@@ -13,12 +13,3 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""GeoPT-style data-generation Warp ops."""
-
-from physicsnemo.experimental.pnm_pretraining.ops.mesh_ray_intersection import (
-    MeshRayIntersection,
-    mesh_ray_intersection,
-)
-
-__all__ = ["MeshRayIntersection", "mesh_ray_intersection"]
