@@ -1323,6 +1323,65 @@ def main(cfg: DictConfig) -> None:
         f"Model contract: input_type={cfg.input_type}, output_type={output_type}"
     )
 
+    # ------------------------------------------------------------------
+    # Optional pretrained-backbone load. Runs ONCE on a fresh fine-tune;
+    # overridden by load_checkpoint(...) below if a resume checkpoint
+    # exists, so resumed runs use their own optimizer / scheduler and do
+    # not reload the pretrained backbone.
+    #
+    # Schema (in the recipe's Hydra config):
+    #
+    #   training:
+    #     pretrained_backbone: /path/to/geopt.mdlus       # bare path form
+    #
+    # OR
+    #
+    #   training:
+    #     pretrained_backbone:
+    #       path: /path/to/geopt.mdlus
+    #       key_remap: {"backbone.": ""}                  # optional
+    #       exclude_layers: ["mlp2", "ln_3"]              # optional, GeoPT default
+    #       strict: false                                 # optional, default false
+    #
+    # See geopt-physicsnemo-engineering-plan.md §1.4 PR 2.5.
+    # ------------------------------------------------------------------
+    pretrained_backbone_cfg = cfg.training.get("pretrained_backbone", None)
+    if pretrained_backbone_cfg is not None:
+        from physicsnemo.utils.checkpoint import load_pretrained_backbone
+
+        if isinstance(pretrained_backbone_cfg, str):
+            # Bare path: equivalent to {"path": "..."}.
+            pb_path = pretrained_backbone_cfg
+            pb_remap = None
+            pb_exclude = None
+            pb_strict = False
+        else:
+            pb_path = pretrained_backbone_cfg["path"]
+            pb_remap = pretrained_backbone_cfg.get("key_remap", None)
+            pb_exclude = pretrained_backbone_cfg.get("exclude_layers", None)
+            pb_strict = pretrained_backbone_cfg.get("strict", False)
+            # Normalize OmegaConf containers to plain Python so the loader
+            # gets dict / list, not DictConfig / ListConfig.
+            if pb_remap is not None and not callable(pb_remap):
+                pb_remap = OmegaConf.to_container(pb_remap, resolve=True)
+            if pb_exclude is not None:
+                pb_exclude = list(
+                    OmegaConf.to_container(pb_exclude, resolve=True)
+                    if not isinstance(pb_exclude, list)
+                    else pb_exclude
+                )
+
+        if dist_manager.rank == 0:
+            logger.info(f"Loading pretrained backbone from {pb_path}")
+        load_pretrained_backbone(
+            model,
+            pb_path,
+            strict=pb_strict,
+            key_remap=pb_remap,
+            exclude_layers=pb_exclude,
+            device=dist_manager.device,
+        )
+
     ckpt_args = {
         "path": os.path.join(checkpoint_dir, cfg.run_id, "checkpoints"),
         "optimizer": optimizer,

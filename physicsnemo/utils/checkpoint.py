@@ -33,6 +33,7 @@ import os
 import re
 import tarfile
 import zipfile
+from collections.abc import Callable, Sequence
 from pathlib import Path, PurePath
 from typing import Any
 
@@ -1123,6 +1124,316 @@ def load_model_weights(
 
     set_model_state_dict(model, state_dict, options=options)
     checkpoint_logging.success(f"Loaded model weights from {weights_path}")
+
+
+# ---------------------------------------------------------------------------
+# Partial / backbone-only checkpoint loading
+# ---------------------------------------------------------------------------
+
+
+def _apply_key_remap(
+    keys: list[str],
+    remap: dict[str, str] | Callable[[str], str] | None,
+) -> dict[str, str]:
+    """Build a ``{src_key: remapped_key}`` mapping.
+
+    For dict ``remap`` we apply longest-prefix-match semantics: if a source
+    key starts with one or more dict keys, the *longest* matching prefix is
+    replaced by its dict value.  Keys that do not match any prefix are
+    returned unchanged.  This matches the natural reading of
+    ``{"backbone.": ""}`` (strip ``backbone.`` from every key that has it)
+    and ``{"transolver.": "model.transolver."}`` (prefix-add).
+
+    For a callable ``remap`` the function is applied per key.
+
+    ``None`` is the identity mapping.
+    """
+    if remap is None:
+        return {k: k for k in keys}
+    if callable(remap):
+        return {k: remap(k) for k in keys}
+    # dict path: longest-prefix-match wins
+    sorted_prefixes = sorted(remap.keys(), key=len, reverse=True)
+    out: dict[str, str] = {}
+    for k in keys:
+        new_key = k
+        for prefix in sorted_prefixes:
+            if k.startswith(prefix):
+                new_key = remap[prefix] + k[len(prefix) :]
+                break
+        out[k] = new_key
+    return out
+
+
+def _read_source_state_dict(
+    ckpt_path: str, device: str | torch.device
+) -> dict[str, Any]:
+    """Read a source state dict from ``.mdlus`` or ``.pt`` and unwrap common containers."""
+    if _is_mdlus_archive(ckpt_path):
+        sd = _extract_mdlus_state_dict(ckpt_path, device)
+    else:
+        cached = _cache_if_needed(ckpt_path)
+        sd = torch.load(cached, map_location=device, weights_only=False)
+
+    # Unwrap common training-checkpoint containers. We only unwrap when the
+    # outer dict's value at the well-known key looks like a state dict
+    # itself (i.e. a dict). This is defensive against the rare case where
+    # someone names a parameter literally "model_state_dict".
+    if isinstance(sd, dict):
+        for wrapper_key in ("model_state_dict", "state_dict", "model"):
+            inner = sd.get(wrapper_key)
+            if isinstance(inner, dict) and all(
+                isinstance(v, torch.Tensor) for v in inner.values()
+            ):
+                return inner
+    return sd
+
+
+def load_pretrained_backbone(
+    model: torch.nn.Module,
+    ckpt_path: str,
+    *,
+    strict: bool = False,
+    key_remap: dict[str, str] | Callable[[str], str] | None = None,
+    exclude_layers: Sequence[str] | None = None,
+    device: str | torch.device = "cpu",
+    verbose: bool = True,
+) -> dict[str, list[str]]:
+    r"""Load a parameter subset from a pretraining checkpoint into a model.
+
+    Designed for the workflow where:
+
+    1. A pretraining run produces a checkpoint with ``backbone + head`` weights.
+    2. A fine-tuning run instantiates a model with a different (or no) head.
+    3. The fine-tuner wants to inherit only the backbone.
+
+    Behaviorally identical to GeoPT's ``load_pretrained_with_filter``
+    (``external-repos/GeoPT/exp/GeoPT_finetune.py:46-65``) but built on
+    top of PhysicsNeMo's existing FSDP/DTensor/mdlus-aware loading
+    machinery rather than a plain ``torch.load`` + ``load_state_dict``.
+    See ``geopt-physicsnemo-engineering-plan.md`` §1.4 PR 2.5 for the
+    motivation.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        The fine-tuning model to load weights into.  May be FSDP-wrapped,
+        DDP-wrapped, contain DTensor parameters, or be a plain module.
+    ckpt_path : str
+        Path to a ``.mdlus`` or ``.pt`` checkpoint.  Local path or
+        ``fsspec`` URI.
+    strict : bool, optional
+        If ``True``, raise on any source key that fails to load (after
+        remap + exclude).  If ``False`` (default), log skipped keys and
+        continue.  The opposite of
+        :meth:`torch.nn.Module.load_state_dict` ``strict=True`` — here
+        ``strict=True`` means *"every checkpoint key must land"*, not
+        *"every model param must be filled"*.
+    key_remap : dict[str, str] | Callable[[str], str] | None, optional
+        Rename source keys before matching against the model.  If a dict,
+        prefix-strip semantics: every source key starting with a dict-key
+        prefix has that prefix replaced by the dict-value (longest-prefix
+        wins on tie).  If a callable, applied per-key.  If ``None``
+        (default), no remapping.  Common patterns: ``{"backbone.": ""}``
+        for prefix-strip, ``{"transolver.": "model.transolver."}`` for
+        prefix-add.
+    exclude_layers : Sequence[str] | None, optional
+        Substring patterns; any source key whose **post-remap** name
+        contains any pattern is skipped.  Default ``None`` (no
+        exclusions).  For GeoPT pretraining, callers typically pass
+        ``("mlp2", "ln_3")`` to drop the trajectory head before
+        fine-tuning.
+    device : str | torch.device, optional
+        ``map_location`` for :func:`torch.load`.  Default ``"cpu"``.
+    verbose : bool, optional
+        If ``True`` (default), log a one-line summary at INFO level on
+        rank 0.  Set ``False`` for quiet operation.
+
+    Returns
+    -------
+    dict[str, list[str]]
+        ``{"loaded": [...], "skipped_excluded": [...], "skipped_missing_target": [...], "skipped_shape_mismatch": [...], "missing_in_source": [...]}``.
+        ``loaded`` lists keys actually copied (post-remap names).  The
+        three ``skipped_*`` lists explain why each source key was dropped.
+        ``missing_in_source`` lists target params with no source counterpart
+        (informational).
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``ckpt_path`` does not exist.
+    RuntimeError
+        If ``strict=True`` and any source key fails to load
+        (``skipped_missing_target`` or ``skipped_shape_mismatch`` is
+        non-empty; ``skipped_excluded`` is a deliberate user choice and
+        does not trigger the strict failure).
+
+    Notes
+    -----
+    - Distributed-safe: rank 0 reads the file; state is broadcast /
+      scattered to other ranks via the same path used by
+      :func:`load_model_weights`.
+    - **Does NOT load optimizer or scheduler state.**  This is intentional:
+      a fresh fine-tune run constructs its own optimizer with its own
+      schedule.  The unified recipe's ``load_checkpoint`` (which does load
+      optimizer / scheduler) runs afterward; if it finds a resume
+      checkpoint it overrides the backbone load.  This is the
+      "fresh-vs-resume" semantics described in
+      ``geopt-physicsnemo-engineering-plan.md`` §1.4 PR 2.5.
+    - Compatible with ``.mdlus`` archives (PhysicsNeMo native) and ``.pt``
+      torch.save dicts (PyTorch native).  Common training-checkpoint
+      containers (``{"model_state_dict": ...}``,
+      ``{"state_dict": ...}``, ``{"model": ...}``) are auto-unwrapped.
+
+    Examples
+    --------
+    Bare usage — load every matching key by name:
+
+    >>> load_pretrained_backbone(model, "geopt_pretrain.pt")  # doctest: +SKIP
+
+    Strip a ``backbone.`` prefix added by the pretrain script:
+
+    >>> load_pretrained_backbone(  # doctest: +SKIP
+    ...     model, "geopt_pretrain.pt", key_remap={"backbone.": ""}
+    ... )
+
+    GeoPT-default exclusions (drop the trajectory head):
+
+    >>> load_pretrained_backbone(  # doctest: +SKIP
+    ...     model, "geopt_pretrain.mdlus", exclude_layers=("mlp2", "ln_3")
+    ... )
+    """
+    # 1. Existence check (rank-0 only for the path-existence error; the
+    #    same path is then read with fsspec / torch.load below).
+    if fsspec.utils.get_protocol(ckpt_path) == "file":
+        if not os.path.exists(ckpt_path):
+            raise FileNotFoundError(
+                f"Pretrained backbone checkpoint not found: {ckpt_path}"
+            )
+
+    # 2. Determine which rank reads the file. Match load_model_weights:
+    #    distributed models read on rank 0 and scatter via DCP; otherwise
+    #    every process reads its own copy.
+    model_unwrapped = _unwrap_ddp_compile(model, loading=True)
+    distributed = _is_distributed_model(model_unwrapped)
+
+    if distributed and not DistributedManager.is_initialized():
+        DistributedManager.initialize()
+    is_rank0 = (not distributed) or DistributedManager().rank == 0
+
+    # 3. Read source state dict (on rank 0 in the distributed case).
+    source_sd: dict[str, Any] = {}
+    if is_rank0:
+        source_sd = _read_source_state_dict(ckpt_path, device)
+
+    # In the distributed case rank 0 needs the target shapes for filtering;
+    # we then broadcast the *filtered* state dict to every rank. We compute
+    # the report on rank 0 only.
+    inner = _unwrap_fsdp(model_unwrapped)
+    target_sd_shapes: dict[str, torch.Size] = {}
+    if is_rank0:
+        target_sd_shapes = {k: v.shape for k, v in inner.state_dict().items()}
+
+    report: dict[str, list[str]] = {
+        "loaded": [],
+        "skipped_excluded": [],
+        "skipped_missing_target": [],
+        "skipped_shape_mismatch": [],
+        "missing_in_source": [],
+    }
+    filtered_sd: dict[str, torch.Tensor] = {}
+    n_source = 0
+
+    if is_rank0:
+        n_source = len(source_sd)
+
+        # 4. Apply key_remap.
+        remapped = _apply_key_remap(list(source_sd.keys()), key_remap)
+
+        # 5. Apply exclude_layers (substring match against the *post-remap* name).
+        excludes: tuple[str, ...] = tuple(exclude_layers) if exclude_layers else ()
+
+        for src_key, value in source_sd.items():
+            tgt_key = remapped[src_key]
+            if excludes and any(p in tgt_key for p in excludes):
+                report["skipped_excluded"].append(tgt_key)
+                continue
+            if tgt_key not in target_sd_shapes:
+                report["skipped_missing_target"].append(tgt_key)
+                continue
+            if (
+                isinstance(value, torch.Tensor)
+                and value.shape != target_sd_shapes[tgt_key]
+            ):
+                report["skipped_shape_mismatch"].append(tgt_key)
+                continue
+            filtered_sd[tgt_key] = value
+
+        loaded_set = set(filtered_sd.keys())
+        report["loaded"] = sorted(loaded_set)
+        report["missing_in_source"] = sorted(
+            k for k in target_sd_shapes if k not in loaded_set
+        )
+
+    # 6. Apply the filtered state dict using the appropriate distributed path.
+    if not distributed:
+        # Plain (or DDP-only) model: load directly. ``strict=False`` here is
+        # the torch flag — "don't require every model param to be filled"
+        # — which is what we want because filtered_sd is by construction a
+        # *subset* of the target.
+        inner.load_state_dict(filtered_sd, strict=False)
+    else:
+        # Mirror load_model_weights's end-of-function logic: broadcast the
+        # filtered state dict from rank 0 and apply via the DCP helpers.
+        dtensor_plc = _get_dtensor_param_placements(model_unwrapped)
+        if _has_non_fsdp_dtensors(model_unwrapped, dtensor_plc):
+            sd_list: list[Any] = [filtered_sd]
+            torch.distributed.broadcast_object_list(sd_list, src=0)
+            filtered_sd = _redistribute_sd_for_dtensor(dtensor_plc, sd_list[0])
+            options = StateDictOptions(full_state_dict=True, strict=False)
+        else:
+            options = StateDictOptions(
+                full_state_dict=True, broadcast_from_rank0=True, strict=False
+            )
+        set_model_state_dict(model_unwrapped, filtered_sd, options=options)
+
+        # Broadcast the report so every rank sees the same accounting.
+        report_list: list[Any] = [report]
+        torch.distributed.broadcast_object_list(report_list, src=0)
+        report = report_list[0]
+        n_src_list: list[Any] = [n_source]
+        torch.distributed.broadcast_object_list(n_src_list, src=0)
+        n_source = n_src_list[0]
+
+    # 7. strict-mode failure: any source key that should have landed but
+    #    didn't (excludes are a deliberate user choice — not a failure).
+    if strict and (
+        report["skipped_missing_target"] or report["skipped_shape_mismatch"]
+    ):
+        raise RuntimeError(
+            "load_pretrained_backbone(strict=True): "
+            f"{len(report['skipped_missing_target'])} source key(s) had no "
+            "target counterpart "
+            f"(first few: {report['skipped_missing_target'][:5]}); "
+            f"{len(report['skipped_shape_mismatch'])} source key(s) had a "
+            "shape mismatch "
+            f"(first few: {report['skipped_shape_mismatch'][:5]})."
+        )
+
+    # 8. One-line summary on rank 0.
+    if verbose and is_rank0:
+        n_loaded = len(report["loaded"])
+        breakdown = (
+            f"excluded={len(report['skipped_excluded'])}, "
+            f"missing_target={len(report['skipped_missing_target'])}, "
+            f"shape_mismatch={len(report['skipped_shape_mismatch'])}"
+        )
+        checkpoint_logging.info(
+            f"[load_pretrained_backbone] Loaded {n_loaded}/{n_source} "
+            f"parameters from {ckpt_path}; skipped {breakdown}"
+        )
+
+    return report
 
 
 # ------------------------------------------------------------------

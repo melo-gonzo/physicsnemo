@@ -699,6 +699,8 @@ recording. Round 2 will fold this list into the parent plan's writeup.
 | I14 | **Composite-walk supervise on non-watertight inputs is fp16-noise-level** | None — GeoPT has no parity test against PhysicsNeMo, so this regime was unmeasured. The plan originally predicted I2's contains/winding disagreement (13.8% on a watertight cube) would propagate into the composite-walk supervise as measurable RMS divergence. | Measured: composite-walk supervise RMS on a broken-cube parity run (`test_constrained_walk_geopt_parity_broken_cube`) is 4e-8, four orders of magnitude below the fp16 quantization floor. Cause: closest-point itself agrees between FCPW and winding-number kernel within 1.4e-4 even on contains-disagreement points; supervise is `closest − p`, not `sign × \|p − closest\|`, so the sign flip does not contribute. The composite walk is more robust to non-watertightness than the kernel-level SDF gate suggests. | M2 | landed (M2 — measured in `reports/m2-composite-parity.md`) |
 | I15 | **`wp.Mesh` rebuild per step in the M2 implementation** | N/A (GeoPT uses FCPW which has the same per-call build cost). | `constrained_walk_step` builds a fresh `wp.Mesh` (BVH + winding-number tree) on every kernel launch. For `n_steps=3, n_walks=100` on a 1024-tri mesh, that's 300 BVH builds. M3's `build_pretraining_sample` should hoist the build to the per-geometry call site and pass `mesh.id` into the orchestrator (and ideally the kernel) so SDF + walk calls within a single sample reuse the mesh. F0.2 already documents the same pattern in `signed_distance_field_impl`. | round 2 | planned (M3 builder-level hoist landed: aligned-mesh tensors stay hot in memory across all SDF + walk calls, so the OBJ load + alignment + I/O are paid once per sample. The `wp.Mesh` BVH-build hoist still requires editing `signed_distance_field_impl`'s signature; deferred to round 2.) |
 | I16 | **M3 prompt schema vs. TensorDict batch-size invariant** | N/A — the conflict is internal to PhysicsNeMo's tensorclass design, not a GeoPT carryover. | The originally-specified schema put walk arrays under `interior.point_data`. `Mesh.__post_init__` enforces `point_data.batch_size == [n_points]`, which means every leaf must have leading dim `n_points`. Walk arrays' leading dim is `n_walks`, not `n_points`; `walks_is_independent` is `(n_walks,)` outright. Resolved in M3 by relocating the four walk arrays to `interior.global_data` (`Mesh`-level non-batched dict). Documented in `builder.py` module docstring; consumers should index `dm.interior.global_data["walks_…"]`. | M3 | landed (M3 — schema adjustment lives in `builder.py`; verified by `test_pdmsh_tiny_config_round_trip`; recorded as a new finding in `reports/m3-pdmsh-round-trip.md`) |
+| I17 | **Backbone-only checkpoint loading** | GeoPT inlines the partial-load logic in `external-repos/GeoPT/exp/GeoPT_finetune.py:46-65`: a 25-line filter that ignores FSDP/DTensor distribution, doesn't handle `.mdlus` archives, and lives in the experiment script (not as a reusable utility). | `physicsnemo.utils.checkpoint.load_pretrained_backbone(model, ckpt_path, *, strict, key_remap, exclude_layers, device, verbose)` — full-feature partial loader built on top of PhysicsNeMo's existing FSDP/DTensor/mdlus-aware machinery (consumes `_unwrap_ddp_compile`, `_unwrap_fsdp`, `_extract_mdlus_state_dict`, `_get_dtensor_param_placements`, `_redistribute_sd_for_dtensor`, `set_model_state_dict` with `broadcast_from_rank0`). Returns a structured report (`{loaded, skipped_excluded, skipped_missing_target, skipped_shape_mismatch, missing_in_source}`) so callers can audit what actually landed. Auto-unwraps common training-checkpoint containers (`{"model_state_dict": …}`, `{"state_dict": …}`, `{"model": …}`). Reusable across pretraining workflows beyond GeoPT. | PR 2.5 (this commit) | landed |
+| I18 | **`strict` semantics flipped from `torch.nn.Module.load_state_dict`** | N/A — GeoPT does not expose a strict flag. | `torch.nn.Module.load_state_dict(strict=True)` means *every model parameter must be filled*. For a backbone-only loader that's the wrong question — the source is by construction a *subset* of the target. `load_pretrained_backbone(strict=True)` instead means *every source key must land* (i.e. `skipped_missing_target` and `skipped_shape_mismatch` are empty). `skipped_excluded` is a deliberate user choice and does not trigger strict failure. The flipped semantics are documented in the function docstring and tested in `test_shape_mismatch_strict_raises` and `test_strict_raises_on_missing_target`. | PR 2.5 (this commit) | landed |
 
 Conventions for adding entries:
 
@@ -947,3 +949,53 @@ happened, what's next. Updated as work proceeds.
       `wp.Mesh` BVH-hoist into the SDF op (I15, still round 2).
     - Commit SHA: see `git log --oneline` for the canonical hash;
       this entry is finalized at commit time.
+
+### PR 2.5 — backbone-only checkpoint loading
+
+- Status: **GREEN** (closed 2026-05-23).
+- Files:
+  - `physicsnemo/utils/checkpoint.py` — added `load_pretrained_backbone`
+    alongside `load_model_weights`. New helpers `_apply_key_remap` and
+    `_read_source_state_dict` for prefix-matching and
+    auto-unwrapping common training-checkpoint containers
+    (`model_state_dict` / `state_dict` / `model`). Reuses the existing
+    distributed scatter path (`_unwrap_ddp_compile`, `_unwrap_fsdp`,
+    `_extract_mdlus_state_dict`, `_get_dtensor_param_placements`,
+    `_redistribute_sd_for_dtensor`, DCP `set_model_state_dict` with
+    `broadcast_from_rank0` / `strict=False`).
+  - `physicsnemo/utils/__init__.py` — re-export
+    `load_pretrained_backbone` so it's importable as
+    `physicsnemo.utils.load_pretrained_backbone`.
+  - `test/utils/test_load_pretrained_backbone.py` — 15 tests covering
+    full match, prefix-stripped match, callable remap, exclude-layers,
+    shape-mismatch (lenient + strict), missing-source reporting,
+    `.pt` round-trip, three wrapped-checkpoint container shapes,
+    DDP-wrapped target (gated on `WORLD_SIZE > 1`), `verbose=False`
+    silence, and missing-file failure mode.
+  - `examples/cfd/external_aerodynamics/unified_external_aero_recipe/src/train.py`
+    — Hydra hook between DDP wrap (~line 1254) and the existing
+    `load_checkpoint` (~line 1326). Supports both bare-path and
+    full-form `cfg.training.pretrained_backbone:`. Normalizes
+    `OmegaConf` containers to plain Python before forwarding.
+  - `examples/cfd/external_aerodynamics/unified_external_aero_recipe/conf/train.yaml`
+    — commented schema example block under the existing `training:`
+    section (bare path + full form + every optional sub-key).
+- New improvements: I17 (backbone-only checkpoint loading;
+  PhysicsNeMo-native replacement for GeoPT's inlined
+  `load_pretrained_with_filter`) and I18 (`strict` semantics flipped
+  vs. `torch.nn.Module.load_state_dict` because the source is by
+  construction a subset of the target — the right question is "did
+  every source key land", not "was every model parameter filled").
+- Test suite: 14 passed, 1 skipped (DDP-gated). Existing
+  `test/utils/test_checkpoint.py` regression-clean: 4 passed, 11
+  skipped (CUDA / msc / wandb-mlflow-boto3 gates).
+- Round-1 (data-gen) is now feature-complete on the consumer side: a
+  future pretraining run can write a checkpoint with `backbone + head`
+  weights; a fine-tuner using the unified recipe consumes it via
+  `cfg.training.pretrained_backbone: <path>`. The fresh-vs-resume
+  semantics work as designed because the new hook runs *after* DDP
+  wrap and *before* `load_checkpoint`, so a resume run finds its own
+  checkpoint and supersedes the pretrained-backbone load. PR 2
+  (backbone adapter, head, loss, `pretrain.py`) is the next chunk.
+- Commit SHA: see `git log --oneline` for the canonical hash; this
+  entry is finalized at commit time.
