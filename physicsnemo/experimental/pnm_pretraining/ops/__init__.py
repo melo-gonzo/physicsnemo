@@ -16,9 +16,20 @@
 
 """GeoPT-style data-generation Warp ops."""
 
+from physicsnemo.experimental.pnm_pretraining.ops.constrained_walk import (
+    constrained_walk,
+    constrained_walk_step,
+    generate_walks,
+)
 from physicsnemo.experimental.pnm_pretraining.ops.mesh_ray_intersection import (
     MeshRayIntersection,
     mesh_ray_intersection,
 )
 
-__all__ = ["MeshRayIntersection", "mesh_ray_intersection"]
+__all__ = [
+    "MeshRayIntersection",
+    "constrained_walk",
+    "constrained_walk_step",
+    "generate_walks",
+    "mesh_ray_intersection",
+]

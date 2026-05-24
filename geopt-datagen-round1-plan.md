@@ -683,7 +683,7 @@ recording. Round 2 will fold this list into the parent plan's writeup.
 
 | # | Improvement | GeoPT reference behavior | Our behavior | Lands in | Status |
 |---|---|---|---|---|---|
-| I1 | **Sign convention for vector-distance feature** | `supervise = positions − closest` (query-pointing) — `GeoPT_PreTraining_Data.py:319`. Inconsistent with CFD wall-function conventions. | `supervise = closest − positions` (surface-pointing). See §A. Parity tests negate before comparing. | M2 | planned |
+| I1 | **Sign convention for vector-distance feature** | `supervise = positions − closest` (query-pointing) — `GeoPT_PreTraining_Data.py:319`. Inconsistent with CFD wall-function conventions. | `supervise = closest − positions` (surface-pointing). See §A. Parity tests negate before comparing. | M2 | landed (M2 — composite kernel emits surface-pointing supervise; parity test `test_constrained_walk_geopt_parity_sphere` confirms sign-aligned 1.24e-7 RMS after negation) |
 | I2 | **Inside/outside test on watertight + non-watertight meshes** | `FCPWScene.contains()` — silently misclassifies points even on closed analytic primitives. M1 measurements (500 random query points each, watertight): sphere 6.4% wrong, cube 13.8% wrong. The plan originally framed this as a non-watertight-ShapeNet-only concern; M1 measurements show FCPW is unreliable on watertight inputs too. | `signed_distance_field(use_sign_winding_number=True)` — winding-number sign is **100% correct** vs analytic ground truth on the watertight sphere and cube fixtures (500/500 each). M3 will additionally log the disagreement rate on non-watertight ShapeNet geometries. | M1, M3 | landed (M1 + analytic-watertight measurement); M3 ShapeNet diagnostic still planned |
 | I3 | **Surface normals at sampled points** | `compute_normals_improved` — vertex-nearest k=1 lookup against `mesh.vertex_normals`; piecewise-constant per Voronoi cell of vertices. | Default: face-barycentric normals from `sample_points_on_mesh` (smooth, principled). Bug-compatibility port emits both keys (`normals_face_barycentric`, `normals_vertex_nearest`). | M3 | planned |
 | I4 | **Misleading variable names in `transform_mesh`** | Returns `(z_min, x_avg, y_avg, scale)` where `z_min` is post-axis-swap **Y**-min and `y_avg` is post-axis-swap **Z**-mean. Reproducers that read names literally silently misalign. | `align_mesh_geopt_general` returns an `AlignmentRecord` dataclass with named fields (`y_min_post_swap`, `z_mean_post_swap`, `scale`, `axis_flipped`). | M3 | planned |
@@ -692,10 +692,12 @@ recording. Round 2 will fold this list into the parent plan's writeup.
 | I7 | **Skip-detection robustness** | Skip-if-`x.npy`-exists silently leaves partial walk data on disk after a mid-loop crash (`GeoPT_PreTraining_Data.py:663`). | Atomic write: `.pdmsh.tmp` directory, rename-on-success. Partial writes are detected and overwritten on retry. | M3 | planned |
 | I8 | **Watertightness diagnostic** | None. | `build_pretraining_sample` records `is_watertight`, fill-holes-attempted flag, and vertex-count delta in `global_data.mesh_quality`. | M3 | planned |
 | I9 | **Float-precision discipline** | `float16` everywhere on disk. ≥3 decimal digits of precision lost for supervision values < 1e-3 in magnitude. | `float32` on disk by default. Optional `dtype: float16` flag for storage budget when corpus generation kicks in (round 2). | M3 | planned |
-| I10 | **Walk diversity** | "100 walks" is really 10 independent + 90 jittered (`BASE_WALKS=10`, `PERTURB_SIGMA=0.05`). The "100" is misleading in the README and paper. | Honest API: `generate_walks(n_independent=10, n_jittered_per_base=9, perturb_sigma=0.05)`. Default values match GeoPT for parity; reports document the actual independence count. | M2 | planned |
+| I10 | **Walk diversity** | "100 walks" is really 10 independent + 90 jittered (`BASE_WALKS=10`, `PERTURB_SIGMA=0.05`). The "100" is misleading in the README and paper. | Honest API: `generate_walks(n_independent=10, n_jittered_per_base=9, perturb_sigma=0.05)`. Default values match GeoPT for parity; reports document the actual independence count. | M2 | landed (M2 — `generate_walks` exposes the three-knob API; `is_independent: (n_walks,) bool` in the return dict; defaults match GeoPT) |
 | I11 | **Single-process Python orchestration** | Serial `for` loop over geometries; "80 cores" is FCPW-internal threading only. No way to scale across geometries from the Python side. | Round 2 will add multi-process / multi-GPU orchestration. Round 1's `build_pretraining_sample` is per-geometry single-process by design (matches scope). | round 2 | deferred |
 | I12 | **Numerical-parity test infrastructure** | None — the released repo has no parity tests, no analytic ground truth, no FCPW comparison. | Three-tier: analytic mesh (sphere/cube/torus) RMS at single-precision unit roundoff; trimesh ShapeNet RMS < 1e-4; FCPW closest-point RMS < 1e-4 (installed locally as dev dep, not upstream). | M1 | landed (all three tiers running locally; ShapeNet leg deferred to corpus provisioning) |
-| I13 | **Throughput measurement discipline** | README claims "20s per geometry on 80 CPU cores"; no per-op breakdown, no build-vs-query split, no comparison methodology. | M1 emits a per-mesh, per-op, per-query-size, build-vs-query timing table. M2 emits per-walk wall-clock comparison. | M1, M2 | in-progress (M1 build-vs-query table landed, CPU run; H100 rerun pending) |
+| I13 | **Throughput measurement discipline** | README claims "20s per geometry on 80 CPU cores"; no per-op breakdown, no build-vs-query split, no comparison methodology. | M1 emits a per-mesh, per-op, per-query-size, build-vs-query timing table. M2 emits per-walk wall-clock comparison. | M1, M2 | in-progress (M1 build-vs-query table landed, CPU run; M2 per-walk numbers landed in `reports/m2-composite-parity.md`; H100 rerun pending for both) |
+| I14 | **Composite-walk supervise on non-watertight inputs is fp16-noise-level** | None — GeoPT has no parity test against PhysicsNeMo, so this regime was unmeasured. The plan originally predicted I2's contains/winding disagreement (13.8% on a watertight cube) would propagate into the composite-walk supervise as measurable RMS divergence. | Measured: composite-walk supervise RMS on a broken-cube parity run (`test_constrained_walk_geopt_parity_broken_cube`) is 4e-8, four orders of magnitude below the fp16 quantization floor. Cause: closest-point itself agrees between FCPW and winding-number kernel within 1.4e-4 even on contains-disagreement points; supervise is `closest − p`, not `sign × \|p − closest\|`, so the sign flip does not contribute. The composite walk is more robust to non-watertightness than the kernel-level SDF gate suggests. | M2 | landed (M2 — measured in `reports/m2-composite-parity.md`) |
+| I15 | **`wp.Mesh` rebuild per step in the M2 implementation** | N/A (GeoPT uses FCPW which has the same per-call build cost). | `constrained_walk_step` builds a fresh `wp.Mesh` (BVH + winding-number tree) on every kernel launch. For `n_steps=3, n_walks=100` on a 1024-tri mesh, that's 300 BVH builds. M3's `build_pretraining_sample` should hoist the build to the per-geometry call site and pass `mesh.id` into the orchestrator (and ideally the kernel) so SDF + walk calls within a single sample reuse the mesh. F0.2 already documents the same pattern in `signed_distance_field_impl`. | round 2 | planned |
 
 Conventions for adding entries:
 
@@ -826,7 +828,47 @@ happened, what's next. Updated as work proceeds.
 
 ### M2 — composite parity
 
-- Status: not started.
+- Status: **GREEN** (closed 2026-05-23). G6–G9 all pass with ≥ 5
+  orders of margin; G10 is informational and yellow only because of
+  a well-understood per-step `wp.Mesh` rebuild (deferred to round 2
+  as I15).
+- Single-commit feature subagent landed:
+  - `physicsnemo/experimental/pnm_pretraining/ops/constrained_walk.py`
+    — fused Warp kernel `_constrained_walk_step_kernel` (closest-
+    point + supervise + ray-cast + 0.99 sticking + surface pin in one
+    launch) plus three Python entry points: `constrained_walk_step`
+    (one fused launch), `constrained_walk` (n-step orchestrator
+    matching GeoPT semantics including the no-move-on-final-step
+    rule), `generate_walks` (10 base + 90 jitter layout, exposed via
+    `n_independent + n_jittered_per_base + perturb_sigma`; defaults
+    match GeoPT).
+  - `test/experimental/pnm_pretraining/ops/test_constrained_walk.py`
+    — 6 tests covering G6 (single-step analytic sphere), G7 (0.99
+    sticking on collision), G8 (surface-pin invariant, bit-exact),
+    I10 (walk-diversity API), G9 sphere parity (fp16-roundtripped,
+    sign-negated, 1.24e-7 RMS), G9 broken-cube illustrative
+    diagnostic (4e-8 RMS — documents I2 at the composite level).
+    Helper `_import_geopt_reference()` stubs `polyscope` so the
+    parity tests run against an unmodified GeoPT clone.
+  - `physicsnemo/experimental/pnm_pretraining/ops/__init__.py` —
+    exports the three new public symbols.
+  - `reports/m2-composite-parity.md` — per-gate measurements,
+    walk-diversity diagnostic, throughput table, and the I14/I15
+    write-ups.
+- Test suite: **6 passed, 0 skipped** with `PNM_GEOPT_REF` set; 4
+  passed + 2 skipped without it.
+- Gate verdicts: G6 green, G7 green, G8 green, G9 **green** (sphere
+  RMS 1.24e-7, gate 1e-2), G10 yellow (informational; CPU-only +
+  per-step mesh rebuild explains the slowdown on small meshes).
+- Improvements landed: I1 (sign convention; surface-pointing supervise
+  emitted by the kernel; parity test confirms after negation), I10
+  (honest walk-diversity API).
+- New findings catalogued: I14 (composite-walk supervise on
+  non-watertight inputs is fp16-noise-level — stronger than predicted),
+  I15 (`wp.Mesh` rebuilt per step; round-2 hoist).
+- Carry-forwards (do not block M3): ShapeNet-corpus parity (still
+  deferred behind M1 G2); H100 throughput rerun (bundled with M1
+  carry-forward); mesh-build hoisting (I15, round 2).
 
 ### M3 — `.pdmsh` round-trip
 
