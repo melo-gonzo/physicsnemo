@@ -14,14 +14,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""GeoPT mesh-alignment port (General variant).
+"""GeoPT mesh-alignment port (General variant) and pretraining transforms.
 
-Ports the General-variant ``transform_mesh`` from
-``external-repos/GeoPT/data_generation/GeoPT_PreTraining_Data_General.py``
-lines 205-264 into PhysicsNeMo. The General variant performs an
-**X-flip** (``vertices[:, 0] = -vertices[:, 0]``) and does **not** swap
-axes — it is the path that generalizes across all 52 ShapeNet
-categories and is the path we adopt here.
+Two responsibilities live here:
+
+* :func:`align_mesh_geopt_general` and :class:`AlignmentRecord` — the
+  General-variant ``transform_mesh`` from
+  ``external-repos/GeoPT/data_generation/GeoPT_PreTraining_Data_General.py``
+  lines 205-264, ported into PhysicsNeMo.
+* :class:`WalkSampler` — a per-sample dataset transform that slices
+  one walk out of the ``(n_walks, ...)`` arrays the M3 builder
+  emits in ``interior.global_data`` and writes the per-point
+  ``(supervise, directions, step_lengths)`` slices into
+  ``interior.point_data`` so the recipe's ``extract_targets`` (which
+  only reads from ``interior.point_data``) can find them. See
+  :class:`WalkSampler` for the rationale and ``geopt-datagen-round1-plan.md``
+  §8 row I20 for the design decision.
+
+Mesh alignment — General-variant ``transform_mesh``
+---------------------------------------------------
+
+The General variant performs an **X-flip**
+(``vertices[:, 0] = -vertices[:, 0]``) and does **not** swap axes — it
+is the path that generalizes across all 52 ShapeNet categories and is
+the path we adopt here.
 
 NOTE — divergence from the category-specific variant.
     ``GeoPT_PreTraining_Data.py:145-195`` defines a *different*
@@ -56,20 +72,25 @@ References
 - ``external-repos/GeoPT/data_generation/GeoPT_PreTraining_Data_General.py:205-264``
   — the reference implementation we port.
 - ``geopt-datagen-round1-plan.md`` §A (Convention 4), §5 (M3 spec),
-  §0 F0.6 (variable-name correction), §8 row I4 (named record contract).
+  §0 F0.6 (variable-name correction), §8 row I4 (named record
+  contract), §8 row I20 (WalkSampler).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 import numpy as np
+import torch
+
+from physicsnemo.datapipes.transforms.mesh.base import MeshTransform
+from physicsnemo.mesh import DomainMesh, Mesh
 
 if TYPE_CHECKING:
     import trimesh
 
-__all__ = ["AlignmentRecord", "align_mesh_geopt_general"]
+__all__ = ["AlignmentRecord", "WalkSampler", "align_mesh_geopt_general"]
 
 
 # Oversize-safety hard limits (verbatim from GeoPT
@@ -364,3 +385,254 @@ def align_mesh_geopt_general(
         oversize_safety_applied=oversize_safety_applied,
     )
     return out_mesh, record
+
+
+# ---------------------------------------------------------------------------
+# WalkSampler — per-sample dataset transform
+# ---------------------------------------------------------------------------
+
+
+class WalkSampler(MeshTransform):
+    """Pick one walk per sample and lift it onto ``interior.point_data``.
+
+    The M3 builder writes **every** independent + jittered walk to disk
+    in ``interior.global_data`` (per finding I16 — those arrays have a
+    leading ``n_walks`` dim and cannot live in ``point_data``, which
+    must satisfy the TensorDict ``batch_size == [n_points]`` invariant
+    required by ``Mesh.__post_init__``). At training time the recipe's
+    ``extract_targets`` reads exclusively from ``interior.point_data``,
+    and per-point loss/metric kernels assume per-point shapes. This
+    transform resolves the gap by:
+
+    1. drawing a random walk index ``i ∈ [0, n_walks)`` from a
+       per-instance ``torch.Generator`` seeded by the constructor,
+    2. slicing the three walk arrays at index ``i`` into per-point
+       shapes,
+    3. writing the slices into ``interior.point_data`` under the
+       names ``supervise``, ``directions``, ``step_lengths``, and
+    4. dropping the original ``(n_walks, …)`` arrays from
+       ``interior.global_data`` so they don't inflate batch payloads.
+
+    The on-disk ``.pdmsh`` keeps every walk for offline reproducibility
+    (improvement I20 in ``geopt-datagen-round1-plan.md`` §8); the
+    per-sample reshape is purely a runtime concern.
+
+    Parameters
+    ----------
+    seed
+        Per-instance RNG seed. ``None`` falls back to PyTorch's global
+        seed (typically a poor choice for reproducible runs; the
+        recipe's seed-on-rank-0-and-broadcast convention assigns one
+        explicitly). Stored as a ``torch.Generator`` so determinism
+        does not depend on the global state of any other code path.
+    walk_field_name
+        Source key in ``interior.global_data`` for the supervise array
+        of shape ``(n_walks, n_points, n_steps, 3)``. Override only if
+        the producer renamed the field.
+    directions_field_name
+        Source key for the directions array of shape
+        ``(n_walks, n_points, 3)``.
+    step_lengths_field_name
+        Source key for the step-lengths array of shape
+        ``(n_walks, n_points)``.
+
+    Attributes
+    ----------
+    generator
+        The ``torch.Generator`` used for walk-index sampling. Exposed
+        for tests and for explicit re-seeding (``set_generator`` from
+        the :class:`MeshTransform` base also works).
+
+    Notes
+    -----
+    The transform raises ``KeyError`` when applied to a ``DomainMesh``
+    that does not carry the three walk arrays in
+    ``interior.global_data``. This is deliberate: feeding a non-
+    pretraining sample (e.g. a DrivAerML ``.pmsh``) through this
+    transform is a configuration bug, not a runtime corner case.
+    The error message names the missing key and points at the M3
+    builder.
+
+    See also
+    --------
+    physicsnemo.experimental.pnm_pretraining.data.builder.build_pretraining_sample
+        The producer of the on-disk schema this transform consumes.
+    """
+
+    _MISSING_WALK_HINT = (
+        " expected `{key}` in interior.global_data — was this DomainMesh "
+        "built by `physicsnemo.experimental.pnm_pretraining.data."
+        "build_pretraining_sample`?"
+    )
+
+    def __init__(
+        self,
+        seed: int | None = None,
+        walk_field_name: str = "walks_supervise",
+        directions_field_name: str = "walks_directions",
+        step_lengths_field_name: str = "walks_step_lengths",
+    ) -> None:
+        super().__init__()
+        self.seed = seed
+        self.walk_field_name = walk_field_name
+        self.directions_field_name = directions_field_name
+        self.step_lengths_field_name = step_lengths_field_name
+        # Per-instance generator. Stored under ``_generator`` so the
+        # base class's ``stochastic`` property reports True; also
+        # exposed publicly as ``generator`` for direct test access
+        # without relying on the underscore-prefixed name.
+        self._generator: torch.Generator = torch.Generator()
+        if seed is not None:
+            self._generator.manual_seed(int(seed))
+
+    @property
+    def generator(self) -> torch.Generator:
+        """The per-instance ``torch.Generator`` driving walk-index sampling."""
+        return self._generator
+
+    def __call__(self, data: Union[Mesh, DomainMesh]) -> Union[Mesh, DomainMesh]:  # type: ignore[override]
+        """Dispatch on the input type.
+
+        On a ``DomainMesh`` we run the per-walk slicer (real work). On
+        a plain ``Mesh`` we have no boundaries / global_data invariants
+        to lean on and the transform doesn't make sense — raise. The
+        recipe's pipeline runner always hands us a ``DomainMesh``
+        (see ``physicsnemo/datapipes/mesh_dataset.py:_load``); this
+        branch matters for tests and for accidental misuse.
+        """
+        if isinstance(data, DomainMesh):
+            return self.apply_to_domain(data)
+        raise TypeError(
+            "WalkSampler operates on DomainMesh; got "
+            f"{type(data).__name__}. The walk arrays live in the "
+            "interior Mesh's global_data, which is only reachable "
+            "through a DomainMesh wrapper."
+        )
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Slice one walk and lift its per-point arrays into ``point_data``.
+
+        Parameters
+        ----------
+        domain
+            A pretraining-sample ``DomainMesh`` carrying the three
+            walk arrays in ``interior.global_data``.
+
+        Returns
+        -------
+        DomainMesh
+            A new ``DomainMesh`` with ``supervise``, ``directions``,
+            ``step_lengths`` injected into ``interior.point_data`` and
+            the source ``(n_walks, …)`` arrays removed from
+            ``interior.global_data``. The ``boundaries`` and the
+            domain-level ``global_data`` are passed through unchanged.
+
+        Raises
+        ------
+        KeyError
+            If any of the three expected walk arrays is missing from
+            ``domain.interior.global_data``.
+        """
+        interior = domain.interior
+        global_data = interior.global_data
+
+        # Validate up front — the recipe's transform pipeline will swallow
+        # KeyErrors with limited context, so we make the message self-
+        # explanatory.
+        for key in (
+            self.walk_field_name,
+            self.directions_field_name,
+            self.step_lengths_field_name,
+        ):
+            if key not in global_data.keys():
+                raise KeyError(
+                    f"WalkSampler: missing key {key!r}. "
+                    + self._MISSING_WALK_HINT.format(key=key)
+                )
+
+        walks_supervise = global_data[self.walk_field_name]
+        walks_directions = global_data[self.directions_field_name]
+        walks_step_lengths = global_data[self.step_lengths_field_name]
+
+        # Schema sanity (cheap and audit-friendly): all three arrays must
+        # share the leading n_walks dim. We do not assert n_points parity
+        # against ``interior.n_points`` here — the M3 builder enforces it
+        # at write time, and this transform survives any consumer that
+        # respects the documented schema.
+        n_walks = walks_supervise.shape[0]
+        if (
+            walks_directions.shape[0] != n_walks
+            or walks_step_lengths.shape[0] != n_walks
+        ):
+            raise ValueError(
+                "WalkSampler: leading n_walks dim mismatch — "
+                f"{self.walk_field_name}: {walks_supervise.shape[0]}, "
+                f"{self.directions_field_name}: {walks_directions.shape[0]}, "
+                f"{self.step_lengths_field_name}: {walks_step_lengths.shape[0]}."
+            )
+
+        # Sample the walk index. ``torch.randint`` honors the generator
+        # we hold; the result is a 0-d int tensor, which we materialize
+        # to a Python int for the slice call site.
+        walk_idx = int(
+            torch.randint(
+                low=0,
+                high=n_walks,
+                size=(),
+                generator=self._generator,
+                device="cpu",  # generator is a CPU generator; slice idx is host-side.
+            ).item()
+        )
+
+        # Slice + reshape. Trailing ``.contiguous()`` calls smooth out
+        # any stride surprises a downstream model might trip on (the
+        # reshape on a non-contiguous slice would fail loudly anyway,
+        # but the explicit contiguous() makes the producer-side
+        # invariant unambiguous).
+        n_points = walks_supervise.shape[1]
+        n_steps = walks_supervise.shape[2]
+        supervise = (
+            walks_supervise[walk_idx]
+            .contiguous()
+            .reshape(n_points, n_steps * 3)
+            .contiguous()
+        )
+        directions = walks_directions[walk_idx].contiguous()
+        step_lengths = walks_step_lengths[walk_idx].unsqueeze(-1).contiguous()
+
+        # Build the new interior. point_data acquires three new keys;
+        # global_data drops the n_walks source arrays. We use
+        # TensorDict.exclude on global_data (null-safe per
+        # DropMeshFields' implementation note in
+        # physicsnemo/datapipes/transforms/mesh/transforms.py).
+        new_point_data = interior.point_data.clone()
+        new_point_data["supervise"] = supervise
+        new_point_data["directions"] = directions
+        new_point_data["step_lengths"] = step_lengths
+
+        new_global_data = global_data.exclude(
+            self.walk_field_name,
+            self.directions_field_name,
+            self.step_lengths_field_name,
+        )
+
+        new_interior = Mesh(
+            points=interior.points,
+            cells=interior.cells,
+            point_data=new_point_data,
+            cell_data=interior.cell_data,
+            global_data=new_global_data,
+        )
+
+        return DomainMesh(
+            interior=new_interior,
+            boundaries=domain.boundaries,
+            global_data=domain.global_data,
+        )
+
+    def extra_repr(self) -> str:
+        return (
+            f"seed={self.seed!r}, walk_field_name={self.walk_field_name!r}, "
+            f"directions_field_name={self.directions_field_name!r}, "
+            f"step_lengths_field_name={self.step_lengths_field_name!r}"
+        )

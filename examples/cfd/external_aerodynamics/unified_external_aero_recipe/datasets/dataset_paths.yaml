@@ -23,3 +23,11 @@
 drivaer_ml: ???
 highlift_aero_ml: ???
 shift_suv: ???
+
+# GeoPT pretraining corpus.
+# Directory containing `*.pdmsh` directories emitted by
+# `physicsnemo.experimental.pnm_pretraining.data.build_pretraining_sample`.
+# See `geopt-datagen-round1-plan.md` §5 for the schema and §8 row I20
+# for the WalkSampler contract that consumes this corpus.
+# Override at the CLI:  dataset_paths.geopt_pretrain=/path/to/corpus
+geopt_pretrain: ???

@@ -42,19 +42,77 @@ import torch
 import torch.nn.functional as F
 from jaxtyping import Float
 from tensordict import TensorDict
-
 from utils import FieldType, align_scalar_shapes, field_dim, validate_field_coverage
 
 _LOGGER = logging.getLogger("training.loss")
 
 DEFAULT_HUBER_DELTA = 1.0
 
-LossType = Literal["huber", "mse", "rmse"]
+# Floor on ``‖target‖₂`` in the rel_l2 denominator so near-zero targets do
+# not blow up the loss. GeoPT's reference (``utils/loss.py:32-43``) does
+# not guard the denominator; we add a small floor for parity with the
+# rest of the unified recipe (which uses ``+ eps`` floors throughout).
+# Pretraining trajectory targets can have legitimately small magnitudes
+# (e.g. surface points whose ``walks_step_lengths == 0``); the floor
+# keeps those rows finite without distorting non-degenerate examples.
+_REL_L2_EPS: float = 1e-8
+
+LossType = Literal["huber", "mse", "rmse", "rel_l2"]
 
 
 ### ---------------------------------------------------------------------------
 ### Per-field loss kernels
 ### ---------------------------------------------------------------------------
+
+
+def _rel_l2_per_example_mean(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    eps: float,
+) -> Float[torch.Tensor, ""]:
+    """Per-example relative-L2 averaged across the batch dimension.
+
+    Computes ``mean_b ‖pred[b] − target[b]‖₂ / max(‖target[b]‖₂, eps)``
+    where ``b`` walks the leading axis of the input. The per-example
+    norm flattens *all* trailing axes -- per-point and per-component
+    are pooled into one feature vector. This matches GeoPT's
+    ``L2Loss`` reference (``external-repos/GeoPT/utils/loss.py:32-43``)
+    on the per-row formula and differs only in the outer reduction
+    (mean here, sum-then-divide-by-ntrain there).
+
+    Inputs that have no leading batch dim (rank ``<= 1``) are treated
+    as a single example -- the function reduces to one ratio. This
+    preserves the recipe's ``test_with_or_without_batch_dim``
+    shape-invariance contract.
+
+    Parameters
+    ----------
+    pred, target
+        Identically-shaped tensors. Leading dim (if any) is the batch.
+    eps
+        Floor on the denominator. ``_REL_L2_EPS`` (1e-8) at the call
+        sites; surfaced here as an arg so unit tests can exercise the
+        guard without mutating the module constant.
+
+    Returns
+    -------
+    torch.Tensor
+        0-d tensor on the same device/dtype as ``pred``.
+    """
+    if pred.ndim == 0 or pred.ndim == 1:
+        ### Single example: norm over the (possibly empty) feature axis.
+        ### Equivalent to torch.linalg.vector_norm over the whole tensor.
+        diff_norm = torch.linalg.vector_norm(pred - target)
+        target_norm = torch.linalg.vector_norm(target)
+        return diff_norm / target_norm.clamp(min=eps)
+
+    ### Multi-example: per-row norm over all trailing axes, then
+    ### average over the batch.
+    flat_pred = pred.reshape(pred.shape[0], -1)
+    flat_target = target.reshape(target.shape[0], -1)
+    diff_norm = torch.linalg.vector_norm(flat_pred - flat_target, dim=-1)
+    target_norm = torch.linalg.vector_norm(flat_target, dim=-1)
+    return torch.mean(diff_norm / target_norm.clamp(min=eps))
 
 
 def _scalar_loss(
@@ -86,7 +144,27 @@ def _scalar_loss(
         num = torch.mean((pred - target) ** 2)
         denom = torch.mean(target**2)
         return num / (denom + eps)
-    raise ValueError(f"Unknown loss_type {loss_type!r}")
+    if loss_type == "rel_l2":
+        ### Per-example relative L2: ‖pred − target‖₂ / max(‖target‖₂, eps),
+        ### averaged across the batch dimension. The "example" is the
+        ### leading batch row -- we treat the entire per-row payload as
+        ### one flat feature vector for the norm. Single-example inputs
+        ### (no leading batch dim) collapse to one term and average to
+        ### themselves, preserving the shape-agnostic invariance the
+        ### other branches honor.
+        ###
+        ### Convention note: GeoPT's reference (``utils/loss.py:32-43``)
+        ### sums-over-batch then divides by ``ntrain`` outside the loss;
+        ### we average inside to match the recipe's averaged-not-summed
+        ### convention across all other loss types. Diagnostics are
+        ### unchanged (the per-batch trace is identical up to a
+        ### constant); training dynamics differ only by an effective
+        ### learning-rate rescale.
+        return _rel_l2_per_example_mean(pred, target, eps=_REL_L2_EPS)
+    raise ValueError(
+        f"Unknown loss_type {loss_type!r}; expected one of "
+        f"'huber', 'mse', 'rmse', 'rel_l2'."
+    )
 
 
 def _vector_loss(
@@ -115,6 +193,13 @@ def _vector_loss(
         target_sq = torch.mean(target**2, dim=tuple(range(pred.ndim - 1)))
         return torch.sum(diff_sq / (target_sq + eps))
 
+    if loss_type == "rel_l2":
+        ### Per-example relative L2 with the entire ``(N, D)`` per-row
+        ### payload treated as a flat feature vector for the norm. Same
+        ### averaged-over-batch convention as :func:`_scalar_loss` --
+        ### see that branch for the GeoPT-vs-recipe convention note.
+        return _rel_l2_per_example_mean(pred, target, eps=_REL_L2_EPS)
+
     total = torch.tensor(0.0, device=pred.device, dtype=pred.dtype)
     for i in range(n_components):
         p, t = pred[..., i], target[..., i]
@@ -123,7 +208,10 @@ def _vector_loss(
         elif loss_type == "mse":
             total = total + torch.mean((p - t) ** 2)
         else:
-            raise ValueError(f"Unknown loss_type {loss_type!r}")
+            raise ValueError(
+                f"Unknown loss_type {loss_type!r}; expected one of "
+                f"'huber', 'mse', 'rmse', 'rel_l2'."
+            )
     return total
 
 
@@ -166,10 +254,10 @@ class LossCalculator:
         normalize_by_channels: bool = True,
         delta: float = DEFAULT_HUBER_DELTA,
     ) -> None:
-        if loss_type not in ("huber", "mse", "rmse"):
+        if loss_type not in ("huber", "mse", "rmse", "rel_l2"):
             raise ValueError(
                 f"Unknown loss_type {loss_type!r}; expected one of "
-                f"'huber', 'mse', 'rmse'."
+                f"'huber', 'mse', 'rmse', 'rel_l2'."
             )
         ### `target_config` values are required to be lowercase per the
         ### `FieldType` contract; we copy the dict verbatim so callers can

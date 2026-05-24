@@ -32,10 +32,9 @@ from __future__ import annotations
 import pytest
 import torch
 import torch.nn.functional as F
-from tensordict import TensorDict
-
-from loss import DEFAULT_HUBER_DELTA, LossCalculator
+from loss import _REL_L2_EPS, DEFAULT_HUBER_DELTA, LossCalculator
 from output_normalize import split_concat_by_target
+from tensordict import TensorDict
 from utils import FieldType, field_dim
 
 
@@ -280,3 +279,141 @@ class TestShapeAgnostic:
         loss_no_batch, _ = lc(pred_no_batch, target_no_batch)
         loss_with_batch, _ = lc(pred_with_batch, target_with_batch)
         assert torch.allclose(loss_no_batch, loss_with_batch, atol=1e-7)
+
+
+### ---------------------------------------------------------------------------
+### rel_l2 (GeoPT pretraining loss; PR 2 / improvement I19)
+### ---------------------------------------------------------------------------
+
+
+def _reference_rel_l2_per_example_mean(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    eps: float,
+) -> torch.Tensor:
+    """Hand-rolled reference for the per-example, mean-over-batch rel_l2.
+
+    Mirrors the formula in ``loss._rel_l2_per_example_mean``: flatten all
+    trailing axes per batch row, take the L2 norm of the difference and
+    of the target, divide row-wise (clamping the denominator at ``eps``),
+    and average over the batch axis. Used by :class:`TestRelL2` to pin
+    :class:`~loss.LossCalculator` to an analytic ground truth.
+    """
+    flat_pred = pred.reshape(pred.shape[0], -1)
+    flat_target = target.reshape(target.shape[0], -1)
+    diff_norm = torch.linalg.vector_norm(flat_pred - flat_target, dim=-1)
+    target_norm = torch.linalg.vector_norm(flat_target, dim=-1)
+    return torch.mean(diff_norm / target_norm.clamp(min=eps))
+
+
+class TestRelL2:
+    """Numerical correctness for the new rel_l2 loss type (PR 2 / I19)."""
+
+    def test_scalar_rel_l2_matches_analytic(self):
+        """Scalar (B=4, N=8) rel_l2 matches the hand-rolled per-row formula."""
+        torch.manual_seed(2024)
+        target_config = {"phi": "scalar"}
+        pred = torch.randn(4, 8)
+        ### target = pred + small perturbation, so rel-L2 is small but non-zero
+        ### and well away from the eps guard.
+        epsilon = 1e-2
+        target = pred + epsilon * torch.randn_like(pred)
+        ### TensorDict input requires a separate (B, N) leaf; the loss
+        ### kernel reads the scalar through `align_scalar_shapes` first.
+        pred_td = _make_td({"phi": pred})
+        target_td = _make_td({"phi": target})
+
+        lc = LossCalculator(
+            target_config=target_config,
+            loss_type="rel_l2",
+            normalize_by_channels=True,
+        )
+        total, ldict = lc(pred_td, target_td)
+
+        ### Reference: per-row L2 of (pred - target) / per-row L2 of target,
+        ### averaged over B. With one scalar field, total_channels=1 so the
+        ### normalizer is a no-op; we still compare against the same ref.
+        ref = _reference_rel_l2_per_example_mean(pred, target, eps=_REL_L2_EPS)
+        assert torch.allclose(total, ref, atol=1e-6, rtol=1e-6), (
+            f"got={float(total):.10g} reference={float(ref):.10g}"
+        )
+        assert torch.allclose(ldict["loss/phi"], ref, atol=1e-6, rtol=1e-6)
+
+    def test_vector_rel_l2_matches_analytic(self):
+        """Vector (B=4, N=8, 3) rel_l2 matches the hand-rolled per-row formula."""
+        torch.manual_seed(2025)
+        target_config = {"velocity": "vector"}
+        pred = torch.randn(4, 8, 3)
+        epsilon = 1e-2
+        target = pred + epsilon * torch.randn_like(pred)
+        pred_td = _make_td({"velocity": pred})
+        target_td = _make_td({"velocity": target})
+
+        lc = LossCalculator(
+            target_config=target_config,
+            loss_type="rel_l2",
+            normalize_by_channels=False,  # avoid /3 so we compare apples-to-apples
+        )
+        total, ldict = lc(pred_td, target_td)
+
+        ### Reference flattens (N, 3) into (N*3,) per row before the norm.
+        ref = _reference_rel_l2_per_example_mean(pred, target, eps=_REL_L2_EPS)
+        assert torch.allclose(total, ref, atol=1e-6, rtol=1e-6), (
+            f"got={float(total):.10g} reference={float(ref):.10g}"
+        )
+        assert torch.allclose(ldict["loss/velocity"], ref, atol=1e-6, rtol=1e-6)
+
+    def test_zero_target_guard_keeps_loss_finite(self):
+        """One zero-target row does not blow the loss up; the eps floor bounds it.
+
+        With a target of all zeros for one batch row, the analytic ratio
+        is ``‖pred‖ / 0`` -- without the floor this is ``inf``. The
+        ``_REL_L2_EPS`` floor caps the per-row contribution at
+        ``‖pred‖ / eps``; the batch-mean stays finite. We assert the
+        observed total matches the eps-clamped reference, which is
+        strictly stronger than just "is finite".
+        """
+        torch.manual_seed(2026)
+        target_config = {"phi": "scalar"}
+        pred = torch.randn(4, 8)
+        target = pred + 1e-2 * torch.randn_like(pred)
+        ### Zero out the entire first row of target -> denominator hits eps.
+        target[0] = 0.0
+        pred_td = _make_td({"phi": pred})
+        target_td = _make_td({"phi": target})
+
+        lc = LossCalculator(target_config=target_config, loss_type="rel_l2")
+        total, _ = lc(pred_td, target_td)
+
+        ### Reference uses the same eps clamp; both should match.
+        ref = _reference_rel_l2_per_example_mean(pred, target, eps=_REL_L2_EPS)
+        assert torch.isfinite(total), f"loss exploded on zero target: {float(total)}"
+        assert torch.allclose(total, ref, atol=1e-6, rtol=1e-6), (
+            f"got={float(total):.10g} reference={float(ref):.10g}"
+        )
+
+        ### Sanity: the offending row's contribution must be bounded by
+        ### ‖pred[0]‖ / eps. We don't get the per-row breakdown back from
+        ### LossCalculator (it returns the per-field aggregate), so we
+        ### check the bound on the reference's row terms directly.
+        flat_pred = pred.reshape(pred.shape[0], -1)
+        flat_target = target.reshape(target.shape[0], -1)
+        per_row = torch.linalg.vector_norm(
+            flat_pred - flat_target, dim=-1
+        ) / torch.linalg.vector_norm(flat_target, dim=-1).clamp(min=_REL_L2_EPS)
+        bound = torch.linalg.vector_norm(flat_pred[0]) / _REL_L2_EPS
+        assert per_row[0] <= bound + 1e-3, (
+            f"zero-target row {float(per_row[0]):.3g} exceeds eps-clamped "
+            f"bound {float(bound):.3g}"
+        )
+
+    def test_loss_calculator_accepts_rel_l2_and_rejects_case_variants(self):
+        """``loss_type='rel_l2'`` is accepted; ``'rel_L2'`` is rejected with a clear msg."""
+        ### Constructor accepts the canonical name (no exception).
+        LossCalculator(target_config={"phi": "scalar"}, loss_type="rel_l2")
+
+        ### Case variants and typos must raise a ValueError that lists
+        ### every supported name (the user will copy one out of the message).
+        for bad in ("rel_L2", "REL_L2", "relL2", "L2", "rel2"):
+            with pytest.raises(ValueError, match="rel_l2"):
+                LossCalculator(target_config={"phi": "scalar"}, loss_type=bad)

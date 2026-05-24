@@ -701,6 +701,8 @@ recording. Round 2 will fold this list into the parent plan's writeup.
 | I16 | **M3 prompt schema vs. TensorDict batch-size invariant** | N/A — the conflict is internal to PhysicsNeMo's tensorclass design, not a GeoPT carryover. | The originally-specified schema put walk arrays under `interior.point_data`. `Mesh.__post_init__` enforces `point_data.batch_size == [n_points]`, which means every leaf must have leading dim `n_points`. Walk arrays' leading dim is `n_walks`, not `n_points`; `walks_is_independent` is `(n_walks,)` outright. Resolved in M3 by relocating the four walk arrays to `interior.global_data` (`Mesh`-level non-batched dict). Documented in `builder.py` module docstring; consumers should index `dm.interior.global_data["walks_…"]`. | M3 | landed (M3 — schema adjustment lives in `builder.py`; verified by `test_pdmsh_tiny_config_round_trip`; recorded as a new finding in `reports/m3-pdmsh-round-trip.md`) |
 | I17 | **Backbone-only checkpoint loading** | GeoPT inlines the partial-load logic in `external-repos/GeoPT/exp/GeoPT_finetune.py:46-65`: a 25-line filter that ignores FSDP/DTensor distribution, doesn't handle `.mdlus` archives, and lives in the experiment script (not as a reusable utility). | `physicsnemo.utils.checkpoint.load_pretrained_backbone(model, ckpt_path, *, strict, key_remap, exclude_layers, device, verbose)` — full-feature partial loader built on top of PhysicsNeMo's existing FSDP/DTensor/mdlus-aware machinery (consumes `_unwrap_ddp_compile`, `_unwrap_fsdp`, `_extract_mdlus_state_dict`, `_get_dtensor_param_placements`, `_redistribute_sd_for_dtensor`, `set_model_state_dict` with `broadcast_from_rank0`). Returns a structured report (`{loaded, skipped_excluded, skipped_missing_target, skipped_shape_mismatch, missing_in_source}`) so callers can audit what actually landed. Auto-unwraps common training-checkpoint containers (`{"model_state_dict": …}`, `{"state_dict": …}`, `{"model": …}`). Reusable across pretraining workflows beyond GeoPT. | PR 2.5 (this commit) | landed |
 | I18 | **`strict` semantics flipped from `torch.nn.Module.load_state_dict`** | N/A — GeoPT does not expose a strict flag. | `torch.nn.Module.load_state_dict(strict=True)` means *every model parameter must be filled*. For a backbone-only loader that's the wrong question — the source is by construction a *subset* of the target. `load_pretrained_backbone(strict=True)` instead means *every source key must land* (i.e. `skipped_missing_target` and `skipped_shape_mismatch` are empty). `skipped_excluded` is a deliberate user choice and does not trigger strict failure. The flipped semantics are documented in the function docstring and tested in `test_shape_mismatch_strict_raises` and `test_strict_raises_on_missing_target`. | PR 2.5 (this commit) | landed |
+| I19 | **Pretraining as a recipe flavor (recipe-extension over standalone scripts)** | GeoPT ships separate `run.py` modes (`GeoPT_finetune`, `steady_cond`); finding D1 of the parent plan also notes pretraining itself is unreleased. The original plan called for a separate `pretrain.py` + `finetune_drivaer.py` pair. | Pretraining and fine-tuning are CLI overrides on the same `unified_external_aero_recipe/src/train.py`. No new entrypoint. The new `rel_l2` loss type, the `geopt_pretrain.yaml` dataset, and the (forthcoming) `transolver_pretrain.yaml` model YAML are the only recipe-side surface changes. See `pr2-recipe-extension-plan.md` for the full rationale. | PR 2 | landed (PR 2 — `examples/cfd/external_aerodynamics/unified_external_aero_recipe/src/loss.py` extends `LossType` with `"rel_l2"`, `_scalar_loss` and `_vector_loss` add `rel_l2` branches with the per-example, mean-over-batch convention; constructor validator updated; `_REL_L2_EPS=1e-8` guards near-zero targets. `datasets/geopt_pretrain.yaml` declares the pretraining corpus, `dataset_paths.yaml` registers the path. Verified by `test_loss_equivalence.py::TestRelL2` (4 tests).) |
+| I20 | **WalkSampler dataset transform** | GeoPT writes 100 separate `condition_{j}.npy` / `supervise_{j}.npy` files per geometry; the dataloader reads one file at random per `__getitem__`. With the M3 schema (one `.pdmsh` per geometry carrying every walk in `interior.global_data`, per I16), per-sample variation needs a different mechanism. | A `WalkSampler` transform in the dataset YAML's `transforms:` block slices `(n_walks, n_points, n_steps, 3)` arrays from `interior.global_data` to `(n_points, n_steps * 3)` arrays in `interior.point_data` per sample. Stateful per-instance (carries a `torch.Generator` seeded by the constructor). Single `.pdmsh` per geometry on disk; per-sample variation comes from the transform's RNG. Drops the source `(n_walks, …)` arrays so they don't inflate batch payloads. | PR 2 | landed (PR 2 — `physicsnemo/experimental/pnm_pretraining/data/transforms.py::WalkSampler`, exported from `physicsnemo.experimental.pnm_pretraining.data`. Subclasses `MeshTransform` so it plugs into the recipe's transforms list via `apply_to_domain`; `__call__` dispatches on `DomainMesh`. Verified by `test_walk_sampler.py` (5 tests: shape + key movement on a real builder output, determinism, seed variation, reshape-order regression, missing-walks `KeyError`).) |
 
 Conventions for adding entries:
 
@@ -997,5 +999,87 @@ happened, what's next. Updated as work proceeds.
   wrap and *before* `load_checkpoint`, so a resume run finds its own
   checkpoint and supersedes the pretrained-backbone load. PR 2
   (backbone adapter, head, loss, `pretrain.py`) is the next chunk.
+- Commit SHA: see `git log --oneline` for the canonical hash; this
+  entry is finalized at commit time.
+
+### PR 2 (subagent E): rel_l2 loss + WalkSampler + pretraining dataset YAML
+
+- Status: **GREEN** (closed 2026-05-23).
+- Files:
+  - `examples/cfd/external_aerodynamics/unified_external_aero_recipe/src/loss.py`
+    — extended `LossType` literal to include `"rel_l2"`; added module
+    constant `_REL_L2_EPS = 1e-8`; added shared helper
+    `_rel_l2_per_example_mean(pred, target, eps)` that flattens all
+    trailing axes per batch row, takes `‖diff‖₂ / max(‖target‖₂, eps)`,
+    and averages over the batch axis (single-example inputs collapse
+    to one term, preserving the recipe's shape-agnostic invariance);
+    added `rel_l2` branches to `_scalar_loss` and `_vector_loss`
+    (both delegate to the helper); updated `LossCalculator.__init__`
+    validator to accept `"rel_l2"`; updated unknown-`loss_type`
+    error messages to list all four supported names.
+  - `examples/cfd/external_aerodynamics/unified_external_aero_recipe/tests/test_loss_equivalence.py`
+    — appended `TestRelL2` (4 tests): scalar `(B=4, N=8)` analytic
+    match, vector `(B=4, N=8, 3)` analytic match, zero-target eps
+    guard (per-row contribution bounded by `‖pred‖ / eps`,
+    `LossCalculator` total stays finite), and constructor
+    accept/reject (canonical name accepted; case variants like
+    `"rel_L2"`, `"REL_L2"`, `"L2"` raise `ValueError` with a message
+    that names `rel_l2`).
+  - `physicsnemo/experimental/pnm_pretraining/data/transforms.py`
+    — added `WalkSampler(MeshTransform)`. Per-instance `torch.Generator`
+    seeded by the constructor; reads `walks_supervise (n_walks, n_pts,
+    n_steps, 3)`, `walks_directions (n_walks, n_pts, 3)`,
+    `walks_step_lengths (n_walks, n_pts)` from
+    `interior.global_data`; samples one walk index;
+    writes `supervise (n_pts, n_steps*3)`, `directions (n_pts, 3)`,
+    `step_lengths (n_pts, 1)` into `interior.point_data`; drops the
+    source `(n_walks, …)` arrays from `interior.global_data`.
+    `apply_to_domain` carries the logic; `__call__` dispatches on
+    `DomainMesh` and raises a clear `TypeError` on plain `Mesh` input.
+    Missing walk arrays raise `KeyError` with a message that names
+    the missing key and points at `build_pretraining_sample`.
+  - `physicsnemo/experimental/pnm_pretraining/data/__init__.py`
+    — re-exports `WalkSampler` alongside `AlignmentRecord` and
+    `align_mesh_geopt_general`.
+  - `test/experimental/pnm_pretraining/data/test_walk_sampler.py`
+    — new file (5 tests): shape + key-movement on a real
+    `build_pretraining_sample` output (uses the conftest sphere
+    fixture with the prompt's tiny config), determinism (same seed →
+    identical slice), seed variation (different seeds on a 10-walk
+    DomainMesh produce different slices), reshape-order regression
+    (hand-crafted `walks_supervise[i, j, t, :] == [i, j, t]` confirms
+    `(n_steps, 3)` flattens in step-major order), and missing-walks
+    `KeyError` (DrivAerML-shaped DomainMesh lacks the walk arrays
+    → `KeyError` mentioning `walks_supervise` and
+    `build_pretraining_sample`).
+  - `examples/cfd/external_aerodynamics/unified_external_aero_recipe/datasets/geopt_pretrain.yaml`
+    — new dataset YAML. `DomainMeshReader` with `pattern: "**/*.pdmsh"`,
+    no augmentations (pretraining is geometry-fixed), one
+    `WalkSampler(seed=${training.seed})` transform, and
+    `targets: { supervise: vector }`. Comments document the contract,
+    the schema, and why `DropMeshFields` is *not* applied to the
+    domain-level `mesh_quality` / `alignment` blocks (recipe-side
+    `DropMeshFields` only operates on Mesh-level `global_data`;
+    domain-level fields are ignored by `extract_targets` and harmless
+    at training time).
+  - `examples/cfd/external_aerodynamics/unified_external_aero_recipe/datasets/dataset_paths.yaml`
+    — added `geopt_pretrain: ???` with a comment block linking to
+    the M3 schema and the WalkSampler contract.
+- Improvements landed: I19 (recipe-extension over standalone
+  pretrain/finetune scripts), I20 (`WalkSampler` dataset transform
+  resolves I16's per-sample-walk-variation requirement against the
+  on-disk schema).
+- Test suite: `test_loss_equivalence.py`: **16 passed** (12 baseline
+  + 4 new rel_l2 cases). `test_walk_sampler.py`: **5 passed**.
+  Regression check: existing `test/experimental/pnm_pretraining/data/`
+  (`test_transforms.py` + `test_pdmsh_round_trip.py`):
+  **19 passed, 1 skipped** (the `PNM_M3_FULL_BENCH`-gated full-config
+  bench), unchanged from the baseline before this PR.
+- Subagent F (parallel): implements `TransolverPretrainBackbone` +
+  `conf/model/transolver_pretrain.yaml` + the e2e smoke test. F's
+  `forward_kwargs:` block consumes `interior.point_data.directions`
+  and `interior.point_data.step_lengths` produced by the WalkSampler
+  in this commit; F's smoke test consumes `geopt_pretrain.yaml`.
+  No file overlap.
 - Commit SHA: see `git log --oneline` for the canonical hash; this
   entry is finalized at commit time.

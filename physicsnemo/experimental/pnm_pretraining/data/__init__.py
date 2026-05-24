@@ -23,11 +23,13 @@ from physicsnemo.experimental.pnm_pretraining.data.builder import (
 )
 from physicsnemo.experimental.pnm_pretraining.data.transforms import (
     AlignmentRecord,
+    WalkSampler,
     align_mesh_geopt_general,
 )
 
 __all__ = [
     "AlignmentRecord",
+    "WalkSampler",
     "align_mesh_geopt_general",
     "build_pretraining_sample",
     "load_pretraining_sample",

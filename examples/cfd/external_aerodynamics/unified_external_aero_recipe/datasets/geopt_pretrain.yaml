@@ -1,0 +1,73 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# GeoPT pretraining dataset (DomainMesh-native).
+# Loads `*.pdmsh` directories emitted by
+# `physicsnemo.experimental.pnm_pretraining.data.build_pretraining_sample`.
+# See `geopt-datagen-round1-plan.md` §A (geometry-direction conventions)
+# and §5 (M3 schema) for the corpus contract.
+#
+# On-disk schema (per the M3 builder):
+#   interior:
+#     points: (n_volume + n_surface, 3) float32
+#     point_data: region, sdf, normals_face_barycentric, normals_vertex_nearest,
+#                 supervise_step0
+#     global_data: walks_supervise (n_walks, n_points, n_steps, 3),
+#                  walks_directions (n_walks, n_points, 3),
+#                  walks_step_lengths (n_walks, n_points),
+#                  walks_is_independent (n_walks,)
+#   boundaries.geometry: aligned trimesh (vertices + faces).
+#   global_data: config / alignment / mesh_quality (informational).
+#
+# Pipeline path:
+#   1. DomainMeshReader loads the .pdmsh.
+#   2. WalkSampler picks one walk per __getitem__ and lifts (supervise,
+#      directions, step_lengths) into interior.point_data so the
+#      recipe's extract_targets can reach them. The (n_walks, ...)
+#      source arrays are dropped from interior.global_data.
+#
+# Pretraining is geometry-fixed: the supervision data was generated
+# against a specific aligned mesh, so we do NOT add random rotations /
+# translations here (unlike drivaer_ml_volume.yaml).
+#
+# Note: the M3 builder writes informational scalars (`mesh_quality`,
+# `alignment`, `config`) to `domain.global_data` (domain-level, not
+# inside any Mesh's `global_data`). They are ignored by the recipe's
+# extract_targets / forward_kwargs and do not need to be dropped here;
+# `${dp:DropMeshFields}` only operates on Mesh-level `global_data`.
+
+train_datadir: ${dataset_paths.geopt_pretrain}
+
+pipeline:
+  reader:
+    _target_: ${dp:DomainMeshReader}
+    path: ${train_datadir}
+    # Builder writes `<prefix>.pdmsh/` directories (atomic rename from
+    # `.pdmsh.tmp/`); both extensions are directories per F0.3 in the
+    # round-1 plan. `**/*.pdmsh` matches the final directory layout.
+    pattern: "**/*.pdmsh"
+  augmentations: []
+  transforms:
+    - _target_: physicsnemo.experimental.pnm_pretraining.data.WalkSampler
+      seed: ${training.seed}
+
+# `targets:` declares what the loss/metric sees in `interior.point_data`.
+# `supervise: vector` means a per-point flat feature vector of shape
+# (n_steps * 3,); LossCalculator's `_vector_loss` walks the trailing
+# axis. Model conditioning inputs (`directions`, `step_lengths`) are
+# referenced in the model YAML's `forward_kwargs:` block, NOT here.
+targets:
+  supervise: vector
