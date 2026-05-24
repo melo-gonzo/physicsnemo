@@ -684,7 +684,7 @@ recording. Round 2 will fold this list into the parent plan's writeup.
 | # | Improvement | GeoPT reference behavior | Our behavior | Lands in | Status |
 |---|---|---|---|---|---|
 | I1 | **Sign convention for vector-distance feature** | `supervise = positions − closest` (query-pointing) — `GeoPT_PreTraining_Data.py:319`. Inconsistent with CFD wall-function conventions. | `supervise = closest − positions` (surface-pointing). See §A. Parity tests negate before comparing. | M2 | planned |
-| I2 | **Inside/outside test on non-watertight meshes** | `FCPWScene.contains()` — silently misclassifies a fraction of "outside" volume points as inside on non-watertight ShapeNet (no `is_watertight` check, no `fill_holes`). | `signed_distance_field(use_sign_winding_number=True)` — winding-number sign is correct on non-watertight inputs. M3 logs the disagreement rate as a diagnostic. | M3 | in-progress (M1 diagnostic landed: 100% on broken-cube fixture) |
+| I2 | **Inside/outside test on watertight + non-watertight meshes** | `FCPWScene.contains()` — silently misclassifies points even on closed analytic primitives. M1 measurements (500 random query points each, watertight): sphere 6.4% wrong, cube 13.8% wrong. The plan originally framed this as a non-watertight-ShapeNet-only concern; M1 measurements show FCPW is unreliable on watertight inputs too. | `signed_distance_field(use_sign_winding_number=True)` — winding-number sign is **100% correct** vs analytic ground truth on the watertight sphere and cube fixtures (500/500 each). M3 will additionally log the disagreement rate on non-watertight ShapeNet geometries. | M1, M3 | landed (M1 + analytic-watertight measurement); M3 ShapeNet diagnostic still planned |
 | I3 | **Surface normals at sampled points** | `compute_normals_improved` — vertex-nearest k=1 lookup against `mesh.vertex_normals`; piecewise-constant per Voronoi cell of vertices. | Default: face-barycentric normals from `sample_points_on_mesh` (smooth, principled). Bug-compatibility port emits both keys (`normals_face_barycentric`, `normals_vertex_nearest`). | M3 | planned |
 | I4 | **Misleading variable names in `transform_mesh`** | Returns `(z_min, x_avg, y_avg, scale)` where `z_min` is post-axis-swap **Y**-min and `y_avg` is post-axis-swap **Z**-mean. Reproducers that read names literally silently misalign. | `align_mesh_geopt_general` returns an `AlignmentRecord` dataclass with named fields (`y_min_post_swap`, `z_mean_post_swap`, `scale`, `axis_flipped`). | M3 | planned |
 | I5 | **Determinism / seeding** | No `np.random.seed` or `torch.manual_seed` anywhere; every run produces different data. | `build_pretraining_sample(seed: int)` seeds NumPy, PyTorch, and Warp deterministically per call. Reproducible by construction. | M3 | planned |
@@ -694,10 +694,11 @@ recording. Round 2 will fold this list into the parent plan's writeup.
 | I9 | **Float-precision discipline** | `float16` everywhere on disk. ≥3 decimal digits of precision lost for supervision values < 1e-3 in magnitude. | `float32` on disk by default. Optional `dtype: float16` flag for storage budget when corpus generation kicks in (round 2). | M3 | planned |
 | I10 | **Walk diversity** | "100 walks" is really 10 independent + 90 jittered (`BASE_WALKS=10`, `PERTURB_SIGMA=0.05`). The "100" is misleading in the README and paper. | Honest API: `generate_walks(n_independent=10, n_jittered_per_base=9, perturb_sigma=0.05)`. Default values match GeoPT for parity; reports document the actual independence count. | M2 | planned |
 | I11 | **Single-process Python orchestration** | Serial `for` loop over geometries; "80 cores" is FCPW-internal threading only. No way to scale across geometries from the Python side. | Round 2 will add multi-process / multi-GPU orchestration. Round 1's `build_pretraining_sample` is per-geometry single-process by design (matches scope). | round 2 | deferred |
-| I12 | **Numerical-parity test infrastructure** | None — the released repo has no parity tests, no analytic ground truth, no FCPW comparison. | Three-tier: analytic mesh (sphere/cube/torus) RMS < 1e-5; trimesh ShapeNet RMS < 1e-4; FCPW ShapeNet RMS < 1e-5 (gated). | M1 | in-progress (analytic + trimesh tier landed; FCPW tier gated and ready) |
+| I12 | **Numerical-parity test infrastructure** | None — the released repo has no parity tests, no analytic ground truth, no FCPW comparison. | Three-tier: analytic mesh (sphere/cube/torus) RMS at single-precision unit roundoff; trimesh ShapeNet RMS < 1e-4; FCPW closest-point RMS < 1e-4 (installed locally as dev dep, not upstream). | M1 | landed (all three tiers running locally; ShapeNet leg deferred to corpus provisioning) |
 | I13 | **Throughput measurement discipline** | README claims "20s per geometry on 80 CPU cores"; no per-op breakdown, no build-vs-query split, no comparison methodology. | M1 emits a per-mesh, per-op, per-query-size, build-vs-query timing table. M2 emits per-walk wall-clock comparison. | M1, M2 | in-progress (M1 build-vs-query table landed, CPU run; H100 rerun pending) |
 
 Conventions for adding entries:
+
 - New rows go at the bottom; do not renumber.
 - `Lands in` is a milestone tag (M1/M2/M3) or `round 2` for deferred items.
 - `Status`: `planned` → `in-progress` → `landed` → `verified` (after the
@@ -705,7 +706,58 @@ Conventions for adding entries:
 
 ---
 
-## 9 — Progress log
+## 9 — Optional dependencies
+
+Round-1 introduces or relies on several Python packages that are
+**not** in PhysicsNeMo-core's `pyproject.toml` install set today.
+Each is listed below with its purpose, install state in our local
+venv, and a working note on whether to upstream it later.
+
+| Package | Version installed | Purpose | Where used | Upstream candidate? |
+|---------|-------------------|---------|------------|---------------------|
+| `scipy` | `1.17.1` | Required transitively by `trimesh.proximity` (closest_point, signed_distance). | `test_sdf_torus_trimesh_parity` (closest-point parity reference). | **No, transitive only.** scipy ships with most PyTorch envs; if a downstream test needs it, gate via `@requires_module("scipy")`. |
+| `trimesh` | `3.23.5` | Closest-point + ray-cast reference for parity tests. Also used by GeoPT data-gen for OBJ loading. | M1 SDF parity (torus) and ray-cast parity (sphere); will be reused in M3 for `align_mesh_geopt_general` (loading raw ShapeNet OBJ → cleaned `Mesh`). | **Discuss for upstream.** trimesh is already used in `physicsnemo` examples (DoMINO data prep, SHIFT-SUV preprocessor). It is *not* in core's `pyproject.toml`. Decision deferred until M3 lands and we know whether it's only test-side or also production-side. Round 2 input. |
+| `fcpw` | `1.2.0` | Reference closest-point + inside/outside implementation, ported from GeoPT's CPU pipeline. Used as a third-party numerical baseline. | `test_sdf_fcpw_parity`, future M2 composite-walk parity test. | **No, dev-only.** FCPW exists only to validate that PhysicsNeMo + Warp matches an independent CPU reference; not needed at runtime. Stays gated by `@requires_fcpw()`; never imported by production code. |
+| `pyembree` | `0.1.12` | Faster ray-mesh-intersection backend for `trimesh.ray`. Pin downgraded `trimesh` from 4.12.2 → 3.23.5 on install (`pyembree` 0.1.12 has a `trimesh<4` constraint on this Python). | M1 ray-cast parity test prefers `ray_pyembree` when available, falls back to `ray_triangle`. | **No, dev-only.** Optional speed-up for tests; the fallback path works without it. Note the `trimesh` downgrade as a dev-env footgun — see "Caveats" below. |
+
+**M1 install commands used (local dev, macOS arm64, Python 3.13):**
+
+```console
+$ VIRTUAL_ENV=/Users/carmelog/venv uv pip install scipy fcpw
+# Installed: fcpw==1.2.0, scipy==1.17.1
+$ VIRTUAL_ENV=/Users/carmelog/venv uv pip install pyembree
+# Installed: pyembree==0.1.12 (downgraded trimesh 4.12.2 → 3.23.5)
+```
+
+**Caveats.**
+
+- `pyembree` 0.1.12 forces `trimesh<4`. On a fresh PhysicsNeMo
+  install, `trimesh` may already be at 4.x; expect this dance.
+  Trimesh 3.x has a slightly different proximity API in places —
+  M1 tests verified compatibility with 3.23.5; tests should be
+  re-verified against 4.x before round 2 if we drop pyembree.
+- `fcpw` is exposed via `nanobind` bindings; the API differs between
+  1.x (`squared_max_radii` arg required, in-place `interactions`
+  output) and earlier versions. `test_sdf_fcpw_parity` is pinned to
+  the 1.x signature.
+- The pre-commit hook does not enforce these deps. They are install
+  responsibilities of the developer or the CI image.
+
+**Decision log on upstreaming.**
+
+- Round-1 keeps all four packages **out of core `pyproject.toml`**.
+- Round-2 will revisit `trimesh`. If `physicsnemo.experimental.pnm_pretraining.data.builder`
+  needs trimesh at runtime (likely, for OBJ → Mesh conversion in M3),
+  it lands as a *runtime* dep on `physicsnemo[experimental_pnm_pretraining]`
+  extra, not in the core install set.
+- `fcpw`, `pyembree`, and `scipy` (when only used by trimesh) stay
+  test-side, gated by `@requires_module(...)` / `@requires_fcpw()`.
+- The decision will be reconsidered when M3 lands; this section gets
+  updated then.
+
+---
+
+## 10 — Progress log
 
 Append-only. Each entry: timestamp (UTC date), milestone, what
 happened, what's next. Updated as work proceeds.
@@ -748,16 +800,29 @@ happened, what's next. Updated as work proceeds.
     100% hit-mask + 8.4e-8 dist RMS).
   - Made `test_sdf_torus_trimesh_parity` skip cleanly when scipy is
     not installed (trimesh.proximity needs scipy at runtime).
-  - Final M1 test suite: 13 passed, 2 skipped on CPU host (FCPW,
-    scipy/trimesh.proximity).
+- Optional deps installed (see new §9): `scipy==1.17.1`,
+  `fcpw==1.2.0`, `pyembree==0.1.12` (downgraded `trimesh` 4.12.2 →
+  3.23.5 as required by pyembree). Decision log on upstreaming
+  recorded in §9; round-1 keeps all four out of core
+  `pyproject.toml`.
+- FCPW test now runs (commit *this* one). Stronger I2 finding: on
+  watertight analytic sphere/cube, FCPW's `contains()` is wrong on
+  6.4% (sphere) and 13.8% (cube) of points; PhysicsNeMo's
+  winding-number sign is bit-exact correct. The plan originally
+  framed FCPW's `contains` deficiency as non-watertight-only;
+  M1 measurements show it is unreliable on watertight inputs too.
+  I2 status upgraded to "landed" with a stronger story.
+- Final M1 test suite (after dep install): **15 passed, 0 skipped**
+  on CPU host.
 - Gate verdicts: G1 green, G2 yellow (analytic-sphere leg green;
   ShapeNet-corpus leg deferred), G3 green, G4 yellow (CPU; H100 rerun
-  needed), G5 informational, I2 green.
+  needed), G5 **green** (FCPW now runs and passes both subchecks),
+  I2 **green+** (stronger story than expected).
 - Carry-forwards (do not block M2): fetch ShapeNet subset before M2's
-  GeoPT-reference parity; rerun bench on H100; provision FCPW.
-- Improvements landed: I12 (parity-test infrastructure), I13
-  (throughput-measurement discipline). I2 partially landed (broken
-  cube; full ShapeNet diagnostic deferred to M3).
+  GeoPT-reference parity; rerun bench on H100.
+- Improvements landed: I2 (with FCPW-watertight finding), I12
+  (parity-test infrastructure: analytic + trimesh + FCPW tiers all
+  running locally), I13 (throughput-measurement discipline).
 
 ### M2 — composite parity
 
