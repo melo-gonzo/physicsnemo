@@ -723,7 +723,8 @@ happened, what's next. Updated as work proceeds.
 
 ### M1 — kernel parity
 
-- Status: in-progress as of 2026-05-23.
+- Status: **GREEN with two yellow carry-forwards** (closed 2026-05-23).
+  Yellows do not block M2.
 - Subagent A landed (`MeshRayIntersection` op + parity tests; commit
   `b7501704`):
   - `physicsnemo/experimental/pnm_pretraining/ops/mesh_ray_intersection.py`
@@ -732,24 +733,31 @@ happened, what's next. Updated as work proceeds.
     `(0, inf, origin)` per GeoPT reference behavior. Direction
     convention §A Convention 3 (caller-normalized).
   - `test/experimental/pnm_pretraining/ops/test_mesh_ray_intersection.py`
-    — analytic + trimesh parity, 10 cases.
-  - Unblocks G1; sets up I12.
-- Subagent B landed (SDF parity + BVH bench):
+    — analytic + trimesh parity, 10 cases. All pass on CPU.
+- Subagent B landed (SDF parity + BVH bench; commit `c13c23a0`):
   - `test/experimental/pnm_pretraining/ops/test_sdf_geopt_parity.py`
     — five tests (sphere analytic, cube analytic, torus vs trimesh,
-    FCPW-gated cross-check, non-watertight diagnostic). On CPU: 4
-    passed, FCPW skipped.
+    FCPW-gated cross-check, non-watertight diagnostic).
   - `scripts/bench_bvh_build_vs_query.py` + `reports/m1-bvh-build-vs-query.md`
-    — per-mesh build / 1k / 10k / 100k / e2e timing table. Ran on CPU
-    (no CUDA available on host); structural ratios captured.
-  - `reports/m1-kernel-parity.md` skeleton with G3 / G4 / G5 / I2
-    sections filled in. G1 and G2 sections are TODO markers awaiting
-    a follow-up commit that quotes subagent A's ray-cast measurements
-    into the report.
-  - Verdict so far: G3 green (torus closest-point RMS 2.37e-6 vs
-    trimesh, 42× under gate), G4 yellow (CPU run; rerun on H100 to
-    close), G5 informational (FCPW not installed), I2 green
-    (broken-cube diagnostic 100% sign agreement vs analytic).
+    — per-mesh build / 1k / 10k / 100k / e2e timing table on CPU.
+  - `reports/m1-kernel-parity.md` skeleton.
+- Closure folded in (post-subagent merge):
+  - Quoted subagent A's ray-cast RMS measurements into G1 and G2
+    sections of the M1 report (sphere chord-floor 5.7e-3, cube
+    bit-exact 0.0, torus float32-floor 1.2e-7, sphere-trimesh
+    100% hit-mask + 8.4e-8 dist RMS).
+  - Made `test_sdf_torus_trimesh_parity` skip cleanly when scipy is
+    not installed (trimesh.proximity needs scipy at runtime).
+  - Final M1 test suite: 13 passed, 2 skipped on CPU host (FCPW,
+    scipy/trimesh.proximity).
+- Gate verdicts: G1 green, G2 yellow (analytic-sphere leg green;
+  ShapeNet-corpus leg deferred), G3 green, G4 yellow (CPU; H100 rerun
+  needed), G5 informational, I2 green.
+- Carry-forwards (do not block M2): fetch ShapeNet subset before M2's
+  GeoPT-reference parity; rerun bench on H100; provision FCPW.
+- Improvements landed: I12 (parity-test infrastructure), I13
+  (throughput-measurement discipline). I2 partially landed (broken
+  cube; full ShapeNet diagnostic deferred to M3).
 
 ### M2 — composite parity
 

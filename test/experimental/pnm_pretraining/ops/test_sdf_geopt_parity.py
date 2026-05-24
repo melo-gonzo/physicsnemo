@@ -179,6 +179,7 @@ def test_sdf_cube_analytic_parity(
 
 @requires_module("warp")
 @requires_module("trimesh")
+@requires_module("scipy")
 def test_sdf_torus_trimesh_parity(
     torus_mesh: TriangleMesh, rng: np.random.Generator
 ) -> None:
@@ -186,6 +187,10 @@ def test_sdf_torus_trimesh_parity(
 
     Closest-point RMS < 1e-4 over 1000 query points in ``[-3, 3]^3``;
     sign agreement vs ``trimesh.proximity.signed_distance`` > 99%.
+
+    ``trimesh.proximity`` requires ``scipy`` at runtime; we gate the test
+    on it explicitly so a thin trimesh install does not yield a confusing
+    ModuleNotFoundError at the closest_point call site.
     """
     import trimesh
 
