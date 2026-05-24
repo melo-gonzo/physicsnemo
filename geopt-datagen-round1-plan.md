@@ -686,7 +686,7 @@ recording. Round 2 will fold this list into the parent plan's writeup.
 | I1 | **Sign convention for vector-distance feature** | `supervise = positions − closest` (query-pointing) — `GeoPT_PreTraining_Data.py:319`. Inconsistent with CFD wall-function conventions. | `supervise = closest − positions` (surface-pointing). See §A. Parity tests negate before comparing. | M2 | landed (M2 — composite kernel emits surface-pointing supervise; parity test `test_constrained_walk_geopt_parity_sphere` confirms sign-aligned 1.24e-7 RMS after negation) |
 | I2 | **Inside/outside test on watertight + non-watertight meshes** | `FCPWScene.contains()` — silently misclassifies points even on closed analytic primitives. M1 measurements (500 random query points each, watertight): sphere 6.4% wrong, cube 13.8% wrong. The plan originally framed this as a non-watertight-ShapeNet-only concern; M1 measurements show FCPW is unreliable on watertight inputs too. | `signed_distance_field(use_sign_winding_number=True)` — winding-number sign is **100% correct** vs analytic ground truth on the watertight sphere and cube fixtures (500/500 each). M3 will additionally log the disagreement rate on non-watertight ShapeNet geometries. | M1, M3 | landed (M1 + analytic-watertight measurement); M3 ShapeNet diagnostic still planned |
 | I3 | **Surface normals at sampled points** | `compute_normals_improved` — vertex-nearest k=1 lookup against `mesh.vertex_normals`; piecewise-constant per Voronoi cell of vertices. | Default: face-barycentric normals from `sample_points_on_mesh` (smooth, principled). Bug-compatibility port emits both keys (`normals_face_barycentric`, `normals_vertex_nearest`). | M3 | planned |
-| I4 | **Misleading variable names in `transform_mesh`** | Returns `(z_min, x_avg, y_avg, scale)` where `z_min` is post-axis-swap **Y**-min and `y_avg` is post-axis-swap **Z**-mean. Reproducers that read names literally silently misalign. | `align_mesh_geopt_general` returns an `AlignmentRecord` dataclass with named fields (`y_min_post_swap`, `z_mean_post_swap`, `scale`, `axis_flipped`). | M3 | planned |
+| I4 | **Misleading variable names in `transform_mesh`** | Returns `(z_min, x_avg, y_avg, scale)` where `z_min` is post-axis-swap **Y**-min and `y_avg` is post-axis-swap **Z**-mean. Reproducers that read names literally silently misalign. | `align_mesh_geopt_general` returns an `AlignmentRecord` dataclass with named fields (`y_min_post_swap`, `z_mean_post_swap`, `scale`, `axis_flipped`). | M3 | landed (M3 — `physicsnemo/experimental/pnm_pretraining/data/transforms.py`; frozen `AlignmentRecord` with fields `axis_flipped`, `y_min_post_flip`, `scale`, `x_mean_post_scale`, `z_mean_post_scale`, `oversize_safety_applied`, plus `apply` / `inverse` methods; verified by `test_transforms.py` 8 tests including `apply`/`inverse` round-trip) |
 | I5 | **Determinism / seeding** | No `np.random.seed` or `torch.manual_seed` anywhere; every run produces different data. | `build_pretraining_sample(seed: int)` seeds NumPy, PyTorch, and Warp deterministically per call. Reproducible by construction. | M3 | planned |
 | I6 | **On-disk format** | Plain `.npy` (`x.npy`, `supervise_{j}.npy`, `condition_{j}.npy`) per geometry/walk in float16. No metadata, no schema, no per-geometry config trace. | Single `.pdmsh` `DomainMesh` per geometry, all walks stacked. Carries `AlignmentRecord` and full config in `global_data`. Native PhysicsNeMo `DomainMeshReader` consumer. | M3 | planned |
 | I7 | **Skip-detection robustness** | Skip-if-`x.npy`-exists silently leaves partial walk data on disk after a mid-loop crash (`GeoPT_PreTraining_Data.py:663`). | Atomic write: `.pdmsh.tmp` directory, rename-on-success. Partial writes are detected and overwritten on retry. | M3 | planned |
@@ -873,3 +873,24 @@ happened, what's next. Updated as work proceeds.
 ### M3 — `.pdmsh` round-trip
 
 - Status: not started.
+  - subagent C landed (mesh-alignment slice):
+    - Paths created: `physicsnemo/experimental/pnm_pretraining/data/transforms.py`,
+      `test/experimental/pnm_pretraining/data/test_transforms.py`. Updated
+      `physicsnemo/experimental/pnm_pretraining/data/__init__.py` to
+      re-export the public API.
+    - Test count: 8 (asymmetric-box arithmetic walk-through; X-extent /
+      Y-min / X-mean / Z-mean invariants parametrized over sphere /
+      cube / torus; `apply`/`inverse` round-trip on 100 random points;
+      oversize-safety branch fires and is recorded; docstring-mentions
+      smoke; frozen-dataclass guard).
+    - Summary: `AlignmentRecord` is a frozen dataclass with named
+      fields (`axis_flipped`, `y_min_post_flip`, `scale`,
+      `x_mean_post_scale`, `z_mean_post_scale`,
+      `oversize_safety_applied`) plus `apply` / `inverse` methods,
+      replacing GeoPT's misleading `(z_min, x_avg, y_avg, scale)` tuple
+      (F0.6 / I4). `align_mesh_geopt_general` ports GeoPT's
+      General-variant `transform_mesh` (X-flip, no axis swap, oversize
+      safety multiplier verbatim from the reference) without mutating
+      the input mesh.
+    - Commit SHA: `61788357` (recorded in plan; amend chain updates
+      the SHA — see `git log --oneline` for the canonical hash).

@@ -13,23 +13,3 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""GeoPT-style data builders, transforms, and orchestrators."""
-
-from physicsnemo.experimental.pnm_pretraining.data.builder import (
-    build_pretraining_sample,
-    load_pretraining_sample,
-    save_pretraining_sample,
-)
-from physicsnemo.experimental.pnm_pretraining.data.transforms import (
-    AlignmentRecord,
-    align_mesh_geopt_general,
-)
-
-__all__ = [
-    "AlignmentRecord",
-    "align_mesh_geopt_general",
-    "build_pretraining_sample",
-    "load_pretraining_sample",
-    "save_pretraining_sample",
-]
