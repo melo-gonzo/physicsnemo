@@ -684,7 +684,7 @@ recording. Round 2 will fold this list into the parent plan's writeup.
 | # | Improvement | GeoPT reference behavior | Our behavior | Lands in | Status |
 |---|---|---|---|---|---|
 | I1 | **Sign convention for vector-distance feature** | `supervise = positions − closest` (query-pointing) — `GeoPT_PreTraining_Data.py:319`. Inconsistent with CFD wall-function conventions. | `supervise = closest − positions` (surface-pointing). See §A. Parity tests negate before comparing. | M2 | planned |
-| I2 | **Inside/outside test on non-watertight meshes** | `FCPWScene.contains()` — silently misclassifies a fraction of "outside" volume points as inside on non-watertight ShapeNet (no `is_watertight` check, no `fill_holes`). | `signed_distance_field(use_sign_winding_number=True)` — winding-number sign is correct on non-watertight inputs. M3 logs the disagreement rate as a diagnostic. | M3 | planned |
+| I2 | **Inside/outside test on non-watertight meshes** | `FCPWScene.contains()` — silently misclassifies a fraction of "outside" volume points as inside on non-watertight ShapeNet (no `is_watertight` check, no `fill_holes`). | `signed_distance_field(use_sign_winding_number=True)` — winding-number sign is correct on non-watertight inputs. M3 logs the disagreement rate as a diagnostic. | M3 | in-progress (M1 diagnostic landed: 100% on broken-cube fixture) |
 | I3 | **Surface normals at sampled points** | `compute_normals_improved` — vertex-nearest k=1 lookup against `mesh.vertex_normals`; piecewise-constant per Voronoi cell of vertices. | Default: face-barycentric normals from `sample_points_on_mesh` (smooth, principled). Bug-compatibility port emits both keys (`normals_face_barycentric`, `normals_vertex_nearest`). | M3 | planned |
 | I4 | **Misleading variable names in `transform_mesh`** | Returns `(z_min, x_avg, y_avg, scale)` where `z_min` is post-axis-swap **Y**-min and `y_avg` is post-axis-swap **Z**-mean. Reproducers that read names literally silently misalign. | `align_mesh_geopt_general` returns an `AlignmentRecord` dataclass with named fields (`y_min_post_swap`, `z_mean_post_swap`, `scale`, `axis_flipped`). | M3 | planned |
 | I5 | **Determinism / seeding** | No `np.random.seed` or `torch.manual_seed` anywhere; every run produces different data. | `build_pretraining_sample(seed: int)` seeds NumPy, PyTorch, and Warp deterministically per call. Reproducible by construction. | M3 | planned |
@@ -694,8 +694,8 @@ recording. Round 2 will fold this list into the parent plan's writeup.
 | I9 | **Float-precision discipline** | `float16` everywhere on disk. ≥3 decimal digits of precision lost for supervision values < 1e-3 in magnitude. | `float32` on disk by default. Optional `dtype: float16` flag for storage budget when corpus generation kicks in (round 2). | M3 | planned |
 | I10 | **Walk diversity** | "100 walks" is really 10 independent + 90 jittered (`BASE_WALKS=10`, `PERTURB_SIGMA=0.05`). The "100" is misleading in the README and paper. | Honest API: `generate_walks(n_independent=10, n_jittered_per_base=9, perturb_sigma=0.05)`. Default values match GeoPT for parity; reports document the actual independence count. | M2 | planned |
 | I11 | **Single-process Python orchestration** | Serial `for` loop over geometries; "80 cores" is FCPW-internal threading only. No way to scale across geometries from the Python side. | Round 2 will add multi-process / multi-GPU orchestration. Round 1's `build_pretraining_sample` is per-geometry single-process by design (matches scope). | round 2 | deferred |
-| I12 | **Numerical-parity test infrastructure** | None — the released repo has no parity tests, no analytic ground truth, no FCPW comparison. | Three-tier: analytic mesh (sphere/cube/torus) RMS < 1e-5; trimesh ShapeNet RMS < 1e-4; FCPW ShapeNet RMS < 1e-5 (gated). | M1 | planned |
-| I13 | **Throughput measurement discipline** | README claims "20s per geometry on 80 CPU cores"; no per-op breakdown, no build-vs-query split, no comparison methodology. | M1 emits a per-mesh, per-op, per-query-size, build-vs-query timing table. M2 emits per-walk wall-clock comparison. | M1, M2 | planned |
+| I12 | **Numerical-parity test infrastructure** | None — the released repo has no parity tests, no analytic ground truth, no FCPW comparison. | Three-tier: analytic mesh (sphere/cube/torus) RMS < 1e-5; trimesh ShapeNet RMS < 1e-4; FCPW ShapeNet RMS < 1e-5 (gated). | M1 | in-progress (analytic + trimesh tier landed; FCPW tier gated and ready) |
+| I13 | **Throughput measurement discipline** | README claims "20s per geometry on 80 CPU cores"; no per-op breakdown, no build-vs-query split, no comparison methodology. | M1 emits a per-mesh, per-op, per-query-size, build-vs-query timing table. M2 emits per-walk wall-clock comparison. | M1, M2 | in-progress (M1 build-vs-query table landed, CPU run; H100 rerun pending) |
 
 Conventions for adding entries:
 - New rows go at the bottom; do not renumber.
@@ -723,7 +723,33 @@ happened, what's next. Updated as work proceeds.
 
 ### M1 — kernel parity
 
-- Status: not started.
+- Status: in-progress as of 2026-05-23.
+- Subagent A landed (`MeshRayIntersection` op + parity tests; commit
+  `b7501704`):
+  - `physicsnemo/experimental/pnm_pretraining/ops/mesh_ray_intersection.py`
+    — Warp-backed `FunctionSpec` mirroring `sdf.py`; outputs
+    `(hit_mask, hit_distance, hit_point)`; miss returns
+    `(0, inf, origin)` per GeoPT reference behavior. Direction
+    convention §A Convention 3 (caller-normalized).
+  - `test/experimental/pnm_pretraining/ops/test_mesh_ray_intersection.py`
+    — analytic + trimesh parity, 10 cases.
+  - Unblocks G1; sets up I12.
+- Subagent B landed (SDF parity + BVH bench):
+  - `test/experimental/pnm_pretraining/ops/test_sdf_geopt_parity.py`
+    — five tests (sphere analytic, cube analytic, torus vs trimesh,
+    FCPW-gated cross-check, non-watertight diagnostic). On CPU: 4
+    passed, FCPW skipped.
+  - `scripts/bench_bvh_build_vs_query.py` + `reports/m1-bvh-build-vs-query.md`
+    — per-mesh build / 1k / 10k / 100k / e2e timing table. Ran on CPU
+    (no CUDA available on host); structural ratios captured.
+  - `reports/m1-kernel-parity.md` skeleton with G3 / G4 / G5 / I2
+    sections filled in. G1 and G2 sections are TODO markers awaiting
+    a follow-up commit that quotes subagent A's ray-cast measurements
+    into the report.
+  - Verdict so far: G3 green (torus closest-point RMS 2.37e-6 vs
+    trimesh, 42× under gate), G4 yellow (CPU run; rerun on H100 to
+    close), G5 informational (FCPW not installed), I2 green
+    (broken-cube diagnostic 100% sign agreement vs analytic).
 
 ### M2 — composite parity
 
