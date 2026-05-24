@@ -110,20 +110,24 @@ Five files, none of them duplicative of the recipe's existing logic:
    head; the backbone weights match by name and load. This is the
    round-trip the whole pipeline is built for.
 
-### Round-1 follow-up (M3 schema reshape, improvement I16's resolution)
+### Recipe-side: WalkSampler transform (resolves I16 / closes Q5)
 
-5. **`physicsnemo/experimental/pnm_pretraining/data/builder.py`** —
-   reshape `walks_supervise` from M3's
-   `(n_walks, n_points, n_steps, 3)` (in `interior.global_data` per
-   I16) to point-major
-   `(n_points, n_walks * n_steps * 3)` (in `interior.point_data`).
-   Same for `walks_directions` and `walks_step_lengths` if the
-   model needs them. The reshape is mechanical — no new geometry, no
-   new walks, just a `.permute(1, 0, 2, 3).reshape(n_points, -1)` at
-   write time. Updates the M3 round-trip test to check the new
-   shape. Closes I16; the rationale ("each point owns its walk
-   samples; *n_points* is the natural leading dim") is documented
-   in the builder docstring.
+5. **`physicsnemo/experimental/pnm_pretraining/data/transforms.py`** —
+   add `WalkSampler` transform class. Stateful (carries an RNG seed)
+   so it can be `_target_:` instantiated in the dataset YAML's
+   `transforms:` block. Slices `interior.global_data.walks_supervise`,
+   `walks_directions`, `walks_step_lengths` by a randomly-drawn walk
+   index, writes the slices to `interior.point_data.supervise: (N+M, n_steps * 3)`,
+   `interior.point_data.directions: (N+M, 3)`,
+   `interior.point_data.step_lengths: (N+M, 1)`. **No changes to
+   `builder.py`** — the M3 on-disk schema (I16) is preserved; the
+   transform handles the per-sample reshape.
+
+   The model's `forward_kwargs:` block in
+   `conf/model/transolver_pretrain.yaml` then references
+   `interior.point_data.directions` and `interior.point_data.step_lengths`
+   as conditioning inputs (à la GeoPT's `fx + v` concatenation in
+   `external-repos/GeoPT/exp/GeoPT_finetune.py:33`).
 
 ## Loss (rel_L2) details
 
@@ -267,18 +271,19 @@ is genuinely useful for "load a frozen pretrained backbone and attach
 a different downstream head" workflows; we can add it later if a real
 need arises.
 
-### D3 — schema reshape (close I16)
+### D3 — schema reshape via WalkSampler transform (not via builder rewrite)
 
 Parent plan §1.2 schema (`interior.point_data.trajectory_features:
-(N, τ+1, 3)`) is closer to point-major than M3's actual emission
-ended up being. M3's I16 finding rationalized moving the walk arrays
-to `interior.global_data` because of a TensorDict batch-size
-invariant. **Now we reverse that decision** and reshape to
-point-major `(n_points, n_walks * n_steps * 3)` so it satisfies the
-TensorDict invariant, lives in `interior.point_data`, and is
-consumable by the recipe's `extract_targets` without any recipe
-changes. I16 stays in the catalog as "discovered, then unwound";
-new improvement I19 records the reshape decision.
+(N, τ+1, 3)`) is per-sample and per-walk. M3's I16 finding kept the
+walk arrays in `interior.global_data` because of TensorDict's
+per-point batch-size invariant on `point_data`. The Q5 resolution
+above shows that *the recipe's per-sample model contract is
+per-walk anyway* — so we don't reshape at builder time. Instead, a
+**`WalkSampler` transform** in the dataset YAML's `transforms:` block
+slices one walk per `__getitem__`, producing
+`interior.point_data.supervise: (N+M, n_steps * 3)` etc. M3's
+on-disk schema is preserved; only the recipe-side transform changes.
+New improvement I20 records the sampler.
 
 ## New improvements to catalog
 
@@ -287,21 +292,39 @@ To be added to `geopt-datagen-round1-plan.md` §8:
 | # | Improvement | GeoPT reference behavior | Our behavior | Lands in | Status |
 |---|---|---|---|---|---|
 | I19 | **Pretraining as a recipe flavor** | GeoPT ships separate `run.py` modes (`GeoPT_finetune`, `steady_cond`); finding D1 of the parent plan also notes pretraining itself is unreleased. | Pretraining and fine-tuning are CLI overrides on the same `unified_external_aero_recipe/src/train.py`. No new entrypoint. | PR 2 | planned |
-| I20 | **Schema reshape: point-major walks_supervise** | N/A (GeoPT writes per-walk `.npy` files, not a structured DomainMesh). | `(n_points, n_walks * n_steps * 3)` in `interior.point_data`, satisfying the TensorDict per-point batch-size invariant and fitting the recipe's `extract_targets`. Closes I16 (M3 finding) by reversing it. | PR 2 | planned |
+| I20 | **WalkSampler dataset transform** | GeoPT writes 100 separate `condition_{j}.npy` / `supervise_{j}.npy` files per geometry; the dataloader reads one file at random per `__getitem__`. | A `WalkSampler` transform in the dataset YAML's `transforms:` block slices `(n_walks, n_points, n_steps, 3)` arrays from `interior.global_data` to `(n_points, n_steps * 3)` arrays in `interior.point_data` per sample. Single `.pdmsh` per geometry on disk; per-sample variation comes from the transform's RNG. Closes Q5; supersedes the originally-planned point-major reshape. | PR 2 | planned |
 
 ## Open questions
 
-- **Q5.** Should `walks_directions` and `walks_step_lengths` also be
-  reshaped to point-major and exposed as additional `forward_kwargs:`
-  inputs (so the model can condition on the per-point velocity, à la
-  GeoPT's `condition` tensor)? The parent plan §3.3 example kernel
-  treats them as inputs *to* the walk, not features for the model.
-  But GeoPT's released schema (`condition_{j}.npy = (N+M, 4)`)
-  suggests the model is meant to *see* directions and step_lengths
-  during pretraining (the model predicts `supervise` *given* the
-  initial dynamics). PR 2 should resolve this by reading the GeoPT
-  finetune script to confirm what the model's input signature looks
-  like.
+- **Q5 (resolved).** GeoPT's fine-tune model signature in
+  `external-repos/GeoPT/exp/GeoPT_finetune.py:30-36` confirms that
+  `(directions, step_lengths)` are **model inputs**, not just
+  data-gen hyperparameters. The model sees its conditioning vector
+  (the `fx` arg = freestream + per-point velocity field derived
+  from the physical operating condition); during pretraining the
+  analog is the per-walk synthetic `(directions, step_lengths)`.
+
+  **Resolution:** the pretraining dataset emits **one walk per sample**
+  (a random index into the `n_walks` dim, drawn fresh per `__getitem__`
+  call). The schema becomes per-sample:
+
+  - `interior.point_data.supervise`: `(N+M, n_steps * 3)` — flat
+    flattened across the τ axis, the prediction target.
+  - `interior.point_data.directions`: `(N+M, 3)` — model input.
+  - `interior.point_data.step_lengths`: `(N+M, 1)` — model input.
+
+  This matches GeoPT's `condition` tensor's `(N+M, 4)` shape
+  (direction 3 + step length 1). The `n_walks` dim is consumed at
+  `__getitem__` time by random sampling, not exposed to the model.
+
+  Dataset YAML's pretraining-side ratio: each `.pdmsh` file yields
+  `n_walks` training samples per epoch (one per walk); we add a
+  `WalkSampler` transform (or use random indexing) to hide the walk
+  axis from the rest of the pipeline.
+
+  This **simplifies the recipe-side schema substantially** vs. the
+  original D3 reshape proposal, and fits the recipe's "per-sample
+  one-shot forward pass" assumption better.
 
 - **Q6.** What's the right default for `n_walks` in the dataset YAML?
   GeoPT's full default is 100 (10 base + 90 jittered, per I10). For a
@@ -316,3 +339,36 @@ To be added to `geopt-datagen-round1-plan.md` §8:
   matched parameters. Not required for the headline GeoPT recipe (the
   paper fine-tunes the whole model) but useful for ablations. Out of
   scope for this PR; tracked as a follow-up.
+
+## Resolved Q5: schema is per-walk, not all-walks-per-sample
+
+The schema deviation D3 above (point-major all-walks-per-sample) is
+**superseded by the Q5 resolution**: per `__getitem__`, the dataset
+samples *one* walk index and emits per-point arrays for that walk
+only. The full `(n_walks, ...)` arrays remain in the on-disk `.pdmsh`
+file (M3's I16 reshape) but are unrolled by a dataset-side transform
+or `__getitem__` override before they reach the recipe's collate.
+
+**Two implementation options:**
+
+1. **WalkSampler transform** in the dataset YAML's `transforms:`
+   block. Runs after the reader, picks a random walk index, slices
+   `walks_supervise[i]` etc. into `interior.point_data.supervise` etc.
+   Recipe-friendly (transforms are how every other dataset YAML
+   handles per-sample randomness).
+
+2. **`__getitem__`-level multiplication.** The reader emits
+   `n_walks` samples per `.pdmsh` file (the dataset's effective
+   length is `n_files * n_walks`). Each `__getitem__` selects one
+   walk deterministically by index. Pre-shuffles walks so the
+   training loop sees them in random order.
+
+Option 1 is more compatible with the unified recipe's existing
+transform pipeline and is the default plan. Option 2 is a future
+optimization for corpus-scale generation.
+
+This makes the M3 schema reshape (D3) trivial: keep walk arrays in
+their natural `(n_walks, n_points, n_steps, 3)` layout under
+`interior.global_data` (per I16); the WalkSampler transform converts
+to `(n_points, n_steps * 3)` etc. at sample time. **I16 is no longer
+unwound; I20 records the WalkSampler as the resolution.**
