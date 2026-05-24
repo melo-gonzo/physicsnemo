@@ -685,19 +685,20 @@ recording. Round 2 will fold this list into the parent plan's writeup.
 |---|---|---|---|---|---|
 | I1 | **Sign convention for vector-distance feature** | `supervise = positions − closest` (query-pointing) — `GeoPT_PreTraining_Data.py:319`. Inconsistent with CFD wall-function conventions. | `supervise = closest − positions` (surface-pointing). See §A. Parity tests negate before comparing. | M2 | landed (M2 — composite kernel emits surface-pointing supervise; parity test `test_constrained_walk_geopt_parity_sphere` confirms sign-aligned 1.24e-7 RMS after negation) |
 | I2 | **Inside/outside test on watertight + non-watertight meshes** | `FCPWScene.contains()` — silently misclassifies points even on closed analytic primitives. M1 measurements (500 random query points each, watertight): sphere 6.4% wrong, cube 13.8% wrong. The plan originally framed this as a non-watertight-ShapeNet-only concern; M1 measurements show FCPW is unreliable on watertight inputs too. | `signed_distance_field(use_sign_winding_number=True)` — winding-number sign is **100% correct** vs analytic ground truth on the watertight sphere and cube fixtures (500/500 each). M3 will additionally log the disagreement rate on non-watertight ShapeNet geometries. | M1, M3 | landed (M1 + analytic-watertight measurement); M3 ShapeNet diagnostic still planned |
-| I3 | **Surface normals at sampled points** | `compute_normals_improved` — vertex-nearest k=1 lookup against `mesh.vertex_normals`; piecewise-constant per Voronoi cell of vertices. | Default: face-barycentric normals from `sample_points_on_mesh` (smooth, principled). Bug-compatibility port emits both keys (`normals_face_barycentric`, `normals_vertex_nearest`). | M3 | planned |
+| I3 | **Surface normals at sampled points** | `compute_normals_improved` — vertex-nearest k=1 lookup against `mesh.vertex_normals`; piecewise-constant per Voronoi cell of vertices. | Default: face-barycentric normals from `sample_points_on_mesh` (smooth, principled). Bug-compatibility port emits both keys (`normals_face_barycentric`, `normals_vertex_nearest`). | M3 | landed (M3 — `builder.py` emits both keys at `interior.point_data.normals_face_barycentric` and `…normals_vertex_nearest`; vertex-nearest port mirrors GeoPT `point_cloud.kdtree.query` verbatim; X-flip applied to both arrays without renormalization since flipped components stay unit) |
 | I4 | **Misleading variable names in `transform_mesh`** | Returns `(z_min, x_avg, y_avg, scale)` where `z_min` is post-axis-swap **Y**-min and `y_avg` is post-axis-swap **Z**-mean. Reproducers that read names literally silently misalign. | `align_mesh_geopt_general` returns an `AlignmentRecord` dataclass with named fields (`y_min_post_swap`, `z_mean_post_swap`, `scale`, `axis_flipped`). | M3 | landed (M3 — `physicsnemo/experimental/pnm_pretraining/data/transforms.py`; frozen `AlignmentRecord` with fields `axis_flipped`, `y_min_post_flip`, `scale`, `x_mean_post_scale`, `z_mean_post_scale`, `oversize_safety_applied`, plus `apply` / `inverse` methods; verified by `test_transforms.py` 8 tests including `apply`/`inverse` round-trip) |
-| I5 | **Determinism / seeding** | No `np.random.seed` or `torch.manual_seed` anywhere; every run produces different data. | `build_pretraining_sample(seed: int)` seeds NumPy, PyTorch, and Warp deterministically per call. Reproducible by construction. | M3 | planned |
-| I6 | **On-disk format** | Plain `.npy` (`x.npy`, `supervise_{j}.npy`, `condition_{j}.npy`) per geometry/walk in float16. No metadata, no schema, no per-geometry config trace. | Single `.pdmsh` `DomainMesh` per geometry, all walks stacked. Carries `AlignmentRecord` and full config in `global_data`. Native PhysicsNeMo `DomainMeshReader` consumer. | M3 | planned |
-| I7 | **Skip-detection robustness** | Skip-if-`x.npy`-exists silently leaves partial walk data on disk after a mid-loop crash (`GeoPT_PreTraining_Data.py:663`). | Atomic write: `.pdmsh.tmp` directory, rename-on-success. Partial writes are detected and overwritten on retry. | M3 | planned |
-| I8 | **Watertightness diagnostic** | None. | `build_pretraining_sample` records `is_watertight`, fill-holes-attempted flag, and vertex-count delta in `global_data.mesh_quality`. | M3 | planned |
-| I9 | **Float-precision discipline** | `float16` everywhere on disk. ≥3 decimal digits of precision lost for supervision values < 1e-3 in magnitude. | `float32` on disk by default. Optional `dtype: float16` flag for storage budget when corpus generation kicks in (round 2). | M3 | planned |
+| I5 | **Determinism / seeding** | No `np.random.seed` or `torch.manual_seed` anywhere; every run produces different data. | `build_pretraining_sample(seed: int)` seeds NumPy, PyTorch, and Warp deterministically per call. Reproducible by construction. | M3 | landed (M3 — `builder.py::_seed_everything` seeds `np.random.default_rng`, `torch.manual_seed`, `wp.rand_init`; the same seed is forwarded into `generate_walks`) |
+| I6 | **On-disk format** | Plain `.npy` (`x.npy`, `supervise_{j}.npy`, `condition_{j}.npy`) per geometry/walk in float16. No metadata, no schema, no per-geometry config trace. | Single `.pdmsh` `DomainMesh` per geometry, all walks stacked. Carries `AlignmentRecord` and full config in `global_data`. Native PhysicsNeMo `DomainMeshReader` consumer. | M3 | landed (M3 — `builder.py::save_pretraining_sample` writes one `.pdmsh` directory per geometry; `test_pdmsh_domain_mesh_reader_consumer` confirms `DomainMeshReader` round-trip) |
+| I7 | **Skip-detection robustness** | Skip-if-`x.npy`-exists silently leaves partial walk data on disk after a mid-loop crash (`GeoPT_PreTraining_Data.py:663`). | Atomic write: `.pdmsh.tmp` directory, rename-on-success. Partial writes are detected and overwritten on retry. | M3 | landed (M3 — `builder.py::save_pretraining_sample(atomic=True)` writes `{prefix}.pdmsh.tmp/` then `os.rename`; tests `test_pdmsh_atomic_write_overwrite` and `test_pdmsh_atomic_write_failure_preserves_original` cover the success and failure paths) |
+| I8 | **Watertightness diagnostic** | None. | `build_pretraining_sample` records `is_watertight`, fill-holes-attempted flag, and vertex-count delta in `global_data.mesh_quality`. | M3 | landed (M3 — `builder.py` writes `global_data.mesh_quality.{is_watertight, n_vertices_pre_alignment, n_faces}` from the input mesh pre-alignment; sphere fixture lights up `is_watertight=False` due to UV pole-ring stitching, demonstrating the diagnostic in action) |
+| I9 | **Float-precision discipline** | `float16` everywhere on disk. ≥3 decimal digits of precision lost for supervision values < 1e-3 in magnitude. | `float32` on disk by default. Optional `dtype: float16` flag for storage budget when corpus generation kicks in (round 2). | M3 | landed (M3 — every persisted tensor is `float32` per `builder.py`; the schema dump in `reports/m3-pdmsh-round-trip.md` enumerates dtypes; `dtype=float16` flag is a round-2 storage-budget knob) |
 | I10 | **Walk diversity** | "100 walks" is really 10 independent + 90 jittered (`BASE_WALKS=10`, `PERTURB_SIGMA=0.05`). The "100" is misleading in the README and paper. | Honest API: `generate_walks(n_independent=10, n_jittered_per_base=9, perturb_sigma=0.05)`. Default values match GeoPT for parity; reports document the actual independence count. | M2 | landed (M2 — `generate_walks` exposes the three-knob API; `is_independent: (n_walks,) bool` in the return dict; defaults match GeoPT) |
 | I11 | **Single-process Python orchestration** | Serial `for` loop over geometries; "80 cores" is FCPW-internal threading only. No way to scale across geometries from the Python side. | Round 2 will add multi-process / multi-GPU orchestration. Round 1's `build_pretraining_sample` is per-geometry single-process by design (matches scope). | round 2 | deferred |
 | I12 | **Numerical-parity test infrastructure** | None — the released repo has no parity tests, no analytic ground truth, no FCPW comparison. | Three-tier: analytic mesh (sphere/cube/torus) RMS at single-precision unit roundoff; trimesh ShapeNet RMS < 1e-4; FCPW closest-point RMS < 1e-4 (installed locally as dev dep, not upstream). | M1 | landed (all three tiers running locally; ShapeNet leg deferred to corpus provisioning) |
 | I13 | **Throughput measurement discipline** | README claims "20s per geometry on 80 CPU cores"; no per-op breakdown, no build-vs-query split, no comparison methodology. | M1 emits a per-mesh, per-op, per-query-size, build-vs-query timing table. M2 emits per-walk wall-clock comparison. | M1, M2 | in-progress (M1 build-vs-query table landed, CPU run; M2 per-walk numbers landed in `reports/m2-composite-parity.md`; H100 rerun pending for both) |
 | I14 | **Composite-walk supervise on non-watertight inputs is fp16-noise-level** | None — GeoPT has no parity test against PhysicsNeMo, so this regime was unmeasured. The plan originally predicted I2's contains/winding disagreement (13.8% on a watertight cube) would propagate into the composite-walk supervise as measurable RMS divergence. | Measured: composite-walk supervise RMS on a broken-cube parity run (`test_constrained_walk_geopt_parity_broken_cube`) is 4e-8, four orders of magnitude below the fp16 quantization floor. Cause: closest-point itself agrees between FCPW and winding-number kernel within 1.4e-4 even on contains-disagreement points; supervise is `closest − p`, not `sign × \|p − closest\|`, so the sign flip does not contribute. The composite walk is more robust to non-watertightness than the kernel-level SDF gate suggests. | M2 | landed (M2 — measured in `reports/m2-composite-parity.md`) |
-| I15 | **`wp.Mesh` rebuild per step in the M2 implementation** | N/A (GeoPT uses FCPW which has the same per-call build cost). | `constrained_walk_step` builds a fresh `wp.Mesh` (BVH + winding-number tree) on every kernel launch. For `n_steps=3, n_walks=100` on a 1024-tri mesh, that's 300 BVH builds. M3's `build_pretraining_sample` should hoist the build to the per-geometry call site and pass `mesh.id` into the orchestrator (and ideally the kernel) so SDF + walk calls within a single sample reuse the mesh. F0.2 already documents the same pattern in `signed_distance_field_impl`. | round 2 | planned |
+| I15 | **`wp.Mesh` rebuild per step in the M2 implementation** | N/A (GeoPT uses FCPW which has the same per-call build cost). | `constrained_walk_step` builds a fresh `wp.Mesh` (BVH + winding-number tree) on every kernel launch. For `n_steps=3, n_walks=100` on a 1024-tri mesh, that's 300 BVH builds. M3's `build_pretraining_sample` should hoist the build to the per-geometry call site and pass `mesh.id` into the orchestrator (and ideally the kernel) so SDF + walk calls within a single sample reuse the mesh. F0.2 already documents the same pattern in `signed_distance_field_impl`. | round 2 | planned (M3 builder-level hoist landed: aligned-mesh tensors stay hot in memory across all SDF + walk calls, so the OBJ load + alignment + I/O are paid once per sample. The `wp.Mesh` BVH-build hoist still requires editing `signed_distance_field_impl`'s signature; deferred to round 2.) |
+| I16 | **M3 prompt schema vs. TensorDict batch-size invariant** | N/A — the conflict is internal to PhysicsNeMo's tensorclass design, not a GeoPT carryover. | The originally-specified schema put walk arrays under `interior.point_data`. `Mesh.__post_init__` enforces `point_data.batch_size == [n_points]`, which means every leaf must have leading dim `n_points`. Walk arrays' leading dim is `n_walks`, not `n_points`; `walks_is_independent` is `(n_walks,)` outright. Resolved in M3 by relocating the four walk arrays to `interior.global_data` (`Mesh`-level non-batched dict). Documented in `builder.py` module docstring; consumers should index `dm.interior.global_data["walks_…"]`. | M3 | landed (M3 — schema adjustment lives in `builder.py`; verified by `test_pdmsh_tiny_config_round_trip`; recorded as a new finding in `reports/m3-pdmsh-round-trip.md`) |
 
 Conventions for adding entries:
 
@@ -872,7 +873,9 @@ happened, what's next. Updated as work proceeds.
 
 ### M3 — `.pdmsh` round-trip
 
-- Status: not started.
+- Status: GREEN on G11 / G12 / G14; YELLOW on G13 (CPU dispatch
+  exceeds the 60 s wall-clock budget; H100 rerun bundled with M1's
+  carry-forward).
   - subagent C landed (mesh-alignment slice):
     - Paths created: `physicsnemo/experimental/pnm_pretraining/data/transforms.py`,
       `test/experimental/pnm_pretraining/data/test_transforms.py`. Updated
@@ -894,3 +897,53 @@ happened, what's next. Updated as work proceeds.
       the input mesh.
     - Commit SHA: `61788357` (recorded in plan; amend chain updates
       the SHA — see `git log --oneline` for the canonical hash).
+  - subagent D landed (builder + `.pdmsh` round-trip slice):
+    - Paths created: `physicsnemo/experimental/pnm_pretraining/data/builder.py`,
+      `test/experimental/pnm_pretraining/data/test_pdmsh_round_trip.py`,
+      `reports/m3-pdmsh-round-trip.md`. Merged exports for
+      `build_pretraining_sample` / `save_pretraining_sample` /
+      `load_pretraining_sample` into the shared
+      `physicsnemo/experimental/pnm_pretraining/data/__init__.py`
+      alongside C's `AlignmentRecord` / `align_mesh_geopt_general`.
+    - Test count: 6 (tiny-config round-trip with bit-exact recovery
+      of every leaf; schema invariants — region partition, surface-row
+      pinning, walks_is_independent count, supervise_step0 zero on
+      surface; alignment-record reconstruction + apply/inverse;
+      atomic write success path; atomic write failure preserves the
+      original; `DomainMeshReader` consumer round-trip) plus 1
+      env-gated full-config wall-clock smoke
+      (`PNM_M3_FULL_BENCH=1`).
+    - Test suite: 6 passed, 1 skipped (full-config gate);
+      `PNM_M3_FULL_BENCH=1` run also passes (16.59 s for the 10-walk
+      subset on this CPU host).
+    - Gate verdicts: G11 green (subagent C's
+      `align_mesh_geopt_general` validates X-extent / Y-min / X-mean
+      / Z-mean post-conditions in-function; the recorded
+      `AlignmentRecord` round-trips correctly). G12 green (every
+      leaf reloads bit-exact at `atol=0, rtol=0`). G13 yellow
+      (full-config 32768 + 4096 / 10+90 walks / 3 steps measured at
+      129.74 s build / 184.71 MB on-disk on this CPU host; budget is
+      60 s on dev machine — H100 rerun is the same carry-forward as
+      M1's G4). G14 green (post-load schema parity is enforced by
+      both the in-memory test and the `DomainMeshReader` consumer
+      test).
+    - Improvements landed: I3 (both normals stored), I5
+      (deterministic seeding across NumPy / torch / Warp), I6
+      (single-`.pdmsh`-per-geometry; consumer round-trip via
+      `DomainMeshReader`), I7 (atomic-rename `.pdmsh` write with
+      preserve-on-failure semantics), I8 (mesh-quality diagnostic
+      under `global_data.mesh_quality`), I9 (float32 on disk by
+      default).
+    - New finding: I16 (M3 prompt schema vs. TensorDict batch-size
+      invariant). The originally-specified `interior.point_data`
+      layout for walk arrays is not representable as a per-point
+      TensorDict because walk-leading dims are `n_walks`, not
+      `n_points`. Resolved by relocating the four walk arrays to
+      `interior.global_data` (the `Mesh`-level non-batched dict).
+      Documented in `builder.py` and the M3 report.
+    - Carry-forwards (do not block round-2 start): full-config H100
+      rerun (G13); ShapeNet-corpus consumer test (deferred per the
+      user's M3 decision today; round-2 / parent plan PR 2 work);
+      `wp.Mesh` BVH-hoist into the SDF op (I15, still round 2).
+    - Commit SHA: see `git log --oneline` for the canonical hash;
+      this entry is finalized at commit time.
