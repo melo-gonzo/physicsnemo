@@ -16,8 +16,9 @@
 
 """End-to-end smoke test for the PR 2 pretraining pipeline.
 
-Exercises the model side of the GeoPT pretraining pipeline against a
-4-sample synthetic ``.pdmsh`` corpus built from the conftest sphere:
+Exercises the full forward + loss path of the GeoPT pretraining
+pipeline against a 4-sample synthetic ``.pdmsh`` corpus built from the
+conftest sphere:
 
 1. Build 4 synthetic samples via
    :func:`physicsnemo.experimental.pnm_pretraining.data.build_pretraining_sample`.
@@ -30,30 +31,38 @@ Exercises the model side of the GeoPT pretraining pipeline against a
    ``forward_kwargs:`` block against that sample to build a real
    ``embedding`` / ``fx`` batch.
 5. Run forward, verify the output shape matches ``(B, N, n_steps * 3)``.
-6. Run backward + one optimizer step (no NaNs).
-7. Save a ``.mdlus`` checkpoint.
-8. Load that checkpoint into a freshly-constructed plain
-   :class:`Transolver` via :func:`load_pretrained_backbone` with
-   ``key_remap={"transolver.": ""}`` and
-   ``exclude_layers=["trajectory_head"]`` — the PR 2.5 round-trip.
+6. Pass the model output through the recipe's
+   :func:`output_normalize.normalize_output_to_tensordict` to split it
+   into per-step ``supervise_step{i}`` `(B, N, 3)` leaves and verify the
+   per-field shapes.
+7. Resolve :func:`forward_kwargs.extract_targets` against the
+   walk-sampled sample to build a target TensorDict with the same
+   per-step keys; verify shapes match the prediction.
+8. Pass both through :class:`loss.LossCalculator` (``loss_type="rel_l2"``)
+   and verify the total is finite, > 0, and a 0-D tensor.
+9. Run backward + one optimizer step (no NaNs in the resulting loss).
+10. Save a ``.mdlus`` checkpoint.
+11. Load that checkpoint into a freshly-constructed plain
+    :class:`Transolver` via :func:`load_pretrained_backbone` with
+    ``key_remap={"transolver.": ""}`` and
+    ``exclude_layers=["trajectory_head"]`` — the PR 2.5 round-trip.
 
-**Simplification (per ``pr2-recipe-extension-plan.md`` "Test plan" and
-the prompt's documented fallback).** This test stops short of running
-the recipe's full training loop (loss / metric / checkpoint manager).
-Two reasons:
+**Recipe-side shape mismatch is RESOLVED in this test (PR 2 follow-up).**
+The dataset YAML's ``targets:`` block now declares ``n_steps`` per-step
+``vector`` fields (one per trajectory step), and the model's flat
+``(B, N, n_steps * 3)`` output is split into the same per-step
+TensorDict keys by :func:`output_normalize.split_concat_by_target`. The
+recipe's loss / metric / output_normalize / extract_targets machinery
+therefore consumes the trajectory output without any recipe-side code
+changes — the per-step decomposition is the semantically-cleanest fit
+for the existing ``vector`` FieldType.
 
-1. The recipe's :func:`train.main` initializes a global
-   ``DistributedManager``, mutates ``sys.path``, and writes to a
-   well-known output directory; running it under pytest is brittle and
-   slow on CPU.
-2. As of this commit, the dataset YAML (subagent E) declares
-   ``targets: supervise: vector`` (3 channels); the model emits
-   ``n_steps * 3`` channels. The recipe's
-   :func:`output_normalize.split_concat_by_target` will reject the
-   shape mismatch until E (or a follow-up PR) introduces a richer
-   field-type tag (e.g. ``"trajectory"``) or reshapes both sides to
-   ``(B, N, n_steps, 3)``. This test stops at the model boundary so
-   the model-side smoke isn't blocked on that coordination.
+**Why this test still bypasses :func:`train.main`.** The recipe's
+:func:`train.main` initializes a global ``DistributedManager``, mutates
+``sys.path``, and writes to a well-known output directory; running it
+under pytest is brittle and slow on CPU. We exercise every recipe-side
+component the model interacts with (``output_normalize``, ``loss``,
+``extract_targets``, ``forward_kwargs``) directly here.
 
 The PR 2.5 round-trip part is **also** unit-tested standalone in
 ``test/experimental/pnm_pretraining/models/test_transolver_pretrain.py::test_backbone_round_trip_via_load_pretrained_backbone``.
@@ -134,9 +143,11 @@ def test_pretraining_e2e_smoke(_smoke_gate: None, tmp_path: Path) -> None:
     import nondim  # noqa: F401, recipe-local
     import sdf  # noqa: F401, recipe-local
     import torch
-    from forward_kwargs import resolve_forward_kwargs
+    from forward_kwargs import extract_targets, resolve_forward_kwargs
     from hydra import compose, initialize_config_dir
+    from loss import LossCalculator
     from omegaconf import OmegaConf
+    from output_normalize import normalize_output_to_tensordict
 
     # Side-effect imports register the ${dp:...} resolver and the
     # recipe-local transforms (mirrors recipe conftest.py:52-54).
@@ -210,7 +221,10 @@ def test_pretraining_e2e_smoke(_smoke_gate: None, tmp_path: Path) -> None:
     assert cfg.dataset == "geopt_pretrain"
 
     # Load the dataset YAML separately and override the corpus path so
-    # the reader looks at our synthetic corpus, not `???`.
+    # the reader looks at our synthetic corpus, not `???`. We also
+    # override the `targets:` block to match the test's `n_steps=2`
+    # (the YAML declares the GeoPT-default `n_steps=3`, which would
+    # mismatch our 2-step synthetic corpus).
     from datasets import load_dataset_config
 
     dataset_cfg = load_dataset_config(_RECIPE_ROOT / "datasets" / f"{cfg.dataset}.yaml")
@@ -220,6 +234,11 @@ def test_pretraining_e2e_smoke(_smoke_gate: None, tmp_path: Path) -> None:
     # is loaded standalone here.
     dataset_cfg = OmegaConf.merge(
         dataset_cfg, OmegaConf.create({"training": {"seed": 0}})
+    )
+    # Rebuild the targets block to match `n_steps=2`.
+    test_n_steps = tiny_kwargs["n_steps"]
+    dataset_cfg.targets = OmegaConf.create(
+        {f"supervise_step{i}": "vector" for i in range(test_n_steps)}
     )
 
     # ----- 3. Instantiate the wrapper via Hydra. -----
@@ -233,12 +252,16 @@ def test_pretraining_e2e_smoke(_smoke_gate: None, tmp_path: Path) -> None:
 
     domain_mesh, _meta = reader[0]
     domain_mesh = walk_sampler(domain_mesh)
-    # WalkSampler must have populated the three keys the model YAML
-    # references in `forward_kwargs:`.
+    # WalkSampler must have populated the conditioning keys the model
+    # YAML references in `forward_kwargs:` plus the per-step supervise
+    # keys the dataset YAML's `targets:` block lists.
     pd = domain_mesh.interior.point_data
     assert "directions" in pd.keys()
     assert "step_lengths" in pd.keys()
-    assert "supervise" in pd.keys()
+    for step_idx in range(test_n_steps):
+        assert f"supervise_step{step_idx}" in pd.keys(), (
+            f"WalkSampler did not emit supervise_step{step_idx}"
+        )
 
     # ----- 5. Resolve forward_kwargs against the sample, run forward. -----
     # The recipe's collate adds a leading batch dim before calling
@@ -252,28 +275,73 @@ def test_pretraining_e2e_smoke(_smoke_gate: None, tmp_path: Path) -> None:
 
     n_points = embedding.shape[1]
     out = model(embedding=embedding, fx=fx)
-    assert out.shape == (1, n_points, tiny_kwargs["n_steps"] * 3)
+    assert out.shape == (1, n_points, test_n_steps * 3)
 
-    # ----- 6. Backward + one optimizer step. -----
-    target = domain_mesh.interior.point_data["supervise"].unsqueeze(0).to(out.dtype)
-    assert target.shape == out.shape, (
-        f"target shape {tuple(target.shape)} != model output {tuple(out.shape)}"
+    # ----- 6. Pass model output through `output_normalize` to get a
+    #          per-step TensorDict; verify per-field shapes. -----
+    target_config = {
+        name: ftype
+        for name, ftype in OmegaConf.to_container(dataset_cfg.targets).items()
+    }
+    pred_td = normalize_output_to_tensordict(
+        out, target_config, output_type=cfg.output_type
     )
+    for step_idx in range(test_n_steps):
+        key = f"supervise_step{step_idx}"
+        assert key in pred_td.keys(), f"normalize_output dropped {key!r}"
+        assert pred_td[key].shape == (1, n_points, 3), (
+            f"per-step prediction {key!r} has wrong shape "
+            f"{tuple(pred_td[key].shape)}; expected (1, {n_points}, 3)"
+        )
+
+    # ----- 7. Resolve targets from the sample; verify shapes match. -----
+    # `extract_targets` returns a TensorDict with batch_size=[n_points]
+    # (inherited from interior.point_data). The recipe's collate adds
+    # the leading batch dim before the loss is applied; we simulate
+    # that here by rebuilding a fresh TensorDict with the per-step
+    # leaves unsqueezed and `batch_size=[1, n_points]`.
+    from tensordict import TensorDict
+
+    target_td_unbatched = extract_targets(domain_mesh, target_config)
+    target_td = TensorDict(
+        {key: target_td_unbatched[key].unsqueeze(0) for key in target_config},
+        batch_size=[1, n_points],
+        device=target_td_unbatched.device,
+    )
+    for step_idx in range(test_n_steps):
+        key = f"supervise_step{step_idx}"
+        assert target_td[key].shape == pred_td[key].shape, (
+            f"target shape {tuple(target_td[key].shape)} != "
+            f"prediction shape {tuple(pred_td[key].shape)} for {key!r}"
+        )
+
+    # ----- 8. Run rel_l2 LossCalculator over the per-field TensorDicts. -----
+    loss_calc = LossCalculator(target_config, loss_type="rel_l2")
+    total_loss, _loss_dict = loss_calc(pred_td, target_td.to(pred_td.device))
+    assert total_loss.ndim == 0, (
+        f"loss must be 0-D, got shape {tuple(total_loss.shape)}"
+    )
+    assert torch.isfinite(total_loss), f"loss not finite: {float(total_loss)}"
+    loss_value = float(total_loss.detach())
+    assert loss_value > 0.0, (
+        f"loss should be positive on random init / random target; got {loss_value}"
+    )
+
+    # ----- 9. Backward + one optimizer step. -----
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     optimizer.zero_grad()
-    loss = ((out - target) ** 2).mean()
-    loss.backward()
+    total_loss.backward()
     optimizer.step()
-    assert torch.isfinite(loss), f"loss not finite: {float(loss)}"
+    assert torch.isfinite(total_loss), f"loss not finite post-step: {float(total_loss)}"
 
-    # ----- 7. Save .mdlus checkpoint. -----
+    # ----- 10. Save .mdlus checkpoint. -----
     runs_dir = tmp_path / "runs" / "smoke" / "checkpoints"
     runs_dir.mkdir(parents=True)
     ckpt_path = runs_dir / "TransolverPretrainBackbone.0.0.last.mdlus"
     model.save(str(ckpt_path))
     assert ckpt_path.exists(), f"checkpoint was not written to {ckpt_path}"
 
-    # ----- 8. Round-trip: load into a plain Transolver. -----
+    # ----- 11. Round-trip: load into a plain Transolver. -----
     fine_tune_model = Transolver(
         functional_dim=4,
         out_dim=4,  # arbitrary fine-tune head width

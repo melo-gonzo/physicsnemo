@@ -23,8 +23,7 @@
 # On-disk schema (per the M3 builder):
 #   interior:
 #     points: (n_volume + n_surface, 3) float32
-#     point_data: region, sdf, normals_face_barycentric, normals_vertex_nearest,
-#                 supervise_step0
+#     point_data: region, sdf, normals_face_barycentric, normals_vertex_nearest
 #     global_data: walks_supervise (n_walks, n_points, n_steps, 3),
 #                  walks_directions (n_walks, n_points, 3),
 #                  walks_step_lengths (n_walks, n_points),
@@ -34,10 +33,12 @@
 #
 # Pipeline path:
 #   1. DomainMeshReader loads the .pdmsh.
-#   2. WalkSampler picks one walk per __getitem__ and lifts (supervise,
-#      directions, step_lengths) into interior.point_data so the
-#      recipe's extract_targets can reach them. The (n_walks, ...)
-#      source arrays are dropped from interior.global_data.
+#   2. WalkSampler picks one walk per __getitem__ and lifts
+#      (`directions`, `step_lengths`, and `n_steps` per-step
+#      `supervise_step{i}` vector fields) into interior.point_data so
+#      the recipe's extract_targets / forward_kwargs can reach them.
+#      The (n_walks, ...) source arrays are dropped from
+#      interior.global_data.
 #
 # Pretraining is geometry-fixed: the supervision data was generated
 # against a specific aligned mesh, so we do NOT add random rotations /
@@ -63,11 +64,33 @@ pipeline:
   transforms:
     - _target_: physicsnemo.experimental.pnm_pretraining.data.WalkSampler
       seed: ${training.seed}
+      # `supervise_field_prefix` defaults to "supervise_step" — matches
+      # the per-step keys declared in the targets block below. Override
+      # only if the targets block is renamed in lockstep.
 
-# `targets:` declares what the loss/metric sees in `interior.point_data`.
-# `supervise: vector` means a per-point flat feature vector of shape
-# (n_steps * 3,); LossCalculator's `_vector_loss` walks the trailing
-# axis. Model conditioning inputs (`directions`, `step_lengths`) are
-# referenced in the model YAML's `forward_kwargs:` block, NOT here.
+# `targets:` declares what the loss/metric/output_normalize see in the
+# recipe's per-field flow.
+#
+# PR 2 follow-up — per-step vector decomposition.
+#   The recipe's `FieldType` is `Literal["scalar", "vector"]` and a
+#   ``vector`` consumes exactly `n_spatial_dims = 3` channels. The
+#   model emits a flat `(B, N, n_steps * 3)` trajectory tensor; rather
+#   than introducing a new FieldType (e.g. "trajectory"), we declare
+#   one ``vector`` field per trajectory step. The recipe's
+#   `output_normalize.split_concat_by_target` then slices the model
+#   output into `n_steps` `(B, N, 3)` chunks by name (in declaration
+#   order), and `extract_targets` pulls the matching per-step keys
+#   produced by `WalkSampler` from `interior.point_data`. No
+#   recipe-side code changes required.
+#
+#   The number of fields listed here MUST match the `n_steps` the
+#   corpus was generated with (see
+#   `physicsnemo.experimental.pnm_pretraining.data.build_pretraining_sample`,
+#   default `n_steps=3`, matching GeoPT's released code) and the
+#   `model.n_steps` value in `conf/model/transolver_pretrain.yaml`.
+#   Override on CLI for `n_steps != 3` (e.g.
+#   `++dataset.targets.supervise_step3=vector …`).
 targets:
-  supervise: vector
+  supervise_step0: vector
+  supervise_step1: vector
+  supervise_step2: vector

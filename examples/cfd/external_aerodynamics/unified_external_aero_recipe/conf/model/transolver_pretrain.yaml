@@ -58,10 +58,16 @@ model:
   _target_: physicsnemo.experimental.pnm_pretraining.models.TransolverPretrainBackbone
   # `out_dim` is computed by the wrapper from `n_steps` (n_steps * 3),
   # so we deliberately do NOT pass `${out_dim}`. The recipe's
-  # `build_dataloaders` still injects `cfg.out_dim` from the dataset's
-  # `targets:` block (set to `n_steps * 3` for `walks_supervise`); the
-  # extra cfg key is a harmless no-op for this template (mirrors the
-  # GLOBE template's pattern, see `train.py:1077-1078`).
+  # `build_dataloaders` still injects `cfg.out_dim` at the top level
+  # by summing channels declared in the dataset YAML's `targets:`
+  # block. Per the PR 2 follow-up, that block lists `n_steps` separate
+  # `vector` fields (`supervise_step0`, `supervise_step1`, ...), so
+  # `cfg.out_dim` resolves to `n_steps * 3` — the same value the
+  # wrapper computes internally. The wrapper validates the two agree
+  # if a caller passes `out_dim` explicitly; we omit it here so the
+  # template stays minimal. Users overriding `n_steps` on the CLI must
+  # also adjust the dataset's targets block to list the matching
+  # number of `supervise_step{i}` fields (see `datasets/geopt_pretrain.yaml`).
   functional_dim: 4         # fx = directions (3) + step length (1)
   embedding_dim: 7          # embedding = points (3) + sdf (1) + normals (3)
   n_steps: 3                # GeoPT's released default; matches builder.py

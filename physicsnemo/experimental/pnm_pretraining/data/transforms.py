@@ -408,14 +408,32 @@ class WalkSampler(MeshTransform):
        per-instance ``torch.Generator`` seeded by the constructor,
     2. slicing the three walk arrays at index ``i`` into per-point
        shapes,
-    3. writing the slices into ``interior.point_data`` under the
-       names ``supervise``, ``directions``, ``step_lengths``, and
+    3. writing the slices into ``interior.point_data`` — ``directions``
+       and ``step_lengths`` as single keys, and the supervise array
+       split into ``n_steps`` separate per-step keys
+       (``{supervise_field_prefix}{step_idx}`` for ``step_idx`` in
+       ``[0, n_steps)``), each of shape ``(n_points, 3)``, and
     4. dropping the original ``(n_walks, …)`` arrays from
        ``interior.global_data`` so they don't inflate batch payloads.
 
+    Per-step decomposition rationale (PR 2 follow-up).
+        The recipe's ``utils.FieldType`` is ``Literal["scalar",
+        "vector"]`` and a ``vector`` field consumes exactly
+        ``n_spatial_dims = 3`` channels (see
+        ``examples/cfd/external_aerodynamics/unified_external_aero_recipe/
+        src/output_normalize.py::split_concat_by_target``). A trajectory
+        of ``n_steps`` per-point offsets is naturally a sequence of
+        ``n_steps`` vector fields, so we emit one ``(n_points, 3)``
+        field per step instead of one flat ``(n_points, n_steps * 3)``
+        field. This lets the recipe's existing per-field machinery
+        (loss / metric / output_normalize / forward_kwargs) consume
+        the trajectory output without recipe-side code changes; the
+        dataset YAML simply lists ``n_steps`` ``vector`` entries in its
+        ``targets:`` block.
+
     The on-disk ``.pdmsh`` keeps every walk for offline reproducibility
     (improvement I20 in ``geopt-datagen-round1-plan.md`` §8); the
-    per-sample reshape is purely a runtime concern.
+    per-sample slicing is purely a runtime concern.
 
     Parameters
     ----------
@@ -435,6 +453,15 @@ class WalkSampler(MeshTransform):
     step_lengths_field_name
         Source key for the step-lengths array of shape
         ``(n_walks, n_points)``.
+    supervise_field_prefix
+        Prefix for the per-step supervise keys written into
+        ``interior.point_data``. Default ``"supervise_step"`` produces
+        ``supervise_step0``, ``supervise_step1``, ... — these names
+        must match the field keys declared in the dataset YAML's
+        ``targets:`` block (see
+        ``examples/cfd/external_aerodynamics/unified_external_aero_recipe/
+        datasets/geopt_pretrain.yaml``). Override only if the recipe's
+        targets block uses a different convention.
 
     Attributes
     ----------
@@ -471,12 +498,14 @@ class WalkSampler(MeshTransform):
         walk_field_name: str = "walks_supervise",
         directions_field_name: str = "walks_directions",
         step_lengths_field_name: str = "walks_step_lengths",
+        supervise_field_prefix: str = "supervise_step",
     ) -> None:
         super().__init__()
         self.seed = seed
         self.walk_field_name = walk_field_name
         self.directions_field_name = directions_field_name
         self.step_lengths_field_name = step_lengths_field_name
+        self.supervise_field_prefix = supervise_field_prefix
         # Per-instance generator. Stored under ``_generator`` so the
         # base class's ``stochastic`` property reports True; also
         # exposed publicly as ``generator`` for direct test access
@@ -521,9 +550,11 @@ class WalkSampler(MeshTransform):
         Returns
         -------
         DomainMesh
-            A new ``DomainMesh`` with ``supervise``, ``directions``,
-            ``step_lengths`` injected into ``interior.point_data`` and
-            the source ``(n_walks, …)`` arrays removed from
+            A new ``DomainMesh`` with ``directions``, ``step_lengths``,
+            and ``n_steps`` per-step ``{supervise_field_prefix}{i}``
+            keys (one ``(n_points, 3)`` field per trajectory step)
+            injected into ``interior.point_data``, and the source
+            ``(n_walks, …)`` arrays removed from
             ``interior.global_data``. The ``boundaries`` and the
             domain-level ``global_data`` are passed through unchanged.
 
@@ -584,31 +615,34 @@ class WalkSampler(MeshTransform):
             ).item()
         )
 
-        # Slice + reshape. Trailing ``.contiguous()`` calls smooth out
-        # any stride surprises a downstream model might trip on (the
-        # reshape on a non-contiguous slice would fail loudly anyway,
-        # but the explicit contiguous() makes the producer-side
-        # invariant unambiguous).
-        n_points = walks_supervise.shape[1]
+        # Slice. ``walks_supervise[walk_idx]`` is ``(n_points, n_steps, 3)``;
+        # we keep the per-step structure and emit one ``(n_points, 3)``
+        # vector field per step (recipe's ``vector`` FieldType eats 3
+        # channels — one trajectory step's worth — by construction).
         n_steps = walks_supervise.shape[2]
-        supervise = (
-            walks_supervise[walk_idx]
-            .contiguous()
-            .reshape(n_points, n_steps * 3)
-            .contiguous()
-        )
+        walk_supervise_3d = walks_supervise[walk_idx].contiguous()
         directions = walks_directions[walk_idx].contiguous()
         step_lengths = walks_step_lengths[walk_idx].unsqueeze(-1).contiguous()
 
-        # Build the new interior. point_data acquires three new keys;
-        # global_data drops the n_walks source arrays. We use
-        # TensorDict.exclude on global_data (null-safe per
-        # DropMeshFields' implementation note in
+        # Build the new interior. point_data acquires:
+        #   - ``directions`` and ``step_lengths`` (single keys, used as
+        #     model-side conditioning by the recipe's forward_kwargs),
+        #   - ``{supervise_field_prefix}{i}`` for ``i ∈ [0, n_steps)``,
+        #     each ``(n_points, 3)``, which the dataset YAML's targets
+        #     block lists as one ``vector`` field per step.
+        # global_data drops the n_walks source arrays via ``exclude``
+        # (null-safe per DropMeshFields' implementation note in
         # physicsnemo/datapipes/transforms/mesh/transforms.py).
         new_point_data = interior.point_data.clone()
-        new_point_data["supervise"] = supervise
         new_point_data["directions"] = directions
         new_point_data["step_lengths"] = step_lengths
+        for step_idx in range(n_steps):
+            # Trailing ``.contiguous()`` smooths out any stride surprises
+            # a downstream model might trip on; the per-step slice of a
+            # contiguous (n_points, n_steps, 3) tensor is non-contiguous.
+            new_point_data[f"{self.supervise_field_prefix}{step_idx}"] = (
+                walk_supervise_3d[:, step_idx, :].contiguous()
+            )
 
         new_global_data = global_data.exclude(
             self.walk_field_name,
@@ -634,5 +668,6 @@ class WalkSampler(MeshTransform):
         return (
             f"seed={self.seed!r}, walk_field_name={self.walk_field_name!r}, "
             f"directions_field_name={self.directions_field_name!r}, "
-            f"step_lengths_field_name={self.step_lengths_field_name!r}"
+            f"step_lengths_field_name={self.step_lengths_field_name!r}, "
+            f"supervise_field_prefix={self.supervise_field_prefix!r}"
         )

@@ -16,16 +16,24 @@
 
 """Unit tests for :class:`~physicsnemo.experimental.pnm_pretraining.data.WalkSampler`.
 
-Pinned behaviors (PR 2 / improvement I20):
+Pinned behaviors (PR 2 / improvement I20, with the PR 2 follow-up
+per-step decomposition):
 
-(a) Slicing produces the documented per-point shapes ``(N, n_steps*3)``,
-    ``(N, 3)``, ``(N, 1)`` in ``interior.point_data`` and removes the
-    source ``(n_walks, …)`` arrays from ``interior.global_data``.
-(b) Same seed → identical slice (per-instance generator is honored).
+(a) Slicing produces ``n_steps`` per-point ``(N, 3)`` ``supervise_step{i}``
+    fields plus ``directions: (N, 3)`` and ``step_lengths: (N, 1)`` in
+    ``interior.point_data`` and removes the source ``(n_walks, …)``
+    arrays from ``interior.global_data``. The flat ``supervise`` key
+    is gone (it was replaced by the per-step decomposition so the
+    recipe's ``vector`` FieldType, which eats 3 channels, can consume
+    each step natively).
+(b) Same seed → identical slice across all per-step + ancillary keys
+    (per-instance generator is honored).
 (c) Different seed on a many-walks DomainMesh → at least one of the
-    three slices differs (different walk index drawn).
-(d) The supervise reshape preserves ``(n_steps, 3)`` trajectory order
-    (regression guard against an accidental dim swap).
+    per-step / directions / step_lengths fields differs (different
+    walk index drawn).
+(d) The per-step fields preserve trajectory order (``supervise_step0``
+    is step 0, ``supervise_step1`` is step 1, …) — regression guard
+    against an accidental dim swap.
 (e) Missing walk arrays raise ``KeyError`` with a message that names
     the missing key and points at the M3 builder.
 """
@@ -163,11 +171,28 @@ class TestWalkSamplerOnPretrainingSample:
         sampler = WalkSampler(seed=0)
         out = sampler(dm)
 
-        # Per-point arrays in point_data with the documented shapes.
-        n_steps = 2
-        assert out.interior.point_data["supervise"].shape == (n_total, n_steps * 3)
+        # ``directions`` and ``step_lengths`` keep their single-key shapes.
         assert out.interior.point_data["directions"].shape == (n_total, 3)
         assert out.interior.point_data["step_lengths"].shape == (n_total, 1)
+
+        # ``supervise`` is now decomposed into ``n_steps`` per-step
+        # ``(n_total, 3)`` vector fields. The flat ``supervise`` key
+        # must be gone (we no longer emit it).
+        n_steps = 2
+        assert "supervise" not in out.interior.point_data.keys(), (
+            "WalkSampler still emits the flat ``supervise`` key; the "
+            "PR 2 follow-up replaces it with per-step ``supervise_step{i}``."
+        )
+        for step_idx in range(n_steps):
+            key = f"supervise_step{step_idx}"
+            assert key in out.interior.point_data.keys(), (
+                f"WalkSampler did not emit per-step key {key!r}"
+            )
+            assert out.interior.point_data[key].shape == (n_total, 3), (
+                f"per-step field {key!r} has wrong shape "
+                f"{tuple(out.interior.point_data[key].shape)}; expected "
+                f"({n_total}, 3)"
+            )
 
         # And the source arrays are gone from interior.global_data.
         for key in ("walks_supervise", "walks_directions", "walks_step_lengths"):
@@ -185,12 +210,16 @@ class TestDeterminism:
     """Same seed → identical slice across two independent invocations."""
 
     def test_same_seed_same_slice(self):
-        dm = _make_synthetic_walk_dm(n_points=12, n_walks=8, n_steps=3)
+        n_steps = 3
+        dm = _make_synthetic_walk_dm(n_points=12, n_walks=8, n_steps=n_steps)
 
         a = WalkSampler(seed=42)(dm)
         b = WalkSampler(seed=42)(dm)
 
-        for key in ("supervise", "directions", "step_lengths"):
+        keys = ["directions", "step_lengths"] + [
+            f"supervise_step{i}" for i in range(n_steps)
+        ]
+        for key in keys:
             assert torch.equal(
                 a.interior.point_data[key], b.interior.point_data[key]
             ), f"determinism violated on key {key!r}"
@@ -209,14 +238,18 @@ class TestSeedVariation:
         # same index small (1/10 worst-case for a uniform draw); we run
         # one pair and accept that on the rare collision the assertion
         # would fail loudly.
-        dm = _make_synthetic_walk_dm(n_points=12, n_walks=10, n_steps=3)
+        n_steps = 3
+        dm = _make_synthetic_walk_dm(n_points=12, n_walks=10, n_steps=n_steps)
 
         a = WalkSampler(seed=42)(dm)
         b = WalkSampler(seed=43)(dm)
 
+        keys = ["directions", "step_lengths"] + [
+            f"supervise_step{i}" for i in range(n_steps)
+        ]
         differ = any(
             not torch.equal(a.interior.point_data[key], b.interior.point_data[key])
-            for key in ("supervise", "directions", "step_lengths")
+            for key in keys
         )
         assert differ, (
             "WalkSampler(seed=42) and WalkSampler(seed=43) produced "
@@ -231,14 +264,14 @@ class TestSeedVariation:
 
 
 class TestReshapeOrdering:
-    """``(n_steps, 3)`` trailing axes flatten in step-major order."""
+    """Per-step decomposition preserves trajectory order."""
 
     def test_trajectory_order_preserved(self):
         # Hand-crafted contents: walks_supervise[i, j, t, :] == [i, j, t].
-        # If WalkSampler picks index 0, the per-point row j becomes:
-        #   supervise[j, :3] == [0, j, 0]   (step 0 vector)
-        #   supervise[j, 3:6] == [0, j, 1]  (step 1 vector)
-        # An accidental (n_steps, 3) → (3, n_steps) swap would break this.
+        # If WalkSampler picks index 0, the per-step rows j become:
+        #   supervise_step0[j, :] == [0, j, 0]   (step 0 vector)
+        #   supervise_step1[j, :] == [0, j, 1]   (step 1 vector)
+        # An accidental step↔point dim swap would break this directly.
         n_points = 5
         n_walks = 2
         n_steps = 2
@@ -249,30 +282,30 @@ class TestReshapeOrdering:
             deterministic=True,
         )
 
-        # Force the draw to index 0 by seeding to a value that does so.
-        # We do not depend on a specific seed-to-index mapping: instead,
-        # we draw once with our generator, look at what index we got,
-        # and then assert the row contents against the expected pattern
-        # for that index. This is robust to torch RNG version skew.
+        # Force the draw to a known index by seeding to a value and
+        # peeking at what the same-seeded generator draws first. We do
+        # not depend on a specific seed-to-index mapping: instead, we
+        # peek the index a fresh same-seeded generator would draw and
+        # then assert the per-step fields against the expected pattern
+        # for that index. Robust to torch RNG version skew.
         sampler = WalkSampler(seed=0)
-        # Peek the index by drawing into a fresh generator with the same
-        # seed -- this matches what apply_to_domain will draw on the
-        # first call below.
         peek_gen = torch.Generator()
         peek_gen.manual_seed(0)
         expected_idx = int(torch.randint(0, n_walks, (), generator=peek_gen).item())
 
         out = sampler(dm)
-        sup = out.interior.point_data["supervise"]
-        assert sup.shape == (n_points, n_steps * 3)
-
-        for j in range(n_points):
-            for t in range(n_steps):
-                row = sup[j, t * 3 : (t + 1) * 3]
+        for t in range(n_steps):
+            sup_t = out.interior.point_data[f"supervise_step{t}"]
+            assert sup_t.shape == (n_points, 3), (
+                f"per-step field supervise_step{t} has wrong shape "
+                f"{tuple(sup_t.shape)}; expected ({n_points}, 3)"
+            )
+            for j in range(n_points):
+                row = sup_t[j]
                 assert torch.equal(
                     row, torch.tensor([expected_idx, j, t], dtype=torch.float32)
                 ), (
-                    f"reshape ordering broken at (j={j}, t={t}): "
+                    f"per-step ordering broken at supervise_step{t}, j={j}: "
                     f"got {row.tolist()}, expected [{expected_idx}, {j}, {t}]."
                 )
 
