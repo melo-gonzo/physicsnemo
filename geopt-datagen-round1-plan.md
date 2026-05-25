@@ -1,5 +1,18 @@
 # GeoPT Data-Gen Reproduction & Validation — Round 1 Plan
 
+> **Status (2026-05-23):** Round 1 closed GREEN with two yellow
+> carry-forwards. PR 2.5 and PR 2 also landed on this branch — see
+> `CURRENT-STATE.md` (worktree root) for the consolidated status and
+> `pr2-recipe-extension-plan.md` for the PR-2 plan that grafts
+> pretraining into the unified external-aero recipe (superseding
+> the parent plan's §1.4 PR 2 + PR 3 separate-script proposal).
+>
+> This doc remains authoritative for §A (geometry convention),
+> §0 (discovery findings), §8 (improvements catalog I1–I20), and
+> §10 (progress log). Sections 1–7 describe the originally-planned
+> M1/M2/M3 milestones — those landed and the milestone reports
+> are in `reports/m{1,2,3}-*.md`.
+
 **Goal of round 1.** Reproduce and validate GeoPT's pretraining data-generation
 pipeline on Warp + PhysicsNeMo `Mesh`, end-to-end for one geometry, to a
 quantitative parity bar against the released GeoPT CPU reference. No
@@ -15,6 +28,9 @@ documented tolerances."
 this round-1 doc executes the kernel-and-composite portion of that plan's
 PR 0 + PR 1 + the kernel half of PR 2. It does **not** execute PR 2's
 datapipe / backbone-adapter / head / loss work, nor any of PRs 2.5 / 3 / 4.
+**PR 2 + PR 2.5 landed on this same branch in subsequent commits**;
+see `pr2-recipe-extension-plan.md` and the §10 progress log entries for
+those.
 
 **Iterative shape.** Three milestones, each landable independently:
 
@@ -1083,6 +1099,86 @@ happened, what's next. Updated as work proceeds.
   No file overlap.
 - Commit SHA: see `git log --oneline` for the canonical hash; this
   entry is finalized at commit time.
+
+### PR 2 (subagent F): TransolverPretrainBackbone + e2e smoke
+
+- Status: **GREEN** (closed 2026-05-23). Commit `e3427425`.
+- Files:
+  - `physicsnemo/experimental/pnm_pretraining/models/{__init__.py, backbone.py}`
+    — new `models` subpackage. `TrajectoryHead` is a small MLP from
+    `(B, N, H)` latents to `(B, N, n_steps * 3)`.
+    `TransolverPretrainBackbone` subclasses `physicsnemo.Module` (so it
+    serializes to `.mdlus` and is loadable by PR 2.5's
+    `load_pretrained_backbone`), wraps
+    `physicsnemo.models.transolver.Transolver`, and replaces the
+    Transolver output projection with the head. Direct subclassing
+    rather than a forward hook — see `pr2-recipe-extension-plan.md` D2
+    for the rationale (replacing the head outright is cleaner than
+    hook-and-discard for the *training* path; PR 2.5's
+    `exclude_layers=["trajectory_head"]` drops the head cleanly when
+    the checkpoint is loaded into a fine-tune model).
+  - `examples/cfd/external_aerodynamics/unified_external_aero_recipe/conf/model/transolver_pretrain.yaml`
+    — pretraining model template, mirrors `transolver_volume.yaml`.
+    `forward_kwargs.fx` concatenates per-point `directions` (3) +
+    `step_lengths` (1) per Q5 resolution.
+  - `examples/.../tests/test_pretraining_smoke.py` — env-gated
+    (`PNM_PR2_E2E_SMOKE=1`) e2e smoke test. Builds a 4-sample
+    synthetic `.pdmsh` corpus, Hydra-composes
+    `model=transolver_pretrain dataset=geopt_pretrain`, runs forward
+    on a single batch, saves `.mdlus`, then exercises the PR 2.5
+    round-trip into a plain `Transolver` via `load_pretrained_backbone`
+    with `exclude_layers=["trajectory_head"]`.
+  - `test/experimental/pnm_pretraining/models/test_transolver_pretrain.py`
+    — 7 unit tests (output shape, out_dim consistency, head shape,
+    PR-2.5 backbone round-trip, `.mdlus` round-trip, gradient flow).
+- Smoke test outcome at first run: F flagged a shape mismatch — the
+  dataset YAML declared `supervise: vector` (3 channels) but the
+  model emitted `n_steps * 3` (9 channels for `n_steps=3`). The
+  recipe's `output_normalize.split_concat_by_target` rejected this.
+  Fix landed in the next commit (PR 2 follow-up) — per-step
+  decomposition. F's smoke test was extended in that follow-up to
+  exercise the full forward + loss + per-step split.
+- Test suite: 7 unit tests + 1 env-gated smoke. All green.
+
+### Tier-1 review cleanup
+
+- Status: **GREEN** (closed 2026-05-23). Commit `05ac5489`.
+- Three read-only review subagents ran post-PR-2 (correctness,
+  DRY-ness, maintainability). Findings cross-referenced against
+  source. The full ledger is in `reviews-deferred.md` at the
+  worktree root.
+- 4 of 5 Tier-1 fixes landed:
+  - **T1.1** rename `hit → closest` in `_rejection_sample_volume_points`
+    (the local var holds closest-point coords, not a hit/miss flag —
+    same naming foot-gun GeoPT had with `z_min`-was-Y-min).
+  - **T1.2** hoist magic numbers to module-level constants with GeoPT
+    line citations in `constrained_walk.py`: `_STICKING_FACTOR=0.99`,
+    `_DEFAULT_BASE_WALKS=10`, `_DEFAULT_PERTURB_SIGMA=0.05`. Kernel
+    literal at line 170 stayed inline (Warp limitation) with
+    `# matches _STICKING_FACTOR` comment.
+  - **T1.3 (Prong A only)** mirror warning blocks added to both
+    `transolver_pretrain.yaml` and `geopt_pretrain.yaml` documenting
+    the `n_steps` coupling. Prong B (Hydra resolver) abandoned —
+    recipe has no existing `register_new_resolver` site; landing one
+    cleanly exceeded the 30-min budget. Documented in
+    `reviews-deferred.md` §2.
+  - **T1.5** load-bearing `assert` on the surface-pin schema invariant
+    in builder replaced with explicit `RuntimeError` (`assert` strips
+    under `python -O`).
+- 1 abandoned: **T1.4** factor `_normalize_mesh_indices` /
+  `_build_warp_mesh` / `_check_vec3` into `ops/_warp_helpers.py`.
+  Implementation showed only 8-line net call-site reduction vs.
+  ~80-line helper file — bad math at 2 consumers. Revisit when a
+  3rd op joins. Documented in `reviews-deferred.md` §2.
+- New review-tier ledger: `reviews-deferred.md` captures Tier 2
+  (6 deferred items with explicit triggers) and Tier 3 (7
+  verified-skip items, including one reviewer claim disproved by
+  direct source-read: `load_pretrained_backbone` does NOT duplicate
+  `load_model_weights` — already reuses every helper).
+- Test suite: 78 passed, 2 skipped. Zero behavior change.
+- Improvements catalog: no new I-rows added (the cleanup didn't
+  introduce any GeoPT-vs-PhysicsNeMo behavior delta worth
+  cataloguing). Existing rows untouched.
 
 ### PR 2 follow-up: per-step vector field decomposition
 
