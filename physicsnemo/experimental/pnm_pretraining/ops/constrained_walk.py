@@ -98,6 +98,22 @@ wp.config.quiet = True
 
 
 # ---------------------------------------------------------------------------
+# GeoPT walk-orchestration constants — values from the released reference
+# at external-repos/GeoPT/data_generation/GeoPT_PreTraining_Data.py:
+#   line 333 — sticking factor (clamps actual step to 99% of hit distance).
+#   line 585 — BASE_WALKS = 10 independent direction draws per geometry.
+#   line 586 — PERTURB_SIGMA = 0.05 σ-jitter applied to the 90 jittered walks.
+# The kernel below references the literal 0.99 inline (Warp kernels resolve
+# constants at compile time and the kernel-typing path is finicky); the
+# Python-side default for the haircut is named here to make the value
+# discoverable from a single source. Keep the two in lockstep.
+# ---------------------------------------------------------------------------
+_STICKING_FACTOR: float = 0.99
+_DEFAULT_BASE_WALKS: int = 10
+_DEFAULT_PERTURB_SIGMA: float = 0.05
+
+
+# ---------------------------------------------------------------------------
 # Fused Warp kernel — one step of the constrained walk.
 # ---------------------------------------------------------------------------
 
@@ -167,6 +183,9 @@ def _constrained_walk_step_kernel(
         qr = wp.mesh_query_ray(mesh_id, p, d, L)
         if qr.result and qr.t < L:
             # GeoPT 0.99 sticking haircut: stop short of the surface.
+            # 0.99 matches _STICKING_FACTOR (module constant); inlined here
+            # because Warp kernels resolve module-scope constants at
+            # compile time and inlining keeps the kernel signature simple.
             positions_out[tid] = p + d * (qr.t * 0.99)
         else:
             # Free flight by the full requested step.
@@ -477,9 +496,9 @@ def generate_walks(
     vol_pts: torch.Tensor,
     surf_pts: torch.Tensor,
     *,
-    n_independent: int = 10,
+    n_independent: int = _DEFAULT_BASE_WALKS,
     n_jittered_per_base: int = 9,
-    perturb_sigma: float = 0.05,
+    perturb_sigma: float = _DEFAULT_PERTURB_SIGMA,
     n_steps: int = 3,
     max_step: float = 2.0,
     seed: int | None = None,

@@ -70,6 +70,18 @@ model:
   # number of `supervise_step{i}` fields (see `datasets/geopt_pretrain.yaml`).
   functional_dim: 4         # fx = directions (3) + step length (1)
   embedding_dim: 7          # embedding = points (3) + sdf (1) + normals (3)
+  # NOTE: n_steps is coupled to the dataset YAML's targets list. If you
+  # override n_steps here on the CLI, you MUST also override the targets
+  # block in geopt_pretrain.yaml to declare exactly n_steps fields named
+  # `supervise_step0`, `supervise_step1`, ..., `supervise_step{n_steps-1}`.
+  # Failure to do so produces a "shape (B, N, 9) cannot be split into 3
+  # vector fields" error from output_normalize.split_concat_by_target,
+  # far from the override site. The same warning lives in
+  # datasets/geopt_pretrain.yaml.
+  #
+  # If you find this footgun bites you, see pr2-recipe-extension-plan.md
+  # T1.3 — a follow-up may add an OmegaConf resolver that auto-generates
+  # the targets list from n_steps.
   n_steps: 3                # GeoPT's released default; matches builder.py
   head_hidden_dim: 256
   head_n_layers: 2

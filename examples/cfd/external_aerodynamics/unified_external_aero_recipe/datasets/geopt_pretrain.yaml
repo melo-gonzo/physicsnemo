@@ -71,6 +71,18 @@ pipeline:
 # `targets:` declares what the loss/metric/output_normalize see in the
 # recipe's per-field flow.
 #
+# WARNING — n_steps coupling.
+#   The number of `supervise_step{i}` entries below MUST equal
+#   `model.n_steps` in `conf/model/transolver_pretrain.yaml`. If you
+#   override `model.n_steps` on the CLI, you MUST also override this
+#   `targets:` block to declare exactly `n_steps` fields. Failure to
+#   keep them in lockstep produces a "shape (B, N, n_steps*3) cannot be
+#   split into 3 vector fields" error from
+#   output_normalize.split_concat_by_target, far from the override
+#   site. The same warning lives in conf/model/transolver_pretrain.yaml.
+#   See pr2-recipe-extension-plan.md T1.3 for a possible follow-up
+#   (OmegaConf resolver that auto-generates this list from n_steps).
+#
 # PR 2 follow-up — per-step vector decomposition.
 #   The recipe's `FieldType` is `Literal["scalar", "vector"]` and a
 #   ``vector`` consumes exactly `n_spatial_dims = 3` channels. The

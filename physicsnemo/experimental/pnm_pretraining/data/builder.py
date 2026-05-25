@@ -316,7 +316,7 @@ def _rejection_sample_volume_points(
 
     accepted_pts: list[torch.Tensor] = []
     accepted_sdf: list[torch.Tensor] = []
-    accepted_hit: list[torch.Tensor] = []
+    accepted_closest: list[torch.Tensor] = []
     n_accepted = 0
 
     for _ in range(max_iter):
@@ -326,7 +326,7 @@ def _rejection_sample_volume_points(
         u = torch.from_numpy(rng.random((batch_size, 3), dtype=np.float32))
         candidate_pts = bbox_min + u * extent
 
-        sdf, hit = signed_distance_field(
+        sdf, closest = signed_distance_field(
             aligned_vertices,
             aligned_faces,
             candidate_pts,
@@ -336,7 +336,7 @@ def _rejection_sample_volume_points(
         outside_mask = sdf > 0.0
         accepted_pts.append(candidate_pts[outside_mask])
         accepted_sdf.append(sdf[outside_mask])
-        accepted_hit.append(hit[outside_mask])
+        accepted_closest.append(closest[outside_mask])
         n_accepted += int(outside_mask.sum().item())
 
     if n_accepted == 0:
@@ -359,12 +359,12 @@ def _rejection_sample_volume_points(
 
     pts = torch.cat(accepted_pts, dim=0)
     sdf = torch.cat(accepted_sdf, dim=0)
-    hit = torch.cat(accepted_hit, dim=0)
+    closest = torch.cat(accepted_closest, dim=0)
 
     if pts.shape[0] >= n_volume_points:
         pts = pts[:n_volume_points]
         sdf = sdf[:n_volume_points]
-        hit = hit[:n_volume_points]
+        closest = closest[:n_volume_points]
     else:
         # Sample-with-replacement padding to maintain schema shape.
         idx = torch.from_numpy(
@@ -372,9 +372,9 @@ def _rejection_sample_volume_points(
         ).long()
         pts = torch.cat([pts, pts[idx]], dim=0)
         sdf = torch.cat([sdf, sdf[idx]], dim=0)
-        hit = torch.cat([hit, hit[idx]], dim=0)
+        closest = torch.cat([closest, closest[idx]], dim=0)
 
-    return pts.contiguous(), sdf.contiguous(), hit.contiguous()
+    return pts.contiguous(), sdf.contiguous(), closest.contiguous()
 
 
 # ---------------------------------------------------------------------------
@@ -601,12 +601,19 @@ def build_pretraining_sample(
     }
 
     # Sanity: keep the consumer schema honest. Surface walks_step_lengths
-    # already pinned to 0 by generate_walks (M2 G8), but assert
-    # cheaply rather than rely on that as an unstated postcondition.
+    # already pinned to 0 by generate_walks (M2 G8), but verify cheaply
+    # rather than rely on that as an unstated postcondition. Use an
+    # explicit RuntimeError because `assert` is stripped under
+    # `python -O` and this invariant is load-bearing for downstream
+    # consumers.
     if surf_pts_post.shape[0] > 0:
-        assert torch.all(
+        if not torch.all(
             interior_global_data["walks_step_lengths"][:, vol_pts.shape[0] :] == 0
-        ), "surface rows of walks_step_lengths must be 0 (M2 G8 invariant)"
+        ):
+            raise RuntimeError(
+                "Surface-pin schema invariant violated: walks_step_lengths "
+                "must be 0 for surface rows. This is a bug in generate_walks."
+            )
 
     interior_mesh = Mesh(
         points=interior_points.to(device_t),
