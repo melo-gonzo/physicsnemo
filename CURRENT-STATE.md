@@ -199,7 +199,10 @@ source-read disproved or downgraded.
 5. **Pick a next step:**
    - Real-data smoke (recommended): provision the ShapeNet subset
      (carry-forward 1), regenerate a `.pdmsh` corpus on real
-     geometry, run the e2e smoke against it.
+     geometry, run the e2e smoke against it. The full GPU runbook
+     (corpus generation → pretrain → fine-tune onto DrivAerML) is in
+     `examples/cfd/external_aerodynamics/unified_external_aero_recipe/README.md`
+     under "GeoPT pretraining + fine-tuning (Transolver)".
    - Op-level mesh-build hoist (I15 / Tier-2 item T2.4 in
      `reviews-deferred.md`).
    - Upstreaming PRs: split the 16 commits into 3 PRs per the parent

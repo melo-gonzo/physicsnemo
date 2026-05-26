@@ -21,6 +21,13 @@ Here, you're able to train the following models:
 - [GLOBE](https://arxiv.org/abs/2511.15856)
 - DoMINO is coming shortly
 
+The recipe also supports [GeoPT](https://arxiv.org/abs/2602.20399)
+pretraining of the Transolver backbone on off-the-shelf geometry, with
+fine-tuning onto a labeled physics dataset via
+`cfg.training.pretrained_backbone`. See the
+[GeoPT pretraining + fine-tuning](#geopt-pretraining--fine-tuning-transolver)
+section for the end-to-end runbook.
+
 We currently support the following datasets:
 - DrivaerML
 
@@ -403,6 +410,288 @@ python src/train.py benchmark_io=true +training.benchmark_max_steps=20
 
 Measures per-sample load time and throughput without running the model.
 
+## GeoPT pretraining + fine-tuning (Transolver)
+
+End-to-end runbook for the GeoPT recipe ([arXiv:2602.20399][geopt-paper]):
+pretrain a Transolver backbone with dynamics-lifted geometric
+self-supervision on off-the-shelf 3D shapes, then fine-tune onto a
+labeled physics dataset (DrivAerML below) with the pretrained weights
+loaded via `cfg.training.pretrained_backbone`. Reproduces the workflow
+shown in the paper's Figure 1 and Section 4.
+
+[geopt-paper]: https://arxiv.org/abs/2602.20399
+
+The pipeline has three stages:
+
+1. **Generate the pretraining corpus.** Convert OBJ meshes (e.g. a
+   ShapeNet subset) to `*.pdmsh` directories containing query points,
+   walks, and vector-distance trajectories. Runs on GPU via Warp.
+2. **Pretrain.** Run `train.py` with `model=transolver_pretrain
+   dataset=geopt_pretrain` to produce a `.mdlus` checkpoint of the
+   wrapped backbone.
+3. **Fine-tune.** Run `train.py` with `model=transolver_volume
+   dataset=drivaer_ml_volume` and
+   `training.pretrained_backbone={path,key_remap,exclude_layers}`
+   to load the pretrained Transolver weights into the volume model
+   and fine-tune.
+
+### 1. Prerequisites
+
+GPU node with CUDA-capable PyTorch and Warp. From the repo root:
+
+```bash
+# Core install (pulls torch, warp-lang, scipy via pyproject.toml).
+uv pip install -e '.[dev]'
+
+# Optional: parity-test backend used by the GeoPT data-gen tests.
+# Not needed for runtime, only for `pytest test/experimental/pnm_pretraining`.
+uv pip install fcpw
+
+# trimesh — used by the data-gen builder for OBJ I/O. Currently not in
+# core pyproject.toml (round-2 decision pending); install explicitly.
+uv pip install trimesh
+```
+
+Verify GPU + Warp:
+
+```bash
+python -c "import torch, warp as wp; \
+  print('cuda:', torch.cuda.is_available(), torch.cuda.get_device_name(0)); \
+  wp.init(); print('warp:', wp.config.version)"
+```
+
+Optional: confirm the pretraining stack imports cleanly:
+
+```bash
+python -c "from physicsnemo.experimental.pnm_pretraining import \
+  build_pretraining_sample, save_pretraining_sample, WalkSampler; \
+  from physicsnemo.experimental.pnm_pretraining.models import \
+  TransolverPretrainBackbone; print('ok')"
+```
+
+### 2. Generate the pretraining corpus
+
+The paper pretrains on ~13k ShapeNet-V1 meshes from the car, airplane,
+and watercraft categories. The builder is per-geometry — you point it
+at OBJ files and it writes one `.pdmsh` directory per mesh. The
+end-to-end smoke test
+(`tests/test_pretraining_smoke.py::test_pretraining_smoke`) shows the
+exact API on a 4-mesh synthetic corpus; for a real corpus, replace the
+synthetic meshes with your OBJ paths.
+
+A minimal corpus-generation script:
+
+```python
+# scripts/build_geopt_corpus.py
+from pathlib import Path
+from physicsnemo.experimental.pnm_pretraining import (
+    build_pretraining_sample,
+    save_pretraining_sample,
+)
+
+OBJ_DIR  = Path("/data/shapenet_subset")  # contains *.obj
+OUT_DIR  = Path("/data/geopt_corpus")
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+for i, obj_path in enumerate(sorted(OBJ_DIR.glob("**/*.obj"))):
+    sample = build_pretraining_sample(
+        obj_path,
+        # Defaults below match GeoPT (paper §4.3 + released code):
+        n_volume_points=32_768,
+        n_surface_points=4_096,
+        n_independent_walks=10,        # see "Paper-faithful walks" note below
+        n_jittered_per_base=9,
+        n_steps=3,                     # τ+1 = 3 stored states (paper App. B)
+        max_step=2.0,
+        target_length=5.0,
+        seed=i,                        # one seed per mesh for reproducibility
+        device="cuda",                 # GPU dispatch for SDF + walks
+    )
+    save_pretraining_sample(sample, OUT_DIR / f"sample_{i:06d}")
+```
+
+Run it:
+
+```bash
+python scripts/build_geopt_corpus.py
+```
+
+Expected output: one `sample_NNNNNN.pdmsh/` directory per OBJ, each
+holding the interior point cloud, walk supervision, and aligned boundary
+mesh. See the `dataset/geopt_pretrain.yaml` header for the on-disk
+schema. Verify a sample loads:
+
+```bash
+python -c "from physicsnemo.experimental.pnm_pretraining import \
+  load_pretraining_sample; \
+  dm = load_pretraining_sample('/data/geopt_corpus/sample_000000.pdmsh'); \
+  print(dm)"
+```
+
+> **Paper-faithful walks (optional).** The defaults above match the
+> released GeoPT data-gen code: 10 independent walks + 90 jittered
+> perturbations (`σ=0.05`) per geometry. The paper text says "100
+> random dynamics fields per geometry" and Algorithm 1 implies
+> per-walk i.i.d. sampling. For strict paper reproduction, set
+> `n_independent_walks=100, n_jittered_per_base=0`. See round-1 plan
+> §8 row I10 and `reviews-deferred.md` for the audit trail.
+
+> **GPU throughput note.** The H100 throughput rerun (carry-forward
+> §2 in `CURRENT-STATE.md`) is the budget gate for the full ~13k-mesh
+> corpus. On a single H100 the per-sample build is dominated by the
+> Warp BVH build + walk evolve and should sit well under the paper's
+> 0.2 s / sample on 80 CPU cores. For the full corpus, parallelize
+> across GPUs by sharding `OBJ_DIR` (the builder is independent
+> per-geometry).
+
+### 3. Pretrain
+
+Wire the corpus into `dataset_paths.yaml` and launch `train.py`. The
+`transolver_pretrain` model template wraps stock `Transolver` with a
+`TrajectoryHead` MLP that emits `(B, N, n_steps · 3)` per-point
+trajectory features, supervised against the WalkSampler-emitted
+per-step `supervise_step{0..n_steps-1}` vector fields:
+
+```bash
+cd examples/cfd/external_aerodynamics/unified_external_aero_recipe
+
+python src/train.py \
+    model=transolver_pretrain \
+    dataset=geopt_pretrain \
+    dataset_paths.geopt_pretrain=/data/geopt_corpus \
+    training.num_epochs=200 \
+    training.optimizer.lr=1e-3 \
+    run_id=geopt_pretrain_v1
+```
+
+The wrapped backbone saves to
+`runs/geopt_pretrain_v1/checkpoints/TransolverPretrainBackbone.0.<epoch>.mdlus`
+every `training.save_interval` epochs (default 25). The final
+checkpoint is the one you fine-tune from.
+
+Multi-GPU pretraining uses the standard PhysicsNeMo distributed entrypoint:
+
+```bash
+torchrun --nproc-per-node=8 src/train.py \
+    model=transolver_pretrain \
+    dataset=geopt_pretrain \
+    dataset_paths.geopt_pretrain=/data/geopt_corpus \
+    training.num_epochs=200 \
+    run_id=geopt_pretrain_v1
+```
+
+> **Coupling warning.** The number of `supervise_step{i}` fields in
+> `datasets/geopt_pretrain.yaml::targets` MUST equal `model.n_steps`
+> in `conf/model/transolver_pretrain.yaml` AND the `n_steps` the
+> corpus was generated with in step 2. The default of 3 is consistent
+> across all three; if you override one, you must override all three.
+> Both YAMLs carry the same warning block.
+
+### 4. Fine-tune onto DrivAerML
+
+Configure the DrivAerML root in `dataset_paths.yaml` (see the recipe's
+[Quick start](#quick-start) and [Dataset config anatomy](#dataset-config-anatomy)
+sections), then launch fine-tuning with the pretrained backbone hook:
+
+```bash
+python src/train.py \
+    model=transolver_volume \
+    dataset=drivaer_ml_volume \
+    dataset_paths.drivaer_ml=/data/drivaer_ml \
+    training.num_epochs=200 \
+    training.optimizer.lr=1e-3 \
+    training.scheduler.gamma=0.5 \
+    'training.pretrained_backbone={path: runs/geopt_pretrain_v1/checkpoints/TransolverPretrainBackbone.0.200.mdlus, key_remap: {transolver.: ""}, exclude_layers: [trajectory_head]}' \
+    run_id=geopt_finetune_drivaer
+```
+
+What the three `training.pretrained_backbone` keys do:
+
+- **`path`** — the `.mdlus` produced by step 3.
+- **`key_remap: {"transolver.": ""}`** — the pretraining wrapper stores
+  Transolver weights under `transolver.*`; the volume model expects them
+  at the top level.
+- **`exclude_layers: [trajectory_head]`** — drops the pretraining head
+  (the `TrajectoryHead` MLP) since the volume model has its own
+  output projection.
+
+The hook runs after model construction and before any resume-checkpoint
+load. A resumed run finds its own checkpoint and supersedes the hook;
+this is intentional — the pretrained backbone is only loaded once at
+fresh-training start. See
+`physicsnemo.utils.checkpoint.load_pretrained_backbone` for the full
+contract.
+
+> **Backbone-shape parity.** `transolver_volume.yaml` and
+> `transolver_pretrain.yaml` ship with identical Transolver
+> hyperparameters (`n_layers=12, n_hidden=256, slice_num=256, ...`)
+> so the pretrained weights load 1-to-1. If you change one
+> backbone-shape knob in either YAML, change it in both, or
+> `load_pretrained_backbone` will report a long
+> `report["unmatched_src"]` list and silently leave most of the
+> finetune model at random init.
+
+### 5. Sanity checks
+
+The repo ships an env-gated end-to-end smoke test that exercises all
+three stages on a tiny synthetic corpus (4 meshes, ~30 s on CPU):
+
+```bash
+PNM_PR2_E2E_SMOKE=1 \
+    pytest examples/cfd/external_aerodynamics/unified_external_aero_recipe/tests/test_pretraining_smoke.py -v
+```
+
+Run this first on any new environment before kicking off a real
+pretraining job — it catches install-environment regressions (Warp
+init, `physicsnemo.Module` round-trip, recipe-side
+`output_normalize` shape contract) without burning GPU time on a real
+corpus.
+
+The unit-test suite for the pretraining stack is:
+
+```bash
+pytest test/experimental/pnm_pretraining/ \
+       test/utils/test_load_pretrained_backbone.py \
+       examples/cfd/external_aerodynamics/unified_external_aero_recipe/tests/test_loss_equivalence.py \
+       -q
+# Expected: 78 passed, 2 skipped (the skips are
+# PNM_GEOPT_REF and PNM_M3_FULL_BENCH gated; see test files).
+```
+
+### 6. What to expect
+
+Per the paper (§5), GeoPT pretraining on ShapeNet-scale geometry
+delivers:
+
+- **20–60 % reduction** in labeled physics data needed to reach a target
+  fine-tune accuracy.
+- **~2× fine-tune convergence speedup** vs from-scratch training.
+
+These are the gates a real-data run is graded against. The paper's
+Table 1 and Figures 5–7 give the per-benchmark breakdown.
+
+### 7. Known divergences from the paper
+
+Documented in full in `reviews-deferred.md`, the round-1 plan §8
+(I1–I20), and our review against the paper (in the conversation
+history). Summary:
+
+- **0.99 sticking factor** in the constrained-walk kernel matches the
+  GeoPT released code, not the paper text (which says 1.0).
+- **Walk independence**: 10 independent + 90 jittered (released-code
+  default) vs paper text "100 i.i.d.". Override on the CLI for strict
+  reproduction (see §2 above).
+- **Backend**: Warp BVH + winding-number occupancy (faster + more
+  accurate than the paper's FCPW; round-1 measurements show 100 %
+  sign-correctness vs FCPW's 86–94 % on watertight meshes).
+- **Per-step loss decomposition**: the recipe declares `n_steps`
+  separate `vector` target fields rather than a single
+  `(τ+1, 3)`-shaped tensor; mathematically equivalent to the paper's
+  Eq. (6) under uniform per-step weights (the default).
+- **Velocity encoding**: the model sees `(directions, step_lengths)`
+  (4 channels) rather than `velocity` (3 channels). 1-to-1
+  reparameterization with `v = step_length · direction`.
+
 ## Configuration
 
 A single canonical `conf/train.yaml` drives every training run. It picks
@@ -567,6 +856,13 @@ python src/train.py model=transolver_volume dataset=drivaer_ml_volume \
 python src/train.py model=transolver_surface dataset=drivaer_ml_surface \
     'extra_datasets=[shift_suv_estate_surface, shift_suv_fastback_surface]' \
     training.optimizer.lr=1e-3 training.scheduler.gamma=0.5
+
+# GeoPT pretraining (Transolver backbone, dynamics-lifted self-supervision).
+# Full runbook (corpus generation, pretrain, fine-tune) is in
+# `## GeoPT pretraining + fine-tuning` above.
+python src/train.py model=transolver_pretrain dataset=geopt_pretrain \
+    dataset_paths.geopt_pretrain=/data/geopt_corpus \
+    training.num_epochs=200 training.optimizer.lr=1e-3
 
 # FLARE
 python src/train.py model=flare_surface dataset=drivaer_ml_surface \
