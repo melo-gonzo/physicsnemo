@@ -1,0 +1,13 @@
+{
+  "paper": "2203.02714",
+  "oracle_repo": "https://github.com/Leminhbinh0209/LookSAM",
+  "metric": "param_mse",
+  "tolerance": 1e-5,
+  "seed": 42,
+  "model": "MLP-8-16-4",
+  "hyperparams": {
+    "rho": 0.1,
+    "alpha": 0.7,
+    "step_k": 5
+  }
+}
