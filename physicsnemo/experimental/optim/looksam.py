@@ -65,7 +65,6 @@ class LookSAM(Optimizer):
         Larger ``k`` reduces extra compute at the cost of fidelity.
     eps : float, default=1e-12
         Numerical stabilizer for gradient-norm denominators.
-
     Notes
     -----
     * **Closure-based step.** :meth:`step` must be called with a closure that
@@ -75,10 +74,16 @@ class LookSAM(Optimizer):
     * **AMP.** Use ``bfloat16`` autocast — ``fp16`` produces NaN gradients on
       sm_87 via CC 8.0 PTX fallback. ``bfloat16`` needs no
       ``GradScaler`` and is recommended for all Ampere+ GPUs.
-    * **Distributed (DDP).** The inner ascent backward triggers a redundant
-      gradient AllReduce. To suppress it, pass a ``ddp_no_sync_fn`` kwarg
-      (a zero-argument callable wrapping ``ddp_model.no_sync()``) when
-      constructing; the second closure call is wrapped in it automatically.
+    * **Distributed (DDP).** Both backward passes on a full-SAM step are
+      AllReduced normally. Unlike vanilla SAM — where the ascent gradient is
+      discarded after perturbing the weights and its sync can be skipped via
+      ``no_sync()`` — LookSAM *reuses* the ascent gradient :math:`g` inside the
+      cached flat component :math:`g_v` that drives subsequent fast steps. If
+      the ascent pass were not synced, each rank would cache a different
+      :math:`g_v` and the fast steps would diverge across ranks. The redundant
+      ascent AllReduce is therefore the price of LookSAM's gradient reuse and
+      cannot be skipped; just wrap the model in ``DistributedDataParallel`` as
+      usual.
     * **Param-group sharing.** ``self.param_groups`` aliases
       ``base_optimizer.param_groups`` so LR schedulers wire transparently.
     * **Step counters.** :attr:`global_step` advances once per :meth:`step`
@@ -113,7 +118,6 @@ class LookSAM(Optimizer):
         alpha: float = 0.7,
         k: int = 5,
         eps: float = 1e-12,
-        **kwargs: Any,
     ) -> None:
         if not isinstance(base_optimizer, Optimizer):
             raise ValueError("`base_optimizer` must be a torch.optim.Optimizer instance.")
@@ -127,14 +131,14 @@ class LookSAM(Optimizer):
         # `params` mirrors the torch.optim.Optimizer signature for API compatibility;
         # actual parameter groups are owned by base_optimizer and shared via reference.
         del params
-        defaults = {"rho": rho, "alpha": alpha, "k": k, "eps": eps, **kwargs}
+        # Only real hyperparameters go into `defaults`; they are copied into every
+        # param group by Optimizer.__init__.
+        defaults = {"rho": rho, "alpha": alpha, "k": k, "eps": eps}
         super().__init__(base_optimizer.param_groups, defaults)
 
         self.base_optimizer = base_optimizer
         self._global_step: int = 0
         self._sam_step: int = 0
-        # Optional no_sync context factory for DDP (see Notes).
-        self._ddp_no_sync_fn: Callable | None = kwargs.get("ddp_no_sync_fn", None)
 
     # ------------------------------------------------------------------
     # Properties
@@ -182,26 +186,30 @@ class LookSAM(Optimizer):
         params = self._params()
         is_sam_step = (self._global_step % k) == 0
 
-        # ---- First forward+backward: g = ∇L(w) ----
-        loss = closure()
-
         if is_sam_step:
             self._sam_step += 1
+
+            # ---- First forward+backward: g = ∇L(w) ----
+            # Under DDP this ascent gradient is AllReduced like any other; it
+            # must stay synced because LookSAM *reuses* it inside the cached
+            # g_v (see Notes, Distributed), so an un-synced g would make every
+            # subsequent fast step diverge across ranks.
+            loss = closure()
+
             g_snap = [p.grad.detach().clone() if p.grad is not None else None for p in params]
             self._ascend(params, g_snap, rho, eps)
 
             # ---- Second forward+backward at perturbed weights: g_s = ∇L(w+e) ----
-            if self._ddp_no_sync_fn is not None:
-                with self._ddp_no_sync_fn():
-                    closure()
-            else:
-                closure()
+            closure()
 
             # Restore weights and compute g_v.
             self._restore_and_cache_gv(params, g_snap, eps)
 
         else:
-            # ---- Fast step: g ← g + α·(‖g‖/‖g_v‖)·g_v ----
+            # ---- Fast step: single (descent) forward+backward, synced ----
+            loss = closure()
+
+            # g ← g + α·(‖g‖/‖g_v‖)·g_v
             g_norm = self._global_norm(params, [p.grad for p in params])
             g_v_norm = self._buffer_norm(params, "g_v")
             blend = alpha * g_norm / (g_v_norm + eps)

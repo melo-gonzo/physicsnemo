@@ -16,20 +16,31 @@
 
 """DDP integration tests for LookSAM (closure-based API).
 
-Single-process tests use world_size=1 with the gloo backend.
-Multi-process tests are marked @pytest.mark.multigpu_static and require:
+Sync contract under test
+------------------------
+On SAM steps LookSAM calls the closure twice, and *both* backward passes must
+AllReduce. Unlike vanilla SAM, the ascent gradient is not discarded — it is
+reused inside the cached ``g_v`` that drives fast steps — so skipping its sync
+(e.g. via ``no_sync``) would desynchronize ``g_v`` and make ranks diverge. There
+is no correct ``no_sync`` shortcut for LookSAM; ``test_ddp_gradient_sync`` guards
+this by feeding each rank a *different* batch and asserting parameters stay
+identical.
 
-    torchrun --nproc-per-node 2 -m pytest --multigpu-static tests/test_looksam_ddp.py
+Running these tests
+-------------------
+All tests here are NCCL-based and marked ``@pytest.mark.multigpu_static``; they
+use ``DistributedManager`` for backend/device assignment (one GPU per rank) and
+require a real multi-GPU machine. Launch with::
 
-Note: NCCL P2P is not supported on sm_87 (nvmlDeviceGetP2PStatus fails).
-Single-process DDP uses gloo with CUDA tensors instead.
+    torchrun --nproc-per-node <N> -m pytest --multigpu-static \\
+        test/optim/test_looksam_ddp.py
 
-DDP limitation: on SAM steps LookSAM calls the closure twice. The second call
-(at perturbed weights) triggers an AllReduce under DDP. This is redundant but
-not incorrect. Suppressing it requires passing ddp_no_sync_fn to LookSAM.__init__.
+Under plain ``pytest`` (no ``--multigpu-static``) every test here is auto-skipped
+by the repo conftest. Note: NCCL P2P is unsupported on Jetson sm_87, so these do
+not run on that hardware — see the ``reference_ddp_testing_jetson`` note for the
+gloo/shared-GPU workaround used during local development.
 """
 
-import os
 import warnings
 
 import pytest
@@ -41,39 +52,35 @@ warnings.filterwarnings("ignore")
 
 from physicsnemo.experimental.optim import LookSAM, LookLayerSAM  # noqa: E402
 
-DEVICE = "cuda:0"
-
 
 # ---------------------------------------------------------------------------
-# Process group helpers
+# Helpers
 # ---------------------------------------------------------------------------
 
 
-def _init_gloo(port: str = "29510") -> None:
-    if dist.is_initialized():
-        return
-    os.environ.setdefault("MASTER_ADDR", "localhost")
-    os.environ["MASTER_PORT"] = port
-    dist.init_process_group("gloo", rank=0, world_size=1)
+def _device():
+    """Return (DistributedManager, device_str) and pin this rank to its GPU.
 
+    Relies on the repo conftest having called ``DistributedManager.initialize()``
+    under ``--multigpu-static`` (NCCL backend, one GPU per rank).
+    """
+    from physicsnemo.distributed import DistributedManager
 
-@pytest.fixture(autouse=True, scope="module")
-def process_group():
-    _init_gloo(port="29510")
-    yield
-    if dist.is_initialized():
-        dist.destroy_process_group()
+    dm = DistributedManager()
+    torch.cuda.set_device(dm.local_rank)
+    return dm, str(dm.device)
 
 
 def _make_ddp(seed: int = 42):
+    dm, device = _device()
     torch.manual_seed(seed)
     model = torch.nn.Sequential(
         torch.nn.Linear(8, 16), torch.nn.ReLU(), torch.nn.Linear(16, 4)
-    ).to(DEVICE)
-    ddp = DistributedDataParallel(model, device_ids=[0])
+    ).to(device)
+    ddp = DistributedDataParallel(model, device_ids=[dm.local_rank])
     base = torch.optim.Adam(ddp.parameters(), lr=1e-3)
     opt = LookSAM(ddp.parameters(), base_optimizer=base, rho=0.1, alpha=0.7, k=5)
-    return model, ddp, opt
+    return model, ddp, opt, device
 
 
 def _closure(opt, ddp, x):
@@ -86,14 +93,15 @@ def _closure(opt, ddp, x):
 
 
 # ---------------------------------------------------------------------------
-# Single-process DDP tests (world_size=1, gloo backend)
+# Per-rank smoke tests (run on every rank's own GPU)
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.multigpu_static
 def test_ddp_wrapping():
     """LookSAM step() works when model is wrapped in DistributedDataParallel."""
-    model, ddp, opt = _make_ddp()
-    x = torch.randn(4, 8, device=DEVICE)
+    model, ddp, opt, device = _make_ddp()
+    x = torch.randn(4, 8, device=device)
 
     for _ in range(6):  # 2 SAM steps (at 0, 5), 4 fast steps
         opt.step(_closure(opt, ddp, x))
@@ -104,28 +112,28 @@ def test_ddp_wrapping():
         assert not torch.isnan(p).any(), f"NaN in {name}"
 
 
-def test_ddp_no_sync_fn():
-    """ddp_no_sync_fn suppresses the AllReduce on the second (perturbation) closure.
+@pytest.mark.multigpu_static
+def test_ddp_no_nosync_kwarg():
+    """LookSAM exposes no no_sync escape hatch (it would desync g_v).
 
-    With world_size=1 the AllReduce is a no-op, but the context manager must be
-    accepted without error and the step must still converge correctly.
+    LookSAM reuses the ascent gradient inside g_v, so both passes must sync and
+    there is intentionally no ddp_no_sync_fn parameter. Guard against it silently
+    reappearing.
     """
+    dm, device = _device()
     torch.manual_seed(42)
     model = torch.nn.Sequential(
         torch.nn.Linear(8, 16), torch.nn.ReLU(), torch.nn.Linear(16, 4)
-    ).to(DEVICE)
-    ddp = DistributedDataParallel(model, device_ids=[0])
+    ).to(device)
+    ddp = DistributedDataParallel(model, device_ids=[dm.local_rank])
     base = torch.optim.Adam(ddp.parameters(), lr=1e-3)
-    opt = LookSAM(
-        ddp.parameters(),
-        base_optimizer=base,
-        rho=0.1,
-        alpha=0.7,
-        k=5,
-        ddp_no_sync_fn=ddp.no_sync,  # suppress redundant AllReduce on perturbation pass
-    )
 
-    x = torch.randn(4, 8, device=DEVICE)
+    with pytest.raises(TypeError):
+        LookSAM(ddp.parameters(), base_optimizer=base, ddp_no_sync_fn=ddp.no_sync)
+
+    # And the normal construction (both passes synced) runs cleanly.
+    opt = LookSAM(ddp.parameters(), base_optimizer=base, rho=0.1, alpha=0.7, k=5)
+    x = torch.randn(4, 8, device=device)
     for _ in range(6):
         opt.step(_closure(opt, ddp, x))
 
@@ -134,10 +142,11 @@ def test_ddp_no_sync_fn():
         assert not torch.isnan(p).any()
 
 
+@pytest.mark.multigpu_static
 def test_ddp_fast_steps():
     """Fast steps (t % k != 0) update params without error under DDP."""
-    model, ddp, opt = _make_ddp()
-    x = torch.randn(4, 8, device=DEVICE)
+    model, ddp, opt, device = _make_ddp()
+    x = torch.randn(4, 8, device=device)
     closure = _closure(opt, ddp, x)
 
     opt.step(closure)  # SAM step — populates g_v
@@ -151,10 +160,11 @@ def test_ddp_fast_steps():
         assert not torch.isnan(p).any()
 
 
+@pytest.mark.multigpu_static
 def test_ddp_bf16():
-    """bf16 autocast works under DDP on sm_87."""
-    model, ddp, opt = _make_ddp()
-    x = torch.randn(4, 8, device=DEVICE)
+    """bf16 autocast works under DDP."""
+    model, ddp, opt, device = _make_ddp()
+    x = torch.randn(4, 8, device=device)
 
     def closure_bf16():
         opt.zero_grad()
@@ -170,16 +180,18 @@ def test_ddp_bf16():
         assert not torch.isnan(p).any()
 
 
+@pytest.mark.multigpu_static
 def test_ddp_looksam_layer():
     """LookLayerSAM works under DDP."""
+    dm, device = _device()
     torch.manual_seed(42)
     model = torch.nn.Sequential(
         torch.nn.Linear(8, 16), torch.nn.ReLU(), torch.nn.Linear(16, 4)
-    ).to(DEVICE)
-    ddp = DistributedDataParallel(model, device_ids=[0])
+    ).to(device)
+    ddp = DistributedDataParallel(model, device_ids=[dm.local_rank])
     base = torch.optim.Adam(ddp.parameters(), lr=1e-3)
     opt = LookLayerSAM(ddp.parameters(), base_optimizer=base, rho=0.1, k=3)
-    x = torch.randn(4, 8, device=DEVICE)
+    x = torch.randn(4, 8, device=device)
 
     for _ in range(4):
         opt.step(_closure(opt, ddp, x))
@@ -189,35 +201,35 @@ def test_ddp_looksam_layer():
 
 
 # ---------------------------------------------------------------------------
-# Multi-process DDP test — requires torchrun --nproc-per-node 2
+# Cross-rank sync regression — requires world_size >= 2
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.multigpu_static
-@pytest.mark.skipif(
-    torch.cuda.device_count() < 2,
-    reason="requires ≥2 GPUs — run with: torchrun --nproc-per-node 2 -m pytest --multigpu-static",
-)
 def test_ddp_gradient_sync():
-    """After a full LookSAM cycle params are identical across all ranks.
+    """Params identical across ranks after a LookSAM cycle (NCCL, device-per-rank).
 
-    On the descent step DDP AllReduces gradients; all replicas must apply the
-    same update and converge to identical parameter values.
+    The regression core of the descent-gradient sync contract: each rank is fed a
+    *different* batch, so replicas can only stay bit-for-bit identical if both
+    backward passes AllReduce. If the ascent gradient were not synced (the removed
+    ``no_sync`` shortcut), each rank would cache a different ``g_v`` and the fast
+    steps would drive the parameters apart — failing the assert below.
     """
-    from physicsnemo.distributed import DistributedManager
+    dm, device = _device()
+    if dm.world_size < 2:
+        pytest.skip("requires world_size >= 2 (torchrun --nproc-per-node >= 2)")
 
-    dm = DistributedManager()
-    device = f"cuda:{dm.local_rank}"
-
+    # Identical initial weights on every rank (DDP also broadcasts at
+    # construction, but seed identically so the check is self-contained).
     torch.manual_seed(0)
     model = torch.nn.Sequential(
         torch.nn.Linear(8, 16), torch.nn.ReLU(), torch.nn.Linear(16, 4)
     ).to(device)
     ddp = DistributedDataParallel(model, device_ids=[dm.local_rank])
     base = torch.optim.Adam(ddp.parameters(), lr=1e-3)
-    opt = LookSAM(ddp.parameters(), base_optimizer=base, rho=0.05, k=3,
-                  ddp_no_sync_fn=ddp.no_sync)
+    opt = LookSAM(ddp.parameters(), base_optimizer=base, rho=0.05, k=3)
 
+    # Distinct data per rank — this is what makes the sync contract observable.
     torch.manual_seed(dm.rank + 1)
     x = torch.randn(4, 8, device=device)
 
@@ -226,7 +238,7 @@ def test_ddp_gradient_sync():
         ddp(x).sum().backward()
         return torch.tensor(0.0)
 
-    for _ in range(6):
+    for _ in range(6):  # 2 SAM steps (at 0, 3) + 4 fast steps, k=3
         opt.step(closure)
 
     for name, p in model.named_parameters():

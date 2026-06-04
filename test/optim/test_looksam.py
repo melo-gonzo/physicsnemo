@@ -244,3 +244,57 @@ def test_multiple_param_groups():
 
     for p in model.parameters():
         assert not torch.isnan(p).any()
+
+
+# ---------------------------------------------------------------------------
+# test_looklayer_sam — per-layer ascent variant runs and stays finite
+# ---------------------------------------------------------------------------
+
+
+def test_looklayer_sam():
+    """LookLayerSAM (per-layer perturbation) takes finite SAM + fast steps."""
+    torch.manual_seed(42)
+    model = torch.nn.Sequential(
+        torch.nn.Linear(8, 16), torch.nn.ReLU(), torch.nn.Linear(16, 4)
+    ).to(DEVICE)
+    base = torch.optim.Adam(model.parameters(), lr=1e-3)
+    opt = LookLayerSAM(model.parameters(), base_optimizer=base, rho=0.1, k=3)
+
+    x = torch.randn(4, 8, device=DEVICE)
+    for _ in range(4):  # SAM step at 0 and 3, fast steps at 1 and 2
+        opt.step(_closure(opt, model, x))
+
+    assert opt.global_step == 4
+    assert opt.sam_step == 2
+    for name, p in model.named_parameters():
+        assert not torch.isnan(p).any(), f"NaN in {name}"
+
+
+# ---------------------------------------------------------------------------
+# test_checkpoint_picklable — state_dict survives a torch.save/load round-trip
+# ---------------------------------------------------------------------------
+
+
+def test_checkpoint_picklable(tmp_path):
+    """LookSAM (and its base optimizer) state_dict must be picklable.
+
+    Regression guard: only the documented hyperparameters belong in
+    `defaults`/param_groups. Folding arbitrary kwargs into `defaults` would copy
+    non-serializable objects into base_optimizer.param_groups (which LookSAM
+    aliases) and break torch.save of any checkpoint.
+    """
+    torch.manual_seed(42)
+    model, opt = _make()
+    base = opt.base_optimizer
+
+    x = torch.randn(4, 8, device=DEVICE)
+    opt.step(_closure(opt, model, x))  # populate g_v cache
+
+    # param_groups must carry only the documented hyperparameters.
+    assert set(opt.param_groups[0]) >= {"rho", "alpha", "k", "eps"}
+
+    ckpt = tmp_path / "looksam.pt"
+    torch.save(opt.state_dict(), ckpt)  # exercises base.state_dict() picklability
+    loaded = torch.load(ckpt, weights_only=False)
+    opt.load_state_dict(loaded)
+    assert opt.global_step == 1
