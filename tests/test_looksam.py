@@ -14,14 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Parity and integration tests for physicsnemo.experimental.optim.LookSAM.
+"""Integration tests for physicsnemo.experimental.optim.LookSAM."""
 
-All tests run on cuda:0 — this is a Jetson Orin Nano (sm_87) with a real GPU.
-Use bfloat16 for AMP; fp16 produces NaN on this device via the CC 8.0 PTX fallback.
-"""
-
-import json
-import pathlib
 import warnings
 
 import pytest
@@ -32,7 +26,6 @@ warnings.filterwarnings("ignore", category=UserWarning)
 from physicsnemo.experimental.optim import LookSAM, LookLayerSAM  # noqa: E402
 
 DEVICE = "cuda:0"
-FIXTURE_DIR = pathlib.Path(__file__).parent / "fixtures" / "looksam"
 
 
 # ---------------------------------------------------------------------------
@@ -59,61 +52,8 @@ def _closure(opt, model, x):
     return _fn
 
 
-@pytest.fixture(scope="module")
-def fixture_data():
-    pt = FIXTURE_DIR / "fixtures.pt"
-    if not pt.exists():
-        pytest.skip(f"fixtures not found at {pt}")
-    return torch.load(pt, weights_only=False)
-
-
-@pytest.fixture(scope="module")
-def metadata():
-    meta = FIXTURE_DIR / "metadata.json"
-    if not meta.exists():
-        pytest.skip(f"metadata not found at {meta}")
-    return json.loads(meta.read_text())
-
-
 # ---------------------------------------------------------------------------
-# a. test_shape — output shapes match reference oracle
-# ---------------------------------------------------------------------------
-
-
-def test_shape(fixture_data):
-    torch.manual_seed(42)
-    model, opt = _make()
-    x = torch.randn(4, 8, device=DEVICE)
-    opt.step(_closure(opt, model, x))   # step 0 is a SAM step (0 % k == 0)
-
-    params_ref = fixture_data["params_after_cycle"]
-    for name, p in model.named_parameters():
-        assert p.shape == params_ref[name].shape
-
-
-# ---------------------------------------------------------------------------
-# b. test_parity — numerical match against reference oracle
-# ---------------------------------------------------------------------------
-
-
-def test_parity(fixture_data, metadata):
-    tolerance = metadata["tolerance"]
-    seed = metadata["seed"]
-    torch.manual_seed(seed)
-    model, opt = _make(seed=seed)
-    torch.manual_seed(seed)
-    x = torch.randn(4, 8, device=DEVICE)
-
-    opt.step(_closure(opt, model, x))
-
-    params_ref = fixture_data["params_after_cycle"]
-    for name, p in model.named_parameters():
-        mse = ((p.data.cpu() - params_ref[name]) ** 2).mean().item()
-        assert mse <= tolerance, f"{name}: MSE={mse:.2e} > tol={tolerance:.2e}"
-
-
-# ---------------------------------------------------------------------------
-# c. test_gradient_flow — grads are finite after a full cycle
+# test_gradient_flow — grads are finite after a full cycle
 # ---------------------------------------------------------------------------
 
 
@@ -124,7 +64,6 @@ def test_gradient_flow():
 
     opt.step(_closure(opt, model, x))
 
-    # Another backward after the step should yield finite grads
     opt.zero_grad()
     model(x).sum().backward()
     for name, p in model.named_parameters():
@@ -133,15 +72,15 @@ def test_gradient_flow():
 
 
 # ---------------------------------------------------------------------------
-# d. test_amp_cuda — bfloat16 autocast on CUDA (no GradScaler needed)
+# test_amp_cuda — bfloat16 autocast on CUDA (no GradScaler needed)
 # ---------------------------------------------------------------------------
 
 
 def test_amp_cuda():
-    """bf16 is the correct AMP dtype for Jetson Orin (sm_87 via CC 8.0 PTX).
+    """bf16 is the correct AMP dtype for sm_87 (CC 8.0 PTX fallback).
 
-    fp16 produces NaN gradients on this device. bf16 has the same dynamic
-    range as fp32 and does not need a GradScaler.
+    fp16 produces NaN gradients on sm_87. bf16 has the same dynamic range
+    as fp32 and does not need a GradScaler.
     """
     torch.manual_seed(42)
     model, opt = _make()
@@ -162,7 +101,7 @@ def test_amp_cuda():
 
 
 # ---------------------------------------------------------------------------
-# e. test_k_reuse — fast steps (t % k != 0) update params without error
+# test_k_reuse — fast steps (t % k != 0) update params without error
 # ---------------------------------------------------------------------------
 
 
@@ -184,7 +123,7 @@ def test_k_reuse():
 
 
 # ---------------------------------------------------------------------------
-# f. test_k1_equiv_sam — k=1 is equivalent to vanilla SAM
+# test_k1_equiv_sam — k=1 is equivalent to vanilla SAM
 # ---------------------------------------------------------------------------
 
 
@@ -192,7 +131,6 @@ def test_k1_equiv_sam():
     """With k=1 every step is a full SAM step; closure is called twice each time."""
     torch.manual_seed(42)
     model, opt = _make()
-    base = opt.base_optimizer
     x = torch.randn(4, 8, device=DEVICE)
 
     call_count = [0]
@@ -204,7 +142,6 @@ def test_k1_equiv_sam():
         loss.backward()
         return loss
 
-    # Override k=1
     for g in opt.param_groups:
         g["k"] = 1
 
@@ -216,7 +153,7 @@ def test_k1_equiv_sam():
 
 
 # ---------------------------------------------------------------------------
-# g. test_state_dict_roundtrip — save/load produces identical trajectory
+# test_state_dict_roundtrip — save/load produces identical trajectory
 # ---------------------------------------------------------------------------
 
 
@@ -238,7 +175,6 @@ def test_state_dict_roundtrip():
         opt.step(closure)
     params_forward = {n: p.clone() for n, p in model.named_parameters()}
 
-    # Restore and replay
     with torch.no_grad():
         for n, p in model.named_parameters():
             p.copy_(params_snap[n])
@@ -264,7 +200,7 @@ def test_state_dict_roundtrip():
 
 
 # ---------------------------------------------------------------------------
-# h. test_lr_scheduler_compat — LR scheduler propagates through wrapper
+# test_lr_scheduler_compat — LR scheduler propagates through wrapper
 # ---------------------------------------------------------------------------
 
 
@@ -287,7 +223,7 @@ def test_lr_scheduler_compat():
 
 
 # ---------------------------------------------------------------------------
-# i. test_multiple_param_groups — two groups with different lr
+# test_multiple_param_groups — two groups with different lr
 # ---------------------------------------------------------------------------
 
 

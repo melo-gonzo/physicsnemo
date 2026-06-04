@@ -16,12 +16,12 @@
 
 """DDP integration tests for LookSAM (closure-based API).
 
-Single-process tests (world_size=1, gloo backend) run on the Jetson.
+Single-process tests use world_size=1 with the gloo backend.
 Multi-process tests are marked @pytest.mark.multigpu_static and require:
 
     torchrun --nproc-per-node 2 -m pytest --multigpu-static tests/test_looksam_ddp.py
 
-Note: NCCL P2P is not supported on Jetson Orin Nano (nvmlDeviceGetP2PStatus fails).
+Note: NCCL P2P is not supported on sm_87 (nvmlDeviceGetP2PStatus fails).
 Single-process DDP uses gloo with CUDA tensors instead.
 
 DDP limitation: on SAM steps LookSAM calls the closure twice. The second call
@@ -86,7 +86,7 @@ def _closure(opt, ddp, x):
 
 
 # ---------------------------------------------------------------------------
-# Single-process DDP tests (run on Jetson, world_size=1, gloo backend)
+# Single-process DDP tests (world_size=1, gloo backend)
 # ---------------------------------------------------------------------------
 
 

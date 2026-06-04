@@ -73,7 +73,7 @@ class LookSAM(Optimizer):
       returns the loss. On full-SAM steps the closure is invoked twice; on
       fast steps it is invoked once.
     * **AMP.** Use ``bfloat16`` autocast — ``fp16`` produces NaN gradients on
-      Jetson Orin (sm_87, CC 8.0 PTX fallback). ``bfloat16`` needs no
+      sm_87 via CC 8.0 PTX fallback. ``bfloat16`` needs no
       ``GradScaler`` and is recommended for all Ampere+ GPUs.
     * **Distributed (DDP).** The inner ascent backward triggers a redundant
       gradient AllReduce. To suppress it, pass a ``ddp_no_sync_fn`` kwarg
