@@ -34,8 +34,7 @@ __all__ = ["LookSAM", "LookLayerSAM"]
 class LookSAM(Optimizer):
     r"""Efficient Sharpness-Aware Minimization (LookSAM) optimizer wrapper.
 
-    Implements LookSAM from Liu et al., *"Towards Efficient and Scalable
-    Sharpness-Aware Minimization"* (CVPR 2022, arXiv:2203.02714). LookSAM
+    Implements LookSAM. LookSAM
     accelerates Sharpness-Aware Minimization (SAM) by computing the expensive
     inner ascent gradient only every ``k`` steps and reusing the cached
     "flat-region" component ``g_v`` on intermediate steps, recovering most of
@@ -71,9 +70,7 @@ class LookSAM(Optimizer):
       zeroes gradients, computes the loss, calls ``loss.backward()``, and
       returns the loss. On full-SAM steps the closure is invoked twice; on
       fast steps it is invoked once.
-    * **AMP.** Use ``bfloat16`` autocast — ``fp16`` produces NaN gradients on
-      sm_87 via CC 8.0 PTX fallback. ``bfloat16`` needs no
-      ``GradScaler`` and is recommended for all Ampere+ GPUs.
+    * **AMP.** Use ``bfloat16`` autocast.
     * **Distributed (DDP).** Both backward passes on a full-SAM step are
       AllReduced normally. Unlike vanilla SAM — where the ascent gradient is
       discarded after perturbing the weights and its sync can be skipped via
@@ -191,7 +188,7 @@ class LookSAM(Optimizer):
 
             # ---- First forward+backward: g = ∇L(w) ----
             # Under DDP this ascent gradient is AllReduced like any other; it
-            # must stay synced because LookSAM *reuses* it inside the cached
+            # must stay synced because LookSAM reuses it inside the cached
             # g_v (see Notes, Distributed), so an un-synced g would make every
             # subsequent fast step diverge across ranks.
             loss = closure()
@@ -334,7 +331,7 @@ class LookSAM(Optimizer):
 
 
 class LookLayerSAM(LookSAM):
-    r"""Layer-wise variant of LookSAM (Look-LayerSAM in the paper).
+    r"""Layer-wise variant of LookSAM.
 
     Replaces the global-norm perturbation with per-layer perturbations
     (analogous to LARS/LAMB layer-wise scaling). Each layer gets its own
@@ -343,9 +340,6 @@ class LookLayerSAM(LookSAM):
 
     All other behaviour — ``decompose_grad``, ``g_v`` caching, fast steps —
     is inherited from :class:`LookSAM`.
-
-    The paper (Section 4.3) reports that Look-LayerSAM outperforms LookSAM
-    at large batch sizes (16k–32k) on ImageNet with ViT-B/16.
     """
 
     def _ascend(

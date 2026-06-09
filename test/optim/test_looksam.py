@@ -23,7 +23,7 @@ import torch
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
-from physicsnemo.experimental.optim import LookSAM, LookLayerSAM  # noqa: E402
+from physicsnemo.experimental.optim import LookLayerSAM, LookSAM  # noqa: E402
 
 DEVICE = "cuda:0"
 
@@ -49,6 +49,7 @@ def _closure(opt, model, x):
         loss = model(x).sum()
         loss.backward()
         return loss
+
     return _fn
 
 
@@ -77,11 +78,7 @@ def test_gradient_flow():
 
 
 def test_amp_cuda():
-    """bf16 is the correct AMP dtype for sm_87 (CC 8.0 PTX fallback).
-
-    fp16 produces NaN gradients on sm_87. bf16 has the same dynamic range
-    as fp32 and does not need a GradScaler.
-    """
+    """bf16 as AMD dtype. check for nan and inf"""
     torch.manual_seed(42)
     model, opt = _make()
     x = torch.randn(4, 8, device=DEVICE)
@@ -118,7 +115,9 @@ def test_k_reuse():
     opt.step(closure)  # step 1: fast step (1 % 5 != 0)
 
     for name, p in model.named_parameters():
-        assert not torch.equal(p.data, params_before[name]), f"{name} did not update on fast step"
+        assert not torch.equal(p.data, params_before[name]), (
+            f"{name} did not update on fast step"
+        )
         assert not torch.isnan(p).any(), f"NaN in {name} after fast step"
 
 
@@ -148,7 +147,7 @@ def test_k1_equiv_sam():
     for _ in range(3):
         opt.step(counted_closure)
 
-    assert call_count[0] == 6, f"expected 6 closure calls (2×3), got {call_count[0]}"
+    assert call_count[0] == 6, f"expected 6 closure calls (2x3), got {call_count[0]}"
     assert opt.sam_step == 3
 
 
@@ -195,8 +194,13 @@ def test_state_dict_roundtrip():
         opt2.step(closure2)
 
     for name, p in model2.named_parameters():
-        torch.testing.assert_close(p, params_forward[name], atol=1e-5, rtol=0,
-                                   msg=f"state_dict roundtrip mismatch for {name}")
+        torch.testing.assert_close(
+            p,
+            params_forward[name],
+            atol=1e-5,
+            rtol=0,
+            msg=f"state_dict roundtrip mismatch for {name}",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -213,13 +217,15 @@ def test_lr_scheduler_compat():
     lr_before = opt.param_groups[0]["lr"]
 
     import warnings
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         sched.step()
 
     assert opt.param_groups[0]["lr"] == pytest.approx(lr_before * 0.5)
-    assert base.param_groups[0]["lr"] == pytest.approx(lr_before * 0.5), \
+    assert base.param_groups[0]["lr"] == pytest.approx(lr_before * 0.5), (
         "lr change did not propagate to base optimizer"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -232,10 +238,12 @@ def test_multiple_param_groups():
     model = torch.nn.Sequential(
         torch.nn.Linear(8, 16), torch.nn.ReLU(), torch.nn.Linear(16, 4)
     ).to(DEVICE)
-    base = torch.optim.Adam([
-        {"params": list(model[0].parameters()), "lr": 1e-3},
-        {"params": list(model[2].parameters()), "lr": 1e-4},
-    ])
+    base = torch.optim.Adam(
+        [
+            {"params": list(model[0].parameters()), "lr": 1e-3},
+            {"params": list(model[2].parameters()), "lr": 1e-4},
+        ]
+    )
     opt = LookSAM(model.parameters(), base_optimizer=base, rho=0.05, k=3)
 
     x = torch.randn(4, 8, device=DEVICE)
@@ -285,7 +293,6 @@ def test_checkpoint_picklable(tmp_path):
     """
     torch.manual_seed(42)
     model, opt = _make()
-    base = opt.base_optimizer
 
     x = torch.randn(4, 8, device=DEVICE)
     opt.step(_closure(opt, model, x))  # populate g_v cache
@@ -294,7 +301,7 @@ def test_checkpoint_picklable(tmp_path):
     assert set(opt.param_groups[0]) >= {"rho", "alpha", "k", "eps"}
 
     ckpt = tmp_path / "looksam.pt"
-    torch.save(opt.state_dict(), ckpt)  # exercises base.state_dict() picklability
+    torch.save(opt.state_dict(), ckpt)  # exercises opt.state_dict() picklability
     loaded = torch.load(ckpt, weights_only=False)
     opt.load_state_dict(loaded)
     assert opt.global_step == 1
