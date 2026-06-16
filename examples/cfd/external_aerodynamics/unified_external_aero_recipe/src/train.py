@@ -66,7 +66,7 @@ from tensordict import TensorDict
 from torch.amp import GradScaler, autocast
 from torch.utils.data import Sampler
 from torch.utils.tensorboard import SummaryWriter
-from utils import FieldType, build_muon_optimizer, field_dim, set_seed
+from utils import FieldType, build_optimizer, field_dim, set_seed
 
 from physicsnemo import datapipes  # noqa: F401 - registers ${dp:...} resolver
 from physicsnemo.core.version_check import OptionalImport
@@ -370,6 +370,17 @@ def _run_epoch(
     else:
         model.eval()
 
+    ### LookSAM is closure-based and takes a different train-step path below.
+    ### Detect it by class name to avoid importing the experimental module
+    ### unless it is actually in use.
+    is_looksam = is_train and type(optimizer).__name__ in ("LookSAM", "LookLayerSAM")
+    if is_looksam and getattr(cfg, "precision", "float32") == "float16":
+        raise ValueError(
+            "LookSAM is incompatible with float16 + GradScaler (the scaler "
+            "cannot span SAM's two backward passes). Use precision=bfloat16 "
+            "or precision=float32."
+        )
+
     grad_ctx = nullcontext() if is_train else torch.no_grad()
     log_prefix = "Epoch" if is_train else "Val Epoch"
 
@@ -392,27 +403,60 @@ def _run_epoch(
         for i, batch in enumerate(dataloader):
             batch = _recursive_to_device(batch, dist_manager.device)
 
-            loss, losses, metrics = forward_pass(
-                batch,
-                model,
-                precision,
-                loss_calculator,
-                metric_calculator,
-                output_type=output_type,
-                target_config=target_config,
-            )
+            if is_train and is_looksam:
+                ### LookSAM is closure-based: it invokes the closure twice on
+                ### full-SAM steps (at w and at the perturbed w+e) and once on
+                ### fast steps. The closure does the forward + backward and
+                ### returns the loss; LookSAM.step returns the loss from the
+                ### *first* call. We capture losses/metrics from that first
+                ### call too (guarded by ``"losses" not in holder``) so the
+                ### accumulated metrics match the reported loss rather than the
+                ### perturbed-point evaluation.
+                holder: dict[str, Any] = {}
 
-            if is_train:
-                optimizer.zero_grad()
-                if precision == "float16" and scaler is not None:
-                    scaler.scale(loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    loss.backward()
-                    optimizer.step()
+                def closure() -> torch.Tensor:
+                    optimizer.zero_grad()
+                    c_loss, c_losses, c_metrics = forward_pass(
+                        batch,
+                        model,
+                        precision,
+                        loss_calculator,
+                        metric_calculator,
+                        output_type=output_type,
+                        target_config=target_config,
+                    )
+                    c_loss.backward()
+                    if "losses" not in holder:
+                        holder["losses"] = c_losses
+                        holder["metrics"] = c_metrics
+                    return c_loss
+
+                loss = optimizer.step(closure)
+                losses, metrics = holder["losses"], holder["metrics"]
                 if cfg.training.get("scheduler_update_mode", "epoch") == "step":
                     scheduler.step()
+            else:
+                loss, losses, metrics = forward_pass(
+                    batch,
+                    model,
+                    precision,
+                    loss_calculator,
+                    metric_calculator,
+                    output_type=output_type,
+                    target_config=target_config,
+                )
+
+                if is_train:
+                    optimizer.zero_grad()
+                    if precision == "float16" and scaler is not None:
+                        scaler.scale(loss).backward()
+                        scaler.step(optimizer)
+                        scaler.update()
+                    else:
+                        loss.backward()
+                        optimizer.step()
+                    if cfg.training.get("scheduler_update_mode", "epoch") == "step":
+                        scheduler.step()
 
             ### Accumulate on-device with no sync. First iteration clones
             ### so subsequent in-place ``add_`` calls don't alias the
@@ -1263,7 +1307,7 @@ def main(cfg: DictConfig) -> None:
         )
         logger.info(f"Normalization: {norm_summary}")
 
-    optimizer = build_muon_optimizer(model, cfg, compile_optimizer=cfg.compile)
+    optimizer = build_optimizer(model, cfg, compile_optimizer=cfg.compile)
     logger.info(f"Optimizer: {optimizer}")
     scheduler = hydra.utils.instantiate(cfg.training.scheduler, optimizer=optimizer)
 

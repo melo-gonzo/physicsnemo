@@ -36,9 +36,20 @@ training:
   batch_size: 1
   scheduler_update_mode: "epoch"
   optimizer:
+    # Optimizer backend: "muon" (default; Muon 2-D weights + AdamW rest),
+    # "adam" (plain AdamW over all params), or "adam+looksam" (AdamW base
+    # wrapped in the closure-based LookSAM sharpness-aware optimizer).
+    # "adam" and "adam+looksam" form a baseline/SAM twin for loss-landscape
+    # comparison. LookSAM requires bfloat16/float32 (not float16 + GradScaler).
+    type: "muon"
     weight_decay: 1.0e-4
     betas: [0.9, 0.999]
     eps: 1.0e-8
+    # LookSAM hyperparameters (only used when type == "adam+looksam"):
+    looksam:
+      rho: 0.05
+      alpha: 0.7
+      k: 5
 
 # -- DataLoader / Dataset Performance Tuning --------------------------------
 dataloader:

@@ -132,6 +132,73 @@ def build_muon_optimizer(
         return opt
 
 
+def build_optimizer(
+    model: torch.nn.Module, cfg: DictConfig, *, compile_optimizer: bool = False
+) -> torch.optim.Optimizer:
+    """Build the training optimizer, dispatching on ``cfg.training.optimizer.type``.
+
+    Supported types:
+
+    * ``"muon"`` (default) — Muon (2-D weights) + AdamW (everything else), via
+      :func:`build_muon_optimizer`. Unchanged legacy behaviour.
+    * ``"adam"`` — plain ``torch.optim.AdamW`` over all parameters. This is the
+      *baseline twin* for a LookSAM comparison: same base optimizer, no
+      sharpness-aware step, so two runs differ only by SAM.
+    * ``"adam+looksam"`` — an AdamW base wrapped in
+      :class:`physicsnemo.experimental.optim.LookSAM`. Reads
+      ``cfg.training.optimizer.looksam.{rho,alpha,k}`` (paper defaults if absent).
+
+    LookSAM is closure-based: the training loop must call ``optimizer.step(closure)``
+    rather than ``loss.backward(); optimizer.step()``. Callers can detect this via
+    ``isinstance(opt, LookSAM)``.
+
+    Args:
+        model: The model (may be DDP-wrapped).
+        cfg: Full Hydra config. Reads ``cfg.training.optimizer.*``.
+        compile_optimizer: Forwarded to the Muon path; ignored for adam/looksam
+            (LookSAM's two-pass step does not compose with a compiled step here).
+    """
+    opt_cfg = cfg.training.optimizer
+    opt_type = opt_cfg.get("type", "muon")
+
+    if opt_type == "muon":
+        return build_muon_optimizer(model, cfg, compile_optimizer=compile_optimizer)
+
+    base_model = model.module if hasattr(model, "module") else model
+    lr = opt_cfg.lr
+    weight_decay = opt_cfg.get("weight_decay", 1e-4)
+    betas = tuple(opt_cfg.get("betas", [0.9, 0.999]))
+    eps = opt_cfg.get("eps", 1e-8)
+
+    if opt_type in ("adam", "adam+looksam"):
+        base = torch.optim.AdamW(
+            base_model.parameters(),
+            lr=lr,
+            weight_decay=weight_decay,
+            betas=betas,
+            eps=eps,
+        )
+        if opt_type == "adam":
+            return base
+
+        # adam+looksam: wrap the AdamW base in LookSAM.
+        from physicsnemo.experimental.optim import LookSAM
+
+        ls_cfg = opt_cfg.get("looksam", {})
+        return LookSAM(
+            base_model.parameters(),
+            base_optimizer=base,
+            rho=ls_cfg.get("rho", 0.05),
+            alpha=ls_cfg.get("alpha", 0.7),
+            k=ls_cfg.get("k", 5),
+        )
+
+    raise ValueError(
+        f"Unknown optimizer type {opt_type!r}. "
+        "Expected one of: 'muon', 'adam', 'adam+looksam'."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Field type helpers for target configurations
 # ---------------------------------------------------------------------------

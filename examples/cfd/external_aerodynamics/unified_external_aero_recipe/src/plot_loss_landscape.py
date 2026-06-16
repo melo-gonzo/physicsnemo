@@ -350,22 +350,33 @@ def compute_landscape(
 # ---------------------------------------------------------------------------
 
 
-def _build_recipe_loss_fn(cfg):  # pragma: no cover - needs GPU + checkpoint
+def _build_recipe_loss_fn(cfg, run_id: str | None = None):  # pragma: no cover - needs GPU + checkpoint
     """Build ``(model, loss_fn)`` from the unified external-aero recipe.
 
-    Reuses the recipe's own model construction, loss calculator, checkpoint
-    loading and a single fixed mini-batch. ``loss_fn`` evaluates that batch's
-    scalar loss for the model's current weights, under ``no_grad`` + autocast.
+    Mirrors the construction order in ``train.main`` (build_dataloaders →
+    instantiate model → loss/metric calculators → load_checkpoint) and reuses
+    the recipe's own ``forward_pass`` so the landscape loss matches training
+    exactly. ``loss_fn`` evaluates one fixed mini-batch's scalar loss for the
+    model's current weights.
+
+    Args:
+        cfg: Composed Hydra config (same as ``train.py``).
+        run_id: Optional override for ``cfg.run_id`` so two checkpoints (e.g.
+            an Adam baseline and a LookSAM run) can be loaded from one config.
     """
     import os
 
     import hydra
+    from omegaconf import OmegaConf
 
-    from datasets import build_dataloaders
     from loss import LossCalculator
-    from metrics import MetricCalculator
-    from output_normalize import require_output_type
-    from train import forward_pass
+    from metrics import DEFAULT_METRICS, MetricCalculator
+    from train import (
+        _recursive_to_device,
+        _resolve_dict,
+        build_dataloaders,
+        forward_pass,
+    )
     from physicsnemo.distributed import DistributedManager
     from physicsnemo.utils import load_checkpoint
 
@@ -373,34 +384,53 @@ def _build_recipe_loss_fn(cfg):  # pragma: no cover - needs GPU + checkpoint
     dist_manager = DistributedManager()
     device = dist_manager.device
 
+    run_id = run_id or cfg.run_id
+
     train_loader, _val_loader, _normalizer, dataset_info = build_dataloaders(cfg)
     target_config = dataset_info["targets"]
-    output_type = require_output_type(cfg)
+
+    output_type = cfg.get("output_type", None)
+    if output_type is None:
+        raise ValueError(
+            "Training YAML must declare `output_type` (one of 'mesh', 'tensors')."
+        )
 
     model = hydra.utils.instantiate(cfg.model, _convert_="partial").to(device)
     model.eval()
 
-    loss_calculator = LossCalculator(
-        target_config=target_config, **cfg.training.loss
+    # Loss / metric calculators — same construction as train.main().
+    metrics_cfg = OmegaConf.select(cfg, "metrics", default=None)
+    metrics_list = (
+        list(DEFAULT_METRICS)
+        if metrics_cfg is None
+        else OmegaConf.to_container(metrics_cfg, resolve=True)
     )
-    metric_calculator = MetricCalculator(target_config=target_config)
+    metric_calculator = MetricCalculator(
+        target_config=target_config, metrics=metrics_list
+    )
+    loss_calculator = LossCalculator(
+        target_config=target_config,
+        loss_type=cfg.training.get("loss_type", "huber"),
+        field_weights=_resolve_dict(cfg, "training.field_weights"),
+    )
 
-    ckpt_args = {
-        "path": os.path.join(
-            cfg.output, cfg.run_id, "checkpoints"
-        ),
-        "models": model,
-    }
-    load_checkpoint(device=device, **ckpt_args)
+    checkpoint_dir = getattr(cfg, "checkpoint_dir", None) or cfg.output_dir
+    load_checkpoint(
+        device=device,
+        path=os.path.join(checkpoint_dir, run_id, "checkpoints"),
+        models=model,
+    )
+
+    precision = cfg.get("precision", "float32")
 
     # One fixed batch — cached once, reused for every grid point.
-    batch = next(iter(train_loader))
+    batch = _recursive_to_device(next(iter(train_loader)), device)
 
     def loss_fn() -> float:
         loss, _loss_td, _metric_td = forward_pass(
             batch,
             model,
-            cfg.training.precision,
+            precision,
             loss_calculator,
             metric_calculator,
             output_type=output_type,
@@ -419,7 +449,13 @@ def main():  # pragma: no cover - needs GPU + checkpoint
     Single checkpoint::
 
         python plot_loss_landscape.py --config-name train \
-            run_id=my_run resolution=21 span=1.0 out=landscape.png
+            run_id=my_run --resolution 21 --span 1.0 --out landscape.png
+
+    Compare two checkpoints (the SAM Fig 1 sharp-vs-wide contrast)::
+
+        python plot_loss_landscape.py --config-name train \
+            --compare adam_run looksam_run --titles Adam LookSAM \
+            --out compare.png
 
     The model-agnostic core (everything above this section) is what the unit
     tests exercise; this entry point requires a GPU and a trained checkpoint.
@@ -438,6 +474,14 @@ def main():  # pragma: no cover - needs GPU + checkpoint
     parser.add_argument("--log-z", action="store_true")
     parser.add_argument("--out", default="loss_landscape.png")
     parser.add_argument(
+        "--compare", nargs=2, metavar=("RUN_A", "RUN_B"), default=None,
+        help="Two run_ids to sweep and render side-by-side (shared config).",
+    )
+    parser.add_argument(
+        "--titles", nargs=2, metavar=("TITLE_A", "TITLE_B"),
+        default=("A", "B"), help="Subplot titles for --compare.",
+    )
+    parser.add_argument(
         "overrides", nargs="*", help="Hydra config overrides (key=value)."
     )
     args = parser.parse_args()
@@ -445,6 +489,24 @@ def main():  # pragma: no cover - needs GPU + checkpoint
     with hydra.initialize(config_path=args.config_path, version_base=None):
         cfg = hydra.compose(config_name=args.config_name, overrides=args.overrides)
     print(OmegaConf.to_yaml(cfg, resolve=False))
+
+    if args.compare is not None:
+        run_a, run_b = args.compare
+        model_a, loss_a = _build_recipe_loss_fn(cfg, run_id=run_a)
+        alphas, betas, grid_a = compute_landscape(
+            model_a, loss_a, resolution=args.resolution, span=args.span, seed=args.seed
+        )
+        del model_a
+        model_b, loss_b = _build_recipe_loss_fn(cfg, run_id=run_b)
+        _, _, grid_b = compute_landscape(
+            model_b, loss_b, resolution=args.resolution, span=args.span, seed=args.seed
+        )
+        out = compare_landscapes(
+            alphas, betas, grid_a, grid_b, args.out,
+            titles=tuple(args.titles), log_z=args.log_z,
+        )
+        print(f"wrote {out} and {out.with_suffix('.npz')}")
+        return
 
     model, loss_fn = _build_recipe_loss_fn(cfg)
     alphas, betas, grid = compute_landscape(
