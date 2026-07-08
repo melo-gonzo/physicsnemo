@@ -43,11 +43,13 @@ def _make_grads(shapes, device, seed):
 @pytest.mark.skipif(not _HAS_TORCH_MUON, reason="torch.optim.Muon unavailable")
 @pytest.mark.parametrize("nesterov", [True, False])
 @pytest.mark.parametrize("adjust_lr_fn", ["original", "match_rms_adamw"])
-def test_matches_torch_muon(device, nesterov, adjust_lr_fn):
+@pytest.mark.parametrize("weight_decay", [0.01, 0.0])
+def test_matches_torch_muon(device, nesterov, adjust_lr_fn, weight_decay):
     """Fused Muon matches torch.optim.Muon step-for-step within tolerance.
 
     Shapes include square, wide, tall, and a repeated shape so the batched
-    Newton-Schulz path (group size > 1) is exercised.
+    Newton-Schulz path (group size > 1) is exercised. ``weight_decay=0``
+    covers the skipped decay multiply.
     """
     shapes = [(8, 8), (8, 8), (8, 16), (16, 8)]
 
@@ -56,7 +58,7 @@ def test_matches_torch_muon(device, nesterov, adjust_lr_fn):
 
     kwargs = dict(
         lr=0.02,
-        weight_decay=0.01,
+        weight_decay=weight_decay,
         momentum=0.95,
         nesterov=nesterov,
         adjust_lr_fn=adjust_lr_fn,
@@ -146,3 +148,148 @@ def test_rejects_non_2d_params(device):
     param_1d = torch.nn.Parameter(torch.randn(8).to(device))
     with pytest.raises(ValueError, match="2D"):
         Muon([param_1d], lr=0.02)
+
+
+def test_ns_scratch_buffer_reused_across_steps(device):
+    """The bf16 Newton-Schulz stacks are allocated once and reused every step."""
+    shapes = [(8, 8), (8, 8), (8, 16)]
+    params = _make_params(shapes, device, seed=4)
+    opt = Muon(params, lr=0.02)
+
+    ptrs = None
+    for step in range(3):
+        grads = _make_grads(shapes, device, seed=400 + step)
+        for p, g in zip(params, grads):
+            p.grad = g.clone()
+        opt.step()
+        if step == 0:
+            # One buffer per shape group: (2, 8, 8) and (1, 8, 16).
+            assert len(opt._ns_buffers) == 2
+            assert sorted(tuple(b.shape) for b in opt._ns_buffers.values()) == [
+                (1, 8, 16),
+                (2, 8, 8),
+            ]
+            assert all(b.dtype == torch.bfloat16 for b in opt._ns_buffers.values())
+            ptrs = {k: v.data_ptr() for k, v in opt._ns_buffers.items()}
+
+    assert {k: v.data_ptr() for k, v in opt._ns_buffers.items()} == ptrs
+
+
+@pytest.mark.skipif(not _HAS_TORCH_MUON, reason="torch.optim.Muon unavailable")
+def test_matches_torch_muon_changing_grad_pattern(device):
+    """Steps stay correct when the set of params with gradients changes.
+
+    Shrinking/growing a shape group across steps forces the cached
+    Newton-Schulz stack to be reallocated, which must not affect results.
+    """
+    shapes = [(8, 8), (8, 8), (8, 8)]
+    ref_params = _make_params(shapes, device, seed=5)
+    fused_params = [torch.nn.Parameter(p.detach().clone()) for p in ref_params]
+
+    kwargs = dict(lr=0.02, weight_decay=0.01, momentum=0.95)
+    ref_opt = _TORCH_MUON(ref_params, **kwargs)
+    fused_opt = Muon(fused_params, **kwargs)
+
+    # Group size goes 3 -> 2 -> 3 across steps.
+    grad_patterns = [{0, 1, 2}, {0, 2}, {0, 1, 2}]
+    for step, with_grad in enumerate(grad_patterns):
+        grads = _make_grads(shapes, device, seed=500 + step)
+        for param_list in (ref_params, fused_params):
+            for i, p in enumerate(param_list):
+                p.grad = grads[i].clone() if i in with_grad else None
+        ref_opt.step()
+        fused_opt.step()
+
+    for ref_p, fused_p in zip(ref_params, fused_params):
+        torch.testing.assert_close(fused_p, ref_p, atol=1e-3, rtol=1e-3)
+
+
+@pytest.mark.skipif(not _HAS_TORCH_MUON, reason="torch.optim.Muon unavailable")
+def test_matches_torch_muon_multiple_param_groups(device):
+    """Same-shape params in different param groups get independent treatment.
+
+    Two groups containing the same (8, 8) shape but different group sizes
+    exercise the per-group scratch-buffer keying.
+    """
+    shapes_a = [(8, 8), (8, 8)]
+    shapes_b = [(8, 8), (8, 16)]
+    ref_a = _make_params(shapes_a, device, seed=6)
+    ref_b = _make_params(shapes_b, device, seed=7)
+    fused_a = [torch.nn.Parameter(p.detach().clone()) for p in ref_a]
+    fused_b = [torch.nn.Parameter(p.detach().clone()) for p in ref_b]
+
+    def _groups(a, b):
+        return [
+            {"params": a, "lr": 0.02, "weight_decay": 0.01},
+            {"params": b, "lr": 0.005, "weight_decay": 0.0},
+        ]
+
+    ref_opt = _TORCH_MUON(_groups(ref_a, ref_b), lr=0.02)
+    fused_opt = Muon(_groups(fused_a, fused_b), lr=0.02)
+
+    for step in range(3):
+        grads_a = _make_grads(shapes_a, device, seed=600 + step)
+        grads_b = _make_grads(shapes_b, device, seed=700 + step)
+        for params, grads in (
+            (ref_a, grads_a),
+            (ref_b, grads_b),
+            (fused_a, grads_a),
+            (fused_b, grads_b),
+        ):
+            for p, g in zip(params, grads):
+                p.grad = g.clone()
+        ref_opt.step()
+        fused_opt.step()
+
+    for ref_p, fused_p in zip(ref_a + ref_b, fused_a + fused_b):
+        torch.testing.assert_close(fused_p, ref_p, atol=1e-3, rtol=1e-3)
+
+
+@pytest.mark.skipif(not _HAS_TORCH_MUON, reason="torch.optim.Muon unavailable")
+def test_matches_torch_muon_non_contiguous_grads(device):
+    """Non-contiguous gradients (e.g. transposed views) are handled correctly."""
+    shapes = [(8, 16), (8, 16)]
+    ref_params = _make_params(shapes, device, seed=8)
+    fused_params = [torch.nn.Parameter(p.detach().clone()) for p in ref_params]
+
+    ref_opt = _TORCH_MUON(ref_params, lr=0.02)
+    fused_opt = Muon(fused_params, lr=0.02)
+
+    for step in range(2):
+        gen = torch.Generator(device="cpu").manual_seed(800 + step)
+        bases = [torch.randn(16, 8, generator=gen).to(device) for _ in shapes]
+        for p, base in zip(ref_params, bases):
+            p.grad = base.t()
+        for p, base in zip(fused_params, bases):
+            p.grad = base.clone().t()
+        assert all(not p.grad.is_contiguous() for p in fused_params)
+        ref_opt.step()
+        fused_opt.step()
+
+    for ref_p, fused_p in zip(ref_params, fused_params):
+        torch.testing.assert_close(fused_p, ref_p, atol=1e-3, rtol=1e-3)
+
+
+def test_bfloat16_params_step(device):
+    """bf16 parameters step without dtype errors and stay finite.
+
+    Exercises the no-cast branch where the Newton-Schulz output dtype already
+    matches the parameter dtype.
+    """
+    shapes = [(8, 8), (8, 8)]
+    params = [
+        torch.nn.Parameter(p.detach().to(torch.bfloat16))
+        for p in _make_params(shapes, device, seed=9)
+    ]
+    before = [p.detach().clone() for p in params]
+    opt = Muon(params, lr=0.02)
+
+    grads = [g.to(torch.bfloat16) for g in _make_grads(shapes, device, seed=900)]
+    for p, g in zip(params, grads):
+        p.grad = g
+    opt.step()
+
+    for p, b in zip(params, before):
+        assert p.dtype == torch.bfloat16
+        assert torch.isfinite(p).all()
+        assert not torch.equal(p, b)

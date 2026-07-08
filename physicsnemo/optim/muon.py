@@ -27,6 +27,12 @@ stacked and orthogonalized together with batched matmuls (``bmm`` / ``baddbmm``)
 the same as the per-parameter loop; only the number of kernel launches changes,
 from ``O(num_params * ns_steps)`` to ``O(num_shape_groups * ns_steps)``.
 
+The stacked ``(G, M, N)`` bfloat16 input to Newton-Schulz is a scratch buffer
+cached on the optimizer and reused across steps: updates are cast-copied into
+it with a single fused ``torch._foreach_copy_`` instead of ``torch.stack``
+followed by a separate bfloat16 cast, and the orthogonalized result is cast
+back with one batched copy instead of one per parameter.
+
 This module provides :class:`Muon`, a subclass of :class:`torch.optim.Muon` that
 overrides only the per-step orthogonalization with a batched implementation. The
 constructor signature, hyperparameter semantics, validation, and ``momentum_buffer``
@@ -67,7 +73,8 @@ def _batched_newton_schulz(
     Parameters
     ----------
     updates : torch.Tensor
-        Stack of update matrices of shape ``(G, M, N)``.
+        Stack of update matrices of shape ``(G, M, N)``. Never mutated in
+        place (the caller reuses it as a cached scratch buffer across steps).
     ns_coefficients : tuple[float, float, float]
         Quintic polynomial coefficients ``(a, b, c)``.
     ns_steps : int
@@ -175,6 +182,12 @@ class Muon(_TorchMuon):
     -----
     See :class:`torch.optim.Muon` for the full algorithm description.
 
+    The batched Newton-Schulz input is a bfloat16 scratch buffer cached on the
+    optimizer and reused across steps (roughly 2 bytes per optimized element,
+    less than one transient fp32 stack). It is scratch state only: it never
+    appears in :meth:`state_dict` and is reallocated automatically if the
+    parameter grouping changes.
+
     Examples
     --------
     >>> import torch
@@ -185,6 +198,54 @@ class Muon(_TorchMuon):
     ...     w.grad = torch.randn_like(w)
     >>> _ = opt.step()
     """
+
+    def __init__(self, *args, **kwargs) -> None:
+        """Initialize the optimizer; see the class docstring for parameters."""
+        super().__init__(*args, **kwargs)
+        # Cached bf16 Newton-Schulz input stacks, keyed by
+        # (param_group index, shape, dtype, device).
+        self._ns_buffers: dict[tuple, Tensor] = {}
+
+    def _ns_scratch(
+        self,
+        group_idx: int,
+        shape: tuple,
+        dtype: torch.dtype,
+        device: torch.device,
+        batch: int,
+    ) -> Tensor:
+        """Return the cached ``(batch, *shape)`` bfloat16 stack for a shape group.
+
+        Reused across steps so the stack + bfloat16 cast of the updates is a
+        single fused copy with no per-step allocation. Reallocated when the
+        number of same-shape parameters changes (e.g. after
+        :meth:`add_param_group` or when some parameters have no gradient).
+
+        Parameters
+        ----------
+        group_idx : int
+            Index of the parameter group within ``self.param_groups``.
+        shape : tuple
+            Matrix shape ``(M, N)`` shared by all parameters in the group.
+        dtype : torch.dtype
+            Parameter dtype of the group (part of the cache key; the buffer
+            itself is always bfloat16).
+        device : torch.device
+            Device of the group's parameters.
+        batch : int
+            Number of parameters stacked together.
+
+        Returns
+        -------
+        torch.Tensor
+            Uninitialized ``(batch, *shape)`` bfloat16 tensor on *device*.
+        """
+        key = (group_idx, shape, dtype, device)
+        buf = self._ns_buffers.get(key)
+        if buf is None or buf.shape[0] != batch:
+            buf = torch.empty((batch, *shape), dtype=torch.bfloat16, device=device)
+            self._ns_buffers[key] = buf
+        return buf
 
     @staticmethod
     def _group_params_by_shape(params: list[Tensor]) -> dict[tuple, list[int]]:
@@ -230,7 +291,7 @@ class Muon(_TorchMuon):
             with torch.enable_grad():
                 loss = closure()
 
-        for group in self.param_groups:
+        for group_idx, group in enumerate(self.param_groups):
             lr = group["lr"]
             if isinstance(lr, Tensor):
                 lr = lr.item()
@@ -266,26 +327,34 @@ class Muon(_TorchMuon):
                 updates = list(momentum_bufs)
 
             # Decoupled weight decay (fused across all shapes).
-            torch._foreach_mul_(params_with_grad, 1 - lr * weight_decay)
+            if weight_decay != 0:
+                torch._foreach_mul_(params_with_grad, 1 - lr * weight_decay)
 
             # Group equally-shaped updates and orthogonalize each group with one
             # batched Newton-Schulz, then apply the (per-group, shape-dependent)
             # learning rate.
             groups = self._group_params_by_shape(params_with_grad)
 
-            for (shape, _dtype, _device), idxs in groups.items():
-                stacked = torch.stack([updates[i] for i in idxs], dim=0)
+            for (shape, dtype, device), idxs in groups.items():
+                # Cast-copy the updates into the cached bf16 stack in one
+                # fused pass (replaces torch.stack + a separate bf16 cast).
+                stacked = self._ns_scratch(group_idx, shape, dtype, device, len(idxs))
+                torch._foreach_copy_(
+                    list(stacked.unbind(0)), [updates[i] for i in idxs]
+                )
                 ortho = _batched_newton_schulz(stacked, ns_coefficients, ns_steps, eps)
                 adjusted_lr = _torch_muon_internal._adjust_lr(
                     lr, adjust_lr_fn, torch.Size(shape)
                 )
 
                 group_params = [params_with_grad[i] for i in idxs]
-                # Cast back to the parameter dtype (NS runs in bf16).
-                ortho_list = [
-                    ortho[j].to(group_params[j].dtype) for j in range(len(idxs))
-                ]
-                torch._foreach_add_(group_params, ortho_list, alpha=-adjusted_lr)
+                # Cast back to the parameter dtype (NS runs in bf16) with one
+                # batched copy; unbind(0) yields views, not copies.
+                if ortho.dtype != dtype:
+                    ortho = ortho.to(dtype)
+                torch._foreach_add_(
+                    group_params, list(ortho.unbind(0)), alpha=-adjusted_lr
+                )
 
         return loss
 
