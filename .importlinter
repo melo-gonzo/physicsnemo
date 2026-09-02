@@ -121,3 +121,21 @@ layers =
 name = Prevent Non-listed external imports in physicsnemo
 type = forbidden_import
 container = physicsnemo
+
+[importlinter:contract:physicsnemo-experimental-uq-conformal]
+name = Control Dependencies in PhysicsNeMo experimental.uq.conformal
+type = layers
+containers=
+   physicsnemo.experimental.uq.conformal
+layers =
+   artifacts | calibrators
+   predictors
+   difficulty
+   scores
+   _quantile
+   _validation
+   _containers
+# ConformalPredictor.save/.load delegate to the artifact layer above them via
+# function-local imports; the only sanctioned upward edge in this package.
+ignore_imports =
+   physicsnemo.experimental.uq.conformal.predictors -> physicsnemo.experimental.uq.conformal.artifacts

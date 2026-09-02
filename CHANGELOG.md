@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Adds `physicsnemo.experimental.uq.conformal`: post-hoc conformal prediction
+  for spatio-temporal fields with `CellwiseCalibrator`,
+  `FunctionalBandCalibrator`, `RiskControlCalibrator`, `ConformalPredictor`,
+  `AbsoluteErrorScore`, `NormalizedErrorScore`,
+  `QuantileRegressionScore`, and `AuxDifficulty`.
 - Adds `ShardTensor` support for GeoTransolver and FLARE models.
 - Adds zarr save/load for `Mesh` and `DomainMesh` via tensordict's zarr
   storage backend: `physicsnemo.mesh.io.to_zarr` / `from_zarr`, with
