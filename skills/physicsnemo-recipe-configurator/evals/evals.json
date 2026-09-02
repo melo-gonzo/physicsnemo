@@ -1,0 +1,60 @@
+[
+  {
+    "id": "01-crash-side-impact-config",
+    "question": "I've already chosen the PhysicsNeMo structural mechanics crash recipe (examples/structural_mechanics/crash). Configure it for my side-impact (T-Bone) dataset: VTP files, one per run, with thickness as a static point field, effective plastic strain as the only extra dynamic target, and per-run impact metadata (lateral impact velocity, impact angle, barrier mass) in a JSON file. I want the time-conditional GeoTransolver variant. What experiment config do I need?",
+    "expected_skill": "physicsnemo-recipe-configurator",
+    "expected_script": null,
+    "ground_truth": "A new experiment-level Hydra YAML copied from the closest existing time-conditional GeoTransolver experiment, not edits to shared config groups. It selects the VTP reader and point-cloud datapipe, sets datapipe.static_features to [thickness], includes effective_plastic_strain in datapipe.dynamic_targets, and lists three global features for the impact metadata. Dimensions are derived from those feature lists and confirmed against the recipe's model/datapipe code: functional_dim 5 (coords 3 + time 1 + thickness 1), out_dim 4 (position 3 + effective_plastic_strain 1), global_dim 3. Dataset paths stay as ??? placeholders or documented CLI overrides. Every recipe path cited was read or listed in the live repo during the task.",
+    "expected_behavior": [
+      "Every absolute path cited in the final message exists on disk.",
+      "Every absolute path cited in the final message appears as a verbatim substring of some tool input or tool result captured this turn.",
+      "The agent read the crash recipe's experiment YAMLs and datapipe/reader/model code (files under 'examples/structural_mechanics/crash/') before proposing config values.",
+      "The final answer proposes a new experiment-level YAML and does not edit shared config groups such as conf/training/default.yaml.",
+      "Dimension values are derived from the configured features, with the derivation stated: functional_dim 5, out_dim 4, global_dim 3."
+    ]
+  },
+  {
+    "id": "02-one-shot-no-globals-dims",
+    "question": "I'm using the crash recipe from PhysicsNeMo's structural mechanics examples with the one-shot GeoTransolver model. My dataset has no global metadata and no static features, and I only predict positions over 26 time steps. Which config keys change relative to the shipped experiment, and what dimension values should I use?",
+    "expected_skill": "physicsnemo-recipe-configurator",
+    "expected_script": null,
+    "ground_truth": "Global features disabled the way the recipe expects (datapipe.global_features null, training.global_features_filepath null, model.global_dim null) and datapipe.static_features emptied, in a new experiment-level YAML. Dimensions derived from the recipe's one-shot conventions and confirmed against its model/rollout code: functional_dim 3 (coordinates only, no static features), out_dim 75 ((26 - 1) time steps * 3 position components), global_dim null. The answer states the derivation rather than copying values from a shipped config, and cites only recipe files read or listed during the task.",
+    "expected_behavior": [
+      "Every absolute path cited in the final message exists on disk.",
+      "Every absolute path cited in the final message appears as a verbatim substring of some tool input or tool result captured this turn.",
+      "The agent read the one-shot experiment config and the model/rollout code that consumes the dimension keys before proposing values.",
+      "The final answer derives out_dim 75 as (26 - 1) * 3 and sets global_dim to null with the global-features file disabled, stating the formula used.",
+      "The agent recommends an experiment-level override rather than editing shared config groups."
+    ]
+  },
+  {
+    "id": "03-swap-model-within-recipe",
+    "question": "I'm training the PhysicsNeMo crash recipe's one-shot GeoTransolver experiment on my full-car dataset (26 time steps, per-node static thickness, positions only). I want to try the MeshGraphNet one-shot variant that ships with the recipe instead. What changes in my experiment config?",
+    "expected_skill": "physicsnemo-recipe-configurator",
+    "expected_script": null,
+    "ground_truth": "A swap within the recipe's existing menu: the experiment selects the shipped MGN one-shot model config and the graph datapipe it requires (MGN consumes edge features the point-cloud datapipe does not produce). Dimensions are re-derived in MGN's own vocabulary from the recipe's config and code \u2014 input_dim_nodes from coordinates plus static thickness, input_dim_edges from the graph datapipe's edge features, output_dim (26 - 1) * 3 = 75 \u2014 not carried over from GeoTransolver's keys. No model or datapipe code is edited and shared config groups stay untouched. Every cited path was read or listed in the live repo during the task.",
+    "expected_behavior": [
+      "Every absolute path cited in the final message exists on disk.",
+      "Every absolute path cited in the final message appears as a verbatim substring of some tool input or tool result captured this turn.",
+      "The agent enumerated the recipe's shipped model configs and selected the existing MGN one-shot option rather than writing or porting model code.",
+      "The agent switched the datapipe to the graph option because MGN requires edge features, stating why.",
+      "Dimensions are re-derived in the new model's own vocabulary rather than carried over from the previous model's keys."
+    ]
+  },
+  {
+    "id": "04-skip-recipe-selection",
+    "question": "Which PhysicsNeMo example or model should I use to build a crash deformation surrogate for car bodies?",
+    "expected_skill": null,
+    "expected_script": null,
+    "ground_truth": null,
+    "expected_behavior": []
+  },
+  {
+    "id": "05-skip-generic-hydra",
+    "question": "How do I override a config value from the command line in Hydra, like changing the learning rate for a run?",
+    "expected_skill": null,
+    "expected_script": null,
+    "ground_truth": null,
+    "expected_behavior": []
+  }
+]
