@@ -42,6 +42,7 @@ from ._validation import (
     require_matching_keys,
     validate_provenance,
 )
+from .diagnostics import CoverageAccumulator
 from .difficulty import (
     AuxDifficulty,
     _check_no_double_scale,
@@ -430,6 +431,24 @@ class ConformalPredictor:
             hi.update(hi_out)
             return lo, hi
         return pack_fields(lo_out), pack_fields(hi_out)
+
+    def coverage_accumulator(self) -> CoverageAccumulator:
+        r"""Create empirical diagnostics aligned with this predictor's tier.
+
+        Returns
+        -------
+        CoverageAccumulator
+            A fresh
+            :class:`~physicsnemo.experimental.uq.conformal.CoverageAccumulator`
+            fixed to this predictor's tier, ``alpha``, ``n_cal``, and field
+            keys.
+        """
+        return CoverageAccumulator(
+            tier=self._tier,
+            alpha=self._alpha,
+            n_cal=self._n_cal,
+            keys=self.keys,
+        )
 
     def save(self, path: Path | str, *, provenance: Mapping | None = None) -> None:
         r"""Atomically write a portable, ``weights_only``-safe artifact.
