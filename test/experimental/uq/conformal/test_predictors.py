@@ -136,6 +136,7 @@ def test_public_api_includes_the_artifact_loader():
         "AuxDifficulty",
         "CellwiseCalibrator",
         "ConformalPredictor",
+        "CoverageAccumulator",
         "FunctionalBandCalibrator",
         "NormalizedErrorScore",
         "QuantileRegressionScore",

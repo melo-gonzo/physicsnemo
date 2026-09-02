@@ -163,10 +163,20 @@ def _predictor_entry():
     return predictor.predict_interval, lambda: predictor.thresholds
 
 
+def _accumulator_entry():
+    accumulator = fitted_risk().coverage_accumulator()
+    accumulator.update(-torch.ones(3), torch.ones(3), _F)
+    return (
+        lambda bad: accumulator.update(-torch.ones(3), torch.ones(3), bad),
+        accumulator.finalize,
+    )
+
+
 ENTRY_POINTS = {
     f"calibrator[{tier}].update_sample": _calibrator_entry(tier) for tier in TIERS
 }
 ENTRY_POINTS["predictor.predict_interval"] = _predictor_entry
+ENTRY_POINTS["accumulator.update"] = _accumulator_entry
 
 
 @pytest.mark.parametrize("bad_kind", sorted(BAD_INPUTS))

@@ -270,7 +270,7 @@ def test_double_scaling_pairing_is_rejected_everywhere(build):
     build(QuantileRegressionScore(), AuxDifficulty("lo"))
 
 
-def test_keys_subset_round_trips_through_predict_and_save(tmp_path):
+def test_keys_subset_round_trips_through_predict_save_and_diagnostics(tmp_path):
     generator = torch.Generator().manual_seed(7)
     calibrator = RiskControlCalibrator(
         AbsoluteErrorScore(), alpha=0.25, keys=["pressure"]
@@ -296,6 +296,14 @@ def test_keys_subset_round_trips_through_predict_and_save(tmp_path):
     lo_loaded, hi_loaded = loaded.predict_interval(full)
     torch.testing.assert_close(lo_loaded["pressure"], lo["pressure"])
     torch.testing.assert_close(hi_loaded["pressure"], hi["pressure"])
+
+    # The held-out loop works with the natural full target too: the
+    # accumulator selects the fitted fields itself.
+    accumulator = loaded.coverage_accumulator()
+    accumulator.update(lo_loaded, hi_loaded, full)
+    report = accumulator.finalize()
+    assert set(report) == {"_meta", "pressure"}
+    assert report["pressure"]["n_samples"] == 1
 
 
 class _CustomScore(AbsoluteErrorScore):

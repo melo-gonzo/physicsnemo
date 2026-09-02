@@ -45,10 +45,17 @@ guarantee is tied to one fixed discretization, and otherwise only when a
 difficulty field consumes it.
 
 Fitted predictors round-trip through portable, ``weights_only``-safe
-artifacts::
+artifacts, and every tier reports held-out empirical coverage aligned with
+its own guarantee::
 
     predictor.save("predictor.pt", provenance={"dataset": "holdout-v1"})
     predictor = ConformalPredictor.load("predictor.pt")
+
+    accumulator = predictor.coverage_accumulator()
+    for pred, target in held_out_set:
+        lo, hi = predictor.predict_interval(pred)
+        accumulator.update(lo, hi, target)
+    report = accumulator.finalize()
 
 Guarantees assume calibration and prediction samples are exchangeable. See
 the calibrator docstrings for each tier's exact statement.
@@ -59,6 +66,7 @@ from .calibrators import (
     FunctionalBandCalibrator,
     RiskControlCalibrator,
 )
+from .diagnostics import CoverageAccumulator
 from .difficulty import AuxDifficulty
 from .predictors import ConformalPredictor
 from .scores import (
@@ -72,6 +80,7 @@ __all__ = [
     "AuxDifficulty",
     "CellwiseCalibrator",
     "ConformalPredictor",
+    "CoverageAccumulator",
     "FunctionalBandCalibrator",
     "NormalizedErrorScore",
     "QuantileRegressionScore",
