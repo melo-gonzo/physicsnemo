@@ -39,9 +39,24 @@ quantitatively.
 
 Both heads require ``gpytorch``: ``pip install gpytorch``, or the ``uq-extras``
 optional dependency group (``pip install nvidia-physicsnemo[uq-extras]``).
+
+Conformal prediction
+--------------------
+* :mod:`conformal` — post-hoc, model-agnostic conformal prediction for
+  spatio-temporal fields (no optional dependencies). Its finite-sample
+  coverage or risk statement depends on the selected guarantee tier and
+  assumes exchangeable calibration and prediction samples. The public
+  names (:class:`CellwiseCalibrator`, :class:`FunctionalBandCalibrator`,
+  :class:`RiskControlCalibrator`, the score strategies, and
+  :class:`ConformalPredictor`) are re-exported here.
 """
 
 from physicsnemo.core.version_check import check_version_spec
+
+from . import conformal
+from .conformal import *  # noqa: F401,F403
+
+__all__ = ["conformal", *conformal.__all__]
 
 _GPYTORCH_AVAILABLE = check_version_spec("gpytorch", hard_fail=False)
 
@@ -51,3 +66,10 @@ if _GPYTORCH_AVAILABLE:
         FieldVariationalGPPrediction,
     )
     from .variational_gp_head import GPPrediction, VariationalGPHead
+
+    __all__ += [
+        "FieldVariationalGPHead",
+        "FieldVariationalGPPrediction",
+        "GPPrediction",
+        "VariationalGPHead",
+    ]
