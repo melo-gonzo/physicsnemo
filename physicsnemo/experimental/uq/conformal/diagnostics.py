@@ -263,9 +263,18 @@ class CoverageAccumulator:
         -----
         Nothing is committed unless every field validates, so a rejected
         sample leaves the accumulator unchanged. Raises ``ValueError`` on a
-        shape mismatch, non-finite value, or (cellwise tier) a sample shape
-        that differs from earlier updates, and ``TypeError`` when the
-        container type does not match the fitted mode.
+        shape mismatch, non-finite value, width or width-sum overflow, or
+        (cellwise tier) a sample shape that differs from earlier updates,
+        and ``TypeError`` when the container type does not match the fitted
+        mode.
+
+        Diagnostics require finite bounds and targets. Conservative prediction
+        bounds may become infinite when they overflow the prediction's dtype.
+        Upcast the prediction (e.g. to float32) before calling
+        ``predict_interval`` and recompute the bounds; upcasting infinite
+        bounds afterward does not repair them. If widths or their accumulated
+        sum overflow float64, rescale interval bounds and targets consistently
+        and restart diagnostics.
         """
         # field_items(container, self._keys) already selects the fitted fields
         # (dropping a superset's extras, raising on a missing fitted key), so
@@ -297,11 +306,20 @@ class CoverageAccumulator:
             if not bool(torch.isfinite(widths).all()):
                 raise ValueError(
                     f"Field '{key}': interval width overflows even though both "
-                    "endpoints are finite."
+                    "endpoints are finite. Rescale interval bounds and targets "
+                    "consistently, and restart diagnostics."
                 )
             # Quantile regression may produce an empty prediction set when a
             # valid negative calibrated threshold contracts a narrower base band.
             widths = widths.clamp_min(0.0)
+            # Nonnegative widths make this catch both sample and total overflow.
+            width_total = self._counters[key].width_sum + float(widths.sum())
+            if not math.isfinite(width_total):
+                raise ValueError(
+                    f"Field '{key}': interval width sum overflows float64 within "
+                    "this sample or across updates. Rescale interval bounds and "
+                    "targets consistently, and restart diagnostics."
+                )
 
             coverage_value, element_hits = self._ops.stage(element_covered)
             if element_hits is not None:
@@ -313,13 +331,13 @@ class CoverageAccumulator:
                     )
 
             staged.append(
-                (key, coverage_value, float(widths.sum()), widths.numel(), element_hits)
+                (key, coverage_value, width_total, widths.numel(), element_hits)
             )
 
-        for key, coverage_value, width_sum, width_count, element_hits in staged:
+        for key, coverage_value, width_total, width_count, element_hits in staged:
             counters = self._counters[key]
             counters.coverage_sum += coverage_value
-            counters.width_sum += width_sum
+            counters.width_sum = width_total
             counters.width_count += width_count
             counters.n_samples += 1
             if element_hits is not None:
