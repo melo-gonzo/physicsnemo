@@ -90,12 +90,13 @@ def _normalized_scores(raw: Tensor, difficulty: Tensor | None, key: str) -> Tens
     difficulty64 = broadcast_difficulty(difficulty, raw, key).to(torch.float64)
     normalized = raw64 / difficulty64
     check_finite(key, "the normalized scores (score / difficulty)", normalized)
-    underflow = (normalized == 0) & (raw64 != 0)
+    underflow = (raw64 != 0) & (normalized.abs() < torch.finfo(torch.float64).tiny)
     if bool(underflow.any()):
         raise ValueError(
             f"Field '{key}': {int(underflow.sum())} normalized score(s) "
-            "underflowed to zero in float64. Rescale the difficulty field "
-            "or score before calibration."
+            "fell below the float64 normal range; subnormal or zero quotients "
+            "lose relative precision needed for interval inversion. Rescale "
+            "the difficulty field or score before calibration."
         )
     return normalized
 

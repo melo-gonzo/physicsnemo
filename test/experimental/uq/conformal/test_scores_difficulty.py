@@ -25,6 +25,12 @@ from physicsnemo.experimental.uq.conformal import (
     NormalizedErrorScore,
     QuantileRegressionScore,
 )
+from test.experimental.uq.conformal._helpers import (
+    CALIBRATORS,
+    TIERS,
+    assert_admitted_covered,
+    assert_predictor_covers_admitted,
+)
 
 
 def test_absolute_error_values(device):
@@ -76,7 +82,7 @@ def test_quantile_regression_asymmetry(device):
     ],
 )
 def test_interval_endpoints_invert_score(score, aux):
-    """score(pred, endpoint) == threshold at both interval endpoints."""
+    """At this scale, endpoint scores stay close to the threshold."""
     pred = torch.randn(5)
     threshold = torch.tensor(0.42)
     lo, hi = score.interval(pred, threshold, aux)
@@ -96,6 +102,164 @@ def test_aux_difficulty_channel_max_clamp_and_trailing_reduction():
     )
     # A (points, time, channels) aux reduces to one scale per point.
     assert difficulty(None, {"sigma": torch.rand(2, 3, 4) + 0.5}).shape == (2,)
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float64], ids=str)
+def test_aux_difficulty_floors_finite_nonpositive_values(dtype):
+    difficulty = AuxDifficulty("spread")
+    raw = torch.tensor([[[-2.0, -1.0]], [[-1.0, 0.0]], [[0.5, 1.5]]], dtype=dtype)
+    floor = max(difficulty.eps, torch.finfo(dtype).tiny)
+    torch.testing.assert_close(
+        difficulty(aux={"spread": raw}),
+        torch.tensor([floor, floor, 1.5], dtype=dtype),
+        rtol=0,
+        atol=0,
+    )
+
+
+@pytest.mark.parametrize(
+    "raw,error,match",
+    [
+        pytest.param(None, TypeError, "must be a torch.Tensor", id="none"),
+        pytest.param([1.0], TypeError, "must be a torch.Tensor", id="list"),
+        pytest.param(1.0, TypeError, "must be a torch.Tensor", id="scalar"),
+        pytest.param(
+            torch.ones(1, dtype=torch.int64), TypeError, "floating-point", id="int"
+        ),
+        pytest.param(
+            torch.ones(1, dtype=torch.bool), TypeError, "floating-point", id="bool"
+        ),
+        pytest.param(
+            torch.ones(1, dtype=torch.complex64),
+            TypeError,
+            "floating-point",
+            id="complex",
+        ),
+        pytest.param(
+            torch.tensor([float("-inf")]),
+            ValueError,
+            "non-finite",
+            id="negative-inf-clamp",
+        ),
+        pytest.param(
+            torch.tensor([[float("-inf"), 1.0]]),
+            ValueError,
+            "non-finite",
+            id="negative-inf-reduction",
+        ),
+        pytest.param(
+            torch.tensor([[float("inf"), 1.0]]),
+            ValueError,
+            "non-finite",
+            id="positive-inf",
+        ),
+        pytest.param(
+            torch.tensor([[float("nan"), 1.0]]), ValueError, "non-finite", id="nan"
+        ),
+    ],
+)
+def test_aux_difficulty_validates_raw_input(raw, error, match):
+    with pytest.raises(error, match=match) as exc:
+        AuxDifficulty("spread")(aux={"spread": raw})
+    assert "spread" in str(exc.value)
+
+
+@pytest.mark.parametrize("tier", ["functional", "risk_control"])
+@pytest.mark.parametrize(
+    "raw,error,match",
+    [
+        pytest.param(None, TypeError, "must be a torch.Tensor", id="none"),
+        pytest.param(
+            torch.tensor([[float("-inf"), 1.0]]),
+            ValueError,
+            "non-finite",
+            id="hidden-inf",
+        ),
+    ],
+)
+def test_aux_difficulty_rejects_raw_input_at_calibration_and_prediction(
+    tier, raw, error, match
+):
+    calibrator = CALIBRATORS[tier](
+        AbsoluteErrorScore(), alpha=0.5, difficulty=AuxDifficulty("spread")
+    )
+    pred, target = torch.zeros(1, 2), torch.ones(1, 2)
+    valid_aux = {"spread": torch.ones_like(pred)}
+    for _ in range(3):
+        calibrator.update_sample(pred, target, aux=valid_aux)
+    predictor = calibrator.finalize()
+    with pytest.raises(error, match=match):
+        calibrator.update_sample(pred, target, aux={"spread": raw})
+    assert calibrator.n_cal == 3
+    torch.testing.assert_close(calibrator.finalize().thresholds, predictor.thresholds)
+    with pytest.raises(error, match=match):
+        predictor.predict_interval(pred, aux={"spread": raw})
+
+
+@pytest.mark.parametrize("tier", TIERS)
+def test_unused_aux_can_be_omitted(tier):
+    calibrator = CALIBRATORS[tier](AbsoluteErrorScore(), alpha=0.5)
+    pred, target = torch.zeros(1), torch.ones(1)
+    points = torch.zeros(1, 1) if tier == "cellwise" else None
+    for aux in (None, {}, {"spread": None}):
+        calibrator.update_sample(pred, target, aux=aux, points=points)
+    predictor = calibrator.finalize()
+    assert predictor.difficulty is None
+    for aux in (None, {}, {"spread": None}):
+        lo, hi = predictor.predict_interval(pred, aux=aux, points=points)
+        assert ((lo <= target) & (target <= hi)).all()
+
+
+@pytest.mark.parametrize("tier", TIERS)
+def test_normalized_low_precision_sigma_keeps_fitted_intervals_tight(tier):
+    """Float16 sigma must not inflate a float64 unit radius to 15.65234375."""
+    score = NormalizedErrorScore()
+    calibrator = CALIBRATORS[tier](score, alpha=0.5)
+    pred = torch.zeros(1, dtype=torch.float64)
+    target = torch.ones_like(pred)
+    aux = {"sigma": torch.full((1,), 60000.0, dtype=torch.float16)}
+    points = torch.zeros(1, 1) if tier == "cellwise" else None
+    for _ in range(3):
+        calibrator.update_sample(pred, target, aux=aux, points=points)
+    predictor = calibrator.finalize()
+    assert (score.score(pred, target, aux) <= predictor.thresholds).all()
+    lo, hi = assert_predictor_covers_admitted(
+        predictor, pred, target, aux=aux, points=points
+    )
+    torch.testing.assert_close(hi, target, atol=0, rtol=1e-12)
+    torch.testing.assert_close(lo, -target, atol=0, rtol=1e-12)
+
+
+@pytest.mark.parametrize(
+    "pred_dtype,target_dtype,sigma_dtype",
+    [
+        (torch.float64, torch.float64, torch.float16),
+        (torch.float32, torch.float32, torch.float16),
+        (torch.float16, torch.float16, torch.float64),
+        (torch.bfloat16, torch.float16, torch.float32),
+        (torch.float64, torch.float16, torch.float16),
+        (torch.float16, torch.float64, torch.bfloat16),
+    ],
+    ids=[
+        "double-half-sigma",
+        "single-half-sigma",
+        "half-double-sigma",
+        "bf16-half",
+        "double-half-target",
+        "half-double-target",
+    ],
+)
+def test_normalized_mixed_dtype_score_boundary_is_contained(
+    pred_dtype, target_dtype, sigma_dtype
+):
+    score = NormalizedErrorScore(eps=1e-3)
+    pred = torch.tensor([0.0, 1000.0, -1000.0, 1.0, 0.0], dtype=pred_dtype)
+    target = torch.tensor([1.0, 1000.5, -999.5, -1.0, 0.0], dtype=target_dtype)
+    aux = {"sigma": torch.tensor([60000.0, 0.0, -1.0, 0.3, 60000.0], dtype=sigma_dtype)}
+    threshold = score.score(pred, target, aux)
+    assert threshold.dtype == torch.result_type(pred, target)
+    assert torch.isfinite(threshold).all()
+    assert_admitted_covered(score, pred, target, threshold, aux)
 
 
 _D = AuxDifficulty(key="sigma")

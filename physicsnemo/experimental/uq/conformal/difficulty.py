@@ -38,7 +38,7 @@ from collections.abc import Mapping
 from jaxtyping import Float
 from torch import Tensor
 
-from ._validation import clamp_min_floor, positive_finite_float
+from ._validation import check_real, clamp_min_floor, positive_finite_float
 from .scores import _NonconformityScore
 
 __all__ = ["AuxDifficulty"]
@@ -68,8 +68,12 @@ class AuxDifficulty:
     Pairing this field with a score that already divides by the same aux key
     (:class:`~physicsnemo.experimental.uq.conformal.NormalizedErrorScore` on
     ``"sigma"``) would scale every interval twice; calibrators and predictors
-    raise ``ValueError`` on that combination. The aux entry must be present
-    at every calibration and prediction call.
+    raise ``ValueError`` on that combination. The aux entry must be a finite
+    real floating-point tensor at every calibration and prediction call.
+    Validation precedes reduction and clamping, so neither operation can
+    hide NaN or infinity. Finite nonpositive values use the positive floor.
+    ``difficulty=None`` on a calibrator or predictor means :math:`s = 1`;
+    ``aux=None`` or an entry of ``None`` cannot supply an ``AuxDifficulty``.
 
     Examples
     --------
@@ -104,15 +108,18 @@ class AuxDifficulty:
             :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`. Accepted
             for API uniformity and unused. Default is ``None``.
         aux : Mapping[str, torch.Tensor], optional
-            Must contain ``key`` with a tensor of shape
-            :math:`(n_{\text{points}}, *\text{dims})`. Default is ``None``.
+            Must contain ``key`` with a finite real floating-point tensor of
+            shape :math:`(n_{\text{points}}, *\text{dims})`. The default
+            ``None`` means no aux mapping and raises ``ValueError`` here;
+            an entry of ``None`` raises ``TypeError``.
 
         Returns
         -------
         torch.Tensor
             Positive difficulty values of shape :math:`(n_{\text{points}},)`,
             reduced by ``max`` over any trailing dimensions and clamped below
-            by ``eps``.
+            by the larger of ``eps`` and the dtype's smallest positive
+            normal value.
         """
         if not isinstance(aux, Mapping) or self.key not in aux:
             raise ValueError(
@@ -120,6 +127,12 @@ class AuxDifficulty:
                 "pass aux={key: tensor}."
             )
         s = aux[self.key]
+        if not isinstance(s, Tensor):
+            raise TypeError(
+                f"AuxDifficulty aux '{self.key}' must be a torch.Tensor, got "
+                f"{type(s).__name__}."
+            )
+        check_real(self.key, "difficulty aux", s)
         if s.ndim >= 2:
             # Reduce EVERY trailing (non-point) dimension: the contract is
             # one positive scale per leading point, matching the
