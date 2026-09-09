@@ -488,15 +488,20 @@ def test_empty_samples_rejected_uniformly(cls):
 # =========================================================================
 
 
-def test_kth_smallest_of_samples_matches_stacked_corpus():
+@pytest.mark.parametrize("layout", ["contiguous", "transposed", "strided"])
+def test_kth_smallest_of_samples_matches_stacked_corpus(layout):
     """The chunked per-sample path must equal the stacked reference for
     every chunking, including one that splits a cell block mid-field."""
     generator = torch.Generator().manual_seed(23)
     scores = torch.randn(9, 5, 3, generator=generator)
+    if layout == "transposed":
+        scores = scores.transpose(1, 2)
+    elif layout == "strided":
+        scores = scores[:, ::2, :]
     per_sample = list(scores.unbind(0))
     reference = torch.sort(scores, dim=0).values[3]
     for chunk_numel in (2**26, 16, 9):
-        torch.testing.assert_close(
+        assert torch.equal(
             kth_smallest_of_samples(per_sample, 4, chunk_numel=chunk_numel), reference
         )
 
