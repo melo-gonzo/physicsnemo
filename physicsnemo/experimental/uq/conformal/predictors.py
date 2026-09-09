@@ -89,7 +89,7 @@ def _validate_thresholds(
     thresholds: Tensor | TensorDict,
     score_kind: str,
 ) -> dict[str, Tensor]:
-    """Validate, detach, and clone fitted thresholds."""
+    """Validate and detach thresholds; the caller decides storage ownership."""
     out: dict[str, Tensor] = {}
     for key, value in field_items(thresholds):
         check_floating(key, "threshold", value)
@@ -117,7 +117,7 @@ def _validate_thresholds(
                 f"Field '{key}': negative threshold for nonnegative score "
                 f"kind {score_kind!r}."
             )
-        out[key] = threshold.detach().clone()
+        out[key] = threshold.detach()
     return out
 
 
@@ -196,6 +196,35 @@ class ConformalPredictor:
         mesh_fingerprint: str | None = None,
         provenance: Mapping | None = None,
     ) -> None:
+        self._initialize(
+            tier=tier,
+            score=score,
+            alpha=alpha,
+            n_cal=n_cal,
+            thresholds=thresholds,
+            difficulty=difficulty,
+            mesh_fingerprint=mesh_fingerprint,
+            provenance=provenance,
+        )
+        # Public construction snapshots caller-owned storage. Artifact loading
+        # uses the same validation but owns its freshly deserialized tensors.
+        self._thresholds_by_key = {
+            key: value.clone() for key, value in self._thresholds_by_key.items()
+        }
+
+    def _initialize(
+        self,
+        *,
+        tier: Tier,
+        score: _Score,
+        alpha: float,
+        n_cal: int,
+        thresholds: Tensor | TensorDict,
+        difficulty: AuxDifficulty | None,
+        mesh_fingerprint: str | None,
+        provenance: Mapping | None,
+    ) -> None:
+        """Validate all fitted state, retaining ownership of threshold storage."""
         if tier not in TIERS:
             raise ValueError(f"tier must be one of {TIERS}, got {tier!r}.")
         alpha, n_cal = _validate_alpha_n_cal(alpha, n_cal)

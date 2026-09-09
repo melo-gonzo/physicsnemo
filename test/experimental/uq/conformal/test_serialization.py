@@ -26,7 +26,9 @@ from physicsnemo.experimental.uq.conformal import (
     ConformalPredictor,
     NormalizedErrorScore,
     QuantileRegressionScore,
+    artifacts,
 )
+from physicsnemo.experimental.uq.conformal._containers import field_items
 from physicsnemo.experimental.uq.conformal._validation import points_fingerprint
 from test.experimental.uq.conformal._helpers import (
     TIERS,
@@ -99,6 +101,40 @@ def test_artifact_has_one_exact_schema_and_cellwise_load_requires_the_mesh(tmp_p
             loaded.predict_interval(prediction, points=changed)
     lo, hi = loaded.predict_interval(prediction, points=_MESH_POINTS.clone())
     assert lo.shape == hi.shape == prediction.shape
+
+
+@pytest.mark.parametrize("fields", [None, ["pressure", "velocity"]])
+def test_artifact_load_owns_storage_but_public_thresholds_remain_snapshots(
+    fields, tmp_path, monkeypatch
+):
+    predictor, points = fit("cellwise", n_samples=5, shape=(6, 3), fields=fields)
+    parse = artifacts._parse_artifact
+    validations = []
+
+    def check_owned_storage(payload):
+        loaded = parse(payload)
+        for key, tensor in payload["thresholds"].items():
+            assert loaded._thresholds_by_key[key].data_ptr() == tensor.data_ptr()
+        validations.append(True)
+        return loaded
+
+    monkeypatch.setattr(artifacts, "_parse_artifact", check_owned_storage)
+    path = tmp_path / "artifact.pt"
+    predictor.save(path)
+    loaded = ConformalPredictor.load(path)
+    assert len(validations) == 2  # save integrity read-back and public load
+    exposed = loaded.thresholds
+    constructed = make_predictor(
+        tier="cellwise", thresholds=exposed, mesh_fingerprint=points_fingerprint(points)
+    )
+    for key, tensor in field_items(exposed):
+        tensor.fill_(float("nan"))
+        assert torch.equal(
+            loaded._thresholds_by_key[key], predictor._thresholds_by_key[key]
+        )
+        assert torch.equal(
+            constructed._thresholds_by_key[key], predictor._thresholds_by_key[key]
+        )
 
 
 def test_map_location_places_loaded_thresholds(device, tmp_path):
