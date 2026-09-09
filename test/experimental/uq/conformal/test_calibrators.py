@@ -31,7 +31,12 @@ from physicsnemo.experimental.uq.conformal import (
     RiskControlCalibrator,
 )
 from physicsnemo.experimental.uq.conformal._validation import points_fingerprint
-from test.experimental.uq.conformal._helpers import TIERS, fit, make_predictor
+from test.experimental.uq.conformal._helpers import (
+    CALIBRATOR_CLASSES,
+    TIERS,
+    fit,
+    make_predictor,
+)
 
 
 def _td(**fields):
@@ -131,6 +136,29 @@ def test_schema_drift_is_rejected_transactionally(
     assert calibrator.n_cal == expected_n_cal
 
 
+@pytest.mark.parametrize("cls", CALIBRATOR_CLASSES)
+def test_late_field_rejection_preserves_finalized_thresholds_transactionally(cls):
+    """A failed second field must not append the first field's staged scores."""
+    calibrator = cls(NormalizedErrorScore(), alpha=0.5)
+    prediction = _td(a=torch.zeros(3), b=torch.zeros(3))
+    aux = {key: {"sigma": torch.ones(3)} for key in ("a", "b")}
+    kwargs = {"points": torch.arange(3.0).reshape(3, 1)}
+    for value in (1.0, 2.0, 3.0, 4.0):
+        target = _td(a=torch.full((3,), value), b=torch.full((3,), value + 1))
+        calibrator.update_sample(prediction, target, aux=aux, **kwargs)
+    before = calibrator.finalize().thresholds
+
+    with pytest.raises(ValueError, match="missing.*sigma"):
+        calibrator.update_sample(
+            prediction, prediction, aux={"a": aux["a"], "b": {}}, **kwargs
+        )
+
+    assert calibrator.n_cal == 4
+    after = calibrator.finalize().thresholds
+    for key in ("a", "b"):
+        assert torch.equal(after[key], before[key])
+
+
 def test_functional_band_uses_scalar_rank_across_varying_meshes():
     calibrator = FunctionalBandCalibrator(AbsoluteErrorScore(), alpha=0.4)
     for index, maximum in enumerate([1.0, 4.0, 2.0, 3.0], start=2):
@@ -158,7 +186,7 @@ def test_difficulty_adaptation_and_strategy_snapshot_are_fixed():
     zeros = torch.zeros_like(target)
     aux = {"scale": torch.full((4,), 2.0, dtype=torch.float64), "sigma": zeros}
     bad_scale = torch.tensor([2.0, torch.inf, 2.0, 2.0], dtype=torch.float64)
-    with pytest.raises(ValueError, match="finite and strictly positive"):
+    with pytest.raises(ValueError, match="non-finite"):
         calibrator.update_sample(zeros, target, aux={**aux, "scale": bad_scale})
     assert calibrator.n_cal == 0
 

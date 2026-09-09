@@ -210,6 +210,52 @@ def test_normalization_underflow_handled_exactly(cls):
     assert_predictor_covers_admitted(predictor, torch.zeros(4), target, aux=aux)
 
 
+@pytest.mark.parametrize("cls", [FunctionalBandCalibrator, RiskControlCalibrator])
+@pytest.mark.parametrize(
+    "score,magnitude",
+    [
+        pytest.param(AbsoluteErrorScore(), 1e-12, id="unsigned-subnormal"),
+        pytest.param(AbsoluteErrorScore(), 1e-20, id="unsigned-zero-underflow"),
+        pytest.param(QuantileRegressionScore(), 8e-16, id="signed-cqr-subnormal"),
+    ],
+)
+def test_normalization_rejects_subnormal_and_underflowed_scores(cls, score, magnitude):
+    """Loss of relative precision must fail before an interval can exclude y."""
+    prediction = torch.zeros(1, dtype=_F64)
+    target = torch.full_like(prediction, magnitude)
+    aux = {"s": torch.full_like(prediction, 1e308), "lo": prediction, "hi": 2 * target}
+    calibrator = cls(score, alpha=0.5, difficulty=AuxDifficulty("s"))
+    with pytest.raises(ValueError, match="float64.*Rescale"):
+        calibrator.update_sample(prediction, target, aux=aux)
+    assert calibrator.n_cal == 0
+
+
+@pytest.mark.parametrize("cls", [FunctionalBandCalibrator, RiskControlCalibrator])
+@pytest.mark.parametrize("signed", [False, True], ids=["unsigned", "signed-cqr"])
+def test_normalization_normal_boundary_and_true_zero(cls, signed):
+    """Reject just below float64's normal range; retain normals and true zero."""
+    prediction = torch.zeros(1, dtype=_F64)
+    scale = torch.full_like(prediction, 2.0**1022)
+    score = QuantileRegressionScore() if signed else AbsoluteErrorScore()
+    # Two steps below 1 divide to the largest subnormal without rounding to tiny.
+    below = math.nextafter(math.nextafter(1.0, 0.0), 0.0)
+    for magnitude in (below, 1.0, math.nextafter(1.0, math.inf), 0.0):
+        target = torch.full_like(prediction, magnitude)
+        aux = {"s": scale, "lo": prediction, "hi": 2 * target}
+        calibrator = cls(score, alpha=0.5, difficulty=AuxDifficulty("s"))
+        if magnitude == below:
+            with pytest.raises(ValueError, match="float64.*Rescale"):
+                calibrator.update_sample(prediction, target, aux=aux)
+            assert calibrator.n_cal == 0
+            continue
+        calibrator.update_sample(prediction, target, aux=aux)
+        predictor = calibrator.finalize()
+        expected = score.score(prediction, target, aux) / scale
+        assert float(predictor.thresholds) == float(expected)
+        lo, hi = predictor.predict_interval(prediction, aux=aux)
+        assert bool(((lo <= target) & (target <= hi)).all())
+
+
 def test_normalization_overflow_rejected():
     """A quotient that overflows even float64 is rejected at update time."""
     calibrator = RiskControlCalibrator(

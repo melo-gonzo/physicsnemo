@@ -23,11 +23,10 @@ predictors are score-agnostic.
 
 That invertibility is what separates a nonconformity score from an error
 metric: a metric (MAE, RMSE) is a scalar read after the fact, whereas a
-score is an elementwise residual whose sublevel set
-:math:`\{y : \text{score}(\hat y, y) \le t\}` is exactly the interval the
-calibrated threshold :math:`t` certifies. The ``...Score`` suffix marks that
-distinction; these classes are not error metrics and are not interchangeable
-with ``physicsnemo`` metrics.
+score is an elementwise residual. Its returned interval conservatively
+encloses the sublevel set :math:`\{y : \text{score}(\hat y, y) \le t\}`.
+The ``...Score`` suffix marks that distinction; these classes are not error
+metrics and are not interchangeable with ``physicsnemo`` metrics.
 
 Scores operate on plain tensors; field-container (``TensorDict``) iteration
 is handled by the calibrators. Optional ``aux`` inputs carry the built-in
@@ -95,7 +94,8 @@ def _outward_interval(
     Together with :func:`_slack_threshold` this implements the package's
     theorem-preserving inversion policy: ``score(prediction, y, aux) <=
     threshold`` (evaluated in the working dtype) implies ``lo <= y <= hi``.
-    Intervals are valid, at most a few ulps wider than the exact inverse.
+    The interval conservatively encloses the score sublevel set. Near zero,
+    the ``4 * tiny`` threshold inflation can span many ulps.
     """
     return (
         cast_directed(lo64, prediction.dtype, up=False),
@@ -123,8 +123,10 @@ class _NonconformityScore:
     predictors (they are the serializable strategies). :meth:`score`
     (calibration time) and :meth:`interval` (prediction time) are related by
     the property that the prediction set
-    :math:`\{y : \text{score}(\hat y, y) \le t\}` equals
+    :math:`\{y : \text{score}(\hat y, y) \le t\}` lies within
     :math:`[\text{lo}, \text{hi}] = \text{interval}(\hat y, t)` elementwise.
+    Finite-precision inversion gives a conservative enclosure of this
+    sublevel set.
 
     Notes
     -----
@@ -142,12 +144,9 @@ class _NonconformityScore:
     threshold must land inside the constructed bounds. Interval endpoints
     are therefore computed in float64 with a conservative threshold inflation
     and rounded outward into the working dtype (:func:`_slack_threshold` and
-    :func:`_outward_interval`); the result is valid and at most a few ulps
-    wider than the exact inverse. This float64 hot path is load-bearing for
-    the guarantee and is markedly slower than working-dtype math on
-    accelerators. A future optimization may compute the bulk residual in the
-    working dtype and reserve float64 for the directed-rounding correction,
-    but must re-establish the containment property first.
+    :func:`_outward_interval`). The ``4 * tiny`` term can dominate near zero,
+    so the excess width need not be only a few ulps. Any change to this
+    arithmetic must preserve the containment property.
     """
 
     aux_keys: tuple[str, ...] = ()
@@ -168,8 +167,11 @@ class _NonconformityScore:
         target : torch.Tensor
             Observed values, same shape as ``prediction``.
         aux : Mapping[str, torch.Tensor], optional
-            Auxiliary tensors read by the score (``aux_keys``), each of the
-            same shape as ``prediction``. Default is ``None``.
+            Finite real floating-point tensors read by the score
+            (``aux_keys``), each of the same shape as ``prediction``.
+            Default is ``None``, which means no aux mapping; only scores
+            without required aux keys allow omission. Required entries must
+            be tensors, not ``None``.
 
         Returns
         -------
@@ -197,8 +199,11 @@ class _NonconformityScore:
             field, when one is configured) for the functional and
             risk-control tiers.
         aux : Mapping[str, torch.Tensor], optional
-            Auxiliary tensors read by the score (``aux_keys``), each of the
-            same shape as ``prediction``. Default is ``None``.
+            Finite real floating-point tensors read by the score
+            (``aux_keys``), each of the same shape as ``prediction``.
+            Default is ``None``, which means no aux mapping; only scores
+            without required aux keys allow omission. Required entries must
+            be tensors, not ``None``.
 
         Returns
         -------
@@ -272,8 +277,9 @@ class NormalizedErrorScore(_NonconformityScore):
     -----
     The effective floor is the larger of ``eps`` and the smallest positive
     normal value of the ``sigma`` dtype, so the clamp cannot underflow to a
-    no-op in low-precision dtypes. Calling :meth:`score` or :meth:`interval`
-    without ``aux["sigma"]`` raises ``ValueError``.
+    no-op in low-precision dtypes. Raw sigma values must be finite before
+    clamping; finite nonpositive values use the floor. Calling :meth:`score`
+    or :meth:`interval` without ``aux["sigma"]`` raises ``ValueError``.
 
     Examples
     --------
@@ -323,7 +329,9 @@ class NormalizedErrorScore(_NonconformityScore):
         # The exact clamp used by score(), then upcast.
         sigma = clamp_min_floor(aux["sigma"], self.eps).to(torch.float64)
         p = prediction.to(torch.float64)
-        half = _slack_threshold(threshold, prediction, aux["sigma"]) * sigma
+        # Sigma embeds exactly in float64; its storage dtype does not round
+        # the division. score() rounds up into result_type(prediction, target).
+        half = _slack_threshold(threshold, prediction) * sigma
         return _outward_interval(prediction, p - half, p + half)
 
 

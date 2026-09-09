@@ -45,7 +45,7 @@ def test_nonfinite_deployment_difficulty_is_rejected():
     )
     spread = torch.ones(5)
     spread[2] = torch.nan
-    with pytest.raises(ValueError, match="finite and strictly positive"):
+    with pytest.raises(ValueError, match="non-finite"):
         predictor.predict_interval(torch.zeros(5), aux={"spread": spread})
 
 
