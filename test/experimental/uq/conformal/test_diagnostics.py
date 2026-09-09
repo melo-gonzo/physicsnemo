@@ -252,6 +252,75 @@ def test_update_rejections_are_transactional(
             )
 
 
+@pytest.mark.parametrize("tier", TIERS)
+@pytest.mark.parametrize(
+    "warm_widths,rejected_widths",
+    [
+        pytest.param([1.0, 1.0], [1e308, 1e308], id="within-sample"),
+        pytest.param([1e308], [1e308], id="cross-call"),
+    ],
+)
+def test_width_sum_overflow_rejects_all_fields(tier, warm_widths, rejected_widths):
+    """Finite widths must not overflow a sample sum or cumulative total."""
+    accumulator = _accumulator(tier, fields=["a", "b"], shape=(len(warm_widths),))
+    warm_hi = torch.tensor(warm_widths, dtype=torch.float64)
+    rejected_hi = torch.tensor(rejected_widths, dtype=torch.float64)
+    zero = torch.zeros_like(warm_hi)
+    one = torch.ones_like(warm_hi)
+    lo = _td(a=zero, b=zero)
+    accumulator.update(lo, _td(a=one, b=warm_hi), _td(a=-one, b=-one))
+    before = accumulator.finalize()
+    before_map = accumulator.empirical_coverage_map if tier == "cellwise" else None
+
+    # Field a changes both coverage and width; field b must reject the entire sample.
+    with pytest.raises(ValueError, match="Field 'b'.*width sum.*[Rr]escale"):
+        accumulator.update(lo, _td(a=2 * one, b=rejected_hi), _td(a=zero, b=zero))
+
+    after = accumulator.finalize()
+    assert after == before
+    json.dumps(after, allow_nan=False)
+    if before_map is not None:
+        after_map = accumulator.empirical_coverage_map
+        for key in ("a", "b"):
+            torch.testing.assert_close(after_map[key], before_map[key], rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("tier", TIERS)
+def test_infinite_prediction_bounds_require_recomputing_in_wider_dtype(tier):
+    """Conservative fp16 bounds can overflow; upcast before predicting again."""
+    predictor, points = fit(tier, n_samples=3, alpha=0.5, shape=(1,))
+    prediction = torch.full((1,), 65504.0, dtype=torch.float16)
+    lo, hi = predictor.predict_interval(prediction, points=points)
+    assert torch.isfinite(prediction).all()
+    assert lo.dtype == hi.dtype == torch.float16
+    assert torch.isposinf(hi).all()
+    assert ((lo <= prediction) & (prediction <= hi)).all()
+
+    accumulator = predictor.coverage_accumulator()
+    accumulator.update(*_interval_sample(1, 1))
+    before = accumulator.finalize()
+    before_map = accumulator.empirical_coverage_map if tier == "cellwise" else None
+    with pytest.raises(ValueError, match="non-finite"):
+        accumulator.update(lo, hi, prediction)
+    after = accumulator.finalize()
+    assert after == before
+    json.dumps(after, allow_nan=False)
+    if before_map is not None:
+        torch.testing.assert_close(
+            accumulator.empirical_coverage_map, before_map, rtol=0, atol=0
+        )
+
+    prediction = prediction.float()
+    lo, hi = predictor.predict_interval(prediction, points=points)
+    assert lo.dtype == hi.dtype == torch.float32
+    assert torch.isfinite(lo).all() and torch.isfinite(hi).all()
+    assert ((lo <= prediction) & (prediction <= hi)).all()
+    accumulator.update(lo, hi, prediction)
+    report = accumulator.finalize()
+    assert report["value"]["n_samples"] == 2
+    json.dumps(report, allow_nan=False)
+
+
 def test_coverage_map_availability_errors():
     with pytest.raises(RuntimeError, match="No diagnostic samples"):
         _ = _accumulator("cellwise").empirical_coverage_map
