@@ -34,6 +34,7 @@ Risk Control <https://arxiv.org/abs/2208.02814>`_ (Angelopoulos et al.,
 """
 
 import copy
+import math
 from collections.abc import Callable, Mapping, Sequence
 from fractions import Fraction
 
@@ -605,9 +606,7 @@ class FunctionalBandCalibrator(_ScaledCalibratorBase):
         )
 
 
-def _crc_threshold(
-    sorted_scores: list[Tensor], lengths: list[int], alpha: float
-) -> float:
+def _crc_threshold(sorted_scores: list[Tensor], alpha: float) -> float:
     r"""Return the smallest observed threshold satisfying the exact CRC bound.
 
     Conformal risk control (CRC) selects the smallest :math:`\lambda` with
@@ -616,9 +615,10 @@ def _crc_threshold(
     calibration samples (`Conformal Risk Control
     <https://arxiv.org/abs/2208.02814>`_, Angelopoulos et al., 2022).
     Feasibility is evaluated with rational arithmetic over integer exceedance
-    counts and the user's declared decimal ``alpha``. Candidate selection is
-    an exact binary search over observed float64 scores, not value-space
-    bisection.
+    counts and the user's declared decimal ``alpha``. With equal sample
+    lengths, select the pooled order statistic whose rank permits exactly
+    that many exceedances. Unequal lengths use an exact binary search over
+    observed float64 scores with equal weight per sample.
     """
     n = len(sorted_scores)
 
@@ -626,13 +626,20 @@ def _crc_threshold(
     require_feasible_alpha(n, alpha)
 
     scores64 = [scores.to(torch.float64) for scores in sorted_scores]
+    m = scores64[0].numel()
+    if all(scores.numel() == m for scores in scores64):
+        # Each exceeded point contributes 1/m to the summed sample risk.
+        # A tie at the selected value only reduces the strict exceedance count.
+        allowed_exceed = math.floor(m * (alpha_exact * (n + 1) - 1))
+        k = n * m - allowed_exceed
+        return float(torch.cat(scores64).kthvalue(k).values)
 
     def corrected_risk(candidate: Tensor) -> Fraction:
         total_loss = Fraction()
-        for scores, length in zip(scores64, lengths):
+        for scores in scores64:
             probe = candidate.to(device=scores.device)
             exceed = scores.numel() - int(torch.searchsorted(scores, probe, right=True))
-            total_loss += Fraction(exceed, length)
+            total_loss += Fraction(exceed, scores.numel())
         return (total_loss + 1) / (n + 1)
 
     # Duplicate candidates are harmless: corrected_risk is a function of the
@@ -658,12 +665,12 @@ def _crc_threshold(
     return float(threshold)
 
 
-def _sorted_point_scores(normalized: Tensor) -> tuple[Tensor, int]:
-    """Reduce trailing dims to point events; sorted CPU scores plus count."""
+def _sorted_point_scores(normalized: Tensor) -> Tensor:
+    """Reduce trailing dims to point events and sort the scores on the CPU."""
     if normalized.ndim > 1:
         normalized = normalized.amax(dim=tuple(range(1, normalized.ndim)))
     point_scores = normalized.reshape(-1)
-    return point_scores.detach().cpu().sort().values, point_scores.numel()
+    return point_scores.detach().cpu().sort().values
 
 
 class RiskControlCalibrator(_ScaledCalibratorBase):
@@ -745,7 +752,7 @@ class RiskControlCalibrator(_ScaledCalibratorBase):
         keys: Sequence[str] | None = None,
     ) -> None:
         super().__init__(score, alpha, difficulty=difficulty, keys=keys)
-        self._samples: dict[str, list[tuple[Tensor, int]]] = {}
+        self._samples: dict[str, list[Tensor]] = {}
 
     def update_sample(
         self,
@@ -809,11 +816,7 @@ class RiskControlCalibrator(_ScaledCalibratorBase):
         self._require_finalizable()
         thresholds = {
             key: torch.tensor(
-                _crc_threshold(
-                    [scores for scores, _ in samples],
-                    [length for _, length in samples],
-                    self._alpha,
-                ),
+                _crc_threshold(samples, self._alpha),
                 dtype=torch.float64,
             )
             for key, samples in self._samples.items()

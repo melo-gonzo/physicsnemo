@@ -98,6 +98,9 @@ CRC_CASES = {  # name: (per-sample scores, alpha, dtype)
     "negative_cqr_scores": ([[-3.0, -1.0], [-2.0, 0.5], [-4.0, -0.5]], 0.4, _F64),
     "log_spaced": ([[10.0**e] for e in range(-30, 31, 6)], 0.3, _F64),
     "uneven_lengths": ([[0.1], [0.2, 0.9, 1.4], [0.05, 0.6], [2.0, 2.5, 3.0, 3.5]], 0.45, _F32),
+    "uneven_sample_weights": ([[1.0], [0.0] * 9], 0.5, _F64),
+    "uneven_negative_ties": ([[-3.0, -1.0], [-2.0], [-4.0, -2.0, -2.0, 1.0]], 0.5, _F64),
+    "single_sample": ([[-2.0, 1.0, 3.0]], 0.9, _F64),
     "float16": ([[0.5, 1.5], [1.0, 2.0], [0.25, 3.0]], 0.4, _H),
 }
 # fmt: on
@@ -109,9 +112,7 @@ def test_crc_threshold_matches_exact_candidate_oracle(case):
     and satisfy its own corrected-risk constraint."""
     raw, alpha, dtype = CRC_CASES[case]
     tensors = [torch.tensor(s, dtype=dtype) for s in raw]
-    lam = _crc_threshold(
-        [t.sort().values for t in tensors], [t.numel() for t in tensors], alpha
-    )
+    lam = _crc_threshold([t.sort().values for t in tensors], alpha)
     expected, corrected = _crc_oracle(tensors, alpha)
     assert lam == expected
     assert corrected <= Fraction(Decimal(str(alpha)))
@@ -123,23 +124,48 @@ def test_crc_threshold_compares_against_declared_decimal_alpha_exactly():
     samples = [torch.tensor([0.0, 0.0]), torch.tensor([1.0, 2.0])]
     lam = _crc_threshold(
         [s.sort().values for s in samples],
-        [s.numel() for s in samples],
         0.6666666666666666,
     )
     assert lam == 1.0
 
 
-def test_crc_threshold_mixed_dtypes_single_comparison_dtype():
+@pytest.mark.parametrize("length", [1, 2], ids=["equal-lengths", "unequal-lengths"])
+def test_crc_threshold_mixed_dtypes_single_comparison_dtype(length):
     """Per-sample probe rounding must not disagree with the returned
     threshold (mixed-dtype variant)."""
     a = torch.tensor([1.0015], dtype=_H).sort().values
-    b = torch.tensor([1.0019], dtype=_F32).sort().values
+    b = torch.full((length,), 1.0019, dtype=_F32).sort().values
     alpha = 0.34
-    lam = _crc_threshold([a, b], [1, 1], alpha)
-    scores64 = [float(a.double()), float(b.double())]
-    risk = sum(1.0 for s in scores64 if s > lam) / 2
-    assert (2 / 3) * risk + 1 / 3 <= alpha
-    assert lam in scores64  # an observed candidate, not a bisection midpoint
+    lam = _crc_threshold([a, b], alpha)
+    expected, corrected = _crc_oracle([a, b], alpha)
+    assert lam == expected
+    assert corrected <= Fraction(Decimal(str(alpha)))
+
+
+@pytest.mark.parametrize(
+    "alpha",
+    [
+        math.nextafter(0.25, 0.0),
+        0.25,
+        math.nextafter(0.5, 0.0),
+        0.5,
+        math.nextafter(0.5, 1.0),
+        math.nextafter(1.0, 0.0),
+    ],
+)
+def test_crc_equal_lengths_exact_rank_boundaries(alpha):
+    """Pooled selection preserves strict exceedances, ties, and signed ranks."""
+    samples = [
+        torch.tensor(values, dtype=_F64)
+        for values in ([-4.0, -2.0, -2.0], [-3.0, -2.0, 0.0], [-2.0, 1.0, 2.0])
+    ]
+    if alpha < 0.25:
+        with pytest.raises(ValueError, match="infeasible"):
+            _crc_threshold(samples, alpha)
+        return
+    expected, corrected = _crc_oracle(samples, alpha)
+    assert _crc_threshold(samples, alpha) == expected
+    assert corrected <= Fraction(Decimal(str(alpha)))
 
 
 def _rank_oracle(n_cal, alpha):

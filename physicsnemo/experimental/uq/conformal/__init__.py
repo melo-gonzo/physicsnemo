@@ -23,10 +23,11 @@ simultaneous functional bands
 (:class:`~physicsnemo.experimental.uq.conformal.FunctionalBandCalibrator`),
 or expected point-risk control by conformal risk control (CRC)
 (:class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator`). All
-accept tensors and ``TensorDict`` field containers. A calibrator fits a
-threshold, the conformal quantile of the nonconformity scores at rank
+accept tensors and ``TensorDict`` field containers. Cellwise and functional
+calibrators fit the conformal quantile of their scores at rank
 :math:`k = \lceil (n_{cal} + 1)(1 - \alpha) \rceil` over :math:`n_{cal}`
-calibration samples; the functional and risk-control tiers may multiply it
+calibration samples. CRC instead fits an exact corrected-risk threshold.
+The functional and risk-control tiers may multiply the fitted threshold
 by a per-point difficulty field :math:`s(x)` before the score inverts it into
 an interval.
 
@@ -41,8 +42,9 @@ Typical two-phase usage::
 
 ``points=`` (mesh coordinates) is required on every call for
 :class:`~physicsnemo.experimental.uq.conformal.CellwiseCalibrator`, whose
-guarantee is tied to one fixed discretization, and otherwise only when a
-difficulty field consumes it.
+guarantee is tied to one fixed discretization. Other tiers accept optional
+coordinates to validate point-axis alignment; ``AuxDifficulty`` reads its
+scales from ``aux``, not coordinates.
 
 Fitted predictors round-trip through portable, ``weights_only``-safe
 artifacts, and every tier reports held-out empirical coverage aligned with
