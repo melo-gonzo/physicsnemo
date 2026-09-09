@@ -126,8 +126,8 @@ class ConformalPredictor:
 
     Instances are produced by a calibrator's ``finalize()`` or by
     :meth:`load`; the constructor is public so artifacts and tests can build
-    one directly. A predictor holds the fitted threshold (the conformal
-    quantile of the calibration scores) for each field and turns a new
+    one directly. A predictor holds the fitted threshold (a conformal
+    quantile or a CRC risk threshold) for each field and turns a new
     prediction into lower and upper bounds through
     :meth:`predict_interval`. Cellwise predictors carry the exact
     calibration-mesh fingerprint; functional and conformal risk control
