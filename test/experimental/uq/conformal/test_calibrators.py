@@ -30,6 +30,7 @@ from physicsnemo.experimental.uq.conformal import (
     QuantileRegressionScore,
     RiskControlCalibrator,
 )
+from physicsnemo.experimental.uq.conformal._containers import TENSOR_KEY
 from physicsnemo.experimental.uq.conformal._validation import points_fingerprint
 from test.experimental.uq.conformal._helpers import (
     CALIBRATOR_CLASSES,
@@ -56,6 +57,32 @@ def test_cellwise_uses_exact_conformal_rank_and_returns_one_predictor():
     # k = ceil(5 * 0.6) = 3: the third-smallest per cell.
     assert torch.equal(predictor.thresholds, torch.tensor([3.0, 3.0]))
     assert predictor.mesh_fingerprint == points_fingerprint(points)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
+def test_cellwise_retains_contiguous_scores_without_changing_bits(dtype):
+    """Flattening retained scores needs no corpus copy or dtype conversion."""
+    calibrator = CellwiseCalibrator(AbsoluteErrorScore(), alpha=0.5)
+    points = torch.arange(5.0).reshape(5, 1)
+    reference = []
+    for offset in (0.1, 2.0, 1.0):
+        target = (torch.arange(15, dtype=dtype).reshape(3, 5) + offset).T
+        prediction = torch.zeros_like(target, requires_grad=True)
+        assert not target.is_contiguous()
+        reference.append(target.abs())
+        calibrator.update_sample(prediction, target, points=points)
+
+    for stored, expected in zip(calibrator._scores[TENSOR_KEY], reference):
+        assert stored.device.type == "cpu" and stored.dtype == dtype
+        assert stored.is_contiguous() and not stored.requires_grad
+        assert stored.grad_fn is None
+        assert (
+            stored.untyped_storage().nbytes() == stored.numel() * stored.element_size()
+        )
+        assert stored.reshape(-1).data_ptr() == stored.data_ptr()
+        assert torch.equal(stored, expected)
+    expected_thresholds = torch.stack(reference).sort(dim=0).values[1]
+    assert torch.equal(calibrator.finalize().thresholds, expected_thresholds)
 
 
 def test_cellwise_requires_and_fingerprints_points_transactionally():

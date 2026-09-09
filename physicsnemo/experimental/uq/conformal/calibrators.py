@@ -292,9 +292,11 @@ class CellwiseCalibrator(_SplitCalibratorBase):
     Every element's threshold is the :math:`k`-th smallest of its
     :math:`n_{cal}` calibration scores,
     :math:`k = \lceil (n_{cal} + 1)(1 - \alpha) \rceil`, computed exactly
-    with ``torch.kthvalue``. Per-sample scores are retained on the CPU until
-    :meth:`finalize`, so memory grows as :math:`n_{cal}` times the field
-    size. Calibration is single-rank: :meth:`finalize` raises
+    with ``torch.kthvalue``. Per-sample scores are retained contiguously on
+    the CPU in their original dtype until :meth:`finalize`, so memory grows
+    as :math:`n_{cal}` times the field size. Finalization adds the output
+    and temporary stacks and native selection workspace bounded by the
+    chunk size. Calibration is single-rank: :meth:`finalize` raises
     ``NotImplementedError`` when an initialized ``torch.distributed`` group
     spans several ranks, and ``ValueError`` when :math:`\alpha < 1 / (n_{cal}
     + 1)`.
@@ -401,7 +403,7 @@ class CellwiseCalibrator(_SplitCalibratorBase):
                     f"first sample's {self._shapes[key]}. Cellwise "
                     "calibration requires an identical output layout."
                 )
-            return score.detach().cpu()
+            return score.detach().cpu().contiguous()
 
         self._collect(prediction, target, aux, points, self._scores, stage)
         for key, scores in self._scores.items():

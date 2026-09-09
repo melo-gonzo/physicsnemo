@@ -171,10 +171,12 @@ def kth_smallest_of_samples(
 ) -> Float[Tensor, "*dims"]:
     r"""``k``-th smallest across per-sample tensors, without stacking the corpus.
 
-    Equivalent to ``torch.kthvalue(torch.stack(per_sample), k, dim=0)``, but
-    only one :math:`(n_{cal}, \text{cells\_per\_chunk})` block is ever
-    materialized beside the retained per-sample list, so peak memory at
-    large field sizes stays ``list + one block`` instead of ``2 x list``.
+    Equivalent to ``torch.kthvalue(torch.stack(per_sample), k, dim=0)``.
+    With contiguous inputs, flattening uses views; temporary stacks and
+    native selection workspace scale with the chunk size, in addition to
+    the retained scores and output. Noncontiguous inputs remain correct,
+    but flattening may copy each full sample. Callers that need bounded
+    temporary memory should retain contiguous scores at collection time.
 
     Computed in the promoted common dtype of the samples (exactly what a
     full ``torch.stack`` would produce), never a down-cast of any sample's
@@ -189,9 +191,9 @@ def kth_smallest_of_samples(
         Order-statistic index in ``[1, len(per_sample)]`` (as produced by
         :func:`conformal_quantile_index`; ``torch.kthvalue`` rejects others).
     chunk_numel : int, optional
-        Upper bound on the number of elements stacked per
-        :func:`torch.kthvalue` call, to bound peak memory. Default is
-        ``2**26``.
+        Target limit on the number of elements stacked per
+        :func:`torch.kthvalue` call. Each chunk includes at least one element
+        per sample. Default is ``2**26``.
 
     Returns
     -------
