@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PHYSICSNEMO_DIST_TIMEOUT_S`; unset or empty configuration keeps PyTorch's
   backend default. Invalid timeouts are rejected before initialization state
   changes, allowing corrected configuration to be retried.
+- Unified external aero recipe: `NonDimensionalizeByMetadata` gains
+  `scale_geometry` so chained instances scale the geometry once; inference
+  re-dimensionalizes with the field maps of every instance.
 
 ### Changed
 
@@ -69,6 +72,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mid-write no longer leaves an unloadable truncated checkpoint. Also fixes
   `legacy_format=True`, which failed with `FileNotFoundError` on current
   fsspec versions.
+- `RandomRotateMesh` defaults to `mode="axis_aligned"` when `axes` is given.
+  Unified external aero recipe translation configs pass tensor bounds so
+  `torch.distributions.Uniform` instantiates.
+- `RenameMeshFields` and `DropMeshFields` also apply to a `DomainMesh`'s
+  domain-level `global_data`.
 
 ### Security
 
