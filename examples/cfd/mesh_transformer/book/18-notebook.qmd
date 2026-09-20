@@ -20799,9 +20799,10 @@ depth is doubled at a rate the 12-layer network trains cleanly at. The
 mechanism (RFDIV: routing saturation) is inferred from the signature, not
 measured on these runs. Under the preregistered training-signature
 clause the four lanes are excluded from the depth ladder and rate
-controls were launched (lanes 22 to 27, job names
+controls are prepared as lanes 22 to 27 of the launcher (job names
 `isla.cap435.isla-w384-d24-lr2.5e-4-c100k-s42` and siblings): 24 layers
-at 2.5e-4, 48 layers at 2.5e-4 and at 1.25e-4, two seeds each. The
+at 2.5e-4, 48 layers at 2.5e-4 and at 1.25e-4, two seeds each; their
+submission is pending (`kernel/cap435_launch.sh 22 27`). The
 one-car CAP study trained 24 layers without this signature at 10,000
 cells; whether the rate that depth tolerates scales like 1/depth or
 1/√depth is what the two 48-layer controls discriminate (1/depth predicts
