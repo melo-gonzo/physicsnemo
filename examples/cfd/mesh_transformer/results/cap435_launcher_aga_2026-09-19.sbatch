@@ -8,7 +8,7 @@
 #SBATCH --gpus-per-node=4
 #SBATCH --segment=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --array=0-21%22
+#SBATCH --array=0-27%28
 #SBATCH --dependency=singleton
 #SBATCH -o sbatch_logs/%x-%A_%a.log
 #SBATCH -e sbatch_logs/%x-%A_%a.log
@@ -44,16 +44,22 @@ lane() {
     8|19)  MODEL=geotransolver_surface;  EXTRA="${GT_EXTRA} model.n_hidden=1024";                          LR=1e-3;     SLUG=gt-w1024-lr1e3 ;;
     9|20)  MODEL=geotransolver_surface;  EXTRA="${GT_EXTRA} model.n_hidden=512 model.n_layers=24";         LR=3e-3;     SLUG=gt-w512-d24 ;;
     10|21) MODEL=transolver_surface;     EXTRA="forward_kwargs.fx.source=global_data.U_inf_dir model.n_hidden=512"; LR=3e-3; SLUG=transolver-w512 ;;
+    # rate controls (2026-09-20, prereg training-signature clause): the 24- and 48-layer ISLA lanes at 5e-4 sat on the
+    # mean-field plateau (validation loss 0.061-0.063 at epoch 23, both seeds) while every other lane was at 0.0016-0.0022;
+    # rerun at half the rate (and a quarter for 48 layers).
+    22|25) MODEL=isla_surface_reference; EXTRA="+model.geo_kernel=fused model.hidden=384 model.n_layers=24"; LR=2.5e-4;  SLUG=isla-w384-d24-lr2.5e-4 ;;
+    23|26) MODEL=isla_surface_reference; EXTRA="+model.geo_kernel=fused model.hidden=384 model.n_layers=48"; LR=2.5e-4;  SLUG=isla-w384-d48-lr2.5e-4 ;;
+    24|27) MODEL=isla_surface_reference; EXTRA="+model.geo_kernel=fused model.hidden=384 model.n_layers=48"; LR=1.25e-4; SLUG=isla-w384-d48-lr1.25e-4 ;;
     *) echo "bad array index $1" >&2; exit 2 ;;
   esac
-  if [ "$1" -le 10 ]; then SEED=42; else SEED=43; fi
+  if [ "$1" -le 10 ] || { [ "$1" -ge 22 ] && [ "$1" -le 24 ]; }; then SEED=42; else SEED=43; fi
   CELLS=100000; EPOCHS=500
   RUN_ID="cap_dr_${SLUG//-/_}_c100k_seed${SEED}"
   SLUG="${SLUG}-c100k-s${SEED}"
 }
 if [ "${1:-}" = "--slug" ]; then lane "$2"; echo "${SLUG}"; exit 0; fi
 if [ "${1:-}" = "--manifest" ]; then
-  for i in $(seq 0 21); do lane "$i"; printf "cap\t%s\t%s\tdrivaer_ml_surface\t%s\t%s\t%s\t%s\tfalse\t\t\n" "$i" "${RUN_ID}" "${MODEL}" "${EXTRA}" "${LR}" "${SEED}"; done
+  for i in $(seq "${2:-0}" "${3:-27}"); do lane "$i"; printf "cap\t%s\t%s\tdrivaer_ml_surface\t%s\t%s\t%s\t%s\tfalse\t\t\n" "$i" "${RUN_ID}" "${MODEL}" "${EXTRA}" "${LR}" "${SEED}"; done
   exit 0
 fi
 lane "${SLURM_ARRAY_TASK_ID}"
