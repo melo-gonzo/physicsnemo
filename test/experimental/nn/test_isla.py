@@ -1140,7 +1140,9 @@ def test_default_is_relative_rms_distance():
         and m.scale_mode == "rms_distance"
         and m.relative_frame
     )
-    assert m.geo_kernel == "auto"  # 2026-09-19 ruling: fused wherever it can run, eager otherwise
+    assert (
+        m.geo_kernel == "auto"
+    )  # 2026-09-19 ruling: fused wherever it can run, eager otherwise
     assert m.embed[0].in_features == 1
     assert m.blocks[0].geo_logit.in_features == 6
     m_c = ISLA(**_CENTERED, hidden=32, n_layers=2, n_slices=8)
@@ -1164,32 +1166,23 @@ def test_constructor_and_forward_are_keyword_only():
     assert out.shape == (1, 16, 4) and torch.isfinite(out).all()
 
 
-def test_legacy_options_former_defaults_are_accepted():
-    """Checkpoints written by the research class recorded every removed option;
-    one recorded at its former default describes this very network and must
-    build the same model (same parameters, same output), with the legacy name
-    dropped from the recorded constructor arguments. Sequence defaults arrive
-    as lists after the JSON round trip and are accepted too."""
-    pts = torch.randn(1, 16, 3)
-    nrm = torch.nn.functional.normalize(torch.randn(1, 16, 3), dim=-1)
-    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1)
-    w = torch.rand(1, 16) + 0.5
-    torch.manual_seed(0)
-    ref = ISLA(hidden=32, n_layers=1, n_slices=8).eval()
+def test_legacy_options_former_defaults_are_dropped_by_the_compat_mapper():
+    """Checkpoints of format 0.1.0 (the research class) recorded every removed
+    option; the checkpoint compat mapper drops those at their former defaults,
+    so the mapped arguments build this very network. Sequence defaults arrive
+    as lists after the JSON round trip and are accepted too. The constructor
+    itself no longer accepts the names (test_unknown_constructor_argument_raises_type_error)."""
     all_defaults = dict(_REMOVED_OPTIONS)
     all_defaults["local_radii"] = list(
         all_defaults["local_radii"]
     )  # as a JSON round trip delivers it
-    torch.manual_seed(0)
-    m = ISLA(hidden=32, n_layers=1, n_slices=8, **all_defaults).eval()
-    assert m.state_dict().keys() == ref.state_dict().keys()
-    with torch.no_grad():
-        assert torch.equal(
-            m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w),
-            ref(points=pts, normals=nrm, global_vectors=drv, measure_weights=w),
-        )
-    assert not set(_REMOVED_OPTIONS) & set(m._args["__args__"])
-    assert m._args["__args__"]["hidden"] == 32
+    recorded = dict(hidden=32, n_layers=1, n_slices=8, **all_defaults)
+    mapped = ISLA._backward_compat_arg_mapper("0.1.0", recorded)
+    assert mapped == dict(hidden=32, n_layers=1, n_slices=8)
+    assert ISLA.__model_checkpoint_version__ == "0.2.0"
+    assert "0.1.0" in ISLA.__supported_model_checkpoint_version__
+    # current-format arguments pass through untouched
+    assert ISLA._backward_compat_arg_mapper("0.2.0", {"hidden": 32}) == {"hidden": 32}
 
 
 @pytest.mark.parametrize(
@@ -1205,10 +1198,17 @@ def test_legacy_options_former_defaults_are_accepted():
 )
 def test_legacy_options_non_default_values_raise_naming_the_tag(kw):
     """A removed option at a non-default value cannot be reproduced by the lean
-    class: the error names the option and the tag where the research class lives."""
+    class: the error names the option and the tag where the research class lives.
+    ``scale_mode='global'`` is a live option with a retired value and is refused
+    by the constructor itself."""
     name = next(iter(kw))
     with pytest.raises(ValueError, match=RESEARCH_TAG) as err:
-        ISLA(hidden=32, n_layers=1, n_slices=8, **kw)
+        if name in _REMOVED_OPTIONS:
+            ISLA._backward_compat_arg_mapper(
+                "0.1.0", dict(hidden=32, n_layers=1, n_slices=8, **kw)
+            )
+        else:
+            ISLA(hidden=32, n_layers=1, n_slices=8, **kw)
     assert name in str(err.value)
 
 
@@ -1246,11 +1246,21 @@ def test_rms_distance_scale_contracts():
             atol=1e-12,
         )
         q = _rotation()
-        rot = m(points=pts @ q.T, normals=nrm @ q.T, global_vectors=drv @ q.T, measure_weights=w)
+        rot = m(
+            points=pts @ q.T,
+            normals=nrm @ q.T,
+            global_vectors=drv @ q.T,
+            measure_weights=w,
+        )
         assert torch.allclose(rot[..., :1], base[..., :1], atol=1e-10)
         assert torch.allclose(rot[..., 1:4], base[..., 1:4] @ q.T, atol=1e-10)
         assert torch.allclose(
-            m(points=pts * 2.5, normals=nrm, global_vectors=drv, measure_weights=w * 2.5**2),
+            m(
+                points=pts * 2.5,
+                normals=nrm,
+                global_vectors=drv,
+                measure_weights=w * 2.5**2,
+            ),
             base,
             atol=1e-10,
         )
@@ -1266,11 +1276,23 @@ def test_rms_distance_scale_contracts():
         )  # a rescale of the points alone is invariant too: the unit is a length of the sample and the
         # routing bias log w is uniform-rescale invariant, so weights and positions decouple
     torch.manual_seed(1)
-    m_tm = ISLA(hidden=64, n_layers=2, n_slices=16, frame_mode="relative", scale_mode="total_measure").double().eval()
+    m_tm = (
+        ISLA(
+            hidden=64,
+            n_layers=2,
+            n_slices=16,
+            frame_mode="relative",
+            scale_mode="total_measure",
+        )
+        .double()
+        .eval()
+    )
     with torch.no_grad():
         base_tm = m_tm(points=pts, normals=nrm, global_vectors=drv, measure_weights=w)
         assert not torch.allclose(
-            m_tm(points=pts, normals=nrm, global_vectors=drv, measure_weights=w * 137.0),
+            m_tm(
+                points=pts, normals=nrm, global_vectors=drv, measure_weights=w * 137.0
+            ),
             base_tm,
             atol=1e-3,
         )  # the total-measure unit is NOT invariant to a weight rescale; the contrast this option removes
@@ -1282,7 +1304,10 @@ def _koch_curve(level: int):
 
     pts = [torch.tensor([0.0, 0.0]), torch.tensor([1.0, 0.0])]
     rot = torch.tensor(
-        [[math.cos(math.pi / 3), -math.sin(math.pi / 3)], [math.sin(math.pi / 3), math.cos(math.pi / 3)]]
+        [
+            [math.cos(math.pi / 3), -math.sin(math.pi / 3)],
+            [math.sin(math.pi / 3), math.cos(math.pi / 3)],
+        ]
     )
     for _ in range(level):
         new = [pts[0]]
@@ -1296,7 +1321,9 @@ def _koch_curve(level: int):
     xy = torch.stack(pts).double()
     mids = (xy[:-1] + xy[1:]) / 2
     seg = (xy[1:] - xy[:-1]).norm(dim=-1)
-    return torch.cat([mids, torch.zeros(len(mids), 1, dtype=torch.float64)], dim=-1)[None], seg[None]
+    return torch.cat([mids, torch.zeros(len(mids), 1, dtype=torch.float64)], dim=-1)[
+        None
+    ], seg[None]
 
 
 def test_rms_distance_converges_on_koch_curve_where_total_measure_diverges():
@@ -1312,12 +1339,13 @@ def test_rms_distance_converges_on_koch_curve_where_total_measure_diverges():
         totals.append(w.sum().item())
         rms.append(rms_pairwise_distance(pts, w).item())
     for a, b in zip(totals[:-1], totals[1:]):
-        assert abs(b / a - 4.0 / 3.0) < 1e-6  # the measure diverges geometrically (float64 polyline arithmetic)
+        assert (
+            abs(b / a - 4.0 / 3.0) < 1e-6
+        )  # the measure diverges geometrically (float64 polyline arithmetic)
     rel = [abs(b - a) / a for a, b in zip(rms[:-1], rms[1:])]
     assert all(r < 1e-3 for r in rel[4:]), rel
     assert rel[-1] < 1e-4, rel
     assert rms[-1] > 0.3  # a finite length of the order of the base
-
 
 
 def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices():
@@ -1326,7 +1354,9 @@ def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices(
     decision, and leave the outputs identical to an explicit eager model with the same weights."""
     torch.manual_seed(0)
     pts = torch.randn(1, 64, 3, dtype=torch.float64)
-    nrm = torch.nn.functional.normalize(torch.randn(1, 64, 3, dtype=torch.float64), dim=-1)
+    nrm = torch.nn.functional.normalize(
+        torch.randn(1, 64, 3, dtype=torch.float64), dim=-1
+    )
     drv = torch.tensor([[[1.0, 0.0, 0.0]]], dtype=torch.float64)
     w = torch.rand(1, 64, dtype=torch.float64) + 0.1
     auto = ISLA(hidden=32, n_layers=2, n_slices=8).double().eval()

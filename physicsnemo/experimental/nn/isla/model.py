@@ -88,12 +88,15 @@ development (parity gates, odd heads, alternative vector bases, local patch
 features, latent volume and wake tokens, sparse routing, second-moment
 invariants, derived interior normals, anchor-conditioned decode, query-cloud
 channels, measure tempering, routing temperature, alternative centers and a
-supplied frame) live at git tag ``isla-research-full``. Checkpoints that
-recorded such an option at its former default still load; one that recorded
-a non-default value raises and names the tag (see ``_REMOVED_OPTIONS``).
+supplied frame) live at git tag ``isla-research-full``. Checkpoints of format
+0.1.0 that recorded such an option at its former default load through the
+checkpoint compat mapper; one that recorded a non-default value raises and
+names the tag (see ``_REMOVED_OPTIONS`` and ``ISLA._backward_compat_arg_mapper``).
 
 Checkpoint files written under the class's pre-2026-09-07 name
-(``MeshTransformer2.*.mdlus``) still load through ``_legacy_class_names``.
+(``MeshTransformer2.*.mdlus``) still load: the training-checkpoint utility
+finds them through ``_legacy_class_names``, and ``ISLA.from_checkpoint``
+resolves the recorded class name to this class.
 """
 
 import logging
@@ -157,24 +160,6 @@ def _is_former_default(name: str, value) -> bool:
     if isinstance(default, (tuple, list)):
         return isinstance(value, (tuple, list)) and tuple(value) == tuple(default)
     return value == default
-
-
-def _check_legacy_options(legacy_options: dict) -> None:
-    """Validate the ``**legacy_options`` catch-all of :class:`ISLA`: names that
-    were never options raise ``TypeError`` (as an unknown keyword would), removed
-    options at their former default pass, anything else raises ``ValueError``
-    naming the option and the research tag."""
-    for name, value in legacy_options.items():
-        if name not in _REMOVED_OPTIONS:
-            raise TypeError(
-                f"ISLA.__init__() got an unexpected keyword argument {name!r}"
-            )
-        if not _is_former_default(name, value):
-            raise ValueError(
-                f"{name}={value!r} is a research option that was removed from ISLA "
-                f"(its former default {_REMOVED_OPTIONS[name]!r} is the only accepted value); "
-                f"the full research class is preserved at git tag {RESEARCH_TAG!r}"
-            )
 
 
 def _softmax_over_points(
@@ -691,11 +676,6 @@ class ISLA(Module):
             ``"fused"`` to force one; ``"fused"`` raises when its constraints
             cannot be met.
         eps: Numerical floor for norms and logarithms.
-        **legacy_options: Research options removed from the mainline on
-            2026-09-15 (see ``_REMOVED_OPTIONS``). A checkpoint that recorded one
-            at its former default loads unchanged; any other value raises a
-            ``ValueError`` naming the git tag ``isla-research-full`` where the
-            option remains runnable.
 
     Forward inputs (all keyword-only): ``points`` and ``normals`` of shape
     ``(B, N, 3)``; ``measure_weights`` ``(B, N)`` (required by
@@ -718,7 +698,35 @@ class ISLA(Module):
     #: checkpoint loader searches these when no file exists under the current
     #: name (see physicsnemo.utils.checkpoint._legacy_checkpoint_filename), so
     #: checkpoints written as ``MeshTransformer2.*.mdlus`` still load into ISLA.
+    #: Load such files with ``ISLA.from_checkpoint`` (the class resolves the old
+    #: name to itself); ``Module.from_checkpoint`` cannot import the retired module.
     _legacy_class_names: tuple[str, ...] = ("MeshTransformer2",)
+
+    #: Checkpoint-format version. 0.1.0 files (written before 2026-09-20) may record
+    #: the retired research options of :data:`_REMOVED_OPTIONS`; the compat mapper
+    #: below drops those at their former defaults and refuses the rest.
+    __model_checkpoint_version__ = "0.2.0"
+    __supported_model_checkpoint_version__ = {
+        "0.1.0": (
+            "Loading an ISLA checkpoint of format 0.1.0: retired research options "
+            "recorded at their former defaults are dropped; any other value raises."
+        ),
+    }
+
+    @classmethod
+    def _backward_compat_arg_mapper(cls, version: str, args: dict) -> dict:
+        """Map 0.1.0 constructor arguments (research class) to the current class."""
+        args = super()._backward_compat_arg_mapper(version, args)
+        if version == "0.1.0":
+            for name in [k for k in args if k in _REMOVED_OPTIONS]:
+                value = args.pop(name)
+                if not _is_former_default(name, value):
+                    raise ValueError(
+                        f"{name}={value!r} is a research option that was removed from ISLA "
+                        f"(its former default {_REMOVED_OPTIONS[name]!r} is the only accepted "
+                        f"value); the full research class is preserved at git tag {RESEARCH_TAG!r}"
+                    )
+        return args
 
     def __init__(
         self,
@@ -750,15 +758,7 @@ class ISLA(Module):
         scale_mode: str = "rms_distance",
         geo_kernel: str | None = None,
         eps: float = 1e-12,
-        **legacy_options,
     ) -> None:
-        ### Removed research options (see _REMOVED_OPTIONS): a checkpoint that
-        ### recorded one at its former default describes this very network and
-        ### loads; any other value raises. Accepted names are dropped from the
-        ### recorded constructor arguments so a re-saved checkpoint is lean.
-        _check_legacy_options(legacy_options)
-        for name in legacy_options:
-            self._args["__args__"].pop(name, None)
         super().__init__(meta=self.MetaData())
         ### KERNEL STUDY (2026-09-13): geo_kernel selects the implementation of the
         ### per-layer geometry region, not its arithmetic. "eager" is the PyTorch
@@ -777,7 +777,6 @@ class ISLA(Module):
                 f"geo_kernel must be None (auto), 'eager' or 'fused', got {geo_kernel!r}"
             )
         self.geo_kernel = geo_kernel
-        self._geo_kernel_resolved: str | None = None if geo_kernel == "auto" else geo_kernel
         ### GLOBAL INPUTS (2026-09-14, ruling: the architecture targets steady
         ### boundary-value problems in general, so the problem's global data
         ### are zero or more global VECTOR inputs (each enters as a unit
@@ -1126,7 +1125,6 @@ class ISLA(Module):
         )
         chosen = "fused" if ok else "eager"
         self._geo_kernel_cache = (key, chosen)
-        self._geo_kernel_resolved = chosen
         logger.info(
             "ISLA geo_kernel=auto resolved to %r on %s (cuda=%s, triton=%s, global_vectors=%d, slices=%d)",
             chosen, points.device, points.is_cuda, HAS_TRITON, self.n_global_vectors, self.n_slices,
@@ -1134,12 +1132,76 @@ class ISLA(Module):
         return chosen
 
     def _apply_geo_kernel(self, points: torch.Tensor) -> None:
+        """Write the resolved kernel name into the blocks, once per resolution."""
         kernel = self.resolve_geo_kernel(points)
+        if getattr(self, "_geo_kernel_applied", None) == kernel:
+            return
         for block in self.blocks:
             block.geo_kernel = kernel
         if self.query_independent:
             for rb in self.read_blocks:
                 rb.geo_kernel = kernel
+        self._geo_kernel_applied = kernel
+
+    def _validate_inputs(
+        self,
+        points, normals, measure_weights, boundary_scalars,
+        query_points, query_normals, query_scalars,
+        support_points, support_normals, support_scalars,
+    ) -> None:
+        """Shape and presence checks for :meth:`forward` (MOD-005 format)."""
+        if points.ndim != 3 or points.shape[-1] != 3:
+            raise ValueError(
+                f"Expected points of shape (B, N, 3) but got tensor of shape {tuple(points.shape)}"
+            )
+        b, n, _ = points.shape
+        if normals.shape != points.shape:
+            raise ValueError(
+                f"Expected normals of shape {(b, n, 3)} but got tensor of shape {tuple(normals.shape)}"
+            )
+        if measure_weights is not None and measure_weights.numel() != b * n:
+            raise ValueError(
+                f"Expected measure_weights of shape {(b, n)} but got tensor of shape {tuple(measure_weights.shape)}"
+            )
+        if self.n_boundary_scalars:
+            if boundary_scalars is None:
+                raise ValueError(
+                    f"n_boundary_scalars={self.n_boundary_scalars} needs boundary_scalars of shape "
+                    f"{(b, n, self.n_boundary_scalars)}"
+                )
+            if boundary_scalars.numel() != b * n * self.n_boundary_scalars:
+                raise ValueError(
+                    f"Expected boundary_scalars of shape {(b, n, self.n_boundary_scalars)} but got "
+                    f"tensor of shape {tuple(boundary_scalars.shape)}"
+                )
+        elif boundary_scalars is not None and boundary_scalars.numel():
+            raise ValueError("this model was built with n_boundary_scalars=0; pass no boundary_scalars")
+        for name, pts, nrm, sc in (
+            ("query", query_points, query_normals, query_scalars),
+            ("support", support_points, support_normals, support_scalars),
+        ):
+            if pts is not None and (pts.ndim != 3 or pts.shape[0] != b or pts.shape[-1] != 3):
+                raise ValueError(
+                    f"Expected {name}_points of shape ({b}, M, 3) but got tensor of shape {tuple(pts.shape)}"
+                )
+            if nrm is not None and (pts is None or nrm.shape != pts.shape):
+                raise ValueError(
+                    f"Expected {name}_normals of shape {None if pts is None else tuple(pts.shape)} "
+                    f"but got tensor of shape {tuple(nrm.shape)}"
+                )
+            if sc is not None and (pts is None or sc.shape[:2] != pts.shape[:2]):
+                raise ValueError(
+                    f"Expected {name}_scalars of shape ({b}, M, {self.n_query_scalars}) matching {name}_points "
+                    f"but got tensor of shape {tuple(sc.shape)}"
+                )
+        if self.support_tokens and support_points is None:
+            raise ValueError(
+                "this model was built with support_tokens=True and needs support_points (and support_normals)"
+            )
+        if self.query_tokens and query_points is None:
+            raise ValueError(
+                "this model was built with query_tokens=True and needs query_points (and query_normals)"
+            )
 
     def forward(
         self,
@@ -1157,10 +1219,34 @@ class ISLA(Module):
         support_normals: Float[torch.Tensor, "batch support 3"] | None = None,
         support_scalars: Float[torch.Tensor, "batch support n_qscalars"] | None = None,
     ) -> Float[torch.Tensor, "batch tokens out_dim"]:
+        ### One un-batched case: every per-case input gains the batch axis.
         if points.ndim == 2:
-            points = points[None]
-            normals = normals[None]
+            points, normals = points[None], normals[None]
+            if measure_weights is not None and measure_weights.ndim == 1:
+                measure_weights = measure_weights[None]
+            if boundary_scalars is not None and boundary_scalars.ndim == 2:
+                boundary_scalars = boundary_scalars[None]
+            if query_points is not None and query_points.ndim == 2:
+                query_points = query_points[None]
+            if query_normals is not None and query_normals.ndim == 2:
+                query_normals = query_normals[None]
+            if query_scalars is not None and query_scalars.ndim == 2:
+                query_scalars = query_scalars[None]
+            if support_points is not None and support_points.ndim == 2:
+                support_points = support_points[None]
+            if support_normals is not None and support_normals.ndim == 2:
+                support_normals = support_normals[None]
+            if support_scalars is not None and support_scalars.ndim == 2:
+                support_scalars = support_scalars[None]
         b, n, _ = points.shape
+        ### Input validation (skipped under torch.compile): fail at the API
+        ### boundary with the offending shape, not inside the network.
+        if not torch.compiler.is_compiling():
+            self._validate_inputs(
+                points, normals, measure_weights, boundary_scalars,
+                query_points, query_normals, query_scalars,
+                support_points, support_normals, support_scalars,
+            )
         self._apply_geo_kernel(points)
         ### Global vector inputs: (B, K, 3), or any layout with B*K*3 or K*3
         ### elements ((K, 3), and for K = 1 (B, 3), (B, 1, 3) or (3,)); a
@@ -1264,9 +1350,11 @@ class ISLA(Module):
         n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
 
         if measure_weights is None or not self.use_measure_weights:
+            ### No measures given (or the weights-off ablation): every token
+            ### carries the same measure, i.e. the count-weighted quadrature.
             log_w = points.new_zeros(b, n, 1)
         else:
-            measure_weights = measure_weights.reshape(b, n)
+            measure_weights = measure_weights.reshape(b, n).to(points.dtype)
             log_w = torch.log(measure_weights.clamp_min(self.eps))[..., None]
 
         invariants = self._seed_invariants(r_mag, r_hat, n_hat, g_hat)

@@ -21187,3 +21187,25 @@ seed ranges rather than means. If 384 at 7.5e-4 or 1e-3 improves on its
 the ISO-MATCH lead is restated; a plateau visit at 1e-3 marks the rate
 edge at 384 (RFDIV placed it at 512). The depth controls (lanes 22 to 27)
 were submitted at the same time.
+
+**Addendum, acceptance of the rate controls (2026-09-20, 08:15 EDT; epochs
+21 to 25).** All fourteen lanes are alive with no traceback. Validation
+losses at the reading, seeds 42 / 43: 24 layers at 2.5e-4 **0.0018 /
+0.0020** (clean; the 5e-4 pair was at 0.061 / 0.063 by epoch 22); 48
+layers at 2.5e-4 **0.057 / 0.061** (on the plateau); 48 layers at 1.25e-4
+**0.0035 / 0.0122** (below the plateau, seed 43 elevated and watched).
+Read against the preregistered discriminator: the rate depth tolerates
+falls with depth like 1/depth (12 layers 5e-4, 24 layers 2.5e-4, 48
+layers 1.25e-4), not like 1/√depth, which predicted 2.5e-4 clean at 48
+layers. The width controls: ISLA-768 at 5e-4 reads 0.0046 / 0.0022 and at
+3.75e-4 0.0019 / 0.0019, against 0.0018 to 0.0022 for the 2.5e-4 lanes at
+the same epoch; ISLA-384 at 7.5e-4 reads 0.0024 / 0.0021 and at 1e-3
+0.0031 / 0.0045, against 0.002 at 5e-4. Both doubled-rate lanes (768 at
+5e-4 seed 42, 384 at 1e-3) sit two times higher than their rule-rate
+siblings at epoch 24 without having risen to the plateau; whether they
+recover, plateau, or finish worse is the reading that matters, at epoch
+500. SCALE-HL (twelve lanes, epoch 2, validation loss 0.062 to 0.082, the
+usual wing start) and TRAIN-AREA-DR (six lanes, epoch about 20,
+validation loss 0.0022 to 0.0031, on the uniform-law lanes' trajectory)
+are accepted as well; the DrivAerML area draw runs from a 1,000,000-cell
+pool at 15.6 GB peak memory for ISLA.
