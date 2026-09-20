@@ -425,10 +425,12 @@ configuration on interior velocity at a third of the parameters, 7% less
 accurate on interior pressure and 14% less accurate on eddy viscosity.** The
 task, the two architectures' interior modes and the diagnostics are in
 @sec-interior; the numbers are in @fig-scoreboard-interior and
-@tbl-scoreboard-interior. The interacting decode's prediction at a point
-depends on the joint query set, so every interior value holds at the
-training count of 10,000 queries, which is the deployment count
-(@sec-interior-companion).
+@tbl-scoreboard-interior at the exploration budget of 10,000 queries, and
+in @tbl-scoreboard-200k-interior at the reporting protocol of 200,000,
+where the same ordering holds with a 42% velocity lead, a 13% pressure
+deficit and a 2% eddy-viscosity deficit. The interacting decode's
+prediction at a point depends on the joint query set, so each interior
+value holds at its own training count (@sec-interior-companion).
 
 ```{python}
 #| label: fig-scoreboard-interior
@@ -492,6 +494,43 @@ print(": Interior error (relative L2 over the 48 DrivAerML validation cars, floa
       "Data: results/relint2_reduction_2026-09-14.json; "
       "results/fp32_reeval/fp32_shift_interior_2026-09-09.json. "
       "{#tbl-scoreboard-interior}")
+```
+
+At the reporting protocol of 200,000 boundary cells and 200,000 interior
+queries per car the standing keeps its shape (@tbl-scoreboard-200k-interior):
+ISLA leads on velocity by 42%, trails on pressure by 13% and is level on
+eddy viscosity, where its 14% deficit at the exploration budget closed to
+2%. One condition travels with the row: with 400,000 interacting tokens per
+car ISLA's interior configuration rises to the mean-field loss plateau at
+the surface configuration's rate of 1e-3 (both seeds, the routing
+saturation of @sec-using-lr) and trains cleanly at 5e-4, the rate the row
+uses; 3e-4 is 3% to 8% worse. GeoTransolver-volume trains at 1e-3 at this
+count.
+
+```{python}
+#| label: tbl-scoreboard-200k-interior
+#| output: asis
+RV = J("ratevol_reduction_2026-09-20.json"); rva = RV["arms"]
+def rrow(label, arm, ref=None):
+    cells = []
+    for f, _ in fields:
+        m = rva[arm][f]["mean"]; cells.append(f"{m:.4f}" + (f" ({rva[ref][f]['mean']/m:.2f})" if ref else ""))
+    return f"| {label} | " + " | ".join(cells) + " |\n"
+out = "| arm, 435 training cars, 200,000 cells and queries | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
+out += rrow("GeoTransolver-volume, 27.6M, unit direction, 1e-3", "gt_vol_unit")
+out += rrow("ISLA, query tokens + signed distance, 8.9M, 5e-4 (GeoTransolver-volume ÷ ISLA)", "isla_lr5e4", "gt_vol_unit")
+out += rrow("ISLA, 3e-4, rate control (ratio)", "isla_lr3e4", "gt_vol_unit")
+out += rrow("ISLA, 1e-3, on the mean-field plateau (ratio)", "isla_lr1e3", "gt_vol_unit")
+print(out)
+b = RV["bars"]
+print(": Interior error at the reporting protocol (relative L2 over the 48 DrivAerML validation cars, float32, two seeds, "
+      "200,000 boundary cells and 200,000 interior queries per car, 500 epochs). Ratios in parentheses are "
+      "GeoTransolver-volume ÷ ISLA (above 1 favors ISLA). Against the 10,000-query standing of @tbl-scoreboard-interior the "
+      f"velocity ratio moved {b['velocity_l2']['relative_change']*100:+.1f}% (within the preregistered 5%) and the pressure ratio "
+      f"{b['pressure_l2']['relative_change']*100:+.1f}%, a swing inside ISLA's 8% seed spread on pressure "
+      f"({' / '.join(f'{v:.4f}' for v in rva['isla_lr5e4']['pressure_l2']['seeds'])}). The 1e-3 row is the plateau signature, kept as the "
+      "record of the rate ceiling (@sec-nb-ratevol-verdict). Single dataset: the interior task has no wing twin. "
+      "Data: results/ratevol_reduction_2026-09-20.json. {#tbl-scoreboard-200k-interior}")
 ```
 
 ::: {.callout-note collapse="true" title="Interior rows measured only on the similarity-gauge variant (diagnostic): the parameter-matched width and the rungs below full data"}
@@ -1043,7 +1082,8 @@ live status of each is in @sec-program-status.
 - **ISLA below full data on the DrivAerML interior ladder**, measured only
   on a variant that this chapter reports in a diagnostic note
   (@tbl-scoreboard-interior-sg); the surface ladder is measured on ISLA at
-  the reporting protocol (@tbl-scoreboard-200k).
+  the reporting protocol (@tbl-scoreboard-200k), and the full-data interior
+  row is (@tbl-scoreboard-200k-interior).
 - **The baselines' consistency with a Horvitz–Thompson centroid on the
   wings.** It is measured on DrivAerML only, and only as a ablation.
 - **Multi-head slice routing at 435 cars.** On a one-car instrument eight

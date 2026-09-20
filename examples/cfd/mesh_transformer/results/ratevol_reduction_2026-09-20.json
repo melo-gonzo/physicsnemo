@@ -1,0 +1,192 @@
+{
+  "study": "RATE-VOL: DrivAerML interior at the 200,000-cell protocol; ISLA at 5e-4 (row) and 3e-4 (rate control) against the 1e-3 pair on the mean-field plateau; GeoTransolver-volume comparator; float32, 48 validation cars, 200,000 interior queries, two seeds",
+  "arms": {
+    "isla_lr1e3": {
+      "runs": {
+        "p200k_dr_isla_vol_seed42": {
+          "pressure_l2": 0.7271471818288168,
+          "velocity_l2": 0.7196844418843588,
+          "nut_l2": 0.9605401357014974
+        },
+        "p200k_dr_isla_vol_seed43": {
+          "pressure_l2": 0.7323149045308431,
+          "velocity_l2": 0.7408972581227621,
+          "nut_l2": 0.9754557609558105
+        }
+      },
+      "status": "complete",
+      "pressure_l2": {
+        "seeds": [
+          0.7271471818288168,
+          0.7323149045308431
+        ],
+        "mean": 0.72973104317983
+      },
+      "velocity_l2": {
+        "seeds": [
+          0.7196844418843588,
+          0.7408972581227621
+        ],
+        "mean": 0.7302908500035604
+      },
+      "nut_l2": {
+        "seeds": [
+          0.9605401357014974,
+          0.9754557609558105
+        ],
+        "mean": 0.967997948328654
+      }
+    },
+    "isla_lr5e4": {
+      "runs": {
+        "p200k_dr_isla_vol_lr5e4_seed42": {
+          "pressure_l2": 0.056815385818481445,
+          "velocity_l2": 0.07186237474282582,
+          "nut_l2": 0.08593727151552837
+        },
+        "p200k_dr_isla_vol_lr5e4_seed43": {
+          "pressure_l2": 0.05231860280036926,
+          "velocity_l2": 0.07055400311946869,
+          "nut_l2": 0.08543105920155843
+        }
+      },
+      "status": "complete",
+      "pressure_l2": {
+        "seeds": [
+          0.056815385818481445,
+          0.05231860280036926
+        ],
+        "mean": 0.054566994309425354
+      },
+      "velocity_l2": {
+        "seeds": [
+          0.07186237474282582,
+          0.07055400311946869
+        ],
+        "mean": 0.07120818893114725
+      },
+      "nut_l2": {
+        "seeds": [
+          0.08593727151552837,
+          0.08543105920155843
+        ],
+        "mean": 0.0856841653585434
+      }
+    },
+    "isla_lr3e4": {
+      "runs": {
+        "p200k_dr_isla_vol_lr3e4_seed42": {
+          "pressure_l2": 0.05911895136038462,
+          "velocity_l2": 0.07771141827106476,
+          "nut_l2": 0.08829441666603088
+        },
+        "p200k_dr_isla_vol_lr3e4_seed43": {
+          "pressure_l2": 0.056629945834477745,
+          "velocity_l2": 0.07615859806537628,
+          "nut_l2": 0.08740521470705669
+        }
+      },
+      "status": "complete",
+      "pressure_l2": {
+        "seeds": [
+          0.05911895136038462,
+          0.056629945834477745
+        ],
+        "mean": 0.05787444859743118
+      },
+      "velocity_l2": {
+        "seeds": [
+          0.07771141827106476,
+          0.07615859806537628
+        ],
+        "mean": 0.07693500816822052
+      },
+      "nut_l2": {
+        "seeds": [
+          0.08829441666603088,
+          0.08740521470705669
+        ],
+        "mean": 0.08784981568654379
+      }
+    },
+    "gt_vol_unit": {
+      "runs": {
+        "p200k_dr_gt_unit_vol_seed42": {
+          "pressure_l2": 0.04780555764834086,
+          "velocity_l2": 0.1003427008787791,
+          "nut_l2": 0.08433392643928528
+        },
+        "p200k_dr_gt_unit_vol_seed43": {
+          "pressure_l2": 0.04762175679206848,
+          "velocity_l2": 0.10128538807233174,
+          "nut_l2": 0.08432275056838989
+        }
+      },
+      "status": "complete",
+      "pressure_l2": {
+        "seeds": [
+          0.04780555764834086,
+          0.04762175679206848
+        ],
+        "mean": 0.04771365722020467
+      },
+      "velocity_l2": {
+        "seeds": [
+          0.1003427008787791,
+          0.10128538807233174
+        ],
+        "mean": 0.10081404447555542
+      },
+      "nut_l2": {
+        "seeds": [
+          0.08433392643928528,
+          0.08432275056838989
+        ],
+        "mean": 0.08432833850383759
+      }
+    }
+  },
+  "row_rate": "isla_lr5e4",
+  "rate_control": "isla_lr3e4",
+  "ratios_gt_vol_over_isla": {
+    "isla_lr5e4": {
+      "pressure_l2": 0.8744050835866378,
+      "velocity_l2": 1.415764759486226,
+      "nut_l2": 0.9841764595706525
+    },
+    "isla_lr3e4": {
+      "pressure_l2": 0.8244338974544024,
+      "velocity_l2": 1.3103793302409579,
+      "nut_l2": 0.9599148028349751
+    },
+    "isla_lr1e3": {
+      "pressure_l2": 0.06538526442878276,
+      "velocity_l2": 0.1380464296862872,
+      "nut_l2": 0.08711623681583103
+    }
+  },
+  "tenk_ratios": {
+    "pressure_l2": 0.9327272727272727,
+    "velocity_l2": 1.3682864450127876,
+    "nut_l2": 0.8746268656716418
+  },
+  "bars": {
+    "pressure_l2": {
+      "ratio_200k": 0.8744050835866378,
+      "ratio_10k": 0.9327272727272727,
+      "relative_change": -0.0625286628213435,
+      "verdict": "budget effect (swing above 5%)"
+    },
+    "velocity_l2": {
+      "ratio_200k": 1.415764759486226,
+      "ratio_10k": 1.3682864450127876,
+      "relative_change": 0.034699104596475516,
+      "verdict": "standing survives (within 5%)"
+    },
+    "rate_control": {
+      "pressure_l2": 1.0606127262434635,
+      "velocity_l2": 1.0804236046869646,
+      "nut_l2": 1.025274802163717
+    }
+  }
+}

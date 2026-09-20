@@ -21685,3 +21685,97 @@ usual wing start) and TRAIN-AREA-DR (six lanes, epoch about 20,
 validation loss 0.0022 to 0.0031, on the uniform-law lanes' trajectory)
 are accepted as well; the DrivAerML area draw runs from a 1,000,000-cell
 pool at 15.6 GB peak memory for ISLA.
+
+## 2026-09-20 — Verdict, RATE-VOL: the DrivAerML interior row at the 200,000-cell protocol is written with ISLA at 5e-4; ISLA leads GeoTransolver-volume on velocity by 42% (was 37%), trails on pressure by 13% (was 7%) and on eddy viscosity by 2% (was 14%) {#sec-nb-ratevol-verdict}
+
+**Setting.** The boundary-to-interior task on DrivAerML asks a model to
+predict pressure, velocity and eddy viscosity at points inside the flow
+domain from the car's surface mesh. ISLA (the architecture under study)
+admits the interior query points as interacting tokens; GeoTransolver's
+volume configuration is the comparator. The fleet that moves every
+evidence lane from the exploration budget of 10,000 sampled cells to the
+reporting protocol of 200,000 (@sec-nb-proto200k-fleet-prereg) found that
+ISLA's interior configuration, with 200,000 boundary cells and 200,000
+interior queries per car, rose to the mean-field loss plateau at learning
+rate 1e-3 on both seeds, while every surface lane at that rate trained
+normally (@sec-nb-ratevol-prereg). RATE-VOL retrained the interior
+configuration at 5e-4 and 3e-4 with the preregistered rule that the row is
+written at the higher rate that never visits the plateau.
+
+**What we saw.** Both rates are clean: no validation loss above 0.01 after
+epoch 20 on any of the four lanes through their 500 epochs (the 1e-3
+lanes had risen to 0.069 and 0.073). Scored in float32 on the 48
+validation cars at 200,000 interior queries, seed means (seeds in
+parentheses):
+
+| arm | pressure | velocity | eddy viscosity |
+|---|---:|---:|---:|
+| ISLA, 1e-3 (mean-field plateau) | 0.730 (0.727 / 0.732) | 0.730 (0.720 / 0.741) | 0.968 (0.961 / 0.976) |
+| **ISLA, 5e-4 (the row)** | **0.0546** (0.0568 / 0.0523) | **0.0712** (0.0719 / 0.0706) | **0.0857** (0.0859 / 0.0854) |
+| ISLA, 3e-4 (rate control) | 0.0579 (0.0591 / 0.0566) | 0.0769 (0.0777 / 0.0762) | 0.0878 (0.0883 / 0.0874) |
+| GeoTransolver-volume, unit direction | 0.0477 (0.0478 / 0.0476) | 0.1008 (0.1003 / 0.1013) | 0.0843 (0.0843 / 0.0843) |
+
+: RATE-VOL: interior relative L2 error on the 48 DrivAerML validation cars, 200,000 interior queries per car, float32, two seeds. Data: results/ratevol_reduction_2026-09-20.json (reduction results/ratevol_reduce_2026-09-20.py).
+
+The ratios GeoTransolver-volume ÷ ISLA at 5e-4 are **0.874 on pressure,
+1.416 on velocity and 0.984 on eddy viscosity**, against 0.933, 1.368 and
+0.875 at the 10,000-query exploration budget
+(results/relint2_reduction_2026-09-14.json). Against the preregistered
+bars: **velocity survives** (a 3.5% change of ratio, within the 5% bar);
+**pressure swings 6.3% toward GeoTransolver-volume**, just past the 5% bar,
+and is reported as a budget effect with a caveat: ISLA's two pressure
+seeds are 8% apart (0.0568 and 0.0523), the widest seed spread on this
+board, so the swing is inside the seed range and a third seed would be
+needed to call it. Eddy viscosity, not covered by a bar, moved most: ISLA
+improved 15% (0.1005 to 0.0857) while GeoTransolver-volume improved 4%,
+closing ISLA's 14% deficit to 2%. In absolute terms the twenty-fold
+increase in boundary cells and queries moved ISLA by 1% on pressure, 9%
+on velocity and 15% on eddy viscosity, and GeoTransolver-volume by 7%, 6%
+and 4%. The 3e-4 rate control is 6%, 8% and 3% worse than 5e-4 on the
+three fields, in the same direction on both seeds, so the row rate is the
+better of the two clean rates and the interior configuration's ceiling
+at 200,000 cells sits between 5e-4 and 1e-3.
+
+**Why it matters.** The interior standing of the exploration budget
+carries to the reporting protocol in its shape: ISLA ahead on velocity,
+behind on pressure, and now level on eddy viscosity. Three qualifications
+travel with the row. First, ISLA's interior configuration needs half the
+surface configuration's learning rate at this token count; the rate
+ceiling is the routing-saturation mechanism ROUTING-SAT measured on the
+width and depth lanes (@sec-nb-routingsat-verdict), inferred here from the
+matching loss signature, not probed on these checkpoints. Second, these
+lanes trained under the earlier `query_mass="geometric_mean"` passive
+readout (the default is now `source_total`, @sec-nb-no-legacy-compat); the
+decoder change is measure-rescale invariant by construction and does not
+alter a trained checkpoint's evaluation, but a fresh interior pair under
+the current default has not been trained. Third, this is one dataset: the
+interior task has no wing twin yet, so the two-dataset rule
+(recorded in @sec-nb-scalehl-prereg) leaves the interior standing
+single-dataset.
+
+**What's next.** The chapter 3 interior section carries the 200,000-query
+row beside the 10,000-query one (@tbl-scoreboard-200k-interior). The
+routing probe extends to the four interior checkpoints when the ROUTE-NORM
+verdict lands (bar: the 1e-3 pair at one active slice per block, the 5e-4
+pair with 4 or more). An interior pair under cosine routing at 1e-3 is the
+natural follow-on if ROUTE-NORM removes the ceiling on the surface lanes.
+
+## 2026-09-20 — Interim, PROTO-200K-FLEET fixed-angle wing rung: at 12° angle of attack and 200,000 cells ISLA reads 0.0300 against GeoTransolver 0.0220 and Transolver 0.0238 at 1e-3; the 3e-3 GeoTransolver control is still training {#sec-nb-fleet-single-aoa-interim}
+
+**Setting.** The HiLiftAeroML fixed-angle rung trains on every wing at a
+single angle of attack of 12° and validates on held-out wings at the same
+angle, so it isolates geometry generalization from angle generalization.
+At the 10,000-cell exploration budget this rung was one of the wing rungs
+where ISLA trails the baselines (@sec-scoreboard-surface).
+
+**What we saw.** The fleet's fixed-angle lanes at 200,000 cells, float32,
+seeds 42 / 43: ISLA 0.0302 / 0.0298 (mean 0.0300), GeoTransolver at 1e-3
+0.0221 / 0.0218 (0.0220), Transolver at 1e-3 0.0235 / 0.0240 (0.0238).
+GeoTransolver ÷ ISLA is 0.73 and Transolver ÷ ISLA is 0.79 at these
+rates. GeoTransolver's 3e-3 pair, its better rate on the wing rungs, is
+still training; the row is written when it lands, at GeoTransolver's
+better rate, per the fleet preregistration. Reading: the fixed-angle rung
+keeps the 35-case rung's picture (GeoTransolver ÷ ISLA 0.73 at both
+budgets there, @tbl-scoreboard-200k-wings): the wing deficit is a property
+of the trained functions, not of the sampling count. Data:
+results/p200k_fleet_interim_2026-09-20.json.
