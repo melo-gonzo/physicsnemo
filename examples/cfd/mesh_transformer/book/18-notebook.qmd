@@ -21862,3 +21862,32 @@ before epoch 20; the 5e-4 lanes read 0.0021 at epoch 45). Peak memory 46 GB
 at 24 layers, 90 GB at 48 layers, 58 GB for the interior configuration;
 step times 0.5 to 0.6 s for the depth lanes and 0.3 s for the interior
 lanes. Six queued successors, one per lane.
+
+## 2026-09-20 — Fleet operations: the recipe keeps every checkpoint it writes; running lanes pruned to their newest three epochs and completed lanes to one (14.4 TB freed, quota 94.7 to 81.8 TB); a pruner now runs every 30 minutes {#sec-nb-fleet-ops-prune-2026-09-20}
+
+**Setting.** After the morning's prune of completed runs
+(@sec-nb-fleet-ops-quota-2026-09-20) the scratch project quota kept rising
+by about 1 TB per hour with roughly 100 lanes training. A size survey of
+the user directory located the whole footprint inside the agents task tree
+(every other directory holds under 2 TB combined), and a measurement of the
+running lanes' checkpoint directories found the cause: **the training
+recipe writes a checkpoint pair (`checkpoint.0.<epoch>.pt` and
+`<Model>.0.<epoch>.mdlus`, about 1 GB together at width 768) every
+`save_interval` epochs and never removes an old one.** The morning prune
+had removed only the `.mdlus` files of completed runs and had not touched
+running lanes. A 768-wide CAP-435 lane at `save_interval=2` had accumulated
+463 files and 243 GB by epoch 447; the 2,048-wide GeoTransolver lanes 200
+GB each by epoch 46; the running lanes together held 5.5 TB.
+
+**What was done.** A pruner (`tmp/prune_running.sh`, cluster side in
+Python) keeps the newest three epochs of both files for every lane still
+training (the chain resumes from the newest checkpoint and the pre-flight
+of @sec-nb-fleet-ops-quota-2026-09-20 moves a truncated newest aside, so
+three is one spare beyond the safe minimum) and the newest epoch only for
+completed lanes; it never touches `norm_stats.pt` or anything outside the
+checkpoint directories. Its first pass pruned 955 runs, removed 134,987
+files and freed 14.4 TB; the project quota read 81.8 of 100 TB afterwards.
+It now runs every 30 minutes in the background alongside the fleet
+watcher. No lane was blocked or lost a checkpoint. A recipe-side fix
+(rotation at save time) is the right long-term repair and belongs to the
+engineering block, not to today's research time.
