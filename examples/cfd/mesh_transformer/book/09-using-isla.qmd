@@ -156,12 +156,18 @@ slice with all 256 anchors coincident, so the network can only emit a
 per-case constant (@sec-nb-routingsat-verdict, measured on the collapsed
 lanes themselves; first seen at width 512 in
 @sec-nb-relframe-divergence-mechanism). The measured edges at 435 cars
-and 100,000 cells: width 384 collapses at $10^{-3}$ and trains at
-$5 \times 10^{-4}$; width 768 collapses at $5 \times 10^{-4}$ and trains at
-$3.75 \times 10^{-4}$ and below; 24 layers at width 384 collapse at
-$5 \times 10^{-4}$ and train at $2.5 \times 10^{-4}$; 48 layers collapse at
-$2.5 \times 10^{-4}$ and train at $1.25 \times 10^{-4}$
-(@sec-nb-cap435-prereg, acceptance addenda). At width 192 the window is
+and 100,000 cells, float32 at 500 epochs (@sec-nb-cap435-verdict): width
+384 reaches the plateau at $10^{-3}$ on both seeds (0.75) and at
+$7.5 \times 10^{-4}$ on both (0.70 and 0.18), and trains at
+$5 \times 10^{-4}$ (0.0411); width 768 reaches the plateau at
+$5 \times 10^{-4}$ on both seeds (0.94 and 0.24) and trains at
+$3.75 \times 10^{-4}$ (0.0428) and $2.5 \times 10^{-4}$ (0.0421), the rule
+rate being the better of the two; 24 layers at width 384 reach the plateau
+at $5 \times 10^{-4}$ (0.77) and train at $2.5 \times 10^{-4}$ (0.0413); 48
+layers have no clean rate under linear routing (NaN at
+$2.5 \times 10^{-4}$, the plateau at $1.25 \times 10^{-4}$ on both seeds
+after a clean start). So the rule rate is the best clean rate at every
+width and depth tested, and the ceiling falls at least as fast as 1/depth. At width 192 the window is
 3e-4 to 1e-3 with 1e-3 best (3e-4 costs 8% in 500 epochs), the plateau
 between 1e-3 and 2e-3, and NaN at 1e-2 (@sec-robustness-lr,
 @sec-nb-ratewindow-verdict). Never run ISLA at the recipe's GeoTransolver

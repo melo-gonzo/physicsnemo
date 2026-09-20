@@ -21891,3 +21891,71 @@ It now runs every 30 minutes in the background alongside the fleet
 watcher. No lane was blocked or lost a checkpoint. A recipe-side fix
 (rotation at save time) is the right long-term repair and belongs to the
 engineering block, not to today's research time.
+
+## 2026-09-20 — Verdict, CAP-435 (linear routing): the width rule's rate is the best clean rate at every width and depth tested, so ISLA's turnover at 384 wide (0.0411) is a property of linear routing, not of under-training; depth 24 is null, 48 layers untrainable; GeoTransolver carries to 1,024 wide and 24 layers (0.0406) {#sec-nb-cap435-verdict}
+
+**Setting.** CAP-435 (@sec-nb-cap435-prereg) asked how far width and depth
+carry ISLA and GeoTransolver at 435 DrivAerML cars and 100,000 sampled
+cells per car (a labeled scaling budget, not the 200,000-cell reporting
+protocol), with ISLA's learning rate set by the width rule (1e-3 × 192 /
+width, × 12 / layers). The interim (@sec-nb-cap435-interim) found ISLA at
+its best at width 384 and worse at every larger width, while GeoTransolver
+kept improving. The open alternative was that the rule under-trains wide
+and deep lanes in 500 epochs; fourteen rate-control lanes tested it by
+training the same configurations at higher rates. All are now scored in
+float32 on the 48 validation cars (results/cap435_reduction_2026-09-20.json,
+reduction results/cap435_reduce_2026-09-20.py).
+
+**What we saw (surface pressure, seed means, seeds in parentheses).**
+
+| configuration | rate | error |
+|---|---|---:|
+| ISLA 384 wide, 12 layers | 1e-3 | 0.748 (0.773 / 0.723), mean-field plateau |
+| | 7.5e-4 | 0.441 (0.704 / 0.177), both seeds degraded |
+| | **5e-4 (rule)** | **0.0411** (0.0409 / 0.0413) |
+| ISLA 768 wide, 12 layers | 5e-4 | 0.592 (0.943 / 0.240), both seeds degraded |
+| | 3.75e-4 | 0.0428 (0.0430 / 0.0427) |
+| | **2.5e-4 (rule)** | **0.0421** (0.0432 / 0.0410) |
+| ISLA 384 wide, 24 layers | 5e-4 | 0.770 (0.773 / 0.767), plateau |
+| | **2.5e-4 (rule)** | **0.0413** (0.0413 / 0.0413) |
+| ISLA 384 wide, 48 layers | 5e-4, 2.5e-4 | NaN |
+| | 1.25e-4 (rule) | plateau on both seeds (validation loss 0.056) after a clean start |
+| GeoTransolver 1,024 wide | 1e-3 | 0.0406 (0.0409 / 0.0403) |
+| GeoTransolver 512 wide, 24 layers | 3e-3 | 0.0406 (0.0402 / 0.0410) |
+
+: CAP-435 rate controls and the best lanes, float32, 48 validation cars, 100,000 cells, 500 epochs. Data: results/cap435_reduction_2026-09-20.json.
+
+**Reading against the preregistered clauses.** The rule does not
+under-train: at width 384 and at 24 layers the rule rate is the only clean
+rate, and at 768 the one higher clean rate (3.75e-4) is 1.7% worse than the
+rule rate. The 768-wide seed split (0.0432 against 0.0410 at 2.5e-4) is
+not cured by the higher rate, which brings the seeds together at the worse
+seed's level (0.0430 / 0.0427), so the split is a property of the wide
+relative frame's optimization and the width ladder is reported with seed
+ranges. The 7.5e-4 and 5e-4 controls both degrade: seed 43 at 384 wide
+and 7.5e-4 scored 0.177, a partial version of the plateau signature
+(ROUTING-SAT measured the full state at 1e-3), so the ceiling at 384 sits
+between 5e-4 and 7.5e-4, within a factor of 1.5 of the rule rate. **Under
+linear routing ISLA's width ladder is 0.0450 / 0.0411 / 0.0426 / 0.0421 /
+0.0429 / 0.0452 at 192 / 384 / 512 / 768 / 1,024 / 1,536, its turnover at
+384 is real, depth 24 is null (1.004×), 6 layers cost 16%, 1,024 slices are
+null (0.995×), and 48 layers are untrainable in this recipe.** GeoTransolver
+improves 6.7% from 256 to 512 wide and 2.6% more to 1,024, and 2.6% from
+12 to 24 layers; at matched parameters GeoTransolver-1,024 leads ISLA-768
+by 3.6% (143M against 134M), while GeoTransolver-512 and ISLA-384 are at
+parity (1.014, 36M against 34M).
+
+**Why it matters.** With linear routing, ISLA's capacity axes stop paying
+at about 34M parameters on this task while GeoTransolver's continue to
+143M; that is the one place in the program where GeoTransolver's
+architecture is ahead of ISLA's, and the mechanism is the routing ceiling
+measured by ROUTING-SAT, since every attempt to give the wider or deeper
+lanes a higher rate meets the plateau. Whether bounding the routing logits
+lifts this ceiling is exactly ROUTE-NORM's question: its cosine lanes at
+384 and 768 wide train cleanly at 1e-3 (@sec-nb-routenorm-depth-prereg),
+and its 1,024- and 1,536-wide lanes and its 24- and 48-layer lanes will say
+whether the ladder then continues. This verdict therefore closes CAP-435
+for linear routing and leaves the width and depth question for the cosine
+form to ROUTE-NORM. Single dataset: the 510-wing twin of the width picture
+is SCALE-HL (@sec-nb-scalehl-prereg), which reads at 100,000 cells at widths
+192, 384 and 768.
