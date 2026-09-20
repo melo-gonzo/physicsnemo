@@ -8,7 +8,7 @@
 #SBATCH --gpus-per-node=4
 #SBATCH --segment=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --array=0-17%18
+#SBATCH --array=0-29%30
 #SBATCH --dependency=singleton
 #SBATCH -o sbatch_logs/%x-%A_%a.log
 #SBATCH -e sbatch_logs/%x-%A_%a.log
@@ -40,17 +40,26 @@ lane() {
     6|15)  DATASET=highlift_surface_medium; EXTRA="${COS} ${HL}";                  LR=1e-3; SLUG=cos-w192-lr1e-3-med ;;
     7|16)  DATASET=highlift_surface_medium; EXTRA="${COS} ${HL} model.hidden=384"; LR=1e-3; SLUG=cos-w384-lr1e-3-med ;;
     8|17)  DATASET=highlift_surface_medium; EXTRA="${LIN} ${HL} model.hidden=384"; LR=1e-3; SLUG=lin-w384-lr1e-3-med ;;
+    # ladder extension (2026-09-20, second reading): cosine ISLA at 1,024 and 1,536 wide at the rates the 768-wide lanes
+    # survive, and GeoTransolver at 2,048 wide so the baseline is pushed as far.
+    18|24) DATASET=drivaer_ml_surface;      EXTRA="${COS} model.hidden=1024"; LR=5e-4; SLUG=cos-w1024-lr5e-4 ;;
+    19|25) DATASET=drivaer_ml_surface;      EXTRA="${COS} model.hidden=1024"; LR=1e-3; SLUG=cos-w1024-lr1e-3 ;;
+    20|26) DATASET=drivaer_ml_surface;      EXTRA="${COS} model.hidden=1536"; LR=5e-4; SLUG=cos-w1536-lr5e-4 ;;
+    21|27) DATASET=drivaer_ml_surface;      EXTRA="${COS} model.hidden=1536"; LR=1e-3; SLUG=cos-w1536-lr1e-3 ;;
+    22|28) DATASET=drivaer_ml_surface;      EXTRA="forward_kwargs.global_embedding=global_data.U_inf_dir model.n_hidden=2048"; LR=1e-3; SLUG=gt-w2048-lr1e-3 ;;
+    23|29) DATASET=drivaer_ml_surface;      EXTRA="forward_kwargs.global_embedding=global_data.U_inf_dir model.n_hidden=2048"; LR=3e-4; SLUG=gt-w2048-lr3e-4 ;;
     *) echo "bad array index $1" >&2; exit 2 ;;
   esac
   MODEL=isla_surface_reference
-  if [ "$1" -le 8 ]; then SEED=42; else SEED=43; fi
+  case "${SLUG}" in gt-*) MODEL=geotransolver_surface ;; esac
+  if [ "$1" -le 8 ] || { [ "$1" -ge 18 ] && [ "$1" -le 23 ]; }; then SEED=42; else SEED=43; fi
   CELLS=100000; EPOCHS=500
   RUN_ID="rn_${SLUG//-/_}_c100k_seed${SEED}"
   SLUG="${SLUG}-c100k-s${SEED}"
 }
 if [ "${1:-}" = "--slug" ]; then lane "$2"; echo "${SLUG}"; exit 0; fi
 if [ "${1:-}" = "--manifest" ]; then
-  for i in $(seq "${2:-0}" "${3:-17}"); do lane "$i"; printf "rn\t%s\t%s\t%s\t%s\t%s\t%s\t%s\tfalse\t\t\n" "$i" "${RUN_ID}" "${DATASET}" "${MODEL}" "${EXTRA}" "${LR}" "${SEED}"; done
+  for i in $(seq "${2:-0}" "${3:-29}"); do lane "$i"; printf "rn\t%s\t%s\t%s\t%s\t%s\t%s\t%s\tfalse\t\t\n" "$i" "${RUN_ID}" "${DATASET}" "${MODEL}" "${EXTRA}" "${LR}" "${SEED}"; done
   exit 0
 fi
 lane "${SLURM_ARRAY_TASK_ID}"

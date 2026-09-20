@@ -21173,6 +21173,39 @@ the clean lanes' trajectory at this epoch and show no early elevation; the
 reading that decides the clause is past epoch 100. Peak memory with cosine
 routing is unchanged (14.6, 24.1 and 43.7 GB at 192, 384 and 768 wide).
 
+**Addendum, second reading (2026-09-20, 14:05 EDT; epochs 137 to 150 on
+the cars).** **Every cosine lane on the cars is clean past the epoch at
+which linear routing had fully collapsed.** Validation losses, seeds 42 /
+43: 192 at 1e-3 0.00064 / 0.00062; 384 at 5e-4 0.00055 / 0.00053; **384 at
+1e-3 0.00059 / 0.00057**; 768 at 2.5e-4 0.00052 / 0.00051; **768 at 5e-4
+0.00054 / 0.00054**; **768 at 1e-3 0.00062 / 0.00061**. The linear lanes at
+384 × 1e-3 and 768 × 5e-4 were at one active slice per block with anchors
+coincident by epoch 89 (@sec-nb-routingsat-verdict) and the 24-layer lane
+at 5e-4 finished at 0.77; the cosine lanes at the same and at twice the
+rate sit at 0.0005 to 0.0006, the range of the clean linear lanes. The
+"collapse removed" clause is met on DrivAerML through epoch 150 on both
+seeds at all three collapse rates; its routing-statistics half (at least
+four active slices per block, by the ROUTING-SAT probe) and the accuracy
+clauses are read at epoch 500. The wing lanes validate every 25 epochs and
+have not yet passed their first validation.
+
+**Ladder extension launched on the strength of the reading (lanes 18 to
+29).** The prereg said the width ladder is re-run under cosine routing if
+the clause holds; waiting for epoch 500 to launch it would cost a day for
+no information the collapse clause does not already give. Added:
+cosine ISLA at 1,024 and 1,536 wide at 5e-4 and 1e-3 (the rates the
+768-wide lanes now survive; under the width rule these widths trained at
+1.875e-4 and 1.25e-4 and scored 0.0429 and 0.0452), and GeoTransolver at
+2,048 wide at 1e-3 and 3e-4 (its 1,024-wide model preferred 1e-3 to 3e-3;
+the lower rate guards against the same drift at 2,048), two seeds each,
+100,000 cells. Preregistered reading: cosine 1,024 or 1,536 at least 2%
+below 0.0411 with seeds within 1% means the linear ladder's turnover was
+the rate ceiling and width converts into accuracy again; GeoTransolver
+2,048 improving on 1,024 (0.0406) by 2% or more keeps its ladder open;
+the iso-parameter pairs (ISLA 1,024 / 238M against GeoTransolver 1,024 /
+143M and 2,048 / about 570M) and the iso-memory frontier are then re-read
+with both ladders pushed as far.
+
 ## 2026-09-20 — Interim, CAP-435: under the width rule ISLA's ladder turns over at 384 (0.0411) and is worse at 512, 768, 1,024 and 1,536, while GeoTransolver keeps improving to 1,024 wide and to 24 layers (0.0406 at both); slices are null; six layers cost 16%; the 24-layer plateau lane scored 0.77 {#sec-nb-cap435-interim}
 
 **Setting.** CAP-435 (@sec-nb-cap435-prereg) pushed width, depth and
