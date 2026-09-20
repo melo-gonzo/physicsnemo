@@ -21997,3 +21997,24 @@ budget also removes ISLA's seed variance on this rung; the baselines'
 spread was already small. The remaining wing rungs (105, 510 and 1,260
 cases, the geometry ladders, the deflection test) report as their lanes
 finish (@sec-program-status).
+
+**Addendum, ROUTE-NORM fourth reading (2026-09-20, 20:30 EDT).** The
+second dataset now speaks. On the 510-wing HiLift medium rung at epochs 35
+to 37 the **linear-routing control at width 384 and 1e-3 reads validation
+loss 0.167 / 0.185**, ten times the 0.012 to 0.014 of every other wing lane
+at the same epoch (cosine 192 at 1e-3: 0.0130 / 0.0138; cosine 384 at
+1e-3: 0.0124 / 0.0129; the SCALE-HL GeoTransolver and Transolver lanes
+0.010 to 0.012), which is the plateau signature appearing on the wings at
+the rate the cars' 384-wide lane also fails at. The cosine wing lanes are
+on the normal trajectory. On the cars the original eighteen lanes are at
+epochs 425 to 451, all clean (0.00047 to 0.00057); the ladder extension at
+epochs 244 to 262 reads 1,024 wide 0.00050 / 0.00050 at 5e-4 and 0.00054 /
+0.00053 at 1e-3, 1,536 wide 0.00053 at 5e-4 (seed 43 at epoch 78, 0.0011)
+and 0.00056 / 0.00055 at 1e-3, GeoTransolver 2,048 0.00055 to 0.00057 at
+epochs 212 to 216. The depth and interior extension at epochs 171 to 200:
+cosine 24 layers at 5e-4 0.00051 / 0.00052; **cosine 48 layers at 2.5e-4
+0.00052 / 0.00051**, a configuration linear routing could not train at any
+rate; cosine interior at 1e-3 0.00083 / 0.00087 at epoch 185, ahead of the
+linear 5e-4 lanes' 0.00097 to 0.0011 at epoch 110. No cosine lane on either
+dataset has visited the plateau. The epoch-500 float32 scoring decides the
+accuracy clauses.
