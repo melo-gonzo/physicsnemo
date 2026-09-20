@@ -145,26 +145,44 @@ dataset's native frame predicts a car in any pose (@sec-pose).
 ### The width learning-rate rule {#sec-using-lr}
 
 **Above width 192, set the learning rate to $10^{-3} \times 192 /
-\mathrm{hidden}$.** At width 512 that is $3.75 \times 10^{-4}$. At the
-protocol rate of $10^{-3}$ the relative frame diverges at width 512: the
-routing hardens to one slice per token and the anchors coincide (measured
-at that width, @sec-nb-relframe-divergence-mechanism). Under the
-rule it trains cleanly, and the rule costs a centered control at the same
-corner nothing (its error at $3.75 \times 10^{-4}$ equals its error at
-$10^{-3}$), so the rule is a property of the relative frame, not a
-retuning of the comparison (@sec-nb-corner-wlr-verdict,
-@sec-nb-cg-wlr-verdict). At width 192 the safe window is 3e-4 to 1e-3, with 1e-3 best (3e-4 costs
-8% in 500 epochs) and a rise of the validation loss to the mean-field
-plateau between 1e-3 and 2e-3; 1e-2 diverges to NaN (@sec-robustness-lr, @sec-nb-ratewindow-verdict). Never
-run ISLA at the recipe's GeoTransolver default of 3e-3; the ISLA
-configurations pin 1e-3 for that reason.
+\mathrm{hidden}$, and above 12 layers scale it by $12 / \mathrm{layers}$
+as well.** At width 384 that is $5 \times 10^{-4}$; at 768,
+$2.5 \times 10^{-4}$; at 384 wide and 24 layers, $2.5 \times 10^{-4}$. The
+ceiling is real and its failure mode is measured: at a rate above it the
+validation loss descends for some epochs and then rises to the mean-field
+plateau (about 0.06, the loss of predicting the field mean), and the
+checkpoint in that state routes every point of every block to a single
+slice with all 256 anchors coincident, so the network can only emit a
+per-case constant (@sec-nb-routingsat-verdict, measured on the collapsed
+lanes themselves; first seen at width 512 in
+@sec-nb-relframe-divergence-mechanism). The measured edges at 435 cars
+and 100,000 cells: width 384 collapses at $10^{-3}$ and trains at
+$5 \times 10^{-4}$; width 768 collapses at $5 \times 10^{-4}$ and trains at
+$3.75 \times 10^{-4}$ and below; 24 layers at width 384 collapse at
+$5 \times 10^{-4}$ and train at $2.5 \times 10^{-4}$; 48 layers collapse at
+$2.5 \times 10^{-4}$ and train at $1.25 \times 10^{-4}$
+(@sec-nb-cap435-prereg, acceptance addenda). At width 192 the window is
+3e-4 to 1e-3 with 1e-3 best (3e-4 costs 8% in 500 epochs), the plateau
+between 1e-3 and 2e-3, and NaN at 1e-2 (@sec-robustness-lr,
+@sec-nb-ratewindow-verdict). Never run ISLA at the recipe's GeoTransolver
+default of 3e-3; the ISLA configurations pin 1e-3 for that reason. The rule
+costs a centered control at the 512-wide corner nothing, so it is a
+property of the routing parametrization, not a retuning of the comparison
+(@sec-nb-corner-wlr-verdict, @sec-nb-cg-wlr-verdict).
 
-::: {.callout-warning collapse="true" title="The rule is provisional"}
-The rule is adopted in the recipe config and documented here as the
-program's working practice; it rests on one corner (width 512, 80,000
-cells) and two controls. A width ladder at fixed cells would establish it as
-a scaling law; until then treat it as the safe default rather than an
-optimum.
+::: {.callout-note collapse="true" title="Why the ceiling scales, and the structural fix under test"}
+Each block's routing logits are an affine map of a normalized token state
+whose weights are free to grow; a sharper routing concentrates the slice
+states, which sharpens the next block's routing, and wider or deeper
+networks raise the gain of that loop. The ceiling therefore falls like
+1/width and 1/depth, and it is a property of the routing form, not of the
+frame. The structural alternative bounds the logits: route on the cosine
+between the token state and a learned prototype per slice at a fixed
+temperature (`routing_norm="cosine"`), so no block can reach the one-slice
+state however its weights grow. ROUTE-NORM (@sec-nb-routenorm-prereg)
+tests it at the measured collapse rates on two datasets; if it holds at
+neutral accuracy, the rule above becomes unnecessary and the default
+changes.
 :::
 
 ## Evaluation and the inference sampler {#sec-using-sampler}
