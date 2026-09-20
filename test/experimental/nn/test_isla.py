@@ -20,7 +20,6 @@ import pytest
 import torch
 
 from physicsnemo.experimental.nn.isla import ISLA
-from physicsnemo.experimental.nn.isla.model import _REMOVED_OPTIONS, RESEARCH_TAG
 
 # The contract tests below were written for the centered construction (plain-mean
 # centre, constant reference_length), which was the class default until 2026-09-11.
@@ -698,13 +697,12 @@ def test_query_tokens_contracts():
     "extra", [{}, {"n_query_scalars": 1, "query_scalar_scale": "length"}]
 )
 def test_query_mass_source_total_refinement_invariance(extra):
-    """Audit 2026-09-08: splitting every source token into two half-weight
-    copies leaves the discrete source measure unchanged (positions, normals,
-    total area, every integral). With query_mass="source_total" the query
-    tokens' weight is a fraction of the total source measure, so the output
-    is exactly unchanged and the similarity-gauge scale contract still holds;
-    the default "geometric_mean" is the trained convention and is asserted to
-    keep its (refinement-dependent) formula so checkpoints reproduce."""
+    """Splitting every source token into two half-weight copies leaves the
+    discrete source measure unchanged (positions, normals, total area, every
+    integral). With query_mass="source_total" (the default) the query tokens'
+    weight is a fraction of the total source measure, so the output is exactly
+    unchanged and the similarity-gauge scale contract still holds; the
+    "geometric_mean" option is refinement-dependent and is asserted to differ."""
     torch.manual_seed(42)
     pts = torch.randn(1, 60, 3, dtype=torch.float64) * torch.tensor(
         [3.0, 2.0, 1.0], dtype=torch.float64
@@ -725,9 +723,9 @@ def test_query_mass_source_total_refinement_invariance(extra):
         **extra,
     )
     torch.manual_seed(0)
-    total = ISLA(query_mass="source_total", **{**_CENTERED, **kw}).double().eval()
+    total = ISLA(**{**_CENTERED, **kw}).double().eval()
     torch.manual_seed(0)
-    default = ISLA(**{**_CENTERED, **kw}).double().eval()
+    default = ISLA(query_mass="geometric_mean", **{**_CENTERED, **kw}).double().eval()
     refined = dict(
         points=pts.repeat_interleave(2, 1),
         normals=nrm.repeat_interleave(2, 1),
@@ -754,12 +752,10 @@ def test_query_mass_source_total_refinement_invariance(extra):
         b0 = default(**refined, **fk)
     assert torch.allclose(b, a, atol=1e-10, rtol=0.0)
     assert torch.allclose(c, a, atol=1e-10, rtol=0.0)
-    ### regression guard: the default convention is unchanged (and therefore
-    ### still refinement-dependent); the two conventions are not the same model
+    ### the geometric-mean option is refinement-dependent; the two conventions are
+    ### not the same model
     assert not torch.allclose(b0, a0, atol=1e-3)
     assert not torch.allclose(a0, a, atol=1e-6)
-    with pytest.raises(ValueError):
-        ISLA(**_CENTERED, hidden=32, n_layers=1, n_slices=8, query_mass="source_total")
     with pytest.raises(ValueError):
         ISLA(
             **_CENTERED,
@@ -1164,52 +1160,6 @@ def test_constructor_and_forward_are_keyword_only():
         m(pts, nrm, drv, w)
     out = m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w)
     assert out.shape == (1, 16, 4) and torch.isfinite(out).all()
-
-
-def test_legacy_options_former_defaults_are_dropped_by_the_compat_mapper():
-    """Checkpoints of format 0.1.0 (the research class) recorded every removed
-    option; the checkpoint compat mapper drops those at their former defaults,
-    so the mapped arguments build this very network. Sequence defaults arrive
-    as lists after the JSON round trip and are accepted too. The constructor
-    itself no longer accepts the names (test_unknown_constructor_argument_raises_type_error)."""
-    all_defaults = dict(_REMOVED_OPTIONS)
-    all_defaults["local_radii"] = list(
-        all_defaults["local_radii"]
-    )  # as a JSON round trip delivers it
-    recorded = dict(hidden=32, n_layers=1, n_slices=8, **all_defaults)
-    mapped = ISLA._backward_compat_arg_mapper("0.1.0", recorded)
-    assert mapped == dict(hidden=32, n_layers=1, n_slices=8)
-    assert ISLA.__model_checkpoint_version__ == "0.2.0"
-    assert "0.1.0" in ISLA.__supported_model_checkpoint_version__
-    # current-format arguments pass through untouched
-    assert ISLA._backward_compat_arg_mapper("0.2.0", {"hidden": 32}) == {"hidden": 32}
-
-
-@pytest.mark.parametrize(
-    "kw",
-    [
-        {"odd_head": True},
-        {"center_mode": "measure"},
-        {"anchor_topk": 4},
-        {"local_radii": (0.5, 1.5)},
-        {"routing_logit_scale": 0.5},
-        {"scale_mode": "global"},
-    ],
-)
-def test_legacy_options_non_default_values_raise_naming_the_tag(kw):
-    """A removed option at a non-default value cannot be reproduced by the lean
-    class: the error names the option and the tag where the research class lives.
-    ``scale_mode='global'`` is a live option with a retired value and is refused
-    by the constructor itself."""
-    name = next(iter(kw))
-    with pytest.raises(ValueError, match=RESEARCH_TAG) as err:
-        if name in _REMOVED_OPTIONS:
-            ISLA._backward_compat_arg_mapper(
-                "0.1.0", dict(hidden=32, n_layers=1, n_slices=8, **kw)
-            )
-        else:
-            ISLA(hidden=32, n_layers=1, n_slices=8, **kw)
-    assert name in str(err.value)
 
 
 def test_unknown_constructor_argument_raises_type_error():

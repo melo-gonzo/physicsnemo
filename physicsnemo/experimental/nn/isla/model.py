@@ -82,21 +82,6 @@ memory (cost sweep, 2026-09-18).
 Every constructor argument and every ``forward`` input is keyword-only, so a
 call reads as the recipe's ``forward_kwargs`` mapping does and models can be
 swapped without positional bookkeeping.
-
-**Research ablations.** The options studied and retired during ISLA's
-development (parity gates, odd heads, alternative vector bases, local patch
-features, latent volume and wake tokens, sparse routing, second-moment
-invariants, derived interior normals, anchor-conditioned decode, query-cloud
-channels, measure tempering, routing temperature, alternative centers and a
-supplied frame) live at git tag ``isla-research-full``. Checkpoints of format
-0.1.0 that recorded such an option at its former default load through the
-checkpoint compat mapper; one that recorded a non-default value raises and
-names the tag (see ``_REMOVED_OPTIONS`` and ``ISLA._backward_compat_arg_mapper``).
-
-Checkpoint files written under the class's pre-2026-09-07 name
-(``MeshTransformer2.*.mdlus``) still load: the training-checkpoint utility
-finds them through ``_legacy_class_names``, and ``ISLA.from_checkpoint``
-resolves the recorded class name to this class.
 """
 
 import logging
@@ -112,55 +97,6 @@ from physicsnemo.core.module import Module
 from physicsnemo.nn.functional.equivariant_ops import spherical_basis
 
 logger = logging.getLogger(__name__)
-
-#: Git tag at which the full research class (every ablation option) is preserved.
-RESEARCH_TAG = "isla-research-full"
-
-#: Constructor options removed from the mainline class, with their former
-#: defaults. Checkpoints store their constructor arguments, so a checkpoint
-#: written by the research class may carry any of these; one that carries the
-#: former default is accepted silently (it describes the same network), one
-#: that carries anything else cannot be reproduced by this class and raises.
-_REMOVED_OPTIONS: dict[str, object] = {
-    "measure_weight_power": 1.0,
-    "routing_logit_scale": 1.0,
-    "use_local_features": False,
-    "local_radii": (0.01, 0.03),
-    "parity_fix": False,
-    "parity_gate_scale": 0.0,
-    "vector_basis": "globe7",
-    "odd_head": False,
-    "raw_coord_channel": False,
-    "interior_queries": False,
-    "anchor_normal_rho": 0.25,
-    "latent_volume_tokens": False,
-    "lvt_offsets": (0.5, 1.0, 2.0),
-    "wake_tokens": False,
-    "wake_offsets": (1.0, 2.0, 4.0),
-    "seed_mode": "invariant",
-    "scale_conditioning": False,
-    "n_anchors": 0,
-    "query_local_features": False,
-    "query_local_radii": (0.05, 0.15, 0.5),
-    "second_moment_features": False,
-    "anchor_topk": 0,
-    "query_density_feature": False,
-    "query_density_radius": 0.05,
-    "query_neighbor_features": False,
-    "query_neighbor_k": 16,
-    "center_mode": "plain",
-}
-
-
-def _is_former_default(name: str, value) -> bool:
-    """Whether ``value`` equals the former default of removed option ``name``.
-    Sequence defaults are compared as tuples: checkpoint arguments round-trip
-    through JSON, which turns tuples into lists."""
-    default = _REMOVED_OPTIONS[name]
-    if isinstance(default, (tuple, list)):
-        return isinstance(value, (tuple, list)) and tuple(value) == tuple(default)
-    return value == default
-
 
 def _softmax_over_points(
     x: Float[torch.Tensor, "batch tokens slices"], fast: bool = True
@@ -469,7 +405,6 @@ class _ReadBlock(nn.Module):
         src_h=None,
         src_w=None,
         local_rho=None,
-        kernel_logspace=False,
     ):
         logits_pre = self.assign(self.norm(q_h))
         if self.geo_kernel == "fused":
@@ -518,44 +453,30 @@ class _ReadBlock(nn.Module):
             ### states cannot carry. Measure-weighted Gaussian kernel over
             ### SOURCE positions attending to encoder states; queries still
             ### never write, so query-independence is preserved exactly.
-            local = _kernel_readout(
-                q_r, src_r, src_h, src_w, local_rho, eps, logspace=kernel_logspace
-            )
+            local = _kernel_readout(q_r, src_r, src_h, src_w, local_rho, eps)
             q_h = q_h + self.local_read(torch.cat([q_h, local], dim=-1))
         return q_h + self.mlp(self.norm_mlp(q_h))
 
 
-def _kernel_readout(q_r, src_r, src_h, src_w, rho, eps, logspace: bool = False):
+def _kernel_readout(q_r, src_r, src_h, src_logw, rho, eps):
     """Measure-weighted Gaussian-kernel average of source states at query
-    positions, row-chunked. Passive: a pure function of the source.
+    positions, row-chunked; a pure function of the source (passive).
 
-    ``logspace=False`` is the legacy form (kernel mass clamped at ``eps``):
-    for a query farther than a few ``rho`` from every source the mass
-    underflows, the clamp takes over, and the readout scales with the
-    absolute source weights (measured 2026-09-09: a 4.2x weight rescale moved
-    the passive output by 0.16). Kept so trained passive checkpoints
-    reproduce. ``logspace=True`` (support-token mode) evaluates the same
-    average as a softmax over sources with logits -d^2/rho^2 + log w, which
-    is exactly invariant to rescaling the source measure and well defined
-    everywhere; where the mass is not tiny the two agree to roundoff, and
-    where it is, the log-space form attends to the nearest sources instead of
-    returning a clamp-scaled value. ``src_w`` is the log-weight when
-    ``logspace`` is set."""
+    Evaluated as a softmax over sources with logits ``-d^2 / rho^2 + log w``:
+    exactly invariant to rescaling the source measure, well defined for a
+    query arbitrarily far from every source (it attends to the nearest ones
+    instead of underflowing), and equal to the plain weighted average where
+    the kernel mass is not tiny. ``src_logw`` is the log measure weight.
+    """
     b, nq, _ = q_r.shape
     outs = []
     chunk = 4096
     for i0 in range(0, nq, chunk):
         d2 = torch.cdist(q_r[:, i0 : i0 + chunk], src_r).square()
-        if logspace:
-            logits = -d2 / (rho * rho) + src_w[:, None, :]
-            k = torch.softmax(logits, dim=-1)
-            outs.append(torch.einsum("bcn,bnh->bch", k, src_h))
-        else:
-            k = torch.exp(-d2 / (rho * rho)) * src_w[:, None, :]
-            mass = k.sum(-1, keepdim=True).clamp_min(eps)
-            outs.append(torch.einsum("bcn,bnh->bch", k, src_h) / mass)
+        logits = -d2 / (rho * rho) + src_logw[:, None, :]
+        k = torch.softmax(logits, dim=-1)
+        outs.append(torch.einsum("bcn,bnh->bch", k, src_h))
     return torch.cat(outs, dim=1)
-
 
 
 def rms_pairwise_distance(
@@ -644,11 +565,12 @@ class ISLA(Module):
         query_scalar_scale: ``"length"`` divides query scalars by the frame's
             length unit and enters ``[s, sign(s) log(|s| + eps)]``; ``"none"``
             enters them raw.
-        query_mass: Routing weight of interior/support tokens:
-            ``"geometric_mean"`` (each query carries the mean boundary
-            log-weight plus a learned offset; kept for trained checkpoints) or
-            ``"source_total"`` (the tokens share a learned fraction of the total
-            boundary measure; invariant to re-representing the same measure).
+        query_mass: Routing weight of interior/support tokens (inert without
+            them): ``"source_total"`` (default) lets the tokens share a learned
+            fraction of the total boundary measure, invariant to
+            re-representing the same measure; ``"geometric_mean"`` gives each
+            token the mean boundary log-weight plus a learned offset, which
+            depends on the boundary refinement.
         support_tokens: With ``query_independent``, admit a per-case
             computational support (``support_points`` / ``support_normals`` /
             ``support_scalars``) as interacting tokens next to the boundary.
@@ -694,40 +616,6 @@ class ISLA(Module):
         jit: bool = False
         amp: bool = True
 
-    #: Class names this architecture was saved under before it was renamed; the
-    #: checkpoint loader searches these when no file exists under the current
-    #: name (see physicsnemo.utils.checkpoint._legacy_checkpoint_filename), so
-    #: checkpoints written as ``MeshTransformer2.*.mdlus`` still load into ISLA.
-    #: Load such files with ``ISLA.from_checkpoint`` (the class resolves the old
-    #: name to itself); ``Module.from_checkpoint`` cannot import the retired module.
-    _legacy_class_names: tuple[str, ...] = ("MeshTransformer2",)
-
-    #: Checkpoint-format version. 0.1.0 files (written before 2026-09-20) may record
-    #: the retired research options of :data:`_REMOVED_OPTIONS`; the compat mapper
-    #: below drops those at their former defaults and refuses the rest.
-    __model_checkpoint_version__ = "0.2.0"
-    __supported_model_checkpoint_version__ = {
-        "0.1.0": (
-            "Loading an ISLA checkpoint of format 0.1.0: retired research options "
-            "recorded at their former defaults are dropped; any other value raises."
-        ),
-    }
-
-    @classmethod
-    def _backward_compat_arg_mapper(cls, version: str, args: dict) -> dict:
-        """Map 0.1.0 constructor arguments (research class) to the current class."""
-        args = super()._backward_compat_arg_mapper(version, args)
-        if version == "0.1.0":
-            for name in [k for k in args if k in _REMOVED_OPTIONS]:
-                value = args.pop(name)
-                if not _is_former_default(name, value):
-                    raise ValueError(
-                        f"{name}={value!r} is a research option that was removed from ISLA "
-                        f"(its former default {_REMOVED_OPTIONS[name]!r} is the only accepted "
-                        f"value); the full research class is preserved at git tag {RESEARCH_TAG!r}"
-                    )
-        return args
-
     def __init__(
         self,
         *,
@@ -752,7 +640,7 @@ class ISLA(Module):
         geo_checkpoint: bool = False,
         n_query_scalars: int = 0,
         query_scalar_scale: str = "length",
-        query_mass: str = "geometric_mean",
+        query_mass: str = "source_total",
         support_tokens: bool = False,
         frame_mode: str = "relative",
         scale_mode: str = "rms_distance",
@@ -830,13 +718,8 @@ class ISLA(Module):
         self.frame_mode = frame_mode
         self.relative_frame = frame_mode == "relative"
         if scale_mode not in ("reference_length", "total_measure", "rms_distance"):
-            hint = (
-                f" (scale_mode='global' is a research option preserved at git tag {RESEARCH_TAG!r})"
-                if scale_mode == "global"
-                else ""
-            )
             raise ValueError(
-                f"scale_mode must be 'reference_length', 'total_measure' or 'rms_distance', got {scale_mode!r}{hint}"
+                f"scale_mode must be 'reference_length', 'total_measure' or 'rms_distance', got {scale_mode!r}"
             )
         self.scale_mode = scale_mode
         if similarity_gauge and scale_mode != "reference_length":
@@ -959,25 +842,15 @@ class ISLA(Module):
                 )
             self.qt_logw = nn.Parameter(torch.zeros(1))
             self.qt_type = nn.Parameter(torch.zeros(hidden))
-        ### Query-token measure weight (audit 2026-09-08). "geometric_mean":
-        ### each query's log-weight is qt_logw + the MEAN surface log-weight.
-        ### That depends on how the source measure is represented -- splitting
-        ### every surface token into two half-weight copies leaves positions,
-        ### normals, total area and every integral unchanged but halves each
-        ### query weight (3.7%-9.1% output change in the probe). It is kept as
-        ### the default only so that trained query-token checkpoints reproduce
-        ### exactly. "source_total": the queries' total weight is a learned
-        ### fraction exp(qt_logw) of the TOTAL source measure, split equally
-        ### over the queries -- invariant to any re-representation of the same
-        ### discrete measure, and it scales like an area, so the similarity
-        ### gauge scale contract still holds. The successor recipe should use
-        ### "source_total".
+        ### Interior/support token measure weight. "source_total": the tokens'
+        ### total weight is a learned fraction exp(logw) of the TOTAL source
+        ### measure, split equally over them: invariant to any re-representation
+        ### of the same discrete measure (splitting a source cell in two changes
+        ### nothing) and scaling like an area, so the similarity-gauge contract
+        ### holds. "geometric_mean": each token carries logw + the MEAN source
+        ### log-weight, which halves when every source cell is split in two.
         if query_mass not in ("geometric_mean", "source_total"):
             raise ValueError(f"unknown query_mass {query_mass!r}")
-        if query_mass != "geometric_mean" and not (self.query_tokens or support_tokens):
-            raise ValueError(
-                "query_mass requires query_tokens=True or support_tokens=True"
-            )
         self.query_mass = query_mass
         ### SUPPORT TOKENS (transfer program D1, 2026-09-09; audit agenda
         ### sec-direction-support): a problem-derived SUPPORT set (e.g. a fixed
@@ -1539,13 +1412,10 @@ class ISLA(Module):
                 q_h = q_h + self.rq_scalar_embed(qs).to(q_h.dtype)
             elif query_scalars is not None:
                 raise ValueError("query_scalars given but n_query_scalars == 0")
-            ### Support-token mode uses the exactly measure-invariant log-space
-            ### kernel (see _kernel_readout); the legacy passive path keeps the
-            ### clamped form so its trained checkpoints reproduce.
-            logspace = self.support_tokens
-            src_w = (
-                src_logw.squeeze(-1) if logspace else torch.exp(src_logw.squeeze(-1))
-            )
+            ### The local readout is a softmax over sources with logits
+            ### -d^2/rho^2 + log w: exactly invariant to a rescale of the source
+            ### measure and well defined however far a query sits from the sources.
+            src_w = src_logw.squeeze(-1)
             for rb in self.read_blocks:
                 q_h = rb(
                     q_h,
@@ -1560,7 +1430,6 @@ class ISLA(Module):
                     src_h=h,
                     src_w=src_w,
                     local_rho=self.local_readout_rho,
-                    kernel_logspace=logspace,
                 )
             h_out, r_hat, n_hat, g_out, b, n = q_h, q_rhat, q_nhat, q_g, bq, nq
             r_out = q_r

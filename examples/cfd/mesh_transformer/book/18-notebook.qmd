@@ -20930,6 +20930,54 @@ means, area-trained over uniform-trained per model).
 **Prediction.** Dependence reproduced at a smaller size: GeoTransolver
 and Transolver 1.3 to 1.8x worse, ISLA within 2%. Probability 0.7.
 
+## 2026-09-20 — Ruling and repair: no backward-compatibility machinery for ISLA's own pre-merge checkpoints; the passive decoder's local readout was not measure-rescale invariant (a 40% output change under a 137x weight rescale) and now is; `query_mass="source_total"` becomes the default {#sec-nb-no-legacy-compat}
+
+**Ruling (Peter, 2026-09-20).** ISLA is unmerged, so nothing in it needs to
+load checkpoints written under its former class name or with retired
+research options; that machinery is technical debt and goes. Research is
+the primary job; engineering serves it and stays a minority of the effort.
+Removed in one pass: the former-name lookup hook on the class, the table
+of retired constructor options with its former-default acceptance, the
+checkpoint compat mapper and format version that had been added the same
+morning, the tests for all of it (five in the checkpoint-utility tests, two
+in the contract tests, two in the release tests), and the recipe docstring
+sentence about the old name. The general checkpoint utility's
+legacy-filename hook, already upstreamed, is untouched.
+
+**A contract failure found on the way.** Three contract tests in the
+global-input suite had been failing at HEAD before today's edits: the
+passive interior decoder (`query_independent=True`) was not invariant to a
+uniform rescale of the measure weights. Measured on a 32-wide, 2-layer
+model in float64: a 137x rescale moved the passive output by **1.26**
+against an output scale of 3.0, while the boundary-only path and both
+query-token conventions moved by 1e-15. The cause was the local Gaussian
+readout's legacy form, which multiplied raw weights into the kernel and
+clamped the kernel mass at ``eps``; for queries far from every source the
+clamp took over and the readout scaled with the absolute weights. That form
+had been kept, by its own comment, "so trained passive checkpoints
+reproduce". Under the ruling it is deleted: the readout is now the
+softmax-over-sources form with logits ``-d^2/rho^2 + log w`` everywhere,
+which is exactly invariant to the weights' scale and well defined at any
+distance. The three tests pass without changes to their tolerances (1e-9).
+The passive decoder is not the interior reference configuration (that is
+`query_tokens=True`; the support-token variant already used the log-space
+form), so no standing result changes; the golden output for the passive
+configuration in the release tests was regenerated.
+
+**Default change.** `query_mass` defaults to `"source_total"` (the
+interior and support tokens share a learned fraction of the total source
+measure, invariant to how the measure is represented); `"geometric_mean"`
+stays available as the refinement-dependent option and is no longer the
+default. The RATE-VOL interior lanes trained under `"geometric_mean"` (the
+default at launch) and their row will say so; the interior control at
+`"source_total"` is queued for when the rate settles.
+
+**Still in the release-readiness set** (kept because they test current
+behavior, not history): constructor-attribute, golden-output and
+save/`from_checkpoint` round-trip tests, the up-front shape validation in
+`forward`, the measure-weight dtype cast, and the once-per-resolution
+kernel application. 128 ISLA and checkpoint tests pass.
+
 ## 2026-09-20 — Interim, TRAIN-AREA: all six area-draw lanes trained; scored on the area draw itself ISLA's wing deficit is 20% to GeoTransolver and 15% to Transolver against 27% on the uniform draw, a cross-draw reading that the benchmark on the independent uniform draw must confirm {#sec-nb-trainarea-interim}
 
 **Setting.** TRAIN-AREA (@sec-nb-trainarea-prereg) trains ISLA,

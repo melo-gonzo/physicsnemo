@@ -26,9 +26,10 @@ from physicsnemo.experimental.nn.isla import ISLA
 
 # The contract tests below were written for the centered construction (plain-mean
 # centre, constant reference_length), which was the class default until 2026-09-11.
-# The class default is now the relative frame with the total-measure scale (the
-# reference configuration); these tests pin the centered construction explicitly so
-# they keep verifying it, and test_default_is_relative_total_measure covers the default.
+# The class default is now the relative frame with the RMS-pairwise-distance length
+# unit (the reference configuration); these tests pin the centered construction
+# explicitly so they keep verifying it, and test_isla.py::test_default_is_relative_rms_distance
+# covers the default.
 _CENTERED = dict(frame_mode="centered", scale_mode="reference_length")
 
 

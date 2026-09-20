@@ -18,14 +18,9 @@ r"""Release-readiness tests for ISLA (MODELS_IMPLEMENTATION.md MOD-008a/b/c).
 
 Constructor and public attributes for a default and a custom configuration; forward
 non-regression against golden outputs stored next to this file; checkpoint save and
-``Module.from_checkpoint`` round trip; a committed reference ``.mdlus``; and loading of
-checkpoints written under the class's former name with retired research options at
-their former defaults.
+``Module.from_checkpoint`` round trip; and a committed reference ``.mdlus``.
 """
 
-import io
-import json
-import zipfile
 from pathlib import Path
 
 import pytest
@@ -225,77 +220,6 @@ def test_isla_reference_checkpoint_matches_golden(device):
     ref = _load_or_create_reference("isla_default_checkpoint_output_v1.pth", out)
     tol = 1e-5 if device == "cpu" else 1e-4
     torch.testing.assert_close(out, ref, atol=tol, rtol=tol)
-
-
-# ---------------------------------------------------------------------------
-# Checkpoints written by the research class under its former name
-# ---------------------------------------------------------------------------
-
-
-def _rewrite_checkpoint(
-    src: Path, dst: Path, *, name=None, module=None, extra_args=None, version=None
-):
-    """Copy a .mdlus archive, editing its args.json (class name, module, constructor args) and metadata version."""
-    with zipfile.ZipFile(src, "r") as zin:
-        members = {m: zin.read(m) for m in zin.namelist()}
-    args = json.loads(members["args.json"])
-    if name is not None:
-        args["__name__"] = name
-    if module is not None:
-        args["__module__"] = module
-    if extra_args:
-        args["__args__"].update(extra_args)
-    members["args.json"] = json.dumps(args).encode()
-    if version is not None:
-        meta = json.loads(members["metadata.json"])
-        meta["mdlus_file_version"] = version
-        members["metadata.json"] = json.dumps(meta).encode()
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zout:
-        for m, data in members.items():
-            zout.writestr(m, data)
-    dst.write_bytes(buf.getvalue())
-
-
-def test_isla_loads_legacy_named_checkpoint_with_former_default_options(
-    device, tmp_path
-):
-    """A checkpoint saved as MeshTransformer2 with retired research options at their former
-    defaults describes this very network and loads through ISLA.from_checkpoint."""
-    model = _instantiate_model(seed=5, **CONFIGS["default"]).to(device)
-    inputs = _make_inputs(device)
-    src, dst = tmp_path / "current.mdlus", tmp_path / "legacy.mdlus"
-    model.save(src)
-    _rewrite_checkpoint(
-        src,
-        dst,
-        name="MeshTransformer2",
-        module="physicsnemo.experimental.nn.mt2.model",
-        extra_args={
-            "odd_head": False,
-            "vector_basis": "globe7",
-            "local_radii": [0.01, 0.03],
-        },
-        version="0.1.0",
-    )
-    with pytest.warns(UserWarning):
-        loaded = ISLA.from_checkpoint(str(dst)).to(device).eval()
-    assert isinstance(loaded, ISLA)
-    assert "odd_head" not in loaded._args["__args__"]
-    with torch.no_grad():
-        torch.testing.assert_close(
-            loaded(**inputs), model(**inputs), atol=0.0, rtol=0.0
-        )
-
-
-def test_isla_refuses_legacy_checkpoint_with_non_default_option(device, tmp_path):
-    """A retired option at a non-default value cannot be reproduced and must raise, naming the option."""
-    model = _instantiate_model(seed=5, **CONFIGS["default"]).to(device)
-    src, dst = tmp_path / "current.mdlus", tmp_path / "legacy_bad.mdlus"
-    model.save(src)
-    _rewrite_checkpoint(src, dst, extra_args={"odd_head": True}, version="0.1.0")
-    with pytest.raises(ValueError, match="odd_head"), pytest.warns(UserWarning):
-        ISLA.from_checkpoint(str(dst))
 
 
 def test_isla_unknown_constructor_argument_is_a_type_error():
