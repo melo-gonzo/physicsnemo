@@ -21173,6 +21173,92 @@ the clean lanes' trajectory at this epoch and show no early elevation; the
 reading that decides the clause is past epoch 100. Peak memory with cosine
 routing is unchanged (14.6, 24.1 and 43.7 GB at 192, 384 and 768 wide).
 
+## 2026-09-20 — Interim, CAP-435: under the width rule ISLA's ladder turns over at 384 (0.0411) and is worse at 512, 768, 1,024 and 1,536, while GeoTransolver keeps improving to 1,024 wide and to 24 layers (0.0406 at both); slices are null; six layers cost 16%; the 24-layer plateau lane scored 0.77 {#sec-nb-cap435-interim}
+
+**Setting.** CAP-435 (@sec-nb-cap435-prereg) pushed width, depth and
+slices at 435 DrivAerML cars and 100,000 cells. The original 22 lanes have
+finished and been scored in float32 at the 200,000-cell protocol; the
+depth and width rate controls (lanes 22 to 35) are still training and the
+48-layer plateau lane's checkpoint evaluates to NaN. Artifact
+`results/cap435_interim_2026-09-20.json` (reduction
+`results/cap435_reduce_2026-09-20.py`, which joins the ISO-COST 100,000-cell
+points so the ladders are complete).
+
+| model | width | layers | slices | rate | parameters | pressure L2, seeds 42 / 43 | mean |
+|---|--:|--:|--:|--:|--:|---|--:|
+| ISLA | 192 | 12 | 256 | 1e-3 | 8.9M | 0.0441 / 0.0458 | 0.0450 |
+| ISLA | 384 | 12 | 256 | 5e-4 | 34.3M | 0.0409 / 0.0413 | **0.0411** |
+| ISLA | 512 | 12 | 256 | 3.75e-4 | 60.3M | 0.0426 / 0.0426 | 0.0426 |
+| ISLA | 768 | 12 | 256 | 2.5e-4 | 134M | 0.0432 / 0.0410 | 0.0421 |
+| ISLA | 1,024 | 12 | 256 | 1.875e-4 | 238M | 0.0417 / 0.0441 | 0.0429 |
+| ISLA | 1,536 | 12 | 256 | 1.25e-4 | 532M | 0.0456 / 0.0449 | 0.0452 |
+| ISLA | 384 | 6 | 256 | 5e-4 | 17.3M | 0.0480 / 0.0477 | 0.0479 |
+| ISLA | 384 | 24 | 256 | 5e-4 | 68.3M | 0.7726 / 0.7674 | 0.7700 (plateau) |
+| ISLA | 384 | 12 | 1,024 | 5e-4 | 38.1M | 0.0407 / 0.0411 | 0.0409 |
+| GeoTransolver | 256 | 12 | 256 | 3e-3 | 9.0M | 0.0443 / 0.0450 | 0.0447 |
+| GeoTransolver | 512 | 12 | 256 | 3e-3 | 35.8M | 0.0420 / 0.0413 | 0.0417 |
+| GeoTransolver | 1,024 | 12 | 256 | 1e-3 | 143M | 0.0409 / 0.0403 | **0.0406** |
+| GeoTransolver | 1,024 | 12 | 256 | 3e-3 | 143M | 0.0484 / 0.0430 | 0.0457 |
+| GeoTransolver | 512 | 24 | 256 | 3e-3 | 71.1M | 0.0402 / 0.0410 | **0.0406** |
+| Transolver | 256 | 8 | 256 | 3e-3 | 6.0M | 0.0471 / 0.0472 | 0.0472 |
+| Transolver | 512 | 8 | 256 | 3e-3 | 23.9M | 0.0430 / 0.0427 | 0.0429 |
+
+: CAP-435 interim standings with the ISO-COST 100,000-cell points, 435 cars, float32 at 200,000 cells. {#tbl-cap435-interim}
+
+**Readings against the bars.**
+
+- **ISLA width turnover: at 384.** The gains along 192, 384, 512, 768,
+  1,024, 1,536 are +8.6%, −3.6%, +1.1%, −1.9%, −5.3%: every width above
+  384 is worse than 384 under the width rule, and 1,536 wide (532M
+  parameters) is back at the 192-wide error. The seed spread at 768 and
+  1,024 (5% and 6%) is the split @sec-nb-isocost-interim reported; 512 and
+  1,536 do not show it. This is the preregistered turnover clause met at
+  the first step, and it is the opposite of the prediction (turnover
+  between 768 and 1,536).
+- **GeoTransolver width: still improving at 1,024, at its lower rate.**
+  512 to 1,024 gains 2.6% at 1e-3 (0.0417 to 0.0406); at 3e-3, its better
+  rate at 256 and 512, the 1,024-wide model is worse than 512 (0.0457, with
+  a 12% seed spread), so GeoTransolver's tolerated rate also falls with
+  width, more gently than ISLA's and without the plateau (its 3e-3 lane
+  degrades to 0.046, not to 0.77). The 2.6% is under the 3% clause that
+  would have added a 2,048-wide lane; it is close enough that the lane is
+  worth adding once ROUTE-NORM's ISLA ladder exists to compare against.
+- **Iso-parameter pairs.** ISLA-384 against GeoTransolver-512 (34M against
+  36M): 1.014, **parity**. ISLA-768 against GeoTransolver-1,024 (134M
+  against 143M): 0.964, **GeoTransolver leads by 3.6%**, outside the
+  parity band. At the top of the two ladders GeoTransolver-1,024 (0.0406,
+  73 GB) is 1.2% below ISLA's best (0.0411, 22 GB).
+- **Depth.** ISLA at 6 layers is 16% worse than 12 (0.0479): depth is
+  binding below 12. ISLA at 24 layers under 5e-4 is the plateau lane
+  (0.77, the mean-field prediction; @sec-nb-routingsat-verdict), so the
+  depth clause waits on the 2.5e-4 control. GeoTransolver at 24 layers
+  gains 2.6% over 12 (0.0417 to 0.0406), within the 3% clause, so its
+  depth reading is "within 3%" but at the edge, and it matches its
+  1,024-wide lane's error at half the parameters.
+- **Slices: null**, as predicted: 1,024 slices score 0.0409 against 0.0411
+  at 256.
+- **Transolver** gains 9% from 256 to 512 wide (0.0472 to 0.0429): the
+  third architecture is also parameter-bound at 435 cars.
+
+**What this says, and what it waits on.** Under the linear routing
+parametrization and the learning-rate rule it forces, ISLA cannot use
+width beyond 384 at this data size: the rate the wide models tolerate is
+too low to train them in 500 epochs, or the wide relative frame does not
+convert parameters into accuracy, and the ladder cannot tell which. The
+baselines, with a gentler rate ceiling, keep converting parameters at
+about 2.6% per doubling past ISLA's turnover, so at matched large parameter
+counts GeoTransolver now leads. The efficiency statement of
+@sec-nb-isocost-verdict stands unchanged (below 100 GB ISLA's frontier is
+ahead; ISLA-384 at 22 GB sits 1.2% behind the best lane in either ladder
+at 73 GB), but the scaling statement has a ceiling that is ISLA's own. The
+discriminating experiment is running: ROUTE-NORM (@sec-nb-routenorm-prereg)
+trains 768 wide at 5e-4 and 1e-3 under bounded routing; if it beats 0.0411,
+the turnover was the rate ceiling and the ladder is re-run under cosine
+routing, with GeoTransolver at 2,048 added so both are pushed as far. The
+rate controls (24 and 48 layers at lower rates, 768 at 3.75e-4 and 5e-4,
+384 at 7.5e-4 and 1e-3) complete the depth and width readings when they
+finish.
+
 ## 2026-09-20 — Preregistration, TRAIN-AREA-DR: the DrivAerML twin of the training-law test; do GeoTransolver and Transolver depend on the training sampling law on the cars as they do on the wings, and does ISLA stay indifferent? {#sec-nb-trainarea-dr-prereg}
 
 **Setting.** TRAIN-AREA (@sec-nb-trainarea-verdict) found on the 35-wing
