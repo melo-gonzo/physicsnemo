@@ -20154,6 +20154,18 @@ to 53): GeoTransolver at 3e-3 on the 105-case, 510-case, 1,260-case,
 larger rungs take days. Each wing row will take GeoTransolver's better rate
 and say so, as the DrivAerML rows do.
 
+**Addendum, GeoTransolver at 3e-3 on the 4-geometry rung (2026-09-20,
+03:40 EDT).** The control pair scored 0.1803 / 0.1793, mean **0.1798**,
+against 0.2021 at 1e-3: GeoTransolver gains 11% from its better rate on
+this rung, more than the 2% it gained on 435 cars, and its seed spread
+shrinks from 10% to 0.6%. Against ISLA's 0.2659 the rung's ratio at each
+model's better rate is **0.676** (Transolver 0.1929, ratio 0.725), so the
+held-out-geometry row is written as a 32% ISLA deficit, not the 24% that
+the 1e-3 control gave. The rate dependence of GeoTransolver's wing rows is
+now measured on one rung; the remaining eleven controls will say whether
+the 35-case rung (where GeoTransolver already ran at 3e-3) and the larger
+rungs move the same way.
+
 ## 2026-09-19 — Preregistration, WING-BENCH-200K: is the 27% wing deficit at the reporting protocol draw variance, and does GeoTransolver's wing lead survive a change of sampling pattern? {#sec-nb-wingbench-prereg}
 
 **Setting.** Two wing rungs at 200,000 cells (@sec-nb-p200k-wings-35,
@@ -20797,6 +20809,54 @@ runs at 0.12 s. The chapter will state the time comparison as "ISLA
 reaches GeoTransolver's best error at 0.27x its GPU-floor step time and
 0.22x its memory" and report the preregistered clause as parity with this
 caveat, rather than let the clause's wording stand for the finding.
+
+## 2026-09-20 — Interim, TRAIN-AREA: all six area-draw lanes trained; scored on the area draw itself ISLA's wing deficit is 20% to GeoTransolver and 15% to Transolver against 27% on the uniform draw, a cross-draw reading that the benchmark on the independent uniform draw must confirm {#sec-nb-trainarea-interim}
+
+**Setting.** TRAIN-AREA (@sec-nb-trainarea-prereg) trains ISLA,
+GeoTransolver and Transolver on the 35-wing rung with an area-proportional
+Poisson draw of 200,000 expected cells (exact Horvitz-Thompson weights) in
+place of the uniform-over-cells draw, to test whether the 27% wing deficit
+is the variance of the measure weights ISLA reads. All six lanes finished
+their 500 epochs and were scored by the fleet pump in float32 on the
+dataset's own validation draw, which for these lanes is also the area
+draw. The preregistered readout is different: the consistency benchmark's
+independent uniform-over-cells draw, area draw and 10:1-biased draw on the
+180 validation wings, so that every model is compared on the same points
+as the uniform-draw lanes of @sec-nb-wingbench-verdict. Those benchmark
+lanes (`bench/bench_lanes_wing200k_area.tsv`, 18 lanes) are prepared; the
+numbers below are the pump's and are not the verdict.
+
+**What we saw (area-draw validation, pressure relative L2, seeds 42 /
+43).** ISLA 0.1518 / 0.1425, mean **0.1472**; GeoTransolver 0.1114 /
+0.1234, mean **0.1174**; Transolver 0.1263 / 0.1253, mean **0.1258**.
+Ratios GeoTransolver over ISLA **0.798** and Transolver over ISLA
+**0.855**, against 0.732 and 0.734 for the uniform-draw lanes scored on
+the uniform draw (@sec-nb-p200k-wings-35). Read model by model against
+the uniform-draw lanes: ISLA moved from 0.1500 to 0.1472 (2% lower),
+GeoTransolver from 0.1098 to 0.1174 (7% higher), Transolver from 0.1101
+to 0.1258 (14% higher). ISLA's two seeds now differ by 6% where they
+differed by 0.5% under the uniform draw.
+
+**Why this is not yet a reading against the bars.** The two columns are
+scored on different point sets: the area draw concentrates validation
+points on large cells, so the relative L2 weights the coarse regions of
+the wing more heavily than the uniform draw does, and a model can move
+between the columns without its function changing. The bars are written
+for the independent uniform draw precisely to remove that. What can be
+said now: (1) the direction is the preregistered one, ISLA down and both
+baselines up, so the "sampler effect, not mechanism" clause (all three
+improve) is unlikely; (2) the size of ISLA's move on its own draw (2%) is
+below the 5% the mechanism clause requires, so unless the uniform-draw
+benchmark shows a larger gain the likely verdict is the null, with the
+baselines' losses under the area draw as a separate finding about the
+training law; (3) the baselines' 7% and 14% rises under the area draw
+would, if they hold on the independent draw, say the uniform-over-cells
+law is the one GeoTransolver and Transolver are tuned for, which is
+itself a statement about discretization dependence worth a row.
+
+**What's next.** Launch the 18 benchmark lanes (three draws, six runs),
+reduce with the WING-BENCH machinery, and write the verdict against the
+preregistered clauses including the density-factor bound (1.05 to 1.3).
 
 ## 2026-09-19 — Preregistration, CAP-435: how far do width and depth carry at 435 cars? ISLA to 1,536 wide and 48 deep, GeoTransolver to 1,024 wide and 24 deep, Transolver to 512, all at 100,000 cells {#sec-nb-cap435-prereg}
 
