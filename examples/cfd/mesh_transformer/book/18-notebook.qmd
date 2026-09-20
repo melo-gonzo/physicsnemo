@@ -21292,6 +21292,28 @@ rate controls (24 and 48 layers at lower rates, 768 at 3.75e-4 and 5e-4,
 384 at 7.5e-4 and 1e-3) complete the depth and width readings when they
 finish.
 
+## 2026-09-20 — Fleet operations: the scratch project quota filled (99.8 of 100 TB); superseded checkpoints of completed runs (8.7 TB, 110,725 files) removed; running lanes logged write errors but no checkpoint loss found {#sec-nb-fleet-ops-quota-2026-09-20}
+
+**Symptom.** The launch-acceptance read of the ROUTE-NORM ladder extension
+(14:40 EDT) showed tracebacks in lanes that had never failed a
+submission; the logs carried `OSError: [Errno 122] Disk quota exceeded`
+from the logging handler. The project quota on the AGA scratch filesystem
+read 99.78 of 100 TB, 94.2 TB of it under this user; the task directory's
+`runs/` held 952 run directories and 10.2 TB of `.mdlus` checkpoints, of
+which 8.7 TB were superseded checkpoints of the 834 completed runs (older
+runs had kept every checkpoint; the current launchers keep three). The
+evaluation outputs (`p200k_fp32`, `bench_evals`) hold metrics only and are
+small.
+
+**Action.** Every completed run kept its newest checkpoint and lost the
+rest: 110,725 files, 8.70 TB, quota now 92.0 TB. Running lanes were not
+touched. A survey of the remaining footprint (other task directories under
+the user's scratch) is running; the per-lane logs are being checked for
+failed checkpoint saves during the full period. Ops rule recorded: launchers
+already cap retained checkpoints at three; completed runs should be pruned
+to one as part of each study's close-out, and the quota belongs in the
+hourly watcher.
+
 ## 2026-09-20 — Preregistration, TRAIN-AREA-DR: the DrivAerML twin of the training-law test; do GeoTransolver and Transolver depend on the training sampling law on the cars as they do on the wings, and does ISLA stay indifferent? {#sec-nb-trainarea-dr-prereg}
 
 **Setting.** TRAIN-AREA (@sec-nb-trainarea-verdict) found on the 35-wing
