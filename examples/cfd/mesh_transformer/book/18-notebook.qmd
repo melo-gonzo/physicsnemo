@@ -20936,6 +20936,62 @@ standing in the book can drop "at 500 epochs".
 this a single-dataset verdict until SCALE-HL (@sec-nb-scalehl-prereg)
 reports on the 510-wing rung; the ledger marks it DONE (single dataset).
 
+## 2026-09-20 — Preregistration, ROUTING-SAT: is the mean-field plateau that appears when width or depth is doubled at a fixed learning rate a routing-saturation state, measured on the plateau lanes themselves? {#sec-nb-routingsat-prereg}
+
+**Setting.** Three studies have now seen the same training signature in
+ISLA: validation loss descends normally, then rises over a few epochs to
+the mean-field plateau (about 0.06, the loss of predicting the field mean)
+and stays. It appeared at width 512 under 1e-3 (RFDIV,
+@sec-nb-relframe-divergence-mechanism, where routing entropy and anchor
+spread were measured and found to collapse), at 24 and 48 layers under 5e-4
+(CAP-435, @sec-nb-cap435-prereg acceptance), and in the interior
+configuration at 200,000 cells under 1e-3 (@sec-nb-ratevol-prereg). The
+rate that avoids it falls like 1/width and like 1/depth. Every entry since
+RFDIV has said "mechanism inferred, not measured on these runs". This probe
+measures it.
+
+**Instrument** (`kernel/routing_probe.py`, one GPU job, job name
+`isla.probe.routing`): ten trained checkpoints are run in float32 on the
+first four DrivAerML validation cars at 100,000 cells with the routing
+softmax instrumented. Per slice block it records the entropy of the routing
+weights over points normalized by log N (the softmax ISLA uses; 1 is
+uniform, 0 is one point per slice), the entropy of the same logits over
+slices normalized by log S (1 is a point spread over every slice, 0 is one
+slice per point), the effective number of slices carrying mass, the RMS
+spread of the slice anchors relative to the RMS radius of the tokens, and
+the logit standard deviation. Pairs: 24 layers at 5e-4 (plateau) against
+2.5e-4 (clean); 48 layers at 2.5e-4 (plateau) against 1.25e-4 (clean); 768
+wide seed 42 (0.0432) against seed 43 (0.0410) and against 384 wide
+(0.0411) and 192 wide (0.0450); and the two doubled-rate width controls
+(384 at 1e-3, 768 at 5e-4) whose fate is still open.
+
+**Bars, written before the readout.**
+
+- **Routing saturation confirmed**: on every plateau checkpoint at least
+  half the blocks have the per-point entropy over slices below 0.2 (a point
+  routes to one or two slices) or an effective slice count below a tenth of
+  S, and the anchor spread below 0.3; on every clean checkpoint every block
+  has per-point entropy above 0.4 and anchor spread above 0.6. Then the
+  plateau is the RFDIV state and the rate laws are one phenomenon.
+- **Refuted**: a plateau checkpoint whose routing statistics are inside the
+  clean checkpoints' range in most blocks; the plateau is then not a
+  routing state and the mechanism is elsewhere (head or MLP scale).
+- **Seed split**: if 768 seed 42 sits between the clean and plateau
+  statistics (entropy 0.2 to 0.4 in several blocks) while seed 43 is clean,
+  the 5% width seed split is a partial saturation and the rate controls are
+  expected to close it; if the two seeds are indistinguishable in routing,
+  the split is not routing.
+- **Doubled-rate controls**: whichever statistics the 384 × 1e-3 and 768 ×
+  5e-4 checkpoints show at this reading (epoch about 30) is recorded as a
+  prediction of their final outcome: saturated statistics predict a
+  plateau or a worse final error, clean statistics predict recovery.
+
+**Prediction.** Confirmed: the plateau lanes show per-point entropies
+below 0.1 in most blocks and anchors within 0.2 of coincident; 768 seed 42
+shows partial hardening in the upper blocks. Probability 0.7. The
+successor study, if confirmed, is the intervention: a routing
+parametrization whose tolerated rate does not shrink with width and depth.
+
 ## 2026-09-20 — Preregistration, TRAIN-AREA-DR: the DrivAerML twin of the training-law test; do GeoTransolver and Transolver depend on the training sampling law on the cars as they do on the wings, and does ISLA stay indifferent? {#sec-nb-trainarea-dr-prereg}
 
 **Setting.** TRAIN-AREA (@sec-nb-trainarea-verdict) found on the 35-wing
