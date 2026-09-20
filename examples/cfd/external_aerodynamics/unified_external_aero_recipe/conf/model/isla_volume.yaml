@@ -73,6 +73,10 @@ model:
   scale_mode: rms_distance
   query_tokens: true
   n_query_scalars: 1
+  # Interior tokens share a learned fraction of the total boundary measure (the class
+  # default since 2026-09-20; invariant to how the boundary measure is represented).
+  # Interior lanes trained before that date used query_mass: geometric_mean.
+  query_mass: source_total
   geo_checkpoint: true
   # Geometry kernel: null = automatic (2026-09-19 ruling): the exact fused Triton kernel
   # wherever it can run (CUDA, one global vector, <= 1024 slices; about a third of the eager
