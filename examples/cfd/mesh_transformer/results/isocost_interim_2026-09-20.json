@@ -1,0 +1,2129 @@
+{
+  "study": "ISO-COST + ISO-MATCH: error as a function of cells per case and width at 435 DrivAerML cars, 500 epochs (1000-epoch budget controls), bf16 training on four GB300 GPUs, float32 scoring on the 48 validation cars at 200,000 cells, two seeds; cost = per-lane median step time after warm-up exclusion and peak logged memory",
+  "configurations": {
+    "gt_unit|w256|c100k|lr3e-3|ep500": {
+      "model": "gt_unit",
+      "width": 256,
+      "cells": 100000,
+      "lr": "3e-3",
+      "epochs": 500,
+      "params": 9046016,
+      "runs": {
+        "iso_dr_gt_unit_w256_c100k_seed42": {
+          "pressure_l2": 0.044339453180631004,
+          "wss_l2": 0.06853445867697398
+        },
+        "iso_dr_gt_unit_w256_c100k_seed43": {
+          "pressure_l2": 0.0449723352988561,
+          "wss_l2": 0.06920824944972992
+        }
+      },
+      "cost": {
+        "iso_dr_gt_unit_w256_c100k_seed42": {
+          "step_s_median": 0.265,
+          "step_s_p10": 0.216,
+          "step_s_p90": 0.934,
+          "peak_mem_gb": 40.04,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_gt_unit_w256_c100k_seed43": {
+          "step_s_median": 0.263,
+          "step_s_p10": 0.213,
+          "step_s_p90": 0.912,
+          "peak_mem_gb": 40.04,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.044339453180631004,
+        0.0449723352988561
+      ],
+      "pressure_l2_mean": 0.04465589423974355,
+      "wss_l2_seeds": [
+        0.06853445867697398,
+        0.06920824944972992
+      ],
+      "wss_l2_mean": 0.06887135406335196,
+      "status": "complete",
+      "step_s_median": 0.264,
+      "step_s_p10": 0.2145,
+      "peak_mem_gb": 40.04
+    },
+    "gt_unit|w256|c200k|lr3e-3|ep1000": {
+      "model": "gt_unit",
+      "width": 256,
+      "cells": 200000,
+      "lr": "3e-3",
+      "epochs": 1000,
+      "params": 9046016,
+      "runs": {
+        "iso_dr_gt_unit_w256_c200k_ep1000_seed42": null,
+        "iso_dr_gt_unit_w256_c200k_ep1000_seed43": null
+      },
+      "cost": {
+        "iso_dr_gt_unit_w256_c200k_ep1000_seed42": {
+          "step_s_median": 0.429,
+          "step_s_p10": 0.394,
+          "step_s_p90": 0.662,
+          "peak_mem_gb": 79.51,
+          "epochs_logged": 568,
+          "completed": false
+        },
+        "iso_dr_gt_unit_w256_c200k_ep1000_seed43": {
+          "step_s_median": 0.431,
+          "step_s_p10": 0.394,
+          "step_s_p90": 0.675,
+          "peak_mem_gb": 79.51,
+          "epochs_logged": 570,
+          "completed": false
+        }
+      },
+      "n_evaluated": 0,
+      "n_runs": 2,
+      "status": "pending",
+      "step_s_median": 0.43,
+      "step_s_p10": 0.394,
+      "peak_mem_gb": 79.51
+    },
+    "gt_unit|w256|c200k|lr3e-3|ep500": {
+      "model": "gt_unit",
+      "width": 256,
+      "cells": 200000,
+      "lr": "3e-3",
+      "epochs": 500,
+      "params": 9046016,
+      "runs": {
+        "p200k_dr_gt_unit_lr3e3_seed42": {
+          "pressure_l2": 0.04408769806226095,
+          "wss_l2": 0.06756786505381267
+        },
+        "p200k_dr_gt_unit_lr3e3_seed43": {
+          "pressure_l2": 0.04486441612243652,
+          "wss_l2": 0.06904880702495575
+        }
+      },
+      "cost": {
+        "p200k_dr_gt_unit_lr3e3_seed42": {
+          "step_s_median": 0.43,
+          "step_s_p10": 0.394,
+          "step_s_p90": null,
+          "peak_mem_gb": 79.51,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "p200k_dr_gt_unit_lr3e3_seed43": {
+          "step_s_median": 0.43,
+          "step_s_p10": 0.394,
+          "step_s_p90": null,
+          "peak_mem_gb": 79.51,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "source": "PROTO-200K lanes",
+      "pressure_l2_seeds": [
+        0.04408769806226095,
+        0.04486441612243652
+      ],
+      "pressure_l2_mean": 0.04447605709234874,
+      "wss_l2_seeds": [
+        0.06756786505381267,
+        0.06904880702495575
+      ],
+      "wss_l2_mean": 0.06830833603938422,
+      "status": "complete",
+      "step_s_median": 0.43,
+      "step_s_p10": 0.394,
+      "peak_mem_gb": 79.51
+    },
+    "gt_unit|w256|c400k|lr3e-3|ep500": {
+      "model": "gt_unit",
+      "width": 256,
+      "cells": 400000,
+      "lr": "3e-3",
+      "epochs": 500,
+      "params": 9046016,
+      "runs": {
+        "iso_dr_gt_unit_w256_c400k_seed42": null,
+        "iso_dr_gt_unit_w256_c400k_seed43": null
+      },
+      "cost": {
+        "iso_dr_gt_unit_w256_c400k_seed42": {
+          "step_s_median": 0.82,
+          "step_s_p10": 0.765,
+          "step_s_p90": 0.829,
+          "peak_mem_gb": 158.31,
+          "epochs_logged": 366,
+          "completed": false
+        },
+        "iso_dr_gt_unit_w256_c400k_seed43": {
+          "step_s_median": 0.818,
+          "step_s_p10": 0.762,
+          "step_s_p90": 0.824,
+          "peak_mem_gb": 158.3,
+          "epochs_logged": 368,
+          "completed": false
+        }
+      },
+      "n_evaluated": 0,
+      "n_runs": 2,
+      "status": "pending",
+      "step_s_median": 0.819,
+      "step_s_p10": 0.7635000000000001,
+      "peak_mem_gb": 158.305
+    },
+    "gt_unit|w512|c100k|lr1e-3|ep500": {
+      "model": "gt_unit",
+      "width": 512,
+      "cells": 100000,
+      "lr": "1e-3",
+      "epochs": 500,
+      "params": 35848576,
+      "runs": {
+        "iso_dr_gt_unit_w512_c100k_lr1e3_seed42": {
+          "pressure_l2": 0.04179645578066508,
+          "wss_l2": 0.06666295230388641
+        },
+        "iso_dr_gt_unit_w512_c100k_lr1e3_seed43": {
+          "pressure_l2": 0.04193078478177389,
+          "wss_l2": 0.06678781410058339
+        }
+      },
+      "cost": {
+        "iso_dr_gt_unit_w512_c100k_lr1e3_seed42": {
+          "step_s_median": 0.277,
+          "step_s_p10": 0.239,
+          "step_s_p90": 0.9,
+          "peak_mem_gb": 51.45,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_gt_unit_w512_c100k_lr1e3_seed43": {
+          "step_s_median": 0.28,
+          "step_s_p10": 0.239,
+          "step_s_p90": 0.918,
+          "peak_mem_gb": 51.45,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04179645578066508,
+        0.04193078478177389
+      ],
+      "pressure_l2_mean": 0.04186362028121948,
+      "wss_l2_seeds": [
+        0.06666295230388641,
+        0.06678781410058339
+      ],
+      "wss_l2_mean": 0.0667253832022349,
+      "status": "complete",
+      "step_s_median": 0.2785,
+      "step_s_p10": 0.239,
+      "peak_mem_gb": 51.45
+    },
+    "gt_unit|w512|c100k|lr3e-3|ep500": {
+      "model": "gt_unit",
+      "width": 512,
+      "cells": 100000,
+      "lr": "3e-3",
+      "epochs": 500,
+      "params": 35848576,
+      "runs": {
+        "iso_dr_gt_unit_w512_c100k_lr3e3_seed42": {
+          "pressure_l2": 0.04203409453233083,
+          "wss_l2": 0.06678062677383423
+        },
+        "iso_dr_gt_unit_w512_c100k_lr3e3_seed43": {
+          "pressure_l2": 0.04133386413256327,
+          "wss_l2": 0.0656136025985082
+        }
+      },
+      "cost": {
+        "iso_dr_gt_unit_w512_c100k_lr3e3_seed42": {
+          "step_s_median": 0.287,
+          "step_s_p10": 0.253,
+          "step_s_p90": 0.869,
+          "peak_mem_gb": 51.45,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_gt_unit_w512_c100k_lr3e3_seed43": {
+          "step_s_median": 0.291,
+          "step_s_p10": 0.253,
+          "step_s_p90": 0.882,
+          "peak_mem_gb": 51.45,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04203409453233083,
+        0.04133386413256327
+      ],
+      "pressure_l2_mean": 0.04168397933244705,
+      "wss_l2_seeds": [
+        0.06678062677383423,
+        0.0656136025985082
+      ],
+      "wss_l2_mean": 0.0661971146861712,
+      "status": "complete",
+      "step_s_median": 0.289,
+      "step_s_p10": 0.253,
+      "peak_mem_gb": 51.45
+    },
+    "gt_unit|w512|c200k|lr1e-3|ep500": {
+      "model": "gt_unit",
+      "width": 512,
+      "cells": 200000,
+      "lr": "1e-3",
+      "epochs": 500,
+      "params": 35848576,
+      "runs": {
+        "iso_dr_gt_unit_w512_c200k_lr1e3_seed42": {
+          "pressure_l2": 0.04157313207785288,
+          "wss_l2": 0.06595745186010997
+        },
+        "iso_dr_gt_unit_w512_c200k_lr1e3_seed43": {
+          "pressure_l2": 0.04185903072357178,
+          "wss_l2": 0.06692629059155782
+        }
+      },
+      "cost": {
+        "iso_dr_gt_unit_w512_c200k_lr1e3_seed42": {
+          "step_s_median": 0.475,
+          "step_s_p10": 0.439,
+          "step_s_p90": 0.566,
+          "peak_mem_gb": 100.4,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_gt_unit_w512_c200k_lr1e3_seed43": {
+          "step_s_median": 0.473,
+          "step_s_p10": 0.435,
+          "step_s_p90": 0.581,
+          "peak_mem_gb": 100.4,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04157313207785288,
+        0.04185903072357178
+      ],
+      "pressure_l2_mean": 0.041716081400712327,
+      "wss_l2_seeds": [
+        0.06595745186010997,
+        0.06692629059155782
+      ],
+      "wss_l2_mean": 0.06644187122583389,
+      "status": "complete",
+      "step_s_median": 0.474,
+      "step_s_p10": 0.437,
+      "peak_mem_gb": 100.4
+    },
+    "gt_unit|w512|c200k|lr3e-3|ep500": {
+      "model": "gt_unit",
+      "width": 512,
+      "cells": 200000,
+      "lr": "3e-3",
+      "epochs": 500,
+      "params": 35848576,
+      "runs": {
+        "iso_dr_gt_unit_w512_c200k_lr3e3_seed42": {
+          "pressure_l2": 0.04154533892869949,
+          "wss_l2": 0.06601889928181966
+        },
+        "iso_dr_gt_unit_w512_c200k_lr3e3_seed43": {
+          "pressure_l2": 0.04052634288867315,
+          "wss_l2": 0.06492638091246287
+        }
+      },
+      "cost": {
+        "iso_dr_gt_unit_w512_c200k_lr3e3_seed42": {
+          "step_s_median": 0.496,
+          "step_s_p10": 0.453,
+          "step_s_p90": 0.545,
+          "peak_mem_gb": 100.4,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_gt_unit_w512_c200k_lr3e3_seed43": {
+          "step_s_median": 0.502,
+          "step_s_p10": 0.455,
+          "step_s_p90": 0.538,
+          "peak_mem_gb": 100.4,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04154533892869949,
+        0.04052634288867315
+      ],
+      "pressure_l2_mean": 0.041035840908686325,
+      "wss_l2_seeds": [
+        0.06601889928181966,
+        0.06492638091246287
+      ],
+      "wss_l2_mean": 0.06547264009714127,
+      "status": "complete",
+      "step_s_median": 0.499,
+      "step_s_p10": 0.454,
+      "peak_mem_gb": 100.4
+    },
+    "gt_unit|w512|c400k|lr1e-3|ep500": {
+      "model": "gt_unit",
+      "width": 512,
+      "cells": 400000,
+      "lr": "1e-3",
+      "epochs": 500,
+      "params": 35848576,
+      "runs": {
+        "iso_dr_gt_unit_w512_c400k_lr1e3_seed42": null,
+        "iso_dr_gt_unit_w512_c400k_lr1e3_seed43": null
+      },
+      "cost": {
+        "iso_dr_gt_unit_w512_c400k_lr1e3_seed42": {
+          "step_s_median": 0.916,
+          "step_s_p10": 0.848,
+          "step_s_p90": 0.924,
+          "peak_mem_gb": 200.65,
+          "epochs_logged": 331,
+          "completed": false
+        },
+        "iso_dr_gt_unit_w512_c400k_lr1e3_seed43": {
+          "step_s_median": 0.915,
+          "step_s_p10": 0.849,
+          "step_s_p90": 0.92,
+          "peak_mem_gb": 200.63,
+          "epochs_logged": 331,
+          "completed": false
+        }
+      },
+      "n_evaluated": 0,
+      "n_runs": 2,
+      "status": "pending",
+      "step_s_median": 0.9155,
+      "step_s_p10": 0.8485,
+      "peak_mem_gb": 200.64
+    },
+    "gt_unit|w512|c400k|lr3e-3|ep500": {
+      "model": "gt_unit",
+      "width": 512,
+      "cells": 400000,
+      "lr": "3e-3",
+      "epochs": 500,
+      "params": 35848576,
+      "runs": {
+        "iso_dr_gt_unit_w512_c400k_lr3e3_seed42": null,
+        "iso_dr_gt_unit_w512_c400k_lr3e3_seed43": null
+      },
+      "cost": {
+        "iso_dr_gt_unit_w512_c400k_lr3e3_seed42": {
+          "step_s_median": 0.959,
+          "step_s_p10": 0.857,
+          "step_s_p90": 0.964,
+          "peak_mem_gb": 199.87,
+          "epochs_logged": 321,
+          "completed": false
+        },
+        "iso_dr_gt_unit_w512_c400k_lr3e3_seed43": {
+          "step_s_median": 0.945,
+          "step_s_p10": 0.853,
+          "step_s_p90": 0.95,
+          "peak_mem_gb": 200.63,
+          "epochs_logged": 323,
+          "completed": false
+        }
+      },
+      "n_evaluated": 0,
+      "n_runs": 2,
+      "status": "pending",
+      "step_s_median": 0.952,
+      "step_s_p10": 0.855,
+      "peak_mem_gb": 200.25
+    },
+    "isla|w192|c100k|lr1e-3|ep500": {
+      "model": "isla",
+      "width": 192,
+      "cells": 100000,
+      "lr": "1e-3",
+      "epochs": 500,
+      "params": 8912796,
+      "runs": {
+        "iso_dr_isla_w192_c100k_seed42": {
+          "pressure_l2": 0.04412322739760081,
+          "wss_l2": 0.06670320530732472
+        },
+        "iso_dr_isla_w192_c100k_seed43": {
+          "pressure_l2": 0.04578488568464915,
+          "wss_l2": 0.06925490498542786
+        }
+      },
+      "cost": {
+        "iso_dr_isla_w192_c100k_seed42": {
+          "step_s_median": 0.265,
+          "step_s_p10": 0.118,
+          "step_s_p90": 1.022,
+          "peak_mem_gb": 13.85,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_isla_w192_c100k_seed43": {
+          "step_s_median": 0.275,
+          "step_s_p10": 0.117,
+          "step_s_p90": 1.019,
+          "peak_mem_gb": 13.85,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04412322739760081,
+        0.04578488568464915
+      ],
+      "pressure_l2_mean": 0.04495405654112498,
+      "wss_l2_seeds": [
+        0.06670320530732472,
+        0.06925490498542786
+      ],
+      "wss_l2_mean": 0.06797905514637628,
+      "status": "complete",
+      "step_s_median": 0.27,
+      "step_s_p10": 0.1175,
+      "peak_mem_gb": 13.85
+    },
+    "isla|w192|c200k|lr1e-3|ep1000": {
+      "model": "isla",
+      "width": 192,
+      "cells": 200000,
+      "lr": "1e-3",
+      "epochs": 1000,
+      "params": 8912796,
+      "runs": {
+        "iso_dr_isla_w192_c200k_ep1000_seed42": null,
+        "iso_dr_isla_w192_c200k_ep1000_seed43": null
+      },
+      "cost": {
+        "iso_dr_isla_w192_c200k_ep1000_seed42": {
+          "step_s_median": 0.245,
+          "step_s_p10": 0.155,
+          "step_s_p90": 1.007,
+          "peak_mem_gb": 27.05,
+          "epochs_logged": 589,
+          "completed": false
+        },
+        "iso_dr_isla_w192_c200k_ep1000_seed43": {
+          "step_s_median": 0.241,
+          "step_s_p10": 0.149,
+          "step_s_p90": 1.001,
+          "peak_mem_gb": 27.05,
+          "epochs_logged": 589,
+          "completed": false
+        }
+      },
+      "n_evaluated": 0,
+      "n_runs": 2,
+      "status": "pending",
+      "step_s_median": 0.243,
+      "step_s_p10": 0.152,
+      "peak_mem_gb": 27.05
+    },
+    "isla|w192|c200k|lr1e-3|ep500": {
+      "model": "isla",
+      "width": 192,
+      "cells": 200000,
+      "lr": "1e-3",
+      "epochs": 500,
+      "params": 8912796,
+      "runs": {
+        "iso_dr_isla_w192_c200k_seed42": {
+          "pressure_l2": 0.044751753409703575,
+          "wss_l2": 0.06764121850331624
+        },
+        "iso_dr_isla_w192_c200k_seed43": {
+          "pressure_l2": 0.044782971342404686,
+          "wss_l2": 0.0679801603158315
+        }
+      },
+      "cost": {
+        "iso_dr_isla_w192_c200k_seed42": {
+          "step_s_median": 0.265,
+          "step_s_p10": 0.148,
+          "step_s_p90": 1.023,
+          "peak_mem_gb": 27.05,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_isla_w192_c200k_seed43": {
+          "step_s_median": 0.267,
+          "step_s_p10": 0.15,
+          "step_s_p90": 1.008,
+          "peak_mem_gb": 27.05,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.044751753409703575,
+        0.044782971342404686
+      ],
+      "pressure_l2_mean": 0.04476736237605413,
+      "wss_l2_seeds": [
+        0.06764121850331624,
+        0.0679801603158315
+      ],
+      "wss_l2_mean": 0.06781068940957387,
+      "status": "complete",
+      "step_s_median": 0.266,
+      "step_s_p10": 0.149,
+      "peak_mem_gb": 27.05
+    },
+    "isla|w192|c400k|lr1e-3|ep500": {
+      "model": "isla",
+      "width": 192,
+      "cells": 400000,
+      "lr": "1e-3",
+      "epochs": 500,
+      "params": 8912796,
+      "runs": {
+        "iso_dr_isla_w192_c400k_seed42": {
+          "pressure_l2": 0.04450074334939321,
+          "wss_l2": 0.06713065008322398
+        },
+        "iso_dr_isla_w192_c400k_seed43": {
+          "pressure_l2": 0.04549770553906759,
+          "wss_l2": 0.06894839803377788
+        }
+      },
+      "cost": {
+        "iso_dr_isla_w192_c400k_seed42": {
+          "step_s_median": 0.309,
+          "step_s_p10": 0.262,
+          "step_s_p90": 0.909,
+          "peak_mem_gb": 53.52,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_isla_w192_c400k_seed43": {
+          "step_s_median": 0.308,
+          "step_s_p10": 0.258,
+          "step_s_p90": 0.904,
+          "peak_mem_gb": 53.54,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04450074334939321,
+        0.04549770553906759
+      ],
+      "pressure_l2_mean": 0.0449992244442304,
+      "wss_l2_seeds": [
+        0.06713065008322398,
+        0.06894839803377788
+      ],
+      "wss_l2_mean": 0.06803952405850093,
+      "status": "complete",
+      "step_s_median": 0.3085,
+      "step_s_p10": 0.26,
+      "peak_mem_gb": 53.53
+    },
+    "isla|w192|c600k|lr1e-3|ep500": {
+      "model": "isla",
+      "width": 192,
+      "cells": 600000,
+      "lr": "1e-3",
+      "epochs": 500,
+      "params": 8912796,
+      "runs": {
+        "iso_dr_isla_w192_c600k_seed42": null,
+        "iso_dr_isla_w192_c600k_seed43": null
+      },
+      "cost": {
+        "iso_dr_isla_w192_c600k_seed42": {
+          "step_s_median": 0.441,
+          "step_s_p10": 0.385,
+          "step_s_p90": 0.728,
+          "peak_mem_gb": 79.95,
+          "epochs_logged": 494,
+          "completed": false
+        },
+        "iso_dr_isla_w192_c600k_seed43": {
+          "step_s_median": 0.434,
+          "step_s_p10": 0.385,
+          "step_s_p90": 0.717,
+          "peak_mem_gb": 79.97,
+          "epochs_logged": 500,
+          "completed": false
+        }
+      },
+      "n_evaluated": 0,
+      "n_runs": 2,
+      "status": "pending",
+      "step_s_median": 0.4375,
+      "step_s_p10": 0.385,
+      "peak_mem_gb": 79.96000000000001
+    },
+    "isla|w288|c400k|lr6.67e-4|ep500": {
+      "model": "isla",
+      "width": 288,
+      "cells": 400000,
+      "lr": "6.67e-4",
+      "epochs": 500,
+      "params": 19532988,
+      "runs": {
+        "iso_dr_isla_w288_c400k_seed42": {
+          "pressure_l2": 0.04271364708741506,
+          "wss_l2": 0.06619698802630107
+        },
+        "iso_dr_isla_w288_c400k_seed43": {
+          "pressure_l2": 0.04346256454785665,
+          "wss_l2": 0.06710608800252278
+        }
+      },
+      "cost": {
+        "iso_dr_isla_w288_c400k_seed42": {
+          "step_s_median": 0.331,
+          "step_s_p10": 0.284,
+          "step_s_p90": 0.847,
+          "peak_mem_gb": 69.2,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_isla_w288_c400k_seed43": {
+          "step_s_median": 0.337,
+          "step_s_p10": 0.284,
+          "step_s_p90": 0.868,
+          "peak_mem_gb": 69.39,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04271364708741506,
+        0.04346256454785665
+      ],
+      "pressure_l2_mean": 0.043088105817635856,
+      "wss_l2_seeds": [
+        0.06619698802630107,
+        0.06710608800252278
+      ],
+      "wss_l2_mean": 0.06665153801441193,
+      "status": "complete",
+      "step_s_median": 0.334,
+      "step_s_p10": 0.284,
+      "peak_mem_gb": 69.295
+    },
+    "isla|w384|c100k|lr5e-4|ep500": {
+      "model": "isla",
+      "width": 384,
+      "cells": 100000,
+      "lr": "5e-4",
+      "epochs": 500,
+      "params": 34263516,
+      "runs": {
+        "iso_dr_isla_w384_c100k_seed42": {
+          "pressure_l2": 0.04090845584869385,
+          "wss_l2": 0.06424080332120259
+        },
+        "iso_dr_isla_w384_c100k_seed43": {
+          "pressure_l2": 0.041268207132816315,
+          "wss_l2": 0.06455639998118083
+        }
+      },
+      "cost": {
+        "iso_dr_isla_w384_c100k_seed42": {
+          "step_s_median": 0.261,
+          "step_s_p10": 0.124,
+          "step_s_p90": 1.014,
+          "peak_mem_gb": 22.31,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_isla_w384_c100k_seed43": {
+          "step_s_median": 0.258,
+          "step_s_p10": 0.121,
+          "step_s_p90": 0.989,
+          "peak_mem_gb": 22.27,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04090845584869385,
+        0.041268207132816315
+      ],
+      "pressure_l2_mean": 0.04108833149075508,
+      "wss_l2_seeds": [
+        0.06424080332120259,
+        0.06455639998118083
+      ],
+      "wss_l2_mean": 0.06439860165119171,
+      "status": "complete",
+      "step_s_median": 0.2595,
+      "step_s_p10": 0.1225,
+      "peak_mem_gb": 22.29
+    },
+    "isla|w384|c200k|lr5e-4|ep500": {
+      "model": "isla",
+      "width": 384,
+      "cells": 200000,
+      "lr": "5e-4",
+      "epochs": 500,
+      "params": 34263516,
+      "runs": {
+        "iso_dr_isla_w384_c200k_seed42": {
+          "pressure_l2": 0.04116245607535044,
+          "wss_l2": 0.0645978053410848
+        },
+        "iso_dr_isla_w384_c200k_seed43": {
+          "pressure_l2": 0.04199996590614319,
+          "wss_l2": 0.06563807527224223
+        }
+      },
+      "cost": {
+        "iso_dr_isla_w384_c200k_seed42": {
+          "step_s_median": 0.257,
+          "step_s_p10": 0.174,
+          "step_s_p90": 0.985,
+          "peak_mem_gb": 43.54,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_isla_w384_c200k_seed43": {
+          "step_s_median": 0.258,
+          "step_s_p10": 0.17,
+          "step_s_p90": 0.984,
+          "peak_mem_gb": 43.54,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04116245607535044,
+        0.04199996590614319
+      ],
+      "pressure_l2_mean": 0.04158121099074681,
+      "wss_l2_seeds": [
+        0.0645978053410848,
+        0.06563807527224223
+      ],
+      "wss_l2_mean": 0.06511794030666351,
+      "status": "complete",
+      "step_s_median": 0.2575,
+      "step_s_p10": 0.172,
+      "peak_mem_gb": 43.54
+    },
+    "isla|w384|c400k|lr5e-4|ep500": {
+      "model": "isla",
+      "width": 384,
+      "cells": 400000,
+      "lr": "5e-4",
+      "epochs": 500,
+      "params": 34263516,
+      "runs": {
+        "iso_dr_isla_w384_c400k_seed42": {
+          "pressure_l2": 0.04172972838083903,
+          "wss_l2": 0.06491054594516754
+        },
+        "iso_dr_isla_w384_c400k_seed43": {
+          "pressure_l2": 0.04282276829083761,
+          "wss_l2": 0.06628661851088206
+        }
+      },
+      "cost": {
+        "iso_dr_isla_w384_c400k_seed42": {
+          "step_s_median": 0.358,
+          "step_s_p10": 0.309,
+          "step_s_p90": 0.833,
+          "peak_mem_gb": 86.17,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_isla_w384_c400k_seed43": {
+          "step_s_median": 0.356,
+          "step_s_p10": 0.306,
+          "step_s_p90": 0.806,
+          "peak_mem_gb": 86.19,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04172972838083903,
+        0.04282276829083761
+      ],
+      "pressure_l2_mean": 0.04227624833583832,
+      "wss_l2_seeds": [
+        0.06491054594516754,
+        0.06628661851088206
+      ],
+      "wss_l2_mean": 0.06559858222802481,
+      "status": "complete",
+      "step_s_median": 0.357,
+      "step_s_p10": 0.3075,
+      "peak_mem_gb": 86.18
+    },
+    "isla|w512|c200k|lr3.75e-4|ep500": {
+      "model": "isla",
+      "width": 512,
+      "cells": 200000,
+      "lr": "3.75e-4",
+      "epochs": 500,
+      "params": 60298076,
+      "runs": {
+        "iso_dr_isla_w512_c200k_seed42": {
+          "pressure_l2": 0.04299197097619375,
+          "wss_l2": 0.06784918904304504
+        },
+        "iso_dr_isla_w512_c200k_seed43": {
+          "pressure_l2": 0.042513748009999595,
+          "wss_l2": 0.06609317660331726
+        }
+      },
+      "cost": {
+        "iso_dr_isla_w512_c200k_seed42": {
+          "step_s_median": 0.261,
+          "step_s_p10": 0.19,
+          "step_s_p90": 0.968,
+          "peak_mem_gb": 53.12,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_isla_w512_c200k_seed43": {
+          "step_s_median": 0.256,
+          "step_s_p10": 0.193,
+          "step_s_p90": 0.969,
+          "peak_mem_gb": 53.17,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04299197097619375,
+        0.042513748009999595
+      ],
+      "pressure_l2_mean": 0.04275285949309667,
+      "wss_l2_seeds": [
+        0.06784918904304504,
+        0.06609317660331726
+      ],
+      "wss_l2_mean": 0.06697118282318115,
+      "status": "complete",
+      "step_s_median": 0.2585,
+      "step_s_p10": 0.1915,
+      "peak_mem_gb": 53.144999999999996
+    },
+    "isla|w512|c300k|lr3.75e-4|ep500": {
+      "model": "isla",
+      "width": 512,
+      "cells": 300000,
+      "lr": "3.75e-4",
+      "epochs": 500,
+      "params": 60298076,
+      "runs": {
+        "iso_dr_isla_w512_c300k_seed42": {
+          "pressure_l2": 0.043278505404790245,
+          "wss_l2": 0.06653692821661632
+        },
+        "iso_dr_isla_w512_c300k_seed43": {
+          "pressure_l2": 0.04220807055632273,
+          "wss_l2": 0.06628711024920146
+        }
+      },
+      "cost": {
+        "iso_dr_isla_w512_c300k_seed42": {
+          "step_s_median": 0.32,
+          "step_s_p10": 0.272,
+          "step_s_p90": 0.873,
+          "peak_mem_gb": 79.16,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_isla_w512_c300k_seed43": {
+          "step_s_median": 0.318,
+          "step_s_p10": 0.268,
+          "step_s_p90": 0.849,
+          "peak_mem_gb": 78.89,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.043278505404790245,
+        0.04220807055632273
+      ],
+      "pressure_l2_mean": 0.04274328798055649,
+      "wss_l2_seeds": [
+        0.06653692821661632,
+        0.06628711024920146
+      ],
+      "wss_l2_mean": 0.06641201923290889,
+      "status": "complete",
+      "step_s_median": 0.319,
+      "step_s_p10": 0.27,
+      "peak_mem_gb": 79.025
+    },
+    "isla|w768|c100k|lr2.5e-4|ep500": {
+      "model": "isla",
+      "width": 768,
+      "cells": 100000,
+      "lr": "2.5e-4",
+      "epochs": 500,
+      "params": 134288988,
+      "runs": {
+        "iso_dr_isla_w768_c100k_seed42": {
+          "pressure_l2": 0.04322939117749532,
+          "wss_l2": 0.06707436839739482
+        },
+        "iso_dr_isla_w768_c100k_seed43": {
+          "pressure_l2": 0.041004652778307595,
+          "wss_l2": 0.06576499342918396
+        }
+      },
+      "cost": {
+        "iso_dr_isla_w768_c100k_seed42": {
+          "step_s_median": 0.247,
+          "step_s_p10": 0.143,
+          "step_s_p90": 0.956,
+          "peak_mem_gb": 39.56,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_isla_w768_c100k_seed43": {
+          "step_s_median": 0.235,
+          "step_s_p10": 0.143,
+          "step_s_p90": 0.947,
+          "peak_mem_gb": 39.56,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04322939117749532,
+        0.041004652778307595
+      ],
+      "pressure_l2_mean": 0.04211702197790146,
+      "wss_l2_seeds": [
+        0.06707436839739482,
+        0.06576499342918396
+      ],
+      "wss_l2_mean": 0.0664196809132894,
+      "status": "complete",
+      "step_s_median": 0.241,
+      "step_s_p10": 0.143,
+      "peak_mem_gb": 39.56
+    },
+    "isla|w768|c200k|lr2.5e-4|ep500": {
+      "model": "isla",
+      "width": 768,
+      "cells": 200000,
+      "lr": "2.5e-4",
+      "epochs": 500,
+      "params": 134288988,
+      "runs": {
+        "iso_dr_isla_w768_c200k_seed42": {
+          "pressure_l2": 0.04296994705994924,
+          "wss_l2": 0.0676521360874176
+        },
+        "iso_dr_isla_w768_c200k_seed43": {
+          "pressure_l2": 0.04126977175474167,
+          "wss_l2": 0.06549013654390971
+        }
+      },
+      "cost": {
+        "iso_dr_isla_w768_c200k_seed42": {
+          "step_s_median": 0.291,
+          "step_s_p10": 0.241,
+          "step_s_p90": 0.898,
+          "peak_mem_gb": 76.72,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_isla_w768_c200k_seed43": {
+          "step_s_median": 0.291,
+          "step_s_p10": 0.242,
+          "step_s_p90": 0.889,
+          "peak_mem_gb": 76.64,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04296994705994924,
+        0.04126977175474167
+      ],
+      "pressure_l2_mean": 0.04211985940734546,
+      "wss_l2_seeds": [
+        0.0676521360874176,
+        0.06549013654390971
+      ],
+      "wss_l2_mean": 0.06657113631566366,
+      "status": "complete",
+      "step_s_median": 0.291,
+      "step_s_p10": 0.2415,
+      "peak_mem_gb": 76.68
+    },
+    "transolver_unit|w256|c100k|lr3e-3|ep500": {
+      "model": "transolver_unit",
+      "width": 256,
+      "cells": 100000,
+      "lr": "3e-3",
+      "epochs": 500,
+      "params": 6021956,
+      "runs": {
+        "iso_dr_transolver_unit_w256_c100k_seed42": {
+          "pressure_l2": 0.04709442456563314,
+          "wss_l2": 0.07080686589082082
+        },
+        "iso_dr_transolver_unit_w256_c100k_seed43": {
+          "pressure_l2": 0.0472144881884257,
+          "wss_l2": 0.07092064619064331
+        }
+      },
+      "cost": {
+        "iso_dr_transolver_unit_w256_c100k_seed42": {
+          "step_s_median": 0.216,
+          "step_s_p10": 0.095,
+          "step_s_p90": 0.962,
+          "peak_mem_gb": 27.09,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_transolver_unit_w256_c100k_seed43": {
+          "step_s_median": 0.21,
+          "step_s_p10": 0.101,
+          "step_s_p90": 0.929,
+          "peak_mem_gb": 27.1,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04709442456563314,
+        0.0472144881884257
+      ],
+      "pressure_l2_mean": 0.04715445637702942,
+      "wss_l2_seeds": [
+        0.07080686589082082,
+        0.07092064619064331
+      ],
+      "wss_l2_mean": 0.07086375604073206,
+      "status": "complete",
+      "step_s_median": 0.213,
+      "step_s_p10": 0.098,
+      "peak_mem_gb": 27.095
+    },
+    "transolver_unit|w256|c200k|lr3e-3|ep500": {
+      "model": "transolver_unit",
+      "width": 256,
+      "cells": 200000,
+      "lr": "3e-3",
+      "epochs": 500,
+      "params": 6021956,
+      "runs": {
+        "p200k_dr_transolver_unit_seed42": {
+          "pressure_l2": 0.04703051348527273,
+          "wss_l2": 0.07112107674280803
+        },
+        "p200k_dr_transolver_unit_seed43": {
+          "pressure_l2": 0.04750637710094452,
+          "wss_l2": 0.07129853963851929
+        }
+      },
+      "cost": {
+        "p200k_dr_transolver_unit_seed42": {
+          "step_s_median": null,
+          "step_s_p10": null,
+          "step_s_p90": null,
+          "peak_mem_gb": null,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "p200k_dr_transolver_unit_seed43": {
+          "step_s_median": null,
+          "step_s_p10": null,
+          "step_s_p90": null,
+          "peak_mem_gb": null,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "source": "PROTO-200K lanes",
+      "pressure_l2_seeds": [
+        0.04703051348527273,
+        0.04750637710094452
+      ],
+      "pressure_l2_mean": 0.04726844529310863,
+      "wss_l2_seeds": [
+        0.07112107674280803,
+        0.07129853963851929
+      ],
+      "wss_l2_mean": 0.07120980819066366,
+      "status": "complete",
+      "step_s_median": null,
+      "step_s_p10": null,
+      "peak_mem_gb": null
+    },
+    "transolver_unit|w256|c400k|lr3e-3|ep500": {
+      "model": "transolver_unit",
+      "width": 256,
+      "cells": 400000,
+      "lr": "3e-3",
+      "epochs": 500,
+      "params": 6021956,
+      "runs": {
+        "iso_dr_transolver_unit_w256_c400k_seed42": {
+          "pressure_l2": 0.04700656235218048,
+          "wss_l2": 0.0707367608944575
+        },
+        "iso_dr_transolver_unit_w256_c400k_seed43": {
+          "pressure_l2": 0.04774162173271179,
+          "wss_l2": 0.07196332017580669
+        }
+      },
+      "cost": {
+        "iso_dr_transolver_unit_w256_c400k_seed42": {
+          "step_s_median": 0.515,
+          "step_s_p10": 0.338,
+          "step_s_p90": 0.54,
+          "peak_mem_gb": 105.96,
+          "epochs_logged": 500,
+          "completed": true
+        },
+        "iso_dr_transolver_unit_w256_c400k_seed43": {
+          "step_s_median": 0.515,
+          "step_s_p10": 0.338,
+          "step_s_p90": 0.54,
+          "peak_mem_gb": 105.98,
+          "epochs_logged": 500,
+          "completed": true
+        }
+      },
+      "n_evaluated": 2,
+      "n_runs": 2,
+      "pressure_l2_seeds": [
+        0.04700656235218048,
+        0.04774162173271179
+      ],
+      "pressure_l2_mean": 0.047374092042446136,
+      "wss_l2_seeds": [
+        0.0707367608944575,
+        0.07196332017580669
+      ],
+      "wss_l2_mean": 0.0713500405351321,
+      "status": "complete",
+      "step_s_median": 0.515,
+      "step_s_p10": 0.338,
+      "peak_mem_gb": 105.97
+    }
+  },
+  "frontiers": {
+    "iso_memory": {
+      "axis": "peak_mem_gb",
+      "rows": [
+        {
+          "budget": 13.85,
+          "isla": {
+            "pressure_l2": 0.04495405654112498,
+            "config": "w192 x 100k"
+          }
+        },
+        {
+          "budget": 22.29,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          }
+        },
+        {
+          "budget": 27.05,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          }
+        },
+        {
+          "budget": 27.095,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 39.56,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 40.04,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04465589423974355,
+            "config": "w256 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0868266639104383
+        },
+        {
+          "budget": 43.54,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04465589423974355,
+            "config": "w256 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0868266639104383
+        },
+        {
+          "budget": 51.45,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 53.145,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 53.53,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 69.295,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 76.68,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 79.025,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 79.51,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 86.18,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 100.4,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.041035840908686325,
+            "config": "w512 x 200k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 0.9987224941932585
+        },
+        {
+          "budget": 105.97,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.041035840908686325,
+            "config": "w512 x 200k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 0.9987224941932585
+        }
+      ]
+    },
+    "iso_time_median": {
+      "axis": "step_s_median",
+      "rows": [
+        {
+          "budget": 0.213,
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 0.241,
+          "isla": {
+            "pressure_l2": 0.04211702197790146,
+            "config": "w768 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 0.258,
+          "isla": {
+            "pressure_l2": 0.04158121099074681,
+            "config": "w384 x 200k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 0.259,
+          "isla": {
+            "pressure_l2": 0.04158121099074681,
+            "config": "w384 x 200k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 0.26,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 0.264,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04465589423974355,
+            "config": "w256 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0868266639104383
+        },
+        {
+          "budget": 0.266,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04465589423974355,
+            "config": "w256 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0868266639104383
+        },
+        {
+          "budget": 0.27,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04465589423974355,
+            "config": "w256 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0868266639104383
+        },
+        {
+          "budget": 0.289,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.291,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.308,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.319,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.334,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.357,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.43,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.499,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.041035840908686325,
+            "config": "w512 x 200k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 0.9987224941932585
+        },
+        {
+          "budget": 0.515,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.041035840908686325,
+            "config": "w512 x 200k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 0.9987224941932585
+        }
+      ]
+    },
+    "iso_time_p10": {
+      "axis": "step_s_p10",
+      "rows": [
+        {
+          "budget": 0.098,
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 0.117,
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 0.122,
+          "isla": {
+            "pressure_l2": 0.04495405654112498,
+            "config": "w192 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 0.143,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 0.149,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 0.172,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 0.192,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 0.214,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          }
+        },
+        {
+          "budget": 0.241,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04465589423974355,
+            "config": "w256 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0868266639104383
+        },
+        {
+          "budget": 0.253,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.26,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.27,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.284,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.307,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.338,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.394,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.04168397933244705,
+            "config": "w512 x 100k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 1.0144967639249598
+        },
+        {
+          "budget": 0.454,
+          "isla": {
+            "pressure_l2": 0.04108833149075508,
+            "config": "w384 x 100k"
+          },
+          "gt_unit": {
+            "pressure_l2": 0.041035840908686325,
+            "config": "w512 x 200k"
+          },
+          "transolver_unit": {
+            "pressure_l2": 0.04715445637702942,
+            "config": "w256 x 100k"
+          },
+          "gt_over_isla": 0.9987224941932585
+        }
+      ]
+    }
+  },
+  "isomatch": {
+    "peak_mem_gb": {
+      "budget": 79.51,
+      "gt_default_pressure_l2": 0.04447605709234874,
+      "isla_within_15pct": [
+        {
+          "config": "w768 x 200k",
+          "peak_mem_gb": 76.68,
+          "pressure_l2": 0.04211985940734546,
+          "gt_over_isla": 1.055940302701779
+        },
+        {
+          "config": "w384 x 400k",
+          "peak_mem_gb": 86.18,
+          "pressure_l2": 0.04227624833583832,
+          "gt_over_isla": 1.0520341525822101
+        },
+        {
+          "config": "w512 x 300k",
+          "peak_mem_gb": 79.025,
+          "pressure_l2": 0.04274328798055649,
+          "gt_over_isla": 1.040538975676847
+        },
+        {
+          "config": "w288 x 400k",
+          "peak_mem_gb": 69.295,
+          "pressure_l2": 0.043088105817635856,
+          "gt_over_isla": 1.0322119352516257
+        }
+      ],
+      "isla_at_or_under_budget_best": {
+        "config": "w384 x 100k",
+        "peak_mem_gb": 22.29,
+        "pressure_l2": 0.04108833149075508,
+        "gt_over_isla": 1.0824498216082563
+      }
+    },
+    "step_s_median": {
+      "budget": 0.43,
+      "gt_default_pressure_l2": 0.04447605709234874,
+      "isla_within_15pct": [],
+      "isla_at_or_under_budget_best": {
+        "config": "w384 x 100k",
+        "step_s_median": 0.2595,
+        "pressure_l2": 0.04108833149075508,
+        "gt_over_isla": 1.0824498216082563
+      }
+    },
+    "step_s_p10": {
+      "budget": 0.394,
+      "gt_default_pressure_l2": 0.04447605709234874,
+      "isla_within_15pct": [],
+      "isla_at_or_under_budget_best": {
+        "config": "w384 x 100k",
+        "step_s_p10": 0.1225,
+        "pressure_l2": 0.04108833149075508,
+        "gt_over_isla": 1.0824498216082563
+      }
+    },
+    "splits_ranked": [
+      {
+        "config": "w768 x 100k",
+        "pressure_l2": 0.04211702197790146,
+        "peak_mem_gb": 39.56,
+        "step_s_median": 0.241
+      },
+      {
+        "config": "w768 x 200k",
+        "pressure_l2": 0.04211985940734546,
+        "peak_mem_gb": 76.68,
+        "step_s_median": 0.291
+      },
+      {
+        "config": "w384 x 400k",
+        "pressure_l2": 0.04227624833583832,
+        "peak_mem_gb": 86.18,
+        "step_s_median": 0.357
+      },
+      {
+        "config": "w512 x 300k",
+        "pressure_l2": 0.04274328798055649,
+        "peak_mem_gb": 79.025,
+        "step_s_median": 0.319
+      },
+      {
+        "config": "w512 x 200k",
+        "pressure_l2": 0.04275285949309667,
+        "peak_mem_gb": 53.144999999999996,
+        "step_s_median": 0.2585
+      },
+      {
+        "config": "w288 x 400k",
+        "pressure_l2": 0.043088105817635856,
+        "peak_mem_gb": 69.295,
+        "step_s_median": 0.334
+      }
+    ]
+  },
+  "budget_controls": {},
+  "fits": {
+    "isla": {
+      "a": 0.015602390842987071,
+      "alpha": 7.116454268565026e-17,
+      "b": 0.0022640184535128905,
+      "beta": 1.9999997481559246,
+      "c": 0.026453594772577638,
+      "n_points": 11,
+      "rms_resid": 0.0005058129298216183,
+      "alpha_se": 0.027558693786622176,
+      "note": "N in units of 1e5 cells, P in units of 1e7 parameters"
+    },
+    "gt_unit": {
+      "status": "pending: 4 complete points, 5 needed"
+    }
+  },
+  "bars": {
+    "iso_memory_frontier": {
+      "min_gt_over_isla": 0.9987224941932585,
+      "at_budget_gb": 100.4,
+      "verdict": "ISLA at or below at every budget (within 2%)"
+    },
+    "iso_time_median_frontier": {
+      "min_gt_over_isla": 0.9987224941932585,
+      "at_budget_s": 0.499,
+      "verdict": "within 3% at every budget"
+    },
+    "iso_time_p10_frontier": {
+      "min_gt_over_isla": 0.9987224941932585,
+      "at_budget_s": 0.454,
+      "verdict": "within 3% at every budget"
+    },
+    "width_384_vs_192_at_200k": {
+      "w192": 0.04476736237605413,
+      "w384": 0.04158121099074681,
+      "ratio_384_over_192": 0.928828699833976,
+      "verdict": "384 improves by >= 3%"
+    },
+    "isomatch_peak_mem_gb": {
+      "best_isla_within_15pct": {
+        "config": "w768 x 200k",
+        "peak_mem_gb": 76.68,
+        "pressure_l2": 0.04211985940734546,
+        "gt_over_isla": 1.055940302701779
+      },
+      "verdict": "lead >= 3%"
+    }
+  }
+}

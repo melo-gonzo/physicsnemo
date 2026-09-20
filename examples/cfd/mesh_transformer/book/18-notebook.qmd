@@ -20692,6 +20692,91 @@ lane. The caveat that matters is that these are single-dataset,
 two-seed readings; the 400,000-cell lanes will show whether cells help
 once width is no longer the binding constraint.
 
+**Addendum, second reading (2026-09-20, 00:45 EDT; 20 of 26
+configurations, artifact `results/isocost_interim_2026-09-20.json`).**
+The ISO-MATCH splits, the ISLA 400,000-cell lanes, GeoTransolver-512 at
+200,000 cells and Transolver at 400,000 cells have been scored. The
+additions:
+
+| model | width | cells | pressure L2, seeds 42 / 43 | mean | peak memory [GB] | step p10 / median [s] |
+|---|---|---|---|---|---|---|
+| ISLA | 192 | 400k | 0.0445 / 0.0455 | 0.0450 | 53.5 | 0.26 / 0.31 |
+| ISLA | 288 | 400k | 0.0427 / 0.0435 | 0.0431 | 69.3 | 0.28 / 0.33 |
+| ISLA | 384 | 400k | 0.0417 / 0.0428 | 0.0423 | 86.2 | 0.31 / 0.36 |
+| ISLA | 512 | 200k | 0.0430 / 0.0425 | 0.0428 | 53.1 | 0.19 / 0.26 |
+| ISLA | 512 | 300k | 0.0433 / 0.0422 | 0.0427 | 79.0 | 0.27 / 0.32 |
+| ISLA | 768 | 100k | 0.0432 / 0.0410 | 0.0421 | 39.6 | 0.14 / 0.24 |
+| ISLA | 768 | 200k | 0.0430 / 0.0413 | 0.0421 | 76.7 | 0.24 / 0.29 |
+| GeoTransolver | 512, 3e-3 | 200k | 0.0415 / 0.0405 | **0.0410** | 100.4 | 0.45 / 0.50 |
+| GeoTransolver | 512, 1e-3 | 200k | 0.0416 / 0.0419 | 0.0417 | 100.4 | 0.44 / 0.47 |
+| Transolver | 256 | 400k | 0.0470 / 0.0477 | 0.0474 | 106.0 | 0.34 / 0.52 |
+
+: ISO-COST second reading: the configurations scored since @tbl-isocost-interim. {#tbl-isocost-interim-2}
+
+What changed in the picture:
+
+1. **The cells axis is flat to 400,000 cells for ISLA-192 and
+   Transolver** (0.0450 / 0.0448 / 0.0450 and 0.0472 / 0.0473 / 0.0474
+   at 100k / 200k / 400k). The joint fit over ISLA's eleven complete
+   points returns a cells exponent α = 0.00 ± 0.03 (the parameter term
+   absorbs everything), so the preregistered cells-exponent bar (ISLA's α
+   exceeding GeoTransolver's by 0.1) is **not met**: there is no cells
+   response to have an exponent of at this data size. At width 384 more
+   cells are slightly worse (0.0411 / 0.0416 / 0.0423), a 3% drift over
+   the two doublings that exceeds the seed spread at 100k (0.0004) but
+   not at 400k (0.0011); it is recorded, not interpreted.
+   GeoTransolver-512 is the exception: it gains 1.7% from 100k to 200k
+   (0.0417 to 0.0410 at 3e-3), and its 400k lanes (still at epoch about
+   300) will say whether that continues.
+2. **ISLA's width curve turns over at 384 under the width rule, with a
+   seed split that did not exist at 384.** Along 192, 384, 512, 768 at
+   comparable cells the means read 0.0450, 0.0411, 0.0428, 0.0421: 384
+   is the best ISLA configuration in the grid. But at 512 and 768 seed
+   42 lands at 0.0430 to 0.0433 in all four lanes while seed 43 lands at
+   0.0410 to 0.0425, a 5% seed spread against 1% at 384 and 0% at 192.
+   One seed of ISLA-768 matches ISLA-384; the other does not. Two
+   explanations are open and a rate control discriminates them: (a) the
+   width rule's rate (2.5e-4 at 768, 3.75e-4 at 512) under-trains the
+   wide lanes in 500 epochs, in which case a higher rate or a longer
+   budget recovers seed 42; (b) the wide relative frame has a
+   seed-dependent optimization outcome at any rate, in which case the
+   rule's edge is a variance edge, not a mean edge. The CAP-435 lanes at
+   1,024 and 1,536 (rates 1.875e-4 and 1.25e-4) will extend the curve but
+   cannot separate (a) from (b); the discriminating lanes are ISLA-768 ×
+   100k at 5e-4 and 3.75e-4, two seeds each, and ISLA-384 × 100k at
+   7.5e-4 and 1e-3 (does the best configuration improve when the rule is
+   relaxed toward the 192-wide ceiling?). These are proposed, not
+   launched.
+3. **GeoTransolver-512 at 200,000 cells and 3e-3 (0.0410, 100 GB) is now
+   the best lane in the grid by 0.1%**, against ISLA-384 × 100k (0.0411,
+   22 GB). At iso-parameters (35.8M against 34.3M) this is parity; at
+   iso-memory ISLA reaches the same error at 0.22x the memory and 0.27x
+   the GPU-floor step time (0.12 against 0.45 s at p10). The iso-memory
+   frontier bar still holds (minimum GeoTransolver-over-ISLA 0.999, at
+   the 100 GB budget where GeoTransolver-512 × 200k enters); below 100 GB
+   ISLA is ahead at every budget (1.014 from 51 to 86 GB, 1.087 below 51
+   GB).
+4. **ISO-MATCH memory clause: lead.** Within 15% of GeoTransolver's 80 GB
+   default sit four ISLA lanes: 768 × 200k (0.0421, 77 GB), 384 × 400k
+   (0.0423, 86 GB), 512 × 300k (0.0427, 79 GB) and 288 × 400k (0.0431, 69
+   GB). The best, 768 × 200k, beats the default's 0.0445 by 5.6% (bar:
+   3%). **But every lane that spends the budget is worse than the 22 GB
+   lane that does not** (0.0411): at this data size the accuracy-optimal
+   way to spend GeoTransolver's memory budget on ISLA is to not spend
+   three quarters of it. Among the five preregistered splits the widest
+   (768 × 100k) is best, so the optimal-split clause reads "width wins",
+   with the caveat in point 2 that 768's mean carries a 5% seed split.
+   The time clause waits on the 192 × 600k lane (epoch about 445), the
+   only ISLA lane whose median step time reaches GeoTransolver's 0.43 s.
+
+**Provisional standing against the bars, updated.** Iso-memory frontier:
+met (0.999 at 100 GB, ISLA ahead below). Iso-time frontier: met on both
+readings (0.999 at the top budget). Width 384 vs 192 at 200k: met
+(7.1%). Cells exponent: not met (α indistinguishable from zero for ISLA;
+GeoTransolver's fit needs its 400k lanes). Budget: pending (controls at
+epoch about 560 of 1,000). ISO-MATCH memory: lead (5.6%); time: pending;
+optimal split: width, with the seed-split caveat.
+
 ## 2026-09-19 — Preregistration, CAP-435: how far do width and depth carry at 435 cars? ISLA to 1,536 wide and 48 deep, GeoTransolver to 1,024 wide and 24 deep, Transolver to 512, all at 100,000 cells {#sec-nb-cap435-prereg}
 
 **Setting.** The ISO-COST interim (@sec-nb-isocost-interim) found that at
