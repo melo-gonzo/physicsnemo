@@ -21146,6 +21146,15 @@ collapse clause; seed-mean float32 pressure relative L2 for accuracy).
 1%); 768 under cosine at 5e-4 beats 0.0411 by 1 to 3% with the seed split
 closed. Probability of the full "collapse removed" clause: 0.6.
 
+**Addendum, launch (2026-09-20, 09:50 EDT).** The first submission of all
+eighteen lanes failed on the first step and the two-strike guard blocked
+them within two links: the code snapshot had been taken from the local
+working tree, whose mesh package has moved past the API the cluster's
+recipe is pinned to (`compose_measure_weights` no longer exists locally).
+The snapshot was rebuilt as the pinned package with only the ISLA files
+overlaid, the markers cleared, and the lanes resubmitted; no training step
+had run, so nothing is lost but forty minutes.
+
 ## 2026-09-20 — Preregistration, TRAIN-AREA-DR: the DrivAerML twin of the training-law test; do GeoTransolver and Transolver depend on the training sampling law on the cars as they do on the wings, and does ISLA stay indifferent? {#sec-nb-trainarea-dr-prereg}
 
 **Setting.** TRAIN-AREA (@sec-nb-trainarea-verdict) found on the 35-wing
