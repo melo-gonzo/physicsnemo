@@ -15,12 +15,55 @@
               "pressure_l2": 0.7323149045308431,
               "velocity_l2": 0.7408972581227621
             },
-            "p200k_dr_isla_vol_lr5e4_seed42": null,
-            "p200k_dr_isla_vol_lr5e4_seed43": null,
-            "p200k_dr_isla_vol_lr3e4_seed42": null,
-            "p200k_dr_isla_vol_lr3e4_seed43": null
+            "p200k_dr_isla_vol_lr5e4_seed42": {
+              "nut_l2": 0.08593727151552837,
+              "pressure_l2": 0.056815385818481445,
+              "velocity_l2": 0.07186237474282582
+            },
+            "p200k_dr_isla_vol_lr5e4_seed43": {
+              "nut_l2": 0.08543105920155843,
+              "pressure_l2": 0.05231860280036926,
+              "velocity_l2": 0.07055400311946869
+            },
+            "p200k_dr_isla_vol_lr3e4_seed42": {
+              "nut_l2": 0.08829441666603088,
+              "pressure_l2": 0.05911895136038462,
+              "velocity_l2": 0.07771141827106476
+            },
+            "p200k_dr_isla_vol_lr3e4_seed43": {
+              "nut_l2": 0.08740521470705669,
+              "pressure_l2": 0.056629945834477745,
+              "velocity_l2": 0.07615859806537628
+            }
           },
-          "n_evaluated": 2
+          "n_evaluated": 6,
+          "pressure_l2_mean": 0.2807241620288955,
+          "pressure_l2_seeds": [
+            0.7271471818288168,
+            0.7323149045308431,
+            0.056815385818481445,
+            0.05231860280036926,
+            0.05911895136038462,
+            0.056629945834477745
+          ],
+          "velocity_l2_mean": 0.2928113490343094,
+          "velocity_l2_seeds": [
+            0.7196844418843588,
+            0.7408972581227621,
+            0.07186237474282582,
+            0.07055400311946869,
+            0.07771141827106476,
+            0.07615859806537628
+          ],
+          "nut_l2_mean": 0.3805106431245804,
+          "nut_l2_seeds": [
+            0.9605401357014974,
+            0.9754557609558105,
+            0.08593727151552837,
+            0.08543105920155843,
+            0.08829441666603088,
+            0.08740521470705669
+          ]
         },
         "gt_unit": {
           "runs": {
@@ -53,7 +96,14 @@
           ]
         }
       },
-      "status": "pending"
+      "status": "complete",
+      "ratios_over_isla": {
+        "gt_unit": {
+          "pressure_l2": 0.16996633590554064,
+          "velocity_l2": 0.34429691611353086,
+          "nut_l2": 0.2216188693471794
+        }
+      }
     },
     "highlift_surface_deflection": {
       "arms": {
@@ -458,7 +508,13 @@
         },
         "gt_unit": {
           "runs": {
-            "p200k_hl_gt_unit_single_aoa_12_seed42": null,
+            "p200k_hl_gt_unit_single_aoa_12_seed42": {
+              "density_l2": 0.02788323826260037,
+              "pressure_l2": 0.022137102153566148,
+              "tau_wall_l2": 0.07368032137552898,
+              "temperature_l2": 0.04393358694182502,
+              "velocity_l2": 0.04595134655634562
+            },
             "p200k_hl_gt_unit_single_aoa_12_seed43": {
               "density_l2": 0.02741616467634837,
               "pressure_l2": 0.02176631987094879,
@@ -467,7 +523,32 @@
               "velocity_l2": 0.04565482338269552
             }
           },
-          "n_evaluated": 1
+          "n_evaluated": 2,
+          "pressure_l2_mean": 0.02195171101225747,
+          "pressure_l2_seeds": [
+            0.022137102153566148,
+            0.02176631987094879
+          ],
+          "velocity_l2_mean": 0.04580308496952057,
+          "velocity_l2_seeds": [
+            0.04595134655634562,
+            0.04565482338269552
+          ],
+          "tau_wall_l2_mean": 0.07337729136149089,
+          "tau_wall_l2_seeds": [
+            0.07368032137552898,
+            0.0730742613474528
+          ],
+          "temperature_l2_mean": 0.043937168187565274,
+          "temperature_l2_seeds": [
+            0.04393358694182502,
+            0.04394074943330553
+          ],
+          "density_l2_mean": 0.027649701469474368,
+          "density_l2_seeds": [
+            0.02788323826260037,
+            0.02741616467634837
+          ]
         },
         "transolver_unit": {
           "runs": {
@@ -478,19 +559,110 @@
               "temperature_l2": 0.04383646117316352,
               "velocity_l2": 0.04666953947809008
             },
-            "p200k_hl_transolver_unit_single_aoa_12_seed43": null
+            "p200k_hl_transolver_unit_single_aoa_12_seed43": {
+              "density_l2": 0.02986402975188361,
+              "pressure_l2": 0.023999136355188157,
+              "tau_wall_l2": 0.0746038622326321,
+              "temperature_l2": 0.04437761174307929,
+              "velocity_l2": 0.046855926513671875
+            }
           },
-          "n_evaluated": 1
+          "n_evaluated": 2,
+          "pressure_l2_mean": 0.023755840129322477,
+          "pressure_l2_seeds": [
+            0.023512543903456792,
+            0.023999136355188157
+          ],
+          "velocity_l2_mean": 0.046762732995880976,
+          "velocity_l2_seeds": [
+            0.04666953947809008,
+            0.046855926513671875
+          ],
+          "tau_wall_l2_mean": 0.07487688130802578,
+          "tau_wall_l2_seeds": [
+            0.07514990038341945,
+            0.0746038622326321
+          ],
+          "temperature_l2_mean": 0.044107036458121404,
+          "temperature_l2_seeds": [
+            0.04383646117316352,
+            0.04437761174307929
+          ],
+          "density_l2_mean": 0.029709234833717346,
+          "density_l2_seeds": [
+            0.02955443991555108,
+            0.02986402975188361
+          ]
         },
         "gt_unit_lr3e3": {
           "runs": {
-            "p200k_hl_gt_unit_single_aoa_12_lr3e3_seed42": null,
-            "p200k_hl_gt_unit_single_aoa_12_lr3e3_seed43": null
+            "p200k_hl_gt_unit_single_aoa_12_lr3e3_seed42": {
+              "density_l2": 0.026233964496188693,
+              "pressure_l2": 0.020559935106171504,
+              "tau_wall_l2": 0.07016854816012913,
+              "temperature_l2": 0.04271108905474345,
+              "velocity_l2": 0.04362834162182278
+            },
+            "p200k_hl_gt_unit_single_aoa_12_lr3e3_seed43": {
+              "density_l2": 0.026105691989262898,
+              "pressure_l2": 0.020843782358699374,
+              "tau_wall_l2": 0.07054182555940416,
+              "temperature_l2": 0.042736474010679454,
+              "velocity_l2": 0.04412762324015299
+            }
           },
-          "n_evaluated": 0
+          "n_evaluated": 2,
+          "pressure_l2_mean": 0.02070185873243544,
+          "pressure_l2_seeds": [
+            0.020559935106171504,
+            0.020843782358699374
+          ],
+          "velocity_l2_mean": 0.04387798243098789,
+          "velocity_l2_seeds": [
+            0.04362834162182278,
+            0.04412762324015299
+          ],
+          "tau_wall_l2_mean": 0.07035518685976665,
+          "tau_wall_l2_seeds": [
+            0.07016854816012913,
+            0.07054182555940416
+          ],
+          "temperature_l2_mean": 0.04272378153271145,
+          "temperature_l2_seeds": [
+            0.04271108905474345,
+            0.042736474010679454
+          ],
+          "density_l2_mean": 0.026169828242725797,
+          "density_l2_seeds": [
+            0.026233964496188693,
+            0.026105691989262898
+          ]
         }
       },
-      "status": "pending"
+      "status": "complete",
+      "ratios_over_isla": {
+        "gt_unit": {
+          "pressure_l2": 0.7321780652456528,
+          "velocity_l2": 0.830285018291751,
+          "tau_wall_l2": 0.824436710069221,
+          "temperature_l2": 0.8982973582154699,
+          "density_l2": 0.7351304753041199
+        },
+        "transolver_unit": {
+          "pressure_l2": 0.7923530450296162,
+          "velocity_l2": 0.8476808198987936,
+          "tau_wall_l2": 0.8412854786600842,
+          "temperature_l2": 0.9017703225638728,
+          "density_l2": 0.7898878744981813
+        },
+        "gt_unit_lr3e3": {
+          "pressure_l2": 0.6904904526685748,
+          "velocity_l2": 0.7953881593250953,
+          "tau_wall_l2": 0.790481601524638,
+          "temperature_l2": 0.8734896140773855,
+          "density_l2": 0.6957846650149718
+        }
+      }
     },
     "highlift_surface_super_scarce": {
       "arms": {

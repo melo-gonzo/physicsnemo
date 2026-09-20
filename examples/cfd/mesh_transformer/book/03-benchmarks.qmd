@@ -1057,11 +1057,18 @@ out += (f"| 35 training cases | exploration budget, 10,000 cells | {mean(tk['isl
 a = w["arms"]
 out += (f"| 35 training cases | reporting protocol, 200,000 cells | {a['isla']['pressure_l2_mean']:.4f} | {a['gt_unit']['pressure_l2_mean']:.4f} | {a['transolver_unit']['pressure_l2_mean']:.4f} "
         f"| {w['ratios_over_isla']['gt_unit']['pressure_l2']:.2f} | {w['ratios_over_isla']['transolver_unit']['pressure_l2']:.2f} |\n")
-pending = [k for k, v in F2.items() if k.startswith("highlift") and v["status"] != "complete"]
+F3 = J("p200k_fleet_interim_2026-09-20.json")["datasets"]
+fx = F3["highlift_surface_single_aoa_12"]; fa = fx["arms"]
+fx10 = dict(isla=mean(S["fixed"]["isla_ref"]), gt=mean(S["fixed"]["gt"]), t=mean(S["fixed"]["t"]))
+out += (f"| fixed angle 12°, 126 geometries | exploration budget, 10,000 cells | {fx10['isla']:.4f} | {fx10['gt']:.4f} | {fx10['t']:.4f} "
+        f"| {fx10['gt']/fx10['isla']:.2f} | {fx10['t']/fx10['isla']:.2f} |\n")
+out += (f"| fixed angle 12°, 126 geometries | reporting protocol, 200,000 cells | {fa['isla']['pressure_l2_mean']:.4f} | {fa['gt_unit_lr3e3']['pressure_l2_mean']:.4f} | {fa['transolver_unit']['pressure_l2_mean']:.4f} "
+        f"| {fx['ratios_over_isla']['gt_unit_lr3e3']['pressure_l2']:.2f} | {fx['ratios_over_isla']['transolver_unit']['pressure_l2']:.2f} |\n")
+pending = [k for k, v in F3.items() if k.startswith("highlift") and v["status"] != "complete"]
 print(out)
-print(": The 35-case HiLiftAeroML rung at both budgets (surface-pressure error, float32, 180 validation cases, seed means; GeoTransolver at 3e-3 in both protocols, its better rate on this rung). "
-      "How to read this: twenty times the sampled cells moved neither model by more than 4%, so the wing deficit is not count noise; the mechanism the program points at is the mesher pattern where validation geometries recur in training (@sec-data-efficiency). "
-      f"The other wing rungs ({len(pending)} of them) are training at 200,000 cells and will join this table as they report (@sec-program-status). Data: results/p200k_fleet_reduction_2026-09-19.json; "
+print(": The 35-case and fixed-angle HiLiftAeroML rungs at both budgets (surface-pressure error, float32, 180 validation cases, seed means; GeoTransolver at 3e-3 in both protocols, its better rate on these rungs; the fixed-angle 10,000-cell GeoTransolver value is the unit-direction run of the surface board). "
+      "How to read this: on the 35-case rung twenty times the sampled cells moved neither model by more than 4%, and on the fixed-angle rung every model improved by 20% to 25% while the ratios moved by 0.01 and 0.04, so the wing deficit is not count noise; the mechanism the program points at is the mesher pattern where validation geometries recur in training (@sec-data-efficiency). "
+      f"The other wing rungs ({len(pending)} of them) are training at 200,000 cells and will join this table as they report (@sec-program-status). Data: results/p200k_fleet_reduction_2026-09-19.json; results/p200k_fleet_interim_2026-09-20.json; "
       "results/fp32_reeval/fp32_shift_35_2026-09-09.json; results/relframe_reduction_2026-09-11.json. {#tbl-scoreboard-200k-wings}")
 ```
 
