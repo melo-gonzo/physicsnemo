@@ -21153,7 +21153,25 @@ working tree, whose mesh package has moved past the API the cluster's
 recipe is pinned to (`compose_measure_weights` no longer exists locally).
 The snapshot was rebuilt as the pinned package with only the ISLA files
 overlaid, the markers cleared, and the lanes resubmitted; no training step
-had run, so nothing is lost but forty minutes.
+had run, so nothing is lost but forty minutes. A second inherited detail
+blocked the second submission the same way: the pinned package's
+experimental namespace still imported the retired alias removed this
+morning (@sec-nb-no-legacy-compat); the import was dropped from the
+snapshot and the lanes resubmitted a third time.
+
+**Addendum, acceptance (2026-09-20, 11:35 EDT; epochs 22 to 24 on the
+cars, 2 on the wings).** All eighteen lanes are training (the tracebacks in
+their logs are the two failed submissions' import errors, before any
+step). Validation losses at the reading, seeds 42 / 43: cosine 192 at 1e-3
+0.0021 / 0.0020; cosine 384 at 5e-4 0.0017 / 0.0017; **cosine 384 at 1e-3
+0.0020 / 0.0022**; cosine 768 at 2.5e-4 0.0019 / 0.0018; **cosine 768 at
+5e-4 0.0021 / 0.0019**; **cosine 768 at 1e-3 0.0028 / 0.0027**. For
+comparison the linear lanes at the same epoch read 0.0031 / 0.0045 (384 at
+1e-3) and 0.0046 / 0.0022 (768 at 5e-4) before collapsing by epoch 89
+(@sec-nb-routingsat-verdict). The cosine lanes at the collapse rates are on
+the clean lanes' trajectory at this epoch and show no early elevation; the
+reading that decides the clause is past epoch 100. Peak memory with cosine
+routing is unchanged (14.6, 24.1 and 43.7 GB at 192, 384 and 768 wide).
 
 ## 2026-09-20 — Preregistration, TRAIN-AREA-DR: the DrivAerML twin of the training-law test; do GeoTransolver and Transolver depend on the training sampling law on the cars as they do on the wings, and does ISLA stay indifferent? {#sec-nb-trainarea-dr-prereg}
 
