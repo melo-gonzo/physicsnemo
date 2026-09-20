@@ -20691,3 +20691,90 @@ default and 1.4% more accurate than GeoTransolver's own 4x-parameter
 lane. The caveat that matters is that these are single-dataset,
 two-seed readings; the 400,000-cell lanes will show whether cells help
 once width is no longer the binding constraint.
+
+## 2026-09-19 — Preregistration, CAP-435: how far do width and depth carry at 435 cars? ISLA to 1,536 wide and 48 deep, GeoTransolver to 1,024 wide and 24 deep, Transolver to 512, all at 100,000 cells {#sec-nb-cap435-prereg}
+
+**Setting.** The ISO-COST interim (@sec-nb-isocost-interim) found that at
+435 DrivAerML cars the cells axis is flat between 100,000 and 200,000
+cells for every model while doubling width buys about 7% for ISLA (192 to
+384) and GeoTransolver (256 to 512) alike. The single-case capacity study
+(CAP, @sec-nb-cap-verdict) had found the same ordering at one car: width
+carries, depth, slices and MLP ratio do not. Peter asked (2026-09-19)
+how far width can be pushed and whether depth is worth revisiting now that
+the data are abundant. Both models are currently parameter-bound at this
+data size, so the question is where each model's width curve turns over,
+whether the two curves cross, and whether depth or slice count offers a
+cheaper route than width.
+
+**Instrument** (`kernel/cap435_aga.sbatch`, 22 lanes, manifest group
+`cap`, job names `isla.cap435.<lane>`; 435 cars, 100,000 cells per case in
+training (the scaling-study budget: cells are flat here and 100,000 is the
+cheapest point that shows it), 500 epochs, bf16, seeds 42 and 43, float32
+scoring at the 200,000-cell reporting protocol through the fleet pump;
+per-lane step time and peak memory from the training log as in ISO-COST):
+
+| axis | model | configuration | parameters | learning rate |
+|---|---|---|---|---|
+| width | ISLA | 512 wide, 12 layers | 60.3M | 3.75e-4 (width rule) |
+| width | ISLA | 1,024 wide | 238M | 1.875e-4 |
+| width | ISLA | 1,536 wide | 532M | 1.25e-4 |
+| depth | ISLA | 384 wide, 6 layers | 17.3M | 5e-4 |
+| depth | ISLA | 384 wide, 24 layers | 68.3M | 5e-4 |
+| depth | ISLA | 384 wide, 48 layers | 136M | 5e-4 |
+| slices | ISLA | 384 wide, 1,024 slices | 38.1M | 5e-4 |
+| width | GeoTransolver | 1,024 wide, 12 layers | 143M | 3e-3 and 1e-3 (better kept) |
+| depth | GeoTransolver | 512 wide, 24 layers | 71.1M | 3e-3 |
+| width | Transolver | 512 wide, 8 layers | 23.9M | 3e-3 |
+
+Together with the ISO-COST and ISO-MATCH lanes already running (ISLA 192,
+384 and 768 wide at 100,000 cells; GeoTransolver 256 and 512), this gives
+ISLA a five-point width ladder (192, 384, 512, 768, 1,024, 1,536: six
+points) spanning 8.9M to 532M parameters and GeoTransolver a three-point
+ladder (9.0M, 35.8M, 143M). The learning rate for ISLA follows the width
+rule (@sec-nb-relframe-divergence-mechanism); depth and slice changes keep
+the rate of their width. No rate search is run for the depth lanes, and
+that is a stated risk, not a control.
+
+**Bars, written before the runs.** Readout is the seed-mean float32
+pressure relative L2 on the 48 validation cars; "improves" means a lower
+mean by at least the stated fraction.
+
+- **Width turnover (ISLA).** Along 192, 384, 512, 768, 1,024, 1,536 the
+  first doubling-equivalent step whose gain is below 1% (or negative) marks
+  the turnover. Prediction: 384 to 768 gains 3 to 5%, 768 to 1,536 gains
+  under 2%; turnover between 768 and 1,536. If 1,536 still improves on
+  1,024 by 2% or more, the ladder is extended.
+- **Width turnover (GeoTransolver).** 512 to 1,024 at its better rate.
+  Prediction: 2 to 4% gain. If 1,024 gains 3% or more, a 2,048 lane is
+  added so the baseline is pushed as far as ISLA.
+- **Iso-parameter pairs.** ISLA-768 (134M) against GeoTransolver-1,024
+  (143M), and ISLA-384 (34.3M) against GeoTransolver-512 (35.8M, already
+  0.0417 against 0.0411): parity if within 3%, otherwise lead or deficit
+  named by model. Prediction: ISLA leads both pairs by 1 to 4%.
+- **Depth (ISLA).** 24 layers at width 384 improves on 12 by 3% or more:
+  depth carries at 435 cars (reversing CAP's single-case null); within
+  ±3%: depth null again. 6 layers within 3% of 12: depth is not binding
+  at all and the recipe could halve it. 48 layers: reported for the
+  turnover and for the training signature (a rise to the mean-field
+  plateau at 48 layers marks a depth edge for the width rule, mechanism to
+  be measured, not assumed). Prediction: 24 layers within 2% (null), 6
+  layers 2 to 4% worse, 48 layers no better than 24.
+- **Depth (GeoTransolver).** 24 layers at 512 against 12: same 3% clause.
+  Prediction: within 2%.
+- **Slices.** ISLA 1,024 slices at 384 within 2% of 256 slices: slices
+  null at 435 cars (matching CAP). Prediction: null.
+- **Cost.** Every lane's peak memory and step time join the ISO-COST
+  frontiers; a lane that does not fit a GB300 is recorded as such (data,
+  not failure). Prediction: ISLA-1,536 at 100,000 cells fits (about 80 to
+  100 GB); GeoTransolver-1,024 about 100 GB.
+- **Training signature.** Every lane is accepted only if its validation
+  loss stays below 0.01 after epoch 20 on both seeds; a lane that rises to
+  the mean-field plateau is reported with the epoch and value and excluded
+  from the ladder with a rate control queued at half its rate.
+
+**Why it matters.** If width keeps paying for ISLA past 768 while
+GeoTransolver turns over at 1,024, the equal-budget chapter gains a
+scaling statement rather than a point comparison; if both turn over
+together, the story is that ISLA reaches the same ceiling at a third of
+the memory. Depth is the cheap alternative: if 24 layers at 384 (68M) beat
+768 wide (134M), the recommendation for spending parameters changes.
