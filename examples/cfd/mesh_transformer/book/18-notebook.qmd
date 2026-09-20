@@ -20810,6 +20810,27 @@ reaches GeoTransolver's best error at 0.27x its GPU-floor step time and
 0.22x its memory" and report the preregistered clause as parity with this
 caveat, rather than let the clause's wording stand for the finding.
 
+**Addendum, fourth reading (2026-09-20, 08:00 EDT; 23 of 26; artifact
+refreshed).** GeoTransolver's 400,000-cell lanes are in: width 256 at
+3e-3 scores 0.0445 / 0.0445, mean **0.0445** (158 GB, 0.76 s p10), so its
+cells ladder reads 0.0447, 0.0445, 0.0445 at 100k, 200k, 400k; width 512
+at 1e-3 scores 0.0412 / 0.0414, mean **0.0413** (201 GB, 0.85 s), against
+0.0417 at 200k and 0.0419 at 100k at the same rate; the 3e-3 pair has one
+seed scored (0.0412) and one still evaluating. **The cells-exponent bar is
+now decided for both models: not met.** GeoTransolver's joint fit on six
+points gives α = 0.03 with a standard error of 10 (the cells term is
+unidentifiable because the response is flat), ISLA's α = 0.00 ± 0.02.
+The prediction of α about 0.25 for ISLA and 0.15 for GeoTransolver is
+refuted for both: at 435 cars neither model converts cells per case into
+accuracy above 100,000, and the count-noise mechanism that predicted a
+steeper ISLA exponent operates below that count (the 10,000-to-200,000
+step bought ISLA 19% and GeoTransolver 12%; the 100,000-to-400,000 step
+buys 0% and 0.5%). GeoTransolver-512 is the one lane with a measurable
+cells response (1.5% from 100k to 400k at 1e-3), consistent with the
+wider model being slightly less parameter-bound. The 200 GB, 0.85 s
+GeoTransolver-512 × 400k lane and the 22 GB, 0.12 s ISLA-384 × 100k lane
+reach the same error (0.0413 against 0.0411).
+
 ## 2026-09-20 — Interim, TRAIN-AREA: all six area-draw lanes trained; scored on the area draw itself ISLA's wing deficit is 20% to GeoTransolver and 15% to Transolver against 27% on the uniform draw, a cross-draw reading that the benchmark on the independent uniform draw must confirm {#sec-nb-trainarea-interim}
 
 **Setting.** TRAIN-AREA (@sec-nb-trainarea-prereg) trains ISLA,
