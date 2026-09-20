@@ -8,7 +8,7 @@
 #SBATCH --gpus-per-node=4
 #SBATCH --segment=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --array=0-27%28
+#SBATCH --array=0-35%36
 #SBATCH --dependency=singleton
 #SBATCH -o sbatch_logs/%x-%A_%a.log
 #SBATCH -e sbatch_logs/%x-%A_%a.log
@@ -50,16 +50,23 @@ lane() {
     22|25) MODEL=isla_surface_reference; EXTRA="+model.geo_kernel=fused model.hidden=384 model.n_layers=24"; LR=2.5e-4;  SLUG=isla-w384-d24-lr2.5e-4 ;;
     23|26) MODEL=isla_surface_reference; EXTRA="+model.geo_kernel=fused model.hidden=384 model.n_layers=48"; LR=2.5e-4;  SLUG=isla-w384-d48-lr2.5e-4 ;;
     24|27) MODEL=isla_surface_reference; EXTRA="+model.geo_kernel=fused model.hidden=384 model.n_layers=48"; LR=1.25e-4; SLUG=isla-w384-d48-lr1.25e-4 ;;
+    # width rate controls (2026-09-20, ISO-COST second reading): under the width rule the 512- and 768-wide lanes carry a 5%
+    # seed split (seed 42 at 0.043, seed 43 at 0.041) that the 384-wide lane does not; does a higher rate recover seed 42
+    # (rule under-trains in 500 epochs) or not (seed-dependent optimization at width)? And does 384 improve above its rule rate?
+    28|32) MODEL=isla_surface_reference; EXTRA="+model.geo_kernel=fused model.hidden=768"; LR=5e-4;     SLUG=isla-w768-lr5e-4 ;;
+    29|33) MODEL=isla_surface_reference; EXTRA="+model.geo_kernel=fused model.hidden=768"; LR=3.75e-4;  SLUG=isla-w768-lr3.75e-4 ;;
+    30|34) MODEL=isla_surface_reference; EXTRA="+model.geo_kernel=fused model.hidden=384"; LR=7.5e-4;   SLUG=isla-w384-lr7.5e-4 ;;
+    31|35) MODEL=isla_surface_reference; EXTRA="+model.geo_kernel=fused model.hidden=384"; LR=1e-3;     SLUG=isla-w384-lr1e-3 ;;
     *) echo "bad array index $1" >&2; exit 2 ;;
   esac
-  if [ "$1" -le 10 ] || { [ "$1" -ge 22 ] && [ "$1" -le 24 ]; }; then SEED=42; else SEED=43; fi
+  if [ "$1" -le 10 ] || { [ "$1" -ge 22 ] && [ "$1" -le 24 ]; } || { [ "$1" -ge 28 ] && [ "$1" -le 31 ]; }; then SEED=42; else SEED=43; fi
   CELLS=100000; EPOCHS=500
   RUN_ID="cap_dr_${SLUG//-/_}_c100k_seed${SEED}"
   SLUG="${SLUG}-c100k-s${SEED}"
 }
 if [ "${1:-}" = "--slug" ]; then lane "$2"; echo "${SLUG}"; exit 0; fi
 if [ "${1:-}" = "--manifest" ]; then
-  for i in $(seq "${2:-0}" "${3:-27}"); do lane "$i"; printf "cap\t%s\t%s\tdrivaer_ml_surface\t%s\t%s\t%s\t%s\tfalse\t\t\n" "$i" "${RUN_ID}" "${MODEL}" "${EXTRA}" "${LR}" "${SEED}"; done
+  for i in $(seq "${2:-0}" "${3:-35}"); do lane "$i"; printf "cap\t%s\t%s\tdrivaer_ml_surface\t%s\t%s\t%s\t%s\tfalse\t\t\n" "$i" "${RUN_ID}" "${MODEL}" "${EXTRA}" "${LR}" "${SEED}"; done
   exit 0
 fi
 lane "${SLURM_ARRAY_TASK_ID}"

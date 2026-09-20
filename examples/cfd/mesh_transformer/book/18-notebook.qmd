@@ -20831,6 +20831,61 @@ wider model being slightly less parameter-bound. The 200 GB, 0.85 s
 GeoTransolver-512 × 400k lane and the 22 GB, 0.12 s ISLA-384 × 100k lane
 reach the same error (0.0413 against 0.0411).
 
+## 2026-09-20 — Preregistration, SCALE-HL: does the DrivAerML scaling picture (cells flat above 100,000, width worth 7% per doubling for both models) hold on the 510-wing HiLift rung? {#sec-nb-scalehl-prereg}
+
+**Setting.** ISO-COST (@sec-nb-isocost-interim) established on 435
+DrivAerML cars that neither ISLA nor GeoTransolver converts cells per case
+into accuracy above 100,000 cells, that doubling width buys both about
+7%, and that ISLA-384 at 100,000 cells (0.0411, 22 GB) sits on the
+iso-memory frontier against GeoTransolver-512 at 200,000 cells (0.0410,
+100 GB). Peter's standing rule (2026-09-20) is that every result is
+reproduced on at least two datasets before it counts. The wings are the
+natural twin: the meshes are coarser and more variable (cell-area
+coefficient of variation 3.3 against 2.3), ISLA trails GeoTransolver by
+27% at 35 wings, and whether width closes or widens that gap is itself
+the question the wing-deficit program needs answered.
+
+**Instrument** (`kernel/scalehl_aga.sbatch`, manifest group `shl`, job
+names `isla.scalehl.<lane>`; HiLift medium rung, 510 training wings, 180
+validation wings; 100,000 cells per case, 500 epochs, bf16, seeds 42 and
+43; float32 scoring at the 200,000-cell protocol through the fleet pump):
+ISLA 192 / 384 / 768 wide at the width rule (1e-3, 5e-4, 2.5e-4);
+GeoTransolver 256 / 512 wide at 3e-3 (its better rate on the wings,
+@sec-nb-p200k-wings-geo4); Transolver 256 at 3e-3. Twelve lanes. The
+fleet's medium-rung lanes at 200,000 cells (ISLA 192, GeoTransolver 256
+at 1e-3 and 3e-3, Transolver 256) supply the cells comparison at default
+widths at no extra cost.
+
+**Bars, written before the runs** (seed-mean float32 pressure relative
+L2 on the 180 validation wings).
+
+- **Cells flat**: ISLA-192 and GeoTransolver-256 at 100,000 cells within
+  2% of their 200,000-cell fleet twins; otherwise the cells response is
+  dataset-dependent and the DrivAerML statement is qualified.
+- **Width carries**: ISLA-384 improves on ISLA-192 by at least 3% and
+  GeoTransolver-512 on GeoTransolver-256 by at least 3% (DrivAerML gave 7%
+  and 7%); within 3% for either model: that model is not parameter-bound
+  on the wings at this data size.
+- **Turnover**: ISLA-768 against ISLA-384; a gain under 1% (or a loss)
+  reproduces the DrivAerML turnover, and its seed spread is reported
+  beside the CAP-435 rate controls' reading.
+- **Deficit under width**: GeoTransolver over ISLA at matched parameters
+  (512 against 384) compared with the default pair (256 against 192): if
+  the ratio rises by 0.05 or more, width closes part of the wing deficit
+  (ISLA is the more parameter-bound model on wings); if it falls by 0.05
+  or more, width widens it; within ±0.05 the deficit is width-independent
+  and architectural.
+- **Iso-memory**: ISLA's best lane at or under GeoTransolver-512's
+  measured memory at 100,000 cells (about 51 GB) against GeoTransolver's
+  best at that budget, reported as a ratio with no bar (the DrivAerML
+  frontier bar was written for that dataset; the wing frontier is a
+  measurement).
+
+**Prediction.** Cells flat (both within 2%); width carries for both
+(ISLA 5 to 8%, GeoTransolver 4 to 6%); ISLA-768 within 1% of 384;
+deficit width-independent (ratio change within ±0.05), probability 0.5,
+with "width closes part of it" the other likely outcome at 0.35.
+
 ## 2026-09-20 — Interim, TRAIN-AREA: all six area-draw lanes trained; scored on the area draw itself ISLA's wing deficit is 20% to GeoTransolver and 15% to Transolver against 27% on the uniform draw, a cross-draw reading that the benchmark on the independent uniform draw must confirm {#sec-nb-trainarea-interim}
 
 **Setting.** TRAIN-AREA (@sec-nb-trainarea-prereg) trains ISLA,
@@ -21070,3 +21125,21 @@ one-car CAP study trained 24 layers without this signature at 10,000
 cells; whether the rate that depth tolerates scales like 1/depth or
 1/√depth is what the two 48-layer controls discriminate (1/depth predicts
 1.25e-4 clean and 2.5e-4 on the plateau; 1/√depth predicts both clean).
+
+**Addendum, width rate controls added (2026-09-20, 08:30 EDT; lanes 28
+to 35).** The ISO-COST second reading (@sec-nb-isocost-interim) found a
+5% seed split at widths 512 and 768 under the width rule that width 384
+does not show. Eight lanes discriminate the two open explanations: ISLA
+768 wide at 100,000 cells under 5e-4 (twice the rule) and 3.75e-4 (1.5x),
+and ISLA 384 wide at 100,000 cells under 7.5e-4 and 1e-3 (1.5x and 2x its
+rule rate, the latter the 192-wide ceiling), two seeds each.
+Preregistered reading: if 768 at a higher rate brings seed 42 to within
+1% of seed 43 without a plateau visit, the rule under-trains wide lanes
+in 500 epochs and the rule becomes a floor, not a prescription; if seed
+42 stays 5% behind at every clean rate, the split is a property of the
+wide relative frame's optimization and the width ladder is reported with
+seed ranges rather than means. If 384 at 7.5e-4 or 1e-3 improves on its
+0.0411 by 2% or more, the best ISLA configuration in the grid moves and
+the ISO-MATCH lead is restated; a plateau visit at 1e-3 marks the rate
+edge at 384 (RFDIV placed it at 512). The depth controls (lanes 22 to 27)
+were submitted at the same time.
