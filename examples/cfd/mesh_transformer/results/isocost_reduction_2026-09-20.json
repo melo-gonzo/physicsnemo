@@ -61,32 +61,48 @@
       "epochs": 1000,
       "params": 9046016,
       "runs": {
-        "iso_dr_gt_unit_w256_c200k_ep1000_seed42": null,
-        "iso_dr_gt_unit_w256_c200k_ep1000_seed43": null
+        "iso_dr_gt_unit_w256_c200k_ep1000_seed42": {
+          "pressure_l2": 0.044068743785222374,
+          "wss_l2": 0.06757236520449321
+        },
+        "iso_dr_gt_unit_w256_c200k_ep1000_seed43": {
+          "pressure_l2": 0.04485824704170227,
+          "wss_l2": 0.06905279060204823
+        }
       },
       "cost": {
         "iso_dr_gt_unit_w256_c200k_ep1000_seed42": {
           "step_s_median": 0.43,
-          "step_s_p10": 0.396,
-          "step_s_p90": 0.623,
+          "step_s_p10": 0.397,
+          "step_s_p90": 0.625,
           "peak_mem_gb": 79.51,
-          "epochs_logged": 942,
-          "completed": false
+          "epochs_logged": 1000,
+          "completed": true
         },
         "iso_dr_gt_unit_w256_c200k_ep1000_seed43": {
           "step_s_median": 0.433,
-          "step_s_p10": 0.398,
-          "step_s_p90": 0.638,
+          "step_s_p10": 0.399,
+          "step_s_p90": 0.636,
           "peak_mem_gb": 79.51,
-          "epochs_logged": 936,
-          "completed": false
+          "epochs_logged": 1000,
+          "completed": true
         }
       },
-      "n_evaluated": 0,
+      "n_evaluated": 2,
       "n_runs": 2,
-      "status": "pending",
+      "pressure_l2_seeds": [
+        0.044068743785222374,
+        0.04485824704170227
+      ],
+      "pressure_l2_mean": 0.044463495413462326,
+      "wss_l2_seeds": [
+        0.06757236520449321,
+        0.06905279060204823
+      ],
+      "wss_l2_mean": 0.06831257790327072,
+      "status": "complete",
       "step_s_median": 0.4315,
-      "step_s_p10": 0.397,
+      "step_s_p10": 0.398,
       "peak_mem_gb": 79.51
     },
     "gt_unit|w256|c200k|lr3e-3|ep500": {
@@ -109,7 +125,7 @@
       "cost": {
         "p200k_dr_gt_unit_lr3e3_seed42": {
           "step_s_median": 0.4315,
-          "step_s_p10": 0.397,
+          "step_s_p10": 0.398,
           "step_s_p90": null,
           "peak_mem_gb": 79.51,
           "epochs_logged": 500,
@@ -117,7 +133,7 @@
         },
         "p200k_dr_gt_unit_lr3e3_seed43": {
           "step_s_median": 0.4315,
-          "step_s_p10": 0.397,
+          "step_s_p10": 0.398,
           "step_s_p90": null,
           "peak_mem_gb": 79.51,
           "epochs_logged": 500,
@@ -139,7 +155,7 @@
       "wss_l2_mean": 0.06830833603938422,
       "status": "complete",
       "step_s_median": 0.4315,
-      "step_s_p10": 0.397,
+      "step_s_p10": 0.398,
       "peak_mem_gb": 79.51
     },
     "gt_unit|w256|c400k|lr3e-3|ep500": {
@@ -462,7 +478,10 @@
       "epochs": 500,
       "params": 35848576,
       "runs": {
-        "iso_dr_gt_unit_w512_c400k_lr3e3_seed42": null,
+        "iso_dr_gt_unit_w512_c400k_lr3e3_seed42": {
+          "pressure_l2": 0.04152334978183111,
+          "wss_l2": 0.06571067372957866
+        },
         "iso_dr_gt_unit_w512_c400k_lr3e3_seed43": {
           "pressure_l2": 0.041229523718357086,
           "wss_l2": 0.06553778052330017
@@ -486,9 +505,19 @@
           "completed": true
         }
       },
-      "n_evaluated": 1,
+      "n_evaluated": 2,
       "n_runs": 2,
-      "status": "pending",
+      "pressure_l2_seeds": [
+        0.04152334978183111,
+        0.041229523718357086
+      ],
+      "pressure_l2_mean": 0.0413764367500941,
+      "wss_l2_seeds": [
+        0.06571067372957866,
+        0.06553778052330017
+      ],
+      "wss_l2_mean": 0.06562422712643942,
+      "status": "complete",
       "step_s_median": 0.9535,
       "step_s_p10": 0.861,
       "peak_mem_gb": 200.29
@@ -553,8 +582,14 @@
       "epochs": 1000,
       "params": 8912796,
       "runs": {
-        "iso_dr_isla_w192_c200k_ep1000_seed42": null,
-        "iso_dr_isla_w192_c200k_ep1000_seed43": null
+        "iso_dr_isla_w192_c200k_ep1000_seed42": {
+          "pressure_l2": 0.04477107028166453,
+          "wss_l2": 0.06764354805151622
+        },
+        "iso_dr_isla_w192_c200k_ep1000_seed43": {
+          "pressure_l2": 0.0447884996732076,
+          "wss_l2": 0.0679497371117274
+        }
       },
       "cost": {
         "iso_dr_isla_w192_c200k_ep1000_seed42": {
@@ -563,20 +598,30 @@
           "step_s_p90": 1.0,
           "peak_mem_gb": 27.05,
           "epochs_logged": 1000,
-          "completed": false
+          "completed": true
         },
         "iso_dr_isla_w192_c200k_ep1000_seed43": {
           "step_s_median": 0.215,
           "step_s_p10": 0.167,
-          "step_s_p90": 0.976,
+          "step_s_p90": 0.975,
           "peak_mem_gb": 27.05,
-          "epochs_logged": 997,
-          "completed": false
+          "epochs_logged": 1000,
+          "completed": true
         }
       },
-      "n_evaluated": 0,
+      "n_evaluated": 2,
       "n_runs": 2,
-      "status": "pending",
+      "pressure_l2_seeds": [
+        0.04477107028166453,
+        0.0447884996732076
+      ],
+      "pressure_l2_mean": 0.044779784977436066,
+      "wss_l2_seeds": [
+        0.06764354805151622,
+        0.0679497371117274
+      ],
+      "wss_l2_mean": 0.06779664258162181,
+      "status": "complete",
       "step_s_median": 0.217,
       "step_s_p10": 0.167,
       "peak_mem_gb": 27.05
@@ -2108,7 +2153,7 @@
           "gt_over_isla": 1.0144967639249598
         },
         {
-          "budget": 0.397,
+          "budget": 0.398,
           "isla": {
             "pressure_l2": 0.04108833149075508,
             "config": "w384 x 100k"
@@ -2236,7 +2281,7 @@
       }
     },
     "step_s_p10": {
-      "budget": 0.397,
+      "budget": 0.398,
       "gt_default_pressure_l2": 0.04447605709234874,
       "isla_within_15pct": [
         {
@@ -2298,7 +2343,20 @@
       }
     ]
   },
-  "budget_controls": {},
+  "budget_controls": {
+    "isla": {
+      "ep500": 0.04476736237605413,
+      "ep1000": 0.044779784977436066,
+      "ep1000_over_ep500": 1.0002774923677116,
+      "verdict": "within 2% (500-epoch protocol converged)"
+    },
+    "gt_unit": {
+      "ep500": 0.04447605709234874,
+      "ep1000": 0.044463495413462326,
+      "ep1000_over_ep500": 0.999717563118054,
+      "verdict": "within 2% (500-epoch protocol converged)"
+    }
+  },
   "fits": {
     "isla": {
       "a": 0.015335325534793947,

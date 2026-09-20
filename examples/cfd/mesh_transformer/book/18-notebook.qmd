@@ -20886,6 +20886,56 @@ L2 on the 180 validation wings).
 deficit width-independent (ratio change within ±0.05), probability 0.5,
 with "width closes part of it" the other likely outcome at 0.35.
 
+## 2026-09-20 — Verdict, ISO-COST and ISO-MATCH (single dataset): at 435 cars cells per case stop paying at 100,000 for every model, width pays about 7% per doubling for ISLA and GeoTransolver, the 500-epoch protocol is converged (1,000 epochs move neither model by 0.1%), and ISLA reaches GeoTransolver's best error at 0.22x the memory and 0.27x the GPU-floor step time {#sec-nb-isocost-verdict}
+
+**Setting.** ISO-COST (@sec-nb-isocost-prereg) and ISO-MATCH
+(@sec-nb-isomatch-prereg) trained 48 lanes at 435 DrivAerML cars over a
+grid of cells per case and width, with 1,000-epoch budget controls, and
+scored all of them in float32 at the 200,000-cell protocol; the readings
+accumulated in @sec-nb-isocost-interim. All 26 configurations are now
+complete (artifact `results/isocost_reduction_2026-09-20.json`; reduction
+`results/isocost_reduce_2026-09-19.py`; cost extraction
+`results/isocost_cost_extract_2026-09-19.py`). Chapter 4's equal-budget
+section (@sec-equal-budget) is written from the artifact.
+
+**The last readings.** GeoTransolver-512 at 400,000 cells and 3e-3 scores
+0.0414 (its 1e-3 pair 0.0413), so its cells ladder reads 0.0417, 0.0410,
+0.0414 at 100k, 200k, 400k: the one lane with a cells response has it
+between 100k and 200k only. The budget controls: ISLA-192 × 200k at 1,000
+epochs scores **0.0448** against 0.0448 at 500 (ratio 1.000);
+GeoTransolver-256 × 200k at 1,000 epochs scores **0.0445** against 0.0445
+(ratio 0.9997). Neither moves by the 2% the bar asked for.
+
+**Verdict against the bars.**
+
+| bar | reading | verdict |
+|---|---|---|
+| cells exponent (ISLA's α exceeds GeoTransolver's by 0.1) | ISLA α = 0.00 ± 0.02; GeoTransolver's α unidentifiable (flat response) | **not met**; prediction (0.25 vs 0.15) refuted |
+| iso-memory frontier (ISLA within 2% or better at every budget) | minimum GeoTransolver-over-ISLA 0.999 at 100 GB; 1.014 to 1.087 below | **met** |
+| iso-time frontier (within 3% at every budget) | minimum 0.999 on both time readings | **met** |
+| width (384 improves on 192 by 3% at 200k) | 7.1% | **met** |
+| budget (1,000 epochs move a model by more than 2%) | 0.0% and 0.03% | **not met**: the 500-epoch protocol is converged at full data |
+| ISO-MATCH memory lead (best ISLA lane within 15% of 80 GB beats 0.0445 by 3%) | 768 × 200k, 0.0421, 5.6% | **lead** |
+| ISO-MATCH time (best ISLA lane within 15% of 0.43 s) | 192 × 600k, 0.0452, ratio 0.984 | **parity**, clause mis-specified (the only time-matched lane spent the budget on cells) |
+| ISO-MATCH optimal split | 768 × 100k best of the five splits; every split worse than 384 × 100k at 22 GB | **width wins**, and the budget is better left unspent |
+
+**What the study says, in one paragraph.** At this data size both
+architectures are parameter-bound and neither is cell-bound above 100,000
+cells per case. Spending a training budget on ISLA should go to width up to
+384; beyond that, under the width learning-rate rule, the mean stops
+improving and a 5% seed split appears (CAP-435's rate controls,
+@sec-nb-cap435-prereg, are the discriminating experiment). The equal-budget
+statement the chapter carries is the frontier one: below 100 GB ISLA's best
+lane is ahead of GeoTransolver's at every memory and every GPU-time budget,
+and at the top of the grid the two best lanes are at parity in error and at
+matched parameters, with ISLA at 0.22x the memory and 0.27x the GPU-floor
+step time. The budget controls retire a standing caveat: every 200k
+standing in the book can drop "at 500 epochs".
+
+**Caveat.** One dataset. The two-dataset rule (Peter, 2026-09-20) keeps
+this a single-dataset verdict until SCALE-HL (@sec-nb-scalehl-prereg)
+reports on the 510-wing rung; the ledger marks it DONE (single dataset).
+
 ## 2026-09-20 — Preregistration, TRAIN-AREA-DR: the DrivAerML twin of the training-law test; do GeoTransolver and Transolver depend on the training sampling law on the cars as they do on the wings, and does ISLA stay indifferent? {#sec-nb-trainarea-dr-prereg}
 
 **Setting.** TRAIN-AREA (@sec-nb-trainarea-verdict) found on the 35-wing
