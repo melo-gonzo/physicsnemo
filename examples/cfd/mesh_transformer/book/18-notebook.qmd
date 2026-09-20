@@ -19854,6 +19854,21 @@ far: each timeout costs a link restart and a queue wait, not epochs (the
 checkpoint interval is two epochs), which is why the wing rungs are
 running behind the DrivAerML lanes.
 
+**Addendum (23:40 PDT): the hourly evaluation pump stalled.** The pump is
+a ten-minute CPU-partition job that lists finished-but-unevaluated lanes,
+submits their float32 evaluation array, and resubmits itself with a start
+time one hour later. Its 20:58 instance sat `PENDING` with reason
+`BeginTime` for two and a half hours past that start time while the CPU
+partition showed eighteen idle nodes, so seven ISLA lanes of the equal-cost
+grid finished training without being evaluated (the GeoTransolver and
+Transolver lanes had been caught by the 19:58 instance). Cancelling and
+resubmitting the pump without a start time ran it within seconds and it
+submitted the missing evaluations. A nudge script
+(`kernel/p200k_fleet/pump_nudge.sh`) now runs on every watcher poll: if
+the pump is pending more than fifteen minutes past its begin time, or
+absent without the stop marker, it is resubmitted. No numbers were
+affected; only their arrival was delayed.
+
 ## 2026-09-19 — Interim verdict, PROTO-200K: at 435 cars and 200,000 cells ISLA scores 0.0446, GeoTransolver at 1e-3 0.0455 (1.02x) and Transolver 0.0473 (1.06x); parity bar met on the 1e-3 reading, final standing waits for GeoTransolver's 3e-3 pair; at 109 cars GeoTransolver at 3e-3 leads ISLA by 8% {#sec-nb-proto200k-interim}
 
 **Setting.** PROTO-200K (@sec-nb-proto200k-prereg) trains ISLA,
