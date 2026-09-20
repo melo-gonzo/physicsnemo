@@ -20886,6 +20886,50 @@ L2 on the 180 validation wings).
 deficit width-independent (ratio change within ±0.05), probability 0.5,
 with "width closes part of it" the other likely outcome at 0.35.
 
+## 2026-09-20 — Preregistration, TRAIN-AREA-DR: the DrivAerML twin of the training-law test; do GeoTransolver and Transolver depend on the training sampling law on the cars as they do on the wings, and does ISLA stay indifferent? {#sec-nb-trainarea-dr-prereg}
+
+**Setting.** TRAIN-AREA (@sec-nb-trainarea-verdict) found on the 35-wing
+rung that GeoTransolver and Transolver trained under an area-proportional
+draw are 2.6x and 2.4x worse on the independent uniform draw than their
+uniform-trained twins, while ISLA moves 1%. The wing meshes are the
+extreme case (cell-area coefficient of variation 3.3); the two-dataset
+rule asks whether the same dependence appears on the cars (coefficient of
+variation 2.3), where the area law is closer to the uniform one and the
+effect, if it is what it appears to be, should be present but smaller.
+
+**Instrument** (`kernel/trainarea_dr_aga.sbatch`, manifest group `tadr`,
+job names `isla.trainarea-dr.<lane>`): ISLA 192 (fused, 1e-3),
+GeoTransolver 256 (3e-3) and Transolver 256 (3e-3) trained on 435
+DrivAerML cars under `drivaer_ml_surface_area` (a 1,000,000-cell uniform
+reader pool followed by an area-proportional Poisson draw with expected
+100,000 cells and exact Horvitz-Thompson weights, replacing the uniform
+subsample), 500 epochs, bf16, seeds 42 and 43: six lanes. The
+uniform-trained twins are the ISO-COST 100,000-cell lanes (ISLA-192,
+GeoTransolver-256, Transolver-256), which is why this twin runs at
+100,000 cells (cells are flat, @sec-nb-isocost-interim). All twelve
+checkpoints are scored by the consistency benchmark on the 48 validation
+cars under the independent uniform, stratified and 10:1-biased draws at
+100,000 cells from the benchmark's 320,000-cell pool
+(`bench/bench_lanes_tadr.tsv`, 36 lanes); at 100,000 cells the pool is
+3.2x the count, better than the 1.6x the wing benchmark had at 200,000.
+
+**Bars, written before the runs** (independent uniform draw, two-seed
+means, area-trained over uniform-trained per model).
+
+- **Dependence reproduced**: GeoTransolver and Transolver at least 1.2x
+  worse when trained on the area law, ISLA within 3% either way; the
+  wing finding is then a property of the architectures, not of the wing
+  meshes, and the chapter claim stands unqualified.
+- **Dependence is a wing property**: both baselines within 1.1x; the
+  claim is qualified to non-uniform meshes.
+- **ISLA moves**: ISLA more than 5% either way; ISLA's indifference on
+  the wings was not general and the statement is withdrawn.
+- **Consistency**: ISLA's density factor (biased over uniform) within
+  0.95 to 1.3 under both laws.
+
+**Prediction.** Dependence reproduced at a smaller size: GeoTransolver
+and Transolver 1.3 to 1.8x worse, ISLA within 2%. Probability 0.7.
+
 ## 2026-09-20 — Interim, TRAIN-AREA: all six area-draw lanes trained; scored on the area draw itself ISLA's wing deficit is 20% to GeoTransolver and 15% to Transolver against 27% on the uniform draw, a cross-draw reading that the benchmark on the independent uniform draw must confirm {#sec-nb-trainarea-interim}
 
 **Setting.** TRAIN-AREA (@sec-nb-trainarea-prereg) trains ISLA,
