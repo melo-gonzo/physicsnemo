@@ -20777,6 +20777,27 @@ GeoTransolver's fit needs its 400k lanes). Budget: pending (controls at
 epoch about 560 of 1,000). ISO-MATCH memory: lead (5.6%); time: pending;
 optimal split: width, with the seed-split caveat.
 
+**Addendum, third reading (2026-09-20, 02:00 EDT; 21 of 26; artifact
+`results/isocost_interim_2026-09-20.json` refreshed).** The 192 × 600k
+pair scored 0.0449 / 0.0455, mean **0.0452**, at 80 GB and 0.385 / 0.438
+s per step (p10 / median): the cells axis is flat for ISLA-192 from
+100,000 to 600,000 cells (0.0450, 0.0448, 0.0450, 0.0452), and the fit's
+α stays at 0.00 ± 0.02 on twelve points. **ISO-MATCH time clause:
+parity, and the clause is mis-specified.** The only ISLA lane whose step
+time falls within 15% of GeoTransolver's default (0.43 s median, 0.39 s
+p10) is this one, and GeoTransolver over ISLA there is 0.984, inside the
+3% parity band on both time readings. But that lane is the one that spent
+GeoTransolver's time budget entirely on cells, which the same study shows
+buy nothing, so "ISLA at GeoTransolver's step time" was answered by the
+worst way to spend it. A time-matched lane that spends on width instead
+does not exist in the grid: the widest ISLA lane at 100,000 cells
+(1,536 wide, CAP-435) runs at 0.23 s per step, still 0.6x GeoTransolver's,
+and the 384 × 100k lane that beats every GeoTransolver lane under 100 GB
+runs at 0.12 s. The chapter will state the time comparison as "ISLA
+reaches GeoTransolver's best error at 0.27x its GPU-floor step time and
+0.22x its memory" and report the preregistered clause as parity with this
+caveat, rather than let the clause's wording stand for the finding.
+
 ## 2026-09-19 — Preregistration, CAP-435: how far do width and depth carry at 435 cars? ISLA to 1,536 wide and 48 deep, GeoTransolver to 1,024 wide and 24 deep, Transolver to 512, all at 100,000 cells {#sec-nb-cap435-prereg}
 
 **Setting.** The ISO-COST interim (@sec-nb-isocost-interim) found that at
