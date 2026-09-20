@@ -18,6 +18,9 @@
           "wss_l2": 0.06529006361961365
         }
       },
+      "peak_mem_gb": 73.55,
+      "step_s_p10": 0.2975,
+      "step_s_median": 0.3305,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -45,6 +48,9 @@
           "wss_l2": 0.06896273295084636
         }
       },
+      "peak_mem_gb": 73.55,
+      "step_s_p10": 0.3105,
+      "step_s_median": 0.34299999999999997,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -72,6 +78,9 @@
           "wss_l2": 0.0660410225391388
         }
       },
+      "peak_mem_gb": 95.87,
+      "step_s_p10": 0.4915,
+      "step_s_median": 0.5115000000000001,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -99,6 +108,9 @@
           "wss_l2": 0.06957285602887471
         }
       },
+      "peak_mem_gb": 51.56,
+      "step_s_p10": 0.1645,
+      "step_s_median": 0.2195,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -126,6 +138,9 @@
           "wss_l2": 0.07073438664277394
         }
       },
+      "peak_mem_gb": 78.445,
+      "step_s_p10": 0.2395,
+      "step_s_median": 0.301,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -153,6 +168,9 @@
           "wss_l2": 0.7652262846628824
         }
       },
+      "peak_mem_gb": 42.489999999999995,
+      "step_s_p10": 0.223,
+      "step_s_median": 0.279,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -174,6 +192,9 @@
         "cap_dr_isla_w384_d48_c100k_seed42": null,
         "cap_dr_isla_w384_d48_c100k_seed43": null
       },
+      "peak_mem_gb": 82.91,
+      "step_s_p10": 0.461,
+      "step_s_median": 0.495,
       "n_evaluated": 0,
       "n_runs": 2,
       "status": "pending"
@@ -195,6 +216,9 @@
           "wss_l2": 0.07172856231530507
         }
       },
+      "peak_mem_gb": 12.16,
+      "step_s_p10": 0.0745,
+      "step_s_median": 0.1325,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -222,6 +246,9 @@
           "wss_l2": 0.0640583982070287
         }
       },
+      "peak_mem_gb": 36.495000000000005,
+      "step_s_p10": 0.20600000000000002,
+      "step_s_median": 0.23249999999999998,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -249,6 +276,9 @@
           "wss_l2": 0.06678982575734456
         }
       },
+      "peak_mem_gb": 27.32,
+      "step_s_p10": 0.126,
+      "step_s_median": 0.1855,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -276,6 +306,9 @@
           "wss_l2": 0.06744793057441711
         }
       },
+      "peak_mem_gb": 34.11,
+      "step_s_p10": 0.1125,
+      "step_s_median": 0.186,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -302,6 +335,9 @@
         }
       },
       "source": "ISO-COST",
+      "peak_mem_gb": 40.04,
+      "step_s_p10": 0.2145,
+      "step_s_median": 0.264,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -328,6 +364,9 @@
         }
       },
       "source": "ISO-COST",
+      "peak_mem_gb": 51.45,
+      "step_s_p10": 0.239,
+      "step_s_median": 0.2785,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -354,6 +393,9 @@
         }
       },
       "source": "ISO-COST",
+      "peak_mem_gb": 51.45,
+      "step_s_p10": 0.253,
+      "step_s_median": 0.289,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -380,6 +422,9 @@
         }
       },
       "source": "ISO-COST",
+      "peak_mem_gb": 13.85,
+      "step_s_p10": 0.1175,
+      "step_s_median": 0.27,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -406,6 +451,9 @@
         }
       },
       "source": "ISO-COST",
+      "peak_mem_gb": 22.29,
+      "step_s_p10": 0.1225,
+      "step_s_median": 0.2595,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -432,6 +480,9 @@
         }
       },
       "source": "ISO-COST",
+      "peak_mem_gb": 39.56,
+      "step_s_p10": 0.143,
+      "step_s_median": 0.241,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",
@@ -458,6 +509,9 @@
         }
       },
       "source": "ISO-COST",
+      "peak_mem_gb": 27.095,
+      "step_s_p10": 0.098,
+      "step_s_median": 0.213,
       "n_evaluated": 2,
       "n_runs": 2,
       "status": "complete",

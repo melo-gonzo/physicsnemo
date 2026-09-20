@@ -2,12 +2,15 @@
 float32 at the 200,000-cell protocol, two seeds; joined with the ISO-COST grid's 100,000-cell points (ISLA 192/384/768,
 GeoTransolver 256/512, Transolver 256) so the ladders are complete.
 
-usage: python reduce_cap435.py <fetched p200k_fp32 dir> <isocost_reduction.json> <out.json>
+usage: python reduce_cap435.py <fetched p200k_fp32 dir> <isocost_reduction.json> <out.json> [lane_cost.tsv]
 """
 import glob, json, re, statistics as st, sys
 from pathlib import Path
 
 root, iso_path, out_path = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+cost_path = Path(sys.argv[4]) if len(sys.argv) > 4 else None
+import csv
+COST = {r["run_id"]: r for r in csv.DictReader(open(cost_path), delimiter="\t")} if cost_path else {}
 NAME = re.compile(r"cap_dr_(isla|gt|transolver)_w(\d+)(?:_d(\d+))?(?:_s(\d+))?(?:_lr([0-9.e_]+))?_c100k_seed(\d+)")
 PARAMS = {("isla", 512, 12, 256): 60298076, ("isla", 1024, 12, 256): 237508956, ("isla", 1536, 12, 256): 531636060,
           ("isla", 384, 6, 256): 17257266, ("isla", 384, 24, 256): 68276016, ("isla", 384, 48, 256): 136301016,
@@ -51,6 +54,11 @@ for k, c in iso.items():
     cfgs[key] = dict(model=model, width=c["width"], depth=depth, slices=256, lr=c["lr"], params=c["params"],
                      runs={r: {"pressure_l2": v} for r, v in zip(c["runs"], c["pressure_l2_seeds"])}, source="ISO-COST")
 for c in cfgs.values():
+    for k in ("peak_mem_gb", "step_s_p10", "step_s_median"):
+        vals = [float(COST[r][k]) for r in c["runs"] if r in COST and COST[r].get(k)]
+        if not vals and c.get("source") == "ISO-COST":
+            vals = [iso_c[k]] if (iso_c := next((x for x in iso.values() if x["model"].replace("_unit", "").replace("gt", "gt") and x["width"] == c["width"] and x["cells"] == 100000 and x["epochs"] == 500 and x["lr"] == c["lr"] and {"isla": "isla", "gt_unit": "gt", "transolver_unit": "transolver"}[x["model"]] == c["model"]), None)) and iso_c.get(k) else []
+        c[k] = st.mean(vals) if vals else None
     got = [v for v in c["runs"].values() if v]
     c["n_evaluated"], c["n_runs"] = len(got), len(c["runs"])
     c["status"] = "complete" if got and len(got) == len(c["runs"]) else "pending"

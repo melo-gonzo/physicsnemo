@@ -321,15 +321,24 @@ user actually waits.
 
 ```{python}
 #| label: fig-equal-budget
-#| fig-cap: "Error against training cost for every scored configuration of the ISO-COST grid (435 DrivAerML cars, 500 epochs, float32 at 200,000 cells, two-seed means). Top: peak GPU memory per device; bottom: GPU-floor step time (tenth percentile of the logged steps). Each marker is one width-and-cells configuration, labeled width x cells; the step lines are each model's frontier, the best error attainable at or under a budget. GeoTransolver's recipe default (256 wide, 200,000 cells) is ringed. How to read this: below 100 GB the ISLA frontier lies under GeoTransolver's at every budget; at 100 GB GeoTransolver-512 at 200,000 cells reaches 0.0410, which ISLA-384 at 100,000 cells reaches at 22 GB. It does not say that ISLA's width can be pushed indefinitely: the ISLA curve turns over above 384 under the width learning-rate rule (@sec-nb-isocost-interim, point 2). Data: results/isocost_reduction_2026-09-20.json."
+#| fig-cap: "Error against training cost for every scored configuration of the ISO-COST grid and the CAP-435 width and depth ladders (435 DrivAerML cars, 500 epochs, float32 at 200,000 cells, two-seed means). Top: peak GPU memory per device; bottom: GPU-floor step time (tenth percentile of the logged steps). Each marker is one configuration, labeled width x cells (and L24 for the 24-layer GeoTransolver); the step lines are each model's frontier, the best error attainable at or under a budget. GeoTransolver's recipe default (256 wide, 200,000 cells) is ringed. How to read this: below about 70 GB and 0.3 s the ISLA frontier lies under GeoTransolver's at every budget, with ISLA-384 at 100,000 cells (0.0411, 22 GB) the best lane of either model there; above it GeoTransolver-1,024 (0.0406, 74 GB) and GeoTransolver-512 with 24 layers (0.0406, 96 GB) are 1.2% below ISLA's best, because ISLA's ladder turns over at 384 under the width learning-rate rule while GeoTransolver keeps converting parameters (@sec-nb-cap435-interim). Data: results/isocost_reduction_2026-09-20.json and results/cap435_interim_2026-09-20.json."
 #| fig-alt: "Two stacked scatter plots of validation pressure error against training cost, one against peak memory and one against GPU-floor step time, with ISLA points in blue, GeoTransolver in red and Transolver in amber, each with a step-shaped frontier line."
 import matplotlib.pyplot as plt
 R = J("isocost_reduction_2026-09-20.json")
 cfgs = [c for c in R["configurations"].values() if c["status"] == "complete" and c["epochs"] == 500 and c.get("peak_mem_gb") and c.get("step_s_p10")]
+# CAP-435 adds the wider and deeper lanes at 100,000 cells (default slice count; the rule learning rate for ISLA, the better rate for GeoTransolver)
+CAP = J("cap435_interim_2026-09-20.json")
+MODEL_KEY = {"isla": "isla", "gt": "gt_unit", "transolver": "transolver_unit"}
+for c in CAP["configurations"].values():
+    if c["status"] != "complete" or c.get("source") == "ISO-COST" or c["slices"] != 256 or not c.get("peak_mem_gb") or c["pressure_l2_mean"] > 0.1:
+        continue
+    cfgs.append(dict(model=MODEL_KEY[c["model"]], width=c["width"], cells=100000, epochs=500, lr=c["lr"], params=c["params"], depth=c["depth"],
+                     pressure_l2_mean=c["pressure_l2_mean"], pressure_l2_seeds=c["pressure_l2_seeds"], peak_mem_gb=c["peak_mem_gb"],
+                     step_s_p10=c["step_s_p10"], step_s_median=c["step_s_median"], status="complete"))
 # GeoTransolver-512 keeps its better rate per configuration (prereg)
 best = {}
 for c in cfgs:
-    k = (c["model"], c["width"], c["cells"])
+    k = (c["model"], c["width"], c["cells"], c.get("depth", 12 if c["model"] != "transolver_unit" else 8))
     if k not in best or c["pressure_l2_mean"] < best[k]["pressure_l2_mean"]:
         best[k] = c
 cfgs = list(best.values())
@@ -348,10 +357,12 @@ for ax, axis, xlabel in ((axes[0], "peak_mem_gb", "Peak GPU memory per device [G
             run = min(run, c["pressure_l2_mean"]); fx.append(c[axis]); fy.append(run)
         ax.step(fx, fy, where="post", color=STYLE[KEY[model]]["color"], lw=1.6, alpha=0.55, label="_nolegend_")
         for c in pts:
-            ax.annotate(f"{c['width']}x{c['cells']//1000}k", (c[axis], c["pressure_l2_mean"]), textcoords="offset points",
+            dep = c.get("depth", 12 if model != "transolver_unit" else 8)
+            lab = f"{c['width']}x{c['cells']//1000}k" + ("" if dep in (8, 12) else f" L{dep}")
+            ax.annotate(lab, (c[axis], c["pressure_l2_mean"]), textcoords="offset points",
                         xytext=(5, 4), fontsize=7.5, color=STYLE[KEY[model]]["color"],
                         bbox=dict(boxstyle="round,pad=0.1", fc=WHITE, ec="none", alpha=0.75))
-    d = best.get(("gt_unit", 256, 200000))
+    d = best.get(("gt_unit", 256, 200000, 12))
     if d:
         ax.plot([d[axis]], [d["pressure_l2_mean"]], marker="o", ms=15, mfc="none", mec=RED, mew=1.4, ls="none")
     ax.set_xscale("log"); ax.set_xlabel(xlabel); ax.grid(True, which="both", color=GRID, lw=0.6)
@@ -369,14 +380,16 @@ NAME = {"isla": "ISLA", "gt_unit": "GeoTransolver", "transolver_unit": "Transolv
 out = "| model | width (parameters) | cells per case | pressure L2, seeds | mean | peak memory [GB] | step p10 / median [s] |\n|---|---|--:|---|--:|--:|---|\n"
 for c in rows:
     seeds = " / ".join(f"{v:.4f}" for v in c["pressure_l2_seeds"])
-    lr = f", {c['lr']}" if c["model"] == "gt_unit" and c["width"] == 512 else ""
-    out += (f"| {NAME[c['model']]} | {c['width']} ({c['params']/1e6:.1f}M){lr} | {c['cells']//1000}k | {seeds} | **{c['pressure_l2_mean']:.4f}** | "
+    lr = f", {c['lr']}" if c["model"] == "gt_unit" and c["width"] >= 512 else ""
+    dep = c.get("depth", 12 if c["model"] != "transolver_unit" else 8)
+    dep_s = "" if dep in (8, 12) else f", {dep} layers"
+    out += (f"| {NAME[c['model']]} | {c['width']} ({c['params']/1e6:.1f}M){lr}{dep_s} | {c['cells']//1000}k | {seeds} | **{c['pressure_l2_mean']:.4f}** | "
             f"{c['peak_mem_gb']:.0f} | {c['step_s_p10']:.2f} / {c['step_s_median']:.2f} |\n")
 print(out)
-print(": Every scored ISO-COST configuration (GeoTransolver-512 at its better learning rate per cell count; its 256-wide "
+print(": Every scored ISO-COST and CAP-435 configuration at the default slice count (GeoTransolver at its better learning rate per configuration; its 256-wide "
       "200,000-cell row is the PROTO-200K pair at 3e-3 with the step time of the same configuration's 1,000-epoch "
       "control). Costs are per-lane medians over the run (memory: peak of the logged per-step values). "
-      "Data: results/isocost_reduction_2026-09-20.json. {#tbl-equal-budget}")
+      "Data: results/isocost_reduction_2026-09-20.json and results/cap435_interim_2026-09-20.json. {#tbl-equal-budget}")
 ```
 
 Three readings carry the section.
@@ -403,24 +416,34 @@ Three readings carry the section.
    split that 384 does not show; whether that is the rule under-training the
    wide lanes or a property of the wide relative frame is the question of
    the CAP-435 rate controls (@sec-nb-cap435-prereg).
-3. **At equal cost ISLA is ahead below 100 GB and at parity at 100 GB.**
-   The two best lanes in the grid, GeoTransolver-512 × 200,000 (0.0410, 100
-   GB, 0.45 s GPU floor) and ISLA-384 × 100,000 (0.0411, 22 GB, 0.12 s), are
-   at parity in error and at matched parameters (35.8M against 34.3M); the
-   memory and time between them is the architecture's. Against
-   GeoTransolver's recipe default (0.0445, 80 GB, 0.39 s) the best ISLA lane
-   within 15% of the memory budget is 768 × 200,000 at 0.0421 (5.6% lower,
-   the preregistered lead), but every ISLA lane that spends the budget is
-   worse than the 22 GB lane that does not: at this data size the
-   accuracy-optimal way to spend GeoTransolver's budget on ISLA is to spend
-   a quarter of it on width. The preregistered time clause is met only by
-   the lane that spent the budget on cells (192 × 600,000, 0.0452, parity
-   at 0.984) and is reported as mis-specified (@sec-nb-isocost-interim,
-   third reading).
+3. **At equal cost ISLA is ahead up to about 70 GB, and behind by 1.2% at
+   the top of the ladders.** ISLA-384 × 100,000 (0.0411, 22 GB, 0.12 s GPU
+   floor) is the best lane of either model below 70 GB and 0.3 s per step;
+   GeoTransolver reaches 0.0410 at 100 GB (512 wide, 200,000 cells) and
+   0.0406 at 74 GB (1,024 wide, 100,000 cells) or 96 GB (512 wide, 24
+   layers). At matched parameters the two are at parity at 34M to 36M
+   (1.014) and GeoTransolver leads by 3.6% at 134M to 143M
+   (@sec-nb-cap435-interim): under the width learning-rate rule ISLA's
+   ladder turns over at 384 and every wider lane is worse, while
+   GeoTransolver keeps converting parameters at about 2.6% per doubling.
+   That turnover is ISLA's own ceiling, its mechanism is measured as total
+   routing collapse at the rates the wide models would need
+   (@sec-nb-routingsat-verdict), and the bounded-routing intervention that
+   would remove it is under test (@sec-nb-routenorm-prereg,
+   @sec-using-lr). Against GeoTransolver's recipe default (0.0445, 80 GB,
+   0.39 s) the best ISLA lane within 15% of the memory budget is 768 ×
+   200,000 at 0.0421 (5.6% lower, the preregistered lead), but every ISLA
+   lane that spends the budget is worse than the 22 GB lane that does not:
+   at this data size the accuracy-optimal way to spend GeoTransolver's
+   budget on ISLA is to spend a quarter of it on width. The preregistered
+   time clause is met only by the lane that spent the budget on cells (192
+   × 600,000, 0.0452, parity at 0.984) and is reported as mis-specified
+   (@sec-nb-isocost-interim, third reading).
 
 These are one dataset's numbers. The same grid on the 510-wing HiLift rung
 (SCALE-HL, @sec-nb-scalehl-prereg) decides whether "width, not cells" is a
-property of the architectures or of DrivAerML.
+property of the architectures or of DrivAerML, and whether ISLA's turnover
+is a rate ceiling (ROUTE-NORM) or a capacity one.
 
 ## Pose: equivariant by construction, invariant by canonicalization {#sec-pose}
 
