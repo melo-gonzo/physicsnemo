@@ -21850,3 +21850,15 @@ Bars for "clean" are the studies' own: no validation loss above 0.01 after
 epoch 20. Accuracy is read at epoch 500 in float32 through the fleet pump.
 Cost: six lanes on one node each, about 20 to 40 hours of chain time; the
 48-layer lane is the most expensive at about 2.5 times the 12-layer cost.
+
+**Addendum, acceptance of the extension (2026-09-20, 16:20 EDT; epochs 26
+to 29).** All six lanes are alive, productive and without a traceback or
+out-of-memory event. Validation losses, seeds 42 / 43: cosine 24 layers at
+5e-4 **0.0015 / 0.0014**; cosine 48 layers at 2.5e-4 **0.0016 / 0.0015**
+(the linear 48-layer pair at 1.25e-4 read 0.0035 / 0.0122 at epoch 25 and
+the 2.5e-4 pair diverged to NaN); cosine interior at 1e-3 **0.0033 /
+0.0033** (the linear interior seed 43 at 1e-3 had risen to the plateau
+before epoch 20; the 5e-4 lanes read 0.0021 at epoch 45). Peak memory 46 GB
+at 24 layers, 90 GB at 48 layers, 58 GB for the interior configuration;
+step times 0.5 to 0.6 s for the depth lanes and 0.3 s for the interior
+lanes. Six queued successors, one per lane.
