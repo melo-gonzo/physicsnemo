@@ -20858,6 +20858,82 @@ itself a statement about discretization dependence worth a row.
 reduce with the WING-BENCH machinery, and write the verdict against the
 preregistered clauses including the density-factor bound (1.05 to 1.3).
 
+## 2026-09-20 — Verdict, TRAIN-AREA: null for the weight-variance mechanism (ISLA gains 1.2% on the independent draw), and a new finding: ISLA's trained function does not depend on the training sampling law (1% change) while GeoTransolver's and Transolver's degrade 2.6x and 2.4x when trained on the area draw and scored on the uniform one {#sec-nb-trainarea-verdict}
+
+**Setting.** TRAIN-AREA (@sec-nb-trainarea-prereg) asked whether the 27%
+wing deficit at 35 cases is the variance of the measure weights ISLA
+reads: train on an area-proportional Poisson draw (exact Horvitz-Thompson
+weights, nearly uniform), and the deficit should shrink if it is. The
+instrument is the consistency benchmark: every run, trained under the
+uniform-over-cells law (the WING-BENCH-200K lanes) or under the area law
+(the six new lanes), is scored in float32 on the 180 validation wings
+under the same three independent draws at 200,000 cells: uniform over
+cells, stratified, and 10:1 front/back biased. Artifact
+`results/trainarea_reduction_2026-09-20.json`; reduction
+`results/trainarea_reduce_2026-09-20.py`; 18 benchmark lanes
+`bench/bench_lanes_wing200k_area.tsv`, array 799857.
+
+**What we saw** (pressure relative L2, two-seed means; per-seed values
+in the artifact).
+
+| model | training law | uniform draw | stratified draw | 10:1-biased draw | density factor (biased ÷ uniform) |
+|---|---|---|---|---|---|
+| ISLA | uniform over cells | 0.1502 | 0.1497 | 0.1498 | 1.00 |
+| ISLA | area-proportional | **0.1483** | 0.1480 | 0.1481 | 1.00 |
+| GeoTransolver (3e-3) | uniform over cells | 0.1098 | 0.1098 | 0.2716 | 2.47 |
+| GeoTransolver (3e-3) | area-proportional | **0.2842** | 0.2842 | 0.3779 | 1.33 |
+| Transolver | uniform over cells | 0.1102 | 0.1101 | 0.3080 | 2.80 |
+| Transolver | area-proportional | **0.2621** | 0.2621 | 0.2968 | 1.13 |
+
+: TRAIN-AREA: the same six model-and-seed pairs under two training laws, scored under three inference draws on the same 180 wings. {#tbl-trainarea}
+
+**Verdict against the bars.** ISLA under the area law improves on the
+independent uniform draw by **1.2%** (0.1502 to 0.1483; seeds 0.1531 and
+0.1436 against 0.1507 and 0.1497, so the seed spread, 6%, exceeds the
+move). The mechanism clause needed 5%: **null**. The wing deficit is not
+the variance of the measure weights. Weight variance was the last
+candidate from the 10,000-cell ablations, and the 12% the weights-off
+ablation bought (@sec-nb-a35-verdict) is therefore not "less variable
+weights"; the candidate now standing is the trained function's response
+to the wing geometry itself, the slice-attention form on a multi-element
+surface (@sec-nb-p200k-wings-35 lists what has been excluded). The
+consistency clause asked ISLA's density factor to stay within 1.05 to 1.3:
+it is **1.00**, as it already was under the uniform law
+(@sec-nb-wingbench-verdict, 1.00), so the clause's lower edge was
+miscalibrated against a factor the program had already measured; the
+thing it guarded against, a rise above 1.5, did not happen.
+
+**The finding the instrument produced instead.** GeoTransolver and
+Transolver trained on the area draw and scored on the uniform draw are
+**2.6x and 2.4x worse** than their uniform-trained twins (0.2842 against
+0.1098; 0.2621 against 0.1102), on both seeds, and the same on the
+stratified draw. Their trained functions encode the sampling law they were
+trained under; move the law and the function moves. ISLA's does not: 0.1483
+against 0.1502 on the uniform draw, 0.1480 against 0.1497 stratified,
+0.1481 against 0.1498 biased. Read with WING-BENCH-200K, this closes the
+second half of the discretization statement: at inference, changing the
+draw moves GeoTransolver 2.5x and ISLA 1.00x; in training, changing the
+law moves GeoTransolver 2.6x and ISLA 1.01x. The area-trained baselines
+are also less draw-sensitive at inference (density factors 1.33 and 1.13
+against 2.47 and 2.80), which is the expected face of the same
+dependence: their function is now tuned to the area law, so the biased
+draw, which is closer to it than the uniform draw is, costs them less.
+Under the area training law, ISLA leads GeoTransolver and Transolver by
+**1.92x and 1.77x** on the uniform draw; under the uniform law it trails
+them by 27%.
+
+**What this changes.** (1) The wing-deficit ledger: weight variance is
+closed; the remaining candidate is architectural and is the next study's
+subject. (2) The chapter statement on training-law dependence
+(@sec-consistency-bench, chapter 6) gains a training-side table: the
+baselines' accuracy on the mesher's own draw is conditional on having
+been trained on that draw. (3) The recommendation stands as before: the
+uniform-over-cells law is the recipe default for every model; ISLA is the
+only one of the three for which the choice does not matter, and that is
+stated as a pro of the architecture, not as a reason to change the
+baselines' training (@sec-nb-geokernel-auto's companion ruling on
+released baselines applies).
+
 ## 2026-09-19 — Preregistration, CAP-435: how far do width and depth carry at 435 cars? ISLA to 1,536 wide and 48 deep, GeoTransolver to 1,024 wide and 24 deep, Transolver to 512, all at 100,000 cells {#sec-nb-cap435-prereg}
 
 **Setting.** The ISO-COST interim (@sec-nb-isocost-interim) found that at

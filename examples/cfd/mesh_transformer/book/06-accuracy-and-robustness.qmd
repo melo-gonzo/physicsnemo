@@ -178,7 +178,8 @@ print(f"1. **A stratified draw of the same cells** keeps the inclusion law and t
       f"integrals, and it is worth {p_draw:.1f} points of ratio.")
 print(f"2. **More cells.** From the stratified 10,000-cell draw to an independent 40,000-cell draw the ratio moves a further "
       f"{p_count:.1f} points. This is the spread of the Horvitz–Thompson weights of a uniform-over-cells sample, which only more "
-      "cells or a weight-changing quadrature can reduce; retraining under an area-proportional draw buys only a few percent.\n")
+      "cells or a weight-changing quadrature can reduce; retraining under an area-proportional draw buys 1% at 200,000 cells "
+      "(@sec-nb-trainarea-verdict), so the weights' variance is not what remains on the wings.\n")
 print(f"What remains at 40,000 cells, {(1 - r_ind40) * 100:.1f} points, is the trained function's deficit. Two further experiments "
       "split it:\n")
 print(f"3. **Raw coordinates as a diagnostic.** Appending each cell's centered coordinates and normal to ISLA's seeds, which breaks "
@@ -625,14 +626,26 @@ print(": The same readouts as @tbl-consistency-40k for the diagnostics. Data: re
 ```
 :::
 
-::: {.callout-note collapse="true" title="The same convergence under a training-convention swap"}
-A measure-weighted ISLA trained on the area-proportional convention and
-evaluated on the uniform-over-cells one pays 2.9x at 2,500 cells, 1.45x at
-10,000 and 1.05x at 40,000 (the reverse swap 2.7x to 1.21x), while at
-10,000 cells the baselines pay 3 to 7x with no count to appeal to. The two
-conventions are two quadratures of the same surface integral, and the
-estimator that treats them as such gives the same answer in the fine-mesh
-limit. Data: results/consistency_bench/consistency_bench_mixarea_2026-09-11.json.
+::: {.callout-note title="The training law is the other half of the same statement"}
+Changing the draw at inference is one half; changing the law the model
+was *trained* under is the other. At the reporting protocol (35 wings,
+200,000 cells, float32, two seeds) ISLA, GeoTransolver and Transolver were
+each trained twice, under the uniform-over-cells law and under an
+area-proportional Poisson law with exact Horvitz-Thompson weights, and
+every checkpoint was scored on the same 180 validation wings under the
+same independent uniform draw. ISLA's error moved from 0.1502 to 0.1483
+(1%). GeoTransolver's moved from 0.1098 to 0.2842 (2.6x) and Transolver's
+from 0.1102 to 0.2621 (2.4x): their trained functions encode the sampling
+law they saw, and their accuracy on the mesher's own draw is conditional
+on having been trained on it. Under the area law ISLA leads them by 1.9x
+and 1.8x on the uniform draw; under the uniform law it trails them by
+27%. The same swap at smaller counts showed the convergence mechanism:
+ISLA trained on the area convention and scored on the uniform one paid
+2.9x at 2,500 cells, 1.45x at 10,000 and 1.05x at 40,000, the price
+falling with count as a quadrature's should. Data:
+results/trainarea_reduction_2026-09-20.json (200,000 cells) and
+results/consistency_bench/consistency_bench_mixarea_2026-09-11.json
+(the count ladder); notebook @sec-nb-trainarea-verdict.
 :::
 
 ## Pose: a contract, not an accuracy edge {#sec-pose-contract}

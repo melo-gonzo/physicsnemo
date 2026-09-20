@@ -1,0 +1,174 @@
+{
+  "study": "TRAIN-AREA: 35-wing rung, runs trained under the uniform-over-cells law and under the area-proportional Poisson law, each scored under three benchmark draws at 200,000 cells, float32, two seeds",
+  "arms": {
+    "isla_uniform": {
+      "per_seed": {
+        "seed42": {
+          "unif": 0.1506652937995063,
+          "strat": 0.15015557607014973,
+          "biased": 0.15009135140313043
+        },
+        "seed43": {
+          "unif": 0.14966338475545246,
+          "strat": 0.14920934041341147,
+          "biased": 0.14946316613091362
+        }
+      },
+      "mean": {
+        "unif": 0.15016433927747938,
+        "strat": 0.1496824582417806,
+        "biased": 0.14977725876702203
+      },
+      "n_unif": 2,
+      "n_strat": 2,
+      "n_biased": 2,
+      "density_factor": 0.9974222873931334
+    },
+    "isla_area": {
+      "per_seed": {
+        "seed42": {
+          "unif": 0.15309997134738498,
+          "strat": 0.15290312237209744,
+          "biased": 0.15276045269436306
+        },
+        "seed43": {
+          "unif": 0.14355040656195747,
+          "strat": 0.14302619298299155,
+          "biased": 0.14338742362128365
+        }
+      },
+      "mean": {
+        "unif": 0.14832518895467123,
+        "strat": 0.1479646576775445,
+        "biased": 0.14807393815782335
+      },
+      "n_unif": 2,
+      "n_strat": 2,
+      "n_biased": 2,
+      "density_factor": 0.9983060813971074
+    },
+    "gt_unit_uniform": {
+      "per_seed": {
+        "seed42": {
+          "unif": 0.10635039011637369,
+          "strat": 0.10626552369859484,
+          "biased": 0.22631390889485678
+        },
+        "seed43": {
+          "unif": 0.11334905624389649,
+          "strat": 0.11331871880425347,
+          "biased": 0.3168911192152235
+        }
+      },
+      "mean": {
+        "unif": 0.10984972318013508,
+        "strat": 0.10979212125142415,
+        "biased": 0.27160251405504016
+      },
+      "n_unif": 2,
+      "n_strat": 2,
+      "n_biased": 2,
+      "density_factor": 2.472491565678847
+    },
+    "gt_unit_area": {
+      "per_seed": {
+        "seed42": {
+          "unif": 0.29038181304931643,
+          "strat": 0.2904080708821615,
+          "biased": 0.3913331773546007
+        },
+        "seed43": {
+          "unif": 0.27801261478000217,
+          "strat": 0.27796139187282987,
+          "biased": 0.36439654032389324
+        }
+      },
+      "mean": {
+        "unif": 0.2841972139146593,
+        "strat": 0.28418473137749567,
+        "biased": 0.377864858839247
+      },
+      "n_unif": 2,
+      "n_strat": 2,
+      "n_biased": 2,
+      "density_factor": 1.3295867810749011
+    },
+    "transolver_unit_uniform": {
+      "per_seed": {
+        "seed42": {
+          "unif": 0.11158485412597656,
+          "strat": 0.11154184341430665,
+          "biased": 0.3205181969536675
+        },
+        "seed43": {
+          "unif": 0.10883465872870551,
+          "strat": 0.10875354342990451,
+          "biased": 0.29555473327636717
+        }
+      },
+      "mean": {
+        "unif": 0.11020975642734104,
+        "strat": 0.11014769342210558,
+        "biased": 0.30803646511501737
+      },
+      "n_unif": 2,
+      "n_strat": 2,
+      "n_biased": 2,
+      "density_factor": 2.795001777525017
+    },
+    "transolver_unit_area": {
+      "per_seed": {
+        "seed42": {
+          "unif": 0.2691327624850803,
+          "strat": 0.26914039187961153,
+          "biased": 0.3223076714409722
+        },
+        "seed43": {
+          "unif": 0.2551389906141493,
+          "strat": 0.2551018608940972,
+          "biased": 0.2712715148925781
+        }
+      },
+      "mean": {
+        "unif": 0.2621358765496148,
+        "strat": 0.26212112638685436,
+        "biased": 0.29678959316677517
+      },
+      "n_unif": 2,
+      "n_strat": 2,
+      "n_biased": 2,
+      "density_factor": 1.132197534627052
+    }
+  },
+  "verdict": {
+    "isla_area_over_uniform_unif": 0.9877524162417171,
+    "gt_unit_area_over_uniform_unif": 2.5871454718973084,
+    "transolver_unit_area_over_uniform_unif": 2.378517883055439,
+    "gt_unit_over_isla_uniform_unif": 0.7315300270935204,
+    "transolver_unit_over_isla_uniform_unif": 0.7339276219481862,
+    "gt_unit_over_isla_area_unif": 1.9160414756087796,
+    "transolver_unit_over_isla_area_unif": 1.7673051920380467,
+    "isla_area_over_uniform_strat": 0.9885237015451646,
+    "gt_unit_area_over_uniform_strat": 2.588389113338216,
+    "transolver_unit_area_over_uniform_strat": 2.3797241525735773,
+    "gt_unit_over_isla_uniform_strat": 0.7335002547464714,
+    "transolver_unit_over_isla_uniform_strat": 0.7358757647084142,
+    "gt_unit_over_isla_area_strat": 1.9206257483243871,
+    "transolver_unit_over_isla_area_strat": 1.7715117278755044,
+    "isla_area_over_uniform_biased": 0.9886276419850347,
+    "gt_unit_area_over_uniform_biased": 1.391242125110347,
+    "transolver_unit_area_over_uniform_biased": 0.9634885047001084,
+    "gt_unit_over_isla_uniform_biased": 1.8133761846817937,
+    "transolver_unit_over_isla_uniform_biased": 2.056630410055554,
+    "gt_unit_over_isla_area_biased": 2.551866071371067,
+    "transolver_unit_over_isla_area_biased": 2.004333759600859,
+    "verdict": "null",
+    "isla_gain_unif": 0.012247583758282943,
+    "baseline_changes_unif": {
+      "gt_unit": -1.5871454718973084,
+      "transolver_unit": -1.378517883055439
+    },
+    "isla_area_density_factor": 0.9983060813971074,
+    "consistency": "outside 1.05-1.3 but below 1.5"
+  }
+}
