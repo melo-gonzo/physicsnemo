@@ -89,6 +89,7 @@ import math
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from jaxtyping import Float
 from torch.utils.checkpoint import checkpoint
 
@@ -212,6 +213,36 @@ def _geo_width(n_global_vectors: int, relative: bool) -> int:
     return 5 + k + (0 if relative else 1 + k)
 
 
+class _RoutingLogits(nn.Module):
+    """Point-to-slice routing logits, ``(B, N, hidden) -> (B, N, S)``.
+
+    ``"linear"``: an affine map of the normalized token state (the original
+    form). ``"cosine"``: ``temperature`` times the cosine between the token
+    state and a learned prototype per slice, so every logit lies in
+    ``[-temperature, temperature]`` and no block can route every point to
+    one slice however its weights grow (ROUTING-SAT measured that state as the
+    mean-field plateau's mechanism). The parameter is ``weight`` in both modes
+    so the two share a state-dict layout; ``bias`` exists only in linear mode.
+    """
+
+    def __init__(self, hidden: int, n_slices: int, mode: str = "linear", temperature: float = 10.0) -> None:
+        super().__init__()
+        if mode not in ("linear", "cosine"):
+            raise ValueError(f"routing_norm must be 'linear' or 'cosine', got {mode!r}")
+        self.mode = mode
+        self.temperature = float(temperature)
+        lin = nn.Linear(hidden, n_slices, bias=(mode == "linear"))
+        self.weight = lin.weight
+        self.bias = lin.bias
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.mode == "linear":
+            return F.linear(x, self.weight, self.bias)
+        return self.temperature * F.linear(
+            F.normalize(x, dim=-1), F.normalize(self.weight, dim=-1)
+        )
+
+
 class _SliceBlock(nn.Module):
     """One pre-LN layer of measure-weighted soft-slice attention + MLP."""
 
@@ -226,6 +257,8 @@ class _SliceBlock(nn.Module):
         relative_frame: bool = False,
         geo_kernel: str = "eager",
         n_global_vectors: int = 1,
+        routing_norm: str = "linear",
+        routing_temperature: float = 10.0,
     ) -> None:
         super().__init__()
         self.use_relational_geo = use_relational_geo
@@ -248,7 +281,7 @@ class _SliceBlock(nn.Module):
         ### the forward is bitwise unchanged (same ops, same order).
         self.geo_checkpoint = bool(geo_checkpoint)
         self.norm_assign = nn.LayerNorm(hidden)
-        self.assign = nn.Linear(hidden, n_slices)
+        self.assign = _RoutingLogits(hidden, n_slices, routing_norm, routing_temperature)
         ### Relational geometry (v2): per-slice equivariant anchors and
         ### point-anchor invariants -- many local, data-adaptive reference
         ### points instead of any global frame (smooth by construction).
@@ -372,6 +405,8 @@ class _ReadBlock(nn.Module):
         relative_frame: bool = False,
         geo_kernel: str = "eager",
         n_global_vectors: int = 1,
+        routing_norm: str = "linear",
+        routing_temperature: float = 10.0,
     ) -> None:
         super().__init__()
         self.geo_checkpoint = bool(geo_checkpoint)
@@ -379,7 +414,7 @@ class _ReadBlock(nn.Module):
         self.geo_kernel = geo_kernel  # see _SliceBlock
         self.n_geo = n_geo = _geo_width(n_global_vectors, self.relative_frame)
         self.norm = nn.LayerNorm(hidden)
-        self.assign = nn.Linear(hidden, n_slices)
+        self.assign = _RoutingLogits(hidden, n_slices, routing_norm, routing_temperature)
         self.geo_logit = nn.Linear(n_geo, 1)
         self.geo_feat = nn.Linear(n_geo, hidden // 2)
         self.broadcast = nn.Linear(2 * hidden + hidden // 2, hidden)
@@ -597,6 +632,15 @@ class ISLA(Module):
             ``"eager"`` (the PyTorch reference region). Pass ``"eager"`` or
             ``"fused"`` to force one; ``"fused"`` raises when its constraints
             cannot be met.
+        routing_norm: ``"linear"`` (default): each block's point-to-slice
+            routing logits are an affine map of the normalized token state;
+            ``"cosine"``: ``routing_temperature`` times the cosine between the
+            token state and a learned prototype per slice, which bounds every
+            logit in ``[-T, T]`` so no block can route every point to a single
+            slice (the routing-collapse state behind the mean-field plateau at
+            high learning rates). Under study (ROUTE-NORM); the frame and head
+            contracts are unchanged either way.
+        routing_temperature: The bound ``T`` of the cosine routing logits.
         eps: Numerical floor for norms and logarithms.
 
     Forward inputs (all keyword-only): ``points`` and ``normals`` of shape
@@ -645,9 +689,15 @@ class ISLA(Module):
         frame_mode: str = "relative",
         scale_mode: str = "rms_distance",
         geo_kernel: str | None = None,
+        routing_norm: str = "linear",
+        routing_temperature: float = 10.0,
         eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
+        if routing_norm not in ("linear", "cosine"):
+            raise ValueError(f"routing_norm must be 'linear' or 'cosine', got {routing_norm!r}")
+        self.routing_norm = routing_norm
+        self.routing_temperature = float(routing_temperature)
         ### KERNEL STUDY (2026-09-13): geo_kernel selects the implementation of the
         ### per-layer geometry region, not its arithmetic. "eager" is the PyTorch
         ### region (with geo_checkpoint deciding whether its (B,N,S,.) intermediates
@@ -786,13 +836,15 @@ class ISLA(Module):
                 relative_frame=self.relative_frame,
                 geo_kernel=geo_kernel,
                 n_global_vectors=K,
+                routing_norm=routing_norm,
+                routing_temperature=routing_temperature,
             )
             for _ in range(n_layers)
         )
         if self.relative_frame:
             ### Head frame (RELFRAME): per-point soft slice anchor for the
             ### radial basis vector.
-            self.frame_assign = nn.Linear(hidden, n_slices)
+            self.frame_assign = _RoutingLogits(hidden, n_slices, routing_norm, routing_temperature)
         ### v5a (query_independent): encode/decode split. Queries decode
         ### passively from final encoder slices and anchors: query-independent
         ### by construction given the source sample.
@@ -800,7 +852,8 @@ class ISLA(Module):
         self.local_readout_rho = float(local_readout_rho)
         if query_independent:
             self.final_assign = nn.Sequential(
-                nn.LayerNorm(hidden), nn.Linear(hidden, n_slices)
+                nn.LayerNorm(hidden),
+                _RoutingLogits(hidden, n_slices, routing_norm, routing_temperature),
             )
             self.read_blocks = nn.ModuleList(
                 _ReadBlock(
@@ -811,6 +864,8 @@ class ISLA(Module):
                     relative_frame=self.relative_frame,
                     geo_kernel=geo_kernel,
                     n_global_vectors=K,
+                    routing_norm=routing_norm,
+                    routing_temperature=routing_temperature,
                 )
                 for _ in range(n_decoder_layers)
             )

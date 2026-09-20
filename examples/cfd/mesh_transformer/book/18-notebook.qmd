@@ -21073,6 +21073,79 @@ slice prototypes at a fixed temperature. That is the successor study
 here (384 at 1e-3, 768 at 5e-4) as its test cases and the reference
 configuration's accuracy as its null.
 
+## 2026-09-20 — Preregistration, ROUTE-NORM: does bounding the routing logits (cosine routing at a fixed temperature) remove the learning-rate ceiling that ROUTING-SAT measured as total routing collapse, and does it change accuracy at the rule rates? {#sec-nb-routenorm-prereg}
+
+**Setting.** ROUTING-SAT (@sec-nb-routingsat-verdict) measured the
+mean-field plateau as total routing collapse: every block routes every
+point to one slice and all anchors coincide. The tolerated learning rate
+falls like 1/width and 1/depth (@sec-nb-cap435-prereg acceptance), which
+costs the wide models their training speed and, under the width rule,
+leaves a seed split at 512 and 768 (@sec-nb-isocost-interim). Each block's
+routing logits are an affine map of a normalized token state whose weights
+are free to grow, so nothing bounds how sharp the routing can become. The
+intervention is structural: route on the cosine between the token state
+and a learned prototype per slice, times a fixed temperature :math:`T`, so
+every logit lies in :math:`[-T, T]` and no block can reach the collapsed
+state however its weights grow. The frame, measure and head contracts are
+untouched (the routing consumes only invariants either way); the test file
+`test_isla_routing.py` asserts the bound, the contracts and that every
+parameter trains. Implementation: `routing_norm="cosine"`,
+`routing_temperature=10` (the linear routing of trained ISLA has logit
+standard deviations of 2.1 to 3.0 on validation cars, so a range of ±10
+leaves ordinary routing sharpness available while forbidding the one-slice
+state; the temperature is a hyperparameter of this study, not tuned).
+
+**Instrument** (`kernel/routenorm_aga.sbatch`, code snapshot
+`code_routenorm`, manifest group `rn`, job names `isla.routenorm.<lane>`;
+100,000 cells, 500 epochs, bf16, seeds 42 and 43, float32 scoring at the
+200,000-cell protocol through the fleet pump; 18 lanes):
+
+| dataset | routing | width | rate | role |
+|---|---|--:|--:|---|
+| DrivAerML 435 | cosine | 192 | 1e-3 | accuracy null against the reference (0.0450) |
+| DrivAerML 435 | cosine | 384 | 5e-4 | accuracy null against 0.0411 |
+| DrivAerML 435 | cosine | 384 | 1e-3 | collapse condition (linear routing collapses by epoch 89) |
+| DrivAerML 435 | cosine | 768 | 2.5e-4 | accuracy null against 0.0421 (seed split 0.0432 / 0.0410) |
+| DrivAerML 435 | cosine | 768 | 5e-4 | collapse condition |
+| DrivAerML 435 | cosine | 768 | 1e-3 | twice the collapse rate |
+| HiLift 510 | cosine | 192 | 1e-3 | second-dataset accuracy null (against SCALE-HL's linear 192) |
+| HiLift 510 | cosine | 384 | 1e-3 | second-dataset collapse condition |
+| HiLift 510 | linear | 384 | 1e-3 | second-dataset collapse control (does linear collapse on wings too?) |
+
+**Bars, written before the runs** (validation loss trajectories for the
+collapse clause; seed-mean float32 pressure relative L2 for accuracy).
+
+- **Collapse removed**: every cosine lane at a collapse rate (384 at 1e-3,
+  768 at 5e-4 and 1e-3, on both datasets) keeps its validation loss below
+  0.01 after epoch 20 on both seeds and finishes with routing statistics in
+  the clean range (effective slices at least 4 in every block, measured with
+  the ROUTING-SAT probe); the linear wing control at 384 and 1e-3 collapses
+  as its DrivAerML twin did. Then the rate ceiling was the routing
+  parametrization and the width rule becomes unnecessary.
+- **Collapse moved, not removed**: cosine lanes survive 1e-3 at 384 but not
+  at 768, or survive on the cars but not the wings; the bound helps and the
+  ceiling still scales.
+- **Null**: a cosine lane collapses at a rate where linear routing also
+  collapses; the bound is not the mechanism's lever (the collapse then goes
+  through the token states rather than the logit scale).
+- **Accuracy at the rule rates**: cosine within 1% of linear at 192 × 1e-3
+  (0.0450), 384 × 5e-4 (0.0411) and 768 × 2.5e-4 (0.0421) is neutral; more
+  than 2% worse is a cost that the rate freedom must pay for; more than 2%
+  better is a finding on its own.
+- **Width beyond 384 recovers**: if cosine 768 at 5e-4 or 1e-3 scores at
+  least 2% below linear 384's 0.0411 with both seeds within 1% of each
+  other, the ISO-COST width turnover was optimization (rate-limited, seed-
+  split) and not capacity, and the width ladder is re-run under cosine
+  routing (CAP-435's 1,024 and 1,536 lanes would follow).
+- **Second dataset**: the collapse and accuracy clauses are read on the
+  510-wing rung as well; a verdict that holds on one dataset only is
+  interim.
+
+**Prediction.** Collapse removed at 384 × 1e-3 on both datasets and at 768
+× 5e-4; 768 × 1e-3 open (0.5); accuracy neutral at the rule rates (within
+1%); 768 under cosine at 5e-4 beats 0.0411 by 1 to 3% with the seed split
+closed. Probability of the full "collapse removed" clause: 0.6.
+
 ## 2026-09-20 — Preregistration, TRAIN-AREA-DR: the DrivAerML twin of the training-law test; do GeoTransolver and Transolver depend on the training sampling law on the cars as they do on the wings, and does ISLA stay indifferent? {#sec-nb-trainarea-dr-prereg}
 
 **Setting.** TRAIN-AREA (@sec-nb-trainarea-verdict) found on the 35-wing
