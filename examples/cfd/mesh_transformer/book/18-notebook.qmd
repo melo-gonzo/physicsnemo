@@ -21779,3 +21779,74 @@ keeps the 35-case rung's picture (GeoTransolver ÷ ISLA 0.73 at both
 budgets there, @tbl-scoreboard-200k-wings): the wing deficit is a property
 of the trained functions, not of the sampling count. Data:
 results/p200k_fleet_interim_2026-09-20.json.
+
+## 2026-09-20 — Third readings and an extension: CAP-435's rate controls at epoch 400 leave 48 layers with no clean linear rate; ROUTE-NORM's cosine lanes are clean at epoch 230 at four times the rule rate; six lanes extend cosine routing to 24 and 48 layers and to the interior configuration {#sec-nb-routenorm-depth-prereg}
+
+**Setting.** Two studies are running on the same question from different
+sides. CAP-435 (@sec-nb-cap435-prereg) asks how far width and depth carry
+ISLA at 435 DrivAerML cars and found that under the width learning-rate
+rule (1e-3 × 192 / width) ISLA turns over at width 384 while GeoTransolver
+keeps improving (@sec-nb-cap435-interim); its rate controls test whether
+the rule under- or over-shoots. ROUTING-SAT (@sec-nb-routingsat-verdict)
+measured the failure at higher rates as total routing collapse (one active
+slice per block, coincident anchors), and ROUTE-NORM
+(@sec-nb-routenorm-prereg) tests whether bounding the routing logits with
+cosine routing removes that ceiling.
+
+**CAP-435 rate controls at epochs 387 to 424 (validation loss, seeds 42 /
+43).** ISLA-384 at 1e-3: **0.059 / 0.052, both on the mean-field plateau**
+(the rule rate 5e-4 finished at 0.0411). ISLA-384 at 7.5e-4: 0.043 /
+0.0059, seed 42 on the plateau, seed 43 elevated three times above the
+5e-4 lanes. ISLA-768 at 5e-4: 0.56 / 0.011, seed 42 on the plateau, seed
+43 elevated; ISLA-768 at 3.75e-4: 0.00051 / 0.00050, clean and level with
+the rule-rate 2.5e-4 lanes. Depth: 24 layers at 2.5e-4 clean (0.00049 /
+0.00050; the 5e-4 pair had plateaued); **48 layers at 2.5e-4 diverged to
+NaN on both seeds, and at 1.25e-4 both seeds are on the plateau (0.057 /
+0.056)** after reading 0.0035 / 0.0122 at epoch 25. So under linear
+routing the 48-layer configuration has no clean rate among those tried,
+the rate ceiling falls at least as fast as 1/depth, and at width 384 the
+rule rate is within a factor of 1.5 of the ceiling on one seed. The
+width-rule verdict waits for the evaluations at epoch 500; nothing here
+contradicts the interim reading that ISLA's turnover at 384 is a rate
+ceiling, not a capacity limit.
+
+**ROUTE-NORM at epochs 217 to 240 (validation loss, seeds 42 / 43).** Every
+cosine lane on the cars is clean: 192 at 1e-3 0.00057 / 0.00057; 384 at
+5e-4 0.00051 / 0.00050 and **at 1e-3 0.00054 / 0.00053** (the linear rate
+that plateaus on both seeds); 768 at 2.5e-4 0.00048 / 0.00048, at 5e-4
+0.00048 / 0.00050 and **at 1e-3 0.00056 / 0.00053**, four times the rule
+rate and a rate at which linear 768 is on the plateau by epoch 90. The
+ladder extension (1,024 and 1,536 wide at 5e-4 and 1e-3, GeoTransolver
+2,048) is at epochs 13 to 57 with validation losses 0.0010 to 0.0041 on
+normal trajectories; the wing lanes are at epoch 20. Cosine lanes at the
+higher rates read 5% to 15% above the rule-rate lanes at this epoch, so
+whether the removed ceiling buys accuracy is still the epoch-500 question.
+
+**Extension, preregistered before launch (lanes 30 to 35 of
+`kernel/routenorm_aga.sbatch`, manifest group rn, job names
+`isla.routenorm.cos-*`).** Cosine routing is placed exactly where linear
+routing had no clean rate:
+
+- **24 layers, width 384, at 5e-4** (two seeds): the rate at which the
+  linear 24-layer pair plateaued (0.77 in float32) and the rule rate for
+  width 384. Prediction: clean; the 24-layer cosine lane is then compared
+  with the linear 24-layer lane at 2.5e-4 when both are scored.
+- **48 layers, width 384, at 2.5e-4** (two seeds): the rate at which
+  linear routing diverged to NaN. Prediction: clean. If it plateaus or
+  diverges, the depth failure has a second mechanism beyond routing
+  saturation (the NaN, unlike the plateau, is not the ROUTING-SAT
+  signature) and the 48-layer configuration is reported as untrainable in
+  this recipe.
+- **The interior configuration at 1e-3, 200,000 cells and queries** (two
+  seeds): the rate at which the linear interior pair rose to the plateau
+  (@sec-nb-ratevol-verdict). The lanes keep the RATE-VOL lanes' eager
+  kernel and `geometric_mean` readout (overridden explicitly, because the
+  snapshot's default is now `source_total`) so routing is the only change.
+  Prediction: clean, with pressure within 5% of the 5e-4 linear row
+  (0.0546) and velocity within 5% of 0.0712; a plateau visit falsifies the
+  claim that routing saturation is the interior ceiling's mechanism.
+
+Bars for "clean" are the studies' own: no validation loss above 0.01 after
+epoch 20. Accuracy is read at epoch 500 in float32 through the fleet pump.
+Cost: six lanes on one node each, about 20 to 40 hours of chain time; the
+48-layer lane is the most expensive at about 2.5 times the 12-layer cost.

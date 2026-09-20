@@ -8,7 +8,7 @@
 #SBATCH --gpus-per-node=4
 #SBATCH --segment=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --array=0-29%30
+#SBATCH --array=0-35%36
 #SBATCH --dependency=singleton
 #SBATCH -o sbatch_logs/%x-%A_%a.log
 #SBATCH -e sbatch_logs/%x-%A_%a.log
@@ -48,18 +48,25 @@ lane() {
     21|27) DATASET=drivaer_ml_surface;      EXTRA="${COS} model.hidden=1536"; LR=1e-3; SLUG=cos-w1536-lr1e-3 ;;
     22|28) DATASET=drivaer_ml_surface;      EXTRA="forward_kwargs.global_embedding=global_data.U_inf_dir model.n_hidden=2048"; LR=1e-3; SLUG=gt-w2048-lr1e-3 ;;
     23|29) DATASET=drivaer_ml_surface;      EXTRA="forward_kwargs.global_embedding=global_data.U_inf_dir model.n_hidden=2048"; LR=3e-4; SLUG=gt-w2048-lr3e-4 ;;
+    # depth and interior extension (2026-09-20, third reading): cosine routing at the depths and the interior token count
+    # where linear routing had no clean rate in CAP-435 / RATE-VOL (24 layers at 5e-4 plateaued; 48 layers NaN at 2.5e-4
+    # and plateaued at 1.25e-4; the interior configuration plateaued at 1e-3). Interior lanes keep the RATE-VOL lanes'
+    # eager kernel and geometric_mean readout so routing is the only change; 200,000 cells and queries.
+    30|33) DATASET=drivaer_ml_surface;      EXTRA="${COS} model.hidden=384 model.n_layers=24"; LR=5e-4;   SLUG=cos-w384-d24-lr5e-4 ;;
+    31|34) DATASET=drivaer_ml_surface;      EXTRA="${COS} model.hidden=384 model.n_layers=48"; LR=2.5e-4; SLUG=cos-w384-d48-lr2.5e-4 ;;
+    32|35) DATASET=drivaer_ml_volume_reference; EXTRA="+model.routing_norm=cosine ++model.query_mass=geometric_mean +training.val_interval=10"; LR=1e-3; SLUG=cos-vol-lr1e-3 ;;
     *) echo "bad array index $1" >&2; exit 2 ;;
   esac
-  MODEL=isla_surface_reference
-  case "${SLUG}" in gt-*) MODEL=geotransolver_surface ;; esac
-  if [ "$1" -le 8 ] || { [ "$1" -ge 18 ] && [ "$1" -le 23 ]; }; then SEED=42; else SEED=43; fi
-  CELLS=100000; EPOCHS=500
-  RUN_ID="rn_${SLUG//-/_}_c100k_seed${SEED}"
-  SLUG="${SLUG}-c100k-s${SEED}"
+  MODEL=isla_surface_reference; CELLS=100000
+  case "${SLUG}" in gt-*) MODEL=geotransolver_surface ;; cos-vol-*) MODEL=isla_volume_reference; CELLS=200000 ;; esac
+  if [ "$1" -le 8 ] || { [ "$1" -ge 18 ] && [ "$1" -le 23 ]; } || { [ "$1" -ge 30 ] && [ "$1" -le 32 ]; }; then SEED=42; else SEED=43; fi
+  EPOCHS=500; CTAG="c$((CELLS / 1000))k"
+  RUN_ID="rn_${SLUG//-/_}_${CTAG}_seed${SEED}"
+  SLUG="${SLUG}-${CTAG}-s${SEED}"
 }
 if [ "${1:-}" = "--slug" ]; then lane "$2"; echo "${SLUG}"; exit 0; fi
 if [ "${1:-}" = "--manifest" ]; then
-  for i in $(seq "${2:-0}" "${3:-29}"); do lane "$i"; printf "rn\t%s\t%s\t%s\t%s\t%s\t%s\t%s\tfalse\t\t\n" "$i" "${RUN_ID}" "${DATASET}" "${MODEL}" "${EXTRA}" "${LR}" "${SEED}"; done
+  for i in $(seq "${2:-0}" "${3:-35}"); do lane "$i"; printf "rn\t%s\t%s\t%s\t%s\t%s\t%s\t%s\tfalse\t\t\n" "$i" "${RUN_ID}" "${DATASET}" "${MODEL}" "${EXTRA}" "${LR}" "${SEED}"; done
   exit 0
 fi
 lane "${SLURM_ARRAY_TASK_ID}"
