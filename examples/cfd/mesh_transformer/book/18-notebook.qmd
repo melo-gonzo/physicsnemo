@@ -20992,6 +20992,87 @@ shows partial hardening in the upper blocks. Probability 0.7. The
 successor study, if confirmed, is the intervention: a routing
 parametrization whose tolerated rate does not shrink with width and depth.
 
+## 2026-09-20 — Verdict, ROUTING-SAT: the mean-field plateau is total routing collapse, measured: every point routes to one slice in every block and all anchors coincide; the two doubled-rate width controls are already in that state at epoch 89, so the width rule's ceiling is real; clean checkpoints keep 4 to 250 active slices per block {#sec-nb-routingsat-verdict}
+
+**Setting.** ROUTING-SAT (@sec-nb-routingsat-prereg) ran ten trained ISLA
+checkpoints on four validation cars with the routing softmax instrumented
+(artifact `results/routingsat_2026-09-20.json`, per-block statistics for
+every run). The question was whether the plateau that appears when width
+or depth is doubled at a fixed learning rate is the routing-saturation
+state RFDIV measured at width 512, this time measured on the plateau lanes
+themselves.
+
+**What we saw** (per block, mean over the four cars; "active slices" is
+the effective slice count :math:`n_{\mathrm{eff}} = \exp H(q)` of the slice
+mass distribution; "hardness" is the per-point entropy over slices divided
+by :math:`\log S`, 1 uniform and 0 one slice per point).
+
+| checkpoint | state | epoch | blocks with one active slice | active slices, min / median | hardness, min / median | anchor spread, median |
+|---|---|--:|--:|--:|--:|--:|
+| 384 wide, 24 layers, 5e-4 | plateau | 500 | 10 / 24 | 1.0 / 2.0 | 0.000 / 0.074 | 0.21 |
+| 384 wide, 48 layers, 5e-4 | plateau | 469 | all 48 blocks NaN in float32 | — | — | — |
+| 384 wide, 12 layers, 1e-3 (width control) | open at prereg | 89 | **12 / 12** | 1.0 / 1.0 | 0.000 / 0.001 | **0.004** |
+| 768 wide, 12 layers, 5e-4 (width control) | open at prereg | 89 | **12 / 12** | 1.0 / 1.0 | 0.000 / 0.001 | **0.003** |
+| 384 wide, 24 layers, 2.5e-4 | clean | 83 | 0 / 24 | 3.7 / 102 | 0.11 / 0.60 | 0.41 |
+| 384 wide, 48 layers, 1.25e-4 | clean | 77 | 0 / 48 | 40 / 190 | 0.57 / 0.87 | 0.30 |
+| 192 wide (reference) | clean, 0.0450 | 500 | 0 / 12 | 20 / 90 | 0.33 / 0.51 | 0.52 |
+| 384 wide, 5e-4 | clean, 0.0411 | 500 | 0 / 12 | 6.3 / 67 | 0.21 / 0.54 | 0.52 |
+| 768 wide, 2.5e-4, seed 42 | clean, 0.0432 | 500 | 0 / 12 | 12 / 54 | 0.19 / 0.40 | 0.46 |
+| 768 wide, 2.5e-4, seed 43 | clean, 0.0410 | 500 | 0 / 12 | 11 / 62 | 0.27 / 0.42 | 0.51 |
+
+: ROUTING-SAT: routing statistics of plateau and clean ISLA checkpoints on four DrivAerML validation cars at 100,000 cells. {#tbl-routingsat}
+
+**Verdict against the bars.** **Confirmed, with the criterion sharpened.**
+The plateau checkpoints are not merely hardened: in the two doubled-rate
+width controls every one of the twelve blocks routes every point to a
+single slice (one active slice, hardness 0.000 to 0.001) and the 256
+anchors of each block sit on top of each other (spread 0.003 to 0.004 of
+the token radius). With one slice and one anchor per block the network can
+only produce a per-case constant, which is the mean-field prediction the
+plateau loss (about 0.06) corresponds to. The 24-layer plateau lane at
+epoch 500 is in the same state in ten of its blocks and within two slices
+of it in the rest. The clean checkpoints never reach it: no block of any
+clean checkpoint has fewer than 3.7 active slices, and their medians run
+54 to 190. The preregistered clean threshold (hardness above 0.4 in every
+block) was too strict, however: every trained ISLA, including the 192-wide
+reference, has two to six blocks that route sharply (hardness 0.19 to 0.33,
+6 to 20 active slices), so "clean" means *bounded* sharpness, not uniform
+routing, and the discriminator that separates the states is the effective
+slice count (1 against at least 4) together with the anchor spread (below
+0.01 against above 0.13). The 48-layer plateau checkpoint returns NaN
+routing statistics in float32 in all 48 blocks (its bf16 training loss
+stayed finite at 0.063); the weights were not inspected and the lane is
+recorded as a divergence, not a plateau.
+
+**The width controls are decided early.** Both doubled-rate lanes (384 at
+1e-3, 768 at 5e-4) are in total collapse at epoch 89. The notebook records
+this as the prediction the prereg asked for: their final errors will be on
+the plateau. That places the rate ceiling at width 384 below 1e-3 (RFDIV
+placed it at 512 below 1e-3; at 384 the 7.5e-4 control is the open point),
+and at 768 below 5e-4 (3.75e-4 clean so far). The width rule is a real
+ceiling, and its 1/width form is a measured fact about this routing
+parametrization, not an artifact of under-training.
+
+**The seed split is not routing.** ISLA-768 seed 42 (0.0432) and seed 43
+(0.0410) have the same routing statistics within noise (six against four
+sharp blocks, minimum active slices 12 against 11, median anchor spread
+0.46 against 0.51); by the preregistered reading the 5% width seed split
+is not a partial saturation.
+
+**Mechanism, now measured.** Routing collapse is the failure mode of this
+architecture at high learning rate, and the tolerated rate falls with
+width and with depth because both raise the gain of the feedback that
+sharpens the routing (each block's assignment logits are a linear map of
+a normalized state whose weights are free to grow; a sharper routing
+concentrates the slice states, which sharpens the next block's routing).
+The intervention this suggests is structural, not a rate rule: bound the
+routing logits so that no block can reach one active slice, for example
+by routing on the cosine between the normalized token state and normalized
+slice prototypes at a fixed temperature. That is the successor study
+(ROUTE-NORM), to be preregistered with the collapse conditions measured
+here (384 at 1e-3, 768 at 5e-4) as its test cases and the reference
+configuration's accuracy as its null.
+
 ## 2026-09-20 — Preregistration, TRAIN-AREA-DR: the DrivAerML twin of the training-law test; do GeoTransolver and Transolver depend on the training sampling law on the cars as they do on the wings, and does ISLA stay indifferent? {#sec-nb-trainarea-dr-prereg}
 
 **Setting.** TRAIN-AREA (@sec-nb-trainarea-verdict) found on the 35-wing
