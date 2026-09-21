@@ -40,7 +40,7 @@ frame variants survive only as diagnostics in this book (@sec-mt2-variants).
 | configuration | recipe config | when to use | what you give up |
 |---|---|---|---|
 | **ISLA** (relative frame, RMS-pairwise-distance length unit) | `isla_surface`, `isla_volume` | every new surface or interior task | nothing among ISLA's options; against the baselines, in-distribution accuracy on every surface rung measured, from 2% at the scale corner to 28% at 35 wing cases (@sec-scoreboard) |
-| total-measure unit (`scale_mode: total_measure`) | option on `isla_surface`, `isla_volume` | reproducing the evidence lanes trained before 2026-09-18 evening | nothing measurable: within 1.3% of the default at 435 cars (@sec-nb-lenrms-verdict); not normalized, and divergent under refinement of a boundary whose area does not converge |
+| total-measure unit (`scale_mode: total_measure`; marked for removal) | option on `isla_surface`, `isla_volume` | reproducing the evidence lanes trained before 2026-09-18 evening, and nothing else | nothing measurable: within 1.3% of the default at 435 cars (@sec-nb-lenrms-verdict); not normalized, so it inherits any error in the weights' absolute scale, and divergent under refinement of a boundary whose area does not converge. Scheduled for removal once those lanes are retired (ruling 2026-09-20) |
 | passive decoder (`query_independent: true`) | `isla_volume_support` | when the prediction at a point must not depend on which other points are queried | 3.0 to 3.7x in accuracy (@sec-query-independence) |
 
 ::: {.callout-note collapse="true" title="The legacy centered variant (removed)"}

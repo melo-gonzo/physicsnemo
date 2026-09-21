@@ -37,9 +37,10 @@ measure-weighted root-mean-square pairwise distance of the sample
 (``scale_mode="rms_distance"``, the default: a normalized two-point
 statistic that is invariant to the weights' overall scale and converges
 under refinement of any boundary with a finite second moment, fractal ones
-included) or the square root of the total quadrature measure
-(``scale_mode="total_measure"``; the two agree within 1.3% of
-surface-pressure error on DrivAerML). No centroid, no per-dataset
+included) or, to reproduce lanes trained before 2026-09-18 only, the square
+root of the total quadrature measure (``scale_mode="total_measure"``; the
+two agree within 1.3% of surface-pressure error on DrivAerML; TODO: remove
+once those lanes are retired). No centroid, no per-dataset
 reference length and no external frame appears anywhere in the forward
 pass, so the frame carries no information about where the mesher placed
 its cells. (Earlier centered-frame variants, with a plain-mean centroid
@@ -595,7 +596,10 @@ class ISLA(Module):
             default until 2026-09-18): divide by the square root of the total
             quadrature measure, an integral of the geometry, equivalent to
             the default within 1.3% of surface-pressure error on DrivAerML
-            (LEN-RMS); needs ``measure_weights``.
+            (LEN-RMS); needs ``measure_weights`` and, unlike the default,
+            inherits any error in their absolute scale. TODO: remove this
+            option; it exists only to reproduce lanes trained before
+            2026-09-18 and has no use case of its own (ruling 2026-09-20).
         geo_kernel: ``None`` (default) selects automatically at the first
             forward pass: ``"fused"`` (exact Triton kernel for the per-layer
             geometry region) when the inputs are on CUDA, Triton is available,
