@@ -55,11 +55,18 @@ lane() {
     30|33) DATASET=drivaer_ml_surface;      EXTRA="${COS} model.hidden=384 model.n_layers=24"; LR=5e-4;   SLUG=cos-w384-d24-lr5e-4 ;;
     31|34) DATASET=drivaer_ml_surface;      EXTRA="${COS} model.hidden=384 model.n_layers=48"; LR=2.5e-4; SLUG=cos-w384-d48-lr2.5e-4 ;;
     32|35) DATASET=drivaer_ml_volume_reference; EXTRA="+model.routing_norm=cosine ++model.query_mass=geometric_mean +training.val_interval=10"; LR=1e-3; SLUG=cos-vol-lr1e-3 ;;
+    # reporting-protocol extension (2026-09-21, prereg #sec-nb-routenorm-p200k-prereg): the cosine-default candidates at
+    # 200,000 cells on the fast second dataset (35-wing rung: cosine 192 at 1e-3, cosine 384 at 1e-3, linear 384 at 1e-3
+    # as the collapse control) and the best cosine configuration (384 wide, 24 layers, 5e-4) on the cars at 200,000 cells.
+    36|40) DATASET=highlift_surface_super_scarce; EXTRA="${COS} ${HL}";                  LR=1e-3; SLUG=cos-w192-lr1e-3-ss ;;
+    37|41) DATASET=highlift_surface_super_scarce; EXTRA="${COS} ${HL} model.hidden=384"; LR=1e-3; SLUG=cos-w384-lr1e-3-ss ;;
+    38|42) DATASET=highlift_surface_super_scarce; EXTRA="${LIN} ${HL} model.hidden=384"; LR=1e-3; SLUG=lin-w384-lr1e-3-ss ;;
+    39|43) DATASET=drivaer_ml_surface;      EXTRA="${COS} model.hidden=384 model.n_layers=24"; LR=5e-4; SLUG=cos-w384-d24-lr5e-4-p200k ;;
     *) echo "bad array index $1" >&2; exit 2 ;;
   esac
   MODEL=isla_surface_reference; CELLS=100000
-  case "${SLUG}" in gt-*) MODEL=geotransolver_surface ;; cos-vol-*) MODEL=isla_volume_reference; CELLS=200000 ;; esac
-  if [ "$1" -le 8 ] || { [ "$1" -ge 18 ] && [ "$1" -le 23 ]; } || { [ "$1" -ge 30 ] && [ "$1" -le 32 ]; }; then SEED=42; else SEED=43; fi
+  case "${SLUG}" in gt-*) MODEL=geotransolver_surface ;; cos-vol-*) MODEL=isla_volume_reference; CELLS=200000 ;; *-ss|*-p200k) CELLS=200000 ;; esac
+  if [ "$1" -le 8 ] || { [ "$1" -ge 18 ] && [ "$1" -le 23 ]; } || { [ "$1" -ge 30 ] && [ "$1" -le 32 ]; } || { [ "$1" -ge 36 ] && [ "$1" -le 39 ]; }; then SEED=42; else SEED=43; fi
   EPOCHS=500; CTAG="c$((CELLS / 1000))k"
   RUN_ID="rn_${SLUG//-/_}_${CTAG}_seed${SEED}"
   SLUG="${SLUG}-${CTAG}-s${SEED}"

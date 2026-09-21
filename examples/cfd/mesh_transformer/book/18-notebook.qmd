@@ -22349,3 +22349,58 @@ wide and 24 layers under cosine routing. All thirty DrivAerML lanes of
 ROUTE-NORM are now scored (results/routenorm_interim_2026-09-20.json,
 refreshed); the six wing lanes, at epoch 60 of 500 and advancing about 3.5
 epochs per hour, decide the second dataset in about five days.
+
+## 2026-09-21 — Preregistration, ROUTE-NORM at the reporting protocol: the cosine-default candidates at 200,000 cells on the fast second dataset (35-wing rung) and the best cosine configuration (384 wide, 24 layers) on the cars {#sec-nb-routenorm-p200k-prereg}
+
+**Setting.** The DrivAerML half of ROUTE-NORM is complete
+(@sec-nb-routenorm-cars-verdict): cosine routing removes the rate ceiling
+at neutral accuracy, and its best configuration (384 wide, 24 layers at
+5e-4) reaches 0.0407 at 100,000 cells, level with GeoTransolver's best.
+Two things stand between that and a default change. The second dataset:
+the 510-wing lanes of the original design advance 3.5 epochs per hour and
+decide in about five days. And the reporting protocol: every ROUTE-NORM
+number so far is at the 100,000-cell scaling budget, and the scoreboard is
+written at 200,000 cells (@sec-nb-proto200k-fleet-prereg). The 35-wing
+rung trains a 200,000-cell lane in hours and already carries the linear
+ISLA-192 row (0.1502, seeds 0.1504 / 0.1496), GeoTransolver (0.1098) and
+Transolver (0.1101) at that protocol.
+
+**Instrument** (`kernel/routenorm_aga.sbatch` lanes 36 to 43, group rn,
+job names `isla.routenorm.*-ss` and `*-p200k`; two seeds; 500 epochs; bf16;
+float32 scoring at 200,000 cells through the fleet pump under the
+`code_routenorm` snapshot):
+
+- 35-wing rung, 200,000 cells: cosine 192 at 1e-3 (the default candidate),
+  cosine 384 at 1e-3 (the width-rule-free candidate), linear 384 at 1e-3
+  (the collapse control; the cars' twin plateaued by epoch 89).
+- DrivAerML 435 cars, 200,000 cells: cosine 384 wide, 24 layers, at 5e-4
+  (the best cosine configuration of the 100,000-cell ladder).
+
+**Bars.**
+
+- **Second-dataset collapse clause**: the linear 384 wing control's
+  validation loss rises above 0.01 after epoch 20 on at least one seed
+  while both cosine wing lanes stay below it; probe on the finished
+  checkpoints, at least 4 effective slices per block for cosine. Then the
+  ceiling is a property of linear routing on both datasets at the protocol.
+- **Second-dataset accuracy null**: cosine 192 at 1e-3 within 2% of the
+  linear ISLA-192 row (0.1502) on the 35-wing rung. More than 2% better is
+  a finding; more than 2% worse is a cost to weigh against the removed
+  ceiling.
+- **Width on the wings**: cosine 384 at 1e-3 at least 3% below cosine 192
+  means width carries on the wings where it did on the cars (ISO-COST:
+  7% per doubling); within 3% means the wing deficit is not capacity.
+- **The best configuration at the protocol**: cosine 384 × 24 at 200,000
+  cells within 2% of its 100,000-cell value (0.0407) confirms that cells
+  are flat for it as for every other lane (ISO-COST); a value at or below
+  0.0406 puts ISLA level with GeoTransolver's best on the scoreboard's own
+  protocol at a quarter of GeoTransolver-1,024's parameters.
+- **Default decision**: cosine becomes the class default if the collapse
+  clause holds on both datasets and the accuracy null holds on both (cars:
+  already 0.998 at 192); a wing accuracy cost above 2% defers the decision
+  to the 510-wing lanes.
+
+**Prediction.** Collapse clause holds (0.85); cosine 192 within 1% of
+0.1502 (0.7); cosine 384 within 3% of cosine 192 on the wings (0.6, the
+wing deficit has not responded to any capacity lever so far); cosine 384 ×
+24 at 200,000 cells between 0.0400 and 0.0410 (0.7).
