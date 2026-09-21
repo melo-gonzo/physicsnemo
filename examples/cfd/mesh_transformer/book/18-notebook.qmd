@@ -22265,3 +22265,24 @@ CAP-435 conclusion that ISLA's capacity axis saturates at about 34M to
 134M parameters on this task holds with the rate explanation removed. The
 1,536-wide cosine lanes and the 2,048-wide GeoTransolver lanes are scored
 on the pump's next pass.
+
+**Addendum, 1,536 wide and 24 layers under cosine routing (2026-09-21,
+02:10 EDT).** Cosine ISLA at 1,536 wide reads **0.0473 at 1e-3** (0.0480 /
+0.0466) and 0.0477 at 5e-4 (seed 42; seed 43 is at epoch 360), against
+linear 1,536 at its rule rate of 1.25e-4 at 0.0452: the widest lane is
+worse than every narrower one under either routing, and 4 to 5% worse
+under cosine than under linear, so the decline past 768 is not a rate
+artifact either and the cosine ladder reads 0.0449 / 0.0413 / 0.0409 /
+0.0423 / 0.0475 at 192 / 384 / 768 / 1,024 / 1,536. **Cosine ISLA at 384
+wide and 24 layers at 5e-4 reads 0.0407** (0.0403 / 0.0410), the lowest
+ISLA number in the program: 1.5% below the linear 24-layer lane at its rule
+rate of 2.5e-4 (0.0413), 1% below the 12-layer lanes (0.0411 linear, 0.0413
+cosine), and level with GeoTransolver's best (0.0406 at 1,024 wide or 24
+layers). All three differences sit inside the 3% depth bar of CAP-435, so
+depth 24 is still "null" by that bar; what changed is that the rate the
+linear 24-layer lane could not survive (5e-4, plateau at 0.77) is now its
+best rate, so the depth axis, like the width axis, is no longer
+rate-limited, and a first cosine configuration reaches GeoTransolver's best
+value at 34M parameters against its 143M. The 48-layer cosine lanes
+(epoch 390), the cosine interior pair (epoch 455), the 2,048-wide
+GeoTransolver lanes and the wing lanes remain to be scored.
