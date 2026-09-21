@@ -22231,3 +22231,21 @@ the linear wing control collapse, and are the cosine wing lanes neutral
 against SCALE-HL's linear ones), the routing probe on these checkpoints,
 and the 1,024- and 1,536-wide cosine lanes, which are the first test of
 the ladder above 768 without a rate confound.
+
+**Addendum, the routing half of the collapse clause on the cars (2026-09-20,
+23:15 EDT).** The ROUTING-SAT probe (routing entropy, effective slice
+count and anchor spread per block on four validation cars) ran on the
+twelve finished cosine checkpoints under their own snapshot (job 806688).
+**Every block of every lane keeps at least 12.5 effective slices of 256**,
+against a clause bar of 4 and the one-slice state ROUTING-SAT measured on
+the linear plateau lanes; per-lane minima over the twelve blocks: 384 at
+5e-4 84.0 / 53.0, 384 at 1e-3 82.3 / 40.0, 768 at 5e-4 69.6 / 98.3, 768 at
+1e-3 12.5 / 75.5 (seeds 42 / 43). Anchor spreads stay between 0.08 and 0.44
+frame units, two orders of magnitude above the coincident-anchor value
+(0.003) of the plateau lanes. The lowest count, 12.5 slices in one block
+of the 768-wide seed-42 lane at 1e-3, belongs to the lane with the 11%
+seed split and the worst score of the six, so routing concentration
+tracks accuracy loss continuously above the sweet spot rather than
+switching to the plateau. Both halves of the "collapse removed" clause
+therefore hold on DrivAerML; the wing lanes decide whether it holds on the
+second dataset.
