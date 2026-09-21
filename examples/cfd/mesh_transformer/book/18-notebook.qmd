@@ -22525,3 +22525,50 @@ that fails twice identically. Cost note: the scratch quota (82 of 100 TB
 after yesterday's pruning) receives about 160 lanes × 3 retained
 checkpoints; the pruner runs every 30 minutes and the largest lanes here
 (GeoTransolver 1,024, ISLA 768) hold about 1 GB per checkpoint pair.
+
+## 2026-09-21 — Ruling: extra seeds are not a compute priority; the seed campaign is cut to four lanes and the freed capacity goes to new questions (a second dataset for the interior task, an interpretability study of the slice territories, a routing-resolution probe on the wings) {#sec-nb-seeds-ruling}
+
+**Ruling (Peter, 2026-09-21 morning).** More seeds of the same claim are
+not a good use of cluster compute: two seeds are the standard, a third
+rarely, more is overkill. Idle capacity should go to new and different
+questions: a new dataset, an architectural change, interpretability (what
+the slice weights learn), visualizations.
+
+**Repair.** The SEEDS campaign of @sec-nb-campaigns-2026-09-21-prereg (62
+lanes) was cancelled forty minutes after launch, except four lanes where a
+two-seed spread is load-bearing for a written claim: the interior pair
+(ISLA at 5e-4 and GeoTransolver-volume, whose 8% pressure spread carries a
+caveat in three chapters) and ISLA's area-trained and uniform-trained lanes
+on the cars at 100,000 cells (whose 8% training-law factor fired a
+preregistered clause). Each cancelled lane carries a `BLOCKED_<run>` marker
+so no chain link restarts it; its manifest row stays for the record. The
+SCALE-LAW and COSINE-TWINS campaigns are unaffected: both ask questions the
+program has not answered (the data and parameter exponents of both
+architectures on two datasets; the evidence board under the candidate
+default routing).
+
+**What replaces the seeds.** Three questions, each preregistered in its own
+entry as it launches:
+
+- *A second dataset for the interior task.* Every interior claim is single
+  dataset (DrivAerML). The cluster holds the HiLiftAeroML volume dataset and
+  a GeoTransolver-volume configuration for it; an ISLA interior configuration
+  for the wings (query tokens with the signed distance, the wings' five
+  output fields) makes the boundary-to-interior standing a two-dataset
+  result or refutes it.
+- *Slice territories, ISLA against GeoTransolver, under two draws.* The
+  discretization results say GeoTransolver's trained function reads the
+  point pattern and ISLA's reads the surface. The mechanism claim behind it
+  (measure-weighted slices partition the surface, point-averaged slices
+  partition the points) has not been looked at. The probe takes trained
+  checkpoints of both models, routes the same validation cars under the
+  uniform and the 10:1-biased draws, assigns every point to its dominant
+  slice, and measures how much each model's slice map moves between the two
+  draws (overlap per slice, and a picture of the territories on the car).
+- *Routing resolution on the wings.* The 1,024-slice control was null on the
+  cars (0.995x, CAP-435) and untested on the wings, where the 27% deficit has
+  not responded to width or cells. Four lanes at the reporting protocol
+  (ISLA-192 with 1,024 slices on the 35-case and fixed-angle rungs, two
+  seeds) against the existing 256-slice rows (0.1502 and 0.0300). Bar: 3%
+  better on either rung means routing resolution is a wing lever; within 3%
+  is null, as on the cars.
