@@ -61,7 +61,9 @@ try:
         for model in ("isla", "gt"):
             pts = [c for c in conf.values() if c["dataset"] == ds and c["model"] == model and c["pressure_l2_mean"] is not None]
             f = {"n_points": len(pts)}
-            if len(pts) >= 6:
+            distinct_n, distinct_P = len({c["n"] for c in pts}), len({c["params"] for c in pts})
+            f["distinct_n"], f["distinct_P"] = distinct_n, distinct_P
+            if distinct_n >= 3 and distinct_P >= 3:   # the separable law has five coefficients; two rungs cannot pin an exponent
                 n = np.array([c["n"] for c in pts], float); P = np.array([c["params"] for c in pts], float); y = np.array([c["pressure_l2_mean"] for c in pts])
                 try:
                     p0 = [np.log(0.3), np.log(0.5), np.log(0.5), np.log(0.3), np.log(0.02)]
