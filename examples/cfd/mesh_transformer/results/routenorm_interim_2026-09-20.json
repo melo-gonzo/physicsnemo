@@ -1,0 +1,187 @@
+{
+  "study": "ROUTE-NORM: cosine routing (T = 10) against linear routing at 100,000 cells, two seeds, float32 at 200,000 cells",
+  "configurations": {
+    "cars|cos|w192|lr1e-3": {
+      "dataset": "cars",
+      "routing": "cosine",
+      "width": 192,
+      "lr": "1e-3",
+      "runs": {
+        "rn_cos_w192_lr1e_3_c100k_seed42": 0.04516596098740896,
+        "rn_cos_w192_lr1e_3_c100k_seed43": 0.04458055396874746
+      },
+      "status": "complete",
+      "seeds": [
+        0.04516596098740896,
+        0.04458055396874746
+      ],
+      "mean": 0.04487325747807821,
+      "seed_spread": 0.0131314433434786
+    },
+    "cars|cos|w384|lr1e-3": {
+      "dataset": "cars",
+      "routing": "cosine",
+      "width": 384,
+      "lr": "1e-3",
+      "runs": {
+        "rn_cos_w384_lr1e_3_c100k_seed42": 0.04252817730108897,
+        "rn_cos_w384_lr1e_3_c100k_seed43": 0.043419609467188515
+      },
+      "status": "complete",
+      "seeds": [
+        0.04252817730108897,
+        0.043419609467188515
+      ],
+      "mean": 0.04297389338413874,
+      "seed_spread": 0.020960977466502495
+    },
+    "cars|cos|w384|lr5e-4": {
+      "dataset": "cars",
+      "routing": "cosine",
+      "width": 384,
+      "lr": "5e-4",
+      "runs": {
+        "rn_cos_w384_lr5e_4_c100k_seed42": 0.04128027458985647,
+        "rn_cos_w384_lr5e_4_c100k_seed43": 0.0413119892279307
+      },
+      "status": "complete",
+      "seeds": [
+        0.04128027458985647,
+        0.0413119892279307
+      ],
+      "mean": 0.041296131908893585,
+      "seed_spread": 0.0007682758506171172
+    },
+    "cars|cos|w768|lr1e-3": {
+      "dataset": "cars",
+      "routing": "cosine",
+      "width": 768,
+      "lr": "1e-3",
+      "runs": {
+        "rn_cos_w768_lr1e_3_c100k_seed42": 0.04597093164920807,
+        "rn_cos_w768_lr1e_3_c100k_seed43": 0.04152613629897436
+      },
+      "status": "complete",
+      "seeds": [
+        0.04597093164920807,
+        0.04152613629897436
+      ],
+      "mean": 0.04374853397409122,
+      "seed_spread": 0.1070360921187723
+    },
+    "cars|cos|w768|lr2.5e-4": {
+      "dataset": "cars",
+      "routing": "cosine",
+      "width": 768,
+      "lr": "2.5e-4",
+      "runs": {
+        "rn_cos_w768_lr2.5e_4_c100k_seed42": 0.043138936161994934,
+        "rn_cos_w768_lr2.5e_4_c100k_seed43": 0.04277511437733968
+      },
+      "status": "complete",
+      "seeds": [
+        0.043138936161994934,
+        0.04277511437733968
+      ],
+      "mean": 0.04295702526966731,
+      "seed_spread": 0.0085054543968206
+    },
+    "cars|cos|w768|lr5e-4": {
+      "dataset": "cars",
+      "routing": "cosine",
+      "width": 768,
+      "lr": "5e-4",
+      "runs": {
+        "rn_cos_w768_lr5e_4_c100k_seed42": 0.041016327838102974,
+        "rn_cos_w768_lr5e_4_c100k_seed43": 0.0407615602016449
+      },
+      "status": "complete",
+      "seeds": [
+        0.041016327838102974,
+        0.0407615602016449
+      ],
+      "mean": 0.04088894401987393,
+      "seed_spread": 0.006250193446908137
+    }
+  },
+  "linear_references_cars": {
+    "w192|lr1e-3": 0.04495405654112498,
+    "w384|lr5e-4": 0.04108833149075508,
+    "w768|lr2.5e-4": 0.04211702197790146,
+    "w1024|lr1.875e-4": 0.04293157656987508,
+    "w1536|lr1.25e-4": 0.04521905134121577,
+    "w384|lr1e-3": 0.7480950752894084,
+    "w384|lr7.5e-4": 0.44071903824806213,
+    "w512|lr3.75e-4": 0.04258439193169276,
+    "w768|lr3.75e-4": 0.0428314208984375,
+    "w768|lr5e-4": 0.5919211904207865
+  },
+  "bars": {
+    "collapse_removed_cars": {
+      "lanes": {
+        "w384|lr1e-3": {
+          "mean": 0.04297389338413874,
+          "seeds": [
+            0.04252817730108897,
+            0.043419609467188515
+          ],
+          "clean": true,
+          "linear_reference": 0.7480950752894084
+        },
+        "w768|lr5e-4": {
+          "mean": 0.04088894401987393,
+          "seeds": [
+            0.041016327838102974,
+            0.0407615602016449
+          ],
+          "clean": true,
+          "linear_reference": 0.5919211904207865
+        },
+        "w768|lr1e-3": {
+          "mean": 0.04374853397409122,
+          "seeds": [
+            0.04597093164920807,
+            0.04152613629897436
+          ],
+          "clean": true,
+          "linear_reference": null
+        }
+      },
+      "verdict": "removed (all clean)"
+    },
+    "accuracy_at_rule_rates": {
+      "w192|lr1e-3": {
+        "cosine": 0.04487325747807821,
+        "linear": 0.04495405654112498,
+        "cosine_over_linear": 0.9982026302126293,
+        "verdict": "neutral (within 1%)"
+      },
+      "w384|lr5e-4": {
+        "cosine": 0.041296131908893585,
+        "linear": 0.04108833149075508,
+        "cosine_over_linear": 1.0050574070690912,
+        "verdict": "neutral (within 1%)"
+      },
+      "w768|lr2.5e-4": {
+        "cosine": 0.04295702526966731,
+        "linear": 0.04211702197790146,
+        "cosine_over_linear": 1.01994450823723,
+        "verdict": "within 2%"
+      }
+    },
+    "width_recovers": {
+      "best_cosine_768": {
+        "lr": "5e-4",
+        "mean": 0.04088894401987393,
+        "seeds": [
+          0.041016327838102974,
+          0.0407615602016449
+        ],
+        "seed_spread": 0.006250193446908137
+      },
+      "linear_384": 0.04108833149075508,
+      "ratio": 0.9951473456417667,
+      "verdict": "not recovered"
+    }
+  }
+}

@@ -22161,3 +22161,73 @@ CPU and CUDA, which is the bitwise check that the default arithmetic did not
 move. Every ISLA checkpoint written before this cleanup (all cluster lanes
 included) fails to load in the current class; their float32 evaluations were
 made under the snapshots that trained them and stand.
+
+## 2026-09-20 — Interim verdict, ROUTE-NORM on the cars: cosine routing removes the rate ceiling (every lane clean at epoch 500, including 768 wide at 1e-3, four times the rule rate) at neutral accuracy at the rule rates; cosine 768 at 5e-4 scores 0.0409 with the seed split closed but does not beat 384's 0.0411, so width past 384 still does not pay {#sec-nb-routenorm-cars-verdict}
+
+**Setting.** ROUTE-NORM (@sec-nb-routenorm-prereg) tests whether bounding
+the point-to-slice routing logits (cosine routing at a fixed temperature)
+removes the learning-rate ceiling that ROUTING-SAT measured as total
+routing collapse (@sec-nb-routingsat-verdict) and that CAP-435 showed
+capping ISLA's width ladder at 384 (@sec-nb-cap435-verdict). The twelve
+DrivAerML lanes (cosine at 192, 384 and 768 wide, at the rule rate and at
+the rates that collapse linear routing, two seeds, 100,000 cells) have
+finished their 500 epochs and are scored in float32 at the 200,000-cell
+protocol (results/routenorm_interim_2026-09-20.json, reduction
+results/routenorm_reduce_2026-09-20.py). A first pass of the evaluation
+pump ran them under the wrong code snapshot and failed at construction;
+the pump now selects the snapshot per lane (@sec-nb-fleet-ops-prune-2026-09-20
+is the fleet-ops record of the day; the fix is noted there in spirit and
+in the pump script). The wing lanes and the width, depth and interior
+extensions are still training, so this verdict is interim under the
+two-dataset rule.
+
+**What we saw (surface pressure, seed means; seeds in parentheses; the
+linear-routing value at the same width and rate from CAP-435 for
+comparison).**
+
+| width | rate | cosine | linear | reading |
+|--:|--:|---:|---:|---|
+| 192 | 1e-3 (rule) | 0.0449 (0.0452 / 0.0446) | 0.0450 | neutral, 0.998 |
+| 384 | 5e-4 (rule) | 0.0413 (0.0413 / 0.0413) | 0.0411 | neutral, 1.005 |
+| 384 | 1e-3 | 0.0430 (0.0425 / 0.0434) | 0.748 (plateau) | **collapse removed**; 4% worse than the rule rate |
+| 768 | 2.5e-4 (rule) | 0.0430 (0.0431 / 0.0428) | 0.0421 (0.0432 / 0.0410) | within 2%, 1.020 |
+| 768 | 5e-4 | **0.0409** (0.0410 / 0.0408) | 0.592 (plateau) | **collapse removed**; best cosine lane; seeds 0.6% apart |
+| 768 | 1e-3 | 0.0437 (0.0460 / 0.0415) | (linear collapses already at 5e-4) | clean at four times the rule rate; seed split 11% |
+
+: ROUTE-NORM, DrivAerML 435 cars, 100,000 training cells, float32 at 200,000 cells, 48 validation cars. Data: results/routenorm_interim_2026-09-20.json; linear values from results/cap435_reduction_2026-09-20.json.
+
+**Against the preregistered clauses (cars only).** *Collapse removed*: yes
+on the loss trajectories and the scores; every cosine lane at a collapse
+rate finished clean, and the routing-statistics half of the clause (at
+least four effective slices per block, ROUTING-SAT probe) is being
+measured on these checkpoints now. *Accuracy at the rule rates*: neutral
+at 192 and 384 (within 1%), 2.0% worse at 768, on the edge of the 2% bar;
+the 768 rule-rate comparison is against a linear pair whose seeds are 5%
+apart, so the 2% is inside that pair's spread. *Width beyond 384
+recovers*: **no**. The best cosine 768 lane (5e-4) scores 0.0409 against
+linear 384's 0.0411, a ratio of 0.995 where the bar asked for 0.98, so the
+width turnover at 384 is not an optimization artifact that the bounded
+logits cure; it is where this task's capacity axis saturates for ISLA in
+either routing form. What cosine routing did buy at 768 is the closing of
+the seed split (0.0410 / 0.0408 at 5e-4 against linear's 0.0432 / 0.0410 at
+2.5e-4) and a 5% gain over its own rule-rate lane, so the rule rate
+under-trains 768 by that much once the ceiling is gone. Above the sweet
+spot the rate still costs accuracy without collapsing: 384 at 1e-3 is 4%
+worse than at 5e-4, and 768 at 1e-3 is 7% worse than at 5e-4 with an 11%
+seed split, the ordinary too-high-a-rate signature rather than the
+plateau.
+
+**Why it matters.** The rate ceiling that produced the mean-field plateau
+is a property of the linear routing parametrization, as the mechanism
+chapter argued: bound the logits and the plateau is gone on every lane
+tried, and the width learning-rate rule becomes a recommendation for the
+best rate rather than a safety limit. The accuracy ceiling at width 384 is
+not a rate artifact; GeoTransolver's continued improvement to 1,024 wide
+and 24 layers (0.0406) stands as the one place its architecture is ahead,
+now with the rate explanation excluded. Cosine routing therefore becomes
+the default candidate on the strength of the removed ceiling at neutral
+accuracy; the decision waits for the wing lanes (the second dataset: does
+the linear wing control collapse, and are the cosine wing lanes neutral
+against SCALE-HL's linear ones), the routing probe on these checkpoints,
+and the 1,024- and 1,536-wide cosine lanes, which are the first test of
+the ladder above 768 without a rate confound.
