@@ -1,0 +1,39 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	rd	rd_isla_wtoff_super_scarce_seed42	highlift_surface_super_scarce	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.use_measure_weights=false	1e-3	42	200000	code_routenorm
+1	rd	rd_isla_geooff_super_scarce_seed42	highlift_surface_super_scarce	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.use_relational_geo=false	1e-3	42	200000	code_routenorm
+2	rd	rd_isla_wtoff_single_aoa_12_seed42	highlift_surface_single_aoa_12	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.use_measure_weights=false	1e-3	42	200000	code_routenorm
+3	rd	rd_isla_geooff_single_aoa_12_seed42	highlift_surface_single_aoa_12	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.use_relational_geo=false	1e-3	42	200000	code_routenorm
+4	rd	rd_isla_wtoff_dr435_seed42	drivaer_ml_surface	isla_surface_reference	++model.use_measure_weights=false	1e-3	42	200000	code_routenorm
+5	rd	rd_isla_geooff_dr435_seed42	drivaer_ml_surface	isla_surface_reference	++model.use_relational_geo=false	1e-3	42	200000	code_routenorm
+6	rd	rd_isla_passive_surface_dr435_seed42	drivaer_ml_surface	isla_surface_reference	++model.query_independent=true	1e-3	42	100000	code_routenorm
+7	rd	rd_isla_passive_vol_dr435_seed42	drivaer_ml_volume_reference	isla_volume_reference	++model.query_tokens=false ++model.query_independent=true ++model.query_mass=source_total +training.val_interval=10	5e-4	42	100000	code_routenorm
+8	rd	rd_gt_mw_super_scarce_seed42	highlift_surface_super_scarce	geotransolver_surface_mw	forward_kwargs.global_embedding=global_data.U_inf_dir +training.val_interval=25	3e-3	42	200000	code_routenorm
+9	rd	rd_t_mw_super_scarce_seed42	highlift_surface_super_scarce	transolver_surface_mw	forward_kwargs.fx.source=global_data.U_inf_dir +training.val_interval=25	3e-3	42	200000	code_routenorm
+10	rd	rd_gt_mw_dr435_seed42	drivaer_ml_surface	geotransolver_surface_mw	forward_kwargs.global_embedding=global_data.U_inf_dir	3e-3	42	200000	code_routenorm
+11	rd	rd_t_mw_dr435_seed42	drivaer_ml_surface	transolver_surface_mw	forward_kwargs.fx.source=global_data.U_inf_dir	1e-3	42	200000	code_routenorm
+12	rd	rd_isla_vol_w344_dr435_seed42	drivaer_ml_volume_reference	isla_volume_reference	model.hidden=344 ++model.query_mass=source_total +training.val_interval=10	2.8e-4	42	200000	code_routenorm
+13	rd	rd_isla_vol_nosdf_dr435_seed42	drivaer_ml_volume_reference_scaling	isla_volume_reference	model.n_query_scalars=0 ~forward_kwargs.query_scalars ++model.query_mass=source_total +training.val_interval=10	5e-4	42	200000	code_routenorm
+14	rd	rd_isla_vol_st_dr435_seed42	drivaer_ml_volume_reference	isla_volume_reference	++model.query_mass=source_total +training.val_interval=10	5e-4	42	200000	code_routenorm
+15	rd	rd_isla_vol_n54_seed42	drivaer_ml_volume_reference_scaling	isla_volume_reference	train_split=train_n54 ++model.query_mass=source_total +training.val_interval=10	5e-4	42	200000	code_routenorm
+16	rd	rd_gt_vol_n54_seed42	drivaer_ml_volume_mt_scaling	geotransolver_volume	forward_kwargs.global_embedding=global_data.U_inf_dir train_split=train_n54 +training.val_interval=10	1e-3	42	200000	code_routenorm
+17	rd	rd_isla_vol_n109_seed42	drivaer_ml_volume_reference_scaling	isla_volume_reference	train_split=train_n109 ++model.query_mass=source_total +training.val_interval=10	5e-4	42	200000	code_routenorm
+18	rd	rd_gt_vol_n109_seed42	drivaer_ml_volume_mt_scaling	geotransolver_volume	forward_kwargs.global_embedding=global_data.U_inf_dir train_split=train_n109 +training.val_interval=10	1e-3	42	200000	code_routenorm
+19	rd	rd_isla_wtoff_super_scarce_seed43	highlift_surface_super_scarce	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.use_measure_weights=false	1e-3	43	200000	code_routenorm
+20	rd	rd_isla_geooff_super_scarce_seed43	highlift_surface_super_scarce	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.use_relational_geo=false	1e-3	43	200000	code_routenorm
+21	rd	rd_isla_wtoff_single_aoa_12_seed43	highlift_surface_single_aoa_12	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.use_measure_weights=false	1e-3	43	200000	code_routenorm
+22	rd	rd_isla_geooff_single_aoa_12_seed43	highlift_surface_single_aoa_12	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.use_relational_geo=false	1e-3	43	200000	code_routenorm
+23	rd	rd_isla_wtoff_dr435_seed43	drivaer_ml_surface	isla_surface_reference	++model.use_measure_weights=false	1e-3	43	200000	code_routenorm
+24	rd	rd_isla_geooff_dr435_seed43	drivaer_ml_surface	isla_surface_reference	++model.use_relational_geo=false	1e-3	43	200000	code_routenorm
+25	rd	rd_isla_passive_surface_dr435_seed43	drivaer_ml_surface	isla_surface_reference	++model.query_independent=true	1e-3	43	100000	code_routenorm
+26	rd	rd_isla_passive_vol_dr435_seed43	drivaer_ml_volume_reference	isla_volume_reference	++model.query_tokens=false ++model.query_independent=true ++model.query_mass=source_total +training.val_interval=10	5e-4	43	100000	code_routenorm
+27	rd	rd_gt_mw_super_scarce_seed43	highlift_surface_super_scarce	geotransolver_surface_mw	forward_kwargs.global_embedding=global_data.U_inf_dir +training.val_interval=25	3e-3	43	200000	code_routenorm
+28	rd	rd_t_mw_super_scarce_seed43	highlift_surface_super_scarce	transolver_surface_mw	forward_kwargs.fx.source=global_data.U_inf_dir +training.val_interval=25	3e-3	43	200000	code_routenorm
+29	rd	rd_gt_mw_dr435_seed43	drivaer_ml_surface	geotransolver_surface_mw	forward_kwargs.global_embedding=global_data.U_inf_dir	3e-3	43	200000	code_routenorm
+30	rd	rd_t_mw_dr435_seed43	drivaer_ml_surface	transolver_surface_mw	forward_kwargs.fx.source=global_data.U_inf_dir	1e-3	43	200000	code_routenorm
+31	rd	rd_isla_vol_w344_dr435_seed43	drivaer_ml_volume_reference	isla_volume_reference	model.hidden=344 ++model.query_mass=source_total +training.val_interval=10	2.8e-4	43	200000	code_routenorm
+32	rd	rd_isla_vol_nosdf_dr435_seed43	drivaer_ml_volume_reference_scaling	isla_volume_reference	model.n_query_scalars=0 ~forward_kwargs.query_scalars ++model.query_mass=source_total +training.val_interval=10	5e-4	43	200000	code_routenorm
+33	rd	rd_isla_vol_st_dr435_seed43	drivaer_ml_volume_reference	isla_volume_reference	++model.query_mass=source_total +training.val_interval=10	5e-4	43	200000	code_routenorm
+34	rd	rd_isla_vol_n54_seed43	drivaer_ml_volume_reference_scaling	isla_volume_reference	train_split=train_n54 ++model.query_mass=source_total +training.val_interval=10	5e-4	43	200000	code_routenorm
+35	rd	rd_gt_vol_n54_seed43	drivaer_ml_volume_mt_scaling	geotransolver_volume	forward_kwargs.global_embedding=global_data.U_inf_dir train_split=train_n54 +training.val_interval=10	1e-3	43	200000	code_routenorm
+36	rd	rd_isla_vol_n109_seed43	drivaer_ml_volume_reference_scaling	isla_volume_reference	train_split=train_n109 ++model.query_mass=source_total +training.val_interval=10	5e-4	43	200000	code_routenorm
+37	rd	rd_gt_vol_n109_seed43	drivaer_ml_volume_mt_scaling	geotransolver_volume	forward_kwargs.global_embedding=global_data.U_inf_dir train_split=train_n109 +training.val_interval=10	1e-3	43	200000	code_routenorm

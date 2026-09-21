@@ -14,8 +14,9 @@ The interior task exists on one dataset, so every interior standing is a
 single-dataset result, and ISLA's two pressure seeds sit 8% apart. Decode
 the queries passively instead, so that a prediction at one point never
 depends on which other points are asked for, and GeoTransolver-volume is
-about three times more accurate on pressure at the exploration budget:
-exact query independence has a measured price, and the interacting
+more accurate on pressure by a factor rather than a percentage (measured
+in the exploration runs; its size is being re-measured at the reporting
+protocol): exact query independence has a price, and the interacting
 configuration pays for its accuracy with a dependence on the joint query
 set that fixes its deployment count (@sec-interior-companion). Two attempts
 to supply interior context without giving up the passive contract fail,
@@ -33,12 +34,6 @@ from matplotlib.colors import Normalize
 RES = Path("..") / "results"
 RP = Path("..") / "research" / "transfer_program" / "studies"
 mean = statistics.mean
-rel = json.load(open(RES / "relint2_reduction_2026-09-14.json"))
-fpint = json.load(open(RES / "fp32_reeval" / "fp32_shift_interior_2026-09-09.json"))["runs"]
-def fp(family, field="pressure_l2", seeds=(42, 43)):
-    return [fpint[f"{family}_seed{s}"]["fields"][field]["fp32_mean"] for s in seeds]
-qc = json.load(open(RES / "qcount_reduction_2026-09-11.json"))
-campD = json.load(open(RP / "computational_support" / "campaign_d_verdict_2026-09-10.json"))["per_arm"]
 FIELDS = [("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity")]
 RV = json.load(open(RES / "ratevol_reduction_2026-09-20.json")); RVA = RV["arms"]; RVR = RV["ratios_gt_vol_over_isla"]
 COSI = json.load(open(RES / "routenorm_extension_2026-09-21.json"))["configurations"]["isla|cos|interior|w192|lr1e-3"]
@@ -176,18 +171,18 @@ are tokens, so its answer at a point depends on the other points requested
 with it. ISLA's surface predictions in this book come from the interacting
 configuration and do not have the property either.
 
-The property has a measured price, and the price is not depth or context
-but the computation the interacting queries receive at the requested
-points. A passive decode at matched depth and inputs, twelve read blocks
-reading from an interacting support set of 5,000 surface tokens that carry
-the signed distance, still costs 1.43x on pressure, 1.34x on velocity and
-2.41x on eddy viscosity against the interacting query-token configuration,
-past the preregistered pressure falsifier; twelve blocks against four buy
-13% and the support set 12%, and neither moves eddy viscosity
-(exploration budget, 10,000 queries;
-research/transfer_program/studies/computational_support/d1_verdict_2026-09-10.json).
-The passive route is therefore closed for ISLA at matched depth, and the
-chapter's ISLA is the interacting one.
+The property has a price, and the price is not depth or context but the
+computation the interacting queries receive at the requested points. A
+passive decode at matched depth and inputs, twelve read blocks reading from
+an interacting support set of 5,000 surface tokens that carry the signed
+distance, still trails the interacting query-token configuration on every
+field, past the preregistered pressure falsifier; twelve blocks against
+four and the larger support set each buy a little on pressure, and neither
+moves eddy viscosity (measured in the exploration runs,
+research/transfer_program/studies/computational_support/d1_verdict_2026-09-10.json;
+the sizes are being re-measured at the reporting protocol). The passive
+route is therefore closed for ISLA at matched depth, and the chapter's
+ISLA is the interacting one.
 
 ### How each architecture treats an interior point
 
@@ -208,7 +203,7 @@ smooth, defined everywhere and parameter-free. The *signed-distance
 gradient* is the unit normal of the nearest wall, computed by the data
 pipeline from the full-resolution surface; passed as the query normal it
 overrides the proxy and carries local wall geometry the proxy does not. The
-gradient is the better of the two by 1.2x on pressure (@tbl-interior, exploration budget).
+gradient is the better of the two on pressure in the exploration runs (@tbl-interior).
 :::
 
 ### ISLA with query tokens {#sec-interior-query-tokens}
@@ -245,8 +240,8 @@ print(f"**At the reporting protocol, with its queries admitted as interacting to
       f"routing), trails on pressure by {(1-lin_ratio['pressure_l2'])*100:.0f}% ({(1-cos_ratio['pressure_l2'])*100:.0f}%) and is level on eddy "
       f"viscosity (GeoTransolver-volume ÷ ISLA {lin_ratio['nut_l2']:.2f} and {cos_ratio['nut_l2']:.2f}), at a third of the parameters.** "
       "Budget: 200,000 boundary cells and 200,000 interior queries per car, 435 training cars, 48 validation cars, float32, two seeds; one "
-      "dataset. At the exploration budget (10,000 cells and queries, @tbl-interior) the same ordering holds; there, without the signed "
-      "distance ISLA trails on every field, and the passive decode trails by a factor of three.")
+      "dataset. The passive decodes and the arms without the signed distance were measured only in the exploration runs and are "
+      "pending at the reporting protocol (@tbl-interior).")
 ```
 
 ```{python}
@@ -297,211 +292,88 @@ print(f"Against the exploration budget the velocity ratio moved from {t10['veloc
       "fields (@sec-robustness-lr). Data: results/ratevol_reduction_2026-09-20.json.")
 ```
 
-::: {.callout-note collapse="true" title="The exploration-budget results (10,000 cells and 10,000 queries): every arm, including the passive decodes"}
-```{python}
-#| label: tbl-interior
-#| output: asis
-rows = [
-    ("GeoTransolver-volume: interior points as interacting tokens with signed distance and wall normal; no surface tokens", "none", "27.6M",
-     {f: rel["gt_vol_unit"][f]["seeds"] for f, _ in FIELDS}),
-    ("ISLA: query tokens + signed distance (relative frame, total-measure length unit as trained, corrected boundary measure)", "10,000 cells", "8.9M",
-     {f: rel["relint2"][f]["seeds"] for f, _ in FIELDS}),
-    ("ISLA, passive decode, wall normal from the signed-distance gradient", "365 cells", "9.9M",
-     {f: fp("v0_mt2_int_sdf", f) for f, _ in FIELDS}),
-    ("ISLA, passive decode, proxy normal", "365 cells", "9.9M",
-     {f: fp("v0_mt2_int", f) for f, _ in FIELDS}),
-    ("exact-kernel decoder (earlier design), double-layer", "365 cells", "0.76M",
-     {f: fp("v0_mt1k_vol", f) for f, _ in FIELDS}),
-]
-gt = {f: mean(rows[0][3][f]) for f, _ in FIELDS}
-out = "| arm | boundary sample | parameters | pressure (per seed) | velocity | eddy viscosity | GeoTransolver-volume ÷ arm (p / U / ν_t) |\n|---|---|---|---|---|---|---|\n"
-for lab, bnd, par, v in rows:
-    m = {f: mean(v[f]) for f, _ in FIELDS}
-    out += (f"| {lab} | {bnd} | {par} | {m['pressure_l2']:.4f} ({' / '.join(f'{x:.4f}' for x in v['pressure_l2'])}) | "
-            f"{m['velocity_l2']:.4f} | {m['nut_l2']:.4f} | {gt['pressure_l2']/m['pressure_l2']:.2f} / {gt['velocity_l2']/m['velocity_l2']:.2f} / {gt['nut_l2']/m['nut_l2']:.2f} |\n")
-print(out)
-print(": Interior relative L2 error at the exploration budget on the 48 DrivAerML validation cars in float32 (arithmetic mean over cars, then over "
-      "seeds; per-seed pressure in parentheses), 10,000 interior queries per car, 500 epochs, learning rate 1e-3. The "
-      "boundary-sample column names which surface sample the ISLA and exact-kernel arms consumed; GeoTransolver-volume "
-      "reads none. Ratios are GeoTransolver-volume ÷ arm, so above one favors the ISLA arm. How to read this: the reporting-protocol "
-      "standing is @tbl-interior-200k; this table adds the arms measured only at 10,000 queries (the passive decodes and the exact-kernel "
-      "decoder). The arms are not "
-      "resource-matched and do not receive the same inputs (the collapsed note in @sec-interior-task). The two "
-      "query-token arms without the signed distance and with the 365-cell boundary were run on the similarity-gauge "
-      "variant (removed) and are in the diagnostic note below. Data: "
-      "results/relint2_reduction_2026-09-14.json (GeoTransolver-volume and the ISLA query-token row); "
-      "results/fp32_reeval/fp32_shift_interior_2026-09-09.json (the rest). {#tbl-interior}")
-```
+::: {.callout-note collapse="true" title="The arms measured only in the exploration runs (pending at the reporting protocol)"}
+Four arms have no reporting-protocol measurement yet. They were run at
+10,000 boundary cells and 10,000 queries, learning rate 1e-3, float32, on
+the 48 validation cars; their standings are being re-measured at 200,000
+cells and queries and are not quoted here.
 
-::: {.callout-note collapse="true" title="The query-token arms measured on the similarity-gauge variant (removed variant; exploration budget)"}
-The interior program was built on the similarity-gauge variant (measure-weighted
-centroid and RMS-radius length unit), a removed variant that estimated a center from
-the sample (@sec-isla-variants). Three of its arms have no ISLA twin: the same
-query-token + signed-distance configuration on the 10,000-cell and on the
-365-cell boundary, and the query-token arm without the signed distance. At 435
-cars ISLA matches the variant on pressure and velocity (1.000x and 0.991x
-against the 10,000-cell arm) and is 12% more accurate on eddy viscosity
-(results/relint2_reduction_2026-09-14.json), so the ingredient readings below
-carry to ISLA; on the surface the price of not being told the body's center is
-at most about 2%, inside seed noise (SG-REF, @sec-nb-sgref-verdict).
+| arm | boundary sample | parameters | standing |
+|---|---|---|---|
+| ISLA, passive decode, wall normal from the signed-distance gradient | 365 cells | 9.9M | pending at the reporting protocol |
+| ISLA, passive decode, proxy normal | 365 cells | 9.9M | pending |
+| ISLA with query tokens, wall normal only (no signed distance) | 365 cells | 8.9M | pending (measured on the removed similarity-gauge variant) |
+| exact-kernel decoder (earlier design), double-layer | 365 cells | 0.76M | closed line (@sec-interior-negatives) |
 
-```{python}
-#| label: tbl-interior-sg
-#| output: asis
-sg_rows = [
-    ("GeoTransolver-volume (as @tbl-interior)", "none", "27.6M", {f: rel["gt_vol_unit"][f]["seeds"] for f, _ in FIELDS}),
-    ("similarity-gauge variant: query tokens + signed distance", "10,000 cells", "8.9M",
-     {f: rel["ref_surf10k_gauge"][f]["seeds"] for f, _ in FIELDS}),
-    ("similarity-gauge variant: query tokens + signed distance (three seeds)", "365 cells", "8.9M",
-     {f: rel["ref_365_gauge"][f]["seeds"] for f, _ in FIELDS}),
-    ("similarity-gauge variant: query tokens, wall normal only (no signed distance)", "365 cells", "8.9M",
-     {f: fp("v0_isla_qt_sdf", f) for f, _ in FIELDS}),
-]
-out = "| arm (diagnostic) | boundary sample | parameters | pressure (per seed) | velocity | eddy viscosity | GeoTransolver-volume ÷ arm (p / U / ν_t) |\n|---|---|---|---|---|---|---|\n"
-for lab, bnd, par, v in sg_rows:
-    m = {f: mean(v[f]) for f, _ in FIELDS}
-    out += (f"| {lab} | {bnd} | {par} | {m['pressure_l2']:.4f} ({' / '.join(f'{x:.4f}' for x in v['pressure_l2'])}) | "
-            f"{m['velocity_l2']:.4f} | {m['nut_l2']:.4f} | {gt['pressure_l2']/m['pressure_l2']:.2f} / {gt['velocity_l2']/m['velocity_l2']:.2f} / {gt['nut_l2']/m['nut_l2']:.2f} |\n")
-print(out)
-print(": The similarity-gauge variant's (removed) query-token arms, same instrument and columns as @tbl-interior (exploration budget: float32, 48 "
-      "validation cars, 10,000 interior queries per car, 500 epochs, learning rate 1e-3). Data: "
-      "results/relint2_reduction_2026-09-14.json (the two signed-distance rows); "
-      "results/fp32_reeval/fp32_shift_interior_2026-09-09.json (the wall-normal-only row). {#tbl-interior-sg}")
-```
-:::
+: The interior arms without a reporting-protocol twin. The boundary-sample column names which surface sample the arm consumed; GeoTransolver-volume reads none. How to read this: the rows are configurations, not results; the reporting-protocol standing of ISLA with query tokens and the signed distance against GeoTransolver-volume is @tbl-interior-200k. Exploration-run artifacts: results/fp32_reeval/fp32_shift_interior_2026-09-09.json; results/relint2_reduction_2026-09-14.json. {#tbl-interior}
 
-```{python}
-#| label: fig-interior-arms
-#| fig-cap: >
-#|   Interior pressure error by architecture on the 48 DrivAerML validation
-#|   cars at the exploration budget (10,000 cells and queries), float32.
-#|   Bars are seed means of the per-car arithmetic-mean
-#|   relative L2; dots are the individual seeds. The label above each bar is
-#|   the ratio GeoTransolver-volume ÷ arm (above one favors the ISLA arm).
-#|   Colors follow the book's key: GeoTransolver-volume red, ISLA
-#|   blue, the passive
-#|   decodes hatched light blue, and the exact-kernel decoder (an earlier
-#|   design, not one of the book's architectures) gray. How to read this: it
-#|   shows the pressure column of @tbl-interior only, at 10,000 queries; the
-#|   reporting-protocol standing is @tbl-interior-200k. Velocity and eddy
-#|   viscosity rank the arms the same way except that ISLA's query-token arm
-#|   leads GeoTransolver-volume on velocity. The similarity-gauge variant's
-#|   (removed) arms are in @tbl-interior-sg.
-#|   Data: as @tbl-interior.
-#| code-fold: true
-arms = [("GeoTransolver-\nvolume", rel["gt_vol_unit"]["pressure_l2"]["seeds"], "gt"),
-        ("ISLA\nquery tokens\n+ signed distance", rel["relint2"]["pressure_l2"]["seeds"], "isla_ref"),
-        ("ISLA passive\nwall normal", fp("v0_mt2_int_sdf"), "isla_abl"),
-        ("ISLA passive\nproxy normal", fp("v0_mt2_int"), "isla_abl"),
-        ("exact-kernel\ndecoder", fp("v0_mt1k_vol"), None)]
-means = [mean(v) for _, v, _ in arms]; gtp = means[0]
-fig, ax = plt.subplots(figsize=(8.5, 4.6))
-for i, (name, vals, key) in enumerate(arms):
-    kw = bar_kwargs(key) if key else dict(color=MUTED, edgecolor="white")
-    ax.bar(i, means[i], width=0.6, zorder=2, **kw)
-    ax.plot([i] * len(vals), vals, "o", ms=5, mfc="white", mec=INK, mew=1.0, ls="none", zorder=4)
-    ax.text(i, means[i] + 0.01, f"{means[i]:.3f}\n{gtp / means[i]:.2f}", ha="center", va="bottom", fontsize=9, color=INK2)
-ax.set_xticks(range(len(arms))); ax.set_xticklabels([a[0] for a in arms], fontsize=8)
-ax.set_ylabel("interior pressure error,\nrelative L2, mean over 48 cars [–]")
-ax.set_ylim(0, max(means) * 1.25); ax.grid(axis="x", visible=False)
-ax.set_title("DrivAerML interior pressure at 10,000 queries (exploration budget), float32; label = GeoTransolver-volume ÷ arm")
-plt.tight_layout(); plt.show()
-```
-
-Two ingredient readings come out of the exploration-budget arms.
-**Interaction closes most of the passive decode's gap**: the same
-architecture, with its queries allowed to interact and given only the wall
-normal, moves from about a third of GeoTransolver-volume's pressure
-accuracy to about four fifths of it, without the signed-distance value and
-without extra parameters. **The signed distance closes most of the rest,
-and most on the fields tied to distance from the wall**: adding it lowers
-the pressure error by about a tenth and the velocity error by about two
-fifths, which turns the velocity standing into a lead. Both readings were
-measured on the similarity-gauge variant's (removed) arms in the note
-above, which ISLA matches or beats on every field at 435 cars, so they are
-read as statements about ISLA with query tokens. Between the two passive
-constructions the wall normal from the signed-distance gradient beats the
-proxy normal by 1.2x on pressure, so a true wall normal at the query is
-better information than a covariant blend of anchor normals; the
-exact-kernel decoder is taken up in @sec-interior-negatives.
+Two ingredient readings came out of those arms, on the removed
+similarity-gauge variant, and are stated as orderings only. **Interaction
+closes most of the passive decode's gap**: the same architecture, with its
+queries allowed to interact and given only the wall normal, moves from a
+fraction of GeoTransolver-volume's pressure accuracy to most of it, without
+the signed-distance value and without extra parameters. **The signed
+distance closes most of the rest, and most on the fields tied to distance
+from the wall**: adding it lowers the pressure error by a little and the
+velocity error by a lot, which turns the velocity standing into a lead.
+Between the two passive constructions the wall normal from the
+signed-distance gradient beats the proxy normal on pressure, so a true wall
+normal at the query is better information than a covariant blend of anchor
+normals; the exact-kernel decoder is taken up in @sec-interior-negatives.
+The sizes of all three readings are pending at the reporting protocol.
 :::
 
 ## Dependence on the query cloud {#sec-interior-companion}
 
 **The interacting configuration's answer at a point depends on how many
 other points are asked for with it, and the dependence is large below the
-training query count.** Budget: the exploration budget (10,000 training
-queries); both instruments were run on lanes trained under
-`query_mass="geometric_mean"`. Because the queries route through the same
-slices as the surface, a prediction at one point is a function of the whole
-request; under the `geometric_mean` option each query's routing weight also
-scales with the query count (@sec-interior-query-tokens), which is the
-count-dependence measured here. @tbl-interior-qcount reads the effect on
-the recipe metric; @tbl-interior-companion reads it at fixed points.
+training query count.** Budget: both instruments were run in the
+exploration runs (10,000 training queries) on lanes trained under
+`query_mass="geometric_mean"`, and their magnitudes are being re-measured
+at the reporting protocol, so this section states the rule and not the
+numbers. Because the queries route through the same slices as the surface,
+a prediction at one point is a function of the whole request; under the
+`geometric_mean` option each query's routing weight also scales with the
+query count (@sec-interior-query-tokens), which is the count-dependence
+measured here.
 
-::: {.callout-note collapse="true" title="The two measurements, made on the similarity-gauge variant (removed variant; exploration budget)"}
-Both instruments below were run on the similarity-gauge variant's query-token
-configuration, which ISLA matches on pressure and velocity and beats on eddy
-viscosity at 435 cars (results/relint2_reduction_2026-09-14.json); the
-dependence they measure is a property of the interacting decode under the
-`geometric_mean` query mass, shared by both frames, so the readings are
-expected to carry to ISLA trained under that option.
+::: {.callout-note collapse="true" title="The two instruments (similarity-gauge variant, removed; exploration runs; magnitudes pending)"}
+Both instruments were run on the similarity-gauge variant's query-token
+configuration; the dependence they measure is a property of the
+interacting decode under the `geometric_mean` query mass, shared by both
+frames, so the readings are expected to carry to ISLA trained under that
+option.
 
-```{python}
-#| label: tbl-interior-qcount
-#| output: asis
-ref = qc["reference"]; aug = qc["qcount"]
-out = "| queries per car at inference | trained at 10,000 queries: pressure / velocity / eddy viscosity | trained on 2,000–20,000 queries per sample |\n|---|---|---|\n"
-for k, lab in (("2k", "2,000"), ("10k", "10,000 (training count)"), ("20k", "20,000")):
-    out += (f"| {lab} | {ref[k]['pressure_l2']:.4f} / {ref[k]['velocity_l2']:.4f} / {ref[k]['nut_l2']:.4f} | "
-            f"{aug[k]['pressure_l2']:.4f} / {aug[k]['velocity_l2']:.4f} / {aug[k]['nut_l2']:.4f} |\n")
-r_ref, r_aug = qc["ratios_2k_over_10k"]["reference"], qc["ratios_2k_over_10k"]["qcount"]
-out += (f"| penalty at 2,000 ÷ 10,000 | {r_ref['pressure']:.2f} / {r_ref['velocity']:.2f} / {r_ref['nut']:.2f} | "
-        f"{r_aug['pressure']:.2f} / {r_aug['velocity']:.2f} / {r_aug['nut']:.2f} |\n")
-print(out)
-print(": Request-size dependence of the interacting decode (similarity-gauge variant, removed; query tokens + signed distance, "
-      "365-cell boundary, two seeds, float32, 48 cars; exploration budget, query_mass=geometric_mean). Left column: the checkpoint trained at a fixed 10,000 queries. "
-      "Right column: the same configuration trained with the request size drawn per sample between 2,000 and 20,000, "
-      "which reduces the dependence by about 40% at a small cost at the training count and does not remove it. "
-      "Data: results/qcount_reduction_2026-09-11.json. {#tbl-interior-qcount}")
-```
+*Request-size dependence on the recipe metric.* The checkpoint trained at a
+fixed 10,000 queries was scored with 2,000, 10,000 and 20,000 queries per
+car: querying a fifth of the training count raises the error on every
+field by more than either margin against GeoTransolver-volume, and
+querying twice the training count gains a little. A second configuration
+trained with the request size drawn per sample between 2,000 and 20,000
+reduces the dependence without removing it, at a small cost at the
+training count (results/qcount_reduction_2026-09-11.json).
 
-| queries in the request | change of the sentinel prediction vs. 10,000 (pressure / ν_t / velocity) | pressure error at the sentinels | ν_t error | velocity error |
-|---|---|---|---|---|
-| 1,000 (sentinels alone) | 0.100 / 0.348 / 0.142 | 0.110 | 0.362 | 0.163 |
-| 2,000 | 0.051 / 0.181 / 0.090 | 0.077 | 0.197 | 0.124 |
-| 10,000 (training count) | 0 / 0 / 0 | 0.062 | 0.080 | 0.091 |
-| 40,000 | 0.029 / 0.048 / 0.045 | 0.056 | 0.084 | 0.089 |
-| passive configuration, any count (float32) | 0.000 / 0.000 / 0.000 | 0.188 | 0.400 | 0.345 |
-
-: Companion-query dependence at fixed points (exploration budget). 1,000 fixed sentinel points on
-four validation cars, predicted alone, with 1,000 companions, with 9,000
-(the training count) and with 39,000, by the trained similarity-gauge
-variant (removed; query tokens + signed distance, seed 42, query_mass=geometric_mean), bfloat16 inference;
-relative L2 in the recipe's normalized target space. How to read this: within-model changes
-under one instrument; the absolute errors are four-car bfloat16 values and
-are not the float32 48-car means of @tbl-interior or @tbl-interior-200k. The passive
-configuration is the control: its predictions at the sentinels are
-identical whatever else is queried. Data:
-results/isla_qt_companion_dependence_2026-09-08.json. {#tbl-interior-companion}
+*Companion dependence at fixed points.* 1,000 fixed sentinel points on four
+validation cars were predicted alone, with 1,000 companions, with 9,000
+(the training count) and with 39,000: the sentinel predictions move with
+the request size, most for eddy viscosity and least for pressure, while
+the passive configuration's predictions at the sentinels are identical
+whatever else is queried, which confirms that the harness measures the
+model and that query independence, where the architecture promises it,
+holds on trained weights
+(results/isla_qt_companion_dependence_2026-09-08.json).
 :::
 
-Read against the headline: at the training count ISLA's pressure deficit
-to GeoTransolver-volume is about a tenth of the error and its velocity lead
-about a third; in the note above, querying a fifth of the training count
-costs more than either margin, and querying twice the training count gains
-a little. So the standings hold at the operating point the model was trained
-at and are not a property of the model at arbitrary request sizes: **a
-surrogate built from this configuration is queried in batches of at least
-the training count** (@sec-using-checkpoint). Training over a range of
-counts reduces the dependence and does not remove it, so query-count
-consistency is an architectural question. The default query mass,
-`source_total`, removes the count-scaling of the query weight by
-construction (@sec-isla-contracts); its request-size dependence has not been
-measured, and the interior lanes quoted in this chapter were trained under
-the count-dependent `geometric_mean` option. The near-identity of the
-passive control confirms that the harness measures the model and that query
-independence, where the architecture promises it, holds on trained weights.
+So the standings hold at the operating point the model was trained at and
+are not a property of the model at arbitrary request sizes: **a surrogate
+built from this configuration is queried in batches of at least the
+training count** (@sec-using-checkpoint). Training over a range of counts
+reduces the dependence and does not remove it, so query-count consistency
+is an architectural question. The default query mass, `source_total`,
+removes the count-scaling of the query weight by construction
+(@sec-isla-contracts); its request-size dependence has not been measured,
+and the interior lanes quoted in this chapter were trained under the
+count-dependent `geometric_mean` option.
 
 ## Where the deficit lives {#sec-interior-distance}
 
@@ -671,68 +543,28 @@ print(f"**One architecture covers the surface and the interior: at the reporting
       "Data: results/ratevol_reduction_2026-09-20.json; results/routenorm_extension_2026-09-21.json.")
 ```
 
-::: {.callout-note collapse="true" title="Diagnostic readings at the exploration budget on the similarity-gauge variant (removed): parameter budget, where the eddy-viscosity gap lived, capacity against data, and the rungs below full data"}
+::: {.callout-note collapse="true" title="Diagnostic readings from the exploration runs on the similarity-gauge variant (removed): parameter budget, capacity against data, what did not close the far-wake gap, and the rungs below full data"}
 Every reading in this note was made at 10,000 queries on the
-similarity-gauge variant (removed), which ISLA matches on pressure and
-velocity (1.000x, 0.991x) and beats by 12% on eddy viscosity at 435 cars at
-that budget (results/relint2_reduction_2026-09-14.json; the frame and the
-corrected boundary measure changed together, and the gain is not attributed
-between them). At the reporting protocol the eddy-viscosity deficit these
-readings tried to locate is 2 to 3% (@tbl-interior-200k), so they document
-a mechanism at the exploration budget and not a standing.
+similarity-gauge variant (removed), which ISLA matched within seed noise on
+pressure and velocity in the same runs. At the reporting protocol the
+eddy-viscosity deficit these readings tried to locate is 2 to 3%
+(@tbl-interior-200k), so they document mechanisms and not standings, and
+every size below is pending at the reporting protocol.
 
-**Parameter budget.** At matched parameters (width 344, 27.6M) the
-variant leads GeoTransolver-volume on pressure and on velocity and trails
-only on eddy viscosity (@tbl-interior-width), so at 10,000 queries the
-interior-pressure ordering was a parameter-budget statement, behind at 8.9M
-and ahead at 27.6M. GeoTransolver-volume without its local features loses
-a few percent on every field, so the features are a general carrier, not
-the lead.
-
-```{python}
-#| label: tbl-interior-width
-#| output: asis
-def cm(key): return campD[key]["mean"]
-g = campD["udrv_gt_vol"]["mean"]
-rows = [("GeoTransolver-volume, 27.6M", "udrv_gt_vol"), ("GeoTransolver-volume without local features, 27.6M", "gt_vol_nolocal"),
-        ("similarity-gauge variant, query tokens + signed distance, width 192 (8.9M)", "isla_qtsdfval"),
-        ("similarity-gauge variant, query tokens + signed distance, width 344 (27.6M)", "isla_qtsdf_h344")]
-out = "| arm | pressure | velocity | eddy viscosity | GeoTransolver-volume ÷ arm (p / U / ν_t) |\n|---|---:|---:|---:|---|\n"
-for lab, k in rows:
-    m = cm(k)
-    out += f"| {lab} | {m['pressure_l2']:.4f} | {m['velocity_l2']:.4f} | {m['nut_l2']:.4f} | {g['pressure_l2']/m['pressure_l2']:.2f} / {g['velocity_l2']/m['velocity_l2']:.2f} / {g['nut_l2']/m['nut_l2']:.2f} |\n"
-h256 = {f: mean(fp("v0_isla_qtsdf_h256", f)) for f, _ in FIELDS}
-out += f"| similarity-gauge variant, width 256 (about 15.7M) | {h256['pressure_l2']:.4f} | {h256['velocity_l2']:.4f} | {h256['nut_l2']:.4f} | {g['pressure_l2']/h256['pressure_l2']:.2f} / {g['velocity_l2']/h256['velocity_l2']:.2f} / {g['nut_l2']/h256['nut_l2']:.2f} |\n"
-print(out)
-print(": The parameter budget, on the similarity-gauge variant (removed; exploration budget). Interior relative L2 on the 48 validation cars, float32, two seeds, 10,000 queries; "
-      "the width-344 arm matches GeoTransolver-volume's parameter count. Ratios are GeoTransolver-volume (27.6M, with "
-      "local features) ÷ arm. How to read this: a 10,000-query reading of the parameter axis; the reporting-protocol standing at 8.9M is "
-      "@tbl-interior-200k. Data: research/transfer_program/studies/computational_support/campaign_d_verdict_2026-09-10.json; "
-      "results/fp32_reeval/fp32_shift_interior_2026-09-09.json (width 256). {#tbl-interior-width}")
-```
-
-**Where the eddy-viscosity gap lived at 10,000 queries.** Splitting the
-saved float32 predictions of the two matched-parameter models by signed
-distance, the two were equal on eddy viscosity near the wall, the variant
-led in the mid band and trailed only in the far field. Split further by
-distance shell, it led GeoTransolver-volume on eddy viscosity everywhere
-within 0.4 body lengths of the surface, around the car and upstream; the
-entire deficit was the far wake beyond 0.4 body lengths downstream, about
-2% of the query points. Pressure carried a small uniform deficit in the far
-shells that did not grow with distance and held under 2% of the squared
-error
-(research/transfer_program/studies/computational_support/band_decomposition_2026-09-10.json,
-far_field_shells_2026-09-10.json).
+**Parameter budget.** At matched parameters (width 344, 27.6M) the variant
+led GeoTransolver-volume on pressure and on velocity and trailed only on
+eddy viscosity in the exploration runs, so at that budget the
+interior-pressure ordering read as a parameter-budget statement, behind at
+8.9M and ahead at 27.6M; GeoTransolver-volume without its local features
+lost a few percent on every field, so the features are a general carrier,
+not the lead. The sizes are pending at the reporting protocol
+(research/transfer_program/studies/computational_support/campaign_d_verdict_2026-09-10.json).
 
 **Capacity against data.** A single-car training test sorted the three
-standings at this budget: with one car presented as 64 resampled views, the
-velocity lead was unchanged with the data fixed, so it is capacity; the
-eddy-viscosity deficit widened, so at 10,000 queries it read as capacity
-too; and the pressure standing reversed on one car, so what pressure lead
-the variant had at full data was generalization across cars
-(@sec-nb-overfit-interior). The denser query budget then closed the
-eddy-viscosity deficit that this test read as capacity, which is why the
-reading stays in this note.
+standings: with one car presented as 64 resampled views, the velocity lead
+was unchanged with the data fixed, so it is capacity; and the pressure
+standing reversed on one car, so what pressure lead the variant had at full
+data was generalization across cars (@sec-nb-overfit-interior).
 
 **What did not close the far-wake gap.**
 Three classes of remedy were tested and none closed it. *Anchor geometry:*
@@ -759,32 +591,16 @@ discretization rather than the physics, so they are excluded by the
 principle of @sec-principle regardless of the result
 (results/qtdens_reduction_2026-09-10.json).
 
-**Below full data.** The standings below full data are in
-@tbl-interior-smalldata: with the signed distance the velocity standing
-moves from parity to a lead as data grow, the pressure ratio rises toward
-one, and eddy viscosity stayed behind at every rung at this budget. Two
+**Below full data.** The 54- and 109-car rungs of the interior task were
+measured only on the variant in the exploration runs: with the signed
+distance the velocity standing moved from parity to a lead as data grew,
+the pressure ratio rose toward one, and eddy viscosity stayed behind at
+every rung. The rungs are pending on ISLA at the reporting protocol
+(results/fp32_reeval/fp32_shift_interior_2026-09-09.json). Two
 qualifications bound the eddy-viscosity readings: the metric is on the
 standardized viscosity, so a ratio there is an ordering under that
 centering and not a physical percentage; and DrivAerML's closure is a
 hybrid RANS/LES model whose modeled viscosity depends on a grid or filter
 length, so a query's neighbors in the volume mesh carry information about
 the discretization as well as the flow.
-
-```{python}
-#| label: tbl-interior-smalldata
-#| output: asis
-out = "| training cars | GeoTransolver-volume (p / U / ν_t) | variant, query tokens, no signed distance | variant, query tokens + signed distance | GeoTransolver-volume ÷ variant with signed distance |\n|---|---|---|---|---|\n"
-def trip(fam, seeds=(42, 43)): return {f: mean(fp(fam, f, seeds)) for f, _ in FIELDS}
-def fmt(m): return f"{m['pressure_l2']:.3f} / {m['velocity_l2']:.3f} / {m['nut_l2']:.3f}"
-for n in (54, 109):
-    g_ = trip(f"v0l_gt_vol_n{n}"); a = trip(f"v0l_isla_qt_sdf_n{n}"); b = trip(f"v0l_isla_qtsdfval_n{n}")
-    out += f"| {n} | {fmt(g_)} | {fmt(a)} | {fmt(b)} | {g_['pressure_l2']/b['pressure_l2']:.2f} / {g_['velocity_l2']/b['velocity_l2']:.2f} / {g_['nut_l2']/b['nut_l2']:.2f} |\n"
-g_ = {f: rel["gt_vol_unit"][f]["mean"] for f, _ in FIELDS}; a = trip("v0_isla_qt_sdf"); b = {f: rel["ref_365_gauge"][f]["mean"] for f, _ in FIELDS}
-out += f"| 435 | {fmt(g_)} | {fmt(a)} | {fmt(b)} | {g_['pressure_l2']/b['pressure_l2']:.2f} / {g_['velocity_l2']/b['velocity_l2']:.2f} / {g_['nut_l2']/b['nut_l2']:.2f} |\n"
-print(out)
-print(": The interior standings below full data (similarity-gauge variant, removed; exploration budget; 365-cell boundary; float32, 48 validation "
-      "cars, two seeds at 54 and 109 cars). How to read this: a 10,000-query ladder on the removed variant; the reporting-protocol "
-      "standing at 435 cars is @tbl-interior-200k. Data: "
-      "results/fp32_reeval/fp32_shift_interior_2026-09-09.json; results/relint2_reduction_2026-09-14.json (435 cars). {#tbl-interior-smalldata}")
-```
 :::

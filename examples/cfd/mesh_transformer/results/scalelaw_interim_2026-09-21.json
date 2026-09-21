@@ -1,0 +1,718 @@
+{
+  "study": "SCALE-LAW: surface-pressure error against training cases and parameters, cosine ISLA and GeoTransolver, DrivAerML and HiLiftAeroML, float32 at 100,000 cells, two seeds",
+  "law": "eps(n, P) = a n^-alpha + b P^-beta + c (least squares on seed means; positive coefficients)",
+  "configurations": {
+    "drivaerml|isla|w192|n27": {
+      "dataset": "drivaerml",
+      "model": "isla",
+      "width": 192,
+      "n": 27,
+      "params": 8912796,
+      "runs": {
+        "sl_dr_isla_cos_w192_n27_c100k_seed42": 0.14267536997795105,
+        "sl_dr_isla_cos_w192_n27_c100k_seed43": 0.14002856612205505
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.14267536997795105,
+        0.14002856612205505
+      ],
+      "pressure_l2_mean": 0.14135196805000305,
+      "status": "complete"
+    },
+    "drivaerml|isla|w384|n27": {
+      "dataset": "drivaerml",
+      "model": "isla",
+      "width": 384,
+      "n": 27,
+      "params": 34263516,
+      "runs": {
+        "sl_dr_isla_cos_w384_n27_c100k_seed42": 0.14703858892122904,
+        "sl_dr_isla_cos_w384_n27_c100k_seed43": 0.14639008045196533
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.14703858892122904,
+        0.14639008045196533
+      ],
+      "pressure_l2_mean": 0.14671433468659717,
+      "status": "complete"
+    },
+    "drivaerml|isla|w768|n27": {
+      "dataset": "drivaerml",
+      "model": "isla",
+      "width": 768,
+      "n": 27,
+      "params": 134288988,
+      "runs": {
+        "sl_dr_isla_cos_w768_n27_c100k_seed42": 0.14081060886383057,
+        "sl_dr_isla_cos_w768_n27_c100k_seed43": 0.13504953185717264
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.14081060886383057,
+        0.13504953185717264
+      ],
+      "pressure_l2_mean": 0.1379300703605016,
+      "status": "complete"
+    },
+    "drivaerml|gt|w256|n27": {
+      "dataset": "drivaerml",
+      "model": "gt",
+      "width": 256,
+      "n": 27,
+      "params": 9046016,
+      "runs": {
+        "sl_dr_gt_w256_n27_c100k_seed42": 0.12731865048408508,
+        "sl_dr_gt_w256_n27_c100k_seed43": 0.12813416123390198
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.12731865048408508,
+        0.12813416123390198
+      ],
+      "pressure_l2_mean": 0.12772640585899353,
+      "status": "complete"
+    },
+    "drivaerml|gt|w512|n27": {
+      "dataset": "drivaerml",
+      "model": "gt",
+      "width": 512,
+      "n": 27,
+      "params": 35848576,
+      "runs": {
+        "sl_dr_gt_w512_n27_c100k_seed42": 0.10476724306742351,
+        "sl_dr_gt_w512_n27_c100k_seed43": 0.10916724801063538
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.10476724306742351,
+        0.10916724801063538
+      ],
+      "pressure_l2_mean": 0.10696724553902945,
+      "status": "complete"
+    },
+    "drivaerml|gt|w1024|n27": {
+      "dataset": "drivaerml",
+      "model": "gt",
+      "width": 1024,
+      "n": 27,
+      "params": 142734464,
+      "runs": {
+        "sl_dr_gt_w1024_n27_c100k_seed42": 0.11229464411735535,
+        "sl_dr_gt_w1024_n27_c100k_seed43": 0.11506697535514832
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.11229464411735535,
+        0.11506697535514832
+      ],
+      "pressure_l2_mean": 0.11368080973625183,
+      "status": "complete"
+    },
+    "drivaerml|isla|w192|n54": {
+      "dataset": "drivaerml",
+      "model": "isla",
+      "width": 192,
+      "n": 54,
+      "params": 8912796,
+      "runs": {
+        "sl_dr_isla_cos_w192_n54_c100k_seed42": 0.08469911416371663,
+        "sl_dr_isla_cos_w192_n54_c100k_seed43": 0.08453999956448872
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.08469911416371663,
+        0.08453999956448872
+      ],
+      "pressure_l2_mean": 0.08461955686410268,
+      "status": "complete"
+    },
+    "drivaerml|isla|w384|n54": {
+      "dataset": "drivaerml",
+      "model": "isla",
+      "width": 384,
+      "n": 54,
+      "params": 34263516,
+      "runs": {
+        "sl_dr_isla_cos_w384_n54_c100k_seed42": 0.08197776973247528,
+        "sl_dr_isla_cos_w384_n54_c100k_seed43": 0.07999973992506663
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.08197776973247528,
+        0.07999973992506663
+      ],
+      "pressure_l2_mean": 0.08098875482877096,
+      "status": "complete"
+    },
+    "drivaerml|isla|w768|n54": {
+      "dataset": "drivaerml",
+      "model": "isla",
+      "width": 768,
+      "n": 54,
+      "params": 134288988,
+      "runs": {
+        "sl_dr_isla_cos_w768_n54_c100k_seed42": 0.07573596636454265,
+        "sl_dr_isla_cos_w768_n54_c100k_seed43": 0.07580778499444325
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.07573596636454265,
+        0.07580778499444325
+      ],
+      "pressure_l2_mean": 0.07577187567949295,
+      "status": "complete"
+    },
+    "drivaerml|gt|w256|n54": {
+      "dataset": "drivaerml",
+      "model": "gt",
+      "width": 256,
+      "n": 54,
+      "params": 9046016,
+      "runs": {
+        "sl_dr_gt_w256_n54_c100k_seed42": 0.07600400845209758,
+        "sl_dr_gt_w256_n54_c100k_seed43": 0.07688093682130177
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.07600400845209758,
+        0.07688093682130177
+      ],
+      "pressure_l2_mean": 0.07644247263669968,
+      "status": "complete"
+    },
+    "drivaerml|gt|w512|n54": {
+      "dataset": "drivaerml",
+      "model": "gt",
+      "width": 512,
+      "n": 54,
+      "params": 35848576,
+      "runs": {
+        "sl_dr_gt_w512_n54_c100k_seed42": 0.06725318729877472,
+        "sl_dr_gt_w512_n54_c100k_seed43": 0.0674097587664922
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.06725318729877472,
+        0.0674097587664922
+      ],
+      "pressure_l2_mean": 0.06733147303263345,
+      "status": "complete"
+    },
+    "drivaerml|gt|w1024|n54": {
+      "dataset": "drivaerml",
+      "model": "gt",
+      "width": 1024,
+      "n": 54,
+      "params": 142734464,
+      "runs": {
+        "sl_dr_gt_w1024_n54_c100k_seed42": 0.0658114751180013,
+        "sl_dr_gt_w1024_n54_c100k_seed43": 0.06511939068635304
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.0658114751180013,
+        0.06511939068635304
+      ],
+      "pressure_l2_mean": 0.06546543290217717,
+      "status": "complete"
+    },
+    "drivaerml|isla|w192|n109": {
+      "dataset": "drivaerml",
+      "model": "isla",
+      "width": 192,
+      "n": 109,
+      "params": 8912796,
+      "runs": {
+        "sl_dr_isla_cos_w192_n109_c100k_seed42": 0.06336372594038646,
+        "sl_dr_isla_cos_w192_n109_c100k_seed43": 0.06035721302032471
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.06336372594038646,
+        0.06035721302032471
+      ],
+      "pressure_l2_mean": 0.06186046948035558,
+      "status": "complete"
+    },
+    "drivaerml|isla|w384|n109": {
+      "dataset": "drivaerml",
+      "model": "isla",
+      "width": 384,
+      "n": 109,
+      "params": 34263516,
+      "runs": {
+        "sl_dr_isla_cos_w384_n109_c100k_seed42": 0.05729645490646362,
+        "sl_dr_isla_cos_w384_n109_c100k_seed43": 0.05672174195448557
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.05729645490646362,
+        0.05672174195448557
+      ],
+      "pressure_l2_mean": 0.057009098430474595,
+      "status": "complete"
+    },
+    "drivaerml|isla|w768|n109": {
+      "dataset": "drivaerml",
+      "model": "isla",
+      "width": 768,
+      "n": 109,
+      "params": 134288988,
+      "runs": {
+        "sl_dr_isla_cos_w768_n109_c100k_seed42": 0.05355902016162872,
+        "sl_dr_isla_cos_w768_n109_c100k_seed43": 0.05428847670555115
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.05355902016162872,
+        0.05428847670555115
+      ],
+      "pressure_l2_mean": 0.053923748433589935,
+      "status": "complete"
+    },
+    "drivaerml|gt|w256|n109": {
+      "dataset": "drivaerml",
+      "model": "gt",
+      "width": 256,
+      "n": 109,
+      "params": 9046016,
+      "runs": {
+        "sl_dr_gt_w256_n109_c100k_seed42": 0.05714484552542368,
+        "sl_dr_gt_w256_n109_c100k_seed43": 0.057434539000193276
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.05714484552542368,
+        0.057434539000193276
+      ],
+      "pressure_l2_mean": 0.05728969226280848,
+      "status": "complete"
+    },
+    "drivaerml|gt|w512|n109": {
+      "dataset": "drivaerml",
+      "model": "gt",
+      "width": 512,
+      "n": 109,
+      "params": 35848576,
+      "runs": {
+        "sl_dr_gt_w512_n109_c100k_seed42": 0.052044043938318886,
+        "sl_dr_gt_w512_n109_c100k_seed43": 0.05184356868267059
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.052044043938318886,
+        0.05184356868267059
+      ],
+      "pressure_l2_mean": 0.051943806310494736,
+      "status": "complete"
+    },
+    "drivaerml|gt|w1024|n109": {
+      "dataset": "drivaerml",
+      "model": "gt",
+      "width": 1024,
+      "n": 109,
+      "params": 142734464,
+      "runs": {
+        "sl_dr_gt_w1024_n109_c100k_seed42": 0.050529455145200096,
+        "sl_dr_gt_w1024_n109_c100k_seed43": 0.050647164384524025
+      },
+      "n_scored": 2,
+      "pressure_l2_seeds": [
+        0.050529455145200096,
+        0.050647164384524025
+      ],
+      "pressure_l2_mean": 0.05058830976486206,
+      "status": "complete"
+    },
+    "drivaerml|isla|w192|n218": {
+      "dataset": "drivaerml",
+      "model": "isla",
+      "width": 192,
+      "n": 218,
+      "params": 8912796,
+      "runs": {
+        "sl_dr_isla_cos_w192_n218_c100k_seed42": null,
+        "sl_dr_isla_cos_w192_n218_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "drivaerml|isla|w384|n218": {
+      "dataset": "drivaerml",
+      "model": "isla",
+      "width": 384,
+      "n": 218,
+      "params": 34263516,
+      "runs": {
+        "sl_dr_isla_cos_w384_n218_c100k_seed42": null,
+        "sl_dr_isla_cos_w384_n218_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "drivaerml|isla|w768|n218": {
+      "dataset": "drivaerml",
+      "model": "isla",
+      "width": 768,
+      "n": 218,
+      "params": 134288988,
+      "runs": {
+        "sl_dr_isla_cos_w768_n218_c100k_seed42": null,
+        "sl_dr_isla_cos_w768_n218_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "drivaerml|gt|w256|n218": {
+      "dataset": "drivaerml",
+      "model": "gt",
+      "width": 256,
+      "n": 218,
+      "params": 9046016,
+      "runs": {
+        "sl_dr_gt_w256_n218_c100k_seed42": null,
+        "sl_dr_gt_w256_n218_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "drivaerml|gt|w512|n218": {
+      "dataset": "drivaerml",
+      "model": "gt",
+      "width": 512,
+      "n": 218,
+      "params": 35848576,
+      "runs": {
+        "sl_dr_gt_w512_n218_c100k_seed42": null,
+        "sl_dr_gt_w512_n218_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "drivaerml|gt|w1024|n218": {
+      "dataset": "drivaerml",
+      "model": "gt",
+      "width": 1024,
+      "n": 218,
+      "params": 142734464,
+      "runs": {
+        "sl_dr_gt_w1024_n218_c100k_seed42": null,
+        "sl_dr_gt_w1024_n218_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|isla|w192|super_scarce": {
+      "dataset": "hilift",
+      "model": "isla",
+      "width": 192,
+      "n": 35,
+      "params": 8912796,
+      "runs": {
+        "sl_hl_isla_cos_w192_super_scarce_c100k_seed42": null,
+        "sl_hl_isla_cos_w192_super_scarce_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|isla|w384|super_scarce": {
+      "dataset": "hilift",
+      "model": "isla",
+      "width": 384,
+      "n": 35,
+      "params": 34263516,
+      "runs": {
+        "sl_hl_isla_cos_w384_super_scarce_c100k_seed42": null,
+        "sl_hl_isla_cos_w384_super_scarce_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|isla|w768|super_scarce": {
+      "dataset": "hilift",
+      "model": "isla",
+      "width": 768,
+      "n": 35,
+      "params": 134288988,
+      "runs": {
+        "sl_hl_isla_cos_w768_super_scarce_c100k_seed42": null,
+        "sl_hl_isla_cos_w768_super_scarce_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|gt|w256|super_scarce": {
+      "dataset": "hilift",
+      "model": "gt",
+      "width": 256,
+      "n": 35,
+      "params": 9046016,
+      "runs": {
+        "sl_hl_gt_w256_super_scarce_c100k_seed42": null,
+        "sl_hl_gt_w256_super_scarce_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|gt|w512|super_scarce": {
+      "dataset": "hilift",
+      "model": "gt",
+      "width": 512,
+      "n": 35,
+      "params": 35848576,
+      "runs": {
+        "sl_hl_gt_w512_super_scarce_c100k_seed42": null,
+        "sl_hl_gt_w512_super_scarce_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|gt|w1024|super_scarce": {
+      "dataset": "hilift",
+      "model": "gt",
+      "width": 1024,
+      "n": 35,
+      "params": 142734464,
+      "runs": {
+        "sl_hl_gt_w1024_super_scarce_c100k_seed42": null,
+        "sl_hl_gt_w1024_super_scarce_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|isla|w192|scarce": {
+      "dataset": "hilift",
+      "model": "isla",
+      "width": 192,
+      "n": 210,
+      "params": 8912796,
+      "runs": {
+        "sl_hl_isla_cos_w192_scarce_c100k_seed42": null,
+        "sl_hl_isla_cos_w192_scarce_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|isla|w384|scarce": {
+      "dataset": "hilift",
+      "model": "isla",
+      "width": 384,
+      "n": 210,
+      "params": 34263516,
+      "runs": {
+        "sl_hl_isla_cos_w384_scarce_c100k_seed42": null,
+        "sl_hl_isla_cos_w384_scarce_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|isla|w768|scarce": {
+      "dataset": "hilift",
+      "model": "isla",
+      "width": 768,
+      "n": 210,
+      "params": 134288988,
+      "runs": {
+        "sl_hl_isla_cos_w768_scarce_c100k_seed42": null,
+        "sl_hl_isla_cos_w768_scarce_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|gt|w256|scarce": {
+      "dataset": "hilift",
+      "model": "gt",
+      "width": 256,
+      "n": 210,
+      "params": 9046016,
+      "runs": {
+        "sl_hl_gt_w256_scarce_c100k_seed42": null,
+        "sl_hl_gt_w256_scarce_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|gt|w512|scarce": {
+      "dataset": "hilift",
+      "model": "gt",
+      "width": 512,
+      "n": 210,
+      "params": 35848576,
+      "runs": {
+        "sl_hl_gt_w512_scarce_c100k_seed42": null,
+        "sl_hl_gt_w512_scarce_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|gt|w1024|scarce": {
+      "dataset": "hilift",
+      "model": "gt",
+      "width": 1024,
+      "n": 210,
+      "params": 142734464,
+      "runs": {
+        "sl_hl_gt_w1024_scarce_c100k_seed42": null,
+        "sl_hl_gt_w1024_scarce_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|isla|w192|medium": {
+      "dataset": "hilift",
+      "model": "isla",
+      "width": 192,
+      "n": 510,
+      "params": 8912796,
+      "runs": {
+        "sl_hl_isla_cos_w192_medium_c100k_seed42": null,
+        "sl_hl_isla_cos_w192_medium_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|isla|w384|medium": {
+      "dataset": "hilift",
+      "model": "isla",
+      "width": 384,
+      "n": 510,
+      "params": 34263516,
+      "runs": {
+        "sl_hl_isla_cos_w384_medium_c100k_seed42": null,
+        "sl_hl_isla_cos_w384_medium_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|isla|w768|medium": {
+      "dataset": "hilift",
+      "model": "isla",
+      "width": 768,
+      "n": 510,
+      "params": 134288988,
+      "runs": {
+        "sl_hl_isla_cos_w768_medium_c100k_seed42": null,
+        "sl_hl_isla_cos_w768_medium_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    },
+    "hilift|gt|w1024|medium": {
+      "dataset": "hilift",
+      "model": "gt",
+      "width": 1024,
+      "n": 510,
+      "params": 142734464,
+      "runs": {
+        "sl_hl_gt_w1024_medium_c100k_seed42": null,
+        "sl_hl_gt_w1024_medium_c100k_seed43": null
+      },
+      "n_scored": 0,
+      "pressure_l2_seeds": [],
+      "pressure_l2_mean": null,
+      "status": "pending"
+    }
+  },
+  "fits": {
+    "drivaerml|isla": {
+      "n_points": 9,
+      "distinct_n": 3,
+      "distinct_P": 3,
+      "a": 11.25465859880407,
+      "alpha": 1.4410186294186693,
+      "b": 0.11530297578861941,
+      "beta": 0.054876044305238326,
+      "c": 5.910423382160077e-09,
+      "rms_rel_residual": 0.01745571173047523,
+      "alpha_by_width": {
+        "192": 0.5918403829836526,
+        "384": 0.6769761293600519,
+        "768": 0.6725796441127514
+      },
+      "beta_by_n": {
+        "27": 0.0091209941517937,
+        "54": 0.04073366305581459,
+        "109": 0.05059758268524977
+      }
+    },
+    "drivaerml|gt": {
+      "n_points": 9,
+      "distinct_n": 3,
+      "distinct_P": 3,
+      "a": 10.188389281728501,
+      "alpha": 1.5041647737080466,
+      "b": 6.12277397911043e+61,
+      "beta": 9.162626076746834,
+      "c": 0.04077531228876155,
+      "rms_rel_residual": 0.03402000513737857,
+      "alpha_by_width": {
+        "256": 0.5741717211073519,
+        "512": 0.5173028587081561,
+        "1024": 0.579726652442359
+      },
+      "beta_by_n": {
+        "27": 0.042180028969762334,
+        "54": 0.05617213481445375,
+        "109": 0.04507962918016439
+      }
+    },
+    "hilift|isla": {
+      "n_points": 0,
+      "distinct_n": 0,
+      "distinct_P": 0,
+      "alpha_by_width": {},
+      "beta_by_n": {}
+    },
+    "hilift|gt": {
+      "n_points": 0,
+      "distinct_n": 0,
+      "distinct_P": 0,
+      "alpha_by_width": {},
+      "beta_by_n": {}
+    }
+  }
+}

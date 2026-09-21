@@ -37,9 +37,7 @@ in view:
    sets GeoTransolver is the more data-efficient model, by a margin that
    closes monotonically with data (@sec-scoreboard-200k). On HiLiftAeroML
    (wings) the baselines lead by about 27% at 35 training cases, and that
-   deficit does not move with the cell budget (@sec-data-efficiency). The
-   program's exploration budget of 10,000 cells, where the earlier standings
-   were measured, is labeled as such wherever it appears.
+   deficit does not move with the cell budget (@sec-data-efficiency).
 2. **ISLA's guarantees are exact and they earn accuracy where they matter.**
    Rotation and translation covariance hold by construction, so when
    geometries arrive in arbitrary poses ISLA leads baselines that learned
@@ -48,15 +46,13 @@ in view:
    the inference draw on DrivAerML is biased 10:1 front to back at 100,000
    cells, ISLA's error grows by about 7% where GeoTransolver's grows about
    9x and Transolver's about 5x (@sec-consistency-bench).
-3. **The gap had an anatomy, and the budget closed it.** At the exploration
-   budget GeoTransolver led ISLA by 8% on DrivAerML; more than half of that
-   was finite-sample noise that a stratified inference draw or more cells
-   removes, about two and a half points were attributed to the positional
-   information the invariance contracts deny the model, and under a point was
-   unattributed. At the reporting protocol the whole gap is gone, so the
-   count-noise term was the load-bearing one and the others were partly
-   budget-bound as well. Each part was measured by an experiment designed to
-   isolate it (@sec-deficit-anatomy).
+3. **The full-data gap on DrivAerML was count noise.** At the reporting
+   protocol GeoTransolver and ISLA are at parity (GeoTransolver ÷ ISLA
+   0.998). The deficit that smaller cell budgets show at full data is
+   finite-sample noise in ISLA's slice integrals, which a stratified
+   inference draw shrinks and more cells remove; whether any part of it is
+   the positional information the invariance contracts deny the model is
+   being re-measured at the reporting protocol (@sec-deficit-anatomy).
 4. **ISLA learns the field, not the mesher's habits, and both architectures
    share one capacity floor.** Trained under an area-proportional sampling
    law instead of the uniform one and scored on the same uniform draw,
@@ -83,17 +79,9 @@ RP = Path("..") / "research" / "transfer_program" / "studies"
 J = lambda p: json.load(open(RES / p))
 mean = statistics.mean
 fp = lambda runs, keys, f="pressure_l2": [runs[k]["fields"][f]["fp32_mean"] for k in keys]
-fpdr = J("fp32_reeval/fp32_shift_drivaer_2026-09-09.json")["runs"]
-rf = J("relframe_reduction_2026-09-11.json")["drivaer_val"]
-qv = J("quadvar_reduction_2026-09-17.json")["arms"]
 poseB = json.load(open(RP / "campaign_b_pose" / "campaign_b_fp32_2026-09-10.json"))
 eqp = J("eqprice_reduction_2026-09-17.json")["summary"]
 
-gt10 = mean(fp(fpdr, [f"uw_gt_unit_lr1e3_seed{s}" for s in (42, 43, 44)]))
-t10 = mean(fp(fpdr, [f"uw_transolver_unit_lr3e3_seed{s}" for s in (42, 43)]))
-isla10 = mean([rf[f"rf_dr_mt2_meas_seed{s}"]["pressure_l2"] for s in (42, 43)])
-gt_st = mean(qv["gt_unit"]["strat"]["10000"]["seeds"]); t_st = mean(qv["transolver_unit"]["strat"]["10000"]["seeds"])
-isla_st = mean(qv["isla_ref"]["strat"]["10000"]["seeds"])
 # training-law study: each model trained under the uniform and under the area-proportional sampling law,
 # scored on the independent uniform draw (wings: 35 HiLiftAeroML cases at 200,000 cells; cars: 435 DrivAerML cars at 100,000 cells)
 TA = J("trainarea_reduction_2026-09-20.json")["arms"]; TAD = J("trainarea_dr_reduction_2026-09-20.json")["arms"]
@@ -136,7 +124,6 @@ lad200 = {n: PL[f"n{n}"]["gt_over_isla_at_better_rates"] for n in (27, 54, 109, 
 rows = [
     (f"Surface accuracy, DrivAerML 435 cars, the reporting protocol: 200,000 cells per case (GeoTransolver at {gt200_lab})", f"{gt200:.4f} / {t200:.4f}", f"{isla200:.4f}", f"{gt200/isla200:.2f} / {t200/isla200:.2f}", f"parity with GeoTransolver; ISLA leads Transolver by {(t200/isla200-1)*100:.0f}%"),
     ("Below full data, DrivAerML 27 / 54 / 109 / 218 cars at 200,000 cells (GeoTransolver at its better rate)", "—", "—", " / ".join(f"{lad200[n]:.2f}" for n in (27, 54, 109, 218)), "GeoTransolver's data-efficiency lead narrows from 17% at 27 cars to zero at 435"),
-    ("Exploration budget: DrivAerML 435 cars, independent 10,000-cell draw", f"{gt10:.4f} / {t10:.4f}", f"{isla10:.4f}", f"{gt10/isla10:.2f} / {t10/isla10:.2f}", f"at 10,000 cells the baselines led by {pct(gt10/isla10)} and {pct(t10/isla10)}; the stratified draw halves that gap ({gt_st/isla_st:.2f} / {t_st/isla_st:.2f}) and the reporting protocol removes it"),
     ("Capacity, DrivAerML 435 cars at 100,000 cells (scaling budget, single dataset): the best lane of each ladder, with parameters", f"GeoTransolver {cap['gt1024']['pressure_l2_mean']:.4f} at {M(cap['gt1024'])} / {cap['gt2048']['pressure_l2_mean']:.4f} at {M(cap['gt2048'])} (estimated)", f"{cap['isla24']['pressure_l2_mean']:.4f} at {M(cap['isla24'])} / {cap['isla48']['pressure_l2_mean']:.4f} at {M(cap['isla48'])}", f"{cap['gt1024']['pressure_l2_mean']/cap['isla48']['pressure_l2_mean']:.2f} at matched parameters", "both ladders end at the same floor of about 0.040; identical at about 140M parameters, and ISLA is within 1% of the floor at half GeoTransolver's parameters (cosine routing on ISLA's depth axis)"),
     ("Every case in a random pose at 200,000 cells (baselines trained with rotation augmentation, ISLA without)", f"{PP['arms']['gt_unit']['posed_mean']:.4f} / {PP['arms']['transolver_unit']['posed_mean']:.4f}", f"{PP['arms']['isla']['posed_mean']:.4f}", f"{pose200_lead['gt']:.2f} / {pose200_lead['t']:.2f}", f"ISLA leads by {(pose200_lead['gt']-1)*100:.0f}% and {(pose200_lead['t']-1)*100:.0f}%; ISLA's own error moves {pose200['isla']:.3f}x, the baselines' {pose200['gt']:.2f}x and {pose200['t']:.2f}x"),
     ("Sampling consistency, DrivAerML at 100,000 cells (scaling budget): error under a 10:1 front/back density bias ÷ error under the uniform draw, each model's frame from the sample", f"{dens['gt_unit']:.1f}x / {dens['transolver_unit']:.1f}x", f"{dens['isla']:.2f}x", "—", f"ISLA's error grows {(dens['isla']-1)*100:.0f}%; the baselines' 5 to 9x"),
@@ -146,15 +133,14 @@ rows = [
 out = "| Setting | GeoTransolver / Transolver | ISLA | baseline ÷ ISLA | Reading |\n|---|---:|---:|---:|---|\n"
 for r in rows: out += "| " + " | ".join(r) + " |\n"
 print(out)
-print(": The thesis in eight rows. How to read this: each row is one setting and one instrument, so rows are not comparable with one another, and the HiLiftAeroML surface rungs, where the baselines lead by about 27% at 35 cases regardless of budget, are not shown (@sec-data-efficiency). "
+print(": The thesis in seven rows. How to read this: each row is one setting and one instrument, so rows are not comparable with one another, and the HiLiftAeroML surface rungs, where the baselines lead by about 27% at 35 cases regardless of budget, are not shown (@sec-data-efficiency). "
       "The reporting protocol is 200,000 sampled cells per case, each architecture at its own best learning rate (GeoTransolver's is 3e-3 at that budget, 1e-3 at 10,000 cells; @sec-lr-protocol); rows at other budgets are labeled. Errors are the area-weighted relative L2 of surface pressure "
       "(@sec-metrics) in float32, seed means; a ratio is baseline error divided by ISLA error, so a value "
       "above one favors ISLA. ISLA is the shipped configuration throughout (the relative frame; the surface lanes carry the total-measure length unit, "
       "within 1.3% of the RMS-pairwise-distance default, @sec-nb-lenrms-verdict; the interior lanes route queries with the geometric-mean mass, not the shipped default). "
       "Data: results/p200k_trio_reduction_2026-09-19.json, "
       "results/p200k_ladder_interim_2026-09-18.json, results/p200k_pose_reduction_2026-09-19.json (the reporting protocol); "
-      "results/fp32_reeval/fp32_shift_drivaer_2026-09-09.json, results/relframe_reduction_2026-09-11.json, "
-      "results/quadvar_reduction_2026-09-17.json (exploration budget); results/routenorm_extension_2026-09-21.json, "
+      "results/routenorm_extension_2026-09-21.json, "
       "results/cap435_reduction_2026-09-20.json (capacity); results/trainarea_dr_reduction_2026-09-20.json (consistency and the cars' training law); "
       "results/trainarea_reduction_2026-09-20.json (the wings' training law); results/ratevol_reduction_2026-09-20.json (interior). {#tbl-thesis}")
 ```

@@ -590,6 +590,138 @@ rung, preregistered in @sec-nb-scalehl-prereg and running, decides whether
 "width, not cells" and the shared floor are properties of the architectures
 or of DrivAerML.
 
+## What compute should buy: cases, parameters, epochs {#sec-compute-allocation}
+
+**Below about 100 training cases, every unit of compute belongs to more
+cases; at 435 cars the data axis is near its floor and parameters buy 3 to
+4% per doubling for either model; more epochs buy nothing measurable.**
+That is the answer, as far as the program can give one today, to the
+question a language-model practitioner would ask of a surrogate: what is
+the compute-optimal mix of training set, model size and training length?
+The instrument is the scaling campaign of @sec-nb-campaigns-2026-09-21-prereg,
+read together with the width ladders above: cosine-routing ISLA at three
+widths and GeoTransolver at three widths, each trained for 500 epochs at
+100,000 cells per case on 27, 54, 109 and 435 DrivAerML cars (the 218-car
+rung and the wing rungs are still training), two seeds, scored in float32.
+@fig-scaling-cases shows the raw picture.
+
+```{python}
+#| label: fig-scaling-cases
+#| fig-cap: >
+#|   Surface-pressure error against training cases for three widths of each
+#|   model (cosine-routing ISLA at 192, 384 and 768 wide; GeoTransolver at 256,
+#|   512 and 1,024), 500 epochs at 100,000 cells per case, two-seed means with
+#|   the seeds as short bars, float32; GeoTransolver at 435 cars at the better of its two rates. Lighter shades are narrower models. The
+#|   dashed reference lines have slopes of -0.7 and -0.25. How to read this:
+#|   the vertical spread between shades is what parameters buy at a given
+#|   training-set size (small everywhere); the slope is what cases buy, steep
+#|   below 109 cars and flattening toward the shared floor near 0.040 above
+#|   it. The 218-car rung is pending. Data:
+#|   results/scalelaw_interim_2026-09-21.json (27 to 109 cars),
+#|   results/routenorm_cars_2026-09-21.json and
+#|   results/cap435_reduction_2026-09-20.json (435 cars).
+#| code-fold: true
+SL = J("scalelaw_interim_2026-09-21.json")["configurations"]
+pts = {"isla": {}, "gt": {}}
+for c in SL.values():
+    if c["dataset"] == "drivaerml" and c["pressure_l2_mean"]:
+        pts[c["model"]].setdefault(c["width"], []).append((c["n"], c["pressure_l2_mean"], c["pressure_l2_seeds"]))
+RN = J("routenorm_cars_2026-09-21.json")["configurations"]; CAPC = J("cap435_reduction_2026-09-20.json")["configurations"]
+for w, key in ((192, "cars|cos|w192|lr1e-3"), (384, "cars|cos|w384|lr5e-4"), (768, "cars|cos|w768|lr2.5e-4")):
+    c = RN.get(key)
+    if c and c.get("mean"): pts["isla"].setdefault(w, []).append((435, c["mean"], c["seeds"]))
+for w, keys in ((256, ["gt|w256|d12|s256|lr3e-3"]), (512, ["gt|w512|d12|s256|lr3e-3", "gt|w512|d12|s256|lr1e-3"]), (1024, ["gt|w1024|d12|s256|lr3e3", "gt|w1024|d12|s256|lr1e3"])):
+    cands = [CAPC[k] for k in keys if k in CAPC and CAPC[k].get("pressure_l2_mean")]
+    if cands:
+        c = min(cands, key=lambda c: c["pressure_l2_mean"])      # each width at its better rate, as the ladders above
+        pts["gt"].setdefault(w, []).append((435, c["pressure_l2_mean"], c["pressure_l2_seeds"]))
+fig, ax = plt.subplots(figsize=(8.0, 4.8))
+shades = {"isla": [BLUE_PALE, BLUE_LIGHT, BLUE], "gt": [RED_LIGHT, "#ec7a79", RED]}
+for m, key in (("isla", "isla_ref"), ("gt", "gt")):
+    kw = series_kwargs(key)
+    for shade, (w, rows) in zip(shades[m], sorted(pts[m].items())):
+        rows = sorted(rows); x = [r[0] for r in rows]; y = [r[1] for r in rows]
+        ax.plot(x, y, marker=kw["marker"], color=shade, ls="-", lw=1.4, ms=6, label=f"{STYLE[key]['label']}, {w} wide")
+        for r in rows:
+            ax.plot([r[0]] * len(r[2]), r[2], ls="none", marker="_", color=shade, ms=7, mew=1.1)
+for s, x0, y0 in ((-0.7, 27, 0.20), (-0.25, 109, 0.075)):
+    xs = np.array([x0, x0 * 4]); ax.plot(xs, y0 * (xs / x0) ** s, color=BASELINE, ls="--", lw=1.0, zorder=0)
+    ax.text(xs[1], y0 * 4 ** s, f"  slope {s}", fontsize=8, color=INK2, va="center")
+ax.set_xscale("log"); ax.set_yscale("log"); ax.set_xticks([27, 54, 109, 218, 435]); ax.set_xticklabels(["27", "54", "109", "218", "435"])
+ax.set_yticks([0.04, 0.05, 0.07, 0.1, 0.15]); ax.set_yticklabels(["0.04", "0.05", "0.07", "0.10", "0.15"]); ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+ax.set_xlabel("training cases [count]"); ax.set_ylabel("surface-pressure relative L2 error [–]")
+ax.legend(fontsize=8, ncol=2, loc="upper right")
+plt.show()
+```
+
+```{python}
+#| label: tbl-scaling-exponents
+#| output: asis
+import numpy as np
+def slope(rows, lo, hi):
+    d = {r[0]: r[1] for r in rows}
+    return -np.log(d[hi] / d[lo]) / np.log(hi / lo) if lo in d and hi in d else None
+out = "| model | width | 27 to 54 cars | 54 to 109 | 109 to 435 | parameters, 4x: at 54 / 109 / 435 cars |\n|---|--:|--:|--:|--:|---|\n"
+for m, name in (("isla", "ISLA (cosine)"), ("gt", "GeoTransolver")):
+    ws = sorted(pts[m])
+    for w in ws:
+        rows = pts[m][w]; s1, s2, s3 = slope(rows, 27, 54), slope(rows, 54, 109), slope(rows, 109, 435)
+        f = lambda s: f"{s:.2f}" if s is not None else "pending"
+        gains = []
+        for n in (54, 109, 435):
+            lo = {r[0]: r[1] for r in pts[m][ws[0]]}.get(n); hi = {r[0]: r[1] for r in pts[m][ws[-1]]}.get(n)
+            gains.append(f"{100 * (1 - hi / lo):.0f}%" if lo and hi else "pending")
+        out += f"| {name} | {w} | {f(s1)} | {f(s2)} | {f(s3)} | {' / '.join(gains) if w == ws[0] else ''} |\n"
+out += "\n: Local exponents of the error against training cases (the negative log-log slope between adjacent rungs, at each width) and the gain from a 15x parameter increase (narrowest to widest lane) at each rung. Data: results/scalelaw_interim_2026-09-21.json, results/routenorm_cars_2026-09-21.json, results/cap435_reduction_2026-09-20.json. {#tbl-scaling-exponents}\n"
+print(out)
+```
+
+**Reading the exponents.** The error is not a single power law in the
+training-set size: the local exponent falls from about 0.7 between 27 and
+54 cars to about 0.25 between 109 and 435 for both models
+(@tbl-scaling-exponents), the signature of an approach to a floor rather
+than of a scale-free law, and the floor is the one @sec-shared-floor
+measures directly, near 0.040 for both architectures. Parameters are cheap
+by comparison at every rung: a 15x increase buys ISLA 3 to 13% and
+GeoTransolver 10 to 12%, and the width ladders above show that a further
+doubling at 435 cars buys 3 to 4% before turning over. Epochs are the third
+axis, and the cost grid of @sec-equal-budget measured it once: doubling the
+500-epoch schedule to 1,000 at 200,000 cells changed neither model's error
+(0.0448 against 0.0448 for ISLA, 0.0445 against 0.0445 for GeoTransolver;
+@tbl-floor), so the protocol is converged and training longer is not a
+lever.
+
+**The compute-optimal rule this implies.** Training compute in this recipe
+is proportional to parameters times tokens seen, $C \propto P \cdot n
+\cdot c \cdot E$ with $n$ cases, $c$ cells per case and $E$ epochs; cells
+are flat above 100,000 (@sec-equal-budget) and epochs are converged, so
+the allocation question reduces to $P$ against $n$ at fixed $P \cdot n$.
+The Chinchilla form $\varepsilon = \varepsilon_\infty + a\,n^{-\alpha} +
+b\,P^{-\beta}$ gives the standard answer $P^\ast \propto C^{\alpha /
+(\alpha + \beta)}$, $n^\ast \propto C^{\beta / (\alpha + \beta)}$: the
+axis with the *smaller* exponent is the one to grow once the other's term
+has been driven down. With $\alpha$ between 0.25 and 0.7 and $\beta$
+between 0.04 and 0.06, that rule says, in words: *first buy cases, because
+each doubling of cases removes 15 to 40% of the reducible error while a
+doubling of parameters removes 3 to 4%; once the data term is small, which
+on DrivAerML happens between 109 and 435 cars, the remaining reducible
+error is the parameter term, and compute goes to width or depth, where it
+buys a few percent per doubling until the shared floor.* The program is
+not yet able to pin the five coefficients of that form: three widths
+spanning 15x and four rungs do not separate the floor from the parameter
+term (the fit puts the floor anywhere from zero to the floor itself
+depending on the initial guess), and the wing rungs, which will say
+whether the exponents are a property of the architectures or of
+DrivAerML, are still training. The local exponents in
+@tbl-scaling-exponents are the honest readout; a fitted law and its
+wing twin are preregistered (@sec-nb-scalelaw-interim). Two practical
+consequences already hold: on a dataset of a few hundred cases the
+recipe's default width is the right place to spend, and a claim that one
+architecture "scales better" needs the exponents, not a single-width
+ladder; on the axes measured so far the two architectures' exponents are
+the same within the resolution of two seeds.
+
+
 ## Pose: equivariant by construction, invariant by canonicalization {#sec-pose}
 
 **ISLA is rotation- and translation-covariant by algebraic construction;
@@ -746,16 +878,11 @@ print(": Learning-rate sensitivity on the full splits: area-weighted relative L2
 Two consequences are built into the protocol. Because GeoTransolver's best
 rate differs between datasets and between budgets, "best rate per
 architecture" is the only rule under which the baseline is the strongest
-version of itself; at the exploration budget the rate choice moves
-GeoTransolver's DrivAerML error by a few percent and does not decide the
-comparison (@sec-full-data), while at the reporting protocol it moves the
-27-car row by 31% and does (@sec-scoreboard-200k). At the exploration budget
-the rate was chosen once on the full split and frozen for every smaller
-split, so that retuning at 35 or 210 training cases would not hand the
-baseline a search that ISLA did not get; at the reporting protocol
-GeoTransolver received a two-rate control on every DrivAerML rung and the
-better rate is reported, a search ISLA cannot use because it has one usable
-rate (@sec-robustness-lr). Rate, training-length and seed controls at the small splits move
+version of itself; at the reporting protocol the rate choice moves the
+27-car row by 31% and decides it (@sec-scoreboard-200k). GeoTransolver
+received a two-rate control on every DrivAerML rung at the reporting
+protocol and the better rate is reported, a search ISLA cannot use because
+it has one usable rate (@sec-robustness-lr). Rate, training-length and seed controls at the small splits move
 GeoTransolver's error by far less than its input-scale sensitivity
 (@tbl-unit-vs-physical), which is why the input scale is fixed by rule and
 not tested by control.

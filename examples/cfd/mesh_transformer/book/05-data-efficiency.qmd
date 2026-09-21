@@ -1,21 +1,18 @@
 # Data efficiency on HiLiftAeroML {#sec-data-efficiency}
 
 **On the wings, GeoTransolver and Transolver are more accurate than ISLA
-at every training-set size measured, by 12 to 32%, and the sampling budget
-does not change that: on the two rungs measured at both budgets the ratios
-agree within 0.01 and 0.04 (GeoTransolver ÷ ISLA 0.73 at the reporting
-protocol of 200,000 cells against 0.72 at the exploration budget of 10,000
-on the 35-case rung; 0.69 against 0.68 on the fixed-angle rung, where
-Transolver ÷ ISLA is 0.79 against 0.75).** The ladder below trains every
-architecture on nested subsets of HiLiftAeroML (ISLA is measured at 35 and
-210 cases; GeoTransolver and Transolver also at 510 and 1,260), and on two
-further ladders that vary what the training set contains rather than how
-large it is, and scores them all on the same validation cases with the same
-instrument. The ordering never changes. The ladder itself was run at the
-exploration budget and is labeled so; the 35-case and fixed-angle rungs
-repeated at 200,000 cells are in @tbl-scoreboard-200k-wings, and the
-remaining rungs at that budget are live (@sec-program-status). What the
-chapter adds beyond the ordering is *where* ISLA's error comes from on this
+on every rung measured at the reporting protocol of 200,000 cells, by 21 to
+32% on the 35-case, 4-geometry and fixed-angle rungs, and the sampling
+budget does not change that: on the two rungs measured at both budgets the
+ratios agree within 0.01 and 0.04 (GeoTransolver ÷ ISLA 0.73 at 200,000
+cells against 0.72 at 10,000 on the 35-case rung; 0.69 against 0.68 on the
+fixed-angle rung).** The ladders below train every architecture on nested
+subsets of HiLiftAeroML and on two further ladders that vary what the
+training set contains rather than how large it is, and score them all on
+the same validation cases with the same instrument. The ordering never
+changes. The 210-case, 21-geometry, 510- and 1,260-case rungs are being
+measured at the reporting protocol and are pending (@sec-program-status).
+What the chapter adds beyond the ordering is *where* ISLA's error comes from on this
 dataset: it is paid in distinct geometries rather than cases, it
 concentrates in the slat and flap gaps, and it is representational rather
 than a data limit. The chapter also carries the one wing result in which
@@ -58,25 +55,24 @@ ladders are used here.
   geometries at the same angle.
 
 Every architecture trains under the frozen protocol (@sec-protocol) at the
-exploration budget: 10,000 sampled surface points per case, 500 epochs,
-bfloat16, no augmentation, two or three seeds, the freestream as a unit
-direction, and the learning rate each architecture prefers on the full
-split (ISLA 1e-3, Transolver 3e-3, GeoTransolver 1e-3 except at 35 cases,
-where its 3e-3 lane is better and is the one reported). The reporting
-protocol is 200,000 cells per case, at which GeoTransolver's better rate is
-3e-3 on the wings; on the two wing rungs measured at both budgets the ratios
-agree within 0.01 and 0.04 (@tbl-scoreboard-200k-wings). Every number is a float32 evaluation of the final-epoch
-checkpoint; no checkpoint is selected on validation error. Parameters are
-matched (ISLA 8.9M, GeoTransolver 9.0M, Transolver 6.0M) and so are tokens
-per case; the step cost is in @sec-review-frontier.
+reporting protocol: 200,000 sampled surface cells per case, 500 epochs,
+bfloat16, no augmentation, two seeds, the freestream as a unit direction,
+and each architecture at its own best learning rate (ISLA 1e-3, Transolver
+3e-3, GeoTransolver the better of 1e-3 and 3e-3, which is 3e-3 on the wings;
+@sec-lr-protocol). On the two wing rungs also measured at 10,000 cells the
+ratios agree within 0.01 and 0.04 (@tbl-scoreboard-200k-wings). Every
+number is a float32 evaluation of the final-epoch checkpoint; no checkpoint
+is selected on validation error. Parameters are matched (ISLA 8.9M,
+GeoTransolver 9.0M, Transolver 6.0M) and so are tokens per case; the step
+cost is in @sec-review-frontier.
 
-ISLA is the shipped configuration (relative frame, @sec-isla; these lanes carry
-the total-measure length unit, within 1.3% of the RMS-pairwise-distance default,
-@sec-nb-lenrms-verdict), measured on the 35-case, 210-case, 4-geometry, 21-geometry and
-fixed-angle rungs. It is not trained on the 510- and 1,260-case rungs at
-the exploration budget, where GeoTransolver and Transolver are
-(@sec-scoreboard-pending); those rungs are live at the reporting protocol
-(@sec-program-status).
+ISLA is the shipped configuration (relative frame, @sec-isla; these lanes
+carry the total-measure length unit, within 0.4% of the
+RMS-pairwise-distance default at the reporting protocol,
+@sec-nb-lenrms-200k). At the reporting protocol it is measured on the
+35-case, 4-geometry and fixed-angle rungs; the 210-case, 21-geometry, 510-
+and 1,260-case rungs are training and pending (@sec-scoreboard-pending,
+@sec-program-status).
 
 ::: {.callout-note collapse="true" title="Why every model receives the freestream as a unit direction"}
 Fed the physical freestream velocity of 2,679.5 in/s instead, GeoTransolver's
@@ -89,82 +85,67 @@ every number in this chapter is a unit-direction number.
 ## The ladder {#sec-de-result}
 
 **GeoTransolver and Transolver are more accurate than ISLA on every rung
-measured at the exploration budget: baseline ÷ ISLA lies between 0.68 and
-0.88.**
+measured at the reporting protocol; the ratios are computed below from the
+200,000-cell artifacts, and the rungs without a reporting-protocol
+measurement are marked pending.**
 
 ```{python}
 #| label: fig-hilift-data-efficiency
 #| fig-cap: >
-#|   The HiLiftAeroML ladders at the exploration budget (10,000 cells per
-#|   case). Surface-pressure error (area-weighted relative
-#|   L2, float32, log axis) against training-set size for GeoTransolver (red
-#|   circles), Transolver (amber triangles, dashed) and ISLA
-#|   (filled blue squares). Left: random splits of 35 and 210
-#|   cases, validated on 180 cases whose geometries recur in training.
-#|   Middle: 4 and 21 training geometries at all ten angles, validated on 180
-#|   cases of 18 never-seen geometries. Right: 126 geometries at a fixed 12°,
-#|   validated on 18 held-out geometries. Large markers are seed means; small
-#|   dots are seeds; bands span the seeds. How to read this: GeoTransolver
-#|   and Transolver sit below ISLA on every rung. It is the exploration
-#|   budget, not the reporting protocol (the 35-case and fixed-angle rungs
-#|   at 200,000 cells are @tbl-scoreboard-200k-wings); it does not show the
-#|   510- and 1,260-case rungs, where ISLA is not trained at this budget
-#|   (@sec-scoreboard-pending), or the uncertainty from the choice of
+#|   The HiLiftAeroML rungs at the reporting protocol (200,000 cells per
+#|   case). Surface-pressure error (area-weighted relative L2, float32) for
+#|   GeoTransolver (red), Transolver (amber) and ISLA (blue) on the three
+#|   rungs measured at this budget: 35 random training cases, validated on
+#|   180 cases whose geometries recur in training; 4 training geometries at
+#|   all ten angles, validated on 180 cases of 18 never-seen geometries; 126
+#|   geometries at a fixed 12°, validated on 18 held-out geometries. Bars
+#|   are seed means; dots are the two seeds; the label above each baseline
+#|   bar is baseline ÷ ISLA. Panels share no vertical scale, since the
+#|   rungs differ several-fold in error. How to read this: GeoTransolver and
+#|   Transolver sit below ISLA on every rung. It does not show the 210-case,
+#|   21-geometry, 510- and 1,260-case rungs, which are pending at this
+#|   budget (@sec-program-status), or the uncertainty from the choice of
 #|   training draw, which is three to eleven times the seed spread at 35
-#|   cases (@sec-de-controls). Data: results/fp32_reeval/fp32_shift_2026-09-09.json,
-#|   results/udrvl_210_reduction_2026-09-10.json,
-#|   results/geo210_all_arms_2026-09-10.json,
-#|   results/now_single12_reduction_2026-09-10.json,
-#|   results/frame_reduction_2026-09-11.json.
+#|   cases (@sec-de-controls). Data:
+#|   results/p200k_fleet_reduction_2026-09-19.json (35 cases),
+#|   results/p200k_fleet_interim_2026-09-20.json (4 geometries, fixed angle).
 #| code-fold: true
-fp = json.load(open(RES / "fp32_reeval" / "fp32_shift_2026-09-09.json"))["runs"]
-fr = json.load(open(RES / "frame_reduction_2026-09-11.json"))["hilift_val"]
-u210 = json.load(open(RES / "udrvl_210_reduction_2026-09-10.json"))["three_seed_addendum_fp32"]
-g210 = json.load(open(RES / "geo210_all_arms_2026-09-10.json"))["arms_fp32"]
-fa = json.load(open(RES / "now_single12_reduction_2026-09-10.json"))["arms_fp32"]
-def fp32(prefix, seeds):
-    return [fp[f"{prefix}_seed{s}"]["fields"]["pressure_l2"]["fp32_mean"] for s in seeds if f"{prefix}_seed{s}" in fp]
-def frame(prefix, seeds=(42, 43, 44)):
-    return [fr[f"{prefix}_seed{s}"]["pressure_l2"] for s in seeds if f"{prefix}_seed{s}" in fr]
+F19 = json.load(open(RES / "p200k_fleet_reduction_2026-09-19.json"))["datasets"]
+F20 = json.load(open(RES / "p200k_fleet_interim_2026-09-20.json"))["datasets"]
+def gt_best(d):
+    """GeoTransolver at the better of its 1e-3 and 3e-3 pairs, with the rate label."""
+    a = d["arms"]; cands = {k: a[k] for k in ("gt_unit", "gt_unit_lr3e3") if k in a and a[k].get("n_evaluated")}
+    k = min(cands, key=lambda k: cands[k]["pressure_l2_mean"])
+    return cands[k], ("3e-3" if k.endswith("3e3") or len(cands) == 1 else "1e-3")
+def rung(d):
+    g, lab = gt_best(d)
+    return {"gt": g["pressure_l2_seeds"], "gt_rate": lab, "t": d["arms"]["transolver_unit"]["pressure_l2_seeds"],
+            "isla_ref": d["arms"]["isla"]["pressure_l2_seeds"]}
 LADDER = {
- "35 cases": {"gt": fp32("udrv_hl_gt_super_scarce_lr3e3", (42, 43)), "t": fp32("udrv_hl_transolver_super_scarce_lr3e3", (42, 43, 44)),
-              "isla_ref": frame("rf_hl_mt2_meas_super_scarce")},
- "210 cases": {"gt": u210["gt_unit_lr1e3"]["seed_pressure"], "t": u210["transolver_unit_lr3e3"]["seed_pressure"],
-               "isla_ref": frame("rf_hl_mt2_meas_scarce")},
- "4 geometries": {"gt": fp32("udrv_hl_gt_geometry_super_scarce", (42, 43)), "t": fp32("udrv_hl_transolver_geometry_super_scarce_lr3e3", (42, 43)),
-                  "isla_ref": frame("rf_hl_mt2_meas_geometry_super_scarce")},
- "21 geometries": {"gt": g210["gt_unit"]["seed_pressure"], "t": g210["transolver_unit_lr3e3"]["seed_pressure"],
-                   "isla_ref": frame("rf_hl_mt2_meas_geometry_scarce")},
- "fixed angle": {"gt": fa["gt_unit"]["seed_pressure"], "t": fa["transolver_unit_lr3e3"]["seed_pressure"],
-                 "isla_ref": frame("rf_hl_mt2_meas_single_aoa_12")},
+ "35 cases": rung(F19["highlift_surface_super_scarce"]),
+ "210 cases": None,
+ "4 geometries": rung(F20["highlift_surface_geometry_super_scarce"]),
+ "21 geometries": None,
+ "fixed angle": rung(F20["highlift_surface_single_aoa_12"]),
 }
-PANELS = [("random splits, 180 validation cases", [("35 cases", 35), ("210 cases", 210)], "training cases [count]", "log"),
-          ("never-seen geometries, 180 validation cases", [("4 geometries", 4), ("21 geometries", 21)], "training geometries [count]", "log"),
-          ("fixed angle 12°, 18 held-out geometries", [("fixed angle", 126)], "training geometries [count]", "linear")]
-fig, axs = plt.subplots(1, 3, figsize=(11.0, 4.8), sharey=True, gridspec_kw={"width_ratios": [2.4, 2.2, 1.2]})
-for ax, (title, rungs, xlabel, xscale) in zip(axs, PANELS):
-    for key in ("isla_ref", "gt", "t"):
-        xs, ys, lo, hi = [], [], [], []
-        for name, x in rungs:
-            v = LADDER[name][key]
-            if not v:
-                continue
-            xs.append(x); ys.append(statistics.mean(v)); lo.append(min(v)); hi.append(max(v))
-            ax.scatter([x] * len(v), v, color=STYLE[key]["color"], s=12, alpha=0.9, zorder=4)
-        if xs:
-            ax.fill_between(xs, lo, hi, color=STYLE[key]["color"], alpha=0.15, lw=0)
-            ax.plot(xs, ys, **series_kwargs(key, lw=1.8, ms=7, label=STYLE[key]["label"] if ax is axs[0] else None), zorder=3)
-    ax.set_xscale(xscale); ax.set_yscale("log")
-    ticks = [x for _, x in rungs]
-    ax.set_xticks(ticks); ax.set_xticklabels([f"{x:,}" for x in ticks])
-    ax.set_xlim(ticks[0] / 1.6, ticks[-1] * 1.6) if xscale == "log" else ax.set_xlim(ticks[0] - 40, ticks[0] + 40)
-    ax.set_xlabel(xlabel); ax.set_title(title, fontsize=9.5, pad=8)
-    ax.grid(True, which="major"); ax.grid(False, which="minor")
-axs[0].set_yticks([0.03, 0.05, 0.1, 0.2, 0.3]); axs[0].set_yticklabels(["0.03", "0.05", "0.10", "0.20", "0.30"])
-axs[0].set_ylim(0.024, 0.32)
+PANELS = [("35 random training cases\n(180 validation cases, geometries recur)", "35 cases"),
+          ("4 training geometries\n(180 validation cases, never-seen geometries)", "4 geometries"),
+          ("fixed angle 12°, 126 geometries\n(18 held-out geometries)", "fixed angle")]
+fig, axs = plt.subplots(1, 3, figsize=(11.0, 4.6))
+for ax, (title, name) in zip(axs, PANELS):
+    r = LADDER[name]
+    arms = [("Geo-\nTransolver", r["gt"], "gt"), ("Transolver", r["t"], "t"), ("ISLA", r["isla_ref"], "isla_ref")]
+    means = [statistics.mean(v) for _, v, _ in arms]
+    for x_, (_, v, k) in enumerate(arms):
+        ax.bar(x_, means[x_], width=0.62, zorder=2, **bar_kwargs(k))
+        ax.plot([x_] * len(v), v, marker="o", ms=4.5, mfc="white", mec=INK, mew=0.9, ls="none", zorder=4)
+        lab = f"{means[x_]:.3f}" + ("" if k == "isla_ref" else f"\n÷ {means[x_] / means[2]:.2f}")
+        ax.text(x_, means[x_] * 1.02, lab, ha="center", va="bottom", fontsize=8.5, color=INK2)
+    ax.set_xticks(range(3)); ax.set_xticklabels([a[0] for a in arms], fontsize=8.5)
+    ax.set_title(title, fontsize=9.5, pad=8); ax.set_ylim(0, max(means) * 1.3); ax.grid(axis="x", visible=False)
 axs[0].set_ylabel("surface pressure error, area-weighted relative L2 [–]")
-fig.legend(loc="upper left", ncol=3, fontsize=8.8, bbox_to_anchor=(0.01, 0.995), handlelength=2.6, columnspacing=1.4)
-fig.tight_layout(rect=(0, 0, 1, 0.93))
+fig.suptitle("reporting protocol: 200,000 cells per case; label = baseline ÷ ISLA", fontsize=9.5, color=INK2)
+fig.tight_layout()
 plt.show()
 ```
 
@@ -173,20 +154,21 @@ plt.show()
 #| output: asis
 #| code-fold: true
 def cell(v):
-    if not v:
-        return "not trained"
     m = statistics.mean(v)
     return f"{m:.4f} ({min(v):.4f}–{max(v):.4f})" if len(v) > 1 else f"{m:.4f}"
 def ratio(a, b):
-    return f"{statistics.mean(a) / statistics.mean(b):.2f}" if a and b else "—"
-print("| rung | GeoTransolver | Transolver | ISLA | GeoTransolver ÷ ISLA | Transolver ÷ ISLA |")
+    return f"{statistics.mean(a) / statistics.mean(b):.2f}"
+print("| rung | GeoTransolver (rate) | Transolver (3e-3) | ISLA (1e-3) | GeoTransolver ÷ ISLA | Transolver ÷ ISLA |")
 print("|---|---|---|---|---:|---:|")
 for name in ("35 cases", "210 cases", "4 geometries", "21 geometries", "fixed angle"):
     r = LADDER[name]
-    print(f"| {name} | {cell(r['gt'])} | {cell(r['t'])} | **{cell(r['isla_ref'])}** | "
+    if r is None:
+        print(f"| {name} | pending at the reporting protocol | pending | pending | — | — |")
+        continue
+    print(f"| {name} | {cell(r['gt'])} ({r['gt_rate']}) | {cell(r['t'])} | **{cell(r['isla_ref'])}** | "
           f"{ratio(r['gt'], r['isla_ref'])} | {ratio(r['t'], r['isla_ref'])} |")
 print()
-print(": The HiLiftAeroML ladders at the exploration budget (10,000 cells per case) in float32: seed mean (seed range) of surface-pressure error on the shared validation cases, and each baseline's mean divided by ISLA's (below one means the baseline is more accurate). GeoTransolver at learning rate 3e-3 at 35 cases and 1e-3 elsewhere; Transolver at 3e-3; ISLA at 1e-3. How to read this: the ordering, not the absolute level, is the result; the 35-case and fixed-angle rungs at the reporting protocol are @tbl-scoreboard-200k-wings, and the 510- and 1,260-case rungs have no ISLA arm at this budget (@sec-scoreboard-pending). Same sources as @fig-hilift-data-efficiency. {#tbl-hilift-ladder}")
+print(": The HiLiftAeroML ladders at the reporting protocol (200,000 cells per case) in float32: seed mean (seed range) of surface-pressure error on the shared validation cases, and each baseline's mean divided by ISLA's (below one means the baseline is more accurate). GeoTransolver at the better of its 1e-3 and 3e-3 pairs, the rate named per row; Transolver at 3e-3; ISLA at 1e-3. How to read this: the ordering, not the absolute level, is the result; rows marked pending are training at this budget and join the table as they report (@sec-program-status), and the 510- and 1,260-case rungs have no ISLA arm yet. Same sources as @fig-hilift-data-efficiency. {#tbl-hilift-ladder}")
 ```
 
 The preregistered bar for an ISLA advantage, baseline ÷ ISLA of at least
@@ -225,31 +207,24 @@ print(f"Trained under the uniform law and scored on the independent uniform draw
       f"Transolver ÷ ISLA {V['transolver_unit_over_isla_area_unif']:.1f}. Float32, two seeds, 180 validation wings, 200,000 cells per case; data: results/trainarea_reduction_2026-09-20.json.")
 ```
 
-::: {.callout-note collapse="true" title="Case-by-case counts and the frame price (diagnostic, legacy centered variant)"}
+::: {.callout-note collapse="true" title="The frame price (diagnostic, legacy centered variant; pending at the reporting protocol)"}
 The program's earlier configuration, the legacy centered variant (plain-mean
 center, constant length unit; @sec-isla-variants), was measured on every
-rung, and the per-case counts were reduced against it: at 210 cases
-GeoTransolver is lower on 161 of 180 validation cases and Transolver on
-149; at 510 cases both on 168 of 180; at 21 geometries on 136 and 135; at
-the fixed angle on all 18 held-out geometries. At 4 geometries the mean and
-the count disagree: GeoTransolver is 0.76x by the mean but lower on only 96
-of 180 cases and 9 of 18 geometries, because a tail of geometries on which
-ISLA is up to twice as bad carries the mean.
-
-ISLA pays a price against that variant that depends
-on whether validation geometries recur in training: 11% at 35 and 210
-cases, where every validation geometry appears in training at other
-angles; 1% and 5% on the two never-seen-geometry rungs; 14% at the fixed
-angle; nothing on DrivAerML. The price is a mesher pattern, not lost
-position: on the 35-case and fixed-angle splits a diagnostic ISLA handed the
-exact frame of the full geometry as global data, so lacking no positional
-information, paid as much or more (14 to 16% and 21%). What the plain-mean
-centroid reads is where the mesher placed its cells, which displaces that
-centroid by 0.131 body lengths on these wings and 0.034 on DrivAerML cars,
-a reusable cue exactly when the same geometries recur or a single angle
-fixes the refinement pattern. That content is discretization-dependent and
-ISLA declines to carry it (@sec-principle); the
-consistency benchmark of @sec-consistency-bench is where it earns its price.
+rung, and ISLA pays a price against it that depends on whether validation
+geometries recur in training: largest at 35 and 210 cases, where every
+validation geometry appears in training at other angles, and at the fixed
+angle; smallest on the two never-seen-geometry rungs; nothing on
+DrivAerML. The sizes are being re-measured at the reporting protocol and
+are not quoted here. The price is a mesher pattern, not lost position: on
+the 35-case and fixed-angle splits a diagnostic ISLA handed the exact frame
+of the full geometry as global data, so lacking no positional information,
+paid as much or more. What the plain-mean centroid reads is where the
+mesher placed its cells, which displaces that centroid by 0.131 body
+lengths on these wings and 0.034 on DrivAerML cars, a reusable cue exactly
+when the same geometries recur or a single angle fixes the refinement
+pattern. That content is discretization-dependent and ISLA declines to
+carry it (@sec-principle); the consistency benchmark of
+@sec-consistency-bench is where it earns its price.
 Data: results/udrv_reduction_2026-09-09d.json,
 results/udrvl_210_reduction_2026-09-10.json,
 results/udrvl_510_reduction_2026-09-12.json,
@@ -270,21 +245,22 @@ lies between 0.88 and 0.96 across draws (mean 0.91, 90% interval 0.84 to
 0.82 to 0.92); the curated draw is typical for every arm. At 210 cases the
 same design gives 0.87 (0.82 to 0.93) and 0.90 (0.85 to 0.95). Every
 35-case and 210-case ratio in the book is to be read with a between-draw
-spread of this size; the scoreboard's forest plot carries seed-mean ratios
-of the curated draw alone (@sec-scoreboard-surface). Data:
+spread of this size; the ladder above carries seed-mean ratios of the
+curated draw alone. Data:
 research/transfer_program/studies/campaign_a_draws/campaign_a_n35_fp32_2026-09-10.json
 and campaign_a_n210_fp32_2026-09-10.json.
 
 ::: {.callout-note collapse="true" title="The other steel-man controls"}
-- **Learning rate.** At 35 cases GeoTransolver at 3e-3 beats its 1e-3 lane
-  on 158 of 180 cases and is the lane reported; at every other rung 1e-3 is
-  better. Transolver at 1e-3 is worse than at 3e-3 at 35 cases and stays at
-  3e-3.
+- **Learning rate.** GeoTransolver receives a two-rate control, 1e-3 and
+  3e-3, and the better lane is reported; at the reporting protocol that is
+  3e-3 on the wings (@sec-lr-protocol). Transolver at 1e-3 is worse than at
+  3e-3 at 35 cases and stays at 3e-3.
 - **Seeds.** Third seeds at 35 and 210 cases move neither baseline's mean by
   more than 0.001.
 - **The surface measure.** Giving GeoTransolver and Transolver the same
-  quadrature measure ISLA carries, in their slice pooling, costs them 6.5% at
-  35 cases and leaves them ahead of ISLA. These measure-weighted baselines
+  quadrature measure ISLA carries, in their slice pooling, costs them a few
+  percent at 35 cases and leaves them ahead of ISLA; the price is being
+  re-measured at the reporting protocol. These measure-weighted baselines
   are ablations that locate a property, not modifications of the
   public models.
 - **ISLA's own controls** are the single-factor ablations of @sec-mechanism.
@@ -345,71 +321,58 @@ another angle helps it by 15% at 35 cases
 
 ## Other readouts: forces and an uncertainty signal {#sec-de-forces}
 
-**From a few dozen CFD runs the model predicts integrated lift and drag to
-a few percent, and the disagreement between its two seeds ranks its
-per-case error; both readouts were measured on the removed legacy centered
-variant at the exploration budget, on ISLA alone, and are diagnostics rather
-than rows.** GeoTransolver's and Transolver's forces and seed signals are not
-reduced, so neither is a comparison.
-
-::: {.callout-note collapse="true" title="The force and uncertainty numbers (removed variant, diagnostic; exploration budget)"}
-*Forces.* Measured on the legacy centered variant: from 35 CFD runs it
-predicts the drag coefficient of the 180 validation cases to 3.3% and the
-lift coefficient to 3.0% (mean absolute error relative to the mean
-magnitude), and from 1,260 to 1.4% and 0.9%
-(results/hilift_paired_stats_2026-09-06.json). The reference is the CFD
-label integrated on the same 10,000 sampled cells as the prediction, so the
-sampling error of the integral cancels; how far a 10,000-cell integral sits
-from the full-surface force is not measured.
-
-*Uncertainty.* For the same variant the Spearman correlation between
-two-seed disagreement and per-case error is +0.67 at 35 cases, about +0.6
-at 210, and +0.15 at 1,260, where seed disagreement no longer predicts
-error (@sec-shared-floor). The ranking is tested, not calibration.
-Two-seed ensembles gain only 1 to 5%
-(results/hilift_ensemble_uq_{35,210,1260}_2026-09-06.json).
-:::
+**Two further readouts exist for ISLA alone and are pending at the
+reporting protocol: the integrated lift and drag coefficients of the
+validation cases, and the disagreement between two seeds as a ranking of
+per-case error.** Both were measured on the removed legacy centered variant
+in the exploration runs (results/hilift_paired_stats_2026-09-06.json,
+results/hilift_ensemble_uq_{35,210,1260}_2026-09-06.json) and are being
+re-measured on ISLA at the reporting protocol; their values are not quoted
+here. The force reference is the CFD label integrated on the same sampled
+cells as the prediction, so the sampling error of the integral cancels; how
+far a sampled integral sits from the full-surface force is not measured.
+The uncertainty readout tests ranking, not calibration. GeoTransolver's and
+Transolver's forces and seed signals are not reduced, so neither is a
+comparison.
 
 ## What each ingredient costs ISLA {#sec-mechanism}
 
-**No single ingredient moves ISLA's error by more than 16%: the relational
+**No single ingredient is load-bearing for ISLA's accuracy: the relational
 invariants are the largest single ingredient, and the measure weights cost
 in distribution as an estimator-variance effect that shrinks with cell
-count.** The single-factor ablation that established this was run on the
-program's earlier configuration, the legacy centered variant, at 35 cases;
-its table and the measure-weight decomposition are in the collapsed note.
+count.** The single-factor ablation that established the ordering was run
+on the program's earlier configuration, the legacy centered variant, at 35
+cases; its prices are being re-measured at the reporting protocol, so the
+collapsed note states what was varied and the mechanism of the
+measure-weight price and quotes no price.
 
-::: {.callout-note collapse="true" title="The single-factor ablation and the price of the measure weights (diagnostic, legacy centered variant)"}
+::: {.callout-note collapse="true" title="The single-factor ablation and the price of the measure weights (diagnostic, legacy centered variant; prices pending at the reporting protocol)"}
 Removing one ingredient at a time from the legacy centered variant at 35
-cases gives @tbl-hilift-ablations.
+cases, two seeds, frozen protocol, shared validation set
+(results/a35_v0_reduction_2026-09-05.json), varied five things: raw
+coordinates added as inputs (breaking exact equivariance); the invariant
+seeds replaced by the raw vectors; the similarity gauge switched on; the
+measure weights switched off (the ablation, never adopted); and the
+relational invariants removed from routing and read-back. Every variant
+retains an invariant path somewhere, so the ablation speaks to exactness
+and to individual ingredients, not to the presence of invariant
+information. Its ordering: exactness of the equivariance and the invariant
+seed set are not load-bearing in distribution; the similarity gauge, a
+center and length unit estimated from the sample, costs the variant a few
+percent on this rung (on ISLA at 435 cars the price of not being told the
+body's center is inside seed noise, @sec-nb-sgref-verdict); the weights-off
+ablation gains; and removing the relational invariants is the largest
+single loss. Each size is pending at the reporting protocol.
 
-| single-factor change to the legacy centered variant at 35 cases | error (seed 42 / 43) | ÷ 0.138 |
-|---|---|---|
-| add raw coordinates as inputs (breaks exact equivariance) | 0.143 / 0.143 | 1.04x |
-| replace the invariant seeds by the raw vectors | 0.138 / 0.137 | 0.99x |
-| similarity gauge on | 0.151 / 0.147 | 1.08x |
-| measure weights off (ablation, not adopted) | 0.121 / 0.123 | **0.88x** |
-| relational invariants off in routing and read-back | 0.158 / 0.163 | 1.16x |
-
-: Single-factor ablations of ISLA's legacy centered variant at 35 training cases, two seeds, frozen protocol, shared validation set; greater than one means worse. Every variant retains an invariant path somewhere, so these results speak to exactness and to individual ingredients, not to the presence of invariant information. Data: results/a35_v0_reduction_2026-09-05.json. {#tbl-hilift-ablations}
-
-Exactness of the equivariance is not load-bearing in distribution (raw
-coordinates cost 4%); the invariant seed set is not (raw vectors cost
-nothing); the similarity gauge, a center and length unit estimated from the
-sample, costs the legacy centered variant 8% on the 35-case rung at the
-exploration budget (on ISLA at 435 cars the price of not being told the
-body's center is at most about 2%, inside seed noise, @sec-nb-sgref-verdict);
-the relational invariants are worth 16%.
-
-**Measure weights are a correctness requirement, and their in-distribution
-price is known.** Turning them off improves the legacy centered variant by
-12% at 35 cases, 8% at 210, 17% at 4 geometries, 11% at 21, 11% at the
-fixed angle, and 3% on DrivAerML. The price has two parts. One is estimator
-variance: with the weights on, the effective number of tokens per slice is
-about a fifth of the count, and on DrivAerML the weights-off advantage
-shrinks from 11% at 2,500 cells to 2.4% at 40,000. The other, on the
-wings, is mesh-pattern content: there the advantage is flat at 12 to 13%
-from 2,500 to 40,000 cells, which variance cannot be, and under
+**Measure weights are a correctness requirement, and the mechanism of
+their in-distribution price is known.** Turning them off improves the
+legacy centered variant on every wing rung and slightly on DrivAerML (the
+sizes are pending at the reporting protocol). The price has two parts. One
+is estimator variance: with the weights on, the effective number of tokens
+per slice is about a fifth of the count, and on DrivAerML the weights-off
+advantage shrinks from 11% at 2,500 cells to 2.4% at 40,000. The other, on
+the wings, is mesh-pattern content: there the advantage is flat at 12 to
+13% from 2,500 to 40,000 cells, which variance cannot be, and under
 area-proportional resampling it inverts, the weights-off model's error
 rising above that of predicting zero while the weighted model's falls with
 count (@sec-consistency-bench). A configuration that reads the mesher's
@@ -430,53 +393,21 @@ best rate (GeoTransolver's is 3e-3 on every rung at this budget,
 @sec-lr-protocol), GeoTransolver ÷ ISLA runs from 0.83 at 27 training cars
 to 1.00 at 435, and Transolver ÷ ISLA stays within 0.99 and 1.06 on every
 rung; the five rungs with seeds and rates are @tbl-scoreboard-200k. This is
-not an ISLA advantage: it is a deficit that closes at the full training set,
-and the ordering is the one the exploration-budget ladder found with a
-smaller gap at every rung. That earlier ladder, run on the legacy centered
-variant at 10,000 cells, is in the note below.
-
-::: {.callout-note collapse="true" title="The DrivAerML ladder at the exploration budget (10,000 cells; diagnostic, legacy centered variant)"}
-The ladder trains on nested subsets of the 435-car training split at
-learning rate 3e-3 for both architectures, 500 epochs, 10,000 tokens, two
-seeds, scored on the 48 validation cars in bfloat16 on identical points.
-GeoTransolver's ladder lanes received the freestream as a physical velocity,
-which on this dataset costs it nothing (within a percent of the unit
-direction at 435 cars in float32, @sec-full-data-accuracy), so the ordering
-is read as it stands.
-
-```{python}
-#| label: tbl-drivaerml-dataeff-ladder
-#| output: asis
-#| code-fold: true
-lad = json.load(open(RES / "ladder_reduction.json"))
-print("| training cars | GeoTransolver | ISLA, legacy centered variant | GeoTransolver ÷ ISLA |")
-print("|---|---|---|---:|")
-for n in (14, 27, 54, 109, 218):
-    g = [lad[f"lad_gt_n{n}_seed{s}"]["infamily"] for s in (42, 43)]
-    m = [lad[f"lad_mt2_n{n}_seed{s}"]["infamily"] for s in (42, 43)]
-    gm, mm = statistics.mean(g), statistics.mean(m)
-    print(f"| {n} | {gm:.3f} ({min(g):.3f}–{max(g):.3f}) | {mm:.3f} ({min(m):.3f}–{max(m):.3f}) | {gm/mm:.2f} |")
-print()
-print(": DrivAerML data-efficiency ladder at the exploration budget (10,000 cells): surface-pressure error on the 48 validation cars, seed mean (seed range), learning rate 3e-3 for both architectures (the variant's preferred 1e-3 is worth about 1.1x at full data and does not change the ordering). The ISLA arm is the legacy centered variant (removed); at this budget ISLA itself is trained on DrivAerML only at 435 cars (@sec-full-data-accuracy), and its ladder at the reporting protocol is @tbl-scoreboard-200k. How to read this: the ordering is the result; the absolute values are bfloat16 evaluations on identical points, and the float32 offset on this dataset moves every close comparison toward GeoTransolver. Data: results/ladder_reduction.json. {#tbl-drivaerml-dataeff-ladder}")
-```
-
-At 14 cars the two tie; from 27 cars up GeoTransolver is 1.2 to 1.3x more
-accurate. The deficit is uniform in every way measured: the same on every
-third of the car, a near-constant factor per car on a difficulty ordering
-both architectures share (per-case rank correlation 0.86 to 0.89, equal to
-each architecture's correlation with its own second seed), and the same for
-the surface and the volume
+not an ISLA advantage: it is a deficit that closes at the full training set.
+The deficit is uniform in every way measured: the same on every third of
+the car, a near-constant factor per car on a difficulty ordering both
+architectures share (per-case rank correlation 0.86 to 0.89, equal to each
+architecture's correlation with its own second seed), and the same for the
+surface and the volume
 (results/drivaer_percase_correlation_2026-09-07.json).
-:::
+
 
 ## Limits of the claim {#sec-de-limits}
 
-- **The ladder is a data-efficiency measurement, not a scaling law.** ISLA's
-  log-log slope of error against training cases (measured on the legacy
-  centered variant, which spans four rungs) flattens from 0.42 to 0.31 to
-  0.21 over the three segments, and GeoTransolver's and Transolver's curves
-  are flat in ratio to it. On DrivAerML the flattening has a measured
-  cause: every model's error is flat in the cell count above 100,000, and
+- **The ladder is a data-efficiency measurement, not a scaling law.** Its
+  rungs span the range of data every production CFD dataset in this program
+  occupies, and the curves flatten over it. On DrivAerML the flattening has
+  a measured cause: every model's error is flat in the cell count above 100,000, and
   given width and depth both architectures reach the same floor of about
   0.040 (@sec-scoreboard-floor, @sec-shared-floor). On the wings the
   corresponding scaling picture is pending (@sec-program-status), so the

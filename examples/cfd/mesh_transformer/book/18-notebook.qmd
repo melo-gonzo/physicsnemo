@@ -23102,3 +23102,163 @@ first validations with no traceback: ISLA linear 5e-4 at epoch 9
 GeoTransolver-volume at epoch 6 (0.07 to 0.09). At this rate the 500-epoch
 protocol completes in about eight hours. Accepted; the bars are those of
 @sec-nb-airfrans-prereg.
+
+## 2026-09-21 — Interim, SCALE-LAW on DrivAerML (three of four rungs scored): the error against cases is not a power law but an approach to the shared floor (local exponent 0.7 falling to 0.25), parameters buy 3 to 13% per 15x at every rung, epochs are converged; the compute-optimal rule is "cases first, then width", and the fitted law is preregistered for the full board {#sec-nb-scalelaw-interim}
+
+**Setting.** The scaling campaign (@sec-nb-campaigns-2026-09-21-prereg)
+trains cosine-routing ISLA at 192/384/768 wide and GeoTransolver at
+256/512/1,024 wide for 500 epochs at 100,000 cells on 27, 54, 109 and 218
+DrivAerML cars and on 35, 210 and 510 wings, two seeds each. Peter asked
+today what the surrogate analogue of a compute-optimal ("Chinchilla") rule
+is: the right mix of training compute, dataset size and parameter count.
+This entry reads the three DrivAerML rungs scored so far together with the
+435-car width ladders (`results/scalelaw_interim_2026-09-21.json`;
+`results/routenorm_interim_2026-09-20.json`;
+`results/cap435_reduction_2026-09-20.json`).
+
+**What we saw** (seed means, float32, surface pressure):
+
+| cases | ISLA 192 / 384 / 768 | GeoTransolver 256 / 512 / 1,024 |
+|--:|---|---|
+| 27 | 0.1414 / 0.1467 / 0.1379 | 0.1277 / 0.1070 / 0.1137 |
+| 54 | 0.0846 / 0.0810 / 0.0758 | 0.0764 / 0.0673 / 0.0655 |
+| 109 | 0.0619 / 0.0570 / 0.0539 | 0.0573 / 0.0519 / 0.0506 |
+| 435 | 0.0449 / 0.0413 / 0.0409 | 0.0447 / 0.0417 / 0.0406 |
+
+: SCALE-LAW interim board, DrivAerML, 100,000 cells, 500 epochs (the 218-car rung pending). {#tbl-scalelaw-interim}
+
+Local exponents of the error against cases (negative log-log slope
+between adjacent rungs) run 0.6 to 0.75 from 27 to 54 cars, 0.45 to 0.6
+from 54 to 109, and 0.18 to 0.24 from 109 to 435, at every width and for
+both models. A 15x increase in parameters buys ISLA 3% (27 cars), 10%
+(54), 13% (109) and 9% (435), GeoTransolver 11%, 14%, 12% and 9%. The
+ISO-COST grid's one epoch doubling (500 to 1,000 at 200,000 cells) moved
+neither model (ISLA 0.0448 to 0.0448, GeoTransolver 0.0445 to 0.0445).
+
+**Reading.** The curve in cases bends: it is the approach to the shared
+floor near 0.040 (@sec-nb-cap435-verdict, @sec-nb-routenorm-cars-verdict),
+not a scale-free law, and a single exponent would misstate it. The
+Chinchilla form $\varepsilon = \varepsilon_\infty + a n^{-\alpha} + b
+P^{-\beta}$ with training compute $C \propto P n$ (cells and epochs held
+at their converged values) yields $P^\ast \propto C^{\alpha/(\alpha +
+\beta)}$ and $n^\ast \propto C^{\beta/(\alpha+\beta)}$; with the data
+exponent an order of magnitude above the parameter exponent this says:
+buy cases until the data term is small (on DrivAerML between 109 and 435
+cars), then buy width, where each doubling is worth 3 to 4% until the
+floor. The five coefficients are not identifiable from three widths and
+four rungs (least squares puts $\varepsilon_\infty$ anywhere from 0 to the
+floor depending on the start, trading against $b P^{-\beta}$); the local
+exponents are the readout, written into @sec-compute-allocation with
+@fig-scaling-cases and @tbl-scaling-exponents.
+
+**Preregistration for the full board.** When the 218-car rung and the
+three wing rungs land: (i) fit the Chinchilla form per model and dataset
+with $\varepsilon_\infty$ bounded to $[0, 0.9 \times$ the best measured
+error$]$ and report the coefficients with a two-seed bootstrap; the law is
+*accepted* if the RMS relative residual is below 3% on both datasets and
+*rejected* for that dataset otherwise. (ii) The two architectures'
+exponents are *the same* if their $\alpha$ and $\beta$ differ by less than
+their bootstrap spread on both datasets, otherwise the one with the larger
+$\beta$ is the one that "scales with parameters" and the book says so with
+the numbers. (iii) The compute-optimal split is reported as the case count
+at which the fitted data and parameter terms are equal for the recipe's
+width, per dataset. Until then the section is labeled interim and single
+dataset.
+
+## 2026-09-21 — Ruling and preregistration, PROTOCOL-REDO: no accuracy claim may rest on the 10,000-cell exploration budget; the claims that did are cut or re-measured at 200,000 cells (38 lanes), the removed variants' prices are dropped {#sec-nb-protocol-redo-prereg}
+
+**The ruling.** Peter, today: results at 10,000 cells are worthless for an
+accuracy argument, because a reader will say the baselines were weak at
+that budget; they may remain only as one rung of a resolution ladder used
+for a scaling statement, or as a labeled mechanism diagnostic. The
+reporting protocol is 200,000 cells (the GeoTransolver recipe default,
+adopted 2026-09-18); scaling studies use 100,000 because cells are flat
+above 100,000.
+
+**The audit.** A read of every chapter found the 10,000-cell accuracy
+claims still load-bearing in: the design-choice prices of the ISLA chapter
+and the decision ledger (single-factor ablation on the 35-case rung,
+weights-off prices per rung, the frame prices against the removed centered
+and similarity-gauge variants, the multi-head null, the positional-price
+attribution of the deficit anatomy); the passive decoder's price (3.0 to
+3.7x on the surface, about 3x on interior pressure); the measure-weighted
+baseline ablations ("the measure costs the baselines nothing"; "frame,
+not aggregation"); the interior chapter's diagnostic note (parameter-matched
+width-344 arm, 54- and 109-car rungs, no-signed-distance arm, query-count
+rule under the geometric-mean option); the cross-family transfer frontier
+(bf16, removed variants); the deflection sealed test; and the HiLift rungs
+without a 200,000-cell twin (210 cases, 4 and 21 geometries, 510 and 1,260
+cases). About twenty further passages quoted a 10,000-cell number beside
+an existing 200,000-cell one. The cuts and pending marks are applied to
+the chapters in the same pass as this entry.
+
+**What is not re-measured.** The multi-head routing variant and the two
+centered frames were removed from the class on 2026-09-20; their prices are
+cut from the book rather than requoted, and the design table says
+"tested, not adopted" without a percentage. The transfer frontier is cut to
+its qualitative mechanism statement and its 200,000-cell redo is deferred to
+its own entry (it needs a fine-tuning path). The deflection test and the
+five HiLift rungs are already in the 200,000-cell fleet.
+
+**The lanes (group `rd`, 38, two seeds, 200,000 cells, jobs 816980 to
+817017).** Study 2, design prices on ISLA itself: `use_measure_weights=False`
+and `use_relational_geo=False` on the 35-case rung, the fixed-angle rung
+and 435 cars (12 lanes; references are the fleet's ISLA lanes). Study 3, the
+passive decoder: passive surface decode on 435 cars, and the interior
+configuration with queries decoded passively instead of interacting (4
+lanes at the interior rate 5e-4). Study 4, GeoTransolver and Transolver
+with ISLA's measure-weighted pooling (ablation) on the 35-case rung and 435
+cars (8 lanes, the `code_mw` snapshot). Study 5, interior sub-standings on
+435 cars unless stated: ISLA at GeoTransolver-volume's parameter count
+(width 344, rate 2.8e-4 by the width rule), the no-signed-distance arm, a
+pair under the default `query_mass="source_total"`, and ISLA and
+GeoTransolver-volume at 54 and 109 cars (14 lanes).
+
+**Bars.** Each study's claim is *reproduced* if the 200,000-cell ratio
+falls on the same side of one as the 10,000-cell one with both seeds
+agreeing and within a factor of 1.5 of it, *revised* if the sign holds but
+the size does not, and *withdrawn* if the sign flips or the seeds disagree.
+Specifically: weights-off worse than ISLA on the wing rungs (was 8 to 17%)
+and within noise on the cars (was 3%); invariants-off worse by more than
+10% on every rung (was 16% at 35 cases); passive surface decode worse by a
+factor of 2 or more (was 3.0 to 3.7x); passive interior decode worse than
+the interacting configuration on pressure by a factor of 2 or more (was
+about 3x); the measure-weighted baselines within 3% of their released
+twins on the uniform draw (was "nothing") and, scored under the 10:1 draw
+of the bench at 100,000 cells, still degraded by a factor of 3 or more
+(was 14 to 16x at 10,000 cells; the 100,000-cell figure for the released
+models is 8.7x and 5.3x); the width-344 arm within 3% of ISLA-192 on
+pressure (the 10,000-cell claim was that parameters do not close the
+pressure gap); the no-signed-distance arm worse than ISLA on every field;
+the source-total pair within 3% of the geometric-mean row (0.0546 / 0.0712
+/ 0.0857); the 54- and 109-car interior ratios on the same side of one as
+at 435 for each field. Verdicts per study as the lanes finish, at about
+1.7 hours per 100 epochs on the wings and a day on the cars.
+
+**Amendment at launch.** The two measure-weighted baseline configurations
+ran under the snapshot they were written for, whose dataset code predates
+the recipe; they were moved to the current snapshot, which carries the
+same measure-weighted option (the measure path is the one ISLA's surface
+configuration reads). The 54- and 109-car interior rungs needed a volume
+dataset definition pointing at the scaling manifest (a command-line
+manifest override does not reach the loader); two such definitions were
+added. The passive decoder at 200,000 queries against 200,000 boundary
+tokens exceeds the 276 GB of one GB300 at the first training step: the
+local Gaussian readout saves a 4,096 x 200,000 kernel per chunk for the
+backward pass, about 500 GB across the 49 chunks. The four passive lanes
+run at 100,000 cells and queries instead (the scaling budget, at which
+cells are flat), and the price is reported against the 100,000-cell ISLA
+reference of the iso-cost grid (0.0450); recomputing the readout chunks in
+the backward pass is the engineering fix, queued as a class change with a
+test.
+
+## 2026-09-21 — Acceptance, PROTOCOL-REDO: all 38 lanes alive after three launch fixes (snapshot for the measure-weighted baselines, scaling-manifest dataset definitions for the interior rungs, 100,000 cells for the passive decoder) {#sec-nb-protocol-redo-acceptance}
+
+Twenty-five minutes after the last relaunch every one of the 38 lanes has
+a running link and a queued successor, no traceback and no blocked marker;
+the earliest lanes are at epoch 12, the relaunched ones at their first
+epochs. The launch fixes are those recorded in the preregistration's
+amendment. Two lanes whose names shared a prefix with the relaunched
+interior rungs were cancelled by the relaunch pattern and resubmitted
+(the no-signed-distance pair; they read the scaling-manifest dataset
+definition, whose `train` and `val` splits are the full ones). Accepted.

@@ -44,7 +44,7 @@ frame variants survive only in this book's collapsed diagnostic notes
 | cosine routing (`routing_norm: cosine`; the candidate default) | option on `isla_surface`, `isla_volume` | any width above 384 or depth above 24 layers, or any time a linear-routing lane reaches the mean-field plateau | nothing measured on DrivAerML: accuracy at the rule rates is within 1% of linear routing at widths 192 and 384 and 2% at 768, and the learning-rate ceiling is gone (@sec-using-lr); the same test on the wings is pending, so the default has not moved |
 | query mass (`query_mass: source_total`, the default; `geometric_mean`) | option on `isla_volume`, `isla_volume_support` | interior tasks only: the routing weight the interior query tokens carry. The default gives them a learned fraction of the total boundary measure, so it is invariant to re-representing the same surface at another refinement; `geometric_mean` gives each query the mean boundary log-weight plus a learned offset, which depends on the refinement, and is the setting of the interior evidence lanes (@sec-interior) | nothing measured; the two have not been compared at the reporting protocol |
 | total-measure unit (`scale_mode: total_measure`; marked for removal) | option on `isla_surface`, `isla_volume` | reproducing the evidence lanes trained under that unit, and nothing else | nothing measurable: within 1.3% of the default at 435 cars (@sec-nb-lenrms-verdict); not normalized, so it inherits any error in the weights' absolute scale, and divergent under refinement of a boundary whose area does not converge. Scheduled for removal once those lanes are retired |
-| passive decoder (`query_independent: true`) | `isla_volume_support` | when the prediction at a point must not depend on which other points are queried | 3.0 to 3.7x in accuracy (@sec-query-independence) |
+| passive decoder (`query_independent: true`) | `isla_volume_support` | when the prediction at a point must not depend on which other points are queried | accuracy: a price of about three times the interacting decode's error in the exploration runs, being re-measured at the reporting protocol (@sec-query-independence) |
 
 ::: {.callout-note collapse="true" title="The legacy centered variant (removed)"}
 The centered frame with a fixed length unit was the program's configuration
@@ -284,7 +284,9 @@ offset. A systematic sample has the same expectation as
 an independent draw for every cell-weighted integral and a lower variance
 for smooth integrands. The effect is a free improvement for every model and
 largest for ISLA, whose slice states are the noisiest estimates
-(@sec-deficit-anatomy):
+(@sec-deficit-anatomy). The table below measures the mechanism at 10,000
+cells, where the estimator variance is largest; it is a low-budget
+diagnostic of the draw, not a standing:
 
 ```{python}
 #| label: tbl-using-strat
@@ -301,21 +303,20 @@ for k, lab in names:
     st = mean(a["strat"]["10000"]["seeds"])
     out += f"| {lab} | {ind:.4f} | {st:.4f} | {(st/ind-1)*100:+.1f}% |\n"
 print(out)
-print(": DrivAerML surface pressure (area-weighted relative L2, float32, 48 validation cars, 10,000 cells, seed means) "
-      "for the same checkpoints under the independent and the stratified inference draw. How to read this: the change is "
-      "an evaluation effect on fixed checkpoints; it does not alter the ranking of the models, only the size of the gap. "
+print(": The stratified inference draw as a low-budget diagnostic: DrivAerML surface pressure (area-weighted relative L2, float32, 48 validation cars, seed means) "
+      "for the same checkpoints under the independent and the stratified inference draw at 10,000 cells, the count at which the draw's variance is largest. How to read this: the change is "
+      "an evaluation effect on fixed checkpoints and a mechanism reading, not an accuracy standing; the absolute errors are not comparable with the reporting protocol's. "
       "Data: results/quadvar_reduction_2026-09-17.json. {#tbl-using-strat}")
 ```
 
-The book keeps the independent draw for its headline comparisons and
-reports the stratified draw as a labeled row (@sec-scoreboard); for a
+The book keeps the independent draw for its headline comparisons; for a
 deployment, use the stratified draw, or more cells.
 
 ::: {.callout-tip collapse="true" title="How many cells"}
 Use the recipe default of 200,000 cells per case. The in-distribution gap
-to GeoTransolver on DrivAerML at full data is present at the 10,000-cell
-exploration budget (8%) and gone at 200,000, because most of it was
-estimator variance in the slice states (@sec-deficit-anatomy); and the
+to GeoTransolver on DrivAerML at full data that smaller cell budgets show
+is gone at 200,000, because it was estimator variance in the slice states
+(@sec-deficit-anatomy); and the
 error of every model is flat above 100,000 cells (@sec-scoreboard-tokens),
 so nothing above the default buys accuracy. The fused geometry kernel, the
 default on CUDA, keeps ISLA's step at a third of GeoTransolver's time and
