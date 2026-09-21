@@ -22788,3 +22788,56 @@ a figure of the slice territories of one car at one mid-depth block under
 the uniform and the biased draw for both models (dominant slice as color),
 for @sec-training-law; and the corrected ROUTING-SAT statistics
 (@sec-nb-routingsat-erratum) from the same job.
+
+## 2026-09-21 — Corrected ROUTING-SAT statistics, per block: the doubled-rate width controls are collapsed in 11 and 9 of their 12 blocks (the last blocks keep 2 to 3 active slices); the 48-layer lane at 1.25e-4 has two deep blocks near the clean threshold; every verdict of 2026-09-20 stands {#sec-nb-routingsat-v2}
+
+**Setting.** The erratum of this morning (@sec-nb-routingsat-erratum) found
+that the routing probes of 2026-09-20 indexed ISLA's softmax calls flat,
+so their "layer $i$" was block $\lfloor i/2 \rfloor$, pass $i \bmod 2$, and
+the deeper half of every network went unmeasured. The corrected probe
+(`results/territory_probe_2026-09-21.py`; artifact directory
+`results/probes/routingsat_v2_2026-09-21/`, one file per checkpoint) hooks
+each slice block and reads its last softmax call, the refined routing, on
+the same four DrivAerML validation cars at 100,000 cells in float32. The
+statistics are those of the original probe: the effective slice count
+$n_{\mathrm{eff}} = \exp H(q)$ of the slice mass distribution, the hardness
+(per-point entropy over slices divided by $\log M$), and the anchor spread
+(RMS distance of the 256 anchors from their mean, divided by the RMS token
+radius).
+
+**What we saw.** Per block, minimum and median over the blocks of each
+checkpoint (the earlier artifact's numbers in parentheses where they
+differ materially):
+
+| checkpoint | state | blocks with one active slice | active slices, min / median | anchor spread, min | note |
+|---|---|--:|--:|--:|---|
+| 384 wide, 12 layers, 1e-3 (width control) | plateau | **11 / 12** (was 12 / 12 records) | 1.0 / 1.0 | 0.002 | block 11 keeps 1.9 active slices, hardness 0.09 |
+| 768 wide, 12 layers, 5e-4 (width control) | plateau | **9 / 12** (was 12 / 12 records) | 1.0 / 1.0 | 0.009 | blocks 8, 10, 11 keep 2.0, 1.8, 3.4 active slices |
+| 384 wide, 24 layers, 5e-4 | plateau | **15 / 24** (was 10 / 24) | 1.0 / 1.1 | 0.017 | blocks 1, 8, 22, 23 open (17, 17, 8, 55 slices) |
+| 384 wide, 48 layers, 5e-4 | divergence | NaN in all 48 | — | — | unchanged |
+| 384 wide, 24 layers, 2.5e-4 | clean | 0 / 24 | 3.6 / 174 | 0.097 | |
+| 384 wide, 48 layers, 1.25e-4 | clean | 0 / 48 | **3.6 / 159** (was 40 / 190) | 0.092 | blocks 45 and 47 at 3.6 and 7.7 active slices; the other 46 blocks at 20 to 231 |
+| 192 wide (reference) | clean | 0 / 12 | 19.9 / 150 | 0.312 | |
+| 384 wide, 5e-4 | clean | 0 / 12 | 6.3 / 128 | 0.181 | block 1 at 6.3, the rest 49 to 252 |
+| 768 wide, 2.5e-4, seed 42 | clean | 0 / 12 | 12.2 / 127 | 0.156 | |
+| 768 wide, 2.5e-4, seed 43 | clean | 0 / 12 | 11.4 / 133 | 0.193 | |
+
+: Corrected ROUTING-SAT statistics, every block of every checkpoint, four DrivAerML validation cars at 100,000 cells (results/probes/routingsat_v2_2026-09-21/). {#tbl-routingsat-v2}
+
+**Reading.** The collapse picture is confirmed with one qualification: in
+the two doubled-rate width controls the last one to three blocks are not
+fully collapsed (2 to 3 active slices, hardness up to 0.12) while the
+first nine to eleven route every point to one slice with coincident
+anchors; a per-case constant is still all the network can express through
+those blocks, and the plateau loss is the same. The 24-layer plateau lane
+is collapsed in 15 blocks, more than the ten the flat indexing suggested.
+On the clean side, the preregistered discriminator (at least 4 active
+slices in every block) is met by every 12-layer clean checkpoint and by
+the 24-layer clean lane in every block but its sharpest (3.6), and the
+48-layer clean lane has two deep blocks at 3.6 and 7.7 where the flat
+indexing had shown a floor of 40. The separation between states therefore
+holds (collapsed blocks sit at 1.0 with spread below 0.02; clean blocks
+sit at 3.6 or more with spread above 0.09), but "clean" networks do carry
+one or two near-threshold blocks, and the earlier statement that no clean
+block has fewer than 3.7 active slices is now 3.6. @tbl-routingsat is
+superseded by @tbl-routingsat-v2 for every per-block count.

@@ -1,0 +1,299 @@
+{
+  "run": "cap_dr_isla_w384_d48_c100k_seed42",
+  "epoch": 500,
+  "model": "ISLA",
+  "dataset": "drivaer_ml_surface",
+  "seed_override": null,
+  "n_cases": 4,
+  "n_layers": 48,
+  "layers": [
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    },
+    {
+      "H_points": NaN,
+      "H_slices": NaN,
+      "n_eff": NaN,
+      "anchor_spread": NaN
+    }
+  ]
+}
