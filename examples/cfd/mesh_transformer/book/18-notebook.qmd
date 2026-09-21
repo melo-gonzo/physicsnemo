@@ -22312,3 +22312,19 @@ ISLA's stops falling at about 34M in either routing form and is matched by
 GeoTransolver only at four times the parameters, exceeded at seventeen
 times. The 48-layer cosine lanes, the last 1,536 seed and the wing lanes
 remain.
+
+**Addendum, 48 layers under cosine routing (2026-09-21, 04:35 EDT).** The
+configuration that linear routing could not train at any rate (NaN at
+2.5e-4 and 5e-4, the plateau at 1.25e-4) finished clean on both seeds
+under cosine routing at 2.5e-4 and scores **0.0406** (0.0405 / 0.0406), the
+tightest seed pair in the program and, with the 24-layer cosine lane's
+0.0407, ISLA's best number: level with GeoTransolver at 1,024 wide and at
+512 wide with 24 layers (both 0.0406), 2% above GeoTransolver's 2,048-wide
+0.0399. The depth ladder under cosine routing at width 384 reads 0.0413 /
+0.0407 / 0.0406 at 12 / 24 / 48 layers, a 1.5% gain from 12 to 24 and
+nothing measurable from 24 to 48, so depth saturates as width does, at a
+level 1% below the width ladder's best; under linear routing the same
+ladder read 0.0411 / 0.0413 / untrainable. The last 1,536-wide seed
+(5e-4, seed 43) reads 0.0443, giving that pair 0.0460 with a 7% split; the
+widest lane stays the worst at either rate. Remaining: the second
+GeoTransolver 2,048 seed at 1e-3 and the six wing lanes.
