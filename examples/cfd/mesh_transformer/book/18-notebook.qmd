@@ -23036,3 +23036,47 @@ variation between the two draws' full routing distributions at matched
 points) is the right follow-on and needs the probe to store the
 distributions, not the argmax. Standing: the anchor-displacement result is
 two-dataset; the territory-agreement result stays single-dataset.
+
+## 2026-09-21 — Preregistration, AIRFRANS-INT lanes: ISLA interior (linear routing at 5e-4, cosine at 1e-3) and GeoTransolver-volume (1e-3) on the AirfRANS full split, 100,000 interior queries per case, two seeds {#sec-nb-airfrans-prereg}
+
+**Setting.** The plan of @sec-nb-airfrans-plan is executed: all 1,001
+AirfRANS cases are converted to native DomainMesh files (converter
+`results/campaigns_2026-09-21/af/airfrans_convert.py`; about one second
+per case; the signed distance is stored positive outside, the boundary is
+the airfoil polyline as line cells with in-plane normals and segment
+lengths as the quadrature measure, and the global data carry the inlet
+velocity, its direction and magnitude, the Reynolds number and an
+incompressible reference state, $\rho_\infty = 1$, $p_\infty = 0$, so the
+recipe's nondimensionalization yields $p / (\tfrac12 |U_\infty|^2)$ and
+$U / |U_\infty|$). Over the converted cases the nondimensional pressure has
+a standard deviation of 0.86 and the velocity components 0.50; the eddy
+viscosity is left in its units and normalized by the recipe with mean
+$7.9 \times 10^{-4}$ and standard deviation $2.4 \times 10^{-3}$ m²/s (the
+mean over cases of the per-case statistics). The name-derived inlet
+velocity agrees with the freestream boundary's mean velocity to 0.5% on
+every case; every airfoil polyline is closed.
+
+**Lanes (six, one chain each).** Dataset `airfrans_volume`, split
+`full_train` (800) against `full_test` (200), 100,000 interior queries and
+the whole airfoil (about 1,000 segments) per case, 500 epochs, validation
+every 10:
+
+- ISLA, linear routing, 5e-4, seeds 42 / 43 (`isla_volume_airfrans`:
+  query tokens, the signed distance as query scalar, one global vector and
+  one global scalar, outputs pressure and eddy viscosity as scalars and
+  velocity as a vector);
+- ISLA, cosine routing, 1e-3, seeds 42 / 43 (the candidate default at the
+  rate the cars' cosine interior lane trained cleanly at);
+- GeoTransolver-volume, 1e-3, seeds 42 / 43 (`geotransolver_volume_airfrans`:
+  coordinates, signed distance and its direction as local features, the
+  inlet velocity as the global embedding).
+
+**Bars (float32, per field, on the 200 test cases).** *Reproduced* if
+GeoTransolver-volume ÷ ISLA falls on the same side of one as on DrivAerML
+(pressure below one, velocity above one) with both seeds agreeing in
+sign; *refuted* for a field if the ratio crosses one with seeds agreeing;
+eddy viscosity is reported without a prior (the cars' ratio is 0.98). A
+lane that reaches the mean-field plateau (validation loss flat at the
+field-variance level after epoch 20) is reported as such and rerun at
+half its rate. The Reynolds and angle-of-attack extrapolation splits
+follow in their own entry once the full-split lanes are accepted.
