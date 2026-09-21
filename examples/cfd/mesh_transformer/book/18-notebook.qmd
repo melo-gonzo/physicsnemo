@@ -22635,3 +22635,156 @@ the recipe is an open engineering item. And the chapter is descriptive,
 not evidential: every number in it is a parameter count or a dimension,
 and the evidence for each design choice stays where it was
 (@sec-isla-design and Part IV).
+
+## 2026-09-21 — Blocked: the HiLiftAeroML volume files carry interior coordinates for 31 of 1,800 cases and no interior fields, so the interior task has no second dataset on this cluster {#sec-nb-hlvol-blocked}
+
+**Setting.** Every boundary-to-interior result of the program is measured
+on one dataset, DrivAerML (the interior configuration of ISLA, Invariant
+Slice Attention, against GeoTransolver-volume at 435 cars). The seeds
+ruling of this morning (@sec-nb-seeds-ruling) named a HiLiftAeroML interior
+rung as the replacement question, since the recipe carries a
+GeoTransolver-volume configuration for the wings and a volume dataset
+definition that reads the wings' `.pdmsh` files with their interior as a
+point cloud.
+
+**What was found.** The dataset root holds 1,800 case files. A structure
+probe (a CPU job loading one case through `DomainMesh.load`, then a direct
+listing of the memory-mapped trees) shows that the standard case has no
+interior at all: the file holds the four in-file boundaries (vehicle, with
+142 million points and 285 million cells; inlet, outlet, symmetry) and the
+global data, and `DomainMesh.load` refuses it because the interior is
+missing. Thirty-one cases (all angles of the first four geometries) carry an
+interior of about 245 million points with **coordinates only**: no
+`point_data` sub-tree exists in any of them, so pressure, temperature,
+density and velocity are not available at a single interior point. No
+HiLift volume lane has ever run in this task directory, and the dataset's
+notes do not mention a volume split. The GeoTransolver-volume-highlift
+configuration in the recipe is therefore untrained and, on this copy of the
+data, untrainable.
+
+**What this changes.** The interior standing stays single dataset and is
+labeled interim wherever it is quoted (@sec-interior). The second interior
+dataset has to come from elsewhere: either an export of the HiLift interior
+fields from the source solver data (a data-engineering request, not a
+research task) or a different volume dataset. Neither is started here. The
+question is recorded as BLOCKED in the status ledger with this entry as its
+evidence.
+
+## 2026-09-21 — Erratum, ROUTING-SAT and the ROUTE-NORM routing probe: "layer $i$" in both artifacts is block $\lfloor i/2 \rfloor$, pass $i \bmod 2$; the verdicts stand, the per-block tables cover the first half of each network {#sec-nb-routingsat-erratum}
+
+**The setting.** The routing probe of 2026-09-20 (`results/routingsat_probe_2026-09-20.py`,
+reused for the ROUTE-NORM lanes) records every call of ISLA's softmax over
+points and then reads the first `n_layers` records as the per-layer
+statistics. While writing the architecture chapter (@sec-architecture) it
+became explicit that every slice layer calls that softmax **twice**, once
+for the provisional routing that places the anchors and once for the
+refined routing after the geometric refinement (@sec-arch-layer, steps b
+and f), and the head frame calls it a third time after the last layer.
+
+**The error.** Record $i$ is therefore block $\lfloor i/2 \rfloor$, pass
+$i \bmod 2$ (0 provisional, 1 refined), not block $i$. In the ROUTING-SAT
+table (@tbl-routingsat) the twelve rows of a 12-layer checkpoint are the
+provisional and refined passes of blocks 0 to 5; blocks 6 to 11 were not
+examined. For the 24- and 48-layer checkpoints the rows cover blocks 0 to
+11 and 0 to 23. The ROUTE-NORM routing probe (`results/probes/routing_rn_2026-09-20/`)
+has the same indexing. The anchor-spread column is unaffected in meaning
+(the positions are the same for every block, and the anchors of record $i$
+are those of the pass it records).
+
+**What stands.** Every verdict that was drawn is a statement about the
+blocks that were measured, and those statements are correct: in the two
+doubled-rate width controls every measured block routes every point to one
+slice with coincident anchors (total collapse in the first six blocks is
+collapse); no measured block of any clean checkpoint has fewer than 3.7
+active slices; the cosine lanes' minimum of 12.5 active slices is over the
+measured blocks. The "12 / 12 blocks" and "0 / 12" counts read "12 of 12
+measured records (blocks 0 to 5, both passes)". What is *not* established by
+those artifacts is the state of the deeper half of any network.
+
+**The repair.** A corrected probe (`kernel/territory_probe.py`, hooking each
+block and reading its last softmax call, the refined routing) is running on
+the ten ROUTING-SAT checkpoints as task 1 of job `isla.territory.probe`
+(artifact to come under `results/probes/routingsat_v2_2026-09-21/`). Its
+per-block tables replace @tbl-routingsat when they land; the acceptance
+bar is unchanged (collapse = one active slice with anchor spread below 0.01
+in a block; clean = at least 4 active slices in every block).
+
+## 2026-09-21 — Preregistration, TERRITORY: do GeoTransolver's slices partition the point pattern and ISLA's the surface? Slice territories of the two uniform-trained 100,000-cell checkpoints under a resampled uniform draw and the 10:1-biased draw {#sec-nb-territory-prereg}
+
+**The setting.** The discretization results (@sec-training-law,
+@sec-scoreboard-consistency) say that under a 10:1 sampling-density bias
+GeoTransolver's surface-pressure error grows 8.7x and Transolver's 5.3x
+where ISLA's grows 1.07x, and that the models trained under an
+area-proportional draw lose 7.9x and 9.6x on the uniform draw where ISLA
+loses 8%. The mechanism the book gives is that a slice in GeoTransolver
+aggregates a *count-weighted* mean over whatever points the sampler
+produced, while ISLA's slices aggregate measure-weighted means, so ISLA's
+slices are functions of the surface and GeoTransolver's of the sample.
+That is an argument from the equations; it has not been looked at in a
+trained network. Peter asked this morning for interpretability work on the
+slice weights in place of further seeds (@sec-nb-seeds-ruling).
+
+**The question.** Two mechanisms could produce GeoTransolver's blow-up, and
+they predict different things about the routing:
+
+- **M1, the territories move.** The soft partition of the surface into
+  slices (which slice each point routes to) is itself a function of the
+  point density, so under the biased draw points are routed to different
+  slices than under the uniform draw, and every downstream aggregate is
+  built from different sets.
+- **M2, the territories hold but the aggregates drift.** The routing is a
+  function of position and normal that the biased draw leaves essentially
+  unchanged; what moves is the slice token, a count-weighted mean whose
+  value shifts toward the oversampled region.
+
+For ISLA the prediction is that neither moves beyond the resampling floor:
+the routing logits see only invariants that are stable under refinement,
+and the aggregates are quadrature means.
+
+**The instrument.** The uniform-trained ISLA (192 wide) and GeoTransolver
+(256 wide, unit-direction protocol) checkpoints of the iso-cost study at
+435 cars and 100,000 cells (`iso_dr_isla_w192_c100k_seed42`,
+`iso_dr_gt_unit_w256_c100k_seed42`) are run in float32 on the first four
+validation cars under three draws of the consistency bench at 100,000
+expected cells: uniform with seed 1, uniform with seed 2, and the
+10:1-biased Poisson draw. Per block the probe records each token's
+**dominant slice** (ISLA: the argmax of the read-back weights over slices,
+@sec-arch-layer step e; GeoTransolver: the argmax of the slice softmax, per
+head), the slice anchors (ISLA) or the weight-averaged slice centroids
+(GeoTransolver), and the un-centered token positions (the bench pipeline
+stores the subtracted center). The reduction matches every token of one
+draw to its nearest token of another draw on the surface and reports:
+
+- **agreement** $A(\cdot,\cdot)$: the fraction of tokens whose dominant
+  slice equals that of their nearest neighbor in the other draw, averaged
+  over the four cars and, for GeoTransolver, over the eight heads; reported
+  per block as minimum and median;
+- the **resampling floor** $A(\text{unif}_1, \text{unif}_2)$, the agreement
+  two independent uniform draws achieve (soft boundaries move a little
+  under any resampling), and the **bias excess**
+  $E \equiv A(\text{unif}_1, \text{unif}_2) - A(\text{unif}_1, \text{biased})$;
+- the **anchor displacement**: RMS over slices of the distance between a
+  slice's anchor (or centroid) under the uniform and the biased draw,
+  divided by the RMS token radius, median over blocks.
+
+**Bars, stated before the job returns.** M1 is supported if
+GeoTransolver's bias excess $E$ exceeds 0.20 in median over blocks while
+ISLA's stays below 0.05, and GeoTransolver's anchor displacement exceeds
+0.05 while ISLA's stays below 0.02. M1 is refuted, and M2 becomes the
+working mechanism, if GeoTransolver's excess stays below 0.05 (its
+territories are as stable as ISLA's); the follow-on is then a slice-token
+drift measurement, not part of this probe. Anything between is reported as
+partial with the numbers. A second prediction, independent of M1 against
+M2: ISLA's agreement under the biased draw is within 0.05 of its own
+resampling floor in every block (the invariants see the surface, not the
+sample); if any block violates it, the block and its statistics are
+reported. If the two uniform draws turn out identical (the recipe's seed
+override not reaching the sampler), the floor is undefined and the run is
+repeated with a different mechanism before any verdict.
+
+**Products.** One artifact, `results/territory_2026-09-21.json`, with the
+per-block agreements, floors, excesses and displacements for both models;
+a figure of the slice territories of one car at one mid-depth block under
+the uniform and the biased draw for both models (dominant slice as color),
+for @sec-training-law; and the corrected ROUTING-SAT statistics
+(@sec-nb-routingsat-erratum) from the same job.
