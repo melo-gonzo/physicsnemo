@@ -22018,3 +22018,76 @@ rate; cosine interior at 1e-3 0.00083 / 0.00087 at epoch 185, ahead of the
 linear 5e-4 lanes' 0.00097 to 0.0011 at epoch 110. No cosine lane on either
 dataset has visited the plateau. The epoch-500 float32 scoring decides the
 accuracy clauses.
+
+## 2026-09-20 — Verdict, TRAIN-AREA-DR: on the cars the training-law dependence is far larger than on the wings, not smaller: GeoTransolver and Transolver trained on the area law are 7.9x and 9.6x worse on the uniform draw, ISLA 8% worse; uniform-trained GeoTransolver and Transolver are 8.7x and 5.3x worse under the 10:1 biased draw, ISLA 7% {#sec-nb-trainarea-dr-verdict}
+
+**Setting.** TRAIN-AREA (@sec-nb-trainarea-verdict) found on the 35-wing
+rung that GeoTransolver and Transolver trained under an area-proportional
+sampling law are 2.6x and 2.4x worse on the independent uniform draw than
+their uniform-trained twins, while ISLA moves 1%. The two-dataset rule
+required the DrivAerML twin (@sec-nb-trainarea-dr-prereg): ISLA-192,
+GeoTransolver-256 and Transolver-256 trained on 435 cars under the area
+law at an expected 100,000 cells (six lanes, `tadr`), with the ISO-COST
+100,000-cell lanes as the uniform-trained twins, all twelve checkpoints
+scored by the consistency benchmark on the 48 validation cars under the
+independent uniform, stratified and 10:1-biased draws at 100,000 cells
+from the 320,000-cell pool (36 benchmark lanes, job 805750). Float32, two
+seeds. Reduction results/trainarea_dr_reduce_2026-09-20.py, artifact
+results/trainarea_dr_reduction_2026-09-20.json.
+
+**What we saw (surface pressure, seed means; seeds in parentheses).**
+
+| arm | uniform draw | stratified draw | 10:1 biased draw |
+|---|---:|---:|---:|
+| ISLA, trained uniform | 0.0458 (0.0450 / 0.0467) | 0.0450 | 0.0489 |
+| ISLA, trained area | 0.0496 (0.0491 / 0.0501) | 0.0473 | 0.0601 |
+| GeoTransolver, trained uniform | 0.0448 (0.0444 / 0.0452) | 0.0445 | 0.391 (0.354 / 0.428) |
+| GeoTransolver, trained area | 0.355 (0.304 / 0.406) | 0.356 | 0.464 |
+| Transolver, trained uniform | 0.0473 (0.0472 / 0.0474) | 0.0469 | 0.252 (0.159 / 0.345) |
+| Transolver, trained area | 0.454 (0.448 / 0.460) | 0.456 | 0.536 |
+
+: TRAIN-AREA-DR: 48 DrivAerML validation cars, 100,000 cells per draw, float32, two seeds. Data: results/trainarea_dr_reduction_2026-09-20.json.
+
+Area-trained over uniform-trained on the uniform draw: **ISLA 1.08,
+GeoTransolver 7.9, Transolver 9.6.** Against the preregistered clauses the
+baselines' dependence is reproduced with a factor of thirty to spare
+(bar: 1.2x), and **ISLA's clause fires**: it moves 8%, past the 3% "within"
+bar and the 5% "ISLA moves" bar, so the wing statement "ISLA's trained
+function does not depend on the training sampling law" is not general and
+is restated as "depends weakly (8% on the cars, 1% on the wings) where the
+baselines' depend by factors of 2.4 to 9.6". The prereg's prediction
+(dependence reproduced at a *smaller* size on the cars, 1.3 to 1.8x) was
+wrong in direction: the cars, with the smaller cell-area coefficient of
+variation (2.3 against 3.3), show the larger dependence. The same table
+carries the inference-side statement at 100,000 cells: under the 10:1
+biased draw the uniform-trained GeoTransolver is 8.7x its uniform-draw
+error (0.391 against 0.0448) and Transolver 5.3x (0.252 against 0.0473),
+against ISLA's 1.07 (0.0489 against 0.0458); at 40,000 cells the same
+checkpoints' predecessors read about 1.2 for ISLA and the baselines'
+factors were of the same order (@sec-consistency-bench). Under the area
+law ISLA's density factor is 1.21, inside the 0.95 to 1.3 consistency bar;
+under the uniform law 1.07. The stratified draw changes nothing for any
+arm (within 2% of the uniform draw for the baselines, 2 to 5% better for
+ISLA), which is the count-noise term.
+
+**Why it matters.** Two datasets now say the same thing about the
+baselines: **a GeoTransolver or Transolver checkpoint is accurate on the
+draw it was trained on and on no other**, and the cars show it at a
+severity (0.36 to 0.45, close to the error of predicting the mean field)
+that would make the trained model unusable on a mesh from a different
+generator. ISLA's error under the same swaps stays within 8% of its native
+value on both datasets. The mechanism the book states (the baselines' slice
+aggregates are point averages that inherit the sampling pattern, ISLA's
+are measure-weighted integrals that do not, @sec-mechanism) predicts the
+direction; the size difference between the datasets is not explained by
+the cell-area spread alone and is an open question. The one honest
+qualification is ISLA's own 8%: the area draw from a 1,000,000-cell pool at
+an expected 100,000 cells has a wider weight spread on the cars than the
+wings' 200,000-cell draw, and a part of ISLA's 8% may be that quadrature
+noise (its stratified-draw error under the area law is 0.0473, 5% above
+the uniform-trained 0.0450, so half of the 8% survives the draw's own
+variance). The chapter callout (@sec-consistency-bench) is rewritten with
+both datasets. Why the dependence is larger on the cars than the wings is
+the next question; a cheap discriminator is the same swap on the DrivAerML
+interior task, where the sampling law of the interior queries can be
+varied independently of the surface's.

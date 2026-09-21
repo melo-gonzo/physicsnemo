@@ -209,7 +209,8 @@ proportional to $w_i$ times a learned, content-dependent factor, so every
 slice aggregate is a weighted mean of the blue kind. Under sampling laws
 that do not draw cells uniformly, the recipe supplies the
 Horvitz–Thompson weight (area divided by inclusion probability), and the
-estimate remains consistent. This is the origin of ISLA's consistency under
+estimate remains consistent (the four draws the book uses are drawn side
+by side in @fig-sampling-laws). This is the origin of ISLA's consistency under
 a change of sampling (@sec-scoreboard-consistency), and it is also a
 correctness requirement rather than a tunable: without the weights a slice
 aggregates a mean over whichever points the mesher placed, and a different

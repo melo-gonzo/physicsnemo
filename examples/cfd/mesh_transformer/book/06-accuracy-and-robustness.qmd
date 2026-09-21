@@ -392,6 +392,134 @@ Above width 192 ISLA trains under the width rule of @sec-using-lr;
 GeoTransolver's best rate must be found per dataset.
 :::
 
+## The sampling laws in one picture {#sec-sampling-laws}
+
+**Every discretization result in this chapter is a statement about which
+cells of a surface mesh a model gets to see, and with what weight; four
+draws recur, and @fig-sampling-laws shows all four on one meshed
+section.** A surface arrives as a mesh whose cells the mesher has refined
+where it expected gradients (leading and trailing edges here, the
+A-pillars and mirrors of a car in DrivAerML). A training or evaluation
+sample keeps a subset of $n$ of the $N$ cells; each kept cell $i$ carries
+its Horvitz–Thompson weight $1/\pi_i$, the reciprocal of its inclusion
+probability, so that any cell-weighted sum over the kept cells estimates
+the same surface integral without bias whatever the draw. The four draws
+differ only in $\pi_i$:
+
+- **Uniform over cells** (the training convention of every model in this
+  book): every cell kept with probability $n/N$, every weight $N/n$. The
+  kept points inherit the mesher's refinement, so the model sees a point
+  cloud that is dense exactly where the mesher was.
+- **Stratified** (the same law, lower variance): one cell per consecutive
+  run of $N/n$ cells along the Morton (Z-order) curve through the cell
+  centroids, with one random offset. Same inclusion probability and
+  weights as the uniform draw, but no two kept cells are neighbours and
+  no run is skipped, so slice integrals have less draw-to-draw noise.
+- **10:1 front/back bias** (the density-bias probe): cells with centroid
+  $x$ ahead of the per-sample median draw with ten times the probability
+  of the rest, kept independently (Poisson sampling) with exact $\pi_i$.
+  The front of the body is over-sampled and each rear cell that is kept
+  stands for about ten times more surface than a front one.
+- **Area-proportional** (the law a uniform point generator over the
+  *surface* would produce): $\pi_i$ proportional to the cell's area, so
+  the kept points are spread evenly over the surface regardless of the
+  mesher's refinement; a large cell is nearly always kept and carries a
+  small weight, a tiny leading-edge cell is rarely kept and carries a
+  large one.
+
+```{python}
+#| label: fig-sampling-laws
+#| fig-cap: >
+#|   The four draws on one meshed section (a Joukowski airfoil at 6° with
+#|   a mesher-like refinement at the leading and trailing edges, 400 cells;
+#|   the small ticks mark the cell boundaries). Top four panels: the cells
+#|   kept by each draw at an expected 80 of 400, one marker per kept cell
+#|   with marker area proportional to its Horvitz–Thompson weight (how much
+#|   surface it stands for). Bottom: the density of kept points along the
+#|   surface for each draw, against the mesh's own cell density (gray) and
+#|   the uniform-over-the-surface level (dashed). The uniform and stratified
+#|   draws follow the mesh's refinement; the 10:1 bias piles points onto the
+#|   front half; the area-proportional draw is flat over the surface, with
+#|   the mesher's refinement moved entirely into the weights. How to read
+#|   this: the draws are computed with the recipe's own inclusion rules
+#|   (PoissonBiasedSubsampleMesh, StratifiedSubsampleMesh); the section and
+#|   its mesh are an illustration, not a dataset surface. Weights span 1 to
+#|   10 under the bias and 1 to 10 under the area law here; on the
+#|   DrivAerML and HiLiftAeroML meshes the area-law weights span four
+#|   decades.
+#| code-fold: true
+rng = np.random.default_rng(3)
+N, n = 400, 80
+s_fine = np.linspace(0, 1, 20001)
+rho = 1 + 9 * np.exp(-((s_fine - 0.5) / 0.05) ** 2) + 5 * np.exp(-(s_fine / 0.035) ** 2) + 5 * np.exp(-((s_fine - 1) / 0.035) ** 2)
+cdf = np.concatenate([[0], np.cumsum(rho[1:] * np.diff(s_fine))]); cdf /= cdf[-1]
+Jm = joukowski(alpha_deg=6.0, n_cells=N, frac=np.interp(np.linspace(0, 1, N + 1), cdf, s_fine))
+xy, mid, w = Jm["xy"], Jm["mid"], Jm["w"]  # w = cell length, the 1-D measure
+s_mid = np.concatenate([[0], np.cumsum(w)])[:-1] + w / 2; s_mid /= w.sum()
+def uniform_draw():
+    return np.sort(rng.choice(N, n, replace=False)), np.full(N, n / N)
+def stratified_draw():  # Morton (Z-order) systematic sample, as StratifiedSubsampleMesh
+    lo = mid.min(axis=0); span = mid.max(axis=0) - lo; q = np.round((mid - lo) / span * (2**16 - 1)).astype(np.int64)
+    code = np.zeros(N, dtype=np.int64)
+    for b in range(16):
+        for ax_ in range(2):
+            code |= ((q[:, ax_] >> b) & 1) << (2 * b + ax_)
+    order = np.argsort(code); step = N / n; off = rng.random() * step
+    return np.sort(order[np.floor(off + step * np.arange(n)).astype(int).clip(max=N - 1)]), np.full(N, n / N)
+def poisson_draw(wts):  # independent sampling with exact pi, as PoissonBiasedSubsampleMesh
+    c = n / wts.sum(); pi = np.minimum(1.0, c * wts); deficit = n - pi.sum()
+    if deficit > 0:
+        free = pi < 1; pi[free] = np.minimum(1.0, pi[free] * (1 + deficit / pi[free].sum()))
+    return np.nonzero(rng.random(N) < pi)[0], pi
+x_med = np.median(mid[:, 0])
+LAWS = [("uniform over cells", INK2, uniform_draw), ("stratified (Morton systematic)", VIOLET, stratified_draw),
+        ("10:1 front/back bias", "#b5179e", lambda: poisson_draw(np.where(mid[:, 0] < x_med, 10.0, 1.0))),
+        ("area-proportional", GREEN, lambda: poisson_draw(w.copy()))]
+fig = plt.figure(figsize=(10.2, 7.4))
+gs = fig.add_gridspec(3, 2, height_ratios=[0.62, 0.62, 1.0], hspace=0.35, wspace=0.04)
+axes = [fig.add_subplot(gs[i // 2, i % 2]) for i in range(4)]
+densities = []
+for ax, (name, col, draw) in zip(axes, LAWS):
+    idx, pi = draw(); ht = 1.0 / pi[idx]
+    ax.plot(xy[:, 0], xy[:, 1], color=BASELINE, lw=1.0, zorder=1)
+    nb = Jm["nrm"]
+    for k in range(N):
+        p = xy[k]; d = nb[k]
+        ax.plot([p[0], p[0] + 0.05 * d[0]], [p[1], p[1] + 0.05 * d[1]], color=MUTED, lw=0.5, zorder=0)
+    ax.scatter(mid[idx, 0], mid[idx, 1], s=9.0 * ht, c=col, alpha=0.85, zorder=3, lw=0)
+    clean_axes(ax); ax.set_xlim(-2.3, 2.3); ax.set_ylim(-0.55, 0.62)
+    ax.set_title(name, color=col, fontsize=10)
+    ax.text(0.5, -0.02, f"{len(idx)} of {N} cells kept; weights 1/π from {ht.min():.1f} to {ht.max():.1f}", transform=ax.transAxes,
+            fontsize=8.5, color=INK2, va="top", ha="center", path_effects=halo())
+    if name.startswith("10:1"):
+        ax.axvline(x_med, color=col, lw=0.8, ls=":", zorder=2); ax.text(x_med + 0.05, 0.5, "median x: 10:1 weight to the left", color=col, fontsize=8, ha="left", va="center")
+    grid = np.linspace(0, 1, 200); bw = 0.02
+    densities.append((name, col, np.array([np.sum(np.exp(-0.5 * ((g - s_mid[idx]) / bw) ** 2)) for g in grid]) / (bw * np.sqrt(2 * np.pi)) / w.sum()))
+axd = fig.add_subplot(gs[2, :]); grid = np.linspace(0, 1, 200)
+mesh_dens = np.interp(grid, s_mid, 1 / (w / w.sum()) / N)
+axd.fill_between(grid, 0, mesh_dens / mesh_dens.mean() * (n / w.sum()), color=GRID, zorder=0, label="the mesh itself: cells per unit length, scaled to n")
+for name, col, dens in densities:
+    axd.plot(grid, dens, color=col, lw=1.8, zorder=3, label=name)
+axd.axhline(n / w.sum(), color=INK2, lw=0.8, ls="--", zorder=2)
+axd.text(0.995, n / w.sum(), "uniform over the surface (n ÷ perimeter)", ha="right", va="bottom", fontsize=8, color=INK2, transform=axd.get_yaxis_transform(), path_effects=halo())
+for s_, lab in ((0.0, "trailing edge"), (0.5, "leading edge"), (1.0, "trailing edge")):
+    axd.axvline(s_, color=BASELINE, lw=0.8); axd.text(s_, 1.5, lab, ha="center", va="bottom", fontsize=8, color=MUTED, path_effects=halo())
+axd.set_xlabel("position along the surface [fraction of arclength, lower surface → leading edge → upper surface]")
+axd.set_ylabel("kept points per\nunit surface length [1/chord]")
+axd.set_xlim(0, 1); axd.set_ylim(0, 75); axd.legend(loc="upper left", fontsize=8.5)
+plt.show()
+```
+
+Two of these draws also serve as *training* laws. Every model in the book
+is trained under the uniform-over-cells law unless a section says
+otherwise; @sec-training-law trains each model a second time under the
+area-proportional law and scores both under the same independent uniform
+draw, which is how the dependence of a trained function on the sampling
+law it saw is measured. The measure weights are what make the swap fair:
+a model that aggregates with them sees the same integrals under all four
+draws; a model that averages the kept points as if they were equally
+representative sees four different point clouds.
+
 ## Sampling-density robustness {#sec-robustness-density}
 
 **Under a 10:1 spatially biased sampling density ISLA's relative frame
@@ -399,9 +527,9 @@ degrades 1.2x; every configuration that centers its coordinates on the
 sampled points, GeoTransolver and Transolver among them, degrades 10 to
 16x.** The probe evaluates a trained DrivAerML
 model on the 48 validation cars with surface points drawn ten times more
-densely at the front of the car than at the back, with exact
-Horvitz–Thompson measure weights so that every weighted integral is
-unbiased; the readout is the error under the biased draw divided by the
+densely at the front of the car than at the back (the third panel of
+@fig-sampling-laws), with exact Horvitz–Thompson measure weights so that
+every weighted integral is unbiased; the readout is the error under the biased draw divided by the
 same model's error under uniform sampling at 10,000 points. A ratio of 1
 means the prediction depends only on the surface and not on how it was
 sampled. Every ratio states its frame: the *sample frame* centers each
@@ -626,27 +754,97 @@ print(": The same readouts as @tbl-consistency-40k for the diagnostics. Data: re
 ```
 :::
 
-::: {.callout-note title="The training law is the other half of the same statement"}
-Changing the draw at inference is one half; changing the law the model
-was *trained* under is the other. At the reporting protocol (35 wings,
-200,000 cells, float32, two seeds) ISLA, GeoTransolver and Transolver were
-each trained twice, under the uniform-over-cells law and under an
-area-proportional Poisson law with exact Horvitz-Thompson weights, and
-every checkpoint was scored on the same 180 validation wings under the
-same independent uniform draw. ISLA's error moved from 0.1502 to 0.1483
-(1%). GeoTransolver's moved from 0.1098 to 0.2842 (2.6x) and Transolver's
-from 0.1102 to 0.2621 (2.4x): their trained functions encode the sampling
-law they saw, and their accuracy on the mesher's own draw is conditional
-on having been trained on it. Under the area law ISLA leads them by 1.9x
-and 1.8x on the uniform draw; under the uniform law it trails them by
-27%. The same swap at smaller counts showed the convergence mechanism:
-ISLA trained on the area convention and scored on the uniform one paid
-2.9x at 2,500 cells, 1.45x at 10,000 and 1.05x at 40,000, the price
-falling with count as a quadrature's should. Data:
-results/trainarea_reduction_2026-09-20.json (200,000 cells) and
-results/consistency_bench/consistency_bench_mixarea_2026-09-11.json
-(the count ladder); notebook @sec-nb-trainarea-verdict.
-:::
+### Training under a different law: two datasets {#sec-training-law}
+
+**A GeoTransolver or Transolver checkpoint is accurate on the sampling
+law it was trained under and on no other: trained on the area-proportional
+draw and scored on the uniform one it is 2.4 to 2.6x worse on the wings
+and 7.9 to 9.6x worse on the cars, while ISLA moves 1% and 8%.** Changing
+the draw at inference (@tbl-consistency-40k) is one half of the
+discretization question; changing the law the model was *trained* under is
+the other, and it is the half a practitioner meets when a surrogate trained
+on one mesher's output is handed a mesh from another. On each dataset the
+three models were trained twice, under the uniform-over-cells law and under
+the area-proportional Poisson law of @fig-sampling-laws with exact
+Horvitz–Thompson weights, and every checkpoint was scored on the same
+validation surfaces under the same independent uniform draw (float32, two
+seeds; 35 wings at 200,000 cells, 435 cars at 100,000).
+
+```{python}
+#| label: fig-training-law
+#| fig-cap: >
+#|   The training-law swap on two datasets. For each model the filled marker
+#|   is the checkpoint trained under the uniform-over-cells law and the open
+#|   marker the same configuration trained under the area-proportional law,
+#|   both scored on the independent uniform draw of the validation set; the
+#|   label is the ratio (open ÷ filled), the short bars the two seeds. Blue:
+#|   ISLA; red: GeoTransolver; amber: Transolver. How to read this: a model
+#|   whose trained function does not depend on the sampling law it saw has
+#|   the two markers at the same height. Wings at 200,000 cells per case,
+#|   cars at 100,000 (cells are flat above 100,000, @sec-equal-budget).
+#|   Data: results/trainarea_reduction_2026-09-20.json;
+#|   results/trainarea_dr_reduction_2026-09-20.json.
+#| code-fold: true
+W = json.load(open(RES / "trainarea_reduction_2026-09-20.json"))["arms"]; C = json.load(open(RES / "trainarea_dr_reduction_2026-09-20.json"))["arms"]
+fig2, axs = plt.subplots(1, 2, figsize=(10.2, 4.6))
+for ax, (title, arms, cells) in zip(axs, (("HiLiftAeroML, 35 training wings, 180 validation wings", W, "200,000"), ("DrivAerML, 435 training cars, 48 validation cars", C, "100,000"))):
+    for k, (key, m) in enumerate((("isla_ref", "isla"), ("gt", "gt_unit"), ("t", "transolver_unit"))):
+        u = arms[f"{m}_uniform"]["mean"]["unif"]; a = arms[f"{m}_area"]["mean"]["unif"]
+        us = [arms[f"{m}_uniform"]["per_seed"][s]["unif"] for s in ("seed42", "seed43")]; as_ = [arms[f"{m}_area"]["per_seed"][s]["unif"] for s in ("seed42", "seed43")]
+        kw = series_kwargs(key)
+        ax.plot([k - 0.18, k + 0.18], [u, a], color=kw["color"], lw=1.6, zorder=2)
+        ax.plot([k - 0.18], [u], marker=kw["marker"], color=kw["color"], mfc=kw["color"], mec=kw["color"], ls="none", ms=8, zorder=4)
+        ax.plot([k + 0.18], [a], marker=kw["marker"], color=kw["color"], mfc="white", mec=kw["color"], mew=1.8, ls="none", ms=8, zorder=4)
+        ax.plot([k - 0.18] * 2, us, ls="none", marker="_", color=kw["color"], ms=9, mew=1.2, zorder=3); ax.plot([k + 0.18] * 2, as_, ls="none", marker="_", color=kw["color"], ms=9, mew=1.2, zorder=3)
+        ax.text(k + 0.24, a, f"×{a / u:.2f}" if a / u < 2 else f"×{a / u:.1f}", color=kw["color"], fontsize=9, va="center", path_effects=halo())
+    ax.set_yscale("log"); ax.set_xticks([0, 1, 2]); ax.set_xticklabels(["ISLA", "GeoTransolver", "Transolver"])
+    ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda v, _: f"{v:g}")); ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+    ax.set_yticks([0.04, 0.06, 0.1, 0.2, 0.3, 0.5]); ax.set_ylim(0.035, 0.6); ax.set_xlim(-0.5, 2.7)
+    ax.set_title(f"{title}\n{cells} cells per case, scored on the independent uniform draw", fontsize=9.5)
+    ax.set_ylabel("surface-pressure relative L2 error [–]")
+h = [mpl.lines.Line2D([], [], marker="o", color=INK2, ls="none", ms=8, label="trained under the uniform-over-cells law (filled)"),
+     mpl.lines.Line2D([], [], marker="o", color=INK2, mfc="white", mew=1.8, ls="none", ms=8, label="the same model trained under the area-proportional law (open)"),
+     mpl.lines.Line2D([], [], marker="_", color=INK2, ls="none", ms=9, mew=1.2, label="seeds")]
+fig2.legend(handles=h, loc="upper left", ncol=3, fontsize=8.5, bbox_to_anchor=(0.01, 1.0))
+fig2.tight_layout(rect=(0, 0, 1, 0.93))
+plt.show()
+```
+
+```{python}
+#| label: para-training-law
+#| output: asis
+def r(arms, m): return arms[f"{m}_area"]["mean"]["unif"] / arms[f"{m}_uniform"]["mean"]["unif"]
+print(f"On the wings ISLA's error moved from {W['isla_uniform']['mean']['unif']:.4f} to {W['isla_area']['mean']['unif']:.4f} ({r(W,'isla'):.2f}x), "
+      f"GeoTransolver's from {W['gt_unit_uniform']['mean']['unif']:.4f} to {W['gt_unit_area']['mean']['unif']:.4f} ({r(W,'gt_unit'):.1f}x) and Transolver's from "
+      f"{W['transolver_unit_uniform']['mean']['unif']:.4f} to {W['transolver_unit_area']['mean']['unif']:.4f} ({r(W,'transolver_unit'):.1f}x). "
+      f"On the cars the same swap moved ISLA from {C['isla_uniform']['mean']['unif']:.4f} to {C['isla_area']['mean']['unif']:.4f} ({r(C,'isla'):.2f}x), "
+      f"GeoTransolver from {C['gt_unit_uniform']['mean']['unif']:.4f} to {C['gt_unit_area']['mean']['unif']:.3f} ({r(C,'gt_unit'):.1f}x) and Transolver from "
+      f"{C['transolver_unit_uniform']['mean']['unif']:.4f} to {C['transolver_unit_area']['mean']['unif']:.3f} ({r(C,'transolver_unit'):.1f}x), errors close to that of predicting the mean field. "
+      f"Under the area law ISLA leads GeoTransolver and Transolver on the uniform draw by {W['gt_unit_area']['mean']['unif']/W['isla_area']['mean']['unif']:.1f}x and {W['transolver_unit_area']['mean']['unif']/W['isla_area']['mean']['unif']:.1f}x on the wings and by "
+      f"{C['gt_unit_area']['mean']['unif']/C['isla_area']['mean']['unif']:.1f}x and {C['transolver_unit_area']['mean']['unif']/C['isla_area']['mean']['unif']:.1f}x on the cars; under the uniform law it trails them by 27% on the wings and is at parity on the cars. "
+      f"The same table carries the inference-side statement at 100,000 cells on the cars: the uniform-trained GeoTransolver and Transolver under the 10:1 biased draw are {C['gt_unit_uniform']['mean']['biased']/C['gt_unit_uniform']['mean']['unif']:.1f}x and "
+      f"{C['transolver_unit_uniform']['mean']['biased']/C['transolver_unit_uniform']['mean']['unif']:.1f}x their uniform-draw error, ISLA {C['isla_uniform']['mean']['biased']/C['isla_uniform']['mean']['unif']:.2f}x.")
+```
+
+The mechanism is the one @sec-mechanism teaches: the baselines' slice
+aggregates are averages over the kept points, so the trained function
+absorbs the point pattern it was fitted on and is wrong on any other;
+ISLA's are measure-weighted integrals, the same under any draw that
+carries its weights. Two honest qualifications travel with the figure.
+ISLA is not perfectly indifferent: 8% on the cars is past the 5% bar the
+DrivAerML twin preregistered (@sec-nb-trainarea-dr-verdict), so the
+statement is "weakly dependent" beside baselines that are dependent by
+factors of 2.4 to 9.6; part of the 8% is the quadrature noise of an
+area-proportional draw whose weights span four decades on these meshes
+(@fig-consistency-curves). And the size of the baselines' dependence is
+much larger on the cars than on the wings although the cars' cell-area
+spread is the smaller (coefficient of variation 2.3 against 3.3), which
+the cell-area spread alone does not explain and is an open question
+(@sec-program-status). The count ladder of the same swap on ISLA shows
+the convergence mechanism at work: trained on the area convention and
+scored on the uniform one it paid 2.9x at 2,500 cells, 1.45x at 10,000
+and 1.05x at 40,000, the price falling with count as a quadrature's
+should (results/consistency_bench/consistency_bench_mixarea_2026-09-11.json).
 
 ## Pose: a contract, not an accuracy edge {#sec-pose-contract}
 
