@@ -139,7 +139,7 @@ consequences shape the architectures compared in this book.
    its area, so splitting one cell into two halves leaves the operator
    unchanged. This is why every dataset hands the model cell areas alongside
    positions and normals, and why ISLA's sums are quadrature rules
-   (@sec-mt2-quadrature).
+   (@sec-isla-quadrature).
 3. **Exactly the shared symmetry, no more.** The map's symmetry is the
    symmetry shared by the equations, their coefficients, the boundary data
    and the nondimensional parameters. Homogeneity and constant coefficients
@@ -157,7 +157,7 @@ consequences shape the architectures compared in this book.
    why each is a property of a dataset rather than of the equations.
 
 Which of these an architecture enforces by construction and which it learns
-from data is the subject of @sec-mt2 (ISLA) and @sec-baselines
+from data is the subject of @sec-isla (ISLA) and @sec-baselines
 (GeoTransolver and Transolver); none of the three requires knowing the PDE.
 :::
 
@@ -512,8 +512,8 @@ measured degradation: it holds for every input, including the ones no
 validation set contains. What the float64 test certifies is the algebraic
 construction; the residual on the trained GPU path is a separate measured
 quantity, 3e-5 in float32 and several percent in bfloat16
-(@sec-mt2-contracts). The contracts ISLA holds, and the tests that
-verify each, are tabulated in @sec-mt2-contracts.
+(@sec-isla-contracts). The contracts ISLA holds, and the tests that
+verify each, are tabulated in @sec-isla-contracts.
 
 A property that is *not* enforced by construction, GeoTransolver's pose
 behavior for instance, is measured as an accuracy degradation under

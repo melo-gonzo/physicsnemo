@@ -35,7 +35,7 @@ review that reframed the program around the fair-comparison protocol.
 %%| fig-cap: >
 %%|   Sub-tree 1: foundations and the critic review. Status is written in
 %%|   every node; DONE nodes have a green border, PLANNED nodes are dashed
-%%|   hexagons. The exact-kernel MeshTransformer, an earlier design of this
+%%|   hexagons. The exact-kernel predecessor of ISLA, an earlier design of this
 %%|   program, appears only here (G3, G3K, K0) and in the interior sub-tree
 %%|   (V0).
 flowchart TB

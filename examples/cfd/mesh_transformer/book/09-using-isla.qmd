@@ -7,7 +7,7 @@ the model needs from your data, the two commands that train and evaluate
 it, the learning-rate rule that lets it scale in width and depth, the
 inference sampler that removes most of the draw noise at a fixed cell
 budget, and what a step costs. Everything here is about ISLA unless an
-option is named; the reasons behind each recommendation are in @sec-mt2 and
+option is named; the reasons behind each recommendation are in @sec-isla and
 the evidence chapters, cited at the point where they apply.
 
 ## Which configuration {#sec-using-config}
@@ -36,7 +36,7 @@ measurements that priced the alternatives left that preference unopposed on
 accuracy: the similarity-gauge variant, before its removal, was within 2% of
 ISLA at 435 cars, inside seed noise (@sec-nb-sgref-verdict). The removed
 frame variants survive only in this book's collapsed diagnostic notes
-(@sec-mt2-variants). The remaining rows are options on that one frame.
+(@sec-isla-variants). The remaining rows are options on that one frame.
 
 | configuration | recipe config | when to use | what you give up |
 |---|---|---|---|
@@ -122,7 +122,7 @@ magnetized flow passes two; steady conduction with pinned temperatures
 passes none (`n_global_vectors: 0`) and supplies the pinned values as
 per-cell `boundary_scalars` (`n_boundary_scalars`). Each global direction
 adds one seed cosine, one relational cosine and three vectors to the output
-basis (@sec-mt2-inputs). The tests in `test_isla_global_inputs.py` cover
+basis (@sec-isla-inputs). The tests in `test_isla_global_inputs.py` cover
 zero and two directions, global scalars, and the invariance of the output to
 the magnitude of every global vector.
 :::
@@ -261,7 +261,7 @@ in this book is a float32 inference on the final-epoch checkpoint
 (@sec-metrics). A bf16 inference differs from the float32 one by about 2%
 of the prediction from rounding alone, and under a rigid motion of the
 input its prediction moves by about 4% (pressure) and 7% (wall shear),
-where the float32 prediction moves by 3e-5 (@sec-mt2-contracts). Where the
+where the float32 prediction moves by 3e-5 (@sec-isla-contracts). Where the
 pose or the sampling-consistency contract is load-bearing, infer in
 float32.
 
@@ -359,7 +359,7 @@ recipe runs them, the training step at 10,000 tokens is 47 ms at 1.30 GiB
 with the geometry recompute on, against GeoTransolver's 45 ms at 2.70 GiB;
 switching the recompute off gives 39 ms at 1.94 GiB. At 40,000 tokens the
 default path is 119 ms against 53 ms and the fused kernel 52 ms at 4.5
-against 10.0 GiB (@tbl-mt2-cost). Two practical consequences:
+against 10.0 GiB (@tbl-isla-cost). Two practical consequences:
 
 - **Leave `geo_checkpoint: true` unless you are short of time and long on
   memory.** It is bitwise identical in outputs and gradients.
@@ -379,7 +379,7 @@ interior queries (the exploration budget).
 
 **Each contract is a one-line test on a loaded checkpoint, and a residual
 far above float32 rounding points at the inputs, not the model.** The
-contracts are exact properties of the code (@sec-mt2-contracts), and
+contracts are exact properties of the code (@sec-isla-contracts), and
 each is cheap to verify on a loaded checkpoint: rotate and translate the
 inputs by a random rigid motion and compare the scalars (unchanged) and the
 vectors (rotated); scale the points by $k$ and the measure weights by $k^2$

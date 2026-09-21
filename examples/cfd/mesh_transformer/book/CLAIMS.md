@@ -1749,8 +1749,8 @@ interior control @sec-nb-udrv-int-prereg.
   Corrections fixed during the overhaul: reference-configuration ISLA exists on 6 of 8 surface rungs (not 510, not 1,260, not the corner);
   210-case ratios are the three-seed 0.84x / 0.90x; corner 512x80k constant gauge 0.0428, similarity gauge 0.0431, GT 0.0419, T 0.0431;
   exact-kernel interior decoder in fp32 = GT-volume ÷ arm 0.10 (9.7x; the 8.0x was bf16); passive decode fp32 0.33 (3.1x). New anchors:
-  #sec-mt2-variants (ch2), #sec-de-result replaces #sec-de-unit-drive (removed), fig-hilift-data-efficiency + tbl-hilift-ladder (ch5),
-  fig-ladder-unit-drive (ch12; fig-slope-extrapolation removed), tbl-mt2-cost (ch2).
+  #sec-isla-variants (ch2), #sec-de-result replaces #sec-de-unit-drive (removed), fig-hilift-data-efficiency + tbl-hilift-ladder (ch5),
+  fig-ladder-unit-drive (ch12; fig-slope-extrapolation removed), tbl-isla-cost (ch2).
 - **FRAMING RULE (2026-09-14, Peter).** ISLA targets steady boundary-value PDE problems in general. The "freestream direction" is this book's
   external-aerodynamics INSTANCE of a global vector input (a direction belonging to the problem, not to a boundary cell); other instances:
   gravity/body force, applied field; none in steady conduction; inlet velocities are boundary data, not a freestream. Global scalar inputs are

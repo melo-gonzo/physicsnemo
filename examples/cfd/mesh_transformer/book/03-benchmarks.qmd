@@ -52,7 +52,7 @@ The reporting-protocol board comes first; the exploration-budget board, at
   and 210-case wing rungs the uncertainty to read is the spread over random
   training draws, three to eleven times the seed spread (@sec-de-controls).
 - **Which ISLA.** Every ISLA number in this chapter's figures and tables is
-  ISLA (relative frame, @sec-mt2); the 10,000- and 200,000-cell surface rows
+  ISLA (relative frame, @sec-isla); the 10,000- and 200,000-cell surface rows
   were trained with the total-measure length unit, within 1.3% of the
   RMS-pairwise-distance default (@sec-nb-lenrms-verdict). The legacy
   centered variant and the similarity-gauge variant, both removed from the
@@ -316,7 +316,7 @@ linear routing rises to the mean-field loss plateau at the surface
 configuration's rate of 1e-3 (both seeds, the routing saturation of
 @sec-using-lr) and trains cleanly at 5e-4, the rate the linear row uses;
 3e-4 is 3% to 8% worse. Cosine routing, which bounds the routing logits
-(@sec-mt2-slices), trains at 1e-3 and gives the better row. Every interior
+(@sec-isla-slices), trains at 1e-3 and gives the better row. Every interior
 lane was trained with the passive readout's `query_mass="geometric_mean"`
 option; the class default is now `"source_total"`, and the count dependence
 under it is not measured (@sec-interior-companion). GeoTransolver-volume
@@ -481,7 +481,7 @@ input-matched baselines on the surface, and it is conditional on the
 setting: in a canonical frame GeoTransolver is at parity
 (@sec-scoreboard-200k), and GeoTransolver trained in a canonicalized frame
 is pose-invariant at a 1% cost (@sec-pose). ISLA's rotation and translation
-covariance is exact by construction (@sec-mt2-contracts) and needs no
+covariance is exact by construction (@sec-isla-contracts) and needs no
 augmentation; the same checkpoints scored in the native frame land within
 0.5% of their posed numbers (@sec-nb-poseref-verdict). At the exploration
 budget the lead was 7% and 17% (the collapsed note).
@@ -747,7 +747,7 @@ centroid: the datapipe centers every coordinate on the measure-weighted
 centroid of the surface, a point the physics does not distinguish and that
 is ill-posed for an open, truncated or multi-body boundary, and the model
 then consumes absolute positions in that frame in every layer. That is the
-construct ISLA declines (@sec-mt2-variants). It also does not make the
+construct ISLA declines (@sec-isla-variants). It also does not make the
 model covariant: its pose behavior still comes from augmentation or a
 canonical frame. The comparison the book makes is therefore not "consistent
 against inconsistent" but "consistent and exactly covariant without any
@@ -942,7 +942,7 @@ memory once its geometry is recomputed in the backward pass.**
 @tbl-scoreboard-resources measures the eager path on which all three can be
 run on one instrument; on the compiled path the recipe runs, ISLA's
 training step is 1.05x GeoTransolver's at 10,000 tokens with the recompute
-on and 0.86x without, at half the memory (@sec-mt2-cost).
+on and 0.86x without, at half the memory (@sec-isla-cost).
 
 ```{python}
 #| label: tbl-scoreboard-resources
@@ -963,7 +963,7 @@ print(": Training cost of the three architectures on one instrument and one exec
       "GB300 GPU, eager execution, batch of one case, bfloat16 autocast, AdamW step, median of five "
       "measured steps after three warm-up steps; memory is the peak allocated during the step net of "
       "the resident parameters and optimizer state. The recomputed-geometry row is the same function at "
-      "a lower memory and a higher step time. How to read this: the eager path ranks the models on one instrument; the compiled path the recipe trains on is in @tbl-mt2-cost. "
+      "a lower memory and a higher step time. How to read this: the eager path ranks the models on one instrument; the compiled path the recipe trains on is in @tbl-isla-cost. "
       "Data: results/isla_vs_baselines_cost_fastkernel_2026-09-09.json. {#tbl-scoreboard-resources}")
 ```
 
@@ -1243,7 +1243,7 @@ print(": The sealed deflection split at the exploration budget: surface-pressure
 ::: {.callout-note collapse="true" title="Rungs measured only on the legacy centered variant (removed variant, diagnostic)"}
 Three surface settings were measured before ISLA
 existed, on the legacy centered variant (plain-mean center, fixed length
-unit; @sec-mt2-variants), and are not re-measured on ISLA
+unit; @sec-isla-variants), and are not re-measured on ISLA
 (@sec-scoreboard-pending). They are kept here as diagnostics of the
 baselines' lead at those sizes, not as ISLA rows.
 

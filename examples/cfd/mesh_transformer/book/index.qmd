@@ -15,15 +15,15 @@ number is computed, as the page renders, from a checked-in artifact.
 ISLA is pronounced "eye-la". An *isla* is an island: a shape defined
 entirely by its boundary, which is what the method takes as input. The code
 class is `ISLA` in `physicsnemo.experimental.nn`. An earlier exact-kernel
-design of this program, the first MeshTransformer, is documented in the
+design of this program, which preceded ISLA, is documented in the
 repository's `book/archive/` directory and does not appear in this book.
 :::
 
 ## The thesis {#sec-verdict}
 
-**ISLA matches the best mesh transformer in distribution at the recipe's
-default budget and adds a set of exact guarantees that no other mesh
-transformer offers; where it still trails, the deficit is priced.** Four
+**ISLA matches GeoTransolver, the strongest published slice-attention
+surrogate, in distribution at the recipe's default budget and adds a set of
+exact guarantees that no other slice-attention model offers; where it still trails, the deficit is priced.** Four
 things are true at once, and the book is organized around keeping all four
 in view:
 
@@ -247,17 +247,17 @@ below are canonical; their definitions are in the chapters cited.
 
 | Name | What it is | Where defined |
 |---|---|---|
-| **ISLA** | the model as shipped, named without qualifier: relative frame, RMS-pairwise-distance length unit, the class defaults | @sec-mt2 |
-| **legacy centered variant** (removed; its measurements survive in collapsed diagnostic notes only) | the centered frame the program used before the relative frame: plain-mean center, fixed length unit. It reads a sample statistic that is not physical knowledge; the class no longer has it, and its checkpoints do not load | @sec-mt2-variants |
-| **similarity-gauge variant** (removed; its measurements survive in collapsed diagnostic notes only) | ISLA centered on the measure-weighted centroid with the RMS radius as length unit. It estimates a center from the sample and presumes one closed body; measured within noise of ISLA (@sec-nb-sgref-verdict), and the class no longer has it | @sec-mt2-variants |
+| **ISLA** | the model as shipped, named without qualifier: relative frame, RMS-pairwise-distance length unit, the class defaults | @sec-isla |
+| **legacy centered variant** (removed; its measurements survive in collapsed diagnostic notes only) | the centered frame the program used before the relative frame: plain-mean center, fixed length unit. It reads a sample statistic that is not physical knowledge; the class no longer has it, and its checkpoints do not load | @sec-isla-variants |
+| **similarity-gauge variant** (removed; its measurements survive in collapsed diagnostic notes only) | ISLA centered on the measure-weighted centroid with the RMS radius as length unit. It estimates a center from the sample and presumes one closed body; measured within noise of ISLA (@sec-nb-sgref-verdict), and the class no longer has it | @sec-isla-variants |
 | **ablation**, **diagnostic** | a configuration measured only to price a design choice (weights-off, raw coordinates); never adopted | @sec-principled-decisions |
 | **GeoTransolver**, **Transolver**, **GeoTransolver-volume** | the public slice-attention baselines, named without qualifier and never modified. "GeoTransolver + ISLA's *feature* (ablation)" is a baseline with one of ISLA's features added to isolate an effect; it is not a variant of the public model | @sec-baselines |
 | **unit-direction protocol** | every model receives the freestream as a unit vector; the fair-comparison rule that decides the surface ranking | @sec-fair-comparison |
-| **global vector / scalar inputs** | the problem's global conditions ($K$ directions, $S$ scalars); here $K = 1$, the freestream direction, and $S = 0$ | @sec-mt2-inputs |
-| **measure weight** $w_i$ | the surface area a sampled cell stands for; the quadrature weight of every sum in the model | @sec-mt2-quadrature |
-| **relative frame** | ISLA's construction of position: no center, positions used only as differences to anchors, the measure-weighted RMS pairwise distance of the sample as length unit | @sec-mt2-frame |
-| **slice**, **anchor** | a soft group of tokens, and its measure-weighted mean position and normal | @sec-mt2-slices |
-| **relational invariants** | the scalars that describe a token relative to an anchor | @sec-mt2-relational |
+| **global vector / scalar inputs** | the problem's global conditions ($K$ directions, $S$ scalars); here $K = 1$, the freestream direction, and $S = 0$ | @sec-isla-inputs |
+| **measure weight** $w_i$ | the surface area a sampled cell stands for; the quadrature weight of every sum in the model | @sec-isla-quadrature |
+| **relative frame** | ISLA's construction of position: no center, positions used only as differences to anchors, the measure-weighted RMS pairwise distance of the sample as length unit | @sec-isla-frame |
+| **slice**, **anchor** | a soft group of tokens, and its measure-weighted mean position and normal | @sec-isla-slices |
+| **relational invariants** | the scalars that describe a token relative to an anchor | @sec-isla-relational |
 | **area-weighted relative L2**, **float32 instrument** | the metric and the precision every reported number is scored at | @sec-metrics |
 | **rung** | one training-set size on the data-efficiency ladder ("the 35-case rung") | @sec-data-efficiency |
 | **deficit anatomy** | the decomposition of the in-distribution gap into measured parts | @sec-deficit-anatomy |
@@ -307,9 +307,11 @@ ones before it.**
 - **Part I, the problem** (@sec-problem). What a boundary-to-field surrogate
   is, taught on a two-dimensional airfoil whose exact solution we know; the
   two production datasets and their splits; the metric; the frozen protocol.
-- **Part II, the architecture.** @sec-mt2 builds ISLA one idea at a time,
+- **Part II, the architecture.** @sec-isla builds ISLA one idea at a time,
   from "a sum over cells should be an integral" to the equivariant output
-  basis, with a figure for each idea and the derivations folded away. @sec-baselines
+  basis, with a figure for each idea and the derivations folded away.
+  @sec-architecture then states the forward pass exactly, stage by stage,
+  with every tensor shape and code identifier. @sec-baselines
   describes GeoTransolver and Transolver and the fair-comparison rules.
 - **Part III, using ISLA** (@sec-using). The one configuration and its
   options, the inputs the model accepts, the recipe commands, the

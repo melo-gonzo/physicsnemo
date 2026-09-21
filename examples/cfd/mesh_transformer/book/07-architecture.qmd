@@ -1,0 +1,641 @@
+# The ISLA forward pass {#sec-architecture}
+
+**This chapter states exactly what ISLA computes, stage by stage, with one
+name for every quantity and the tensor shape beside it.** @sec-isla explains
+why each part is there; this chapter is the reference for *what* the class
+does, and it is the one description of the architecture that the other
+chapters and the code are held to. Read it with @fig-isla-pass open: every
+stage below is one box of that figure, and every equation names the
+identifier that computes it in `physicsnemo/experimental/nn/isla/model.py`.
+The dimensions quoted are the recipe's surface configuration (width 192,
+12 layers, 256 slices); nothing in the structure depends on them.
+
+```{python}
+#| label: setup-arch
+#| include: false
+import sys; sys.path.insert(0, ".")
+from palette import *
+from matplotlib.colors import Normalize
+```
+
+## Notation {#sec-arch-notation}
+
+**One symbol per quantity, one code name per symbol.** Indices: $i, j$ run
+over the $N$ tokens, $s, t$ over the $M$ slices, $k$ over the $K$ global
+vector inputs. Batch axes are omitted throughout; the code carries a
+leading batch dimension on every tensor.
+
+| symbol | shape | code | meaning |
+|---|---|---|---|
+| $x_i, n_i, w_i$ | $N{\times}3,\ N{\times}3,\ N$ | `points`, `normals`, `measure_weights` | sampled boundary positions, outward normals, the surface area each sample stands for |
+| $g_k$, $\sigma$ | $K{\times}3$, $S$ | `global_vectors`, `global_scalars` | the problem's global directions and scalars ($K = 1$, the freestream direction, and $S = 0$ in this book) |
+| $\hat g_k$, $\hat n_i$ | $K{\times}3$, $N{\times}3$ | `g_unit`, `n_hat` | the same directions and normals, normalized to unit length |
+| $L$ | scalar | `gauge` | the length unit: the measure-weighted RMS pairwise distance of the sample |
+| $r_i$ | $N{\times}3$ | `r` | position in length units, $x_i / L$; used only inside differences |
+| $\ell_i$ | $N$ | `log_w` | $\log w_i$, the measure bias of every routing softmax |
+| $s_i$ | $N{\times}(K + n_b + S)$ | `invariants` | the seed: the scalars a token knows before any layer runs |
+| $h_i$ | $N{\times}d$ | `h` | the token state, width $d = 192$ |
+| $\lambda_{is}$, $\lambda'_{is}$ | $N{\times}M$ | `logits`, `logits + bias` | routing logits before and after the geometric refinement |
+| $a_{is}$ | $N{\times}M$ | `a` | routing weights: a softmax over tokens $i$ for each slice $s$ |
+| $z_s, m_s$ | $M{\times}3$ | `z_pos`, `m_s` | the anchor of slice $s$: its mean position and mean normal direction |
+| $\rho_{is}$, $\xi_{is}$ | $N{\times}M{\times}3$, $N{\times}M{\times}(5+K)$ | `rel`, `geo` | the token-to-anchor separation and the relational invariants formed from it |
+| $\pi_{is}$ | $N{\times}M$ | `point_mix` | read-back weights: a softmax over slices $s$ for each token $i$ |
+| $\bar\xi_i$, $\gamma_i$ | $N{\times}(5+K)$, $N{\times}d/2$ | `pooled`, `geo_pool` | the invariants pooled over slices, and their projection |
+| $Z_s$ | $M{\times}d$ | `z` | the slice state |
+| $b_i$ | $N{\times}d$ | `back` | the slice states read back to token $i$ |
+| $\hat u_i$ | $N{\times}3$ | `r_hat` | the head's radial direction: from the token's own soft anchor to the token |
+| $e_\theta, e_\phi$ | $N{\times}3$ | `spherical_basis` | the tangential complements of $\hat u_i$ against another direction |
+| $p_i$, $c_{ij}$, $v_i$ | $N{\times}n_p$, $N{\times}n_v{\times}(4+3K)$, $N{\times}n_v{\times}3$ | `scalars`, `coeffs`, `vectors` | scalar outputs, vector-head coefficients, vector outputs |
+
+$\mathrm{LN}$ is LayerNorm over the width; $\mathrm{MLP}$ is Linear–GELU–Linear
+with a hidden width of $4d$ (`mlp_ratio`); $W$ with a subscript is a learned
+affine map. Definitions use $\equiv$.
+
+## The pass in one picture {#sec-arch-picture}
+
+**From the inputs to the last slice layer, only scalars that are invariant
+under rotation, translation and uniform rescaling are computed; vectors are
+rebuilt once, at the output.** @fig-isla-pass is the whole surface model.
+The three interior arrangements of @sec-arch-modes change which tokens
+enter and which the head reads; they add no stage.
+
+```{mermaid}
+%%| label: fig-isla-pass
+%%| fig-cap: >
+%%|   The ISLA forward pass for a surface prediction, with the shape of every
+%%|   tensor ($N$ tokens, $M$ slices, width $d$, $K$ global directions). Gray
+%%|   boxes are data; dashed blue boxes are fixed geometric maps with no
+%%|   parameters; solid blue boxes are learned. The slice layer, the one
+%%|   repeated block, is opened up in @fig-isla-layer. How to read this: no
+%%|   box centers the geometry and no learned box receives a coordinate; the
+%%|   positions $r_i$ reach the learned path only through the anchors and the
+%%|   invariants formed against them.
+flowchart TB
+    classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
+    classDef learned fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
+    classDef fixed fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3,color:#0b0b0b
+    classDef out fill:#e6f0fb,stroke:#2a78d6,stroke-width:2px,color:#0b0b0b
+
+    IN["boundary sample x_i, n_i, w_i (N×3, N×3, N)<br/>global inputs g_k (K×3), σ (S)"]:::data
+    FR["stage 1, frame: L = RMS pairwise distance; r_i = x_i / L; n̂_i, ĝ_k; ℓ_i = log w_i"]:::fixed
+    SEED["stage 2, seed: s_i = [n̂_i·ĝ_k, boundary scalars, σ] (N×(K+n_b+S))"]:::fixed
+    EMB["embedding MLP → h_i (N×d)"]:::learned
+    LAYER["stage 3, slice layer × 12 (opened up in the next figure)<br/>routing a_is → anchors z_s, m_s → invariants ξ_is → refined routing<br/>→ slice states Z_s → read-back → h_i (N×d)"]:::learned
+    HF["stage 4, head frame: soft anchors from the final state; û_i = direction from the token's anchor to the token (N×3)"]:::fixed
+    HEAD["stage 5, linear head on LN(h_i): scalars p_i and 4 + 3K coefficients per vector output"]:::learned
+    BASIS["equivariant basis at each token: ĝ_k, n̂_i, û_i and their tangential complements (N×(4+3K)×3)"]:::fixed
+    OUT["outputs: scalar fields p_i (N×n_p), vector fields v_i = Σ_j c_ij B_ij (N×n_v×3)"]:::out
+
+    IN --> FR --> SEED --> EMB --> LAYER --> HEAD --> OUT
+    LAYER --> HF --> BASIS --> OUT
+    FR -. r_i, n̂_i, ĝ_k, ℓ_i to every layer .-> LAYER
+```
+
+## Stage 1: inputs and the frame {#sec-arch-frame}
+
+**The frame has a length unit and no origin.** The model receives the
+sampled boundary, $x_i, n_i, w_i$, and the global inputs $g_k$ and
+$\sigma$ (@sec-isla-inputs). It normalizes every direction it is given,
+$\hat g_k \equiv g_k / \lvert g_k \rvert$ and $\hat n_i \equiv n_i / \lvert
+n_i \rvert$, so a global vector's magnitude never enters (a magnitude that
+matters is a global scalar). The one length unit is a normalized two-point
+integral of the geometry, with $\tilde w_i \equiv w_i / \sum_j w_j$:
+
+$$
+L \equiv \Big( \sum_{i,j} \tilde w_i\, \tilde w_j\, \lvert x_i - x_j \rvert^2 \Big)^{1/2}
+      = \Big( 2 \sum_i \tilde w_i\, \lvert x_i - \bar x \rvert^2 \Big)^{1/2},
+\qquad
+r_i \equiv x_i / L,
+\qquad
+\ell_i \equiv \log w_i .
+$$
+
+The second form is how the code evaluates it (`rms_pairwise_distance`, in
+$O(N)$ through the variance identity); the weighted mean $\bar x$ is an
+intermediate of this scalar only and is never used as a center. $L$ is
+unchanged by a translation or rotation, scales with the geometry, is
+unchanged by a uniform rescale of the weights alone because they are
+normalized first, and converges under refinement of any boundary whose
+normalized measure converges (@sec-isla-frame). The scaled positions $r_i$
+are never fed to a learned map; they enter only as differences $r_i - z_s$
+in stage 3 and stage 4. The log measure $\ell_i$ is the bias that turns
+every routing softmax into a quadrature rule (@sec-isla-quadrature); with
+`use_measure_weights=False` (the weights-off ablation) or no weights
+supplied it is zero.
+
+## Stage 2: the seed and the embedding {#sec-arch-seed}
+
+**A token's seed is every origin-free scalar the inputs offer, and it is
+small.** With no origin, a position alone has no invariant; the only
+scalars in $\{\hat n_i, \hat g_k\}$ that survive rotation are the cosines
+between them. The seed is therefore
+
+$$
+s_i \equiv \big[\, \hat n_i \!\cdot\! \hat g_1,\ \dots,\ \hat n_i \!\cdot\! \hat g_K,\ \beta_i,\ \sigma \,\big]
+\quad (K + n_b + S \text{ scalars}),
+\qquad
+h_i \equiv \mathrm{MLP}_{\mathrm{embed}}(s_i),
+$$
+
+where $\beta_i$ are the optional per-cell boundary scalars
+(`boundary_scalars`, $n_b = 0$ in this book) and $\sigma$ the global scalars
+broadcast to every token. In the surface configuration of this book the
+seed is a single number per token, the cosine between the normal and the
+freestream; if the seed would be empty ($K = n_b = S = 0$) every token starts
+from one learned constant. All separation between tokens then comes from
+the slice layers, where a token learns where it sits relative to the anchors
+(`_seed_invariants`, `embed`).
+
+## Stage 3: the slice layer {#sec-arch-layer}
+
+**A slice layer routes the tokens softly into $M$ slices, forms one anchor
+per slice, describes every token relative to every anchor by invariant
+scalars, and sends information up to the slices and back down together with
+those scalars.** It is the one block that repeats, twelve times, each with
+its own parameters (`_SliceBlock`). Its inputs are the token state $h_i$
+and the four frame quantities of stage 1, which every layer receives
+unchanged: $r_i$, $\hat n_i$, $\hat g_k$, $\ell_i$. Its output is the
+updated $h_i$. @fig-isla-layer shows the ten steps; the equations follow in
+the same order.
+
+```{mermaid}
+%%| label: fig-isla-layer
+%%| fig-cap: >
+%%|   One slice layer, opened up. Down the left: the routing path from the
+%%|   token state to the slice states. Down the right: the geometry path from
+%%|   the routing weights to the anchors and the relational invariants, which
+%%|   feed back into the routing (the refinement) and forward into the
+%%|   read-back. Two softmaxes act on the same logits: over tokens for the
+%%|   routing (each slice's weights sum to one, with the measure bias) and over
+%%|   slices for the read-back (each token's weights sum to one, without it).
+%%|   How to read this: the only tensor that is $N{\times}M$ in the width of
+%%|   the invariants is $\xi_{is}$, and it is pooled to $N{\times}(5+K)$ before
+%%|   any learned projection; that ordering, not the arithmetic, sets the
+%%|   layer's memory.
+flowchart TB
+    classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
+    classDef learned fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
+    classDef fixed fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3,color:#0b0b0b
+
+    H["token state h_i (N×d); frame r_i, n̂_i, ĝ_k, ℓ_i"]:::data
+    L1["a. routing logits λ_is = routing map of LN(h_i) (N×M)"]:::learned
+    A0["b. provisional routing a⁰_is = softmax over tokens of λ_is + ℓ_i"]:::fixed
+    ANC["c. anchors z_s = Σ_i a⁰_is r_i, m_s = normalize(Σ_i a⁰_is n̂_i) (M×3 each)"]:::fixed
+    XI["d. relational invariants ξ_is of (r_i − z_s, n̂_i, m_s, ĝ_k) (N×M×(5+K))"]:::fixed
+    REF["e. refinement λ'_is = λ_is + w_g·ξ_is + b_g"]:::learned
+    PI["read-back weights π_is = softmax over slices of λ'_is"]:::fixed
+    A1["f. routing a_is = softmax over tokens of λ'_is + ℓ_i"]:::fixed
+    Z["g. slice states Z_s = Σ_i a_is h_i; Z_s += MLP(LN(Z_s)) (M×d)"]:::learned
+    POOL["h. pooled invariants ξ̄_i = Σ_s π_is ξ_is (N×(5+K)); γ_i = W_f ξ̄_i + b_f (N×d/2)"]:::learned
+    BACK["h. read-back b_i = Σ_s π_is Z_s (N×d)"]:::fixed
+    BR["i. h_i += W_b [h_i; b_i; γ_i]"]:::learned
+    MLP["j. h_i += MLP(LN(h_i))"]:::learned
+    OUT["updated token state h_i (N×d)"]:::data
+
+    H --> L1 --> A0 --> ANC --> XI --> REF
+    REF --> PI
+    REF --> A1 --> Z --> BACK
+    PI --> BACK
+    PI --> POOL
+    XI --> POOL
+    BACK --> BR
+    POOL --> BR
+    BR --> MLP --> OUT
+```
+
+**a. Routing logits.** A learned map of the normalized token state gives a
+logit per token–slice pair. It has two forms (`_RoutingLogits`,
+@sec-isla-routing-forms): the linear form is an affine map, and the cosine
+form is a temperature $T$ times the cosine between the normalized state and
+a learned prototype $p_s$ per slice, which bounds every logit in $[-T, T]$:
+
+$$
+\tilde h_i \equiv \mathrm{LN}(h_i), \qquad
+\lambda_{is} = W_a \tilde h_i + b_a \ \ (\text{linear}), \qquad
+\lambda_{is} = T\, \frac{\tilde h_i \cdot p_s}{\lVert \tilde h_i \rVert\, \lVert p_s \rVert} \ \ (\text{cosine},\ T = 10).
+$$
+
+**b. Provisional routing.** A softmax over the *tokens*, for each slice,
+with the measure bias:
+
+$$
+a^0_{is} = \frac{\exp(\lambda_{is} + \ell_i)}{\sum_j \exp(\lambda_{js} + \ell_j)} .
+$$
+
+Each slice's weights sum to one over the tokens, so anything of the form
+$\sum_i a^0_{is} f_i$ is a measure-weighted mean of $f$ over the slice, a
+quadrature estimate of a surface integral (`_softmax_over_points`).
+
+**c. Anchors.** From those weights each slice forms its mean position and
+its mean normal direction (`z_pos`, `m_s`):
+
+$$
+z_s \equiv \sum_i a^0_{is}\, r_i, \qquad
+m_s \equiv \frac{\sum_i a^0_{is}\, \hat n_i}{\big\lvert \sum_i a^0_{is}\, \hat n_i \big\rvert} .
+$$
+
+Both are weighted sums of vectors that rotate with the body, with weights
+that do not, so the anchors rotate and translate with the body
+(@sec-isla-slices).
+
+**d. Relational invariants.** For every token–anchor pair, with the
+separation $\rho_{is} \equiv r_i - z_s$ and its direction $\hat\rho_{is}$,
+the layer forms $5 + K$ scalars (`_relational_invariants`; drawn in
+@fig-isla-relational):
+
+$$
+\xi_{is} \equiv \big[\,
+\lvert\rho_{is}\rvert,\ \log\lvert\rho_{is}\rvert,\
+\hat\rho_{is}\!\cdot\!\hat g_1,\ \dots,\ \hat\rho_{is}\!\cdot\!\hat g_K,\
+\hat\rho_{is}\!\cdot\!\hat n_i,\
+\hat\rho_{is}\!\cdot\! m_s,\
+\hat n_i\!\cdot\! m_s
+\,\big] .
+$$
+
+Every entry is a norm or a dot product of vectors that move together, and
+every position appears as a difference, so no origin and no axis is
+referred to (@sec-isla-relational).
+
+**e. Refinement, and the read-back weights.** A linear map of the
+invariants to one scalar per pair refines the routing logit, so a slice can
+prefer tokens near its anchor, upwind of it, or facing it (`geo_logit`).
+The *same* refined logits, normalized over the slices for each token and
+without the measure bias, are the read-back weights (`point_mix`):
+
+$$
+\lambda'_{is} = \lambda_{is} + w_g \cdot \xi_{is} + b_g, \qquad
+\pi_{is} = \frac{\exp(\lambda'_{is})}{\sum_t \exp(\lambda'_{it})} .
+$$
+
+**f. Routing.** The routing weights are recomputed from the refined logits
+with the measure bias, exactly as in step b:
+
+$$
+a_{is} = \frac{\exp(\lambda'_{is} + \ell_i)}{\sum_j \exp(\lambda'_{js} + \ell_j)} .
+$$
+
+@fig-isla-routing-readback shows the two normalizations side by side on the
+airfoil: the same matrix of logits, read one way as "what each slice
+averages" and the other way as "where each token reads from".
+
+**g. Slice states.** Each slice aggregates the token states it routes, a
+measure-weighted mean, and transforms the result with its own residual MLP
+(`slice_mlp`):
+
+$$
+Z_s = \sum_i a_{is}\, h_i, \qquad
+Z_s \leftarrow Z_s + \mathrm{MLP}_{\mathrm{slice}}(\mathrm{LN}(Z_s)) .
+$$
+
+This is the only place tokens exchange information: through $M = 256$
+slice states, never pairwise.
+
+**h. Read-back.** Each token reads the slice states with its read-back
+weights, and reads the invariants pooled with the same weights, projected
+to half the width (`back`, `pooled`, `geo_feat`):
+
+$$
+b_i = \sum_s \pi_{is}\, Z_s, \qquad
+\bar\xi_i = \sum_s \pi_{is}\, \xi_{is}, \qquad
+\gamma_i = W_f\, \bar\xi_i + b_f .
+$$
+
+**i. Broadcast.** The token state, what it read, and where it sits are
+combined by one affine map into a residual update (`broadcast`):
+
+$$
+h_i \leftarrow h_i + W_b\, [\, h_i;\ b_i;\ \gamma_i \,] .
+$$
+
+**j. Token MLP.** A pre-norm residual MLP closes the layer (`norm_mlp`,
+`mlp`):
+
+$$
+h_i \leftarrow h_i + \mathrm{MLP}(\mathrm{LN}(h_i)) .
+$$
+
+```{python}
+#| label: fig-isla-routing-readback
+#| fig-cap: >
+#|   The two softmaxes of a slice layer, on the airfoil with six slices and
+#|   eighty cells (the hand-made logits of @fig-isla-slices stand in for the
+#|   learned ones; cells are finer near the leading edge). Top: the routing
+#|   weights $a_{is}$, a softmax over tokens for each slice with the measure
+#|   bias, so each row sums to one and a slice is a quadrature average of the
+#|   cells it covers; the fine leading-edge cells receive individually smaller
+#|   weights because they stand for less surface. Bottom: the read-back weights
+#|   $\pi_{is}$, a softmax over slices for each token without the bias, so each
+#|   column sums to one and a token chooses where to read. How to read this:
+#|   both matrices come from the same logits; the model has 256 slices and
+#|   200,000 tokens per case, so its matrices are much sparser than these.
+#| code-fold: true
+frac = np.concatenate([[0.0], np.cumsum(1.0 - 0.6 * np.sin(np.linspace(0, np.pi, 80)) ** 4)]); frac /= frac[-1]
+JJ = joukowski(n_cells=80, frac=frac)      # finer cells around the leading edge (mid-arclength)
+s_arc = np.concatenate([[0], np.cumsum(JJ["w"])]); s_mid = (s_arc[:-1] + s_arc[1:]) / 2; total = s_arc[-1]
+n_sl = 6
+centers = (np.arange(n_sl) + 0.5) / n_sl * total
+d = np.abs(s_mid[:, None] - centers[None, :]); d = np.minimum(d, total - d)
+logits = -(d / (0.06 * total)) ** 2                       # (tokens, slices)
+lw_ = np.log(JJ["w"])[:, None]
+a = np.exp(logits + lw_); a /= a.sum(axis=0, keepdims=True)    # softmax over tokens, per slice
+pi = np.exp(logits); pi /= pi.sum(axis=1, keepdims=True)        # softmax over slices, per token
+fig, axes = plt.subplots(2, 1, figsize=(8.0, 4.6), sharex=True, gridspec_kw=dict(hspace=0.35))
+for ax, mat, title, vmax in ((axes[0], a.T, r"routing $a_{is}$: softmax over tokens, with the measure bias $\ell_i$; each row sums to 1", None),
+                             (axes[1], pi.T, r"read-back $\pi_{is}$: softmax over slices, no bias; each column sums to 1", 1.0)):
+    im = ax.imshow(mat, aspect="auto", cmap=SEQUENTIAL, vmin=0, vmax=vmax if vmax else mat.max(), interpolation="nearest")
+    ax.grid(False); ax.set_yticks(range(n_sl)); ax.set_yticklabels([f"slice {k + 1}" for k in range(n_sl)], fontsize=8.5)
+    ax.set_title(title, fontsize=9.5, loc="left", color=INK)
+    for sp in ax.spines.values(): sp.set_visible(False)
+    cb = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.01); cb.ax.tick_params(labelsize=8); cb.outline.set_visible(False)
+    cb.set_label("weight [–]", fontsize=8.5)
+i_le = int(np.argmin(JJ["mid"][:, 0]))
+axes[1].set_xlabel("token $i$ along the surface, from the trailing edge around the leading edge and back [index]", fontsize=9)
+for ax in axes:
+    ax.axvline(i_le, color=WHITE, lw=1.0, ls="--")
+axes[1].text(i_le + 0.8, n_sl - 0.55, "leading edge", ha="left", va="center", fontsize=8.5, color=WHITE)
+plt.show()
+```
+
+::: {.callout-note collapse="true" title="Two identities the implementation relies on"}
+**Pool first, then project.** The invariants $\xi_{is}$ are $N{\times}M{\times}(5+K)$.
+Projecting each pair to width $d/2$ and then pooling would make autograd
+store an $N{\times}M{\times}d/2$ tensor per layer; because the projection is
+affine and $\pi_{is}$ sums to one over slices,
+$\sum_s \pi_{is}(W_f \xi_{is} + b_f) = W_f \sum_s \pi_{is} \xi_{is} + b_f$,
+so the code pools first and saves only $N{\times}(5+K)$. The identity is
+tested at $10^{-12}$ (@sec-isla-contracts).
+
+**Rebuild the geometry in the backward pass.** Steps c to e and the pooling
+of step h are one *geometry region* per layer (`_geo_region`): a function
+of $(\lambda, r, \hat n, \hat g, z, m)$ with no parameters but $w_g, b_g$.
+With `geo_checkpoint=True` (the recipe's setting) its $N{\times}M{\times}\cdot$
+intermediates are recomputed in the backward pass instead of stored, with
+bitwise-identical outputs and gradients; the fused Triton kernel
+(`geo_kernel="fused"`, the automatic choice on CUDA with one global vector
+and at most 1,024 slices) evaluates the same region without ever
+materializing them (@sec-isla-cost).
+:::
+
+## Stage 4: the head frame {#sec-arch-head-frame}
+
+**The vector head needs one direction per token that points from the body
+to the token, and ISLA takes it from the token's own soft anchor, not from
+a center.** After the last layer, one more routing map (`frame_assign`,
+acting on the final $h_i$) gives logits $\lambda^f_{is}$. Read one way they
+give anchors, read the other way they give each token's soft assignment:
+
+$$
+a^f_{is} = \frac{\exp(\lambda^f_{is} + \ell_i)}{\sum_j \exp(\lambda^f_{js} + \ell_j)}, \qquad
+z^f_s = \sum_i a^f_{is}\, r_i, \qquad
+\beta_{is} = \frac{\exp(\lambda^f_{is})}{\sum_t \exp(\lambda^f_{it})}, \qquad
+u_i = r_i - \sum_s \beta_{is}\, z^f_s, \qquad
+\hat u_i = u_i / \lvert u_i \rvert .
+$$
+
+$u_i$ is a difference of positions, so $\hat u_i$ rotates with the body and
+is unchanged by a translation; no centroid appears (`a_f`, `z_f`, `b_f`,
+`r_hat`; the construction is @fig-isla-basis).
+
+## Stage 5: the head {#sec-arch-head}
+
+**One linear head produces the scalar outputs and, for each vector output,
+invariant coefficients over a basis of directions the token already has.**
+On the normalized final state (`norm_out`, `head`):
+
+$$
+[\, p_i;\ c_i \,] = W_h\, \mathrm{LN}(h_i) + b_h, \qquad
+p_i \in \mathbb{R}^{n_p}, \quad c_i \in \mathbb{R}^{n_v \times (4 + 3K)} .
+$$
+
+The basis at token $i$, in the order the code stacks it, is
+
+$$
+B_i = \big\{\, \hat g_1, \dots, \hat g_K,\ \hat n_i,\ \hat u_i,\
+e_\theta(\hat u_i, \hat n_i),\ e_\phi(\hat u_i, \hat n_i),\
+e_\theta(\hat u_i, \hat g_1),\ e_\phi(\hat u_i, \hat g_1),\ \dots \,\big\},
+$$
+
+with the tangential complements of $\hat u$ against a second direction
+$\hat a$ defined, unnormalized, as
+
+$$
+e_\theta(\hat u, \hat a) \equiv -\hat a + (\hat a \cdot \hat u)\, \hat u, \qquad
+e_\phi(\hat u, \hat a) \equiv \hat u \times e_\theta(\hat u, \hat a)
+$$
+
+(`spherical_basis` with `normalize_basis_vectors=False`; both vanish
+smoothly where $\hat u \parallel \hat a$, which is why they are left
+unnormalized). Each vector output is the expansion
+
+$$
+v_i = \sum_{j=1}^{4+3K} c_{ij}\, B_{ij},
+$$
+
+and the model returns $[\, p_i;\ v_i \,]$, of width $n_p + 3 n_v$ (two
+outputs, pressure and wall shear stress, in every surface result of the
+book). Under a rotation every basis vector rotates and every coefficient is
+unchanged, so $v_i$ rotates: that is the covariance proof, and
+@sec-isla-contracts lists the tests that check it (@sec-isla-heads
+discusses reflections, under which $e_\phi$ flips).
+
+## Where the parameters are {#sec-arch-params}
+
+**Almost all of ISLA's parameters are ordinary MLPs; the geometry costs
+seven numbers per layer.** @tbl-isla-params counts them from the class at
+the recipe's surface dimensions.
+
+```{python}
+#| label: tbl-isla-params
+#| output: asis
+import warnings; warnings.filterwarnings("ignore")
+import torch
+from physicsnemo.experimental.nn import ISLA
+m = ISLA(out_scalars=1, out_vectors=1, hidden=192, n_layers=12, n_slices=256)
+cnt = lambda mod: sum(p.numel() for p in mod.parameters())
+blk = m.blocks[0]
+rows = [
+    ("embedding MLP (stage 2)", "`embed`", cnt(m.embed), 1),
+    ("routing map, with its LayerNorm (step a)", "`norm_assign`, `assign`", cnt(blk.norm_assign) + cnt(blk.assign), 12),
+    ("routing refinement (step e)", "`geo_logit`", cnt(blk.geo_logit), 12),
+    ("pooled-invariant projection (step h)", "`geo_feat`", cnt(blk.geo_feat), 12),
+    ("slice MLP, with its LayerNorm (step g)", "`slice_mlp`", cnt(blk.slice_mlp), 12),
+    ("broadcast (step i)", "`broadcast`", cnt(blk.broadcast), 12),
+    ("token MLP, with its LayerNorm (step j)", "`norm_mlp`, `mlp`", cnt(blk.norm_mlp) + cnt(blk.mlp), 12),
+    ("head-frame routing map (stage 4)", "`frame_assign`", cnt(m.frame_assign), 1),
+    ("head, with its LayerNorm (stage 5)", "`norm_out`, `head`", cnt(m.norm_out) + cnt(m.head), 1),
+]
+total = cnt(m)
+assert sum(c * n for _, _, c, n in rows) == total
+out = "| component | code | parameters each | copies | parameters in all | share |\n|---|---|---:|---:|---:|---:|\n"
+for name, code, c, n in rows:
+    out += f"| {name} | {code} | {c:,} | {n} | {c * n:,} | {100 * c * n / total:.1f}% |\n"
+out += f"| **total** | | | | **{total:,}** | 100% |\n"
+out += f"\n: Parameter count of ISLA at the recipe's surface dimensions (width 192, 12 layers, 256 slices, one scalar and one vector output, one global vector input), computed from the class as the page renders. {{#tbl-isla-params}}\n"
+print(out)
+```
+
+The two per-layer MLPs hold four fifths of the total; the broadcast maps
+and the routing maps (at $d \times M$ each) hold most of the rest. Width $d$ therefore sets the
+count quadratically and the slice count $M$ linearly, which is why the
+capacity ladders of @sec-equal-budget move width and not slices.
+
+## The interior arrangements {#sec-arch-modes}
+
+**Three arrangements of tokens and queries share the five stages; they
+differ in which points interact and which the head reads.** @fig-isla-modes
+places them side by side. Everything above described the first.
+
+```{mermaid}
+%%| label: fig-isla-modes
+%%| fig-cap: >
+%%|   The three arrangements of ISLA. Surface: the boundary cells are the
+%%|   tokens and the head reads every one of them. Interior with query tokens:
+%%|   interior points join the encoder as interacting tokens with a learned
+%%|   routing mass, and the head reads them alone (the configuration the
+%%|   interior results of the book use). Passive decoder: the encoder runs on
+%%|   the boundary alone, and queries read its final slices and anchors through
+%%|   read blocks that never write back, so a prediction at one query is
+%%|   independent of every other query. How to read this: the slice layer,
+%%|   head frame and head are the same modules in all three; only the token
+%%|   set and the read-out path change.
+flowchart LR
+    classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
+    classDef learned fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
+    classDef fixed fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3,color:#0b0b0b
+    classDef aqua fill:#e3f6ef,stroke:#1baf7a,color:#0b0b0b
+
+    subgraph S["surface (the default)"]
+        direction TB
+        S1["boundary tokens (N)"]:::data
+        S2["slice layers × 12"]:::learned
+        S3["head frame + head on all N tokens"]:::learned
+        S1 --> S2 --> S3
+    end
+    subgraph Q["interior, queries as tokens (query_tokens)"]
+        direction TB
+        Q1["boundary tokens (N)"]:::data
+        Q2["query tokens (Q): position, SDF gradient as normal,<br/>signed distance as scalar; learned routing mass"]:::aqua
+        Q3["slice layers × 12 on all N + Q tokens"]:::learned
+        Q4["head frame + head on the Q query tokens"]:::learned
+        Q1 --> Q3
+        Q2 --> Q3 --> Q4
+    end
+    subgraph P["passive decoder (query_independent)"]
+        direction TB
+        P1["boundary tokens (N)"]:::data
+        P2["slice layers × 12"]:::learned
+        P3["final slice states Z_s and anchors z_s, m_s"]:::fixed
+        P4["queries (Q)"]:::aqua
+        P5["read blocks × 4: read slices, invariants and a local kernel average; never write"]:::learned
+        P6["head frame + head on the Q queries"]:::learned
+        P1 --> P2 --> P3 --> P5
+        P4 --> P5 --> P6
+    end
+```
+
+**Queries as tokens** (`query_tokens=True`; @sec-interior-query-tokens).
+Each interior point $q$ arrives with a normal (the gradient of the signed
+distance field) and, in this book, one per-query scalar, the signed
+distance $\delta_q$ to the wall. It is placed in the same frame, seeded like
+a boundary cell with zeros in the boundary-scalar channel, and given a
+learned type offset and a scalar embedding:
+
+$$
+r_q = x_q / L, \qquad
+h_q = \mathrm{MLP}_{\mathrm{embed}}(s_q) + t_{\mathrm{q}}
+      + \mathrm{MLP}_{\mathrm{qs}}\!\big(\,[\, \delta_q / L,\ \operatorname{sign}(\delta_q) \log(\lvert \delta_q \rvert / L + \epsilon) \,]\big) .
+$$
+
+Its measure bias is not an area but a learned share of the boundary's total
+measure, split equally over the $Q$ queries (`query_mass="source_total"`):
+
+$$
+\ell_q = \omega + \log \sum_{i \le N} w_i - \log Q ,
+$$
+
+so re-representing the same surface on finer cells changes nothing, and
+rescaling the geometry shifts every token's bias by the same amount. The
+$N + Q$ tokens then run through the twelve slice layers together; the head
+frame builds its anchors from all of them, and the head reads the $Q$ query
+tokens only. The arrangement is exactly covariant and not query-independent
+(@sec-isla-contracts).
+
+**The passive decoder** (`query_independent=True`; @sec-isla-passive,
+@sec-query-independence). The encoder runs on the boundary alone. One more
+routing map on the final state (`final_assign`) summarizes it once into
+slice states $Z_s$ and anchors $z_s, m_s$ exactly as steps b, c and g do.
+Each query, seeded and embedded as above (with its own scalar embedding),
+then passes through four **read blocks** (`_ReadBlock`), each of which
+forms the relational invariants $\xi_{qs}$ against the final anchors, reads
+over the slices, and reads the encoder states near the query through a
+measure-weighted Gaussian kernel of width $\varrho$ (`local_readout_rho`,
+0.02 length units):
+
+$$
+\pi_{qs} = \mathrm{softmax}_s\big(\lambda_{qs} + w_g \!\cdot\! \xi_{qs} + b_g\big), \qquad
+h_q \leftarrow h_q + W_b\, \big[\, h_q;\ \textstyle\sum_s \pi_{qs} Z_s;\ W_f \sum_s \pi_{qs}\, \xi_{qs} + b_f \,\big],
+$$
+
+$$
+\kappa_{qi} = \frac{\exp(-\lvert r_q - r_i \rvert^2 / \varrho^2 + \ell_i)}{\sum_j \exp(-\lvert r_q - r_j \rvert^2 / \varrho^2 + \ell_j)}, \qquad
+h_q \leftarrow h_q + W_l\, \big[\, h_q;\ \textstyle\sum_i \kappa_{qi}\, h_i \,\big], \qquad
+h_q \leftarrow h_q + \mathrm{MLP}(\mathrm{LN}(h_q)) .
+$$
+
+Nothing in a read block writes into the encoder, so the prediction at a
+query depends on the boundary and that query alone. The head frame's
+anchors come from the encoder tokens and its soft assignment $\beta_{qs}$
+from the query state; the head is stage 5 unchanged. With
+`support_tokens=True` a per-case set of interior *support* points joins the
+encoder as interacting tokens (seeded and weighted like query tokens) while
+the requested queries are still decoded passively, which keeps the
+independence contract with more of the interior in view.
+
+## What the pass never does {#sec-arch-never}
+
+**The guarantees of @sec-isla-contracts are absences, and they can be read
+off the stages.**
+
+- **No coordinate reaches a learned map.** $r_i$ enters only as
+  $r_i - z_s$ (step d), $r_i - \sum_s \beta_{is} z^f_s$ (stage 4) and
+  $\lvert r_q - r_i \rvert$ (the local readout); every learned input is a
+  norm, a dot product, a log of one of those, or a supplied scalar.
+- **No center is estimated.** The one mean position computed, inside $L$,
+  is consumed by a scalar. Anchors are means over *slices*, not over the
+  body, and only their differences from tokens are used.
+- **No positional encoding, no pairwise attention.** Tokens communicate
+  only through the $M$ slice states, and the routing that decides which
+  slice a token joins is a function of the token's state and its relation
+  to the anchors.
+- **No count.** Every sum over tokens carries the measure bias $\ell_i$ and
+  is normalized, so it estimates an integral; doubling the sample of the
+  same surface changes the estimate by quadrature error only.
+- **No vector is learned.** Vector outputs are assembled from
+  $\{\hat g_k, \hat n_i, \hat u_i\}$ and their complements with coefficients
+  that are invariants (stage 5).
+
+## The switches {#sec-arch-switches}
+
+**The class has one frame and a small set of switches; each names the stage
+it changes.** The recipe's surface and interior configurations are in
+@sec-using-config.
+
+| flag (default) | stage | what it changes |
+|---|---|---|
+| `hidden` (256 in the class, 192 in the recipe), `n_layers` (12), `n_slices` (256), `mlp_ratio` (4) | all | $d$, the number of slice layers, $M$, and the MLP expansion |
+| `out_scalars` (1), `out_vectors` (1) | 5 | $n_p$ and $n_v$; each vector output adds $4 + 3K$ coefficients |
+| `n_global_vectors` (1), `n_global_scalars` (0) | 1, 2, 3d, 5 | $K$ and $S$: each vector adds one seed cosine, one relational cosine and three basis vectors; each scalar widens the seed by one |
+| `n_boundary_scalars` (0) | 2 | per-cell boundary-condition scalars $\beta_i$ appended to the seed; non-boundary tokens carry zeros |
+| `scale_mode` (`"rms_distance"`) | 1 | the length unit; `"total_measure"` (the square root of the total measure) is kept only to reproduce lanes trained before 2026-09-18 and is marked for removal |
+| `use_measure_weights` (on) | 3b, 3f, 4 | the measure bias $\ell_i$; off is the weights-off ablation |
+| `routing_norm` (`"linear"`), `routing_temperature` (10) | 3a, 4 | the form of every routing map: affine, or the bounded cosine against learned prototypes (the candidate default, @sec-isla-routing-forms) |
+| `use_relational_geo` (on) | 3d, 3e, 3h | the relational invariants in the refinement and the read-back; off is the feature-only slicing ablation |
+| `query_tokens` (off), `n_query_scalars` (0), `query_scalar_scale` (`"length"`), `query_mass` (`"source_total"`) | modes | the interacting interior arrangement, its per-query scalars and their scaling, and the queries' routing mass |
+| `query_independent` (off), `n_decoder_layers` (4), `local_readout_rho` (0.02), `support_tokens` (off) | modes | the passive decoder, its depth, its local-readout width, and the optional interacting support set |
+| `geo_checkpoint` (off in the class, on in the recipe), `geo_kernel` (`None`, automatic), `fast_point_softmax` (on) | 3c–3e, 3h | how the geometry region is executed: rebuilt in backward or stored; the fused Triton kernel or the eager region; the row-parallel softmax kernel; none changes the function computed beyond roundoff |
+| `eps` ($10^{-12}$) | 1, 3c, 3d, 4 | the floor under every norm and logarithm |
+
+The research options the program measured and did not adopt were removed
+from the class and remain runnable at the git tag `isla-research-full`
+(@sec-principled-ask).

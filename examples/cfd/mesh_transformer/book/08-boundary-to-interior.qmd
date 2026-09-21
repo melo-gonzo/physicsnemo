@@ -169,9 +169,9 @@ the other queried points change.** A user who asks for one streamline, a
 plane, or the whole domain then gets the same answer at every shared point,
 at a cost linear in the points asked for. In ISLA's passive configuration
 an interior query is never a token: the encoder sees the surface only, and
-read blocks (@sec-mt2-passive) read the slice states and the boundary tokens
+read blocks (@sec-isla-passive) read the slice states and the boundary tokens
 without writing anything back, so the property holds exactly (verified in
-float64 to $10^{-12}$; @sec-mt2-contracts). GeoTransolver-volume's queries
+float64 to $10^{-12}$; @sec-isla-contracts). GeoTransolver-volume's queries
 are tokens, so its answer at a point depends on the other points requested
 with it. ISLA's surface predictions in this book come from the interacting
 configuration and do not have the property either.
@@ -221,7 +221,7 @@ the measure-weighted routing with a learned weight relative to the surface
 measure; the twelve slice layers run over surface and query tokens together
 and the heads read the query tokens. Every invariant is a function of
 relative geometry, so rotation and translation covariance hold by
-construction (@sec-mt2-contracts). What is given up is query independence:
+construction (@sec-isla-contracts). What is given up is query independence:
 a query's prediction depends on the other queries in the request. How the
 query weight is set relative to the surface measure is the `query_mass`
 option. The default, `source_total`, gives the queries a learned fraction
@@ -336,7 +336,7 @@ print(": Interior relative L2 error at the exploration budget on the 48 DrivAerM
 ::: {.callout-note collapse="true" title="The query-token arms measured on the similarity-gauge variant (removed variant; exploration budget)"}
 The interior program was built on the similarity-gauge variant (measure-weighted
 centroid and RMS-radius length unit), a removed variant that estimated a center from
-the sample (@sec-mt2-variants). Three of its arms have no ISLA twin: the same
+the sample (@sec-isla-variants). Three of its arms have no ISLA twin: the same
 query-token + signed-distance configuration on the 10,000-cell and on the
 365-cell boundary, and the query-token arm without the signed distance. At 435
 cars ISLA matches the variant on pressure and velocity (1.000x and 0.991x
@@ -497,7 +497,7 @@ the training count** (@sec-using-checkpoint). Training over a range of
 counts reduces the dependence and does not remove it, so query-count
 consistency is an architectural question. The default query mass,
 `source_total`, removes the count-scaling of the query weight by
-construction (@sec-mt2-contracts); its request-size dependence has not been
+construction (@sec-isla-contracts); its request-size dependence has not been
 measured, and the interior lanes quoted in this chapter were trained under
 the count-dependent `geometric_mean` option. The near-identity of the
 passive control confirms that the harness measures the model and that query

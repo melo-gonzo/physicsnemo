@@ -92,7 +92,7 @@ and normal; the freestream vector is broadcast to every point.
 
 **ISLA** receives position, unit normal and measure weight per point and the
 freestream as a unit direction, consumed only through invariants and
-equivariant anchors (@sec-mt2). @tbl-architectures gives the three
+equivariant anchors (@sec-isla). @tbl-architectures gives the three
 configurations side by side.
 
 | architecture | per-point inputs | global input | layers | hidden | slices | parameters | peak memory at the exploration budget (10,000 cells) |
@@ -109,7 +109,7 @@ of the recipe configuration. *Peak memory*: measured at the exploration
 budget, as the peak allocated GPU memory over one training step on one case
 of 10,000 cells in bfloat16 on one GB300, both models compiled as the recipe
 runs them (results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json;
-@sec-mt2-cost); the 200,000-cell footprints are in @tbl-equal-budget; not
+@sec-isla-cost); the 200,000-cell footprints are in @tbl-equal-budget; not
 measured for Transolver, which serves as a same-family control. How to read
 this: the table states what each model is handed and what it costs, not how
 accurate it is. Configuration source:
@@ -278,7 +278,7 @@ GPU-floor step time (80 GB against 27 GB on one GB300; @tbl-equal-budget).**
 At the exploration budget of 10,000 cells, on one GB300 in bfloat16 with
 both models compiled as the recipe runs them, ISLA's step is 1.05x
 GeoTransolver's with the geometry recompute on and 0.86x with it off, at
-1.30 and 1.94 GiB against 2.70 GiB (@tbl-mt2-cost). Memory was not a
+1.30 and 1.94 GiB against 2.70 GiB (@tbl-isla-cost). Memory was not a
 controlled variable in any comparison and no accuracy result depends on it:
 the checkpoints in this book were trained by implementations of the same
 function that differ only in footprint. Where the two architectures are
@@ -337,7 +337,7 @@ at 100,000 cells, the scaling budget, takes ISLA to 1,536 wide and 48 layers
 and GeoTransolver to 1,024 wide and 24 layers, with a two-rate control on
 every rung (@sec-nb-cap435-prereg, @sec-nb-cap435-verdict). A routing study
 repeats the ISLA ladders with the bounded, cosine form of the routing softmax
-(@sec-mt2-slices) in place of the linear form and adds GeoTransolver at
+(@sec-isla-slices) in place of the linear form and adds GeoTransolver at
 2,048 wide (@sec-nb-routenorm-prereg, @sec-nb-routenorm-cars-verdict).
 Every lane trains for 500 epochs with two seeds and is scored on the one
 instrument, float32 at 200,000 cells, whatever count it trained at. Every
@@ -605,7 +605,7 @@ the posed evaluation (@sec-scoreboard-pose).
 The two phrases mean different things. A model is *equivariant by
 construction* when every operation inside it commutes with rigid motions, so
 a rotated case yields the rotated prediction to roundoff (ISLA's float64
-contract test, @sec-mt2-contracts). A pipeline is *invariant by
+contract test, @sec-isla-contracts). A pipeline is *invariant by
 canonicalization* when a preprocessing step estimates a frame from each
 case, expresses the case in that frame, runs an ordinary model, and rotates
 vector outputs back; it is invariant exactly when the frame estimate depends
@@ -689,7 +689,7 @@ and the anchors coincide, so the network can only predict the field mean
 @sec-nb-routingsat-verdict, @sec-robustness-lr). Under linear routing the
 rate that avoids the plateau falls like 1/width and at least 1/depth, which
 is the width learning-rate rule of @sec-using-lr; the cosine form of the
-routing softmax (@sec-mt2-slices) bounds the routing logits and removes the
+routing softmax (@sec-isla-slices) bounds the routing logits and removes the
 ceiling on every DrivAerML lane tested (@sec-nb-routenorm-cars-verdict). At
 width 192 ISLA runs at 1e-3 throughout, and the point here is procedural:
 each architecture runs at its own best rate. GeoTransolver's best rate also

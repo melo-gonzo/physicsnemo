@@ -1,4 +1,4 @@
-# ISLA, one idea at a time {#sec-mt2}
+# ISLA, one idea at a time {#sec-isla}
 
 **ISLA is a slice-attention transformer that never sees a coordinate.**
 Every learned operation inside it acts on scalars that do not change when
@@ -23,7 +23,7 @@ from matplotlib.collections import LineCollection
 from matplotlib.colors import Normalize
 ```
 
-## Where ISLA stands among mesh transformers {#sec-mt2-position}
+## Where ISLA stands among slice-attention transformers {#sec-isla-position}
 
 **ISLA keeps the slice-attention mechanism of the Transolver family and
 changes only what the network is allowed to see.** The strongest empirical
@@ -53,9 +53,9 @@ survive separated three-dimensional flow (@sec-interior-negatives).
 %%|   geometric maps with no parameters; solid blue boxes are learned. From
 %%|   the length scale to the last slice layer, nothing but invariant scalars
 %%|   is computed; the one place a vector is rebuilt is the output basis. The
-%%|   passive decoder on the right is optional (@sec-mt2-passive). How to read
+%%|   passive decoder on the right is optional (@sec-isla-passive). How to read
 %%|   this: it is the whole class; no box centers the geometry, and no box
-%%|   sees a coordinate (@sec-mt2-variants says why).
+%%|   sees a coordinate (@sec-isla-variants says why).
 flowchart TB
     classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
     classDef learned fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
@@ -81,7 +81,7 @@ flowchart TB
     V --> O
 ```
 
-## What goes in and what comes out {#sec-mt2-inputs}
+## What goes in and what comes out {#sec-isla-inputs}
 
 **ISLA maps a sampled boundary plus the problem's global conditions to
 fields at query points.** Per case, the inputs are:
@@ -111,7 +111,7 @@ The outputs are one or more scalar fields (surface pressure, in every
 surface result of the book) and one or more vector fields (wall shear
 stress) at query points. In ISLA the queries *are*
 the surface sample and each point receives its own prediction; with the
-passive decoder (@sec-mt2-passive) queries can be any positions, on or off
+passive decoder (@sec-isla-passive) queries can be any positions, on or off
 the surface.
 
 ```{python}
@@ -164,7 +164,7 @@ and raise otherwise: the fused geometry kernel, `odd_head`, `parity_fix`,
 `latent_volume_tokens` and `wake_tokens`.
 :::
 
-## Idea 1: every sum over the boundary is a quadrature rule {#sec-mt2-quadrature}
+## Idea 1: every sum over the boundary is a quadrature rule {#sec-isla-quadrature}
 
 **A mesh is a discretization of a surface, not the surface itself, so any
 quantity the model forms by summing over cells must be an integral estimate
@@ -240,7 +240,7 @@ learned from the mesher, and it loses consistency under an area-proportional dra
 errors worse than predicting zero (@sec-consistency-bench).
 :::
 
-## Idea 2: position without a frame {#sec-mt2-frame}
+## Idea 2: position without a frame {#sec-isla-frame}
 
 **A model that is handed coordinates in some frame has to learn that the
 frame is arbitrary; ISLA is never handed coordinates.** Two things are
@@ -274,7 +274,7 @@ origin. Being a length of the geometry, $L$ makes a uniform rescale of the
 points invisible to everything downstream. A fixed constant would not do
 that, and a statistic of the sampled points would move with the mesher;
 @fig-isla-frame shows why a point statistic is a poor frame, and
-@sec-mt2-variants why ISLA names no center at all.
+@sec-isla-variants why ISLA names no center at all.
 
 ::: {.callout-note collapse="true" title="The total-measure unit (option)"}
 The class offers one other unit, the square root of the total measure,
@@ -354,7 +354,7 @@ in the freestream speed, a dimensional pressure degree two), so a magnitude
 that matters is passed as a global scalar and learned.
 :::
 
-## Idea 3: slices and their anchors {#sec-mt2-slices}
+## Idea 3: slices and their anchors {#sec-isla-slices}
 
 **Attention over ten thousand tokens is too expensive and too
 unstructured; slice attention routes every token softly into a few hundred
@@ -427,10 +427,10 @@ is choosing *where to read*, not how much it weighs. Adding a constant to
 every $\ell_i$ cancels in the routing ratio, and under the default length
 unit the same constant leaves $L$ unchanged too, because the weights are
 normalized before they enter it; so ISLA is invariant to a rescale of the
-weights alone as well as to a joint geometric rescale (@sec-mt2-contracts).
+weights alone as well as to a joint geometric rescale (@sec-isla-contracts).
 :::
 
-### The two forms of the routing logit {#sec-mt2-routing-forms}
+### The two forms of the routing logit {#sec-isla-routing-forms}
 
 **The routing logit is a linear map by default and a bounded cosine as the
 candidate default; the bounded form is what makes wide and deep ISLA
@@ -471,7 +471,7 @@ contracts hold under either form. Cosine is the candidate default pending
 the HiLiftAeroML lanes; the learning-rate rule is in @sec-using-lr and the
 capacity picture in @sec-equal-budget and @fig-capacity.
 
-## Idea 4: relational invariants {#sec-mt2-relational}
+## Idea 4: relational invariants {#sec-isla-relational}
 
 **Everything a token learns about its position, it learns from six scalars
 per anchor.** For each token–anchor pair, with $\rho_{is} \equiv r_i - z_s$
@@ -542,9 +542,9 @@ back** to the token (idea 5) so it learns where it sits relative to the
 slices it belongs to. Removing them from both roles is the largest single
 ablation measured, a 16% loss in the single-factor ablation on the 35-case
 HiLiftAeroML rung at the exploration budget, run on the removed centered
-variant of @sec-mt2-variants (@sec-mechanism).
+variant of @sec-isla-variants (@sec-mechanism).
 
-## Idea 5: the slice layer, assembled {#sec-mt2-layer}
+## Idea 5: the slice layer, assembled {#sec-isla-layer}
 
 **A slice layer sends information up from tokens to slices, transforms it
 there, and sends it back down together with the geometry.** With the
@@ -587,7 +587,7 @@ two orderings differ by $4 \times 10^{-15}$ in float64, so checkpoints are
 interchangeable. The recipe additionally rebuilds every per-slice geometric
 tensor inside the backward pass instead of storing it (`geo_checkpoint`),
 which is bitwise identical in outputs and gradients and halves peak memory
-(@sec-mt2-cost).
+(@sec-isla-cost).
 :::
 
 ::: {.callout-note collapse="true" title="Multi-head routing (tested, not adopted)"}
@@ -602,7 +602,7 @@ so the one-car ordering did not transfer and the option was not promoted
 kernel is single-routing only.
 :::
 
-## Idea 6: vectors from an equivariant basis {#sec-mt2-heads}
+## Idea 6: vectors from an equivariant basis {#sec-isla-heads}
 
 **The network's state is made of invariants, so a vector output has to be
 assembled from vectors that rotate with the body, with invariant
@@ -670,28 +670,18 @@ built, verified, and measured; none is ISLA's head (@sec-limits),
 and they live at the git tag `isla-research-full`.
 :::
 
-## The forward pass on one page {#sec-mt2-forward}
+## The forward pass on one page {#sec-isla-forward}
 
-**Every symbol of the six ideas has one identifier in the code, and this
-table is the dictionary.** The identifiers are those of
-`physicsnemo/experimental/nn/isla/model.py`; ISLA's frame has no origin
-and `scale_mode="rms_distance"` is the class default.
+**Every symbol of the six ideas has one identifier in the code, and
+@sec-architecture is the dictionary.** That chapter states the pass stage
+by stage with the shape of every tensor (@fig-isla-pass), opens up the slice
+layer step by step (@fig-isla-layer), counts where the parameters are
+(@tbl-isla-params) and lists the switches (@sec-arch-switches); the six
+ideas here map onto its stages as follows: idea 1 is the measure bias of
+every routing softmax (stages 3b, 3f, 4), idea 2 is stage 1, ideas 3 to 5
+are stage 3, and idea 6 is stages 4 and 5.
 
-| symbol | code | meaning |
-|---|---|---|
-| $x_i, n_i, w_i$ | `points`, `normals`, `measure_weights` | positions, unit normals, cell areas |
-| $\hat g_k$, $\sigma$ | `global_vectors`, `global_scalars` | the $K$ global directions and $S$ global scalars ($K = 1$, $S = 0$ here) |
-| $L$, $r_i$ | `gauge`, `r` | length unit, the measure-weighted RMS pairwise distance of the sample; scaled position, used only in differences |
-| $\ell_i$ | `log_w` | log measure weight, the routing bias |
-| $s_i$, $h_i$ | `invariants`, `h` | invariant seed; token state, width 192 |
-| $\lambda_{is}$, $a_{is}$ | `logits`, `a` | routing logit (`_RoutingLogits`, linear or cosine) and weight (softmax over points), 256 slices |
-| $z_s, m_s$ | `z_pos`, `m_s` | anchor position and normal |
-| $\xi_{is}$ | `geo` | the $5 + K$ relational invariants |
-| $Z_s$ | `z` | slice state |
-| $\pi_{is}$, $b_i$, $\gamma_i$ | `point_mix`, `back`, `geo_pool` | read-back weight; pooled slice states; pooled invariants |
-| $\hat u_i$, $e_\theta, e_\phi$ | `r_hat`, `spherical_basis` | radial basis vector; tangential complements |
-
-### The passive decoder and off-surface queries {#sec-mt2-passive}
+### The passive decoder and off-surface queries {#sec-isla-passive}
 
 **The passive decoder makes the prediction at a query depend on the
 surface and that query alone, at a price in surface accuracy.** It is off
@@ -729,7 +719,7 @@ book reports instead admits queries as interacting tokens
 (@sec-interior-query-tokens).
 :::
 
-## Why ISLA has no center {#sec-mt2-variants}
+## Why ISLA has no center {#sec-isla-variants}
 
 **ISLA states position only relative to its own anchors because a PDE does
 not know what "the body" is.** The area-weighted centroid of a surface is
@@ -793,7 +783,7 @@ like this one, as the configuration on which the single-factor ablation of
 @sec-mechanism was run.
 :::
 
-## The contracts, as tests {#sec-mt2-contracts}
+## The contracts, as tests {#sec-isla-contracts}
 
 **Each contract is a property of the code, verified in double precision on
 random weights and a random anisotropic point cloud, not a property of a
@@ -871,7 +861,7 @@ input and weights.
   @sec-nb-precres-verdict).
 :::
 
-## Cost {#sec-mt2-cost}
+## Cost {#sec-isla-cost}
 
 **At the recipe dimensions (width 192, 12 layers, 256 slices) ISLA has 8.9M
 parameters against GeoTransolver's 9.0M, and on the path the recipe runs
@@ -886,7 +876,7 @@ relational invariants alone move 61% of the traffic, which is why the ratio
 grows with tokens and why a fused Triton kernel exists for the geometry
 region, the default wherever it can run (CUDA, one global vector, at most
 1,024 slices; `geo_kernel=None` resolves to it at the first forward pass and
-to the eager region elsewhere, @sec-nb-geokernel-auto). Every path in @tbl-mt2-cost computes the same function (output
+to the eager region elsewhere, @sec-nb-geokernel-auto). Every path in @tbl-isla-cost computes the same function (output
 relative L2 against the eager reference at most $5.5 \times 10^{-7}$ in
 bf16).
 
@@ -898,7 +888,7 @@ bf16).
 | eager, geometry recompute on | 87 | 1.28x | 1.52 (4.07) |
 | eager, point softmax in its middle-dimension layout (`fast_point_softmax=False`) | 245 | 3.61x | 1.52 (4.07) |
 
-: Training-step cost of ISLA's execution paths against GeoTransolver on the same path, one GB300, bf16 autocast, batch of one case, 10,000 tokens, AdamW step included, median of measured steps; memory is the peak allocated during the step. At 40,000 tokens the default compiled step is 2.2x GeoTransolver's (119 against 53 ms); the fused kernel brings it to parity (52 ms) at 4.5 against 10.0 GiB, and the compiler's autotuned mode alone reaches 41 ms. The last row is the layout the trained checkpoints ran and is the source of every larger ISLA step-time ratio measured before the compiled path. Data: results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json. {#tbl-mt2-cost}
+: Training-step cost of ISLA's execution paths against GeoTransolver on the same path, one GB300, bf16 autocast, batch of one case, 10,000 tokens, AdamW step included, median of measured steps; memory is the peak allocated during the step. At 40,000 tokens the default compiled step is 2.2x GeoTransolver's (119 against 53 ms); the fused kernel brings it to parity (52 ms) at 4.5 against 10.0 GiB, and the compiler's autotuned mode alone reaches 41 ms. The last row is the layout the trained checkpoints ran and is the source of every larger ISLA step-time ratio measured before the compiled path. Data: results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json. {#tbl-isla-cost}
 
 ::: {.callout-note collapse="true" title="Where the memory goes"}
 Hooking every tensor autograd stores and grouping by shape, about three
@@ -922,7 +912,7 @@ per-slice geometry (6.0 GB and 0.28 s per step at 10,000 interior queries;
 results/v0_interior_resources_2026-09-07.json).
 :::
 
-## What each design choice costs and buys {#sec-mt2-design}
+## What each design choice costs and buys {#sec-isla-design}
 
 **No single ingredient of ISLA carries its accuracy: the largest single
 effect measured is 16%, the price of not being told the body's center is at
@@ -931,22 +921,22 @@ Each line below carries one number and the section that defines the
 measurement; ablation ratios are a variant's pressure error over the
 unablated model's (0.138) in the single-factor ablation on the 35-case
 HiLiftAeroML rung at the exploration budget, two seeds, run on the removed
-centered variant of @sec-mt2-variants (@sec-mechanism), greater than one
+centered variant of @sec-isla-variants (@sec-mechanism), greater than one
 meaning worse.
 
 | choice | what it buys | what it costs | where |
 |---|---|---|---|
 | relational invariants in routing and read-back (idea 4) | the largest single accuracy contribution | removing them: 1.16x | @sec-mechanism |
 | exact equivariance (ideas 2, 6) | no canonical frame or augmentation at inference: in random poses on DrivAerML at 200,000 cells ISLA's posed error is 1.015x its native, and it leads GeoTransolver and Transolver, each trained with pose augmentation, by 12% and 21% | adding raw coordinates does not help on the 35-case wing rung (1.04x with the channel, 0.99x with raw seeds); at 435 cars the contracts deny about 2.5 points of positional information against GeoTransolver | @sec-pose, @sec-deficit-anatomy |
-| the relative frame (idea 2) | consistency: on DrivAerML at 100,000 cells under a 10:1 density bias with exact Horvitz–Thompson weights, ISLA's error grows 1.07 to 1.2x where GeoTransolver's grows 8.7x and Transolver's 5.3x | the price of not being told the body's center: at most about 2% at 435 cars, inside seed noise | @sec-scoreboard-consistency, @sec-consistency-bench, @sec-mt2-variants |
+| the relative frame (idea 2) | consistency: on DrivAerML at 100,000 cells under a 10:1 density bias with exact Horvitz–Thompson weights, ISLA's error grows 1.07 to 1.2x where GeoTransolver's grows 8.7x and Transolver's 5.3x | the price of not being told the body's center: at most about 2% at 435 cars, inside seed noise | @sec-scoreboard-consistency, @sec-consistency-bench, @sec-isla-variants |
 | measure weights (idea 1) | correctness: a slice aggregates an integral, not a mesher's point pattern; a weak dependence on the training sampling law (0.99x wings, 1.08x cars) where GeoTransolver's is 2.6x and 7.9x | 0.88x on the 35-case wing rung as an ablation; the price is estimator variance and shrinks with cells; retraining under an area-proportional draw, which makes the weights constant, does not buy the ablation's advantage back | @sec-principle, @sec-training-law, @sec-deficit-anatomy |
 | passive decoder (exact query independence) | prediction at a point depends on the surface and that point alone | 3.0 to 3.7x on DrivAerML surface pressure at the exploration budget; 3.1x on interior pressure | @sec-query-independence |
 | single routing per layer (idea 3) | simplicity, the fused kernel | nothing measurable at full data: four routings recover 2.5% at 435 cars, eight are 1.7% worse; not adopted | @sec-nb-heads435-verdict |
-| bounded routing logits (idea 3, candidate default) | trainability at width and depth: no learning-rate ceiling on any DrivAerML lane tried; 48 layers trainable | nothing measured at the rule rates (cosine ÷ linear 0.998 to 1.020 at 192 to 768 wide, 100,000 cells) | @sec-mt2-routing-forms, @sec-using-lr |
+| bounded routing logits (idea 3, candidate default) | trainability at width and depth: no learning-rate ceiling on any DrivAerML lane tried; 48 layers trainable | nothing measured at the rule rates (cosine ÷ linear 0.998 to 1.020 at 192 to 768 wide, 100,000 cells) | @sec-isla-routing-forms, @sec-using-lr |
 
 ::: {.callout-note collapse="true" title="Measurements against the removed centered variants (diagnostic)"}
 The numbers here compare ISLA with the removed variants of
-@sec-mt2-variants and are kept because they locate mechanisms. Under the
+@sec-isla-variants and are kept because they locate mechanisms. Under the
 10:1 density bias at the exploration budget the legacy centered variant
 degraded 10 to 16x depending on the rung against ISLA's 1.2x, and swapping
 a measure-weighted center into the legacy checkpoint brought 12.1x to
@@ -967,20 +957,10 @@ ablations keep an invariant path through the relational invariants, so they
 do not show the invariants are dispensable.
 :::
 
-::: {.callout-note collapse="true" title="The flags that select these configurations"}
-| flag (default) | what it changes |
-|---|---|
-| `scale_mode` (`"rms_distance"`) | the one length unit of the origin-free frame: the measure-weighted RMS pairwise distance of the sample; `"total_measure"` uses the square root of the total measure, within 1.3% of the default on DrivAerML (@sec-nb-lenrms-verdict), kept only to reproduce the lanes trained with it and marked for removal. The class has no centered-frame flag; checkpoints of the removed variants do not load |
-| `routing_norm` (`"linear"`), `routing_temperature` (10) | the form of the routing logit (@sec-mt2-routing-forms): `"linear"` is the affine map of the normalized token state; `"cosine"` is the temperature times the cosine against a learned prototype per slice, bounded in $[-T, T]$; cosine is the candidate default |
-| `query_mass` (`"source_total"`) | the routing weight of query tokens in the interior configuration: the default gives them a learned fraction of the total boundary measure, invariant to re-representing the same measure; `"geometric_mean"` gives each the mean boundary log-weight plus a learned offset, which depends on the boundary refinement (the option the interior evidence lanes were trained with) |
-| `use_measure_weights` (on) | the log-measure routing bias; off is the ablation |
-| `use_relational_geo` (on) | the relational invariants in routing and read-back |
-| `query_independent`, `n_decoder_layers` (off, 4) | the passive decoder |
-| `query_tokens`, `n_query_scalars` | the interior configuration: queries as interacting tokens with per-query scalars (the signed distance) |
-| `n_global_vectors` (1), `n_global_scalars` (0) | $K$ and $S$; each vector adds one seed cosine, one relational cosine and three basis vectors |
-| `n_boundary_scalars` (0) | per-cell boundary-condition scalars, pass-through to the seeds |
-| `geo_checkpoint` (on in the recipe), `geo_kernel` (`None` = automatic) | rebuild the geometry in the backward pass; the kernel is the exact fused Triton region on CUDA with one global vector and at most 1,024 slices, the eager region otherwise; `"eager"` or `"fused"` forces one |
+The switches that select these configurations, with the stage of the
+forward pass each one changes, are listed in @sec-arch-switches.
 
+::: {.callout-note collapse="true" title="Where the research options went"}
 This is the mainline class as prepared for PhysicsNeMo integration. The
 research-only options the program measured and did not adopt, and the
 diagnostics, were removed from the class and remain runnable, with their

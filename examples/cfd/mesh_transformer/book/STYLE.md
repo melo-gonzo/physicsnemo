@@ -15,7 +15,7 @@ presentation.
 |---|---|---|
 | Front matter | `index.qmd` | the thesis in one paragraph, the trade in one picture, the names and colors, how to read the book |
 | I The problem | `01-problem.qmd` | what a boundary-to-field surrogate is, the datasets, the metric, the protocol |
-| II The architecture | `02-isla.qmd`, `04-baselines-and-fair-comparison.qmd` | how ISLA computes, one idea at a time; what the baselines are and what "fair" means |
+| II The architecture | `02-isla.qmd`, `07-architecture.qmd`, `04-baselines-and-fair-comparison.qmd` | why each part of ISLA is there, one idea at a time; exactly what the forward pass computes, stage by stage (the source of truth for the architecture and its flow diagram); what the baselines are and what "fair" means |
 | III Using ISLA | `09-using-isla.qmd` | the configurations, the inputs, the recipe, the learning-rate rule, the inference sampler, checkpoints, cost |
 | IV Evidence | `03-benchmarks.qmd`, `05-…`, `06-…`, `08-…` | the standing on one page; then the studies behind each row |
 | V Limits and status | `12-…`, `13-program-status.qmd` | what each claim does not say; what is running |
@@ -55,7 +55,7 @@ was retracted) lives in the notebook and the status chapter only.
 
 | Say | Never say | Meaning |
 |---|---|---|
-| ISLA | "ISLA, reference configuration", "the reference configuration", MT2, MeshTransformer2 | the definitive model as shipped: one origin-free frame, `scale_mode="rms_distance"`, the class defaults; its configuration is described once in 02 and 09 and never used as a name. Since 2026-09-20 the class has no frame variants |
+| ISLA | "ISLA, reference configuration", "the reference configuration", MT2, MT, MeshTransformer2, "the mesh transformer" | the definitive model as shipped: one origin-free frame, `scale_mode="rms_distance"`, the class defaults; its configuration is described once in 02 and 09 and never used as a name. Since 2026-09-20 the class has no frame variants |
 | the relative frame | "the reference frame", "the frame-free frame" ("reference frame" reads as a coordinate frame to a PDE reader) | ISLA's construction of position: no origin, positions enter only as point-to-anchor differences. The only frame the class has (the `frame_mode` flag was removed 2026-09-20) |
 | the legacy centered variant (removed) | "the constant-gauge variant" in a main result; "prior reference"; "centered ISLA" | the centered frame with a constant length unit the program used before the relative frame; cut from every main figure and table on 2026-09-18 and removed from the class on 2026-09-20 (@sec-nb-frame-cleanup); appears only in collapsed diagnostic notes, labeled "removed variant" |
 | form; one-car floor | | a structural choice of the architecture (as opposed to capacity or inputs); the converged error on a single training car (a capacity measure) |

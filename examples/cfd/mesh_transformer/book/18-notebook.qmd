@@ -16,6 +16,10 @@ ledger that preceded this scope correction is preserved verbatim in
 provenance, not the active research argument.
 :::
 
+::: {.callout-note title="Nomenclature"}
+Entries written before 2026-09-21 called the architecture MeshTransformer2 (MT2, MT); every such mention has been replaced by its current name, ISLA, without other change to the entry. The exact-kernel boundary-integral design that preceded ISLA in this program is called "the exact-kernel predecessor" wherever it appears. Run identifiers, file names and configuration names keep their historical spelling.
+:::
+
 “Registered” means the deciding pattern was written before the result was
 seen. “Exploratory” means useful for forming a hypothesis but not confirming
 one. “Invalid” means the instrument could not answer the stated question.
@@ -1879,22 +1883,22 @@ material target-data saving; every observed ratio was above one:
 
 | Architecture | Target family | Pressure ratio (95% paired-case interval) | WSS ratio |
 |---|---|---:|---:|
-| MeshTransformer | Estate | 1.294 [1.281, 1.307] | 1.135 |
-| MeshTransformer | Fastback | 1.244 [1.229, 1.258] | 1.106 |
+| exact-kernel predecessor | Estate | 1.294 [1.281, 1.307] | 1.135 |
+| exact-kernel predecessor | Fastback | 1.244 [1.229, 1.258] | 1.106 |
 | GeoTransolver | Estate | 1.042 [1.021, 1.061] | 1.072 |
 | GeoTransolver | Fastback | 1.030 [1.007, 1.068] | 1.029 |
 
 Pretraining nevertheless reduced pressure error when the target-label budget
 was held fixed. Geometric-mean scratch/pretrained gains across the 64- and
 128-case budgets were 1.089 on estates and 1.075 on fastbacks for
-MeshTransformer, versus 1.140 and 1.170 for GeoTransolver. Thus the generic
-operator gained more from source initialization: the MeshTransformer/
+the exact-kernel predecessor, versus 1.140 and 1.170 for GeoTransolver. Thus the generic
+operator gained more from source initialization: the exact-kernel predecessor/
 GeoTransolver gain ratios were 0.955 [0.943, 0.967] on estates and 0.918
 [0.909, 0.928] on fastbacks. Boundary-aware structure has not earned an
 incremental transfer claim.
 
 The prospective morphology explanation also failed its sufficiency test.
-DrivAerML shapes are closer to fastbacks, yet MeshTransformer's fastback/
+DrivAerML shapes are closer to fastbacks, yet the exact-kernel predecessor's fastback/
 estate gain ratio was 0.987 [0.978, 0.997], in the opposite direction; its
 descriptive interval lay below one. GeoTransolver followed the predicted
 direction only weakly, at 1.027 [1.012, 1.042], below the declared 1.10
@@ -2000,14 +2004,14 @@ sealed. The pilot's ordering inverts once optimization is matched:
 
 | Architecture | Family | Pressure ratio pretrained-64 / scratch-128 [95% CI] | Half-label gate (<= 0.95) |
 |---|---|---|---|
-| MeshTransformer | fastback | 0.9385 [0.9296, 0.9474] | **passes** |
-| MeshTransformer | estate | 0.9595 [0.9496, 0.9700] | misses |
+| exact-kernel predecessor | fastback | 0.9385 [0.9296, 0.9474] | **passes** |
+| exact-kernel predecessor | estate | 0.9595 [0.9496, 0.9700] | misses |
 | GeoTransolver | estate | 1.0135 [0.9913, 1.0347] | no signal |
 | GeoTransolver | fastback | 1.0101 [0.9791, 1.0594] | no signal |
 
 GeoTransolver's pilot-era larger pretraining gain was a warm-start
 artifact: at matched updates its ratios sit at ~1.01 with intervals
-straddling one. MeshTransformer's DrivAerML initialization is now worth
+straddling one. The exact-kernel predecessor's DrivAerML initialization is now worth
 approximately half the target labels on fastbacks, with wall-shear safety
 satisfied (0.949) and the strong-validation criterion (CI upper bound
 below one) met on both families.
@@ -2439,16 +2443,16 @@ instrument (0.0530-0.0534 vs 0.1344-0.1447 at 10k) -- the registered
 mechanism claim. **D2, the uncomfortable one**: GT is not merely
 bounded zero-shot on both SHIFT families -- it is *skilled* (means
 0.54-0.64, max 0.68, three seeds, both families), while every
-MeshTransformer arm in the program sits at mean-predictor level
-(0.78-1.37). The compensating-asset argument for MT (boundedness as
+exact-kernel predecessor arm in the program sits at mean-predictor level
+(0.78-1.37). The compensating-asset argument for the exact-kernel predecessor (boundedness as
 differential) is now empirically dead: GeoTransolver has boundedness
-AND skill. What MT retains: 12x fewer parameters, exact structural
+AND skill. What the exact-kernel predecessor retains: 12x fewer parameters, exact structural
 contracts (equivariance, declared degree, zero preservation), and the
 measure/quadrature pathway. **D3**: GT's resolution curve is flat
 (1.00) with no quadrature correction at all. **Instrument correction
 recorded**: the pdmsh redimensionalized rel-L2 used in earlier sweep
 gates understates resolution sensitivity (truth-norm inflation) -- on
-the normalized instrument, fixed-trained MT arms show 40k/10k of
+the normalized instrument, fixed-trained exact-kernel predecessor arms show 40k/10k of
 1.18x (zpn, defect-1 control re-extracted from HSG) to 1.44-1.66x
 (homogeneous), while mixedres-trained arms are flat. The
 defect-1 collapse-cure claim remains supported (the historical failure was
@@ -2457,7 +2461,7 @@ sampling is unnecessary for resolution transfer" was
 instrument-dependent and is hereby weakened: sampling diversity does
 flatten the normalized curve. Both instruments stay archived side by
 side. Next, per the registered decision rule: the matched-parameter
-MeshTransformer rung under the current convention.
+exact-kernel predecessor rung under the current convention.
 
 ## 2026-08-07 — Defect-4 stage-1 preregistration: the matched-parameter rung {#sec-nb-incumbent-stage1-prereg}
 
@@ -2484,9 +2488,9 @@ sha256 bfbe38c922a3715b): train on SHIFT estate (test split sealed),
 measure in-family estate plus zero-shot DrivAerML and fastback, for
 both GeoTransolver and the homogeneous flagship at 3 seeds each. R1
 asks whether GeoTransolver's zero-shot skill is direction-symmetric
-(p ~ 0.55); R2 whether MT stays at mean-predictor level in reverse
+(p ~ 0.55); R2 whether the exact-kernel predecessor stays at mean-predictor level in reverse
 (p ~ 0.75); R3 whether the 2.63x in-family gap replicates on a second
-family (band 2.0-3.5x declared, p ~ 0.65); R4 MT boundedness in
+family (band 2.0-3.5x declared, p ~ 0.65); R4 exact-kernel predecessor boundedness in
 reverse (p ~ 0.8). Falsifiers cut both ways: R1 failing weakens the
 GeoTransolver-wins narrative to one direction; R2 flipping would be the
 program's first transfer-skill signal and defers any GeoTransolver-wins
@@ -2535,7 +2539,7 @@ boundedness at the scale where the mode axis lost it -- explicitly
 reopening the just-pruned mixed-resolution path as a scale-robustness
 question, from the AGA snapshot that predates the pruning; if B holds
 and A detonates, the pruning gets partially reversed with a
-correction. **C**: GT shrunk to ~MT parameter count (4 layers x 128
+correction. **C**: GT shrunk to ~exact-kernel-predecessor parameter count (4 layers x 128
 hidden, actual count to be read from the config log) tests whether the
 GeoTransolver's whole advantage profile persists at 784k-class scale --
 deciding whether GeoTransolver-wins statement is scale-uniform. All
@@ -2560,7 +2564,7 @@ the rung is actually 11.4M parameters, not the prereg's ~9.6M
 estimate. The defect-4 mechanism question sharpens accordingly: the
 soft-slice exchange delivers its accuracy inside a ~5 GB / 0.13
 s-step envelope, so absorbing the mechanism must mean absorbing the
-*efficiency*, and MT's kernel-attention activation footprint is the
+*efficiency*, and the exact-kernel predecessor's kernel-attention activation footprint is the
 named bottleneck. Declared analyses (no new training): accuracy-vs-VRAM
 and accuracy-vs-wall-clock frontiers over the existing and in-flight
 lanes; a measured (not asserted) resolution-scaling-of-memory
@@ -2589,10 +2593,10 @@ re-chained; the same fp32 sliver class as drivaer, caught by the step
 barrier on two different nodes) still running. Findings on the paired
 instrument:
 
-1. **Capacity curve (E1 context)**: MT in-family 10k walks
+1. **Capacity curve (E1 context)**: the exact-kernel predecessor's in-family 10k walks
    0.140 (784k) -> 0.101 (x2h) -> 0.081 (x2l4h) -> 0.076 (x2l8h,
    3-seed mean), while GT walks 0.087 (gt_small) -> 0.053 (9M) ->
-   0.051 (72M). The frontiers are roughly PARALLEL -- MT's local slope
+   0.051 (72M). The frontiers are roughly PARALLEL -- the exact-kernel predecessor's local slope
    flattens (6% gain for the last 2.4x parameters) and does not
    converge on GT's curve. Scale alone will not close the 1.42x.
 2. **Detonation rate at 11.4M (wave arm A)**: seeds 45/46 split --
@@ -2601,11 +2605,11 @@ instrument:
    (max > 5), 3/5 clean. The registered prediction (>= 1 more
    detonates or max > 5, p ~ 0.5) CONFIRMED via seed 45. Boundedness
    at scale is unreliable for the homogeneous mode.
-3. **gt_small (wave arm C)**: at roughly MT-flagship parameter count
+3. **gt_small (wave arm C)**: at roughly the exact-kernel predecessor's flagship parameter count
    GeoTransolver still wins in-family (0.086-0.088 vs 0.134-0.145,
    ~1.6x) AND keeps zero-shot skill (0.65-0.68 both families, tight
    seeds) at 2.1 GB / 3.9 h. GeoTransolver-wins profile is
-   scale-uniform; MT has no in-family niche at any tested scale.
+   scale-uniform; the exact-kernel predecessor has no in-family niche at any tested scale.
 4. **gt_big (matched-VRAM arm)**: 24x512 trains stably at the frozen
    lr, reaches 0.050-0.051 in-family with retained skill (0.56-0.64),
    at 11.2 GB peak -- my prereg predicted 25-60 GB; GT undershot the
@@ -2617,7 +2621,7 @@ instrument:
    same platform; far-transfer estate->DrivAerML is 0.73-0.77 --
    passing the R1 skill letter (< 0.8) but much weaker than the
    forward direction's 0.54-0.64. Transfer skill is real but
-   direction-asymmetric (candidate explanation, declared before the MT
+   direction-asymmetric (candidate explanation, declared before the exact-kernel predecessor
    reverse lanes read out: DrivAerML's training diversity exceeds
    estate's, so the forward model generalizes further).
 
@@ -2631,15 +2635,15 @@ frozen lr -- peak 36.6 GB, 7.2 h wall. That is the same memory
 envelope as our 784k-parameter flagship (35.8 GB): GeoTransolver fits
 **720x more parameters in the same VRAM**, and both stability
 predictions (p ~ 0.5-0.55) came in on the favorable side.
-(2) **Chunk-checkpointing relocates the MT rung** from 104 GB to
+(2) **Chunk-checkpointing relocates the exact-kernel predecessor rung** from 104 GB to
 55.8 GB at a 1.33x step-time cost (both inside the registered bands)
--- MT's memory-efficient operating point still needs 1.5x the VRAM of
+-- the exact-kernel predecessor's memory-efficient operating point still needs 1.5x the VRAM of
 the 564M GT. The activation-footprint asymmetry is structural: GT's
-soft-slice attention materializes O(N x slices) state where MT's
+soft-slice attention materializes O(N x slices) state where the exact-kernel predecessor's
 kernel decode materializes O(N x members x rank)-class state per
 query block.
 
-## 2026-08-09 — Window readout, part 3: reverse gates; GT's frontier turns; MT's first transfer skill {#sec-nb-window-readout-3}
+## 2026-08-09 — Window readout, part 3: reverse gates; GT's frontier turns; the exact-kernel predecessor's first transfer skill {#sec-nb-window-readout-3}
 
 Eval wave 2 reduced
 ([reduction](../results/mixedres_training_2026-07-31/sweep/window_reduction.json));
@@ -2648,13 +2652,13 @@ only the mixedres-at-scale evals remain. Reverse-transfer gates
 0.73-0.77, under the 0.8 letter on every seed, so GeoTransolver's
 zero-shot skill is direction-symmetric in kind, though clearly weaker
 than forward (0.54-0.64): magnitude asymmetry consistent with the
-declared training-diversity explanation. **R2 held** -- MT far-transfer
+declared training-diversity explanation. **R2 held** -- the exact-kernel predecessor's far-transfer
 1.49-1.81, no skill. **R3 PASS at the band edge** -- in-family gap on
-the second family is 2.0x (MT 0.097-0.104 vs GT 0.0495-0.0500),
-inside the declared 2.0-3.5. **R4 PASS** -- MT reverse bounded 3/3
-(max 4.3). **R5, the surprise**: MT near-transfer
+the second family is 2.0x (exact-kernel predecessor 0.097-0.104 vs GT 0.0495-0.0500),
+inside the declared 2.0-3.5. **R4 PASS** -- the exact-kernel predecessor's reverse bounded 3/3
+(max 4.3). **R5, the surprise**: the exact-kernel predecessor's near-transfer
 estate->fastback reaches **0.21-0.23** -- well into skill territory,
-the program's FIRST transfer-skill signal for MeshTransformer. GT does
+the program's FIRST transfer-skill signal for the exact-kernel predecessor. GT does
 the same transfer at 0.11-0.12. Within-platform generalization works
 for both architectures; cross-dataset generalization belongs to the
 GeoTransolver (and to training diversity). Also: the recovered
@@ -2695,8 +2699,8 @@ the identical instrument and protocol
 
 | arch/scale | in-family 10k | peak VRAM | train wall | zero-shot foreign |
 |---|---|---|---|---|
-| MT 784k | 0.134-0.145 | 35.8 GB | 12.8 h | bounded, no skill |
-| MT 11.4M | 0.073-0.080 | 104 GB (55.8 chunked) | 14 h | seed-conditioned detonation (2/6 lanes across arms) |
+| exact-kernel predecessor 784k | 0.134-0.145 | 35.8 GB | 12.8 h | bounded, no skill |
+| exact-kernel predecessor 11.4M | 0.073-0.080 | 104 GB (55.8 chunked) | 14 h | seed-conditioned detonation (2/6 lanes across arms) |
 | GT 0.9M-class | 0.086-0.088 | 2.1 GB | 3.9 h | skilled (0.65-0.68) |
 | GT 9.0M | 0.053 | 4.6 GB | 3.6 h | skilled (0.54-0.64) |
 | GT 72M | 0.050-0.064 | 11.2 GB | 4.6 h | skilled (0.56-0.67) |
@@ -2705,7 +2709,7 @@ the identical instrument and protocol
 The conclusion for program review: **at every resource budget
 tested, GeoTransolver architecture dominates in-family accuracy,
 zero-shot transfer, boundedness reliability, and training cost.**
-MT's measured assets reduce to: near-transfer skill (0.21-0.23
+The exact-kernel predecessor's measured assets reduce to: near-transfer skill (0.21-0.23
 estate->fastback -- real, but GT does 0.11-0.12), three closed
 root-cause defects, and its exact structural contracts (similarity
 equivariance, declared drive degree, zero preservation, quadrature
@@ -2716,7 +2720,7 @@ under the frozen lr.
 
 Recommendation staged for Peter: the registered "absorb the mechanism"
 branch should be INVERTED. The evidence supports structuring the
-winner, not accelerating the loser -- port MT's earned conventions
+winner, not accelerating the loser -- port the exact-kernel predecessor's earned conventions
 (measure-consistent quadrature; a degree-declared drive read-in, which
 GT's global_embedding pathway lacks and which the estate->DrivAerML
 weakness suggests could matter; the boundary-trace data contract) onto
@@ -2729,18 +2733,18 @@ grade; both roads are staged.
 ## 2026-08-09 — Contract-axis probes preregistered and launched {#sec-nb-contract-probes-prereg}
 
 The three benchmark axes the frozen scorecard never measured, and where
-MT's structural contracts should show differential value if they show
+The exact-kernel predecessor's structural contracts should show differential value if they show
 it anywhere ([artifact](../results/contract_axis_probes_preregistration_2026-08-09.json),
 sha256 f64c0291ec3df971; eval-only, existing checkpoints, both
-architectures paired on every probe with MT as the positive control):
+architectures paired on every probe with the exact-kernel predecessor as the positive control):
 **P1** rotation-orbit (random z-rotation of geometry + all vector data;
-MT predicted invariant p ~ 0.85, GT predicted degraded p ~ 0.7);
-**P2** drive-amplitude effective degree in normalized space (MT
+the exact-kernel predecessor predicted invariant p ~ 0.85, GT predicted degraded p ~ 0.7);
+**P2** drive-amplitude effective degree in normalized space (the exact-kernel predecessor
 homogeneous predicted d = 1.000 +/- 0.02 -- the declared contract
 measured end-to-end; GT's degree unknown, misbehavior p ~ 0.55);
-**P3** 10:1 nonuniform sampling density with per-cell HT weights (MT
+**P3** 10:1 nonuniform sampling density with per-cell HT weights (the exact-kernel predecessor
 predicted within 10%, GT sensitivity p ~ 0.5, the weakest prediction).
-Each probe maps to an MT2 module keeping or losing its slot. Design
+Each probe maps to an ISLA module keeping or losing its slot. Design
 correction recorded at registration (Peter): the earlier
 "canonicalize by freestream x gravity" sketch was wrong physics --
 gravity does not enter this PDE, and no single canonical frame exists
@@ -2748,7 +2752,7 @@ for problems with several non-orthogonal vector inputs. Whatever P1
 shows, the remedy is an input-covariant treatment (invariant
 featurization over the Gram of all vector inputs with vector-basis
 expansion for outputs, per the GLOBE appendix treatment, to be
-re-read before the MT2 symmetry section is finalized), not a
+re-read before the ISLA symmetry section is finalized), not a
 hand-picked frame.
 
 ## 2026-08-09 — Probe verdicts P1 and P2; P3 instrument repair {#sec-nb-contract-probes-verdict}
@@ -2757,7 +2761,7 @@ P1 and P2 read out; P3's first instrument was broken and is re-running
 ([reduction](../results/mixedres_training_2026-07-31/sweep/probe_reduction.json)).
 
 **P1 (rotation orbit): the benchmark-incompleteness point is now a
-measurement.** MT is invariant to 0.3-0.6% (ratios 1.003-1.006 over the
+measurement.** The exact-kernel predecessor is invariant to 0.3-0.6% (ratios 1.003-1.006 over the
 full random-yaw orbit, all three seeds -- the similarity-equivariance
 contract verified end-to-end through the recipe), while **GT degrades
 26-32x** (means 1.40-1.71, i.e., worse than predicting zero, on
@@ -2765,11 +2769,11 @@ geometry it predicts at 0.053 in canonical pose). GeoTransolver's
 in-family dominance is pose-conditional; every number in the defect-4
 synthesis carries an implicit "in the dataset's canonical pose" that
 the scorecard never surfaced. The exact-symmetry mechanism justifies its
-MT2 slot decisively (form per the GLOBE-appendix multi-vector
+ISLA slot decisively (form per the GLOBE-appendix multi-vector
 treatment, NOT a hand-picked frame -- see the correction above).
 
 **P2 (drive-amplitude degree): both contracts verified, neither
-detonates.** MT homogeneous measures d = 1.0000 exactly (range +/-
+detonates.** The exact-kernel predecessor's homogeneous measures d = 1.0000 exactly (range +/-
 0.0000, 48 cases, k in {0.5, 2, 4}) -- the declared degree holds
 end-to-end to four decimals. GT measures d = 0.000 (+/- 0.01): its
 output is amplitude-BLIND, consistent with layer normalization
@@ -2777,7 +2781,7 @@ saturating input scale. By the registered letter (|d| outside [0.5,
 1.5]) GT "misbehaves", but the physical reading is saturation,
 not amplification -- no euler-arm-style blowup exists here, and on
 this recipe drive amplitude is not a live axis (the drive input is a
-unit direction by construction). P2's MT2 implication is therefore
+unit direction by construction). P2's ISLA implication is therefore
 weak support only: the norm-factored read-in is cheap and exact, but
 GT's failure mode on this axis is silence, not detonation. The
 sharper framing: for any deployment where output must scale
@@ -2802,22 +2806,22 @@ P3 resolved in two more rounds
 The v2 uniform 40k->10k control matches every baseline (instrument
 sound). Under a 10:1 front/back density bias: **GT degrades 1.9-3.6x**
 -- a clean verdict, since GT never sees the weights; pure density
-sensitivity. **MT fails its own 10% gate too**: 1.9-2.5x with the
+sensitivity. **The exact-kernel predecessor fails its own 10% gate too**: 1.9-2.5x with the
 approximate-HT sampler, and still **1.65-2.24x with exact Poisson
 inclusion probabilities (v3)** -- so the failure is the model's, not
 the instrument's. Mechanistically, HT weighting keeps the
 quadrature *unbiased*, but a 10:1 allocation leaves the sparse half
 with ~11x fewer points and correspondingly higher estimator variance
 in every boundary integral that reads it -- a variance term no
-weighting scheme removes. The measure contract MITIGATES (MT
+weighting scheme removes. The measure contract MITIGATES (the exact-kernel predecessor
 degrades ~2x less than GT relative to its own baseline) but does not
 deliver density-robustness; the defect-1 closure generalizes only
 across uniform densities.
 
-**Three-probe synthesis for the MT2 gate list.** P1: exact-symmetry
-mechanism IN, decisively (GT 26-32x off-pose vs MT invariant to 0.6%;
+**Three-probe synthesis for the ISLA gate list.** P1: exact-symmetry
+mechanism IN, decisively (GT 26-32x off-pose vs the exact-kernel predecessor invariant to 0.6%;
 the pose-conditionality of every GeoTransolver number is now measured).
-P2: degree declaration verified exact for MT, GT saturates rather
+P2: degree declaration verified exact for the exact-kernel predecessor, GT saturates rather
 than detonates -- slot retained on cheapness and on deployments where
 amplitude is live, but the forward-recipe motivation is weak. P3:
 measure-aware aggregation IN as mitigation (halves the damage), with
@@ -2827,12 +2831,12 @@ program-review framing: GeoTransolver's dominance table
 (sec-nb-defect4-synthesis) holds ON-POSE AND ON-DENSITY; off either
 axis, the structural contracts are the only thing standing.
 
-## 2026-08-09 — MT2 program charter and stage-0 preregistration {#sec-nb-mt2-charter}
+## 2026-08-09 — ISLA program charter and stage-0 preregistration {#sec-nb-isla-charter}
 
-The program pivots to MT2 on Peter's direction, building on the
+The program pivots to ISLA on Peter's direction, building on the
 defect-4 synthesis and the three-probe verdicts. **Thesis**: GT's
 measured advantages live in normalized global routing, not
-raw-coordinate access, so MT's contracts can be paid once at the
+raw-coordinate access, so the exact-kernel predecessor's contracts can be paid once at the
 network edges -- GLOBE-style input-covariant featurization in
 (invariants over the full vector set), vector-basis expansion out
 (reusing GLOBE's `equivariant_ops` spherical-basis treatment for
@@ -2848,7 +2852,7 @@ raw coordinates) is already declared. S0_2 (rotation ratio <= 1.05)
 is a contract check gated by a pre-launch unit equivariance test --
 its failure would be an implementation bug, not a result.
 
-## 2026-08-10 — MT2 stage-0 verdict: v0 REFUTED at 3.08x; the invariants were non-separating {#sec-nb-mt2-stage0-verdict}
+## 2026-08-10 — ISLA stage-0 verdict: v0 REFUTED at 3.08x; the invariants were non-separating {#sec-nb-isla-stage0-verdict}
 
 The thesis-killer killed the v0 formulation
 ([reduction](../results/mixedres_training_2026-07-31/sweep/mt2_stage0_reduction.json)).
@@ -2873,7 +2877,7 @@ covariant, sign-fixed by projection skewness -- making the invariant
 set separating while keeping every contract exact and every cost at
 the edges.
 
-## 2026-08-10 — Stage 0b registered and launched: separating invariants {#sec-nb-mt2-stage0b}
+## 2026-08-10 — Stage 0b registered and launched: separating invariants {#sec-nb-isla-stage0b}
 
 Amendment 00b089c4 (results of v0 inspected and cited; gates
 inherited): the minimal input-covariant repair -- the cloud's
@@ -2888,7 +2892,7 @@ p ~ 0.5, on the strength of v0's autopsy (tightest seed band yet,
 flat resolution curve, near-skill smoke -- a backbone that trains
 well and lacked only position information).
 
-## 2026-08-10 — Stage 0b: separating invariants recover routing; thesis remains viable {#sec-nb-mt2-stage0b-verdict}
+## 2026-08-10 — Stage 0b: separating invariants recover routing; thesis remains viable {#sec-nb-isla-stage0b-verdict}
 
 All gates read out
 ([reduction](../results/mixedres_training_2026-07-31/sweep/mt2_stage0b_reduction.json)).
@@ -2897,14 +2901,14 @@ All gates read out
 to assign, recorded as: past the survival letter (1.30),
 clear of the refutation bar (1.50). The separating-invariants repair
 bought 2.2x (0.164 -> 0.075), and v0b now matches the 11.4M
-MeshTransformer rung's accuracy at 8.6M parameters and **1.8 GB / 3 h**
+exact-kernel predecessor rung's accuracy at 8.6M parameters and **1.8 GB / 3 h**
 -- 58x less memory than that rung, 2.6x less than GT. **S0_2 PASSES**
 (rotation ratio 1.028-1.035 <= 1.05) with a diagnosed residual: cars
 are nearly left-right symmetric, so the lateral skew that orients the
 principal frame sits near zero and the sign can flip under rotated
 resampling -- the degeneracy obstruction showing up exactly where the
 amendment said it would. **Zero-shot is the quiet headline**: estate
-0.72-0.80, fastback 0.70-0.78 -- better than every MeshTransformer arm
+0.72-0.80, fastback 0.70-0.78 -- better than every exact-kernel predecessor arm
 the program has trained and approaching GT's 0.54-0.64, from an
 architecture that is also exactly equivariant off-pose where GT loses
 26-32x. **S0_4 is the clear defect**: density ratio 11.5-12.7x, WORSE
@@ -2917,7 +2921,7 @@ measure); (2) close 1.41x -> ~1.0x with capacity/tuning parity, to
 which GT's community-hardened config is entitled and v0b's day-one
 config is not.
 
-## 2026-08-10 — Stage 0c registered and launched: the drive-oriented, handedness-completed frame {#sec-nb-mt2-stage0c}
+## 2026-08-10 — Stage 0c registered and launched: the drive-oriented, handedness-completed frame {#sec-nb-isla-stage0c}
 
 Amendment 1e307907 (0b results inspected and cited): frame orientation
 only, everything else frozen. The drive-aligned axis takes its sign
@@ -2931,7 +2935,7 @@ deciding gate is S0c_4: density ratio materially below 0b's
 from the assignment-softmax redistribution, the other suspected
 density mechanism. Three seeds training under the frozen protocol.
 
-## 2026-08-10 — Stage-0c verdict: discrete frames are the wrong tool {#sec-nb-mt2-stage0c-verdict}
+## 2026-08-10 — Stage-0c verdict: discrete frames are the wrong tool {#sec-nb-isla-stage0c-verdict}
 
 ([reduction](../results/mixedres_training_2026-07-31/sweep/mt2_stage0c_reduction.json))
 S0c_1 passes (1.36x GT, from 0b's 1.41x). S0c_2 splits (1.020-1.039
@@ -2959,7 +2963,7 @@ change, not an orientation patch -- v2 gets its own preregistration.
 Stage-0 record to date: v0 refuted (non-separating), 0b remains viable
 (1.41x), 0c in-family 1.36x with the frame path exhausted.
 
-## 2026-08-10 — v2 registered and launched: relational anchors, no frames anywhere {#sec-nb-mt2-v2}
+## 2026-08-10 — v2 registered and launched: relational anchors, no frames anywhere {#sec-nb-isla-v2}
 
 Peter's directive, now also the twice-measured lesson: there is no
 canonical frame in the physics, so stop building one. v2
@@ -2980,7 +2984,7 @@ eigenbases cliff, p ~ 0.6). Guards: in-family <= 1.36x, rotation
 rotation test now exact without the anisotropy scoping. Three seeds
 training under the frozen protocol.
 
-## 2026-08-11 — v2 verdict: rotation solved exactly, density floor exposed, in-family paid the bill {#sec-nb-mt2-v2-verdict}
+## 2026-08-11 — v2 verdict: rotation solved exactly, density floor exposed, in-family paid the bill {#sec-nb-isla-v2-verdict}
 
 ([reduction](../results/mixedres_training_2026-07-31/sweep/mt2_v2_reduction.json))
 **V2_2 passes perfectly**: rotation ratio 0.996-1.000 -- with no frame
@@ -3005,7 +3009,7 @@ on/off x anchor geometry on/off, 1 seed per cell, full instrument) --
 localize the ~11x floor before spending another design iteration on
 it.
 
-## 2026-08-11 — Density factorial: the decisive cell launched {#sec-nb-mt2-density-factorial}
+## 2026-08-11 — Density factorial: the decisive cell launched {#sec-nb-isla-density-factorial}
 
 The 2x2 registered in the v2 verdict resolves to one new training run:
 cells (bias on, anchors on) = v2 and (bias on, anchors off) ~= v0
@@ -3022,7 +3026,7 @@ first branch). The fourth cell (bias off, anchors off) stays unfilled
 unless the readout is ambiguous -- an asymmetry by design,
 not an oversight.
 
-## 2026-08-11 — Density-factorial verdict: the anchors themselves are the mechanism {#sec-nb-mt2-factorial-verdict}
+## 2026-08-11 — Density-factorial verdict: the anchors themselves are the mechanism {#sec-nb-isla-factorial-verdict}
 
 The decisive cell read out (bias OFF, anchors ON, seed 42:
 [reduction](../results/mixedres_training_2026-07-31/sweep/mt2_v2nw_reduction.json)):
@@ -3047,7 +3051,7 @@ under any variant while in-family and equivariance improved steadily)
 leans (a) -- but that is a scoping decision with program-review
 weight, staged rather than taken unilaterally.
 
-## 2026-08-11 — v3a registered and launched: the in-family gap, capacity first {#sec-nb-mt2-v3a}
+## 2026-08-11 — v3a registered and launched: the in-family gap, capacity first {#sec-nb-isla-v3a}
 
 Taking branch (a) of the factorial fork on the evidence's lean, without
 closing branch (b)
@@ -3063,11 +3067,11 @@ follows; >= 1.35x at both means capacity is not the controlling factor and v3b g
 after the thin relational-feature pipe (N_GEO = 3) instead. Anchor
 stabilization (branch b) stays open for Peter's read.
 
-## 2026-08-11 — v3a: capacity is not the controlling factor {#sec-nb-mt2-v3a-verdict}
+## 2026-08-11 — v3a: capacity is not the controlling factor {#sec-nb-isla-v3a-verdict}
 
 Both rungs reach >= 1.35x, triggering the registered v3b branch. The
 ladder is nearly flat -- 8.6M: 1.39x, 15M (wide): 1.45x, 20M (deep):
-1.35x -- so MT2's in-family frontier is FEATURE-limited, not
+1.35x -- so ISLA's in-family frontier is FEATURE-limited, not
 capacity-limited (consistent with stage 0's history: the only large
 in-family move, 2.2x, came from featurization). Two echoes of earlier
 program lessons: the deep rung pays for its 1.35x with density 38.8x
@@ -3080,12 +3084,12 @@ point normal and drive, anchor position magnitude/direction
 invariants) and a wider geo channel, at the 8.6M scale where the
 bias-off cell was healthiest.
 
-## 2026-08-12 — v3b verdict: the pipe was the bottleneck; accuracy and robustness now visibly trade {#sec-nb-mt2-v3b-verdict}
+## 2026-08-12 — v3b verdict: the pipe was the bottleneck; accuracy and robustness now visibly trade {#sec-nb-isla-v3b-verdict}
 
 **V3b_1 PASSES**: in-family 0.0596-0.0625 = **1.12-1.18x GT**
 (seed-mean 1.15x, from 1.39x), with rotation exact (1.000-1.001) and
 resolution flat. Featurization has now delivered every large in-family
-move in MT2's history (3.08x -> 1.41x -> 1.15x) while capacity
+move in ISLA's history (3.08x -> 1.41x -> 1.15x) while capacity
 delivered none. The costs: density 21.9-34.1x (richer
 geometric statistics couple harder to sampling, per the factorial
 mechanism) and zero-shot regressed to 1.00-1.87 (from 0b's 0.70-0.80)
@@ -3096,11 +3100,11 @@ bias-OFF, and the factorial showed the measure bias HELPS zero-shot
 (v2 0.78 vs v2nw 0.91): the registered next arm (v3c) is v3b's
 features with the bias restored, 3 seeds -- the cheapest candidate for
 v3b accuracy at 0b-class transfer. If v3c recovers zero-shot < 0.85 at
-in-family <= 1.25x, it becomes the canonical MT2 configuration for the
+in-family <= 1.25x, it becomes the canonical ISLA configuration for the
 program review; if not, the anti-correlation is structural at this
 design point and the review presents the frontier, not a single model.
 
-## 2026-08-12 — v3c verdict and the MT2 stage-0 synthesis {#sec-nb-mt2-stage0-synthesis}
+## 2026-08-12 — v3c verdict and the ISLA stage-0 synthesis {#sec-nb-isla-stage0-synthesis}
 
 v3c ([reduction](../results/mixedres_training_2026-07-31/sweep/mt2_v3c_reduction.json)):
 in-family 1.18-1.20x GT (gate <= 1.25x PASSES), density recovered to
@@ -3111,17 +3115,17 @@ accuracy-robustness anti-correlation is structural at this design
 point, and the program review presents the frontier, not a single
 canonical model.**
 
-**The MT2 stage-0 frontier, eight preregistered iterations
+**The ISLA stage-0 frontier, eight preregistered iterations
 (2026-08-09 to -12), every arm on the identical frozen instrument:**
 
 | variant | in-family (xGT) | zero-shot | density | rotation |
 |---|---|---|---|---|
 | GT 9M (reference) | 1.00 | 0.54-0.64 | 3.6x | 26-32x BROKEN |
-| MT2-0b | 1.41 | 0.70-0.80 | 12x | 1.03 |
-| MT2-v3c | 1.18-1.20 | 0.95-1.03 | 13-14x | 1.00 |
-| MT2-v3b | 1.15 | 1.0-1.9 | 22-34x | 1.00 |
+| ISLA-0b | 1.41 | 0.70-0.80 | 12x | 1.03 |
+| ISLA-v3c | 1.18-1.20 | 0.95-1.03 | 13-14x | 1.00 |
+| ISLA-v3b | 1.15 | 1.0-1.9 | 22-34x | 1.00 |
 
-All MT2 variants: exact similarity equivariance (v2 onward: no frame,
+All ISLA variants: exact similarity equivariance (v2 onward: no frame,
 no degeneracy caveat), drive degree 1 by construction, 1.8-9.8 GB /
 3-6 h training (GT-class), seed bands tighter than anything the
 program measured before. What stage 0 established: (1) the routing
@@ -3130,7 +3134,7 @@ they separate; (2) featurization is the only in-family factor
 (3.08 -> 1.41 -> 1.15x; capacity flat); (3) richer geometric features
 trade OOD for in-family, monotonically, with the measure bias
 partially compensating; (4) GT's transfer superiority persists across every
-MT2 variant -- pointwise local features generalize across families
+ISLA variant -- pointwise local features generalize across families
 where relational-global features bind to them. The v4 question this
 frontier poses (open, for program review): can a pointwise-local
 feature channel (GT's generalizing ingredient) be added UNDER the
@@ -3139,7 +3143,7 @@ transfer without selling the in-family gains? Stage 0 closes here;
 the review decides v4 against the alternative of hardening what
 exists.
 
-## 2026-08-14 — v4 experiment registered and launched: the local channel {#sec-nb-mt2-v4}
+## 2026-08-14 — v4 experiment registered and launched: the local channel {#sec-nb-isla-v4}
 
 Per the Heilmeier discussion and Peter's framing (an EXPERIMENT, not a
 mainlined change): the local geometric channel is added behind a flag,
@@ -3155,12 +3159,12 @@ tests exact in fp64, including the local variant. Gates: zero-shot
 < 0.85 both families (the point of the experiment), in-family held
 <= 1.25x, density not worse than v3c's 13-14x, rotation <= 1.02.
 Stretch: zero-shot <= 0.80 AND in-family <= 1.20x -- a cell dominating
-every existing MT2 variant. Failure reading, declared: if local
+every existing ISLA variant. Failure reading, declared: if local
 features do not transfer, the anti-correlation is a
 one-family-training property and stage 1 pivots to training
 diversity. Three seeds on the frozen protocol.
 
-## 2026-08-14 — Idle-cluster burst: fourteen review-hardening lanes in parallel with v4 {#sec-nb-mt2-idleburst}
+## 2026-08-14 — Idle-cluster burst: fourteen review-hardening lanes in parallel with v4 {#sec-nb-isla-idleburst}
 
 The cluster is mostly idle and Peter opened the throttle; the wave
 ([prereg](../results/mt2_idleburst_wave_preregistration_2026-08-14.json),
@@ -3172,14 +3176,14 @@ impossible without code archaeology -- its architecture was superseded
 -- recorded as a coverage limit); **(C)** the first tuning-parity
 check of the entire program: lr {1e-3, 6e-3} for both architectures
 against the frozen 3e-3, with a declared caveat trigger at 15%
-improvement either side; **(D)** MT2's reverse-direction transfer
+improvement either side; **(D)** ISLA's reverse-direction transfer
 (trained on estate, against the existing gt_rev baselines) -- is
-MT2's transfer weakness direction-symmetric?; **(E)** one
+ISLA's transfer weakness direction-symmetric?; **(E)** one
 capacity-x-features interaction rung (v3c at ~15M; capacity was flat
 BEFORE the v3b features). Fourteen lanes plus the three running v4
 lanes; all on the standard restart-safe chains.
 
-## 2026-08-15 — v4 verdict: local features do not improve transfer; pivot triggered {#sec-nb-mt2-v4-verdict}
+## 2026-08-15 — v4 verdict: local features do not improve transfer; pivot triggered {#sec-nb-isla-v4-verdict}
 
 **V4_1 (the point of the experiment) FAILED**: zero-shot 0.87-1.07
 across seeds and families -- marginally better than v3c's 0.95-1.03 at
@@ -3203,18 +3207,18 @@ The local channel stays flag-gated: its mainlining case (best
 in-family-at-density cell) is a separate, smaller decision for after
 the burst reads out.
 
-## 2026-08-15 — Stage-1 diversity wave launched; burst 13/14 trained; the sliver bites a third time {#sec-nb-mt2-stage1-diversity}
+## 2026-08-15 — Stage-1 diversity wave launched; burst 13/14 trained; the sliver bites a third time {#sec-nb-isla-stage1-diversity}
 
 With the cluster still idle, the pivot's decisive experiment launches
 now rather than after the burst synthesis
 ([prereg](../results/mt2_stage1_diversity_preregistration_2026-08-15.json),
 sha256 e17fbb39f025c600): **multi-family training** (DrivAerML +
 estate, fastback strictly held out) for BOTH architectures at 3 seeds
--- D1 predicts MT2-multi crosses the fastback transfer gate (< 0.85,
+-- D1 predicts ISLA-multi crosses the fastback transfer gate (< 0.85,
 p ~ 0.6) that no single-family variant crossed; plus the review's
 missing counterfactual, **equivariance-via-augmentation** (GT trained
 with the z-rotation augmentation; R1 prices it against GT's 26-32x
-orbit hole, R2 against its in-family level; an MT2 rotaug control
+orbit hole, R2 against its in-family level; an ISLA rotaug control
 should be indifferent); plus the v4 5-seed band. Eleven lanes. The
 burst wave finished 13/14; the fourteenth (mt2_rev_seed43) failed at
 estate epoch 472 -- the SAME deterministic sliver that killed
@@ -3222,7 +3226,7 @@ gt_rev_seed43, because the 2026-08-08 guard patch was job-local and
 never reached the repo. Now ported to the repo yaml (the lesson:
 job-local fixes are loans, not payments), lane re-chained.
 
-## 2026-08-15 — Multi-family lanes unblocked: the manifest-offsets fix comes home {#sec-nb-mt2-manifest-fix}
+## 2026-08-15 — Multi-family lanes unblocked: the manifest-offsets fix comes home {#sec-nb-isla-manifest-fix}
 
 All six multi-family lanes fast-failed on the loud guard that
 multi-dataset manifest sampling raises -- the precise defect draft PR
@@ -3240,27 +3244,27 @@ Twenty-five lanes reduced on one instrument
 
 **D1 -- the pivot's central prediction CONFIRMED, decisively.**
 Multi-family training (DrivAerML + estate, fastback held out):
-MT2-multi zero-shot fastback **0.125-0.129** on 3/3 seeds (single-family
+ISLA-multi zero-shot fastback **0.125-0.129** on 3/3 seeds (single-family
 variants: 0.87-1.07); GT-multi 0.105-0.114. Estate in-family 0.064 /
 0.052. The accuracy-robustness anti-correlation was a single-family
 -training artifact, exactly as the v4 failure reading declared: one
 additional training family moves zero-shot transfer on a HELD-OUT
 family by ~7x, dwarfing every architectural intervention the program
-tried. Cost asymmetry worth flagging: MT2-multi pays 1.51-1.54x on
+tried. Cost asymmetry worth flagging: ISLA-multi pays 1.51-1.54x on
 DrivAerML (from 1.18x; capacity split at 8.6M) where GT-multi pays
 almost nothing (1.08x).
 
-**R1/R2 -- the augmentation counterfactual prices MT2's headline
+**R1/R2 -- the augmentation counterfactual prices ISLA's headline
 claim, favorably.** Rotation augmentation DOES close GT's orbit hole
 (rot 1.00) -- at **1.84-1.91x in-family cost** and degraded transfer
-(0.80-0.85). MT2 gets the same pose-robustness at 1.18x. At equal
+(0.80-0.85). ISLA gets the same pose-robustness at 1.18x. At equal
 pose-robustness, exact equivariance beats augmentation by ~1.6x
 accuracy. The mt2 rotaug control sat at 1.21x, unchanged, as an
 equivariant model should. This is the release-grade differentiator,
 now measured rather than argued.
 
 **C -- tuning parity: the frozen lr flattered GeoTransolver
-slightly.** MT2-v3c prefers lr 1e-3 (0.0587 = **1.10x GT**, with
+slightly.** ISLA-v3c prefers lr 1e-3 (0.0587 = **1.10x GT**, with
 zero-shot improving to 0.78); GT prefers the frozen 3e-3 (1e-3:
 1.03x). Neither crosses the declared 15% caveat trigger, but the
 matched-tuning in-family gap is ~1.10x, not 1.18x. Both
@@ -3270,14 +3274,14 @@ architectures degrade at 6e-3.
 (zero-shot band wider: 0.90-1.14); GT's band razor-thin. v4 radii
 matter for transfer (larger patches 0.89-0.90 vs smaller 1.51-1.52,
 in-family flat) -- patch scale is a transfer knob, noted for any v4
-mainlining. Capacity x features: still flat (1.17x at 15M). MT2
+mainlining. Capacity x features: still flat (1.17x at 15M). ISLA
 reverse: estate in-family 1.16x GT-rev (the forward gap replicates),
 near-transfer fastback 0.117-0.131 -- PARITY with GT-rev's 0.11-0.12
 -- far-transfer none (GT-rev keeps its far edge, consistent with the
 diversity story).
 
 **The program-review picture in one line:** with one extra data
-family, both architectures transfer; with exact equivariance, MT2 is
+family, both architectures transfer; with exact equivariance, ISLA is
 the only model that is simultaneously pose-robust (free), within
 1.10-1.18x in-family (matched tuning), at equal resources -- and the
 alternative (augmentation) is now measured at 1.6x more expensive for
@@ -3296,11 +3300,11 @@ much harder physics per Corey) tests whether that floor is the
 dataset's or the architectures'. Data is copying HSG -> AGA via the
 proven datamover pattern (the recurated variant is permission-locked
 to Corey and recorded as a potential confound; this wave uses the
-original curation). Arms: GT and MT2-v3c, 2 seeds each, frozen
+original curation). Arms: GT and ISLA-v3c, 2 seeds each, frozen
 protocol, launched when the copy verifies. Meanwhile P4 is running
 and v5a is training.
 
-## 2026-08-18 — v5a-v1 verdict: training collapse, diagnosed as the decoder's thin pipe; v5a2 launched {#sec-nb-mt2-v5a-verdict}
+## 2026-08-18 — v5a-v1 verdict: training collapse, diagnosed as the decoder's thin pipe; v5a2 launched {#sec-nb-isla-v5a-verdict}
 
 v5a-v1 REFUTED as implemented, and informatively: training collapsed
 (final loss 0.064 vs healthy 0.0007-0.003), all three seeds converging
@@ -3319,7 +3323,7 @@ relaunched under the same prereg gates. P4's four-architecture
 stability table reduces in the background; the high-lift copy
 continues (~ETA tomorrow).
 
-## 2026-08-18 — v5a2 verdict at epoch 70: the pipe was not the cause; lanes stood down early {#sec-nb-mt2-v5a2-verdict}
+## 2026-08-18 — v5a2 verdict at epoch 70: the pipe was not the cause; lanes stood down early {#sec-nb-isla-v5a2-verdict}
 
 The widened decoder pipe changed nothing: v5a2's losses sat at
 0.0637-0.0658 at epoch 70 -- the exact v5a-v1 collapse plateau --
@@ -3351,7 +3355,7 @@ cost ~15 node-hours total instead of three full waves.
 
 **P4 (query-set stability), with an instrument caveat.** Measured
 companion-set instability at the shared 5000-cell prefix: GT 0.020,
-MT2-v3c 0.068, MT1 1.48, MT2-v4 1.81. The two large numbers are an
+ISLA-v3c 0.068, MT1 1.48, ISLA-v4 1.81. The two large numbers are an
 INSTRUMENT ARTIFACT declared here: the base variant's deterministic
 prefix carries inclusion weight 1 and represents only itself, so
 measure-CONSUMING models (MT1's boundary quadrature, v4's patch
@@ -3371,13 +3375,13 @@ alternative and the probe has served its purpose.
 v5a3 trained cleanly (the pilot's plateau escape was real) and
 **V5a_1 REFUTED decisively**: in-family 0.203-0.211 = 3.82-3.96x GT,
 far past the 1.40 refutation bar. But look at what it bought:
-**density 4.3-4.5x -- the best of any MT2 variant** (v3c/v4: 9-14x)
+**density 4.3-4.5x -- the best of any ISLA variant** (v3c/v4: 9-14x)
 and near GT's 3.6x floor, with rotation exact and query-independence
 by construction. The v5 arc's net scientific finding, three
 iterations and one pilot deep: **at this design family, accuracy and
 query-interaction are entangled.** The iterated query-side token
 stream is worth ~2.7x in-family accuracy over the best passive
-decoder we built -- which simultaneously explains WHY GT and MT2
+decoder we built -- which simultaneously explains WHY GT and ISLA
 carry companion-set sensitivity (P4: 2% and 6.8%): it is not a
 defect riding along, it is where the accuracy comes from. The menu is
 now measured rather than argued: exact query-independence at 3.9x
@@ -3405,7 +3409,7 @@ performance-per-sample and extrapolation, measured fairly as CURVES.
 The ledger: G1 data-scaling (error vs n_train on a fixed val set --
 slope and small-n intercept), G2 transfer-vs-data (held-out-family
 error as a function of n_train), G3 OOD-over-factors (the procedural
-2D suite revived for MT2 vs GeoTransolver: train on a BC range, test
+2D suite revived for ISLA vs GeoTransolver: train on a BC range, test
 beyond it -- designed after G1/G2 complete), G4 group-orbit (done). The
 SOTA criterion is curve dominance at equal protocol, not point
 dominance. **Stage A launched**: nested seeded subsets
@@ -3426,12 +3430,12 @@ that can isolate boundary-condition factors one at a time: train on
 drive modes 1-4 at unit amplitude on mildly deformed disks; test on
 unseen frequencies (T1), doubled and quadrupled amplitudes (T2 -- where
 the PDE's linearity makes the correct extrapolation EXACT, and the
-original MeshTransformer's drive-linearity contract serves as the
+exact-kernel predecessor's drive-linearity contract serves as the
 ledger's exactness anchor), and out-of-range geometry (T3). Arms:
-MeshTransformer2 with a new minimal boundary-scalar channel (per-point
+ISLA with a new minimal boundary-scalar channel (per-point
 BC values as invariant seed features; contracts untouched, 13 fp64
 tests), the in-tree soft-slice baseline (the GeoTransolver mechanism
-family), and MeshTransformer-v1 in linear mode. The readout is each
+family), and the exact-kernel predecessor in linear mode. The readout is each
 architecture's per-axis degradation fingerprint -- generalization as a
 table of ratios, not a point. Implementation and runs delegated to a
 fresh-context subagent briefed solely from the preregistration (the
@@ -3446,12 +3450,12 @@ The 22-lane ladder reduced
 scaling)**: at n_train = 14 the architectures are TIED (0.2692 vs
 0.2724, ratio 1.01); the gap then GROWS with data (1.16 at 27, 1.22
 at 54, 1.28 at 109, 1.25 at 218, 1.19 at 435). Log-log slopes: 
-GeoTransolver ~0.47, MeshTransformer2 ~0.42. Reading: **MT2's
+GeoTransolver ~0.47, ISLA ~0.42. Reading: **ISLA's
 structure is worth exactly the data it replaces at extreme scarcity
 -- parity with 14 cases -- while GeoTransolver converts additional
 data into accuracy at a faster rate.** The registered small-n
 prediction (p ~ 0.5) scores as half-right: parity, not superiority.
-The double-epoch controls at n = 54 moved GeoTransolver -2% and MT2
+The double-epoch controls at n = 54 moved GeoTransolver -2% and ISLA
 +3% (mild small-n overfitting), so the fixed-epoch protocol does not
 drive the curve shapes. **G2 (transfer vs data) -- the registered
 flat-curves prediction (p ~ 0.6) is REFUTED for GeoTransolver**: its
@@ -3459,12 +3463,12 @@ zero-shot estate error improves MONOTONICALLY with in-family data
 across all five rungs (0.784 -> 0.740 -> 0.685 -> 0.669 -> 0.657),
 five points, no reversal -- the program's first measured evidence of
 architecture-carried cross-family generalization that grows with
-training data. MT2's transfer curve is flat-with-noise (0.83-0.94,
+training data. ISLA's transfer curve is flat-with-noise (0.83-0.94,
 no monotone trend). The mechanism hypothesis this sharpens (consistent
 with the v4 diagnosis and the reverse-probe asymmetry): 
 **GeoTransolver's pointwise-local features learn family-portable
 surface physics whose quality compounds with geometric exposure,
-while MT2's relational-global features bind to the training family
+while ISLA's relational-global features bind to the training family
 regardless of how much of it is seen.** The generalization campaign
 now has a measured target -- the G2 slope -- and a concrete
 architectural suspect list for earning it. G3 (queued on ORD) tests
@@ -3474,9 +3478,9 @@ the same question with exact labels and isolated BC factors.
 
 Registered before results, extending the G1/G2 prereg: if
 GeoTransolver's data-compounding transfer (the refuted-flat G2 curve)
-is carried by pointwise-local features, then MeshTransformer2's
+is carried by pointwise-local features, then ISLA's
 flag-gated local patch-integral channel (the v4 experiment) should
-bend MT2's G2 curve downward. Six lanes: mt2+local at
+bend ISLA's G2 curve downward. Six lanes: mt2+local at
 n in {27, 109, 218}, two seeds, same frozen ladder protocol and
 instrument. Prediction: the local channel changes the G2 slope
 (monotone decrease across the three rungs, p ~ 0.45) at unchanged G1
@@ -3503,7 +3507,7 @@ that passed their tests). NOT WORKING: in-family accuracy from
 structure (every gap-close came from adopting GeoTransolver's
 ingredients -- routing, features -- never from a contract);
 architecture-carried transfer (G2: GeoTransolver's zero-shot improves
-monotonically with training data, MT2's is flat -- the model built
+monotonically with training data, ISLA's is flat -- the model built
 for generalization generalizes worse on every axis not declared as a
 group); the GLOBE-lineage distinctives (query-independence measured
 at 2.7x accuracy cost; typed-BC ingestion unbuilt for lack of an
@@ -3516,7 +3520,7 @@ matured against a literature pass): a two-stream architecture --
 a LOCAL stream of gauge-consistent tangent-frame features (local
 frames are principled where the refuted single global frame was not:
 curvature, per-panel BC values, multiscale patch structure -- the
-transfer carrier and the natural typed-BC port) feeding MT2's proven
+transfer carrier and the natural typed-BC port) feeding ISLA's proven
 GLOBAL stream (measure-aware slices + relational anchors), with the
 existing exact contracts at the edges and the G-ledger curves as the
 selection pressure. Literature clusters to mine before committing:
@@ -3581,7 +3585,7 @@ curves with AB-UPT in the baseline set.
 ## 2026-08-20 — Literature wave preregisters M1–M3; M4 closes analytically {#sec-nb-lit-wave-prereg}
 
 **The setting.** The literature synthesis (@sec-nb-lit-synthesis)
-left three testable claims about MeshTransformer2 (MT2), our
+left three testable claims about ISLA (ISLA), our
 similarity-equivariant slice-routing surrogate: (a) its exact scale
 equivariance may be an over-symmetrization, since aerodynamic pressure
 depends on Reynolds number and hence on absolute size; (b) its
@@ -3600,7 +3604,7 @@ token--token interaction and every query decodes passively from it.
   scale equivariance, keeping rotation/translation exact (new contract
   test asserts equivariance AND that the flag is not inert). Runs at
   ladder rungs n∈{54, 218} × 2 seeds against the existing G1 ladder
-  MT2 rungs. Prediction: >5% in-family gain at n=218 if the scale
+  ISLA rungs. Prediction: >5% in-family gain at n=218 if the scale
   axis is the G1 mechanism; falsifier: within the ±3% seed spread.
   Caveat declared: DrivAerML's scale signal is weak (fixed freestream),
   so a null bounds only this dataset.
@@ -3612,18 +3616,18 @@ token--token interaction and every query decodes passively from it.
   test caught it — the anchor set then depends on the query set,
   violating the very contract the arm exists for. Pilot-gated (50
   epochs must reach ≤ 0.0129×1.15, the v5a3 pilot value) before seeds.
-  Prediction: in-family within 1.3x of MT2-v3c; falsifier: >2x closes
+  Prediction: in-family within 1.3x of ISLA-v3c; falsifier: >2x closes
   the anchor-conditioned line.
 - **M3 (invariant-completeness audit):** analytic probe, no training —
-  construct geometry pairs that MT2's invariant set cannot separate
+  construct geometry pairs that ISLA's invariant set cannot separate
   but that differ aerodynamically (e.g. handedness of a swept
   feature). Delegated as a self-contained analysis.
 - **M4 (NEO normalization audit): closed by derivation.** Checked the
   code, not the paper trail: measure weights already enter every
-  point-population normalization in MT2 (assignment softmax carries
+  point-population normalization in ISLA (assignment softmax carries
   `log_w`; slice states and anchors use the weighted assignment; v4
   patch integrals are weighted; the per-point softmax normalizes over
-  slices, where no point measure applies). MT2 is NEO-complete, so
+  slices, where no point measure applies). ISLA is NEO-complete, so
   the P3 biased-sampling floor (4.3--4.5x at 10:1) is the
   information-limited component the SNIS analysis predicts — **no
   retrain arm is warranted**, and the density result stands as a
@@ -3639,8 +3643,8 @@ including the two new ones.
 **The setting.** The locality-hypothesis ladder (@sec-nb-locality-ladder)
 asked whether GeoTransolver's data-compounding zero-shot transfer —
 the one curve in the G2 experiment that improves monotonically with
-training-set size while MeshTransformer2's stays flat — is carried by
-local features. The test: MT2 with its flag-gated local
+training-set size while ISLA's stays flat — is carried by
+local features. The test: ISLA with its flag-gated local
 patch-integral channel (the v4 experiment) at training-set sizes
 n ∈ {27, 109, 218}, two seeds each, on the frozen DrivAerML→SHIFT-SUV
 instrument. Preregistered prediction (p ~ 0.45): a monotone decrease
@@ -3649,14 +3653,14 @@ sufficient.
 
 **What we saw** (`results/locladder_reduction.json`, evals job
 527924). In-family, the local channel yields a **consistent but
-constant 3–5% improvement** over plain MT2: 0.1695 vs 0.1779 at
+constant 3–5% improvement** over plain ISLA: 0.1695 vs 0.1779 at
 n=27, 0.0881 vs 0.0913 at n=109, 0.0729 vs 0.0750 at n=218
 (GeoTransolver still leads every rung: 0.1536 / 0.0713 / 0.0599). The
-ratio to plain MT2 *rises* with n (0.953 → 0.965 → 0.972), so the
+ratio to plain ISLA *rises* with n (0.953 → 0.965 → 0.972), so the
 channel is an offset, not a slope change. Zero-shot transfer to the
 held-out SHIFT-SUV estate is **not monotone and not improved**:
 0.885 → 0.819 → 1.031 across the rungs, with the n=218 seeds at
-0.970 and 1.091 — worse than the n=27 rung, worse than plain MT2 at
+0.970 and 1.091 — worse than the n=27 rung, worse than plain ISLA at
 the same rung (0.825), and nowhere near GeoTransolver's compounding
 0.740 → 0.669 → 0.657. Fastback numbers track estate throughout.
 
@@ -3677,7 +3681,7 @@ addresses generalization.
 ## 2026-08-20 — Invariant ceiling is irrelevant here; vector head had a reflection defect {#sec-nb-m3-verdict}
 
 **The setting.** Arm M3 of the literature wave
-(@sec-nb-lit-wave-prereg) asked whether MeshTransformer2's
+(@sec-nb-lit-wave-prereg) asked whether ISLA's
 invariant-only feature set has a Joshi-GWL-style expressivity ceiling
 — geometry pairs it provably cannot separate. Executed as an analytic
 fp64 probe with random weights (no training), artifact
@@ -3695,7 +3699,7 @@ control separates at 1e-2 to 4e-1. But the ceiling is **refuted as a
 DrivAerML-scale limitation** — no car has such a symmetry, and 1° of
 drive misalignment already restores measurable separation (3.5e-3 to
 1.5e-2). The originally conjectured chirality blindness is refuted
-directly: MT2(mirror geometry, d) equals MT2(geometry, mirror d)
+directly: ISLA(mirror geometry, d) equals ISLA(geometry, mirror d)
 bitwise, which is exactly the parity covariance of Navier–Stokes, and
 chirality under yaw is separated at 0.13–0.37. The flag-gated v4
 local channel (inter-point distances) fully breaks the constructed
@@ -3756,7 +3760,7 @@ not a rerun of this arm.
 ## 2026-08-20 — Scale relaxation fails on DrivAerML; literature wave closes {#sec-nb-m1-verdict-wave-close}
 
 **M1 verdict: refuted, per the preregistered falsifier.** The arm
-asked whether MeshTransformer2's exact scale equivariance is an
+asked whether ISLA's exact scale equivariance is an
 over-symmetrization costing accuracy at large training-set sizes —
 the leading literature explanation for the G1 scaling anomaly. The
 intervention (a log raw-cloud-radius scalar appended to the seed
@@ -3766,7 +3770,7 @@ declared ±3% seed-spread band, far from the preregistered >5%
 threshold (`results/m1_reduction.json`, evals job 528683).
 GeoTransolver still leads both rungs (0.1004 / 0.0599). A secondary
 observation with the expected sign: scale conditioning **hurts
-zero-shot transfer** (estate 0.949–0.956 vs plain MT2's 0.825–0.856)
+zero-shot transfer** (estate 0.949–0.956 vs plain ISLA's 0.825–0.856)
 — conditioning on absolute size lets the model bind to the training
 family's size distribution, exactly the failure exact equivariance
 prevents. The preregistered caveat stands: DrivAerML's scale signal
@@ -3785,7 +3789,7 @@ preregistration** (prereg 69a81e2a, @sec-nb-lit-wave-prereg):
   real expressivity ceiling exists but not at DrivAerML scale; the
   audit's by-product was finding and fixing a   reflection-equivariance defect in the vector head (`parity_fix`).
 - **M4 NEO normalization audit: CLOSED BY DERIVATION**
-  (@sec-nb-lit-wave-prereg) — MT2 was already measure-complete; the
+  (@sec-nb-lit-wave-prereg) — ISLA was already measure-complete; the
   P3 density floor is information-limited, not a bug.
 
 **What remains as the explanation of the G2 transfer gap.** With
@@ -3795,8 +3799,8 @@ remaining candidates for GeoTransolver's data-compounding zero-shot
 transfer are its **pointwise raw coordinate features** and its
 **non-equivariant global encoder** — i.e., the hypothesis that
 transfer on this instrument is carried by representations that exact
-similarity equivariance forbids MT2 from learning. The corresponding
-qualification is that MT2's equivariance still provides its rotation robustness
+similarity equivariance forbids ISLA from learning. The corresponding
+qualification is that ISLA's equivariance still provides its rotation robustness
 (P1: free vs GeoTransolver's 1.87x augmentation price) and small-data
 parity. The discriminating next experiments are (a) the
 HighLiftAeroML wave (Reynolds-varying, curated OOD splits — the
@@ -3816,10 +3820,10 @@ on conformally deformed disks — zero solver error, so every
 degradation is the model's). Preregistered as
 `results/g3_2d_bc_generalization_preregistration_2026-08-20.json`
 (sha ae2dee91); three arms at matched parameters and identical
-training: **mt2_bscalar** (MeshTransformer2 with the Dirichlet trace
+training: **mt2_bscalar** (ISLA with the Dirichlet trace
 as an invariant boundary-scalar seed feature), **softslice_2d** (the
 Transolver-class soft-slice mechanism, GeoTransolver's family), and
-**mt1_linear** (MeshTransformer in drive-linear mode — the
+**mt1_linear** (the exact-kernel predecessor in drive-linear mode — the
 contract-exactness reference). Train: drive modes 1–4, boundary RMS
 1.0, deformation ≤ 0.3. Test axes, one factor each: T0 in-range
 control, T1 unseen drive modes 5–8, T2a/T2b amplitude ×2/×4, T3
@@ -3872,7 +3876,7 @@ structure can provide.
 **Program consequence.** G3 delivers the first measured
 generalization *fingerprint* decomposition: amplitude extrapolation
 is purchasable by contract (declare linearity where the PDE has it —
-for aerodynamics, the drive-degree-1 contract MT2 already carries is
+for aerodynamics, the drive-degree-1 contract ISLA already carries is
 exactly this and its value is now measured at 4.5–12×);
 geometry extrapolation is mild and slightly favors the equivariant
 slice router; frequency-content extrapolation is purchasable by
@@ -3885,7 +3889,7 @@ those G3 measures now exist.
 
 **The setting.** The high-lift wave (prereg
 `highlift_wave_preregistration_2026-08-17.json`) is training
-GeoTransolver and MeshTransformer2 (v3c config) on the HiLiftAeroML
+GeoTransolver and ISLA (v3c config) on the HiLiftAeroML
 curated `full` split, 2 seeds each, under the frozen DrivAerML
 protocol (lr 3e-3, 500 epochs). At mid-flight (~epoch 250 of 500),
 the two architectures' health diverges in a way that must be handled
@@ -3895,7 +3899,7 @@ before results exist, not after.
 epoch 130: seed 42 reaches val loss 0.016 at epoch 134 and then
 *rises monotonically* to 0.070 by epoch 255 — training loss rising in
 lockstep, so this is optimizer instability, not overfitting; seed 43
-dips to 0.013 and re-plateaus at 0.021–0.024. MeshTransformer2
+dips to 0.013 and re-plateaus at 0.021–0.024. ISLA
 descends smoothly through the identical restart schedule (0.0039 at
 epoch 248, still improving), which also rules out the checkpointing
 training procedure as the cause. The mechanism is simple: the frozen lr 3e-3
@@ -3914,7 +3918,7 @@ regardless (a cosine schedule can re-converge late; killing them
 would bias against GeoTransolver). H1/H2 readouts of the original
 prereg are unchanged — they now just take each architecture's best
 lane. Precedent: the DrivAerML lr-parity treatment that produced
-MT2's matched-tuning 1.10x (@sec-nb-lit-wave-prereg cites it).
+ISLA's matched-tuning 1.10x (@sec-nb-lit-wave-prereg cites it).
 
 **Also fixed this wave (recorded for reproducibility):** the
 Sisyphus trap — the frozen save_interval=50 exceeded the ~35 epochs a
@@ -3924,14 +3928,14 @@ Slurm snapshotting the batch script at submission, so the fix
 required resubmitting the queue, not just editing the script).
 save_interval=5 since; checkpoints now track epochs exactly.
 
-## 2026-08-27 — MT2 leads one frozen-rate seed; learning-rate parity pending {#sec-nb-hl-interim}
+## 2026-08-27 — ISLA leads one frozen-rate seed; learning-rate parity pending {#sec-nb-hl-interim}
 
 **INTERIM readout — not the wave verdict.** The first two completed
 lanes of the high-lift wave (seed 43 of each architecture, frozen
 lr 3e-3, 500 epochs, curated `full` split, 180-case val set) have
 been evaluated. Mean relative-L2 over the val set:
 
-| field | GeoTransolver | MeshTransformer2 | ratio GT/MT2 |
+| field | GeoTransolver | ISLA | ratio GT/ISLA |
 |---|---|---|---|
 | pressure | 0.1476 | **0.0490** | 3.0x |
 | velocity | 0.1731 | 0.0704 | 2.5x |
@@ -3941,9 +3945,9 @@ been evaluated. Mean relative-L2 over the val set:
 
 This *reverses* the DrivAerML ordering (GeoTransolver led by
 1.10–1.18x there). Two observations, one caveat. **H2 (absolute
-difficulty):** MT2's high-lift pressure error (0.049) is *lower* than
+difficulty):** ISLA's high-lift pressure error (0.049) is *lower* than
 its DrivAerML error (0.0633) — the "harder" dataset is easier for
-MT2 — while GeoTransolver got 2.8x worse (0.148 vs 0.053). **The
+ISLA — while GeoTransolver got 2.8x worse (0.148 vs 0.053). **The
 mandatory caveat:** this GeoTransolver lane trained at the frozen
 lr 3e-3 where it demonstrably destabilizes on this dataset
 (@sec-nb-hl-lr-amendment — best val loss 0.013 at epoch ~130,
@@ -3955,7 +3959,7 @@ declared until they complete, and the seed-42 frozen-lr lanes complete
 (~30 epochs remaining each).
 
 **2026-08-27 addendum (frozen-lr wave complete, both seeds).** Seed-42
-evals: MeshTransformer2 pressure 0.0452 (2-seed mean **0.0471**,
+evals: ISLA pressure 0.0452 (2-seed mean **0.0471**,
 spread 0.045–0.049 — tight); GeoTransolver pressure 0.3974 (2-seed
 "mean" 0.27, spread 0.148–0.397 — the seed-42 lane is the one whose
 optimizer visibly diverged, @sec-nb-hl-lr-amendment). At the frozen
@@ -3964,7 +3968,7 @@ lanes are now fully essential for the H1 verdict.
 
 ## 2026-08-31 — Best-rate parity; DrivAerML gap does not transfer {#sec-nb-hl-verdict}
 
-**The wave is complete**: GeoTransolver and MeshTransformer2 (v3c),
+**The wave is complete**: GeoTransolver and ISLA (v3c),
 2 seeds x 2 learning rates each on the HiLiftAeroML curated `full`
 split, evaluated on the sealed-protocol 180-case val set
 (`results/highlift_wave_reduction.json`). Mean pressure rel-L2, all
@@ -3973,21 +3977,21 @@ eight lanes:
 | arch / lr | 3e-3 (frozen) | 1e-3 (parity arm) |
 |---|---|---|
 | GeoTransolver | 0.148 / 0.397 (unstable) | **0.0408 / 0.0435** |
-| MeshTransformer2 | 0.0452 / 0.0490 | **0.0401 / 0.0425** |
+| ISLA | 0.0452 / 0.0490 | **0.0401 / 0.0425** |
 
 **H1 (the architecture gap on harder physics): the gap does not
 transfer — it closes.** At each architecture's best configuration
 (lr 1e-3 for both, per the preregistered selection rule), the 2-seed
-means are GeoTransolver 0.0422 and MeshTransformer2 0.0413 — a
-MT2/GT ratio of **0.98**, i.e. statistical parity with MT2 nominally
-ahead, versus GeoTransolver's 1.10–1.18x lead on DrivAerML. MT2 is
+means are GeoTransolver 0.0422 and ISLA 0.0413 — a
+ISLA/GT ratio of **0.98**, i.e. statistical parity with ISLA nominally
+ahead, versus GeoTransolver's 1.10–1.18x lead on DrivAerML. ISLA is
 also nominally ahead on every other field (velocity 0.059 vs 0.062,
 wall shear 0.094 vs 0.101, temperature, density), all within
 seed-spread-scale margins.
 
 **H2 (absolute difficulty): HiLiftAeroML is more learnable, not
 harder.** Both architectures beat their own DrivAerML pressure
-levels (GeoTransolver 0.042 vs 0.053; MT2 0.041 vs 0.063). Combined
+levels (GeoTransolver 0.042 vs 0.053; ISLA 0.041 vs 0.063). Combined
 with H1 this supports the irreducible-error reading of the DrivAerML
 gap that motivated this wave (Corey's suggestion): DrivAerML's
 time-averaged transient labels carry a noise floor that the
@@ -3997,11 +4001,11 @@ both models go lower and the difference evaporates. The claim
 survive the dataset change.
 
 **The reproducible architecture difference on this dataset is
-optimizer robustness.** MT2's eight lane-results span 0.040–0.049
+optimizer robustness.** ISLA's eight lane-results span 0.040–0.049
 across both learning rates and both seeds; GeoTransolver spans
 0.041–0.397, destabilizing at the lr that its own frozen protocol
 prescribed (@sec-nb-hl-lr-amendment). A concise summary for the
-program: exact contracts cost MT2 nothing here, MT2 trains stably
+program: exact contracts cost ISLA nothing here, ISLA trains stably
 where GeoTransolver requires tuning, and in-family accuracy at tuned
 settings is a tie.
 
@@ -4010,7 +4014,7 @@ settings is a tie.
 declared gate rule. With in-family parity established, the ladder's
 data-efficiency rungs (35/210/1260 cases) and OOD axes (AoA
 extrapolation, pre-to-post-stall) are the deciding measurements for
-the north-star question — whether MT2's structure improves
+the north-star question — whether ISLA's structure improves
 generalization that GeoTransolver's tuned pointwise attention does
 not.
 
@@ -4019,10 +4023,10 @@ not.
 A full critical review of the campaign at Peter's request, recorded
 here because the review itself reshaped the agenda.
 
-**Central misconception.** The defect-4 to MeshTransformer2 arc
+**Central misconception.** The defect-4 to ISLA arc
 (eleven preregistered iterations) optimized against GeoTransolver's
 1.10–1.18x DrivAerML lead without ever measuring DrivAerML's
-label-noise floor. High-lift parity (@sec-nb-hl-verdict, MT2/GT =
+label-noise floor. High-lift parity (@sec-nb-hl-verdict, ISLA/GT =
 0.98, both architectures *better* than their DrivAerML levels) says
 that lead was substantially a property of the labels, not the
 architectures. A second conflation rode along: "harder dataset" was
@@ -4033,7 +4037,7 @@ cleaner labels.
 buys generalization exactly on the axes where it is the PDE's own
 symmetry, and nothing tested generalizes across boundary-condition
 frequency content — a coverage lever, not an architecture lever.
-(2) Optimizer robustness is an architecture property: MT2 spanned
+(2) Optimizer robustness is an architecture property: ISLA spanned
 0.040–0.049 across the high-lift lr × seed grid, GeoTransolver
 0.041–0.397. (3) The M3 audit's parity defect: contracts must be
 enumerated from the symmetry group, not from encountered failures.
@@ -4067,7 +4071,7 @@ HiLift ladder is the test); the mechanism of GeoTransolver's lr
 instability; two-seed statistical power stated plainly in the book.
 
 **Claims that survive for the book's hero framing:** exact contracts
-cost nothing in-family on either dataset; MT2 trains stably where
+cost nothing in-family on either dataset; ISLA trains stably where
 GeoTransolver needs tuning; exact symmetries buy exact generalization
 on their own axes; the measurement methodology is itself novel. The
 claim to retire: "beat GeoTransolver in-family."
@@ -4079,7 +4083,7 @@ claim to retire: "beat GeoTransolver in-family."
 review's central reframing: that DrivAerML's 1.10–1.18x GeoTransolver
 lead was a property of noisy time-averaged labels rather than of the
 architectures. Method: dump per-point pressure predictions from two
-GeoTransolver and two MeshTransformer2 checkpoints on bit-identical
+GeoTransolver and two ISLA checkpoints on bit-identical
 val points (verified: max |Δpoints| = max |Δtargets| = 0), and
 measure how much of each model's residual is shared across all four.
 HiLiftAeroML (lr 1e-3 checkpoints) served as the cleaner-label
@@ -4090,10 +4094,10 @@ control. Results: `results/n1_noise_floor_2026-09-01.json`.
 | statistic | DrivAerML (48 cases) | HiLift (180 cases) |
 |---|---|---|
 | shared-residual fraction (4 models) | 0.713 | 0.703 |
-| per-case error correlation GT vs MT2 | 0.887 | 0.968 |
+| per-case error correlation GT vs ISLA | 0.887 | 0.968 |
 | pointwise residual correlation, cross-arch / same-arch | 0.52 / 0.70 | 0.79 / 0.86 |
 | cross-arch disagreement ratio D | 0.927 | 0.914 |
-| same-arch seed-pair D (GT, MT2) | 0.66, 0.83 | 0.73, 0.84 |
+| same-arch seed-pair D (GT, ISLA) | 0.66, 0.83 | 0.73, 0.84 |
 
 **Verdict: the instrument does not discriminate, and the review's
 attribution is unsupported.** DrivAerML shows the predicted shared
@@ -4120,9 +4124,9 @@ attribution. What falls is the review's explanatory story that the
 DrivAerML gap "was noise." The honest statement is narrower: the gap
 does not transfer across datasets, and the residuals on both datasets
 are dominated by structure common to both architectures. **A new
-observation worth its own follow-up:** MT2 has larger seed-to-seed
+observation worth its own follow-up:** ISLA has larger seed-to-seed
 prediction spread than GeoTransolver on both datasets (same-arch D
-0.83 vs 0.66–0.73), even though MT2 is far more robust to learning
+0.83 vs 0.66–0.73), even though ISLA is far more robust to learning
 rate. Hyperparameter robustness and seed variance are different
 properties; the R1 arm now running should be read with both in view.
 Measure-weighting caveat: unweighted HiLift D drops to 0.64 — the
@@ -4154,18 +4158,18 @@ the frozen val instrument (`results/instrument_wave_reduction_2026-09-01.json`).
 Pressure rel-L2 across the symmetric grid (2 seeds at 1e-3 and 1e-2;
 the 3e-3 rung is the existing 5-seed result):
 
-| lr | GeoTransolver | MeshTransformer2 |
+| lr | GeoTransolver | ISLA |
 |---|---|---|
 | 1e-3 | 0.0546 / 0.0550 | **0.0588 / 0.0567** |
 | 3e-3 | **0.0532** | 0.0633 |
 | 1e-2 | 0.739 / 0.221 | 0.0874 / 0.0914 |
 
 GeoTransolver degrades 4–14x at lr 1e-2 (prediction: > 2x, held);
-MT2 degrades 1.55x from its best (prediction: < 1.5x, **missed
+ISLA degrades 1.55x from its best (prediction: < 1.5x, **missed
 narrowly**). The spreads differ by far more than the 20% falsifier
 band, so robustness is a reproducible architecture property on both
 datasets, not a HiLift step-count artifact. A by-product corrects the
-DrivAerML ledger: **MT2's best learning rate on DrivAerML is 1e-3
+DrivAerML ledger: **ISLA's best learning rate on DrivAerML is 1e-3
 (0.0577), not the frozen 3e-3 (0.0633)**, so the honest best-vs-best
 in-family ratio there is 0.0577 / 0.0532 = **1.085x**, consistent
 with the earlier single-seed lr-parity figure of 1.10x.
@@ -4318,7 +4322,7 @@ The mirror-antisymmetry statistic computed on *predictions* at the
 10,000-point val subsample, on identical mirror pairs for every model
 (pairing error dominates the absolute level, so the exactly covariant
 parity heads define the floor and the per-case *excess* over it is
-the informative quantity): unconstrained MT2-v3c excess
+the informative quantity): unconstrained ISLA-v3c excess
 −0.002 ± 0.001 (i.e. zero), GeoTransolver +0.001, the labels on the
 same pairs **+0.012 to +0.016**. The unconstrained head predicts
 fields exactly as mirror-symmetric as the constrained ones and does
@@ -4349,7 +4353,7 @@ the N1/L1 lesson):
   which would reopen the labels question at the *query-point* level
   (a model-in-the-loop covariance check at exactly mirrored points).
 
-If true7 lands, MT2 gains exact O(3) covariance (rotations *and*
+If true7 lands, ISLA gains exact O(3) covariance (rotations *and*
 reflections) at no accuracy cost, and the parity_fix gate is
 retired in its favor. 18/18 contract tests pass.
 
@@ -4405,7 +4409,7 @@ head's advantage is not about parity at all but about optimization
 better-conditioned overparameterization), which would be tested next
 by an unconstrained 9-channel head.
 
-## 2026-09-02 — Independent critic review: two of MT2's stated contracts are not implemented; M4 closure retracted; program reframed {#sec-nb-critic-review}
+## 2026-09-02 — Independent critic review: two of ISLA's stated contracts are not implemented; M4 closure retracted; program reframed {#sec-nb-critic-review}
 
 At Peter's request a fresh-context critic reviewed the whole written
 record with no framing from the program (report:
@@ -4413,20 +4417,20 @@ record with no framing from the program (report:
 most consequential findings were **verified in-session against the
 code** before being accepted:
 
-1. **MT2 is not scale-equivariant** (critic C4, confirmed). A
+1. **ISLA is not scale-equivariant** (critic C4, confirmed). A
    geometric 2x rescale of the input (points ×2, areas ×4) changes
    the output by **63%** (fp64, random weights). `reference_length`
    is a constant 8.0, and the only "scale" contract test ever written
    (`test_measure_weight_scale_invariance`) checks measure-*weight*
    rescaling — exact to 1e-16 — not geometry. Every chapter that
-   calls MT2 "similarity-equivariant" is wrong; the correct statement
+   calls ISLA "similarity-equivariant" is wrong; the correct statement
    is SE(3)-equivariant (rotations + translations), with a fixed
    length gauge. **Consequence:** the M1 scale-relaxation arm
    (@sec-nb-m1-verdict-wave-close) tested nothing — it appended a
    log-size feature to a model that already saw absolute size — so
    its "refuted" verdict is void, and the literature synthesis's
    over-symmetrization hypothesis was never actually tested.
-2. **MT2 is not measure-complete** (critic C6, confirmed). The
+2. **ISLA is not measure-complete** (critic C6, confirmed). The
    centroid is an unweighted `points.mean`; under 10:1 biased density
    it shifts by **0.94 RMS radii**. The M4 "closed by derivation"
    verdict (@sec-nb-lit-wave-prereg) is **retracted** — the audit
@@ -4439,7 +4443,7 @@ code** before being accepted:
    speed, Cp degree 0. The contract test is exact and the contract is
    irrelevant.
 
-Also accepted from the report: MT2's peak memory is 9.8 GB against
+Also accepted from the report: ISLA's peak memory is 9.8 GB against
 GeoTransolver's 4.6 GB on the same DrivAerML protocol (C16 — the
 review chapter's cost table is wrong); the "DrivAerML gap was label
 noise" framing survives in chapter 17 despite N1 retracting it
@@ -4447,7 +4451,7 @@ noise" framing survives in chapter 17 despite N1 retracting it
 statistic; the HiLift dataset config lives only job-locally on AGA;
 and the program has been optimizing a 48-case DrivAerML val ratio
 rather than its stated boundary→interior generalization objective
-(volume recipes exist in the tree and MT2 has never run on them).
+(volume recipes exist in the tree and ISLA has never run on them).
 Two claims I do not yet accept without checking: that the G3 MT1 arm
 used the moment decoder with the proved m ≤ 2 ceiling rather than
 the kernel decoder that chapter 6 reports at 0.075 on frequency-OOD
@@ -4476,13 +4480,13 @@ the kernel decoder that chapter 6 reports at 0.075 on frequency-OOD
   principal axes for the remaining rotation), run the frozen GT
   checkpoint, rotate outputs back; re-read the P1 rotation orbit. If
   GT recovers its in-pose accuracy off-pose at zero training cost,
-  the "equivariance is worth 1.6x" headline is void and MT2's
+  the "equivariance is worth 1.6x" headline is void and ISLA's
   rotation robustness is a convenience, not a capability.
 - **G3' — rerun the G3 ladder's MT1 arm with the kernel decoder** to
   resolve the chapter-6-vs-G3 contradiction on frequency
   generalization (< 3 GPU-hours).
 
-**Reframing accepted.** MT2 should be described as an SE(3)-equivariant
+**Reframing accepted.** ISLA should be described as an SE(3)-equivariant
 soft-slice transformer with a learned local geometry basis; the
 differentiators that survive are exact rotation/translation
 covariance (with the O(3) extension under test in W2), learning-rate
@@ -4492,7 +4496,7 @@ and "the DrivAerML gap was noise" are retired from the book pending
 the S1 result, and chapters 02 and 17 will be corrected in the same
 pass that records S1.
 
-## 2026-09-02 — G3 frequency verdict OVERTURNED: the kernel-decoder MeshTransformer generalizes across BC frequency content (T1 0.070 vs 1.00); the original arm measured a proved nullspace {#sec-nb-g3-kernel-rerun}
+## 2026-09-02 — G3 frequency verdict OVERTURNED: the exact-kernel predecessor (kernel decoder) generalizes across BC frequency content (T1 0.070 vs 1.00); the original arm measured a proved nullspace {#sec-nb-g3-kernel-rerun}
 
 **The critic's confound was real.** G3's `mt1_linear` arm used the
 *moment* query decoder (`make_model("mesh_transformer", "reference")`,
@@ -4523,7 +4527,7 @@ optimizer, evaluation; ORD job 33696718, 3 seeds. Artifacts
 | mt2_bscalar | 0.0624 | 1.1485 (18.4×) | 0.3883 (6.2×) | 0.7289 (11.7×) | 0.0669 (1.07×) |
 | softslice_2d | 0.1114 | 1.2090 (10.9×) | 0.4979 (4.5×) | 0.7760 (7.0×) | 0.1221 (1.10×) |
 
-**Verdict.** The kernel-decoder MeshTransformer **does generalize
+**Verdict.** The exact-kernel predecessor (kernel decoder) **does generalize
 across boundary-condition frequency content** (T1 0.070, 14× better
 than the moment decoder's 1.00, reproducing chapter 6's 0.075 under
 G3's protocol) and is the best arm on every axis: 4× lower
@@ -4583,10 +4587,10 @@ canonical frame estimated from the 10,000-cell eval sample is off by
 **Verdict.** The headline "exact equivariance is worth 1.6x" survives
 only against rotation *augmentation* (1.84–1.91x). Against the
 correct steel-man — canonicalized GeoTransolver with a well-estimated
-frame — MT2's exact-equivariance advantage is **~1.15–1.2x**, not
+frame — ISLA's exact-equivariance advantage is **~1.15–1.2x**, not
 1.6x, and the book's P1 framing must say so. What the control adds is
 arguably more valuable than what it removes: a *quantified pose-error
-sensitivity* for the non-equivariant baseline (1° → 1.7x) that MT2 is
+sensitivity* for the non-equivariant baseline (1° → 1.7x) that ISLA is
 immune to by construction. In any deployment where the freestream
 direction or vehicle alignment carries even a degree of uncertainty,
 that is the operative difference, and it is now a measured curve
@@ -4616,7 +4620,7 @@ formulation* on a 0.1%-coverage point subsample (the exterior trace is
 ½I + compact K; exact panel integrals on a Monte Carlo sample carry a
 ~34% quadrature floor), not evidence against the 3D kernel mechanism.
 The 2D result's leverage lives in boundary→interior — which is the
-program's stated north-star objective, and the axis on which MT2 has
+program's stated north-star objective, and the axis on which ISLA has
 never been run (critic C-hill). Inventory: every piece that
 *evaluates* a 3D Laplace kernel exists and is tested
 (`kernel_decoder.py` triangle members, Barnes–Hut backend); every
@@ -4635,27 +4639,27 @@ piece that *solves* a learned BIE is 2D/complex-plane-bound.
 - **K1 — symmetric feature arm (conditional on K0 passing).** K0's
   field (Cp_pf and the tangential potential velocity, both exactly
   similarity-invariant with no reference length) as a declared input
-  to *both* MeshTransformer2-v3c (lr 1e-3) and GeoTransolver (lr
+  to *both* ISLA-v3c (lr 1e-3) and GeoTransolver (lr
   3e-3), 2 seeds each. Predictions: in-family unchanged (|Δ| ≤
-  0.004); **SHIFT-SUV estate zero-shot improves** (MT2 0.997 → ≤ 0.85,
+  0.004); **SHIFT-SUV estate zero-shot improves** (ISLA 0.997 → ≤ 0.85,
   GT 0.614 → ≤ 0.55); P3 density ratio ≤ 8x (from 13–14x for
-  MT2-v3c on that instrument). Falsifier: neither architecture moves
+  ISLA-v3c on that instrument). Falsifier: neither architecture moves
   ≥ 0.10 on estate → the potential-flow prior does not carry
   transfer, K2 not launched.
 - **K2 — mechanism arm (conditional on K1):** exact measure-weighted
-  layer operators as a fixed exchange channel inside MT2's slice
+  layer operators as a fixed exchange channel inside ISLA's slice
   block.
 - **K-alt (independent of K0–K2, admits the interior problem):** the
-  existing kernel-decoder MeshTransformer, unchanged, on
+  existing exact-kernel predecessor (kernel decoder), unchanged, on
   `drivaer_ml_volume.yaml` — boundary→interior, where the 2D
   mechanism's spectral leverage actually lives. Deferred until K0
   reads out, to keep the cluster share on S1/W2/P1''/ladder.
 
 **Side facts from the scoping worth keeping:** the one G-ledger axis
 the existing kernel-decoder arm already wins is P3 density bias
-(1.7–2.1x vs GeoTransolver 3.6x vs MT2-v3c 13–14x on that probe
+(1.7–2.1x vs GeoTransolver 3.6x vs ISLA-v3c 13–14x on that probe
 version); no watertightness check exists anywhere in the aero recipe
-(K0 adds a Gauss-identity gate); degree 0, not MT2's degree 1, is the
+(K0 adds a Gauss-identity gate); degree 0, not ISLA's degree 1, is the
 correct drive law for pressure *coefficients*.
 
 ## 2026-09-02 — K0 gate FAILS: inviscid potential flow is not a usable prior for DrivAerML pressure (oracle rel-L2 4.8 vs 0.77 for the case mean); the 3D kernel line does not launch {#sec-nb-k0-verdict}
@@ -4717,7 +4721,7 @@ program records "exact O(3) covariance of the vector head costs
 ≥ 10% wall shear on DrivAerML with every construction tried" and
 moves on — the critic's hill-climbing warning applies here.
 
-## 2026-09-03 — Parity thread CLOSED: W2' diverged to NaN at epoch 95; exact O(3) covariance of MT2's vector head costs ≥ 10% wall shear or fails to train under every construction tried {#sec-nb-parity-thread-closed}
+## 2026-09-03 — Parity thread CLOSED: W2' diverged to NaN at epoch 95; exact O(3) covariance of ISLA's vector head costs ≥ 10% wall shear or fails to train under every construction tried {#sec-nb-parity-thread-closed}
 
 W2' (zero-initialized odd gate, unit-normalized anchors, bounded
 pseudoscalars) reached epoch 95 and produced `Train Loss: nan`
@@ -4736,7 +4740,7 @@ pressure 0.0632 / wall shear 0.0910):
 | W2 odd head (K=7 pseudoscalars) | exact | collapsed 0.77 | 0.74 |
 | W2' zero-init, bounded | exact | **NaN @95** | — |
 
-**Closing statement for the book.** MT2's vector head reaches the
+**Closing statement for the book.** ISLA's vector head reaches the
 e_φ (pseudovector) directions with parity-even coefficients, which
 formally violates reflection covariance (M3). The labels are
 mirror-covariant to < 1% energy (L1) and the trained head's
@@ -4782,12 +4786,12 @@ vehicle dataset in this program; 0/48 degenerate cases),
 canonicalization delivers the same pose invariance as exact
 equivariance at ~1% cost and no architectural constraint.* The
 augmentation baseline (1.84–1.91x) that made equivariance look
-valuable was the wrong steel-man. MT2's exact equivariance remains a
+valuable was the wrong steel-man. ISLA's exact equivariance remains a
 genuine *contract* — it holds for any geometry, including ones whose
 principal frame is degenerate or whose freestream is unknown — but on
 the datasets this program measures, it is not an accuracy advantage.
 Combined with high-lift parity (@sec-nb-hl-verdict) and the retired
-scale/measure claims (@sec-nb-critic-review), the differentiators MT2
+scale/measure claims (@sec-nb-critic-review), the differentiators ISLA
 still holds on measured axes are: learning-rate robustness (R1) and
 whatever the HiLift generalization ladder shows. This is the critic's
 "single biggest risk" materializing, and it is better known than
@@ -4799,7 +4803,7 @@ in every PDE surrogate setting) and a sign-resolvable principal frame
 (cars: skewness sign 48/48 consistent; a symmetric body would need
 another disambiguator); the equivariant model needs neither.
 
-## 2026-09-03 — S1 verdict: the real similarity gauge is free in-family and cuts MT2's biased-density penalty from 13–14.5x to 1.20x; zero-shot transfer unchanged {#sec-nb-s1-verdict}
+## 2026-09-03 — S1 verdict: the real similarity gauge is free in-family and cuts ISLA's biased-density penalty from 13–14.5x to 1.20x; zero-shot transfer unchanged {#sec-nb-s1-verdict}
 
 **Result** (`results/s1_similarity_gauge_2026-09-03.json`; 2 seeds
 each, seed-matched against v3c; configs differ only in
@@ -4819,10 +4823,10 @@ the p3v3 instrument (biased-sampling error 0.077 against a uniform
 the earlier "information-limited floor" reading (M4,
 @sec-nb-lit-wave-prereg, already retracted in @sec-nb-critic-review)
 is now positively refuted by measurement: the floor was an
-implementation gap. With the gauge, MT2 is the most density-robust
+implementation gap. With the gauge, ISLA is the most density-robust
 architecture the program has measured on this instrument
-(GeoTransolver 3.6x, kernel-decoder MeshTransformer 1.7–2.1x,
-MT2-v3c 13–14.5x, **MT2-gauge 1.20x**) — and it is exactly the
+(GeoTransolver 3.6x, kernel-decoder predecessor 1.7–2.1x,
+ISLA-v3c 13–14.5x, **ISLA-gauge 1.20x**) — and it is exactly the
 property the SE(3) + measure contracts were supposed to deliver.
 **Prediction 3 (zero-shot estate improves): falsifier fired.** Estate
 0.949 mean vs 0.967, inside a two-seed spread of 0.17 and inside
@@ -4834,12 +4838,12 @@ quoted a v3c estate baseline of "0.83–0.90" that matches no v3c run
 threshold/baseline slip this week, caught by the seed-matched
 re-reduction.
 
-**Adoption.** `similarity_gauge=true` becomes the reference MT2
+**Adoption.** `similarity_gauge=true` becomes the reference ISLA
 configuration for all new runs (frozen checkpoints keep the constant
 gauge; the flag stays default-off in code for that reason and the
-book's MT2 description now states both). The HiLift ladder's MT2
+book's ISLA description now states both). The HiLift ladder's ISLA
 lanes predate this and are recorded as v3c-constant-gauge. The honest
-MT2 claim set after this week: exact SE(3) equivariance as a
+ISLA claim set after this week: exact SE(3) equivariance as a
 contract (not an accuracy edge, P1''); learning-rate robustness
 (R1); **biased-density robustness at 1.2x** (S1); in-family parity
 with GeoTransolver on high-lift and a 1.085x deficit on DrivAerML at
@@ -4862,10 +4866,10 @@ block-difference fields; realized-regime diagnostics) and
 nothing is lost in translation).
 
 **G5 in one paragraph.** Six arms on the new corpus, every threshold
-in readout units: **A1 pose twins** (exact SE(3) axis — MT2's twin
+in readout units: **A1 pose twins** (exact SE(3) axis — ISLA's twin
 difference must sit at its own mesh-realization floor; raw
 GeoTransolver fails by ≥ 5x on the two profiles without a freestream
-frame; canonicalized GeoTransolver matches MT2 within 1.05x where a
+frame; canonicalized GeoTransolver matches ISLA within 1.05x where a
 frame exists); **A2 scale twins** — the *first real test of the
 similarity gauge*, at fixed Reynolds number across 0.02–20 m
 (GeoTransolver predicted to exceed 2x at a 10x scale change); **A3
@@ -4877,14 +4881,14 @@ is reported as not resolvable); **B1 bank-held-out geometry** (the
 strong G2, at two training sizes to test the transfer-slope
 hypothesis); **B2 profile-held-out boundary conditions** (do explicit
 BC operators buy anything on realized 3D flows). Architectures:
-GeoTransolver raw and canonicalized, MT2 with the gauge, the
-kernel-decoder MeshTransformer as the GLOBE-lineage arm; surface task
+GeoTransolver raw and canonicalized, ISLA with the gauge, the
+exact-kernel predecessor (kernel decoder) as the GLOBE-lineage arm; surface task
 first, then the boundary→interior volume task the program has never
-run MT2 on. The A-arms are void unless the twin-draw recommendation is
+run ISLA on. The A-arms are void unless the twin-draw recommendation is
 adopted, which is why the preregistration exists before generation.
 Tech tree: node **G5 PLANNED**, gated on the corpus launch.
 
-## 2026-09-03 — HiLift ladder, data-efficiency rungs: MT2 is 2.5–2.9x more accurate than GeoTransolver at 35 and 210 training cases, converging to parity at 1,260 {#sec-nb-hl-ladder-dataeff}
+## 2026-09-03 — HiLift ladder, data-efficiency rungs: ISLA is 2.5–2.9x more accurate than GeoTransolver at 35 and 210 training cases, converging to parity at 1,260 {#sec-nb-hl-ladder-dataeff}
 
 **First half of the ladder readout** (prereg `499bcfe8`;
 `results/hilift_ladder_reduction_2026-09-03.json`). Both
@@ -4893,15 +4897,15 @@ epochs, 2 seeds, evaluated on the *shared* 180-case val set that the
 `full`, `scarce` and `super_scarce` splits have in common — so these
 three rungs are directly comparable:
 
-| training cases | GeoTransolver (min–max) | MeshTransformer2 (min–max) | MT2 / GT |
+| training cases | GeoTransolver (min–max) | ISLA (min–max) | ISLA / GT |
 |---|---|---|---|
 | 35 (`super_scarce`) | 0.392 (0.375–0.409) | **0.138** (0.135–0.141) | **0.35** |
 | 210 (`scarce`) | 0.159 (0.157–0.160) | **0.064** (0.062–0.067) | **0.41** |
 | 1,260 (`full`) | 0.042 | 0.041 | 0.98 |
 
 **Prediction P1 of the preregistration held, and not marginally.**
-MT2 is **2.9x more accurate at 35 cases and 2.5x at 210**, with seed
-spreads an order of magnitude smaller than the gap; MT2 trained on 210
+ISLA is **2.9x more accurate at 35 cases and 2.5x at 210**, with seed
+spreads an order of magnitude smaller than the gap; ISLA trained on 210
 cases (0.064) is already as good as GeoTransolver trained on 1,260
 would have been on DrivAerML (0.053–0.063 range), and better than
 GeoTransolver on 210 by the same factor the whole month-one DrivAerML
@@ -4921,8 +4925,8 @@ than an architectural property; on DrivAerML's G1 ladder the same
 protocol gave parity at n = 14, which argues against that, but it is
 cheap to test: **GeoTransolver `super_scarce` and `scarce` at lr 3e-3
 (500 epochs) and at lr 1e-3 with 1,000 epochs, 2 seeds each (8 small
-lanes).** Prediction: the best of these stays ≥ 2x MT2 at 35 cases.
-Falsifier: any GeoTransolver control within 1.2x of MT2 at 35 cases →
+lanes).** Prediction: the best of these stays ≥ 2x ISLA at 35 cases.
+Falsifier: any GeoTransolver control within 1.2x of ISLA at 35 cases →
 the data-efficiency gap is a protocol artifact and the Branch A
 decision is void. The OOD half of the ladder (aoa, stall) is still
 training; its verdict and the single sealed test evaluation follow.
@@ -4935,13 +4939,13 @@ OOD-axis splits train on their low-side populations (aoa: 788 cases
 at low angle of attack; stall: 942 pre-stall cases) and validate on
 in-distribution held-out cases from the same populations:
 
-| split (train n) | GeoTransolver s42 / s43 | MT2 s42 / s43 | MT2 / GT |
+| split (train n) | GeoTransolver s42 / s43 | ISLA s42 / s43 | ISLA / GT |
 |---|---|---|---|
 | aoa (788) | 0.0285 / 0.0317 | 0.0205 / 0.0209 | **0.69** |
 | stall (942) | 0.0289 / 0.0304 | 0.0204 / 0.0210 | **0.70** |
 
 These are *in-distribution* numbers and extend the data-efficiency
-curve (@sec-nb-hl-ladder-dataeff) with two more rungs: MT2/GT is
+curve (@sec-nb-hl-ladder-dataeff) with two more rungs: ISLA/GT is
 0.35 at 35 cases, 0.41 at 210, ~0.70 at 788–942, 0.98 at 1,260. The
 absolute errors are lower than on the full split because the low-AoA
 and pre-stall populations are attached-flow cases.
@@ -4973,15 +4977,15 @@ recorded.
 hypothesis is refuted at 35 cases.** GeoTransolver `super_scarce` at
 lr 3e-3 (500 epochs, 2 seeds): pressure **0.392 / 0.481** — no better
 than its lr 1e-3 ladder lanes (0.375 / 0.409), and worse on one seed,
-against MT2's 0.135–0.141. The preregistered falsifier (a control
-within 1.2x of MT2, i.e. ≤ 0.166) is not approached: GeoTransolver's
+against ISLA's 0.135–0.141. The preregistered falsifier (a control
+within 1.2x of ISLA, i.e. ≤ 0.166) is not approached: GeoTransolver's
 small-data collapse is not a learning-rate mismatch. The
 under-training hypothesis (1,000-epoch lanes, currently past epoch
 500 of 1,000) and the 210-case controls remain to be read; the
 data-efficiency result (@sec-nb-hl-ladder-dataeff) stands provisional
 on those alone.
 
-## 2026-09-04 — Sealed test verdict: both architectures degrade ~10x on AoA and stall extrapolation; MT2 keeps the lower absolute error, GeoTransolver the smaller ratio; Branch B triggers on stall {#sec-nb-hl-sealed-test}
+## 2026-09-04 — Sealed test verdict: both architectures degrade ~10x on AoA and stall extrapolation; ISLA keeps the lower absolute error, GeoTransolver the smaller ratio; Branch B triggers on stall {#sec-nb-hl-sealed-test}
 
 **One-shot evaluation, run exactly as declared**
 (@sec-nb-hl-ladder-ood-indist; `results/hilift_sealed_test_2026-09-04.json`;
@@ -4991,9 +4995,9 @@ failures).
 | axis | model | in-dist val p | OOD test p | d = test/val | OOD test velocity / wss |
 |---|---|---|---|---|---|
 | aoa | GeoTransolver | 0.0285 / 0.0317 | 0.300 / 0.330 | **10.5** | 0.22 / 0.34 |
-| aoa | MT2 | 0.0205 / 0.0209 | **0.241 / 0.248** | 11.8 | 0.25 / 0.37 |
+| aoa | ISLA | 0.0205 / 0.0209 | **0.241 / 0.248** | 11.8 | 0.25 / 0.37 |
 | stall | GeoTransolver | 0.0289 / 0.0303 | 0.274 / 0.277 | **9.3** | 0.19 / 0.33 |
-| stall | MT2 | 0.0204 / 0.0210 | **0.261 / 0.259** | 12.6 | 0.19 / 0.32 |
+| stall | ISLA | 0.0204 / 0.0210 | **0.261 / 0.259** | 12.6 | 0.19 / 0.32 |
 
 **Reading, in order of importance.** (1) **Neither architecture
 generalizes across a physical-regime boundary.** Extrapolating from low
@@ -5001,14 +5005,14 @@ to high angle of attack, or from attached to separated flow, costs
 both models roughly a factor of ten in pressure error; the OOD test
 errors (0.24–0.33) are worse than the *35-case* in-distribution error.
 This is the 3D analogue of G3's frequency-content null: coverage of
-the regime, not architecture, governs this axis. (2) **MT2 keeps the
+the regime, not architecture, governs this axis. (2) **ISLA keeps the
 lower absolute OOD error on pressure on both axes** (0.244 vs 0.315
 aoa; 0.260 vs 0.276 stall), so its in-distribution advantage shrinks
 but does not invert. (3) **GeoTransolver has the smaller degradation
 *ratio*** because its in-distribution floor is higher (0.030 vs
 0.021): the two architectures converge to similar OOD error from
 different starting points. Prediction "stall harder than aoa" held for
-MT2 only.
+ISLA only.
 
 **Decision rule, applied by the letter.** The MT3 skeleton's Branch B
 trigger is d_GT ≤ 0.8 d_MT2, resolvable above seed spread: aoa gives
@@ -5017,14 +5021,14 @@ intervals (worst-case pairing 0.769) — triggered.** So the
 preregistered next step is the mechanism discriminator, not an MT3
 design. **Caveat, stated before it runs:** this trigger is driven by
 the denominator. A ratio criterion rewards a worse in-distribution
-model, and in absolute OOD terms MT2 is ahead; a reader should weigh
+model, and in absolute OOD terms ISLA is ahead; a reader should weigh
 the discriminator's *absolute* OOD readout at least as heavily as the
 ratio. The rule is followed because it was committed in advance and
 because the question it asks — is GeoTransolver's residual transfer
 edge carried by pointwise raw-coordinate features? — is worth a cheap
 answer either way.
 
-**B1 — raw-coordinate discriminator, preregistered here.** MT2 with
+**B1 — raw-coordinate discriminator, preregistered here.** ISLA with
 the similarity gauge plus a `raw_coord_channel` that appends the raw
 gauge-normalized coordinates and normal components to the seed
 invariants, deliberately breaking SE(3) equivariance (24/24 contract
@@ -5032,7 +5036,7 @@ tests, including one asserting it *does* break rotation equivariance).
 Two seeds, `stall` split, lr 1e-3, 500 epochs, otherwise frozen.
 Readouts: in-distribution val pressure; OOD stall-test pressure; d.
 **Predictions in readout units:** if pointwise raw features carry
-transfer, MT2+raw's d moves at least halfway from MT2's 12.6 toward
+transfer, ISLA+raw's d moves at least halfway from ISLA's 12.6 toward
 GeoTransolver's 9.3 (d ≤ 11.0) *and* its absolute OOD pressure drops
 below 0.245; if it does not (d ≥ 12.0 or OOD pressure ≥ 0.255), the
 carrier is elsewhere and the next discriminator is a GeoTransolver
@@ -5071,7 +5075,7 @@ passes were the dominant cost under slow I/O. Recorded so the
 B1/control train logs' sparser validation lines are not mistaken for a
 protocol difference against the ladder lanes.
 
-## 2026-09-05 — Same-family control preregistered: plain Transolver on the HiLift data-efficiency rungs (is the 2.8x MT2's contracts, or GeoTransolver's geometry encoder?) {#sec-nb-transolver-control-prereg}
+## 2026-09-05 — Same-family control preregistered: plain Transolver on the HiLift data-efficiency rungs (is the 2.8x ISLA's contracts, or GeoTransolver's geometry encoder?) {#sec-nb-transolver-control-prereg}
 
 **Why.** The AB-UPT baseline scoping
 (`results/abupt_baseline_scoping_2026-09-05.md`) found no AB-UPT in
@@ -5080,9 +5084,9 @@ needs a design note from the primary paper first), but a plain
 **Transolver** is already recipe-ready (`conf/model/transolver_surface.yaml`)
 and has never been run on HiLiftAeroML. It is the same attention
 family as GeoTransolver with no geometry encoder, no ball-query
-context path, and no MT2 contracts — exactly the control that
+context path, and no ISLA contracts — exactly the control that
 separates two readings of the data-efficiency result
-(@sec-nb-hl-ladder-dataeff): *MT2's geometric contracts buy small-data
+(@sec-nb-hl-ladder-dataeff): *ISLA's geometric contracts buy small-data
 accuracy* versus *GeoTransolver's geometry encoder loses it*.
 
 **Arm T1 (launched now).** Transolver on `super_scarce` (35) and
@@ -5093,10 +5097,10 @@ cheaply), 500 epochs, val_interval 25, otherwise the frozen ladder
 protocol; scored on the shared 180-case val set. **Predictions in
 readout units:** Transolver at 35 cases lands in GeoTransolver's band,
 0.30–0.50 (the gap is contract-specific); **falsifier:** Transolver
-≤ 1.3 × MT2 = **≤ 0.18 at 35 cases** → the advantage is not
-MT2-specific, GeoTransolver's geometry encoder is the small-data
+≤ 1.3 × ISLA = **≤ 0.18 at 35 cases** → the advantage is not
+ISLA-specific, GeoTransolver's geometry encoder is the small-data
 liability, and the headline must be restated before publication. A
-secondary readout at 210 cases (MT2 0.064, GT 0.159) discriminates the
+secondary readout at 210 cases (ISLA 0.064, GT 0.159) discriminates the
 same way with the 1.3x bar at 0.084. The sealed test split is not
 touched by this arm.
 
@@ -5112,25 +5116,25 @@ that statement:
   controls (first of four refuted the lr explanation), and the T1
   plain-Transolver same-family control on the small-data rungs. Together
   they decide whether the data-efficiency headline
-  (@sec-nb-hl-ladder-dataeff) is MT2-specific and whether GeoTransolver's
+  (@sec-nb-hl-ladder-dataeff) is ISLA-specific and whether GeoTransolver's
   residual OOD edge is its raw-coordinate features.
 - **Ready and unmeasured, and the closest to the restated goal:**
   boundary→interior prediction. Every result so far is surface-to-surface.
   The program's scope statement, the critic (C-hill), and the 2D kernel
   result all point at the interior task as the axis where exact-operator
   structure has leverage and where query-independence becomes a
-  first-class property (interior queries are never tokens). MT2 has no
+  first-class property (interior queries are never tokens). ISLA has no
   native off-surface decode path — its query-independent read blocks
   require query normals — so this is an architecture step, not just a
   dataset switch. Scoping dispatched (`results/volume_arm_scoping_2026-09-05.md`
   when it lands): data contract of the volume recipes, readiness of
-  GeoTransolver-volume and the kernel-decoder MeshTransformer flagship,
-  the minimal covariant normal-free query mode for MT2, and a pilot-gated
+  GeoTransolver-volume and the exact-kernel predecessor (kernel decoder) flagship,
+  the minimal covariant normal-free query mode for ISLA, and a pilot-gated
   V0 arm with predictions in readout units.
 - **Deferred:** AB-UPT implementation (gated on T1), G5 (gated on the
   cfd-datagen corpus), MT3 design (gated on B1 + controls + V0).
 
-## 2026-09-05 — T1 verdict (35 cases): plain Transolver lands in GeoTransolver's band (0.40–0.63), not MT2's 0.14; the data-efficiency gap is MT2-specific {#sec-nb-t1-35-verdict}
+## 2026-09-05 — T1 verdict (35 cases): plain Transolver lands in GeoTransolver's band (0.40–0.63), not ISLA's 0.14; the data-efficiency gap is ISLA-specific {#sec-nb-t1-35-verdict}
 
 **Result** (same shared 180-case val set as the ladder; 2 seeds each):
 
@@ -5139,7 +5143,7 @@ that statement:
 | Transolver | 1e-3 | 0.634 / 0.616 |
 | Transolver | 3e-3 | **0.406 / 0.398** |
 | GeoTransolver (ladder, lr 1e-3; control lr 3e-3) | | 0.375 / 0.409; 0.392 / 0.481 |
-| **MeshTransformer2** (ladder, lr 1e-3) | | **0.135 / 0.141** |
+| **ISLA** (ladder, lr 1e-3) | | **0.135 / 0.141** |
 
 **Prediction held; falsifier (Transolver ≤ 0.18) not approached.** The
 same-family, no-geometry-encoder Transolver collapses at 35 cases
@@ -5147,17 +5151,17 @@ exactly as GeoTransolver does (its best, 0.40 at lr 3e-3, sits inside
 GeoTransolver's 0.30–0.50 band), so the small-data liability is not
 GeoTransolver's geometry encoder and the 2.8x advantage is not an
 artifact of one baseline. Two Transolver-family architectures at their
-better learning rate are 2.8–2.9x behind MT2 at 35 cases. Transolver
+better learning rate are 2.8–2.9x behind ISLA at 35 cases. Transolver
 also shows the same lr sensitivity as GeoTransolver (1.55x between
 1e-3 and 3e-3), consistent with R1. The 210-case Transolver lanes are
 still training and will be read the same way (bar: ≤ 0.084).
 
 **What this does and does not establish.** It establishes that the
-data-efficiency advantage belongs to something MeshTransformer2 has
+data-efficiency advantage belongs to something ISLA has
 that neither Transolver-family model has: the candidates are the exact
 SE(3) equivariance, the measure-weighted soft-slice routing, and the
 invariant local geometry basis. It does not yet say *which*; the
-natural next discriminator is a single-factor ablation of MT2 at 35
+natural next discriminator is a single-factor ablation of ISLA at 35
 cases (equivariance broken via the raw-coordinate channel already
 built for B1; measure weights off; local basis off), one flag at a
 time, 2 seeds each — cheap at this rung (~4 epochs/minute) and
@@ -5166,7 +5170,7 @@ gated: with two Transolver-family models already in the same band,
 the marginal information from a third is low relative to its 31–44
 engineer-hour cost.
 
-**A35 preregistered here.** MT2 at 35 cases, lr 1e-3, 2 seeds per arm:
+**A35 preregistered here.** ISLA at 35 cases, lr 1e-3, 2 seeds per arm:
 (i) `raw_coord_channel=true` (breaks SE(3)); (ii) `use_measure_weights=false`;
 (iii) `use_local_features=false` if the default config has them on,
 else this arm is the gauge on/off pair (`similarity_gauge` true vs
@@ -5178,9 +5182,9 @@ for the equivariance reading:** the raw-coordinate arm within 1.15x of
 0.138 → equivariance is not what buys small-data accuracy and the
 routing/basis becomes the candidate.
 
-## 2026-09-05 — V0 preregistered: the first boundary→interior measurement (DrivAerML volume), with MT2's new interior-query mode {#sec-nb-v0-prereg}
+## 2026-09-05 — V0 preregistered: the first boundary→interior measurement (DrivAerML volume), with ISLA's new interior-query mode {#sec-nb-v0-prereg}
 
-**The architecture step.** MT2's query-independent decode required a
+**The architecture step.** ISLA's query-independent decode required a
 normal at every query, so it could not decode off-surface points.
 The `interior_queries` mode derives an equivariant proxy normal per
 query from the source anchors — the geometric soft assignment of the
@@ -5198,44 +5202,44 @@ DrivAerML volume recipe is a complete boundary→interior contract
 (interior points with velocity/pressure/nut targets, the subsampled
 vehicle boundary kept alongside with measure weights, per-point SDF
 and SDF normals); GeoTransolver-volume is wired but has never produced
-a number in this program; the kernel-decoder MeshTransformer decodes
+a number in this program; the exact-kernel predecessor (kernel decoder) decodes
 at interior points natively and needs only a yaml (flagship minus the
 trace terms); HiLift volume is not runnable as committed. All arms
 share a dataset variant adding the freestream direction, the
 reference length, the degenerate-cell guard, and a scalars-first
-target order (MT2 emits scalars then vectors).
+target order (ISLA emits scalars then vectors).
 
 **V0 arms, pilot-gated** (1 seed × 50 epochs; gate: pressure rel-L2
 ≤ 0.6 and descending, ≤ 60 GB, ≤ 1 s/step), then 2 seeds × 500
 epochs at the frozen protocol: GeoTransolver-volume; MT1-kernel-volume;
-MT2-interior (proxy normals); MT2-interior-sdf (SDF normals as query
+ISLA-interior (proxy normals); ISLA-interior-sdf (SDF normals as query
 normals). **Predictions in readout units** (val-mean interior
 pressure rel-L2 ratios; no absolute volume number exists in the record,
-so absolute bands are priors, not predictions): MT2-interior / GT in
+so absolute bands are priors, not predictions): ISLA-interior / GT in
 [1.3, 2.5] — falsifiers ≤ 1.2 (the v5 entanglement finding was
-surface-specific) and ≥ 3.0 (no MT2 interior product without query
+surface-specific) and ≥ 3.0 (no ISLA interior product without query
 interaction); MT1-kernel / GT in [1.5, 3.0] on pressure and
 [1.0, 2.0] on perturbation velocity, **and ≤ 1.0x GT in the far band
 (SDF ≥ 0.5 L_ref)** — MT1 ≥ 1.5x GT there closes the kernel line for
 good. **New ledger axes this task enables** (eval-only on the V0
 checkpoints): exact query-independence as a first-class property
-(interior queries are never tokens for MT1/MT2-interior, always
+(interior queries are never tokens for MT1/ISLA-interior, always
 tokens for GeoTransolver), query-resolution transfer at fixed source,
 SDF-band-stratified error, and surface-trace consistency against the
 surface labels the boundary tokens already carry.
 
-**A35 launched alongside** (@sec-nb-t1-35-verdict): MT2 at 35 cases with
+**A35 launched alongside** (@sec-nb-t1-35-verdict): ISLA at 35 cases with
 one factor removed at a time — equivariance (raw-coordinate channel),
-measure weights, gauge — to name which of MT2's ingredients buys the
+measure weights, gauge — to name which of ISLA's ingredients buys the
 data-efficiency result.
 
 **2026-09-05 addendum — steel-man controls 3 of 4 in: none approaches
 the falsifier.** GeoTransolver at 35 cases: lr 3e-3 → 0.392 / 0.480;
 1,000 epochs at lr 1e-3 → 0.373 / 0.429 — versus its ladder lanes
-0.375 / 0.409 and the 1.2x-MT2 bar of 0.166. At 210 cases: lr 3e-3 →
+0.375 / 0.409 and the 1.2x-ISLA bar of 0.166. At 210 cases: lr 3e-3 →
 0.220 / 0.290, *worse* than the ladder's 0.159, versus a bar of
 0.077. Neither more optimizer steps nor a higher learning rate moves
-GeoTransolver toward MeshTransformer2 at small n; together with the
+GeoTransolver toward ISLA at small n; together with the
 T1 Transolver result (@sec-nb-t1-35-verdict) the data-efficiency
 advantage is now robust to learning rate, training length, and the
 choice of Transolver-family baseline. The last control pair
@@ -5251,9 +5255,9 @@ tokens per case, 50-epoch pilots, seed 42, lr 1e-3; interior rel-L2):
 | arm | pressure | velocity | nut | vs GT (pressure) |
 |---|---|---|---|---|
 | GeoTransolver-volume | **0.093** | **0.169** | **0.159** | 1.0 |
-| MT2-interior (SDF query normals) | 0.269 | 0.397 | 0.631 | 2.9x |
-| MT2-interior (anchor proxy normals) | 0.375 | 0.482 | 0.715 | 4.0x |
-| kernel-decoder MeshTransformer | 0.577 | 0.605 | 0.817 | 6.2x |
+| ISLA-interior (SDF query normals) | 0.269 | 0.397 | 0.631 | 2.9x |
+| ISLA-interior (anchor proxy normals) | 0.375 | 0.482 | 0.715 | 4.0x |
+| exact-kernel predecessor (kernel decoder) | 0.577 | 0.605 | 0.817 | 6.2x |
 
 **Gate (≤ 0.6 and descending): all four pass**, the kernel arm
 barely. Facts fixed by the launch: 150–166 million interior points per
@@ -5262,11 +5266,11 @@ the volume manifest is the surface instrument's own 435/48 split; all
 arms fit in 4–9 GB at ~0.35 s/step.
 
 **Early reading, not a verdict.** GeoTransolver dominates the interior
-task at pilot stage: MT2's query-independent read path is 2.9–4x
+task at pilot stage: ISLA's query-independent read path is 2.9–4x
 behind, echoing the surface-era finding that passive decoding costs
 accuracy (v5a3: 2.7–3.9x), and the exact-kernel decoder is 6x behind,
 echoing its surface null. Two of the preregistered predictions
-(@sec-nb-v0-prereg) are already under pressure: MT2-interior/GT was
+(@sec-nb-v0-prereg) are already under pressure: ISLA-interior/GT was
 predicted in [1.3, 2.5] with a falsifier at ≥ 3.0 (the proxy-normal
 variant sits at 4.0 at pilot; the SDF variant at 2.9), and MT1-kernel/GT
 in [1.5, 3.0] (6.2 at pilot). Pilot ratios can move with 10x more
@@ -5275,7 +5279,7 @@ for the goal is that *for boundary→interior on this task, token-level
 query interaction (GeoTransolver's) is worth ~3x over passive
 equivariant decoding, and the exact Laplace kernel buys nothing* —
 which would locate the "useful architecture" question squarely in how
-to give MT2 interior queries interaction without giving up
+to give ISLA interior queries interaction without giving up
 query-independence. Also worth noting for the SDF-band readout to
 come: SDF query normals beat the anchor-derived proxy by 1.4x, so the
 query's local geometry information matters more than its exact
@@ -5287,8 +5291,8 @@ SDF-band stratification and the exact query-independence check.
 
 ## 2026-09-05 — A35 verdict: exact equivariance is NOT what buys the data-efficiency (raw coordinates cost nothing); measure weights *hurt* at 35 cases; the invariant seed parameterization and the relational routing are the surviving candidates (A35b preregistered) {#sec-nb-a35-verdict}
 
-**Result** (MT2 at 35 HiLift cases, shared val pressure rel-L2, 2 seeds;
-reference MT2 ladder 0.135 / 0.141, mean 0.138):
+**Result** (ISLA at 35 HiLift cases, shared val pressure rel-L2, 2 seeds;
+reference ISLA ladder 0.135 / 0.141, mean 0.138):
 
 | ablation | pressure (s42 / s43) | vs reference |
 |---|---|---|
@@ -5297,7 +5301,7 @@ reference MT2 ladder 0.135 / 0.141, mean 0.138):
 | similarity gauge ON | 0.1510 / 0.1471 | 1.08x |
 
 **The equivariance reading is falsified.** Adding raw coordinates,
-which makes MT2 non-equivariant, changes the 35-case error by 4% — far
+which makes ISLA non-equivariant, changes the 35-case error by 4% — far
 inside the 1.15x falsifier band — so exact SE(3) equivariance is not
 the ingredient that buys the 2.8x small-data advantage. Two further
 surprises: turning **measure weights off improves accuracy by 12%** at
@@ -5319,7 +5323,7 @@ feature-only slicing; stays exactly equivariant). **Predictions:** if
 the invariant seed set is the carrier, (i) degrades ≥ 1.5x (≥ 0.21)
 and (ii) stays within 1.15x; if the relational routing is the carrier,
 the reverse; if neither moves ≥ 1.3x, the advantage is distributed and
-the honest statement becomes "MT2's soft-slice design as a whole,
+the honest statement becomes "ISLA's soft-slice design as a whole,
 not any single contract". Falsifier for the whole line: both within
 1.15x. The ablations launch now under the existing A35 script pattern.
 
@@ -5332,10 +5336,10 @@ regression test that checks every parameter receives a gradient for
 each flag variant (32/32) — the single-process contract suite could not
 have caught this. Both A35b variants are now training and accepted; an
 early, non-readout observation is that the no-relational-geometry
-variant runs at 2.0 GB versus 9.8 GB for every other MT2 arm and trails
+variant runs at 2.0 GB versus 9.8 GB for every other ISLA arm and trails
 in validation loss at epoch 50.
 
-## 2026-09-05 — Full V0 verdict: on boundary→interior, GeoTransolver's token-level query interaction is worth 2.6–3.1x over MT2's passive equivariant decode and 8x over the exact-kernel decoder; Branch V launches {#sec-nb-v0-verdict}
+## 2026-09-05 — Full V0 verdict: on boundary→interior, GeoTransolver's token-level query interaction is worth 2.6–3.1x over ISLA's passive equivariant decode and 8x over the exact-kernel decoder; Branch V launches {#sec-nb-v0-verdict}
 
 **Result** (DrivAerML volume, 48 val cases, 10,000 interior queries
 from 10,000 boundary tokens, 500 epochs, lr 1e-3, 2 seeds; interior
@@ -5344,15 +5348,15 @@ rel-L2, `results/a35_v0_reduction_2026-09-05.json`):
 | arm | pressure (s42 / s43) | velocity | nut | pressure vs GT |
 |---|---|---|---|---|
 | GeoTransolver-volume | **0.0622 / 0.0618** | **0.133** | **0.094** | 1.0 |
-| MT2-interior, SDF query normals | 0.166 / 0.153 | 0.308 | 0.372 | **2.57x** |
-| MT2-interior, anchor proxy normals | 0.195 / 0.191 | 0.337 | 0.418 | **3.11x** |
-| kernel-decoder MeshTransformer | 0.499 / 0.492 | 0.549 | 0.727 | **8.0x** |
+| ISLA-interior, SDF query normals | 0.166 / 0.153 | 0.308 | 0.372 | **2.57x** |
+| ISLA-interior, anchor proxy normals | 0.195 / 0.191 | 0.337 | 0.418 | **3.11x** |
+| exact-kernel predecessor (kernel decoder) | 0.499 / 0.492 | 0.549 | 0.727 | **8.0x** |
 
-**Against the preregistration** (@sec-nb-v0-prereg). MT2-interior/GT
+**Against the preregistration** (@sec-nb-v0-prereg). ISLA-interior/GT
 was predicted in [1.3, 2.5] with falsifiers at ≤ 1.2 and ≥ 3.0: the
 SDF-normal variant lands at 2.57 (just outside the band, above it) and
 the proxy-normal variant at 3.11 (**falsifier fires**: without query
-interaction there is no MT2 interior product). The kernel decoder was
+interaction there is no ISLA interior product). The kernel decoder was
 predicted in [1.5, 3.0]: **8.0x**, far outside; its preregistered
 lifeline is the far-band readout (SDF ≥ 0.5 L_ref ≤ 1.0x GT), which is
 being computed from the saved per-point predictions and is not
@@ -5366,7 +5370,7 @@ potential-flow prior is useless (K0) and the learned-density kernel
 decoder is 8x behind a plain attention model on interior fields. What
 *does* separate the architectures on the interior is **interaction at
 the query**: GeoTransolver treats interior queries as tokens that
-attend to everything; MT2's passive read of slices, boundary tokens and
+attend to everything; ISLA's passive read of slices, boundary tokens and
 a local kernel loses 2.6x even with the best query-side geometry (SDF
 normals), and 3.1x with the covariant proxy. Query-side local geometry
 matters (SDF normals buy 1.2x over the proxy), but the dominant term is
@@ -5374,21 +5378,21 @@ interaction. This locates the useful-architecture problem exactly where
 the MT3 skeleton's Branch V put it: give interior queries interaction
 *without* making predictions depend on the batch of queries.
 
-**Decision rule applied: Branch V launches.** MT2-interior/GT ≥ 2.0 on
+**Decision rule applied: Branch V launches.** ISLA-interior/GT ≥ 2.0 on
 both variants → the equivariant latent-volume-token arm
 (`latent_volume_tokens`, K = 3·n_slices + 1 interacting tokens placed
 covariantly off the boundary; built and contract-tested 2026-09-05,
 @sec-nb-sched-2026-09-05) runs on the SDF-normal base: 1-seed
 50-epoch pilot (gate: pressure ≤ 0.6 and descending, memory fits),
 then 2 seeds × 500 epochs. **Prediction in readout units:**
-MT2-interior-LVT / GT ≤ 1.5 (halving the gap) with exact query
+ISLA-interior-LVT / GT ≤ 1.5 (halving the gap) with exact query
 independence retained (1e-12). **Falsifier:** ≥ 2.0 → interaction at
 the query itself is required; the honest product is then
-"GeoTransolver for interior accuracy, MT2 for contracts," and the next
+"GeoTransolver for interior accuracy, ISLA for contracts," and the next
 candidate is interaction with a canonical probe set re-computed per
 request but never across the request's queries.
 
-## 2026-09-05 — SDF-band stratification: the exact-kernel line closes (far-band velocity 16.7x GT; its "≤1.0x pressure" is a zero-output artifact); MT2's interior deficit grows with distance from the wall {#sec-nb-v0-sdf-band}
+## 2026-09-05 — SDF-band stratification: the exact-kernel line closes (far-band velocity 16.7x GT; its "≤1.0x pressure" is a zero-output artifact); ISLA's interior deficit grows with distance from the wall {#sec-nb-v0-sdf-band}
 
 **Method** (`results/v0_sdf_band_2026-09-05.json`; eval-only on the
 saved full-V0 predictions; the 10k interior sample and its SDF are
@@ -5416,11 +5420,11 @@ Together with K0 and the surface-era factorial, the exact-Laplace
 kernel is now closed for separated 3D aerodynamics on every readout
 the program owns.
 
-**MT2-interior, stratified** (SDF-normal variant, pressure / velocity
+**ISLA-interior, stratified** (SDF-normal variant, pressure / velocity
 vs GT): near 2.54x / 2.28x → mid 3.7x / 4.7x → far 3.3x / 5.4x. The
 scoping document predicted the passive-decode price would be worst
 *near* the wall (a local-detail deficit); it is the opposite:
-**near-wall is MT2's best band and the deficit grows with distance.**
+**near-wall is ISLA's best band and the deficit grows with distance.**
 That is the signature of missing *volumetric* context, not missing
 local detail — the slices and anchors are boundary-centric and the
 local kernel readout sees only boundary tokens, so far-field queries
@@ -5432,7 +5436,7 @@ the wall*. A GeoTransolver weakness surfaces too: far-band pressure
 rel-L2 of 1.71 — worse than predicting zero 20 m from the body.
 
 **2026-09-05 addendum — Branch V pilot gate: passes, but the prediction
-is under pressure from the start.** MT2-interior with SDF query normals
+is under pressure from the start.** ISLA-interior with SDF query normals
 plus latent volume tokens, 50 epochs, seed 42: interior pressure
 **0.340**, velocity 0.445, nut 0.756 — against the SDF-normal base's
 own 50-epoch pilot of 0.269 / 0.397 / 0.631. The gate (≤ 0.6 and
@@ -5447,16 +5451,16 @@ preregistered full-run prediction (LVT/GT ≤ 1.5) and falsifier (≥ 2.0)
 stand unchanged; the stratified prediction (gain largest in the mid/far
 bands) will be read from the SDF-band analysis on the full checkpoints.
 
-## 2026-09-05 — T1 verdict (210 cases): plain Transolver lands at 0.091, above the 0.084 bar but 1.8x better than GeoTransolver; MT2's edge at 210 is 1.4x against the best same-family baseline {#sec-nb-t1-210-verdict}
+## 2026-09-05 — T1 verdict (210 cases): plain Transolver lands at 0.091, above the 0.084 bar but 1.8x better than GeoTransolver; ISLA's edge at 210 is 1.4x against the best same-family baseline {#sec-nb-t1-210-verdict}
 
 **Setting.** The HiLift data-efficiency ladder (@sec-nb-hl-ladder-dataeff)
-measured MeshTransformer2 (MT2) 2.5x more accurate than GeoTransolver at
+measured ISLA (ISLA) 2.5x more accurate than GeoTransolver at
 210 training cases (pressure rel-L2 0.064 vs 0.159 on the shared 180-case
 validation set). The same-family control preregistered at
 @sec-nb-transolver-control-prereg trains plain **Transolver** — the same
 soft-slice attention family as GeoTransolver, with no geometry encoder,
-no ball-query context and none of MT2's contracts — on the same rungs,
-to separate "MT2's structure buys small-data accuracy" from
+no ball-query context and none of ISLA's contracts — on the same rungs,
+to separate "ISLA's structure buys small-data accuracy" from
 "GeoTransolver's geometry encoder loses it". At 35 cases the verdict was
 clean (@sec-nb-t1-35-verdict): Transolver collapsed into GeoTransolver's
 band. This entry reads the 210-case rung.
@@ -5464,24 +5468,24 @@ band. This entry reads the 210-case rung.
 **Result** (lr 1e-3, 500 epochs, 2 seeds, shared val set;
 `results/t1_transolver_control_reduction_2026-09-05.json`):
 
-| model @ 210 training cases | lr | pressure rel-L2 | vs MT2 |
+| model @ 210 training cases | lr | pressure rel-L2 | vs ISLA |
 |---|---|---|---|
 | GeoTransolver (ladder) | 1e-3 | 0.160 / 0.157 | 2.5x |
 | GeoTransolver (steel-man control) | 3e-3 | 0.220 / 0.290 | 4.0x |
 | **Transolver** | 1e-3 | **0.092 / 0.089** | **1.4x** |
-| **MeshTransformer2** (ladder) | 1e-3 | **0.062 / 0.067** | 1.0 |
+| **ISLA** (ladder) | 1e-3 | **0.062 / 0.067** | 1.0 |
 
 **The preregistered bar holds, narrowly, and the honest reading is a
-qualification.** The falsifier was Transolver ≤ 1.3x MT2 = 0.084; the
-measured 0.0905 mean is 1.41x MT2, so the advantage is still
-MT2-specific at this rung. But Transolver is **1.76x more accurate than
+qualification.** The falsifier was Transolver ≤ 1.3x ISLA = 0.084; the
+measured 0.0905 mean is 1.41x ISLA, so the advantage is still
+ISLA-specific at this rung. But Transolver is **1.76x more accurate than
 GeoTransolver** at 210 cases with the identical learning rate, whereas at
 35 cases the two were at parity (0.40 vs 0.39 at each one's better lr).
-Most of the 2.5x MT2/GeoTransolver gap at 210 is therefore GeoTransolver
-falling behind its own backbone, not MT2 pulling ahead of the family: the
+Most of the 2.5x ISLA/GeoTransolver gap at 210 is therefore GeoTransolver
+falling behind its own backbone, not ISLA pulling ahead of the family: the
 geometry encoder and context path that GeoTransolver adds are a liability
 between 35 and 210 cases on this dataset. The full-split rung (1,260) has
-no Transolver lane, and GeoTransolver reaches MT2 parity there (0.042 vs
+no Transolver lane, and GeoTransolver reaches ISLA parity there (0.042 vs
 0.041), so whether the geometry encoder ever pays for itself on HiLift is
 open — a 1,260-case Transolver pair would answer it but is a benchmarking
 question, not an architecture one, and is parked.
@@ -5490,7 +5494,7 @@ question, not an architecture one, and is parked.
 carries the Transolver series and both factors per rung, and its caption
 states the claim as: *2.9x at 35 cases against both baselines; 1.4x
 (Transolver) to 2.5x (GeoTransolver) at 210; parity at 1,260*. The
-architecture question A35/A35b is asking — which MT2 ingredient carries
+architecture question A35/A35b is asking — which ISLA ingredient carries
 the small-data advantage — is unchanged, because the 35-case rung, where
 the effect is largest, is exactly where all Transolver-family variants
 collapse together.
@@ -5501,25 +5505,25 @@ run only at lr 1e-3; at 35 cases it preferred 3e-3 by 1.55x. Two lanes at
 launched now, same protocol. **Prediction:** they land within 0.08–0.10
 (lr 3e-3 helps less at 210 than at 35, as it did for GeoTransolver, which
 got *worse*). **Falsifier of the 1.4x statement:** Transolver lr 3e-3 ≤
-0.070 → MT2's 210-case advantage over the best same-family baseline is
+0.070 → ISLA's 210-case advantage over the best same-family baseline is
 within seed spread and the figure's 210-rung annotation must say so.
 
-## 2026-09-05 — Derivation from the A35b memory anomaly: MT2's peak training memory falls 2.75x (9.8 → 3.6 GB at 10k tokens) from an exact pool-then-project rewrite; MT2 now trains in less memory than GeoTransolver {#sec-nb-geo-pool-memory}
+## 2026-09-05 — Derivation from the A35b memory anomaly: ISLA's peak training memory falls 2.75x (9.8 → 3.6 GB at 10k tokens) from an exact pool-then-project rewrite; ISLA now trains in less memory than GeoTransolver {#sec-nb-geo-pool-memory}
 
 **Setting.** The critic review (@sec-nb-critic-review, C16) established
-that MeshTransformer2 (MT2) costs about twice GeoTransolver's peak
+that ISLA (ISLA) costs about twice GeoTransolver's peak
 training memory on the DrivAerML surface protocol — 9.8 GB against
 4.6 GB at 10,000 surface tokens — and chapter 17 retired the
 "equal-or-lower cost" claim on that basis. The A35b ablation launch
 (@sec-nb-a35-verdict, addendum) then produced an anomaly: the
 `use_relational_geo=false` variant, which removes the anchor-relational
 invariants from slice routing and readback, trained at **2.0 GB** while
-every other MT2 arm sat at 9.8 GB. Removing eight scalar features per
+every other ISLA arm sat at 9.8 GB. Removing eight scalar features per
 point–slice pair should not remove four fifths of the memory. This
 entry derives where the memory actually goes and removes it exactly.
 
 **The derivation, from the code rather than the description.** In each
-slice block, MT2 forms the relational invariants
+slice block, ISLA forms the relational invariants
 `geo` of shape (B, N, S, 8) — for every point and every slice anchor,
 the distance, its log, and six direction cosines — and uses them twice:
 a linear map to one logit per pair refines the routing, and a linear map
@@ -5557,7 +5561,7 @@ function, same contracts.
   the V6 arm to 0.1%, which validates the instrument — new code
   **3.33 GiB (3.58 GB)**, a **2.75x** reduction.
 
-**Why it matters.** MT2 now trains in *less* peak memory than
+**Why it matters.** ISLA now trains in *less* peak memory than
 GeoTransolver (3.6 GB vs 4.6 GB at the same token count), with no
 change in its function. The critic's cost finding (C16) is resolved at
 the implementation, not by argument, and the "retired: equal-or-lower
@@ -5589,9 +5593,9 @@ function is unchanged to roundoff, checkpoints are interchangeable.
 readout of the *no-relational-geometry* variant (which removes the
 features, not just their cost) is a separate question, read out below.
 
-## 2026-09-06 — A35b verdict: raw seeds cost nothing (0.99x), no relational routing costs 1.16x; no single MT2 contract carries the 35-case advantage, and the A35 "equivariance is not the carrier" reading is weakened {#sec-nb-a35b-verdict}
+## 2026-09-06 — A35b verdict: raw seeds cost nothing (0.99x), no relational routing costs 1.16x; no single ISLA contract carries the 35-case advantage, and the A35 "equivariance is not the carrier" reading is weakened {#sec-nb-a35b-verdict}
 
-**Setting.** MeshTransformer2 (MT2) is 2.9x more accurate than both
+**Setting.** ISLA (ISLA) is 2.9x more accurate than both
 GeoTransolver and plain Transolver at 35 HiLift training cases
 (@sec-nb-hl-ladder-dataeff, @sec-nb-t1-35-verdict). A35
 (@sec-nb-a35-verdict) removed one ingredient at a time and found that
@@ -5603,7 +5607,7 @@ anchor-relational routing (`use_relational_geo=false`, Transolver-style
 feature-only slicing in the encoder).
 
 **Result** (35 cases, lr 1e-3, 500 epochs, shared 180-case val,
-pressure rel-L2; reference MT2 ladder 0.135 / 0.141, mean 0.138):
+pressure rel-L2; reference ISLA ladder 0.135 / 0.141, mean 0.138):
 
 | ablation | s42 / s43 | vs reference |
 |---|---|---|
@@ -5621,7 +5625,7 @@ than 16%, in either direction, while the gap to the Transolver family is
 
 **A correction to the A35 reading.** A35 concluded that "exact
 equivariance is NOT what buys the data-efficiency" because adding raw
-coordinates cost only 4%. That is too strong. Every MT2 variant tested,
+coordinates cost only 4%. That is too strong. Every ISLA variant tested,
 including the raw-coordinate and raw-seed ones, *retains an invariant
 path*: the relational invariants (distance, log-distance and six
 direction cosines to each slice anchor) are still present in every
@@ -5652,8 +5656,8 @@ observed 2.9x → 1.4–2.5x → 1.0x ladder.
 
 **Setting.** On the boundary→interior task (DrivAerML volume fields
 from the surface alone), GeoTransolver's queries-as-interacting-tokens
-lead MT2's passive equivariant decode by 2.57x on interior pressure
-(@sec-nb-v0-verdict), with MT2's deficit growing with distance from the
+lead ISLA's passive equivariant decode by 2.57x on interior pressure
+(@sec-nb-v0-verdict), with ISLA's deficit growing with distance from the
 wall (@sec-nb-v0-sdf-band). Branch V (`results/mt3_preregistration_skeleton_2026-09-03.md`,
 addendum) proposed equivariant latent volume tokens (LVT): 769 tokens
 placed off each slice anchor along its mean normal at 0.5, 1 and 2 RMS
@@ -5667,8 +5671,8 @@ exactly query-independent. Preregistered: LVT/GT ≤ 1.5 confirms;
 | arm | pressure | velocity | nut | pressure vs GT |
 |---|---|---|---|---|
 | GeoTransolver-volume | 0.0620 | 0.1334 | 0.0939 | 1.00 |
-| MT2-interior (SDF normal) | 0.1596 | 0.3075 | 0.3719 | 2.57x |
-| **MT2-interior + LVT** | **0.2283** | 0.3709 | 0.5811 | **3.68x** |
+| ISLA-interior (SDF normal) | 0.1596 | 0.3075 | 0.3719 | 2.57x |
+| **ISLA-interior + LVT** | **0.2283** | 0.3709 | 0.5811 | **3.68x** |
 
 **The falsifier fires (3.68 ≥ 2.0), and the arm is worse than its own
 base by 1.43x** on pressure, 1.21x on velocity and 1.56x on nut, on both
@@ -5685,7 +5689,7 @@ measure-weighted slice routing that the boundary tokens rely on, and
 the anchor-normal offsets (0.5–2 RMS radii) do not reach the region
 where the deficit is largest (the mid and far bands). The clean
 statement is: **off-surface latent tokens placed along anchor normals,
-as interacting tokens in MT2's routing, degrade the interior decode.**
+as interacting tokens in ISLA's routing, degrade the interior decode.**
 Branch V as built is closed. Two designs remain unmeasured and are
 recorded, not launched: (i) a *wake-aligned* probe set (tokens along the
 freestream direction downstream of the body, where the volumetric
@@ -5696,19 +5700,19 @@ and queries decode from it. Neither launches before the small-data
 carrier question (@sec-nb-inv-prereg) is settled, because that result
 decides which architecture the interior work should build on.
 
-**Standing of the interior task.** GeoTransolver 0.062, MT2-interior
+**Standing of the interior task.** GeoTransolver 0.062, ISLA-interior
 0.160, kernel decoder 0.496 (closed). The honest product statement is
-unchanged: GeoTransolver for interior accuracy; MT2 for exact contracts
+unchanged: GeoTransolver for interior accuracy; ISLA for exact contracts
 and query independence at a 2.6x interior-accuracy price.
 
-## 2026-09-06 — INV transplant preregistered: give GeoTransolver and Transolver MT2's three drive-relative invariants as inputs at 35 cases; if they recover, the small-data carrier is a portable feature, not an architecture {#sec-nb-inv-prereg}
+## 2026-09-06 — INV transplant preregistered: give GeoTransolver and Transolver ISLA's three drive-relative invariants as inputs at 35 cases; if they recover, the small-data carrier is a portable feature, not an architecture {#sec-nb-inv-prereg}
 
-**Question.** Five single-factor ablations of MeshTransformer2 (A35,
+**Question.** Five single-factor ablations of ISLA (A35,
 A35b) have failed to name what carries its 2.9x accuracy advantage over
 both Transolver-family baselines at 35 HiLift training cases. The one
-asymmetry no ablation touched is that every MT2 variant *has* the
+asymmetry no ablation touched is that every ISLA variant *has* the
 drive-relative invariants — the local incidence n·d, the radial
-direction cosine r̂·d and the radius |r|/L, in MT2's seed set and in
+direction cosine r̂·d and the radius |r|/L, in ISLA's seed set and in
 its relational features — while the baselines receive raw centered
 coordinates, normals and the freestream vector and must learn those
 bilinear couplings from data. On HiLift the angle of attack varies
@@ -5719,7 +5723,7 @@ which retrodicts the absent small-data advantage there.
 **Arm INV (launched now; 4 lanes, `highlift/hl_inv_aga.sbatch`).** A
 job-local datapipe transform `ComputeDriveInvariants` writes a per-cell
 feature `drive_inv = [n·d, r̂·d, |r|/8]` (r relative to the mesh
-centroid, L = 8 exactly as in MT2's constant gauge) after `CenterMesh`
+centroid, L = 8 exactly as in ISLA's constant gauge) after `CenterMesh`
 and `ComputeSurfaceNormals`; the `super_scarce` dataset variant
 `highlift_surface_super_scarce_inv.yaml` adds it, and the model
 configs `transolver_surface_inv.yaml` (embedding 6 → 9 dims) and
@@ -5730,18 +5734,18 @@ baseline at its own better learning rate at this rung (Transolver
 3e-3, GeoTransolver 1e-3); scored on the shared 180-case val set.
 The runs are `inv_hl_{transolver,geotransolver}_super_scarce_*`.
 
-**Predictions in readout units** (reference: MT2 0.138; Transolver
+**Predictions in readout units** (reference: ISLA 0.138; Transolver
 0.40; GeoTransolver 0.39; the log-midpoint between 0.40 and 0.138 is
 0.235):
 
 - *Carrier identified* if both baselines land ≤ 0.235 (at least halfway
-  to MT2 in log-error) — and *fully identified* if ≤ 0.16 (within 1.15x
-  of MT2), in which case the honest hero statement becomes "explicit
+  to ISLA in log-error) — and *fully identified* if ≤ 0.16 (within 1.15x
+  of ISLA), in which case the honest hero statement becomes "explicit
   drive-relative invariant inputs buy ~2.9x data efficiency on
-  parametric-freestream problems; MT2 has them built in".
+  parametric-freestream problems; ISLA has them built in".
 - *Falsifier:* both baselines ≥ 0.30 (less than 20% of the log-gap
   closed) → the invariant inputs are not the carrier and the advantage
-  lies in MT2's routing/decoder structure as a whole (the A35b
+  lies in ISLA's routing/decoder structure as a whole (the A35b
   "distributed" verdict stands as the final word on the surface task).
 - Mixed (one recovers, one does not) is read per architecture and
   reported as such; between 0.235 and 0.30 is "partial" and not a
@@ -5760,16 +5764,16 @@ discriminator. The sealed test split is not touched.
 **Result** (shared 180-case val, pressure rel-L2, 2 seeds;
 `results/t1_transolver_control_reduction_2026-09-05.json`, refreshed):
 
-| arm | s42 / s43 | vs MT2 at the same rung |
+| arm | s42 / s43 | vs ISLA at the same rung |
 |---|---|---|
-| GeoTransolver, 210 cases, lr 1e-3, **1,000 epochs** | 0.152 / 0.128 | 2.2x (MT2 0.064) |
+| GeoTransolver, 210 cases, lr 1e-3, **1,000 epochs** | 0.152 / 0.128 | 2.2x (ISLA 0.064) |
 | Transolver, 210 cases, **lr 3e-3** | 0.089 / 0.083 | **1.34x** |
 
 **Controls.** The last GeoTransolver control is the only one of the four
 that beat its ladder lane (0.140 mean vs 0.159, 1.13x), which says
 GeoTransolver at 210 cases was mildly under-trained at 500 epochs; it
-remains 2.2x behind MeshTransformer2 (MT2) and nowhere near the
-preregistered falsifier (1.2x MT2 = 0.077). Across the four controls —
+remains 2.2x behind ISLA (ISLA) and nowhere near the
+preregistered falsifier (1.2x ISLA = 0.077). Across the four controls —
 higher learning rate and doubled epochs at both small rungs — the best
 GeoTransolver result at 35 cases is 0.373 (bar 0.166) and at 210 cases
 0.128 (bar 0.077). **The data-efficiency result is not a protocol
@@ -5779,7 +5783,7 @@ provisional status is lifted.
 **Transolver.** At 210 cases the higher learning rate helps Transolver
 slightly (0.086 vs 0.0905 mean), as predicted (0.08–0.10 band); the
 falsifier of the 1.4x statement (≤ 0.070) did not fire. The final
-same-family number at 210 is **1.34x MT2**, and the hero figure — which
+same-family number at 210 is **1.34x ISLA**, and the hero figure — which
 picks each baseline's better learning rate per rung — now shows 1.3x.
 
 **Final ladder statement.** Against GeoTransolver: 2.9x / 2.5x / 1.0x at
@@ -5790,22 +5794,22 @@ transplant (@sec-nb-inv-prereg) is the running test.
 ## 2026-09-06 — The slope objection, answered honestly, and the W2 wave preregistered: power (third seed), curve fill (510-case rung), floor test (20k tokens), mechanism (single-AoA split), engineering readout (forces) {#sec-nb-w2-prereg}
 
 **The objection.** An adversarial reader of @fig-hilift-data-efficiency
-can say: MeshTransformer2 (MT2) wins at small n by *flattening* the
+can say: ISLA (ISLA) wins at small n by *flattening* the
 scaling curve, so extrapolated to, say, 5,000 cases GeoTransolver would
 be ahead. The measured log-log segment slopes support the premise:
 
-| segment | GeoTransolver | MT2 |
+| segment | GeoTransolver | ISLA |
 |---|---|---|
 | 35 → 210 cases | 0.50 | 0.43 |
 | 210 → 1,260 cases | 0.74 | 0.25 |
 
-GeoTransolver steepens; MT2 flattens. A power-law extrapolation to
-5,000 cases gives ≈ 0.015 for GeoTransolver and ≈ 0.029 for MT2.
+GeoTransolver steepens; ISLA flattens. A power-law extrapolation to
+5,000 cases gives ≈ 0.015 for GeoTransolver and ≈ 0.029 for ISLA.
 
 **The response.** (i) The claim is a *data-efficiency* claim in the
 regime where every production CFD dataset in this program lives
 (35–1,260 cases); it is not a scaling-law claim and the book will not
-make one. (ii) The flattening may be a **shared floor**, not an MT2
+make one. (ii) The flattening may be a **shared floor**, not an ISLA
 property: at full data the two architectures share 70% of their
 residual on identical points (N1, @sec-nb-n1-verdict) and accuracy still
 rises with tokens per case (V6: 6,500 → 10,000 tokens was worth 8%),
@@ -5816,56 +5820,56 @@ shape (bias–variance): a model with more built-in prior starts lower and
 has less left to learn from data. (iv) The way to *defeat* rather than
 concede the objection is the INV transplant (@sec-nb-inv-prereg): if the
 carrier is the drive-relative invariant inputs, GeoTransolver plus those
-three features should inherit MT2's small-data floor while keeping its
+three features should inherit ISLA's small-data floor while keeping its
 own large-data slope, dominating at every n.
 
 **W2 wave, preregistered before any of it runs.** All lanes use the
 frozen ladder protocol (500 epochs, 10,000 tokens unless stated, bf16,
-no augmentation, lr 1e-3 for GeoTransolver and MT2, 3e-3 for
+no augmentation, lr 1e-3 for GeoTransolver and ISLA, 3e-3 for
 Transolver, shared val) and `highlift/hl_wave2_aga.sbatch` with a lane
 table (`highlift/wave2_lanes.tsv`). Splits are the dataset's own curated
 manifests (`splits.md`): `super_scarce` ⊂ `scarce` ⊂ `medium` ⊂ `full`
 are nested with the same 180-case val; `single_aoa_12` holds 126
 geometries at a single angle of attack with its own 18-geometry val.
 
-- **W2-A power: third seed (44)** at 35 and 210 cases for MT2,
+- **W2-A power: third seed (44)** at 35 and 210 cases for ISLA,
   GeoTransolver and Transolver (6 lanes). *Prediction:* every seed-44
   result lands inside the seed-42/43 spread ×1.5; *falsifier:* any
   architecture's third seed moves its rung mean by more than 15%.
   Reported together with the paired per-case statistics on the 180
-  shared val cases (fraction of cases MT2 wins; sign-test p), computed
+  shared val cases (fraction of cases ISLA wins; sign-test p), computed
   now from the existing evaluations
   (`results/hilift_paired_stats_2026-09-06.json`).
-- **W2-B curve fill: the 510-case `medium` rung** for MT2,
+- **W2-B curve fill: the 510-case `medium` rung** for ISLA,
   GeoTransolver, and Transolver at both learning rates (8 lanes).
-  *Prediction in readout units:* GeoTransolver 0.075–0.095, MT2
-  0.048–0.056 (MT2/GT ≈ 0.6, continuing the monotone 0.35 → 0.41 → 0.98
+  *Prediction in readout units:* GeoTransolver 0.075–0.095, ISLA
+  0.048–0.056 (ISLA/GT ≈ 0.6, continuing the monotone 0.35 → 0.41 → 0.98
   approach to parity). *Falsifier for the "smooth approach to a shared
-  floor" reading:* MT2/GT at 510 ≥ 0.9 (parity already, i.e. MT2's curve
+  floor" reading:* ISLA/GT at 510 ≥ 0.9 (parity already, i.e. ISLA's curve
   is flat from 210 on) — that would mean the crossover is near 1,260 and
   the slope objection stands in full.
-- **W2-C floor test: 1,260 cases at 20,000 tokens** for MT2 and
+- **W2-C floor test: 1,260 cases at 20,000 tokens** for ISLA and
   GeoTransolver (4 lanes). *Prediction if the floor is the protocol's:*
   both improve by a similar factor (within 5 percentage points of each
   other; the V6 token effect suggests 5–10%). *Falsifier (objection
   stands):* GeoTransolver improves by ≥ 10 percentage points more than
-  MT2.
-- **W2-D mechanism: single angle of attack.** MT2 vs GeoTransolver on
+  ISLA.
+- **W2-D mechanism: single angle of attack.** ISLA vs GeoTransolver on
   `single_aoa_12` (126 geometries, AoA fixed at 12°, val 18) and on a
   matched-size mixed-AoA control `mixed126` (126 cases drawn from
   `full_train` with a fixed seed, val = the shared 180), 2 seeds each
-  (8 lanes). The drive-invariant hypothesis says MT2's advantage comes
+  (8 lanes). The drive-invariant hypothesis says ISLA's advantage comes
   from representing the freestream-direction dependence exactly, so it
   should be *absent* when the direction is fixed (as on DrivAerML) and
-  present when it varies. *Prediction:* MT2/GT ≈ 0.40–0.55 on
-  `mixed126`; MT2/GT ≥ 0.80 on `single_aoa_12`. *Falsifier:* MT2/GT
+  present when it varies. *Prediction:* ISLA/GT ≈ 0.40–0.55 on
+  `mixed126`; ISLA/GT ≥ 0.80 on `single_aoa_12`. *Falsifier:* ISLA/GT
   ≤ 0.60 on `single_aoa_12` → the carrier is not the direction
   dependence.
 - **W2-E engineering readout, no compute:** lift and drag coefficient
   errors from the existing 35- and 210-case evaluations (the recipe's
   inference already integrates CD/CL per case). Reported as MAE relative
   to the mean magnitude, per architecture; a first look at 35 cases
-  shows MT2's CL error 3.2x smaller than GeoTransolver's (19,100 vs
+  shows ISLA's CL error 3.2x smaller than GeoTransolver's (19,100 vs
   60,500 in the dataset's dimensional force units; 3.1% vs 9.7% of the
   mean) — recorded here before the full table so it cannot be
   cherry-picked later.
@@ -5879,18 +5883,18 @@ appear at other angles of attack; the dataset's `geometry` family
 (`geometry`, `geometry_scarce`, `geometry_super_scarce` = 1,260 / 210 /
 40 cases; 18 val geometries never seen at any angle) is the
 unseen-geometry ladder its designers call the primary ML challenge
-(`splits.md`). It is unmeasured here. Arm: MT2 vs GeoTransolver on
+(`splits.md`). It is unmeasured here. Arm: ISLA vs GeoTransolver on
 `geometry_scarce` (210) and `geometry_super_scarce` (40 = 4 geometries ×
 10 angles), 2 seeds each (8 lanes), frozen protocol, scored on the
-18-geometry val (180 cases). *Prediction:* MT2/GT ratios match the
+18-geometry val (180 cases). *Prediction:* ISLA/GT ratios match the
 same-size data-efficiency rungs within 0.1 (≈ 0.41 at 210; ≈ 0.35–0.5 at
-40), i.e. the advantage is not geometry memorization. *Falsifier:* MT2/GT
+40), i.e. the advantage is not geometry memorization. *Falsifier:* ISLA/GT
 ≥ 0.8 on either rung → the small-data advantage depends on having seen
 the geometry at another angle, which would re-attribute it to angle
 interpolation rather than data efficiency. Launches when the running
 count allows.
 
-## 2026-09-06 — W2-E readout: MT2 beats both baselines on 360 of 360 paired validation cases at 35 training cases (median per-case ratio 3.2x), and predicts lift and drag coefficients to 3% where GeoTransolver reaches 11–17% {#sec-nb-w2e-paired}
+## 2026-09-06 — W2-E readout: ISLA beats both baselines on 360 of 360 paired validation cases at 35 training cases (median per-case ratio 3.2x), and predicts lift and drag coefficients to 3% where GeoTransolver reaches 11–17% {#sec-nb-w2e-paired}
 
 **Why.** Two seeds with tight spreads is suggestive; the critic (C-power)
 asked for a paired per-case statistic. The 180 validation cases are
@@ -5902,9 +5906,9 @@ uses. Computed from the existing evaluations
 (`highlift/paired_stats.py` → `results/hilift_paired_stats_2026-09-06.json`);
 no new training.
 
-**Paired pressure rel-L2, MeshTransformer2 (MT2) vs each baseline:**
+**Paired pressure rel-L2, ISLA (ISLA) vs each baseline:**
 
-| training cases | baseline | cases MT2 wins | sign-test p | median ratio (baseline / MT2) | 10th–90th pct |
+| training cases | baseline | cases ISLA wins | sign-test p | median ratio (baseline / ISLA) | 10th–90th pct |
 |---|---|---|---|---|---|
 | 35 | GeoTransolver | **360 / 360** | 9e-109 | **3.18** | 1.82–4.75 |
 | 35 | Transolver (lr 3e-3) | **360 / 360** | 9e-109 | **3.20** | 1.91–4.71 |
@@ -5913,10 +5917,10 @@ no new training.
 | 1,260 | GeoTransolver | 258 / 360 | 1e-16 | 1.06 | 0.90–1.20 |
 
 At 35 cases there is **no validation case, on either seed, where either
-baseline beats MT2**; the *worst* tenth of cases still favor MT2 by
+baseline beats ISLA**; the *worst* tenth of cases still favor ISLA by
 1.8x. At 210 the same holds against GeoTransolver (98%); against
-Transolver MT2 wins 92% of cases with a median 1.5x. At 1,260, where
-the means are at parity (0.98), MT2 is nominally better on 72% of cases
+Transolver ISLA wins 92% of cases with a median 1.5x. At 1,260, where
+the means are at parity (0.98), ISLA is nominally better on 72% of cases
 with a median 1.06x — a small but statistically unambiguous per-case
 edge that the seed-mean comparison hides.
 
@@ -5926,23 +5930,23 @@ seeds):
 
 | training cases | architecture | CD | CL |
 |---|---|---|---|
-| 35 | **MT2** | **3.3%** | **3.0%** |
+| 35 | **ISLA** | **3.3%** | **3.0%** |
 | 35 | GeoTransolver | 17.1% | 11.0% |
 | 35 | Transolver | 11.9% | 8.1% |
-| 210 | MT2 | 1.9% | 1.5% |
+| 210 | ISLA | 1.9% | 1.5% |
 | 210 | GeoTransolver | 3.2% | 2.5% |
 | 210 | Transolver | 2.0% | 1.5% |
-| 1,260 | MT2 | 1.4% | 0.9% |
+| 1,260 | ISLA | 1.4% | 0.9% |
 | 1,260 | GeoTransolver | 1.2% | 0.8% |
 
 **What it establishes.** The data-efficiency result is not a
 seed-level accident: it holds case by case, on every case, at the rung
-where it is largest. In engineering terms, **from 35 CFD runs MT2
+where it is largest. In engineering terms, **from 35 CFD runs ISLA
 predicts lift and drag coefficients of unseen high-lift configurations
 to about 3%, where the Transolver-family baselines are at 8–17%**; at
 210 runs all three are within 1.5–3%, and at 1,260 the two-seed
 means are indistinguishable (GeoTransolver nominally ahead on forces by
-0.1–0.2 points, MT2 nominally ahead per case on the field). The 3%
+0.1–0.2 points, ISLA nominally ahead per case on the field). The 3%
 number at 35 cases is the "useful" statement of the result: a
 few-dozen-run design-of-experiments budget yields a force surrogate of
 practical accuracy.
@@ -5953,11 +5957,11 @@ meaningful quantity; the validation set is in-distribution
 (random cases of the same 180-geometry × 10-angle design); and the
 1,260-case force comparison is within seed noise.
 
-## 2026-09-06 — Free mechanism probe on the 35-case models: MT2's advantage holds at every angle of attack (2.2–4.3x), at the one angle absent from training (18°, 2.5x), and on never-seen geometries (3.0x); the baselines' error is flat across all strata {#sec-nb-strat35}
+## 2026-09-06 — Free mechanism probe on the 35-case models: ISLA's advantage holds at every angle of attack (2.2–4.3x), at the one angle absent from training (18°, 2.5x), and on never-seen geometries (3.0x); the baselines' error is flat across all strata {#sec-nb-strat35}
 
 **Why.** Two hypotheses about the 35-case carrier make different
 predictions about *where* on the validation set the advantage lives.
-If MeshTransformer2 (MT2) wins by representing the freestream-direction
+If ISLA (ISLA) wins by representing the freestream-direction
 dependence exactly, its edge should be largest at angles the baselines
 have seen least. If it wins by geometry memorization, the edge should
 collapse on validation geometries absent from the 35 training cases.
@@ -5968,7 +5972,7 @@ geometric-mean pressure rel-L2 over cases and both seeds.
 **By angle of attack** (the 35 training cases contain 3–7 cases per
 angle and **none at 18°**; 33 distinct geometries):
 
-| AoA [deg] | train cases | val cases | MT2 | GeoTransolver | Transolver | GT / MT2 | T / MT2 |
+| AoA [deg] | train cases | val cases | ISLA | GeoTransolver | Transolver | GT / ISLA | T / ISLA |
 |---|---|---|---|---|---|---|---|
 | 4 | 4 | 17 | 0.106 | 0.354 | 0.329 | 3.3 | 3.1 |
 | 6 | 4 | 18 | 0.098 | 0.338 | 0.330 | 3.4 | 3.4 |
@@ -5983,28 +5987,28 @@ angle and **none at 18°**; 33 distinct geometries):
 
 **By whether the validation geometry appears in training at another angle:**
 
-| geometry seen in train | val cases | MT2 | GeoTransolver | Transolver | GT / MT2 |
+| geometry seen in train | val cases | ISLA | GeoTransolver | Transolver | GT / ISLA |
 |---|---|---|---|---|---|
 | yes | 34 | 0.113 | 0.386 | 0.387 | 3.4 |
 | **no** | **146** | 0.130 | 0.388 | 0.398 | **3.0** |
 
 **Three readings.** (i) **The advantage is not geometry memorization:**
-on the 146 never-seen geometries MT2 is 3.0x ahead; seeing a geometry
-at another angle helps MT2 by 15% and GeoTransolver not at all.
+on the 146 never-seen geometries ISLA is 3.0x ahead; seeing a geometry
+at another angle helps ISLA by 15% and GeoTransolver not at all.
 (ii) **The advantage is not angle memorization either:** at 18°, which
-no training case has, MT2 interpolates smoothly between its 16° and
+no training case has, ISLA interpolates smoothly between its 16° and
 20° errors (0.135 → 0.167 → 0.186) and stays 2.5x ahead. (iii) **The
 baselines' error is flat** — 0.33–0.47 at every angle and identical on
-seen and unseen geometries — while MT2's error tracks the physics
+seen and unseen geometries — while ISLA's error tracks the physics
 (0.09–0.10 in attached flow, 0.17–0.19 post-stall, where the ratio
 falls to 2.2–2.5x). Flat error across every stratum is what a model
 that has not yet begun to fit the case-to-case variation looks like; a
 dataset-mean predictor would be the natural reference and is worth
 computing (recorded as a to-do, not a result). The picture at 35 cases
-is therefore not "MT2 is 3x better at the same task" but "**MT2 has
+is therefore not "ISLA is 3x better at the same task" but "**ISLA has
 learned the task and the Transolver family has not yet started**",
 which is exactly what a sample-complexity carrier (a coupling the
-baselines must learn from data and MT2 gets for free) would produce,
+baselines must learn from data and ISLA gets for free) would produce,
 and what the INV transplant (@sec-nb-inv-prereg) tests directly.
 
 **Addendum — the reference predictors, computed** (from the stored
@@ -6014,17 +6018,17 @@ pressure p − p_inf, geometric mean over the 180 cases;
 Predicting the freestream pressure everywhere scores 1.00 by
 definition; the dataset-mean constant 0.94; each case's own mean (an
 oracle constant) 0.93. On the same scale GeoTransolver scores 0.63,
-Transolver 0.68 and MT2 0.25. The median per-case correlation between
+Transolver 0.68 and ISLA 0.25. The median per-case correlation between
 predicted and true pressure is 0.76 (GeoTransolver), 0.69 (Transolver)
-and **0.97 (MT2)**; the worst decile is 0.69 / 0.60 / 0.93. So reading
+and **0.97 (ISLA)**; the worst decile is 0.69 / 0.60 / 0.93. So reading
 (iii) above is too strong as written: at 35 cases the baselines *have*
 learned something — about 1.5x better than a constant, explaining
-roughly half the pointwise variance — while MT2 is 4x better than a
+roughly half the pointwise variance — while ISLA is 4x better than a
 constant and explains 93%. The flatness of the baselines' error
 across angles and geometries reflects a model that captures the
 coarse, case-independent pressure pattern (suction over the wing,
 stagnation at the leading edge) and little of the case-to-case
-variation that the angle and the geometry drive; MT2 captures most of
+variation that the angle and the geometry drive; ISLA captures most of
 that variation. (The recipe's headline metric uses a different
 normalization, so 0.25 here corresponds to 0.138 there; ratios between
 rows, not the absolute values, are the comparable quantities.)
@@ -6034,7 +6038,7 @@ of the same-size rung) is already met at this rung on the 146-case
 subset; W2-F's own lanes remain the clean test because the `geometry`
 splits hold out *all* angles of the val geometries by construction.
 
-## 2026-09-06 — Free uncertainty signal: at 35 cases, disagreement between two MT2 seeds rank-correlates with the per-case error (Spearman 0.67); the baselines' seed disagreement is anticorrelated with theirs {#sec-nb-uq35}
+## 2026-09-06 — Free uncertainty signal: at 35 cases, disagreement between two ISLA seeds rank-correlates with the per-case error (Spearman 0.67); the baselines' seed disagreement is anticorrelated with theirs {#sec-nb-uq35}
 
 **Why.** A surrogate trained from a few dozen CFD runs is only useful in
 practice if it can flag the cases it gets wrong. The cheapest
@@ -6046,16 +6050,16 @@ with stored per-point predictions. Computed on gauge pressure over the
 
 | architecture (35 cases) | error seed 42 / 43 | two-seed ensemble error | ensemble gain | seed disagreement | Spearman(disagreement, error) |
 |---|---|---|---|---|---|
-| **MT2** | 0.253 / 0.261 | 0.251 | 1.03x | 0.112 | **+0.67** |
+| **ISLA** | 0.253 / 0.261 | 0.251 | 1.03x | 0.112 | **+0.67** |
 | GeoTransolver | 0.633 / 0.659 | 0.634 | 1.02x | 0.221 | −0.20 |
 | Transolver | 0.678 / 0.671 | 0.671 | 1.01x | 0.124 | −0.47 |
 
 (Same gauge-pressure scale as @sec-nb-strat35's addendum; ratios are
 what transfer to the recipe metric.)
 
-**Three readings.** (i) **MT2 knows when it is wrong:** the cases on
+**Three readings.** (i) **ISLA knows when it is wrong:** the cases on
 which its two seeds disagree most are the cases with the largest error
-(rank correlation 0.67, on 180 cases). A two-seed MT2 therefore ships
+(rank correlation 0.67, on 180 cases). A two-seed ISLA therefore ships
 with a usable per-case confidence flag at no extra inference cost
 beyond the second model. (ii) **The baselines do not:** their seed
 disagreement is *anti*-correlated with their error, so an ensemble
@@ -6069,15 +6073,15 @@ seed-stable.
 
 **Addendum — the other rungs** (`results/hilift_ensemble_uq_{210,1260}_2026-09-06.json`):
 
-| rung | MT2 Spearman | GeoTransolver Spearman | Transolver Spearman | ensemble gain (MT2 / GT) |
+| rung | ISLA Spearman | GeoTransolver Spearman | Transolver Spearman | ensemble gain (ISLA / GT) |
 |---|---|---|---|---|
 | 35 | **+0.67** | −0.20 | −0.47 | 1.03x / 1.02x |
 | 210 | +0.64 | +0.65 | +0.60 | 1.03x / 1.05x |
 | 1,260 | +0.15 | +0.19 | — | 1.04x / 1.03x |
 
 So the ranking property is a **"the model has learned the task"**
-property, not an MT2-specific one: at 210 cases all three architectures
-have it (≈ 0.6–0.65), and MT2 simply reaches that state at 35 cases
+property, not an ISLA-specific one: at 210 cases all three architectures
+have it (≈ 0.6–0.65), and ISLA simply reaches that state at 35 cases
 where the baselines have not. At 1,260 cases the correlation collapses
 for both architectures (0.15–0.19): the remaining error is no longer
 seed-dependent model variance but something the two seeds — and, per
@@ -6089,10 +6093,10 @@ line of evidence for the shared-floor reading of the flattened curve
 the right *size*) is not tested; only the ranking is. The
 force-coefficient-level version is a cheap follow-up.
 
-## 2026-09-07 — INV verdict: giving the baselines MT2's drive-relative invariants as inputs buys Transolver 1.35x and GeoTransolver nothing; the invariant inputs are not the small-data carrier {#sec-nb-inv-verdict}
+## 2026-09-07 — INV verdict: giving the baselines ISLA's drive-relative invariants as inputs buys Transolver 1.35x and GeoTransolver nothing; the invariant inputs are not the small-data carrier {#sec-nb-inv-verdict}
 
 **Setting.** The transplant test preregistered at @sec-nb-inv-prereg added
-the three per-cell invariants MeshTransformer2 (MT2) builds internally —
+the three per-cell invariants ISLA (ISLA) builds internally —
 the local incidence n·d, the radial cosine r̂·d and the radius |r|/8 — as
 plain input features to GeoTransolver and to Transolver at 35 HiLift
 training cases, each at its better learning rate, 2 seeds, frozen
@@ -6102,7 +6106,7 @@ freestream-direction coupling from data.
 
 **Result** (`results/inv_transplant_2026-09-07.json`):
 
-| model @ 35 cases | without invariants | **with invariants** | change | vs MT2 (0.138) |
+| model @ 35 cases | without invariants | **with invariants** | change | vs ISLA (0.138) |
 |---|---|---|---|---|
 | Transolver (lr 3e-3) | 0.406 / 0.398 | **0.294 / 0.301** | 1.35x better | 2.15x |
 | GeoTransolver (lr 1e-3) | 0.375 / 0.409 | **0.400 / 0.388** | none | 2.85x |
@@ -6113,14 +6117,14 @@ GeoTransolver does not move at all. **The invariant inputs are not the
 carrier.** Transolver gains a quarter of the log-gap; GeoTransolver —
 which already has a geometry encoder that could in principle form these
 features — gains nothing, so the coupling n·d is not what its small-data
-failure is about. Combined with the five single-factor ablations of MT2
+failure is about. Combined with the five single-factor ablations of ISLA
 (@sec-nb-a35-verdict, @sec-nb-a35b-verdict), the program has now
 excluded, one at a time: exactness of equivariance, the invariant seed
 parameterization, the similarity gauge, measure weights, encoder
 relational routing, and (from the baseline side) the availability of
 drive-relative invariant inputs. None accounts for more than 16% on the
-MT2 side or 35% on the baseline side, against a 190% gap. The honest
-statement is that MT2's small-data advantage is a property of its
+ISLA side or 35% on the baseline side, against a 190% gap. The honest
+statement is that ISLA's small-data advantage is a property of its
 soft-slice design as a whole — equivariant anchors, relational routing
 and readback, measure-weighted aggregation, invariant seeds, and the
 training dynamics they induce together — and that no single transplantable
@@ -6133,22 +6137,22 @@ on DrivAerML (fixed freestream). That null is real, but the transplant
 shows it cannot be attributed to the invariant inputs; the DrivAerML–HiLift
 contrast remains unexplained and is recorded as such.
 
-## 2026-09-07 — W2-A first readout: the third seed lands inside the two-seed spread for all three architectures at 35 cases (MT2 0.138, GeoTransolver 0.359, Transolver 0.409) {#sec-nb-w2a-35}
+## 2026-09-07 — W2-A first readout: the third seed lands inside the two-seed spread for all three architectures at 35 cases (ISLA 0.138, GeoTransolver 0.359, Transolver 0.409) {#sec-nb-w2a-35}
 
-Seed 44, frozen protocol, shared val: MT2 **0.1376** (seeds 42/43:
+Seed 44, frozen protocol, shared val: ISLA **0.1376** (seeds 42/43:
 0.1352/0.1410), GeoTransolver **0.3588** (0.375/0.409), Transolver at
 lr 3e-3 **0.4089** (0.406/0.398). Every third seed is inside its
 two-seed spread ×1.5 (prediction held; falsifier of a 15% move in any
 rung mean not approached: three-seed means 0.138 / 0.381 / 0.404, i.e.
-GT/MT2 2.76x, T/MT2 2.93x). The 210-case third seeds are still training.
+GT/ISLA 2.76x, T/ISLA 2.93x). The 210-case third seeds are still training.
 
-## 2026-09-07 — B1 verdict: a raw-coordinate channel does not give MT2 GeoTransolver's smaller stall-extrapolation ratio (d = 12.7 / 13.3 vs GeoTransolver's 9.3); the falsifier fires {#sec-nb-b1-verdict}
+## 2026-09-07 — B1 verdict: a raw-coordinate channel does not give ISLA GeoTransolver's smaller stall-extrapolation ratio (d = 12.7 / 13.3 vs GeoTransolver's 9.3); the falsifier fires {#sec-nb-b1-verdict}
 
 **Setting.** On the sealed stall test (@sec-nb-hl-sealed-test)
-GeoTransolver's degradation ratio d = test/val was 9.3 against MT2's
-12.5, with MT2 keeping the lower absolute error. The preregistered
+GeoTransolver's degradation ratio d = test/val was 9.3 against ISLA's
+12.5, with ISLA keeping the lower absolute error. The preregistered
 discriminator asked whether that ratio edge is carried by GeoTransolver's
-raw-coordinate inputs: MT2 with the similarity gauge plus a
+raw-coordinate inputs: ISLA with the similarity gauge plus a
 raw-coordinate channel (breaking SE(3) equivariance on purpose), 2
 seeds, stall split, one permitted sealed-test evaluation. Bars: raw
 features carry the ratio if d ≤ 11.0 *and* OOD pressure < 0.245; they do
@@ -6157,11 +6161,11 @@ not if d ≥ 12.0 or OOD pressure ≥ 0.255.
 **Result** (`results/b1_raw_coordinate_discriminator_2026-09-07.json`;
 pressure rel-L2):
 
-| MT2 + raw coordinates, stall split | in-regime val (135) | sealed test (723) | d |
+| ISLA + raw coordinates, stall split | in-regime val (135) | sealed test (723) | d |
 |---|---|---|---|
 | seed 42 | 0.0206 | 0.262 | **12.7** |
 | seed 43 | 0.0201 | 0.267 | **13.3** |
-| MT2 reference (ladder) | 0.0204 / 0.0210 | 0.261 / 0.259 | 12.5 |
+| ISLA reference (ladder) | 0.0204 / 0.0210 | 0.261 / 0.259 | 12.5 |
 | GeoTransolver (ladder) | 0.0289 / 0.0304 | 0.274 / 0.277 | 9.3 |
 
 **Both falsifier conditions fire** (d ≥ 12.0; OOD pressure ≥ 0.255). The
@@ -6190,14 +6194,16 @@ A colleague pointed out that "MeshTransformer" is already the name of
 other published architectures. Peter chose **ISLA — Invariant Slice
 Attention** (pronounced "eye-la"; an *isla* is an island, a shape defined
 entirely by its boundary) for the soft-slice equivariant architecture the
-book calls MeshTransformer2 / MT2 in every entry above this one. The code
-package moves to `physicsnemo/experimental/nn/isla/` with class `ISLA` and a
-backward-compatible alias `MeshTransformer2`; the recipe config becomes
+entries above this one were written under the name MeshTransformer2 / MT2
+(those mentions were replaced by ISLA on 2026-09-21; see the nomenclature
+note at the top of this notebook). The code package moves to
+`physicsnemo/experimental/nn/isla/` with class `ISLA` and a
+backward-compatible alias `MeshTransformer2` (the alias was removed on
+2026-09-20, @sec-nb-no-legacy-compat); the recipe config becomes
 `isla_surface.yaml` with the old file kept as a pointer. Reader-facing
-chapters use ISLA throughout. This notebook keeps its historical names;
-artifact keys (`mt2_*`) and the `examples/cfd/mesh_transformer/` directory
-are unchanged as provenance. The exact-kernel MeshTransformer keeps its
-name in the archive.
+chapters use ISLA throughout. Artifact keys (`mt2_*`) and the
+`examples/cfd/mesh_transformer/` directory are unchanged as provenance. The
+exact-kernel predecessor keeps its own name in the archive.
 
 ## 2026-09-07 — W2-F launched (unseen-geometry ladder) with a GeoTransolver learning-rate steel-man at the single angle, on the strength of an early single-angle read {#sec-nb-w2f-launch}
 
@@ -6870,7 +6876,7 @@ resources paragraph (results/v0_interior_resources_2026-09-07.json):
 | GeoTransolver-volume (`geotransolver_volume.yaml`) | 27,574,449 | 8.8 GB | interior points only, each with coordinates, signed distance to the full-resolution surface and its gradient; U_inf globally; geometry encoder on the interior cloud; `include_local_features: true` with radii 0.01–5.0 (six ball queries) |
 | ISLA passive decode (`mt2_volume.yaml`) | 9,942,855 | 4.9 GB | 10,000 surface cell centroids, normals, areas; freestream direction; query positions; SDF-gradient normal at the query in the SDF arm |
 | ISLA + latent volume tokens | 10,030,856 | 5.8 GB | as above plus 769 latent tokens |
-| exact-kernel MeshTransformer (`mesh_transformer_volume.yaml`) | 761,749 | 4.0 GB | boundary sample + drive |
+| exact-kernel predecessor (`mesh_transformer_volume.yaml`) | 761,749 | 4.0 GB | boundary sample + drive |
 | ISLA query tokens (training) | 8,866,870 | 6.0 GB | as the passive arm, queries as interacting tokens |
 
 The GeoTransolver volume configuration does not consume the boundary
@@ -7886,7 +7892,7 @@ chapter's verdict, the limits chapter's established list and its
 recommendation section, and the status chapter's opening), two of them
 stale (the limits chapter still recommended GeoTransolver for the interior
 and treated the unseen-geometry ladder as future; the status chapter still
-named the exact-kernel MeshTransformer as a recurring architecture and the
+named the exact-kernel predecessor as a recurring architecture and the
 cross-family transfer gap as the organizing question). The index paragraph
 was a 400-word chain of ratios with no sentence saying how large the author
 thinks the effect is.
@@ -8559,7 +8565,7 @@ the 365-token arm's seed spread. **Null** if all three fields lie within 3%
 of the 365-token arm. Between: partial, reported per field. Cost is
 reported alongside (the per-slice geometry now spans 20,000 tokens, so the
 step time and memory of the query-token arm rise; the recompute and compiled
-paths of @sec-mt2-cost are the mitigation). Either outcome corrects the
+paths of @sec-isla-cost are the mitigation). Either outcome corrects the
 chapter's input description; a supported outcome also reopens the passive
 decoder question with the full surface (PASSIVE2), because the passive
 arm's 2.6x deficit was measured with the same 365 tokens.
@@ -10960,7 +10966,7 @@ largest per-case change in any seed.
 | ISLA query tokens (no SDF scalar) | 2 | 0.0639 → 0.0615 (-3.8%, max 8%) | 0.1552 → 0.1390 (-10.4%, max 14%) | 0.1604 → 0.1416 (-11.7%, max 51%) |
 | ISLA passive decode | 2 | 0.1928 → 0.1895 (-1.7%, max 6%) | 0.3371 → 0.3318 (-1.6%, max 4%) | 0.4181 → 0.3977 (-4.9%, max 16%) |
 | ISLA passive decode + SDF normals | 2 | 0.1596 → 0.1572 (-1.5%, max 14%) | 0.3075 → 0.3052 (-0.7%, max 5%) | 0.3719 → 0.3736 (+0.5%, max 26%) |
-| MeshTransformer exact kernel | 2 | 0.4958 → 0.4959 (+0.0%, max 5%) | 0.5490 → 0.5486 (-0.1%, max 3%) | 0.7271 → 0.7270 (-0.0%, max 2%) |
+| exact-kernel predecessor | 2 | 0.4958 → 0.4959 (+0.0%, max 5%) | 0.5490 → 0.5486 (-0.1%, max 3%) | 0.7271 → 0.7270 (-0.0%, max 2%) |
 | ladder 54 cars: GeoTransolver-volume | 2 | 0.1041 → 0.0960 (-7.8%, max 15%) | 0.2020 → 0.1756 (-13.1%, max 17%) | 0.1901 → 0.1701 (-10.5%, max 28%) |
 | ladder 54 cars: ISLA QT+SDF | 2 | 0.1159 → 0.1139 (-1.8%, max 4%) | 0.1685 → 0.1649 (-2.1%, max 3%) | 0.2743 → 0.2606 (-5.0%, max 32%) |
 | ladder 54 cars: ISLA QT (no SDF) | 2 | 0.1263 → 0.1240 (-1.8%, max 4%) | 0.2542 → 0.2465 (-3.1%, max 5%) | 0.3293 → 0.3121 (-5.2%, max 18%) |
@@ -11011,7 +11017,7 @@ the architecture-dependence bar fires by a wide margin: bf16 inflated
 GeoTransolver-volume's pressure and velocity errors by 17–18% and its eddy
 viscosity by 6%, the ISLA query-token arms by 3–4% (pressure), 6–10%
 (velocity) and 4–12% (eddy viscosity), the passive ISLA arms by 0.5–2%,
-and the exact-kernel MeshTransformer not at all. Under float32 the
+and the exact-kernel predecessor not at all. Under float32 the
 book's interior ordering changes on pressure and stands on the other two
 fields: GeoTransolver-volume leads on pressure (ISLA ÷ GT 1.06–1.07 against
 0.91–0.93 under bf16), ISLA leads on velocity (0.73–0.74 against 0.64–0.65),
@@ -11074,7 +11080,7 @@ of the unit-drive GeoTransolver-volume (0.0512 / 0.0514 pressure, 0.1090 /
 | ISLA query tokens, no SDF | −3.8% / −10.4% / −11.7% | **1.19 / 1.28 / 1.61** |
 | ISLA passive decode, SDF normal | −1.5% / −0.7% / +0.5% | **3.06** on pressure |
 | ISLA passive decode, proxy normal | −1.7% / −1.6% / −4.9% | 3.68 on pressure |
-| exact-kernel MeshTransformer | 0% | unchanged |
+| exact-kernel predecessor | 0% | unchanged |
 | ISLA query tokens + SDF, 54 cars | — | 1.19 / 0.94 / 1.53 |
 | ISLA query tokens + SDF, 109 cars | — | 1.18 / 0.83 / 1.49 |
 
@@ -11268,7 +11274,7 @@ Artifact: results/fp32_reeval/fp32_shift_2026-09-09.json.
 | ISLA | DrivAerML (surface and interior) | 49 | -3.14% | -4.4% to +0.1% | 7% | 45 |
 | GeoTransolver | DrivAerML (surface and interior) | 15 | -9.55% | -17.2% to -0.3% | 18% | 14 |
 | Transolver | DrivAerML (surface and interior) | 4 | -7.83% | -8.3% to -7.6% | 16% | 4 |
-| MeshTransformer (exact kernel) | DrivAerML (surface and interior) | 2 | +0.02% | -0.1% to +0.1% | 3% | 0 |
+| exact-kernel predecessor | DrivAerML (surface and interior) | 2 | +0.02% | -0.1% to +0.1% | 3% | 0 |
 
 **By rung** (median shift, number of runs; a rung's baselines are the
 unit-drive ones where they exist):
@@ -11339,7 +11345,7 @@ not change sign. (3) Within ISLA, the offset is nearly configuration-
 independent (weights on or off, gauge, second-moment channel, query
 tokens: 3–4% on DrivAerML, 0.1–0.7% on small HiLift rungs), so every
 within-ISLA statement in the book survives unchanged; the passive decoders'
-offset is smallest (0.5–2%), the exact-kernel MeshTransformer's zero. (4)
+offset is smallest (0.5–2%), the exact-kernel predecessor's zero. (4)
 The per-case picture is worse than the means: single cases move by 5–25%
 for the baselines and 5–17% for ISLA, so per-case paired statistics
 computed under bf16 (win counts, medians of per-case ratios) are not
@@ -13083,7 +13089,7 @@ class made the loader skip the weights file and evaluate the seeded
 initialization, silently) has two structural fixes in the repository: the
 loader refuses to continue when a training checkpoint exists but the
 model's weights file is missing, and it searches a model's declared legacy
-class names first, so ISLA loads its MeshTransformer2 checkpoints with a
+class names first, so ISLA loads its ISLA checkpoints with a
 warning naming both files. The frozen training snapshots on the cluster
 predate both fixes, so the scaling session exported an evaluation-only
 snapshot, `code_eval`, from the fixed package (fast kernel opt-in, so the
@@ -16345,7 +16351,7 @@ area.
 *Reading.* The preregistered "fails" band is not reached on its own terms:
 the arm did not test the frame, it tested an uncorrected measure, and the
 verdict on the interior frame is void, not negative. The lesson is the one
-already written in @sec-mt2-forward and now enforced: the total-measure
+already written in @sec-isla-forward and now enforced: the total-measure
 scale requires measure weights whose sum is the integral of the geometry,
 which means Horvitz–Thompson-corrected weights on every subsampled
 boundary. The interior pipeline needs that correction before the relative
@@ -16486,7 +16492,7 @@ changes a single output beyond fp32 roundoff.
 so the anchor column is like-for-like. (c) One training run with `geo_kernel="fused"`
 for neutrality (its bf16 backward accumulates in fp32 where eager's rounds to bf16 --
 more precise, not identical) before any default changes. (d) Correct the book's cost
-section from the reconciliation table in `TABLES.md`, on the GB300 numbers (done 2026-09-14, @sec-mt2-cost).
+section from the reconciliation table in `TABLES.md`, on the GB300 numbers (done 2026-09-14, @sec-isla-cost).
 
 *Provenance.* Study run by a delegated engineering agent in an isolated worktree on
 2026-09-13 at Peter's request; merged by the coordinating session on 2026-09-14 with
@@ -16614,14 +16620,14 @@ freestream direction.
 **What is not done.** No non-aerodynamic problem has been trained; a
 Laplace or conduction case with $K = 0$ and one scalar parameter is the
 open acceptance item for the generalization (@sec-future). The book's
-terminology was overhauled in the same pass (@sec-mt2, @sec-problem):
+terminology was overhauled in the same pass (@sec-isla, @sec-problem):
 "unit-direction baselines" replaces the old protocol label, the symbol for
 the global vector inputs is $\hat g_k$, and the relational invariants are
 now written $\xi_{is}$ to avoid the clash.
 
-## 2026-09-14 — Exact-kernel MeshTransformer code removed from the tree; git tag mt1-final marks the last commit carrying it {#sec-nb-mt1-removed}
+## 2026-09-14 — Exact-kernel predecessor code removed from the tree; git tag mt1-final marks the last commit carrying it {#sec-nb-mt1-removed}
 
-The exact-kernel MeshTransformer (MT1), the first architecture of this
+The exact-kernel predecessor (MT1), the first architecture of this
 program (2026-07), had been retired as a product candidate since the
 interior verdict of @sec-nb-v0-verdict, but its code was still in the
 repository: the `mesh_attention` package (nine modules, about 9,000 lines)
@@ -17591,7 +17597,7 @@ the flagship relative-frame, total-measure configuration lived under the
 suffixed name `isla_surface_reference`, and likewise `isla_volume_reference`
 for the interior. An integrator reading the recipe would have trained the
 ablation under the obvious name. A `mt2_surface` pointer from the
-MeshTransformer2-to-ISLA rename also survived.
+ISLA-to-ISLA rename also survived.
 
 **What changed.** The plain names are now the reference configurations
 and the constant gauge is explicitly named:
@@ -17630,7 +17636,7 @@ text that names `isla_surface_reference.yaml` means today's
 `isla_surface.yaml`. The rule is recorded in `CLAIMS.md`.
 
 **The class-name aliases went with it.** The 2026-09-07 rename from
-MeshTransformer2 to ISLA had left an import-path alias
+ISLA to ISLA had left an import-path alias
 (`physicsnemo.experimental.nn.mt2`) and a class alias (`MeshTransformer2`)
 in the package. Neither name ever appeared in a PhysicsNeMo release, so
 both are deleted from the mainline; the one remaining mention of the old
@@ -18637,7 +18643,7 @@ all collapsed notes closed.
 
 **Setting.** ISLA's rotation and translation covariance is exact by
 algebraic construction and verified in float64 unit tests on random
-weights (@sec-mt2-contracts). The recipe trains and evaluates under bf16
+weights (@sec-isla-contracts). The recipe trains and evaluates under bf16
 autocast, and the book has said since the audit response
 (@sec-nb-audit-2026-09-08) that the residual on the deployed path is a
 quantity to be measured, not asserted: a CPU autocast probe on a small
@@ -19413,7 +19419,7 @@ measure-weighted centroid and divides by the root-mean-square radius, and
 hands each token its distance and direction from that centroid as extra
 invariant seeds. The book prefers ISLA on principle (the centroid of a
 sample is not physical knowledge and presumes one closed body,
-@sec-mt2-variants); this study asked whether the preference costs
+@sec-isla-variants); this study asked whether the preference costs
 accuracy, since the deficit anatomy (@sec-deficit-anatomy) attributes
 about two and a half points of GeoTransolver ÷ ISLA to the positional
 information the relative frame denies the model. The preregistration is
@@ -20270,7 +20276,7 @@ draw is the candidate.
 **Setting.** At 200,000 cells ISLA uses 0.46x GeoTransolver's inference
 memory; with the fused geometry kernel (accuracy-neutral,
 @sec-nb-kernel-neutral-verdict) it also takes 0.86x the step time
-(@sec-mt2-cost). Peter asked (2026-09-19) whether that footprint buys
+(@sec-isla-cost). Peter asked (2026-09-19) whether that footprint buys
 accuracy at equal cost, which of cells and parameters ISLA converts into
 accuracy more cheaply, and whether the fixed 500-epoch budget binds. The
 program has two points on the cells axis at width 192 (10,000 to 200,000
@@ -20499,7 +20505,7 @@ to fused where possible and falls back to eager safely. The cost case is
 now measured in training as well as inference: at 200,000 cells the fused
 region trains ISLA at about a third of the eager step time and memory
 (@sec-nb-isocost-prereg acceptance, 26 GB and 0.15 s against the eager
-path's earlier readings; inference 91 against 529 ms, @sec-mt2-cost).
+path's earlier readings; inference 91 against 529 ms, @sec-isla-cost).
 
 **What changed.** The class default is `geo_kernel=None` ("auto"). At the
 first forward pass `resolve_geo_kernel(points)` chooses `"fused"` when the
@@ -22572,3 +22578,60 @@ entry as it launches:
   seeds) against the existing 256-slice rows (0.1502 and 0.0300). Bar: 3%
   better on either rung means routing resolution is a wing lever; within 3%
   is null, as on the cars.
+
+## 2026-09-21 — Book: the architecture gets its own reference chapter (the forward pass, stage by stage, with shapes and code names), and every legacy name becomes ISLA {#sec-nb-architecture-chapter}
+
+**The setting.** The book's architecture part had one chapter, @sec-isla,
+which builds ISLA (Invariant Slice Attention, the soft-slice transformer
+this program develops) one idea at a time on the airfoil example, with a
+one-page symbol dictionary at the end. Peter asked for two things: that the
+book stop using the architecture's former names (MeshTransformer2, MT2, MT)
+anywhere and standardize on ISLA; and that the architecture be presented
+cleanly in a chapter of its own, "what is the forward pass", in
+straightforward, consistent nomenclature, with illustrations, as simply as
+the complexity allows while staying complete and accurate.
+
+**What was done.** A new chapter, @sec-architecture, is now the source of
+truth for what the class computes. It fixes one symbol and one code
+identifier per quantity (a notation table with every tensor shape), draws
+the whole pass with shapes on the boxes (@fig-isla-pass), opens the slice
+layer into its ten steps in a second diagram (@fig-isla-layer) and states
+each step as one equation in the order the code runs them, including the
+detail the ideas chapter elided: the read-back weights are the softmax over
+slices of the *refined* logits, the routing weights are recomputed from the
+same refined logits with the measure bias, and the head frame's radial
+direction comes from a separate routing map on the final state. A new
+figure shows the two softmaxes of one layer on the airfoil side by side
+(routing, rows summing to one with the measure bias; read-back, columns
+summing to one without it; @fig-isla-routing-readback). The parameter
+count is computed from the class as the page renders and broken down by
+component (@tbl-isla-params: the two per-layer MLPs hold four fifths of
+the 8.9M parameters; the geometry costs seven numbers per layer). The
+three token arrangements (surface; interior queries as interacting tokens;
+the passive decoder with read blocks) are drawn side by side
+(@fig-isla-modes) with the query-mass and read-block equations, and a
+closing section lists what the pass never does (no coordinate reaches a
+learned map, no center is estimated, no pairwise attention, no count, no
+learned vector). The switches table moved from the ideas chapter into the
+new one, each flag tagged with the stage it changes; the ideas chapter's
+dictionary section became a map from the six ideas to the stages.
+
+**Nomenclature.** Every section label of the form `sec-mt2-*` became
+`sec-isla-*` (and the cost table `tbl-isla-cost`) across all chapters and
+this notebook's cross-references; the prose mentions of the old names in
+the index, the ideas chapter and the status chapter were rewritten; the
+style guide's never-say list gained MT and "the mesh transformer". In this
+notebook, 309 MT2, 48 MeshTransformer2 and 36 MT mentions became ISLA, and
+the bare "MeshTransformer" mentions that meant the earlier exact-kernel
+boundary-integral design (a different architecture) became "the
+exact-kernel predecessor"; run identifiers, file names, configuration
+names and artifact keys keep their historical spelling (the nomenclature
+note at the top of this notebook records the convention).
+
+**Two things a reader of the new chapter should know.** The class default
+width is 256 while the recipe and every result of the book use 192; the
+chapter says so in its switches table, and aligning the class default to
+the recipe is an open engineering item. And the chapter is descriptive,
+not evidential: every number in it is a parameter count or a dimension,
+and the evidence for each design choice stays where it was
+(@sec-isla-design and Part IV).

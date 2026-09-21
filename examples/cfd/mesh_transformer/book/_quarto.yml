@@ -13,6 +13,7 @@ book:
     - part: "II. The architecture"
       chapters:
         - 02-isla.qmd
+        - 07-architecture.qmd
         - 04-baselines-and-fair-comparison.qmd
     - part: "III. Using ISLA"
       chapters:

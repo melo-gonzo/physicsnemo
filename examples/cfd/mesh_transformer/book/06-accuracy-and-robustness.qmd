@@ -31,7 +31,7 @@ in float32 (@sec-metrics), and a ratio is baseline ÷ ISLA, above one
 favoring ISLA. Every ISLA number in this chapter's figures and tables is
 ISLA unless a collapsed note says otherwise; the
 program's earlier configuration, the legacy centered variant (plain-mean
-center, constant length unit; removed from the class; @sec-mt2-variants),
+center, constant length unit; removed from the class; @sec-isla-variants),
 appears only inside such notes, labeled "removed variant", where a
 mechanism was first established on it. Each section states its cell budget
 in its first lines: the reporting protocol is 200,000 cells per case, the
@@ -156,7 +156,7 @@ sgc = SC["isla_similarity_gauge_512x80k"]
 def rng(t): return f"{t['min']:.4f} to {t['max']:.4f}"
 print("The similarity-gauge variant centers on the measure-weighted centroid and scales by the RMS radius, both "
       "integrals of the sampled geometry; it reads a center from the sample and presumes one closed body, which is why "
-      "it is a diagnostic and not a main-results configuration (@sec-mt2-variants). SG-REF measured its accuracy against "
+      "it is a diagnostic and not a main-results configuration (@sec-isla-variants). SG-REF measured its accuracy against "
       f"ISLA at 435 cars with three seeds each in float32: under the stratified 10,000-cell draw {sga['similarity_gauge']['table']['strat_10000']['mean']:.4f} "
       f"(seeds {rng(sga['similarity_gauge']['table']['strat_10000'])}) against ISLA's {sga['isla']['table']['strat_10000']['mean']:.4f} "
       f"(seeds {rng(sga['isla']['table']['strat_10000'])}), a ratio of {sgv['sg_over_isla_strat_10k']:.3f} with overlapping seed ranges; "
@@ -236,7 +236,7 @@ print(f"At the exploration budget of 10,000 cells the {gap10:.0f}-point gap was 
       "right-hand bars were also partly properties of the 10,000-cell instrument rather than of the architecture.\n")
 print("The reasoning runs from the outside in. The exploration budget's instrument is a 10,000-cell *independent* draw of each car's "
       "surface. The area-weighted relative L2 over such a draw is itself a noisy estimate of the true field error, and ISLA's slice "
-      "states, being measure-weighted means over the draw (@sec-mt2-quadrature), inherit more of that noise than the baselines' "
+      "states, being measure-weighted means over the draw (@sec-isla-quadrature), inherit more of that noise than the baselines' "
       "unweighted aggregates. Two instruments separate the pieces:\n")
 print(f"1. **A stratified draw of the same cells** keeps the inclusion law and the token budget but spreads the cells evenly over "
       f"the surface (@sec-using-sampler). Every model improves, GeoTransolver by {base_impr:.1%}, which is the metric's own "
@@ -620,7 +620,7 @@ mesher delivers and what ISLA computes inside the model; the *pool frame*
 hands a model an unbiased center it would not have in deployment and
 appears only where it is the value on file.
 
-The mechanism is the one taught in @sec-mt2-frame. ISLA has no origin: translation invariance comes from
+The mechanism is the one taught in @sec-isla-frame. ISLA has no origin: translation invariance comes from
 point-to-anchor differences, and its length unit is an integral of the
 sampled surface that the biased draw estimates without bias (the lanes
 quoted in the table carry the total-measure unit; the default
@@ -929,7 +929,7 @@ print(f"On the wings ISLA's error moved from {W['isla_uniform']['mean']['unif']:
       f"{C['transolver_unit_uniform']['mean']['biased']/C['transolver_unit_uniform']['mean']['unif']:.1f}x their uniform-draw error, ISLA {C['isla_uniform']['mean']['biased']/C['isla_uniform']['mean']['unif']:.2f}x.")
 ```
 
-The mechanism is the one @sec-mt2-quadrature teaches: the baselines' slice
+The mechanism is the one @sec-isla-quadrature teaches: the baselines' slice
 aggregates are averages over the kept points, so the trained function
 absorbs the point pattern it was fitted on and is wrong on any other;
 ISLA's are measure-weighted integrals, the same under any draw that
@@ -1004,7 +1004,7 @@ ISLA's covariance is exact by
 algebraic construction and verified to roundoff in float64; on the trained
 GPU path it holds to 3e-5 in float32 and to about 4% under bf16 autocast,
 so the contract is exercised at deployment only under float32 inference
-(@sec-mt2-contracts).
+(@sec-isla-contracts).
 
 ## Query independence and its price {#sec-query-independence}
 
@@ -1015,7 +1015,7 @@ dependence exactly, at a 3.0 to 3.7x cost in accuracy.** Budget: the
 exploration budget of 10,000 cells per case, 435 DrivAerML cars. Holding a shared
 prefix of 5,000 cells fixed and redrawing the rest of the 10,000-point
 sample moves the predictions on the prefix by about 7% for ISLA and 2% for
-GeoTransolver. The passive decoder (@sec-mt2-passive) replaces the readout
+GeoTransolver. The passive decoder (@sec-isla-passive) replaces the readout
 with read blocks that never write back, so a point evaluated alone gives the
 same answer, to float64 roundoff, as in a batch of 10,000. Its price on
 DrivAerML surface pressure was measured against the legacy centered variant
@@ -1049,11 +1049,11 @@ training. The frontier is stated as a matrix, not a column (@sec-principle).
 ::: {#sec-cost}
 On cost: on the path the recipe runs, ISLA's training step is at parity
 with GeoTransolver's at 10,000 tokens in half the memory, and the opt-in
-fused geometry kernel keeps parity at 40,000 tokens (@tbl-mt2-cost, with
+fused geometry kernel keeps parity at 40,000 tokens (@tbl-isla-cost, with
 the measurement protocol and every execution path). Every kernel option
 computes the same function, so no accuracy number in this chapter depends
 on the kernel; what makes ISLA the smaller model is explained in
-@sec-mt2-cost, and the accuracy-against-memory frontier at 435 cars, on
+@sec-isla-cost, and the accuracy-against-memory frontier at 435 cars, on
 which ISLA holds every budget below about 70 GB, is @fig-equal-budget
 in @sec-equal-budget.
 :::
