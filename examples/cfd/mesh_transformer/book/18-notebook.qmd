@@ -22988,6 +22988,8 @@ distinction between M1 (territories move) and M2 (aggregates drift) is
 decided for GeoTransolver in favor of M1 at the level of the routing;
 whether the aggregates *also* drift once the territories are held fixed
 is not measured and would need a controlled-routing probe. Single
-dataset: the wings' checkpoints at 100,000 cells exist (the iso-cost
-twins) and the same probe runs on them unchanged; that twin is the next
-step before the result is quoted as general.
+dataset: the wing twin runs the same probe on the 35-wing checkpoints of
+the reporting-protocol fleet (200,000 cells; ISLA and GeoTransolver, seed
+42) under the HiLift bench draws at 200,000 cells, and is launched with
+this entry (job `isla.territory.wings`); the result is quoted as general
+only when it lands.
