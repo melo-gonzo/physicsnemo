@@ -92,7 +92,7 @@ def convert(case_dir: Path) -> dict:
                     point_data={"velocity": torch.from_numpy(np.asarray(vol.point_data["U"], np.float32)),
                                 "pressure": torch.from_numpy(np.asarray(vol.point_data["p"], np.float32)),
                                 "nut": torch.from_numpy(np.asarray(vol.point_data["nut"], np.float32)),
-                                "sdf": torch.from_numpy(sdf.astype(np.float32)),
+                                "sdf": torch.from_numpy(sdf.astype(np.float32)).reshape(-1, 1),   # (N, 1): the recipe passes per-query scalars with a trailing channel axis
                                 "sdf_normals": torch.from_numpy(sdf_normals.astype(np.float32))})
     airfoil = Mesh(points=torch.from_numpy(fp.astype(np.float32)), cells=torch.from_numpy(segs),
                    cell_data={"normals": torch.from_numpy(nrm.astype(np.float32)),

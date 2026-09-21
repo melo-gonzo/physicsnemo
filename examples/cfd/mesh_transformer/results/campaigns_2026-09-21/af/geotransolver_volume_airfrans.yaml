@@ -1,3 +1,4 @@
+# @package _global_
 # GeoTransolver-volume on AirfRANS (AIRFRANS-INT): the recipe's volume configuration on the same interior inputs
 # (coordinates, signed distance and its direction; freestream velocity as the global embedding).
 dataset_reader_overrides:

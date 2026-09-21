@@ -1,3 +1,4 @@
+# @package _global_
 # ISLA interior configuration on AirfRANS (AIRFRANS-INT): boundary tokens from the airfoil polyline (line cells),
 # interior queries as interacting tokens with the signed distance as the query scalar; the freestream direction is
 # the one global vector input and the freestream speed the one global scalar input.

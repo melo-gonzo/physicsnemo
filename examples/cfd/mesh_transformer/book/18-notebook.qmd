@@ -23080,3 +23080,21 @@ lane that reaches the mean-field plateau (validation loss flat at the
 field-variance level after epoch 20) is reported as such and rerun at
 half its rate. The Reynolds and angle-of-attack extrapolation splits
 follow in their own entry once the full-split lanes are accepted.
+
+## 2026-09-21 — Acceptance, AIRFRANS-INT: all six lanes alive after two false starts (a missing Hydra package header on the new model configurations; the signed distance stored without a channel axis), about one epoch per minute {#sec-nb-airfrans-acceptance}
+
+The first launch failed at configuration time because the two new model
+files lacked the `# @package _global_` header every recipe model file
+carries; the second failed at the first training step because the
+converter stored the signed distance as a flat per-point field where the
+recipe passes per-query scalars with a trailing channel axis (the
+GeoTransolver lanes, which concatenate the field into their local
+embedding, had trained through it). The converter now writes the signed
+distance as $(N, 1)$; all 1,000 cases were reconverted (about four
+minutes on four CPU shards) and the six lanes relaunched from scratch
+(jobs 813630 to 813635). Eight minutes in, every lane has completed its
+first validations with no traceback: ISLA linear 5e-4 at epoch 9
+(validation loss 0.12), ISLA cosine 1e-3 at epoch 6 to 9 (0.10 to 0.11),
+GeoTransolver-volume at epoch 6 (0.07 to 0.09). At this rate the 500-epoch
+protocol completes in about eight hours. Accepted; the bars are those of
+@sec-nb-airfrans-prereg.
