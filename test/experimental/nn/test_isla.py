@@ -1173,3 +1173,31 @@ def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices(
         ISLA(hidden=32, n_layers=2, n_slices=8, n_global_vectors=2, geo_kernel="fused")
     with pytest.raises(ValueError, match="geo_kernel must be"):
         ISLA(hidden=32, n_layers=2, n_slices=8, geo_kernel="turbo")
+
+
+def test_kernel_readout_recompute_matches_dense_gradient():
+    """The passive decoder's local Gaussian readout rebuilds each query chunk's
+    kernel in the backward pass instead of storing it; outputs and gradients must
+    equal the dense formula to roundoff (float64)."""
+    from physicsnemo.experimental.nn.isla.model import _kernel_readout
+
+    torch.manual_seed(0)
+    b, nq, ns, d = 2, 300, 500, 8
+    q_r = torch.randn(b, nq, 3, dtype=torch.float64, requires_grad=True)
+    src_r = torch.randn(b, ns, 3, dtype=torch.float64, requires_grad=True)
+    src_h = torch.randn(b, ns, d, dtype=torch.float64, requires_grad=True)
+    src_logw = torch.randn(b, ns, dtype=torch.float64)
+    rho = 0.7
+    out = _kernel_readout(q_r, src_r, src_h, src_logw, rho, 1e-12)
+    loss = (out * torch.linspace(0.5, 1.5, d, dtype=torch.float64)).sum()
+    g_q, g_r, g_h = torch.autograd.grad(loss, (q_r, src_r, src_h))
+    # dense reference
+    q2, r2, h2 = (t.detach().clone().requires_grad_(True) for t in (q_r, src_r, src_h))
+    d2 = torch.cdist(q2, r2).square()
+    k = torch.softmax(-d2 / (rho * rho) + src_logw[:, None, :], dim=-1)
+    ref = torch.einsum("bcn,bnh->bch", k, h2)
+    ref_loss = (ref * torch.linspace(0.5, 1.5, d, dtype=torch.float64)).sum()
+    r_q, r_r, r_h = torch.autograd.grad(ref_loss, (q2, r2, h2))
+    assert torch.allclose(out, ref, atol=1e-12, rtol=0)
+    for a, c in ((g_q, r_q), (g_r, r_r), (g_h, r_h)):
+        assert torch.allclose(a, c, atol=1e-10, rtol=0)

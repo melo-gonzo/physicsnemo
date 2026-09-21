@@ -488,11 +488,23 @@ def _kernel_readout(q_r, src_r, src_h, src_logw, rho, eps):
     b, nq, _ = q_r.shape
     outs = []
     chunk = 4096
-    for i0 in range(0, nq, chunk):
-        d2 = torch.cdist(q_r[:, i0 : i0 + chunk], src_r).square()
-        logits = -d2 / (rho * rho) + src_logw[:, None, :]
+
+    def _chunk(q_chunk, src_r_, src_h_, src_logw_):
+        d2 = torch.cdist(q_chunk, src_r_).square()
+        logits = -d2 / (rho * rho) + src_logw_[:, None, :]
         k = torch.softmax(logits, dim=-1)
-        outs.append(torch.einsum("bcn,bnh->bch", k, src_h))
+        return torch.einsum("bcn,bnh->bch", k, src_h_)
+
+    ### Memory (2026-09-21): autograd would otherwise keep the (chunk, N) kernel of every chunk for the backward
+    ### pass, about 3 GB per chunk at 200,000 sources and several hundred GB per step at 200,000 queries. The
+    ### kernel is a cheap function of the positions, so under grad it is rebuilt in backward instead of stored;
+    ### the forward is unchanged.
+    for i0 in range(0, nq, chunk):
+        q_chunk = q_r[:, i0 : i0 + chunk]
+        if torch.is_grad_enabled():
+            outs.append(checkpoint(_chunk, q_chunk, src_r, src_h, src_logw, use_reentrant=False))
+        else:
+            outs.append(_chunk(q_chunk, src_r, src_h, src_logw))
     return torch.cat(outs, dim=1)
 
 
