@@ -1,0 +1,19 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	ct	ct_dr_isla_cos_seed42	drivaer_ml_surface	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine	1e-3	42	200000	code_routenorm
+1	ct	ct_dr_isla_cos_n27_seed42	drivaer_scaling	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine train_split=train_n27	1e-3	42	200000	code_routenorm
+2	ct	ct_dr_isla_cos_n54_seed42	drivaer_scaling	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine train_split=train_n54	1e-3	42	200000	code_routenorm
+3	ct	ct_dr_isla_cos_n109_seed42	drivaer_scaling	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine train_split=train_n109	1e-3	42	200000	code_routenorm
+4	ct	ct_dr_isla_cos_n218_seed42	drivaer_scaling	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine train_split=train_n218	1e-3	42	200000	code_routenorm
+5	ct	ct_dr_isla_cos_pose_seed42	drivaer_ml_surface_pose	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine	1e-3	42	200000	code_routenorm
+6	ct	ct_hl_isla_cos_single_aoa_12_seed42	highlift_surface_single_aoa_12	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	1e-3	42	200000	code_routenorm
+7	ct	ct_hl_isla_cos_super_scarce_area_seed42	highlift_surface_super_scarce_area	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	1e-3	42	200000	code_routenorm
+8	ct	ct_dr_isla_cos_area_c100k_seed42	drivaer_ml_surface_area	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine	1e-3	42	100000	code_routenorm
+9	ct	ct_dr_isla_cos_seed43	drivaer_ml_surface	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine	1e-3	43	200000	code_routenorm
+10	ct	ct_dr_isla_cos_n27_seed43	drivaer_scaling	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine train_split=train_n27	1e-3	43	200000	code_routenorm
+11	ct	ct_dr_isla_cos_n54_seed43	drivaer_scaling	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine train_split=train_n54	1e-3	43	200000	code_routenorm
+12	ct	ct_dr_isla_cos_n109_seed43	drivaer_scaling	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine train_split=train_n109	1e-3	43	200000	code_routenorm
+13	ct	ct_dr_isla_cos_n218_seed43	drivaer_scaling	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine train_split=train_n218	1e-3	43	200000	code_routenorm
+14	ct	ct_dr_isla_cos_pose_seed43	drivaer_ml_surface_pose	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine	1e-3	43	200000	code_routenorm
+15	ct	ct_hl_isla_cos_single_aoa_12_seed43	highlift_surface_single_aoa_12	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	1e-3	43	200000	code_routenorm
+16	ct	ct_hl_isla_cos_super_scarce_area_seed43	highlift_surface_super_scarce_area	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	1e-3	43	200000	code_routenorm
+17	ct	ct_dr_isla_cos_area_c100k_seed43	drivaer_ml_surface_area	isla_surface_reference	+model.geo_kernel=fused +model.routing_norm=cosine	1e-3	43	100000	code_routenorm

@@ -163,15 +163,18 @@ from data is the subject of @sec-mt2 (ISLA) and @sec-baselines
 
 ### What varies within a dataset {#sec-parametric}
 
-A dataset is a family of cases, and the families differ in what varies
-(the datasets themselves are introduced in @sec-datasets). On DrivAerML and
-SHIFT-SUV, the two car datasets, only the geometry varies: every car sits in the same
-freestream, so the global vector input is a constant and the operator is
-learned as a function of shape alone. On HiLiftAeroML the global vector
-input is itself a variable: each wing geometry of that dataset is simulated at ten angles of
-attack, so $\hat g_1$ changes from case to case and the model must represent
-how the field depends on it, from attached flow through stall. Coordinates
-enter only in nondimensional form, scaled by the dataset's per-case reference
+**On the car datasets only the geometry varies from case to case; on the
+wings the freestream direction varies too, so the model must learn how the
+field depends on a global input.** A dataset is a family of cases, and the
+families differ in what varies (the datasets themselves are introduced in
+@sec-datasets). On DrivAerML and on SHIFT-SUV (introduced below), only the
+geometry varies: every car sits in the same freestream, so the global vector
+input is a constant and the operator is learned as a function of shape
+alone. On HiLiftAeroML the global vector input is itself a variable: each
+wing geometry of that dataset is simulated at ten angles of attack, so
+$\hat g_1$ changes from case to case and the model must represent how the
+field depends on it, from attached flow through stall. Coordinates enter
+only in nondimensional form, scaled by the dataset's nondimensionalizing
 length, so learned weights never see units; no architecture receives the
 Reynolds number, and none is told how the field depends on the global vector
 input. Because HiLiftAeroML is a full geometry-by-angle grid, its axes of
@@ -179,10 +182,10 @@ variation can each be held out separately (@sec-splits).
 
 ### What generalization means here
 
-A learned operator is useful only if it behaves like an operator away from
-its training distribution, and "away" has several independent directions.
-Four are measured, one question per split, never two combined into one
-score:
+**A learned operator earns the name only if it behaves like an operator
+away from its training distribution, and "away" has several independent
+directions, each measured by its own split or probe.** Five are measured,
+one question per split, never two combined into one score:
 
 - **Data efficiency**: accuracy against the number of training cases on a
   fixed validation set (@sec-data-efficiency).
@@ -193,6 +196,11 @@ score:
   at any condition, as distinct from geometries seen at other conditions.
 - **Cross-family transfer**: zero-shot evaluation on a vehicle family
   different from the training family (@sec-full-data).
+- **Discretization**: the same cases presented under a different sampling
+  draw at inference (@sec-sampling-laws), and, separately, a model trained
+  under a different sampling law and scored on the original draw
+  (@sec-training-law). The physics does not depend on how the surface was
+  sampled, so neither should the answer.
 
 ## Datasets {#sec-datasets}
 
@@ -209,57 +217,71 @@ model implementation runs on all of them.
 
 ### DrivAerML {#sec-benchmarks}
 
-Every comparison feeds the models the vehicle surface only, the information
-diet of every published baseline on the dataset. The recipe assigns 435
-variants to training and 48 to validation; the remaining variant is in
-neither. The reporting protocol samples the recipe's default of 200,000
-surface cells per case per step; the program explored at 10,000 cells, and
-every number measured at that exploration budget is labeled as such
-(@sec-scoreboard-200k has the standing at the reporting protocol,
-@sec-scoreboard-tokens what the budget does to it).
-The surface task predicts pressure and wall shear at those cells
-(@sec-full-data); the interior task predicts pressure, velocity and
-turbulent viscosity at 10,000 interior query points from the surface alone
-(@sec-interior).
+**DrivAerML is the full-data accuracy benchmark: one freestream, geometry
+the only variable, and every model fed the vehicle surface alone.** That is
+the information diet of every published baseline on the dataset. The recipe
+assigns 435 variants to training and 48 to validation; the remaining variant
+is in neither. The reporting protocol samples the recipe's default of
+200,000 surface cells per case per step; the program explored at 10,000
+cells, and every number measured at that exploration budget is labeled as
+such (@sec-scoreboard-200k has the standing at the reporting protocol,
+@sec-scoreboard-tokens what the budget does to it). The surface task
+predicts pressure and wall shear at those cells (@sec-full-data); the
+interior task predicts pressure, velocity and turbulent viscosity at
+interior query points (200,000 per car under the reporting protocol; the
+exploration budget used 10,000) from the surface alone (@sec-interior).
 
 ### SHIFT-SUV {#sec-shift-suv}
 
-Its curated manifest separates the estate family (794 / 99 / 100 cases for
-training / validation / test) from the fastback family (796 / 99 / 99). The
-fastback family is held out from every model in the book and is the
-zero-shot target of the cross-family transfer measurements (@sec-full-data);
-the estate training split is a training source only where a two-family model
-is compared. Its lower freestream speed is a covariate shift identical for
-every architecture, none of which receives the Reynolds number, and it is
-reported alongside the geometry-family shift rather than corrected.
+**No main result trains on SHIFT-SUV; its fastback family is the zero-shot
+target.** Its curated manifest separates the estate family (794 / 99 / 100
+cases for training / validation / test) from the fastback family
+(796 / 99 / 99). The fastback family is held out from every model in the
+book and is the zero-shot target of the cross-family transfer measurements
+(@sec-full-data); the estate training split is a training source only where
+a two-family model is compared. Its lower freestream speed is a covariate
+shift identical for every architecture, none of which receives the Reynolds
+number, and it is reported alongside the geometry-family shift rather than
+corrected.
 
 ### HiLiftAeroML
 
-Because the design is a full grid, every geometry appears at every angle,
-and the dataset supports splits along three independent directions: how
-many cases, which angles, and which geometries. It is the dataset on which
-the data-efficiency ladder is measured (@sec-data-efficiency).
+**HiLiftAeroML is a full geometry-by-angle grid, so it can hold out each
+axis of variation on its own.** Every geometry appears at every angle, and
+the dataset supports splits along three independent directions: how many
+cases, which angles, and which geometries. It is one of the two datasets on
+which the data-efficiency ladder is measured (@sec-data-efficiency); the
+other is DrivAerML.
 
 ### Splits {#sec-splits}
 
-**HiLiftAeroML.** The dataset ships curated manifests, used unchanged. The
-*data-efficiency* family is nested (@fig-hilift-splits): 35 training cases
-$\subset$ 210 $\subset$ 510 $\subset$ 1,260, all scored on one shared
-180-case validation set (180 cases on 118 geometries), with a 360-case test
-set that no data-efficiency experiment touches. Because the rungs are
-subsets of the same 1,260 cases, a validation geometry may appear in
-training at other angles: these rungs measure sample complexity, not unseen
-geometry. Two *regime-extrapolation* splits hold out flow physics: the
-angle-of-attack split trains on 788 cases at angles up to 12°, validates on
-112 in-regime cases and tests on 900 cases at 14° and above; the stall split
-trains on 942 pre-stall cases, validates on 135 and tests on 723 post-stall
-cases, stall onset determined per geometry from the lift curve. The
-*geometry* family holds out 18 validation and 36 test geometries at all ten
-angles, with training sets of 1,260, 210 and 40 cases (4 and 21 training
-geometries at the two smaller sizes). Three *fixed-angle* splits hold the
-angle at 4°, 12° or 22°, train on 126 geometries at that angle and validate
-on 18 others; they remove the direction dependence entirely and so control
+**Each HiLiftAeroML split holds out one question, and the splits are the
+dataset's curated manifests, used unchanged.** @tbl-hilift-splits lists
+them. The *data-efficiency* family is nested (@fig-hilift-splits): 35
+training cases $\subset$ 210 $\subset$ 510 $\subset$ 1,260, all scored on
+one shared 180-case validation set (180 cases on 118 geometries), with a
+360-case test set that no data-efficiency experiment touches. Because the
+rungs are subsets of the same 1,260 cases, a validation geometry may appear
+in training at other angles: these rungs measure sample complexity, not
+unseen geometry. The two *regime-extrapolation* splits hold out flow
+physics, with stall onset determined per geometry from the lift curve. The
+*geometry* family holds out geometries at all ten angles. The three
+*fixed-angle* splits remove the direction dependence entirely and so control
 for whether an advantage comes from representing the freestream direction.
+
+| family | split | train | val | test | what it holds out |
+|---|---|---:|---:|---:|---|
+| data efficiency | nested rungs | 35, 210, 510, 1,260 | 180 | 360 | nothing; measures sample complexity (validation geometries may recur in training at other angles) |
+| regime extrapolation | angle of attack | 788 (angles up to 12°) | 112 | 900 (14° and above) | higher angles of attack |
+| regime extrapolation | stall | 942 (pre-stall) | 135 | 723 (post-stall) | post-stall flow |
+| unseen geometry | geometry | 1,260, 210 or 40 cases (126, 21 or 4 geometries) | 18 geometries, all ten angles | 36 geometries, all ten angles | the geometry itself |
+| fixed angle | 4°, 12°, 22° | 126 geometries at one angle | 18 geometries at that angle | — | the freestream direction as a variable |
+
+: The HiLiftAeroML splits, in cases unless a cell says geometries. Every
+split is a curated manifest of the dataset revision named in the warning
+below; the fixed-angle splits have no test set. How to read this: a row is
+one question; the manifests overlap (see the warning), so the test columns
+are held out per checkpoint, not per program. {#tbl-hilift-splits}
 
 ```{python}
 #| label: fig-hilift-splits
@@ -292,9 +314,11 @@ fig.tight_layout()
 plt.show()
 ```
 
-**DrivAerML.** One split: 435 training cars, 48 validation cars, fixed
-across every experiment. Sampling-density and pose probes evaluate the same
-48 cars with transformed inputs (@sec-full-data).
+**DrivAerML has one validation set of 48 cars, fixed across every
+experiment.** The training set is 435 cars, or a nested rung of 27, 54, 109
+or 218 cars for the data-efficiency ladder (@sec-data-efficiency).
+Sampling-density and pose probes evaluate the same 48 cars with transformed
+inputs (@sec-full-data).
 
 ::: {.callout-warning collapse="true" title="The HiLiftAeroML manifests overlap, so a test split is sealed per checkpoint, not per program"}
 The manifests are separate but not disjoint. The angle-of-attack and stall
@@ -314,10 +338,10 @@ the book's force errors never use the dataset's coefficients as reference.
 
 ## How we measure {#sec-part-eval}
 
-Every number in the book is one of a small set of quantities defined here:
-a relative field error, a force-coefficient error, a paired per-case
-statistic, a seed-disagreement statistic, a regime-extrapolation ratio, or
-an exact contract test.
+**Every number in the book is one of a small set of quantities defined
+here, each read on a stated instrument:** a relative field error, a
+force-coefficient error, a paired per-case statistic, a seed-disagreement
+statistic, a regime-extrapolation ratio, or an exact contract test.
 
 ### Field error, forces and paired statistics {#sec-metrics}
 
@@ -387,24 +411,24 @@ without being labeled as such (@sec-nb-fp32-instrument).
 
 @fig-metric-calibration calibrates the scale of the metric on
 HiLiftAeroML by scoring three parameter-free reference predictors beside
-the trained architectures. It uses the gauge-pressure scale, pressure
-measured relative to the freestream pressure, so the error is normalized by
-the pressure variation over the surface rather than by its absolute level;
-on that scale predicting the freestream pressure everywhere scores exactly
-1.00 by construction, and a model has learned something about a case only
-when it beats the best constant.
+the trained architectures. It uses the freestream-relative scale
+($p - p_\infty$), so the error is normalized by the pressure variation over
+the surface rather than by its absolute level; on that scale predicting the
+freestream pressure everywhere scores exactly 1.00 by construction, and a
+model has learned something about a case only when it beats the best
+constant.
 
 ```{python}
 #| label: fig-metric-calibration
 #| fig-cap: >
 #|   What a relative L2 error means, calibrated on HiLiftAeroML. Pressure
-#|   relative L2 on the 180 shared validation cases on the gauge-pressure
-#|   scale (pressure relative to the freestream, p − p_∞, so the error is
+#|   relative L2 on the 180 shared validation cases on the
+#|   freestream-relative scale (p − p_∞, so the error is
 #|   scaled by the pressure variation over the surface, not by its absolute
 #|   level; geometric mean over cases; scored in bfloat16, which predates
 #|   the float32 instrument and is labeled as such; not the recipe metric), for
-#|   three parameter-free reference predictors (gray) and the two
-#|   baselines trained on 35 cases, one seed, at the physical-velocity
+#|   three parameter-free reference predictors (gray) and GeoTransolver and
+#|   Transolver trained on 35 cases, one seed, at the physical-velocity
 #|   input scale. One seed suffices because this is a
 #|   calibration of the metric's scale, not a comparison between
 #|   architectures; the unit-direction comparison on the recipe metric is in
@@ -431,7 +455,7 @@ for i, (label, v, _, _) in enumerate(rows):
     ax.text(v + 0.012, i, f"{v:.2f}", va="center", fontsize=9, color=INK2)
 ax.set_yticks(list(y), [r[0] for r in rows], fontsize=9)
 ax.invert_yaxis(); ax.set_xlim(0, 1.12)
-ax.set_xlabel("pressure error, relative L2 on gauge pressure [–]\n(geometric mean over 180 cases)")
+ax.set_xlabel("pressure error, relative L2 on $p - p_\\infty$ [–]\n(geometric mean over 180 cases)")
 ax.grid(axis="y", visible=False)
 fig.tight_layout()
 plt.show()
@@ -440,8 +464,8 @@ plt.show()
 ::: {.callout-note collapse="true" title="The other quantities: forces, paired statistics, seed disagreement, regime ratio"}
 **Force coefficients.** Inference integrates predicted pressure and wall
 shear into drag and lift coefficients per case (reference area one) and
-integrates the CFD labels on the *same* 10,000 sampled cells to form the
-reference. The reported error is the mean absolute coefficient error over
+integrates the CFD labels on the *same* 10,000 sampled cells (the
+exploration budget) to form the reference. The reported error is the mean absolute coefficient error over
 the validation cases divided by the mean magnitude of the reference
 coefficient, averaged over seeds. It is an error against the sampled-cell
 label integral, not the full-surface force: the shared quadrature cancels
@@ -468,8 +492,8 @@ model's in-regime validation error, always reported beside the absolute
 test error, since a smaller $d$ can also come from a higher in-regime floor
 (@sec-regime-extrapolation).
 
-**The gauge-pressure scale** of @fig-metric-calibration and of the
-seed-disagreement analysis is $\lVert\hat p - p\rVert / \lVert p -
+**The freestream-relative scale** ($p - p_\infty$) of
+@fig-metric-calibration and of the seed-disagreement analysis is $\lVert\hat p - p\rVert / \lVert p -
 p_\infty\rVert$ with the geometric mean over cases. Numbers on the two
 scales are not interchangeable; per-case ratios between two models coincide
 on both, because the numerators are the same, and case-averaged values do
@@ -497,16 +521,16 @@ transformed inputs and reported as a number (@sec-pose), never as a pass.
 
 ### The properties a PDE surrogate should have {#sec-four-properties}
 
-Four properties are commonly required of any discretization of a
-boundary-driven PDE. Each has a measurement here, and the measurements
-differ in kind.
+**Four properties are commonly required of any discretization of a
+boundary-driven PDE; each has a measurement here, and the measurements
+differ in kind.**
 
 | property | what it means | how it is established in this book |
 |---|---|---|
 | spatial equivariance | a rigidly moved input gives the rigidly moved output | a float64 contract for ISLA; an accuracy under transformed inputs for GeoTransolver and Transolver, which consume raw coordinates (@sec-pose) |
 | global interaction | every boundary patch can influence every output | by construction in every architecture compared: slice routing over the whole boundary, no neighbourhoods or cutoffs |
-| discretization invariance | the answer does not depend on how the surface was meshed or sampled | measured as robustness to a 10:1 sampling-density bias and as convergence under refinement (@sec-consistency-bench); an acceptance criterion, below |
-| units invariance | no weight sees a meter; the measure enters only as quadrature weight | coordinates nondimensionalized by every model; exact scale covariance a contract for ISLA and the similarity-gauge variant only; measure semantics tested by the density probe |
+| discretization invariance | the answer does not depend on how the surface was meshed or sampled | measured as robustness to a 10:1 sampling-density bias and as convergence under refinement (@sec-consistency-bench), and as insensitivity to the sampling law the model was trained under (@sec-training-law); an acceptance criterion, below |
+| units invariance | no weight sees a meter; the measure enters only as quadrature weight | coordinates nondimensionalized by every model; exact scale covariance a contract for ISLA, whose length unit is a measure-weighted integral of the geometry; measure semantics tested by the density probe |
 
 ### Discretization invariance is an acceptance criterion, not a metric {#sec-principle}
 
@@ -537,9 +561,17 @@ resampling as the count grows. In-distribution accuracy alone never
 justifies a change. Configurations that fail the third test are still
 measured, as ablations that price the requirement: ISLA's routing without
 its measure weights is the standing example, more accurate in distribution
-on the wings, and collapsing under a sampling-density bias and under
-area-proportional sampling (@sec-mechanism, @sec-consistency-bench). The
-ledger of every such decision is @sec-principled-decisions.
+on the wings, with errors worse than predicting zero under an
+area-proportional draw (@sec-mechanism, @sec-consistency-bench).
+
+The same requirement applies to the law a model was *trained* under. Trained
+on an area-proportional draw and scored on the independent uniform draw,
+GeoTransolver is 2.6x (HiLiftAeroML, 200,000 cells) and 7.9x (DrivAerML,
+100,000 cells, a labeled scaling budget) worse than its uniform-trained twin,
+and Transolver 2.4x and 9.6x; ISLA moves 0.99x and 1.08x on the same swap
+(@sec-training-law). A weak dependence, not none: the 8% on the cars is
+measured, and why the cars show the larger dependence is open. The ledger of
+every such decision is @sec-principled-decisions.
 
 ## Protocol {#sec-protocol}
 
@@ -552,10 +584,11 @@ a comparison that departs from it says so in the same sentence.**
 | epochs and schedule | 500 epochs, one case per step; the learning rate is divided by ten every 100 epochs, so the effective budget is about 300 epochs at a useful rate |
 | arithmetic | bfloat16 autocast in training; float32 at evaluation (@sec-metrics) |
 | augmentation | none |
-| learning rate | each architecture at its own best rate: ISLA $10^{-3}$ (its one usable rate at width 192, @sec-robustness-lr); Transolver $3 \times 10^{-3}$; GeoTransolver $3 \times 10^{-3}$ at the reporting protocol on every DrivAerML rung and on the 35-case wing rung, $10^{-3}$ at the exploration budget at full data, because its best rate depends on how much data it sees (@sec-lr-protocol). Every row names the rate it used. Above width 192, ISLA uses the width rule of @sec-using-lr |
+| learning rate | each architecture at its own best rate at the reporting protocol: ISLA $10^{-3}$ at width 192 (the width rule of @sec-using-lr above it), GeoTransolver and Transolver $3 \times 10^{-3}$; every row names the rate it used, and the rates at the exploration budget are in @sec-lr-protocol |
 | global vector input | the freestream as a unit direction, for every architecture (@sec-part-baseline) |
 | seeds | two or more (42 and 43 unless stated), reported individually beside the mean |
 | checkpoint | the final epoch; no selection on validation error |
+| datasets | a result counts when it is reproduced on both DrivAerML and HiLiftAeroML; a single-dataset result is labeled interim |
 | validation and test | all architectures at all rungs scored on the same validation cases; a sealed test split is evaluated exactly once with the checkpoint and configuration declared in writing beforehand |
 | preregistration | every experiment states its prediction and its falsifier in readout units before it runs; the dated record is the notebook (@sec-notebook) |
 

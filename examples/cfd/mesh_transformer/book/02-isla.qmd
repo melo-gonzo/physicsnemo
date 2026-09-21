@@ -25,8 +25,10 @@ from matplotlib.colors import Normalize
 
 ## Where ISLA stands among mesh transformers {#sec-mt2-position}
 
-The strongest empirical record on industrial aerodynamics belongs to the
-Transolver family, whose *physics attention* routes every mesh point softly
+**ISLA keeps the slice-attention mechanism of the Transolver family and
+changes only what the network is allowed to see.** The strongest empirical
+record on industrial aerodynamics belongs to that family, whose *physics
+attention* routes every mesh point softly
 into a few hundred *slices*, lets the slices attend to one another, and
 reads the result back to the points. GeoTransolver adds a geometry encoder
 and a global-context projector. Both feed the network raw coordinates in
@@ -39,7 +41,8 @@ to see. The change is paid once at the network's edges: invariant scalars
 on the way in, an equivariant basis on the way out. Inside, the slice
 layers are the same kind of object as Transolver's, with two additions
 that this chapter explains: the routing weights carry the surface measure,
-and every token knows where it is only relative to the slice anchors. The
+and every token knows where it is only relative to the slice anchors
+(routing, anchors and read-back are defined in ideas 3 and 5). The
 opposite design, enforcing physical structure inside every layer with typed
 scalar and vector streams or analytic boundary-integral kernels, does not
 survive separated three-dimensional flow (@sec-interior-negatives).
@@ -51,9 +54,8 @@ survive separated three-dimensional flow (@sec-interior-negatives).
 %%|   the length scale to the last slice layer, nothing but invariant scalars
 %%|   is computed; the one place a vector is rebuilt is the output basis. The
 %%|   passive decoder on the right is optional (@sec-mt2-passive). How to read
-%%|   this: it is ISLA; the gauge variants that the program measured and
-%%|   then removed (@sec-mt2-variants) inserted a centering step before the
-%%|   length scale.
+%%|   this: it is the whole class; no box centers the geometry, and no box
+%%|   sees a coordinate (@sec-mt2-variants says why).
 flowchart TB
     classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
     classDef learned fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
@@ -61,7 +63,7 @@ flowchart TB
     classDef out fill:#e6f0fb,stroke:#2a78d6,stroke-width:2px,color:#0b0b0b
 
     A["boundary sample: positions x_i, unit normals n_i, measure weights w_i<br/>global vector inputs g_k (k = 1..K), global scalar inputs σ"]:::data
-    B["length scale L = sqrt(Σ w_i); r_i = x_i / L (idea 2)"]:::fixed
+    B["length unit L = measure-weighted RMS pairwise distance; r_i = x_i / L (idea 2)"]:::fixed
     C["invariant seed: n_i · ĝ_k, then σ (idea 2)"]:::fixed
     D["embedding MLP → token state h_i"]:::learned
     E["slice layer × 12 (ideas 1, 3, 4, 5)<br/>measure-weighted routing → anchors z_s, m_s → relational invariants ξ_is<br/>→ slice states Z_s → read-back → h_i"]:::learned
@@ -87,8 +89,9 @@ fields at query points.** Per case, the inputs are:
 - $N$ sampled boundary points $x_i \in \mathbb{R}^3$, each with a unit
   outward normal $n_i$ (a hat, $\hat n_i$, marks a unit vector below; the
   model renormalizes the normals it is given) and a **measure weight** $w_i > 0$, the surface area
-  the point stands for, so that $\sum_i w_i f(x_i) \approx \int f\,dA$. In
-  the protocol of @sec-protocol, $N = 10{,}000$ per case.
+  the point stands for, so that $\sum_i w_i f(x_i) \approx \int f\,dA$.
+  Under the reporting protocol of @sec-protocol, $N = 200{,}000$ per case;
+  the exploration budget is 10,000.
 - **Global vector inputs** $g_k \in \mathbb{R}^3$, $k = 1,\dots,K$:
   directions that belong to the problem rather than to any cell. In this
   book $K = 1$ and $g_1$ is the freestream direction; for a buoyant flow it
@@ -212,7 +215,11 @@ that do not draw cells uniformly, the recipe supplies the
 Horvitz–Thompson weight (area divided by inclusion probability), and the
 estimate remains consistent (the four draws the book uses are drawn side
 by side in @fig-sampling-laws). This is the origin of ISLA's consistency under
-a change of sampling (@sec-scoreboard-consistency), and it is also a
+a change of sampling at inference (@sec-scoreboard-consistency) and of its
+weak dependence on the sampling law it was trained under: trained on an
+area-proportional draw and scored on the uniform draw, ISLA moves 0.99x on
+HiLiftAeroML and 1.08x on DrivAerML where GeoTransolver moves 2.6x and 7.9x
+(@sec-training-law). It is also a
 correctness requirement rather than a tunable: without the weights a slice
 aggregates a mean over whichever points the mesher placed, and a different
 mesher changes the answer (@sec-principle). The in-distribution price of
@@ -227,7 +234,7 @@ enough that the effective size is about a fifth of the points, so each slice
 state is a noisier estimate of the same integral and moves about twice as
 much when the surface is resampled. That noise falls as $1/\sqrt{N}$ and is
 nearly gone at 40,000 cells on DrivAerML; the stratified inference draw of
-@sec-using-sampler removes most of it at 10,000. The part of the ablation's
+@sec-using-sampler removes most of it at 10,000 (the exploration budget). The part of the ablation's
 advantage that does not shrink, on the wings, is mesh-pattern content
 learned from the mesher, and it loses consistency under an area-proportional draw, with
 errors worse than predicting zero (@sec-consistency-bench).
@@ -264,24 +271,24 @@ where the second form, the variance identity, is what the code evaluates
 in $O(N)$ (`rms_pairwise_distance` in `model.py`); the measure-weighted mean
 $\bar x$ appears only inside this one scalar and is never used as a frame
 origin. Being a length of the geometry, $L$ makes a uniform rescale of the
-points invisible to everything downstream. The alternatives, a fixed
-constant or a statistic of the sampled points, are the gauge variants of
-@sec-mt2-variants, and @fig-isla-frame shows why a point statistic is a
-poor frame.
+points invisible to everything downstream. A fixed constant would not do
+that, and a statistic of the sampled points would move with the mesher;
+@fig-isla-frame shows why a point statistic is a poor frame, and
+@sec-mt2-variants why ISLA names no center at all.
 
-::: {.callout-note collapse="true" title="The total-measure unit (option; the unit the evidence before 2026-09-18 evening was trained with)"}
-Until 2026-09-18 the unit was the square root of the total measure,
+::: {.callout-note collapse="true" title="The total-measure unit (option)"}
+The class offers one other unit, the square root of the total measure,
 $L = (\sum_i w_i)^{1/2}$, the square root of the surface area: also an
 integral of the geometry and also center-free, but not normalized (a
 rescale of the weights alone changes it) and divergent under refinement of
-a boundary whose area does not converge. It remains available as
-`scale_mode="total_measure"`. The two units were compared at 435 DrivAerML
-cars: 0.0526 against 0.0533 surface-pressure error under the stratified
-draw (0.987, overlapping seed ranges), within 1.3% on every draw, with the
-density factor inside the contract band (@sec-nb-lenrms-verdict,
-results/lenrms_reduction_2026-09-18.json). Evidence lanes trained before
-that evening carry the total-measure unit; where a chapter quotes one, it
-says so.
+a boundary whose area does not converge. It is kept as
+`scale_mode="total_measure"` only to reproduce the lanes trained with it.
+The two units were compared at 435 DrivAerML cars under the stratified
+10,000-cell draw (exploration budget): total-measure unit 0.0526 against
+ISLA's 0.0533 surface-pressure error (0.987, overlapping seed ranges),
+within 1.3% on every draw, with the density factor inside the contract band
+(@sec-nb-lenrms-verdict, results/lenrms_reduction_2026-09-18.json). Where a
+chapter quotes a lane trained with the total-measure unit, it says so.
 :::
 
 Where a point is, ISLA states only *relative to other things*: the scaled
@@ -307,12 +314,12 @@ from the relational invariants of idea 4.
 #|   @fig-isla-quadrature, overlaid. The plain mean of the sampled positions
 #|   (open gray markers) moves toward the leading edge when the sampling is
 #|   clustered there, so a model whose coordinates are centered on it sees the
-#|   whole body displaced. The measure-weighted centroid (blue) and the total
-#|   measure (the length unit, printed) are integrals and agree between the
-#|   samplings to quadrature error. How to read this: ISLA
-#|    uses no center at all and only the length unit; the
-#|   legacy centered variant (a diagnostic, @sec-mt2-variants) used the gray
-#|   center and degraded 12x under a sampling-density bias.
+#|   whole body displaced. The measure-weighted centroid (blue) and the
+#|   length unit $L$, the measure-weighted RMS pairwise distance (printed),
+#|   are integrals and agree between the samplings to quadrature error. How
+#|   to read this: ISLA uses no center at all, only the length unit; the
+#|   centroid is drawn to show that an integral is stable where a point
+#|   statistic is not. It does not show a trained model.
 #| code-fold: true
 fig, ax = plt.subplots(figsize=(8.0, 3.6))
 clean_axes(ax); ax.set_xlim(-2.4, 2.4); ax.set_ylim(-1.1, 1.2)
@@ -328,7 +335,11 @@ ax.annotate("plain mean of the clustered sample:\npulled toward the leading edge
             ha="center", arrowprops=dict(arrowstyle="-", color=INK2, lw=0.8))
 ax.annotate("measure-weighted centroids of both samplings\n(the equal-arclength plain mean coincides with them)", xy=wc, xytext=(0.9, 0.75),
             fontsize=8.5, color=BLUE, ha="center", arrowprops=dict(arrowstyle="-", color=BLUE, lw=0.8))
-ax.text(-2.3, -1.02, f"total measure $\\sum_i w_i$: {Ju['w'].sum():.3f} (equal-arclength), {Jm['w'].sum():.3f} (clustered)", fontsize=9, color=INK2)
+def rms_pairwise_distance(JJ):
+    # the variance identity: sum_ij w_i w_j |x_i - x_j|^2 = 2 sum_i w_i |x_i - c|^2 with normalized weights
+    wt = JJ["w"] / JJ["w"].sum(); c = (wt[:, None] * JJ["mid"]).sum(axis=0)
+    return np.sqrt(2.0 * np.sum(wt * np.sum((JJ["mid"] - c) ** 2, axis=1)))
+ax.text(-2.3, -1.02, f"length unit $L$ (RMS pairwise distance): {rms_pairwise_distance(Ju):.3f} (equal-arclength), {rms_pairwise_distance(Jm):.3f} (clustered)", fontsize=9, color=INK2)
 ax.legend(loc="upper left", fontsize=8.5)
 plt.show()
 ```
@@ -348,7 +359,8 @@ that matters is passed as a global scalar and learned.
 **Attention over ten thousand tokens is too expensive and too
 unstructured; slice attention routes every token softly into a few hundred
 slices, and each slice becomes one aggregate token.** In each of the 12
-layers, a linear map of the normalized token state gives a logit
+layers, a learned map of the normalized token state (one of two forms,
+below) gives a logit
 $\lambda_{is}$ for every token–slice pair, and a softmax *over tokens* for
 each slice, with the measure bias of idea 1, gives the routing weights
 
@@ -412,11 +424,52 @@ Routing normalizes over points so that a slice is an *average*, with the
 measure bias making it a quadrature average. Reading back (idea 5)
 normalizes over slices instead, with no measure bias, because there a point
 is choosing *where to read*, not how much it weighs. Adding a constant to
-every $\ell_i$ cancels in the routing ratio; in ISLA
-the same constant also rescales $L$, which is why the reference is invariant
-to a joint geometric rescale rather than to a weight rescale alone
-(@sec-mt2-contracts).
+every $\ell_i$ cancels in the routing ratio, and under the default length
+unit the same constant leaves $L$ unchanged too, because the weights are
+normalized before they enter it; so ISLA is invariant to a rescale of the
+weights alone as well as to a joint geometric rescale (@sec-mt2-contracts).
 :::
+
+### The two forms of the routing logit {#sec-mt2-routing-forms}
+
+**The routing logit is a linear map by default and a bounded cosine as the
+candidate default; the bounded form is what makes wide and deep ISLA
+trainable.** In the linear form the logit is an affine map of the
+normalized token state, and nothing bounds it: the weights can grow without
+limit, and as they grow each slice's softmax over points sharpens toward a
+single point and each point's preference toward a single slice. A learning
+rate above a ceiling drives it there, and the ceiling falls like one over
+the width and at least as fast as one over the depth. Past it the routing
+sharpens until every point of every block routes to a single slice and all
+anchors coincide; with one anchor the relational invariants carry no
+information, and the network can emit only a per-case constant. That state
+is the **mean-field plateau**, a validation loss of about 0.06 and a
+surface-pressure error of about 0.75, and the routing probe measured it
+directly: one active slice per block with the anchors coincident (spread
+about 0.003), where a checkpoint that trained cleanly keeps 4 to 250 active
+slices (@sec-nb-routingsat-verdict). The bounded form routes on the
+cosine between the normalized token state and a learned prototype per
+slice, scaled by a temperature $T$, so every logit lies in $[-T, T]$
+whatever the weights do and no block can route every point to one slice. In
+symbols, with $\tilde h_i \equiv \mathrm{LN}(h_i)$ and $p_s$ the prototype
+of slice $s$,
+
+$$
+\lambda_{is} = W_a \tilde h_i + b_a \quad (\texttt{routing\_norm="linear"}),
+\qquad
+\lambda_{is} = T\,\frac{\tilde h_i \cdot p_s}{\lVert \tilde h_i \rVert\,\lVert p_s \rVert}
+\quad (\texttt{routing\_norm="cosine"},\ T = 10).
+$$
+
+On DrivAerML at 435 cars and 100,000 cells (a labeled scaling budget) the
+cosine form removed the learning-rate ceiling on every lane tried at neutral
+accuracy at the rule rates (cosine ÷ linear 0.998, 1.005 and 1.020 at widths
+192, 384 and 768); width past 768 does not pay in either form, and depth
+that the linear form could not train becomes trainable, 0.0406 at 384 wide
+and 48 layers. The temperature is `routing_temperature`; the frame and head
+contracts hold under either form. Cosine is the candidate default pending
+the HiLiftAeroML lanes; the learning-rate rule is in @sec-using-lr and the
+capacity picture in @sec-equal-budget and @fig-capacity.
 
 ## Idea 4: relational invariants {#sec-mt2-relational}
 
@@ -487,8 +540,9 @@ or upwind of it, or facing it, and the routing weights $a'_{is}$ are
 recomputed with the same measure-weighted softmax. And they are **pooled
 back** to the token (idea 5) so it learns where it sits relative to the
 slices it belongs to. Removing them from both roles is the largest single
-ablation measured on ISLA, a 16% loss at 35 wing cases
-(@sec-mechanism).
+ablation measured, a 16% loss in the single-factor ablation on the 35-case
+HiLiftAeroML rung at the exploration budget, run on the removed centered
+variant of @sec-mt2-variants (@sec-mechanism).
 
 ## Idea 5: the slice layer, assembled {#sec-mt2-layer}
 
@@ -612,25 +666,25 @@ norm or dot product, so *scalar* outputs are invariant under reflections
 too; but $e_\phi$ is a cross product and flips sign under a mirror while its
 coefficient does not, so the default vector head is covariant under
 rotations and translations only. Three exactly O(3)-covariant heads were
-built, verified, and measured; none is the reference head (@sec-limits),
+built, verified, and measured; none is ISLA's head (@sec-limits),
 and they live at the git tag `isla-research-full`.
 :::
 
 ## The forward pass on one page {#sec-mt2-forward}
 
-The symbols above are tied to the identifiers in
+**Every symbol of the six ideas has one identifier in the code, and this
+table is the dictionary.** The identifiers are those of
 `physicsnemo/experimental/nn/isla/model.py`; ISLA's frame has no origin
-and `scale_mode="rms_distance"` is the class default (the centered-frame
-options were removed from the class on 2026-09-20, @sec-nb-frame-cleanup).
+and `scale_mode="rms_distance"` is the class default.
 
 | symbol | code | meaning |
 |---|---|---|
 | $x_i, n_i, w_i$ | `points`, `normals`, `measure_weights` | positions, unit normals, cell areas |
 | $\hat g_k$, $\sigma$ | `global_vectors`, `global_scalars` | the $K$ global directions and $S$ global scalars ($K = 1$, $S = 0$ here) |
-| $L$, $r_i$ | `gauge`, `r` | length scale $\sqrt{\sum_i w_i}$; scaled position, used only in differences |
+| $L$, $r_i$ | `gauge`, `r` | length unit, the measure-weighted RMS pairwise distance of the sample; scaled position, used only in differences |
 | $\ell_i$ | `log_w` | log measure weight, the routing bias |
 | $s_i$, $h_i$ | `invariants`, `h` | invariant seed; token state, width 192 |
-| $\lambda_{is}$, $a_{is}$ | `logits`, `a` | routing logit and weight (softmax over points), 256 slices |
+| $\lambda_{is}$, $a_{is}$ | `logits`, `a` | routing logit (`_RoutingLogits`, linear or cosine) and weight (softmax over points), 256 slices |
 | $z_s, m_s$ | `z_pos`, `m_s` | anchor position and normal |
 | $\xi_{is}$ | `geo` | the $5 + K$ relational invariants |
 | $Z_s$ | `z` | slice state |
@@ -638,6 +692,13 @@ options were removed from the class on 2026-09-20, @sec-nb-frame-cleanup).
 | $\hat u_i$, $e_\theta, e_\phi$ | `r_hat`, `spherical_basis` | radial basis vector; tangential complements |
 
 ### The passive decoder and off-surface queries {#sec-mt2-passive}
+
+**The passive decoder makes the prediction at a query depend on the
+surface and that query alone, at a price in surface accuracy.** It is off
+by default; the interior configuration the book reports admits queries as
+interacting tokens instead (@sec-interior-query-tokens), and the decoder is
+described here because it is the one exact query-independence contract in
+the class.
 
 ::: {.callout-note collapse="true" title="How the passive decoder reads the encoder"}
 With `query_independent=True` the encoder runs unchanged on the surface and
@@ -668,78 +729,68 @@ book reports instead admits queries as interacting tokens
 (@sec-interior-query-tokens).
 :::
 
-## The similarity-gauge variant, and the frame question {#sec-mt2-variants}
+## Why ISLA has no center {#sec-mt2-variants}
 
-**One documented variant replaces the relative frame with a frame estimated
-from the sample: the similarity-gauge variant centers on the measure-weighted
-centroid and scales by the measure-weighted RMS radius, both integrals of
-the geometry.** It is a diagnostic, not a main-results configuration: it
-appears in this book only inside collapsed notes labeled as such, and its
-one measured role is to price what ISLA gives up by declining a center. That
-price, the price of not being told the body's center, is at most about 2%
-of surface-pressure error at 435 cars, inside seed noise (SG-REF,
-@sec-nb-sgref-verdict). It was a constructor option (a centered frame with
-the similarity gauge) until 2026-09-20, when the centered-frame branches
-were removed from the class (@sec-nb-frame-cleanup); its checkpoints and
-measurements remain on file. It subtracted its center $c$ before scaling,
-$r_i = (x_i - c)/L$, and differed from ISLA in three places: its seed is
-$3 + 2K$ scalars (the rotation invariants of $\{r_i, \hat n_i, \hat
-g_k\}$, which now include the distance from the center and its direction
-cosines); its relational invariants gain $1 + K$ more that describe the
-anchor's position relative to the center; and its head's radial basis vector
-is the direction from the center instead of from the token's anchor. Because
-the center and the length unit are integrals, it is exactly covariant under
-rigid motions and rescaling and consistent under a change of sampling, like
-ISLA. What it adds is information: every token learns where it is
-relative to the body's centroid.
+**ISLA states position only relative to its own anchors because a PDE does
+not know what "the body" is.** The area-weighted centroid of a surface is
+not a point the physics distinguishes: for an open or truncated boundary, a
+multi-body scene, or a boundary with structure at every scale, that
+centroid is an artifact of where the domain was cut, and a frame built on
+it carries the artifact into every invariant. The relative frame presumes
+none of this. Positions enter only as differences $r_i - z_s$ against
+anchors that are themselves measure-weighted means, so no origin is ever
+named, and the one place a mean position appears, inside the length unit
+$L$, is a scalar. The price of not being told the body's center was
+measured on DrivAerML at 435 cars with three seeds, against a removed
+variant that centered on the measure-weighted centroid and scaled by the
+measure-weighted RMS radius: at most about 2% of surface-pressure error,
+inside seed noise (@sec-nb-sgref-verdict). A center taken from a sample
+statistic rather than an integral is worse than useless under a change of
+sampling (@fig-isla-frame). The class has no centered frame of either kind;
+the two it once had are described below as removed variants, and the
+notebook records their removal (@sec-nb-frame-cleanup).
 
-ISLA is preferred on principle, and the measurement leaves the preference
-unopposed. A PDE does not know what "the body" is, and the area-weighted
-centroid of a surface is not a point the physics distinguishes; for an open
-or truncated boundary, a multi-body scene, or a boundary with structure at
-every scale, that centroid is an artifact of where the domain was cut. The
-relative frame presumes none of this. Whether the extra information buys
-measurable accuracy on closed single bodies was measured at 435 DrivAerML
-cars with three seeds each (SG-REF, @sec-nb-sgref-verdict): under the
-stratified 10,000-cell draw the variant scores 0.0524 against ISLA's 0.0533,
-a ratio of 0.98 with overlapping seed ranges, and the same 1.6 to 2.0%
-offset on the independent draws at 10,000 and 40,000 cells. Being told the
-centroid recovers essentially none of the positional deficit the anatomy
-measures against GeoTransolver (@sec-deficit-anatomy); the deliberation is
-recorded in the notebook.
-
-::: {.callout-note collapse="true" title="The centered construction, in symbols"}
-With a center $c$ and $r_i = (x_i - c)/L$, $\hat r_i = r_i/\lvert r_i\rvert$,
-the seed becomes the $3 + 2K$ rotation invariants of $\{r_i, \hat n_i,
+::: {.callout-note collapse="true" title="Removed variants: the similarity-gauge frame and the legacy centered frame (diagnostic)"}
+Both variants subtracted a center $c$ before scaling, $r_i = (x_i - c)/L$,
+$\hat r_i = r_i/\lvert r_i\rvert$, and differed from ISLA in three places.
+The seed became the $3 + 2K$ rotation invariants of $\{r_i, \hat n_i,
 \hat g_k\}$ up to parity (the complete set for $K = 1$),
 $$
-s_i = \big[\,\lvert r_i\rvert,\ \log\lvert r_i\rvert,\ \hat r_i\!\cdot\!\hat g_k,\ \hat r_i\!\cdot\!\hat n_i,\ \hat n_i\!\cdot\!\hat g_k,\ \sigma\,\big],
+s_i = \big[\,\lvert r_i\rvert,\ \log\lvert r_i\rvert,\ \hat r_i\!\cdot\!\hat g_k,\ \hat r_i\!\cdot\!\hat n_i,\ \hat n_i\!\cdot\!\hat g_k,\ \sigma\,\big];
 $$
-and the relational invariants gain $\lvert z_s\rvert$ and $\hat z_s\cdot\hat
+the relational invariants gained $\lvert z_s\rvert$ and $\hat z_s\cdot\hat
 g_k$ (the anchor's position relative to the center), broadcast to every
-token: $6 + 2K$ in all. The head's radial vector is $\hat r_i$. The
-similarity-gauge variant sets, with $\tilde w_i = w_i / \sum_j w_j$,
+token, $6 + 2K$ in all; and the head's radial vector was $\hat r_i$, the
+direction from the center instead of from the token's anchor. Their
+measurements remain on file; their checkpoints no longer load.
+
+**The similarity-gauge variant (removed)** set, with $\tilde w_i = w_i /
+\sum_j w_j$,
 $$
 c = \sum_i \tilde w_i\, x_i, \qquad L = \Big(\sum_i \tilde w_i\, \lvert x_i - c\rvert^2\Big)^{1/2},
 $$
-and holds at 1.2x under the 10:1 density bias (@sec-scoreboard-consistency).
-:::
+both integrals of the geometry, so it was exactly covariant under rigid
+motions and rescaling and consistent under a change of sampling like ISLA
+(1.2x under the 10:1 density bias, @sec-scoreboard-consistency). What it
+added was information: every token knew where it sat relative to the body's
+centroid. At 435 DrivAerML cars with three seeds each, under the stratified
+10,000-cell draw (exploration budget), it scored 0.0524 against ISLA's
+0.0533, a ratio of 0.98 with overlapping seed ranges, and the same 1.6 to
+2.0% offset on the independent draws at 10,000 and 40,000 cells: the price
+of not being told the body's center, at most about 2%, inside seed noise
+(@sec-nb-sgref-verdict).
 
-::: {.callout-note collapse="true" title="The legacy centered variant (diagnostic)"}
-Before the relative frame, the program's configuration was a centered frame
-with the plain mean of the sampled points as center and a constant length
-unit (8.0 in the recipe's nondimensional units, 40 m physical on
-DrivAerML; the constructor options that selected it were removed from the
-class on 2026-09-20, @sec-nb-frame-cleanup). The plain mean is a mesher statistic, the gray marker of
-@fig-isla-frame: under a 10:1 sampling-density bias it moves by a large
-fraction of the body length, every downstream invariant leaves its trained
-range, and the error grows 12x where the reference grows 1.2x. It reads a
-sample statistic that is not physical knowledge, so it is cut from every
-main result of this book and appears only in collapsed notes like this one,
-where it is the diagnostic that locates a mechanism (the plain-mean center's density degradation;
-the single-factor ablation of @sec-mechanism, which was run on it). Its
-recipe configuration `isla_surface_constant_gauge` is kept to reproduce
-those measurements.
+**The legacy centered variant (removed)** used the plain mean of the
+sampled points as center and a constant length unit (8.0 in the recipe's
+nondimensional units, 40 m physical on DrivAerML). The plain mean is a
+mesher statistic, the gray marker of @fig-isla-frame: under a 10:1
+sampling-density bias it moves by a large fraction of the body length,
+every downstream invariant leaves its trained range, and the error grows
+12x where ISLA's grows 1.2x. Swapping a measure-weighted center into that
+same checkpoint brings 12.1x to 1.12x, which locates the degradation in the
+plain-mean center alone. It appears in this book only in collapsed notes
+like this one, as the configuration on which the single-factor ablation of
+@sec-mechanism was run.
 :::
 
 ## The contracts, as tests {#sec-mt2-contracts}
@@ -764,7 +815,7 @@ input and weights.
 | weight-scale invariance of the measure weights; geometric-scale equivariance under both length units, with and without the passive decoder | `test_measure_weight_scale_invariance`, `test_geometric_scale_equivariance` | $10^{-9}$ / $10^{-10}$ |
 | pool-then-project equals project-then-pool; the geometry recompute reproduces outputs and gradients | `test_geo_pool_then_project_is_exact`, `test_geo_checkpoint_is_exact` | $10^{-12}$ / exact (outputs), $10^{-11}$ (gradients) |
 | every parameter receives a gradient (five configurations); heads run under bf16 autocast | `test_all_parameters_receive_gradients`, `test_head_variants_run_under_bf16_autocast` | exact / finite |
-| removing the relational invariants (`use_relational_geo=False`) keeps the contracts; the removed `"reference_length"` unit is refused | `test_a35b_ablation_flags_run_and_differ`, `test_frame_contracts` | $10^{-10}$ / `ValueError` |
+| removing the relational invariants (`use_relational_geo=False`) keeps the contracts; a `"reference_length"` unit is refused | `test_a35b_ablation_flags_run_and_differ`, `test_frame_contracts` | $10^{-10}$ / `ValueError` |
 | the diagnostics break covariance by design | `test_raw_coord_channel_breaks_equivariance_by_design` | $> 10^{-3}$ |
 
 ::: {.callout-warning collapse="true" title="What is not a contract"}
@@ -783,19 +834,24 @@ input and weights.
   companion points change (GeoTransolver 2%). The exact contract is bought
   by the passive decoder at the price of @sec-query-independence.
 - **Refinement of the source measure, in the query-token interior
-  configuration.** A query's routing weight is a learned factor times the
+  configuration, under the `query_mass="geometric_mean"` option.** With
+  that option a query's routing weight is a learned factor times the
   geometric mean of the source weights, so halving every source cell shifts
   the balance between surface and queries (3.7 to 9.1% in a float64 probe
-  where the surface model moves by $10^{-15}$). The uniform-rescale
-  contracts cannot detect this. Count augmentation during training reduces
-  the dependence on the request size by about 40% at a 3.7% cost and does
-  not remove it, so the interior model is deployed at its training query
-  count (@sec-interior-companion).
+  where the surface model moves by $10^{-15}$), and the uniform-rescale
+  contracts cannot detect it. The default, `query_mass="source_total"`,
+  gives the queries a learned fraction of the total boundary measure, which
+  does not change when the same measure is re-represented on finer cells,
+  so the dependence is absent by construction; the interior lanes the book
+  reports were trained under the geometric-mean option and are labeled so
+  where quoted. Separately, count augmentation during training reduces the
+  dependence on the number of queries requested by about 40% at a 3.7% cost
+  and does not remove it, so the interior model is deployed at its training
+  query count (@sec-interior-companion).
 - **Composition of optional channels.** Each optional channel preserves the
-  contracts alone; not every pair composes (the similarity gauge with the
-  local-feature channel is not scale-equivariant; the passive decoder with
+  contracts alone; not every pair composes (the passive decoder with
   boundary scalars fails on a shape when source and query counts differ).
-  None of these combinations is behind any number in the book.
+  No such combination is behind any number in the book.
 - **Completeness of the representation.** The anchors are first moments, so
   two non-congruent arrangements whose transverse first moments about the
   global direction vanish are indistinguishable to every layer (a
@@ -819,8 +875,13 @@ input and weights.
 
 **At the recipe dimensions (width 192, 12 layers, 256 slices) ISLA has 8.9M
 parameters against GeoTransolver's 9.0M, and on the path the recipe runs
-its training step costs 1.05x GeoTransolver's at 10,000 tokens in half the
-memory.** The step is memory-bound at every stage but the MLP; the
+its training step costs 1.05x GeoTransolver's at 10,000 tokens (the
+exploration budget) in half the memory.** At scale that memory is what buys
+accuracy: on DrivAerML at 435 cars and 100,000 cells (a labeled scaling
+budget), ISLA at width 384 reaches 0.0411 surface-pressure error in 22 GB
+where GeoTransolver at width 1,024 reaches 0.0406 in 74 GB, so GeoTransolver
+needs 3.4x the memory for the same floor (@sec-equal-budget). The step is
+memory-bound at every stage but the MLP; the
 relational invariants alone move 61% of the traffic, which is why the ratio
 grows with tokens and why a fused Triton kernel exists for the geometry
 region, the default wherever it can run (CUDA, one global vector, at most
@@ -863,29 +924,55 @@ results/v0_interior_resources_2026-09-07.json).
 
 ## What each design choice costs and buys {#sec-mt2-design}
 
-**No single ingredient of ISLA carries its accuracy; the largest single
-effect measured is 16%. The relative frame buys consistency under a change
-of sampling at a price of 0 to 14.5% against a sample-centered frame
-depending on the rung, and exact query independence costs 3.0 to 3.7x.**
+**No single ingredient of ISLA carries its accuracy: the largest single
+effect measured is 16%, the price of not being told the body's center is at
+most about 2%, and exact query independence costs 3.0 to 3.7x.**
 Each line below carries one number and the section that defines the
 measurement; ablation ratios are a variant's pressure error over the
-unablated model's (0.138) in the single-factor ablation at 35 HiLiftAeroML
-training cases, two seeds, which was run on the legacy centered variant
-(@sec-mechanism), greater than one meaning worse.
+unablated model's (0.138) in the single-factor ablation on the 35-case
+HiLiftAeroML rung at the exploration budget, two seeds, run on the removed
+centered variant of @sec-mt2-variants (@sec-mechanism), greater than one
+meaning worse.
 
 | choice | what it buys | what it costs | where |
 |---|---|---|---|
 | relational invariants in routing and read-back (idea 4) | the largest single accuracy contribution | removing them: 1.16x | @sec-mechanism |
-| exact equivariance (ideas 2, 6) | no canonical frame or augmentation at inference; a 7% and 17% lead in random poses | adding raw coordinates does not help at 35 wing cases (1.04x with the channel, 0.99x with raw seeds; every ablation keeps an invariant path through the relational invariants, so these do not show invariants are dispensable); at 435 cars the contracts deny about 2.5 points of positional information against the baselines | @sec-pose, @sec-deficit-anatomy |
-| the relative frame (idea 2) | consistency: 1.2x under a 10:1 density bias where sample-centered configurations degrade 10 to 16x; that degradation is the plain-mean center alone (the legacy centered checkpoint with a measure-weighted center swapped in goes from 12.1x to 1.12x), and under refinement the measure-weighted convention-swap penalty converges 2.9x → 1.45x → 1.05x from 2,500 to 40,000 cells while the baselines stay at 3 to 7x | against the legacy centered variant (diagnostic): 0% on DrivAerML; 1 to 5% on never-seen-geometry rungs; 11% where validation geometries recur in training; 14.5% at a fixed angle; on the wings that price is the plain mean's mesher pattern (its centroid sits 0.131 body lengths off the geometric one, 0.034 on the cars), not positional information | @sec-scoreboard-consistency, @sec-full-data, @sec-consistency-bench |
-| measure weights (idea 1) | correctness: a slice aggregates an integral, not a mesher's point pattern | 0.88x at 35 cases as an ablation; the price is estimator variance and shrinks with cells; retraining under an area-proportional draw, which makes the weights constant, does not buy the ablation's advantage back | @sec-principle, @sec-deficit-anatomy |
-| passive decoder (exact query independence) | prediction at a point depends on the surface and that point alone | 3.0 to 3.7x on DrivAerML surface pressure (0.203 to 0.211 against 0.0577 for the interacting legacy centered variant; a 6,500-token interacting control gives the 3.0x end and is a token-count, not a matched-memory, control); 3.1x on interior pressure | @sec-query-independence |
+| exact equivariance (ideas 2, 6) | no canonical frame or augmentation at inference: in random poses on DrivAerML at 200,000 cells ISLA's posed error is 1.015x its native, and it leads GeoTransolver and Transolver, each trained with pose augmentation, by 12% and 21% | adding raw coordinates does not help on the 35-case wing rung (1.04x with the channel, 0.99x with raw seeds); at 435 cars the contracts deny about 2.5 points of positional information against GeoTransolver | @sec-pose, @sec-deficit-anatomy |
+| the relative frame (idea 2) | consistency: on DrivAerML at 100,000 cells under a 10:1 density bias with exact Horvitz–Thompson weights, ISLA's error grows 1.07 to 1.2x where GeoTransolver's grows 8.7x and Transolver's 5.3x | the price of not being told the body's center: at most about 2% at 435 cars, inside seed noise | @sec-scoreboard-consistency, @sec-consistency-bench, @sec-mt2-variants |
+| measure weights (idea 1) | correctness: a slice aggregates an integral, not a mesher's point pattern; a weak dependence on the training sampling law (0.99x wings, 1.08x cars) where GeoTransolver's is 2.6x and 7.9x | 0.88x on the 35-case wing rung as an ablation; the price is estimator variance and shrinks with cells; retraining under an area-proportional draw, which makes the weights constant, does not buy the ablation's advantage back | @sec-principle, @sec-training-law, @sec-deficit-anatomy |
+| passive decoder (exact query independence) | prediction at a point depends on the surface and that point alone | 3.0 to 3.7x on DrivAerML surface pressure at the exploration budget; 3.1x on interior pressure | @sec-query-independence |
 | single routing per layer (idea 3) | simplicity, the fused kernel | nothing measurable at full data: four routings recover 2.5% at 435 cars, eight are 1.7% worse; not adopted | @sec-nb-heads435-verdict |
+| bounded routing logits (idea 3, candidate default) | trainability at width and depth: no learning-rate ceiling on any DrivAerML lane tried; 48 layers trainable | nothing measured at the rule rates (cosine ÷ linear 0.998 to 1.020 at 192 to 768 wide, 100,000 cells) | @sec-mt2-routing-forms, @sec-using-lr |
+
+::: {.callout-note collapse="true" title="Measurements against the removed centered variants (diagnostic)"}
+The numbers here compare ISLA with the removed variants of
+@sec-mt2-variants and are kept because they locate mechanisms. Under the
+10:1 density bias at the exploration budget the legacy centered variant
+degraded 10 to 16x depending on the rung against ISLA's 1.2x, and swapping
+a measure-weighted center into the legacy checkpoint brought 12.1x to
+1.12x, so the degradation was the plain-mean center alone; under
+refinement the measure-weighted convention-swap penalty converged
+2.9x → 1.45x → 1.05x from 2,500 to 40,000 cells while GeoTransolver and
+Transolver stayed at 3 to 7x (@sec-consistency-bench). In distribution the
+relative frame scored against the legacy centered variant at 0% on
+DrivAerML, 1 to 5% on never-seen-geometry wing rungs, 11% where validation
+geometries recur in training and 14.5% at a fixed angle; on the wings that
+offset is the plain mean's mesher pattern (its centroid sits 0.131 body
+lengths off the geometric one, 0.034 on the cars), not positional
+information (@sec-full-data). The passive-decoder price of 3.0 to 3.7x is
+0.203 to 0.211 against 0.0577 for the interacting legacy centered variant;
+a 6,500-token interacting control gives the 3.0x end and is a token-count,
+not a matched-memory, control (@sec-query-independence). The raw-coordinate
+ablations keep an invariant path through the relational invariants, so they
+do not show the invariants are dispensable.
+:::
 
 ::: {.callout-note collapse="true" title="The flags that select these configurations"}
 | flag (default) | what it changes |
 |---|---|
-| `scale_mode` (`"rms_distance"`) | the one length unit of the origin-free frame: the measure-weighted RMS pairwise distance of the sample; `"total_measure"` uses the square root of the total measure (the unit the evidence before 2026-09-18 evening was trained with, within 1.3% of the default, @sec-nb-lenrms-verdict; kept only to reproduce those lanes and marked for removal, ruling 2026-09-20). The centered-frame flags (`frame_mode`, `similarity_gauge`, `reference_length`) were removed on 2026-09-20; their checkpoints no longer load (@sec-nb-frame-cleanup) |
+| `scale_mode` (`"rms_distance"`) | the one length unit of the origin-free frame: the measure-weighted RMS pairwise distance of the sample; `"total_measure"` uses the square root of the total measure, within 1.3% of the default on DrivAerML (@sec-nb-lenrms-verdict), kept only to reproduce the lanes trained with it and marked for removal. The class has no centered-frame flag; checkpoints of the removed variants do not load |
+| `routing_norm` (`"linear"`), `routing_temperature` (10) | the form of the routing logit (@sec-mt2-routing-forms): `"linear"` is the affine map of the normalized token state; `"cosine"` is the temperature times the cosine against a learned prototype per slice, bounded in $[-T, T]$; cosine is the candidate default |
+| `query_mass` (`"source_total"`) | the routing weight of query tokens in the interior configuration: the default gives them a learned fraction of the total boundary measure, invariant to re-representing the same measure; `"geometric_mean"` gives each the mean boundary log-weight plus a learned offset, which depends on the boundary refinement (the option the interior evidence lanes were trained with) |
 | `use_measure_weights` (on) | the log-measure routing bias; off is the ablation |
 | `use_relational_geo` (on) | the relational invariants in routing and read-back |
 | `query_independent`, `n_decoder_layers` (off, 4) | the passive decoder |
@@ -895,9 +982,7 @@ training cases, two seeds, which was run on the legacy centered variant
 | `geo_checkpoint` (on in the recipe), `geo_kernel` (`None` = automatic) | rebuild the geometry in the backward pass; the kernel is the exact fused Triton region on CUDA with one global vector and at most 1,024 slices, the eager region otherwise; `"eager"` or `"fused"` forces one |
 
 This is the mainline class as prepared for PhysicsNeMo integration. The
-research-only options the program built and refuted or used as diagnostics
-were removed from the class and remain runnable, with their
-tests, at the git tag `isla-research-full`; a checkpoint that names one at
-its former default loads unchanged, and one that set it raises an error
-naming the tag (@sec-principled-ask).
+research-only options the program measured and did not adopt, and the
+diagnostics, were removed from the class and remain runnable, with their
+tests, at the git tag `isla-research-full` (@sec-principled-ask).
 :::

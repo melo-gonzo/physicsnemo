@@ -22430,4 +22430,98 @@ The phrases "one seventeenth of the parameters", "a quarter of the
 parameters" and "34M against 570M" in the addenda above are withdrawn;
 the artifact for the extension lanes with their parameter counts is
 results/routenorm_extension_2026-09-21.json (reduction
-results/routenorm_extension_reduce_2026-09-21.py).
+results/routenorm_extension_reduce_2026-09-21.py). The memory fraction quoted with them ("a fifth of
+GeoTransolver-1,024's training memory") is likewise withdrawn: the logged
+peaks are 22 GB for ISLA 384 × 12 and 42 GB for the 384 × 24 shape against
+74 GB for GeoTransolver-1,024, so the 68M lane trains in about half and the
+34M lane in less than a third of that memory.
+
+## 2026-09-21 — Preregistration, three campaigns on the idle cluster: SCALE-LAW (error against training cases and parameters for cosine ISLA and GeoTransolver on two datasets), SEEDS (third and fourth seeds of every headline lane) and COSINE-TWINS (the evidence board under cosine routing) {#sec-nb-campaigns-2026-09-21-prereg}
+
+**Setting.** Peter reports about 1,400 idle nodes on AGA this morning and
+asks that the latitude be spent on research that the program has ready.
+Three questions are ready and are limited by node count, not by design:
+the scaling law the goal asks for (how error depends on training cases and
+parameters, for both architectures, on both datasets); the seed count
+behind the headline numbers (every reporting-protocol row rests on two
+seeds, and two of the book's caveats are 8% seed spreads); and the state of
+the evidence board should cosine routing become the default (every ISLA
+lane on the board is linear-routed). All three run on one node per lane
+with the pinned recipe and the `code_routenorm` snapshot (the class with
+`routing_norm`; GeoTransolver and Transolver do not read it), 500 epochs,
+bf16, float32 scoring at 200,000 cells through the fleet pump, which now
+selects the snapshot per lane for these groups. Lane tables and launchers:
+`kernel/{sl,sd,ct}/lanes.{tsv,sbatch}`; 160 lanes, 160 nodes, 640 GPUs,
+about one to three days of chain time per lane.
+
+**SCALE-LAW (group `sl`, 80 lanes, 100,000 cells, the scaling budget).**
+Cosine ISLA at 192 / 384 / 768 wide (1e-3 / 5e-4 / 5e-4, each width's best
+clean rate on the cars) and GeoTransolver at 256 / 512 / 1,024 wide (3e-3 /
+3e-3 / 1e-3, its best rate per width at 435 cars) on the DrivAerML rungs of
+27, 54, 109 and 218 cars (the 435-car points exist from the routing and
+capacity studies) and on the HiLift rungs of 35, 105 and 510 wings (the
+510-wing GeoTransolver 256 and 512 points come from the wing scaling study
+already running); two seeds. Fit per model and dataset
+$\varepsilon(n, P) = a\,n^{-\alpha} + b\,P^{-\beta} + c$ by least squares
+on the seed means, with the floor $c$ shared between the two architectures
+on a dataset when the fit does not separate them.
+
+- **Bars.** *Data exponent*: $\alpha$ within 0.05 of each other for ISLA and
+  GeoTransolver on the same dataset means the architectures convert
+  training cases at the same rate and GeoTransolver's small-data lead is
+  an offset, not a slope; a difference above 0.1 is a real slope difference
+  and is reported with its sign. *Parameter exponent*: $\beta$ is expected
+  to vanish for ISLA beyond 384 wide on the cars (the width ladder is flat
+  384 to 768 under cosine routing); on the wings the same flatness, within
+  3% between 384 and 768 at every rung, means the wing deficit is not
+  capacity; a gain above 3% at the largest rung reopens the capacity
+  question for the wings. *Two datasets*: the exponents agree between cars
+  and wings within 0.1 or the law is stated per dataset. *Cross-over*: a
+  rung at which GeoTransolver ÷ ISLA moves from below to above 1 as width
+  grows is reported as such.
+- **Prediction.** $\alpha \approx 0.3$ for both on the cars (the 200k ladder
+  fell 0.83 to 1.00 in ratio, so the slopes are close: within 0.05);
+  $\beta_\text{ISLA} \approx 0$ past 384 on both datasets; GeoTransolver's
+  wing deficit lead stays about 27% at every width; probability that the
+  wings show width recovering more than 3% for ISLA: 0.3.
+
+**SEEDS (group `sd`, 62 lanes, the reporting protocol).** Seeds 44 and 45
+of: the 435-car trio (ISLA, GeoTransolver 3e-3, Transolver); ISLA and
+GeoTransolver 3e-3 on the 27 / 54 / 109 / 218-car rungs; the pose trio; the
+35-wing and fixed-angle trios; the training-law lanes on both datasets
+(area-trained trios on the 35-wing rung at 200,000 cells and on the cars at
+100,000, with the cars' uniform-trained trio at 100,000); the interior pair
+(ISLA at 5e-4, GeoTransolver-volume). Readout: four-seed means and ranges.
+
+- **Bars.** A headline ratio *survives* if the four-seed ratio is within 2%
+  of the two-seed ratio (parity 0.998 stays within 0.98 to 1.02; the ladder
+  0.83 / 0.86 / 0.92 / 0.97; the wing rungs 0.73 and 0.69; the pose lead
+  12% / 21%; the interior 0.87 / 1.42 / 0.98; the training-law factors 2.6x
+  / 7.9x, 2.4x / 9.6x, 0.99x / 1.08x). A ratio that moves more than 2% is
+  restated at four seeds and the chapter sentence changes. ISLA's interior
+  pressure seed spread (8% at two seeds) is reported as the four-seed range.
+- **Prediction.** Every ratio survives; the interior pressure range narrows
+  to under 6%.
+
+**COSINE-TWINS (group `ct`, 18 lanes, the reporting protocol).** Cosine
+ISLA-192 at 1e-3, two seeds, on the 435-car row, the four ladder rungs, the
+pose split, the fixed-angle wing rung, the area-trained wing and car lanes
+(the 35-wing cosine lanes already run as part of the routing study).
+
+- **Bars.** Cosine within 2% of linear on every row means the board can be
+  re-stated under cosine routing without a change of reading if the wing
+  lanes of the routing study confirm the default; a row more than 2% worse
+  is a cost of the default change at that rung; more than 2% better is a
+  finding. The training-law factor for cosine ISLA within 0.03 of linear's
+  (0.99 wings, 1.08 cars) means the discretization result does not depend
+  on the routing form.
+- **Prediction.** Every row within 2% (0.8); the training-law factors within
+  0.03 (0.8).
+
+Acceptance: every lane alive with no traceback at the first validation
+(epoch 10 for the cars, 25 for the wings), validation losses on the
+trajectories of their existing twins; the two-strike guard blocks any lane
+that fails twice identically. Cost note: the scratch quota (82 of 100 TB
+after yesterday's pruning) receives about 160 lanes × 3 retained
+checkpoints; the pruner runs every 30 minutes and the largest lanes here
+(GeoTransolver 1,024, ISLA 768) hold about 1 GB per checkpoint pair.

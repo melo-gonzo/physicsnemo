@@ -1,0 +1,63 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	sd	sd_dr435_isla_seed44	drivaer_ml_surface	isla_surface_reference	-	1e-3	44	200000	code_routenorm
+1	sd	sd_dr435_gt_unit_lr3e3_seed44	drivaer_ml_surface	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir	3e-3	44	200000	code_routenorm
+2	sd	sd_dr435_transolver_unit_seed44	drivaer_ml_surface	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir	3e-3	44	200000	code_routenorm
+3	sd	sd_dr435_isla_seed45	drivaer_ml_surface	isla_surface_reference	-	1e-3	45	200000	code_routenorm
+4	sd	sd_dr435_gt_unit_lr3e3_seed45	drivaer_ml_surface	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir	3e-3	45	200000	code_routenorm
+5	sd	sd_dr435_transolver_unit_seed45	drivaer_ml_surface	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir	3e-3	45	200000	code_routenorm
+6	sd	sd_dr_isla_n27_seed44	drivaer_scaling	isla_surface_reference	train_split=train_n27	1e-3	44	200000	code_routenorm
+7	sd	sd_dr_gt_unit_lr3e3_n27_seed44	drivaer_scaling	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir train_split=train_n27	3e-3	44	200000	code_routenorm
+8	sd	sd_dr_isla_n27_seed45	drivaer_scaling	isla_surface_reference	train_split=train_n27	1e-3	45	200000	code_routenorm
+9	sd	sd_dr_gt_unit_lr3e3_n27_seed45	drivaer_scaling	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir train_split=train_n27	3e-3	45	200000	code_routenorm
+10	sd	sd_dr_isla_n54_seed44	drivaer_scaling	isla_surface_reference	train_split=train_n54	1e-3	44	200000	code_routenorm
+11	sd	sd_dr_gt_unit_lr3e3_n54_seed44	drivaer_scaling	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir train_split=train_n54	3e-3	44	200000	code_routenorm
+12	sd	sd_dr_isla_n54_seed45	drivaer_scaling	isla_surface_reference	train_split=train_n54	1e-3	45	200000	code_routenorm
+13	sd	sd_dr_gt_unit_lr3e3_n54_seed45	drivaer_scaling	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir train_split=train_n54	3e-3	45	200000	code_routenorm
+14	sd	sd_dr_isla_n109_seed44	drivaer_scaling	isla_surface_reference	train_split=train_n109	1e-3	44	200000	code_routenorm
+15	sd	sd_dr_gt_unit_lr3e3_n109_seed44	drivaer_scaling	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir train_split=train_n109	3e-3	44	200000	code_routenorm
+16	sd	sd_dr_isla_n109_seed45	drivaer_scaling	isla_surface_reference	train_split=train_n109	1e-3	45	200000	code_routenorm
+17	sd	sd_dr_gt_unit_lr3e3_n109_seed45	drivaer_scaling	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir train_split=train_n109	3e-3	45	200000	code_routenorm
+18	sd	sd_dr_isla_n218_seed44	drivaer_scaling	isla_surface_reference	train_split=train_n218	1e-3	44	200000	code_routenorm
+19	sd	sd_dr_gt_unit_lr3e3_n218_seed44	drivaer_scaling	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir train_split=train_n218	3e-3	44	200000	code_routenorm
+20	sd	sd_dr_isla_n218_seed45	drivaer_scaling	isla_surface_reference	train_split=train_n218	1e-3	45	200000	code_routenorm
+21	sd	sd_dr_gt_unit_lr3e3_n218_seed45	drivaer_scaling	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir train_split=train_n218	3e-3	45	200000	code_routenorm
+22	sd	sd_dr_pose_isla_seed44	drivaer_ml_surface_pose	isla_surface_reference	-	1e-3	44	200000	code_routenorm
+23	sd	sd_dr_pose_gt_unit_lr1e3_seed44	drivaer_ml_surface_pose	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir	1e-3	44	200000	code_routenorm
+24	sd	sd_dr_pose_transolver_unit_seed44	drivaer_ml_surface_pose	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir	3e-3	44	200000	code_routenorm
+25	sd	sd_dr_pose_isla_seed45	drivaer_ml_surface_pose	isla_surface_reference	-	1e-3	45	200000	code_routenorm
+26	sd	sd_dr_pose_gt_unit_lr1e3_seed45	drivaer_ml_surface_pose	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir	1e-3	45	200000	code_routenorm
+27	sd	sd_dr_pose_transolver_unit_seed45	drivaer_ml_surface_pose	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir	3e-3	45	200000	code_routenorm
+28	sd	sd_hl_super_scarce_isla_seed44	highlift_surface_super_scarce	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	1e-3	44	200000	code_routenorm
+29	sd	sd_hl_super_scarce_gt_unit_lr3e3_seed44	highlift_surface_super_scarce	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir +training.val_interval=25	3e-3	44	200000	code_routenorm
+30	sd	sd_hl_super_scarce_transolver_unit_seed44	highlift_surface_super_scarce	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir +training.val_interval=25	3e-3	44	200000	code_routenorm
+31	sd	sd_hl_super_scarce_isla_seed45	highlift_surface_super_scarce	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	1e-3	45	200000	code_routenorm
+32	sd	sd_hl_super_scarce_gt_unit_lr3e3_seed45	highlift_surface_super_scarce	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir +training.val_interval=25	3e-3	45	200000	code_routenorm
+33	sd	sd_hl_super_scarce_transolver_unit_seed45	highlift_surface_super_scarce	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir +training.val_interval=25	3e-3	45	200000	code_routenorm
+34	sd	sd_hl_single_aoa_12_isla_seed44	highlift_surface_single_aoa_12	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	1e-3	44	200000	code_routenorm
+35	sd	sd_hl_single_aoa_12_gt_unit_lr3e3_seed44	highlift_surface_single_aoa_12	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir +training.val_interval=25	3e-3	44	200000	code_routenorm
+36	sd	sd_hl_single_aoa_12_transolver_unit_seed44	highlift_surface_single_aoa_12	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir +training.val_interval=25	3e-3	44	200000	code_routenorm
+37	sd	sd_hl_single_aoa_12_isla_seed45	highlift_surface_single_aoa_12	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	1e-3	45	200000	code_routenorm
+38	sd	sd_hl_single_aoa_12_gt_unit_lr3e3_seed45	highlift_surface_single_aoa_12	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir +training.val_interval=25	3e-3	45	200000	code_routenorm
+39	sd	sd_hl_single_aoa_12_transolver_unit_seed45	highlift_surface_single_aoa_12	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir +training.val_interval=25	3e-3	45	200000	code_routenorm
+40	sd	sd_hl_super_scarce_area_isla_seed44	highlift_surface_super_scarce_area	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	1e-3	44	200000	code_routenorm
+41	sd	sd_hl_super_scarce_area_gt_unit_lr3e3_seed44	highlift_surface_super_scarce_area	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir +training.val_interval=25	3e-3	44	200000	code_routenorm
+42	sd	sd_hl_super_scarce_area_transolver_unit_seed44	highlift_surface_super_scarce_area	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir +training.val_interval=25	3e-3	44	200000	code_routenorm
+43	sd	sd_hl_super_scarce_area_isla_seed45	highlift_surface_super_scarce_area	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	1e-3	45	200000	code_routenorm
+44	sd	sd_hl_super_scarce_area_gt_unit_lr3e3_seed45	highlift_surface_super_scarce_area	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir +training.val_interval=25	3e-3	45	200000	code_routenorm
+45	sd	sd_hl_super_scarce_area_transolver_unit_seed45	highlift_surface_super_scarce_area	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir +training.val_interval=25	3e-3	45	200000	code_routenorm
+46	sd	sd_dr_area_isla_seed44	drivaer_ml_surface_area	isla_surface_reference	+model.geo_kernel=fused	1e-3	44	100000	code_routenorm
+47	sd	sd_dr_area_gt_unit_lr3e3_seed44	drivaer_ml_surface_area	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir	3e-3	44	100000	code_routenorm
+48	sd	sd_dr_area_transolver_unit_seed44	drivaer_ml_surface_area	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir	3e-3	44	100000	code_routenorm
+49	sd	sd_dr_area_isla_seed45	drivaer_ml_surface_area	isla_surface_reference	+model.geo_kernel=fused	1e-3	45	100000	code_routenorm
+50	sd	sd_dr_area_gt_unit_lr3e3_seed45	drivaer_ml_surface_area	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir	3e-3	45	100000	code_routenorm
+51	sd	sd_dr_area_transolver_unit_seed45	drivaer_ml_surface_area	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir	3e-3	45	100000	code_routenorm
+52	sd	sd_dr_c100k_isla_seed44	drivaer_ml_surface	isla_surface_reference	+model.geo_kernel=fused	1e-3	44	100000	code_routenorm
+53	sd	sd_dr_c100k_gt_unit_lr3e3_seed44	drivaer_ml_surface	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir	3e-3	44	100000	code_routenorm
+54	sd	sd_dr_c100k_transolver_unit_seed44	drivaer_ml_surface	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir	3e-3	44	100000	code_routenorm
+55	sd	sd_dr_c100k_isla_seed45	drivaer_ml_surface	isla_surface_reference	+model.geo_kernel=fused	1e-3	45	100000	code_routenorm
+56	sd	sd_dr_c100k_gt_unit_lr3e3_seed45	drivaer_ml_surface	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir	3e-3	45	100000	code_routenorm
+57	sd	sd_dr_c100k_transolver_unit_seed45	drivaer_ml_surface	transolver_surface	forward_kwargs.fx.source=global_data.U_inf_dir	3e-3	45	100000	code_routenorm
+58	sd	sd_dr_isla_vol_lr5e4_seed44	drivaer_ml_volume_reference	isla_volume_reference	++model.query_mass=geometric_mean +training.val_interval=10	5e-4	44	200000	code_routenorm
+59	sd	sd_dr_gt_unit_vol_seed44	drivaer_ml_volume_mt	geotransolver_volume	forward_kwargs.global_embedding=global_data.U_inf_dir +training.val_interval=10	1e-3	44	200000	code_routenorm
+60	sd	sd_dr_isla_vol_lr5e4_seed45	drivaer_ml_volume_reference	isla_volume_reference	++model.query_mass=geometric_mean +training.val_interval=10	5e-4	45	200000	code_routenorm
+61	sd	sd_dr_gt_unit_vol_seed45	drivaer_ml_volume_mt	geotransolver_volume	forward_kwargs.global_embedding=global_data.U_inf_dir +training.val_interval=10	1e-3	45	200000	code_routenorm

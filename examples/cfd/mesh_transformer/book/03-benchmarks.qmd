@@ -1,18 +1,29 @@
 # The scoreboard: ISLA against GeoTransolver and Transolver {#sec-scoreboard}
 
 **With every architecture fed the same inputs and scored on the same
-float32 instrument, GeoTransolver and Transolver are at least as accurate as
-ISLA on every in-distribution surface benchmark measured, by 2% at the
-512-wide, 80,000-cell corner and by up to 28% at 35 wing cases; ISLA leads
-where geometries arrive in arbitrary poses, on interior velocity, and on
-consistency under a change of surface sampling, where its relative frame
-degrades 1.2x against 10 to 16x (19x for the weights-off ablation) for
-every configuration that centers its coordinates on the sampled points.** This chapter is the standing on one
-page. Every cross-architecture measurement of the book appears here,
-computed from the same result files the evidence chapters use, so a reader
-who needs the standing and not the derivation can stop after this chapter
-and go to @sec-data-efficiency, @sec-full-data and @sec-interior only for
-the protocol behind a particular row.
+float32 instrument at the reporting protocol of 200,000 cells per case,
+ISLA and GeoTransolver are at parity on DrivAerML at full data
+(GeoTransolver ÷ ISLA 0.998) and ISLA leads Transolver by 6%; below full
+data GeoTransolver holds a data-efficiency lead that narrows from 17% at 27
+cars to zero at 435; on HiLiftAeroML GeoTransolver and Transolver lead by
+27 to 31% on the 35-case and fixed-angle rungs at either budget. ISLA leads
+where every case arrives in its own random pose (by 12% over GeoTransolver
+and 21% over Transolver), on interior velocity (by 42%), under a change of
+the law the training sample is drawn by (GeoTransolver and Transolver
+trained on the area-proportional draw are 2.6 to 7.9x worse on the uniform
+one, ISLA 1 to 8%), and on the accuracy-against-memory frontier, where its
+best configuration at or under each training-memory budget is at least as
+accurate as GeoTransolver's at every budget measured and 9% more accurate
+at 40 GB. Given width and depth, both architectures reach the same floor of
+about 0.040 on DrivAerML, ISLA at 68 to 136M parameters and GeoTransolver
+at 143 to 571M.** This chapter is the standing on one page. The
+cross-architecture measurements of the book appear here as boards computed
+from the same result files the evidence chapters use, so a reader who needs
+the standing and not the derivation can stop after this chapter and go to
+@sec-data-efficiency, @sec-full-data, @sec-interior and
+@sec-baselines only for the protocol behind a particular row.
+The reporting-protocol board comes first; the exploration-budget board, at
+10,000 cells, follows under its own heading.
 
 ## How to read every number {#sec-scoreboard-protocol}
 
@@ -25,39 +36,42 @@ the protocol behind a particular row.
   case, epochs (500), split and validation cases are identical across
   architectures in every row, and each architecture runs at its own best
   learning rate. GeoTransolver's best rate depends on how much data it sees
-  (3e-3 at 200,000 cells on every DrivAerML rung, 1e-3 at 10,000 cells at
-  full data); the rows name the rate used.
+  (3e-3 at 200,000 cells on every DrivAerML rung and on the wings, 1e-3 at
+  10,000 cells at full data on the cars); the rows name the rate used.
 - **Two budgets, one protocol.** The reporting protocol is the recipe's
   default of 200,000 sampled cells per case (@sec-scoreboard-200k). The
   program explored at 10,000 cells, and every figure and table measured at
-  that count carries the label *exploration budget*; on DrivAerML the
-  budget changes the standing (parity at 200,000 against an 8% deficit at
-  10,000), on the 35-case wing rung it does not.
+  that count carries the label *exploration budget*
+  (@sec-scoreboard-exploration); on DrivAerML the budget changes the
+  standing (parity at 200,000 against an 8% deficit at 10,000), on the wing
+  rungs it does not. The capacity and memory results were measured at
+  100,000 cells, a *scaling budget* labeled as such; every model's error is
+  flat in the cell count above 100,000 (@sec-scoreboard-tokens).
 - **A ratio is baseline error divided by ISLA error**, so a value above one
-  favors ISLA. Where a rung was run on several random training draws, the
-  ratio carries the 90% interval over draws, which is the uncertainty to read.
+  favors ISLA. Seeds do not measure the choice of training cases; on the 35-
+  and 210-case wing rungs the uncertainty to read is the spread over random
+  training draws, three to eleven times the seed spread (@sec-de-controls).
 - **Which ISLA.** Every ISLA number in this chapter's figures and tables is
-  ISLA (relative frame, @sec-mt2; every lane in this chapter was trained
-  with the total-measure length unit, within 1.3% of the RMS-pairwise-distance
-  default, @sec-nb-lenrms-verdict); the legacy centered variant appears only
-  in collapsed diagnostic notes.
+  ISLA (relative frame, @sec-mt2); the 10,000- and 200,000-cell surface rows
+  were trained with the total-measure length unit, within 1.3% of the
+  RMS-pairwise-distance default (@sec-nb-lenrms-verdict). The legacy
+  centered variant and the similarity-gauge variant, both removed from the
+  class, appear only in collapsed diagnostic notes, labeled.
 
-::: {.callout-note collapse="true" title="The detail behind those four rules"}
-Learning rates: GeoTransolver 3e-3 on the 35-case wing rung and 1e-3
-elsewhere; Transolver 3e-3 everywhere; ISLA 1e-3 at width 192 and the width
-rule above it (@sec-using-lr). At 1,260 wing cases GeoTransolver and the
-legacy centered variant (diagnostic) were also trained at 20,000 cells: each
-improves by about 5% and their ratio does not move, so the wing rungs are
-not a cell-count floor (@sec-nb-w2c-floor-verdict). ISLA is measured
-on eight surface rungs: 35 and 210 wing cases, 4 and 21 training
-geometries, the fixed angle, DrivAerML at 435 cars under the independent
-and the stratified inference draw, and the corner; the rungs measured only
-on the legacy centered variant are listed in @sec-scoreboard-pending, and the
-properties first measured on that variant are being re-measured on ISLA
-(@sec-nb-refprops-prereg). One further family of
-configurations appears where it informs the reading: the baselines with the
-surface measure carried in their slice pooling, ablations that
-locate a property (GeoTransolver and Transolver are not
+::: {.callout-note collapse="true" title="The detail behind those rules at the exploration budget (10,000 cells)"}
+Learning rates at 10,000 cells: GeoTransolver 3e-3 on the 35-case wing rung
+and 1e-3 elsewhere; Transolver 3e-3 everywhere; ISLA 1e-3 at width 192 and
+the width rule above it (@sec-using-lr). At 1,260 wing cases GeoTransolver
+and the legacy centered variant (diagnostic) were also trained at 20,000
+cells: each improves by about 5% and their ratio does not move
+(@sec-nb-w2c-floor-verdict). ISLA is measured at this budget on eight
+surface rungs: 35 and 210 wing cases, 4 and 21 training geometries, the
+fixed angle, DrivAerML at 435 cars under the independent and the stratified
+inference draw, and the 512-wide, 80,000-cell corner; the rungs measured
+only on the legacy centered variant are listed in @sec-scoreboard-pending.
+One further family of configurations appears where it informs the reading:
+GeoTransolver and Transolver with the surface measure carried in their slice
+pooling, ablations that locate a property (the public models are not
 modified, @sec-part-baseline).
 :::
 
@@ -87,15 +101,15 @@ ud = J("udrv_reduction_2026-09-09d.json")
 campA35 = json.load(open(RP / "campaign_a_draws" / "campaign_a_n35_fp32_2026-09-10.json"))["ratios"]
 campA210 = json.load(open(RP / "campaign_a_draws" / "campaign_a_n210_fp32_2026-09-10.json"))["ratios"]
 poseB = json.load(open(RP / "campaign_b_pose" / "campaign_b_fp32_2026-09-10.json"))
-poseRR = J("refprops_reduction_2026-09-18.json"); poseR = poseRR["pose"]   # POSE-REF: ISLA in random poses, two seeds
+poseRR = J("refprops_reduction_2026-09-18.json"); poseR = poseRR["pose"]   # ISLA in random poses at 10,000 cells, two seeds
 campD = json.load(open(RP / "computational_support" / "campaign_d_verdict_2026-09-10.json"))["per_arm"]
 cost = J("isla_vs_baselines_cost_fastkernel_2026-09-09.json")
 fw = J("farwake_reduction_2026-09-11.json")
 u510 = J("udrvl_510_reduction_2026-09-12.json")
-ri2 = J("relint2_reduction_2026-09-14.json")  # interior ISLA (with the Horvitz–Thompson-corrected boundary measure)
+ri2 = J("relint2_reduction_2026-09-14.json")  # interior ISLA at 10,000 queries (Horvitz–Thompson-corrected boundary measure)
 fs = J("farwake_far_field_shells_2026-09-11.json")["arms"]
 
-# ---- surface rungs: seed lists in float32 -------------------------------
+# ---- surface rungs at the exploration budget: seed lists in float32 -------
 S = {}
 S["hl35"] = dict(
     title="HiLiftAeroML, 35 training cases (180 validation cases)",
@@ -161,7 +175,7 @@ S["dr435"] = dict(
     isla_cg=fp(fpdr, [f"iw_mt2_lr1e3_seed{s}" for s in (42, 43, 44)]),
     isla_ref=[rf["drivaer_val"][f"rf_dr_mt2_meas_seed{s}"]["pressure_l2"] for s in (42, 43)],
     gt_mw=MAT["rows"]["geotransolver_unit_mw"]["in_family_seeds"], t_mw=MAT["rows"]["transolver_unit_mw"]["in_family_seeds"],
-    paired=("36 of 48 for GeoTransolver against the legacy centered variant (diagnostic; not reduced against the reference); Transolver not reduced per case", "@sec-full-data-accuracy"),
+    paired=("36 of 48 for GeoTransolver against the legacy centered variant (diagnostic; not reduced against ISLA); Transolver not reduced per case", "@sec-full-data-accuracy"),
     draws=None,
     src="results/fp32_reeval/fp32_shift_drivaer_2026-09-09.json; results/relframe_reduction_2026-09-11.json; results/accuracy_consistency_matrix_2026-09-10.json")
 sc = MAT["scale_corner"]["rows"]
@@ -192,266 +206,185 @@ defl = J("deflection_sealed_test_2026-09-15.json")   # HiLift deflection split: 
 lad = J("ladder_reduction.json")                      # DrivAerML data-efficiency ladder (legacy centered variant vs GeoTransolver, physical velocity; diagnostic note only)
 ```
 
-## Surface pressure: every rung on one axis {#sec-scoreboard-surface}
+## The standing at the reporting protocol: 200,000 cells {#sec-scoreboard-200k}
 
-**At the exploration budget of 10,000 cells the unit-direction baselines
-match or beat ISLA on every surface rung; the margin runs from 2% at the
-corner to 28% at 35 wing cases and does not close as the training set
-grows.** This section is the exploration-budget standing; the reporting
-protocol's standing on DrivAerML, where the full-data gap closes to parity,
-is @sec-scoreboard-200k, and the 35-case wing rung does not move between
-the two budgets (@sec-scoreboard-200k). @fig-scoreboard-forest places every
-setting on one axis of baseline error divided by ISLA error; the rows below
-the surface rungs are the pose test and the interior task, where ISLA leads.
-
-```{python}
-#| label: fig-scoreboard-forest
-#| fig-cap: >
-#|   The scoreboard on one axis. Each row is one benchmark setting; each
-#|   marker is a baseline's surface-pressure error divided by ISLA's on the
-#|   same validation cases (GeoTransolver red circles, Transolver amber
-#|   triangles), so markers left of the line at 1 favor the baseline and
-#|   markers right of it favor ISLA. Every row divides by ISLA and
-#|   carries the seed-mean ratio. The bottom rows are the pose test
-#|   (baselines trained with rotation augmentation, ISLA without, every case
-#|   in a random pose, @sec-nb-poseref-verdict) and the interior task (GeoTransolver-volume
-#|   divided by ISLA with query tokens and the signed distance). How to read
-#|   this: it shows ratios, not absolute accuracy, and says nothing about
-#|   consistency under a change of sampling (@fig-scoreboard-density).
-#|   Float32 throughout.
-#|   Data: the files listed in @tbl-scoreboard-surface, plus
-#|   research/transfer_program/studies/campaign_b_pose/campaign_b_fp32_2026-09-10.json,
-#|   results/relint2_reduction_2026-09-14.json and
-#|   results/fp32_reeval/fp32_shift_interior_2026-09-09.json.
-#| code-fold: true
-rows = []  # (label, gt_ratio, t_ratio, filled)
-def add(label, key):
-    s = S[key]; i = s["isla_ref"]
-    rows.append((label, ratio(s["gt"], i), (ratio(s["t"], i) if s["t"] else None), True))
-add("HiLift, 35 cases", "hl35")
-add("HiLift, 210 cases", "hl210")
-add("HiLift, 4 training geometries", "geo4")
-add("HiLift, 21 training geometries", "geo21")
-add("HiLift, fixed angle 12°", "fixed")
-add("DrivAerML, 435 cars", "dr435")
-add("DrivAerML, 435 cars, stratified inference draw", "dr435_strat")
-add("DrivAerML, 512 wide × 80k cells (width learning rate)", "corner")
-n_surface = len(rows)
-pB = poseB["arms"]
-rows.append(("DrivAerML, every case in a random pose (baselines rotation-augmented)", pB["gt_aug"]["pressure_mean"] / poseR["posed_mean"],
-             pB["transolver_aug"]["pressure_mean"] / poseR["posed_mean"], True))
-def intf(keys, f): return mean(fp(fpint, keys, f))
-gtv = [f"udrv_gt_vol_seed{s}" for s in (42, 43)]; isq = [f"v0_isla_qtsdfval_seed{s}" for s in (42, 43)]  # isq: similarity-gauge interior variant, diagnostic note only
-for f, lab in (("pressure_l2", "interior pressure"), ("velocity_l2", "interior velocity"), ("nut_l2", "interior eddy viscosity")):
-    rows.append((f"DrivAerML interior, {lab}", ri2["gt_vol_unit"][f]["mean"] / ri2["relint2"][f]["mean"], None, True))
-fig, ax = plt.subplots(figsize=(9.6, 5.6))
-y = list(range(len(rows)))[::-1]
-for yy, (label, rg, rt, filled) in zip(y, rows):
-    for r, key, dy in ((rg, "gt", 0.12), (rt, "t", -0.12)):
-        if r is None: continue
-        c, mk = STYLE[key]["color"], STYLE[key]["marker"]
-        ax.plot([r], [yy + dy], marker=mk, ms=8, mfc=(c if filled else "white"), mec=c, mew=1.8, ls="none", zorder=4)
-        ax.annotate(f"{r:.2f}", (r, yy + dy), xytext=(0, 7 if dy > 0 else -11), textcoords="offset points", ha="center", fontsize=7.5, color=c)
-ax.axvline(1.0, color=INK2, lw=1.2, zorder=1)
-ax.axvspan(0.95, 1.05, color=GRID, alpha=0.6, zorder=0)
-n_rows = len(rows)
-for sep in (n_rows - n_surface - 0.5, n_rows - n_surface - 1.5):  # separate surface rungs / pose / interior
-    ax.axhline(sep, color=BASELINE, lw=0.8, ls=":", zorder=1)
-ax.set_yticks(y); ax.set_yticklabels([r[0] for r in rows], fontsize=8.5)
-ax.set_xscale("log"); ax.set_xlim(0.62, 1.45)
-ax.set_xticks([0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3]); ax.set_xticklabels(["0.7", "0.8", "0.9", "1.0", "1.1", "1.2", "1.3"])
-ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
-ax.set_xlabel("baseline error ÷ ISLA error [–]\n(left of 1: the baseline is more accurate; right of 1: ISLA is)")
-ax.grid(axis="y", visible=False)
-ax.set_ylim(-0.7, y[0] + 0.7)
-from matplotlib.lines import Line2D
-ax.legend(handles=[Line2D([], [], **{k: v for k, v in series_kwargs("gt", ls="none").items() if k in ("color", "marker", "mfc", "mec", "mew", "ms", "ls")}, label="GeoTransolver ÷ ISLA"),
-                   Line2D([], [], **{k: v for k, v in series_kwargs("t", ls="none").items() if k in ("color", "marker", "mfc", "mec", "mew", "ms", "ls")}, label="Transolver ÷ ISLA"),
-                   mpl.patches.Patch(facecolor=GRID, label="parity within 5%")],
-          loc="upper right", fontsize=8, ncol=1)
-fig.tight_layout()
-plt.show()
-```
-
-Every surface marker sits left of one; the pose and interior-velocity
-markers sit right of it. The numbers, seeds and paired case counts behind
-each marker are in @tbl-scoreboard-surface, and @fig-scoreboard-bars shows
-the same rungs as absolute error.
+**At the reporting protocol, the recipe's default of 200,000 sampled cells
+per case, ISLA and GeoTransolver are at parity on DrivAerML at full data
+(0.998), ISLA leads Transolver by 6%, below full data GeoTransolver holds a
+data-efficiency lead that narrows from 17% at 27 cars to zero at 435, and
+on the two HiLiftAeroML rungs measured GeoTransolver and Transolver lead by
+21 to 31%.** This is the book's primary standing. The DrivAerML table is
+computed from the 200,000-cell artifacts and names GeoTransolver's rate on
+every row, because GeoTransolver's best rate depends on how much data it
+sees: 3e-3 beats 1e-3 by 31%, 24%, 10%, 4% and 2% at 27, 54, 109, 218 and
+435 cars at this budget, where 1e-3 had won its 435-car grid at 10,000
+cells (@sec-nb-rategt-prereg, @sec-nb-proto200k-verdict). ISLA has one
+usable rate under linear routing (1e-3 at width 192; @sec-robustness-lr)
+and Transolver runs at 3e-3 throughout. A row would mark itself
+*provisional* if a rate control were still training; none is.
 
 ```{python}
-#| label: fig-scoreboard-bars
-#| fig-cap: >
-#|   The surface settings as absolute error. Bars are seed means of the
-#|   surface-pressure error (lower is better) for GeoTransolver (red),
-#|   Transolver (amber) and ISLA (blue); dots are
-#|   the individual seeds. Panels share no vertical scale, since the rungs differ by an order
-#|   of magnitude in error. How to read this: the ordering within a panel is
-#|   the benchmark result; the level across panels reflects how hard each
-#|   split is (few geometries, or a single angle), not architecture. Float32.
-#|   Data: as @tbl-scoreboard-surface.
-#| code-fold: true
-REF_KEYS = ["hl35", "hl210", "geo4", "geo21", "fixed", "dr435", "dr435_strat", "corner"]  # rungs where ISLA is measured
-keys = REF_KEYS
-short = {"hl35": "HiLift, 35 cases", "hl210": "HiLift, 210 cases",
-         "geo4": "HiLift, 4 geometries", "geo21": "HiLift, 21 geometries", "fixed": "HiLift, fixed angle", "dr435": "DrivAerML, 435 cars",
-         "dr435_strat": "DrivAerML, stratified draw", "corner": "DrivAerML, 512 × 80k"}
-fig, axs = plt.subplots(2, 4, figsize=(12.0, 6.0))
-axs = axs.ravel()
-for ax, key in zip(axs, keys):
-    s = S[key]
-    arms = [("Geo-\nTransolver", s["gt"], "gt"), ("Transolver", s["t"], "t"), ("ISLA\nreference", s["isla_ref"], "isla_ref")]
-    xs = list(range(len(arms))); means = [mean(v) for _, v, _ in arms]
-    for x_, (_, v, k) in zip(xs, arms):
-        ax.bar(x_, mean(v), width=0.62, zorder=2, **bar_kwargs(k))
-        if len(v) > 1:
-            ax.plot([x_] * len(v), v, marker="o", ms=4, mfc="white", mec=INK, mew=0.9, ls="none", zorder=4)
-        ax.text(x_, mean(v) * 1.02, f"{mean(v):.3f}", ha="center", va="bottom", fontsize=7.5, color=INK2)
-    ax.set_xticks(xs); ax.set_xticklabels([n for n, _, _ in arms], fontsize=7.5)
-    ax.set_title(short[key], fontsize=9.5)
-    ax.set_ylim(0, max(means) * 1.28); ax.grid(axis="x", visible=False)
-    ax.tick_params(axis="y", labelsize=8)
-axs[0].set_ylabel("surface pressure error [–]"); axs[4].set_ylabel("surface pressure error [–]")
-fig.tight_layout()
-plt.show()
-```
-
-```{python}
-#| label: tbl-scoreboard-surface
+#| label: tbl-scoreboard-200k
 #| output: asis
-def fmt(v):
-    if not v: return "pending"
-    return f"{mean(v):.4f}" + (" (" + " / ".join(f"{x:.4f}" for x in v) + ")" if len(v) > 1 else "")
-def rat(b, s):
-    return f"**{ratio(b, s['isla_ref']):.2f}**" if b else "pending"
-out = ("| setting | GeoTransolver | Transolver | ISLA | GeoTransolver ÷ ISLA | Transolver ÷ ISLA | validation cases where the baseline is lower |\n"
-       "|---|---|---|---|---:|---:|---|\n")
-for key in REF_KEYS:
-    s = S[key]
-    out += (f"| {s['title']} | {fmt(s['gt'])} | {fmt(s['t'])} | **{fmt(s['isla_ref'])}** "
-            f"| {rat(s['gt'], s)} | {rat(s['t'], s)} | {s['paired'][0]} |\n")
+P2 = J("p200k_trio_reduction_2026-09-19.json"); L2 = J("p200k_ladder_interim_2026-09-18.json")
+out = "| DrivAerML training cars | ISLA (1e-3) | GeoTransolver (better of 1e-3, 3e-3) | Transolver (3e-3) | GeoTransolver ÷ ISLA | Transolver ÷ ISLA | status |\n|---:|---:|---:|---:|---:|---:|---|\n"
+for n in ("n27", "n54", "n109", "n218"):
+    r = L2["rungs"][n]; isla = r["isla"]["pressure_mean"]; g1 = r["gt_unit"]
+    rc = r.get("rate_control_lr3e3", {}).get("gt_unit_lr3e3")
+    if rc and rc["pressure_mean"] < g1["pressure_mean"]:
+        g, glab, status = rc, "3e-3", "final"
+    elif rc:
+        g, glab, status = g1, "1e-3", "final"
+    else:
+        g, glab, status = g1, "1e-3", "provisional: 3e-3 control training"
+    t = r["transolver_unit"]
+    out += (f"| {n[1:]} | {isla:.4f} | {g['pressure_mean']:.4f} ({glab}) | {t['pressure_mean']:.4f} | {g['pressure_mean']/isla:.2f} | {t['pressure_mean']/isla:.2f} | {status} |\n")
+A = P2["arms"]; isla = A["isla"]["pressure_mean"]
+gts = {k: A[k]["pressure_mean"] for k in ("gt_unit_lr1e3", "gt_unit_lr3e3") if A[k]["pressure_mean"] and A[k]["n"] == 2}
+best = min(gts, key=gts.get); glab = "3e-3" if best.endswith("3e3") else "1e-3"
+status = "final" if "gt_unit_lr3e3" in gts else "provisional: 3e-3 control training"
+out += (f"| **435** | **{isla:.4f}** | **{gts[best]:.4f}** ({glab}) | **{A['transolver_unit_lr3e3']['pressure_mean']:.4f}** | **{gts[best]/isla:.2f}** | **{A['transolver_unit_lr3e3']['pressure_mean']/isla:.2f}** | {status} |\n")
 print(out)
-print(": Surface-pressure error (area-weighted relative L2, float32, final-epoch checkpoints; seed "
-      "values in parentheses, the corner row lists seed means of two seeds) on every rung where the "
-      "unit-direction baselines and ISLA are both measured. The ratio columns "
-      "give baseline ÷ ISLA (above one favors ISLA). "
-      "The corner row is width 512 and 80,000 cells per car for all arms (60.2M, 35.9M and 23.9M "
-      "parameters), evaluated at 80,000 cells; ISLA there trained at the width "
-      "learning rate 3.75e-4 (@sec-using-lr), the other arms at their protocol rates. The "
-      "stratified-draw row queries the same 435-car checkpoints with a systematic sample along the Morton "
-      "order of the cells, the inference sampler of @sec-using-sampler; the independent-draw rows are the "
-      "book's headline ratios. Data: "
-      + "; ".join(sorted({S[k]['src'] for k in REF_KEYS})) + ". {#tbl-scoreboard-surface}")
+print(": Surface-pressure error (area-weighted relative L2, float32, 48 DrivAerML validation cars) with every model trained and "
+      "scored at 200,000 sampled cells per case, width 192 (ISLA) and 256 (GeoTransolver, Transolver), 500 epochs, two seeds (seed means; the per-seed values are in the "
+      "artifacts). GeoTransolver's column takes the better of its 1e-3 and 3e-3 pairs and names the rate; a row marked provisional "
+      "still awaits that control. ISLA carries the total-measure length unit in these lanes; the RMS-pairwise-distance unit, now "
+      "the default, scores 0.0444 on the same 435-car protocol (0.996 of it, @sec-nb-lenrms-200k). How to read this: ratios above 1 favor ISLA; the 10,000-cell "
+      "rows of @sec-scoreboard-exploration are the exploration budget and are not comparable in absolute value. Data: "
+      "results/p200k_trio_reduction_2026-09-19.json; results/p200k_ladder_interim_2026-09-18.json. {#tbl-scoreboard-200k}")
 ```
-
-The DrivAerML gap at the reference size has a measured anatomy, about half of it finite-sample noise that the stratified draw or more cells removes (@sec-deficit-anatomy); the larger gaps at 35 wing cases are a different mechanism, the mesher-pattern cue where validation geometries recur in training (@sec-full-data).
-
-::: {.callout-note collapse="true" title="Two configurations that are deliberately not rows"}
-The baselines with ISLA's measure-weighted pooling, ablations that carry the same
-quadrature measure in their slice pooling that ISLA does, keep the lead: at
-35 wing cases they score
-`{python} f"{mean(S['hl35']['gt_mw']):.3f}"` and
-`{python} f"{mean(S['hl35']['t_mw']):.3f}"` (three seeds each; a
-`{python} f"{(mean(S['hl35']['gt_mw'])/mean(S['hl35']['gt'])-1)*100:.0f}"` to
-`{python} f"{(mean(S['hl35']['t_mw'])/mean(S['hl35']['t'])-1)*100:.0f}%"` price for the measure against
-their unit-direction counterparts) against ISLA's
-`{python} f"{mean(S['hl35']['isla_ref']):.3f}"`, and on DrivAerML
-`{python} f"{mean(S['dr435']['gt_mw']):.4f}"` and
-`{python} f"{mean(S['dr435']['t_mw']):.4f}"` at no price against
-`{python} f"{mean(S['dr435']['isla_ref']):.4f}"`. The ISLA weights-off
-ablation is not a row because it is not a configuration the program adopts:
-it closes a third to all of the gap on the wing rungs by reading the
-mesher's cell pattern, and under a change of sampling it collapses hardest
-of every configuration measured (@sec-scoreboard-consistency,
-@sec-limits-mechanism).
-:::
-
-### The sealed deflection split {#sec-scoreboard-other}
-
-**Across a sealed geometry boundary both architectures degrade by the same
-factor and the in-regime ordering carries through.** @tbl-scoreboard-other
-holds the one surface setting that does not fit the ladder above: the wing
-deflection split, which trains on the 80% of geometries with the milder
-flap-and-slat settings and evaluates once, sealed, on the 20% most
-aggressive (@sec-limits-regime).
 
 ```{python}
-#| label: tbl-scoreboard-other
+#| label: para-200k-reading
 #| output: asis
-da = defl["arms"]; di, dg = da["isla"]["pressure_l2"], da["geotransolver"]["pressure_l2"]
-def sd(v): return " / ".join(f"{x:.4f}" for x in v)
-out = ("| setting | GeoTransolver | ISLA | GeoTransolver ÷ ISLA | reading |\n|---|---|---|---:|---|\n"
-       f"| HiLift deflection split, in-regime validation | {dg['val_mean']:.4f} ({sd(dg['val_seeds'])}) | ISLA {di['val_mean']:.4f} ({sd(di['val_seeds'])}) | {dg['val_mean']/di['val_mean']:.2f} | the baseline leads in regime |\n"
-       f"| HiLift deflection split, sealed test (360 cases, 36 most aggressive geometries) | {dg['test_mean']:.4f} ({sd(dg['test_seeds'])}) | ISLA {di['test_mean']:.4f} ({sd(di['test_seeds'])}) | {dg['test_mean']/di['test_mean']:.2f} | test ÷ validation degradation {di['degradation_d']:.2f}x (ISLA) and {dg['degradation_d']:.2f}x (GeoTransolver): both cross the boundary equally |\n")
-print(out)
-print(": The sealed deflection split: surface-pressure error, float32, two seeds, unit-direction "
-      "GeoTransolver against ISLA, on the in-regime validation cases and on the "
-      "sealed high-deflection test set. Data: results/deflection_sealed_test_2026-09-15.json. {#tbl-scoreboard-other}")
+gt_final = "gt_unit_lr3e3" in gts
+r435 = gts[best] / isla; t435 = A["transolver_unit_lr3e3"]["pressure_mean"] / isla
+standing = "at parity with" if abs(r435 - 1) < 0.01 else ("ahead of" if r435 > 1 else "behind")
+lads = [L2["rungs"][n]["gt_over_isla_at_better_rates"] for n in ("n27", "n54", "n109", "n218")]
+tenk = P2["tenk_reference"]
+print(f"At 435 cars ISLA is {standing} GeoTransolver (GeoTransolver ÷ ISLA {r435:.3f}, GeoTransolver at {glab}) and leads Transolver by {(t435-1)*100:.0f}%"
+      f"{'' if gt_final else '; GeoTransolver’s 3e-3 pair is still training and the row is provisional'}. "
+      f"Against the 10,000-cell standings (@sec-scoreboard-surface) every model improved, ISLA by the most "
+      f"({(1-P2['verdict']['isla_200k_over_10k'])*100:.0f}% against {(1-gts[best]/tenk['gt_unit'])*100:.0f}% for GeoTransolver and "
+      f"{(1-A['transolver_unit_lr3e3']['pressure_mean']/tenk['transolver_unit'])*100:.0f}% for Transolver), which is the count-noise term of the deficit anatomy "
+      f"(@sec-deficit-anatomy) going to zero at the denser sampling. Below full data GeoTransolver at its better rate "
+      f"leads ISLA by {', '.join(f'{(1-r)*100:.0f}%' for r in lads)} at 27, 54, 109 and 218 cars: the data-efficiency ordering of the "
+      f"10,000-cell ladder survives the change of budget with a smaller gap at every rung, and closes at the full training set. "
+      f"On the wings the budget changes nothing (@tbl-scoreboard-200k-wings): on the 35-case rung GeoTransolver ÷ ISLA is 0.73 at 200,000 cells against 0.72 at 10,000, "
+      f"and on the fixed-angle rung 0.69 against 0.68, so the wing deficit is a property of the trained functions, not of the sampling count.")
 ```
-
-::: {.callout-note collapse="true" title="Rungs measured only on the legacy centered variant (diagnostic)"}
-Three surface settings were measured before ISLA
-existed, on the legacy centered variant (plain-mean center, fixed length
-unit; @sec-mt2-variants), and are not re-measured yet
-(@sec-scoreboard-pending). They are kept here as diagnostics of the
-baselines' lead at those sizes, not as ISLA rows.
 
 ```{python}
-#| label: tbl-scoreboard-legacy-rungs
+#| label: tbl-scoreboard-200k-wings
 #| output: asis
-out = "| setting | GeoTransolver | Transolver | legacy centered variant (diagnostic) | GeoTransolver ÷ variant | Transolver ÷ variant |\n|---|---|---|---|---:|---:|\n"
-for key in ("hl510", "hl1260"):
-    s = S[key]
-    out += (f"| {s['title']} | {fmt(s['gt'])} | {fmt(s['t'])} | {fmt(s['isla_cg'])} | {ratio(s['gt'], s['isla_cg']):.2f} | {ratio(s['t'], s['isla_cg']):.2f} |\n")
-for n in (14, 27, 54, 109, 218):
-    g = [lad[f"lad_gt_n{n}_seed{s}"]["infamily"] for s in (42, 43)]
-    m = [lad[f"lad_mt2_n{n}_seed{s}"]["infamily"] for s in (42, 43)]
-    out += f"| DrivAerML, {n} training cars (bfloat16; GeoTransolver with the physical velocity) | {mean(g):.3f} ({sd(g)}) | not run | {mean(m):.3f} ({sd(m)}) | {mean(g)/mean(m):.2f} | — |\n"
+F2 = J("p200k_fleet_reduction_2026-09-19.json")["datasets"]
+out = "| HiLiftAeroML rung | budget | ISLA | GeoTransolver (3e-3) | Transolver (3e-3) | GeoTransolver ÷ ISLA | Transolver ÷ ISLA |\n|---|---|---:|---:|---:|---:|---:|\n"
+w = F2["highlift_surface_super_scarce"]; tk = w["tenk_reference"]
+out += (f"| 35 training cases | exploration budget, 10,000 cells | {mean(tk['isla']):.4f} | {mean(tk['gt_lr3e3']):.4f} | {mean(tk['transolver_lr3e3']):.4f} "
+        f"| {tk['gt_over_isla']:.2f} | {tk['t_over_isla']:.2f} |\n")
+a = w["arms"]
+out += (f"| 35 training cases | reporting protocol, 200,000 cells | {a['isla']['pressure_l2_mean']:.4f} | {a['gt_unit']['pressure_l2_mean']:.4f} | {a['transolver_unit']['pressure_l2_mean']:.4f} "
+        f"| {w['ratios_over_isla']['gt_unit']['pressure_l2']:.2f} | {w['ratios_over_isla']['transolver_unit']['pressure_l2']:.2f} |\n")
+F3 = J("p200k_fleet_interim_2026-09-20.json")["datasets"]
+fx = F3["highlift_surface_single_aoa_12"]; fa = fx["arms"]
+fx10 = dict(isla=mean(S["fixed"]["isla_ref"]), gt=mean(S["fixed"]["gt"]), t=mean(S["fixed"]["t"]))
+out += (f"| fixed angle 12°, 126 geometries | exploration budget, 10,000 cells | {fx10['isla']:.4f} | {fx10['gt']:.4f} | {fx10['t']:.4f} "
+        f"| {fx10['gt']/fx10['isla']:.2f} | {fx10['t']/fx10['isla']:.2f} |\n")
+out += (f"| fixed angle 12°, 126 geometries | reporting protocol, 200,000 cells | {fa['isla']['pressure_l2_mean']:.4f} | {fa['gt_unit_lr3e3']['pressure_l2_mean']:.4f} | {fa['transolver_unit']['pressure_l2_mean']:.4f} "
+        f"| {fx['ratios_over_isla']['gt_unit_lr3e3']['pressure_l2']:.2f} | {fx['ratios_over_isla']['transolver_unit']['pressure_l2']:.2f} |\n")
+pending = [k for k, v in F3.items() if k.startswith("highlift") and v["status"] != "complete"]
 print(out)
-print(": Wing rungs at 510 and 1,260 training cases (float32, two seeds each, the unit-direction protocol) and the "
-      "DrivAerML data-efficiency ladder (bfloat16 evaluation on identical points, two seeds, learning rate 3e-3 for "
-      "both architectures, GeoTransolver fed the physical freestream velocity, which on this dataset costs it "
-      "nothing, @sec-de-drivaerml), all with the legacy centered variant as the ISLA arm. Data: "
-      "results/udrvl_510_reduction_2026-09-12.json; results/udrv_1260_reduction_2026-09-15.json; "
-      "results/udrv_1260_transolver_2026-09-16.json; results/ladder_reduction.json. {#tbl-scoreboard-legacy-rungs}")
+print(": The 35-case and fixed-angle HiLiftAeroML rungs at both budgets (surface-pressure error, float32, 180 validation cases, seed means; GeoTransolver at 3e-3 in both protocols, its better rate on these rungs; the fixed-angle 10,000-cell GeoTransolver value is the unit-direction run of the exploration-budget board). "
+      "How to read this: on the 35-case rung twenty times the sampled cells moved neither model by more than 4%, and on the fixed-angle rung every model improved by 20% to 25% while the ratios moved by 0.01 and 0.04, so the wing deficit is not count noise; the mechanism the program points at is the mesher pattern where validation geometries recur in training (@sec-data-efficiency). "
+      f"The other wing rungs ({len(pending)} of them) are training at 200,000 cells and join this table as they report (@sec-program-status). Data: results/p200k_fleet_reduction_2026-09-19.json; results/p200k_fleet_interim_2026-09-20.json; "
+      "results/fp32_reeval/fp32_shift_35_2026-09-09.json; results/relframe_reduction_2026-09-11.json. {#tbl-scoreboard-200k-wings}")
 ```
-:::
 
 ## Interior fields from the surface {#sec-scoreboard-interior}
 
-**On the boundary-to-interior task ISLA, with its
-interior queries admitted as interacting tokens and given the signed
-distance to the wall, is 27% more accurate than GeoTransolver's volume
-configuration on interior velocity at a third of the parameters, 7% less
-accurate on interior pressure and 14% less accurate on eddy viscosity.** The
-task, the two architectures' interior modes and the diagnostics are in
-@sec-interior; the numbers are in @fig-scoreboard-interior and
-@tbl-scoreboard-interior at the exploration budget of 10,000 queries, and
-in @tbl-scoreboard-200k-interior at the reporting protocol of 200,000,
-where the same ordering holds with a 42% velocity lead, a 13% pressure
-deficit and a 2% eddy-viscosity deficit. The interacting decode's
-prediction at a point depends on the joint query set, so each interior
-value holds at its own training count (@sec-interior-companion).
+**On the boundary-to-interior task at the reporting protocol (200,000
+boundary cells and 200,000 interior queries per car) ISLA, with its interior
+queries admitted as interacting tokens and given the signed distance to the
+wall, is 42% more accurate than GeoTransolver-volume on interior velocity at
+a third of the parameters, 13% less accurate on interior pressure and level
+on eddy viscosity; with cosine routing the velocity lead is 56% and the
+pressure deficit 5%.** The task, the two architectures' interior modes and
+the diagnostics are in @sec-interior. This is a single-dataset result: the
+interior task has no wing twin. Two conditions travel with the rows. With
+400,000 interacting tokens per car ISLA's interior configuration under
+linear routing rises to the mean-field loss plateau at the surface
+configuration's rate of 1e-3 (both seeds, the routing saturation of
+@sec-using-lr) and trains cleanly at 5e-4, the rate the linear row uses;
+3e-4 is 3% to 8% worse. Cosine routing, which bounds the routing logits
+(@sec-mt2-slices), trains at 1e-3 and gives the better row. Every interior
+lane was trained with the passive readout's `query_mass="geometric_mean"`
+option; the class default is now `"source_total"`, and the count dependence
+under it is not measured (@sec-interior-companion). GeoTransolver-volume
+trains at 1e-3 at this count.
+
+```{python}
+#| label: tbl-scoreboard-200k-interior
+#| output: asis
+fields = [("pressure_l2", "interior pressure"), ("velocity_l2", "interior velocity"), ("nut_l2", "eddy viscosity")]
+RV = J("ratevol_reduction_2026-09-20.json"); rva = RV["arms"]
+EXTI = J("routenorm_extension_2026-09-21.json")["configurations"]["isla|cos|interior|w192|lr1e-3"]
+gtv200 = {f: rva["gt_vol_unit"][f]["mean"] for f, _ in fields}
+def rrow(label, vals, ref=None):
+    cells = []
+    for f, _ in fields:
+        m = vals[f]; cells.append(f"{m:.4f}" + (f" ({ref[f]/m:.2f})" if ref else ""))
+    return f"| {label} | " + " | ".join(cells) + " |\n"
+def arm(a): return {f: rva[a][f]["mean"] for f, _ in fields}
+out = "| arm, 435 training cars, 200,000 cells and queries | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
+out += rrow("GeoTransolver-volume, 27.6M, unit direction, 1e-3", gtv200)
+out += rrow("ISLA, query tokens + signed distance, 8.9M, linear routing, 5e-4 (GeoTransolver-volume ÷ ISLA)", arm("isla_lr5e4"), gtv200)
+out += rrow("**ISLA, query tokens + signed distance, 8.9M, cosine routing, 1e-3 (ratio)**", {f: EXTI[f"{f}_mean"] for f, _ in fields}, gtv200)
+out += rrow("ISLA, linear routing, 3e-4, rate control (ratio)", arm("isla_lr3e4"), gtv200)
+out += rrow("ISLA, linear routing, 1e-3, on the mean-field plateau (ratio)", arm("isla_lr1e3"), gtv200)
+print(out)
+b = RV["bars"]
+print(": Interior error at the reporting protocol (relative L2 over the 48 DrivAerML validation cars, float32, two seeds, "
+      "200,000 boundary cells and 200,000 interior queries per car, 500 epochs). Ratios in parentheses are "
+      "GeoTransolver-volume ÷ ISLA (above 1 favors ISLA). Against the 10,000-query standing in the note below the linear row's "
+      f"velocity ratio moved {b['velocity_l2']['relative_change']*100:+.1f}% (within the preregistered 5%) and its pressure ratio "
+      f"{b['pressure_l2']['relative_change']*100:+.1f}%, a swing inside ISLA's 8% seed spread on pressure "
+      f"({' / '.join(f'{v:.4f}' for v in rva['isla_lr5e4']['pressure_l2']['seeds'])}); the cosine row's pressure seeds are "
+      f"{' / '.join(f'{v:.4f}' for v in EXTI['pressure_l2_seeds'])}. The 1e-3 linear row is the plateau signature, kept as the "
+      "record of the rate ceiling (@sec-nb-ratevol-verdict). How to read this: single dataset (the interior task has no wing twin); "
+      "every ISLA lane here uses the passive readout's geometric-mean query mass, not the class default. "
+      "Data: results/ratevol_reduction_2026-09-20.json; results/routenorm_extension_2026-09-21.json. {#tbl-scoreboard-200k-interior}")
+```
+
+The interacting decode's prediction at a point depends on the joint query
+set, so each interior value holds at its own training count
+(@sec-interior-companion).
+
+::: {.callout-note collapse="true" title="The interior task at the exploration budget (10,000 boundary cells and 10,000 queries)"}
+At the exploration budget the same ordering holds with a smaller velocity
+lead and a larger eddy-viscosity deficit: GeoTransolver-volume ÷ ISLA is
+1.37 on velocity, 0.93 on pressure and 0.87 on eddy viscosity.
 
 ```{python}
 #| label: fig-scoreboard-interior
 #| fig-cap: >
-#|   Interior error on the 48 DrivAerML validation cars for the three
-#|   interior fields (panels), 10,000 interior queries per car, float32, two
-#|   seeds (dots). Red: GeoTransolver-volume (27.6M parameters, unit
-#|   direction). Blue: ISLA (query tokens
-#|   with the signed distance, relative frame, total-measure length unit as
-#|   trained, Horvitz–Thompson-corrected boundary measure; 8.9M). The
-#|   label above the ISLA bar is GeoTransolver-volume's error divided by
-#|   ISLA's (above 1 favors ISLA). How to read this: the arms receive
-#|   the same per-point geometry (signed distance and its gradient) and
-#|   differ in how the query consumes it and in width (ISLA has a third of
-#|   the parameters; a parameter-matched ISLA exists only for the
-#|   similarity-gauge variant, in the diagnostic note below). The values hold
-#|   at the training count of 10,000 queries
-#|   (@sec-interior-companion). Data: results/relint2_reduction_2026-09-14.json;
+#|   Interior error at the exploration budget on the 48 DrivAerML validation
+#|   cars for the three interior fields (panels), 10,000 interior queries per
+#|   car, float32, two seeds (dots). Red: GeoTransolver-volume (27.6M
+#|   parameters, unit direction). Blue: ISLA (query tokens with the signed
+#|   distance, relative frame, total-measure length unit as trained,
+#|   Horvitz–Thompson-corrected boundary measure; 8.9M). The label above the
+#|   ISLA bar is GeoTransolver-volume's error divided by ISLA's (above 1
+#|   favors ISLA). How to read this: the arms receive the same per-point
+#|   geometry (signed distance and its gradient) and differ in how the query
+#|   consumes it and in width (ISLA has a third of the parameters; a
+#|   parameter-matched arm exists only for the removed similarity-gauge
+#|   variant, in the next note). The values hold at the training count of
+#|   10,000 queries (@sec-interior-companion); the reporting-protocol values
+#|   are @tbl-scoreboard-200k-interior. Data:
+#|   results/relint2_reduction_2026-09-14.json;
 #|   results/fp32_reeval/fp32_shift_interior_2026-09-09.json.
 #| code-fold: true
-fields = [("pressure_l2", "interior pressure"), ("velocity_l2", "interior velocity"), ("nut_l2", "eddy viscosity")]
+gtv = [f"udrv_gt_vol_seed{s}" for s in (42, 43)]; isq = [f"v0_isla_qtsdfval_seed{s}" for s in (42, 43)]  # isq: similarity-gauge interior variant, diagnostic note only
 h344 = campD["isla_qtsdf_h344"]["per_seed"]  # similarity-gauge variant at width 344; diagnostic note only
 fig, axs = plt.subplots(1, 3, figsize=(10.0, 4.3))
 for ax, (f, name) in zip(axs, fields):
@@ -467,6 +400,7 @@ for ax, (f, name) in zip(axs, fields):
     ax.set_title(name, fontsize=10); ax.set_ylim(0, max(means) * 1.32)
     ax.grid(axis="x", visible=False)
 axs[0].set_ylabel("relative L2 over 48 cars [–]")
+fig.suptitle("exploration budget: 10,000 boundary cells and 10,000 queries per car", fontsize=9.5, color=INK2)
 fig.tight_layout()
 plt.show()
 ```
@@ -483,73 +417,38 @@ gtd = {f: fp(fpint, gtv, f) for f, _ in fields}
 rfd = {f: ri2["relint2"][f]["seeds"] for f, _ in fields}
 isd = {f: fp(fpint, isq, f) for f, _ in fields}
 h3 = {f: [h344[s][f] for s in ("42", "43")] for f, _ in fields}
-out = "| arm, 435 training cars | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
+out = "| arm, 435 training cars, exploration budget | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
 out += row("GeoTransolver-volume, 27.6M, unit direction", gtd)
 out += row("ISLA, query tokens + signed distance, 8.9M (GeoTransolver-volume ÷ ISLA)", rfd, gtd)
 print(out)
-print(": Interior error (relative L2 over the 48 DrivAerML validation cars, float32, two seeds, 10,000 "
+print(": Interior error at the exploration budget (relative L2 over the 48 DrivAerML validation cars, float32, two seeds, 10,000 "
       "interior queries per car, 500 epochs, learning rate 1e-3 for both arms). Ratios in parentheses are "
-      "GeoTransolver-volume ÷ ISLA (above 1 favors ISLA). ISLA "
-      "reads a 10,000-cell boundary sample with the Horvitz–Thompson-corrected measure. "
+      "GeoTransolver-volume ÷ ISLA (above 1 favors ISLA). ISLA reads a 10,000-cell boundary sample with the "
+      "Horvitz–Thompson-corrected measure (each cell weighted by the inverse of its inclusion probability). How to read this: "
+      "the exploration-budget standing; the reporting-protocol values are @tbl-scoreboard-200k-interior. "
       "Data: results/relint2_reduction_2026-09-14.json; "
       "results/fp32_reeval/fp32_shift_interior_2026-09-09.json. "
       "{#tbl-scoreboard-interior}")
 ```
+:::
 
-At the reporting protocol of 200,000 boundary cells and 200,000 interior
-queries per car the standing keeps its shape (@tbl-scoreboard-200k-interior):
-ISLA leads on velocity by 42%, trails on pressure by 13% and is level on
-eddy viscosity, where its 14% deficit at the exploration budget closed to
-2%. One condition travels with the row: with 400,000 interacting tokens per
-car ISLA's interior configuration rises to the mean-field loss plateau at
-the surface configuration's rate of 1e-3 (both seeds, the routing
-saturation of @sec-using-lr) and trains cleanly at 5e-4, the rate the row
-uses; 3e-4 is 3% to 8% worse. GeoTransolver-volume trains at 1e-3 at this
-count.
-
-```{python}
-#| label: tbl-scoreboard-200k-interior
-#| output: asis
-RV = J("ratevol_reduction_2026-09-20.json"); rva = RV["arms"]
-def rrow(label, arm, ref=None):
-    cells = []
-    for f, _ in fields:
-        m = rva[arm][f]["mean"]; cells.append(f"{m:.4f}" + (f" ({rva[ref][f]['mean']/m:.2f})" if ref else ""))
-    return f"| {label} | " + " | ".join(cells) + " |\n"
-out = "| arm, 435 training cars, 200,000 cells and queries | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
-out += rrow("GeoTransolver-volume, 27.6M, unit direction, 1e-3", "gt_vol_unit")
-out += rrow("ISLA, query tokens + signed distance, 8.9M, 5e-4 (GeoTransolver-volume ÷ ISLA)", "isla_lr5e4", "gt_vol_unit")
-out += rrow("ISLA, 3e-4, rate control (ratio)", "isla_lr3e4", "gt_vol_unit")
-out += rrow("ISLA, 1e-3, on the mean-field plateau (ratio)", "isla_lr1e3", "gt_vol_unit")
-print(out)
-b = RV["bars"]
-print(": Interior error at the reporting protocol (relative L2 over the 48 DrivAerML validation cars, float32, two seeds, "
-      "200,000 boundary cells and 200,000 interior queries per car, 500 epochs). Ratios in parentheses are "
-      "GeoTransolver-volume ÷ ISLA (above 1 favors ISLA). Against the 10,000-query standing of @tbl-scoreboard-interior the "
-      f"velocity ratio moved {b['velocity_l2']['relative_change']*100:+.1f}% (within the preregistered 5%) and the pressure ratio "
-      f"{b['pressure_l2']['relative_change']*100:+.1f}%, a swing inside ISLA's 8% seed spread on pressure "
-      f"({' / '.join(f'{v:.4f}' for v in rva['isla_lr5e4']['pressure_l2']['seeds'])}). The 1e-3 row is the plateau signature, kept as the "
-      "record of the rate ceiling (@sec-nb-ratevol-verdict). Single dataset: the interior task has no wing twin. "
-      "Data: results/ratevol_reduction_2026-09-20.json. {#tbl-scoreboard-200k-interior}")
-```
-
-::: {.callout-note collapse="true" title="Interior rows measured only on the similarity-gauge variant (diagnostic): the parameter-matched width and the rungs below full data"}
+::: {.callout-note collapse="true" title="Interior rows measured only on the similarity-gauge variant (removed variant, diagnostic): the parameter-matched width and the rungs below full data"}
 The interior program was built on the similarity-gauge variant (measure-weighted
-centroid and RMS-radius length unit) before the relative frame replaced it; the
-variant reads a center estimated from the sample, so it appears only here. Two of
-its measurements have no ISLA twin yet: the width-344 arm that matches
-GeoTransolver-volume's 27.6M parameters, and the 54- and 109-car rungs. At
-435 cars ISLA matches the variant on interior pressure and velocity (1.000x
-and 0.991x) and is 12% more accurate on eddy viscosity
-(results/relint2_reduction_2026-09-14.json), and on the surface the price of
-not being told the body's center is at most about 2%, inside seed noise
-(SG-REF, @sec-nb-sgref-verdict), so these trends are expected to carry to
-ISLA; they are not rows until measured on it.
+centroid and RMS-radius length unit) before the relative frame replaced it and
+the variant was removed from the class; it read a center estimated from the
+sample, so it appears only here. Two of its measurements have no ISLA twin: the
+width-344 arm that matches GeoTransolver-volume's 27.6M parameters, and the 54-
+and 109-car rungs. At 435 cars and the exploration budget ISLA matches the
+variant on interior pressure and velocity (1.000x and 0.991x) and is 12% more
+accurate on eddy viscosity (results/relint2_reduction_2026-09-14.json), and on
+the surface the price of not being told the body's center is at most about 2%,
+inside seed noise (@sec-nb-sgref-verdict), so these trends are expected to
+carry to ISLA; they are not rows until measured on it.
 
 ```{python}
 #| label: tbl-scoreboard-interior-sg
 #| output: asis
-out = "| arm (similarity-gauge variant, diagnostic) | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
+out = "| arm (similarity-gauge variant, removed; diagnostic) | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
 out += row("GeoTransolver-volume, 27.6M, unit direction, 435 cars", gtd)
 out += row("similarity-gauge variant, query tokens + signed distance, 8.9M, 435 cars (GeoTransolver-volume ÷ variant)", isd, gtd)
 out += row("similarity-gauge variant, hidden 344, 27.6M, 435 cars (ratio)", h3, gtd)
@@ -560,12 +459,12 @@ for n in (54, 109):
     out += row(f"{n} cars: GeoTransolver-volume", g)
     out += row(f"{n} cars: similarity-gauge variant, query tokens + signed distance, 8.9M (ratio)", i, g)
 print(out)
-print(": Interior error of the similarity-gauge variant (relative L2 over the 48 DrivAerML validation cars, "
+print(": Interior error of the similarity-gauge variant at the exploration budget (relative L2 over the 48 DrivAerML validation cars, "
       "float32, two seeds, 10,000 interior queries per car, 500 epochs, learning rate 1e-3 for every arm). "
       "Ratios in parentheses are GeoTransolver-volume ÷ variant on the same rung (above 1 favors the variant). "
       "The variant's arms read about 365 boundary cells, a difference measured to be immaterial "
-      "(@sec-interior-task). Below full data the variant trails on pressure and eddy viscosity and leads on "
-      "velocity, the same pattern as at 435 cars. Data: results/fp32_reeval/fp32_shift_interior_2026-09-09.json; "
+      "(@sec-interior-task). How to read this: below full data the variant trails on pressure and eddy viscosity and leads on "
+      "velocity, the same pattern as at 435 cars; none of these rows is ISLA. Data: results/fp32_reeval/fp32_shift_interior_2026-09-09.json; "
       "research/transfer_program/studies/computational_support/campaign_d_verdict_2026-09-10.json. "
       "{#tbl-scoreboard-interior-sg}")
 ```
@@ -585,7 +484,7 @@ is pose-invariant at a 1% cost (@sec-pose). ISLA's rotation and translation
 covariance is exact by construction (@sec-mt2-contracts) and needs no
 augmentation; the same checkpoints scored in the native frame land within
 0.5% of their posed numbers (@sec-nb-poseref-verdict). At the exploration
-budget the lead was 7% and 17% (the second table below).
+budget the lead was 7% and 17% (the collapsed note).
 
 ```{python}
 #| label: tbl-scoreboard-pose-200k
@@ -599,6 +498,7 @@ for label, key in (("GeoTransolver, trained with rotation augmentation (native a
 print(out)
 print(": The pose test at the reporting protocol: DrivAerML surface pressure, 435 training cars, 48 validation cars, 200,000 cells, float32, two seeds each. "
       "The native column is each architecture's error in the dataset's frame from @tbl-scoreboard-200k (GeoTransolver's posed lanes ran at 1e-3, so its native reference here is the 1e-3 pair); the posed column trains and validates with every case rotated by its own random rotation. "
+      "How to read this: the last column is the posed comparison, ratios above 1 favor ISLA; the native column is the canonical-frame standing, where GeoTransolver is at parity. "
       "Data: results/p200k_pose_reduction_2026-09-19.json; results/p200k_trio_reduction_2026-09-19.json. {#tbl-scoreboard-pose-200k}")
 ```
 
@@ -607,10 +507,10 @@ print(": The pose test at the reporting protocol: DrivAerML surface pressure, 43
 ```{python}
 #| label: tbl-scoreboard-pose
 #| output: asis
-C = poseB["canonical"]; A = poseB["arms"]
+C = poseB["canonical"]; A10 = poseB["arms"]
 def seeds(d): return " / ".join(f"{v['pressure_l2']:.4f}" for v in d["runs"].values())
-rows = [("GeoTransolver, trained with rotation augmentation", C["gt"], A["gt_aug"]),
-        ("Transolver, trained with rotation augmentation", C["transolver_lr3e3"], A["transolver_aug"]),
+rows = [("GeoTransolver, trained with rotation augmentation", C["gt"], A10["gt_aug"]),
+        ("Transolver, trained with rotation augmentation", C["transolver_lr3e3"], A10["transolver_aug"]),
         ("ISLA, no augmentation", {"pressure_mean": poseRR["in_pose_reference"]["mean"]},
          {"pressure_mean": poseR["posed_mean"], "runs": {k: {"pressure_l2": v["posed_pressure"]} for k, v in poseR["per_run"].items()}})]
 out = "| architecture | canonical pose | every case in a random pose | posed ÷ canonical | baseline ÷ ISLA, posed |\n|---|---|---|---:|---:|\n"
@@ -618,11 +518,12 @@ for label, c, a in rows:
     out += (f"| {label} | {c['pressure_mean']:.4f} | {a['pressure_mean']:.4f} ({seeds(a)}) | {a['pressure_mean']/c['pressure_mean']:.2f} "
             f"| {a['pressure_mean']/poseR['posed_mean']:.2f} |\n")
 print(out)
-print(": DrivAerML surface pressure, 435 training cars, 48 validation cars, float32. The canonical "
-      "column is each architecture's unit-direction reference in the dataset's native frame (three seeds "
+print(": DrivAerML surface pressure at the exploration budget (10,000 cells), 435 training cars, 48 validation cars, float32. The canonical "
+      "column is each architecture's unit-direction value in the dataset's native frame (three seeds "
       "for GeoTransolver, two for ISLA and Transolver); the posed column trains and validates with "
       "every case rotated by its own random rotation (two seeds each). In the campaign artifact, GeoTransolver "
-      "without augmentation and the legacy centered variant of ISLA with augmentation are also scored in random poses (one seed each). Data: "
+      "without augmentation and the legacy centered variant of ISLA with augmentation are also scored in random poses (one seed each). "
+      "How to read this: the exploration-budget standing; the reporting-protocol values are @tbl-scoreboard-pose-200k. Data: "
       "results/refprops_reduction_2026-09-18.json (ISLA); research/transfer_program/studies/campaign_b_pose/campaign_b_fp32_2026-09-10.json. "
       "{#tbl-scoreboard-pose}")
 ```
@@ -631,46 +532,49 @@ print(": DrivAerML surface pressure, 435 training cars, 48 validation cars, floa
 ## Consistency under a change of surface sampling {#sec-scoreboard-consistency}
 
 **Every configuration that centers its coordinates on a statistic of the
-sampled points, whichever architecture it belongs to, degrades 10 to 16x
-when the same surface is resampled with a 10:1 front-to-back density bias;
-frames that read nothing from the sample hold at 1.1 to 1.2x, and the
-baselines join that group once their datapipe centers on an unbiased
+sampled points, whichever architecture it belongs to, degrades 10 to 16x at
+10,000 cells and 5 to 9x at 100,000 when the same surface is resampled with
+a 10:1 front-to-back density bias; ISLA, whose frame reads nothing from the
+sample, holds at 1.07 to 1.2x at either count, and GeoTransolver and
+Transolver join that group once their datapipe centers on an unbiased
 estimate of the geometric centroid.** Consistency in the fine-mesh limit is
 the acceptance criterion of @sec-principle, not a score: a model whose
 prediction depends on where the mesher happened to refine is not predicting
-the physics. The probe holds the geometry fixed and redraws 10,000 cells
-with the bias, with exact Horvitz–Thompson weights so a measure-consistent
-model sees the same surface integral; the ratio of the error under the
-biased draw to the error under the uniform draw is the number in
-@fig-scoreboard-density, stated in the sample frame, the frame a biased
-mesher would deliver.
+the physics. The probe holds the geometry fixed and redraws the cells with
+the bias, with exact Horvitz–Thompson weights, the inverse of each cell's
+inclusion probability under the draw, so a measure-consistent model sees the
+same surface integral; the ratio of the error under the biased draw to the
+error under the uniform draw is the number in @fig-scoreboard-density,
+stated in the sample frame, the frame a biased mesher would deliver.
 
 ```{python}
 #| label: fig-scoreboard-density
 #| fig-cap: >
-#|   Sampling-density sensitivity by configuration on DrivAerML (48 cars,
-#|   10,000 cells, float32, two or three seeds): surface-pressure error under
-#|   the 10:1 front/back biased draw divided by the same checkpoint's error
-#|   under the uniform draw, on a log axis; 1 is exact consistency and the
-#|   gray band marks up to 1.5x. Bars are sample-frame values, in which every
-#|   model's input is centered on the drawn points. Open markers on the
-#|   baseline rows are the same checkpoints with the frame handed to them
-#|   unbiased by the pipeline (pool frame); the two rows marked "HT-centered
-#|   datapipe" are baselines retrained with the datapipe centering on the
-#|   Horvitz–Thompson estimate of the geometric centroid. Color follows the
-#|   book's key: ISLA blue,
-#|   GeoTransolver red, Transolver amber, ablations in the lighter
-#|   tints. How to read this: a bar near 1 means the configuration's
-#|   answer does not depend on the sampling law at this count; it does not
-#|   rank in-distribution accuracy, which is in @tbl-scoreboard-surface. Data:
+#|   Sampling-density sensitivity by configuration on DrivAerML at the
+#|   exploration budget (48 cars, 10,000 cells, float32, two or three seeds):
+#|   surface-pressure error under the 10:1 front/back biased draw divided by
+#|   the same checkpoint's error under the uniform draw, on a log axis; 1 is
+#|   exact consistency and the gray band marks up to 1.5x. Bars are
+#|   sample-frame values, in which every model's input is centered on the
+#|   drawn points. Open markers on the GeoTransolver and Transolver rows are
+#|   the same checkpoints with the frame handed to them unbiased by the
+#|   pipeline (pool frame); the two rows marked "Horvitz–Thompson-centered
+#|   datapipe" are GeoTransolver and Transolver retrained with the datapipe
+#|   centering on the Horvitz–Thompson estimate of the geometric centroid.
+#|   Color follows the book's key: ISLA blue, GeoTransolver red, Transolver
+#|   amber, ablations in the lighter tints. How to read this: a bar near 1
+#|   means the configuration's answer does not depend on the sampling law at
+#|   this count; it does not rank in-distribution accuracy, which is in
+#|   @tbl-scoreboard-200k and @tbl-scoreboard-surface; the same probe at
+#|   100,000 cells is @tbl-scoreboard-density-100k. Data:
 #|   results/accuracy_consistency_matrix_2026-09-10.json (provenance per cell
 #|   inside) and results/mwaw_2026-09-11.json.
 #| code-fold: true
 R = MAT["rows"]
 items = [  # (label, sample-frame factor, pool-frame factor or None, style key)
     ("ISLA", R["isla_relative_frame_meas"]["density_factor"], None, "isla_ref"),
-    ("GeoTransolver + ISLA's measure-weighted pooling + HT-centered datapipe (ablation)", mwaw["runs"]["mwaw_dr_gt_unit_lr1e3"]["probe_sfht"]["ratio_mean"], None, "gt_var"),
-    ("Transolver + ISLA's measure-weighted pooling + HT-centered datapipe (ablation)", mwaw["runs"]["mwaw_dr_transolver_unit_lr3e3"]["probe_sfht"]["ratio_mean"], None, "t_var"),
+    ("GeoTransolver + ISLA's measure-weighted pooling + Horvitz–Thompson-centered datapipe (ablation)", mwaw["runs"]["mwaw_dr_gt_unit_lr1e3"]["probe_sfht"]["ratio_mean"], None, "gt_var"),
+    ("Transolver + ISLA's measure-weighted pooling + Horvitz–Thompson-centered datapipe (ablation)", mwaw["runs"]["mwaw_dr_transolver_unit_lr3e3"]["probe_sfht"]["ratio_mean"], None, "t_var"),
     ("GeoTransolver", R["geotransolver_unit"]["density_factor"], R["geotransolver_unit"]["density_factor_pipeline_frame"], "gt"),
     ("Transolver", R["transolver_unit"]["density_factor"], R["transolver_unit"]["density_factor_pipeline_frame"], "t"),
     ("GeoTransolver + ISLA's measure-weighted pooling (ablation)", R["geotransolver_unit_mw"]["density_factor"], R["geotransolver_unit_mw"]["density_factor_pipeline_frame"], "gt_var"),
@@ -691,10 +595,33 @@ ax.set_xscale("log"); ax.set_xlim(0.9, 45)
 ax.set_xticks([1, 1.5, 2, 5, 10, 20]); ax.set_xticklabels(["1", "1.5", "2", "5", "10", "20"])
 ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
 ax.axvline(1.0, color=INK2, lw=1.0, zorder=1)
-ax.set_xlabel("error under 10:1 biased sampling ÷ error under uniform sampling [–]\n(sample frame: each model's input frame taken from the drawn points)", fontsize=9.5)
+ax.set_xlabel("error under 10:1 biased sampling ÷ error under uniform sampling [–], exploration budget (10,000 cells)\n(sample frame: each model's input frame taken from the drawn points)", fontsize=9.5)
 ax.grid(axis="y", visible=False)
 fig.tight_layout()
 plt.show()
+```
+
+The same probe at 100,000 cells, on the uniform-trained checkpoints of the
+training-law study, gives the 100,000-cell column of
+@tbl-scoreboard-density-100k beside the exploration-budget bars: the
+baselines' factors shrink with count, as a finite-sample effect should, and
+stay far from one; ISLA's is 1.07.
+
+```{python}
+#| label: tbl-scoreboard-density-100k
+#| output: asis
+TD = J("trainarea_dr_reduction_2026-09-20.json")["arms"]
+out = "| model | 10,000 cells: biased ÷ uniform | 100,000 cells: biased ÷ uniform | 100,000 cells: stratified ÷ uniform |\n|---|---:|---:|---:|\n"
+for label, rk, m in (("ISLA", "isla_relative_frame_meas", "isla"), ("GeoTransolver", "geotransolver_unit", "gt_unit"), ("Transolver", "transolver_unit", "transolver_unit")):
+    u = TD[f"{m}_uniform"]["mean"]
+    out += f"| {label} | {R[rk]['density_factor']:.2f}x | {u['biased']/u['unif']:.2f}x | {u['strat']/u['unif']:.2f}x |\n"
+print(out)
+print(": The inference-draw change at two counts on DrivAerML (435 training cars, 48 validation cars, float32, seed means): surface-pressure error under the 10:1 front/back "
+      "biased draw, and under the stratified draw, divided by the same checkpoint's error under the independent uniform draw, every draw with exact "
+      "Horvitz–Thompson weights. The 10,000-cell column is the sample-frame bar of @fig-scoreboard-density (exploration budget); the 100,000-cell columns are the "
+      "uniform-trained checkpoints of the training-law study (@sec-training-law), each architecture at its reporting-protocol rate. How to read this: 1 is exact "
+      "consistency; the stratified column shows that a draw under the same law moves every model by under 2%, so the biased column measures the law and not the noise. "
+      "Data: results/accuracy_consistency_matrix_2026-09-10.json; results/trainarea_dr_reduction_2026-09-20.json. {#tbl-scoreboard-density-100k}")
 ```
 
 The single-count probe understates the question the principle asks, which
@@ -725,20 +652,20 @@ out = "| configuration | frame convention in the benchmark | DrivAerML: area / b
 for label, frame, dr, hl in rows:
     out += f"| {label} | {frame} | {cell(*dr)} | {cell(*hl) if hl else 'not run'} |\n"
 print(out)
-print(": Sampling-distribution dependence at 40,000 cells, float32, two seeds: the change in "
+print(": Sampling-distribution dependence at 40,000 cells, float32, two seeds, checkpoints trained at the exploration budget: the change in "
       "surface-pressure error when the same surface is drawn proportionally to cell area (area) or "
       "with the 10:1 front/back bias (biased) instead of uniformly over cells, as a percentage of the "
       "uniform-draw error; within ±3% counts as consistent. The frame column states where each "
-      "model's input frame came from in this benchmark: the baselines received their center from the "
+      "model's input frame came from in this benchmark: GeoTransolver and Transolver received their center from the "
       "pipeline's uniform 320,000-cell pool before the draw, an unbiased frame that a biased mesher "
       "would not deliver (their sample-frame sensitivity is the bar in @fig-scoreboard-density), while "
-      "ISLA computes its frame in the model from the drawn points. With the frame held, measure "
+      "ISLA computes its frame in the model from the drawn points. How to read this: with the frame held, measure "
       "weighting makes the baselines' aggregation consistent; the frame is the separate defect. Data: "
       "results/consistency_bench/consistency_bench_2026-09-10.json and its _mw and _rf "
       "companions. {#tbl-scoreboard-bench}")
 ```
 
-::: {.callout-note collapse="true" title="The legacy centered variant and the weights-off ablation under the same probes (diagnostic)"}
+::: {.callout-note collapse="true" title="The legacy centered variant and the weights-off ablation under the same probes (removed variant, diagnostic)"}
 These rows establish one mechanism: a frame centered on the plain mean of
 the sampled points collapses under a change of sampling law, and nothing
 else in the model does, since the same checkpoint re-evaluated with a
@@ -758,7 +685,7 @@ out = "| configuration (diagnostic) | 10:1 density bias, sample frame: biased ÷
 for label, df, dr, hl in legacy:
     out += f"| {label} | {df:.2f}x | {cell(*dr) if dr else 'not run'} | {cell(*hl) if hl else 'not run'} |\n"
 print(out)
-print(": The legacy centered variant under the two consistency instruments of this section, and the "
+print(": The legacy centered variant under the two consistency instruments of this section (exploration-budget checkpoints), and the "
       "weights-off ablation, which reads the mesher's cell pattern and collapses hardest of every "
       "configuration measured. Data: results/accuracy_consistency_matrix_2026-09-10.json; "
       "results/consistency_bench/consistency_bench_2026-09-10.json and its _mcenter companion. "
@@ -766,14 +693,13 @@ print(": The legacy centered variant under the two consistency instruments of th
 ```
 :::
 
-::: {.callout-note collapse="true" title="The similarity-gauge variant under the same probes (diagnostic)"}
+::: {.callout-note collapse="true" title="The similarity-gauge variant under the same probes (removed variant, diagnostic)"}
 The similarity-gauge variant centers on the measure-weighted centroid and
 scales by the RMS radius, both integrals of the sampled geometry, so it is
 consistent under a change of sampling law like ISLA; what it adds is a
 center estimated from the sample, which ISLA declines on principle. Its
 price, on the surface at 435 cars: the price of not being told the body's
-center is at most about 2%, inside seed noise (SG-REF,
-@sec-nb-sgref-verdict).
+center is at most about 2%, inside seed noise (@sec-nb-sgref-verdict).
 
 ```{python}
 #| label: tbl-scoreboard-sg-consistency
@@ -784,7 +710,7 @@ out = "| configuration (diagnostic) | 10:1 density bias, sample frame: biased ÷
 for label, df, dr, hl in sgc:
     out += f"| {label} | {f'{df:.2f}x' if df else 'not run'} | {cell(*dr) if dr else 'not run'} | {cell(*hl) if hl else 'not run'} |\n"
 print(out)
-print(": The similarity-gauge variant under the two consistency instruments of this section. Data: "
+print(": The similarity-gauge variant under the two consistency instruments of this section (exploration-budget checkpoints). Data: "
       "results/accuracy_consistency_matrix_2026-09-10.json; "
       "results/consistency_bench/consistency_bench_2026-09-10.json. "
       "{#tbl-scoreboard-sg-consistency}")
@@ -792,18 +718,18 @@ print(": The similarity-gauge variant under the two consistency instruments of t
 :::
 
 Read together, the two instruments say one thing: the sampling-law
-dependence of every architecture at the reference size lives in the input
-frame, not in the attention. Measure weighting in the slice pooling repairs
-the aggregation for the Transolver family at no accuracy cost on DrivAerML
-and at `{python} f"{(mean(S['hl35']['gt_mw'])/mean(S['hl35']['gt'])-1)*100:.0f}"` to
+dependence of every architecture at the exploration budget lives in the
+input frame, not in the attention. Measure weighting in the slice pooling
+repairs the aggregation for the Transolver family at no accuracy cost on
+DrivAerML and at `{python} f"{(mean(S['hl35']['gt_mw'])/mean(S['hl35']['gt'])-1)*100:.0f}"` to
 `{python} f"{(mean(S['hl35']['t_mw'])/mean(S['hl35']['t'])-1)*100:.0f}%"` on the wings at 35
 cases; a frame that is a property of the geometry rather
 than of the sample, whether ISLA's relative frame or a Horvitz–Thompson
 centroid in the baselines' datapipe, removes the rest. The Horvitz–Thompson
-centered baselines are ablations that locate the property; the
-GeoTransolver and Transolver keep their plain-mean frame
-(@sec-part-baseline), so the deployable comparison is the baselines
-against ISLA.
+centered GeoTransolver and Transolver are ablations that locate the
+property; the public GeoTransolver and Transolver keep their plain-mean
+frame (@sec-part-baseline), so the deployable comparison is GeoTransolver
+and Transolver as released against ISLA.
 
 A reader of @fig-scoreboard-density will ask why one would not simply use
 GeoTransolver with ISLA's measure-weighted pooling and the
@@ -814,7 +740,7 @@ measure in the pooling and a frame taken from integrals of the surface. The
 ablation pays little for them in distribution (its uniform-draw error is
 `{python} f"{mean(mwaw['runs']['mwaw_dr_gt_unit_lr1e3']['probe_sfht']['unif']):.4f}"`
 against GeoTransolver's
-`{python} f"{mean(S['dr435']['gt']):.4f}"`), and under the refinement
+`{python} f"{mean(S['dr435']['gt']):.4f}"` at the exploration budget), and under the refinement
 benchmark it is consistent at every count, and more consistent than ISLA
 (@tbl-scoreboard-steelman). What it buys consistency with is a body
 centroid: the datapipe centers every coordinate on the measure-weighted
@@ -835,7 +761,7 @@ SM = J("steelman_reduction_2026-09-18.json")["arms"]
 RFB = J("consistency_bench/consistency_bench_rf_2026-09-11.json")["arms"]["rf_dr_mt2_meas"]["table"]
 def dev(arm, s, c): return SM[arm]["deviation_over_unif"][s][str(c)]["mean"]
 out = "| model | uniform error, 10,000 cells | area ÷ uniform at 2,500 / 10,000 / 40,000 | biased ÷ uniform at 2,500 / 10,000 / 40,000 |\n|---|---:|---:|---:|\n"
-for arm, lab in (("gt_ht", "GeoTransolver + ISLA's measure-weighted pooling + HT-centered datapipe (ablation)"), ("t_ht", "Transolver + ISLA's measure-weighted pooling + HT-centered datapipe (ablation)")):
+for arm, lab in (("gt_ht", "GeoTransolver + ISLA's measure-weighted pooling + Horvitz–Thompson-centered datapipe (ablation)"), ("t_ht", "Transolver + ISLA's measure-weighted pooling + Horvitz–Thompson-centered datapipe (ablation)")):
     out += f"| {lab} | {SM[arm]['table']['unif']['10000']['mean']:.4f} | " + " / ".join(f"{dev(arm,'area',c):.3f}" for c in (2500, 10000, 40000)) + " | " + " / ".join(f"{dev(arm,'biased',c):.3f}" for c in (2500, 10000, 40000)) + " |\n"
 isla_u = {c: RFB["unif"][c]["pressure_l2"]["mean"] for c in ("10000", "40000")}
 out += (f"| ISLA | {isla_u['10000']:.4f} | — / {RFB['area']['10000']['pressure_l2']['mean']/isla_u['10000']:.3f} / {RFB['area']['40000']['pressure_l2']['mean']/isla_u['40000']:.3f} "
@@ -843,7 +769,7 @@ out += (f"| ISLA | {isla_u['10000']:.4f} | — / {RFB['area']['10000']['pressure
 print(out)
 print(": The steel-man of the consistency claim: the two baseline ablations that adopt ISLA's measure semantics and an "
       "integral (Horvitz–Thompson) centroid, through the refinement benchmark (float32, 48 DrivAerML validation cars, "
-      "two seeds each, seed means), with ISLA on the same benchmark for context. A deviation of 1.000 is exact consistency; "
+      "two seeds each, seed means, exploration-budget checkpoints), with ISLA on the same benchmark for context. A deviation of 1.000 is exact consistency; "
       "the benchmark's bar is 3% at 40,000 cells. How to read this: the ablations are consistent at every count and more "
       "consistent than ISLA; the comparison ISLA makes is covariance and center-freeness on top of consistency, not "
       "consistency alone. ISLA's 2,500-cell row is not in its benchmark artifact. Data: results/steelman_reduction_2026-09-18.json; "
@@ -857,14 +783,166 @@ deviation from +81% to +5.5%, converging but not yet at the bias bar at
 40,000, while it is the most accurate ISLA arm under every sampler at every
 count (@sec-consistency-bench).
 
+## The law the training sample is drawn by {#sec-scoreboard-training-law}
+
+**Trained under the area-proportional sampling law and scored on the
+independent uniform draw, GeoTransolver is 2.6x (wings) and 7.9x (cars)
+worse than its uniform-trained twin and Transolver 2.4x and 9.6x, while ISLA
+moves 1% and 8%: ISLA's trained function is weakly dependent on the law its
+training sample was drawn by, the baselines' are dependent by factors.**
+This is the other half of the discretization question, the half a
+practitioner meets when a surrogate trained on one mesher's output is handed
+a mesh from another; @sec-training-law has the figure (@fig-training-law),
+the mechanism and the open question of why the cars show the larger
+dependence. It is reproduced on both datasets.
+
+```{python}
+#| label: tbl-scoreboard-training-law
+#| output: asis
+TW = J("trainarea_reduction_2026-09-20.json")["verdict"]; TC = J("trainarea_dr_reduction_2026-09-20.json")["verdict"]
+out = "| model | HiLiftAeroML, 35 training cases, 200,000 cells | DrivAerML, 435 training cars, 100,000 cells |\n|---|---:|---:|\n"
+for label, m in (("ISLA", "isla"), ("GeoTransolver", "gt_unit"), ("Transolver", "transolver_unit")):
+    out += f"| {label} | {TW[f'{m}_area_over_uniform_unif']:.2f}x | {TC[f'{m}_area_over_uniform_unif']:.2f}x |\n"
+print(out)
+print(": The training-law change on two datasets: surface-pressure error of the checkpoint trained under the area-proportional Poisson law divided by "
+      "that of the same configuration trained under the uniform-over-cells law, both scored on the same validation surfaces under the independent uniform draw "
+      "(float32, two seeds, seed means; each architecture at its reporting-protocol rate). How to read this: 1 means the trained function does not depend on the "
+      "law its training sample was drawn by; the wing column is at the reporting protocol, the car column at the 100,000-cell scaling budget (cells are flat above "
+      "100,000, @sec-scoreboard-tokens). The figure and per-arm values are @fig-training-law. Data: results/trainarea_reduction_2026-09-20.json; "
+      "results/trainarea_dr_reduction_2026-09-20.json. {#tbl-scoreboard-training-law}")
+```
+
+## The floor both architectures reach {#sec-scoreboard-floor}
+
+**Given width and depth, ISLA and GeoTransolver reach the same floor of
+about 0.040 on DrivAerML at 435 cars: ISLA 0.0407 at 68M parameters (384
+wide, 24 layers, cosine routing) and 0.0405 at 136M (48 layers),
+GeoTransolver 0.0406 at 143M (1,024 wide) and 0.0403 at 571M (2,048 wide,
+estimated parameters); at matched parameters of about 140M the two are the
+same to within 0.1%, and ISLA comes within 1% of the floor at half
+GeoTransolver's parameters and about half of GeoTransolver-1,024's training
+memory.**
+This is one dataset's result at the 100,000-cell scaling budget; the
+picture, with every ladder on one axis of parameter count, is
+@fig-capacity, and the wing twin is pending (@sec-program-status). Two
+things decide how each architecture gets there. GeoTransolver's width ladder
+saturates (6.7%, 2.6% and 0.7% per doubling from 256 to 2,048 wide). ISLA's
+width ladder turns over above 768 under either routing form, so its axis is
+depth, and depth is reachable only under cosine routing: linear routing has
+a learning-rate ceiling that falls like 1/width and at least 1/depth, above
+which the loss rises to the mean-field plateau, and 48 layers has no clean
+linear rate (@sec-lr-protocol). The memory column is where ISLA's advantage
+lies: its best configuration at or under each training-memory budget is at
+least as accurate as GeoTransolver's at every budget measured, by 9% at 40
+GB, 1.4% from 51 to 86 GB and parity at 100 GB.
+
+```{python}
+#| label: tbl-scoreboard-floor
+#| output: asis
+CFG = J("cap435_reduction_2026-09-20.json")["configurations"]
+CFI = J("cap435_interim_2026-09-20.json")["configurations"]   # the same lanes with peak training memory recorded
+RNC = J("routenorm_interim_2026-09-20.json")["configurations"]
+EXT = J("routenorm_extension_2026-09-21.json")["configurations"]
+ISO = J("isocost_reduction_2026-09-20.json")
+def memcell(key, star=False):
+    m = CFI.get(key, {}).get("peak_mem_gb")
+    return ("—" if m is None else f"{m:.0f}" + ("\\*" if star else ""))
+def P(n, est=False): return f"{n/1e6:.0f}M" + (" (estimated)" if est else "")
+rows = [
+    ("ISLA", "linear", "192 × 12", CFG["isla|w192|d12|s256|lr1e-3"]["params"], "1e-3", CFG["isla|w192|d12|s256|lr1e-3"]["pressure_l2_mean"], memcell("isla|w192|d12|s256|lr1e-3")),
+    ("ISLA", "linear", "384 × 12", CFG["isla|w384|d12|s256|lr5e-4"]["params"], "5e-4", CFG["isla|w384|d12|s256|lr5e-4"]["pressure_l2_mean"], memcell("isla|w384|d12|s256|lr5e-4")),
+    ("ISLA", "cosine", "384 × 12", CFG["isla|w384|d12|s256|lr5e-4"]["params"], "5e-4", RNC["cars|cos|w384|lr5e-4"]["mean"], memcell("isla|w384|d12|s256|lr5e-4", True)),
+    ("ISLA", "cosine", "768 × 12", CFG["isla|w768|d12|s256|lr2.5e-4"]["params"], "5e-4", RNC["cars|cos|w768|lr5e-4"]["mean"], memcell("isla|w768|d12|s256|lr2.5e-4", True)),
+    ("**ISLA**", "cosine", "384 × 24", EXT["isla|cos|w384|d24|lr5e-4"]["params"], "5e-4", EXT["isla|cos|w384|d24|lr5e-4"]["pressure_l2_mean"], memcell("isla|w384|d24|s256|lr5e-4", True)),
+    ("**ISLA**", "cosine", "384 × 48", EXT["isla|cos|w384|d48|lr2.5e-4"]["params"], "2.5e-4", EXT["isla|cos|w384|d48|lr2.5e-4"]["pressure_l2_mean"], memcell("isla|w384|d48|s256|lr5e-4", True)),
+    ("GeoTransolver", "—", "512 × 12", CFG["gt|w512|d12|s256|lr3e-3"]["params"], "3e-3", CFG["gt|w512|d12|s256|lr3e-3"]["pressure_l2_mean"], memcell("gt|w512|d12|s256|lr3e-3")),
+    ("GeoTransolver", "—", "512 × 24", CFG["gt|w512|d24|s256|lr3e-3"]["params"], "3e-3", CFG["gt|w512|d24|s256|lr3e-3"]["pressure_l2_mean"], memcell("gt|w512|d24|s256|lr3e-3")),
+    ("**GeoTransolver**", "—", "1,024 × 12", CFG["gt|w1024|d12|s256|lr1e3"]["params"], "1e-3", CFG["gt|w1024|d12|s256|lr1e3"]["pressure_l2_mean"], memcell("gt|w1024|d12|s256|lr1e3")),
+    ("**GeoTransolver**", "—", "2,048 × 12", EXT["gt|w2048|d12|lr1e-3"]["params"], "1e-3", EXT["gt|w2048|d12|lr1e-3"]["pressure_l2_mean"], "—"),
+]
+out = "| architecture | routing | width × layers | parameters | training cells | rate | error | peak training memory [GB] |\n|---|---|---|---:|---:|---:|---:|---:|\n"
+for arch, rt, shape, p, lr, err, mem in rows:
+    out += f"| {arch} | {rt} | {shape} | {P(p, est=(shape == '2,048 × 12'))} | 100,000 | {lr} | {err:.4f} | {mem} |\n"
+print(out)
+fm = ISO["bars"]["iso_memory_frontier"]
+print(": The floor on DrivAerML (435 training cars, 48 validation cars, float32 surface-pressure error, two-seed means, 500 epochs) at the 100,000-cell scaling budget, "
+      "single dataset. Each row is one trained configuration at its best clean rate; the bold rows are the two architectures at or within 1% of the floor. "
+      "Peak training memory is the recorded peak of the lane on one GB300 at batch 1; entries marked \\* are the linear-routing lane of the same shape "
+      "(the routing form changes no tensor shape) and the 2,048-wide GeoTransolver lane's memory and exact parameter count were not recorded (the count is "
+      "extrapolated from the measured 256-to-1,024 ladder). How to read this: the table is a floor, not a scaling law; ISLA's width ladder beyond 768 and "
+      "GeoTransolver's are in @fig-capacity, and on the accuracy-against-memory frontier the best ISLA at or under each budget is at least as accurate as the best "
+      f"GeoTransolver at every budget measured (GeoTransolver ÷ ISLA at least {fm['min_gt_over_isla']:.3f}, at {fm['at_budget_gb']:.0f} GB). Data: results/cap435_reduction_2026-09-20.json; "
+      "results/cap435_interim_2026-09-20.json (memory); results/routenorm_interim_2026-09-20.json; results/routenorm_extension_2026-09-21.json; "
+      "results/isocost_reduction_2026-09-20.json. {#tbl-scoreboard-floor}")
+```
+
+## The standing against the cell budget {#sec-scoreboard-tokens}
+
+**Above 100,000 cells per case every model's error is flat in the cell
+count, so the reporting protocol's 200,000 cells is a converged budget and
+the DrivAerML gap at the exploration budget was a property of the 10,000-cell
+count.** @tbl-scoreboard-cells trains and scores each architecture at its
+protocol width from 100,000 to 600,000 cells per case; the fitted exponent
+of error against cells is `{python} f"{J('isocost_reduction_2026-09-20.json')['bars']['cells_exponent']['alpha_isla']:.2f}"` for ISLA and
+`{python} f"{J('isocost_reduction_2026-09-20.json')['bars']['cells_exponent']['alpha_gt']:.2f}"` for GeoTransolver, and doubling the
+epochs to 1,000 at 200,000 cells moves neither by more than 0.1%
+(results/isocost_reduction_2026-09-20.json). The gain from denser sampling
+is spent by 100,000 cells; what buys accuracy past it is width and depth
+(@sec-scoreboard-floor).
+
+```{python}
+#| label: tbl-scoreboard-cells
+#| output: asis
+IC = ISO["configurations"]
+def ic(model, w, c, lr):
+    k = f"{model}|w{w}|c{c}|lr{lr}|ep500"; d = IC.get(k)
+    return (f"{d['pressure_l2_mean']:.4f}" if d and d.get("pressure_l2_mean") else "not run")
+out = "| cells per case (train and score) | ISLA, width 192 (1e-3) | GeoTransolver, width 256 (3e-3) | Transolver, width 256 (3e-3) |\n|---:|---:|---:|---:|\n"
+for c in ("100k", "200k", "400k", "600k"):
+    out += f"| {int(c[:-1]):,},000 | {ic('isla', 192, c, '1e-3')} | {ic('gt_unit', 256, c, '3e-3')} | {ic('transolver_unit', 256, c, '3e-3')} |\n"
+print(out)
+print(": Surface-pressure error (area-weighted relative L2, float32, 48 DrivAerML validation cars, 435 training cars, 500 epochs, two-seed means) when every model "
+      "trains and is scored at the same cell count, each architecture at its protocol width and reporting-protocol rate. How to read this: the rows differ by under "
+      "1% within a column, so the cell count above 100,000 is not an axis of accuracy for any of the three; the 200,000-cell row is the reporting protocol of "
+      "@tbl-scoreboard-200k (the lanes differ, the values agree within seed noise). Data: results/isocost_reduction_2026-09-20.json. {#tbl-scoreboard-cells}")
+```
+
+::: {.callout-note collapse="true" title="The path from 10,000 to 80,000 cells (legacy centered variant, removed; diagnostic)"}
+Between the exploration budget and 100,000 cells the DrivAerML ratio moves
+from 0.90 to 0.985 against GeoTransolver and past parity against Transolver.
+The only ISLA trained at 40,000 and 80,000 cells at width 192 is the legacy
+centered variant; its 10,000-cell value is within 1% of ISLA's on this
+dataset, so the ratios read across.
+
+```{python}
+#| label: tbl-scoreboard-tokens
+#| output: asis
+TP = J("tokproto_reduction_2026-09-18.json")
+r10 = TP["ratios_10k"]
+out = "| cells per case (train and score) | GeoTransolver | Transolver | ISLA (legacy centered variant) | GeoTransolver ÷ variant | Transolver ÷ variant |\n|---:|---:|---:|---:|---:|---:|\n"
+out += f"| 10,000 | {mean(S['dr435']['gt']):.4f} | {mean(S['dr435']['t']):.4f} | {mean(S['dr435']['isla_cg']):.4f} | {r10['gt_over_isla']:.3f} | {r10['t_over_isla']:.3f} |\n"
+for c in ("40000", "80000"):
+    t = TP["table"][c]
+    sd = lambda k: " / ".join(f"{v:.4f}" for v in t[k]["seeds"])
+    out += f"| {int(c):,} | {t['gt']['mean']:.4f} ({sd('gt')}) | {t['t']['mean']:.4f} ({sd('t')}) | {t['isla_cg']['mean']:.4f} ({sd('isla_cg')}) | {t['gt_over_isla']:.3f} | {t['t_over_isla']:.3f} |\n"
+print(out)
+print(": Surface-pressure error (area-weighted relative L2, float32, 48 DrivAerML validation cars, 435 training cars, "
+      "width 192 for the variant, 256 for GeoTransolver and Transolver) when every model trains and is scored at the same cell count, seed means with the two seeds in "
+      "parentheses. The ISLA arm is the legacy centered variant at every count (the only ISLA trained at 40,000 and 80,000). How to read this: the ratio moves toward and past parity with the budget; the "
+      "reporting protocol's 200,000-cell standing on ISLA itself is @tbl-scoreboard-200k. Data: "
+      "results/tokproto_reduction_2026-09-18.json; results/fp32_reeval/fp32_shift_drivaer_2026-09-09.json. {#tbl-scoreboard-tokens}")
+```
+:::
+
 ## Resources behind the comparison {#sec-scoreboard-resources}
 
-**The three architectures are parameter-matched at the reference width, and
-ISLA trains in the least memory once its geometry is recomputed in the
-backward pass.** @tbl-scoreboard-resources measures the eager path on which
-all three can be run on one instrument; on the compiled path the recipe
-runs, ISLA's training step is 1.05x GeoTransolver's at 10,000 tokens with
-the recompute on and 0.86x without, at half the memory (@sec-mt2-cost).
+**At the protocol widths (ISLA 192, GeoTransolver and Transolver 256) the
+three architectures are parameter-matched, and ISLA trains in the least
+memory once its geometry is recomputed in the backward pass.**
+@tbl-scoreboard-resources measures the eager path on which all three can be
+run on one instrument; on the compiled path the recipe runs, ISLA's
+training step is 1.05x GeoTransolver's at 10,000 tokens with the recompute
+on and 0.86x without, at half the memory (@sec-mt2-cost).
 
 ```{python}
 #| label: tbl-scoreboard-resources
@@ -885,7 +963,7 @@ print(": Training cost of the three architectures on one instrument and one exec
       "GB300 GPU, eager execution, batch of one case, bfloat16 autocast, AdamW step, median of five "
       "measured steps after three warm-up steps; memory is the peak allocated during the step net of "
       "the resident parameters and optimizer state. The recomputed-geometry row is the same function at "
-      "a lower memory and a higher step time. The compiled path the recipe trains on is in @tbl-mt2-cost. "
+      "a lower memory and a higher step time. How to read this: the eager path ranks the models on one instrument; the compiled path the recipe trains on is in @tbl-mt2-cost. "
       "Data: results/isla_vs_baselines_cost_fastkernel_2026-09-09.json. {#tbl-scoreboard-resources}")
 ```
 
@@ -943,167 +1021,280 @@ ax0.set_title("training-step cost against token count, one GB300, bf16, batch 1,
 plt.show()
 ```
 
-## The standing against the token budget {#sec-scoreboard-tokens}
+## The exploration budget: 10,000 cells {#sec-scoreboard-exploration}
 
-**The DrivAerML in-distribution gap was a property of the 10,000-cell
-budget: it closes to parity at the recipe default.** The rows of
-@sec-scoreboard-surface train and score at 10,000 sampled cells per case,
-the program's exploration count. Trained and scored at 40,000 and 80,000
-cells at the same width, the baselines improve by 8% and ISLA by 16%, and
-the ratio moves from 0.90 to 0.985 against GeoTransolver and past parity
-against Transolver (@tbl-scoreboard-tokens); at the reporting protocol of
-200,000 cells, each architecture at its own best rate, GeoTransolver ÷ ISLA
-is 0.998 (@sec-scoreboard-200k). The ISLA in the 40,000- and 80,000-cell
-rows is the legacy centered variant, the only ISLA trained at those counts;
-its 10,000-cell value is within 1% of ISLA's on this dataset, so the ratios
-read across.
+**Every number in this section was trained and scored at 10,000 sampled
+cells per case, the program's exploration budget; on the wings it agrees
+with the reporting protocol, on DrivAerML it does not, and the difference
+is the count-noise term of the deficit anatomy (@sec-deficit-anatomy).**
+The section is kept because it is the widest board the program has: eight
+surface rungs on ISLA, the pose test and the interior task on one axis.
+
+### Surface pressure: every rung on one axis {#sec-scoreboard-surface}
+
+**At the exploration budget GeoTransolver and Transolver match or beat ISLA
+on every surface rung; the margin runs from 2% at the 512-wide corner to
+28% at 35 wing cases.** The reporting protocol's standing on DrivAerML,
+where the full-data gap closes to parity, is @sec-scoreboard-200k; the wing
+rungs do not move between the two budgets (@tbl-scoreboard-200k-wings).
+@fig-scoreboard-forest places every setting on one axis of baseline error
+divided by ISLA error; the rows below the surface rungs are the pose test
+and the interior task at this budget, where ISLA leads.
 
 ```{python}
-#| label: tbl-scoreboard-tokens
+#| label: fig-scoreboard-forest
+#| fig-cap: >
+#|   The exploration-budget scoreboard on one axis (10,000 cells per case
+#|   throughout). Each row is one benchmark setting; each marker is a
+#|   baseline's surface-pressure error divided by ISLA's on the same
+#|   validation cases (GeoTransolver red circles, Transolver amber
+#|   triangles), so markers left of the line at 1 favor the baseline and
+#|   markers right of it favor ISLA. Every row divides by ISLA and carries
+#|   the seed-mean ratio of one training draw; the spread over training
+#|   draws on the 35- and 210-case wing rungs is in @sec-de-controls. The
+#|   bottom rows are the pose test (GeoTransolver and
+#|   Transolver trained with rotation augmentation, ISLA without, every case
+#|   in a random pose) and the interior task (GeoTransolver-volume divided by
+#|   ISLA with query tokens and the signed distance, 10,000 queries). How to
+#|   read this: it shows ratios, not absolute accuracy; it is the exploration
+#|   budget, not the reporting protocol (@tbl-scoreboard-200k,
+#|   @tbl-scoreboard-200k-wings, @tbl-scoreboard-pose-200k,
+#|   @tbl-scoreboard-200k-interior); and it says nothing about consistency
+#|   under a change of sampling (@fig-scoreboard-density). Float32
+#|   throughout. Data: the files listed in @tbl-scoreboard-surface, plus
+#|   research/transfer_program/studies/campaign_b_pose/campaign_b_fp32_2026-09-10.json,
+#|   results/refprops_reduction_2026-09-18.json,
+#|   results/relint2_reduction_2026-09-14.json and
+#|   results/fp32_reeval/fp32_shift_interior_2026-09-09.json.
+#| code-fold: true
+rows = []  # (label, gt_ratio, t_ratio)
+def add(label, key):
+    s = S[key]; i = s["isla_ref"]
+    rows.append((label, ratio(s["gt"], i), (ratio(s["t"], i) if s["t"] else None)))
+add("HiLift, 35 cases", "hl35")
+add("HiLift, 210 cases", "hl210")
+add("HiLift, 4 training geometries", "geo4")
+add("HiLift, 21 training geometries", "geo21")
+add("HiLift, fixed angle 12°", "fixed")
+add("DrivAerML, 435 cars", "dr435")
+add("DrivAerML, 435 cars, stratified inference draw", "dr435_strat")
+add("DrivAerML, 512 wide × 80k cells (width learning rate)", "corner")
+n_surface = len(rows)
+pB = poseB["arms"]
+rows.append(("DrivAerML, every case in a random pose (GeoTransolver and Transolver rotation-augmented)", pB["gt_aug"]["pressure_mean"] / poseR["posed_mean"],
+             pB["transolver_aug"]["pressure_mean"] / poseR["posed_mean"]))
+for f, lab in (("pressure_l2", "interior pressure"), ("velocity_l2", "interior velocity"), ("nut_l2", "interior eddy viscosity")):
+    rows.append((f"DrivAerML interior, {lab}", ri2["gt_vol_unit"][f]["mean"] / ri2["relint2"][f]["mean"], None))
+fig, ax = plt.subplots(figsize=(9.6, 5.6))
+y = list(range(len(rows)))[::-1]
+for yy, (label, rg, rt) in zip(y, rows):
+    for r, key, dy in ((rg, "gt", 0.12), (rt, "t", -0.12)):
+        if r is None: continue
+        c, mk = STYLE[key]["color"], STYLE[key]["marker"]
+        ax.plot([r], [yy + dy], marker=mk, ms=8, mfc=c, mec=c, mew=1.8, ls="none", zorder=4)
+        ax.annotate(f"{r:.2f}", (r, yy + dy), xytext=(0, 7 if dy > 0 else -11), textcoords="offset points", ha="center", fontsize=7.5, color=c)
+ax.axvline(1.0, color=INK2, lw=1.2, zorder=1)
+ax.axvspan(0.95, 1.05, color=GRID, alpha=0.6, zorder=0)
+n_rows = len(rows)
+for sep in (n_rows - n_surface - 0.5, n_rows - n_surface - 1.5):  # separate surface rungs / pose / interior
+    ax.axhline(sep, color=BASELINE, lw=0.8, ls=":", zorder=1)
+ax.set_yticks(y); ax.set_yticklabels([r[0] for r in rows], fontsize=8.5)
+ax.set_xscale("log"); ax.set_xlim(0.62, 1.45)
+ax.set_xticks([0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3]); ax.set_xticklabels(["0.7", "0.8", "0.9", "1.0", "1.1", "1.2", "1.3"])
+ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+ax.set_xlabel("baseline error ÷ ISLA error [–], exploration budget (10,000 cells per case)\n(left of 1: the baseline is more accurate; right of 1: ISLA is)")
+ax.grid(axis="y", visible=False)
+ax.set_ylim(-0.7, y[0] + 0.7)
+from matplotlib.lines import Line2D
+ax.legend(handles=[Line2D([], [], **{k: v for k, v in series_kwargs("gt", ls="none").items() if k in ("color", "marker", "mfc", "mec", "mew", "ms", "ls")}, label="GeoTransolver ÷ ISLA"),
+                   Line2D([], [], **{k: v for k, v in series_kwargs("t", ls="none").items() if k in ("color", "marker", "mfc", "mec", "mew", "ms", "ls")}, label="Transolver ÷ ISLA"),
+                   mpl.patches.Patch(facecolor=GRID, label="parity within 5%")],
+          loc="upper right", fontsize=8, ncol=1)
+fig.tight_layout()
+plt.show()
+```
+
+Every surface marker sits left of one; the pose and interior-velocity
+markers sit right of it. The numbers, seeds and paired case counts behind
+each marker are in @tbl-scoreboard-surface, and @fig-scoreboard-bars shows
+the same rungs as absolute error.
+
+```{python}
+#| label: fig-scoreboard-bars
+#| fig-cap: >
+#|   The exploration-budget surface settings as absolute error (10,000 cells
+#|   per case). Bars are seed means of the surface-pressure error (lower is
+#|   better) for GeoTransolver (red), Transolver (amber) and ISLA (blue);
+#|   dots are the individual seeds. Panels share no vertical scale, since
+#|   the rungs differ by an order of magnitude in error. How to read this:
+#|   the ordering within a panel is the benchmark result; the level across
+#|   panels reflects how hard each split is (few geometries, or a single
+#|   angle), not architecture; the reporting-protocol values are
+#|   @tbl-scoreboard-200k and @tbl-scoreboard-200k-wings. Float32. Data: as
+#|   @tbl-scoreboard-surface.
+#| code-fold: true
+REF_KEYS = ["hl35", "hl210", "geo4", "geo21", "fixed", "dr435", "dr435_strat", "corner"]  # rungs where ISLA is measured
+keys = REF_KEYS
+short = {"hl35": "HiLift, 35 cases", "hl210": "HiLift, 210 cases",
+         "geo4": "HiLift, 4 geometries", "geo21": "HiLift, 21 geometries", "fixed": "HiLift, fixed angle", "dr435": "DrivAerML, 435 cars",
+         "dr435_strat": "DrivAerML, stratified draw", "corner": "DrivAerML, 512 × 80k"}
+fig, axs = plt.subplots(2, 4, figsize=(12.0, 6.0))
+axs = axs.ravel()
+for ax, key in zip(axs, keys):
+    s = S[key]
+    arms = [("Geo-\nTransolver", s["gt"], "gt"), ("Transolver", s["t"], "t"), ("ISLA", s["isla_ref"], "isla_ref")]
+    xs = list(range(len(arms))); means = [mean(v) for _, v, _ in arms]
+    for x_, (_, v, k) in zip(xs, arms):
+        ax.bar(x_, mean(v), width=0.62, zorder=2, **bar_kwargs(k))
+        if len(v) > 1:
+            ax.plot([x_] * len(v), v, marker="o", ms=4, mfc="white", mec=INK, mew=0.9, ls="none", zorder=4)
+        ax.text(x_, mean(v) * 1.02, f"{mean(v):.3f}", ha="center", va="bottom", fontsize=7.5, color=INK2)
+    ax.set_xticks(xs); ax.set_xticklabels([n for n, _, _ in arms], fontsize=7.5)
+    ax.set_title(short[key], fontsize=9.5)
+    ax.set_ylim(0, max(means) * 1.28); ax.grid(axis="x", visible=False)
+    ax.tick_params(axis="y", labelsize=8)
+axs[0].set_ylabel("surface pressure error [–]"); axs[4].set_ylabel("surface pressure error [–]")
+fig.suptitle("exploration budget: 10,000 cells per case", fontsize=9.5, color=INK2)
+fig.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: tbl-scoreboard-surface
 #| output: asis
-TP = J("tokproto_reduction_2026-09-18.json")
-r10 = TP["ratios_10k"]
-out = "| cells per case (train and score) | GeoTransolver | Transolver | ISLA (legacy centered variant) | GeoTransolver ÷ ISLA | Transolver ÷ ISLA |\n|---:|---:|---:|---:|---:|---:|\n"
-out += f"| 10,000 | {mean(S['dr435']['gt']):.4f} | {mean(S['dr435']['t']):.4f} | {mean(S['dr435']['isla_cg']) if 'isla_cg' in S['dr435'] and S['dr435']['isla_cg'] else 0.0558:.4f} | {r10['gt_over_isla']:.3f} | {r10['t_over_isla']:.3f} |\n"
-for c in ("40000", "80000"):
-    t = TP["table"][c]
-    sd = lambda k: " / ".join(f"{v:.4f}" for v in t[k]["seeds"])
-    out += f"| {int(c):,} | {t['gt']['mean']:.4f} ({sd('gt')}) | {t['t']['mean']:.4f} ({sd('t')}) | {t['isla_cg']['mean']:.4f} ({sd('isla_cg')}) | {t['gt_over_isla']:.3f} | {t['t_over_isla']:.3f} |\n"
+def fmt(v):
+    if not v: return "pending"
+    return f"{mean(v):.4f}" + (" (" + " / ".join(f"{x:.4f}" for x in v) + ")" if len(v) > 1 else "")
+def rat(b, s):
+    return f"**{ratio(b, s['isla_ref']):.2f}**" if b else "pending"
+out = ("| setting (exploration budget) | GeoTransolver | Transolver | ISLA | GeoTransolver ÷ ISLA | Transolver ÷ ISLA | validation cases where the baseline is lower |\n"
+       "|---|---|---|---|---:|---:|---|\n")
+for key in REF_KEYS:
+    s = S[key]
+    out += (f"| {s['title']} | {fmt(s['gt'])} | {fmt(s['t'])} | **{fmt(s['isla_ref'])}** "
+            f"| {rat(s['gt'], s)} | {rat(s['t'], s)} | {s['paired'][0]} |\n")
 print(out)
-print(": Surface-pressure error (area-weighted relative L2, float32, 48 DrivAerML validation cars, 435 training cars, "
-      "width 192) when every model trains and is scored at the same cell count, seed means with the two seeds in "
-      "parentheses. ISLA is the legacy centered variant at 40,000 and 80,000 cells (the only ISLA trained there) and at "
-      "10,000 for like-for-like. How to read this: the ratio moves toward and past parity with the budget; it does not "
-      "show the recipe default of 200,000 cells, where the reporting lanes are training. Data: "
-      "results/tokproto_reduction_2026-09-18.json; results/fp32_reeval/fp32_shift_drivaer_2026-09-09.json. {#tbl-scoreboard-tokens}")
+print(": Surface-pressure error at the exploration budget of 10,000 cells per case (area-weighted relative L2, float32, final-epoch checkpoints; seed "
+      "values in parentheses, the corner row lists seed means of two seeds) on every rung where "
+      "GeoTransolver, Transolver and ISLA are all measured. The ratio columns "
+      "give baseline ÷ ISLA (above one favors ISLA). "
+      "The corner row is width 512 and 80,000 cells per car for all arms (60.2M, 35.9M and 23.9M "
+      "parameters), evaluated at 80,000 cells; ISLA there trained at the width "
+      "learning rate 3.75e-4 (@sec-using-lr), the other arms at their protocol rates. The "
+      "stratified-draw row queries the same 435-car checkpoints with a systematic sample along the Morton "
+      "order of the cells, the inference sampler of @sec-using-sampler. How to read this: the exploration-budget board; "
+      "the reporting protocol's rows are @tbl-scoreboard-200k and @tbl-scoreboard-200k-wings. Data: "
+      + "; ".join(sorted({S[k]['src'] for k in REF_KEYS})) + ". {#tbl-scoreboard-surface}")
 ```
 
-## The standing at the reporting protocol: 200,000 cells {#sec-scoreboard-200k}
+The DrivAerML gap at the exploration budget has a measured anatomy, about half of it finite-sample noise that the stratified draw or more cells removes (@sec-deficit-anatomy), and it closes at the reporting protocol (@sec-scoreboard-200k); the larger gaps at 35 wing cases are a different mechanism, the mesher-pattern cue where validation geometries recur in training (@sec-full-data).
 
-**At the reporting protocol, the recipe's default of 200,000 sampled cells
-per case, ISLA and GeoTransolver are at parity on DrivAerML at full data
-(0.998), ISLA leads Transolver by 6%, and below full data GeoTransolver
-holds a data-efficiency lead that narrows from 17% at 27 cars to zero at
-435.** This is the book's primary standing on DrivAerML; the 10,000-cell
-rows of @sec-scoreboard-surface are the exploration budget. The table is
-computed from the 200,000-cell artifacts and names GeoTransolver's rate on
-every row, because GeoTransolver's best rate depends on how much data it
-sees: 3e-3 beats 1e-3 by 31%, 24%, 10%, 4% and 2% at 27, 54, 109, 218 and
-435 cars at this budget, where 1e-3 had won its 435-car grid at 10,000
-cells (@sec-nb-rategt-prereg, @sec-nb-proto200k-verdict). ISLA has one
-usable rate (1e-3 at width 192; @sec-robustness-lr) and Transolver runs at
-3e-3 throughout. A row would mark itself *provisional* if a rate control
-were still training; none is.
+::: {.callout-note collapse="true" title="Two configurations that are deliberately not rows"}
+GeoTransolver and Transolver with ISLA's measure-weighted pooling, ablations
+that carry the same quadrature measure in their slice pooling that ISLA
+does, keep the lead at the exploration budget (@tbl-scoreboard-mw). The
+ISLA weights-off ablation is not a row because it is not a configuration
+the program adopts: it closes a third to all of the gap on the wing rungs
+by reading the mesher's cell pattern, and under a change of sampling it
+collapses hardest of every configuration measured
+(@sec-scoreboard-consistency, @sec-limits-mechanism).
 
 ```{python}
-#| label: tbl-scoreboard-200k
+#| label: tbl-scoreboard-mw
 #| output: asis
-P2 = J("p200k_trio_reduction_2026-09-19.json"); L2 = J("p200k_ladder_interim_2026-09-18.json")
-def cell(a): return (f"{a['pressure_mean']:.4f}", " / ".join(f"{v['pressure_l2']:.4f}" for v in a["per_seed"].values())) if a and a.get("pressure_mean") else None
-out = "| DrivAerML training cars | ISLA (1e-3) | GeoTransolver (better of 1e-3, 3e-3) | Transolver (3e-3) | GeoTransolver ÷ ISLA | Transolver ÷ ISLA | status |\n|---:|---:|---:|---:|---:|---:|---|\n"
-for n in ("n27", "n54", "n109", "n218"):
-    r = L2["rungs"][n]; isla = r["isla"]["pressure_mean"]; g1 = r["gt_unit"]
-    rc = r.get("rate_control_lr3e3", {}).get("gt_unit_lr3e3")
-    if rc and rc["pressure_mean"] < g1["pressure_mean"]:
-        g, glab, status = rc, "3e-3", "final"
-    elif rc:
-        g, glab, status = g1, "1e-3", "final"
-    else:
-        g, glab, status = g1, "1e-3", "provisional: 3e-3 control training"
-    t = r["transolver_unit"]
-    out += (f"| {n[1:]} | {isla:.4f} | {g['pressure_mean']:.4f} ({glab}) | {t['pressure_mean']:.4f} | {g['pressure_mean']/isla:.2f} | {t['pressure_mean']/isla:.2f} | {status} |\n")
-A = P2["arms"]; isla = A["isla"]["pressure_mean"]
-gts = {k: A[k]["pressure_mean"] for k in ("gt_unit_lr1e3", "gt_unit_lr3e3") if A[k]["pressure_mean"] and A[k]["n"] == 2}
-best = min(gts, key=gts.get); glab = "3e-3" if best.endswith("3e3") else "1e-3"
-status = "final" if "gt_unit_lr3e3" in gts else "provisional: 3e-3 control training"
-out += (f"| **435** | **{isla:.4f}** | **{gts[best]:.4f}** ({glab}) | **{A['transolver_unit_lr3e3']['pressure_mean']:.4f}** | **{gts[best]/isla:.2f}** | **{A['transolver_unit_lr3e3']['pressure_mean']/isla:.2f}** | {status} |\n")
+out = "| rung (exploration budget) | GeoTransolver | GeoTransolver + ISLA's measure-weighted pooling (ablation) | Transolver | Transolver + ISLA's measure-weighted pooling (ablation) | ISLA |\n|---|---:|---:|---:|---:|---:|\n"
+for key, label in (("hl35", "HiLiftAeroML, 35 training cases"), ("dr435", "DrivAerML, 435 training cars")):
+    s = S[key]
+    out += (f"| {label} | {mean(s['gt']):.4f} | {mean(s['gt_mw']):.4f} ({(mean(s['gt_mw'])/mean(s['gt'])-1)*100:+.0f}%) | {mean(s['t']):.4f} | "
+            f"{mean(s['t_mw']):.4f} ({(mean(s['t_mw'])/mean(s['t'])-1)*100:+.0f}%) | **{mean(s['isla_ref']):.4f}** |\n")
 print(out)
-print(": Surface-pressure error (area-weighted relative L2, float32, 48 DrivAerML validation cars) with every model trained and "
-      "scored at 200,000 sampled cells per case, width 192, 500 epochs, two seeds (seed means; the per-seed values are in the "
-      "artifacts). GeoTransolver's column takes the better of its 1e-3 and 3e-3 pairs and names the rate; a row marked provisional "
-      "still awaits that control. ISLA carries the total-measure length unit in these lanes; the RMS-pairwise-distance unit, now "
-      "the default, scores 0.0444 on the same 435-car protocol (0.996 of it, @sec-nb-lenrms-200k). How to read this: ratios above 1 favor ISLA; the 10,000-cell "
-      "rows elsewhere in this chapter are the exploration budget and are not comparable in absolute value. Data: "
-      "results/p200k_trio_reduction_2026-09-19.json; results/p200k_ladder_interim_2026-09-18.json. {#tbl-scoreboard-200k}")
+print(": GeoTransolver and Transolver with ISLA's measure-weighted pooling against their public counterparts and ISLA at the exploration budget "
+      "(surface-pressure error, float32, seed means of two or three seeds; the percentage is the price of the measure against the public model). "
+      "How to read this: the ablations locate a property and are not modifications of the released models; both keep the lead over ISLA on the wings and are level on the cars. "
+      "Data: results/mw_w4dr_xfam_reduction_2026-09-10.json; results/accuracy_consistency_matrix_2026-09-10.json; results/fp32_reeval/fp32_shift_35_2026-09-09.json; "
+      "results/fp32_reeval/fp32_shift_drivaer_2026-09-09.json; results/relframe_reduction_2026-09-11.json. {#tbl-scoreboard-mw}")
 ```
+:::
+
+### The sealed deflection split {#sec-scoreboard-other}
+
+**Across a sealed geometry boundary both architectures degrade by the same
+factor and the in-regime ordering carries through.** @tbl-scoreboard-other
+holds the one surface setting that does not fit the ladder above: the wing
+deflection split, which trains on the 80% of geometries with the milder
+flap-and-slat settings and evaluates once, sealed, on the 20% most
+aggressive (@sec-limits-regime), at the exploration budget.
 
 ```{python}
-#| label: para-200k-reading
+#| label: tbl-scoreboard-other
 #| output: asis
-gt_final = "gt_unit_lr3e3" in gts
-r435 = gts[best] / isla; t435 = A["transolver_unit_lr3e3"]["pressure_mean"] / isla
-standing = "at parity with" if abs(r435 - 1) < 0.01 else ("ahead of" if r435 > 1 else "behind")
-lads = [L2["rungs"][n]["gt_over_isla_at_better_rates"] for n in ("n27", "n54", "n109", "n218")]
-print(f"At 435 cars ISLA is {standing} GeoTransolver (GeoTransolver ÷ ISLA {r435:.3f}, GeoTransolver at {glab}) and leads Transolver by {(t435-1)*100:.0f}%"
-      f"{'' if gt_final else '; GeoTransolver’s 3e-3 pair is still training and the row is provisional'}. "
-      f"Against the 10,000-cell standings (@sec-scoreboard-surface) every model improved, ISLA by the most "
-      f"({(1-P2['verdict']['isla_200k_over_10k'])*100:.0f}% against {(1-gts[best]/0.0503)*100:.0f}% for GeoTransolver and "
-      f"{(1-A['transolver_unit_lr3e3']['pressure_mean']/0.0517)*100:.0f}% for Transolver), which is the count-noise term of the deficit anatomy "
-      f"(@sec-deficit-anatomy) going to zero at the denser sampling. Below full data GeoTransolver at its better rate "
-      f"leads ISLA by {', '.join(f'{(1-r)*100:.0f}%' for r in lads)} at 27, 54, 109 and 218 cars: the data-efficiency ordering of the "
-      f"10,000-cell ladder survives the change of budget with a smaller gap at every rung, and closes at the full training set. "
-      f"On the wings the budget changes nothing: on the 35-case rung GeoTransolver ÷ ISLA is 0.73 at 200,000 cells against 0.72 at 10,000 "
-      f"(@tbl-scoreboard-200k-wings), so that deficit is a property of the trained functions, not of the sampling count.")
-```
-
-```{python}
-#| label: tbl-scoreboard-200k-wings
-#| output: asis
-F2 = J("p200k_fleet_reduction_2026-09-19.json")["datasets"]
-out = "| HiLiftAeroML rung | budget | ISLA | GeoTransolver (3e-3) | Transolver (3e-3) | GeoTransolver ÷ ISLA | Transolver ÷ ISLA |\n|---|---|---:|---:|---:|---:|---:|\n"
-w = F2["highlift_surface_super_scarce"]; tk = w["tenk_reference"]
-out += (f"| 35 training cases | exploration budget, 10,000 cells | {mean(tk['isla']):.4f} | {mean(tk['gt_lr3e3']):.4f} | {mean(tk['transolver_lr3e3']):.4f} "
-        f"| {tk['gt_over_isla']:.2f} | {tk['t_over_isla']:.2f} |\n")
-a = w["arms"]
-out += (f"| 35 training cases | reporting protocol, 200,000 cells | {a['isla']['pressure_l2_mean']:.4f} | {a['gt_unit']['pressure_l2_mean']:.4f} | {a['transolver_unit']['pressure_l2_mean']:.4f} "
-        f"| {w['ratios_over_isla']['gt_unit']['pressure_l2']:.2f} | {w['ratios_over_isla']['transolver_unit']['pressure_l2']:.2f} |\n")
-F3 = J("p200k_fleet_interim_2026-09-20.json")["datasets"]
-fx = F3["highlift_surface_single_aoa_12"]; fa = fx["arms"]
-fx10 = dict(isla=mean(S["fixed"]["isla_ref"]), gt=mean(S["fixed"]["gt"]), t=mean(S["fixed"]["t"]))
-out += (f"| fixed angle 12°, 126 geometries | exploration budget, 10,000 cells | {fx10['isla']:.4f} | {fx10['gt']:.4f} | {fx10['t']:.4f} "
-        f"| {fx10['gt']/fx10['isla']:.2f} | {fx10['t']/fx10['isla']:.2f} |\n")
-out += (f"| fixed angle 12°, 126 geometries | reporting protocol, 200,000 cells | {fa['isla']['pressure_l2_mean']:.4f} | {fa['gt_unit_lr3e3']['pressure_l2_mean']:.4f} | {fa['transolver_unit']['pressure_l2_mean']:.4f} "
-        f"| {fx['ratios_over_isla']['gt_unit_lr3e3']['pressure_l2']:.2f} | {fx['ratios_over_isla']['transolver_unit']['pressure_l2']:.2f} |\n")
-pending = [k for k, v in F3.items() if k.startswith("highlift") and v["status"] != "complete"]
+da = defl["arms"]; di, dg = da["isla"]["pressure_l2"], da["geotransolver"]["pressure_l2"]
+def sd(v): return " / ".join(f"{x:.4f}" for x in v)
+out = ("| setting (exploration budget) | GeoTransolver | ISLA | GeoTransolver ÷ ISLA | reading |\n|---|---|---|---:|---|\n"
+       f"| HiLift deflection split, in-regime validation | {dg['val_mean']:.4f} ({sd(dg['val_seeds'])}) | ISLA {di['val_mean']:.4f} ({sd(di['val_seeds'])}) | {dg['val_mean']/di['val_mean']:.2f} | GeoTransolver leads in regime |\n"
+       f"| HiLift deflection split, sealed test (360 cases, 36 most aggressive geometries) | {dg['test_mean']:.4f} ({sd(dg['test_seeds'])}) | ISLA {di['test_mean']:.4f} ({sd(di['test_seeds'])}) | {dg['test_mean']/di['test_mean']:.2f} | test ÷ validation degradation {di['degradation_d']:.2f}x (ISLA) and {dg['degradation_d']:.2f}x (GeoTransolver): both cross the boundary equally |\n")
 print(out)
-print(": The 35-case and fixed-angle HiLiftAeroML rungs at both budgets (surface-pressure error, float32, 180 validation cases, seed means; GeoTransolver at 3e-3 in both protocols, its better rate on these rungs; the fixed-angle 10,000-cell GeoTransolver value is the unit-direction run of the surface board). "
-      "How to read this: on the 35-case rung twenty times the sampled cells moved neither model by more than 4%, and on the fixed-angle rung every model improved by 20% to 25% while the ratios moved by 0.01 and 0.04, so the wing deficit is not count noise; the mechanism the program points at is the mesher pattern where validation geometries recur in training (@sec-data-efficiency). "
-      f"The other wing rungs ({len(pending)} of them) are training at 200,000 cells and will join this table as they report (@sec-program-status). Data: results/p200k_fleet_reduction_2026-09-19.json; results/p200k_fleet_interim_2026-09-20.json; "
-      "results/fp32_reeval/fp32_shift_35_2026-09-09.json; results/relframe_reduction_2026-09-11.json. {#tbl-scoreboard-200k-wings}")
+print(": The sealed deflection split at the exploration budget: surface-pressure error, float32, two seeds, unit-direction "
+      "GeoTransolver against ISLA, on the in-regime validation cases and on the "
+      "sealed high-deflection test set. How to read this: the ratio column is the in-regime ordering; the degradation factors are the regime-extrapolation result, and they are equal. "
+      "Data: results/deflection_sealed_test_2026-09-15.json. {#tbl-scoreboard-other}")
 ```
+
+::: {.callout-note collapse="true" title="Rungs measured only on the legacy centered variant (removed variant, diagnostic)"}
+Three surface settings were measured before ISLA
+existed, on the legacy centered variant (plain-mean center, fixed length
+unit; @sec-mt2-variants), and are not re-measured on ISLA
+(@sec-scoreboard-pending). They are kept here as diagnostics of the
+baselines' lead at those sizes, not as ISLA rows.
+
+```{python}
+#| label: tbl-scoreboard-legacy-rungs
+#| output: asis
+out = "| setting (exploration budget) | GeoTransolver | Transolver | legacy centered variant (diagnostic) | GeoTransolver ÷ variant | Transolver ÷ variant |\n|---|---|---|---|---:|---:|\n"
+for key in ("hl510", "hl1260"):
+    s = S[key]
+    out += (f"| {s['title']} | {fmt(s['gt'])} | {fmt(s['t'])} | {fmt(s['isla_cg'])} | {ratio(s['gt'], s['isla_cg']):.2f} | {ratio(s['t'], s['isla_cg']):.2f} |\n")
+for n in (14, 27, 54, 109, 218):
+    g = [lad[f"lad_gt_n{n}_seed{s}"]["infamily"] for s in (42, 43)]
+    m = [lad[f"lad_mt2_n{n}_seed{s}"]["infamily"] for s in (42, 43)]
+    out += f"| DrivAerML, {n} training cars (bfloat16; GeoTransolver with the physical velocity) | {mean(g):.3f} ({sd(g)}) | not run | {mean(m):.3f} ({sd(m)}) | {mean(g)/mean(m):.2f} | — |\n"
+print(out)
+print(": Wing rungs at 510 and 1,260 training cases (float32, two seeds each, the unit-direction protocol) and the "
+      "DrivAerML data-efficiency ladder (bfloat16 evaluation on identical points, two seeds, learning rate 3e-3 for "
+      "both architectures, GeoTransolver fed the physical freestream velocity, which on this dataset costs it "
+      "nothing, @sec-de-drivaerml), all at the exploration budget with the legacy centered variant as the ISLA arm. How to read this: none of these rows is ISLA; "
+      "the DrivAerML ladder on ISLA at the reporting protocol is @tbl-scoreboard-200k. Data: "
+      "results/udrvl_510_reduction_2026-09-12.json; results/udrv_1260_reduction_2026-09-15.json; "
+      "results/udrv_1260_transolver_2026-09-16.json; results/ladder_reduction.json. {#tbl-scoreboard-legacy-rungs}")
+```
+:::
 
 ## What is not yet on the board {#sec-scoreboard-pending}
 
-Five measurements would complete the board, and one line is closed; the
-live status of each is in @sec-program-status.
+**Three measurements are live and would change or complete rows above:
+the wing half of the cosine-routing study, which decides whether cosine
+routing becomes ISLA's default (the DrivAerML half is in
+@tbl-scoreboard-floor and @tbl-scoreboard-200k-interior); the wing scaling
+picture, the second-dataset twin of @tbl-scoreboard-floor; and the remaining
+HiLiftAeroML rungs at the reporting protocol (the 210-, 510- and 1,260-case
+rungs, the geometry ladders and the deflection split), which join
+@tbl-scoreboard-200k-wings as they report.** Two gaps are not being
+measured: ISLA below full data on the DrivAerML interior ladder, known only
+on the removed similarity-gauge variant (@tbl-scoreboard-interior-sg), and
+GeoTransolver's and Transolver's consistency with a Horvitz–Thompson
+centroid on the wings, measured on DrivAerML only and only as an ablation.
+The live status of each item, with its preregistered bar, is in
+@sec-program-status.
 
-- **ISLA on 510 and 1,260 wing cases**: not yet
-  measured. The unit-direction baselines' values on those rungs are in
-  results/udrvl_510_reduction_2026-09-12.json,
-  results/udrv_1260_reduction_2026-09-15.json and
-  results/udrv_1260_transolver_2026-09-16.json.
-- **The remaining wing rungs at the reporting protocol.** The 35-case rung
-  is measured at 200,000 cells (@tbl-scoreboard-200k-wings); the 105-,
-  510- and 1,260-case rungs, the geometry ladders and the fixed angle are
-  training at that budget (@sec-program-status).
-- **ISLA below full data on the DrivAerML interior ladder**, measured only
-  on a variant that this chapter reports in a diagnostic note
-  (@tbl-scoreboard-interior-sg); the surface ladder is measured on ISLA at
-  the reporting protocol (@tbl-scoreboard-200k), and the full-data interior
-  row is (@tbl-scoreboard-200k-interior).
-- **The baselines' consistency with a Horvitz–Thompson centroid on the
-  wings.** It is measured on DrivAerML only, and only as a ablation.
-- **Multi-head slice routing at 435 cars.** On a one-car instrument eight
-  independent routings per block lowered ISLA's floor by 19%; the run at the
-  full training set is in progress (@sec-nb-heads435-prereg).
-
-::: {.callout-note collapse="true" title="The closed line: oversampling the far wake"}
-The far-wake deficit carries ISLA's interior eddy-viscosity gap. The one
-remedy tested, oversampling the far field in the interior training queries
-with exact measure weights, makes every field worse. Trained that way and
-scored on the standard uniform interior sample, the arm is worse than the
-similarity-gauge interior variant (diagnostic) it was built from on every field and in
-every wall-distance band (pressure, velocity and eddy viscosity
+::: {.callout-note collapse="true" title="The closed line: oversampling the far wake (removed variant, diagnostic)"}
+At the exploration budget ISLA's interior eddy-viscosity deficit sat in the
+far wake (at the reporting protocol it is 2%, @tbl-scoreboard-200k-interior).
+The one remedy tested, oversampling the far field in the interior training
+queries with exact measure weights, makes every field worse. Trained that
+way and scored on the standard uniform interior sample, the arm is worse
+than the similarity-gauge interior variant (diagnostic) it was built from on
+every field and in every wall-distance band (pressure, velocity and eddy
+viscosity
 `{python} f"{fw['two_seed_mean']['pressure_l2']/fw['reference_three_seed_fp32']['pressure_l2']-1:+.0%}"`,
 `{python} f"{fw['two_seed_mean']['velocity_l2']/fw['reference_three_seed_fp32']['velocity_l2']-1:+.0%}"` and
 `{python} f"{fw['two_seed_mean']['nut_l2']/fw['reference_three_seed_fp32']['nut_l2']-1:+.0%}"`;
