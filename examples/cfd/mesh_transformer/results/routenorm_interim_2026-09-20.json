@@ -1,6 +1,74 @@
 {
   "study": "ROUTE-NORM: cosine routing (T = 10) against linear routing at 100,000 cells, two seeds, float32 at 200,000 cells",
   "configurations": {
+    "cars|cos|w1024|lr1e-3": {
+      "dataset": "cars",
+      "routing": "cosine",
+      "width": 1024,
+      "lr": "1e-3",
+      "runs": {
+        "rn_cos_w1024_lr1e_3_c100k_seed42": 0.04229484995206197,
+        "rn_cos_w1024_lr1e_3_c100k_seed43": 0.042623634139696755
+      },
+      "status": "complete",
+      "seeds": [
+        0.04229484995206197,
+        0.042623634139696755
+      ],
+      "mean": 0.042459242045879364,
+      "seed_spread": 0.007773622273336667
+    },
+    "cars|cos|w1024|lr5e-4": {
+      "dataset": "cars",
+      "routing": "cosine",
+      "width": 1024,
+      "lr": "5e-4",
+      "runs": {
+        "rn_cos_w1024_lr5e_4_c100k_seed42": 0.04197296996911367,
+        "rn_cos_w1024_lr5e_4_c100k_seed43": 0.0425144632657369
+      },
+      "status": "complete",
+      "seeds": [
+        0.04197296996911367,
+        0.0425144632657369
+      ],
+      "mean": 0.042243716617425285,
+      "seed_spread": 0.012901000263304985
+    },
+    "cars|cos|w1536|lr1e-3": {
+      "dataset": "cars",
+      "routing": "cosine",
+      "width": 1536,
+      "lr": "1e-3",
+      "runs": {
+        "rn_cos_w1536_lr1e_3_c100k_seed42": 0.04803456862767538,
+        "rn_cos_w1536_lr1e_3_c100k_seed43": 0.04664505024751028
+      },
+      "status": "complete",
+      "seeds": [
+        0.04803456862767538,
+        0.04664505024751028
+      ],
+      "mean": 0.04733980943759283,
+      "seed_spread": 0.029789192482202687
+    },
+    "cars|cos|w1536|lr5e-4": {
+      "dataset": "cars",
+      "routing": "cosine",
+      "width": 1536,
+      "lr": "5e-4",
+      "runs": {
+        "rn_cos_w1536_lr5e_4_c100k_seed42": 0.04774304231007894,
+        "rn_cos_w1536_lr5e_4_c100k_seed43": 0.04433941841125488
+      },
+      "status": "complete",
+      "seeds": [
+        0.04774304231007894,
+        0.04433941841125488
+      ],
+      "mean": 0.046041230360666915,
+      "seed_spread": 0.07676293512140653
+    },
     "cars|cos|w192|lr1e-3": {
       "dataset": "cars",
       "routing": "cosine",

@@ -189,9 +189,17 @@ frame. The structural alternative bounds the logits: route on the cosine
 between the token state and a learned prototype per slice at a fixed
 temperature (`routing_norm="cosine"`), so no block can reach the one-slice
 state however its weights grow. ROUTE-NORM (@sec-nb-routenorm-prereg)
-tests it at the measured collapse rates on two datasets; if it holds at
-neutral accuracy, the rule above becomes unnecessary and the default
-changes.
+tests it at the measured collapse rates on two datasets. On DrivAerML the
+test is complete (@sec-nb-routenorm-cars-verdict and its addenda): every
+cosine lane at a collapse rate trained cleanly to epoch 500, including 768
+wide at 1e-3 (four times the rule rate) and 48 layers at 2.5e-4 (a
+configuration linear routing could not train at any rate), the routing
+probe finds at least 12 effective slices in every block, and accuracy at
+the rule rates is neutral (within 1% at 192 and 384, 2% at 768). The rule
+above therefore becomes a recommendation for the best rate rather than a
+safety limit under cosine routing; the default changes once the 510-wing
+lanes confirm the second dataset (their linear control sits on the plateau
+at epoch 60 while the cosine lanes train normally).
 :::
 
 ## Evaluation and the inference sampler {#sec-using-sampler}

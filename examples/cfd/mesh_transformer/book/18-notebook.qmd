@@ -22328,3 +22328,24 @@ ladder read 0.0411 / 0.0413 / untrainable. The last 1,536-wide seed
 (5e-4, seed 43) reads 0.0443, giving that pair 0.0460 with a 7% split; the
 widest lane stays the worst at either rate. Remaining: the second
 GeoTransolver 2,048 seed at 1e-3 and the six wing lanes.
+
+**Addendum, GeoTransolver at 2,048 wide, both seeds (2026-09-21, 06:30
+EDT); the DrivAerML half of ROUTE-NORM is complete.** The second seed at
+1e-3 reads 0.0407, so GeoTransolver-2,048 scores **0.0403** (0.0407 /
+0.0399) at 1e-3 and 0.0408 (0.0407 / 0.0408) at 3e-4. That corrects the
+reading two addenda above, which quoted the first seed alone: the doubling
+from 1,024 to 2,048 wide buys GeoTransolver 0.7% (0.0406 to 0.0403), after
+6.7% for 256 to 512 and 2.6% for 512 to 1,024, so **GeoTransolver's width
+ladder saturates too**, at about 0.040 and 570M parameters. ISLA's best,
+0.0406 at 384 wide and 48 layers under cosine routing (34M parameters), is
+0.7% above that value, inside seed noise for both models. The capacity
+picture on this task is therefore not "GeoTransolver keeps improving where
+ISLA stops" but **both architectures reach the same floor, about 0.040,
+and ISLA reaches it at one seventeenth of the parameters** (34M against
+570M) and at about a fifth of GeoTransolver-1,024's training memory
+(@sec-equal-budget); GeoTransolver's ladder is the slower-saturating one,
+needing 1,024 wide to come within 1% of the floor where ISLA needs 384
+wide and 24 layers under cosine routing. All thirty DrivAerML lanes of
+ROUTE-NORM are now scored (results/routenorm_interim_2026-09-20.json,
+refreshed); the six wing lanes, at epoch 60 of 500 and advancing about 3.5
+epochs per hour, decide the second dataset in about five days.
