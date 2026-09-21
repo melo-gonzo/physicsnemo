@@ -22249,3 +22249,19 @@ tracks accuracy loss continuously above the sweet spot rather than
 switching to the plateau. Both halves of the "collapse removed" clause
 therefore hold on DrivAerML; the wing lanes decide whether it holds on the
 second dataset.
+
+**Addendum, the 1,024-wide cosine lanes (2026-09-21, 01:20 EDT).** The
+first rung of the ladder above 768 without a rate confound is scored:
+cosine ISLA at 1,024 wide reads **0.0423 at 5e-4** (0.0420 / 0.0425) and
+**0.0425 at 1e-3** (0.0423 / 0.0426), against linear 1,024 at its rule rate
+of 1.875e-4 at 0.0429 (0.0417 / 0.0441). The seed split of the linear lane
+(6%) closes to 1% under cosine routing at either rate, as at 768, and the
+two rates agree within 0.5%, so 1,024 is neither rate-limited nor
+seed-limited under the bounded logits; it is simply worse than 768
+(0.0409) and 384 (0.0411 linear, 0.0413 cosine) by 3%. The cosine width
+ladder on the cars therefore reads 0.0449 / 0.0413 / 0.0409 / 0.0423 at
+192 / 384 / 768 / 1,024, flat from 384 to 768 and declining after, and the
+CAP-435 conclusion that ISLA's capacity axis saturates at about 34M to
+134M parameters on this task holds with the rate explanation removed. The
+1,536-wide cosine lanes and the 2,048-wide GeoTransolver lanes are scored
+on the pump's next pass.
