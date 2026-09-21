@@ -23078,7 +23078,11 @@ sign; *refuted* for a field if the ratio crosses one with seeds agreeing;
 eddy viscosity is reported without a prior (the cars' ratio is 0.98). A
 lane that reaches the mean-field plateau (validation loss flat at the
 field-variance level after epoch 20) is reported as such and rerun at
-half its rate. The Reynolds and angle-of-attack extrapolation splits
+half its rate. Scoring draws 100,000 interior queries per test case (the
+training count; each case has about 177,000 interior points) for both
+architectures, because ISLA's interacting-query configuration is deployed
+at its training query count (@sec-interior-companion); fixed before the
+first lane finished. The Reynolds and angle-of-attack extrapolation splits
 follow in their own entry once the full-split lanes are accepted.
 
 ## 2026-09-21 — Acceptance, AIRFRANS-INT: all six lanes alive after two false starts (a missing Hydra package header on the new model configurations; the signed distance stored without a channel axis), about one epoch per minute {#sec-nb-airfrans-acceptance}
