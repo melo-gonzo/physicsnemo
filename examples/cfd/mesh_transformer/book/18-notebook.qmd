@@ -22286,3 +22286,29 @@ rate-limited, and a first cosine configuration reaches GeoTransolver's best
 value at 34M parameters against its 143M. The 48-layer cosine lanes
 (epoch 390), the cosine interior pair (epoch 455), the 2,048-wide
 GeoTransolver lanes and the wing lanes remain to be scored.
+
+**Addendum, the cosine interior pair and GeoTransolver at 2,048 wide
+(2026-09-21, 03:40 EDT).** The interior configuration under cosine routing
+at 1e-3, the rate at which the linear interior pair rose to the mean-field
+plateau (@sec-nb-ratevol-verdict), finished clean on both seeds and scores
+**0.0500 / 0.0645 / 0.0870** on pressure / velocity / eddy viscosity
+(seeds: pressure 0.0520 / 0.0481, velocity 0.0635 / 0.0654, eddy viscosity
+0.0858 / 0.0882), against the linear row at 5e-4 of 0.0546 / 0.0712 /
+0.0857. The preregistered prediction was "clean, within 5% of the linear
+row"; the lanes are clean and **8% better on pressure and 9% better on
+velocity**, past the bar in the favourable direction, with eddy viscosity
+level (1.5% worse). The same readout, kernel and training count as the
+linear lanes, so the whole difference is the doubled rate that cosine
+routing made survivable. Against GeoTransolver-volume the interior ratios
+move to 0.95 on pressure (from 0.87), 1.56 on velocity (from 1.42) and 0.97
+on eddy viscosity (from 0.98); ISLA's pressure seed spread is again 8%, so
+the pressure ratio carries that caveat. GeoTransolver at 2,048 wide (about
+570M parameters) reads **0.0399** at 1e-3 (seed 43; seed 42 still training)
+and 0.0407 / 0.0408 at 3e-4: its width ladder continues past 1,024
+(0.0406) to a new best of 0.0399, 2% below ISLA's best of 0.0407 (cosine,
+384 wide and 24 layers, 34M parameters). The capacity picture is now
+sharp: GeoTransolver's error keeps falling with parameters to at least 570M;
+ISLA's stops falling at about 34M in either routing form and is matched by
+GeoTransolver only at four times the parameters, exceeded at seventeen
+times. The 48-layer cosine lanes, the last 1,536 seed and the wing lanes
+remain.
