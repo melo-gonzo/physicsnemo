@@ -22906,3 +22906,88 @@ error grows less from `full` to `reynolds` (and to `aoa`) generalizes
 better, with a 10% difference in growth counting and anything less
 reported as a tie. Status: PLANNED; the converter is the next engineering
 step and is not started in this entry.
+
+## 2026-09-21 — Verdict, TERRITORY: GeoTransolver's slice territories move with the point pattern (bias excess 0.33 in agreement, slice centroids displaced by 0.64 body radii) and ISLA's nearly do not (0.06 and 0.04), so mechanism M1 is supported for GeoTransolver; ISLA misses its own "unchanged" bars by small margins that the deep blocks carry {#sec-nb-territory-verdict}
+
+**Setting.** TERRITORY (@sec-nb-territory-prereg) asked whether the
+discretization results have the mechanism the book gives them: that a
+GeoTransolver slice partitions the *sample* and an ISLA slice partitions
+the *surface*. The uniform-trained ISLA (192 wide) and GeoTransolver (256
+wide) checkpoints from the iso-cost study (435 DrivAerML cars, 100,000
+cells) were run in float32 on the first four validation cars under three
+independent draws of each car's surface at 100,000 expected cells: two
+uniform draws (recipe seeds 11 and 22) and the 10:1-biased Poisson draw
+(seed 33). Per block, every token's dominant slice was recorded; tokens of
+one draw were matched to their nearest token of another on the surface
+(positions restored to the dataset frame; the bench pipeline's subtracted
+center is carried through the model's forward-kwargs spec) and the
+fraction with the same dominant slice is the **agreement**. The two uniform
+draws give the **resampling floor**; the **bias excess** is the floor
+minus the agreement with the biased draw. Artifact:
+`results/territory_2026-09-21.json` (probe
+`results/territory_probe_2026-09-21.py`, reduction
+`results/territory_reduce_2026-09-21.py`, job 812907). Two earlier
+attempts of the same job were discarded before any reading: the first
+because the seed override had not reached the sampler (the two "uniform"
+draws were identical, the case the preregistration named), the second
+because the uniform and biased draws shared the same seed and therefore
+the same 320,000-cell parent sample (a third of their tokens coincided
+exactly, inflating the biased agreement above the floor).
+
+**What we saw.** Median over the twelve blocks, four cars, GeoTransolver
+over its eight heads:
+
+| model | floor $A(\text{unif}_1, \text{unif}_2)$ | $A(\text{unif}_1, \text{biased})$ | bias excess | excess, deep blocks 8 to 11 | anchor or centroid displacement [body RMS radii] |
+|---|--:|--:|--:|--:|--:|
+| ISLA (192 wide) | 0.71 | 0.65 | **+0.06** | +0.08 to +0.09 | **0.039** |
+| GeoTransolver (256 wide) | 0.63 | 0.27 | **+0.33** | +0.31 to +0.34 | **0.64** |
+
+: TERRITORY: dominant-slice agreement between draws and slice-anchor displacement, four DrivAerML validation cars at 100,000 expected cells, float32 (results/territory_2026-09-21.json). {#tbl-territory}
+
+The floors are well below one for both models: two independent uniform
+draws already disagree on the dominant slice of 30 to 40% of tokens,
+because the soft boundaries between slices move under any resampling and
+the deep blocks route sharply (ISLA's floor falls from 0.83 in block 2 to
+0.43 in block 10; GeoTransolver's from 0.69 to 0.48). What separates the
+models is what the biased draw costs *beyond* that floor. For
+GeoTransolver it costs 0.33 in median, in every block but the first (block
+0, whose routing is a function of the input embedding alone, costs 0.05),
+and its weight-averaged slice centroids move by 0.64 of the body's RMS
+radius: the slices are following the points. For ISLA it costs 0.06, and
+its anchors move by 0.039 of the body radius. A post hoc control that
+equalizes matching quality (keeping only matched pairs at least as close
+as a typical uniform-to-uniform pair; a third of the biased pairs, since
+the biased draw is sparse over half the body) leaves the picture
+unchanged: ISLA +0.05, GeoTransolver +0.24.
+
+**Verdict against the bars.** **M1 is supported for GeoTransolver**: its
+bias excess (0.33) exceeds the 0.20 bar and its centroid displacement
+(0.64) exceeds the 0.05 bar, each by a wide margin. **ISLA misses its own
+"unchanged" clauses by small margins**: its excess is 0.056 against a bar
+of 0.05, its anchor displacement 0.039 against 0.02, and the second
+prediction (agreement under the biased draw within 0.05 of the floor in
+every block) holds in blocks 0 to 5 (0.026 to 0.058) and fails in blocks 6
+to 11 (0.058 to 0.092). ISLA's territories are therefore *nearly*, not
+exactly, functions of the surface: a 10:1 change of density costs it about
+one sixth of what it costs GeoTransolver in territory agreement and one
+sixteenth in anchor motion, and the residual is concentrated in the deep
+blocks. The mechanism of that residual is not measured here; the natural
+candidate is the quadrature noise of the biased draw (Horvitz–Thompson
+weights spanning a decade give a slice over the sparse half of the body
+fewer effective samples), which is also the book's explanation of ISLA's
+1.07x error growth under the same draw and its 8% training-law
+dependence. The picture of one car (block 6) and the per-block curves go
+to @sec-training-law as @fig-territory-maps and
+@fig-territory-agreement.
+
+**What it changes.** The mechanism sentence of @sec-training-law ("the
+baselines' slice aggregates are averages over the kept points; ISLA's are
+measure-weighted integrals") now has a direct measurement behind it, with
+the qualification that ISLA's routing is not perfectly draw-invariant. The
+distinction between M1 (territories move) and M2 (aggregates drift) is
+decided for GeoTransolver in favor of M1 at the level of the routing;
+whether the aggregates *also* drift once the territories are held fixed
+is not measured and would need a controlled-routing probe. Single
+dataset: the wings' checkpoints at 100,000 cells exist (the iso-cost
+twins) and the same probe runs on them unchanged; that twin is the next
+step before the result is quoted as general.

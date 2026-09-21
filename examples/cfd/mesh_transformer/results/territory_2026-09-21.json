@@ -1,0 +1,320 @@
+{
+  "study": "TERRITORY: slice territories of the uniform-trained ISLA-192 and GeoTransolver-256 checkpoints (435 DrivAerML cars, 100,000 cells) on four validation cars under two independent uniform draws and the 10:1-biased draw at 100,000 expected cells, float32",
+  "definitions": {
+    "agreement": "fraction of draw-A tokens whose dominant slice equals that of the nearest draw-B token (GeoTransolver: mean over heads)",
+    "floor": "agreement(unif1, unif2)",
+    "excess": "floor - agreement(unif1, biased)",
+    "displacement": "RMS over slices of |anchor(unif1) - anchor(biased)| / RMS token radius"
+  },
+  "models": {
+    "ISLA": {
+      "run": "iso_dr_isla_w192_c100k_seed42",
+      "n_cases": 4,
+      "uniform_draws_identical": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "median_nn_distance_unif_unif": 0.0014885211712680757,
+      "median_nn_distance_unif_biased": 0.0023531459737569094,
+      "per_block": [
+        {
+          "block": 0,
+          "floor": 0.7410375,
+          "agreement_biased": 0.6955825,
+          "excess": 0.04545500000000002,
+          "displacement": 0.0115076694637537
+        },
+        {
+          "block": 1,
+          "floor": 0.7140825,
+          "agreement_biased": 0.6600625,
+          "excess": 0.05401999999999996,
+          "displacement": 0.01979936845600605
+        },
+        {
+          "block": 2,
+          "floor": 0.8336950000000001,
+          "agreement_biased": 0.808035,
+          "excess": 0.025660000000000127,
+          "displacement": 0.012390932068228722
+        },
+        {
+          "block": 3,
+          "floor": 0.76888,
+          "agreement_biased": 0.73949,
+          "excess": 0.029390000000000027,
+          "displacement": 0.04590621963143349
+        },
+        {
+          "block": 4,
+          "floor": 0.7845249999999999,
+          "agreement_biased": 0.7485274999999999,
+          "excess": 0.035997500000000016,
+          "displacement": 0.028757041320204735
+        },
+        {
+          "block": 5,
+          "floor": 0.73989,
+          "agreement_biased": 0.6901200000000001,
+          "excess": 0.04976999999999998,
+          "displacement": 0.034390103071928024
+        },
+        {
+          "block": 6,
+          "floor": 0.6979525,
+          "agreement_biased": 0.6401425000000001,
+          "excess": 0.05780999999999992,
+          "displacement": 0.05224648863077164
+        },
+        {
+          "block": 7,
+          "floor": 0.66475,
+          "agreement_biased": 0.59948,
+          "excess": 0.06526999999999994,
+          "displacement": 0.06433624029159546
+        },
+        {
+          "block": 8,
+          "floor": 0.51847,
+          "agreement_biased": 0.43288,
+          "excess": 0.08559,
+          "displacement": 0.05412318930029869
+        },
+        {
+          "block": 9,
+          "floor": 0.4679625,
+          "agreement_biased": 0.37611249999999996,
+          "excess": 0.09185000000000004,
+          "displacement": 0.05684470757842064
+        },
+        {
+          "block": 10,
+          "floor": 0.43147250000000004,
+          "agreement_biased": 0.342865,
+          "excess": 0.08860750000000006,
+          "displacement": 0.04338870942592621
+        },
+        {
+          "block": 11,
+          "floor": 0.47293,
+          "agreement_biased": 0.3884949999999999,
+          "excess": 0.0844350000000001,
+          "displacement": 0.026555873453617096
+        }
+      ],
+      "summary": {
+        "floor_median": 0.7060175,
+        "floor_min": 0.43147250000000004,
+        "agreement_biased_median": 0.6501025,
+        "agreement_biased_min": 0.342865,
+        "excess_median": 0.05591499999999994,
+        "excess_max": 0.09185000000000004,
+        "displacement_median": 0.038889408111572266,
+        "displacement_max": 0.06433624029159546
+      }
+    },
+    "GeoTransolver": {
+      "run": "iso_dr_gt_unit_w256_c100k_seed42",
+      "n_cases": 4,
+      "uniform_draws_identical": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "median_nn_distance_unif_unif": 0.0014885211712680757,
+      "median_nn_distance_unif_biased": 0.0023531459737569094,
+      "per_block": [
+        {
+          "block": 0,
+          "floor": 0.6866340625,
+          "agreement_biased": 0.6416765624999999,
+          "excess": 0.044957500000000095,
+          "displacement": 0.414406418800354
+        },
+        {
+          "block": 1,
+          "floor": 0.6718528125,
+          "agreement_biased": 0.3696678125,
+          "excess": 0.3021849999999999,
+          "displacement": 0.46307024359703064
+        },
+        {
+          "block": 2,
+          "floor": 0.694455,
+          "agreement_biased": 0.41234656249999996,
+          "excess": 0.2821084375000001,
+          "displacement": 0.4725798964500427
+        },
+        {
+          "block": 3,
+          "floor": 0.6941165625000001,
+          "agreement_biased": 0.3750384375,
+          "excess": 0.3190781250000001,
+          "displacement": 0.6463660597801208
+        },
+        {
+          "block": 4,
+          "floor": 0.67158,
+          "agreement_biased": 0.34845562500000005,
+          "excess": 0.3231243749999999,
+          "displacement": 0.6435192227363586
+        },
+        {
+          "block": 5,
+          "floor": 0.647195625,
+          "agreement_biased": 0.266670625,
+          "excess": 0.38052500000000006,
+          "displacement": 0.7742367386817932
+        },
+        {
+          "block": 6,
+          "floor": 0.5899099999999999,
+          "agreement_biased": 0.23728500000000002,
+          "excess": 0.3526249999999999,
+          "displacement": 0.6823795437812805
+        },
+        {
+          "block": 7,
+          "floor": 0.611536875,
+          "agreement_biased": 0.27115406249999996,
+          "excess": 0.3403828125,
+          "displacement": 0.6964970827102661
+        },
+        {
+          "block": 8,
+          "floor": 0.506265,
+          "agreement_biased": 0.1666728125,
+          "excess": 0.3395921875,
+          "displacement": 0.6368129253387451
+        },
+        {
+          "block": 9,
+          "floor": 0.5404378125,
+          "agreement_biased": 0.21267312500000002,
+          "excess": 0.3277646875,
+          "displacement": 0.6354575157165527
+        },
+        {
+          "block": 10,
+          "floor": 0.506956875,
+          "agreement_biased": 0.179323125,
+          "excess": 0.32763374999999995,
+          "displacement": 0.6173973083496094
+        },
+        {
+          "block": 11,
+          "floor": 0.4806559375,
+          "agreement_biased": 0.1706996875,
+          "excess": 0.30995625000000004,
+          "displacement": 0.6116545796394348
+        }
+      ],
+      "summary": {
+        "floor_median": 0.62936625,
+        "floor_min": 0.4806559375,
+        "agreement_biased_median": 0.26891234374999995,
+        "agreement_biased_min": 0.1666728125,
+        "excess_median": 0.3253790624999999,
+        "excess_max": 0.38052500000000006,
+        "displacement_median": 0.6361352205276489,
+        "displacement_max": 0.7742367386817932
+      }
+    }
+  },
+  "distance_controlled": {
+    "definition": "agreement restricted to matched pairs whose nearest-neighbour distance is at most the median uniform-uniform nearest-neighbour distance of the same car (equalizes matching quality between the sparse half of the biased draw and the uniform draw); post hoc, labeled",
+    "ISLA": {
+      "floor_ctrl": [
+        0.6827799999999999,
+        0.644925,
+        0.8012250000000001,
+        0.7100599999999999,
+        0.74136,
+        0.67633,
+        0.626565,
+        0.61817,
+        0.4082,
+        0.37261500000000003,
+        0.32926,
+        0.358
+      ],
+      "biased_ctrl": [
+        0.6753522983736585,
+        0.6039681381051631,
+        0.7827583802757363,
+        0.6866258519853077,
+        0.7189419616089281,
+        0.6402266224930543,
+        0.5643658134676093,
+        0.5601650857436952,
+        0.3229197278242586,
+        0.2868367273836876,
+        0.24735924153695954,
+        0.2712710272845425
+      ],
+      "excess_ctrl": [
+        0.007427701626341432,
+        0.04095686189483683,
+        0.018466619724263778,
+        0.023434148014692235,
+        0.022418038391071926,
+        0.0361033775069457,
+        0.06219918653239076,
+        0.05800491425630483,
+        0.08528027217574141,
+        0.08577827261631243,
+        0.08190075846304046,
+        0.08672897271545749
+      ],
+      "kept_fraction_biased": 0.3207725
+    },
+    "GeoTransolver": {
+      "floor_ctrl": [
+        0.607781875,
+        0.58176875,
+        0.6075550000000001,
+        0.6100806249999999,
+        0.58716875,
+        0.56675375,
+        0.49868375,
+        0.551338125,
+        0.401331875,
+        0.45959500000000003,
+        0.42572125,
+        0.381029375
+      ],
+      "biased_ctrl": [
+        0.5589521494477601,
+        0.283355279958768,
+        0.3527227768348389,
+        0.33159123485595754,
+        0.3454502035111183,
+        0.2564665255468174,
+        0.23827270145463597,
+        0.341543328074595,
+        0.15727393668196268,
+        0.23751290097679437,
+        0.2027897988745621,
+        0.1592327655052412
+      ],
+      "excess_ctrl": [
+        0.048829725552239966,
+        0.2984134700412319,
+        0.2548322231651612,
+        0.2784893901440424,
+        0.2417185464888817,
+        0.3102872244531825,
+        0.260411048545364,
+        0.20979479692540504,
+        0.24405793831803732,
+        0.22208209902320566,
+        0.22293145112543788,
+        0.2217966094947588
+      ],
+      "kept_fraction_biased": 0.3207725
+    }
+  }
+}

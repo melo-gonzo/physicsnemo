@@ -54,6 +54,17 @@ cosine) and 0.0406 at 136M (48 layers); GeoTransolver 0.0406 at 143M and
 100k; 500 epochs converged. Do not state: "GeoTransolver keeps improving
 where ISLA stops".
 
+**Slice territories (TERRITORY, single dataset, 2026-09-21).** Uniform-trained
+ISLA-192 and GeoTransolver-256 (435 cars, 100k) on four validation cars under
+two independent uniform draws and the 10:1-biased draw: dominant-slice
+agreement floor (unif vs unif) 0.71 / 0.63 (ISLA / GeoTransolver), agreement
+unif vs biased 0.65 / 0.27, bias excess +0.06 / +0.33, anchor (centroid)
+displacement 0.039 / 0.64 body RMS radii. Say: "GeoTransolver's slices follow
+the points; ISLA's nearly do not (excess one sixth, anchor motion one
+sixteenth)". Do not say ISLA's routing is exactly draw-invariant: it missed
+its preregistered unchanged bars (0.056 vs 0.05; 0.039 vs 0.02), the residual
+sits in blocks 6 to 11. results/territory_2026-09-21.json.
+
 **Discretization (two datasets).** Trained under the area-proportional law
 and scored on the uniform draw: GeoTransolver 2.6x (wings, 200k) / 7.9x
 (cars, 100k) worse than its uniform-trained twin, Transolver 2.4x / 9.6x,

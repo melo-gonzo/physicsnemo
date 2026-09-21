@@ -132,6 +132,10 @@ for run in args.runs:
                  f"output_dir={out_dir}", *extra]
     if args.seed is not None:
         overrides.append(f"++training.seed={args.seed}")   # the reader derives its per-index generator from training.seed
+    if terr_dir is not None:
+        # The batch carries forward_kwargs only; route the subtracted center (bench yamls: store_center_as: center)
+        # through the forward-kwargs spec and pop it before the model call.
+        overrides.append("+forward_kwargs.center=global_data.center")
     with hydra.initialize_config_dir(config_dir=str(RECIPE / "conf"), version_base=None):
         cfg = hydra.compose(config_name="infer", overrides=overrides)
     _, val_loader, _, _ = build_dataloaders(cfg)
@@ -152,6 +156,7 @@ for run in args.runs:
         for batch in val_loader:
             REC["soft"].clear(); REC["gt"].clear(); BLK.clear()
             fk = {k: (v.cuda() if torch.is_tensor(v) else v) for k, v in batch["forward_kwargs"].items()}
+            center_fk = fk.pop("center", None)
             model(**fk)
             def _find(obj, key, depth=0):
                 """Depth-first search of a nested dict / TensorDict / object for a tensor under ``key``."""
@@ -172,7 +177,9 @@ for run in args.runs:
                     if found is not None:
                         return found
                 return None
-            center = _find(batch, "center")
+            center = center_fk if center_fk is not None else _find(batch, "center")
+            if terr_dir is not None and center is None:
+                raise RuntimeError("center not found in the batch; the territory dumps would not be un-centered")
             if n_cases == 0:
                 try:
                     print("batch keys:", list(batch.keys()), "center found:", center is not None, flush=True)

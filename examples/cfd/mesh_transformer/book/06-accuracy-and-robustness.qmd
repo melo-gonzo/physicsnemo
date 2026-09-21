@@ -933,7 +933,8 @@ The mechanism is the one @sec-isla-quadrature teaches: the baselines' slice
 aggregates are averages over the kept points, so the trained function
 absorbs the point pattern it was fitted on and is wrong on any other;
 ISLA's are measure-weighted integrals, the same under any draw that
-carries its weights. Two qualifications travel with the figure.
+carries its weights. @sec-territories looks at this directly in the two
+trained networks. Two qualifications travel with the figure.
 ISLA is not indifferent: 8% on the cars is past the 5% bar the
 DrivAerML twin preregistered (@sec-nb-trainarea-dr-verdict), so the
 statement is "weakly dependent" beside baselines that are dependent by
@@ -944,6 +945,106 @@ much larger on the cars than on the wings although the cars' cell-area
 spread is the smaller (coefficient of variation 2.3 against 3.3), which
 the cell-area spread alone does not explain and is an open question
 (@sec-program-status).
+
+### Where the slices sit: territories under a change of draw {#sec-territories}
+
+**GeoTransolver's slices follow the points and ISLA's nearly do not: under
+the 10:1-biased draw GeoTransolver's slice territories lose a third of
+their agreement with the uniform draw beyond what a fresh uniform draw
+costs, and its slice centroids move by 0.6 of the body's radius; ISLA loses
+0.06 and its anchors move by 0.04.** The mechanism above was argued from
+the equations; the probe here looks at the routing of the two
+uniform-trained 100,000-cell checkpoints (ISLA at width 192, GeoTransolver
+at width 256, both from @sec-equal-budget) on four validation cars under
+three independent draws of the same surface: two uniform draws and the
+10:1-biased draw of @fig-sampling-laws. For every
+token the probe records its **dominant slice** in each block (the slice
+with the largest read-back weight for ISLA, the largest slice weight for
+GeoTransolver, head 0 shown), matches every token of one draw to its
+nearest token of another on the surface, and counts how often the dominant
+slice agrees. Two uniform draws set the **resampling floor**: soft
+boundaries move a little under any resampling, so the floor is below one.
+The **bias excess** is how much further the agreement falls when the
+second draw is the biased one, and it is the quantity that separates the
+two models.
+
+```{python}
+#| label: fig-territory-maps
+#| fig-cap: >
+#|   Slice territories of one validation car at block 6, one half of the
+#|   body seen from the side, each point colored by its dominant slice (256
+#|   slices, colors repeat). Top row ISLA, bottom row GeoTransolver; left
+#|   column the uniform draw, right column the 10:1-biased draw of the same
+#|   surface (denser toward the front). How to read this: colors are slice
+#|   identities within one model and are not comparable between rows; a
+#|   territory that keeps its place and its outline between the two columns is
+#|   a function of the surface, one that moves is a function of the sample.
+#|   The agreement printed in each right-hand panel is the fraction of its
+#|   points whose slice equals that of the nearest uniform-draw point. Data:
+#|   results/territory_pictures_2026-09-21.npz.
+#| code-fold: true
+T = np.load(RES / "territory_pictures_2026-09-21.npz")
+cmap = plt.get_cmap("tab20")
+fig, axs = plt.subplots(2, 2, figsize=(10.0, 5.6), sharex=True, sharey=True)
+for i, (name, label) in enumerate((("isla", STYLE["isla_ref"]["label"]), ("gt", STYLE["gt"]["label"]))):
+    for j, draw in enumerate(("unif", "biased")):
+        ax = axs[i, j]; p = T[f"{name}_{draw}_points"]; d = T[f"{name}_{draw}_dominant"].astype(int)
+        m = p[:, 1] > 0                                  # one half of the car
+        ax.scatter(p[m, 0], p[m, 2], c=cmap(d[m] % 20), s=1.2, linewidths=0, rasterized=True)
+        ax.set_aspect("equal"); ax.grid(False)
+        ax.set_title(f"{label}, {'uniform draw' if draw == 'unif' else '10:1-biased draw'}", fontsize=9.5, loc="left")
+        if draw == "biased":
+            ax.text(0.98, 0.04, f"agreement with the uniform draw {float(T[f'{name}_agreement_block']):.2f}", transform=ax.transAxes, ha="right", va="bottom", fontsize=9, path_effects=halo())
+for ax in axs[-1]: ax.set_xlabel("x [m]")
+for ax in axs[:, 0]: ax.set_ylabel("z [m]")
+fig.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: fig-territory-agreement
+#| fig-cap: >
+#|   Territory agreement per block for the two models. Filled markers: the
+#|   resampling floor, the agreement between two independent uniform draws.
+#|   Open markers: the agreement between the uniform draw and the 10:1-biased
+#|   draw. The vertical distance between the two is the bias excess. How to
+#|   read this: the floor is below one for both models because soft
+#|   boundaries move under any resampling; what matters is whether the biased
+#|   draw costs more agreement than a fresh uniform draw does. Four validation
+#|   cars, 100,000 expected cells per draw, GeoTransolver averaged over its
+#|   eight heads. Data: results/territory_2026-09-21.json.
+#| code-fold: true
+R = json.load(open(RES / "territory_2026-09-21.json"))["models"]
+fig, ax = plt.subplots(figsize=(8.0, 4.0))
+for key, name in (("isla_ref", "ISLA"), ("gt", "GeoTransolver")):
+    kw = series_kwargs(key); pb = R[name]["per_block"]; x = [r["block"] for r in pb]
+    ax.plot(x, [r["floor"] for r in pb], marker=kw["marker"], color=kw["color"], ls="-", lw=1.4, ms=6, label=f"{STYLE[key]['label']}: two uniform draws (floor)")
+    ax.plot(x, [r["agreement_biased"] for r in pb], marker=kw["marker"], color=kw["color"], mfc="white", mew=1.6, ls="--", lw=1.2, ms=6, label=f"{STYLE[key]['label']}: uniform against 10:1-biased")
+ax.set_ylim(0, 1.0); ax.set_xticks(range(12)); ax.set_xlabel("slice block [index]"); ax.set_ylabel("dominant-slice agreement [–]")
+ax.legend(fontsize=8.5, loc="lower left", ncol=1)
+plt.show()
+```
+
+```{python}
+#| label: para-territory
+#| output: asis
+I, G = R["ISLA"]["summary"], R["GeoTransolver"]["summary"]
+print(f"In median over the twelve blocks, ISLA's agreement between two uniform draws is {I['floor_median']:.2f} and between the uniform and the biased draw {I['agreement_biased_median']:.2f}, "
+      f"a bias excess of {I['excess_median']:+.2f}; GeoTransolver's floor is {G['floor_median']:.2f} and its biased agreement {G['agreement_biased_median']:.2f}, an excess of {G['excess_median']:+.2f}. "
+      f"The anchors move accordingly: the RMS displacement of ISLA's slice anchors between the two draws is {I['displacement_median']:.3f} of the body's RMS radius in median over blocks, "
+      f"GeoTransolver's weight-averaged slice centroids move {G['displacement_median']:.2f}.")
+```
+
+Two qualifications. ISLA's territories are *nearly*, not exactly,
+functions of the surface: the excess of 0.06 is just past the 0.05 the
+probe preregistered as "unchanged", it is carried by the deep blocks (0.08
+to 0.09 in blocks 8 to 11 against 0.03 to 0.06 in the first six), and
+the anchors' 0.04 radii of motion is twice the 0.02 preregistered; the
+likely source is the quadrature noise of a draw whose weights span a
+decade, the same source the book gives for ISLA's 1.07x error growth under
+this draw. And the result is measured on one dataset; the wings'
+checkpoints at the same budget exist and the probe runs on them unchanged
+(@sec-nb-territory-verdict).
 
 ## Pose: a contract, not an accuracy edge {#sec-pose-contract}
 
