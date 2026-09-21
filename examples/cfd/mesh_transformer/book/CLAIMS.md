@@ -6,13 +6,73 @@ needs a number that is not here, it comes from the named artifact in
 `results/` or the named notebook anchor, and is added here. Anything listed
 under **Do not state** is deleted from the chapters wherever it appears.
 
-Conventions: "rel-L2" = relative L2 error of a field over the sampled points
-of one case, geometric or arithmetic mean over cases as the artifact defines
-(state which). "ISLA/GT" = ISLA error divided by GeoTransolver error (< 1 means
-ISLA more accurate). Seeds are 42/43 unless stated. Protocol P0 = the frozen
-recipe: 10,000 sampled surface points per case, 500 epochs, bf16, no
-augmentation, learning rate 1e-3 for ISLA and GeoTransolver (each one's best
-on the full split), 3e-3 for Transolver where stated.
+Conventions: "rel-L2" = area-weighted relative L2 error of a field over the
+sampled points of one case, mean over cases as the artifact defines (state
+which). In the chapters every cross-architecture ratio is **baseline ÷ ISLA**
+(above 1 favors ISLA); older sections of this ledger wrote "ISLA/GT" (ISLA
+divided by GeoTransolver, < 1 favoring ISLA) and are marked so. Seeds are
+42/43 unless stated. The reporting protocol (since 2026-09-18) is 200,000
+sampled cells per case, 500 epochs, bf16 training, float32 scoring, each
+architecture at its own best learning rate (GeoTransolver 3e-3, ISLA 1e-3 at
+width 192); 10,000 cells is the exploration budget and is labeled wherever
+quoted. Sections below that predate 2026-09-18 describe the exploration
+budget (their "P0") unless dated otherwise.
+
+## Current state, 2026-09-21 (read this section first)
+
+Everything the chapters state as current knowledge is summarized here; this
+list is the brief the 2026-09-21 book refresh was written from. Artifacts are
+named in the chapter captions and the notebook entries cited there.
+
+**The class (code, not evidence).** One origin-free frame; length unit
+`scale_mode="rms_distance"` (default) or `"total_measure"` (kept to reproduce
+pre-2026-09-18 lanes, marked for removal). Removed on 2026-09-20: `frame_mode`
+("centered"), `similarity_gauge`, `reference_length`; the legacy centered and
+similarity-gauge variants are *removed variants*, quoted only in collapsed
+diagnostic notes. Routing: `routing_norm="linear"` (default) or `"cosine"`
+(bounded logits); cosine is the default candidate pending the wing lanes.
+`query_mass="source_total"` (measure-rescale invariant passive readout).
+
+**Surface, DrivAerML 435 cars, 200,000 cells.** Parity: ISLA 0.0446,
+GeoTransolver 0.0445 at 3e-3, Transolver 0.0473 (0.998 / 1.06).
+Ladder GeoTransolver ÷ ISLA 0.83 / 0.86 / 0.92 / 0.97 / 1.00 at 27 / 54 /
+109 / 218 / 435 cars. Wings: 35-case rung 0.73 (0.72 at 10k); fixed-angle
+rung 0.69 (0.68 at 10k), Transolver 0.79; every model 20 to 25% better at
+200k, so the wing deficit is a property of the trained functions.
+
+**Capacity (100,000 cells, labeled scaling budget).** Linear routing has a
+rate ceiling ∝ 1/width and ≥ 1/depth whose failure is total routing collapse
+(one active slice per block). Cosine routing removes it on every lane at
+neutral accuracy at the rule rates (0.998 / 1.005 / 1.020 at 192 / 384 /
+768). Cosine ISLA ladder 0.0449 / 0.0413 / 0.0409 / 0.0423 / ~0.047 at 192
+/ 384 / 768 / 1,024 / 1,536; depth at 384: 0.0413 / 0.0407 / 0.0406 at 12 /
+24 / 48 layers. GeoTransolver 0.0447 / 0.0417 / 0.0406 / 0.0403 at 256 / 512
+/ 1,024 / 2,048. Both reach about 0.040: ISLA 0.0407 at 68M parameters (384 x 24,
+cosine) and 0.0406 at 136M (48 layers); GeoTransolver 0.0406 at 143M and
+0.0403 at 571M (estimated). At matched ~140M parameters the two are identical. Iso-memory: ISLA-384 × 100k
+0.0411 at 22 GB; GeoTransolver-1,024 0.0406 at 74 GB. Cells flat above
+100k; 500 epochs converged. Do not state: "GeoTransolver keeps improving
+where ISLA stops".
+
+**Discretization (two datasets).** Trained under the area-proportional law
+and scored on the uniform draw: GeoTransolver 2.6x (wings, 200k) / 7.9x
+(cars, 100k) worse than its uniform-trained twin, Transolver 2.4x / 9.6x,
+ISLA 0.99x / 1.08x ("weakly dependent", never "indifferent"). Uniform-trained
+under the 10:1 biased draw at 100k cells on the cars: GeoTransolver 8.7x,
+Transolver 5.3x, ISLA 1.07x.
+
+**Interior (200k cells and queries, DrivAerML).** Linear ISLA at 5e-4:
+GeoTransolver-volume ÷ ISLA 0.87 / 1.42 / 0.98 (pressure / velocity / eddy
+viscosity); cosine ISLA at 1e-3: 0.95 / 1.56 / 0.97. ISLA pressure seeds 8%
+apart. Interior lanes trained under `query_mass=geometric_mean`.
+
+**Pose (200k).** ISLA posed ÷ native 1.015; leads augmented GeoTransolver /
+Transolver by 12% / 21%.
+
+**Pending, never stated as results.** ROUTE-NORM wings (510-wing rung, days;
+35-wing rung and cosine 384 × 24 on the cars at 200k, hours), the
+cosine-default decision, SCALE-HL, the remaining wing rungs.
+
 
 ## Architectures and resources (chapter 2–4)
 

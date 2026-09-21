@@ -22415,3 +22415,19 @@ collapse clause, whose cars' twin appeared between epochs 20 and 90. The
 deep car lanes (384 wide, 24 layers, 5e-4 at 200,000 cells) read 0.0011 /
 0.0011 at epoch 45, on the trajectory of their 100,000-cell twins, at 91 GB
 peak memory and 0.41 s per step. Each lane has one queued successor.
+
+**Erratum (2026-09-21, 10:30 EDT): the parameter counts in the three
+addenda above.** The 24- and 48-layer cosine lanes were described as "34M
+parameters"; that is the 12-layer count. From the CAP-435 reduction: 384
+wide × 12 layers is 34.3M, × 24 layers 68.3M, × 48 layers 136.3M;
+GeoTransolver-1,024 is 142.7M and GeoTransolver-2,048 about 571M (four
+times the 1,024 count, estimated). The corrected reading: **at matched
+parameters, about 140M, the two architectures are identical** (ISLA 384 × 48
+under cosine routing 0.0406, GeoTransolver-1,024 0.0406); ISLA comes within
+1% of the floor at half GeoTransolver's parameters (68M against 143M),
+GeoTransolver reaches 0.0403 at four times ISLA's largest measured count.
+The phrases "one seventeenth of the parameters", "a quarter of the
+parameters" and "34M against 570M" in the addenda above are withdrawn;
+the artifact for the extension lanes with their parameter counts is
+results/routenorm_extension_2026-09-21.json (reduction
+results/routenorm_extension_reduce_2026-09-21.py).

@@ -1,0 +1,181 @@
+{
+  "study": "ROUTE-NORM extension lanes on DrivAerML: cosine width 1,024/1,536, cosine depth 24/48 at width 384, GeoTransolver 2,048, cosine interior at 1e-3; float32 at 200,000 cells, 48 validation cars, two seeds",
+  "configurations": {
+    "isla|cos|w1024|d12|lr5e-4": {
+      "runs": {
+        "rn_cos_w1024_lr5e_4_c100k_seed42": {
+          "pressure_l2": 0.04197296996911367
+        },
+        "rn_cos_w1024_lr5e_4_c100k_seed43": {
+          "pressure_l2": 0.0425144632657369
+        }
+      },
+      "params": 237508956,
+      "params_estimated": false,
+      "status": "complete",
+      "pressure_l2_seeds": [
+        0.04197296996911367,
+        0.0425144632657369
+      ],
+      "pressure_l2_mean": 0.042243716617425285
+    },
+    "isla|cos|w1024|d12|lr1e-3": {
+      "runs": {
+        "rn_cos_w1024_lr1e_3_c100k_seed42": {
+          "pressure_l2": 0.04229484995206197
+        },
+        "rn_cos_w1024_lr1e_3_c100k_seed43": {
+          "pressure_l2": 0.042623634139696755
+        }
+      },
+      "params": 237508956,
+      "params_estimated": false,
+      "status": "complete",
+      "pressure_l2_seeds": [
+        0.04229484995206197,
+        0.042623634139696755
+      ],
+      "pressure_l2_mean": 0.042459242045879364
+    },
+    "isla|cos|w1536|d12|lr5e-4": {
+      "runs": {
+        "rn_cos_w1536_lr5e_4_c100k_seed42": {
+          "pressure_l2": 0.04774304231007894
+        },
+        "rn_cos_w1536_lr5e_4_c100k_seed43": {
+          "pressure_l2": 0.04433941841125488
+        }
+      },
+      "params": 531636060,
+      "params_estimated": false,
+      "status": "complete",
+      "pressure_l2_seeds": [
+        0.04774304231007894,
+        0.04433941841125488
+      ],
+      "pressure_l2_mean": 0.046041230360666915
+    },
+    "isla|cos|w1536|d12|lr1e-3": {
+      "runs": {
+        "rn_cos_w1536_lr1e_3_c100k_seed42": {
+          "pressure_l2": 0.04803456862767538
+        },
+        "rn_cos_w1536_lr1e_3_c100k_seed43": {
+          "pressure_l2": 0.04664505024751028
+        }
+      },
+      "params": 531636060,
+      "params_estimated": false,
+      "status": "complete",
+      "pressure_l2_seeds": [
+        0.04803456862767538,
+        0.04664505024751028
+      ],
+      "pressure_l2_mean": 0.04733980943759283
+    },
+    "isla|cos|w384|d24|lr5e-4": {
+      "runs": {
+        "rn_cos_w384_d24_lr5e_4_c100k_seed42": {
+          "pressure_l2": 0.040333107113838196
+        },
+        "rn_cos_w384_d24_lr5e_4_c100k_seed43": {
+          "pressure_l2": 0.04100367923577627
+        }
+      },
+      "params": 68276016,
+      "params_estimated": false,
+      "status": "complete",
+      "pressure_l2_seeds": [
+        0.040333107113838196,
+        0.04100367923577627
+      ],
+      "pressure_l2_mean": 0.040668393174807235
+    },
+    "isla|cos|w384|d48|lr2.5e-4": {
+      "runs": {
+        "rn_cos_w384_d48_lr2.5e_4_c100k_seed42": {
+          "pressure_l2": 0.040501448015371956
+        },
+        "rn_cos_w384_d48_lr2.5e_4_c100k_seed43": {
+          "pressure_l2": 0.040591783821582794
+        }
+      },
+      "params": 136301016,
+      "params_estimated": false,
+      "status": "complete",
+      "pressure_l2_seeds": [
+        0.040501448015371956,
+        0.040591783821582794
+      ],
+      "pressure_l2_mean": 0.04054661591847737
+    },
+    "gt|w2048|d12|lr1e-3": {
+      "runs": {
+        "rn_gt_w2048_lr1e_3_c100k_seed42": {
+          "pressure_l2": 0.04069205125172933
+        },
+        "rn_gt_w2048_lr1e_3_c100k_seed43": {
+          "pressure_l2": 0.039899855852127075
+        }
+      },
+      "params": 570937856,
+      "params_estimated": true,
+      "status": "complete",
+      "pressure_l2_seeds": [
+        0.04069205125172933,
+        0.039899855852127075
+      ],
+      "pressure_l2_mean": 0.04029595355192821
+    },
+    "gt|w2048|d12|lr3e-4": {
+      "runs": {
+        "rn_gt_w2048_lr3e_4_c100k_seed42": {
+          "pressure_l2": 0.04068442930777868
+        },
+        "rn_gt_w2048_lr3e_4_c100k_seed43": {
+          "pressure_l2": 0.04080643504858017
+        }
+      },
+      "params": 570937856,
+      "params_estimated": true,
+      "status": "complete",
+      "pressure_l2_seeds": [
+        0.04068442930777868,
+        0.04080643504858017
+      ],
+      "pressure_l2_mean": 0.04074543217817943
+    },
+    "isla|cos|interior|w192|lr1e-3": {
+      "runs": {
+        "rn_cos_vol_lr1e_3_c200k_seed42": {
+          "pressure_l2": 0.05198808511098226,
+          "velocity_l2": 0.06351860860983531,
+          "nut_l2": 0.08577299118041992
+        },
+        "rn_cos_vol_lr1e_3_c200k_seed43": {
+          "pressure_l2": 0.048062543074289955,
+          "velocity_l2": 0.06542245546976726,
+          "nut_l2": 0.08820998668670654
+        }
+      },
+      "params": null,
+      "params_estimated": false,
+      "status": "complete",
+      "pressure_l2_seeds": [
+        0.05198808511098226,
+        0.048062543074289955
+      ],
+      "pressure_l2_mean": 0.05002531409263611,
+      "velocity_l2_seeds": [
+        0.06351860860983531,
+        0.06542245546976726
+      ],
+      "velocity_l2_mean": 0.06447053203980128,
+      "nut_l2_seeds": [
+        0.08577299118041992,
+        0.08820998668670654
+      ],
+      "nut_l2_mean": 0.08699148893356323
+    }
+  }
+}
