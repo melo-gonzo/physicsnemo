@@ -22404,3 +22404,14 @@ float32 scoring at 200,000 cells through the fleet pump under the
 0.1502 (0.7); cosine 384 within 3% of cosine 192 on the wings (0.6, the
 wing deficit has not responded to any capacity lever so far); cosine 384 ×
 24 at 200,000 cells between 0.0400 and 0.0410 (0.7).
+
+**Addendum, acceptance (2026-09-21, 07:20 EDT; epochs 26 to 45).** All
+eight lanes are alive and productive with no traceback or out-of-memory
+event. The wing lanes validate every 25 epochs, so their first reading is
+the epoch-25 value: cosine 192 at 1e-3 0.144 / 0.145, cosine 384 at 1e-3
+0.143 / 0.147, linear 384 at 1e-3 0.148 / 0.061 (seeds 42 / 43), all
+within the wing lanes' usual early range and not yet informative for the
+collapse clause, whose cars' twin appeared between epochs 20 and 90. The
+deep car lanes (384 wide, 24 layers, 5e-4 at 200,000 cells) read 0.0011 /
+0.0011 at epoch 45, on the trajectory of their 100,000-cell twins, at 91 GB
+peak memory and 0.41 s per step. Each lane has one queued successor.
