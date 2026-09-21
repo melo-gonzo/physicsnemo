@@ -1,0 +1,7 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	af	af_isla_lin_lr5e4_seed42	airfrans_volume	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	42	100000	code_routenorm
+1	af	af_isla_cos_lr1e3_seed42	airfrans_volume	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	42	100000	code_routenorm
+2	af	af_gt_vol_lr1e3_seed42	airfrans_volume	geotransolver_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10	1e-3	42	100000	code_routenorm
+3	af	af_isla_lin_lr5e4_seed43	airfrans_volume	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	43	100000	code_routenorm
+4	af	af_isla_cos_lr1e3_seed43	airfrans_volume	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	43	100000	code_routenorm
+5	af	af_gt_vol_lr1e3_seed43	airfrans_volume	geotransolver_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10	1e-3	43	100000	code_routenorm

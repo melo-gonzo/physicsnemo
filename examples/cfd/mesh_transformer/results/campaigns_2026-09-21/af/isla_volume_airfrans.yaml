@@ -1,0 +1,27 @@
+# ISLA interior configuration on AirfRANS (AIRFRANS-INT): boundary tokens from the airfoil polyline (line cells),
+# interior queries as interacting tokens with the signed distance as the query scalar; the freestream direction is
+# the one global vector input and the freestream speed the one global scalar input.
+input_type: tensors
+output_type: tensors
+forward_kwargs:
+  points: boundaries.airfoil.cell_centroids
+  normals: boundaries.airfoil.cell_data.normals            # precomputed in-plane normals (a curve in 3-D has no cell_normals)
+  measure_weights: boundaries.airfoil.cell_data.quadrature_measure
+  global_vectors: global_data.U_inf_dir
+  global_scalars: global_data.U_inf_mag
+  query_points: interior.points
+  query_normals: interior.point_data.sdf_normals
+  query_scalars: interior.point_data.sdf
+model:
+  _target_: physicsnemo.experimental.nn.ISLA
+  out_scalars: 2                 # pressure, nut (dataset targets: scalars first)
+  out_vectors: 1                 # velocity
+  hidden: 192
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  n_global_vectors: 1
+  n_global_scalars: 1
+  query_tokens: true
+  n_query_scalars: 1
+  geo_checkpoint: true
