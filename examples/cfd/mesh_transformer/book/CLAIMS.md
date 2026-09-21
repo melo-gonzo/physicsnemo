@@ -63,7 +63,7 @@ displacement 0.039 / 0.64 body RMS radii. Say: "GeoTransolver's slices follow
 the points; ISLA's nearly do not (excess one sixth, anchor motion one
 sixteenth)". Do not say ISLA's routing is exactly draw-invariant: it missed
 its preregistered unchanged bars (0.056 vs 0.05; 0.039 vs 0.02), the residual
-sits in blocks 6 to 11. results/territory_2026-09-21.json.
+sits in blocks 6 to 11. Wing twin (200k, seed 42): centroid/anchor displacement 0.31 / 0.0035 reproduces; dominant-slice agreement does not discriminate (soft routing). results/territory_2026-09-21.json, results/territory_wings_2026-09-21.json.
 
 **Discretization (two datasets).** Trained under the area-proportional law
 and scored on the uniform draw: GeoTransolver 2.6x (wings, 200k) / 7.9x

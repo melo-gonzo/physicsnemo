@@ -22993,3 +22993,46 @@ the reporting-protocol fleet (200,000 cells; ISLA and GeoTransolver, seed
 42) under the HiLift bench draws at 200,000 cells, and is launched with
 this entry (job `isla.territory.wings`); the result is quoted as general
 only when it lands.
+
+## 2026-09-21 — TERRITORY wing twin: the anchor-displacement clause reproduces (GeoTransolver's slice centroids move 0.31 body radii, ISLA's anchors 0.004), the dominant-slice clause does not discriminate because both wing checkpoints route softly (GeoTransolver's deep blocks are nearly uniform over slices) {#sec-nb-territory-wings}
+
+**Setting.** The same probe as @sec-nb-territory-verdict on the second
+dataset: the 35-wing checkpoints of the reporting-protocol fleet (ISLA-192
+and GeoTransolver-256, seed 42, 200,000 cells) on the first four validation
+wings under two independent uniform draws and the 10:1-biased draw of the
+HiLift bench at 200,000 expected cells (job `isla.territory.wings` 813228;
+artifact `results/territory_wings_2026-09-21.json`; the wing bench
+definitions gained `store_center_as: center` so the positions could be
+restored, as on the cars).
+
+**What we saw.** Median over blocks: ISLA floor 0.24, biased agreement
+0.19, excess +0.045, anchor displacement 0.0035 body radii; GeoTransolver
+floor 0.20, biased 0.15, excess +0.061, centroid displacement 0.31. The
+floors are a third of the cars' because the wing checkpoints route
+softly: ISLA's hardness (per-point entropy over slices divided by
+$\log M$) is 0.59 to 0.89 on the wings against 0.33 to 0.78 on the cars,
+and GeoTransolver's deep blocks are essentially uniform over slices
+(hardness 0.91 to 1.00 in blocks 7 to 11, 246 to 252 effective slices of
+256). When every slice takes nearly equal weight, the argmax is decided by
+small differences and moves under any resampling, so the dominant-slice
+agreement stops measuring territories. The displacement clause is
+unaffected by this and reproduces the cars' picture: GeoTransolver's
+weight-averaged slice centroids move by 0.31 body radii under the biased
+draw (bar 0.05), which for near-uniform slices is the shift of the sample's
+own centroid; ISLA's anchors move by 0.0035 (bar 0.02, met with room; on
+the cars 0.039 just missed it).
+
+**Reading.** On both datasets GeoTransolver's slice aggregates follow the
+point pattern (centroid displacement 0.64 on the cars, 0.31 on the wings)
+and ISLA's do not (0.039, 0.0035). The dominant-slice agreement, the
+probe's primary metric, separated the models on the cars (excess 0.33
+against 0.06) and not on the wings (0.06 against 0.045), where GeoTransolver's
+routing is too soft for a dominant slice to mean anything: that is itself a
+finding about the wing checkpoints (GeoTransolver's deep layers on the
+35-wing rung behave as a near-global average, which is consistent with its
+0.73 ratio there being carried by other layers) but it makes the agreement
+metric the wrong instrument for soft routing. A soft version (the total
+variation between the two draws' full routing distributions at matched
+points) is the right follow-on and needs the probe to store the
+distributions, not the argmax. Standing: the anchor-displacement result is
+two-dataset; the territory-agreement result stays single-dataset.

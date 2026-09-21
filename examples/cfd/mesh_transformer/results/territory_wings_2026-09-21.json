@@ -1,0 +1,227 @@
+{
+  "study": "TERRITORY: slice territories of the uniform-trained ISLA-192 and GeoTransolver-256 checkpoints (35 HiLiftAeroML wings, 200,000 cells) on four validation cars under two independent uniform draws and the 10:1-biased draw at 200,000 expected cells, float32",
+  "definitions": {
+    "agreement": "fraction of draw-A tokens whose dominant slice equals that of the nearest draw-B token (GeoTransolver: mean over heads)",
+    "floor": "agreement(unif1, unif2)",
+    "excess": "floor - agreement(unif1, biased)",
+    "displacement": "RMS over slices of |anchor(unif1) - anchor(biased)| / RMS token radius"
+  },
+  "models": {
+    "ISLA": {
+      "run": "p200k_hl_isla_super_scarce_seed42",
+      "n_cases": 4,
+      "uniform_draws_identical": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "median_nn_distance_unif_unif": 0.3736302852630615,
+      "median_nn_distance_unif_biased": 0.3517742156982422,
+      "per_block": [
+        {
+          "block": 0,
+          "floor": 0.727960593567929,
+          "agreement_biased": 0.7248335459700421,
+          "excess": 0.003127047597886845,
+          "displacement": 0.003425654722377658
+        },
+        {
+          "block": 1,
+          "floor": 0.3017151921862804,
+          "agreement_biased": 0.2674639284030936,
+          "excess": 0.034251263783186825,
+          "displacement": 0.0033590770326554775
+        },
+        {
+          "block": 2,
+          "floor": 0.36198069901166896,
+          "agreement_biased": 0.3247978197106602,
+          "excess": 0.037182879301008775,
+          "displacement": 0.003232714021578431
+        },
+        {
+          "block": 3,
+          "floor": 0.19214624829637572,
+          "agreement_biased": 0.1553667617412743,
+          "excess": 0.03677948655510141,
+          "displacement": 0.004029693081974983
+        },
+        {
+          "block": 4,
+          "floor": 0.26268113738881166,
+          "agreement_biased": 0.2040749774313187,
+          "excess": 0.058606159957492965,
+          "displacement": 0.0035560487303882837
+        },
+        {
+          "block": 5,
+          "floor": 0.24162054727353233,
+          "agreement_biased": 0.1959296779737804,
+          "excess": 0.04569086929975194,
+          "displacement": 0.0037330887280404568
+        },
+        {
+          "block": 6,
+          "floor": 0.17677137205282714,
+          "agreement_biased": 0.12028271458996585,
+          "excess": 0.05648865746286129,
+          "displacement": 0.004082968924194574
+        },
+        {
+          "block": 7,
+          "floor": 0.24244171101512138,
+          "agreement_biased": 0.186668312718286,
+          "excess": 0.05577339829683539,
+          "displacement": 0.0035217399708926678
+        },
+        {
+          "block": 8,
+          "floor": 0.18807590136138283,
+          "agreement_biased": 0.14827087868810854,
+          "excess": 0.03980502267327429,
+          "displacement": 0.0035649272613227367
+        },
+        {
+          "block": 9,
+          "floor": 0.22245977245415793,
+          "agreement_biased": 0.17809008489488784,
+          "excess": 0.04436968755927009,
+          "displacement": 0.003024518024176359
+        },
+        {
+          "block": 10,
+          "floor": 0.19906799183045873,
+          "agreement_biased": 0.1497884791401279,
+          "excess": 0.04927951269033082,
+          "displacement": 0.003427100833505392
+        },
+        {
+          "block": 11,
+          "floor": 0.31849511048833995,
+          "agreement_biased": 0.26215039768607534,
+          "excess": 0.05634471280226461,
+          "displacement": 0.0032369375694543123
+        }
+      ],
+      "summary": {
+        "floor_median": 0.24203112914432684,
+        "floor_min": 0.17677137205282714,
+        "agreement_biased_median": 0.19129899534603317,
+        "agreement_biased_min": 0.12028271458996585,
+        "excess_median": 0.04503027842951102,
+        "excess_max": 0.058606159957492965,
+        "displacement_median": 0.00347442040219903,
+        "displacement_max": 0.004082968924194574
+      }
+    },
+    "GeoTransolver": {
+      "run": "p200k_hl_gt_unit_super_scarce_seed42",
+      "n_cases": 4,
+      "uniform_draws_identical": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "median_nn_distance_unif_unif": 0.3736302852630615,
+      "median_nn_distance_unif_biased": 0.3517742156982422,
+      "per_block": [
+        {
+          "block": 0,
+          "floor": 0.29627345507471303,
+          "agreement_biased": 0.22516519904778662,
+          "excess": 0.07110825602692641,
+          "displacement": 0.2759316861629486
+        },
+        {
+          "block": 1,
+          "floor": 0.269145326087031,
+          "agreement_biased": 0.20324371757849308,
+          "excess": 0.06590160850853793,
+          "displacement": 0.26919621229171753
+        },
+        {
+          "block": 2,
+          "floor": 0.23977737857113327,
+          "agreement_biased": 0.15618817754121772,
+          "excess": 0.08358920102991554,
+          "displacement": 0.29108843207359314
+        },
+        {
+          "block": 3,
+          "floor": 0.21789349821104065,
+          "agreement_biased": 0.15719878957517502,
+          "excess": 0.060694708635865624,
+          "displacement": 0.29671135544776917
+        },
+        {
+          "block": 4,
+          "floor": 0.21111507385667705,
+          "agreement_biased": 0.16289539239337522,
+          "excess": 0.04821968146330183,
+          "displacement": 0.31535446643829346
+        },
+        {
+          "block": 5,
+          "floor": 0.19525277351714476,
+          "agreement_biased": 0.1329701543718867,
+          "excess": 0.06228261914525807,
+          "displacement": 0.2882424592971802
+        },
+        {
+          "block": 6,
+          "floor": 0.16616021618680926,
+          "agreement_biased": 0.10355335842173233,
+          "excess": 0.06260685776507693,
+          "displacement": 0.31116819381713867
+        },
+        {
+          "block": 7,
+          "floor": 0.15722187118877645,
+          "agreement_biased": 0.09768824966249302,
+          "excess": 0.05953362152628343,
+          "displacement": 0.3154681921005249
+        },
+        {
+          "block": 8,
+          "floor": 0.13761239672367878,
+          "agreement_biased": 0.08062863745073873,
+          "excess": 0.056983759272940054,
+          "displacement": 0.3107644319534302
+        },
+        {
+          "block": 9,
+          "floor": 0.15769449369139069,
+          "agreement_biased": 0.10787865712319658,
+          "excess": 0.049815836568194105,
+          "displacement": 0.31306973099708557
+        },
+        {
+          "block": 10,
+          "floor": 0.16958098949463635,
+          "agreement_biased": 0.1225950303881721,
+          "excess": 0.04698595910646425,
+          "displacement": 0.31178128719329834
+        },
+        {
+          "block": 11,
+          "floor": 0.24688826194834687,
+          "agreement_biased": 0.181058417710398,
+          "excess": 0.06582984423794888,
+          "displacement": 0.3113884925842285
+        }
+      ],
+      "summary": {
+        "floor_median": 0.2031839236869109,
+        "floor_min": 0.13761239672367878,
+        "agreement_biased_median": 0.1445791659565522,
+        "agreement_biased_min": 0.08062863745073873,
+        "excess_median": 0.061488663890561845,
+        "excess_max": 0.08358920102991554,
+        "displacement_median": 0.3109663128852844,
+        "displacement_max": 0.3154681921005249
+      }
+    }
+  }
+}

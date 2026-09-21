@@ -1042,8 +1042,12 @@ to 0.09 in blocks 8 to 11 against 0.03 to 0.06 in the first six), and
 the anchors' 0.04 radii of motion is twice the 0.02 preregistered; the
 likely source is the quadrature noise of a draw whose weights span a
 decade, the same source the book gives for ISLA's 1.07x error growth under
-this draw. And the result is measured on one dataset; the same probe on the wings'
-200,000-cell checkpoints is the pending twin (@sec-nb-territory-verdict).
+this draw. On the wings (35-case rung, 200,000 cells) the anchor picture reproduces,
+GeoTransolver's centroids moving 0.31 body radii and ISLA's anchors 0.004,
+while the dominant-slice agreement no longer separates the models because
+both wing checkpoints route softly (GeoTransolver's deep blocks are nearly
+uniform over slices), so the agreement result is single-dataset and the
+displacement result two-dataset (@sec-nb-territory-wings).
 
 ## Pose: a contract, not an accuracy edge {#sec-pose-contract}
 
