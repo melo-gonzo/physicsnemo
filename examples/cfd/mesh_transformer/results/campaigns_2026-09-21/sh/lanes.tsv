@@ -1,0 +1,5 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	sh	sh_hl_isla_s1024_super_scarce_seed42	highlift_surface_super_scarce	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 model.n_slices=1024	1e-3	42	200000	code_routenorm
+1	sh	sh_hl_isla_s1024_super_scarce_seed43	highlift_surface_super_scarce	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 model.n_slices=1024	1e-3	43	200000	code_routenorm
+2	sh	sh_hl_isla_s1024_single_aoa_12_seed42	highlift_surface_single_aoa_12	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 model.n_slices=1024	1e-3	42	200000	code_routenorm
+3	sh	sh_hl_isla_s1024_single_aoa_12_seed43	highlift_surface_single_aoa_12	isla_surface_reference	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 model.n_slices=1024	1e-3	43	200000	code_routenorm
