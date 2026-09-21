@@ -28,7 +28,6 @@ import torch
 from physicsnemo.experimental.nn.isla import ISLA
 
 D = torch.float64
-_CENTERED = dict(frame_mode="centered", scale_mode="reference_length")
 
 
 def _rotation(seed: int):
@@ -91,9 +90,9 @@ def _assert_se3(m, pts, nrm, w, gv, gs, extra=None, atol=1e-10):
     assert torch.allclose(moved[..., :1], base[..., :1], atol=atol)
     assert torch.allclose(moved[..., 1:4], base[..., 1:4] @ R.T, atol=atol)
     if m.scale_mode != "total_measure":
-        ### Measure-scale invariance holds where the length unit is constant; the
-        ### reference configuration's unit is sqrt(total measure), so there the
-        ### weights carry physical area and a rescale is a different geometry.
+        ### Measure-scale invariance holds under the RMS-distance unit (normalized
+        ### weights); under the total-measure unit the weights carry physical area
+        ### and a rescale is a different geometry.
         with torch.no_grad():
             rescaled = m(
                 points=pts,
@@ -107,19 +106,14 @@ def _assert_se3(m, pts, nrm, w, gv, gs, extra=None, atol=1e-10):
     return base
 
 
-@pytest.mark.parametrize("frame", ["relative", "centered"])
-def test_zero_global_vectors(frame):
+def test_zero_global_vectors():
     """K = 0: no direction anywhere in the problem (steady conduction with pinned
-    boundary values). The seed is constant in the relative frame and the model is
-    still exactly SE(3)-covariant and measure-scale invariant."""
-    kw = {} if frame == "relative" else _CENTERED
-    m = _model(n_global_vectors=0, **kw)
+    boundary values). The seed is constant and the model is still exactly
+    SE(3)-covariant and measure-scale invariant."""
+    m = _model(n_global_vectors=0)
     pts, nrm, w = _sample()
-    if frame == "relative":
-        assert m.constant_seed
-        assert m.embed[0].in_features == 1
-    else:
-        assert m.embed[0].in_features == 3  # |r|, log|r|, rhat.n
+    assert m.constant_seed
+    assert m.embed[0].in_features == 1
     assert m.n_basis == 4  # n, u, and the two complements of (u, n)
     base = _assert_se3(m, pts, nrm, w, None, None)
     assert torch.isfinite(base).all()
@@ -132,16 +126,14 @@ def test_zero_global_vectors(frame):
         )
 
 
-@pytest.mark.parametrize("frame", ["relative", "centered"])
-def test_two_global_vectors(frame):
+def test_two_global_vectors():
     """K = 2 (a freestream and a gravity direction): both vectors rotate with the
     geometry, the output rotates with them, and rescaling either vector's magnitude
     changes nothing."""
-    kw = {} if frame == "relative" else _CENTERED
-    m = _model(n_global_vectors=2, **kw)
+    m = _model(n_global_vectors=2)
     pts, nrm, w = _sample()
     gv = torch.randn(2, 2, 3, dtype=D)
-    assert m.embed[0].in_features == (2 if frame == "relative" else 7)
+    assert m.embed[0].in_features == 2  # n.g_1, n.g_2
     assert m.n_basis == 10
     base = _assert_se3(m, pts, nrm, w, gv, None)
     with torch.no_grad():
@@ -249,14 +241,11 @@ def test_no_global_inputs_at_all_with_scalars_only():
 
 def test_one_vector_layout_matches_the_former_single_vector_model():
     """K = 1, S = 0 (the defaults) must keep the former parameter layout so that
-    every saved checkpoint loads: seed width 1 (relative) / 5 (centered), geometry
-    width 6 / 8, head basis 7."""
+    every saved checkpoint loads: seed width 1, geometry width 6, head basis 7."""
     m = _model()
     assert (m.n_global_vectors, m.n_global_scalars) == (1, 0)
     assert m.embed[0].in_features == 1
     assert m.blocks[0].geo_logit.in_features == 6 and m.n_basis == 7
-    mc = _model(**_CENTERED)
-    assert mc.embed[0].in_features == 5 and mc.blocks[0].geo_logit.in_features == 8
 
 
 def test_legacy_vector_layouts_still_accepted():
@@ -350,7 +339,7 @@ def test_boundary_data_reaches_every_interior_path():
     for m, extra in arms:
         assert (
             m.embed[0].in_features == 2
-        )  # boundary scalar + global scalar (no vectors, relative frame)
+        )  # boundary scalar + global scalar (no vectors)
         base = _assert_se3(
             m, pts, nrm, w, None, gs, extra=dict(extra, boundary_scalars=bsc)
         )

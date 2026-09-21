@@ -22091,3 +22091,73 @@ both datasets. Why the dependence is larger on the cars than the wings is
 the next question; a cheap discriminator is the same swap on the DrivAerML
 interior task, where the sampling law of the interior queries can be
 varied independently of the surface's.
+
+## 2026-09-20 — Ruling and repair: the centered frame, the similarity gauge and the constant reference length are removed from ISLA; the class has one frame, origin-free, with the RMS pairwise distance or the total measure as its length unit {#sec-nb-frame-cleanup}
+
+**Setting.** Until today ISLA's constructor carried three frame options
+beside the reference configuration: `frame_mode="centered"` (a frame
+centered on the plain mean of the sampled points), `similarity_gauge=True`
+(the same frame with a measure-weighted centroid and RMS radius) and
+`scale_mode="reference_length"` with `reference_length` (a constant length
+unit per dataset). All three were the program's configurations at some
+point between July and 2026-09-10 and every one of them was measured
+against the origin-free frame (the density probe, SG-REF, CORNER-WLR,
+CG-WLR); none is used by any live lane, the book reports them only in
+collapsed diagnostic notes, and their code paths (a second seed layout,
+two extra relational invariants, a centroid branch in the forward pass, a
+conditional head frame) were a third of the frame logic. Peter's ruling
+this evening: fold them out entirely.
+
+**What was removed.** Constructor parameters `frame_mode`,
+`similarity_gauge` and `reference_length`, and the `"reference_length"`
+value of `scale_mode`; attributes `frame_mode`, `relative_frame`,
+`similarity_gauge`, `reference_length`; the `relative` argument of the
+relational-invariant helpers and the `relative_frame` argument of the slice
+and read blocks (the geometry width is 5 + K, the seed width K + boundary
+scalars + global scalars); the centroid branch and the seed features
+$|r|, \log|r|, \hat r \cdot \hat g_k, \hat r \cdot \hat n$ of the forward
+pass; the conditional around the head frame. The recipe config
+`isla_surface_constant_gauge.yaml` is deleted and `isla_volume_support.yaml`
+no longer pins the similarity gauge (its support-token lanes were trained
+under it and would need a re-run under the current frame before any
+number from that config is quoted again). The Triton kernel keeps its
+`RELATIVE` compile-time flag, always set; that branch is the one piece of
+dead code left, inside a kernel that is not worth re-validating for it.
+The default configuration's arithmetic is unchanged: the committed golden
+outputs and reference checkpoint of the release tests still match, and
+rigid-motion invariance of the scalar head holds to $5 \times 10^{-7}$ in
+float32 across the surface, query-independent, query-token, total-measure,
+cosine-routing and no-global-vector modes after the change.
+
+**Consequences.** Checkpoints trained under the removed options no longer
+load (ISLA keeps no compatibility shims by the 2026-09-20 ruling); the
+measurements made with them stay on file in the results artifacts and the
+book's diagnostic notes, labeled as measurements of a removed variant.
+Chapters 2 and 9 and the recipe README now describe one frame. The tests
+that existed only to exercise the removed branches are deleted; tests of
+contracts that still hold (rigid-motion invariance, measure-weight scale
+invariance, total-measure scale equivariance, query independence, kernel
+agreement, global inputs) are kept and constructed through the current API
+(the list is in the addendum below).
+
+**Addendum, the test suite after the cleanup (2026-09-20, 22:10 EDT).** 92
+tests pass in the six ISLA test files on CPU and CUDA (fused kernel and
+`torch.compile` paths included), none skipped. Removed as tests of the
+removed branches: the two similarity-gauge scale-equivariance tests (their
+contract is now `test_geometric_scale_equivariance`, four cases over both
+length units with and without the passive decoder), the centered
+parametrizations of the global-input layout tests, the eight-invariant
+fused-kernel case, the centered contrast inside the frame-contract and
+sampling-consistency tests, and the `ValueError` checks for option
+combinations that no longer exist; `test_frame_contracts` now asserts that
+`scale_mode="reference_length"` is refused. Rewritten to the current
+constructor: every test that carried the centered defaults only as
+boilerplate. One consequence surfaced exactly as the ruling predicts: the
+committed reference checkpoint `isla_default_v1.mdlus`, saved before the
+cleanup, stored `reference_length` among its constructor arguments and no
+longer loaded; it was regenerated through the test's own seeded creation
+path, and the committed golden output it must reproduce still matches on
+CPU and CUDA, which is the bitwise check that the default arithmetic did not
+move. Every ISLA checkpoint written before this cleanup (all cluster lanes
+included) fails to load in the current class; their float32 evaluations were
+made under the snapshots that trained them and stand.

@@ -16,9 +16,8 @@
 
 """The ISLA recipe configurations compose to the intended architecture (2026-09-15).
 
-The plain names carry the reference configuration (relative frame, total-measure scale):
-``model=isla_surface`` and ``model=isla_volume``. ``isla_surface_constant_gauge`` pins the centered
-frame with a fixed reference length (the ablation). The deprecated ``_reference`` names resolve to
+The plain names carry the reference configuration (origin-free frame, RMS-pairwise-distance
+scale): ``model=isla_surface`` and ``model=isla_volume``. The deprecated ``_reference`` names resolve to
 the plain files. The interior reference pairs the Horvitz-Thompson-corrected boundary measure with
 the total-measure scale (2026-09-14)."""
 
@@ -58,21 +57,13 @@ def test_plain_surface_name_is_the_reference_configuration():
     cfg = _compose("isla_surface", "drivaer_ml_surface")
     m = cfg.model
     assert m._target_ == ISLA_TARGET
-    assert m.frame_mode == "relative" and m.scale_mode == "rms_distance"
-    assert "reference_length" not in m
+    assert m.scale_mode == "rms_distance"
+    assert "frame_mode" not in m and "reference_length" not in m
     assert m.geo_checkpoint is True
     assert cfg.forward_kwargs.global_vectors == "global_data.U_inf_dir"
     assert (
         cfg.forward_kwargs.measure_weights == "interior.point_data._effective_measure"
     )
-
-
-def test_constant_gauge_variant_pins_the_centered_frame():
-    """The constant-gauge ablation keeps its fixed reference length."""
-    m = _compose("isla_surface_constant_gauge", "drivaer_ml_surface").model
-    assert m._target_ == ISLA_TARGET
-    assert m.frame_mode == "centered" and m.scale_mode == "reference_length"
-    assert m.reference_length == 8.0
 
 
 @pytest.mark.parametrize(
@@ -98,7 +89,7 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
     ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "drivaer_ml_volume_reference.yaml")
     cfg = _compose("isla_volume", "drivaer_ml_volume_reference")
     m = cfg.model
-    assert m.frame_mode == "relative" and m.scale_mode == "rms_distance"
+    assert m.scale_mode == "rms_distance"
     assert m.query_tokens is True and m.n_query_scalars == 1
     assert (
         cfg.forward_kwargs.measure_weights

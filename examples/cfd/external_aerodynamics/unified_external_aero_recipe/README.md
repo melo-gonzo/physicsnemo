@@ -359,8 +359,9 @@ The constructor and `forward()` are keyword-only, so a call reads exactly as
 the `forward_kwargs:` mapping does.
 
 **Reference configuration** (`conf/model/isla_surface.yaml`):
-relative frame (`frame_mode: relative`; positions enter only as
-point-to-anchor differences, no centroid anywhere) with the
+the origin-free frame (positions enter only as point-to-anchor
+differences, no centroid anywhere; ISLA's only frame since the
+centered-frame options were removed on 2026-09-20) with the
 RMS-pairwise-distance length unit (`scale_mode: rms_distance`; the length
 unit is the measure-weighted root-mean-square pairwise distance of the
 sample, normalized and center-free, so no per-dataset reference length is
@@ -425,16 +426,7 @@ and remove the old `ComposeQuadratureMeasure.output_field` option. The
 provides conversion examples. ISLA's model parameters and checkpoint layout
 are unchanged.
 
-**Variants.** Constant gauge (`isla_surface_constant_gauge.yaml`):
-`frame_mode: centered`, `scale_mode: reference_length`, `reference_length: 8.0`
-(see the `SetGlobalField` note in `drivaer_ml_surface.yaml` for the
-calibration); the reference configuration before 2026-09-11, kept as the
-ablation that isolates what the relative frame and a geometry-derived length
-unit buy. Similarity gauge: `similarity_gauge: true` on the centered frame derives
-the centroid and length scale from the measure-weighted geometry and adds
-equivariance to geometric scale. The names `isla_surface_reference` and
-`isla_volume_reference`, under which the reference configurations were first
-introduced, remain as pointers to `isla_surface` and `isla_volume`.
+**Variants.** The centered-frame variants (the constant gauge, `isla_surface_constant_gauge.yaml`, and the similarity gauge, `similarity_gauge: true`) were removed from the class and the recipe on 2026-09-20; ISLA has one frame, origin-free, with `scale_mode: rms_distance` (default) or `total_measure` as its length unit. The names `isla_surface_reference` and `isla_volume_reference`, under which the reference configurations were first introduced, remain as pointers to `isla_surface` and `isla_volume`.
 
 **Interior modes.** `query_tokens: true` admits the interior query points
 as interacting tokens carrying the SDF gradient as `query_normals` and the

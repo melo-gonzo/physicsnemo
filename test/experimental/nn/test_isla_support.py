@@ -24,15 +24,6 @@ import torch
 
 from physicsnemo.experimental.nn.isla import ISLA
 
-# The contract tests below were written for the centered construction (plain-mean
-# centre, constant reference_length), which was the class default until 2026-09-11.
-# The class default is now the relative frame with the RMS-pairwise-distance length
-# unit (the reference configuration); these tests pin the centered construction
-# explicitly so they keep verifying it, and test_isla.py::test_default_is_relative_rms_distance
-# covers the default.
-_CENTERED = dict(frame_mode="centered", scale_mode="reference_length")
-
-
 D = torch.float64
 
 
@@ -70,7 +61,7 @@ def _model(**kw):
             support_tokens=True,
             n_query_scalars=1,
             query_mass="source_total",
-            **{**_CENTERED, **kw},
+            **kw,
         )
         .double()
         .eval()
@@ -197,8 +188,11 @@ def test_measure_scale_and_refinement_invariance(setup):
     assert torch.allclose(split, base, atol=1e-10)
 
 
-def test_similarity_gauge_scale_equivariance():
-    m = _model(similarity_gauge=True)
+def test_geometric_scale_equivariance():
+    """A geometric rescale (points x k, areas x k^2, support and query positions
+    and their length-like scalars x k) leaves the output exactly unchanged: the
+    frame's length unit scales with the sample."""
+    m = _model()
     pts, nrm, w = _cloud(300)
     drv = torch.nn.functional.normalize(
         torch.randn(1, 3, dtype=D, generator=torch.Generator().manual_seed(3)), dim=-1
@@ -224,7 +218,6 @@ def test_geo_checkpoint_is_exact_with_support(setup):
     torch.manual_seed(0)
     m2 = (
         ISLA(
-            **_CENTERED,
             hidden=64,
             n_layers=2,
             n_slices=16,
@@ -257,7 +250,6 @@ def test_all_parameters_receive_gradients(setup):
 def test_decoder_depth_is_configurable():
     torch.manual_seed(0)
     m12 = ISLA(
-        **_CENTERED,
         hidden=32,
         n_layers=2,
         n_slices=8,
@@ -276,11 +268,10 @@ def test_decoder_depth_is_configurable():
 def test_option_validation():
     with pytest.raises(ValueError):
         ISLA(
-            **_CENTERED, hidden=32, n_layers=1, n_slices=8, support_tokens=True
+            hidden=32, n_layers=1, n_slices=8, support_tokens=True
         )  # needs query_independent
     with pytest.raises(ValueError):
         ISLA(
-            **_CENTERED,
             hidden=32,
             n_layers=1,
             n_slices=8,
@@ -312,7 +303,6 @@ def test_passive_queries_take_scalars_without_support():
     torch.manual_seed(0)
     m = (
         ISLA(
-            **_CENTERED,
             hidden=64,
             n_layers=2,
             n_slices=16,

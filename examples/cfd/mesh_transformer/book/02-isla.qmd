@@ -51,8 +51,9 @@ survive separated three-dimensional flow (@sec-interior-negatives).
 %%|   the length scale to the last slice layer, nothing but invariant scalars
 %%|   is computed; the one place a vector is rebuilt is the output basis. The
 %%|   passive decoder on the right is optional (@sec-mt2-passive). How to read
-%%|   this: it is ISLA; the gauge variants
-%%|   (@sec-mt2-variants) insert a centering step before the length scale.
+%%|   this: it is ISLA; the gauge variants that the program measured and
+%%|   then removed (@sec-mt2-variants) inserted a centering step before the
+%%|   length scale.
 flowchart TB
     classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
     classDef learned fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
@@ -618,8 +619,9 @@ and they live at the git tag `isla-research-full`.
 ## The forward pass on one page {#sec-mt2-forward}
 
 The symbols above are tied to the identifiers in
-`physicsnemo/experimental/nn/isla/model.py`; ISLA is
-`frame_mode="relative"`, `scale_mode="rms_distance"`, the class default.
+`physicsnemo/experimental/nn/isla/model.py`; ISLA's frame has no origin
+and `scale_mode="rms_distance"` is the class default (the centered-frame
+options were removed from the class on 2026-09-20, @sec-nb-frame-cleanup).
 
 | symbol | code | meaning |
 |---|---|---|
@@ -676,9 +678,11 @@ appears in this book only inside collapsed notes labeled as such, and its
 one measured role is to price what ISLA gives up by declining a center. That
 price, the price of not being told the body's center, is at most about 2%
 of surface-pressure error at 435 cars, inside seed noise (SG-REF,
-@sec-nb-sgref-verdict). It is selected by `frame_mode="centered"` with
-`similarity_gauge=True`, subtracts its center $c$ before scaling, $r_i =
-(x_i - c)/L$, and differs from ISLA in three places: its seed is
+@sec-nb-sgref-verdict). It was a constructor option (a centered frame with
+the similarity gauge) until 2026-09-20, when the centered-frame branches
+were removed from the class (@sec-nb-frame-cleanup); its checkpoints and
+measurements remain on file. It subtracted its center $c$ before scaling,
+$r_i = (x_i - c)/L$, and differed from ISLA in three places: its seed is
 $3 + 2K$ scalars (the rotation invariants of $\{r_i, \hat n_i, \hat
 g_k\}$, which now include the distance from the center and its direction
 cosines); its relational invariants gain $1 + K$ more that describe the
@@ -724,9 +728,9 @@ and holds at 1.2x under the 10:1 density bias (@sec-scoreboard-consistency).
 ::: {.callout-note collapse="true" title="The legacy centered variant (diagnostic)"}
 Before the relative frame, the program's configuration was a centered frame
 with the plain mean of the sampled points as center and a constant length
-unit (`frame_mode="centered"`, `scale_mode="reference_length"`,
-`reference_length` 8.0 in the recipe's nondimensional units, 40 m physical
-on DrivAerML). The plain mean is a mesher statistic, the gray marker of
+unit (8.0 in the recipe's nondimensional units, 40 m physical on
+DrivAerML; the constructor options that selected it were removed from the
+class on 2026-09-20, @sec-nb-frame-cleanup). The plain mean is a mesher statistic, the gray marker of
 @fig-isla-frame: under a 10:1 sampling-density bias it moves by a large
 fraction of the body length, every downstream invariant leaves its trained
 range, and the error grows 12x where the reference grows 1.2x. It reads a
@@ -757,10 +761,10 @@ input and weights.
 | query independence in the passive decoder: 50 queries alone equal the same 50 among 150 | `test_query_set_independence` | $10^{-12}$, rtol 0 |
 | off-surface queries keep every contract | `test_interior_queries_contracts` | $10^{-10}$ / $10^{-12}$ |
 | zero and several global vectors; global scalars; magnitude invariance | `test_isla_global_inputs.py` (12 tests) | $10^{-10}$ |
-| gauge variants: weight-scale invariance; similarity gauge: geometric-scale equivariance | `test_measure_weight_scale_invariance`, `test_similarity_gauge_geometric_scale_equivariance` | $10^{-9}$ / $10^{-10}$ |
+| weight-scale invariance of the measure weights; geometric-scale equivariance under both length units, with and without the passive decoder | `test_measure_weight_scale_invariance`, `test_geometric_scale_equivariance` | $10^{-9}$ / $10^{-10}$ |
 | pool-then-project equals project-then-pool; the geometry recompute reproduces outputs and gradients | `test_geo_pool_then_project_is_exact`, `test_geo_checkpoint_is_exact` | $10^{-12}$ / exact (outputs), $10^{-11}$ (gradients) |
 | every parameter receives a gradient (five configurations); heads run under bf16 autocast | `test_all_parameters_receive_gradients`, `test_head_variants_run_under_bf16_autocast` | exact / finite |
-| removing the relational invariants (`use_relational_geo=False`) keeps the contracts; a centered frame with a fixed length unit is *not* invariant to a geometric rescale | `test_a35b_ablation_flags_run_and_differ`, `test_similarity_gauge_geometric_scale_equivariance` | $10^{-10}$ / changes by $> 10^{-3}$ |
+| removing the relational invariants (`use_relational_geo=False`) keeps the contracts; the removed `"reference_length"` unit is refused | `test_a35b_ablation_flags_run_and_differ`, `test_frame_contracts` | $10^{-10}$ / `ValueError` |
 | the diagnostics break covariance by design | `test_raw_coord_channel_breaks_equivariance_by_design` | $> 10^{-3}$ |
 
 ::: {.callout-warning collapse="true" title="What is not a contract"}
@@ -881,9 +885,7 @@ training cases, two seeds, which was run on the legacy centered variant
 ::: {.callout-note collapse="true" title="The flags that select these configurations"}
 | flag (default) | what it changes |
 |---|---|
-| `frame_mode` (`"relative"`) | the reference; `"centered"` selects the gauge variants. Checkpoints store their constructor arguments and load in the configuration that trained them |
-| `scale_mode` (`"rms_distance"`) | the measure-weighted RMS pairwise distance of the sample; `"total_measure"` uses the square root of the total measure (the unit the evidence before 2026-09-18 evening was trained with, within 1.3% of the default, @sec-nb-lenrms-verdict); `"reference_length"` uses the constant `reference_length` (the legacy centered variant) |
-| `similarity_gauge` (off) | the similarity-gauge variant; requires `frame_mode="centered"` |
+| `scale_mode` (`"rms_distance"`) | the one length unit of the origin-free frame: the measure-weighted RMS pairwise distance of the sample; `"total_measure"` uses the square root of the total measure (the unit the evidence before 2026-09-18 evening was trained with, within 1.3% of the default, @sec-nb-lenrms-verdict). The centered-frame flags (`frame_mode`, `similarity_gauge`, `reference_length`) were removed on 2026-09-20; their checkpoints no longer load (@sec-nb-frame-cleanup) |
 | `use_measure_weights` (on) | the log-measure routing bias; off is the ablation |
 | `use_relational_geo` (on) | the relational invariants in routing and read-back |
 | `query_independent`, `n_decoder_layers` (off, 4) | the passive decoder |

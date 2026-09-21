@@ -54,13 +54,11 @@ model:
   n_layers: 12
   n_slices: 256
   mlp_ratio: 4
-  reference_length: 8.0
-  # Prior (constant-gauge) frame, pinned explicitly: the class defaults are
-  # frame_mode=relative and scale_mode=rms_distance (the reference
-  # configuration, conf/model/isla_surface.yaml; total_measure until 2026-09-18).
-  frame_mode: centered
-  scale_mode: reference_length
-  similarity_gauge: true
+  # The frame is ISLA's only frame (origin-free, RMS-pairwise-distance length
+  # unit). This config trained under the similarity gauge until that option
+  # was removed from the class on 2026-09-20; checkpoints from those lanes do
+  # not load and the support-token lanes have not been re-run since.
+  scale_mode: rms_distance
   geo_checkpoint: true
   # Geometry kernel: null = automatic (2026-09-19 ruling): the exact fused Triton kernel
   # wherever it can run (CUDA, one global vector, <= 1024 slices; about a third of the eager

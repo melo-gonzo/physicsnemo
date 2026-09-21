@@ -31,20 +31,10 @@ from physicsnemo.experimental.nn.isla import ISLA
 
 DATA_DIR = Path(__file__).parent / "data"
 
-#: Small configurations that exercise the three forward paths users see: the default
-#: boundary-to-boundary model, the centered frame with a fixed reference length, and
-#: the query-independent (interior) decoder.
+#: Small configurations that exercise the two forward paths users see: the default
+#: boundary-to-boundary model and the query-independent (interior) decoder.
 CONFIGS = {
     "default": dict(hidden=32, n_layers=2, n_slices=8, geo_kernel="eager"),
-    "centered": dict(
-        hidden=32,
-        n_layers=2,
-        n_slices=8,
-        frame_mode="centered",
-        scale_mode="reference_length",
-        reference_length=4.0,
-        geo_kernel="eager",
-    ),
     "query_independent": dict(
         hidden=32,
         n_layers=2,
@@ -110,7 +100,6 @@ def test_isla_constructor_attributes(config):
         assert m.out_scalars == 1 and m.out_vectors == 1
         assert m.n_slices == 256
         assert len(m.blocks) == 12
-        assert m.frame_mode == "relative" and m.relative_frame is True
         assert m.scale_mode == "rms_distance"
         assert m.geo_kernel == "auto"
         assert m.use_measure_weights is True
@@ -118,7 +107,6 @@ def test_isla_constructor_attributes(config):
         assert m.n_boundary_scalars == 0
         assert m.query_independent is False
         assert m.query_tokens is False and m.support_tokens is False
-        assert m.similarity_gauge is False
         assert m.eps == 1e-12
     else:
         m = ISLA(
@@ -127,9 +115,7 @@ def test_isla_constructor_attributes(config):
             hidden=64,
             n_layers=3,
             n_slices=16,
-            frame_mode="centered",
-            scale_mode="reference_length",
-            reference_length=2.5,
+            scale_mode="total_measure",
             geo_kernel="eager",
             n_global_vectors=2,
             n_global_scalars=1,
@@ -142,8 +128,7 @@ def test_isla_constructor_attributes(config):
         assert m.out_scalars == 3 and m.out_vectors == 2
         assert m.n_slices == 16
         assert len(m.blocks) == 3 and len(m.read_blocks) == 2
-        assert m.frame_mode == "centered" and m.relative_frame is False
-        assert m.scale_mode == "reference_length" and m.reference_length == 2.5
+        assert m.scale_mode == "total_measure"
         assert m.geo_kernel == "eager"
         assert m.n_global_vectors == 2 and m.n_global_scalars == 1
         assert m.n_boundary_scalars == 2
@@ -185,7 +170,6 @@ def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
     assert isinstance(loaded, ISLA)
     for name in (
         "n_slices",
-        "frame_mode",
         "scale_mode",
         "geo_kernel",
         "query_independent",

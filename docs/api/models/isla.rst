@@ -17,8 +17,9 @@ Contracts
 
 - **Rotation/translation equivariance.** The backbone sees only invariants;
   vector outputs are expanded in the input vector set plus its spherical-basis
-  complements with invariant coefficients. With ``similarity_gauge=True`` the
-  model is additionally equivariant to geometric scale.
+  complements with invariant coefficients. The frame has no origin, so
+  translation invariance needs no centering; the length unit is a
+  measure-weighted integral of the sampled geometry.
 - **Measure-aware aggregation.** Slice states are quadrature-weighted means, so
   the routing reads a sampled integral rather than a raw point population.
 - **Query independence (optional).** With ``query_independent=True`` queries are
@@ -26,9 +27,9 @@ Contracts
   on which other points are queried.
 
 Every constructor argument and every ``forward`` input is keyword-only. The
-reference configuration uses the relative frame (``frame_mode="relative"``) with
-the measure-weighted RMS pairwise-distance scale
-(``scale_mode="rms_distance"``), both class defaults:
+reference configuration uses the measure-weighted RMS pairwise-distance
+length unit (``scale_mode="rms_distance"``, the class default; the
+alternative is ``"total_measure"``):
 
 .. code-block:: python
 

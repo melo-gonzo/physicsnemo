@@ -31,24 +31,20 @@ frame is re-attached only at the vector heads, so exact rotation and
 translation covariance is paid once at the network's edges instead of in
 every layer.
 
-**Reference configuration** (the defaults): ``frame_mode="relative"`` with
-``scale_mode="rms_distance"``. Positions enter only as point-to-anchor
-differences and the length scale is the measure-weighted root-mean-square
-pairwise distance of the sample (a normalized two-point statistic that is
-invariant to the weights' overall scale and converges under refinement of
-any boundary with a finite second moment, fractal ones included), so no
-centroid, no per-dataset reference length and no external frame appears
-anywhere in the forward pass and the frame carries no information about
-where the mesher placed its cells. ``scale_mode="total_measure"`` (the
-square root of the total quadrature measure, the default until 2026-09-18)
-remains available; the two agree within 1.3% of surface-pressure error on
-DrivAerML.
-
-**Frame variants.** ``frame_mode="centered"`` centers by the plain mean of
-the sampled points and scales by the constant ``reference_length``
-(``scale_mode="reference_length"``); ``similarity_gauge=True`` on top of it
-derives the centroid and the length scale from the measure-weighted geometry
-and makes the model additionally equivariant to geometric scale.
+**The frame.** ISLA has no frame origin: positions enter only as
+point-to-anchor differences, and the one length scale is the
+measure-weighted root-mean-square pairwise distance of the sample
+(``scale_mode="rms_distance"``, the default: a normalized two-point
+statistic that is invariant to the weights' overall scale and converges
+under refinement of any boundary with a finite second moment, fractal ones
+included) or the square root of the total quadrature measure
+(``scale_mode="total_measure"``; the two agree within 1.3% of
+surface-pressure error on DrivAerML). No centroid, no per-dataset
+reference length and no external frame appears anywhere in the forward
+pass, so the frame carries no information about where the mesher placed
+its cells. (Earlier centered-frame variants, with a plain-mean centroid
+and a constant reference length or a measure-weighted similarity gauge,
+were removed on 2026-09-20; they survive only as diagnostics in the book.)
 
 **Interior modes.** ``query_tokens=True`` lets interior query points join
 the encoder as interacting tokens (their normal, e.g. the SDF gradient, must
@@ -99,6 +95,7 @@ from physicsnemo.nn.functional.equivariant_ops import spherical_basis
 
 logger = logging.getLogger(__name__)
 
+
 def _softmax_over_points(
     x: Float[torch.Tensor, "batch tokens slices"], fast: bool = True
 ):
@@ -133,21 +130,15 @@ def _relational_invariants(
     z_pos: Float[torch.Tensor, "batch slices 3"],
     m_s: Float[torch.Tensor, "batch slices 3"],
     eps: float,
-    relative: bool = False,
 ) -> Float[torch.Tensor, "batch tokens slices geo"]:
     """The point-anchor invariants (v3b set, generalized to K global vector
     inputs): distance and its log, the unit relative vector dotted with each
     global vector (K terms), with the point normal and with the anchor normal,
-    the point normal dotted with the anchor normal, and (centered frame only)
-    the anchor radius and the anchor direction dotted with each global vector
-    (1 + K terms). Width 5 + K (+ 1 + K centered); for K = 1 this is the
-    original 6/8-wide set in its original order. Shared by the encoder slice
-    blocks and the passive decoder blocks.
-
-    ``relative`` (RELFRAME, 2026-09-10) drops the invariants that refer to the
-    frame origin, the anchor radius ``|z_s|`` and the anchor direction
-    ``z_hat_s . g_k``, leaving the point-anchor terms, which depend on the
-    anchors' positions relative to the point only."""
+    and the point normal dotted with the anchor normal. Width 5 + K; for K = 1
+    this is the original 6-wide set in its original order. Every term depends
+    on the anchors' positions relative to the point only, so no frame origin
+    is referred to. Shared by the encoder slice blocks and the passive decoder
+    blocks."""
     z = z_pos[:, None, :, :]
     m = m_s[:, None, :, :]
     rel = r[:, :, None, :] - z  # (B, N, S, 3)
@@ -165,13 +156,6 @@ def _relational_invariants(
         (rel_hat * m).sum(-1, keepdim=True),
         (n_exp * m).sum(-1, keepdim=True),
     ]
-    if not relative:
-        z_mag = z.norm(dim=-1, keepdim=True).clamp_min(eps)
-        z_hat = (z / z_mag).expand(rel.shape[0], rel.shape[1], -1, 3)
-        feats += [
-            z_mag.expand(rel.shape[0], rel.shape[1], -1, 1),
-            (z_hat[..., None, :] * g_hat[:, :, None, :, :]).sum(-1),
-        ]
     return torch.cat(feats, dim=-1)
 
 
@@ -184,14 +168,13 @@ def _geo_region(
     z_pos,
     m_s,
     eps: float,
-    relative: bool = False,
 ):
     """One recompute region per layer: the per-slice routing bias from the
     invariants and the invariants pooled over slices by the resulting
     point->slice mix. Returns (bias (B,N,S), mix (B,N,S), pooled (B,N,geo)); the
     (B,N,S,geo) invariants and their (B,N,S,3) intermediates never leave the
     region, so under checkpointing they are rebuilt in backward, not stored."""
-    geo = _relational_invariants(r, n_hat, g_hat, z_pos, m_s, eps, relative)
+    geo = _relational_invariants(r, n_hat, g_hat, z_pos, m_s, eps)
     bias = lin(geo).squeeze(-1)
     mix = torch.softmax(logits_pre + bias, dim=-1)  # normalized over slices
     return bias, mix, torch.einsum("bns,bnsg->bng", mix, geo)
@@ -205,12 +188,10 @@ def _fused_geo_region():
     return fused_geo_region
 
 
-def _geo_width(n_global_vectors: int, relative: bool) -> int:
+def _geo_width(n_global_vectors: int) -> int:
     """Width of _relational_invariants: dist, log dist, K rel.g_k, rel.n, rel.m,
-    n.m (5 + K); centered adds |z_s| and K zhat_s.g_k. K = 1 gives the original
-    6 (relative) / 8 (centered)."""
-    k = int(n_global_vectors)
-    return 5 + k + (0 if relative else 1 + k)
+    n.m (5 + K); K = 1 gives the original 6."""
+    return 5 + int(n_global_vectors)
 
 
 class _RoutingLogits(nn.Module):
@@ -225,7 +206,13 @@ class _RoutingLogits(nn.Module):
     so the two share a state-dict layout; ``bias`` exists only in linear mode.
     """
 
-    def __init__(self, hidden: int, n_slices: int, mode: str = "linear", temperature: float = 10.0) -> None:
+    def __init__(
+        self,
+        hidden: int,
+        n_slices: int,
+        mode: str = "linear",
+        temperature: float = 10.0,
+    ) -> None:
         super().__init__()
         if mode not in ("linear", "cosine"):
             raise ValueError(f"routing_norm must be 'linear' or 'cosine', got {mode!r}")
@@ -254,7 +241,6 @@ class _SliceBlock(nn.Module):
         use_relational_geo: bool = True,
         geo_checkpoint: bool = False,
         fast_point_softmax: bool = True,
-        relative_frame: bool = False,
         geo_kernel: str = "eager",
         n_global_vectors: int = 1,
         routing_norm: str = "linear",
@@ -269,10 +255,7 @@ class _SliceBlock(nn.Module):
         ### tensor (see geo_kernel.py); same arithmetic as _geo_region, recompute
         ### built in, so geo_checkpoint is moot on that path.
         self.geo_kernel = geo_kernel
-        ### RELFRAME (2026-09-10): without a frame origin the two origin-referring
-        ### invariants (|z_s|, zhat_s.g_k) are gone and the geo width is 5 + K.
-        self.relative_frame = bool(relative_frame)
-        self.n_geo = _geo_width(n_global_vectors, self.relative_frame)
+        self.n_geo = _geo_width(n_global_vectors)
         ### Activation recompute (2026-09-07 memory attribution): the per-slice
         ### geometry tensors -- rel (B,N,S,3), rel_hat, dist and two bf16 copies
         ### of the (B,N,S,8) invariants -- are 76% of ISLA's saved activations
@@ -281,7 +264,9 @@ class _SliceBlock(nn.Module):
         ### the forward is bitwise unchanged (same ops, same order).
         self.geo_checkpoint = bool(geo_checkpoint)
         self.norm_assign = nn.LayerNorm(hidden)
-        self.assign = _RoutingLogits(hidden, n_slices, routing_norm, routing_temperature)
+        self.assign = _RoutingLogits(
+            hidden, n_slices, routing_norm, routing_temperature
+        )
         ### Relational geometry (v2): per-slice equivariant anchors and
         ### point-anchor invariants -- many local, data-adaptive reference
         ### points instead of any global frame (smooth by construction).
@@ -345,7 +330,7 @@ class _SliceBlock(nn.Module):
                     z_pos,
                     m_s,
                     eps,
-                    self.relative_frame,
+                    True,
                 )
             elif self.geo_checkpoint:
                 bias, point_mix, pooled = checkpoint(
@@ -358,7 +343,6 @@ class _SliceBlock(nn.Module):
                     z_pos,
                     m_s,
                     eps,
-                    self.relative_frame,
                     use_reentrant=False,
                 )
             else:
@@ -371,7 +355,6 @@ class _SliceBlock(nn.Module):
                     z_pos,
                     m_s,
                     eps,
-                    self.relative_frame,
                 )
             logits = logits + bias
         else:
@@ -402,7 +385,6 @@ class _ReadBlock(nn.Module):
         n_slices: int,
         mlp_ratio: int = 4,
         geo_checkpoint: bool = False,
-        relative_frame: bool = False,
         geo_kernel: str = "eager",
         n_global_vectors: int = 1,
         routing_norm: str = "linear",
@@ -410,11 +392,12 @@ class _ReadBlock(nn.Module):
     ) -> None:
         super().__init__()
         self.geo_checkpoint = bool(geo_checkpoint)
-        self.relative_frame = bool(relative_frame)
         self.geo_kernel = geo_kernel  # see _SliceBlock
-        self.n_geo = n_geo = _geo_width(n_global_vectors, self.relative_frame)
+        self.n_geo = n_geo = _geo_width(n_global_vectors)
         self.norm = nn.LayerNorm(hidden)
-        self.assign = _RoutingLogits(hidden, n_slices, routing_norm, routing_temperature)
+        self.assign = _RoutingLogits(
+            hidden, n_slices, routing_norm, routing_temperature
+        )
         self.geo_logit = nn.Linear(n_geo, 1)
         self.geo_feat = nn.Linear(n_geo, hidden // 2)
         self.broadcast = nn.Linear(2 * hidden + hidden // 2, hidden)
@@ -452,7 +435,7 @@ class _ReadBlock(nn.Module):
                 z_pos,
                 m_s,
                 eps,
-                self.relative_frame,
+                True,
             )
         elif self.geo_checkpoint:
             _, mix, pooled = checkpoint(
@@ -465,7 +448,6 @@ class _ReadBlock(nn.Module):
                 z_pos,
                 m_s,
                 eps,
-                self.relative_frame,
                 use_reentrant=False,
             )
         else:
@@ -478,7 +460,6 @@ class _ReadBlock(nn.Module):
                 z_pos,
                 m_s,
                 eps,
-                self.relative_frame,
             )
         back = torch.einsum("bqs,bsh->bqh", mix, z_states)
         geo_pool = self.geo_feat(pooled)  # pool-then-project (exact)
@@ -538,6 +519,7 @@ def rms_pairwise_distance(
     var = (w_n * (points - c).square().sum(-1, keepdim=True)).sum(dim=1, keepdim=True)
     return (2.0 * var).sqrt().clamp_min(eps)
 
+
 class ISLA(Module):
     r"""ISLA (Invariant Slice Attention): invariant backbone, equivariant edges.
 
@@ -556,9 +538,6 @@ class ISLA(Module):
         n_layers: Number of slice-attention blocks in the encoder.
         n_slices: Number of soft slices (data-adaptive anchors) per block.
         mlp_ratio: Expansion ratio of the per-token and per-slice MLPs.
-        reference_length: Constant length unit of the centered frame when
-            ``scale_mode="reference_length"``; unused by the reference
-            configuration (``scale_mode="rms_distance"``).
         use_measure_weights: Route with the quadrature measure as a log-space
             bias so slice states are measure-weighted (quadrature) means. ``False``
             is the "weights-off" ablation, which reads the sampling density.
@@ -576,10 +555,6 @@ class ISLA(Module):
         n_global_scalars: Number ``S >= 0`` of global scalar inputs
             (``global_scalars`` of shape ``(B, S)``, e.g. PDE parameters),
             appended to every token's seed features.
-        similarity_gauge: Centered-frame variant whose centroid and length unit
-            are the measure-weighted centroid and RMS radius of the sample
-            (adds equivariance to geometric scale); requires
-            ``frame_mode="centered"`` and ``scale_mode="reference_length"``.
         use_relational_geo: Feed the point-anchor relational invariants to the
             routing bias and the read-back (``False`` is the feature-only
             slicing ablation).
@@ -609,22 +584,18 @@ class ISLA(Module):
         support_tokens: With ``query_independent``, admit a per-case
             computational support (``support_points`` / ``support_normals`` /
             ``support_scalars``) as interacting tokens next to the boundary.
-        frame_mode: ``"relative"`` (reference): positions enter only as
-            point-to-anchor differences, no centroid anywhere; ``"centered"``:
-            centre on the plain mean of the sampled points (the constant-gauge
-            and similarity-gauge variants).
-        scale_mode: ``"rms_distance"`` (reference, the default): divide
-            positions by the measure-weighted RMS pairwise distance of the
-            sample, ``sqrt(sum_ij w_i w_j |x_i - x_j|^2)`` with the
-            weights normalized to one, a *normalized* two-point statistic
-            that converges under refinement of a boundary whose total measure
-            does not (a fractal boundary) and that names no center; it is
-            also invariant to a uniform rescale of the weights alone;
-            ``"total_measure"`` (option; the default until 2026-09-18): divide
-            by the square root of the total quadrature measure, an integral of
-            the geometry, equivalent to the default within 1.3% of
-            surface-pressure error on DrivAerML (LEN-RMS);
-            ``"reference_length"``: divide by ``reference_length``.
+        scale_mode: The one length unit of the (origin-free) frame.
+            ``"rms_distance"`` (the default): divide positions by the
+            measure-weighted RMS pairwise distance of the sample,
+            ``sqrt(sum_ij w_i w_j |x_i - x_j|^2)`` with the weights normalized
+            to one, a *normalized* two-point statistic that converges under
+            refinement of a boundary whose total measure does not (a fractal
+            boundary) and that names no center; it is also invariant to a
+            uniform rescale of the weights alone. ``"total_measure"`` (the
+            default until 2026-09-18): divide by the square root of the total
+            quadrature measure, an integral of the geometry, equivalent to
+            the default within 1.3% of surface-pressure error on DrivAerML
+            (LEN-RMS); needs ``measure_weights``.
         geo_kernel: ``None`` (default) selects automatically at the first
             forward pass: ``"fused"`` (exact Triton kernel for the per-layer
             geometry region) when the inputs are on CUDA, Triton is available,
@@ -669,13 +640,11 @@ class ISLA(Module):
         n_layers: int = 12,
         n_slices: int = 256,
         mlp_ratio: int = 4,
-        reference_length: float = 8.0,
         use_measure_weights: bool = True,
         fast_point_softmax: bool = True,
         n_boundary_scalars: int = 0,
         n_global_vectors: int = 1,
         n_global_scalars: int = 0,
-        similarity_gauge: bool = False,
         use_relational_geo: bool = True,
         query_independent: bool = False,
         n_decoder_layers: int = 4,
@@ -686,7 +655,6 @@ class ISLA(Module):
         query_scalar_scale: str = "length",
         query_mass: str = "source_total",
         support_tokens: bool = False,
-        frame_mode: str = "relative",
         scale_mode: str = "rms_distance",
         geo_kernel: str | None = None,
         routing_norm: str = "linear",
@@ -695,7 +663,9 @@ class ISLA(Module):
     ) -> None:
         super().__init__(meta=self.MetaData())
         if routing_norm not in ("linear", "cosine"):
-            raise ValueError(f"routing_norm must be 'linear' or 'cosine', got {routing_norm!r}")
+            raise ValueError(
+                f"routing_norm must be 'linear' or 'cosine', got {routing_norm!r}"
+            )
         self.routing_norm = routing_norm
         self.routing_temperature = float(routing_temperature)
         ### KERNEL STUDY (2026-09-13): geo_kernel selects the implementation of the
@@ -737,57 +707,27 @@ class ISLA(Module):
                 f"got n_global_vectors={self.n_global_vectors}"
             )
         self.n_slices = int(n_slices)
-        ### RELFRAME (2026-09-10, ruling: no sample statistic may enter the
-        ### flagship's frame; 2026-09-11: frame_mode="relative" and
-        ### scale_mode="total_measure" became the class defaults, the
-        ### reference configuration; checkpoints store their constructor
-        ### arguments, so models saved under the old defaults load unchanged).
-        ### LEN-RMS (2026-09-18): scale_mode="rms_distance" became the default
+        ### The frame (RELFRAME, 2026-09-10; the only frame since 2026-09-20):
+        ### r = points / L with no centering. Every position-dependent quantity
+        ### is a point-to-anchor difference (seeds reduce to n.g_k; the measure
+        ### enters the routing as before), and the vector head's radial basis
+        ### vector is the direction from the point's soft slice anchor (a
+        ### measure-weighted mean, the same construction as the relational
+        ### anchors), so the head stays translation covariant and exact
+        ### translation invariance holds without any centering. A centroid,
+        ### plain or measure-weighted, was the one sampling-distribution-
+        ### dependent quantity in the earlier centered frame; that is why it
+        ### is gone. L is a measure-weighted integral of the geometry:
+        ### LEN-RMS (2026-09-18) made the RMS pairwise distance the default
         ### after validation against the total-measure unit at 435 DrivAerML
         ### cars (0.0526 vs 0.0533 under the stratified draw, seed ranges
-        ### overlapping); the RMS pairwise distance is normalized, center-free
-        ### and finite on fractal boundaries where the total measure diverges.
-        ### frame_mode="relative" removes the frame origin
-        ### altogether: r = points / L with no centering. The six scalars that
-        ### referred to the centroid are gone -- the four seed features |r|,
-        ### log|r|, rhat.g, rhat.n (seeds reduce to n.g_k; the measure enters the
-        ### routing as before) and the relational invariants |z_s| and
-        ### zhat_s.g_k (see _relational_invariants). The vector head's radial
-        ### basis vector rhat becomes the direction from the point's soft slice
-        ### anchor (a measure-weighted mean, the same construction as the
-        ### relational anchors) so the head stays translation covariant.
-        ### Exact translation invariance holds without any centering.
-        ### scale_mode="total_measure" divides positions by sqrt(sum of the
-        ### measure weights) per sample -- the total surface area, an integral
-        ### of the geometry that is consistent under Horvitz-Thompson weights
-        ### -- instead of the constant reference_length.
-        if frame_mode not in ("centered", "relative"):
+        ### overlapping); it is normalized, center-free and finite on fractal
+        ### boundaries where the total measure diverges.
+        if scale_mode not in ("total_measure", "rms_distance"):
             raise ValueError(
-                f"frame_mode must be 'centered' or 'relative', got {frame_mode!r}"
-            )
-        self.frame_mode = frame_mode
-        self.relative_frame = frame_mode == "relative"
-        if scale_mode not in ("reference_length", "total_measure", "rms_distance"):
-            raise ValueError(
-                f"scale_mode must be 'reference_length', 'total_measure' or 'rms_distance', got {scale_mode!r}"
+                f"scale_mode must be 'total_measure' or 'rms_distance', got {scale_mode!r}"
             )
         self.scale_mode = scale_mode
-        if similarity_gauge and scale_mode != "reference_length":
-            raise ValueError(
-                "similarity_gauge sets its own scale; use scale_mode='reference_length'"
-            )
-        if self.relative_frame and similarity_gauge:
-            raise ValueError(
-                "frame_mode='relative' (the default) excludes similarity_gauge (it reads a position "
-                "relative to a frame origin); pass frame_mode='centered' and scale_mode='reference_length' to use it"
-            )
-        ### CENTER (2026-09-10): the constant gauge (similarity_gauge=False) in
-        ### the centered frame centers by the PLAIN mean of the sampled points.
-        ### The routing softmax adds raw log-weights (invariant to uniform
-        ### rescaling) and the slice moments are attention-normalized, so the
-        ### unweighted centroid is the ONLY sampling-distribution-dependent
-        ### quantity in that forward pass -- the reason the relative frame is
-        ### the reference configuration.
         ### Density-factorial knob (prereg 3f4e4af7 follow-up): with False,
         ### the assignment softmax ignores quadrature weights entirely,
         ### isolating the measure-bias pathway of density sensitivity.
@@ -802,18 +742,16 @@ class ISLA(Module):
         self.fast_point_softmax = bool(fast_point_softmax)
         self.out_scalars = out_scalars
         self.out_vectors = out_vectors
-        self.reference_length = float(reference_length)
         self.eps = eps
         ### G3 experiment channel (prereg pending): per-point boundary-condition
         ### scalars (e.g. a Dirichlet trace). Scalars are invariants, so every
         ### contract is untouched; they simply widen the seed features.
         self.n_boundary_scalars = int(n_boundary_scalars)
-        ### Seed width: the {r, n, g_k} invariants (K terms n.g_k in the relative
-        ### frame; |r|, log|r|, rhat.g_k, rhat.n, n.g_k centered), the boundary
+        ### Seed width: the K invariants n.g_k (the only origin-free scalars of
+        ### {n, g_k}; positions enter through the anchors), the boundary
         ### scalars and the global scalars.
         K = self.n_global_vectors
-        n_base = K if self.relative_frame else 3 + 2 * K
-        n_seed = n_base + self.n_boundary_scalars + self.n_global_scalars
+        n_seed = K + self.n_boundary_scalars + self.n_global_scalars
         ### With no global inputs and no other seed channel the seed is empty;
         ### every token then starts from one learned embedding and all
         ### separation comes from the slice blocks' relational anchors.
@@ -833,7 +771,6 @@ class ISLA(Module):
                 use_relational_geo=use_relational_geo,
                 geo_checkpoint=geo_checkpoint,
                 fast_point_softmax=self.fast_point_softmax,
-                relative_frame=self.relative_frame,
                 geo_kernel=geo_kernel,
                 n_global_vectors=K,
                 routing_norm=routing_norm,
@@ -841,10 +778,10 @@ class ISLA(Module):
             )
             for _ in range(n_layers)
         )
-        if self.relative_frame:
-            ### Head frame (RELFRAME): per-point soft slice anchor for the
-            ### radial basis vector.
-            self.frame_assign = _RoutingLogits(hidden, n_slices, routing_norm, routing_temperature)
+        ### Head frame: per-point soft slice anchor for the radial basis vector.
+        self.frame_assign = _RoutingLogits(
+            hidden, n_slices, routing_norm, routing_temperature
+        )
         ### v5a (query_independent): encode/decode split. Queries decode
         ### passively from final encoder slices and anchors: query-independent
         ### by construction given the source sample.
@@ -861,7 +798,6 @@ class ISLA(Module):
                     n_slices,
                     mlp_ratio,
                     geo_checkpoint=geo_checkpoint,
-                    relative_frame=self.relative_frame,
                     geo_kernel=geo_kernel,
                     n_global_vectors=K,
                     routing_norm=routing_norm,
@@ -875,12 +811,6 @@ class ISLA(Module):
         ### the GLOBE multi-vector expansion (4 + 3K basis vectors; 7 for K = 1).
         self.n_basis = 4 + 3 * K
         self.head = nn.Linear(hidden, out_scalars + out_vectors * self.n_basis)
-        ### S1 (critic review 2026-09-02): the centered frame's plain-mean
-        ### centroid and constant reference length make the model neither
-        ### measure-complete nor scale-equivariant. This gauge uses the
-        ### measure-weighted centroid and the measure-weighted RMS radius:
-        ### exact geometric-scale equivariance and a density-robust frame.
-        self.similarity_gauge = similarity_gauge
         ### QUERY TOKENS (boundary->interior exploration, 2026-09-07): interior
         ### query points join the encoder as INTERACTING tokens, carrying the
         ### same {q, n_q, g_k} invariant seeds as the surface tokens (the
@@ -972,22 +902,11 @@ class ISLA(Module):
         Multiply-and-sum rather than einsum so autocast leaves the geometry in fp32."""
         return (x[:, :, None, :] * g_hat).sum(-1)
 
-    def _seed_invariants(self, mag, hat, n_hat, g_hat):
-        """The per-token seed invariants of {r, n, g_k}: |r|, log|r|, rhat.g_k (K),
-        rhat.n, n.g_k (K) -- or the K terms n.g_k alone in the relative frame,
-        where r has no origin (an empty tensor when K = 0)."""
-        if self.relative_frame:
-            return self._dots(n_hat, g_hat)
-        return torch.cat(
-            [
-                mag,
-                torch.log(mag),
-                self._dots(hat, g_hat),
-                (hat * n_hat).sum(-1, keepdim=True),
-                self._dots(n_hat, g_hat),
-            ],
-            dim=-1,
-        )
+    def _seed_invariants(self, n_hat, g_hat):
+        """The per-token seed invariants: the K terms n.g_k (an empty tensor when
+        K = 0). Positions have no origin, so they carry no seed scalar; they
+        enter through the point-to-anchor invariants of the slice blocks."""
+        return self._dots(n_hat, g_hat)
 
     def _with_empty_boundary_data(self, inv, n_tokens: int):
         """Boundary-condition data (``boundary_scalars``) belong to boundary cells;
@@ -1055,7 +974,12 @@ class ISLA(Module):
         self._geo_kernel_cache = (key, chosen)
         logger.info(
             "ISLA geo_kernel=auto resolved to %r on %s (cuda=%s, triton=%s, global_vectors=%d, slices=%d)",
-            chosen, points.device, points.is_cuda, HAS_TRITON, self.n_global_vectors, self.n_slices,
+            chosen,
+            points.device,
+            points.is_cuda,
+            HAS_TRITON,
+            self.n_global_vectors,
+            self.n_slices,
         )
         return chosen
 
@@ -1073,9 +997,16 @@ class ISLA(Module):
 
     def _validate_inputs(
         self,
-        points, normals, measure_weights, boundary_scalars,
-        query_points, query_normals, query_scalars,
-        support_points, support_normals, support_scalars,
+        points,
+        normals,
+        measure_weights,
+        boundary_scalars,
+        query_points,
+        query_normals,
+        query_scalars,
+        support_points,
+        support_normals,
+        support_scalars,
     ) -> None:
         """Shape and presence checks for :meth:`forward` (MOD-005 format)."""
         if points.ndim != 3 or points.shape[-1] != 3:
@@ -1103,12 +1034,16 @@ class ISLA(Module):
                     f"tensor of shape {tuple(boundary_scalars.shape)}"
                 )
         elif boundary_scalars is not None and boundary_scalars.numel():
-            raise ValueError("this model was built with n_boundary_scalars=0; pass no boundary_scalars")
+            raise ValueError(
+                "this model was built with n_boundary_scalars=0; pass no boundary_scalars"
+            )
         for name, pts, nrm, sc in (
             ("query", query_points, query_normals, query_scalars),
             ("support", support_points, support_normals, support_scalars),
         ):
-            if pts is not None and (pts.ndim != 3 or pts.shape[0] != b or pts.shape[-1] != 3):
+            if pts is not None and (
+                pts.ndim != 3 or pts.shape[0] != b or pts.shape[-1] != 3
+            ):
                 raise ValueError(
                     f"Expected {name}_points of shape ({b}, M, 3) but got tensor of shape {tuple(pts.shape)}"
                 )
@@ -1171,9 +1106,16 @@ class ISLA(Module):
         ### boundary with the offending shape, not inside the network.
         if not torch.compiler.is_compiling():
             self._validate_inputs(
-                points, normals, measure_weights, boundary_scalars,
-                query_points, query_normals, query_scalars,
-                support_points, support_normals, support_scalars,
+                points,
+                normals,
+                measure_weights,
+                boundary_scalars,
+                query_points,
+                query_normals,
+                query_scalars,
+                support_points,
+                support_normals,
+                support_scalars,
             )
         self._apply_geo_kernel(points)
         ### Global vector inputs: (B, K, 3), or any layout with B*K*3 or K*3
@@ -1226,22 +1168,9 @@ class ISLA(Module):
                     f"global_scalars gives {g_scalars.shape[0]} rows for a batch of {b}"
                 )
 
-        ### Frame: no origin in the relative frame; the measure-weighted centroid
-        ### under the similarity gauge; the plain mean otherwise. Scale: the square
-        ### root of the total measure, the gauge's weighted RMS radius, or L_ref.
-        if self.similarity_gauge:
-            w_raw = (
-                measure_weights.reshape(b, n, 1).to(points.dtype)
-                if measure_weights is not None
-                else torch.ones(b, n, 1, dtype=points.dtype, device=points.device)
-            )
-            w_n = w_raw / w_raw.sum(dim=1, keepdim=True).clamp_min(self.eps)
-        if self.relative_frame:
-            center = points.new_zeros(b, 1, 3)  # RELFRAME: no frame origin
-        elif self.similarity_gauge:
-            center = (w_n * points).sum(dim=1, keepdim=True)
-        else:
-            center = points.mean(dim=1, keepdim=True)
+        ### Frame: no origin; the one length unit is a measure-weighted integral
+        ### of the geometry (the RMS pairwise distance or the square root of the
+        ### total measure).
         if self.scale_mode == "total_measure":
             if measure_weights is None:
                 raise ValueError("scale_mode='total_measure' needs measure_weights")
@@ -1252,7 +1181,7 @@ class ISLA(Module):
                 .clamp_min(self.eps)
                 .sqrt()
             )
-        elif self.scale_mode == "rms_distance":
+        else:
             ### LEN-RMS (2026-09-18): the measure-weighted RMS pairwise distance,
             ### computed through the variance identity sum_ij w_i w_j |x_i-x_j|^2
             ### = 2 sum_i w_i |x_i - c|^2 with c the weighted mean (used only
@@ -1260,21 +1189,7 @@ class ISLA(Module):
             ### weights make it converge under refinement where the total
             ### measure diverges, and make it invariant to a weight rescale.
             gauge = rms_pairwise_distance(points, measure_weights, self.eps)
-        elif self.similarity_gauge:
-            gauge = (
-                (
-                    (w_n * (points - center).square().sum(-1, keepdim=True)).sum(
-                        dim=1, keepdim=True
-                    )
-                )
-                .sqrt()
-                .clamp_min(self.eps)
-            )  # (B,1,1) weighted RMS radius
-        else:
-            gauge = self.reference_length
-        r = (points - center) / gauge
-        r_mag = r.norm(dim=-1, keepdim=True).clamp_min(self.eps)
-        r_hat = r / r_mag
+        r = points / gauge
         n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
 
         if measure_weights is None or not self.use_measure_weights:
@@ -1285,7 +1200,7 @@ class ISLA(Module):
             measure_weights = measure_weights.reshape(b, n).to(points.dtype)
             log_w = torch.log(measure_weights.clamp_min(self.eps))[..., None]
 
-        invariants = self._seed_invariants(r_mag, r_hat, n_hat, g_hat)
+        invariants = self._seed_invariants(n_hat, g_hat)
         if self.n_boundary_scalars:
             bs = boundary_scalars.reshape(b, n, self.n_boundary_scalars)
             invariants = torch.cat([invariants, bs.to(invariants.dtype)], dim=-1)
@@ -1305,17 +1220,13 @@ class ISLA(Module):
                 )
             s_pts = support_points
             bs_, ns_, _ = s_pts.shape
-            s_r = (s_pts - center) / gauge
-            s_mag = s_r.norm(dim=-1, keepdim=True).clamp_min(self.eps)
-            s_rhat = s_r / s_mag
+            s_r = s_pts / gauge
             s_nhat = support_normals / support_normals.norm(
                 dim=-1, keepdim=True
             ).clamp_min(self.eps)
             s_g = g_unit[:, None].expand(bs_, ns_, K, 3)
             s_inv = self._with_global_scalars(
-                self._with_empty_boundary_data(
-                    self._seed_invariants(s_mag, s_rhat, s_nhat, s_g), ns_
-                ),
+                self._with_empty_boundary_data(self._seed_invariants(s_nhat, s_g), ns_),
                 g_scalars,
                 ns_,
             )
@@ -1356,17 +1267,13 @@ class ISLA(Module):
                 )
             q_pts = query_points
             bq, nq, _ = q_pts.shape
-            q_r = (q_pts - center) / gauge
-            q_mag = q_r.norm(dim=-1, keepdim=True).clamp_min(self.eps)
-            q_rhat = q_r / q_mag
+            q_r = q_pts / gauge
             q_nhat = query_normals / query_normals.norm(dim=-1, keepdim=True).clamp_min(
                 self.eps
             )
             q_g = g_unit[:, None].expand(bq, nq, K, 3)
             q_inv = self._with_global_scalars(
-                self._with_empty_boundary_data(
-                    self._seed_invariants(q_mag, q_rhat, q_nhat, q_g), nq
-                ),
+                self._with_empty_boundary_data(self._seed_invariants(q_nhat, q_g), nq),
                 g_scalars,
                 nq,
             )
@@ -1408,16 +1315,16 @@ class ISLA(Module):
             h = block(h, log_w, r, n_hat, g_hat, self.eps)
 
         ### The head frame builds its slice anchors from the SOURCE tokens
-        ### (src_r, src_logw, and h); the branches below overwrite r_hat, n_hat,
-        ### g_out and n with the query-side values, so the source tensors are
+        ### (src_r, src_logw, and h); the branches below overwrite n_hat, g_out
+        ### and n with the query-side values, so the source tensors are
         ### captured here.
         src_r, src_logw = r, log_w
-        r_out = r  # positions of the tokens the head reads (RELFRAME radial basis)
+        r_out = r  # positions of the tokens the head reads (radial basis)
         g_out = g_hat  # the global vectors seen by the tokens the head reads
         if qt_active:
             ### Heads read the query tokens only (surface tokens were context).
             h_out = h[:, n_boundary:]
-            r_hat, n_hat, g_out, b, n = q_rhat, q_nhat, q_g, bq, nq
+            n_hat, g_out, b, n = q_nhat, q_g, bq, nq
             r_out = q_r
         elif self.query_independent:
             ### Final encoder slice states and anchors (read-only for queries).
@@ -1440,13 +1347,11 @@ class ISLA(Module):
                     )
                 else:
                     q_nrm = normals
-            q_r = (q_pts - center) / gauge
-            q_mag = q_r.norm(dim=-1, keepdim=True).clamp_min(self.eps)
-            q_rhat = q_r / q_mag
+            q_r = q_pts / gauge
             q_nhat = q_nrm / q_nrm.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             bq, nq, _ = q_pts.shape
             q_g = g_unit[:, None].expand(bq, nq, K, 3)
-            q_inv = self._seed_invariants(q_mag, q_rhat, q_nhat, q_g)
+            q_inv = self._seed_invariants(q_nhat, q_g)
             ### The remaining seed channels must match the encoder's seed
             ### layout. Boundary scalars are per-boundary-cell data: the
             ### queries carry them only when the queries ARE the boundary
@@ -1486,21 +1391,20 @@ class ISLA(Module):
                     src_w=src_w,
                     local_rho=self.local_readout_rho,
                 )
-            h_out, r_hat, n_hat, g_out, b, n = q_h, q_rhat, q_nhat, q_g, bq, nq
+            h_out, n_hat, g_out, b, n = q_h, q_nhat, q_g, bq, nq
             r_out = q_r
         else:
             h_out = h
-        if self.relative_frame:
-            ### RELFRAME head frame: the radial basis vector is the direction from
-            ### the token's soft slice anchor (measure-weighted mean of source
-            ### positions) instead of from a centroid; translation covariant.
-            a_f = _softmax_over_points(
-                self.frame_assign(h) + src_logw, self.fast_point_softmax
-            )
-            z_f = torch.einsum("bns,bnc->bsc", a_f, src_r)
-            b_f = torch.softmax(self.frame_assign(h_out), dim=-1)
-            u = r_out - torch.einsum("bns,bsc->bnc", b_f, z_f).to(r_out.dtype)
-            r_hat = u / u.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+        ### Head frame: the radial basis vector is the direction from the token's
+        ### soft slice anchor (measure-weighted mean of source positions), not
+        ### from a centroid; translation covariant.
+        a_f = _softmax_over_points(
+            self.frame_assign(h) + src_logw, self.fast_point_softmax
+        )
+        z_f = torch.einsum("bns,bnc->bsc", a_f, src_r)
+        b_f = torch.softmax(self.frame_assign(h_out), dim=-1)
+        u = r_out - torch.einsum("bns,bsc->bnc", b_f, z_f).to(r_out.dtype)
+        r_hat = u / u.norm(dim=-1, keepdim=True).clamp_min(self.eps)
         out = self.head(self.norm_out(h_out))
 
         scalars = out[..., : self.out_scalars]

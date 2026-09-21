@@ -98,10 +98,11 @@ def _assert_same(ref, opt, dtype, out_tol, grad_tol, n=700, batch=1):
 
 # --------------------------------------------------------------------------- fused region
 @cuda_only
-@pytest.mark.parametrize("relative", [True, False])
 @pytest.mark.parametrize("dtype", [torch.float64, torch.float32])
-def test_fused_geo_region_matches_eager_region(relative, dtype):
-    """Region level: forward outputs (bias, mix, pooled) and every input gradient."""
+def test_fused_geo_region_matches_eager_region(dtype):
+    """Region level: forward outputs (bias, mix, pooled) and every input gradient.
+    The fused kernel keeps a ``relative`` flag; the model always passes ``True``
+    (the six-invariant set), which is what the eager region computes."""
     from physicsnemo.experimental.nn.isla.geo_kernel import fused_geo_region
 
     torch.backends.cuda.matmul.allow_tf32 = False
@@ -131,7 +132,7 @@ def test_fused_geo_region_matches_eager_region(relative, dtype):
     )
     logits = torch.randn(b, n, s, generator=g).to("cuda", dtype).requires_grad_()
     torch.manual_seed(0)
-    lin = torch.nn.Linear(6 if relative else 8, 1).to("cuda", dtype)
+    lin = torch.nn.Linear(6, 1).to("cuda", dtype)
     leaves = (lin.weight, lin.bias, logits, r, nh, d, z, ms)
     wts = [
         torch.randn(b, n, s, generator=g).to("cuda", dtype),
@@ -158,8 +159,8 @@ def test_fused_geo_region_matches_eager_region(relative, dtype):
         sum((o * w).sum() for o, w in zip(outs, wts)).backward()
         return [o.detach() for o in outs], [t.grad.detach().clone() for t in leaves]
 
-    o_ref, g_ref = run(_geo_region, relative)
-    o_f, g_f = run(fused_geo_region, relative)
+    o_ref, g_ref = run(_geo_region)
+    o_f, g_f = run(fused_geo_region, True)
     tol = 1e-11 if dtype == torch.float64 else 1e-6
     for a, bb in zip(o_f, o_ref):
         assert _rel(a, bb) < tol, _rel(a, bb)
@@ -190,7 +191,7 @@ def test_fused_geo_region_bf16_autocast_forward_matches_eager():
     lin = torch.nn.Linear(6, 1).cuda()
     with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
         ref = _geo_region(
-            lin, logits, r, nh, d[:, :, None], z, ms, 1e-12, True
+            lin, logits, r, nh, d[:, :, None], z, ms, 1e-12
         )  # eager region takes (B, N, K, 3)
         fused = fused_geo_region(lin, logits, r, nh, d, z, ms, 1e-12, True)
     assert [t.dtype for t in fused] == [t.dtype for t in ref]
@@ -244,21 +245,11 @@ def test_fused_geo_kernel_passive_decoder_and_batch():
 
 @cuda_only
 def test_fused_geo_kernel_keeps_contracts():
-    """SE(3) covariance and measure-scale invariance on the fused path (float64), in the
-    centered frame (the total-measure scale of the default frame is not measure-scale
-    invariant by design, see test_isla_perf), which also runs the 8-invariant kernel."""
+    """SE(3) covariance and measure-scale invariance on the fused path (float64) in
+    the default configuration (the RMS-distance length unit is invariant to a
+    uniform rescale of the weights)."""
     torch.manual_seed(0)
-    m = (
-        ISLA(
-            **REF,
-            geo_kernel="fused",
-            frame_mode="centered",
-            scale_mode="reference_length",
-        )
-        .cuda()
-        .double()
-        .eval()
-    )
+    m = ISLA(**REF, geo_kernel="fused").cuda().double().eval()
     inputs, _ = _cloud(500, dtype=torch.float64)
     q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64, device="cuda"))
     if torch.det(q) < 0:

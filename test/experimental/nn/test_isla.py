@@ -21,19 +21,16 @@ import torch
 
 from physicsnemo.experimental.nn.isla import ISLA
 
-# The contract tests below were written for the centered construction (plain-mean
-# centre, constant reference_length), which was the class default until 2026-09-11.
-# The class default is now the relative frame with the RMS-pairwise-distance length
-# unit (the reference configuration; the total-measure unit was the default from
-# 2026-09-11 to 2026-09-18); these tests pin the centered construction explicitly so
-# they keep verifying it, and test_default_is_relative_rms_distance covers the default.
-_CENTERED = dict(frame_mode="centered", scale_mode="reference_length")
+# The frame is origin-free (positions enter only as point-to-anchor differences) with
+# one data-derived length unit: the measure-weighted RMS pairwise distance
+# (scale_mode="rms_distance", the default) or the square root of the total measure
+# (scale_mode="total_measure"). Unless a test says otherwise it exercises the default.
 
 
 @pytest.fixture
 def setup():
     torch.manual_seed(0)
-    m = ISLA(**_CENTERED, hidden=64, n_layers=3, n_slices=32).double().eval()
+    m = ISLA(hidden=64, n_layers=3, n_slices=32).double().eval()
     n = 500
     ### Anisotropic cloud: the principal-axis frame is exactly covariant
     ### only where the covariance spectrum is non-degenerate (generic for
@@ -115,7 +112,6 @@ def setup_qi():
     torch.manual_seed(0)
     m = (
         ISLA(
-            **_CENTERED,
             hidden=64,
             n_layers=2,
             n_slices=16,
@@ -196,11 +192,7 @@ def test_qi_global_vector_magnitude_invariance(setup_qi):
 
 def test_boundary_scalar_channel_contracts():
     torch.manual_seed(0)
-    m = (
-        ISLA(**_CENTERED, hidden=64, n_layers=2, n_slices=16, n_boundary_scalars=2)
-        .double()
-        .eval()
-    )
+    m = ISLA(hidden=64, n_layers=2, n_slices=16, n_boundary_scalars=2).double().eval()
     n = 300
     pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
         [3.0, 2.0, 1.0], dtype=torch.float64
@@ -234,14 +226,12 @@ def test_boundary_scalar_channel_contracts():
     assert torch.allclose(rot[..., 1:4], base[..., 1:4] @ q.T, atol=1e-10)
 
 
-@pytest.mark.parametrize(
-    "kw", [{}, {"frame_mode": "relative", "scale_mode": "total_measure"}]
-)
+@pytest.mark.parametrize("kw", [{}, {"scale_mode": "total_measure"}])
 def test_head_runs_under_bf16_autocast(kw):
-    """Mixed-precision smoke: the head must survive bf16 autocast in both frames
-    (the geometry is kept in the input precision by construction)."""
+    """Mixed-precision smoke: the head must survive bf16 autocast under both length
+    units (the geometry is kept in the input precision by construction)."""
     torch.manual_seed(0)
-    m = ISLA(hidden=32, n_layers=1, n_slices=8, **{**_CENTERED, **kw})
+    m = ISLA(hidden=32, n_layers=1, n_slices=8, **kw)
     pts = torch.randn(1, 128, 3)
     nrm = torch.nn.functional.normalize(torch.randn(1, 128, 3), dim=-1)
     drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1)
@@ -250,46 +240,6 @@ def test_head_runs_under_bf16_autocast(kw):
         out = m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w)
     out.float().sum().backward()
     assert torch.isfinite(out.float()).all()
-
-
-def test_similarity_gauge_geometric_scale_equivariance():
-    """S1: with the measure-weighted gauge, a geometric rescale (points x k,
-    areas x k^2) must leave the output exactly unchanged; the default gauge
-    must NOT (documenting that the original model is not scale-equivariant)."""
-    torch.manual_seed(0)
-    n = 400
-    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
-        [3.0, 2.0, 1.0], dtype=torch.float64
-    )
-    nrm = torch.nn.functional.normalize(
-        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
-    )
-    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
-    w = torch.rand(1, n, dtype=torch.float64) + 0.5
-    torch.manual_seed(1)
-    mg = (
-        ISLA(**_CENTERED, hidden=64, n_layers=2, n_slices=16, similarity_gauge=True)
-        .double()
-        .eval()
-    )
-    torch.manual_seed(1)
-    m0 = ISLA(**_CENTERED, hidden=64, n_layers=2, n_slices=16).double().eval()
-    k = 2.7
-    shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
-    with torch.no_grad():
-        a = mg(points=pts, normals=nrm, global_vectors=drv, measure_weights=w)
-        bsc = mg(
-            points=k * pts + shift,
-            normals=nrm,
-            global_vectors=drv,
-            measure_weights=k * k * w,
-        )
-        a0 = m0(points=pts, normals=nrm, global_vectors=drv, measure_weights=w)
-        b0 = m0(
-            points=k * pts, normals=nrm, global_vectors=drv, measure_weights=k * k * w
-        )
-    assert torch.allclose(bsc, a, atol=1e-10)
-    assert not torch.allclose(b0, a0, atol=1e-3)
 
 
 def test_passive_interior_queries_contracts():
@@ -313,13 +263,11 @@ def test_passive_interior_queries_contracts():
     )
     m = (
         ISLA(
-            **_CENTERED,
             hidden=64,
             n_layers=2,
             n_slices=16,
             query_independent=True,
             n_decoder_layers=2,
-            similarity_gauge=True,
             out_scalars=1,
             out_vectors=1,
         )
@@ -389,10 +337,10 @@ def test_no_relational_geo_ablation_runs_and_differs():
     if torch.det(q) < 0:
         q[:, 0] = -q[:, 0]
     torch.manual_seed(1)
-    ref = ISLA(**_CENTERED, hidden=64, n_layers=2, n_slices=16).double().eval()
+    ref = ISLA(hidden=64, n_layers=2, n_slices=16).double().eval()
     torch.manual_seed(1)
     nogeo = (
-        ISLA(**_CENTERED, hidden=64, n_layers=2, n_slices=16, use_relational_geo=False)
+        ISLA(hidden=64, n_layers=2, n_slices=16, use_relational_geo=False)
         .double()
         .eval()
     )
@@ -419,10 +367,9 @@ def test_no_relational_geo_ablation_runs_and_differs():
     [
         {},
         {"use_relational_geo": False},
-        {"similarity_gauge": True},
-        {"frame_mode": "relative"},
+        {"scale_mode": "total_measure"},
+        {"geo_checkpoint": True},
         {
-            "frame_mode": "relative",
             "scale_mode": "total_measure",
             "query_independent": True,
             "n_decoder_layers": 1,
@@ -433,7 +380,7 @@ def test_all_parameters_receive_gradients(kw):
     """DDP requires every parameter to take part in the loss; a module built
     but skipped in forward crashes distributed training (A35b nogeo incident)."""
     torch.manual_seed(0)
-    m = ISLA(hidden=32, n_layers=2, n_slices=8, **{**_CENTERED, **kw})
+    m = ISLA(hidden=32, n_layers=2, n_slices=8, **kw)
     pts = torch.randn(1, 128, 3)
     nrm = torch.nn.functional.normalize(torch.randn(1, 128, 3), dim=-1)
     drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1)
@@ -468,8 +415,8 @@ def test_geo_checkpoint_is_exact(extra):
     for the encoder blocks and the passive decoder blocks."""
     torch.manual_seed(0)
     kw = dict(out_scalars=1, out_vectors=1, hidden=32, n_layers=2, n_slices=8, **extra)
-    ref = ISLA(**{**_CENTERED, **kw}).double()
-    ckp = ISLA(geo_checkpoint=True, **{**_CENTERED, **kw}).double()
+    ref = ISLA(**kw).double()
+    ckp = ISLA(geo_checkpoint=True, **kw).double()
     ckp.load_state_dict(ref.state_dict())
     pts = torch.randn(1, 40, 3, dtype=torch.float64)
     nrm = torch.nn.functional.normalize(
@@ -500,8 +447,9 @@ def test_query_scalars_contracts():
     """Per-query scalar inputs on the query tokens (e.g. the signed distance
     to the wall): exact rotation/translation covariance is untouched (scalars
     are invariants), the scalar channel changes the output and receives
-    gradients, geometric-scale equivariance holds under the similarity gauge
-    with the "length" scaling, and misuse raises."""
+    gradients, geometric-scale equivariance holds with the "length" scaling of
+    the scalars (they are divided by the frame's length unit), and misuse
+    raises."""
     torch.manual_seed(0)
     kw = dict(
         out_scalars=1,
@@ -510,10 +458,9 @@ def test_query_scalars_contracts():
         n_layers=2,
         n_slices=8,
         query_tokens=True,
-        similarity_gauge=True,
         n_query_scalars=1,
     )
-    m = ISLA(**{**_CENTERED, **kw}).double()
+    m = ISLA(**kw).double()
     pts = torch.randn(1, 40, 3, dtype=torch.float64)
     nrm = torch.nn.functional.normalize(
         torch.randn(1, 40, 3, dtype=torch.float64), dim=-1
@@ -591,7 +538,6 @@ def test_query_scalars_contracts():
         )
     with pytest.raises(ValueError):
         ISLA(
-            **_CENTERED,
             out_scalars=1,
             out_vectors=1,
             hidden=32,
@@ -621,12 +567,10 @@ def test_query_tokens_contracts():
     )
     m = (
         ISLA(
-            **_CENTERED,
             hidden=64,
             n_layers=2,
             n_slices=16,
             query_tokens=True,
-            similarity_gauge=True,
             out_scalars=1,
             out_vectors=1,
         )
@@ -684,7 +628,6 @@ def test_query_tokens_contracts():
     assert not missing, missing
     with pytest.raises(ValueError):
         ISLA(
-            **_CENTERED,
             hidden=32,
             n_layers=1,
             n_slices=8,
@@ -701,7 +644,7 @@ def test_query_mass_source_total_refinement_invariance(extra):
     discrete source measure unchanged (positions, normals, total area, every
     integral). With query_mass="source_total" (the default) the query tokens'
     weight is a fraction of the total source measure, so the output is exactly
-    unchanged and the similarity-gauge scale contract still holds; the
+    unchanged and the geometric-scale contract still holds; the
     "geometric_mean" option is refinement-dependent and is asserted to differ."""
     torch.manual_seed(42)
     pts = torch.randn(1, 60, 3, dtype=torch.float64) * torch.tensor(
@@ -718,14 +661,13 @@ def test_query_mass_source_total_refinement_invariance(extra):
         hidden=32,
         n_layers=2,
         n_slices=8,
-        similarity_gauge=True,
         query_tokens=True,
         **extra,
     )
     torch.manual_seed(0)
-    total = ISLA(**{**_CENTERED, **kw}).double().eval()
+    total = ISLA(**kw).double().eval()
     torch.manual_seed(0)
-    default = ISLA(query_mass="geometric_mean", **{**_CENTERED, **kw}).double().eval()
+    default = ISLA(query_mass="geometric_mean", **kw).double().eval()
     refined = dict(
         points=pts.repeat_interleave(2, 1),
         normals=nrm.repeat_interleave(2, 1),
@@ -758,7 +700,6 @@ def test_query_mass_source_total_refinement_invariance(extra):
     assert not torch.allclose(a0, a, atol=1e-6)
     with pytest.raises(ValueError):
         ISLA(
-            **_CENTERED,
             hidden=32,
             n_layers=1,
             n_slices=8,
@@ -767,13 +708,14 @@ def test_query_mass_source_total_refinement_invariance(extra):
         )
 
 
+@pytest.mark.parametrize("scale_mode", ["rms_distance", "total_measure"])
 @pytest.mark.parametrize(
     "extra", [{}, {"query_independent": True, "n_decoder_layers": 2}]
 )
-def test_similarity_gauge_scale_equivariance_with_passive_decoder(extra):
-    """Under the similarity gauge a geometric rescale (points x k, areas x k^2)
-    leaves the output exactly unchanged, for the encoder alone and with the
-    passive decoder reading queries that are rescaled along."""
+def test_geometric_scale_equivariance(scale_mode, extra):
+    """A similarity of the geometry (points x k + shift, areas x k^2) leaves the
+    output exactly unchanged under either length unit, for the encoder alone and
+    with the passive decoder reading queries that are moved along."""
     torch.manual_seed(0)
     n = 400
     pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
@@ -785,13 +727,7 @@ def test_similarity_gauge_scale_equivariance_with_passive_decoder(extra):
     drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
     w = torch.rand(1, n, dtype=torch.float64) + 0.5
     m = (
-        ISLA(
-            hidden=64,
-            n_layers=2,
-            n_slices=16,
-            similarity_gauge=True,
-            **{**_CENTERED, **extra},
-        )
+        ISLA(hidden=64, n_layers=2, n_slices=16, scale_mode=scale_mode, **extra)
         .double()
         .eval()
     )
@@ -826,7 +762,6 @@ def test_passive_decode_boundary_scalars():
     bs = torch.randn(1, 60, 2, dtype=torch.float64)
     m = (
         ISLA(
-            **_CENTERED,
             hidden=32,
             n_layers=2,
             n_slices=8,
@@ -902,12 +837,12 @@ def _rotation():
     return q
 
 
-def test_relative_frame_contracts():
-    """RELFRAME: no frame origin. Exact translation invariance without centering
-    (1e-12, fp64), rotation equivariance, the reduced feature widths (seeds 5 ->
-    1, relational 8 -> 6 in the slice blocks and the passive read blocks),
-    geometric scale equivariance under scale_mode='total_measure' (points x s,
-    weights x s^2), and the excluded combinations."""
+def test_frame_contracts():
+    """The origin-free frame: exact translation invariance without centering
+    (1e-12, fp64), rotation equivariance, the feature widths (one seed invariant
+    n.g, six relational invariants in the slice blocks and the passive read
+    blocks), geometric scale equivariance under scale_mode='total_measure'
+    (points x s, weights x s^2), and the refused options."""
     pts, nrm, drv, w = _frame_cloud()
     shift = torch.tensor([300.0, -70.0, 1100.0], dtype=torch.float64)
     torch.manual_seed(1)
@@ -916,7 +851,6 @@ def test_relative_frame_contracts():
             hidden=64,
             n_layers=2,
             n_slices=16,
-            frame_mode="relative",
             query_independent=True,
             n_decoder_layers=1,
         )
@@ -925,23 +859,12 @@ def test_relative_frame_contracts():
     )
     torch.manual_seed(1)
     m_tm = (
-        ISLA(
-            hidden=64,
-            n_layers=2,
-            n_slices=16,
-            frame_mode="relative",
-            scale_mode="total_measure",
-        )
+        ISLA(hidden=64, n_layers=2, n_slices=16, scale_mode="total_measure")
         .double()
         .eval()
     )
-    torch.manual_seed(1)
-    m_def = ISLA(**_CENTERED, hidden=64, n_layers=2, n_slices=16).double().eval()
-    assert m.embed[0].in_features == 1 and m_def.embed[0].in_features == 5
-    assert (
-        m.blocks[0].geo_logit.in_features == 6
-        and m_def.blocks[0].geo_logit.in_features == 8
-    )
+    assert m.embed[0].in_features == 1
+    assert m.blocks[0].geo_logit.in_features == 6
     assert m.read_blocks[0].geo_logit.in_features == 6
     with torch.no_grad():
         for model in (m, m_tm):
@@ -984,45 +907,17 @@ def test_relative_frame_contracts():
         )  # the total measure IS the scale
         with pytest.raises(ValueError):
             m_tm(points=pts, normals=nrm, global_vectors=drv, measure_weights=None)
-    with pytest.raises(ValueError):
-        ISLA(
-            hidden=64,
-            n_layers=2,
-            n_slices=16,
-            frame_mode="relative",
-            similarity_gauge=True,
-        )
-    with pytest.raises(ValueError):
-        ISLA(hidden=64, n_layers=2, n_slices=16, frame_mode="absolute")
-    with pytest.raises(ValueError):
-        ISLA(
-            hidden=64, n_layers=2, n_slices=16, frame_mode="centered", scale_mode="rms"
-        )
-    with pytest.raises(ValueError):
-        ISLA(
-            hidden=64,
-            n_layers=2,
-            n_slices=16,
-            frame_mode="centered",
-            similarity_gauge=True,
-            scale_mode="total_measure",
-        )
+    with pytest.raises(ValueError, match="scale_mode must be"):
+        ISLA(hidden=64, n_layers=2, n_slices=16, scale_mode="reference_length")
 
 
-@pytest.mark.parametrize(
-    "kw",
-    [
-        {"frame_mode": "relative"},
-        {"frame_mode": "relative", "scale_mode": "total_measure"},
-    ],
-)
-def test_relative_frame_is_sampling_consistent(kw):
-    """The discriminating contract of the relative frame. Under a 10:1 biased
+@pytest.mark.parametrize("scale_mode", ["rms_distance", "total_measure"])
+def test_frame_is_sampling_consistent(scale_mode):
+    """The discriminating contract of the origin-free frame. Under a 10:1 biased
     Poisson subsample with exact HT weights, a model whose frame carries no
     sample statistic moves its predictions at fixed queries between the uniform
     and the biased draw by no more than the measure noise -- the same order as
-    between two independent uniform draws -- and far less than the plain-centred
-    model."""
+    between two independent uniform draws."""
     torch.manual_seed(0)
     n_full = 100000
     pts = torch.randn(1, n_full, 3, dtype=torch.float64) * torch.tensor(
@@ -1034,55 +929,31 @@ def test_relative_frame_is_sampling_consistent(kw):
     drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
     w = torch.rand(1, n_full, dtype=torch.float64) + 0.5
     q, qn = pts[:, :40], nrm[:, :40]
-    ### reference_length 1 puts r at the cloud's scale (the plain model must feel
-    ### the centroid shift); local_readout_rho 1 keeps the passive readout a smooth
-    ### measure-weighted average on this volumetric toy cloud (its surface default,
-    ### 0.02, underflows to the clamp here and its noise would swamp the frame).
-    common = dict(
-        hidden=32,
-        n_layers=2,
-        n_slices=8,
-        query_independent=True,
-        n_decoder_layers=1,
-        reference_length=1.0,
-        local_readout_rho=1.0,
+    ### local_readout_rho 1 keeps the passive readout a smooth measure-weighted
+    ### average on this volumetric toy cloud (its surface default, 0.02, underflows
+    ### to the clamp here and its noise would swamp the frame).
+    torch.manual_seed(1)
+    m = (
+        ISLA(
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
+            query_independent=True,
+            n_decoder_layers=1,
+            local_readout_rho=1.0,
+            scale_mode=scale_mode,
+        )
+        .double()
+        .eval()
     )
-    torch.manual_seed(1)
-    m_plain = ISLA(**{**_CENTERED, **common}).double().eval()
-    torch.manual_seed(1)
-    m = ISLA(**{**_CENTERED, **common, **kw}).double().eval()
     n_sub = 10000
-    d_bias, d_noise, d_plain, d_plain_noise = [], [], [], []
+    d_bias, d_noise = [], []
     for seed in range(4):
         g = torch.Generator().manual_seed(100 + seed)
         p_u, w_u, iu = _biased_poisson_subsample(pts, w, n_sub, 1.0, g)
         p_u2, w_u2, iu2 = _biased_poisson_subsample(pts, w, n_sub, 1.0, g)
         p_b, w_b, ib = _biased_poisson_subsample(pts, w, n_sub, 10.0, g)
         with torch.no_grad():
-            o_pu = m_plain(
-                points=p_u,
-                normals=nrm[:, iu],
-                global_vectors=drv,
-                measure_weights=w_u,
-                query_points=q,
-                query_normals=qn,
-            )
-            o_pu2 = m_plain(
-                points=p_u2,
-                normals=nrm[:, iu2],
-                global_vectors=drv,
-                measure_weights=w_u2,
-                query_points=q,
-                query_normals=qn,
-            )
-            o_pb = m_plain(
-                points=p_b,
-                normals=nrm[:, ib],
-                global_vectors=drv,
-                measure_weights=w_b,
-                query_points=q,
-                query_normals=qn,
-            )
             o_u = m(
                 points=p_u,
                 normals=nrm[:, iu],
@@ -1109,40 +980,28 @@ def test_relative_frame_is_sampling_consistent(kw):
             )
         d_bias.append(float((o_b - o_u).norm()))
         d_noise.append(float((o_u2 - o_u).norm()))
-        d_plain.append(float((o_pb - o_pu).norm()))
-        d_plain_noise.append(float((o_pu2 - o_pu).norm()))
-        assert d_bias[-1] < 0.4 * d_plain[-1], (d_bias, d_plain)
     ### measure-noise level: the biased draw's HT estimates have a larger variance
     ### than a uniform draw's (10x fewer points in the undersampled half), so the
     ### bias-vs-uniform difference may exceed the uniform-vs-uniform one by a
-    ### bounded factor -- not the order of magnitude a frame shift produces.
+    ### bounded factor -- not the order of magnitude a centroid shift produces.
     ratio = sum(d_bias) / sum(d_noise)
-    ratio_plain = sum(d_plain) / sum(d_plain_noise)
-    assert ratio < 4.0 < ratio_plain, (ratio, ratio_plain)
+    assert ratio < 4.0, (ratio, d_bias, d_noise)
 
 
-def test_default_is_relative_rms_distance():
-    """The class default is the reference configuration: the relative frame
-    (no centroid anywhere; one seed invariant n.d and six relational
-    invariants, decided 2026-09-11) with the RMS-pairwise-distance length unit
-    (positions divided by the measure-weighted root-mean-square pairwise
-    distance of the sample; validated and adopted 2026-09-18, LEN-RMS).
-    Checkpoints store their constructor arguments, so models saved under the
-    earlier defaults (centered frame; total-measure unit) are unaffected; this
-    test pins the default itself."""
+def test_default_is_rms_distance():
+    """The class default is the reference configuration: the RMS-pairwise-distance
+    length unit (positions divided by the measure-weighted root-mean-square
+    pairwise distance of the sample; validated and adopted 2026-09-18, LEN-RMS),
+    one seed invariant n.g and six relational invariants. Checkpoints store their
+    constructor arguments, so models saved under the earlier total-measure default
+    are unaffected; this test pins the default itself."""
     m = ISLA(hidden=32, n_layers=2, n_slices=8)
-    assert (
-        m.frame_mode == "relative"
-        and m.scale_mode == "rms_distance"
-        and m.relative_frame
-    )
+    assert m.scale_mode == "rms_distance"
     assert (
         m.geo_kernel == "auto"
     )  # 2026-09-19 ruling: fused wherever it can run, eager otherwise
     assert m.embed[0].in_features == 1
     assert m.blocks[0].geo_logit.in_features == 6
-    m_c = ISLA(**_CENTERED, hidden=32, n_layers=2, n_slices=8)
-    assert m_c.embed[0].in_features == 5 and m_c.blocks[0].geo_logit.in_features == 8
 
 
 def test_constructor_and_forward_are_keyword_only():
@@ -1168,21 +1027,15 @@ def test_unknown_constructor_argument_raises_type_error():
 
 
 def test_rms_distance_scale_contracts():
-    """LEN-RMS: the relative frame with the RMS-pairwise-distance length unit keeps
-    exact translation invariance and rotation covariance, is invariant to a
-    geometric rescale of the points (with or without the matching weight rescale)
-    AND to a uniform rescale of the weights alone (which the total-measure unit is
-    not), and needs no centre."""
+    """LEN-RMS: the RMS-pairwise-distance length unit keeps exact translation
+    invariance and rotation covariance, is invariant to a geometric rescale of the
+    points (with or without the matching weight rescale) AND to a uniform rescale
+    of the weights alone (which the total-measure unit is not), and needs no
+    centre."""
     pts, nrm, drv, w = _frame_cloud()
     torch.manual_seed(1)
     m = (
-        ISLA(
-            hidden=64,
-            n_layers=2,
-            n_slices=16,
-            frame_mode="relative",
-            scale_mode="rms_distance",
-        )
+        ISLA(hidden=64, n_layers=2, n_slices=16, scale_mode="rms_distance")
         .double()
         .eval()
     )
@@ -1227,13 +1080,7 @@ def test_rms_distance_scale_contracts():
         # routing bias log w is uniform-rescale invariant, so weights and positions decouple
     torch.manual_seed(1)
     m_tm = (
-        ISLA(
-            hidden=64,
-            n_layers=2,
-            n_slices=16,
-            frame_mode="relative",
-            scale_mode="total_measure",
-        )
+        ISLA(hidden=64, n_layers=2, n_slices=16, scale_mode="total_measure")
         .double()
         .eval()
     )
