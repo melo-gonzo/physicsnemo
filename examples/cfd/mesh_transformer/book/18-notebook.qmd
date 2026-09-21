@@ -22841,3 +22841,68 @@ sit at 3.6 or more with spread above 0.09), but "clean" networks do carry
 one or two near-threshold blocks, and the earlier statement that no clean
 block has fewer than 3.7 active slices is now 3.6. @tbl-routingsat is
 superseded by @tbl-routingsat-v2 for every per-block count.
+
+## 2026-09-21 — Plan, AIRFRANS-INT: AirfRANS (1,001 two-dimensional incompressible RANS airfoil cases, on the cluster in raw VTK) as the second interior dataset and a second PDE regime, with its Reynolds and angle-of-attack extrapolation splits {#sec-nb-airfrans-plan}
+
+**Setting.** The HiLiftAeroML volume files carry no interior fields
+(@sec-nb-hlvol-blocked), so the boundary-to-interior task, and every
+claim built on it, rests on DrivAerML alone. The cluster's dataset root
+holds one more candidate: **AirfRANS** (Bonnet et al., 2022), 1,001
+two-dimensional steady RANS (k-ω SST) solutions around NACA-family
+airfoils at Reynolds numbers of 2 to 6 million and angles of attack of −5
+to 15 degrees, in raw VTK (`airfrans/Dataset/<case>/`: an `_internal.vtu`
+with about 177,000 quadrilateral cells carrying velocity `U`, pressure `p`,
+eddy viscosity `nut` and the signed distance `implicit_distance` at the
+points; an `_aerofoil.vtp` polyline of the airfoil; a `_freestream.vtp`
+of the far boundary), with a manifest of splits: `full` (800 train / 200
+test), `scarce` (200 train), `reynolds` (504 train / 496 test, an
+extrapolation in Reynolds number) and `aoa` (804 / 196, an extrapolation
+in angle of attack). The recipe has no configuration for it.
+
+**Why it is the right second dataset.** It is a boundary-to-interior
+problem in the program's sense (a closed boundary curve with its normals
+and arc-length measure, one global direction, one global scalar, fields
+requested at interior points), it is a *different PDE regime*
+(incompressible, two-dimensional, a 3x range of Reynolds number) which is
+what ISLA's claim of generality needs, its two extrapolation splits are
+generalization tests the program has not had, and it is small (15 GB, a
+few minutes per epoch at 100,000 interior queries), so two-seed lanes of
+both architectures fit in a day. Its published leaderboard gives external
+reference numbers for the volume fields.
+
+**What has to be built (engineering, kept minimal).** A one-off converter
+(a CPU job with `pyvista`) that writes each case as a native `DomainMesh`:
+the interior as a point cloud in three dimensions with $z = 0$ and the four
+fields plus the signed distance and its gradient direction (the unit
+vector from the nearest airfoil point, computed in the converter because
+the recipe's SDF transform expects a triangulated surface); the airfoil
+as a boundary of line cells with precomputed in-plane unit normals and
+the cell lengths as the quadrature measure (the mesh class's normals are
+defined for codimension one only, and a curve in three dimensions is
+codimension two, so the converter stores them); global data holding the
+inlet velocity vector (its direction is the one global vector input, its
+magnitude the one global scalar) and the case's Reynolds number. Then a
+dataset definition reading those files with the manifest splits, an ISLA
+interior configuration (`query_tokens`, the signed distance as the query
+scalar, `n_global_scalars=1`, outputs: pressure and eddy viscosity as
+scalars, velocity as a vector) and the GeoTransolver-volume configuration
+on the same inputs. ISLA's vector head is three-dimensional; on a planar
+problem the out-of-plane basis vector carries a coefficient the network
+can learn to zero, and the planar velocity is representable in the
+remaining basis (the freestream direction, the query's signed-distance
+direction, and their in-plane complement).
+
+**Preregistration (to be completed when the lanes launch).** Both
+architectures at the recipe's interior dimensions on the `full` split
+(800 cases, two seeds), scored on the 200 test cases in float32 per field;
+then the two extrapolation splits with the same configurations. Bars, in
+readout units: the interior standing is *reproduced* if the
+GeoTransolver-volume ÷ ISLA ratios per field on AirfRANS fall on the same
+side of one as on DrivAerML (pressure below one, velocity above one) with
+both seeds agreeing in sign; it is *refuted* for a field if the ratio
+crosses one with seeds agreeing. On the extrapolation splits the question
+is new and the bar is stated as a comparison: the architecture whose test
+error grows less from `full` to `reynolds` (and to `aoa`) generalizes
+better, with a 10% difference in growth counting and anything less
+reported as a tie. Status: PLANNED; the converter is the next engineering
+step and is not started in this entry.
