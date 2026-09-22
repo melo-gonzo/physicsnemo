@@ -83,24 +83,29 @@ measured at the reporting protocol; the ratios are computed below from the
 #| fig-cap: >
 #|   The HiLiftAeroML rungs at the reporting protocol (200,000 cells per
 #|   case). Surface-pressure error (area-weighted relative L2, float32) for
-#|   GeoTransolver (red), Transolver (amber) and ISLA (blue) on the three
-#|   rungs measured at this budget: 35 random training cases, validated on
-#|   180 cases whose geometries recur in training; 4 training geometries at
-#|   all ten angles, validated on 180 cases of 18 never-seen geometries; 126
-#|   geometries at a fixed 12°, validated on 18 held-out geometries. Bars
+#|   GeoTransolver (red), Transolver (amber) and ISLA (blue) on the five
+#|   rungs measured at this budget: 35 and 210 random training cases,
+#|   validated on 180 cases whose geometries recur in training; 4 and 21
+#|   training geometries at all their angles, validated on 180 cases of
+#|   never-seen geometries; 126 geometries at a fixed 12°, validated on 18
+#|   held-out geometries. Bars
 #|   are seed means; dots are the two seeds; the label above each baseline
 #|   bar is baseline ÷ ISLA. Panels share no vertical scale, since the
-#|   rungs differ several-fold in error. How to read this: GeoTransolver and
-#|   Transolver sit below ISLA on every rung. It does not show the 210-case,
-#|   21-geometry, 510- and 1,260-case rungs, which are training at this
-#|   budget (@sec-program-status), or the uncertainty from the choice of
+#|   rungs differ several-fold in error. How to read this: the baselines'
+#|   lead is largest where the training set is small and its geometries recur
+#|   in validation, shrinks with cases, and is within 5% where the validation
+#|   geometries are never seen at 21 training geometries. It does not show
+#|   the 510- and 1,260-case rungs, which are training at this budget
+#|   (@sec-program-status), or the uncertainty from the choice of
 #|   training draw, which is three to eleven times the seed spread at 35
 #|   cases (@sec-de-controls). Data:
 #|   results/p200k_fleet_reduction_2026-09-19.json (35 cases),
-#|   results/p200k_fleet_interim_2026-09-20.json (4 geometries, fixed angle).
+#|   results/p200k_fleet_interim_2026-09-20.json (4 geometries, fixed angle),
+#|   results/p200k_fleet_reduction_2026-09-22.json (210 cases, 21 geometries).
 #| code-fold: true
 F19 = json.load(open(RES / "p200k_fleet_reduction_2026-09-19.json"))["datasets"]
 F20 = json.load(open(RES / "p200k_fleet_interim_2026-09-20.json"))["datasets"]
+F22 = json.load(open(RES / "p200k_fleet_reduction_2026-09-22.json"))["datasets"]
 def gt_best(d):
     """GeoTransolver at the better of its 1e-3 and 3e-3 pairs, with the rate label."""
     a = d["arms"]; cands = {k: a[k] for k in ("gt_unit", "gt_unit_lr3e3") if k in a and a[k].get("n_evaluated")}
@@ -112,13 +117,17 @@ def rung(d):
             "isla_ref": d["arms"]["isla"]["pressure_l2_seeds"]}
 LADDER = {
  "35 cases": rung(F19["highlift_surface_super_scarce"]),
+ "210 cases": rung(F22["highlift_surface_scarce"]),
  "4 geometries": rung(F20["highlift_surface_geometry_super_scarce"]),
+ "21 geometries": rung(F22["highlift_surface_geometry_scarce"]),
  "fixed angle": rung(F20["highlift_surface_single_aoa_12"]),
 }
-PANELS = [("35 random training cases\n(180 validation cases, geometries recur)", "35 cases"),
-          ("4 training geometries\n(180 validation cases, never-seen geometries)", "4 geometries"),
+PANELS = [("35 random training cases\n(geometries recur)", "35 cases"),
+          ("210 random training cases\n(geometries recur)", "210 cases"),
+          ("4 training geometries\n(never-seen geometries)", "4 geometries"),
+          ("21 training geometries\n(never-seen geometries)", "21 geometries"),
           ("fixed angle 12°, 126 geometries\n(18 held-out geometries)", "fixed angle")]
-fig, axs = plt.subplots(1, 3, figsize=(11.0, 4.6))
+fig, axs = plt.subplots(1, 5, figsize=(13.5, 4.6))
 for ax, (title, name) in zip(axs, PANELS):
     r = LADDER[name]
     arms = [("Geo-\nTransolver", r["gt"], "gt"), ("Transolver", r["t"], "t"), ("ISLA", r["isla_ref"], "isla_ref")]
@@ -128,8 +137,8 @@ for ax, (title, name) in zip(axs, PANELS):
         ax.plot([x_] * len(v), v, marker="o", ms=4.5, mfc="white", mec=INK, mew=0.9, ls="none", zorder=4)
         lab = f"{means[x_]:.3f}" + ("" if k == "isla_ref" else f"\n÷ {means[x_] / means[2]:.2f}")
         ax.text(x_, means[x_] * 1.02, lab, ha="center", va="bottom", fontsize=8.5, color=INK2)
-    ax.set_xticks(range(3)); ax.set_xticklabels([a[0] for a in arms], fontsize=8.5)
-    ax.set_title(title, fontsize=9.5, pad=8); ax.set_ylim(0, max(means) * 1.3); ax.grid(axis="x", visible=False)
+    ax.set_xticks(range(3)); ax.set_xticklabels([a[0] for a in arms], fontsize=8)
+    ax.set_title(title, fontsize=9, pad=8); ax.set_ylim(0, max(means) * 1.3); ax.grid(axis="x", visible=False)
 axs[0].set_ylabel("surface pressure error, area-weighted relative L2 [–]")
 fig.suptitle("reporting protocol: 200,000 cells per case; label = baseline ÷ ISLA", fontsize=9.5, color=INK2)
 fig.tight_layout()
@@ -147,7 +156,7 @@ def ratio(a, b):
     return f"{statistics.mean(a) / statistics.mean(b):.2f}"
 print("| rung | GeoTransolver (rate) | Transolver (3e-3) | ISLA (1e-3) | GeoTransolver ÷ ISLA | Transolver ÷ ISLA |")
 print("|---|---|---|---|---:|---:|")
-for name in ("35 cases", "4 geometries", "fixed angle"):
+for name in ("35 cases", "210 cases", "4 geometries", "21 geometries", "fixed angle"):
     r = LADDER[name]
     print(f"| {name} | {cell(r['gt'])} ({r['gt_rate']}) | {cell(r['t'])} | **{cell(r['isla_ref'])}** | "
           f"{ratio(r['gt'], r['isla_ref'])} | {ratio(r['t'], r['isla_ref'])} |")
@@ -155,13 +164,19 @@ print()
 print(": The HiLiftAeroML ladders at the reporting protocol (200,000 cells per case) in float32: seed mean (seed range) of surface-pressure error on the shared validation cases, and each baseline's mean divided by ISLA's (below one means the baseline is more accurate). GeoTransolver at the better of its 1e-3 and 3e-3 pairs, the rate named per row; Transolver at 3e-3; ISLA at 1e-3. How to read this: the ordering, not the absolute level, is the result. Same sources as @fig-hilift-data-efficiency. {#tbl-hilift-ladder}")
 ```
 
-The 210-case, 21-geometry, 510- and 1,260-case rungs are training at the
-reporting protocol and join the table as they report (@sec-program-status);
-the 510- and 1,260-case ISLA arms are its first at any budget. The
+**The deficit is a small-data, recurring-geometry effect.** Going from 35
+to 210 random training cases shrinks GeoTransolver's lead from 27% to 11%
+and Transolver's from 27% to 4%; holding the validation geometries out of
+training, the lead at 21 training geometries is 2% for GeoTransolver and
+5% for Transolver, against 24% and 27% at 4 geometries. Where a validation
+wing's geometry recurs in the training set the baselines gain more than
+ISLA does from having seen it, and where it does not the three models are
+within seed noise of one another once the training set holds a few tens of
+geometries. The 510- and 1,260-case rungs are training at the reporting
+protocol and join the table as they report (@sec-program-status); the
 preregistered bar for an ISLA advantage, baseline ÷ ISLA of at least 1.10
-with ISLA lower on two thirds of the cases, is approached on no rung. At 35
-cases and at the fixed angle GeoTransolver and Transolver lead on velocity
-and wall shear as well as pressure.
+with ISLA lower on two thirds of the cases, is reached on no rung. The
+orderings on velocity and wall shear follow pressure on every rung.
 
 ### The same rung under a different training law {#sec-de-training-law}
 

@@ -34,8 +34,11 @@ in view:
    (cars) at full data and Transolver trails both; on the smaller training
    sets GeoTransolver is the more data-efficient model, by a margin that
    closes monotonically with data (@sec-scoreboard-200k). On HiLiftAeroML
-   (wings) the baselines lead by about 27% at 35 training cases, and that
-   deficit does not move with the cell budget (@sec-data-efficiency).
+   (wings) the baselines lead by 21 to 32% on the small rungs, by 4 to 11% at
+   210 random training cases, and by 2 to 5% where the validation geometries
+   are never seen at 21 training geometries; the deficit is a small-data,
+   recurring-geometry effect and does not move with the cell budget
+   (@sec-data-efficiency).
 2. **ISLA's guarantees are exact and they earn accuracy where they matter.**
    Rotation and translation covariance hold by construction, so when
    geometries arrive in arbitrary poses ISLA leads baselines that learned

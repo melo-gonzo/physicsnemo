@@ -23311,3 +23311,48 @@ pair, the scaling-law rungs, the AirfRANS comparison, and two items with
 no runs behind them yet: the cross-family transfer at the protocol (needs
 a fine-tuning path in the recipe) and the force-coefficient readout on the
 200,000-cell checkpoints (evaluation only).
+
+## 2026-09-22 — Verdict, the 210-case and 21-geometry HiLiftAeroML rungs at the reporting protocol: the baselines' wing lead shrinks with training cases (GeoTransolver 27% → 11%, Transolver 27% → 4%) and is within 5% where the validation geometries are never seen at 21 training geometries {#sec-nb-wing-rungs-210-verdict}
+
+**Setting.** Until today the reporting-protocol wing board (200,000 cells
+per case, float32, two seeds) held three rungs: 35 random training cases,
+4 training geometries and the fixed-angle rung, and on each the baselines
+led ISLA by 21 to 32%. The 210-case rung (random split, validation
+geometries recur in training) and the 21-geometry rung (210 cases from 21
+geometries at all angles, the 18 validation geometries never seen) finished
+training in the fleet and were scored today
+(`results/p200k_fleet_reduction_2026-09-22.json`; GeoTransolver at the
+better of its 1e-3 and 3e-3 pairs, here 1e-3 on both rungs).
+
+**What we saw** (surface pressure, seed means; ratio = baseline ÷ ISLA):
+
+| rung | ISLA | GeoTransolver | Transolver | GeoTransolver ÷ ISLA | Transolver ÷ ISLA |
+|---|--:|--:|--:|--:|--:|
+| 35 random cases | 0.1500 | 0.1098 | 0.1101 | 0.73 | 0.73 |
+| 210 random cases | 0.0551 | 0.0489 | 0.0528 | 0.89 | 0.96 |
+| 4 geometries (never seen) | 0.2659 | 0.2022 | 0.1929 | 0.76 | 0.73 |
+| 21 geometries (never seen) | 0.0917 | 0.0900 | 0.0876 | 0.98 | 0.96 |
+
+: The wing ladders at the reporting protocol after the two new rungs (results/p200k_fleet_reduction_2026-09-19.json, …interim_2026-09-20.json, …reduction_2026-09-22.json). {#tbl-wing-rungs-210}
+
+Velocity and wall shear follow pressure on both new rungs (GeoTransolver ÷
+ISLA 0.91 and 0.90 at 210 cases, 0.97 and 0.97 at 21 geometries). Seeds:
+ISLA 0.0534 / 0.0567 and 0.0910 / 0.0924; GeoTransolver 0.0502 / 0.0476 and
+0.0913 / 0.0888; Transolver 0.0528 / 0.0527 and 0.0845 / 0.0907.
+
+**Reading.** The wing deficit the book has carried since the 35-case rung is
+a small-data effect that is largest when the validation geometries recur in
+training: six times the training cases cut GeoTransolver's lead from 27% to
+11% and Transolver's to 4%, and with the validation geometries held out the
+lead at 21 training geometries is 2% and 5%, inside the seed spread of the
+three models (ISLA 1.5%, GeoTransolver 2.7%, Transolver 7%). The chapter
+headline "the baselines lead on every wing rung" therefore becomes "the
+baselines lead by 21 to 32% on the small rungs, by 4 to 11% at 210 cases,
+and by 2 to 5% where the validation geometries are never seen". The
+preregistered ISLA-advantage bar (baseline ÷ ISLA of at least 1.10) is
+reached on no rung; the 510- and 1,260-case rungs (training) will say
+whether the recurring-geometry lead closes further. The mechanism the
+program has pointed at (the baselines read the mesher's pattern where a
+validation geometry recurs; @sec-data-efficiency) is consistent with the
+ordering but not established by it; the redo campaign's weights-off arms
+on the 35-case rung are the next evidence.

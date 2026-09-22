@@ -36,9 +36,15 @@ diagnostic notes. Routing: `routing_norm="linear"` (default) or `"cosine"`
 **Surface, DrivAerML 435 cars, 200,000 cells.** Parity: ISLA 0.0446,
 GeoTransolver 0.0445 at 3e-3, Transolver 0.0473 (0.998 / 1.06).
 Ladder GeoTransolver ÷ ISLA 0.83 / 0.86 / 0.92 / 0.97 / 1.00 at 27 / 54 /
-109 / 218 / 435 cars. Wings: 35-case rung 0.73 (0.72 at 10k); fixed-angle
-rung 0.69 (0.68 at 10k), Transolver 0.79; every model 20 to 25% better at
-200k, so the wing deficit is a property of the trained functions.
+109 / 218 / 435 cars. Wings (GeoTransolver ÷ ISLA / Transolver ÷ ISLA, 200k):
+35-case rung 0.73 / 0.73 (0.72 at 10k); fixed-angle rung 0.69 / 0.79 (0.68 at
+10k); 4 geometries 0.76 / 0.73; 210 random cases 0.89 / 0.96; 21 held-out
+geometries 0.98 / 0.96 (2026-09-22). The wing deficit is a small-data,
+recurring-geometry effect: it shrinks with cases and is within 5% where the
+validation geometries are never seen; it does not move with the cell budget.
+Say: "the baselines lead by 21 to 32% on the small wing rungs, 4 to 11% at 210
+cases, 2 to 5% at 21 held-out geometries". Do not say "27% on the wings"
+without the rung.
 
 **Capacity (100,000 cells, labeled scaling budget).** Linear routing has a
 rate ceiling ∝ 1/width and ≥ 1/depth whose failure is total routing collapse

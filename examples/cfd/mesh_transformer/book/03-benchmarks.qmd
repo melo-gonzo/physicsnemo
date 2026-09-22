@@ -5,9 +5,10 @@ float32 instrument at the reporting protocol of 200,000 cells per case,
 ISLA and GeoTransolver are at parity on DrivAerML at full data
 (GeoTransolver ÷ ISLA 0.998) and ISLA leads Transolver by 6%; below full
 data GeoTransolver holds a data-efficiency lead that narrows from 17% at 27
-cars to zero at 435; on HiLiftAeroML GeoTransolver leads by 27 to 32% and
-Transolver by 21 to 27% on the 35-case, 4-geometry and fixed-angle rungs,
-at either budget measured. ISLA leads where every case arrives in its own
+cars to zero at 435; on HiLiftAeroML the baselines lead by 21 to 32% on the
+small rungs (35 random cases, 4 geometries, the fixed angle), by 4 to 11%
+at 210 random cases, and by 2 to 5% where the validation geometries are
+never seen at 21 training geometries. ISLA leads where every case arrives in its own
 random pose (by 12% over GeoTransolver and 21% over Transolver), on
 interior velocity (by 42%, single dataset), and under a change of the law
 the training sample is drawn by (GeoTransolver and Transolver trained on
@@ -79,8 +80,9 @@ ISO = J("isocost_reduction_2026-09-20.json")
 per case, ISLA and GeoTransolver are at parity on DrivAerML at full data
 (0.998), ISLA leads Transolver by 6%, below full data GeoTransolver holds a
 data-efficiency lead that narrows from 17% at 27 cars to zero at 435, and
-on the three HiLiftAeroML rungs measured GeoTransolver leads by 27 to 32%
-and Transolver by 21 to 27%.** This is the book's primary standing. The
+on HiLiftAeroML the baselines lead by 21 to 32% on the small rungs, by 4
+to 11% at 210 random cases and by 2 to 5% at 21 held-out training
+geometries.** This is the book's primary standing. The
 DrivAerML table names GeoTransolver's rate on every row, because
 GeoTransolver's best rate depends on how much data it sees: 3e-3 beats 1e-3
 by 31%, 24%, 10%, 4% and 2% at 27, 54, 109, 218 and 435 cars at this budget
@@ -149,10 +151,16 @@ out += (f"| fixed angle 12°, 126 geometries | reporting protocol, 200,000 cells
 g4 = F3["highlift_surface_geometry_super_scarce"]; ga = g4["arms"]
 out += (f"| 4 training geometries, 18 held out | reporting protocol, 200,000 cells | {ga['isla']['pressure_l2_mean']:.4f} | {ga['gt_unit_lr3e3']['pressure_l2_mean']:.4f} | {ga['transolver_unit']['pressure_l2_mean']:.4f} "
         f"| {g4['ratios_over_isla']['gt_unit_lr3e3']['pressure_l2']:.2f} | {g4['ratios_over_isla']['transolver_unit']['pressure_l2']:.2f} |\n")
+F4 = J("p200k_fleet_reduction_2026-09-22.json")["datasets"]
+for key, label in (("highlift_surface_scarce", "210 training cases"), ("highlift_surface_geometry_scarce", "21 training geometries, held out")):
+    d4 = F4[key]; a4 = d4["arms"]
+    gk = min((k for k in ("gt_unit", "gt_unit_lr3e3") if k in a4 and a4[k].get("n_evaluated")), key=lambda k: a4[k]["pressure_l2_mean"])
+    out += (f"| {label} | reporting protocol, 200,000 cells | {a4['isla']['pressure_l2_mean']:.4f} | {a4[gk]['pressure_l2_mean']:.4f} | {a4['transolver_unit']['pressure_l2_mean']:.4f} "
+            f"| {d4['ratios_over_isla'][gk]['pressure_l2']:.2f} | {d4['ratios_over_isla']['transolver_unit']['pressure_l2']:.2f} |\n")
 print(out)
-print(": The 35-case and fixed-angle HiLiftAeroML rungs at both budgets, and the 4-geometry rung at the reporting protocol (surface-pressure error, float32, 180 validation cases, seed means; GeoTransolver at 3e-3 in both protocols, its better rate on these rungs; the 10,000-cell rows are rungs of the cell-count ladder, not standings). "
+print(": The 35-case and fixed-angle HiLiftAeroML rungs at both budgets, and the 4-geometry, 210-case and 21-geometry rungs at the reporting protocol (surface-pressure error, float32, 180 validation cases, seed means; GeoTransolver at 3e-3 in both protocols, its better rate on these rungs; the 10,000-cell rows are rungs of the cell-count ladder, not standings). "
       "How to read this: on the 35-case rung twenty times the sampled cells moved neither model by more than 4%, and on the fixed-angle rung every model improved by 20% to 25% while the ratios moved by 0.01 and 0.04; the mechanism the program points at is the mesher pattern where validation geometries recur in training (@sec-data-efficiency). "
-      "The remaining wing rungs join this table as they report (@sec-program-status). Data: results/p200k_fleet_reduction_2026-09-19.json; results/p200k_fleet_interim_2026-09-20.json; "
+      "The lead shrinks with training cases (27% to 11% for GeoTransolver from 35 to 210 cases) and is within 5% where the validation geometries are never seen at 21 training geometries (@sec-data-efficiency). The 510- and 1,260-case rungs join this table as they report (@sec-program-status). Data: results/p200k_fleet_reduction_2026-09-19.json; results/p200k_fleet_interim_2026-09-20.json; results/p200k_fleet_reduction_2026-09-22.json; "
       "results/fp32_reeval/fp32_shift_2026-09-09.json; results/frame_reduction_2026-09-11.json. {#tbl-scoreboard-200k-wings}")
 ```
 
