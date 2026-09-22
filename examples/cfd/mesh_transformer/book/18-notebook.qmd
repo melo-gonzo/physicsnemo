@@ -23881,3 +23881,30 @@ accurate on the cars by 6 to 9% (0.8) and on the 35-wing rung by 20% or
 more behind still (the wing deficit; 0.8: GeoTransolver 0.1098 against
 R1's 0.1361); step time of R1 with the fused kernel at or below
 GeoTransolver-256's (0.6), memory below (0.7); R2 above on both (0.8).
+
+## 2026-09-22 — Acceptance, REF and BASELINE-GAPS: all 32 reference-candidate lanes and all 24 baseline-gap lanes alive; the 384 x 12 candidate steps at 0.55 s on the 435 cars at 200,000 cells, GeoTransolver-512 at 0.56 to 0.65 s {#sec-nb-ref-acceptance}
+
+Twenty minutes after the REF lanes (@sec-nb-ref-prereg) left the queue,
+every one of the 32 has a running link, a queued successor, no traceback
+and no blocked marker. On DrivAerML Surface (435 cars, 200,000 cells) the
+lanes are at epochs 17 to 22 with validation losses 0.0016 to 0.0019 (the
+linear 192-wide reference read 0.0011 at epoch 45 on its 200,000-cell
+lane, so these are on trajectory); the logged step times are 0.54 to 0.56 s
+for the 384 x 12 candidate (R1), 0.54 to 0.94 s for 384 x 24 (R2; the two
+seeds differ, the slower one is on a shared node) and 0.56 to 0.65 s for
+GeoTransolver-512, with the fused geometry kernel active on the ISLA lanes.
+The HiLiftAeroML lanes are at epoch 0 with 5 to 16 s per step (the wing
+datasets load whole meshes per step), the AirfRANS lanes at epochs 20 to
+30 (0.08 to 0.19 s per step), and the DrivAerML Volume lanes have not
+logged their first epoch (200,000 boundary cells and 200,000 interacting
+queries at 384 wide; their first validation is expected within the hour).
+Accepted. The BASELINE-GAPS lanes (Transolver 1e-3 controls on the
+DrivAerML Surface ladder, GeoTransolver 3e-3 on the 210 and 21-geometry
+wing rungs, GeoTransolver and Transolver at 600,000 cells, physical-velocity
+baselines at 200,000 cells on the 35-wing rung; `kernel/bl/lanes.tsv`, 24
+lanes) launched alongside and are queued or running with no fault. The
+reference cost sweep (2,500 to 600,000 tokens, six arms, one GB300; job
+825142) is measuring: at 5,000 tokens R1 steps in 41 ms and 1.4 GiB, R2 in
+84 ms and 2.8 GiB, 192 wide in 43 ms and 0.7 GiB, GeoTransolver-256 in
+44 ms and 1.4 GiB, GeoTransolver-512 in 45 ms and 2.2 GiB, Transolver-256
+in 21 ms and 1.0 GiB; the large counts decide the figure.
