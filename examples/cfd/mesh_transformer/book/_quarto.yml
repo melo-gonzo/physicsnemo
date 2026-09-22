@@ -29,6 +29,7 @@ book:
         - 12-program-status.qmd
   appendices:
     - 13-design-decisions.qmd
+    - 14-datasets.qmd
     - 18-notebook.qmd
 
 execute:

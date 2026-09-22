@@ -218,11 +218,10 @@ print(f"**The interior ordering is not a property of car flow: on AirfRANS, a di
       f"GeoTransolver-volume on interior velocity by {AFR['velocity_l2']:.2f}x and trails it on pressure by {trail(AFR['pressure_l2'])} and on "
       f"eddy viscosity by {trail(AFR['nut_l2'])}, with both seeds agreeing on every field.** AirfRANS is 1,001 two-dimensional incompressible "
       "k-omega SST RANS solutions around NACA airfoils; its full split trains on 800 cases and tests on 200. It is the book's instance of the "
-      "general interface with one global scalar: the boundary is the airfoil polyline (about 1,000 segments with in-plane normals and segment "
-      "lengths as the measure weights), the global inputs are the inlet velocity as the one global vector and the Reynolds number as the one "
-      "global scalar, and the interior queries carry the signed distance to the airfoil. Both architectures train for 500 epochs at 100,000 "
-      "interior queries per case and are scored in float32 at the same count on the 200 test cases. Pressure is nondimensionalized by the "
-      "inlet dynamic pressure and velocity by the inlet speed; eddy viscosity keeps its units and the recipe's normalization.")
+      "general interface with one global scalar: the boundary is the airfoil polyline, the global inputs are the inlet direction as the one "
+      "global vector and the inlet speed as the one global scalar, and the interior queries carry the signed distance to the airfoil "
+      "(@sec-dataset-airfrans; conversion and normalization in @sec-data-airfrans). Both architectures train for 500 epochs at 100,000 "
+      "interior queries per case and are scored in float32 at the same count on the 200 test cases.")
 ```
 
 ```{python}

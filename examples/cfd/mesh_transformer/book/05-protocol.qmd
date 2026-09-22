@@ -8,9 +8,9 @@ GeoTransolver has at least as many parameters as ISLA and receives raw
 coordinates that ISLA never sees; both run at their own best learning rate;
 neither is ever modified. This chapter says what each baseline computes and
 sees, states one rule about how a problem's global conditions enter any
-model, lists the protocol as nine rules, names the datasets and their
-splits, and closes with the protocol table every cross-architecture number
-in the book is produced under.
+model, lists the protocol as nine rules, introduces the datasets (their
+details are in @sec-datasets-detail), and closes with the protocol table
+every cross-architecture number in the book is produced under.
 
 ```{python}
 #| label: setup-baselines
@@ -238,8 +238,8 @@ because a rule that depends on the dataset's units is not a rule.
 
 **Every cross-architecture number in this book is produced under the
 following rules; a comparison that violates one is not reported.** The
-datasets and splits are in @sec-splits, the metric in @sec-metrics and the
-training recipe in @sec-protocol.
+datasets are in @sec-datasets and their splits in @sec-splits, the metric
+in @sec-metrics and the training recipe in @sec-protocol.
 
 1. **Matched cells per case: 200,000 sampled surface cells for every
    architecture, the reporting protocol.** Accuracy is flat in the cell
@@ -329,19 +329,27 @@ property of the routing form and is explained once, in
 
 ## Datasets {#sec-datasets}
 
-**Three datasets are training and evaluation sources, and a fourth is a
-zero-shot target.** All four supply the same input schema, boundary cells
-with positions, outward normals and measures plus the global conditions, so
-one model implementation runs on all of them. Every one is an instance of
-external aerodynamics with $K = 1$ global direction, the far-field flow
-direction, and $S \in \{0, 1\}$ global scalars.
+**Three datasets are training and evaluation sources, a fourth is a
+zero-shot target, and four more, outside external aerodynamics, exercise
+the parts of the interface the aerodynamic sets leave idle.** All supply
+the same input schema, boundary cells with positions, outward normals and
+measures plus the global conditions, so one model implementation runs on
+all of them. Every aerodynamic one is an instance of external aerodynamics
+with $K = 1$ global direction, the far-field flow direction, and
+$S \in \{0, 1\}$ global scalars. This section says, per dataset, what the
+problem is, what varies, what is predicted and what the model receives, at
+the depth the results need; provenance, conversion, field names, sign
+conventions, normalization, splits and pitfalls are in
+@sec-datasets-detail.
 
 | dataset | what it is | what varies | global inputs | role in the book |
 |---|---|---|---|---|
-| **DrivAerML** (cars) | 484 parametrically morphed DrivAer notchback variants; time-averaged surface pressure and wall shear on about 8.8 million surface cells per car, plus volume fields | geometry only; one far-field condition | $K = 1$, $S = 0$ | the Surface task: full-data accuracy, discretization and pose probes, capacity ladders; the Volume task: boundary to interior |
+| **DrivAerML** (cars) | 484 parametrically morphed DrivAer notchback variants; time-averaged surface pressure and wall shear on the vehicle surface, plus volume fields | geometry only; one far-field condition | $K = 1$, $S = 0$ | the Surface task: full-data accuracy, discretization and pose probes, capacity ladders; the Volume task: boundary to interior |
 | **HiLiftAeroML** (wings) | 1,800 cases: 180 high-lift wing geometries (flap and slat settings by Latin hypercube), each at ten angles of attack from 4° to 22°; surface pressure, velocity and wall shear | geometry and far-field direction | $K = 1$, $S = 0$ | data efficiency, unseen geometry, regime extrapolation |
 | **AirfRANS** (airfoils) | 1,001 two-dimensional incompressible RANS solutions around NACA airfoils; pressure, velocity and turbulent viscosity in the volume | geometry, inlet direction and inlet speed | $K = 1$, $S = 1$ | the interior task on a second dataset; the training-case axis |
 | **SHIFT-SUV** | sport-utility bodies in two rear-end families, estate and fastback; surface pressure and wall shear; same reference length and far-field direction as DrivAerML at a lower speed | geometry; a speed shift common to every architecture | $K = 1$, $S = 0$ | zero-shot transfer target only |
+
+: The aerodynamic datasets. The four datasets beyond external aerodynamics are listed in @sec-datasets-beyond-aero. {#tbl-datasets-aero}
 
 ### DrivAerML: the Surface task and the Volume task {#sec-benchmarks}
 
@@ -349,15 +357,15 @@ direction, and $S \in \{0, 1\}$ global scalars.
 they measure different things.** Geometry is the only variable, there is
 one far-field condition, and every model is fed the vehicle surface alone:
 the information diet of every published baseline on the dataset. The recipe
-assigns 435 variants to training and 48 to validation; the remaining variant
-is in neither. The reporting protocol samples the recipe's default of
-200,000 surface cells per case per step. The **DrivAerML Surface task**
-predicts pressure and wall shear at those cells (@sec-surface). The
-**DrivAerML Volume task** predicts pressure, velocity and turbulent
-viscosity at 200,000 interior query points per car from the surface alone
-(@sec-interior). A sentence that compares architectures on DrivAerML names
-one of the two. @fig-problem-drivaer shows one validation car with both
-tasks' fields.
+assigns 435 variants to training and 48 to validation, one validation set
+shared by both tasks and every experiment. The reporting protocol samples
+the recipe's default of 200,000 surface cells per case per step. The
+**DrivAerML Surface task** predicts pressure and wall shear at those cells
+(@sec-surface). The **DrivAerML Volume task** predicts pressure, velocity
+and turbulent viscosity at 200,000 interior query points per car from the
+surface alone (@sec-interior). A sentence that compares architectures on
+DrivAerML names one of the two. @fig-problem-drivaer shows one validation
+car with both tasks' fields (details: @sec-data-drivaer).
 
 ```{python}
 #| label: fig-problem-drivaer
@@ -406,15 +414,18 @@ cb2 = fig.colorbar(sc2, ax=[ax], fraction=0.025, pad=0.01, extend="max"); cb2.se
 plt.show()
 ```
 
-### HiLiftAeroML
+### HiLiftAeroML {#sec-dataset-hilift}
 
 **HiLiftAeroML is a full geometry-by-angle grid, so it can hold out each
 axis of variation on its own.** Every geometry appears at every angle, and
 the dataset supports splits along three independent directions: how many
-cases, which angles, and which geometries. It is one of the two datasets on
-which the data-efficiency ladder is measured (@sec-data-efficiency); the
-other is the DrivAerML Surface task. @fig-problem-hilift shows one
-validation case.
+cases, which angles, and which geometries (@sec-splits). The model receives
+the surface cells and the far-field direction $\hat g_1$, which carries the
+angle of attack, and predicts pressure, temperature, density, velocity and
+wall shear at those cells, at the same 200,000 cells per case as on the
+cars. It is one of the two datasets on which the data-efficiency ladder is
+measured (@sec-data-efficiency); the other is the DrivAerML Surface task.
+@fig-problem-hilift shows one validation case (details: @sec-data-hilift).
 
 ```{python}
 #| label: fig-problem-hilift
@@ -460,11 +471,10 @@ full split trains on 800 airfoils and tests on 200. The boundary is the
 airfoil polyline, about a thousand segments with in-plane normals and
 segment lengths as the quadrature measure; the global inputs are the inlet
 direction as the one global vector and the inlet speed as the one global
-scalar; the interior queries carry the signed distance to the airfoil.
-Pressure is nondimensionalized by the inlet dynamic pressure and velocity
-by the inlet speed; turbulent viscosity keeps its units and the recipe's
-normalization. The interior results are in @sec-interior-airfrans; @fig-problem-airfrans
-shows one test case.
+scalar; the interior queries, 100,000 per case, carry the signed distance to
+the airfoil, and the model predicts pressure, velocity and turbulent
+viscosity at them. The interior results are in @sec-interior-airfrans;
+@fig-problem-airfrans shows one test case (details: @sec-data-airfrans).
 
 ```{python}
 #| label: fig-problem-airfrans
@@ -513,15 +523,15 @@ plt.show()
 ### SHIFT-SUV {#sec-shift-suv}
 
 **No main result trains on SHIFT-SUV; its fastback family is the zero-shot
-target.** Its curated manifest separates the estate family (794 / 99 / 100
-cases for training / validation / test) from the fastback family
-(796 / 99 / 99). The fastback family is held out from every model in the
-book and is the zero-shot target of the cross-family transfer measurements
-(@sec-scoreboard-200k); the estate training split is a training source only where
-a two-family model is compared. Its lower far-field speed is a covariate
-shift identical for every architecture, none of which receives the Reynolds
-number, and it is reported alongside the geometry-family shift rather than
-corrected. @fig-problem-shift-suv shows one fastback case.
+target.** The fastback family is held out from every model in the book and
+is the zero-shot target of the cross-family transfer measurements
+(@sec-scoreboard-200k); the estate family is a training source only where a
+two-family model is compared. The model receives exactly what it receives
+on DrivAerML. The lower far-field speed is a covariate shift identical for
+every architecture, none of which receives the Reynolds number, and it is
+reported alongside the geometry-family shift rather than corrected.
+@fig-problem-shift-suv shows one fastback case (details:
+@sec-data-shift-suv).
 
 ```{python}
 #| label: fig-problem-shift-suv
@@ -565,38 +575,39 @@ benchmark instances are steady problems whose boundary conditions and loads
 vary per sample, which exercise the global vector and scalar inputs and the
 per-cell boundary scalars that the aerodynamic datasets leave at $K = 1$
 and $n_b = 0$. Each is drawn below on one sample, with its boundary
-conditions labeled where they act and one reference field beside them:
+conditions labeled where they act and one reference field beside them; the
+model reads every mesh node as a query in all four:
 
-- **PLAID Tensile2d** (@fig-problem-tensile2d): two-dimensional
-  elasto-viscoplastic tension of a notched specimen; the top edge carries a
-  pressure $P$ that varies per sample, the bottom edge is fixed, and five
-  material parameters vary too. The model receives the outer polyline with
-  per-cell labels (loaded, fixed, pinned) and the applied pressure as
-  boundary scalars, $P$ and the material parameters as six global scalars,
-  the laboratory frame as two global vectors (its targets are stress
-  components in that frame, @sec-isla-heads), and every mesh node as a
-  query; it predicts the three stress components, the cumulated plastic
-  strain and the displacement.
-- **GINOT Bracket Lug** (@fig-problem-lug): a three-dimensional
-  elastoplastic lug clamped at one end and pressed on the lower half of its
-  hole; hole radius, length, thickness and pressure vary. The model receives
-  the surface triangles with labels (fixed, hole, loaded) and the pressure
-  as boundary scalars, the four design parameters as global scalars, and the
-  nodes as queries; it predicts the von Mises stress. Published Transolver
-  and GNOT numbers exist for it.
-- **OLBC** (@fig-problem-olbc-poisson, @fig-problem-olbc-elasticity): two
-  sets on fixed meshes whose boundary is cut, per sample, into random
-  segments carrying labeled Dirichlet, Neumann or Robin conditions with
-  random values: a Poisson problem $-\nabla^2 u = f$ on a square with a
-  random source (the $K = 0$ case with per-cell boundary scalars, the type
-  and the value) and plane-strain steel elasticity on a disc with two holes
-  (per component a free segment, a prescribed displacement and two
-  tractions; the laboratory frame as $K = 2$).
+- **PLAID Tensile2d** (@fig-problem-tensile2d; details:
+  @sec-data-tensile2d): two-dimensional elasto-viscoplastic tension of a
+  notched specimen; the top edge carries a pressure $P$ that varies per
+  sample, the bottom edge is fixed, and five material parameters vary too.
+  The model receives the outer polyline with per-cell labels (loaded,
+  fixed, pinned) and the applied pressure as boundary scalars, $P$ and the
+  material parameters as six global scalars, and the laboratory frame as
+  two global vectors, because its targets are stress components in that
+  frame (@sec-isla-heads); it predicts the three stress components, the
+  cumulated plastic strain and the displacement.
+- **GINOT Bracket Lug** (@fig-problem-lug; details: @sec-data-lug): a
+  three-dimensional elastoplastic lug clamped at one end and pressed on the
+  lower half of its hole; hole radius, length, thickness and pressure vary.
+  The model receives the surface triangles with labels (fixed, hole,
+  loaded) and the pressure as boundary scalars and the four design
+  parameters as global scalars; it predicts the von Mises stress. Published
+  Transolver and GNOT numbers exist for it.
+- **OLBC** (@fig-problem-olbc-poisson, @fig-problem-olbc-elasticity;
+  details: @sec-data-olbc): two sets on fixed meshes whose boundary is
+  cut, per sample, into random segments carrying labeled Dirichlet, Neumann
+  or Robin conditions with random values: a Poisson problem
+  $-\nabla^2 u = f$ on a square with a random source (the $K = 0$ case,
+  with the type and the value as per-cell boundary scalars) and
+  plane-strain steel elasticity on a disc with two holes (per component a
+  free segment, a prescribed displacement and two tractions; the laboratory
+  frame as $K = 2$).
 
-Within aerodynamics, AeroZoo is the in-generation diversity benchmark: a
-dataset of dissimilar bodies built to stress generalization across geometry
-families rather than within one. None of these carries a number in this
-book; the open axis they represent is stated in @sec-limits.
+None of these carries a number in this book; the open axis they represent
+is stated in @sec-limits-datasets, and the datasets scouted but not
+adopted, with the conversion in progress, are in @sec-data-scouted.
 
 ```{python}
 #| label: fig-problem-tensile2d
@@ -786,92 +797,15 @@ for ax in axes[1:]:
 plt.show()
 ```
 
-### Splits {#sec-splits}
-
-**Each HiLiftAeroML split holds out one question, and the splits are the
-dataset's curated manifests, used unchanged.** @tbl-hilift-splits lists
-them. The *data-efficiency* family is nested (@fig-hilift-splits): 35
-training cases $\subset$ 210 $\subset$ 510 $\subset$ 1,260, all scored on
-one shared 180-case validation set (180 cases on 118 geometries), with a
-360-case test set that no data-efficiency experiment touches. Because the
-rungs are subsets of the same 1,260 cases, a validation geometry may appear
-in training at other angles: these rungs measure sample complexity, not
-unseen geometry. The two *regime-extrapolation* splits hold out flow
-physics, with stall onset determined per geometry from the lift curve. The
-*geometry* family holds out geometries at all ten angles. The three
-*fixed-angle* splits remove the direction dependence entirely and so control
-for whether an advantage comes from representing the far-field direction.
-
-| family | split | train | val | test | what it holds out |
-|---|---|---:|---:|---:|---|
-| data efficiency | nested rungs | 35, 210, 510, 1,260 | 180 | 360 | nothing; measures sample complexity (validation geometries may recur in training at other angles) |
-| regime extrapolation | angle of attack | 788 (angles up to 12°) | 112 | 900 (14° and above) | higher angles of attack |
-| regime extrapolation | stall | 942 (pre-stall) | 135 | 723 (post-stall) | post-stall flow |
-| unseen geometry | geometry | 1,260, 210 or 40 cases (126, 21 or 4 geometries) | 18 geometries, all ten angles | 36 geometries, all ten angles | the geometry itself |
-| fixed angle | 4°, 12°, 22° | 126 geometries at one angle | 18 geometries at that angle | — | the far-field direction as a variable |
-
-: The HiLiftAeroML splits, in cases unless a cell says geometries. Every
-split is a curated manifest of the dataset revision named in the warning
-below; the fixed-angle splits have no test set. How to read this: a row is
-one question; the manifests overlap (see the warning), so the test columns
-are held out per checkpoint, not per program. {#tbl-hilift-splits}
-
-```{python}
-#| label: fig-hilift-splits
-#| fig-cap: >
-#|   The HiLiftAeroML data-efficiency family, to scale. The bar is the
-#|   1,800-case grid; the nested training rungs (35, 210, 510, 1,260 cases)
-#|   are subsets of one another, all scored on the same 180 validation
-#|   cases, and the 360-case test set is sealed. How to read this: widths
-#|   are case counts; the bar does not show which angles or geometries fall
-#|   in each rung, and the regime, geometry and fixed-angle families are
-#|   separate manifests not drawn here.
-#| code-fold: true
-fig, ax = plt.subplots(figsize=(9.0, 1.9))
-shades = ["#1f5aa3", BLUE, BLUE_LIGHT, BLUE_PALE]
-for n, col in zip([1260, 510, 210, 35], shades):
-    ax.barh(0, n, left=0, height=0.6, color=col, edgecolor="white", lw=0.8)
-ax.barh(0, 180, left=1260, height=0.6, color=BASELINE, edgecolor="white", lw=0.8)
-ax.barh(0, 360, left=1440, height=0.6, color=PAPER, edgecolor=BASELINE, lw=0.8, hatch="///")
-for x, label in [(35 / 2, "35"), (35 + 175 / 2, "210"), (210 + 300 / 2, "510"),
-                 (510 + 750 / 2, "1,260 training cases (nested rungs)")]:
-    ax.text(x, 0, label, ha="center", va="center", fontsize=9, color="white" if x > 200 else INK)
-ax.text(1260 + 90, 0, "val\n180", ha="center", va="center", fontsize=9, color=INK)
-ax.text(1440 + 180, 0, "sealed test 360", ha="center", va="center", fontsize=9, color=INK)
-ax.set_xlim(0, 1800); ax.set_ylim(-0.6, 0.6); ax.set_yticks([]); ax.grid(False)
-ax.spines["left"].set_visible(False)
-ax.set_xticks([0, 35, 210, 510, 1260, 1440, 1800])
-ax.set_xticklabels(["0", "35", "210", "510", "1,260", "1,440", "1,800"], fontsize=8.5)
-ax.set_xlabel("cases [count]")
-fig.tight_layout()
-plt.show()
-```
-
-**DrivAerML has one validation set of 48 cars, fixed across every
-experiment and shared by the Surface and Volume tasks.** The training set
-is 435 cars, or a nested rung of 27, 54, 109 or 218 cars for the
-data-efficiency ladder (@sec-data-efficiency). Sampling-density and pose
-probes evaluate the same 48 cars with transformed inputs
-(@sec-discretization-centerpiece). AirfRANS uses its full split's 800
-training and 200 test airfoils, with nested rungs of 50, 100, 200 and 400
-airfoils for its training-case axis (@sec-compute-allocation).
-
-::: {.callout-warning collapse="true" title="The HiLiftAeroML manifests overlap, so a test split is sealed per checkpoint, not per program"}
-The manifests are separate but not disjoint. The angle-of-attack and stall
-test sets between them contain every one of the 180 geometries, and the
-360-case data-efficiency test set shares 179 cases with them, the geometry
-test set 182 and the deflection test set 182 (37 and 40 of their cases also
-sit in the shared validation set). A test split is therefore *held out per
-checkpoint*, since no model evaluated on it trained on it; but once the
-regime-extrapolation tests are read, no HiLiftAeroML geometry remains
-unexposed at the level of the program, and no later evaluation on these
-manifests is an independent program-level confirmation
-(@sec-limits-validation). The dataset revision used throughout is
-`bbec30bcfc6103309c1375c5228b3ad0a586bfaf`, in which six cases' force
-coefficients are surface-field integrations rather than solver monitor
-means; the book's force errors never use the dataset's coefficients as
-reference.
-:::
+**Splits.** Every split in the book is either the dataset's curated
+manifest used unchanged or a fixed-seed permutation recorded in the
+manifest; the HiLiftAeroML split table, which holds out one question per
+split, and the other datasets' splits are in @sec-splits. Two facts bear on
+reading the results: DrivAerML has one validation set of 48 cars, shared by
+the Surface and Volume tasks and by every experiment, with a training set
+of 435 cars or a nested rung of 27, 54, 109 or 218 (@sec-data-efficiency);
+and the HiLiftAeroML test manifests overlap, so a test split is sealed per
+checkpoint, not per program (@sec-limits-validation).
 
 ## Protocol {#sec-protocol}
 

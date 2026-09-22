@@ -1,0 +1,647 @@
+# Datasets in detail {#sec-datasets-detail}
+
+**Every dataset in the book reaches the model through one file format and
+one set of conventions, so the differences between datasets are in the
+physics and the boundary data, not in the plumbing.** This appendix is the
+reference for those conventions and for each dataset's provenance, size,
+conversion, field names, sign conventions, normalization and splits. The
+protocol chapter (@sec-datasets) says what each dataset is and what the
+model receives, at the depth a reader of the results needs; this appendix
+is where to look when reproducing a lane, writing a converter for a new
+dataset, or checking which cases a number was scored on.
+
+*Before this chapter:* the input contract of @sec-using-inputs (boundary
+cells with positions, outward normals and measure weights; $K$ global unit
+vectors; $S$ global scalars; $n_b$ per-cell boundary scalars; interior
+queries with their scalars) and the names of the tasks in @sec-datasets.
+
+```{python}
+#| label: setup-datasets-detail
+#| include: false
+import sys; sys.path.insert(0, ".")
+from palette import *
+import json
+from pathlib import Path
+RES = Path("..") / "results"
+PF = RES / "problem_figures_2026-09-22"
+meta = {p.stem: json.load(open(p)) for p in sorted(PF.glob("*.json"))}
+```
+
+## Conventions shared by every dataset {#sec-data-conventions}
+
+**A converted case is one native `DomainMesh` file (`.pdmsh`): an
+`interior` point cloud, one or more named `boundaries`, and a
+`global_data` dictionary.** The datasets differ in which of these the
+model reads and in what the boundary cells carry.
+
+- **Two reader layouts.** The *surface* datasets (DrivAerML Surface task,
+  HiLiftAeroML, SHIFT-SUV, DeepJEB++) read only the boundary mesh: the
+  reader walks into the boundary tensordict
+  (`<case>.pdmsh/_tensordict/boundaries/<name>`), merges the parent
+  file's `global_data` onto it (`MeshReaderWithGlobalData`), and the
+  terminal transform `MeshToDomainMesh` places the prediction points at
+  the cell centroids. The *interior* datasets (DrivAerML Volume task,
+  AirfRANS, the solids and OLBC sets) read the whole file
+  (`DomainMeshReader`): the interior points are the queries and the
+  boundary is kept whole whenever the cell budget exceeds its size.
+- **Signed distance is positive outside the solid.** Interior nodes of a
+  solid carry `sdf` $\le 0$; fluid points outside a body carry `sdf` $> 0$.
+  `sdf_normals` is the gradient of that field, so it is the outward normal
+  at the boundary. Converters negate a source that stores the opposite sign
+  (OLBC stores the distance positive inside and a gradient pointing into
+  the domain).
+- **Boundary conditions are per-cell scalars.** Each labeled region is a
+  0/1 indicator on the boundary cells (`bc_fixed`, `bc_loaded`,
+  `bc_dirichlet`, …) and each prescribed value is a scalar on the cells it
+  applies to and zero elsewhere (`bc_pressure`, `bc_value_g`, `bc_disp_x`,
+  …). Where a traction vector exists it is stored too (`traction`,
+  `bc_load`), but ISLA has no per-cell vector input: the traction on a
+  pressed face is $-p\,n$, recoverable from the pressure scalar and the
+  cell normal the model already sees. GeoTransolver has no boundary-token
+  path, so the same labels and values are also written as nodal fields on
+  the interior points (`tag_*`, `bc_*_node`) and enter its local embedding
+  there.
+- **Global vectors are unit directions; the laboratory frame is a global
+  vector when the targets are components.** For external aerodynamics
+  `ComputeFreestreamDirection` writes `U_inf_dir` from the solver's
+  velocity. Where the targets are components in a fixed frame (the stress
+  components of Tensile2d and of the OLBC elasticity set), the frame axes
+  $+x, +y$ enter as two constant global vectors (`SetDomainGlobalField`),
+  because ISLA's scalar heads are invariant under rotation and reflection
+  and cannot otherwise tell $\sigma_{11}$ from $\sigma_{22}$ or fix the
+  sign of $\sigma_{12}$ (@sec-isla-heads). A dataset with no global
+  direction ($K = 0$) runs ISLA with the eager geometry kernel; the fused
+  kernel is written for $K = 1$.
+- **Normalization statistics come from the manifest.** Every converter
+  writes `manifest.json` next to the files with the named split lists and
+  a `_stats` block of per-field mean and standard deviation pooled over the
+  training split; the dataset yaml copies those values into
+  `NormalizeMeshFields` (targets, and standardized input fields) and
+  `StandardizeDomainGlobalField` (global scalars). Vector targets use one
+  isotropic standard deviation (the Frobenius value divided by
+  $\sqrt{2}$ in two dimensions), so a component's scale is not rescaled
+  per axis.
+- **Splits are named lists in the manifest; nested rungs are prefixes of
+  one permutation.** Where a dataset publishes splits they are used
+  unchanged (HiLiftAeroML, AirfRANS, SHIFT-SUV, PLAID's official ladder,
+  OLBC's train/test). Where it does not (GINOT lug), or where a validation
+  set has to be carved out (Tensile2d), the draw is a fixed-seed
+  permutation recorded in the manifest, and every smaller rung is a prefix
+  of the larger one, so a rung differs from the next only by the cases it
+  lacks.
+
+| dataset | converter | dataset yaml | ISLA yaml |
+|---|---|---|---|
+| DrivAerML (Surface, Volume) | native files from the dataset release | recipe `datasets/drivaer_ml_surface.yaml`, `drivaer_ml_volume.yaml` | recipe `conf/model/isla_surface.yaml`, `isla_volume.yaml` |
+| HiLiftAeroML | native files | recipe `datasets/highlift_surface.yaml` | recipe `conf/model/isla_surface.yaml` |
+| SHIFT-SUV | native files | recipe `datasets/shift_suv_surface.yaml`, `shift_suv_estate_surface.yaml`, `shift_suv_fastback_surface.yaml` | as DrivAerML |
+| AirfRANS | `results/campaigns_2026-09-21/af/airfrans_convert.py` | `results/campaigns_2026-09-21/af/airfrans_volume.yaml` | `results/campaigns_2026-09-21/af/isla_volume_airfrans.yaml` |
+| PLAID Tensile2d | `results/campaigns_2026-09-22/datasets/plaid_tensile2d_convert.py` | `…/datasets/plaid_tensile2d.yaml` | `…/datasets/isla_tensile2d.yaml` |
+| GINOT Bracket Lug | `…/datasets/ginot_lug_convert.py` | `…/datasets/ginot_lug_volume.yaml` | `…/datasets/isla_lug.yaml` |
+| OLBC Poisson, OLBC elasticity | `…/datasets/olbc_convert.py --set {poisson,elasticity}` | `…/datasets/olbc_poisson.yaml`, `olbc_elasticity.yaml` | `…/datasets/isla_olbc_poisson.yaml`, `isla_olbc_elasticity.yaml` |
+| DeepJEB++ (converting) | `…/datasets/deepjebpp_convert.py` | `…/datasets/deepjebpp_surface.yaml` | `…/datasets/isla_surface_deepjebpp.yaml` |
+
+: Where each dataset's conversion and configuration live. "Recipe" is the unified external-aerodynamics recipe root (`examples/cfd/external_aerodynamics/unified_external_aero_recipe`); `…/datasets/` abbreviates `results/campaigns_2026-09-22/datasets/`. The GeoTransolver yamls sit beside the ISLA yamls with the prefix `geotransolver_`. {#tbl-data-files}
+
+```{python}
+#| label: tbl-data-samples
+#| output: asis
+rows = [
+    ("DrivAerML", "drivaer", "surface cells", "n_surface_cells", "volume points", "n_interior_points"),
+    ("HiLiftAeroML", "hilift", "surface cells", "n_surface_cells", None, None),
+    ("SHIFT-SUV (fastback)", "shift_suv", "surface cells", "n_surface_cells", None, None),
+    ("AirfRANS", "airfrans", "boundary segments", "n_boundary_cells", "interior points", "n_interior_points"),
+    ("PLAID Tensile2d", "tensile2d", "boundary segments", "n_boundary_cells", "nodes", "n_nodes"),
+    ("GINOT Bracket Lug", "lug", "boundary triangles", "n_boundary_cells", "nodes", "n_nodes"),
+    ("OLBC Poisson", "olbc_poisson", "boundary segments", "n_boundary_cells", "nodes", "n_nodes"),
+    ("OLBC elasticity", "olbc_elasticity", "boundary segments", "n_boundary_cells", "nodes", "n_nodes"),
+]
+out = "| dataset | sample case (split) | boundary | interior |\n|---|---|---:|---:|\n"
+for name, key, blab, bkey, ilab, ikey in rows:
+    m = meta[key]
+    split = m.get("split", m.get("family", ""))
+    b = f"{m[bkey]:,} {blab}"
+    i = f"{m[ikey]:,} {ilab}" if ikey else "—"
+    out += f"| {name} | `{m['case']}` ({split}) | {b} | {i} |\n"
+print(out)
+print(": Size of the one case drawn in each problem figure of @sec-datasets, read from the figure metadata. How to read this: one case per dataset, not a mean; the aerodynamic surfaces are sampled to 200,000 cells per step under the reporting protocol, the solids and OLBC sets are read whole. Data: results/problem_figures_2026-09-22/*.json. {#tbl-data-samples}")
+```
+
+## DrivAerML {#sec-data-drivaer}
+
+**484 parametrically morphed DrivAer notchback variants in one far-field
+condition; the boundary is the vehicle surface alone, and the two tasks
+read different parts of the same files.** Each case is a `run_<id>`
+directory holding a `domain_*.pdmsh` with the vehicle boundary
+(`boundaries.vehicle`, triangles), the tetrahedral volume mesh with its
+point fields, the watertight `*_single_solid.stl.pmsh` of the body, and
+`global_data` with the far-field conditions `U_inf` (38.89 m/s along $x$),
+`rho_inf`, `p_inf` (zero: the pressure is gauge), `nu` and `L_ref` (5 m).
+The reader divides coordinates by `L_ref`, so a car spans about one unit.
+The sample car in @tbl-data-samples has 17.0 million surface cells and
+160 million volume points; @sec-interior states the volume range across
+cars as 150 to 166 million.
+
+- **Surface task.** The recipe reads the boundary tensordict directly
+  (`run_*/*.pdmsh/_tensordict/boundaries/vehicle`). Fields
+  `pMeanTrim` and `wallShearStressMeanTrim` (time-averaged) are
+  nondimensionalized from the case's own `global_data`
+  (`NonDimensionalizeByMetadata`: pressure by the far-field dynamic
+  pressure, stress likewise) and renamed `pressure` and `wss`; `wss` is
+  further scaled by a fixed standard deviation (0.00313). Normals are
+  recomputed from the faces after centering (`ComputeSurfaceNormals`);
+  the cell subsample and `DropDegenerateCells` follow; `MeshToDomainMesh`
+  puts the prediction points at the cell centroids. `U_inf_dir` is written
+  from `U_inf` before centering so the augmentation block (axis-aligned
+  rotations about $z$, used by the baselines' pose lanes only) rotates it
+  with the geometry.
+- **Volume task.** `DomainMeshReader` on `run_*/domain_*.pdmsh` with the
+  interior as a point cloud (tetrahedral topology dropped), the vehicle
+  boundary subsampled by cells, and the STL as an extra boundary from
+  which `ComputeSDFFromBoundary` writes `sdf` and `sdf_normals` at the
+  query points (pseudo-normal sign, exact on the watertight STL) before
+  the STL is dropped. `UMeanTrim`, `pMeanTrim`, `nutMeanTrim` become
+  `velocity` (by $|U_\infty|$), `pressure` (by the dynamic pressure) and
+  `nut` (standardized with mean 4.8e-4 and standard deviation 9.4e-4,
+  m²/s).
+- **What is not an input.** The ground plane and the wind-tunnel
+  boundaries are present in the source files and are read by no
+  configuration in the book; every model sees the vehicle surface only.
+- **Splits.** One validation set of 48 cars, fixed across every
+  experiment and shared by the two tasks; 435 training cars, with nested
+  rungs of 27, 54, 109 and 218 for the data-efficiency ladder
+  (@sec-data-efficiency); one variant is in neither set. The
+  sampling-density and pose probes evaluate the same 48 cars with
+  transformed inputs (@sec-discretization-centerpiece).
+- **License.** The dataset is distributed by its authors under their own
+  terms; this program's artifacts do not restate them.
+
+## HiLiftAeroML {#sec-data-hilift}
+
+**1,800 compressible RANS cases on a full grid of 180 high-lift wing
+geometries by ten angles of attack, in imperial units, with curated
+manifests for every split the book uses.** The geometries vary the flap
+and slat settings by Latin hypercube; the angles run from 4° to 22° in
+steps of 2°, so the far-field direction $\hat g_1$ varies per case and
+carries the angle. Each case is a `geo_LHC<nnn>_AoA_<a>` directory; the
+recipe reads the boundary tensordict
+(`geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle`) and merges the
+parent's `global_data` (`U_inf`, `p_inf`, `rho_inf`, `T_inf`, `L_ref`).
+Units are slug, inch, second and Rankine: the far-field speed is 2,679.5
+in/s, and the problem figure converts positions to metres for display
+only. The targets are the projected averages `PROJ(AVG(P))`,
+`PROJ(AVG(T))`, `PROJ(AVG(RHO))`, `PROJ(AVG(U))` and `AVG(TAU_WALL)` on
+the surface cells, nondimensionalized from the case's `global_data`
+(`NonDimensionalizeByMetadata`), renamed `pressure`, `temperature`,
+`density`, `velocity`, `tau_wall`, and then standardized with fixed
+constants in the dataset yaml (pressure mean −0.5 and standard deviation
+1; temperature 1.00 / 0.002; density 1.0 / 0.02; velocity 0.20; wall
+shear 0.003). The sample case in @tbl-data-samples has
+291 million surface cells, the largest surface in the book, so a
+200,000-cell draw is a $10^{-3}$ sample of it.
+
+- **No interior task.** The dataset's volume files carry interior
+  coordinates for 31 of the 1,800 cases and no interior fields, so
+  HiLiftAeroML has no boundary-to-interior task on this cluster
+  (@sec-nb-hlvol-blocked); AirfRANS is the second interior dataset for that
+  reason.
+- **Dataset revision.** Every split in the book is a curated manifest of
+  revision `bbec30bcfc6103309c1375c5228b3ad0a586bfaf`, in which six cases'
+  force coefficients are surface-field integrations rather than solver
+  monitor means; the book's force errors never use the dataset's
+  coefficients as reference.
+- **License.** As for DrivAerML, not restated here.
+
+### Splits {#sec-splits}
+
+**Each HiLiftAeroML split holds out one question, and the splits are the
+dataset's curated manifests, used unchanged.** @tbl-hilift-splits lists
+them. The *data-efficiency* family is nested (@fig-hilift-splits): 35
+training cases $\subset$ 210 $\subset$ 510 $\subset$ 1,260, all scored on
+one shared 180-case validation set (180 cases on 118 geometries), with a
+360-case test set that no data-efficiency experiment touches. Because the
+rungs are subsets of the same 1,260 cases, a validation geometry may appear
+in training at other angles: these rungs measure sample complexity, not
+unseen geometry. The two *regime-extrapolation* splits hold out flow
+physics, with stall onset determined per geometry from the lift curve. The
+*geometry* family holds out geometries at all ten angles. The three
+*fixed-angle* splits remove the direction dependence entirely and so control
+for whether an advantage comes from representing the far-field direction.
+
+| family | split | train | val | test | what it holds out |
+|---|---|---:|---:|---:|---|
+| data efficiency | nested rungs | 35, 210, 510, 1,260 | 180 | 360 | nothing; measures sample complexity (validation geometries may recur in training at other angles) |
+| regime extrapolation | angle of attack | 788 (angles up to 12°) | 112 | 900 (14° and above) | higher angles of attack |
+| regime extrapolation | stall | 942 (pre-stall) | 135 | 723 (post-stall) | post-stall flow |
+| unseen geometry | geometry | 1,260, 210 or 40 cases (126, 21 or 4 geometries) | 18 geometries, all ten angles | 36 geometries, all ten angles | the geometry itself |
+| fixed angle | 4°, 12°, 22° | 126 geometries at one angle | 18 geometries at that angle | — | the far-field direction as a variable |
+
+: The HiLiftAeroML splits, in cases unless a cell says geometries. Every
+split is a curated manifest of the dataset revision named above; the
+fixed-angle splits have no test set. How to read this: a row is one
+question; the manifests overlap (see the warning), so the test columns are
+held out per checkpoint, not per program. {#tbl-hilift-splits}
+
+```{python}
+#| label: fig-hilift-splits
+#| fig-cap: >
+#|   The HiLiftAeroML data-efficiency family, to scale. The bar is the
+#|   1,800-case grid; the nested training rungs (35, 210, 510, 1,260 cases)
+#|   are subsets of one another, all scored on the same 180 validation
+#|   cases, and the 360-case test set is sealed. How to read this: widths
+#|   are case counts; the bar does not show which angles or geometries fall
+#|   in each rung, and the regime, geometry and fixed-angle families are
+#|   separate manifests not drawn here.
+#| code-fold: true
+fig, ax = plt.subplots(figsize=(9.0, 1.9))
+shades = ["#1f5aa3", BLUE, BLUE_LIGHT, BLUE_PALE]
+for n, col in zip([1260, 510, 210, 35], shades):
+    ax.barh(0, n, left=0, height=0.6, color=col, edgecolor="white", lw=0.8)
+ax.barh(0, 180, left=1260, height=0.6, color=BASELINE, edgecolor="white", lw=0.8)
+ax.barh(0, 360, left=1440, height=0.6, color=PAPER, edgecolor=BASELINE, lw=0.8, hatch="///")
+for x, label in [(35 / 2, "35"), (35 + 175 / 2, "210"), (210 + 300 / 2, "510"),
+                 (510 + 750 / 2, "1,260 training cases (nested rungs)")]:
+    ax.text(x, 0, label, ha="center", va="center", fontsize=9, color="white" if x > 200 else INK)
+ax.text(1260 + 90, 0, "val\n180", ha="center", va="center", fontsize=9, color=INK)
+ax.text(1440 + 180, 0, "sealed test 360", ha="center", va="center", fontsize=9, color=INK)
+ax.set_xlim(0, 1800); ax.set_ylim(-0.6, 0.6); ax.set_yticks([]); ax.grid(False)
+ax.spines["left"].set_visible(False)
+ax.set_xticks([0, 35, 210, 510, 1260, 1440, 1800])
+ax.set_xticklabels(["0", "35", "210", "510", "1,260", "1,440", "1,800"], fontsize=8.5)
+ax.set_xlabel("cases [count]")
+fig.tight_layout()
+plt.show()
+```
+
+The other datasets' splits are stated in their own sections: DrivAerML's
+48-car validation set and nested training rungs (@sec-data-drivaer),
+AirfRANS's published `full`, `reynolds` and `aoa` manifests
+(@sec-data-airfrans), SHIFT-SUV's two families (@sec-data-shift-suv), and
+the fixed-seed permutations of the solids and OLBC sets
+(@sec-data-tensile2d, @sec-data-lug, @sec-data-olbc).
+
+::: {.callout-warning collapse="true" title="The HiLiftAeroML manifests overlap, so a test split is sealed per checkpoint, not per program"}
+The manifests are separate but not disjoint. The angle-of-attack and stall
+test sets between them contain every one of the 180 geometries, and the
+360-case data-efficiency test set shares 179 cases with them, the geometry
+test set 182 and the deflection test set 182 (37 and 40 of their cases also
+sit in the shared validation set). A test split is therefore *held out per
+checkpoint*, since no model evaluated on it trained on it; but once the
+regime-extrapolation tests are read, no HiLiftAeroML geometry remains
+unexposed at the level of the program, and no later evaluation on these
+manifests is an independent program-level confirmation
+(@sec-limits-validation).
+:::
+
+## AirfRANS {#sec-data-airfrans}
+
+**1,001 two-dimensional incompressible RANS ($k$–$\omega$ SST) solutions
+around NACA-family airfoils at Reynolds numbers of 2 to 6 million and
+angles of attack of −5° to 15°, with published split manifests, converted
+once from raw VTK.** The source (Bonnet et al., 2022) ships one directory
+per case, `airFoil2D_SST_<speed>_<aoa>_<NACA parameters>`, with an
+`_internal.vtu` volume slice of about 177,000 cells carrying velocity `U`,
+pressure `p`, eddy viscosity `nut` and the signed distance
+`implicit_distance` at the points, an `_aerofoil.vtp` polyline and a
+`_freestream.vtp` of the far boundary. The chord is 1 m and the kinematic
+viscosity 1.56e-5 m²/s.
+
+- **Conversion** (`airfrans_convert.py`, @tbl-data-files). The interior is
+  a point cloud in three dimensions at $z = 0$ with `velocity` (N, 3),
+  `pressure`, `nut`, `sdf` (the file's `implicit_distance`, positive
+  outside the airfoil) and `sdf_normals`, the in-plane unit vector from the
+  nearest airfoil point to the query, computed in the converter because the
+  recipe's SDF transform expects a triangulated surface. The boundary
+  `airfoil` is line cells in three dimensions with precomputed in-plane
+  outward normals (a curve in three dimensions has no cell normals of its
+  own) and the segment lengths as `quadrature_measure`. `global_data`
+  holds `U_inf` (parsed from the case name and checked against the
+  freestream boundary's velocity), `U_inf_dir`, `U_inf_mag`, `aoa_deg`,
+  `Re` and the NACA parameters.
+- **Normalization** (`airfrans_volume.yaml`). Pressure is kinematic
+  ($\rho_\infty = 1$, $p_\infty = 0$) and is divided by
+  $\tfrac{1}{2} |U_\infty|^2$; velocity by $|U_\infty|$; `nut` keeps its
+  units and is standardized (mean 7.9e-4, standard deviation 2.4e-3,
+  m²/s, from the converter's per-case statistics).
+- **What the model receives.** ISLA: the airfoil cells, `U_inf_dir` as
+  the one global vector, `U_inf_mag` as the one global scalar, and the
+  interior queries with `sdf` as the query scalar; outputs pressure and
+  `nut` as scalars and velocity as a vector. On a planar problem the
+  three-dimensional vector head's out-of-plane basis coefficient is
+  learnable to zero. GeoTransolver-volume: the interior points with
+  coordinates, `sdf` and `sdf_normals`, and the inlet velocity through the
+  unit-direction rule (@sec-unit-direction-rule).
+- **Splits** (the dataset's manifest, used unchanged). `full`: 800 train /
+  200 test; `scarce`: 200 train; `reynolds`: 504 / 496, an extrapolation
+  in Reynolds number; `aoa`: 804 / 196, an extrapolation in angle of
+  attack. The training-case axis of the scaling study uses nested rungs of
+  50, 100, 200 and 400 airfoils inside `full` (@sec-compute-allocation).
+  Every case has about 179,000 interior points; the interior task queries
+  100,000 of them per case per step (@sec-protocol).
+- **License.** As for DrivAerML, not restated here.
+
+## SHIFT-SUV {#sec-data-shift-suv}
+
+**Sport-utility bodies in two rear-end families, estate and fastback,
+read with DrivAerML's transform pipeline frozen so that a DrivAerML
+checkpoint can be evaluated on them unchanged.** The curated manifest
+separates the estate family (794 / 99 / 100 cases for training /
+validation / test) from the fastback family (796 / 99 / 99); the frozen
+inventory with the split hashes and the exclusion policy is
+`results/shift_suv_full_dataset_inventory_2026-07-29/inventory.json`.
+The recipe reads each run's `domain.pdmsh` boundary tensordict
+(`run_*/domain.pdmsh/_tensordict/boundaries/vehicle`) under the family
+subdirectory, and merges the case's `U_inf`, `p_inf`, `rho_inf`, `nu`,
+`L_ref`. The sample fastback in @tbl-data-samples has 5.0 million surface
+cells.
+
+- **What is the same as DrivAerML.** `L_ref` is 5.0 m in both datasets,
+  so the nondimensional coordinates are on the same scale; the same
+  nondimensionalization, the same `wss` standard deviation and the same
+  subsampling are applied; the fields `pressure_average` and
+  `wall_shear_stress_average` are the time-averaged analogues of
+  DrivAerML's `pMeanTrim` and `wallShearStressMeanTrim` (SI units verified
+  against the release's `units.json`).
+- **What differs, and how it is handled.** SHIFT-SUV stores absolute
+  pressure with `p_inf` = 101,325 Pa where DrivAerML stores gauge pressure
+  with `p_inf` = 0; the shared transform $(p - p_\infty) / q_\infty$ gives
+  a proper pressure coefficient for both, with no correction. The
+  far-field speed is 30.0 m/s against DrivAerML's 38.89, a Reynolds number
+  about 1.3 times lower; every model receives the unit direction only and
+  none receives the Reynolds number, so this is a covariate shift
+  identical for every architecture, reported alongside the geometry-family
+  shift rather than corrected.
+- **Role.** The fastback family is held out from every model in the book
+  and is the zero-shot target of the cross-family transfer measurements
+  (@sec-scoreboard-200k); the estate training split is a training source
+  only where a two-family model is compared.
+- **License.** As for DrivAerML, not restated here.
+
+## PLAID Tensile2d {#sec-data-tensile2d}
+
+**702 two-dimensional quasi-static elasto-viscoplastic tension cases of a
+notched specimen (Safran; CC-BY-SA-4.0; Hugging Face
+`PLAID-datasets/Tensile2d`), of which the 500 official training samples
+carry targets.** Plane strain, small deformations; each sample is an
+unstructured triangle mesh of 6 to 12 thousand nodes with coordinates in
+$[-1, 1]$ (a unit half-width), a pressure $P$ on the top edge that varies
+per sample (negative $P$ pulls), a fixed bottom edge ($u_2 = 0$) with its
+bottom-left node pinned ($u_1 = 0$), free curved notches, and five
+constitutive scalars $p_1 \ldots p_5$ that vary too. The source is one
+parquet column of pickled CGNS trees, read with pyarrow and numpy alone.
+The 200 test samples and 2 out-of-distribution samples ship geometry and
+input scalars but no output fields; the converter writes them under
+`withheld/`, which the dataset pattern excludes.
+
+- **Conversion** (`plaid_tensile2d_convert.py`). Interior: every node
+  embedded at $z = 0$ with `displacement` (N, 3) = $(U_1, U_2, 0)$, `q`
+  (cumulated plastic strain), `sig11`, `sig22`, `sig12` (MPa-scale, the
+  dataset's units), `sdf` = −(distance to the outer boundary) and
+  `sdf_normals`, plus the nodal tags `tag_top`, `tag_bottom`,
+  `tag_bottomleft`. Boundary `outer`: every triangle edge owned by exactly
+  one triangle, as line cells with outward in-plane normals, segment
+  lengths as `quadrature_measure`, and the per-cell scalars `bc_loaded`
+  (top edge), `bc_fixed` (bottom edge), `bc_pinned` (cells touching the
+  pinned node), `bc_pressure` (= $P$ on loaded cells, so
+  $\sigma_{22} = -P$ there) and `traction` (= $-P\,n$). `global_data`:
+  `P`, `p1` … `p5`, `params` (6,), `has_targets`, and on training
+  samples the output scalars `max_von_mises`, `max_q`, `max_U2_top`,
+  `max_sig22_top` (never inputs).
+- **What each model receives.** ISLA (`isla_tensile2d.yaml`): the outer
+  cells with four boundary scalars (`bc_loaded`, `bc_fixed`, `bc_pinned`,
+  `bc_pressure`), the six standardized input scalars `params_std` as
+  global scalars, every node as an interacting query with `sdf`; outputs
+  `q`, `sig11`, `sig22`, `sig12` as scalars and `displacement` as a
+  vector. The base yaml has $K = 0$ (the load axis is $+y$ for every
+  sample); the frame lanes add the laboratory frame $+x, +y$ as two
+  global vectors, which is what lets the scalar heads produce frame
+  components (@sec-isla-heads; the finding is
+  @sec-nb-solids-frame-interim). GeoTransolver
+  (`geotransolver_tensile2d.yaml`, 512 wide): the interior points with
+  coordinates, `sdf`, `sdf_normals` and the three nodal tags in its local
+  embedding, `params_std` as its global embedding, radii 0.05 / 0.2 / 0.8
+  on the $[-1, 1]$ coordinates.
+- **Normalization** (`plaid_tensile2d.yaml`, from the manifest `_stats`
+  over `train_400`): `params` mean $[-45.0, 14.9, 450.8, 1502.6, 1496.5,
+  75434.8]$ and standard deviation $[2.90, 2.87, 86.1, 286.1, 289.2,
+  14613.8]$; `displacement` mean $[-3.38\times10^{-4}, 1.054\times10^{-3},
+  0]$, isotropic standard deviation $8.22\times10^{-4}$; `sig11`
+  $-0.127 / 28.4$; `sig22` $57.7 / 32.0$; `sig12`
+  $8.1\times10^{-4} / 16.9$; `q` $1.73\times10^{-7} / 8.18\times10^{-6}$.
+- **Splits.** The README's official nested ladder `train_8` …
+  `train_500`, plus `val_100` (100 samples drawn with seed 0 from
+  `train_500` minus `train_250`, so the official ladder up to
+  `train_250` stays disjoint from it) and `train_400` (= `train_500`
+  minus `val_100`). The book's ladder is 32 / 64 / 125 / 250 / 400 cases
+  scored on `val_100`.
+- **Pitfalls.** `q` is heavy-tailed under z-scoring (the per-case maximum
+  ranges over four decades in `train_400`), so it is reported but excluded
+  from the headline fields; without the frame vectors ISLA fits the
+  training set and validates 20 to 60 times worse than GeoTransolver, and
+  the reflection-odd $\sigma_{12}$ needs both frame vectors, not the load
+  axis alone. The leaderboard's Tensile2d numbers are on the withheld test
+  set and are not comparable to `val_100` figures.
+
+## GINOT Bracket Lug {#sec-data-lug}
+
+**3,000 three-dimensional elastoplastic lugs (Liu, Koric et al.; Zenodo
+15293036; CC BY 4.0), clamped at one end and pressed on the lower half of
+the hole, with three geometry parameters and the pressure varying.** The
+material is steel-like (E = 200 GPa, $\nu$ = 0.3, $\sigma_y$ = 380 MPa,
+linear isotropic hardening H = 571.4 MPa). The raw release stores the
+corner nodes of a quadratic hex mesh (5 to 15 thousand nodes, mean 9.5
+thousand), the nodal von Mises stress in MPa, the surface node cloud, the
+hex connectivity and `input_params` = [hole radius, length, thickness,
+pressure] in m and Pa (pressures of 50 to 100 MPa). The lug lies along
+$+x$: the flat end face at $x = x_{\min}$ is clamped, the far end is a
+semicircular nose around the hole whose axis is parallel to $z$; the lug is
+0.05 m wide.
+
+- **Conversion** (`ginot_lug_convert.py`). Interior: every node with
+  `von_mises` (MPa), `sdf` = −(distance to the surface), `sdf_normals`.
+  Boundary `surface`: the boundary quads of the hex mesh (faces owned by one
+  hex) split into triangles, outward normals, triangle areas as
+  `quadrature_measure`, and the per-cell scalars `bc_fixed` (the clamped
+  end face), `bc_hole` (the hole's cylindrical surface), `bc_loaded` (the
+  lower half of the hole, $y$ below the axis), `bc_pressure` (MPa on loaded
+  cells) and `traction` (= $-p\,n$, MPa). The fixed and pressed faces are
+  identified geometrically from the paper's description; their areas match
+  the paper's to 0.1%. `global_data`: `hole_radius`, `length`,
+  `thickness` (m), `pressure` (Pa), `pressure_mpa`, `params` (4,),
+  `sample_id`.
+- **What each model receives.** ISLA (`isla_lug.yaml`): the surface
+  triangles with four boundary scalars (`bc_fixed`, `bc_hole`,
+  `bc_loaded`, `bc_pressure`), the four standardized design parameters as
+  global scalars ($K = 0$, eager kernel), every node as a query with
+  `sdf`; output `von_mises`. Coordinates stay in metres; the RMS-distance
+  length unit absorbs the scale. GeoTransolver: the interior points with
+  the nodal tags and the parameters as its global embedding.
+- **Normalization** (manifest `_stats` over the 2,400 training lugs):
+  `params` mean $[0.01249, 0.1001, 0.02251, 7.53\times10^{7}]$ and
+  standard deviation $[1.44\times10^{-3}, 0.0116, 4.24\times10^{-3},
+  1.44\times10^{7}]$; `von_mises` mean 150.2 MPa, standard deviation
+  92.4 MPa over 22.8 million nodes.
+- **Splits.** No indices are published (the paper holds out 20%), so the
+  converter draws one seed-0 permutation: 600 test, 2,400 train, with
+  nested `train_n300` / `train_n600` / `train_n1200` inside train. The
+  book's ladder is 300 / 600 / 1,200 / 2,400 scored on the 600 test lugs.
+- **Published numbers** (from the program's scout notes,
+  `results/book_audit_2026-09-22/datasets_scout.md`): Transolver 2.74%
+  (0.32% with the load scalar as input), GNOT 3.58%, GINOT 0.40% relative
+  error on the authors' split; comparable in kind, not in split, to the
+  book's figures.
+
+## OLBC {#sec-data-olbc}
+
+**Two of the eighteen OLBC sets (Mousavi, Mishra, De Lorenzis; Zenodo
+collection 10.5281/zenodo.18377370; CC BY 4.0), each one fixed mesh whose
+boundary is cut per sample into random segments carrying labeled
+Dirichlet, Neumann or Robin conditions with random values: the pure
+complement of the aerodynamic datasets, where the geometry varies and the
+boundary data are fixed.** Each set is 8,448 training and 256 test
+samples on an unstructured triangle mesh; the files store, per sample, the
+node coordinates (identical across samples), the distance field (positive
+inside, zero on the boundary) and its gradient (pointing into the domain),
+the solution and, per component and condition type, the boundary node
+indices with the value $g$ (Robin also $\alpha$ in $\alpha u + \partial u
+/ \partial n = g$). No connectivity is stored; the converter reconstructs
+the boundary loops from the boundary node set by two-nearest-neighbour
+chaining, verified to give closed loops.
+
+- **poisson-square-bc5** (record 18377514): $-\nabla^2 u = f$ on
+  $[-1, 1]^2$, "Mixed+" configuration: four random boundary segments each
+  carrying a non-homogeneous Dirichlet, Neumann or Robin condition whose
+  $g$ (and $\alpha$) are random sinusoids, and a random sinusoidal source
+  $f$ per sample; 16,598 nodes, 1,120 on the boundary; linear FEM.
+- **elasticity-circlehollow-m1** (record 18377539): linear elasticity of
+  steel ($\lambda$ = 115 GPa, $\mu$ = 76.9 GPa), plane problem on the unit
+  disc with two holes, all fields dimensionless (stress per 100 MPa,
+  length per metre, so a displacement of $10^{-4}$ is 0.1 mm); per
+  component and per sample the exterior circle is cut into four random
+  segments: one free, one prescribed displacement (about $10^{-4}$) and
+  two tractions (about $10^{-1}$); the smallest hole is clamped, the other
+  is free; 11,786 nodes, 1,312 on the boundary over three loops;
+  quadratic FEM stored at the vertices.
+- **Conversion** (`olbc_convert.py --set {poisson,elasticity}`).
+  Interior: every node at $z = 0$ with `sdf` = −(file distance), so nodes
+  are $\le 0$ inside in the program's convention, `sdf_normals` =
+  unit(−(file gradient)), outward at the boundary; Poisson: `u`,
+  `source`, nodal labels `tag_dirichlet` / `tag_neumann` / `tag_robin`
+  and values `bc_value_node`, `bc_robin_alpha_node`; elasticity:
+  `displacement` (N, 3), `sig11` / `sig22` / `sig12`, `eps11` / `eps22` /
+  `eps12` (stored, not targets), per-component tags and nodal values
+  `bc_disp_node_*`, `bc_trac_node_*`. Boundary `outer`: line cells over
+  all loops with normals outward from the solid (into a hole on hole
+  loops; sign fixed by the file's gradient), segment lengths, `loop_id`
+  (0 the exterior, then holes by decreasing node count), and per-cell
+  labels and values: a cell takes the type shared by its two end nodes,
+  the cell on either side of a segment junction takes its labeled end's
+  type, and values are the mean of the labeled ends' $g$. Poisson:
+  `bc_dirichlet`, `bc_neumann`, `bc_robin`, `bc_value_g`,
+  `bc_robin_alpha` (0 off Robin cells); elasticity: `bc_dirichlet_x`,
+  `bc_neumann_x`, `bc_disp_x`, `bc_trac_x` and the same for $y$.
+  `global_data` holds only `sample_id`: the material is fixed and the
+  source is a field.
+- **What each model receives.** ISLA on Poisson
+  (`isla_olbc_poisson.yaml`): the 1,120 cells with five boundary scalars
+  (three one-hot types, $g$, $\alpha$), no global vector or scalar
+  ($K = 0$, eager kernel), every node as a query with two query scalars,
+  `sdf` and the standardized `source`; output `u`. ISLA on elasticity
+  (`isla_olbc_elasticity.yaml`): the 1,312 cells with eight boundary
+  scalars (per component: two one-hot types, the prescribed displacement
+  and the traction component, the latter two standardized), the
+  laboratory frame `frame_xy` = $(+x, +y)$ as two global vectors
+  ($K = 2$), every node as a query with `sdf`; outputs the three stress
+  components as scalars and `displacement` as a vector. GeoTransolver-512
+  on both: the interior points with coordinates, `sdf`, `sdf_normals` and
+  the nodal tags and values in its local embedding; no global embedding
+  (it works in absolute coordinates and needs no frame).
+- **Normalization** (manifest `_stats` over train). Poisson: `u` mean
+  $3.26\times10^{-3}$, standard deviation 1.0845; `source` mean
+  $-7.0\times10^{-3}$, standard deviation 11.517 (standardized in place
+  as an input). Elasticity: the boundary inputs `bc_disp_x` / `bc_disp_y`
+  standard deviations $1.053\times10^{-4}$ / $1.047\times10^{-4}$ and
+  `bc_trac_x` / `bc_trac_y` $6.05\times10^{-2}$ / $6.07\times10^{-2}$
+  (means zero, so off-condition cells stay exactly zero); targets
+  `displacement` isotropic standard deviation $3.18\times10^{-4}$,
+  `sig11` $-1.57\times10^{-3} / 0.3127$, `sig22`
+  $1.19\times10^{-3} / 0.3116$, `sig12` $4.9\times10^{-4} / 0.1825$.
+  The displacement and traction values differ by three orders of
+  magnitude, which is why they are separate fields rather than one
+  `bc_value_g`.
+- **Splits.** `train` (8,448) and `test` (256) as released, with nested
+  `train_n512` / `train_n2048` as seed-0 prefixes of one permutation of
+  train. The 512- and 2,048-case rungs train 500 epochs; the full rung
+  trains 120 epochs, the same number of optimizer steps as the 2,048-case
+  rung at 500, a stated deviation from the 500-epoch protocol
+  (@sec-nb-olbc-prereg).
+- **Pitfalls and scope.** The Robin type appears in some Poisson samples
+  and not others. One mesh per set: nothing measured here speaks to
+  geometry generalization or discretization invariance; those axes remain
+  with the aerodynamic and solids datasets.
+
+## Scouted, deferred, and in conversion {#sec-data-scouted}
+
+**Two more literature datasets were examined against the same
+requirements (a steady PDE, labeled and strongly varying boundary
+conditions or loads, a license that permits redistribution of converted
+files); one is deferred and one is converting.** The full shortlist,
+with fit tags and the classic operator-learning sets kept for
+comparability only, is `results/book_audit_2026-09-22/datasets_scout.md`;
+the verified facts below are from the files and papers
+(@sec-nb-datasets-scout-2026-09-22).
+
+- **GNOT Heat2d (deferred).** Steady heat conduction with a boundary
+  temperature *function* on a labeled top edge, the bottom edge at zero
+  temperature. The repository and the data folder carry no license (an
+  issue asking for one went unanswered), so converted files could not be
+  shared; the released split is 1,000 train / 100 test; each sample is a
+  point cloud of 365 to 1,089 nodes with no connectivity, the top-edge
+  temperature sampled at 16 or 17 nodes, two spline interfaces as point
+  clouds, a dummy zero global scalar, and a side-wall condition that is
+  undocumented (the data are not periodic despite the paper). Only GNOT
+  (4.13e-2) and MMET (3.36e-2) report numbers. At about 600 nodes it is
+  300 times below the reporting protocol: a mechanism rung at best, and
+  not redistributable.
+- **DeepJEB++ (promoted; conversion in progress).** 15,360
+  TRELLIS-generated jet-engine brackets in the SimJEB design space (Yoo et
+  al., KAIST; Hugging Face `KAIST-SmartDesignLab/DeepJEB-PP`; ODC-By 1.0),
+  each under four static linear-elastic load cases (Ti-6Al-4V): vertical,
+  horizontal and diagonal forces and a torsion about $z$, with the bolt
+  holes clamped and the load shared over the lug bore. The surface is
+  decimated to 25,000 vertices with per-vertex displacement (mm) and von
+  Mises stress (MPa) per load case, and explicit clamped-bolt and
+  loaded-lug vertex index sets. The converter
+  (`deepjebpp_convert.py`) writes one file per (bracket, load): the FEM
+  surface triangles re-wound outward, areas, `bc_fixed` / `bc_loaded`
+  indicators, the traction `bc_load` (force cases $F\,d / A_{\text{loaded}}$;
+  torsion the rigid-twist traction about the lug axis) with its two
+  rotation-invariant scalars `bc_load_n` = $n \cdot t$ and `bc_load_mag`
+  = $|t|$, cell-mean targets, and `global_data` with `load_dir` (the
+  force direction or the moment axis), `load_type` one-hot
+  [force, torque], the magnitude and the bracket's mass and volume. It is
+  a surface task in the DrivAerML layout (`deepjebpp_surface.yaml`), with
+  coordinates scaled from mm to 0.1 m so a bracket spans about one unit;
+  ISLA (`isla_surface_deepjebpp.yaml`) takes `load_dir` as the one global
+  vector ($K = 1$, the fused kernel), the load-type one-hot as two global
+  scalars (a moment axis is a pseudovector, so the model must know when
+  the vector is an axis) and the four boundary scalars, and predicts von
+  Mises stress and displacement at the cells. Splits are grouped by SimJEB
+  seed pair, because the brackets of one pair are a smooth family and must
+  not straddle a split: a seed-0 draw of 10% of the pairs is the test set,
+  the rest train, with nested 256 / 1,024 / 4,096-bracket rungs and
+  per-load sub-splits; the authors' pair-grouped and random splits are
+  kept under `official_*`. The normalization block of the dataset yaml
+  holds placeholders until the manifest's `_stats` are written by the
+  finalize step. Published stress errors for Transolver, GNOT and GI-FNO
+  are 30 to 37% (scout notes). No number from it is in the book.
+- **AeroZoo.** Within aerodynamics, the program's own diversity-stress
+  dataset of dissimilar bodies, built to stress generalization across
+  geometry families rather than within one; in generation, carries no
+  number in the book, and is the coming out-of-distribution instance
+  named in @sec-limits-datasets.
+
+Every dataset above enters the book's evidence only with GeoTransolver
+trained on it under the fair-comparison protocol (@sec-fair-comparison)
+and a per-dataset preregistration before its first lane; the standing of
+each conversion is in @sec-program-status.

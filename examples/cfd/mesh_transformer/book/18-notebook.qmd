@@ -24721,3 +24721,70 @@ model; the chapter says so and makes no accuracy claim from them.
 **Verification.** Both chapters' cells ran clean under the project
 interpreter; the full book render and the check that the new figures
 appear in the HTML are recorded in the commit that carries this entry.
+
+## 2026-09-22 — Book restructuring: the detailed dataset material moves to a new appendix, "Datasets in detail", and the protocol chapter's Datasets section is slimmed to what the results need {#sec-nb-datasets-appendix}
+
+**Setting.** The protocol chapter's Datasets section had grown, over the
+day's additions (one problem figure per dataset, the OLBC sets, the
+laboratory-frame inputs), into a mixture of two things: the sentences a
+reader needs to follow the evidence chapters (what each PDE problem is,
+what varies, what is predicted, what the model receives) and the reference
+material a reader needs to reproduce a lane or write a converter
+(provenance and license, case counts, mesh sizes, field names, sign
+conventions, how boundary conditions are encoded, normalization
+statistics, splits, pitfalls). Peter asked that the detailed dataset
+material go into appendix chapters of the book.
+
+**What was done.** A new appendix chapter `14-datasets.qmd`
+(`@sec-datasets-detail`, registered before the notebook) now holds the
+detail: a conventions section for what every converted dataset shares
+(the `DomainMesh` layout and the two reader patterns, the positive-outside
+signed distance, boundary conditions as per-cell 0/1 labels and per-cell
+values with the traction recoverable from pressure and normal, unit global
+vectors and the laboratory frame as global vectors for component targets,
+normalization from the manifest `_stats`, nested rungs as seed-0 prefixes),
+a table of every converter and yaml path, a computed table of the sizes of
+the problem-figure sample cases (from
+`results/problem_figures_2026-09-22/*.json`), one section per dataset
+(`@sec-data-drivaer`, `@sec-data-hilift` with the HiLiftAeroML `Splits`
+subsection moved in full under its original anchor `@sec-splits`,
+`@sec-data-airfrans`, `@sec-data-shift-suv`, `@sec-data-tensile2d`,
+`@sec-data-lug`, `@sec-data-olbc`), and a closing section on the datasets
+scouted but not adopted or still converting (`@sec-data-scouted`: GNOT
+Heat2d deferred, DeepJEB++ converting, AeroZoo). Every fact was taken from
+the existing chapter text, the dataset and model yamls and converter
+docstrings under `results/campaigns_2026-09-22/datasets/` and
+`results/campaigns_2026-09-21/af/`, the recipe's dataset yamls, and the
+notebook entries `@sec-nb-datasets-scout-2026-09-22`,
+`@sec-nb-solids-prereg`, `@sec-nb-olbc-prereg` and
+`@sec-nb-airfrans-plan`; no number is new except the sample-case sizes,
+which a cell computes. Licenses are stated only where the program's
+artifacts record them (Tensile2d CC-BY-SA-4.0, Bracket Lug and OLBC
+CC BY 4.0, DeepJEB++ ODC-By 1.0, Heat2d none); for the aerodynamic
+datasets the appendix says they are not restated.
+
+The protocol chapter's `@sec-datasets` keeps, per dataset, the problem
+figure, one or two paragraphs and a pointer to its appendix section; the
+anchors `@sec-benchmarks`, `@sec-dataset-airfrans`, `@sec-shift-suv` and
+`@sec-datasets-beyond-aero` are unchanged and HiLiftAeroML gains
+`@sec-dataset-hilift`; the split table, the nested-rung figure and the
+manifest-overlap warning left with `@sec-splits`, and a short "Splits"
+paragraph remains with the two facts the results need (the one 48-car
+DrivAerML validation set; HiLiftAeroML test manifests overlap, so sealing
+is per checkpoint). Every existing `@sec-splits` reference (the problem
+chapter, the fair-comparison rules, the validation-set warning, the
+data-efficiency chapter) concerns the HiLiftAeroML splits and resolves to
+the moved heading. The limits chapter's paragraph on datasets beyond
+external aerodynamics keeps the regime statement and points at the
+appendix instead of repeating the descriptions; the interior chapter's
+AirfRANS lead paragraph drops the conversion details (and its statement
+that the global scalar is the Reynolds number: the configuration passes
+the inlet speed, `global_data.U_inf_mag`) in favour of a pointer; the
+status chapter's DATASETS row and tech-tree node are brought up to the
+scout's decision (OLBC and DeepJEB++ promoted, Heat2d deferred) and point
+at the appendix. `STYLE.md`'s arc table lists the new appendix.
+
+**Verification.** The cross-reference checker reports no unresolved
+reference; the full render and the check that the appendix appears in the
+sidebar and that every moved anchor resolves in the HTML are recorded in
+the commit that carries this entry.
