@@ -24230,3 +24230,25 @@ lifted. The fused kernel stays the default. The engineering follow-up
 regardless of permissions, since datasets are immutable artifacts; that is
 a `physicsnemo.datapipes` change, recorded as a task. The earlier addenda
 that attributed the hang to the kernel are superseded by this entry.
+
+**Addendum (2026-09-22, later).** The reader change landed in the main
+tree (commit `a32a5cc5`: a re-entrant `read_only_memory_maps` context
+wraps every mesh load in `physicsnemo.datapipes.readers.mesh`, with
+tests). Deploying that file verbatim into the `code_ref` cluster snapshot
+was a mistake: the snapshot's `physicsnemo.mesh` is the older pinned API
+and lacks a name the current reader imports, so every new chain link of
+the REF campaign failed at import and the chain guard stood 24 lanes down
+(the four fused volume lanes were still queued and escaped). The
+snapshot's own reader was restored with only the read-only context patched
+in, the import-error markers were lifted, and the 24 lanes resumed from
+their checkpoints; the six retired eager-twin markers stand and their
+leftover chain links were cancelled. Lesson for the record: a pinned
+snapshot receives patches, never whole files from the moving tree.
+
+The relaunched fused volume lanes step under the read-only datasets:
+R1 (384 x 12) at 0.38 s per step and 95 GB, R2 (384 x 24) at 0.77 s and
+181 GB, against the eager twins' 0.98 s and 161 GB (R1) and out of memory
+(R2). The fused kernel is thus 2.6x faster and 41% leaner than eager on
+the DrivAerML Volume task at 200,000 surface cells and 200,000 queries,
+which settles the memory question that had motivated the checkpointed
+twins.
