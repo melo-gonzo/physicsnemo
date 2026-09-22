@@ -632,7 +632,7 @@ it changes.** The recipe's surface and interior configurations are in
 | `n_boundary_scalars` (0) | 2 | per-cell boundary-condition scalars $\beta_i$ appended to the seed; non-boundary tokens carry zeros |
 | `scale_mode` (`"rms_distance"`) | 1 | the length unit; `"total_measure"` (the square root of the total measure) is kept only to reproduce the lanes trained with it and is marked for removal |
 | `use_measure_weights` (on) | 3b, 3f, 4 | the measure bias $\ell_i$; off is the weights-off ablation |
-| `routing_norm` (`"linear"`), `routing_temperature` (10) | 3a, 4 | the form of every routing map: affine, or the bounded cosine against learned prototypes (the candidate default, @sec-isla-routing-forms) |
+| `routing_norm` (`"cosine"`), `routing_temperature` (10) | 3a, 4 | the form of every routing map: the bounded cosine against learned prototypes (the default since 2026-09-22), or the affine map of the lanes trained before it (@sec-isla-routing-forms) |
 | `use_relational_geo` (on) | 3d, 3e, 3h | the relational invariants in the refinement and the read-back; off is the feature-only slicing ablation |
 | `query_tokens` (off), `n_query_scalars` (0), `query_scalar_scale` (`"length"`), `query_mass` (`"source_total"`) | modes | the interacting interior arrangement, its per-query scalars and their scaling, and the queries' routing mass |
 | `query_independent` (off), `n_decoder_layers` (4), `local_readout_rho` (0.02), `support_tokens` (off) | modes | the passive decoder, its depth, its local-readout width, and the optional interacting support set |

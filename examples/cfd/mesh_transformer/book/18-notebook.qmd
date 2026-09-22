@@ -23553,3 +23553,90 @@ GeoTransolver-volume embeds the inlet velocity once); no prediction for
 the angle-of-attack split beyond the full-split ordering. Whatever the
 outcome, the absolute ordering (ISLA on velocity, GeoTransolver-volume on
 pressure) is expected to hold on both splits (0.8).
+
+## 2026-09-22 — Verdict, ROUTE-NORM at the reporting protocol, and the default decision: cosine 192 beats linear 192 by 6% on the 35-wing rung at 200,000 cells (0.1408 against 0.1502), the 510-wing linear control plateaus at 13 to 39 times the cosine loss, cosine 384 × 24 on the cars scores 0.0407 at 200,000 cells; cosine routing becomes ISLA's default {#sec-nb-routenorm-p200k-verdict}
+
+**Setting.** ROUTE-NORM asks whether bounding the routing logits (cosine
+routing at temperature 10) removes the learning-rate ceiling that linear
+routing has, whose failure is total routing collapse to the mean-field
+plateau (@sec-nb-routingsat-verdict), and what it costs in accuracy. The
+DrivAerML half closed on 2026-09-21 (@sec-nb-routenorm-cars-verdict):
+ceiling removed on every lane, accuracy neutral at the rule rates. The
+reporting-protocol half (@sec-nb-routenorm-p200k-prereg) trained cosine 192
+at 1e-3, cosine 384 at 1e-3 and a linear 384 control at 1e-3 on the 35-wing
+rung at 200,000 cells, and cosine 384 wide × 24 layers at 5e-4 on the 435
+cars at 200,000 cells, two seeds each, float32 scoring at 200,000 cells.
+The 510-wing lanes of the original design (100,000 cells; cosine 192 and
+384 at 1e-3, linear 384 control) are at epoch 125 of 500 and are read here
+for their validation trajectories only. Reduction
+`results/routenorm_wings_reduce_2026-09-22.py`, artifact
+`results/routenorm_p200k_2026-09-22.json`.
+
+**What we saw.**
+
+| lane | seed 42 | seed 43 | mean | reference |
+|---|--:|--:|--:|---|
+| 35 wings, 200k: cosine 192, 1e-3 | 0.1418 | 0.1398 | 0.1408 | linear 192 (fleet) 0.1502; GeoTransolver 0.1098; Transolver 0.1101 |
+| 35 wings, 200k: cosine 384, 1e-3 | 0.1388 | 0.1335 | 0.1361 | |
+| 35 wings, 200k: linear 384, 1e-3 (control) | 0.1411 | 0.1447 | 0.1429 | trained cleanly |
+| 435 cars, 200k: cosine 384 × 24, 5e-4 | 0.0407 | 0.0406 | 0.0407 | same lane at 100k 0.0407; GeoTransolver's best 0.0406 |
+
+: ROUTE-NORM at the reporting protocol (surface pressure, float32, 200,000 cells). {#tbl-routenorm-p200k}
+
+*Collapse clause.* The preregistered threshold ("linear control above 0.01
+validation loss after epoch 20 while cosine stays below") was written in
+the cars' loss units; on the wings every lane, cosine included, sits above
+0.01 through epoch 500 (the 35-wing floor is 0.020), so as written the
+clause cannot fire there and the reduction restates it in the units
+ROUTING-SAT measured the signature in: a linear validation loss more than
+three times the cosine lane's at a matched epoch after epoch 20 (the cars'
+plateau was seventeen times). **On the 35-wing rung at 200,000 cells the
+signature is absent**: linear 384 at 1e-3 tracks cosine 384 within 2 to 11%
+on both seeds to epoch 500 and scores 0.1429, 5% behind cosine 384. **On
+the 510-wing rung at 100,000 cells it is present on both seeds**: the linear
+control's validation loss rises from 0.08 at epoch 0 to 0.17 at epoch 25
+and sits at 0.15 through epoch 125, while cosine 384 descends to 0.004; the
+ratio grows from 13 to 39 as cosine keeps improving. The ceiling therefore
+depends on the training-set size as well as on width and depth: 35 wings
+at 200,000 cells sit below it at width 384 and 1e-3, 510 wings at 100,000
+cells sit above it. That is consistent with routing collapse being an
+optimization instability whose onset needs enough gradient signal per
+epoch (the 510-wing epoch has 15 times the steps), and it is recorded as
+an observation, not a mechanism.
+
+*Accuracy null.* Cosine 192 at 1e-3 scores 0.1408 against the fleet's
+linear 192 row at 0.1502: **6% better, both seeds below both linear
+seeds** (0.1418 / 0.1398 against 0.1504 / 0.1496). The bar was "within 2%
+is null, more than 2% better is a finding": a finding. GeoTransolver ÷
+cosine ISLA on this rung is 0.78 (Transolver 0.78) against 0.73 for linear
+ISLA; the wing deficit narrows by five points and stays.
+
+*Width on the wings.* Cosine 384 scores 0.1361, 3.3% below cosine 192, at
+the 3% bar with a 4% seed spread on the 384 lane (0.1388 / 0.1335): width
+carries on the wings at the edge of resolution, where on the cars it
+carried 7% per doubling. Not resolved at two seeds; the 510-wing width
+ladder (SCALE-HL) is the instrument that will.
+
+*Best configuration at the protocol.* Cosine 384 × 24 at 200,000 cells
+scores 0.04065 (0.0407 / 0.0406) against 0.04067 at 100,000: cells are
+flat for it as for every other lane (ISO-COST), and it sits 0.1% above
+GeoTransolver-1,024's 0.0406, level within the seed spread, at half the
+parameters (68M against 143M) and 91 GB of training memory.
+
+**Decision.** The preregistered rule made cosine the default if the
+collapse clause held on both datasets and the accuracy null held on both.
+Collapse: removed on the cars at every rate tried; on the wings the
+510-wing control shows the signature on both seeds while both cosine lanes
+train normally (interim, epoch 125, the ratio 13 to 39 leaves no room for
+reversal), and the 35-wing rung shows no collapse under either form.
+Accuracy: neutral on the cars (0.998), 6% better on the wings. **Cosine
+routing is ISLA's class default from today** (`routing_norm="cosine"`,
+temperature 10; the class change is in the same commit as this entry, with
+the linear form kept as the alternative and the release tests passing).
+Every evidence lane in the book trained before today uses linear routing;
+the cosine twins of the evidence board (COSINE-TWINS, 14 of 18 lanes
+trained) will say whether any scoreboard row moves, and the book's
+scoreboard rows remain the linear-trained lanes until they do. What this
+does not settle: the 510-wing final scores (SCALE-HL), whether width pays
+on the wings past the 3% edge, and the mechanism that makes the ceiling
+data-size dependent.

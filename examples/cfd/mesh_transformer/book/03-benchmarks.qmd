@@ -128,7 +128,9 @@ print(f"At 435 cars ISLA is {standing} GeoTransolver (GeoTransolver ÷ ISLA {r43
       f"(@sec-deficit-anatomy) that goes to zero at the denser sampling. Below full data GeoTransolver at its better rate "
       f"leads ISLA by {', '.join(f'{(1-r)*100:.0f}%' for r in lads)} at 27, 54, 109 and 218 cars, a deficit that closes at the full training set. "
       f"On the wings the budget changes nothing (@tbl-scoreboard-200k-wings): on the 35-case rung GeoTransolver ÷ ISLA is 0.73 at 200,000 cells against 0.72 at 10,000, "
-      f"and on the fixed-angle rung 0.69 against 0.68, so the wing deficit is a property of the trained functions, not of the sampling count.")
+      f"and on the fixed-angle rung 0.69 against 0.68, so the wing deficit is a property of the trained functions, not of the sampling count. "
+      "The rows are linear-routed lanes; under the cosine routing that became the default on 2026-09-22, ISLA-192 on the 35-case rung scores 0.1408 "
+      "(GeoTransolver ÷ ISLA 0.78; @sec-nb-routenorm-p200k-verdict), a five-point narrowing that leaves the ordering.")
 ```
 
 ```{python}

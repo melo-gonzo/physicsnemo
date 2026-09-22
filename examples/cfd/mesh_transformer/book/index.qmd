@@ -325,9 +325,11 @@ outside it.**
   under the area-proportional law and scored on the uniform draw, its error
   moves 1% on the wings and 8% on the cars; why the cars show the larger
   dependence is open (@sec-training-law).
-- **Not that cosine routing is the default.** It removes the learning-rate
-  ceiling on DrivAerML at accuracy neutral to linear routing; the decision
-  waits on the same test on the wings (@sec-using-lr).
+- **Not that cosine routing buys accuracy.** It is the default (2026-09-22)
+  because it removes the learning-rate ceiling on both datasets; accuracy is
+  neutral to linear routing on the cars and 6% better on the 35-wing rung,
+  and the evidence lanes trained before the change use linear routing
+  (@sec-using-lr).
 - **Not that the interior lead is unconditional.** It is on velocity only, and
   the interacting decode requires at least the training count of points to be
   queried together (@sec-interior-companion).

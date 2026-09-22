@@ -197,8 +197,16 @@ and 384 and 2% at 768 (@sec-nb-routenorm-cars-verdict). The best cosine
 lanes are also the best ISLA lanes on that budget: 384 wide at 24 and 48
 layers reach 0.0407 and 0.0406, the same floor GeoTransolver reaches at
 1,024 wide (@fig-capacity). Under cosine routing, then, read the rule as
-the rate to start from rather than a limit. Cosine is the candidate
-default; the same test on the wings decides it (@sec-program-status).
+the rate to start from rather than a limit. The same test on the wings
+made cosine the default (2026-09-22): on the 35-wing rung at the reporting
+protocol cosine 192 at 1e-3 scores 0.1408 against linear 192's 0.1502, and
+on the 510-wing rung at the scaling budget the linear 384 control at 1e-3
+holds a validation loss 13 to 39 times the cosine lane's from epoch 25 on
+(@sec-nb-routenorm-p200k-verdict). One caveat travels with it: on the
+35-wing rung at 200,000 cells linear 384 at 1e-3 did *not* plateau (it
+tracks cosine within 11% to epoch 500), so the ceiling depends on the
+training-set size as well as on width and depth, and the 35-case rung sits
+below it.
 
 ::: {.callout-note collapse="true" title="Why the linear-routing ceiling scales with width and depth"}
 Each block's routing logits are an affine map of a normalized token state

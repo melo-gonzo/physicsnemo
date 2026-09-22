@@ -1,0 +1,368 @@
+{
+  "study": "ROUTE-NORM at the reporting protocol: cosine routing on the 35-wing rung at 200,000 cells (cosine 192 and 384 at 1e-3, linear 384 control) and cosine 384 x 24 layers on the 435 cars at 200,000 cells; float32 scoring, two seeds; 510-wing trajectories read for the collapse clause only",
+  "configurations": {
+    "wings35|cos|w192|lr1e-3|c200k": {
+      "runs": {
+        "rn_cos_w192_lr1e_3_ss_c200k_seed42": 0.14175014495849608,
+        "rn_cos_w192_lr1e_3_ss_c200k_seed43": 0.13975786632961698
+      },
+      "n_scored": 2,
+      "status": "complete",
+      "pressure_l2_seeds": [
+        0.14175014495849608,
+        0.13975786632961698
+      ],
+      "pressure_l2_mean": 0.14075400564405655,
+      "seed_spread": 0.0142552164053531
+    },
+    "wings35|cos|w384|lr1e-3|c200k": {
+      "runs": {
+        "rn_cos_w384_lr1e_3_ss_c200k_seed42": 0.1387607150607639,
+        "rn_cos_w384_lr1e_3_ss_c200k_seed43": 0.13349776797824436
+      },
+      "n_scored": 2,
+      "status": "complete",
+      "pressure_l2_seeds": [
+        0.1387607150607639,
+        0.13349776797824436
+      ],
+      "pressure_l2_mean": 0.13612924151950412,
+      "seed_spread": 0.03942348371979687
+    },
+    "wings35|lin|w384|lr1e-3|c200k": {
+      "runs": {
+        "rn_lin_w384_lr1e_3_ss_c200k_seed42": 0.1411155170864529,
+        "rn_lin_w384_lr1e_3_ss_c200k_seed43": 0.14469723171657986
+      },
+      "n_scored": 2,
+      "status": "complete",
+      "pressure_l2_seeds": [
+        0.1411155170864529,
+        0.14469723171657986
+      ],
+      "pressure_l2_mean": 0.14290637440151638,
+      "seed_spread": 0.025381437166351217
+    },
+    "cars|cos|w384|d24|lr5e-4|c200k": {
+      "runs": {
+        "rn_cos_w384_d24_lr5e_4_p200k_c200k_seed42": 0.040739625692367554,
+        "rn_cos_w384_d24_lr5e_4_p200k_c200k_seed43": 0.040553897619247437
+      },
+      "n_scored": 2,
+      "status": "complete",
+      "pressure_l2_seeds": [
+        0.040739625692367554,
+        0.040553897619247437
+      ],
+      "pressure_l2_mean": 0.040646761655807495,
+      "seed_spread": 0.004579783547906668
+    }
+  },
+  "collapse_trajectories": {
+    "wings35": {
+      "arms": {
+        "rn_cos_w192_lr1e_3_ss_c200k_seed42": {
+          "last_epoch": 499,
+          "val_at_last": 0.021197,
+          "val_at_25": 0.055869,
+          "max_after_20": 0.055869,
+          "n_readings": 21
+        },
+        "rn_cos_w192_lr1e_3_ss_c200k_seed43": {
+          "last_epoch": 499,
+          "val_at_last": 0.021116,
+          "val_at_25": 0.058268,
+          "max_after_20": 0.058268,
+          "n_readings": 21
+        },
+        "rn_cos_w384_lr1e_3_ss_c200k_seed42": {
+          "last_epoch": 499,
+          "val_at_last": 0.020638,
+          "val_at_25": 0.055381,
+          "max_after_20": 0.055381,
+          "n_readings": 21
+        },
+        "rn_cos_w384_lr1e_3_ss_c200k_seed43": {
+          "last_epoch": 499,
+          "val_at_last": 0.020031,
+          "val_at_25": 0.057504,
+          "max_after_20": 0.057504,
+          "n_readings": 21
+        },
+        "rn_lin_w384_lr1e_3_ss_c200k_seed42": {
+          "last_epoch": 499,
+          "val_at_last": 0.021146,
+          "val_at_25": 0.061868,
+          "max_after_20": 0.061868,
+          "n_readings": 21
+        },
+        "rn_lin_w384_lr1e_3_ss_c200k_seed43": {
+          "last_epoch": 499,
+          "val_at_last": 0.022273,
+          "val_at_25": 0.060836,
+          "max_after_20": 0.060836,
+          "n_readings": 21
+        }
+      },
+      "lin384_over_cos384_after_epoch_20": {
+        "seed42": {
+          "epochs": [
+            25,
+            50,
+            75,
+            100,
+            125,
+            150,
+            175,
+            200,
+            225,
+            250,
+            275,
+            300,
+            325,
+            350,
+            375,
+            400,
+            425,
+            450,
+            475,
+            499
+          ],
+          "lin_over_cos": [
+            1.117134035138405,
+            1.315499500364599,
+            1.1570106273568734,
+            1.079720335918351,
+            1.0586471630400216,
+            1.0580228560810183,
+            1.0344698388909703,
+            1.031354332994629,
+            1.0315382757787972,
+            1.025895450145208,
+            1.0250967117988394,
+            1.0256584372120097,
+            1.0228354873190166,
+            1.0224463082367772,
+            1.0222899139348225,
+            1.0267792169989813,
+            1.0213883135025772,
+            1.0236353133724847,
+            1.024133094742951,
+            1.024614788254676
+          ]
+        },
+        "seed43": {
+          "epochs": [
+            25,
+            50,
+            75,
+            100,
+            125,
+            150,
+            175,
+            200,
+            225,
+            250,
+            275,
+            300,
+            325,
+            350,
+            375,
+            400,
+            425,
+            450,
+            475,
+            499
+          ],
+          "lin_over_cos": [
+            1.057943795214246,
+            1.1181491822895893,
+            1.246948486311289,
+            1.2547885493943585,
+            1.1833040908671162,
+            1.1503204973733674,
+            1.126293395222899,
+            1.1186003865787777,
+            1.1042305031135713,
+            1.112023636636787,
+            1.11069851465275,
+            1.1086503128413943,
+            1.110229498317682,
+            1.118929235096178,
+            1.1085600199650611,
+            1.1145248596631916,
+            1.1075911236067877,
+            1.1072569375124774,
+            1.1111895161290322,
+            1.1119265139034498
+          ]
+        }
+      },
+      "clause_as_written": {
+        "linear_above_0.01_after_20": true,
+        "cosine_below_0.01_after_20": false,
+        "fires": false,
+        "note": "threshold written in the cars' loss units; not discriminating on the 35-wing rung, where every lane sits above 0.01"
+      },
+      "clause_in_signature_units": {
+        "seeds_with_linear_plateau_above_3x_cosine": [],
+        "fires": false,
+        "definition": "linear 384 validation loss more than three times cosine 384 at a matched epoch after epoch 20"
+      },
+      "status": "final (epoch 500)"
+    },
+    "wings510": {
+      "arms": {
+        "rn_cos_w192_lr1e_3_med_c100k_seed42": {
+          "last_epoch": 125,
+          "val_at_last": 0.004203,
+          "val_at_25": 0.013045,
+          "max_after_20": 0.013045,
+          "n_readings": 6
+        },
+        "rn_cos_w192_lr1e_3_med_c100k_seed43": {
+          "last_epoch": 125,
+          "val_at_last": 0.004003,
+          "val_at_25": 0.013832,
+          "max_after_20": 0.013832,
+          "n_readings": 6
+        },
+        "rn_cos_w384_lr1e_3_med_c100k_seed42": {
+          "last_epoch": 125,
+          "val_at_last": 0.004147,
+          "val_at_25": 0.012359,
+          "max_after_20": 0.012359,
+          "n_readings": 6
+        },
+        "rn_cos_w384_lr1e_3_med_c100k_seed43": {
+          "last_epoch": 125,
+          "val_at_last": 0.004011,
+          "val_at_25": 0.012901,
+          "max_after_20": 0.012901,
+          "n_readings": 6
+        },
+        "rn_lin_w384_lr1e_3_med_c100k_seed42": {
+          "last_epoch": 125,
+          "val_at_last": 0.150443,
+          "val_at_25": 0.166623,
+          "max_after_20": 0.186273,
+          "n_readings": 6
+        },
+        "rn_lin_w384_lr1e_3_med_c100k_seed43": {
+          "last_epoch": 125,
+          "val_at_last": 0.154838,
+          "val_at_25": 0.185308,
+          "max_after_20": 0.185308,
+          "n_readings": 6
+        }
+      },
+      "lin384_over_cos384_after_epoch_20": {
+        "seed42": {
+          "epochs": [
+            25,
+            50,
+            75,
+            100,
+            125
+          ],
+          "lin_over_cos": [
+            13.48191601262238,
+            16.911179347208005,
+            27.28475172110737,
+            30.76100121114251,
+            36.27755003617073
+          ]
+        },
+        "seed43": {
+          "epochs": [
+            25,
+            50,
+            75,
+            100,
+            125
+          ],
+          "lin_over_cos": [
+            14.363847763739246,
+            14.158501179459263,
+            20.28337052106576,
+            31.826826196473554,
+            38.6033408127649
+          ]
+        }
+      },
+      "clause_as_written": {
+        "linear_above_0.01_after_20": true,
+        "cosine_below_0.01_after_20": false,
+        "fires": false,
+        "note": "threshold written in the cars' loss units; not discriminating on the 35-wing rung, where every lane sits above 0.01"
+      },
+      "clause_in_signature_units": {
+        "seeds_with_linear_plateau_above_3x_cosine": [
+          "seed42",
+          "seed43"
+        ],
+        "fires": true,
+        "definition": "linear 384 validation loss more than three times cosine 384 at a matched epoch after epoch 20"
+      },
+      "status": "interim (in flight)"
+    }
+  },
+  "references": {
+    "wings35_linear_isla_192_fleet": 0.14997896088494195,
+    "wings35_geotransolver": 0.10978310373094347,
+    "wings35_transolver": 0.11008687019348144,
+    "cars_cosine_384x24_100k": 0.040668393174807235,
+    "sources": [
+      "results/p200k_fleet_reduction_2026-09-22.json",
+      "results/routenorm_extension_2026-09-21.json"
+    ]
+  },
+  "bars": {
+    "second_dataset_accuracy_null": {
+      "cosine_192": 0.14075400564405655,
+      "linear_192_fleet": 0.14997896088494195,
+      "cosine_over_linear": 0.938491671188718,
+      "n_scored": 2,
+      "verdict": "cosine better by more than 2%: a finding",
+      "gt_over_cosine": 0.7799643301702309,
+      "transolver_over_cosine": 0.7821224674193132,
+      "gt_over_linear_fleet": 0.7319900276890491,
+      "transolver_over_linear_fleet": 0.7340154215225949
+    },
+    "width_on_the_wings": {
+      "cosine_384": 0.13612924151950412,
+      "cosine_192": 0.14075400564405655,
+      "ratio_384_over_192": 0.9671429306513117,
+      "verdict": "width carries (at least 3% below 192)",
+      "gt_over_cosine_384": 0.8064623184961632,
+      "transolver_over_cosine_384": 0.8086937748617998
+    },
+    "linear_384_control_accuracy": {
+      "linear_384": 0.14290637440151638,
+      "cosine_384": 0.13612924151950412,
+      "linear_over_cosine": 1.0497845489063513,
+      "note": "the control trained cleanly on this rung; its score is reported, not a bar"
+    },
+    "best_configuration_at_the_protocol": {
+      "cosine_384x24_200k": 0.040646761655807495,
+      "cosine_384x24_100k": 0.040668393174807235,
+      "ratio_200k_over_100k": 0.9994680999835238,
+      "cells_flat": true,
+      "gt_best_mark": 0.0406,
+      "at_or_below_gt_best": false,
+      "relative_to_gt_best": 0.0011517649213670378
+    },
+    "collapse_clause": {
+      "wings35": {
+        "as_written": false,
+        "in_signature_units": false,
+        "status": "final (epoch 500)"
+      },
+      "wings510": {
+        "as_written": false,
+        "in_signature_units": true,
+        "status": "interim (in flight)"
+      }
+    }
+  }
+}

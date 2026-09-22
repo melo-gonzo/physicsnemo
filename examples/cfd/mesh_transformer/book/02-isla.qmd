@@ -382,9 +382,9 @@ weights alone as well as to a joint geometric rescale (@sec-isla-contracts).
 
 ### The two forms of the routing logit {#sec-isla-routing-forms}
 
-**The routing logit is a linear map by default and a bounded cosine as the
-candidate default; the bounded form is what makes wide and deep ISLA
-trainable.** In the linear form the logit is an affine map of the
+**The routing logit is a bounded cosine by default (since 2026-09-22) and
+a linear map as the alternative; the bounded form is what makes wide and
+deep ISLA trainable.** In the linear form the logit is an affine map of the
 normalized token state, and nothing bounds it: the weights can grow without
 limit, and as they grow each slice's softmax over points sharpens toward a
 single point and each point's preference toward a single slice. A learning
@@ -411,9 +411,15 @@ On DrivAerML the cosine form removed the learning-rate ceiling on every lane
 tried at accuracy neutral to the linear form, and depth that the linear form
 could not train becomes trainable. The temperature is
 `routing_temperature`; the frame and head contracts hold under either form.
-Cosine is the candidate default and the HiLiftAeroML lanes decide it; the
+On the wings the same test made it the default: at the reporting protocol
+on the 35-wing rung cosine 192 scores 0.1408 against linear 192's 0.1502
+(6% better, both seeds), and on the 510-wing rung the linear 384 control
+sits at a validation loss 13 to 39 times the cosine lane's from epoch 25
+on while cosine trains normally (@sec-nb-routenorm-p200k-verdict). The
 learning-rate rule and the numbers are in @sec-using-lr, the capacity
-picture in @sec-shared-floor.
+picture in @sec-shared-floor. Every evidence lane in this book trained
+before the change uses linear routing and says so where it matters; the
+cosine twins of the evidence board are in flight (@sec-program-status).
 
 ## Idea 4: relational invariants {#sec-isla-relational}
 

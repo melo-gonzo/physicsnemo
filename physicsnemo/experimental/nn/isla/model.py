@@ -211,7 +211,7 @@ class _RoutingLogits(nn.Module):
         self,
         hidden: int,
         n_slices: int,
-        mode: str = "linear",
+        mode: str = "cosine",
         temperature: float = 10.0,
     ) -> None:
         super().__init__()
@@ -244,7 +244,7 @@ class _SliceBlock(nn.Module):
         fast_point_softmax: bool = True,
         geo_kernel: str = "eager",
         n_global_vectors: int = 1,
-        routing_norm: str = "linear",
+        routing_norm: str = "cosine",
         routing_temperature: float = 10.0,
     ) -> None:
         super().__init__()
@@ -388,7 +388,7 @@ class _ReadBlock(nn.Module):
         geo_checkpoint: bool = False,
         geo_kernel: str = "eager",
         n_global_vectors: int = 1,
-        routing_norm: str = "linear",
+        routing_norm: str = "cosine",
         routing_temperature: float = 10.0,
     ) -> None:
         super().__init__()
@@ -619,13 +619,16 @@ class ISLA(Module):
             ``"eager"`` (the PyTorch reference region). Pass ``"eager"`` or
             ``"fused"`` to force one; ``"fused"`` raises when its constraints
             cannot be met.
-        routing_norm: ``"linear"`` (default): each block's point-to-slice
-            routing logits are an affine map of the normalized token state;
-            ``"cosine"``: ``routing_temperature`` times the cosine between the
-            token state and a learned prototype per slice, which bounds every
-            logit in ``[-T, T]`` so no block can route every point to a single
-            slice (the routing-collapse state behind the mean-field plateau at
-            high learning rates). Under study (ROUTE-NORM); the frame and head
+        routing_norm: ``"cosine"`` (default): each block's point-to-slice
+            routing logits are ``routing_temperature`` times the cosine between
+            the normalized token state and a learned prototype per slice, which
+            bounds every logit in ``[-T, T]`` so no block can route every point
+            to a single slice (the routing-collapse state behind the mean-field
+            plateau that linear routing reaches above a learning-rate ceiling
+            falling like 1/width and 1/depth). ``"linear"``: an affine map of
+            the normalized token state, the form of the lanes trained before
+            2026-09-22; accuracy is neutral between the two at the rule rates
+            (ROUTE-NORM, DrivAerML and HiLiftAeroML). The frame and head
             contracts are unchanged either way.
         routing_temperature: The bound ``T`` of the cosine routing logits.
         eps: Numerical floor for norms and logarithms.
@@ -673,7 +676,7 @@ class ISLA(Module):
         support_tokens: bool = False,
         scale_mode: str = "rms_distance",
         geo_kernel: str | None = None,
-        routing_norm: str = "linear",
+        routing_norm: str = "cosine",
         routing_temperature: float = 10.0,
         eps: float = 1e-12,
     ) -> None:

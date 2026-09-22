@@ -60,6 +60,24 @@ cosine) and 0.0406 at 136M (48 layers); GeoTransolver 0.0406 at 143M and
 100k; 500 epochs converged. Do not state: "GeoTransolver keeps improving
 where ISLA stops".
 
+**Cosine routing is the class default (2026-09-22;
+results/routenorm_p200k_2026-09-22.json).** Wing half: 35-wing rung at 200k,
+cosine 192 at 1e-3 0.1408 (0.1418 / 0.1398) against linear 192's 0.1502
+(6% better; GeoTransolver ÷ cosine ISLA 0.78, Transolver 0.78); cosine 384
+0.1361 (3.3% below 192, at the bar, 4% seed spread); linear 384 control
+trained cleanly at 0.1429 (no plateau on this rung). 510-wing rung at 100k
+(interim, epoch 125): linear 384 control at 0.15 validation loss from epoch
+25 against cosine 0.004 (13 to 39x, both seeds). Cosine 384 x 24 at 200k on
+the cars 0.0407 (cells flat; 0.1% above GeoTransolver-1,024's 0.0406 at half
+the parameters). Say: "cosine routing removes the learning-rate ceiling on
+both datasets at accuracy neutral (cars) or 6% better (35 wings)"; "the
+ceiling depends on training-set size as well as width and depth: absent at
+35 wings x 200k for 384 wide at 1e-3, present at 510 wings x 100k". Do not
+say cosine routing closes the wing deficit (0.73 to 0.78) or that width pays
+on the wings (3.3% at the 3% bar, two seeds). Every scoreboard row trained
+before 2026-09-22 is linear-routed; say so when a row is compared with a
+cosine lane.
+
 **Scaling law (SCALE-LAW, DrivAerML only, 2026-09-22;
 results/scalelaw_drivaerml_2026-09-22.json).** Five rungs (27 / 54 / 109 /
 218 / 435 cars), three widths each, 100k cells, 500 epochs, two seeds. Total
@@ -109,9 +127,10 @@ ISLA number to better than about 15%. Interior lanes trained under
 **Pose (200k).** ISLA posed ÷ native 1.015; leads augmented GeoTransolver /
 Transolver by 12% / 21%.
 
-**Pending, never stated as results.** ROUTE-NORM wings (510-wing rung, days;
-35-wing rung and cosine 384 × 24 on the cars at 200k, hours), the
-cosine-default decision, SCALE-HL, the remaining wing rungs.
+**Pending, never stated as results.** SCALE-HL and the ROUTE-NORM 510-wing
+scores (days), the SCALE-LAW wing half, COSINE-TWINS (the evidence board
+under cosine routing), the AirfRANS extrapolation splits, the remaining
+wing rungs (510 / 1,260 at 200k), PROTOCOL-REDO.
 
 
 ## Architectures and resources (chapter 2–4)

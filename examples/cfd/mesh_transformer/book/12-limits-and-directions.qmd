@@ -204,7 +204,7 @@ baseline ÷ ISLA, so above one favors ISLA.
 | What is the mechanism of the wing deficit? | the mesher-pattern hypothesis (validation geometries recur in training with a different mesh) tested by a split that holds geometries out entirely at matched case count, at the reporting protocol | the ratio moves toward parity when recurrence is removed, or does not |
 | What is ISLA's ratio on the two largest HiLift rungs? | ISLA trained at 510 and 1,260 cases at the reporting protocol | reported as measured |
 | Do the 35-case ratios hold on cases no decision has read? | the 35-case ISLA and unit-direction baseline checkpoints scored once on the 360-case sealed test | the validation ratios reproduced within their seed spread |
-| Does bounding the routing logits remove the linear-routing rate ceiling on a second dataset? | cosine routing at the rates that collapse linear routing on the 510-wing rung, and the reporting-protocol lanes on the 35-wing rung and on the cars (@sec-nb-routenorm-prereg, @sec-nb-routenorm-p200k-prereg) | answered on DrivAerML (clean training at every collapse rate, neutral accuracy at the rule rates; @sec-nb-routenorm-cars-verdict); pending on the 510-wing rung, and the cosine default waits on it |
+| Does bounding the routing logits remove the linear-routing rate ceiling on a second dataset? | cosine routing at the rates that collapse linear routing on the 510-wing rung, and the reporting-protocol lanes on the 35-wing rung and on the cars (@sec-nb-routenorm-prereg, @sec-nb-routenorm-p200k-prereg) | answered on both datasets: DrivAerML (clean training at every collapse rate, neutral accuracy at the rule rates; @sec-nb-routenorm-cars-verdict) and the wings (510-wing linear control at 13 to 39 times the cosine loss from epoch 25; cosine 192 6% better than linear 192 on the 35-wing rung at the reporting protocol; @sec-nb-routenorm-p200k-verdict); cosine routing is the class default since 2026-09-22 |
 | Does the capacity floor and the memory frontier reproduce on the wings? | the wing scaling study: cosine ISLA and GeoTransolver width and depth ladders on the HiLiftAeroML rungs at the scaling budget (@sec-nb-scalehl-prereg) | both ladders flatten at one floor, and the best ISLA at or under each memory budget is at least as accurate as the best GeoTransolver, or not |
 | Does the interior standing reproduce on a second dataset? | the AirfRANS interior lanes, ISLA with query tokens against GeoTransolver-volume (@sec-interior-airfrans) | answered: reproduced on both fields with a prior, every paired ratio agreeing (velocity 1.95 / 2.14, pressure 0.80 / 0.83; @sec-nb-airfrans-verdict); the Reynolds and angle-of-attack extrapolation splits run next (@sec-nb-airfrans-extrap-prereg) |
 | Why does ISLA's training-law dependence differ between datasets (1% on the wings, 8% on the cars)? | the twin training under a third law, or on a third dataset, with the same independent uniform readout (@sec-training-law) | no bar is preregistered; reported as measured |
@@ -251,9 +251,9 @@ outcomes would change the recommendation.
 **ISLA gains an in-distribution accuracy claim below full data and on the
 wings** if the mechanism of the wing deficit is located and removed by a
 principled configuration: the geometry-holdout test of @sec-open-questions
-is the one such candidate, and the cosine routing decision, if it carries
-the wing lanes, changes the training rule but not, on the DrivAerML
-evidence, the accuracy at width 192. If the wing deficit closes, the
+is the one such candidate, and the cosine routing default changes the
+training rule and, on the 35-wing rung, the accuracy at width 192 by 6%
+(0.1408 against 0.1502), not the deficit's sign. If the wing deficit closes, the
 scoreboard gains rows in which GeoTransolver no longer leads at small data,
 and the recommendation on matched-mesher, known-pose surface prediction
 from few training cases becomes a trade of a few percent of accuracy
