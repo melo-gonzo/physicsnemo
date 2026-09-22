@@ -341,13 +341,7 @@ print(f"**On the first solid-mechanics dataset, PLAID Tensile2d, GeoTransolver-5
 ```
 
 ```{python}
-#| label: tbl-tensile2d-ladder
-#| tbl-cap: >
-#|   PLAID Tensile2d, float32 relative L2 on the 100 held-out cases at 500 epochs (mean of two seeds), ISLA R1 with the
-#|   laboratory frame as global vectors against GeoTransolver-512, along the training-case ladder; the last row is the
-#|   least-squares learning-curve exponent of each arm (error proportional to cases to the minus alpha). How to read
-#|   this: a ratio below one is a GeoTransolver lead; the ratios rise along the ladder because ISLA's exponent is larger
-#|   on every field. Source: results/solids_frame_2026-09-22.json.
+#| label: tensile2d-ladder-table
 #| output: asis
 hdr = "| training cases | " + " | ".join(f"ISLA {l} | GeoTransolver {l} | ratio" for _, l in T2D_FIELDS) + " |"
 print(hdr); print("|" + "---|" * (1 + 3 * len(T2D_FIELDS)))
@@ -355,6 +349,12 @@ for n in T2D_RUNGS:
     i = SFS[f"isla_r1|frame2|n{n}"]["fields"]; g = SFS[f"gt512|gt|n{n}"]["fields"]; rr = SFR[f"isla_r1|frame2|n{n}"]
     print(f"| {n} | " + " | ".join(f"{i[f]['mean']:.4f} | {g[f]['mean']:.4f} | {rr[f]:.2f}" for f, _ in T2D_FIELDS) + " |")
 print("| exponent $\\alpha$ | " + " | ".join(f"{SFX[f'isla_r1|frame2|{f}']['exponent']:.2f} | {SFX[f'gt512|gt|{f}']['exponent']:.2f} | " for f, _ in T2D_FIELDS) + " |")
+print()
+print(": PLAID Tensile2d, float32 relative L2 on the 100 held-out cases at 500 epochs (mean of two seeds), ISLA R1 with the "
+      "laboratory frame as global vectors against GeoTransolver-512, along the training-case ladder; the last row is the "
+      "least-squares learning-curve exponent of each arm (error proportional to cases to the minus alpha). How to read "
+      "this: a ratio below one is a GeoTransolver lead; the ratios rise along the ladder because ISLA's exponent is larger "
+      "on every field. Data: results/solids_frame_2026-09-22.json. {#tbl-tensile2d-ladder}")
 ```
 
 Two things this measures, and one it does not. It measures the standing of
