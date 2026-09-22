@@ -9,3 +9,4 @@ _freeze/
 
 **/*.quarto_ipynb
 site_libs/
+_draft/
