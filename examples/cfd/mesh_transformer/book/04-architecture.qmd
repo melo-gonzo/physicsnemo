@@ -710,6 +710,299 @@ in @sec-interior-negatives and in the table above.
 
 :::
 
+## What the trained routing looks like {#sec-arch-routing-trained}
+
+**On a trained model a slice is a region of the body. A token's dominant
+slice is a patch of surface with an anchor inside the body, the first
+layer routes nearly everything into a handful of slices, and the deep
+layers spread the mass over most of the 256 while each token stays soft.**
+Every routing picture in Part I so far drew hand-made routing weights on the
+airfoil; this section reads the real ones out of trained checkpoints, so
+the reader can see what @sec-isla-slices promised. The instrument is a
+wrapper around the routing softmax over tokens (`_softmax_over_points`,
+step f) with pre- and post-hooks on each `_SliceBlock` delimiting the two
+calls a block makes (step b's provisional pass and step f's refined pass);
+the block's second call is read. From the recorded refined logits the
+read-back weights $\pi_{is}$ of step e, a softmax over the slices without
+the measure bias, are each token's **soft assignment**; the **dominant
+slice** of a token is $\arg\max_s \pi_{is}$, the **mass** of a slice is
+$q_s \equiv \frac{1}{N}\sum_i \pi_{is}$ (the slices' share of the tokens,
+summing to one), and the **effective number of slices** is
+$M_{\mathrm{eff}} \equiv \exp(-\sum_s q_s \log q_s)$, which is 256 when
+every slice carries the same mass and 1 when one slice carries all of it.
+The anchors are step c's $z_s$, drawn in the dataset's coordinates. Each
+checkpoint is the final one of a completed reference-configuration run
+(384 wide, 12 layers, 256 slices, cosine routing), run in float32 on the
+first case of its validation loader with the geometry kernel it trained
+with; the numbers in this section are computed from the stored weights as
+the page renders.
+
+```{python}
+#| label: setup-routing-trained
+#| include: false
+import json
+from pathlib import Path
+RES = Path("..") / "results"
+SL = RES / "probes" / "slices_2026-09-22"
+PF = RES / "problem_figures_2026-09-22"
+M_SL = 256
+
+def load_slices(run):
+    z = np.load(SL / f"{run}_case0.npz"); meta = json.load(open(SL / f"{run}_case0.json"))
+    return {k: z[k] for k in z.files}, meta
+
+def n_eff(q):
+    return float(np.exp(-(q * np.log(q + 1e-30)).sum()))
+
+SLICE_COLS = slice_colors(M_SL)
+
+def partition_colors(dom, conf, floor=0.25):
+    """Dominant-slice color, faded toward paper where the token is undecided (its largest pi_is is small)."""
+    c = SLICE_COLS[dom].copy(); a = np.clip(conf / max(np.quantile(conf, 0.95), 1e-6), floor, 1.0)
+    paper = np.array([0.96, 0.96, 0.95, 1.0])
+    return a[:, None] * c + (1 - a[:, None]) * paper
+
+def draw_anchors(ax, d, li, scale=1.0, dims=(0, 1), s=50):
+    q = d["q"][li]; active = np.flatnonzero(q > 1.0 / M_SL); A = d["anchors"][li][active] * scale
+    ax.scatter(A[:, dims[0]], A[:, dims[1]], marker="*", s=s, c=SLICE_COLS[active], edgecolors=INK, linewidths=0.45, zorder=5)
+    return len(active)
+
+DR, DRm = load_slices("ref_isla_r1_dr435_seed42")
+T2, T2m = load_slices("so_t2d_isla_r1_frame_n64_seed42")
+AF, AFm = load_slices("ref_isla_r1_af_seed42")
+LG, LGm = load_slices("so_lug_isla_r1_n300_seed43")
+L_REF_DR = json.load(open(PF / "drivaer.json"))["L_ref"]        # the recipe divides DrivAerML positions by L_ref = 5 m
+RUNS = {"DrivAerML Surface task, 435 cars": (DR, DRm), "AirfRANS interior task, 800 airfoils": (AF, AFm),
+        "PLAID Tensile2d with the frame, 64 cases": (T2, T2m), "GINOT lug, 300 cases": (LG, LGm)}
+```
+
+```{python}
+#| label: fig-routing-partition-drivaer
+#| fig-cap: >
+#|   How the trained ISLA partitions a car, DrivAerML Surface task. Side
+#|   view of the 200,000 boundary tokens of one validation car (a 60,000-token
+#|   subset drawn), each colored by its dominant slice at the first, sixth and
+#|   last slice layer; a token whose largest soft assignment is small is faded
+#|   toward the paper. Stars are the anchors $z_s$ of the slices whose mass
+#|   exceeds the uniform share $1/M$, in the slice's color. How to read this:
+#|   slice colors are labels and repeat (twenty hues for 256 slices), so two
+#|   distant patches of one hue are usually different slices; what the picture
+#|   shows is the granularity and placement of the partition, not the identity
+#|   of any slice. The tokens carry no coordinates; the patches follow from the
+#|   token states and the relational invariants alone. Data:
+#|   results/probes/slices_2026-09-22/ref_isla_r1_dr435_seed42_case0.npz
+#|   (epoch 500, float32, the run's fused kernel).
+#| code-fold: true
+P = DR["points"][DR["keep"]] * L_REF_DR
+layers = [int(i) for i in DR["top_layers"]]
+fig, axes = plt.subplots(3, 1, figsize=(8, 7.0), sharex=True, gridspec_kw=dict(hspace=0.25))
+for ax, li in zip(axes, layers):
+    depth_scatter(ax, P[:, [0, 2]], P[:, 1], partition_colors(DR["dominant"][li].astype(int), DR["pi_max"][li].astype(float)), s=2.0)
+    map_axes(ax)
+    n_act = draw_anchors(ax, DR, li, scale=L_REF_DR, dims=(0, 2))
+    ax.set_title(f"layer {li + 1} of 12: effective number of slices {n_eff(DR['q'][li]):.0f}; {n_act} slices above the uniform mass (stars: their anchors)", fontsize=9.5)
+    ax.set_ylabel("z [m]")
+axes[-1].set_xlabel("x [m]  (far-field flow along $+x$)")
+plt.show()
+```
+
+```{python}
+#| label: fig-routing-weights-drivaer
+#| fig-cap: >
+#|   Three individual slices of the sixth layer on the same car: the soft
+#|   assignment $\pi_{is}$ of every token to the slice, as heat, for the three
+#|   slices that are the dominant slice of the most tokens, each seen from the
+#|   side (left) and from below (right). The star is the slice's anchor. How to
+#|   read this: a slice is a soft region, brightest at its core and fading
+#|   over its neighbors; the anchor is the routing-weighted mean position of
+#|   the region and sits inside the body when the region wraps around it. The
+#|   largest territories of this layer are on the wheels and the underbody,
+#|   where the surface mesh is finest and the sampled tokens densest, which is
+#|   why the view from below is drawn. Each panel's color scale runs to the
+#|   slice's own 99.9th percentile of $\pi_{is}$; the printed $q_s$ is the
+#|   slice's mass, its share of all tokens. Data:
+#|   results/probes/slices_2026-09-22/ref_isla_r1_dr435_seed42_case0.npz.
+#| code-fold: true
+li_pos = 1; L6 = int(DR["top_layers"][li_pos]); ts = DR["top_slices"][li_pos][:3]
+fig, axes = plt.subplots(3, 2, figsize=(8, 5.8), gridspec_kw=dict(hspace=0.6, wspace=0.08, width_ratios=[1, 1]))
+for j, (ax_side, ax_below) in enumerate(axes):
+    pi = DR["top_pi"][li_pos][:, j].astype(float); vmax = max(0.2, float(np.quantile(pi, 0.999)))
+    sc = depth_scatter(ax_side, P[:, [0, 2]], P[:, 1], pi, s=1.6, cmap=SEQUENTIAL, vmin=0, vmax=vmax)
+    depth_scatter(ax_below, P[:, [0, 1]], -P[:, 2], pi, s=1.6, cmap=SEQUENTIAL, vmin=0, vmax=vmax)
+    a = DR["anchors"][L6][ts[j]] * L_REF_DR
+    ax_side.plot(a[0], a[2], marker="*", ms=12, color=WHITE, mec=INK, mew=0.8, zorder=5)
+    ax_below.plot(a[0], a[1], marker="*", ms=12, color=WHITE, mec=INK, mew=0.8, zorder=5)
+    for ax in (ax_side, ax_below):
+        map_axes(ax)
+    n_dom = int((DR["dominant"][L6] == ts[j]).sum())
+    ax_side.set_title(f"slice {int(ts[j])}: $q_s$ = {DR['q'][L6][ts[j]]:.3f}, dominant for {n_dom:,} of {len(P):,} tokens; side view", fontsize=8.2)
+    ax_below.set_title("the same slice from below", fontsize=8.2, loc="right")
+    ax_side.set_ylabel("z [m]"); ax_below.set_ylabel("y [m]"); ax_below.yaxis.set_label_position("right"); ax_below.yaxis.tick_right()
+    cb = fig.colorbar(sc, ax=[ax_side, ax_below], fraction=0.015, pad=0.08); cb.outline.set_visible(False); cb.ax.tick_params(labelsize=7.5)
+    cb.set_label(r"$\pi_{is}$ [–]", fontsize=8)
+for ax in axes[-1]:
+    ax.set_xlabel("x [m]")
+plt.show()
+```
+
+```{python}
+#| label: fig-routing-tensile2d
+#| fig-cap: >
+#|   The same instrument on a solid: PLAID Tensile2d, one validation specimen,
+#|   the ISLA trained on 64 cases with the laboratory frame as two global
+#|   vectors. Top row: every token (the 496 boundary cells as squares, the
+#|   mesh nodes as dots, all of them interacting query tokens) colored by its
+#|   dominant slice at the first, sixth and last layer, faded where undecided,
+#|   stars at the anchors of the slices above the uniform mass. Bottom row:
+#|   the soft assignment $\pi_{is}$ of the three slices that dominate the most
+#|   tokens in the sixth layer. How to read this: in the first layer the
+#|   routing can only see each token's seed (its type, its normal against the
+#|   frame, the boundary labels and the global scalars), so it separates
+#|   boundary from interior and the flat edges from the curved ones; the
+#|   deeper layers cut the specimen into regions of the plane. Coordinates are
+#|   the dataset's (the specimen spans $[-1, 1]^2$). Data:
+#|   results/probes/slices_2026-09-22/so_t2d_isla_r1_frame_n64_seed42_case0.npz
+#|   (epoch 500, float32, eager kernel).
+#| code-fold: true
+nb = int(T2["n_boundary"]); PT = T2["points"]; layers_t = [int(i) for i in T2["top_layers"]]
+fig, axes = plt.subplots(2, 3, figsize=(8, 5.6), sharex=True, sharey=True, gridspec_kw=dict(hspace=0.28, wspace=0.08))
+for ax, li in zip(axes[0], layers_t):
+    c = partition_colors(T2["dominant"][li].astype(int), T2["pi_max"][li].astype(float))
+    ax.scatter(PT[nb:, 0], PT[nb:, 1], c=c[nb:], s=5, lw=0, rasterized=True)
+    ax.scatter(PT[:nb, 0], PT[:nb, 1], c=c[:nb], s=16, lw=0, marker="s", rasterized=True)
+    n_act = draw_anchors(ax, T2, li, s=40)
+    map_axes(ax); ax.set_title(f"layer {li + 1}: $M_\\mathrm{{eff}}$ = {n_eff(T2['q'][li]):.0f}", fontsize=9.3)
+L6t = int(T2["top_layers"][1]); tst = T2["top_slices"][1]
+for j, ax in enumerate(axes[1]):
+    pi = T2["top_pi"][1][:, j].astype(float)
+    sc = ax.scatter(PT[:, 0], PT[:, 1], c=pi, s=5, lw=0, cmap=SEQUENTIAL, vmin=0, vmax=max(0.5, float(np.quantile(pi, 0.999))), rasterized=True)
+    a = T2["anchors"][L6t][tst[j]]; ax.plot(a[0], a[1], marker="*", ms=13, color=WHITE, mec=INK, mew=0.8, zorder=5)
+    map_axes(ax); ax.set_title(f"layer {L6t + 1}, slice {int(tst[j])}: $q_s$ = {T2['q'][L6t][tst[j]]:.3f}", fontsize=9.3)
+    ax.set_xlabel("x [dataset units]")
+axes[0, 0].set_ylabel("y [dataset units]"); axes[1, 0].set_ylabel("y [dataset units]")
+cb = fig.colorbar(sc, ax=axes[1], fraction=0.02, pad=0.02); cb.outline.set_visible(False); cb.set_label(r"$\pi_{is}$ [–]", fontsize=8.5)
+plt.show()
+```
+
+```{python}
+#| label: fig-routing-other-tasks
+#| fig-cap: >
+#|   The partition on the two other trained tasks, first, sixth and last
+#|   layer, dominant slice per token faded where undecided, anchors as stars.
+#|   Top: AirfRANS interior task, one test airfoil, the 1,007 boundary cells
+#|   and a 60,000-token subset of the 100,000 interior queries, the window
+#|   around the airfoil (the queried domain extends about two chords upstream
+#|   and four downstream). Bottom: GINOT lug, one test bracket, the 6,728
+#|   surface triangles and 10,483 nodes projected along the hole's axis, top
+#|   face nearest. How to read this: the first layer of the airfoil model
+#|   splits the domain by the query normal's direction against the inlet
+#|   direction (the seed invariant it can see) and the deep layers by region;
+#|   on the lug the anchors of the deep layers line up along the bracket and
+#|   ring the loaded hole. Data:
+#|   results/probes/slices_2026-09-22/ref_isla_r1_af_seed42_case0.npz,
+#|   so_lug_isla_r1_n300_seed43_case0.npz (epoch 500, float32).
+#| code-fold: true
+fig, axes = plt.subplots(2, 3, figsize=(8, 5.0), gridspec_kw=dict(hspace=0.45, wspace=0.1))
+nb_a = int(AF["n_boundary"]); PA = AF["points"][AF["keep"]]; isb = AF["keep"] < nb_a
+for ax, li in zip(axes[0], [int(i) for i in AF["top_layers"]]):
+    c = partition_colors(AF["dominant"][li].astype(int), AF["pi_max"][li].astype(float))
+    ax.scatter(PA[~isb, 0], PA[~isb, 1], c=c[~isb], s=2.5, lw=0, rasterized=True)
+    ax.scatter(PA[isb, 0], PA[isb, 1], c=c[isb], s=6, lw=0, rasterized=True)
+    n_act = draw_anchors(ax, AF, li, s=35)
+    map_axes(ax); ax.set_xlim(-0.6, 1.6); ax.set_ylim(-0.8, 0.8)
+    ax.set_title(f"AirfRANS, layer {li + 1}: $M_\\mathrm{{eff}}$ = {n_eff(AF['q'][li]):.0f}", fontsize=9.3); ax.set_xlabel("x / chord [–]")
+axes[0, 0].set_ylabel("y / chord [–]")
+PL = LG["points"] * 1000.0
+for ax, li in zip(axes[1], [int(i) for i in LG["top_layers"]]):
+    c = partition_colors(LG["dominant"][li].astype(int), LG["pi_max"][li].astype(float))
+    depth_scatter(ax, PL[:, [0, 1]], PL[:, 2], c, s=3.0)
+    n_act = draw_anchors(ax, LG, li, scale=1000.0, s=35)
+    map_axes(ax); ax.set_title(f"lug, layer {li + 1}: $M_\\mathrm{{eff}}$ = {n_eff(LG['q'][li]):.0f}", fontsize=9.3); ax.set_xlabel("x [mm]")
+axes[1, 0].set_ylabel("y [mm]")
+for ax in axes[0, 1:].tolist() + axes[1, 1:].tolist():
+    ax.set_yticklabels([])
+plt.show()
+```
+
+```{python}
+#| label: fig-routing-summary
+#| fig-cap: >
+#|   How many slices each layer uses. Top: the effective number of slices
+#|   $M_{\mathrm{eff}} = \exp(-\sum_s q_s \log q_s)$ per layer for the four
+#|   trained models, one validation case each (dashed line: all 256 equally
+#|   loaded). Bottom: the distribution of slice mass in the DrivAerML Surface
+#|   model, every layer's 256 masses sorted from heaviest to lightest, one line
+#|   per layer colored from the first (dark) to the last (light); the dashed
+#|   line is the uniform share $1/M$. How to read this: a flat line near the
+#|   dashed one means the layer spreads its tokens over nearly every slice; a
+#|   line that falls by decades means a few slices hold most tokens. The
+#|   effective number counts slices by mass, not how decided the tokens are;
+#|   a layer can use many slices while each token is spread over several of
+#|   them. Data: results/probes/slices_2026-09-22/*_case0.json and .npz.
+#| code-fold: true
+from matplotlib.cm import ScalarMappable
+fig, axes = plt.subplots(2, 1, figsize=(8, 7.0), gridspec_kw=dict(hspace=0.3))
+ax = axes[0]
+marks = [(BLUE, "o"), (AQUA, "s"), (VIOLET, "^"), (INK2, "D")]
+for (lab, (d, m)), (col, mk) in zip(RUNS.items(), marks):
+    ne = [n_eff(d["q"][li]) for li in range(d["q"].shape[0])]
+    ax.plot(np.arange(1, 13), ne, marker=mk, color=col, lw=1.8, ms=6, mec=col, mfc=col, label=lab)
+ax.axhline(M_SL, color=BASELINE, ls="--", lw=1.2)
+ax.text(12.4, M_SL, "all 256 slices equally loaded", va="bottom", ha="right", fontsize=8.5, color=INK2)
+ax.set_ylabel(r"effective number of slices $M_\mathrm{eff}$ [–]"); ax.set_xlabel("slice layer [index]"); ax.set_xticks(range(1, 13)); ax.set_ylim(0, 275)
+ax.legend(loc="lower right", fontsize=8.5, ncol=2)
+ax = axes[1]
+cm = plt.get_cmap("viridis")
+for li in range(DR["q"].shape[0]):
+    ax.plot(np.arange(1, M_SL + 1), np.sort(DR["q"][li])[::-1], color=cm(li / 11), lw=1.4)
+ax.axhline(1 / M_SL, color=BASELINE, ls="--", lw=1.2); ax.text(M_SL, 1 / M_SL * 1.15, "uniform share 1/M", ha="right", va="bottom", fontsize=8.5, color=INK2)
+ax.set_yscale("log"); ax.set_xlabel("slice, ranked by mass within its layer [rank]"); ax.set_ylabel(r"slice mass $q_s$ [–]")
+ax.set_xlim(0, M_SL + 2)
+cb = fig.colorbar(ScalarMappable(norm=Normalize(1, 12), cmap=cm), ax=ax, fraction=0.03, pad=0.01, ticks=[1, 6, 12]); cb.outline.set_visible(False)
+cb.set_label("slice layer [index]", fontsize=8.5)
+plt.show()
+```
+
+```{python}
+#| label: routing-trained-numbers
+#| output: asis
+def undecided(d, li, thr=0.5):
+    return 100.0 * float((d["pi_max"][li].astype(float) < thr).mean())
+ne_dr = [n_eff(DR["q"][li]) for li in range(12)]; ne_t2 = [n_eff(T2["q"][li]) for li in range(12)]
+dr_l1_top = np.sort(DR["q"][0])[::-1]
+print(
+    f"**What the pictures show.** In the first layer the car model routes with an effective number of {ne_dr[0]:.0f} slices "
+    f"and its heaviest slice holds {100 * dr_l1_top[0]:.0f}% of the soft mass: that layer's routing map sees only the embedded seed "
+    f"(each normal against the far-field direction), refined by the geometry against anchors formed from that same seed, and a car's "
+    f"surface offers few distinct values of it. From the "
+    f"second layer on the token states carry position through the relational invariants and the effective number rises to "
+    f"{min(ne_dr[1:6]):.0f} to {max(ne_dr[1:6]):.0f} in layers 2 to 6 and {min(ne_dr[6:]):.0f} to {max(ne_dr[6:]):.0f} in layers 7 to 12. "
+    f"The specimen model, whose seed already carries the boundary labels, the frame and six global scalars, starts at {ne_t2[0]:.0f} "
+    f"and stays between {min(ne_t2):.0f} and {max(ne_t2):.0f}. The assignment is soft throughout: in the sixth layer "
+    f"{undecided(DR, 5):.0f}% of the car's tokens and {undecided(T2, 5):.0f}% of the specimen's give no single slice more than half "
+    f"their weight, and in the last layer {undecided(DR, 11):.0f}% and {undecided(T2, 11):.0f}%. Anchors sit inside the body, not on "
+    f"it, as the weighted mean of a patch that wraps a wheel or a neck must. These are descriptions of one validation case of one "
+    f"seed per model; they show the granularity of the learned partition and are not a claim about accuracy."
+)
+```
+
+::: {.callout-note collapse="true" title="How the weights were read, and what the earlier routing probes measured"}
+The wrapper records the input and output of every call of
+`_softmax_over_points`; a slice block calls it twice, once with the
+provisional logits (step b, used only to place the anchors) and once with
+the refined logits (step f). Forward pre-hooks on the blocks record where
+each block's calls start and end, and the block's last call is read; its
+input is $\lambda'_{is} + \ell_i$, so subtracting the measure bias $\ell_i$
+(taken from the block's second argument) and normalizing over slices gives
+$\pi_{is}$ exactly as step e computes it. The earlier routing probes
+(@sec-nb-routingsat-erratum) indexed the flat list of calls, so their
+"layer $i$" was block $\lfloor i/2 \rfloor$, pass $i \bmod 2$; the per-layer
+numbers here are per block. The recorded arrays are stored subsampled to
+60,000 tokens per case for the pictures; the masses and effective numbers
+are computed over every token before subsampling. Probe:
+`results/probes/slices_2026-09-22/slices_probe.py`.
+:::
+
 ## What the pass never does {#sec-arch-never}
 
 **The contracts of @sec-isla-contracts are absences, and two of them can be

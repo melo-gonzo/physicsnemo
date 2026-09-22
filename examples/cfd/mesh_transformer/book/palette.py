@@ -55,6 +55,27 @@ WHITE = "#ffffff"
 DIVERGING = LinearSegmentedColormap.from_list("book_diverging", [BLUE, "#f0efec", RED])
 SEQUENTIAL = "viridis"
 
+# --- Boundary-condition types (the dataset "problem" figures only) -------------
+# Distinct from every architecture hue. A boundary segment or face is colored by
+# the KIND of condition it carries, whatever the dataset calls it.
+BC = {
+    "value": "#7d3c98",     # a value prescribed: Dirichlet, fixed, clamped, pinned displacement
+    "flux": "#d35400",      # a flux prescribed: Neumann, traction, applied pressure, loaded face
+    "robin": "#117a65",     # a Robin (mixed) condition
+    "free": "#898781",      # free surface, wall with no data (context gray)
+}
+BC_LABEL = {"value": "value prescribed (Dirichlet)", "flux": "flux prescribed (Neumann)", "robin": "Robin", "free": "free surface"}
+
+
+def slice_colors(n_slices: int, seed: int = 0):
+    """Label colors for up to a few hundred slices: a shuffled 20-hue qualitative map, reused cyclically.
+
+    Slice colors are labels only; two slices may share a hue. Never one of the architecture hues' roles.
+    """
+    base = plt.get_cmap("tab20")(np.arange(20))
+    perm = np.random.default_rng(seed).permutation(n_slices) % 20
+    return base[perm]
+
 # --- Series styles ------------------------------------------------------------
 # key -> dict(label, color, marker, ls, mfc). ``mfc`` "full" fills the marker.
 # Use STYLE[key] wherever that configuration appears so the legend text is the
@@ -140,6 +161,24 @@ def clean_axes(ax, keep_grid_axis="y"):
     for sp in ax.spines.values():
         sp.set_visible(False)
     ax.set_aspect("equal")
+
+
+def depth_scatter(ax, xy, depth, c, s=1.5, **kw):
+    """Scatter a projected point cloud, painter-sorted so the nearest points (largest ``depth``) draw last.
+
+    ``xy`` (n, 2) are the projected coordinates, ``depth`` (n,) the coordinate toward the viewer, ``c`` a color
+    array (n, 4) or a field (n,) with ``cmap``/``norm`` in ``kw``. Rasterized, because n is large.
+    """
+    o = np.argsort(np.asarray(depth))
+    c = np.asarray(c)
+    return ax.scatter(xy[o, 0], xy[o, 1], c=c[o] if c.ndim >= 1 and len(c) == len(o) else c, s=s, lw=0, rasterized=True, **kw)
+
+
+def map_axes(ax):
+    """An axes that shows a geometric map: equal aspect, no grid, spines off, ticks kept for the units."""
+    ax.set_aspect("equal"); ax.grid(False)
+    for sp in ax.spines.values():
+        sp.set_visible(False)
 
 
 def joukowski(alpha_deg: float = 6.0, n_cells: int = 60, c=complex(-0.08, 0.08), frac=None):

@@ -24612,3 +24612,112 @@ one GB300 through its saved readout kernels and runs at 100,000), and the
 practical cases for each. Every crossref to the removed anchors, including
 one in the QCOUNT preregistration entry above, points at the callout. The
 status ledger and tech tree keep PASSIVE2, LVT, M2 and QCOUNT as history.
+
+## 2026-09-22 — Two figure families for the book: one "the problem" picture per dataset (boundary conditions labeled, one reference field) and the trained routing of four reference-configuration ISLA checkpoints read out per block {#sec-nb-viz-problem-and-routing}
+
+**Setting.** The book introduced every dataset in prose and every routing
+picture it drew was hand-made on the Joukowski airfoil: the reader had
+seen neither a sample of any dataset nor what a trained ISLA's slices
+look like. Peter asked for both: a visualization of the PDE problem of
+each dataset (the geometry with its boundary conditions labeled where
+they act, plus an example solution field from one sample) and a
+visualization of the slice weights of a trained model. Both were built
+today as cluster artifacts plus live Quarto cells.
+
+**The problem figures.** One representative sample per dataset was read
+from its native DomainMesh files on the cluster and reduced to what a
+figure needs (`results/problem_figures_2026-09-22/<dataset>.npz` and
+`.json`; script `problem_figures.py` in the same directory, job 829652,
+plus the DrivAerML car from job 829590). The nondimensional coefficients
+are formed from each case's own `global_data`, so the pictures carry
+physical meaning rather than the recipe's normalized targets. Samples:
+DrivAerML `run_112` (the first car of the recipe's 48-car validation
+split; 150,000 of its 17.0 million surface cells and an 80,000-point band
+of its 160-million-point volume mesh within 1 cm of the symmetry plane),
+HiLiftAeroML `geo_LHC001_AoA_16` (the first `full_val` case with files
+present; 150,000 of its 291 million surface cells, converted from inches
+to metres), SHIFT-SUV fastback `run_00001` (150,000 of 5.0 million
+cells), AirfRANS `airFoil2D_SST_31.812_1.334_0.371_3.287_0.0_19.548` (the
+first `full_test` case; 70,000 of 179,033 points in a window around the
+airfoil), PLAID Tensile2d `sample_000001` (first of `val_100`; all 6,171
+nodes and 496 boundary cells), GINOT lug `lug_0004` (first of `test`;
+10,483 nodes, 6,728 triangles), OLBC poisson `test_000000` and OLBC
+elasticity `test_000000` (all nodes and cells). The figures live in the
+protocol chapter beside each dataset's paragraph
+(`@fig-problem-drivaer`, `@fig-problem-hilift`, `@fig-problem-airfrans`,
+`@fig-problem-shift-suv`, `@fig-problem-tensile2d`, `@fig-problem-lug`,
+`@fig-problem-olbc-poisson`, `@fig-problem-olbc-elasticity`), and the
+"datasets beyond external aerodynamics" section was rewritten around
+them (it now names the two OLBC sets, which the 2026-09-22 scout promoted,
+instead of GNOT Heat2d, which it deferred; the limits chapter's list was
+changed to match). Two conventions were added to `palette.py` and
+`STYLE.md` for them: boundary-condition *kinds* carry fixed colors (a
+value prescribed, plum; a flux prescribed, burnt orange; Robin, teal;
+free, gray), and the dominant slice of a token is drawn with a shuffled
+twenty-hue qualitative map that is labels only. DeepJEB++ was skipped:
+its conversion was running under another agent and its files were not to
+be touched. HiLiftAeroML's full DomainMesh cannot be loaded on this
+machine's copy (its interior is not complete for every case), so the
+boundary tensordict was read directly, as the recipe's surface reader
+does.
+
+**The routing instrument.** `results/probes/slices_2026-09-22/slices_probe.py`
+(job 829626) composes the recipe's inference config exactly as each lane
+did (model yaml, dataset yaml, splits, cells), restores the final
+checkpoint with the recipe's `load_checkpoint`, and runs the first case
+of the validation loader in float32 with the geometry kernel the run
+trained with (fused for the two reference lanes, eager for the two
+solids lanes). The routing softmax over tokens (`_softmax_over_points`)
+is wrapped to record its input and output; forward pre- and post-hooks on
+every `_SliceBlock` delimit the two calls each block makes, and the
+block's **second** call, the refined routing of step f, is read (the
+first is step b's provisional pass that only places the anchors; the
+2026-09-20 probes indexed the flat call list and mixed the two,
+@sec-nb-routingsat-erratum). The recorded input is
+$\lambda'_{is} + \ell_i$; subtracting the block's measure bias and
+normalizing over slices gives the read-back weights $\pi_{is}$ of step e,
+each token's soft assignment. Per layer the artifact stores every
+token's dominant slice and its largest $\pi_{is}$ (a 60,000-token subset
+for the 200,000-cell car), the slice masses $q_s = \frac{1}{N}\sum_i
+\pi_{is}$ and their measure-weighted version, the anchors $z_s$ and
+$m_s$, and, for layers 1, 6 and 12, the full $\pi_{is}$ of the eight
+slices that dominate the most tokens. Checkpoints, all at epoch 500 of
+500: `ref_isla_r1_dr435_seed42` (DrivAerML Surface task, 435 cars,
+200,000 cells; the first validation car's extents agree with `run_112`
+to 0.01%), `so_t2d_isla_r1_frame_n64_seed42` (PLAID Tensile2d, the
+laboratory frame as two global vectors, 64 training cases),
+`ref_isla_r1_af_seed42` (AirfRANS interior task, 800 airfoils, 100,000
+queries) and `so_lug_isla_r1_n300_seed43` (GINOT lug, 300 cases; its
+training had completed, so its final checkpoint was used).
+
+**What was seen.** The pictures are in the architecture chapter's new
+section `@sec-arch-routing-trained` (partition of the car at three layers
+with anchors, three individual slices of layer 6 seen from the side and
+from below, the specimen's partition and three of its slices, the airfoil
+and the lug at three layers, and a per-layer summary), cross-referenced
+from the slices idea in the ISLA chapter. On the car the first layer
+spreads its tokens almost evenly over four slices (masses 0.268, 0.249,
+0.237, …; effective number 4.4; every token's largest weight below 0.5):
+that layer's routing sees only the embedded seed, the normal against the
+far-field direction, and a car offers few distinct values of it. From the
+second layer the relational invariants carry position and the effective
+number rises to 68 to 132 in layers 2 to 6 and 183 to 241 in layers 7 to
+12; the largest territories of layer 6 are on the wheels and the
+underbody, where the surface mesh is finest and the sampled tokens
+densest, and the anchors sit inside the body. The assignment stays soft:
+in layer 6, 75% of the car's tokens give no slice more than half their
+weight (median largest weight 0.27); in layer 12, 99.9% (median 0.05).
+The specimen model, whose seed already carries the boundary labels, the
+frame and six global scalars, uses 240 effective slices in its first
+layer and stays between 153 and 244; its first layer separates the
+boundary cells from the interior nodes and the flat edges from the
+curved notches, and its deep layers cut the plane into regions with the
+anchors clustered in the neck. The airfoil model's first layer splits the
+domain by the query normal's direction against the inlet direction; the
+lug's deep-layer anchors line up along the bracket and ring the loaded
+hole. These are descriptions of one validation case and one seed per
+model; the chapter says so and makes no accuracy claim from them.
+
+**Verification.** Both chapters' cells ran clean under the project
+interpreter; the full book render and the check that the new figures
+appear in the HTML are recorded in the commit that carries this entry.

@@ -1,0 +1,26 @@
+{
+  "dataset": "AirfRANS",
+  "case": "airFoil2D_SST_31.812_1.334_0.371_3.287_0.0_19.548",
+  "split": "full_test",
+  "n_boundary_cells": 1007,
+  "n_interior_points": 179033,
+  "n_interior_stored": 70000,
+  "units": "m (chord 1)",
+  "U_inf_mag": 31.812000274658203,
+  "aoa_deg": 1.3339999914169312,
+  "Re": 2039230.75,
+  "ranges": {
+    "int_cp": [
+      -0.8730840682983398,
+      1.0017367601394653
+    ],
+    "int_umag": [
+      0.0,
+      1.3644059896469116
+    ],
+    "int_nut": [
+      0.0,
+      0.006071564741432667
+    ]
+  }
+}

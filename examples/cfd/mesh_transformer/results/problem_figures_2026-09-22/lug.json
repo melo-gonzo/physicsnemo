@@ -1,0 +1,21 @@
+{
+  "dataset": "GINOT Bracket Lug",
+  "case": "lug_0004",
+  "split": "test",
+  "n_boundary_cells": 6728,
+  "n_nodes": 10483,
+  "units": "m, MPa",
+  "globals": {
+    "hole_radius": 0.011782359331846237,
+    "length": 0.10668608546257019,
+    "thickness": 0.025506641715765,
+    "pressure": 71809088.0,
+    "pressure_mpa": 71.80908203125
+  },
+  "ranges": {
+    "von_mises": [
+      2.0521585941314697,
+      460.9167785644531
+    ]
+  }
+}

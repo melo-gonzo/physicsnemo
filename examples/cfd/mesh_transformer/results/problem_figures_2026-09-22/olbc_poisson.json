@@ -1,0 +1,18 @@
+{
+  "dataset": "OLBC poisson-square-bc5",
+  "case": "test_000000",
+  "split": "test",
+  "n_boundary_cells": 1120,
+  "n_nodes": 16598,
+  "units": "dimensionless (file units)",
+  "ranges": {
+    "u": [
+      -1.2245436906814575,
+      1.1380618810653687
+    ],
+    "source": [
+      -18.687898635864258,
+      18.897567749023438
+    ]
+  }
+}

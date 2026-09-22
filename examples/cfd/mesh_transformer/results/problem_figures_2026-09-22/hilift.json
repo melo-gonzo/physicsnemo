@@ -1,0 +1,23 @@
+{
+  "dataset": "HiLiftAeroML",
+  "case": "geo_LHC001_AoA_16",
+  "split": "full_val",
+  "n_surface_cells": 291066894,
+  "n_surface_stored": 150000,
+  "units": "m (converted from inch)",
+  "U_inf": [
+    2575.705322265625,
+    0.0,
+    738.5716552734375
+  ],
+  "rho_inf": 1.3756000498688081e-06,
+  "p_inf": 176.3520050048828,
+  "aoa_deg": 16.0,
+  "L_ref_inch": 275.79998779296875,
+  "ranges": {
+    "surf_cp": [
+      -10.094849586486816,
+      1.0366039276123047
+    ]
+  }
+}

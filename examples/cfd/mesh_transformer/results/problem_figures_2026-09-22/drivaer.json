@@ -1,0 +1,33 @@
+{
+  "dataset": "DrivAerML",
+  "case": "run_112",
+  "split": "val",
+  "n_surface_cells": 17029624,
+  "n_surface_stored": 150000,
+  "n_interior_points": 159899850,
+  "n_slice_stored": 80000,
+  "slice_band_m": 0.01,
+  "units": "m",
+  "U_inf": [
+    38.888999938964844,
+    0.0,
+    0.0
+  ],
+  "rho_inf": 1.0,
+  "p_inf": 0.0,
+  "L_ref": 5.0,
+  "ranges": {
+    "surf_cp": [
+      -3.4028806686401367,
+      1.0080853700637817
+    ],
+    "slice_cp": [
+      -2.493633270263672,
+      1.0075974464416504
+    ],
+    "slice_umag": [
+      0.0,
+      1.460422650683436
+    ]
+  }
+}

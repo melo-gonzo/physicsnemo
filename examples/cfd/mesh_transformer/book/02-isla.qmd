@@ -315,7 +315,9 @@ Both are weighted sums of vectors that rotate with the body, with weights
 that do not, so the anchors rotate with the body. They give each layer $M$
 data-adaptive reference points ($M = 256$ in the class), and a token's
 position will be described by its relation to this constellation (idea 4)
-instead of by coordinates.
+instead of by coordinates. What the learned routing of a trained model
+looks like, on a car and on a solid specimen, is shown in
+@sec-arch-routing-trained.
 
 ```{python}
 #| label: fig-isla-slices

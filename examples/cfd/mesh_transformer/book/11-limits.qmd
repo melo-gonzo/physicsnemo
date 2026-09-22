@@ -170,9 +170,11 @@ tension, a load and material scalars per sample, labeled boundary edges,
 and, because its targets are stress components, the laboratory frame as
 global vectors; @sec-isla-heads),
 GINOT Bracket Lug (three-dimensional elastoplastic lug under a varying
-pressure load, with published Transolver and GNOT baselines) and GNOT
-Heat2d (steady conduction with a boundary temperature *function* on a
-labeled edge). AeroZoo, a diversity-stress aerodynamics benchmark in
+pressure load, with published Transolver and GNOT baselines) and the two
+OLBC sets (a Poisson problem and plane-strain elasticity on fixed meshes
+whose boundary is cut per sample into random segments carrying labeled
+Dirichlet, Neumann or Robin conditions with random values; @sec-datasets-beyond-aero
+draws each on one sample). AeroZoo, a diversity-stress aerodynamics benchmark in
 generation, is the coming out-of-distribution instance within external
 aerodynamics. None of these carries a number in this book; each is
 measured under the fair-comparison protocol with GeoTransolver trained on

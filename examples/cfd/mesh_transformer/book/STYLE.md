@@ -104,6 +104,8 @@ radial basis vector. Definitions use $\equiv$.
 | contract satisfied | `GREEN` | | |
 | context (grids, reference lines, non-data) | grays | | never encodes a data distinction |
 | signed fields | `DIVERGING` (blue–paper–red) | | unsigned fields: viridis |
+| boundary-condition types (the dataset problem figures only) | `BC["value"]` plum (a value prescribed: Dirichlet, fixed, clamped), `BC["flux"]` burnt orange (a flux prescribed: Neumann, traction, applied pressure), `BC["robin"]` teal, `BC["free"]` gray | thick boundary stroke, direct label | global vectors (far-field direction, laboratory frame) are black arrows |
+| dominant slice of a token (trained-routing figures) | `slice_colors(M)`: a shuffled 20-hue qualitative map | anchors: black-edged stars | labels only; two slices may share a hue; never an architecture hue's role |
 
 In Mermaid diagrams: data boxes `fill:#f4f3ee,stroke:#898781`; fixed
 geometric maps `fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3`; learned

@@ -22,6 +22,36 @@ from pathlib import Path
 RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
 mean = statistics.mean
+from matplotlib.colors import TwoSlopeNorm
+from matplotlib.collections import LineCollection
+PF = RES / "problem_figures_2026-09-22"
+
+def load_problem(name):
+    """One representative sample of a dataset, reduced for plotting (results/problem_figures_2026-09-22/)."""
+    z = np.load(PF / f"{name}.npz"); meta = json.load(open(PF / f"{name}.json"))
+    return {k: z[k] for k in z.files}, meta
+
+def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
+    """Draw line cells colored by boundary-condition kind (keys of palette.BC)."""
+    segs = pts[cells][:, :, :2]
+    ax.add_collection(LineCollection(segs, colors=[BC[k] for k in kinds], linewidths=lw, capstyle="butt", zorder=zorder))
+
+def field_scatter(ax, xy, v, s=3.0, signed=False, vmin=None, vmax=None):
+    if signed:
+        lim = max(abs(np.nanmin(v)), abs(np.nanmax(v))) if vmin is None else None
+        norm = TwoSlopeNorm(vcenter=0.0, vmin=(-lim if vmin is None else vmin), vmax=(lim if vmax is None else vmax))
+        return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=DIVERGING, norm=norm, rasterized=True)
+    return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=SEQUENTIAL, vmin=vmin, vmax=vmax, rasterized=True)
+
+def small_colorbar(fig, sc, ax, label, **kw):
+    cb = fig.colorbar(sc, ax=ax, fraction=0.035, pad=0.02, **kw); cb.outline.set_visible(False); cb.ax.tick_params(labelsize=8)
+    cb.set_label(label, fontsize=8.5)
+    return cb
+
+def bc_legend(ax, kinds, loc="lower right", extra=()):
+    from matplotlib.lines import Line2D
+    handles = [Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds] + list(extra)
+    ax.legend(handles=handles, loc=loc, fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
 ```
 
 ## The baselines and what each one sees {#sec-part-baseline}
@@ -326,7 +356,55 @@ predicts pressure and wall shear at those cells (@sec-surface). The
 **DrivAerML Volume task** predicts pressure, velocity and turbulent
 viscosity at 200,000 interior query points per car from the surface alone
 (@sec-interior). A sentence that compares architectures on DrivAerML names
-one of the two.
+one of the two. @fig-problem-drivaer shows one validation car with both
+tasks' fields.
+
+```{python}
+#| label: fig-problem-drivaer
+#| fig-cap: >
+#|   The DrivAerML problem, on one validation car. Top and middle: the
+#|   vehicle surface (150,000 of its 17 million cells drawn at their
+#|   centroids) colored by the time-averaged pressure coefficient
+#|   $C_p = (p - p_\infty) / \tfrac{1}{2}\rho U_\infty^2$, the Surface task's
+#|   scalar target, seen from the side and from above; the black arrow is the
+#|   far-field flow direction, the one global vector input, and the far-field
+#|   speed is the same for every car. Bottom: the symmetry plane of the volume
+#|   mesh, colored by the speed ratio $|U| / U_\infty$, with the car's outline
+#|   in black; the Volume task predicts pressure, velocity and turbulent
+#|   viscosity at 200,000 query points drawn from this mesh, whose extent is
+#|   printed. What varies per sample is the geometry only. What the model
+#|   receives: the surface cells' positions, outward normals and areas, and the
+#|   flow direction; the ground plane and the wind-tunnel boundaries are not
+#|   inputs. How to read this: colors are the reference CFD
+#|   fields, not predictions; the surface points are a random subset, so the
+#|   density of dots is not the mesh resolution. Data:
+#|   results/problem_figures_2026-09-22/drivaer.npz.
+#| code-fold: true
+D, Dm = load_problem("drivaer")
+sp, cp = D["surf_points"], D["surf_cp"]
+norm = TwoSlopeNorm(vcenter=0.0, vmin=-1.5, vmax=1.0)
+fig, axes = plt.subplots(3, 1, figsize=(8, 8.8), gridspec_kw=dict(height_ratios=[1.0, 1.15, 1.35], hspace=0.4))
+U = D["U_inf"]; bb = D["surf_bbox"]; x0 = bb[0, 0] - 1.9; z0 = 0.5 * (bb[0, 2] + bb[1, 2])
+ax = axes[0]
+depth_scatter(ax, sp[:, [0, 2]], sp[:, 1], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
+ax.set_ylabel("z [m]"); ax.set_title("side view: surface pressure coefficient $C_p$, the Surface task's scalar target", fontsize=9.5)
+ax.annotate("", xy=(x0 + 1.2, z0), xytext=(x0, z0), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0))
+ax.text(x0 + 0.6, z0 - 0.1, f"far field: uniform flow,\n$U_\\infty$ = {np.linalg.norm(U):.1f} m/s along $\\hat g_1$\n(the one global vector)", ha="center", va="top", fontsize=8.2, color=INK2)
+ax.set_xlim(x0 - 0.2, bb[1, 0] + 0.3)
+ax = axes[1]
+sc = depth_scatter(ax, sp[:, [0, 1]], sp[:, 2], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
+ax.set_ylabel("y [m]"); ax.set_xlabel("x [m]"); ax.set_title("top view: $C_p$", fontsize=9.5); ax.set_xlim(x0 - 0.2, bb[1, 0] + 0.3)
+cb = fig.colorbar(sc, ax=axes[:2], fraction=0.025, pad=0.01, extend="min"); cb.set_label("$C_p$ [–]"); cb.outline.set_visible(False)
+ax = axes[2]
+q, um = D["slice_points"], D["slice_umag"]
+sc2 = ax.scatter(q[:, 0], q[:, 2], c=um, s=1.8, lw=0, cmap=SEQUENTIAL, vmin=0, vmax=1.3, rasterized=True); map_axes(ax)
+sil = sp[np.abs(sp[:, 1]) < 0.03]; ax.scatter(sil[:, 0], sil[:, 2], s=0.8, c=INK, lw=0, rasterized=True)
+ax.set_ylabel("z [m]"); ax.set_xlabel("x [m]"); ax.set_title("symmetry plane $y = 0$ of the volume mesh: speed ratio $|U| / U_\\infty$ (the Volume task queries these points)", fontsize=9.5)
+ib = D["interior_bbox"]
+note(ax, f"volume mesh (query domain): {ib[0,0]:.0f} < x < {ib[1,0]:.0f} m, {ib[0,1]:.0f} < y < {ib[1,1]:.0f} m, {ib[0,2]:.1f} < z < {ib[1,2]:.0f} m\nground plane at z = {ib[0,2]:.2f} m (not an input)", loc="upper right")
+cb2 = fig.colorbar(sc2, ax=[ax], fraction=0.025, pad=0.01, extend="max"); cb2.set_label("$|U| / U_\\infty$ [–]"); cb2.outline.set_visible(False)
+plt.show()
+```
 
 ### HiLiftAeroML
 
@@ -335,7 +413,44 @@ axis of variation on its own.** Every geometry appears at every angle, and
 the dataset supports splits along three independent directions: how many
 cases, which angles, and which geometries. It is one of the two datasets on
 which the data-efficiency ladder is measured (@sec-data-efficiency); the
-other is the DrivAerML Surface task.
+other is the DrivAerML Surface task. @fig-problem-hilift shows one
+validation case.
+
+```{python}
+#| label: fig-problem-hilift
+#| fig-cap: >
+#|   The HiLiftAeroML problem, on one validation case (a high-lift wing with
+#|   slat and flap deployed, at 16° angle of attack). The wing surface
+#|   (150,000 of its cells drawn at their centroids) colored by the pressure
+#|   coefficient $C_p$, seen from above (top) and from the side (bottom); the
+#|   black arrow is the far-field flow direction $\hat g_1$, the one global
+#|   vector, which here carries the angle of attack. What varies per sample is
+#|   the geometry (flap and slat settings) and the far-field direction (ten
+#|   angles per geometry). What the model receives: surface cells with
+#|   positions, outward normals and areas, and $\hat g_1$; it predicts
+#|   pressure, temperature, density, velocity and wall shear on those cells.
+#|   How to read this: the flow is compressible and the suction on the slat and
+#|   the wing's leading edge runs far below the color scale's bottom, which is
+#|   clipped; coordinates are converted from the dataset's inches to metres.
+#|   Data: results/problem_figures_2026-09-22/hilift.npz.
+#| code-fold: true
+H, Hm = load_problem("hilift")
+sp, cp = H["surf_points"], H["surf_cp"]
+norm = TwoSlopeNorm(vcenter=0.0, vmin=-4.0, vmax=1.0)
+fig, axes = plt.subplots(2, 1, figsize=(8, 7.2), sharex=True, gridspec_kw=dict(height_ratios=[2.2, 1.0], hspace=0.08))
+ax = axes[0]
+sc = depth_scatter(ax, sp[:, [0, 1]], sp[:, 2], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
+ax.set_ylabel("y [m]"); ax.set_title(f"top view: $C_p$ on the upper surface; angle of attack {Hm['aoa_deg']:.0f}°", fontsize=9.5)
+ax = axes[1]
+depth_scatter(ax, sp[:, [0, 2]], -sp[:, 1], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
+U = H["U_inf"]; u = U / np.linalg.norm(U); bb = H["surf_bbox"]; Lc = 0.14 * (bb[1, 0] - bb[0, 0])
+x0 = bb[0, 0] + 0.02 * (bb[1, 0] - bb[0, 0]); z0 = bb[1, 2] - 0.35 * (bb[1, 2] - bb[0, 2])
+ax.annotate("", xy=(x0 + Lc * u[0], z0 + Lc * u[2]), xytext=(x0, z0), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0))
+ax.text(x0 + 0.5 * Lc, z0 + 0.5 * Lc * u[2] + 0.12 * Lc, f"far field: uniform flow along $\\hat g_1$ at {Hm['aoa_deg']:.0f}°\n(Mach and Reynolds number fixed)", ha="left", va="bottom", fontsize=8.5, color=INK2)
+ax.set_ylabel("z [m]"); ax.set_xlabel("x [m]"); ax.set_title("side view: $C_p$, the slat and the flap deflected below the wing", fontsize=9.5)
+cb = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.01, extend="min"); cb.set_label("$C_p$ [–]"); cb.outline.set_visible(False)
+plt.show()
+```
 
 ### AirfRANS {#sec-dataset-airfrans}
 
@@ -348,7 +463,52 @@ direction as the one global vector and the inlet speed as the one global
 scalar; the interior queries carry the signed distance to the airfoil.
 Pressure is nondimensionalized by the inlet dynamic pressure and velocity
 by the inlet speed; turbulent viscosity keeps its units and the recipe's
-normalization. The interior results are in @sec-interior-airfrans.
+normalization. The interior results are in @sec-interior-airfrans; @fig-problem-airfrans
+shows one test case.
+
+```{python}
+#| label: fig-problem-airfrans
+#| fig-cap: >
+#|   The AirfRANS problem, on one test airfoil. Top: the boundary the model
+#|   sees, the airfoil polyline of about a thousand segments with their
+#|   outward normals (every twelfth drawn), the inlet direction $\hat g_1$
+#|   (black arrow, the one global vector, at the angle of attack) and the inlet
+#|   speed as the one global scalar; the interior queries carry the signed
+#|   distance to the airfoil. Middle: the pressure coefficient
+#|   $C_p = p / \tfrac{1}{2} U_\infty^2$ (kinematic pressure) at the interior
+#|   mesh points in a window around the airfoil. Bottom: the speed ratio
+#|   $|U| / U_\infty$ at the same points. What varies per sample is the
+#|   airfoil shape, the inlet speed and its direction. What the model
+#|   predicts: pressure, velocity and turbulent viscosity at the queries. How
+#|   to read this: the queried domain extends well beyond this window (its
+#|   extent is printed); the dots are 70,000 of the case's 179,000 mesh points
+#|   and their density follows the mesh, fine near the wall and in the wake.
+#|   Data: results/problem_figures_2026-09-22/airfrans.npz.
+#| code-fold: true
+A, Am = load_problem("airfrans")
+bp, bc, bn = A["bnd_points"], A["bnd_cells"], A["bnd_normals"]; mid = bp[bc].mean(axis=1)
+ip = A["int_points"]
+fig, axes = plt.subplots(3, 1, figsize=(8, 7.2), sharex=True, gridspec_kw=dict(hspace=0.22))
+ax = axes[0]
+ax.add_collection(LineCollection(bp[bc][:, :, :2], colors=BC["free"], linewidths=2.0, zorder=3))
+k = slice(None, None, 12); ax.quiver(mid[k, 0], mid[k, 1], bn[k, 0], bn[k, 1], color=MUTED, scale=28, width=0.0025, headwidth=3, zorder=2)
+u = A["U_inf_dir"]; ax.annotate("", xy=(-0.45 + 0.3 * u[0], 0.38 + 0.3 * u[1]), xytext=(-0.45, 0.38), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0))
+ax.text(-0.1, 0.40, f"inlet: uniform flow along $\\hat g_1$ at {Am['aoa_deg']:.2f}° (the global vector); $U_\\infty$ = {Am['U_inf_mag']:.1f} m/s (the global scalar); Re = {Am['Re']:.2g}", ha="left", va="center", fontsize=8.5, color=INK2)
+ib = A["interior_bbox"]
+map_axes(ax); ax.set_xlim(-0.5, 1.5); ax.set_ylim(-0.55, 0.55); ax.set_ylabel("y / chord [–]")
+ax.set_title(f"the boundary: {Am['n_boundary_cells']:,} line cells (position, normal, length), a no-slip wall; queries fill {ib[0,0]:.0f} < x < {ib[1,0]:.0f}, {ib[0,1]:.0f} < y < {ib[1,1]:.0f} chords", fontsize=9.2)
+ax = axes[1]
+sc = field_scatter(ax, ip[:, :2], A["int_cp"], s=2.5, signed=True, vmin=-1.0, vmax=1.0); map_axes(ax); ax.set_ylim(-0.55, 0.55)
+ax.add_collection(LineCollection(bp[bc][:, :, :2], colors=INK, linewidths=0.8, zorder=3)); ax.set_ylabel("y / chord [–]")
+ax.set_title("pressure coefficient $C_p$ at the interior points (target)", fontsize=9.5)
+small_colorbar(fig, sc, ax, "$C_p$ [–]", extend="both")
+ax = axes[2]
+sc = field_scatter(ax, ip[:, :2], A["int_umag"], s=2.5, vmin=0, vmax=1.3); map_axes(ax); ax.set_ylim(-0.55, 0.55)
+ax.add_collection(LineCollection(bp[bc][:, :, :2], colors=WHITE, linewidths=0.8, zorder=3)); ax.set_ylabel("y / chord [–]"); ax.set_xlabel("x / chord [–]")
+ax.set_title("speed ratio $|U| / U_\\infty$ at the interior points (target)", fontsize=9.5)
+small_colorbar(fig, sc, ax, "$|U| / U_\\infty$ [–]", extend="max")
+plt.show()
+```
 
 ### SHIFT-SUV {#sec-shift-suv}
 
@@ -361,7 +521,41 @@ book and is the zero-shot target of the cross-family transfer measurements
 a two-family model is compared. Its lower far-field speed is a covariate
 shift identical for every architecture, none of which receives the Reynolds
 number, and it is reported alongside the geometry-family shift rather than
-corrected.
+corrected. @fig-problem-shift-suv shows one fastback case.
+
+```{python}
+#| label: fig-problem-shift-suv
+#| fig-cap: >
+#|   The SHIFT-SUV zero-shot target, on one fastback case. The vehicle surface
+#|   (150,000 of its 5 million cells at their centroids) colored by the
+#|   pressure coefficient $C_p = (p - p_\infty) / \tfrac{1}{2}\rho U_\infty^2$,
+#|   seen from the side and from above; the black arrow is the far-field
+#|   direction $\hat g_1$. What varies per sample is the geometry; the far-field
+#|   speed is fixed and lower than DrivAerML's, a covariate shift every model
+#|   sees alike since none receives the Reynolds number. What the model
+#|   receives is exactly what it receives on DrivAerML (positions, normals,
+#|   areas, $\hat g_1$), which is what makes the zero-shot transfer possible.
+#|   How to read this: the same color scale as @fig-problem-drivaer, so the
+#|   two bodies can be compared by eye. Data:
+#|   results/problem_figures_2026-09-22/shift_suv.npz.
+#| code-fold: true
+S_, Sm = load_problem("shift_suv")
+sp, cp = S_["surf_points"], S_["surf_cp"]
+norm = TwoSlopeNorm(vcenter=0.0, vmin=-1.5, vmax=1.0)
+fig, axes = plt.subplots(2, 1, figsize=(8, 5.6), sharex=True, gridspec_kw=dict(height_ratios=[1.0, 1.15], hspace=0.15))
+ax = axes[0]
+depth_scatter(ax, sp[:, [0, 2]], sp[:, 1], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
+U = S_["U_inf"]; bb = S_["surf_bbox"]; x0 = bb[0, 0] - 1.9; z0 = 0.5 * (bb[0, 2] + bb[1, 2])
+ax.annotate("", xy=(x0 + 1.2, z0), xytext=(x0, z0), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0))
+ax.text(x0 + 0.6, z0 - 0.1, f"far field: $U_\\infty$ = {np.linalg.norm(U):.0f} m/s\nalong $\\hat g_1$", ha="center", va="top", fontsize=8.2, color=INK2)
+ax.set_xlim(x0 - 0.2, bb[1, 0] + 0.3)
+ax.set_ylabel("z [m]"); ax.set_title(f"side view: $C_p$ on the {Sm['family']} family", fontsize=9.5)
+ax = axes[1]
+sc = depth_scatter(ax, sp[:, [0, 1]], sp[:, 2], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
+ax.set_ylabel("y [m]"); ax.set_xlabel("x [m]"); ax.set_title("top view: $C_p$", fontsize=9.5)
+cb = fig.colorbar(sc, ax=axes, fraction=0.025, pad=0.01, extend="min"); cb.set_label("$C_p$ [–]"); cb.outline.set_visible(False)
+plt.show()
+```
 
 ### Datasets beyond external aerodynamics {#sec-datasets-beyond-aero}
 
@@ -370,17 +564,227 @@ external aerodynamics is its benchmark instance, not its scope.** The next
 benchmark instances are steady problems whose boundary conditions and loads
 vary per sample, which exercise the global vector and scalar inputs and the
 per-cell boundary scalars that the aerodynamic datasets leave at $K = 1$
-and $n_b = 0$: PLAID Tensile2d (two-dimensional solid mechanics under a
-varying load with material parameters as global scalars, labeled boundary
-edges, and the laboratory frame as two global vectors because its targets
-are stress components in that frame, @sec-isla-heads), GINOT Bracket Lug (three-dimensional elastoplasticity under
-a varying pressure load, with published Transolver and GNOT numbers), and
-GNOT Heat2d (steady conduction with a prescribed temperature function on a
-labeled edge, the $K = 0$ case with per-cell boundary scalars). Within
-aerodynamics, AeroZoo is the in-generation diversity benchmark: a dataset of
-dissimilar bodies built to stress generalization across geometry families
-rather than within one. None of these carries a number in this book; the
-open axis they represent is stated in @sec-limits.
+and $n_b = 0$. Each is drawn below on one sample, with its boundary
+conditions labeled where they act and one reference field beside them:
+
+- **PLAID Tensile2d** (@fig-problem-tensile2d): two-dimensional
+  elasto-viscoplastic tension of a notched specimen; the top edge carries a
+  pressure $P$ that varies per sample, the bottom edge is fixed, and five
+  material parameters vary too. The model receives the outer polyline with
+  per-cell labels (loaded, fixed, pinned) and the applied pressure as
+  boundary scalars, $P$ and the material parameters as six global scalars,
+  the laboratory frame as two global vectors (its targets are stress
+  components in that frame, @sec-isla-heads), and every mesh node as a
+  query; it predicts the three stress components, the cumulated plastic
+  strain and the displacement.
+- **GINOT Bracket Lug** (@fig-problem-lug): a three-dimensional
+  elastoplastic lug clamped at one end and pressed on the lower half of its
+  hole; hole radius, length, thickness and pressure vary. The model receives
+  the surface triangles with labels (fixed, hole, loaded) and the pressure
+  as boundary scalars, the four design parameters as global scalars, and the
+  nodes as queries; it predicts the von Mises stress. Published Transolver
+  and GNOT numbers exist for it.
+- **OLBC** (@fig-problem-olbc-poisson, @fig-problem-olbc-elasticity): two
+  sets on fixed meshes whose boundary is cut, per sample, into random
+  segments carrying labeled Dirichlet, Neumann or Robin conditions with
+  random values: a Poisson problem $-\nabla^2 u = f$ on a square with a
+  random source (the $K = 0$ case with per-cell boundary scalars, the type
+  and the value) and plane-strain steel elasticity on a disc with two holes
+  (per component a free segment, a prescribed displacement and two
+  tractions; the laboratory frame as $K = 2$).
+
+Within aerodynamics, AeroZoo is the in-generation diversity benchmark: a
+dataset of dissimilar bodies built to stress generalization across geometry
+families rather than within one. None of these carries a number in this
+book; the open axis they represent is stated in @sec-limits.
+
+```{python}
+#| label: fig-problem-tensile2d
+#| fig-cap: >
+#|   The PLAID Tensile2d problem, on one validation specimen. Left: the outer
+#|   boundary, 496 line cells, colored by the condition each carries: the top
+#|   edge is loaded by the pressure $P$ (a traction $-P\,n$; negative $P$ pulls),
+#|   the bottom edge is fixed ($u_2 = 0$) with its left corner pinned
+#|   ($u_1 = 0$, marked), and the curved notches are free; the box lists the
+#|   six global scalars of this sample and the arrows the laboratory frame,
+#|   the two global vectors. Middle: the axial stress $\sigma_{22}$ at the
+#|   mesh nodes. Right: the displacement magnitude $|u|$. How to read this:
+#|   the specimen's coordinates and stresses are in the dataset's units (a
+#|   unit half-width; MPa-scale stresses); the nodes drawn are all 6,171 of
+#|   this sample and every one is a query token; the loaded and fixed edges
+#|   are where the per-cell boundary scalars are nonzero. Data:
+#|   results/problem_figures_2026-09-22/tensile2d.npz.
+#| code-fold: true
+T, Tm = load_problem("tensile2d")
+bp, bc = T["bnd_points"], T["bnd_cells"]; mid = bp[bc].mean(axis=1)
+kinds = np.where(T["bc_loaded"] > 0.5, "flux", np.where(T["bc_fixed"] > 0.5, "value", "free"))
+fig, axes = plt.subplots(1, 3, figsize=(8, 4.2), sharey=True, gridspec_kw=dict(wspace=0.15, width_ratios=[1.75, 1, 1]))
+ax = axes[0]
+ax.scatter(T["int_points"][:, 0], T["int_points"][:, 1], s=1.2, c=GRID, lw=0, rasterized=True)
+bc_segments(ax, bp, bc, kinds, lw=4.5)
+pin = mid[T["bc_pinned"] > 0.5]; ax.plot(pin[:, 0], pin[:, 1], marker="^", ms=9, color=BC["value"], mec=INK, ls="none", zorder=5)
+ax.text(0.0, 1.07, f"top edge: pressure P = {Tm['globals']['P']:.1f} (flux)", ha="center", va="bottom", fontsize=8.5, color=BC["flux"], path_effects=halo())
+ax.text(0.0, -1.08, "bottom edge: fixed $u_2$ = 0 (value)\ntriangle: pinned $u_1$ = 0", ha="center", va="top", fontsize=8.5, color=BC["value"], path_effects=halo())
+ax.text(0.72, 0.0, "notches: free", ha="center", va="center", fontsize=8.5, color=BC["free"], rotation=90)
+for v, lab in ((np.array([1, 0]), "$\\hat g_1$"), (np.array([0, 1]), "$\\hat g_2$")):
+    ax.annotate("", xy=(-2.4 + 0.35 * v[0], -1.1 + 0.35 * v[1]), xytext=(-2.4, -1.1), arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.6))
+    ax.text(-2.4 + 0.5 * v[0], -1.1 + 0.5 * v[1], lab, ha="center", va="center", fontsize=8.5, color=INK)
+g = Tm["globals"]
+ax.text(-2.45, 1.0, "global scalars\n" + "\n".join(f"{k} = {g[k]:g}" for k in ("P", "p1", "p2", "p3", "p4", "p5")), ha="left", va="top", fontsize=7.8, color=INK2,
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=BASELINE))
+map_axes(ax); ax.set_xlim(-2.55, 1.3); ax.set_ylim(-1.5, 1.35); ax.set_ylabel("y [dataset units]"); ax.set_xlabel("x [dataset units]")
+ax.set_title("conditions and global inputs", fontsize=9.5)
+ax = axes[1]
+sc = field_scatter(ax, T["int_points"][:, :2], T["sig22"], s=4.0, vmin=0, vmax=float(np.quantile(T["sig22"], 0.995))); map_axes(ax); ax.set_xlabel("x [dataset units]")
+ax.set_title("axial stress $\\sigma_{22}$ (target)", fontsize=9.5); small_colorbar(fig, sc, ax, "$\\sigma_{22}$ [MPa]", extend="max")
+ax = axes[2]
+um = np.linalg.norm(T["displacement"], axis=1)
+sc = field_scatter(ax, T["int_points"][:, :2], um * 1e3, s=4.0, vmin=0); map_axes(ax); ax.set_xlabel("x [dataset units]")
+ax.set_title("displacement magnitude $|u|$ (target)", fontsize=9.5); small_colorbar(fig, sc, ax, "$|u|$ [$10^{-3}$ length units]")
+plt.show()
+```
+
+```{python}
+#| label: fig-problem-lug
+#| fig-cap: >
+#|   The GINOT Bracket Lug problem, on one test bracket. Left: the surface
+#|   triangles that are the model's boundary tokens, colored by condition: the
+#|   end face is clamped (value), the lower half of the hole carries the
+#|   pressure (flux), the rest of the hole and the outer surface are free;
+#|   orthographic view from above and in front (azimuth −60°, elevation 30°).
+#|   Right: the von Mises stress at the mesh nodes projected along the hole's
+#|   axis, the top face nearest; the box lists the four global scalars. What
+#|   varies per sample: the hole radius, the length, the thickness and the
+#|   pressure. How to read this: every node is a query token and the stress
+#|   is the one target; the projection shows the top face's nodes over the
+#|   interior ones, so the stress concentration at the hole is read on the
+#|   surface. Data: results/problem_figures_2026-09-22/lug.npz.
+#| code-fold: true
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+Lg, Lm = load_problem("lug")
+bp, bc = Lg["bnd_points"] * 1e3, Lg["bnd_cells"]
+kinds = np.where(Lg["bc_loaded"] > 0.5, "flux", np.where(Lg["bc_fixed"] > 0.5, "value", "free"))
+fig = plt.figure(figsize=(8, 3.6))
+ax = fig.add_subplot(1, 2, 1, projection="3d"); ax.set_proj_type("ortho")
+tri = bp[bc]
+face = np.array([BC[k] if k != "free" else "#d9d8d0" for k in kinds])
+coll = Poly3DCollection(tri, facecolors=face, edgecolors="none", linewidths=0.1); ax.add_collection3d(coll)
+ext = bp.max(0) - bp.min(0); c0 = 0.5 * (bp.max(0) + bp.min(0)); R = 0.5 * ext.max()
+ax.set_xlim(bp[:, 0].min(), bp[:, 0].max()); ax.set_ylim(bp[:, 1].min(), bp[:, 1].max()); ax.set_zlim(bp[:, 2].min(), bp[:, 2].max()); ax.set_box_aspect(tuple(ext / ext.max()), zoom=1.0)
+ax.view_init(elev=30, azim=-60); ax.set_axis_off()
+ax.text2D(0.02, 0.90, "clamped end face: $u$ = 0 (value)", transform=ax.transAxes, color=BC["value"], fontsize=8.5, path_effects=halo())
+ax.text2D(0.98, 0.14, "lower half of the hole:\npressure p (flux)", transform=ax.transAxes, color=BC["flux"], fontsize=8.5, ha="right", path_effects=halo())
+ax.text2D(0.5, 0.02, "outer surface and upper hole: free", transform=ax.transAxes, color=BC["free"], fontsize=8.5, ha="center")
+ax.set_title("boundary tokens and their conditions", fontsize=9.5, loc="left")
+ax2 = fig.add_subplot(1, 2, 2)
+ip = Lg["int_points"] * 1e3
+sc = depth_scatter(ax2, ip[:, [0, 1]], ip[:, 2], Lg["von_mises"], s=6, cmap=SEQUENTIAL, vmin=0, vmax=float(np.quantile(Lg["von_mises"], 0.995))); map_axes(ax2)
+g = Lm["globals"]
+ax2.set_xlabel("x [mm]"); ax2.set_ylabel("y [mm]"); ax2.set_title("von Mises stress at the nodes (target)", fontsize=9.5)
+small_colorbar(fig, sc, ax2, "von Mises [MPa]", extend="max")
+fig.text(0.5, 0.0, f"this sample's global scalars: hole radius {1e3 * g['hole_radius']:.1f} mm, length {1e3 * g['length']:.1f} mm, thickness {1e3 * g['thickness']:.1f} mm, pressure {g['pressure_mpa']:.1f} MPa",
+         ha="center", va="top", fontsize=8.5, color=INK2)
+plt.show()
+```
+
+```{python}
+#| label: fig-problem-olbc-poisson
+#| fig-cap: >
+#|   The OLBC Poisson problem, $-\nabla^2 u = f$ on the square, on one test
+#|   sample. Left: the boundary, 1,120 line cells, colored by the type of
+#|   condition each segment carries in this sample (Dirichlet $u = g$, Neumann
+#|   $\partial u / \partial n = g$, Robin $\alpha u + \partial u / \partial n = g$),
+#|   with the prescribed value $g$ drawn as a curve offset from the edge (its
+#|   scale in the corner). Middle: the source $f$, an input field given at the
+#|   mesh nodes. Right: the solution $u$, the target. What varies per sample:
+#|   where the segments are cut, which type each carries, the functions $g$
+#|   and the source $f$; the mesh is the same for every sample. What the model
+#|   receives: the boundary cells with positions, normals, lengths, a one-hot
+#|   type and $g$ (and $\alpha$) as per-cell boundary scalars, no global
+#|   vector, and every node as a query carrying $f$. How to read this: the
+#|   Robin type appears in some samples and not others; this sample has none.
+#|   Data: results/problem_figures_2026-09-22/olbc_poisson.npz.
+#| code-fold: true
+O, Om = load_problem("olbc_poisson")
+bp, bc, bn = O["bnd_points"], O["bnd_cells"], O["bnd_normals"]; mid = bp[bc].mean(axis=1)
+kinds = np.where(O["bc_dirichlet"] > 0.5, "value", np.where(O["bc_neumann"] > 0.5, "flux", np.where(O["bc_robin"] > 0.5, "robin", "free")))
+fig, axes = plt.subplots(1, 3, figsize=(8, 3.7), gridspec_kw=dict(wspace=0.3))
+ax = axes[0]
+bc_segments(ax, bp, bc, kinds, lw=4.0)
+gscale = 0.12 / max(1e-9, float(np.abs(O["bc_value_g"]).max()))
+off = mid[:, :2] + bn[:, :2] * (0.06 + gscale * O["bc_value_g"][:, None])
+for k in ("value", "flux", "robin"):
+    m = kinds == k
+    if m.any():
+        ax.scatter(off[m, 0], off[m, 1], s=2.5, c=BC[k], lw=0, rasterized=True)
+ax.plot([1.08, 1.08], [-1.0, -1.0 + 0.12], color=INK2, lw=1.0); ax.text(1.12, -0.94, f"g = {float(np.abs(O['bc_value_g']).max()):.1f}", fontsize=7.5, color=INK2, va="center")
+present = [k for k in ("value", "flux", "robin") if (kinds == k).any()]
+bc_legend(ax, present, loc="lower center")
+map_axes(ax); ax.set_xlim(-1.4, 1.4); ax.set_ylim(-2.05, 1.3); ax.set_xlabel("x [–]"); ax.set_ylabel("y [–]")
+ax.set_title("conditions: type, and value $g$", fontsize=9.5)
+ax = axes[1]
+sc = field_scatter(ax, O["int_points"][:, :2], O["source"], s=2.5, signed=True); map_axes(ax); ax.set_xlabel("x [–]")
+ax.set_title("source $f$ (input at the nodes)", fontsize=9.5); small_colorbar(fig, sc, ax, "$f$ [–]")
+ax = axes[2]
+sc = field_scatter(ax, O["int_points"][:, :2], O["u"], s=2.5, signed=True); map_axes(ax); ax.set_xlabel("x [–]")
+ax.set_title("solution $u$ (target)", fontsize=9.5); small_colorbar(fig, sc, ax, "$u$ [–]")
+for ax in axes[1:]:
+    ax.set_ylim(-1.05, 1.05); ax.set_yticklabels([])
+plt.show()
+```
+
+```{python}
+#| label: fig-problem-olbc-elasticity
+#| fig-cap: >
+#|   The OLBC elasticity problem, plane-strain steel on a disc with two holes,
+#|   on one test sample. Left: the three boundary loops; on the outer circle
+#|   each of the two displacement components has its own condition, drawn as
+#|   two concentric rings (outer ring: the $x$ component; inner ring: the $y$
+#|   component), a prescribed displacement (value), a traction (flux) or free;
+#|   the smaller hole is clamped in both components, the larger is free. The
+#|   arrows are the laboratory frame, the two global vectors. Middle: the von
+#|   Mises stress from the three stress components at the nodes. Right: the
+#|   displacement magnitude. What varies per sample: where the outer circle is
+#|   cut, which condition each segment and component carries, and the values.
+#|   What the model receives: the loops' cells with normals, lengths, the
+#|   per-component one-hot type and the prescribed displacement and traction
+#|   components as boundary scalars, the frame, and every node as a query; it
+#|   predicts the three stress components and the displacement. How to read
+#|   this: all quantities are in the dataset's dimensionless units (stress per
+#|   100 MPa, length per metre). Data:
+#|   results/problem_figures_2026-09-22/olbc_elasticity.npz.
+#| code-fold: true
+E, Em = load_problem("olbc_elasticity")
+bp, bc, bn = E["bnd_points"], E["bnd_cells"], E["bnd_normals"]; mid = bp[bc].mean(axis=1)
+def kinds_of(comp):
+    return np.where(E[f"bc_dirichlet_{comp}"] > 0.5, "value", np.where(E[f"bc_neumann_{comp}"] > 0.5, "flux", "free"))
+kx, ky = kinds_of("x"), kinds_of("y")
+fig, axes = plt.subplots(1, 3, figsize=(8, 3.9), gridspec_kw=dict(wspace=0.3))
+ax = axes[0]
+outer = E["loop_id"] < 0.5
+segs = bp[bc][:, :, :2]
+ax.add_collection(LineCollection(segs[outer] + 0.045 * bn[outer, None, :2], colors=[BC[k] for k in kx[outer]], linewidths=4.0, capstyle="butt"))
+ax.add_collection(LineCollection(segs[outer] - 0.0 * bn[outer, None, :2], colors=[BC[k] for k in ky[outer]], linewidths=4.0, capstyle="butt"))
+ax.add_collection(LineCollection(segs[~outer], colors=[BC[k] for k in kx[~outer]], linewidths=4.0, capstyle="butt"))
+ax.scatter(E["int_points"][:, 0], E["int_points"][:, 1], s=0.8, c=GRID, lw=0, rasterized=True, zorder=0)
+for v, lab in ((np.array([1, 0]), "$\\hat g_1$"), (np.array([0, 1]), "$\\hat g_2$")):
+    ax.annotate("", xy=(1.05 + 0.3 * v[0], 0.8 + 0.3 * v[1]), xytext=(1.05, 0.8), arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.6))
+    ax.text(1.05 + 0.46 * v[0], 0.8 + 0.46 * v[1], lab, ha="center", va="center", fontsize=8.5, color=INK)
+bc_legend(ax, ["value", "flux", "free"], loc="lower center")
+map_axes(ax); ax.set_xlim(-1.55, 1.6); ax.set_ylim(-2.15, 1.3); ax.set_xlabel("x [–]"); ax.set_ylabel("y [–]")
+ax.set_title("conditions, per component\nouter ring: on $u_x$; inner ring: on $u_y$", fontsize=9.0)
+vm = np.sqrt(E["sig11"] ** 2 - E["sig11"] * E["sig22"] + E["sig22"] ** 2 + 3 * E["sig12"] ** 2)
+ax = axes[1]
+sc = field_scatter(ax, E["int_points"][:, :2], vm, s=2.5, vmin=0, vmax=float(np.quantile(vm, 0.995))); map_axes(ax); ax.set_xlabel("x [–]")
+ax.set_title("von Mises stress (from targets)", fontsize=9.5); small_colorbar(fig, sc, ax, "$\\sigma_\\mathrm{vM}$ [–]", extend="max")
+ax = axes[2]
+um = np.linalg.norm(E["displacement"], axis=1)
+sc = field_scatter(ax, E["int_points"][:, :2], um * 1e4, s=2.5, vmin=0); map_axes(ax); ax.set_xlabel("x [–]")
+ax.set_title("displacement $|u|$ (target)", fontsize=9.5); small_colorbar(fig, sc, ax, "$|u|$ [$10^{-4}$]")
+for ax in axes[1:]:
+    ax.set_ylim(-1.05, 1.05); ax.set_yticklabels([])
+plt.show()
+```
 
 ### Splits {#sec-splits}
 
