@@ -1,0 +1,39 @@
+# @package _global_
+# ISLA on DeepJEB++ surface (2026-09-22): the reference surface configuration (isla_surface_ref: 384 x 12, 256 slices, cosine
+# routing, fused geometry kernel, RMS-distance length unit, lr 5e-4) with the load as the one global condition: the load
+# direction (force direction, or the moment axis for torsion) as the global vector (n_global_vectors = 1, the fused-kernel
+# layout), the one-hot load type [is_force, is_torque] as two global scalars (a moment axis is a pseudovector, so the model
+# must know when the vector is an axis), and four per-cell boundary scalars: bc_fixed, bc_loaded and the two rotation-
+# invariant scalars of the applied traction, n.t and |t| (standardized by the dataset yaml). Outputs at the same cells:
+# von Mises (scalar, invariant) and displacement (vector, equivariant). Load magnitudes are fixed per load case, so they are
+# implied by the one-hot and not fed.
+input_type: tensors
+output_type: tensors
+
+forward_kwargs:
+  points: interior.points
+  normals: boundaries.surface.cell_data.normals
+  measure_weights: interior.point_data._target_quadrature_measure
+  global_vectors: global_data.load_dir
+  global_scalars: global_data.load_type
+  boundary_scalars:
+    - boundaries.surface.cell_data.bc_fixed
+    - boundaries.surface.cell_data.bc_loaded
+    - boundaries.surface.cell_data.bc_load_n
+    - boundaries.surface.cell_data.bc_load_mag
+
+model:
+  _target_: physicsnemo.experimental.nn.ISLA
+  out_scalars: 1                 # von_mises
+  out_vectors: 1                 # displacement
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  scale_mode: rms_distance
+  routing_norm: cosine
+  routing_temperature: 10.0
+  geo_kernel: fused
+  n_global_vectors: 1
+  n_global_scalars: 2
+  n_boundary_scalars: 4

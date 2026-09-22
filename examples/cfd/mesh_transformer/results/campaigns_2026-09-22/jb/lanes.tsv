@@ -1,0 +1,25 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	jb	jb_isla_r1_n256_seed42	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean_n256 val_split=test_clean +training.val_interval=10 training.num_epochs=500	5e-4	42	200000	code_ref
+1	jb	jb_gt512_n256_seed42	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean_n256 val_split=test_clean +training.val_interval=10 training.num_epochs=500 ++model.n_hidden=512	1e-3	42	200000	code_ref
+2	jb	jb_isla_r1_n256_seed43	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean_n256 val_split=test_clean +training.val_interval=10 training.num_epochs=500	5e-4	43	200000	code_ref
+3	jb	jb_gt512_n256_seed43	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean_n256 val_split=test_clean +training.val_interval=10 training.num_epochs=500 ++model.n_hidden=512	1e-3	43	200000	code_ref
+4	jb	jb_isla_r1_n1024_seed42	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean_n1024 val_split=test_clean +training.val_interval=5 training.num_epochs=125	5e-4	42	200000	code_ref
+5	jb	jb_gt512_n1024_seed42	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean_n1024 val_split=test_clean +training.val_interval=5 training.num_epochs=125 ++model.n_hidden=512	1e-3	42	200000	code_ref
+6	jb	jb_isla_r1_n1024_seed43	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean_n1024 val_split=test_clean +training.val_interval=5 training.num_epochs=125	5e-4	43	200000	code_ref
+7	jb	jb_gt512_n1024_seed43	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean_n1024 val_split=test_clean +training.val_interval=5 training.num_epochs=125 ++model.n_hidden=512	1e-3	43	200000	code_ref
+8	jb	jb_isla_r1_n4096_seed42	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean_n4096 val_split=test_clean +training.val_interval=2 training.num_epochs=32	5e-4	42	200000	code_ref
+9	jb	jb_gt512_n4096_seed42	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean_n4096 val_split=test_clean +training.val_interval=2 training.num_epochs=32 ++model.n_hidden=512	1e-3	42	200000	code_ref
+10	jb	jb_isla_r1_n4096_seed43	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean_n4096 val_split=test_clean +training.val_interval=2 training.num_epochs=32	5e-4	43	200000	code_ref
+11	jb	jb_gt512_n4096_seed43	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean_n4096 val_split=test_clean +training.val_interval=2 training.num_epochs=32 ++model.n_hidden=512	1e-3	43	200000	code_ref
+12	jb	jb_isla_r1_full_seed42	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=1 training.num_epochs=10	5e-4	42	200000	code_ref
+13	jb	jb_gt512_full_seed42	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=1 training.num_epochs=10 ++model.n_hidden=512	1e-3	42	200000	code_ref
+14	jb	jb_isla_r1_full_seed43	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=1 training.num_epochs=10	5e-4	43	200000	code_ref
+15	jb	jb_gt512_full_seed43	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=1 training.num_epochs=10 ++model.n_hidden=512	1e-3	43	200000	code_ref
+16	jb	jb_gt512_lr3e3_n1024_seed42	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean_n1024 val_split=test_clean +training.val_interval=5 training.num_epochs=125 ++model.n_hidden=512	3e-3	42	200000	code_ref
+17	jb	jb_gt512_lr3e3_n1024_seed43	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean_n1024 val_split=test_clean +training.val_interval=5 training.num_epochs=125 ++model.n_hidden=512	3e-3	43	200000	code_ref
+18	jb	jb_gt512_lr3e3_full_seed42	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=1 training.num_epochs=10 ++model.n_hidden=512	3e-3	42	200000	code_ref
+19	jb	jb_gt512_lr3e3_full_seed43	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=1 training.num_epochs=10 ++model.n_hidden=512	3e-3	43	200000	code_ref
+20	jb	jb_isla_r2_full_seed42	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=1 training.num_epochs=10 ++model.n_layers=24	5e-4	42	200000	code_ref
+21	jb	jb_gt256_full_seed42	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=1 training.num_epochs=10	1e-3	42	200000	code_ref
+22	jb	jb_isla_r2_full_seed43	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=1 training.num_epochs=10 ++model.n_layers=24	5e-4	43	200000	code_ref
+23	jb	jb_gt256_full_seed43	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=1 training.num_epochs=10	1e-3	43	200000	code_ref

@@ -24848,3 +24848,70 @@ so on the cars the reference ISLA matches the parameter-matched
 GeoTransolver at 0.85x the time and 0.52x the memory, and beats the
 protocol's GeoTransolver-256 by 7% at 0.71x its memory. The wing rung
 decides between R1 and R2.
+
+## 2026-09-22 — Preregistration, DEEPJEB: 12,451 clean brackets under four load cases (three forces, one torque) on the surface task; ISLA reference configuration against GeoTransolver-512 on an equal-optimizer-step ladder of 256 / 1,024 / 4,096 / all brackets {#sec-nb-deepjeb-prereg}
+
+**Setting.** DeepJEB++ (Yoo et al., KAIST, 2026; Hugging Face
+`KAIST-SmartDesignLab/DeepJEB-PP`, ODC-By 1.0) is 15,360 generated
+jet-engine brackets, each solved by linear static finite elements
+(Ti-6Al-4V) under four load cases applied at the lug bore with four bolt
+holes clamped: vertical, horizontal and diagonal forces and a torque about
+the lug axis. A conversion agent wrote one DomainMesh per bracket and load
+(61,440 files, 341 GB; converter and verifier in
+`results/campaigns_2026-09-22/datasets/deepjebpp_*`; details in
+@sec-data-scouted until the appendix gains its own section): the finite
+element surface (about 50,000 triangles) with outward normals, areas,
+`bc_fixed` and `bc_loaded` labels, the traction vector on loaded cells (the
+force shared over the loaded area; for the torque a rigid-twist traction
+about the lug axis that reproduces the moment exactly), and the targets von
+Mises stress and displacement at cell centroids; `global_data` carries the
+load direction (the force direction, or the moment axis), a force/torque
+one-hot and the magnitude. **This is the first surface task with a
+physical global vector that is not a freestream**, exactly the reference
+configuration's $K = 1$ layout with two global scalars, on a geometry
+family 35 times larger than DrivAerML's.
+
+**A census of the labels** found unphysical maxima: the per-file maximum
+von Mises stress has a median of 2,533 MPa against a yield of 903 MPa, and
+1,524 brackets (9.9%) exceed 10,000 MPa in at least one load case (the
+worst 1.19e7 MPa). Those brackets are excluded from the **clean splits**
+(`train_clean` 12,451 brackets / 49,804 files; `test_clean` 1,385 / 5,540;
+nested `train_clean_n256 / n1024 / n4096` as seed-0 permutation prefixes;
+grouping by seed pair keeps interpolation families out of both sides).
+The normalization statistics stay those of the full training split (a
+common scale for both models). Smoke lanes (three epochs, 256 brackets)
+trained for both models; no accuracy is read from them.
+
+**Lanes** (group `jb`, `kernel/jb/lanes.tsv`, 24 lanes, `code_ref`,
+200,000 cells keeps every triangle, two seeds, bf16 training, float32
+scoring on the 5,540 clean test files): ISLA R1 (384 x 12, cosine, fused
+kernel, 5e-4; boundary scalars `bc_fixed`, `bc_loaded`, the normal traction
+and its magnitude) and GeoTransolver-512 (1e-3; its parameter match, with
+the labels and the traction vector in its local embedding) on the ladder
+256 / 1,024 / 4,096 / 12,451 brackets at **equal optimizer steps** (500 /
+125 / 32 / 10 epochs, about 125,000 to 138,000 steps each; the full rung at
+500 epochs would take ten days per lane); GeoTransolver-512 at 3e-3 (the
+surface protocol's rate on the cars) at 1,024 and all brackets as the rate
+control; ISLA R2 (384 x 24) and GeoTransolver-256 (the protocol's surface
+baseline) at all brackets.
+
+**Bars.** (i) *Standing at all brackets*, von Mises and displacement:
+GeoTransolver-512 ÷ ISLA R1 with paired-seed sign; the GeoTransolver rate
+that scores better is the one quoted, stated. (ii) *Data exponent* per
+field and architecture over the four rungs at equal steps; same exponent
+across architectures within the bootstrap. (iii) *Depth and width*: R2
+within 1.5% of R1 means depth does not pay; GeoTransolver-512 within 1.5%
+of 256 means width does not pay. (iv) *Per-load standing*: the torque case
+scored separately (`test_clean_tor`); if ISLA's torque error exceeds its
+force-case error by more than 1.5x while GeoTransolver's does not, the
+pseudovector encoding of the moment axis is investigated. (v) *Cost*: step
+time and peak memory per arm from the training logs.
+
+**Predictions.** The reference ISLA beats GeoTransolver-512 on von Mises
+at all brackets (0.55; the surface task is ISLA's home ground and the
+boundary carries the load) and ties on the displacement (0.5); ISLA's data
+exponent exceeds GeoTransolver's (0.7, the ordering on three datasets so
+far); depth does not pay (0.6); the torque case is no worse than the force
+cases for either model (0.6). Regime limit: one family of generated
+brackets, one material, four fixed load directions; the clean-split
+exclusion is stated with every number.
