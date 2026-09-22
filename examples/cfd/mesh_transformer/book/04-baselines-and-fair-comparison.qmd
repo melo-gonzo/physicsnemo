@@ -333,10 +333,12 @@ instrument is the scaling study read together with the capacity ladders of
 @sec-shared-floor: cosine-routing ISLA at three widths and GeoTransolver at
 three widths, each trained for 500 epochs at 100,000 cells per case on 27,
 54, 109, 218 and 435 DrivAerML cars, two seeds, scored in float32 (thirty
-configurations, sixty lanes). The wing rungs of the same study are in
-flight (@sec-program-status), so the law below is a single-dataset result
-until they land (@sec-nb-scalelaw-drivaerml-verdict). @fig-scaling-cases
-shows the raw picture with the fitted law drawn through it.
+configurations, sixty lanes). The training-case axis has a second dataset
+and a second task, the AirfRANS interior ladder of @fig-scaling-airfrans,
+where the curve has a different shape and the two architectures' exponents
+differ; the wing rungs of the surface study are in flight
+(@sec-program-status). @fig-scaling-cases shows the DrivAerML picture with
+the fitted law drawn through it.
 
 ```{python}
 #| label: fig-scaling-cases
@@ -472,10 +474,66 @@ compute goes to width or depth until the floor. The rule in one line:
 *collect cases until about 200, then widen.* Two practical consequences:
 on a dataset of a few hundred cases the recipe's default width is the
 right place to spend, and a claim that one architecture "scales better"
-needs the exponents, not a single-width ladder; on the axes measured the
-two architectures' exponents are the same. This is one dataset; the wing
-rungs of the same study decide whether the exponents transfer
-(@sec-program-status).
+needs the exponents, not a single-width ladder; on the axes measured on
+DrivAerML the two architectures' exponents are the same.
+
+**The same axis on a second dataset and task.** On AirfRANS (two-dimensional
+incompressible airfoil flow, the interior task of @sec-interior) the
+training-case axis was run with nested subsets of 50, 100, 200, 400 and
+800 airfoils for cosine ISLA at 192 wide and GeoTransolver-volume, two
+seeds each (@fig-scaling-airfrans; @sec-nb-airfrans-scale-verdict). The
+curve has a different shape there: no floor within reach at 800 airfoils,
+and ISLA's error falls as a clean power law on every field ($n^{-0.67}$ on
+pressure, $n^{-0.62}$ on velocity, local exponents 0.59 to 0.72 with no
+bending). GeoTransolver-volume's exponent on pressure is about 0.5 from 100
+airfoils up (its 50-airfoil error sits twice above its own trend), so **on
+the one task where the two architectures' exponents differ, ISLA has the
+larger one**: GeoTransolver-volume's pressure lead is 45% at 100 airfoils
+and 17% at 800, while ISLA's velocity lead holds near 2x from 200 airfoils
+up. Two consequences for the rule above. The exponents are properties of a
+dataset and a task, not of an architecture, and do not transfer (1.28 for
+the reducible error on the cars, 0.67 for the total error on the
+airfoils); a compute-allocation rule has to be measured where it will be
+used. And the compute-optimal crossover moves with the exponent: with no
+floor and $\alpha \approx 0.67$ the data term never becomes small, and
+cases stay the better purchase across the whole AirfRANS range measured.
+
+```{python}
+#| label: fig-scaling-airfrans
+#| fig-cap: >
+#|   Interior error against training airfoils on AirfRANS for cosine ISLA
+#|   (192 wide, 1e-3) and GeoTransolver-volume (1e-3), 500 epochs at 100,000
+#|   interior queries, two-seed means with the seeds as short bars, float32
+#|   on the 200 test airfoils; left, pressure; right, velocity. Dotted curves
+#|   are the fitted $\varepsilon = \varepsilon_\infty + a n^{-\alpha}$ per
+#|   architecture (ISLA's floor fits to zero on both fields; GeoTransolver-volume's
+#|   pressure fit is poor, 6.4% RMS, because its 50-airfoil error sits above
+#|   its trend). How to read this: parallel lines mean the same exponent
+#|   (velocity); converging lines mean ISLA converts cases faster (pressure).
+#|   It does not show a parameter axis (one width per architecture). Data:
+#|   results/airfrans_scale_2026-09-22.json.
+#| code-fold: true
+AFS = J("airfrans_scale_2026-09-22.json"); AC = AFS["configurations"]; AFF = AFS["fits"]
+fig, axes = plt.subplots(1, 2, figsize=(8.0, 3.8), sharex=True)
+nn = np.geomspace(45, 900, 100)
+for ax, (f, lab) in zip(axes, (("pressure_l2", "interior pressure"), ("velocity_l2", "interior velocity"))):
+    for m, key in (("isla", "isla_ref"), ("gt", "gt")):
+        kw = series_kwargs(key)
+        rows = sorted([(c["n"], c[f]["mean"], c[f]["seeds"]) for c in AC.values() if c["arm"] == m and c["status"] == "complete" and f in c])
+        ax.plot([r[0] for r in rows], [r[1] for r in rows], marker=kw["marker"], color=kw["color"], ls="none", ms=6, label=STYLE[key]["label"] + (" (volume)" if m == "gt" else ""))
+        for r in rows:
+            ax.plot([r[0]] * len(r[2]), r[2], ls="none", marker="_", color=kw["color"], ms=7, mew=1.1)
+        F = AFF[f"{m}|{f}"].get("fit")
+        if F:
+            ax.plot(nn, F["eps_inf"] + F["a"] * nn ** (-F["alpha"]), color=kw["color"], ls=":", lw=1.1, zorder=0)
+            ax.text(rows[-1][0] * 1.08, rows[-1][1], f"α = {F['alpha']:.2f}", fontsize=8, color=kw["color"], va="center")
+    ax.set_xscale("log"); ax.set_yscale("log"); ax.set_xticks([50, 100, 200, 400, 800]); ax.set_xticklabels(["50", "100", "200", "400", "800"])
+    ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+    ax.set_yticks([0.02, 0.03, 0.05, 0.1, 0.2]); ax.set_yticklabels(["0.02", "0.03", "0.05", "0.10", "0.20"]); ax.set_xlim(42, 1150)
+    ax.set_xlabel("training airfoils [count]"); ax.set_ylabel(f"{lab} relative L2 error [–]")
+axes[0].legend(fontsize=8, loc="upper right")
+plt.tight_layout(); plt.show()
+```
 
 
 ## Pose: equivariant by construction, invariant by canonicalization {#sec-pose}

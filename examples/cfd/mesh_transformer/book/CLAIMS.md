@@ -89,8 +89,20 @@ in width, 1,024 6% worse than 512). Exponents the same for both within the
 bootstrap. Say: "compute goes to cases until about 200 cars, then to width
 (about 70% of each further increment)"; "GeoTransolver's small-data lead is
 an offset, not a slope: 0.82 to 0.90 at 27 and 54 cars, parity at 435". Do
-not quote the exponents as if they held on the wings (in flight) and do not
-say either architecture "scales better".
+not quote the exponents as if they held on the wings (in flight). AirfRANS
+case axis (results/airfrans_scale_2026-09-22.json; 50 / 100 / 200 / 400 /
+800 airfoils, ISLA cosine 192 vs GeoTransolver-volume, interior task): ISLA
+floorless power law, α 0.67 pressure / 0.62 velocity / 0.78 nut (2 to 4%
+RMS, floor 0); GeoTransolver-volume about 0.5 on pressure from 100 up
+(50-airfoil error 0.161, twice its trend). GT-vol ÷ ISLA pressure 0.76 /
+0.55 / 0.63 / 0.69 / 0.83, velocity 1.81 / 1.67 / 2.04 / 2.15 / 2.14. Say:
+"the exponents are properties of the dataset and task, not the
+architecture (1.28 reducible on the cars, 0.67 total on the airfoils)"; "on
+the one task where the exponents differ, ISLA's is the larger, so
+GeoTransolver-volume's pressure lead shrinks with data (45% at 100
+airfoils, 17% at 800)". Do not say either architecture "scales better" in
+general; the 2,000-airfoil parity figure is a projection of fitted slopes,
+label it so if quoted.
 
 **Slice territories (TERRITORY, single dataset, 2026-09-21).** Uniform-trained
 ISLA-192 and GeoTransolver-256 (435 cars, 100k) on four validation cars under

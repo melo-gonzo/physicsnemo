@@ -23724,3 +23724,88 @@ GeoTransolver-volume pair is at epoch 410 to 421 (0.013 / 0.012), the
 90 and the 400-airfoil lanes at 30 to 50, every one descending. Accepted.
 The 800-airfoil rung is the full-split pair already scored
 (@sec-nb-airfrans-verdict).
+
+## 2026-09-22 — Verdict, AIRFRANS-SCALE: on the airfoils the interior error follows a floorless power law in training cases for ISLA (pressure exponent 0.67, velocity 0.62, no floor at 800 airfoils); GeoTransolver-volume converts cases more slowly on pressure (0.47 to 0.51 per rung from 100 up), so its pressure lead shrinks from 45% at 100 airfoils to 17% at 800 while ISLA's velocity lead holds at about 2x {#sec-nb-airfrans-scale-verdict}
+
+**Setting.** AIRFRANS-SCALE (@sec-nb-airfrans-scale-prereg) adds the
+training-case axis of the scaling law on a third dataset, a second PDE
+regime and the interior task: nested random subsets of 50, 100, 200 and
+400 AirfRANS airfoils plus the 800-airfoil full split, ISLA with cosine
+routing at 192 wide and 1e-3 against GeoTransolver-volume at 1e-3, two
+seeds, 500 epochs, 100,000 interior queries, float32 scoring at 100,000
+queries on the 200 test airfoils. All sixteen new lanes trained and scored
+within nine hours of launch. Reduction
+`results/airfrans_scale_reduce_2026-09-22.py`, artifact
+`results/airfrans_scale_2026-09-22.json`.
+
+**What we saw** (seed means; the seeds in the artifact; every seed pair
+is closer than the gap to the neighboring rung, so no rung is unresolved):
+
+| airfoils | ISLA pressure / velocity / eddy viscosity | GeoTransolver-volume pressure / velocity / eddy viscosity | GeoTransolver-volume ÷ ISLA |
+|--:|---|---|---|
+| 50 | 0.211 / 0.085 / 0.225 | 0.161 / 0.153 / 0.220 | 0.76 / 1.81 / 0.98 |
+| 100 | 0.140 / 0.059 / 0.127 | 0.077 / 0.098 / 0.096 | 0.55 / 1.67 / 0.75 |
+| 200 | 0.087 / 0.038 / 0.082 | 0.055 / 0.077 / 0.070 | 0.63 / 2.04 / 0.86 |
+| 400 | 0.055 / 0.025 / 0.056 | 0.038 / 0.054 / 0.045 | 0.69 / 2.15 / 0.79 |
+| 800 | 0.034 / 0.018 / 0.035 | 0.028 / 0.038 / 0.029 | 0.83 / 2.14 / 0.83 |
+
+: AIRFRANS-SCALE board (relative L2 over the 200 test airfoils, float32, two seeds, 100,000 queries, 500 epochs). {#tbl-airfrans-scale}
+
+*ISLA's local exponents* (negative log-log slope between adjacent rungs)
+are 0.59 / 0.69 / 0.66 / 0.72 on pressure and 0.53 / 0.64 / 0.57 / 0.51
+on velocity across the four intervals: no bending. The bounded-floor fit
+puts the floor at zero for every field (bootstrap 16th to 84th percentile
+0 to 0.01 on pressure) with $\alpha$ = 0.67 (0.67 to 0.72) on pressure at
+2.1% RMS, 0.62 (0.61 to 0.76) on velocity at 1.7%, 0.78 (0.67 to 0.92) on
+eddy viscosity at 3.5%. **On the airfoils ISLA is on a floorless power law
+at 800 training cases.**
+
+*GeoTransolver-volume's exponents* are not constant: 1.07 between 50 and
+100 airfoils on pressure, then 0.49 / 0.51 / 0.47; on velocity 0.64 then
+0.35 / 0.50 / 0.52. The 50-airfoil pressure error (0.161, both seeds) sits
+far above its own trend from 100 up (0.077 at 100), so the fit is poor
+(6.4% RMS on pressure, 9.1% on eddy viscosity; $\alpha$ = 1.07 with a
+floor of 0.022 is the fit's way of bending through that point) and its
+exponents are read from the rungs at 100 and above: about 0.5 on every
+field.
+
+**Bars.** (i) *Same exponent across architectures*: **refuted on
+pressure** (0.67 against 1.07 in the fit, 0.41 apart against a bootstrap
+spread of 0.18; in local exponents from 100 up, 0.66 to 0.72 against 0.47
+to 0.51); held on velocity (0.62 against 0.51, inside the 0.16 spread) and
+eddy viscosity (0.78 against 1.02, inside 0.25). (ii) *Transfer from
+DrivAerML*: **refuted**; ISLA's pressure exponent is 0.67 here against 1.28
+for the reducible surface error on the cars, so the law is stated per
+dataset. The two are different kinds of curve, not one curve with two
+exponents: on the cars the total error bends into a floor near 0.036 and
+the 1.28 describes the part above it; on the airfoils there is no floor
+within reach and the total error itself falls as $n^{-0.67}$. The cars'
+total-error local exponent on their first interval (27 to 54 cars, 0.74 to
+0.86) is the number comparable to the airfoils' 0.59 to 0.72. (iii) *The
+ordering persists*: **held at every rung, every paired ratio agreeing**
+(pressure 0.76 / 0.55 / 0.63 / 0.69 / 0.83 below one; velocity 1.81 / 1.67
+/ 2.04 / 2.15 / 2.14 above one). (iv) No unresolved rungs.
+
+**Predictions against outcome.** Same exponent (0.7): refuted on pressure.
+Transfer within 0.3 (0.5): refuted. Ordering persists (0.7): confirmed.
+Velocity lead widening at small $n$ (0.5): refuted; the lead is smaller at
+50 and 100 airfoils (1.8, 1.7) than from 200 up (2.0 to 2.2).
+
+**Reading.** On the interior task the two architectures convert training
+cases at different rates on pressure: ISLA at 0.67 per decade-ratio,
+GeoTransolver-volume at about 0.5, so GeoTransolver-volume's pressure lead
+is largest at 100 airfoils (ISLA 1.8 times its error) and has shrunk to 17%
+at 800. Extrapolating the two local slopes from the 100-to-800 interval
+(0.69 against 0.49) puts pressure parity near 2,000 airfoils; that is a
+projection of fitted slopes, not a measurement, and the dataset has 1,000
+cases. On velocity ISLA's lead is about 2x at every rung from 200 up and
+neither exponent differs. What this changes in the book: the compute
+allocation section (@sec-compute-allocation) gains the airfoil ladder
+beside the car ladder and says that the case axis has two shapes (a floor
+approach on the cars, a floorless power law on the airfoils), that the
+exponents do not transfer across datasets or tasks, and that on the one
+task where the architectures' exponents differ ISLA has the larger one. The
+one anomaly, GeoTransolver-volume's 50-airfoil pressure error twice its
+trend, is recorded and not explained; its ball-query local features see
+fewer distinct neighborhoods at 50 airfoils, but nothing here measures
+that.
