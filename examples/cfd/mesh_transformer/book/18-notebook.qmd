@@ -23356,3 +23356,93 @@ program has pointed at (the baselines read the mesher's pattern where a
 validation geometry recurs; @sec-data-efficiency) is consistent with the
 ordering but not established by it; the redo campaign's weights-off arms
 on the 35-case rung are the next evidence.
+
+## 2026-09-22 — Verdict, SCALE-LAW on DrivAerML (all five rungs, three widths, both architectures): the bounded-floor law is accepted for ISLA (2.3% RMS; floor 0.0356, data exponent 1.28, parameter exponent 0.52) and missed by GeoTransolver (3.3%, its 27-car rung is not monotone in width); the exponents are the same for both; compute goes to cases until about 200, then to width {#sec-nb-scalelaw-drivaerml-verdict}
+
+**Setting.** The scaling campaign (@sec-nb-campaigns-2026-09-21-prereg)
+trains cosine-routing ISLA at 192 / 384 / 768 wide and GeoTransolver at
+256 / 512 / 1,024 wide for 500 epochs at 100,000 cells on 27, 54, 109 and
+218 DrivAerML cars, two seeds each, scored in float32; the 435-car points
+are the routing and capacity ladders at the same rates
+(@sec-nb-routenorm-cars-verdict, @sec-nb-cap435-verdict). The interim
+reading (@sec-nb-scalelaw-interim) had three rungs and preregistered the
+fit for the full board: the Chinchilla form $\varepsilon =
+\varepsilon_\infty + a\,n^{-\alpha} + b\,P^{-\beta}$ per architecture,
+least squares on the seed means with the floor bounded to at most 0.9
+times the best measured error, a two-seed bootstrap, acceptance at 3% RMS
+relative residual, "same exponents" if $\alpha$ and $\beta$ differ by less
+than the bootstrap spread, and the compute-optimal split as the case count
+at which the two fitted terms are equal at the recipe width. The 218-car
+rung landed today; this entry closes the DrivAerML half. Reduction
+`results/scalelaw_reduce_2026-09-22.py`, artifact
+`results/scalelaw_drivaerml_2026-09-22.json`. One change against the
+interim figure: the 435-car ISLA-768 point is the 5e-4 lane (0.0409), the
+rate the study's own 768-wide lanes use, where the interim figure had drawn
+the 2.5e-4 rule-rate lane (0.0430).
+
+**What we saw** (seed means, surface pressure):
+
+| cases | ISLA 192 / 384 / 768 | GeoTransolver 256 / 512 / 1,024 | GeoTransolver ÷ ISLA, narrowest / widest |
+|--:|---|---|---|
+| 27 | 0.1414 / 0.1467 / 0.1379 | 0.1277 / 0.1070 / 0.1137 | 0.90 / 0.82 |
+| 54 | 0.0846 / 0.0810 / 0.0758 | 0.0764 / 0.0673 / 0.0655 | 0.90 / 0.86 |
+| 109 | 0.0619 / 0.0570 / 0.0539 | 0.0573 / 0.0519 / 0.0506 | 0.93 / 0.94 |
+| 218 | 0.0515 / 0.0467 / 0.0454 | 0.0490 / 0.0452 / 0.0440 | 0.95 / 0.97 |
+| 435 | 0.0449 / 0.0413 / 0.0409 | 0.0447 / 0.0417 / 0.0406 | 1.00 / 0.99 |
+
+: SCALE-LAW board, DrivAerML, 100,000 cells, 500 epochs, two seeds (seeds in the artifact; the widest seed pair is 5% apart, at ISLA-192 on 109 cars; twelve of the thirty pairs are within 1%). {#tbl-scalelaw-drivaerml}
+
+Local exponents of the total error against cases fall with every rung:
+0.74 / 0.86 / 0.86 (ISLA 192 / 384 / 768) and 0.74 / 0.67 / 0.80
+(GeoTransolver) from 27 to 54 cars, 0.45 / 0.50 / 0.48 and 0.41 / 0.37 /
+0.37 from 54 to 109, 0.26 / 0.29 / 0.25 and 0.23 / 0.20 / 0.20 from 109 to
+218, and 0.20 / 0.18 / 0.15 and 0.13 / 0.12 / 0.12 from 218 to 435. A 15x
+parameter increase buys ISLA 2% at 27 cars and 10 / 13 / 12 / 9% at 54 /
+109 / 218 / 435; GeoTransolver 11 / 14 / 12 / 10 / 9%.
+
+**The fit.** For ISLA the bounded-floor law is identified: the floor lands
+inside its range at $\varepsilon_\infty = 0.0356$ (bootstrap 0.0346 to
+0.0364; the bound was 0.0368), $\alpha = 1.28$ (1.26 to 1.30), $\beta =
+0.52$ (0.41 to 0.63), $a = 6.9$, $b = 33$, RMS relative residual 2.3%
+(bootstrap 2.2 to 2.6%). **The law is accepted for ISLA on DrivAerML.**
+For GeoTransolver the same form reaches 3.3% RMS (bootstrap 3.0 to 3.7%)
+and pushes the floor onto its bound (0.0365), so its coefficients are
+bound-determined and **the law is rejected for GeoTransolver on DrivAerML
+by the preregistered bar**; its exponents, $\alpha = 1.30$ (1.27 to 1.33)
+and $\beta = 0.65$ (0.59 to 0.74), differ from ISLA's by 0.02 and 0.13
+against bootstrap spreads of 0.06 and 0.22, so **the two architectures'
+exponents are the same** by the second bar. The compute-optimal crossover
+(data term equal to parameter term at the recipe width) is 200 cars for
+ISLA and 150 for GeoTransolver; at 54 cars ISLA's data term is 0.042
+against a parameter term of 0.008 and a floor of 0.036, at 435 cars 0.003
+against the same 0.008.
+
+**Why GeoTransolver misses the bar: the 27-car rung.** The additive law
+predicts that a wider model is never worse. At 27 cars GeoTransolver-1,024
+is 6% worse than GeoTransolver-512 (0.1137 against 0.1070; seeds 0.1123 /
+0.1151 against 0.1048 / 0.1092, separated), and ISLA-384 is 4% worse than
+ISLA-192 (0.1467 against 0.1414; 0.1470 / 0.1464 against 0.1427 / 0.1400)
+while ISLA-768 is the best of its three. Neither architecture is monotone
+in width at 27 cars; from 54 cars up both are. The residual of the
+GeoTransolver fit is concentrated on that rung. The effect is real
+(seed-separated on both architectures) and the separable law has no term
+for it; a data-dependent parameter term ($b\,P^{-\beta}$ with $\beta$
+falling toward zero or negative at small $n$) would be the next form to
+try, but with two seeds and one rung below 54 cars the program does not
+fit it. This is the one anomaly of the board and it is recorded, not
+sanded off.
+
+**Reading.** The interim entry's rule stands with numbers attached: the
+error is an approach to a floor near 0.036 to 0.040 for both
+architectures, the reducible part falls as $n^{-1.3}$ in cases and as
+$P^{-0.5}$ to $P^{-0.65}$ in parameters, and the optimum at fixed compute
+buys cases until about 200 cars and then parameters (about 70% of each
+further increment, $\alpha / (\alpha + \beta)$). GeoTransolver's
+small-data lead (0.82 to 0.90 at 27 and 54 cars) is an offset in the
+coefficients, not a slope, and it closes to parity at 435 cars at every
+width. The chapter section @sec-compute-allocation is restated with
+@fig-scaling-cases (all five rungs, fitted curves and floors),
+@tbl-scaling-exponents and the new @tbl-scaling-fit. Single dataset: the
+wing rungs (35 / 210 / 510) of the same campaign are in flight and decide
+whether the exponents transfer (the two-datasets bar: agreement within 0.1
+or the law is stated per dataset).

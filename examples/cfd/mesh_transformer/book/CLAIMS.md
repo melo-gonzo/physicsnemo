@@ -60,6 +60,20 @@ cosine) and 0.0406 at 136M (48 layers); GeoTransolver 0.0406 at 143M and
 100k; 500 epochs converged. Do not state: "GeoTransolver keeps improving
 where ISLA stops".
 
+**Scaling law (SCALE-LAW, DrivAerML only, 2026-09-22;
+results/scalelaw_drivaerml_2026-09-22.json).** Five rungs (27 / 54 / 109 /
+218 / 435 cars), three widths each, 100k cells, 500 epochs, two seeds. Total
+error is an approach to a floor, not a power law: local case exponent 0.7 to
+0.9 (27 to 54) falling to 0.1 to 0.2 (218 to 435). Fitted law ε = ε∞ + a n^-α
++ b P^-β: ISLA accepted (2.3% RMS; ε∞ 0.0356, α 1.28, β 0.52); GeoTransolver
+misses the 3% bar (3.3%; floor on its bound; its 27-car rung is not monotone
+in width, 1,024 6% worse than 512). Exponents the same for both within the
+bootstrap. Say: "compute goes to cases until about 200 cars, then to width
+(about 70% of each further increment)"; "GeoTransolver's small-data lead is
+an offset, not a slope: 0.82 to 0.90 at 27 and 54 cars, parity at 435". Do
+not quote the exponents as if they held on the wings (in flight) and do not
+say either architecture "scales better".
+
 **Slice territories (TERRITORY, single dataset, 2026-09-21).** Uniform-trained
 ISLA-192 and GeoTransolver-256 (435 cars, 100k) on four validation cars under
 two independent uniform draws and the 10:1-biased draw: dominant-slice
