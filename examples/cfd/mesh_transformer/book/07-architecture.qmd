@@ -288,8 +288,8 @@ Z_s = \sum_i a_{is}\, h_i, \qquad
 Z_s \leftarrow Z_s + \mathrm{MLP}_{\mathrm{slice}}(\mathrm{LN}(Z_s)) .
 $$
 
-This is the only place tokens exchange information: through $M = 256$
-slice states, never pairwise.
+In the surface configuration, this is the only place tokens exchange
+information: through $M = 256$ slice states, never pairwise.
 
 **h. Read-back.** Each token reads the slice states with its read-back
 weights, and reads the invariants pooled with the same weights, projected
@@ -556,6 +556,9 @@ $$
 
 so re-representing the same surface on finer cells changes nothing, and
 rescaling the geometry shifts every token's bias by the same amount. The
+interior results the book reports were trained under the earlier
+`query_mass="geometric_mean"` option (a learned factor times the geometric
+mean of the source weights) and are labeled so where quoted. The
 $N + Q$ tokens then run through the twelve slice layers together; the head
 frame builds its anchors from all of them, and the head reads the $Q$ query
 tokens only. The arrangement is exactly covariant and not query-independent
@@ -627,7 +630,7 @@ it changes.** The recipe's surface and interior configurations are in
 | `out_scalars` (1), `out_vectors` (1) | 5 | $n_p$ and $n_v$; each vector output adds $4 + 3K$ coefficients |
 | `n_global_vectors` (1), `n_global_scalars` (0) | 1, 2, 3d, 5 | $K$ and $S$: each vector adds one seed cosine, one relational cosine and three basis vectors; each scalar widens the seed by one |
 | `n_boundary_scalars` (0) | 2 | per-cell boundary-condition scalars $\beta_i$ appended to the seed; non-boundary tokens carry zeros |
-| `scale_mode` (`"rms_distance"`) | 1 | the length unit; `"total_measure"` (the square root of the total measure) is kept only to reproduce lanes trained before 2026-09-18 and is marked for removal |
+| `scale_mode` (`"rms_distance"`) | 1 | the length unit; `"total_measure"` (the square root of the total measure) is kept only to reproduce the lanes trained with it and is marked for removal |
 | `use_measure_weights` (on) | 3b, 3f, 4 | the measure bias $\ell_i$; off is the weights-off ablation |
 | `routing_norm` (`"linear"`), `routing_temperature` (10) | 3a, 4 | the form of every routing map: affine, or the bounded cosine against learned prototypes (the candidate default, @sec-isla-routing-forms) |
 | `use_relational_geo` (on) | 3d, 3e, 3h | the relational invariants in the refinement and the read-back; off is the feature-only slicing ablation |

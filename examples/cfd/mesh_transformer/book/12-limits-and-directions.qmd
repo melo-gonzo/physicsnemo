@@ -22,24 +22,24 @@ mean = statistics.mean
 ## What is established {#sec-established}
 
 **Nine results are settled to the standard of the fair-comparison protocol
-(@sec-protocol) at the reporting protocol; the last two rest on a single
-dataset and are labeled so.** Each carries its numbers and its scope in
-its home section; this chapter adds only the limits. Ratios are baseline ÷
-ISLA, so above one favors ISLA. Two further findings, on regime
-extrapolation and cross-family transfer, are stated below as pending
-because no ISLA lane exists for them at any budget.
+(@sec-protocol) at the reporting protocol; three rest on a single dataset
+and are labeled so.** Each carries its numbers and its scope in its home
+section; this chapter adds only the limits. Ratios are baseline ÷ ISLA, so
+above one favors ISLA. Two further findings, on regime extrapolation and
+cross-family transfer, are stated below as pending because no ISLA lane
+exists for them at any budget.
 
 | result | where |
 |---|---|
-| On HiLiftAeroML surface pressure, GeoTransolver and Transolver fed the unit freestream direction lead ISLA at every rung measured at the reporting protocol: 35 random training cases, 4 training geometries, and the fixed angle (by 21 to 32%). The deficit is not count noise: on the 35-case rung GeoTransolver ÷ ISLA is 0.73 at 200,000 cells against 0.72 at 10,000, and at the fixed angle 0.69 against 0.68 while every model improves 20 to 25% from the one budget to the other. The 210-case, 21-geometry, 510- and 1,260-case rungs are pending at the reporting protocol. | @sec-data-efficiency, @sec-scoreboard-200k |
+| On HiLiftAeroML surface pressure, GeoTransolver and Transolver fed the unit freestream direction lead ISLA at every rung measured at the reporting protocol: 35 random training cases, 4 training geometries, and the fixed angle (GeoTransolver by 27 to 32%, Transolver by 21 to 27%). The deficit is not count noise: on the 35-case rung GeoTransolver ÷ ISLA is 0.73 at 200,000 cells against 0.72 at 10,000, and at the fixed angle 0.69 against 0.68 while every model improves 20 to 25% from the one budget to the other. The 210-case, 21-geometry, 510- and 1,260-case rungs are training at the reporting protocol. | @sec-data-efficiency, @sec-scoreboard-200k |
 | On DrivAerML at the reporting protocol ISLA and GeoTransolver are at parity at full data (0.998) and ISLA leads Transolver by 6%; below full data GeoTransolver is the more data-efficient model, by a deficit that narrows from 17% at 27 cars to zero at 435 (0.83, 0.86, 0.92, 0.97, 1.00 at 27, 54, 109, 218, 435 cars, GeoTransolver at its better rate on every rung). | @sec-scoreboard-200k, @sec-full-data, @sec-deficit-anatomy |
-| Rotation and translation covariance are exact by construction; with every case in a random pose ISLA scores 1.015x its native-frame error on DrivAerML and leads the rotation-augmented GeoTransolver and Transolver by 12% and 21% at the reporting protocol (@sec-nb-p200k-pose-verdict). | @sec-pose, @sec-isla-contracts |
-| ISLA's prediction is consistent under a change of the inference draw: under a 10:1 front-to-back density bias with exact Horvitz–Thompson weights on DrivAerML at 100,000 cells (the labeled scaling budget) its error grows 1.07 to 1.2x where GeoTransolver's grows 8.7x and Transolver's 5.3x; under a stratified draw every model moves under 2%. Under refinement, ISLA converges across samplers, and so do GeoTransolver and Transolver + ISLA's measure-weighted pooling + Horvitz–Thompson-centered datapipe (ablation); GeoTransolver and Transolver as released do not. | @sec-consistency-bench, @sec-scoreboard-consistency, @sec-nb-steelman-verdict |
+| Rotation and translation covariance are exact by construction; with every case in a random pose ISLA scores 1.015x its native-frame error on DrivAerML and leads the rotation-augmented GeoTransolver and Transolver by 12% and 21% at the reporting protocol (@sec-nb-p200k-pose-verdict). | @sec-pose-contract, @sec-isla-contracts |
+| ISLA's prediction is consistent under a change of the inference draw: under a 10:1 front-to-back density bias with exact Horvitz–Thompson weights on DrivAerML at 100,000 cells (the labeled scaling budget) its error grows 1.07x where GeoTransolver's grows 8.7x and Transolver's 5.3x; under a stratified draw every model moves under 2%. Under refinement, ISLA converges across samplers, and so do GeoTransolver and Transolver + ISLA's measure-weighted pooling + Horvitz–Thompson-centered datapipe (ablation); GeoTransolver and Transolver as released do not. The slice territories say why: under the biased draw GeoTransolver's slices follow the points and ISLA's nearly do not (dominant-slice agreement excess over the uniform-versus-uniform floor +0.33 against +0.06, anchor displacement 0.64 against 0.039 body RMS radii; the anchor displacement reproduces on the wings, the agreement readout is single-dataset). | @sec-consistency-bench, @sec-scoreboard-consistency, @sec-territories, @sec-nb-steelman-verdict |
 | ISLA's trained function depends weakly on the training sampling law, on two datasets: trained under the area-proportional law and scored on the independent uniform draw, ISLA is 0.99x its uniform-trained twin on the 35-wing rung (200,000 cells) and 1.08x on the 435 cars (100,000 cells), GeoTransolver 2.6x and 7.9x, Transolver 2.4x and 9.6x. Weakly dependent, not indifferent: the cars' 8% exceeded the 5% clause preregistered for it. | @sec-training-law, @sec-sampling-laws |
-| Training needs no rate sweep at the protocol rate 1e-3 at width 192, but under the default linear routing the safe rate has a ceiling that falls like 1/width and at least 1/depth: the rule rate 1e-3 × 192/width × 12/layers is the best clean rate at 384 and 768 wide and at 24 layers, and 48 layers has no clean linear rate. Above the ceiling the loss rises to the mean-field plateau, which is total routing collapse (every point routes to one slice in every block, anchors coincident). Cosine routing (bounded logits) removes the ceiling on every DrivAerML lane at neutral accuracy at the rule rates (cosine ÷ linear 0.998, 1.005, 1.020 at 192, 384, 768); its wing lanes are pending. The step cost is at parity with GeoTransolver at 10,000 tokens in half the memory. | @sec-robustness-lr, @sec-using-lr, @sec-isla-cost, @sec-nb-routingsat-verdict, @sec-nb-routenorm-cars-verdict |
-| On the DrivAerML interior at 200,000 boundary cells and 200,000 queries ISLA leads GeoTransolver-volume on velocity (1.42), trails on pressure (0.87) and is level on eddy viscosity (0.98); single dataset, and ISLA's pressure seeds are 8% apart. | @sec-interior |
-| *Single dataset (DrivAerML, 435 cars, 100,000 cells).* ISLA holds the accuracy-versus-memory frontier below about 70 GB: ISLA 384 wide at 100,000 cells scores 0.0411 at 22 GB against GeoTransolver 1,024 wide at 100,000 cells 0.0406 at 74 GB and GeoTransolver 512 wide at 200,000 cells 0.0410 at 100 GB. Cells stop paying above 100,000 for every model, and the 500-epoch protocol is converged. | @sec-equal-budget |
-| *Single dataset (DrivAerML, 435 cars, 100,000 cells).* Both architectures reach the same capacity floor, about 0.040: ISLA with cosine routing reaches 0.0407 at 68M parameters (384 wide, 24 layers) and 0.0406 at 136M (48 layers); GeoTransolver reaches 0.0406 at 143M (1,024 wide) and 0.0403 at 571M (2,048 wide, estimated). At matched parameters near 140M the two are identical, and ISLA is within 1% of the floor at half GeoTransolver's parameters. | @sec-equal-budget |
+| Training needs no rate sweep at the protocol rate 1e-3 at width 192, but under the default linear routing the safe rate has a ceiling that falls like 1/width and at least 1/depth: the rule rate 1e-3 × 192/width × 12/layers is the best clean rate at 384 and 768 wide and at 24 layers, and 48 layers has no clean linear rate. Above the ceiling the loss rises to the mean-field plateau, which is total routing collapse (every point routes to one slice in every block, anchors coincident). Cosine routing (bounded logits) removes the ceiling on every DrivAerML lane at neutral accuracy at the rule rates (cosine ÷ linear 0.998, 1.005, 1.020 at 192, 384, 768); its wing lanes are running. With the fused geometry kernel the step cost is at parity with GeoTransolver in half the memory. | @sec-robustness-lr, @sec-using-lr, @sec-isla-cost, @sec-nb-routingsat-verdict, @sec-nb-routenorm-cars-verdict |
+| *Single dataset (DrivAerML, 435 cars).* On the interior at 200,000 boundary cells and 200,000 queries ISLA leads GeoTransolver-volume on velocity (1.42; 1.56 with cosine routing), trails on pressure (0.87; 0.95) and is level on eddy viscosity (0.98; 0.97); ISLA's pressure seeds are 8% apart. The AirfRANS lanes are the second dataset. | @sec-interior |
+| *Single dataset (DrivAerML, 435 cars, 100,000 cells).* ISLA holds the accuracy-versus-memory frontier: ISLA 384 wide at 100,000 cells scores 0.0411 at 22 GB against GeoTransolver 1,024 wide at 100,000 cells 0.0406 at 74 GB, less than a third of the memory, and the best ISLA at or under each budget is at least as accurate as the best GeoTransolver at every budget measured. Cells stop paying above 100,000 for every model, and the 500-epoch protocol is converged. | @sec-shared-floor, @sec-scoreboard-floor |
+| *Single dataset (DrivAerML, 435 cars, 100,000 cells).* Both architectures reach the same capacity floor, about 0.040: ISLA with cosine routing reaches 0.0407 at 68M parameters (384 wide, 24 layers) and 0.0406 at 136M (48 layers); GeoTransolver reaches 0.0406 at 143M (1,024 wide) and 0.0403 at 571M (2,048 wide, estimated). At matched parameters near 140M the two are identical, and ISLA is within 1% of the floor at half GeoTransolver's parameters. | @sec-shared-floor |
 
 Two findings were established in the exploration runs on the removed legacy
 centered variant and have no ISLA lane at any budget, so they are pending
@@ -61,25 +61,18 @@ surface-pressure relative L2 of @sec-metrics averaged over the 180
 validation cases shared by every rung, in float32; the figure and table
 are @fig-hilift-data-efficiency and @tbl-hilift-ladder.
 
-Three facts bound what the ladder can say.
+Two facts bound what the ladder can say.
 
 - **On the random-case ladder ISLA is measured at the reporting protocol
-  at one rung, 35 cases; the 210-case rung is pending there.** Its ratio at
-  510 and 1,260 cases is not known at any budget; GeoTransolver's and
-  Transolver's curves continue to those rungs (@sec-scoreboard-exploration),
-  and the expectation from the recurrence reading below is a ratio somewhat
-  lower than at 210 cases. The geometry and fixed-angle splits are separate
-  ladders with their own rungs (@sec-data-efficiency).
+  at one rung, 35 cases.** The 210-, 510- and 1,260-case rungs are training
+  there, and the 510- and 1,260-case ISLA arms are its first at any budget.
+  The geometry and fixed-angle splits are separate ladders with their own
+  rungs (@sec-data-efficiency).
 - **Every seed at a rung trains on the same curated subset**, so the seed
   bands measure initialization, not the choice of training cases.
   Geometry-stratified redraws of the 35- and 210-case training sets put the
-  GeoTransolver ÷ ISLA ratio inside a band that stays below one on every
-  draw (@sec-scoreboard), so the curated draws are typical.
-- **The wing deficit does not move with the cell count.** On the 35-case
-  rung GeoTransolver ÷ ISLA is 0.73 at 200,000 cells against 0.72 at
-  10,000, and at the fixed angle 0.69 against 0.68 while every model
-  improves 20 to 25% between the two budgets (@sec-scoreboard-200k); the
-  deficit is a property of the trained functions, not of the sampling.
+  baseline ÷ ISLA ratio inside a band that stays below one on every draw
+  (@sec-de-controls), so the curated draws are typical.
 
 ### The HiLift accuracy figures are validation-set figures {#sec-limits-validation}
 
@@ -106,64 +99,24 @@ prospective dataset.
 
 ### Mechanism: what is known and what is not {#sec-limits-mechanism}
 
-**The in-distribution gap is decomposed, and the parts that remain
-unexplained are small; what is not known is whether any of them can be
-removed without breaking a contract.** The decomposition itself is
-@sec-deficit-anatomy; the limits on it are these.
+**On the cars there is no in-distribution gap left to explain at the
+reporting protocol; on the wings the deficit is measured on every rung and
+not decomposed.** The DrivAerML decomposition is @sec-deficit-anatomy; the
+limits on the mechanism are these.
 
 - **No single ingredient of ISLA is load-bearing for its own accuracy.**
-  Five single-factor ablations at 35 wing cases each move the error by a
-  fraction of the deficit to the baselines; their sizes are being
-  re-measured at the reporting protocol (@sec-mechanism). The exactness of
-  the covariance contract neither costs nor buys anything measurable in
-  distribution at that rung; whether the positional information the
-  contracts deny is worth anything at 435 cars is being re-measured at the
-  reporting protocol, by a diagnostic that breaks the contract and is not a
-  configuration (@sec-deficit-anatomy).
-- **The wing deficit is representational, not a shortage of training
-  cases.** With the data axis removed (one case, 64 resampled views,
-  trained to convergence: the error reached this way is the model's
-  *one-case floor*, a measurement of capacity rather than of
-  generalization), ISLA's floor is above both baselines' by more than the
-  35-case gap; the deficit sits on the smooth, large-cell regions that
-  dominate the area-weighted metric, not at the gaps between wing elements
-  (@sec-nb-overfit-verdict). On the cars there is no deficit left to
-  explain: at the reporting protocol the two architectures are at parity at
-  full data, share most of their residual on identical points
-  (@sec-shared-floor), and reach the same capacity floor of about 0.040 as
-  width and depth grow (@sec-equal-budget, single dataset). Which part of
-  the wing representation carries the deficit is partly known and partly
-  refuted: on the one-case instrument eight independent routings per block
-  remove most of the form gap, but on the full DrivAerML training set eight
-  routings are null, so the one-case ordering does not transfer and
-  routing multiplicity is not the carrier (@sec-nb-heads435-verdict).
-- **The origin-free frame's price on the wings is mesher pattern.** Against
-  the legacy centered variant (removed; a plain-mean center with a fixed
-  length unit) ISLA pays nothing on DrivAerML and little on the
-  never-seen-geometry rungs, and most where validation geometries recur in
-  training (the sizes are being re-measured at the reporting protocol). Two
-  diagnostics with an exact full-geometry frame pay
-  more than ISLA, so the price is not positional information but the
-  mesh-density content of the plain-mean center, which is reusable when a
-  wing returns and a liability when it does not
-  (@sec-nb-frame-full-verdict). The fixed angle is the one
-  never-seen-geometry rung where ISLA still pays; the reading that a single
-  freestream direction makes the mesher's refinement pattern a geometric
-  cue that transfers within the wing family is consistent with every rung
-  and not separately tested.
+  The single-factor ablations at 35 wing cases each move the error by a
+  fraction of the deficit to the baselines, and the exactness of the
+  covariance contract neither costs nor buys anything measurable in
+  distribution at that rung (@sec-mechanism).
 - **The measure weights' price is variance plus mesh pattern, and only the
-  variance part shrinks.** Its in-distribution size is being re-measured
-  at the reporting protocol. On the cars the weights-off ÷ weights-on ratio
+  variance part shrinks.** On the cars the weights-off ÷ weights-on ratio
   rises toward one with cell count; on the wings it is flat across a
   sixteen-fold range, which variance cannot produce, and the weights-off
   checkpoints lose consistency under an area-proportional draw, with errors
   worse than predicting zero (@sec-consistency-bench). Weights off is an
   ablation that prices the measure semantics, never a configuration
   (@sec-principle).
-- **The interior standings sort into capacity and generalization** on the
-  single-car instrument: the velocity lead is capacity, and the pressure
-  standing reverses with the data fixed, so what pressure lead ISLA has at
-  full data is generalization across cars (@sec-interior-open).
 - **The contracts are exact in float32 and not in bf16.** On the trained
   GPU path the rotation and translation residual is 3e-5 at worst in
   float32 and 4% (pressure) to 7% (wall shear) under the bf16 autocast the
@@ -180,91 +133,62 @@ sealed-test pressure error divided by the in-regime validation error.
 Trained at angles of attack up to 12° and tested at 14° and above, or
 trained pre-stall and tested post-stall, both architectures lose about a
 factor of ten, and the out-of-regime errors are worse than either reaches
-from 35 in-regime cases (@sec-regime-extrapolation). Both GeoTransolver
+from 35 in-regime cases (@sec-regime-extrapolation); both GeoTransolver
 regime runs consumed the physical velocity, so the ratios there are
-physical-velocity measurements; ISLA keeps the lower absolute error on both
-sides of the boundary. Whether GeoTransolver's smaller degradation ratio
-comes from its raw-coordinate inputs was tested directly with a
-raw-coordinate channel on ISLA (which breaks the covariance contract); the
-preregistered falsifier fired, so the smaller ratio is not carried by raw
-coordinates and no mechanism for it has been isolated
-(@sec-ood-mechanism). Coverage of the regime, not architecture, governs
-this axis. Along one geometry parameter of one wing family, the deflection
-split (trained on the milder 80% of geometries and tested once, sealed, on
-the most aggressive 20%) is being re-measured at the reporting protocol
-(@sec-scoreboard-other). A split across geometry *classes* remains the
-open test, and none of this book's datasets provides one.
+physical-velocity measurements. Coverage of the regime, not architecture,
+governs this axis. The deflection split (trained on the milder 80% of
+geometries, tested once, sealed, on the most aggressive 20%) is training at
+the reporting protocol (@sec-scoreboard-pending); a split across geometry
+*classes* remains the open test, and none of this book's datasets provides
+one.
 
 ### Interior accuracy {#sec-limits-interior}
 
 **The interior standing at the reporting protocol, a velocity lead (1.42),
 a pressure deficit (0.87) and level eddy viscosity (0.98) against
 GeoTransolver-volume, holds at the training query count on one dataset,
-and its pressure part is inside ISLA's own seed spread.** Six limits bound
+and its pressure part is inside ISLA's own seed spread.** Five limits bound
 it (@sec-interior). The comparison is not resource-matched and the two
 models do not receive the same inputs, and GeoTransolver-volume fed the
 physical velocity changes by under 2% on every field, so the ratios are not
 an input-scale artifact. ISLA's two pressure seeds are 8% apart, so the
-pressure ratio is the least settled of the three. The full-data standings
-only partly extend to small data: at 54 and 109 training cars the velocity
-lead was smaller in the exploration runs on the removed variant, and those
-rungs are pending on ISLA (@sec-interior-open). The interacting decode's
-prediction depends on the joint query set, training over a range of counts
-reduces the dependence without removing it, and the passive decode's
-dependence is exactly zero, so the interacting configuration is deployed at
-its training count (@sec-interior-companion). The interior evidence lanes
-were trained under the older `geometric_mean` query-mass option, not the
-default `source_total`, so the standing under the default is not yet
-measured. And the eddy-viscosity metric is on a standardized field, so its
-ratios are orderings under that centering, not physical percentages. What
-remains open is pressure.
+pressure ratio is the least settled of the three. Below full data the task
+is unmeasured on ISLA: the 54- and 109-car rungs are pending on it
+(@sec-interior-open). The interacting decode's prediction depends on the
+joint query set, training over a range of counts reduces the dependence
+without removing it, and the passive decode's dependence is exactly zero,
+so the interacting configuration is deployed at its training count
+(@sec-interior-companion). The interior evidence lanes were trained under
+the older `geometric_mean` query-mass option, not the default
+`source_total`, so the standing under the default is not yet measured. And
+the eddy-viscosity metric is on a standardized field, so its ratios are
+orderings under that centering, not physical percentages. What remains
+open is pressure.
 
 ### Exact query independence has a price {#sec-limits-query-independence}
 
 **ISLA's surface predictions depend weakly on which other points are
-sampled; making them exactly independent costs a multiple of the error in
-surface accuracy, so every surface checkpoint behind the headline results
-is the interacting configuration** (@sec-query-independence). Swapping the
-companion set moves a surface point's prediction more than it moves
-GeoTransolver's at a shared prefix. The passive decoder is exactly
-independent in float64 and several times less accurate on DrivAerML
-surface pressure, and the interior confirms the price at matched depth and
-inputs: a twelve-block passive decode from an interacting support set
-carrying the signed distance still trails the interacting query tokens on
-every field (@sec-interior-query-independence). Every size here was
-measured in the exploration runs and is being re-measured at the reporting
-protocol. What the interacting queries provide is
-computation at the requested points through every encoder layer, not
-geometric context. Evaluate-anywhere semantics is a contract with a measured
-price, and ISLA does not carry it.
+sampled; making them exactly independent costs surface accuracy, so every
+surface checkpoint behind the headline results is the interacting
+configuration** (@sec-query-independence). The passive decoder is exactly
+independent in float64 and less accurate on DrivAerML surface pressure, and
+on the interior a twelve-block passive decode from an interacting support
+set carrying the signed distance still trails the interacting query tokens
+on every field (@sec-interior-query-independence). What the interacting
+queries provide is computation at the requested points through every
+encoder layer, not geometric context; evaluate-anywhere semantics is a
+contract with a price, and ISLA does not carry it.
 
 ### Cross-family transfer is a data property {#sec-limits-transfer}
 
 **Neither the removed ISLA variants nor GeoTransolver transfer zero-shot
 across vehicle families; what moves cross-family error is the diversity of
 the training data.** The finding is a mechanism finding from the
-exploration runs on the removed variants (@sec-review-frontier); no ISLA
-lane exists for it at any budget, so it is pending rather than settled and
-no ranking is quoted. On the held-out fastback family the models trained on
-DrivAerML alone score close to the mean predictor, the variants' failure
-worse than GeoTransolver's, and a second training family moves both to a
-usable error. Few-shot adaptation
-separates them further: fine-tuned on 20 fastback cases, GeoTransolver's
-head start over training from scratch grows while ISLA's shrinks, so what
-GeoTransolver learns on DrivAerML is the better starting point for a new
-family (research/transfer_program/studies/campaign_c_transfer). No single
-ISLA ingredient carries that deficit: retraining with more or fewer
-anchors, raw seeds, the similarity-gauge variant (removed) or the weights
-off moves the zero-shot error nowhere near GeoTransolver's
-(@sec-nb-xfam-verdict), so the cross-family question is a data question.
-Diversity at a fixed label budget is a trade: splitting 435 training cases
-between DrivAerML and a sibling family buys the target family almost
-entirely and costs the source about what halving its data costs, plus a
-mixing cost that grows with the foreign share for the variants and not for
-GeoTransolver; a per-case family flag changes nothing, so the mismatch is
-coverage, not identification. A claim of family-portable
-surface physics from any of these architectures would need a corpus in
-which geometry, pose, scale and regime vary one at a time.
+exploration runs on the removed variants (@sec-review-frontier,
+@sec-nb-xfam-verdict); no ISLA lane exists for it at any budget, so it is
+pending rather than settled and no ranking is quoted. A claim of
+family-portable surface physics from any of these architectures would need
+a corpus in which geometry, pose, scale and regime vary one at a time.
 
 ## Open questions, and what would settle each {#sec-open-questions}
 
@@ -277,9 +201,11 @@ baseline ÷ ISLA, so above one favors ISLA.
 | question | what would settle it | bar |
 |---|---|---|
 | What is the mechanism of the wing deficit? | the mesher-pattern hypothesis (validation geometries recur in training with a different mesh) tested by a split that holds geometries out entirely at matched case count, at the reporting protocol | the ratio moves toward parity when recurrence is removed, or does not |
-| What is ISLA's ratio on the two largest HiLift rungs? | ISLA trained at 510 and 1,260 cases at the reporting protocol | reported as measured; the prediction from the recurrence reading is a ratio somewhat below the 210-case value |
+| What is ISLA's ratio on the two largest HiLift rungs? | ISLA trained at 510 and 1,260 cases at the reporting protocol | reported as measured |
 | Do the 35-case ratios hold on cases no decision has read? | the 35-case ISLA and unit-direction baseline checkpoints scored once on the 360-case sealed test | the validation ratios reproduced within their seed spread |
 | Does bounding the routing logits remove the linear-routing rate ceiling on a second dataset? | cosine routing at the rates that collapse linear routing on the 510-wing rung, and the reporting-protocol lanes on the 35-wing rung and on the cars (@sec-nb-routenorm-prereg, @sec-nb-routenorm-p200k-prereg) | answered on DrivAerML (clean training at every collapse rate, neutral accuracy at the rule rates; @sec-nb-routenorm-cars-verdict); pending on the 510-wing rung, and the cosine default waits on it |
+| Does the capacity floor and the memory frontier reproduce on the wings? | the wing scaling study: cosine ISLA and GeoTransolver width and depth ladders on the HiLiftAeroML rungs at the scaling budget (@sec-nb-scalehl-prereg) | both ladders flatten at one floor, and the best ISLA at or under each memory budget is at least as accurate as the best GeoTransolver, or not |
+| Does the interior standing reproduce on a second dataset? | the AirfRANS interior lanes, ISLA with query tokens against GeoTransolver-volume under the reporting protocol (@sec-interior-airfrans) | the velocity lead and the pressure ordering reproduced within seed spread |
 | Why does ISLA's training-law dependence differ between datasets (1% on the wings, 8% on the cars)? | the twin training under a third law, or on a third dataset, with the same independent uniform readout (@sec-training-law) | no bar is preregistered; reported as measured |
 | Does the architecture match a same-size baseline on a problem that is not external aerodynamics? | a dataset outside external aerodynamics with GeoTransolver trained on it under the fair-comparison protocol; the screened-Poisson acceptance case already trains with $K = 0$ global vectors and one global scalar (@sec-nb-globin-accept-verdict) | the error at the level of the same-size baseline on that problem |
 | Does either architecture extrapolate across geometry classes? | a split across classes rather than along one parameter of one family | none of this book's datasets provides one |
@@ -293,17 +219,17 @@ starting point and a stated remainder.**
 | direction | what is in place | what remains |
 |---|---|---|
 | Problems outside external aerodynamics | the interface accepts zero or more global vector inputs and zero or more global scalar inputs, and per-cell boundary data through the boundary-scalar channel (@sec-isla-inputs); the contract tests cover zero and two global directions; a screened-Poisson acceptance case trains with no global vector and one global scalar, and the scalar is decisive where the boundary data cannot substitute for it (@sec-nb-globin-accept-verdict) | no production dataset outside external aerodynamics has a baseline trained on it under the protocol, and nothing in this book's measurements depends on one |
-| Cost at scale | parity with GeoTransolver's step at 10,000 tokens in half the memory on the compiled path; the exact fused geometry kernel, the default on CUDA, holds the accuracy-versus-memory frontier below about 70 GB at 435 cars (@sec-isla-cost, @sec-equal-budget) | the fused kernel is single-routing only; the gap below GeoTransolver's footprint is headroom for more tokens or a wider model, though on DrivAerML neither buys accuracy past 100,000 cells and 384 wide under either routing |
-| The in-distribution price of the measure weights | its mechanism is estimator variance in the slice states, removable by more cells or by the stratified inference draw (@sec-using-sampler) | a variance-reduced consistent quadrature at a fixed cell budget beyond stratification; the weights themselves are not the target (@sec-principle) |
+| Cost at scale | with the exact fused geometry kernel, the default on CUDA, ISLA's step tracks GeoTransolver's at every token count in less than half the memory, and ISLA holds the accuracy-versus-memory frontier at 435 cars (@sec-isla-cost, @sec-shared-floor) | the gap below GeoTransolver's footprint is headroom for more tokens or a wider model, though on DrivAerML neither buys accuracy past 100,000 cells and 384 wide under either routing |
+| The in-distribution price of the measure weights | on the cars the weights-off ablation has no price to remove at the reporting protocol (parity at full data); on the wings the training-law study says that what remains is mesh-pattern content, not variance (@sec-training-law, @sec-mechanism) | nothing: the weights are a correctness requirement (@sec-principle), and the stratified inference draw is the variance reduction the recipe already uses (@sec-using-sampler) |
 | Sampling conventions | ISLA's convention-swap penalty converges under refinement, and so does that of GeoTransolver and Transolver + ISLA's measure-weighted pooling + Horvitz–Thompson-centered datapipe (ablation); GeoTransolver's and Transolver's as released does not (@sec-consistency-bench, @sec-nb-steelman-verdict) | at 10,000 cells no architecture is consistent across conventions; the fine-mesh limit is within a few percent of reached at 40,000 |
-| Query-count consistency of the interior decode | `query_mass="source_total"` is the default: the total query mass is a learned fraction of the total source measure divided by the query count, so neither refining the source nor changing the request size moves the balance between surface and queries, and the passive readout is invariant to a rescaling of the measure (the defect it removes is stated in @sec-isla-contracts; @sec-nb-no-legacy-compat); count augmentation reduces the interacting decode's dependence without removing it, at a small cost (sizes pending at the reporting protocol) | the interior evidence lanes were trained under the older `geometric_mean` option, so the interior standing under the default is not yet measured |
+| Query-count consistency of the interior decode | `query_mass="source_total"` is the default: the total query mass is a learned fraction of the total source measure divided by the query count, so neither refining the source nor changing the request size moves the balance between surface and queries, and the passive readout is invariant to a rescaling of the measure (the defect it removes is stated in @sec-isla-contracts; @sec-nb-no-legacy-compat); count augmentation reduces the interacting decode's dependence without removing it | the interior evidence lanes were trained under the older `geometric_mean` option, so the interior standing under the default is not yet measured |
 
 ## What would change the recommendation {#sec-review-roads}
 
 **On DrivAerML surface pressure at the reporting protocol ISLA and
 GeoTransolver are at parity at full data and ISLA leads Transolver by 6%;
 GeoTransolver leads below full data on the cars, by 17% at 27 cars
-narrowing to zero at 435, and by 27% on the 35-wing rung; ISLA is the
+narrowing to zero at 435, and by 27 to 32% on the wing rungs; ISLA is the
 choice wherever the deployment sampling may differ from the training
 sampling, wherever the training sampling law is not the deployment one,
 where geometries arrive in arbitrary poses, and where memory at scale

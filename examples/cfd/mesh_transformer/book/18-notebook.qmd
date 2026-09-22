@@ -1966,7 +1966,7 @@ directories or only in the archived chronology. This revision restores them
 as compressed entries with anchors into the archive: the
 subsampling/measure/resolution/reproducibility findings of 07-24..26
 (@sec-nb-hdi-summary through @sec-nb-hseed-summary), the audit content
-behind @sec-program-review, the per-experiment verdicts of the 07-29
+behind @sec-full-data-accuracy, the per-experiment verdicts of the 07-29
 controlled-reset wave (@sec-nb-controlled-reset), and the repaired
 train-only gauge recalibration (@sec-nb-gauge-recalibration). The review
 also committed four days of working-tree state (results, studies, the
@@ -17493,7 +17493,7 @@ parallel session's rule.
 **Setting.** The scoreboard's only measurement of ISLA at the scale
 corner (width 512, 80,000 DrivAerML cells per car) is the constant-gauge
 variant, at 0.0428 against GeoTransolver's 0.0419 and Transolver's 0.0431
-(float32, evaluated at 80,000 cells, seed means; @sec-scoreboard-surface).
+(float32, evaluated at 80,000 cells, seed means; @sec-scoreboard-pending).
 The reference configuration itself, the relative frame with the
 total-measure scale, has no number there: at the protocol learning rate
 of $10^{-3}$ it diverged on both seeds, and the localization work of
@@ -17853,7 +17853,7 @@ baseline ÷ ISLA):
 **Why it matters.** The ladder's ordering at full data is GeoTransolver,
 then Transolver, then ISLA's constant-gauge variant, on every field. The
 Transolver-to-ISLA ratio on pressure runs 0.90 at 510 cases and 0.95 at
-1,260 (@sec-scoreboard-surface), so the plain Transolver's lead over ISLA
+1,260 (@sec-scoreboard-pending), so the plain Transolver's lead over ISLA
 narrows with data where GeoTransolver's (0.84 at 510, 0.88 at 1,260) also
 narrows, and neither closes. Every surface rung of the scoreboard now has
 both unit-direction baselines; the reference configuration remains
@@ -21772,7 +21772,7 @@ natural follow-on if ROUTE-NORM removes the ceiling on the surface lanes.
 single angle of attack of 12° and validates on held-out wings at the same
 angle, so it isolates geometry generalization from angle generalization.
 At the 10,000-cell exploration budget this rung was one of the wing rungs
-where ISLA trails the baselines (@sec-scoreboard-surface).
+where ISLA trails the baselines (@sec-scoreboard-pending).
 
 **What we saw.** The fleet's fixed-angle lanes at 200,000 cells, float32,
 seeds 42 / 43: ISLA 0.0302 / 0.0298 (mean 0.0300), GeoTransolver at 1e-3
@@ -23262,3 +23262,52 @@ amendment. Two lanes whose names shared a prefix with the relaunched
 interior rungs were cancelled by the relaunch pattern and resubmitted
 (the no-signed-distance pair; they read the scaling-manifest dataset
 definition, whose `train` and `val` splits are the full ones). Accepted.
+
+## 2026-09-21 — Book review pass: every chapter cut to current knowledge (about 1,900 lines removed), the fused kernel stated as the default, the wing-lead range and the floor rounding corrected, the capacity material consolidated in one chapter, stale ledger nodes closed {#sec-nb-book-review-2026-09-21}
+
+Peter asked what in the book was out of date, moot, a path-dependent
+sideshow, or otherwise due for cutting or updating, and separately that
+"update" means re-running where a number is stale, not adding prose. Two
+independent read-throughs (front half and evidence half) produced about
+one hundred flags; the ones that survived cross-checking against the
+current-state section of the claims file were applied in one pass.
+
+**Cut.** Every diagnostic of a removed variant (the centered frames, the
+similarity gauge, multi-head routing), the exploration-budget learning-rate
+grids, the transfer program's frontier on removed variants, the far-wake
+closed line, the passive-decode distance bands, the exact-kernel
+predecessor rows, the stratified-sampler table at 10,000 cells, the
+deficit anatomy beyond its count-noise paragraph, the duplicated
+statements of the training law, the plateau definition, the cosine numbers
+and the count-noise argument (each now has one home), and every
+"pending" table row or content-free section (replaced by one sentence and
+a pointer to the status chapter). The scoreboard chapter went from 981 to
+508 lines, the robustness chapter from 1,364 to 1,079 after absorbing the
+capacity material from the baselines chapter (888 to 563), the interior
+chapter from 606 to 331, the ISLA chapter from 972 to 768.
+
+**Corrected.** The fused geometry kernel is the default on CUDA, not an
+opt-in (three chapters said otherwise; the cost figure's legend now names
+the eager recompute region as the fallback). The wing lead is GeoTransolver
+27 to 32% and Transolver 21 to 27% over three rungs (two chapters carried
+two other ranges). The 48-layer cosine lane is 0.0406 at 136M parameters
+everywhere. ISLA-384 at 100,000 cells trains in less than a third of
+GeoTransolver-1,024's memory, not half. Memory footprints in the
+architecture table are at 200,000 cells (27 against 80 GB). The length-unit
+comparison quotes the protocol figure (0.996). The usage chapter's
+HiLift command trains 500 epochs, and its `compile=false` is explained as
+the setting every lane of the book trained with. The claims file's
+"do not state" list no longer describes the pre-cleanup class.
+
+**Ledger.** WAVE3 and TRANSFER closed as done or superseded, MT3 stopped,
+FORCEREF re-scoped to an evaluation-only readout on the 200,000-cell ISLA
+checkpoints, MAINLINE restated on current gates, the ROUTE-NORM cell cut
+to its cars verdict.
+
+**Not done by editing.** The remaining pending items are runs, not prose:
+the 210-case and 21-geometry wing rungs (trained, being scored), the
+510- and 1,260-case rungs, the protocol redo's 38 lanes, the deflection
+pair, the scaling-law rungs, the AirfRANS comparison, and two items with
+no runs behind them yet: the cross-family transfer at the protocol (needs
+a fine-tuning path in the recipe) and the force-coefficient readout on the
+200,000-cell checkpoints (evaluation only).

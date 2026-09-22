@@ -11,12 +11,10 @@ have in mind is fluent in PDE numerics and machine learning and has never
 seen this program; every term is defined where it first appears, and every
 number is computed, as the page renders, from a checked-in artifact.
 
-::: {.callout-note collapse="true" title="Where the name comes from, and what came before"}
+::: {.callout-note collapse="true" title="Where the name comes from"}
 ISLA is pronounced "eye-la". An *isla* is an island: a shape defined
 entirely by its boundary, which is what the method takes as input. The code
-class is `ISLA` in `physicsnemo.experimental.nn`. An earlier exact-kernel
-design of this program, which preceded ISLA, is documented in the
-repository's `book/archive/` directory and does not appear in this book.
+class is `ISLA` in `physicsnemo.experimental.nn`.
 :::
 
 ## The thesis {#sec-verdict}
@@ -45,14 +43,14 @@ in view:
    so its prediction is consistent under a change of surface sampling: when
    the inference draw on DrivAerML is biased 10:1 front to back at 100,000
    cells, ISLA's error grows by about 7% where GeoTransolver's grows about
-   9x and Transolver's about 5x (@sec-consistency-bench).
-3. **The full-data gap on DrivAerML was count noise.** At the reporting
-   protocol GeoTransolver and ISLA are at parity (GeoTransolver ÷ ISLA
-   0.998). The deficit that smaller cell budgets show at full data is
-   finite-sample noise in ISLA's slice integrals, which a stratified
-   inference draw shrinks and more cells remove; whether any part of it is
-   the positional information the invariance contracts deny the model is
-   being re-measured at the reporting protocol (@sec-deficit-anatomy).
+   9x and Transolver's about 5x (@sec-consistency-bench), and its slices
+   stay put when the draw changes (anchor motion 1/16 of GeoTransolver's,
+   @sec-territories).
+3. **Below 100,000 cells ISLA's error carries finite-sample noise in its
+   slice integrals; at the protocol it is gone.** At 200,000 cells
+   GeoTransolver and ISLA are at parity on DrivAerML (GeoTransolver ÷ ISLA
+   0.998); the gap smaller budgets showed at full data was count noise,
+   which more cells remove (@sec-deficit-anatomy).
 4. **ISLA learns the field, not the mesher's habits, and both architectures
    share one capacity floor.** Trained under an area-proportional sampling
    law instead of the uniform one and scored on the same uniform draw,
@@ -62,10 +60,7 @@ in view:
    100,000-cell scaling budget, ISLA's and GeoTransolver's capacity ladders
    end at the same floor of about 0.040, identical at matched parameters
    (about 140M), with ISLA within 1% of it at half GeoTransolver's
-   parameters (@fig-capacity). ISLA's default linear routing has a
-   learning-rate ceiling that falls with width and depth; bounding the
-   routing logits (cosine routing) removes it on DrivAerML and is the
-   candidate default, pending the same test on the wings (@sec-using-lr).
+   parameters (@fig-capacity).
 
 ```{python}
 #| label: setup-index
@@ -75,12 +70,9 @@ from pathlib import Path
 import sys; sys.path.insert(0, ".")
 from palette import *
 RES = Path("..") / "results"
-RP = Path("..") / "research" / "transfer_program" / "studies"
 J = lambda p: json.load(open(RES / p))
 mean = statistics.mean
 fp = lambda runs, keys, f="pressure_l2": [runs[k]["fields"][f]["fp32_mean"] for k in keys]
-poseB = json.load(open(RP / "campaign_b_pose" / "campaign_b_fp32_2026-09-10.json"))
-eqp = J("eqprice_reduction_2026-09-17.json")["summary"]
 
 # training-law study: each model trained under the uniform and under the area-proportional sampling law,
 # scored on the independent uniform draw (wings: 35 HiLiftAeroML cases at 200,000 cells; cars: 435 DrivAerML cars at 100,000 cells)
@@ -99,13 +91,6 @@ RN = J("routenorm_extension_2026-09-21.json")["configurations"]; CAPC = J("cap43
 cap = {"isla24": RN["isla|cos|w384|d24|lr5e-4"], "isla48": RN["isla|cos|w384|d48|lr2.5e-4"],
        "gt1024": CAPC["gt|w1024|d12|s256|lr1e3"], "gt2048": RN["gt|w2048|d12|lr1e-3"]}
 M = lambda c: f"{c['params'] / 1e6:.0f}M"
-poseR = json.load(open(RES / "refprops_reduction_2026-09-18.json"))["pose"]   # ISLA in random poses (two seeds)
-pose = {"isla": poseR["posed_over_in_pose"],
-        "gt": poseB["arms"]["gt_aug"]["pressure_mean"] / poseB["canonical"]["gt"]["pressure_mean"],
-        "t": poseB["arms"]["transolver_aug"]["pressure_mean"] / poseB["canonical"]["transolver_lr3e3"]["pressure_mean"]}
-pose_lead = {"gt": poseB["arms"]["gt_aug"]["pressure_mean"] / poseR["posed_mean"],
-             "t": poseB["arms"]["transolver_aug"]["pressure_mean"] / poseR["posed_mean"]}
-pct = lambda r: f"{(1 - r) * 100:.0f}%"
 # the reporting protocol: 200,000 cells per case, each architecture at its better learning rate
 P2 = J("p200k_trio_reduction_2026-09-19.json")["arms"]
 isla200 = P2["isla"]["pressure_mean"]; t200 = P2["transolver_unit_lr3e3"]["pressure_mean"]
@@ -134,10 +119,10 @@ out = "| Setting | GeoTransolver / Transolver | ISLA | baseline ÷ ISLA | Readin
 for r in rows: out += "| " + " | ".join(r) + " |\n"
 print(out)
 print(": The thesis in seven rows. How to read this: each row is one setting and one instrument, so rows are not comparable with one another, and the HiLiftAeroML surface rungs, where the baselines lead by about 27% at 35 cases regardless of budget, are not shown (@sec-data-efficiency). "
-      "The reporting protocol is 200,000 sampled cells per case, each architecture at its own best learning rate (GeoTransolver's is 3e-3 at that budget, 1e-3 at 10,000 cells; @sec-lr-protocol); rows at other budgets are labeled. Errors are the area-weighted relative L2 of surface pressure "
+      "The reporting protocol is 200,000 sampled cells per case, each architecture at its own best learning rate (GeoTransolver's is 3e-3, ISLA's 1e-3; @sec-lr-protocol); rows at other budgets are labeled. Errors are the area-weighted relative L2 of surface pressure "
       "(@sec-metrics) in float32, seed means; a ratio is baseline error divided by ISLA error, so a value "
       "above one favors ISLA. ISLA is the shipped configuration throughout (the relative frame; the surface lanes carry the total-measure length unit, "
-      "within 1.3% of the RMS-pairwise-distance default, @sec-nb-lenrms-verdict; the interior lanes route queries with the geometric-mean mass, not the shipped default). "
+      "which scores 0.0446 against the RMS-pairwise-distance default's 0.0444 at the protocol, ratio 0.996, results/p200k_trio_reduction_2026-09-19.json; the interior lanes route queries with the geometric-mean mass, not the shipped default). "
       "Data: results/p200k_trio_reduction_2026-09-19.json, "
       "results/p200k_ladder_interim_2026-09-18.json, results/p200k_pose_reduction_2026-09-19.json (the reporting protocol); "
       "results/routenorm_extension_2026-09-21.json, "
@@ -234,8 +219,7 @@ below are canonical; their definitions are in the chapters cited.
 | Name | What it is | Where defined |
 |---|---|---|
 | **ISLA** | the model as shipped, named without qualifier: relative frame, RMS-pairwise-distance length unit, the class defaults | @sec-isla |
-| **legacy centered variant** (removed; its measurements survive in collapsed diagnostic notes only) | the centered frame the program used before the relative frame: plain-mean center, fixed length unit. It reads a sample statistic that is not physical knowledge; the class no longer has it, and its checkpoints do not load | @sec-isla-variants |
-| **similarity-gauge variant** (removed; its measurements survive in collapsed diagnostic notes only) | ISLA centered on the measure-weighted centroid with the RMS radius as length unit. It estimates a center from the sample and presumes one closed body; measured within noise of ISLA (@sec-nb-sgref-verdict), and the class no longer has it | @sec-isla-variants |
+| **removed variants** (legacy centered, similarity gauge) | centered frames the class no longer has; they appear only in collapsed diagnostic notes, labeled | @sec-isla-variants |
 | **ablation**, **diagnostic** | a configuration measured only to price a design choice (weights-off, raw coordinates); never adopted | @sec-principled-decisions |
 | **GeoTransolver**, **Transolver**, **GeoTransolver-volume** | the public slice-attention baselines, named without qualifier and never modified. "GeoTransolver + ISLA's *feature* (ablation)" is a baseline with one of ISLA's features added to isolate an effect; it is not a variant of the public model | @sec-baselines |
 | **unit-direction protocol** | every model receives the freestream as a unit vector; the fair-comparison rule that decides the surface ranking | @sec-fair-comparison |
@@ -248,7 +232,6 @@ below are canonical; their definitions are in the chapters cited.
 | **rung** | one training-set size on the data-efficiency ladder ("the 35-case rung") | @sec-data-efficiency |
 | **deficit anatomy** | the decomposition of the in-distribution gap into measured parts | @sec-deficit-anatomy |
 | **form** | a structural choice of the architecture (one routing per layer, the head basis) as opposed to its capacity or its inputs | @sec-deficit-anatomy |
-| **one-car floor** | the error a model reaches when trained to convergence on a single car; a capacity measurement, not a benchmark | @sec-limits-mechanism |
 
 ```{python}
 #| label: fig-key
@@ -333,14 +316,12 @@ outside it.**
   percent of cost (@sec-pose). ISLA's pose lead is against baselines that learn
   pose from augmentation, in random poses.
 - **Not that sampling consistency is an invariance.** It is a fine-mesh-limit
-  property: ISLA's small degradation under a 10:1 bias (1.07 to 1.2x) is a
-  40,000- to 100,000-cell statement on the cars, and on the wings at a fixed
-  angle the bar is not yet met at 40,000 cells (@sec-consistency-bench).
+  property: ISLA's small degradation under a 10:1 bias is 1.07x at 100,000
+  cells on DrivAerML, a single dataset for this probe (@sec-consistency-bench).
 - **Not that ISLA is indifferent to the training sampling law.** Trained
   under the area-proportional law and scored on the uniform draw, its error
-  moves 1% on the wings and 8% on the cars; the 5% clause preregistered for
-  that study fired on the cars, and why the cars show the larger dependence
-  is open (@sec-training-law).
+  moves 1% on the wings and 8% on the cars; why the cars show the larger
+  dependence is open (@sec-training-law).
 - **Not that cosine routing is the default.** It removes the learning-rate
   ceiling on DrivAerML at accuracy neutral to linear routing; the decision
   waits on the same test on the wings (@sec-using-lr).

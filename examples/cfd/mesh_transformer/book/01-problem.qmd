@@ -222,14 +222,11 @@ the only variable, and every model fed the vehicle surface alone.** That is
 the information diet of every published baseline on the dataset. The recipe
 assigns 435 variants to training and 48 to validation; the remaining variant
 is in neither. The reporting protocol samples the recipe's default of
-200,000 surface cells per case per step; the program explored at 10,000
-cells, and every number measured at that exploration budget is labeled as
-such (@sec-scoreboard-200k has the standing at the reporting protocol,
-@sec-scoreboard-tokens what the budget does to it). The surface task
-predicts pressure and wall shear at those cells (@sec-full-data); the
-interior task predicts pressure, velocity and turbulent viscosity at
-interior query points (200,000 per car under the reporting protocol; the
-exploration budget used 10,000) from the surface alone (@sec-interior).
+200,000 surface cells per case per step (@sec-scoreboard-200k has the
+standing, @sec-scoreboard-tokens what the budget does to it). The surface
+task predicts pressure and wall shear at those cells (@sec-full-data); the
+interior task predicts pressure, velocity and turbulent viscosity at 200,000
+interior query points per car from the surface alone (@sec-interior).
 
 ### SHIFT-SUV {#sec-shift-suv}
 
@@ -427,16 +424,11 @@ constant.
 #|   scaled by the pressure variation over the surface, not by its absolute
 #|   level; geometric mean over cases; scored in bfloat16, which predates
 #|   the float32 instrument and is labeled as such; not the recipe metric), for
-#|   three parameter-free reference predictors (gray) and GeoTransolver and
-#|   Transolver trained on 35 cases, one seed, at the physical-velocity
-#|   input scale. One seed suffices because this is a
-#|   calibration of the metric's scale, not a comparison between
-#|   architectures; the unit-direction comparison on the recipe metric is in
-#|   @sec-data-efficiency. How to read this: the gray bars are the scale of
-#|   the metric, 1.00 is "predict the freestream pressure everywhere" and
-#|   0.93 is the best any constant per case can do. It does not show
-#|   recipe-metric values, and the baseline bars measure the input scale of
-#|   @sec-part-baseline, not the architectures. Data:
+#|   three parameter-free reference predictors. How to read this: the bars
+#|   are the scale of the metric, 1.00 is "predict the freestream pressure
+#|   everywhere" and 0.93 is the best any constant per case can do. It does
+#|   not show recipe-metric values or any trained model; the trained models
+#|   on the recipe metric are in @sec-data-efficiency. Data:
 #|   results/hilift_reference_predictors_35_2026-09-06.json.
 #| code-fold: true
 ref = json.load(open(RES / "hilift_reference_predictors_35_2026-09-06.json"))
@@ -445,10 +437,8 @@ rows = [
     ("constant: freestream pressure", s["const_p_inf_rel_l2_gmean"], BASELINE, ""),
     ("constant: dataset mean", s["const_dataset_mean_rel_l2_gmean"], BASELINE, ""),
     ("constant: each case's own mean", s["const_case_mean_rel_l2_gmean"], BASELINE, ""),
-    ("Transolver, 35 cases (physical velocity)", s["model_rel_l2_gmean"]["transolver"], AMBER, ""),
-    ("GeoTransolver, 35 cases (physical velocity)", s["model_rel_l2_gmean"]["gt"], RED, ""),
 ]
-fig, ax = plt.subplots(figsize=(7.6, 3.3))
+fig, ax = plt.subplots(figsize=(7.6, 2.4))
 y = range(len(rows))
 ax.barh(list(y), [r[1] for r in rows], color=[r[2] for r in rows], height=0.62)
 for i, (label, v, _, _) in enumerate(rows):
@@ -464,8 +454,8 @@ plt.show()
 ::: {.callout-note collapse="true" title="The other quantities: forces, paired statistics, seed disagreement, regime ratio"}
 **Force coefficients.** Inference integrates predicted pressure and wall
 shear into drag and lift coefficients per case (reference area one) and
-integrates the CFD labels on the *same* 10,000 sampled cells (the
-exploration budget) to form the reference. The reported error is the mean absolute coefficient error over
+integrates the CFD labels on the *same* 200,000 sampled cells to form the
+reference. The reported error is the mean absolute coefficient error over
 the validation cases divided by the mean magnitude of the reference
 coefficient, averaged over seeds. It is an error against the sampled-cell
 label integral, not the full-surface force: the shared quadrature cancels
@@ -560,18 +550,15 @@ model converge to the same field under a biased and an area-proportional
 resampling as the count grows. In-distribution accuracy alone never
 justifies a change. Configurations that fail the third test are still
 measured, as ablations that price the requirement: ISLA's routing without
-its measure weights is the standing example, more accurate in distribution
-on the wings, with errors worse than predicting zero under an
-area-proportional draw (@sec-mechanism, @sec-consistency-bench).
+its measure weights is the standing example, with errors worse than
+predicting zero under an area-proportional draw (@sec-mechanism,
+@sec-consistency-bench).
 
-The same requirement applies to the law a model was *trained* under. Trained
-on an area-proportional draw and scored on the independent uniform draw,
-GeoTransolver is 2.6x (HiLiftAeroML, 200,000 cells) and 7.9x (DrivAerML,
-100,000 cells, a labeled scaling budget) worse than its uniform-trained twin,
-and Transolver 2.4x and 9.6x; ISLA moves 0.99x and 1.08x on the same swap
-(@sec-training-law). A weak dependence, not none: the 8% on the cars is
-measured, and why the cars show the larger dependence is open. The ledger of
-every such decision is @sec-principled-decisions.
+The same requirement applies to the law a model was *trained* under: a
+model trained on an area-proportional draw should score the same on the
+uniform draw as its uniform-trained twin. The baselines do not and ISLA
+nearly does; the numbers are in @sec-training-law. The ledger of every such
+decision is @sec-principled-decisions.
 
 ## Protocol {#sec-protocol}
 
@@ -584,7 +571,7 @@ a comparison that departs from it says so in the same sentence.**
 | epochs and schedule | 500 epochs, one case per step; the learning rate is divided by ten every 100 epochs, so the effective budget is about 300 epochs at a useful rate |
 | arithmetic | bfloat16 autocast in training; float32 at evaluation (@sec-metrics) |
 | augmentation | none |
-| learning rate | each architecture at its own best rate at the reporting protocol: ISLA $10^{-3}$ at width 192 (the width rule of @sec-using-lr above it), GeoTransolver and Transolver $3 \times 10^{-3}$; every row names the rate it used, and the rates at the exploration budget are in @sec-lr-protocol |
+| learning rate | each architecture at its own best rate at the reporting protocol: ISLA $10^{-3}$ at width 192 (the width rule of @sec-using-lr above it), GeoTransolver and Transolver $3 \times 10^{-3}$; every row names the rate it used (@sec-lr-protocol) |
 | global vector input | the freestream as a unit direction, for every architecture (@sec-part-baseline) |
 | seeds | two or more (42 and 43 unless stated), reported individually beside the mean |
 | checkpoint | the final epoch; no selection on validation error |

@@ -30,45 +30,20 @@ model:
   geo_checkpoint: true        # rebuild per-slice geometry in backward: same numbers, half the memory
 ```
 
-The configuration table below is the whole decision. ISLA has one frame,
-preferred on principle (no center is estimated from the sample), and the
-measurements that priced the alternatives left that preference unopposed on
-accuracy: the similarity-gauge variant, before its removal, was within 2% of
-ISLA at 435 cars, inside seed noise (@sec-nb-sgref-verdict). The removed
-frame variants survive only in this book's collapsed diagnostic notes
-(@sec-isla-variants). The remaining rows are options on that one frame.
+ISLA has one frame; the rows below are options on it.
 
 | configuration | recipe config | when to use | what you give up |
 |---|---|---|---|
 | **ISLA** (relative frame, RMS-pairwise-distance length unit, linear routing) | `isla_surface`, `isla_volume` | every new surface or interior task | nothing among ISLA's options; against GeoTransolver, nothing at 435 DrivAerML cars at the reporting protocol, up to 17% below full data on the cars and 27% on the 35-wing rung (@sec-scoreboard-200k) |
-| cosine routing (`routing_norm: cosine`; the candidate default) | option on `isla_surface`, `isla_volume` | any width above 384 or depth above 24 layers, or any time a linear-routing lane reaches the mean-field plateau | nothing measured on DrivAerML: accuracy at the rule rates is within 1% of linear routing at widths 192 and 384 and 2% at 768, and the learning-rate ceiling is gone (@sec-using-lr); the same test on the wings is pending, so the default has not moved |
+| cosine routing (`routing_norm: cosine`; the candidate default) | option on `isla_surface`, `isla_volume` | any width above 384 or depth above 24 layers, or any time a linear-routing lane reaches the mean-field plateau | nothing measured on DrivAerML: accuracy at the rule rates is within 1% of linear routing at widths 192 and 384 and 2% at 768, and the learning-rate ceiling is gone (@sec-using-lr); the wing lanes decide whether it becomes the default |
 | query mass (`query_mass: source_total`, the default; `geometric_mean`) | option on `isla_volume`, `isla_volume_support` | interior tasks only: the routing weight the interior query tokens carry. The default gives them a learned fraction of the total boundary measure, so it is invariant to re-representing the same surface at another refinement; `geometric_mean` gives each query the mean boundary log-weight plus a learned offset, which depends on the refinement, and is the setting of the interior evidence lanes (@sec-interior) | nothing measured; the two have not been compared at the reporting protocol |
-| total-measure unit (`scale_mode: total_measure`; marked for removal) | option on `isla_surface`, `isla_volume` | reproducing the evidence lanes trained under that unit, and nothing else | nothing measurable: within 1.3% of the default at 435 cars (@sec-nb-lenrms-verdict); not normalized, so it inherits any error in the weights' absolute scale, and divergent under refinement of a boundary whose area does not converge. Scheduled for removal once those lanes are retired |
-| passive decoder (`query_independent: true`) | `isla_volume_support` | when the prediction at a point must not depend on which other points are queried | accuracy: a price of about three times the interacting decode's error in the exploration runs, being re-measured at the reporting protocol (@sec-query-independence) |
+| total-measure unit (`scale_mode: total_measure`; marked for removal) | option on `isla_surface`, `isla_volume` | reproducing the evidence lanes trained under that unit, and nothing else | nothing measurable: 0.0446 against the default's 0.0444 at 435 cars and the reporting protocol, ratio 0.996 (results/p200k_trio_reduction_2026-09-19.json); not normalized, so it inherits any error in the weights' absolute scale, and divergent under refinement of a boundary whose area does not converge. Scheduled for removal once those lanes are retired |
+| passive decoder (`query_independent: true`) | `isla_volume_support` | when the prediction at a point must not depend on which other points are queried | accuracy: a multiple of the interacting decode's error, being measured at the reporting protocol (@sec-query-independence) |
 
-::: {.callout-note collapse="true" title="The legacy centered variant (removed)"}
-The centered frame with a fixed length unit was the program's configuration
-before the relative frame, and the recipe carried it as
-`isla_surface_constant_gauge` for the diagnostic that shows what a
-sample-estimated center costs (its error grows 12x under a 10:1
-sampling-density bias at the exploration budget of 10,000 cells). The
-centered frame, the similarity gauge and the constant reference length were
-removed from the class and the recipe (@sec-nb-frame-cleanup); their
-measurements stay in this book's diagnostic notes, their checkpoints no
-longer load.
-:::
-
-::: {.callout-tip collapse="true" title="Checkpoints remember their configuration"}
 Every checkpoint stores its constructor arguments, so a model saved under
-any current option loads in the configuration that trained it; you never
-have to recall which length unit a checkpoint used. ISLA keeps no
-compatibility shims for its own pre-release history: a checkpoint that
-names a removed option (the centered frame, the similarity gauge, the
-constant reference length, or the research options removed earlier) does
-not load, and the measurements made with such checkpoints are reported in
-this book as measurements of a removed variant (@sec-nb-frame-cleanup,
-@sec-nb-no-legacy-compat).
-:::
+any current option loads in the configuration that trained it; a checkpoint
+that names a removed option (the centered frame, the similarity gauge, the
+constant reference length) does not load (@sec-nb-frame-cleanup).
 
 ## What the model needs from your data {#sec-using-inputs}
 
@@ -108,7 +83,8 @@ Three of these need a word.
   again internally and discards the magnitude. This is also the
   fair-comparison rule for every architecture in the book
   (@sec-fair-comparison): fed the physical velocity, GeoTransolver's global
-  context routes to a single slice and loses 3.4 to 3.8x.
+  context routes to a single slice and loses a factor of three
+  (@sec-part-baseline).
 - **A speed or other magnitude that matters is a global scalar.** Set
   `n_global_scalars` and pass `global_scalars` of shape (B, S). No fixed power
   of the freestream speed is a physical law for every output (a pressure
@@ -135,7 +111,8 @@ needs thought is the learning rate when you leave width 192.** From the
 recipe root:
 
 ```bash
-# DrivAerML surface, ISLA (sampling_resolution defaults to 200,000 cells per case)
+# DrivAerML surface, ISLA (sampling_resolution defaults to 200,000 cells per case).
+# compile=false is how every lane of this book was trained; the compiled path computes the same function faster.
 python src/train.py model=isla_surface dataset=drivaer_ml_surface \
     training.optimizer.lr=1e-3 compile=false
 
@@ -144,19 +121,14 @@ python src/train.py model=isla_surface dataset=drivaer_ml_surface \
 python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference \
     training.optimizer.lr=5e-4 compile=false
 
-# HiLiftAeroML surface (the 200,000-cell default again)
+# HiLiftAeroML surface (the 200,000-cell default again; 500 epochs, as on the cars)
 python src/train.py model=isla_surface dataset=highlift_surface \
-    training.optimizer.lr=1e-3 compile=false training.num_epochs=200
+    training.optimizer.lr=1e-3 compile=false training.num_epochs=500
 ```
 
-The reporting protocol behind the evidence chapters' numbers is the recipe
-default of 200,000 sampled cells per case (@sec-scoreboard-tokens), 500
-epochs, bfloat16 autocast, no augmentation, learning rate 1e-3 at width
-192, final-epoch checkpoint (@sec-protocol); every architecture is trained
-at its own best rate. Numbers at the exploration budget of 10,000 cells per
-case are labeled as such wherever they appear. ISLA needs no rotation
-augmentation: the contracts make it exact, and a model trained in the
-dataset's native frame predicts a car in any pose (@sec-pose).
+These commands are the reporting protocol of @sec-protocol. ISLA needs no
+rotation augmentation: the contracts make it exact, and a model trained in
+the dataset's native frame predicts a car in any pose (@sec-pose).
 
 ### The learning-rate rule {#sec-using-lr}
 
@@ -172,8 +144,7 @@ descends for some epochs and then rises to the mean-field plateau (about
 and the checkpoint in that state routes every point of every block to a
 single slice with all 256 anchors coincident, so the network can only emit
 a per-case constant (@sec-nb-routingsat-verdict, measured on the plateaued
-lanes themselves; first seen at width 512 in
-@sec-nb-relframe-divergence-mechanism). @tbl-using-rate-ceiling shows the
+lanes themselves). @tbl-using-rate-ceiling shows the
 measured edges: the rule rate is the best clean rate at every width and
 depth tested, the ceiling falls at least as fast as 1/depth, and 48 layers
 have no clean rate at all under linear routing.
@@ -210,9 +181,7 @@ At width 192 the window is 3e-4 to 1e-3 with 1e-3 best (3e-4 costs 8% in
 500 epochs), the plateau between 1e-3 and 2e-3, and NaN at 1e-2
 (@sec-robustness-lr, @sec-nb-ratewindow-verdict). Never run ISLA at the
 recipe's GeoTransolver default of 3e-3; the ISLA configurations pin 1e-3
-for that reason. The rule costs a centered control at the 512-wide corner
-nothing, so it is a property of the routing parametrization, not a retuning
-of the comparison (@sec-nb-corner-wlr-verdict, @sec-nb-cg-wlr-verdict).
+for that reason.
 
 **Cosine routing removes the ceiling on DrivAerML at no measured cost in
 accuracy.** With `routing_norm: cosine` each block routes on the cosine
@@ -228,8 +197,8 @@ and 384 and 2% at 768 (@sec-nb-routenorm-cars-verdict). The best cosine
 lanes are also the best ISLA lanes on that budget: 384 wide at 24 and 48
 layers reach 0.0407 and 0.0406, the same floor GeoTransolver reaches at
 1,024 wide (@fig-capacity). Under cosine routing, then, read the rule as
-the rate to start from rather than a limit; the class default changes to
-cosine once the same test on the wings reports.
+the rate to start from rather than a limit. Cosine is the candidate
+default; the same test on the wings decides it (@sec-program-status).
 
 ::: {.callout-note collapse="true" title="Why the linear-routing ceiling scales with width and depth"}
 Each block's routing logits are an affine map of a normalized token state
@@ -284,44 +253,14 @@ offset. A systematic sample has the same expectation as
 an independent draw for every cell-weighted integral and a lower variance
 for smooth integrands. The effect is a free improvement for every model and
 largest for ISLA, whose slice states are the noisiest estimates
-(@sec-deficit-anatomy). The table below measures the mechanism at 10,000
-cells, where the estimator variance is largest; it is a low-budget
-diagnostic of the draw, not a standing:
-
-```{python}
-#| label: tbl-using-strat
-#| output: asis
-import json, statistics
-from pathlib import Path
-RES = Path("..") / "results"
-qv = json.load(open(RES / "quadvar_reduction_2026-09-17.json"))["arms"]
-mean = statistics.mean
-names = [("isla_ref", "ISLA"), ("gt_unit", "GeoTransolver"), ("transolver_unit", "Transolver")]
-out = "| model | independent draw | stratified draw | change |\n|---|---:|---:|---:|\n"
-for k, lab in names:
-    a = qv[k]; u = a["unif"]["10000"]; ind = mean(u["seeds"]) if isinstance(u, dict) else u
-    st = mean(a["strat"]["10000"]["seeds"])
-    out += f"| {lab} | {ind:.4f} | {st:.4f} | {(st/ind-1)*100:+.1f}% |\n"
-print(out)
-print(": The stratified inference draw as a low-budget diagnostic: DrivAerML surface pressure (area-weighted relative L2, float32, 48 validation cars, seed means) "
-      "for the same checkpoints under the independent and the stratified inference draw at 10,000 cells, the count at which the draw's variance is largest. How to read this: the change is "
-      "an evaluation effect on fixed checkpoints and a mechanism reading, not an accuracy standing; the absolute errors are not comparable with the reporting protocol's. "
-      "Data: results/quadvar_reduction_2026-09-17.json. {#tbl-using-strat}")
-```
+(@sec-deficit-anatomy).
 
 The book keeps the independent draw for its headline comparisons; for a
 deployment, use the stratified draw, or more cells.
 
 ::: {.callout-tip collapse="true" title="How many cells"}
-Use the recipe default of 200,000 cells per case. The in-distribution gap
-to GeoTransolver on DrivAerML at full data that smaller cell budgets show
-is gone at 200,000, because it was estimator variance in the slice states
-(@sec-deficit-anatomy); and the
-error of every model is flat above 100,000 cells (@sec-scoreboard-tokens),
-so nothing above the default buys accuracy. The fused geometry kernel, the
-default on CUDA, keeps ISLA's step at a third of GeoTransolver's time and
-memory at 200,000 cells (@sec-using-cost). If the budget forces fewer
-cells, use the stratified draw.
+Use 200,000; error is flat above 100,000 (@sec-scoreboard-tokens). If the
+budget forces fewer cells, use the stratified draw.
 :::
 
 ## Loading a trained model {#sec-using-checkpoint}
@@ -351,16 +290,36 @@ prediction at a point depends on the joint query set
 ## Cost {#sec-using-cost}
 
 **At the recipe dimensions ISLA and GeoTransolver have the same parameter
-count; with the fused geometry kernel ISLA's training step matches
-GeoTransolver's in time at half the memory up to 40,000 tokens and is a
-third of it in both at 200,000 cells.** At those dimensions ISLA has 8.9M
-parameters (GeoTransolver 9.0M). On
-one GB300 in bfloat16, batch of one case, both models compiled as the
-recipe runs them, the training step at 10,000 tokens is 47 ms at 1.30 GiB
-with the geometry recompute on, against GeoTransolver's 45 ms at 2.70 GiB;
-switching the recompute off gives 39 ms at 1.94 GiB. At 40,000 tokens the
-default path is 119 ms against 53 ms and the fused kernel 52 ms at 4.5
-against 10.0 GiB (@tbl-isla-cost). Two practical consequences:
+count, and at the reporting protocol of 200,000 cells per case ISLA trains
+in about a third of GeoTransolver's memory and GPU-floor step time.** At
+those dimensions ISLA has 8.9M parameters (GeoTransolver 9.0M).
+@tbl-isla-cost reads both footprints from the protocol lanes' own training
+logs.
+
+```{python}
+#| label: tbl-isla-cost
+#| output: asis
+import json
+from pathlib import Path
+ISO = json.load(open(Path("..") / "results" / "isocost_reduction_2026-09-20.json"))["configurations"]
+rows = [("ISLA, 192 wide, 1e-3", "isla|w192|c200k|lr1e-3|ep500"), ("GeoTransolver, 256 wide, 3e-3", "gt_unit|w256|c200k|lr3e-3|ep500")]
+out = "| architecture | parameters | peak memory per device [GB] | GPU-floor step, p10 [s] | median step [s] | surface-pressure error |\n|---|--:|--:|--:|--:|--:|\n"
+for lab, k in rows:
+    c = ISO[k]
+    out += f"| {lab} | {c['params']/1e6:.1f}M | {c['peak_mem_gb']:.0f} | {c['step_s_p10']:.2f} | {c['step_s_median']:.2f} | {c['pressure_l2_mean']:.4f} |\n"
+i, g = ISO[rows[0][1]], ISO[rows[1][1]]
+out += f"| GeoTransolver ÷ ISLA | — | {g['peak_mem_gb']/i['peak_mem_gb']:.1f}x | {g['step_s_p10']/i['step_s_p10']:.1f}x | {g['step_s_median']/i['step_s_median']:.1f}x | {g['pressure_l2_mean']/i['pressure_l2_mean']:.3f} |\n"
+print(out)
+print(": Training cost at the reporting protocol: 435 DrivAerML cars, 200,000 sampled cells per case, 500 epochs, bfloat16 autocast, one case per "
+      "step on one GB300, both models as the recipe trains them (`compile=false`, ISLA with the geometry recompute on). Memory is the peak of the logged "
+      "per-step values; the GPU-floor step is the tenth percentile of the logged steps (the network alone) and the median is the wall clock a "
+      "user waits, which the input pipeline sets at these sizes. The error column is the float32 protocol standing of the same lanes. How to read this: "
+      "the ratio row is GeoTransolver ÷ ISLA; it does not show Transolver, whose 200,000-cell cost was not logged, nor the compiled or fused-kernel "
+      "paths, which compute the same function faster (@sec-isla-cost). Every scored lane of the cost grid is in @tbl-equal-budget. "
+      "Data: results/isocost_reduction_2026-09-20.json. {#tbl-isla-cost}")
+```
+
+Two practical consequences:
 
 - **Leave `geo_checkpoint: true` unless you are short of time and long on
   memory.** It is bitwise identical in outputs and gradients.
@@ -368,13 +327,8 @@ against 10.0 GiB (@tbl-isla-cost). Two practical consequences:
   vector the model selects the exact fused Triton kernel at the first forward
   pass (relative difference to the eager region at most $5.5 \times 10^{-7}$
   in bf16) and logs the choice; off CUDA, or with several global vectors, it
-  falls back to the eager region. Force `eager` only to reproduce the exact
-  arithmetic path of a checkpoint trained on the eager region.
-
-The passive decoder adds 1.1M parameters and four read blocks; the
-query-token interior configuration adds almost no parameters but spans every
-token with the per-slice geometry, at 0.28 s per step and 6.0 GB at 10,000
-interior queries (the exploration budget).
+  falls back to the eager recompute region. Force `eager` only to reproduce
+  the exact arithmetic path of a checkpoint trained on the eager region.
 
 ## Contracts you can check on your own data {#sec-using-contracts}
 

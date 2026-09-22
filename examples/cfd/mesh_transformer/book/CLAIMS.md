@@ -546,10 +546,14 @@ stops". Present-tense, no chronology. Key current statements:
 
 ## Do not state (delete wherever found)
 
-- That ISLA is similarity- or scale-equivariant by default (only with the
-  similarity gauge on; default is a constant reference length).
-- That ISLA is "measure-complete" as a general property (true only with the
-  gauge on; state the measured density robustness instead).
+- That ISLA's scale invariance is anything but the length unit: the default
+  `scale_mode="rms_distance"` makes a uniform rescale of the points (and a
+  rescale of the weights alone) invisible; the `"total_measure"` option is
+  invariant to points × k with areas × k²; the similarity gauge and the
+  constant reference length were removed from the class on 2026-09-20 and are
+  never described as current options.
+- That ISLA is "measure-complete" as a general property (state the measured
+  density robustness and the training-law dependence instead).
 - Any degree-one or magnitude contract for ISLA (global vectors are normalized inside the model; magnitudes are global scalar inputs).
 - A 1.6x accuracy dividend from equivariance (canonicalized GeoTransolver
   is pose-invariant at 1.01x).

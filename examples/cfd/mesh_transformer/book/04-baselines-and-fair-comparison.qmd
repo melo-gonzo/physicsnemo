@@ -95,24 +95,22 @@ freestream as a unit direction, consumed only through invariants and
 equivariant anchors (@sec-isla). @tbl-architectures gives the three
 configurations side by side.
 
-| architecture | per-point inputs | global input | layers | hidden | slices | parameters | peak memory at the exploration budget (10,000 cells) |
+| architecture | per-point inputs | global input | layers | hidden | slices | parameters | peak training memory at the reporting protocol (200,000 cells) |
 |---|---|---|--:|--:|--:|--:|--:|
-| GeoTransolver | centered coordinates, unit normal; coordinates again through the geometry encoder | freestream vector through the global-context projector: the unit direction under the protocol | 12 | 256 | 256 | 9.0M | 2.70 GiB |
-| Transolver | centered coordinates, unit normal | freestream vector, broadcast per point: the unit direction under the protocol | 8 | 256 | 256 | 6.0M | not measured |
-| ISLA | position, unit normal, measure weight, through invariants and anchors only | unit freestream direction | 12 | 192 | 256 | 8.9M | 1.30 GiB with the geometry recompute; 1.94 GiB without |
+| GeoTransolver | centered coordinates, unit normal; coordinates again through the geometry encoder | freestream vector through the global-context projector: the unit direction under the protocol | 12 | 256 | 256 | 9.0M | 80 GB |
+| Transolver | centered coordinates, unit normal | freestream vector, broadcast per point: the unit direction under the protocol | 8 | 256 | 256 | 6.0M | not logged (27 GB at 100,000 cells) |
+| ISLA | position, unit normal, measure weight, through invariants and anchors only | unit freestream direction | 12 | 192 | 256 | 8.9M | 27 GB |
 
 : The three architectures compared on the aerodynamic datasets. *Per-point
 inputs*: channels attached to each of the 200,000 sampled surface cells per
 case under the reporting protocol. *Layers*: soft-slice attention blocks.
 *Hidden*: width of the per-point feature. *Parameters*: trainable parameters
-of the recipe configuration. *Peak memory*: measured at the exploration
-budget, as the peak allocated GPU memory over one training step on one case
-of 10,000 cells in bfloat16 on one GB300, both models compiled as the recipe
-runs them (results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json;
-@sec-isla-cost); the 200,000-cell footprints are in @tbl-equal-budget; not
-measured for Transolver, which serves as a same-family control. How to read
-this: the table states what each model is handed and what it costs, not how
-accurate it is. Configuration source:
+of the recipe configuration. *Peak memory*: the peak of the logged per-step
+GPU memory per device over the 500-epoch protocol lane on one GB300, bfloat16
+autocast, one case per step (results/isocost_reduction_2026-09-20.json;
+every cost lane is in @tbl-equal-budget). How to read this: the table
+states what each model is handed and what it costs, not how accurate it is.
+Configuration source:
 `unified_external_aero_recipe/conf/model/{isla_surface,geotransolver_surface,transolver_surface}.yaml`.
 {#tbl-architectures}
 
@@ -130,14 +128,15 @@ not.
 
 Why it matters is visible before training. GeoTransolver's global-context
 projector applies linear maps and a slice softmax to the vector directly, so
-its conditioning depends on the magnitude: @tbl-projector shows how many
-slices each head of the untrained projector occupies as the magnitude
-grows. At unit magnitude a head spreads over most of the 256 slices; at the
-HiLiftAeroML magnitude it routes almost all of its weight to one. Transolver concatenates the raw
+its conditioning depends on the magnitude. At unit magnitude a head of the
+untrained projector spreads over most of the 256 slices; at the
+HiLiftAeroML magnitude it routes almost all of its weight to one
+(@tbl-projector, in the note below). Transolver concatenates the raw
 vector into every point's features, with the same hazard in a different
 place. Training can in principle rescale either path, so these numbers are
 the initialization signature; the trained measurement is what counts.
 
+::: {.callout-note collapse="true" title="The projector's conditioning at initialization"}
 ```{python}
 #| label: tbl-projector
 #| output: asis
@@ -154,6 +153,7 @@ print(": Conditioning of GeoTransolver's global-context projector at initializat
       "this is a property of the untrained network, and @tbl-unit-vs-physical is the trained consequence. "
       "Data: results/geotransolver_drive_conditioning_2026-09-08.json. {#tbl-projector}")
 ```
+:::
 
 The trained consequence, at 35 HiLiftAeroML training cases with the same
 cases, seeds and budget in both arms, is in @tbl-unit-vs-physical:
@@ -178,7 +178,7 @@ arms = [
     ("ISLA", [rf[f"rf_hl_mt2_meas_super_scarce_seed{s}"]["pressure_l2"] for s in (42, 43)]),
 ]
 isla_ref = mean(arms[5][1])
-out = "| arm | surface pressure error, seed mean (seeds) | baseline ÷ ISLA reference |\n|---|---|---:|\n"
+out = "| arm | surface pressure error, seed mean (seeds) | baseline ÷ ISLA |\n|---|---|---:|\n"
 for lab, v in arms:
     ratio = "—" if lab.startswith("ISLA") else f"{mean(v)/isla_ref:.2f}"
     out += f"| {lab} | {mean(v):.4f} ({' / '.join(f'{x:.4f}' for x in v)}) | {ratio} |\n"
@@ -238,8 +238,7 @@ training recipe in @sec-protocol.
    width rule, @sec-using-lr). GeoTransolver receives a two-rate control,
    1e-3 and 3e-3, on every rung and is reported at the better, a search
    that favors the baseline: at the reporting protocol its better rate is
-   3e-3 on every DrivAerML rung and on the wings, at the exploration budget
-   1e-3 on the DrivAerML full split (@sec-lr-protocol).
+   3e-3 on every DrivAerML rung and on the wings (@sec-lr-protocol).
 4. **Every architecture receives the freestream as the unit direction**
    (@sec-part-baseline).
 5. **Two or more seeds per cell, reported individually**, so the reader can
@@ -275,21 +274,26 @@ estimate (@sec-limits).
 9.0M) and on cells per case (200,000, the reporting protocol), and at that
 row GeoTransolver needs about 2.9x ISLA's peak training memory and 2.7x its
 GPU-floor step time (80 GB against 27 GB on one GB300; @tbl-equal-budget).**
-At the exploration budget of 10,000 cells, on one GB300 in bfloat16 with
-both models compiled as the recipe runs them, ISLA's step is 1.05x
-GeoTransolver's with the geometry recompute on and 0.86x with it off, at
-1.30 and 1.94 GiB against 2.70 GiB (@tbl-isla-cost). Memory was not a
-controlled variable in any comparison and no accuracy result depends on it:
-the checkpoints in this book were trained by implementations of the same
-function that differ only in footprint. Where the two architectures are
-compared at unequal parameters or memory, the section that does so says
-which side has more and whether it bought accuracy (@sec-equal-budget).
+Memory was not a controlled variable in any comparison and no accuracy
+result depends on it: the checkpoints in this book were trained by
+implementations of the same function that differ only in footprint. Where
+the two architectures are compared at unequal parameters or memory, the
+section that does so says which side has more and whether it bought
+accuracy.
 
-@tbl-cells-ladder is the cell-count control behind rule 1. It trains each
-architecture at its recipe width and its own best rate at 100,000 to 600,000
-cells per case and scores every lane on the one instrument, so the only
-variable down a column is how many surface cells a case is sampled to. No
-model moves by more than its seed spread above 100,000 cells.
+## The comparison at equal budget {#sec-equal-budget}
+
+**A comparison at unequal budgets is read at matched memory or matched
+parameters, never down a column; cells per case are not a budget axis above
+100,000.** @tbl-cells-ladder is the cell-count control behind rule 1. It
+trains each architecture at its recipe width and its own best rate at
+100,000 to 600,000 cells per case and scores every lane on the one
+instrument, so the only variable down a column is how many surface cells a
+case is sampled to. No model moves by more than its seed spread above
+100,000 cells, so the capacity comparison at 100,000 cells in
+@sec-shared-floor, where the frontier against memory and against
+parameters is drawn, is a comparison of the architectures and not of their
+cell budgets.
 
 ```{python}
 #| label: tbl-cells-ladder
@@ -316,280 +320,6 @@ print(": The cell-count ladder on DrivAerML (435 training cars, 500 epochs): are
       "{#tbl-cells-ladder}")
 ```
 
-## The comparison at equal budget {#sec-equal-budget}
-
-**On DrivAerML at 435 training cars both architectures reach the same
-floor, about 0.040, and ISLA reaches it cheaper: at matched parameters of
-about 140M the two are identical to within 0.1% (0.0405 and 0.0406), ISLA
-comes within 1% of the
-floor at half GeoTransolver's parameters (68M against 143M), and on the
-accuracy-against-memory frontier ISLA at 384 wide and 100,000 cells (0.0411,
-22 GB) matches GeoTransolver at 512 wide and 200,000 cells (0.0410), which
-needs 4.5x the memory and 3.7x the GPU-floor step time.** @tbl-floor
-collects those lanes; the rest of the section shows where they come from.
-
-Three studies feed it, each with a preregistration and a verdict in the
-notebook. A cost grid varies cells per case and width at 435 DrivAerML cars
-(ISLA at widths 192 to 768 and 100,000 to 600,000 cells, GeoTransolver at
-256 and 512 wide and 100,000 to 400,000 cells, Transolver at 256;
-@sec-nb-isocost-prereg, @sec-nb-isocost-verdict). A width and depth ladder
-at 100,000 cells, the scaling budget, takes ISLA to 1,536 wide and 48 layers
-and GeoTransolver to 1,024 wide and 24 layers, with a two-rate control on
-every rung (@sec-nb-cap435-prereg, @sec-nb-cap435-verdict). A routing study
-repeats the ISLA ladders with the bounded, cosine form of the routing softmax
-(@sec-isla-slices) in place of the linear form and adds GeoTransolver at
-2,048 wide (@sec-nb-routenorm-prereg, @sec-nb-routenorm-cars-verdict).
-Every lane trains for 500 epochs with two seeds and is scored on the one
-instrument, float32 at 200,000 cells, whatever count it trained at. Every
-lane's peak memory and step time are read from its own training log, and
-the step time is reported two ways, because at these sizes the median step
-is set by the input pipeline (one case per GPU step) rather than by the
-network: the tenth percentile of the logged steps is the *GPU-floor step
-time*, the cost of the network alone; the median is the wall clock a user
-waits.
-
-```{python}
-#| label: tbl-floor
-#| output: asis
-ISO = J("isocost_reduction_2026-09-20.json")["configurations"]
-CAPI = J("cap435_interim_2026-09-20.json")["configurations"]
-EXT = J("routenorm_extension_2026-09-21.json")["configurations"]
-# (architecture, routing, width x layers, training cells, displayed rate, source record)
-floor_rows = [
-    ("ISLA", "linear", "384 × 12", "100,000", "5e-4", ISO["isla|w384|c100k|lr5e-4|ep500"]),
-    ("ISLA", "cosine", "384 × 24", "100,000", "5e-4", EXT["isla|cos|w384|d24|lr5e-4"]),
-    ("ISLA", "cosine", "384 × 48", "100,000", "2.5e-4", EXT["isla|cos|w384|d48|lr2.5e-4"]),
-    ("GeoTransolver", "as released", "512 × 12", "200,000", "3e-3", ISO["gt_unit|w512|c200k|lr3e-3|ep500"]),
-    ("GeoTransolver", "as released", "512 × 24", "100,000", "3e-3", CAPI["gt|w512|d24|s256|lr3e-3"]),
-    ("GeoTransolver", "as released", "1,024 × 12", "100,000", "1e-3", CAPI["gt|w1024|d12|s256|lr1e3"]),
-    ("GeoTransolver", "as released", "2,048 × 12", "100,000", "1e-3", EXT["gt|w2048|d12|lr1e-3"]),
-]
-out = "| architecture | routing | width × layers | parameters | training cells | learning rate | surface pressure error, mean (seeds) | peak memory [GB] |\n|---|---|---|--:|--:|--:|---|--:|\n"
-for arch, routing, shape, cells, lr, c in floor_rows:
-    params = f"{c['params']/1e6:.0f}M" + (" (estimated)" if c.get("params_estimated") else "")
-    seeds = " / ".join(f"{v:.4f}" for v in c["pressure_l2_seeds"])
-    memv = c.get("peak_mem_gb")
-    out += f"| {arch} | {routing} | {shape} | {params} | {cells} | {lr} | **{c['pressure_l2_mean']:.4f}** ({seeds}) | {'not logged' if memv is None else f'{memv:.0f}'} |\n"
-print(out)
-print(": The lanes of either architecture at or near the floor on DrivAerML: 435 training cars, 100,000 training cells "
-      "per case (the scaling budget) except the 200,000-cell GeoTransolver row, all scored in float32 at 200,000 cells "
-      "on the 48 validation cars, single dataset, 500 epochs, two seeds. *Parameters*: trainable, as counted by the "
-      "training script; GeoTransolver-2,048's is extrapolated from its measured 256 to 1,024 ladder. *Peak memory*: "
-      "peak of the logged per-step values on one GB300; not logged for the routing-study lanes. How to read this: the "
-      "table names the floor and what each model pays to reach it, not a ranking (the errors differ by less than a "
-      "seed spread); the cosine rows are ISLA's default candidate, not its shipped default. Data: "
-      "results/isocost_reduction_2026-09-20.json, results/cap435_interim_2026-09-20.json, "
-      "results/routenorm_extension_2026-09-21.json. {#tbl-floor}")
-```
-
-```{python}
-#| label: fig-equal-budget
-#| fig-cap: "Error against training cost for every scored configuration of the cost grid and the width and depth ladders (435 DrivAerML cars, 500 epochs, two-seed means). The lanes train at 100,000 to 600,000 cells per case, the count in each label; every lane is scored in float32 at 200,000 cells. Top: peak GPU memory per device; bottom: GPU-floor step time (tenth percentile of the logged steps). Each marker is one configuration, labeled width x training cells (and L24 for the 24-layer GeoTransolver); the step lines are each model's frontier, the best error attainable at or under a budget. GeoTransolver's recipe default (256 wide, 200,000 cells) is ringed. How to read this: below about 70 GB and 0.3 s the ISLA frontier lies under GeoTransolver's at every budget, with ISLA-384 at 100,000 cells (0.0411, 22 GB) the best lane of either model there; above it GeoTransolver-1,024 (0.0406, 74 GB) and GeoTransolver-512 with 24 layers (0.0406, 96 GB) sit 1.2% below ISLA's best lane on this figure (GeoTransolver ÷ ISLA 0.988), because ISLA's width ladder turns over above 384 and its depth ladder, which reaches the same floor (0.0407 to 0.0405 at 68M to 136M parameters; @fig-capacity, @tbl-floor), is absent here: its cost was not logged in the same way. Data: results/isocost_reduction_2026-09-20.json and results/cap435_interim_2026-09-20.json."
-#| fig-alt: "Two stacked scatter plots of validation pressure error against training cost, one against peak memory and one against GPU-floor step time, with ISLA points in blue, GeoTransolver in red and Transolver in amber, each with a step-shaped frontier line."
-import matplotlib.pyplot as plt
-R = J("isocost_reduction_2026-09-20.json")
-cfgs = [c for c in R["configurations"].values() if c["status"] == "complete" and c["epochs"] == 500 and c.get("peak_mem_gb") and c.get("step_s_p10")]
-# the width and depth ladders add the wider and deeper lanes at 100,000 cells (default slice count; the rule learning rate for ISLA, the better rate for GeoTransolver)
-CAP = J("cap435_interim_2026-09-20.json")
-MODEL_KEY = {"isla": "isla", "gt": "gt_unit", "transolver": "transolver_unit"}
-for c in CAP["configurations"].values():
-    if c["status"] != "complete" or c.get("source") == "ISO-COST" or c["slices"] != 256 or not c.get("peak_mem_gb") or c["pressure_l2_mean"] > 0.1:
-        continue
-    cfgs.append(dict(model=MODEL_KEY[c["model"]], width=c["width"], cells=100000, epochs=500, lr=c["lr"], params=c["params"], depth=c["depth"],
-                     pressure_l2_mean=c["pressure_l2_mean"], pressure_l2_seeds=c["pressure_l2_seeds"], peak_mem_gb=c["peak_mem_gb"],
-                     step_s_p10=c["step_s_p10"], step_s_median=c["step_s_median"], status="complete"))
-# GeoTransolver-512 keeps its better rate per configuration (prereg)
-best = {}
-for c in cfgs:
-    k = (c["model"], c["width"], c["cells"], c.get("depth", 12 if c["model"] != "transolver_unit" else 8))
-    if k not in best or c["pressure_l2_mean"] < best[k]["pressure_l2_mean"]:
-        best[k] = c
-cfgs = list(best.values())
-KEY = {"isla": "isla_ref", "gt_unit": "gt", "transolver_unit": "t"}
-fig, axes = plt.subplots(2, 1, figsize=(7.2, 7.6), sharey=True)
-for ax, axis, xlabel in ((axes[0], "peak_mem_gb", "Peak GPU memory per device [GB]"), (axes[1], "step_s_p10", "GPU-floor step time, p10 [s]")):
-    for model in ("isla", "gt_unit", "transolver_unit"):
-        pts = sorted([c for c in cfgs if c["model"] == model], key=lambda c: c[axis])
-        if not pts:
-            continue
-        kw = series_kwargs(KEY[model], ls="none")
-        ax.plot([c[axis] for c in pts], [c["pressure_l2_mean"] for c in pts], **kw)
-        # frontier: best error at or under each budget
-        fx, fy, run = [], [], float("inf")
-        for c in pts:
-            run = min(run, c["pressure_l2_mean"]); fx.append(c[axis]); fy.append(run)
-        ax.step(fx, fy, where="post", color=STYLE[KEY[model]]["color"], lw=1.6, alpha=0.55, label="_nolegend_")
-        for c in pts:
-            dep = c.get("depth", 12 if model != "transolver_unit" else 8)
-            lab = f"{c['width']}x{c['cells']//1000}k" + ("" if dep in (8, 12) else f" L{dep}")
-            ax.annotate(lab, (c[axis], c["pressure_l2_mean"]), textcoords="offset points",
-                        xytext=(5, 4), fontsize=7.5, color=STYLE[KEY[model]]["color"],
-                        bbox=dict(boxstyle="round,pad=0.1", fc=WHITE, ec="none", alpha=0.75))
-    d = best.get(("gt_unit", 256, 200000, 12))
-    if d:
-        ax.plot([d[axis]], [d["pressure_l2_mean"]], marker="o", ms=15, mfc="none", mec=RED, mew=1.4, ls="none")
-    ax.set_xscale("log"); ax.set_xlabel(xlabel); ax.grid(True, which="both", color=GRID, lw=0.6)
-    ax.set_ylabel("Pressure relative L2\n(48 validation cars)")
-axes[0].legend(loc="upper right", frameon=False)
-plt.tight_layout()
-plt.show()
-```
-
-```{python}
-#| label: tbl-equal-budget
-#| output: asis
-rows = sorted(cfgs, key=lambda c: (c["model"] != "isla", c["model"], c["params"], c["cells"]))
-NAME = {"isla": "ISLA", "gt_unit": "GeoTransolver", "transolver_unit": "Transolver"}
-out = "| model | width (parameters) | cells per case | pressure L2, seeds | mean | peak memory [GB] | step p10 / median [s] |\n|---|---|--:|---|--:|--:|---|\n"
-for c in rows:
-    seeds = " / ".join(f"{v:.4f}" for v in c["pressure_l2_seeds"])
-    lr_s = c["lr"] if "e-" in c["lr"] else c["lr"].replace("e", "e-")  # the ladder keys write 1e-3 as "1e3"
-    lr = f", {lr_s}" if c["model"] == "gt_unit" and c["width"] >= 512 else ""
-    dep = c.get("depth", 12 if c["model"] != "transolver_unit" else 8)
-    dep_s = "" if dep in (8, 12) else f", {dep} layers"
-    out += (f"| {NAME[c['model']]} | {c['width']} ({c['params']/1e6:.1f}M){lr}{dep_s} | {c['cells']//1000}k | {seeds} | **{c['pressure_l2_mean']:.4f}** | "
-            f"{c['peak_mem_gb']:.0f} | {c['step_s_p10']:.2f} / {c['step_s_median']:.2f} |\n")
-print(out)
-print(": Every scored configuration of the cost grid and the width and depth ladders at the default slice count "
-      "(435 DrivAerML cars, 500 epochs, two seeds; training cells per case as listed, every row scored in float32 at "
-      "200,000 cells on the 48 validation cars). GeoTransolver is at its better learning rate per configuration; its "
-      "256-wide 200,000-cell row is the reporting-protocol pair at 3e-3 with the step time of the same configuration's "
-      "1,000-epoch control. Costs are per-lane medians over the run (memory: peak of the logged per-step values) on "
-      "one GB300. How to read this: rows differ in width, parameters and cells at once, so a comparison across "
-      "architectures must be read at matched memory or matched parameters (@tbl-floor), not down the column. "
-      "Data: results/isocost_reduction_2026-09-20.json and results/cap435_interim_2026-09-20.json. {#tbl-equal-budget}")
-```
-
-Four readings carry the section.
-
-1. **Cells per case stop paying at 100,000.** Down every column of
-   @tbl-cells-ladder the error moves by less than a seed spread from 100,000
-   to 600,000 cells: ISLA-192 spans 0.0448 to 0.0452, GeoTransolver-256
-   0.0445 to 0.0447. The joint fit
-   $\varepsilon = a N^{-\alpha} + b P^{-\beta} + c$ in training cells $N$
-   and parameters $P$ returns $\alpha = 0.00 \pm 0.02$ for ISLA and an
-   unidentifiable $\alpha$ for GeoTransolver. The preregistered prediction
-   that ISLA converts cells faster (@sec-nb-isocost-prereg) is refuted at
-   this data size: the count-noise mechanism that bought ISLA 19% from
-   10,000 to 200,000 cells (@sec-scoreboard-200k) is spent by 100,000. The
-   training budget is not what limits either model: 1,000 epochs instead of
-   500 move ISLA-192 and GeoTransolver-256 at 200,000 cells by 0.03% each
-   (@sec-nb-isocost-verdict), so the 500-epoch protocol is converged at
-   full data.
-2. **Width pays, for both, up to about 35M parameters.** ISLA-384 improves
-   on ISLA-192 by 8.7% at 100,000 cells and 7.1% at 200,000;
-   GeoTransolver-512 improves on GeoTransolver-256 by 6.7% at 100,000 and
-   7.9% at 200,000 (@tbl-equal-budget). Above that ISLA's width curve
-   turns over (0.0426 at 512, 0.0421 at 768, 0.0429 at 1,024, 0.0452 at
-   1,536 under linear routing) and, as the next reading and @fig-capacity
-   show, the turnover is a property of the width axis and not of the *width
-   learning-rate rule*, the prescription that a linear-routing ISLA of width
-   $w$ trains at $10^{-3} \times 192 / w$ (@sec-using-lr): the rate
-   controls found the rule rate to be the best clean rate at every width
-   (@sec-nb-cap435-verdict), and removing the ceiling altogether with cosine
-   routing leaves the ladder flat from 384 to 768 and declining after
-   (@sec-nb-routenorm-cars-verdict).
-3. **At equal cost ISLA is ahead up to about 70 GB; at the top of the
-   ladders GeoTransolver's best lanes are 1.2% lower.** ISLA-384 × 100,000
-   (0.0411, 22 GB, 0.12 s GPU floor) is the best lane of either model below
-   70 GB and 0.3 s per step; GeoTransolver reaches 0.0410 at 100 GB (512
-   wide, 200,000 cells) and 0.0406 at 74 GB (1,024 wide, 100,000 cells) or
-   96 GB (512 wide, 24 layers), GeoTransolver ÷ ISLA 0.988 against the
-   22 GB lane. At matched parameters the two are at parity at 34M to 36M
-   (GeoTransolver ÷ ISLA 1.014); at 134M to 143M GeoTransolver-1,024 is
-   below ISLA-768 under linear routing (GeoTransolver ÷ ISLA 0.964,
-   @sec-nb-cap435-verdict) and level with ISLA's 48-layer cosine lane
-   (0.0406 against 0.0405, reading 4). Against GeoTransolver's recipe
-   default (0.0445, 80 GB, 0.39 s) the best ISLA lane within 15% of the
-   memory budget is 768 × 200,000 at 0.0421 (GeoTransolver ÷ ISLA 1.056,
-   the preregistered lead), but every ISLA lane that spends the budget is
-   worse than the 22 GB lane that does not: at this data size the
-   accuracy-optimal way to spend GeoTransolver's budget on ISLA is to spend
-   a quarter of it on width. The matched-time comparison is met only by the
-   lane that spent the budget on cells (192 × 600,000, 0.0452,
-   GeoTransolver ÷ ISLA 0.984), which is the wrong way to spend it
-   (@sec-nb-isocost-verdict).
-4. **Both architectures reach the same floor, about 0.040, and ISLA reaches
-   it with fewer parameters along its depth axis.** @fig-capacity puts every
-   ladder on one axis of parameter count. GeoTransolver's width ladder
-   improves by 6.7%, 2.6% and 0.7% per doubling from 256 to 2,048 wide and
-   ends at 0.0403 with about 571M parameters. ISLA's width ladder turns
-   over above 768 whichever routing form is used, so width is not ISLA's
-   axis past 35M to 134M parameters. Its depth axis is: under cosine
-   routing, which removes the learning-rate ceiling that made the linear
-   48-layer model untrainable (@sec-nb-routenorm-cars-verdict), 384 wide
-   with 24 layers reads 0.0407 at 68M parameters and 48
-   layers 0.0405 at 136M (@tbl-floor). At matched parameters of about 140M
-   the two architectures are identical to within 0.1% (0.0405 against
-   GeoTransolver-1,024's 0.0406); ISLA comes within 1% of the
-   floor at half GeoTransolver's parameters (68M against 143M) and at about
-   half of GeoTransolver-1,024's training memory (42 against 74 GB). GeoTransolver's last
-   doubling, to 571M, buys 0.7%, which is the size of a seed spread here.
-   Data: results/cap435_reduction_2026-09-20.json,
-   results/routenorm_interim_2026-09-20.json,
-   results/routenorm_extension_2026-09-21.json.
-
-```{python}
-#| label: fig-capacity
-#| fig-cap: >
-#|   Surface-pressure error against trainable parameters on DrivAerML (435
-#|   training cars, 48 validation cars, 100,000 cells per case, 500 epochs,
-#|   float32 at 200,000 cells; two-seed means with the seeds as short bars).
-#|   Red: GeoTransolver's width ladder (filled) and its 24-layer lane at 512
-#|   wide (open). Blue: ISLA's width ladder under linear routing at the
-#|   width-rule rate (open squares, dashed) and under cosine routing at each
-#|   width's best clean rate (filled squares), and ISLA's depth ladder at 384
-#|   wide under cosine routing (open diamonds, dotted). The gray band is the
-#|   floor both architectures reach, 0.040 to 0.041. How to read this: the
-#|   x axis is parameters, not memory or time (those are @fig-equal-budget);
-#|   GeoTransolver-2,048's count is estimated from the measured 256 to 1,024
-#|   ladder (parameters grow as width squared); the linear 48-layer ISLA lane
-#|   is absent because it did not train at any rate. Data:
-#|   results/cap435_reduction_2026-09-20.json,
-#|   results/routenorm_interim_2026-09-20.json,
-#|   results/routenorm_extension_2026-09-21.json.
-#| code-fold: true
-CFG = J("cap435_reduction_2026-09-20.json")["configurations"]
-RNC = J("routenorm_interim_2026-09-20.json")["configurations"]
-EXT = J("routenorm_extension_2026-09-21.json")["configurations"]
-def cap_pt(k): c = CFG[k]; return c["params"], c["pressure_l2_mean"], c["pressure_l2_seeds"]
-def rn_pt(k, params): c = RNC[k]; return params, c["mean"], c["seeds"]
-def ext_pt(k): c = EXT[k]; return c["params"], c["pressure_l2_mean"], c["pressure_l2_seeds"]
-PW = {w: CFG[f"isla|w{w}|d12|s256|lr{lr}"]["params"] for w, lr in ((192, "1e-3"), (384, "5e-4"), (768, "2.5e-4"))}
-gt_w = [cap_pt("gt|w256|d12|s256|lr3e-3"), cap_pt("gt|w512|d12|s256|lr3e-3"), cap_pt("gt|w1024|d12|s256|lr1e3"), ext_pt("gt|w2048|d12|lr1e-3")]
-gt_d = [cap_pt("gt|w512|d12|s256|lr3e-3"), cap_pt("gt|w512|d24|s256|lr3e-3")]
-isla_lin = [cap_pt("isla|w192|d12|s256|lr1e-3"), cap_pt("isla|w384|d12|s256|lr5e-4"), cap_pt("isla|w512|d12|s256|lr3.75e-4"),
-            cap_pt("isla|w768|d12|s256|lr2.5e-4"), cap_pt("isla|w1024|d12|s256|lr1.875e-4"), cap_pt("isla|w1536|d12|s256|lr1.25e-4")]
-isla_cos = [rn_pt("cars|cos|w192|lr1e-3", PW[192]), rn_pt("cars|cos|w384|lr5e-4", PW[384]), rn_pt("cars|cos|w768|lr5e-4", PW[768]),
-            ext_pt("isla|cos|w1024|d12|lr5e-4"), ext_pt("isla|cos|w1536|d12|lr5e-4")]
-isla_dep = [rn_pt("cars|cos|w384|lr5e-4", PW[384]), ext_pt("isla|cos|w384|d24|lr5e-4"), ext_pt("isla|cos|w384|d48|lr2.5e-4")]
-fig, ax = plt.subplots(figsize=(8.6, 5.2))
-def draw(series, key, label, ls="-", marker=None, mfc=None):
-    kw = series_kwargs(key, lw=1.8, ms=7); kw["ls"] = ls
-    if marker: kw["marker"] = marker
-    if mfc is not None: kw["mfc"] = mfc
-    ax.plot([s[0] for s in series], [s[1] for s in series], label=label, **{k: v for k, v in kw.items() if k != "label"}, zorder=3)
-    for x, _, seeds in series:
-        ax.plot([x] * len(seeds), seeds, ls="none", marker="_", color=kw["color"], ms=8, mew=1.1, zorder=4)
-draw(gt_w, "gt", "GeoTransolver, width 256 → 2,048 (12 layers)")
-draw(gt_d, "gt", "GeoTransolver, 512 wide, 12 → 24 layers", ls=":", mfc="white")
-draw(isla_lin, "isla_ref", "ISLA, linear routing, width 192 → 1,536 (12 layers; width-rule rate)", ls="--", mfc="white")
-draw(isla_cos, "isla_ref", "ISLA, cosine routing, width 192 → 1,536 (12 layers; best clean rate)")
-draw(isla_dep, "isla_ref", "ISLA, cosine routing, 384 wide, 12 → 48 layers", ls=":", marker="D", mfc="white")
-ax.axhspan(0.0399, 0.0411, color=GRID, zorder=0)
-ax.text(6.5e6, 0.0405, "the floor: 0.040 to 0.041", fontsize=8.5, color=INK2, va="center", path_effects=halo())
-ax.set_xscale("log"); ax.set_xlim(5e6, 1.0e9); ax.set_ylim(0.039, 0.0485)
-ax.set_xlabel("trainable parameters [count]"); ax.set_ylabel("surface-pressure error,\narea-weighted relative L2 [–]")
-ax.set_xticks([1e7, 3e7, 1e8, 3e8, 1e9]); ax.set_xticklabels(["10M", "30M", "100M", "300M", "1B"])
-ax.legend(loc="upper right", fontsize=8.2)
-plt.show()
-```
-
-These are one dataset's numbers. The same grid on the 510-wing HiLiftAeroML
-rung, preregistered in @sec-nb-scalehl-prereg and running, decides whether
-"width, not cells" and the shared floor are properties of the architectures
-or of DrivAerML.
-
 ## What compute should buy: cases, parameters, epochs {#sec-compute-allocation}
 
 **Below about 100 training cases, every unit of compute belongs to more
@@ -598,11 +328,11 @@ cases; at 435 cars the data axis is near its floor and parameters buy 3 to
 That is the answer, as far as the program can give one today, to the
 question a language-model practitioner would ask of a surrogate: what is
 the compute-optimal mix of training set, model size and training length?
-The instrument is the scaling campaign of @sec-nb-campaigns-2026-09-21-prereg,
-read together with the width ladders above: cosine-routing ISLA at three
-widths and GeoTransolver at three widths, each trained for 500 epochs at
-100,000 cells per case on 27, 54, 109 and 435 DrivAerML cars (the 218-car
-rung and the wing rungs are still training), two seeds, scored in float32.
+The instrument is the scaling study read together with the capacity
+ladders of @sec-shared-floor: cosine-routing ISLA at three widths and
+GeoTransolver at three widths, each trained for 500 epochs at 100,000
+cells per case on 27, 54, 109 and 435 DrivAerML cars, two seeds, scored in
+float32; the 218-car rung and the wing rungs are in @sec-program-status.
 @fig-scaling-cases shows the raw picture.
 
 ```{python}
@@ -616,7 +346,7 @@ rung and the wing rungs are still training), two seeds, scored in float32.
 #|   the vertical spread between shades is what parameters buy at a given
 #|   training-set size (small everywhere); the slope is what cases buy, steep
 #|   below 109 cars and flattening toward the shared floor near 0.040 above
-#|   it. The 218-car rung is pending. Data:
+#|   it. It does not show the 218-car rung or the wings. Data:
 #|   results/scalelaw_interim_2026-09-21.json (27 to 109 cars),
 #|   results/routenorm_cars_2026-09-21.json and
 #|   results/cap435_reduction_2026-09-20.json (435 cars).
@@ -666,11 +396,11 @@ for m, name in (("isla", "ISLA (cosine)"), ("gt", "GeoTransolver")):
     ws = sorted(pts[m])
     for w in ws:
         rows = pts[m][w]; s1, s2, s3 = slope(rows, 27, 54), slope(rows, 54, 109), slope(rows, 109, 435)
-        f = lambda s: f"{s:.2f}" if s is not None else "pending"
+        f = lambda s: f"{s:.2f}" if s is not None else "—"
         gains = []
         for n in (54, 109, 435):
             lo = {r[0]: r[1] for r in pts[m][ws[0]]}.get(n); hi = {r[0]: r[1] for r in pts[m][ws[-1]]}.get(n)
-            gains.append(f"{100 * (1 - hi / lo):.0f}%" if lo and hi else "pending")
+            gains.append(f"{100 * (1 - hi / lo):.0f}%" if lo and hi else "—")
         out += f"| {name} | {w} | {f(s1)} | {f(s2)} | {f(s3)} | {' / '.join(gains) if w == ws[0] else ''} |\n"
 out += "\n: Local exponents of the error against training cases (the negative log-log slope between adjacent rungs, at each width) and the gain from a 15x parameter increase (narrowest to widest lane) at each rung. Data: results/scalelaw_interim_2026-09-21.json, results/routenorm_cars_2026-09-21.json, results/cap435_reduction_2026-09-20.json. {#tbl-scaling-exponents}\n"
 print(out)
@@ -683,43 +413,35 @@ training-set size: the local exponent falls from about 0.7 between 27 and
 than of a scale-free law, and the floor is the one @sec-shared-floor
 measures directly, near 0.040 for both architectures. Parameters are cheap
 by comparison at every rung: a 15x increase buys ISLA 3 to 13% and
-GeoTransolver 10 to 12%, and the width ladders above show that a further
-doubling at 435 cars buys 3 to 4% before turning over. Epochs are the third
-axis, and the cost grid of @sec-equal-budget measured it once: doubling the
-500-epoch schedule to 1,000 at 200,000 cells changed neither model's error
-(0.0448 against 0.0448 for ISLA, 0.0445 against 0.0445 for GeoTransolver;
-@tbl-floor), so the protocol is converged and training longer is not a
-lever.
+GeoTransolver 10 to 12%, and the capacity ladders of @sec-shared-floor
+show that a further doubling at 435 cars buys 3 to 4% before turning over.
+Epochs are the third axis: doubling the 500-epoch schedule to 1,000 at
+200,000 cells changed neither model's error (0.0448 against 0.0448 for
+ISLA, 0.0445 against 0.0445 for GeoTransolver;
+results/isocost_reduction_2026-09-20.json), so the protocol is converged
+and training longer is not a lever.
 
 **The compute-optimal rule this implies.** Training compute in this recipe
 is proportional to parameters times tokens seen, $C \propto P \cdot n
 \cdot c \cdot E$ with $n$ cases, $c$ cells per case and $E$ epochs; cells
 are flat above 100,000 (@sec-equal-budget) and epochs are converged, so
-the allocation question reduces to $P$ against $n$ at fixed $P \cdot n$.
-The Chinchilla form $\varepsilon = \varepsilon_\infty + a\,n^{-\alpha} +
-b\,P^{-\beta}$ gives the standard answer $P^\ast \propto C^{\alpha /
-(\alpha + \beta)}$, $n^\ast \propto C^{\beta / (\alpha + \beta)}$: the
-axis with the *smaller* exponent is the one to grow once the other's term
-has been driven down. With $\alpha$ between 0.25 and 0.7 and $\beta$
-between 0.04 and 0.06, that rule says, in words: *first buy cases, because
-each doubling of cases removes 15 to 40% of the reducible error while a
-doubling of parameters removes 3 to 4%; once the data term is small, which
-on DrivAerML happens between 109 and 435 cars, the remaining reducible
-error is the parameter term, and compute goes to width or depth, where it
-buys a few percent per doubling until the shared floor.* The program is
-not yet able to pin the five coefficients of that form: three widths
-spanning 15x and four rungs do not separate the floor from the parameter
-term (the fit puts the floor anywhere from zero to the floor itself
-depending on the initial guess), and the wing rungs, which will say
-whether the exponents are a property of the architectures or of
-DrivAerML, are still training. The local exponents in
-@tbl-scaling-exponents are the honest readout; a fitted law and its
-wing twin are preregistered (@sec-nb-scalelaw-interim). Two practical
-consequences already hold: on a dataset of a few hundred cases the
-recipe's default width is the right place to spend, and a claim that one
-architecture "scales better" needs the exponents, not a single-width
-ladder; on the axes measured so far the two architectures' exponents are
-the same within the resolution of two seeds.
+the question reduces to $P$ against $n$ at fixed $P \cdot n$. In the
+Chinchilla form $\varepsilon = \varepsilon_\infty + a\,n^{-\alpha} +
+b\,P^{-\beta}$ the optimum grows the axis with the *smaller* exponent once
+the other's term is driven down, $P^\ast \propto C^{\alpha/(\alpha+\beta)}$
+and $n^\ast \propto C^{\beta/(\alpha+\beta)}$. With $\alpha$ between 0.25
+and 0.7 and $\beta$ between 0.04 and 0.06 the rule reads: *first buy cases,
+each doubling of which removes 15 to 40% of the reducible error against 3
+to 4% for a doubling of parameters; once the data term is small, on
+DrivAerML between 109 and 435 cars, compute goes to width or depth until
+the shared floor.* Three widths and four rungs do not yet separate the
+floor from the parameter term, so the local exponents of
+@tbl-scaling-exponents are the readout and the five coefficients are not
+quoted. Two practical consequences hold now: on a dataset of a few hundred
+cases the recipe's default width is the right place to spend, and a claim
+that one architecture "scales better" needs the exponents, not a
+single-width ladder; on the axes measured the two architectures' exponents
+are the same within the resolution of two seeds.
 
 
 ## Pose: equivariant by construction, invariant by canonicalization {#sec-pose}
@@ -811,69 +533,22 @@ frame, the contract also earns accuracy (@sec-scoreboard-pose).
 learning rate, so a protocol sharing one rate would measure tuning luck
 instead of architecture.** One grid step above its best rate,
 GeoTransolver's seed-mean error grows 9.0x on DrivAerML and 6.5x on
-HiLiftAeroML (bfloat16, within-architecture); the table in the note below
-computes each factor from its artifact. ISLA's side of the grid in the note
-is the legacy centered variant's (1.1x and 1.14x). ISLA itself fails
-differently above its rate: at 3e-3 it reaches the *mean-field plateau*, the
-training state in which every point routes to a single slice in every block
-and the anchors coincide, so the network can only predict the field mean
-(validation loss about 0.06, float32 error about 0.75;
-@sec-nb-routingsat-verdict, @sec-robustness-lr). Under linear routing the
-rate that avoids the plateau falls like 1/width and at least 1/depth, which
-is the width learning-rate rule of @sec-using-lr; the cosine form of the
-routing softmax (@sec-isla-slices) bounds the routing logits and removes the
-ceiling on every DrivAerML lane tested (@sec-nb-routenorm-cars-verdict). At
-width 192 ISLA runs at 1e-3 throughout, and the point here is procedural:
-each architecture runs at its own best rate. GeoTransolver's best rate also
+HiLiftAeroML (full splits, 10,000 cells, bfloat16, within-architecture;
+results/instrument_wave_reduction_2026-09-01.json,
+results/highlift_wave_reduction.json). ISLA fails differently above its
+rate: at 3e-3 it reaches the mean-field plateau defined in @sec-using-lr,
+total routing collapse. Under linear routing the rate that avoids the
+plateau falls like 1/width and at least 1/depth, which is the width
+learning-rate rule of @sec-using-lr; the cosine form of the routing softmax
+(@sec-isla-slices) bounds the routing logits and removes the ceiling on
+every DrivAerML lane tested (@sec-nb-routenorm-cars-verdict). At width 192
+ISLA runs at 1e-3 throughout, and the point here is procedural: each
+architecture runs at its own best rate. GeoTransolver's best rate also
 depends on how much data it sees: at the reporting protocol of 200,000
 cells, 3e-3 beats its 1e-3 lanes by 31%, 24%, 10%, 4% and 2% at 27, 54,
-109, 218 and 435 DrivAerML cars, where 1e-3 had won its full-data grid at
-10,000 cells; every 200,000-cell row therefore uses GeoTransolver at 3e-3
-and names it (@sec-scoreboard-200k, @sec-nb-rategt-prereg). The grids are plotted as a
-robustness result in @sec-robustness-lr (@fig-lr-robustness).
-
-::: {.callout-note collapse="true" title="The learning-rate grids behind the rule (ISLA rows: legacy centered variant, diagnostic)"}
-
-```{python}
-#| label: tbl-lr-sensitivity
-#| output: asis
-SW = RES / "mixedres_training_2026-07-31" / "sweep"
-iw = J("instrument_wave_reduction_2026-09-01.json")
-round3 = json.load(open(SW / "round3_reduction.json"))
-mt2_const = json.load(open(SW / "mt2_v3c_reduction.json"))
-mega = json.load(open(SW / "mega_reduction.json"))
-hl = J("highlift_wave_reduction.json")
-dr = {"gt": {}, "isla": {}}
-for arch, key in (("gt", "gt"), ("isla", "mt2")):
-    for lr_key, lr in (("lr1e3", 1e-3), ("lr1e2", 1e-2)):
-        dr[arch][lr] = [iw[f"iw_{key}_{lr_key}_seed{s}"]["pressure_l2"] for s in (42, 43)]
-dr["gt"][3e-3] = [round3[f"gt_fixed_seed{s}"]["sweep_metrics"]["10000"]["mean"] for s in (42, 43, 44)]
-dr["isla"][3e-3] = ([mt2_const[f"mt2_v3c_seed{s}"]["sweep"]["10000"]["mean"] for s in (42, 43, 44)]
-                    + [mega[f"mt2_v3c_seed{s}"]["in10k"]["mean"] for s in (45, 46)])
-hlg = {"gt": {1e-3: [hl[f"gt_hl_lr1_seed{s}"]["pressure_l2"] for s in (42, 43)], 3e-3: [hl[f"gt_hl_seed{s}"]["pressure_l2"] for s in (42, 43)]},
-       "isla": {1e-3: [hl[f"mt2_hl_lr1_seed{s}"]["pressure_l2"] for s in (42, 43)], 3e-3: [hl[f"mt2_hl_seed{s}"]["pressure_l2"] for s in (42, 43)]}}
-name = {"gt": "GeoTransolver", "isla": "ISLA, legacy centered variant (diagnostic)"}
-out = "| dataset | architecture | best rate (error) | one grid step above (error) | degradation |\n|---|---|---|---|---:|\n"
-for ds, grid, steps in (("DrivAerML, 435 cars", dr, [1e-3, 3e-3, 1e-2]), ("HiLiftAeroML, 1,260 cases", hlg, [1e-3, 3e-3])):
-    for arch in ("gt", "isla"):
-        m = {lr: mean(grid[arch][lr]) for lr in steps}
-        best = min(m, key=m.get); above = steps[min(steps.index(best) + 1, len(steps) - 1)]
-        f = lambda lr: f"{lr:.0e}".replace("e-0", "e-")
-        if above == best:
-            out += f"| {ds} | {name[arch]} | {f(best)} ({m[best]:.4f}) | none run above | — |\n"; continue
-        out += f"| {ds} | {name[arch]} | {f(best)} ({m[best]:.4f}) | {f(above)} ({m[above]:.4f}) | {m[above]/m[best]:.2f}x |\n"
-print(out)
-print(": Learning-rate sensitivity on the full splits: area-weighted relative L2 of surface pressure, seed means, "
-      "scored in bfloat16 (labeled: these grids predate the float32 instrument and are used only for "
-      "within-architecture degradation factors), 500 epochs, 10,000 cells; DrivAerML grid {1e-3, 3e-3, 1e-2}, "
-      "HiLiftAeroML grid {1e-3, 3e-3}. The HiLiftAeroML grid fed GeoTransolver the physical velocity, so its "
-      "degradation there is a physical-velocity measurement. How to read this: the ratio in the last column is the "
-      "price of one wrong grid step, within one architecture; it is not a comparison between architectures. Data: "
-      "results/instrument_wave_reduction_2026-09-01.json, results/mixedres_training_2026-07-31/sweep/"
-      "{round3_reduction,mt2_v3c_reduction,mega_reduction}.json, results/highlift_wave_reduction.json. {#tbl-lr-sensitivity}")
-```
-
-:::
+109, 218 and 435 DrivAerML cars; every 200,000-cell row therefore uses
+GeoTransolver at 3e-3 and names it (@sec-scoreboard-200k,
+@sec-nb-rategt-prereg).
 
 Two consequences are built into the protocol. Because GeoTransolver's best
 rate differs between datasets and between budgets, "best rate per
