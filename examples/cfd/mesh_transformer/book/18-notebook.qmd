@@ -13549,7 +13549,7 @@ point is predicted alone, 0.080 with 2,000 companions, 0.055 at the training
 request of 10,000 and 0.054 at 40,000 (float32, four cars,
 @sec-nb-qmass-verdict). The passive alternative, which is exactly
 count-independent, was tested at matched depth and inputs and lost 1.43x on
-pressure and 2.41x on eddy viscosity (companion D1, @sec-interior-query-independence),
+pressure and 2.41x on eddy viscosity (companion D1, @sec-arch-passive-decoder),
 so the interacting queries are the configuration and the count dependence
 is what remains to remove. Under @sec-principle the target is consistency:
 the same field at every request size, with error that falls, not rises,
@@ -24554,3 +24554,44 @@ exponents between 0.3 and 0.8 on both sets (0.6). Depth pays on neither
 (0.6). Regime limit stated in advance: one mesh per set, so nothing here
 speaks to geometry generalization or discretization invariance; those
 axes remain with the aerodynamic and solids datasets.
+
+## 2026-09-22 — Book restructuring: the passive decoder leaves the main text and becomes one collapsed note in the architecture chapter {#sec-nb-passive-dropdown}
+
+Peter asked that the passive decode variant be removed from the book's
+presentation if it is not competitive, with at most a drop-down in the
+architecture chapter stating what it is, why the interior results do not
+use it, its quantitative cost and the practical considerations. The
+numbers say it is not competitive: on the DrivAerML Volume task in float32
+(48 cars, two seeds, the 10,000-cell exploration budget) the passive
+decode trails the interacting query tokens on every field by more than
+any seed spread, 1.63 / 1.51 / 2.07 on pressure / velocity / eddy
+viscosity at matched depth and inputs (PASSIVE-12 0.0890 / 0.1201 / 0.2305
+against 0.0547 / 0.0796 / 0.1116;
+research/transfer_program/studies/computational_support/d1_verdict_2026-09-10.json)
+and 2.9 / 3.8 / 3.4 as the complete configurations
+(@sec-nb-fp32-interior-family, @sec-nb-fp32-reeval-verdict-interior);
+seed spreads are at most 2% and 9%. It has not been run on AirfRANS, so
+the verdict rests on one dataset, and the 100,000-cell re-measurement of
+PROTOCOL-REDO study 3 is pending (@sec-nb-protocol-redo-prereg).
+
+Applied: the ISLA chapter loses its passive-decoder section
+(`#sec-isla-passive`) and the interior chapter its "query independence as
+a property" section (`#sec-interior-query-independence`) and the passive
+row of its comparison table; the interior chapter now reads as interacting
+tokens whose prediction depends on the request, with one forward
+reference from the query-cloud section. The usage chapter's two passive
+rows become a "when query independence is required" note; the limits
+chapter's query-independence limit is restated as the interacting
+configuration's actual limit (the QCOUNT dependence and its partial
+mitigation); the design ledger's `query_mass` row names the decoder as
+optional. The architecture chapter's modes section becomes two
+arrangements, and the passive decoder moves into a collapsed callout under
+its own heading, `#sec-arch-passive-decoder`, with the equations, the
+float64 contract test, the prices above, the QCOUNT size of the
+interacting decode's request dependence, the memory picture (interacting
+tokens at 200,000 boundary cells plus 200,000 queries are a 400,000-token
+case, 53.5 GB on the cost grid; the passive decoder at that size exceeds
+one GB300 through its saved readout kernels and runs at 100,000), and the
+practical cases for each. Every crossref to the removed anchors, including
+one in the QCOUNT preregistration entry above, points at the callout. The
+status ledger and tech tree keep PASSIVE2, LVT, M2 and QCOUNT as history.

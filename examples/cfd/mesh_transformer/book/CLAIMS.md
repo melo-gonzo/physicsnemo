@@ -165,6 +165,25 @@ velocity, and ISLA leads on every field"; label single dataset, single task,
 **Pose (200k).** ISLA posed ÷ native 1.015; leads augmented GeoTransolver /
 Transolver by 12% / 21%.
 
+**Passive decoder (2026-09-22 restructuring, Peter's request).** The
+passive decoder (`query_independent=True`, read-only blocks) is no longer a
+presented variant anywhere in the main text; it lives in one collapsed
+callout in the architecture chapter (`#sec-arch-passive-decoder`) as an
+optional switch with its measured price, and every crossref points there
+(`#sec-isla-passive` and `#sec-interior-query-independence` are gone). Its
+price, all DrivAerML Volume, float32, 48 cars, two seeds, 10,000-cell
+exploration budget, labeled as such: at matched depth and inputs
+(PASSIVE-12 ÷ query tokens + SDF) 1.63 / 1.51 / 2.07 on pressure /
+velocity / eddy viscosity (0.0890 / 0.1201 / 0.2305 vs 0.0547 / 0.0796 /
+0.1116; d1_verdict_2026-09-10.json); as complete configurations (four read
+blocks, SDF-gradient normal, no SDF scalar) 2.9 / 3.8 / 3.4 (0.1572 /
+0.3052 / 0.3736), 3.06 / 2.81 / 4.25 against GeoTransolver-volume. Seed
+spreads at most 2% (passive) and 9% (interacting). Not measured on
+AirfRANS; the 100,000-cell re-measurement is PROTOCOL-REDO study 3
+(pending, bar: 2x or more on pressure). Write "several times less accurate
+on every interior field"; never present it as an interior configuration
+of the book, never quote the 2.6x (bf16).
+
 **Pending, never stated as results.** SCALE-HL and the ROUTE-NORM 510-wing
 scores (days), the SCALE-LAW wing half, COSINE-TWINS (the evidence board
 under cosine routing), the AirfRANS extrapolation splits, the remaining

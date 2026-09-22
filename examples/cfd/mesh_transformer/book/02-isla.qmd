@@ -78,8 +78,8 @@ fields at query points.** Per case, the inputs are:
 The outputs are one or more scalar fields (surface pressure, in every
 surface result of the book) and one or more vector fields (wall shear
 stress) at query points. In ISLA the queries *are* the surface sample and
-each point receives its own prediction; with the passive decoder
-(@sec-isla-passive) queries can be any positions, on or off the surface.
+each point receives its own prediction; on the interior task, query points
+off the surface join the sample as tokens (@sec-interior-query-tokens).
 
 ```{python}
 #| label: fig-isla-inputs
@@ -637,21 +637,6 @@ ideas here map onto its stages as follows: idea 1 is the measure bias of
 every routing softmax (stages 3b, 3f, 4), idea 2 is stage 1, ideas 3 to 5
 are stage 3, and idea 6 is stages 4 and 5.
 
-### The passive decoder and off-surface queries {#sec-isla-passive}
-
-**The passive decoder makes the prediction at a query depend on the
-surface and that query alone, at a price in accuracy.** It is off by
-default; the interior configuration the book reports admits queries as
-interacting tokens instead (@sec-interior-query-tokens), and the decoder is
-described here because it is the one exact query-independence contract in
-the class. With `query_independent=True` the encoder runs unchanged on the
-surface and each query passes through four **read blocks** that read slice
-states, pooled invariants and a measure-weighted local kernel of the
-encoder states, and never write back (the equations are in
-@sec-arch-modes). The prediction at a query therefore depends on the
-surface and that query alone; what the contract costs in error is measured
-in @sec-interior-query-independence.
-
 ## Why ISLA has no center {#sec-isla-variants}
 
 **ISLA states position only relative to its own anchors because a PDE does
@@ -685,7 +670,7 @@ input and weights.
 | translation invariance, with no centering anywhere | `test_translation_invariance`, `test_relative_frame_contracts` | $10^{-10}$ / $10^{-12}$ |
 | geometric-scale invariance: points $\times k$ (with or without areas $\times k^2$) leave every output unchanged; so does a rescale of the areas alone, because the unit is normalized | `test_rms_distance_scale_contracts`, `test_measure_weight_scale_invariance`, `test_geometric_scale_equivariance` | $10^{-10}$ / $10^{-9}$ |
 | the length unit stays finite under refinement of a boundary whose total measure diverges (Koch curve) | `test_rms_distance_converges_on_koch_curve_where_total_measure_diverges` | converges |
-| query independence in the passive decoder: 50 queries alone equal the same 50 among 150 | `test_query_set_independence` | $10^{-12}$, rtol 0 |
+| query independence of the optional passive decoder (`query_independent=True`, @sec-arch-passive-decoder): 50 queries alone equal the same 50 among 150 | `test_query_set_independence` | $10^{-12}$, rtol 0 |
 | off-surface queries keep every contract | `test_interior_queries_contracts` | $10^{-10}$ / $10^{-12}$ |
 | zero and several global vectors; global scalars; magnitude invariance | `test_isla_global_inputs.py` (12 tests) | $10^{-10}$ |
 | pool-then-project equals project-then-pool; the geometry recompute reproduces outputs and gradients | `test_geo_pool_then_project_is_exact`, `test_geo_checkpoint_is_exact` | $10^{-12}$ / exact (outputs), $10^{-11}$ (gradients) |
@@ -697,11 +682,12 @@ input and weights.
 - **Reflection covariance of vectors** (see idea 6).
 - **The magnitude of a global vector input**: discarded by design.
 - **Query independence in ISLA.** Every surface point is an interacting
-  token, so the prediction at a point depends on which other points are in
-  the sample; the exact contract is bought by the passive decoder at the
-  price measured in @sec-interior-query-independence, and the interacting interior
-  configuration is deployed at its training query count
-  (@sec-interior-companion).
+  token, and so is every interior query in the reported configuration, so
+  the prediction at a point depends on which other points are in the
+  request; the interacting interior configuration is deployed at its
+  training query count (@sec-interior-companion). The optional passive
+  decoder has the exact contract, at a measured accuracy price
+  (@sec-arch-passive-decoder).
 - **Refinement of the source measure, in the query-token interior
   configuration, under the `query_mass="geometric_mean"` option.** With
   that option a query's routing weight is a learned factor times the
@@ -712,8 +698,9 @@ input and weights.
   change when the same measure is re-represented on finer cells, so the
   dependence is absent by construction.
 - **Composition of optional channels.** Each optional channel preserves the
-  contracts alone; not every pair composes (the passive decoder with
-  boundary scalars fails on a shape when source and query counts differ).
+  contracts alone; not every pair composes (the optional passive decoder
+  with boundary scalars fails on a shape when source and query counts
+  differ).
   No such combination is behind any number in the book.
 - **Completeness of the representation.** The anchors are first moments,
   so two non-congruent arrangements with the same first moments are

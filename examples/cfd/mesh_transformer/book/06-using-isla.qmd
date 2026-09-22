@@ -52,11 +52,24 @@ routing form; the rows below are the options that remain on it.
 |---|---|---|---|
 | **ISLA** (cosine routing, RMS-pairwise-distance length unit, fused geometry kernel, `query_mass: source_total`) | `isla_surface`, `isla_volume` | every new surface or interior task | nothing among ISLA's options; the standing against GeoTransolver and Transolver, dataset by dataset and task by task, is in @sec-surface and @sec-interior |
 | query mass `geometric_mean` (`query_mass: geometric_mean`) | option on `isla_volume`, `isla_volume_support` | interior tasks only, when a boundary is guaranteed to arrive at one fixed refinement | the refinement contract: each query's routing weight becomes the mean boundary log-weight plus a learned offset, so re-representing the same surface on finer cells shifts the balance between surface and queries (@sec-isla-contracts) |
-| passive decoder (`query_independent: true`) | `isla_volume_support` | when the prediction at a point must not depend on which other points are queried | accuracy: a multiple of the interacting decode's error (@sec-interior-query-independence) |
-| support tokens (`support_tokens: true`, with the passive decoder) | `isla_volume_support` | when the passive decoder is wanted and a per-case interior support set is available | the extra tokens' cost; the independence contract is kept, because the requested queries are still decoded passively (@sec-arch-modes) |
 
 Every checkpoint stores its constructor arguments, so a model saved under
 any option loads in the configuration that trained it (@sec-using-checkpoint).
+
+::: {.callout-note title="When query independence is required"}
+Both configurations above predict at a point as a function of the whole
+request, so an interior surrogate built from `isla_volume` is deployed at
+its training query count (@sec-using-checkpoint). If a deployment needs
+the prediction at a point to be exactly the same whatever else is asked
+for (chunked or streaming inference over arbitrary point sets, a
+per-point answer that must not change between requests), the class keeps
+a read-only decoder behind `query_independent: true`, optionally with a
+per-case interacting support set (`support_tokens: true`; recipe config
+`isla_volume_support`). It holds the contract exactly and is several times
+less accurate than the interacting decode on every interior field; what
+it is, what it costs and when it is worth the price are in
+@sec-arch-passive-decoder.
+:::
 
 ## What the model needs from your data {#sec-using-inputs}
 
