@@ -23908,3 +23908,25 @@ reference cost sweep (2,500 to 600,000 tokens, six arms, one GB300; job
 84 ms and 2.8 GiB, 192 wide in 43 ms and 0.7 GiB, GeoTransolver-256 in
 44 ms and 1.4 GiB, GeoTransolver-512 in 45 ms and 2.2 GiB, Transolver-256
 in 21 ms and 1.0 GiB; the large counts decide the figure.
+
+## 2026-09-22 — Erratum: the GeoTransolver rows of the 210-case and 21-geometry wing rungs (and the 4-geometry and fixed-angle single arms) are 1e-3 lanes, not 3e-3 as the chapters headed them; the 3e-3 controls are running {#sec-nb-wing-gt-rate-erratum}
+
+The figures audit (`results/book_audit_2026-09-22/figures_audit.md`) noted
+that the reporting-protocol wing artifacts carry a single GeoTransolver arm
+on the 210-case and 21-geometry rungs while the chapter headers said
+"GeoTransolver (3e-3), its better rate". The launch manifest settles it:
+the `gt_unit` lanes are 3e-3 on the 35-case rung and **1e-3** on the
+210-case, 21-geometry, 4-geometry and fixed-angle rungs (the 4-geometry
+and fixed-angle rungs also have separate 3e-3 arms, which the chapters
+used). The rates are now an artifact,
+`results/p200k_fleet_rates_2026-09-22.json` (every reporting-protocol
+lane's launch rate), and the rewritten surface chapter reads the rate from
+it. The 210-case (0.89) and 21-geometry (0.98) GeoTransolver ÷ ISLA ratios
+therefore compare ISLA with GeoTransolver at 1e-3, the rate that was 4 to
+10% worse than 3e-3 on the rungs where both exist, so the baselines' lead
+on those rungs is understated. The fleet in fact holds 3e-3 lanes for both
+rungs (`p200k_hl_gt_unit_scarce_lr3e3`, `..._geometry_scarce_lr3e3`, two
+seeds each), trained and scored but left out of the 2026-09-22 fleet
+reduction; the reduction is rerun with them and the chapters take the
+better-rate value, as on every other rung. The four duplicate 3e-3 lanes
+launched in BASELINE-GAPS (rows 10 to 13) are cancelled.

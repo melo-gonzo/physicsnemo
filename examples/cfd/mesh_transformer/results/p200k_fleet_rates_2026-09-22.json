@@ -1,0 +1,689 @@
+{
+ "source": "kernel/p200k_fleet/manifest.tsv on AGA (the launch manifest of the reporting-protocol fleet), read 2026-09-22; lr is the training learning rate each lane was launched with",
+ "runs": {
+  "p200k_dr_isla_pose_seed42": {
+   "dataset": "drivaer_ml_surface_pose",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_dr_isla_pose_seed43": {
+   "dataset": "drivaer_ml_surface_pose",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_dr_gt_unit_pose_seed42": {
+   "dataset": "drivaer_ml_surface_pose",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_dr_gt_unit_pose_seed43": {
+   "dataset": "drivaer_ml_surface_pose",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_dr_transolver_unit_pose_seed42": {
+   "dataset": "drivaer_ml_surface_pose",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_dr_transolver_unit_pose_seed43": {
+   "dataset": "drivaer_ml_surface_pose",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_isla_super_scarce_seed42": {
+   "dataset": "highlift_surface_super_scarce",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_isla_super_scarce_seed43": {
+   "dataset": "highlift_surface_super_scarce",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_super_scarce_seed42": {
+   "dataset": "highlift_surface_super_scarce",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_super_scarce_seed43": {
+   "dataset": "highlift_surface_super_scarce",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_transolver_unit_super_scarce_seed42": {
+   "dataset": "highlift_surface_super_scarce",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_transolver_unit_super_scarce_seed43": {
+   "dataset": "highlift_surface_super_scarce",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_isla_scarce_seed42": {
+   "dataset": "highlift_surface_scarce",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_isla_scarce_seed43": {
+   "dataset": "highlift_surface_scarce",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_scarce_seed42": {
+   "dataset": "highlift_surface_scarce",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_scarce_seed43": {
+   "dataset": "highlift_surface_scarce",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_transolver_unit_scarce_seed42": {
+   "dataset": "highlift_surface_scarce",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_transolver_unit_scarce_seed43": {
+   "dataset": "highlift_surface_scarce",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_isla_medium_seed42": {
+   "dataset": "highlift_surface_medium",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_isla_medium_seed43": {
+   "dataset": "highlift_surface_medium",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_medium_seed42": {
+   "dataset": "highlift_surface_medium",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_medium_seed43": {
+   "dataset": "highlift_surface_medium",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_transolver_unit_medium_seed42": {
+   "dataset": "highlift_surface_medium",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_transolver_unit_medium_seed43": {
+   "dataset": "highlift_surface_medium",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_isla_full_seed42": {
+   "dataset": "highlift_surface_full",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_isla_full_seed43": {
+   "dataset": "highlift_surface_full",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_full_seed42": {
+   "dataset": "highlift_surface_full",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_full_seed43": {
+   "dataset": "highlift_surface_full",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_transolver_unit_full_seed42": {
+   "dataset": "highlift_surface_full",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_transolver_unit_full_seed43": {
+   "dataset": "highlift_surface_full",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_isla_geometry_super_scarce_seed42": {
+   "dataset": "highlift_surface_geometry_super_scarce",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_isla_geometry_super_scarce_seed43": {
+   "dataset": "highlift_surface_geometry_super_scarce",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_geometry_super_scarce_seed42": {
+   "dataset": "highlift_surface_geometry_super_scarce",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_geometry_super_scarce_seed43": {
+   "dataset": "highlift_surface_geometry_super_scarce",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_transolver_unit_geometry_super_scarce_seed42": {
+   "dataset": "highlift_surface_geometry_super_scarce",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_transolver_unit_geometry_super_scarce_seed43": {
+   "dataset": "highlift_surface_geometry_super_scarce",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_isla_geometry_scarce_seed42": {
+   "dataset": "highlift_surface_geometry_scarce",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_isla_geometry_scarce_seed43": {
+   "dataset": "highlift_surface_geometry_scarce",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_geometry_scarce_seed42": {
+   "dataset": "highlift_surface_geometry_scarce",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_geometry_scarce_seed43": {
+   "dataset": "highlift_surface_geometry_scarce",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_transolver_unit_geometry_scarce_seed42": {
+   "dataset": "highlift_surface_geometry_scarce",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_transolver_unit_geometry_scarce_seed43": {
+   "dataset": "highlift_surface_geometry_scarce",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_isla_single_aoa_12_seed42": {
+   "dataset": "highlift_surface_single_aoa_12",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_isla_single_aoa_12_seed43": {
+   "dataset": "highlift_surface_single_aoa_12",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_single_aoa_12_seed42": {
+   "dataset": "highlift_surface_single_aoa_12",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_single_aoa_12_seed43": {
+   "dataset": "highlift_surface_single_aoa_12",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_transolver_unit_single_aoa_12_seed42": {
+   "dataset": "highlift_surface_single_aoa_12",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_transolver_unit_single_aoa_12_seed43": {
+   "dataset": "highlift_surface_single_aoa_12",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_isla_deflection_seed42": {
+   "dataset": "highlift_surface_deflection",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_isla_deflection_seed43": {
+   "dataset": "highlift_surface_deflection",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_deflection_seed42": {
+   "dataset": "highlift_surface_deflection",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_deflection_seed43": {
+   "dataset": "highlift_surface_deflection",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_dr_isla_n27_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_dr_isla_n27_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_dr_gt_unit_n27_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_dr_gt_unit_n27_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_dr_transolver_unit_n27_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_dr_transolver_unit_n27_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_dr_isla_n54_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_dr_isla_n54_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_dr_gt_unit_n54_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_dr_gt_unit_n54_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_dr_transolver_unit_n54_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_dr_transolver_unit_n54_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_dr_isla_n109_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_dr_isla_n109_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_dr_gt_unit_n109_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_dr_gt_unit_n109_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_dr_transolver_unit_n109_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_dr_transolver_unit_n109_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_dr_isla_n218_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_dr_isla_n218_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_dr_gt_unit_n218_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_dr_gt_unit_n218_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_dr_transolver_unit_n218_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_dr_transolver_unit_n218_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_dr_isla_vol_seed42": {
+   "dataset": "drivaer_ml_volume_reference",
+   "model": "isla_volume_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_dr_isla_vol_seed43": {
+   "dataset": "drivaer_ml_volume_reference",
+   "model": "isla_volume_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_dr_gt_unit_vol_seed42": {
+   "dataset": "drivaer_ml_volume_mt",
+   "model": "geotransolver_volume",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_dr_gt_unit_vol_seed43": {
+   "dataset": "drivaer_ml_volume_mt",
+   "model": "geotransolver_volume",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_dr_gt_unit_n27_lr3e3_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_dr_gt_unit_n27_lr3e3_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_dr_isla_n27_lr3e3_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "isla_surface_reference",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_dr_isla_n27_lr3e3_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "isla_surface_reference",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_dr_gt_unit_n54_lr3e3_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_dr_gt_unit_n54_lr3e3_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_dr_gt_unit_n109_lr3e3_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_dr_gt_unit_n109_lr3e3_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_dr_gt_unit_n218_lr3e3_seed42": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_dr_gt_unit_n218_lr3e3_seed43": {
+   "dataset": "drivaer_scaling",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_dr_gt_unit_lr3e3_seed42": {
+   "dataset": "drivaer_ml_surface",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_dr_gt_unit_lr3e3_seed43": {
+   "dataset": "drivaer_ml_surface",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_scarce_lr3e3_seed42": {
+   "dataset": "highlift_surface_scarce",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_scarce_lr3e3_seed43": {
+   "dataset": "highlift_surface_scarce",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_medium_lr3e3_seed42": {
+   "dataset": "highlift_surface_medium",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_medium_lr3e3_seed43": {
+   "dataset": "highlift_surface_medium",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_full_lr3e3_seed42": {
+   "dataset": "highlift_surface_full",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_full_lr3e3_seed43": {
+   "dataset": "highlift_surface_full",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_geometry_super_scarce_lr3e3_seed42": {
+   "dataset": "highlift_surface_geometry_super_scarce",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_geometry_super_scarce_lr3e3_seed43": {
+   "dataset": "highlift_surface_geometry_super_scarce",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_geometry_scarce_lr3e3_seed42": {
+   "dataset": "highlift_surface_geometry_scarce",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_geometry_scarce_lr3e3_seed43": {
+   "dataset": "highlift_surface_geometry_scarce",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_single_aoa_12_lr3e3_seed42": {
+   "dataset": "highlift_surface_single_aoa_12",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_single_aoa_12_lr3e3_seed43": {
+   "dataset": "highlift_surface_single_aoa_12",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_isla_super_scarce_area_seed42": {
+   "dataset": "highlift_surface_super_scarce_area",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "42"
+  },
+  "p200k_hl_isla_super_scarce_area_seed43": {
+   "dataset": "highlift_surface_super_scarce_area",
+   "model": "isla_surface_reference",
+   "lr": "1e-3",
+   "seed": "43"
+  },
+  "p200k_hl_gt_unit_super_scarce_area_seed42": {
+   "dataset": "highlift_surface_super_scarce_area",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_gt_unit_super_scarce_area_seed43": {
+   "dataset": "highlift_surface_super_scarce_area",
+   "model": "geotransolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_hl_transolver_unit_super_scarce_area_seed42": {
+   "dataset": "highlift_surface_super_scarce_area",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "42"
+  },
+  "p200k_hl_transolver_unit_super_scarce_area_seed43": {
+   "dataset": "highlift_surface_super_scarce_area",
+   "model": "transolver_surface",
+   "lr": "3e-3",
+   "seed": "43"
+  },
+  "p200k_dr_isla_vol_lr5e4_seed42": {
+   "dataset": "drivaer_ml_volume_reference",
+   "model": "isla_volume_reference",
+   "lr": "5e-4",
+   "seed": "42"
+  },
+  "p200k_dr_isla_vol_lr5e4_seed43": {
+   "dataset": "drivaer_ml_volume_reference",
+   "model": "isla_volume_reference",
+   "lr": "5e-4",
+   "seed": "43"
+  },
+  "p200k_dr_isla_vol_lr3e4_seed42": {
+   "dataset": "drivaer_ml_volume_reference",
+   "model": "isla_volume_reference",
+   "lr": "3e-4",
+   "seed": "42"
+  },
+  "p200k_dr_isla_vol_lr3e4_seed43": {
+   "dataset": "drivaer_ml_volume_reference",
+   "model": "isla_volume_reference",
+   "lr": "3e-4",
+   "seed": "43"
+  }
+ }
+}
