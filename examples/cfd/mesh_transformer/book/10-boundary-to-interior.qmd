@@ -373,7 +373,9 @@ axes stay with the aerodynamic datasets. The frameless configuration, which
 fits the training set and memorizes it (validation error 20 to 60 times
 GeoTransolver's), is the ablation behind the component clause of the output
 contract and is reported in @sec-nb-solids-frame-interim, not here. The
-GINOT lug, the deeper R2 candidate on Tensile2d and the OLBC sets are
+deeper R2 candidate (384 x 24) is 9% to 27% *worse* than R1 at 400 cases
+on every field, so depth does not pay on Tensile2d at this data size
+(@sec-nb-solids-tensile2d-verdict). The GINOT lug and the OLBC sets are
 pending (@sec-nb-solids-prereg, @sec-nb-olbc-prereg).
 
 ## Dependence on the query cloud {#sec-interior-companion}

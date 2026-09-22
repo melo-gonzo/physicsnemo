@@ -1,0 +1,166 @@
+{
+ "protocol": "fp32 inference on the 600 GINOT Bracket Lug test cases, every node queried, per-sample relative L2 of von Mises stress averaged over cases; bf16 training, 500 epochs; ISLA R1 = 384x12 cosine (K=0, eager), lr 5e-4; GeoTransolver-512 lr 1e-3",
+ "lanes": {
+  "so_lug_gt512_n1200_seed42": {
+   "arm": "gt512",
+   "n": 1200,
+   "seed": 42,
+   "n_cases": 600,
+   "epoch": 500,
+   "mean": 0.002924639463890344,
+   "median": 0.0025992030277848244
+  },
+  "so_lug_gt512_n1200_seed43": {
+   "arm": "gt512",
+   "n": 1200,
+   "seed": 43,
+   "n_cases": 600,
+   "epoch": 500,
+   "mean": 0.0023050416551996023,
+   "median": 0.001899553812108934
+  },
+  "so_lug_gt512_n300_seed42": {
+   "arm": "gt512",
+   "n": 300,
+   "seed": 42,
+   "n_cases": 600,
+   "epoch": 500,
+   "mean": 0.005586056002648547,
+   "median": 0.004896700149402022
+  },
+  "so_lug_gt512_n300_seed43": {
+   "arm": "gt512",
+   "n": 300,
+   "seed": 43,
+   "n_cases": 600,
+   "epoch": 500,
+   "mean": 0.0055226852876755095,
+   "median": 0.004923403263092041
+  },
+  "so_lug_gt512_n600_seed42": {
+   "arm": "gt512",
+   "n": 600,
+   "seed": 42,
+   "n_cases": 600,
+   "epoch": 500,
+   "mean": 0.004174906024321293,
+   "median": 0.003545080660842359
+  },
+  "so_lug_gt512_n600_seed43": {
+   "arm": "gt512",
+   "n": 600,
+   "seed": 43,
+   "n_cases": 600,
+   "epoch": 500,
+   "mean": 0.0037494358959763,
+   "median": 0.00315451854839921
+  },
+  "so_lug_isla_r1_n300_seed42": {
+   "arm": "isla_r1",
+   "n": 300,
+   "seed": 42,
+   "n_cases": 600,
+   "epoch": 500,
+   "mean": 0.010343696768395604,
+   "median": 0.007636442314833403
+  },
+  "so_lug_isla_r1_n300_seed43": {
+   "arm": "isla_r1",
+   "n": 300,
+   "seed": 43,
+   "n_cases": 600,
+   "epoch": 500,
+   "mean": 0.005211120101933678,
+   "median": 0.00440050708130002
+  },
+  "so_lug_isla_r1_n600_seed42": {
+   "arm": "isla_r1",
+   "n": 600,
+   "seed": 42,
+   "n_cases": 600,
+   "epoch": 500,
+   "mean": 0.003669940255737553,
+   "median": 0.0030677689937874675
+  },
+  "so_lug_isla_r1_n600_seed43": {
+   "arm": "isla_r1",
+   "n": 600,
+   "seed": 43,
+   "n_cases": 600,
+   "epoch": 500,
+   "mean": 0.003643942939622017,
+   "median": 0.0030598046723753214
+  }
+ },
+ "summary": {
+  "gt512|n1200": {
+   "lanes": [
+    "so_lug_gt512_n1200_seed42",
+    "so_lug_gt512_n1200_seed43"
+   ],
+   "seeds": [
+    0.002924639463890344,
+    0.0023050416551996023
+   ],
+   "mean": 0.002614840559544973
+  },
+  "gt512|n300": {
+   "lanes": [
+    "so_lug_gt512_n300_seed42",
+    "so_lug_gt512_n300_seed43"
+   ],
+   "seeds": [
+    0.005586056002648547,
+    0.0055226852876755095
+   ],
+   "mean": 0.005554370645162028
+  },
+  "gt512|n600": {
+   "lanes": [
+    "so_lug_gt512_n600_seed42",
+    "so_lug_gt512_n600_seed43"
+   ],
+   "seeds": [
+    0.004174906024321293,
+    0.0037494358959763
+   ],
+   "mean": 0.0039621709601487965
+  },
+  "isla_r1|n300": {
+   "lanes": [
+    "so_lug_isla_r1_n300_seed42",
+    "so_lug_isla_r1_n300_seed43"
+   ],
+   "seeds": [
+    0.010343696768395604,
+    0.005211120101933678
+   ],
+   "mean": 0.007777408435164641
+  },
+  "isla_r1|n600": {
+   "lanes": [
+    "so_lug_isla_r1_n600_seed42",
+    "so_lug_isla_r1_n600_seed43"
+   ],
+   "seeds": [
+    0.003669940255737553,
+    0.003643942939622017
+   ],
+   "mean": 0.0036569415976797854
+  }
+ },
+ "gt512_over_isla": {
+  "isla_r1|n300": 0.7141672822592925,
+  "isla_r1|n600": 1.0834657470774676
+ },
+ "learning_curve_exponents": {
+  "gt512": {
+   "exponent": 0.5434502357057239,
+   "rungs": [
+    300,
+    600,
+    1200
+   ]
+  }
+ }
+}

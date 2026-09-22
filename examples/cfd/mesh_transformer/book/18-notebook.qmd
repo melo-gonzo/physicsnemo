@@ -24915,3 +24915,31 @@ far); depth does not pay (0.6); the torque case is no worse than the force
 cases for either model (0.6). Regime limit: one family of generated
 brackets, one material, four fixed load directions; the clean-split
 exclusion is stated with every number.
+
+
+**Addendum (2026-09-22, later): depth on Tensile2d, and the first lug rungs.**
+ISLA R2 (384 x 24, frame configuration) at 400 cases scores 0.0129 /
+0.0109 / 0.0127 / 0.0093 on $\sigma_{11}$ / $\sigma_{22}$ / $\sigma_{12}$ /
+displacement against R1's 0.0118 / 0.0086 / 0.0112 / 0.0082 (both two
+seeds): 9% to 27% worse on every field, so bar (iii) is settled the
+unexpected way, **depth does not pay and costs accuracy on Tensile2d at 400
+cases** (the same sign as the 435-car DrivAerML depth ladder's null, larger
+here). GeoTransolver-512 against 256 at 400 cases: within 3% except
+$\sigma_{11}$ (25% better at 512), so width pays for GeoTransolver on one
+field only.
+
+GINOT lug, von Mises relative L2 on the 600 test lugs
+(`results/solids_lug_2026-09-22.json`): at 300 lugs ISLA R1 0.0078
+(seeds 0.0103 / 0.0052) against GeoTransolver-512 0.0056 (0.0056 /
+0.0055), ratio 0.71; at 600 lugs ISLA 0.0037 (0.0037 / 0.0036) against
+0.0040 (0.0042 / 0.0037), ratio **1.08, an ISLA lead with both seeds
+ahead of their GeoTransolver partners' mean**. The 300-lug seed spread is
+the delayed escape recorded in the acceptance: both ISLA seeds sat at a
+validation plateau near 0.0085 (training-loss units) for 90 to 150 epochs
+before dropping; seed 42 escaped 60 epochs later than seed 43 and had not
+converged at epoch 500 (its validation loss was still falling), which is
+the whole of the 2x spread. The 600-lug pair escaped early and agrees to
+3%. Bar (iv) applies: the plateau is reported here; a half-rate rerun of
+the 300-lug pair is the control, launched with the ladder's remaining
+rungs pending (1,200 lugs at epoch 464, 2,400 lugs and the R2 /
+GeoTransolver-256 pairs at 125 to 310).
