@@ -526,7 +526,9 @@ for ax, (f, lab) in zip(axes, (("pressure_l2", "interior pressure"), ("velocity_
         F = AFF[f"{m}|{f}"].get("fit")
         if F:
             ax.plot(nn, F["eps_inf"] + F["a"] * nn ** (-F["alpha"]), color=kw["color"], ls=":", lw=1.1, zorder=0)
-            ax.text(rows[-1][0] * 1.08, rows[-1][1], f"α = {F['alpha']:.2f}", fontsize=8, color=kw["color"], va="center")
+            loc = AFF[f"{m}|{f}"]["local_alpha"]; tail = [v for k, v in loc.items() if int(k.split("-")[0]) >= 100]
+            lab_a = f"α = {F['alpha']:.2f}" + (f" (fit); {min(tail):.2f} to {max(tail):.2f} from 100 up" if F["rms_rel_residual"] > 0.05 else "")
+            ax.text(rows[-1][0] * 1.08, rows[-1][1], lab_a, fontsize=8, color=kw["color"], va="center")
     ax.set_xscale("log"); ax.set_yscale("log"); ax.set_xticks([50, 100, 200, 400, 800]); ax.set_xticklabels(["50", "100", "200", "400", "800"])
     ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
     ax.set_yticks([0.02, 0.03, 0.05, 0.1, 0.2]); ax.set_yticklabels(["0.02", "0.03", "0.05", "0.10", "0.20"]); ax.set_xlim(42, 1150)
