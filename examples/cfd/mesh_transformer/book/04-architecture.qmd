@@ -493,23 +493,24 @@ slices.
 
 ## The interior arrangements {#sec-arch-modes}
 
-**Three arrangements of tokens and queries share the five stages; they
-differ in which points interact and which the head reads.** @fig-isla-modes
-places them side by side. Everything above described the first.
+**Two arrangements of tokens and queries share the five stages; they
+differ in which points are tokens and which the head reads.**
+@fig-isla-modes places them side by side. Everything above described the
+first; every interior result of the book uses the second. A third, the
+optional passive decoder, is exactly query-independent at a measured
+accuracy price and is described in @sec-arch-passive-decoder.
 
 ```{mermaid}
 %%| label: fig-isla-modes
 %%| fig-cap: >
-%%|   The three arrangements of ISLA. Surface: the boundary cells are the
+%%|   The two arrangements of ISLA. Surface: the boundary cells are the
 %%|   tokens and the head reads every one of them. Interior with query tokens:
 %%|   interior points join the encoder as interacting tokens with a learned
 %%|   routing mass, and the head reads them alone (the configuration the
-%%|   interior results of the book use). Passive decoder: the encoder runs on
-%%|   the boundary alone, and queries read its final slices and anchors through
-%%|   read blocks that never write back, so a prediction at one query is
-%%|   independent of every other query. How to read this: the slice layer,
-%%|   head frame and head are the same modules in all three; only the token
-%%|   set and the read-out path change.
+%%|   interior results of the book use). How to read this: the slice layer,
+%%|   head frame and head are the same modules in both; only the token set
+%%|   and which tokens the head reads change. The optional passive decoder
+%%|   (@sec-arch-passive-decoder) is not drawn.
 flowchart LR
     classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
     classDef learned fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
@@ -531,17 +532,6 @@ flowchart LR
         Q4["head frame + head on the Q query tokens"]:::learned
         Q1 --> Q3
         Q2 --> Q3 --> Q4
-    end
-    subgraph P["passive decoder (query_independent)"]
-        direction TB
-        P1["boundary tokens (N)"]:::data
-        P2["slice layers × 12"]:::learned
-        P3["final slice states Z_s and anchors z_s, m_s"]:::fixed
-        P4["queries (Q)"]:::aqua
-        P5["read blocks × 4: read slices, invariants and a local kernel average; never write"]:::learned
-        P6["head frame + head on the Q queries"]:::learned
-        P1 --> P2 --> P3 --> P5
-        P4 --> P5 --> P6
     end
 ```
 
@@ -572,16 +562,26 @@ frame builds its anchors from all of them, and the head reads the $Q$ query
 tokens only. The arrangement is exactly covariant and not query-independent
 (@sec-isla-contracts).
 
-**The passive decoder** (`query_independent=True`; @sec-isla-passive,
-@sec-interior-query-independence). The encoder runs on the boundary alone. One more
-routing map on the final state (`final_assign`) summarizes it once into
-slice states $Z_s$ and anchors $z_s, m_s$ exactly as steps b, c and g do.
-Each query, seeded and embedded as above (with its own scalar embedding),
-then passes through four **read blocks** (`_ReadBlock`), each of which
-forms the relational invariants $\xi_{qs}$ against the final anchors, reads
-over the slices, and reads the encoder states near the query through a
-measure-weighted Gaussian kernel of width $\varrho$ (`local_readout_rho`,
-0.02 length units):
+### The optional passive decoder {#sec-arch-passive-decoder}
+
+**A prediction from the interacting arrangement depends on which other
+points are in the request. The class keeps a switch that removes that
+dependence exactly, and no interior result in this book uses it, because
+its accuracy price is several-fold on every field.** The note below is
+the one place the book describes it.
+
+::: {.callout-note collapse="true" title="The passive decoder: exact query independence, and why the interior results do not use it"}
+
+**What it is.** With `query_independent=True` the encoder runs on the
+boundary alone; the queries never enter it. One more routing map on the
+final state (`final_assign`) summarizes the encoder once into slice states
+$Z_s$ and anchors $z_s, m_s$ exactly as steps b, c and g do. Each query,
+seeded and embedded as a query token would be (with its own scalar
+embedding), then passes through `n_decoder_layers` (four by default)
+**read blocks** (`_ReadBlock`), each of which forms the relational
+invariants $\xi_{qs}$ against the final anchors, reads over the slices, and
+reads the encoder states near the query through a measure-weighted
+Gaussian kernel of width $\varrho$ (`local_readout_rho`, 0.02 length units):
 
 $$
 \pi_{qs} = \mathrm{softmax}_s\big(\lambda_{qs} + w_g \!\cdot\! \xi_{qs} + b_g\big), \qquad
@@ -595,13 +595,120 @@ h_q \leftarrow h_q + \mathrm{MLP}(\mathrm{LN}(h_q)) .
 $$
 
 Nothing in a read block writes into the encoder, so the prediction at a
-query depends on the boundary and that query alone. The head frame's
+query is a function of the boundary and that query alone. The head frame's
 anchors come from the encoder tokens and its soft assignment $\beta_{qs}$
-from the query state; the head is stage 5 unchanged. With
-`support_tokens=True` a per-case set of interior *support* points joins the
-encoder as interacting tokens (seeded and weighted like query tokens) while
-the requested queries are still decoded passively, which keeps the
-independence contract with more of the interior in view.
+from the query state; the head is stage 5 unchanged. The property is a
+contract of the code, not of a checkpoint: `test_query_set_independence`
+checks in float64 that 50 queries predicted alone equal the same 50 among
+150 to $10^{-12}$ with zero relative tolerance (@sec-isla-contracts), and
+on a trained checkpoint the same sentinel points predicted alone, with
+2,000 companions and with 40,000 move by exactly 0.000 in float32
+(@sec-nb-qmass-verdict). With `support_tokens=True` a per-case set of
+interior *support* points joins the encoder as interacting tokens (seeded
+and weighted like query tokens) while the requested queries are still
+decoded read-only, which keeps the contract with more of the interior in
+view. Every contract of @sec-isla-contracts holds in this mode; the
+read-only path with boundary scalars fails on a shape when source and
+query counts differ, and no number in the book uses that pair.
+
+**Why the interior results use interacting query tokens instead.** The
+price was measured on the DrivAerML Volume task in float32 on the 48
+validation cars with two seeds, at the 10,000-cell exploration budget
+(the reporting protocol of @sec-protocol is 200,000 cells; these numbers
+are a labeled mechanism measurement, not an accuracy claim, and the
+100,000-cell re-measurement is pending under PROTOCOL-REDO,
+@sec-nb-protocol-redo-prereg). Against the interacting query tokens with
+the signed distance (0.0547 / 0.0796 / 0.1116 on pressure / velocity /
+eddy viscosity):
+
+| passive arm (10,000 boundary cells and queries, float32) | pressure | velocity | eddy viscosity | passive ÷ interacting |
+|---|--:|--:|--:|---|
+| twelve read blocks, same inputs as the query tokens (matched depth and inputs) | 0.0890 | 0.1201 | 0.2305 | 1.63 / 1.51 / 2.07 |
+| twelve read blocks over an interacting interior support set carrying the signed distance | 0.0781 | 0.1068 | 0.2689 | 1.43 / 1.34 / 2.41 |
+| the complete passive configuration as built: four read blocks, signed-distance gradient as the query normal, no signed-distance scalar | 0.1572 | 0.3052 | 0.3736 | 2.87 / 3.83 / 3.35 |
+
+: The passive decoder's price against the interacting query tokens on the
+DrivAerML Volume task (relative L2, arithmetic mean over 48 validation
+cars and two seeds, float32, 10,000 boundary cells and 10,000 queries per
+car, 500 epochs). Ratios are passive ÷ interacting, above one against the
+passive decoder; seed spreads are at most 2% for the passive arms and 9%
+for the interacting one, so every ratio is resolved. The complete
+configuration is 3.06 / 2.81 / 4.25 times GeoTransolver-volume's error on
+the same points. Data:
+research/transfer_program/studies/computational_support/d1_verdict_2026-09-10.json
+(first two rows); @sec-nb-fp32-interior-family and
+@sec-nb-fp32-reeval-verdict-interior (third row). {#tbl-arch-passive-price}
+
+The two matched rows locate the price: it is not depth (twelve read
+blocks against four, both over the support set, change pressure by 13%)
+and not interior context (the interacting support set with the signed
+distance changes it by 12% and makes eddy viscosity worse), but the
+computation the interacting queries receive at the requested points
+through every slice layer. That is why admitting the queries as tokens
+closes most of the gap to GeoTransolver-volume on pressure with no extra
+parameters (@sec-interior-results), and why the passive route is closed
+for ISLA at matched depth and inputs. The verdict rests on one dataset:
+the passive decoder has not been trained on AirfRANS.
+
+**What the interacting tokens give up.** A prediction at a point is a
+function of the whole request. The size of the dependence is measured at
+the same exploration budget (@sec-interior-companion, QCOUNT,
+@sec-nb-qcount-verdict): the reference checkpoint trained at 10,000
+requests and scored at 2,000 loses 1.38x / 1.59x / 1.49x on pressure /
+velocity / eddy viscosity, and at 40,000 it moves by 3% and improves;
+training over request sizes 2,000 to 20,000 reduces the 2,000-request
+penalty to 1.24x / 1.31x / 1.31x at a 3.7% pressure cost and does not
+remove it. The default query mass `query_mass="source_total"` removes the
+count scaling of the routing weight by construction; the dependence
+through the shared slices remains. The working rule is to deploy the
+interacting configuration at its training request count and to state
+that count with every interior number.
+
+**Practical considerations.** The passive decoder is the right tool when
+the deployment needs the contract rather than the last factor of
+accuracy:
+
+- *Encode once, decode many.* The encoder's final slice states and
+  anchors are a fixed summary of one boundary; any number of query
+  batches can be decoded from it later, in any chunking, and the answer
+  at a point never changes. The interacting arrangement recomputes the
+  slice layers for every request and its answer depends on the batch.
+- *Streaming or chunked inference over arbitrary point sets.* A
+  streamline traced point by point, a probe plane added after the fact, a
+  domain too large for one forward pass: with the passive decoder the
+  chunks are exactly consistent with each other and with the whole; with
+  the interacting decoder each chunk must be filled to the training count
+  and adjacent chunks disagree at shared points by the companion
+  sensitivity above.
+- *Reproducibility and certification.* A per-point prediction that is a
+  pure function of the boundary and the point is auditable and identical
+  across requests; the interacting prediction is identical only for an
+  identical request.
+- *Memory.* The passive decoder's cost in queries is linear and separable
+  from the encoder: queries do not attend to one another. The interacting
+  arrangement's token set is $N + Q$: at the reporting protocol, 200,000
+  boundary cells and 200,000 queries are a 400,000-token case, whose
+  training peak on the cost grid is 53.5 GB for ISLA-192 against 27 GB for
+  200,000 tokens (@sec-cost-sweep), with the fused geometry kernel; on
+  the eager fallback the geometry region is rebuilt in the
+  backward pass (`geo_checkpoint`) to hold memory. The passive decoder is
+  not free of its own footprint: its local readout saves a $4{,}096 \times
+  Q$ kernel per chunk for the backward pass, so 200,000 queries against
+  200,000 boundary tokens exceed one GB300 in training (about 500 GB of
+  saved kernels), and the pending re-measurement runs at 100,000;
+  recomputing those chunks in backward is the queued engineering fix
+  (@sec-nb-protocol-redo-prereg).
+
+The interacting arrangement is the default whenever the evaluation point
+set is fixed and available in full, in batch inference, and wherever
+accuracy is the objective, which is every interior result of this book.
+The passive decoder stays supported as a switch at the price in
+@tbl-arch-passive-price; nothing in the program has found a way to keep
+its contract at the interacting configuration's accuracy, and the two
+attempts (latent volume tokens, an interacting support set) are recorded
+in @sec-interior-negatives and in the table above.
+
+:::
 
 ## What the pass never does {#sec-arch-never}
 
@@ -637,6 +744,6 @@ it changes.** The recipe's surface and interior configurations are in
 | `routing_norm` (`"cosine"`), `routing_temperature` (10) | 3a, 4 | the form of every routing map: the bounded cosine against learned prototypes, or `"linear"`, the affine alternative (@sec-isla-routing-forms) |
 | `use_relational_geo` (on) | 3d, 3e, 3h | the relational invariants in the refinement and the read-back; off is the feature-only slicing ablation |
 | `query_tokens` (off), `n_query_scalars` (0), `query_scalar_scale` (`"length"`), `query_mass` (`"source_total"`) | modes | the interacting interior arrangement, its per-query scalars and their scaling, and the queries' routing mass: a learned share of the total boundary measure, or `"geometric_mean"`, a learned factor times the geometric mean of the source weights (which depends on the boundary refinement) |
-| `query_independent` (off), `n_decoder_layers` (4), `local_readout_rho` (0.02), `support_tokens` (off) | modes | the passive decoder, its depth, its local-readout width, and the optional interacting support set |
+| `query_independent` (off), `n_decoder_layers` (4), `local_readout_rho` (0.02), `support_tokens` (off) | modes | the optional passive decoder (exactly query-independent, at the accuracy price in @sec-arch-passive-decoder), its depth, its local-readout width, and its optional interacting support set |
 | `geo_kernel` (`None`, automatic), `geo_checkpoint` (off), `fast_point_softmax` (on) | 3c–3e, 3h | how the geometry region is executed: `None` resolves at the first forward pass to `"fused"` (the Triton kernel) when the inputs are on CUDA, Triton is importable, there is one global vector and at most 1,024 slices, and to `"eager"` (the PyTorch region) otherwise; either name forces that path, and `"fused"` raises where its constraints fail. `geo_checkpoint` rebuilds the eager region in backward instead of storing it; `fast_point_softmax` selects the row-parallel softmax kernel. None changes the function computed beyond roundoff |
 | `eps` ($10^{-12}$) | 1, 3c, 3d, 4 | the floor under every norm and logarithm |
