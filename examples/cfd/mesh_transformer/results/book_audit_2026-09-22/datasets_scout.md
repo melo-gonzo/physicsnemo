@@ -52,3 +52,14 @@ First conversions: PLAID Tensile2d (2-D solid mechanics, load + material variati
 (3-D elastoplastic, load variation, Transolver/GNOT numbers), GNOT Heat2d (boundary-function input; license to
 clear). Then DeepJEB++ and OLBC. AeroZoo (ours, in generation) is named in the book as the coming diversity-stress
 aerodynamics benchmark.
+
+## Update 2026-09-22 (scout agent, verified from files/papers)
+
+- GNOT Heat2d: NO license (repo `license: null`, issue #8 unanswered); 1000/100 split; 365-1089 nodes/sample, no
+  connectivity; top-edge Dirichlet T at 16-17 nodes; bottom T=0; sides not periodic (undocumented); theta == 0. Only
+  GNOT 4.13e-2 / MMET 3.36e-2 baselines. DEFERRED.
+- OLBC (arXiv 2602.04923v2; Zenodo 10.5281/zenodo.18377370; CC BY 4.0): 18 datasets x (8448 train / 256 test),
+  12k-18k nodes, random labeled Dirichlet/Neumann/Robin segments with values; Poisson (9), linear elasticity (6),
+  hyperelasticity (3); NetCDF ~16 GB/dataset. PROMOTED (first: one Poisson mixed set + one linear elasticity set).
+- DeepJEB++ (arXiv 2606.12994; HF KAIST-SmartDesignLab/DeepJEB-PP; ODC-By 1.0): 15,360 brackets, ~50k-vertex .obj,
+  bolt/lug vertex index sets, U and von Mises for 4 load cases; 61 GB. PROMOTED (after OLBC); load direction = K=1.

@@ -24398,3 +24398,56 @@ vector only, so frame-component problems run the eager region until the
 kernel takes $K \le 3$. Verdict pending at 400 cases (bar unchanged:
 `frame2` within 2x of GeoTransolver per field; the SOLIDS standing bars
 then apply to the frame lanes).
+
+## 2026-09-22 — Dataset scout: GNOT Heat2d deferred (no license, 600-node meshes, no connectivity); OLBC (CC BY 4.0, random labeled Dirichlet/Neumann/Robin segments, Poisson and elasticity) and DeepJEB++ (ODC-By, 15,360 brackets, four load directions) promoted {#sec-nb-datasets-scout-2026-09-22}
+
+**Setting.** Peter's ruling asks for literature steady-PDE datasets with
+labeled and strongly varying boundary conditions beyond aerodynamics
+(@sec-nb-solids-prereg covers the first two). A scouting agent resolved the
+open questions on GNOT Heat2d and checked the two alternatives named in the
+scout notes; the facts below were read from the files or the papers, not
+inferred.
+
+**GNOT Heat2d** (Hao et al., ICML 2023): the repository and the Google
+Drive folder carry **no license** (an issue asking for one went
+unanswered), so converted files could not be redistributed. The released
+split is 1,000 train / 100 test; each sample is a point cloud of 365 to
+1,089 nodes with **no connectivity**, the top-edge Dirichlet temperature
+sampled at 16 or 17 nodes, two spline interfaces as point clouds, the
+bottom edge at zero temperature, and a dummy zero global scalar; the
+side-wall condition is undocumented and the data are not periodic despite
+the paper. Only GNOT (4.13e-2) and MMET (3.36e-2) report numbers;
+Transolver has none. At 600 nodes it is 300 times below the reporting
+protocol. **Deferred**: it would be a mechanism rung at best and cannot be
+shared.
+
+**OLBC** (Mousavi, Mishra, De Lorenzis; Zenodo, **CC BY 4.0**): 18
+datasets of 8,448 train / 256 test samples each on unstructured triangle
+meshes of 12 to 18 thousand nodes (9 Poisson on circle, square and
+boomerang domains with Dirichlet, mixed, and mixed-plus-source conditions;
+6 linear elasticity in steel and bone on hollow geometries; 3
+hyperelasticity in rubber). Every sample carries randomly placed and sized
+boundary segments with **randomly assigned Dirichlet, Neumann or Robin
+type and value**, plus signed distance and its gradient, the source, the
+solution and, for elasticity, strain and Cauchy stress. This is exactly the
+labeled, strongly varying boundary-condition stress test the ruling asks
+for, and the stress targets are components, so the frame clause of
+@sec-nb-solids-frame-interim applies from the start. Baselines are BENO,
+RIGNO and GAOT only; GeoTransolver will be trained under our protocol. Cost:
+about 16 GB per dataset in NetCDF.
+
+**DeepJEB++** (Yoo et al., KAIST, 2026; Hugging Face, **ODC-By 1.0**):
+15,360 jet-engine brackets as surface meshes of about 50 thousand
+vertices with clamped-bolt and loaded-lug vertex index sets, and per-node
+displacement and von Mises stress under **four load directions**
+(vertical, horizontal, diagonal, torsional). The load direction is a
+genuine global vector ($K = 1$, the fused-kernel layout), the boundary
+labels are explicit, and the geometry family is large. Cost: 61 GB.
+
+**Decision.** OLBC first (two datasets: one Poisson mixed-condition set
+and one linear-elasticity set, so the Poisson case gives a scalar-only
+$K = 0$ problem and the elasticity case a frame-component problem), then
+DeepJEB++; Heat2d deferred. Conversion follows the Tensile2d converter
+pattern to native DomainMesh files; each dataset enters the book only with
+GeoTransolver trained under the fair-comparison protocol and a per-dataset
+preregistration before the first lane.
