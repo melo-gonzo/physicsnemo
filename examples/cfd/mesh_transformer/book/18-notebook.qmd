@@ -23909,6 +23909,23 @@ reference cost sweep (2,500 to 600,000 tokens, six arms, one GB300; job
 44 ms and 1.4 GiB, GeoTransolver-512 in 45 ms and 2.2 GiB, Transolver-256
 in 21 ms and 1.0 GiB; the large counts decide the figure.
 
+**Addendum (2026-09-22, evening): DrivAerML Surface scored for both
+candidates.** Float32 pressure relative L2 on the 48 validation cars at
+200,000 cells, 500 epochs: R1 (384 x 12, 5e-4) 0.0416 / 0.0414 (seeds 42 /
+43), R2 (384 x 24, 5e-4) 0.0415 / 0.0402, the R1 rate control at 1e-3
+0.0424 / 0.0425; wall shear stress 0.0649 / 0.0649 (R1), 0.0651 / 0.0631
+(R2). Under the selection rule R1 is within 1.5% of R2 on this dataset (mean
+pressure 0.0415 against 0.0409, 1.47%; seed 42 equal, seed 43 3% apart), a
+marginal pass that the 35-wing rung must confirm. Against the reporting
+protocol's GeoTransolver-256 at 3e-3 (0.0445, @sec-nb-proto200k-verdict) the
+ratio GeoTransolver-256 ÷ R1 is 1.07, above the 1.03 bar with both seeds
+agreeing, at a step-time ratio of 1.11 (parity within 1.2) and a memory
+ratio of 0.71 (@sec-nb-cost-ref-verdict): on this dataset the recommended
+settings beat the baseline at lower memory and parity time. The 1e-3 rate
+control is 2% worse than 5e-4 on both seeds, so 5e-4 stands. Pending:
+the 35-wing rung (epoch ~190 of 500), GeoTransolver-512 on the cars (epoch
+~475), the volume and AirfRANS candidates.
+
 ## 2026-09-22 — Erratum: the GeoTransolver rows of the 210-case and 21-geometry wing rungs (and the 4-geometry and fixed-angle single arms) are 1e-3 lanes, not 3e-3 as the chapters headed them; the 3e-3 controls are running {#sec-nb-wing-gt-rate-erratum}
 
 The figures audit (`results/book_audit_2026-09-22/figures_audit.md`) noted
