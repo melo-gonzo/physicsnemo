@@ -5,3 +5,11 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 3	af	af_isla_lin_lr5e4_seed43	airfrans_volume	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	43	100000	code_routenorm
 4	af	af_isla_cos_lr1e3_seed43	airfrans_volume	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	43	100000	code_routenorm
 5	af	af_gt_vol_lr1e3_seed43	airfrans_volume	geotransolver_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10	1e-3	43	100000	code_routenorm
+6	af	af_isla_cos_lr1e3_reynolds_seed42	airfrans_volume	isla_volume_airfrans	train_split=reynolds_train val_split=reynolds_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	42	100000	code_routenorm
+7	af	af_gt_vol_lr1e3_reynolds_seed42	airfrans_volume	geotransolver_volume_airfrans	train_split=reynolds_train val_split=reynolds_test +training.val_interval=10	1e-3	42	100000	code_routenorm
+8	af	af_isla_cos_lr1e3_reynolds_seed43	airfrans_volume	isla_volume_airfrans	train_split=reynolds_train val_split=reynolds_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	43	100000	code_routenorm
+9	af	af_gt_vol_lr1e3_reynolds_seed43	airfrans_volume	geotransolver_volume_airfrans	train_split=reynolds_train val_split=reynolds_test +training.val_interval=10	1e-3	43	100000	code_routenorm
+10	af	af_isla_cos_lr1e3_aoa_seed42	airfrans_volume	isla_volume_airfrans	train_split=aoa_train val_split=aoa_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	42	100000	code_routenorm
+11	af	af_gt_vol_lr1e3_aoa_seed42	airfrans_volume	geotransolver_volume_airfrans	train_split=aoa_train val_split=aoa_test +training.val_interval=10	1e-3	42	100000	code_routenorm
+12	af	af_isla_cos_lr1e3_aoa_seed43	airfrans_volume	isla_volume_airfrans	train_split=aoa_train val_split=aoa_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	43	100000	code_routenorm
+13	af	af_gt_vol_lr1e3_aoa_seed43	airfrans_volume	geotransolver_volume_airfrans	train_split=aoa_train val_split=aoa_test +training.val_interval=10	1e-3	43	100000	code_routenorm

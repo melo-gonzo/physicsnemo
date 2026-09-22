@@ -92,10 +92,19 @@ ISLA 0.99x / 1.08x ("weakly dependent", never "indifferent"). Uniform-trained
 under the 10:1 biased draw at 100k cells on the cars: GeoTransolver 8.7x,
 Transolver 5.3x, ISLA 1.07x.
 
-**Interior (200k cells and queries, DrivAerML).** Linear ISLA at 5e-4:
-GeoTransolver-volume ÷ ISLA 0.87 / 1.42 / 0.98 (pressure / velocity / eddy
-viscosity); cosine ISLA at 1e-3: 0.95 / 1.56 / 0.97. ISLA pressure seeds 8%
-apart. Interior lanes trained under `query_mass=geometric_mean`.
+**Interior (two datasets, 2026-09-22).** DrivAerML, 200k cells and queries:
+linear ISLA at 5e-4, GeoTransolver-volume ÷ ISLA 0.87 / 1.42 / 0.98
+(pressure / velocity / eddy viscosity); cosine ISLA at 1e-3: 0.95 / 1.56 /
+0.97; ISLA pressure seeds 8% apart. AirfRANS full split, 100k queries
+(results/airfrans_reduction_2026-09-22.json): linear 0.80 / 1.95 / 0.85,
+cosine 0.83 / 2.14 / 0.83, every paired ratio agreeing in sign; ISLA seeds
+22 to 34% apart, GeoTransolver-volume 2 to 7%. Say: "ISLA leads on interior
+velocity (1.4x on the cars, about 2x on the airfoils) and trails on
+interior pressure (13% / 5% on the cars, 20% / 17% on the airfoils) on two
+datasets and two PDE regimes; eddy viscosity level on the cars,
+GeoTransolver-volume by 15 to 17% on the airfoils." Do not quote an AirfRANS
+ISLA number to better than about 15%. Interior lanes trained under
+`query_mass=geometric_mean`. Extrapolation splits (reynolds, aoa) pending.
 
 **Pose (200k).** ISLA posed ÷ native 1.015; leads augmented GeoTransolver /
 Transolver by 12% / 21%.

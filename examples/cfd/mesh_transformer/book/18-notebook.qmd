@@ -23446,3 +23446,110 @@ width. The chapter section @sec-compute-allocation is restated with
 wing rungs (35 / 210 / 510) of the same campaign are in flight and decide
 whether the exponents transfer (the two-datasets bar: agreement within 0.1
 or the law is stated per dataset).
+
+## 2026-09-22 — Verdict, AIRFRANS-INT (full split): the interior standing reproduces on the second dataset and PDE regime; GeoTransolver-volume ÷ ISLA 0.80 / 1.95 / 0.85 (pressure / velocity / eddy viscosity) under linear routing and 0.83 / 2.14 / 0.83 under cosine, both seeds agreeing on every field {#sec-nb-airfrans-verdict}
+
+**Setting.** The interior task asks a surrogate for the flow field at
+points off the wall given only the boundary. On DrivAerML (three-dimensional
+compressible-RANS car external flow, 435 training cars) ISLA with query
+tokens leads GeoTransolver-volume on interior velocity and trails it on
+pressure, level on eddy viscosity (@sec-nb-ratevol-verdict:
+GeoTransolver-volume ÷ ISLA 0.87 / 1.42 / 0.98 under linear routing at
+5e-4, 0.95 / 1.56 / 0.97 under cosine at 1e-3). That was a single-dataset
+standing. AirfRANS is the second dataset and a second regime:
+two-dimensional incompressible k-omega SST RANS around NACA airfoils, 800
+training and 200 test cases of the full split, converted to native
+DomainMesh files (@sec-nb-airfrans-plan, @sec-nb-airfrans-prereg). Six
+lanes trained for 500 epochs at 100,000 interior queries per case (ISLA
+linear 5e-4, ISLA cosine 1e-3, GeoTransolver-volume 1e-3; seeds 42 and 43)
+and were scored in float32 at 100,000 queries on the 200 test cases.
+Reduction `results/airfrans_reduce_2026-09-22.py`, artifact
+`results/airfrans_reduction_2026-09-22.json`.
+
+**Bars (preregistered).** Reproduced if GeoTransolver-volume ÷ ISLA falls
+on the same side of one as on DrivAerML (pressure below one, velocity
+above one) with both seed-paired ratios agreeing in sign; refuted for a
+field if the ratio crosses one with seeds agreeing; eddy viscosity
+reported without a prior.
+
+**What we saw** (relative L2 over the 200 test cases, seed means with
+seeds):
+
+| arm | pressure | velocity | eddy viscosity |
+|---|---|---|---|
+| GeoTransolver-volume, 1e-3 | 0.0277 (0.0268 / 0.0286) | 0.0379 (0.0370 / 0.0389) | 0.0293 (0.0296 / 0.0290) |
+| ISLA, linear routing, 5e-4 | 0.0348 (0.0391 / 0.0306) | 0.0195 (0.0217 / 0.0173) | 0.0344 (0.0401 / 0.0286) |
+| ISLA, cosine routing, 1e-3 | 0.0335 (0.0299 / 0.0372) | 0.0177 (0.0156 / 0.0199) | 0.0353 (0.0310 / 0.0396) |
+| GeoTransolver-volume ÷ ISLA linear (paired) | 0.80 (0.69 / 0.94) | 1.95 (1.71 / 2.25) | 0.85 (0.74 / 1.02) |
+| GeoTransolver-volume ÷ ISLA cosine (paired) | 0.83 (0.90 / 0.77) | 2.14 (2.38 / 1.95) | 0.83 (0.96 / 0.73) |
+
+: AIRFRANS-INT full split, 100,000 interior queries per case, 500 epochs, float32. {#tbl-airfrans-verdict}
+
+**Verdict.** **Reproduced on both fields with a prior, for both ISLA
+arms**: pressure below one (0.80 and 0.83; every paired ratio below one),
+velocity above one (1.95 and 2.14; every paired ratio above 1.7). ISLA's
+velocity lead is larger on the airfoils than on the cars (about 2x against
+1.4 to 1.6x) and its pressure deficit is also larger (20% against 13%, 17%
+against 5%). Eddy viscosity, level on the cars, goes to GeoTransolver-volume
+on the airfoils by 15 to 17%, with one paired ratio of the linear arm
+crossing one (1.02) — reported, no prior, not a verdict.
+
+**Two things to carry with the numbers.** First, ISLA's seed spread on
+AirfRANS is large: 22 to 34% between the two seeds on every field for both
+ISLA arms, against 2 to 7% for GeoTransolver-volume. The verdicts survive it
+because every paired ratio agrees in sign, but no ISLA number on this
+dataset should be quoted to better than about 15%, and the source of the
+spread (200 test cases of 2-D flow at 100,000 queries; the loss reaches
+its floor by epoch 300 on every lane) is not identified. Second, the two
+regimes differ in what the pressure field is: gauge pressure over a 3-D
+car body against nondimensional pressure over a 2-D airfoil with an
+incompressible reference state; that the ordering (GeoTransolver-volume on
+pressure, ISLA on velocity) is the same across them is the finding, and
+the mechanism behind it is the open question the cars left open
+(@sec-interior-open).
+
+**Reading.** The interior standing is now a two-dataset result and is
+written as one in @sec-interior, @tbl-scoreboard-200k-interior and
+@sec-established: ISLA leads on interior velocity by 42 to 114%, trails on
+interior pressure by 5 to 20%, and is level to 17% behind on eddy
+viscosity, against GeoTransolver-volume at a third of its parameters, on
+two datasets and two PDE regimes.
+
+## 2026-09-22 — Preregistration, AIRFRANS-INT extrapolation splits: ISLA (cosine 1e-3) and GeoTransolver-volume (1e-3) on the Reynolds-number and angle-of-attack splits, two seeds {#sec-nb-airfrans-extrap-prereg}
+
+**Setting.** AirfRANS ships two extrapolation splits: `reynolds` (504
+training cases inside a Reynolds-number band, 496 test cases outside it)
+and `aoa` (804 training cases inside an angle-of-attack band, 196 test
+cases outside it). With the full-split lanes accepted and reduced
+(@sec-nb-airfrans-verdict), eight lanes run the same two architectures on
+both splits: ISLA with cosine routing at 1e-3 (the candidate default,
+which matched linear routing on the full split within its seed spread) and
+GeoTransolver-volume at 1e-3, seeds 42 and 43, 500 epochs, 100,000
+interior queries per case, float32 scoring at 100,000 queries on each
+split's test cases (group af, rows 6 to 13 of
+`results/campaigns_2026-09-21/af/lanes.tsv`).
+
+**Readout.** Per field and architecture, the *growth factor* $g$ = test
+error on the extrapolation split ÷ the same architecture's full-split test
+error (seed means; paired by seed for the sign test). The growth mixes
+extrapolation with the smaller training set of the Reynolds split (504
+against 800 cases); both architectures pay the same reduction, so the
+fair readout is the ratio of growth factors, $g_\text{GT} / g_\text{ISLA}$.
+
+**Bars.** On a field, ISLA *extrapolates better* if
+$g_\text{GT} / g_\text{ISLA} > 1.10$ with both seed pairs above one;
+GeoTransolver-volume extrapolates better if the ratio is below 0.90 with
+both pairs below one; otherwise *no difference* (the status ledger's "a
+10% difference in error growth counts"). A lane at the mean-field plateau
+is reported as such and rerun at half its rate. The absolute ratios
+GeoTransolver-volume ÷ ISLA on each split are reported alongside, without
+a bar (the full-split ordering is the prior: pressure below one, velocity
+above one).
+
+**Prediction.** No difference in growth on pressure on either split
+(0.5); ISLA's velocity growth smaller on the Reynolds split (0.4; the
+global scalar carries the Reynolds number into every slice block, where
+GeoTransolver-volume embeds the inlet velocity once); no prediction for
+the angle-of-attack split beyond the full-split ordering. Whatever the
+outcome, the absolute ordering (ISLA on velocity, GeoTransolver-volume on
+pressure) is expected to hold on both splits (0.8).

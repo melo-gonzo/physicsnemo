@@ -10,7 +10,8 @@ small rungs (35 random cases, 4 geometries, the fixed angle), by 4 to 11%
 at 210 random cases, and by 2 to 5% where the validation geometries are
 never seen at 21 training geometries. ISLA leads where every case arrives in its own
 random pose (by 12% over GeoTransolver and 21% over Transolver), on
-interior velocity (by 42%, single dataset), and under a change of the law
+interior velocity (by 42% on DrivAerML and 95% on AirfRANS, trailing on
+interior pressure by 13% and 20%), and under a change of the law
 the training sample is drawn by (GeoTransolver and Transolver trained on
 the area-proportional draw are 2.4 to 9.6x worse on the uniform one, ISLA
 1 to 8%).** This chapter is the standing on one page. The
@@ -173,9 +174,10 @@ wall, is 42% more accurate than GeoTransolver-volume on interior velocity at
 a third of the parameters, 13% less accurate on interior pressure and level
 on eddy viscosity; with cosine routing the velocity lead is 56% and the
 pressure deficit 5%.** The task, the two architectures' interior modes and
-the diagnostics are in @sec-interior. This is a single-dataset result; the
-second dataset is AirfRANS, whose lanes are running (@sec-interior-airfrans;
-the HiLiftAeroML volume carries no interior fields). Two conditions travel
+the diagnostics are in @sec-interior. The ordering reproduces on AirfRANS,
+a second dataset and PDE regime, with the gaps widened (velocity 1.95 and
+2.14, pressure 0.80 and 0.83, eddy viscosity 0.85 and 0.83;
+@sec-interior-airfrans). Two conditions travel
 with the rows. With 400,000 interacting tokens per car ISLA's interior
 configuration under linear routing rises to the mean-field loss plateau at
 the surface configuration's rate of 1e-3 (both seeds, the routing
@@ -213,7 +215,7 @@ print(": Interior error at the reporting protocol (relative L2 over the 48 DrivA
       f"{b['pressure_l2']['relative_change']*100:+.1f}%, a swing inside ISLA's 8% seed spread on pressure "
       f"({' / '.join(f'{v:.4f}' for v in rva['isla_lr5e4']['pressure_l2']['seeds'])}); the cosine row's pressure seeds are "
       f"{' / '.join(f'{v:.4f}' for v in EXTI['pressure_l2_seeds'])}. The rate controls behind the linear row are in @sec-interior. "
-      "How to read this: single dataset (the AirfRANS lanes are the second); "
+      "How to read this: DrivAerML rows; the AirfRANS twin of this table is @tbl-interior-airfrans, with the same ordering; "
       "every ISLA lane here uses the passive readout's geometric-mean query mass, not the class default. "
       "Data: results/ratevol_reduction_2026-09-20.json; results/routenorm_extension_2026-09-21.json. {#tbl-scoreboard-200k-interior}")
 ```
@@ -505,8 +507,8 @@ geometries with the milder flap-and-slat settings and evaluates once on the
 they report; the ISLA arms of the 510- and 1,260-case rungs are their first
 at any budget. The wing half of the cosine-routing study decides whether
 cosine routing becomes ISLA's default; the wing scaling picture is the
-second-dataset twin of @sec-scoreboard-floor; and the AirfRANS interior
-lanes are the second dataset of @tbl-scoreboard-200k-interior. Two
+second-dataset twin of @sec-scoreboard-floor; and the AirfRANS
+extrapolation splits follow the full split of @tbl-interior-airfrans. Two
 configurations are deliberately not rows at any budget: GeoTransolver and
 Transolver with ISLA's measure-weighted pooling, ablations that locate the
 property of @sec-scoreboard-consistency and are not modifications of the

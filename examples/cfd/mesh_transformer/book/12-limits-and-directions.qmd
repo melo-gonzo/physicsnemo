@@ -22,7 +22,7 @@ mean = statistics.mean
 ## What is established {#sec-established}
 
 **Nine results are settled to the standard of the fair-comparison protocol
-(@sec-protocol) at the reporting protocol; three rest on a single dataset
+(@sec-protocol) at the reporting protocol; two rest on a single dataset
 and are labeled so.** Each carries its numbers and its scope in its home
 section; this chapter adds only the limits. Ratios are baseline ÷ ISLA, so
 above one favors ISLA. Two further findings, on regime extrapolation and
@@ -37,7 +37,7 @@ exists for them at any budget.
 | ISLA's prediction is consistent under a change of the inference draw: under a 10:1 front-to-back density bias with exact Horvitz–Thompson weights on DrivAerML at 100,000 cells (the labeled scaling budget) its error grows 1.07x where GeoTransolver's grows 8.7x and Transolver's 5.3x; under a stratified draw every model moves under 2%. Under refinement, ISLA converges across samplers, and so do GeoTransolver and Transolver + ISLA's measure-weighted pooling + Horvitz–Thompson-centered datapipe (ablation); GeoTransolver and Transolver as released do not. The slice territories say why: under the biased draw GeoTransolver's slices follow the points and ISLA's nearly do not (dominant-slice agreement excess over the uniform-versus-uniform floor +0.33 against +0.06, anchor displacement 0.64 against 0.039 body RMS radii; the anchor displacement reproduces on the wings, the agreement readout is single-dataset). | @sec-consistency-bench, @sec-scoreboard-consistency, @sec-territories, @sec-nb-steelman-verdict |
 | ISLA's trained function depends weakly on the training sampling law, on two datasets: trained under the area-proportional law and scored on the independent uniform draw, ISLA is 0.99x its uniform-trained twin on the 35-wing rung (200,000 cells) and 1.08x on the 435 cars (100,000 cells), GeoTransolver 2.6x and 7.9x, Transolver 2.4x and 9.6x. Weakly dependent, not indifferent: the cars' 8% exceeded the 5% clause preregistered for it. | @sec-training-law, @sec-sampling-laws |
 | Training needs no rate sweep at the protocol rate 1e-3 at width 192, but under the default linear routing the safe rate has a ceiling that falls like 1/width and at least 1/depth: the rule rate 1e-3 × 192/width × 12/layers is the best clean rate at 384 and 768 wide and at 24 layers, and 48 layers has no clean linear rate. Above the ceiling the loss rises to the mean-field plateau, which is total routing collapse (every point routes to one slice in every block, anchors coincident). Cosine routing (bounded logits) removes the ceiling on every DrivAerML lane at neutral accuracy at the rule rates (cosine ÷ linear 0.998, 1.005, 1.020 at 192, 384, 768); its wing lanes are running. With the fused geometry kernel the step cost is at parity with GeoTransolver in half the memory. | @sec-robustness-lr, @sec-using-lr, @sec-isla-cost, @sec-nb-routingsat-verdict, @sec-nb-routenorm-cars-verdict |
-| *Single dataset (DrivAerML, 435 cars).* On the interior at 200,000 boundary cells and 200,000 queries ISLA leads GeoTransolver-volume on velocity (1.42; 1.56 with cosine routing), trails on pressure (0.87; 0.95) and is level on eddy viscosity (0.98; 0.97); ISLA's pressure seeds are 8% apart. The AirfRANS lanes are the second dataset. | @sec-interior |
+| On the interior ISLA leads GeoTransolver-volume on velocity and trails it on pressure, on two datasets and two PDE regimes: DrivAerML at 200,000 boundary cells and 200,000 queries, velocity 1.42 (1.56 with cosine routing), pressure 0.87 (0.95), eddy viscosity level at 0.98 (0.97), ISLA's pressure seeds 8% apart; AirfRANS at 100,000 queries, velocity 1.95 (2.14), pressure 0.80 (0.83), eddy viscosity 0.85 (0.83), every paired ratio agreeing in sign, ISLA's seeds 22 to 34% apart. | @sec-interior, @sec-interior-airfrans |
 | *Single dataset (DrivAerML, 435 cars, 100,000 cells).* ISLA holds the accuracy-versus-memory frontier: ISLA 384 wide at 100,000 cells scores 0.0411 at 22 GB against GeoTransolver 1,024 wide at 100,000 cells 0.0406 at 74 GB, less than a third of the memory, and the best ISLA at or under each budget is at least as accurate as the best GeoTransolver at every budget measured. Cells stop paying above 100,000 for every model, and the 500-epoch protocol is converged. | @sec-shared-floor, @sec-scoreboard-floor |
 | *Single dataset (DrivAerML, 435 cars, 100,000 cells).* Both architectures reach the same capacity floor, about 0.040: ISLA with cosine routing reaches 0.0407 at 68M parameters (384 wide, 24 layers) and 0.0406 at 136M (48 layers); GeoTransolver reaches 0.0406 at 143M (1,024 wide) and 0.0403 at 571M (2,048 wide, estimated). At matched parameters near 140M the two are identical, and ISLA is within 1% of the floor at half GeoTransolver's parameters. | @sec-shared-floor |
 
@@ -144,10 +144,11 @@ one.
 
 ### Interior accuracy {#sec-limits-interior}
 
-**The interior standing at the reporting protocol, a velocity lead (1.42),
-a pressure deficit (0.87) and level eddy viscosity (0.98) against
-GeoTransolver-volume, holds at the training query count on one dataset,
-and its pressure part is inside ISLA's own seed spread.** Five limits bound
+**The interior standing, a velocity lead (1.42 on DrivAerML, 1.95 on
+AirfRANS), a pressure deficit (0.87, 0.80) and eddy viscosity level to
+15% behind (0.98, 0.85) against GeoTransolver-volume, holds at the
+training query count on two datasets; on the cars its pressure part is
+inside ISLA's own seed spread, on the airfoils it is seed-robust.** Five limits bound
 it (@sec-interior). The comparison is not resource-matched and the two
 models do not receive the same inputs, and GeoTransolver-volume fed the
 physical velocity changes by under 2% on every field, so the ratios are not
@@ -205,7 +206,7 @@ baseline ÷ ISLA, so above one favors ISLA.
 | Do the 35-case ratios hold on cases no decision has read? | the 35-case ISLA and unit-direction baseline checkpoints scored once on the 360-case sealed test | the validation ratios reproduced within their seed spread |
 | Does bounding the routing logits remove the linear-routing rate ceiling on a second dataset? | cosine routing at the rates that collapse linear routing on the 510-wing rung, and the reporting-protocol lanes on the 35-wing rung and on the cars (@sec-nb-routenorm-prereg, @sec-nb-routenorm-p200k-prereg) | answered on DrivAerML (clean training at every collapse rate, neutral accuracy at the rule rates; @sec-nb-routenorm-cars-verdict); pending on the 510-wing rung, and the cosine default waits on it |
 | Does the capacity floor and the memory frontier reproduce on the wings? | the wing scaling study: cosine ISLA and GeoTransolver width and depth ladders on the HiLiftAeroML rungs at the scaling budget (@sec-nb-scalehl-prereg) | both ladders flatten at one floor, and the best ISLA at or under each memory budget is at least as accurate as the best GeoTransolver, or not |
-| Does the interior standing reproduce on a second dataset? | the AirfRANS interior lanes, ISLA with query tokens against GeoTransolver-volume under the reporting protocol (@sec-interior-airfrans) | the velocity lead and the pressure ordering reproduced within seed spread |
+| Does the interior standing reproduce on a second dataset? | the AirfRANS interior lanes, ISLA with query tokens against GeoTransolver-volume (@sec-interior-airfrans) | answered: reproduced on both fields with a prior, every paired ratio agreeing (velocity 1.95 / 2.14, pressure 0.80 / 0.83; @sec-nb-airfrans-verdict); the Reynolds and angle-of-attack extrapolation splits run next (@sec-nb-airfrans-extrap-prereg) |
 | Why does ISLA's training-law dependence differ between datasets (1% on the wings, 8% on the cars)? | the twin training under a third law, or on a third dataset, with the same independent uniform readout (@sec-training-law) | no bar is preregistered; reported as measured |
 | Does the architecture match a same-size baseline on a problem that is not external aerodynamics? | a dataset outside external aerodynamics with GeoTransolver trained on it under the fair-comparison protocol; the screened-Poisson acceptance case already trains with $K = 0$ global vectors and one global scalar (@sec-nb-globin-accept-verdict) | the error at the level of the same-size baseline on that problem |
 | Does either architecture extrapolate across geometry classes? | a split across classes rather than along one parameter of one family | none of this book's datasets provides one |
@@ -263,7 +264,8 @@ pressure deficit closes at width 192 without moving velocity or eddy
 viscosity. Eddy viscosity is level (0.98) and pressure remains at 0.87
 with ISLA's seeds 8% apart, so at the reporting protocol
 the recommendation is ISLA on velocity, GeoTransolver-volume on pressure,
-and either on eddy viscosity, on one dataset.
+and either on eddy viscosity (GeoTransolver-volume by 15% on the
+airfoils), on two datasets.
 
 If neither fires, the recommendation stands as written, with the bounds of
 this chapter attached: the program's ISLA-specific claims are exact

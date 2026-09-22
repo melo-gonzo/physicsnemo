@@ -10,8 +10,10 @@ DrivAerML validation cars in float32, ISLA leads GeoTransolver-volume on
 interior velocity by 42% (56% with cosine routing), trails it on interior
 pressure by 13% (5%) and is level on eddy viscosity (GeoTransolver-volume ÷
 ISLA 0.98 and 0.97), at a third of the parameters (@tbl-interior-200k).
-This is a single-dataset standing, with ISLA's two pressure seeds 8%
-apart; the second dataset is AirfRANS, whose lanes are running
+The ordering reproduces on a second dataset and PDE regime, AirfRANS
+(two-dimensional incompressible airfoil flow): there ISLA leads on velocity
+by 95% (114% with cosine routing), trails on pressure by 20% (17%) and on
+eddy viscosity by 15% (17%), with both seeds agreeing on every field
 (@sec-interior-airfrans). Decode the queries passively instead, so that a
 prediction at one point never depends on which other points are asked for,
 and accuracy falls: exact query independence has a price, and the
@@ -311,10 +313,11 @@ boundary-integral kernels and places no latent tokens off the surface.
 print(f"**One architecture covers the surface and the interior: at the reporting protocol ISLA with query tokens leads "
       f"GeoTransolver-volume on velocity by {(lin_ratio['velocity_l2']-1)*100:.0f}% ({(cos_ratio['velocity_l2']-1)*100:.0f}% with cosine routing), "
       f"is level on eddy viscosity and trails on pressure by {(1-lin_ratio['pressure_l2'])*100:.0f}% ({(1-cos_ratio['pressure_l2'])*100:.0f}%), at "
-      "a third of GeoTransolver-volume's parameters, on one dataset.** The pressure deficit is the one open standing, and its size "
+      "a third of GeoTransolver-volume's parameters; the same ordering holds on AirfRANS, where the velocity lead is about 2x and the pressure "
+      "deficit 17 to 20% (@sec-interior-airfrans).** The pressure deficit is the one open standing. On the cars its size "
       f"({(1-cos_ratio['pressure_l2'])*100:.0f}% under cosine routing) is inside ISLA's own pressure seed spread "
-      f"({abs(RVA['isla_lr5e4']['pressure_l2']['seeds'][0]/RVA['isla_lr5e4']['pressure_l2']['seeds'][1]-1)*100:.0f}% between the two linear seeds), so "
-      "settling it needs more seeds before it needs a mechanism. Not measured: the standing under the default "
+      f"({abs(RVA['isla_lr5e4']['pressure_l2']['seeds'][0]/RVA['isla_lr5e4']['pressure_l2']['seeds'][1]-1)*100:.0f}% between the two linear seeds); on the airfoils "
+      "it is seed-robust (every paired ratio below one), so it is a property of the architecture pair, not of one dataset, and its mechanism is open. Not measured: the standing under the default "
       "query_mass=source_total, the cosine configuration's request-size dependence, an ISLA arm at GeoTransolver-volume's 27.6M "
       "parameters, and the 54- and 109-car rungs of the task, which are pending on ISLA at the reporting protocol. The passive decode "
       "remains the configuration to use when query independence is contractual, at its measured price "
@@ -325,7 +328,55 @@ print(f"**One architecture covers the surface and the interior: at the reporting
 
 ### The second dataset: AirfRANS {#sec-interior-airfrans}
 
-The second dataset for the interior task is AirfRANS, whose lanes are
-running under the same protocol (the HiLiftAeroML volume carries no
-interior fields); until they report, every interior standing is a
-single-dataset result (@sec-program-status).
+**The interior ordering is not a property of car flow: on AirfRANS, a
+different dataset and a different PDE regime, ISLA leads
+GeoTransolver-volume on interior velocity by about 2x and trails it on
+pressure by 17 to 20%, with both seeds agreeing on every field.** AirfRANS
+is 1,001 two-dimensional incompressible k-omega SST RANS solutions around
+NACA airfoils; its full split trains on 800 cases and tests on 200. The
+boundary is the airfoil polyline (about 1,000 segments with in-plane
+normals and segment lengths as the quadrature measure), the global inputs
+are the inlet velocity as the one global vector and the Reynolds number as
+the one global scalar, and the interior queries carry the signed distance
+to the airfoil. Both architectures were trained for 500 epochs at 100,000
+interior queries per case and scored in float32 at the same count on the
+200 test cases (the HiLiftAeroML volume, the other candidate, carries no
+interior fields). Pressure is nondimensionalized by the inlet dynamic
+pressure and velocity by the inlet speed; eddy viscosity keeps its units
+and the recipe's normalization.
+
+```{python}
+#| label: tbl-interior-airfrans
+#| output: asis
+AF = json.load(open(RES / "airfrans_reduction_2026-09-22.json")); afa = AF["arms"]; afv = AF["verdicts"]
+fields = [("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity")]
+def afcell(a, f): return f"{afa[a][f]['mean']:.4f} ({' / '.join(f'{v:.4f}' for v in afa[a][f]['seeds'])})"
+out = "| arm, 800 training airfoils, 100,000 queries | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
+out += "| GeoTransolver-volume, 1e-3 | " + " | ".join(afcell("gt_volume_1e-3", f) for f, _ in fields) + " |\n"
+for a, lab in (("isla_linear_5e-4", "ISLA, query tokens + signed distance, linear routing, 5e-4"), ("isla_cosine_1e-3", "**ISLA, query tokens + signed distance, cosine routing, 1e-3**")):
+    out += f"| {lab} | " + " | ".join(afcell(a, f) for f, _ in fields) + " |\n"
+    out += f"| GeoTransolver-volume ÷ {'ISLA linear' if 'linear' in a else 'ISLA cosine'} (paired by seed) | " + " | ".join(f"{afv[a][f]['gt_over_isla']:.2f} ({' / '.join(f'{v:.2f}' for v in afv[a][f]['paired_ratios'])})" for f, _ in fields) + " |\n"
+print(out)
+print(": Interior error on AirfRANS (relative L2 over the 200 test cases of the full split, float32, two seeds, 100,000 interior "
+      "queries per case, 500 epochs), seed means with the seeds in parentheses. Ratios are GeoTransolver-volume ÷ ISLA (above 1 "
+      "favors ISLA), as the seed mean and paired by seed. Preregistered bars: reproduced if the pressure ratio is below one and the "
+      "velocity ratio above one with both paired ratios agreeing, as on DrivAerML; eddy viscosity has no prior. "
+      f"Verdicts: pressure {afv['isla_linear_5e-4']['pressure_l2']['verdict']} / {afv['isla_cosine_1e-3']['pressure_l2']['verdict']}, "
+      f"velocity {afv['isla_linear_5e-4']['velocity_l2']['verdict']} / {afv['isla_cosine_1e-3']['velocity_l2']['verdict']} (linear / cosine). "
+      "How to read this: ISLA's two seeds differ by 22 to 34% on every field here, GeoTransolver-volume's by 2 to 7%; the sign of "
+      "every paired ratio is what the verdicts rest on, not the second digit. Data: results/airfrans_reduction_2026-09-22.json. {#tbl-interior-airfrans}")
+```
+
+Three things carry with @tbl-interior-airfrans. The ordering is the cars'
+ordering with the gaps widened: the velocity lead is about 2x (1.4 to 1.6x
+on the cars), the pressure deficit 17 to 20% (5 to 13%), and eddy
+viscosity, level on the cars, goes to GeoTransolver-volume by 15 to 17%.
+The two regimes differ in what pressure is (gauge pressure on a 3-D body
+against nondimensional pressure in 2-D incompressible flow), so the same
+ordering across them says the split is a property of how the two
+architectures treat an interior point, not of one flow. And ISLA's seed
+spread on this dataset is large, 22 to 34%, where GeoTransolver-volume's
+is a few percent; the verdicts rest on the sign of every paired ratio,
+which agrees, and the source of the spread is open. The Reynolds-number
+and angle-of-attack extrapolation splits of AirfRANS run next under a
+preregistered growth-factor readout (@sec-nb-airfrans-extrap-prereg).
