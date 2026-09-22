@@ -69,15 +69,20 @@ every rung and not decomposed.** The DrivAerML decomposition is
 
 ### Regime extrapolation {#sec-limits-regime}
 
-**Whether ISLA generalizes across a flow-regime boundary (angle of attack,
-attached to separated flow) is unmeasured: no ISLA lane exists on the
-sealed regime splits at any budget, and the finding that GeoTransolver
-and Transolver lose about an order of magnitude across such a boundary is
-a mechanism finding on those architectures (@sec-nb-hl-sealed-test), not a
-comparison with ISLA.** What would move this: the sealed regime splits
-run once with ISLA and unit-direction baselines at the reporting
-protocol; a split across geometry *classes* remains the open test, and
-none of this book's datasets provides one.
+**ISLA's generalization across a physical-regime boundary is measured on
+one dataset and one task: on AirfRANS's Reynolds-number and angle-of-attack
+extrapolation splits its interior error grows less than
+GeoTransolver-volume's on pressure and eddy viscosity and the same on
+velocity, and it leads on every field outside the training range
+(@sec-interior-extrapolation). It is unmeasured on the surface task and on
+three-dimensional flow: no ISLA lane exists on the HiLiftAeroML sealed
+regime splits (angle of attack, attached to separated flow), and the finding
+that GeoTransolver and Transolver lose about an order of magnitude across
+that boundary is a mechanism finding on those architectures
+(@sec-nb-hl-sealed-test), not a comparison with ISLA.** What would move
+this: the sealed regime splits run once with ISLA and the unit-direction
+baselines at the reporting protocol; a split across geometry *classes*
+remains the open test, and none of this book's datasets provides one.
 
 ### Interior accuracy {#sec-limits-interior}
 

@@ -286,6 +286,60 @@ print(f"Three things carry with @tbl-interior-airfrans. The ordering is the cars
       "@sec-shared-floor.")
 ```
 
+## Outside the training range: the AirfRANS extrapolation splits {#sec-interior-extrapolation}
+
+**When the global condition leaves its training range, ISLA's interior
+error grows less than GeoTransolver-volume's on pressure and eddy
+viscosity and the same on velocity, and the in-distribution ordering on
+pressure inverts: outside the training Reynolds band ISLA leads by 15%,
+outside the training angle-of-attack band by 47%.** AirfRANS ships two
+extrapolation splits: `reynolds` trains on 504 airfoils inside a
+Reynolds-number band and tests on 496 outside it; `aoa` trains on 804
+inside an angle-of-attack band and tests on 196 outside. Both
+architectures were trained on each split as on the full split (500
+epochs, 100,000 queries, two seeds) and scored on the split's test cases.
+The readout that separates extrapolation from the smaller training sets is
+the *growth factor*, each architecture's test error on the split divided
+by its own full-split test error, and the bar is the ratio of the two
+growth factors: above 1.10 with both seed pairs agreeing, ISLA extrapolates
+better; below 0.90, GeoTransolver-volume does.
+
+```{python}
+#| label: tbl-interior-airfrans-extrap
+#| output: asis
+AFX = json.load(open(RES / "airfrans_extrap_2026-09-22.json"))["splits"]
+fields = [("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity")]
+names = {"reynolds": "Reynolds number", "aoa": "angle of attack"}
+out = "| split | field | ISLA error (growth) | GeoTransolver-volume error (growth) | growth ratio GeoTransolver-volume ÷ ISLA (paired by seed) | GeoTransolver-volume ÷ ISLA on the split | verdict |\n|---|---|--:|--:|---|--:|---|\n"
+for sp in ("reynolds", "aoa"):
+    S = AFX[sp]
+    for f, lab in fields:
+        gi, gg, g = S["arms"]["isla_cosine_1e-3"][f], S["arms"]["gt_volume_1e-3"][f], S["growth"][f]
+        out += (f"| {names[sp]} | {lab} | {gi['mean']:.4f} ({gi['growth_mean']:.2f}) | {gg['mean']:.4f} ({gg['growth_mean']:.2f}) | "
+                f"{g['g_gt_over_g_isla']:.2f} ({', '.join(f'{v:.2f}' for v in g['paired'])}) | {S['gt_over_isla_on_split'][f]['mean']:.2f} | {S['verdict'][f].split(' (')[0]} |\n")
+print(out)
+print(": AirfRANS extrapolation splits (relative L2 on the split's test cases, float32, two seeds, 100,000 queries, 500 epochs). "
+      "Growth = the split's test error divided by the same architecture's full-split test error; the growth ratio compares how much "
+      "each architecture's error grows when the condition leaves its training range (above 1 means ISLA's grows less), and the "
+      "last ratio is the standing on the split itself (above 1 favors ISLA). Bars: 1.10 / 0.90 with both seed pairs agreeing. "
+      "How to read this: the Reynolds split trains on 504 airfoils against the full split's 800, so part of each growth factor is "
+      "data-size; both architectures pay it, which is why the ratio of growths is the readout. "
+      "Data: results/airfrans_extrap_2026-09-22.json. {#tbl-interior-airfrans-extrap}")
+```
+
+Two things travel with @tbl-interior-airfrans-extrap. It is one dataset
+and one task, two-dimensional; the HiLiftAeroML regime splits are the
+second dataset for the claim and are unmeasured (@sec-limits-regime). And
+the mechanism is not measured here: the architecture's premise is that a
+model whose learned maps see only invariant scalars, the boundary and a
+standardized condition vector should degrade more gracefully when the
+condition leaves its range than one that concatenates coordinates and the
+raw condition into every token, and the numbers go that way, but the
+territory and routing probes that would show *how* have not been run on
+these lanes. GeoTransolver-volume's two seeds also separate under
+extrapolation (its angle-of-attack pressure seeds differ by 16%) where
+ISLA's stay within 4%.
+
 ## Dependence on the query cloud {#sec-interior-companion}
 
 **The interacting configuration's answer at a point depends on how many

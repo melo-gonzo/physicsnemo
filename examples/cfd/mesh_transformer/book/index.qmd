@@ -89,6 +89,9 @@ vol_ratio = {f: vol_gt[f] / vol_isla[f] for f in FIELDS}
 AF = J("airfrans_reduction_2026-09-22.json")
 af_isla = {f: AF["arms"]["isla_cosine_1e-3"][f]["mean"] for f in FIELDS}; af_gt = {f: AF["arms"]["gt_volume_1e-3"][f]["mean"] for f in FIELDS}
 af_ratio = {f: AF["verdicts"]["isla_cosine_1e-3"][f]["gt_over_isla"] for f in FIELDS}
+AFX = J("airfrans_extrap_2026-09-22.json")["splits"]
+afx_split = {sp: {f: AFX[sp]["gt_over_isla_on_split"][f]["mean"] for f in FIELDS} for sp in ("reynolds", "aoa")}
+afx_growth = {sp: {f: AFX[sp]["growth"][f]["g_gt_over_g_isla"] for f in FIELDS} for sp in ("reynolds", "aoa")}
 
 def standing(r, names=("pressure", "velocity", "eddy viscosity")):
     """Word a triple of baseline ÷ ISLA ratios: above 1.02 ISLA leads, below 0.98 it trails, else level."""
@@ -123,6 +126,7 @@ rows = [
      f"ISLA reaches GeoTransolver-1,024's error at half its parameters; GeoTransolver-2,048 sits {(1-cap['gt2048']['pressure_l2_mean']/cap['isla24']['pressure_l2_mean'])*100:.0f}% lower at eight times ISLA's; both ladders flatten near 0.040"),
     ("**DrivAerML Volume task**, 200,000 boundary cells and 200,000 interior queries: pressure / velocity / eddy viscosity", f"GeoTransolver-volume {tri(vol_gt)}", tri(vol_isla), " / ".join(f"{vol_ratio[f]:.2f}" for f in FIELDS), standing(vol_ratio)),
     ("**AirfRANS interior task**, 800 training airfoils, 100,000 queries per case: pressure / velocity / eddy viscosity", f"GeoTransolver-volume {tri(af_gt)}", tri(af_isla), " / ".join(f"{af_ratio[f]:.2f}" for f in FIELDS), standing(af_ratio)),
+    ("**AirfRANS interior task, outside the training range** (Reynolds-number split / angle-of-attack split): pressure / velocity / eddy viscosity, GeoTransolver-volume ÷ ISLA on the held-out range", "—", "—", " / ".join(f"{afx_split['reynolds'][f]:.2f}" for f in FIELDS) + " ; " + " / ".join(f"{afx_split['aoa'][f]:.2f}" for f in FIELDS), f"ISLA leads on every field outside the training range; its error grows less than GeoTransolver-volume's on pressure (growth ratios {afx_growth['reynolds']['pressure_l2']:.2f} and {afx_growth['aoa']['pressure_l2']:.2f}) and eddy viscosity, the same on velocity"),
 ]
 out = "| Dataset, task and setting | GeoTransolver / Transolver | ISLA | baseline ÷ ISLA | Reading |\n|---|---:|---:|---:|---|\n"
 for r in rows: out += "| " + " | ".join(r) + " |\n"

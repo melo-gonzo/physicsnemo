@@ -24124,3 +24124,68 @@ GeoTransolver-512 0.11 s and 8.4 GB, first validations 0.013 / 0.011 /
 is used (no subsampling below the 20,000 cap). Accepted. Wall-clock
 estimates: Tensile2d 400-case lanes about 6 hours, lug 2,400-case lanes
 about 45 hours at one node each.
+
+## 2026-09-22 — Verdict, AIRFRANS-INT extrapolation splits: outside the training Reynolds band and outside the training angle-of-attack band, ISLA's interior error grows less than GeoTransolver-volume's on pressure (growth ratios 1.39 and 1.78) and eddy viscosity (1.52 and 1.81), the same on velocity (0.91 and 1.04); on both splits ISLA leads on every field, pressure included {#sec-nb-airfrans-extrap-verdict}
+
+**Setting.** The preregistration (@sec-nb-airfrans-extrap-prereg) trained
+ISLA (192 wide, cosine routing, 1e-3) and GeoTransolver-volume (1e-3) on
+AirfRANS's two extrapolation splits, `reynolds` (504 training airfoils
+inside a Reynolds-number band, 496 test airfoils outside it) and `aoa`
+(804 inside an angle-of-attack band, 196 outside), two seeds, 500 epochs,
+100,000 queries, float32 scoring at 100,000 queries on each split's test
+cases. The readout is the growth factor $g$ = extrapolation-split test
+error ÷ the same architecture's full-split test error, and the bar is the
+ratio $g_\text{GT} / g_\text{ISLA}$: above 1.10 with both seed pairs above
+one, ISLA extrapolates better; below 0.90 with both below one,
+GeoTransolver-volume does. Reduction
+`results/airfrans_extrap_reduce_2026-09-22.py`, artifact
+`results/airfrans_extrap_2026-09-22.json`.
+
+**What we saw** (relative L2 on the split's test cases; growth factors
+against the full-split values 0.0335 / 0.0177 / 0.0353 for ISLA and 0.0277
+/ 0.0379 / 0.0293 for GeoTransolver-volume):
+
+| split | field | ISLA error (growth) | GeoTransolver-volume error (growth) | $g_\text{GT}/g_\text{ISLA}$ (paired) | GeoTransolver-volume ÷ ISLA on the split |
+|---|---|---|---|---|---|
+| Reynolds | pressure | 0.0551 (1.64) | 0.0634 (2.29) | 1.39 (1.29, 1.49) | 1.15 |
+| Reynolds | velocity | 0.0256 (1.45) | 0.0501 (1.32) | 0.91 (0.83, 0.99) | 1.95 |
+| Reynolds | eddy viscosity | 0.0683 (1.93) | 0.0860 (2.93) | 1.52 (1.12, 1.99) | 1.26 |
+| angle of attack | pressure | 0.0719 (2.14) | 0.1059 (3.82) | 1.78 (1.74, 1.80) | 1.47 |
+| angle of attack | velocity | 0.0291 (1.64) | 0.0649 (1.71) | 1.04 (1.11, 0.94) | 2.23 |
+| angle of attack | eddy viscosity | 0.0886 (2.51) | 0.1330 (4.54) | 1.81 (1.84, 1.68) | 1.50 |
+
+: AIRFRANS-INT extrapolation splits (two seeds; ISLA seeds within 4% on every field, GeoTransolver-volume's within 7% on the Reynolds split and 15 to 40% apart on the angle-of-attack split). {#tbl-airfrans-extrap}
+
+**Verdict.** **ISLA extrapolates better on pressure and on eddy viscosity
+on both splits** (growth ratios 1.39 and 1.78 on pressure, 1.52 and 1.81
+on eddy viscosity, every paired ratio above one); **on velocity the two
+architectures' errors grow alike** (0.91 and 1.04, seeds straddling one on
+both splits). The consequence is a crossover: inside the training
+distribution GeoTransolver-volume leads ISLA on pressure by 17%
+(@sec-nb-airfrans-verdict); outside the Reynolds band ISLA leads by 15%,
+outside the angle-of-attack band by 47%, and its velocity lead widens
+from 2.1x to 2.2x. Eddy viscosity, GeoTransolver-volume's by 17% in
+distribution, is ISLA's by 26% and 50% outside. GeoTransolver-volume's
+seeds also diverge under extrapolation (its angle-of-attack pressure seeds
+are 0.114 and 0.098) where ISLA's stay within 4%.
+
+**Predictions against outcome.** No difference in growth on pressure
+(0.5): refuted, ISLA's growth is smaller on both splits. ISLA's velocity
+growth smaller on the Reynolds split (0.4): refuted, no difference. The
+full-split ordering holds on both splits (0.8): confirmed on velocity and
+inverted in ISLA's favor on pressure and eddy viscosity.
+
+**Reading and caveats.** This is the first measurement of ISLA's
+generalization across a physical-regime boundary, and it goes the way the
+architecture's premise predicts: a model whose learned maps see only
+invariant scalars, the boundary geometry and a standardized global
+condition vector degrades more gracefully when the condition vector leaves
+its training range than one that concatenates coordinates and the raw
+condition into every token. Two caveats keep it a single-dataset,
+single-task finding: the Reynolds split trains on 504 cases against the
+full split's 800, so part of every growth factor is data-size (both
+architectures pay it, which is why the ratio of growths is the readout);
+and AirfRANS is two-dimensional. The HiLiftAeroML regime splits (angle of
+attack and stall), unmeasured for ISLA at the protocol, are the second
+dataset for this claim. The book states the result in the interior chapter
+and in the limits chapter's regime section, labeled single dataset.

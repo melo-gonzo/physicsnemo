@@ -150,7 +150,17 @@ interior pressure (13% / 5% on the cars, 20% / 17% on the airfoils) on two
 datasets and two PDE regimes; eddy viscosity level on the cars,
 GeoTransolver-volume by 15 to 17% on the airfoils." Do not quote an AirfRANS
 ISLA number to better than about 15%. Interior lanes trained under
-`query_mass=geometric_mean`. Extrapolation splits (reynolds, aoa) pending.
+`query_mass=geometric_mean`. **Extrapolation splits (2026-09-22;
+results/airfrans_extrap_2026-09-22.json):** growth of the split test error
+over the full-split error, ISLA / GT-vol: Reynolds pressure 1.64 / 2.29,
+velocity 1.45 / 1.32, nut 1.93 / 2.93; AoA pressure 2.14 / 3.82, velocity
+1.64 / 1.71, nut 2.51 / 4.54. Growth ratios GT÷ISLA 1.39 / 0.91 / 1.52 and
+1.78 / 1.04 / 1.81 (paired seeds agree on pressure and nut). GT-vol ÷ ISLA on
+the splits: 1.15 / 1.95 / 1.26 and 1.47 / 2.23 / 1.50. Say: "outside the
+training Reynolds or angle-of-attack range ISLA's interior error grows less
+than GeoTransolver-volume's on pressure and eddy viscosity, the same on
+velocity, and ISLA leads on every field"; label single dataset, single task,
+2-D; do not call it a mechanism result (no probe run).
 
 **Pose (200k).** ISLA posed ÷ native 1.015; leads augmented GeoTransolver /
 Transolver by 12% / 21%.
