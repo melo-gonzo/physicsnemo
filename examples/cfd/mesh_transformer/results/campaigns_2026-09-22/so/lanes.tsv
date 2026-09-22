@@ -53,3 +53,5 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 51	so	so_t2d_isla_r1_frame_n250_seed43	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_250 val_split=val_100 +training.val_interval=10	5e-4	43	20000	code_ref
 52	so	so_t2d_isla_r2_frame_n400_seed42	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_400 val_split=val_100 +training.val_interval=10 ++model.n_layers=24	5e-4	42	20000	code_ref
 53	so	so_t2d_isla_r2_frame_n400_seed43	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_400 val_split=val_100 +training.val_interval=10 ++model.n_layers=24	5e-4	43	20000	code_ref
+54	so	so_lug_isla_r1_lr25e4_n300_seed42	ginot_lug_volume	isla_lug	train_split=train_n300 val_split=test +training.val_interval=10	2.5e-4	42	20000	code_ref
+55	so	so_lug_isla_r1_lr25e4_n300_seed43	ginot_lug_volume	isla_lug	train_split=train_n300 val_split=test +training.val_interval=10	2.5e-4	43	20000	code_ref
