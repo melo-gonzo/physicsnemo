@@ -23714,3 +23714,13 @@ and launched behind them (af rows 14 to 29; the manifest gained the nested
 `full_train_n50` to `full_train_n400` splits, seeded 2026); the first left
 the queue as this entry was written and its acceptance is checked
 separately.
+
+**Addendum (2026-09-22, 25 minutes after the scaling lanes started).** All
+sixteen AIRFRANS-SCALE lanes are alive with no traceback: the 50-airfoil
+ISLA pair has already finished its 500 epochs (about three seconds per
+epoch; final validation loss 0.015 / 0.013), the 50-airfoil
+GeoTransolver-volume pair is at epoch 410 to 421 (0.013 / 0.012), the
+100-airfoil lanes are at epochs 200 to 320, the 200-airfoil lanes at 70 to
+90 and the 400-airfoil lanes at 30 to 50, every one descending. Accepted.
+The 800-airfoil rung is the full-split pair already scored
+(@sec-nb-airfrans-verdict).
