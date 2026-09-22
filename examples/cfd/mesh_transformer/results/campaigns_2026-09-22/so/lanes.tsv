@@ -43,3 +43,13 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 41	so	so_lug_gt256_n2400_seed42	ginot_lug_volume	geotransolver_lug	train_split=train val_split=test +training.val_interval=10 model.n_hidden=256	1e-3	42	20000	code_ref
 42	so	so_lug_isla_r2_n2400_seed43	ginot_lug_volume	isla_lug	train_split=train val_split=test +training.val_interval=10 ++model.n_layers=24	5e-4	43	20000	code_ref
 43	so	so_lug_gt256_n2400_seed43	ginot_lug_volume	geotransolver_lug	train_split=train val_split=test +training.val_interval=10 model.n_hidden=256	1e-3	43	20000	code_ref
+44	so	so_t2d_isla_r1_frame_n32_seed43	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_32 val_split=val_100 +training.val_interval=10	5e-4	43	20000	code_ref
+45	so	so_t2d_isla_r1_frame_n400_seed43	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_400 val_split=val_100 +training.val_interval=10	5e-4	43	20000	code_ref
+46	so	so_t2d_isla_r1_frame_n64_seed42	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_64 val_split=val_100 +training.val_interval=10	5e-4	42	20000	code_ref
+47	so	so_t2d_isla_r1_frame_n64_seed43	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_64 val_split=val_100 +training.val_interval=10	5e-4	43	20000	code_ref
+48	so	so_t2d_isla_r1_frame_n125_seed42	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_125 val_split=val_100 +training.val_interval=10	5e-4	42	20000	code_ref
+49	so	so_t2d_isla_r1_frame_n125_seed43	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_125 val_split=val_100 +training.val_interval=10	5e-4	43	20000	code_ref
+50	so	so_t2d_isla_r1_frame_n250_seed42	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_250 val_split=val_100 +training.val_interval=10	5e-4	42	20000	code_ref
+51	so	so_t2d_isla_r1_frame_n250_seed43	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_250 val_split=val_100 +training.val_interval=10	5e-4	43	20000	code_ref
+52	so	so_t2d_isla_r2_frame_n400_seed42	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_400 val_split=val_100 +training.val_interval=10 ++model.n_layers=24	5e-4	42	20000	code_ref
+53	so	so_t2d_isla_r2_frame_n400_seed43	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_400 val_split=val_100 +training.val_interval=10 ++model.n_layers=24	5e-4	43	20000	code_ref

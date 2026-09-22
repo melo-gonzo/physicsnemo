@@ -371,8 +371,9 @@ benchmark instances are steady problems whose boundary conditions and loads
 vary per sample, which exercise the global vector and scalar inputs and the
 per-cell boundary scalars that the aerodynamic datasets leave at $K = 1$
 and $n_b = 0$: PLAID Tensile2d (two-dimensional solid mechanics under a
-varying load with material parameters as global scalars and labeled
-boundary edges), GINOT Bracket Lug (three-dimensional elastoplasticity under
+varying load with material parameters as global scalars, labeled boundary
+edges, and the laboratory frame as two global vectors because its targets
+are stress components in that frame, @sec-isla-heads), GINOT Bracket Lug (three-dimensional elastoplasticity under
 a varying pressure load, with published Transolver and GNOT numbers), and
 GNOT Heat2d (steady conduction with a prescribed temperature function on a
 labeled edge, the $K = 0$ case with per-cell boundary scalars). Within

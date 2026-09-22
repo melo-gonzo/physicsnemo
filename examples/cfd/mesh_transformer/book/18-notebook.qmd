@@ -24325,3 +24325,76 @@ need either the laboratory frame as global vector inputs (the principled
 route when the frame is physical, as gravity or a load axis is) or an
 equivariant rank-2 head; the book's statement of ISLA's output contract
 (scalars invariant, vectors equivariant) gains the missing clause.
+
+## 2026-09-22 — Interim verdict, SOLIDS-FRAME at 32 cases: the laboratory frame as global vectors repairs ISLA's Tensile2d generalization (validation total 0.063 to 0.0026); the load axis alone repairs everything but the odd component; removing that component repairs nothing {#sec-nb-solids-frame-interim}
+
+**Setting.** @sec-nb-solids-frame-prereg found ISLA fitting the PLAID
+Tensile2d training set while its validation error stayed 20 to 60 times
+GeoTransolver's, and preregistered four hypotheses with eight lanes. The
+32-case lanes have reached epochs 100 to 150 (validation every ten epochs
+on the 100 held-out cases; Huber losses on z-scored fields; the frameless
+baseline is the SOLIDS lane at the same seed, now at epoch 378 and
+plateaued since epoch 100). The numbers below are the latest validation
+tables; the 400-case lanes are at epoch 10 to 14 and report at the end.
+
+| lane (32 cases, seed 42) | epoch | $\sigma_{11}$ | $\sigma_{22}$ | $\sigma_{12}$ | displacement | total |
+|---|---|---|---|---|---|---|
+| ISLA R1, no frame (SOLIDS baseline) | 378 | 0.160 | 0.083 | 0.389 | 0.299 | 0.063 |
+| ISLA R1, `frame1` ($+y$ as the one global vector) | 149 | 0.0076 | 0.0062 | **0.416** | 0.0216 | 0.0123 |
+| ISLA R1, `frame2` ($+x, +y$ as two global vectors) | 100 | 0.0119 | 0.0091 | 0.0070 | 0.0223 | 0.0026 |
+| ISLA R1, `leak` (absolute coordinates as query scalars; not invariant) | 131 | 0.0098 | 0.0101 | 0.0080 | 0.0191 | 0.0025 |
+| ISLA R1, `nosig12` (no $\sigma_{12}$ head) | 148 | 0.114 | 0.074 | — | 0.294 | 0.081 |
+| GeoTransolver-512 | 369 | 0.0019 | 0.0009 | 0.0011 | 0.0068 | 0.00015 |
+
+: Validation Huber loss per field (z-scored), PLAID Tensile2d, 32 training cases, seed 42, latest table of each lane; GeoTransolver at epoch 90 stood at 0.00146 total, the epoch at which `frame2` stands at 0.0026. Plastic strain $q$ is 0.004 to 0.007 in every lane and omitted. Source: `runs/<lane>/train.log` on AGA. {#tbl-solids-frame-interim}
+
+**What we saw.** The pattern is the one H-frame predicted, term for term.
+*(i)* The load axis alone (`frame1`) brings $\sigma_{11}$, $\sigma_{22}$
+and the displacement down by 14 to 21 times, to within 4 to 7 times
+GeoTransolver, while $\sigma_{12}$ stays at 0.416, as bad as without any
+frame: $\sigma_{12}$ is odd under the reflection $x \to -x$, and with only
+$+y$ supplied no dot-product invariant can tell $+x$ from $-x$ (the book's
+statement that ISLA's scalar outputs are reflection-invariant,
+@sec-isla-heads, is exactly the obstruction). *(ii)* The full in-plane
+frame (`frame2`) repairs $\sigma_{12}$ as well (0.389 to 0.0070) and
+brings the total to 0.0026 at epoch 100, 1.8 times GeoTransolver at the
+same epoch, inside the preregistered 2x bar. *(iii)* The coordinate leak
+matches `frame2` field for field (0.0025 against 0.0026), so absolute
+positions add nothing beyond the frame: H-position is refuted. *(iv)*
+Dropping the $\sigma_{12}$ head leaves the other fields at the frameless
+values (0.114 / 0.074 / 0.294): the odd field does not poison the trunk,
+H-poison is refuted, and since two frame inputs suffice H-conditioning is
+refuted as well. The frameless lane's training losses of 1e-4 against
+validation losses of 0.1 to 0.4 are memorization; with the frame the
+training losses rise to 4e-3 and the validation losses fall a hundredfold.
+
+**Why it matters.** ISLA's output contract has a clause the aerodynamic
+datasets never exercised: **a scalar output is an invariant of the input
+vector set, so a quantity defined as a component in a frame is
+representable only when that frame is part of the input.** Pressure, von
+Mises stress and plastic strain are true scalars and need nothing; the
+components $\sigma_{ij} = e_i^{\mathsf T} \sigma\, e_j$ are invariants of
+the set augmented with $e_i, e_j$, and the principled input is the frame
+itself as global vectors ($K = 2$ in the plane, $K = 3$ in space). This is
+not a leak of an absolute frame: rotating the body *and* the frame vectors
+together leaves the components unchanged, which is the correct covariance
+of frame components, and the vector heads keep their equivariance. The
+displacement failed without the frame for a second reason of the same
+kind: z-scoring subtracts a constant laboratory-frame mean vector from an
+equivariant target. GeoTransolver has no such clause because it reads
+absolute coordinates; that is why the 32-case gap was invisible on every
+aerodynamic dataset and immediate on this one. The GINOT lug, whose one
+output is the von Mises invariant, never showed the failure.
+
+**Consequences.** The frameless Tensile2d ISLA lanes at 64, 125 and 250
+cases and the frameless R2 pair are superseded (blocked markers); the
+32- and 400-case frameless R1 pairs keep running as the ablation record.
+The Tensile2d ladder is relaunched with the frame configuration
+(`isla_tensile2d_frame2.yaml` with `plaid_tensile2d_frame.yaml`; rows 44
+to 53 of `kernel/so/lanes.tsv`, 10 lanes), and the two `frame2` lanes of
+this campaign serve as the seed-42 members at 32 and 400 cases. One
+engineering item follows: the fused geometry kernel accepts one global
+vector only, so frame-component problems run the eager region until the
+kernel takes $K \le 3$. Verdict pending at 400 cases (bar unchanged:
+`frame2` within 2x of GeoTransolver per field; the SOLIDS standing bars
+then apply to the frame lanes).

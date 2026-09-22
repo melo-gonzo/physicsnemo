@@ -603,6 +603,27 @@ too; but $e_\phi$ is a cross product and flips sign under a mirror while its
 coefficient does not, so the head is covariant under proper rotations only.
 :::
 
+**The contract has a clause for outputs that are components.** A scalar
+head can represent only invariants of the input vector set. Pressure, von
+Mises stress and plastic strain are invariants and need nothing; a stress
+component $\sigma_{ij} = e_i^{\mathsf T} \sigma\, e_j$ is an invariant
+of the set *augmented with the frame vectors* $e_i, e_j$, and is
+representable only when that frame is an input. The principled input is the
+frame itself as global vectors ($K = 2$ in the plane, $K = 3$ in space),
+which keeps the contract intact: rotating the body and the frame together
+leaves the components unchanged, as it should. The clause was measured on
+PLAID Tensile2d, where the targets are the in-plane stress components: with
+no frame ISLA fits the training set and its validation error is 20 to 60
+times GeoTransolver's (memorization); with the load axis alone every field
+is repaired except $\sigma_{12}$, which is odd under the in-plane
+reflection and stays unrepresentable; with the full frame every field is
+repaired and the total lands within 2x of GeoTransolver
+(@sec-nb-solids-frame-interim). Absolute coordinates add nothing beyond
+the frame, and removing the odd component repairs nothing else, so the
+mechanism is the contract and not the trunk. GeoTransolver reads absolute
+coordinates and has no such clause, which is why the aerodynamic datasets,
+whose outputs are a true scalar and a vector, never exposed it.
+
 ## The forward pass on one page {#sec-isla-forward}
 
 **Every symbol of the six ideas has one identifier in the code, and

@@ -146,6 +146,14 @@ They fail in three settings a general PDE surrogate meets:
 - an assembly of parts in mixed orientations, where no single frame
   canonicalizes every component.
 
+The contract also has a clause that the aerodynamic datasets never
+exercise: an output that is a *component in a frame* (a stress
+$\sigma_{12}$, a displacement along a laboratory axis) is representable
+by ISLA's invariant scalar heads only when that frame is supplied as global
+vectors, since the components are invariants of the body together with the
+frame. Measured on PLAID Tensile2d in @sec-nb-solids-frame-interim, and
+stated with the contract in @sec-isla-heads.
+
 ISLA needs neither a frame estimate nor a global direction at inference;
 in these settings the contract is the difference between a working
 surrogate and the first row of @tbl-pose. Against baselines that learn pose
