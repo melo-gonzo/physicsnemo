@@ -617,8 +617,10 @@ no frame ISLA fits the training set and its validation error is 20 to 60
 times GeoTransolver's (memorization); with the load axis alone every field
 is repaired except $\sigma_{12}$, which is odd under the in-plane
 reflection and stays unrepresentable; with the full frame every field is
-repaired and the total lands within 2x of GeoTransolver
-(@sec-nb-solids-frame-interim). Absolute coordinates add nothing beyond
+repaired, four to twelve times in float32 relative L2 at 32 cases, and the
+remaining gap to GeoTransolver (2 to 4 times at 32 and 64 cases, narrowing
+with cases) is a standing question for the Tensile2d ladder, not a
+representability one (@sec-nb-solids-frame-interim). Absolute coordinates add nothing beyond
 the frame, and removing the odd component repairs nothing else, so the
 mechanism is the contract and not the trunk. GeoTransolver reads absolute
 coordinates and has no such clause, which is why the aerodynamic datasets,

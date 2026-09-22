@@ -24451,3 +24451,37 @@ DeepJEB++; Heat2d deferred. Conversion follows the Tensile2d converter
 pattern to native DomainMesh files; each dataset enters the book only with
 GeoTransolver trained under the fair-comparison protocol and a per-dataset
 preregistration before the first lane.
+
+**Addendum (2026-09-22, float32 scoring of the 32- and 64-case lanes;
+`results/solids_frame_2026-09-22.json`, reduction script alongside).** The
+scorer's per-sample relative L2 on the 100 held-out cases at 500 epochs
+(mean over cases; seeds averaged where two exist):
+
+| lane | cases | $\sigma_{11}$ | $\sigma_{22}$ | $\sigma_{12}$ | displacement |
+|---|---|---|---|---|---|
+| ISLA R1, no frame (2 seeds) | 32 | 0.450 | 0.360 | 1.199 | 0.639 |
+| ISLA R1, `frame1` ($+y$) | 32 | 0.122 | 0.111 | **1.076** | 0.125 |
+| ISLA R1, `frame2` ($+x,+y$; 2 seeds) | 32 | 0.112 | 0.112 | 0.102 | 0.090 |
+| ISLA R1, `leak` | 32 | 0.136 | 0.131 | 0.128 | 0.101 |
+| ISLA R1, `nosig12` | 32 | 0.450 | 0.378 | — | 0.655 |
+| GeoTransolver-512 (2 seeds) | 32 | 0.032 | 0.028 | 0.031 | 0.041 |
+| ISLA R1, `frame2` (2 seeds) | 64 | 0.054 | 0.043 | 0.050 | 0.038 |
+| GeoTransolver-512 (2 seeds) | 64 | 0.021 | 0.019 | 0.021 | 0.018 |
+
+: Float32 relative L2 on `val_100`, PLAID Tensile2d, 500 epochs. {#tbl-solids-frame-fp32}
+
+The mechanism verdict is unchanged and sharper in these units: the frame
+repairs the stresses 4 times and the displacement 7 times at 32 cases, the
+$\sigma_{12}$ error falls from 1.20 (worse than predicting zero) to 0.10
+only when both frame vectors are present (1.08 with $+y$ alone), the
+coordinate leak is no better than the frame (slightly worse), and removing
+the odd head changes nothing else. **The standing is a separate matter:**
+in relative L2 GeoTransolver-512 leads the frame-configured ISLA by 3.5 to
+4.5 times at 32 cases and by 2.2 to 2.6 times at 64 cases, so the
+interim's "within 2x at equal epoch" (a training-loss statement at epoch
+90) does not carry to the scored standing at 500 epochs. The ratio moves
+toward one with cases (GeoTransolver ÷ ISLA on $\sigma_{11}$ 0.29 at 32,
+0.39 at 64); the 125-, 250- and 400-case rungs and the R2 pair decide the
+Tensile2d standing under the SOLIDS bars, and the prereg's prediction that
+GeoTransolver leads on the stresses at 400 cases stands to be tested rather
+than already refuted.
