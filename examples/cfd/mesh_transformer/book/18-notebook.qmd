@@ -23992,3 +23992,75 @@ still the 192-wide linear-routed lanes and are stated as such once, in
 **Still to do in the book.** Swap the surface artifacts for the reference
 lanes; add the cost-sweep artifact; add the new datasets' chapter section
 when the first conversions train; remove the transition paragraph.
+
+## 2026-09-22 — Preregistration, SOLIDS: the first non-aerodynamic steady-PDE datasets, PLAID Tensile2d (2-D elasto-viscoplastic tension, load and material as global scalars, labeled edges) and GINOT Bracket Lug (3-D elastoplastic lug, pressed hole), full-data comparisons and training-case ladders {#sec-nb-solids-prereg}
+
+**Setting.** Peter's 2026-09-22 ruling asks for datasets beyond
+aerodynamics, referenced in the literature, with boundary conditions that
+are or can be labeled and that vary strongly. Two are converted
+(`results/campaigns_2026-09-22/datasets/`): **PLAID Tensile2d** (Safran;
+CC-BY-SA-4.0; 702 quasi-static elasto-viscoplastic tension cases on a
+square with two semicircular cut-outs; unstructured triangle meshes of 6 to
+11 thousand nodes; the top edge carries a uniform pressure $P$ that varies
+per case, the bottom edge is fixed, one corner node is pinned; five
+constitutive scalars $p_1 \ldots p_5$ vary; outputs displacement, plastic
+strain $q$, and the stresses $\sigma_{11}, \sigma_{22}, \sigma_{12}$; the
+200 test cases ship without targets, so a seed-0 draw of 100 cases from
+`train_500` is the validation split and the remaining 400 the largest
+training rung) and **GINOT Bracket Lug** (CC BY 4.0; 3,000 elastoplastic
+lugs with three geometry parameters and a pressure of 50 to 100 MPa on the
+lower half of the hole, the far end fixed; hex meshes of 5 to 15 thousand
+nodes; output von Mises stress; the fixed and pressed faces are identified
+geometrically from the paper's description, with face areas matching to
+0.1%; a seed-0 split of 2,400 training and 600 test lugs with nested
+300 / 600 / 1,200 rungs). Both are solids: the field lives on the whole
+mesh, so every node is an interior query carrying its signed distance to
+the boundary, and the boundary is the outer surface with per-cell labels
+(fixed, loaded, pinned; the applied pressure on loaded cells). Neither
+problem has a global direction ($K = 0$), so ISLA runs with the eager
+geometry region (the fused kernel requires $K = 1$); the global scalars
+enter standardized over the training split. Three-epoch smoke lanes for
+ISLA and GeoTransolver passed on both datasets (val relative L2 after
+three epochs: Tensile2d displacement 0.49 ISLA / 0.17 GeoTransolver, lug
+von Mises 0.29 / 0.46; warm-up numbers, not verdicts).
+
+**Lanes** (group `so`, `kernel/so/lanes.tsv`, 44 lanes, snapshot
+`code_ref`, 500 epochs, every node used, two seeds, bf16 training, float32
+scoring on the validation split): ISLA R1 (384 x 12, cosine routing,
+`n_boundary_scalars = 4`, global scalars 6 / 4, query tokens with the
+signed distance, 5e-4) and GeoTransolver at 512 wide (the agent's yaml,
+1e-3, with the nodal boundary tags in its local embedding and the global
+scalars in its global embedding) on the Tensile2d ladder 32 / 64 / 125 /
+250 / 400 and the lug ladder 300 / 600 / 1,200 / 2,400; ISLA R2 (384 x 24)
+and GeoTransolver-256 at the largest rung of each.
+
+**Bars.** (i) *Standing at full data*, per field: GeoTransolver ÷ ISLA
+with paired-seed sign; no prior, reported. Headline fields: displacement
+and the three stresses on Tensile2d (plastic strain $q$ is reported but
+heavy-tailed under z-scoring and excluded from the headline), von Mises on
+the lug. (ii) *Data exponent*: bounded-floor fit per field and
+architecture as in the AirfRANS ladder; same exponent across architectures
+within the bootstrap; exponents stated per dataset. (iii) *Width and
+depth*: R2 within 1.5% of R1 at the largest rung means depth does not pay
+on solids; GeoTransolver-512 within 1.5% of 256 means width does not pay
+for it. (iv) *Trainability*: a lane at the mean-field plateau is reported
+and rerun at half its rate.
+
+**Prediction.** GeoTransolver leads on Tensile2d stresses at 400 cases
+(0.6; it sees the nodal tags at every node, ISLA only on the boundary),
+ISLA leads on the lug von Mises (0.5); both data exponents between 0.4 and
+0.9 on both datasets (0.6); same exponents within bootstrap (0.6); depth
+pays on neither (0.6).
+
+**Addendum (2026-09-22, later): the DrivAerML Volume REF lanes hang under
+the fused kernel.** All four volume lanes (384 wide, 200,000 boundary cells
+and 200,000 interacting queries, fused geometry kernel) stopped logging at
+epoch 0 after 12 (seed 42) or 19 (seed 43) steps while the job stayed
+alive; cancelled and restarted, each stopped at the same step with the
+same loss to six digits, and the node's GPU no longer answered an overlap
+step. The 192-wide cosine volume lanes trained under the fused kernel
+without incident, so the trigger is the 384-wide volume shape on a
+particular training case. The four lanes are retired with blocked markers
+and replaced by eager-kernel twins (rows 32 to 35 of `kernel/ref/lanes.tsv`,
+`++model.geo_kernel=eager`); the hang is an engineering task with the
+reproducer recorded (case at step 13 of seed 42's epoch 0).

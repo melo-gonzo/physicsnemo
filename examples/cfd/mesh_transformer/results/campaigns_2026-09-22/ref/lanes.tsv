@@ -31,3 +31,7 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 29	ref	ref_gt_w512_dr435_seed43	drivaer_ml_surface	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir model.n_hidden=512	3e-3	43	200000	code_routenorm
 30	ref	ref_gt_w512_hl35_seed42	highlift_surface_super_scarce	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir model.n_hidden=512 +training.val_interval=25	3e-3	42	200000	code_routenorm
 31	ref	ref_gt_w512_hl35_seed43	highlift_surface_super_scarce	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir model.n_hidden=512 +training.val_interval=25	3e-3	43	200000	code_routenorm
+32	ref	ref_isla_r1_drvol_eager_seed42	drivaer_ml_volume_reference	isla_volume_ref	+training.val_interval=10 ++model.geo_kernel=eager	5e-4	42	200000	code_ref
+33	ref	ref_isla_r2_drvol_eager_seed42	drivaer_ml_volume_reference	isla_volume_ref	+training.val_interval=10 ++model.geo_kernel=eager ++model.n_layers=24	5e-4	42	200000	code_ref
+34	ref	ref_isla_r1_drvol_eager_seed43	drivaer_ml_volume_reference	isla_volume_ref	+training.val_interval=10 ++model.geo_kernel=eager	5e-4	43	200000	code_ref
+35	ref	ref_isla_r2_drvol_eager_seed43	drivaer_ml_volume_reference	isla_volume_ref	+training.val_interval=10 ++model.geo_kernel=eager ++model.n_layers=24	5e-4	43	200000	code_ref
