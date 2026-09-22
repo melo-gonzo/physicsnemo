@@ -24189,3 +24189,44 @@ and AirfRANS is two-dimensional. The HiLiftAeroML regime splits (angle of
 attack and stall), unmeasured for ISLA at the protocol, are the second
 dataset for this claim. The book states the result in the interior chapter
 and in the limits chapter's regime section, labeled single dataset.
+
+## 2026-09-22 — Root cause of the volume-lane hang: a Lustre write-lock wait on writable shared memory maps of one DrivAerML case (`run_397`), not the fused geometry kernel; the fix is read-only datasets {#sec-nb-volume-hang-root-cause}
+
+**The symptom** (@sec-nb-ref-acceptance addenda): every 384-wide REF lane
+on the DrivAerML Volume task stopped logging at epoch 0 after 12 (seed 42)
+or 19 (seed 43) steps, fused and eager alike, with one GPU idle and three
+spinning in the collective, and did so again on restart at the same step.
+
+**What was measured.** The fused kernel was exonerated on three counts: its
+grid and blocks depend on token and slice counts only, with every load and
+store masked and no index product near the 32-bit limit at 400,000 tokens;
+a random-input sweep at 384 wide over ten boundary counts around the
+dataset's (199,999 to 65,536 cells, 200,000 queries) completed on every
+configuration with fused and eager agreeing to 0.4% under bf16 and
+gradients to 0.6%; and case-faithful single-GPU steps on four suspected
+cars ran at 0.38 s and 88 GB. Reconstructing the recipe's sampler order
+placed one case, `run_397`, exactly one prefetch slot past the last logged
+step on the idle rank for both seeds. In a four-rank reproduction that rank
+never entered its forward pass, held only `run_397`'s files as writable
+shared memory maps, and had a thread waiting inside the Lustre distributed
+lock manager. In a single-process reproduction the same case blocked the
+loader indefinitely with the default mapping and loaded in 32 to 44
+seconds with read-only mapping, twice each.
+
+**Mechanism.** The mesh reader loads cases through tensordict memory maps,
+which map owner-writable files read-write and shared; page faults through
+such a map take Lustre *write* extent locks, and when several lanes on
+different nodes (the same-seed R1 and R2 lanes and their twins, launched
+in lockstep) fault the same case, the requests wait on one another without
+end. Plain reads of the same files take shared read locks and complete in
+seconds.
+
+**Fix and consequences.** The dataset trees are made read-only (`chmod -R
+a-w`), which makes tensordict map them read-only; the eager and
+checkpointed-eager volume twins (rows 32 to 37) are retired and the fused
+volume lanes (rows 16, 17, 20, 21) relaunched with their blocked markers
+lifted. The fused kernel stays the default. The engineering follow-up
+(@sec-program-status): the mesh reader should map dataset files read-only
+regardless of permissions, since datasets are immutable artifacts; that is
+a `physicsnemo.datapipes` change, recorded as a task. The earlier addenda
+that attributed the hang to the kernel are superseded by this entry.
