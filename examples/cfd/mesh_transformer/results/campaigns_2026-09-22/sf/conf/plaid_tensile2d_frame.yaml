@@ -1,0 +1,50 @@
+# SOLIDS-FRAME variant of plaid_tensile2d.yaml: identical, plus constant frame vectors in global_data (see the transform below).
+# PLAID Tensile2d (Safran, CC-BY-SA-4.0; HF PLAID-datasets/Tensile2d) as a boundary-to-interior solid-mechanics dataset,
+# converted to native DomainMesh files by kernel/plaid_tensile2d_convert.py (2026-09-22). Two-dimensional quasi-static
+# elasto-viscoplastic tension (plane strain, small deformations) embedded at z = 0: interior = every mesh node with
+# displacement (U1, U2, 0), q (cumulated plastic strain), sig11 / sig22 / sig12 (stress, dataset units, MPa-scale), sdf
+# (<= 0: the nodes are inside the solid, positive-outside convention) and sdf_normals (grad sdf); boundary "outer" = the
+# closed outer polyline as line cells with outward in-plane normals, segment lengths as the quadrature measure, and per-cell
+# BC labels bc_loaded (top edge, pressure P), bc_fixed (bottom edge, U2 = 0), bc_pinned (the BottomLeft node, U1 = 0),
+# bc_pressure (= P on loaded cells, negative = tension) and traction (= -P n on loaded cells); global_data: P, p1..p5,
+# params (6,). Only the 500 official training samples carry targets: the 200 test and 2 OOD samples ship without output
+# fields and live under withheld/ (excluded by the pattern below). Splits: the official nested ladder train_8 ... train_500
+# plus val_100 (seed-0 draw from train_500 minus train_250) and train_400 (= train_500 minus val_100); select with
+# train_split=train_400 val_split=val_100 (or train_split=train_250 for the leaderboard-comparable ladder rung).
+train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/plaid_tensile2d_pdmsh
+manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/plaid_tensile2d_pdmsh/manifest.json
+
+pipeline:
+  reader:
+    _target_: ${dp:DomainMeshReader}
+    path: ${train_datadir}
+    pattern: "sample_*/*.pdmsh"                  # excludes withheld/sample_*/ (no targets)
+    subsample_n_points: ${sampling_resolution}   # interior queries (each case has 6k to 12k nodes: set sampling_resolution >= 12000 to keep every node)
+    subsample_n_cells: ${sampling_resolution}    # larger than any case's ~500 boundary segments: the boundary is kept whole
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    - _target_: ${dp:SetDomainGlobalField}             # SOLIDS-FRAME (2026-09-22): the fixed laboratory frame as constant global vectors
+      fields:
+        frame_y: [0.0, 1.0, 0.0]                        # the load direction (+y)
+        frame_xy: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]    # the full in-plane frame (K = 2)
+    - _target_: ${dp:StandardizeDomainGlobalField}     # recipe-local (domain_transforms.py): global_data.params -> params_std, zero mean / unit std over train_400
+      field: params
+      output_field: params_std
+      mean: [-44.9989, 14.9429, 450.7845, 1502.57, 1496.48, 75434.75]
+      std: [2.8984, 2.8713, 86.0517, 286.0675, 289.1855, 14613.757]
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:                                    # pooled over all nodes of train_400 (manifest _stats; 2026-09-22)
+        displacement: {type: vector, mean: [-3.38e-4, 1.054e-3, 0.0], std: 8.22e-4}   # per-component std 2.89e-4 / 1.126e-3; std here is the isotropic (Frobenius/sqrt(2)) value
+        q: {type: scalar, mean: 1.73e-7, std: 8.18e-6}       # heavy-tailed: 400-case max_q ranges 1.9e-7 .. 1.6e-3; consider a log1p transform
+        sig11: {type: scalar, mean: -0.127, std: 28.4}
+        sig22: {type: scalar, mean: 57.7, std: 32.0}
+        sig12: {type: scalar, mean: 8.1e-4, std: 16.9}
+
+targets:
+  q: scalar
+  sig11: scalar
+  sig22: scalar
+  sig12: scalar
+  displacement: vector

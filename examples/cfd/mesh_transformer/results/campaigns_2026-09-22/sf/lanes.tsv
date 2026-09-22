@@ -1,0 +1,9 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	sf	sf_t2d_isla_r1_frame1_n32_seed42	plaid_tensile2d_frame	isla_tensile2d_frame1	train_split=train_32 val_split=val_100 +training.val_interval=10	5e-4	42	20000	code_ref
+1	sf	sf_t2d_isla_r1_frame2_n32_seed42	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_32 val_split=val_100 +training.val_interval=10	5e-4	42	20000	code_ref
+2	sf	sf_t2d_isla_r1_leak_n32_seed42	plaid_tensile2d	isla_tensile2d_leak	train_split=train_32 val_split=val_100 +training.val_interval=10	5e-4	42	20000	code_ref
+3	sf	sf_t2d_isla_r1_nosig12_n32_seed42	plaid_tensile2d_nosig12	isla_tensile2d_nosig12	train_split=train_32 val_split=val_100 +training.val_interval=10	5e-4	42	20000	code_ref
+4	sf	sf_t2d_isla_r1_frame1_n400_seed42	plaid_tensile2d_frame	isla_tensile2d_frame1	train_split=train_400 val_split=val_100 +training.val_interval=10	5e-4	42	20000	code_ref
+5	sf	sf_t2d_isla_r1_frame2_n400_seed42	plaid_tensile2d_frame	isla_tensile2d_frame2	train_split=train_400 val_split=val_100 +training.val_interval=10	5e-4	42	20000	code_ref
+6	sf	sf_t2d_isla_r1_leak_n400_seed42	plaid_tensile2d	isla_tensile2d_leak	train_split=train_400 val_split=val_100 +training.val_interval=10	5e-4	42	20000	code_ref
+7	sf	sf_t2d_isla_r1_nosig12_n400_seed42	plaid_tensile2d_nosig12	isla_tensile2d_nosig12	train_split=train_400 val_split=val_100 +training.val_interval=10	5e-4	42	20000	code_ref

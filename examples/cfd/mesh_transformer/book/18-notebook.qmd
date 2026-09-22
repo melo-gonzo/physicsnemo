@@ -24252,3 +24252,76 @@ R1 (384 x 12) at 0.38 s per step and 95 GB, R2 (384 x 24) at 0.77 s and
 the DrivAerML Volume task at 200,000 surface cells and 200,000 queries,
 which settles the memory question that had motivated the checkpointed
 twins.
+
+## 2026-09-22 — Preregistration, SOLIDS-FRAME: ISLA fits the Tensile2d training set but its validation error is 20 to 60 times GeoTransolver's; frame-vector variants and three controls to find out why {#sec-nb-solids-frame-prereg}
+
+**Setting.** The SOLIDS campaign (@sec-nb-solids-prereg) trains ISLA R1
+(384 wide, 12 layers, cosine routing, no global vector, eager geometry
+region) and GeoTransolver-512 on PLAID Tensile2d, a two-dimensional
+elasto-viscoplastic tension problem whose outputs are the displacement
+vector, the plastic strain $q$, and the three in-plane stress components
+$\sigma_{11}, \sigma_{22}, \sigma_{12}$ in the laboratory frame. The
+first validation tables are in, and they show a failure of a kind not seen
+on any aerodynamic dataset.
+
+**The symptom.** At 32 training cases after 62 epochs, ISLA's *training*
+losses per field match GeoTransolver's (Huber, z-scored: $\sigma_{12}$
+0.006 against 0.004, displacement 0.022 against 0.010), but its
+*validation* losses are 20 to 60 times larger ($\sigma_{11}$ 0.141 against
+0.007, $\sigma_{22}$ 0.088 against 0.005, $\sigma_{12}$ 0.367 against
+0.006, displacement 0.324 against 0.015; plastic strain equal at 0.003).
+The validation relative L2 of $\sigma_{12}$ is 1.21, worse than predicting
+zero. The same gap holds at every rung of the ladder in its first epochs
+(ISLA validation totals 0.13 to 0.17 against GeoTransolver's 0.005 to
+0.03), so it is not a small-data artifact. On the GINOT lug, where the one
+output (von Mises stress) is a rotation invariant, ISLA R1 at 300 lugs
+reaches a validation loss of 3.8e-5 (seed 43) against GeoTransolver's
+3.9e-5. ISLA memorizes Tensile2d and generalizes the lug.
+
+**Hypotheses.** *H-frame*: ISLA's scalar head is invariant under
+rotations and reflections (its features are dot products), but
+$\sigma_{11}, \sigma_{22}, \sigma_{12}$ are components in a fixed
+laboratory frame, so an invariant head can represent them only by
+reconstructing that frame from the geometry (the loaded edge's normal gives
+$+y$; the pinned corner and any asymmetry of the cut-outs give $\pm x$).
+$\sigma_{12}$ is odd under the reflection $x \to -x$, which no invariant
+can express when the geometry is mirror-symmetric, and the z-scored
+displacement target carries a constant laboratory-frame offset (the
+subtracted mean) that an equivariant vector head can only produce from the
+same reconstructed frame. With 32 cases the network resolves this by
+memorizing case fingerprints; the frame reconstruction does not
+generalize. *H-position*: the failure is in how positions enter (through
+point-to-anchor invariants only) rather than in the output frame, and any
+absolute coordinate input would repair it. *H-poison*: the one odd field
+$\sigma_{12}$ drives the trunk into memorization and the other fields
+follow. *H-conditioning*: the six global scalars reach ISLA's tokens less
+effectively than GeoTransolver's global embedding, and no frame input
+repairs the gap.
+
+**Lanes** (group `sf`, `kernel/sf/lanes.tsv`, 8 lanes, `code_ref`, 500
+epochs, seed 42, rungs 32 and 400; validation every ten epochs on
+`val_100`). `frame1`: the load direction $+y$ as ISLA's one global vector
+(`n_global_vectors = 1`; the fused kernel then applies, so this is exactly
+the R1 layout of the reference configuration). `frame2`: the full in-plane
+frame $(+x, +y)$ as two global vectors (eager). `leak` (diagnostic only;
+breaks the invariance contract): the absolute coordinates appended to the
+per-query scalars. `nosig12`: the baseline model and dataset without the
+$\sigma_{12}$ head. The frame vectors are constants written into
+`global_data` by a `SetDomainGlobalField` transform
+(`plaid_tensile2d_frame.yaml`); the model yamls are in
+`results/campaigns_2026-09-22/sf/conf/`.
+
+**Predictions and bars** (validation loss per field at epoch 100 and at
+the end, against the baseline ISLA lane at the same rung and seed). Under
+H-frame: `frame2` and `leak` both bring every field within 2x of
+GeoTransolver-512, `frame1` repairs $\sigma_{11}$, $\sigma_{22}$ and
+$\sigma_{22}$-like quantities but leaves $\sigma_{12}$ above 0.1, and
+`nosig12` does not repair the remaining fields. Under H-position: `leak`
+repairs, `frame1` and `frame2` do not. Under H-poison: `nosig12` repairs
+the remaining fields and the frame variants do not. Under H-conditioning:
+nothing repairs. Prior: H-frame 0.6, H-position 0.2, H-poison 0.1,
+H-conditioning 0.1. Consequence if H-frame holds: tensor-valued targets
+need either the laboratory frame as global vector inputs (the principled
+route when the frame is physical, as gravity or a load axis is) or an
+equivariant rank-2 head; the book's statement of ISLA's output contract
+(scalars invariant, vectors equivariant) gains the missing clause.
