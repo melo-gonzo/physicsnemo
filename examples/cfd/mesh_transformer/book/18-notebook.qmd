@@ -24943,3 +24943,11 @@ the whole of the 2x spread. The 600-lug pair escaped early and agrees to
 the 300-lug pair is the control, launched with the ladder's remaining
 rungs pending (1,200 lugs at epoch 464, 2,400 lugs and the R2 /
 GeoTransolver-256 pairs at 125 to 310).
+
+**Addendum (2026-09-22, night): the 1,200-lug rung.** ISLA R1 0.0027 (seeds
+0.0028 / 0.0025) against GeoTransolver-512 0.0026 (0.0029 / 0.0023): ratio
+0.99, parity with overlapping seeds. The lug ladder so far reads 0.71 /
+1.08 / 0.99 at 300 / 600 / 1,200 lugs, and the learning-curve exponents
+over the three rungs are 0.78 (ISLA; the 300-lug mean carries the
+late-escaping seed) against 0.54 (GeoTransolver-512). The 2,400-lug rung
+and the R2 / GeoTransolver-256 pairs decide the standing at full data.
