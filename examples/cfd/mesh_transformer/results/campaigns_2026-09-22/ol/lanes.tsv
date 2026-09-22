@@ -1,0 +1,33 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	ol	ol_poisson_isla_r1_n512_seed42	olbc_poisson	isla_olbc_poisson	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_ref
+1	ol	ol_poisson_gt512_n512_seed42	olbc_poisson	geotransolver_olbc_poisson	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	1e-3	42	20000	code_ref
+2	ol	ol_poisson_isla_r1_n512_seed43	olbc_poisson	isla_olbc_poisson	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_ref
+3	ol	ol_poisson_gt512_n512_seed43	olbc_poisson	geotransolver_olbc_poisson	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	1e-3	43	20000	code_ref
+4	ol	ol_poisson_isla_r1_n2048_seed42	olbc_poisson	isla_olbc_poisson	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_ref
+5	ol	ol_poisson_gt512_n2048_seed42	olbc_poisson	geotransolver_olbc_poisson	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	1e-3	42	20000	code_ref
+6	ol	ol_poisson_isla_r1_n2048_seed43	olbc_poisson	isla_olbc_poisson	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_ref
+7	ol	ol_poisson_gt512_n2048_seed43	olbc_poisson	geotransolver_olbc_poisson	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	1e-3	43	20000	code_ref
+8	ol	ol_poisson_isla_r1_n8448_seed42	olbc_poisson	isla_olbc_poisson	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120	5e-4	42	20000	code_ref
+9	ol	ol_poisson_gt512_n8448_seed42	olbc_poisson	geotransolver_olbc_poisson	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120	1e-3	42	20000	code_ref
+10	ol	ol_poisson_isla_r1_n8448_seed43	olbc_poisson	isla_olbc_poisson	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120	5e-4	43	20000	code_ref
+11	ol	ol_poisson_gt512_n8448_seed43	olbc_poisson	geotransolver_olbc_poisson	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120	1e-3	43	20000	code_ref
+12	ol	ol_poisson_isla_r2_n8448_seed42	olbc_poisson	isla_olbc_poisson	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120 ++model.n_layers=24	5e-4	42	20000	code_ref
+13	ol	ol_poisson_gt256_n8448_seed42	olbc_poisson	geotransolver_olbc_poisson	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120 model.n_hidden=256	1e-3	42	20000	code_ref
+14	ol	ol_poisson_isla_r2_n8448_seed43	olbc_poisson	isla_olbc_poisson	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120 ++model.n_layers=24	5e-4	43	20000	code_ref
+15	ol	ol_poisson_gt256_n8448_seed43	olbc_poisson	geotransolver_olbc_poisson	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120 model.n_hidden=256	1e-3	43	20000	code_ref
+16	ol	ol_elasticity_isla_r1_n512_seed42	olbc_elasticity	isla_olbc_elasticity	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_ref
+17	ol	ol_elasticity_gt512_n512_seed42	olbc_elasticity	geotransolver_olbc_elasticity	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	1e-3	42	20000	code_ref
+18	ol	ol_elasticity_isla_r1_n512_seed43	olbc_elasticity	isla_olbc_elasticity	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_ref
+19	ol	ol_elasticity_gt512_n512_seed43	olbc_elasticity	geotransolver_olbc_elasticity	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	1e-3	43	20000	code_ref
+20	ol	ol_elasticity_isla_r1_n2048_seed42	olbc_elasticity	isla_olbc_elasticity	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_ref
+21	ol	ol_elasticity_gt512_n2048_seed42	olbc_elasticity	geotransolver_olbc_elasticity	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	1e-3	42	20000	code_ref
+22	ol	ol_elasticity_isla_r1_n2048_seed43	olbc_elasticity	isla_olbc_elasticity	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_ref
+23	ol	ol_elasticity_gt512_n2048_seed43	olbc_elasticity	geotransolver_olbc_elasticity	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	1e-3	43	20000	code_ref
+24	ol	ol_elasticity_isla_r1_n8448_seed42	olbc_elasticity	isla_olbc_elasticity	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120	5e-4	42	20000	code_ref
+25	ol	ol_elasticity_gt512_n8448_seed42	olbc_elasticity	geotransolver_olbc_elasticity	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120	1e-3	42	20000	code_ref
+26	ol	ol_elasticity_isla_r1_n8448_seed43	olbc_elasticity	isla_olbc_elasticity	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120	5e-4	43	20000	code_ref
+27	ol	ol_elasticity_gt512_n8448_seed43	olbc_elasticity	geotransolver_olbc_elasticity	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120	1e-3	43	20000	code_ref
+28	ol	ol_elasticity_isla_r2_n8448_seed42	olbc_elasticity	isla_olbc_elasticity	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120 ++model.n_layers=24	5e-4	42	20000	code_ref
+29	ol	ol_elasticity_gt256_n8448_seed42	olbc_elasticity	geotransolver_olbc_elasticity	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120 model.n_hidden=256	1e-3	42	20000	code_ref
+30	ol	ol_elasticity_isla_r2_n8448_seed43	olbc_elasticity	isla_olbc_elasticity	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120 ++model.n_layers=24	5e-4	43	20000	code_ref
+31	ol	ol_elasticity_gt256_n8448_seed43	olbc_elasticity	geotransolver_olbc_elasticity	train_split=train val_split=test +training.val_interval=10 training.num_epochs=120 model.n_hidden=256	1e-3	43	20000	code_ref

@@ -13,7 +13,7 @@ forward_kwargs:
     - interior.point_data.sdf
     - interior.point_data.sdf_normals
   local_positions: interior.points
-  global_embedding: global_data.params
+  global_embedding: global_data.params_std
 model:
   _target_: physicsnemo.models.geotransolver.GeoTransolver
   out_dim: ${out_dim}            # 1 (von_mises)

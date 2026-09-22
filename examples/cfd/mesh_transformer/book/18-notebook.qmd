@@ -24485,3 +24485,72 @@ toward one with cases (GeoTransolver ÷ ISLA on $\sigma_{11}$ 0.29 at 32,
 Tensile2d standing under the SOLIDS bars, and the prereg's prediction that
 GeoTransolver leads on the stresses at 400 cases stands to be tested rather
 than already refuted.
+
+## 2026-09-22 — Preregistration, OLBC: random labeled Dirichlet/Neumann/Robin segments on a Poisson problem with a random source and on plane-strain steel elasticity with two holes; ISLA against GeoTransolver on a 512 / 2,048 / 8,448-case ladder {#sec-nb-olbc-prereg}
+
+**Setting.** OLBC (Mousavi, Mishra and De Lorenzis, ETH; Zenodo
+10.5281/zenodo.18377370, CC BY 4.0) is the labeled-boundary-condition
+stress test the datasets ruling asked for (@sec-nb-datasets-scout-2026-09-22).
+Two of its eighteen sets were converted to native DomainMesh files by a
+scouting agent (`results/campaigns_2026-09-22/datasets/olbc_convert.py`;
+verifier alongside): **poisson-square-bc5** (record 18377514; one fixed
+triangle mesh of 16,598 nodes on the unit square with 1,120 boundary
+segments; per sample four random boundary segments each carry a Dirichlet,
+Neumann or Robin condition with a random value function, and the source is
+a random sinusoid; the output is the scalar solution $u$) and
+**elasticity-circlehollow-m1** (record 18377539; a fixed mesh of 11,786
+nodes on a disc with two holes, 1,312 boundary segments on three loops;
+steel, plane strain, small deformations; random displacement and traction
+segments; outputs the displacement vector and the three Cauchy stress
+components). Every boundary segment carries its type as a label and its
+prescribed value (Poisson: `bc_dirichlet`, `bc_neumann`, `bc_robin`,
+`bc_value_g`, `bc_robin_alpha`; elasticity: type labels plus the
+prescribed displacement and traction components, standardized
+separately since they differ by three orders). The signed distance is
+converted to the program's positive-outside convention, and the elasticity
+set carries the laboratory frame as two constant global vectors because
+its targets are stress components (@sec-nb-solids-frame-interim). The
+geometry is identical across samples in each set, so **everything a model
+must learn here is the map from boundary data and source to the solution**:
+the pure complement of the aerodynamic datasets, where the boundary data
+are fixed and the geometry varies. Splits: 8,448 train / 256 test as
+released, with nested 512 and 2,048 rungs (seed-0 prefixes). Smoke lanes
+(three epochs, both models, both sets) trained without incident; no
+accuracy is read from them.
+
+**Lanes** (group `ol`, `kernel/ol/lanes.tsv`, 32 lanes, snapshot
+`code_ref`, every node queried, two seeds, bf16 training, float32 scoring
+on the 256 test cases): ISLA R1 (384 x 12, cosine routing, 5e-4; $K = 0$
+on Poisson with the source as a second per-query scalar, $K = 2$ on
+elasticity, eager geometry region) and GeoTransolver-512 (1e-3; the
+boundary labels and values as nodal tags in its local embedding) on the
+ladder 512 / 2,048 / 8,448 cases; ISLA R2 (384 x 24) and
+GeoTransolver-256 at the full rung. The 512- and 2,048-case rungs train
+500 epochs; the full rung trains **120 epochs, which is the same number
+of optimizer steps as the 2,048-case rung at 500** (a stated deviation
+from the 500-epoch protocol; the 8,448-case rung at 500 epochs would take
+about 50 hours per lane and the equal-step budget is the fairer ladder
+statement anyway).
+
+**Bars.** (i) *Standing per rung and field*: GeoTransolver ÷ ISLA with
+paired-seed sign, reported without a prior on the Poisson set. (ii) *Data
+exponent*: bounded-floor fit per field and architecture across the three
+rungs; same exponent across architectures within the bootstrap. (iii)
+*Depth and width*: R2 within 1.5% of R1 at the full rung means depth does
+not pay; GeoTransolver-512 within 1.5% of 256 means width does not pay for
+it. (iv) *Trainability*: any lane at a mean-field plateau (validation
+relative L2 above 0.9 after 100 epochs) is reported with its signature and
+rerun at half its rate. (v) *Frame clause check*: the elasticity
+$\sigma_{12}$ error must not exceed the $\sigma_{11}$ error by more than
+1.5x for ISLA; if it does, the frame input is not doing its job and the
+lane is investigated before any standing is quoted.
+
+**Predictions.** The boundary-data-to-solution map favors the model that
+reads the boundary as a first-class object: ISLA leads GeoTransolver on the
+Poisson set at every rung (0.55) and the lead is largest at 512 cases
+(0.6). On elasticity GeoTransolver leads on the stresses at 512 cases as
+on Tensile2d (0.6) and the ratio moves toward one with cases (0.6). Data
+exponents between 0.3 and 0.8 on both sets (0.6). Depth pays on neither
+(0.6). Regime limit stated in advance: one mesh per set, so nothing here
+speaks to geometry generalization or discretization invariance; those
+axes remain with the aerodynamic and solids datasets.

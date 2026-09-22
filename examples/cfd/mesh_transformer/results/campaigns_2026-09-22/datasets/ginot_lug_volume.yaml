@@ -21,6 +21,11 @@ pipeline:
     drop_interior_cells: true
     drop_in_file_boundaries: false
   transforms:
+    - _target_: ${dp:StandardizeDomainGlobalField}     # recipe-local (domain_transforms.py): global_data.params -> params_std, zero mean / unit std over train (2400)
+      field: params
+      output_field: params_std
+      mean: [0.0124862, 0.100103, 0.0225110, 75300663.3]
+      std: [0.00144079, 0.0115957, 0.00423982, 14360825.0]
     - _target_: ${dp:NormalizeMeshFields}
       association: point_data
       fields:                                    # pooled over all nodes of the train split (manifest _stats; 2026-09-22)

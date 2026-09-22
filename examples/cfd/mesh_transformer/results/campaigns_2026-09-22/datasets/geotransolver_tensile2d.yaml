@@ -16,7 +16,7 @@ forward_kwargs:
     - interior.point_data.tag_bottom
     - interior.point_data.tag_bottomleft
   local_positions: interior.points
-  global_embedding: global_data.params
+  global_embedding: global_data.params_std
 model:
   _target_: physicsnemo.models.geotransolver.GeoTransolver
   out_dim: ${out_dim}            # 4 scalars + 3 (displacement) = 7

@@ -15,7 +15,7 @@ forward_kwargs:
     - boundaries.outer.cell_data.bc_pressure
   # ISLA has no per-boundary-cell vector input; the traction (-P n on the loaded edge) is recoverable from bc_pressure and
   # the cell normal, which the model already sees. cell_data.traction stays in the files for other consumers.
-  global_scalars: global_data.params                       # [P, p1, p2, p3, p4, p5]
+  global_scalars: global_data.params_std                   # standardized [P, p1, p2, p3, p4, p5] (StandardizeDomainGlobalField in the dataset yaml)
   query_points: interior.points
   query_normals: interior.point_data.sdf_normals
   query_scalars: interior.point_data.sdf

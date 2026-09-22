@@ -1,0 +1,46 @@
+# @package _global_
+# GeoTransolver on OLBC elasticity-circlehollow-m1 (2026-09-22): the recipe's volume configuration on the interior inputs
+# (coordinates, signed distance and its direction, per-component nodal BC tags and the standardized nodal prescribed
+# displacement / traction values). GeoTransolver has no boundary-token path, so the boundary conditions enter only through
+# the nodal fields on the boundary nodes; it works in absolute coordinates, so it needs no frame; no global embedding.
+dataset_reader_overrides:
+  drop_in_file_boundaries: true
+input_type: tensors
+output_type: tensors
+forward_kwargs:
+  geometry: interior.points
+  local_embedding:
+    - interior.points
+    - interior.point_data.sdf
+    - interior.point_data.sdf_normals
+    - interior.point_data.tag_dirichlet_x
+    - interior.point_data.tag_neumann_x
+    - interior.point_data.bc_disp_node_x
+    - interior.point_data.bc_trac_node_x
+    - interior.point_data.tag_dirichlet_y
+    - interior.point_data.tag_neumann_y
+    - interior.point_data.bc_disp_node_y
+    - interior.point_data.bc_trac_node_y
+  local_positions: interior.points
+model:
+  _target_: physicsnemo.models.geotransolver.GeoTransolver
+  out_dim: ${out_dim}            # 3 scalars + 3 (displacement) = 6
+  functional_dim: 15             # 3 + 1 + 3 + 8
+  geometry_dim: 3
+  global_dim: null
+  n_layers: 12
+  n_hidden: 512
+  dropout: 0.0
+  n_head: 8
+  act: "gelu"
+  mlp_ratio: 4
+  slice_num: 256
+  use_te: false
+  plus: false
+  include_local_features: false
+  radii: [0.05, 0.2, 0.8]        # coordinates span [-1, 1]
+  neighbors_in_radius: [16, 32, 64]
+  n_hidden_local: 32
+  activation_checkpointing: false
+  checkpointing_ratio: 1.0
+  activation_checkpointing_components: [blocks]
