@@ -1,0 +1,38 @@
+# @package _global_
+# ISLA on GINOT PLASTIC_LUG (2026-09-22): boundary tokens from the watertight surface triangles with the BC labels and the
+# applied pressure as boundary scalars and the traction as a boundary vector; the four design parameters (hole radius,
+# length, thickness, pressure) as the global condition vector; every mesh node as an interacting query token.
+input_type: tensors
+output_type: tensors
+forward_kwargs:
+  points: boundaries.surface.cell_centroids
+  normals: boundaries.surface.cell_data.normals            # precomputed outward normals (equal to cell_normals up to orientation)
+  measure_weights: boundaries.surface.cell_data.quadrature_measure
+  boundary_scalars:
+    - boundaries.surface.cell_data.bc_fixed
+    - boundaries.surface.cell_data.bc_hole
+    - boundaries.surface.cell_data.bc_loaded
+    - boundaries.surface.cell_data.bc_pressure             # MPa, the target's units
+  # ISLA has no per-boundary-cell vector input; the traction (-p n on the loaded half) is recoverable from bc_pressure and
+  # the cell normal, which the model already sees. cell_data.traction stays in the files for other consumers.
+  global_scalars: global_data.params                       # [hole_radius m, length m, thickness m, pressure Pa] - normalize (see manifest _stats)
+  query_points: interior.points
+  query_normals: interior.point_data.sdf_normals
+  query_scalars: interior.point_data.sdf
+model:
+  _target_: physicsnemo.experimental.nn.ISLA
+  out_scalars: 1                 # von_mises
+  out_vectors: 0
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  n_boundary_scalars: 4
+  n_global_vectors: 0
+  n_global_scalars: 4
+  query_tokens: true
+  n_query_scalars: 1
+  geo_checkpoint: true
+  geo_kernel: eager              # the fused kernel requires n_global_vectors == 1 (isla/model.py: ValueError otherwise)
+# Coordinates are in metres (lug about 0.1 m long); ISLA's rms_distance gauge handles the scale. The pressure is the one
+# global scalar that varies the load; it also appears per cell on the loaded faces so the direction of loading is local.

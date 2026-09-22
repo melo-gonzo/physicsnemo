@@ -1,0 +1,38 @@
+# @package _global_
+# GeoTransolver on GINOT PLASTIC_LUG (2026-09-22): the recipe's volume configuration on the interior inputs (coordinates,
+# signed distance and its direction) with the four design parameters as the global embedding. This matches the published
+# Transolver setting with the load scalar as input (0.32% in the GINOT paper) rather than geometry-only (2.74%).
+dataset_reader_overrides:
+  drop_in_file_boundaries: true
+input_type: tensors
+output_type: tensors
+forward_kwargs:
+  geometry: interior.points
+  local_embedding:
+    - interior.points
+    - interior.point_data.sdf
+    - interior.point_data.sdf_normals
+  local_positions: interior.points
+  global_embedding: global_data.params
+model:
+  _target_: physicsnemo.models.geotransolver.GeoTransolver
+  out_dim: ${out_dim}            # 1 (von_mises)
+  functional_dim: 7
+  geometry_dim: 3
+  global_dim: 4
+  n_layers: 12
+  n_hidden: 512
+  dropout: 0.0
+  n_head: 8
+  act: "gelu"
+  mlp_ratio: 4
+  slice_num: 256
+  use_te: false
+  plus: false
+  include_local_features: false
+  radii: [0.005, 0.02, 0.08]     # metres: lug 0.08 to 0.12 m long, 0.05 m wide, 0.015 to 0.03 m thick
+  neighbors_in_radius: [16, 32, 64]
+  n_hidden_local: 32
+  activation_checkpointing: false
+  checkpointing_ratio: 1.0
+  activation_checkpointing_components: [blocks]

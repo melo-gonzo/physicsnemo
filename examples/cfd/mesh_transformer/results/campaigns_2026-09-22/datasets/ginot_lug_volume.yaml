@@ -1,0 +1,30 @@
+# GINOT PLASTIC_LUG (Liu, Koric et al. 2025; Zenodo 15293036, CC BY 4.0) as a boundary-to-interior solid-mechanics dataset,
+# converted to native DomainMesh files by kernel/ginot_lug_convert.py (2026-09-22). Three-dimensional elastoplastic lug
+# (E = 200 GPa, nu = 0.3, sigma_y = 380 MPa, linear isotropic hardening H = 571.4 MPa; hex8 corner nodes of the quadratic
+# hex mesh): interior = every mesh node (5k to 15k) with von_mises [MPa], sdf (<= 0 inside the solid, positive-outside
+# convention) and sdf_normals; boundary "surface" = the watertight boundary triangles (split hex faces, 4k to 8.6k) with
+# outward normals, triangle areas as the quadrature measure, and per-cell BC labels bc_fixed (clamped end face x = x_min),
+# bc_hole (the hole's cylindrical surface), bc_loaded (the lower half of the hole, y < axis, carrying the pressure),
+# bc_pressure (= pressure [MPa] on loaded cells) and traction (= -pressure n [MPa]); global_data: hole_radius, length,
+# thickness [m], pressure [Pa], pressure_mpa, params (4,). Splits (no official indices): train 2400 / test 600 from a seed-0
+# permutation, nested train_n300 / train_n600 / train_n1200; select with train_split=train val_split=test.
+train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/ginot_lug_pdmsh
+manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/ginot_lug_pdmsh/manifest.json
+
+pipeline:
+  reader:
+    _target_: ${dp:DomainMeshReader}
+    path: ${train_datadir}
+    pattern: "lug_*/*.pdmsh"
+    subsample_n_points: ${sampling_resolution}   # interior queries (5k to 15k nodes per case; >= 15210 keeps every node)
+    subsample_n_cells: ${sampling_resolution}    # larger than any case's 8.6k surface triangles: the boundary is kept whole
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:                                    # pooled over all nodes of the train split (manifest _stats; 2026-09-22)
+        von_mises: {type: scalar, mean: 150.2, std: 92.4}   # MPa, 22.8M nodes over 2400 train cases
+
+targets:
+  von_mises: scalar

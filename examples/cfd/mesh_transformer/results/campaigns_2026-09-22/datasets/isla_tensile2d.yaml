@@ -1,0 +1,39 @@
+# @package _global_
+# ISLA on PLAID Tensile2d (2026-09-22): boundary tokens from the outer polyline (line cells) with the per-cell BC labels
+# and the applied pressure as boundary scalars and the traction as a boundary vector; the six input scalars (P, p1..p5)
+# as the global condition vector; every mesh node as an interacting query token with the signed distance as its scalar.
+input_type: tensors
+output_type: tensors
+forward_kwargs:
+  points: boundaries.outer.cell_centroids
+  normals: boundaries.outer.cell_data.normals              # precomputed in-plane outward normals (a curve in 3-D has no cell_normals)
+  measure_weights: boundaries.outer.cell_data.quadrature_measure
+  boundary_scalars:                                        # per-boundary-cell scalars: which edge, and how hard it is pulled
+    - boundaries.outer.cell_data.bc_loaded
+    - boundaries.outer.cell_data.bc_fixed
+    - boundaries.outer.cell_data.bc_pinned
+    - boundaries.outer.cell_data.bc_pressure
+  # ISLA has no per-boundary-cell vector input; the traction (-P n on the loaded edge) is recoverable from bc_pressure and
+  # the cell normal, which the model already sees. cell_data.traction stays in the files for other consumers.
+  global_scalars: global_data.params                       # [P, p1, p2, p3, p4, p5]
+  query_points: interior.points
+  query_normals: interior.point_data.sdf_normals
+  query_scalars: interior.point_data.sdf
+model:
+  _target_: physicsnemo.experimental.nn.ISLA
+  out_scalars: 4                 # q, sig11, sig22, sig12 (dataset targets: scalars first)
+  out_vectors: 1                 # displacement
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  n_boundary_scalars: 4
+  n_global_vectors: 0
+  n_global_scalars: 6
+  query_tokens: true
+  n_query_scalars: 1
+  geo_checkpoint: true
+  geo_kernel: eager              # the fused kernel requires n_global_vectors == 1 (isla/model.py: ValueError otherwise)
+# Note: there is no physically meaningful global direction here (the load direction is fixed +y for every sample), so the
+# model is built with n_global_vectors = 0; the geometric seed then has width 5 instead of 6. If a REF-like configuration
+# with the fused kernel is wanted, pass a constant unit +y via global_data instead and set n_global_vectors: 1.
