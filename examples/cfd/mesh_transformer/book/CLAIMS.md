@@ -190,6 +190,19 @@ under cosine routing), the AirfRANS extrapolation splits, the remaining
 wing rungs (510 / 1,260 at 200k), PROTOCOL-REDO.
 
 
+### SOLIDS / SOLIDS-FRAME / REF state (2026-09-22, late)
+
+- Tensile2d (frame configuration, ISLA R1 vs GeoTransolver-512, fp32, 400 cases): GeoTransolver ÷ ISLA 0.73 / 0.89 / 1.00 / 0.66
+  (sig11 / sig22 / sig12 / displacement); ratio on sig11 rises 0.29 / 0.39 / 0.49 / 0.65 / 0.73 along 32-400 cases;
+  learning-curve exponents ISLA 0.89-1.01 vs GeoTransolver 0.40-0.76. Write: "GeoTransolver-512 leads 1.1-1.5x at 400
+  cases; ISLA's error falls faster with cases (third dataset with this ordering)". Never quote the frameless ISLA
+  Tensile2d numbers as a standing: they are the output-contract ablation (val 20-60x GeoTransolver, memorization).
+- Output contract clause: scalar heads are rotation- AND reflection-invariant; frame components (sigma_ij, lab-axis
+  displacement means) need the frame as global vectors (K=2 plane, K=3 space). sigma_12 is unrepresentable with +y alone.
+- REF on DrivAerML Surface at 200k: R1 0.0415, R2 0.0409 (R1 within 1.5%, marginal, wing rung decides), GeoTransolver-512
+  0.0410 (parity at matched parameters, at 1.17x ISLA's time and 1.9x its memory), GeoTransolver-256 0.0445 (÷R1 = 1.07).
+- Lug, OLBC, DeepJEB++: pending; never state before fp32 scoring.
+
 ## Architectures and resources (chapter 2–4)
 
 - **ISLA**: SE(3)-equivariant soft-slice transformer.

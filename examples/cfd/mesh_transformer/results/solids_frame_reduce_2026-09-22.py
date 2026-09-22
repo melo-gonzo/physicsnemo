@@ -76,7 +76,20 @@ def main() -> None:
             for f in FIELDS
             if f in s["fields"] and f in gt["fields"]
         }
+    # learning-curve exponents: least-squares slope of log(error) vs log(cases) over the rungs each arm has
+    import math
+    fits = {}
+    for arm in ("isla_r1|frame2", "gt512|gt"):
+        rungs = sorted(int(k.split("|n")[1]) for k in summary if k.startswith(arm + "|"))
+        for f in FIELDS:
+            pts = [(math.log(n), math.log(summary[f"{arm}|n{n}"]["fields"][f]["mean"])) for n in rungs if f in summary[f"{arm}|n{n}"]["fields"]]
+            if len(pts) < 3:
+                continue
+            mx = sum(x for x, _ in pts) / len(pts); my = sum(y for _, y in pts) / len(pts)
+            slope = sum((x - mx) * (y - my) for x, y in pts) / sum((x - mx) ** 2 for x, _ in pts)
+            fits[f"{arm}|{f}"] = {"exponent": -slope, "rungs": rungs}
     out = {
+        "learning_curve_exponents": fits,
         "protocol": "fp32 inference on val_100 (100 held-out PLAID Tensile2d cases), every node queried, per-sample relative L2 averaged over cases; training bf16, 500 epochs; ISLA R1 = 384x12 cosine, lr 5e-4; GeoTransolver-512 lr 1e-3",
         "variants": {
             "noframe": "ISLA with no global vector (K=0, eager)",
@@ -93,6 +106,9 @@ def main() -> None:
     for key in sorted(summary):
         f = summary[key]["fields"]
         print(f"{key:28s}", "  ".join(f"{k}={v['mean']:.4f}" for k, v in f.items() if k != "q"), f"(seeds {len(summary[key]['lanes'])})")
+    print("--- learning-curve exponents (error ~ cases^-alpha)")
+    for k, v in sorted(fits.items()):
+        print(f"{k:28s} alpha={v['exponent']:.2f} rungs={v['rungs']}")
     print("--- GeoTransolver-512 ÷ ISLA")
     for key in sorted(ratios):
         print(f"{key:28s}", "  ".join(f"{k}={v:.2f}" for k, v in ratios[key].items() if k != "q"))

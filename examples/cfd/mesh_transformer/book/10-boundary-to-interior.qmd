@@ -312,6 +312,70 @@ these lanes. GeoTransolver-volume's two seeds also separate under
 extrapolation (its angle-of-attack pressure seeds differ by 16%) where
 ISLA's stay within 4%.
 
+## A solid: PLAID Tensile2d {#sec-interior-tensile2d}
+
+```{python}
+#| label: setup-tensile2d
+#| include: false
+SF = J("solids_frame_2026-09-22.json"); SFS = SF["summary"]; SFR = SF["gt512_over_isla"]; SFX = SF["learning_curve_exponents"]
+T2D_FIELDS = [("sig11", "$\\sigma_{11}$"), ("sig22", "$\\sigma_{22}$"), ("sig12", "$\\sigma_{12}$"), ("displacement", "displacement")]
+T2D_RUNGS = sorted(int(k.split("|n")[1]) for k in SFS if k.startswith("isla_r1|frame2|"))
+r400 = SFR["isla_r1|frame2|n400"]
+```
+
+```{python}
+#| label: tensile2d-lede
+#| output: asis
+print(f"**On the first solid-mechanics dataset, PLAID Tensile2d, GeoTransolver-512 leads the reference ISLA at "
+      f"400 training cases by {trail(r400['sig11'])} on $\\sigma_{{11}}$, {trail(r400['sig22'])} on $\\sigma_{{22}}$ and "
+      f"{trail(r400['displacement'])} on the displacement, and the two tie on $\\sigma_{{12}}$ "
+      f"(GeoTransolver ÷ ISLA {r400['sig12']:.2f}); ISLA's error falls faster with cases on every field "
+      f"(exponents {SFX['isla_r1|frame2|sig11']['exponent']:.2f} against {SFX['gt512|gt|sig11']['exponent']:.2f} on "
+      f"$\\sigma_{{11}}$), so the gap closes along the ladder and is projected to cross within a few hundred more cases.** "
+      f"Tensile2d (@sec-data-tensile2d) is two-dimensional elasto-viscoplastic tension: per case a load $P$ on the top "
+      f"edge and five constitutive scalars vary, the geometry barely does, and the targets are the displacement and the "
+      f"three in-plane stress components. Every mesh node is an interacting query token; ISLA reads the boundary polyline "
+      f"with its condition labels and receives the laboratory frame as two global vectors because the stress components "
+      f"are defined in it (@sec-isla-heads); GeoTransolver reads every node with the nodal condition tags in its local "
+      f"embedding. Both models use the reference configurations (ISLA R1, 384 x 12; GeoTransolver-512, its parameter match).")
+```
+
+```{python}
+#| label: tbl-tensile2d-ladder
+#| tbl-cap: >
+#|   PLAID Tensile2d, float32 relative L2 on the 100 held-out cases at 500 epochs (mean of two seeds), ISLA R1 with the
+#|   laboratory frame as global vectors against GeoTransolver-512, along the training-case ladder; the last row is the
+#|   least-squares learning-curve exponent of each arm (error proportional to cases to the minus alpha). How to read
+#|   this: a ratio below one is a GeoTransolver lead; the ratios rise along the ladder because ISLA's exponent is larger
+#|   on every field. Source: results/solids_frame_2026-09-22.json.
+#| output: asis
+hdr = "| training cases | " + " | ".join(f"ISLA {l} | GeoTransolver {l} | ratio" for _, l in T2D_FIELDS) + " |"
+print(hdr); print("|" + "---|" * (1 + 3 * len(T2D_FIELDS)))
+for n in T2D_RUNGS:
+    i = SFS[f"isla_r1|frame2|n{n}"]["fields"]; g = SFS[f"gt512|gt|n{n}"]["fields"]; rr = SFR[f"isla_r1|frame2|n{n}"]
+    print(f"| {n} | " + " | ".join(f"{i[f]['mean']:.4f} | {g[f]['mean']:.4f} | {rr[f]:.2f}" for f, _ in T2D_FIELDS) + " |")
+print("| exponent $\\alpha$ | " + " | ".join(f"{SFX[f'isla_r1|frame2|{f}']['exponent']:.2f} | {SFX[f'gt512|gt|{f}']['exponent']:.2f} | " for f, _ in T2D_FIELDS) + " |")
+```
+
+Two things this measures, and one it does not. It measures the standing of
+the general interface on a problem with no global direction of its own and
+six global scalars: the boundary tokens, condition labels and frame vectors
+carry everything the model knows, and the standing is a 1.1x to 1.5x
+GeoTransolver lead at the largest rung, the direction the SOLIDS
+preregistration predicted (@sec-nb-solids-prereg). It measures the
+learning curve: ISLA's exponents are near one on the stresses and the
+displacement, GeoTransolver's near one half, the same ordering as the
+AirfRANS ladder (@sec-interior-airfrans) and the DrivAerML law
+(@sec-compute-allocation), now on a third dataset and a third physics. It
+does not measure geometry generalization or discretization invariance,
+since the specimen shape hardly varies and each case has one mesh; those
+axes stay with the aerodynamic datasets. The frameless configuration, which
+fits the training set and memorizes it (validation error 20 to 60 times
+GeoTransolver's), is the ablation behind the component clause of the output
+contract and is reported in @sec-nb-solids-frame-interim, not here. The
+GINOT lug, the deeper R2 candidate on Tensile2d and the OLBC sets are
+pending (@sec-nb-solids-prereg, @sec-nb-olbc-prereg).
+
 ## Dependence on the query cloud {#sec-interior-companion}
 
 **The interacting configuration's answer at a point depends on how many
