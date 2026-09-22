@@ -13,13 +13,12 @@ presentation.
 
 | Part | Chapters | The reader leaves knowing |
 |---|---|---|
-| Front matter | `index.qmd` | the thesis in one paragraph, the trade in one picture, the names and colors, how to read the book |
-| I The problem | `01-problem.qmd` | what a boundary-to-field surrogate is, the datasets, the metric, the protocol |
-| II The architecture | `02-isla.qmd`, `07-architecture.qmd`, `04-baselines-and-fair-comparison.qmd` | why each part of ISLA is there, one idea at a time; exactly what the forward pass computes, stage by stage (the source of truth for the architecture and its flow diagram); what the baselines are and what "fair" means |
-| III Using ISLA | `09-using-isla.qmd` | the configurations, the inputs, the recipe, the learning-rate rule, the inference sampler, checkpoints, cost |
-| IV Evidence | `03-benchmarks.qmd`, `05-…`, `06-…`, `08-…` | the standing on one page; then the studies behind each row |
-| V Limits and status | `12-…`, `13-program-status.qmd` | what each claim does not say; what is running |
-| Appendices | `17-…`, `18-notebook.qmd` | the design-decision ledger; the dated record |
+| Front matter | `index.qmd` | the thesis in one paragraph, ONE thesis table with dataset and task named per row, the names and colors, how to read the book |
+| I The problem and the two invariances | `01-problem.qmd`, `02-isla.qmd`, `03-invariances.qmd`, `04-architecture.qmd` | the general operator interface and the metric; why each part of ISLA is there, one idea at a time; the two invariances (equivariance and pose; discretization) as contracts and instruments (the centerpiece); exactly what the forward pass computes, stage by stage (the source of truth for the architecture and its switches) |
+| II Protocol and use | `05-protocol.qmd`, `06-using-isla.qmd` | the baselines and what each sees, the datasets and splits, the fair-comparison protocol, the configuration of the evidence lanes; the one configuration, the inputs, the recipe, the inference sampler, checkpoints, cost |
+| III Evidence | `07-surface-accuracy.qmd`, `08-discretization-and-pose.qmd`, `09-capacity-scaling-cost.qmd`, `10-boundary-to-interior.qmd` | the surface standings (DrivAerML Surface task, HiLiftAeroML rungs) and data efficiency; the discretization and pose evidence; capacity, scaling laws and cost; the two interior tasks |
+| IV Limits and status | `11-limits.qmd`, `12-program-status.qmd` | what each claim does not say; what is running (the one chapter with dates) |
+| Appendices | `13-design-decisions.qmd`, `18-notebook.qmd` | the design-decision ledger; the dated record |
 
 Chapters state current knowledge. History (what was believed before, what
 was retracted) lives in the notebook and the status chapter only.
@@ -55,7 +54,7 @@ was retracted) lives in the notebook and the status chapter only.
 
 | Say | Never say | Meaning |
 |---|---|---|
-| ISLA | "ISLA, reference configuration", "the reference configuration", MT2, MT, MeshTransformer2, "the mesh transformer" | the definitive model as shipped: one origin-free frame, `scale_mode="rms_distance"`, the class defaults; its configuration is described once in 02 and 09 and never used as a name. Since 2026-09-20 the class has no frame variants |
+| ISLA; the reference configuration (its recommended settings: cosine routing, the RMS length unit, the fused geometry kernel, `query_mass="source_total"`, the width and depth the REF study fixes) | MT2, MT, MeshTransformer2, "the mesh transformer"; "linear routing" or "192 wide" as if they described ISLA | the definitive model as shipped: one origin-free frame, `scale_mode="rms_distance"`, the class defaults; its configuration is described once in 02 and 09 and never used as a name. Since 2026-09-20 the class has no frame variants |
 | the relative frame | "the reference frame", "the frame-free frame" ("reference frame" reads as a coordinate frame to a PDE reader) | ISLA's construction of position: no origin, positions enter only as point-to-anchor differences. The only frame the class has (the `frame_mode` flag was removed 2026-09-20) |
 | the legacy centered variant (removed) | "the constant-gauge variant" in a main result; "prior reference"; "centered ISLA" | the centered frame with a constant length unit the program used before the relative frame; cut from every main figure and table on 2026-09-18 and removed from the class on 2026-09-20 (@sec-nb-frame-cleanup); appears only in collapsed diagnostic notes, labeled "removed variant" |
 | form; one-car floor | | a structural choice of the architecture (as opposed to capacity or inputs); the converged error on a single training car (a capacity measure) |
@@ -74,13 +73,13 @@ was retracted) lives in the notebook and the status chapter only.
 | relational invariants | "geo features" | the scalars describing a token relative to an anchor |
 | routing / read-back | | softmax over points into slices / softmax over slices back to points |
 | length unit $L$ | "gauge" in prose; "the total measure" in the present tense | the measure-weighted RMS pairwise distance of the sample (`scale_mode="rms_distance"`, default since 2026-09-18 evening). "The total-measure unit" names the pre-2026-09-18 option (`scale_mode="total_measure"`, the square root of the total measure); lanes trained before then carry it and are labeled so where quoted |
-| DrivAerML (cars), HiLiftAeroML (wings) | | the two datasets; "HiLift" allowed after first use in a chapter |
+| the DrivAerML Surface task, the DrivAerML Volume task; HiLiftAeroML (the $n$-wing rung); the AirfRANS interior task | "DrivAerML" alone in a sentence that compares architectures | dataset AND task on every cross-architecture sentence; "HiLift" allowed after first use in a chapter |
 | the $n$-case rung | | a training-set size on the data-efficiency ladder |
 | area-weighted relative L2, float32 instrument | "rel-L2" in prose | the metric and its reporting precision |
 | the deficit anatomy | | the decomposition of the in-distribution gap into named parts |
 | the reporting protocol (200,000 cells per case) | "the 200k runs" in prose; an unlabeled 10,000-cell number | every reported standing trains and scores at the recipe default of 200,000 sampled cells per case, each architecture at its own best learning rate (GeoTransolver's is 3e-3 at that budget on every DrivAerML rung, 1e-3 at 10,000 cells; ISLA's is 1e-3). Adopted 2026-09-18 |
 | the exploration budget (10,000 cells per case) | "the reference resolution"; "the protocol" for a 10,000-cell number | the count the program explored at before 2026-09-18; every 10,000-cell figure, table and number carries this label |
-| parity (GeoTransolver and ISLA, DrivAerML, full data) | "ISLA leads at full data"; "the baselines lead by a few percent" | GeoTransolver ÷ ISLA = 0.998 at 435 cars and 200,000 cells, each at its better rate (results/p200k_trio_reduction_2026-09-19.json) |
+| parity within seed spread (GeoTransolver and ISLA, DrivAerML Surface task, full data) | "ISLA leads at full data"; "the baselines lead by a few percent"; a lead read off a 0.3 to 1% gap on a log axis | GeoTransolver ÷ ISLA = 0.998 at 435 cars and 200,000 cells, each at its better rate (results/p200k_trio_reduction_2026-09-19.json) |
 | a data-efficiency deficit that narrows from 17% at 27 cars to zero at 435 | "ISLA wins on data efficiency"; "ISLA is more data-efficient" | GeoTransolver ÷ ISLA 0.83, 0.86, 0.92, 0.97, 1.00 at 27, 54, 109, 218, 435 DrivAerML cars at 200,000 cells, GeoTransolver at 3e-3 |
 | the wing deficit is not count noise | "the wing gap is a budget artifact" | on the 35-case HiLiftAeroML rung the ratio is 0.73 at 200,000 cells and 0.72 at 10,000 (results/p200k_fleet_reduction_2026-09-19.json) |
 

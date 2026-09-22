@@ -1,0 +1,346 @@
+# Boundary to interior: predicting the field from the surface {#sec-interior}
+
+```{python}
+#| label: setup-interior
+#| include: false
+import json, statistics
+from pathlib import Path
+import sys; sys.path.insert(0, ".")
+from palette import *
+from matplotlib.colors import Normalize
+RES = Path("..") / "results"
+J = lambda p: json.load(open(RES / p))
+mean = statistics.mean
+FIELDS = [("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity")]
+# DrivAerML Volume task: GeoTransolver-volume and ISLA with query tokens, 200,000 cells and 200,000 queries per car
+RVA = J("ratevol_reduction_2026-09-20.json")["arms"]
+COSI = J("routenorm_extension_2026-09-21.json")["configurations"]["isla|cos|interior|w192|lr1e-3"]
+GTV = {f: RVA["gt_vol_unit"][f] for f, _ in FIELDS}
+ISLAV = {f: dict(mean=COSI[f"{f}_mean"], seeds=COSI[f"{f}_seeds"]) for f, _ in FIELDS}
+RATIO = {f: GTV[f]["mean"] / ISLAV[f]["mean"] for f, _ in FIELDS}
+# AirfRANS (interior task): the same pair on 800 training airfoils, 100,000 queries per case
+AF = J("airfrans_reduction_2026-09-22.json"); AFA, AFV = AF["arms"], AF["verdicts"]
+AFR = {f: AFV["isla_cosine_1e-3"][f]["gt_over_isla"] for f, _ in FIELDS}
+lead = lambda r: f"{(r - 1) * 100:.0f}%"
+trail = lambda r: f"{(1 - r) * 100:.0f}%"
+```
+
+```{python}
+#| label: para-interior-lede
+#| output: asis
+print("**On the task that asks for the field rather than the wall pressure, how an architecture treats an interior point decides the "
+      "result.** ISLA admits its interior queries as interacting tokens and gives them the signed distance to the wall, the same input "
+      "GeoTransolver's volume configuration receives. On the DrivAerML Volume task at the reporting protocol (200,000 boundary cells and "
+      f"200,000 interior queries per car, 48 validation cars, float32) ISLA leads GeoTransolver-volume on interior velocity by "
+      f"{lead(RATIO['velocity_l2'])}, trails it on interior pressure by {trail(RATIO['pressure_l2'])} and is level on eddy viscosity "
+      f"(GeoTransolver-volume ÷ ISLA {RATIO['nut_l2']:.2f}), at a third of the parameters. On AirfRANS (interior task), a second dataset and "
+      f"a second PDE regime, the ordering holds with the gaps widened: velocity {AFR['velocity_l2']:.2f}, pressure {AFR['pressure_l2']:.2f}, "
+      f"eddy viscosity {AFR['nut_l2']:.2f}, both seeds agreeing on every field. Decode the queries passively instead, so that a prediction at "
+      "one point never depends on which other points are asked for, and accuracy falls: exact query independence has a price, and the "
+      "interacting configuration pays for its accuracy with a dependence on the joint query set that fixes its deployment count "
+      "(@sec-interior-companion). Two attempts to supply interior context without giving up the passive contract fail, and an exact "
+      "boundary-integral prior is the wrong prior for separated flow (@sec-interior-negatives). Every ratio is GeoTransolver-volume ÷ ISLA, "
+      "above one favoring ISLA; protocol: @sec-protocol.")
+```
+
+## The task {#sec-interior-task}
+
+A surrogate that returns only wall pressure answers one engineering
+question, the forces; one that returns the field in the domain answers the
+rest: wake structure, cooling-flow paths, where separation begins. The task
+here is the second in its strictest form: predict the fields inside the
+domain from the boundary alone. @fig-interior-task shows it on the running
+example. ISLA is held to that form. GeoTransolver's volume configuration is
+not: it never sees the surface sample and takes instead, at every interior
+point, the signed distance to the full-resolution boundary and its
+gradient, which is the boundary information in a different, denser form.
+
+```{python}
+#| label: fig-interior-task
+#| fig-cap: >
+#|   The boundary-to-interior task on the airfoil. Inputs: the sampled
+#|   boundary (black dots with normals, as in the surface task) and a set of
+#|   interior query points (aqua). Target: the pressure coefficient at the
+#|   query points, shown here as the exact potential-flow field the queries
+#|   sample. How to read this: the model sees the boundary and the query
+#|   positions and must produce the field at the aqua points; on DrivAerML
+#|   the field is a RANS solution with a separated wake, for which no closed
+#|   form exists, and each query also carries its signed distance to the
+#|   wall. It does not show any model's prediction.
+#| code-fold: true
+Jk = joukowski(n_cells=50)
+fig, ax = plt.subplots(figsize=(8.0, 3.9))
+clean_axes(ax); ax.set_xlim(-2.6, 2.8); ax.set_ylim(-1.5, 1.6)
+xs = np.linspace(-2.6, 2.8, 301); ys = np.linspace(-1.5, 1.6, 181)
+X, Y = np.meshgrid(xs, ys); Z = X + 1j * Y
+cp = Jk["cp_field"](Z)
+c0 = complex(-0.08, 0.08); a0 = abs(1 - c0)
+inside = (np.abs((Z + np.sqrt(Z * Z - 4 + 0j)) / 2 - c0) < a0 + 1e-9) & (np.abs((Z - np.sqrt(Z * Z - 4 + 0j)) / 2 - c0) < a0 + 1e-9)
+cp = np.where(inside, np.nan, np.clip(cp, -1.6, 1.0))
+norm = Normalize(-1.6, 1.0)
+ax.pcolormesh(X, Y, cp, cmap=DIVERGING, norm=norm, shading="auto", alpha=0.6, rasterized=True)
+ax.fill(Jk["xy"][:, 0], Jk["xy"][:, 1], color="white", zorder=2)
+ax.plot(Jk["xy"][:, 0], Jk["xy"][:, 1], color=INK, lw=1.4, zorder=3)
+ax.plot(Jk["mid"][:, 0], Jk["mid"][:, 1], "o", ms=3, color=INK, zorder=4)
+rng = np.random.default_rng(5)
+q = np.stack([rng.uniform(-2.4, 2.6, 400), rng.uniform(-1.3, 1.4, 400)], axis=1)
+qz = q[:, 0] + 1j * q[:, 1]
+zeta = (qz + np.sqrt(qz * qz - 4 + 0j)) / 2
+keep = np.abs(zeta - c0) > a0 * 1.06
+q = q[keep][:140]
+ax.plot(q[:, 0], q[:, 1], "o", ms=4, mfc=AQUA, mec="white", mew=0.6, zorder=5)
+ax.text(-2.5, 1.35, "input: boundary sample (black), interior query points (aqua)", fontsize=9.5, color=INK)
+ax.text(-2.5, -1.4, "target: the field at the query points (color: exact $C_p$)", fontsize=9.5, color=INK2)
+sm = plt.cm.ScalarMappable(norm=norm, cmap=DIVERGING); sm.set_array([])
+cb = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02); cb.set_label("pressure coefficient $C_p$ [–]", color=INK2)
+plt.show()
+```
+
+**Data.** The DrivAerML Volume task (@sec-datasets): the 435-car training
+split and the 48-car validation split used for every DrivAerML comparison
+in the book. Each car contributes a sample of the vehicle boundary (cell
+centroids, unit normals, cell areas as measure weights) and a sample of
+200,000 interior query points drawn from the CFD volume mesh, bit-identical
+across every trained run. The volume mesh holds 150 to 166 million points
+per car, so even this sample covers about $10^{-3}$ of it and is
+overwhelmingly near the wall. Targets are the static pressure, the three
+velocity components and the turbulent eddy viscosity $\nu_t$.
+
+**Metric.** For one car and one field $f$ the relative L2 error is
+$\lVert \hat f - f\rVert_2 / \lVert f\rVert_2$ over the query points,
+with $f$ in training normalization: pressure as $C_p$, velocity as
+$U/|U_\infty|$ with the far-field mean included (Frobenius norm over the
+components), and eddy viscosity standardized to zero mean and unit scale
+*before* scoring. The viscosity denominator is therefore the norm of a
+mean-subtracted field, so an eddy-viscosity value of 0.10 is not a 10% error
+in physical $\nu_t$: orderings under this metric stand, but the number is
+not a physical percentage. The reported value is the arithmetic mean over
+the 48 cars (@sec-metrics).
+
+**Protocol.** @sec-protocol, with 200,000 boundary cells and 200,000
+interior queries per car; both arms train at 1e-3 and are scored in float32
+at the training query count. The arms are not resource-matched and do not
+receive the same inputs: GeoTransolver-volume has 27.6M parameters (the
+surface configuration's 12-layer, 256-wide backbone plus ball-query local
+features over neighboring interior points at six radii), its tokens are
+the interior points only, and each carries its coordinates, the signed
+distance to the full-resolution surface and that distance's gradient; fed
+the physical far-field velocity vector instead of the unit direction it
+changes by under 2% on every field, so the interior ordering does not
+depend on the input-scale rule of @sec-part-baseline. ISLA with query
+tokens has 8.9M parameters, the surface configuration's count, and its
+per-slice geometry spans surface and query tokens together.
+
+### Query independence as a property {#sec-interior-query-independence}
+
+
+**Query independence means the prediction at a point does not change when
+the other queried points change.** A user who asks for one streamline, a
+plane, or the whole domain then gets the same answer at every shared point,
+at a cost linear in the points asked for. In ISLA's passive configuration
+an interior query is never a token: the encoder sees the surface only, and
+read blocks (@sec-isla-passive) read the slice states and the boundary
+tokens without writing anything back, so the property holds exactly
+(verified in float64 to $10^{-12}$; @sec-isla-contracts).
+GeoTransolver-volume's queries are tokens, so its answer at a point depends
+on the other points requested with it. ISLA's surface predictions in this
+book come from the interacting configuration and do not have the property
+either.
+
+The property has a price, and the price is not depth or context but the
+computation the interacting queries receive at the requested points: a
+passive decode at matched depth and inputs, twelve read blocks reading an
+interacting support set that carries the signed distance, still trails the
+interacting query-token configuration on every field
+(research/transfer_program/studies/computational_support/d1_verdict_2026-09-10.json).
+The passive route is therefore closed for ISLA at matched depth, and the
+chapter's ISLA is the interacting one.
+
+### How each architecture treats an interior point
+
+| architecture | what an interior point is | what it knows about the geometry | query independence |
+|---|---|---|---|
+| GeoTransolver-volume | an interacting token, routed to slices with the other interior points of the request | its signed distance to the wall and the nearest wall normal; ball-query features over neighboring interior points at six radii; no surface tokens | no |
+| ISLA, passive decode | a passive reader: read blocks that consult the surface-encoder's slice states and boundary tokens | the relational invariants of its position against the surface anchors and a unit normal at the query (the wall normal from the signed-distance gradient, or a covariant blend of anchor normals) | yes, exactly |
+| ISLA with query tokens | an interacting token in the encoder alongside the surface tokens, with a learned type embedding and routing weight | the same relational invariants, plus the wall normal and the signed distance as a query scalar | no |
+
+### ISLA with query tokens {#sec-interior-query-tokens}
+
+ISLA with query tokens admits the queries into the encoder as tokens. Each
+query is seeded exactly as a boundary token is, from the invariants of its
+position, its wall normal and the global direction, plus a learned type
+embedding and the signed distance as a query scalar, and enters the
+measure-weighted routing with a learned weight relative to the surface
+measure; the twelve slice layers run over surface and query tokens together
+and the heads read the query tokens. Every invariant is a function of
+relative geometry, so rotation and translation covariance hold by
+construction (@sec-isla-contracts). What is given up is query independence:
+a query's prediction depends on the other queries in the request. How the
+query weight is set relative to the surface measure is the `query_mass`
+option. The class default, `source_total`, gives the queries a learned
+fraction of the total boundary measure, so re-representing the same
+surface at another refinement leaves the routing unchanged
+(measure-rescale invariant). The rows of this chapter use the
+`geometric_mean` option, which gives each query the mean boundary
+log-weight plus a learned offset and therefore depends on how finely the
+surface is sampled and on how many queries are asked for; the query-count
+dependence of @sec-interior-companion is that option's. Nothing else
+changes: 8.9M parameters, the surface configuration's hyperparameters, no
+local features.
+
+## The DrivAerML Volume task {#sec-interior-results}
+
+
+```{python}
+#| label: para-interior-results-lead
+#| output: asis
+ps = ISLAV["pressure_l2"]["seeds"]
+print(f"**At the reporting protocol, with its queries admitted as interacting tokens and given the signed distance, ISLA leads "
+      f"GeoTransolver-volume on interior velocity by {lead(RATIO['velocity_l2'])}, trails on pressure by {trail(RATIO['pressure_l2'])} and is "
+      f"level on eddy viscosity (GeoTransolver-volume ÷ ISLA {RATIO['nut_l2']:.2f}), at a third of the parameters.** Budget: 200,000 boundary "
+      "cells and 200,000 interior queries per car, 435 training cars, 48 validation cars, float32, two seeds. The pressure deficit is the "
+      f"size of ISLA's own pressure seed spread ({abs(ps[0] / ps[1] - 1) * 100:.0f}% between the two seeds), so on this dataset it is a "
+      "standing inside the noise; velocity is not, with the two seeds of each arm on the same side by a wide margin.")
+```
+
+```{python}
+#| label: tbl-interior-200k
+#| output: asis
+def cell(d, ref=None):
+    s = f"{d['mean']:.4f} ({' / '.join(f'{v:.4f}' for v in d['seeds'])})"
+    return s + (f" — {ref['mean'] / d['mean']:.2f}" if ref else "")
+out = "| arm, 435 training cars, 200,000 cells and 200,000 queries | pressure (seeds) — ratio | velocity (seeds) — ratio | eddy viscosity (seeds) — ratio |\n|---|---|---|---|\n"
+out += "| GeoTransolver-volume, 27.6M, 1e-3 | " + " | ".join(cell(GTV[f]) for f, _ in FIELDS) + " |\n"
+out += "| **ISLA with query tokens + signed distance, 8.9M, 1e-3** | " + " | ".join(cell(ISLAV[f], GTV[f]) for f, _ in FIELDS) + " |\n"
+print(out)
+print(": Interior error on the DrivAerML Volume task at the reporting protocol: relative L2 over the 48 validation cars (arithmetic mean over "
+      "cars, then over seeds; seeds in parentheses), float32, 200,000 boundary cells and 200,000 interior queries per car, 500 epochs. The "
+      "ratio after each ISLA cell is GeoTransolver-volume ÷ ISLA (above 1 favors ISLA). How to read this: the arms are not resource-matched "
+      "and do not receive the same inputs (@sec-interior-task); both use the passive readout's geometric-mean query mass. The AirfRANS twin "
+      "of this table is @tbl-interior-airfrans. Data: results/ratevol_reduction_2026-09-20.json (GeoTransolver-volume); "
+      "results/routenorm_extension_2026-09-21.json (ISLA). {#tbl-interior-200k}")
+```
+
+Two ingredient orderings sit behind the row, measured at the exploration
+budget of 10,000 cells and queries and stated as orderings only:
+interaction closes most of the passive decode's gap to GeoTransolver-volume
+on pressure without the signed distance and without extra parameters, and
+the signed distance closes most of the rest, most on velocity, which is
+what turns the velocity standing into a lead. Among the passive decodes the
+wall normal from the signed-distance gradient beats the covariant blend of
+anchor normals on pressure, so a true wall normal at the query is better
+information than a proxy. One caution applies to any per-band reading of
+these fields: far from the body the true $C_p$ has an RMS two orders of
+magnitude below the near-wall value, so far-band pressure relative L2 is
+ill-conditioned for every architecture and the velocity error, whose
+denominator is the far-field speed, is the well-conditioned view of the far
+field.
+
+## The second dataset: AirfRANS {#sec-interior-airfrans}
+
+```{python}
+#| label: para-airfrans-lead
+#| output: asis
+print(f"**The interior ordering is not a property of car flow: on AirfRANS, a different dataset and a different PDE regime, ISLA leads "
+      f"GeoTransolver-volume on interior velocity by {AFR['velocity_l2']:.2f}x and trails it on pressure by {trail(AFR['pressure_l2'])} and on "
+      f"eddy viscosity by {trail(AFR['nut_l2'])}, with both seeds agreeing on every field.** AirfRANS is 1,001 two-dimensional incompressible "
+      "k-omega SST RANS solutions around NACA airfoils; its full split trains on 800 cases and tests on 200. It is the book's instance of the "
+      "general interface with one global scalar: the boundary is the airfoil polyline (about 1,000 segments with in-plane normals and segment "
+      "lengths as the measure weights), the global inputs are the inlet velocity as the one global vector and the Reynolds number as the one "
+      "global scalar, and the interior queries carry the signed distance to the airfoil. Both architectures train for 500 epochs at 100,000 "
+      "interior queries per case and are scored in float32 at the same count on the 200 test cases. Pressure is nondimensionalized by the "
+      "inlet dynamic pressure and velocity by the inlet speed; eddy viscosity keeps its units and the recipe's normalization.")
+```
+
+```{python}
+#| label: tbl-interior-airfrans
+#| output: asis
+def afcell(a, f): return f"{AFA[a][f]['mean']:.4f} ({' / '.join(f'{v:.4f}' for v in AFA[a][f]['seeds'])})"
+v = AFV["isla_cosine_1e-3"]
+out = "| arm, 800 training airfoils, 100,000 queries | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
+out += "| GeoTransolver-volume, 1e-3 | " + " | ".join(afcell("gt_volume_1e-3", f) for f, _ in FIELDS) + " |\n"
+out += "| **ISLA, query tokens + signed distance, 1e-3** | " + " | ".join(afcell("isla_cosine_1e-3", f) for f, _ in FIELDS) + " |\n"
+out += "| GeoTransolver-volume ÷ ISLA (paired by seed) | " + " | ".join(f"{v[f]['gt_over_isla']:.2f} ({' / '.join(f'{r:.2f}' for r in v[f]['paired_ratios'])})" for f, _ in FIELDS) + " |\n"
+print(out)
+sp = {f: AFA["isla_cosine_1e-3"][f]["seed_spread"] * 100 for f, _ in FIELDS}; spg = {f: AFA["gt_volume_1e-3"][f]["seed_spread"] * 100 for f, _ in FIELDS}
+print(": Interior error on AirfRANS (relative L2 over the 200 test cases of the full split, float32, two seeds, 100,000 interior queries per "
+      "case, 500 epochs), seed means with the seeds in parentheses. Ratios are GeoTransolver-volume ÷ ISLA (above 1 favors ISLA), as the "
+      "seed mean and paired by seed. Preregistered bars: reproduced if the pressure ratio is below one and the velocity ratio above one with "
+      f"both paired ratios agreeing, as on DrivAerML; eddy viscosity has no prior. Verdicts: pressure {v['pressure_l2']['verdict']}, velocity "
+      f"{v['velocity_l2']['verdict']}. How to read this: ISLA's two seeds differ by {min(sp.values()):.0f} to {max(sp.values()):.0f}% on every field "
+      f"here, GeoTransolver-volume's by {min(spg.values()):.0f} to {max(spg.values()):.0f}%; the sign of every paired ratio is what the verdicts rest "
+      "on, not the second digit. Data: results/airfrans_reduction_2026-09-22.json. {#tbl-interior-airfrans}")
+```
+
+```{python}
+#| label: para-airfrans-reading
+#| output: asis
+print(f"Three things carry with @tbl-interior-airfrans. The ordering is the cars' ordering with the gaps widened: the velocity lead is "
+      f"{AFR['velocity_l2']:.2f}x against {RATIO['velocity_l2']:.2f}x on the cars, the pressure deficit {trail(AFR['pressure_l2'])} against "
+      f"{trail(RATIO['pressure_l2'])}, and eddy viscosity, level on the cars, goes to GeoTransolver-volume by {trail(AFR['nut_l2'])}. The two "
+      "regimes differ in what pressure is (gauge pressure on a three-dimensional body against nondimensional pressure in two-dimensional "
+      "incompressible flow), so the same ordering across them says the split is a property of how the two architectures treat an interior "
+      f"point, not of one flow. And ISLA's seed spread on this dataset is large, {min(sp.values()):.0f} to {max(sp.values()):.0f}%, where "
+      "GeoTransolver-volume's is a few percent; the verdicts rest on the sign of every paired ratio, which agrees, and the source of the "
+      "spread is open. The case-count ladder of this dataset, and how the two architectures' errors fall with training airfoils, are in "
+      "@sec-shared-floor.")
+```
+
+## Dependence on the query cloud {#sec-interior-companion}
+
+**The interacting configuration's answer at a point depends on how many
+other points are asked for with it, so a surrogate built from it is
+queried in batches of at least the training count** (@sec-using-checkpoint).
+Because the queries route through the same slices as the surface, a
+prediction at one point is a function of the whole request; under the
+`geometric_mean` option each query's routing weight also scales with the
+query count (@sec-interior-query-tokens). Two instruments establish the
+rule at the exploration budget: a checkpoint trained at a fixed query count
+and scored at a fifth of it loses more on every field than either margin
+against GeoTransolver-volume, while twice the count gains a little; and
+fixed sentinel points predicted alone and with growing companion sets move
+with the request size, most for eddy viscosity and least for pressure,
+while the passive configuration's predictions at the same sentinels are
+identical whatever else is queried, which confirms that query independence
+holds on trained weights where the architecture promises it
+(results/qcount_reduction_2026-09-11.json,
+results/isla_qt_companion_dependence_2026-09-08.json). Training over a
+range of counts reduces the dependence and does not remove it, so
+query-count consistency is an architectural question. The class default
+query mass, `source_total`, removes the count-scaling of the query weight
+by construction (@sec-isla-contracts); the dependence through the shared
+slices remains.
+
+## What does not work {#sec-interior-negatives}
+
+**Two mechanisms tested as ways to give ISLA interior context or an
+interior prior without giving up query independence both fail.** Latent
+volume tokens placed covariantly along the anchor normals (769 tokens
+entering the routing as interacting tokens) make the passive decode worse
+on every field (results/v0_lvt_reduction_2026-09-07.json). An exact
+boundary-integral prior is the wrong prior for separated flow: on the 45 of
+48 validation cars whose remesh passes a watertightness check, exact
+inviscid potential flow evaluated at the recipe's surface points has a
+measure-weighted relative L2 of 4.8 against the CFD pressure, where
+predicting zero scores 1.00, because most of a DrivAerML surface carries
+the separated-base pressure deficit that inviscid flow cannot produce; the
+learned-density decoder built on those kernels is about ten times less
+accurate than GeoTransolver-volume on interior pressure, and its far-field
+output decays to identically zero. ISLA therefore evaluates no exact
+boundary-integral kernels and places no latent tokens off the surface.
+
+## Standing and open designs {#sec-interior-open}
+
+```{python}
+#| label: para-interior-open
+#| output: asis
+print(f"**One architecture covers the surface and the interior: ISLA with query tokens leads GeoTransolver-volume on interior velocity on "
+      f"both datasets (by {lead(RATIO['velocity_l2'])} on the DrivAerML Volume task, {AFR['velocity_l2']:.2f}x on AirfRANS) at a third of its "
+      f"parameters, and trails it on interior pressure (by {trail(RATIO['pressure_l2'])} and {trail(AFR['pressure_l2'])}).** The pressure deficit "
+      f"is the one open standing. On the cars its size is inside ISLA's own pressure seed spread ({abs(ps[0] / ps[1] - 1) * 100:.0f}% between the "
+      "two seeds); on the airfoils it is seed-robust (every paired ratio below one), so it is a property of the architecture pair, not of "
+      "one dataset, and its mechanism is open. The passive decode remains the configuration to use when query independence is contractual, "
+      "at its measured price (@sec-interior-query-independence); a request-independent probe set that would supply interior context while "
+      "keeping the passive decode is a design, not a result. @sec-limits collects the interior limits alongside the book's others. Data: "
+      "results/ratevol_reduction_2026-09-20.json; results/routenorm_extension_2026-09-21.json; results/airfrans_reduction_2026-09-22.json.")
+```

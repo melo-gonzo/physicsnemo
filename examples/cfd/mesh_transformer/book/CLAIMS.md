@@ -18,32 +18,48 @@ width 192); 10,000 cells is the exploration budget and is labeled wherever
 quoted. Sections below that predate 2026-09-18 describe the exploration
 budget (their "P0") unless dated otherwise.
 
-## Current state, 2026-09-21 (read this section first)
+## Current state, 2026-09-22 (read this section first)
 
 Everything the chapters state as current knowledge is summarized here; this
 list is the brief the 2026-09-21 book refresh was written from. Artifacts are
 named in the chapter captions and the notebook entries cited there.
 
 **The class (code, not evidence).** One origin-free frame; length unit
-`scale_mode="rms_distance"` (default) or `"total_measure"` (kept to reproduce
-pre-2026-09-18 lanes, marked for removal). Removed on 2026-09-20: `frame_mode`
-("centered"), `similarity_gauge`, `reference_length`; the legacy centered and
-similarity-gauge variants are *removed variants*, quoted only in collapsed
-diagnostic notes. Routing: `routing_norm="linear"` (default) or `"cosine"`
-(bounded logits); cosine is the default candidate pending the wing lanes.
-`query_mass="source_total"` (measure-rescale invariant passive readout).
+`scale_mode="rms_distance"` (default; `"total_measure"` kept only to load
+older lanes, marked for removal). Routing: `routing_norm="cosine"` (default
+since 2026-09-22) or `"linear"` (the alternative, whose learning-rate ceiling
+is described once, in the architecture chapter's routing-forms note and
+nowhere else). `geo_kernel=None` = auto (fused on CUDA when its constraints
+hold). `query_mass="source_total"` (measure-rescale invariant passive readout).
+The reference configuration (Peter's ruling 2026-09-22: one set of
+recommended settings for every dataset, toward the accuracy end) is being
+fixed by the REF study between 384 x 12 and 384 x 24 (#sec-nb-ref-prereg);
+until it lands, the surface-task evidence lanes are 192-wide linear-routed
+lanes and the book says so in ONE place (05-protocol, "Configuration of the
+evidence lanes"), never in captions.
+
+**Book structure (2026-09-22 rewrite).** index; 01 problem; 02 ISLA ideas;
+03 the two invariances (centerpiece); 04 forward pass; 05 protocol
+(baselines, datasets, rules); 06 using; 07 surface accuracy and data
+efficiency; 08 discretization and pose evidence; 09 capacity, scaling, cost;
+10 boundary to interior; 11 limits; 12 program status (dates live here only);
+13 design decisions; 18 notebook. One home per concept; other chapters cite
+in one sentence. Every cross-architecture sentence names dataset AND task
+("DrivAerML Surface task" / "DrivAerML Volume task").
 
 **Surface, DrivAerML 435 cars, 200,000 cells.** Parity: ISLA 0.0446,
 GeoTransolver 0.0445 at 3e-3, Transolver 0.0473 (0.998 / 1.06).
 Ladder GeoTransolver ÷ ISLA 0.83 / 0.86 / 0.92 / 0.97 / 1.00 at 27 / 54 /
 109 / 218 / 435 cars. Wings (GeoTransolver ÷ ISLA / Transolver ÷ ISLA, 200k):
-35-case rung 0.73 / 0.73 (0.72 at 10k); fixed-angle rung 0.69 / 0.79 (0.68 at
-10k); 4 geometries 0.76 / 0.73; 210 random cases 0.89 / 0.96; 21 held-out
-geometries 0.98 / 0.96 (2026-09-22). The wing deficit is a small-data,
+35-case rung 0.73 / 0.73 linear ISLA, 0.78 / 0.78 against cosine ISLA-192
+(0.1408); fixed-angle rung 0.69 / 0.79; 4 geometries 0.68 / 0.73 (GeoTransolver
+at 3e-3, its better rate); 210 random cases 0.88 / 0.96; 21 held-out
+geometries 0.95 / 0.96 (GeoTransolver at 3e-3; the 1e-3 lanes read 0.89 and
+0.98 and were the chapters' numbers until 2026-09-22). The wing deficit is a small-data,
 recurring-geometry effect: it shrinks with cases and is within 5% where the
 validation geometries are never seen; it does not move with the cell budget.
-Say: "the baselines lead by 21 to 32% on the small wing rungs, 4 to 11% at 210
-cases, 2 to 5% at 21 held-out geometries". Do not say "27% on the wings"
+Say: "the baselines lead by 21 to 32% on the small wing rungs, 4 to 12% at 210
+cases, 4 to 5% at 21 held-out geometries". Do not say "27% on the wings"
 without the rung.
 
 **Capacity (100,000 cells, labeled scaling budget).** Linear routing has a

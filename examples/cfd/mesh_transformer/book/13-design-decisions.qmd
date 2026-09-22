@@ -1,0 +1,127 @@
+# Design decisions and the principle behind them {#sec-principled-decisions}
+
+**Every architectural decision in ISLA is made by one rule: an accuracy
+gain is not accepted when it is known to come from a violation of a
+physical principle.** A surrogate for a boundary-value problem should depend
+on the geometry, the boundary conditions and the physics, and on nothing
+else. When a change improves the score by reading the mesher's cell pattern,
+the sampling density, or a statistic of the drawn sample, the improvement is
+a fit to the discretization, and it will not survive a different mesher, a
+different sampling law, or a geometry the training set did not contain. This
+appendix is the ledger of every decision of that kind: the alternative it
+rejected, what the alternative would have bought on the in-distribution
+metric, what it consumed that the physics does not provide, and the evidence.
+It exists so that the paper on ISLA can say *why* the architecture is what it
+is, and so that the position is stated plainly for others: a program that
+wants highly generalizable physics surrogates has to be willing to leave
+measured accuracy on the table when that accuracy is known to be
+non-physical.^[Not everything that is measured counts, and not everything
+that counts can be measured. The aphorism is William Bruce Cameron's
+(*Informal Sociology*, 1963); it is often misattributed to Einstein.]
+
+## The criterion {#sec-principled-criterion}
+
+**The operational form of the principle is discretization consistency,
+stated and argued once in @sec-discretization-centerpiece: a prediction
+that converges to one field under refinement and to the same field under
+two sampling laws, tested by the consistency benchmark and its
+training-law twin rather than by any single accuracy number.** Two
+questions are asked of every proposed change, before and after it is
+measured. *Why should this work*, in mechanistic terms? And would a
+practitioner of classical CFD look at the construction without objecting
+to what it consumes? Changes that cannot answer both are run, when they
+are run at all, as ablations, and are labeled so wherever they appear. The
+same two questions are the reason ISLA has one configuration: the
+weights-off ablation is not adopted on the rungs where it scores better,
+and no frame that centers on a statistic of the sample is in the class
+(@sec-nb-principle-redirect, @sec-nb-frame-cleanup).
+
+## The ledger {#sec-principled-ledger}
+
+
+**Each row names the decision as it stands in ISLA, the alternative it
+rejected, and what the alternative would have cost the physics.** "What it
+would have bought" is the alternative's gain on the in-distribution
+surface-pressure metric (float32, seed means) where it had one, with the
+cell budget it was measured at; "what it reads" is the non-physical quantity
+the gain came from; the evidence column points to the chapter or notebook
+entry that carries the numbers and their artifacts. Five rows are decisions
+of protocol, code or program rather than of architecture; each says so.
+Where the alternative's gain was measured only on a configuration that is
+no longer in the class, or only below the reporting protocol, the gain
+column says "not re-measured" and the row stands on its principle.
+
+| Decision | Rejected alternative | What it would have bought | What it reads that the physics does not provide | Evidence | Principle |
+|---|---|---|---|---|---|
+| Measure weights in the routing softmax | Unweighted routing (the weights-off ablation) | A gain on the small wing rungs; not re-measured | The number of cells the mesher placed in a region. Under area-proportional sampling the ablation's error rises above that of predicting zero; on the wings its advantage is flat in cell count, the signature of mesh-pattern content | @sec-limits-mechanism, @sec-consistency-bench, @sec-nb-bench-verdict, @sec-nb-overfit-routing-probe | A slice aggregate is an integral, not a point population |
+| The origin-free frame: positions enter only as differences against anchors | A frame centered on the plain mean of the sampled points | Nothing on DrivAerML; a price on the wing rungs where validation geometries recur and at the fixed angle; not re-measured | The mesher's refinement pattern, through the plain mean's offset from the geometric centroid: under a sampling-density bias the centered frame degrades many-fold, and an exact full-geometry frame with every positional seed pays *more* than the origin-free construction, so the price is the pattern, not positional information | @sec-nb-frame-full-verdict, @sec-nb-frame-full-fixed-angle-verdict, @sec-nb-relframe-ladder-verdict | No statistic of the sample in the frame |
+| The origin-free frame | A similarity gauge: measure-weighted centroid and RMS radius estimated from the sample | A price where validation geometries recur (35 and 210 wing cases); within seed noise on DrivAerML at 435 cars, so the price of not being told the body's center is inside seed noise; not re-measured | An absolute position on a wing that recurs between training and deployment. An estimated frame is a sample statistic even when it is consistent under refinement; the gain is a fit to a fixed fleet of shapes | @sec-nb-relframe-ladder-verdict, @sec-nb-relframe-verdict, @sec-nb-sgref-verdict | Built for the shapes not yet seen |
+| Length unit $L$ from the measure-weighted RMS pairwise distance of the sample (`scale_mode="rms_distance"`) | A constant `reference_length` per dataset; the total-measure unit $L \equiv (\sum_i w_i)^{1/2}$ | Nothing: the per-dataset constant pays more at the fixed angle than the total-measure unit, and the RMS pairwise distance is within seed noise of the total-measure unit at 435 cars at the reporting protocol | The constant encodes the fleet's size by hand. The total-measure unit is an integral of the geometry and consistent under Horvitz–Thompson weights, but it is not center-free in the sense the RMS distance is, and it diverges on boundaries whose measure grows under refinement where the pairwise distance converges | @sec-nb-lenrms-verdict, @sec-nb-lenrms-200k, @sec-nb-relframe-ladder-verdict, @sec-nb-frame-full-fixed-angle-verdict | Length from the geometry, not from a table |
+| One frame in the class, origin-free, with no compatibility shims (a code decision) | Centered and gauge frames as constructor options, and a checkpoint-compatibility layer for the program's own files | Nothing: no evidence lane uses another frame, and a compatibility layer would serve only the program's own files | Nothing non-physical; a class that carries frames the evidence rejects invites their use as configurations | @sec-nb-frame-cleanup, @sec-nb-no-legacy-compat | One flagship, one frame |
+| Cosine routing (bounded logits at a fixed temperature), the class default | The unbounded affine routing map (`routing_norm="linear"`, kept as the alternative form in @sec-isla-routing-forms) | Nothing: the bounded form is the more accurate or the equal one on both datasets. It removes the learning-rate ceiling that falls like 1/width and at least 1/depth and whose failure is total routing collapse: every cosine lane trains clean at the rates that collapse linear routing, at neutral accuracy at the rule rates on DrivAerML (cosine ÷ linear 0.998, 1.005, 1.020 at 192, 384, 768 wide), 6% better on the 35-wing rung at the reporting protocol, and 48 layers become trainable | Nothing non-physical in either direction; the choice is between an unbounded logit whose scale grows with the weights and a bounded one whose scale is fixed | @sec-nb-routingsat-verdict, @sec-nb-routenorm-cars-verdict, @sec-nb-routenorm-p200k-verdict, @sec-isla-routing-forms | Two datasets before a default moves |
+| `query_mass="source_total"`: the total query mass is a learned fraction of the total source measure divided by the query count (a code decision) | A `geometric_mean` convention for the query mass | Nothing; not re-measured | The alternative lets a refinement of the source or a change of request size move the balance between surface and queries, and the passive readout it fed was not invariant to a rescaling of the measure | @sec-nb-no-legacy-compat, @sec-isla-contracts | A readout must not read the cell count |
+| Deploy the interacting decode at the training query count | Query-count augmentation as the flagship | A reduction of the query-count dependence at a small accuracy cost | Nothing non-physical; the dependence is intrinsic to an interacting decode and is stated rather than papered over. Augmentation stays a documented mitigation | @sec-nb-qcount-verdict, @sec-interior-companion | State a limitation; do not hide it |
+| One routing per block | Multi-head routing: several independent routings per block | Nothing at full data: on the one-case instrument eight routings remove most of the form gap, but on the 435 DrivAerML cars eight routings are null, so the one-case ordering does not transfer and routing multiplicity is not the carrier of any deficit | Nothing non-physical; the change was removed because it bought nothing at the scale the recipe trains at | @sec-nb-heads435-verdict | Two instruments before a structural change |
+| One configuration for every dataset and task | Per-dataset configurations chosen by a rung-count rule | A gain on individual wing rungs by picking the discretization-reading configuration where it wins; not re-measured | Knowledge of which dataset a case comes from; a surrogate that changes its construction per dataset has no claim to generalize across them | @sec-principle, @sec-nb-principle-redirect | One flagship |
+| Matched inputs, float32 reporting | The original protocol: physical freestream velocity for GeoTransolver and Transolver, bfloat16 scoring | A headline advantage of the artifact's size: fed the physical velocity, GeoTransolver and Transolver lose 3.4 to 3.8x at 35 cases, and bfloat16 scoring added a precision offset that fell unevenly across architectures | An input-scale artifact in GeoTransolver's and Transolver's global projector and a precision artifact that fell unevenly across architectures | @sec-part-baseline, @sec-nb-fp32-drivaer-regrade | Compare architectures, not protocols |
+| The reporting protocol: 200,000 sampled cells per case, each architecture at its own best learning rate (a protocol decision) | Reporting at the exploration budget of 10,000 cells, or every architecture at one shared rate | Reporting at 10,000 cells would have reported a full-data ordering on DrivAerML that the count noise of a 10,000-cell draw produces and that 200,000 cells removes; a shared rate of 1e-3 would have understated GeoTransolver on every DrivAerML rung, most at the smallest, where its better rate is 3e-3 | A budget below the one the recipe trains at, and a rate that favors whichever architecture it was tuned on. At 200,000 cells and each model's better rate the two architectures are at parity at full data on the cars, and the wing deficit is unchanged from the smaller budget, so the protocol changes no ordering it does not have to (@sec-surface) | @sec-nb-proto200k-fleet-prereg, @sec-nb-proto200k-verdict, @sec-scoreboard-200k | Report where you train, at each model's best |
+| Present ISLA as a new architecture; leave GeoTransolver and Transolver unmodified | Back-port measure weighting and the origin-free frame into GeoTransolver and Transolver | A sampler-consistent GeoTransolver and Transolver at unchanged accuracy | Nothing non-physical; the released architectures are stable and in use, so their measure-consistent ablations locate a property and are never shipped modifications | @sec-nb-mwaw-verdict, @sec-nb-steelman-verdict, @sec-nb-ruling-released-baselines | Released models are not modified |
+
+: The design-decision ledger. Every number is stated in the chapter or notebook entry the row points to and carries its artifact there. How to read this: a row records what the rejected alternative would have bought *in distribution* and what it would have read; it does not rank the decisions by size; a row whose gain column says "nothing" is a decision made on principle with no accuracy at stake, and a row that says "not re-measured" carries its principle without a current number. {#tbl-principled-ledger}
+
+**Two rows deserve a sentence each, because they are the ones where the
+principle cost the most.**
+
+**The measure weights** are the clearest case. With them, a slice state is
+a quadrature estimate of a surface integral; without them it is a mean over
+whichever points the mesher happened to place, and the network learns the
+mesher. The price on the wings is real and understood: part of it is the
+estimator variance of a quadrature-weighted mean over a heavy-tailed draw of
+cell areas, which shrinks with cell count and is nearly gone at 40,000 cells
+on the cars; the rest is mesh-pattern content in the ablation, which does
+not shrink and which collapses the moment the sampling law changes. An
+accuracy table at one cell count cannot tell these apart. The consistency
+benchmark can, and it decided.
+
+**The frame** is the case where the trade is closest. Where the same
+wings recur between training and validation, an estimated center and
+scale buys accuracy against the origin-free construction; no such frame
+is in the class because the never-seen-geometry rungs favor the
+origin-free construction, because on DrivAerML at 435 cars the price of
+not being told the body's center is inside seed noise
+(@sec-nb-sgref-verdict), and because an estimated frame is a statistic of
+the sample even when it is a consistent one. For a fixed fleet of shapes
+an estimated frame is the better instrument; ISLA is built for the shapes
+that have not been seen yet.
+
+## What we would ask of the field {#sec-principled-ask}
+
+**Three practices follow from the ledger, and none of them is expensive.**
+
+- **Measure consistency, not only accuracy.** Score every model under at
+  least two sampling laws and at more than one cell count, and report
+  whether the answers converge to each other; then train under a second law
+  and score on the first. A model that is 10% better at 10,000 cells and
+  10x worse under a different sampler, or 8x worse when trained under a
+  different law, has learned the mesher (@sec-consistency-bench,
+  @sec-training-law).
+- **Locate every gain before adopting it.** When a change improves the
+  score, run the test that would reveal a discretization dependence, and ask
+  what the change consumes that the physics does not supply. A mechanism that
+  cannot be stated is a hypothesis; a gain whose mechanism is the mesh is not
+  a gain.
+- **Preregister the bar and keep the refuted configurations runnable.**
+  Every decision above is made against a bar written before the run. The
+  class ISLA ships carries one frame and the options the chapters compare
+  against as labeled ablations (the weights-off ablation, the interior
+  decodes, both routing forms); the rejected frames (centered and
+  similarity-gauge), the constant reference length and the diagnostic
+  options are not in the class and their checkpoints do not load, and
+  they remain runnable, with their tests, only at the git tag
+  `isla-research-full`, so that the price can be re-measured when the data
+  or the metric change (@sec-nb-frame-cleanup, @sec-program-status).
+
+The accuracy metric is one number about one discretization of one dataset.
+It is necessary and it is not sufficient, and a research program that
+optimizes it alone will converge on surrogates that know their mesher better
+than their physics.

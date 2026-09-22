@@ -1966,7 +1966,7 @@ directories or only in the archived chronology. This revision restores them
 as compressed entries with anchors into the archive: the
 subsampling/measure/resolution/reproducibility findings of 07-24..26
 (@sec-nb-hdi-summary through @sec-nb-hseed-summary), the audit content
-behind @sec-full-data-accuracy, the per-experiment verdicts of the 07-29
+behind @sec-scoreboard-200k, the per-experiment verdicts of the 07-29
 controlled-reset wave (@sec-nb-controlled-reset), and the repaired
 train-only gauge recalibration (@sec-nb-gauge-recalibration). The review
 also committed four days of working-tree state (results, studies, the
@@ -8565,7 +8565,7 @@ the 365-token arm's seed spread. **Null** if all three fields lie within 3%
 of the 365-token arm. Between: partial, reported per field. Cost is
 reported alongside (the per-slice geometry now spans 20,000 tokens, so the
 step time and memory of the query-token arm rise; the recompute and compiled
-paths of @sec-isla-cost are the mitigation). Either outcome corrects the
+paths of @sec-using-cost are the mitigation). Either outcome corrects the
 chapter's input description; a supported outcome also reopens the passive
 decoder question with the full surface (PASSIVE2), because the passive
 arm's 2.6x deficit was measured with the same 365 tokens.
@@ -8847,7 +8847,7 @@ excludes the prediction that the resulting *error* advantage sits at the
 gaps, and it is consistent with a different picture: ISLA's routing fits
 the smooth, global part of the pressure field from few samples where
 GeoTransolver's does not, and neither model resolves the local gap flow from
-35 cases. The small-feature hypothesis of @sec-mechanism therefore joins the
+35 cases. The small-feature hypothesis of @sec-de-limits therefore joins the
 freestream-direction hypothesis as a prediction that failed, and the
 mechanism stays located at the level of the dataset (parametric
 multi-element variation), not the surface.
@@ -9238,7 +9238,7 @@ routing softmax (`use_measure_weights`), so slice states are quadrature
 means over the surface measure. The book's pressure metric is the per-point
 relative L2 over the 10,000 sampled cells, in which every point counts
 equally. Turning the weights off improved the 35-case HiLift error from
-0.138 to 0.122 (0.88x; @sec-mechanism), a gain the book reads as removed
+0.138 to 0.122 (0.88x; @sec-de-limits), a gain the book reads as removed
 gradient variance under uniform sampling. That gain is as large as ISLA's
 whole deficit to the unit-drive GeoTransolver (0.124), so the reading
 matters. A second reading: the weighted model is optimized for a different
@@ -13006,7 +13006,7 @@ trained at 3e-3, mt2_v3c_seed42, whose float32 error on the same 48 cars
 under the same snapshot is 0.0620 (transfer session, snapshot `code`):
 **0.0616 (gauge, two seeds 0.0623 / 0.0609) against 0.0620 (constant gauge,
 one seed at 3e-3), parity within the seed spread.** The 35-case HiLift
-comparison (1.08x, @sec-mechanism) is rate-matched and stands. Consequences:
+comparison (1.08x, @sec-de-limits) is rate-matched and stands. Consequences:
 the DrivAerML price of the similarity gauge is not established and is not
 quoted; the accuracy × consistency matrix labels the gauge row with its
 rate; a rate-matched pair at 1e-3 (similarity gauge, two seeds, DrivAerML)
@@ -16492,7 +16492,7 @@ changes a single output beyond fp32 roundoff.
 so the anchor column is like-for-like. (c) One training run with `geo_kernel="fused"`
 for neutrality (its bf16 backward accumulates in fp32 where eager's rounds to bf16 --
 more precise, not identical) before any default changes. (d) Correct the book's cost
-section from the reconciliation table in `TABLES.md`, on the GB300 numbers (done 2026-09-14, @sec-isla-cost).
+section from the reconciliation table in `TABLES.md`, on the GB300 numbers (done 2026-09-14, @sec-using-cost).
 
 *Provenance.* Study run by a delegated engineering agent in an isolated worktree on
 2026-09-13 at Peter's request; merged by the coordinating session on 2026-09-14 with
@@ -17493,7 +17493,7 @@ parallel session's rule.
 **Setting.** The scoreboard's only measurement of ISLA at the scale
 corner (width 512, 80,000 DrivAerML cells per car) is the constant-gauge
 variant, at 0.0428 against GeoTransolver's 0.0419 and Transolver's 0.0431
-(float32, evaluated at 80,000 cells, seed means; @sec-scoreboard-pending).
+(float32, evaluated at 80,000 cells, seed means; @sec-program-status).
 The reference configuration itself, the relative frame with the
 total-measure scale, has no number there: at the protocol learning rate
 of $10^{-3}$ it diverged on both seeds, and the localization work of
@@ -17853,7 +17853,7 @@ baseline ÷ ISLA):
 **Why it matters.** The ladder's ordering at full data is GeoTransolver,
 then Transolver, then ISLA's constant-gauge variant, on every field. The
 Transolver-to-ISLA ratio on pressure runs 0.90 at 510 cases and 0.95 at
-1,260 (@sec-scoreboard-pending), so the plain Transolver's lead over ISLA
+1,260 (@sec-program-status), so the plain Transolver's lead over ISLA
 narrows with data where GeoTransolver's (0.84 at 510, 0.88 at 1,260) also
 narrows, and neither closes. Every surface rung of the scoreboard now has
 both unit-direction baselines; the reference configuration remains
@@ -18653,7 +18653,7 @@ random model gave a scalar rotation residual of 1.2 to 1.3% in bf16 against
 **Question.** On the trained reference-configuration checkpoints, how far
 from exact are the contracts in float32 and in bf16 on the GPU, and is the
 bf16 residual small against the pose test's own reading (ISLA in random
-poses scores 1.01x its in-pose error, @sec-scoreboard-pose)?
+poses scores 1.01x its in-pose error, @sec-pose-contract)?
 
 **Instrument.** The two reference checkpoints trained at 435 DrivAerML
 cars (seeds 42 and 43), loaded through the recipe's own loader assembly on
@@ -19581,7 +19581,7 @@ rather than the middle of a safe decade.
 **Consequences for the book and the recipe.**
 
 - The claim "stable across a decade of learning rate" is withdrawn from the
-  main text everywhere (@sec-robustness-lr, the pros table of the limits
+  main text everywhere (@sec-isla-routing-forms, the pros table of the limits
   chapter, the operating manual); the legacy variant's grid stays in its
   collapsed diagnostic note. ISLA's rate statement now reads: trains at the
   protocol rate 1e-3 without a sweep; rises to the mean-field plateau at 3e-3; diverges to NaN at 1e-2;
@@ -20276,7 +20276,7 @@ draw is the candidate.
 **Setting.** At 200,000 cells ISLA uses 0.46x GeoTransolver's inference
 memory; with the fused geometry kernel (accuracy-neutral,
 @sec-nb-kernel-neutral-verdict) it also takes 0.86x the step time
-(@sec-isla-cost). Peter asked (2026-09-19) whether that footprint buys
+(@sec-using-cost). Peter asked (2026-09-19) whether that footprint buys
 accuracy at equal cost, which of cells and parameters ISLA converts into
 accuracy more cheaply, and whether the fixed 500-epoch budget binds. The
 program has two points on the cells axis at width 192 (10,000 to 200,000
@@ -20505,7 +20505,7 @@ to fused where possible and falls back to eager safely. The cost case is
 now measured in training as well as inference: at 200,000 cells the fused
 region trains ISLA at about a third of the eager step time and memory
 (@sec-nb-isocost-prereg acceptance, 26 GB and 0.15 s against the eager
-path's earlier readings; inference 91 against 529 ms, @sec-isla-cost).
+path's earlier readings; inference 91 against 529 ms, @sec-using-cost).
 
 **What changed.** The class default is `geo_kernel=None` ("auto"). At the
 first forward pass `resolve_geo_kernel(points)` chooses `"fused"` when the
@@ -21760,7 +21760,7 @@ interior task has no wing twin yet, so the two-dataset rule
 single-dataset.
 
 **What's next.** The chapter 3 interior section carries the 200,000-query
-row beside the 10,000-query one (@tbl-scoreboard-200k-interior). The
+row beside the 10,000-query one (@tbl-interior-200k). The
 routing probe extends to the four interior checkpoints when the ROUTE-NORM
 verdict lands (bar: the 1e-3 pair at one active slice per block, the 5e-4
 pair with 4 or more). An interior pair under cosine routing at 1e-3 is the
@@ -21772,7 +21772,7 @@ natural follow-on if ROUTE-NORM removes the ceiling on the surface lanes.
 single angle of attack of 12° and validates on held-out wings at the same
 angle, so it isolates geometry generalization from angle generalization.
 At the 10,000-cell exploration budget this rung was one of the wing rungs
-where ISLA trails the baselines (@sec-scoreboard-pending).
+where ISLA trails the baselines (@sec-program-status).
 
 **What we saw.** The fleet's fixed-angle lanes at 200,000 cells, float32,
 seeds 42 / 43: ISLA 0.0302 / 0.0298 (mean 0.0300), GeoTransolver at 1e-3
@@ -21782,7 +21782,7 @@ rates. GeoTransolver's 3e-3 pair, its better rate on the wing rungs, is
 still training; the row is written when it lands, at GeoTransolver's
 better rate, per the fleet preregistration. Reading: the fixed-angle rung
 keeps the 35-case rung's picture (GeoTransolver ÷ ISLA 0.73 at both
-budgets there, @tbl-scoreboard-200k-wings): the wing deficit is a property
+budgets there, @tbl-hilift-ladder): the wing deficit is a property
 of the trained functions, not of the sampling count. Data:
 results/p200k_fleet_interim_2026-09-20.json.
 
@@ -21993,7 +21993,7 @@ ISLA). Data: results/p200k_fleet_interim_2026-09-20.json.
 
 **Why it matters.** This is the second wing rung to report at the
 protocol, and it repeats the 35-case rung's reading
-(@tbl-scoreboard-200k-wings): the wing deficit is not count noise and does
+(@tbl-hilift-ladder): the wing deficit is not count noise and does
 not shrink with denser sampling. The fixed-angle split removes the angle
 axis, so what remains is generalization across wing geometry under a
 mesher whose validation geometries recur in training
@@ -22084,7 +22084,7 @@ that would make the trained model unusable on a mesh from a different
 generator. ISLA's error under the same swaps stays within 8% of its native
 value on both datasets. The mechanism the book states (the baselines' slice
 aggregates are point averages that inherit the sampling pattern, ISLA's
-are measure-weighted integrals that do not, @sec-mechanism) predicts the
+are measure-weighted integrals that do not, @sec-de-limits) predicts the
 direction; the size difference between the datasets is not explained by
 the cell-area spread alone and is an open question. The one honest
 qualification is ISLA's own 8%: the area draw from a 1,000,000-cell pool at
@@ -22634,7 +22634,7 @@ chapter says so in its switches table, and aligning the class default to
 the recipe is an open engineering item. And the chapter is descriptive,
 not evidential: every number in it is a parameter count or a dimension,
 and the evidence for each design choice stays where it was
-(@sec-isla-design and Part IV).
+(@sec-principled-ledger and Part IV).
 
 ## 2026-09-21 — Blocked: the HiLiftAeroML volume files carry interior coordinates for 31 of 1,800 cases and no interior fields, so the interior task has no second dataset on this cluster {#sec-nb-hlvol-blocked}
 
@@ -22712,7 +22712,7 @@ in a block; clean = at least 4 active slices in every block).
 ## 2026-09-21 — Preregistration, TERRITORY: do GeoTransolver's slices partition the point pattern and ISLA's the surface? Slice territories of the two uniform-trained 100,000-cell checkpoints under a resampled uniform draw and the 10:1-biased draw {#sec-nb-territory-prereg}
 
 **The setting.** The discretization results (@sec-training-law,
-@sec-scoreboard-consistency) say that under a 10:1 sampling-density bias
+@sec-robustness-density) say that under a 10:1 sampling-density bias
 GeoTransolver's surface-pressure error grows 8.7x and Transolver's 5.3x
 where ISLA's grows 1.07x, and that the models trained under an
 area-proportional draw lose 7.9x and 9.6x on the uniform draw where ISLA
@@ -23509,8 +23509,8 @@ the mechanism behind it is the open question the cars left open
 (@sec-interior-open).
 
 **Reading.** The interior standing is now a two-dataset result and is
-written as one in @sec-interior, @tbl-scoreboard-200k-interior and
-@sec-established: ISLA leads on interior velocity by 42 to 114%, trails on
+written as one in @sec-interior, @tbl-interior-200k and
+@sec-verdict: ISLA leads on interior velocity by 42 to 114%, trails on
 interior pressure by 5 to 20%, and is level to 17% behind on eddy
 viscosity, against GeoTransolver-volume at a third of its parameters, on
 two datasets and two PDE regimes.
@@ -23929,4 +23929,66 @@ rungs (`p200k_hl_gt_unit_scarce_lr3e3`, `..._geometry_scarce_lr3e3`, two
 seeds each), trained and scored but left out of the 2026-09-22 fleet
 reduction; the reduction is rerun with them and the chapters take the
 better-rate value, as on every other rung. The four duplicate 3e-3 lanes
-launched in BASELINE-GAPS (rows 10 to 13) are cancelled.
+launched in BASELINE-GAPS (rows 10 to 13) are cancelled. Rerun with the
+3e-3 arms (`results/p200k_fleet_reduction_2026-09-22.json`, replaced in
+place): GeoTransolver at 3e-3 scores 0.0485 on the 210-case rung (0.0489
+at 1e-3) and 0.0875 on the 21-geometry rung (0.0900 at 1e-3), so
+GeoTransolver ÷ ISLA moves from 0.89 to 0.88 at 210 cases and from 0.98 to
+0.95 at 21 geometries; the wing-rung verdict entry above
+(@sec-nb-wing-rungs-210-verdict) reads "2 to 5%" at 21 geometries where
+the corrected figure is 5% for both baselines.
+
+## 2026-09-22 — Book overhaul (Peter's ruling): the book is rewritten as thirteen chapters with one home per concept, a centerpiece chapter for the two invariances, task names on every comparison, and linear routing confined to the architecture chapter {#sec-nb-book-overhaul-2026-09-22}
+
+**The ruling.** Peter, today: the book must reflect what *is*, not how we
+got here (deprecated experiments are re-run, never kept as evidence);
+repetition is penalized; discretization invariance and rigid-motion
+equivariance each need a centerpiece; "DrivAerML" must name its Surface or
+Volume task; the accuracy story must agree between text and figures;
+obvious figure gaps must be filled by measurement; one reference
+configuration (the recommended settings) underlies every experiment; more
+datasets, including non-aerodynamic steady PDEs, with existing literature
+sets preferred; AeroZoo named.
+
+**What was done.** Two fresh-context audits
+(`results/book_audit_2026-09-22/structure_audit.md`, `figures_audit.md`)
+mapped every duplicated concept (parity stated about fourteen times, the
+10:1-bias factors eleven, the routing-ceiling story nine), every
+path-dependent passage, every linear-routed figure and table, twelve
+contradictions, and the aerodynamics-only framing; a rewrite plan
+(`rewrite_plan.md`) fixed the new chapter list, the writing rules and a
+numbers policy for the transition. Four editors composed the chapters from
+the sources; integration repointed 26 cross-references to the new homes and
+the full render is clean. The structure: index (one thesis table, dataset
+and task per row); 01 the problem and the general operator interface
+(boundary cells, $K$ global directions, $S$ global scalars, optional
+boundary data; external aerodynamics as the benchmark instance); 02 ISLA
+one idea at a time (the routing forms and the linear ceiling table live
+here and nowhere else); 03 the two invariances (new centerpiece: the
+contracts, the canonicalization argument, the four sampling draws, the
+acceptance criterion); 04 the forward pass; 05 baselines, datasets and
+protocol (with the one paragraph that states the evidence lanes'
+configuration); 06 using ISLA (one configuration); 07 surface accuracy and
+data efficiency; 08 discretization and pose evidence; 09 capacity, scaling
+laws and cost; 10 boundary to interior (cosine rows are the rows); 11
+limits; 12 program status (the one chapter with dates); 13 design
+decisions; this notebook. Retired as files: the scoreboard, baselines,
+data-efficiency, accuracy-and-robustness, architecture, interior, using,
+limits, status and decisions chapters of the previous numbering.
+
+**What changed in the numbers.** Cosine ISLA is the ISLA row wherever a
+cosine lane exists at the protocol (35-wing rung 0.1408; DrivAerML Volume
+1e-3; AirfRANS; 384 x 24 at 200,000 cells); the wing rungs' GeoTransolver
+rows use the 3e-3 lanes where they exist (210 cases 0.88, 21 geometries
+0.95; @sec-nb-wing-gt-rate-erratum); the cost figure carries step time and
+memory only, filled to 600,000 tokens from the training-log peaks pending
+the reference cost sweep; failed fits are drawn as points; the floor band
+is computed. The surface-task standings (DrivAerML Surface 435 cars and
+ladder, pose, training law, density, territories, the other wing rungs) are
+still the 192-wide linear-routed lanes and are stated as such once, in
+@sec-protocol; they are replaced as REF and REF-BOARD land
+(@sec-nb-ref-prereg).
+
+**Still to do in the book.** Swap the surface artifacts for the reference
+lanes; add the cost-sweep artifact; add the new datasets' chapter section
+when the first conversions train; remove the transition paragraph.

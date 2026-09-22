@@ -4,32 +4,31 @@ project:
 
 book:
   title: "ISLA: Invariant Slice Attention for Boundary-to-Field Surrogates"
-  subtitle: "A guide to the method, its use, and the evidence, measured against GeoTransolver and Transolver on production aerodynamics"
+  subtitle: "A guide to the method, its use, and the evidence, measured against GeoTransolver and Transolver on steady boundary-driven PDE benchmarks"
   chapters:
     - index.qmd
-    - part: "I. The problem"
+    - part: "I. The problem and the two invariances"
       chapters:
         - 01-problem.qmd
-    - part: "II. The architecture"
-      chapters:
         - 02-isla.qmd
-        - 07-architecture.qmd
-        - 04-baselines-and-fair-comparison.qmd
-    - part: "III. Using ISLA"
+        - 03-invariances.qmd
+        - 04-architecture.qmd
+    - part: "II. Protocol and use"
       chapters:
-        - 09-using-isla.qmd
-    - part: "IV. Evidence on production aerodynamics"
+        - 05-protocol.qmd
+        - 06-using-isla.qmd
+    - part: "III. Evidence"
       chapters:
-        - 03-benchmarks.qmd
-        - 05-data-efficiency.qmd
-        - 06-accuracy-and-robustness.qmd
-        - 08-boundary-to-interior.qmd
-    - part: "V. Limits and status"
+        - 07-surface-accuracy.qmd
+        - 08-discretization-and-pose.qmd
+        - 09-capacity-scaling-cost.qmd
+        - 10-boundary-to-interior.qmd
+    - part: "IV. Limits and status"
       chapters:
-        - 12-limits-and-directions.qmd
-        - 13-program-status.qmd
+        - 11-limits.qmd
+        - 12-program-status.qmd
   appendices:
-    - 17-principled-decisions.qmd
+    - 13-design-decisions.qmd
     - 18-notebook.qmd
 
 execute:
