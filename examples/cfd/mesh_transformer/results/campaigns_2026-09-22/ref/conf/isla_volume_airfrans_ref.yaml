@@ -1,0 +1,32 @@
+# @package _global_
+# ISLA -- AirfRANS interior task, REFERENCE CONFIGURATION candidate (REF campaign, 2026-09-22): as isla_volume_ref with
+# the airfoil boundary (line cells with precomputed in-plane normals), one global vector (inlet direction) and one
+# global scalar (inlet speed).
+input_type: tensors
+output_type: tensors
+forward_kwargs:
+  points: boundaries.airfoil.cell_centroids
+  normals: boundaries.airfoil.cell_data.normals
+  measure_weights: boundaries.airfoil.cell_data.quadrature_measure
+  global_vectors: global_data.U_inf_dir
+  global_scalars: global_data.U_inf_mag
+  query_points: interior.points
+  query_normals: interior.point_data.sdf_normals
+  query_scalars: interior.point_data.sdf
+model:
+  _target_: physicsnemo.experimental.nn.ISLA
+  out_scalars: 2                 # pressure, nut
+  out_vectors: 1                 # velocity
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  n_global_vectors: 1
+  n_global_scalars: 1
+  scale_mode: rms_distance
+  routing_norm: cosine
+  routing_temperature: 10.0
+  geo_kernel: fused
+  query_tokens: true
+  n_query_scalars: 1
+  query_mass: source_total

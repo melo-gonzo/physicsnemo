@@ -1,0 +1,30 @@
+# @package _global_
+# ---------------------------------------------------------------------------
+# ISLA -- SURFACE task, REFERENCE CONFIGURATION candidate (REF campaign, 2026-09-22).
+# ---------------------------------------------------------------------------
+# The "recommended settings" (Peter, 2026-09-22): one configuration for every dataset, toward the accuracy end of
+# the speed/accuracy axis, with every default optimization on. 384 wide, 12 layers (24 via ++model.n_layers=24),
+# 256 slices, cosine routing (the class default since 2026-09-22), the fused geometry kernel, the RMS-pairwise-
+# distance length unit (the class default). Learning rate 5e-4 (the width rule 1e-3 x 192/384). Requires the code_ref
+# snapshot (current class API: no frame_mode, no geo_checkpoint under the fused kernel).
+input_type: tensors
+output_type: tensors
+
+forward_kwargs:
+  points: interior.points
+  normals: boundaries.vehicle.cell_data.normals
+  global_vectors: global_data.U_inf_dir   # the one global condition vector of these datasets: the far-field flow direction
+  measure_weights: interior.point_data._target_quadrature_measure
+
+model:
+  _target_: physicsnemo.experimental.nn.ISLA
+  out_scalars: 1                 # pressure
+  out_vectors: 1                 # wss
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  scale_mode: rms_distance
+  routing_norm: cosine
+  routing_temperature: 10.0
+  geo_kernel: fused

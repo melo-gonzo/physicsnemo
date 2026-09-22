@@ -1,0 +1,33 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	ref	ref_isla_r1_dr435_seed42	drivaer_ml_surface	isla_surface_ref	-	5e-4	42	200000	code_ref
+1	ref	ref_isla_r2_dr435_seed42	drivaer_ml_surface	isla_surface_ref	++model.n_layers=24	5e-4	42	200000	code_ref
+2	ref	ref_isla_r1_dr435_seed43	drivaer_ml_surface	isla_surface_ref	-	5e-4	43	200000	code_ref
+3	ref	ref_isla_r2_dr435_seed43	drivaer_ml_surface	isla_surface_ref	++model.n_layers=24	5e-4	43	200000	code_ref
+4	ref	ref_isla_r1_hl35_seed42	highlift_surface_super_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	42	200000	code_ref
+5	ref	ref_isla_r2_hl35_seed42	highlift_surface_super_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.n_layers=24	5e-4	42	200000	code_ref
+6	ref	ref_isla_r1_hl35_seed43	highlift_surface_super_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	43	200000	code_ref
+7	ref	ref_isla_r2_hl35_seed43	highlift_surface_super_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.n_layers=24	5e-4	43	200000	code_ref
+8	ref	ref_isla_r1_hl210_seed42	highlift_surface_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	42	200000	code_ref
+9	ref	ref_isla_r2_hl210_seed42	highlift_surface_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.n_layers=24	5e-4	42	200000	code_ref
+10	ref	ref_isla_r1_hl210_seed43	highlift_surface_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	43	200000	code_ref
+11	ref	ref_isla_r2_hl210_seed43	highlift_surface_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.n_layers=24	5e-4	43	200000	code_ref
+12	ref	ref_isla_r1_hl510_seed42	highlift_surface_medium	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	42	200000	code_ref
+13	ref	ref_isla_r2_hl510_seed42	highlift_surface_medium	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.n_layers=24	5e-4	42	200000	code_ref
+14	ref	ref_isla_r1_hl510_seed43	highlift_surface_medium	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	43	200000	code_ref
+15	ref	ref_isla_r2_hl510_seed43	highlift_surface_medium	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25 ++model.n_layers=24	5e-4	43	200000	code_ref
+16	ref	ref_isla_r1_drvol_seed42	drivaer_ml_volume_reference	isla_volume_ref	+training.val_interval=10	5e-4	42	200000	code_ref
+17	ref	ref_isla_r2_drvol_seed42	drivaer_ml_volume_reference	isla_volume_ref	+training.val_interval=10 ++model.n_layers=24	5e-4	42	200000	code_ref
+18	ref	ref_isla_r1_af_seed42	airfrans_volume	isla_volume_airfrans_ref	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	42	100000	code_ref
+19	ref	ref_isla_r2_af_seed42	airfrans_volume	isla_volume_airfrans_ref	train_split=full_train val_split=full_test +training.val_interval=10 ++model.n_layers=24	5e-4	42	100000	code_ref
+20	ref	ref_isla_r1_drvol_seed43	drivaer_ml_volume_reference	isla_volume_ref	+training.val_interval=10	5e-4	43	200000	code_ref
+21	ref	ref_isla_r2_drvol_seed43	drivaer_ml_volume_reference	isla_volume_ref	+training.val_interval=10 ++model.n_layers=24	5e-4	43	200000	code_ref
+22	ref	ref_isla_r1_af_seed43	airfrans_volume	isla_volume_airfrans_ref	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	43	100000	code_ref
+23	ref	ref_isla_r2_af_seed43	airfrans_volume	isla_volume_airfrans_ref	train_split=full_train val_split=full_test +training.val_interval=10 ++model.n_layers=24	5e-4	43	100000	code_ref
+24	ref	ref_isla_r1_lr1e3_dr435_seed42	drivaer_ml_surface	isla_surface_ref	-	1e-3	42	200000	code_ref
+25	ref	ref_isla_r1_lr1e3_dr435_seed43	drivaer_ml_surface	isla_surface_ref	-	1e-3	43	200000	code_ref
+26	ref	ref_isla_r1_lr1e3_hl35_seed42	highlift_surface_super_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	1e-3	42	200000	code_ref
+27	ref	ref_isla_r1_lr1e3_hl35_seed43	highlift_surface_super_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	1e-3	43	200000	code_ref
+28	ref	ref_gt_w512_dr435_seed42	drivaer_ml_surface	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir model.n_hidden=512	3e-3	42	200000	code_routenorm
+29	ref	ref_gt_w512_dr435_seed43	drivaer_ml_surface	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir model.n_hidden=512	3e-3	43	200000	code_routenorm
+30	ref	ref_gt_w512_hl35_seed42	highlift_surface_super_scarce	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir model.n_hidden=512 +training.val_interval=25	3e-3	42	200000	code_routenorm
+31	ref	ref_gt_w512_hl35_seed43	highlift_surface_super_scarce	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir model.n_hidden=512 +training.val_interval=25	3e-3	43	200000	code_routenorm

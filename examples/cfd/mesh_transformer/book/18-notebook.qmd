@@ -23809,3 +23809,75 @@ one anomaly, GeoTransolver-volume's 50-airfoil pressure error twice its
 trend, is recorded and not explained; its ball-query local features see
 fewer distinct neighborhoods at 50 airfoils, but nothing here measures
 that.
+
+## 2026-09-22 — Ruling and preregistration, REF: one reference configuration for every dataset (the recommended settings), chosen from two candidates at the reporting protocol; every evidence lane is then re-run under it {#sec-nb-ref-prereg}
+
+**The ruling (Peter, 2026-09-22).** The book must reflect what the
+architecture *is*, not how it got here: deprecated configurations
+(linear routing, earlier widths) may not carry evidence; there is one
+reference set of hyperparameters, as similar across datasets as possible,
+and every experiment is a deviation from it; the reference sits toward the
+accuracy end of the speed/accuracy axis because the headline numbers are
+reported with it; the fused geometry kernel and cosine routing are part of
+it (the "recommended settings"); the target is better accuracy than
+GeoTransolver at lower step time and memory. The current reference
+(192 wide, 12 layers, linear routing, the eager geometry region) fails all
+three: it was the width that trained at 1e-3 under linear routing, not the
+width the capacity ladders favor.
+
+**Candidates** (both: 256 slices, MLP ratio 4, cosine routing at
+temperature 10, the fused geometry kernel, the RMS-pairwise-distance unit,
+the class default query mass `source_total` on the interior tasks;
+learning rate 5e-4, the width rule 1e-3 × 192/384):
+
+- **R1**: 384 wide, 12 layers (34.3M parameters). Cars at 100,000 cells:
+  0.0413 (@sec-nb-routenorm-cars-verdict); 35 wings at 200,000: 0.1361 at
+  1e-3 (@sec-nb-routenorm-p200k-verdict); 22 GB at 100,000 cells.
+- **R2**: 384 wide, 24 layers (68.3M). Cars: 0.0407 at 100,000 and
+  200,000 cells, level with GeoTransolver-1,024's 0.0406 at half its
+  parameters; 91 GB at 200,000 cells, 0.41 s per step.
+
+**Lanes** (group `ref`, `kernel/ref/lanes.tsv`, 32 lanes, snapshot
+`code_ref` = the recipe's pinned package with the current ISLA class
+overlaid; model files `isla_surface_ref`, `isla_volume_ref`,
+`isla_volume_airfrans_ref`; two seeds; 500 epochs; bf16; float32 scoring
+through the fleet pump): R1 and R2 on DrivAerML Surface (435 cars,
+200,000 cells), HiLiftAeroML 35 / 210 / 510 wings (200,000 cells),
+DrivAerML Volume (200,000 cells and queries) and AirfRANS (800 airfoils,
+100,000 queries); R1 at 1e-3 on the cars and the 35-wing rung as the rate
+control; GeoTransolver at 512 wide (35.8M, the parameter match to R1) at
+its best rate 3e-3 on the cars and the 35-wing rung. The GeoTransolver-256
+(recipe default) and Transolver rows at 200,000 cells exist for every
+rung (@sec-nb-proto200k-fleet-prereg). Step time (logged per epoch) and
+peak memory (from the per-node GPU sampler) are read from every lane.
+
+**Selection rule (fixed now).** The reference is the smallest candidate
+whose surface-pressure error is within 1.5% of the better candidate's on
+*both* DrivAerML Surface and the 35-wing rung; if R2 beats R1 by more than
+1.5% on either, R2 is the reference and its cost is the price. The rate
+control decides the reference rate per width rule only if 1e-3 beats
+5e-4 by more than 1.5% on both surface datasets. The chosen configuration
+becomes the ISLA class defaults (hidden, layers) and the recipe's
+`isla_surface` / `isla_volume` files; every evidence lane (pose, training
+law, biased draw, interior standing, territory, the ladders, deflection)
+is then re-run under it (REF-BOARD), and the book's scoreboard, figures and
+claims are restated from those lanes alone; the linear-routed and 192-wide
+lanes leave the chapters (the architecture chapter keeps one section on
+the routing forms).
+
+**Bars for the comparison with GeoTransolver's recipe default** (256
+wide, 27.6M) at 200,000 cells, per dataset: accuracy ratio
+GeoTransolver-256 ÷ reference, step-time ratio and peak-memory ratio
+(reference ÷ GeoTransolver-256, below one is cheaper). *The recommended
+settings beat the baseline* on a dataset if the accuracy ratio is above
+1.03 with seeds agreeing and both cost ratios are at or below one; *cost
+parity* if the accuracy ratio is above 1.03 and a cost ratio is within 1.2;
+otherwise stated as measured.
+
+**Prediction.** R1 within 1.5% of R2 on the cars (0.4: the cosine ladder
+had 0.0413 against 0.0407, 1.5% apart) and on the wings (0.5); reference =
+R2 (0.55). Against GeoTransolver-256 at 200,000 cells the reference is more
+accurate on the cars by 6 to 9% (0.8) and on the 35-wing rung by 20% or
+more behind still (the wing deficit; 0.8: GeoTransolver 0.1098 against
+R1's 0.1361); step time of R1 with the fused kernel at or below
+GeoTransolver-256's (0.6), memory below (0.7); R2 above on both (0.8).
