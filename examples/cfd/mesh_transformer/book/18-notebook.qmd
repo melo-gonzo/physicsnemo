@@ -24102,3 +24102,14 @@ double the step. The book's cost figure (@fig-cost-sweep) and the 200k
 cost table (@tbl-cost-200k) are redrawn from this artifact. The earlier
 sweep's eager-region fallback arm is no longer drawn; the fused kernel is
 the default and the eager path is named once in @sec-using-cost.
+
+**Addendum (2026-09-22, later): the volume task at 384 x 24.** The
+eager-kernel twins of the DrivAerML Volume lanes behave as follows: R1
+(384 x 12) trains at 0.98 s per step and 161 GB (against 0.39 s and 93 GB
+under the fused kernel before it hung); R2 (384 x 24) runs out of GPU
+memory at the first step on both seeds (278 GB per GB300) and is blocked.
+Two further R2 lanes run with the eager region's intermediates rebuilt in
+the backward pass (`geo_checkpoint=true`, rows 36 and 37); if they also
+fail, the volume task's reference decision rests on R1 against
+GeoTransolver-volume, and R2 is recorded as not trainable on the volume
+task at the protocol without the fused kernel.

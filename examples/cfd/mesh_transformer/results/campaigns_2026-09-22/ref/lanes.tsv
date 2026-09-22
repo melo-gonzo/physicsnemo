@@ -35,3 +35,5 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 33	ref	ref_isla_r2_drvol_eager_seed42	drivaer_ml_volume_reference	isla_volume_ref	+training.val_interval=10 ++model.geo_kernel=eager ++model.n_layers=24	5e-4	42	200000	code_ref
 34	ref	ref_isla_r1_drvol_eager_seed43	drivaer_ml_volume_reference	isla_volume_ref	+training.val_interval=10 ++model.geo_kernel=eager	5e-4	43	200000	code_ref
 35	ref	ref_isla_r2_drvol_eager_seed43	drivaer_ml_volume_reference	isla_volume_ref	+training.val_interval=10 ++model.geo_kernel=eager ++model.n_layers=24	5e-4	43	200000	code_ref
+36	ref	ref_isla_r2_drvol_eagerckpt_seed42	drivaer_ml_volume_reference	isla_volume_ref	+training.val_interval=10 ++model.geo_kernel=eager ++model.geo_checkpoint=true ++model.n_layers=24	5e-4	42	200000	code_ref
+37	ref	ref_isla_r2_drvol_eagerckpt_seed43	drivaer_ml_volume_reference	isla_volume_ref	+training.val_interval=10 ++model.geo_kernel=eager ++model.geo_checkpoint=true ++model.n_layers=24	5e-4	43	200000	code_ref
