@@ -23515,6 +23515,24 @@ interior pressure by 5 to 20%, and is level to 17% behind on eddy
 viscosity, against GeoTransolver-volume at a third of its parameters, on
 two datasets and two PDE regimes.
 
+**Addendum (2026-09-22, later): where ISLA's seed spread lives.** The
+per-case scores (200 test airfoils, `infer_step` records in the scored
+metrics) say the spread is a whole-model shift, not a few cases: between
+the two linear-routing seeds, 85% of the test cases are worse on seed 42
+than on seed 43 on pressure, the median per-case difference is 0.005 and
+the five largest differences carry 20% of the total. The three worst
+cases (relative error 0.18 to 0.33 on pressure) are the same airfoils for
+every arm and every seed, GeoTransolver-volume included, and carry 7 to 9%
+of each arm's sum, so they are hard cases, not the spread. The validation
+loss of every lane, GeoTransolver-volume included, moves by 30 to 40%
+between its epoch-300, 400 and 490 readings (for example 0.00093, 0.00068,
+0.00084 for ISLA linear seed 42), so the final-epoch checkpoint is a draw
+from a band; that GeoTransolver-volume's scored spread is nonetheless 2 to
+7% while ISLA's is 22 to 34% says ISLA's band is the wider one on this
+dataset. Not pursued here: checkpoint selection or averaging would be a
+protocol change and the comparison is at final epoch for every arm by the
+program's rule.
+
 ## 2026-09-22 — Preregistration, AIRFRANS-INT extrapolation splits: ISLA (cosine 1e-3) and GeoTransolver-volume (1e-3) on the Reynolds-number and angle-of-attack splits, two seeds {#sec-nb-airfrans-extrap-prereg}
 
 **Setting.** AirfRANS ships two extrapolation splits: `reynolds` (504
@@ -23640,3 +23658,44 @@ scoreboard rows remain the linear-trained lanes until they do. What this
 does not settle: the 510-wing final scores (SCALE-HL), whether width pays
 on the wings past the 3% edge, and the mechanism that makes the ceiling
 data-size dependent.
+
+## 2026-09-22 — Preregistration, AIRFRANS-SCALE: the training-case axis of the scaling law on a third dataset and the interior task (ISLA cosine 192 and GeoTransolver-volume on 50 / 100 / 200 / 400 / 800 AirfRANS airfoils) {#sec-nb-airfrans-scale-prereg}
+
+**Setting.** The scaling law's DrivAerML half is closed
+(@sec-nb-scalelaw-drivaerml-verdict): the reducible surface-pressure
+error falls as $n^{-1.3}$ in training cases toward a floor, with the same
+exponent for ISLA and GeoTransolver, and the wing half is in flight.
+Both are surface tasks on three-dimensional external aerodynamics. AirfRANS
+(@sec-nb-airfrans-verdict) offers a third dataset, a second PDE regime and
+the interior task, at a training cost of about a minute per epoch per 800
+cases. Sixteen lanes add its training-case axis: nested random subsets of
+the full training split with 50, 100, 200 and 400 airfoils (seeded, each
+rung containing the smaller ones; manifest splits `full_train_n50` to
+`full_train_n400`), the 800-case rung being the full-split lanes already
+scored. Arms: ISLA with cosine routing (the default) at 1e-3 and
+GeoTransolver-volume at 1e-3, seeds 42 and 43, 500 epochs, 100,000
+interior queries, float32 scoring at 100,000 queries on the 200 test
+cases. One width per architecture: this is the data axis only, so the
+readout is $\alpha$, not the joint law.
+
+**Bars.** Per field (pressure, velocity, eddy viscosity) and architecture,
+the local exponents between adjacent rungs and a two-parameter fit
+$\varepsilon = \varepsilon_\infty + a\,n^{-\alpha}$ with the floor bounded
+to $[0, 0.9 \times$ the 800-case error$]$ on the seed means. (i) *Same
+exponent across architectures* if the two $\alpha$ differ by less than
+their two-seed bootstrap spread, as on the cars. (ii) *Transfer across
+datasets* if ISLA's $\alpha$ on AirfRANS pressure is within 0.3 of its
+DrivAerML value (1.28); a larger gap is stated per dataset (the campaign
+prereg's 0.1 was written for the same task on two datasets; the interior
+task and the 2-D regime warrant the wider bar, fixed now). (iii) *The
+ordering persists*: GeoTransolver-volume ÷ ISLA below one on pressure and
+above one on velocity at every rung with both seeds agreeing; a rung at
+which a ratio crosses one is reported as a crossover. (iv) ISLA's seed
+spread (22 to 34% on the full split) is reported per rung; a rung where
+the spread exceeds the gap between adjacent rungs is marked unresolved.
+
+**Prediction.** Same exponent for both architectures (0.7); ISLA's
+pressure $\alpha$ within 0.3 of 1.28 (0.5, no strong prior for the
+interior task); the ordering persists at every rung (0.7), with the
+velocity lead widening at small $n$ if ISLA's boundary-driven structure is
+the more data-efficient inductive bias for the flow field (0.5).

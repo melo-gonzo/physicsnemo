@@ -13,3 +13,19 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 11	af	af_gt_vol_lr1e3_aoa_seed42	airfrans_volume	geotransolver_volume_airfrans	train_split=aoa_train val_split=aoa_test +training.val_interval=10	1e-3	42	100000	code_routenorm
 12	af	af_isla_cos_lr1e3_aoa_seed43	airfrans_volume	isla_volume_airfrans	train_split=aoa_train val_split=aoa_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	43	100000	code_routenorm
 13	af	af_gt_vol_lr1e3_aoa_seed43	airfrans_volume	geotransolver_volume_airfrans	train_split=aoa_train val_split=aoa_test +training.val_interval=10	1e-3	43	100000	code_routenorm
+14	af	af_isla_cos_lr1e3_n50_seed42	airfrans_volume	isla_volume_airfrans	train_split=full_train_n50 val_split=full_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	42	100000	code_routenorm
+15	af	af_gt_vol_lr1e3_n50_seed42	airfrans_volume	geotransolver_volume_airfrans	train_split=full_train_n50 val_split=full_test +training.val_interval=10	1e-3	42	100000	code_routenorm
+16	af	af_isla_cos_lr1e3_n50_seed43	airfrans_volume	isla_volume_airfrans	train_split=full_train_n50 val_split=full_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	43	100000	code_routenorm
+17	af	af_gt_vol_lr1e3_n50_seed43	airfrans_volume	geotransolver_volume_airfrans	train_split=full_train_n50 val_split=full_test +training.val_interval=10	1e-3	43	100000	code_routenorm
+18	af	af_isla_cos_lr1e3_n100_seed42	airfrans_volume	isla_volume_airfrans	train_split=full_train_n100 val_split=full_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	42	100000	code_routenorm
+19	af	af_gt_vol_lr1e3_n100_seed42	airfrans_volume	geotransolver_volume_airfrans	train_split=full_train_n100 val_split=full_test +training.val_interval=10	1e-3	42	100000	code_routenorm
+20	af	af_isla_cos_lr1e3_n100_seed43	airfrans_volume	isla_volume_airfrans	train_split=full_train_n100 val_split=full_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	43	100000	code_routenorm
+21	af	af_gt_vol_lr1e3_n100_seed43	airfrans_volume	geotransolver_volume_airfrans	train_split=full_train_n100 val_split=full_test +training.val_interval=10	1e-3	43	100000	code_routenorm
+22	af	af_isla_cos_lr1e3_n200_seed42	airfrans_volume	isla_volume_airfrans	train_split=full_train_n200 val_split=full_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	42	100000	code_routenorm
+23	af	af_gt_vol_lr1e3_n200_seed42	airfrans_volume	geotransolver_volume_airfrans	train_split=full_train_n200 val_split=full_test +training.val_interval=10	1e-3	42	100000	code_routenorm
+24	af	af_isla_cos_lr1e3_n200_seed43	airfrans_volume	isla_volume_airfrans	train_split=full_train_n200 val_split=full_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	43	100000	code_routenorm
+25	af	af_gt_vol_lr1e3_n200_seed43	airfrans_volume	geotransolver_volume_airfrans	train_split=full_train_n200 val_split=full_test +training.val_interval=10	1e-3	43	100000	code_routenorm
+26	af	af_isla_cos_lr1e3_n400_seed42	airfrans_volume	isla_volume_airfrans	train_split=full_train_n400 val_split=full_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	42	100000	code_routenorm
+27	af	af_gt_vol_lr1e3_n400_seed42	airfrans_volume	geotransolver_volume_airfrans	train_split=full_train_n400 val_split=full_test +training.val_interval=10	1e-3	42	100000	code_routenorm
+28	af	af_isla_cos_lr1e3_n400_seed43	airfrans_volume	isla_volume_airfrans	train_split=full_train_n400 val_split=full_test +training.val_interval=10 ++model.routing_norm=cosine	1e-3	43	100000	code_routenorm
+29	af	af_gt_vol_lr1e3_n400_seed43	airfrans_volume	geotransolver_volume_airfrans	train_split=full_train_n400 val_split=full_test +training.val_interval=10	1e-3	43	100000	code_routenorm
