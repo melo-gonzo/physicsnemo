@@ -612,37 +612,38 @@ footprint table of the shipped configurations is @sec-using-cost.
 #| label: fig-cost-sweep
 #| fig-cap: >
 #|   Training-step time (top) and peak memory (bottom) against the number
-#|   of tokens per case for each model at its recipe width (ISLA 192,
-#|   GeoTransolver 256, Transolver 256). Lines with filled markers: one
-#|   GB300, bf16 autocast, batch of one case, AdamW step included, every
-#|   model compiled, median of ten measured steps after warm-up on random
-#|   inputs; ISLA with the fused geometry kernel (the default on CUDA;
-#|   filled squares, solid) and on the fallback path, the eager geometry
-#|   region with recompute (open squares, dashed); memory is the allocator's
-#|   peak during the step. Crosses (bottom): the peak memory logged over a
-#|   full 500-epoch training run of the cell-count ladder at 100,000 to
-#|   600,000 cells (@tbl-cells-ladder), a different instrument, which
-#|   includes the allocator's reserve and the data pipeline and sits above
-#|   the step peak at the same count. How to read this: all axes are
-#|   logarithmic and the lines are joined measurements, not fits; the sweep
-#|   measures the step alone and stops at 200,000 tokens, so above it only
-#|   the training-log crosses exist; the training lanes of this book are
-#|   dominated by data loading, so the top panel ranks the models' step
-#|   cost, not their wall-clock. The 200,000-token column is the recipe's
-#|   default budget. Accuracy against the same axis is @tbl-cells-ladder.
-#|   Data: results/cost_sweep_gb300_bf16_2026-09-18.json;
+#|   of tokens per case, 2,500 to 600,000, for the two ISLA reference
+#|   candidates (384 wide with 12 layers, solid blue; with 24 layers,
+#|   dash-dot blue), ISLA at 192 wide (pale blue), GeoTransolver at 256
+#|   (red) and 512 wide (light red) and Transolver at 256 wide (amber).
+#|   Lines: one GB300, bf16 autocast, batch of one case, AdamW step
+#|   included, every model compiled, ISLA with the fused geometry kernel,
+#|   median of ten measured steps after warm-up on random inputs; memory is
+#|   the allocator's peak during the step. Crosses (bottom): the peak memory
+#|   logged over a full 500-epoch training run of the cell-count ladder
+#|   (@tbl-cells-ladder), a different instrument that includes the
+#|   allocator's reserve and the data pipeline. How to read this: all axes
+#|   are logarithmic and the lines are joined measurements, not fits; below
+#|   about 40,000 tokens every model is launch-bound and the lines are flat;
+#|   the 200,000-token column is the reporting protocol and its numbers are
+#|   in @tbl-cost-200k; the training lanes of this book are dominated by
+#|   data loading, so the top panel ranks the models' step cost, not their
+#|   wall-clock. Data: results/cost_sweep_ref_gb300_bf16_2026-09-22.json;
 #|   results/isocost_reduction_2026-09-20.json.
-#| fig-alt: "Two stacked log-log panels against tokens per case from 2,500 to 600,000: step time with four lines, and peak memory with the same four lines to 200,000 plus crosses from training logs extending to 600,000."
+#| fig-alt: "Two stacked log-log panels against tokens per case from 2,500 to 600,000: step time and peak memory, six lines each, plus crosses from training logs on the memory panel."
 #| code-fold: true
 import statistics as st
-CS = J("cost_sweep_gb300_bf16_2026-09-18.json")["runs"]
+CSR = J("cost_sweep_ref_gb300_bf16_2026-09-22.json")
+CS = CSR["runs"]
 GIB_TO_GB = 1024 ** 3 / 1e9
-arms = [("isla_fused_compiled", "isla_ref", "ISLA, fused geometry kernel (default on CUDA)", {}),
-        ("isla_compiled_recompute", "isla_ref", "ISLA, eager geometry region with recompute (fallback)", dict(ls="--", mfc="white")),
-        ("geotransolver_compiled", "gt", "GeoTransolver", {}),
-        ("transolver_compiled", "t", "Transolver", {})]
+COST_ARMS = [("isla_ref_r1_384x12_cos_fused", "isla_ref", "ISLA 384 x 12 (reference candidate R1)", dict(color=BLUE, ls="-")),
+             ("isla_ref_r2_384x24_cos_fused", "isla_ref", "ISLA 384 x 24 (reference candidate R2)", dict(color=BLUE, ls="-.")),
+             ("isla_192x12_cos_fused", "isla_ref", "ISLA 192 x 12", dict(color=BLUE_PALE, ls="-")),
+             ("geotransolver_256", "gt", "GeoTransolver 256 (recipe default)", dict(color=RED, ls="-")),
+             ("geotransolver_512", "gt", "GeoTransolver 512", dict(color=RED_LIGHT, ls="-")),
+             ("transolver_256", "t", "Transolver 256", {})]
 fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(8.0, 7.0), sharex=True, gridspec_kw=dict(hspace=0.08))
-for arm, key, lab, ov in arms:
+for arm, key, lab, ov in COST_ARMS:
     rows = sorted([r for r in CS if r["arm"] == arm and r["status"] == "ok"], key=lambda r: r["tokens"])
     xs = [r["tokens"] for r in rows]
     ax0.plot(xs, [st.median(r["step_ms"]) for r in rows], **series_kwargs(key, label=lab, **ov))
@@ -651,7 +652,7 @@ for arm, key, lab, ov in arms:
 for model, key, width, lr in (("isla", "isla_ref", 192, "1e-3"), ("gt_unit", "gt", 256, "3e-3"), ("transolver_unit", "t", 256, "3e-3")):
     rows = sorted([c for c in ISO.values() if c["model"] == model and c["width"] == width and c["epochs"] == 500 and c["lr"] == lr and c.get("peak_mem_gb")], key=lambda c: c["cells"])
     ax1.plot([c["cells"] for c in rows], [c["peak_mem_gb"] for c in rows], ls="none", marker="x", ms=9, mew=2.0, color=STYLE[key]["color"], zorder=4)
-ax1.plot([], [], ls="none", marker="x", ms=9, mew=2.0, color=INK2, label="training-log peak, 500-epoch run")
+ax1.plot([], [], ls="none", marker="x", ms=9, mew=2.0, color=INK2, label="training-log peak, 500-epoch run (192 / 256 wide)")
 for ax in (ax0, ax1):
     ax.set_xscale("log"); ax.grid(True, which="major", color=GRID); ax.grid(False, which="minor")
     ax.axvline(200000, color=BASELINE, lw=1.0, zorder=0)
@@ -660,11 +661,28 @@ ax0.set_ylabel("training step [ms]"); ax1.set_ylabel("peak GPU memory [GB]")
 ax0.set_yticks([20, 50, 100, 200, 500]); ax0.set_yticklabels(["20", "50", "100", "200", "500"])
 ax1.set_yticks([0.5, 1, 2, 5, 10, 20, 50, 100, 200]); ax1.set_yticklabels(["0.5", "1", "2", "5", "10", "20", "50", "100", "200"])
 ax1.set_xlim(2000, 800000)
-ax1.set_xticks([2500, 10000, 40000, 100000, 200000, 400000]); ax1.set_xticklabels(["2,500", "10,000", "40,000", "100,000", "200,000", "400,000"])
+ax1.set_xticks([2500, 10000, 40000, 100000, 200000, 400000, 600000]); ax1.set_xticklabels(["2,500", "10,000", "40,000", "100,000", "200,000", "400,000", "600,000"])
 ax1.xaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax0.yaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax1.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
 ax1.set_xlabel("tokens per case [count]")
-ax0.text(200000, ax0.get_ylim()[0], " recipe default", fontsize=8, color=INK2, va="bottom")
-ax0.legend(loc="upper left", fontsize=8.5); ax1.legend(loc="upper left", fontsize=8.2)
-ax0.set_title("training-step cost against token count (435 DrivAerML cars; one GB300, bf16, batch 1, compiled)")
+ax0.text(200000, ax0.get_ylim()[0], " reporting protocol", fontsize=8, color=INK2, va="bottom")
+ax0.legend(loc="upper left", fontsize=8.2); ax1.legend(loc="upper left", fontsize=8.0)
 plt.show()
+```
+
+```{python}
+#| label: tbl-cost-200k
+#| output: asis
+at200 = {r["arm"]: r for r in CS if r["tokens"] == 200000 and r["status"] == "ok"}
+ref = at200["geotransolver_256"]
+out = "| model | parameters | step [ms] | peak memory [GB] | step ÷ GeoTransolver-256 | memory ÷ GeoTransolver-256 |\n|---|--:|--:|--:|--:|--:|\n"
+for arm, key, lab, ov in COST_ARMS:
+    r = at200[arm]
+    out += (f"| {lab} | {r['n_params'] / 1e6:.1f}M | {st.median(r['step_ms']):.0f} | {r['peak_allocated_gib'] * GIB_TO_GB:.1f} | "
+            f"{st.median(r['step_ms']) / st.median(ref['step_ms']):.2f} | {r['peak_allocated_gib'] / ref['peak_allocated_gib']:.2f} |\n")
+print(out)
+print(": Step time and peak memory at the reporting protocol's 200,000 tokens per case, one GB300, bf16, batch of one, compiled, "
+      "ISLA with the fused geometry kernel; the last two columns are ratios to GeoTransolver's recipe default, below one is cheaper. "
+      "How to read this: the reference candidate R1 (384 x 12) steps 11% slower than GeoTransolver-256 in 29% less memory and is "
+      "faster and smaller than the parameter-matched GeoTransolver-512; R2 (384 x 24) costs twice R1's time and memory. "
+      "Data: results/cost_sweep_ref_gb300_bf16_2026-09-22.json. {#tbl-cost-200k}")
 ```

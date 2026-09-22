@@ -24064,3 +24064,41 @@ particular training case. The four lanes are retired with blocked markers
 and replaced by eager-kernel twins (rows 32 to 35 of `kernel/ref/lanes.tsv`,
 `++model.geo_kernel=eager`); the hang is an engineering task with the
 reproducer recorded (case at step 13 of seed 42's epoch 0).
+
+## 2026-09-22 — COST-SWEEP-REF: the reference candidates' step time and memory from 2,500 to 600,000 tokens; at the reporting protocol R1 (384 x 12) steps in 117 ms and 35 GiB against GeoTransolver-256's 105 ms and 49 GiB, R2 (384 x 24) in 231 ms and 68 GiB {#sec-nb-cost-ref-verdict}
+
+**Setting.** Peter's ruling asks that the reference configuration be
+compared on speed and memory as well as accuracy, and that the cost figure
+cover the whole token range a reader expects (the earlier sweep stopped at
+200,000 tokens). One GB300, bf16 autocast, batch of one case, AdamW step,
+every model compiled, ISLA with the fused geometry kernel, random inputs,
+median of ten steps after three warm-up steps; six arms at ten token counts
+(`kernel/cost_ref/bench_tokens_ref.py`, job 825142; artifact
+`results/cost_sweep_ref_gb300_bf16_2026-09-22.json`).
+
+| arm | parameters | 100k: ms / GiB | 200k | 400k | 600k |
+|---|--:|---|---|---|---|
+| ISLA 384 x 12 (R1) | 34.3M | 64 / 17.8 | 117 / 34.9 | 224 / 69.3 | 332 / 103.6 |
+| ISLA 384 x 24 (R2) | 68.3M | 129 / 34.8 | 231 / 68.4 | 441 / 135.7 | 656 / 203.0 |
+| ISLA 192 x 12 | 8.9M | 57 / 10.9 | 94 / 21.7 | 178 / 43.2 | 266 / 64.6 |
+| GeoTransolver 256 | 9.0M | 58 / 24.7 | 105 / 49.3 | 199 / 98.3 | 291 / 147.3 |
+| GeoTransolver 512 | 35.8M | 73 / 33.5 | 137 / 66.5 | 258 / 132.2 | 379 / 198.1 |
+| Transolver 256 | 6.0M | 35 / 16.3 | 65 / 32.5 | 123 / 64.9 | 181 / 97.3 |
+
+: Step time [ms] and peak allocated memory [GiB] per token count (2,500 to 40,000 tokens are launch-bound at 40 to 90 ms for every arm and are in the artifact). {#tbl-cost-ref}
+
+**Reading.** Every arm is linear in tokens above 100,000 (the slice
+attention is linear in points; no quadratic term appears up to 600,000).
+Against GeoTransolver's recipe default at the protocol, R1 steps 11% slower
+and uses 29% less memory; against the parameter-matched GeoTransolver-512
+it is 15% faster and uses 48% less. R2 costs 2.0x R1 in both time and
+memory, 2.2x GeoTransolver-256's time and 1.4x its memory. ISLA at 192
+wide remains the cheapest model per token after Transolver. For the REF
+selection rule (@sec-nb-ref-prereg) this fixes the cost side of the bars:
+R1 is inside the "cost parity" clause against GeoTransolver-256 (time
+ratio 1.11, memory ratio 0.71) and beats it outright on memory; R2 fails
+both cost ratios, so choosing R2 would be an accuracy purchase priced at
+double the step. The book's cost figure (@fig-cost-sweep) and the 200k
+cost table (@tbl-cost-200k) are redrawn from this artifact. The earlier
+sweep's eager-region fallback arm is no longer drawn; the fused kernel is
+the default and the eager path is named once in @sec-using-cost.
