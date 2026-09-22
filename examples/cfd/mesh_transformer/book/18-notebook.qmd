@@ -24113,3 +24113,14 @@ the backward pass (`geo_checkpoint=true`, rows 36 and 37); if they also
 fail, the volume task's reference decision rests on R1 against
 GeoTransolver-volume, and R2 is recorded as not trainable on the volume
 task at the protocol without the fused kernel.
+
+**Addendum, acceptance (2026-09-22, 25 minutes after launch).** All 44
+SOLIDS lanes have a running link and no traceback. Tensile2d at 400 cases:
+ISLA R1 0.17 s per step at 3.5 GB, R2 0.27 s at 6.7 GB, GeoTransolver-512
+0.12 s at 6.6 GB; the 32-case rung is at epoch 10 (validation loss 0.146).
+The lug at 2,400 cases: R1 0.14 s and 6.3 GB, R2 0.26 s and 12 GB,
+GeoTransolver-512 0.11 s and 8.4 GB, first validations 0.013 / 0.011 /
+0.038; the 300-lug rung is at epoch 30 (0.0028). Every node of every case
+is used (no subsampling below the 20,000 cap). Accepted. Wall-clock
+estimates: Tensile2d 400-case lanes about 6 hours, lug 2,400-case lanes
+about 45 hours at one node each.
