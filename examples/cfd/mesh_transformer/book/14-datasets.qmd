@@ -6,9 +6,9 @@ physics and the boundary data, not in the plumbing.** This appendix is the
 reference for those conventions and for each dataset's provenance, size,
 conversion, field names, sign conventions, normalization and splits. The
 protocol chapter (@sec-datasets) says what each dataset is and what the
-model receives, at the depth a reader of the results needs; this appendix
+model receives, at the depth a reader of the results needs. This appendix
 is where to look when reproducing a lane, writing a converter for a new
-dataset, or checking which cases a number was scored on.
+dataset, or finding which cases a number was scored on.
 
 *Before this chapter:* the input contract of @sec-using-inputs (boundary
 cells with positions, outward normals and measure weights; $K$ global unit
@@ -55,7 +55,7 @@ model reads and in what the boundary cells carry.
   `bc_dirichlet`, …) and each prescribed value is a scalar on the cells it
   applies to and zero elsewhere (`bc_pressure`, `bc_value_g`, `bc_disp_x`,
   …). Where a traction vector exists it is stored too (`traction`,
-  `bc_load`), but ISLA has no per-cell vector input: the traction on a
+  `bc_load`), but ISLA has no per-cell vector input. The traction on a
   pressed face is $-p\,n$, recoverable from the pressure scalar and the
   cell normal the model already sees. GeoTransolver has no boundary-token
   path, so the same labels and values are also written as nodal fields on
@@ -188,7 +188,7 @@ recipe reads the boundary tensordict
 (`geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle`) and merges the
 parent's `global_data` (`U_inf`, `p_inf`, `rho_inf`, `T_inf`, `L_ref`).
 Units are slug, inch, second and Rankine: the far-field speed is 2,679.5
-in/s, and the problem figure converts positions to metres for display
+in/s, and the problem figure converts positions to meters for display
 only. The targets are the projected averages `PROJ(AVG(P))`,
 `PROJ(AVG(T))`, `PROJ(AVG(RHO))`, `PROJ(AVG(U))` and `AVG(TAU_WALL)` on
 the surface cells, nondimensionalized from the case's `global_data`
@@ -220,8 +220,8 @@ them. The *data-efficiency* family is nested (@fig-hilift-splits): 35
 training cases $\subset$ 210 $\subset$ 510 $\subset$ 1,260, all scored on
 one shared 180-case validation set (180 cases on 118 geometries), with a
 360-case test set that no data-efficiency experiment touches. Because the
-rungs are subsets of the same 1,260 cases, a validation geometry may appear
-in training at other angles: these rungs measure sample complexity, not
+rungs are subsets of the same 1,260 cases, a validation geometry can appear
+in training at other angles. These rungs measure sample complexity, not
 unseen geometry. The two *regime-extrapolation* splits hold out flow
 physics, with stall onset determined per geometry from the lift curve. The
 *geometry* family holds out geometries at all ten angles. The three
@@ -282,11 +282,11 @@ the fixed-seed permutations of the solids and OLBC sets
 
 ::: {.callout-warning collapse="true" title="The HiLiftAeroML manifests overlap, so a test split is sealed per checkpoint, not per program"}
 The manifests are separate but not disjoint. The angle-of-attack and stall
-test sets between them contain every one of the 180 geometries, and the
+test sets between them contain every one of the 180 geometries. The
 360-case data-efficiency test set shares 179 cases with them, the geometry
 test set 182 and the deflection test set 182 (37 and 40 of their cases also
 sit in the shared validation set). A test split is therefore *held out per
-checkpoint*, since no model evaluated on it trained on it; but once the
+checkpoint*, since no model evaluated on it trained on it. But once the
 regime-extrapolation tests are read, no HiLiftAeroML geometry remains
 unexposed at the level of the program, and no later evaluation on these
 manifests is an independent program-level confirmation
@@ -364,13 +364,13 @@ cells.
   against the release's `units.json`).
 - **What differs, and how it is handled.** SHIFT-SUV stores absolute
   pressure with `p_inf` = 101,325 Pa where DrivAerML stores gauge pressure
-  with `p_inf` = 0; the shared transform $(p - p_\infty) / q_\infty$ gives
+  with `p_inf` = 0. The shared transform $(p - p_\infty) / q_\infty$ gives
   a proper pressure coefficient for both, with no correction. The
   far-field speed is 30.0 m/s against DrivAerML's 38.89, a Reynolds number
-  about 1.3 times lower; every model receives the unit direction only and
+  about 1.3 times lower. Every model receives the unit direction only and
   none receives the Reynolds number, so this is a covariate shift
-  identical for every architecture, reported alongside the geometry-family
-  shift rather than corrected.
+  identical for every architecture. It is reported alongside the
+  geometry-family shift rather than corrected.
 - **Role.** The fastback family is held out from every model in the book
   and is the zero-shot target of the cross-family transfer measurements
   (@sec-scoreboard-200k); the estate training split is a training source
@@ -436,7 +436,7 @@ input scalars but no output fields; the converter writes them under
   scored on `val_100`.
 - **Pitfalls.** `q` is heavy-tailed under z-scoring (the per-case maximum
   ranges over four decades in `train_400`), so it is reported but excluded
-  from the headline fields; without the frame vectors ISLA fits the
+  from the headline fields. Without the frame vectors ISLA fits the
   training set and validates 20 to 60 times worse than GeoTransolver, and
   the reflection-odd $\sigma_{12}$ needs both frame vectors, not the load
   axis alone. The leaderboard's Tensile2d numbers are on the withheld test
@@ -473,7 +473,7 @@ semicircular nose around the hole whose axis is parallel to $z$; the lug is
   triangles with four boundary scalars (`bc_fixed`, `bc_hole`,
   `bc_loaded`, `bc_pressure`), the four standardized design parameters as
   global scalars ($K = 0$, eager kernel), every node as a query with
-  `sdf`; output `von_mises`. Coordinates stay in metres; the RMS-distance
+  `sdf`; output `von_mises`. Coordinates stay in meters; the RMS-distance
   length unit absorbs the scale. GeoTransolver: the interior points with
   the nodal tags and the parameters as its global embedding.
 - **Normalization** (manifest `_stats` over the 2,400 training lugs):
@@ -504,9 +504,9 @@ node coordinates (identical across samples), the distance field (positive
 inside, zero on the boundary) and its gradient (pointing into the domain),
 the solution and, per component and condition type, the boundary node
 indices with the value $g$ (Robin also $\alpha$ in $\alpha u + \partial u
-/ \partial n = g$). No connectivity is stored; the converter reconstructs
-the boundary loops from the boundary node set by two-nearest-neighbour
-chaining, verified to give closed loops.
+/ \partial n = g$). No connectivity is stored. The converter reconstructs
+the boundary loops from the boundary node set by two-nearest-neighbor
+chaining, and makes sure that the loops close.
 
 - **poisson-square-bc5** (record 18377514): $-\nabla^2 u = f$ on
   $[-1, 1]^2$, "Mixed+" configuration: four random boundary segments each
@@ -516,7 +516,7 @@ chaining, verified to give closed loops.
 - **elasticity-circlehollow-m1** (record 18377539): linear elasticity of
   steel ($\lambda$ = 115 GPa, $\mu$ = 76.9 GPa), plane problem on the unit
   disc with two holes, all fields dimensionless (stress per 100 MPa,
-  length per metre, so a displacement of $10^{-4}$ is 0.1 mm); per
+  length per meter, so a displacement of $10^{-4}$ is 0.1 mm); per
   component and per sample the exterior circle is cut into four random
   segments: one free, one prescribed displacement (about $10^{-4}$) and
   two tractions (about $10^{-1}$); the smallest hole is clamped, the other
@@ -585,17 +585,17 @@ chaining, verified to give closed loops.
 **Two more literature datasets were examined against the same
 requirements (a steady PDE, labeled and strongly varying boundary
 conditions or loads, a license that permits redistribution of converted
-files); one is deferred and one is converting.** The full shortlist,
+files). One is deferred and one is converting.** The full shortlist,
 with fit tags and the classic operator-learning sets kept for
-comparability only, is `results/book_audit_2026-09-22/datasets_scout.md`;
-the verified facts below are from the files and papers
+comparability only, is `results/book_audit_2026-09-22/datasets_scout.md`.
+The facts below are from the files and papers
 (@sec-nb-datasets-scout-2026-09-22).
 
 - **GNOT Heat2d (deferred).** Steady heat conduction with a boundary
   temperature *function* on a labeled top edge, the bottom edge at zero
   temperature. The repository and the data folder carry no license (an
-  issue asking for one went unanswered), so converted files could not be
-  shared; the released split is 1,000 train / 100 test; each sample is a
+  issue asking for one went unanswered), so converted files cannot be
+  shared. The released split is 1,000 train / 100 test. Each sample is a
   point cloud of 365 to 1,089 nodes with no connectivity, the top-edge
   temperature sampled at 16 or 17 nodes, two spline interfaces as point
   clouds, a dummy zero global scalar, and a side-wall condition that is
@@ -637,11 +637,11 @@ the verified facts below are from the files and papers
   are 30 to 37% (scout notes). No number from it is in the book.
 - **AeroZoo.** Within aerodynamics, the program's own diversity-stress
   dataset of dissimilar bodies, built to stress generalization across
-  geometry families rather than within one; in generation, carries no
+  geometry families rather than within one. It is in generation, carries no
   number in the book, and is the coming out-of-distribution instance
   named in @sec-limits-datasets.
 
 Every dataset above enters the book's evidence only with GeoTransolver
 trained on it under the fair-comparison protocol (@sec-fair-comparison)
-and a per-dataset preregistration before its first lane; the standing of
+and a per-dataset preregistration before its first lane. The standing of
 each conversion is in @sec-program-status.

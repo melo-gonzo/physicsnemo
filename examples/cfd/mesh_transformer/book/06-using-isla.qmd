@@ -1,15 +1,16 @@
 # Using ISLA {#sec-using}
 
 **ISLA ships as one class with one reference configuration, trained and
-evaluated by the unified external-aerodynamics recipe; this chapter is the
+evaluated by the unified external-aerodynamics recipe. This chapter is the
 operating manual.** It tells you which configuration to run and what the
-few remaining options are for, what the model needs from your data, the
-commands that train and evaluate it, how to set the learning rate when you
-change the width or depth, the inference sampler that removes most of the
-draw noise at a fixed cell budget, how to load a checkpoint, and what a step
-costs. Everything here is about ISLA unless an option is named; the reasons
-behind each recommendation are in @sec-isla and the evidence chapters,
-cited at the point where they apply.
+few remaining options are for. It states what the model needs from your
+data and the commands that train and evaluate it. It tells you how to set
+the learning rate when you change the width or depth, how to use the
+inference sampler that removes most of the draw noise at a fixed cell
+budget, how to load a checkpoint, and what a step costs. Everything here is
+about ISLA unless an option is named. The reasons behind each
+recommendation are in @sec-isla and the evidence chapters, cited where they
+apply.
 
 ```{python}
 #| label: setup-using
@@ -27,7 +28,7 @@ RES = Path("..") / "results"
 length unit, the fused geometry kernel where it can run, and interior
 queries carrying a share of the total boundary measure.** Those are the
 class defaults, so `ISLA(outputs=..., global_inputs=...)` with nothing else
-is the reference configuration; the recipe's `isla_surface.yaml` names the
+is the reference configuration. The recipe's `isla_surface.yaml` names the
 fields, fixes the dimensions and states the frame setting explicitly:
 
 ```yaml
@@ -47,13 +48,13 @@ model:
 ```
 
 The reference configuration is 384 wide with 12 layers and 256 slices, at
-learning rate 5e-4 (the REF selection, @sec-nb-ref-verdict); the class
-defaults and the recipe's `isla_surface` and `isla_volume` state the same
-dimensions, this is the one place the book states them, and the width and
-depth ladders of @sec-review-frontier are deviations from it. Lanes of the
-earlier protocol ran 192 wide at 1e-3 and are labeled so wherever they
-appear. ISLA has one frame and one
-routing form; the rows below are the options that remain on it.
+learning rate 5e-4 (the reference selection, @sec-nb-ref-verdict). The
+class defaults and the recipe's `isla_surface` and `isla_volume` state the
+same dimensions. This is the one place the book states them, and the width
+and depth ladders of @sec-review-frontier are deviations from it. Lanes of
+the earlier protocol ran 192 wide at 1e-3 and are labeled so wherever they
+appear. ISLA has one frame and one routing form. The rows below are the
+options that remain on it.
 
 | configuration | recipe config | when to use | what you give up |
 |---|---|---|---|
@@ -65,30 +66,29 @@ any option loads in the configuration that trained it (@sec-using-checkpoint).
 
 ::: {.callout-note title="When query independence is required"}
 Both configurations above predict at a point as a function of the whole
-request, so an interior surrogate built from `isla_volume` is deployed at
-its training query count (@sec-using-checkpoint). If a deployment needs
-the prediction at a point to be exactly the same whatever else is asked
-for (chunked or streaming inference over arbitrary point sets, a
-per-point answer that must not change between requests), the class keeps
-a read-only decoder behind `query_independent: true`, optionally with a
-per-case interacting support set (`support_tokens: true`; recipe config
-`isla_volume_support`). It holds the contract exactly and is several times
-less accurate than the interacting decode on every interior field; what
-it is, what it costs and when it is worth the price are in
-@sec-arch-passive-decoder.
+request. Deploy an interior surrogate built from `isla_volume` at its
+training query count (@sec-using-checkpoint). If a deployment needs the
+prediction at a point to be exactly the same whatever else is asked for
+(chunked or streaming inference over arbitrary point sets, or a per-point
+answer that must not change between requests), use the read-only decoder
+behind `query_independent: true`. It can take a per-case interacting
+support set (`support_tokens: true`; recipe config `isla_volume_support`).
+It holds the contract exactly and is several times less accurate than the
+interacting decode on every interior field. What it is, what it costs and
+when it is worth the price are in @sec-arch-passive-decoder.
 :::
 
 ## What the model needs from your data {#sec-using-inputs}
 
 **ISLA takes three geometry arrays per case plus named fields of declared
-rank, and the two that are easy to get wrong are the measure weights,
-which must sum to the boundary's measure, and the global directions, which
-must be directions.** The forward call is keyword-only, so the recipe's
-`forward_kwargs:` mapping reads exactly as the call does; the field names
+rank. The two that are easy to get wrong are the measure weights, which
+must sum to the boundary's measure, and the global directions, which must
+be directions.** The forward call is keyword-only, so the recipe's
+`forward_kwargs:` mapping reads exactly as the call does. The field names
 under `global_inputs`, `boundary_inputs` and `query_inputs` are the ones
-the model block declares with their ranks, and the model returns a
-TensorDict keyed by the `outputs:` names (`output_type: fields`). For the
-surface task:
+the model block declares, with their ranks. The model returns a TensorDict
+keyed by the `outputs:` names (`output_type: fields`). For the surface
+task:
 
 ```yaml
 forward_kwargs:
@@ -103,20 +103,20 @@ Three of these need a word.
 
 - **The measure weights must sum to the boundary's measure.** When the
   recipe keeps $n$ of $N$ cells, each kept cell carries the Horvitz–Thompson
-  weight, its area times $N/n$, so that the weights stand for the full
-  surface at any `sampling_resolution`: the routing's quadrature sums then
-  read the surface area rather than the retained fraction of it (the length
-  unit normalizes the weights and is indifferent to the factor, but the
-  quadrature sums are not). The surface dataset stores this in
-  `interior.point_data._effective_measure`; the volume dataset uses
+  weight: its area times $N/n$. The weights then stand for the full surface
+  at any `sampling_resolution`, and the routing's quadrature sums read the
+  surface area rather than the retained fraction of it. The length unit
+  normalizes the weights and is indifferent to the factor, but the
+  quadrature sums are not. The surface dataset stores this in
+  `interior.point_data._effective_measure`. The volume dataset uses
   `boundaries.vehicle.cell_data._effective_measure` through its
   `ComposeQuadratureMeasure` stage. Both are complete measures, including
   sampling corrections. Point measures carry their represented dimension
   and follow geometric scaling: on a two-dimensional problem such as
   AirfRANS the measure is the segment length.
 - **A rank-1 global input is a direction.** The problem's global
-  directions (the rank-1 entries of `global_inputs`) enter as unit vectors;
-  the model normalizes each again internally and discards its magnitude.
+  directions (the rank-1 entries of `global_inputs`) enter as unit vectors.
+  The model normalizes each again internally and discards its magnitude.
   For external aerodynamics `ComputeFreestreamDirection` writes `U_inf_dir`
   from the solver's velocity. This is also the fair-comparison rule for
   every architecture in the book (@sec-unit-direction-rule).
@@ -129,7 +129,7 @@ Three of these need a word.
   the inlet speed this way (`global_data.U_inf_mag`).
 
 For the interior task the model needs one more array, the query positions,
-and nothing about them: `isla_volume` adds
+and nothing else about them. `isla_volume` adds
 
 ```yaml
 forward_kwargs:
@@ -141,14 +141,14 @@ forward_kwargs:
   query_points: interior.points          # (B, Q, 3); direction and wall distance are derived inside the model
 ```
 
-Each query's direction and signed distance to the wall are computed from
-the boundary sample inside the model (the nearest boundary cell,
-@sec-arch-modes), so no signed-distance field has to be stored, sampled or
-declared. The distance is to the sampled boundary, not the full mesh; the
-`isla_volume_provided` configuration keeps the dataset's full-mesh field
-instead (`interior_geometry: provided`, with `query_normals:
+The model computes each query's direction and signed distance to the wall
+from the boundary sample (the nearest boundary cell, @sec-arch-modes). No
+signed-distance field has to be stored, sampled or declared. The distance
+is to the sampled boundary, not the full mesh. The `isla_volume_provided`
+configuration keeps the dataset's full-mesh field instead
+(`interior_geometry: provided`, with `query_normals:
 interior.point_data.sdf_normals` and `query_inputs: {sdf:
-interior.point_data.sdf}`) and exists to measure that difference
+interior.point_data.sdf}`). It exists to measure that difference
 (@sec-nb-internal-geometry-prereg) and to load interior checkpoints trained
 with it.
 
@@ -156,10 +156,10 @@ with it.
 A dataset that stores its fields in groups (`solution/pressure` on disk,
 `solution.pressure` in a config) names its targets with a dot, and the
 model's `outputs:` block uses the same dotted names. A dot is the only way
-to spell a group: every value of `outputs`, `global_inputs`,
-`boundary_inputs` and `query_inputs` is a rank spec, so
+to spell a group, because every value of `outputs`, `global_inputs`,
+`boundary_inputs` and `query_inputs` is a rank spec. So
 `outputs: {"solution.pressure": 0, "solution.velocity": 1}` declares two
-leaves of one group, and the model returns a TensorDict in which
+leaves of one group. The model returns a TensorDict in which
 `out["solution", "pressure"]` and `out["solution"]["pressure"]` both
 address the first. The recipe reads its targets by the same dotted names,
 so `output_type: fields` consumes the nested output unchanged. The input
@@ -169,33 +169,33 @@ TensorDict.
 
 ::: {.callout-note collapse="true" title="Problems other than external aerodynamics"}
 The architecture knows only that it was handed named fields of declared
-rank. A buoyant flow passes gravity as its one direction; a magnetized flow
-passes two; steady conduction with pinned temperatures passes no direction
+rank. A buoyant flow passes gravity as its one direction. A magnetized flow
+passes two. Steady conduction with pinned temperatures passes no direction
 and supplies the pinned values as a rank-0 boundary input
-(`boundary_inputs: {trace: 0}`); an elasticity problem passes its
+(`boundary_inputs: {trace: 0}`). An elasticity problem passes its
 prescribed displacement and traction as rank-1 boundary inputs
-(`bc_displacement: 1`, `bc_traction: 1`; a planar dataset that stored the
+(`bc_displacement: 1`, `bc_traction: 1`). A planar dataset that stored the
 components separately stacks them with `StackScalarFields` in its dataset
-yaml) and predicts the stress as a symmetric rank-2 output
-(`stress: {rank: 2, symmetric: true}`), whose laboratory components the
-recipe reads off for a `symmetric_tensor` target. Each global direction
-adds one seed cosine, one relational cosine and two vectors to the output
-basis; each rank-1 boundary input adds its frame cosines and norm to the
-seed and one relational cosine per slice (@sec-isla-inputs-rank). The tests
-in `test_isla_global_inputs.py`, `test_isla_inputs.py` and
-`test_isla_heads.py` cover zero and two directions, global scalars, rank-1
-and rank-2 inputs and every output rank and parity. The fused geometry
-kernel is written for one to three per-point vectors, counting the global
-directions and the rank-1 boundary or query inputs together, and no rank-2
-per-token inputs (since 2026-09-23; the frame-input and rank-1-input solids
-configurations run it); otherwise `geo_kernel: null` resolves to the eager
-region.
+yaml. It predicts the stress as a symmetric rank-2 output
+(`stress: {rank: 2, symmetric: true}`), and the recipe reads off its
+laboratory components for a `symmetric_tensor` target. Each global
+direction adds one seed cosine, one relational cosine and two vectors to
+the output basis. Each rank-1 boundary input adds its frame cosines and
+norm to the seed and one relational cosine per slice
+(@sec-isla-inputs-rank). The tests in `test_isla_global_inputs.py`,
+`test_isla_inputs.py` and `test_isla_heads.py` cover zero and two
+directions, global scalars, rank-1 and rank-2 inputs and every output rank
+and parity. The fused geometry kernel is written for one to three per-point
+vectors, counting the global directions and the rank-1 boundary or query
+inputs together, and for no rank-2 per-token inputs. The frame-input and
+rank-1-input solids configurations run it. Otherwise `geo_kernel: null`
+resolves to the eager region.
 :::
 
 ## Training {#sec-using-train}
 
 **Train at the recipe defaults, 200,000 sampled cells per case for 500
-epochs at learning rate 5e-4, with no augmentation; the only setting that
+epochs at learning rate 5e-4, with no augmentation. The only setting that
 needs thought is the learning rate when you leave width 384.** From the
 recipe root:
 
@@ -218,30 +218,30 @@ python src/train.py model=isla_surface dataset=highlift_surface \
 ```
 
 These commands are the reporting protocol of @sec-protocol. ISLA needs no
-rotation augmentation: the contracts make it exact, and a model trained in
+rotation augmentation. The contracts make it exact, and a model trained in
 the dataset's native frame predicts a body in any pose (@sec-pose).
 
 ### The learning rate {#sec-using-lr}
 
-**Use 5e-4 at the reference width 384 and 12 layers; for a wider or deeper
+**Use 5e-4 at the reference width 384 and 12 layers. For a wider or deeper
 model, start from $10^{-3} \times 192 / \mathrm{hidden} \times 12 /
 \mathrm{layers}$ and treat it as a starting rate, not a limit.** The
 expression gives $10^{-3}$ at width 192, $5 \times 10^{-4}$ at 384,
 $2.5 \times 10^{-4}$ at 768, and $2.5 \times 10^{-4}$ at 384 wide and 24
-layers. It is the rate at which every width and depth in the capacity
-ladders trains cleanly, and the ladders of @sec-review-frontier run at it,
-so a model trained at the rule rate is comparable with the book's lanes.
-Under ISLA's cosine routing the logits are bounded and the routing-collapse
+layers. Every width and depth in the capacity ladders trains cleanly at
+this rate, and the ladders of @sec-review-frontier run at it. A model
+trained at the rule rate is therefore comparable with the book's lanes.
+Under ISLA's cosine routing the logits are bounded, so the routing-collapse
 failure that would otherwise set a hard ceiling on the rate is unreachable
-(@sec-isla-routing-forms), so a higher rate is an experiment, not a hazard,
-and the recipe's ISLA configurations pin 5e-4 rather than inheriting the
-recipe-wide default. The interior standings of @sec-interior are the reference
-configuration's at 5e-4; GeoTransolver-volume trains at 1e-3, its best
-rate there.
+(@sec-isla-routing-forms). A higher rate is an experiment, not a hazard.
+The recipe's ISLA configurations pin 5e-4 rather than inheriting the
+recipe-wide default. The interior standings of @sec-interior are the
+reference configuration's at 5e-4. GeoTransolver-volume trains at 1e-3,
+its best rate there.
 
 ## Evaluation and the inference sampler {#sec-using-sampler}
 
-**Score in float32 at the reporting protocol's 200,000 cells; when the cell
+**Score in float32 at the reporting protocol's 200,000 cells. If the cell
 budget is fixed and smaller, draw the cells with the stratified sampler.**
 Inference shares the training configuration and reads the checkpoint by run
 identifier:
@@ -255,11 +255,11 @@ python src/infer.py model=isla_surface dataset=drivaer_ml_surface \
 Report in float32. The recipe trains under bf16 autocast, and every number
 in this book is a float32 inference on the final-epoch checkpoint
 (@sec-metrics). A bf16 inference differs from the float32 one by rounding
-of order a percent, and under a rigid motion of the input its prediction
-moves by several percent where the float32 prediction moves at the level of
-float32 roundoff (the residuals are tabulated in @sec-isla-contracts).
-Where the pose or the sampling-consistency contract is load-bearing, infer
-in float32.
+of order a percent. Under a rigid motion of the input, its prediction moves
+by several percent, where the float32 prediction moves at the level of
+float32 roundoff (the residuals are tabulated in @sec-isla-contracts). If
+the pose or the sampling-consistency contract is load-bearing, infer in
+float32.
 
 **For inference at a fixed cell budget, draw the cells with the stratified
 sampler.** Replace the dataset's `SubsampleMesh` stage with the recipe's
@@ -272,21 +272,21 @@ sampler.** Replace the dataset's `SubsampleMesh` stage with the recipe's
 
 It keeps the same inclusion law (every cell kept with probability $n/N$,
 weight $N/n$), so nothing about the trained model or the quantity it
-estimates changes, but the kept cells are a *systematic* draw along the
-Morton order of the cell centroids (the ordering by interleaved coordinate
-bits, a space-filling curve along which consecutive cells are spatial
-neighbors), one per consecutive run of $N/n$ cells with a single random
-offset. A systematic sample has the same expectation as an independent draw
-for every cell-weighted integral and a lower variance for smooth
-integrands. The effect is a free improvement for every model and largest
-for ISLA, whose slice states are the noisiest estimates
+estimates changes. The kept cells are a *systematic* draw along the Morton
+order of the cell centroids: one cell per consecutive run of $N/n$ cells,
+with a single random offset. The Morton order sorts cells by interleaved
+coordinate bits, a space-filling curve along which consecutive cells are
+spatial neighbors. A systematic sample has the same expectation as an
+independent draw for every cell-weighted integral and a lower variance for
+smooth integrands. The effect is a free improvement for every model and
+largest for ISLA, whose slice states are the noisiest estimates
 (@sec-deficit-anatomy).
 
-The book keeps the independent draw for its headline comparisons; for a
-deployment, use the stratified draw, or more cells.
+The book keeps the independent draw for its headline comparisons. For a
+deployment, use the stratified draw or more cells.
 
 ::: {.callout-tip collapse="true" title="How many cells"}
-Use 200,000; error is flat above 100,000 (@sec-equal-budget). If the
+Use 200,000 cells. Error is flat above 100,000 (@sec-equal-budget). If the
 budget forces fewer cells, use the stratified draw.
 :::
 
@@ -294,8 +294,8 @@ budget forces fewer cells, use the stratified draw.
 
 **A checkpoint carries its own constructor arguments, so loading is one
 call and the forward call mirrors the recipe mapping.** A saved ISLA is a
-PhysicsNeMo module checkpoint and loads with the class's `from_checkpoint`;
-no configuration has to be repeated:
+PhysicsNeMo module checkpoint and loads with the class's `from_checkpoint`.
+No configuration has to be repeated:
 
 ```python
 from physicsnemo.experimental.models import ISLA
@@ -304,17 +304,17 @@ out = model(points=x, normals=n, measure_weights=w, global_inputs={"freestream":
 p, tau = out["pressure"], out["wss"]  # (B, N) and (B, N, 3)
 ```
 
-`points` and `normals` are (B, N, 3), `measure_weights` (B, N) summing to the
-boundary's measure, `global_inputs` a mapping from each declared name to
-its tensor ((B, 3) for a direction, (B,) or (B, channels) for a rank-0
-field). The output is a TensorDict of batch size (B, N) keyed by the
+`points` and `normals` are (B, N, 3). `measure_weights` is (B, N) and sums
+to the boundary's measure. `global_inputs` is a mapping from each declared
+name to its tensor: (B, 3) for a direction, (B,) or (B, channels) for a
+rank-0 field. The output is a TensorDict of batch size (B, N) keyed by the
 declared output names (a dotted name is a nested leaf), each field with as
 many trailing axes of size 3 as its rank. For interior prediction with
 `isla_volume`, add `query_points` (B, Q, 3) and read the output at the
-query rows; the model derives each query's direction and signed wall
-distance from the boundary sample (a checkpoint trained with
+query rows. The model derives each query's direction and signed wall
+distance from the boundary sample. A checkpoint trained with
 `interior_geometry: provided` takes `query_normals` and
-`query_inputs={"sdf": ...}` instead, as its constructor arguments record).
+`query_inputs={"sdf": ...}` instead, as its constructor arguments record.
 Deploy at the training query count (200,000 at the reporting protocol on
 DrivAerML), because the interacting decode's prediction at a point depends
 on the joint query set (@sec-interior-companion).
@@ -322,56 +322,63 @@ on the joint query set (@sec-interior-companion).
 ## Cost {#sec-using-cost}
 
 
-**At matched parameter count and the reporting protocol of 200,000 cells
-per case, ISLA trains in about a third of GeoTransolver's peak memory and
-GPU-floor step time.** @tbl-isla-cost reads both footprints from the
-protocol lanes' own training logs. The step is memory-bound at every stage
-but the MLP; the per-slice geometry (separations, invariants, routing
-softmaxes) is most of the stored activations, which is why the eager path
+```{python}
+#| label: para-using-cost-lede
+#| output: asis
+CSW = {r["arm"]: r for r in json.load(open(RES / "cost_sweep_ref_gb300_bf16_2026-09-22.json"))["runs"] if r["tokens"] == 200000 and r["status"] == "ok"}
+_med = lambda v: sorted(v)[len(v) // 2]
+_isla, _gt, _gt512 = CSW["isla_ref_r1_384x12_cos_fused"], CSW["geotransolver_256"], CSW["geotransolver_512"]
+print(f"**At the reporting protocol of 200,000 cells per case, ISLA trains at {_isla['peak_allocated_gib'] / _gt['peak_allocated_gib']:.2f}x "
+      f"GeoTransolver-256's peak memory and {_med(_isla['step_ms']) / _med(_gt['step_ms']):.2f}x its step time. GeoTransolver-512, "
+      f"the parameter match, costs {_med(_gt512['step_ms']) / _med(_isla['step_ms']):.2f}x ISLA's step time and "
+      f"{_gt512['peak_allocated_gib'] / _isla['peak_allocated_gib']:.1f}x its memory.** @tbl-isla-cost reads the three footprints from one "
+      "cost sweep on one GB300.")
+```
+ The step is memory-bound at every stage
+but the MLP. The per-slice geometry (separations, invariants, routing
+softmaxes) is most of the stored activations. That is why the eager path
 rebuilds it in the backward pass instead of storing it (`geo_checkpoint`,
-bitwise identical outputs and gradients) and why a fused Triton kernel
-exists for the geometry region. The kernel is the automatic choice wherever
-it can run (CUDA, one global direction, at most 1,024 slices):
-`geo_kernel: null` resolves to it at the first forward pass and to the eager
-recompute region elsewhere (@sec-arch-switches). Every path computes the
-same function (output relative L2 against the eager reference at most
-$5.5 \times 10^{-7}$ in bf16, @sec-nb-geokernel-auto). That footprint is
-what buys accuracy at scale: on the DrivAerML Surface task at 435 cars,
-ISLA reaches GeoTransolver's floor at less than a third of the memory
-(@sec-shared-floor).
+bitwise identical outputs and gradients), and why a fused Triton kernel
+exists for the geometry region. `geo_kernel: null` resolves to the kernel
+at the first forward pass wherever it can run, and to the eager recompute
+region elsewhere (@sec-arch-switches; the conditions are in the list
+below). Every path computes the same function (output relative L2 against
+the eager reference at most $5.5 \times 10^{-7}$ in bf16,
+@sec-nb-geokernel-auto). That footprint is what buys accuracy at scale. On
+the DrivAerML Surface task at 435 cars, ISLA reaches GeoTransolver's floor
+at less than a third of the memory (@sec-shared-floor).
 
 ```{python}
 #| label: tbl-isla-cost
 #| output: asis
-ISO = json.load(open(RES / "isocost_reduction_2026-09-20.json"))["configurations"]
-rows = [("ISLA, 192 wide, 1e-3", "isla|w192|c200k|lr1e-3|ep500"), ("GeoTransolver, 256 wide, 3e-3", "gt_unit|w256|c200k|lr3e-3|ep500")]
-out = "| architecture | parameters | peak memory per device [GB] | GPU-floor step, p10 [s] | median step [s] |\n|---|--:|--:|--:|--:|\n"
+rows = [("ISLA (reference configuration, fused kernel)", "isla_ref_r1_384x12_cos_fused"), ("GeoTransolver-256", "geotransolver_256"), ("GeoTransolver-512 (the parameter match)", "geotransolver_512")]
+out = "| architecture | parameters | peak memory per device [GiB] | median step [ms] | ÷ ISLA: parameters | ÷ ISLA: memory | ÷ ISLA: step |\n|---|--:|--:|--:|--:|--:|--:|\n"
+i = CSW[rows[0][1]]
 for lab, k in rows:
-    c = ISO[k]
-    out += f"| {lab} | {c['params']/1e6:.1f}M | {c['peak_mem_gb']:.0f} | {c['step_s_p10']:.2f} | {c['step_s_median']:.2f} |\n"
-i, g = ISO[rows[0][1]], ISO[rows[1][1]]
-out += f"| GeoTransolver ÷ ISLA | {g['params']/i['params']:.2f}x | {g['peak_mem_gb']/i['peak_mem_gb']:.1f}x | {g['step_s_p10']/i['step_s_p10']:.1f}x | {g['step_s_median']/i['step_s_median']:.1f}x |\n"
+    c = CSW[k]
+    out += (f"| {lab} | {c['n_params']/1e6:.1f}M | {c['peak_allocated_gib']:.1f} | {_med(c['step_ms']):.0f} | {c['n_params']/i['n_params']:.2f}x | "
+            f"{c['peak_allocated_gib']/i['peak_allocated_gib']:.2f}x | {_med(c['step_ms'])/_med(i['step_ms']):.2f}x |\n")
 print(out)
-print(": Training cost at the reporting protocol on the DrivAerML Surface task: 435 cars, 200,000 sampled cells per case, 500 epochs, bfloat16 autocast, one case per "
-      "step on one GB300, both models as the recipe trains them (`compile=false`, ISLA on the eager geometry region with the recompute on). Memory is the peak of the logged "
-      "per-step values; the GPU-floor step is the tenth percentile of the logged steps (the network alone) and the median is the wall clock a "
-      "user waits, which the input pipeline sets at these sizes. How to read this: the table states cost, not accuracy (the standing of these lanes is in @sec-surface); "
-      "the ratio row is GeoTransolver ÷ ISLA; it does not show Transolver, whose 200,000-cell cost is not logged, nor the compiled or fused-kernel "
-      "paths, which compute the same function faster. Every scored lane of the cost grid is in @tbl-equal-budget. "
-      "Data: results/isocost_reduction_2026-09-20.json. {#tbl-isla-cost}")
+print(": Training cost at the reporting protocol on the DrivAerML Surface task: one case of 200,000 sampled cells per step, bfloat16 autocast, "
+      "one GB300, forward plus backward, each architecture as the recipe trains it (ISLA on the fused geometry kernel, GeoTransolver compiled). Memory "
+      "is the peak allocated by the step; the step is the median over the timed steps. How to read this: the table states cost, not accuracy (the "
+      "standing of these configurations is in @sec-surface); the ratio columns are each architecture ÷ ISLA, above one meaning the architecture "
+      "costs more. It does not show Transolver, whose row is in @tbl-cost-200k, nor the eager geometry region, which computes the same function "
+      "at about three times the memory (@sec-cost-sweep). "
+      "Data: results/cost_sweep_ref_gb300_bf16_2026-09-22.json. {#tbl-isla-cost}")
 ```
 
 Two practical consequences:
 
 - **Leave `geo_kernel` at its default (`null`).** On CUDA with one to three
-  global directions the model selects the fused kernel at the first forward pass and
-  logs the choice; off CUDA, with rank-2 per-token inputs, or with more than
-  three vectors in all, it falls
-  back to the eager recompute region. Force `eager` only to reproduce the
-  exact arithmetic path of a checkpoint trained on the eager region.
+  global directions, the model selects the fused kernel at the first
+  forward pass and logs the choice. Off CUDA, with rank-2 per-token inputs,
+  or with more than three vectors in all, it falls back to the eager
+  recompute region. Force `eager` only to reproduce the exact arithmetic
+  path of a checkpoint trained on the eager region.
 - **On the eager path, leave `geo_checkpoint: true` unless you are short
   of time and long on memory.** It is bitwise identical in outputs and
-  gradients; under the fused kernel the recompute is built in and the flag
+  gradients. Under the fused kernel the recompute is built in and the flag
   has no effect.
 
 ## Contracts you can check on your own data {#sec-using-contracts}
@@ -379,15 +386,15 @@ Two practical consequences:
 **Each contract is a one-line test on a loaded checkpoint, and a residual
 far above float32 rounding points at the inputs, not the model.** The
 contracts are exact properties of the code (@sec-isla-contracts), and each
-is cheap to verify on a loaded checkpoint: rotate and translate the inputs
-by a random rigid motion and compare the scalars (unchanged) and the
-vectors (rotated); scale the points by $k$ and the measure weights by $k^2$
-(unchanged); scale the measure weights alone (unchanged). In float32 the
-residuals on the trained checkpoints are at the level of float32 roundoff;
-in bf16 autocast they are several percent, mostly rounding
-(@sec-isla-contracts). A residual far above these on your own data means
-the inputs, not the model: normals with inconsistent orientation, weights
-that do not sum to the boundary's measure, or positions that were already
+is cheap to test on a loaded checkpoint. Rotate and translate the inputs by
+a random rigid motion, then compare the scalars (unchanged) and the vectors
+(rotated). Scale the points by $k$ and the measure weights by $k^2$
+(unchanged). Scale the measure weights alone (unchanged). In float32 the
+residuals on the trained checkpoints are at the level of float32 roundoff.
+In bf16 autocast they are several percent, mostly rounding
+(@sec-isla-contracts). A residual far above these on your own data points
+at the inputs, not the model: normals with inconsistent orientation,
+weights that do not sum to the boundary's measure, or positions that were
 centered or scaled by something sample-dependent before the model saw them.
-(The model normalizes the normals and the global vectors itself, so their
-magnitudes cannot cause a residual.)
+The model normalizes the normals and the global vectors itself, so their
+magnitudes cannot cause a residual.

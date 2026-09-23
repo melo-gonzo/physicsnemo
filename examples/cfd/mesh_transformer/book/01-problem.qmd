@@ -4,11 +4,11 @@
 discretized boundary and a few global conditions to the steady field that
 boundary induces, under one recipe, with one metric.** This chapter defines
 the mapping and its general interface on an example whose exact solution we
-know, names the directions in which a learned operator is asked to
-generalize, and defines the metric and the instrument it is read on. The
-datasets, their splits and the comparison protocol are in @sec-baselines. A
-reader who knows PDEs and transformers but has never seen this program
-should be able to read any later table after this chapter and that one.
+know. It names the directions in which a learned operator must generalize.
+It defines the metric and the instrument the metric is read on. The
+datasets, their splits and the comparison protocol are in @sec-baselines.
+After this chapter and that one, a reader who knows PDEs and transformers
+but has never seen this program can read any later table.
 
 ```{python}
 #| label: setup-problem
@@ -32,14 +32,14 @@ has three parts.
 - **Boundary cells.** A closed boundary surface (in two dimensions, a closed
   curve) given as a mesh of cells, each carrying its position $x_i$, its
   outward unit normal $n_i$ and its measure $w_i$ (area in three dimensions,
-  length in two). A cell may also carry **per-cell boundary scalars**, the
+  length in two). A cell can also carry **per-cell boundary scalars**, the
   data its boundary condition prescribes (a wall temperature, a prescribed
-  flux); this channel is optional and none of the benchmark datasets uses it.
+  flux). This channel is optional, and none of the benchmark datasets uses
+  it.
 - **$K$ global vector inputs.** Directions that belong to the problem rather
   than to any cell: a gravity or body-force direction, an applied field, the
-  far-field flow direction. Each enters as a unit vector $\hat g_k$;
-  directions are unit vectors and magnitudes are scalars, so a magnitude
-  that matters is passed as one of the scalars below.
+  far-field flow direction. Each enters as a unit vector $\hat g_k$. A
+  magnitude that matters is passed as one of the scalars below.
 - **$S$ global scalar inputs.** The parameters of the PDE and of its
   far-field data: a diffusivity, a Young's modulus, a Reynolds number, a
   far-field speed.
@@ -47,23 +47,23 @@ has three parts.
 The output is the steady field this data induces: pressure and wall shear
 on the boundary itself, and pressure, velocity or other fields at arbitrary
 **interior** points. Throughout the book *interior* means the domain the
-boundary bounds; for a body in a stream, the fluid outside the body.
-Interior query points carry no data; they are bare coordinates at which the
-field is requested. There is no volume mesh, no initial state, and nothing
-to advance in time.
+boundary bounds. For a body in a stream, that is the fluid outside the
+body. Interior query points carry no data. They are bare coordinates at
+which the field is requested. There is no volume mesh, no initial state,
+and nothing to advance in time.
 
-**External aerodynamics is the benchmark instance of this interface**: one
-closed body in a uniform far field, exactly one global direction ($K = 1$,
-the far-field direction), and either no global scalar ($S = 0$, the car and
-wing datasets, where every case shares one far-field speed) or one ($S = 1$,
-the airfoil dataset, where the far-field speed varies from case to case).
-The datasets are introduced in @sec-datasets. Nothing in the architectures
-compared here is specific to that instance; the mechanism chapters speak of
-"along a global direction", and the reader should hear gravity or an applied
-field as readily as a stream.
+**External aerodynamics is the benchmark instance of this interface.** It
+has one closed body in a uniform far field and exactly one global direction
+($K = 1$, the far-field direction). The car and wing datasets have no global
+scalar ($S = 0$), because every case shares one far-field speed. The airfoil
+dataset has one ($S = 1$), because the far-field speed varies from case to
+case. The datasets are introduced in @sec-datasets. Nothing in the
+architectures compared here is specific to that instance. The mechanism
+chapters speak of "along a global direction", and gravity or an applied
+field fits that phrase as well as a stream does.
 
 @fig-problem-schematic draws the mapping on the simplest member of the
-class, ideal flow around a lifting Joukowski airfoil, which has a
+class, ideal flow around a lifting Joukowski airfoil. That flow has a
 closed-form solution and is the running example of this book.
 
 ```{python}
@@ -129,9 +129,9 @@ everywhere in the domain. For such problems the boundary data and the
 global conditions determine the whole field, so a surrogate that consumes
 only the boundary throws nothing away: the boundary *is* the problem. The
 industrial targets are time-averaged turbulent flows around vehicles,
-wings and airfoils; their governing equations are not given to the model
-and are not even perfectly knowable, since the turbulence closure is an
-empirical fit, so every claim about an architecture is a measurement
+wings and airfoils. Their governing equations are not given to the model.
+They are not even perfectly knowable, because the turbulence closure is an
+empirical fit. Every claim about an architecture is therefore a measurement
 against CFD labels, never against a closed form.
 
 ::: {.callout-note collapse="true" title="What potential theory says a correct boundary-to-field map must respect"}
@@ -145,7 +145,7 @@ $$ {#eq-green}
 with $G$ the free-space fundamental solution, $n_y$ the outward normal at
 the boundary point $y$ and $dS_y$ the boundary measure. The flows of
 interest are separated and turbulent, far from harmonic, so the identity is
-not a model; but it says what any correct map has to respect, and three
+not a model. But it says what any correct map must respect, and three
 consequences shape the architectures compared in this book.
 
 1. **All-to-all coupling.** The density of the representation depends on
@@ -160,22 +160,23 @@ consequences shape the architectures compared in this book.
 3. **Exactly the shared symmetry, no more.** The map's symmetry is the
    symmetry shared by the equations, their coefficients, the boundary data
    and the nondimensional parameters. Homogeneity and constant coefficients
-   buy translation invariance only; anisotropic diffusion is not isotropic,
+   buy translation invariance only. Anisotropic diffusion is not isotropic,
    and the screened Laplace equation $\Delta u - \kappa^2 u = 0$ is not scale
-   invariant. For incompressible Navier–Stokes at fixed Reynolds number with
-   a free-space far field and one distinguished global direction, the
-   operator commutes with rigid motions, reflections and, once lengths are
-   measured in a unit carried with the geometry, with positive scalings; the
-   map may then depend on the geometry only through the joint invariants of
-   $\{x - y,\ n_y,\ \hat g_1\}$, magnitudes and pairwise angles, and
-   dimensionless scalars may modulate everything freely because a scalar
-   breaks no symmetry. A ground plane, a second inlet or a Reynolds number
-   that varies with size removes the corresponding symmetry, which is why
-   each is a property of a dataset rather than of the equations.
+   invariant. Consider incompressible Navier–Stokes at fixed Reynolds number
+   with a free-space far field and one distinguished global direction. That
+   operator commutes with rigid motions and reflections. Once lengths are
+   measured in a unit carried with the geometry, it also commutes with
+   positive scalings. The map can then depend on the geometry only through
+   the joint invariants of $\{x - y,\ n_y,\ \hat g_1\}$, which are
+   magnitudes and pairwise angles. Dimensionless scalars can modulate
+   everything freely, because a scalar breaks no symmetry. A ground plane, a
+   second inlet or a Reynolds number that varies with size removes the
+   corresponding symmetry. Each is therefore a property of a dataset rather
+   than of the equations.
 
 Which of these an architecture enforces by construction and which it learns
 from data is the subject of @sec-isla (ISLA) and @sec-baselines
-(GeoTransolver and Transolver); none of the three requires knowing the PDE.
+(GeoTransolver and Transolver). None of the three requires knowing the PDE.
 :::
 
 ### What varies within a dataset {#sec-parametric}
@@ -184,18 +185,19 @@ from data is the subject of @sec-isla (ISLA) and @sec-baselines
 which parts of the interface vary across the family.** When only the
 geometry varies, the global inputs are constants and the operator is
 learned as a function of shape alone. When a global direction varies, the
-model must represent how the field depends on it; when a global scalar
-varies, how the field depends on a parameter of the physics. The three
-benchmark datasets (@sec-datasets) span the three cases: on DrivAerML only
-the geometry varies, every car sitting in the same far field; on
-HiLiftAeroML each wing geometry is simulated across a range of far-field
-directions, from attached flow through stall, so $\hat g_1$ changes from
-case to case; on AirfRANS the direction and the far-field speed both vary,
-the speed entering as the one global scalar. Coordinates enter only in
-nondimensional form, scaled by the dataset's reference length, so learned
-weights never see units, and no architecture is told how the field depends
-on any global input. Because HiLiftAeroML is a full geometry-by-direction
-grid, its axes of variation can each be held out separately (@sec-splits).
+model must represent how the field depends on it. When a global scalar
+varies, it must represent how the field depends on a parameter of the
+physics. The three benchmark datasets (@sec-datasets) span the three cases.
+On DrivAerML only the geometry varies, and every car sits in the same far
+field. On HiLiftAeroML each wing geometry is simulated across a range of
+far-field directions, from attached flow through stall, so $\hat g_1$
+changes from case to case. On AirfRANS the direction and the far-field
+speed both vary, and the speed enters as the one global scalar. Coordinates
+enter only in nondimensional form, scaled by the dataset's reference
+length, so learned weights never see units. No architecture is told how the
+field depends on any global input. Because HiLiftAeroML is a full
+geometry-by-direction grid, its axes of variation can each be held out
+separately (@sec-splits).
 
 ### What generalization means here
 
@@ -216,14 +218,14 @@ one question per split, never two combined into one score:
   different from the training family (@sec-shift-suv).
 - **Pose**: the same cases presented in arbitrary rigid poses (@sec-pose).
   The physics does not depend on where the body sits in the laboratory, so
-  neither should the answer.
+  the answer must not either.
 - **Discretization**: the same cases presented under a different sampling
   draw at inference (@sec-sampling-laws), and, separately, a model trained
   under a different sampling law and scored on the original draw
   (@sec-training-law). The physics does not depend on how the surface was
-  sampled, so neither should the answer.
+  sampled, so the answer must not either.
 
-The last two are the invariances ISLA is built for; @sec-invariances
+The last two are the invariances ISLA is built for. @sec-invariances
 defines them and their instruments.
 
 ## How we measure {#sec-part-eval}
@@ -241,9 +243,9 @@ read in float32.** It scores error *per unit surface area*, so a large,
 smooth cell of an open surface counts for more than the many small cells
 packed into a slot or a corner. A per-point root-mean-square over the same
 samples weights every cell equally and depends on where the mesher put its
-cells; @tbl-metric-illustration shows the difference on the airfoil, where
-one prediction error scored under two samplings of the same surface gives
-the same area-weighted number and two different per-point numbers.
+cells. @tbl-metric-illustration shows the difference on the airfoil. One
+prediction error is scored under two samplings of the same surface. It
+gives the same area-weighted number and two different per-point numbers.
 
 ```{python}
 #| label: tbl-metric-illustration
@@ -282,22 +284,22 @@ $$
 $$ {#eq-rel-l2}
 
 where $\lVert\cdot\rVert$ is the vector norm for vector fields (velocity,
-wall shear) and the absolute value for scalars; in the interior the weights
+wall shear) and the absolute value for scalars. In the interior the weights
 are cell volumes. The fields enter as the training pipeline presents them,
-each shifted and scaled by dataset statistics, so the denominator is the
-norm of the standardized label, and absolute values are comparable only
+each shifted and scaled by dataset statistics. The denominator is therefore
+the norm of the standardized label, and absolute values are comparable only
 within one dataset and one pipeline. The quantity that carries across is
 the *ratio* between two models scored on the same cases. **Every
 cross-architecture ratio in the book is the named baseline's error divided
-by ISLA's error on the same cases, so a ratio above one favors ISLA**;
-this convention is stated here once and not restated per table.
+by ISLA's error on the same cases, so a ratio above one favors ISLA.**
+This convention is stated here once and not restated per table.
 
 **The reporting instrument is float32 inference on the final-epoch
-checkpoint.** Training runs in bfloat16 (@sec-protocol); scoring in bfloat16
-adds an architecture-dependent offset of several percent to the mean error,
-larger for GeoTransolver and Transolver than for ISLA, so a bfloat16
-comparison would flatter ISLA. No bfloat16 number appears in the book
-without being labeled as such (@sec-nb-fp32-instrument).
+checkpoint.** Training runs in bfloat16 (@sec-protocol). Scoring in
+bfloat16 adds an architecture-dependent offset of several percent to the
+mean error. The offset is larger for GeoTransolver and Transolver than for
+ISLA, so a bfloat16 comparison flatters ISLA. Every bfloat16 number in the
+book is labeled as such (@sec-nb-fp32-instrument).
 
 ```{python}
 #| label: para-metric-calibration
@@ -308,8 +310,8 @@ print(f"**What a relative L2 value means, calibrated on HiLiftAeroML.** On the f
       f"($p - p_\\infty$, so the error is normalized by the pressure variation over the surface rather than by its absolute level; "
       f"geometric mean over the 180 shared validation cases; not the recipe metric), predicting the far-field pressure everywhere "
       f"scores exactly {ref['const_p_inf_rel_l2_gmean']:.2f} by construction, the dataset-mean pressure {ref['const_dataset_mean_rel_l2_gmean']:.2f}, "
-      f"and each case's own mean pressure {ref['const_case_mean_rel_l2_gmean']:.2f}. A model has learned something about a case only when it "
-      f"beats the last of these; the trained architectures on the recipe metric are in @sec-surface. "
+      f"and each case's own mean pressure {ref['const_case_mean_rel_l2_gmean']:.2f}. A model knows something about a case only when it "
+      f"beats the last of these. The trained architectures on the recipe metric are in @sec-surface. "
       f"Data: results/hilift_reference_predictors_35_2026-09-06.json (constants only).")
 ```
 
@@ -326,30 +328,30 @@ the sampling error common to prediction and label.
 **Paired per-case statistics.** Because every architecture is scored on the
 same 180 HiLiftAeroML cases (or 48 DrivAerML cars), each case yields one
 paired comparison of the architectures' seed-mean errors. Three statistics
-are reported: the number of cases on which ISLA has the lower seed-mean
-error, with the exact two-sided sign test; the stricter count of cases on
-which ISLA wins on every seed; and the median and 10th to 90th percentile
-of the per-case error ratio.
+are reported. The first is the number of cases on which ISLA has the lower
+seed-mean error, with the exact two-sided sign test. The second is the
+stricter count of cases on which ISLA wins on every seed. The third is the
+median and the 10th to 90th percentile of the per-case error ratio.
 
 **Seed disagreement.** With two independently seeded models of one
 architecture, the per-case relative L2 of one seed's prediction against the
-other's is the cheapest uncertainty estimate available; its Spearman rank
+other's is the cheapest uncertainty estimate available. Its Spearman rank
 correlation with the per-case error against the truth measures whether the
 model knows where it is wrong (@sec-data-efficiency).
 
 **Regime-extrapolation ratio.** On the sealed angle-of-attack and stall
 splits the readout is $d \equiv \varepsilon_{\text{test}} /
 \varepsilon_{\text{val}}$, the out-of-regime error divided by the same
-model's in-regime validation error, always reported beside the absolute
-test error, since a smaller $d$ can also come from a higher in-regime floor
-(@sec-limits-regime).
+model's in-regime validation error. It is always reported beside the
+absolute test error, because a smaller $d$ can also come from a higher
+in-regime floor (@sec-limits-regime).
 
 **The far-field-relative scale** ($p - p_\infty$) of the calibration
 paragraph above and of the seed-disagreement analysis is $\lVert\hat p -
 p\rVert / \lVert p - p_\infty\rVert$ with the geometric mean over cases.
-Numbers on the two scales are not interchangeable; per-case ratios between
-two models coincide on both, because the numerators are the same, and
-case-averaged values do not.
+Numbers on the two scales are not interchangeable. Per-case ratios between
+two models coincide on both, because the numerators are the same.
+Case-averaged values do not.
 :::
 
 ### Contracts are exact tests, not metrics {#sec-fidelity-columns}
@@ -357,12 +359,12 @@ case-averaged values do not.
 **A structural property an architecture claims is asserted to roundoff in
 float64 as a unit test, never averaged into a score.** A contract is a
 statement such as "a rigidly moved input produces the rigidly moved
-output": it either holds to roundoff on random weights and a random point
-cloud or it is not claimed, so it is a property of the code rather than of
-any trained checkpoint. That is what makes it worth more than a small
-measured degradation: it holds for every input, including the ones no
+output". It either holds to roundoff on random weights and a random point
+cloud or it is not claimed. It is therefore a property of the code rather
+than of any trained checkpoint. That is what makes it worth more than a
+small measured degradation: it holds for every input, including the ones no
 validation set contains. What the float64 test certifies is the algebraic
-construction; the residual on the trained GPU path is a separate measured
+construction. The residual on the trained GPU path is a separate measured
 quantity, small in float32 and several percent in bfloat16
 (@sec-isla-contracts). The contracts ISLA holds, and the tests that
 verify each, are tabulated in @sec-isla-contracts.

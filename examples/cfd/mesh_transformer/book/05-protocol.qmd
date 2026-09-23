@@ -3,14 +3,15 @@
 **ISLA is measured against the two public slice-attention transformers
 with the strongest record on industrial aerodynamics, GeoTransolver and
 Transolver, on three datasets, under one protocol that fixes everything
-except the architecture.** The baselines are strong, not straw:
-GeoTransolver has at least as many parameters as ISLA and receives raw
-coordinates that ISLA never sees; both run at their own best learning rate;
-neither is ever modified. This chapter says what each baseline computes and
-sees, states one rule about how a problem's global conditions enter any
-model, lists the protocol as nine rules, introduces the datasets (their
-details are in @sec-datasets-detail), and closes with the protocol table
-every cross-architecture number in the book is produced under.
+except the architecture.** The baselines are strong, not straw.
+GeoTransolver runs at its recipe width and, where named, at the width that
+matches ISLA's parameter count, and it receives raw coordinates that ISLA
+never sees. Both run at their own best learning rate,
+and neither is ever modified. This chapter says what each baseline computes
+and sees. It states one rule about how a problem's global conditions enter
+any model, lists the protocol as nine rules, and introduces the datasets
+(their details are in @sec-datasets-detail). It closes with the protocol
+table under which every cross-architecture number in the book is produced.
 
 ```{python}
 #| label: setup-baselines
@@ -61,11 +62,11 @@ what they are allowed to see: raw coordinates in a frame, and the problem's
 global vector as a raw feature.** Transolver (Wu et al., ICML 2024, arXiv
 [2402.02366](https://arxiv.org/abs/2402.02366)) is a transformer for physics
 fields on unstructured point sets. Each layer assigns every point a softmax
-mixture over a fixed number of *slices*, pools point features into one token
-per slice, runs attention among the slice tokens, and scatters the result
-back through the same mixture: *physics attention*. GeoTransolver adds a
-geometry encoder and a global-context projector. @fig-family-diagram places
-ISLA beside them.
+mixture over a fixed number of *slices*. It pools point features into one
+token per slice, runs attention among the slice tokens, and scatters the
+result back through the same mixture. That is *physics attention*.
+GeoTransolver adds a geometry encoder and a global-context projector.
+@fig-family-diagram places ISLA beside them.
 
 ```{mermaid}
 %%| label: fig-family-diagram
@@ -103,26 +104,26 @@ flowchart LR
 
 **GeoTransolver** is the recipe's default surface model. Per surface point
 it receives the coordinates, centered on the case, and the unit normal as a
-six-channel feature; the far-field vector is a three-channel global feature.
+six-channel feature. The far-field vector is a three-channel global feature.
 Its *geometry encoder* takes the coordinates a second time through a
-dedicated embedding path that conditions the slice attention; the
+dedicated embedding path that conditions the slice attention. The
 ball-query local-feature path is off throughout this program, because it is
-off in the recipe's shipped configuration; the GeoTransolver compared here
+off in the recipe's shipped configuration. The GeoTransolver compared here
 is therefore the one a user gets by running the recipe unmodified, not the
 strongest configuration the class can express. It is not rotation- or
-translation-equivariant: rotate the car and it sees a different input
+translation-equivariant. Rotate the car and it sees a different input
 (@sec-pose).
 
 ::: {#sec-transolver}
 **Transolver** is the same family without the geometry encoder, the control
 that isolates what the encoder contributes. Per point it receives coordinates
-and normal; the far-field vector is broadcast to every point.
+and normal. The far-field vector is broadcast to every point.
 :::
 
 **ISLA** receives position, unit normal and measure weight per point and
 each global direction as a unit vector, consumed only through invariants
 and equivariant anchors (@sec-isla). @tbl-architectures gives the three
-configurations side by side; the parameter counts and training footprints
+configurations side by side. The parameter counts and training footprints
 are in @tbl-isla-cost. On the interior tasks the baseline is
 GeoTransolver-volume, the recipe's volume configuration of the same class,
 described with those tasks in @sec-interior.
@@ -146,26 +147,26 @@ states what each model is handed, not how accurate it is or what it costs
 
 **A problem's global conditions enter every architecture in one form:
 directions as unit vectors, magnitudes as scalars.** The rule is a property
-of the problem, not of any dataset's units. A direction carries no scale;
-whatever scale the pipeline attaches to it (the units the solver ran in) is
-an accident of the dataset that a model would have to learn to ignore. A
+of the problem, not of any dataset's units. A direction carries no scale.
+Whatever scale the pipeline attaches to it (the units the solver ran in) is
+an accident of the dataset, and a model would have to learn to ignore it. A
 magnitude that matters physically, a far-field speed or a Reynolds number,
 is a separate scalar with its own place in the input. ISLA enforces the
 rule by construction: it normalizes its global vectors and takes magnitudes
 only through rank-0 `global_inputs` (@sec-isla-inputs). GeoTransolver and
 Transolver consume whatever vector the pipeline hands them, so for them the
-rule is a protocol requirement, and every dataset pipeline of the recipe
+rule is a protocol requirement. Every dataset pipeline of the recipe
 writes the far-field direction as a unit vector.
 
 The motivating control is visible before training. GeoTransolver's
 global-context projector applies linear maps and a slice softmax to the
 vector directly, so its conditioning depends on the magnitude. At unit
 magnitude a head of the untrained projector spreads over most of the 256
-slices; at the magnitude of the HiLiftAeroML solver's velocity (in inches
+slices. At the magnitude of the HiLiftAeroML solver's velocity (in inches
 per second) it routes almost all of its weight to one (@tbl-projector).
 Transolver concatenates the raw vector into every point's features, with
 the same hazard in a different place. Training can in principle rescale
-either path, so these numbers are the initialization signature; the trained
+either path, so these numbers are the initialization signature. The trained
 measurement, in the collapsed note below, is what the rule rests on.
 
 ```{python}
@@ -191,7 +192,7 @@ both arms, GeoTransolver and Transolver fed the unit direction are each more
 accurate than their physical-velocity twin on every one of the 180
 validation cases, by a median factor above three (@tbl-unit-vs-physical).
 The table is a control on an input scale, measured at the exploration
-budget of 10,000 cells; it makes no accuracy claim about any architecture
+budget of 10,000 cells. It makes no accuracy claim about any architecture
 and appears nowhere else in the book.
 
 ```{python}
@@ -222,22 +223,23 @@ print(f": The input-scale control at 35 HiLiftAeroML training cases: area-weight
 ```
 :::
 
-Three consequences follow. Every architecture receives each global
+Three consequences follow. First, every architecture receives each global
 direction as a unit vector and each magnitude as a scalar, and a comparison
 against a baseline fed a raw vector is reported only as a measurement of the
-input scale. The unit-direction baseline is the reference baseline on every
-rung. And the input scale is fixed by rule rather than by control:
-learning-rate, training-length and seed controls vary the optimizer and
-cannot detect an input-scale defect. On DrivAerML, whose solver velocity is
-of order tens of metres per second, and on the DrivAerML Volume task, the
-trained difference between the two inputs is inside seed spread
-(@sec-nb-udrv-int-verdict); the rule applies on every dataset regardless,
-because a rule that depends on the dataset's units is not a rule.
+input scale. Second, the unit-direction baseline is the reference baseline
+on every rung. Third, the input scale is fixed by rule rather than by
+control, because learning-rate, training-length and seed controls vary the
+optimizer and cannot detect an input-scale defect. On the DrivAerML Surface
+task and the DrivAerML Volume task, whose solver velocity is of order tens
+of meters per second, the trained difference between the two inputs is
+inside seed spread (@sec-nb-udrv-int-verdict). The rule applies on every
+dataset regardless, because a rule that depends on the dataset's units is
+not a rule.
 
 ## The fair-comparison protocol {#sec-fair-comparison}
 
 **Every cross-architecture number in this book is produced under the
-following rules; a comparison that violates one is not reported.** The
+following rules. A comparison that violates one is not reported.** The
 datasets are in @sec-datasets and their splits in @sec-splits, the metric
 in @sec-metrics and the training recipe in @sec-protocol.
 
@@ -248,15 +250,15 @@ in @sec-metrics and the training recipe in @sec-protocol.
    disguised as an architecture difference. A number at any other count
    carries its label.
 2. **Matched epochs: 500 for every arm.** Doubling GeoTransolver's budget at
-   the small rungs does not lower its error (@sec-data-efficiency), and at
-   435 cars and 200,000 cells 1,000 epochs move neither ISLA nor
-   GeoTransolver outside seed spread (@sec-nb-isocost-verdict), so 500
+   the small rungs does not lower its error (@sec-data-efficiency). At
+   435 cars and 200,000 cells, 1,000 epochs move neither ISLA nor
+   GeoTransolver outside seed spread (@sec-nb-isocost-verdict). So 500
    under-trains neither.
 3. **Each architecture at its own best learning rate, chosen by
    validation.** ISLA runs at 1e-3 at width 192 and at the width rule's
    rate above it (@sec-using-lr). GeoTransolver receives a two-rate control,
-   1e-3 and 3e-3, on every rung and is reported at the better, a search
-   that favors the baseline: at the reporting protocol its better rate is
+   1e-3 and 3e-3, on every rung and is reported at the better rate. The
+   search favors the baseline. At the reporting protocol its better rate is
    3e-3 on every DrivAerML rung and on the wings (@sec-lr-protocol).
 4. **Every architecture receives each global direction as a unit vector and
    each magnitude as a scalar** (@sec-unit-direction-rule).
@@ -277,18 +279,37 @@ in @sec-metrics and the training recipe in @sec-protocol.
 **Every number in a family of comparisons is read from one fixed
 instrument, and a control that changes the instrument is reported as a
 control.** The *instrument* for a dataset is its fixed validation set and
-evaluation configuration: on the DrivAerML Surface task, surface pressure
-and wall shear on 48 held-out cars at 200,000 sampled cells, scored in
-float32; on the DrivAerML Volume task, pressure, velocity and turbulent
-viscosity at the interior queries of the same 48 cars; on HiLiftAeroML,
-pressure, velocity and wall shear on 180 held-out cases shared by every
-training split, at the same count and precision; on AirfRANS, pressure,
-velocity and turbulent viscosity at the interior queries of its 200 test
-airfoils. An instrument is never widened after a result is read from it; a
-control that changes it (another cell count, a rotated pose, a biased
-sampling density) is reported as such and never mixed into an in-family
-number. Its limits bind where stated: 48 cars is a small validation set and
-two seeds a thin noise estimate (@sec-limits).
+evaluation configuration. On the DrivAerML Surface task, it is surface
+pressure and wall shear on 48 held-out cars at 200,000 sampled cells,
+scored in float32. On the DrivAerML Volume task, it is pressure, velocity
+and turbulent viscosity at the interior queries of the same 48 cars. On
+HiLiftAeroML, it is pressure, velocity and wall shear on 180 held-out cases
+shared by every training split, at the same count and precision. On
+AirfRANS, it is pressure, velocity and turbulent viscosity at the interior
+queries of its 200 test airfoils. An instrument is never widened after a
+result is read from it. A control that changes it (another cell count, a
+rotated pose, a biased sampling density) is reported as such and never
+mixed into an in-family number. Its limits bind where stated: 48 cars is a
+small validation set and two seeds a thin noise estimate (@sec-limits).
+
+### Configuration of the evidence lanes {#sec-evidence-lane-config}
+
+**Every standing in the book is the reference configuration's
+(@sec-using-config: 384 wide, 12 layers, cosine routing, the fused
+geometry kernel, 5e-4) wherever its lane has been scored. The rows that
+still carry the earlier protocol's ISLA (192 wide, linear routing, 1e-3)
+are labeled "earlier protocol" in their table or caption, and the re-run
+of @sec-program-status re-measures them.** This paragraph is the one place
+the book explains the label. Individual tables and captions carry it and
+do not narrate the difference. The standings under the reference
+configuration are the DrivAerML Surface ladder and its 435-car row, the
+35-wing rung of HiLiftAeroML, the DrivAerML Volume and AirfRANS interior
+tasks, the sampling-consistency and territory probes, and every solid and
+fixed-mesh dataset. The earlier protocol's lanes remain on the 210-wing,
+geometry and fixed-angle rungs of HiLiftAeroML, the pose and training-law
+studies, the AirfRANS extrapolation splits and the capacity, scaling and
+cost-frontier studies at 100,000 cells (which are studies of deviations by
+design).
 
 ## Resource matching {#sec-resource-matching}
 
@@ -296,45 +317,26 @@ two seeds a thin noise estimate (@sec-limits).
 count, the cells per case and the training memory, or says in the same
 sentence where they differ and whether the difference could buy accuracy.**
 The 435-car row of the DrivAerML Surface task is stated twice for this
-reason, against GeoTransolver at its recipe width (which ISLA leads by 7%
+reason: against GeoTransolver at its recipe width (which ISLA leads by 7%
 in 0.7x the memory at 1.25x the parameters) and against the
 parameter-matched GeoTransolver-512 (parity at 1.9x ISLA's memory), both
-at the same cells per case; the footprints of both sides are read from
+at the same cells per case. The footprints of both sides are read from
 the reference cost sweep in @sec-cost-sweep. Memory is not a controlled
-variable in any comparison and no accuracy result depends on it: the
+variable in any comparison and no accuracy result depends on it. The
 checkpoints in this book are trained by implementations of the same
 function that differ only in footprint. Where the two architectures are
 compared at unequal parameters or memory, the section that does so says
 which side has more and whether it bought accuracy (@sec-equal-budget).
-
-### Configuration of the evidence lanes {#sec-evidence-lane-config}
-
-**Every standing in the book is the reference configuration's
-(@sec-using-config: 384 wide, 12 layers, cosine routing, the fused
-geometry kernel, 5e-4) wherever its lane has been scored; the rows that
-still carry the earlier protocol's ISLA (192 wide, linear routing, 1e-3)
-are labeled "earlier protocol" in their table or caption and are
-re-measured by the re-run of @sec-program-status.** This paragraph is the
-one place the book explains the label; individual tables and captions
-carry it and do not narrate the difference. The standings under the
-reference configuration are the DrivAerML Surface ladder and its 435-car
-row, the 35-wing rung of HiLiftAeroML, the DrivAerML Volume and AirfRANS
-interior tasks, the sampling-consistency and territory probes, and every
-solid and fixed-mesh dataset; the earlier protocol's lanes remain on the
-210-wing, geometry and fixed-angle rungs of HiLiftAeroML, the pose and
-training-law studies, the AirfRANS extrapolation splits and the
-capacity, scaling and cost-frontier studies at 100,000 cells (which are
-studies of deviations by design).
 
 ## Learning rate {#sec-lr-protocol}
 
 **Each architecture trains at its own best learning rate, and the rate is
 part of the protocol, not a tuning afterthought.** GeoTransolver's best rate
 at the reporting protocol is 3e-3 on every DrivAerML rung and on the wings,
-found by the two-rate control of rule 3; Transolver runs at 3e-3; ISLA runs
-at 1e-3 at width 192 and at the width rule's starting rate above it
-(@sec-using-lr). Why ISLA's rate does not simply follow the baselines' is a
-property of the routing form and is explained once, in
+found by the two-rate control of rule 3. Transolver runs at 3e-3. ISLA runs
+at 5e-4 in the reference configuration, and the earlier protocol's 192-wide
+lanes ran at 1e-3 (@sec-using-lr). Why ISLA's rate does not follow the
+baselines' is a property of the routing form, explained once in
 @sec-isla-routing-forms.
 
 ## Datasets {#sec-datasets}
@@ -342,13 +344,13 @@ property of the routing form and is explained once, in
 **Three datasets are training and evaluation sources, a fourth is a
 zero-shot target, and four more, outside external aerodynamics, exercise
 the parts of the interface the aerodynamic sets leave idle.** All supply
-the same input schema, boundary cells with positions, outward normals and
-measures plus the global conditions, so one model implementation runs on
-all of them. Every aerodynamic one is an instance of external aerodynamics
-with $K = 1$ global direction, the far-field flow direction, and
-$S \in \{0, 1\}$ global scalars. This section says, per dataset, what the
-problem is, what varies, what is predicted and what the model receives, at
-the depth the results need; provenance, conversion, field names, sign
+the same input schema: boundary cells with positions, outward normals and
+measures, plus the global conditions. One model implementation therefore
+runs on all of them. Every aerodynamic one is an instance of external
+aerodynamics with $K = 1$ global direction, the far-field flow direction,
+and $S \in \{0, 1\}$ global scalars. This section says, per dataset, what
+the problem is, what varies, what is predicted and what the model receives,
+at the depth the results need. Provenance, conversion, field names, sign
 conventions, normalization, splits and pitfalls are in
 @sec-datasets-detail.
 
@@ -364,8 +366,8 @@ conventions, normalization, splits and pitfalls are in
 ### DrivAerML: the Surface task and the Volume task {#sec-benchmarks}
 
 **DrivAerML carries two tasks, named separately throughout the book because
-they measure different things.** Geometry is the only variable, there is
-one far-field condition, and every model is fed the vehicle surface alone:
+they measure different things.** Geometry is the only variable, and there
+is one far-field condition. Every model is fed the vehicle surface alone,
 the information diet of every published baseline on the dataset. The recipe
 assigns 435 variants to training and 48 to validation, one validation set
 shared by both tasks and every experiment. The reporting protocol samples
@@ -431,10 +433,10 @@ axis of variation on its own.** Every geometry appears at every angle, and
 the dataset supports splits along three independent directions: how many
 cases, which angles, and which geometries (@sec-splits). The model receives
 the surface cells and the far-field direction $\hat g_1$, which carries the
-angle of attack, and predicts pressure, temperature, density, velocity and
+angle of attack. It predicts pressure, temperature, density, velocity and
 wall shear at those cells, at the same 200,000 cells per case as on the
 cars. It is one of the two datasets on which the data-efficiency ladder is
-measured (@sec-data-efficiency); the other is the DrivAerML Surface task.
+measured (@sec-data-efficiency). The other is the DrivAerML Surface task.
 @fig-problem-hilift shows one validation case (details: @sec-data-hilift).
 
 ```{python}
@@ -479,11 +481,11 @@ plt.show()
 regime, and the first instance in the book of a global scalar input.** Its
 full split trains on 800 airfoils and tests on 200. The boundary is the
 airfoil polyline, about a thousand segments with in-plane normals and
-segment lengths as the quadrature measure; the global inputs are the inlet
+segment lengths as the measure weights. The global inputs are the inlet
 direction as the one global vector and the inlet speed as the one global
-scalar; the interior queries, 100,000 per case, carry the signed distance to
+scalar. The interior queries, 100,000 per case, carry the signed distance to
 the airfoil, and the model predicts pressure, velocity and turbulent
-viscosity at them. The interior results are in @sec-interior-airfrans;
+viscosity at them. The interior results are in @sec-interior-airfrans.
 @fig-problem-airfrans shows one test case (details: @sec-data-airfrans).
 
 ```{python}
@@ -532,13 +534,13 @@ plt.show()
 
 ### SHIFT-SUV {#sec-shift-suv}
 
-**No main result trains on SHIFT-SUV; its fastback family is the zero-shot
+**No main result trains on SHIFT-SUV. Its fastback family is the zero-shot
 target.** The fastback family is held out from every model in the book and
 is the zero-shot target of the cross-family transfer measurements
-(@sec-scoreboard-200k); the estate family is a training source only where a
+(@sec-scoreboard-200k). The estate family is a training source only where a
 two-family model is compared. The model receives exactly what it receives
 on DrivAerML. The lower far-field speed is a covariate shift identical for
-every architecture, none of which receives the Reynolds number, and it is
+every architecture, since none receives the Reynolds number. It is
 reported alongside the geometry-family shift rather than corrected.
 @fig-problem-shift-suv shows one fastback case (details:
 @sec-data-shift-suv).
@@ -582,40 +584,41 @@ plt.show()
 **The architecture is written for any steady boundary-driven PDE, and
 external aerodynamics is its benchmark instance, not its scope.** The next
 benchmark instances are steady problems whose boundary conditions and loads
-vary per sample, which exercise the global vector and scalar inputs and the
-per-cell boundary scalars that the aerodynamic datasets leave at $K = 1$
+vary per sample. They exercise the global vector and scalar inputs and the
+per-cell boundary scalars, which the aerodynamic datasets leave at $K = 1$
 and $n_b = 0$. Each is drawn below on one sample, with its boundary
-conditions labeled where they act and one reference field beside them; the
+conditions labeled where they act and one reference field beside them. The
 model reads every mesh node as a query in all four:
 
 - **PLAID Tensile2d** (@fig-problem-tensile2d; details:
   @sec-data-tensile2d): two-dimensional elasto-viscoplastic tension of a
-  notched specimen; the top edge carries a pressure $P$ that varies per
+  notched specimen. The top edge carries a pressure $P$ that varies per
   sample, the bottom edge is fixed, and five material parameters vary too.
   The model receives the outer polyline with per-cell labels (loaded,
-  fixed, pinned) and the applied pressure as boundary scalars, $P$ and the
-  material parameters as six global scalars, and the laboratory frame as
-  two global vectors, because its targets are stress components in that
-  frame (@sec-isla-heads); it predicts the three stress components, the
-  cumulated plastic strain and the displacement.
+  fixed, pinned) and the applied pressure as boundary scalars. It receives
+  $P$ and the material parameters as six global scalars, and the laboratory
+  frame as two global vectors, because its targets are stress components in
+  that frame (@sec-isla-heads). It predicts the three stress components,
+  the cumulated plastic strain and the displacement.
 - **GINOT Bracket Lug** (@fig-problem-lug; details: @sec-data-lug): a
   three-dimensional elastoplastic lug clamped at one end and pressed on the
-  lower half of its hole; hole radius, length, thickness and pressure vary.
+  lower half of its hole. Hole radius, length, thickness and pressure vary.
   The model receives the surface triangles with labels (fixed, hole,
-  loaded) and the pressure as boundary scalars and the four design
-  parameters as global scalars; it predicts the von Mises stress. Published
+  loaded) and the pressure as boundary scalars, and the four design
+  parameters as global scalars. It predicts the von Mises stress. Published
   Transolver and GNOT numbers exist for it.
 - **OLBC** (@fig-problem-olbc-poisson, @fig-problem-olbc-elasticity;
-  details: @sec-data-olbc): two sets on fixed meshes whose boundary is
-  cut, per sample, into random segments carrying labeled Dirichlet, Neumann
-  or Robin conditions with random values: a Poisson problem
+  details: @sec-data-olbc): two sets on fixed meshes. Each sample cuts the
+  boundary into random segments carrying labeled Dirichlet, Neumann or
+  Robin conditions with random values. The first set is a Poisson problem
   $-\nabla^2 u = f$ on a square with a random source (the $K = 0$ case,
-  with the type and the value as per-cell boundary scalars) and
+  with the type and the value as per-cell boundary scalars). The second is
   plane-strain steel elasticity on a disc with two holes (per component a
   free segment, a prescribed displacement and two tractions; the laboratory
   frame as $K = 2$).
 
-None of these carries a number in this book; the open axis they represent
+Their standings are in @sec-interior-tensile2d, @sec-interior-lug,
+@sec-surface-deepjeb and @sec-interior-olbc; the open axis they represent
 is stated in @sec-limits-datasets, and the datasets scouted but not
 adopted, with the conversion in progress, are in @sec-data-scouted.
 
@@ -811,16 +814,16 @@ plt.show()
 manifest used unchanged or a fixed-seed permutation recorded in the
 manifest; the HiLiftAeroML split table, which holds out one question per
 split, and the other datasets' splits are in @sec-splits. Two facts bear on
-reading the results: DrivAerML has one validation set of 48 cars, shared by
+reading the results. DrivAerML has one validation set of 48 cars, shared by
 the Surface and Volume tasks and by every experiment, with a training set
-of 435 cars or a nested rung of 27, 54, 109 or 218 (@sec-data-efficiency);
-and the HiLiftAeroML test manifests overlap, so a test split is sealed per
+of 435 cars or a nested rung of 27, 54, 109 or 218 (@sec-data-efficiency).
+The HiLiftAeroML test manifests overlap, so a test split is sealed per
 checkpoint, not per program (@sec-limits-validation).
 
 ## Protocol {#sec-protocol}
 
-**One frozen recipe produces every cross-architecture number in the book;
-a comparison that departs from it says so in the same sentence.**
+**One frozen recipe produces every cross-architecture number in the book.
+A comparison that departs from it says so in the same sentence.**
 
 | item | setting |
 |---|---|
@@ -846,14 +849,14 @@ geometry encoder) run under the same recipe before the result is stated.
 ::: {.callout-warning collapse="true" title="What the validation set is used for"}
 The HiLiftAeroML and DrivAerML accuracy figures in this book are
 validation-set figures with no checkpoint selection behind them, and with
-this much adaptive reuse disclosed: the per-architecture learning rate is
-chosen on the full split by validation; Transolver's rate is chosen per
-small-data rung on it; the ablations that follow earlier readouts are
-designed after reading it; and the choice of which results to present is
-made with it in view. The HiLiftAeroML test splits are spent only on the
+this much adaptive reuse disclosed. The per-architecture learning rate is
+chosen on the full split by validation. Transolver's rate is chosen per
+small-data rung on it. The ablations that follow earlier readouts are
+designed after reading it. The choice of which results to present is made
+with it in view. The HiLiftAeroML test splits are spent only on the
 regime-extrapolation evaluations and one diagnostic run alongside them (a
-variant of ISLA given raw coordinates), and because those test sets cover
-every geometry (@sec-splits), the remaining test manifests are held out per
+variant of ISLA given raw coordinates). Because those test sets cover every
+geometry (@sec-splits), the remaining test manifests are held out per
 checkpoint but are not program-level confirmations (@sec-limits-validation).
 :::
 

@@ -74,53 +74,53 @@ one dataset and one task: on AirfRANS's Reynolds-number and angle-of-attack
 extrapolation splits its interior error grows less than
 GeoTransolver-volume's on pressure and eddy viscosity and the same on
 velocity, and it leads on every field outside the training range
-(@sec-interior-extrapolation). It is unmeasured on the surface task and on
-three-dimensional flow: no ISLA lane exists on the HiLiftAeroML sealed
+(@sec-interior-extrapolation).** It is unmeasured on the surface task and on
+three-dimensional flow. No ISLA lane exists on the HiLiftAeroML sealed
 regime splits (angle of attack, attached to separated flow), and the finding
 that GeoTransolver and Transolver lose about an order of magnitude across
 that boundary is a mechanism finding on those architectures
-(@sec-nb-hl-sealed-test), not a comparison with ISLA.** What would move
+(@sec-nb-hl-sealed-test), not a comparison with ISLA. What would move
 this: the sealed regime splits run once with ISLA and the unit-direction
-baselines at the reporting protocol; a split across geometry *classes*
+baselines at the reporting protocol. A split across geometry *classes*
 remains the open test, and none of this book's datasets provides one.
 
 ### Interior accuracy {#sec-limits-interior}
 
-**The interior standing of @sec-interior, a velocity lead and a pressure
-deficit against GeoTransolver-volume with eddy viscosity level to behind,
-holds at the training query count on two datasets (DrivAerML Volume task,
-AirfRANS interior task); its pressure part on the cars is inside ISLA's
-own seed spread.** Four limits bound it. The comparison is not
-resource-matched and the two models do not receive the same inputs;
+**The interior standing of @sec-interior holds at the training query
+count on two datasets (DrivAerML Volume task, AirfRANS interior task). ISLA
+leads GeoTransolver-volume on velocity on both, leads on pressure on the
+cars and trails on pressure and eddy viscosity on the airfoils, every
+paired seed ratio on the same side.** Four limits bound it. The comparison is not
+resource-matched and the two models do not receive the same inputs.
 GeoTransolver-volume fed the physical velocity changes by under 2% on
-every field, so the ratios are not an input-scale artifact. Below full
-data the DrivAerML Volume task is unmeasured on ISLA. The interacting
-decode's prediction depends on the joint query set and training over a
+every field, so the ratios are not an input-scale artifact. The interacting
+decode's prediction depends on the joint query set, and training over a
 range of counts reduces the dependence without removing it, so the
 interacting configuration is deployed at its training count
 (@sec-interior-companion). And the
 eddy-viscosity metric is on a standardized field, so its ratios are
 orderings under that centering, not physical percentages. What would move
-this: a third seed of the interior configuration on both datasets, and the
-54- and 109-car interior rungs.
+this: a third seed of the interior configuration on both datasets, and
+GeoTransolver-volume on the 54- and 109-car interior rungs, where only ISLA
+is measured (@sec-interior-results).
 
 ### The prediction depends on the query set {#sec-limits-query-independence}
 
 **ISLA's prediction at a point depends on which other points are in the
 request: every surface point is an interacting token, and so is every
 interior query in the reported configuration.** On the interior the
-dependence is measured: at the exploration budget a checkpoint trained at
+dependence is measured. At the exploration budget a checkpoint trained at
 one request size and scored at a fifth of it loses more on every field
-than either margin against GeoTransolver-volume, training over a range of
+than either margin against GeoTransolver-volume. Training over a range of
 request sizes reduces that penalty by about 40% at a 3.7% pressure cost
-and does not remove it (QCOUNT, @sec-nb-qcount-verdict), and the default
+and does not remove it (@sec-nb-qcount-verdict). The default
 query mass `source_total` removes the count scaling of the routing weight
-by construction while the dependence through the shared slices remains
+by construction, while the dependence through the shared slices remains
 (@sec-interior-companion). The interacting configuration is therefore
 deployed at its training request count, and every interior number in the
 book states that count. Evaluate-anywhere semantics is available only as
-the optional passive decoder, exactly query-independent in float64 and
-several times less accurate on every interior field
+the optional passive decoder, which is exactly query-independent in float64
+and several times less accurate on every interior field
 (@sec-arch-passive-decoder). What would move this: a query-independent
 decode within seed noise of the interacting one on either interior
 dataset.
@@ -157,23 +157,23 @@ baseline ÷ ISLA, so above one favors ISLA.
 
 ### Datasets beyond external aerodynamics {#sec-limits-datasets}
 
-**Every number in this book is measured on external aerodynamics
-(DrivAerML, HiLiftAeroML, AirfRANS); the architecture's interface is
-general (boundary cells with normals and measures, $K$ global directions,
-$S$ global scalars, optional per-cell boundary scalars, fields on the
-boundary or at interior queries), and whether its standing carries to
-other steady boundary-driven PDEs is the open axis.** The next benchmark
-instances are chosen for varying boundary conditions and loads, not only
-varying geometry, so that the global-scalar and boundary-scalar channels
-are exercised: two solids problems (PLAID Tensile2d, GINOT Bracket Lug)
+**The flow standings of this book are measured on external aerodynamics
+(DrivAerML, HiLiftAeroML, AirfRANS). Two solids problems (PLAID Tensile2d,
+GINOT Bracket Lug), one bracket family under prescribed loads (DeepJEB++)
 and two fixed-mesh problems with randomly placed, labeled Dirichlet,
-Neumann and Robin segments (the OLBC Poisson and elasticity sets);
-@sec-datasets-beyond-aero draws each on one sample and
-@sec-datasets-detail gives their conversion. AeroZoo, a diversity-stress
-aerodynamics benchmark in generation, is the coming out-of-distribution
-instance within external aerodynamics. None of these carries a number in
-this book; each is measured under the fair-comparison protocol with
-GeoTransolver trained on it before it does, and the status of each
+Neumann and Robin segments (the OLBC Poisson and elasticity sets) now carry
+standings too (@sec-interior-tensile2d, @sec-interior-lug,
+@sec-surface-deepjeb, @sec-interior-olbc). Whether the interface carries to
+further steady boundary-driven PDEs is still the open axis.** These sets
+were chosen for varying boundary conditions and loads, not only varying
+geometry, so that the global-scalar, global-vector and boundary-input
+channels are exercised; @sec-datasets-beyond-aero draws each on one sample
+and @sec-datasets-detail gives their conversion. On the fixed-mesh sets
+GeoTransolver-512 leads by a factor of two to three, and on Tensile2d it
+leads at 400 cases: these are the standings that most need a located
+mechanism (@sec-interior-olbc). AeroZoo, a diversity-stress aerodynamics
+benchmark in generation, is the coming out-of-distribution instance within
+external aerodynamics; it carries no number yet, and the status of each
 conversion is in @sec-program-status.
 
 ## Engineering directions {#sec-future}
@@ -186,7 +186,7 @@ starting point and a stated remainder.**
 | Problems outside external aerodynamics | the interface accepts zero or more global vector inputs and zero or more global scalar inputs, and per-cell boundary data through the boundary-scalar channel (@sec-isla-inputs); the contract tests cover zero and two global directions; a screened-Poisson acceptance case trains with no global vector and one global scalar, and the scalar is decisive where the boundary data cannot substitute for it (@sec-nb-globin-accept-verdict) | a production dataset outside external aerodynamics with a baseline trained on it under the protocol (@sec-limits-datasets) |
 | Cost at scale | with the exact fused geometry kernel, the default on CUDA, ISLA's step tracks GeoTransolver's at every token count in about half its memory, and ISLA holds the accuracy-against-memory frontier below about 70 GB at 435 cars (@sec-cost-sweep, @sec-review-frontier) | cost logs for the depth ladder, which reaches the floor at half GeoTransolver's parameters but is absent from the cost frontier; the gap below GeoTransolver's footprint is headroom for a wider or deeper model, since on DrivAerML cells past 100,000 buy nothing |
 | Sampling conventions | ISLA's convention-swap penalty converges under refinement, and so does that of GeoTransolver and Transolver + ISLA's measure-weighted pooling + Horvitz–Thompson-centered datapipe (ablation); GeoTransolver's and Transolver's as released does not (@sec-consistency-bench) | at 10,000 cells no architecture is consistent across conventions; the fine-mesh limit is within a few percent of reached at 40,000 |
-| Query-count consistency of the interior decode | `query_mass="source_total"` is the default: the total query mass is a learned fraction of the total source measure divided by the query count, so neither refining the source nor changing the request size moves the balance between surface and queries, and the optional passive decoder's local readout is invariant to a rescaling of the measure (@sec-isla-contracts); count augmentation reduces the interacting decode's dependence without removing it | the interior standing under `source_total` on both interior datasets |
+| Query-count consistency of the interior decode | `query_mass="source_total"` is the default: the total query mass is a learned fraction of the total source measure divided by the query count, so neither refining the source nor changing the request size moves the balance between surface and queries, and the optional passive decoder's local readout is invariant to a rescaling of the measure (@sec-isla-contracts); count augmentation reduces the interacting decode's dependence without removing it | a decode whose prediction at a point is independent of the request at the interacting configuration's accuracy (@sec-interior-open) |
 
 ## What would change the recommendation {#sec-review-roads}
 
@@ -199,14 +199,14 @@ to 7% in less memory and ties the parameter-matched GeoTransolver-512 in
 half of it; GeoTransolver is the choice for matched-mesher, known-pose
 surface prediction from few training cases on the wings and below about
 100 cars (@sec-surface).** The recommendation splits on consistency, and
-consistency is a property of the frame, not of the architecture: every
+consistency is a property of the frame, not of the architecture. Every
 configuration that centers its coordinates on a statistic of the sampled
 points degrades several-fold under a sampling-density bias when the frame
-is taken from the biased sample, GeoTransolver and Transolver included,
-and only frames that do not read the sample hold, ISLA's origin-free
-frame among them and the ablations of GeoTransolver and Transolver given
+is taken from the biased sample, GeoTransolver and Transolver included.
+Only frames that do not read the sample hold: ISLA's origin-free
+frame, and the ablations of GeoTransolver and Transolver given
 a Horvitz–Thompson center (@sec-robustness-density). Those ablations
-locate the property; GeoTransolver and Transolver are stable, in use and
+locate the property. GeoTransolver and Transolver are stable, in use and
 published, and are not modified, so measure weighting and a sample-free
 frame reach users through ISLA (@sec-nb-ruling-released-baselines). Two
 outcomes would change the recommendation.
@@ -228,11 +228,11 @@ GeoTransolver-volume on AirfRANS pressure and eddy viscosity
 (@sec-interior).
 
 If neither fires, the recommendation stands as written, with the bounds
-of this chapter attached: the program's ISLA-specific claims are exact
-covariance and its lead in arbitrary poses, consistency under a change of
-inference draw and weak dependence on the training sampling law as
-properties of the origin-free frame and the measure weights, the interior
-velocity lead, the cost figures of @sec-capacity, and on in-distribution
-surface accuracy a lead over GeoTransolver at its recipe width from about
-100 cars up on the DrivAerML Surface task, parity with the parameter match,
-and a deficit below 100 cars and on the wings.
+of this chapter attached. The program's ISLA-specific claims are these:
+exact covariance and its lead in arbitrary poses; consistency under a
+change of inference draw and weak dependence on the training sampling law,
+both properties of the origin-free frame and the measure weights; the
+interior velocity lead; the cost figures of @sec-capacity; and, on
+in-distribution surface accuracy, a lead over GeoTransolver at its recipe
+width from about 100 cars up on the DrivAerML Surface task, parity with
+the parameter match, and a deficit below 100 cars and on the wings.

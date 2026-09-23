@@ -1,48 +1,50 @@
 # What this book is {.unnumbered}
 
 This book is the guide to **ISLA** (Invariant Slice Attention), a neural
-surrogate for steady, boundary-driven PDE problems: given a discretized
-boundary and the problem's global conditions, predict the steady field on
-that boundary and in the domain it bounds. It is written the way a user
-guide for a design code is written. It teaches what the method computes and
-why each part is there, shows how to run it, and then lays out, with the
-same care, what the measurements say for it and against it. The reader we
-have in mind is fluent in PDE numerics and machine learning and has never
-seen this program; every term is defined where it first appears, and every
-number is computed, as the page renders, from a checked-in artifact.
+surrogate for steady, boundary-driven PDE problems. Given a discretized
+boundary and the problem's global conditions, ISLA predicts the steady field
+on that boundary and in the domain it bounds. The book is written the way a
+user guide for a design code is written. It teaches what the method computes
+and why each part is there. It shows how to run it. Then it lays out, with
+the same care, what the measurements say for it and against it. The reader
+we have in mind is fluent in PDE numerics and machine learning and has never
+seen this program. Every term is defined where it first appears. Every
+number is computed from a checked-in artifact as the page renders.
 
 ::: {.callout-note collapse="true" title="Where the name comes from"}
-ISLA is pronounced "eye-la". An *isla* is an island: a shape defined
-entirely by its boundary, which is what the method takes as input. The code
-class is `ISLA` in `physicsnemo.experimental.nn`.
+ISLA is pronounced "eye-la". An *isla* is an island, a shape defined
+entirely by its boundary. The boundary is what the method takes as input.
+The code class is `physicsnemo.experimental.models.ISLA`.
 :::
 
 ## The thesis {#sec-verdict}
 
-**ISLA is built around two exact invariances that no other slice-attention
-surrogate has, rigid-motion equivariance and consistency under a change of
-boundary discretization, and at its reference configuration it is more
+**ISLA is built around two invariances that no other slice-attention
+surrogate has, rigid-motion equivariance, which is exact, and consistency
+under a change of boundary discretization, which holds in the fine-mesh
+limit, and at its reference configuration it is more
 accurate than GeoTransolver at the recipe width on the DrivAerML Surface
-task in less memory.** Measured against GeoTransolver, the strongest
-published slice-attention surrogate, and Transolver, with every model given
-the same inputs and scored on the same instrument at the reporting protocol
-(@sec-protocol), the standing is this. On the DrivAerML Surface task ISLA
-leads GeoTransolver-256 by 7% at full data and from 109 training cars up,
-in 0.7x its memory; the parameter-matched GeoTransolver-512 is at parity at
-1.9x ISLA's memory and 1.17x its step time; below 109 cars GeoTransolver
-leads, and on the HiLiftAeroML 35-wing rung both baselines lead by a
-quarter. Where the evaluation departs from the training conventions, in
-pose or in how the surface is sampled, ISLA's error barely moves and the
-baselines' grows by factors; both architectures reach the same accuracy
+task in less memory.** The comparison is against GeoTransolver, the
+strongest published slice-attention surrogate, and Transolver. Every model
+receives the same inputs and is scored on the same instrument at the
+reporting protocol (@sec-protocol). The standing is this. On the DrivAerML
+Surface task ISLA leads GeoTransolver-256 by 7% at full data and from 109
+training cars up, in 0.7x its memory. The parameter-matched
+GeoTransolver-512 is at parity, at 1.9x ISLA's memory and 1.17x its step
+time. Below 109 cars GeoTransolver leads. On the HiLiftAeroML 35-wing rung
+GeoTransolver and Transolver both lead by a quarter. Where the evaluation
+departs from the training conventions, in pose or in how the surface is
+sampled, ISLA's error barely moves, and the error of GeoTransolver and
+Transolver grows by factors. ISLA and GeoTransolver reach the same accuracy
 floor on the DrivAerML Surface task, ISLA at half GeoTransolver's
 parameters. On the boundary-to-interior tasks ISLA leads
 GeoTransolver-volume on velocity on both datasets and on pressure on the
-cars, and trails on pressure on the airfoils. On the solids it leads
-GeoTransolver-512 on the lug, trails on Tensile2d at 400 cases with the
-steeper learning curve, and on the fixed-mesh OLBC Poisson set trails by a
-constant factor of three with the same learning-curve exponent, the one
-dataset where ISLA's curve is not steeper. @tbl-thesis carries the
-numbers, one row per dataset and task; each row's chapter carries the
+cars. It trails on pressure on the airfoils. On the solids ISLA leads
+GeoTransolver-512 on the lug. It trails on Tensile2d at 400 cases but has
+the steeper learning curve. On the fixed-mesh OLBC Poisson set it trails by
+a constant factor of three with the same learning-curve exponent. That is
+the one dataset where ISLA's curve is not steeper. @tbl-thesis carries the
+numbers, one row per dataset and task. Each row's chapter carries the
 study behind it.
 
 ```{python}
@@ -173,9 +175,9 @@ print(f": The thesis in {len(rows)} rows, one dataset and task per row. How to r
 
 ## Names, symbols and colors {#sec-key}
 
-**Every thing in this book has one name and every architecture one color,
-and a ratio between architectures is always baseline ÷ ISLA.** The names
-below are canonical; their definitions are in the chapters cited.
+**Every thing in this book has one name and every architecture one
+color.** The names below are canonical. Their definitions are in the
+chapters cited.
 
 | Name | What it is | Where defined |
 |---|---|---|
@@ -245,18 +247,17 @@ Two conventions hold in every table and figure. **A ratio between
 architectures is baseline error divided by ISLA error**, so a value above
 one favors ISLA. **Every error is the area-weighted relative L2 of
 @sec-metrics, scored in float32** on the final-epoch checkpoint. A few
-within-architecture comparisons are scored in bfloat16 and are labeled as
-such in their captions; no bfloat16 number is compared across
-architectures.
+within-architecture comparisons are scored in bfloat16, and their captions
+say so. No bfloat16 number is compared across architectures.
 
 ## How to read this book {#sec-how-to-read}
 
-**The book reads in order; each chapter assumes only the ones before it.**
+**The book reads in order. Each chapter assumes only the ones before it.**
 
 - **The problem and how we measure** (@sec-problem): the boundary-to-field
   operator and its general interface, taught on a two-dimensional airfoil
-  whose exact solution we know; the generalization axes; the metric and the
-  instrument.
+  whose exact solution we know, then the generalization axes, the metric
+  and the instrument.
 - **ISLA, one idea at a time** (@sec-isla): why each part of the
   architecture is there, from "a sum over cells should be an integral" to
   the equivariant output basis.
@@ -271,9 +272,9 @@ architectures.
 - **Using ISLA** (@sec-using): the reference configuration, the inputs, the
   commands, the sampler, checkpoints and cost.
 - **Evidence.** Surface accuracy and data efficiency on the DrivAerML
-  Surface task and HiLiftAeroML (@sec-surface); discretization and pose
-  (@sec-robustness-density); capacity, scaling laws and cost
-  (@sec-shared-floor); boundary to interior on the DrivAerML Volume and
+  Surface task and HiLiftAeroML (@sec-surface). Discretization and pose
+  (@sec-robustness-density). Capacity, scaling laws and cost
+  (@sec-shared-floor). Boundary to interior on the DrivAerML Volume and
   AirfRANS interior tasks (@sec-interior).
 - **Limits and directions** (@sec-limits), then **program status**
   (@sec-program-status), the one chapter with dates.
@@ -291,32 +292,33 @@ outside it.**
 
 - **Not that ISLA is more accurate in distribution in general.** Its 7%
   lead at full data on the DrivAerML Surface task is against GeoTransolver
-  at its recipe width; at matched parameters (GeoTransolver-512) the two
-  are at parity and ISLA's gain is cost, not accuracy; below 109 cars and
+  at its recipe width. At matched parameters (GeoTransolver-512) the two
+  are at parity, and ISLA's gain is cost, not accuracy. Below 109 cars and
   on every HiLiftAeroML rung GeoTransolver leads (@sec-surface).
 - **Not that equivariance is an accuracy edge in general.** A baseline
-  trained in a canonical frame is exactly pose-invariant; ISLA's pose lead
-  is against baselines that learn pose from augmentation, in random poses,
-  and what the contract buys beyond that is stated in @sec-pose.
+  trained in a canonical frame is exactly pose-invariant. ISLA's pose lead
+  is against baselines that learn pose from augmentation, in random poses.
+  What the contract buys beyond that is stated in @sec-pose.
 - **Not that discretization consistency is an exact invariance.** It is a
   fine-mesh-limit property: ISLA's residual under a biased draw is
   quadrature variance that shrinks with cell count (@sec-principle,
   @sec-robustness-density).
 - **Not that ISLA is indifferent to the training sampling law.** Its
-  dependence is weak beside baselines that are dependent by factors, and
-  why the cars show the larger dependence is open (@sec-training-law).
+  dependence is weak beside GeoTransolver and Transolver, whose errors
+  change by factors. Why the cars show the larger dependence is an open
+  question (@sec-training-law).
 - **Not that the interior lead is unconditional.** It is on velocity on
-  two datasets and on pressure on one; GeoTransolver-volume leads on
+  two datasets and on pressure on one. GeoTransolver-volume leads on
   pressure and eddy viscosity on AirfRANS (@sec-interior).
 - **Not that either architecture extrapolates across a flow regime** or
   transfers zero-shot to a different vehicle family (@sec-limits-regime,
   @sec-limits-transfer).
-- **Not that the HiLiftAeroML figures are test-set figures.** They are
-  validation figures on final-epoch checkpoints (@sec-limits-validation).
+- **Not that the HiLiftAeroML numbers are test-set numbers.** They are
+  validation numbers on final-epoch checkpoints (@sec-limits-validation).
 - **Not that ISLA's learning curve is always the steeper one.** It is on
-  Tensile2d, on the lug and on AirfRANS pressure; on the DrivAerML Surface
-  task the two architectures' exponents are the same within the fit, and
-  on the fixed-mesh OLBC Poisson set they are equal with a constant
+  Tensile2d, on the lug and on AirfRANS pressure. On the DrivAerML Surface
+  task the two architectures' exponents are the same within the fit. On
+  the fixed-mesh OLBC Poisson set they are equal, with a constant
   three-fold gap (@sec-compute-allocation, @sec-interior-olbc).
 - **Not that the solid and fixed-mesh standings are final.** The lug's
   largest rung, the OLBC extension and the DeepJEB equal-epoch companion

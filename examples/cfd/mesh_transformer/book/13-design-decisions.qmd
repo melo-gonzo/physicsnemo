@@ -2,18 +2,18 @@
 
 **Every architectural decision in ISLA is made by one rule: an accuracy
 gain is not accepted when it is known to come from a violation of a
-physical principle.** A surrogate for a boundary-value problem should depend
+physical principle.** A surrogate for a boundary-value problem must depend
 on the geometry, the boundary conditions and the physics, and on nothing
 else. When a change improves the score by reading the mesher's cell pattern,
 the sampling density, or a statistic of the drawn sample, the improvement is
-a fit to the discretization, and it will not survive a different mesher, a
+a fit to the discretization. It will not survive a different mesher, a
 different sampling law, or a geometry the training set did not contain. This
 appendix is the ledger of every decision of that kind: the alternative it
 rejected, what the alternative would have bought on the in-distribution
 metric, what it consumed that the physics does not provide, and the evidence.
 It exists so that the paper on ISLA can say *why* the architecture is what it
-is, and so that the position is stated plainly for others: a program that
-wants highly generalizable physics surrogates has to be willing to leave
+is, and so that the position is stated plainly for others. A program that
+wants highly generalizable physics surrogates must be willing to leave
 measured accuracy on the table when that accuracy is known to be
 non-physical.^[Not everything that is measured counts, and not everything
 that counts can be measured. The aphorism is William Bruce Cameron's
@@ -25,13 +25,13 @@ that counts can be measured. The aphorism is William Bruce Cameron's
 stated and argued once in @sec-discretization-centerpiece: a prediction
 that converges to one field under refinement and to the same field under
 two sampling laws, tested by the consistency benchmark and its
-training-law twin rather than by any single accuracy number.** Two
-questions are asked of every proposed change, before and after it is
+training-law twin rather than by any single accuracy number.** The program
+asks two questions of every proposed change, before and after it is
 measured. *Why should this work*, in mechanistic terms? And would a
 practitioner of classical CFD look at the construction without objecting
 to what it consumes? Changes that cannot answer both are run, when they
 are run at all, as ablations, and are labeled so wherever they appear. The
-same two questions are the reason ISLA has one configuration: the
+same two questions are the reason ISLA has one configuration. The
 weights-off ablation is not adopted on the rungs where it scores better,
 and no frame that centers on a statistic of the sample is in the class
 (@sec-nb-principle-redirect, @sec-nb-frame-cleanup).
@@ -74,25 +74,25 @@ column says "not re-measured" and the row stands on its principle.
 principle cost the most.**
 
 **The measure weights** are the clearest case. With them, a slice state is
-a quadrature estimate of a surface integral; without them it is a mean over
+a quadrature estimate of a surface integral. Without them it is a mean over
 whichever points the mesher happened to place, and the network learns the
-mesher. The price on the wings is real and understood: part of it is the
+mesher. The price on the wings is real and understood. Part of it is the
 estimator variance of a quadrature-weighted mean over a heavy-tailed draw of
 cell areas, which shrinks with cell count and is nearly gone at 40,000 cells
-on the cars; the rest is mesh-pattern content in the ablation, which does
+on the cars. The rest is mesh-pattern content in the ablation, which does
 not shrink and which collapses the moment the sampling law changes. An
 accuracy table at one cell count cannot tell these apart. The consistency
 benchmark can, and it decided.
 
 **The frame** is the case where the trade is closest. Where the same
 wings recur between training and validation, an estimated center and
-scale buys accuracy against the origin-free construction; no such frame
-is in the class because the never-seen-geometry rungs favor the
-origin-free construction, because on DrivAerML at 435 cars the price of
+scale buys accuracy against the origin-free construction. No such frame
+is in the class, for three reasons. The never-seen-geometry rungs favor the
+origin-free construction. On DrivAerML at 435 cars the price of
 not being told the body's center is inside seed noise
-(@sec-nb-sgref-verdict), and because an estimated frame is a statistic of
+(@sec-nb-sgref-verdict). And an estimated frame is a statistic of
 the sample even when it is a consistent one. For a fixed fleet of shapes
-an estimated frame is the better instrument; ISLA is built for the shapes
+an estimated frame is the better instrument. ISLA is built for the shapes
 that have not been seen yet.
 
 ## What we would ask of the field {#sec-principled-ask}
@@ -123,6 +123,6 @@ that have not been seen yet.
   or the metric change (@sec-nb-frame-cleanup, @sec-program-status).
 
 The accuracy metric is one number about one discretization of one dataset.
-It is necessary and it is not sufficient, and a research program that
+It is necessary and it is not sufficient. A research program that
 optimizes it alone will converge on surrogates that know their mesher better
 than their physics.

@@ -2,15 +2,14 @@
 
 **This chapter states exactly what ISLA computes, stage by stage, with one
 name for every quantity and the tensor shape beside it.** @sec-isla explains
-why each part is there; this chapter is the reference for *what* the class
-does, and it is the one description of the architecture that the other
-chapters and the code are held to. Read it with @fig-isla-pass open: every
-stage below is one box of that figure, and every equation names the
-identifier that computes it in `physicsnemo/experimental/models/isla/model.py`.
-The structure is written for a width $d$, a stack of 12 slice layers and
-$M = 256$ slices, the class's layer and slice counts; nothing in it depends
-on those numbers, and the width the recipe runs is stated with the commands
-in @sec-using-config.
+why each part is there. This chapter is the reference for *what* the class
+does, and the other chapters and the code are held to it. Read it with
+@fig-isla-pass open. Every stage below is one box of that figure, and every
+equation names the identifier that computes it in
+`physicsnemo/experimental/models/isla/model.py`. The description uses a
+width $d$, a stack of 12 slice layers and $M = 256$ slices, the class's
+layer and slice counts. Nothing in it depends on those numbers. The width
+the recipe runs is stated with the commands in @sec-using-config.
 
 ```{python}
 #| label: setup-arch
@@ -24,7 +23,7 @@ from matplotlib.colors import Normalize
 
 **One symbol per quantity, one code name per symbol.** Indices: $i, j$ run
 over the $N$ tokens, $s, t$ over the $M$ slices, $k$ over the $K$ global
-vector inputs. Batch axes are omitted throughout; the code carries a
+vector inputs. Batch axes are omitted throughout. The code carries a
 leading batch dimension on every tensor.
 
 | symbol | shape | code | meaning |
@@ -55,11 +54,11 @@ affine map. Definitions use $\equiv$.
 
 ## The pass in one picture {#sec-arch-picture}
 
-**From the inputs to the last slice layer, only scalars that are invariant
-under rotation, translation and uniform rescaling are computed; vectors are
-rebuilt once, at the output.** @fig-isla-pass is the whole surface model.
-The three interior arrangements of @sec-arch-modes change which tokens
-enter and which the head reads; they add no stage.
+**From the inputs to the last slice layer, the model computes only scalars
+that are invariant under rotation, translation and uniform rescaling.
+Vectors are rebuilt once, at the output.** @fig-isla-pass is the whole
+surface model. The interior arrangements of @sec-arch-modes change which
+tokens enter and which the head reads. They add no stage.
 
 ```{mermaid}
 %%| label: fig-isla-pass
@@ -84,8 +83,8 @@ flowchart TB
     EMB["embedding MLP → h_i (N×d)"]:::learned
     LAYER["stage 3, slice layer × 12 (opened up in the next figure)<br/>routing a_is → anchors z_s, m_s → invariants ξ_is → refined routing<br/>→ slice states Z_s → read-back → h_i (N×d)"]:::learned
     HF["stage 4, head frame: soft anchors from the final state; û_i = direction from the token's anchor to the token (N×3)"]:::fixed
-    HEAD["stage 5, linear head on LN(h_i): scalars p_i and 4 + 3K coefficients per vector output"]:::learned
-    BASIS["equivariant basis at each token: ĝ_k, n̂_i, û_i and their tangential complements (N×(4+3K)×3)"]:::fixed
+    HEAD["stage 5, linear head on LN(h_i): scalars p_i and 2K + 3 coefficients per vector output"]:::learned
+    BASIS["equivariant basis at each token: ĝ_k, n̂_i, û_i and their tangential complements (N×(2K+3)×3)"]:::fixed
     OUT["outputs: scalar fields p_i (N×n_p), vector fields v_i = Σ_j c_ij B_ij (N×n_v×3)"]:::out
 
     IN --> FR --> SEED --> EMB --> LAYER --> HEAD --> OUT
@@ -99,9 +98,9 @@ flowchart TB
 sampled boundary, $x_i, n_i, w_i$, and the global inputs $g_k$ and
 $\sigma$ (@sec-isla-inputs). It normalizes every direction it is given,
 $\hat g_k \equiv g_k / \lvert g_k \rvert$ and $\hat n_i \equiv n_i / \lvert
-n_i \rvert$, so a global vector's magnitude never enters (a magnitude that
-matters is a global scalar). The one length unit is a normalized two-point
-integral of the geometry, with $\tilde w_i \equiv w_i / \sum_j w_j$:
+n_i \rvert$, so the magnitude of a global vector never enters. A magnitude
+that matters is a global scalar. The one length unit is a normalized
+two-point integral of the geometry, with $\tilde w_i \equiv w_i / \sum_j w_j$:
 
 $$
 L \equiv \Big( \sum_{i,j} \tilde w_i\, \tilde w_j\, \lvert x_i - x_j \rvert^2 \Big)^{1/2}
@@ -112,23 +111,23 @@ r_i \equiv x_i / L,
 \ell_i \equiv \log w_i .
 $$
 
-The second form is how the code evaluates it (`rms_pairwise_distance`, in
-$O(N)$ through the variance identity); the weighted mean $\bar x$ is an
+The code evaluates the second form (`rms_pairwise_distance`, in $O(N)$
+through the variance identity). The weighted mean $\bar x$ is an
 intermediate of this scalar only and is never used as a center. $L$ is
-unchanged by a translation or rotation, scales with the geometry, is
-unchanged by a uniform rescale of the weights alone because they are
-normalized first, and converges under refinement of any boundary whose
+unchanged by a translation or rotation and scales with the geometry. It is
+unchanged by a uniform rescale of the weights alone, because they are
+normalized first, and it converges under refinement of any boundary whose
 normalized measure converges (@sec-isla-frame). The scaled positions $r_i$
-are never fed to a learned map; they enter only as differences $r_i - z_s$
+are never fed to a learned map. They enter only as differences $r_i - z_s$
 in stage 3 and stage 4. The log measure $\ell_i$ is the bias that turns
-every routing softmax into a quadrature rule (@sec-isla-quadrature); with
-`use_measure_weights=False` (the weights-off ablation) or no weights
-supplied it is zero.
+every routing softmax into a quadrature rule (@sec-isla-quadrature). With
+`use_measure_weights=False` (the weights-off ablation), or when no weights
+are supplied, it is zero.
 
 ## Stage 2: the seed and the embedding {#sec-arch-seed}
 
 **A token's seed is every origin-free scalar the inputs offer, and it is
-small.** With no origin, a position alone has no invariant; the only
+small.** With no origin, a position alone has no invariant. The only
 scalars in $\{\hat n_i, \hat g_k\}$ that survive rotation are the cosines
 between them. The seed is therefore
 
@@ -140,15 +139,16 @@ h_i \equiv \mathrm{MLP}_{\mathrm{embed}}(s_i),
 $$
 
 where $\beta_i$ are the invariants of the optional per-cell boundary
-inputs (`boundary_inputs`: a rank-0 field is its own scalar, a rank-1 field
-$v_i$ contributes $v_i \cdot \hat n_i$, $v_i \cdot \hat g_k$ and $\lvert
-v_i \rvert$, a rank-2 field its frame contractions, trace and Frobenius
-norm; @sec-isla-inputs-rank; $n_b = 0$ on the aerodynamic tasks of this
-book) and $\sigma$ the global scalars broadcast to every token. On the surface tasks of this book the seed is a
-single number per token, the cosine between the normal and the far-field
-direction; if the seed would be empty ($K = n_b = S = 0$) every token starts
-from one learned constant. All separation between tokens then comes from
-the slice layers, where a token learns where it sits relative to the anchors
+inputs and $\sigma$ the global scalars, broadcast to every token. For
+`boundary_inputs`, a rank-0 field is its own scalar. A rank-1 field $v_i$
+contributes $v_i \cdot \hat n_i$, $v_i \cdot \hat g_k$ and $\lvert v_i
+\rvert$. A rank-2 field contributes its frame contractions, trace and
+Frobenius norm (@sec-isla-inputs-rank). On the aerodynamic tasks of this
+book $n_b = 0$, so on the surface tasks the seed is a single number per
+token: the cosine between the normal and the far-field direction. If the
+seed would be empty ($K = n_b = S = 0$), every token starts from one
+learned constant. All separation between tokens then comes from the slice
+layers, where a token learns where it sits relative to the anchors
 (`_seed_invariants`, `embed`).
 
 ## Stage 3: the slice layer {#sec-arch-layer}
@@ -156,11 +156,11 @@ the slice layers, where a token learns where it sits relative to the anchors
 **A slice layer routes the tokens softly into $M$ slices, forms one anchor
 per slice, describes every token relative to every anchor by invariant
 scalars, and sends information up to the slices and back down together with
-those scalars.** It is the one block that repeats, twelve times, each with
-its own parameters (`_SliceBlock`). Its inputs are the token state $h_i$
-and the four frame quantities of stage 1, which every layer receives
+those scalars.** It is the one block that repeats, twelve times, each copy
+with its own parameters (`_SliceBlock`). Its inputs are the token state
+$h_i$ and the four frame quantities of stage 1, which every layer receives
 unchanged: $r_i$, $\hat n_i$, $\hat g_k$, $\ell_i$. Its output is the
-updated $h_i$. @fig-isla-layer shows the ten steps; the equations follow in
+updated $h_i$. @fig-isla-layer shows the ten steps. The equations follow in
 the same order.
 
 ```{mermaid}
@@ -211,8 +211,8 @@ flowchart TB
 **a. Routing logits.** A learned map of the normalized token state gives a
 logit per token–slice pair (`_RoutingLogits`, @sec-isla-routing-forms).
 ISLA's form is a temperature $T$ times the cosine between the normalized
-state and a learned prototype $p_s$ per slice, which bounds every logit in
-$[-T, T]$; the alternative form is an affine map:
+state and a learned prototype $p_s$ per slice. This bounds every logit in
+$[-T, T]$. The alternative form is an affine map:
 
 $$
 \tilde h_i \equiv \mathrm{LN}(h_i), \qquad
@@ -227,9 +227,9 @@ $$
 a^0_{is} = \frac{\exp(\lambda_{is} + \ell_i)}{\sum_j \exp(\lambda_{js} + \ell_j)} .
 $$
 
-Each slice's weights sum to one over the tokens, so anything of the form
-$\sum_i a^0_{is} f_i$ is a measure-weighted mean of $f$ over the slice, a
-quadrature estimate of a surface integral (`_softmax_over_points`).
+Each slice's weights sum to one over the tokens. Anything of the form
+$\sum_i a^0_{is} f_i$ is therefore a measure-weighted mean of $f$ over the
+slice, a quadrature estimate of a surface integral (`_softmax_over_points`).
 
 **c. Anchors.** From those weights each slice forms its mean position and
 its mean normal direction (`z_pos`, `m_s`):
@@ -259,18 +259,18 @@ $$
 $$
 
 Every entry is a norm or a dot product of vectors that move together, and
-every position appears as a difference, so no origin and no axis is
-referred to (@sec-isla-relational). A model with rank-1 or rank-2 per-token
-inputs appends, in the same place, $\hat\rho_{is} \cdot v$ for every
+every position appears as a difference. No origin and no axis is referred
+to (@sec-isla-relational). A model with rank-1 or rank-2 per-token inputs
+appends more entries in the same place: $\hat\rho_{is} \cdot v$ for every
 per-token vector $v$ (the inputs themselves and the vectors $T \hat n_i$,
-$T \hat g_k$ derived from a rank-2 input) and $\hat\rho_{is}^{\mathsf T} T
-\hat\rho_{is}$ for every rank-2 input, so the width is $5 + K + P' + Q$
-(@sec-isla-inputs-rank); on the aerodynamic tasks it is $5 + K$.
+$T \hat g_k$ derived from a rank-2 input $T$), and $\hat\rho_{is}^{\mathsf T}
+T \hat\rho_{is}$ for every rank-2 input. The width is then $5 + K + P' + Q$
+(@sec-isla-inputs-rank). On the aerodynamic tasks it is $5 + K$.
 
 **e. Refinement, and the read-back weights.** A linear map of the
-invariants to one scalar per pair refines the routing logit, so a slice can
-prefer tokens near its anchor, along the global direction from it, or
-facing it (`geo_logit`). The *same* refined logits, normalized over the
+invariants to one scalar per pair refines the routing logit (`geo_logit`).
+A slice can then prefer tokens near its anchor, along the global direction
+from it, or facing it. The *same* refined logits, normalized over the
 slices for each token and without the measure bias, are the read-back
 weights (`point_mix`):
 
@@ -371,21 +371,21 @@ plt.show()
 ::: {.callout-note collapse="true" title="Two identities the implementation relies on"}
 **Pool first, then project.** The invariants $\xi_{is}$ are $N{\times}M{\times}(5+K)$.
 Projecting each pair to width $d/2$ and then pooling would make autograd
-store an $N{\times}M{\times}d/2$ tensor per layer; because the projection is
-affine and $\pi_{is}$ sums to one over slices,
-$\sum_s \pi_{is}(W_f \xi_{is} + b_f) = W_f \sum_s \pi_{is} \xi_{is} + b_f$,
-so the code pools first and saves only $N{\times}(5+K)$. The identity is
-tested at $10^{-12}$ (@sec-isla-contracts).
+store an $N{\times}M{\times}d/2$ tensor per layer. The projection is affine
+and $\pi_{is}$ sums to one over slices, so
+$\sum_s \pi_{is}(W_f \xi_{is} + b_f) = W_f \sum_s \pi_{is} \xi_{is} + b_f$.
+The code therefore pools first and saves only $N{\times}(5+K)$. The
+identity is tested at $10^{-12}$ (@sec-isla-contracts).
 
 **Rebuild the geometry in the backward pass.** Steps c to e and the pooling
 of step h are one *geometry region* per layer (`_geo_region`): a function
 of $(\lambda, r, \hat n, \hat g, z, m)$ with no parameters but $w_g, b_g$.
 On the eager path, `geo_checkpoint=True` recomputes its $N{\times}M{\times}\cdot$
 intermediates in the backward pass instead of storing them, with
-bitwise-identical outputs and gradients; the fused Triton kernel
+bitwise-identical outputs and gradients. The fused Triton kernel
 (`geo_kernel="fused"`, the automatic choice on CUDA with one to three
-global vectors and at most 1,024 slices) evaluates the same region without ever
-materializing them, with the recompute built in (@sec-using-cost).
+global vectors and at most 1,024 slices) evaluates the same region without
+ever materializing them, with the recompute built in (@sec-using-cost).
 :::
 
 ## Stage 4: the head frame {#sec-arch-head-frame}
@@ -405,7 +405,7 @@ u_i = r_i - \sum_s \beta_{is}\, z^f_s, \qquad
 $$
 
 $u_i$ is a difference of positions, so $\hat u_i$ rotates with the body and
-is unchanged by a translation; no centroid appears (`a_f`, `z_f`, `b_f`,
+is unchanged by a translation. No centroid appears (`a_f`, `z_f`, `b_f`,
 `r_hat`; the construction is @fig-isla-basis).
 
 ## Stage 5: the head {#sec-arch-head}
@@ -435,10 +435,10 @@ $$
 e_\theta(\hat u, \hat a) \equiv -\hat a + (\hat a \cdot \hat u)\, \hat u
 $$
 
-(`spherical_basis` with `normalize_basis_vectors=False`; it vanishes
+(`spherical_basis` with `normalize_basis_vectors=False`). It vanishes
 smoothly where $\hat u \parallel \hat a$, which is why it is left
-unnormalized), and the pseudovector basis is the set of cross products of
-the primaries $\{\hat g_k, \hat n_i, \hat u_i\}$ ($p = \binom{K+2}{2}$
+unnormalized. The pseudovector basis is the set of cross products of the
+primaries $\{\hat g_k, \hat n_i, \hat u_i\}$ ($p = \binom{K+2}{2}$
 vectors). An output declared with rank $r$ and even parity is
 
 $$
@@ -448,28 +448,28 @@ $$
 
 where the isotropic tensors $I_k$ are the identity at rank 2 and the three
 products of Kronecker deltas at rank 4 (their symmetric sum for a symmetric
-spec); a symmetric spec carries one coefficient per unordered multi-index,
-and an odd-parity spec replaces exactly one factor by a pseudovector (with
-the Levi-Civita symbol as the isotropic term at rank 3). The code gathers
-the free coefficients into the full coefficient tensor over ordered
+spec). A symmetric spec carries one coefficient per unordered multi-index.
+An odd-parity spec replaces exactly one factor by a pseudovector, with the
+Levi-Civita symbol as the isotropic term at rank 3. The code gathers the
+free coefficients into the full coefficient tensor over ordered
 multi-indices and contracts one index at a time, so the basis of $m^r$
 products is never materialized (`_OutputLayout`, `_assemble_output`). The
 coefficient counts per output are $1$ at rank 0, $m$ at rank 1 ($5$ with
 one global direction), $m^2 + 1$ or $m(m+1)/2 + 1$ (symmetric) at rank 2
-($26$ or $16$), $m^3$ or $\binom{m+2}{3}$ at rank 3, $m^4 + 3$ or
-$\binom{m+3}{4} + 1$ at rank 4; the class refuses ranks above 4. The model
-returns a dictionary keyed by the output names (pressure, a rank-0 field of
-shape $N$; wall shear stress, a rank-1 field of shape $N{\times}3$, in every
-surface result of the book). Under an orthogonal map $R$ every true basis
-vector maps as $R t$, every pseudovector as $\det(R)\, R t$, and every
-coefficient is unchanged, so an even output maps as $R^{\otimes r} T$ and an
-odd one as $\det(R)\, R^{\otimes r} T$: that is the covariance proof, for
-rotations and reflections alike, and @sec-isla-contracts lists the tests
-that check it.
+($26$ or $16$), $m^3$ or $\binom{m+2}{3}$ at rank 3, and $m^4 + 3$ or
+$\binom{m+3}{4} + 1$ at rank 4. The class refuses ranks above 4. The model
+returns a dictionary keyed by the output names. In every surface result of
+the book these are pressure, a rank-0 field of shape $N$, and wall shear
+stress, a rank-1 field of shape $N{\times}3$. Under an orthogonal map $R$
+every true basis vector maps as $R t$, every pseudovector as $\det(R)\, R t$,
+and every coefficient is unchanged. An even output therefore maps as
+$R^{\otimes r} T$ and an odd one as $\det(R)\, R^{\otimes r} T$. That is the
+covariance proof, for rotations and reflections alike, and
+@sec-isla-contracts lists the tests that check it.
 
 ## Where the parameters are {#sec-arch-params}
 
-**Almost all of ISLA's parameters are ordinary MLPs; the geometry costs
+**Almost all of ISLA's parameters are ordinary MLPs. The geometry costs
 seven numbers per layer.** @tbl-isla-params counts them from the class at
 two widths, 12 layers and 256 slices.
 
@@ -510,20 +510,20 @@ out += ("\n: Parameter count of ISLA at 12 layers, 256 slices, one scalar and on
 print(out)
 ```
 
-The two per-layer MLPs hold four fifths of the total; the broadcast maps
+The two per-layer MLPs hold four fifths of the total. The broadcast maps
 and the routing maps (at $d \times M$ each) hold most of the rest. Width $d$
-therefore sets the count quadratically and the slice count $M$ linearly,
-which is why the capacity ladders of @sec-equal-budget move width and not
+therefore sets the count quadratically and the slice count $M$ linearly.
+That is why the capacity ladders of @sec-equal-budget move width and not
 slices.
 
 ## The interior arrangements {#sec-arch-modes}
 
-**Two arrangements of tokens and queries share the five stages; they
+**Two arrangements of tokens and queries share the five stages. They
 differ in which points are tokens and which the head reads.**
 @fig-isla-modes places them side by side. Everything above described the
-first; every interior result of the book uses the second. A third, the
+first. Every interior result of the book uses the second. A third, the
 optional passive decoder, is exactly query-independent at a measured
-accuracy price and is described in @sec-arch-passive-decoder.
+accuracy price. @sec-arch-passive-decoder describes it.
 
 ```{mermaid}
 %%| label: fig-isla-modes
@@ -561,11 +561,11 @@ flowchart LR
 ```
 
 **Queries as tokens** (`query_tokens=True`; @sec-interior-query-tokens).
-Each interior point $q$ arrives as a position $x_q$ and nothing else. The
-two quantities its invariants need, a direction to stand in for the normal
-and a distance to the wall, are functions of the boundary sample and of
+Each interior point $q$ arrives as a position $x_q$ and nothing else. Its
+invariants need two quantities: a direction to stand in for the normal, and
+a distance to the wall. Both are functions of the boundary sample and of
 $x_q$, so the model computes them (`interior_geometry="nearest_boundary"`,
-the default): with $i^* \equiv \arg\min_i \lvert x_q - x_i \rvert$ the
+the default). With $i^* \equiv \arg\min_i \lvert x_q - x_i \rvert$ the
 nearest boundary sample,
 
 $$
@@ -573,20 +573,20 @@ $$
 \delta_q \equiv \operatorname{sign}\big(\hat n_q \cdot \hat n_{i^*}\big)\, \lvert x_q - x_{i^*} \rvert ,
 $$
 
-the direction from the boundary to the query and the distance signed by the
-nearest sample's normal, positive on the side the normal points to (outside,
-for outward normals; a query on a sample takes that sample's normal and
-$\delta_q = 0$). Both are differences of positions, so they are invariant
-(the distance) and covariant (the direction) under every rigid motion and
-reflection, and the distance scales with the geometry; the search is exact
-and runs as a fused kernel that streams the boundary past blocks of
-queries, so the $Q \times N$ distance matrix is never held at once
-(`nearest_boundary_geometry`; about 0.13 s per training step at
-200,000 queries against 200,000 samples on a GB300, 1.3x the step of the
-provided-distance path, @sec-nb-internal-geometry-cost). The query is then placed
-in the same frame, seeded like a boundary cell with zeros in the
-boundary-scalar channel, and given a learned type offset and an embedding
-of the distance in frame units:
+are the direction from the boundary to the query and the distance signed by
+the nearest sample's normal. The distance is positive on the side the
+normal points to (outside, for outward normals). A query on a sample takes
+that sample's normal and $\delta_q = 0$. Both are differences of positions,
+so the distance is invariant and the direction covariant under every rigid
+motion and reflection, and the distance scales with the geometry. The
+search is exact. It runs as a fused kernel that streams the boundary past
+blocks of queries, so the $Q \times N$ distance matrix is never held at
+once (`nearest_boundary_geometry`). It costs about 0.13 s per training
+step at 200,000 queries against 200,000 samples on a GB300, 1.3x the step
+of the provided-distance path (@sec-nb-internal-geometry-cost). The query
+is then placed in the same frame and seeded like a boundary cell, with
+zeros in the boundary-scalar channel. It receives a learned type offset and
+an embedding of the distance in frame units:
 
 $$
 r_q = x_q / L, \qquad
@@ -595,29 +595,31 @@ h_q = \mathrm{MLP}_{\mathrm{embed}}(s_q) + t_{\mathrm{q}}
 $$
 
 The distance is to the *sampled* boundary, 200,000 of up to 17 million
-cells on a DrivAerML car, so near the wall it overestimates the true wall
-distance by up to about the sample spacing and the direction deviates from
-the true gradient of the signed-distance field by the same order; far from
-the wall both agree with the full-resolution field. Whether that price is
-measurable is a preregistered measurement (@sec-nb-internal-geometry-prereg).
-`interior_geometry="provided"` is the alternative: the caller supplies the
-direction (`query_normals`, the stored gradient of a full-resolution
-signed-distance field) and the distance as a declared rank-0 query input,
-the form of every interior lane the evidence chapters report.
+cells on a DrivAerML car. Near the wall it therefore overestimates the true
+wall distance by up to about the sample spacing, and the direction deviates
+from the true gradient of the signed-distance field by the same order. Far
+from the wall both agree with the full-resolution field. Whether that price
+is measurable is a preregistered measurement
+(@sec-nb-internal-geometry-prereg). `interior_geometry="provided"` is the
+alternative. The caller supplies the direction (`query_normals`, the stored
+gradient of a full-resolution signed-distance field) and the distance as a
+declared rank-0 query input. This is the form of every interior lane the
+evidence chapters report.
 
-Its measure bias is not an area but a learned share of the boundary's total
-measure, split equally over the $Q$ queries (`query_mass="source_total"`):
+A query's measure bias is not an area but a learned share of the boundary's
+total measure, split equally over the $Q$ queries
+(`query_mass="source_total"`):
 
 $$
 \ell_q = \omega + \log \sum_{i \le N} w_i - \log Q ,
 $$
 
-so re-representing the same surface on finer cells changes nothing, and
-rescaling the geometry shifts every token's bias by the same amount. The
-$N + Q$ tokens then run through the twelve slice layers together; the head
-frame builds its anchors from all of them, and the head reads the $Q$ query
-tokens only. The arrangement is exactly covariant and not query-independent
-(@sec-isla-contracts).
+Re-representing the same surface on finer cells therefore changes nothing,
+and rescaling the geometry shifts every token's bias by the same amount.
+The $N + Q$ tokens then run through the twelve slice layers together. The
+head frame builds its anchors from all of them, and the head reads the $Q$
+query tokens only. The arrangement is exactly covariant and not
+query-independent (@sec-isla-contracts).
 
 ### The optional passive decoder {#sec-arch-passive-decoder}
 
@@ -630,12 +632,12 @@ the one place the book describes it.
 ::: {.callout-note collapse="true" title="The passive decoder: exact query independence, and why the interior results do not use it"}
 
 **What it is.** With `query_independent=True` the encoder runs on the
-boundary alone; the queries never enter it. One more routing map on the
+boundary alone. The queries never enter it. One more routing map on the
 final state (`final_assign`) summarizes the encoder once into slice states
-$Z_s$ and anchors $z_s, m_s$ exactly as steps b, c and g do. Each query,
-seeded and embedded as a query token would be (with its own scalar
-embedding), then passes through `n_decoder_layers` (four by default)
-**read blocks** (`_ReadBlock`), each of which forms the relational
+$Z_s$ and anchors $z_s, m_s$ exactly as steps b, c and g do. Each query is
+seeded and embedded as a query token would be, with its own scalar
+embedding. It then passes through `n_decoder_layers` (four by default)
+**read blocks** (`_ReadBlock`). Each read block forms the relational
 invariants $\xi_{qs}$ against the final anchors, reads over the slices, and
 reads the encoder states near the query through a measure-weighted
 Gaussian kernel of width $\varrho$ (`local_readout_rho`, 0.02 length units):
@@ -654,29 +656,28 @@ $$
 Nothing in a read block writes into the encoder, so the prediction at a
 query is a function of the boundary and that query alone. The head frame's
 anchors come from the encoder tokens and its soft assignment $\beta_{qs}$
-from the query state; the head is stage 5 unchanged. The property is a
-contract of the code, not of a checkpoint: `test_query_set_independence`
+from the query state. The head is stage 5 unchanged. The property is a
+contract of the code, not of a checkpoint. `test_query_set_independence`
 checks in float64 that 50 queries predicted alone equal the same 50 among
-150 to $10^{-12}$ with zero relative tolerance (@sec-isla-contracts), and
-on a trained checkpoint the same sentinel points predicted alone, with
-2,000 companions and with 40,000 move by exactly 0.000 in float32
+150 to $10^{-12}$ with zero relative tolerance (@sec-isla-contracts). On a
+trained checkpoint, the same sentinel points predicted alone, with 2,000
+companions and with 40,000 move by exactly 0.000 in float32
 (@sec-nb-qmass-verdict). With `support_tokens=True` a per-case set of
-interior *support* points joins the encoder as interacting tokens (seeded
-and weighted like query tokens) while the requested queries are still
-decoded read-only, which keeps the contract with more of the interior in
-view. Every contract of @sec-isla-contracts holds in this mode; the
-read-only path with boundary scalars fails on a shape when source and
-query counts differ, and no number in the book uses that pair.
+interior *support* points joins the encoder as interacting tokens, seeded
+and weighted like query tokens. The requested queries are still decoded
+read-only, so the contract holds with more of the interior in view. Every
+contract of @sec-isla-contracts holds in this mode. The read-only path with
+boundary scalars fails on a shape when source and query counts differ, and
+no number in the book uses that pair.
 
 **Why the interior results use interacting query tokens instead.** The
 price was measured on the DrivAerML Volume task in float32 on the 48
-validation cars with two seeds, at the 10,000-cell exploration budget
-(the reporting protocol of @sec-protocol is 200,000 cells; these numbers
-are a labeled mechanism measurement, not an accuracy claim, and the
-100,000-cell re-measurement is pending under PROTOCOL-REDO,
-@sec-nb-protocol-redo-prereg). Against the interacting query tokens with
-the signed distance (0.0547 / 0.0796 / 0.1116 on pressure / velocity /
-eddy viscosity):
+validation cars with two seeds, at the 10,000-cell exploration budget. The
+reporting protocol of @sec-protocol is 200,000 cells, so these numbers are
+a labeled mechanism measurement, not an accuracy claim. The 100,000-cell
+re-measurement is pending (@sec-nb-protocol-redo-prereg). Against the
+interacting query tokens with the signed distance (0.0547 / 0.0796 / 0.1116
+on pressure / velocity / eddy viscosity):
 
 | passive arm (10,000 boundary cells and queries, float32) | pressure | velocity | eddy viscosity | passive ÷ interacting |
 |---|--:|--:|--:|---|
@@ -696,27 +697,27 @@ research/transfer_program/studies/computational_support/d1_verdict_2026-09-10.js
 (first two rows); @sec-nb-fp32-interior-family and
 @sec-nb-fp32-reeval-verdict-interior (third row). {#tbl-arch-passive-price}
 
-The two matched rows locate the price: it is not depth (twelve read
-blocks against four, both over the support set, change pressure by 13%)
-and not interior context (the interacting support set with the signed
-distance changes it by 12% and makes eddy viscosity worse), but the
+The two matched rows locate the price. It is not depth: twelve read blocks
+against four, both over the support set, change pressure by 13%. It is not
+interior context: the interacting support set with the signed distance
+changes pressure by 12% and makes eddy viscosity worse. It is the
 computation the interacting queries receive at the requested points
 through every slice layer. That is why admitting the queries as tokens
 closes most of the gap to GeoTransolver-volume on pressure with no extra
 parameters (@sec-interior-results), and why the passive route is closed
-for ISLA at matched depth and inputs. The verdict rests on one dataset:
-the passive decoder has not been trained on AirfRANS.
+for ISLA at matched depth and inputs. The verdict rests on one dataset.
+The passive decoder has not been trained on AirfRANS.
 
 **What the interacting tokens give up.** A prediction at a point is a
 function of the whole request. The size of the dependence is measured at
-the same exploration budget (@sec-interior-companion, QCOUNT,
-@sec-nb-qcount-verdict): the reference checkpoint trained at 10,000
+the same exploration budget (@sec-interior-companion,
+@sec-nb-qcount-verdict). The reference checkpoint trained at 10,000
 requests and scored at 2,000 loses 1.38x / 1.59x / 1.49x on pressure /
-velocity / eddy viscosity, and at 40,000 it moves by 3% and improves;
-training over request sizes 2,000 to 20,000 reduces the 2,000-request
+velocity / eddy viscosity. Scored at 40,000 it moves by 3% and improves.
+Training over request sizes 2,000 to 20,000 reduces the 2,000-request
 penalty to 1.24x / 1.31x / 1.31x at a 3.7% pressure cost and does not
 remove it. The default query mass `query_mass="source_total"` removes the
-count scaling of the routing weight by construction; the dependence
+count scaling of the routing weight by construction. The dependence
 through the shared slices remains. The working rule is to deploy the
 interacting configuration at its training request count and to state
 that count with every interior number.
@@ -726,42 +727,42 @@ the deployment needs the contract rather than the last factor of
 accuracy:
 
 - *Encode once, decode many.* The encoder's final slice states and
-  anchors are a fixed summary of one boundary; any number of query
+  anchors are a fixed summary of one boundary. Any number of query
   batches can be decoded from it later, in any chunking, and the answer
   at a point never changes. The interacting arrangement recomputes the
-  slice layers for every request and its answer depends on the batch.
+  slice layers for every request, and its answer depends on the batch.
 - *Streaming or chunked inference over arbitrary point sets.* A
   streamline traced point by point, a probe plane added after the fact, a
   domain too large for one forward pass: with the passive decoder the
-  chunks are exactly consistent with each other and with the whole; with
-  the interacting decoder each chunk must be filled to the training count
+  chunks are exactly consistent with each other and with the whole. With
+  the interacting decoder each chunk must be filled to the training count,
   and adjacent chunks disagree at shared points by the companion
   sensitivity above.
 - *Reproducibility and certification.* A per-point prediction that is a
   pure function of the boundary and the point is auditable and identical
-  across requests; the interacting prediction is identical only for an
+  across requests. The interacting prediction is identical only for an
   identical request.
 - *Memory.* The passive decoder's cost in queries is linear and separable
-  from the encoder: queries do not attend to one another. The interacting
-  arrangement's token set is $N + Q$: at the reporting protocol, 200,000
-  boundary cells and 200,000 queries are a 400,000-token case, whose
-  training peak on the cost grid is 53.5 GB for ISLA-192 against 27 GB for
-  200,000 tokens (@sec-cost-sweep), with the fused geometry kernel; on
-  the eager fallback the geometry region is rebuilt in the
-  backward pass (`geo_checkpoint`) to hold memory. The passive decoder is
-  not free of its own footprint: its local readout saves a $4{,}096 \times
-  Q$ kernel per chunk for the backward pass, so 200,000 queries against
-  200,000 boundary tokens exceed one GB300 in training (about 500 GB of
-  saved kernels), and the pending re-measurement runs at 100,000;
-  recomputing those chunks in backward is the queued engineering fix
+  from the encoder, because queries do not attend to one another. The
+  interacting arrangement's token set is $N + Q$. At the reporting
+  protocol, 200,000 boundary cells and 200,000 queries are a 400,000-token
+  case. Its training peak on the cost grid is 53.5 GB for ISLA-192 against
+  27 GB for 200,000 tokens (@sec-cost-sweep), with the fused geometry
+  kernel. On the eager fallback the geometry region is rebuilt in the
+  backward pass (`geo_checkpoint`) to hold memory. The passive decoder has
+  its own footprint. Its local readout saves a $4{,}096 \times Q$ kernel
+  per chunk for the backward pass, so 200,000 queries against 200,000
+  boundary tokens exceed one GB300 in training (about 500 GB of saved
+  kernels). The pending re-measurement runs at 100,000. Recomputing those
+  chunks in backward is the queued engineering fix
   (@sec-nb-protocol-redo-prereg).
 
 The interacting arrangement is the default whenever the evaluation point
 set is fixed and available in full, in batch inference, and wherever
 accuracy is the objective, which is every interior result of this book.
 The passive decoder stays supported as a switch at the price in
-@tbl-arch-passive-price; nothing in the program has found a way to keep
-its contract at the interacting configuration's accuracy, and the two
+@tbl-arch-passive-price. Nothing in the program has found a way to keep
+its contract at the interacting configuration's accuracy. The two
 attempts (latent volume tokens, an interacting support set) are recorded
 in @sec-interior-negatives and in the table above.
 
@@ -774,24 +775,24 @@ slice is a patch of surface with an anchor inside the body, the first
 layer routes nearly everything into a handful of slices, and the deep
 layers spread the mass over most of the 256 while each token stays soft.**
 Every routing picture in Part I so far drew hand-made routing weights on the
-airfoil; this section reads the real ones out of trained checkpoints, so
+airfoil. This section reads the real ones out of trained checkpoints, so
 the reader can see what @sec-isla-slices promised. The instrument is a
 wrapper around the routing softmax over tokens (`_softmax_over_points`,
-step f) with pre- and post-hooks on each `_SliceBlock` delimiting the two
-calls a block makes (step b's provisional pass and step f's refined pass);
-the block's second call is read. From the recorded refined logits the
-read-back weights $\pi_{is}$ of step e, a softmax over the slices without
-the measure bias, are each token's **soft assignment**; the **dominant
-slice** of a token is $\arg\max_s \pi_{is}$, the **mass** of a slice is
-$q_s \equiv \frac{1}{N}\sum_i \pi_{is}$ (the slices' share of the tokens,
-summing to one), and the **effective number of slices** is
+step f), with pre- and post-hooks on each `_SliceBlock` that delimit the
+two calls a block makes (step b's provisional pass and step f's refined
+pass). The block's second call is read. From the recorded refined logits,
+the read-back weights $\pi_{is}$ of step e (a softmax over the slices
+without the measure bias) are each token's **soft assignment**. The
+**dominant slice** of a token is $\arg\max_s \pi_{is}$. The **mass** of a
+slice is $q_s \equiv \frac{1}{N}\sum_i \pi_{is}$, the slices' share of the
+tokens, summing to one. The **effective number of slices** is
 $M_{\mathrm{eff}} \equiv \exp(-\sum_s q_s \log q_s)$, which is 256 when
 every slice carries the same mass and 1 when one slice carries all of it.
 The anchors are step c's $z_s$, drawn in the dataset's coordinates. Each
 checkpoint is the final one of a completed reference-configuration run
 (384 wide, 12 layers, 256 slices, cosine routing), run in float32 on the
 first case of its validation loader with the geometry kernel it trained
-with; the numbers in this section are computed from the stored weights as
+with. The numbers in this section are computed from the stored weights as
 the page renders.
 
 ```{python}
@@ -1029,10 +1030,10 @@ ne_dr = [n_eff(DR["q"][li]) for li in range(12)]; ne_t2 = [n_eff(T2["q"][li]) fo
 dr_l1_top = np.sort(DR["q"][0])[::-1]
 print(
     f"**What the pictures show.** In the first layer the car model routes with an effective number of {ne_dr[0]:.0f} slices "
-    f"and its heaviest slice holds {100 * dr_l1_top[0]:.0f}% of the soft mass: that layer's routing map sees only the embedded seed "
+    f"and its heaviest slice holds {100 * dr_l1_top[0]:.0f}% of the soft mass. That layer's routing map sees only the embedded seed "
     f"(each normal against the far-field direction), refined by the geometry against anchors formed from that same seed, and a car's "
     f"surface offers few distinct values of it. From the "
-    f"second layer on the token states carry position through the relational invariants and the effective number rises to "
+    f"second layer on, the token states carry position through the relational invariants, and the effective number rises to "
     f"{min(ne_dr[1:6]):.0f} to {max(ne_dr[1:6]):.0f} in layers 2 to 6 and {min(ne_dr[6:]):.0f} to {max(ne_dr[6:]):.0f} in layers 7 to 12. "
     f"The specimen model, whose seed already carries the boundary labels, the frame and six global scalars, starts at {ne_t2[0]:.0f} "
     f"and stays between {min(ne_t2):.0f} and {max(ne_t2):.0f}. The assignment is soft throughout: in the sixth layer "
@@ -1045,18 +1046,18 @@ print(
 
 ::: {.callout-note collapse="true" title="How the weights were read, and what the earlier routing probes measured"}
 The wrapper records the input and output of every call of
-`_softmax_over_points`; a slice block calls it twice, once with the
+`_softmax_over_points`. A slice block calls it twice: once with the
 provisional logits (step b, used only to place the anchors) and once with
 the refined logits (step f). Forward pre-hooks on the blocks record where
-each block's calls start and end, and the block's last call is read; its
-input is $\lambda'_{is} + \ell_i$, so subtracting the measure bias $\ell_i$
+each block's calls start and end, and the block's last call is read. Its
+input is $\lambda'_{is} + \ell_i$. Subtracting the measure bias $\ell_i$
 (taken from the block's second argument) and normalizing over slices gives
 $\pi_{is}$ exactly as step e computes it. The earlier routing probes
 (@sec-nb-routingsat-erratum) indexed the flat list of calls, so their
-"layer $i$" was block $\lfloor i/2 \rfloor$, pass $i \bmod 2$; the per-layer
-numbers here are per block. The recorded arrays are stored subsampled to
-60,000 tokens per case for the pictures; the masses and effective numbers
-are computed over every token before subsampling. Probe:
+"layer $i$" was block $\lfloor i/2 \rfloor$, pass $i \bmod 2$. The
+per-layer numbers here are per block. The recorded arrays are stored
+subsampled to 60,000 tokens per case for the pictures. The masses and
+effective numbers are computed over every token before subsampling. Probe:
 `results/probes/slices_2026-09-22/slices_probe.py`.
 :::
 
@@ -1067,10 +1068,10 @@ read off the stages directly.**
 
 - **No coordinate reaches a learned map, and no center is estimated.**
   $r_i$ enters only as $r_i - z_s$ (step d), $r_i - \sum_s \beta_{is} z^f_s$
-  (stage 4) and $\lvert r_q - r_i \rvert$ (the local readout); every learned
+  (stage 4) and $\lvert r_q - r_i \rvert$ (the local readout). Every learned
   input is a norm, a dot product, a log of one of those, or a supplied
   scalar. The one mean position computed, inside $L$, is consumed by a
-  scalar; anchors are means over *slices*, not over the body, and only
+  scalar. Anchors are means over *slices*, not over the body, and only
   their differences from tokens are used.
 - **No positional encoding, no pairwise attention.** Tokens communicate
   only through the $M$ slice states, and the routing that decides which
@@ -1079,9 +1080,9 @@ read off the stages directly.**
 
 ## The switches {#sec-arch-switches}
 
-**The class has one frame and a small set of switches; each names the stage
-it changes.** The recipe's surface and interior configurations are in
-@sec-using-config.
+**The class has one frame and a small set of switches. Each row below names
+the stage a switch changes.** The recipe's surface and interior
+configurations are in @sec-using-config.
 
 | flag (default) | stage | what it changes |
 |---|---|---|
@@ -1097,5 +1098,5 @@ it changes.** The recipe's surface and interior configurations are in
 | `use_relational_geo` (on) | 3d, 3e, 3h | the relational invariants in the refinement and the read-back; off is the feature-only slicing ablation |
 | `query_tokens` (off), `query_mass` (`"source_total"`) | modes | the interacting interior arrangement and the queries' routing mass: a learned share of the total boundary measure, or `"geometric_mean"`, a learned factor times the geometric mean of the source weights (which depends on the boundary refinement) |
 | `query_independent` (off), `n_decoder_layers` (4), `local_readout_rho` (0.02), `support_tokens` (off) | modes | the optional passive decoder (exactly query-independent, at the accuracy price in @sec-arch-passive-decoder), its depth, its local-readout width, and its optional interacting support set (whose directions and distances follow `interior_geometry` like the queries') |
-| `geo_kernel` (`None`, automatic), `geo_checkpoint` (off), `fast_point_softmax` (on) | 3c–3e, 3h | how the geometry region is executed: `None` resolves at the first forward pass to `"fused"` (the Triton kernel) when the inputs are on CUDA, Triton is importable, there is one global direction, at most 1,024 slices and no rank-1 or rank-2 per-token input, and to `"eager"` (the PyTorch region) otherwise; either name forces that path, and `"fused"` raises where its constraints fail. `geo_checkpoint` rebuilds the eager region in backward instead of storing it; `fast_point_softmax` selects the row-parallel softmax kernel. None changes the function computed beyond roundoff |
+| `geo_kernel` (`None`, automatic), `geo_checkpoint` (off), `fast_point_softmax` (on) | 3c–3e, 3h | how the geometry region is executed: `None` resolves at the first forward pass to `"fused"` (the Triton kernel) when the inputs are on CUDA, Triton is importable, the global directions and rank-1 per-token inputs together number one to three, there are at most 1,024 slices and no rank-2 per-token input, and to `"eager"` (the PyTorch region) otherwise; either name forces that path, and `"fused"` raises where its constraints fail. `geo_checkpoint` rebuilds the eager region in backward instead of storing it; `fast_point_softmax` selects the row-parallel softmax kernel. None changes the function computed beyond roundoff |
 | `eps` ($10^{-12}$) | 1, 3c, 3d, 4 | the floor under every norm and logarithm |
