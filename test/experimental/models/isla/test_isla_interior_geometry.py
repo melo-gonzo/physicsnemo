@@ -305,8 +305,8 @@ def test_nearest_boundary_geometry_near_wall_dense_cluster_matches_brute_force()
     """The matmul candidate search must return the true nearest sample where it is
     hardest: queries a hair off a dense cluster of boundary samples far from the
     cloud's centre (large |x|^2 relative to the separations), in float32 inputs,
-    against a float64 brute force; every candidate count, including 1, must agree
-    (the expansion runs in float64, so its resolution is below fp32 coordinate ties)."""
+    against a float64 brute force (the fallback expansion runs in float64, so its
+    resolution is below fp32 coordinate ties; the CUDA kernel forms exact differences)."""
     g = torch.Generator().manual_seed(3)
     n, q_n = 5000, 400
     pts64, nrm64, _ = _cloud(n, 0)
@@ -320,7 +320,26 @@ def test_nearest_boundary_geometry_near_wall_dense_cluster_matches_brute_force()
     q64 = centre + 2e-3 * torch.randn(1, q_n, 3, dtype=D, generator=g)
     pts, nrm, q = pts64.float(), nrm64.float(), q64.float()
     d_ref, u_ref = _brute_force(q.double(), pts.double(), nrm.double())
-    for cand in (1, 2, 16):
-        d, u = nearest_boundary_geometry(q, pts, nrm, chunk=64, candidates=cand)
-        assert torch.allclose(d.double(), d_ref, atol=1e-9, rtol=1e-5), cand
-        assert torch.allclose(u.double(), u_ref, atol=1e-5, rtol=0), cand
+    d, u = nearest_boundary_geometry(q, pts, nrm, chunk=64)
+    assert torch.allclose(d.double(), d_ref, atol=1e-9, rtol=1e-5)
+    assert torch.allclose(u.double(), u_ref, atol=1e-5, rtol=0)
+    if torch.cuda.is_available():
+        ### the Triton kernel path (CUDA) against the same float64 truth
+        d_k, u_k = nearest_boundary_geometry(q.cuda(), pts.cuda(), nrm.cuda())
+        assert torch.allclose(d_k.cpu().double(), d_ref, atol=1e-9, rtol=1e-5)
+        assert torch.allclose(u_k.cpu().double(), u_ref, atol=1e-5, rtol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="Triton kernel")
+def test_triton_nearest_index_matches_float64_path_at_scale():
+    """The kernel and the float64 fallback pick the same sample (up to exact ties,
+    which leave d and u unchanged) on a large random cloud with a padded tail."""
+    from physicsnemo.experimental.models.isla.nn_kernel import nearest_index
+
+    g = torch.Generator(device="cuda").manual_seed(0)
+    pts = torch.randn(2, 30001, 3, device="cuda", generator=g)
+    q = 1.5 * torch.randn(2, 4099, 3, device="cuda", generator=g)
+    idx = nearest_index(q, pts)
+    d_k = (q - torch.gather(pts, 1, idx[..., None].expand(2, 4099, 3))).norm(dim=-1)
+    d_ref = torch.cdist(q.double(), pts.double()).amin(-1)
+    assert torch.allclose(d_k.double(), d_ref, atol=1e-6, rtol=1e-6)

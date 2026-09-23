@@ -122,9 +122,9 @@ y_{i^*}|`, signed by the nearest sample's normal (positive on the side the
 normal points to: outside, for outward normals, the convention of the stored
 signed-distance fields of the program's datasets). The search is a chunked
 nearest-neighbour pass over the queries (:func:`nearest_boundary_geometry`:
-matmul-expanded candidates on centred coordinates, refined exactly; the
-:math:`N_q \times N` distance matrix is never materialized; the chunk is
-``interior_nn_chunk`` queries or a 512 MiB block by default), and
+an exact brute-force pass, a fused Triton kernel on CUDA and a float64
+matmul expansion elsewhere; the :math:`N_q \times N` distance matrix is never
+materialized; ``interior_nn_chunk`` sizes the fallback's blocks), and
 :math:`d_q / L` with its signed logarithm enters the token's embedding as a
 built-in rank-0 channel ahead of the declared ``query_inputs``. The caller
 passes ``query_points`` (and ``support_points``) only. Because the boundary
@@ -990,9 +990,20 @@ def rms_pairwise_distance(
 
 
 #: Memory budget, in bytes, of one chunk of the nearest-boundary distance block
-#: when ``interior_nn_chunk`` is not given (512 MiB: about 640 queries per chunk
-#: against 200,000 float32 boundary points).
-NN_CHUNK_BYTES = 512 * 2**20
+#: when ``interior_nn_chunk`` is not given (2 GiB of float64: about 1,300 queries
+#: per chunk against 200,000 boundary points; the search is memory-bound, so
+#: fewer, larger chunks are faster).
+NN_CHUNK_BYTES = 2 * 2**30
+
+
+def _nn_kernel_available() -> bool:
+    """Whether the Triton nearest-neighbour kernel can run (imported lazily so
+    the module loads without triton)."""
+    try:
+        from .nn_kernel import HAS_TRITON
+    except Exception:  # pragma: no cover
+        return False
+    return bool(HAS_TRITON)
 
 
 def nearest_boundary_geometry(
@@ -1001,7 +1012,6 @@ def nearest_boundary_geometry(
     normals: Float[torch.Tensor, "batch tokens 3"],
     *,
     chunk: int | None = None,
-    candidates: int = 16,
     eps: float = 1e-12,
 ) -> tuple[
     Float[torch.Tensor, "batch queries"], Float[torch.Tensor, "batch queries 3"]
@@ -1009,12 +1019,13 @@ def nearest_boundary_geometry(
     r"""Signed distance and direction from the nearest boundary sample to each query.
 
     For every query :math:`x_q` the nearest boundary point :math:`y_{i^*}` is
-    found by a chunked nearest-neighbour search over the queries: a
-    ``(B, chunk, N)`` block of matmul-expanded squared distances on centred,
-    scaled coordinates selects ``candidates`` samples per query, and the exact
-    distance to those decides (so the ``N_q x N`` matrix is never
-    materialized, the search runs at matmul speed, and the returned distance
-    is computed exactly from the chosen sample); then
+    found by an exact brute-force search: on CUDA with Triton a fused kernel
+    (:mod:`nn_kernel`) streams the samples past ``BLOCK_Q`` queries at a time
+    and keeps the running minimum of the exact float32 ``|x_q - y_i|^2``, so no
+    ``N_q x N`` block is ever written; elsewhere a chunked float64 matmul
+    expansion ``|y|^2 - 2 x.y`` on centred, scaled coordinates (whose distance
+    resolution, ``sqrt(eps64) R ~ 1e-8 R``, is below the float32 resolution of
+    the coordinates) selects the same sample; then
 
     .. math::
 
@@ -1033,11 +1044,8 @@ def nearest_boundary_geometry(
     The search runs without gradient (an argmin); :math:`d_q, u_q` are then
     rebuilt from the gathered sample, so they are differentiable in the
     positions. ``normals`` are renormalized. ``chunk`` is the number of
-    queries per distance block; ``None`` derives it from :data:`NN_CHUNK_BYTES`.
-    ``candidates`` is the number of samples per query whose exact distance is
-    compared after the float64 expanded-form search (16 by default; the
-    expansion alone already resolves below fp32 coordinate ties, so the
-    refinement is margin against ties and denormal inputs).
+    queries per distance block of the float64 fallback; ``None`` derives it
+    from :data:`NN_CHUNK_BYTES`.
 
     Because the boundary is a *sample* (200,000 of up to 17 million cells on
     a DrivAerML car), :math:`\lvert d_q \rvert` overestimates the true wall
@@ -1047,45 +1055,35 @@ def nearest_boundary_geometry(
     """
     b, nq, _ = query_points.shape
     n = points.shape[1]
-    if chunk is None:
-        chunk = max(1, NN_CHUNK_BYTES // (b * n * query_points.element_size()))
-    k = min(int(candidates), n)
     with torch.autocast(query_points.device.type, enabled=False), torch.no_grad():
-        ### Candidate search in the matmul-expanded form |y|^2 - 2 x.y (the |x|^2
-        ### term is constant per query) in float64 on coordinates centred and
-        ### scaled by the boundary sample, then the exact distance to the k best
-        ### candidates decides. The expansion cancels catastrophically: its
-        ### squared-distance error is ~eps * R^2, i.e. a distance resolution of
-        ### sqrt(eps) * R, which at fp32 is 2e-4 of the body radius (coarser than
-        ### the near-wall sample spacing it must resolve) and at fp64 1e-8 R
-        ### (below the fp32 resolution of the coordinates themselves). The exact
-        ### element-wise cdist path ("donot_use_mm_for_euclid_dist") is ~100x
-        ### slower at 200,000 x 200,000 (46 s against 0.4 s per training step,
-        ### INTERNAL-GEOMETRY lanes, 2026-09-23); a float64 matmul of that size is
-        ### 8e10 flop, well under 0.1 s even on GPUs with reduced fp64 rates.
-        c = points.mean(dim=1, keepdim=True)
-        scale = (points - c).norm(dim=-1).amax(dim=1).clamp_min(eps)[:, None, None]
-        y_s = ((points - c) / scale).double()  # (B, N, 3)
-        y_sq = y_s.square().sum(-1)  # (B, N)
-        y_t = y_s.transpose(1, 2)  # (B, 3, N)
-        idx = []
-        for i0 in range(0, nq, chunk):
-            q_c = query_points[:, i0 : i0 + chunk]  # (B, q, 3)
-            q_s = ((q_c - c) / scale).double()
-            approx = y_sq[:, None, :] - 2.0 * (q_s @ y_t)  # (B, q, N)
-            if k == 1:
+        if query_points.is_cuda and _nn_kernel_available():
+            from .nn_kernel import nearest_index
+
+            idx = nearest_index(query_points, points)  # (B, Q)
+        else:
+            ### Float64 expanded form |y|^2 - 2 x.y (|x|^2 is constant per query) on
+            ### coordinates centred and scaled by the boundary sample. The expansion
+            ### cancels catastrophically: its squared-distance error is ~eps R^2, a
+            ### distance resolution of sqrt(eps) R, which at fp32 would be 2e-4 R
+            ### (coarser than the near-wall sample spacing) and at fp64 is 1e-8 R
+            ### (below the fp32 resolution of the coordinates themselves). The exact
+            ### element-wise cdist path is ~100x slower at 200,000 x 200,000
+            ### (46 s per training step, INTERNAL-GEOMETRY lanes, 2026-09-23).
+            if chunk is None:
+                chunk = max(1, NN_CHUNK_BYTES // (b * n * 8))  # the block is float64
+            c = points.mean(dim=1, keepdim=True)
+            scale = (points - c).norm(dim=-1).amax(dim=1).clamp_min(eps)[:, None, None]
+            y_s = ((points - c) / scale).double()  # (B, N, 3)
+            y_sq = y_s.square().sum(-1)  # (B, N)
+            y_t = y_s.transpose(1, 2)  # (B, 3, N)
+            idx = []
+            for i0 in range(0, nq, chunk):
+                q_s = ((query_points[:, i0 : i0 + chunk] - c) / scale).double()
+                approx = torch.baddbmm(
+                    y_sq[:, None, :].expand(b, q_s.shape[1], n), q_s, y_t, beta=1.0, alpha=-2.0
+                )  # (B, q, N), one fused pass
                 idx.append(approx.argmin(dim=-1))
-                continue
-            cand = approx.topk(k, dim=-1, largest=False).indices  # (B, q, k)
-            y_k = torch.gather(
-                y_s[:, None].expand(b, cand.shape[1], n, 3),
-                2,
-                cand[..., None].expand(*cand.shape, 3),
-            )  # (B, q, k, 3)
-            exact = (q_s[:, :, None, :] - y_k).square().sum(-1)  # (B, q, k)
-            best = exact.argmin(dim=-1, keepdim=True)
-            idx.append(torch.gather(cand, 2, best).squeeze(-1))
-        idx = torch.cat(idx, dim=1)  # (B, Q)
+            idx = torch.cat(idx, dim=1)  # (B, Q)
     gather = idx[..., None].expand(b, nq, 3)
     y = torch.gather(points, 1, gather)
     n_star = torch.gather(normals, 1, gather)
