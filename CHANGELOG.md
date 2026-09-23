@@ -25,12 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PHYSICSNEMO_DIST_TIMEOUT_S`; unset or empty configuration keeps PyTorch's
   backend default. Invalid timeouts are rejected before initialization state
   changes, allowing corrected configuration to be retried.
-- Adds `physicsnemo.experimental.nn.ISLA` (Invariant Slice Attention), an
-  SE(3)-equivariant, measure-aware slice-attention surrogate for steady
-  boundary-value problems with zero or more global vector and scalar inputs,
-  boundary-condition scalars, and interior query modes. The API is
-  keyword-only; the reference configuration and its variants are documented
-  in the unified external-aerodynamics recipe.
+- Adds `physicsnemo.experimental.models.ISLA` (Invariant Slice Attention), an
+  O(3)/SE(3)-equivariant, measure-aware slice-attention surrogate for steady
+  boundary-value problems. Inputs (global, per-boundary-cell, per-query) and
+  outputs are named fields of declared tensor rank (`outputs={"pressure": 0,
+  "wss": 1, "stress": {"rank": 2, "symmetric": True}}`); every input enters
+  through O(3)-invariants and every output leaves through an exactly
+  equivariant basis (ranks up to 4, even or odd parity). Interior query modes
+  are included. The API is keyword-only; the reference configuration and its
+  variants are documented in the unified external-aerodynamics recipe.
 - Adds `DropDegenerateCells` to the unified external aerodynamics surface
   pipelines, dropping collapsed or non-finite cells before centroid conversion.
 - `MeshToDomainMesh` in `cell_centroids` mode records each source cell's

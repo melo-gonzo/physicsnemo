@@ -14,6 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from physicsnemo.experimental.nn.isla.model import ISLA
+"""Experimental models for PhysicsNeMo.
+
+Models in this subpackage are under active development and may have breaking API
+changes between releases. Subpackages (``geotransolver``, ``globe``, ...) are
+imported by their own paths; the classes re-exported here are the ones whose
+package lives only in this namespace.
+"""
+
+from .isla import ISLA
 
 __all__ = ["ISLA"]
