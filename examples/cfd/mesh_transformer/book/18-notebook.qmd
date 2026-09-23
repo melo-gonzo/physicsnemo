@@ -26506,3 +26506,28 @@ on this set ISLA's stress curve is the *shallower* one (one seed at two
 rungs; the second seeds and the RANK-IO 2,048-case lanes decide whether
 the rank-1 inputs change the exponent as they changed the 512-case
 standing).
+
+**Addendum (2026-09-23, later): DeepJEB++ rank-1 load, both seeds; the
+2,048-case elasticity baseline, both seeds; the domain frame at 2,048
+Poisson cases, one seed.** (a) `v2_jb_isla_r1_rankio_n1024_seed{42,43}`:
+von Mises 0.489 / 0.498 (mean 0.494), displacement 0.246 / 0.253 (0.249),
+against the scalar-load R1 lanes' 0.496 / 0.496 (0.496) and 0.239 / 0.246
+(0.242). **RANK-IO verdict on DeepJEB++: within the spread on von Mises
+(0.5% better) and 3% worse on the displacement, at the two-seed spread of
+either arm**, so the preregistered clause "the scalar components sufficed"
+holds (@sec-nb-rankio-prereg, prediction 0.6): with the load direction
+already the global vector, the traction as a rank-1 boundary input adds
+nothing beyond its normal projection and magnitude. (b) OLBC elasticity
+baseline ISLA at 2,048 cases with both seeds: 0.357 / 0.555 / 0.534 /
+0.503 (displacement / $\sigma_{11}$ / $\sigma_{22}$ / $\sigma_{12}$),
+GeoTransolver-512 ÷ ISLA 0.46 / 0.46 / 0.52 / 0.50; the one-seed reading
+above stands. (c) `om_poisson_isla_r1_frame2_n2048_seed42`: $u$ 0.156
+against the 2,048-case baseline 0.395 and GeoTransolver-512 0.098, i.e.
+**the domain's frame as global vectors recovers 67% of the log-gap at
+2,048 cases where it recovered 19% at 512** (one seed; the 2,048-case
+`ext` and `leak` twins are still training). If the second seed holds, the
+mechanism reading changes with the rung: at 512 cases the value channel
+dominates, at 2,048 the positional channel (a frame the model can express
+absolute position in, on a fixed domain) recovers most of the gap on its
+own. The two are not exclusive; the 2,048-case `ext` twin says whether
+they add.
