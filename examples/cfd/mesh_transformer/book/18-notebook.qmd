@@ -26586,11 +26586,15 @@ tests pass). **Cost** on the RTX 4090 laptop GPU at 20,000 points, width
 | directions | eager | fused | speed-up | peak memory eager / fused |
 |---|---|---|---|---|
 | K = 1 | 84 ms | 25 ms | 3.4x | 2.15 / 1.00 GiB |
-| K = 2 | 97 ms | 48 ms | 2.0x | 2.23 / 1.00 GiB |
+| K = 2 | 97 ms | 25 ms | 3.9x | 2.23 / 1.00 GiB |
+| K = 3 | 99 ms | 25 ms | 4.0x | 2.31 / 1.01 GiB |
 
-The fused K = 2 step is twice the fused K = 1 step where the arithmetic
-grows by a sixth, which points at register pressure in the unrolled tile
-rather than at the extra dot products; a launch-configuration pass for
-K > 1 is the follow-up. The cluster snapshots are not touched by this
-change (the running frame lanes finish on the eager region they started
-on; a new snapshot carries the kernel for the next solids campaign).
+With the K = 1 tile sizes the K = 2 and K = 3 steps first came out at 48
+and 50 ms: the unrolled tile holds K extra (BLOCK_N, S) invariants and
+spills registers (region-level sweep: 5.2 and 9.4 ms against 1.2 ms per
+region step). Halving the points per program for K > 1 (forward 4, backward
+2 at up to 256 slices) restores the K = 1 speed, so the fused step is
+independent of the direction count up to three. The cluster snapshots are
+not touched by this change (the running frame lanes finish on the eager
+region they started on; a new snapshot carries the kernel for the next
+solids campaign).

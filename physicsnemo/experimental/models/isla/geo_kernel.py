@@ -647,16 +647,21 @@ BWD_BLOCK_N: int | None = None
 NUM_WARPS: int = 4
 
 
-def _fwd_block(s):
+def _fwd_block(s, k=1):
+    """Points per forward program; halved for K > 1, whose unrolled tiles hold K
+    extra (BLOCK_N, S) invariants (the K = 1 defaults spill registers there:
+    5.2 ms against 1.2 ms per region step at K = 2 on the 4090, 2026-09-23)."""
     if FWD_BLOCK_N is not None:
         return FWD_BLOCK_N
-    return 8 if s <= 256 else 4 if s <= 512 else 2
+    base = 8 if s <= 256 else 4 if s <= 512 else 2
+    return base if k == 1 else max(1, base // 2)
 
 
-def _bwd_block(s):
+def _bwd_block(s, k=1):
     if BWD_BLOCK_N is not None:
         return BWD_BLOCK_N
-    return 4 if s <= 256 else 2 if s <= 512 else 1
+    base = 4 if s <= 256 else 2 if s <= 512 else 1
+    return base if k == 1 else max(1, base // 2)
 
 
 @torch.library.custom_op("physicsnemo::isla_geo_region_fwd", mutates_args=())
@@ -685,7 +690,7 @@ def _geo_region_fwd(
     pooled = torch.empty(b, n, ng, device=r.device, dtype=out_dt)
     w = weight.reshape(-1).to(r.dtype).contiguous()
     bb = bias.reshape(-1).to(r.dtype).contiguous()
-    block_n, block_s = _fwd_block(s), _next_pow2(s)
+    block_n, block_s = _fwd_block(s, k), _next_pow2(s)
     grid = (triton.cdiv(n, block_n), b)
     _geo_fwd_kernel[grid](
         r,
@@ -776,7 +781,7 @@ def _geo_region_bwd(
     grad_bias = grad_bias.contiguous()
     grad_mix = grad_mix.contiguous()
     grad_pooled = grad_pooled.contiguous()
-    block_n, block_s = _bwd_block(s), _next_pow2(s)
+    block_n, block_s = _bwd_block(s, k), _next_pow2(s)
     n_tiles = triton.cdiv(n, block_n)
     glogit = torch.empty_like(logits_pre)
     gr = torch.empty(b, n, 3, device=r.device, dtype=r.dtype)
