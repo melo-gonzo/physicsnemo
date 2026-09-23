@@ -1,0 +1,2025 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+r"""ISLA: Invariant Slice Attention.
+
+An O(3)/SE(3)-equivariant soft-slice transformer for steady boundary-value PDE
+surrogates. A boundary sample (positions, unit normals, quadrature measures)
+goes in, together with the problem's data as *named fields of declared
+tensor rank*: global inputs (a direction, a diffusivity, a Reynolds number),
+per-cell boundary inputs (a prescribed traction, a Dirichlet trace, a
+condition tag) and, in the interior modes, per-query inputs (the signed
+distance to the wall). Fields of declared rank come out: scalars, vectors,
+rank-2 tensors, up to rank 4, each exactly covariant. The name states the
+design principle: the attention operates only on invariants of the per-point
+vector set :math:`\{r_i, n_i, \hat g_1, \dots, \hat g_K, v_{i1}, \dots\}`
+(scaled position, unit normal, unit global vectors, the token's own tensor
+inputs), and the frame is re-attached only at the heads, so exact rotation,
+reflection and translation covariance is paid once at the network's edges
+instead of in every layer.
+
+**Rank specs.** Inputs and outputs are declared as mappings from a field
+name to a rank spec: an ``int`` rank (0 scalar, 1 vector, 2 rank-2 tensor,
+...) or a mapping ``{"rank": r, "symmetric": bool, "parity": "even" |
+"odd", "channels": int}``. ``symmetric`` (rank :math:`\ge 2`) means fully
+symmetric under index permutation, ``parity="odd"`` (outputs only) a
+pseudotensor that flips sign under a reflection (a vorticity), and
+``channels`` (rank 0 only) packs several independent scalars under one name
+(a standardized parameter vector). The same grammar serves the constructor's
+``outputs``, ``boundary_inputs``, ``query_inputs`` and ``global_inputs``.
+
+**Inputs of any rank enter through invariants.** A rank-1 boundary input
+:math:`v_i` at a token contributes the seed scalars :math:`v_i \cdot \hat
+n_i`, :math:`v_i \cdot \hat g_k`, :math:`|v_i|` and its dot products with
+the token's other vector inputs, and, inside every slice layer where the
+token-to-anchor direction :math:`\hat\rho_{is}` exists, the contraction
+:math:`v_i \cdot \hat\rho_{is}` next to the existing :math:`\hat n_i \cdot
+\hat\rho_{is}` and :math:`\hat g_k \cdot \hat\rho_{is}` (one shared helper
+contracts every per-token vector with the anchor direction; the normal is
+just the first of them). A rank-2 input :math:`T_i` contributes the seed
+scalars :math:`a^{\mathsf T} T_i b` over the frame vectors :math:`a, b \in
+\{\hat n_i, \hat g_k\}`, :math:`\operatorname{tr} T_i` and
+:math:`\|T_i\|_F`, and in the layers :math:`\hat\rho^{\mathsf T} T_i
+\hat\rho`, :math:`\hat\rho \cdot T_i \hat n_i` and :math:`\hat\rho \cdot
+T_i \hat g_k` (the last two are contractions of the derived true vectors
+:math:`T_i \hat n_i`, :math:`T_i \hat g_k` with the anchor direction, so they
+ride on the same helper). Only true vectors appear on the input side, no
+cross products, so every input invariant is invariant under improper
+rotations as well; pseudotensor *inputs* are therefore refused. Rank-0
+inputs are the scalars themselves. Inputs of rank above 2 are refused (the
+contraction set grows combinatorially and no dataset of the program has
+one).
+
+**Outputs of any rank leave through an equivariant basis.** One linear head
+on the normalized final token state emits invariant coefficients; a rank-
+:math:`r` output is the contraction of those coefficients with tensor
+products of :math:`r` vectors from the token's basis: the *true* vectors
+:math:`t_1, \dots, t_m` (the global directions, the normal, the radial
+direction from the token's soft anchor and the :math:`e_\theta`
+complements; :math:`m = 2K + 3`) for even parity, and products with exactly
+one *pseudovector* factor (the cross products of the primary true vectors
+:math:`\hat g_k, \hat n_i, \hat u_i`; :math:`p = \binom{K+2}{2}` of them) for
+odd parity, plus the isotropic tensors of that rank and parity (the identity
+at rank 2, the three products of Kronecker deltas at rank 4, the Levi-Civita
+symbol at rank 3 odd). A symmetric spec uses the symmetrized basis with one
+coefficient per unordered multi-index. Coefficient counts are in the class
+docstring; ranks above 4 are refused.
+
+**The frame.** ISLA has no frame origin: positions enter only as
+point-to-anchor differences, and the one length scale is the
+measure-weighted root-mean-square pairwise distance of the sample
+(``scale_mode="rms_distance"``, the default: a normalized two-point
+statistic that is invariant to the weights' overall scale and converges
+under refinement of any boundary with a finite second moment, fractal ones
+included) or, to reproduce lanes trained before 2026-09-18 only, the square
+root of the total quadrature measure (``scale_mode="total_measure"``; the
+two agree within 1.3% of surface-pressure error on DrivAerML; TODO: remove
+once those lanes are retired). No centroid, no per-dataset
+reference length and no external frame appears anywhere in the forward
+pass, so the frame carries no information about where the mesher placed
+its cells.
+
+**Interior modes.** ``query_tokens=True`` lets interior query points join
+the encoder as interacting tokens (their normal, e.g. the SDF gradient, must
+be supplied); ``query_independent=True`` decodes queries passively through
+read-only blocks, so a prediction at one point does not depend on which
+other points are queried; ``support_tokens=True`` (with
+``query_independent``) adds a problem-derived interior support set as
+interacting tokens while the requested queries stay passive. Per-query
+inputs (``query_inputs``, e.g. the signed distance) are carried by the
+query and support tokens; per-cell boundary inputs (``boundary_inputs``) by
+the boundary cells, with zeros on every other token.
+
+**Global inputs.** Rank-1 global inputs are the :math:`K` global directions:
+each is normalized to a unit direction inside the model (a direction is what
+the invariants consume; a physically meaningful magnitude belongs among the
+rank-0 global inputs), enters the seed through :math:`\hat n_i \cdot \hat
+g_k`, the layers through :math:`\hat g_k \cdot \hat\rho_{is}`, and the head
+basis as :math:`\hat g_k` with the complements of :math:`(\hat u_i, \hat
+g_k)`. Rank-0 global inputs are appended to every token's seed. Global
+inputs of rank 2 are refused (broadcast the tensor to the boundary cells and
+declare it as a boundary input instead).
+
+**Kernels.** The per-layer geometry region has two exact implementations
+of the same arithmetic: ``geo_kernel="eager"`` (PyTorch; ``geo_checkpoint``
+rebuilds its intermediates in backward instead of storing them) and
+``geo_kernel="fused"`` (one Triton kernel per direction that never
+materializes the (B, N, S, .) tensor; CUDA, float32/float64 geometry, one
+global direction, at most 1024 slices, no per-token vector or tensor
+inputs). The default ``geo_kernel=None`` means *auto*: at the first forward
+pass the model picks the fused kernel when the inputs are on CUDA, Triton
+is importable and the constraints hold, and the eager region otherwise,
+logging the choice once; at 200,000 cells the fused kernel runs the
+training step in about a third of the eager time and memory (cost sweep,
+2026-09-18). Extending the kernel to the per-token vector contractions is
+the standing kernel follow-up; until then a model with rank-1 or rank-2
+boundary or query inputs runs the eager region.
+
+Every constructor argument and every ``forward`` input is keyword-only, so a
+call reads as the recipe's ``forward_kwargs`` mapping does and models can be
+swapped without positional bookkeeping.
+"""
+
+import itertools
+import logging
+import math
+from collections.abc import Mapping
+from dataclasses import dataclass
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from jaxtyping import Float
+from torch.utils.checkpoint import checkpoint
+
+from physicsnemo.core.meta import ModelMetaData
+from physicsnemo.core.module import Module
+from physicsnemo.nn.functional.equivariant_ops import spherical_basis
+
+logger = logging.getLogger(__name__)
+
+
+### ---------------------------------------------------------------------------
+### Rank specs
+### ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RankSpec:
+    """A declared tensor field: its rank, symmetry, parity and (rank 0) channel count.
+
+    ``rank`` is the number of spatial indices (0 scalar, 1 vector, 2 rank-2
+    tensor, ...). ``symmetric`` means fully symmetric under any permutation of
+    the indices and is meaningful for ``rank >= 2`` only (ignored below).
+    ``parity`` is ``"even"`` for a true tensor and ``"odd"`` for a pseudotensor
+    (one that flips sign under an improper rotation). ``channels`` packs several
+    independent scalars under one rank-0 name; it is 1 for every other rank.
+    """
+
+    rank: int
+    symmetric: bool = False
+    parity: str = "even"
+    channels: int = 1
+
+    @property
+    def size(self) -> int:
+        """Number of components per token: ``channels`` at rank 0, ``3**rank`` above."""
+        return self.channels if self.rank == 0 else 3**self.rank
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        """Trailing component shape: ``()`` at rank 0, ``(3,) * rank`` above."""
+        return () if self.rank == 0 else (3,) * self.rank
+
+
+def _parse_rank_spec(kind: str, name: str, spec) -> RankSpec:
+    """Validate one ``{name: spec}`` entry of an input or output mapping.
+
+    ``spec`` is an ``int`` rank or a mapping with the keys ``rank`` (required),
+    ``symmetric`` (default ``False``), ``parity`` (default ``"even"``) and
+    ``channels`` (default 1, rank 0 only). ``kind`` names the mapping in error
+    messages (``"outputs"``, ``"boundary_inputs"``, ...).
+    """
+    where = f"{kind}[{name!r}]"
+    if isinstance(spec, bool):
+        raise TypeError(f"{where}: a rank spec is an int or a mapping, got a bool")
+    if isinstance(spec, int):
+        spec = {"rank": spec}
+    elif not isinstance(spec, Mapping):
+        raise TypeError(
+            f"{where}: a rank spec is an int rank or a mapping "
+            f"{{rank, symmetric, parity, channels}}, got {type(spec).__name__}"
+        )
+    unknown = set(spec) - {"rank", "symmetric", "parity", "channels"}
+    if unknown:
+        raise ValueError(f"{where}: unknown rank-spec keys {sorted(unknown)!r}")
+    if "rank" not in spec or isinstance(spec["rank"], bool):
+        raise ValueError(f"{where}: a rank spec mapping needs an int 'rank'")
+    rank = int(spec["rank"])
+    if rank < 0:
+        raise ValueError(f"{where}: rank must be non-negative, got {rank}")
+    parity = spec.get("parity", "even")
+    if parity not in ("even", "odd"):
+        raise ValueError(f"{where}: parity must be 'even' or 'odd', got {parity!r}")
+    channels = int(spec.get("channels", 1))
+    if channels < 1:
+        raise ValueError(f"{where}: channels must be >= 1, got {channels}")
+    if channels != 1 and rank != 0:
+        raise ValueError(f"{where}: 'channels' applies to rank-0 fields only")
+    return RankSpec(
+        rank=rank,
+        symmetric=bool(spec.get("symmetric", False)) and rank >= 2,
+        parity=parity,
+        channels=channels,
+    )
+
+
+def _parse_rank_specs(kind: str, specs, *, max_rank: int, allow_odd: bool):
+    """Parse a whole ``{name: spec}`` mapping (``None`` is the empty mapping)."""
+    if specs is None:
+        return {}
+    if not isinstance(specs, Mapping):
+        raise TypeError(f"{kind} must be a mapping of field name to rank spec")
+    out: dict[str, RankSpec] = {}
+    for name, spec in specs.items():
+        if not isinstance(name, str) or not name:
+            raise ValueError(f"{kind}: field names must be non-empty strings")
+        rs = _parse_rank_spec(kind, name, spec)
+        if rs.rank > max_rank:
+            raise ValueError(
+                f"{kind}[{name!r}]: rank {rs.rank} is not supported (maximum {max_rank}"
+                + (
+                    "; the equivariant basis grows as m**rank)"
+                    if kind == "outputs"
+                    else "; see the class docstring for how higher ranks would enter)"
+                )
+            )
+        if rs.parity == "odd" and not allow_odd:
+            raise ValueError(
+                f"{kind}[{name!r}]: pseudotensor (parity='odd') inputs are not supported; "
+                "input invariants are formed with true vectors only so that they are "
+                "invariant under reflections"
+            )
+        out[name] = rs
+    return out
+
+
+### ---------------------------------------------------------------------------
+### Input invariants
+### ---------------------------------------------------------------------------
+
+
+def _pair_indices(f: int, symmetric: bool) -> tuple[torch.Tensor, torch.Tensor]:
+    """Index pairs ``(a, b)`` over ``f`` frame vectors: ``a <= b`` for a symmetric
+    tensor (``a^T T b == b^T T a``), all ordered pairs otherwise."""
+    if symmetric:
+        return torch.triu_indices(f, f)
+    grid = torch.cartesian_prod(torch.arange(f), torch.arange(f))
+    return grid[:, 0], grid[:, 1]
+
+
+class _InputSet:
+    """The per-token tensor inputs of one token class (boundary cells, or interior
+    queries and support points) and the invariants they contribute.
+
+    With ``F = 1 + K`` frame vectors ``{n_hat, g_1..g_K}`` per token, ``P`` rank-1
+    inputs and ``Q`` rank-2 inputs (``Q_s`` of them symmetric):
+
+    * seed features (into the token's embedding): the rank-0 channels
+      (``x 2`` when ``scaled_scalars``: ``[s, sign(s) log(|s| + eps)]``), then
+      per rank-1 input its ``F`` frame cosines and its norm and the
+      ``P(P-1)/2`` pairwise dot products of the rank-1 inputs, then per rank-2
+      input the ``F(F+1)/2`` (symmetric) or ``F**2`` frame contractions
+      ``a^T T b``, its trace and its Frobenius norm;
+    * block vectors (contracted with the token-to-anchor direction in every
+      slice layer): the ``P`` rank-1 inputs and, per rank-2 input, the ``F``
+      derived true vectors ``T a`` (plus ``T^T a`` when not symmetric);
+    * block tensors (``rho^T T rho`` in every slice layer): the ``Q`` rank-2 inputs.
+    """
+
+    def __init__(self, specs: dict[str, RankSpec], n_frame: int, scaled_scalars: bool):
+        self.specs = specs
+        self.n_frame = f = int(n_frame)
+        self.scaled_scalars = bool(scaled_scalars)
+        self.n_scalar = sum(s.channels for s in specs.values() if s.rank == 0)
+        self.rank1 = [name for name, s in specs.items() if s.rank == 1]
+        self.rank2 = [(name, s.symmetric) for name, s in specs.items() if s.rank == 2]
+        p, q = len(self.rank1), len(self.rank2)
+        n_pairs = sum(f * (f + 1) // 2 if sym else f * f for _, sym in self.rank2)
+        self.n_features = (
+            (2 if self.scaled_scalars else 1) * self.n_scalar
+            + p * f
+            + p
+            + p * (p - 1) // 2
+            + n_pairs
+            + 2 * q
+        )
+        self.n_block_vecs = p + sum(f if sym else 2 * f for _, sym in self.rank2)
+        self.n_block_tens = q
+
+    def __bool__(self) -> bool:
+        return bool(self.specs)
+
+    def validate(self, kind: str, fields, b: int, n: int) -> None:
+        """Presence and element-count checks for the forward-time mapping."""
+        if not self.specs:
+            if fields:
+                raise ValueError(
+                    f"this model declares no {kind}; got fields {sorted(fields)!r}"
+                )
+            return
+        if fields is None:
+            raise ValueError(
+                f"{kind} declared {sorted(self.specs)!r}; pass {kind}={{name: tensor}}"
+            )
+        if not isinstance(fields, Mapping):
+            raise TypeError(f"{kind} must be a mapping of field name to tensor")
+        missing = [k for k in self.specs if k not in fields]
+        extra = [k for k in fields if k not in self.specs]
+        if missing or extra:
+            raise ValueError(
+                f"{kind} fields do not match the declared set: missing {missing!r}, "
+                f"unexpected {extra!r}"
+            )
+        for name, spec in self.specs.items():
+            t = fields[name]
+            if not isinstance(t, torch.Tensor) or t.numel() != b * n * spec.size:
+                raise ValueError(
+                    f"{kind}[{name!r}]: expected a tensor of shape "
+                    f"{(b, n, *spec.shape) if spec.rank else (b, n) + ((spec.channels,) if spec.channels > 1 else ())} "
+                    f"({b * n * spec.size} elements), got "
+                    f"{tuple(t.shape) if isinstance(t, torch.Tensor) else type(t).__name__}"
+                )
+
+    def features(self, fields, b: int, n: int, frame, *, gauge=None, eps=0.0):
+        """Invariants of one token class.
+
+        ``frame`` is ``(B, N, F, 3)``: the token's true frame vectors
+        ``[n_hat, g_1..g_K]``. Returns ``(seed (B, N, n_features), vecs
+        (B, N, n_block_vecs, 3), tens (B, N, n_block_tens, 3, 3))``; ``gauge``
+        (``(B, 1, 1)``) divides the rank-0 channels when ``scaled_scalars``.
+        """
+        ### The invariants and the derived vectors are geometry: computed in the
+        ### input precision even under autocast (the embedding that consumes the
+        ### seed is autocast on its own).
+        with torch.autocast(frame.device.type, enabled=False):
+            return self._features(fields, b, n, frame, gauge, eps)
+
+    def _features(self, fields, b, n, frame, gauge, eps):
+        dtype = frame.dtype
+        seed, vecs, tens = [], [], []
+        for name, spec in self.specs.items():
+            if spec.rank == 0:
+                s = fields[name].reshape(b, n, spec.channels).to(dtype)
+                if self.scaled_scalars:
+                    s = s / gauge
+                    s = torch.cat([s, torch.sign(s) * torch.log(s.abs() + eps)], -1)
+                seed.append(s)
+        if self.rank1:
+            v = torch.stack(
+                [fields[name].reshape(b, n, 3).to(dtype) for name in self.rank1], dim=2
+            )  # (B, N, P, 3)
+            seed.append(_contract_vectors(v, frame).flatten(2))  # (B, N, P*F)
+            seed.append(v.norm(dim=-1))  # (B, N, P)
+            p = v.shape[2]
+            if p > 1:
+                iu, ju = torch.triu_indices(p, p, offset=1, device=v.device)
+                seed.append((v[:, :, iu] * v[:, :, ju]).sum(-1))  # (B, N, P(P-1)/2)
+            vecs.append(v)
+        for name, symmetric in self.rank2:
+            t = fields[name].reshape(b, n, 3, 3).to(dtype)
+            ### a^T T b over the frame pairs, as (T b) . a with T b a derived vector.
+            tb = torch.einsum("bnij,bnfj->bnfi", t, frame)  # (B, N, F, 3): T a
+            ia, ib = _pair_indices(self.n_frame, symmetric)
+            seed.append(
+                (frame[:, :, ia.to(t.device)] * tb[:, :, ib.to(t.device)]).sum(-1)
+            )
+            seed.append(torch.diagonal(t, dim1=-2, dim2=-1).sum(-1, keepdim=True))
+            seed.append(t.flatten(2).norm(dim=-1, keepdim=True))
+            vecs.append(tb)
+            if not symmetric:
+                vecs.append(torch.einsum("bnji,bnfj->bnfi", t, frame))  # T^T a
+            tens.append(t)
+        seed_t = torch.cat(seed, -1) if seed else frame.new_zeros(b, n, 0)
+        vecs_t = torch.cat(vecs, 2) if vecs else frame.new_zeros(b, n, 0, 3)
+        tens_t = torch.stack(tens, 2) if tens else frame.new_zeros(b, n, 0, 3, 3)
+        return seed_t, vecs_t, tens_t
+
+
+def _contract_vectors(x, y):
+    """Dot products of per-token vector stacks ``x (B, N, P, 3)`` and ``y (B, N, F, 3)``
+    -> ``(B, N, P, F)``. Broadcast multiply-and-sum, not einsum: einsum is autocast
+    to bf16 and the geometry must stay in the input precision."""
+    return (x[:, :, :, None, :] * y[:, :, None, :, :]).sum(-1)
+
+
+### ---------------------------------------------------------------------------
+### Backbone
+### ---------------------------------------------------------------------------
+
+
+def _softmax_over_points(
+    x: Float[torch.Tensor, "batch tokens slices"], fast: bool = True
+):
+    """Softmax over the point dimension (dim 1) of a (B, N, S) tensor.
+
+    ISLA-PERF (2026-09-09): PyTorch serves a softmax over a *middle* dimension
+    with its "spatial" kernel, which parallelizes over the B*S columns only and
+    walks the N points serially. On a GB300 that kernel was 85-95% of ISLA's
+    training step (203 of 238 ms at 10k tokens, 3.3 of 3.5 s at 80k) and the
+    source of the superlinear token scaling. Reducing along a contiguous last
+    dimension instead uses the row-parallel kernel. Same arithmetic; the
+    floating-point summation order differs (roundoff). ``fast=False`` keeps
+    the original kernel for bitwise reproduction of checkpoints trained before
+    2026-09-10 (bf16 outputs differ 1-1.5% between kernels; float32 model outputs
+    agree to 1e-6). On raw softmax weights the two kernels are not equally
+    precise: against a float64 reference the middle-dimension kernel carries a
+    ~1e-4 absolute float32 floor at every N from 40k to 100k, the row-parallel
+    kernel ~1e-7 (measured on a GB300, 2026-09-10; no defect at any N, including
+    across 2^16 points). Which kernel a model runs is decided by this flag at
+    instantiation, not by the checkpoint: a checkpoint written before the flag
+    existed takes the current default when loaded.
+    """
+    if not fast:
+        return torch.softmax(x, dim=1)
+    return torch.softmax(x.transpose(1, 2), dim=-1).transpose(1, 2)
+
+
+def _relational_invariants(
+    r: Float[torch.Tensor, "batch tokens 3"],
+    n_hat: Float[torch.Tensor, "batch tokens 3"],
+    g_hat: Float[torch.Tensor, "batch tokens vectors 3"],
+    z_pos: Float[torch.Tensor, "batch slices 3"],
+    m_s: Float[torch.Tensor, "batch slices 3"],
+    eps: float,
+    vecs: Float[torch.Tensor, "batch tokens extra 3"] | None = None,
+    tens: Float[torch.Tensor, "batch tokens tensors 3 3"] | None = None,
+) -> Float[torch.Tensor, "batch tokens slices geo"]:
+    """The point-anchor invariants: distance and its log, the unit relative
+    vector dotted with each global direction (K terms), with the point normal
+    and with the anchor normal, the point normal dotted with the anchor normal,
+    then the unit relative vector dotted with each of the token's extra vectors
+    (its rank-1 inputs and the vectors derived from its rank-2 inputs) and the
+    quadratic form of each rank-2 input in the unit relative vector. Width
+    ``5 + K + P' + Q``; for K = 1 and no inputs this is the original 6-wide set
+    in its original order. Every term depends on the anchors' positions
+    relative to the point only, so no frame origin is referred to. Shared by
+    the encoder slice blocks and the passive decoder blocks."""
+    z = z_pos[:, None, :, :]
+    m = m_s[:, None, :, :]
+    rel = r[:, :, None, :] - z  # (B, N, S, 3)
+    dist = rel.norm(dim=-1, keepdim=True).clamp_min(eps)
+    rel_hat = rel / dist
+    n_exp = n_hat[:, :, None, :]
+    feats = [
+        dist,
+        torch.log(dist),
+        ### Broadcast multiply-and-sum, not einsum: einsum is autocast to bf16 and
+        ### the geometry must stay in the input precision (for K = 1 this is the
+        ### former (rel_hat * d).sum(-1) arithmetic exactly).
+        (rel_hat[..., None, :] * g_hat[:, :, None, :, :]).sum(-1),  # (B, N, S, K)
+        (rel_hat * n_exp).sum(-1, keepdim=True),
+        (rel_hat * m).sum(-1, keepdim=True),
+        (n_exp * m).sum(-1, keepdim=True),
+    ]
+    if vecs is not None and vecs.shape[2]:
+        ### The token's vector inputs, contracted with the anchor direction exactly
+        ### as the global directions are above.
+        feats.append((rel_hat[..., None, :] * vecs[:, :, None, :, :]).sum(-1))
+    if tens is not None and tens.shape[2]:
+        ### rho^T T rho per rank-2 input. einsum (autocast disabled, so the geometry
+        ### stays in the input precision) rather than a broadcast product, which
+        ### would materialize a (B, N, S, Q, 3, 3) intermediate.
+        with torch.autocast(rel_hat.device.type, enabled=False):
+            t_rho = torch.einsum("bnqij,bnsj->bnsqi", tens, rel_hat)  # (B, N, S, Q, 3)
+            feats.append(torch.einsum("bnsqi,bnsi->bnsq", t_rho, rel_hat))
+    return torch.cat(feats, dim=-1)
+
+
+def _geo_region(
+    lin: nn.Linear,
+    logits_pre,
+    r,
+    n_hat,
+    g_hat,
+    z_pos,
+    m_s,
+    eps: float,
+    vecs=None,
+    tens=None,
+):
+    """One recompute region per layer: the per-slice routing bias from the
+    invariants and the invariants pooled over slices by the resulting
+    point->slice mix. Returns (bias (B,N,S), mix (B,N,S), pooled (B,N,geo)); the
+    (B,N,S,geo) invariants and their (B,N,S,3) intermediates never leave the
+    region, so under checkpointing they are rebuilt in backward, not stored."""
+    geo = _relational_invariants(r, n_hat, g_hat, z_pos, m_s, eps, vecs, tens)
+    bias = lin(geo).squeeze(-1)
+    mix = torch.softmax(logits_pre + bias, dim=-1)  # normalized over slices
+    return bias, mix, torch.einsum("bns,bnsg->bng", mix, geo)
+
+
+def _fused_geo_region():
+    """The Triton-fused dense geometry region (geo_kernel="fused"); imported lazily so
+    that the module loads without triton and the eager path never touches it."""
+    from .geo_kernel import fused_geo_region
+
+    return fused_geo_region
+
+
+def _geo_width(n_global_vectors: int, n_vecs: int = 0, n_tens: int = 0) -> int:
+    """Width of _relational_invariants: dist, log dist, K rel.g_k, rel.n, rel.m,
+    n.m (5 + K), then P' rel.v and Q rho^T T rho; K = 1 alone gives the original 6."""
+    return 5 + int(n_global_vectors) + int(n_vecs) + int(n_tens)
+
+
+class _RoutingLogits(nn.Module):
+    """Point-to-slice routing logits, ``(B, N, hidden) -> (B, N, S)``.
+
+    ``"linear"``: an affine map of the normalized token state (the original
+    form). ``"cosine"``: ``temperature`` times the cosine between the token
+    state and a learned prototype per slice, so every logit lies in
+    ``[-temperature, temperature]`` and no block can route every point to
+    one slice however its weights grow (ROUTING-SAT measured that state as the
+    mean-field plateau's mechanism). The parameter is ``weight`` in both modes
+    so the two share a state-dict layout; ``bias`` exists only in linear mode.
+    """
+
+    def __init__(
+        self,
+        hidden: int,
+        n_slices: int,
+        mode: str = "cosine",
+        temperature: float = 10.0,
+    ) -> None:
+        super().__init__()
+        if mode not in ("linear", "cosine"):
+            raise ValueError(f"routing_norm must be 'linear' or 'cosine', got {mode!r}")
+        self.mode = mode
+        self.temperature = float(temperature)
+        lin = nn.Linear(hidden, n_slices, bias=(mode == "linear"))
+        self.weight = lin.weight
+        self.bias = lin.bias
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.mode == "linear":
+            return F.linear(x, self.weight, self.bias)
+        return self.temperature * F.linear(
+            F.normalize(x, dim=-1), F.normalize(self.weight, dim=-1)
+        )
+
+
+class _SliceBlock(nn.Module):
+    """One pre-LN layer of measure-weighted soft-slice attention + MLP."""
+
+    def __init__(
+        self,
+        hidden: int,
+        n_slices: int,
+        mlp_ratio: int = 4,
+        use_relational_geo: bool = True,
+        geo_checkpoint: bool = False,
+        fast_point_softmax: bool = True,
+        geo_kernel: str = "eager",
+        n_global_vectors: int = 1,
+        n_block_vecs: int = 0,
+        n_block_tens: int = 0,
+        routing_norm: str = "cosine",
+        routing_temperature: float = 10.0,
+    ) -> None:
+        super().__init__()
+        self.use_relational_geo = use_relational_geo
+        self.fast_point_softmax = bool(fast_point_softmax)
+        ### KERNEL STUDY (2026-09-13): "fused" evaluates the dense geometry region
+        ### (invariants -> routing bias -> point->slice mix -> pooled invariants) in
+        ### one Triton kernel per direction that never materializes a (B,N,S,.)
+        ### tensor (see geo_kernel.py); same arithmetic as _geo_region, recompute
+        ### built in, so geo_checkpoint is moot on that path.
+        self.geo_kernel = geo_kernel
+        self.n_geo = _geo_width(n_global_vectors, n_block_vecs, n_block_tens)
+        ### Activation recompute (2026-09-07 memory attribution): the per-slice
+        ### geometry tensors -- rel (B,N,S,3), rel_hat, dist and two bf16 copies
+        ### of the (B,N,S,8) invariants -- are 76% of ISLA's saved activations
+        ### at 10k tokens. With geo_checkpoint the invariants are rebuilt from
+        ### (r, n_hat, g_hat, z_pos, m_s) inside backward instead of stored;
+        ### the forward is bitwise unchanged (same ops, same order).
+        self.geo_checkpoint = bool(geo_checkpoint)
+        self.norm_assign = nn.LayerNorm(hidden)
+        self.assign = _RoutingLogits(
+            hidden, n_slices, routing_norm, routing_temperature
+        )
+        ### Relational geometry (v2): per-slice equivariant anchors and
+        ### point-anchor invariants -- many local, data-adaptive reference
+        ### points instead of any global frame (smooth by construction).
+        ### Built only when used: parameters that never receive gradients
+        ### crash DDP (A35b nogeo, 2026-09-05).
+        self.geo_width = hidden // 2
+        if use_relational_geo:
+            self.geo_logit = nn.Linear(self.n_geo, 1)
+            self.geo_feat = nn.Linear(self.n_geo, self.geo_width)
+        self.slice_mlp = nn.Sequential(
+            nn.LayerNorm(hidden),
+            nn.Linear(hidden, mlp_ratio * hidden),
+            nn.GELU(),
+            nn.Linear(mlp_ratio * hidden, hidden),
+        )
+        self.broadcast = nn.Linear(2 * hidden + hidden // 2, hidden)
+        self.norm_mlp = nn.LayerNorm(hidden)
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden, mlp_ratio * hidden),
+            nn.GELU(),
+            nn.Linear(mlp_ratio * hidden, hidden),
+        )
+
+    def forward(
+        self,
+        h: Float[torch.Tensor, "batch tokens hidden"],
+        log_w: Float[torch.Tensor, "batch tokens 1"],
+        r: Float[torch.Tensor, "batch tokens 3"],
+        n_hat: Float[torch.Tensor, "batch tokens 3"],
+        g_hat: Float[torch.Tensor, "batch tokens vectors 3"],
+        eps: float,
+        vecs=None,
+        tens=None,
+    ) -> Float[torch.Tensor, "batch tokens hidden"]:
+        ### Soft assignment of points to slices; measure weights enter as a
+        ### log-space bias so slice states are quadrature-weighted means.
+        logits = self.assign(self.norm_assign(h))  # (B, N, S)
+        a = _softmax_over_points(
+            logits + log_w, self.fast_point_softmax
+        )  # normalized over points
+        ### Equivariant anchors: weighted mean position AND mean normal
+        ### direction per slice (v3b) -- anchors gain orientation.
+        z_pos = torch.einsum("bns,bnc->bsc", a, r)  # (B, S, 3)
+        m_s = torch.einsum("bns,bnc->bsc", a, n_hat)
+        m_s = m_s / m_s.norm(dim=-1, keepdim=True).clamp_min(eps)
+        ### Geometry refines the routing and the readback. A35b ablation:
+        ### use_relational_geo=False removes the anchor-relational invariants
+        ### from routing and readback (Transolver-style feature-only slicing).
+        if self.use_relational_geo:
+            ### Pool the invariants over slices FIRST, then project: exactly
+            ### equal to projecting then pooling (the projection is affine and
+            ### point_mix sums to one over slices), but the saved activation is
+            ### (B, N, geo) instead of (B, N, S, hidden/2) -- ~0.5 GB per layer at
+            ### 10k tokens, 256 slices, hidden 192 (A35b memory derivation).
+            if self.geo_kernel == "fused":
+                ### The fused kernel is written for one global direction and no
+                ### per-token vector inputs (enforced at construction / resolution).
+                bias, point_mix, pooled = _fused_geo_region()(
+                    self.geo_logit,
+                    logits,
+                    r,
+                    n_hat,
+                    g_hat[:, :, 0],
+                    z_pos,
+                    m_s,
+                    eps,
+                    True,
+                )
+            elif self.geo_checkpoint:
+                bias, point_mix, pooled = checkpoint(
+                    _geo_region,
+                    self.geo_logit,
+                    logits,
+                    r,
+                    n_hat,
+                    g_hat,
+                    z_pos,
+                    m_s,
+                    eps,
+                    vecs,
+                    tens,
+                    use_reentrant=False,
+                )
+            else:
+                bias, point_mix, pooled = _geo_region(
+                    self.geo_logit,
+                    logits,
+                    r,
+                    n_hat,
+                    g_hat,
+                    z_pos,
+                    m_s,
+                    eps,
+                    vecs,
+                    tens,
+                )
+            logits = logits + bias
+        else:
+            point_mix = torch.softmax(logits, dim=-1)  # normalized over slices
+        a = _softmax_over_points(logits + log_w, self.fast_point_softmax)
+        z = torch.einsum("bns,bnh->bsh", a, h)  # slice states
+        z = z + self.slice_mlp(z)
+        back = torch.einsum("bns,bsh->bnh", point_mix, z)
+        if self.use_relational_geo:
+            geo_pool = self.geo_feat(pooled)
+        else:
+            geo_pool = h.new_zeros(h.shape[0], h.shape[1], self.geo_width)
+        h = h + self.broadcast(torch.cat([h, back, geo_pool], dim=-1))
+        return h + self.mlp(self.norm_mlp(h))
+
+
+class _ReadBlock(nn.Module):
+    """Passive decoder layer (v5a): queries read encoder slices/anchors,
+    never write. Removing the write-back is what makes predictions at one
+    query independent of every other query (given a fixed source sample)."""
+
+    # v5a2: the full v3b relational-feature set (thin decoder pipes collapse
+    # training -- measured twice now, v3a and v5a-v1)
+
+    def __init__(
+        self,
+        hidden: int,
+        n_slices: int,
+        mlp_ratio: int = 4,
+        geo_checkpoint: bool = False,
+        geo_kernel: str = "eager",
+        n_global_vectors: int = 1,
+        n_block_vecs: int = 0,
+        n_block_tens: int = 0,
+        routing_norm: str = "cosine",
+        routing_temperature: float = 10.0,
+    ) -> None:
+        super().__init__()
+        self.geo_checkpoint = bool(geo_checkpoint)
+        self.geo_kernel = geo_kernel  # see _SliceBlock
+        self.n_geo = n_geo = _geo_width(n_global_vectors, n_block_vecs, n_block_tens)
+        self.norm = nn.LayerNorm(hidden)
+        self.assign = _RoutingLogits(
+            hidden, n_slices, routing_norm, routing_temperature
+        )
+        self.geo_logit = nn.Linear(n_geo, 1)
+        self.geo_feat = nn.Linear(n_geo, hidden // 2)
+        self.broadcast = nn.Linear(2 * hidden + hidden // 2, hidden)
+        self.local_read = nn.Linear(2 * hidden, hidden)
+        self.norm_mlp = nn.LayerNorm(hidden)
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden, mlp_ratio * hidden),
+            nn.GELU(),
+            nn.Linear(mlp_ratio * hidden, hidden),
+        )
+
+    def forward(
+        self,
+        q_h,
+        q_r,
+        q_n,
+        q_g,
+        z_states,
+        z_pos,
+        m_s,
+        eps,
+        src_r=None,
+        src_h=None,
+        src_w=None,
+        local_rho=None,
+        q_vecs=None,
+        q_tens=None,
+    ):
+        logits_pre = self.assign(self.norm(q_h))
+        if self.geo_kernel == "fused":
+            _, mix, pooled = _fused_geo_region()(
+                self.geo_logit,
+                logits_pre,
+                q_r,
+                q_n,
+                q_g[:, :, 0],
+                z_pos,
+                m_s,
+                eps,
+                True,
+            )
+        elif self.geo_checkpoint:
+            _, mix, pooled = checkpoint(
+                _geo_region,
+                self.geo_logit,
+                logits_pre,
+                q_r,
+                q_n,
+                q_g,
+                z_pos,
+                m_s,
+                eps,
+                q_vecs,
+                q_tens,
+                use_reentrant=False,
+            )
+        else:
+            _, mix, pooled = _geo_region(
+                self.geo_logit,
+                logits_pre,
+                q_r,
+                q_n,
+                q_g,
+                z_pos,
+                m_s,
+                eps,
+                q_vecs,
+                q_tens,
+            )
+        back = torch.einsum("bqs,bsh->bqh", mix, z_states)
+        geo_pool = self.geo_feat(pooled)  # pool-then-project (exact)
+        q_h = q_h + self.broadcast(torch.cat([q_h, back, geo_pool], dim=-1))
+        if src_h is not None:
+            ### v5a3: local token readout -- the per-point detail 256 slice
+            ### states cannot carry. Measure-weighted Gaussian kernel over
+            ### SOURCE positions attending to encoder states; queries still
+            ### never write, so query-independence is preserved exactly.
+            local = _kernel_readout(q_r, src_r, src_h, src_w, local_rho, eps)
+            q_h = q_h + self.local_read(torch.cat([q_h, local], dim=-1))
+        return q_h + self.mlp(self.norm_mlp(q_h))
+
+
+def _kernel_readout(q_r, src_r, src_h, src_logw, rho, eps):
+    """Measure-weighted Gaussian-kernel average of source states at query
+    positions, row-chunked; a pure function of the source (passive).
+
+    Evaluated as a softmax over sources with logits ``-d^2 / rho^2 + log w``:
+    exactly invariant to rescaling the source measure, well defined for a
+    query arbitrarily far from every source (it attends to the nearest ones
+    instead of underflowing), and equal to the plain weighted average where
+    the kernel mass is not tiny. ``src_logw`` is the log measure weight.
+    """
+    b, nq, _ = q_r.shape
+    outs = []
+    chunk = 4096
+
+    def _chunk(q_chunk, src_r_, src_h_, src_logw_):
+        d2 = torch.cdist(q_chunk, src_r_).square()
+        logits = -d2 / (rho * rho) + src_logw_[:, None, :]
+        k = torch.softmax(logits, dim=-1)
+        return torch.einsum("bcn,bnh->bch", k, src_h_)
+
+    ### Memory (2026-09-21): autograd would otherwise keep the (chunk, N) kernel of every chunk for the backward
+    ### pass, about 3 GB per chunk at 200,000 sources and several hundred GB per step at 200,000 queries. The
+    ### kernel is a cheap function of the positions, so under grad it is rebuilt in backward instead of stored;
+    ### the forward is unchanged.
+    for i0 in range(0, nq, chunk):
+        q_chunk = q_r[:, i0 : i0 + chunk]
+        if torch.is_grad_enabled():
+            outs.append(
+                checkpoint(_chunk, q_chunk, src_r, src_h, src_logw, use_reentrant=False)
+            )
+        else:
+            outs.append(_chunk(q_chunk, src_r, src_h, src_logw))
+    return torch.cat(outs, dim=1)
+
+
+def rms_pairwise_distance(
+    points: torch.Tensor, measure_weights: torch.Tensor | None, eps: float = 1e-8
+) -> torch.Tensor:
+    """Measure-weighted RMS pairwise distance of a sampled boundary, shape (B, 1, 1).
+
+    ``L^2 = sum_ij w~_i w~_j |x_i - x_j|^2`` with ``w~ = w / sum(w)`` (uniform
+    weights when ``measure_weights`` is ``None``), evaluated in O(N) through the
+    variance identity ``L^2 = 2 sum_i w~_i |x_i - c|^2`` with ``c`` the weighted
+    mean. A normalized two-point statistic: it converges under refinement of any
+    boundary whose normalized measure converges (including fractal boundaries
+    whose total measure diverges), is invariant to a uniform rescale of the
+    weights, and is covariant under a geometric rescale. The mean ``c`` is an
+    intermediate of this scalar only; no centre is exposed.
+    """
+    b, n = points.shape[0], points.shape[1]
+    if measure_weights is None:
+        w = points.new_ones(b, n, 1)
+    else:
+        w = measure_weights.reshape(b, n, 1).to(points.dtype)
+    w_n = w / w.sum(dim=1, keepdim=True).clamp_min(eps)
+    c = (w_n * points).sum(dim=1, keepdim=True)
+    var = (w_n * (points - c).square().sum(-1, keepdim=True)).sum(dim=1, keepdim=True)
+    return (2.0 * var).sqrt().clamp_min(eps)
+
+
+### ---------------------------------------------------------------------------
+### Output heads: the rank-r equivariant expansion
+### ---------------------------------------------------------------------------
+
+
+def _isotropic_tensors(rank: int, symmetric: bool, parity: str) -> list[torch.Tensor]:
+    """The constant (isotropic) tensors of a rank and parity, each of shape (3,)*rank.
+
+    Even parity: the identity at rank 2; at rank 4 the three products of
+    Kronecker deltas ``d_ij d_kl, d_ik d_jl, d_il d_jk`` (their sum alone for a
+    symmetric spec, the only fully symmetric isotropic rank-4 tensor). Odd
+    parity: the Levi-Civita symbol at rank 3 (a pseudotensor, antisymmetric, so
+    not for a symmetric spec). No isotropic tensor exists at ranks 0, 1, at even
+    rank 3, or at odd ranks 1, 2, 4.
+    """
+    eye = torch.eye(3, dtype=torch.float64)
+    if parity == "even":
+        if rank == 2:
+            return [eye]
+        if rank == 4:
+            terms = [
+                torch.einsum("ij,kl->ijkl", eye, eye),
+                torch.einsum("ik,jl->ijkl", eye, eye),
+                torch.einsum("il,jk->ijkl", eye, eye),
+            ]
+            return [sum(terms)] if symmetric else terms
+        return []
+    if rank == 3 and not symmetric:
+        eps3 = torch.zeros(3, 3, 3, dtype=torch.float64)
+        for (i, j, k), s in (
+            ((0, 1, 2), 1.0),
+            ((1, 2, 0), 1.0),
+            ((2, 0, 1), 1.0),
+            ((0, 2, 1), -1.0),
+            ((2, 1, 0), -1.0),
+            ((1, 0, 2), -1.0),
+        ):
+            eps3[i, j, k] = s
+        return [eps3]
+    return []
+
+
+class _OutputLayout:
+    """Coefficient bookkeeping of one output field.
+
+    With ``m`` true and ``p`` pseudo basis vectors per token, a rank-``r``
+    output of even parity is expanded in tensor products of ``r`` true vectors
+    (``m**r`` ordered products, or one per unordered multi-index for a
+    symmetric spec), one of odd parity in products with exactly one
+    pseudovector factor (``r p m**(r-1)`` ordered; ``p`` times the unordered
+    multisets of ``r-1`` true vectors for a symmetric spec), plus the isotropic
+    tensors of that rank and parity. ``index`` maps every ordered multi-index
+    over the relevant vector set (the true vectors alone for even parity, true
+    then pseudo for odd) to its free coefficient, or to the trailing zero slot.
+    """
+
+    def __init__(self, spec: RankSpec, n_true: int, n_pseudo: int) -> None:
+        self.spec = spec
+        r = spec.rank
+        self.n_true, self.n_pseudo = n_true, n_pseudo
+        self.n_vec = n_true if spec.parity == "even" else n_true + n_pseudo
+        if r == 0:
+            self.n_free, self.index, self.iso = 1, None, []
+            self.n_coeffs = 1
+            return
+        free: dict[tuple[int, ...], int] = {}
+        index = []
+        for j in itertools.product(range(self.n_vec), repeat=r):
+            n_odd = sum(1 for a in j if a >= n_true)
+            valid = n_odd == (0 if spec.parity == "even" else 1)
+            if not valid:
+                index.append(-1)
+                continue
+            key = tuple(sorted(j)) if spec.symmetric else j
+            index.append(free.setdefault(key, len(free)))
+        self.n_free = len(free)
+        ### -1 (no coefficient) points at the appended zero slot n_free.
+        self.index = torch.tensor(
+            [i if i >= 0 else self.n_free for i in index], dtype=torch.long
+        )
+        self.iso = _isotropic_tensors(r, spec.symmetric, spec.parity)
+        self.n_coeffs = self.n_free + len(self.iso)
+
+
+def _assemble_output(coeffs, layout: _OutputLayout, true_vecs, pseudo_vecs):
+    """Contract one output's coefficients ``(B, N, n_coeffs)`` with the token basis.
+
+    ``true_vecs`` is ``(B, N, m, 3)``, ``pseudo_vecs`` ``(B, N, p, 3)``. Returns
+    ``(B, N)`` at rank 0 and ``(B, N, 3, ..., 3)`` with ``rank`` trailing axes
+    otherwise. The full coefficient tensor over ordered multi-indices is
+    gathered from the free coefficients and contracted one index at a time,
+    so the basis itself is never materialized (peak ``(B, N, n_vec**(r-1), 3)``).
+    """
+    b, n = coeffs.shape[:2]
+    r = layout.spec.rank
+    if r == 0:
+        return coeffs[..., 0]
+    u = (
+        true_vecs
+        if layout.spec.parity == "even"
+        else torch.cat([true_vecs, pseudo_vecs], dim=2)
+    )
+    c_free = coeffs[..., : layout.n_free]
+    c_full = torch.cat([c_free, c_free.new_zeros(b, n, 1)], dim=-1)[
+        ..., layout.index.to(coeffs.device)
+    ]
+    x = c_full  # (B, N, n_vec**r), indices (j1, ..., jr) row-major
+    for _ in range(r):
+        x = x.reshape(b, n, layout.n_vec, -1)  # split j1 from the rest
+        x = torch.einsum("bnjR,bnja->bnRa", x, u)  # (B, N, rest, 3)
+        x = x.reshape(b, n, -1)  # (rest, a1) flattened: j2 leads again
+    out = x.reshape(b, n, *layout.spec.shape)
+    if layout.iso:
+        iso = torch.stack(layout.iso).to(device=out.device, dtype=out.dtype)
+        c_iso = coeffs[..., layout.n_free :].to(out.dtype)
+        out = out + torch.einsum("bnk,kR->bnR", c_iso, iso.flatten(1)).reshape(
+            out.shape
+        )
+    return out
+
+
+### ---------------------------------------------------------------------------
+### The model
+### ---------------------------------------------------------------------------
+
+
+class ISLA(Module):
+    r"""ISLA (Invariant Slice Attention): invariant backbone, equivariant edges.
+
+    A soft-slice transformer for steady boundary-value problems whose attention
+    operates only on invariants of the per-point vector set and whose outputs of
+    any rank are re-assembled in an equivariant basis at the heads, so exact
+    rotation, reflection and translation covariance holds by construction (see
+    the module docstring for the contracts and the reference configuration).
+    Every argument is keyword-only.
+
+    **Rank specs.** ``outputs``, ``boundary_inputs``, ``query_inputs`` and
+    ``global_inputs`` map a field name to a rank spec: an ``int`` rank, or a
+    mapping ``{"rank": r, "symmetric": False, "parity": "even", "channels":
+    1}``. ``symmetric`` means fully symmetric under index permutation (rank
+    :math:`\ge 2`); ``parity="odd"`` declares a pseudotensor output (outputs
+    only); ``channels`` packs several independent scalars under one rank-0 name.
+
+    Args:
+        outputs: Output fields, ``{name: rank spec}``. ``forward`` returns a
+            ``dict`` with these keys; a rank-0 field has shape ``(B, N)`` (or
+            ``(B, N, channels)`` when ``channels > 1``), a rank-``r`` field
+            ``(B, N, 3, ..., 3)`` with ``r`` trailing axes. Ranks up to 4. Each
+            field's coefficients come from the shared linear head; with ``m =
+            2K + 3`` true basis vectors and ``p = (K+2)(K+1)/2`` pseudovectors
+            the counts per field are ``1`` at rank 0; ``m`` (even) or ``p``
+            (odd) at rank 1; ``m^2 + 1`` (even, the identity included) or
+            ``m(m+1)/2 + 1`` (even symmetric), ``2pm`` or ``pm`` (odd) at rank
+            2; ``m^3`` or ``C(m+2, 3)`` (even), ``3pm^2 + 1`` (odd, the
+            Levi-Civita symbol included) or ``p\,m(m+1)/2`` (odd symmetric) at
+            rank 3; ``m^4 + 3`` or ``C(m+3, 4) + 1`` (even), ``4pm^3`` or
+            ``p\,C(m+2, 3)`` (odd) at rank 4. For ``K = 1`` (``m = 5, p = 3``):
+            a vector costs 5, a symmetric rank-2 tensor 16, a pseudovector 3.
+        boundary_inputs: Per-cell boundary fields, ``{name: rank spec}`` with
+            ranks 0 to 2 and even parity (a prescribed traction as ``1``, a
+            Dirichlet trace or a condition tag as ``0``). Their invariants
+            widen the boundary tokens' seed; tokens that are not boundary cells
+            carry zeros there. Rank-1 and rank-2 inputs also contract with the
+            token-to-anchor direction in every slice layer (module docstring).
+        query_inputs: Per-query fields for the interior modes, ``{name: rank
+            spec}`` with ranks 0 to 2 (the signed distance as ``0``). Carried by
+            the query tokens, the passive queries and the support tokens
+            through their own embedding; the same invariants as for boundary
+            inputs. Rank-0 entries are scaled by ``query_scalar_scale``.
+        global_inputs: Per-case fields, ``{name: rank spec}`` with rank 0
+            (appended to every token's seed; ``channels`` for a parameter
+            vector) or rank 1 (a global direction, normalized to unit length
+            inside the model). The ``K`` rank-1 entries, in declaration order,
+            are the global directions of the geometry region and the head basis.
+        hidden: Token width of the slice blocks.
+        n_layers: Number of slice-attention blocks in the encoder.
+        n_slices: Number of soft slices (data-adaptive anchors) per block.
+        mlp_ratio: Expansion ratio of the per-token and per-slice MLPs.
+        use_measure_weights: Route with the quadrature measure as a log-space
+            bias so slice states are measure-weighted (quadrature) means. ``False``
+            is the "weights-off" ablation, which reads the sampling density.
+        fast_point_softmax: Use the row-parallel softmax kernel over points
+            (``True``, the default since 2026-09-10) or the reference
+            middle-dimension kernel (roundoff-level difference).
+        use_relational_geo: Feed the point-anchor relational invariants to the
+            routing bias and the read-back (``False`` is the feature-only
+            slicing ablation).
+        query_independent: Decode queries passively through read blocks, so a
+            prediction at one point does not depend on which other points are
+            queried (given the boundary sample).
+        n_decoder_layers: Number of passive read blocks when
+            ``query_independent`` is set.
+        local_readout_rho: Radius (in frame units) of the measure-weighted
+            Gaussian local readout of the passive decoder.
+        query_tokens: Admit ``query_points`` as interacting tokens (the interior
+            reference configuration; needs ``query_normals``).
+        geo_checkpoint: Rebuild the per-slice geometric invariants in the
+            backward pass instead of storing them (bitwise-identical forward and
+            gradients, lower peak memory).
+        query_scalar_scale: ``"length"`` divides rank-0 query inputs by the
+            frame's length unit and enters ``[s, sign(s) log(|s| + eps)]``;
+            ``"none"`` enters them raw. Rank-1 and rank-2 query inputs are never
+            scaled.
+        query_mass: Routing weight of interior/support tokens (inert without
+            them): ``"source_total"`` (default) lets the tokens share a learned
+            fraction of the total boundary measure, invariant to
+            re-representing the same measure; ``"geometric_mean"`` gives each
+            token the mean boundary log-weight plus a learned offset, which
+            depends on the boundary refinement.
+        support_tokens: With ``query_independent``, admit a per-case
+            computational support (``support_points`` / ``support_normals`` /
+            ``support_inputs``) as interacting tokens next to the boundary.
+        scale_mode: The one length unit of the (origin-free) frame.
+            ``"rms_distance"`` (the default): divide positions by the
+            measure-weighted RMS pairwise distance of the sample,
+            ``sqrt(sum_ij w_i w_j |x_i - x_j|^2)`` with the weights normalized
+            to one, a *normalized* two-point statistic that converges under
+            refinement of a boundary whose total measure does not (a fractal
+            boundary) and that names no center; it is also invariant to a
+            uniform rescale of the weights alone. ``"total_measure"`` (the
+            default until 2026-09-18): divide by the square root of the total
+            quadrature measure, an integral of the geometry, equivalent to
+            the default within 1.3% of surface-pressure error on DrivAerML
+            (LEN-RMS); needs ``measure_weights`` and, unlike the default,
+            inherits any error in their absolute scale. TODO: remove this
+            option; it exists only to reproduce lanes trained before
+            2026-09-18 and has no use case of its own (ruling 2026-09-20).
+        geo_kernel: ``None`` (default) selects automatically at the first
+            forward pass: ``"fused"`` (exact Triton kernel for the per-layer
+            geometry region) when the inputs are on CUDA, Triton is available,
+            there is exactly one global direction, at most 1024 slices and no
+            rank-1 or rank-2 boundary or query inputs, else ``"eager"`` (the
+            PyTorch reference region). Pass ``"eager"`` or ``"fused"`` to force
+            one; ``"fused"`` raises when its constraints cannot be met.
+        routing_norm: ``"cosine"`` (default): each block's point-to-slice
+            routing logits are ``routing_temperature`` times the cosine between
+            the normalized token state and a learned prototype per slice, which
+            bounds every logit in ``[-T, T]`` so no block can route every point
+            to a single slice (the routing-collapse state behind the mean-field
+            plateau that linear routing reaches above a learning-rate ceiling
+            falling like 1/width and 1/depth). ``"linear"``: an affine map of
+            the normalized token state, the form of the lanes trained before
+            2026-09-22; accuracy is neutral between the two at the rule rates
+            (ROUTE-NORM, DrivAerML and HiLiftAeroML). The frame and head
+            contracts are unchanged either way.
+        routing_temperature: The bound ``T`` of the cosine routing logits.
+        eps: Numerical floor for norms and logarithms.
+
+    Forward inputs (all keyword-only): ``points`` and ``normals`` of shape
+    ``(B, N, 3)``; ``measure_weights`` ``(B, N)`` (required by
+    ``scale_mode="rms_distance"`` and ``"total_measure"``; Horvitz-Thompson
+    corrected so they sum to the boundary measure); ``global_inputs`` ``{name:
+    tensor}`` with a rank-0 field of shape ``(B,)`` or ``(B, channels)`` and a
+    rank-1 field ``(B, 3)`` (a single case's values, shape ``(3,)`` or
+    ``(channels,)``, is shared across the batch); ``boundary_inputs`` ``{name:
+    tensor}`` with shapes ``(B, N)`` / ``(B, N, channels)``, ``(B, N, 3)``,
+    ``(B, N, 3, 3)`` by rank; ``query_points`` / ``query_normals`` ``(B, Q,
+    3)`` and ``query_inputs`` (shapes as for boundary inputs over ``Q``) for the
+    interior modes; ``support_points`` / ``support_normals`` ``(B, M, 3)`` and
+    ``support_inputs`` (the ``query_inputs`` fields over ``M``) with
+    ``support_tokens``. Returns ``dict[str, Tensor]`` keyed by ``outputs`` with
+    ``N_out`` the boundary token count, or the query count in the interior
+    modes.
+
+    Output contract: a field declared with rank ``r`` and even parity
+    transforms as a true rank-``r`` tensor under every orthogonal map of the
+    inputs (``T -> R^{(x)r} T``; rotations and reflections alike) and is
+    invariant under translations; an odd field picks up the extra sign
+    ``det R``. Components in any frame are only ever a view of such a field.
+    """
+
+    class MetaData(ModelMetaData):
+        jit: bool = False
+        amp: bool = True
+
+    #: Largest output rank; the ordered basis grows as ``m**rank``.
+    MAX_OUTPUT_RANK = 4
+    #: Largest per-token input rank; see the module docstring.
+    MAX_INPUT_RANK = 2
+
+    def __init__(
+        self,
+        *,
+        outputs: Mapping[str, int | Mapping],
+        boundary_inputs: Mapping[str, int | Mapping] | None = None,
+        query_inputs: Mapping[str, int | Mapping] | None = None,
+        global_inputs: Mapping[str, int | Mapping] | None = None,
+        hidden: int = 256,
+        n_layers: int = 12,
+        n_slices: int = 256,
+        mlp_ratio: int = 4,
+        use_measure_weights: bool = True,
+        fast_point_softmax: bool = True,
+        use_relational_geo: bool = True,
+        query_independent: bool = False,
+        n_decoder_layers: int = 4,
+        local_readout_rho: float = 0.02,
+        query_tokens: bool = False,
+        geo_checkpoint: bool = False,
+        query_scalar_scale: str = "length",
+        query_mass: str = "source_total",
+        support_tokens: bool = False,
+        scale_mode: str = "rms_distance",
+        geo_kernel: str | None = None,
+        routing_norm: str = "cosine",
+        routing_temperature: float = 10.0,
+        eps: float = 1e-12,
+    ) -> None:
+        super().__init__(meta=self.MetaData())
+        if routing_norm not in ("linear", "cosine"):
+            raise ValueError(
+                f"routing_norm must be 'linear' or 'cosine', got {routing_norm!r}"
+            )
+        self.routing_norm = routing_norm
+        self.routing_temperature = float(routing_temperature)
+        ### RANK SPECS (2026-09-22): every input and output is a named field of
+        ### declared rank; the grammar is shared (RankSpec).
+        self.output_specs = _parse_rank_specs(
+            "outputs", outputs, max_rank=self.MAX_OUTPUT_RANK, allow_odd=True
+        )
+        if not self.output_specs:
+            raise ValueError("outputs must declare at least one field")
+        self.boundary_specs = _parse_rank_specs(
+            "boundary_inputs",
+            boundary_inputs,
+            max_rank=self.MAX_INPUT_RANK,
+            allow_odd=False,
+        )
+        self.query_specs = _parse_rank_specs(
+            "query_inputs", query_inputs, max_rank=self.MAX_INPUT_RANK, allow_odd=False
+        )
+        self.global_specs = _parse_rank_specs(
+            "global_inputs", global_inputs, max_rank=1, allow_odd=False
+        )
+        ### Checkpoints store the constructor arguments as JSON: keep the spec
+        ### mappings there as plain dicts whatever container the caller passed
+        ### (a Hydra DictConfig, for instance).
+        for key, specs in (
+            ("outputs", self.output_specs),
+            ("boundary_inputs", self.boundary_specs),
+            ("query_inputs", self.query_specs),
+            ("global_inputs", self.global_specs),
+        ):
+            self._args["__args__"][key] = (
+                {name: vars(spec) for name, spec in specs.items()} if specs else None
+            )
+        ### GLOBAL INPUTS (2026-09-14, ruling: the architecture targets steady
+        ### boundary-value problems in general, so the problem's global data
+        ### are zero or more global DIRECTIONS (each enters as a unit direction:
+        ### one seed term n.g_k per token, one direction cosine rel.g_k per
+        ### point-anchor pair, and the head basis gains g_k with the spherical
+        ### complements of (u, g_k)) and zero or more global SCALARS (PDE
+        ### parameters; appended to every token's seed features).
+        self.global_vector_names = [
+            n for n, s in self.global_specs.items() if s.rank == 1
+        ]
+        self.global_scalar_names = [
+            n for n, s in self.global_specs.items() if s.rank == 0
+        ]
+        self.n_global_vectors = K = len(self.global_vector_names)
+        self.n_global_scalars = sum(
+            self.global_specs[n].channels for n in self.global_scalar_names
+        )
+        ### KERNEL STUDY (2026-09-13): geo_kernel selects the implementation of the
+        ### per-layer geometry region, not its arithmetic. "eager" is the PyTorch
+        ### region (with geo_checkpoint deciding whether its (B,N,S,.) intermediates
+        ### are stored or rebuilt in backward); "fused" is the Triton kernel of
+        ### geo_kernel.py, which reads the pre-logits once and writes the bias and
+        ### mix once per direction, with the recompute built in (CUDA only).
+        ### AUTO (2026-09-19, ruling): geo_kernel=None resolves at the first forward
+        ### pass to "fused" wherever the fused kernel can run (CUDA, Triton, one
+        ### global direction, <= 1024 slices, no per-token vector inputs) and to
+        ### "eager" otherwise; the blocks read the resolved name. An explicit
+        ### "eager" or "fused" is honored.
+        if geo_kernel is None:
+            geo_kernel = "auto"
+        if geo_kernel not in ("auto", "eager", "fused"):
+            raise ValueError(
+                f"geo_kernel must be None (auto), 'eager' or 'fused', got {geo_kernel!r}"
+            )
+        self.geo_kernel = geo_kernel
+        self.n_slices = int(n_slices)
+        ### The frame (RELFRAME, 2026-09-10; the only frame since 2026-09-20):
+        ### r = points / L with no centering. Every position-dependent quantity
+        ### is a point-to-anchor difference (seeds reduce to n.g_k; the measure
+        ### enters the routing as before), and the head's radial basis vector
+        ### is the direction from the point's soft slice anchor (a
+        ### measure-weighted mean, the same construction as the relational
+        ### anchors), so the head stays translation covariant and exact
+        ### translation invariance holds without any centering. L is a
+        ### measure-weighted integral of the geometry: LEN-RMS (2026-09-18)
+        ### made the RMS pairwise distance the default after validation
+        ### against the total-measure unit at 435 DrivAerML cars (0.0526 vs
+        ### 0.0533 under the stratified draw, seed ranges overlapping); it is
+        ### normalized, center-free and finite on fractal boundaries where the
+        ### total measure diverges.
+        if scale_mode not in ("total_measure", "rms_distance"):
+            raise ValueError(
+                f"scale_mode must be 'total_measure' or 'rms_distance', got {scale_mode!r}"
+            )
+        self.scale_mode = scale_mode
+        ### Density-factorial knob (prereg 3f4e4af7 follow-up): with False,
+        ### the assignment softmax ignores quadrature weights entirely,
+        ### isolating the measure-bias pathway of density sensitivity.
+        self.use_measure_weights = use_measure_weights
+        ### ISLA-PERF (2026-09-09): point softmaxes reduce along a contiguous last
+        ### dimension (see _softmax_over_points); False reproduces the original
+        ### middle-dimension kernel bitwise (roundoff-level difference otherwise).
+        self.fast_point_softmax = bool(fast_point_softmax)
+        self.eps = eps
+        ### PER-TOKEN INPUTS (2026-09-22): the boundary cells' fields and the
+        ### interior queries' fields, each set with its own invariant layout
+        ### (_InputSet). Every token carries the UNION of the two block-level
+        ### vector/tensor stacks (zeros where a class has no such field), so one
+        ### geometry region serves boundary, support and query tokens alike.
+        if query_scalar_scale not in ("length", "none"):
+            raise ValueError(f"unknown query_scalar_scale {query_scalar_scale!r}")
+        self.query_scalar_scale = query_scalar_scale
+        n_frame = 1 + K  # {n_hat, g_1..g_K}
+        self.bin = _InputSet(self.boundary_specs, n_frame, scaled_scalars=False)
+        self.qin = _InputSet(
+            self.query_specs, n_frame, scaled_scalars=(query_scalar_scale == "length")
+        )
+        self.n_block_vecs = self.bin.n_block_vecs + self.qin.n_block_vecs
+        self.n_block_tens = self.bin.n_block_tens + self.qin.n_block_tens
+        if geo_kernel == "fused":
+            if K != 1:
+                raise ValueError(
+                    f"geo_kernel='fused' is written for exactly one global direction; "
+                    f"got {K} rank-1 global inputs"
+                )
+            if self.n_block_vecs or self.n_block_tens:
+                raise ValueError(
+                    "geo_kernel='fused' does not support rank-1 or rank-2 boundary or "
+                    "query inputs yet (kernel follow-up); use geo_kernel='eager' or None"
+                )
+        ### Seed width: the K invariants n.g_k (the only origin-free scalars of
+        ### {n, g_k}; positions enter through the anchors), the boundary inputs'
+        ### invariants and the global scalars.
+        n_seed = K + self.bin.n_features + self.n_global_scalars
+        ### With no global inputs and no other seed channel the seed is empty;
+        ### every token then starts from one learned embedding and all
+        ### separation comes from the slice blocks' relational anchors.
+        self.constant_seed = n_seed == 0
+        if self.constant_seed:
+            n_seed = 1
+        self.embed = nn.Sequential(
+            nn.Linear(n_seed, hidden), nn.GELU(), nn.Linear(hidden, hidden)
+        )
+        self.blocks = nn.ModuleList(
+            _SliceBlock(
+                hidden,
+                n_slices,
+                mlp_ratio,
+                use_relational_geo=use_relational_geo,
+                geo_checkpoint=geo_checkpoint,
+                fast_point_softmax=self.fast_point_softmax,
+                geo_kernel=geo_kernel,
+                n_global_vectors=K,
+                n_block_vecs=self.n_block_vecs,
+                n_block_tens=self.n_block_tens,
+                routing_norm=routing_norm,
+                routing_temperature=routing_temperature,
+            )
+            for _ in range(n_layers)
+        )
+        ### Head frame: per-point soft slice anchor for the radial basis vector.
+        self.frame_assign = _RoutingLogits(
+            hidden, n_slices, routing_norm, routing_temperature
+        )
+        ### v5a (query_independent): encode/decode split. Queries decode
+        ### passively from final encoder slices and anchors: query-independent
+        ### by construction given the source sample.
+        self.query_independent = query_independent
+        self.local_readout_rho = float(local_readout_rho)
+        if query_independent:
+            self.final_assign = nn.Sequential(
+                nn.LayerNorm(hidden),
+                _RoutingLogits(hidden, n_slices, routing_norm, routing_temperature),
+            )
+            self.read_blocks = nn.ModuleList(
+                _ReadBlock(
+                    hidden,
+                    n_slices,
+                    mlp_ratio,
+                    geo_checkpoint=geo_checkpoint,
+                    geo_kernel=geo_kernel,
+                    n_global_vectors=K,
+                    n_block_vecs=self.n_block_vecs,
+                    n_block_tens=self.n_block_tens,
+                    routing_norm=routing_norm,
+                    routing_temperature=routing_temperature,
+                )
+                for _ in range(n_decoder_layers)
+            )
+        self.norm_out = nn.LayerNorm(hidden)
+        ### HEADS (2026-09-22): one linear head emits every output's invariant
+        ### coefficients; each output is contracted with tensor products of the
+        ### token's basis vectors (_OutputLayout / _assemble_output). True
+        ### vectors: g_1..g_K, n, rhat, e_th(rhat, n), e_th(rhat, g_k), m = 2K+3.
+        ### Pseudovectors: the cross products of the primaries {g_k, n, rhat},
+        ### p = C(K+2, 2). For K = 1 and outputs {scalar: 0, vector: 1} the
+        ### head has width 1 + 5.
+        self.n_true_basis = 3 + 2 * K
+        self.n_pseudo_basis = (K + 2) * (K + 1) // 2
+        self.output_layouts = {
+            name: _OutputLayout(spec, self.n_true_basis, self.n_pseudo_basis)
+            for name, spec in self.output_specs.items()
+        }
+        self.n_head_coeffs = sum(
+            self.output_layouts[name].n_coeffs * spec.channels
+            for name, spec in self.output_specs.items()
+        )
+        self.head = nn.Linear(hidden, self.n_head_coeffs)
+        ### QUERY TOKENS (boundary->interior exploration, 2026-09-07): interior
+        ### query points join the encoder as INTERACTING tokens, carrying the
+        ### same {q, n_q, g_k} invariant seeds as the surface tokens (the
+        ### query normal must be supplied, e.g. the SDF gradient), a learned
+        ### measure weight and a learned token-type offset. This is
+        ### GeoTransolver's interior mechanism (queries as tokens) on ISLA's
+        ### equivariant routing: exactly SE(3)-covariant, NOT query-independent.
+        ### Outputs are returned for the query tokens only.
+        self.query_tokens = bool(query_tokens)
+        if self.query_tokens:
+            if query_independent:
+                raise ValueError(
+                    "query_tokens is an interacting mode; set query_independent=False"
+                )
+            self.qt_logw = nn.Parameter(torch.zeros(1))
+            self.qt_type = nn.Parameter(torch.zeros(hidden))
+        ### Interior/support token measure weight. "source_total": the tokens'
+        ### total weight is a learned fraction exp(logw) of the TOTAL source
+        ### measure, split equally over them: invariant to any re-representation
+        ### of the same discrete measure (splitting a source cell in two changes
+        ### nothing) and scaling like an area, so the similarity-gauge contract
+        ### holds. "geometric_mean": each token carries logw + the MEAN source
+        ### log-weight, which halves when every source cell is split in two.
+        if query_mass not in ("geometric_mean", "source_total"):
+            raise ValueError(f"unknown query_mass {query_mass!r}")
+        self.query_mass = query_mass
+        ### SUPPORT TOKENS (transfer program D1, 2026-09-09; audit agenda
+        ### sec-direction-support): a problem-derived SUPPORT set (e.g. a fixed
+        ### per-case sample of interior points with their signed distance) joins
+        ### the encoder as interacting tokens exactly like query tokens do, while
+        ### the requested output points are decoded PASSIVELY through the read
+        ### blocks (query_independent=True). The prediction at a query therefore
+        ### cannot depend on which other queries are requested, only on the
+        ### case (surface + support), which is the deployment contract the
+        ### interacting query-token configuration lacks. The support tokens'
+        ### total routing weight follows `query_mass` over the support set
+        ### ("source_total" recommended: invariant to refinement of the source
+        ### measure).
+        self.support_tokens = bool(support_tokens)
+        if self.support_tokens:
+            if not query_independent:
+                raise ValueError(
+                    "support_tokens requires query_independent=True (passive read blocks decode the queries)"
+                )
+            if self.query_tokens:
+                raise ValueError("support_tokens excludes query_tokens")
+            self.sp_logw = nn.Parameter(torch.zeros(1))
+            self.sp_type = nn.Parameter(torch.zeros(hidden))
+        ### Per-query inputs (e.g. the signed distance to the wall, which
+        ### GeoTransolver's volume configuration receives at every interior
+        ### point) enter the query, passive-query and support tokens through
+        ### their own embedding of the fields' invariants; every covariance
+        ### contract is untouched.
+        if self.qin:
+            if not (self.query_tokens or query_independent):
+                raise ValueError(
+                    "query_inputs require query_tokens=True or query_independent=True"
+                )
+            width = self.qin.n_features
+            if self.query_tokens:
+                self.qt_embed = nn.Sequential(
+                    nn.Linear(width, hidden), nn.GELU(), nn.Linear(hidden, hidden)
+                )
+            if query_independent:
+                self.rq_embed = nn.Sequential(
+                    nn.Linear(width, hidden), nn.GELU(), nn.Linear(hidden, hidden)
+                )
+            if self.support_tokens:
+                self.sp_embed = nn.Sequential(
+                    nn.Linear(width, hidden), nn.GELU(), nn.Linear(hidden, hidden)
+                )
+
+    @staticmethod
+    def _dots(x, g_hat):
+        """x (B, N, 3) against the K unit global directions g_hat (B, N, K, 3) -> (B, N, K).
+        Multiply-and-sum rather than einsum so autocast leaves the geometry in fp32."""
+        return (x[:, :, None, :] * g_hat).sum(-1)
+
+    def _seed_invariants(self, n_hat, g_hat):
+        """The per-token seed invariants: the K terms n.g_k (an empty tensor when
+        K = 0). Positions have no origin, so they carry no seed scalar; they
+        enter through the point-to-anchor invariants of the slice blocks."""
+        return self._dots(n_hat, g_hat)
+
+    def _with_global_scalars(self, inv, g_scalars, n_tokens: int):
+        """Append the global scalar inputs (B, S) to every token's seed features;
+        substitute the constant seed when the feature set is empty."""
+        b = inv.shape[0]
+        if g_scalars is not None and g_scalars.shape[-1]:
+            inv = torch.cat(
+                [inv, g_scalars[:, None, :].expand(b, n_tokens, -1).to(inv.dtype)],
+                dim=-1,
+            )
+        if self.constant_seed:
+            inv = inv.new_ones(b, n_tokens, 1)
+        return inv
+
+    def _token_seed(self, n_hat, g_hat, b_feat, g_scalars, n_tokens: int):
+        """A token class's seed: [n.g_k, boundary-input invariants (zeros for tokens
+        that are not boundary cells), global scalars]."""
+        inv = self._seed_invariants(n_hat, g_hat)
+        if self.bin.n_features:
+            if b_feat is None:
+                b_feat = inv.new_zeros(inv.shape[0], n_tokens, self.bin.n_features)
+            inv = torch.cat([inv, b_feat.to(inv.dtype)], dim=-1)
+        return self._with_global_scalars(inv, g_scalars, n_tokens)
+
+    def _block_extras(self, b_vecs, b_tens, q_vecs, q_tens, b: int, n: int, like):
+        """The union block-level stacks of one token class: [boundary-derived vectors,
+        query-derived vectors] (B, N, P', 3) and [boundary tensors, query tensors]
+        (B, N, Q, 3, 3); zeros where the class has no such field."""
+        if not (self.n_block_vecs or self.n_block_tens):
+            return None, None
+        if b_vecs is None:
+            b_vecs = like.new_zeros(b, n, self.bin.n_block_vecs, 3)
+            b_tens = like.new_zeros(b, n, self.bin.n_block_tens, 3, 3)
+        if q_vecs is None:
+            q_vecs = like.new_zeros(b, n, self.qin.n_block_vecs, 3)
+            q_tens = like.new_zeros(b, n, self.qin.n_block_tens, 3, 3)
+        return torch.cat([b_vecs, q_vecs], 2), torch.cat([b_tens, q_tens], 2)
+
+    def resolve_geo_kernel(self, points: torch.Tensor) -> str:
+        """The geometry-kernel implementation this forward pass will use.
+
+        ``"eager"`` or ``"fused"`` when the constructor fixed it; under the
+        default (auto) the fused kernel when ``points`` is on CUDA, Triton is
+        importable, the model has one global direction, at most 1024 slices and
+        no rank-1 or rank-2 per-token inputs, else the eager region. The
+        decision is cached per device and logged once.
+        """
+        if self.geo_kernel != "auto":
+            return self.geo_kernel
+        key = (points.device.type, points.device.index)
+        cached = getattr(self, "_geo_kernel_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        try:
+            from .geo_kernel import HAS_TRITON, MAX_SLICES
+        except Exception:  # pragma: no cover - a broken triton install falls back
+            HAS_TRITON, MAX_SLICES = False, 0
+        has_token_inputs = bool(self.n_block_vecs or self.n_block_tens)
+        ok = (
+            points.is_cuda
+            and HAS_TRITON
+            and self.n_global_vectors == 1
+            and self.n_slices <= MAX_SLICES
+            and not has_token_inputs
+        )
+        chosen = "fused" if ok else "eager"
+        self._geo_kernel_cache = (key, chosen)
+        logger.info(
+            "ISLA geo_kernel=auto resolved to %r on %s (cuda=%s, triton=%s, global_vectors=%d, slices=%d, token_vector_inputs=%s)",
+            chosen,
+            points.device,
+            points.is_cuda,
+            HAS_TRITON,
+            self.n_global_vectors,
+            self.n_slices,
+            has_token_inputs,
+        )
+        if points.is_cuda and HAS_TRITON and has_token_inputs and chosen == "eager":
+            logger.warning(
+                "ISLA: rank-1 or rank-2 boundary/query inputs are present, so the fused "
+                "geometry kernel is not used (kernel follow-up); running the eager region."
+            )
+        return chosen
+
+    def _apply_geo_kernel(self, points: torch.Tensor) -> None:
+        """Write the resolved kernel name into the blocks, once per resolution."""
+        kernel = self.resolve_geo_kernel(points)
+        if getattr(self, "_geo_kernel_applied", None) == kernel:
+            return
+        for block in self.blocks:
+            block.geo_kernel = kernel
+        if self.query_independent:
+            for rb in self.read_blocks:
+                rb.geo_kernel = kernel
+        self._geo_kernel_applied = kernel
+
+    def _validate_inputs(
+        self,
+        points,
+        normals,
+        measure_weights,
+        boundary_inputs,
+        query_points,
+        query_normals,
+        query_inputs,
+        support_points,
+        support_normals,
+        support_inputs,
+    ) -> None:
+        """Shape and presence checks for :meth:`forward` (MOD-005 format)."""
+        if points.ndim != 3 or points.shape[-1] != 3:
+            raise ValueError(
+                f"Expected points of shape (B, N, 3) but got tensor of shape {tuple(points.shape)}"
+            )
+        b, n, _ = points.shape
+        if normals.shape != points.shape:
+            raise ValueError(
+                f"Expected normals of shape {(b, n, 3)} but got tensor of shape {tuple(normals.shape)}"
+            )
+        if measure_weights is not None and measure_weights.numel() != b * n:
+            raise ValueError(
+                f"Expected measure_weights of shape {(b, n)} but got tensor of shape {tuple(measure_weights.shape)}"
+            )
+        self.bin.validate("boundary_inputs", boundary_inputs, b, n)
+        for name, pts, nrm, fields in (
+            ("query", query_points, query_normals, query_inputs),
+            ("support", support_points, support_normals, support_inputs),
+        ):
+            if pts is not None and (
+                pts.ndim != 3 or pts.shape[0] != b or pts.shape[-1] != 3
+            ):
+                raise ValueError(
+                    f"Expected {name}_points of shape ({b}, M, 3) but got tensor of shape {tuple(pts.shape)}"
+                )
+            if nrm is not None and (pts is None or nrm.shape != pts.shape):
+                raise ValueError(
+                    f"Expected {name}_normals of shape {None if pts is None else tuple(pts.shape)} "
+                    f"but got tensor of shape {tuple(nrm.shape)}"
+                )
+            ### The per-query fields are validated against the point set they
+            ### belong to; passive queries that ARE the boundary points (no
+            ### query_points) carry them over the boundary token count.
+            if pts is not None:
+                self.qin.validate(f"{name}_inputs", fields, b, pts.shape[1])
+            elif fields is not None and name == "support":
+                raise ValueError("support_inputs given without support_points")
+            elif name == "query" and self.query_independent and (fields or self.qin):
+                self.qin.validate("query_inputs", fields, b, n)
+        if self.support_tokens and support_points is None:
+            raise ValueError(
+                "this model was built with support_tokens=True and needs support_points (and support_normals)"
+            )
+        if self.query_tokens and query_points is None:
+            raise ValueError(
+                "this model was built with query_tokens=True and needs query_points (and query_normals)"
+            )
+
+    def _global_fields(self, global_inputs, b: int, points):
+        """Assemble the unit global directions (B, K, 3) and the global scalars
+        (B, S) from the named per-case fields. A single case's values (one row) are
+        shared across the batch."""
+        fields = global_inputs or {}
+        if not isinstance(fields, Mapping):
+            raise TypeError("global_inputs must be a mapping of field name to tensor")
+        missing = [k for k in self.global_specs if k not in fields]
+        extra = [k for k in fields if k not in self.global_specs]
+        if missing or extra:
+            raise ValueError(
+                f"global_inputs fields do not match the declared set: missing {missing!r}, "
+                f"unexpected {extra!r}"
+            )
+
+        def _rows(name, t, width):
+            if not isinstance(t, torch.Tensor) or t.numel() % width:
+                raise ValueError(
+                    f"global_inputs[{name!r}]: expected {width} values per case, got "
+                    f"{tuple(t.shape) if isinstance(t, torch.Tensor) else type(t).__name__}"
+                )
+            t = t.reshape(-1, width).to(points.dtype)
+            if t.shape[0] == 1 and b != 1:
+                t = t.expand(b, width)
+            elif t.shape[0] != b:
+                raise ValueError(
+                    f"global_inputs[{name!r}] gives {t.shape[0]} rows for a batch of {b}"
+                )
+            return t
+
+        K = self.n_global_vectors
+        if K:
+            gv = torch.stack(
+                [_rows(k, fields[k], 3) for k in self.global_vector_names], 1
+            )
+            ### Each direction is normalized; the magnitude, if it means anything,
+            ### is a rank-0 global input.
+            g_unit = gv / gv.norm(dim=-1, keepdim=True).clamp_min(self.eps)  # (B, K, 3)
+        else:
+            g_unit = points.new_zeros(b, 0, 3)
+        if self.n_global_scalars:
+            g_scalars = torch.cat(
+                [
+                    _rows(k, fields[k], self.global_specs[k].channels)
+                    for k in self.global_scalar_names
+                ],
+                dim=-1,
+            )
+        else:
+            g_scalars = None
+        return g_unit, g_scalars
+
+    def forward(
+        self,
+        *,
+        points: Float[torch.Tensor, "batch tokens 3"],
+        normals: Float[torch.Tensor, "batch tokens 3"],
+        measure_weights: Float[torch.Tensor, "batch tokens"] | None = None,
+        global_inputs: Mapping[str, torch.Tensor] | None = None,
+        boundary_inputs: Mapping[str, torch.Tensor] | None = None,
+        query_points: Float[torch.Tensor, "batch queries 3"] | None = None,
+        query_normals: Float[torch.Tensor, "batch queries 3"] | None = None,
+        query_inputs: Mapping[str, torch.Tensor] | None = None,
+        support_points: Float[torch.Tensor, "batch support 3"] | None = None,
+        support_normals: Float[torch.Tensor, "batch support 3"] | None = None,
+        support_inputs: Mapping[str, torch.Tensor] | None = None,
+    ) -> dict[str, torch.Tensor]:
+        ### One un-batched case: every per-case input gains the batch axis.
+        if points.ndim == 2:
+            points, normals = points[None], normals[None]
+            if measure_weights is not None and measure_weights.ndim == 1:
+                measure_weights = measure_weights[None]
+            if query_points is not None and query_points.ndim == 2:
+                query_points = query_points[None]
+            if query_normals is not None and query_normals.ndim == 2:
+                query_normals = query_normals[None]
+            if support_points is not None and support_points.ndim == 2:
+                support_points = support_points[None]
+            if support_normals is not None and support_normals.ndim == 2:
+                support_normals = support_normals[None]
+            ### Named per-token fields are reshaped by element count downstream.
+        b, n, _ = points.shape
+        ### Input validation (skipped under torch.compile): fail at the API
+        ### boundary with the offending shape, not inside the network.
+        if not torch.compiler.is_compiling():
+            self._validate_inputs(
+                points,
+                normals,
+                measure_weights,
+                boundary_inputs,
+                query_points,
+                query_normals,
+                query_inputs,
+                support_points,
+                support_normals,
+                support_inputs,
+            )
+        self._apply_geo_kernel(points)
+        K = self.n_global_vectors
+        g_unit, g_scalars = self._global_fields(global_inputs, b, points)
+        g_hat = g_unit[:, None].expand(b, n, K, 3)
+
+        ### Frame: no origin; the one length unit is a measure-weighted integral
+        ### of the geometry (the RMS pairwise distance or the square root of the
+        ### total measure).
+        if self.scale_mode == "total_measure":
+            if measure_weights is None:
+                raise ValueError("scale_mode='total_measure' needs measure_weights")
+            gauge = (
+                measure_weights.reshape(b, n, 1)
+                .to(points.dtype)
+                .sum(dim=1, keepdim=True)
+                .clamp_min(self.eps)
+                .sqrt()
+            )
+        else:
+            ### LEN-RMS (2026-09-18): the measure-weighted RMS pairwise distance,
+            ### computed through the variance identity sum_ij w_i w_j |x_i-x_j|^2
+            ### = 2 sum_i w_i |x_i - c|^2 with c the weighted mean (used only
+            ### inside this scalar; the frame keeps no centre). Normalized
+            ### weights make it converge under refinement where the total
+            ### measure diverges, and make it invariant to a weight rescale.
+            gauge = rms_pairwise_distance(points, measure_weights, self.eps)
+        r = points / gauge
+        n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+
+        if measure_weights is None or not self.use_measure_weights:
+            ### No measures given (or the weights-off ablation): every token
+            ### carries the same measure, i.e. the count-weighted quadrature.
+            log_w = points.new_zeros(b, n, 1)
+        else:
+            measure_weights = measure_weights.reshape(b, n).to(points.dtype)
+            log_w = torch.log(measure_weights.clamp_min(self.eps))[..., None]
+
+        ### Boundary inputs: invariants against the token's frame {n, g_k}.
+        if self.bin:
+            frame = torch.cat([n_hat[:, :, None], g_hat], dim=2)  # (B, N, 1+K, 3)
+            b_feat, b_vecs, b_tens = self.bin.features(boundary_inputs, b, n, frame)
+        else:
+            b_feat, b_vecs, b_tens = None, None, None
+        h = self.embed(self._token_seed(n_hat, g_hat, b_feat, g_scalars, n))
+        vecs, tens = self._block_extras(b_vecs, b_tens, None, None, b, n, points)
+
+        def _query_class(q_pts, q_nrm, fields, kind: str):
+            """Frame quantities, seed state and block stacks of a query-side token
+            class (query tokens, support tokens or passive queries)."""
+            bq, nq, _ = q_pts.shape
+            q_r = q_pts / gauge
+            q_nhat = q_nrm / q_nrm.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+            q_g = g_unit[:, None].expand(bq, nq, K, 3)
+            if self.qin:
+                if fields is None:
+                    raise ValueError(f"query_inputs declared: {kind} needs its fields")
+                q_frame = torch.cat([q_nhat[:, :, None], q_g], dim=2)
+                q_feat, q_vecs, q_tens = self.qin.features(
+                    fields, bq, nq, q_frame, gauge=gauge, eps=self.eps
+                )
+            else:
+                if fields:
+                    raise ValueError(
+                        f"{kind} given but the model declares no query_inputs"
+                    )
+                q_feat, q_vecs, q_tens = None, None, None
+            return q_r, q_nhat, q_g, q_feat, q_vecs, q_tens
+
+        ### n_boundary counts the SURFACE tokens only: the surface measure
+        ### statistics that the support and query tokens' routing weights refer
+        ### to must not see the tokens appended below.
+        n_boundary = n
+        if self.support_tokens and support_points is not None:
+            ### Support tokens (see __init__): interacting interior tokens that
+            ### are a function of the case, not of the requested queries.
+            if support_normals is None:
+                raise ValueError(
+                    "support_tokens needs support_normals (e.g. the SDF gradient at each support point)"
+                )
+            bs_, ns_, _ = support_points.shape
+            s_r, s_nhat, s_g, s_feat, s_vecs, s_tens = _query_class(
+                support_points, support_normals, support_inputs, "support_inputs"
+            )
+            h_s = self.embed(self._token_seed(s_nhat, s_g, None, g_scalars, ns_))
+            h_s = h_s + self.sp_type.to(h.dtype)
+            if self.qin:
+                h_s = h_s + self.sp_embed(s_feat).to(h_s.dtype)
+            if self.query_mass == "source_total":
+                s_logw = (
+                    self.sp_logw.to(log_w.dtype)
+                    + torch.logsumexp(log_w[:, :n_boundary], dim=1, keepdim=True)
+                    - math.log(ns_)
+                )
+            else:
+                s_logw = self.sp_logw.to(log_w.dtype) + log_w[:, :n_boundary].mean(
+                    dim=1, keepdim=True
+                )
+            s_vecs, s_tens = self._block_extras(
+                None, None, s_vecs, s_tens, bs_, ns_, points
+            )
+            h = torch.cat([h, h_s], dim=1)
+            r = torch.cat([r, s_r], dim=1)
+            n_hat = torch.cat([n_hat, s_nhat], dim=1)
+            g_hat = torch.cat([g_hat, s_g], dim=1)
+            log_w = torch.cat([log_w, s_logw.expand(b, ns_, 1)], dim=1)
+            if vecs is not None:
+                vecs = torch.cat([vecs, s_vecs], dim=1)
+                tens = torch.cat([tens, s_tens], dim=1)
+            n = n + ns_
+        qt_active = self.query_tokens and query_points is not None
+        if qt_active:
+            ### Interior queries as interacting tokens (see __init__).
+            if query_normals is None:
+                raise ValueError(
+                    "query_tokens needs query_normals (e.g. the SDF gradient at each query)"
+                )
+            bq, nq, _ = query_points.shape
+            q_r, q_nhat, q_g, q_feat, q_vecs, q_tens = _query_class(
+                query_points, query_normals, query_inputs, "query_inputs"
+            )
+            h_q = self.embed(self._token_seed(q_nhat, q_g, None, g_scalars, nq))
+            h_q = h_q + self.qt_type.to(h.dtype)
+            if self.qin:
+                h_q = h_q + self.qt_embed(q_feat).to(h_q.dtype)
+            ### The query tokens' routing weight is learned RELATIVE to the
+            ### surface measure (mean surface log-weight), so that rescaling
+            ### the geometry (areas x k^2) shifts every token's log-weight by
+            ### the same 2 log k and the similarity-gauge scale contract holds
+            ### exactly; an absolute learned weight broke it (2026-09-07).
+            ### "source_total" (see __init__) ties the queries' total weight to
+            ### the total surface measure instead of the per-token mean.
+            if self.query_mass == "source_total":
+                q_logw = (
+                    self.qt_logw.to(log_w.dtype)
+                    + torch.logsumexp(log_w[:, :n_boundary], dim=1, keepdim=True)
+                    - math.log(nq)
+                )
+            else:
+                q_logw = self.qt_logw.to(log_w.dtype) + log_w[:, :n_boundary].mean(
+                    dim=1, keepdim=True
+                )
+            q_vecs, q_tens = self._block_extras(
+                None, None, q_vecs, q_tens, bq, nq, points
+            )
+            h = torch.cat([h, h_q], dim=1)
+            r = torch.cat([r, q_r], dim=1)
+            n_hat = torch.cat([n_hat, q_nhat], dim=1)
+            g_hat = torch.cat([g_hat, q_g], dim=1)
+            log_w = torch.cat([log_w, q_logw.expand(b, nq, 1)], dim=1)
+            if vecs is not None:
+                vecs = torch.cat([vecs, q_vecs], dim=1)
+                tens = torch.cat([tens, q_tens], dim=1)
+            n = n + nq
+
+        for block in self.blocks:
+            h = block(h, log_w, r, n_hat, g_hat, self.eps, vecs, tens)
+
+        ### The head frame builds its slice anchors from the SOURCE tokens
+        ### (src_r, src_logw, and h); the branches below overwrite n_hat, g_out
+        ### and n with the query-side values, so the source tensors are
+        ### captured here.
+        src_r, src_logw = r, log_w
+        r_out = r  # positions of the tokens the head reads (radial basis)
+        g_out = g_hat  # the global directions seen by the tokens the head reads
+        if qt_active:
+            ### Heads read the query tokens only (surface tokens were context).
+            h_out = h[:, n_boundary:]
+            n_hat, g_out, b, n = q_nhat, q_g, bq, nq
+            r_out = q_r
+        elif self.query_independent:
+            ### Final encoder slice states and anchors (read-only for queries).
+            logits = self.final_assign(h)
+            a = _softmax_over_points(logits + log_w, self.fast_point_softmax)
+            z_states = torch.einsum("bns,bnh->bsh", a, h)
+            z_pos = torch.einsum("bns,bnc->bsc", a, r)
+            m_s = torch.einsum("bns,bnc->bsc", a, n_hat)
+            m_s = m_s / m_s.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+            if query_points is None:
+                q_pts, q_nrm = points, normals
+            else:
+                q_pts = query_points
+                if query_normals is not None:
+                    q_nrm = query_normals
+                elif query_points.shape[1] != normals.shape[1]:
+                    raise ValueError(
+                        "query_points are not the boundary points: pass query_normals (e.g. the SDF "
+                        "gradient at each query)"
+                    )
+                else:
+                    q_nrm = normals
+            bq, nq, _ = q_pts.shape
+            q_r, q_nhat, q_g, q_feat, q_vecs, q_tens = _query_class(
+                q_pts, q_nrm, query_inputs, "query_inputs"
+            )
+            ### The remaining seed channels must match the encoder's seed
+            ### layout. Boundary inputs are per-boundary-cell data: the
+            ### queries carry them only when the queries ARE the boundary
+            ### points, and zeros otherwise.
+            own_boundary = query_points is None
+            q_h = self.embed(
+                self._token_seed(
+                    q_nhat, q_g, b_feat if own_boundary else None, g_scalars, nq
+                )
+            )
+            if self.qin:
+                q_h = q_h + self.rq_embed(q_feat).to(q_h.dtype)
+            q_vecs, q_tens = self._block_extras(
+                b_vecs if own_boundary else None,
+                b_tens if own_boundary else None,
+                q_vecs,
+                q_tens,
+                bq,
+                nq,
+                points,
+            )
+            ### The local readout is a softmax over sources with logits
+            ### -d^2/rho^2 + log w: exactly invariant to a rescale of the source
+            ### measure and well defined however far a query sits from the sources.
+            src_w = src_logw.squeeze(-1)
+            for rb in self.read_blocks:
+                q_h = rb(
+                    q_h,
+                    q_r,
+                    q_nhat,
+                    q_g,
+                    z_states,
+                    z_pos,
+                    m_s,
+                    self.eps,
+                    src_r=r,
+                    src_h=h,
+                    src_w=src_w,
+                    local_rho=self.local_readout_rho,
+                    q_vecs=q_vecs,
+                    q_tens=q_tens,
+                )
+            h_out, n_hat, g_out, b, n = q_h, q_nhat, q_g, bq, nq
+            r_out = q_r
+        else:
+            h_out = h
+        ### Head frame: the radial basis vector is the direction from the token's
+        ### soft slice anchor (measure-weighted mean of source positions), not
+        ### from a centroid; translation covariant.
+        a_f = _softmax_over_points(
+            self.frame_assign(h) + src_logw, self.fast_point_softmax
+        )
+        z_f = torch.einsum("bns,bnc->bsc", a_f, src_r)
+        b_f = torch.softmax(self.frame_assign(h_out), dim=-1)
+        u = r_out - torch.einsum("bns,bsc->bnc", b_f, z_f).to(r_out.dtype)
+        r_hat = u / u.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+        coeffs = self.head(self.norm_out(h_out))
+
+        ### The token basis. True vectors: the global directions, the normal, the
+        ### radial direction and the e_theta complements of (rhat, n) and each
+        ### (rhat, g_k), left unnormalized so they vanish smoothly where the pair
+        ### is parallel. Pseudovectors: the cross products of the primaries
+        ### {g_k, n, rhat} (for K = 1: g x n, g x rhat, n x rhat), which flip sign
+        ### under a reflection while their coefficients do not.
+        gs = [g_out[:, :, k] for k in range(K)]
+        _, e_th_n, _ = spherical_basis(r_hat, n_hat, normalize_basis_vectors=False)
+        true_basis = gs + [n_hat, r_hat, e_th_n]
+        for g in gs:
+            _, e_th, _ = spherical_basis(r_hat, g, normalize_basis_vectors=False)
+            true_basis.append(e_th)
+        primaries = gs + [n_hat, r_hat]
+        pseudo_basis = [
+            torch.cross(primaries[i], primaries[j], dim=-1)
+            for i in range(len(primaries))
+            for j in range(i + 1, len(primaries))
+        ]
+        true_vecs = torch.stack(true_basis, dim=-2)  # (B, N, m, 3)
+        pseudo_vecs = (
+            torch.stack(pseudo_basis, dim=-2)
+            if pseudo_basis
+            else true_vecs.new_zeros(b, n, 0, 3)
+        )
+
+        out: dict[str, torch.Tensor] = {}
+        start = 0
+        for name, spec in self.output_specs.items():
+            layout = self.output_layouts[name]
+            if spec.rank == 0 and spec.channels > 1:
+                out[name] = coeffs[..., start : start + spec.channels]
+                start += spec.channels
+                continue
+            c = coeffs[..., start : start + layout.n_coeffs]
+            out[name] = _assemble_output(c, layout, true_vecs, pseudo_vecs)
+            start += layout.n_coeffs
+        return out

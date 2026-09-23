@@ -1,0 +1,141 @@
+{
+ "protocol": "fp32 inference on the 5,540 clean DeepJEB++ test files (1,385 brackets x 4 load cases), every surface cell, per-sample relative L2 averaged over files; bf16 training on the clean ladder 256 / 1,024 / 4,096 / 12,451 brackets at equal optimizer steps (500 / 125 / 32 / 10 epochs); ISLA R1 = 384x12 cosine fused, K=1 load direction, lr 5e-4; GeoTransolver-512 lr 1e-3 (3e-3 control)",
+ "lanes": {
+  "jb_isla_r1_n1024_seed42": {
+   "arm": "isla_r1",
+   "rung": "n1024",
+   "seed": 42,
+   "n_cases": 2267,
+   "epoch": 125,
+   "fields": {
+    "von_mises": 0.49473403482301465,
+    "displacement": 0.23320831914514922
+   },
+   "by_load": {
+    "ver": {
+     "von_mises": 0.5371853825060302,
+     "displacement": 0.21805288603154172
+    },
+    "hor": {
+     "von_mises": 0.5124349265607366,
+     "displacement": 0.18660840942693555
+    },
+    "dia": {
+     "von_mises": 0.5777714802527133,
+     "displacement": 0.24696089402235374
+    },
+    "tor": {
+     "von_mises": 0.3516192200743122,
+     "displacement": 0.2811843579408353
+    }
+   }
+  },
+  "jb_isla_r1_n256_seed43": {
+   "arm": "isla_r1",
+   "rung": "n256",
+   "seed": 43,
+   "n_cases": 2260,
+   "epoch": 500,
+   "fields": {
+    "von_mises": 0.6032519068239274,
+    "displacement": 0.3061536367966142
+   },
+   "by_load": {
+    "ver": {
+     "von_mises": 0.6499827625477208,
+     "displacement": 0.2872292723671525
+    },
+    "hor": {
+     "von_mises": 0.6311330718276775,
+     "displacement": 0.2568186150517611
+    },
+    "dia": {
+     "von_mises": 0.7043921091651495,
+     "displacement": 0.32523924878476995
+    },
+    "tor": {
+     "von_mises": 0.4274996837551615,
+     "displacement": 0.3553274109827734
+    }
+   }
+  }
+ },
+ "summary": {
+  "isla_r1|n1024": {
+   "lanes": [
+    "jb_isla_r1_n1024_seed42"
+   ],
+   "fields": {
+    "von_mises": {
+     "mean": 0.49473403482301465,
+     "seeds": [
+      0.49473403482301465
+     ]
+    },
+    "displacement": {
+     "mean": 0.23320831914514922,
+     "seeds": [
+      0.23320831914514922
+     ]
+    }
+   },
+   "by_load": {
+    "ver": {
+     "von_mises": 0.5371853825060302,
+     "displacement": 0.21805288603154172
+    },
+    "hor": {
+     "von_mises": 0.5124349265607366,
+     "displacement": 0.18660840942693555
+    },
+    "dia": {
+     "von_mises": 0.5777714802527133,
+     "displacement": 0.24696089402235374
+    },
+    "tor": {
+     "von_mises": 0.3516192200743122,
+     "displacement": 0.2811843579408353
+    }
+   }
+  },
+  "isla_r1|n256": {
+   "lanes": [
+    "jb_isla_r1_n256_seed43"
+   ],
+   "fields": {
+    "von_mises": {
+     "mean": 0.6032519068239274,
+     "seeds": [
+      0.6032519068239274
+     ]
+    },
+    "displacement": {
+     "mean": 0.3061536367966142,
+     "seeds": [
+      0.3061536367966142
+     ]
+    }
+   },
+   "by_load": {
+    "ver": {
+     "von_mises": 0.6499827625477208,
+     "displacement": 0.2872292723671525
+    },
+    "hor": {
+     "von_mises": 0.6311330718276775,
+     "displacement": 0.2568186150517611
+    },
+    "dia": {
+     "von_mises": 0.7043921091651495,
+     "displacement": 0.32523924878476995
+    },
+    "tor": {
+     "von_mises": 0.4274996837551615,
+     "displacement": 0.3553274109827734
+    }
+   }
+  }
+ },
+ "gt512_over_isla": {},
+ "learning_curve_exponents": {}
+}
