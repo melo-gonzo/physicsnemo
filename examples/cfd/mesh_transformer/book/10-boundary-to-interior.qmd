@@ -518,8 +518,10 @@ print(f"**On the OLBC sets, one fixed mesh per set whose boundary is cut per sam
       f"segments with random values, GeoTransolver-512 leads ISLA by a factor of about three on the Poisson set at every rung "
       f"(GeoTransolver-512 ÷ ISLA {OLR['poisson|isla_r1|n512']['u']:.2f} / {OLR['poisson|isla_r1|n2048']['u']:.2f} / "
       f"{OLR['poisson|isla_r1|n8448']['u']:.2f} at 512 / 2,048 / 8,448 cases) with the same learning-curve exponent "
-      f"({OLX['poisson|isla_r1|u']['exponent']:.2f} against {OLX['poisson|gt512|u']['exponent']:.2f}), and by 1.4 to 2x on the elasticity set "
-      f"at 512 cases; the gap is located in value transport, and a parameter-free boundary-value extension recovers most of it.** These "
+      f"({OLX['poisson|isla_r1|u']['exponent']:.2f} against {OLX['poisson|gt512|u']['exponent']:.2f}), and by about two on the stresses of the "
+      f"elasticity set at every rung with the shallower learning curve (exponents {OLX['elasticity|isla_r1|sig11']['exponent']:.2f} against "
+      f"{OLX['elasticity|gt512|sig11']['exponent']:.2f} on $\\sigma_{{11}}$); on Poisson the gap is located in value transport, and a "
+      f"parameter-free boundary-value extension recovers most of it at 512 cases.** These "
       "sets (@sec-data-olbc) are the complement of every other dataset in the book: the geometry never varies and only the boundary data "
       "do, so the task is the pure boundary-data-to-solution map on a known domain. On the Poisson set ($-\\nabla^2 u = f$ on a square, a "
       "random sinusoidal source and four random boundary segments per sample) ISLA reads the boundary segments with the condition type and "
@@ -538,17 +540,20 @@ for n in OL_RUNGS:
     out += f"| {n:,} | {ocell(OLS[f'poisson|isla_r1|n{n}'])} | {ocell(OLS[f'poisson|gt512|n{n}'])} | {OLR[f'poisson|isla_r1|n{n}']['u']:.2f} |\n"
 out += f"| 8,448, GeoTransolver-256 | | {ocell(OLS['poisson|gt256|n8448'])} | {OLS['poisson|gt256|n8448']['fields']['u']['mean'] / OLS['poisson|isla_r1|n8448']['fields']['u']['mean']:.2f} |\n"
 out += f"| exponent, 512 to 8,448 | {OLX['poisson|isla_r1|u']['exponent']:.2f} | {OLX['poisson|gt512|u']['exponent']:.2f} | |\n"
-out += "\n| OLBC elasticity, 512 cases | " + " | ".join(l for _, l in OL_EL) + " |\n|---|" + "---|" * len(OL_EL) + "\n"
-out += "| ISLA | " + " | ".join(ocell(OLS["elasticity|isla_r1|n512"], f) for f, _ in OL_EL) + " |\n"
-out += "| GeoTransolver-512 | " + " | ".join(ocell(OLS["elasticity|gt512|n512"], f) for f, _ in OL_EL) + " |\n"
-out += "| GeoTransolver-512 ÷ ISLA | " + " | ".join(f"{el[f]:.2f}" for f, _ in OL_EL) + " |\n"
+out += "\n| OLBC elasticity, training cases | " + " | ".join(f"ISLA {l} | GeoTransolver-512 {l} | ratio" for _, l in OL_EL) + " |\n|---:|" + "---|" * (3 * len(OL_EL)) + "\n"
+for n in OL_RUNGS:
+    i = OLS[f"elasticity|isla_r1|n{n}"]["fields"]; g = OLS[f"elasticity|gt512|n{n}"]["fields"]; rr = OLR[f"elasticity|isla_r1|n{n}"]
+    out += f"| {n:,} | " + " | ".join(f"{i[f]['mean']:.3f} | {g[f]['mean']:.3f} | {rr[f]:.2f}" for f, _ in OL_EL) + " |\n"
+out += "| exponent | " + " | ".join(f"{OLX[f'elasticity|isla_r1|{f}']['exponent']:.2f} | {OLX[f'elasticity|gt512|{f}']['exponent']:.2f} | " for f, _ in OL_EL) + " |\n"
 print(out)
 print(": The OLBC ladders: relative L2 over the 256 test samples of each set (mean over samples, then over seeds; seeds in parentheses), "
       "float32 at every node, ISLA at the reference configuration against GeoTransolver-512. Top: the Poisson set's solution $u$ along the "
       "512 / 2,048 / 8,448-case ladder, with GeoTransolver-256 at the full rung (width does not pay for GeoTransolver here) and the "
-      "least-squares learning-curve exponents. Bottom: the elasticity set at 512 cases, per field. How to read this: a ratio below one is "
-      "a GeoTransolver lead; an ISLA error near one on the elasticity set is the error of predicting zero, so those cells say ISLA did not "
-      "learn the map at 512 cases, not that it is 1.4 to 2x behind. "
+      "least-squares learning-curve exponents. Bottom: the elasticity set along the same ladder, per field (two seeds per cell), with the "
+      "exponents in the last row. How to read this: a ratio below one is a GeoTransolver lead; an ISLA error near one on the elasticity set "
+      "is the error of predicting zero, so the 512-case cells say ISLA did not learn the map there, not that it is 1.4 to 2x behind; from "
+      "2,048 cases up it learns the map and trails by about two on the stresses, with the shallower exponent. These are the scalar-input "
+      "lanes; the rank-1-input configuration (@sec-nb-rankio-verdict-elasticity) moves the 512-case standing to 0.72 to 0.77. "
       "Data: results/olbc_2026-09-22.json. {#tbl-olbc-ladder}")
 ```
 

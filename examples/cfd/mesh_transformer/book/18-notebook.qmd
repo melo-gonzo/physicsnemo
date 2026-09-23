@@ -26531,3 +26531,24 @@ dominates, at 2,048 the positional channel (a frame the model can express
 absolute position in, on a fixed domain) recovers most of the gap on its
 own. The two are not exclusive; the 2,048-case `ext` twin says whether
 they add.
+
+**Addendum (2026-09-23, later still).** (d) `om_poisson_isla_r1_leak_n2048_seed42`:
+$u$ 0.060 against GeoTransolver-512's 0.098 at 2,048 cases, 39% better
+(27% at 512): with absolute coordinates the routing-and-boundary-token
+path pulls further ahead of GeoTransolver as cases grow, a contract-breaking
+diagnostic that bounds what the positional channel could be worth on a
+fixed domain. (e) **The OLBC elasticity baseline ladder is complete at two
+seeds per cell**: ISLA R1 0.904 / 1.007 / 0.934 / 0.964 at 512 cases,
+0.357 / 0.555 / 0.503 / 0.534 at 2,048 and 0.088 / 0.225 / 0.221 / 0.216
+at 8,448 (displacement / $\sigma_{11}$ / $\sigma_{22}$ / $\sigma_{12}$)
+against GeoTransolver-512's 0.447 / 0.626 / 0.651 / 0.636, 0.165 / 0.257 /
+0.261 / 0.267 and 0.050 / 0.102 / 0.105 / 0.098; GeoTransolver-512 ÷ ISLA
+0.49 / 0.62 / 0.70 / 0.66, 0.46 / 0.46 / 0.52 / 0.50, 0.57 / 0.45 / 0.48 /
+0.45; learning-curve exponents 0.83 (displacement) and 0.51 to 0.53
+(stresses) against 0.78 and 0.65 to 0.67. **On the elasticity set with
+scalar boundary inputs ISLA trails GeoTransolver-512 by about two on the
+stresses at every rung and its stress curve is the shallower one**, the
+second OLBC set (after Poisson) where the SOLIDS same-exponent clause
+does not hold in ISLA's favor. The rank-1-input configuration (RANK-IO)
+moved the 512-case standing from no learning to 0.72 to 0.77; its
+2,048-case lanes decide whether it also steepens the curve.

@@ -418,5 +418,13 @@
    "displacement": 0.24565004700667054,
    "von_mises": 0.4888042858684106
   }
+ },
+ "om_poisson_isla_r1_leak_n2048_seed42": {
+  "group": "om",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "u": 0.059777256687084446
+  }
  }
 }
