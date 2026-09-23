@@ -318,5 +318,88 @@
    "pressure": 0.042398497268247105,
    "wss": 0.06660993762003879
   }
+ },
+ "om_poisson_isla_r1_ext_n512_seed43": {
+  "group": "om",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "u": 0.3472594749473501
+  }
+ },
+ "om_poisson_isla_r1_frame2_n512_seed43": {
+  "group": "om",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "u": 0.7161923084640875
+  }
+ },
+ "om_poisson_isla_r1_leak_n512_seed43": {
+  "group": "om",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "u": 0.18746201181784272
+  }
+ },
+ "v2_elasticity_isla_r1_ext_n512_seed42": {
+  "group": "v2",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "displacement": 0.7129981248290278,
+   "sig11": 0.7804424029309303,
+   "sig12": 0.7889813808724284,
+   "sig22": 0.7862653326010332,
+   "stress": 0.7681310655316338
+  }
+ },
+ "v2_elasticity_isla_r1_ext_n512_seed43": {
+  "group": "v2",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "displacement": 0.7003085956093855,
+   "sig11": 0.7698910154867917,
+   "sig12": 0.7832728698849678,
+   "sig22": 0.782669311389327,
+   "stress": 0.7620073647703975
+  }
+ },
+ "v2_jb_isla_r1_rankio_n1024_seed43": {
+  "group": "v2",
+  "n_cases": 5540,
+  "epoch": 125,
+  "fields": {
+   "displacement": 0.252787736365538,
+   "von_mises": 0.4983922140558489
+  }
+ },
+ "v2_t2d_isla_r1_tensor_frame2_n32_seed42": {
+  "group": "v2",
+  "n_cases": 100,
+  "epoch": 500,
+  "fields": {
+   "displacement": 0.0941572180390358,
+   "q": 2.0044806200265883,
+   "sig11": 0.11649277172982693,
+   "sig12": 0.09469694109633565,
+   "sig22": 0.07787409690208733,
+   "stress": 0.09468546090647578
+  }
+ },
+ "v2_t2d_isla_r1_tensor_frame2_n32_seed43": {
+  "group": "v2",
+  "n_cases": 100,
+  "epoch": 500,
+  "fields": {
+   "displacement": 0.09537775656208396,
+   "q": 2.104598449617624,
+   "sig11": 0.11525708690285683,
+   "sig12": 0.09702993018552661,
+   "sig22": 0.07900277389213443,
+   "stress": 0.09544564329087735
+  }
  }
 }

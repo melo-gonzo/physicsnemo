@@ -26435,3 +26435,74 @@ inference draw. Both effects are consistent with the quadrature noise of
 an area-proportional draw whose weights span four decades; the LIT-MLOSS
 idea (@sec-vs-ideas) is the contract-preserving remedy to test if the
 residual few percent ever matters.
+
+## 2026-09-23 — Verdict and interims: the vector boundary-value extension does not help on OLBC elasticity at 512 cases (3 to 6% worse than the rank-1 inputs alone, both seeds); tensor head plus full frame at 32 Tensile2d cases; DeepJEB rank-1 load second seed; OLBC elasticity ladder at one seed {#sec-nb-litext-vec-verdict}
+
+**LIT-EXT-vec (falsified at 512 cases).** The Poisson mechanism study
+(@sec-nb-olbc-mech-verdict) found that a parameter-free extension of the
+prescribed boundary values into the interior recovers 84% of ISLA's
+log-gap to GeoTransolver-512. Its vector form on the elasticity set
+extends the prescribed displacement and traction per condition label with
+the same inverse-square-distance kernel and feeds them as four rank-1
+query inputs plus four distances, on top of the RANK-IO configuration
+(rank-1 boundary inputs, symmetric rank-2 stress head). Float32 relative
+L2 on the 256 test cases, 512 training cases, seeds 42 / 43
+(`v2_elasticity_isla_r1_ext_n512_*` against `v2_elasticity_isla_r1_rankio_n512_*`,
+`lane_means_2026-09-23.json`):
+
+| field | RANK-IO (rank-1 inputs, tensor head) | + vector extension | change |
+|---|---|---|---|
+| displacement | 0.673 / 0.667 | 0.713 / 0.700 | +5% |
+| $\sigma_{11}$ | 0.724 / 0.756 | 0.780 / 0.770 | +5% |
+| $\sigma_{22}$ | 0.737 / 0.766 | 0.786 / 0.783 | +4% |
+| $\sigma_{12}$ | 0.770 / 0.789 | 0.789 / 0.783 | +1% |
+
+The preregistered bar ("recovers at least half of the log-gap to
+GeoTransolver-512 on every field, as it did for the Poisson scalar")
+fails on every field: the extension makes every field 1 to 5% *worse*,
+both seeds agreeing on the sign for three of four fields. **The value-transport
+mechanism, as the parameter-free extension supplies it, is specific to the
+Poisson set at this rung.** A reading, not a measurement: on Poisson the
+prescribed values *are* the solution's boundary trace and the extension is
+close to a harmonic interpolant of it; on elasticity the prescribed
+traction is a derivative datum and the displacement is prescribed on a
+few segments, so an inverse-distance average of them is not close to any
+field the model must produce, and eight extra query channels at 512 cases
+cost more in fit than they give. The 2,048-case twins (rows 12 and 13)
+score next; the LIT-EXT ledger row carries the elasticity clause.
+
+**Tensor head plus both laboratory axes at 32 Tensile2d cases (interim;
+the 400-case pair decides).** `tensor_frame2` seeds 42 / 43:
+$\sigma_{11}$ 0.1165 / 0.1153, $\sigma_{22}$ 0.0779 / 0.0790,
+$\sigma_{12}$ 0.0947 / 0.0970, displacement 0.0942 / 0.0954. Against
+`frame2` (two scalar-head seeds: 0.112 / 0.112 / 0.102 / 0.090) the tensor
+head with the same inputs is 3% worse on $\sigma_{11}$, 30% better on
+$\sigma_{22}$, 6% better on $\sigma_{12}$ and 5% worse on the displacement;
+against `tensor_axis` (the one-axis tensor lanes, 0.108 / 0.076 / 0.087 /
+0.113) the second axis costs 4 to 11% on the stresses and buys 16% on the
+displacement. So at 32 cases the second axis is what the displacement was
+missing under `tensor_axis`, and the tensor head is what $\sigma_{22}$
+gains over scalar heads. The bars of @sec-nb-tensor-axis-verdict-400 are
+stated at 400 cases, where rows 14 and 15 are training.
+
+**DeepJEB++ rank-1 load, seed 43** (`v2_jb_isla_r1_rankio_n1024_seed43`,
+5,540 clean test brackets): von Mises 0.498, displacement 0.253, against
+the R1 lanes with the load as a one-hot-and-magnitude scalar set
+(two seeds: 0.496 / 0.242). One seed says the rank-1 load traction is
+neutral on von Mises and 4% worse on the displacement at 1,024 brackets;
+seed 42 is scoring.
+
+**OLBC elasticity ladder, baseline ISLA at one seed** (`ol_elasticity_isla_r1_n{2048,8448}_seed43`;
+GeoTransolver-512 two seeds): at 2,048 cases ISLA 0.344 / 0.537 / 0.518 /
+0.484 (displacement / $\sigma_{11}$ / $\sigma_{22}$ / $\sigma_{12}$)
+against 0.165 / 0.257 / 0.261 / 0.267, ratios 0.48 / 0.48 / 0.54 / 0.52;
+at 8,448 cases 0.086 / 0.220 / 0.211 / 0.211 against 0.050 / 0.102 /
+0.105 / 0.098, ratios 0.58 / 0.46 / 0.50 / 0.46. Unlike the 512-case rung,
+where ISLA sat at the predict-zero error, it learns the map from 2,048
+cases up and trails GeoTransolver-512 by a factor of about two on the
+stresses at every rung, with learning-curve exponents 0.84 (displacement)
+and 0.53 to 0.54 (stresses) against GeoTransolver's 0.78 and 0.65 to 0.67:
+on this set ISLA's stress curve is the *shallower* one (one seed at two
+rungs; the second seeds and the RANK-IO 2,048-case lanes decide whether
+the rank-1 inputs change the exponent as they changed the 512-case
+standing).
