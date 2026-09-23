@@ -154,8 +154,8 @@ of the same arithmetic: ``geo_kernel="eager"`` (PyTorch; ``geo_checkpoint``
 rebuilds its intermediates in backward instead of storing them) and
 ``geo_kernel="fused"`` (one Triton kernel per direction that never
 materializes the (B, N, S, .) tensor; CUDA, float32/float64 geometry, one
-global direction, at most 1024 slices, no per-token vector or tensor
-inputs). The default ``geo_kernel=None`` means *auto*: at the first forward
+to three global directions, at most 1024 slices, no per-token vector or
+tensor inputs). The default ``geo_kernel=None`` means *auto*: at the first forward
 pass the model picks the fused kernel when the inputs are on CUDA, Triton
 is importable and the constraints hold, and the eager region otherwise,
 logging the choice once; at 200,000 cells the fused kernel runs the
@@ -762,14 +762,14 @@ class _SliceBlock(nn.Module):
             ### (B, N, geo) instead of (B, N, S, hidden/2) -- ~0.5 GB per layer at
             ### 10k tokens, 256 slices, hidden 192 (A35b memory derivation).
             if self.geo_kernel == "fused":
-                ### The fused kernel is written for one global direction and no
-                ### per-token vector inputs (enforced at construction / resolution).
+                ### The fused kernel is written for one to three global directions and
+                ### no per-token vector inputs (enforced at construction / resolution).
                 bias, point_mix, pooled = _fused_geo_region()(
                     self.geo_logit,
                     logits,
                     r,
                     n_hat,
-                    g_hat[:, :, 0],
+                    g_hat,
                     z_pos,
                     m_s,
                     eps,
@@ -882,7 +882,7 @@ class _ReadBlock(nn.Module):
                 logits_pre,
                 q_r,
                 q_n,
-                q_g[:, :, 0],
+                q_g,
                 z_pos,
                 m_s,
                 eps,
@@ -1339,7 +1339,7 @@ class ISLA(Module):
         geo_kernel: ``None`` (default) selects automatically at the first
             forward pass: ``"fused"`` (exact Triton kernel for the per-layer
             geometry region) when the inputs are on CUDA, Triton is available,
-            there is exactly one global direction, at most 1024 slices and no
+            there are one to three global directions, at most 1024 slices and no
             rank-1 or rank-2 boundary or query inputs, else ``"eager"`` (the
             PyTorch reference region). Pass ``"eager"`` or ``"fused"`` to force
             one; ``"fused"`` raises when its constraints cannot be met.
@@ -1569,9 +1569,9 @@ class ISLA(Module):
         self.n_block_vecs = self.bin.n_block_vecs + self.qin.n_block_vecs
         self.n_block_tens = self.bin.n_block_tens + self.qin.n_block_tens
         if geo_kernel == "fused":
-            if K != 1:
+            if not 1 <= K <= 3:
                 raise ValueError(
-                    f"geo_kernel='fused' is written for exactly one global direction; "
+                    f"geo_kernel='fused' is written for one to three global directions; "
                     f"got {K} rank-1 global inputs"
                 )
             if self.n_block_vecs or self.n_block_tens:
@@ -1793,7 +1793,7 @@ class ISLA(Module):
 
         ``"eager"`` or ``"fused"`` when the constructor fixed it; under the
         default (auto) the fused kernel when ``points`` is on CUDA, Triton is
-        importable, the model has one global direction, at most 1024 slices and
+        importable, the model has one to three global directions, at most 1024 slices and
         no rank-1 or rank-2 per-token inputs, else the eager region. The
         decision is cached per device and logged once.
         """
@@ -1804,14 +1804,14 @@ class ISLA(Module):
         if cached is not None and cached[0] == key:
             return cached[1]
         try:
-            from .geo_kernel import HAS_TRITON, MAX_SLICES
+            from .geo_kernel import HAS_TRITON, MAX_DIRECTIONS, MAX_SLICES
         except Exception:  # pragma: no cover - a broken triton install falls back
-            HAS_TRITON, MAX_SLICES = False, 0
+            HAS_TRITON, MAX_SLICES, MAX_DIRECTIONS = False, 0, 0
         has_token_inputs = bool(self.n_block_vecs or self.n_block_tens)
         ok = (
             points.is_cuda
             and HAS_TRITON
-            and self.n_global_vectors == 1
+            and 1 <= self.n_global_vectors <= MAX_DIRECTIONS
             and self.n_slices <= MAX_SLICES
             and not has_token_inputs
         )

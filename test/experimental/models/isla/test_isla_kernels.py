@@ -105,10 +105,12 @@ def _assert_same(ref, opt, dtype, out_tol, grad_tol, n=700, batch=1):
 # --------------------------------------------------------------------------- fused region
 @cuda_only
 @pytest.mark.parametrize("dtype", [torch.float64, torch.float32])
-def test_fused_geo_region_matches_eager_region(dtype):
-    """Region level: forward outputs (bias, mix, pooled) and every input gradient.
-    The fused kernel keeps a ``relative`` flag; the model always passes ``True``
-    (the six-invariant set), which is what the eager region computes."""
+@pytest.mark.parametrize("K", [1, 2, 3])
+def test_fused_geo_region_matches_eager_region(dtype, K):
+    """Region level: forward outputs (bias, mix, pooled) and every input gradient, for
+    one to three global directions (the (5 + K)-invariant set). The fused kernel keeps
+    a ``relative`` flag; the model always passes ``True``, which is what the eager
+    region computes."""
     from physicsnemo.experimental.models.isla.geo_kernel import fused_geo_region
 
     torch.backends.cuda.matmul.allow_tf32 = False
@@ -132,13 +134,13 @@ def test_fused_geo_region_matches_eager_region(dtype):
         .requires_grad_()
     )
     d = (
-        torch.nn.functional.normalize(torch.randn(b, 1, 3, generator=g), dim=-1)
+        torch.nn.functional.normalize(torch.randn(b, 1, K, 3, generator=g), dim=-1)
         .to("cuda", dtype)
         .requires_grad_()
     )
     logits = torch.randn(b, n, s, generator=g).to("cuda", dtype).requires_grad_()
     torch.manual_seed(0)
-    lin = torch.nn.Linear(6, 1).to("cuda", dtype)
+    lin = torch.nn.Linear(5 + K, 1).to("cuda", dtype)
     leaves = (lin.weight, lin.bias, logits, r, nh, d, z, ms)
     wts = [
         torch.randn(b, n, s, generator=g).to("cuda", dtype),
@@ -149,14 +151,13 @@ def test_fused_geo_region_matches_eager_region(dtype):
     def run(fn, *extra):
         for t in leaves:
             t.grad = None
-        d_n = d.expand(b, n, 3)
-        ### the eager region takes the K global directions as (B, N, K, 3); the fused kernel is single-vector (B, N, 3)
+        d_n = d.expand(b, n, K, 3)  # both regions take the K global directions as (B, N, K, 3)
         outs = fn(
             lin,
             logits,
             r,
             nh,
-            d_n[:, :, None] if fn is _geo_region else d_n,
+            d_n,
             z,
             ms,
             1e-12,
@@ -188,17 +189,15 @@ def test_fused_geo_region_bf16_autocast_forward_matches_eager():
     nh = torch.nn.functional.normalize(torch.randn(b, n, 3, generator=g), dim=-1).cuda()
     ms = torch.nn.functional.normalize(torch.randn(b, s, 3, generator=g), dim=-1).cuda()
     d = (
-        torch.nn.functional.normalize(torch.randn(b, 1, 3, generator=g), dim=-1)
+        torch.nn.functional.normalize(torch.randn(b, 1, 1, 3, generator=g), dim=-1)
         .cuda()
-        .expand(b, n, 3)
+        .expand(b, n, 1, 3)
     )
     logits = torch.randn(b, n, s, generator=g).cuda().bfloat16()
     torch.manual_seed(0)
     lin = torch.nn.Linear(6, 1).cuda()
     with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
-        ref = _geo_region(
-            lin, logits, r, nh, d[:, :, None], z, ms, 1e-12
-        )  # eager region takes (B, N, K, 3)
+        ref = _geo_region(lin, logits, r, nh, d, z, ms, 1e-12)
         fused = fused_geo_region(lin, logits, r, nh, d, z, ms, 1e-12, True)
     assert [t.dtype for t in fused] == [t.dtype for t in ref]
     for a, bb in zip(fused, ref):
@@ -210,6 +209,31 @@ def test_fused_geo_region_bf16_autocast_forward_matches_eager():
 def test_fused_geo_kernel_model_exact_in_float64():
     ref, opt = _pair(torch.float64, geo_kernel="fused")
     _assert_same(ref, opt, torch.float64, 1e-11, 1e-11)
+
+
+@cuda_only
+def test_fused_geo_kernel_model_two_directions_exact_in_float64():
+    """A frame-input model (two global directions, as the solids lanes use) runs the
+    fused kernel and matches the eager region to float64 roundoff."""
+    spec = {**REF, "global_inputs": {"g": 1, "h": 1}}
+    torch.manual_seed(0)
+    ref = ISLA(**spec).to("cuda", torch.float64)
+    torch.manual_seed(0)
+    opt = ISLA(**{**spec, "geo_kernel": "fused"}).to("cuda", torch.float64)
+    opt.load_state_dict(ref.state_dict())
+    inputs, tgt = _cloud(600, 1, dtype=torch.float64)
+    g2 = torch.Generator().manual_seed(7)
+    inputs["global_inputs"]["h"] = torch.nn.functional.normalize(
+        torch.randn(1, 3, generator=g2), dim=-1
+    ).to("cuda", torch.float64)
+    o_ref, g_ref = _run(ref, inputs, tgt)
+    o_opt, g_opt = _run(opt, inputs, tgt)
+    assert _rel(o_opt, o_ref) < 1e-11
+    total = torch.cat([g.flatten() for g in g_ref.values()]).norm()
+    for k, g in g_ref.items():
+        if g.norm() < 1e-6 * total:
+            continue
+        assert _rel(g_opt[k], g) < 1e-11, (k, _rel(g_opt[k], g))
 
 
 @cuda_only

@@ -294,9 +294,9 @@ def test_legacy_vector_layouts_still_accepted():
 
 
 def test_fused_kernel_refuses_other_vector_counts():
-    """The fused Triton region is written for one global direction."""
-    for spec in ({}, {"g1": 1, "g2": 1}):
-        with pytest.raises(ValueError, match="exactly one global direction"):
+    """The fused Triton region is unrolled for one to three global directions."""
+    for spec in ({}, {"g1": 1, "g2": 1, "g3": 1, "g4": 1}):
+        with pytest.raises(ValueError, match="one to three global directions"):
             ISLA(
                 outputs=PV,
                 global_inputs=spec,

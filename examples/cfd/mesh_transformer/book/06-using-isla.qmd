@@ -43,7 +43,7 @@ model:
   n_slices: 256
   mlp_ratio: 4
   scale_mode: rms_distance    # length unit = measure-weighted RMS pairwise distance of the sample (the frame has no origin)
-  geo_kernel: null            # automatic: the fused Triton kernel on CUDA with one global vector, the eager region otherwise
+  geo_kernel: null            # automatic: the fused Triton kernel on CUDA with one to three global vectors, the eager region otherwise
 ```
 
 The reference configuration is 384 wide with 12 layers and 256 slices, at
@@ -185,9 +185,9 @@ seed and one relational cosine per slice (@sec-isla-inputs-rank). The tests
 in `test_isla_global_inputs.py`, `test_isla_inputs.py` and
 `test_isla_heads.py` cover zero and two directions, global scalars, rank-1
 and rank-2 inputs and every output rank and parity. The fused geometry
-kernel is written for exactly one global direction and no rank-1 or rank-2
-per-token inputs; otherwise `geo_kernel: null` resolves to the eager
-region.
+kernel is written for one to three global directions and no rank-1 or rank-2
+per-token inputs (since 2026-09-23; the frame-input solids configurations
+run it); otherwise `geo_kernel: null` resolves to the eager region.
 :::
 
 ## Training {#sec-using-train}
@@ -361,9 +361,9 @@ print(": Training cost at the reporting protocol on the DrivAerML Surface task: 
 
 Two practical consequences:
 
-- **Leave `geo_kernel` at its default (`null`).** On CUDA with one global
-  direction the model selects the fused kernel at the first forward pass and
-  logs the choice; off CUDA, or with several global directions, it falls
+- **Leave `geo_kernel` at its default (`null`).** On CUDA with one to three
+  global directions the model selects the fused kernel at the first forward pass and
+  logs the choice; off CUDA, or with rank-1 or rank-2 per-token inputs, it falls
   back to the eager recompute region. Force `eager` only to reproduce the
   exact arithmetic path of a checkpoint trained on the eager region.
 - **On the eager path, leave `geo_checkpoint: true` unless you are short

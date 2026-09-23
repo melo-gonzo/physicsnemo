@@ -383,8 +383,8 @@ of $(\lambda, r, \hat n, \hat g, z, m)$ with no parameters but $w_g, b_g$.
 On the eager path, `geo_checkpoint=True` recomputes its $N{\times}M{\times}\cdot$
 intermediates in the backward pass instead of storing them, with
 bitwise-identical outputs and gradients; the fused Triton kernel
-(`geo_kernel="fused"`, the automatic choice on CUDA with one global vector
-and at most 1,024 slices) evaluates the same region without ever
+(`geo_kernel="fused"`, the automatic choice on CUDA with one to three
+global vectors and at most 1,024 slices) evaluates the same region without ever
 materializing them, with the recompute built in (@sec-using-cost).
 :::
 

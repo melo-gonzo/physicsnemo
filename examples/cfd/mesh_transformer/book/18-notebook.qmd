@@ -26552,3 +26552,45 @@ second OLBC set (after Poisson) where the SOLIDS same-exponent clause
 does not hold in ISLA's favor. The rank-1-input configuration (RANK-IO)
 moved the 512-case standing from no learning to 0.72 to 0.77; its
 2,048-case lanes decide whether it also steepens the curve.
+
+## 2026-09-23 — Engineering: the fused geometry kernel now takes one to three global directions, so frame-input configurations (the solids lanes, K = 2) run the reference fused path; exact against the eager region in float64, 2x faster and 2.2x leaner than eager at K = 2 on a laptop GPU {#sec-nb-fused-kernel-k3}
+
+**Setting.** ISLA's per-layer geometry region evaluates the point-anchor
+invariants (distance, log distance, the unit separation dotted with each
+global direction, the token normal and the anchor direction, and normal
+dot anchor direction: $5 + K$ scalars for $K$ global directions) on the
+point x slice grid, the routing bias from them, the point-to-slice
+softmax and the mix-weighted pooling. The fused Triton kernel of the
+KERNEL STUDY (2026-09-13) evaluated this on register tiles without writing
+the $(B, N, S, \cdot)$ intermediates, but was written for $K = 1$: the
+DrivAerML and HiLift lanes. Every configuration with the laboratory frame
+as two global vectors (Tensile2d `frame2`, OLBC elasticity, the
+`tensor_frame2` lanes) has therefore run the eager region, at the eager
+region's time and memory, and the book's cost statements did not apply to
+them.
+
+**Change** (commit of 2026-09-23; `geo_kernel.py`, `model.py`). Both
+kernels take a compile-time `K` (1 to 3): they load up to three
+directions per point, form the extra dot products, shift the routing
+Linear's weight and the pooled-invariant indices by $K$, and return the
+direction gradient as $(B, N, K, 3)$. The legacy absolute-anchor variant
+stays at $K = 1$. The model passes all $K$ directions to the kernel,
+accepts `geo_kernel="fused"` for $K \le 3$, and the automatic choice
+selects the kernel for $K \le 3$ on CUDA. **Exactness**: the region-level
+test compares forward outputs and every input gradient with the eager
+region for $K = 1, 2, 3$ in float64 (1e-11) and float32 (1e-6 / 1e-5), and a
+two-direction model matches its eager twin to 1e-11 in float64 (160 ISLA
+tests pass). **Cost** on the RTX 4090 laptop GPU at 20,000 points, width
+192, 4 layers, 256 slices, bf16 autocast, forward plus backward:
+
+| directions | eager | fused | speed-up | peak memory eager / fused |
+|---|---|---|---|---|
+| K = 1 | 84 ms | 25 ms | 3.4x | 2.15 / 1.00 GiB |
+| K = 2 | 97 ms | 48 ms | 2.0x | 2.23 / 1.00 GiB |
+
+The fused K = 2 step is twice the fused K = 1 step where the arithmetic
+grows by a sixth, which points at register pressure in the unrolled tile
+rather than at the extra dot products; a launch-configuration pass for
+K > 1 is the follow-up. The cluster snapshots are not touched by this
+change (the running frame lanes finish on the eager region they started
+on; a new snapshot carries the kernel for the next solids campaign).
