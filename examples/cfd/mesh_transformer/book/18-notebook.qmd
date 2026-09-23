@@ -26759,3 +26759,21 @@ cars are hard (ISLA's per-car error runs 0.034 to 0.051 between the 10th
 and 90th percentiles, 0.067 at the worst car). That is the per-case face of
 the shared floor of @sec-shared-floor: what remains at 435 cars is the
 difficulty of the case, not the architecture.
+
+**Addendum, AirfRANS by angle of attack (ISLA only; the baseline's
+per-case rows are on the cluster).** The AirfRANS sample ids carry the
+inflow speed and the angle of attack. ISLA's interior errors on the 200
+full-test airfoils (reference configuration, two seeds), by angle bin:
+pressure 0.049 / 0.030 / 0.022 / 0.022, velocity 0.018 / 0.013 / 0.013 /
+0.017, eddy viscosity 0.043 / 0.022 / 0.024 / 0.042 for angles below 0, 0
+to 5, 5 to 10 and at least 10 degrees (55 / 46 / 61 / 38 cases). ISLA's
+pressure error is 2.2 times larger at negative angles than at 5 to 10
+degrees, and the eddy viscosity is worst at both ends of the range. Whether
+GeoTransolver-volume's pressure and eddy-viscosity leads on this set
+(@sec-interior-airfrans) concentrate in the same bins is the twin of the
+wing anatomy on a second dataset; the per-case rows of
+`af_gt_vol_lr1e3_seed{42,43}` are fetched and the same script run when the
+cluster is reachable. Bar, stated now: if the GeoTransolver-volume ÷ ISLA
+pressure ratio at negative angles is at least 0.08 below its value at 5 to
+10 degrees, the deficit is regime-located on two datasets and the frame
+lane of the preregistration above runs on AirfRANS as well.
