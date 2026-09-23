@@ -232,5 +232,47 @@
    "pressure": 0.06380647824456294,
    "velocity": 0.0844001597724855
   }
+ },
+ "v2_elasticity_isla_r1_rankio_n512_seed42": {
+  "group": "v2",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "displacement": 0.6729770405800082,
+   "sig11": 0.7241566323209554,
+   "sig12": 0.7701715718721971,
+   "sig22": 0.7365159600740299,
+   "stress": 0.7268110958393663
+  }
+ },
+ "v2_elasticity_isla_r1_rankio_n512_seed43": {
+  "group": "v2",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "displacement": 0.6668392721330747,
+   "sig11": 0.7563250585226342,
+   "sig12": 0.789162632660009,
+   "sig22": 0.7663281902205199,
+   "stress": 0.7527497083647177
+  }
+ },
+ "rb_dr_isla_pose_seed42": {
+  "group": "rb",
+  "n_cases": 48,
+  "epoch": 500,
+  "fields": {
+   "pressure": 0.041191696926640965,
+   "wss": 0.06468109662334125
+  }
+ },
+ "rb_dr_isla_pose_seed43": {
+  "group": "rb",
+  "n_cases": 48,
+  "epoch": 500,
+  "fields": {
+   "pressure": 0.04139014162744085,
+   "wss": 0.06474136289519568
+  }
  }
 }

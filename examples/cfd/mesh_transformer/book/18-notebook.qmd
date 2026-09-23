@@ -26091,3 +26091,30 @@ two large ones; exponents 0.65 (ISLA) against 0.47 (GeoTransolver-512) over
 600 to 2,400. Chapters 10 and 15, the status ledger and CLAIMS carry the
 corrected reading; the lesson for the writing rule is the standing one:
 quote seeds from the artifact's seed list, never from a ratio alone.
+
+## 2026-09-23 — Verdict, RANK-IO (elasticity, 512 cases): prescribed displacement and traction as rank-1 inputs with the symmetric rank-2 stress head bring ISLA from no learning to 0.72 to 0.77 on the stresses; vector inputs pay, and a 1.2 to 1.5x gap to GeoTransolver-512 remains for the extension channel {#sec-nb-rankio-verdict-elasticity}
+
+**Numbers** (float32 relative L2 on the 256 OLBC elasticity test cases,
+two seeds each): RANK-IO (`v2`, tensor head, rank-1 boundary inputs,
+$K = 0$) $\sigma_{11}$ 0.724 / 0.756, $\sigma_{22}$ 0.737 / 0.766,
+$\sigma_{12}$ 0.770 / 0.789, displacement 0.673 / 0.667. The tensor head
+with the same data as scalar components (`tn`) sat at 1.15 / 1.09 / 1.08 /
+1.04 (no learning); the scalar-output frame-input configuration (`ol`) at
+1.01 / 0.93 / 0.96 / 0.90; GeoTransolver-512 at 0.626 / 0.651 / 0.636 /
+0.447. **Bar (a) is met by a wide margin**: declaring the prescribed
+displacement and traction as vectors, so that they enter through their
+dot products with the normal and the anchor directions, is what lets the
+model learn this problem at all (a 30 to 40% reduction against every
+scalar-input configuration, both seeds agreeing). Against GeoTransolver
+the ratios are 0.86 / 0.88 / 0.82 / 0.67: the same 1.2 to 1.5x gap the
+Poisson set shows, on which the OLBC-MECH verdict placed value transport
+as the mechanism; the elasticity extension lanes (`v2` rows 10 to 13) are
+the test. GeoTransolver's own ladder on this set (two seeds at 512 and
+2,048, one at 8,448): 0.626 / 0.257 / 0.104 on $\sigma_{11}$, exponents
+0.64 to 0.77.
+
+**Also scored: the pose twin under R1.** ISLA R1 trained on the posed
+DrivAerML surface set (`rb_dr_isla_pose`): pressure 0.0412 / 0.0414
+against the in-pose R1 0.0416 / 0.0414: ratio **1.00**, the exact contract
+holding at the reference configuration as at 192 wide (1.015 there,
+@sec-pose-contract).
