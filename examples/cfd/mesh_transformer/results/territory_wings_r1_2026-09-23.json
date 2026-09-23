@@ -1,0 +1,482 @@
+{
+  "study": "TERRITORY under R1, wing twin: the ISLA R1 35-wing checkpoints (200,000 cells) on four validation wings under two independent uniform draws and the 10:1-biased draw at 200,000 expected cells, float32; the GeoTransolver-256 row is the released baseline re-reduced from the 2026-09-21 dumps",
+  "config": "R1",
+  "cells": 200000,
+  "definitions": {
+    "agreement": "fraction of draw-A tokens whose dominant slice equals that of the nearest draw-B token (GeoTransolver: mean over heads)",
+    "floor": "agreement(unif1, unif2)",
+    "excess": "floor - agreement(unif1, biased)",
+    "displacement": "RMS over slices of |anchor(unif1) - anchor(biased)| / RMS token radius",
+    "displacement_floor": "RMS over slices of |anchor(unif1) - anchor(unif2)| / RMS token radius"
+  },
+  "models": {
+    "ISLA": {
+      "run": "ref_isla_r1_hl35_seed42",
+      "n_cases": 4,
+      "uniform_draws_identical": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "median_nn_distance_unif_unif": 0.3736302780016015,
+      "median_nn_distance_unif_biased": 0.35177422001328074,
+      "per_block": [
+        {
+          "block": 0,
+          "floor": 0.9483604209377112,
+          "agreement_biased": 0.9630602035130039,
+          "excess": -0.014699782575292697,
+          "displacement": 0.0037043432239443064,
+          "displacement_floor": 0.002311810851097107
+        },
+        {
+          "block": 1,
+          "floor": 0.334394072303666,
+          "agreement_biased": 0.3228919358822547,
+          "excess": 0.011502136421411346,
+          "displacement": 0.0046529644168913364,
+          "displacement_floor": 0.003305128775537014
+        },
+        {
+          "block": 2,
+          "floor": 0.2277046151592812,
+          "agreement_biased": 0.13668753859891647,
+          "excess": 0.09101707656036473,
+          "displacement": 0.004670228809118271,
+          "displacement_floor": 0.0030908870976418257
+        },
+        {
+          "block": 3,
+          "floor": 0.19041228107221708,
+          "agreement_biased": 0.10321566356635875,
+          "excess": 0.08719661750585833,
+          "displacement": 0.004724391736090183,
+          "displacement_floor": 0.0034196926280856133
+        },
+        {
+          "block": 4,
+          "floor": 0.16116156456544836,
+          "agreement_biased": 0.100913677513837,
+          "excess": 0.06024788705161137,
+          "displacement": 0.004819103982299566,
+          "displacement_floor": 0.003603187156841159
+        },
+        {
+          "block": 5,
+          "floor": 0.18189212202585087,
+          "agreement_biased": 0.11853554922588985,
+          "excess": 0.06335657279996101,
+          "displacement": 0.004868913441896439,
+          "displacement_floor": 0.003907742444425821
+        },
+        {
+          "block": 6,
+          "floor": 0.1795961226418432,
+          "agreement_biased": 0.14677259657627859,
+          "excess": 0.0328235260655646,
+          "displacement": 0.0037901282776147127,
+          "displacement_floor": 0.0030403046403080225
+        },
+        {
+          "block": 7,
+          "floor": 0.14239393062236566,
+          "agreement_biased": 0.07181244723454883,
+          "excess": 0.07058148338781683,
+          "displacement": 0.0042711542919278145,
+          "displacement_floor": 0.0028937580063939095
+        },
+        {
+          "block": 8,
+          "floor": 0.17191231091420706,
+          "agreement_biased": 0.1025486638645012,
+          "excess": 0.06936364704970585,
+          "displacement": 0.00407163193449378,
+          "displacement_floor": 0.0030125752091407776
+        },
+        {
+          "block": 9,
+          "floor": 0.18316193705885903,
+          "agreement_biased": 0.12881672228406887,
+          "excess": 0.05434521477479015,
+          "displacement": 0.003696091938763857,
+          "displacement_floor": 0.0027983777690678835
+        },
+        {
+          "block": 10,
+          "floor": 0.25873606491612444,
+          "agreement_biased": 0.20766495928369846,
+          "excess": 0.05107110563242598,
+          "displacement": 0.004747007507830858,
+          "displacement_floor": 0.0033470126800239086
+        },
+        {
+          "block": 11,
+          "floor": 0.21663080454751565,
+          "agreement_biased": 0.17077119271028735,
+          "excess": 0.04585961183722831,
+          "displacement": 0.0038456886541098356,
+          "displacement_floor": 0.0028226226568222046
+        }
+      ],
+      "summary": {
+        "floor_median": 0.18678710906553805,
+        "floor_min": 0.14239393062236566,
+        "agreement_biased_median": 0.13275213044149267,
+        "agreement_biased_min": 0.07181244723454883,
+        "excess_median": 0.05729655091320076,
+        "excess_max": 0.09101707656036473,
+        "displacement_median": 0.004462059587240219,
+        "displacement_max": 0.004868913441896439,
+        "displacement_floor_median": 0.003065595868974924,
+        "displacement_floor_max": 0.003907742444425821
+      },
+      "label": "ISLA R1, seed 42"
+    },
+    "ISLA_seed43": {
+      "run": "ref_isla_r1_hl35_seed43",
+      "n_cases": 4,
+      "uniform_draws_identical": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "median_nn_distance_unif_unif": 0.3736302780016015,
+      "median_nn_distance_unif_biased": 0.35177422001328074,
+      "per_block": [
+        {
+          "block": 0,
+          "floor": 0.5197735340596846,
+          "agreement_biased": 0.48379957611917246,
+          "excess": 0.03597395794051217,
+          "displacement": 0.003662828588858247,
+          "displacement_floor": 0.0023562212008982897
+        },
+        {
+          "block": 1,
+          "floor": 0.2960347080607685,
+          "agreement_biased": 0.24698741486313164,
+          "excess": 0.04904729319763684,
+          "displacement": 0.003966584336012602,
+          "displacement_floor": 0.0030474206432700157
+        },
+        {
+          "block": 2,
+          "floor": 0.28192403870519156,
+          "agreement_biased": 0.2640170090202556,
+          "excess": 0.01790702968493596,
+          "displacement": 0.005028523504734039,
+          "displacement_floor": 0.003476713551208377
+        },
+        {
+          "block": 3,
+          "floor": 0.18692376095026003,
+          "agreement_biased": 0.11741573605213261,
+          "excess": 0.06950802489812742,
+          "displacement": 0.004352035000920296,
+          "displacement_floor": 0.003528475994244218
+        },
+        {
+          "block": 4,
+          "floor": 0.1660629896312669,
+          "agreement_biased": 0.07573443272386725,
+          "excess": 0.09032855690739965,
+          "displacement": 0.0053293751552701,
+          "displacement_floor": 0.0041558691300451756
+        },
+        {
+          "block": 5,
+          "floor": 0.16569869879756477,
+          "agreement_biased": 0.11303967784708319,
+          "excess": 0.05265902095048158,
+          "displacement": 0.004530465696007013,
+          "displacement_floor": 0.003877215785905719
+        },
+        {
+          "block": 6,
+          "floor": 0.15262169938986964,
+          "agreement_biased": 0.10557541342633957,
+          "excess": 0.04704628596353007,
+          "displacement": 0.004941859282553196,
+          "displacement_floor": 0.0037784522864967585
+        },
+        {
+          "block": 7,
+          "floor": 0.1853244939260045,
+          "agreement_biased": 0.13487722848410483,
+          "excess": 0.050447265441899675,
+          "displacement": 0.005198590457439423,
+          "displacement_floor": 0.003652699524536729
+        },
+        {
+          "block": 8,
+          "floor": 0.13803659627593146,
+          "agreement_biased": 0.0907411694715757,
+          "excess": 0.04729542680435575,
+          "displacement": 0.00418631499633193,
+          "displacement_floor": 0.0031650790479034185
+        },
+        {
+          "block": 9,
+          "floor": 0.17527213826301385,
+          "agreement_biased": 0.10755480781802787,
+          "excess": 0.06771733044498598,
+          "displacement": 0.004879712127149105,
+          "displacement_floor": 0.003542945720255375
+        },
+        {
+          "block": 10,
+          "floor": 0.2180635709143051,
+          "agreement_biased": 0.2234767553321052,
+          "excess": -0.005413184417800115,
+          "displacement": 0.003226265776902437,
+          "displacement_floor": 0.0024249020498245955
+        },
+        {
+          "block": 11,
+          "floor": 0.25053402131129815,
+          "agreement_biased": 0.19663243754650223,
+          "excess": 0.053901583764795924,
+          "displacement": 0.00388881447724998,
+          "displacement_floor": 0.0027962124440819025
+        }
+      ],
+      "summary": {
+        "floor_median": 0.18612412743813228,
+        "floor_min": 0.13803659627593146,
+        "agreement_biased_median": 0.12614648226811873,
+        "agreement_biased_min": 0.07573443272386725,
+        "excess_median": 0.04974727931976826,
+        "excess_max": 0.09032855690739965,
+        "displacement_median": 0.004441250115633011,
+        "displacement_max": 0.0053293751552701,
+        "displacement_floor_median": 0.0035025947727262974,
+        "displacement_floor_max": 0.0041558691300451756
+      },
+      "label": "ISLA R1, seed 43"
+    },
+    "GeoTransolver": {
+      "run": "p200k_hl_gt_unit_super_scarce_seed42",
+      "n_cases": 4,
+      "uniform_draws_identical": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "median_nn_distance_unif_unif": 0.3736302780016015,
+      "median_nn_distance_unif_biased": 0.35177422001328074,
+      "per_block": [
+        {
+          "block": 0,
+          "floor": 0.29627345507471303,
+          "agreement_biased": 0.22516519904778662,
+          "excess": 0.07110825602692641,
+          "displacement": 0.2759316861629486,
+          "displacement_floor": 0.004595537204295397
+        },
+        {
+          "block": 1,
+          "floor": 0.269145326087031,
+          "agreement_biased": 0.20324371757849308,
+          "excess": 0.06590160850853793,
+          "displacement": 0.26919621229171753,
+          "displacement_floor": 0.007164435461163521
+        },
+        {
+          "block": 2,
+          "floor": 0.23977737857113327,
+          "agreement_biased": 0.15618817754121772,
+          "excess": 0.08358920102991554,
+          "displacement": 0.29108843207359314,
+          "displacement_floor": 0.005462075583636761
+        },
+        {
+          "block": 3,
+          "floor": 0.21789349821104065,
+          "agreement_biased": 0.15719878957517502,
+          "excess": 0.060694708635865624,
+          "displacement": 0.29671135544776917,
+          "displacement_floor": 0.0053690955974161625
+        },
+        {
+          "block": 4,
+          "floor": 0.21111507385667705,
+          "agreement_biased": 0.16289539239337522,
+          "excess": 0.04821968146330183,
+          "displacement": 0.31535446643829346,
+          "displacement_floor": 0.00813228078186512
+        },
+        {
+          "block": 5,
+          "floor": 0.19525277351714476,
+          "agreement_biased": 0.1329701543718867,
+          "excess": 0.06228261914525807,
+          "displacement": 0.2882424592971802,
+          "displacement_floor": 0.004180703312158585
+        },
+        {
+          "block": 6,
+          "floor": 0.16616021618680926,
+          "agreement_biased": 0.10355335842173233,
+          "excess": 0.06260685776507693,
+          "displacement": 0.31116819381713867,
+          "displacement_floor": 0.005650041624903679
+        },
+        {
+          "block": 7,
+          "floor": 0.15722187118877645,
+          "agreement_biased": 0.09768824966249302,
+          "excess": 0.05953362152628343,
+          "displacement": 0.3154681921005249,
+          "displacement_floor": 0.0032587929163128138
+        },
+        {
+          "block": 8,
+          "floor": 0.13761239672367878,
+          "agreement_biased": 0.08062863745073873,
+          "excess": 0.056983759272940054,
+          "displacement": 0.3107644319534302,
+          "displacement_floor": 0.002843427238985896
+        },
+        {
+          "block": 9,
+          "floor": 0.15769449369139069,
+          "agreement_biased": 0.10787865712319658,
+          "excess": 0.049815836568194105,
+          "displacement": 0.31306973099708557,
+          "displacement_floor": 0.002348152920603752
+        },
+        {
+          "block": 10,
+          "floor": 0.16958098949463635,
+          "agreement_biased": 0.1225950303881721,
+          "excess": 0.04698595910646425,
+          "displacement": 0.31178128719329834,
+          "displacement_floor": 0.0017598405247554183
+        },
+        {
+          "block": 11,
+          "floor": 0.24688826194834687,
+          "agreement_biased": 0.181058417710398,
+          "excess": 0.06582984423794888,
+          "displacement": 0.3113884925842285,
+          "displacement_floor": 0.0016229042084887624
+        }
+      ],
+      "summary": {
+        "floor_median": 0.2031839236869109,
+        "floor_min": 0.13761239672367878,
+        "agreement_biased_median": 0.1445791659565522,
+        "agreement_biased_min": 0.08062863745073873,
+        "excess_median": 0.061488663890561845,
+        "excess_max": 0.08358920102991554,
+        "displacement_median": 0.3109663128852844,
+        "displacement_max": 0.3154681921005249,
+        "displacement_floor_median": 0.004388120025396347,
+        "displacement_floor_max": 0.00813228078186512
+      },
+      "label": "GeoTransolver-256 (2026-09-21 dumps)"
+    }
+  },
+  "distance_controlled": {
+    "definition": "agreement restricted to matched pairs whose nearest-neighbour distance is at most the median uniform-uniform nearest-neighbour distance of the same case (equalizes matching quality between the sparse half of the biased draw and the uniform draw); post hoc, labeled",
+    "ISLA": {
+      "floor_ctrl": [
+        0.9617939631695028,
+        0.3137974459537818,
+        0.21355019727857152,
+        0.17085455448423,
+        0.1354654637338706,
+        0.12690906609659386,
+        0.1373707060684603,
+        0.1374713211224309,
+        0.14222970368494126,
+        0.17953291563213414,
+        0.28038868917868276,
+        0.23493611036413836
+      ],
+      "biased_ctrl": [
+        0.9569516597332746,
+        0.1898697946045553,
+        0.08915397767333705,
+        0.04822030908138837,
+        0.0651192578873706,
+        0.04866465474959342,
+        0.06253116562250952,
+        0.02991234543602692,
+        0.07161378271597281,
+        0.12505899491282815,
+        0.28959146905064836,
+        0.12802701819844678
+      ],
+      "excess_ctrl_median": 0.07654197589647561,
+      "biased_pairs_kept": 0.42907256570543645
+    },
+    "ISLA_seed43": {
+      "floor_ctrl": [
+        0.5992511334922097,
+        0.2919234347022033,
+        0.2250845538275072,
+        0.15622952820331337,
+        0.12878600821944924,
+        0.13130185484403611,
+        0.13950372146151768,
+        0.14973197509153288,
+        0.13581853208204414,
+        0.16615831061984848,
+        0.1918790783346117,
+        0.23134338617806832
+      ],
+      "biased_ctrl": [
+        0.5293025921354764,
+        0.2241049739147142,
+        0.13441589688762784,
+        0.060085678217040764,
+        0.0376989579272206,
+        0.04237187390440276,
+        0.03146626828379418,
+        0.05442486853876615,
+        0.04199437975214664,
+        0.126185192946977,
+        0.18941737711289586,
+        0.17392862556006258
+      ],
+      "excess_ctrl_median": 0.08979931893975636,
+      "biased_pairs_kept": 0.42907256570543645
+    },
+    "GeoTransolver": {
+      "floor_ctrl": [
+        0.26290258951878154,
+        0.23169598042928333,
+        0.19871222406983596,
+        0.1853771557172936,
+        0.19112572265722974,
+        0.1700836785801045,
+        0.14782082831410845,
+        0.14070787437482005,
+        0.13078413755513707,
+        0.15918907016507006,
+        0.16255104249695274,
+        0.23844393305616718
+      ],
+      "biased_ctrl": [
+        0.15351213674055653,
+        0.14447645914198967,
+        0.097844937465962,
+        0.10834140020734051,
+        0.1181582553517644,
+        0.10122053105233297,
+        0.08321388241331301,
+        0.07984099536834077,
+        0.06697282772756136,
+        0.11838217908140969,
+        0.1227664563681777,
+        0.18037822337296217
+      ],
+      "excess_ctrl_median": 0.06673504671428349,
+      "biased_pairs_kept": 0.42907256570543645
+    }
+  }
+}

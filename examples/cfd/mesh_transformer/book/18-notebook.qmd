@@ -25599,3 +25599,186 @@ rungs improve by the same 5 to 10% as the surface. If any DrivAerML
 Surface rung worsens under R1, the width rule (5e-4 at 384) is the first
 suspect at small training sets and the rate control of REF is extended
 to that rung before the standing is replaced.
+
+## 2026-09-23 — REF-BOARD (inference half): consistency factors and territories of the reference configuration; R1's biased ÷ uniform is 1.01 on the cars at 200,000 cells (1.10 at the 100,000-cell probe count, the 192-wide lane's 1.07) and 1.00 on the wings, the stratified factors 0.99 / 0.98 / 1.00, GeoTransolver's factors unchanged at 8.7 and 2.5; the territory excess is 0.05 to 0.06 as at 192 wide, the anchors move 0.09 to 0.12 body radii against a resampling floor of 0.08 to 0.09 {#sec-nb-refboard-probes}
+
+**Setting.** The three findings of @sec-nb-refboard-prereg that are
+inference-time re-draws of trained checkpoints rather than training lanes:
+the 10:1 density-biased draw and the stratified Morton-ordered draw
+(@sec-robustness-density; originals @sec-nb-trainarea-dr-verdict on the
+cars at 100,000 cells and @sec-nb-wingbench-verdict on the wings at
+200,000), and TERRITORY (@sec-territories; originals
+@sec-nb-territory-verdict, @sec-nb-territory-wings). The four REF
+checkpoints `ref_isla_r1_dr435_seed{42,43}` (435 DrivAerML cars) and
+`ref_isla_r1_hl35_seed{42,43}` (35 wings), 500 epochs at 200,000 cells
+under `code_ref`, were scored in float32 by the consistency benchmark's
+protocol exactly as the originals were: `infer.py` on the validation split
+with the bench dataset definitions (`drivaer_bench_{unif,strat,biased}`,
+`highlift_bench_super_scarce_{unif,strat,biased}`: a 320,000-cell reader
+pool, then `SubsampleMesh` for the independent uniform draw,
+`StratifiedSubsampleMesh` for the Morton systematic draw with inclusion
+$n/N$, `PoissonBiasedSubsampleMesh` with `bias: 10` and exact
+Horvitz–Thompson weights for the biased draw; the recipe's default seed 42
+for every draw, as in every bench lane), at 200,000 cells for all four
+checkpoints and, for the cars, also at 100,000 cells, the count of the
+192-wide originals and of the GeoTransolver-256 and Transolver-256 rows
+that are reused from `results/trainarea_dr_reduction_2026-09-20.json` (the
+wing baselines from `results/wingbench_200k_reduction_2026-09-19.json`
+were already at 200,000). Because scratch stands at its file-count quota,
+the run used a copy of `recipe_globin` under `$HOME/rp_probes/recipe_rp`
+that differs from it only by the six bench yamls and the
+`StratifiedSubsampleMesh` class copied from `recipe_bench` (neither
+snapshot was modified), wrote metrics only (`+save_predictions=false`), and
+kept outputs off scratch (job 835042, 18 lanes, `kernel/rp_bench.sbatch`;
+metrics mirrored at `results/campaigns_2026-09-23/rp/metrics/`; reduction
+`results/consistency_r1_reduce_2026-09-23.py`; artifact
+`results/consistency_r1_2026-09-23.json`). TERRITORY ran the same probe as
+2026-09-21 (`kernel/rp_territory_probe.py`, the 2026-09-21 script with a
+`--recipe-dir` flag) on the first four validation cases with the same three
+draws (uniform with recipe seeds 11 and 22, 10:1-biased with seed 33, so no
+two draws share a parent sample): the cars at 100,000 expected cells (both
+seeds; the original protocol, whose GeoTransolver-256 dumps of 2026-09-21
+are re-reduced beside them) and at 200,000 (seed 42), the wings at 200,000
+(both seeds) (job 835043, `kernel/rp_territory.sbatch`; reduction
+`results/territory_reduce_r1_2026-09-23.py`, which adds one statistic to
+the original, the anchor displacement between the two *uniform* draws, the
+displacement's own resampling floor; artifacts
+`results/territory_r1_2026-09-23.json`,
+`results/territory_r1_200k_2026-09-23.json`,
+`results/territory_wings_r1_2026-09-23.json`, pictures
+`results/territory_pictures_r1_2026-09-23.npz`).
+
+**Consistency factors** (surface-pressure relative L2, float32, two-seed
+means; seeds in parentheses).
+
+| checkpoint | cells per draw | uniform draw | stratified | 10:1 biased | biased ÷ uniform (seeds) | stratified ÷ uniform |
+|---|--:|--:|--:|--:|--:|--:|
+| ISLA R1, 435 cars | 200,000 | 0.0415 (0.0416 / 0.0414) | 0.0413 | 0.0419 | **1.010** (1.011 / 1.009) | 0.993 |
+| ISLA R1, 435 cars | 100,000 | 0.0425 (0.0425 / 0.0424) | 0.0415 | 0.0466 | **1.098** (1.096 / 1.099) | 0.976 |
+| ISLA, 192 wide, 435 cars (2026-09-20) | 100,000 | 0.0458 (0.0450 / 0.0467) | 0.0450 | 0.0489 | 1.068 (1.066 / 1.069) | 0.981 |
+| GeoTransolver-256, 435 cars (2026-09-20, reused) | 100,000 | 0.0448 | 0.0445 | 0.391 | 8.73 | 0.993 |
+| Transolver-256, 435 cars (2026-09-20, reused) | 100,000 | 0.0473 | 0.0469 | 0.252 | 5.32 | 0.991 |
+| ISLA R1, 35 wings | 200,000 | 0.1462 (0.1457 / 0.1467) | 0.1456 | 0.1460 | **0.998** (0.999 / 0.998) | 0.996 |
+| ISLA, 192 wide, 35 wings (2026-09-19) | 200,000 | 0.1502 (0.1507 / 0.1497) | 0.1497 | 0.1498 | 0.997 | 0.997 |
+| GeoTransolver-256, 35 wings (2026-09-19, reused) | 200,000 | 0.1098 | 0.1098 | 0.2716 | 2.47 | 1.000 |
+| Transolver-256, 35 wings (2026-09-19, reused) | 200,000 | 0.1102 | 0.1101 | 0.3080 | 2.80 | 0.999 |
+
+: REF-BOARD inference half: the three benchmark draws on the R1 checkpoints, with the 192-wide lanes and the released baselines they replace or are read against (results/consistency_r1_2026-09-23.json; results/trainarea_dr_reduction_2026-09-20.json; results/wingbench_200k_reduction_2026-09-19.json). {#tbl-refboard-probes}
+
+The uniform draw reproduces REF: the bench's 200,000-cell uniform draw
+scores 0.04162 / 0.04142 on the cars against the fleet scorer's 0.04160 /
+0.04141 (@sec-nb-ref-verdict), and 0.1457 / 0.1467 on the wings against
+0.1456 / 0.1465, so the two draws (the fleet's from the full mesh, the
+bench's from the 320,000-cell pool) agree to 0.1%.
+
+**Against the bar** ("R1's factors within 0.03 of the 192-wide lanes' and
+GeoTransolver's unchanged"). *Wings*: met with room, biased 0.998 against
+0.997 and stratified 0.996 against 0.997. *Cars, at the matched count of
+100,000 cells*: the stratified factor is within the bar (0.976 against
+0.981, a difference of 0.005) and the biased factor sits exactly on it
+(1.098 against 1.068, a difference of 0.0300 that the reducer rounds to a
+miss by four parts in a million); both R1 seeds agree (1.096, 1.099) and
+both 192-wide seeds agree (1.066, 1.069), so the three points are real and
+not seed noise. *Cars, at R1's own 200,000-cell protocol*: 1.010 and 0.993,
+which is not the bar's comparison (a different count) but is the number the
+chapter now quotes for the reference configuration at its protocol.
+*GeoTransolver's factors are unchanged* by construction (released
+baseline, not re-run: 8.73 and 0.993 on the cars at 100,000 cells, 2.47
+and 1.000 on the wings); the baseline-to-ISLA ratio of biased factors is
+8.0 at the matched count and 8.6 against R1 at 200,000, where the earlier
+chapter quoted 8.2. One caveat travels with the 100,000-cell row: R1 was
+trained at 200,000 cells and is probed at half that, where the 192-wide
+lane was trained and probed at 100,000, so the row also carries a small
+count shift (its uniform error is 2.3% above the 200,000-cell one).
+
+**Reading.** ISLA's biased-draw residual is the quadrature variance the
+chapter has always attributed it to, and R1 shows the count dependence
+cleanly on one checkpoint: 1.098 at 100,000 cells, 1.010 at 200,000, where
+the sparse half of the biased draw still holds tens of thousands of cells.
+The stratified draw is a small free improvement at every count (0.7% at
+200,000, 2.4% at 100,000 on the cars; 0.4% on the wings), as QUAD-VAR found
+(@sec-nb-quadvar-verdict, @sec-nb-quadvar-hl-verdict). Nothing in the
+consistency picture depends on the width or the routing norm; the reference
+configuration inherits it.
+
+**Territories.** Medians over the twelve blocks, four validation cases;
+GeoTransolver over its eight heads; the displacement floor is new.
+
+| dataset, cells | model | floor $A(\text{unif}_1, \text{unif}_2)$ | $A(\text{unif}_1, \text{biased})$ | bias excess | excess, blocks 8 to 11 | anchor displacement, biased | anchor displacement, two uniform draws (floor) |
+|---|---|--:|--:|--:|--:|--:|--:|
+| cars, 100,000 | ISLA R1, seed 42 | 0.685 | 0.623 | **+0.062** | +0.077 to +0.093 | **0.090** | 0.075 |
+| cars, 100,000 | ISLA R1, seed 43 | 0.694 | 0.636 | **+0.054** | +0.073 to +0.087 | **0.120** | 0.088 |
+| cars, 100,000 | ISLA, 192 wide (2026-09-21) | 0.71 | 0.65 | +0.056 | +0.08 to +0.09 | 0.039 | not measured |
+| cars, 100,000 | GeoTransolver-256 (2026-09-21 dumps, re-reduced) | 0.629 | 0.269 | **+0.325** | +0.31 to +0.34 | **0.636** | 0.038 |
+| cars, 200,000 | ISLA R1, seed 42 | 0.693 | 0.649 | +0.044 | +0.066 to +0.078 | 0.057 | 0.055 |
+| wings, 200,000 | ISLA R1, seed 42 | 0.187 | 0.133 | +0.057 | +0.046 to +0.069 | 0.0045 | 0.0031 |
+| wings, 200,000 | ISLA R1, seed 43 | 0.186 | 0.126 | +0.050 | +0.047 to +0.068 | 0.0044 | 0.0035 |
+| wings, 200,000 | ISLA, 192 wide (2026-09-21) | 0.242 | 0.191 | +0.045 | — | 0.0035 | not measured |
+| wings, 200,000 | GeoTransolver-256 (2026-09-21 dumps, re-reduced) | 0.203 | 0.145 | +0.061 | +0.047 to +0.066 | 0.311 | 0.0044 |
+
+: TERRITORY under R1 beside the 2026-09-21 originals (results/territory_r1_2026-09-23.json, results/territory_r1_200k_2026-09-23.json, results/territory_wings_r1_2026-09-23.json; originals results/territory_2026-09-21.json, results/territory_wings_2026-09-21.json). {#tbl-refboard-territory}
+
+*Agreement.* The dominant-slice picture is the 192-wide one: on the cars
+R1's bias excess is 0.062 and 0.054 against 0.056 at 192 wide and 0.325 for
+GeoTransolver, carried by the deep blocks (0.07 to 0.09 in blocks 8 to 11
+against 0.03 to 0.06 in blocks 1 to 5), and it falls to 0.044 when the same
+checkpoint is probed at 200,000 cells, the count dependence a quadrature
+term should show. The post hoc distance-controlled agreement (pairs at
+most a median uniform-uniform match apart, a third of the biased pairs)
+leaves it unchanged (ISLA +0.070 / +0.065, GeoTransolver +0.243). Two
+details of R1's routing: seed 42's block 0 routes every token to one
+dominant slice (4.4 effective slices; floor and biased agreement both 1,
+excess 0), and R1 routes over more effective slices than the 192-wide lane
+in the deep blocks (170 to 240 in blocks 6 to 11 against 140 to 200,
+`territory_*_unif1.json` per-block statistics). On the wings the floors are
+0.19 (0.24 at 192 wide) and the excess 0.050 to 0.057 against
+GeoTransolver's 0.061: soft routing, where the argmax does not measure
+territories, as @sec-nb-territory-wings found; the agreement clause stays
+single-dataset.
+
+*Anchor displacement.* Here R1 differs from the 192-wide lane: its anchors
+move 0.090 and 0.120 body radii under the bias on the cars, two to three
+times the 0.039 of 2026-09-21 and far past the 0.02 the original probe
+preregistered, while GeoTransolver's centroids move 0.636. The new floor
+column reads it: under two *uniform* draws R1's anchors already move 0.075
+and 0.088, so under the bias they move 1.2x and 1.4x as far as under any
+resampling, where GeoTransolver's centroids move 17x as far (0.636
+against 0.038). The anchor of a slice is the routing-weighted mean
+position of its tokens; a network that spreads its mass over more slices
+gives each anchor fewer effective tokens, and its anchors are noisier under
+every resampling, biased or not. At 200,000 cells the motion halves (0.057
+against a floor of 0.055, 1.04x) as a sampling-noise term should. On the
+wings the anchors move 0.0045 and 0.0044 (floors 0.0031 and 0.0035, so 1.5x
+and 1.3x) against GeoTransolver's 0.311 (floor 0.0044, 71x) and the 192-wide
+0.0035, and the displacement clause reproduces on both datasets. The reading of @sec-nb-territory-verdict therefore stands with
+one correction of emphasis: the unweighted RMS anchor displacement is
+partly a per-slice sample-size statistic, and the bias-specific motion is
+the excess over its floor, which is small for ISLA and an order of
+magnitude for GeoTransolver. A mass-weighted displacement would remove the
+low-mass slices' wander and is the right follow-on if the anchor motion is
+to be quoted as a number in its own right; it needs the probe to store the
+slice masses.
+
+**Verdict.** Consistency: the bar is met on the wings and on the cars'
+stratified factor, and the cars' biased factor at the matched count is at
+the bar's edge, three points above the 192-wide lane's (1.10 against
+1.07), with both seeds of both lanes agreeing; at the reference
+configuration's own protocol the factor is 1.01. GeoTransolver's factors
+are unchanged. Territories: the agreement statistics reproduce the
+192-wide ones within 0.01 on both datasets; the anchor displacement on the
+cars is two to three times the 192-wide value and is mostly the
+resampling floor of a network that uses more slices, not a bias-following
+motion (1.2 to 1.4x its floor against GeoTransolver's 17x). The
+"unchanged" clauses of the original preregistration (excess below 0.05,
+displacement below 0.02) are missed by R1 as they were at 192 wide, by the
+same margin on the excess and a larger one on the displacement.
+
+**What it changes.** @sec-robustness-density and @sec-territories now read
+the R1 artifacts: the density figure and table carry R1 at 100,000 cells
+beside the released baselines and R1's 200,000-cell row, the territory
+figures and table carry R1 (both seeds) beside the re-reduced
+GeoTransolver-256 rows with the new displacement-floor column; the
+192-wide numbers are recorded in the two tables above and nowhere else in
+the chapters. The training-law half of @sec-training-law waits for the
+`rb_dr_isla_area` and `rb_hl_isla_super_scarce_area` twins of
+@sec-nb-refboard-prereg, which are training lanes.

@@ -1,0 +1,172 @@
+{
+  "study": "TERRITORY under R1, 200,000-cell companion: ISLA R1 seed 42 on four validation cars under two independent uniform draws and the 10:1-biased draw at 200,000 expected cells, float32",
+  "config": "R1",
+  "cells": 200000,
+  "definitions": {
+    "agreement": "fraction of draw-A tokens whose dominant slice equals that of the nearest draw-B token (GeoTransolver: mean over heads)",
+    "floor": "agreement(unif1, unif2)",
+    "excess": "floor - agreement(unif1, biased)",
+    "displacement": "RMS over slices of |anchor(unif1) - anchor(biased)| / RMS token radius",
+    "displacement_floor": "RMS over slices of |anchor(unif1) - anchor(unif2)| / RMS token radius"
+  },
+  "models": {
+    "ISLA": {
+      "run": "ref_isla_r1_dr435_seed42",
+      "n_cases": 4,
+      "uniform_draws_identical": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "median_nn_distance_unif_unif": 0.0013000496361211134,
+      "median_nn_distance_unif_biased": 0.0019532099956853202,
+      "per_block": [
+        {
+          "block": 0,
+          "floor": 1.0,
+          "agreement_biased": 1.0,
+          "excess": 0.0,
+          "displacement": 0.02081594616174698,
+          "displacement_floor": 0.02724520117044449
+        },
+        {
+          "block": 1,
+          "floor": 0.67432125,
+          "agreement_biased": 0.6284925,
+          "excess": 0.045828749999999974,
+          "displacement": 0.03304441645741463,
+          "displacement_floor": 0.02764335833489895
+        },
+        {
+          "block": 2,
+          "floor": 0.8422225000000001,
+          "agreement_biased": 0.81667,
+          "excess": 0.02555250000000009,
+          "displacement": 0.035929031670093536,
+          "displacement_floor": 0.02933153323829174
+        },
+        {
+          "block": 3,
+          "floor": 0.7112974999999999,
+          "agreement_biased": 0.669065,
+          "excess": 0.042232499999999895,
+          "displacement": 0.13605138659477234,
+          "displacement_floor": 0.10466565191745758
+        },
+        {
+          "block": 4,
+          "floor": 0.75357875,
+          "agreement_biased": 0.7158312499999999,
+          "excess": 0.037747500000000045,
+          "displacement": 0.08348928391933441,
+          "displacement_floor": 0.0677715316414833
+        },
+        {
+          "block": 5,
+          "floor": 0.8054675,
+          "agreement_biased": 0.7724650000000001,
+          "excess": 0.033002499999999935,
+          "displacement": 0.07776818424463272,
+          "displacement_floor": 0.08392490446567535
+        },
+        {
+          "block": 6,
+          "floor": 0.7415087499999999,
+          "agreement_biased": 0.6990562499999999,
+          "excess": 0.042452500000000004,
+          "displacement": 0.056144457310438156,
+          "displacement_floor": 0.05455450713634491
+        },
+        {
+          "block": 7,
+          "floor": 0.6717725,
+          "agreement_biased": 0.62041,
+          "excess": 0.05136249999999998,
+          "displacement": 0.08754807710647583,
+          "displacement_floor": 0.09417963027954102
+        },
+        {
+          "block": 8,
+          "floor": 0.61213375,
+          "agreement_biased": 0.545655,
+          "excess": 0.06647875000000003,
+          "displacement": 0.06759914755821228,
+          "displacement_floor": 0.06126660853624344
+        },
+        {
+          "block": 9,
+          "floor": 0.5517737500000001,
+          "agreement_biased": 0.48302625,
+          "excess": 0.06874750000000007,
+          "displacement": 0.056882940232753754,
+          "displacement_floor": 0.05438017472624779
+        },
+        {
+          "block": 10,
+          "floor": 0.50194625,
+          "agreement_biased": 0.42396625,
+          "excess": 0.07798000000000005,
+          "displacement": 0.04293910786509514,
+          "displacement_floor": 0.039704661816358566
+        },
+        {
+          "block": 11,
+          "floor": 0.5422875,
+          "agreement_biased": 0.47224125,
+          "excess": 0.07004625000000003,
+          "displacement": 0.027232682332396507,
+          "displacement_floor": 0.025791091844439507
+        }
+      ],
+      "summary": {
+        "floor_median": 0.692809375,
+        "floor_min": 0.50194625,
+        "agreement_biased_median": 0.64877875,
+        "agreement_biased_min": 0.42396625,
+        "excess_median": 0.04414062499999999,
+        "excess_max": 0.07798000000000005,
+        "displacement_median": 0.056513696908950806,
+        "displacement_max": 0.13605138659477234,
+        "displacement_floor_median": 0.0544673427939415,
+        "displacement_floor_max": 0.10466565191745758
+      },
+      "label": "ISLA R1, seed 42"
+    }
+  },
+  "distance_controlled": {
+    "definition": "agreement restricted to matched pairs whose nearest-neighbour distance is at most the median uniform-uniform nearest-neighbour distance of the same case (equalizes matching quality between the sparse half of the biased draw and the uniform draw); post hoc, labeled",
+    "ISLA": {
+      "floor_ctrl": [
+        1.0,
+        0.5646575,
+        0.7984899999999999,
+        0.616165,
+        0.6840275,
+        0.77005,
+        0.676695,
+        0.57926,
+        0.51118,
+        0.44755999999999996,
+        0.39096,
+        0.43679999999999997
+      ],
+      "biased_ctrl": [
+        1.0,
+        0.4962757010764673,
+        0.7503191979919904,
+        0.558264236306204,
+        0.6400383969955941,
+        0.7423689623352978,
+        0.6264952811991567,
+        0.5003775877177383,
+        0.43567100853622076,
+        0.3833601061758668,
+        0.3102391788761976,
+        0.36960887720017216
+      ],
+      "excess_ctrl_median": 0.061050328758964545,
+      "biased_pairs_kept": 0.34900624999999996
+    }
+  }
+}

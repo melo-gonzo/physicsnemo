@@ -1,0 +1,390 @@
+{
+  "study": "REF-BOARD inference half: consistency factors of the reference configuration R1 (384 x 12, cosine routing, fused kernel, 5e-4) under the consistency benchmark's independent uniform, stratified and 10:1-biased draws, float32, two seeds",
+  "config": "R1",
+  "protocol": {
+    "snapshot": "code_ref",
+    "recipe": "recipe_globin + the six bench dataset yamls and StratifiedSubsampleMesh (copy $HOME/rp_probes/recipe_rp)",
+    "pool_cells": 320000,
+    "draw_seed": "recipe default 42 for every draw (as the original bench lanes)",
+    "precision": "float32",
+    "biased": "PoissonBiasedSubsampleMesh bias=10 (10:1 front/back on centroid x), exact HT weights",
+    "strat": "StratifiedSubsampleMesh (Morton-ordered systematic sample, inclusion n/N, weights N/n)"
+  },
+  "arms": {
+    "isla_r1_dr435_200k": {
+      "dataset": "DrivAerML Surface, 435 training cars, 48 validation cars",
+      "cells": 200000,
+      "per_seed": {
+        "seed42": {
+          "unif": 0.04162360976139704,
+          "strat": 0.04136591653029124,
+          "biased": 0.04207546512285868
+        },
+        "seed43": {
+          "unif": 0.04142208397388458,
+          "strat": 0.041127897799015045,
+          "biased": 0.04177984098593394
+        }
+      },
+      "mean": {
+        "unif": 0.04152284686764081,
+        "strat": 0.04124690716465314,
+        "biased": 0.04192765305439631
+      },
+      "n_cases": 48,
+      "ref_uniform_reference": {
+        "seed42": 0.04160424818595251,
+        "seed43": 0.04140827804803848,
+        "mean": 0.0415062631169955
+      },
+      "n_unif": 2,
+      "n_strat": 2,
+      "n_biased": 2,
+      "biased_over_unif": 1.0097489988594923,
+      "strat_over_unif": 0.9933545090521547,
+      "density_factor": 1.0097489988594923,
+      "per_seed_factors": {
+        "seed42": {
+          "biased_over_unif": 1.0108557466315837,
+          "strat_over_unif": 0.9938089648499252
+        },
+        "seed43": {
+          "biased_over_unif": 1.0086368665631336,
+          "strat_over_unif": 0.9928978422463
+        }
+      },
+      "bench_unif_over_ref_uniform": 1.0003995481500845
+    },
+    "isla_r1_dr435_100k": {
+      "dataset": "DrivAerML Surface, 435 training cars, 48 validation cars",
+      "cells": 100000,
+      "per_seed": {
+        "seed42": {
+          "unif": 0.04252726833025614,
+          "strat": 0.04160129030545553,
+          "biased": 0.04660029709339142
+        },
+        "seed43": {
+          "unif": 0.04241176942984263,
+          "strat": 0.041327230632305145,
+          "biased": 0.0466284453868866
+        }
+      },
+      "mean": {
+        "unif": 0.042469518880049385,
+        "strat": 0.04146426046888034,
+        "biased": 0.04661437124013901
+      },
+      "n_cases": 48,
+      "ref_uniform_reference": {
+        "seed42": 0.04160424818595251,
+        "seed43": 0.04140827804803848,
+        "mean": 0.0415062631169955
+      },
+      "n_unif": 2,
+      "n_strat": 2,
+      "n_biased": 2,
+      "biased_over_unif": 1.097595933963752,
+      "strat_over_unif": 0.9763298846401277,
+      "density_factor": 1.097595933963752,
+      "per_seed_factors": {
+        "seed42": {
+          "biased_over_unif": 1.0957745212202474,
+          "strat_over_unif": 0.978226251975328
+        },
+        "seed43": {
+          "biased_over_unif": 1.099422306914574,
+          "strat_over_unif": 0.9744283529756634
+        }
+      },
+      "bench_unif_over_ref_uniform": 1.0232074798046433
+    },
+    "isla_r1_hl35_200k": {
+      "dataset": "HiLiftAeroML, 35 training cases, 180 validation cases",
+      "cells": 200000,
+      "per_seed": {
+        "seed42": {
+          "unif": 0.14565667046440972,
+          "strat": 0.14511346817016602,
+          "biased": 0.14553941090901693
+        },
+        "seed43": {
+          "unif": 0.1467423544989692,
+          "strat": 0.14613752365112304,
+          "biased": 0.14637150234646268
+        }
+      },
+      "mean": {
+        "unif": 0.14619951248168944,
+        "strat": 0.14562549591064453,
+        "biased": 0.1459554566277398
+      },
+      "n_cases": 180,
+      "ref_uniform_reference": {
+        "seed42": 0.14555027219984268,
+        "seed43": 0.1465150515238444,
+        "mean": 0.14603266186184355
+      },
+      "n_unif": 2,
+      "n_strat": 2,
+      "n_biased": 2,
+      "biased_over_unif": 0.9983306657470542,
+      "strat_over_unif": 0.9960737449715039,
+      "density_factor": 0.9983306657470542,
+      "per_seed_factors": {
+        "seed42": {
+          "biased_over_unif": 0.9991949592489041,
+          "strat_over_unif": 0.9962706665440603
+        },
+        "seed43": {
+          "biased_over_unif": 0.9974727667838456,
+          "strat_over_unif": 0.995878280337594
+        }
+      },
+      "bench_unif_over_ref_uniform": 1.0011425568617227
+    }
+  },
+  "comparators": {
+    "isla_192_dr435_100k": {
+      "source": "trainarea_dr_reduction_2026-09-20.json:arms.isla_uniform",
+      "label": "ISLA, 192 wide, linear routing, 1e-3 (iso_dr_isla_w192_c100k)",
+      "cells": 100000,
+      "mean": {
+        "unif": 0.04582889378070831,
+        "strat": 0.04495219389597575,
+        "biased": 0.04892656703790029
+      },
+      "per_seed": {
+        "seed42": {
+          "unif": 0.04495972394943237,
+          "strat": 0.04414867361386617,
+          "biased": 0.04794046779473623
+        },
+        "seed43": {
+          "unif": 0.04669806361198425,
+          "strat": 0.04575571417808533,
+          "biased": 0.049912666281064354
+        }
+      },
+      "biased_over_unif": 1.0675921455144515,
+      "strat_over_unif": 0.9808701495408644,
+      "per_seed_factors": {
+        "seed42": {
+          "biased_over_unif": 1.066298090456614,
+          "strat_over_unif": 0.981960513448027
+        },
+        "seed43": {
+          "biased_over_unif": 1.0688380292551387,
+          "strat_over_unif": 0.9798203745292537
+        }
+      }
+    },
+    "gt256_dr435_100k": {
+      "source": "trainarea_dr_reduction_2026-09-20.json:arms.gt_unit_uniform",
+      "label": "GeoTransolver-256, 3e-3 (iso_dr_gt_unit_w256_c100k)",
+      "cells": 100000,
+      "mean": {
+        "unif": 0.0447845458984375,
+        "strat": 0.04448577016592026,
+        "biased": 0.391076922416687
+      },
+      "per_seed": {
+        "seed42": {
+          "unif": 0.04438789188861847,
+          "strat": 0.04413480559984843,
+          "biased": 0.3537485599517822
+        },
+        "seed43": {
+          "unif": 0.04518119990825653,
+          "strat": 0.04483673473199209,
+          "biased": 0.4284052848815918
+        }
+      },
+      "biased_over_unif": 8.732407900340716,
+      "strat_over_unif": 0.9933285974765758,
+      "per_seed_factors": {
+        "seed42": {
+          "biased_over_unif": 7.969483228431652,
+          "strat_over_unif": 0.9942983034786805
+        },
+        "seed43": {
+          "biased_over_unif": 9.48193686204655,
+          "strat_over_unif": 0.992375917926839
+        }
+      }
+    },
+    "transolver256_dr435_100k": {
+      "source": "trainarea_dr_reduction_2026-09-20.json:arms.transolver_unit_uniform",
+      "label": "Transolver-256, 3e-3 (iso_dr_transolver_unit_w256_c100k)",
+      "cells": 100000,
+      "mean": {
+        "unif": 0.04730900625387828,
+        "strat": 0.04687847693761189,
+        "biased": 0.2517432322104772
+      },
+      "per_seed": {
+        "seed42": {
+          "unif": 0.04723056157430013,
+          "strat": 0.04686959087848663,
+          "biased": 0.15899200240770975
+        },
+        "seed43": {
+          "unif": 0.04738745093345642,
+          "strat": 0.04688736299673716,
+          "biased": 0.34449446201324463
+        }
+      },
+      "biased_over_unif": 5.3212538614640605,
+      "strat_over_unif": 0.9908996330644528,
+      "per_seed_factors": {
+        "seed42": {
+          "biased_over_unif": 3.366294981642206,
+          "strat_over_unif": 0.9923572643690539
+        },
+        "seed43": {
+          "biased_over_unif": 7.269740305233957,
+          "strat_over_unif": 0.9894468276544035
+        }
+      }
+    },
+    "isla_192_hl35_200k": {
+      "source": "wingbench_200k_reduction_2026-09-19.json:arms.isla",
+      "label": "ISLA, 192 wide, linear routing, 1e-3 (p200k_hl_isla_super_scarce)",
+      "cells": 200000,
+      "mean": {
+        "unif": 0.15016433927747938,
+        "strat": 0.1496824582417806,
+        "biased": 0.14977725876702203
+      },
+      "per_seed": {
+        "seed42": {
+          "unif": 0.1506652937995063,
+          "strat": 0.15015557607014973,
+          "biased": 0.15009135140313043
+        },
+        "seed43": {
+          "unif": 0.14966338475545246,
+          "strat": 0.14920934041341147,
+          "biased": 0.14946316613091362
+        }
+      },
+      "biased_over_unif": 0.9974222873931334,
+      "strat_over_unif": 0.9967909755537343,
+      "per_seed_factors": {
+        "seed42": {
+          "biased_over_unif": 0.996190613100721,
+          "strat_over_unif": 0.9966168868987515
+        },
+        "seed43": {
+          "biased_over_unif": 0.9986622070263479,
+          "strat_over_unif": 0.9969662296306949
+        }
+      }
+    },
+    "gt256_hl35_200k": {
+      "source": "wingbench_200k_reduction_2026-09-19.json:arms.gt_unit_lr3e3",
+      "label": "GeoTransolver-256, 3e-3 (p200k_hl_gt_unit_super_scarce)",
+      "cells": 200000,
+      "mean": {
+        "unif": 0.10984972318013508,
+        "strat": 0.10979212125142415,
+        "biased": 0.27160251405504016
+      },
+      "per_seed": {
+        "seed42": {
+          "unif": 0.10635039011637369,
+          "strat": 0.10626552369859484,
+          "biased": 0.22631390889485678
+        },
+        "seed43": {
+          "unif": 0.11334905624389649,
+          "strat": 0.11331871880425347,
+          "biased": 0.3168911192152235
+        }
+      },
+      "biased_over_unif": 2.472491565678847,
+      "strat_over_unif": 0.9994756297326624,
+      "per_seed_factors": {
+        "seed42": {
+          "biased_over_unif": 2.1280026208386564,
+          "strat_over_unif": 0.9992020112226576
+        },
+        "seed43": {
+          "biased_over_unif": 2.7957102574666313,
+          "strat_over_unif": 0.9997323538400025
+        }
+      }
+    },
+    "transolver256_hl35_200k": {
+      "source": "wingbench_200k_reduction_2026-09-19.json:arms.transolver_unit",
+      "label": "Transolver-256, 3e-3 (p200k_hl_transolver_unit_super_scarce)",
+      "cells": 200000,
+      "mean": {
+        "unif": 0.11020975642734104,
+        "strat": 0.11014769342210558,
+        "biased": 0.30803646511501737
+      },
+      "per_seed": {
+        "seed42": {
+          "unif": 0.11158485412597656,
+          "strat": 0.11154184341430665,
+          "biased": 0.3205181969536675
+        },
+        "seed43": {
+          "unif": 0.10883465872870551,
+          "strat": 0.10875354342990451,
+          "biased": 0.29555473327636717
+        }
+      },
+      "biased_over_unif": 2.795001777525017,
+      "strat_over_unif": 0.9994368646910459,
+      "per_seed_factors": {
+        "seed42": {
+          "biased_over_unif": 2.8724166865138376,
+          "strat_over_unif": 0.9996145470457724
+        },
+        "seed43": {
+          "biased_over_unif": 2.7156306339242793,
+          "strat_over_unif": 0.9992546923953407
+        }
+      }
+    }
+  },
+  "verdict": {
+    "bar": "R1's biased/unif and strat/unif factors within 0.03 of the 192-wide lane's on the same dataset (GeoTransolver's quoted unchanged)",
+    "isla_r1_dr435_200k": {
+      "biased_over_unif": 1.0097489988594923,
+      "strat_over_unif": 0.9933545090521547,
+      "delta_biased_vs_192": -0.057843146654959154,
+      "delta_strat_vs_192": 0.012484359511290344,
+      "gt256_biased_over_unif": 8.732407900340716,
+      "gt256_strat_over_unif": 0.9933285974765758,
+      "gt256_factor_over_r1_factor_biased": 8.648097606636835,
+      "same_count_as_comparators": false,
+      "within_bar": false
+    },
+    "isla_r1_dr435_100k": {
+      "biased_over_unif": 1.097595933963752,
+      "strat_over_unif": 0.9763298846401277,
+      "delta_biased_vs_192": 0.030003788449300517,
+      "delta_strat_vs_192": -0.004540264900736668,
+      "gt256_biased_over_unif": 8.732407900340716,
+      "gt256_strat_over_unif": 0.9933285974765758,
+      "gt256_factor_over_r1_factor_biased": 7.955940460534817,
+      "same_count_as_comparators": true,
+      "within_bar": false
+    },
+    "isla_r1_hl35_200k": {
+      "biased_over_unif": 0.9983306657470542,
+      "strat_over_unif": 0.9960737449715039,
+      "delta_biased_vs_192": 0.000908378353920769,
+      "delta_strat_vs_192": -0.0007172305822303882,
+      "gt256_biased_over_unif": 2.472491565678847,
+      "gt256_strat_over_unif": 0.9994756297326624,
+      "gt256_factor_over_r1_factor_biased": 2.4766258820955613,
+      "same_count_as_comparators": true,
+      "within_bar": true
+    },
+    "verdict": "bar missed on at least one arm"
+  }
+}
