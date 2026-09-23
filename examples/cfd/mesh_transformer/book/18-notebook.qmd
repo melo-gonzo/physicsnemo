@@ -25893,3 +25893,70 @@ makes the shear component representable, and together they are the
 canonical Tensile2d configuration; the frame-input lanes stay as the
 measured interim. The 400-case pair (epoch ~63) and the float32 scores
 close the bar.
+
+## 2026-09-23 — Verdict, OLBC-MECH at 512 cases: the boundary-value extension recovers 88% of the log-gap to GeoTransolver without touching the invariance contract; the domain's frame recovers 17%, four times the slices nothing, absolute coordinates overshoot to 27% better than GeoTransolver {#sec-nb-olbc-mech-verdict}
+
+**Setting and numbers** (`om`, Poisson mixed-plus-source set, 512 cases,
+seed 42, float32 relative L2 of $u$ on the 256 test cases; baseline ISLA R1
+0.867, GeoTransolver-512 0.279, both two-seed means):
+
+| variant | what it adds | $u$ rel. L2 | fraction of the log-gap to GeoTransolver recovered |
+|---|---|---|---|
+| `s1024` | four times the slices | 0.907 | 0 (slightly worse) |
+| `frame2` | the domain's own axes as two global vectors | 0.673 | 0.22 |
+| `ext` | parameter-free boundary-value extension: per condition type, the measure-weighted inverse-square-distance average of the prescribed values and the distance to the nearest labeled cell, as six query scalars | **0.318** | **0.88** |
+| `leak` | absolute coordinates as boundary and query scalars (diagnostic; breaks the contract) | 0.203 | 1.27 (beats GeoTransolver by 27%) |
+
+: OLBC-MECH at 512 cases, one seed each; recovered fraction = log(baseline ÷ variant) ÷ log(baseline ÷ GeoTransolver-512). {#tbl-olbc-mech}
+
+**Verdict against the preregistered predictions**
+(@sec-nb-olbc-interim and its addendum). Under M1 (positional
+resolution) `frame2` should have recovered at least half of what `leak`
+recovers; it recovers 17%, and `s1024` recovers nothing, so *finer
+partition and a coordinate frame are not what is missing*. Under M2
+(value transport) `ext` should have recovered at least half the gap; it
+recovers 88%, so **the missing ingredient is a direct path from the
+prescribed boundary values to the interior query**, which the parameter-
+free extension supplies as an invariant, mesh-consistent quadrature. The
+leak's overshoot says something further: given position and the extension
+is not even needed, ISLA's routing and boundary tokens beat
+GeoTransolver's coordinate-reading local embedding on this set. Both
+mechanisms are real; the one that can be added without breaking the
+contract is the extension, and it does most of the work. Pending: the
+2,048-case twins of all four (rows 0 to 2 and 6), and a second seed before
+any of these numbers enters a chapter as a standing.
+
+**What it means for the architecture.** The literature idea that
+motivated `ext` (the OLBC paper's learned extensions, BENO's boundary
+branch) enters ISLA as a **boundary-data extension channel**: for each
+labeled condition type, an integral of the prescribed data over the
+labeled cells against a distance kernel, evaluated at every query and fed
+through the rank-spec input interface (a rank-0 extension per scalar
+datum; for vector data such as prescribed displacement or traction the
+same construction yields a rank-1 input). The parameter-free kernel is
+the control; a learned kernel width per type is the natural next step and
+stays within the contract. Entered as the next OLBC lanes: `ext` on the
+elasticity set with the vector data extended as rank-1 query inputs under
+the v2 API.
+
+**Addendum, TENSOR-HEAD at 400 cases and on OLBC elasticity.** Tensor head
+alone (no load axis, `tn`): Tensile2d at 400 cases 0.385 / 0.280 / 0.354 /
+0.470 (two seeds agree) against `frame2`'s 0.0118 / 0.0086 / 0.0112 /
+0.0082: **30 to 60 times worse**, at the frameless configuration's level;
+OLBC elasticity at 512 cases 1.15 / 1.09 / 1.08 / 1.04, i.e. no better
+than predicting zero. The tensor head without a physical axis input does
+not learn these problems at all; with the load axis (previous addendum)
+it matches or beats the full frame. The clause for the book: a
+tensor-valued output needs the equivariant head *and* whatever physical
+direction defines the problem as an input; neither alone suffices, and on
+the OLBC elasticity set, whose loading has no single direction, the
+extension channel is the input to test next.
+
+**Addendum, SOLIDS lug at 2,400 lugs.** ISLA R1 0.00208 against
+GeoTransolver-512 0.00235 (two seeds each; ratio **1.13**). Lug ladder in
+full: 1.06 (300, half rate) / 1.08 (600) / 0.99 (1,200) / 1.13 (2,400);
+learning-curve exponents 0.65 (ISLA, over 600 to 2,400) against 0.47.
+**On the one solid dataset whose target is a true scalar (von Mises) and
+whose loading direction is local (a pressure on the hole), ISLA leads
+GeoTransolver-512 at three of four rungs and ties the fourth.** R2 and
+GeoTransolver-256 at 2,400 pending for the depth and width bars.

@@ -217,6 +217,20 @@
     }
    }
   },
+  "ol_poisson_isla_r1_n2048_seed43": {
+   "set": "poisson",
+   "arm": "isla_r1",
+   "n": 2048,
+   "seed": 43,
+   "n_cases": 256,
+   "epoch": 500,
+   "fields": {
+    "u": {
+     "mean": 0.39313227724051103,
+     "median": 0.35835646092891693
+    }
+   }
+  },
   "ol_poisson_isla_r1_n512_seed42": {
    "set": "poisson",
    "arm": "isla_r1",
@@ -379,6 +393,19 @@
     }
    }
   },
+  "poisson|isla_r1|n2048": {
+   "lanes": [
+    "ol_poisson_isla_r1_n2048_seed43"
+   ],
+   "fields": {
+    "u": {
+     "mean": 0.39313227724051103,
+     "seeds": [
+      0.39313227724051103
+     ]
+    }
+   }
+  },
   "poisson|isla_r1|n512": {
    "lanes": [
     "ol_poisson_isla_r1_n512_seed42",
@@ -401,6 +428,9 @@
    "sig11": 0.6211865453486092,
    "sig12": 0.6595371970286119,
    "sig22": 0.6968755997465635
+  },
+  "poisson|isla_r1|n2048": {
+   "u": 0.24955340004072085
   },
   "poisson|isla_r1|n512": {
    "u": 0.32183708785699466
