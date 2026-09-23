@@ -18,7 +18,7 @@ presentation.
 | II Protocol and use | `05-protocol.qmd`, `06-using-isla.qmd` | the baselines and what each sees, the datasets and splits, the fair-comparison protocol, the configuration of the evidence lanes; the one configuration, the inputs, the recipe, the inference sampler, checkpoints, cost |
 | III Evidence | `07-surface-accuracy.qmd`, `08-discretization-and-pose.qmd`, `09-capacity-scaling-cost.qmd`, `10-boundary-to-interior.qmd` | the surface standings (DrivAerML Surface task, HiLiftAeroML rungs) and data efficiency; the discretization and pose evidence; capacity, scaling laws and cost; the two interior tasks |
 | IV Limits and status | `11-limits.qmd`, `12-program-status.qmd` | what each claim does not say; what is running (the one chapter with dates) |
-| Appendices | `13-design-decisions.qmd`, `14-datasets.qmd`, `18-notebook.qmd` | the design-decision ledger; the datasets in detail (provenance, conversion, field names, normalization, splits, pitfalls); the dated record |
+| Appendices | `13-design-decisions.qmd`, `14-datasets.qmd`, `15-isla-vs-geotransolver.qmd`, `18-notebook.qmd` | the design-decision ledger; the datasets in detail (provenance, conversion, field names, normalization, splits, pitfalls); ISLA and GeoTransolver side by side on every measured axis, which of ISLA's ideas are new against the literature, and the literature-derived experiments to run (with a bibliography); the dated record |
 
 Chapters state current knowledge. History (what was believed before, what
 was retracted) lives in the notebook and the status chapter only.

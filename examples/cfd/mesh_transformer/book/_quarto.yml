@@ -30,6 +30,7 @@ book:
   appendices:
     - 13-design-decisions.qmd
     - 14-datasets.qmd
+    - 15-isla-vs-geotransolver.qmd
     - 18-notebook.qmd
 
 execute:

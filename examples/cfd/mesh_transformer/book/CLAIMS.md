@@ -189,6 +189,13 @@ scores (days), the SCALE-LAW wing half, COSINE-TWINS (the evidence board
 under cosine routing), the AirfRANS extrapolation splits, the remaining
 wing rungs (510 / 1,260 at 200k), PROTOCOL-REDO.
 
+**Literature-derived experiments (PLANNED, 2026-09-22; ledger rows LIT-EXT,
+LIT-TEMP, LIT-LOCALQ, LIT-PARITY, LIT-MLOSS, LIT-SLICEATT, LIT-CARBENCH,
+LIT-OLBCBASE in 12-program-status; bars in 15-isla-vs-geotransolver
+@tbl-vs-ideas).** None has run; none is a result. The side-by-side
+appendix (15) quotes only artifacts already listed here and labels the
+OLBC (512 cases) and lug (300 / 600 / 1,200) rows interim.
+
 
 ### SOLIDS / SOLIDS-FRAME / REF state (2026-09-22, late)
 

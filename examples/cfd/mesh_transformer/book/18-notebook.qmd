@@ -25152,3 +25152,56 @@ itself repair the standing (prior 0.7 that it stays above 0.8 on the
 stresses): the gap there is a boundary-value-reaching problem
 (@sec-nb-olbc-interim), not a representation one. Verdict when the six
 lanes are scored in float32.
+
+## 2026-09-22 — Book: side-by-side appendix (ISLA against GeoTransolver), review of what is new, eight PLANNED experiments {#sec-nb-vs-appendix}
+
+**Setting.** Peter asked for a chapter that steps back from the evidence
+chapters and compares ISLA to GeoTransolver holistically (what each is
+better and worse at), with a section on which of ISLA's *ideas* are new
+against the state of the art, resting on an extensive literature review,
+and with any ideas the review suggests added to the to-do list. It is the
+new appendix `15-isla-vs-geotransolver.qmd` (@sec-isla-vs-geotransolver),
+registered after the datasets appendix and before this notebook.
+
+**What it contains.** One computed table and one figure (@tbl-vs-standing,
+@fig-vs-standing) put every measured axis on one page: surface accuracy at
+full data and on every DrivAerML and HiLiftAeroML rung, the two interior
+tasks, the AirfRANS extrapolation splits, Tensile2d, the lug ladder and
+the OLBC sets (the last two labeled interim), pose, the biased inference
+draw, the training-law swap, refinement convergence, slice territories,
+the learning-curve exponents on four datasets, cost at the reporting
+protocol, the capacity floor, trainability, query independence and what
+each model needs at inference. Every number is computed from a
+`results/` artifact already cited by a chapter; the reading is the
+pattern the chapters already carry: geometry-varying tasks favor or tie
+ISLA (field quantities earlier, small rungs later), fixed-mesh
+boundary-data tasks favor GeoTransolver by factors so far, and the
+invariances are ISLA's. The novelty section (@sec-vs-novel) assesses
+eight candidate ideas against the closest prior work, each with a
+verdict: the measure-weighted routing plus discretization consistency as
+a measured acceptance criterion (new in form, instruments and finding;
+quadrature-weighted attention itself is adopted from the neural-operator
+literature), the anchor-relative invariant construction with a scalar
+trunk and an equivariant readout (the covariance is not new; its zero
+price at parity is, against the reported cost of full-tensor
+equivariance in AB-GATr), the boundary-first learning curve (new
+measurement, mechanism open), cosine routing (adopted from Swin V2 and
+QK-norm; the collapse diagnosis is the contribution), the interface and
+the fused kernel (engineering). The ranked short list is
+@sec-vs-ranked. The bibliography (@sec-vs-bibliography) lists 52 entries
+(57 arXiv sources) with what was read for each (abstract page in every case, full text for
+Transolver++'s method section, the OLBC paper and the AB-GATr paper) and
+names what could not be verified in session.
+
+**Ideas entered.** Eight literature-derived experiments with a targeted
+weakness, a smallest discriminating form and a preregistered bar
+(@tbl-vs-ideas), added as PLANNED nodes LIT-EXT, LIT-TEMP, LIT-LOCALQ,
+LIT-PARITY, LIT-MLOSS, LIT-SLICEATT, LIT-CARBENCH and LIT-OLBCBASE to the
+tech tree and ledger of @sec-program-status and noted in `CLAIMS.md`'s
+pending list. The two aimed at the OLBC gap (a fixed boundary-value
+extension as a query scalar; a per-token routing temperature) are the ones
+to schedule first, beside the OLBC-MECH diagnostics already running.
+
+**Housekeeping.** `_quarto.yml` and `STYLE.md`'s chapter map register the
+appendix; no other chapter was edited except the status chapter's tree and
+ledger. Nothing in this entry is a result.
