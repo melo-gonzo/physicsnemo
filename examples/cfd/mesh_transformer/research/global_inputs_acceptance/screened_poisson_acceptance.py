@@ -64,7 +64,7 @@ import numpy as np
 import torch
 from scipy.special import spherical_in
 
-from physicsnemo.experimental.nn.isla import ISLA
+from physicsnemo.experimental.models import ISLA
 
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
 LMAX = 3  # real spherical-harmonic perturbation order of the surface
@@ -77,8 +77,15 @@ def _real_sh_basis(d: torch.Tensor) -> torch.Tensor:
     x, y, z = d[..., 0], d[..., 1], d[..., 2]
     l1 = [x, y, z]
     l2 = [x * y, y * z, x * z, x * x - y * y, 3 * z * z - 1]
-    l3 = [x * (x * x - 3 * y * y), y * (3 * x * x - y * y), z * (x * x - y * y), x * y * z,
-          x * (5 * z * z - 1), y * (5 * z * z - 1), z * (5 * z * z - 3)]
+    l3 = [
+        x * (x * x - 3 * y * y),
+        y * (3 * x * x - y * y),
+        z * (x * x - y * y),
+        x * y * z,
+        x * (5 * z * z - 1),
+        y * (5 * z * z - 1),
+        z * (5 * z * z - 3),
+    ]
     return torch.stack(l1 + l2 + l3, dim=-1)
 
 
@@ -103,8 +110,14 @@ def sample_directions(b: int, n: int, gen: torch.Generator) -> torch.Tensor:
     return d / d.norm(dim=-1, keepdim=True)
 
 
-def make_cases(b: int, n_boundary: int, n_query: int, kappa_range: tuple[float, float],
-               gen: torch.Generator, n_sources: int = 6):
+def make_cases(
+    b: int,
+    n_boundary: int,
+    n_query: int,
+    kappa_range: tuple[float, float],
+    gen: torch.Generator,
+    n_sources: int = 6,
+):
     """One batch of exact cases. Returns a dict of tensors on DEV."""
     coef = (torch.rand(b, 15, generator=gen, device=DEV) * 2 - 1) * 0.12
     coef[:, 3:8] *= 0.7
@@ -129,7 +142,9 @@ def make_cases(b: int, n_boundary: int, n_query: int, kappa_range: tuple[float, 
     rs = 1.8 + torch.rand(b, n_sources, 1, generator=gen, device=DEV)
     ys = ds * rs
     cs = torch.randn(b, n_sources, generator=gen, device=DEV)
-    kappa = kappa_range[0] + (kappa_range[1] - kappa_range[0]) * torch.rand(b, generator=gen, device=DEV)
+    kappa = kappa_range[0] + (kappa_range[1] - kappa_range[0]) * torch.rand(
+        b, generator=gen, device=DEV
+    )
 
     def u_at(p):  # p (B, M, 3) -> (B, M)
         dist = (p[:, :, None, :] - ys[:, None, :, :]).norm(dim=-1)  # (B, M, S)
@@ -138,24 +153,48 @@ def make_cases(b: int, n_boundary: int, n_query: int, kappa_range: tuple[float, 
     ub, uq = u_at(x), u_at(xq)
     ### the PDE is linear: normalize each case by the boundary RMS of the trace
     scale = ub.square().mean(-1, keepdim=True).sqrt().clamp_min(1e-6)
-    return dict(points=x, normals=nrm, weights=w, trace=(ub / scale)[..., None], kappa=kappa[:, None],
-                query_points=xq, query_normals=nq, target=(uq / scale)[..., None])
+    return dict(
+        points=x,
+        normals=nrm,
+        weights=w,
+        trace=(ub / scale)[..., None],
+        kappa=kappa[:, None],
+        query_points=xq,
+        query_normals=nq,
+        target=(uq / scale)[..., None],
+    )
 
 
-_L_OF_BASIS = [0] + [1] * 3 + [2] * 5 + [3] * 7  # harmonic degree of [1, Y_1.., Y_2.., Y_3..]
+_L_OF_BASIS = (
+    [0] + [1] * 3 + [2] * 5 + [3] * 7
+)  # harmonic degree of [1, Y_1.., Y_2.., Y_3..]
 
 
-def _bessel_ratio(l: int, kappa: torch.Tensor, r: torch.Tensor, R: torch.Tensor) -> torch.Tensor:
+def _bessel_ratio(
+    l: int, kappa: torch.Tensor, r: torch.Tensor, R: torch.Tensor
+) -> torch.Tensor:
     """i_l(kappa r) / i_l(kappa R) for kappa (B,), r (B, M), R (B,); (r/R)^l at kappa = 0."""
     k = kappa[:, None].expand_as(r)
-    kr = (k * r).double().cpu().numpy(); kR = (k * R[:, None].expand_as(r)).double().cpu().numpy()
+    kr = (k * r).double().cpu().numpy()
+    kR = (k * R[:, None].expand_as(r)).double().cpu().numpy()
     with np.errstate(all="ignore"):
-        num = spherical_in(l, kr); den = spherical_in(l, kR)
-        ratio = np.where(kR > 1e-6, num / np.where(den == 0, 1.0, den), (r / R[:, None]).double().cpu().numpy() ** l)
+        num = spherical_in(l, kr)
+        den = spherical_in(l, kR)
+        ratio = np.where(
+            kR > 1e-6,
+            num / np.where(den == 0, 1.0, den),
+            (r / R[:, None]).double().cpu().numpy() ** l,
+        )
     return torch.as_tensor(ratio, dtype=r.dtype, device=r.device)
 
 
-def make_cases_sphere(b: int, n_boundary: int, n_query: int, kappa_range: tuple[float, float], gen: torch.Generator):
+def make_cases_sphere(
+    b: int,
+    n_boundary: int,
+    n_query: int,
+    kappa_range: tuple[float, float],
+    gen: torch.Generator,
+):
     """The discriminator family: sphere, prescribed trace, exact Bessel interior."""
     R = 0.8 + 0.4 * torch.rand(b, generator=gen, device=DEV)
     d = sample_directions(b, n_boundary, gen)
@@ -165,50 +204,85 @@ def make_cases_sphere(b: int, n_boundary: int, n_query: int, kappa_range: tuple[
     sq = torch.rand(b, n_query, generator=gen, device=DEV).pow(1 / 3) * 0.95
     xq = (sq * R[:, None])[..., None] * dq
     ### trace coefficients, decaying with degree; the constant term included
-    a = torch.randn(b, 16, generator=gen, device=DEV) / torch.tensor([1.0 + l for l in _L_OF_BASIS], device=DEV)
-    kappa = kappa_range[0] + (kappa_range[1] - kappa_range[0]) * torch.rand(b, generator=gen, device=DEV)
-    Yb = torch.cat([torch.ones(b, n_boundary, 1, device=DEV), _real_sh_basis(d)], dim=-1)  # (B, N, 16)
+    a = torch.randn(b, 16, generator=gen, device=DEV) / torch.tensor(
+        [1.0 + l for l in _L_OF_BASIS], device=DEV
+    )
+    kappa = kappa_range[0] + (kappa_range[1] - kappa_range[0]) * torch.rand(
+        b, generator=gen, device=DEV
+    )
+    Yb = torch.cat(
+        [torch.ones(b, n_boundary, 1, device=DEV), _real_sh_basis(d)], dim=-1
+    )  # (B, N, 16)
     Yq = torch.cat([torch.ones(b, n_query, 1, device=DEV), _real_sh_basis(dq)], dim=-1)
     ub = (a[:, None, :] * Yb).sum(-1)
     rq = xq.norm(dim=-1)
-    ratios = torch.stack([_bessel_ratio(l, kappa, rq, R) for l in range(4)], dim=-1)  # (B, M, 4)
+    ratios = torch.stack(
+        [_bessel_ratio(l, kappa, rq, R) for l in range(4)], dim=-1
+    )  # (B, M, 4)
     uq = (a[:, None, :] * Yq * ratios[..., _L_OF_BASIS]).sum(-1)
     scale = ub.square().mean(-1, keepdim=True).sqrt().clamp_min(1e-6)
-    return dict(points=x, normals=d, weights=w, trace=(ub / scale)[..., None], kappa=kappa[:, None],
-                query_points=xq, query_normals=dq, target=(uq / scale)[..., None])
+    return dict(
+        points=x,
+        normals=d,
+        weights=w,
+        trace=(ub / scale)[..., None],
+        kappa=kappa[:, None],
+        query_points=xq,
+        query_normals=dq,
+        target=(uq / scale)[..., None],
+    )
 
 
 # ----------------------------------------------------------------------------- model / arms
 def build(arm: str, seed: int) -> ISLA:
     torch.manual_seed(seed)
     return ISLA(
-        out_scalars=1, out_vectors=0, hidden=128, n_layers=6, n_slices=64, mlp_ratio=4,
-        n_global_vectors=0, n_global_scalars=1 if arm == "isla_scalar" else 0, n_boundary_scalars=1,
-        query_tokens=True, query_mass="source_total",
+        outputs={"u": 0},
+        boundary_inputs={"trace": 0},
+        global_inputs={"kappa": 0} if arm == "isla_scalar" else None,
+        hidden=128,
+        n_layers=6,
+        n_slices=64,
+        mlp_ratio=4,
+        query_tokens=True,
+        query_mass="source_total",
     ).to(DEV)
 
 
 def forward(m: ISLA, c: dict, arm: str) -> torch.Tensor:
-    kw = dict(points=c["points"], normals=c["normals"], measure_weights=c["weights"], boundary_scalars=c["trace"],
-              query_points=c["query_points"], query_normals=c["query_normals"])
+    kw = dict(
+        points=c["points"],
+        normals=c["normals"],
+        measure_weights=c["weights"],
+        boundary_inputs={"trace": c["trace"]},
+        query_points=c["query_points"],
+        query_normals=c["query_normals"],
+    )
     if arm == "isla_scalar":
-        kw["global_scalars"] = c["kappa"]
-    return m(**kw)
+        kw["global_inputs"] = {"kappa": c["kappa"]}
+    return m(**kw)["u"][..., None]
 
 
 def rel_l2(pred: torch.Tensor, tgt: torch.Tensor) -> torch.Tensor:
     """Per-case relative L2 over the queries -> (B,)."""
-    return ((pred - tgt).square().sum((1, 2)) / tgt.square().sum((1, 2)).clamp_min(1e-12)).sqrt()
+    return (
+        (pred - tgt).square().sum((1, 2)) / tgt.square().sum((1, 2)).clamp_min(1e-12)
+    ).sqrt()
 
 
 def trivial_predictors(c: dict) -> dict:
     tr = c["trace"][..., 0]
-    mean = (c["weights"] * tr).sum(-1, keepdim=True) / c["weights"].sum(-1, keepdim=True)
+    mean = (c["weights"] * tr).sum(-1, keepdim=True) / c["weights"].sum(
+        -1, keepdim=True
+    )
     mean_pred = mean[..., None].expand_as(c["target"])
     d2 = torch.cdist(c["query_points"], c["points"])
     idx = d2.argmin(-1)
     nearest = torch.gather(tr, 1, idx)[..., None]
-    return {"boundary_mean": rel_l2(mean_pred, c["target"]), "nearest_boundary_value": rel_l2(nearest, c["target"])}
+    return {
+        "boundary_mean": rel_l2(mean_pred, c["target"]),
+        "nearest_boundary_value": rel_l2(nearest, c["target"]),
+    }
 
 
 # ----------------------------------------------------------------------------- run
@@ -223,21 +297,44 @@ def main() -> None:
     ap.add_argument("--eval-cases", type=int, default=64)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--family", choices=["sources", "sphere_bessel"], default="sources")
-    ap.add_argument("--kappa-max", type=float, default=None, help="training/T0 kappa range upper end (default 3, or 6 for sphere_bessel)")
+    ap.add_argument(
+        "--kappa-max",
+        type=float,
+        default=None,
+        help="training/T0 kappa range upper end (default 3, or 6 for sphere_bessel)",
+    )
     args = ap.parse_args()
-    kmax = args.kappa_max if args.kappa_max is not None else (6.0 if args.family == "sphere_bessel" else 3.0)
+    kmax = (
+        args.kappa_max
+        if args.kappa_max is not None
+        else (6.0 if args.family == "sphere_bessel" else 3.0)
+    )
     cases = make_cases_sphere if args.family == "sphere_bessel" else make_cases
 
-    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+    commit = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
     gen_eval = torch.Generator(device=DEV).manual_seed(12345)
     tests = {
-        "T0_in_range": cases(args.eval_cases, args.n_boundary, args.n_query, (0.0, kmax), gen_eval),
-        "T1_kappa_3_4": cases(args.eval_cases, args.n_boundary, args.n_query, (kmax, kmax + 1.0), gen_eval),
+        "T0_in_range": cases(
+            args.eval_cases, args.n_boundary, args.n_query, (0.0, kmax), gen_eval
+        ),
+        "T1_kappa_3_4": cases(
+            args.eval_cases, args.n_boundary, args.n_query, (kmax, kmax + 1.0), gen_eval
+        ),
     }
-    out = {"commit": commit, "device": torch.cuda.get_device_name(0) if DEV == "cuda" else "cpu",
-           "config": vars(args) | {"out": str(args.out), "kappa_max": kmax}, "trivial": {}, "arms": {}}
+    out = {
+        "commit": commit,
+        "device": torch.cuda.get_device_name(0) if DEV == "cuda" else "cpu",
+        "config": vars(args) | {"out": str(args.out), "kappa_max": kmax},
+        "trivial": {},
+        "arms": {},
+    }
     for name, c in tests.items():
-        out["trivial"][name] = {k: {"mean": v.mean().item(), "median": v.median().item()} for k, v in trivial_predictors(c).items()}
+        out["trivial"][name] = {
+            k: {"mean": v.mean().item(), "median": v.median().item()}
+            for k, v in trivial_predictors(c).items()
+        }
     print("trivial:", json.dumps(out["trivial"]), flush=True)
 
     for arm in args.arms:
@@ -246,30 +343,56 @@ def main() -> None:
             m = build(arm, seed)
             n_params = sum(p.numel() for p in m.parameters())
             opt = torch.optim.AdamW(m.parameters(), lr=3e-4, weight_decay=1e-4)
-            sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=3e-4, total_steps=args.steps, pct_start=0.05)
+            sched = torch.optim.lr_scheduler.OneCycleLR(
+                opt, max_lr=3e-4, total_steps=args.steps, pct_start=0.05
+            )
             gen = torch.Generator(device=DEV).manual_seed(1000 + seed)
-            t0 = time.time(); losses = []
+            t0 = time.time()
+            losses = []
             for step in range(args.steps):
                 c = cases(args.batch, args.n_boundary, args.n_query, (0.0, kmax), gen)
-                with torch.autocast("cuda", dtype=torch.bfloat16, enabled=DEV == "cuda"):
+                with torch.autocast(
+                    "cuda", dtype=torch.bfloat16, enabled=DEV == "cuda"
+                ):
                     pred = forward(m, c, arm)
                 loss = rel_l2(pred.float(), c["target"]).mean()
-                opt.zero_grad(set_to_none=True); loss.backward()
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
                 torch.nn.utils.clip_grad_norm_(m.parameters(), 1.0)
-                opt.step(); sched.step(); losses.append(loss.item())
+                opt.step()
+                sched.step()
+                losses.append(loss.item())
                 if step % 200 == 0 or step == args.steps - 1:
-                    print(f"[{arm} seed {seed}] step {step} loss {sum(losses[-50:]) / len(losses[-50:]):.4f} "
-                          f"({time.time() - t0:.0f} s)", flush=True)
-            m.eval(); res = {"params": n_params, "train_seconds": time.time() - t0, "final_train_loss": sum(losses[-100:]) / 100}
+                    print(
+                        f"[{arm} seed {seed}] step {step} loss {sum(losses[-50:]) / len(losses[-50:]):.4f} "
+                        f"({time.time() - t0:.0f} s)",
+                        flush=True,
+                    )
+            m.eval()
+            res = {
+                "params": n_params,
+                "train_seconds": time.time() - t0,
+                "final_train_loss": sum(losses[-100:]) / 100,
+            }
             with torch.no_grad():
                 for name, c in tests.items():
-                    r = rel_l2(forward(m, c, arm).float(), c["target"])  # float32 evaluation
-                    res[name] = {"mean": r.mean().item(), "median": r.median().item(), "p90": r.quantile(0.9).item()}
+                    r = rel_l2(
+                        forward(m, c, arm).float(), c["target"]
+                    )  # float32 evaluation
+                    res[name] = {
+                        "mean": r.mean().item(),
+                        "median": r.median().item(),
+                        "p90": r.quantile(0.9).item(),
+                    }
             out["arms"][arm][f"seed{seed}"] = res
-            print(f"[{arm} seed {seed}] {json.dumps({k: v for k, v in res.items() if k.startswith('T')})}", flush=True)
+            print(
+                f"[{arm} seed {seed}] {json.dumps({k: v for k, v in res.items() if k.startswith('T')})}",
+                flush=True,
+            )
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(json.dumps(out, indent=2))
-            del m, opt; torch.cuda.empty_cache()
+            del m, opt
+            torch.cuda.empty_cache()
     print("DONE", args.out, flush=True)
 
 

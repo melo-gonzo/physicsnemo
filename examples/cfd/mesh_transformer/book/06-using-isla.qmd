@@ -26,15 +26,18 @@ RES = Path("..") / "results"
 **Run ISLA as the class ships it: cosine routing, the RMS-pairwise-distance
 length unit, the fused geometry kernel where it can run, and interior
 queries carrying a share of the total boundary measure.** Those are the
-class defaults, so `ISLA()` with no arguments is the reference
-configuration; the recipe's `isla_surface.yaml` fixes the dimensions and
-states the frame setting explicitly:
+class defaults, so `ISLA(outputs=..., global_inputs=...)` with nothing else
+is the reference configuration; the recipe's `isla_surface.yaml` names the
+fields, fixes the dimensions and states the frame setting explicitly:
 
 ```yaml
 model:
-  _target_: physicsnemo.experimental.nn.ISLA
-  out_scalars: 1        # pressure
-  out_vectors: 1        # wall shear stress
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs:              # the dataset's targets, by name and tensor rank
+    pressure: 0         #   rank 0: a scalar field
+    wss: 1              #   rank 1: a vector field (a stress tensor would be {rank: 2, symmetric: true})
+  global_inputs:
+    freestream: 1       # one rank-1 global input: the far-field flow direction
   hidden: 192
   n_layers: 12
   n_slices: 256
@@ -73,18 +76,23 @@ it is, what it costs and when it is worth the price are in
 
 ## What the model needs from your data {#sec-using-inputs}
 
-**ISLA takes four arrays per case, and the two that are easy to get wrong
-are the measure weights, which must sum to the boundary's measure, and the
-global vectors, which must be directions.** The forward call is
-keyword-only, so the recipe's `forward_kwargs:` mapping reads exactly as the
-call does. For the surface task:
+**ISLA takes three geometry arrays per case plus named fields of declared
+rank, and the two that are easy to get wrong are the measure weights,
+which must sum to the boundary's measure, and the global directions, which
+must be directions.** The forward call is keyword-only, so the recipe's
+`forward_kwargs:` mapping reads exactly as the call does; the field names
+under `global_inputs`, `boundary_inputs` and `query_inputs` are the ones
+the model block declares with their ranks, and the model returns
+`{name: tensor}` keyed by the `outputs:` names (`output_type: fields`).
+For the surface task:
 
 ```yaml
 forward_kwargs:
   points: interior.points                                  # (B, N, 3) sampled cell centroids ("interior" is the datapipe's name for the sampled point set, not the fluid domain)
   normals: boundaries.vehicle.cell_data.normals            # (B, N, 3) unit outward normals
   measure_weights: interior.point_data._effective_measure   # (B, N) area each sampled cell stands for
-  global_vectors: global_data.U_inf_dir                    # (B, 1, 3) the one global direction of external aerodynamics
+  global_inputs:
+    freestream: global_data.U_inf_dir                      # (B, 3) the one global direction of external aerodynamics
 ```
 
 Three of these need a word.
@@ -102,31 +110,41 @@ Three of these need a word.
   sampling corrections. Point measures carry their represented dimension
   and follow geometric scaling: on a two-dimensional problem such as
   AirfRANS the measure is the segment length.
-- **A global vector is a direction.** The problem's global directions
-  (`n_global_vectors` of them) enter as unit vectors; the model normalizes
-  each again internally and discards its magnitude. For external
-  aerodynamics `ComputeFreestreamDirection` writes `U_inf_dir` from the
-  solver's velocity. This is also the fair-comparison rule for every
-  architecture in the book (@sec-unit-direction-rule).
-- **A magnitude that matters is a global scalar.** Set `n_global_scalars`
-  and pass `global_scalars` of shape (B, S). No fixed power of a far-field
+- **A rank-1 global input is a direction.** The problem's global
+  directions (the rank-1 entries of `global_inputs`) enter as unit vectors;
+  the model normalizes each again internally and discards its magnitude.
+  For external aerodynamics `ComputeFreestreamDirection` writes `U_inf_dir`
+  from the solver's velocity. This is also the fair-comparison rule for
+  every architecture in the book (@sec-unit-direction-rule).
+- **A magnitude that matters is a rank-0 global input.** Declare it
+  (`u_inf: 0`; a standardized parameter vector is `params: {rank: 0,
+  channels: 6}`) and pass it under its name. No fixed power of a far-field
   speed is a physical law for every output (a pressure coefficient is degree
   zero, a dimensional pressure degree two), so the model learns the
   dependence like any other parameter. The AirfRANS configuration passes
-  the inlet speed this way (`global_data.U_inf_mag`, $S = 1$).
+  the inlet speed this way (`global_data.U_inf_mag`).
 
 ::: {.callout-note collapse="true" title="Problems other than external aerodynamics"}
-The architecture knows only that it was handed $K$ global directions and
-$S$ global scalars. A buoyant flow passes gravity as its one direction; a
-magnetized flow passes two; steady conduction with pinned temperatures
-passes none (`n_global_vectors: 0`) and supplies the pinned values as
-per-cell `boundary_scalars` (`n_boundary_scalars`). Each global direction
-adds one seed cosine, one relational cosine and three vectors to the output
-basis (@sec-isla-inputs). The tests in `test_isla_global_inputs.py` cover
-zero and two directions, global scalars, and the invariance of the output to
-the magnitude of every global vector. The fused geometry kernel is written
-for exactly one global direction; with any other count `geo_kernel: null`
-resolves to the eager region.
+The architecture knows only that it was handed named fields of declared
+rank. A buoyant flow passes gravity as its one direction; a magnetized flow
+passes two; steady conduction with pinned temperatures passes no direction
+and supplies the pinned values as a rank-0 boundary input
+(`boundary_inputs: {trace: 0}`); an elasticity problem passes its
+prescribed displacement and traction as rank-1 boundary inputs
+(`bc_displacement: 1`, `bc_traction: 1`; a planar dataset that stored the
+components separately stacks them with `StackScalarFields` in its dataset
+yaml) and predicts the stress as a symmetric rank-2 output
+(`stress: {rank: 2, symmetric: true}`), whose laboratory components the
+recipe reads off for a `symmetric_tensor` target. Each global direction
+adds one seed cosine, one relational cosine and two vectors to the output
+basis; each rank-1 boundary input adds its frame cosines and norm to the
+seed and one relational cosine per slice (@sec-isla-inputs-rank). The tests
+in `test_isla_global_inputs.py`, `test_isla_inputs.py` and
+`test_isla_heads.py` cover zero and two directions, global scalars, rank-1
+and rank-2 inputs and every output rank and parity. The fused geometry
+kernel is written for exactly one global direction and no rank-1 or rank-2
+per-token inputs; otherwise `geo_kernel: null` resolves to the eager
+region.
 :::
 
 ## Training {#sec-using-train}
@@ -230,19 +248,20 @@ PhysicsNeMo module checkpoint and loads with the class's `from_checkpoint`;
 no configuration has to be repeated:
 
 ```python
-from physicsnemo.experimental.nn import ISLA
+from physicsnemo.experimental.models import ISLA
 model = ISLA.from_checkpoint("checkpoints/isla_surface.mdlus").eval()
-out = model(points=x, normals=n, measure_weights=w, global_vectors=g_hat)  # (B, N, 1 + 3)
-p, tau = out[..., :1], out[..., 1:]
+out = model(points=x, normals=n, measure_weights=w, global_inputs={"freestream": g_hat})
+p, tau = out["pressure"], out["wss"]  # (B, N) and (B, N, 3)
 ```
 
 `points` and `normals` are (B, N, 3), `measure_weights` (B, N) summing to the
-boundary's measure, `global_vectors` (B, K, 3) or (B, 3) for one direction,
-`global_scalars` (B, S) when the model has any. The output stacks the scalar
-fields first, then each vector field's three components. For interior
+boundary's measure, `global_inputs` a mapping from each declared name to
+its tensor ((B, 3) for a direction, (B,) or (B, channels) for a rank-0
+field). The output is a dictionary keyed by the declared output names,
+each field with as many trailing axes of size 3 as its rank. For interior
 prediction with `isla_volume`, add `query_points`, `query_normals` (the
-signed-distance gradient) and `query_scalars` (the signed distance) and read
-the output at the query rows; deploy at the training query count (200,000
+signed-distance gradient) and `query_inputs={"sdf": ...}` (the signed
+distance) and read the output at the query rows; deploy at the training query count (200,000
 at the reporting protocol on DrivAerML), because the interacting decode's
 prediction at a point depends on the joint query set
 (@sec-interior-companion).

@@ -6,7 +6,7 @@ why each part is there; this chapter is the reference for *what* the class
 does, and it is the one description of the architecture that the other
 chapters and the code are held to. Read it with @fig-isla-pass open: every
 stage below is one box of that figure, and every equation names the
-identifier that computes it in `physicsnemo/experimental/nn/isla/model.py`.
+identifier that computes it in `physicsnemo/experimental/models/isla/model.py`.
 The structure is written for a width $d$, a stack of 12 slice layers and
 $M = 256$ slices, the class's layer and slice counts; nothing in it depends
 on those numbers, and the width the recipe runs is stated with the commands
@@ -30,24 +30,24 @@ leading batch dimension on every tensor.
 | symbol | shape | code | meaning |
 |---|---|---|---|
 | $x_i, n_i, w_i$ | $N{\times}3,\ N{\times}3,\ N$ | `points`, `normals`, `measure_weights` | sampled boundary positions, outward normals, the surface area each sample stands for |
-| $g_k$, $\sigma$ | $K{\times}3$, $S$ | `global_vectors`, `global_scalars` | the problem's global directions and scalars (external aerodynamics, the benchmark instance: $K = 1$, the far-field flow direction; $S = 0$ on the surface tasks, $S = 1$ on AirfRANS) |
+| $g_k$, $\sigma$ | $K{\times}3$, $S$ | `global_inputs` (rank 1, rank 0) | the problem's global directions and scalars, as named fields (external aerodynamics, the benchmark instance: $K = 1$, the far-field flow direction; $S = 0$ on the surface tasks, $S = 1$ on AirfRANS) |\n| $v_{ip}$, $T_{iq}$ | $N{\times}P{\times}3$, $N{\times}Q{\times}3{\times}3$ | `boundary_inputs`, `query_inputs` (rank 1, rank 2) | per-token tensor inputs (a prescribed traction, a prescribed stress); $P = Q = 0$ on the aerodynamic tasks |
 | $\hat g_k$, $\hat n_i$ | $K{\times}3$, $N{\times}3$ | `g_unit`, `n_hat` | the same directions and normals, normalized to unit length |
 | $L$ | scalar | `gauge` | the length unit: the measure-weighted RMS pairwise distance of the sample |
 | $r_i$ | $N{\times}3$ | `r` | position in length units, $x_i / L$; used only inside differences |
 | $\ell_i$ | $N$ | `log_w` | $\log w_i$, the measure bias of every routing softmax |
-| $s_i$ | $N{\times}(K + n_b + S)$ | `invariants` | the seed: the scalars a token knows before any layer runs |
+| $s_i$ | $N{\times}(K + n_b + S)$ | `invariants` | the seed: the scalars a token knows before any layer runs ($n_b$ counts the boundary inputs' invariants) |
 | $h_i$ | $N{\times}d$ | `h` | the token state, width $d$ (`hidden`) |
 | $\lambda_{is}$, $\lambda'_{is}$ | $N{\times}M$ | `logits`, `logits + bias` | routing logits before and after the geometric refinement |
 | $a_{is}$ | $N{\times}M$ | `a` | routing weights: a softmax over tokens $i$ for each slice $s$ |
 | $z_s, m_s$ | $M{\times}3$ | `z_pos`, `m_s` | the anchor of slice $s$: its mean position and mean normal direction |
-| $\rho_{is}$, $\xi_{is}$ | $N{\times}M{\times}3$, $N{\times}M{\times}(5+K)$ | `rel`, `geo` | the token-to-anchor separation and the relational invariants formed from it |
+| $\rho_{is}$, $\xi_{is}$ | $N{\times}M{\times}3$, $N{\times}M{\times}(5+K+P'+Q)$ | `rel`, `geo` | the token-to-anchor separation and the relational invariants formed from it ($P'$ counts the per-token vectors beyond the normal and the global directions, $Q$ the rank-2 inputs; both zero on the aerodynamic tasks) |
 | $\pi_{is}$ | $N{\times}M$ | `point_mix` | read-back weights: a softmax over slices $s$ for each token $i$ |
 | $\bar\xi_i$, $\gamma_i$ | $N{\times}(5+K)$, $N{\times}d/2$ | `pooled`, `geo_pool` | the invariants pooled over slices, and their projection |
 | $Z_s$ | $M{\times}d$ | `z` | the slice state |
 | $b_i$ | $N{\times}d$ | `back` | the slice states read back to token $i$ |
 | $\hat u_i$ | $N{\times}3$ | `r_hat` | the head's radial direction: from the token's own soft anchor to the token |
 | $e_\theta, e_\phi$ | $N{\times}3$ | `spherical_basis` | the tangential complements of $\hat u_i$ against another direction |
-| $p_i$, $c_{ij}$, $v_i$ | $N{\times}n_p$, $N{\times}n_v{\times}(4+3K)$, $N{\times}n_v{\times}3$ | `scalars`, `coeffs`, `vectors` | scalar outputs, vector-head coefficients, vector outputs |
+| $c_i$, $T_i$ | $N{\times}n_c$, $N{\times}3^r$ per output | `coeffs`, `out[name]` | the head's invariant coefficients and the assembled output fields, one per declared name and rank ($m = 2K + 3$ true basis vectors; a vector costs $m$ coefficients, a symmetric rank-2 tensor $m(m+1)/2 + 1$) |
 
 $\mathrm{LN}$ is LayerNorm over the width; $\mathrm{MLP}$ is Linear–GELU–Linear
 with a hidden width of $4d$ (`mlp_ratio`); $W$ with a subscript is a learned
@@ -139,9 +139,12 @@ s_i \equiv \big[\, \hat n_i \!\cdot\! \hat g_1,\ \dots,\ \hat n_i \!\cdot\! \hat
 h_i \equiv \mathrm{MLP}_{\mathrm{embed}}(s_i),
 $$
 
-where $\beta_i$ are the optional per-cell boundary scalars
-(`boundary_scalars`, $n_b = 0$ in this book) and $\sigma$ the global scalars
-broadcast to every token. On the surface tasks of this book the seed is a
+where $\beta_i$ are the invariants of the optional per-cell boundary
+inputs (`boundary_inputs`: a rank-0 field is its own scalar, a rank-1 field
+$v_i$ contributes $v_i \cdot \hat n_i$, $v_i \cdot \hat g_k$ and $\lvert
+v_i \rvert$, a rank-2 field its frame contractions, trace and Frobenius
+norm; @sec-isla-inputs-rank; $n_b = 0$ on the aerodynamic tasks of this
+book) and $\sigma$ the global scalars broadcast to every token. On the surface tasks of this book the seed is a
 single number per token, the cosine between the normal and the far-field
 direction; if the seed would be empty ($K = n_b = S = 0$) every token starts
 from one learned constant. All separation between tokens then comes from
@@ -257,7 +260,12 @@ $$
 
 Every entry is a norm or a dot product of vectors that move together, and
 every position appears as a difference, so no origin and no axis is
-referred to (@sec-isla-relational).
+referred to (@sec-isla-relational). A model with rank-1 or rank-2 per-token
+inputs appends, in the same place, $\hat\rho_{is} \cdot v$ for every
+per-token vector $v$ (the inputs themselves and the vectors $T \hat n_i$,
+$T \hat g_k$ derived from a rank-2 input) and $\hat\rho_{is}^{\mathsf T} T
+\hat\rho_{is}$ for every rank-2 input, so the width is $5 + K + P' + Q$
+(@sec-isla-inputs-rank); on the aerodynamic tasks it is $5 + K$.
 
 **e. Refinement, and the read-back weights.** A linear map of the
 invariants to one scalar per pair refines the routing logit, so a slice can
@@ -402,45 +410,62 @@ is unchanged by a translation; no centroid appears (`a_f`, `z_f`, `b_f`,
 
 ## Stage 5: the head {#sec-arch-head}
 
-**One linear head produces the scalar outputs and, for each vector output,
-invariant coefficients over a basis of directions the token already has.**
-On the normalized final state (`norm_out`, `head`):
+**One linear head produces every output's invariant coefficients, and each
+output of declared rank $r$ is contracted from them over tensor products of
+$r$ vectors the token already has.** On the normalized final state
+(`norm_out`, `head`):
 
 $$
-[\, p_i;\ c_i \,] = W_h\, \mathrm{LN}(h_i) + b_h, \qquad
-p_i \in \mathbb{R}^{n_p}, \quad c_i \in \mathbb{R}^{n_v \times (4 + 3K)} .
+c_i = W_h\, \mathrm{LN}(h_i) + b_h, \qquad c_i \in \mathbb{R}^{n_c},
 $$
 
-The basis at token $i$, in the order the code stacks it, is
+with $n_c$ the sum over the declared outputs of their coefficient counts.
+The true basis at token $i$, in the order the code stacks it, is
 
 $$
-B_i = \big\{\, \hat g_1, \dots, \hat g_K,\ \hat n_i,\ \hat u_i,\
-e_\theta(\hat u_i, \hat n_i),\ e_\phi(\hat u_i, \hat n_i),\
-e_\theta(\hat u_i, \hat g_1),\ e_\phi(\hat u_i, \hat g_1),\ \dots \,\big\},
+t_i = \big\{\, \hat g_1, \dots, \hat g_K,\ \hat n_i,\ \hat u_i,\
+e_\theta(\hat u_i, \hat n_i),\ e_\theta(\hat u_i, \hat g_1),\ \dots \,\big\}
+\quad (m = 2K + 3 \text{ vectors}),
 $$
 
-with the tangential complements of $\hat u$ against a second direction
+with the tangential complement of $\hat u$ against a second direction
 $\hat a$ defined, unnormalized, as
 
 $$
-e_\theta(\hat u, \hat a) \equiv -\hat a + (\hat a \cdot \hat u)\, \hat u, \qquad
-e_\phi(\hat u, \hat a) \equiv \hat u \times e_\theta(\hat u, \hat a)
+e_\theta(\hat u, \hat a) \equiv -\hat a + (\hat a \cdot \hat u)\, \hat u
 $$
 
-(`spherical_basis` with `normalize_basis_vectors=False`; both vanish
-smoothly where $\hat u \parallel \hat a$, which is why they are left
-unnormalized). Each vector output is the expansion
+(`spherical_basis` with `normalize_basis_vectors=False`; it vanishes
+smoothly where $\hat u \parallel \hat a$, which is why it is left
+unnormalized), and the pseudovector basis is the set of cross products of
+the primaries $\{\hat g_k, \hat n_i, \hat u_i\}$ ($p = \binom{K+2}{2}$
+vectors). An output declared with rank $r$ and even parity is
 
 $$
-v_i = \sum_{j=1}^{4+3K} c_{ij}\, B_{ij},
+T_i = \sum_{j_1 \dots j_r} c_{i\, j_1 \dots j_r}\; t_{i j_1} \otimes \dots \otimes t_{i j_r}
+\;+\; \sum_k c_{ik}^{\mathrm{iso}}\, I_k ,
 $$
 
-and the model returns $[\, p_i;\ v_i \,]$, of width $n_p + 3 n_v$ (two
-outputs, pressure and wall shear stress, in every surface result of the
-book). Under a rotation every basis vector rotates and every coefficient is
-unchanged, so $v_i$ rotates: that is the covariance proof, and
-@sec-isla-contracts lists the tests that check it (@sec-isla-heads
-discusses reflections, under which $e_\phi$ flips).
+where the isotropic tensors $I_k$ are the identity at rank 2 and the three
+products of Kronecker deltas at rank 4 (their symmetric sum for a symmetric
+spec); a symmetric spec carries one coefficient per unordered multi-index,
+and an odd-parity spec replaces exactly one factor by a pseudovector (with
+the Levi-Civita symbol as the isotropic term at rank 3). The code gathers
+the free coefficients into the full coefficient tensor over ordered
+multi-indices and contracts one index at a time, so the basis of $m^r$
+products is never materialized (`_OutputLayout`, `_assemble_output`). The
+coefficient counts per output are $1$ at rank 0, $m$ at rank 1 ($5$ with
+one global direction), $m^2 + 1$ or $m(m+1)/2 + 1$ (symmetric) at rank 2
+($26$ or $16$), $m^3$ or $\binom{m+2}{3}$ at rank 3, $m^4 + 3$ or
+$\binom{m+3}{4} + 1$ at rank 4; the class refuses ranks above 4. The model
+returns a dictionary keyed by the output names (pressure, a rank-0 field of
+shape $N$; wall shear stress, a rank-1 field of shape $N{\times}3$, in every
+surface result of the book). Under an orthogonal map $R$ every true basis
+vector maps as $R t$, every pseudovector as $\det(R)\, R t$, and every
+coefficient is unchanged, so an even output maps as $R^{\otimes r} T$ and an
+odd one as $\det(R)\, R^{\otimes r} T$: that is the covariance proof, for
+rotations and reflections alike, and @sec-isla-contracts lists the tests
+that check it.
 
 ## Where the parameters are {#sec-arch-params}
 
@@ -453,10 +478,10 @@ two widths, 12 layers and 256 slices.
 #| output: asis
 import warnings; warnings.filterwarnings("ignore")
 import torch
-from physicsnemo.experimental.nn import ISLA
+from physicsnemo.experimental.models import ISLA
 cnt = lambda mod: sum(p.numel() for p in mod.parameters())
 widths = (192, 384)
-models = {w: ISLA(out_scalars=1, out_vectors=1, hidden=w, n_layers=12, n_slices=256) for w in widths}
+models = {w: ISLA(outputs={"pressure": 0, "wss": 1}, global_inputs={"freestream": 1}, hidden=w, n_layers=12, n_slices=256) for w in widths}
 def rows_for(m):
     blk = m.blocks[0]
     return [
@@ -1029,14 +1054,15 @@ it changes.** The recipe's surface and interior configurations are in
 | flag (default) | stage | what it changes |
 |---|---|---|
 | `hidden` (256 in the class; the recipe's width is in @sec-using-config), `n_layers` (12), `n_slices` (256), `mlp_ratio` (4) | all | $d$, the number of slice layers, $M$, and the MLP expansion |
-| `out_scalars` (1), `out_vectors` (1) | 5 | $n_p$ and $n_v$; each vector output adds $4 + 3K$ coefficients |
-| `n_global_vectors` (1), `n_global_scalars` (0) | 1, 2, 3d, 5 | $K$ and $S$: each vector adds one seed cosine, one relational cosine and three basis vectors; each scalar widens the seed by one |
-| `n_boundary_scalars` (0) | 2 | per-cell boundary-condition scalars $\beta_i$ appended to the seed; non-boundary tokens carry zeros |
+| `outputs` (required) | 5 | the output fields by name and rank spec (`{pressure: 0, wss: 1, stress: {rank: 2, symmetric: true}}`; `parity: odd` for a pseudotensor); each field costs the coefficient count of @sec-arch-head and is returned under its name |
+| `global_inputs` (none) | 1, 2, 3d, 5 | the per-case fields by name and rank: each rank-1 field is a global direction $\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field (with `channels` for a parameter vector) widens the seed |
+| `boundary_inputs` (none) | 2, 3d | per-cell fields by name and rank 0 to 2: their invariants $\beta_i$ join the seed (non-boundary tokens carry zeros), and rank-1 and rank-2 fields add their contractions with $\hat\rho_{is}$ to the relational invariants (@sec-isla-inputs-rank) |
+| `query_inputs` (none), `query_scalar_scale` (`"length"`) | modes | per-query fields by name and rank 0 to 2, carried by the query, support and passive-query tokens through their own embedding; rank-0 fields are divided by $L$ and paired with a signed log under `"length"` |
 | `scale_mode` (`"rms_distance"`) | 1 | the length unit: the measure-weighted RMS pairwise distance of the sample |
 | `use_measure_weights` (on) | 3b, 3f, 4 | the measure bias $\ell_i$; off is the weights-off ablation |
 | `routing_norm` (`"cosine"`), `routing_temperature` (10) | 3a, 4 | the form of every routing map: the bounded cosine against learned prototypes, or `"linear"`, the affine alternative (@sec-isla-routing-forms) |
 | `use_relational_geo` (on) | 3d, 3e, 3h | the relational invariants in the refinement and the read-back; off is the feature-only slicing ablation |
-| `query_tokens` (off), `n_query_scalars` (0), `query_scalar_scale` (`"length"`), `query_mass` (`"source_total"`) | modes | the interacting interior arrangement, its per-query scalars and their scaling, and the queries' routing mass: a learned share of the total boundary measure, or `"geometric_mean"`, a learned factor times the geometric mean of the source weights (which depends on the boundary refinement) |
+| `query_tokens` (off), `query_mass` (`"source_total"`) | modes | the interacting interior arrangement and the queries' routing mass: a learned share of the total boundary measure, or `"geometric_mean"`, a learned factor times the geometric mean of the source weights (which depends on the boundary refinement) |
 | `query_independent` (off), `n_decoder_layers` (4), `local_readout_rho` (0.02), `support_tokens` (off) | modes | the optional passive decoder (exactly query-independent, at the accuracy price in @sec-arch-passive-decoder), its depth, its local-readout width, and its optional interacting support set |
-| `geo_kernel` (`None`, automatic), `geo_checkpoint` (off), `fast_point_softmax` (on) | 3c–3e, 3h | how the geometry region is executed: `None` resolves at the first forward pass to `"fused"` (the Triton kernel) when the inputs are on CUDA, Triton is importable, there is one global vector and at most 1,024 slices, and to `"eager"` (the PyTorch region) otherwise; either name forces that path, and `"fused"` raises where its constraints fail. `geo_checkpoint` rebuilds the eager region in backward instead of storing it; `fast_point_softmax` selects the row-parallel softmax kernel. None changes the function computed beyond roundoff |
+| `geo_kernel` (`None`, automatic), `geo_checkpoint` (off), `fast_point_softmax` (on) | 3c–3e, 3h | how the geometry region is executed: `None` resolves at the first forward pass to `"fused"` (the Triton kernel) when the inputs are on CUDA, Triton is importable, there is one global direction, at most 1,024 slices and no rank-1 or rank-2 per-token input, and to `"eager"` (the PyTorch region) otherwise; either name forces that path, and `"fused"` raises where its constraints fail. `geo_checkpoint` rebuilds the eager region in backward instead of storing it; `fast_point_softmax` selects the row-parallel softmax kernel. None changes the function computed beyond roundoff |
 | `eps` ($10^{-12}$) | 1, 3c, 3d, 4 | the floor under every norm and logarithm |

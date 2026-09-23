@@ -152,7 +152,7 @@ an accident of the dataset that a model would have to learn to ignore. A
 magnitude that matters physically, a far-field speed or a Reynolds number,
 is a separate scalar with its own place in the input. ISLA enforces the
 rule by construction: it normalizes its global vectors and takes magnitudes
-only through `global_scalars` (@sec-isla-inputs). GeoTransolver and
+only through rank-0 `global_inputs` (@sec-isla-inputs). GeoTransolver and
 Transolver consume whatever vector the pipeline hands them, so for them the
 rule is a protocol requirement, and every dataset pipeline of the recipe
 writes the far-field direction as a unit vector.

@@ -25223,3 +25223,147 @@ M2 (value transport): `ext` recovers at least half the log-gap to
 GeoTransolver-512 at 2,048 cases while `frame2` and `s1024` do not; under
 M1 the frame and slice variants move and `ext` does not. Both can be true,
 in which case the remedy is both.
+
+
+## 2026-09-22 — Code: ISLA moves to `physicsnemo.experimental.models`, and every input and output becomes a named field of declared tensor rank {#sec-nb-rank-spec-api}
+
+**Setting.** Peter asked whether `out_tensors` was properly generalized:
+he wants to hand ISLA a rank-spec dictionary for its output fields and have
+the class handle any rank of equivariant tensor, with the input signatures
+supporting the same, and no tech debt since ISLA is unreleased. He then
+raised the bar on the input side: the per-cell boundary *vector* input
+channel had to be implemented, cleanly, in the same style, as the lowest
+possible bar for a model that claims to take boundary conditions. This
+entry records the API, what changed in the code, the recipe and the book,
+and what was verified. Nothing in it is a training result.
+
+**The API.** The class is `physicsnemo.experimental.models.ISLA`
+(`from physicsnemo.experimental.models import ISLA`; the package moved
+from `physicsnemo/experimental/nn/isla/` to
+`physicsnemo/experimental/models/isla/`, tests to
+`test/experimental/models/isla/`, no re-export left behind). The
+constructor is keyword-only and takes four mappings from a field name to
+a *rank spec*: `outputs` (required), `boundary_inputs`, `query_inputs`
+and `global_inputs`. A rank spec is an integer rank (0 scalar, 1 vector,
+2 rank-2 tensor, ...) or a mapping `{rank, symmetric: false, parity:
+"even", channels: 1}`: `symmetric` for a fully symmetric tensor (rank
+$\ge 2$), `parity: odd` for a pseudotensor output, `channels` to pack
+several independent scalars (a standardized parameter vector) under one
+rank-0 name. Outputs take ranks 0 to 4; per-token inputs ranks 0 to 2 and
+even parity; global inputs ranks 0 and 1 (a rank-1 global input is a
+global direction, normalized inside the model). `forward` takes `points`,
+`normals`, `measure_weights` and the same four names as mappings from
+field name to tensor (a rank-$r$ per-token field is (B, N, 3, ..., 3)
+with $r$ trailing axes; a rank-1 global field (B, 3)), plus
+`query_points`, `query_normals`, `support_points`, `support_normals` and
+`support_inputs` for the interior modes, and returns `dict[str, Tensor]`
+keyed by the output names, a rank-0 field of shape (B, N) and a rank-$r$
+field of shape (B, N, 3, ..., 3). The counted channels
+(`out_scalars`, `out_vectors`, `out_tensors`, `n_global_vectors`,
+`n_global_scalars`, `n_boundary_scalars`, `n_query_scalars`) and the
+tensor-valued `global_vectors`, `global_scalars`, `boundary_scalars`,
+`query_scalars`, `support_scalars` are gone; nothing is shimmed.
+
+**Outputs (@sec-isla-heads, @sec-arch-head).** One linear head emits every
+output's invariant coefficients. With $m = 2K + 3$ true basis vectors
+($\hat g_k$, $\hat n_i$, $\hat u_i$, the $e_\theta$ complements) and $p =
+\binom{K+2}{2}$ pseudovectors (the cross products of the primaries), an
+even output of rank $r$ is contracted over tensor products of $r$ true
+vectors plus the isotropic tensors of that rank (the identity at rank 2,
+the three products of Kronecker deltas at rank 4, their symmetric sum
+under a symmetric spec); an odd output over products with exactly one
+pseudovector factor, plus the Levi-Civita symbol at rank 3. A symmetric
+spec has one coefficient per unordered multi-index. The coefficient
+counts per field are 1 (rank 0); $m$ or $p$ (rank 1, even or odd); $m^2 +
+1$, $m(m+1)/2 + 1$, $2pm$, $pm$ (rank 2: general, symmetric, odd, odd
+symmetric); $m^3$, $\binom{m+2}{3}$, $3pm^2 + 1$, $p\,m(m+1)/2$ (rank 3);
+$m^4 + 3$, $\binom{m+3}{4} + 1$, $4pm^3$, $p\binom{m+2}{3}$ (rank 4). For
+$K = 1$: a vector costs 5, a symmetric rank-2 tensor 16, a pseudovector 3.
+The code gathers the free coefficients into the full coefficient tensor
+and contracts one index at a time, so the $m^r$ basis is never
+materialized. The vector head therefore lost the two $e_\phi$
+pseudovectors it carried (7 to 5 coefficients with one direction): a true
+vector no longer pays for a pseudovector's basis, and every even output
+is covariant under reflections as well.
+
+**Inputs (@sec-isla-inputs-rank).** A rank-1 per-token input $v_i$
+contributes to the seed its cosines with the token's frame $\{\hat n_i,
+\hat g_k\}$, its norm and its dot products with the token's other vector
+inputs, and in every slice layer $v_i \cdot \hat\rho_{is}$ beside the
+existing $\hat n_i \cdot \hat\rho_{is}$ and $\hat g_k \cdot \hat\rho_{is}$
+(`_relational_invariants` now takes the per-token vector stack; the normal
+is the first of them). A rank-2 input $T_i$ contributes $a^{\mathsf T} T_i
+b$ over the frame pairs, $\operatorname{tr} T_i$ and $\lVert T_i \rVert_F$
+to the seed, and $\hat\rho^{\mathsf T} T_i \hat\rho$ plus the contractions
+of the derived vectors $T_i \hat n_i$, $T_i \hat g_k$ (and their
+transposes for a non-symmetric spec) with $\hat\rho_{is}$ in the layers.
+Only true vectors appear on the input side, so every input invariant is
+O(3)-invariant and pseudotensor inputs are refused. Boundary-input
+invariants widen the boundary tokens' seed (zeros on other tokens);
+query-input invariants go through the query, passive-query and support
+embeddings; every token carries the union of the two block-level vector
+stacks. The geometry width is $5 + K + P' + Q$. The fused Triton kernel
+is written for the normal and one global direction: a model with rank-1
+or rank-2 per-token inputs runs the eager region (a warning under
+`geo_kernel=None`, an error under `geo_kernel="fused"`); extending the
+kernel is the standing follow-up.
+
+**What was verified.** The pre-refactor code's `norm_out` state was
+recorded with a forward hook for the release-test configurations and
+inputs (`test/experimental/models/isla/data/isla_backbone_v1.pth`); the
+new class reproduces it bitwise for the default and the passive-decoder
+configuration with `outputs={"p": 0, "v": 1}` and `global_inputs={"g":
+1}`, so the trunk is unchanged wherever no rank-1 or rank-2 input is
+present. Every output spec above (ranks 0 to 4, both parities, symmetric
+and general, a two-channel rank-0 field) and rank-0, rank-1, symmetric and
+general rank-2 boundary inputs were checked in float64 for covariance to
+below $10^{-13}$ under random proper rotations, improper orthogonal maps
+(sign $\det R$ for odd parity) and translations of geometry and fields
+together; the goldens of the release tests were regenerated by the new
+code path (the regeneration command is in the test file's docstring); the
+ISLA suite and the recipe suite pass (289 recipe tests). The fused-versus-
+eager comparison on a rank-2 output stays as the CUDA-only test.
+
+**Recipe.** A third output type, `output_type: fields`, means the model
+returns `{name: tensor}` keyed by the dataset's target names; the model
+yaml declares `outputs:` with the same names and their ranks, and the
+recipe selects by name (`select_fields_by_target`), reading the listed
+laboratory components of a `symmetric_tensor` target off the predicted
+(B, N, 3, 3) tensor. The flat six-component tensor layout is deleted
+(`field_dim` now refuses a tensor target on a flat model). The yaml's
+`global_inputs:`, `boundary_inputs:` and `query_inputs:` blocks under
+`forward_kwargs:` map the declared names to dataset paths (the resolver
+already produced dict-valued kwargs). A recipe-local `StackScalarFields`
+transform stacks component fields into one zero-padded (N, 3) vector, so
+OLBC elasticity's `bc_disp_x/y` and `bc_trac_x/y` reach ISLA as ONE
+rank-1 `bc_displacement` and ONE rank-1 `bc_traction`; DeepJEB++'s
+`bc_load` (already (N, 3)) is declared rank 1 in place of its normal
+component and magnitude; the constant laboratory frames become two named
+rank-1 globals (`frame_x`, `frame_y`). Every ISLA yaml of the recipe and
+of `results/campaigns_2026-09-22` was rewritten (the leak diagnostics
+keep their absolute coordinates as a three-channel rank-0 input).
+
+**Cluster.** The running campaigns import the pinned snapshots
+`code_ref` and `recipe_globin`, whose yamls speak the old API, and chain
+links re-import them every four hours, so neither was touched. New
+snapshots `code_v2` (a copy of `code_ref` with `experimental/nn/isla`
+removed and only the `experimental/models/isla` package files and the
+models `__init__` added) and `recipe_v2` (a copy of `recipe_globin` with
+the recipe source changes applied as a patch onto the pinned files and the
+ISLA yamls replaced) were created and import-checked on a CPU-partition
+job; no training lane was launched. New lanes point their `code` column
+at `code_v2` and their recipe at `recipe_v2`.
+
+**Book.** @sec-isla-heads is now "fields of any rank from an equivariant
+basis" with the pseudotensor note and the input-side rule
+(@sec-isla-inputs-rank); @sec-arch-head states the general head and the
+coefficient counts; the notation and switches tables, the seed stage and
+the relational invariants carry the new widths; @sec-using-config and
+@sec-using-inputs show the yaml; the design-decision ledger
+(@tbl-principled-ledger) gains the row "a component is a view of a
+tensor, never a channel"; the status chapter's tree and ledger gain
+RANK-IO (DONE). The tensor-head lanes of `kernel/tn` (TENSOR-HEAD) were
+launched under the old API and keep running on `code_ref`; their
+elasticity arm still reads the boundary components as scalars, and the
+rerun under `code_v2` with rank-1 boundary inputs is the next lane to
+schedule.

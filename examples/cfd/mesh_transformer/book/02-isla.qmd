@@ -70,14 +70,19 @@ fields at query points.** Per case, the inputs are:
   PDE, such as a diffusivity, a Reynolds number or a far-field speed. They
   are appended to the seed of every token. The surface tasks of this book
   have $S = 0$; the AirfRANS interior task has $S = 1$, the inlet speed.
-- Optionally, per-cell boundary data (`boundary_scalars`: whatever a
-  boundary condition prescribes at each cell) and per-query scalars
-  (`query_scalars`: in this book the signed distance to the wall for
-  interior queries).
+- Optionally, per-cell boundary data (`boundary_inputs`: whatever a
+  boundary condition prescribes at each cell, as named fields of declared
+  tensor rank: a condition tag or a Dirichlet trace at rank 0, a prescribed
+  traction at rank 1, a prescribed stress at rank 2) and per-query fields
+  (`query_inputs`: in this book the signed distance to the wall for
+  interior queries, at rank 0). A field of rank 1 or 2 enters only through
+  its invariants against the token's own directions
+  (@sec-isla-inputs-rank).
 
-The outputs are one or more scalar fields (surface pressure, in every
-surface result of the book) and one or more vector fields (wall shear
-stress) at query points. In ISLA the queries *are* the surface sample and
+The outputs are named fields of declared rank at the query points: scalar
+fields (surface pressure, in every surface result of the book), vector
+fields (wall shear stress), and tensors of rank 2 to 4 where a problem asks
+for them (a stress tensor). In ISLA the queries *are* the surface sample and
 each point receives its own prediction; on the interior task, query points
 off the surface join the sample as tokens (@sec-interior-query-tokens).
 
@@ -117,16 +122,27 @@ plt.show()
 ```
 
 ::: {.callout-note collapse="true" title="Tensor shapes and keyword names"}
-Every constructor argument and every `forward` input is keyword-only.
-`points` (batch, $N$, 3), `normals` (batch, $N$, 3), `measure_weights`
-(batch, $N$), `global_vectors` (batch, $K$, 3; a (batch, 3) tensor is
-accepted when $K = 1$), `global_scalars` (batch, $S$), `boundary_scalars`
-(batch, $N$, `n_boundary_scalars`), and for off-surface prediction
-`query_points`, `query_normals`, `query_scalars`. The output is (batch,
-tokens, `out_scalars` + 3 · `out_vectors`). The constructor counts
-`n_global_vectors` (default 1) and `n_global_scalars` (default 0) fix $K$
-and $S$. The fused geometry kernel is one-vector only and raises otherwise
-(@sec-arch-switches).
+Every constructor argument and every `forward` input is keyword-only, and
+every field other than the geometry is *named* and carries a declared
+tensor rank. The constructor takes `outputs`, `global_inputs`,
+`boundary_inputs` and `query_inputs`, each a mapping from a field name to
+a rank spec: an integer rank (0 scalar, 1 vector, 2 rank-2 tensor, ...)
+or a mapping `{rank, symmetric, parity, channels}` (`symmetric` for a
+fully symmetric tensor; `parity: odd` for a pseudotensor output; `channels`
+to pack several independent scalars, such as a standardized parameter
+vector, under one rank-0 name). `forward` takes `points` (batch, $N$, 3),
+`normals` (batch, $N$, 3), `measure_weights` (batch, $N$), and the same
+four names as mappings from field name to tensor: a rank-1 global input is
+(batch, 3), a rank-0 one (batch,) or (batch, channels); a per-cell or
+per-query field is (batch, $N$), (batch, $N$, 3) or (batch, $N$, 3, 3) by
+rank; for off-surface prediction `query_points`, `query_normals` and
+`query_inputs` over the queries. The output is a dictionary keyed by the
+output names, each of shape (batch, tokens, 3, ..., 3) with as many
+trailing axes as its rank. The $K$ rank-1 global inputs are the global
+directions; the fused geometry kernel is written for $K = 1$ and no rank-1
+or rank-2 per-token inputs, and the model falls back to the eager region
+otherwise (@sec-arch-switches). The class is
+`physicsnemo.experimental.models.ISLA`.
 :::
 
 ## Idea 1: every sum over the boundary is a quadrature rule {#sec-isla-quadrature}
@@ -279,7 +295,7 @@ plt.show()
 ::: {.callout-note collapse="true" title="Code correspondence"}
 `gauge` is $L$; `r` is $r_i$; `n_hat`, `g_hat` are the unit normal and
 global directions; `log_w` is $\ell_i$; `invariants` is the seed $s_i$
-(`_seed_invariants` in `physicsnemo/experimental/nn/isla/model.py`). The
+(`_seed_invariants` in `physicsnemo/experimental/models/isla/model.py`). The
 magnitude $\lvert g_k \rvert$ is discarded: no fixed power of a global
 vector's magnitude is a physical law (a pressure coefficient is degree zero
 in the far-field speed, a dimensional pressure degree two), so a magnitude
@@ -540,32 +556,43 @@ The pooled invariants are projected *after* pooling, which is exact because
 the projection is affine and $\pi_{is}$ sums to one; the identity and the
 memory it saves are in @sec-arch-layer.
 
-## Idea 6: vectors from an equivariant basis {#sec-isla-heads}
+## Idea 6: fields of any rank from an equivariant basis {#sec-isla-heads}
 
-**The network's state is made of invariants, so a vector output has to be
-assembled from vectors that rotate with the body, with invariant
-coefficients.** A single linear head on the normalized final state produces
-the scalar outputs and, for each vector output, $4 + 3K$ coefficients
-(seven with one global direction):
+**The network's state is made of invariants, so an output of tensor rank
+$r$ has to be assembled from tensor products of $r$ vectors that rotate
+with the body, with invariant coefficients.** A single linear head on the
+normalized final state produces every output's coefficients; an output
+declared with rank $r$ is the contraction of its coefficients with products
+of $r$ vectors from the token's basis,
 
 $$
-[\,p_i;\ c_i\,] = W_h\, \mathrm{LN}(h_i), \qquad
-v_i = \sum_{j} c_{ij}\, B_{ij}, \qquad
-B_i = \big\{\hat g_1, \dots, \hat g_K,\ \hat n_i,\ \hat u_i,\
-e_\theta(\hat u_i, \hat n_i),\ e_\phi(\hat u_i, \hat n_i),\
-e_\theta(\hat u_i, \hat g_k),\ e_\phi(\hat u_i, \hat g_k)\big\}.
+c_i = W_h\, \mathrm{LN}(h_i), \qquad
+T_i = \sum_{j_1 \dots j_r} c_{i\,j_1 \dots j_r}\,
+t_{i j_1} \otimes \dots \otimes t_{i j_r} \;+\; \text{isotropic terms}, \qquad
+\{t_{ij}\} = \big\{\hat g_1, \dots, \hat g_K,\ \hat n_i,\ \hat u_i,\
+e_\theta(\hat u_i, \hat n_i),\ e_\theta(\hat u_i, \hat g_k)\big\}.
 $$
 
-Three of the basis vectors are directions the token already has: the global
-direction(s), its own normal, and $\hat u_i$, the **radial** direction from
-the token's own soft anchor to the token (a separate routing softmax assigns
-the token to slices and $u_i = r_i - \sum_s \beta_{is} z_s$; a difference of
-positions, so no center appears). These already span space generically. The
-complements $e_\theta(\hat u, \hat a)$, the part of $-\hat a$ orthogonal to
-$\hat u$, and $e_\phi = \hat u \times e_\theta$ keep the expansion well
-conditioned where the three are nearly coplanar, and they are left
+Rank 0 is the coefficient itself (pressure); rank 1 is a vector over the
+$m = 2K + 3$ basis vectors (wall shear stress; five coefficients with one
+global direction); rank 2 is a matrix over their $m^2$ outer products plus
+the identity, or over the $m(m+1)/2$ symmetrized products plus the identity
+for a symmetric spec (a stress tensor: sixteen coefficients with one global
+direction); ranks 3 and 4 follow the same rule, with the three products of
+Kronecker deltas as the isotropic terms of rank 4 (their symmetric sum for
+a symmetric spec). Three of the basis vectors are directions the token
+already has: the global direction(s), its own normal, and $\hat u_i$, the
+**radial** direction from the token's own soft anchor to the token (a
+separate routing softmax assigns the token to slices and $u_i = r_i -
+\sum_s \beta_{is} z_s$; a difference of positions, so no center appears).
+These already span space generically. The complements $e_\theta(\hat u,
+\hat a)$, the part of $-\hat a$ orthogonal to $\hat u$, keep the expansion
+well conditioned where the three are nearly coplanar, and they are left
 unnormalized so that they vanish smoothly where $\hat u \parallel \hat a$
-and no direction field on the sphere has to be combed.
+and no direction field on the sphere has to be combed. Every basis vector
+is a *true* vector (no cross product among them), so every product is a
+true tensor and the output transforms as $R^{\otimes r}$ under rotations
+*and* reflections; the head is O(3)-covariant, not only SO(3)-covariant.
 
 ```{python}
 #| label: fig-isla-basis
@@ -598,45 +625,53 @@ ax.text(0.2, -1.15, r"$v_i = \sum_j c_{ij} B_{ij}$: learned invariant coefficien
 plt.show()
 ```
 
-::: {.callout-note collapse="true" title="Reflections"}
-The rotation contract is for proper rotations. Every backbone invariant is a
-norm or dot product, so *scalar* outputs are invariant under reflections
-too; but $e_\phi$ is a cross product and flips sign under a mirror while its
-coefficient does not, so the head is covariant under proper rotations only.
+::: {.callout-note collapse="true" title="Reflections and pseudotensors"}
+Every backbone invariant is a norm or a dot product of true vectors, so
+every *scalar* output is invariant under reflections as well as rotations,
+and every even-parity output is a true tensor. A quantity that flips sign
+under a mirror (a vorticity, a magnetic field, a torque) is a pseudotensor
+and is declared with `parity: odd`: its basis is the set of products with
+exactly one *pseudovector* factor, the cross products $\hat g_k \times \hat
+n_i$, $\hat g_k \times \hat u_i$, $\hat n_i \times \hat u_i$ of the
+primary true vectors ($\binom{K+2}{2}$ of them; three with one global
+direction), plus the Levi-Civita symbol at rank 3. Such an output
+transforms as $\det(R)\, R^{\otimes r}$, which is the pseudotensor law. The
+vector head of the lanes trained before 2026-09-22 carried both kinds of
+basis vector in one output and was therefore covariant under proper
+rotations only; the parity is now a declaration, and a true vector no
+longer pays for a pseudovector's basis.
 :::
 
-**The contract has a clause for outputs that are components.** A scalar
-head can represent only invariants of the input vector set. Pressure, von
-Mises stress and plastic strain are invariants and need nothing; a stress
-component $\sigma_{ij} = e_i^{\mathsf T} \sigma\, e_j$ is an invariant
-of the set *augmented with the frame vectors* $e_i, e_j$, and is
-representable only when that frame is an input, or when the head produces
-the tensor $\sigma$ itself and the components are read off afterwards. The
-principled route for a tensor-valued target is the second: a **symmetric
-rank-2 tensor head** (`out_tensors`, 2026-09-22) that expands each output
-in the symmetrized outer products of the head's *true* basis vectors
-$\{\hat g_k, \hat n_i, \hat u_i, e_\theta(\hat u_i, \hat n_i),
-e_\theta(\hat u_i, \hat g_k)\}$ together with the identity,
+**The contract has a clause for outputs that are components: a component
+is only ever a view of a tensor.** A scalar head can represent only
+invariants of the input vector set. Pressure, von Mises stress and plastic
+strain are invariants and need nothing; a stress component $\sigma_{ij} =
+e_i^{\mathsf T} \sigma\, e_j$ is an invariant of the set *augmented with
+the frame vectors* $e_i, e_j$, and is representable only when that frame is
+an input, or when the head produces the tensor $\sigma$ itself and the
+components are read off afterwards. The principled route for a
+tensor-valued target is the second: the target is declared with its rank
+(`stress: {rank: 2, symmetric: true}`), the head expands it in the
+symmetrized outer products of the true basis vectors together with the
+identity,
 
 $$
 \sigma_i = \sum_{j \le k} c_{ijk}\, \tfrac{1}{2}\big(t_{ij} t_{ik}^{\mathsf T} + t_{ik} t_{ij}^{\mathsf T}\big) + c_{i0}\, I,
 $$
 
-with invariant coefficients from the same linear head ($m(m+1)/2 + 1$ of
-them per tensor, $m = 2K + 3$; seven with no global direction). The
-$e_\phi$ cross products are left out of this basis on purpose: a product of
-two true vectors is a true tensor, so $\sigma$ transforms as
-$R\,\sigma\,R^{\mathsf T}$ under proper *and* improper rotations, a
-stronger contract than the vector heads carry, and no laboratory frame
-enters anywhere. The laboratory components the dataset stores are then
-read off the predicted tensor, and the tests hold this to $10^{-12}$ in
-float64 for random rotations and mirrors. The interim route, which was the
-one measured first, is the frame itself as global vectors ($K = 2$ in the
-plane, $K = 3$ in space); it also keeps the contract intact, since rotating
-the body and the frame together leaves the components unchanged, but it
-asks the network to learn the frame's effect from data. The clause was
-measured on PLAID Tensile2d with the frame route, where the targets are
-the in-plane stress components: with
+with $m(m+1)/2 + 1$ invariant coefficients from the same linear head
+(seven with no global direction, sixteen with one), and the laboratory
+components the dataset stores are read off the predicted tensor by the
+recipe (`symmetric_tensor` targets with a `components` mapping). No
+laboratory frame enters anywhere, and the tests hold the covariance to
+$10^{-12}$ in float64 for random rotations and mirrors, for every rank and
+parity the class admits. The interim route, which was the one measured
+first, is the frame itself as global directions ($K = 2$ in the plane, $K =
+3$ in space); it also keeps the contract intact, since rotating the body
+and the frame together leaves the components unchanged, but it asks the
+network to learn the frame's effect from data. The clause was measured on
+PLAID Tensile2d with the frame route, where the targets are the in-plane
+stress components: with
 no frame ISLA fits the training set and its validation error is 20 to 60
 times GeoTransolver's (memorization); with the load axis alone every field
 is repaired except $\sigma_{12}$, which is odd under the in-plane
@@ -651,6 +686,42 @@ coordinates and has no such clause, which is why the aerodynamic datasets,
 whose outputs are a true scalar and a vector, never exposed it. The tensor
 head against the frame route on the same two datasets is preregistered in
 @sec-nb-tensor-head-prereg.
+
+### Inputs of any rank enter through invariants {#sec-isla-inputs-rank}
+
+**The same rule runs backwards at the input: a boundary field of rank 1
+or 2 reaches the network only through its invariants against the
+directions the token already has.** A per-cell vector $v_i$ (a prescribed
+traction, an applied load) contributes to the token's seed its cosines with
+the token's frame, $v_i \cdot \hat n_i$ and $v_i \cdot \hat g_k$, its norm
+$\lvert v_i \rvert$ and its dot products with the token's other vector
+inputs; and inside every slice layer, where the token-to-anchor direction
+$\hat\rho_{is}$ exists, it contributes $v_i \cdot \hat\rho_{is}$ beside the
+$\hat n_i \cdot \hat\rho_{is}$ and $\hat g_k \cdot \hat\rho_{is}$ of
+@sec-isla-relational: an input vector is treated exactly as the normal is,
+by one helper that contracts every per-token vector with the anchor
+direction. A per-cell rank-2 field $T_i$ (a prescribed stress) contributes
+the bilinear contractions $a^{\mathsf T} T_i b$ over the frame vectors $a,
+b \in \{\hat n_i, \hat g_k\}$, $\operatorname{tr} T_i$ and $\lVert T_i
+\rVert_F$ to the seed, and $\hat\rho^{\mathsf T} T_i \hat\rho$,
+$\hat\rho \cdot T_i \hat n_i$ and $\hat\rho \cdot T_i \hat g_k$ in the
+layers (the last two are the derived true vectors $T_i \hat n_i$, $T_i
+\hat g_k$ contracted with the anchor direction, so they ride on the same
+helper). Only true vectors appear on the input side, no cross products, so
+every input invariant is unchanged by a reflection and pseudotensor inputs
+are refused; a rank-0 input is the scalar itself. The per-query fields of
+the interior modes enter the same way through their own embedding, and the
+global inputs are the special case where a rank-1 field is a direction
+shared by every token (it is normalized and joins the head basis) and a
+rank-0 field a parameter appended to every seed. The cost is one scalar
+per slice per extra vector in the geometry region, which is why the fused
+kernel, written for the normal and one global direction, hands a model with
+rank-1 or rank-2 per-token inputs to the eager region until it is extended
+(@sec-arch-switches). Planar datasets that store a boundary vector
+component by component (OLBC elasticity's prescribed displacement and
+traction) stack the components into one rank-1 field in the dataset
+pipeline (`StackScalarFields`) rather than feeding laboratory components as
+scalars, which would leak the frame.
 
 ## The forward pass on one page {#sec-isla-forward}
 
@@ -685,10 +756,13 @@ the subject of @sec-invariances.
 
 **Each contract is a property of the code, verified in double precision on
 random weights and a random anisotropic point cloud, not a property of a
-trained checkpoint.** The tests live in `test/experimental/nn/test_isla.py`
-and `test_isla_global_inputs.py`; the fixture is a 3-layer, 32-slice,
-width-64 model in float64 on 500 points with random normals, global vector
-input and weights.
+trained checkpoint.** The tests live in
+`test/experimental/models/isla/test_isla.py`, `test_isla_global_inputs.py`,
+`test_isla_heads.py` (every output rank and parity) and
+`test_isla_inputs.py` (rank-1 and rank-2 inputs, geometry and fields
+transformed together); the fixture is a 3-layer, 32-slice, width-64 model
+in float64 on 500 points with random normals, global direction and
+weights.
 
 | contract | test | tolerance |
 |---|---|---|

@@ -3,7 +3,8 @@
 This directory holds the research record of ISLA (Invariant Slice
 Attention), the equivariant slice-attention surrogate for steady
 boundary-value PDE problems that lives in
-`physicsnemo/experimental/nn/isla/`. The trainable recipe is the unified
+`physicsnemo/experimental/models/isla/`
+(`from physicsnemo.experimental.models import ISLA`). The trainable recipe is the unified
 external-aerodynamics recipe under
 `examples/cfd/external_aerodynamics/unified_external_aero_recipe/`
 (model configurations `isla_*.yaml`).

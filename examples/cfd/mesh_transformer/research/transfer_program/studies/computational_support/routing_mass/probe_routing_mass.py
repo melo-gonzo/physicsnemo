@@ -30,7 +30,7 @@ from utils import recursive_to_device  # noqa: E402
 from physicsnemo import datapipes  # noqa: F401,E402  (registers ${dp:...})
 from physicsnemo.distributed import DistributedManager  # noqa: E402
 from physicsnemo.utils import load_checkpoint  # noqa: E402
-import physicsnemo.experimental.nn.isla.model as isla_model  # noqa: E402
+import physicsnemo.experimental.models.isla.model as isla_model  # noqa: E402
 
 REC = {"a": [], "r": [], "d": []}
 _orig_softmax = isla_model._softmax_over_points

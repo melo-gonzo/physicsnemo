@@ -32,4 +32,4 @@ sed -e 's/#SBATCH -J hl-udrv-eval$/#SBATCH -J camp-a-eval/' \
 bash -n transfer/campaign_a_aga.sbatch && bash -n transfer/campaign_a_eval_aga.sbatch && echo syntax-ok
 grep -nE '^#SBATCH -J|^CODE=|^RECIPE=|campaign_a_lanes|camp-a-\$|campa_resubmit' transfer/campaign_a_aga.sbatch | head -8
 grep -nE '^#SBATCH -J|PYTHONPATH|campaign_a_lanes|recipe_support' transfer/campaign_a_eval_aga.sbatch | head -6
-grep -c support_tokens code_support/physicsnemo/experimental/nn/isla/model.py
+grep -c support_tokens code_support/physicsnemo/experimental/models/isla/model.py

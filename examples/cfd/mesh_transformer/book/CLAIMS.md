@@ -252,8 +252,8 @@ OLBC (512 cases) and lug (300 / 600 / 1,200) rows interim.
   translation covariance; query-set independence (in the query_independent
   configuration); geometric-scale equivariance when the similarity gauge is
   on. Source
-  `physicsnemo/experimental/nn/isla/model.py`, tests
-  `test/experimental/nn/test_isla.py` (33 tests).
+  `physicsnemo/experimental/models/isla/model.py`, tests
+  `test/experimental/models/isla/test_isla.py` (33 tests; moved 2026-09-22).
 - **GeoTransolver**: Transolver-family soft-slice transformer with a
   geometry encoder and ball-query local context (`include_local_features`
   off in this program), raw centered coordinates + normals per point,
