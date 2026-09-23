@@ -25367,3 +25367,45 @@ launched under the old API and keep running on `code_ref`; their
 elasticity arm still reads the boundary components as scalars, and the
 rerun under `code_v2` with rank-1 boundary inputs is the next lane to
 schedule.
+
+## 2026-09-22 — Preregistration, RANK-IO: the rank-spec interface in use; OLBC elasticity with prescribed displacement and traction as rank-1 boundary inputs and the stress as a symmetric rank-2 output, and DeepJEB++ with the load traction as a rank-1 input {#sec-nb-rankio-prereg}
+
+**Setting.** ISLA now declares every input and output as a named field of
+a stated tensor rank (@sec-nb-rank-spec-api; `physicsnemo.experimental.models.ISLA`).
+Two of the running campaigns fed frame-dependent data as scalars: on OLBC
+elasticity the prescribed displacement and traction entered as their
+laboratory-frame components, and on DeepJEB++ the load traction entered as
+its normal projection and magnitude. The TENSOR-HEAD lanes (group `tn`,
+@sec-nb-tensor-head-prereg) made the *output* frame-free while the inputs
+stayed as scalars. This campaign closes the input side with the general
+mechanism: a rank-1 boundary field enters through its dot products with the
+normal and the global directions at the seed and with the point-to-anchor
+direction in every slice block, exactly as the normal itself does.
+
+**Lanes** (group `v2`, snapshot `code_v2` with the pinned recipe patched to
+`recipe_v2`; the running campaigns keep `code_ref`): ISLA R1 (384 x 12,
+cosine, 5e-4, eager region since the fused kernel does not yet take
+per-token vector inputs) on OLBC elasticity with `bc_displacement` and
+`bc_traction` as rank-1 inputs and `stress` as a symmetric rank-2 output,
+K = 0, 512 and 2,048 cases, two seeds, 500 epochs; and on DeepJEB++ with
+`bc_load` as a rank-1 input at 1,024 clean brackets (125 epochs, equal
+steps to the `jb` ladder), two seeds.
+
+**Comparisons and bars** (float32 relative L2 on the same test sets).
+OLBC elasticity: (a) against the `tn` lanes (tensor output, scalar inputs)
+at the same rungs isolates the vector-input channel; (b) against the `ol`
+lanes (frame vectors as inputs, scalar outputs) isolates head plus inputs
+together; (c) against GeoTransolver-512. Bars: the rank-1 inputs improve
+on the `tn` lanes by more than the two-seed spread on the stresses and the
+displacement = "vector inputs pay"; within the spread = "the scalar
+components sufficed on this fixed-frame dataset" (both are informative:
+the dataset's condition tags are still per laboratory component, so a
+frame remains implicit in the labels). DeepJEB++: against `jb` ISLA R1 at
+1,024 brackets on von Mises and displacement, same bar. Also recorded: the
+eager-region cost against the fused `jb` lanes (step time, memory).
+
+**Predictions.** OLBC elasticity: vector inputs pay on the displacement
+(0.55) and are within spread on the stresses (0.5); the combined
+frame-free configuration is within 10% of the frame-input `ol` lanes
+(0.6). DeepJEB++: within spread (0.6; the load direction is already the
+global vector, so the traction adds little beyond the normal projection).

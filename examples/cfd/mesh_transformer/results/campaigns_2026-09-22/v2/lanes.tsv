@@ -1,0 +1,7 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	v2	v2_elasticity_isla_r1_rankio_n512_seed42	olbc_elasticity_tensor	isla_olbc_elasticity_tensor	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v2
+1	v2	v2_elasticity_isla_r1_rankio_n512_seed43	olbc_elasticity_tensor	isla_olbc_elasticity_tensor	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v2
+2	v2	v2_elasticity_isla_r1_rankio_n2048_seed42	olbc_elasticity_tensor	isla_olbc_elasticity_tensor	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v2
+3	v2	v2_elasticity_isla_r1_rankio_n2048_seed43	olbc_elasticity_tensor	isla_olbc_elasticity_tensor	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v2
+4	v2	v2_jb_isla_r1_rankio_n1024_seed42	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean_n1024 val_split=test_clean +training.val_interval=5 training.num_epochs=125	5e-4	42	200000	code_v2
+5	v2	v2_jb_isla_r1_rankio_n1024_seed43	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean_n1024 val_split=test_clean +training.val_interval=5 training.num_epochs=125	5e-4	43	200000	code_v2
