@@ -22,7 +22,7 @@ from domain_transforms import SetConstantCellField
 from tensordict import TensorDict
 from utils import initialize_from_checkpoint
 
-from physicsnemo.experimental.nn.isla import ISLA
+from physicsnemo.experimental.models import ISLA
 from physicsnemo.mesh import Mesh
 from physicsnemo.utils.checkpoint import save_checkpoint
 
@@ -43,18 +43,32 @@ def test_constant_cell_field_shape_value_and_dtype():
 
 
 def test_constant_cell_field_survives_cell_slicing():
-    m = SetConstantCellField(field_name="cond", value=1.0)(_patch()).slice_cells(torch.tensor([1]))
+    m = SetConstantCellField(field_name="cond", value=1.0)(_patch()).slice_cells(
+        torch.tensor([1])
+    )
     assert torch.equal(m.cell_data["cond"], torch.ones(1, 1))
 
 
 def test_initialize_from_checkpoint_loads_weights_only(tmp_path):
     torch.manual_seed(0)
-    src = ISLA(hidden=32, n_layers=2, n_slices=8)
+    src = ISLA(
+        outputs={"p": 0, "v": 1},
+        global_inputs={"g": 1},
+        hidden=32,
+        n_layers=2,
+        n_slices=8,
+    )
     save_checkpoint(str(tmp_path), models=src, epoch=7)
     saved = sorted(tmp_path.glob("*.mdlus"))
     assert saved, "save_checkpoint wrote no .mdlus file"
     torch.manual_seed(1)
-    dst = ISLA(hidden=32, n_layers=2, n_slices=8)
+    dst = ISLA(
+        outputs={"p": 0, "v": 1},
+        global_inputs={"g": 1},
+        hidden=32,
+        n_layers=2,
+        n_slices=8,
+    )
     before = {k: v.clone() for k, v in dst.state_dict().items()}
     assert any(not torch.equal(before[k], v) for k, v in src.state_dict().items())
     report = initialize_from_checkpoint(dst, str(tmp_path))
@@ -64,9 +78,21 @@ def test_initialize_from_checkpoint_loads_weights_only(tmp_path):
 
 
 def test_initialize_from_checkpoint_rejects_architecture_mismatch(tmp_path):
-    src = ISLA(hidden=32, n_layers=2, n_slices=8)
+    src = ISLA(
+        outputs={"p": 0, "v": 1},
+        global_inputs={"g": 1},
+        hidden=32,
+        n_layers=2,
+        n_slices=8,
+    )
     save_checkpoint(str(tmp_path), models=src, epoch=1)
-    other = ISLA(hidden=48, n_layers=2, n_slices=8)
+    other = ISLA(
+        outputs={"p": 0, "v": 1},
+        global_inputs={"g": 1},
+        hidden=48,
+        n_layers=2,
+        n_slices=8,
+    )
     try:
         initialize_from_checkpoint(other, str(tmp_path))
     except Exception:

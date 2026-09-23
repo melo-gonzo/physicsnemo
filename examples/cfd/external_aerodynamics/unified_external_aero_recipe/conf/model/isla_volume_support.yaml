@@ -29,7 +29,7 @@
 # the transfer program's computational-support study.
 
 input_type: tensors
-output_type: tensors
+output_type: fields
 # Learning rate pinned at ISLA's protocol rate (the recipe default of 3e-3
 # collapses the relative frame; book notebook: lrref-verdict; see isla_surface.yaml).
 training:
@@ -39,17 +39,26 @@ forward_kwargs:
   points: boundaries.vehicle.cell_centroids
   normals: boundaries.vehicle.cell_data.normals
   measure_weights: boundaries.vehicle.cell_data.areas
-  global_vectors: global_data.U_inf_dir   # the one global vector input of external aerodynamics: the freestream direction
+  global_inputs:
+    freestream: global_data.U_inf_dir   # the one global direction of external aerodynamics
   support_points: boundaries.support.points
   support_normals: boundaries.support.point_data.sdf_normals
-  support_scalars: boundaries.support.point_data.sdf
+  support_inputs:
+    sdf: boundaries.support.point_data.sdf
   query_points: interior.points
   query_normals: interior.point_data.sdf_normals
-  query_scalars: interior.point_data.sdf
+  query_inputs:
+    sdf: interior.point_data.sdf
 model:
-  _target_: physicsnemo.experimental.nn.ISLA
-  out_scalars: 2                 # pressure, nut (DrivAerML volume targets)
-  out_vectors: 1                 # velocity
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs:                       # the dataset's targets, by name and tensor rank
+    velocity: 1
+    pressure: 0
+    nut: 0
+  global_inputs:
+    freestream: 1
+  query_inputs:
+    sdf: 0                       # signed distance at support and query points
   hidden: 192
   n_layers: 12
   n_slices: 256
@@ -60,15 +69,11 @@ model:
   # not load and the support-token lanes have not been re-run since.
   scale_mode: rms_distance
   geo_checkpoint: true
-  # Geometry kernel: null = automatic (2026-09-19 ruling): the exact fused Triton kernel
-  # wherever it can run (CUDA, one global vector, <= 1024 slices; about a third of the eager
-  # step time and memory at 200,000 cells), the eager PyTorch region otherwise. Force with
-  # `eager` or `fused`.
+  # Geometry kernel: null = automatic (2026-09-19 ruling); see isla_surface.yaml.
   geo_kernel: null
   # Support/passive split (default off in the class; on here).
   query_independent: true
   support_tokens: true
   n_decoder_layers: 12          # SUPPORT-12; set 4 for the SUPPORT-4 arm
-  n_query_scalars: 1            # signed distance at support and query points
   query_scalar_scale: length
   query_mass: source_total      # support mass invariant to source refinement

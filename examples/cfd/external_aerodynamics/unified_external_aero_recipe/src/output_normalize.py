@@ -25,6 +25,10 @@ Different model output conventions need different unpacking:
 - **Tensor output** (e.g. GeoTransolver / Transolver / FLARE): a ``(B, N, C)``
   tensor whose channels are concatenated in ``target_config`` order; we
   slice by per-field dim count and squeeze the trailing 1 for scalars.
+- **Fields output** (ISLA): a ``{name: tensor}`` mapping keyed by the target
+  names, each tensor of its declared rank -- ``(B, N)`` for a scalar,
+  ``(B, N, 3)`` for a vector, ``(B, N, 3, 3)`` for a symmetric tensor, of which
+  the listed laboratory components are read off.
 
 Kept in its own module (separate from ``train.py``) so tests can exercise
 the slicing logic without paying the cost of importing tensorboard.
@@ -32,6 +36,7 @@ the slicing logic without paying the cost of importing tensorboard.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Literal, TypeAlias
 
 import torch
@@ -42,7 +47,7 @@ from utils import (
     FieldType,
     field_dim,
     field_kind,
-    tensor_component_indices,
+    select_tensor_components,
     tensor_components,
 )
 
@@ -50,24 +55,25 @@ from physicsnemo.datapipes.keys import as_nested_key, format_leaf_keys
 from physicsnemo.mesh import Mesh
 
 ### Recipe-wide I/O contract literal: every model declares whether its
-### `forward()` consumes / returns Mesh-like objects or plain `(B, N, C)`
-### tensors. The collate, output normalizer, and forward-pass dispatch
-### all key off this same enum.
-IOType: TypeAlias = Literal["mesh", "tensors"]
+### `forward()` consumes / returns Mesh-like objects, plain `(B, N, C)`
+### tensors, or (output side only) a mapping of named fields of declared
+### rank. The collate, output normalizer, and forward-pass dispatch all key
+### off this same enum.
+IOType: TypeAlias = Literal["mesh", "tensors", "fields"]
 
 
 def require_output_type(cfg: DictConfig) -> IOType:
     """Return the model's declared ``output_type``, or raise if missing/invalid.
 
     Both entry points (``train.py`` / ``infer.py``) require the model YAML
-    to declare ``output_type`` (``"mesh"`` or ``"tensors"``) so the forward
-    output can be unpacked; this is the shared validation.
+    to declare ``output_type`` (``"mesh"``, ``"tensors"`` or ``"fields"``) so
+    the forward output can be unpacked; this is the shared validation.
     """
     output_type = cfg.get("output_type", None)
-    if output_type not in ("mesh", "tensors"):
+    if output_type not in ("mesh", "tensors", "fields"):
         raise ValueError(
             f"Model YAML must declare `output_type` as one of 'mesh', "
-            f"'tensors'; got {output_type!r}."
+            f"'tensors', 'fields'; got {output_type!r}."
         )
     return output_type
 
@@ -83,10 +89,8 @@ def split_concat_by_target(
     ``"scalar"`` field eats one channel and the trailing dim is squeezed
     (so the leaf is shape ``(B, N)``); a ``"vector"`` field eats
     ``n_spatial_dims`` channels and keeps its trailing dim (leaf shape
-    ``(B, N, n_spatial_dims)``); a symmetric-tensor field eats the model's
-    six components ``xx, yy, zz, xy, xz, yz`` and keeps only the listed ones,
-    in the YAML's component order (leaf shape ``(B, N, n_listed)``, matching
-    :func:`forward_kwargs.extract_targets`).
+    ``(B, N, n_spatial_dims)``). A symmetric-tensor target has no flat layout
+    and raises (``field_dim``): it needs a ``"fields"`` model.
 
     Args:
         tensor: Concatenated output tensor, shape ``(B, N, C)`` where
@@ -118,11 +122,8 @@ def split_concat_by_target(
     for name, ftype in target_config.items():
         dim = field_dim(ftype, n_spatial_dims)
         slice_ = tensor[..., idx : idx + dim]
-        kind = field_kind(ftype)
-        if kind == "scalar":
+        if field_kind(ftype) == "scalar":
             slice_ = slice_.squeeze(-1)
-        elif kind == "symmetric_tensor":
-            slice_ = slice_[..., tensor_component_indices(ftype)]
         out.set(as_nested_key(name), slice_)
         idx += dim
 
@@ -154,6 +155,46 @@ def explode_tensor_targets(
     return out
 
 
+def select_fields_by_target(
+    output: Mapping[str, torch.Tensor], target_config: dict[str, FieldType]
+) -> TensorDict:
+    """Adapt a ``{name: tensor}`` model output into the per-field TensorDict.
+
+    The model's output names are the target names (the model YAML declares its
+    ``outputs:`` with the dataset's target names). A ``"scalar"`` target takes
+    the ``(B, N)`` field; a ``"vector"`` target the ``(B, N, 3)`` field; a
+    symmetric-tensor target reads its listed laboratory components off the
+    ``(B, N, 3, 3)`` field, in the YAML's component order (leaf shape
+    ``(B, N, n_listed)``, matching :func:`forward_kwargs.extract_targets`).
+
+    Raises:
+        KeyError: If a target name is missing from the output.
+        ValueError: If a field's shape does not match its declared type.
+    """
+    missing = [name for name in target_config if name not in output]
+    if missing:
+        raise KeyError(
+            f"Model output is missing target fields {missing!r}; "
+            f"available: {sorted(output)!r}."
+        )
+    any_field = output[next(iter(target_config))]
+    out = TensorDict({}, batch_size=any_field.shape[:2], device=any_field.device)
+    for name, ftype in target_config.items():
+        field = output[name]
+        kind = field_kind(ftype)
+        expected = {"scalar": 2, "vector": 3, "symmetric_tensor": 4}[kind]
+        if field.ndim != expected:
+            raise ValueError(
+                f"Output field {name!r} is declared {kind!r} and must have "
+                f"{expected} dims ((B, N{', 3' * (expected - 2)})), got shape "
+                f"{tuple(field.shape)}."
+            )
+        if kind == "symmetric_tensor":
+            field = select_tensor_components(field, ftype)
+        out.set(as_nested_key(name), field)
+    return out
+
+
 def normalize_output_to_tensordict(
     output: Any,
     target_config: dict[str, FieldType],
@@ -174,12 +215,16 @@ def normalize_output_to_tensordict(
     returns a ``(vol, surf)`` tuple; we take the non-None element
     automatically.
 
+    For ``output_type == "fields"``, the output is a ``{name: tensor}``
+    mapping keyed by the target names (ISLA); we select the targets via
+    :func:`select_fields_by_target`.
+
     Args:
         output: Raw model output. ``Mesh`` for ``output_type='mesh'``;
             ``Tensor`` (or DoMINO ``(vol, surf)`` tuple) for
-            ``output_type='tensors'``.
-        target_config: Ordered ``{name: "scalar" | "vector"}`` mapping.
-        output_type: ``"mesh"`` or ``"tensors"``.
+            ``output_type='tensors'``; a mapping for ``output_type='fields'``.
+        target_config: Ordered ``{name: "scalar" | "vector" | tensor spec}`` mapping.
+        output_type: ``"mesh"``, ``"tensors"`` or ``"fields"``.
         n_spatial_dims: Vector-field dimensionality. Default 3.
 
     Returns:
@@ -236,5 +281,12 @@ def normalize_output_to_tensordict(
                 f"trailing channel dim (e.g. ``out.unsqueeze(-1)``)."
             )
         return split_concat_by_target(output, target_config, n_spatial_dims)
+
+    if output_type == "fields":
+        if not isinstance(output, Mapping):
+            raise TypeError(
+                f"output_type='fields' but model returned {type(output).__name__}"
+            )
+        return select_fields_by_target(output, target_config)
 
     raise ValueError(f"Unknown output_type {output_type!r}")

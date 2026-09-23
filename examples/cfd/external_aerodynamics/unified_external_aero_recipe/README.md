@@ -344,11 +344,12 @@ to set it above 1.
 
 ### ISLA (Invariant Slice Attention)
 
-`physicsnemo.experimental.nn.ISLA` is an equivariant slice-attention
+`physicsnemo.experimental.models.ISLA` is an equivariant slice-attention
 surrogate for steady boundary-value problems. A boundary sample (points,
-unit normals, quadrature measures, optional per-cell boundary scalars) and
-the problem's global inputs go in; fields on the boundary, or at interior
-query points, come out. Three contracts hold by construction rather than by
+unit normals, quadrature measures) and the problem's data as named fields of
+declared tensor rank (global, per-boundary-cell and per-query inputs) go in;
+named fields of declared rank come out (`output_type: fields`: the model
+returns `{name: tensor}` keyed by the dataset's target names). Three contracts hold by construction rather than by
 augmentation: rotation and translation covariance (the backbone sees only
 invariants of the per-point vector set; the frame is re-attached at the
 vector heads), measure-aware routing (slice states are quadrature-weighted
@@ -430,18 +431,29 @@ are unchanged.
 
 **Interior modes.** `query_tokens: true` admits the interior query points
 as interacting tokens carrying the SDF gradient as `query_normals` and the
-SDF as `query_scalars` (`n_query_scalars: 1`); this is the interior
+SDF as a rank-0 query input (`query_inputs: {sdf: 0}`); this is the interior
 reference (`isla_volume.yaml`). `query_independent: true` instead
 decodes queries passively through `n_decoder_layers` read blocks, and
 `support_tokens: true` adds a per-case computational support
-(`support_points` / `support_normals` / `support_scalars`) as interacting
+(`support_points` / `support_normals` / `support_inputs`) as interacting
 tokens next to the boundary (`isla_volume_support.yaml`).
 
-**General PDE inputs.** `n_global_vectors` (K >= 0 unit directions;
-`global_vectors` has shape `(B, K, 3)`), `n_global_scalars` (S >= 0 PDE
-parameters; `global_scalars` has shape `(B, S)`) and `n_boundary_scalars`
-(per-cell `boundary_scalars`). The freestream direction is the K = 1, S = 0
-instance.
+**Fields of declared rank.** The model YAML declares `outputs:` (the
+dataset's target names with their ranks: `pressure: 0`, `wss: 1`,
+`stress: {rank: 2, symmetric: true}`), `global_inputs:` (rank 1 = a global
+direction, normalized inside the model; rank 0 = a PDE parameter, with
+`channels` for a parameter vector), `boundary_inputs:` (per-cell fields of
+rank 0 to 2: a condition tag, a prescribed traction as a rank-1 field, a
+prescribed stress as a rank-2 field) and `query_inputs:` (per-query fields
+of rank 0 to 2). `forward_kwargs:` maps each declared name to a dataset
+path under the same block names (`global_inputs: {freestream:
+global_data.U_inf_dir}`). Every input enters through O(3)-invariants and
+every output leaves through an equivariant basis, so a target declared with
+a rank transforms as that rank; a symmetric-tensor target reads its listed
+laboratory components off the predicted tensor. The freestream direction is
+the one-global-direction instance. Planar datasets that store a boundary
+vector component by component stack it with `StackScalarFields`
+(`src/domain_transforms.py`).
 
 **Measured standing.** At the reporting protocol of 200,000 sampled cells
 and 435 DrivAerML training cases, float32 pressure relative L2 is 0.0444

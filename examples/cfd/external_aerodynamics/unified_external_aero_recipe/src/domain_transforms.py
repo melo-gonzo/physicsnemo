@@ -496,7 +496,7 @@ class PrefixPlusRandomSubsampleMesh(SubsampleMesh):
 class ScaleGlobalField(MeshTransform):
     r"""Multiply one global_data field by a constant factor (probe P2).
 
-    Applied to the global vector input only: ``U_inf_dir`` for ISLA (the
+    Applied to the global direction input only: ``U_inf_dir`` for ISLA (the
     recipe's unit direction, scaled to amplitude ``factor``) or ``U_inf`` for
     GeoTransolver (its physical-velocity global embedding).
     """
@@ -804,8 +804,8 @@ class SetConstantCellField(MeshTransform):
     YAML (e.g. ``0.0`` in the DrivAerML pipeline, ``1.0`` in the SHIFT-SUV
     pipelines) and rides along into ``boundaries.<name>.cell_data`` like
     ``normals``.  Transfer-program campaign C (T1, complete conditioning):
-    lets ISLA read it as a boundary scalar (``n_boundary_scalars=1`` with
-    ``forward_kwargs.boundary_scalars`` pointing at the field) and
+    lets ISLA read it as a rank-0 boundary input (``boundary_inputs: {cond: 0}``
+    with ``forward_kwargs.boundary_inputs.cond`` pointing at the field) and
     GeoTransolver / Transolver as an extra per-point functional channel
     (append the field to ``forward_kwargs.local_embedding`` and raise
     ``functional_dim`` by one).  A scalar is an invariant, so every ISLA
@@ -832,6 +832,66 @@ class SetConstantCellField(MeshTransform):
 
     def extra_repr(self) -> str:
         return f"cell_data[{self._field_name!r}] = {self._value}"
+
+
+@register()
+class StackScalarFields(MeshTransform):
+    r"""Stack named scalar fields into one vector field, zero-padded to ``n_components``.
+
+    ``fields: [bc_disp_x, bc_disp_y]`` (each ``(N,)`` or ``(N, 1)``) becomes
+    ``output_field`` of shape ``(N, 3)`` with a zero third component: how a planar
+    dataset that stored a boundary vector component by component presents it as
+    ONE rank-1 field to a model with tensor-valued inputs (ISLA's
+    ``boundary_inputs``). ``association`` is ``"cell_data"`` or ``"point_data"``.
+    The source fields are kept.
+    """
+
+    def __init__(
+        self,
+        fields: Sequence[str],
+        output_field: str,
+        association: str = "cell_data",
+        n_components: int = 3,
+    ) -> None:
+        super().__init__()
+        if association not in ("cell_data", "point_data"):
+            raise ValueError(
+                f"association must be 'cell_data' or 'point_data', got {association!r}"
+            )
+        self._fields = [str(f) for f in fields]
+        if not self._fields or len(self._fields) > int(n_components):
+            raise ValueError(
+                f"StackScalarFields: need 1 to {n_components} fields, got {self._fields!r}"
+            )
+        self._output_field = str(output_field)
+        self._association = association
+        self._n_components = int(n_components)
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        data = getattr(mesh, self._association)
+        columns = []
+        for name in self._fields:
+            if name not in data:
+                raise KeyError(
+                    f"StackScalarFields: {self._association}[{name!r}] not found "
+                    f"(available: {sorted(data.keys())!r})"
+                )
+            columns.append(data[name].reshape(-1))
+        stacked = torch.stack(columns, dim=-1)
+        if stacked.shape[-1] < self._n_components:
+            pad = stacked.new_zeros(
+                stacked.shape[0], self._n_components - stacked.shape[-1]
+            )
+            stacked = torch.cat([stacked, pad], dim=-1)
+        new_data = data.clone()
+        new_data[self._output_field] = stacked
+        return mesh.with_data(**{self._association: new_data})
+
+    def extra_repr(self) -> str:
+        return (
+            f"{self._association}[{self._output_field!r}] = stack({self._fields}, "
+            f"pad to {self._n_components})"
+        )
 
 
 @register()

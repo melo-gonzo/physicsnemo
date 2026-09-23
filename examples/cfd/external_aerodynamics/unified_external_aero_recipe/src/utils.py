@@ -76,9 +76,10 @@ def initialize_from_checkpoint(
 ###
 ###     stress: {type: symmetric_tensor, components: {sig11: xx, sig22: yy, sig12: xy}}
 ###
-### The model emits all six components (``xx, yy, zz, xy, xz, yz``); the loss and
-### the metrics read only the listed ones from the named dataset fields and keep
-### the per-component metric names (``sig11_l2``), so results stay comparable with
+### A tensor target needs a model with ``output_type: fields`` (ISLA), whose output
+### for the target is the whole ``(B, N, 3, 3)`` tensor; the recipe reads the listed
+### laboratory components off it, and the loss and the metrics keep the
+### per-component metric names (``sig11_l2``), so results stay comparable with
 ### lanes that predicted the same components as separate scalars. Normalization is
 ### the dataset's per-component z-score, applied component by component: a
 ### diagonal affine map per lab-frame component, consistent with the loss and
@@ -86,8 +87,16 @@ def initialize_from_checkpoint(
 FieldType: TypeAlias = Literal["scalar", "vector"] | dict[str, Any]
 FieldKind: TypeAlias = Literal["scalar", "vector", "symmetric_tensor"]
 
-### The model's component order for a symmetric rank-2 tensor output.
-SYMMETRIC_TENSOR_COMPONENTS: tuple[str, ...] = ("xx", "yy", "zz", "xy", "xz", "yz")
+### Laboratory-frame index pairs of the six independent components of a symmetric
+### rank-2 tensor ``T[..., i, j]``.
+SYMMETRIC_TENSOR_COMPONENTS: dict[str, tuple[int, int]] = {
+    "xx": (0, 0),
+    "yy": (1, 1),
+    "zz": (2, 2),
+    "xy": (0, 1),
+    "xz": (0, 2),
+    "yz": (1, 2),
+}
 
 
 def field_kind(field_type: FieldType) -> FieldKind:
@@ -133,17 +142,23 @@ def tensor_components(field_type: FieldType) -> dict[str, str]:
     if bad or len(set(labels)) != len(labels):
         raise ValueError(
             f"symmetric_tensor components must be distinct labels from "
-            f"{SYMMETRIC_TENSOR_COMPONENTS!r}; got {comps!r}."
+            f"{tuple(SYMMETRIC_TENSOR_COMPONENTS)!r}; got {comps!r}."
         )
     return {str(k): str(v) for k, v in comps.items()}
 
 
-def tensor_component_indices(field_type: FieldType) -> list[int]:
-    """Channel indices (in the model's six-component layout) of the listed components."""
-    return [
-        SYMMETRIC_TENSOR_COMPONENTS.index(c)
-        for c in tensor_components(field_type).values()
+def select_tensor_components(
+    tensor: torch.Tensor, field_type: FieldType
+) -> torch.Tensor:
+    """The listed laboratory components of a ``(..., 3, 3)`` tensor, in YAML order, as ``(..., n_listed)``."""
+    if tensor.shape[-2:] != (3, 3):
+        raise ValueError(
+            f"a symmetric_tensor prediction must have shape (..., 3, 3), got {tuple(tensor.shape)}"
+        )
+    pairs = [
+        SYMMETRIC_TENSOR_COMPONENTS[c] for c in tensor_components(field_type).values()
     ]
+    return torch.stack([tensor[..., i, j] for i, j in pairs], dim=-1)
 
 
 def target_field_names(target_config: dict[str, FieldType]) -> list[str]:
@@ -161,9 +176,9 @@ def field_loss_channels(field_type: FieldType, n_spatial_dims: int = 3) -> int:
     """Number of components a field contributes to the loss / metrics.
 
     Equal to :func:`field_dim` for scalars and vectors; for a symmetric tensor it is
-    the number of *listed* components (the model emits six, the loss compares the
-    listed ones), so a tensor target weighs exactly as much in the channel-normalized
-    total as the same components declared as separate scalars.
+    the number of *listed* components (the model predicts the whole tensor, the loss
+    compares the listed components), so a tensor target weighs exactly as much in the
+    channel-normalized total as the same components declared as separate scalars.
     """
     if field_kind(field_type) == "symmetric_tensor":
         return len(tensor_components(field_type))
@@ -282,26 +297,30 @@ def build_muon_optimizer(
 
 
 def field_dim(field_type: FieldType, n_spatial_dims: int = 3) -> int:
-    """Number of model output channels a field occupies.
+    """Number of channels a field occupies in a flat ``(B, N, C)`` model output.
 
     The type tag is always lowercase by contract -- the recipe normalises
     YAML inputs at the LossCalculator / MetricCalculator boundary. Pass
     pre-lowercased strings here.
 
     Args:
-        field_type: ``"scalar"``, ``"vector"`` or a symmetric-tensor mapping
-            (six channels: the model emits every component).
+        field_type: ``"scalar"`` or ``"vector"``. A symmetric-tensor target has
+            no flat layout (it is predicted as a whole tensor by a
+            ``output_type: fields`` model) and raises.
         n_spatial_dims: Dimensionality of vector fields. Default 3.
 
     Raises:
-        ValueError: If ``field_type`` is not a recognized type.
+        ValueError: If ``field_type`` is not a recognized type or is a tensor.
     """
     kind = field_kind(field_type)
     if kind == "scalar":
         return 1
     if kind == "vector":
         return n_spatial_dims
-    return len(SYMMETRIC_TENSOR_COMPONENTS)
+    raise ValueError(
+        "a symmetric_tensor target has no flat channel layout; it needs a model with "
+        "output_type: fields (ISLA), which returns the tensor itself"
+    )
 
 
 def align_scalar_shapes(

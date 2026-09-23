@@ -70,7 +70,13 @@ import nondim  # noqa: F401, E402  (registers NonDimensionalizeByMetadata)
 import sdf  # noqa: F401, E402  (registers ComputeSDFFromBoundary, DropBoundary)
 from collate import build_collate_fn  # noqa: E402
 from metrics import MetricName  # noqa: E402
-from utils import FieldType, field_dim, resolve_dict, target_field_names  # noqa: E402
+from utils import (  # noqa: E402
+    FieldType,
+    field_dim,
+    field_kind,
+    resolve_dict,
+    target_field_names,
+)
 
 ### Module-level logger used for warnings emitted from helpers below
 ### (e.g. ``validate_dataset_consistency``, ``build_dataloaders``). Goes
@@ -1000,8 +1006,12 @@ def build_dataloaders(
     ### resolves before `hydra.utils.instantiate(cfg.model)`.  GLOBE's
     ### model template doesn't reference `out_dim`, so the extra key is
     ### a harmless no-op for it.
+    ### `out_dim` is a flat-output quantity; tensor targets exist only for
+    ### `output_type: fields` models (ISLA), which take their outputs by name.
     out_dim_total = sum(
-        field_dim(cast(FieldType, ftype)) for ftype in (first_targets or {}).values()
+        field_dim(cast(FieldType, ftype))
+        for ftype in (first_targets or {}).values()
+        if field_kind(cast(FieldType, ftype)) != "symmetric_tensor"
     )
     OmegaConf.update(cfg, "out_dim", out_dim_total, force_add=True)
 

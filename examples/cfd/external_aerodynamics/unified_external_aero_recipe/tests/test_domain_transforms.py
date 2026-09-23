@@ -251,3 +251,21 @@ def test_drivaer_dataset_pipeline_preserves_thin_face_and_aligns_targets(
     loss.backward()
     torch.testing.assert_close(prediction.grad, 2 * weights * error.detach())
     assert "TimeValue" not in domain.global_data
+
+
+def test_stack_scalar_fields_builds_a_zero_padded_vector():
+    """Two stored components become one (N, 3) field with z = 0; sources are kept."""
+    from domain_transforms import StackScalarFields
+
+    mesh = _two_triangles()
+    mesh.cell_data["bc_x"] = torch.tensor([1.0, 2.0])
+    mesh.cell_data["bc_y"] = torch.tensor([[3.0], [4.0]])
+    out = StackScalarFields(fields=["bc_x", "bc_y"], output_field="bc")(mesh)
+    assert torch.equal(
+        out.cell_data["bc"], torch.tensor([[1.0, 3.0, 0.0], [2.0, 4.0, 0.0]])
+    )
+    assert "bc_x" in out.cell_data and "bc_y" in out.cell_data
+    with pytest.raises(KeyError):
+        StackScalarFields(fields=["missing"], output_field="bc")(mesh)
+    with pytest.raises(ValueError):
+        StackScalarFields(fields=["a", "b", "c", "d"], output_field="bc")

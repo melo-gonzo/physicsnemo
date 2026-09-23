@@ -37,7 +37,7 @@ from domain_transforms import ComposeQuadratureMeasure  # noqa: E402
 from physicsnemo.mesh import Mesh  # noqa: E402
 from physicsnemo.mesh.calculus.measure import scale_measures  # noqa: E402
 
-ISLA_TARGET = "physicsnemo.experimental.nn.ISLA"
+ISLA_TARGET = "physicsnemo.experimental.models.ISLA"
 
 
 def _compose(model, dataset):
@@ -60,7 +60,11 @@ def test_plain_surface_name_is_the_reference_configuration():
     assert m.scale_mode == "rms_distance"
     assert "frame_mode" not in m and "reference_length" not in m
     assert m.geo_checkpoint is True
-    assert cfg.forward_kwargs.global_vectors == "global_data.U_inf_dir"
+    assert cfg.output_type == "fields"
+    ### Outputs are declared by the dataset's target names and ranks.
+    assert OmegaConf.to_container(m.outputs) == {"pressure": 0, "wss": 1}
+    assert OmegaConf.to_container(m.global_inputs) == {"freestream": 1}
+    assert cfg.forward_kwargs.global_inputs.freestream == "global_data.U_inf_dir"
     assert (
         cfg.forward_kwargs.measure_weights == "interior.point_data._effective_measure"
     )
@@ -90,7 +94,10 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
     cfg = _compose("isla_volume", "drivaer_ml_volume_reference")
     m = cfg.model
     assert m.scale_mode == "rms_distance"
-    assert m.query_tokens is True and m.n_query_scalars == 1
+    assert m.query_tokens is True
+    assert OmegaConf.to_container(m.query_inputs) == {"sdf": 0}
+    assert OmegaConf.to_container(m.outputs) == {"velocity": 1, "pressure": 0, "nut": 0}
+    assert cfg.forward_kwargs.query_inputs.sdf == "interior.point_data.sdf"
     assert (
         cfg.forward_kwargs.measure_weights
         == "boundaries.vehicle.cell_data._effective_measure"
@@ -136,8 +143,9 @@ def test_isla_global_vector_is_produced_by_the_dataset_pipeline(model, dataset):
     The volume reference dataset lacked the transform until 2026-09-18 and the
     interior configuration could not run as shipped."""
     cfg = _compose(model, dataset)
-    gv = cfg.forward_kwargs.get("global_vectors")
+    gv = cfg.forward_kwargs.global_inputs.get("freestream")
     assert gv == "global_data.U_inf_dir", gv
+    assert OmegaConf.to_container(cfg.model.global_inputs) == {"freestream": 1}
     ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
     raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
     producers = [

@@ -246,11 +246,11 @@ def _norm_stats_match(a: dict[str, dict], b: dict[str, dict]) -> bool:
 def _to_pointwise(td: TensorDict, output_type: IOType) -> TensorDict:
     """Drop the leading batch dim so a TD aligns with the interior points.
 
-    Tensor-output models produce ``(1, N)`` / ``(1, N, C)`` leaves
+    Tensor- and fields-output models produce ``(1, N)`` / ``(1, N, C)`` leaves
     (batch_size ``[1, N]``); mesh-output models produce per-point leaves
     already (batch_size ``[N]``).
     """
-    return td[0] if output_type == "tensors" else td
+    return td if output_type == "mesh" else td[0]
 
 
 def _sample_id(metadata: dict[str, Any], idx: int) -> str:

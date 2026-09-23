@@ -48,7 +48,9 @@ def _mesh(case_key: int | None, dtype=torch.float32) -> Mesh:
         gd["case_key"] = torch.tensor(case_key, dtype=torch.int64)
     return Mesh(
         points=torch.randn(12, 3, dtype=dtype),
-        cells=torch.stack([torch.arange(0, 10), torch.arange(1, 11), torch.arange(2, 12)], dim=1),
+        cells=torch.stack(
+            [torch.arange(0, 10), torch.arange(1, 11), torch.arange(2, 12)], dim=1
+        ),
         global_data=TensorDict(gd, batch_size=[]),
     )
 
@@ -56,14 +58,20 @@ def _mesh(case_key: int | None, dtype=torch.float32) -> Mesh:
 def test_table_fields_are_injected_by_case_key(tmp_path: Path) -> None:
     table = tmp_path / "frame_table.json"
     table.write_text(json.dumps(_TABLE))
-    t = SetGlobalFieldsFromTable(table=str(table), fields=["frame_center", "frame_scale"])
+    t = SetGlobalFieldsFromTable(
+        table=str(table), fields=["frame_center", "frame_scale"]
+    )
     for name, row in _TABLE.items():
         if name.startswith("_"):
             continue
         out = t(_mesh(_crc(name)))
-        assert torch.allclose(out.global_data["frame_center"], torch.tensor(row["frame_center"]))
+        assert torch.allclose(
+            out.global_data["frame_center"], torch.tensor(row["frame_center"])
+        )
         assert out.global_data["frame_center"].dtype == torch.float32
-        assert out.global_data["frame_scale"].shape == () and float(out.global_data["frame_scale"]) == pytest.approx(row["frame_scale"])
+        assert out.global_data["frame_scale"].shape == () and float(
+            out.global_data["frame_scale"]
+        ) == pytest.approx(row["frame_scale"])
         assert "n_cells" not in out.global_data.keys()  # only the requested fields
         assert "U_inf" in out.global_data.keys()  # existing fields kept
     with pytest.raises(KeyError):

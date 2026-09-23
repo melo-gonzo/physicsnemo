@@ -43,7 +43,7 @@
 # reference configuration lived in isla_surface_reference.yaml, which is now a
 # pointer to this file.
 input_type: tensors
-output_type: tensors
+output_type: fields
 
 # Learning rate (protocol, 2026-09-17; ceiling measured 2026-09-18): 1e-3 at
 # hidden 192. Pinned here because the recipe's default of 3e-3 (GeoTransolver's)
@@ -61,13 +61,17 @@ training:
 forward_kwargs:
   points: interior.points
   normals: boundaries.vehicle.cell_data.normals
-  global_vectors: global_data.U_inf_dir   # the one global vector input of external aerodynamics: the freestream direction
   measure_weights: interior.point_data._effective_measure
+  global_inputs:
+    freestream: global_data.U_inf_dir   # the one global direction of external aerodynamics; other PDEs pass their own fields
 
 model:
-  _target_: physicsnemo.experimental.nn.ISLA
-  out_scalars: 1                 # pressure
-  out_vectors: 1                 # wss
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs:                       # the dataset's targets, by name and tensor rank (0 scalar, 1 vector)
+    pressure: 0
+    wss: 1
+  global_inputs:
+    freestream: 1                # a rank-1 global input: normalized to a unit direction inside the model
   hidden: 192
   n_layers: 12
   n_slices: 256
@@ -78,7 +82,7 @@ model:
   # memory for a modest step-time cost. Set false to trade memory for speed.
   geo_checkpoint: true
   # Geometry kernel: null = automatic (2026-09-19 ruling): the exact fused Triton kernel
-  # wherever it can run (CUDA, one global vector, <= 1024 slices; about a third of the eager
-  # step time and memory at 200,000 cells), the eager PyTorch region otherwise. Force with
-  # `eager` or `fused`.
+  # wherever it can run (CUDA, one global direction, <= 1024 slices, no rank-1/2 per-token
+  # inputs; about a third of the eager step time and memory at 200,000 cells), the eager
+  # PyTorch region otherwise. Force with `eager` or `fused`.
   geo_kernel: null

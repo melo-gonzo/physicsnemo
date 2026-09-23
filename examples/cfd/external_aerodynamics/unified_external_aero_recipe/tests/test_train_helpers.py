@@ -125,7 +125,7 @@ def test_isla_training_on_filtered_thin_triangles(device):
     from domain_transforms import DropDegenerateCells
 
     from physicsnemo.datapipes.transforms.mesh import MeshToDomainMesh
-    from physicsnemo.experimental.nn.isla import ISLA
+    from physicsnemo.experimental.models import ISLA
     from physicsnemo.mesh.calculus import scale_measures
 
     mesh = Mesh(
@@ -158,7 +158,7 @@ def test_isla_training_on_filtered_thin_triangles(device):
         {
             "points": "interior.points",
             "normals": "boundaries.vehicle.cell_data.normals",
-            "global_vectors": "global_data.U_inf_dir",
+            "global_inputs": {"freestream": "global_data.U_inf_dir"},
             "measure_weights": "interior.point_data._effective_measure",
         },
         targets,
@@ -169,10 +169,15 @@ def test_isla_training_on_filtered_thin_triangles(device):
         batch["forward_kwargs"]["measure_weights"].reshape_as(measure), measure
     )
     model = ISLA(
-        hidden=16, n_layers=1, n_slices=4, out_vectors=0, geo_kernel="eager"
+        outputs={"pressure": 0},
+        global_inputs={"freestream": 1},
+        hidden=16,
+        n_layers=1,
+        n_slices=4,
+        geo_kernel="eager",
     ).to(device)
     with torch.no_grad():
-        prediction = model(**batch["forward_kwargs"])[..., 0]
+        prediction = model(**batch["forward_kwargs"])["pressure"]
         error = prediction - batch["targets"]["pressure"]
         expected = (measure * error.square()).sum() / measure.sum()
     loss, _, _ = train.forward_pass(
@@ -181,7 +186,7 @@ def test_isla_training_on_filtered_thin_triangles(device):
         "float32",
         train.LossCalculator(targets, loss_type="mse"),
         train.MetricCalculator(targets, metrics=["mae"]),
-        output_type="tensors",
+        output_type="fields",
         target_config=targets,
     )
     torch.testing.assert_close(loss, expected)

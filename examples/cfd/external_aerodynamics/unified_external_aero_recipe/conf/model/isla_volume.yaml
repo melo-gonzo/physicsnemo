@@ -43,7 +43,7 @@
 # Naming note: until 2026-09-15 this file was isla_volume_reference.yaml, which
 # is now a pointer to this file.
 input_type: tensors
-output_type: tensors
+output_type: fields
 
 # Learning rate pinned at ISLA's protocol rate: the recipe default of 3e-3
 # collapses the relative frame to a mean-field plateau at width 192 (book
@@ -56,29 +56,35 @@ forward_kwargs:
   points: boundaries.vehicle.cell_centroids
   normals: boundaries.vehicle.cell_normals
   measure_weights: boundaries.vehicle.cell_data._effective_measure
-  global_vectors: global_data.U_inf_dir   # the one global vector input of external aerodynamics: the freestream direction
+  global_inputs:
+    freestream: global_data.U_inf_dir   # the one global direction of external aerodynamics
   query_points: interior.points
   query_normals: interior.point_data.sdf_normals
-  query_scalars: interior.point_data.sdf
+  query_inputs:
+    sdf: interior.point_data.sdf        # the signed distance to the wall at each query
 
 model:
-  _target_: physicsnemo.experimental.nn.ISLA
-  out_scalars: 2                 # pressure, nut (dataset targets: scalars first)
-  out_vectors: 1                 # velocity
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs:                       # the dataset's targets, by name and tensor rank
+    velocity: 1
+    pressure: 0
+    nut: 0
+  global_inputs:
+    freestream: 1
+  query_inputs:
+    sdf: 0                       # rank-0 per-query input, scaled by the frame's length unit (query_scalar_scale)
   hidden: 192
   n_layers: 12
   n_slices: 256
   mlp_ratio: 4
   scale_mode: rms_distance
   query_tokens: true
-  n_query_scalars: 1
   # Interior tokens share a learned fraction of the total boundary measure (the class
   # default since 2026-09-20; invariant to how the boundary measure is represented).
   # Interior lanes trained before that date used query_mass: geometric_mean.
   query_mass: source_total
   geo_checkpoint: true
   # Geometry kernel: null = automatic (2026-09-19 ruling): the exact fused Triton kernel
-  # wherever it can run (CUDA, one global vector, <= 1024 slices; about a third of the eager
-  # step time and memory at 200,000 cells), the eager PyTorch region otherwise. Force with
-  # `eager` or `fused`.
+  # wherever it can run (CUDA, one global direction, <= 1024 slices, no rank-1/2 per-token
+  # inputs), the eager PyTorch region otherwise. Force with `eager` or `fused`.
   geo_kernel: null
