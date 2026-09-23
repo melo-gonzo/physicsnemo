@@ -26648,3 +26648,46 @@ same released lanes. @sec-pose-contract, the index and @sec-vs-standing now
 read the reference-configuration artifact; the CLAIMS pose line is
 restated. The one remaining earlier-protocol element of the pose study is
 the baselines' augmented lanes, which are what they are (released models).
+
+## 2026-09-23 — Preregistration, OLBC-MECH combined channel: do the domain frame and the boundary-value extension add on the fixed-mesh Poisson set? Four lanes (2,048 and 512 cases, two seeds), to launch when the cluster is reachable {#sec-nb-olbc-mech-combined-prereg}
+
+**Setting.** On the OLBC Poisson set (one fixed square mesh, random
+labeled Dirichlet, Neumann and Robin segments and a random source per
+sample) ISLA trails GeoTransolver-512 by a factor of three at every rung
+(@sec-interior-olbc). The mechanism study at 512 cases found the gap in
+value transport: a parameter-free extension of the prescribed boundary
+values into the interior (`ext`) recovers 84% of the log-gap, the domain's
+axes as two global vectors (`frame2`) recover 19%, four times the slices
+recover nothing (@sec-nb-olbc-mech-verdict). At 2,048 cases the frame alone
+recovers 67% (one seed), so the positional channel grows with the rung
+(@sec-nb-litext-vec-verdict, addendum (c)); the 2,048-case `ext` twin is
+still training.
+
+**Question.** Are the two contract-preserving channels additive, or do
+they carry the same information? Each is legitimate on a fixed domain (the
+frame is a property of the domain, the extension a quadrature of the
+boundary data), so the combination is a candidate recipe for fixed-mesh
+boundary-value problems, not a diagnostic.
+
+**Lanes** (`kernel/om/lanes.tsv` rows 11 to 14; `recipe_globin` gains
+`olbc_poisson_frame_ext.yaml` and `isla_olbc_poisson_frame_ext.yaml`, new
+files, the pinned files untouched): ISLA R1 with both the frame vectors and
+the six extension query scalars, 2,048 and 512 cases, seeds 42 and 43,
+500 epochs, eager region ($K = 2$ on the pinned snapshot), float32 scoring
+on the 256 test cases.
+
+**Bars, in the recovered fraction of the log-gap between the baseline ISLA
+and GeoTransolver-512 at the same rung.** Let $f$ be the frame's fraction
+and $e$ the extension's (two seeds each). *Additive*: the combination
+recovers at least $\min(1.0,\ f + e - 0.1)$, i.e. the channels carry
+different information and together close the gap or overshoot it (they
+may: the coordinate leak reaches 1.31 at 512 and 1.35 at 2,048). *Redundant*:
+within 0.1 of $\max(f, e)$, the two carry the same information and the
+cheaper one (the frame: two global vectors, no per-query channels) is the
+recipe. *Between*: reported as measured. Predictions: at 512 cases
+redundant-to-between (the frame adds little where the extension already
+recovers 84%; 0.6); at 2,048 additive (the frame's 67% is positional and
+the extension's contribution is value transport; 0.6). Whatever the
+outcome, the standing that enters the book is against GeoTransolver-512
+at the same rung with both seeds, and the mechanism section of
+@sec-interior-olbc gains one sentence.
