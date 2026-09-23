@@ -726,14 +726,15 @@ def main(cfg: DictConfig) -> None:
         ### docstring's torchrun caveat). attach_and_save self-creates
         ### parent dirs.
         sample_id = _sample_id(metadata, idx)
-        attach_and_save(
-            domain,
-            pred_phys,
-            true_phys,
-            target_config,
-            pred_dir / f"{sample_id}.pdmsh",
-            rescale_geometry=bool(cfg.get("rescale_geometry", False)),
-        )
+        if bool(cfg.get("save_predictions", True)):  # file-count quota (2026-09-23): the fleet scorer passes +save_predictions=false
+            attach_and_save(
+                domain,
+                pred_phys,
+                true_phys,
+                target_config,
+                pred_dir / f"{sample_id}.pdmsh",
+                rescale_geometry=bool(cfg.get("rescale_geometry", False)),
+            )
 
         ### One JSONL row per sample -- the documented metrics.jsonl
         ### contract. Console logging below is throttled by log_every.
