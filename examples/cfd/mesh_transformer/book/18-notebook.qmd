@@ -25205,3 +25205,21 @@ to schedule first, beside the OLBC-MECH diagnostics already running.
 **Housekeeping.** `_quarto.yml` and `STYLE.md`'s chapter map register the
 appendix; no other chapter was edited except the status chapter's tree and
 ledger. Nothing in this entry is a result.
+
+**Addendum (2026-09-22, night): LIT-EXT joins OLBC-MECH.** The literature
+appendix (@sec-vs-ideas) names the OLBC paper's learned function extensions
+and BENO's boundary branch as the closest ideas to what the fixed-mesh gap
+may need: a path by which a prescribed boundary value reaches an interior
+query directly rather than only through the slices. The parameter-free
+version, `BoundaryValueExtension`
+(`results/campaigns_2026-09-22/datasets/boundary_value_extension.py`),
+gives every node, per condition type, the measure-weighted
+inverse-square-distance average of the prescribed values over the labeled
+cells and the distance to the nearest such cell: translation- and
+rotation-invariant, mesh-consistent, six extra query scalars, no new
+parameters. Rows 6 and 7 of `kernel/om/lanes.tsv` (`ext`, 2,048 and 512
+cases, seed 42) run it beside `frame2`, `leak` and `s1024`. Prediction under
+M2 (value transport): `ext` recovers at least half the log-gap to
+GeoTransolver-512 at 2,048 cases while `frame2` and `s1024` do not; under
+M1 the frame and slice variants move and `ext` does not. Both can be true,
+in which case the remedy is both.
