@@ -26746,3 +26746,16 @@ the same `frame2` instrument as OLBC, against the bar that it recovers at
 least half of the high-angle widening); ratio flat across angles at 210
 cases = the widening is a small-data effect, and the recurring-geometry
 line stays the hypothesis. @sec-de-strata carries the figure.
+
+**Addendum, the same anatomy on the cars**
+(`results/drivaer435_percase_2026-09-23.{py,json}`; 48 validation cars,
+ISLA reference configuration against GeoTransolver-512, two seeds each).
+Spearman rank correlation of the per-car errors **0.91**; the per-car
+ratio GeoTransolver-512 ÷ ISLA runs from 0.91 (10th percentile) through
+0.99 (median) to 1.10 (90th), and ISLA is the more accurate model on 20 of
+the 48 cars. The parity at full data is therefore parity car by car, not an
+average of large wins and losses, and the two architectures agree on which
+cars are hard (ISLA's per-car error runs 0.034 to 0.051 between the 10th
+and 90th percentiles, 0.067 at the worst car). That is the per-case face of
+the shared floor of @sec-shared-floor: what remains at 435 cars is the
+difficulty of the case, not the architecture.
