@@ -547,6 +547,21 @@ class ISLA(Module):
         out_scalars: Number of scalar output fields per token (e.g. pressure).
         out_vectors: Number of vector output fields per token (e.g. wall shear);
             each is expanded in the ``4 + 3K`` equivariant head basis.
+        out_tensors: Number of symmetric rank-2 tensor output fields per token
+            (e.g. a stress tensor). Each is expanded, with invariant
+            coefficients from the same linear head, in the tensor basis built
+            from the head's *true* vectors ``t_1..t_m`` (the global directions,
+            the normal, the radial direction and the ``e_theta`` complements;
+            ``m = 2K + 3``): the ``m(m+1)/2`` symmetrized outer products
+            ``sym(t_j t_k^T)``, ``j <= k``, plus the identity, so
+            ``n_tbasis = m(m+1)/2 + 1`` (7 for ``K = 0``, 16 for ``K = 1``).
+            The ``e_phi`` cross products are left out on purpose: a product
+            of two true vectors is a true tensor, so the output is covariant
+            under proper rotations *and* reflections, ``sigma -> R sigma R^T``
+            for every orthogonal ``R``, whereas the vector heads are covariant
+            under proper rotations only. The six independent components are
+            returned in the laboratory frame in the order
+            ``xx, yy, zz, xy, xz, yz``.
         hidden: Token width of the slice blocks.
         n_layers: Number of slice-attention blocks in the encoder.
         n_slices: Number of soft slices (data-adaptive anchors) per block.
@@ -642,8 +657,18 @@ class ISLA(Module):
     ``(B, Q, n_query_scalars)`` for the interior modes; ``support_points`` /
     ``support_normals`` ``(B, M, 3)`` and ``support_scalars``
     ``(B, M, n_query_scalars)`` with ``support_tokens``. Returns
-    ``(B, N_out, out_scalars + 3 * out_vectors)`` with ``N_out`` the boundary
-    token count, or the query count in the interior modes.
+    ``(B, N_out, out_scalars + 3 * out_vectors + 6 * out_tensors)`` with
+    ``N_out`` the boundary token count, or the query count in the interior
+    modes: the scalars first, then each vector's ``x, y, z``, then each
+    symmetric tensor's ``xx, yy, zz, xy, xz, yz``.
+
+    Output contract: scalars are invariant under rotations, translations and
+    reflections of the input; vectors are covariant under proper rotations
+    (``v -> R v``; the ``e_phi`` basis vectors are pseudovectors, see the
+    reflection note in the book); symmetric tensors are true tensors,
+    covariant under proper *and* improper rotations (``sigma -> R sigma R^T``).
+    ``out_tensors=0`` (the default) leaves the head, its parameter layout and
+    every output bitwise identical to the model before tensor outputs existed.
     """
 
     class MetaData(ModelMetaData):
@@ -655,6 +680,7 @@ class ISLA(Module):
         *,
         out_scalars: int = 1,
         out_vectors: int = 1,
+        out_tensors: int = 0,
         hidden: int = 256,
         n_layers: int = 12,
         n_slices: int = 256,
@@ -761,6 +787,9 @@ class ISLA(Module):
         self.fast_point_softmax = bool(fast_point_softmax)
         self.out_scalars = out_scalars
         self.out_vectors = out_vectors
+        self.out_tensors = int(out_tensors)
+        if self.out_tensors < 0:
+            raise ValueError("out_tensors must be non-negative")
         self.eps = eps
         ### G3 experiment channel (prereg pending): per-point boundary-condition
         ### scalars (e.g. a Dirichlet trace). Scalars are invariants, so every
@@ -829,7 +858,18 @@ class ISLA(Module):
         ### spherical-basis complements of (rhat, n) and of each (rhat, g_k) --
         ### the GLOBE multi-vector expansion (4 + 3K basis vectors; 7 for K = 1).
         self.n_basis = 4 + 3 * K
-        self.head = nn.Linear(hidden, out_scalars + out_vectors * self.n_basis)
+        ### TENSOR HEAD (2026-09-22): a symmetric rank-2 output is expanded in
+        ### the symmetrized outer products of the head's TRUE vectors {g_k, n,
+        ### rhat, e_th_n, e_th_gk} (m = 2K + 3 of them; the e_phi cross
+        ### products are pseudovectors and are excluded) plus the identity, so
+        ### it is a true tensor: covariant under rotations AND reflections.
+        ### With out_tensors = 0 the head's width and init are unchanged.
+        self.n_true_basis = 3 + 2 * K
+        self.n_tbasis = self.n_true_basis * (self.n_true_basis + 1) // 2 + 1
+        self.head = nn.Linear(
+            hidden,
+            out_scalars + out_vectors * self.n_basis + self.out_tensors * self.n_tbasis,
+        )
         ### QUERY TOKENS (boundary->interior exploration, 2026-09-07): interior
         ### query points join the encoder as INTERACTING tokens, carrying the
         ### same {q, n_q, g_k} invariant seeds as the surface tokens (the
@@ -1427,7 +1467,8 @@ class ISLA(Module):
         out = self.head(self.norm_out(h_out))
 
         scalars = out[..., : self.out_scalars]
-        coeffs = out[..., self.out_scalars :].reshape(
+        vec_end = self.out_scalars + self.out_vectors * self.n_basis
+        coeffs = out[..., self.out_scalars : vec_end].reshape(
             b, n, self.out_vectors, self.n_basis
         )
         ### GLOBE-style expansion: input vectors + spherical complements of
@@ -1438,10 +1479,31 @@ class ISLA(Module):
         gs = [g_out[:, :, k] for k in range(self.n_global_vectors)]
         _, e_th_n, e_ph_n = spherical_basis(r_hat, n_hat, normalize_basis_vectors=False)
         basis = gs + [n_hat, r_hat, e_th_n, e_ph_n]
+        true_basis = gs + [n_hat, r_hat, e_th_n]
         for g in gs:
             _, e_th, e_ph = spherical_basis(r_hat, g, normalize_basis_vectors=False)
             basis += [e_th, e_ph]
+            true_basis.append(e_th)
         basis = torch.stack(basis, dim=-2)  # (B, N, n_basis, 3)
         vectors = torch.einsum("bnvk,bnkc->bnvc", coeffs, basis)
+        parts = [scalars, vectors.reshape(b, n, self.out_vectors * 3)]
 
-        return torch.cat([scalars, vectors.reshape(b, n, self.out_vectors * 3)], dim=-1)
+        if self.out_tensors:
+            ### Symmetric rank-2 head: coefficients over {sym(t_j t_k^T), j <= k}
+            ### of the true vectors plus the identity. Every basis tensor is a
+            ### true tensor, so sigma -> R sigma R^T for any orthogonal R.
+            tcoeffs = out[..., vec_end:].reshape(b, n, self.out_tensors, self.n_tbasis)
+            tb = torch.stack(true_basis, dim=-2)  # (B, N, m, 3)
+            ju, ku = torch.triu_indices(self.n_true_basis, self.n_true_basis, device=tb.device)
+            tj, tk = tb[:, :, ju], tb[:, :, ku]  # (B, N, m(m+1)/2, 3)
+            outer = 0.5 * (tj.unsqueeze(-1) * tk.unsqueeze(-2) + tk.unsqueeze(-1) * tj.unsqueeze(-2))
+            eye = torch.eye(3, dtype=tb.dtype, device=tb.device).expand(b, n, 1, 3, 3)
+            tbasis = torch.cat([outer, eye], dim=-3)  # (B, N, n_tbasis, 3, 3)
+            sig = torch.einsum("bntk,bnkij->bntij", tcoeffs, tbasis)
+            comps = torch.stack(
+                [sig[..., 0, 0], sig[..., 1, 1], sig[..., 2, 2], sig[..., 0, 1], sig[..., 0, 2], sig[..., 1, 2]],
+                dim=-1,
+            )  # (B, N, out_tensors, 6): xx, yy, zz, xy, xz, yz
+            parts.append(comps.reshape(b, n, self.out_tensors * 6))
+
+        return torch.cat(parts, dim=-1)
