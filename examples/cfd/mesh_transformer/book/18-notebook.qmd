@@ -25438,3 +25438,44 @@ checkpoint and running lanes three (the pruning loop); raw dataset
 downloads are deleted once the converted tree is verified. Until the
 scorer change lands, the prediction directories are deleted on each
 pruning pass.
+
+## 2026-09-23 — Verdict, REF: R1 (384 x 12, cosine routing, fused kernel, 5e-4) is the reference configuration; it ties R2 on the 35-wing rung as on the cars, beats GeoTransolver-256 by 7% on the cars at 0.71x its memory, and trails it by 25% on the 35-wing rung {#sec-nb-ref-verdict}
+
+**Selection.** The rule fixed in @sec-nb-ref-prereg chooses the smaller
+candidate when it is within 1.5% of the better one on both DrivAerML
+Surface (435 cars) and the 35-wing HiLiftAeroML rung, all at 200,000
+cells, float32, two seeds. Pressure relative L2: cars R1 0.0416 / 0.0414,
+R2 0.0415 / 0.0402 (R1 1.5% behind, at the edge); 35 wings R1 0.1456 /
+0.1465, R2 0.1463 / 0.1454 (0.2% apart). **R1 is the reference
+configuration**: 384 wide, 12 layers, 256 slices, cosine routing, the
+fused geometry kernel, the RMS-pairwise-distance gauge, `source_total`
+query mass on interior tasks, learning rate 5e-4. Doubling the depth
+buys nothing measurable on either dataset (and costs 9 to 27% on Tensile2d,
+@sec-nb-solids-tensile2d-verdict).
+
+**Against the baselines.** Cars: GeoTransolver-256 at the protocol rate
+0.0445 ÷ R1 0.0415 = **1.07** with both seeds agreeing, at a step-time
+ratio of 1.11 (parity within 1.2) and a memory ratio of 0.71; the
+parameter-matched GeoTransolver-512 0.0410 is at parity (0.99) at 1.17x
+R1's time and 1.9x its memory. 35 wings: GeoTransolver-256 0.1098 and
+Transolver-256 0.1101 (`results/p200k_fleet_reduction_2026-09-22.json`)
+against R1 0.1461: **GeoTransolver ÷ R1 = 0.75**, the small-recurring-
+geometry deficit the wing rungs have shown throughout (@sec-surface-wings),
+unchanged by the reference configuration; GeoTransolver-512 on the wings
+is at epoch ~460 and is added when scored. So the prereg's acceptance
+clause ("recommended settings beat the baseline") holds on the cars and
+fails on the 35-wing rung; both are stated wherever the reference is
+quoted.
+
+**Rate.** The 1e-3 control is 2% worse than 5e-4 on the cars (both seeds)
+and 3% better on the wings (0.1410 / 0.1420); the reference keeps 5e-4 as
+preregistered and the wing-favoring direction is recorded as a
+dataset-dependent 2 to 3% effect, not a knob to retune per dataset.
+
+**Consequences.** The class defaults move to the reference (hidden 384,
+12 layers, 256 slices; the recipe's ISLA yamls default to R1 and 5e-4);
+the scoreboard, cost and scaling chapters quote R1 as "ISLA" from here on,
+with the 192-wide lanes of the earlier protocol labeled as such where they
+remain load-bearing (REF-BOARD replaces them). Pending under REF: the 210-
+and 510-wing rungs, DrivAerML Volume and AirfRANS under R1 (lanes running
+after the quota outage relaunch), and GeoTransolver-512 on the wings.
