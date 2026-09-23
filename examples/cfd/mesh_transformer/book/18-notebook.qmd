@@ -25974,3 +25974,59 @@ unchanged). Bar: against the RANK-IO lanes at the same rungs, the
 extension recovers at least half of the log-gap to GeoTransolver-512 on
 every field (as it did for the Poisson scalar), else the value-transport
 mechanism is specific to the Poisson set.
+
+**Addendum (2026-09-23, 05:30): float32 scores of the tensor head plus load
+axis at 32 cases, and the OLBC Poisson full rung.** `tensor_axis` (seeds
+42 / 43) against `frame2` (two-seed means), relative L2 on `val_100`:
+$\sigma_{11}$ 0.105 / 0.111 vs 0.112; $\sigma_{22}$ 0.074 / 0.077 vs 0.112;
+$\sigma_{12}$ 0.088 / 0.085 vs 0.102; displacement 0.102 / 0.124 vs 0.090.
+The bar ("within 10% of `frame2` on every field") is met on the three
+stresses, where the tensor-plus-axis configuration is 4% to 33% *better*,
+and missed on the displacement, 13% and 38% worse by seed (mean 25%). The
+displacement is a vector head in both configurations; the difference is
+that the frame lanes see the laboratory $x$-axis, which the z-scored
+displacement target's constant mean offset lives in. The 400-case pair
+decides; the reading stands that the physical load axis carries the
+generalization and the equivariant head the shear component, and that the
+full frame still buys something on the displacement at 32 cases.
+
+OLBC Poisson at all 8,448 cases (`ol`, two seeds): ISLA R1 0.0826 against
+GeoTransolver-512 0.0289 and GeoTransolver-256 0.0287 (ratio 0.35; width
+does not pay for GeoTransolver here). The ladder reads 0.32 / 0.25 / 0.35
+at 512 / 2,048 / 8,448 with learning-curve exponents 0.84 (ISLA) against
+0.81 (GeoTransolver): **the same exponent and a constant 3x gap**, the one
+dataset where ISLA's curve is not steeper. The mechanism verdict
+(@sec-nb-olbc-mech-verdict) locates the gap in value transport, and the
+extension variant recovers most of it at 512 cases; its 2,048-case twin
+and the elasticity ladder are running.
+
+## 2026-09-23 — Verdict, REF-BOARD (DrivAerML ladder): under the reference configuration the crossover with GeoTransolver moves from about 435 cars to about 100; R1 improves every rung of the 192-wide ladder by 5 to 10% and leads GeoTransolver-256 at its best rate from 109 cars up {#sec-nb-refboard-ladder-verdict}
+
+**Numbers** (`results/refboard_ladder_2026-09-23.json`; float32 pressure
+relative L2 at 200,000 cells on the 48 validation cars, two seeds per
+cell; the 435-car column from REF):
+
+| cars | ISLA R1 | ISLA 192-wide (1e-3) | GeoTransolver-256 (3e-3) | GeoTransolver-256 (1e-3) | Transolver-256 | best GeoTransolver ÷ R1 |
+|---|---|---|---|---|---|---|
+| 27 | 0.1428 | 0.1506 | 0.1244 | 0.1813 | 0.1605 | 0.87 |
+| 54 | 0.0775 | 0.0859 | 0.0743 | 0.0978 | 0.0861 | 0.96 |
+| 109 | 0.0559 | 0.0614 | 0.0565 | 0.0627 | 0.0609 | 1.01 |
+| 218 | 0.0465 | 0.0507 | 0.0490 | 0.0512 | 0.0523 | 1.05 |
+| 435 | 0.0415 | 0.0446 | 0.0445 | — | 0.0473 | 1.07 |
+
+: DrivAerML Surface ladder at the reporting protocol under the reference configuration. {#tbl-refboard-ladder}
+
+**Reading.** The prereg's prediction (R1 improves every DrivAerML surface
+standing by 5 to 10%) holds at every rung: 5.2% at 27 cars, 9.8% at 54,
+9.0% at 109, 8.3% at 218, 7.0% at 435. Against GeoTransolver-256 at its
+best rate the crossover, which the 192-wide ladder placed at the full 435
+cars (ratio 0.998), now sits between 54 and 109 cars: GeoTransolver leads
+by 13% at 27 cars and 4% at 54, ISLA leads by 1% at 109, 5% at 218 and 7%
+at 435. Learning-curve exponents over 27 to 218 cars: 0.53 (R1), 0.52
+(192-wide), 0.44 (GeoTransolver-256 at 3e-3; 0.61 at 1e-3, from a worse
+start), 0.53 (Transolver-256): on DrivAerML the exponents are the same
+within the fit, as the SCALE-LAW verdict found, and the reference
+configuration lowers the curve rather than steepening it. The volume
+rungs (54 and 109 cars) are scored and enter the interior chapter with the
+REF Volume standing. HiLift rungs, pose, area-law and deflection twins are
+still training.
