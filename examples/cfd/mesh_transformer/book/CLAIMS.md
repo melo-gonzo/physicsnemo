@@ -59,7 +59,7 @@ configuration, see below); fixed-angle rung 0.69 / 0.79; 4 geometries 0.68 /
 0.73 (GeoTransolver at 3e-3, its better rate); 210 random cases 0.88 / 0.96;
 21 held-out geometries 0.95 / 0.96 (GeoTransolver at 3e-3). The four wing
 rungs other than 35 cases are still earlier-protocol ISLA lanes (REF-BOARD
-twins training). The wing deficit is a small-data, recurring-geometry
+twins training). Per angle of attack on the 35-wing rung (2026-09-23, results/hl35_percase_2026-09-23.json): GeoTransolver-512 ÷ ISLA 0.77 at 4-14 deg, 0.67 at 16-22 deg (both errors double there); Spearman of per-case errors 0.80; ISLA better on 24/180. Say "largest in the separated regime"; a location, not a mechanism. The wing deficit is a small-data, recurring-geometry
 effect: it shrinks with cases and is within 5% where the validation
 geometries are never seen; it does not move with the cell budget, nor with
 ISLA's width, depth or rate. Say: "the baselines lead by 25 to 32% on the

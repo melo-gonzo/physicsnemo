@@ -26691,3 +26691,58 @@ the extension's contribution is value transport; 0.6). Whatever the
 outcome, the standing that enters the book is against GeoTransolver-512
 at the same rung with both seeds, and the mechanism section of
 @sec-interior-olbc gains one sentence.
+
+## 2026-09-23 — Finding, the 35-wing deficit by angle of attack: GeoTransolver-512 ÷ ISLA is 0.77 up to 14 degrees and 0.67 from 16 degrees, where both errors double; the two models rank the cases alike (Spearman 0.80); 210-case twin preregistered {#sec-nb-hl35-percase}
+
+**Setting.** On the 35-case HiLiftAeroML rung at the reporting protocol
+(200,000 cells, float32, 180 validation cases on 118 geometries) the
+reference configuration trails GeoTransolver-256 by 25% and the
+parameter-matched GeoTransolver-512 by 29% on surface pressure
+(@sec-nb-ref-verdict). The deficit's mechanism is the book's standing open
+question on the wings: it is not the cell count, width, depth or rate
+(@sec-de-limits). The fleet scorer writes one row per validation case, and
+the HiLiftAeroML sample ids carry the geometry and the angle of attack, so
+the deficit can be located without a new run.
+
+**What was done.** `results/hl35_percase_2026-09-23.py` reads the per-case
+float32 pressure errors of `ref_isla_r1_hl35_seed{42,43}`,
+`ref_gt_w512_hl35_seed{42,43}`, the 24-layer variant and the 1e-3 rate
+control, takes the seed mean per case, groups by angle of attack, and
+computes the Spearman rank correlation of the two architectures' per-case
+errors.
+
+**Numbers** (`results/hl35_percase_2026-09-23.json`; GeoTransolver-512 ÷
+ISLA per angle group, case counts 13 to 27): 0.78 / 0.78 / 0.77 / 0.80 /
+0.71 / 0.78 at 4 / 6 / 8 / 10 / 12 / 14 degrees, then 0.67 / 0.76 / 0.61 /
+0.64 at 16 / 18 / 20 / 22; means **0.77 below 16 degrees and 0.67 from 16
+degrees**. Both models' errors roughly double across the same boundary
+(ISLA 0.087 to 0.227, GeoTransolver-512 0.062 to 0.139 from 12 to 20
+degrees). Spearman correlation of the per-case errors 0.80: the two
+architectures find the same cases hard. ISLA is the more accurate model on
+24 of 180 cases; the per-case ratio spans 0.45 (10th percentile) to 1.05
+(90th). The 24-layer variant is within 4% of the reference in every angle
+group (0.96 to 1.03), the 1e-3 control within 3%.
+
+**Reading.** The deficit is present at every angle and grows where the flow
+separates. What GeoTransolver-512 has that ISLA does not is the absolute
+position of every cell as an input; in the separated regime the pressure at
+a cell is set by where the cell sits along the chord and span (the
+separation line, the wake of the slat and flap) more than by its local
+geometry, so a model that reads position directly has an easier map. That
+is the positional channel the fixed-mesh OLBC sets isolate (the coordinate
+leak overshoots GeoTransolver there, the frame recovers 67% at 2,048 cases;
+@sec-nb-olbc-mech-verdict and addenda), and the same reading as the
+recurring-geometry hypothesis (the mesher pattern gives GeoTransolver
+absolute positions it can memorize per geometry) with the regime as the
+amplifier. It is a location, not a mechanism: nothing here varies an input.
+
+**Preregistered twin.** When the 210-case rung's reference lanes and its
+GeoTransolver-512 pair score (the latter needs launching; `ref` group), the
+same script runs on them. Bar: the 16-to-22-degree ratio at least 0.08
+below the 4-to-14-degree ratio again = the widening is a property of the
+regime and not of the 35-case training set, and the next lane is the
+mechanism test (the domain frame as two global vectors on the 35-wing rung,
+the same `frame2` instrument as OLBC, against the bar that it recovers at
+least half of the high-angle widening); ratio flat across angles at 210
+cases = the widening is a small-data effect, and the recurring-geometry
+line stays the hypothesis. @sec-de-strata carries the figure.

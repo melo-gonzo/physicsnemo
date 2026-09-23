@@ -421,6 +421,57 @@ print(f"**ISLA's error is paid for in geometries, not cases.** Cutting the train
       "statement that geometry count alone sets the error.")
 ```
 
+```{python}
+#| label: fig-hl35-percase
+#| fig-cap: >
+#|   The 35-wing deficit by angle of attack. Top: seed-mean surface-pressure
+#|   error per validation case, grouped by the case's angle of attack, ISLA
+#|   (reference configuration, squares) and GeoTransolver-512 (the parameter
+#|   match, circles), 200,000 cells, float32, two seeds each. Bottom: the ratio
+#|   GeoTransolver-512 ÷ ISLA per group, with the case count above each bar.
+#|   How to read this: both models' errors rise steeply above 14 degrees, where
+#|   the flow separates; the ratio is flat near 0.77 below 16 degrees and falls
+#|   to 0.61 to 0.67 above it, so the deficit is largest in the separated
+#|   regime. It does not show the 210-case rung, whose reference lanes are in
+#|   flight, and the groups hold 13 to 27 cases each.
+#|   Data: results/hl35_percase_2026-09-23.json.
+#| code-fold: true
+HP = J("hl35_percase_2026-09-23.json")
+aoas = sorted(int(a) for a in HP["by_aoa"]); rows = [HP["by_aoa"][str(a)] for a in aoas]
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.6, 6.2), sharex=True, gridspec_kw={"height_ratios": [1.3, 1.0]})
+clean_axes(ax1); clean_axes(ax2)
+ax1.plot(aoas, [r["isla_r1"] for r in rows], **series_kwargs("isla_ref", lw=1.6, ms=6))
+ax1.plot(aoas, [r["gt512"] for r in rows], **series_kwargs("gt", lw=1.6, ms=6))
+label_line(ax1, aoas[-1], rows[-1]["isla_r1"], "ISLA", STYLE["isla_ref"]["color"], dx=0.3)
+label_line(ax1, aoas[-1], rows[-1]["gt512"], "GeoTransolver-512", STYLE["gt"]["color"], dx=0.3)
+ax1.set_ylabel("surface-pressure\nrelative L2 [–]", rotation=0, ha="right", va="center"); ax1.set_ylim(0, None)
+ratios = [r["gt512_over_isla_r1"] for r in rows]
+ax2.bar(aoas, ratios, width=1.4, color=STYLE["gt"]["color"], alpha=0.85)
+ax2.axhline(1.0, color="#898781", lw=0.8)
+for a, r, row in zip(aoas, ratios, rows):
+    ax2.text(a, r + 0.02, f"n={row['n']}", ha="center", va="bottom", fontsize=7.5, color=INK2)
+ax2.set_ylim(0, 1.15); ax2.set_ylabel("GeoTransolver-512\n÷ ISLA [–]", rotation=0, ha="right", va="center")
+ax2.set_xlabel("angle of attack [deg]"); ax2.set_xticks(aoas)
+ax1.set_xlim(aoas[0] - 1.5, aoas[-1] + 4.5)
+plt.tight_layout(); plt.show()
+```
+
+```{python}
+#| label: para-hl35-percase
+#| output: asis
+S = HP["summary"]; R = HP["per_case_ratio_gt512_over_isla_r1"]
+print(f"**The wing deficit is a regime effect as much as a data effect: against the parameter-matched GeoTransolver-512 the ratio is "
+      f"{S['ratio_aoa_4_to_14_mean']:.2f} at 4 to 14 degrees and {S['ratio_aoa_16_to_22_mean']:.2f} at 16 to 22 degrees, where both models' errors "
+      f"double and the flow over the high-lift configuration separates.** The two architectures find the same cases hard (Spearman rank "
+      f"correlation of the per-case errors {HP['spearman_isla_r1_gt512']:.2f} over {HP['n_cases']} validation cases on {HP['n_geometries']} "
+      f"geometries), and ISLA is the more accurate model on {R['isla_better_count']} of the {HP['n_cases']} cases. The 24-layer variant "
+      "moves no angle group by more than 4%, so depth does not buy the separated regime either. What GeoTransolver-512 has and ISLA does not "
+      "is the absolute position of every cell (@sec-part-baseline); in the separated regime the pressure depends on where along the chord "
+      "and span a cell sits more than on its local geometry, which is the same positional channel the fixed-mesh OLBC sets isolate "
+      "(@sec-interior-olbc). This is a location of the deficit, not its mechanism: the notebook preregisters the 210-case twin of this "
+      "anatomy (@sec-nb-hl35-percase).")
+```
+
 ## A second surface task: DeepJEB++ brackets {#sec-surface-deepjeb}
 
 ```{python}
