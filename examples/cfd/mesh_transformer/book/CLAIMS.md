@@ -166,8 +166,9 @@ than GeoTransolver-volume's on pressure and eddy viscosity, the same on
 velocity, and ISLA leads on every field"; label single dataset, single task,
 2-D; do not call it a mechanism result (no probe run).
 
-**Pose (200k).** ISLA posed ÷ native 1.015; leads augmented GeoTransolver /
-Transolver by 12% / 21%.
+**Pose (200k, reference configuration, 2026-09-23).** ISLA posed ÷ native 0.995 (0.0413 vs 0.0415); augmented
+GeoTransolver-256 / Transolver-256 ÷ posed ISLA 1.23 / 1.33 (results/p200k_pose_r1_2026-09-23.json). The earlier
+protocol's 1.015 and 12% / 21% are history (notebook only).
 
 **Passive decoder (2026-09-22 restructuring, Peter's request).** The
 passive decoder (`query_independent=True`, read-only blocks) is no longer a
@@ -2119,9 +2120,10 @@ interior control @sec-nb-udrv-int-prereg.
   and 2e-3; width rule above 192". Never write a rate above 1e-3 as usable for ISLA at width 192.
 
 ## PROTO-200K-FLEET pose + RATE-GT 218 (2026-09-19)
-- Pose at 200k (results/p200k_pose_reduction_2026-09-19.json): ISLA posed 0.0453 (1.015x native 0.0446);
-  GT-aug posed 0.0508 (1.12x its native 0.0455 at 1e-3); T-aug posed 0.0550 (1.16x). ISLA leads posed
-  GT by 12%, T by 21%. Write "12% and 21%" for the 200k pose lead; "7% and 17%" is the 10k reading.
+- Pose at 200k, reference configuration (results/p200k_pose_r1_2026-09-23.json): ISLA posed 0.0413 (0.995x native
+  0.0415); GT-aug posed 0.0508 (1.12x its native 0.0455 at 1e-3); T-aug posed 0.0550 (1.16x). ISLA leads posed
+  GT by 23%, T by 33%. Write "23% and 33%" for the 200k pose lead (the earlier protocol's "12% and 21%" and the 10k
+  "7% and 17%" are notebook history).
 - Ladder at 200k, GT at its better rate (3e-3 on every rung): GT / ISLA = 0.83, 0.86, 0.92, 0.97 at
   27, 54, 109, 218 cars. Write ISLA's data efficiency as "a narrowing deficit that closes at full
   data", never as a win. The 435-car GT 3e-3 pair is the last open number.

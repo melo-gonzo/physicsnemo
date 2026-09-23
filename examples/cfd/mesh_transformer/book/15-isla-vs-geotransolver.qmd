@@ -74,7 +74,7 @@ lug = {300: LUGR["isla_r1_lr25e4|n300"], 600: LUGR["isla_r1|n600"], 1200: LUGR["
 OLJ = J("olbc_2026-09-22.json"); OL = OLJ["gt512_over_isla"]; OLX = OLJ["learning_curve_exponents"]
 olbc_p = {n: OL[f"poisson|isla_r1|n{n}"]["u"] for n in (512, 2048, 8448)}; olbc_e = OL["elasticity|isla_r1|n512"]
 # --- pose, draws, laws, territories -------------------------------------------------------------------------
-PP = J("p200k_pose_reduction_2026-09-19.json"); PV, PA = PP["verdict"], PP["arms"]
+PP = J("p200k_pose_r1_2026-09-23.json"); PV, PA = PP["verdict"], PP["arms"]
 TAD = J("trainarea_dr_reduction_2026-09-20.json"); TA = J("trainarea_reduction_2026-09-20.json")
 WB = J("wingbench_200k_reduction_2026-09-19.json")["arms"]
 dens_cars = {m: TAD["arms"][f"{m}_uniform"]["mean"]["biased"] / TAD["arms"][f"{m}_uniform"]["mean"]["unif"] for m in ("isla", "gt_unit")}
@@ -200,11 +200,11 @@ for r in rows: out += "| " + " | ".join(r) + " |\n"
 print(out)
 print(": The standing by axis. Ratios are GeoTransolver (or GeoTransolver-volume, or GeoTransolver-512 where named) error divided by ISLA error, above one favoring ISLA; "
       "factors in the discretization rows are a model's own error under the changed draw or law divided by its own error under the training convention, so 1 is consistency. "
-      "ISLA is the reference configuration (384 x 12, 5e-4) on every row except the HiLiftAeroML rungs other than 35 cases, the pose, draw and law rows and the AirfRANS extrapolation rows, which hold the earlier protocol's 192-wide lanes (their re-runs are in flight, @sec-program-status). "
+      "ISLA is the reference configuration (384 x 12, 5e-4) on every row except the HiLiftAeroML rungs other than 35 cases, the draw and law rows and the AirfRANS extrapolation rows, which hold the earlier protocol's 192-wide lanes (their re-runs are in flight, @sec-program-status). "
       "Seeds, paired counts, rates and controls are in the chapter each row cites; every cell holds two seeds. How to read this: rows are different instruments and are not comparable with one another; the table ranks nothing, it locates. "
       "Data: results/ref_surface_2026-09-23.json, refboard_ladder_2026-09-23.json, p200k_trio_reduction_2026-09-19.json, p200k_fleet_reduction_2026-09-22.json, "
       "p200k_fleet_interim_2026-09-20.json, ratevol_reduction_2026-09-20.json, routenorm_extension_2026-09-21.json, airfrans_reduction_2026-09-22.json, airfrans_extrap_2026-09-22.json, "
-      "solids_frame_2026-09-22.json, solids_lug_2026-09-22.json, olbc_2026-09-22.json, p200k_pose_reduction_2026-09-19.json, trainarea_dr_reduction_2026-09-20.json, "
+      "solids_frame_2026-09-22.json, solids_lug_2026-09-22.json, olbc_2026-09-22.json, p200k_pose_r1_2026-09-23.json, trainarea_dr_reduction_2026-09-20.json, "
       "trainarea_reduction_2026-09-20.json, wingbench_200k_reduction_2026-09-19.json, territory_2026-09-21.json, territory_wings_2026-09-21.json, scalelaw_drivaerml_2026-09-22.json, "
       "airfrans_scale_2026-09-22.json, cost_sweep_ref_gb300_bf16_2026-09-22.json, cap435_interim_2026-09-20.json. {#tbl-vs-standing}")
 ```

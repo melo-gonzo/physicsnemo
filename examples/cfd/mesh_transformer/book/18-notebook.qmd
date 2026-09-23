@@ -26618,3 +26618,33 @@ inputs, $K = 0$) still needs one global direction for the kernel ($K \ge
 those lanes stay eager); the DeepJEB rank-1 load with the load direction
 as the global vector ($K = 1, P' = 1$) and Tensile2d with a traction input
 run fused. Rank-2 per-token inputs remain the follow-up.
+
+## 2026-09-23 — Verdict, REF-BOARD pose twin: the reference configuration trained in random poses scores 0.995x its native-frame standing; the rotation-augmented GeoTransolver-256 and Transolver-256 are 23% and 33% worse than posed ISLA (12% and 21% against the earlier protocol) {#sec-nb-refboard-pose-twin}
+
+**Setting.** The pose study (@sec-pose-contract) trains every model with
+every training and validation case of the DrivAerML Surface set rotated
+into its own random pose, at the reporting protocol (435 cars, 200,000
+cells, 500 epochs, two seeds), and scores surface pressure in float32 on
+the 48 posed validation cars. ISLA trains without augmentation and its
+covariance is exact by construction; GeoTransolver-256 and Transolver-256
+train with rotation augmentation. The earlier protocol's ISLA (192 wide,
+1e-3) scored 1.016x its native frame and led the augmented baselines by 12%
+and 21% (@sec-nb-p200k-pose-verdict). REF-BOARD re-runs the ISLA arm under
+the reference configuration (`rb_dr_isla_pose_seed{42,43}`).
+
+**Numbers** (`results/p200k_pose_r1_2026-09-23.json`, built by
+`pose_r1_reduce_2026-09-23.py` from the fleet scorer's metrics; the
+baseline rows are copied from the earlier artifact, released models not
+re-run): posed ISLA 0.0412 / 0.0414 (mean 0.0413) against the native-frame
+reference configuration 0.0416 / 0.0414 (mean 0.0415): **posed ÷ native
+0.995**. Augmented GeoTransolver-256 0.0508 and Transolver-256 0.0550 in
+the posed setting: **augmented baseline ÷ posed ISLA 1.23 and 1.33**.
+
+**Verdict.** The POSE-REF bars (posed within 3% of native; at least 5%
+below both augmented baselines) hold with margin, and the lead widens from
+12 / 21% to 23 / 33% because the reference configuration is 7% more
+accurate than the earlier protocol while the augmented baselines are the
+same released lanes. @sec-pose-contract, the index and @sec-vs-standing now
+read the reference-configuration artifact; the CLAIMS pose line is
+restated. The one remaining earlier-protocol element of the pose study is
+the baselines' augmented lanes, which are what they are (released models).

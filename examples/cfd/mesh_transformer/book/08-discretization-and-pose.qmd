@@ -24,7 +24,7 @@ factor = lambda a, draw="biased": a["mean"][draw] / a["mean"]["unif"]
 seed_factors = lambda a, draw="biased": [s[draw] / s["unif"] for s in a["per_seed"].values()]
 # slice territories on both datasets (ISLA R1 against the released GeoTransolver-256), and pose at the reporting protocol
 TT = J("territory_r1_2026-09-23.json")["models"]; TTW = J("territory_wings_r1_2026-09-23.json")["models"]; TT200 = J("territory_r1_200k_2026-09-23.json")["models"]
-POSE = J("p200k_pose_reduction_2026-09-19.json"); PA, PV, PN = POSE["arms"], POSE["verdict"], POSE["native_frame_reference"]
+POSE = J("p200k_pose_r1_2026-09-23.json"); PA, PV, PN = POSE["arms"], POSE["verdict"], POSE["native_frame_reference"]
 ```
 
 ```{python}
@@ -545,8 +545,8 @@ print(f"**ISLA is exactly covariant to rotations and translations. When geometri
       f"{(PV['gt_aug_posed_over_isla_posed']-1)*100:.0f}% against GeoTransolver and {(PV['t_aug_posed_over_isla_posed']-1)*100:.0f}% against "
       "Transolver trained with rotation augmentation, at the reporting protocol. When every case is in a native pose, or a canonical "
       "frame can be computed, it is a contract and not an accuracy edge.** This is ISLA's one measured in-distribution accuracy lead over "
-      "input-matched baselines on the surface, and it is conditional on the setting: in the dataset's native frame GeoTransolver is at "
-      "parity (@sec-scoreboard-200k). The budget is 200,000 cells per case, 435 DrivAerML training cars, 48 validation cars, float32, two seeds. "
+      "input-matched baselines on the surface, and it is conditional on the setting: in the dataset's native frame GeoTransolver-256 trails "
+      "ISLA by 7% and GeoTransolver-512 is at parity (@sec-scoreboard-200k). The budget is 200,000 cells per case, 435 DrivAerML training cars, 48 validation cars, float32, two seeds. "
       f"With every training and validation case in its own random pose, ISLA trained without augmentation scores {PA['isla']['posed_mean']:.4f} "
       f"(seeds {pseeds('isla')}), {PA['isla']['posed_over_native']:.3f}x its native-frame {PN['isla']:.4f}. GeoTransolver trained with rotation "
       f"augmentation scores {PA['gt_unit']['posed_mean']:.4f} ({PA['gt_unit']['posed_over_native']:.2f}x its native-pose {PN['gt_unit']:.4f}). "
@@ -566,10 +566,11 @@ for label, arm, ratio in (("ISLA, no augmentation", "isla", None), ("GeoTransolv
 print(out)
 print(": Pose at the reporting protocol on the DrivAerML Surface task (435 training cars, 48 validation cars, 200,000 cells per case, "
       "float32, two seeds): surface-pressure error with every case in the dataset's native pose, and with every training and validation "
-      "case rotated into its own random pose. The native-pose references are the trio lanes of @tbl-scoreboard-200k, GeoTransolver's at "
-      "1e-3. How to read this: the last column is the accuracy lead exact covariance buys against augmentation in the posed setting. "
-      "Posed ÷ native is each model's own cost of the setting. Data: results/p200k_pose_reduction_2026-09-19.json; "
-      "results/p200k_trio_reduction_2026-09-19.json. {#tbl-pose-200k}")
+      "case rotated into its own random pose. ISLA is the reference configuration in both columns (native: results/ref_surface_2026-09-23.json); "
+      "the baselines' native-pose references are their lanes of @tbl-scoreboard-200k at 1e-3, and their posed rows are the rotation-augmented "
+      "lanes of the earlier protocol (released models, not re-run). How to read this: the last column is the accuracy lead exact covariance buys against augmentation in the posed setting. "
+      "Posed ÷ native is each model's own cost of the setting. Data: results/p200k_pose_r1_2026-09-23.json; "
+      "results/ref_surface_2026-09-23.json; results/p200k_trio_reduction_2026-09-19.json. {#tbl-pose-200k}")
 ```
 
 ```{python}

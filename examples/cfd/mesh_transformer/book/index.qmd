@@ -84,7 +84,7 @@ olbc_x = (OLJ["learning_curve_exponents"]["poisson|isla_r1|u"]["exponent"], OLJ[
 JBR = J("deepjeb_2026-09-22.json")["gt512_over_isla"]; JBS = J("deepjeb_2026-09-22.json")["summary"]
 jb_full = {f: JBS["gt256|full"]["fields"][f]["mean"] / JBS["isla_r1|full"]["fields"][f]["mean"] for f in ("von_mises", "displacement")}
 # every case in a random pose, DrivAerML Surface task at the reporting protocol
-PP = J("p200k_pose_reduction_2026-09-19.json")
+PP = J("p200k_pose_r1_2026-09-23.json")
 pose200 = {"isla": PP["arms"]["isla"]["posed_over_native"], "gt": PP["arms"]["gt_unit"]["posed_over_native"], "t": PP["arms"]["transolver_unit"]["posed_over_native"]}
 pose200_lead = {"gt": PP["verdict"]["gt_aug_posed_over_isla_posed"], "t": PP["verdict"]["t_aug_posed_over_isla_posed"]}
 # training-law study: each model trained under the uniform and under the area-proportional sampling law,
@@ -138,7 +138,7 @@ rows = [
      f"GeoTransolver leads by {(1-lad200[27])*100:.0f}% at 27 cars and {(1-lad200[54])*100:.0f}% at 54; ISLA leads from 109 cars up"),
     ("**HiLiftAeroML surface task, 35-wing rung** (GeoTransolver-256 at 3e-3; Transolver-256)", f"{gt35:.4f} / {t35:.4f}", f"{W35:.4f}", f"{gt35/W35:.2f} / {t35/W35:.2f}",
      f"the baselines' error is {(1-gt35/W35)*100:.0f}% below ISLA's; the deficit shrinks with training cases and does not move with ISLA's width or depth (@sec-data-efficiency)"),
-    ("**DrivAerML Surface task**, every case in a random pose (baselines trained with rotation augmentation, ISLA without; ISLA under the earlier protocol, 192 wide)", f"{PP['arms']['gt_unit']['posed_mean']:.4f} / {PP['arms']['transolver_unit']['posed_mean']:.4f}", f"{PP['arms']['isla']['posed_mean']:.4f}", f"{pose200_lead['gt']:.2f} / {pose200_lead['t']:.2f}",
+    ("**DrivAerML Surface task**, every case in a random pose (baselines trained with rotation augmentation, ISLA without)", f"{PP['arms']['gt_unit']['posed_mean']:.4f} / {PP['arms']['transolver_unit']['posed_mean']:.4f}", f"{PP['arms']['isla']['posed_mean']:.4f}", f"{pose200_lead['gt']:.2f} / {pose200_lead['t']:.2f}",
      f"ISLA's own error moves {pose200['isla']:.3f}x between native and posed evaluation, the baselines' {pose200['gt']:.2f}x and {pose200['t']:.2f}x"),
     ("**DrivAerML Surface task**, 100,000 cells: error under a 10:1 front/back sampling-density bias ÷ error under the uniform draw, each model's frame from the sample (ISLA under the earlier protocol, 192 wide; the reference configuration's factors are in @sec-robustness-density)", f"{dens['gt_unit']:.1f}x / {dens['transolver_unit']:.1f}x", f"{dens['isla']:.2f}x", "—",
      f"ISLA's error grows {(dens['isla']-1)*100:.0f}%; the baselines' by factors"),
@@ -166,7 +166,7 @@ print(f": The thesis in {len(rows)} rows, one dataset and task per row. How to r
       "Unless a row says otherwise the setting is the reporting protocol, 200,000 sampled cells per case, each architecture at its own best learning rate (@sec-protocol). "
       "Errors are the area-weighted relative L2 (@sec-metrics) in float32, seed means over two seeds, of surface pressure on the surface tasks and of the named fields elsewhere; a ratio is baseline error divided by ISLA error, so a value above one favors ISLA. "
       "The seeds, the paired counts and the controls behind each row are in the chapter the row cites: the surface rows in @sec-surface, the pose and sampling rows in @sec-robustness-density and @sec-training-law, the capacity row in @sec-shared-floor, the interior and solid rows in @sec-interior. "
-      "Data: results/ref_surface_2026-09-23.json (ISLA and GeoTransolver-512), results/refboard_ladder_2026-09-23.json, results/p200k_trio_reduction_2026-09-19.json, results/p200k_pose_reduction_2026-09-19.json, "
+      "Data: results/ref_surface_2026-09-23.json (ISLA and GeoTransolver-512), results/refboard_ladder_2026-09-23.json, results/p200k_trio_reduction_2026-09-19.json, results/p200k_pose_r1_2026-09-23.json, "
       "results/p200k_fleet_reduction_2026-09-22.json (35-wing baselines), results/cost_sweep_ref_gb300_bf16_2026-09-22.json, "
       "results/trainarea_dr_reduction_2026-09-20.json and results/trainarea_reduction_2026-09-20.json (sampling consistency and the training law), "
       "results/cap435_reduction_2026-09-20.json, results/routenorm_extension_2026-09-21.json and results/routenorm_p200k_2026-09-22.json (capacity), results/ratevol_reduction_2026-09-20.json (GeoTransolver-volume), "

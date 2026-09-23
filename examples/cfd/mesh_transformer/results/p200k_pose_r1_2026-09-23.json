@@ -1,0 +1,69 @@
+{
+ "study": "POSE-REF under the reference configuration (REF-BOARD twin)",
+ "protocol": "POSE under the reference configuration (REF-BOARD pose twin, 2026-09-23): ISLA R1 (384 x 12, cosine routing, fused kernel,\n5e-4) trained on the DrivAerML Surface set with every training and validation case in its own random SO(3) pose\n(rb_dr_isla_pose_seed{42,43}, no augmentation), scored in float32 at 200,000 cells on the 48 posed validation cars by the\nfleet scorer (campaigns_2026-09-23/rb/metrics), against the same configuration's native-frame standing\n(ref_isla_r1_dr435, results/ref_surface_2026-09-23.json). The rotation-augmented GeoTransolver-256 and Transolver-256 arms\nand their native-pose references are copied unchanged from results/p200k_pose_reduction_2026-09-19.json (released\nbaselines, not re-run). Same schema as that artifact so the chapter cell reads either.\nOutput: p200k_pose_r1_2026-09-23.json.",
+ "arms": {
+  "isla": {
+   "per_seed": {
+    "seed42": {
+     "pressure_l2": 0.041191696926640965,
+     "n": 48
+    },
+    "seed43": {
+     "pressure_l2": 0.04139014162744085,
+     "n": 48
+    }
+   },
+   "posed_mean": 0.041290919277040906,
+   "posed_over_native": 0.9948117608563255,
+   "lanes": [
+    "rb_dr_isla_pose_seed42",
+    "rb_dr_isla_pose_seed43"
+   ],
+   "native_lanes": [
+    "ref_isla_r1_dr435_seed42",
+    "ref_isla_r1_dr435_seed43"
+   ]
+  },
+  "gt_unit": {
+   "per_seed": {
+    "seed42": {
+     "pressure_l2": 0.050635124246279396,
+     "wss_l2": 0.07772683103879292
+    },
+    "seed43": {
+     "pressure_l2": 0.050886218746503196,
+     "wss_l2": 0.07774550716082256
+    }
+   },
+   "posed_mean": 0.050760671496391296,
+   "posed_over_native": 1.115191713196312
+  },
+  "transolver_unit": {
+   "per_seed": {
+    "seed42": {
+     "pressure_l2": 0.055203805367151894,
+     "wss_l2": 0.08408824602762859
+    },
+    "seed43": {
+     "pressure_l2": 0.05474019547303518,
+     "wss_l2": 0.08347423871358235
+    }
+   },
+   "posed_mean": 0.054972000420093536,
+   "posed_over_native": 1.1629745822866746
+  }
+ },
+ "native_frame_reference": {
+  "source": "ISLA: results/ref_surface_2026-09-23.json (reference configuration, 435 cars, 200,000 cells); baselines: results/p200k_trio_reduction_2026-09-19.json (GeoTransolver at 1e-3; its 3e-3 pair pending)",
+  "isla": 0.04150626369907211,
+  "gt_unit": 0.04551743964354197,
+  "transolver_unit": 0.04726844529310863
+ },
+ "verdict": {
+  "isla_posed_over_native": 0.9948117608563255,
+  "gt_aug_posed_over_isla_posed": 1.2293422472823432,
+  "t_aug_posed_over_isla_posed": 1.331333895747382,
+  "bars": "as POSE-REF: supports if ISLA posed within 3% of native and at least 5% below both augmented baselines",
+  "verdict": "supports"
+ }
+}
