@@ -24951,3 +24951,56 @@ GeoTransolver-256 pairs at 125 to 310).
 over the three rungs are 0.78 (ISLA; the 300-lug mean carries the
 late-escaping seed) against 0.54 (GeoTransolver-512). The 2,400-lug rung
 and the R2 / GeoTransolver-256 pairs decide the standing at full data.
+
+## 2026-09-22 — Interim, OLBC at 512 and 2,048 cases: GeoTransolver-512 leads ISLA 3 to 4x on the fixed-mesh Poisson set and 1.4 to 2x on elasticity; ISLA's 512-case lanes memorize (validation rising after epoch 50); OLBC-MECH diagnostics launched {#sec-nb-olbc-interim}
+
+**What we saw** (`results/olbc_2026-09-22.json`; float32 relative L2 on the
+256 test cases, two seeds). Poisson at 512 cases: ISLA R1 0.867 against
+GeoTransolver-512 0.279 (ratio 0.32); elasticity at 512: ISLA 1.01 / 0.93
+/ 0.96 / 0.90 on $\sigma_{11}$ / $\sigma_{22}$ / $\sigma_{12}$ /
+displacement against 0.63 / 0.65 / 0.64 / 0.45 (ratios 0.62 / 0.70 / 0.66
+/ 0.49). Training-time validation at the larger rungs (Huber, z-scored,
+not yet scored in float32): Poisson at 2,048 cases ISLA relative L2 0.40
+against 0.096; at 8,448 cases (epoch 68 of 120) 0.22 against 0.087;
+elasticity at 2,048 cases 0.52 to 0.57 against 0.26 to 0.27. **The
+preregistered prediction that ISLA leads on the Poisson set at every rung
+(0.55) is being falsified at every rung so far**, in the direction opposite
+to the aerodynamic and solid datasets, where ISLA's steeper learning curve
+closes or reverses the gap.
+
+**The signature.** The 512-case ISLA lanes reach a training Huber loss of
+3e-4 (GeoTransolver 8e-5) while their validation loss falls to 0.18 at
+epoch 50 and then *rises* to 0.26 and stays there: memorization of the
+512 boundary-data samples, not a plateau (bar (iv)'s clause fires on
+elasticity at the letter, relative L2 above 0.9, but a half-rate rerun does
+not address memorization and is not launched). At 8,448 cases the
+training and validation losses agree (0.19 against 0.22), so the gap at
+full data is representational, not overfitting.
+
+**Hypotheses for the mechanism.** OLBC is the one setting where the
+geometry is *identical* in every sample and all information is in the
+per-cell boundary scalars and the nodal source: (M1) *positional
+resolution*: with a fixed mesh, ISLA's tokens see their position only
+through point-to-anchor invariants, and the anchors of a fixed geometry
+barely move between samples, so "where the Dirichlet segment sits relative
+to this node" is resolved only as finely as the slice partition allows,
+while GeoTransolver reads absolute coordinates and a fixed-radius
+neighborhood; (M2) *value transport*: the boundary value $g$ enters as one
+seed scalar on its cell and reaches the interior only through slice
+attention, a longer path than GeoTransolver's nodal tags carrying the value
+at the node itself; (M3) *small-data overfitting* specific to 512 samples,
+which the 8,448-case gap already argues against as the whole story.
+
+**Diagnostics** (group `om`, 6 lanes, Poisson set, seed 42, 512 and
+2,048 cases, 500 epochs): `frame2`, the laboratory frame as two global
+vectors (an equivariant coordinate system for the point-to-anchor
+invariants; if M1 is the cause this recovers most of the gap without
+breaking the contract); `leak`, absolute coordinates as extra boundary and
+query scalars (diagnostic only; the ceiling for positional information);
+`s1024`, four times the slices at the reference width and depth (M1 by
+finer partition). Predictions: under M1, `leak` closes at least half the
+log-gap to GeoTransolver-512 at 2,048 cases and `frame2` recovers at least
+half of what `leak` recovers; `s1024` recovers less than `frame2`. Under
+M2, none of the three moves the standing by more than 20% and the fix is
+architectural (a per-cell value channel that reaches the readout
+directly). Verdict when the six lanes are scored.

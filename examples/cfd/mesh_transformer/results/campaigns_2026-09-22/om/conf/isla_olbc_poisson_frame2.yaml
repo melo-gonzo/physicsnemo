@@ -1,0 +1,39 @@
+# @package _global_
+# OLBC-MECH (2026-09-22): the laboratory frame (+x, +y) as two global vectors (eager kernel).
+# ISLA on OLBC poisson-square-bc5 (2026-09-22): boundary tokens from the square polyline (line cells) with the one-hot BC type,
+# the BC value g and the Robin alpha as boundary scalars; no global condition (the material and domain are fixed, the source is
+# a field, and a scalar Poisson solution needs no frame: K = 0); every mesh node as an interacting query token with the signed
+# distance and the (standardized) source as its two query scalars.
+input_type: tensors
+output_type: tensors
+forward_kwargs:
+  points: boundaries.outer.cell_centroids
+  normals: boundaries.outer.cell_data.normals              # precomputed in-plane outward normals (a curve in 3-D has no cell_normals)
+  measure_weights: boundaries.outer.cell_data.quadrature_measure
+  boundary_scalars:                                        # per-boundary-cell scalars: which condition, and its value
+    - boundaries.outer.cell_data.bc_dirichlet
+    - boundaries.outer.cell_data.bc_neumann
+    - boundaries.outer.cell_data.bc_robin
+    - boundaries.outer.cell_data.bc_value_g
+    - boundaries.outer.cell_data.bc_robin_alpha
+  global_vectors: global_data.frame_xy                    # constant (+x, +y) (olbc_poisson_frame.yaml)
+  query_points: interior.points
+  query_normals: interior.point_data.sdf_normals
+  query_scalars:
+    - interior.point_data.sdf
+    - interior.point_data.source                           # standardized in place by the dataset yaml
+model:
+  _target_: physicsnemo.experimental.nn.ISLA
+  out_scalars: 1                 # u
+  out_vectors: 0
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  n_boundary_scalars: 5
+  n_global_vectors: 2
+  n_global_scalars: 0
+  query_tokens: true
+  n_query_scalars: 2
+  geo_checkpoint: true
+  geo_kernel: eager              # the fused kernel requires n_global_vectors == 1
