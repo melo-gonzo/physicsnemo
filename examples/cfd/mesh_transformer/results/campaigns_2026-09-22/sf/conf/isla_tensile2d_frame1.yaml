@@ -4,38 +4,35 @@
 # and the applied pressure as boundary scalars and the traction as a boundary vector; the six input scalars (P, p1..p5)
 # as the global condition vector; every mesh node as an interacting query token with the signed distance as its scalar.
 input_type: tensors
-output_type: tensors
+output_type: fields
 forward_kwargs:
   points: boundaries.outer.cell_centroids
   normals: boundaries.outer.cell_data.normals              # precomputed in-plane outward normals (a curve in 3-D has no cell_normals)
   measure_weights: boundaries.outer.cell_data.quadrature_measure
-  boundary_scalars:                                        # per-boundary-cell scalars: which edge, and how hard it is pulled
-    - boundaries.outer.cell_data.bc_loaded
-    - boundaries.outer.cell_data.bc_fixed
-    - boundaries.outer.cell_data.bc_pinned
-    - boundaries.outer.cell_data.bc_pressure
-  # ISLA has no per-boundary-cell vector input; the traction (-P n on the loaded edge) is recoverable from bc_pressure and
-  # the cell normal, which the model already sees. cell_data.traction stays in the files for other consumers.
-  global_vectors: global_data.frame_y                     # constant +y (plaid_tensile2d_frame.yaml)
-  global_scalars: global_data.params_std                   # standardized [P, p1, p2, p3, p4, p5] (StandardizeDomainGlobalField in the dataset yaml)
+  boundary_inputs:                                         # per-boundary-cell fields: which edge, and how hard it is pulled (all rank 0)
+    bc_loaded: boundaries.outer.cell_data.bc_loaded
+    bc_fixed: boundaries.outer.cell_data.bc_fixed
+    bc_pinned: boundaries.outer.cell_data.bc_pinned
+    bc_pressure: boundaries.outer.cell_data.bc_pressure
+  # The traction (-P n on the loaded edge) is recoverable from bc_pressure and the cell normal, which the model already
+  # sees; these lanes keep the rank-0 inputs of the running ladder. cell_data.traction could be declared as a rank-1 input.
+  global_inputs:
+    frame_y: global_data.frame_y                           # constant +y, the load direction (plaid_tensile2d_frame.yaml)
+    params: global_data.params_std                         # standardized [P, p1, p2, p3, p4, p5] (StandardizeDomainGlobalField in the dataset yaml)
   query_points: interior.points
   query_normals: interior.point_data.sdf_normals
-  query_scalars: interior.point_data.sdf
+  query_inputs:
+    sdf: interior.point_data.sdf
 model:
-  _target_: physicsnemo.experimental.nn.ISLA
-  out_scalars: 4                 # q, sig11, sig22, sig12 (dataset targets: scalars first)
-  out_vectors: 1                 # displacement
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs: {q: 0, sig11: 0, sig22: 0, sig12: 0, displacement: 1}
+  boundary_inputs: {bc_loaded: 0, bc_fixed: 0, bc_pinned: 0, bc_pressure: 0}
+  global_inputs: {frame_y: 1, params: {rank: 0, channels: 6}}
+  query_inputs: {sdf: 0}
   hidden: 384
   n_layers: 12
   n_slices: 256
   mlp_ratio: 4
-  n_boundary_scalars: 4
-  n_global_vectors: 1
-  n_global_scalars: 6
   query_tokens: true
-  n_query_scalars: 1
   geo_checkpoint: true
   geo_kernel: fused
-# Note: there is no physically meaningful global direction here (the load direction is fixed +y for every sample), so the
-# model is built with n_global_vectors = 0; the geometric seed then has width 5 instead of 6. If a REF-like configuration
-# with the fused kernel is wanted, pass a constant unit +y via global_data instead and set n_global_vectors: 1.

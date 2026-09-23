@@ -26,7 +26,8 @@ pipeline:
   transforms:
     - _target_: ${dp:SetDomainGlobalField}             # OLBC-MECH (2026-09-22): the laboratory frame as constant global vectors
       fields:
-        frame_xy: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+        frame_x: [1.0, 0.0, 0.0]
+        frame_y: [0.0, 1.0, 0.0]
     - _target_: ${dp:NormalizeMeshFields}
       association: point_data
       fields:                                    # pooled over all nodes of train (manifest _stats; 2026-09-22)

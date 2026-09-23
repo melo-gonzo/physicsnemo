@@ -27,7 +27,7 @@ pipeline:
     - _target_: ${dp:SetDomainGlobalField}             # SOLIDS-FRAME (2026-09-22): the fixed laboratory frame as constant global vectors
       fields:
         frame_y: [0.0, 1.0, 0.0]                        # the load direction (+y)
-        frame_xy: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]    # the full in-plane frame (K = 2)
+        frame_x: [1.0, 0.0, 0.0]                        # with frame_y, the full in-plane frame (K = 2)
     - _target_: ${dp:StandardizeDomainGlobalField}     # recipe-local (domain_transforms.py): global_data.params -> params_std, zero mean / unit std over train_400
       field: params
       output_field: params_std

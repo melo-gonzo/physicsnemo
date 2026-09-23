@@ -8,24 +8,24 @@
 # von Mises (scalar, invariant) and displacement (vector, equivariant). Load magnitudes are fixed per load case, so they are
 # implied by the one-hot and not fed.
 input_type: tensors
-output_type: tensors
-
+output_type: fields
 forward_kwargs:
   points: interior.points
   normals: boundaries.surface.cell_data.normals
   measure_weights: interior.point_data._target_quadrature_measure
-  global_vectors: global_data.load_dir
-  global_scalars: global_data.load_type
-  boundary_scalars:
-    - boundaries.surface.cell_data.bc_fixed
-    - boundaries.surface.cell_data.bc_loaded
-    - boundaries.surface.cell_data.bc_load_n
-    - boundaries.surface.cell_data.bc_load_mag
+  global_inputs:
+    load_dir: global_data.load_dir                         # the load direction: a rank-1 global input
+    load_type: global_data.load_type                       # one-hot load type: two rank-0 channels
+  boundary_inputs:
+    bc_fixed: boundaries.surface.cell_data.bc_fixed
+    bc_loaded: boundaries.surface.cell_data.bc_loaded
+    bc_load: boundaries.surface.cell_data.bc_load          # the applied traction on the loaded cells, ONE rank-1 field (zero elsewhere)
 
 model:
-  _target_: physicsnemo.experimental.nn.ISLA
-  out_scalars: 1                 # von_mises
-  out_vectors: 1                 # displacement
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs: {von_mises: 0, displacement: 1}
+  global_inputs: {load_dir: 1, load_type: {rank: 0, channels: 2}}
+  boundary_inputs: {bc_fixed: 0, bc_loaded: 0, bc_load: 1}
   hidden: 384
   n_layers: 12
   n_slices: 256
@@ -33,7 +33,4 @@ model:
   scale_mode: rms_distance
   routing_norm: cosine
   routing_temperature: 10.0
-  geo_kernel: fused
-  n_global_vectors: 1
-  n_global_scalars: 2
-  n_boundary_scalars: 4
+  geo_kernel: eager              # the fused kernel does not take rank-1 boundary inputs yet (kernel follow-up)

@@ -26,9 +26,10 @@ pipeline:
     drop_interior_cells: true
     drop_in_file_boundaries: false
   transforms:
-    - _target_: ${dp:SetDomainGlobalField}             # the fixed laboratory frame as constant global vectors (K = 2)
+    - _target_: ${dp:SetDomainGlobalField}             # the fixed laboratory frame as two constant global directions (K = 2)
       fields:
-        frame_xy: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+        frame_x: [1.0, 0.0, 0.0]
+        frame_y: [0.0, 1.0, 0.0]
     - _target_: ${dp:NormalizeMeshFields}              # boundary inputs: the ~1e-4 displacements and ~1e-1 tractions to unit scale
       association: cell_data
       fields:                                    # over labelled boundary cells of train (manifest _stats; 2026-09-22)
@@ -36,6 +37,12 @@ pipeline:
         bc_disp_y: {type: scalar, mean: 0.0, std: 1.047e-4}
         bc_trac_x: {type: scalar, mean: 0.0, std: 6.05e-2}
         bc_trac_y: {type: scalar, mean: 0.0, std: 6.07e-2}
+    - _target_: ${dp:StackScalarFields}                # the stored components as ONE rank-1 field each for ISLA's boundary_inputs (z = 0);
+      fields: [bc_disp_x, bc_disp_y]             # stacked after the per-component z-scores above, whose stds differ by < 1% (isotropic to that accuracy)
+      output_field: bc_displacement
+    - _target_: ${dp:StackScalarFields}
+      fields: [bc_trac_x, bc_trac_y]
+      output_field: bc_traction
     - _target_: ${dp:NormalizeMeshFields}
       association: point_data
       fields:                                    # pooled over all nodes of train (manifest _stats; 2026-09-22)

@@ -8,18 +8,17 @@
 # distance length unit (the class default). Learning rate 5e-4 (the width rule 1e-3 x 192/384). Requires the code_ref
 # snapshot (current class API: no frame_mode, no geo_checkpoint under the fused kernel).
 input_type: tensors
-output_type: tensors
-
+output_type: fields
 forward_kwargs:
   points: interior.points
   normals: boundaries.vehicle.cell_data.normals
-  global_vectors: global_data.U_inf_dir   # the one global condition vector of these datasets: the far-field flow direction
   measure_weights: interior.point_data._target_quadrature_measure
-
+  global_inputs:
+    freestream: global_data.U_inf_dir   # the one global direction of these datasets: the far-field flow direction
 model:
-  _target_: physicsnemo.experimental.nn.ISLA
-  out_scalars: 1                 # pressure
-  out_vectors: 1                 # wss
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs: {pressure: 0, wss: 1}
+  global_inputs: {freestream: 1}
   hidden: 384
   n_layers: 12
   n_slices: 256

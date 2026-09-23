@@ -5,36 +5,35 @@
 # components, and ISLA's scalar heads are rotation- and reflection-invariant without it); every mesh node as an interacting
 # query token with the signed distance as its scalar.
 input_type: tensors
-output_type: tensors
+output_type: fields
 forward_kwargs:
   points: boundaries.outer.cell_centroids
   normals: boundaries.outer.cell_data.normals              # precomputed in-plane outward normals (a curve in 3-D has no cell_normals)
   measure_weights: boundaries.outer.cell_data.quadrature_measure
-  boundary_scalars:
-    - boundaries.outer.cell_data.bc_dirichlet_x
-    - boundaries.outer.cell_data.bc_neumann_x
-    - boundaries.outer.cell_data.bc_disp_x
-    - boundaries.outer.cell_data.bc_trac_x
-    - boundaries.outer.cell_data.bc_dirichlet_y
-    - boundaries.outer.cell_data.bc_neumann_y
-    - boundaries.outer.cell_data.bc_disp_y
-    - boundaries.outer.cell_data.bc_trac_y
-  global_vectors: global_data.frame_xy                    # constant (+x, +y) (olbc_elasticity.yaml SetDomainGlobalField)
+  boundary_inputs:
+    bc_dirichlet_x: boundaries.outer.cell_data.bc_dirichlet_x   # condition tags, per component (rank 0)
+    bc_neumann_x: boundaries.outer.cell_data.bc_neumann_x
+    bc_dirichlet_y: boundaries.outer.cell_data.bc_dirichlet_y
+    bc_neumann_y: boundaries.outer.cell_data.bc_neumann_y
+    bc_displacement: boundaries.outer.cell_data.bc_displacement # prescribed displacement, ONE rank-1 field (StackScalarFields in the dataset yaml; z = 0)
+    bc_traction: boundaries.outer.cell_data.bc_traction         # prescribed traction, ONE rank-1 field
+  global_inputs:                                           # the constant laboratory frame as two global directions (olbc_elasticity.yaml)
+    frame_x: global_data.frame_x
+    frame_y: global_data.frame_y
   query_points: interior.points
   query_normals: interior.point_data.sdf_normals
-  query_scalars: interior.point_data.sdf
+  query_inputs:
+    sdf: interior.point_data.sdf
 model:
-  _target_: physicsnemo.experimental.nn.ISLA
-  out_scalars: 3                 # sig11, sig22, sig12 (dataset targets: scalars first)
-  out_vectors: 1                 # displacement
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs: {sig11: 0, sig22: 0, sig12: 0, displacement: 1}
+  boundary_inputs: {bc_dirichlet_x: 0, bc_neumann_x: 0, bc_dirichlet_y: 0, bc_neumann_y: 0, bc_displacement: 1, bc_traction: 1}
+  global_inputs: {frame_x: 1, frame_y: 1}
+  query_inputs: {sdf: 0}
   hidden: 384
   n_layers: 12
   n_slices: 256
   mlp_ratio: 4
-  n_boundary_scalars: 8
-  n_global_vectors: 2
-  n_global_scalars: 0
   query_tokens: true
-  n_query_scalars: 1
   geo_checkpoint: true
-  geo_kernel: eager              # the fused kernel requires n_global_vectors == 1
+  geo_kernel: eager              # the fused kernel does not take rank-1 boundary inputs yet (kernel follow-up)

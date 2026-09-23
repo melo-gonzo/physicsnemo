@@ -15,8 +15,8 @@
 # segment lengths as the quadrature measure, loop_id, and per component the one-hot type bc_dirichlet_* / bc_neumann_* with
 # the prescribed displacement bc_disp_* (0 off Dirichlet cells) and traction component bc_trac_* (0 off Neumann cells).
 # Splits: train (8448), test (256), nested train_n512 / train_n2048; select with train_split=train_n512 val_split=test.
-# NOTE: the boundary inputs bc_disp_x/y and bc_trac_x/y are still laboratory-frame components (scalars to ISLA), so this
-# configuration is frame-free on the OUTPUT side only; see the TENSOR-HEAD preregistration.
+# The boundary displacement and traction reach ISLA as rank-1 fields (StackScalarFields below), so the configuration is
+# frame-free on both sides; the lanes launched before 2026-09-22 read the components as scalars (TENSOR-HEAD preregistration).
 train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/olbc_elasticity_pdmsh
 manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/olbc_elasticity_pdmsh/manifest.json
 
@@ -37,6 +37,12 @@ pipeline:
         bc_disp_y: {type: scalar, mean: 0.0, std: 1.047e-4}
         bc_trac_x: {type: scalar, mean: 0.0, std: 6.05e-2}
         bc_trac_y: {type: scalar, mean: 0.0, std: 6.07e-2}
+    - _target_: ${dp:StackScalarFields}                # the stored components as ONE rank-1 field each for ISLA's boundary_inputs (z = 0);
+      fields: [bc_disp_x, bc_disp_y]             # stacked after the per-component z-scores above, whose stds differ by < 1% (isotropic to that accuracy)
+      output_field: bc_displacement
+    - _target_: ${dp:StackScalarFields}
+      fields: [bc_trac_x, bc_trac_y]
+      output_field: bc_traction
     - _target_: ${dp:NormalizeMeshFields}
       association: point_data
       fields:                                    # pooled over all nodes of train (manifest _stats; 2026-09-22)

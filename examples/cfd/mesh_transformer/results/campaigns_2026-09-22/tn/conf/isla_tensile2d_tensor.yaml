@@ -5,35 +5,34 @@
 # and the applied pressure as boundary scalars; the six input scalars (P, p1..p5) as the global condition vector; every
 # mesh node as an interacting query token with the signed distance as its scalar.
 input_type: tensors
-output_type: tensors
+output_type: fields
 forward_kwargs:
   points: boundaries.outer.cell_centroids
   normals: boundaries.outer.cell_data.normals              # precomputed in-plane outward normals (a curve in 3-D has no cell_normals)
   measure_weights: boundaries.outer.cell_data.quadrature_measure
-  boundary_scalars:                                        # per-boundary-cell scalars: which edge, and how hard it is pulled
-    - boundaries.outer.cell_data.bc_loaded
-    - boundaries.outer.cell_data.bc_fixed
-    - boundaries.outer.cell_data.bc_pinned
-    - boundaries.outer.cell_data.bc_pressure
-  # ISLA has no per-boundary-cell vector input; the traction (-P n on the loaded edge) is recoverable from bc_pressure and
-  # the cell normal, which the model already sees. cell_data.traction stays in the files for other consumers.
-  global_scalars: global_data.params_std                   # standardized [P, p1, p2, p3, p4, p5] (StandardizeDomainGlobalField in the dataset yaml)
+  boundary_inputs:                                         # per-boundary-cell fields: which edge, and how hard it is pulled (all rank 0)
+    bc_loaded: boundaries.outer.cell_data.bc_loaded
+    bc_fixed: boundaries.outer.cell_data.bc_fixed
+    bc_pinned: boundaries.outer.cell_data.bc_pinned
+    bc_pressure: boundaries.outer.cell_data.bc_pressure
+  # The traction (-P n on the loaded edge) is recoverable from bc_pressure and the cell normal, which the model already
+  # sees; these lanes keep the rank-0 inputs of the running ladder. cell_data.traction could be declared as a rank-1 input.
+  global_inputs:
+    params: global_data.params_std                         # standardized [P, p1, p2, p3, p4, p5] (StandardizeDomainGlobalField in the dataset yaml)
   query_points: interior.points
   query_normals: interior.point_data.sdf_normals
-  query_scalars: interior.point_data.sdf
+  query_inputs:
+    sdf: interior.point_data.sdf
 model:
-  _target_: physicsnemo.experimental.nn.ISLA
-  out_scalars: 1                 # q (dataset targets: scalars first)
-  out_vectors: 1                 # displacement
-  out_tensors: 1                 # stress: six lab-frame components xx, yy, zz, xy, xz, yz; the recipe reads xx, yy, xy
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs: {q: 0, displacement: 1, stress: {rank: 2, symmetric: true}}   # the stress as a whole rank-2 tensor; the recipe reads xx, yy, xy off it
+  boundary_inputs: {bc_loaded: 0, bc_fixed: 0, bc_pinned: 0, bc_pressure: 0}
+  global_inputs: {params: {rank: 0, channels: 6}}
+  query_inputs: {sdf: 0}
   hidden: 384
   n_layers: 12
   n_slices: 256
   mlp_ratio: 4
-  n_boundary_scalars: 4
-  n_global_vectors: 0            # no frame input: the tensor head is frame-independent by construction
-  n_global_scalars: 6
   query_tokens: true
-  n_query_scalars: 1
   geo_checkpoint: true
-  geo_kernel: eager              # the fused kernel requires n_global_vectors == 1 (isla/model.py: ValueError otherwise)
+  geo_kernel: eager              # no global direction: the fused kernel does not apply
