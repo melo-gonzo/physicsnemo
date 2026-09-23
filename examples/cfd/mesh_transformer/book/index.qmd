@@ -152,7 +152,7 @@ rows = [
     ("**PLAID Tensile2d** (2-D solid, frame components), 400 cases, GeoTransolver-512: σ11 / σ22 / σ12 / displacement", "—", "—", " / ".join(f"{T2[f]:.2f}" for f in ("sig11", "sig22", "sig12", "displacement")),
      "GeoTransolver-512 leads 1.1 to 1.5x and ties on σ12; ISLA's exponents are near one against one half, so the gap closes along the ladder (@sec-interior-tensile2d)"),
     ("**OLBC Poisson** (one fixed mesh, random labeled boundary data), 512 / 2,048 / 8,448 cases, GeoTransolver-512", "—", "—", " / ".join(f"{olbc[n]:.2f}" for n in (512, 2048, 8448)),
-     f"GeoTransolver leads by a constant factor of three with the same exponent ({olbc_x[0]:.2f} against {olbc_x[1]:.2f}); the gap is value transport, and a boundary-value extension recovers most of it at one rung and one seed (@sec-interior-olbc)"),
+     f"GeoTransolver leads by a constant factor of three with the same exponent ({olbc_x[0]:.2f} against {olbc_x[1]:.2f}); the gap is value transport, and a boundary-value extension recovers most of it at one rung (two seeds) (@sec-interior-olbc)"),
     ("**DeepJEB++** (brackets, load direction as the global vector; surface von Mises / displacement), 12,451 brackets at equal optimizer steps, best GeoTransolver arm", "—", "—", f"{jb_full['von_mises']:.2f} / {jb_full['displacement']:.2f}",
      f"ISLA leads or ties at every rung of the equal-step ladder ({JBR['isla_r1|n256']['von_mises']:.2f} / {JBR['isla_r1|n1024']['von_mises']:.2f} on von Mises at 256 / 1,024 brackets); equal-compute standings, not a learning curve (@sec-surface-deepjeb)"),
 ]

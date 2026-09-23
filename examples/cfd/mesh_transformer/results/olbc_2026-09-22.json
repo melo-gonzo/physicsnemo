@@ -1,6 +1,58 @@
 {
  "protocol": "fp32 inference on the 256 OLBC test cases per set, every node queried, per-sample relative L2 averaged over cases; bf16 training; 512- and 2,048-case rungs 500 epochs, 8,448-case rung 120 epochs (equal optimizer steps to 2,048 x 500); ISLA R1 = 384x12 cosine, lr 5e-4 (K=0 Poisson, K=2 frame on elasticity, eager); GeoTransolver-512 lr 1e-3",
  "lanes": {
+  "ol_elasticity_gt256_n8448_seed42": {
+   "set": "elasticity",
+   "arm": "gt256",
+   "n": 8448,
+   "seed": 42,
+   "n_cases": 256,
+   "epoch": 120,
+   "fields": {
+    "displacement": {
+     "mean": 0.04161757749170647,
+     "median": 0.03712598234415054
+    },
+    "sig11": {
+     "mean": 0.09297048144799192,
+     "median": 0.07770294323563576
+    },
+    "sig12": {
+     "mean": 0.0914024888043059,
+     "median": 0.0798480175435543
+    },
+    "sig22": {
+     "mean": 0.09660096196603263,
+     "median": 0.0834105871617794
+    }
+   }
+  },
+  "ol_elasticity_gt256_n8448_seed43": {
+   "set": "elasticity",
+   "arm": "gt256",
+   "n": 8448,
+   "seed": 43,
+   "n_cases": 256,
+   "epoch": 120,
+   "fields": {
+    "displacement": {
+     "mean": 0.04561785418263753,
+     "median": 0.040620461106300354
+    },
+    "sig11": {
+     "mean": 0.0978701995263691,
+     "median": 0.0816558264195919
+    },
+    "sig12": {
+     "mean": 0.0949681599449832,
+     "median": 0.08350663259625435
+    },
+    "sig22": {
+     "mean": 0.09869933905429207,
+     "median": 0.08633188158273697
+    }
+   }
+  },
   "ol_elasticity_gt512_n2048_seed42": {
    "set": "elasticity",
    "arm": "gt512",
@@ -128,6 +180,32 @@
     "sig22": {
      "mean": 0.10764184388972353,
      "median": 0.09647257998585701
+    }
+   }
+  },
+  "ol_elasticity_gt512_n8448_seed43": {
+   "set": "elasticity",
+   "arm": "gt512",
+   "n": 8448,
+   "seed": 43,
+   "n_cases": 256,
+   "epoch": 120,
+   "fields": {
+    "displacement": {
+     "mean": 0.048763879221951356,
+     "median": 0.04383559711277485
+    },
+    "sig11": {
+     "mean": 0.09919020084635122,
+     "median": 0.08700636774301529
+    },
+    "sig12": {
+     "mean": 0.09539382270304486,
+     "median": 0.08453330397605896
+    },
+    "sig22": {
+     "mean": 0.10309449912165292,
+     "median": 0.0886521153151989
     }
    }
   },
@@ -295,6 +373,20 @@
     }
    }
   },
+  "ol_poisson_isla_r1_n2048_seed42": {
+   "set": "poisson",
+   "arm": "isla_r1",
+   "n": 2048,
+   "seed": 42,
+   "n_cases": 256,
+   "epoch": 500,
+   "fields": {
+    "u": {
+     "mean": 0.39675149114918895,
+     "median": 0.36657917499542236
+    }
+   }
+  },
   "ol_poisson_isla_r1_n2048_seed43": {
    "set": "poisson",
    "arm": "isla_r1",
@@ -367,6 +459,42 @@
   }
  },
  "summary": {
+  "elasticity|gt256|n8448": {
+   "lanes": [
+    "ol_elasticity_gt256_n8448_seed42",
+    "ol_elasticity_gt256_n8448_seed43"
+   ],
+   "fields": {
+    "displacement": {
+     "mean": 0.043617715837172,
+     "seeds": [
+      0.04161757749170647,
+      0.04561785418263753
+     ]
+    },
+    "sig11": {
+     "mean": 0.09542034048718051,
+     "seeds": [
+      0.09297048144799192,
+      0.0978701995263691
+     ]
+    },
+    "sig12": {
+     "mean": 0.09318532437464455,
+     "seeds": [
+      0.0914024888043059,
+      0.0949681599449832
+     ]
+    },
+    "sig22": {
+     "mean": 0.09765015051016235,
+     "seeds": [
+      0.09660096196603263,
+      0.09869933905429207
+     ]
+    }
+   }
+  },
   "elasticity|gt512|n2048": {
    "lanes": [
     "ol_elasticity_gt512_n2048_seed42",
@@ -441,31 +569,36 @@
   },
   "elasticity|gt512|n8448": {
    "lanes": [
-    "ol_elasticity_gt512_n8448_seed42"
+    "ol_elasticity_gt512_n8448_seed42",
+    "ol_elasticity_gt512_n8448_seed43"
    ],
    "fields": {
     "displacement": {
-     "mean": 0.051221260659076506,
+     "mean": 0.04999256994051393,
      "seeds": [
-      0.051221260659076506
+      0.051221260659076506,
+      0.048763879221951356
      ]
     },
     "sig11": {
-     "mean": 0.10393098833446857,
+     "mean": 0.10156059459040989,
      "seeds": [
-      0.10393098833446857
+      0.10393098833446857,
+      0.09919020084635122
      ]
     },
     "sig12": {
-     "mean": 0.09976214485504897,
+     "mean": 0.09757798377904692,
      "seeds": [
-      0.09976214485504897
+      0.09976214485504897,
+      0.09539382270304486
      ]
     },
     "sig22": {
-     "mean": 0.10764184388972353,
+     "mean": 0.10536817150568822,
      "seeds": [
-      0.10764184388972353
+      0.10764184388972353,
+      0.10309449912165292
      ]
     }
    }
@@ -568,12 +701,14 @@
   },
   "poisson|isla_r1|n2048": {
    "lanes": [
+    "ol_poisson_isla_r1_n2048_seed42",
     "ol_poisson_isla_r1_n2048_seed43"
    ],
    "fields": {
     "u": {
-     "mean": 0.39313227724051103,
+     "mean": 0.39494188419485,
      "seeds": [
+      0.39675149114918895,
       0.39313227724051103
      ]
     }
@@ -618,7 +753,7 @@
    "sig22": 0.6968755997465635
   },
   "poisson|isla_r1|n2048": {
-   "u": 0.24955340004072085
+   "u": 0.24840995695133247
   },
   "poisson|isla_r1|n512": {
    "u": 0.32183708785699466
@@ -629,7 +764,7 @@
  },
  "learning_curve_exponents": {
   "poisson|isla_r1|u": {
-   "exponent": 0.8395854657035134,
+   "exponent": 0.8395974533042488,
    "rungs": [
     512,
     2048,
@@ -645,7 +780,7 @@
    ]
   },
   "elasticity|gt512|displacement": {
-   "exponent": 0.7730196972346554,
+   "exponent": 0.7817121795166752,
    "rungs": [
     512,
     2048,
@@ -653,7 +788,7 @@
    ]
   },
   "elasticity|gt512|sig11": {
-   "exponent": 0.6402359130623159,
+   "exponent": 0.648495636034438,
    "rungs": [
     512,
     2048,
@@ -661,7 +796,7 @@
    ]
   },
   "elasticity|gt512|sig12": {
-   "exponent": 0.6606215802210582,
+   "exponent": 0.668546716775263,
    "rungs": [
     512,
     2048,
@@ -669,7 +804,7 @@
    ]
   },
   "elasticity|gt512|sig22": {
-   "exponent": 0.6416757770079115,
+   "exponent": 0.6493187816032282,
    "rungs": [
     512,
     2048,

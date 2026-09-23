@@ -25944,6 +25944,16 @@ stays within the contract. Entered as the next OLBC lanes: `ext` on the
 elasticity set with the vector data extended as rank-1 query inputs under
 the v2 API.
 
+**Addendum (2026-09-23, second seeds).** Seed 43 of `ext`, `frame2` and
+`leak` scored (`om` rows 8 to 10; `s1024` stays one seed): $u$ relative
+L2 0.347 / 0.716 / 0.188 against seed 42's 0.318 / 0.673 / 0.203. Two-seed
+means and recovered fractions of the log-gap (baseline 0.867,
+GeoTransolver-512 0.279): **`ext` 0.333, 0.84**; `frame2` 0.695, 0.19;
+`leak` 0.195, 1.31. The seeds move each fraction by a few points and no
+ordering: the verdict stands with the extension recovering 84% of the
+log-gap and the frame 19%. The 2,048-case Poisson baseline also carries
+both seeds now (0.395; GeoTransolver-512 ÷ ISLA 0.25 unchanged).
+
 **Addendum, TENSOR-HEAD at 400 cases and on OLBC elasticity.** Tensor head
 alone (no load axis, `tn`): Tensile2d at 400 cases 0.385 / 0.280 / 0.354 /
 0.470 (two seeds agree) against `frame2`'s 0.0118 / 0.0086 / 0.0112 /
@@ -26344,3 +26354,43 @@ and 16 to 22 on the wings, against 62 and 24 for GeoTransolver-256; the
 @sec-nb-refboard-probes count slices that receive some weight, not
 slices that dominate any token, and the two numbers describe different
 things.
+
+## 2026-09-23 — Engineering, INTERNAL-GEOMETRY cost: the first nearest-boundary search ran at 46 s per step on DrivAerML Volume (113x the provided-SDF twin); replaced by an exact Triton brute-force kernel, bitwise equal, at matmul-class speed {#sec-nb-internal-geometry-cost}
+
+**Symptom.** The launch-acceptance check of the `sg` lanes
+(@sec-nb-internal-geometry-prereg) found the DrivAerML Volume lane with the
+internal geometry at epoch 1 while its provided-SDF twin was at epoch 20
+after the same 18 minutes: 46.5 s per step against 0.41 s. The AirfRANS
+pair, whose airfoil boundary has about a thousand segments, ran at 0.30
+against 0.18 s per step.
+
+**Cause.** The search was `torch.cdist` on the element-wise path
+(`compute_mode="donot_use_mm_for_euclid_dist"`, chosen for exactness) over
+200,000 queries x 200,000 boundary samples in 640-query blocks: 4e10 pairs
+through a generic kernel that is two orders of magnitude off the hardware.
+
+**Two fixes, one kept.** (1) The matmul expansion $|y|^2 - 2\,x\cdot y$ is
+fast but cancels catastrophically: its squared-distance error is about
+$\varepsilon R^2$ ($R$ the body radius), a *distance* resolution of
+$\sqrt{\varepsilon}\,R$, which is $2 \times 10^{-4} R$ in float32 (coarser
+than the near-wall sample spacing it has to resolve; in a stress test with a
+thousand samples within $10^{-3}$ of a point four radii out, 298 of 400
+queries picked the wrong sample) and $10^{-8} R$ in float64 (below the
+float32 resolution of the coordinates). In float64 it is exact and picked
+every sample correctly, but GPUs with reduced float64 throughput make it a
+2.8 s step (task 837676), still 7x the twin. It stays as the CPU fallback.
+(2) **A Triton kernel** (`physicsnemo/experimental/models/isla/nn_kernel.py`):
+one program owns 64 queries and streams the boundary in 128-sample tiles,
+forming the exact float32 difference $|x_q - y_i|^2$ (whose rounding is set
+by the coordinates' own precision, not by $R^2$) and keeping a running
+minimum and its index, so no $(Q, N)$ block is ever written and the pass is
+compute-bound at about eight flops per pair. On a laptop GPU (RTX 4090
+mobile) the full 200,000 x 200,000 search takes 0.36 s and returns indices
+bitwise equal to the float64 path; the class's tests compare both paths
+with a float64 brute force on the dense-cluster case and at scale
+(commit 300ed0ab). The two DrivAerML Volume internal lanes were relaunched
+under the kernel (epoch 0 to 1 of the first two links discarded; the
+AirfRANS internal lanes pick it up at their next chain link, their results
+unchanged since the search is exact either way). The measured step time
+under the kernel on the GB300 lanes is added below when the relaunch has
+stepped.

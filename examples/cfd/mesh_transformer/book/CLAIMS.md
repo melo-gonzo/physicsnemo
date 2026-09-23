@@ -247,9 +247,9 @@ chapters write "ISLA" for it and never "R1"; the 192-wide linear-routed lanes at
   seed) / 8,448; GeoTransolver-256 0.0287 at the full rung (width does not pay for GeoTransolver); exponents **0.84 vs
   0.81, the same exponent and a constant 3x gap: the one dataset where ISLA's curve is not steeper**. Elasticity 512:
   0.62 / 0.70 / 0.66 / 0.49 (sig11 / sig22 / sig12 / displacement), ISLA at the predict-zero error. Mechanism
-  (#sec-nb-olbc-mech-verdict, one seed, 512 Poisson): 4x slices 0%, domain frame 17%, boundary-value extension **88%** of
-  the log-gap (0.318 vs 0.867 vs 0.279), coordinate leak 127% (beats GeoTransolver by 27%; contract-breaking diagnostic).
-  Say: "the gap is value transport; the extension recovers most of it at one rung and one seed". Not a standing yet.
+  (#sec-nb-olbc-mech-verdict, 512 Poisson, two seeds; slices one seed): 4x slices 0%, domain frame 19%, boundary-value extension **84%** of
+  the log-gap (0.333 vs 0.867 vs 0.279, seed means), coordinate leak 131% (beats GeoTransolver by 31%; contract-breaking diagnostic).
+  Say: "the gap is value transport; the extension recovers most of it at one rung (two seeds)". Not a standing yet (one rung).
 - **DeepJEB++** (results/deepjeb_2026-09-22.json, equal optimizer steps about 130k, fp32 on 5,540 clean test files):
   best GeoTransolver ÷ ISLA von Mises / displacement **1.09 / 1.05 (256), 1.07 / 1.16 (1,024), 1.00 / 1.09 (4,096; GT one
   seed), 1.02 / 1.04 (12,451; best arm GeoTransolver-256)**. Both flat above 1,024 at equal steps: state as equal-compute

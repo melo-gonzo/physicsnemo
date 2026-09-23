@@ -548,7 +548,7 @@ print(": The OLBC ladders: relative L2 over the 256 test samples of each set (me
       "512 / 2,048 / 8,448-case ladder, with GeoTransolver-256 at the full rung (width does not pay for GeoTransolver here) and the "
       "least-squares learning-curve exponents. Bottom: the elasticity set at 512 cases, per field. How to read this: a ratio below one is "
       "a GeoTransolver lead; an ISLA error near one on the elasticity set is the error of predicting zero, so those cells say ISLA did not "
-      "learn the map at 512 cases, not that it is 1.4 to 2x behind; the 2,048-case ISLA Poisson cell holds one scored seed in the artifact. "
+      "learn the map at 512 cases, not that it is 1.4 to 2x behind. "
       "Data: results/olbc_2026-09-22.json. {#tbl-olbc-ladder}")
 ```
 
@@ -559,21 +559,21 @@ scaffold, and the solution varies on the scale of the boundary segments),
 or ISLA lacks a direct path from the prescribed boundary values to the
 interior query, which GeoTransolver's local embedding of the tagged nodes
 supplies. The diagnostic study at 512 Poisson cases ran one variant per
-mechanism against the reference (@sec-nb-olbc-mech-verdict, one seed
-each): four times the slices recovers nothing; the domain's own axes as
-global vectors recover 17% of the log-gap to GeoTransolver-512;
+mechanism against the reference (@sec-nb-olbc-mech-verdict, two seeds
+each except the slice count): four times the slices recovers nothing; the domain's own axes as
+global vectors recover 19% of the log-gap to GeoTransolver-512;
 absolute coordinates fed to every token, a diagnostic that breaks the
 pose contract, overshoot to 27% *better* than GeoTransolver-512, so
 position is sufficient but not what the contract-preserving remedies
 lack; and a parameter-free **boundary-value extension**, the
 measure-weighted inverse-square-distance average of the prescribed
 values per condition type and the distance to the nearest labeled cell,
-evaluated at every query as six query scalars, recovers 88% of the
-log-gap (0.318 against the reference's 0.867 and GeoTransolver-512's
-0.279). The missing ingredient is value transport, and an invariant,
+evaluated at every query as six query scalars, recovers 84% of the
+log-gap (0.333 against the reference's 0.867 and GeoTransolver-512's
+0.279, seed means). The missing ingredient is value transport, and an invariant,
 mesh-consistent quadrature of the boundary data supplies most of it
-without touching the contracts. The extension is one seed at one rung and
-is not a standing; its second seed, its 2,048-case twin, and its
+without touching the contracts. The extension is one rung and
+is not a standing; its 2,048-case twin and its
 vector-data form on the elasticity set (prescribed displacement and
 traction extended as rank-1 query inputs) are in flight
 (@sec-program-status). Two readings for the architecture travel with it:
