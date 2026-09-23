@@ -610,11 +610,33 @@ head can represent only invariants of the input vector set. Pressure, von
 Mises stress and plastic strain are invariants and need nothing; a stress
 component $\sigma_{ij} = e_i^{\mathsf T} \sigma\, e_j$ is an invariant
 of the set *augmented with the frame vectors* $e_i, e_j$, and is
-representable only when that frame is an input. The principled input is the
-frame itself as global vectors ($K = 2$ in the plane, $K = 3$ in space),
-which keeps the contract intact: rotating the body and the frame together
-leaves the components unchanged, as it should. The clause was measured on
-PLAID Tensile2d, where the targets are the in-plane stress components: with
+representable only when that frame is an input, or when the head produces
+the tensor $\sigma$ itself and the components are read off afterwards. The
+principled route for a tensor-valued target is the second: a **symmetric
+rank-2 tensor head** (`out_tensors`, 2026-09-22) that expands each output
+in the symmetrized outer products of the head's *true* basis vectors
+$\{\hat g_k, \hat n_i, \hat u_i, e_\theta(\hat u_i, \hat n_i),
+e_\theta(\hat u_i, \hat g_k)\}$ together with the identity,
+
+$$
+\sigma_i = \sum_{j \le k} c_{ijk}\, \tfrac{1}{2}\big(t_{ij} t_{ik}^{\mathsf T} + t_{ik} t_{ij}^{\mathsf T}\big) + c_{i0}\, I,
+$$
+
+with invariant coefficients from the same linear head ($m(m+1)/2 + 1$ of
+them per tensor, $m = 2K + 3$; seven with no global direction). The
+$e_\phi$ cross products are left out of this basis on purpose: a product of
+two true vectors is a true tensor, so $\sigma$ transforms as
+$R\,\sigma\,R^{\mathsf T}$ under proper *and* improper rotations, a
+stronger contract than the vector heads carry, and no laboratory frame
+enters anywhere. The laboratory components the dataset stores are then
+read off the predicted tensor, and the tests hold this to $10^{-12}$ in
+float64 for random rotations and mirrors. The interim route, which was the
+one measured first, is the frame itself as global vectors ($K = 2$ in the
+plane, $K = 3$ in space); it also keeps the contract intact, since rotating
+the body and the frame together leaves the components unchanged, but it
+asks the network to learn the frame's effect from data. The clause was
+measured on PLAID Tensile2d with the frame route, where the targets are
+the in-plane stress components: with
 no frame ISLA fits the training set and its validation error is 20 to 60
 times GeoTransolver's (memorization); with the load axis alone every field
 is repaired except $\sigma_{12}$, which is odd under the in-plane
@@ -626,7 +648,9 @@ representability one (@sec-nb-solids-frame-interim). Absolute coordinates add no
 the frame, and removing the odd component repairs nothing else, so the
 mechanism is the contract and not the trunk. GeoTransolver reads absolute
 coordinates and has no such clause, which is why the aerodynamic datasets,
-whose outputs are a true scalar and a vector, never exposed it.
+whose outputs are a true scalar and a vector, never exposed it. The tensor
+head against the frame route on the same two datasets is preregistered in
+@sec-nb-tensor-head-prereg.
 
 ## The forward pass on one page {#sec-isla-forward}
 

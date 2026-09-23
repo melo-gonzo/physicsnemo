@@ -25004,3 +25004,151 @@ half of what `leak` recovers; `s1024` recovers less than `frame2`. Under
 M2, none of the three moves the standing by more than 20% and the fix is
 architectural (a per-cell value channel that reaches the readout
 directly). Verdict when the six lanes are scored.
+
+## 2026-09-22 — Preregistration, TENSOR-HEAD: an exactly equivariant symmetric rank-2 output for ISLA, so the stress tensor is predicted as a tensor and its laboratory components are read off afterwards; against the frame-input configuration and GeoTransolver-512 on Tensile2d and OLBC elasticity {#sec-nb-tensor-head-prereg}
+
+**Setting.** The SOLIDS-FRAME finding (@sec-nb-solids-frame-prereg,
+@sec-nb-solids-frame-interim) was that ISLA's scalar heads are invariant
+under rotations and reflections, so the stress components $\sigma_{11},
+\sigma_{22}, \sigma_{12}$, which are components in a fixed laboratory frame,
+were unrepresentable without that frame as an input: frameless ISLA
+memorized the Tensile2d training set (validation error 20 to 60 times
+GeoTransolver's), the load axis alone as one global vector left
+$\sigma_{12}$ unrepresentable (odd under the in-plane mirror), and the
+full frame as two global vectors repaired every field. With the frame, ISLA
+R1 still trails GeoTransolver-512 by 1.1 to 1.5x at 400 cases
+(@sec-nb-solids-tensile2d-verdict). Peter's reading of that result: some
+of the remaining error comes from treating $\sigma_{11}$ and its
+companions as three unrelated scalars, which discards the fact that they
+are the components of one object that rotates with the body. This entry
+preregisters the principled fix, an equivariant tensor output, and a test
+of whether it pays.
+
+**The head.** ISLA's vector head already writes each vector output as
+$v_i = \sum_j c_{ij} B_{ij}$: invariant coefficients from the final linear
+layer times a basis of directions the token owns (the global directions
+$\hat g_k$, its normal $\hat n_i$, the radial direction $\hat u_i$ from its
+soft anchor, and the spherical complements $e_\theta, e_\phi$ of each
+pair; @sec-isla-heads). The tensor head (`out_tensors`, in
+`physicsnemo/experimental/nn/isla/model.py`) writes a symmetric rank-2
+output the same way, in the basis of symmetrized outer products of the
+*true* vectors of that set, $\{\hat g_k, \hat n_i, \hat u_i,
+e_\theta(\hat u_i, \hat n_i), e_\theta(\hat u_i, \hat g_k)\}$, plus the
+identity:
+
+$$
+\sigma_i = \sum_{j \le k} c_{ijk}\, \operatorname{sym}(t_{ij} t_{ik}^{\mathsf T}) + c_{i0}\, I,
+\qquad m = 2K + 3,\quad n_{\text{tbasis}} = \tfrac{m(m+1)}{2} + 1 .
+$$
+
+With no global direction ($K = 0$, the configuration used here) that is
+seven coefficients per tensor; the six laboratory components $xx, yy, zz,
+xy, xz, yz$ are read off $\sigma_i$ and appended after the vectors, so the
+output layout is scalars, vectors, tensors. Two choices deserve a sentence
+each. *(i)* The $e_\phi$ vectors are cross products, hence pseudovectors,
+and are left out: every basis tensor is then a product of two true vectors
+or the identity, and $\sigma$ is a true tensor, covariant under rotations
+*and* reflections ($\sigma \to R \sigma R^{\mathsf T}$ for every orthogonal
+$R$); the vector heads, which keep $e_\phi$, are covariant under proper
+rotations only. This matters here because the Tensile2d geometries are
+nearly mirror-symmetric and $\sigma_{12}$ is the odd component: a mirror
+of the geometry must flip the sign of the predicted $\sigma_{12}$, and with
+a true tensor it does exactly that, without the network having seen a
+mirrored case. *(ii)* The frame never enters. Rotating the geometry rotates
+the predicted tensor, and the laboratory components change accordingly,
+which is what frame independence means for a tensor field; the frame-input
+configuration keeps the contract too, but only by asking the network to
+learn how a fixed pair of input directions enters every component. The
+contract is tested in float64 (`test/experimental/nn/test_isla_tensor_head.py`):
+rotation covariance and reflection covariance at $10^{-12}$ for random
+proper and improper orthogonal matrices, translation invariance, symmetry,
+the layout, and that `out_tensors = 0` leaves the head, its parameters and
+every output of the existing lanes bitwise unchanged (the goldens pass; the
+three existing solids configurations were also compared old-against-new
+forward pass and agree bitwise). The fused geometry kernel is per layer
+and upstream of the head; the fused and eager models agree on the tensor
+outputs to roundoff.
+
+**The recipe.** A dataset that stores the components as separate scalar
+fields declares them as one target,
+
+```yaml
+targets:
+  q: scalar
+  displacement: vector
+  stress: {type: symmetric_tensor, components: {sig11: xx, sig22: yy, sig12: xy}}
+```
+
+and the recipe reads the listed laboratory components off the model's six,
+compares them with the named fields, and keeps the per-component metric
+names (`sig11_l2`, `sig22_l2`, `sig12_l2`), so the numbers sit in the same
+tables as the scalar-head lanes. The loss is unchanged in value: the
+listed components enter as per-component reductions summed, which is what
+three scalar fields contributed, and the channel normalization counts the
+listed components, not the six (a test pins tensor-against-scalar equality
+of the per-field and total losses). Normalization is the dataset's
+per-component z-score, applied component by component: a diagonal affine
+map per laboratory component, consistent with the loss and chosen so the
+loss stays comparable with the scalar-head lanes; it is not itself
+equivariant, but it acts on the readout side of an equivariant prediction
+and the metrics are computed in the same normalized space as before. The
+type is additive: every existing `targets:` block parses and behaves as it
+did (the recipe's 287 tests pass), which is what lets the pinned cluster
+copy take the patch under running lanes.
+
+**Why this is not benchmark gaming.** Nothing about the data, the splits,
+the scoring or the comparison arms changes. The tensor head is the
+architecture's contract extended to the next tensor rank, in the same
+construction (invariant coefficients times body-fixed basis elements) that
+the vector head has had since the beginning, and it removes an input (the
+laboratory frame) rather than adding one. The comparison arms are already
+scored: the frame configuration `frame2` and GeoTransolver-512, both at the
+same rungs, seeds, epochs and float32 scoring protocol
+(`results/solids_frame_2026-09-22.json`, `results/olbc_2026-09-22.json`).
+On Tensile2d at 400 cases, `frame2` reaches $\sigma_{11}$ /
+$\sigma_{22}$ / $\sigma_{12}$ / displacement 0.0118 / 0.0086 / 0.0112 /
+0.0082 against GeoTransolver-512's 0.0087 / 0.0076 / 0.0112 / 0.0054; at
+32 cases 0.112 / 0.112 / 0.102 / 0.090 against 0.032 / 0.028 / 0.031 /
+0.041. On OLBC elasticity at 512 cases, `frame2` (the configuration with
+the frame as two global vectors) reaches 1.01 / 0.93 / 0.96 / 0.90 against
+0.63 / 0.65 / 0.64 / 0.45. A method that only reproduces `frame2` has
+earned the removal of an input, no more; a method that beats it has found
+error in the scalar-component representation, which is the claim under
+test.
+
+**Lanes** (group `tn`, `kernel/tn/lanes.tsv`, six lanes, `code_ref`, 500
+epochs, lr 5e-4, 20,000 cells, validation every ten epochs; configs in
+`results/campaigns_2026-09-22/tn/conf/`). Tensile2d: `isla_tensile2d_tensor`
+(K = 0, eager, `out_scalars 1` for $q$, `out_vectors 1`, `out_tensors 1`)
+on `plaid_tensile2d_tensor` at 32 and 400 cases, seeds 42 and 43,
+`val_100`. OLBC elasticity: `isla_olbc_elasticity_tensor` (K = 0,
+`out_vectors 1`, `out_tensors 1`, the frame transform dropped) on
+`olbc_elasticity_tensor` at 512 and 2,048 cases, seed 42, the 256 test
+cases. One caveat is stated up front for the elasticity set: its boundary
+*inputs* (prescribed displacement and traction) are still laboratory
+components fed as scalars, so this configuration is frame-free on the
+output side only; a boundary-vector input is a separate item.
+
+**Bars** (float32 relative L2 on the held-out cases, per field, against
+`frame2` at the same rung, seed means). *Frame input not needed*: the
+tensor head within 10% of `frame2` on every field. *Equivariant head
+pays*: better than `frame2` by more than the seed spread of the two arms
+on at least the two normal stresses. *Exact contract*: the reflection test
+is the acceptance test of the implementation, not a training outcome; a
+lane whose $\sigma_{12}$ error does not fall below the frameless lanes'
+(1.2, worse than zero) would indicate a wiring error, not a finding. A
+tensor head worse than `frame2` by more than 10% on any field is a
+negative result for the representation claim on that dataset, and the
+frame configuration stays the Tensile2d arm.
+
+**Predictions.** At 400 Tensile2d cases the tensor head lands within the
+seed noise of `frame2` (prior 0.5): the frame configuration has 400 cases
+to learn a fixed frame's effect, and does. At 32 cases it beats `frame2`
+(prior 0.35): there the frame configuration had to learn the frame from
+32 cases and lost 3.5x to GeoTransolver-512, and a head that needs no
+frame has less to learn. On OLBC elasticity at 512 cases, where ISLA's
+error is near 1.0 and the lanes memorize, the tensor head does not by
+itself repair the standing (prior 0.7 that it stays above 0.8 on the
+stresses): the gap there is a boundary-value-reaching problem
+(@sec-nb-olbc-interim), not a representation one. Verdict when the six
+lanes are scored in float32.

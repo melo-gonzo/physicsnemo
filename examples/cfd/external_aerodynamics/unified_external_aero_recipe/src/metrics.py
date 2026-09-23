@@ -24,6 +24,10 @@ named target field declared in ``target_config`` produces:
 - For ``"vector"`` types: per-component values
   (``"<prefix>/<name>_x_<metric>"`` etc.) plus aggregate values over all
   components jointly (``"<prefix>/<name>_<metric>"``).
+- For symmetric-tensor types: one value per listed component under the
+  component's *dataset field name* (``"<prefix>/sig11_<metric>"``, the same
+  keys a scalar target of that name produces) plus the joint aggregate under
+  the tensor's name (``"<prefix>/stress_<metric>"``).
 
 When a target quadrature measure is available, every spatial reduction is
 measure-weighted. This is distinct from per-field loss weighting: the measure
@@ -43,7 +47,9 @@ from utils import (
     FieldType,
     align_scalar_shapes,
     align_target_measure,
+    field_kind,
     normalize_target_measure,
+    tensor_components,
     validate_field_coverage,
 )
 
@@ -231,7 +237,8 @@ class MetricCalculator:
         """
         keys: list[str] = []
         for name, field_type in self.target_config.items():
-            if field_type == "vector":
+            kind = field_kind(field_type)
+            if kind == "vector":
                 for i in range(self.n_spatial_dims):
                     comp = (
                         VECTOR_COMPONENTS[i] if i < len(VECTOR_COMPONENTS) else str(i)
@@ -239,6 +246,9 @@ class MetricCalculator:
                     keys.extend(
                         self._make_key(name, comp, m) for m in self.metric_names
                     )
+            elif kind == "symmetric_tensor":
+                for field in tensor_components(field_type):
+                    keys.extend(self._make_key(field, m) for m in self.metric_names)
             keys.extend(self._make_key(name, m) for m in self.metric_names)
         return keys
 
@@ -293,23 +303,34 @@ class MetricCalculator:
                 ### Nested lookup; metric keys keep the config spelling.
                 key = as_nested_key(name)
                 p, t = pred[key], target[key]
-                if field_type == "scalar":
+                kind = field_kind(field_type)
+                if kind == "scalar":
                     p, t = align_scalar_shapes(p, t)
-                    measure = align_target_measure(target_measure, p, field_type)
+                    measure = align_target_measure(target_measure, p, kind)
                     out.update(self._metrics_for_tensor(p, t, (name,), measure))
-                else:  # vector
-                    measure = align_target_measure(target_measure, p, field_type)
+                else:  # vector or symmetric tensor
+                    measure = align_target_measure(target_measure, p, kind)
                     n_components = p.shape[-1]
-                    ### Per-component metrics.
-                    for i in range(n_components):
-                        comp = (
-                            VECTOR_COMPONENTS[i]
-                            if i < len(VECTOR_COMPONENTS)
-                            else str(i)
-                        )
+                    ### Per-component metrics. A tensor's components are keyed
+                    ### by their dataset field names (``sig11_l2``), so the
+                    ### numbers line up with lanes that predicted them as
+                    ### scalars; a vector's by ``x, y, z``.
+                    if kind == "symmetric_tensor":
+                        parts = [(f,) for f in tensor_components(field_type)]
+                    else:
+                        parts = [
+                            (
+                                name,
+                                VECTOR_COMPONENTS[i]
+                                if i < len(VECTOR_COMPONENTS)
+                                else str(i),
+                            )
+                            for i in range(n_components)
+                        ]
+                    for i, name_parts in enumerate(parts):
                         out.update(
                             self._metrics_for_tensor(
-                                p[..., i], t[..., i], (name, comp), measure
+                                p[..., i], t[..., i], name_parts, measure
                             )
                         )
                     ### Aggregate vector metric under the bare field name:

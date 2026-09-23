@@ -1,0 +1,40 @@
+# @package _global_
+# TENSOR-HEAD variant (2026-09-22): the stress as one symmetric rank-2 tensor output (out_tensors: 1) from ISLA's
+# equivariant tensor head; no laboratory-frame global vectors (K = 0, eager); pairs with olbc_elasticity_tensor.yaml.
+# ISLA on OLBC elasticity-circlehollow-m1 (2026-09-22): boundary tokens from all three boundary loops (line cells) with the
+# per-component one-hot BC type, prescribed displacement and traction component (standardized) as boundary scalars; every
+# mesh node as an interacting query token with the signed distance as its scalar.
+input_type: tensors
+output_type: tensors
+forward_kwargs:
+  points: boundaries.outer.cell_centroids
+  normals: boundaries.outer.cell_data.normals              # precomputed in-plane outward normals (a curve in 3-D has no cell_normals)
+  measure_weights: boundaries.outer.cell_data.quadrature_measure
+  boundary_scalars:
+    - boundaries.outer.cell_data.bc_dirichlet_x
+    - boundaries.outer.cell_data.bc_neumann_x
+    - boundaries.outer.cell_data.bc_disp_x
+    - boundaries.outer.cell_data.bc_trac_x
+    - boundaries.outer.cell_data.bc_dirichlet_y
+    - boundaries.outer.cell_data.bc_neumann_y
+    - boundaries.outer.cell_data.bc_disp_y
+    - boundaries.outer.cell_data.bc_trac_y
+  query_points: interior.points
+  query_normals: interior.point_data.sdf_normals
+  query_scalars: interior.point_data.sdf
+model:
+  _target_: physicsnemo.experimental.nn.ISLA
+  out_scalars: 0
+  out_vectors: 1                 # displacement (dataset targets: vectors before tensors)
+  out_tensors: 1                 # stress: six lab-frame components xx, yy, zz, xy, xz, yz; the recipe reads xx, yy, xy
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  n_boundary_scalars: 8
+  n_global_vectors: 0            # no frame input: the tensor head is frame-independent by construction
+  n_global_scalars: 0
+  query_tokens: true
+  n_query_scalars: 1
+  geo_checkpoint: true
+  geo_kernel: eager              # the fused kernel requires n_global_vectors == 1

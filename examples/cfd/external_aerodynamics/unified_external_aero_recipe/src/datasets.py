@@ -70,7 +70,7 @@ import nondim  # noqa: F401, E402  (registers NonDimensionalizeByMetadata)
 import sdf  # noqa: F401, E402  (registers ComputeSDFFromBoundary, DropBoundary)
 from collate import build_collate_fn  # noqa: E402
 from metrics import MetricName  # noqa: E402
-from utils import FieldType, field_dim, resolve_dict  # noqa: E402
+from utils import FieldType, field_dim, resolve_dict, target_field_names  # noqa: E402
 
 ### Module-level logger used for warnings emitted from helpers below
 ### (e.g. ``validate_dataset_consistency``, ``build_dataloaders``). Goes
@@ -371,7 +371,9 @@ def build_dataset(
     reader = hydra.utils.instantiate(cfg.pipeline.reader, pin_memory=pin_memory)
     resolved = []
 
-    target_names = list(
+    ### The dataset field names the targets read (a symmetric-tensor target
+    ### expands to its component fields).
+    target_names = target_field_names(
         OmegaConf.to_container(
             OmegaConf.select(cfg, "targets", default=OmegaConf.create({})),
             resolve=True,

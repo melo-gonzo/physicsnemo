@@ -89,7 +89,12 @@ from forces import ForceAccumulator, ForceContext
 from metrics import MetricCalculator, resolve_metrics
 from nondim import NonDimensionalizeByMetadata, NondimFieldType, freestream_scales
 from omegaconf import DictConfig, OmegaConf
-from output_normalize import IOType, normalize_output_to_tensordict, require_output_type
+from output_normalize import (
+    IOType,
+    explode_tensor_targets,
+    normalize_output_to_tensordict,
+    require_output_type,
+)
 from tabulate import tabulate
 from tensordict import TensorDict
 from utils import (
@@ -98,6 +103,7 @@ from utils import (
     make_jsonl_logger,
     recursive_to_device,
     set_seed,
+    target_field_names,
 )
 
 from physicsnemo import datapipes  # noqa: F401 - registers ${dp:...} resolver
@@ -310,7 +316,10 @@ def attach_and_save(
     ### Names may spell nested leaves ("solution.p"); ``key in td`` and
     ### ``exclude`` resolve them, and the pred_/true_ prefix goes on the
     ### leaf so the nesting is preserved: ("solution", "pred_p").
-    target_keys = [as_nested_key(n) for n in target_config]
+    ### A symmetric-tensor target was read from its component fields, and its
+    ### predictions arrive exploded back into them (see the inference loop), so
+    ### the component fields are the ones to drop and re-write.
+    target_keys = [as_nested_key(n) for n in target_field_names(target_config)]
     present_targets = [k for k in target_keys if k in interior.point_data]
     drop_keys = list(present_targets)
     new_pd = interior.point_data.exclude(*drop_keys).clone()
@@ -653,8 +662,15 @@ def main(cfg: DictConfig) -> None:
             maxima[k] = max(maxima[k], v)
         count += 1
 
-        pred_pts = _to_pointwise(pred_td, output_type)
-        true_pts = _to_pointwise(batch["targets"], output_type)
+        ### Symmetric-tensor targets go back to their component fields here
+        ### (``stress`` -> ``sig11, sig22, sig12``), so the normalizer's inverse
+        ### and the saved ``pred_<name>`` fields read as in the scalar lanes.
+        pred_pts = explode_tensor_targets(
+            _to_pointwise(pred_td, output_type), target_config
+        )
+        true_pts = explode_tensor_targets(
+            _to_pointwise(batch["targets"], output_type), target_config
+        )
 
         ### Integrated force / moment coefficients (surface cases). The
         ### ForceContext un-normalizes to Cp / Cf internally and returns

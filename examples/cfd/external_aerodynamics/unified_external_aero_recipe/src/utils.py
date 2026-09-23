@@ -70,7 +70,103 @@ def initialize_from_checkpoint(
 ### output_normalize.py, forward_kwargs.py, collate.py, train.py, infer.py,
 ### and the tests so that ``target_config`` values share a single source of
 ### truth.
-FieldType: TypeAlias = Literal["scalar", "vector"]
+### A target is ``"scalar"``, ``"vector"`` or (2026-09-22, TENSOR-HEAD) a symmetric
+### rank-2 tensor spelled as a mapping whose ``components`` name the dataset fields
+### that hold its laboratory-frame components::
+###
+###     stress: {type: symmetric_tensor, components: {sig11: xx, sig22: yy, sig12: xy}}
+###
+### The model emits all six components (``xx, yy, zz, xy, xz, yz``); the loss and
+### the metrics read only the listed ones from the named dataset fields and keep
+### the per-component metric names (``sig11_l2``), so results stay comparable with
+### lanes that predicted the same components as separate scalars. Normalization is
+### the dataset's per-component z-score, applied component by component: a
+### diagonal affine map per lab-frame component, consistent with the loss and
+### chosen to keep the loss comparable with the scalar-head lanes.
+FieldType: TypeAlias = Literal["scalar", "vector"] | dict[str, Any]
+FieldKind: TypeAlias = Literal["scalar", "vector", "symmetric_tensor"]
+
+### The model's component order for a symmetric rank-2 tensor output.
+SYMMETRIC_TENSOR_COMPONENTS: tuple[str, ...] = ("xx", "yy", "zz", "xy", "xz", "yz")
+
+
+def field_kind(field_type: FieldType) -> FieldKind:
+    """Classify a ``targets:`` value as ``scalar``, ``vector`` or ``symmetric_tensor``.
+
+    Raises:
+        ValueError: On an unknown type tag or a malformed tensor spec.
+    """
+    if isinstance(field_type, dict):
+        kind = field_type.get("type")
+        if kind != "symmetric_tensor":
+            raise ValueError(
+                f"Unknown mapping field type {field_type!r}. Expected "
+                f"{{type: symmetric_tensor, components: {{<field>: <xx|yy|zz|xy|xz|yz>}}}}."
+            )
+        tensor_components(field_type)
+        return "symmetric_tensor"
+    if field_type in ("scalar", "vector", "symmetric_tensor"):
+        ### Idempotent on an already-classified kind (``align_target_measure``
+        ### is called with kinds as well as raw config values).
+        return field_type
+    raise ValueError(
+        f"Unknown field type {field_type!r}. Expected 'scalar', 'vector' or a "
+        f"symmetric_tensor mapping."
+    )
+
+
+def tensor_components(field_type: FieldType) -> dict[str, str]:
+    """``{dataset field name: component label}`` of a symmetric-tensor target, in YAML order.
+
+    Raises:
+        ValueError: If the spec has no components, repeats a component, or names
+            a label outside :data:`SYMMETRIC_TENSOR_COMPONENTS`.
+    """
+    comps = field_type.get("components") if isinstance(field_type, dict) else None
+    if not comps or not isinstance(comps, dict):
+        raise ValueError(
+            f"symmetric_tensor target needs a non-empty `components` mapping "
+            f"{{<field>: <xx|yy|zz|xy|xz|yz>}}; got {field_type!r}."
+        )
+    labels = list(comps.values())
+    bad = [c for c in labels if c not in SYMMETRIC_TENSOR_COMPONENTS]
+    if bad or len(set(labels)) != len(labels):
+        raise ValueError(
+            f"symmetric_tensor components must be distinct labels from "
+            f"{SYMMETRIC_TENSOR_COMPONENTS!r}; got {comps!r}."
+        )
+    return {str(k): str(v) for k, v in comps.items()}
+
+
+def tensor_component_indices(field_type: FieldType) -> list[int]:
+    """Channel indices (in the model's six-component layout) of the listed components."""
+    return [
+        SYMMETRIC_TENSOR_COMPONENTS.index(c) for c in tensor_components(field_type).values()
+    ]
+
+
+def target_field_names(target_config: dict[str, FieldType]) -> list[str]:
+    """Dataset field names a ``targets:`` block reads: tensor targets expand to their components."""
+    names: list[str] = []
+    for name, ftype in target_config.items():
+        if field_kind(ftype) == "symmetric_tensor":
+            names.extend(tensor_components(ftype))
+        else:
+            names.append(name)
+    return names
+
+
+def field_loss_channels(field_type: FieldType, n_spatial_dims: int = 3) -> int:
+    """Number of components a field contributes to the loss / metrics.
+
+    Equal to :func:`field_dim` for scalars and vectors; for a symmetric tensor it is
+    the number of *listed* components (the model emits six, the loss compares the
+    listed ones), so a tensor target weighs exactly as much in the channel-normalized
+    total as the same components declared as separate scalars.
+    """
+    if field_kind(field_type) == "symmetric_tensor":
+        return len(tensor_components(field_type))
+    return field_dim(field_type, n_spatial_dims)
 
 ### Allowed mixed-precision modes for the autocast context. ``"float8"`` is
 ### intentionally absent; `get_autocast_context` rejects it at runtime (see
@@ -184,26 +280,26 @@ def build_muon_optimizer(
 
 
 def field_dim(field_type: FieldType, n_spatial_dims: int = 3) -> int:
-    """Number of channels a single ``"scalar"`` or ``"vector"`` field occupies.
+    """Number of model output channels a field occupies.
 
     The type tag is always lowercase by contract -- the recipe normalises
     YAML inputs at the LossCalculator / MetricCalculator boundary. Pass
     pre-lowercased strings here.
 
     Args:
-        field_type: ``"scalar"`` or ``"vector"``.
+        field_type: ``"scalar"``, ``"vector"`` or a symmetric-tensor mapping
+            (six channels: the model emits every component).
         n_spatial_dims: Dimensionality of vector fields. Default 3.
 
     Raises:
-        ValueError: If ``field_type`` is not ``"scalar"`` or ``"vector"``.
+        ValueError: If ``field_type`` is not a recognized type.
     """
-    if field_type == "scalar":
+    kind = field_kind(field_type)
+    if kind == "scalar":
         return 1
-    if field_type == "vector":
+    if kind == "vector":
         return n_spatial_dims
-    raise ValueError(
-        f"Unknown field type {field_type!r}. Expected 'scalar' or 'vector'."
-    )
+    return len(SYMMETRIC_TENSOR_COMPONENTS)
 
 
 def align_scalar_shapes(
@@ -238,6 +334,7 @@ def align_target_measure(
     """
     if target_measure is None:
         return None
+    field_type = field_kind(field_type)
     expected_shape = reference.shape if field_type == "scalar" else reference.shape[:-1]
     if target_measure.shape != expected_shape:
         raise ValueError(

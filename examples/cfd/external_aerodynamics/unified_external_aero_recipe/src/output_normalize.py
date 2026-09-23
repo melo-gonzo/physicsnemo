@@ -38,7 +38,13 @@ import torch
 from jaxtyping import Float
 from omegaconf import DictConfig
 from tensordict import TensorDict
-from utils import FieldType, field_dim
+from utils import (
+    FieldType,
+    field_dim,
+    field_kind,
+    tensor_component_indices,
+    tensor_components,
+)
 
 from physicsnemo.datapipes.keys import as_nested_key, format_leaf_keys
 from physicsnemo.mesh import Mesh
@@ -77,7 +83,10 @@ def split_concat_by_target(
     ``"scalar"`` field eats one channel and the trailing dim is squeezed
     (so the leaf is shape ``(B, N)``); a ``"vector"`` field eats
     ``n_spatial_dims`` channels and keeps its trailing dim (leaf shape
-    ``(B, N, n_spatial_dims)``).
+    ``(B, N, n_spatial_dims)``); a symmetric-tensor field eats the model's
+    six components ``xx, yy, zz, xy, xz, yz`` and keeps only the listed ones,
+    in the YAML's component order (leaf shape ``(B, N, n_listed)``, matching
+    :func:`forward_kwargs.extract_targets`).
 
     Args:
         tensor: Concatenated output tensor, shape ``(B, N, C)`` where
@@ -109,11 +118,39 @@ def split_concat_by_target(
     for name, ftype in target_config.items():
         dim = field_dim(ftype, n_spatial_dims)
         slice_ = tensor[..., idx : idx + dim]
-        if ftype == "scalar":
+        kind = field_kind(ftype)
+        if kind == "scalar":
             slice_ = slice_.squeeze(-1)
+        elif kind == "symmetric_tensor":
+            slice_ = slice_[..., tensor_component_indices(ftype)]
         out.set(as_nested_key(name), slice_)
         idx += dim
 
+    return out
+
+
+def explode_tensor_targets(
+    td: TensorDict, target_config: dict[str, FieldType]
+) -> TensorDict:
+    """Replace each symmetric-tensor leaf by one leaf per listed component field.
+
+    ``stress`` with ``components: {sig11: xx, sig22: yy, sig12: xy}`` becomes
+    ``sig11``, ``sig22``, ``sig12`` (the dataset's own field names), so the
+    dataset normalizer's inverse and the saved ``pred_<name>`` files read
+    exactly as they do for lanes that predicted the components as scalars.
+    A config without tensor targets is returned unchanged.
+    """
+    if not any(field_kind(t) == "symmetric_tensor" for t in target_config.values()):
+        return td
+    out = TensorDict({}, batch_size=td.batch_size, device=td.device)
+    for name, ftype in target_config.items():
+        key = as_nested_key(name)
+        if field_kind(ftype) == "symmetric_tensor":
+            leaf = td[key]
+            for i, field in enumerate(tensor_components(ftype)):
+                out.set(as_nested_key(field), leaf[..., i])
+        else:
+            out.set(key, td[key])
     return out
 
 

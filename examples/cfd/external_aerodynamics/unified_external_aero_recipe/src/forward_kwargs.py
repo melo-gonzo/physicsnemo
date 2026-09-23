@@ -53,7 +53,7 @@ from typing import Any
 
 import torch
 from tensordict import TensorDict
-from utils import FieldType
+from utils import FieldType, field_kind, target_field_names, tensor_components
 
 from physicsnemo.datapipes.keys import as_nested_key, format_leaf_keys
 from physicsnemo.mesh import DomainMesh, Mesh
@@ -339,11 +339,25 @@ def extract_targets(
     """
     source_td, location = _target_point_data(domain)
 
-    keys = [as_nested_key(name) for name in target_config]
-    missing = [name for name, key in zip(target_config, keys) if key not in source_td]
+    ### A symmetric-tensor target is assembled from its component fields
+    ### (``{sig11: xx, sig22: yy, sig12: xy}`` -> one ``(N, 3)`` leaf under the
+    ### target's name, components in YAML order); everything else is selected
+    ### by name as before.
+    names = target_field_names(target_config)
+    keys = [as_nested_key(name) for name in names]
+    missing = [name for name, key in zip(names, keys) if key not in source_td]
     if missing:
         raise KeyError(
             f"Target fields {missing!r} not found in {location} "
             f"(available: {format_leaf_keys(source_td)!r})."
         )
-    return source_td.select(*keys)
+    if not any(field_kind(t) == "symmetric_tensor" for t in target_config.values()):
+        return source_td.select(*keys)
+    out = TensorDict({}, batch_size=source_td.batch_size, device=source_td.device)
+    for name, ftype in target_config.items():
+        if field_kind(ftype) == "symmetric_tensor":
+            comps = [source_td[as_nested_key(f)] for f in tensor_components(ftype)]
+            out.set(as_nested_key(name), torch.stack(comps, dim=-1))
+        else:
+            out.set(as_nested_key(name), source_td[as_nested_key(name)])
+    return out

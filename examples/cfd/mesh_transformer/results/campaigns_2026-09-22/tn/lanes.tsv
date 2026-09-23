@@ -1,0 +1,7 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	tn	tn_t2d_isla_r1_tensor_n32_seed42	plaid_tensile2d_tensor	isla_tensile2d_tensor	train_split=train_32 val_split=val_100 +training.val_interval=10	5e-4	42	20000	code_ref
+1	tn	tn_t2d_isla_r1_tensor_n32_seed43	plaid_tensile2d_tensor	isla_tensile2d_tensor	train_split=train_32 val_split=val_100 +training.val_interval=10	5e-4	43	20000	code_ref
+2	tn	tn_t2d_isla_r1_tensor_n400_seed42	plaid_tensile2d_tensor	isla_tensile2d_tensor	train_split=train_400 val_split=val_100 +training.val_interval=10	5e-4	42	20000	code_ref
+3	tn	tn_t2d_isla_r1_tensor_n400_seed43	plaid_tensile2d_tensor	isla_tensile2d_tensor	train_split=train_400 val_split=val_100 +training.val_interval=10	5e-4	43	20000	code_ref
+4	tn	tn_elasticity_isla_r1_tensor_n512_seed42	olbc_elasticity_tensor	isla_olbc_elasticity_tensor	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_ref
+5	tn	tn_elasticity_isla_r1_tensor_n2048_seed42	olbc_elasticity_tensor	isla_olbc_elasticity_tensor	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_ref

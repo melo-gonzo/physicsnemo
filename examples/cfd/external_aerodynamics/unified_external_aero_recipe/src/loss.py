@@ -47,7 +47,8 @@ from utils import (
     FieldType,
     align_scalar_shapes,
     align_target_measure,
-    field_dim,
+    field_kind,
+    field_loss_channels,
     normalize_target_measure,
     validate_field_coverage,
 )
@@ -312,8 +313,11 @@ class LossCalculator:
         ### Per-field tensors are looked up by name in the input TensorDict,
         ### so we just need a per-field dim count for total_channels.
         ### `field_dim` raises on unknown field types, validating the config.
+        ### A symmetric-tensor target counts its LISTED components (the ones
+        ### the loss compares), so declaring sig11/sig22/sig12 as one tensor
+        ### normalizes the total exactly as three scalar fields did.
         self.total_channels = sum(
-            field_dim(t, n_spatial_dims) for t in self.target_config.values()
+            field_loss_channels(t, n_spatial_dims) for t in self.target_config.values()
         )
 
         ### Per-field weights default to 1.0 for any field not in the dict.
@@ -396,14 +400,18 @@ class LossCalculator:
             ### key keeps the config spelling while the lookup is nested.
             key = as_nested_key(name)
             p, t = pred[key], target[key]
-            if field_type == "scalar":
+            kind = field_kind(field_type)
+            if kind == "scalar":
                 ### Caller may pass scalar fields as (..., 1) or (...);
                 ### normalize to a single shape so the loss is shape-agnostic.
                 p, t = align_scalar_shapes(p, t)
-                measure = align_target_measure(target_measure, p, field_type)
+                measure = align_target_measure(target_measure, p, kind)
                 field_loss = _scalar_loss(p, t, self.loss_type, self.delta, measure)
-            else:  # vector
-                measure = align_target_measure(target_measure, p, field_type)
+            else:
+                ### vector, or the listed components of a symmetric tensor:
+                ### per-component reductions summed, so a tensor's components
+                ### enter exactly as the same fields declared as scalars.
+                measure = align_target_measure(target_measure, p, kind)
                 field_loss = _vector_loss(p, t, self.loss_type, self.delta, measure)
 
             weighted = field_loss * self.field_weights[name]
