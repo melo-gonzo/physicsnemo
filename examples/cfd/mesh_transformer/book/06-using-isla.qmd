@@ -185,9 +185,11 @@ seed and one relational cosine per slice (@sec-isla-inputs-rank). The tests
 in `test_isla_global_inputs.py`, `test_isla_inputs.py` and
 `test_isla_heads.py` cover zero and two directions, global scalars, rank-1
 and rank-2 inputs and every output rank and parity. The fused geometry
-kernel is written for one to three global directions and no rank-1 or rank-2
-per-token inputs (since 2026-09-23; the frame-input solids configurations
-run it); otherwise `geo_kernel: null` resolves to the eager region.
+kernel is written for one to three per-point vectors, counting the global
+directions and the rank-1 boundary or query inputs together, and no rank-2
+per-token inputs (since 2026-09-23; the frame-input and rank-1-input solids
+configurations run it); otherwise `geo_kernel: null` resolves to the eager
+region.
 :::
 
 ## Training {#sec-using-train}
@@ -363,7 +365,8 @@ Two practical consequences:
 
 - **Leave `geo_kernel` at its default (`null`).** On CUDA with one to three
   global directions the model selects the fused kernel at the first forward pass and
-  logs the choice; off CUDA, or with rank-1 or rank-2 per-token inputs, it falls
+  logs the choice; off CUDA, with rank-2 per-token inputs, or with more than
+  three vectors in all, it falls
   back to the eager recompute region. Force `eager` only to reproduce the
   exact arithmetic path of a checkpoint trained on the eager region.
 - **On the eager path, leave `geo_checkpoint: true` unless you are short

@@ -26598,3 +26598,23 @@ independent of the direction count up to three. The cluster snapshots are
 not touched by this change (the running frame lanes finish on the eager
 region they started on; a new snapshot carries the kernel for the next
 solids campaign).
+
+**Addendum (same day): per-token rank-1 inputs through the same kernel.**
+In the kernel a token's rank-1 input (prescribed traction, displacement,
+load) is the same object as a global direction: a per-point vector dotted
+with the unit separation. The kernels now take the K global directions and
+the P' token vectors as one per-point vector set of at most three, with a
+second compile-time constant placing each vector's invariant where the
+eager region puts it (direction dots right after log distance, token-vector
+dots after $\hat n \cdot \hat m$), so the routing Linear's weights mean the
+same on both paths and a checkpoint trained on either loads on the other.
+The direction gradient comes back as $(B, N, K + P', 3)$ and autograd splits
+it. Exactness: the region test now covers $(K, P') \in \{(1,0), (2,0),
+(3,0), (1,1), (1,2), (2,1)\}$ in float64 and float32, and a model with a
+rank-1 boundary input matches its eager twin to 1e-11 (22 kernel tests, 167
+ISLA tests). The RANK-IO elasticity configuration (two rank-1 boundary
+inputs, $K = 0$) still needs one global direction for the kernel ($K \ge
+1$ is the kernel's contract; the OLBC sets have no global direction, so
+those lanes stay eager); the DeepJEB rank-1 load with the load direction
+as the global vector ($K = 1, P' = 1$) and Tensile2d with a traction input
+run fused. Rank-2 per-token inputs remain the follow-up.

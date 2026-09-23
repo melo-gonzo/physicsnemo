@@ -1191,7 +1191,7 @@ def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices(
         .eval()
     )
     assert two.resolve_geo_kernel(pts) == "eager"
-    with pytest.raises(ValueError, match="one to three global directions"):
+    with pytest.raises(ValueError, match="one to three per-point vectors"):
         ISLA(
             outputs=PV,
             global_inputs={"g1": 1, "g2": 1, "g3": 1, "g4": 1},

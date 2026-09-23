@@ -296,7 +296,7 @@ def test_legacy_vector_layouts_still_accepted():
 def test_fused_kernel_refuses_other_vector_counts():
     """The fused Triton region is unrolled for one to three global directions."""
     for spec in ({}, {"g1": 1, "g2": 1, "g3": 1, "g4": 1}):
-        with pytest.raises(ValueError, match="one to three global directions"):
+        with pytest.raises(ValueError, match="one to three per-point vectors"):
             ISLA(
                 outputs=PV,
                 global_inputs=spec,

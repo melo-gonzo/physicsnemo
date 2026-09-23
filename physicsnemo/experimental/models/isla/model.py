@@ -154,15 +154,16 @@ of the same arithmetic: ``geo_kernel="eager"`` (PyTorch; ``geo_checkpoint``
 rebuilds its intermediates in backward instead of storing them) and
 ``geo_kernel="fused"`` (one Triton kernel per direction that never
 materializes the (B, N, S, .) tensor; CUDA, float32/float64 geometry, one
-to three global directions, at most 1024 slices, no per-token vector or
-tensor inputs). The default ``geo_kernel=None`` means *auto*: at the first forward
+to three per-point vectors counting the global directions and the token's
+rank-1 inputs together, at most 1024 slices, no rank-2 inputs). The default
+``geo_kernel=None`` means *auto*: at the first forward
 pass the model picks the fused kernel when the inputs are on CUDA, Triton
 is importable and the constraints hold, and the eager region otherwise,
 logging the choice once; at 200,000 cells the fused kernel runs the
 training step in about a third of the eager time and memory (cost sweep,
-2026-09-18). Extending the kernel to the per-token vector contractions is
-the standing kernel follow-up; until then a model with rank-1 or rank-2
-boundary or query inputs runs the eager region.
+2026-09-18). The per-token rank-2 contractions (rho^T T rho) are the standing
+kernel follow-up; until then a model with rank-2 boundary or query inputs
+runs the eager region.
 
 Every constructor argument and every ``forward`` input is keyword-only, so a
 call reads as the recipe's ``forward_kwargs`` mapping does and models can be
@@ -618,6 +619,14 @@ def _geo_region(
     return bias, mix, torch.einsum("bns,bnsg->bng", mix, geo)
 
 
+def _fused_vectors(g_hat, vecs):
+    """The fused kernel's per-point vector set: the K global directions followed by
+    the token's rank-1 vectors (if any), (B, N, K + P', 3)."""
+    if vecs is None or vecs.shape[2] == 0:
+        return g_hat
+    return torch.cat([g_hat, vecs], dim=2)
+
+
 def _fused_geo_region():
     """The Triton-fused dense geometry region (geo_kernel="fused"); imported lazily so
     that the module loads without triton and the eager path never touches it."""
@@ -762,18 +771,20 @@ class _SliceBlock(nn.Module):
             ### (B, N, geo) instead of (B, N, S, hidden/2) -- ~0.5 GB per layer at
             ### 10k tokens, 256 slices, hidden 192 (A35b memory derivation).
             if self.geo_kernel == "fused":
-                ### The fused kernel is written for one to three global directions and
-                ### no per-token vector inputs (enforced at construction / resolution).
+                ### The fused kernel takes the global directions and the token's rank-1
+                ### vectors as one per-point vector set (at most three in all, no rank-2
+                ### inputs; enforced at construction / resolution).
                 bias, point_mix, pooled = _fused_geo_region()(
                     self.geo_logit,
                     logits,
                     r,
                     n_hat,
-                    g_hat,
+                    _fused_vectors(g_hat, vecs),
                     z_pos,
                     m_s,
                     eps,
                     True,
+                    n_global=g_hat.shape[2],
                 )
             elif self.geo_checkpoint:
                 bias, point_mix, pooled = checkpoint(
@@ -882,11 +893,12 @@ class _ReadBlock(nn.Module):
                 logits_pre,
                 q_r,
                 q_n,
-                q_g,
+                _fused_vectors(q_g, q_vecs),
                 z_pos,
                 m_s,
                 eps,
                 True,
+                n_global=q_g.shape[2],
             )
         elif self.geo_checkpoint:
             _, mix, pooled = checkpoint(
@@ -1339,8 +1351,9 @@ class ISLA(Module):
         geo_kernel: ``None`` (default) selects automatically at the first
             forward pass: ``"fused"`` (exact Triton kernel for the per-layer
             geometry region) when the inputs are on CUDA, Triton is available,
-            there are one to three global directions, at most 1024 slices and no
-            rank-1 or rank-2 boundary or query inputs, else ``"eager"`` (the
+            there are one to three per-point vectors (global directions plus rank-1
+            boundary or query inputs), at most 1024 slices and no rank-2 inputs,
+            else ``"eager"`` (the
             PyTorch reference region). Pass ``"eager"`` or ``"fused"`` to force
             one; ``"fused"`` raises when its constraints cannot be met.
         routing_norm: ``"cosine"`` (default): each block's point-to-slice
@@ -1569,15 +1582,16 @@ class ISLA(Module):
         self.n_block_vecs = self.bin.n_block_vecs + self.qin.n_block_vecs
         self.n_block_tens = self.bin.n_block_tens + self.qin.n_block_tens
         if geo_kernel == "fused":
-            if not 1 <= K <= 3:
+            if self.n_block_tens:
                 raise ValueError(
-                    f"geo_kernel='fused' is written for one to three global directions; "
-                    f"got {K} rank-1 global inputs"
+                    "geo_kernel='fused' does not support rank-2 boundary or query inputs "
+                    "(kernel follow-up); use geo_kernel='eager' or None"
                 )
-            if self.n_block_vecs or self.n_block_tens:
+            if not 1 <= K + self.n_block_vecs <= 3 or K < 1:
                 raise ValueError(
-                    "geo_kernel='fused' does not support rank-1 or rank-2 boundary or "
-                    "query inputs yet (kernel follow-up); use geo_kernel='eager' or None"
+                    f"geo_kernel='fused' is written for one to three per-point vectors "
+                    f"(global directions plus rank-1 token inputs); got {K} global "
+                    f"direction(s) and {self.n_block_vecs} token vector(s)"
                 )
         ### Seed width: the K invariants n.g_k (the only origin-free scalars of
         ### {n, g_k}; positions enter through the anchors), the boundary inputs'
@@ -1793,8 +1807,9 @@ class ISLA(Module):
 
         ``"eager"`` or ``"fused"`` when the constructor fixed it; under the
         default (auto) the fused kernel when ``points`` is on CUDA, Triton is
-        importable, the model has one to three global directions, at most 1024 slices and
-        no rank-1 or rank-2 per-token inputs, else the eager region. The
+        importable, the model has one to three per-point vectors (global directions
+        plus rank-1 token inputs), at most 1024 slices and no rank-2 inputs, else the
+        eager region. The
         decision is cached per device and logged once.
         """
         if self.geo_kernel != "auto":
@@ -1811,9 +1826,10 @@ class ISLA(Module):
         ok = (
             points.is_cuda
             and HAS_TRITON
-            and 1 <= self.n_global_vectors <= MAX_DIRECTIONS
+            and self.n_global_vectors >= 1
+            and self.n_global_vectors + self.n_block_vecs <= MAX_DIRECTIONS
             and self.n_slices <= MAX_SLICES
-            and not has_token_inputs
+            and not self.n_block_tens
         )
         chosen = "fused" if ok else "eager"
         self._geo_kernel_cache = (key, chosen)
