@@ -23,3 +23,7 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 21	jb	jb_gt256_full_seed42	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=1 training.num_epochs=10	1e-3	42	200000	code_ref
 22	jb	jb_isla_r2_full_seed43	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=1 training.num_epochs=10 ++model.n_layers=24	5e-4	43	200000	code_ref
 23	jb	jb_gt256_full_seed43	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=1 training.num_epochs=10	1e-3	43	200000	code_ref
+24	jb	jb_isla_r1_full_e40_seed42	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 training.num_epochs=40	5e-4	42	200000	code_ref
+25	jb	jb_gt512_full_e40_seed42	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 training.num_epochs=40 ++model.n_hidden=512	1e-3	42	200000	code_ref
+26	jb	jb_isla_r1_full_e40_seed43	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 training.num_epochs=40	5e-4	43	200000	code_ref
+27	jb	jb_gt512_full_e40_seed43	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 training.num_epochs=40 ++model.n_hidden=512	1e-3	43	200000	code_ref

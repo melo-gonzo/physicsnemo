@@ -25479,3 +25479,23 @@ with the 192-wide lanes of the earlier protocol labeled as such where they
 remain load-bearing (REF-BOARD replaces them). Pending under REF: the 210-
 and 510-wing rungs, DrivAerML Volume and AirfRANS under R1 (lanes running
 after the quota outage relaunch), and GeoTransolver-512 on the wings.
+
+**Addendum to DEEPJEB (2026-09-23): the equal-step ladder is flat for ISLA
+above 1,024 brackets.** Float32 von Mises relative L2 on the 5,540 clean
+test files, ISLA R1, two seeds: 0.605 / 0.496 / 0.509 / 0.508 at 256 /
+1,024 / 4,096 / 12,451 brackets (displacement 0.305 / 0.243 / 0.246 /
+0.252); GeoTransolver-512 at 1,024 brackets 0.536 / 0.282, so
+GeoTransolver ÷ ISLA = **1.08 / 1.16** there (ISLA leads; the other
+GeoTransolver rungs are scoring). The ladder holds optimizer steps fixed
+(about 130,000) while multiplying the data, and ISLA's error stops
+falling at 1,024 brackets: at equal steps the model is step-limited, not
+data-limited, and the "exponent" of 0.04 measures the budget, not the
+learning curve. Rows 24 to 27 of `kernel/jb/lanes.tsv` add an
+**equal-epoch companion** at the full rung: ISLA R1 and GeoTransolver-512
+for 40 epochs (four times the steps, about 500,000), two seeds. Bar: if
+ISLA at 40 epochs improves on its 10-epoch full-rung score by more than
+the two-seed spread, the ladder's flatness is the step budget and the
+data exponent must be read from equal-epoch rungs; the 10-epoch numbers
+stay as the equal-compute statement. The load-case breakdown holds at
+every rung: the torque case is ISLA's easiest (0.34 to 0.41) and the
+diagonal force its hardest (0.58 to 0.71); bar (iv) is met.
