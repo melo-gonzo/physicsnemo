@@ -12,17 +12,38 @@ RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
 mean = statistics.mean
 FIELDS = [("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity")]
+# ISLA is the reference configuration (384 x 12, cosine routing, 5e-4, `source_total` query mass), scored by the fleet scorer
+# on both interior datasets and reduced in results/ref_surface_2026-09-23.json; GeoTransolver-volume is the released baseline
+# of the reporting protocol on each dataset.
+REF = J("ref_surface_2026-09-23.json")
+REFS = REF["summary"]; REFL = REF["lanes"]
+def ref_arm(key):
+    return {f: dict(mean=REFS[key]["fields"][f]["mean"], seeds=REFS[key]["fields"][f]["seeds"]) for f, _ in FIELDS}
+# ISLA's parameter counts on the volume task, from each lane's own config line
+lane_params = lambda lane: json.loads(open(RES / f"campaigns_2026-09-22/ref/metrics/{lane}/{lane}/metrics.jsonl").readline())["num_parameters"] / 1e6
+ISLA_PARAMS = lane_params("ref_isla_r1_drvol_seed42"); R2_PARAMS = lane_params("ref_isla_r2_drvol_seed42")
 # DrivAerML Volume task: GeoTransolver-volume and ISLA with query tokens, 200,000 cells and 200,000 queries per car
 RVA = J("ratevol_reduction_2026-09-20.json")["arms"]
-COSI = J("routenorm_extension_2026-09-21.json")["configurations"]["isla|cos|interior|w192|lr1e-3"]
 GTV = {f: RVA["gt_vol_unit"][f] for f, _ in FIELDS}
-ISLAV = {f: dict(mean=COSI[f"{f}_mean"], seeds=COSI[f"{f}_seeds"]) for f, _ in FIELDS}
+ISLAV = ref_arm("isla_r1|drvol"); ISLAV_R2 = ref_arm("isla_r2|drvol")
 RATIO = {f: GTV[f]["mean"] / ISLAV[f]["mean"] for f, _ in FIELDS}
+PAIRED = {f: [g / i for g, i in zip(GTV[f]["seeds"], ISLAV[f]["seeds"])] for f, _ in FIELDS}
+# the interior training-car rungs (54 and 109 cars) of the reference configuration
+VOL_RUNGS = {54: ref_arm("isla_r1|drvol_n54"), 109: ref_arm("isla_r1|drvol_n109"), 435: ISLAV}
 # AirfRANS (interior task): the same pair on 800 training airfoils, 100,000 queries per case
-AF = J("airfrans_reduction_2026-09-22.json"); AFA, AFV = AF["arms"], AF["verdicts"]
-AFR = {f: AFV["isla_cosine_1e-3"][f]["gt_over_isla"] for f, _ in FIELDS}
+AF = J("airfrans_reduction_2026-09-22.json"); AFA = AF["arms"]
+AFG = {f: AFA["gt_volume_1e-3"][f] for f, _ in FIELDS}
+AFI = ref_arm("isla_r1|af"); AFI_R2 = ref_arm("isla_r2|af")
+AFR = {f: AFG[f]["mean"] / AFI[f]["mean"] for f, _ in FIELDS}
+AFP = {f: [g / i for g, i in zip(AFG[f]["seeds"], AFI[f]["seeds"])] for f, _ in FIELDS}
+spread = lambda s: abs(s[0] / s[1] - 1) * 100
 lead = lambda r: f"{(r - 1) * 100:.0f}%"
 trail = lambda r: f"{(1 - r) * 100:.0f}%"
+def standing(r, p):
+    """Word a ratio with its paired seeds: a lead or a deficit only when both paired ratios sit on the same side of one."""
+    if r > 1.02 and min(p) > 1: return f"leads by {r:.2f}x" if r >= 1.5 else f"leads by {lead(r)}"
+    if r < 0.98 and max(p) < 1: return f"trails by {trail(r)}"
+    return f"is level (ratio {r:.2f})"
 ```
 
 ```{python}
@@ -32,13 +53,16 @@ print("**On the task that asks for the field rather than the wall pressure, how 
       "result.** ISLA admits its interior queries as interacting tokens and gives them the signed distance to the wall, the same input "
       "GeoTransolver's volume configuration receives. On the DrivAerML Volume task at the reporting protocol (200,000 boundary cells and "
       f"200,000 interior queries per car, 48 validation cars, float32) ISLA leads GeoTransolver-volume on interior velocity by "
-      f"{lead(RATIO['velocity_l2'])}, trails it on interior pressure by {trail(RATIO['pressure_l2'])} and is level on eddy viscosity "
-      f"(GeoTransolver-volume ÷ ISLA {RATIO['nut_l2']:.2f}), at a third of the parameters. On AirfRANS (interior task), a second dataset and "
-      f"a second PDE regime, the ordering holds with the gaps widened: velocity {AFR['velocity_l2']:.2f}, pressure {AFR['pressure_l2']:.2f}, "
-      f"eddy viscosity {AFR['nut_l2']:.2f}, both seeds agreeing on every field. Because the queries interact, the interacting configuration "
-      "pays for its accuracy with a dependence on the joint query set that fixes its deployment count (@sec-interior-companion). Two "
-      "attempts to supply interior context by other means fail, and an exact boundary-integral prior is the wrong prior for separated flow "
-      "(@sec-interior-negatives). Every ratio is GeoTransolver-volume ÷ ISLA, above one favoring ISLA; protocol: @sec-protocol.")
+      f"{lead(RATIO['velocity_l2'])} and on interior pressure by {lead(RATIO['pressure_l2'])}, and {standing(RATIO['nut_l2'], PAIRED['nut_l2'])} "
+      f"on eddy viscosity. On AirfRANS (interior task), a second dataset and a second PDE regime, ISLA leads on velocity by "
+      f"{AFR['velocity_l2']:.2f}x and trails on pressure by {trail(AFR['pressure_l2'])} and on eddy viscosity by {trail(AFR['nut_l2'])}, "
+      "both seeds agreeing on every field. Because the queries interact, the interacting configuration pays for its accuracy with a "
+      "dependence on the joint query set that fixes its deployment count (@sec-interior-companion). Two attempts to supply interior "
+      "context by other means fail, and an exact boundary-integral prior is the wrong prior for separated flow (@sec-interior-negatives). "
+      "The chapter closes with the first solid-mechanics datasets, where every mesh node is a query: on the lug ISLA leads GeoTransolver-512 "
+      "at three of four rungs; on Tensile2d it trails at 400 cases with the steeper learning curve; on the fixed-mesh OLBC sets, where only "
+      "the boundary data vary, GeoTransolver-512 leads by a factor of three, and the mechanism is located (@sec-interior-olbc). Every ratio "
+      "is GeoTransolver-volume ÷ ISLA (GeoTransolver-512 ÷ ISLA on the solids), above one favoring ISLA; protocol: @sec-protocol.")
 ```
 
 ## The task {#sec-interior-task}
@@ -116,18 +140,24 @@ not a physical percentage. The reported value is the arithmetic mean over
 the 48 cars (@sec-metrics).
 
 **Protocol.** @sec-protocol, with 200,000 boundary cells and 200,000
-interior queries per car; both arms train at 1e-3 and are scored in float32
-at the training query count. The arms are not resource-matched and do not
-receive the same inputs: GeoTransolver-volume has 27.6M parameters (the
-surface configuration's 12-layer, 256-wide backbone plus ball-query local
-features over neighboring interior points at six radii), its tokens are
-the interior points only, and each carries its coordinates, the signed
-distance to the full-resolution surface and that distance's gradient; fed
-the physical far-field velocity vector instead of the unit direction it
-changes by under 2% on every field, so the interior ordering does not
-depend on the input-scale rule of @sec-part-baseline. ISLA with query
-tokens has 8.9M parameters, the surface configuration's count, and its
-per-slice geometry spans surface and query tokens together.
+interior queries per car; GeoTransolver-volume trains at 1e-3 and ISLA at
+the reference configuration's 5e-4, and both are scored in float32 at the
+training query count. The arms are not resource-matched and do not receive
+the same inputs: GeoTransolver-volume has 27.6M parameters (the surface
+configuration's 12-layer, 256-wide backbone plus ball-query local features
+over neighboring interior points at six radii), its tokens are the interior
+points only, and each carries its coordinates, the signed distance to the
+full-resolution surface and that distance's gradient; fed the physical
+far-field velocity vector instead of the unit direction it changes by under
+2% on every field, so the interior ordering does not depend on the
+input-scale rule of @sec-part-baseline. ISLA with query tokens is the
+reference configuration (384 wide, 12 layers,
+`{python} f"{ISLA_PARAMS:.1f}M"` parameters,
+`{python} f"{ISLA_PARAMS / 27.6:.2f}x"` GeoTransolver-volume's),
+and its per-slice geometry spans surface and query tokens together; the
+parameter difference is stated here once and could buy accuracy, so the
+interior ratios are read as standings of the two configurations as
+shipped, not as a matched-capacity comparison.
 
 ### How each architecture treats an interior point
 
@@ -152,13 +182,14 @@ query weight is set relative to the surface measure is the `query_mass`
 option. The class default, `source_total`, gives the queries a learned
 fraction of the total boundary measure, so re-representing the same
 surface at another refinement leaves the routing unchanged
-(measure-rescale invariant). The rows of this chapter use the
-`geometric_mean` option, which gives each query the mean boundary
+(measure-rescale invariant), and every standing of this chapter is under
+it. The alternative, `geometric_mean`, gives each query the mean boundary
 log-weight plus a learned offset and therefore depends on how finely the
 surface is sampled and on how many queries are asked for; the query-count
-dependence of @sec-interior-companion is that option's. Nothing else
-changes: 8.9M parameters, the surface configuration's hyperparameters, no
-local features.
+instruments of @sec-interior-companion were read under that option at the
+exploration budget. Nothing else changes: the reference configuration's
+width, depth and slice count, the surface configuration's
+hyperparameters, no local features.
 
 ## The DrivAerML Volume task {#sec-interior-results}
 
@@ -168,11 +199,13 @@ local features.
 #| output: asis
 ps = ISLAV["pressure_l2"]["seeds"]
 print(f"**At the reporting protocol, with its queries admitted as interacting tokens and given the signed distance, ISLA leads "
-      f"GeoTransolver-volume on interior velocity by {lead(RATIO['velocity_l2'])}, trails on pressure by {trail(RATIO['pressure_l2'])} and is "
-      f"level on eddy viscosity (GeoTransolver-volume ÷ ISLA {RATIO['nut_l2']:.2f}), at a third of the parameters.** Budget: 200,000 boundary "
-      "cells and 200,000 interior queries per car, 435 training cars, 48 validation cars, float32, two seeds. The pressure deficit is the "
-      f"size of ISLA's own pressure seed spread ({abs(ps[0] / ps[1] - 1) * 100:.0f}% between the two seeds), so on this dataset it is a "
-      "standing inside the noise; velocity is not, with the two seeds of each arm on the same side by a wide margin.")
+      f"GeoTransolver-volume on interior velocity by {lead(RATIO['velocity_l2'])} and on interior pressure by {lead(RATIO['pressure_l2'])}, "
+      f"with both paired seeds on ISLA's side on both fields, and {standing(RATIO['nut_l2'], PAIRED['nut_l2'])} on eddy viscosity.** "
+      "Budget: 200,000 boundary cells and 200,000 interior queries per car, 435 training cars, 48 validation cars, float32, two seeds. "
+      f"ISLA's two pressure seeds are {spread(ps):.0f}% apart and GeoTransolver-volume's {spread(GTV['pressure_l2']['seeds']):.0f}%, so the "
+      f"pressure lead ({min(PAIRED['pressure_l2']):.2f} and {max(PAIRED['pressure_l2']):.2f} paired by seed) is outside the seed noise; the "
+      f"velocity lead is several times any spread. Doubling ISLA's depth to 24 layers moves the three fields by "
+      f"{', '.join(f'{(ISLAV_R2[f]['mean'] / ISLAV[f]['mean'] - 1) * 100:+.0f}%' for f, _ in FIELDS)} at twice the step time and memory.")
 ```
 
 ```{python}
@@ -183,14 +216,32 @@ def cell(d, ref=None):
     return s + (f" — {ref['mean'] / d['mean']:.2f}" if ref else "")
 out = "| arm, 435 training cars, 200,000 cells and 200,000 queries | pressure (seeds) — ratio | velocity (seeds) — ratio | eddy viscosity (seeds) — ratio |\n|---|---|---|---|\n"
 out += "| GeoTransolver-volume, 27.6M, 1e-3 | " + " | ".join(cell(GTV[f]) for f, _ in FIELDS) + " |\n"
-out += "| **ISLA with query tokens + signed distance, 8.9M, 1e-3** | " + " | ".join(cell(ISLAV[f], GTV[f]) for f, _ in FIELDS) + " |\n"
+out += f"| **ISLA with query tokens + signed distance, {ISLA_PARAMS:.1f}M, 5e-4** | " + " | ".join(cell(ISLAV[f], GTV[f]) for f, _ in FIELDS) + " |\n"
+out += "| paired by seed, GeoTransolver-volume ÷ ISLA | " + " | ".join(" / ".join(f"{r:.2f}" for r in PAIRED[f]) for f, _ in FIELDS) + " |\n"
+out += f"| ISLA, 24 layers (depth variant, {R2_PARAMS:.1f}M), 5e-4 | " + " | ".join(cell(ISLAV_R2[f], GTV[f]) for f, _ in FIELDS) + " |\n"
 print(out)
 print(": Interior error on the DrivAerML Volume task at the reporting protocol: relative L2 over the 48 validation cars (arithmetic mean over "
       "cars, then over seeds; seeds in parentheses), float32, 200,000 boundary cells and 200,000 interior queries per car, 500 epochs. The "
-      "ratio after each ISLA cell is GeoTransolver-volume ÷ ISLA (above 1 favors ISLA). How to read this: the arms are not resource-matched "
-      "and do not receive the same inputs (@sec-interior-task); the ISLA lanes use the `geometric_mean` query mass (@sec-interior-query-tokens). The AirfRANS twin "
-      "of this table is @tbl-interior-airfrans. Data: results/ratevol_reduction_2026-09-20.json (GeoTransolver-volume); "
-      "results/routenorm_extension_2026-09-21.json (ISLA). {#tbl-interior-200k}")
+      "ratio after each ISLA cell is GeoTransolver-volume ÷ ISLA (above 1 favors ISLA); the paired row divides seed by seed. How to read "
+      "this: the arms are not resource-matched and do not receive the same inputs (@sec-interior-task); ISLA is the reference "
+      "configuration with the `source_total` query mass (@sec-interior-query-tokens), and the last row is the depth variant the reference "
+      "selection rejected. The AirfRANS twin of this table is @tbl-interior-airfrans. Data: results/ratevol_reduction_2026-09-20.json "
+      "(GeoTransolver-volume); results/ref_surface_2026-09-23.json (ISLA). {#tbl-interior-200k}")
+```
+
+```{python}
+#| label: tbl-interior-rungs
+#| output: asis
+out = "| DrivAerML training cars | ISLA interior pressure (seeds) | velocity (seeds) | eddy viscosity (seeds) |\n|---:|---|---|---|\n"
+for n, a in VOL_RUNGS.items():
+    out += f"| {n} | " + " | ".join(cell(a[f]) for f, _ in FIELDS) + " |\n"
+print(out)
+slope = lambda f: -np.log(VOL_RUNGS[435][f]["mean"] / VOL_RUNGS[54][f]["mean"]) / np.log(435 / 54)
+print(f": ISLA's interior error against training cars on the DrivAerML Volume task (same protocol as @tbl-interior-200k; nested training "
+      f"splits of 54 and 109 cars inside the 435-car split; two seeds). The exponent of the total error over 54 to 435 cars is "
+      f"{slope('pressure_l2'):.2f} on pressure, {slope('velocity_l2'):.2f} on velocity and {slope('nut_l2'):.2f} on eddy viscosity. How to "
+      "read this: a within-architecture ladder; GeoTransolver-volume was trained at the full split only, so no cross-architecture ratio "
+      "exists below 435 cars. Data: results/ref_surface_2026-09-23.json. {#tbl-interior-rungs}")
 ```
 
 Two ingredient orderings sit behind the row, measured at the exploration
@@ -214,48 +265,53 @@ field.
 ```{python}
 #| label: para-airfrans-lead
 #| output: asis
-print(f"**The interior ordering is not a property of car flow: on AirfRANS, a different dataset and a different PDE regime, ISLA leads "
+print(f"**The velocity lead is not a property of car flow: on AirfRANS, a different dataset and a different PDE regime, ISLA leads "
       f"GeoTransolver-volume on interior velocity by {AFR['velocity_l2']:.2f}x and trails it on pressure by {trail(AFR['pressure_l2'])} and on "
-      f"eddy viscosity by {trail(AFR['nut_l2'])}, with both seeds agreeing on every field.** AirfRANS is 1,001 two-dimensional incompressible "
+      f"eddy viscosity by {trail(AFR['nut_l2'])}, with both paired seeds agreeing on every field.** AirfRANS is 1,001 two-dimensional incompressible "
       "k-omega SST RANS solutions around NACA airfoils; its full split trains on 800 cases and tests on 200. It is the book's instance of the "
       "general interface with one global scalar: the boundary is the airfoil polyline, the global inputs are the inlet direction as the one "
       "global vector and the inlet speed as the one global scalar, and the interior queries carry the signed distance to the airfoil "
       "(@sec-dataset-airfrans; conversion and normalization in @sec-data-airfrans). Both architectures train for 500 epochs at 100,000 "
-      "interior queries per case and are scored in float32 at the same count on the 200 test cases.")
+      "interior queries per case (GeoTransolver-volume at 1e-3, ISLA at the reference configuration's 5e-4) and are scored in float32 at "
+      "the same count on the 200 test cases.")
 ```
 
 ```{python}
 #| label: tbl-interior-airfrans
 #| output: asis
-def afcell(a, f): return f"{AFA[a][f]['mean']:.4f} ({' / '.join(f'{v:.4f}' for v in AFA[a][f]['seeds'])})"
-v = AFV["isla_cosine_1e-3"]
+def acell(d): return f"{d['mean']:.4f} ({' / '.join(f'{v:.4f}' for v in d['seeds'])})"
 out = "| arm, 800 training airfoils, 100,000 queries | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
-out += "| GeoTransolver-volume, 1e-3 | " + " | ".join(afcell("gt_volume_1e-3", f) for f, _ in FIELDS) + " |\n"
-out += "| **ISLA, query tokens + signed distance, 1e-3** | " + " | ".join(afcell("isla_cosine_1e-3", f) for f, _ in FIELDS) + " |\n"
-out += "| GeoTransolver-volume ÷ ISLA (paired by seed) | " + " | ".join(f"{v[f]['gt_over_isla']:.2f} ({' / '.join(f'{r:.2f}' for r in v[f]['paired_ratios'])})" for f, _ in FIELDS) + " |\n"
+out += "| GeoTransolver-volume, 1e-3 | " + " | ".join(acell(AFG[f]) for f, _ in FIELDS) + " |\n"
+out += "| **ISLA, query tokens + signed distance, 5e-4** | " + " | ".join(acell(AFI[f]) for f, _ in FIELDS) + " |\n"
+out += "| GeoTransolver-volume ÷ ISLA (paired by seed) | " + " | ".join(f"{AFR[f]:.2f} ({' / '.join(f'{r:.2f}' for r in AFP[f])})" for f, _ in FIELDS) + " |\n"
+out += "| ISLA, 24 layers (depth variant), 5e-4 | " + " | ".join(acell(AFI_R2[f]) for f, _ in FIELDS) + " |\n"
 print(out)
-sp = {f: AFA["isla_cosine_1e-3"][f]["seed_spread"] * 100 for f, _ in FIELDS}; spg = {f: AFA["gt_volume_1e-3"][f]["seed_spread"] * 100 for f, _ in FIELDS}
+sp = {f: spread(AFI[f]["seeds"]) for f, _ in FIELDS}; spg = {f: spread(AFG[f]["seeds"]) for f, _ in FIELDS}
+verdict = {f: standing(AFR[f], AFP[f]) for f, _ in FIELDS}
 print(": Interior error on AirfRANS (relative L2 over the 200 test cases of the full split, float32, two seeds, 100,000 interior queries per "
       "case, 500 epochs), seed means with the seeds in parentheses. Ratios are GeoTransolver-volume ÷ ISLA (above 1 favors ISLA), as the "
-      "seed mean and paired by seed. Preregistered bars: reproduced if the pressure ratio is below one and the velocity ratio above one with "
-      f"both paired ratios agreeing, as on DrivAerML; eddy viscosity has no prior. Verdicts: pressure {v['pressure_l2']['verdict']}, velocity "
-      f"{v['velocity_l2']['verdict']}. How to read this: ISLA's two seeds differ by {min(sp.values()):.0f} to {max(sp.values()):.0f}% on every field "
-      f"here, GeoTransolver-volume's by {min(spg.values()):.0f} to {max(spg.values()):.0f}%; the sign of every paired ratio is what the verdicts rest "
-      "on, not the second digit. Data: results/airfrans_reduction_2026-09-22.json. {#tbl-interior-airfrans}")
+      "seed mean and paired by seed; a standing is a lead or a deficit only when both paired ratios sit on the same side of one. Standings: "
+      f"ISLA {verdict['pressure_l2']} on pressure, {verdict['velocity_l2']} on velocity, {verdict['nut_l2']} on eddy viscosity. How to read this: "
+      f"ISLA's two seeds differ by {min(sp.values()):.0f} to {max(sp.values()):.0f}% and GeoTransolver-volume's by {min(spg.values()):.0f} to "
+      f"{max(spg.values()):.0f}%, so the pressure and eddy-viscosity deficits are one to two seed spreads wide and the velocity lead is many; "
+      "the last row is the depth variant the reference selection rejected, worse than the reference on every field here. Data: "
+      "results/airfrans_reduction_2026-09-22.json (GeoTransolver-volume); results/ref_surface_2026-09-23.json (ISLA). {#tbl-interior-airfrans}")
 ```
 
 ```{python}
 #| label: para-airfrans-reading
 #| output: asis
-print(f"Three things carry with @tbl-interior-airfrans. The ordering is the cars' ordering with the gaps widened: the velocity lead is "
-      f"{AFR['velocity_l2']:.2f}x against {RATIO['velocity_l2']:.2f}x on the cars, the pressure deficit {trail(AFR['pressure_l2'])} against "
-      f"{trail(RATIO['pressure_l2'])}, and eddy viscosity, level on the cars, goes to GeoTransolver-volume by {trail(AFR['nut_l2'])}. The two "
-      "regimes differ in what pressure is (gauge pressure on a three-dimensional body against nondimensional pressure in two-dimensional "
-      "incompressible flow), so the same ordering across them says the split is a property of how the two architectures treat an interior "
-      f"point, not of one flow. And ISLA's seed spread on this dataset is large, {min(sp.values()):.0f} to {max(sp.values()):.0f}%, where "
-      "GeoTransolver-volume's is a few percent; the verdicts rest on the sign of every paired ratio, which agrees, and the source of the "
-      "spread is open. The case-count ladder of this dataset, and how the two architectures' errors fall with training airfoils, are in "
-      "@sec-shared-floor.")
+print(f"Three things carry with @tbl-interior-airfrans. The velocity lead carries across the two datasets and widens, {AFR['velocity_l2']:.2f}x "
+      f"here against {RATIO['velocity_l2']:.2f}x on the cars; the pressure standing does not carry: ISLA leads by {lead(RATIO['pressure_l2'])} "
+      f"on the cars and trails by {trail(AFR['pressure_l2'])} here, and eddy viscosity, level on the cars, goes to GeoTransolver-volume by "
+      f"{trail(AFR['nut_l2'])}. The two regimes differ in what pressure is (gauge pressure on a three-dimensional body against "
+      "nondimensional pressure in two-dimensional incompressible flow) and in what the boundary is (a 200,000-cell sample of a car against "
+      "a polyline of a few hundred cells), so the velocity lead is a property of how the two architectures treat an interior point and the "
+      "pressure standing a property of the dataset. And the depth variant is "
+      f"{min((AFI_R2[f]['mean'] / AFI[f]['mean'] - 1) * 100 for f, _ in FIELDS):.0f} to "
+      f"{max((AFI_R2[f]['mean'] / AFI[f]['mean'] - 1) * 100 for f, _ in FIELDS):.0f}% worse than the reference here, the largest depth "
+      "penalty of any dataset in the book beside Tensile2d (@sec-interior-tensile2d). The case-count ladder of this dataset, and how the "
+      "two architectures' errors fall with training airfoils, are in @sec-compute-allocation.")
 ```
 
 ## Outside the training range: the AirfRANS extrapolation splits {#sec-interior-extrapolation}
@@ -269,7 +325,11 @@ extrapolation splits: `reynolds` trains on 504 airfoils inside a
 Reynolds-number band and tests on 496 outside it; `aoa` trains on 804
 inside an angle-of-attack band and tests on 196 outside. Both
 architectures were trained on each split as on the full split (500
-epochs, 100,000 queries, two seeds) and scored on the split's test cases.
+epochs, 100,000 queries, two seeds) and scored on the split's test cases;
+the ISLA lanes of this study are the earlier protocol's (192 wide, cosine
+routing, 1e-3), and every growth factor divides a configuration's split
+error by the same configuration's full-split error, so the readout is
+within-configuration and the reference re-run is not required for it.
 The readout that separates extrapolation from the smaller training sets is
 the *growth factor*, each architecture's test error on the split divided
 by its own full-split test error, and the bar is the ratio of the two
@@ -373,10 +433,150 @@ axes stay with the aerodynamic datasets. The frameless configuration, which
 fits the training set and memorizes it (validation error 20 to 60 times
 GeoTransolver's), is the ablation behind the component clause of the output
 contract and is reported in @sec-nb-solids-frame-interim, not here. The
-deeper R2 candidate (384 x 24) is 9% to 27% *worse* than R1 at 400 cases
-on every field, so depth does not pay on Tensile2d at this data size
-(@sec-nb-solids-tensile2d-verdict). The GINOT lug and the OLBC sets are
-pending (@sec-nb-solids-prereg, @sec-nb-olbc-prereg).
+24-layer depth variant is 9% to 27% *worse* than the reference at 400
+cases on every field, so depth does not pay on Tensile2d at this data size
+(@sec-nb-solids-tensile2d-verdict).
+
+## A second solid: the GINOT bracket lug {#sec-interior-lug}
+
+```{python}
+#| label: setup-lug
+#| include: false
+LUG = J("solids_lug_2026-09-22.json"); LUGS = LUG["summary"]; LUGR = LUG["gt512_over_isla"]; LUGX = LUG["learning_curve_exponents"]
+LUG_RUNGS = (300, 600, 1200, 2400)
+# the 300-lug rung is reported at the half rate (2.5e-4), the rerun the preregistration prescribes for a lane that sat on a plateau;
+# the 5e-4 lane at 300 lugs is shown beside it
+lug_isla = {300: LUGS["isla_r1_lr25e4|n300"], 600: LUGS["isla_r1|n600"], 1200: LUGS["isla_r1|n1200"], 2400: LUGS["isla_r1|n2400"]}
+lug_ratio = {300: LUGR["isla_r1_lr25e4|n300"], 600: LUGR["isla_r1|n600"], 1200: LUGR["isla_r1|n1200"], 2400: LUGR["isla_r1|n2400"]}
+```
+
+```{python}
+#| label: lug-lede
+#| output: asis
+print(f"**On the GINOT bracket lug, a three-dimensional elastoplastic solid whose target is a true scalar (von Mises stress) and whose load "
+      f"is a pressure on the hole with no global direction, ISLA leads GeoTransolver-512 at three of four rungs of the training-case ladder "
+      f"and ties the fourth: GeoTransolver-512 ÷ ISLA {lug_ratio[300]:.2f} / {lug_ratio[600]:.2f} / {lug_ratio[1200]:.2f} / {lug_ratio[2400]:.2f} "
+      f"at 300 / 600 / 1,200 / 2,400 lugs, with learning-curve exponents {LUGX['isla_r1']['exponent']:.2f} against "
+      f"{LUGX['gt512']['exponent']:.2f}.** The lug (@sec-data-lug) is clamped at one end and pressed on the lower half of its hole; three "
+      "geometry parameters and the pressure vary, and the target is the nodal von Mises stress. ISLA reads the boundary triangles with the "
+      "clamped, hole, loaded and pressure labels as boundary scalars, the four design parameters as global scalars, and every node as a "
+      "query with its signed distance ($K = 0$: no global vector); GeoTransolver-512 reads every node with the nodal tags and the "
+      "parameters in its global embedding. The 600 test lugs are scored in float32 at every node.")
+```
+
+```{python}
+#| label: tbl-lug-ladder
+#| output: asis
+def lcell(g): return f"{g['mean']:.4f} ({' / '.join(f'{v:.4f}' for v in g['seeds'])})" + (" (one seed)" if len(g["seeds"]) == 1 else "")
+out = "| training lugs | ISLA (rate) | GeoTransolver-512 (1e-3) | GeoTransolver-512 ÷ ISLA |\n|---:|---|---|---:|\n"
+for n in LUG_RUNGS:
+    rate = "2.5e-4, the half-rate rerun" if n == 300 else "5e-4"
+    out += f"| {n:,} | {lcell(lug_isla[n])} ({rate}) | {lcell(LUGS[f'gt512|n{n}'])} | {lug_ratio[n]:.2f} |\n"
+out += f"| 300, the 5e-4 lane | {lcell(LUGS['isla_r1|n300'])} (5e-4; seed 42 escaped a plateau late) | {lcell(LUGS['gt512|n300'])} | {LUGR['isla_r1|n300']:.2f} |\n"
+out += f"| exponent, 300 to 2,400 | {LUGX['isla_r1']['exponent']:.2f} | {LUGX['gt512']['exponent']:.2f} | |\n"
+print(out)
+print(": GINOT bracket lug: relative L2 of von Mises stress over the 600 test lugs (mean over lugs, then over seeds; seeds in parentheses), "
+      "float32 at every node, 500 epochs, ISLA at the reference configuration against GeoTransolver-512, its parameter match. The 300-lug "
+      "row is ISLA's half-rate rerun: the 5e-4 pair at that rung sat on a loss plateau for 90 to 150 epochs and one seed escaped it late, "
+      "and the preregistration prescribes that a plateau lane be reported and its half-rate rerun replace it in the ladder with the rate "
+      "stated (@sec-nb-solids-prereg); the 5e-4 lane is the row below. The exponent is the least-squares learning-curve exponent over the "
+      "four rungs, ISLA's from the half-rate 300-lug value. How to read this: a ratio above one is an ISLA lead; the 2,400-lug ISLA cell "
+      "holds one scored seed in the artifact. Data: results/solids_lug_2026-09-22.json. {#tbl-lug-ladder}")
+```
+
+The lug and Tensile2d pull in opposite directions on the standing and the
+same direction on the learning curve. Tensile2d's targets are stress
+*components* in a laboratory frame, which ISLA's scalar heads can
+represent only when that frame enters as global vectors
+(@sec-isla-heads), and GeoTransolver-512 leads there at 400 cases; the
+lug's target is a frame-free scalar and its loading has no direction of
+its own, and ISLA leads. On both, ISLA's error falls faster with cases
+than GeoTransolver-512's. The 2,400-lug rung awaits its second ISLA seed
+and the width and depth controls (GeoTransolver-256, the 24-layer ISLA);
+the standing above is the artifact's (@sec-program-status).
+
+## Boundary data on a fixed mesh: the OLBC sets {#sec-interior-olbc}
+
+```{python}
+#| label: setup-olbc
+#| include: false
+OL = J("olbc_2026-09-22.json"); OLS = OL["summary"]; OLR = OL["gt512_over_isla"]; OLX = OL["learning_curve_exponents"]
+OL_RUNGS = (512, 2048, 8448)
+OL_EL = [("sig11", "$\\sigma_{11}$"), ("sig22", "$\\sigma_{22}$"), ("sig12", "$\\sigma_{12}$"), ("displacement", "displacement")]
+```
+
+```{python}
+#| label: olbc-lede
+#| output: asis
+el = OLR["elasticity|isla_r1|n512"]
+print(f"**On the OLBC sets, one fixed mesh per set whose boundary is cut per sample into random labeled Dirichlet, Neumann and Robin "
+      f"segments with random values, GeoTransolver-512 leads ISLA by a factor of about three on the Poisson set at every rung "
+      f"(GeoTransolver-512 ÷ ISLA {OLR['poisson|isla_r1|n512']['u']:.2f} / {OLR['poisson|isla_r1|n2048']['u']:.2f} / "
+      f"{OLR['poisson|isla_r1|n8448']['u']:.2f} at 512 / 2,048 / 8,448 cases) with the same learning-curve exponent "
+      f"({OLX['poisson|isla_r1|u']['exponent']:.2f} against {OLX['poisson|gt512|u']['exponent']:.2f}), and by 1.4 to 2x on the elasticity set "
+      f"at 512 cases; the gap is located in value transport, and a parameter-free boundary-value extension recovers most of it.** These "
+      "sets (@sec-data-olbc) are the complement of every other dataset in the book: the geometry never varies and only the boundary data "
+      "do, so the task is the pure boundary-data-to-solution map on a known domain. On the Poisson set ($-\\nabla^2 u = f$ on a square, a "
+      "random sinusoidal source and four random boundary segments per sample) ISLA reads the boundary segments with the condition type and "
+      "value as boundary scalars and every node as a query ($K = 0$); on the elasticity set (steel, a disc with two holes, prescribed "
+      "displacement and tractions per component) it also receives the domain's axes as two global vectors for the stress components. "
+      "GeoTransolver-512 reads every node with the nodal condition tags. The 256 test samples of each set are scored in float32 at every "
+      "node; the 8,448-case rung trains for 120 epochs, the same optimizer-step count as 2,048 cases for 500.")
+```
+
+```{python}
+#| label: tbl-olbc-ladder
+#| output: asis
+def ocell(g, f="u"): d = g["fields"][f]; return f"{d['mean']:.4f} ({' / '.join(f'{v:.4f}' for v in d['seeds'])})" + (" (one seed)" if len(d["seeds"]) == 1 else "")
+out = "| OLBC Poisson, training cases | ISLA $u$ | GeoTransolver-512 $u$ | GeoTransolver-512 ÷ ISLA |\n|---:|---|---|---:|\n"
+for n in OL_RUNGS:
+    out += f"| {n:,} | {ocell(OLS[f'poisson|isla_r1|n{n}'])} | {ocell(OLS[f'poisson|gt512|n{n}'])} | {OLR[f'poisson|isla_r1|n{n}']['u']:.2f} |\n"
+out += f"| 8,448, GeoTransolver-256 | | {ocell(OLS['poisson|gt256|n8448'])} | {OLS['poisson|gt256|n8448']['fields']['u']['mean'] / OLS['poisson|isla_r1|n8448']['fields']['u']['mean']:.2f} |\n"
+out += f"| exponent, 512 to 8,448 | {OLX['poisson|isla_r1|u']['exponent']:.2f} | {OLX['poisson|gt512|u']['exponent']:.2f} | |\n"
+out += "\n| OLBC elasticity, 512 cases | " + " | ".join(l for _, l in OL_EL) + " |\n|---|" + "---|" * len(OL_EL) + "\n"
+out += "| ISLA | " + " | ".join(ocell(OLS["elasticity|isla_r1|n512"], f) for f, _ in OL_EL) + " |\n"
+out += "| GeoTransolver-512 | " + " | ".join(ocell(OLS["elasticity|gt512|n512"], f) for f, _ in OL_EL) + " |\n"
+out += "| GeoTransolver-512 ÷ ISLA | " + " | ".join(f"{el[f]:.2f}" for f, _ in OL_EL) + " |\n"
+print(out)
+print(": The OLBC ladders: relative L2 over the 256 test samples of each set (mean over samples, then over seeds; seeds in parentheses), "
+      "float32 at every node, ISLA at the reference configuration against GeoTransolver-512. Top: the Poisson set's solution $u$ along the "
+      "512 / 2,048 / 8,448-case ladder, with GeoTransolver-256 at the full rung (width does not pay for GeoTransolver here) and the "
+      "least-squares learning-curve exponents. Bottom: the elasticity set at 512 cases, per field. How to read this: a ratio below one is "
+      "a GeoTransolver lead; an ISLA error near one on the elasticity set is the error of predicting zero, so those cells say ISLA did not "
+      "learn the map at 512 cases, not that it is 1.4 to 2x behind; the 2,048-case ISLA Poisson cell holds one scored seed in the artifact. "
+      "Data: results/olbc_2026-09-22.json. {#tbl-olbc-ladder}")
+```
+
+**What is missing, and what supplies it.** Two mechanisms could explain a
+three-fold gap on a fixed mesh: ISLA resolves position too coarsely
+through 256 anchors (a fixed geometry gives every sample the same anchor
+scaffold, and the solution varies on the scale of the boundary segments),
+or ISLA lacks a direct path from the prescribed boundary values to the
+interior query, which GeoTransolver's local embedding of the tagged nodes
+supplies. The diagnostic study at 512 Poisson cases ran one variant per
+mechanism against the reference (@sec-nb-olbc-mech-verdict, one seed
+each): four times the slices recovers nothing; the domain's own axes as
+global vectors recover 17% of the log-gap to GeoTransolver-512;
+absolute coordinates fed to every token, a diagnostic that breaks the
+pose contract, overshoot to 27% *better* than GeoTransolver-512, so
+position is sufficient but not what the contract-preserving remedies
+lack; and a parameter-free **boundary-value extension**, the
+measure-weighted inverse-square-distance average of the prescribed
+values per condition type and the distance to the nearest labeled cell,
+evaluated at every query as six query scalars, recovers 88% of the
+log-gap (0.318 against the reference's 0.867 and GeoTransolver-512's
+0.279). The missing ingredient is value transport, and an invariant,
+mesh-consistent quadrature of the boundary data supplies most of it
+without touching the contracts. The extension is one seed at one rung and
+is not a standing; its second seed, its 2,048-case twin, and its
+vector-data form on the elasticity set (prescribed displacement and
+traction extended as rank-1 query inputs) are in flight
+(@sec-program-status). Two readings for the architecture travel with it:
+a boundary-data-to-solution map on a fixed domain is where ISLA's
+geometry-first design has the least to offer and GeoTransolver's
+coordinate-reading embedding the most, and the OLBC Poisson set is the
+one dataset in the book where ISLA's learning curve is not steeper than
+GeoTransolver's: the exponents are equal and the gap is a constant factor.
 
 ## Dependence on the query cloud {#sec-interior-companion}
 
@@ -429,11 +629,15 @@ boundary-integral kernels and places no latent tokens off the surface.
 #| label: para-interior-open
 #| output: asis
 print(f"**One architecture covers the surface and the interior: ISLA with query tokens leads GeoTransolver-volume on interior velocity on "
-      f"both datasets (by {lead(RATIO['velocity_l2'])} on the DrivAerML Volume task, {AFR['velocity_l2']:.2f}x on AirfRANS) at a third of its "
-      f"parameters, and trails it on interior pressure (by {trail(RATIO['pressure_l2'])} and {trail(AFR['pressure_l2'])}).** The pressure deficit "
-      f"is the one open standing. On the cars its size is inside ISLA's own pressure seed spread ({abs(ps[0] / ps[1] - 1) * 100:.0f}% between the "
-      "two seeds); on the airfoils it is seed-robust (every paired ratio below one), so it is a property of the architecture pair, not of "
-      "one dataset, and its mechanism is open. An interior decode whose prediction at a point is independent of the request and matches "
-      "the interacting configuration's accuracy is a design, not a result. @sec-limits collects the interior limits alongside the book's others. Data: "
-      "results/ratevol_reduction_2026-09-20.json; results/routenorm_extension_2026-09-21.json; results/airfrans_reduction_2026-09-22.json.")
+      f"both datasets (by {lead(RATIO['velocity_l2'])} on the DrivAerML Volume task, {AFR['velocity_l2']:.2f}x on AirfRANS), leads on pressure "
+      f"on the cars (by {lead(RATIO['pressure_l2'])}) and trails on pressure on the airfoils (by {trail(AFR['pressure_l2'])}), at "
+      f"{ISLA_PARAMS / 27.6:.2f}x GeoTransolver-volume's parameters.**The AirfRANS pressure and eddy-viscosity deficits are the open standings on the flow datasets: "
+      "both are seed-robust (every paired ratio below one) and neither has a located mechanism. On the solids the picture is one of targets, "
+      f"not of physics: ISLA leads on the lug's frame-free scalar (GeoTransolver-512 ÷ ISLA {lug_ratio[2400]:.2f} at 2,400 lugs), trails on "
+      "Tensile2d's frame components at 400 cases with the steeper learning curve, and trails by a constant factor of three on the fixed-mesh "
+      "Poisson set, where the gap is value transport and the boundary-value extension is the candidate remedy (@sec-interior-olbc). An "
+      "interior decode whose prediction at a point is independent of the request and matches the interacting configuration's accuracy is "
+      "a design, not a result. @sec-limits collects the interior limits alongside the book's others. Data: "
+      "results/ratevol_reduction_2026-09-20.json; results/ref_surface_2026-09-23.json; results/airfrans_reduction_2026-09-22.json; "
+      "results/solids_lug_2026-09-22.json; results/olbc_2026-09-22.json.")
 ```

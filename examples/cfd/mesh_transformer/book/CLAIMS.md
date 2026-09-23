@@ -47,20 +47,24 @@ efficiency; 08 discretization and pose evidence; 09 capacity, scaling, cost;
 in one sentence. Every cross-architecture sentence names dataset AND task
 ("DrivAerML Surface task" / "DrivAerML Volume task").
 
-**Surface, DrivAerML 435 cars, 200,000 cells.** Parity: ISLA 0.0446,
-GeoTransolver 0.0445 at 3e-3, Transolver 0.0473 (0.998 / 1.06).
-Ladder GeoTransolver ÷ ISLA 0.83 / 0.86 / 0.92 / 0.97 / 1.00 at 27 / 54 /
-109 / 218 / 435 cars. Wings (GeoTransolver ÷ ISLA / Transolver ÷ ISLA, 200k):
-35-case rung 0.73 / 0.73 linear ISLA, 0.78 / 0.78 against cosine ISLA-192
-(0.1408); fixed-angle rung 0.69 / 0.79; 4 geometries 0.68 / 0.73 (GeoTransolver
-at 3e-3, its better rate); 210 random cases 0.88 / 0.96; 21 held-out
-geometries 0.95 / 0.96 (GeoTransolver at 3e-3; the 1e-3 lanes read 0.89 and
-0.98 and were the chapters' numbers until 2026-09-22). The wing deficit is a small-data,
-recurring-geometry effect: it shrinks with cases and is within 5% where the
-validation geometries are never seen; it does not move with the cell budget.
-Say: "the baselines lead by 21 to 32% on the small wing rungs, 4 to 12% at 210
-cases, 4 to 5% at 21 held-out geometries". Do not say "27% on the wings"
-without the rung.
+**Surface, DrivAerML 435 cars, 200,000 cells (SUPERSEDED 2026-09-23 by the
+REF / REF-BOARD block below; the numbers here are the earlier protocol's,
+ISLA 192 wide at 1e-3, and are labeled "earlier protocol" wherever a chapter
+still holds one).** Earlier protocol: ISLA 0.0446, GeoTransolver 0.0445 at
+3e-3, Transolver 0.0473 (0.998 / 1.06). Earlier-protocol ladder
+GeoTransolver ÷ ISLA 0.83 / 0.86 / 0.92 / 0.97 / 1.00 at 27 / 54 / 109 / 218
+/ 435 cars. Wings (GeoTransolver ÷ ISLA / Transolver ÷ ISLA, 200k): 35-case
+rung 0.73 / 0.73 linear ISLA-192 (now 0.75 / 0.75 against the reference
+configuration, see below); fixed-angle rung 0.69 / 0.79; 4 geometries 0.68 /
+0.73 (GeoTransolver at 3e-3, its better rate); 210 random cases 0.88 / 0.96;
+21 held-out geometries 0.95 / 0.96 (GeoTransolver at 3e-3). The four wing
+rungs other than 35 cases are still earlier-protocol ISLA lanes (REF-BOARD
+twins training). The wing deficit is a small-data, recurring-geometry
+effect: it shrinks with cases and is within 5% where the validation
+geometries are never seen; it does not move with the cell budget, nor with
+ISLA's width, depth or rate. Say: "the baselines lead by 25 to 32% on the
+small wing rungs, 4 to 12% at 210 cases, 4 to 5% at 21 held-out geometries".
+Do not say "27% on the wings" without the rung.
 
 **Capacity (100,000 cells, labeled scaling budget).** Linear routing has a
 rate ceiling ∝ 1/width and ≥ 1/depth whose failure is total routing collapse
@@ -197,18 +201,60 @@ appendix (15) quotes only artifacts already listed here and labels the
 OLBC (512 cases) and lug (300 / 600 / 1,200) rows interim.
 
 
-### SOLIDS / SOLIDS-FRAME / REF state (2026-09-22, late)
+### REF / REF-BOARD / SOLIDS / OLBC / DEEPJEB state (2026-09-23; read this before the surface and interior paragraphs above)
 
-- Tensile2d (frame configuration, ISLA R1 vs GeoTransolver-512, fp32, 400 cases): GeoTransolver ÷ ISLA 0.73 / 0.89 / 1.00 / 0.66
-  (sig11 / sig22 / sig12 / displacement); ratio on sig11 rises 0.29 / 0.39 / 0.49 / 0.65 / 0.73 along 32-400 cases;
-  learning-curve exponents ISLA 0.89-1.01 vs GeoTransolver 0.40-0.76. Write: "GeoTransolver-512 leads 1.1-1.5x at 400
-  cases; ISLA's error falls faster with cases (third dataset with this ordering)". Never quote the frameless ISLA
-  Tensile2d numbers as a standing: they are the output-contract ablation (val 20-60x GeoTransolver, memorization).
+**The reference configuration IS ISLA.** REF verdict (#sec-nb-ref-verdict): R1 = 384 wide, 12 layers, 256 slices,
+cosine routing, fused geometry kernel, RMS-pairwise-distance unit, `source_total` query mass, learning rate 5e-4. The
+chapters write "ISLA" for it and never "R1"; the 192-wide linear-routed lanes at 1e-3 are "the earlier protocol (192 wide,
+1e-3)" and appear only in rows so labeled (05 explains the label once). Artifact: results/ref_surface_2026-09-23.json
+(reducer results/ref_surface_reduce_2026-09-23.py, from campaigns_2026-09-22/ref/metrics and campaigns_2026-09-23/rb/metrics).
+
+- **DrivAerML Surface, 435 cars, 200k, fp32:** ISLA 0.0415 (0.0416 / 0.0414); 24-layer variant 0.0409 (0.0415 / 0.0402;
+  within 1.5%, rejected at twice the cost); ISLA at 1e-3 0.0425 (2% worse); GeoTransolver-256 (3e-3) 0.0445 → **1.07,
+  both seeds agreeing**; GeoTransolver-512 (3e-3) 0.0410 (0.0415 / 0.0405) → **0.99, parity at matched parameters, at
+  1.17x ISLA's step time and 1.9x its memory** (cost sweep at 200k tokens: ISLA 117 ms / 34.9 GiB, GeoTransolver-256
+  105 / 49.3, GeoTransolver-512 137 / 66.5, 24-layer ISLA 231 / 68.4; results/cost_sweep_ref_gb300_bf16_2026-09-22.json).
+  Say: "ISLA leads GeoTransolver-256 by 7% at 435 cars and from 109 cars up; GeoTransolver-512, the parameter match, is at
+  parity at 1.17x the time and 1.9x the memory". Never "parity at full data" without naming GeoTransolver-512.
+- **DrivAerML Surface ladder (REF-BOARD, results/refboard_ladder_2026-09-23.json):** ISLA 0.1428 / 0.0775 / 0.0559 /
+  0.0465 / 0.0415 at 27 / 54 / 109 / 218 / 435 cars (5 to 10% below the 192-wide lanes at every rung); best
+  GeoTransolver-256 ÷ ISLA **0.87 / 0.96 / 1.01 / 1.05 / 1.07**; crossover between 54 and 109 cars. Exponents of the total
+  error over 27-218: 0.53 (ISLA), 0.52 (192 wide), 0.44 (GeoTransolver 3e-3), 0.61 (GeoTransolver 1e-3), 0.53 (Transolver).
+  Say: "the reference configuration lowers the curve without steepening it". Fitted-law exponents (SCALE-LAW) unchanged.
+- **HiLiftAeroML 35 wings, 200k:** ISLA 0.1460 (0.1456 / 0.1465); 24-layer 0.1459; ISLA at 1e-3 0.1415 (3% better; not
+  retuned); GeoTransolver-256 0.1098 → **0.75**; Transolver-256 0.1101 → 0.75; GeoTransolver-512 0.1061 on ONE seed
+  (→ 0.73; flag as one seed). 210- and 510-wing REF rungs pending; the 210 / 4-geometry / 21-geometry / fixed-angle rows
+  stay earlier-protocol ISLA, labeled, until their REF-BOARD twins land.
+- **Interior under the reference configuration** (results/ref_surface_2026-09-23.json; GeoTransolver-volume from
+  ratevol_reduction_2026-09-20.json and airfrans_reduction_2026-09-22.json, same protocols): DrivAerML Volume 200k cells
+  and queries, ISLA 0.0418 / 0.0569 / 0.0837 (pressure / velocity / eddy viscosity) vs GeoTransolver-volume 0.0477 /
+  0.1008 / 0.0843 → **1.14 / 1.77 / 1.01** (paired 1.13-1.15 on pressure): ISLA now LEADS on interior pressure on the
+  cars. AirfRANS 800 airfoils, 100k queries: ISLA 0.0313 / 0.0153 / 0.0322 vs 0.0277 / 0.0379 / 0.0293 → **0.89 / 2.48 /
+  0.91**, paired seeds agree; ISLA seeds 1-6% apart (the 22-34% spread of the 192-wide lanes is gone). 24-layer variant:
+  within 3% on the cars, 39-64% WORSE on AirfRANS. ISLA parameters on the volume task 34.4M vs GeoTransolver-volume 27.6M
+  (say "1.25x", never "a third of the parameters"). ISLA volume rungs (REF-BOARD): pressure 0.0946 / 0.0653 at 54 / 109.
+  Say: "ISLA leads on interior velocity on both datasets and on pressure on the cars; GeoTransolver-volume leads on
+  AirfRANS pressure and eddy viscosity". The AirfRANS extrapolation and scaling studies remain earlier-protocol ISLA.
+- **Tensile2d** (frame configuration, ISLA vs GeoTransolver-512, fp32, 400 cases): GeoTransolver ÷ ISLA 0.73 / 0.89 /
+  1.00 / 0.66 (sig11 / sig22 / sig12 / displacement); exponents ISLA 0.89-1.01 vs GeoTransolver 0.40-0.76; 24-layer
+  variant 9-27% worse. Never quote the frameless ISLA Tensile2d numbers as a standing (output-contract ablation).
+- **Lug** (results/solids_lug_2026-09-22.json, von Mises on 600 test lugs): GeoTransolver-512 ÷ ISLA **1.06 (300 lugs at
+  the half rate 2.5e-4; 0.71 for the 5e-4 pair whose seed 42 escaped a plateau late, reported and replaced as
+  preregistered) / 1.08 / 0.99 / 1.13** at 300 / 600 / 1,200 / 2,400; exponents 0.65 vs 0.47. The 2,400 ISLA cell is one
+  seed in the artifact. Say: "ISLA leads at three of four rungs on the one solid whose target is a frame-free scalar".
+- **OLBC** (results/olbc_2026-09-22.json): Poisson GeoTransolver-512 ÷ ISLA **0.32 / 0.25 / 0.35** at 512 / 2,048 (one ISLA
+  seed) / 8,448; GeoTransolver-256 0.0287 at the full rung (width does not pay for GeoTransolver); exponents **0.84 vs
+  0.81, the same exponent and a constant 3x gap: the one dataset where ISLA's curve is not steeper**. Elasticity 512:
+  0.62 / 0.70 / 0.66 / 0.49 (sig11 / sig22 / sig12 / displacement), ISLA at the predict-zero error. Mechanism
+  (#sec-nb-olbc-mech-verdict, one seed, 512 Poisson): 4x slices 0%, domain frame 17%, boundary-value extension **88%** of
+  the log-gap (0.318 vs 0.867 vs 0.279), coordinate leak 127% (beats GeoTransolver by 27%; contract-breaking diagnostic).
+  Say: "the gap is value transport; the extension recovers most of it at one rung and one seed". Not a standing yet.
+- **DeepJEB++** (results/deepjeb_2026-09-22.json, equal optimizer steps about 130k, fp32 on 5,540 clean test files):
+  best GeoTransolver ÷ ISLA von Mises / displacement **1.09 / 1.05 (256), 1.07 / 1.16 (1,024), 1.00 / 1.09 (4,096; GT one
+  seed), 1.02 / 1.04 (12,451; best arm GeoTransolver-256)**. Both flat above 1,024 at equal steps: state as equal-compute
+  standings, never as a learning curve; exponents not readable (0.04). Equal-epoch companion running.
 - Output contract clause: scalar heads are rotation- AND reflection-invariant; frame components (sigma_ij, lab-axis
   displacement means) need the frame as global vectors (K=2 plane, K=3 space). sigma_12 is unrepresentable with +y alone.
-- REF on DrivAerML Surface at 200k: R1 0.0415, R2 0.0409 (R1 within 1.5%, marginal, wing rung decides), GeoTransolver-512
-  0.0410 (parity at matched parameters, at 1.17x ISLA's time and 1.9x its memory), GeoTransolver-256 0.0445 (÷R1 = 1.07).
-- Lug, OLBC, DeepJEB++: pending; never state before fp32 scoring.
 
 ## Architectures and resources (chapter 2–4)
 

@@ -193,10 +193,12 @@ starting point and a stated remainder.**
 **ISLA is the choice wherever the deployment sampling may differ from the
 training sampling, wherever the training sampling law is not the
 deployment one, where geometries arrive in arbitrary poses, and where
-memory at scale binds; GeoTransolver is the choice for matched-mesher,
-known-pose surface prediction from few training cases on the wings, and
-the two are at parity at full data on the DrivAerML Surface task
-(@sec-surface).** The recommendation splits on consistency, and
+memory at scale binds, and on the DrivAerML Surface task from about 100
+training cars up, where it leads GeoTransolver at its recipe width by up
+to 7% in less memory and ties the parameter-matched GeoTransolver-512 in
+half of it; GeoTransolver is the choice for matched-mesher, known-pose
+surface prediction from few training cases on the wings and below about
+100 cars (@sec-surface).** The recommendation splits on consistency, and
 consistency is a property of the frame, not of the architecture: every
 configuration that centers its coordinates on a statistic of the sampled
 points degrades several-fold under a sampling-density bias when the frame
@@ -219,16 +221,18 @@ accuracy against the contracts rather than a preference for
 GeoTransolver.
 
 **The interior recommendation becomes unconditional for ISLA** only if
-the pressure deficit closes without moving velocity or eddy viscosity.
-Until then the recommendation on the interior is ISLA on velocity,
-GeoTransolver-volume on pressure, and either on eddy viscosity, on two
-datasets (@sec-interior).
+the AirfRANS pressure and eddy-viscosity deficits close without moving
+velocity. Until then the recommendation on the interior is ISLA on
+velocity on both datasets and on every DrivAerML Volume field, and
+GeoTransolver-volume on AirfRANS pressure and eddy viscosity
+(@sec-interior).
 
 If neither fires, the recommendation stands as written, with the bounds
 of this chapter attached: the program's ISLA-specific claims are exact
 covariance and its lead in arbitrary poses, consistency under a change of
 inference draw and weak dependence on the training sampling law as
 properties of the origin-free frame and the measure weights, the interior
-velocity lead, the cost figures of @sec-capacity, and on in-distribution surface
-accuracy parity with GeoTransolver at full data on the cars, with a
-deficit below full data and on the wings.
+velocity lead, the cost figures of @sec-capacity, and on in-distribution
+surface accuracy a lead over GeoTransolver at its recipe width from about
+100 cars up on the DrivAerML Surface task, parity with the parameter match,
+and a deficit below 100 cars and on the wings.

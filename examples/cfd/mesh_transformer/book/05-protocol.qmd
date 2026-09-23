@@ -295,9 +295,12 @@ two seeds a thin noise estimate (@sec-limits).
 **Every cross-architecture comparison states, on both sides, the parameter
 count, the cells per case and the training memory, or says in the same
 sentence where they differ and whether the difference could buy accuracy.**
-The parity row of the DrivAerML Surface task is matched on parameters and
-on cells per case; the footprints of both sides are read from the protocol
-lanes' own training logs in @tbl-isla-cost. Memory is not a controlled
+The 435-car row of the DrivAerML Surface task is stated twice for this
+reason, against GeoTransolver at its recipe width (which ISLA leads by 7%
+in 0.7x the memory at 1.25x the parameters) and against the
+parameter-matched GeoTransolver-512 (parity at 1.9x ISLA's memory), both
+at the same cells per case; the footprints of both sides are read from
+the reference cost sweep in @sec-cost-sweep. Memory is not a controlled
 variable in any comparison and no accuracy result depends on it: the
 checkpoints in this book are trained by implementations of the same
 function that differ only in footprint. Where the two architectures are
@@ -306,15 +309,22 @@ which side has more and whether it bought accuracy (@sec-equal-budget).
 
 ### Configuration of the evidence lanes {#sec-evidence-lane-config}
 
-**The evidence lanes of the surface tasks carry ISLA at width 192 with the
-linear routing form; the reference configuration (@sec-using-config)
-re-measures them, and where a reference-configuration artifact exists it is
-the row.** This paragraph is the one place the book states it; individual
-tables and captions name their lane's width and rate and do not narrate the
-difference. Lanes that already carry the reference form are the 35-wing rung
-of HiLiftAeroML at 200,000 cells, the DrivAerML Volume task at 1e-3, the
-384-wide, 24-layer DrivAerML Surface lane at 200,000 cells, and every
-AirfRANS lane. @sec-program-status lists which lanes remain.
+**Every standing in the book is the reference configuration's
+(@sec-using-config: 384 wide, 12 layers, cosine routing, the fused
+geometry kernel, 5e-4) wherever its lane has been scored; the rows that
+still carry the earlier protocol's ISLA (192 wide, linear routing, 1e-3)
+are labeled "earlier protocol" in their table or caption and are
+re-measured by the re-run of @sec-program-status.** This paragraph is the
+one place the book explains the label; individual tables and captions
+carry it and do not narrate the difference. The standings under the
+reference configuration are the DrivAerML Surface ladder and its 435-car
+row, the 35-wing rung of HiLiftAeroML, the DrivAerML Volume and AirfRANS
+interior tasks, the sampling-consistency and territory probes, and every
+solid and fixed-mesh dataset; the earlier protocol's lanes remain on the
+210-wing, geometry and fixed-angle rungs of HiLiftAeroML, the pose and
+training-law studies, the AirfRANS extrapolation splits and the
+capacity, scaling and cost-frontier studies at 100,000 cells (which are
+studies of deviations by design).
 
 ## Learning rate {#sec-lr-protocol}
 

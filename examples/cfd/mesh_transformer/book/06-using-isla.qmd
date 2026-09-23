@@ -192,8 +192,9 @@ Under ISLA's cosine routing the logits are bounded and the routing-collapse
 failure that would otherwise set a hard ceiling on the rate is unreachable
 (@sec-isla-routing-forms), so a higher rate is an experiment, not a hazard,
 and the recipe's ISLA configurations pin 5e-4 rather than inheriting the
-recipe-wide default. The interior lanes of @sec-interior trained under the
-earlier 192-wide protocol at 1e-3, the rule rate for that width.
+recipe-wide default. The interior standings of @sec-interior are the reference
+configuration's at 5e-4; GeoTransolver-volume trains at 1e-3, its best
+rate there.
 
 ## Evaluation and the inference sampler {#sec-using-sampler}
 

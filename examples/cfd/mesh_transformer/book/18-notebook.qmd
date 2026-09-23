@@ -26030,3 +26030,51 @@ configuration lowers the curve rather than steepening it. The volume
 rungs (54 and 109 cars) are scored and enter the interior chapter with the
 REF Volume standing. HiLift rungs, pose, area-law and deflection twins are
 still training.
+
+## 2026-09-23 — Book restated under the reference configuration: R1 is "ISLA" in every standing; 192-wide rows labeled "earlier protocol" {#sec-nb-book-ref-restatement}
+
+**What changed.** Per the REF verdict (@sec-nb-ref-verdict) and the ruling
+that the book states what IS, every standing in the chapters now reads the
+reference configuration (384 x 12, cosine routing, fused kernel, 5e-4) as
+"ISLA", from one new artifact, `results/ref_surface_2026-09-23.json`
+(reducer `results/ref_surface_reduce_2026-09-23.py`: per-lane means of the
+fleet scorer's float32 metrics for the `ref` group and the REF-BOARD volume
+rungs), beside `results/refboard_ladder_2026-09-23.json` for the training-
+car ladder. Chapter 07: the 435-car standing is now two rows (GeoTransolver-
+256 ÷ ISLA 1.07 in 0.71x the memory; GeoTransolver-512 0.99 at 1.17x the
+time and 1.9x the memory), the ladder is the REF-BOARD one (0.87 / 0.96 /
+1.01 / 1.05 / 1.07), the 35-wing rung reads 0.75 with the 24-layer variant,
+the rate control and GeoTransolver-512 (one seed) beside it, the anatomy
+paragraph is labeled as the earlier protocol's mechanism study, and a
+DeepJEB++ section (`#sec-surface-deepjeb`, `#tbl-deepjeb-surface`) carries
+the equal-step ladder with its caveat. Chapter 09: the cost section names
+the reference as ISLA with its accuracy beside its cost (`#tbl-cost-200k`
+gains an error column), the depth reading quotes the 24-layer variant's
+1.5% at twice the cost, and `#sec-compute-allocation` gains
+`#tbl-refboard-exponents` (0.53 against 0.52: the reference lowers the
+curve without steepening it). Chapter 10: DrivAerML Volume and AirfRANS
+under the reference (GeoTransolver-volume ÷ ISLA 1.14 / 1.77 / 1.01 and
+0.89 / 2.48 / 0.91), so ISLA now leads on interior pressure on the cars and
+the "a third of the parameters" clause becomes 1.25x; an ISLA-only volume
+ladder (54 / 109 / 435 cars); new sections `#sec-interior-lug` (1.06 half
+rate / 1.08 / 0.99 / 1.13; exponents 0.65 against 0.47) and
+`#sec-interior-olbc` (0.32 / 0.25 / 0.35 with equal exponents 0.84 against
+0.81; the mechanism verdict with its one-seed caveat). Index, 05, 06, 11,
+13, 15, STYLE.md and CLAIMS.md restated to match; 12 carries REF as DONE,
+REF-BOARD RUNNING with the ladder verdict, and the SOLIDS / OLBC / DEEPJEB
+rows with their standings.
+
+**Left as "earlier protocol (192 wide, 1e-3)", labeled in place.** The
+210-wing, 4-geometry, 21-geometry and fixed-angle HiLiftAeroML rows (their
+REF-BOARD twins are training); the pose and training-law studies of
+chapter 08 (twins training) and their index rows; the AirfRANS
+extrapolation splits and scaling ladder (within-configuration readouts, no
+reference twin launched); the capacity, cell-count and cost-frontier grids
+at 100,000 cells (studies of deviations by design); the cell-count anatomy
+paragraph of 07 (a mechanism study on the 192-wide checkpoints). One-seed
+cells are flagged where they stand: GeoTransolver-512 on the 35-wing rung,
+the 2,400-lug ISLA cell and the 2,048-case OLBC Poisson ISLA cell in their
+artifacts, the 4,096-bracket GeoTransolver cell of DeepJEB. The lug
+artifact predates the second 2,400-lug seed now present in
+`results/campaigns_2026-09-22/so/metrics`; re-reducing it is a separate
+step and the chapter quotes the artifact as it stands.
