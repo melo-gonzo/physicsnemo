@@ -141,7 +141,8 @@ def tensor_components(field_type: FieldType) -> dict[str, str]:
 def tensor_component_indices(field_type: FieldType) -> list[int]:
     """Channel indices (in the model's six-component layout) of the listed components."""
     return [
-        SYMMETRIC_TENSOR_COMPONENTS.index(c) for c in tensor_components(field_type).values()
+        SYMMETRIC_TENSOR_COMPONENTS.index(c)
+        for c in tensor_components(field_type).values()
     ]
 
 
@@ -167,6 +168,7 @@ def field_loss_channels(field_type: FieldType, n_spatial_dims: int = 3) -> int:
     if field_kind(field_type) == "symmetric_tensor":
         return len(tensor_components(field_type))
     return field_dim(field_type, n_spatial_dims)
+
 
 ### Allowed mixed-precision modes for the autocast context. ``"float8"`` is
 ### intentionally absent; `get_autocast_context` rejects it at runtime (see

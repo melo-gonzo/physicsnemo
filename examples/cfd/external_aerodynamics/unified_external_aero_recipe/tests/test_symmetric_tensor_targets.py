@@ -87,7 +87,13 @@ def test_type_helpers():
     assert field_kind(STRESS) == "symmetric_tensor"
     assert field_dim(STRESS) == 6 and field_loss_channels(STRESS) == 3
     assert tensor_component_indices(STRESS) == [0, 1, 3]
-    assert target_field_names(TENSOR_TARGETS) == ["q", "sig11", "sig22", "sig12", "displacement"]
+    assert target_field_names(TENSOR_TARGETS) == [
+        "q",
+        "sig11",
+        "sig22",
+        "sig12",
+        "displacement",
+    ]
     assert target_field_names(SCALAR_TARGETS) == list(SCALAR_TARGETS)
     with pytest.raises(ValueError):
         field_kind({"type": "tensor"})
@@ -145,7 +151,14 @@ def test_metrics_keep_the_component_names():
     t_m = calc(t_pred, t_true)
     s_m = MetricCalculator(SCALAR_TARGETS, metrics=["l2", "l1"])(s_pred, s_true)
     assert set(t_m.keys()) == set(calc.expected_keys())
-    for k in ("sig11_l2", "sig22_l2", "sig12_l2", "sig11_l1", "q_l2", "displacement_l2"):
+    for k in (
+        "sig11_l2",
+        "sig22_l2",
+        "sig12_l2",
+        "sig11_l1",
+        "q_l2",
+        "displacement_l2",
+    ):
         assert torch.allclose(t_m[k], s_m[k]), k
     assert "stress_l2" in t_m.keys()
     ### A measure-weighted call has the same key set.

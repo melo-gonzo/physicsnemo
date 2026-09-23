@@ -1494,14 +1494,26 @@ class ISLA(Module):
             ### true tensor, so sigma -> R sigma R^T for any orthogonal R.
             tcoeffs = out[..., vec_end:].reshape(b, n, self.out_tensors, self.n_tbasis)
             tb = torch.stack(true_basis, dim=-2)  # (B, N, m, 3)
-            ju, ku = torch.triu_indices(self.n_true_basis, self.n_true_basis, device=tb.device)
+            ju, ku = torch.triu_indices(
+                self.n_true_basis, self.n_true_basis, device=tb.device
+            )
             tj, tk = tb[:, :, ju], tb[:, :, ku]  # (B, N, m(m+1)/2, 3)
-            outer = 0.5 * (tj.unsqueeze(-1) * tk.unsqueeze(-2) + tk.unsqueeze(-1) * tj.unsqueeze(-2))
+            outer = 0.5 * (
+                tj.unsqueeze(-1) * tk.unsqueeze(-2)
+                + tk.unsqueeze(-1) * tj.unsqueeze(-2)
+            )
             eye = torch.eye(3, dtype=tb.dtype, device=tb.device).expand(b, n, 1, 3, 3)
             tbasis = torch.cat([outer, eye], dim=-3)  # (B, N, n_tbasis, 3, 3)
             sig = torch.einsum("bntk,bnkij->bntij", tcoeffs, tbasis)
             comps = torch.stack(
-                [sig[..., 0, 0], sig[..., 1, 1], sig[..., 2, 2], sig[..., 0, 1], sig[..., 0, 2], sig[..., 1, 2]],
+                [
+                    sig[..., 0, 0],
+                    sig[..., 1, 1],
+                    sig[..., 2, 2],
+                    sig[..., 0, 1],
+                    sig[..., 0, 2],
+                    sig[..., 1, 2],
+                ],
                 dim=-1,
             )  # (B, N, out_tensors, 6): xx, yy, zz, xy, xz, yz
             parts.append(comps.reshape(b, n, self.out_tensors * 6))

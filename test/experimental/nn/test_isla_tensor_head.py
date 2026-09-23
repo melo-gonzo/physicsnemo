@@ -33,16 +33,24 @@ COMPONENTS = ("xx", "yy", "zz", "xy", "xz", "yz")
 
 def _cloud(n=300, seed=0):
     g = torch.Generator().manual_seed(seed)
-    pts = torch.randn(1, n, 3, dtype=D, generator=g) * torch.tensor([3.0, 2.0, 1.0], dtype=D)
-    nrm = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=D, generator=g), dim=-1)
-    drv = torch.nn.functional.normalize(torch.randn(1, 1, 3, dtype=D, generator=g), dim=-1)
+    pts = torch.randn(1, n, 3, dtype=D, generator=g) * torch.tensor(
+        [3.0, 2.0, 1.0], dtype=D
+    )
+    nrm = torch.nn.functional.normalize(
+        torch.randn(1, n, 3, dtype=D, generator=g), dim=-1
+    )
+    drv = torch.nn.functional.normalize(
+        torch.randn(1, 1, 3, dtype=D, generator=g), dim=-1
+    )
     w = torch.rand(1, n, dtype=D, generator=g) + 0.5
     return pts, nrm, drv, w
 
 
 def _model(**kw):
     torch.manual_seed(0)
-    base = dict(hidden=32, n_layers=2, n_slices=8, out_scalars=2, out_vectors=1, out_tensors=2)
+    base = dict(
+        hidden=32, n_layers=2, n_slices=8, out_scalars=2, out_vectors=1, out_tensors=2
+    )
     base.update(kw)
     return ISLA(**base).double().eval()
 
@@ -63,7 +71,9 @@ def _tensors(out, m):
 
 
 def _proper_rotation(seed):
-    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=D, generator=torch.Generator().manual_seed(seed)))
+    q, _ = torch.linalg.qr(
+        torch.randn(3, 3, dtype=D, generator=torch.Generator().manual_seed(seed))
+    )
     if torch.det(q) < 0:
         q[:, 0] = -q[:, 0]
     return q
@@ -88,7 +98,10 @@ def test_layout_and_basis_counts(K):
     mm = 2 * K + 3
     assert m.n_true_basis == mm
     assert m.n_tbasis == mm * (mm + 1) // 2 + 1
-    assert m.head.out_features == m.out_scalars + m.out_vectors * m.n_basis + m.out_tensors * m.n_tbasis
+    assert (
+        m.head.out_features
+        == m.out_scalars + m.out_vectors * m.n_basis + m.out_tensors * m.n_tbasis
+    )
     ### K = 0: 7 tensor basis elements; K = 1: 16.
     assert {0: 7, 1: 16, 2: 29}[K] == m.n_tbasis
 
@@ -117,7 +130,10 @@ def test_reflection_covariance_of_tensors(K):
     m = _model(n_global_vectors=K)
     pts, nrm, drv, w = _cloud()
     base = _forward(m, pts, nrm, drv, w, K)
-    for mirror in (torch.diag(torch.tensor([-1.0, 1.0, 1.0], dtype=D)), torch.diag(torch.tensor([1.0, -1.0, 1.0], dtype=D))):
+    for mirror in (
+        torch.diag(torch.tensor([-1.0, 1.0, 1.0], dtype=D)),
+        torch.diag(torch.tensor([1.0, -1.0, 1.0], dtype=D)),
+    ):
         ### A general improper orthogonal matrix: mirror composed with a rotation.
         M = _proper_rotation(7) @ mirror
         assert torch.det(M) < 0
@@ -152,11 +168,29 @@ def test_tensor_head_in_the_interior_modes():
         dict(query_tokens=True, n_query_scalars=1),
         dict(query_independent=True, n_decoder_layers=1, n_query_scalars=1),
     ):
-        m = _model(n_global_vectors=1, out_scalars=1, out_vectors=1, out_tensors=1, **kw)
+        m = _model(
+            n_global_vectors=1, out_scalars=1, out_vectors=1, out_tensors=1, **kw
+        )
         qs = torch.rand(1, 50, 1, dtype=D)
         with torch.no_grad():
-            base = m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w, query_points=q_pts, query_normals=q_nrm, query_scalars=qs)
-            rot = m(points=pts @ q.T, normals=nrm @ q.T, global_vectors=drv @ q.T, measure_weights=w, query_points=q_pts @ q.T, query_normals=q_nrm @ q.T, query_scalars=qs)
+            base = m(
+                points=pts,
+                normals=nrm,
+                global_vectors=drv,
+                measure_weights=w,
+                query_points=q_pts,
+                query_normals=q_nrm,
+                query_scalars=qs,
+            )
+            rot = m(
+                points=pts @ q.T,
+                normals=nrm @ q.T,
+                global_vectors=drv @ q.T,
+                measure_weights=w,
+                query_points=q_pts @ q.T,
+                query_normals=q_nrm @ q.T,
+                query_scalars=qs,
+            )
         assert base.shape == (1, 50, 1 + 3 + 6)
         assert torch.allclose(_tensors(rot, m), q @ _tensors(base, m) @ q.T, atol=1e-12)
 
