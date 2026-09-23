@@ -9732,7 +9732,7 @@ own lane table and launcher (highlift/scale_lanes_<arch>.tsv,
 highlift/hl_scale_<arch>_aga.sbatch cloned from hl_wave2_aga.sbatch), after
 a ten-minute probe of its three heaviest configurations for memory and step
 time; verdict entries per architecture follow, and one synthesis entry.
-Job-name prefix scale-<arch>-; run ids scale_<arch>_<dataset>_<arm>_seed<s>.
+Job-name prefix `scale-<arch>-`; run ids `scale_<arch>_<dataset>_<arm>_seed<s>`.
 
 ## 2026-09-09 — SCALE launched: 64 lanes accepted; the cost half of the study is already measured, and it is step time, not memory, that scales {#sec-nb-scale-launch}
 
