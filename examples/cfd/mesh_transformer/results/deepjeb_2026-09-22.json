@@ -378,6 +378,35 @@
     }
    }
   },
+  "jb_gt512_n4096_seed43": {
+   "arm": "gt512",
+   "rung": "n4096",
+   "seed": 43,
+   "n_cases": 5540,
+   "epoch": 32,
+   "fields": {
+    "von_mises": 0.5250261436314037,
+    "displacement": 0.26888557178529804
+   },
+   "by_load": {
+    "ver": {
+     "von_mises": 0.5768226443430147,
+     "displacement": 0.21868157040879185
+    },
+    "hor": {
+     "von_mises": 0.5463034930104383,
+     "displacement": 0.2059394474548123
+    },
+    "dia": {
+     "von_mises": 0.6112572728296479,
+     "displacement": 0.2617018764199763
+    },
+    "tor": {
+     "von_mises": 0.36572116434251356,
+     "displacement": 0.3892193928576118
+    }
+   }
+  },
   "jb_isla_r1_full_seed42": {
    "arm": "isla_r1",
    "rung": "full",
@@ -607,6 +636,64 @@
     "tor": {
      "von_mises": 0.3499219442949545,
      "displacement": 0.3321167663325389
+    }
+   }
+  },
+  "jb_isla_r2_full_seed42": {
+   "arm": "isla_r2",
+   "rung": "full",
+   "seed": 42,
+   "n_cases": 5540,
+   "epoch": 10,
+   "fields": {
+    "von_mises": 1.016211374216992,
+    "displacement": 1.1581116062747012
+   },
+   "by_load": {
+    "ver": {
+     "von_mises": 1.004216691216837,
+     "displacement": 0.8421966115920553
+    },
+    "hor": {
+     "von_mises": 1.0041524210561483,
+     "displacement": 0.8959503920930387
+    },
+    "dia": {
+     "von_mises": 1.019772317134086,
+     "displacement": 0.7516131008575109
+    },
+    "tor": {
+     "von_mises": 1.0367040674608967,
+     "displacement": 2.1426863205562
+    }
+   }
+  },
+  "jb_isla_r2_full_seed43": {
+   "arm": "isla_r2",
+   "rung": "full",
+   "seed": 43,
+   "n_cases": 5540,
+   "epoch": 10,
+   "fields": {
+    "von_mises": 1.0092834151931618,
+    "displacement": 1.1615057214395235
+   },
+   "by_load": {
+    "ver": {
+     "von_mises": 1.0021641560840262,
+     "displacement": 0.8420085062188792
+    },
+    "hor": {
+     "von_mises": 1.0020779451308268,
+     "displacement": 0.8970479009814211
+    },
+    "dia": {
+     "von_mises": 1.0112482383793442,
+     "displacement": 0.7529012007833819
+    },
+    "tor": {
+     "von_mises": 1.0216433211784501,
+     "displacement": 2.1540652777744116
     }
    }
   }
@@ -854,38 +941,41 @@
   },
   "gt512|n4096": {
    "lanes": [
-    "jb_gt512_n4096_seed42"
+    "jb_gt512_n4096_seed42",
+    "jb_gt512_n4096_seed43"
    ],
    "fields": {
     "von_mises": {
-     "mean": 0.50991300662614,
+     "mean": 0.5174695751287719,
      "seeds": [
-      0.50991300662614
+      0.50991300662614,
+      0.5250261436314037
      ]
     },
     "displacement": {
-     "mean": 0.2649999956456571,
+     "mean": 0.2669427837154776,
      "seeds": [
-      0.2649999956456571
+      0.2649999956456571,
+      0.26888557178529804
      ]
     }
    },
    "by_load": {
     "ver": {
-     "von_mises": 0.5645819876475682,
-     "displacement": 0.21948797761795882
+     "von_mises": 0.5707023159952914,
+     "displacement": 0.21908477401337534
     },
     "hor": {
-     "von_mises": 0.5340735830071955,
-     "displacement": 0.22628282801495433
+     "von_mises": 0.5401885380088169,
+     "displacement": 0.21611113773488333
     },
     "dia": {
-     "von_mises": 0.5879955000543998,
-     "displacement": 0.24672619628872575
+     "von_mises": 0.5996263864420239,
+     "displacement": 0.254214036354351
     },
     "tor": {
-     "von_mises": 0.3530318422253523,
-     "displacement": 0.3674772676564543
+     "von_mises": 0.3593765032839329,
+     "displacement": 0.37834833025703307
     }
    }
   },
@@ -1048,6 +1138,46 @@
      "displacement": 0.3410466364562233
     }
    }
+  },
+  "isla_r2|full": {
+   "lanes": [
+    "jb_isla_r2_full_seed42",
+    "jb_isla_r2_full_seed43"
+   ],
+   "fields": {
+    "von_mises": {
+     "mean": 1.012747394705077,
+     "seeds": [
+      1.016211374216992,
+      1.0092834151931618
+     ]
+    },
+    "displacement": {
+     "mean": 1.1598086638571123,
+     "seeds": [
+      1.1581116062747012,
+      1.1615057214395235
+     ]
+    }
+   },
+   "by_load": {
+    "ver": {
+     "von_mises": 1.0031904236504317,
+     "displacement": 0.8421025589054673
+    },
+    "hor": {
+     "von_mises": 1.0031151830934877,
+     "displacement": 0.8964991465372298
+    },
+    "dia": {
+     "von_mises": 1.015510277756715,
+     "displacement": 0.7522571508204463
+    },
+    "tor": {
+     "von_mises": 1.0291736943196734,
+     "displacement": 2.148375799165306
+    }
+   }
   }
  },
  "gt512_over_isla": {
@@ -1064,8 +1194,12 @@
    "displacement": 1.0534606730901377
   },
   "isla_r1|n4096": {
-   "von_mises": 1.0027091428180244,
-   "displacement": 1.0877638174861468
+   "von_mises": 1.0175686192923616,
+   "displacement": 1.0957385140979166
+  },
+  "isla_r2|full": {
+   "von_mises": 0.5828132969998066,
+   "displacement": 0.28186743437078965
   }
  },
  "learning_curve_exponents": {
@@ -1088,7 +1222,7 @@
    ]
   },
   "gt512|von_mises": {
-   "exponent": 0.03191896988316005,
+   "exponent": 0.03060430392657468,
    "rungs": [
     256,
     1024,
@@ -1097,7 +1231,7 @@
    ]
   },
   "gt512|displacement": {
-   "exponent": 0.002525804886608145,
+   "exponent": 0.0018730087120271857,
    "rungs": [
     256,
     1024,

@@ -26118,3 +26118,12 @@ DrivAerML surface set (`rb_dr_isla_pose`): pressure 0.0412 / 0.0414
 against the in-pose R1 0.0416 / 0.0414: ratio **1.00**, the exact contract
 holding at the reference configuration as at 192 wide (1.015 there,
 @sec-pose-contract).
+
+**Addendum to DEEPJEB (2026-09-23, 07:00): the 24-layer candidate at the
+full rung.** ISLA R2 (384 x 24) on all 12,451 clean brackets at the same
+10-epoch budget as R1: von Mises 1.013, displacement 1.160 (two seeds,
+every load case at 1.00 to 1.03): the deeper model did not learn in this
+step budget, where R1 reaches 0.508 / 0.250. Depth bar (iii): not "does
+not pay" but "does not train at this budget"; the same sign as the 435-car
+depth null and the 9 to 27% Tensile2d penalty, larger. R2 is not a
+reference candidate anywhere a step budget binds.
