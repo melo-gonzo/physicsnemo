@@ -95,9 +95,19 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
     m = cfg.model
     assert m.scale_mode == "rms_distance"
     assert m.query_tokens is True
-    assert OmegaConf.to_container(m.query_inputs) == {"sdf": 0}
+    ### The interior geometry (direction and wall distance of every query) is computed
+    ### inside the model from the boundary sample (2026-09-23): no stored SDF is read.
+    assert m.get("query_inputs") is None and m.get("interior_geometry") is None
+    assert "query_normals" not in cfg.forward_kwargs
+    assert "query_inputs" not in cfg.forward_kwargs
+    assert cfg.forward_kwargs.query_points == "interior.points"
     assert OmegaConf.to_container(m.outputs) == {"velocity": 1, "pressure": 0, "nut": 0}
-    assert cfg.forward_kwargs.query_inputs.sdf == "interior.point_data.sdf"
+    ### the "_provided" variant keeps the stored field for the INTERNAL-GEOMETRY measurement
+    prov = _compose("isla_volume_provided", "drivaer_ml_volume_reference")
+    assert prov.model.interior_geometry == "provided"
+    assert OmegaConf.to_container(prov.model.query_inputs) == {"sdf": 0}
+    assert prov.forward_kwargs.query_inputs.sdf == "interior.point_data.sdf"
+    assert prov.forward_kwargs.query_normals == "interior.point_data.sdf_normals"
     assert (
         cfg.forward_kwargs.measure_weights
         == "boundaries.vehicle.cell_data._effective_measure"
@@ -169,10 +179,11 @@ def test_isla_global_vector_is_produced_by_the_dataset_pipeline(model, dataset):
     ],
 )
 def test_isla_configs_pin_the_protocol_learning_rate(model, dataset):
-    """The recipe's default rate (3e-3, GeoTransolver's) collapses the relative frame to a mean-field
-    plateau within five epochs (LR-REF, 2026-09-18), so every ISLA config must carry its own 1e-3."""
+    """The recipe's default rate (3e-3, GeoTransolver's) drives the relative frame to a mean-field
+    plateau within five epochs (LR-REF, 2026-09-18), so every ISLA config must carry its own rate:
+    5e-4, the reference configuration's (REF, 2026-09-23)."""
     cfg = _compose(model, dataset)
-    assert cfg.training.optimizer.lr == pytest.approx(1.0e-3)
+    assert cfg.training.optimizer.lr == pytest.approx(5.0e-4)
 
 
 def test_cli_override_still_wins_over_the_pinned_rate():

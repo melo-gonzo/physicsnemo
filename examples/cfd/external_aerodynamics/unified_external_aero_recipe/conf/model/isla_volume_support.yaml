@@ -18,10 +18,12 @@
 # ISLA on the boundary->interior task with a per-case computational SUPPORT
 # (transfer program D1, 2026-09-09). Surface tokens (vehicle cells) and the
 # support points (`boundaries.support`, produced by the dataset's
-# SplitInteriorSupport transform, carrying the signed distance and its gradient)
-# interact in the 12 encoder layers; the requested interior points
-# (`interior.points`) are decoded PASSIVELY through `n_decoder_layers` read
-# blocks with the same signed-distance inputs. A prediction at a query cannot
+# SplitInteriorSupport transform) interact in the 12 encoder layers; the
+# requested interior points (`interior.points`) are decoded PASSIVELY through
+# `n_decoder_layers` read blocks. The direction and signed wall distance of
+# every support and query point are computed inside the model from the
+# boundary sample (interior_geometry=nearest_boundary, 2026-09-23), so the
+# dataset's stored sdf / sdf_normals are not read. A prediction at a query cannot
 # depend on which other queries are requested. Use with dataset
 # drivaer_ml_volume_support. Every architecture receives the freestream as the
 # unit direction (protocol rule after UDRV). The interior reference
@@ -43,13 +45,7 @@ forward_kwargs:
   global_inputs:
     freestream: global_data.U_inf_dir   # the one global direction of external aerodynamics
   support_points: boundaries.support.points
-  support_normals: boundaries.support.point_data.sdf_normals
-  support_inputs:
-    sdf: boundaries.support.point_data.sdf
   query_points: interior.points
-  query_normals: interior.point_data.sdf_normals
-  query_inputs:
-    sdf: interior.point_data.sdf
 model:
   _target_: physicsnemo.experimental.models.ISLA
   outputs:                       # the dataset's targets, by name and tensor rank
@@ -58,8 +54,6 @@ model:
     nut: 0
   global_inputs:
     freestream: 1
-  query_inputs:
-    sdf: 0                       # signed distance at support and query points
   hidden: 384                  # the reference configuration's dimensions (REF verdict, 2026-09-23)
   n_layers: 12
   n_slices: 256
@@ -76,5 +70,4 @@ model:
   query_independent: true
   support_tokens: true
   n_decoder_layers: 12          # SUPPORT-12; set 4 for the SUPPORT-4 arm
-  query_scalar_scale: length
   query_mass: source_total      # support mass invariant to source refinement

@@ -1,0 +1,37 @@
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ISLA interior configuration with the interior geometry PROVIDED by the dataset
+# (interior_geometry=provided): the query direction is the stored SDF gradient
+# and the signed distance a declared rank-0 query input, both computed on the
+# full mesh by the dataset's ComputeSDFFromBoundary stage. Everything else is
+# isla_volume.yaml, whose model derives both quantities from the sampled
+# boundary. This variant exists for the INTERNAL-GEOMETRY measurement (book
+# notebook #sec-nb-internal-geometry-prereg) and to reproduce interior lanes
+# trained before 2026-09-23.
+defaults:
+  - isla_volume
+
+forward_kwargs:
+  query_normals: interior.point_data.sdf_normals
+  query_inputs:
+    sdf: interior.point_data.sdf        # the signed distance to the wall at each query (full mesh)
+
+model:
+  interior_geometry: provided
+  query_inputs:
+    sdf: 0                       # rank-0 per-query input, scaled by the frame's length unit (query_scalar_scale)
