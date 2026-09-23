@@ -1057,7 +1057,12 @@ class ISLA(Module):
             vector) or rank 1 (a global direction, normalized to unit length
             inside the model). The ``K`` rank-1 entries, in declaration order,
             are the global directions of the geometry region and the head basis.
-        hidden: Token width of the slice blocks.
+        hidden: Token width of the slice blocks. The defaults ``hidden=384``,
+            ``n_layers=12`` and ``n_slices=256`` are the book's reference
+            configuration (REF verdict, 2026-09-23), together with the other
+            defaults below: cosine routing, the RMS-pairwise-distance length
+            unit, the automatic geometry kernel and ``source_total`` query
+            mass. The reference training rate is 5e-4.
         n_layers: Number of slice-attention blocks in the encoder.
         n_slices: Number of soft slices (data-adaptive anchors) per block.
         mlp_ratio: Expansion ratio of the per-token and per-slice MLPs.
@@ -1170,7 +1175,7 @@ class ISLA(Module):
         boundary_inputs: Mapping[str, int | Mapping] | None = None,
         query_inputs: Mapping[str, int | Mapping] | None = None,
         global_inputs: Mapping[str, int | Mapping] | None = None,
-        hidden: int = 256,
+        hidden: int = 384,
         n_layers: int = 12,
         n_slices: int = 256,
         mlp_ratio: int = 4,

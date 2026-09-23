@@ -128,6 +128,7 @@ def test_isla_constructor_attributes(config):
         assert m.n_head_coeffs == 1 + 5  # a scalar and a true vector over m = 5
         assert m.n_slices == 256
         assert len(m.blocks) == 12
+        assert m.norm_out.normalized_shape == (384,)  # the reference width
         assert m.scale_mode == "rms_distance"
         assert m.geo_kernel == "auto"
         assert m.use_measure_weights is True

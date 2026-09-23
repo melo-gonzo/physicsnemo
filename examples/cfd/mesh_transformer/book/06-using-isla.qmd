@@ -38,7 +38,7 @@ model:
     wss: 1              #   rank 1: a vector field (a stress tensor would be {rank: 2, symmetric: true})
   global_inputs:
     freestream: 1       # one rank-1 global input: the far-field flow direction
-  hidden: 192
+  hidden: 384                 # the reference configuration; also the class defaults
   n_layers: 12
   n_slices: 256
   mlp_ratio: 4
@@ -46,9 +46,13 @@ model:
   geo_kernel: null            # automatic: the fused Triton kernel on CUDA with one global vector, the eager region otherwise
 ```
 
-The recipe's width is 192 with 12 layers and 256 slices; this is the one
-place the book states it, and the width and depth ladders of
-@sec-review-frontier are deviations from it. ISLA has one frame and one
+The reference configuration is 384 wide with 12 layers and 256 slices, at
+learning rate 5e-4 (the REF selection, @sec-nb-ref-verdict); the class
+defaults and the recipe's `isla_surface` and `isla_volume` state the same
+dimensions, this is the one place the book states them, and the width and
+depth ladders of @sec-review-frontier are deviations from it. Lanes of the
+earlier protocol ran 192 wide at 1e-3 and are labeled so wherever they
+appear. ISLA has one frame and one
 routing form; the rows below are the options that remain on it.
 
 | configuration | recipe config | when to use | what you give up |
@@ -150,23 +154,24 @@ region.
 ## Training {#sec-using-train}
 
 **Train at the recipe defaults, 200,000 sampled cells per case for 500
-epochs at learning rate 1e-3, with no augmentation; the only setting that
-needs thought is the learning rate when you leave width 192.** From the
+epochs at learning rate 5e-4, with no augmentation; the only setting that
+needs thought is the learning rate when you leave width 384.** From the
 recipe root:
 
 ```bash
 # DrivAerML Surface task (sampling_resolution defaults to 200,000 cells per case).
 # compile=false is the configuration of the evidence lanes; the compiled path computes the same function faster.
+# The ISLA configs pin training.optimizer.lr=5e-4; it is stated here so the protocol is explicit.
 python src/train.py model=isla_surface dataset=drivaer_ml_surface \
-    training.optimizer.lr=1e-3 compile=false
+    training.optimizer.lr=5e-4 compile=false
 
 # DrivAerML Volume task: boundary -> interior, queries as interacting tokens with the signed distance.
 python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference \
-    training.optimizer.lr=1e-3 compile=false
+    training.optimizer.lr=5e-4 compile=false
 
 # HiLiftAeroML surface (the 200,000-cell default again; 500 epochs, as on the cars)
 python src/train.py model=isla_surface dataset=highlift_surface \
-    training.optimizer.lr=1e-3 compile=false training.num_epochs=500
+    training.optimizer.lr=5e-4 compile=false training.num_epochs=500
 ```
 
 These commands are the reporting protocol of @sec-protocol. ISLA needs no
@@ -175,19 +180,20 @@ the dataset's native frame predicts a body in any pose (@sec-pose).
 
 ### The learning rate {#sec-using-lr}
 
-**Use 1e-3 at width 192 and 12 layers; for a wider or deeper model, start
-from $10^{-3} \times 192 / \mathrm{hidden} \times 12 / \mathrm{layers}$ and
-treat it as a starting rate, not a limit.** The expression gives
-$5 \times 10^{-4}$ at width 384, $2.5 \times 10^{-4}$ at 768, and
-$2.5 \times 10^{-4}$ at 384 wide and 24 layers. It is the rate at which
-every width and depth in the capacity ladders trains cleanly, and the
-ladders of @sec-review-frontier run at it, so a model trained at the rule
-rate is comparable with the book's lanes. Under ISLA's cosine routing the
-logits are bounded and the routing-collapse failure that would otherwise
-set a hard ceiling on the rate is unreachable (@sec-isla-routing-forms), so
-a higher rate is an experiment, not a hazard, and the recipe's ISLA
-configurations pin 1e-3 rather than inheriting the recipe-wide default. On
-both interior tasks ISLA trains at 1e-3 (@sec-interior).
+**Use 5e-4 at the reference width 384 and 12 layers; for a wider or deeper
+model, start from $10^{-3} \times 192 / \mathrm{hidden} \times 12 /
+\mathrm{layers}$ and treat it as a starting rate, not a limit.** The
+expression gives $10^{-3}$ at width 192, $5 \times 10^{-4}$ at 384,
+$2.5 \times 10^{-4}$ at 768, and $2.5 \times 10^{-4}$ at 384 wide and 24
+layers. It is the rate at which every width and depth in the capacity
+ladders trains cleanly, and the ladders of @sec-review-frontier run at it,
+so a model trained at the rule rate is comparable with the book's lanes.
+Under ISLA's cosine routing the logits are bounded and the routing-collapse
+failure that would otherwise set a hard ceiling on the rate is unreachable
+(@sec-isla-routing-forms), so a higher rate is an experiment, not a hazard,
+and the recipe's ISLA configurations pin 5e-4 rather than inheriting the
+recipe-wide default. The interior lanes of @sec-interior trained under the
+earlier 192-wide protocol at 1e-3, the rule rate for that width.
 
 ## Evaluation and the inference sampler {#sec-using-sampler}
 

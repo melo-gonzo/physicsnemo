@@ -36,7 +36,8 @@
 # (notebook #sec-nb-relint-void for what goes wrong without it). Pair this
 # model config with that dataset config.
 #
-# Standing (float32, 48 DrivAerML validation cars, 10,000 queries, two seeds,
+# Standing at the 192-wide, 1e-3 protocol of the time (float32, 48 DrivAerML
+# validation cars, 10,000 queries, two seeds,
 # results/relint2_reduction_2026-09-14.json): pressure 0.0550, velocity 0.0782,
 # eddy viscosity 0.1005; 1.000x / 0.990x / 0.880x of the similarity-gauge
 # interior configuration it replaces.
@@ -45,12 +46,13 @@
 input_type: tensors
 output_type: fields
 
-# Learning rate pinned at ISLA's protocol rate: the recipe default of 3e-3
-# collapses the relative frame to a mean-field plateau at width 192 (book
-# notebook: lrref-verdict; see isla_surface.yaml). Width rule above 192.
+# Learning rate pinned at the reference configuration's rate, 5e-4 (REF
+# verdict, 2026-09-23; the width rule 1e-3 x 192 / hidden at 384): the recipe
+# default of 3e-3 drives the relative frame to a mean-field plateau (book
+# notebook: lrref-verdict; see isla_surface.yaml).
 training:
   optimizer:
-    lr: 1.0e-3
+    lr: 5.0e-4
 
 forward_kwargs:
   points: boundaries.vehicle.cell_centroids
@@ -73,7 +75,7 @@ model:
     freestream: 1
   query_inputs:
     sdf: 0                       # rank-0 per-query input, scaled by the frame's length unit (query_scalar_scale)
-  hidden: 192
+  hidden: 384                  # the reference configuration (REF verdict, 2026-09-23); also the class defaults
   n_layers: 12
   n_slices: 256
   mlp_ratio: 4
