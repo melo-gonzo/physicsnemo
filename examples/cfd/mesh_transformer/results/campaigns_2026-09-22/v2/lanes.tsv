@@ -13,3 +13,7 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 11	v2	v2_elasticity_isla_r1_ext_n512_seed43	olbc_elasticity_tensor_ext	isla_olbc_elasticity_tensor_ext	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v2
 12	v2	v2_elasticity_isla_r1_ext_n2048_seed42	olbc_elasticity_tensor_ext	isla_olbc_elasticity_tensor_ext	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v2
 13	v2	v2_elasticity_isla_r1_ext_n2048_seed43	olbc_elasticity_tensor_ext	isla_olbc_elasticity_tensor_ext	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v2
+14	v2	v2_t2d_isla_r1_tensor_frame2_n400_seed42	plaid_tensile2d_tensor_frame2	isla_tensile2d_tensor_frame2	train_split=train_400 val_split=val_100 +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v2
+15	v2	v2_t2d_isla_r1_tensor_frame2_n400_seed43	plaid_tensile2d_tensor_frame2	isla_tensile2d_tensor_frame2	train_split=train_400 val_split=val_100 +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v2
+16	v2	v2_t2d_isla_r1_tensor_frame2_n32_seed42	plaid_tensile2d_tensor_frame2	isla_tensile2d_tensor_frame2	train_split=train_32 val_split=val_100 +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v2
+17	v2	v2_t2d_isla_r1_tensor_frame2_n32_seed43	plaid_tensile2d_tensor_frame2	isla_tensile2d_tensor_frame2	train_split=train_32 val_split=val_100 +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v2

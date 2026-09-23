@@ -26223,3 +26223,82 @@ because it is set near the wall (0.5 that it stays within 3%). AirfRANS:
 within 3% on every field (0.8; the airfoil boundary is kept whole at about
 a thousand segments, so the sampled and full boundaries coincide and only
 the direction convention differs).
+
+## 2026-09-23 — Verdict, TENSOR-HEAD at 400 Tensile2d cases: the equivariant stress head with the load axis alone trails the frame-input configuration by 10 to 47%, reversing its 32-case lead; a tensor-head-plus-full-frame lane separates head from input {#sec-nb-tensor-axis-verdict-400}
+
+**Setting.** PLAID Tensile2d is two-dimensional elasto-viscoplastic
+tension: a pressure on the top edge and five constitutive scalars vary per
+case, and the targets are the displacement and the three in-plane stress
+components. Two ISLA configurations are compared, both R1 (384 wide, 12
+layers, 256 slices) at 5e-4 and 500 epochs, float32 relative L2 on the 100
+held-out cases, two seeds each. `frame2` (the SOLIDS-FRAME lane that the
+Tensile2d ladder in @sec-interior-tensile2d reports) receives both
+laboratory axes as global vectors and predicts $\sigma_{11}$,
+$\sigma_{22}$, $\sigma_{12}$ as three scalar heads. `tensor_axis` (rows 6 to
+9 of `kernel/v2/lanes.tsv`) receives the load direction as the one global
+vector and predicts the stress as one symmetric rank-2 tensor from the
+equivariant head; the laboratory components are read off afterwards. At 32
+cases the preregistered bar ("within 10% of `frame2` on every field") was
+met on the three stresses with a 4 to 33% lead and missed on the
+displacement (@sec-nb-tensor-mech-interim).
+
+**Numbers at 400 cases** (`v2_t2d_isla_r1_tensor_axis_n400_seed42` /
+`seed43` from `lane_means_2026-09-23.json`; `frame2` and GeoTransolver-512
+from `results/solids_frame_2026-09-22.json`):
+
+| field | `tensor_axis` seeds 42 / 43 | `tensor_axis` mean | `frame2` (two seeds) | `tensor_axis` ÷ `frame2` | GeoTransolver-512 |
+|---|---|---|---|---|---|
+| $\sigma_{11}$ | 0.0134 / 0.0126 | 0.0130 | 0.0118 | 1.10 | 0.0087 |
+| $\sigma_{22}$ | 0.0140 / 0.0112 | 0.0126 | 0.0086 | 1.47 | 0.0076 |
+| $\sigma_{12}$ | 0.0142 / 0.0145 | 0.0144 | 0.0112 | 1.28 | 0.0112 |
+| displacement | 0.0097 / 0.0113 | 0.0105 | 0.0082 | 1.28 | 0.0054 |
+
+**Verdict.** The bar fails on every field at 400 cases: the tensor head
+with the load axis alone is 10% worse on $\sigma_{11}$ (at the bar, both
+seeds above `frame2`), 47% on $\sigma_{22}$, 28% on $\sigma_{12}$ and 28% on
+the displacement. Against GeoTransolver-512 the ratios become 0.67 / 0.60 /
+0.78 / 0.51 where `frame2` stands at 0.74 / 0.88 / 1.00 / 0.66. **The
+32-case lead of the tensor-plus-axis configuration does not carry to the
+data-rich rung; `frame2` remains the configuration the Tensile2d ladder
+reports**, and the clause that the tensor head plus the physical axis is
+"the canonical Tensile2d configuration" (@sec-nb-tensor-mech-interim,
+06:00 addendum) is withdrawn as premature: it was written from
+training-time validation at 32 cases before the 400-case pair scored.
+
+**What the two configurations differ in.** Two things at once: the
+*inputs* (`frame2` sees both laboratory axes, `tensor_axis` only the load
+axis; on Tensile2d the second axis is the direction along the loaded edge)
+and the *head* (three scalar heads with their per-component z-scores
+against one tensor head whose coefficients multiply the basis tensors built
+from the query's direction to the boundary, the global vectors and the
+identity). The 32-case result says the load axis is what generalizes when
+data are scarce; the 400-case result says something in the pairing costs
+10 to 47% once the network has enough cases to fit either way, and it does
+not say which. Representability is not the candidate: with the load axis,
+the direction to the nearest boundary and the identity, the symmetric
+rank-2 basis spans the three in-plane degrees of freedom at every query.
+The candidates are the missing second axis (an input effect; the frameless
+lanes memorized, and the one-axis lanes may still lack a position invariant
+along the loaded edge) and the tensor head's optimization (a head effect;
+the coefficients' scale depends on the local basis).
+
+**Discriminating lane (launched 2026-09-23).** `tensor_frame2` (rows 14 to
+17 of `kernel/v2/lanes.tsv`; `recipe_v2/conf/model/isla_tensile2d_tensor_frame2.yaml`):
+the tensor head with *both* laboratory axes as global vectors, i.e.
+`frame2`'s inputs with `tensor_axis`'s head, at 400 and 32 cases, two
+seeds each, eager kernel ($K = 2$). Bars, stated before the lanes score:
+within 5% of `frame2` on every field at 400 cases means the 400-case gap
+was the missing axis input and the equivariant head is free; within 5% of
+`tensor_axis` means the gap is the head and the scalar-component heads stay
+the recommendation for frame-defined components; in between, both
+contribute and the split is reported as measured. At 32 cases the same
+lane says whether the second axis is what the displacement (25% worse
+under `tensor_axis`) was missing.
+
+**For the book.** @sec-interior-tensile2d keeps `frame2` as the ISLA arm
+of the ladder; the component clause of @sec-isla-heads stands (a
+frame-defined component needs the frame as input); the tensor head remains
+the API for tensor-valued targets (it is what makes the OLBC elasticity
+stresses learnable together with rank-1 inputs, @sec-nb-rankio-verdict-elasticity),
+with the Tensile2d 400-case price recorded beside it until `tensor_frame2`
+attributes it.
