@@ -498,7 +498,9 @@ print(": Slice territories under a change of draw on two datasets, medians over 
       "uniform and the biased draw, and the last column the same motion between the two uniform draws (the displacement's own resampling "
       "floor). How to read this: on the cars both agreement and displacement separate the models; on the wings only the displacement does, "
       "because both wing checkpoints route softly (floors near 0.2, GeoTransolver's deep blocks nearly uniform over slices), so the "
-      "agreement columns there measure the softness of the routing and not its dependence on the draw. Data: "
+      "agreement columns there measure the softness of the routing and not its dependence on the draw. Weighting each slice by the tokens "
+      "it owns instead of counting every slice once changes each displacement by 10% or less and no ordering (@sec-nb-territory-massweighted; "
+      "results/territory_massweighted_2026-09-23.json). Data: "
       "results/territory_r1_2026-09-23.json; results/territory_r1_200k_2026-09-23.json; results/territory_wings_r1_2026-09-23.json. "
       "{#tbl-territory}")
 ```

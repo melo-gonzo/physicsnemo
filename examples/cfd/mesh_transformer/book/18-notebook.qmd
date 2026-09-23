@@ -26302,3 +26302,45 @@ the API for tensor-valued targets (it is what makes the OLBC elasticity
 stresses learnable together with rank-1 inputs, @sec-nb-rankio-verdict-elasticity),
 with the Tensile2d 400-case price recorded beside it until `tensor_frame2`
 attributes it.
+
+## 2026-09-23 — Check, TERRITORY metric: weighting slices by the tokens they own changes the anchor displacement by under 10% for both architectures; the unweighted RMS is not dominated by empty slices {#sec-nb-territory-massweighted}
+
+**Question.** The territory table (@tbl-territory) reports the anchor
+displacement as the RMS over all 256 slices of how far a slice's anchor
+(ISLA) or centroid (GeoTransolver) moves between the uniform and the
+10:1-biased draw, divided by the body's RMS token radius. Under cosine
+routing R1 spreads its mass over many slices, but a slice that owns almost
+no tokens enters that RMS with the same 1/256 weight as one that owns a
+whole panel, so the published number could be carried by slices that do
+not matter to the prediction. The check re-reduces the same dumps
+(`rp_probes/territory/*/dumps`; `probes/territory_*/dumps` for the
+released baseline) with each slice weighted by the number of tokens whose
+dominant slice it is in the first uniform draw, which under a uniform draw
+is proportional to the surface area the slice owns.
+
+**Numbers** (`results/territory_massweighted_2026-09-23.json`; medians
+over 12 blocks x 4 validation cases; "floor" = the same displacement
+between two independent uniform draws):
+
+| model, dataset, cells | RMS over slices: biased (floor) | token-weighted: biased (floor) | change |
+|---|---|---|---|
+| ISLA R1 seed 42, cars, 100k | 0.099 (0.077) | 0.092 (0.073) | -7% |
+| ISLA R1 seed 43, cars, 100k | 0.109 (0.082) | 0.099 (0.071) | -10% |
+| GeoTransolver-256, cars, 100k | 0.629 (0.038) | 0.619 (0.034) | -2% |
+| ISLA R1 seed 42, cars, 200k | 0.056 (0.055) | 0.055 (0.050) | -3% |
+| ISLA R1 seeds 42 / 43, wings, 200k | 0.0037 / 0.0041 (0.0032 / 0.0033) | 0.0040 / 0.0040 (0.0029 / 0.0031) | +8% / -2% |
+| GeoTransolver-256, wings, 200k | 0.280 (0.004) | 0.281 (0.004) | +1% |
+
+**Verdict.** The weighting moves every entry by 10% or less and none of the
+orderings: ISLA's anchors under the bias move by about the resampling floor
+(cars 0.09 to 0.10 against a floor of 0.07 to 0.08 at 100,000 cells, equal
+to the floor at 200,000; wings at the floor), GeoTransolver's centroids by
+6 to 70 times their floor. The published unweighted RMS stands as the
+table's metric; this check is cited from its caption. A side reading: by
+dominant-token counts the effective number of slices (inverse
+Herfindahl of the token shares) is 30 to 36 per block for R1 on the cars
+and 16 to 22 on the wings, against 62 and 24 for GeoTransolver-256; the
+170 to 240 "effective slices" quoted from the soft routing weights in
+@sec-nb-refboard-probes count slices that receive some weight, not
+slices that dominate any token, and the two numbers describe different
+things.
