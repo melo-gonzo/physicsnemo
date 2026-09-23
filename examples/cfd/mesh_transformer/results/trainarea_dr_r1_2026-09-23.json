@@ -1,0 +1,71 @@
+{
+ "study": "TRAIN-AREA-DR under R1 (REF-BOARD area-law twin)",
+ "protocol": "TRAIN-AREA-DR twin under the reference configuration R1 (REF-BOARD, 2026-09-23): ISLA R1 trained on 435 DrivAerML\ncars under the area-proportional Poisson draw at 200,000 expected cells (rb_dr_isla_area_seed{42,43}) against the\nuniform-trained R1 reference (ref_isla_r1_dr435_seed{42,43}), both scored by the consistency benchmark's independent\nuniform, stratified and 10:1-biased draws at 200,000 cells, float32, 48 validation cars (mirror\ncampaigns_2026-09-23/rp/metrics/<run>/<draw>_200000/<run>/metrics.jsonl). Bar (TRAIN-AREA-DR): area-trained /\nuniform-trained on the uniform draw within 5% = training-law independent; the 192-wide lanes at 100,000 cells gave 1.08.\nOutput: trainarea_dr_r1_2026-09-23.json.",
+ "arms": {
+  "isla_r1_area": {
+   "runs": [
+    "rb_dr_isla_area_seed42",
+    "rb_dr_isla_area_seed43"
+   ],
+   "seeds": {
+    "unif": [
+     0.04335152000809709,
+     0.04390380896317462
+    ],
+    "strat": [
+     0.04260580389139553,
+     0.043272104036683835
+    ],
+    "biased": [
+     0.0443548581097275,
+     0.04514733352698386
+    ]
+   },
+   "mean": {
+    "unif": 0.043627664485635854,
+    "strat": 0.04293895396403968,
+    "biased": 0.04475109581835568
+   }
+  },
+  "isla_r1_uniform": {
+   "runs": [
+    "ref_isla_r1_dr435_seed42",
+    "ref_isla_r1_dr435_seed43"
+   ],
+   "seeds": {
+    "unif": [
+     0.04162361014944812,
+     0.04142208335300287
+    ],
+    "strat": [
+     0.041365915715383984,
+     0.04112789667366693
+    ],
+    "biased": [
+     0.04207546702430894,
+     0.04177983993819604
+    ]
+   },
+   "mean": {
+    "unif": 0.041522846751225494,
+    "strat": 0.04124690619452546,
+    "biased": 0.04192765348125249
+   }
+  }
+ },
+ "area_over_uniform_on_uniform_draw": {
+  "mean": 1.050690593229816,
+  "per_seed": [
+   1.041512734057545,
+   1.0599131045394856
+  ],
+  "bar": 1.05,
+  "verdict": "at or past the 5% bar: weakly dependent"
+ },
+ "density_factor_area_trained": 1.0257504348666133,
+ "comparators_192_wide_100k": {
+  "isla": 1.0816147378631833,
+  "gt_unit": 7.932426089579783,
+  "transolver_unit": 9.600748212962255
+ }
+}

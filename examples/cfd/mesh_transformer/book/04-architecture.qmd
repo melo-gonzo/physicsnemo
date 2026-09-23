@@ -579,8 +579,11 @@ for outward normals; a query on a sample takes that sample's normal and
 $\delta_q = 0$). Both are differences of positions, so they are invariant
 (the distance) and covariant (the direction) under every rigid motion and
 reflection, and the distance scales with the geometry; the search is exact
-and runs in blocks of queries so that the $Q \times N$ distance matrix is
-never held at once (`nearest_boundary_geometry`). The query is then placed
+and runs as a fused kernel that streams the boundary past blocks of
+queries, so the $Q \times N$ distance matrix is never held at once
+(`nearest_boundary_geometry`; about 0.13 s per training step at
+200,000 queries against 200,000 samples on a GB300, 1.3x the step of the
+provided-distance path, @sec-nb-internal-geometry-cost). The query is then placed
 in the same frame, seeded like a boundary cell with zeros in the
 boundary-scalar channel, and given a learned type offset and an embedding
 of the distance in frame units:

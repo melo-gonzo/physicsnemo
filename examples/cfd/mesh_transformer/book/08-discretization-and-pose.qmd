@@ -383,10 +383,13 @@ absorbs the point pattern it was fitted on and is wrong on any other;
 ISLA's are measure-weighted integrals, the same under any draw that
 carries its weights. @sec-territories looks at this directly in the two
 trained networks. Two qualifications travel with the figure. ISLA is not
-indifferent: 8% on the cars is past the 5% bar the DrivAerML twin
-preregistered (@sec-nb-trainarea-dr-verdict), so the statement is "weakly
-dependent" beside baselines that are dependent by factors of 2.4 to 9.6;
-part of the 8% is the quadrature noise of an area-proportional draw whose
+indifferent: 8% on the cars for the 192-wide lanes of the table, and 5%
+for the reference configuration re-run at 200,000 cells (seeds 4% and 6%;
+@sec-nb-refboard-area-twin, results/trainarea_dr_r1_2026-09-23.json), sit
+at or past the 5% bar the DrivAerML twin preregistered
+(@sec-nb-trainarea-dr-verdict), so the statement is "weakly dependent"
+beside baselines that are dependent by factors of 2.4 to 9.6; part of
+the few percent is the quadrature noise of an area-proportional draw whose
 weights span four decades on these meshes (@fig-consistency-curves). And
 the size of the baselines' dependence is much larger on the cars than on
 the wings although the cars' cell-area spread is the smaller (coefficient

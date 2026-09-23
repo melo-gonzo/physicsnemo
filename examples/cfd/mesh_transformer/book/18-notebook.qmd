@@ -26391,6 +26391,47 @@ with a float64 brute force on the dense-cluster case and at scale
 (commit 300ed0ab). The two DrivAerML Volume internal lanes were relaunched
 under the kernel (epoch 0 to 1 of the first two links discarded; the
 AirfRANS internal lanes pick it up at their next chain link, their results
-unchanged since the search is exact either way). The measured step time
-under the kernel on the GB300 lanes is added below when the relaunch has
-stepped.
+unchanged since the search is exact either way). **Measured under the kernel (GB300, the relaunched lanes at epoch 9):
+0.54 s per step against the provided-SDF twin's 0.41 s**, i.e. the exact
+search over 200,000 x 200,000 pairs costs about 0.13 s per step, 1.3x the
+twin where the first implementation was 113x. Peak memory unchanged
+(93.9 against 93.4 GB).
+
+## 2026-09-23 — Verdict, REF-BOARD area-law twin: the reference configuration trained on the area-proportional draw is 5% worse on the uniform draw (seeds 4% and 6%) against 8% for the 192-wide lanes; at the bar, "weakly dependent" stands {#sec-nb-refboard-area-twin}
+
+**Setting.** The training-law study (TRAIN-AREA-DR, @sec-nb-trainarea-dr-verdict)
+trains each architecture on 435 DrivAerML cars under an area-proportional
+Poisson draw of the surface cells with exact Horvitz–Thompson weights and
+scores it on the independent uniform draw the uniform-trained model was
+scored on: a trained function that depends on the law its training sample
+was drawn by is worse there. The 192-wide ISLA of the earlier protocol
+(100,000 cells) came out 8% worse (bar 5%), GeoTransolver-256 and
+Transolver-256 7.9x and 9.6x. REF-BOARD re-runs the ISLA arm under the
+reference configuration R1 (384 x 12, cosine routing, fused kernel, 5e-4)
+at 200,000 cells, two seeds (`rb_dr_isla_area_seed{42,43}`), scored by the
+consistency benchmark's three draws (`kernel/rp_bench.sbatch` tasks 6 and
+7, job 837636) against the uniform-trained R1 reference
+(`ref_isla_r1_dr435_seed{42,43}`) under the same draws.
+
+**Numbers** (`results/trainarea_dr_r1_2026-09-23.json`; float32 pressure
+relative L2 on the 48 validation cars at 200,000 cells):
+
+| arm | uniform draw | stratified | 10:1 biased |
+|---|---|---|---|
+| R1 trained on the uniform law | 0.0415 (0.0416 / 0.0414) | 0.0413 | 0.0419 |
+| R1 trained on the area law | 0.0436 (0.0434 / 0.0439) | 0.0429 | 0.0448 |
+| area-trained ÷ uniform-trained on the uniform draw | **1.051** (1.042 / 1.060) | | |
+
+**Verdict.** The reference configuration's dependence on the training
+law is 5.1% by the seed mean, one seed below the 5% bar and one above:
+the bar is met by neither reading with margin, so the chapter's statement
+stays "weakly dependent" (@sec-training-law), now with the smaller
+number beside the earlier protocol's 8%, and the baselines' factors of
+2.4 to 9.6 unchanged (released checkpoints, not re-run). The area-trained
+R1's own density factor (biased ÷ uniform draw at inference) is 1.026,
+against 1.011 for the uniform-trained R1 (@sec-nb-refboard-probes): a
+model trained on the area law is also slightly more sensitive to the
+inference draw. Both effects are consistent with the quadrature noise of
+an area-proportional draw whose weights span four decades; the LIT-MLOSS
+idea (@sec-vs-ideas) is the contract-preserving remedy to test if the
+residual few percent ever matters.
