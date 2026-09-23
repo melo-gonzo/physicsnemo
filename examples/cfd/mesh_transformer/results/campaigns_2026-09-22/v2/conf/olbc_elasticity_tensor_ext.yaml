@@ -1,0 +1,72 @@
+# LIT-EXT-vec variant of olbc_elasticity_tensor.yaml: plus boundary-value extensions of the prescribed displacement and traction (rank-1 query inputs).
+# TENSOR-HEAD variant of olbc_elasticity.yaml (2026-09-22): identical data and normalization; the stress components are
+# declared as ONE symmetric rank-2 tensor target (the recipe compares its xx / yy / xy laboratory-frame components with
+# sig11 / sig22 / sig12 under the unchanged metric names), and the constant laboratory-frame global vectors are dropped:
+# the tensor head is frame-independent. Target order follows the model layout: vectors, then tensors.
+# OLBC elasticity-circlehollow-m1 (Mousavi, Mishra, De Lorenzis; arXiv 2602.04923; Zenodo record 18377539, CC BY 4.0) as a
+# boundary-to-interior solid-mechanics dataset, converted to native DomainMesh files by kernel/olbc_convert.py --set elasticity
+# (2026-09-22). Linear elasticity, Steel (lambda 115 GPa, mu 76.9 GPa), plane problem on the unit disc with two holes; all
+# fields dimensionless (stress / 100 MPa, length / 1 m, so a displacement of 1e-4 is 0.1 mm). Per component (x, y) and per
+# sample the exterior circle is cut into four random segments: one free surface, one prescribed displacement (Dirichlet, ~1e-4)
+# and two tractions (Neumann, ~1e-1); the smallest hole is clamped, the other hole is a free surface. One fixed mesh of 11,786
+# nodes (1,312 on the boundary, three loops) embedded at z = 0: interior = every node with displacement (u_x, u_y, 0), sig11 /
+# sig22 / sig12 (Cauchy stress), eps11 / eps22 / eps12 (strain; stored, not a target here), sdf (<= 0 inside), sdf_normals,
+# nodal BC tags tag_dirichlet_x / tag_neumann_x / tag_dirichlet_y / tag_neumann_y and nodal values bc_disp_node_* /
+# bc_trac_node_*; boundary "outer" = all three loops as 1,312 line cells with outward (into the holes on hole loops) normals,
+# segment lengths as the quadrature measure, loop_id, and per component the one-hot type bc_dirichlet_* / bc_neumann_* with
+# the prescribed displacement bc_disp_* (0 off Dirichlet cells) and traction component bc_trac_* (0 off Neumann cells).
+# Splits: train (8448), test (256), nested train_n512 / train_n2048; select with train_split=train_n512 val_split=test.
+# The boundary displacement and traction reach ISLA as rank-1 fields (StackScalarFields below), so the configuration is
+# frame-free on both sides; the lanes launched before 2026-09-22 read the components as scalars (TENSOR-HEAD preregistration).
+train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/olbc_elasticity_pdmsh
+manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/olbc_elasticity_pdmsh/manifest.json
+
+pipeline:
+  reader:
+    _target_: ${dp:DomainMeshReader}
+    path: ${train_datadir}
+    pattern: "*_*/*.pdmsh"
+    subsample_n_points: ${sampling_resolution}   # interior queries (11,786 nodes per case: set sampling_resolution >= 11786 to keep every node)
+    subsample_n_cells: ${sampling_resolution}    # larger than the 1,312 boundary segments: the boundary is kept whole
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    - _target_: ${dp:NormalizeMeshFields}              # boundary inputs: the ~1e-4 displacements and ~1e-1 tractions to unit scale
+      association: cell_data
+      fields:                                    # over labelled boundary cells of train (manifest _stats; 2026-09-22)
+        bc_disp_x: {type: scalar, mean: 0.0, std: 1.053e-4}
+        bc_disp_y: {type: scalar, mean: 0.0, std: 1.047e-4}
+        bc_trac_x: {type: scalar, mean: 0.0, std: 6.05e-2}
+        bc_trac_y: {type: scalar, mean: 0.0, std: 6.07e-2}
+    - _target_: ${dp:StackScalarFields}                # the stored components as ONE rank-1 field each for ISLA's boundary_inputs (z = 0);
+      fields: [bc_disp_x, bc_disp_y]             # stacked after the per-component z-scores above, whose stds differ by < 1% (isotropic to that accuracy)
+      output_field: bc_displacement
+    - _target_: ${dp:StackScalarFields}
+      fields: [bc_trac_x, bc_trac_y]
+      output_field: bc_traction
+    - _target_: ${dp:BoundaryValueExtension}            # LIT-EXT-vec (2026-09-23): prescribed displacement extended into the interior as rank-1 fields, per Dirichlet component label
+      boundary: outer
+      value_field: bc_displacement
+      label_fields: [bc_dirichlet_x, bc_dirichlet_y]
+      prefix: extd_
+    - _target_: ${dp:BoundaryValueExtension}            # prescribed traction extended per Neumann component label
+      boundary: outer
+      value_field: bc_traction
+      label_fields: [bc_neumann_x, bc_neumann_y]
+      prefix: extt_
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:                                    # pooled over all nodes of train (manifest _stats; 2026-09-22)
+        displacement: {type: vector, mean: [-3.6e-7, 3.0e-6, 0.0], std: 3.18e-4}   # std = isotropic (Frobenius/sqrt(2)) value
+        # Per-component z-scores as in the scalar-head lanes (diagonal affine map per lab-frame component; utils.py FieldType note).
+        sig11: {type: scalar, mean: -1.57e-3, std: 0.3127}
+        sig22: {type: scalar, mean: 1.19e-3, std: 0.3116}
+        sig12: {type: scalar, mean: 4.9e-4, std: 0.1825}
+        bc_disp_node_x: {type: scalar, mean: 0.0, std: 1.053e-4}    # nodal copies of the boundary inputs (GeoTransolver path)
+        bc_disp_node_y: {type: scalar, mean: 0.0, std: 1.047e-4}
+        bc_trac_node_x: {type: scalar, mean: 0.0, std: 6.05e-2}
+        bc_trac_node_y: {type: scalar, mean: 0.0, std: 6.07e-2}
+
+targets:
+  displacement: vector
+  stress: {type: symmetric_tensor, components: {sig11: xx, sig22: yy, sig12: xy}}

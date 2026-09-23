@@ -44,7 +44,8 @@ class BoundaryValueExtension(MeshTransform):
         bnd = domain.boundaries[self.boundary]
         x = domain.interior.points  # (N, 3)
         y = bnd.cell_centroids.to(x.dtype)  # (M, 3)
-        g = bnd.cell_data[self.value_field].reshape(-1).to(x.dtype)
+        g = bnd.cell_data[self.value_field].to(x.dtype)
+        g = g.reshape(y.shape[0], -1)  # (M, C): C = 1 for a scalar datum, 3 for a vector datum (rank-1 extension)
         w = bnd.cell_data[self.measure_field].reshape(-1).to(x.dtype)
         d2 = torch.cdist(x, y).pow(2)  # (N, M)
         kern = 1.0 / (d2 + self.eps**2)
@@ -52,15 +53,15 @@ class BoundaryValueExtension(MeshTransform):
         for lf in self.label_fields:
             m = bnd.cell_data[lf].reshape(-1).to(x.dtype)
             wm = w * m
-            den = kern @ wm
-            num = kern @ (wm * g)
-            ext = torch.where(den > 0, num / den.clamp_min(1e-30), torch.zeros_like(den))
+            den = kern @ wm  # (N,)
+            num = kern @ (wm[:, None] * g)  # (N, C)
+            ext = torch.where(den[:, None] > 0, num / den.clamp_min(1e-30)[:, None], torch.zeros_like(num))
             if bool(m.sum() > 0):
                 dist = d2[:, m > 0].min(dim=1).values.sqrt()
             else:
                 dist = torch.full_like(den, self.absent_distance)
             short = lf.replace("bc_", "")
-            new_pd[f"{self.prefix}{short}"] = ext.reshape(-1, 1)
+            new_pd[f"{self.prefix}{short}"] = ext  # (N, C)
             new_pd[f"{self.prefix}dist_{short}"] = dist.reshape(-1, 1)
         interior = Mesh(
             points=domain.interior.points,

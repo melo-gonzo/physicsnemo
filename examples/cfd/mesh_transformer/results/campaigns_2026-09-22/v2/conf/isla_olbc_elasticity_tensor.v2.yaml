@@ -1,0 +1,35 @@
+# @package _global_
+# TENSOR-HEAD variant (2026-09-22): the stress as one symmetric rank-2 tensor output (out_tensors: 1) from ISLA's
+# equivariant tensor head; no laboratory-frame global vectors (K = 0, eager); pairs with olbc_elasticity_tensor.yaml.
+# ISLA on OLBC elasticity-circlehollow-m1 (2026-09-22): boundary tokens from all three boundary loops (line cells) with the
+# per-component one-hot BC type, prescribed displacement and traction component (standardized) as boundary scalars; every
+# mesh node as an interacting query token with the signed distance as its scalar.
+input_type: tensors
+output_type: fields
+forward_kwargs:
+  points: boundaries.outer.cell_centroids
+  normals: boundaries.outer.cell_data.normals              # precomputed in-plane outward normals (a curve in 3-D has no cell_normals)
+  measure_weights: boundaries.outer.cell_data.quadrature_measure
+  boundary_inputs:
+    bc_dirichlet_x: boundaries.outer.cell_data.bc_dirichlet_x   # condition tags, per component (rank 0)
+    bc_neumann_x: boundaries.outer.cell_data.bc_neumann_x
+    bc_dirichlet_y: boundaries.outer.cell_data.bc_dirichlet_y
+    bc_neumann_y: boundaries.outer.cell_data.bc_neumann_y
+    bc_displacement: boundaries.outer.cell_data.bc_displacement # prescribed displacement, ONE rank-1 field (StackScalarFields in the dataset yaml; z = 0)
+    bc_traction: boundaries.outer.cell_data.bc_traction         # prescribed traction, ONE rank-1 field
+  query_points: interior.points
+  query_normals: interior.point_data.sdf_normals
+  query_inputs:
+    sdf: interior.point_data.sdf
+model:
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs: {displacement: 1, stress: {rank: 2, symmetric: true}}   # the stress as a whole rank-2 tensor; the recipe reads xx, yy, xy off it (no frame input: the head is frame-independent by construction)
+  boundary_inputs: {bc_dirichlet_x: 0, bc_neumann_x: 0, bc_dirichlet_y: 0, bc_neumann_y: 0, bc_displacement: 1, bc_traction: 1}
+  query_inputs: {sdf: 0}
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  query_tokens: true
+  geo_checkpoint: true
+  geo_kernel: eager              # the fused kernel does not take rank-1 boundary inputs yet (kernel follow-up)

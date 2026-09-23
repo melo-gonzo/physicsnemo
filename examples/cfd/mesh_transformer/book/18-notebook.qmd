@@ -25960,3 +25960,17 @@ learning-curve exponents 0.65 (ISLA, over 600 to 2,400) against 0.47.
 whose loading direction is local (a pressure on the hole), ISLA leads
 GeoTransolver-512 at three of four rungs and ties the fourth.** R2 and
 GeoTransolver-256 at 2,400 pending for the depth and width bars.
+
+**Addendum (2026-09-23, 06:30): next lanes from the OLBC-MECH verdict.**
+(a) `om` rows 8 to 10: second seed (43) of `ext`, `leak` and `frame2` at
+512 cases, so the verdict's factors carry two seeds. (b) LIT-EXT-vec, `v2`
+rows 10 to 13: on the elasticity set the prescribed displacement and
+traction vectors are extended into the interior with the same
+parameter-free kernel, per component label, and enter as **rank-1 query
+inputs** (four vectors and four distances), on top of the tensor-head
+plus rank-1-boundary-input configuration of RANK-IO; 512 and 2,048 cases,
+two seeds. The transform now accepts vector data (the scalar behavior is
+unchanged). Bar: against the RANK-IO lanes at the same rungs, the
+extension recovers at least half of the log-gap to GeoTransolver-512 on
+every field (as it did for the Poisson scalar), else the value-transport
+mechanism is specific to the Poisson set.
