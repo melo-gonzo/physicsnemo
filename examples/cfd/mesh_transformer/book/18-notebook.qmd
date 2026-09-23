@@ -26777,3 +26777,41 @@ cluster is reachable. Bar, stated now: if the GeoTransolver-volume ÷ ISLA
 pressure ratio at negative angles is at least 0.08 below its value at 5 to
 10 degrees, the deficit is regime-located on two datasets and the frame
 lane of the preregistration above runs on AirfRANS as well.
+
+## 2026-09-23 — Preregistration, FRAME-AF (local mechanism rung): does the domain frame as global vectors change ISLA's AirfRANS interior error at exploration scale? Two arms on the laptop GPU while the cluster is unreachable {#sec-nb-frame-af-local-prereg}
+
+**Why now.** The cluster has been unreachable since 13:50; the raw
+AirfRANS dataset is on this machine, its converter is in the repository,
+and the wing anatomy above raised the positional hypothesis (GeoTransolver
+reads absolute position; ISLA does not). The domain frame as two global
+vectors is the contract-preserving instrument that gives ISLA a frame to
+express position in without breaking equivariance in the dataset's frame
+(the OLBC `frame2` instrument, @sec-nb-olbc-mech-verdict). AirfRANS is the
+one interior set where ISLA trails GeoTransolver-volume on pressure and
+eddy viscosity (@sec-interior-airfrans).
+
+**Instrument (labeled exploration scale; mechanism only, no standing).**
+A 160-case subset converted locally (120 cases drawn from `scarce_train`,
+40 from `full_test`, seed 0; `datasets/airfrans_volume_local*.yaml`,
+manifest splits `local_train` / `local_test`). ISLA at 192 x 12 x 256,
+cosine routing, fused kernel, 20,000 interior queries per case, 300
+epochs, learning rate 1e-3 (the 192-wide rule), seed 42, one RTX 4090
+laptop GPU. Two arms: baseline (`isla_volume_airfrans_local`: freestream
+direction as the one global vector, speed as a global scalar) and frame
+(`isla_volume_airfrans_local_frame`: plus the laboratory axes as two more
+global vectors, $K = 3$, the first training use of the three-direction
+fused kernel). Readout: validation relative L2 on the 40 local test
+airfoils at epoch 300 for pressure, velocity and eddy viscosity, plus the
+per-angle bins of the addendum above.
+
+**Bars.** *Frame pays*: pressure improves by at least 10% and velocity is
+not worse by more than 5%; then the positional channel is a live candidate
+for the AirfRANS deficit and the reference-scale twin (R1, 800 airfoils,
+100,000 queries, two seeds, against GeoTransolver-volume) launches when the
+cluster returns. *Frame is neutral*: every field within 5%; the deficit is
+not positional at this scale and the frame lane on the wings keeps its own
+bar. *Frame hurts*: any field worse by more than 5%; recorded, the lane
+is not repeated at scale. Prediction: neutral-to-pays on pressure at the
+negative angles, neutral elsewhere (0.5); a laptop rung of 120 cases is
+where a frame that helps memorization would help most, so a null here is
+the more informative outcome.
