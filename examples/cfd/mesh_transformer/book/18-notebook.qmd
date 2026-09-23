@@ -25782,3 +25782,15 @@ GeoTransolver-256 rows with the new displacement-floor column; the
 the chapters. The training-law half of @sec-training-law waits for the
 `rb_dr_isla_area` and `rb_hl_isla_super_scarce_area` twins of
 @sec-nb-refboard-prereg, which are training lanes.
+
+**Addendum (2026-09-23, 04:00).** The runaway was the scorer itself: each
+lane's inference wrote one DomainMesh tree per test sample (a DeepJEB++
+lane, 5,540 files of tens of members each, adds about 200,000 inodes), so
+the count climbed back to the limit twice within hours of the first
+cleanup. Fixed at the source: `infer.py` honors `save_predictions`
+(default true, unchanged behavior) and the fleet scorer passes false and
+deletes any prediction directory after a lane's metrics are written; the
+routing-probe dumps of September 10 to 21 are archived as seven tar files
+(`probes_archive/`, 6.9 GB). The count stands at 47.3 million with the
+pruning loop bounding checkpoints; the standing rule for the program is
+that per-sample predictions are written only when a study asks for them.
