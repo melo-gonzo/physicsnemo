@@ -25794,3 +25794,41 @@ routing-probe dumps of September 10 to 21 are archived as seven tar files
 (`probes_archive/`, 6.9 GB). The count stands at 47.3 million with the
 pruning loop bounding checkpoints; the standing rule for the program is
 that per-sample predictions are written only when a study asks for them.
+
+**Addendum to DEEPJEB (2026-09-23, 04:30): GeoTransolver rungs scored at the
+equal-step budget.** Float32 von Mises / displacement relative L2 on the
+5,540 clean test files (two seeds unless noted):
+
+| brackets | ISLA R1 | GeoTransolver-512 (1e-3) | GeoTransolver-512 (3e-3) | GeoTransolver-256 (1e-3) | best GeoTransolver ÷ ISLA |
+|---|---|---|---|---|---|
+| 256 | 0.605 / 0.304 | 0.660 / 0.320 | — | — | 1.09 / 1.05 |
+| 1,024 | 0.496 / 0.242 | 0.531 / 0.282 | 0.581 / 0.325 | — | 1.07 / 1.16 |
+| 4,096 | 0.509 / 0.244 | 0.510 / 0.265 (one seed) | — | — | 1.00 / 1.09 |
+| 12,451 | 0.508 / 0.250 | 0.589 / 0.328 | 0.664 / 0.434 | 0.518 / 0.261 | 1.02 / 1.04 (GeoTransolver-256) |
+
+: DeepJEB++ clean splits at equal optimizer steps (about 130,000); the last column uses the GeoTransolver arm that scores best at that rung, as preregistered. {#tbl-deepjeb-equalstep}
+
+**Reading.** ISLA R1 leads or ties at every rung on both fields, by 7 to 9%
+on von Mises at 256 and 1,024 brackets and by 2 to 4% at all brackets
+against GeoTransolver-256, which is GeoTransolver's best arm there: at this
+step budget the wider GeoTransolver-512 converges more slowly (14% behind
+256 at the full rung) and the 3e-3 rate that the surface protocol uses on
+the cars is 13 to 32% worse than 1e-3 on this dataset. Both architectures
+are flat above 1,024 brackets at equal steps, so bar (ii)'s exponents are
+not readable from this ladder (the equal-epoch companion decides). Bar (i)
+at all brackets: GeoTransolver-256 ÷ ISLA 1.02 / 1.04, with paired seeds
+to be checked in the final reduction; bar (iii) width: GeoTransolver-512
+is *worse* than 256 at this budget; R2 pending. Cost: ISLA R1 0.11 s and
+12.7 GB per GPU against GeoTransolver-512's 0.14 s and 26.4 GB. Load
+cases: torque easiest for both models (ISLA 0.34 to 0.41,
+GeoTransolver-512 0.35 to 0.45), diagonal force hardest; bar (iv) met.
+
+**Addendum to SOLIDS (2026-09-23, 04:30): the half-rate 300-lug control.**
+ISLA R1 at 2.5e-4 on 300 lugs: von Mises 0.0054 / 0.0051 (seeds 42 / 43)
+against 0.0103 / 0.0052 at 5e-4 and GeoTransolver-512's 0.0056 / 0.0055:
+**GeoTransolver ÷ ISLA = 1.06 at half rate, with both seeds agreeing**, so
+the 5e-4 seed-42 outlier was the delayed plateau escape and the rate, not
+the architecture; the lug ladder reads 1.06 (300, half rate) / 1.08 (600)
+/ 0.99 (1,200), with 2,400 pending. The trainability clause (iv) is
+resolved as preregistered: the plateau lane is reported, and its half-rate
+rerun replaces it in the ladder with the rate stated.

@@ -30,7 +30,7 @@ def main() -> None:
     lanes = {}
     for p in sorted(MET.glob("so_lug_*/*/metrics.jsonl")):
         name = p.parent.name
-        m = re.match(r"so_lug_(isla_r[12]|gt512|gt256)_n(\d+)_seed(\d+)", name)
+        m = re.match(r"so_lug_(isla_r[12](?:_lr25e4)?|gt512|gt256)_n(\d+)_seed(\d+)", name)
         lanes[name] = {"arm": m.group(1), "n": int(m.group(2)), "seed": int(m.group(3)), **lane_mean(p)}
     summary: dict[str, dict] = {}
     for name, d in lanes.items():
