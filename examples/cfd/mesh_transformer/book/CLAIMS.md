@@ -240,8 +240,9 @@ chapters write "ISLA" for it and never "R1"; the 192-wide linear-routed lanes at
   variant 9-27% worse. Never quote the frameless ISLA Tensile2d numbers as a standing (output-contract ablation).
 - **Lug** (results/solids_lug_2026-09-22.json, von Mises on 600 test lugs): GeoTransolver-512 ÷ ISLA **1.06 (300 lugs at
   the half rate 2.5e-4; 0.71 for the 5e-4 pair whose seed 42 escaped a plateau late, reported and replaced as
-  preregistered) / 1.08 / 0.99 / 1.13** at 300 / 600 / 1,200 / 2,400; exponents 0.65 vs 0.47. The 2,400 ISLA cell is one
-  seed in the artifact. Say: "ISLA leads at three of four rungs on the one solid whose target is a frame-free scalar".
+  preregistered) / 1.08 / 0.99 / 1.01** at 300 / 600 / 1,200 / 2,400 (two seeds each; the 2,400 cell was misquoted as 1.13 from one
+  seed on 2026-09-23 and corrected the same morning). Say: "ISLA leads at the two small rungs and ties at the two large ones on
+  the one solid whose target is a frame-free scalar".
 - **OLBC** (results/olbc_2026-09-22.json): Poisson GeoTransolver-512 ÷ ISLA **0.32 / 0.25 / 0.35** at 512 / 2,048 (one ISLA
   seed) / 8,448; GeoTransolver-256 0.0287 at the full rung (width does not pay for GeoTransolver); exponents **0.84 vs
   0.81, the same exponent and a constant 3x gap: the one dataset where ISLA's curve is not steeper**. Elasticity 512:

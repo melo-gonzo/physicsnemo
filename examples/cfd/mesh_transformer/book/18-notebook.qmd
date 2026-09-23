@@ -26078,3 +26078,16 @@ artifacts, the 4,096-bracket GeoTransolver cell of DeepJEB. The lug
 artifact predates the second 2,400-lug seed now present in
 `results/campaigns_2026-09-22/so/metrics`; re-reducing it is a separate
 step and the chapter quotes the artifact as it stands.
+
+**Erratum (2026-09-23, 07:00): the 2,400-lug rung.** The 04:30 addendum
+quoted ISLA 0.00208 against GeoTransolver-512 0.00235 "two seeds each,
+ratio 1.13"; the artifact at that moment held one ISLA seed. With both
+seeds scored: ISLA 0.0019 / 0.0024 (mean 0.0022), GeoTransolver-512 0.0018
+/ 0.0025 (0.0022), **ratio 1.01, parity**, and GeoTransolver-256 0.0021 /
+0.0019 (0.0020) is the better GeoTransolver width at this rung (5% ahead
+of both). The lug ladder reads 1.06 (300, half rate) / 1.08 (600) / 0.99
+(1,200) / 1.01 (2,400): ISLA leads at the two small rungs and ties at the
+two large ones; exponents 0.65 (ISLA) against 0.47 (GeoTransolver-512) over
+600 to 2,400. Chapters 10 and 15, the status ledger and CLAIMS carry the
+corrected reading; the lesson for the writing rule is the standing one:
+quote seeds from the artifact's seed list, never from a ratio alone.

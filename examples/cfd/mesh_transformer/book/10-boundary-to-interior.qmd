@@ -60,7 +60,7 @@ print("**On the task that asks for the field rather than the wall pressure, how 
       "dependence on the joint query set that fixes its deployment count (@sec-interior-companion). Two attempts to supply interior "
       "context by other means fail, and an exact boundary-integral prior is the wrong prior for separated flow (@sec-interior-negatives). "
       "The chapter closes with the first solid-mechanics datasets, where every mesh node is a query: on the lug ISLA leads GeoTransolver-512 "
-      "at three of four rungs; on Tensile2d it trails at 400 cases with the steeper learning curve; on the fixed-mesh OLBC sets, where only "
+      "at the 300- and 600-lug rungs and ties at 1,200 and 2,400; on Tensile2d it trails at 400 cases with the steeper learning curve; on the fixed-mesh OLBC sets, where only "
       "the boundary data vary, GeoTransolver-512 leads by a factor of three, and the mechanism is located (@sec-interior-olbc). Every ratio "
       "is GeoTransolver-volume ÷ ISLA (GeoTransolver-512 ÷ ISLA on the solids), above one favoring ISLA; protocol: @sec-protocol.")
 ```
@@ -454,7 +454,7 @@ lug_ratio = {300: LUGR["isla_r1_lr25e4|n300"], 600: LUGR["isla_r1|n600"], 1200: 
 #| label: lug-lede
 #| output: asis
 print(f"**On the GINOT bracket lug, a three-dimensional elastoplastic solid whose target is a true scalar (von Mises stress) and whose load "
-      f"is a pressure on the hole with no global direction, ISLA leads GeoTransolver-512 at three of four rungs of the training-case ladder "
+      f"is a pressure on the hole with no global direction, ISLA leads GeoTransolver-512 at the two small rungs of the training-case ladder and ties at the two large ones "
       f"and ties the fourth: GeoTransolver-512 ÷ ISLA {lug_ratio[300]:.2f} / {lug_ratio[600]:.2f} / {lug_ratio[1200]:.2f} / {lug_ratio[2400]:.2f} "
       f"at 300 / 600 / 1,200 / 2,400 lugs, with learning-curve exponents {LUGX['isla_r1']['exponent']:.2f} against "
       f"{LUGX['gt512']['exponent']:.2f}.** The lug (@sec-data-lug) is clamped at one end and pressed on the lower half of its hole; three "

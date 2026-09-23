@@ -150,7 +150,7 @@ print(f"**Read across every axis the program has measured, the pattern is one se
       f"{pct(vol['velocity_l2'])} (DrivAerML Volume task) and {af['velocity_l2']:.2f}x (AirfRANS), leads on pressure by {pct(vol['pressure_l2'])} "
       f"on the cars and trails by {pct(af['pressure_l2'])} on the airfoils; outside the AirfRANS training range it leads on every field. "
       f"On the solids GeoTransolver-512 leads ISLA by {pct(T2['sig11'])} to {pct(T2['displacement'])} on Tensile2d at 400 cases, and ISLA "
-      f"leads on the lug ladder at three of four rungs ({lug[300]:.2f} / {lug[600]:.2f} / {lug[1200]:.2f} / {lug[2400]:.2f} at 300 / 600 / "
+      f"leads on the lug ladder at the two small rungs and ties at the two large ones ({lug[300]:.2f} / {lug[600]:.2f} / {lug[1200]:.2f} / {lug[2400]:.2f} at 300 / 600 / "
       f"1,200 / 2,400 lugs); on the fixed-mesh OLBC Poisson set GeoTransolver-512 leads {1 / olbc_p[512]:.1f} to {1 / olbc_p[2048]:.1f}x "
       f"at every rung with the same learning-curve exponent, and {1 / max(olbc_e.values()):.1f} to {1 / min(olbc_e.values()):.1f}x on "
       f"elasticity at 512 cases. Under a 10:1 sampling bias ISLA's error moves {pct(dens_cars['isla'])} on the cars where GeoTransolver's grows "
