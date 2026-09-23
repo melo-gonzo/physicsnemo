@@ -25460,7 +25460,7 @@ parameter-matched GeoTransolver-512 0.0410 is at parity (0.99) at 1.17x
 R1's time and 1.9x its memory. 35 wings: GeoTransolver-256 0.1098 and
 Transolver-256 0.1101 (`results/p200k_fleet_reduction_2026-09-22.json`)
 against R1 0.1461: **GeoTransolver ÷ R1 = 0.75**, the small-recurring-
-geometry deficit the wing rungs have shown throughout (@sec-surface-wings),
+geometry deficit the wing rungs have shown throughout (@sec-data-efficiency),
 unchanged by the reference configuration; GeoTransolver-512 on the wings
 is at epoch ~460 and is added when scored. So the prereg's acceptance
 clause ("recommended settings beat the baseline") holds on the cars and
