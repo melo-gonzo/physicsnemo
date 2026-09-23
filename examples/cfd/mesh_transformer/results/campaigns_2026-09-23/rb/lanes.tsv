@@ -1,0 +1,27 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	rb	rb_dr_isla_pose_seed42	drivaer_ml_surface_pose	isla_surface_ref	-	5e-4	42	200000	code_ref
+1	rb	rb_dr_isla_pose_seed43	drivaer_ml_surface_pose	isla_surface_ref	-	5e-4	43	200000	code_ref
+2	rb	rb_dr_isla_area_seed42	drivaer_ml_surface_area	isla_surface_ref	-	5e-4	42	200000	code_ref
+3	rb	rb_hl_isla_super_scarce_area_seed42	highlift_surface_super_scarce_area	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	42	200000	code_ref
+4	rb	rb_dr_isla_area_seed43	drivaer_ml_surface_area	isla_surface_ref	-	5e-4	43	200000	code_ref
+5	rb	rb_hl_isla_super_scarce_area_seed43	highlift_surface_super_scarce_area	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	43	200000	code_ref
+6	rb	rb_dr_isla_n27_seed42	drivaer_scaling	isla_surface_ref	train_split=train_n27	5e-4	42	200000	code_ref
+7	rb	rb_dr_isla_n27_seed43	drivaer_scaling	isla_surface_ref	train_split=train_n27	5e-4	43	200000	code_ref
+8	rb	rb_dr_isla_n54_seed42	drivaer_scaling	isla_surface_ref	train_split=train_n54	5e-4	42	200000	code_ref
+9	rb	rb_dr_isla_n54_seed43	drivaer_scaling	isla_surface_ref	train_split=train_n54	5e-4	43	200000	code_ref
+10	rb	rb_dr_isla_n109_seed42	drivaer_scaling	isla_surface_ref	train_split=train_n109	5e-4	42	200000	code_ref
+11	rb	rb_dr_isla_n109_seed43	drivaer_scaling	isla_surface_ref	train_split=train_n109	5e-4	43	200000	code_ref
+12	rb	rb_dr_isla_n218_seed42	drivaer_scaling	isla_surface_ref	train_split=train_n218	5e-4	42	200000	code_ref
+13	rb	rb_dr_isla_n218_seed43	drivaer_scaling	isla_surface_ref	train_split=train_n218	5e-4	43	200000	code_ref
+14	rb	rb_hl_isla_geometry_super_scarce_seed42	highlift_surface_geometry_super_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	42	200000	code_ref
+15	rb	rb_hl_isla_geometry_super_scarce_seed43	highlift_surface_geometry_super_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	43	200000	code_ref
+16	rb	rb_hl_isla_geometry_scarce_seed42	highlift_surface_geometry_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	42	200000	code_ref
+17	rb	rb_hl_isla_geometry_scarce_seed43	highlift_surface_geometry_scarce	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	43	200000	code_ref
+18	rb	rb_hl_isla_single_aoa_12_seed42	highlift_surface_single_aoa_12	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	42	200000	code_ref
+19	rb	rb_hl_isla_single_aoa_12_seed43	highlift_surface_single_aoa_12	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	43	200000	code_ref
+20	rb	rb_hl_isla_deflection_seed42	highlift_surface_deflection	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	42	200000	code_ref
+21	rb	rb_hl_isla_deflection_seed43	highlift_surface_deflection	isla_surface_ref	model.out_scalars=3 model.out_vectors=2 +training.val_interval=25	5e-4	43	200000	code_ref
+22	rb	rb_dr_isla_vol_n54_seed42	drivaer_ml_volume_reference_scaling	isla_volume_ref	train_split=train_n54 +training.val_interval=10	5e-4	42	200000	code_ref
+23	rb	rb_dr_isla_vol_n54_seed43	drivaer_ml_volume_reference_scaling	isla_volume_ref	train_split=train_n54 +training.val_interval=10	5e-4	43	200000	code_ref
+24	rb	rb_dr_isla_vol_n109_seed42	drivaer_ml_volume_reference_scaling	isla_volume_ref	train_split=train_n109 +training.val_interval=10	5e-4	42	200000	code_ref
+25	rb	rb_dr_isla_vol_n109_seed43	drivaer_ml_volume_reference_scaling	isla_volume_ref	train_split=train_n109 +training.val_interval=10	5e-4	43	200000	code_ref

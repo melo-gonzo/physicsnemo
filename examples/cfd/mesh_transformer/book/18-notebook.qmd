@@ -25499,3 +25499,103 @@ data exponent must be read from equal-epoch rungs; the 10-epoch numbers
 stay as the equal-compute statement. The load-case breakdown holds at
 every rung: the torque case is ISLA's easiest (0.34 to 0.41) and the
 diagonal force its hardest (0.58 to 0.71); bar (iv) is met.
+
+## 2026-09-23 — Preregistration, REF-BOARD: every load-bearing 192-wide ISLA evidence lane re-run under the reference configuration R1; 26 lanes, group `rb` {#sec-nb-refboard-prereg}
+
+**Why.** @sec-nb-ref-verdict fixed R1 (384 wide, 12 layers, 256 slices,
+cosine routing, the fused geometry kernel, the RMS-pairwise-distance
+gauge, learning rate 5e-4) as the reference configuration, and Peter's
+ruling of 2026-09-22 (@sec-nb-ref-prereg) is that every experiment is a
+deviation from it. The chapters still quote ISLA lanes trained 192 wide
+under linear routing at 1e-3 (the p200k fleet, @sec-nb-proto200k-fleet-prereg,
+model file `isla_surface_reference`): the SO(3)-orbit pose lane, the
+area-law training lanes on both datasets, the DrivAerML 27 / 54 / 109 /
+218-car rungs, the HiLiftAeroML geometry and fixed-angle rungs, the
+deflection sealed test, and the 54 / 109-car rungs of the DrivAerML
+Volume ladder. REF-BOARD re-runs each of them as an R1 twin: the same
+dataset, split, extra overrides, seed and cell count (200,000), with the
+model file `isla_surface_ref` or `isla_volume_ref` at 5e-4 under the
+`code_ref` snapshot. The GeoTransolver and Transolver rows of every rung
+are released baselines and are not re-run (@sec-nb-ref-verdict); the
+comparison in each chapter is R1 against the existing baseline rows.
+
+**Lanes** (group `rb`, `kernel/rb/lanes.tsv`, mirrored at
+`results/campaigns_2026-09-23/rb/`; 26 lanes, two seeds each, 500 epochs,
+bf16 training, float32 scoring through the fleet pump at 200,000 cells;
+launched 2026-09-23, Slurm 834819 to 834844). Each row names the 192-wide
+original it replaces and the chapter statement it feeds.
+
+| original (192 wide, linear routing, 1e-3) | REF-BOARD twin (R1, 5e-4) | dataset | split / extra | feeds |
+|---|---|---|---|---|
+| `p200k_dr_isla_pose_seed{42,43}` | `rb_dr_isla_pose_seed{42,43}` | DrivAerML Surface, SO(3) orbit | `drivaer_ml_surface_pose` (FixedRandomPose) | pose contract and posed accuracy against the augmented baselines, @sec-pose-contract (`tbl-pose-200k`); the orbit row of @sec-pose |
+| `tadr_dr_isla_w192_area_c100k_seed{42,43}` | `rb_dr_isla_area_seed{42,43}` | DrivAerML Surface, 435 cars | `drivaer_ml_surface_area` (area-proportional Poisson law, exact HT weights); originals at 100,000 cells, twins at 200,000 against `ref_isla_r1_dr435` | training-law swap, DrivAerML panel of @sec-training-law (`fig-training-law`) |
+| `p200k_hl_isla_super_scarce_area_seed{42,43}` | `rb_hl_isla_super_scarce_area_seed{42,43}` | HiLiftAeroML, 35 wings | `highlift_surface_super_scarce_area`; uniform-trained twin is `ref_isla_r1_hl35` | training-law swap, HiLiftAeroML panel of @sec-training-law |
+| `p200k_dr_isla_n{27,54,109,218}_seed{42,43}` | `rb_dr_isla_n{27,54,109,218}_seed{42,43}` | DrivAerML Surface | `drivaer_scaling`, `train_split=train_n{27,54,109,218}`; the 435-car rung is `ref_isla_r1_dr435` | training-case ladder and its exponents, @sec-compute-allocation (`fig-scaling-cases`, `tbl-scaling-exponents`); the car rungs of @sec-scoreboard-200k and @sec-isla-vs-geotransolver |
+| `p200k_hl_isla_geometry_super_scarce_seed{42,43}` | `rb_hl_isla_geometry_super_scarce_seed{42,43}` | HiLiftAeroML, 4 training geometries | `highlift_surface_geometry_super_scarce` | geometry ladder, @sec-de-result (`fig-hilift-data-efficiency`) |
+| `p200k_hl_isla_geometry_scarce_seed{42,43}` | `rb_hl_isla_geometry_scarce_seed{42,43}` | HiLiftAeroML, 21 training geometries | `highlift_surface_geometry_scarce` | geometry ladder, @sec-de-result |
+| `p200k_hl_isla_single_aoa_12_seed{42,43}` | `rb_hl_isla_single_aoa_12_seed{42,43}` | HiLiftAeroML, 126 geometries at 12° | `highlift_surface_single_aoa_12` | fixed-angle rung, @sec-de-result |
+| `p200k_hl_isla_deflection_seed{42,43}` | `rb_hl_isla_deflection_seed{42,43}` | HiLiftAeroML, deflection sealed test | `highlift_surface_deflection` | DEFL standing (falsified at 192 wide), @sec-de-limits and the program table |
+| `rd_isla_vol_n{54,109}_seed{42,43}` | `rb_dr_isla_vol_n{54,109}_seed{42,43}` | DrivAerML Volume | `drivaer_ml_volume_reference_scaling`, `train_split=train_n{54,109}`, `+training.val_interval=10`; the 435-car rung is `ref_isla_r1_drvol` | interior training-case rungs, @sec-interior-results (currently notebook-only, @sec-nb-protocol-redo-prereg) |
+
+All HiLiftAeroML rows carry `model.out_scalars=3 model.out_vectors=2
++training.val_interval=25` as their originals did; the DrivAerML Surface
+rows carry no extra beyond the split (the fused kernel is R1's default,
+so the `+model.geo_kernel=fused` of the `tadr` originals is dropped).
+
+**Not twinned, and why.**
+
+- The 435-car, 35 / 210 / 510-wing, DrivAerML Volume and AirfRANS
+  standings: already R1 under REF (`kernel/ref/lanes.tsv`).
+- The biased-draw and stratified-draw robustness rows
+  (@sec-robustness-density) and the territory probe (@sec-territories):
+  these are inference-time re-draws of the 435-car and 35-wing
+  checkpoints, not training lanes; they are re-read from
+  `ref_isla_r1_dr435` and `ref_isla_r1_hl35` with the existing probe
+  scripts (`kernel/territory_probe.py`, the consistency benchmark) once
+  those checkpoints are final. Likewise the `tadr` twins are scored on the
+  independent uniform draw with the consistency benchmark, as the
+  originals were, not with the fleet scorer's training-law draw.
+- The HiLiftAeroML `full` split: not a rung of the ladder figure (the
+  largest quoted rung, 510 wings, is under REF); its 192-wide lane serves
+  only the learning-rate protocol.
+- The `rd` (PROTOCOL-REDO) surface lanes are 192 wide
+  (`isla_surface_reference` at 1e-3): the measure-weights-off,
+  relational-geometry-off and passive-decoder ablations on the 35-wing,
+  fixed-angle and 435-car sets. They are mechanism ablations, not
+  standings, and no chapter quotes them yet; they are twinned when a
+  chapter does. The `rd` volume lanes other than the two ladder rungs
+  (`w344`, `nosdf`, `st`, `passive_vol`) are design ablations of the same
+  kind.
+- The GeoTransolver and Transolver lanes of every group: released
+  baselines, unchanged.
+- Scaling-study groups (`shl`, `sh`, `iso`, `cap`, `sl`): width, slice and
+  cost ladders at 100,000 cells; they are studies of deviations, not
+  standings.
+
+**Bar.** Each REF-BOARD standing replaces the 192-wide one in the chapter
+it feeds, with the same baseline rows; the 192-wide number stays only in
+the notebook. A twin whose two seeds do not both complete 500 epochs is
+reported as pending, not substituted. Acceptance for the campaign: every
+lane's `train.log` carries epoch lines and no traceback within the first
+chain link, and no `BLOCKED_rb_*` marker appears.
+
+**Prediction.** R1 improves every DrivAerML Surface standing by 5 to 10%,
+as it did at 435 cars (0.0416 against the 192-wide 0.0446,
+@sec-nb-ref-verdict), so the car-ladder exponents shift by at most their
+seed spread and GeoTransolver ÷ ISLA at 27 to 218 cars rises by about
+0.05 to 0.10. The wing-rung ratios stay qualitatively where they are:
+GeoTransolver ÷ ISLA below 1 on the 4- and 21-geometry rungs and the
+fixed-angle rung (R1 moved the 35-wing ratio from 0.73 at 192 wide,
+`results/p200k_fleet_reduction_2026-09-22.json`, to 0.75,
+@sec-nb-ref-verdict: the small-recurring-geometry deficit is not a
+width effect), and the deflection standing stays falsified (ISLA at or
+above 0.9x GeoTransolver). The invariance findings do not move: posed ISLA
+÷ native ISLA stays within 1.03 (1.015x at 192 wide,
+@sec-nb-p200k-pose-verdict; the contract is exact and the residual is
+the draw), area-trained ÷ uniform-trained ISLA stays within 1.05 on both
+datasets while the baselines' area-trained errors remain an order of
+magnitude above their uniform-trained ones, and the 54 / 109-car interior
+rungs improve by the same 5 to 10% as the surface. If any DrivAerML
+Surface rung worsens under R1, the width rule (5e-4 at 384) is the first
+suspect at small training sets and the rate control of REF is extended
+to that rung before the standing is replaced.
