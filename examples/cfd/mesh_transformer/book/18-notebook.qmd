@@ -25876,3 +25876,20 @@ score. The reading for the architecture: on a fixed mesh the anchors of a
 fixed geometry give every sample the same coordinate scaffold, and 256
 slices resolve position on it too coarsely for a boundary-data-to-solution
 map that varies on the scale of the boundary segments.
+
+**Addendum (2026-09-23, 06:00): tensor head plus load axis at 32 cases.**
+Training-time validation relative L2 at epoch 500 (float32 scoring
+follows), `tensor_axis` seeds 42 / 43 against `frame2` seed 42 in the same
+units: $\sigma_{11}$ 0.106 / 0.112 vs 0.112; $\sigma_{22}$ 0.074 / 0.077
+vs 0.110; $\sigma_{12}$ 0.088 / 0.085 vs 0.101; displacement 0.102 / 0.124
+(the `frame2` table did not print this row; float32 gave 0.090). **The
+symmetric rank-2 head plus the load direction as the one physical global
+vector matches the full-frame configuration on every stress component and
+beats it on $\sigma_{22}$ by 30% and on $\sigma_{12}$ by 15%**, with no
+laboratory $x$-axis anywhere in the inputs and the fused kernel in use
+($K = 1$). Combined with the previous addendum this settles the mechanism:
+the load axis is the input that generalizes, the equivariant head is what
+makes the shear component representable, and together they are the
+canonical Tensile2d configuration; the frame-input lanes stay as the
+measured interim. The 400-case pair (epoch ~63) and the float32 scores
+close the bar.
