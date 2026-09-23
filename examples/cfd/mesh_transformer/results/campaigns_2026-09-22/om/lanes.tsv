@@ -5,3 +5,5 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 3	om	om_poisson_isla_r1_frame2_n512_seed42	olbc_poisson_frame	isla_olbc_poisson_frame2	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_ref
 4	om	om_poisson_isla_r1_leak_n512_seed42	olbc_poisson	isla_olbc_poisson_leak	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_ref
 5	om	om_poisson_isla_r1_s1024_n512_seed42	olbc_poisson	isla_olbc_poisson_s1024	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_ref
+6	om	om_poisson_isla_r1_ext_n2048_seed42	olbc_poisson_ext	isla_olbc_poisson_ext	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_ref
+7	om	om_poisson_isla_r1_ext_n512_seed42	olbc_poisson_ext	isla_olbc_poisson_ext	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_ref
