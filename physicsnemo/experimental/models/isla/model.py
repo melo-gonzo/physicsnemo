@@ -120,9 +120,10 @@ nearest boundary sample :math:`y_{i^*}` gives the direction :math:`u_q =
 (x_q - y_{i^*}) / |x_q - y_{i^*}|` and the distance :math:`d_q = \pm |x_q -
 y_{i^*}|`, signed by the nearest sample's normal (positive on the side the
 normal points to: outside, for outward normals, the convention of the stored
-signed-distance fields of the program's datasets). The search is an exact
-chunked nearest-neighbour pass over the queries (:func:`nearest_boundary_geometry`;
-the :math:`N_q \times N` distance matrix is never materialized; the chunk is
+signed-distance fields of the program's datasets). The search is a chunked
+nearest-neighbour pass over the queries (:func:`nearest_boundary_geometry`:
+matmul-expanded candidates on centred coordinates, refined exactly; the
+:math:`N_q \times N` distance matrix is never materialized; the chunk is
 ``interior_nn_chunk`` queries or a 512 MiB block by default), and
 :math:`d_q / L` with its signed logarithm enters the token's embedding as a
 built-in rank-0 channel ahead of the declared ``query_inputs``. The caller
@@ -1000,6 +1001,7 @@ def nearest_boundary_geometry(
     normals: Float[torch.Tensor, "batch tokens 3"],
     *,
     chunk: int | None = None,
+    candidates: int = 16,
     eps: float = 1e-12,
 ) -> tuple[
     Float[torch.Tensor, "batch queries"], Float[torch.Tensor, "batch queries 3"]
@@ -1007,10 +1009,12 @@ def nearest_boundary_geometry(
     r"""Signed distance and direction from the nearest boundary sample to each query.
 
     For every query :math:`x_q` the nearest boundary point :math:`y_{i^*}` is
-    found by a chunked exact nearest-neighbour search over the queries (a
-    ``(B, chunk, N)`` distance block at a time, ``torch.cdist`` without the
-    matmul expansion, so the ``N_q x N`` matrix is never materialized and
-    near-wall distances keep full precision); then
+    found by a chunked nearest-neighbour search over the queries: a
+    ``(B, chunk, N)`` block of matmul-expanded squared distances on centred,
+    scaled coordinates selects ``candidates`` samples per query, and the exact
+    distance to those decides (so the ``N_q x N`` matrix is never
+    materialized, the search runs at matmul speed, and the returned distance
+    is computed exactly from the chosen sample); then
 
     .. math::
 
@@ -1030,6 +1034,10 @@ def nearest_boundary_geometry(
     rebuilt from the gathered sample, so they are differentiable in the
     positions. ``normals`` are renormalized. ``chunk`` is the number of
     queries per distance block; ``None`` derives it from :data:`NN_CHUNK_BYTES`.
+    ``candidates`` is the number of samples per query whose exact distance is
+    compared after the float64 expanded-form search (16 by default; the
+    expansion alone already resolves below fp32 coordinate ties, so the
+    refinement is margin against ties and denormal inputs).
 
     Because the boundary is a *sample* (200,000 of up to 17 million cells on
     a DrivAerML car), :math:`\lvert d_q \rvert` overestimates the true wall
@@ -1041,15 +1049,42 @@ def nearest_boundary_geometry(
     n = points.shape[1]
     if chunk is None:
         chunk = max(1, NN_CHUNK_BYTES // (b * n * query_points.element_size()))
+    k = min(int(candidates), n)
     with torch.autocast(query_points.device.type, enabled=False), torch.no_grad():
+        ### Candidate search in the matmul-expanded form |y|^2 - 2 x.y (the |x|^2
+        ### term is constant per query) in float64 on coordinates centred and
+        ### scaled by the boundary sample, then the exact distance to the k best
+        ### candidates decides. The expansion cancels catastrophically: its
+        ### squared-distance error is ~eps * R^2, i.e. a distance resolution of
+        ### sqrt(eps) * R, which at fp32 is 2e-4 of the body radius (coarser than
+        ### the near-wall sample spacing it must resolve) and at fp64 1e-8 R
+        ### (below the fp32 resolution of the coordinates themselves). The exact
+        ### element-wise cdist path ("donot_use_mm_for_euclid_dist") is ~100x
+        ### slower at 200,000 x 200,000 (46 s against 0.4 s per training step,
+        ### INTERNAL-GEOMETRY lanes, 2026-09-23); a float64 matmul of that size is
+        ### 8e10 flop, well under 0.1 s even on GPUs with reduced fp64 rates.
+        c = points.mean(dim=1, keepdim=True)
+        scale = (points - c).norm(dim=-1).amax(dim=1).clamp_min(eps)[:, None, None]
+        y_s = ((points - c) / scale).double()  # (B, N, 3)
+        y_sq = y_s.square().sum(-1)  # (B, N)
+        y_t = y_s.transpose(1, 2)  # (B, 3, N)
         idx = []
         for i0 in range(0, nq, chunk):
-            d = torch.cdist(
-                query_points[:, i0 : i0 + chunk],
-                points,
-                compute_mode="donot_use_mm_for_euclid_dist",
-            )
-            idx.append(d.argmin(dim=-1))
+            q_c = query_points[:, i0 : i0 + chunk]  # (B, q, 3)
+            q_s = ((q_c - c) / scale).double()
+            approx = y_sq[:, None, :] - 2.0 * (q_s @ y_t)  # (B, q, N)
+            if k == 1:
+                idx.append(approx.argmin(dim=-1))
+                continue
+            cand = approx.topk(k, dim=-1, largest=False).indices  # (B, q, k)
+            y_k = torch.gather(
+                y_s[:, None].expand(b, cand.shape[1], n, 3),
+                2,
+                cand[..., None].expand(*cand.shape, 3),
+            )  # (B, q, k, 3)
+            exact = (q_s[:, :, None, :] - y_k).square().sum(-1)  # (B, q, k)
+            best = exact.argmin(dim=-1, keepdim=True)
+            idx.append(torch.gather(cand, 2, best).squeeze(-1))
         idx = torch.cat(idx, dim=1)  # (B, Q)
     gather = idx[..., None].expand(b, nq, 3)
     y = torch.gather(points, 1, gather)

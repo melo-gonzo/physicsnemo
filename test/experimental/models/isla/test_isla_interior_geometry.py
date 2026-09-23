@@ -299,3 +299,28 @@ def test_checkpoint_round_trip_keeps_the_mode(tmp_path):
     with torch.no_grad():
         a, b = m(**kw), m2(**kw)
     assert all(torch.equal(a[k], b[k]) for k in a.keys())
+
+
+def test_nearest_boundary_geometry_near_wall_dense_cluster_matches_brute_force():
+    """The matmul candidate search must return the true nearest sample where it is
+    hardest: queries a hair off a dense cluster of boundary samples far from the
+    cloud's centre (large |x|^2 relative to the separations), in float32 inputs,
+    against a float64 brute force; every candidate count, including 1, must agree
+    (the expansion runs in float64, so its resolution is below fp32 coordinate ties)."""
+    g = torch.Generator().manual_seed(3)
+    n, q_n = 5000, 400
+    pts64, nrm64, _ = _cloud(n, 0)
+    ### a dense cluster of 1,000 samples within 1e-3 of a point 4 radii out
+    centre = torch.tensor([[[4.0, 0.0, 0.0]]], dtype=D)
+    cluster = centre + 1e-3 * torch.randn(1, 1000, 3, dtype=D, generator=g)
+    pts64 = torch.cat([pts64, cluster], dim=1)
+    nrm64 = torch.cat(
+        [nrm64, torch.nn.functional.normalize(torch.randn(1, 1000, 3, dtype=D, generator=g), dim=-1)], dim=1
+    )
+    q64 = centre + 2e-3 * torch.randn(1, q_n, 3, dtype=D, generator=g)
+    pts, nrm, q = pts64.float(), nrm64.float(), q64.float()
+    d_ref, u_ref = _brute_force(q.double(), pts.double(), nrm.double())
+    for cand in (1, 2, 16):
+        d, u = nearest_boundary_geometry(q, pts, nrm, chunk=64, candidates=cand)
+        assert torch.allclose(d.double(), d_ref, atol=1e-9, rtol=1e-5), cand
+        assert torch.allclose(u.double(), u_ref, atol=1e-5, rtol=0), cand
