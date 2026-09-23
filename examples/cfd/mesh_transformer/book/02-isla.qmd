@@ -74,10 +74,14 @@ fields at query points.** Per case, the inputs are:
   boundary condition prescribes at each cell, as named fields of declared
   tensor rank: a condition tag or a Dirichlet trace at rank 0, a prescribed
   traction at rank 1, a prescribed stress at rank 2) and per-query fields
-  (`query_inputs`: in this book the signed distance to the wall for
-  interior queries, at rank 0). A field of rank 1 or 2 enters only through
-  its invariants against the token's own directions
-  (@sec-isla-inputs-rank).
+  (`query_inputs`: a material label or a source term at an interior query,
+  at rank 0 or above). A field of rank 1 or 2 enters only through its
+  invariants against the token's own directions (@sec-isla-inputs-rank).
+- For prediction off the surface, the interior query positions $x_q$ and
+  nothing else: the direction and the signed distance an interior token
+  needs are functions of the boundary sample and the query position, so the
+  model computes them itself from the nearest boundary sample
+  (@sec-arch-modes). No stored signed-distance field is read.
 
 The outputs are named fields of declared rank at the query points: scalar
 fields (surface pressure, in every surface result of the book), vector
@@ -85,6 +89,11 @@ fields (wall shear stress), and tensors of rank 2 to 4 where a problem asks
 for them (a stress tensor). In ISLA the queries *are* the surface sample and
 each point receives its own prediction; on the interior task, query points
 off the surface join the sample as tokens (@sec-interior-query-tokens).
+Names may nest: a field name may contain a dot (`surface.pressure`), and
+the output is then a nested TensorDict, the project's convention for a
+tree of fields; every value of the declaration is a leaf, so a dot is the
+only way to say "group" and there is no ambiguity between a group and a
+rank spec.
 
 ```{python}
 #| label: fig-isla-inputs
@@ -135,10 +144,15 @@ vector, under one rank-0 name). `forward` takes `points` (batch, $N$, 3),
 four names as mappings from field name to tensor: a rank-1 global input is
 (batch, 3), a rank-0 one (batch,) or (batch, channels); a per-cell or
 per-query field is (batch, $N$), (batch, $N$, 3) or (batch, $N$, 3, 3) by
-rank; for off-surface prediction `query_points`, `query_normals` and
-`query_inputs` over the queries. The output is a dictionary keyed by the
-output names, each of shape (batch, tokens, 3, ..., 3) with as many
-trailing axes as its rank. The $K$ rank-1 global inputs are the global
+rank; for off-surface prediction `query_points` (batch, $Q$, 3) and any
+`query_inputs` over the queries (a query's direction and signed wall
+distance are computed inside the model; `interior_geometry: provided` is
+the switch that takes them from the caller instead, @sec-arch-switches).
+Each named mapping may be given flat with dotted names, nested, or as a
+TensorDict. The output is a TensorDict of batch size (batch, tokens) whose
+leaves are the output names, a dotted name unflattened into a group
+(`out["surface", "pressure"]`), each of shape (batch, tokens, 3, ..., 3)
+with as many trailing axes as its rank. The $K$ rank-1 global inputs are the global
 directions; the fused geometry kernel is written for $K = 1$ and no rank-1
 or rank-2 per-token inputs, and the model falls back to the eager region
 otherwise (@sec-arch-switches). The class is

@@ -1,0 +1,103 @@
+diff --git a/examples/cfd/external_aerodynamics/unified_external_aero_recipe/src/output_normalize.py b/examples/cfd/external_aerodynamics/unified_external_aero_recipe/src/output_normalize.py
+index 3374b7b1..4a5e8dce 100644
+--- a/examples/cfd/external_aerodynamics/unified_external_aero_recipe/src/output_normalize.py
++++ b/examples/cfd/external_aerodynamics/unified_external_aero_recipe/src/output_normalize.py
+@@ -25,10 +25,11 @@ Different model output conventions need different unpacking:
+ - **Tensor output** (e.g. GeoTransolver / Transolver / FLARE): a ``(B, N, C)``
+   tensor whose channels are concatenated in ``target_config`` order; we
+   slice by per-field dim count and squeeze the trailing 1 for scalars.
+-- **Fields output** (ISLA): a ``{name: tensor}`` mapping keyed by the target
+-  names, each tensor of its declared rank -- ``(B, N)`` for a scalar,
+-  ``(B, N, 3)`` for a vector, ``(B, N, 3, 3)`` for a symmetric tensor, of which
+-  the listed laboratory components are read off.
++- **Fields output** (ISLA): a TensorDict (or ``{name: tensor}`` mapping) keyed
++  by the target names, a dotted target name being a nested leaf, each tensor of
++  its declared rank -- ``(B, N)`` for a scalar, ``(B, N, 3)`` for a vector,
++  ``(B, N, 3, 3)`` for a symmetric tensor, of which the listed laboratory
++  components are read off.
+ 
+ Kept in its own module (separate from ``train.py``) so tests can exercise
+ the slicing logic without paying the cost of importing tensorboard.
+@@ -36,7 +37,7 @@ the slicing logic without paying the cost of importing tensorboard.
+ 
+ from __future__ import annotations
+ 
+-from collections.abc import Mapping
++from collections.abc import Callable, Mapping
+ from typing import Any, Literal, TypeAlias
+ 
+ import torch
+@@ -155,14 +156,34 @@ def explode_tensor_targets(
+     return out
+ 
+ 
++def _fields_lookup(output: Mapping[str, Any]) -> tuple[Callable[[str], Any], list]:
++    """``(get, available)`` for a ``fields`` output: a TensorDict is addressed by
++    nested key (a dotted target name is a nested leaf, as ISLA returns it), a plain
++    mapping by its own (possibly dotted) string keys."""
++    if isinstance(output, TensorDict):
++
++        def get(name: str) -> Any:
++            ### ``TensorDict.get`` raises ValueError for a path that runs through a
++            ### leaf tensor; that is "not found" here.
++            try:
++                return output.get(as_nested_key(name), None)
++            except ValueError:
++                return None
++
++        return get, format_leaf_keys(output)
++    return (lambda name: output.get(name, None), sorted(output))
++
++
+ def select_fields_by_target(
+-    output: Mapping[str, torch.Tensor], target_config: dict[str, FieldType]
++    output: Mapping[str, Any], target_config: dict[str, FieldType]
+ ) -> TensorDict:
+-    """Adapt a ``{name: tensor}`` model output into the per-field TensorDict.
++    """Adapt a ``fields`` model output into the per-field TensorDict.
+ 
+     The model's output names are the target names (the model YAML declares its
+-    ``outputs:`` with the dataset's target names). A ``"scalar"`` target takes
+-    the ``(B, N)`` field; a ``"vector"`` target the ``(B, N, 3)`` field; a
++    ``outputs:`` with the dataset's target names, dotted where the dataset nests
++    them). The output is a TensorDict (ISLA; a dotted name is a nested leaf) or
++    a plain ``{name: tensor}`` mapping. A ``"scalar"`` target takes the
++    ``(B, N)`` field; a ``"vector"`` target the ``(B, N, 3)`` field; a
+     symmetric-tensor target reads its listed laboratory components off the
+     ``(B, N, 3, 3)`` field, in the YAML's component order (leaf shape
+     ``(B, N, n_listed)``, matching :func:`forward_kwargs.extract_targets`).
+@@ -171,16 +192,18 @@ def select_fields_by_target(
+         KeyError: If a target name is missing from the output.
+         ValueError: If a field's shape does not match its declared type.
+     """
+-    missing = [name for name in target_config if name not in output]
++    get, available = _fields_lookup(output)
++    fields = {name: get(name) for name in target_config}
++    missing = [name for name, f in fields.items() if not isinstance(f, torch.Tensor)]
+     if missing:
+         raise KeyError(
+             f"Model output is missing target fields {missing!r}; "
+-            f"available: {sorted(output)!r}."
++            f"available: {available!r}."
+         )
+-    any_field = output[next(iter(target_config))]
++    any_field = next(iter(fields.values()))
+     out = TensorDict({}, batch_size=any_field.shape[:2], device=any_field.device)
+     for name, ftype in target_config.items():
+-        field = output[name]
++        field = fields[name]
+         kind = field_kind(ftype)
+         expected = {"scalar": 2, "vector": 3, "symmetric_tensor": 4}[kind]
+         if field.ndim != expected:
+@@ -215,8 +238,9 @@ def normalize_output_to_tensordict(
+     returns a ``(vol, surf)`` tuple; we take the non-None element
+     automatically.
+ 
+-    For ``output_type == "fields"``, the output is a ``{name: tensor}``
+-    mapping keyed by the target names (ISLA); we select the targets via
++    For ``output_type == "fields"``, the output is a TensorDict or a
++    ``{name: tensor}`` mapping keyed by the target names (ISLA; a dotted
++    target name is a nested leaf); we select the targets via
+     :func:`select_fields_by_target`.
+ 
+     Args:

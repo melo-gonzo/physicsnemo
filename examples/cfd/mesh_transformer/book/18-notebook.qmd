@@ -26127,3 +26127,94 @@ step budget, where R1 reaches 0.508 / 0.250. Depth bar (iii): not "does
 not pay" but "does not train at this budget"; the same sign as the 435-car
 depth null and the 9 to 27% Tensile2d penalty, larger. R2 is not a
 reference candidate anywhere a step budget binds.
+
+## 2026-09-23 — Code and preregistration, INTERNAL-GEOMETRY: field names may nest with a dot and `forward` returns a TensorDict; an interior query's direction and signed wall distance are computed inside the model from the nearest sampled boundary cell instead of read from a stored SDF; the sampled-boundary price is measured against the full-mesh field on DrivAerML Volume and AirfRANS {#sec-nb-internal-geometry-prereg}
+
+**Two API refinements (Peter's review of the rank-spec interface,
+@sec-nb-rank-spec-api).** First, the rank-spec grammar used a mapping
+value for `{rank, symmetric, parity, channels}`, which left no way to
+declare a nested group of outputs. The resolution is the project's
+TensorDict convention (`physicsnemo.datapipes.keys`): a field name may
+contain `"."` (`surface.pressure`), every value of `outputs`,
+`boundary_inputs`, `query_inputs` and `global_inputs` is a leaf spec, so a
+mapping value is never a group and there is no ambiguity. `forward` now
+returns a `TensorDict` of batch size `(B, N_out)` with the dotted names
+unflattened (`out["surface", "pressure"]`), a name without a dot staying a
+top-level leaf; the named input mappings accept a flat dict with dotted
+names, a nested dict or a TensorDict. The recipe's `fields` adapter reads
+the TensorDict by its (dotted) target names. A name that is a group of
+another (`surface` beside `surface.pressure`) is refused at construction.
+
+Second, the interior modes took `query_normals` (the stored SDF gradient)
+and the recipe declared `sdf` as a rank-0 query input, although both are
+functions of the boundary sample and the query position. The class now
+computes them (`interior_geometry="nearest_boundary"`, the default): for
+each query the nearest boundary sample $y_{i^*}$ gives the direction $u_q
+= (x_q - y_{i^*}) / |x_q - y_{i^*}|$, used as the query's normal, and the
+distance $d_q = \pm |x_q - y_{i^*}|$ signed by the nearest sample's normal
+(positive on the side the normal points to, the datasets' positive-outside
+convention), fed as a built-in rank-0 channel $[d_q / L, \operatorname{sign}
+d_q \log(|d_q|/L + \epsilon)]$ ahead of any declared query input (the
+layout of one declared `"length"`-scaled scalar, so a `"provided"` model
+with the same weights handed the internal $u_q, d_q$ is the same function
+to roundoff; tested). The search is an exact chunked nearest-neighbour
+pass over the queries (`torch.cdist` without the matmul expansion, one
+`(B, chunk, N)` block at a time, chunk from a 512 MiB budget or
+`interior_nn_chunk`; the argmin runs without gradient and $d_q, u_q$ are
+rebuilt from the gathered sample). At 200,000 queries against 200,000
+cells this is about 300 blocks of 640 queries, $4 \times 10^{10}$
+distances, some 160 GB of distance traffic on the device: tens of
+milliseconds per case, against a training step of order a second, and no
+$Q \times N$ matrix ever held. The built-in channel enters the embedding,
+not the geometry region, so the fused kernel stays available. Under
+`interior_geometry="provided"` the class reproduces the form of every
+interior lane trained before today bitwise (the release goldens and the
+backbone golden hold under it), so the pinned-snapshot lanes remain
+interpretable. Support tokens follow the same switch. Tests: brute-force
+match of the geometry, sign convention on a sampled sphere (inside
+negative, outside positive, $|d|$ within the sample spacing), on-wall
+queries, covariance and scaling of $d, u$, every contract in the internal
+mode for all three interior arrangements, the internal-equals-provided
+identity, checkpoint round trips, nested names on outputs and inputs with
+the covariance holding on the nested values. 153 tests in the ISLA suite,
+the recipe suite green.
+
+**The nuance to measure.** The stored SDF is computed on the *full* mesh
+(the DrivAerML STL, up to 17 million cells); the internal one sees the
+200,000-cell sample, so near the wall $|d_q|$ overestimates the true wall
+distance by up to about the sample spacing, and $u_q$ deviates from the
+true gradient by the same order. Far from the wall the two agree. Whether
+that costs interior accuracy is not assumed.
+
+**Lanes** (group `sg`, snapshot pair `code_v3` = `code_v2` + the ISLA
+package overlay and `recipe_v3` = `recipe_v2` + the recipe patch, verified
+by a cpu-partition import-and-forward job before launch): ISLA R1 (384 x
+12, cosine routing, 5e-4, fused kernel in both arms) on the DrivAerML Volume
+task at 200,000 cells and 200,000 queries, 500 epochs, and on the AirfRANS
+interior task at 100,000 queries (full split), as the REF lanes
+`ref_isla_r1_drvol_*` and `ref_isla_r1_af_*` ran them; two arms, two seeds
+each: `sg_{drvol,af}_internal_seed{42,43}` (`interior_geometry:
+nearest_boundary`, the dataset's `sdf` / `sdf_normals` not read) against
+`sg_{drvol,af}_provided_seed{42,43}` (`isla_volume_*_ref_provided`: the
+stored full-mesh field and its gradient). The dataset yamls are identical
+between arms. Eight lanes. Acceptance at 15 minutes: every lane stepping,
+no Traceback. Scored in float32 by the scorer pump under `code_v3` +
+`recipe_v3`.
+
+**Bar** (float32 relative L2 on the validation cars and the 200 test
+airfoils, seed means with both seeds agreeing in sign). Internal within 3%
+of provided on every interior field (velocity, pressure, eddy viscosity)
+on both datasets = the stored SDF is not needed; the internal geometry
+stays the default and the `_provided` configurations exist only to load
+older checkpoints. Internal worse than provided by more than 3% on any
+field on either dataset = the near-wall price of the sampled boundary is
+real; it is reported per field and `interior_geometry: provided` stays
+documented as the accurate option for datasets that carry a full-mesh
+field. Internal better by more than 3% is also recorded (it would mean the
+sampled-boundary distance is the more consistent input for a model that
+sees the sampled boundary). **Predictions.** DrivAerML: within 3% on
+velocity and eddy viscosity (0.6), pressure the field most likely to pay
+because it is set near the wall (0.5 that it stays within 3%). AirfRANS:
+within 3% on every field (0.8; the airfoil boundary is kept whole at about
+a thousand segments, so the sampled and full boundaries coincide and only
+the direction convention differs).

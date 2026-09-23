@@ -86,9 +86,9 @@ which must sum to the boundary's measure, and the global directions, which
 must be directions.** The forward call is keyword-only, so the recipe's
 `forward_kwargs:` mapping reads exactly as the call does; the field names
 under `global_inputs`, `boundary_inputs` and `query_inputs` are the ones
-the model block declares with their ranks, and the model returns
-`{name: tensor}` keyed by the `outputs:` names (`output_type: fields`).
-For the surface task:
+the model block declares with their ranks, and the model returns a
+TensorDict keyed by the `outputs:` names (`output_type: fields`). For the
+surface task:
 
 ```yaml
 forward_kwargs:
@@ -128,6 +128,45 @@ Three of these need a word.
   dependence like any other parameter. The AirfRANS configuration passes
   the inlet speed this way (`global_data.U_inf_mag`).
 
+For the interior task the model needs one more array, the query positions,
+and nothing about them: `isla_volume` adds
+
+```yaml
+forward_kwargs:
+  points: boundaries.vehicle.cell_centroids
+  normals: boundaries.vehicle.cell_normals
+  measure_weights: boundaries.vehicle.cell_data._effective_measure
+  global_inputs:
+    freestream: global_data.U_inf_dir
+  query_points: interior.points          # (B, Q, 3); direction and wall distance are derived inside the model
+```
+
+Each query's direction and signed distance to the wall are computed from
+the boundary sample inside the model (the nearest boundary cell,
+@sec-arch-modes), so no signed-distance field has to be stored, sampled or
+declared. The distance is to the sampled boundary, not the full mesh; the
+`isla_volume_provided` configuration keeps the dataset's full-mesh field
+instead (`interior_geometry: provided`, with `query_normals:
+interior.point_data.sdf_normals` and `query_inputs: {sdf:
+interior.point_data.sdf}`) and exists to measure that difference
+(@sec-nb-internal-geometry-prereg) and to load interior checkpoints trained
+with it.
+
+::: {.callout-note collapse="true" title="Nested field names"}
+A dataset that stores its fields in groups (`solution/pressure` on disk,
+`solution.pressure` in a config) names its targets with a dot, and the
+model's `outputs:` block uses the same dotted names. A dot is the only way
+to spell a group: every value of `outputs`, `global_inputs`,
+`boundary_inputs` and `query_inputs` is a rank spec, so
+`outputs: {"solution.pressure": 0, "solution.velocity": 1}` declares two
+leaves of one group, and the model returns a TensorDict in which
+`out["solution", "pressure"]` and `out["solution"]["pressure"]` both
+address the first. The recipe reads its targets by the same dotted names,
+so `output_type: fields` consumes the nested output unchanged. The input
+mappings accept a flat dict with dotted names, a nested dict, or a
+TensorDict.
+:::
+
 ::: {.callout-note collapse="true" title="Problems other than external aerodynamics"}
 The architecture knows only that it was handed named fields of declared
 rank. A buoyant flow passes gravity as its one direction; a magnetized flow
@@ -165,7 +204,9 @@ recipe root:
 python src/train.py model=isla_surface dataset=drivaer_ml_surface \
     training.optimizer.lr=5e-4 compile=false
 
-# DrivAerML Volume task: boundary -> interior, queries as interacting tokens with the signed distance.
+# DrivAerML Volume task: boundary -> interior, queries as interacting tokens; the queries' direction and
+# wall distance are computed inside the model from the boundary sample (model=isla_volume_provided reads
+# the dataset's full-mesh signed-distance field instead).
 python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference \
     training.optimizer.lr=5e-4 compile=false
 
@@ -264,14 +305,17 @@ p, tau = out["pressure"], out["wss"]  # (B, N) and (B, N, 3)
 `points` and `normals` are (B, N, 3), `measure_weights` (B, N) summing to the
 boundary's measure, `global_inputs` a mapping from each declared name to
 its tensor ((B, 3) for a direction, (B,) or (B, channels) for a rank-0
-field). The output is a dictionary keyed by the declared output names,
-each field with as many trailing axes of size 3 as its rank. For interior
-prediction with `isla_volume`, add `query_points`, `query_normals` (the
-signed-distance gradient) and `query_inputs={"sdf": ...}` (the signed
-distance) and read the output at the query rows; deploy at the training query count (200,000
-at the reporting protocol on DrivAerML), because the interacting decode's
-prediction at a point depends on the joint query set
-(@sec-interior-companion).
+field). The output is a TensorDict of batch size (B, N) keyed by the
+declared output names (a dotted name is a nested leaf), each field with as
+many trailing axes of size 3 as its rank. For interior prediction with
+`isla_volume`, add `query_points` (B, Q, 3) and read the output at the
+query rows; the model derives each query's direction and signed wall
+distance from the boundary sample (a checkpoint trained with
+`interior_geometry: provided` takes `query_normals` and
+`query_inputs={"sdf": ...}` instead, as its constructor arguments record).
+Deploy at the training query count (200,000 at the reporting protocol on
+DrivAerML), because the interacting decode's prediction at a point depends
+on the joint query set (@sec-interior-companion).
 
 ## Cost {#sec-using-cost}
 

@@ -171,7 +171,12 @@ shipped, not as a matched-capacity comparison.
 ISLA with query tokens admits the queries into the encoder as tokens. Each
 query is seeded exactly as a boundary token is, from the invariants of its
 position, its wall normal and the global direction, plus a learned type
-embedding and the signed distance as a query scalar, and enters the
+embedding and the signed distance as a query scalar (in every lane of this
+chapter the normal and the distance are the dataset's full-mesh
+signed-distance field and its gradient, `interior_geometry: provided`; the
+class now derives both from the boundary sample by default, and whether the
+sampled-boundary distance costs accuracy is the preregistered measurement
+of @sec-nb-internal-geometry-prereg), and enters the
 measure-weighted routing with a learned weight relative to the surface
 measure; the twelve slice layers run over surface and query tokens together
 and the heads read the query tokens. Every invariant is a function of

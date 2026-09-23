@@ -1,0 +1,30 @@
+# @package _global_
+# ISLA -- DrivAerML VOLUME task (boundary -> interior), REFERENCE CONFIGURATION candidate (REF campaign, 2026-09-22).
+# Query tokens carry the signed distance; the query mass is the class default (source_total, measure-rescale invariant).
+# 384 wide, 12 layers (24 via ++model.n_layers=24), cosine routing, fused geometry kernel, RMS-pairwise-distance unit.
+input_type: tensors
+output_type: fields
+forward_kwargs:
+  points: boundaries.vehicle.cell_centroids
+  normals: boundaries.vehicle.cell_normals
+  measure_weights: boundaries.vehicle.cell_data.quadrature_measure
+  global_inputs:
+    freestream: global_data.U_inf_dir
+  query_points: interior.points
+  # INTERNAL-GEOMETRY (2026-09-23): the queries' direction and signed wall distance are computed
+  # inside the model from the boundary sample (interior_geometry: nearest_boundary, the class default);
+  # the stored sdf / sdf_normals are not read. The *_provided twin reads them.
+model:
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs: {velocity: 1, pressure: 0, nut: 0}
+  global_inputs: {freestream: 1}
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  scale_mode: rms_distance
+  routing_norm: cosine
+  routing_temperature: 10.0
+  geo_kernel: fused
+  query_tokens: true
+  query_mass: source_total
