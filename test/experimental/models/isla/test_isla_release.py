@@ -58,6 +58,7 @@ CONFIGS = {
         query_independent=True,
         n_decoder_layers=2,
         geo_kernel="eager",
+        interior_geometry="provided",
         **IO,
     ),
 }
@@ -84,7 +85,8 @@ def _make_inputs(device, query: bool = False, seed: int = 1234) -> dict:
     inputs = dict(points=pts, normals=nrm, measure_weights=w)
     if query:
         inputs["query_points"] = torch.randn(b, 40, 3, generator=gen) * 2.0
-        # interior queries carry a direction (the SDF gradient in the recipe)
+        # the goldens predate the internal geometry: the interior configuration is
+        # interior_geometry="provided" and the queries carry a direction
         inputs["query_normals"] = torch.nn.functional.normalize(
             torch.randn(b, 40, 3, generator=gen), dim=-1
         )
@@ -107,8 +109,8 @@ def _load_or_create_reference(file_name: str, output: dict) -> dict:
 
 
 def _assert_dict_close(out: dict, ref: dict, atol: float, rtol: float) -> None:
-    assert list(out) == list(ref)
-    for k in out:
+    assert list(out.keys()) == list(ref.keys())
+    for k in out.keys():
         torch.testing.assert_close(out[k], ref[k], atol=atol, rtol=rtol)
 
 
@@ -136,6 +138,7 @@ def test_isla_constructor_attributes(config):
         assert m.boundary_specs == {} and m.query_specs == {}
         assert m.query_independent is False
         assert m.query_tokens is False and m.support_tokens is False
+        assert m.interior_geometry == "nearest_boundary"
         assert m.eps == 1e-12
     else:
         m = ISLA(
@@ -158,6 +161,7 @@ def test_isla_constructor_attributes(config):
             query_independent=True,
             n_decoder_layers=2,
             local_readout_rho=0.05,
+            interior_geometry="provided",
             eps=1e-8,
         )
         assert len(m.output_specs) == 6 and m.output_specs["stress"].symmetric
@@ -171,6 +175,7 @@ def test_isla_constructor_attributes(config):
         assert list(m.query_specs) == ["sdf"]
         assert m.query_independent is True
         assert m.local_readout_rho == 0.05
+        assert m.interior_geometry == "provided"
         assert m.eps == 1e-8
     assert isinstance(m, Module)
 

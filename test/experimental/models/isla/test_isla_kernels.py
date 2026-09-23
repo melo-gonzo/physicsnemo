@@ -230,10 +230,7 @@ def test_fused_geo_kernel_passive_decoder_and_batch():
     opt = ISLA(**REF, **kw, geo_kernel="fused").cuda()
     opt.load_state_dict(ref.state_dict())
     inputs, tgt = _cloud(600, batch=2)
-    q = dict(
-        query_points=inputs["points"][:, :200] + 0.3,
-        query_normals=inputs["normals"][:, :200],
-    )
+    q = dict(query_points=inputs["points"][:, :200] + 0.3)
     ref.zero_grad()
     opt.zero_grad()
     a = _flat(ref(**inputs, **q))
@@ -271,7 +268,7 @@ def test_fused_geo_kernel_keeps_contracts():
         scaled = m(**{**inputs, "measure_weights": 2.5 * inputs["measure_weights"]})
     assert torch.allclose(moved["p"], base["p"], atol=1e-10)
     assert torch.allclose(moved["v"], base["v"] @ q.T, atol=1e-10)
-    assert all(torch.allclose(scaled[k], base[k], atol=1e-10) for k in base)
+    assert all(torch.allclose(scaled[k], base[k], atol=1e-10) for k in base.keys())
 
 
 def test_geo_kernel_argument_is_validated():

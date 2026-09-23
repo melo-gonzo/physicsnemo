@@ -21,9 +21,9 @@ surrogates. A boundary sample (positions, unit normals, quadrature measures)
 goes in, together with the problem's data as *named fields of declared
 tensor rank*: global inputs (a direction, a diffusivity, a Reynolds number),
 per-cell boundary inputs (a prescribed traction, a Dirichlet trace, a
-condition tag) and, in the interior modes, per-query inputs (the signed
-distance to the wall). Fields of declared rank come out: scalars, vectors,
-rank-2 tensors, up to rank 4, each exactly covariant. The name states the
+condition tag) and, in the interior modes, optional per-query inputs (a
+material label, a source term). Fields of declared rank come out: scalars,
+vectors, rank-2 tensors, up to rank 4, each exactly covariant. The name states the
 design principle: the attention operates only on invariants of the per-point
 vector set :math:`\{r_i, n_i, \hat g_1, \dots, \hat g_K, v_{i1}, \dots\}`
 (scaled position, unit normal, unit global vectors, the token's own tensor
@@ -40,6 +40,16 @@ pseudotensor that flips sign under a reflection (a vorticity), and
 ``channels`` (rank 0 only) packs several independent scalars under one name
 (a standardized parameter vector). The same grammar serves the constructor's
 ``outputs``, ``boundary_inputs``, ``query_inputs`` and ``global_inputs``.
+
+**Names may nest.** A field name may contain ``"."`` to denote nesting, the
+project's TensorDict convention (:mod:`physicsnemo.datapipes.keys`): every
+value of the four mappings is a leaf rank spec, so a mapping value is never a
+group and ``{"surface.pressure": 0, "surface.wall_shear": 1}`` declares two
+leaves of one group. ``forward`` returns a :class:`~tensordict.TensorDict` of
+batch size ``(B, N_out)`` with the dotted names unflattened
+(``out["surface", "pressure"]``, ``out["surface"]["pressure"]``; a name
+without a dot is a top-level leaf as before), and accepts each named input
+mapping flat with dotted names, nested, or as a TensorDict.
 
 **Inputs of any rank enter through invariants.** A rank-1 boundary input
 :math:`v_i` at a token contributes the seed scalars :math:`v_i \cdot \hat
@@ -93,15 +103,40 @@ pass, so the frame carries no information about where the mesher placed
 its cells.
 
 **Interior modes.** ``query_tokens=True`` lets interior query points join
-the encoder as interacting tokens (their normal, e.g. the SDF gradient, must
-be supplied); ``query_independent=True`` decodes queries passively through
-read-only blocks, so a prediction at one point does not depend on which
-other points are queried; ``support_tokens=True`` (with
+the encoder as interacting tokens; ``query_independent=True`` decodes queries
+passively through read-only blocks, so a prediction at one point does not
+depend on which other points are queried; ``support_tokens=True`` (with
 ``query_independent``) adds a problem-derived interior support set as
 interacting tokens while the requested queries stay passive. Per-query
-inputs (``query_inputs``, e.g. the signed distance) are carried by the
-query and support tokens; per-cell boundary inputs (``boundary_inputs``) by
-the boundary cells, with zeros on every other token.
+inputs (``query_inputs``) are carried by the query and support tokens;
+per-cell boundary inputs (``boundary_inputs``) by the boundary cells, with
+zeros on every other token.
+
+**Interior geometry.** An interior token needs a direction (its "normal" in
+every invariant) and a distance to the wall, and both are functions of the
+boundary sample and the query position, so by default the model computes
+them itself (``interior_geometry="nearest_boundary"``): for each query the
+nearest boundary sample :math:`y_{i^*}` gives the direction :math:`u_q =
+(x_q - y_{i^*}) / |x_q - y_{i^*}|` and the distance :math:`d_q = \pm |x_q -
+y_{i^*}|`, signed by the nearest sample's normal (positive on the side the
+normal points to: outside, for outward normals, the convention of the stored
+signed-distance fields of the program's datasets). The search is an exact
+chunked nearest-neighbour pass over the queries (:func:`nearest_boundary_geometry`;
+the :math:`N_q \times N` distance matrix is never materialized; the chunk is
+``interior_nn_chunk`` queries or a 512 MiB block by default), and
+:math:`d_q / L` with its signed logarithm enters the token's embedding as a
+built-in rank-0 channel ahead of the declared ``query_inputs``. The caller
+passes ``query_points`` (and ``support_points``) only. Because the boundary
+is a sample (200,000 of up to 17 million cells on a DrivAerML car), the
+internal distance overestimates the true wall distance near the wall by up
+to about the sample spacing, and the direction deviates from the true SDF
+gradient by the same order; far from the wall both agree with the full-mesh
+field (the price is measured, not assumed: INTERNAL-GEOMETRY, 2026-09-23).
+``interior_geometry="provided"`` is the form of every interior lane trained
+before that date: the caller supplies ``query_normals`` (``support_normals``;
+e.g. the stored SDF gradient) and any distance as a declared ``query_inputs``
+field, and no built-in channel exists. Both settings compute the geometry
+from pairwise differences, so every covariance contract holds in either.
 
 **Global inputs.** Rank-1 global inputs are the :math:`K` global directions:
 each is normalized to a unit direction inside the model (a direction is what
@@ -143,6 +178,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from jaxtyping import Float
+from tensordict import TensorDict
 from torch.utils.checkpoint import checkpoint
 
 from physicsnemo.core.meta import ModelMetaData
@@ -227,16 +263,37 @@ def _parse_rank_spec(kind: str, name: str, spec) -> RankSpec:
     )
 
 
+def _keys():
+    """The project's nested-key helpers (``physicsnemo.datapipes.keys``), imported on
+    first use: the datapipes package is heavy and the model must import without it."""
+    from physicsnemo.datapipes import keys
+
+    return keys
+
+
 def _parse_rank_specs(kind: str, specs, *, max_rank: int, allow_odd: bool):
-    """Parse a whole ``{name: spec}`` mapping (``None`` is the empty mapping)."""
+    """Parse a whole ``{name: spec}`` mapping (``None`` is the empty mapping).
+
+    A name may contain ``"."`` to denote nesting (``"surface.pressure"`` is the
+    leaf ``("surface", "pressure")`` of the returned or consumed TensorDict);
+    every value is a leaf spec, so a mapping value is never a nested group. A
+    name that is a group of another (``"surface"`` next to
+    ``"surface.pressure"``) is refused.
+    """
     if specs is None:
         return {}
     if not isinstance(specs, Mapping):
         raise TypeError(f"{kind} must be a mapping of field name to rank spec")
     out: dict[str, RankSpec] = {}
+    paths: dict[str, tuple[str, ...]] = {}
     for name, spec in specs.items():
         if not isinstance(name, str) or not name:
             raise ValueError(f"{kind}: field names must be non-empty strings")
+        try:
+            path = _keys().as_nested_key(name)
+        except ValueError as e:
+            raise ValueError(f"{kind}[{name!r}]: {e}") from None
+        paths[name] = (path,) if isinstance(path, str) else path
         rs = _parse_rank_spec(kind, name, spec)
         if rs.rank > max_rank:
             raise ValueError(
@@ -254,6 +311,54 @@ def _parse_rank_specs(kind: str, specs, *, max_rank: int, allow_odd: bool):
                 "invariant under reflections"
             )
         out[name] = rs
+    for a, pa in paths.items():
+        for b, pb in paths.items():
+            if len(pb) > len(pa) and pb[: len(pa)] == pa:
+                raise ValueError(
+                    f"{kind}: {a!r} is a group of {b!r}; a name cannot be both a field "
+                    "and a group of fields"
+                )
+    return out
+
+
+def _flatten_fields(kind: str, fields):
+    """Normalize a forward-time ``{name: tensor}`` mapping to flat dotted names.
+
+    Accepts a flat mapping with dotted names (``{"surface.pressure": t}``), a
+    nested mapping (``{"surface": {"pressure": t}}``) or a (nested)
+    :class:`~tensordict.TensorDict`; returns ``{"surface.pressure": t}``.
+    ``None`` passes through.
+    """
+    if fields is None:
+        return None
+    if isinstance(fields, TensorDict):
+        k = _keys()
+        return {k.key_to_str(key): fields.get(key) for key in k.leaf_keys(fields)}
+    if not isinstance(fields, Mapping):
+        raise TypeError(f"{kind} must be a mapping of field name to tensor")
+    sep = _keys().KEY_SEPARATOR
+    flat: dict[str, torch.Tensor] = {}
+
+    def _walk(prefix: str, mapping: Mapping) -> None:
+        for name, value in mapping.items():
+            if not isinstance(name, str):
+                raise TypeError(f"{kind}: field names must be strings, got {name!r}")
+            full = f"{prefix}{sep}{name}" if prefix else name
+            if isinstance(value, Mapping):
+                _walk(full, value)
+            else:
+                flat[full] = value
+
+    _walk("", fields)
+    return flat
+
+
+def _fields_to_tensordict(fields: dict[str, torch.Tensor], batch_size) -> TensorDict:
+    """Pack flat dotted names into a nested TensorDict (``"a.b"`` -> ``td["a", "b"]``)."""
+    k = _keys()
+    out = TensorDict({}, batch_size=batch_size)
+    for name, value in fields.items():
+        out.set(k.as_nested_key(name), value)
     return out
 
 
@@ -883,6 +988,84 @@ def rms_pairwise_distance(
     return (2.0 * var).sqrt().clamp_min(eps)
 
 
+#: Memory budget, in bytes, of one chunk of the nearest-boundary distance block
+#: when ``interior_nn_chunk`` is not given (512 MiB: about 640 queries per chunk
+#: against 200,000 float32 boundary points).
+NN_CHUNK_BYTES = 512 * 2**20
+
+
+def nearest_boundary_geometry(
+    query_points: Float[torch.Tensor, "batch queries 3"],
+    points: Float[torch.Tensor, "batch tokens 3"],
+    normals: Float[torch.Tensor, "batch tokens 3"],
+    *,
+    chunk: int | None = None,
+    eps: float = 1e-12,
+) -> tuple[
+    Float[torch.Tensor, "batch queries"], Float[torch.Tensor, "batch queries 3"]
+]:
+    r"""Signed distance and direction from the nearest boundary sample to each query.
+
+    For every query :math:`x_q` the nearest boundary point :math:`y_{i^*}` is
+    found by a chunked exact nearest-neighbour search over the queries (a
+    ``(B, chunk, N)`` distance block at a time, ``torch.cdist`` without the
+    matmul expansion, so the ``N_q x N`` matrix is never materialized and
+    near-wall distances keep full precision); then
+
+    .. math::
+
+        u_q = \frac{x_q - y_{i^*}}{\lvert x_q - y_{i^*} \rvert}, \qquad
+        d_q = \operatorname{sign}(u_q \cdot \hat n_{i^*})\,\lvert x_q - y_{i^*} \rvert ,
+
+    the direction from the boundary to the query and the distance signed by
+    the nearest sample's normal: **positive on the side the normal points to**
+    (outside, for outward normals), which is the convention of the stored
+    signed-distance fields of the program's datasets. A query that coincides
+    with its nearest sample takes that sample's normal as :math:`u_q` and
+    :math:`d_q = 0`. Both quantities are functions of pairwise differences,
+    so :math:`d_q` is invariant and :math:`u_q` covariant under every rigid
+    motion and reflection, and :math:`d_q` scales with the geometry.
+
+    The search runs without gradient (an argmin); :math:`d_q, u_q` are then
+    rebuilt from the gathered sample, so they are differentiable in the
+    positions. ``normals`` are renormalized. ``chunk`` is the number of
+    queries per distance block; ``None`` derives it from :data:`NN_CHUNK_BYTES`.
+
+    Because the boundary is a *sample* (200,000 of up to 17 million cells on
+    a DrivAerML car), :math:`\lvert d_q \rvert` overestimates the true wall
+    distance by up to about the sample spacing near the wall and :math:`u_q`
+    deviates from the true SDF gradient by the same order; far from the wall
+    both agree with the full-mesh field.
+    """
+    b, nq, _ = query_points.shape
+    n = points.shape[1]
+    if chunk is None:
+        chunk = max(1, NN_CHUNK_BYTES // (b * n * query_points.element_size()))
+    with torch.autocast(query_points.device.type, enabled=False), torch.no_grad():
+        idx = []
+        for i0 in range(0, nq, chunk):
+            d = torch.cdist(
+                query_points[:, i0 : i0 + chunk],
+                points,
+                compute_mode="donot_use_mm_for_euclid_dist",
+            )
+            idx.append(d.argmin(dim=-1))
+        idx = torch.cat(idx, dim=1)  # (B, Q)
+    gather = idx[..., None].expand(b, nq, 3)
+    y = torch.gather(points, 1, gather)
+    n_star = torch.gather(normals, 1, gather)
+    n_star = n_star / n_star.norm(dim=-1, keepdim=True).clamp_min(eps)
+    diff = query_points - y
+    dist = diff.norm(dim=-1, keepdim=True)
+    on_wall = dist <= eps
+    u = torch.where(on_wall, n_star, diff / dist.clamp_min(eps))
+    ### The tangent case (u . n = 0) counts as the positive side, so d never
+    ### vanishes off the wall.
+    sign = torch.where((u * n_star).sum(-1, keepdim=True) >= 0, 1.0, -1.0).to(dist)
+    d = torch.where(on_wall, torch.zeros_like(dist), sign * dist)
+    return d.squeeze(-1), u
+
+
 ### ---------------------------------------------------------------------------
 ### Output heads: the rank-r equivariant expansion
 ### ---------------------------------------------------------------------------
@@ -1025,10 +1208,13 @@ class ISLA(Module):
     1}``. ``symmetric`` means fully symmetric under index permutation (rank
     :math:`\ge 2`); ``parity="odd"`` declares a pseudotensor output (outputs
     only); ``channels`` packs several independent scalars under one rank-0 name.
+    A name may contain ``"."`` to denote nesting (``"surface.pressure"``); every
+    value is a leaf spec, so a mapping value is never a group.
 
     Args:
         outputs: Output fields, ``{name: rank spec}``. ``forward`` returns a
-            ``dict`` with these keys; a rank-0 field has shape ``(B, N)`` (or
+            :class:`~tensordict.TensorDict` of batch size ``(B, N)`` with these
+            names as (nested) leaves; a rank-0 field has shape ``(B, N)`` (or
             ``(B, N, channels)`` when ``channels > 1``), a rank-``r`` field
             ``(B, N, 3, ..., 3)`` with ``r`` trailing axes. Ranks up to 4. Each
             field's coefficients come from the shared linear head; with ``m =
@@ -1047,8 +1233,10 @@ class ISLA(Module):
             widen the boundary tokens' seed; tokens that are not boundary cells
             carry zeros there. Rank-1 and rank-2 inputs also contract with the
             token-to-anchor direction in every slice layer (module docstring).
-        query_inputs: Per-query fields for the interior modes, ``{name: rank
-            spec}`` with ranks 0 to 2 (the signed distance as ``0``). Carried by
+        query_inputs: Optional per-query fields for the interior modes, ``{name:
+            rank spec}`` with ranks 0 to 2 (a material label, a source term; the
+            wall distance and direction are built in under the default
+            ``interior_geometry``). Carried by
             the query tokens, the passive queries and the support tokens
             through their own embedding; the same invariants as for boundary
             inputs. Rank-0 entries are scaled by ``query_scalar_scale``.
@@ -1083,7 +1271,7 @@ class ISLA(Module):
         local_readout_rho: Radius (in frame units) of the measure-weighted
             Gaussian local readout of the passive decoder.
         query_tokens: Admit ``query_points`` as interacting tokens (the interior
-            reference configuration; needs ``query_normals``).
+            reference configuration).
         geo_checkpoint: Rebuild the per-slice geometric invariants in the
             backward pass instead of storing them (bitwise-identical forward and
             gradients, lower peak memory).
@@ -1134,6 +1322,26 @@ class ISLA(Module):
             (ROUTE-NORM, DrivAerML and HiLiftAeroML). The frame and head
             contracts are unchanged either way.
         routing_temperature: The bound ``T`` of the cosine routing logits.
+        interior_geometry: Where an interior token's direction and wall distance
+            come from. ``"nearest_boundary"`` (default): computed inside the
+            model from the boundary sample by an exact chunked nearest-neighbour
+            search (:func:`nearest_boundary_geometry`; direction from the nearest
+            sample to the query, distance signed by that sample's normal,
+            positive on the side the normal points to), and ``d / L`` with its
+            signed log enters the query embedding as a built-in channel; the
+            caller passes ``query_points`` / ``support_points`` only and
+            ``query_normals`` / ``support_normals`` are refused. The distance is
+            that to the *sampled* boundary and overestimates the wall distance
+            near the wall by up to about the sample spacing (module docstring).
+            ``"provided"``: the caller supplies ``query_normals`` (and
+            ``support_normals``; e.g. the stored SDF gradient) and any distance
+            as a declared rank-0 ``query_inputs`` field; no built-in channel.
+            The form of every interior lane trained before 2026-09-23.
+        interior_nn_chunk: Queries per distance block of the nearest-neighbour
+            search under ``"nearest_boundary"``; ``None`` derives it from a
+            512 MiB budget (about 640 queries against 200,000 float32 boundary
+            points, i.e. some 300 blocks for 200,000 queries). Cost only, never
+            the result.
         eps: Numerical floor for norms and logarithms.
 
     Forward inputs (all keyword-only): ``points`` and ``normals`` of shape
@@ -1144,13 +1352,16 @@ class ISLA(Module):
     rank-1 field ``(B, 3)`` (a single case's values, shape ``(3,)`` or
     ``(channels,)``, is shared across the batch); ``boundary_inputs`` ``{name:
     tensor}`` with shapes ``(B, N)`` / ``(B, N, channels)``, ``(B, N, 3)``,
-    ``(B, N, 3, 3)`` by rank; ``query_points`` / ``query_normals`` ``(B, Q,
-    3)`` and ``query_inputs`` (shapes as for boundary inputs over ``Q``) for the
-    interior modes; ``support_points`` / ``support_normals`` ``(B, M, 3)`` and
-    ``support_inputs`` (the ``query_inputs`` fields over ``M``) with
-    ``support_tokens``. Returns ``dict[str, Tensor]`` keyed by ``outputs`` with
-    ``N_out`` the boundary token count, or the query count in the interior
-    modes.
+    ``(B, N, 3, 3)`` by rank; ``query_points`` ``(B, Q, 3)`` and
+    ``query_inputs`` (shapes as for boundary inputs over ``Q``) for the
+    interior modes, plus ``query_normals`` ``(B, Q, 3)`` under
+    ``interior_geometry="provided"`` only; ``support_points`` ``(B, M, 3)``
+    (``support_normals`` likewise) and ``support_inputs`` (the ``query_inputs``
+    fields over ``M``) with ``support_tokens``. Each named mapping may be flat
+    with dotted names, nested, or a TensorDict. Returns a
+    :class:`~tensordict.TensorDict` of batch size ``(B, N_out)`` whose leaves
+    are the ``outputs`` names unflattened on ``"."``, with ``N_out`` the
+    boundary token count, or the query count in the interior modes.
 
     Output contract: a field declared with rank ``r`` and even parity
     transforms as a true rank-``r`` tensor under every orthogonal map of the
@@ -1194,9 +1405,20 @@ class ISLA(Module):
         geo_kernel: str | None = None,
         routing_norm: str = "cosine",
         routing_temperature: float = 10.0,
+        interior_geometry: str = "nearest_boundary",
+        interior_nn_chunk: int | None = None,
         eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
+        if interior_geometry not in ("nearest_boundary", "provided"):
+            raise ValueError(
+                "interior_geometry must be 'nearest_boundary' or 'provided', "
+                f"got {interior_geometry!r}"
+            )
+        self.interior_geometry = interior_geometry
+        self.interior_nn_chunk = (
+            None if interior_nn_chunk is None else int(interior_nn_chunk)
+        )
         if routing_norm not in ("linear", "cosine"):
             raise ValueError(
                 f"routing_norm must be 'linear' or 'cosine', got {routing_norm!r}"
@@ -1455,12 +1677,22 @@ class ISLA(Module):
         ### point) enter the query, passive-query and support tokens through
         ### their own embedding of the fields' invariants; every covariance
         ### contract is untouched.
-        if self.qin:
-            if not (self.query_tokens or query_independent):
-                raise ValueError(
-                    "query_inputs require query_tokens=True or query_independent=True"
-                )
-            width = self.qin.n_features
+        if self.qin and not (self.query_tokens or query_independent):
+            raise ValueError(
+                "query_inputs require query_tokens=True or query_independent=True"
+            )
+        ### INTERIOR GEOMETRY (2026-09-23): under "nearest_boundary" the model
+        ### derives each interior token's direction (its "normal") and signed
+        ### distance from the boundary sample itself (nearest_boundary_geometry);
+        ### the distance enters the token's embedding as a built-in rank-0
+        ### feature [d/L, sign(d) log(|d|/L + eps)] ahead of the declared
+        ### query_inputs. Under "provided" the caller passes query_normals (and
+        ### any distance as a declared query input), the form of every interior
+        ### lane trained before this date.
+        self.n_query_builtin = 2 if interior_geometry == "nearest_boundary" else 0
+        self.n_query_features = self.n_query_builtin + self.qin.n_features
+        if self.n_query_features and (self.query_tokens or query_independent):
+            width = self.n_query_features
             if self.query_tokens:
                 self.qt_embed = nn.Sequential(
                     nn.Linear(width, hidden), nn.GELU(), nn.Linear(hidden, hidden)
@@ -1609,6 +1841,7 @@ class ISLA(Module):
                 f"Expected measure_weights of shape {(b, n)} but got tensor of shape {tuple(measure_weights.shape)}"
             )
         self.bin.validate("boundary_inputs", boundary_inputs, b, n)
+        internal = self.interior_geometry == "nearest_boundary"
         for name, pts, nrm, fields in (
             ("query", query_points, query_normals, query_inputs),
             ("support", support_points, support_normals, support_inputs),
@@ -1619,11 +1852,31 @@ class ISLA(Module):
                 raise ValueError(
                     f"Expected {name}_points of shape ({b}, M, 3) but got tensor of shape {tuple(pts.shape)}"
                 )
+            if nrm is not None and internal:
+                raise ValueError(
+                    f"{name}_normals given, but interior_geometry='nearest_boundary' derives "
+                    f"the {name} directions from the boundary sample; pass "
+                    "interior_geometry='provided' to supply them"
+                )
             if nrm is not None and (pts is None or nrm.shape != pts.shape):
                 raise ValueError(
                     f"Expected {name}_normals of shape {None if pts is None else tuple(pts.shape)} "
                     f"but got tensor of shape {tuple(nrm.shape)}"
                 )
+            if pts is not None and nrm is None and not internal:
+                ### Passive queries that ARE the boundary points reuse the boundary
+                ### normals (checked in forward); every other query set needs its own.
+                if not (
+                    name == "query"
+                    and self.query_independent
+                    and pts.shape[1] == n
+                    and not self.query_tokens
+                ):
+                    raise ValueError(
+                        f"interior_geometry='provided' needs {name}_normals (e.g. the SDF "
+                        f"gradient at each {name} point); or use the default "
+                        "interior_geometry='nearest_boundary'"
+                    )
             ### The per-query fields are validated against the point set they
             ### belong to; passive queries that ARE the boundary points (no
             ### query_points) carry them over the boundary token count.
@@ -1646,9 +1899,7 @@ class ISLA(Module):
         """Assemble the unit global directions (B, K, 3) and the global scalars
         (B, S) from the named per-case fields. A single case's values (one row) are
         shared across the batch."""
-        fields = global_inputs or {}
-        if not isinstance(fields, Mapping):
-            raise TypeError("global_inputs must be a mapping of field name to tensor")
+        fields = _flatten_fields("global_inputs", global_inputs) or {}
         missing = [k for k in self.global_specs if k not in fields]
         extra = [k for k in fields if k not in self.global_specs]
         if missing or extra:
@@ -1708,7 +1959,12 @@ class ISLA(Module):
         support_points: Float[torch.Tensor, "batch support 3"] | None = None,
         support_normals: Float[torch.Tensor, "batch support 3"] | None = None,
         support_inputs: Mapping[str, torch.Tensor] | None = None,
-    ) -> dict[str, torch.Tensor]:
+    ) -> TensorDict:
+        ### Named fields arrive flat with dotted names, nested, or as TensorDicts;
+        ### the model works on flat dotted names throughout.
+        boundary_inputs = _flatten_fields("boundary_inputs", boundary_inputs)
+        query_inputs = _flatten_fields("query_inputs", query_inputs)
+        support_inputs = _flatten_fields("support_inputs", support_inputs)
         ### One un-batched case: every per-case input gains the batch axis.
         if points.ndim == 2:
             points, normals = points[None], normals[None]
@@ -1785,12 +2041,31 @@ class ISLA(Module):
         h = self.embed(self._token_seed(n_hat, g_hat, b_feat, g_scalars, n))
         vecs, tens = self._block_extras(b_vecs, b_tens, None, None, b, n, points)
 
+        internal = self.interior_geometry == "nearest_boundary"
+
         def _query_class(q_pts, q_nrm, fields, kind: str):
             """Frame quantities, seed state and block stacks of a query-side token
-            class (query tokens, support tokens or passive queries)."""
+            class (query tokens, support tokens or passive queries). Under
+            interior_geometry='nearest_boundary' the class's directions and signed
+            distances come from the boundary sample (q_nrm is ignored)."""
             bq, nq, _ = q_pts.shape
             q_r = q_pts / gauge
-            q_nhat = q_nrm / q_nrm.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+            builtin = None
+            if internal:
+                with torch.autocast(points.device.type, enabled=False):
+                    d, q_nhat = nearest_boundary_geometry(
+                        q_pts,
+                        points[:, :n_boundary],
+                        n_hat[:, :n_boundary],
+                        chunk=self.interior_nn_chunk,
+                        eps=self.eps,
+                    )
+                    s = (d / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
+                    builtin = torch.cat(
+                        [s, torch.sign(s) * torch.log(s.abs() + self.eps)], -1
+                    )
+            else:
+                q_nhat = q_nrm / q_nrm.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             q_g = g_unit[:, None].expand(bq, nq, K, 3)
             if self.qin:
                 if fields is None:
@@ -1805,6 +2080,8 @@ class ISLA(Module):
                         f"{kind} given but the model declares no query_inputs"
                     )
                 q_feat, q_vecs, q_tens = None, None, None
+            if builtin is not None:
+                q_feat = builtin if q_feat is None else torch.cat([builtin, q_feat], -1)
             return q_r, q_nhat, q_g, q_feat, q_vecs, q_tens
 
         ### n_boundary counts the SURFACE tokens only: the surface measure
@@ -1814,9 +2091,9 @@ class ISLA(Module):
         if self.support_tokens and support_points is not None:
             ### Support tokens (see __init__): interacting interior tokens that
             ### are a function of the case, not of the requested queries.
-            if support_normals is None:
+            if support_normals is None and not internal:
                 raise ValueError(
-                    "support_tokens needs support_normals (e.g. the SDF gradient at each support point)"
+                    "interior_geometry='provided' needs support_normals (e.g. the SDF gradient at each support point)"
                 )
             bs_, ns_, _ = support_points.shape
             s_r, s_nhat, s_g, s_feat, s_vecs, s_tens = _query_class(
@@ -1824,7 +2101,7 @@ class ISLA(Module):
             )
             h_s = self.embed(self._token_seed(s_nhat, s_g, None, g_scalars, ns_))
             h_s = h_s + self.sp_type.to(h.dtype)
-            if self.qin:
+            if self.n_query_features:
                 h_s = h_s + self.sp_embed(s_feat).to(h_s.dtype)
             if self.query_mass == "source_total":
                 s_logw = (
@@ -1851,9 +2128,9 @@ class ISLA(Module):
         qt_active = self.query_tokens and query_points is not None
         if qt_active:
             ### Interior queries as interacting tokens (see __init__).
-            if query_normals is None:
+            if query_normals is None and not internal:
                 raise ValueError(
-                    "query_tokens needs query_normals (e.g. the SDF gradient at each query)"
+                    "interior_geometry='provided' needs query_normals (e.g. the SDF gradient at each query)"
                 )
             bq, nq, _ = query_points.shape
             q_r, q_nhat, q_g, q_feat, q_vecs, q_tens = _query_class(
@@ -1861,7 +2138,7 @@ class ISLA(Module):
             )
             h_q = self.embed(self._token_seed(q_nhat, q_g, None, g_scalars, nq))
             h_q = h_q + self.qt_type.to(h.dtype)
-            if self.qin:
+            if self.n_query_features:
                 h_q = h_q + self.qt_embed(q_feat).to(h_q.dtype)
             ### The query tokens' routing weight is learned RELATIVE to the
             ### surface measure (mean surface log-weight), so that rescaling
@@ -1920,12 +2197,12 @@ class ISLA(Module):
                 q_pts, q_nrm = points, normals
             else:
                 q_pts = query_points
-                if query_normals is not None:
+                if query_normals is not None or internal:
                     q_nrm = query_normals
                 elif query_points.shape[1] != normals.shape[1]:
                     raise ValueError(
                         "query_points are not the boundary points: pass query_normals (e.g. the SDF "
-                        "gradient at each query)"
+                        "gradient at each query) or use interior_geometry='nearest_boundary'"
                     )
                 else:
                     q_nrm = normals
@@ -1943,7 +2220,7 @@ class ISLA(Module):
                     q_nhat, q_g, b_feat if own_boundary else None, g_scalars, nq
                 )
             )
-            if self.qin:
+            if self.n_query_features:
                 q_h = q_h + self.rq_embed(q_feat).to(q_h.dtype)
             q_vecs, q_tens = self._block_extras(
                 b_vecs if own_boundary else None,
@@ -2027,4 +2304,6 @@ class ISLA(Module):
             c = coeffs[..., start : start + layout.n_coeffs]
             out[name] = _assemble_output(c, layout, true_vecs, pseudo_vecs)
             start += layout.n_coeffs
-        return out
+        ### A TensorDict over (batch, tokens the head read); a dotted output name
+        ### becomes a nested leaf ("surface.pressure" -> out["surface", "pressure"]).
+        return _fields_to_tensordict(out, [b, n])

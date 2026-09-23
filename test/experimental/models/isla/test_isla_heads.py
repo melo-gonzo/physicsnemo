@@ -152,7 +152,7 @@ def test_output_shapes(K):
     m = _model(K)
     pts, nrm, drv, w = _cloud()
     out = _forward(m, pts, nrm, drv, w, K)
-    assert set(out) == set(OUTPUTS)
+    assert set(out.keys()) == set(OUTPUTS)
     assert out["s"].shape == (1, 300) and out["s2"].shape == (1, 300, 2)
     assert out["v"].shape == out["pv"].shape == (1, 300, 3)
     assert out["t"].shape == out["ts"].shape == out["pt"].shape == (1, 300, 3, 3)
@@ -188,7 +188,7 @@ def test_translation_invariance_alone():
     tr = _forward(
         m, pts, nrm, drv, w, 1, shift=torch.tensor([3.0, -7.0, 11.0], dtype=D)
     )
-    for k in base:
+    for k in base.keys():
         assert torch.allclose(tr[k], base[k], atol=1e-12), k
 
 
@@ -273,7 +273,6 @@ def test_rank_two_output_in_the_interior_modes():
             w,
             1,
             query_points=q_pts,
-            query_normals=q_nrm,
             query_inputs={"sdf": qs},
         )
         for improper in (False, True):
@@ -287,7 +286,6 @@ def test_rank_two_output_in_the_interior_modes():
                 1,
                 R=R,
                 query_points=q_pts @ R.T,
-                query_normals=q_nrm @ R.T,
                 query_inputs={"sdf": qs},
             )
             assert base["sig"].shape == (1, 50, 3, 3)
@@ -315,7 +313,7 @@ def test_checkpoint_round_trip_keeps_the_specs(tmp_path):
     assert m2.output_specs == m.output_specs and m2.global_specs == m.global_specs
     pts, nrm, drv, w = _cloud(64)
     a, b = _forward(m, pts, nrm, drv, w, 1), _forward(m2, pts, nrm, drv, w, 1)
-    assert all(torch.equal(a[k], b[k]) for k in a)
+    assert all(torch.equal(a[k], b[k]) for k in a.keys())
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="fused kernel needs CUDA")
@@ -336,5 +334,5 @@ def test_fused_kernel_does_not_touch_the_heads():
                 ).items()
             }
         )
-    for k in outs[0]:
+    for k in outs[0].keys():
         assert torch.allclose(outs[0][k], outs[1][k], atol=1e-10), k

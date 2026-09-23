@@ -41,7 +41,7 @@ def _isla(**kw):
 def _same(a, b, atol, rtol=1e-5):
     """Two output dicts agree key by key."""
     assert a.keys() == b.keys()
-    return all(torch.allclose(a[k], b[k], atol=atol, rtol=rtol) for k in a)
+    return all(torch.allclose(a[k], b[k], atol=atol, rtol=rtol) for k in a.keys())
 
 
 def _rows(d, sl):
@@ -167,9 +167,7 @@ def test_query_set_independence(setup_qi):
     bitwise-identical predictions at shared queries."""
     m, pts, nrm, drv, w = setup_qi
     qa = pts[:, :50]
-    na = nrm[:, :50]
     q_big = torch.cat([qa, pts[:, 200:300]], dim=1)
-    n_big = torch.cat([na, nrm[:, 200:300]], dim=1)
     with torch.no_grad():
         out_small = m(
             points=pts,
@@ -177,7 +175,6 @@ def test_query_set_independence(setup_qi):
             global_inputs={"g": drv},
             measure_weights=w,
             query_points=qa,
-            query_normals=na,
         )
         out_big = m(
             points=pts,
@@ -185,7 +182,6 @@ def test_query_set_independence(setup_qi):
             global_inputs={"g": drv},
             measure_weights=w,
             query_points=q_big,
-            query_normals=n_big,
         )
     ### Mathematically exact; allclose(1e-12) rather than bitwise because
     ### GEMM tiling reorders reductions when the query count changes.
@@ -275,10 +271,11 @@ def test_head_runs_under_bf16_autocast(kw):
 
 
 def test_passive_interior_queries_contracts():
-    """Passive decoding at off-surface query points: with the query normals
-    supplied (e.g. the SDF gradient) the prediction is exactly rotation- and
-    translation-covariant, query-set independent and finite; distinct query
-    points WITHOUT normals are refused with a clear error."""
+    """Passive decoding at off-surface query points under the default internal
+    geometry (direction and signed distance from the nearest boundary sample):
+    the prediction is exactly rotation- and translation-covariant, query-set
+    independent and finite; query normals are refused in this mode, and the
+    "provided" mode refuses distinct query points WITHOUT normals."""
     torch.manual_seed(0)
     n, nq = 400, 150
     pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
@@ -313,7 +310,6 @@ def test_passive_interior_queries_contracts():
             global_inputs={"g": drv},
             measure_weights=w,
             query_points=qpts,
-            query_normals=qnrm,
         )
         rot = m(
             points=pts @ q.T + shift,
@@ -321,7 +317,6 @@ def test_passive_interior_queries_contracts():
             global_inputs={"g": drv @ q.T},
             measure_weights=w,
             query_points=qpts @ q.T + shift,
-            query_normals=qnrm @ q.T,
         )
         sub = m(
             points=pts,
@@ -329,15 +324,32 @@ def test_passive_interior_queries_contracts():
             global_inputs={"g": drv},
             measure_weights=w,
             query_points=qpts[:, :50],
-            query_normals=qnrm[:, :50],
         )
     assert base["p"].shape == (1, nq) and base["v"].shape == (1, nq, 3)
     assert all(torch.isfinite(o).all() for o in base.values())
     _assert_rotated(rot, base, q)
     assert _same(sub, _rows(base, slice(0, 50)), atol=1e-12, rtol=0.0)
-    with pytest.raises(ValueError, match="pass query_normals"):
+    with pytest.raises(ValueError, match="derives the query directions"):
         with torch.no_grad():
             m(
+                points=pts,
+                normals=nrm,
+                global_inputs={"g": drv},
+                measure_weights=w,
+                query_points=qpts,
+                query_normals=qnrm,
+            )
+    provided = _isla(
+        hidden=32,
+        n_layers=1,
+        n_slices=8,
+        query_independent=True,
+        n_decoder_layers=1,
+        interior_geometry="provided",
+    ).double()
+    with pytest.raises(ValueError, match="needs query_normals"):
+        with torch.no_grad():
+            provided(
                 points=pts,
                 normals=nrm,
                 global_inputs={"g": drv},
@@ -451,12 +463,7 @@ def test_geo_checkpoint_is_exact(extra):
     w = torch.rand(1, 40, dtype=torch.float64) + 0.5
     fk = {}
     if extra:
-        fk = dict(
-            query_points=torch.randn(1, 17, 3, dtype=torch.float64),
-            query_normals=torch.nn.functional.normalize(
-                torch.randn(1, 17, 3, dtype=torch.float64), dim=-1
-            ),
-        )
+        fk = dict(query_points=torch.randn(1, 17, 3, dtype=torch.float64))
     outs = []
     for m in (ref, ckp):
         out = m(
@@ -468,7 +475,7 @@ def test_geo_checkpoint_is_exact(extra):
         )
         sum(o.square().sum() for o in out.values()).backward()
         outs.append(out)
-    assert all(torch.equal(outs[0][k], outs[1][k]) for k in outs[0])
+    assert all(torch.equal(outs[0][k], outs[1][k]) for k in outs[0].keys())
     for (n, p), (_, q) in zip(ref.named_parameters(), ckp.named_parameters()):
         assert p.grad is not None and q.grad is not None, n
         assert torch.allclose(p.grad, q.grad, atol=1e-11, rtol=1e-9), n
@@ -487,6 +494,7 @@ def test_query_scalars_contracts():
         n_slices=8,
         query_tokens=True,
         query_inputs={"sdf": 0},
+        interior_geometry="provided",
     )
     m = _isla(**kw).double()
     pts = torch.randn(1, 40, 3, dtype=torch.float64)
@@ -579,9 +587,6 @@ def test_query_tokens_contracts():
     drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
     w = torch.rand(1, n, dtype=torch.float64) + 0.5
     qpts = torch.randn(1, nq, 3, dtype=torch.float64) * 4.0
-    qnrm = torch.nn.functional.normalize(
-        torch.randn(1, nq, 3, dtype=torch.float64), dim=-1
-    )
     m = _isla(hidden=64, n_layers=2, n_slices=16, query_tokens=True).double().eval()
     q = _rotation()
     shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
@@ -592,7 +597,6 @@ def test_query_tokens_contracts():
             global_inputs={"g": drv},
             measure_weights=w,
             query_points=qpts,
-            query_normals=qnrm,
         )
         rot = m(
             points=pts @ q.T + shift,
@@ -600,7 +604,6 @@ def test_query_tokens_contracts():
             global_inputs={"g": drv @ q.T},
             measure_weights=w,
             query_points=qpts @ q.T + shift,
-            query_normals=qnrm @ q.T,
         )
         sub = m(
             points=pts,
@@ -608,7 +611,6 @@ def test_query_tokens_contracts():
             global_inputs={"g": drv},
             measure_weights=w,
             query_points=qpts[:, :50],
-            query_normals=qnrm[:, :50],
         )
     assert base["p"].shape == (1, nq) and base["v"].shape == (1, nq, 3)
     assert all(torch.isfinite(o).all() for o in base.values())
@@ -623,7 +625,6 @@ def test_query_tokens_contracts():
         global_inputs={"g": drv},
         measure_weights=w,
         query_points=qpts,
-        query_normals=qnrm,
     )
     sum(o.square().mean() for o in out.values()).backward()
     missing = [k for k, p in m.named_parameters() if p.grad is None]
@@ -655,8 +656,8 @@ def test_query_mass_source_total_refinement_invariance(extra):
     nrm = torch.nn.functional.normalize(torch.randn_like(pts), dim=-1)
     drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
     w = torch.rand(1, 60, dtype=torch.float64) + 0.5
-    q, qn = pts[:, :17], nrm[:, :17]
-    fk = dict(query_points=q, query_normals=qn)
+    q = pts[:, :17]
+    fk = dict(query_points=q)
     if extra:
         fk["query_inputs"] = {"sdf": q.norm(dim=-1)}
     kw = dict(
@@ -737,7 +738,7 @@ def test_geometric_scale_equivariance(scale_mode, extra):
     )
     k = 2.7
     shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
-    fk = dict(query_points=pts[:, :50], query_normals=nrm[:, :50]) if extra else {}
+    fk = dict(query_points=pts[:, :50]) if extra else {}
     fk_sc = {**fk, "query_points": k * fk["query_points"] + shift} if extra else {}
     with torch.no_grad():
         a = m(
@@ -804,7 +805,6 @@ def test_passive_decode_boundary_scalars():
             measure_weights=w,
             boundary_inputs={"bc": bs},
             query_points=pts[:, :17] * 0.5,
-            query_normals=nrm[:, :17],
         )
     assert out_q["p"].shape == (1, 17) and out_q["v"].shape == (1, 17, 3)
     assert all(torch.isfinite(o).all() for o in out_q.values())
@@ -937,7 +937,7 @@ def test_frame_is_sampling_consistent(scale_mode):
     )
     drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
     w = torch.rand(1, n_full, dtype=torch.float64) + 0.5
-    q, qn = pts[:, :40], nrm[:, :40]
+    q = pts[:, :40]
     ### local_readout_rho 1 keeps the passive readout a smooth measure-weighted
     ### average on this volumetric toy cloud (its surface default, 0.02, underflows
     ### to the clamp here and its noise would swamp the frame).
@@ -973,7 +973,6 @@ def test_frame_is_sampling_consistent(scale_mode):
                 global_inputs={"g": drv},
                 measure_weights=w_u,
                 query_points=q,
-                query_normals=qn,
             )
             o_u2 = m(
                 points=p_u2,
@@ -981,7 +980,6 @@ def test_frame_is_sampling_consistent(scale_mode):
                 global_inputs={"g": drv},
                 measure_weights=w_u2,
                 query_points=q,
-                query_normals=qn,
             )
             o_b = m(
                 points=p_b,
@@ -989,7 +987,6 @@ def test_frame_is_sampling_consistent(scale_mode):
                 global_inputs={"g": drv},
                 measure_weights=w_b,
                 query_points=q,
-                query_normals=qn,
             )
         d_bias.append(float((_flat(o_b) - _flat(o_u)).norm()))
         d_noise.append(float((_flat(o_u2) - _flat(o_u)).norm()))
@@ -1177,7 +1174,7 @@ def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices(
     with torch.no_grad():
         ya = auto(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
         ye = eager(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-    assert all(torch.equal(ya[k], ye[k]) for k in ya)
+    assert all(torch.equal(ya[k], ye[k]) for k in ya.keys())
     assert all(b.geo_kernel == "eager" for b in auto.blocks)
     assert auto._geo_kernel_cache[1] == "eager"
     # two global directions: auto silently stays eager; an explicit fused request is refused at construction

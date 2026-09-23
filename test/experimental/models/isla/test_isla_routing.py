@@ -89,7 +89,7 @@ def test_cosine_routing_keeps_the_contracts_and_all_parameters_train():
         )
     assert torch.allclose(moved["p"], base["p"], atol=1e-10)
     assert torch.allclose(moved["v"], base["v"] @ q.T, atol=1e-10)
-    assert all(torch.allclose(rescaled[k], base[k], atol=1e-9) for k in base)
+    assert all(torch.allclose(rescaled[k], base[k], atol=1e-9) for k in base.keys())
     m.train()
     out = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
     sum(o.square().mean() for o in out.values()).backward()

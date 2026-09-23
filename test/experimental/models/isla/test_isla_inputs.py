@@ -144,7 +144,7 @@ def test_boundary_inputs_covariance(improper):
             global_inputs={"g": drv},
             boundary_inputs={**bf, "trac": 2.0 * bf["trac"]},
         )
-    assert all(not torch.allclose(other[k], base[k], atol=1e-6) for k in base)
+    assert all(not torch.allclose(other[k], base[k], atol=1e-6) for k in base.keys())
     ### a rotation of the fields ALONE (geometry fixed) is not a symmetry
     R = _orthogonal(6, False)
     with torch.no_grad():
@@ -192,11 +192,10 @@ def test_query_inputs_covariance(mode, improper):
     def call(R, shift):
         extra = dict(query_inputs=_move(qf, m.query_specs, R))
         if mode != "passive_boundary":
-            extra.update(query_points=q_pts @ R.T + shift, query_normals=q_nrm @ R.T)
+            extra.update(query_points=q_pts @ R.T + shift)
         if mode == "support":
             extra.update(
                 support_points=s_pts @ R.T + shift,
-                support_normals=s_nrm @ R.T,
                 support_inputs=_move(sf, m.query_specs, R),
             )
         with torch.no_grad():
@@ -215,9 +214,9 @@ def test_query_inputs_covariance(mode, improper):
     qf2 = {**qf, "u": 3.0 * qf["u"]}
     extra = dict(query_inputs=qf2)
     if mode != "passive_boundary":
-        extra.update(query_points=q_pts, query_normals=q_nrm)
+        extra.update(query_points=q_pts)
     if mode == "support":
-        extra.update(support_points=s_pts, support_normals=s_nrm, support_inputs=sf)
+        extra.update(support_points=s_pts, support_inputs=sf)
     with torch.no_grad():
         other = m(
             points=pts,
@@ -277,12 +276,11 @@ def test_field_validation_errors():
     mq = _model(query_tokens=True, query_inputs={"sdf": 0})
     q, qn, _ = _cloud(7, 1)
     with pytest.raises(ValueError, match="pass query_inputs"):
-        mq(**common, query_points=q, query_normals=qn)
+        mq(**common, query_points=q)
     with pytest.raises(ValueError, match="unexpected"):
         mq(
             **common,
             query_points=q,
-            query_normals=qn,
             query_inputs={"sdf": q[..., 0], "x": q[..., 0]},
         )
 
@@ -321,12 +319,11 @@ def test_rank0_query_inputs_are_scaled_by_the_gauge():
                 measure_weights=w * k_geo**2,
                 global_inputs={"g": drv},
                 query_points=k_geo * q,
-                query_normals=qn,
                 query_inputs={"sdf": k_sdf * sdf, "u": u},
             )
 
     base, scaled, geo_only = call(1.0, 1.0), call(s, s), call(s, 1.0)
-    assert all(torch.allclose(scaled[k], base[k], atol=1e-10) for k in base)
+    assert all(torch.allclose(scaled[k], base[k], atol=1e-10) for k in base.keys())
     assert not torch.allclose(geo_only["p"], base["p"], atol=1e-6)
     ### query_scalar_scale="none" enters the raw value (one channel instead of the
     ### scaled pair, so its own parameters): the geometric rescale then changes it
@@ -341,7 +338,6 @@ def test_rank0_query_inputs_are_scaled_by_the_gauge():
             measure_weights=w,
             global_inputs={"g": drv},
             query_points=q,
-            query_normals=qn,
             query_inputs={"sdf": sdf, "u": u},
         )
         b = m_raw(
@@ -350,7 +346,6 @@ def test_rank0_query_inputs_are_scaled_by_the_gauge():
             measure_weights=w * s**2,
             global_inputs={"g": drv},
             query_points=s * q,
-            query_normals=qn,
             query_inputs={"sdf": s * sdf, "u": u},
         )
     assert not torch.allclose(a["p"], b["p"], atol=1e-6)
@@ -373,7 +368,6 @@ def test_geo_checkpoint_is_exact_with_tensor_inputs():
         global_inputs={"g": torch.tensor([[1.0, 0.2, 0.0]], dtype=D)},
         boundary_inputs=_boundary_fields(50),
         query_points=q,
-        query_normals=qn,
         query_inputs=_query_fields(9),
     )
     outs = []
@@ -382,7 +376,7 @@ def test_geo_checkpoint_is_exact_with_tensor_inputs():
         out = m(**kw)
         sum(o.square().sum() for o in out.values()).backward()
         outs.append(out)
-    assert all(torch.equal(outs[0][k], outs[1][k]) for k in outs[0])
+    assert all(torch.equal(outs[0][k], outs[1][k]) for k in outs[0].keys())
     for (n, p), (_, g) in zip(ref.named_parameters(), ckp.named_parameters()):
         assert p.grad is not None and g.grad is not None, n
         assert torch.allclose(p.grad, g.grad, atol=1e-11, rtol=1e-9), n

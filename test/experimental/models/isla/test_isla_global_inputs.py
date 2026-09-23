@@ -71,7 +71,7 @@ def _model(global_inputs=None, **kw):
 
 def _same(a, b, atol):
     assert a.keys() == b.keys()
-    return all(torch.allclose(a[k], b[k], atol=atol) for k in a)
+    return all(torch.allclose(a[k], b[k], atol=atol) for k in a.keys())
 
 
 def _rotate_globals(m, gi, R):
@@ -172,7 +172,7 @@ def test_two_global_vectors():
     assert _same(scaled, base, atol=1e-10)
     assert not _same(swapped, base, atol=1e-3)  # the two inputs are distinct channels
     assert all(
-        torch.allclose(shared[k][:1], base[k][:1], atol=1e-10) for k in base
+        torch.allclose(shared[k][:1], base[k][:1], atol=1e-10) for k in base.keys()
     )  # a single set is shared across the batch
     with pytest.raises(ValueError, match="3 values per case"):
         m(
@@ -187,16 +187,13 @@ def test_two_vectors_passive_and_query_token_paths():
     """The interior paths carry the K directions to the query side as well."""
     pts, nrm, w = _sample()
     q = torch.randn(2, 40, 3, dtype=D)
-    qn = torch.nn.functional.normalize(torch.randn(2, 40, 3, dtype=D), dim=-1)
     gv = torch.randn(2, 2, 3, dtype=D)
     gi = {"g1": gv[:, 0], "g2": gv[:, 1]}
     two = {"g1": 1, "g2": 1}
     m_passive = _model(two, query_independent=True, n_decoder_layers=1)
-    _assert_se3(
-        m_passive, pts, nrm, w, gi, extra=dict(query_points=q, query_normals=qn)
-    )
+    _assert_se3(m_passive, pts, nrm, w, gi, extra=dict(query_points=q))
     m_qt = _model(two, query_tokens=True, query_mass="source_total")
-    _assert_se3(m_qt, pts, nrm, w, gi, extra=dict(query_points=q, query_normals=qn))
+    _assert_se3(m_qt, pts, nrm, w, gi, extra=dict(query_points=q))
 
 
 def test_global_scalars_condition_every_token():
@@ -225,7 +222,9 @@ def test_global_scalars_condition_every_token():
             global_inputs={"g": gv, "kappa": gs[:1, 0], "E": gs[:1, 1]},
         )
     assert not _same(other, base, atol=1e-3)
-    assert all(torch.allclose(shared[k][:1], base[k][:1], atol=1e-10) for k in base)
+    assert all(
+        torch.allclose(shared[k][:1], base[k][:1], atol=1e-10) for k in base.keys()
+    )
     with pytest.raises(ValueError, match="missing"):
         m(points=pts, normals=nrm, measure_weights=w, global_inputs={"g": gv})
     m0 = _model()
@@ -237,13 +236,10 @@ def test_global_scalars_condition_every_token():
     _assert_se3(m_ch, pts, nrm, w, {"g": gv, "params": gs})
     ### the passive and interacting query paths take the scalars as well
     q = torch.randn(2, 30, 3, dtype=D)
-    qn = torch.nn.functional.normalize(torch.randn(2, 30, 3, dtype=D), dim=-1)
     m_passive = _model(spec, query_independent=True, n_decoder_layers=1)
-    _assert_se3(
-        m_passive, pts, nrm, w, gi, extra=dict(query_points=q, query_normals=qn)
-    )
+    _assert_se3(m_passive, pts, nrm, w, gi, extra=dict(query_points=q))
     m_qt = _model(spec, query_tokens=True, query_mass="source_total")
-    _assert_se3(m_qt, pts, nrm, w, gi, extra=dict(query_points=q, query_normals=qn))
+    _assert_se3(m_qt, pts, nrm, w, gi, extra=dict(query_points=q))
 
 
 def test_no_global_inputs_at_all_with_scalars_only():
@@ -292,7 +288,7 @@ def test_legacy_vector_layouts_still_accepted():
             measure_weights=w,
             global_inputs={"g": d[None, None].expand(2, 1, 3)},
         )
-    assert all(torch.equal(a[k], b[k]) and torch.equal(a[k], c[k]) for k in a)
+    assert all(torch.equal(a[k], b[k]) and torch.equal(a[k], c[k]) for k in a.keys())
     with pytest.raises(ValueError, match="missing"):
         m(points=pts, normals=nrm, measure_weights=w)
 
@@ -326,17 +322,16 @@ def test_boundary_data_reaches_every_interior_path():
     pts, nrm, w = _sample()
     bsc = torch.randn(2, pts.shape[1], dtype=D)
     q = torch.randn(2, 30, 3, dtype=D) * 0.5
-    qn = torch.nn.functional.normalize(torch.randn(2, 30, 3, dtype=D), dim=-1)
     gi = {"kappa": torch.tensor([[0.7], [2.0]], dtype=D)}
     common = dict(global_inputs={"kappa": 0}, boundary_inputs={"trace": 0})
     arms = [
         (
             _model(query_tokens=True, query_mass="source_total", **common),
-            dict(query_points=q, query_normals=qn),
+            dict(query_points=q),
         ),
         (
             _model(query_independent=True, n_decoder_layers=1, **common),
-            dict(query_points=q, query_normals=qn),
+            dict(query_points=q),
         ),
         (
             _model(
@@ -346,9 +341,7 @@ def test_boundary_data_reaches_every_interior_path():
                 n_decoder_layers=1,
                 **common,
             ),
-            dict(
-                query_points=q, query_normals=qn, support_points=q, support_normals=qn
-            ),
+            dict(query_points=q, support_points=q),
         ),
     ]
     for m, extra in arms:

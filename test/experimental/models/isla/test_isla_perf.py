@@ -91,9 +91,9 @@ def test_fast_point_softmax_is_exact_in_float64(kw):
     native.load_state_dict(fast.state_dict())
     extra = {}
     if kw.get("query_tokens"):
-        extra = dict(query_points=pts[:, :50], query_normals=nrm[:, :50])
+        extra = dict(query_points=pts[:, :50])
     elif kw.get("query_independent"):
-        extra = dict(query_points=pts[:, :50] + 0.3, query_normals=nrm[:, :50])
+        extra = dict(query_points=pts[:, :50] + 0.3)
     with torch.no_grad():
         a = fast(
             points=pts,
@@ -109,7 +109,7 @@ def test_fast_point_softmax_is_exact_in_float64(kw):
             measure_weights=w,
             **extra,
         )
-    for k in a:
+    for k in a.keys():
         assert torch.allclose(a[k], b[k], atol=1e-11), (
             k,
             float((a[k] - b[k]).abs().max()),
@@ -158,4 +158,4 @@ def test_fast_point_softmax_keeps_contracts():
         )
     assert torch.allclose(moved["p"], base["p"], atol=1e-10)
     assert torch.allclose(moved["v"], base["v"] @ q.T, atol=1e-10)
-    assert all(torch.allclose(scaled_w[k], base[k], atol=1e-10) for k in base)
+    assert all(torch.allclose(scaled_w[k], base[k], atol=1e-10) for k in base.keys())

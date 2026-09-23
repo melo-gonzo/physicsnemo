@@ -73,7 +73,7 @@ def _model(**kw):
 
 def _same(a, b, atol, rtol=1e-5):
     assert a.keys() == b.keys()
-    return all(torch.allclose(a[k], b[k], atol=atol, rtol=rtol) for k in a)
+    return all(torch.allclose(a[k], b[k], atol=atol, rtol=rtol) for k in a.keys())
 
 
 def _rows(d, sl):
@@ -101,10 +101,8 @@ def _run(m, pts, nrm, drv, w, S, Q):
         global_inputs={"g": drv},
         measure_weights=w,
         query_points=q,
-        query_normals=qn,
         query_inputs={"sdf": qs},
         support_points=sp,
-        support_normals=sn,
         support_inputs={"sdf": ss},
     )
 
@@ -230,7 +228,7 @@ def test_geo_checkpoint_is_exact_with_support(setup):
     with torch.no_grad():
         a = _run(m, pts, nrm, drv, w, S, Q)
         b = _run(m2, pts, nrm, drv, w, S, Q)
-    assert all(torch.equal(a[k], b[k]) for k in a)
+    assert all(torch.equal(a[k], b[k]) for k in a.keys())
 
 
 def test_all_parameters_receive_gradients(setup):
@@ -286,10 +284,8 @@ def test_option_validation():
             global_inputs={"g": drv},
             measure_weights=w,
             query_points=Q[0],
-            query_normals=Q[1],
             query_inputs={"sdf": Q[2]},
             support_points=S[0],
-            support_normals=S[1],
         )
 
 
@@ -321,7 +317,6 @@ def test_passive_queries_take_scalars_without_support():
             global_inputs={"g": drv},
             measure_weights=w,
             query_points=q,
-            query_normals=qn,
             query_inputs={"sdf": qs},
         )
         b = m(
@@ -330,7 +325,6 @@ def test_passive_queries_take_scalars_without_support():
             global_inputs={"g": drv},
             measure_weights=w,
             query_points=q,
-            query_normals=qn,
             query_inputs={"sdf": 2 * qs},
         )
     assert a["p"].shape == (1, 30) and a["v"].shape == (1, 30, 3)
