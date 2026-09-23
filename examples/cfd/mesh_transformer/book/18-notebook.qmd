@@ -25409,3 +25409,32 @@ eager-region cost against the fused `jb` lanes (step time, memory).
 frame-free configuration is within 10% of the frame-input `ol` lanes
 (0.6). DeepJEB++: within spread (0.6; the load direction is already the
 global vector, so the traction adds little beyond the normal projection).
+
+## 2026-09-23 — Ops: the scratch project's file-count quota (52.4 million inodes) was hit at 00:00 while bytes stood at 90 of 100 TB; lanes died at checkpoint saves; 2.7 million files of regenerable scorer predictions and raw dataset cache freed {#sec-nb-inode-quota}
+
+**What happened.** Every lane that reached a checkpoint save between about
+23:50 and 00:20 died with `OSError: [Errno 122] Disk quota exceeded` (the
+RANK-IO lanes among them, at epochs 0 to 5). The byte quota had 10 TB of
+headroom; the *file-count* quota of the shared project (52,428,800 inodes)
+stood at 52,421,315. The program's own contributions: DomainMesh datasets
+are tensordict directory trees of tens of files per case (the 61,440-case
+DeepJEB++ conversion alone is about two million), the float32 scorer wrote
+one prediction file per test sample per lane (332,000 files across 472
+lanes), the routing probes 372,000 files, and the DeepJEB++ raw download
+kept both the Hugging Face cache and its extraction.
+
+**What was done.** Deleted, in order of regenerability: every scorer
+`predictions/` directory (the per-lane `metrics.jsonl` that every artifact
+is built from stays) and the DeepJEB++ Hugging Face cache and extracted
+`.obj` surface meshes (the FEA and boundary-condition sources of the
+conversion stay). The count fell to 49.7 million. Chain links that died
+resume from their last checkpoint on the next singleton link; the guard did
+not block any lane because the failure did not repeat. The fleet watcher
+now wakes above 51.5 million inodes as it does above 97 TB.
+
+**Standing changes.** The scorer should not write per-sample predictions
+unless a study asks for them (engineering item); completed runs keep one
+checkpoint and running lanes three (the pruning loop); raw dataset
+downloads are deleted once the converted tree is verified. Until the
+scorer change lands, the prediction directories are deleted on each
+pruning pass.
