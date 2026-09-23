@@ -887,6 +887,31 @@ class StackScalarFields(MeshTransform):
         new_data[self._output_field] = stacked
         return mesh.with_data(**{self._association: new_data})
 
+    def _has_fields(self, mesh: Mesh) -> bool:
+        data = getattr(mesh, self._association)
+        return all(name in data for name in self._fields)
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Stack on every sub-mesh that carries the fields (a boundary, typically);
+        leave the others untouched; raise if no sub-mesh has them."""
+        hit = False
+        interior = domain.interior
+        if self._has_fields(interior):
+            interior = self(interior)
+            hit = True
+        boundaries = {}
+        for name, bnd in domain.boundaries.items():
+            if self._has_fields(bnd):
+                boundaries[name] = self(bnd)
+                hit = True
+            else:
+                boundaries[name] = bnd
+        if not hit:
+            raise KeyError(
+                f"StackScalarFields: no sub-mesh carries {self._association} fields {self._fields!r}"
+            )
+        return DomainMesh(interior=interior, boundaries=boundaries, global_data=domain.global_data)
+
     def extra_repr(self) -> str:
         return (
             f"{self._association}[{self._output_field!r}] = stack({self._fields}, "
