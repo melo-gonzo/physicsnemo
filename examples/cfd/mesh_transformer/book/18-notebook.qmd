@@ -25832,3 +25832,47 @@ the architecture; the lug ladder reads 1.06 (300, half rate) / 1.08 (600)
 / 0.99 (1,200), with 2,400 pending. The trainability clause (iv) is
 resolved as preregistered: the plateau lane is reported, and its half-rate
 rerun replaces it in the ladder with the rate stated.
+
+## 2026-09-23 — Interim, TENSOR-HEAD and OLBC-MECH: the equivariant stress head alone does not generalize at 32 Tensile2d cases (it is the load-axis input that carried the frame lanes), and on the fixed-mesh Poisson set absolute coordinates make ISLA better than GeoTransolver, so the gap there is positional resolution {#sec-nb-tensor-mech-interim}
+
+**TENSOR-HEAD at 32 cases** (`tn`, float32 relative L2 on `val_100`, two
+seeds): $\sigma_{11}$ 0.609 / 0.593, $\sigma_{22}$ 0.406 / 0.384,
+$\sigma_{12}$ 0.459 / 0.438, displacement 0.680 / 0.647. Against the
+frame-input configuration (`frame2`: 0.112 / 0.112 / 0.102 / 0.090) the
+tensor head alone is 4 to 7 times worse, and against the frameless
+configuration (0.450 / 0.360 / 1.199 / 0.639) it repairs only
+$\sigma_{12}$ (1.20 to 0.45) and leaves the displacement, a vector head
+that the tensor head does not touch, exactly where the frameless lanes had
+it. The bar "within 10% of `frame2`" fails by a factor of five, and the
+prediction that the tensor head would do *better* at 32 cases is refuted.
+**Reading.** The SOLIDS-FRAME ladder already said this in a form I read too
+narrowly: `frame1`, the load axis alone, repaired $\sigma_{11}$,
+$\sigma_{22}$ and the displacement by 14 to 21 times; the full frame added
+only $\sigma_{12}$. What generalizes is the *input*: knowing the load
+direction as a global vector lets the network represent "how far along the
+load axis" as an invariant of every token; without it the network has to
+reconstruct that axis from the labeled-edge normals, and at 32 cases it
+memorizes instead. Representability of $\sigma_{12}$ is the second,
+smaller issue, and the tensor head is its principled fix. The two are
+complementary, not alternatives. Rows 6 to 9 of `kernel/v2/lanes.tsv`
+(`tensor_axis`: the symmetric rank-2 stress head plus the load direction
+as the one global vector, $K = 1$, fused kernel, no laboratory $x$-axis)
+test the combination at 32 and 400 cases, two seeds. Bar: within 10% of
+`frame2` on every field means the frame-free-plus-physical-axis
+configuration is the canonical one for Tensile2d; the 400-case `tn` and
+OLBC elasticity `tn` lanes are scoring.
+
+**OLBC-MECH at 512 cases** (`om`, one seed so far): the coordinate-leak
+control reaches $u$ relative L2 **0.203** against the baseline ISLA's 0.867
+and GeoTransolver-512's 0.279. Absolute position at every token does not
+merely close the gap, it inverts it: with positions, ISLA's routing and
+boundary-token path beat GeoTransolver by 27% at this rung. Hypothesis M1
+(positional resolution) is confirmed as *a* cause and is sufficient; M2
+(value transport) is not needed to explain the gap. Whether the
+contract-preserving remedies recover it is what `frame2` (the domain's own
+axes as global vectors, legitimate for a fixed domain), `s1024` (finer
+slice partition) and `ext` (boundary-value extension) decide when they
+score. The reading for the architecture: on a fixed mesh the anchors of a
+fixed geometry give every sample the same coordinate scaffold, and 256
+slices resolve position on it too coarsely for a boundary-data-to-solution
+map that varies on the scale of the boundary segments.

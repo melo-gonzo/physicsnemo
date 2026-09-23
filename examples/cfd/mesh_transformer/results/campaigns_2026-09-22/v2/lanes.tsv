@@ -5,3 +5,7 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 3	v2	v2_elasticity_isla_r1_rankio_n2048_seed43	olbc_elasticity_tensor	isla_olbc_elasticity_tensor	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v2
 4	v2	v2_jb_isla_r1_rankio_n1024_seed42	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean_n1024 val_split=test_clean +training.val_interval=5 training.num_epochs=125	5e-4	42	200000	code_v2
 5	v2	v2_jb_isla_r1_rankio_n1024_seed43	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean_n1024 val_split=test_clean +training.val_interval=5 training.num_epochs=125	5e-4	43	200000	code_v2
+6	v2	v2_t2d_isla_r1_tensor_axis_n32_seed42	plaid_tensile2d_tensor_axis	isla_tensile2d_tensor_axis	train_split=train_32 val_split=val_100 +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v2
+7	v2	v2_t2d_isla_r1_tensor_axis_n32_seed43	plaid_tensile2d_tensor_axis	isla_tensile2d_tensor_axis	train_split=train_32 val_split=val_100 +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v2
+8	v2	v2_t2d_isla_r1_tensor_axis_n400_seed42	plaid_tensile2d_tensor_axis	isla_tensile2d_tensor_axis	train_split=train_400 val_split=val_100 +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v2
+9	v2	v2_t2d_isla_r1_tensor_axis_n400_seed43	plaid_tensile2d_tensor_axis	isla_tensile2d_tensor_axis	train_split=train_400 val_split=val_100 +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v2
