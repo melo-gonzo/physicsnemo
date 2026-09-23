@@ -222,7 +222,7 @@ chapters write "ISLA" for it and never "R1"; the 192-wide linear-routed lanes at
   error over 27-218: 0.53 (ISLA), 0.52 (192 wide), 0.44 (GeoTransolver 3e-3), 0.61 (GeoTransolver 1e-3), 0.53 (Transolver).
   Say: "the reference configuration lowers the curve without steepening it". Fitted-law exponents (SCALE-LAW) unchanged.
 - **HiLiftAeroML 35 wings, 200k:** ISLA 0.1460 (0.1456 / 0.1465); 24-layer 0.1459; ISLA at 1e-3 0.1415 (3% better; not
-  retuned); GeoTransolver-256 0.1098 → **0.75**; Transolver-256 0.1101 → 0.75; GeoTransolver-512 0.1061 on ONE seed
+  retuned); GeoTransolver-256 0.1098 → **0.75**; Transolver-256 0.1101 → 0.75; GeoTransolver-512 0.1042 (0.1022 / 0.1061, both seeds) → **0.71**
   (→ 0.73; flag as one seed). 210- and 510-wing REF rungs pending; the 210 / 4-geometry / 21-geometry / fixed-angle rows
   stay earlier-protocol ISLA, labeled, until their REF-BOARD twins land.
 - **Interior under the reference configuration** (results/ref_surface_2026-09-23.json; GeoTransolver-volume from

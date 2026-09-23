@@ -25462,7 +25462,12 @@ Transolver-256 0.1101 (`results/p200k_fleet_reduction_2026-09-22.json`)
 against R1 0.1461: **GeoTransolver ÷ R1 = 0.75**, the small-recurring-
 geometry deficit the wing rungs have shown throughout (@sec-data-efficiency),
 unchanged by the reference configuration; GeoTransolver-512 on the wings
-is at epoch ~460 and is added when scored. So the prereg's acceptance
+is at epoch ~460 and is added when scored (scored 2026-09-23, both seeds:
+pressure 0.1022 / 0.1061, mean 0.1042, **GeoTransolver-512 ÷ R1 = 0.71**;
+velocity 0.1293 against 0.1679, 0.77; wall shear 0.1963 against 0.2566,
+0.77. Doubling GeoTransolver's width buys 5% on this rung against 8% on the
+cars, so the parameter match does not change the wing reading: the deficit
+is 25 to 29% against either GeoTransolver width). So the prereg's acceptance
 clause ("recommended settings beat the baseline") holds on the cars and
 fails on the 35-wing rung; both are stated wherever the reference is
 quoted.
