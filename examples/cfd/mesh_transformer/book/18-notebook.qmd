@@ -26964,6 +26964,10 @@ reachable.
 *Addendum 2026-09-24.* After FRAME-AF-X (@sec-nb-frame-af-x-verdict) the
 wing lane's body axes are $\hat y$ (span) and $\hat z$ (up), the two not
 collinear with the inlet, rather than $\hat x$ and $\hat y$.
+FRAME-AF-Y (@sec-nb-frame-af-y-verdict) then refuted the collinearity
+reasoning behind that choice; the $\hat y$, $\hat z$ pair stands as the
+staged guess until the E and F controls say which property of the pair
+matters.
 
 ## 2026-09-23 — Preregistration, FRAME-AF-X: does the airfoil frame gain need both laboratory axes, or does one axis carry it? One-axis control (K = 2), two seeds, laptop GPU {#sec-nb-frame-af-x-prereg}
 
@@ -27030,7 +27034,7 @@ float32 relative L2 on the 40 test airfoils, means over cases then seeds.
 | inlet + $\hat x$ (K = 2) | 0.3317 | 0.1220 | 0.2522 | 0.94 / 0.94 |
 | inlet + $\hat x$ + $\hat y$ (K = 3) | 0.2666 | 0.1158 | 0.2122 | 0.75 / 0.89 |
 
-: FRAME-AF-X, two seeds. Data: results/frame_af_x_2026-09-24.json (reducer frame_af_x_reduce_2026-09-24.py).
+: FRAME-AF-X, two seeds. Data: results/frame_af_xy_2026-09-24.json (reducer frame_af_x_reduce_2026-09-24.py; the file also holds the later arms).
 
 The fraction of the two-axis log-gain that one axis recovers is
 0.23 on pressure, 0.56 on velocity and 0.11 on eddy
