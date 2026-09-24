@@ -155,10 +155,8 @@ TensorDict. The output is a TensorDict of batch size (batch, tokens) whose
 leaves are the output names. A dotted name is unflattened into a group
 (`out["surface", "pressure"]`). Each leaf has shape (batch, tokens, 3, ...,
 3), with as many trailing axes as its rank. The $K$ rank-1 global inputs
-are the global directions. The fused geometry kernel takes up to three
-vectors per token, the global directions and the rank-1 per-token inputs
-together, and no rank-2 per-token inputs; the model falls back to the eager
-region otherwise (@sec-arch-switches). The class is
+are the global directions. The limits of the fused geometry kernel are
+stated once, in @sec-isla-inputs-rank. The class is
 `physicsnemo.experimental.models.ISLA`.
 :::
 

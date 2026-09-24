@@ -307,16 +307,10 @@ plt.show()
 - **Fixed-mesh boundary-data tasks favor GeoTransolver so far, by
   factors.** On the OLBC sets the geometry is identical in every sample
   and the whole signal is in per-cell boundary scalars and a nodal source
-  (@sec-data-olbc). ISLA's tokens know where they are only through
-  invariants against anchors that barely move between samples of one
-  mesh, and a boundary value enters as one seed scalar on one cell and
-  reaches the interior only through the slices. GeoTransolver reads
-  absolute coordinates and nodal tags. The standing is a constant 3x
-  deficit on Poisson at every rung with the same learning-curve exponent
-  and 1.4 to 2x on elasticity at 512 cases. The diagnostics locate the
-  gap in value transport, not positional resolution, and a parameter-free
-  boundary-value extension recovers 84% of the log-gap at one rung, two
-  seeds (@sec-interior-olbc).
+  (@sec-data-olbc). The standing is a constant 3x deficit on Poisson at
+  every rung with the same learning-curve exponent and 1.4 to 2x on
+  elasticity at 512 cases. The mechanism study and the boundary-value
+  extension that recovers most of the gap are in @sec-interior-olbc.
   This is the one axis on which the ordering runs the other way from the
   rest of the book, and @sec-vs-ideas is mostly about it.
 - **Consistency is ISLA's, and it is a property of the frame plus the

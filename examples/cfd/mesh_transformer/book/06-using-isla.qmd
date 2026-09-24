@@ -185,11 +185,9 @@ norm to the seed and one relational cosine per slice
 (@sec-isla-inputs-rank). The tests in `test_isla_global_inputs.py`,
 `test_isla_inputs.py` and `test_isla_heads.py` cover zero and two
 directions, global scalars, rank-1 and rank-2 inputs and every output rank
-and parity. The fused geometry kernel is written for one to three per-point
-vectors, counting the global directions and the rank-1 boundary or query
-inputs together, and for no rank-2 per-token inputs. The frame-input and
-rank-1-input solids configurations run it. Otherwise `geo_kernel: null`
-resolves to the eager region.
+and parity. The frame-input and rank-1-input solids configurations run the
+fused geometry kernel; its limits are in @sec-isla-inputs-rank and the
+switch in @sec-using-cost.
 :::
 
 ## Training {#sec-using-train}
