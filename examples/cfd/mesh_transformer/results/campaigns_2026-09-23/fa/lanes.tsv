@@ -1,0 +1,3 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	fa	fa_af_frame_seed42	airfrans_volume_frame	isla_volume_airfrans_ref_frame	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	42	100000	code_v4
+1	fa	fa_af_frame_seed43	airfrans_volume_frame	isla_volume_airfrans_ref_frame	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	43	100000	code_v4
