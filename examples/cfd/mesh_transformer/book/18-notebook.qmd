@@ -27483,6 +27483,13 @@ extra registers). The class refuses five or more with the fused kernel
 and the auto-resolution falls back to the eager region there. The cluster
 `code_v4` overlay is refreshed to this commit.
 
+With the kernel at four, the 3-D falsifier gains its second half: beside
+the K = 3 DrivAerML Surface lanes (inlet + $\hat y$ + $\hat z$), a K = 4
+pair (inlet + $\hat x$ + $\hat y$ + $\hat z$) is staged as campaign `fa`
+rows 4 and 5. The overcompleteness reading predicts K = 3 flat and K = 4
+better by at least 10% on pressure at 200,000 cells against the R1
+reference pair; the ledger row FRAME-3D carries both bars.
+
 **Preregistration, FRAME-AF-K4.** Arm: the inlet direction plus three
 fixed in-plane directions ($\hat x$, $\hat y$ and the 45-degree
 direction; K = 4), on the same 160-airfoil subset, protocol and seeds as
