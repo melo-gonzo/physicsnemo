@@ -10,7 +10,7 @@ from pathlib import Path
 RES = Path(__file__).resolve().parent
 root = Path(sys.argv[1])
 FIELDS = ("pressure_l2", "velocity_l2", "nut_l2")
-SEEDS = (42, 43); ARMS = ("base", "framex", "framey", "framee", "framef", "frameg", "frame")  # frameg added (G control)  # framee/framef added 2026-09-24 (E/F controls)  # framey added 2026-09-24 (FRAME-AF-Y)
+SEEDS = (42, 43); ARMS = ("base", "framex", "framey", "framee", "framef", "frameg", "frameh", "frame")  # frameg added (G control)  # framee/framef added 2026-09-24 (E/F controls)  # framey added 2026-09-24 (FRAME-AF-Y)
 def load(run):
     per = {}
     for p in root.glob(f"{run}/*/metrics.jsonl"):
@@ -35,14 +35,14 @@ for a in ARMS:
         grp = [s for s in ids if binname(aoa(s)) == b]
         out["by_aoa"][b][a] = {"n": len(grp), **{f: st.fmean(mean(runs[(a, s)], grp, f) for s in SEEDS) for f in FIELDS}}
 sm = out["seed_means"]
-for a in ("framex", "framey", "framee", "framef", "frameg", "frame"):
+for a in ("framex", "framey", "framee", "framef", "frameg", "frameh", "frame"):
     out["ratio_to_base"][a] = {f: sm[a][f] / sm["base"][f] for f in FIELDS}
     for b in BINS: out["by_aoa_ratio_to_base"][b][a] = {f: out["by_aoa"][b][a][f] / out["by_aoa"][b]["base"][f] for f in FIELDS}
 out["fraction_recovered"] = {f: math.log(sm["base"][f] / sm["framex"][f]) / math.log(sm["base"][f] / sm["frame"][f]) for f in FIELDS}
 out["fraction_recovered_y"] = {f: math.log(sm["base"][f] / sm["framey"][f]) / math.log(sm["base"][f] / sm["frame"][f]) for f in FIELDS}
 out["by_aoa_y_over_xy"] = {b: {f: out["by_aoa"][b]["framey"][f] / out["by_aoa"][b]["frame"][f] for f in FIELDS} for b in BINS}
-out["fraction_recovered_ef"] = {a: {f: math.log(sm["base"][f] / sm[a][f]) / math.log(sm["base"][f] / sm["frame"][f]) for f in FIELDS} for a in ("framee", "framef", "frameg")}
-out["ef_over_xy"] = {a: {f: sm[a][f] / sm["frame"][f] for f in FIELDS} for a in ("framee", "framef", "frameg")}
+out["fraction_recovered_ef"] = {a: {f: math.log(sm["base"][f] / sm[a][f]) / math.log(sm["base"][f] / sm["frame"][f]) for f in FIELDS} for a in ("framee", "framef", "frameg", "frameh")}
+out["ef_over_xy"] = {a: {f: sm[a][f] / sm["frame"][f] for f in FIELDS} for a in ("framee", "framef", "frameg", "frameh")}
 fy = out["fraction_recovered_y"]; ymax = max(abs(out["by_aoa_y_over_xy"][b]["pressure_l2"] - 1) for b in BINS)
 out["verdict_y"] = "reading supported" if (fy["pressure_l2"] >= 0.8 and ymax <= 0.10) else "reading refuted" if fy["pressure_l2"] <= 0.5 else "between (reported as measured)"
 out["by_aoa_x_over_xy"] = {b: {f: out["by_aoa"][b]["framex"][f] / out["by_aoa"][b]["frame"][f] for f in FIELDS} for b in BINS}
@@ -59,5 +59,5 @@ print("ratio to base:", {a: {f: round(v[f], 3) for f in FIELDS} for a, v in out[
 print("fraction recovered by one axis:", {f: round(v, 2) for f, v in fr.items()})
 for b in BINS: print(f"  {b:6s} n={out['by_aoa'][b]['base']['n']:2d} x/base {out['by_aoa_ratio_to_base'][b]['framex']['pressure_l2']:.2f} xy/base {out['by_aoa_ratio_to_base'][b]['frame']['pressure_l2']:.2f} x/xy {out['by_aoa_x_over_xy'][b]['pressure_l2']:.2f} (pressure) | velocity x/xy {out['by_aoa_x_over_xy'][b]['velocity_l2']:.2f}")
 print("verdict:", verdict)
-for a in ("framee", "framef", "frameg"): print(a, "fraction recovered", {f: round(v, 2) for f, v in out["fraction_recovered_ef"][a].items()}, "| ÷ two-axis", {f: round(v, 3) for f, v in out["ef_over_xy"][a].items()}, "| per seed p:", [round(out["per_run"][f"{a}_seed{s}"]["pressure_l2"], 4) for s in SEEDS])
+for a in ("framee", "framef", "frameg", "frameh"): print(a, "fraction recovered", {f: round(v, 2) for f, v in out["fraction_recovered_ef"][a].items()}, "| ÷ two-axis", {f: round(v, 3) for f, v in out["ef_over_xy"][a].items()}, "| per seed p:", [round(out["per_run"][f"{a}_seed{s}"]["pressure_l2"], 4) for s in SEEDS])
 print("Y: fraction recovered", {f: round(v, 2) for f, v in fy.items()}, "| y/xy pressure by bin", {b: round(out["by_aoa_y_over_xy"][b]["pressure_l2"], 2) for b in BINS}, "| per seed p:", [round(out["per_run"][f"framey_seed{s}"]["pressure_l2"], 4) for s in SEEDS], "| verdict_y:", out["verdict_y"])

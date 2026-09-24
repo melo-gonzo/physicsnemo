@@ -27341,3 +27341,87 @@ kernel is cleared and the K = 2 result stands; if it lands within 10% of
 the two-axis arm (0.27), the fused K = 2 training path is defective and
 every K = 2 verdict above is void until the kernel is repaired.
 Prediction: cleared (0.8). Launched 2026-09-24 10:52 EDT.
+
+## 2026-09-24 — Verdict, FRAME-AF-H: an exactly redundant third direction recovers a third of the pressure gain, not all of it; the ingredient is three distinct in-plane directions, an overcomplete description of the plane; the eight-arm ladder closes at exploration scale {#sec-nb-frame-af-h-verdict}
+
+**Setting.** Seven arms on the 160-airfoil local AirfRANS subset have
+narrowed why two extra global directions beside the inlet cut ISLA's
+interior pressure error by a quarter at exploration scale
+(@sec-nb-frame-af-g-verdict). G showed that a third direction carrying
+no new information still pays in full, so the effect is representational.
+H was preregistered to split "more channels" from "more distinct
+directions": the inlet, $\hat y$ and $-\hat y$ (K = 3), where every
+channel of the third direction is the negation of one of the second's.
+
+**What we saw** (float32 relative L2 on the 40 test airfoils, two seeds;
+data results/frame_af_xy_2026-09-24.json, reducer
+frame_af_x_reduce_2026-09-24.py):
+
+| arm (K) | directions | pressure | velocity | eddy viscosity | pressure ÷ inlet-only | pressure ÷ two-axis |
+|---|---|---:|---:|---:|---:|---:|
+| inlet only (1) | $\hat u$ | 0.3546 | 0.1303 | 0.2576 | 1 | 1.33 |
+| X (2) | $\hat u, \hat x$ | 0.3317 | 0.1220 | 0.2522 | 0.94 | 1.24 |
+| Y (2) | $\hat u, \hat y$ | 0.3598 | 0.1282 | 0.2287 | 1.01 | 1.35 |
+| E (2) | $\hat x, \hat y$ (no inlet) | 0.9055 | 0.3330 | 0.3156 | 2.55 | 3.40 |
+| H (3) | $\hat u, \hat y, -\hat y$ | 0.3190 | 0.1212 | 0.2079 | 0.90 | 1.20 |
+| F (3) | $\hat u, \hat y, \hat d_{45}$ | 0.2677 | 0.1159 | 0.2080 | 0.75 | 1.004 |
+| G (3) | $\hat u, \hat u_\perp, \hat y$ | 0.2635 | 0.1159 | 0.1897 | 0.74 | 0.988 |
+| frame (3) | $\hat u, \hat x, \hat y$ | 0.2666 | 0.1158 | 0.2122 | 0.75 | 1 |
+
+: The FRAME-AF ladder: eight arms, two seeds each, ISLA 192 x 12 on 120 training airfoils and 20,000 queries (exploration scale; mechanism only). Bold rows are the K = 3 arms with three distinct directions.
+
+**H recovers 0.37 of the two-axis pressure log-gain** (per seed 0.314,
+0.324; 1.20x the two-axis arm), 0.61 on velocity and all of
+it on eddy viscosity. The preregistered "sits with the K = 2 arms"
+clause (fraction below 0.5 on pressure) fires, but H is not a K = 2 arm
+either: it beats the inlet-plus-$\hat y$ arm, whose information it
+duplicates exactly, by 1.13x on pressure. **Reading: a third channel
+per pair pays something even when it is a copy (about a third of the
+gain), and a third *distinct* direction pays the rest.** The complete
+gain needs three distinct in-plane directions, which for a plane is an
+overcomplete set: every relative vector and every normal is then
+described by three one-dimensional projections at three angles instead
+of two.
+
+**The ladder, closed.** Read together, the eight arms say: (1) the
+inlet direction is indispensable (E), because the angle of attack has no
+other route into the model; (2) a second direction, fixed or not,
+collinear with the inlet or normal to it, gives nothing on pressure (X,
+Y); (3) a third direction gives the full quarter if it is distinct from
+the other two (F, G, frame), whatever its angle and whether or not it
+carries new information, and a third of the quarter if it is a copy (H).
+This is not a frame effect in any physical sense. It is a statement
+about ISLA's geometry region and seed: the learned functions of the
+per-slice invariants $\{\hat r_{is} \cdot \hat g_k\}$ and
+$\{\hat n_i \cdot \hat g_k\}$ resolve in-plane geometry far better from
+three projections than from two, the way a function on a plane is easier
+to learn from an overcomplete set of ridge coordinates than from a
+minimal basis. Two readings were proposed and refuted on the way (the
+signed angle of attack; the completed frame), and the fixedness reading
+after them; the entries above keep them.
+
+**Why it matters for the architecture.** ISLA's per-pair geometry is
+carried by dot products with a small set of directions, and this ladder
+says the set should be *overcomplete* for the ambient plane of the
+problem. For 2-D problems that is three directions; for 3-D problems
+(the cars, the wings, the lug) the same reasoning predicts that three
+directions, a complete basis, are the analog of the failed K = 2 arms,
+and that four are needed. The fused geometry kernel is written for at
+most three per-point vectors (@sec-isla-inputs-rank); if the 3-D
+prediction holds, raising that cap to four is the engineering
+consequence. The preregistered tests are in the next entry.
+
+**What's next.** (i) The reference-scale AirfRANS twin (campaign `fa`,
+R1, 800 airfoils, 100,000 queries, two seeds, code_v4): does the quarter
+survive at scale? Its two frame axes are any two distinct directions
+beside the inlet; the staged $\hat x, \hat y$ pair stands. (ii) A
+DrivAerML Surface twin at R1 and 200,000 cells with the inlet plus
+$\hat y$ and $\hat z$ (K = 3, a complete 3-D set): the prediction is
+*no gain* (the 3-D analog of K = 2), which is the falsifier of the
+overcompleteness reading; a gain would instead say that any extra
+distinct direction pays. (iii) If (ii) shows no gain, a K = 4 arm on the
+eager region (the fused kernel's cap) decides whether overcompleteness
+is the rule in 3-D. Both cluster lanes are staged for the VPN's return.
+(iv) The eager-kernel twin of the $\hat y$ arm
+(@sec-nb-frame-af-derivation) is still training and closes the kernel
+question independently. No accuracy claim at this scale (@sec-protocol).
