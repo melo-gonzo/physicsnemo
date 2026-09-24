@@ -27430,3 +27430,37 @@ is the rule in 3-D. Both cluster lanes are staged for the VPN's return.
 (iv) The eager-kernel twin of the $\hat y$ arm
 (@sec-nb-frame-af-derivation) is still training and closes the kernel
 question independently. No accuracy claim at this scale (@sec-protocol).
+
+## 2026-09-24 — Verdict, FRAME-AF-Y-EAGER: the eager geometry region reproduces the fused K = 2 result (pressure within 4%), so the fused kernel's two-direction training path is sound and the K = 2 verdicts stand {#sec-nb-frame-af-y-eager-verdict}
+
+**Setting.** Every K = 2 arm of the FRAME-AF ladder
+(@sec-nb-frame-af-h-verdict) trained on the fused Triton geometry kernel,
+whose two-direction path had been tested exact against the eager region
+only at unit-test scale. The derivation entry
+(@sec-nb-frame-af-derivation) preregistered a twin of the inlet-plus-$\hat y$
+arm on the eager region (`geo_kernel: eager`, seed 42; one seed because
+the eager region ran about nine times slower per step on this GPU).
+
+**What we saw** (float32 relative L2 on the 40 test airfoils, seed 42;
+data results/frame_af_y_eager_2026-09-24.json):
+
+| arm, seed 42 | pressure | velocity | eddy viscosity |
+|---|---:|---:|---:|
+| inlet + $\hat y$, eager region | 0.3625 | 0.1391 | 0.2632 |
+| inlet + $\hat y$, fused kernel | 0.3763 | 0.1297 | 0.2306 |
+| inlet only, fused kernel | 0.3008 | 0.1303 | 0.2267 |
+| inlet + $\hat x$ + $\hat y$, fused kernel | 0.2483 | 0.1149 | 0.2205 |
+
+: Eager against fused on the K = 2 arm, one seed.
+
+**Kernel cleared.** The eager twin is 0.96x the fused $\hat y$ arm on pressure,
+1.07x on velocity and 1.14x on eddy viscosity, within the
+preregistered 10% on the deciding field, and 1.46x the two-axis arm. A
+defective fused path would have put it near the two-axis arm. The two
+implementations of the geometry region are exact to roundoff at the
+region level, and this run says the training-scale outcome follows: the
+K = 2 result is a property of the architecture, not of the kernel. The
+eight-arm ladder's conclusions stand as written. One seed is enough
+here because the question was a large, discrete one (a 0.36 against 0.27
+split); the eager region is not a candidate for further arms at this
+speed.
