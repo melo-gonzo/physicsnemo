@@ -27259,7 +27259,12 @@ data: results/frame_af_xy_2026-09-24.json.
 
 **Fixedness is refuted.** G has one fixed direction and reproduces the
 gain within 1% on pressure and velocity (and does better on eddy
-viscosity). The information G carries is exactly that of the failed
+viscosity). One caveat travels with G: its third direction is the inlet
+rotated by a fixed 90 degrees about $\hat z$, which is a *pseudovector*
+under reflection (the mirror image of the problem would receive the
+opposite perpendicular), so G is not a legitimate input under ISLA's
+reflection contract and is used here only as a mechanism probe. The
+legitimate arms (F and the two-axis arm) reach the same number. The information G carries is exactly that of the failed
 inlet-plus-$\hat y$ arm: $\hat u_\perp$ is a deterministic function of
 $\hat u$, so every invariant G can form is a function of invariants the
 K = 2 arm already had. **Three directions beat two even when the third
