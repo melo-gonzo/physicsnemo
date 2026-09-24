@@ -27169,3 +27169,69 @@ GPU, about 4.5 hours):
 Prediction: E near the frame-free arm (0.6) and F near the two-axis arm
 (0.6). Reducer: `frame_af_x_reduce_2026-09-24.py` with arms `framee`,
 `framef`. No accuracy claim at this scale (@sec-protocol).
+
+## 2026-09-24 — Verdict, FRAME-AF-E/F: the frame gain needs the inlet direction and two fixed in-plane directions together; orthogonality is irrelevant (F reproduces the two-axis arm to 0.4%); axes without the inlet are 2.6x worse than no frame {#sec-nb-frame-af-ef-verdict}
+
+**Setting.** Four arms so far (@sec-nb-frame-af-y-verdict): on the
+160-airfoil local AirfRANS subset at exploration scale, the inlet
+direction plus the two laboratory axes as global vectors cuts ISLA's
+interior pressure error to 0.75x the inlet-only arm's, while the inlet
+plus either single axis does nothing. Two controls were preregistered to
+say what the axis pair supplies: E, the axes without the inlet direction
+(a fixed frame, no angle of attack among the global inputs); F, the inlet
+plus $\hat y$ plus a fixed direction at 45 degrees (three directions and a
+fixed, complete, non-orthonormal in-plane frame).
+
+**What we saw** (float32 relative L2 on the 40 test airfoils, two seeds):
+
+| arm | pressure | velocity | eddy viscosity | ÷ inlet-only (p / v / ν) | ÷ two-axis arm (p) |
+|---|---:|---:|---:|---|---:|
+| inlet only (K = 1) | 0.3546 | 0.1303 | 0.2576 | 1 / 1 / 1 | 1.33 |
+| inlet + $\hat x$ | 0.3317 | 0.1220 | 0.2522 | 0.94 / 0.94 / 0.98 | 1.24 |
+| inlet + $\hat y$ | 0.3598 | 0.1282 | 0.2287 | 1.01 / 0.98 / 0.89 | 1.35 |
+| E: $\hat x$ + $\hat y$, no inlet direction | 0.9055 | 0.3330 | 0.3156 | 2.55 / 2.56 / 1.23 | 3.40 |
+| F: inlet + $\hat y$ + 45-degree direction | 0.2677 | 0.1159 | 0.2080 | 0.75 / 0.89 / 0.81 | 1.004 |
+| inlet + $\hat x$ + $\hat y$ (K = 3) | 0.2666 | 0.1158 | 0.2122 | 0.75 / 0.89 / 0.82 | 1 |
+
+: The six FRAME-AF arms, two seeds each. Data: results/frame_af_xy_2026-09-24.json (reducer frame_af_x_reduce_2026-09-24.py).
+
+**Both bars fire cleanly.** E sits far *above* the inlet-only arm:
+2.55x on pressure and 2.56x on velocity (per seed 0.896, 0.915).
+Without the inlet direction the model has no access to the angle of
+attack (the inlet speed, kept as a scalar input, does not carry it), and
+the fixed frame alone is worth nothing; so the gain needs the inlet and
+the frame together, and the model was not reading the angle from
+anywhere else. F reproduces the two-axis arm: 1.004x on pressure,
+1.000x on velocity, 0.98x on eddy viscosity (per seed
+0.274, 0.261). **Orthogonality of the frame is irrelevant.** Any
+two fixed, non-collinear in-plane directions, beside the inlet, give the
+gain; one fixed direction beside the inlet gives none.
+
+**What is settled and what is not.** Settled: the ingredient is *two
+fixed directions plus the case's condition vector*. Not yet settled is
+whether the two fixed directions matter because they are fixed (the same
+frame for every case, so every relative vector, normal and the inlet
+itself are expressed in one case-independent frame) or because three
+directions is simply more than two (the K = 2 arms both failed, the
+K = 3 arms both succeeded; count is confounded with fixedness in every
+arm so far). A seventh arm splits them: **G**, the inlet direction, its
+in-plane perpendicular (a case-dependent second direction, rotated with
+the inlet by a new recipe transform `RotateGlobalVectorInPlane`) and the
+fixed $\hat y$ (K = 3, one fixed direction). If G reaches within 10% of
+the two-axis arm on pressure, the count of directions (or the
+completeness of the frame regardless of fixedness) is the gain; if G sits
+with the K = 2 arms (fraction recovered below 0.5), two *fixed*
+directions are the ingredient. Prediction: fixedness (0.65), because the
+$(\hat u, \hat y)$ arm already had a complete frame and failed. Launched
+2026-09-24 08:24 EDT, two seeds, about 2.4 hours.
+
+**Why it matters.** For the architecture: the global-direction input is
+doing more than adding a condition; a pair of fixed directions turns the
+per-slice invariants into coordinates in a shared frame, and on a
+fixed-frame dataset that is worth a quarter of the pressure error at
+this scale. For the recipe: on any dataset whose cases share a frame
+(wind-tunnel airfoils, the OLBC domains, the solids), supply two fixed
+non-collinear directions beside the physical condition vector; one is
+not enough, and the axes need not be orthogonal. The reference-scale
+AirfRANS twin (campaign `fa`) tests whether this survives at R1 with 800
+airfoils. No accuracy claim at this scale (@sec-protocol).

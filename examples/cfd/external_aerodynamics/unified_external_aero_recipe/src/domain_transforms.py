@@ -58,6 +58,7 @@ YAML configs.  Import this module before Hydra instantiation
 
 from __future__ import annotations
 
+import math
 import json
 import zlib
 from collections.abc import Sequence
@@ -264,6 +265,52 @@ class ComputeFreestreamDirection(MeshTransform):
         return (
             f"{self._output_field} = {self._velocity_field} / |{self._velocity_field}|"
         )
+
+
+@register()
+class RotateGlobalVectorInPlane(MeshTransform):
+    r"""Write a copy of a ``(3,)`` global vector rotated about ``z`` into ``global_data``.
+
+    ``global_data[output_field] = R_z(angle) @ global_data[input_field]``. Used by the FRAME-AF
+    mechanism controls (2026-09-24) to build a *case-dependent* second in-plane direction (the
+    inlet direction rotated by 90 degrees), as opposed to the fixed laboratory axes that
+    ``SetDomainGlobalField`` writes. Domain-aware like :class:`ComputeFreestreamDirection`.
+    """
+
+    def __init__(self, input_field: str, output_field: str, angle_deg: float = 90.0) -> None:
+        super().__init__()
+        self._input_field = input_field
+        self._output_field = output_field
+        a = math.radians(angle_deg)
+        self._rot = torch.tensor(
+            [[math.cos(a), -math.sin(a), 0.0], [math.sin(a), math.cos(a), 0.0], [0.0, 0.0, 1.0]]
+        )
+
+    def _rotated(self, global_data: TensorDict) -> torch.Tensor:
+        if self._input_field not in global_data.keys():
+            raise KeyError(
+                f"RotateGlobalVectorInPlane: {self._input_field!r} not found in global_data "
+                f"(available: {sorted(global_data.keys())!r})."
+            )
+        v = global_data[self._input_field].float()
+        if v.shape != (3,):
+            raise ValueError(f"RotateGlobalVectorInPlane: expected a (3,) vector, got {tuple(v.shape)}.")
+        return self._rot.to(v.device) @ v
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        new_gd = mesh.global_data.clone()
+        new_gd[self._output_field] = self._rotated(mesh.global_data)
+        new_mesh = mesh.copy()  # ty: ignore[unresolved-attribute]
+        new_mesh.global_data = new_gd
+        return new_mesh
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        new_gd = domain.global_data.clone()
+        new_gd[self._output_field] = self._rotated(domain.global_data)
+        return DomainMesh(interior=domain.interior, boundaries=domain.boundaries, global_data=new_gd)
+
+    def extra_repr(self) -> str:
+        return f"{self._output_field} = R_z @ {self._input_field}"
 
 
 @register()
