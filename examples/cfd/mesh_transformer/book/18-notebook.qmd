@@ -27235,3 +27235,60 @@ non-collinear directions beside the physical condition vector; one is
 not enough, and the axes need not be orthogonal. The reference-scale
 AirfRANS twin (campaign `fa`) tests whether this survives at R1 with 800
 airfoils. No accuracy claim at this scale (@sec-protocol).
+
+## 2026-09-24 — Verdict, FRAME-AF-G: a case-dependent third direction that adds no information reproduces the frame gain (0.99x the two-axis arm), so fixedness is refuted and the gain is a property of three directions over two; a redundant-duplicate control launched {#sec-nb-frame-af-g-verdict}
+
+**Setting.** Six arms on the 160-airfoil local AirfRANS subset
+(@sec-nb-frame-af-ef-verdict) established that the inlet direction plus
+two fixed, non-collinear in-plane directions cuts ISLA's interior
+pressure error to 0.75x the inlet-only arm's, that one fixed direction
+does nothing, and that orthogonality is irrelevant. The open question was
+whether the two directions matter because they are *fixed* across cases
+or because three directions beat two. G was preregistered to split them:
+the inlet $\hat u$, its in-plane perpendicular $\hat u_\perp$ (rotated
+with the inlet, case by case, by the new recipe transform
+`RotateGlobalVectorInPlane`), and the fixed $\hat y$ (K = 3, one fixed
+direction).
+
+**What we saw** (float32 relative L2 on the 40 test airfoils, two
+seeds): G scores 0.2635 on pressure (per seed 0.265, 0.262),
+0.1159 on velocity and 0.1897 on eddy viscosity: 0.988x,
+1.001x and 0.89x the two-axis arm, and 0.74x, 0.89x and
+0.74x the inlet-only arm. The full six-arm table is in the E/F entry;
+data: results/frame_af_xy_2026-09-24.json.
+
+**Fixedness is refuted.** G has one fixed direction and reproduces the
+gain within 1% on pressure and velocity (and does better on eddy
+viscosity). The information G carries is exactly that of the failed
+inlet-plus-$\hat y$ arm: $\hat u_\perp$ is a deterministic function of
+$\hat u$, so every invariant G can form is a function of invariants the
+K = 2 arm already had. **Three directions beat two even when the third
+adds no information.** The ingredient is therefore not a frame in the
+physical sense, fixed or otherwise, but the size or form of the
+per-slice invariant set (and the head basis) that a third direction
+brings: with K directions the geometry region of each slice carries
+$K$ direction dots per relative vector and per normal, and the seeds
+carry $K(K-1)/2$ direction-direction cosines (@sec-isla-inputs-rank).
+Between K = 2 and K = 3 the invariant set grows from a minimal to an
+overcomplete description of the in-plane geometry.
+
+**What this changes.** The recommendation drafted in the E/F entry
+("supply two fixed directions beside the condition vector on a
+fixed-frame dataset") is not wrong as a recipe, but its rationale is:
+the fixed frame is not what pays. The finding is about ISLA's
+parameterization, and it raises a sharper question: does a third
+direction that is *exactly* redundant, not just informationally
+redundant, also pay? **H**, the inlet, $\hat y$ and $-\hat y$ (K = 3;
+every invariant of the third direction is the negation of one of the
+second's), is launched to answer it (2026-09-24 10:44 EDT, two seeds,
+about 2.4 hours). If H reproduces the two-axis arm within 10% on
+pressure, the gain is a feature-count effect of how the invariants enter
+the seeds and the geometry region (a scale, normalization or capacity
+effect to be located in the class), and the frame reading is retired
+entirely. If H sits with the K = 2 arms (fraction recovered below 0.5),
+the third direction must be non-collinear with the second, and the
+overcomplete in-plane description is the mechanism. Prediction: H fails
+(0.6). Either way, the reference-scale AirfRANS twin (campaign `fa`)
+keeps its value as the test of whether the gain survives at R1 and 800
+airfoils; its interpretation waits on H. No accuracy claim at this
+scale (@sec-protocol).

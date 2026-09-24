@@ -1,0 +1,27 @@
+# @package _global_
+# FRAME-AF-H control (2026-09-24): the inlet direction, the fixed y axis and its negation -y (K = 3): a third direction that carries no new information.
+input_type: tensors
+output_type: fields
+forward_kwargs:
+  points: boundaries.airfoil.cell_centroids
+  normals: boundaries.airfoil.cell_data.normals            # precomputed in-plane normals (a curve in 3-D has no cell_normals)
+  measure_weights: boundaries.airfoil.cell_data.quadrature_measure
+  global_inputs:
+    freestream: global_data.U_inf_dir
+    frame_yn: global_data.frame_yn
+    frame_y: global_data.frame_y
+    speed: global_data.U_inf_mag
+  query_points: interior.points
+model:
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs: {pressure: 0, nut: 0, velocity: 1}
+  global_inputs: {freestream: 1, frame_yn: 1, frame_y: 1, speed: 0}
+  hidden: 192
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  scale_mode: rms_distance
+  query_tokens: true
+  query_mass: source_total
+  geo_checkpoint: true
+  geo_kernel: fused
