@@ -26960,3 +26960,44 @@ the frame becomes the recommended input on fixed-frame datasets in
 `CenterMesh` so the rotation augmentation carries it) launches alongside;
 its bar is in @sec-nb-hl35-percase. Both launch when the cluster is
 reachable.
+
+## 2026-09-23 — Preregistration, FRAME-AF-X: does the airfoil frame gain need both laboratory axes, or does one axis carry it? One-axis control (K = 2), two seeds, laptop GPU {#sec-nb-frame-af-x-prereg}
+
+**Setting.** The FRAME-AF local rung (@sec-nb-frame-af-local-verdict)
+found that giving ISLA the two laboratory axes as global vectors, beside
+the inlet direction, cuts its AirfRANS interior pressure error by a
+quarter at exploration scale. The verdict named the mechanism as a
+direct invariant for the angle of attack (inlet direction dot $\hat x$),
+but did not test it. Two readings compete. Under the first, one axis
+carries the gain: the angle between the inlet and the chord axis is the
+quantity the pressure field is most sensitive to, and $\hat x$ alone
+supplies it as an invariant. Under the second, both axes are needed:
+ISLA's invariants are reflection-invariant, and with only $\hat x$ the
+sign of the angle is lost (inlet at $+\alpha$ and $-\alpha$ give the same
+dot with $\hat x$); $\hat y$ restores the sign. A cambered airfoil at
+$+\alpha$ and its mirror image at $-\alpha$ are the same problem, so the
+sign is recoverable from the geometry in principle. The question is
+whether the model recovers it in practice from boundary tokens at this
+scale.
+
+**What is tested.** A third arm on the same 160-case subset, protocol and
+seeds as the two verdict arms: the inlet direction plus $\hat x$ only
+(K = 2, the fused kernel with two directions). Float32 per-case relative
+L2 on the 40 test airfoils, seeds 42 and 43, means over cases then seeds.
+The comparison quantity is the fraction of the two-axis gain that one
+axis recovers, on the log scale, per field:
+$f = \ln(e_\text{base} / e_x) / \ln(e_\text{base} / e_{xy})$.
+
+**Bars.** *One axis suffices*: $f \geq 0.8$ on pressure and velocity, and
+the by-angle pattern of the one-axis arm matches the two-axis arm at
+negative angles (ratio to the two-axis arm within 10% in the below-zero
+bin). *Both axes needed*: $f \leq 0.5$ on pressure, or the one-axis arm
+trails the two-axis arm by more than 15% in the below-zero bin while
+matching it (within 5%) at positive angles; the second pattern is the
+sign-loss signature. *Between*: reported as measured. Prediction: both
+axes needed with the sign-loss signature (0.55), since the frame-free
+arm's error was largest at negative angles in the verdict rung and
+reflection-invariant tokens cannot tell the sign of the angle from the
+inlet alone. Launched 2026-09-23 22:32 EDT (seed 42 then 43, about 2.4
+hours, inference included); reducer extends
+`frame_af_local_reduce_2026-09-23.py` with the third arm.
