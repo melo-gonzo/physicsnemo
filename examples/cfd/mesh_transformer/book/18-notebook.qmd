@@ -26961,6 +26961,10 @@ the frame becomes the recommended input on fixed-frame datasets in
 its bar is in @sec-nb-hl35-percase. Both launch when the cluster is
 reachable.
 
+*Addendum 2026-09-24.* After FRAME-AF-X (@sec-nb-frame-af-x-verdict) the
+wing lane's body axes are $\hat y$ (span) and $\hat z$ (up), the two not
+collinear with the inlet, rather than $\hat x$ and $\hat y$.
+
 ## 2026-09-23 — Preregistration, FRAME-AF-X: does the airfoil frame gain need both laboratory axes, or does one axis carry it? One-axis control (K = 2), two seeds, laptop GPU {#sec-nb-frame-af-x-prereg}
 
 **Setting.** The FRAME-AF local rung (@sec-nb-frame-af-local-verdict)
@@ -27001,3 +27005,87 @@ reflection-invariant tokens cannot tell the sign of the angle from the
 inlet alone. Launched 2026-09-23 22:32 EDT (seed 42 then 43, about 2.4
 hours, inference included); reducer extends
 `frame_af_local_reduce_2026-09-23.py` with the third arm.
+
+## 2026-09-24 — Verdict, FRAME-AF-X: one laboratory axis recovers a quarter of the two-axis pressure gain and trails the full frame at every angle, so the sign-loss reading is refuted; the informative axis is the one normal to the inlet {#sec-nb-frame-af-x-verdict}
+
+**Setting.** The FRAME-AF local rung (@sec-nb-frame-af-local-verdict)
+showed that giving ISLA the two laboratory axes as global vectors, beside
+the inlet direction, cuts its AirfRANS interior pressure error to
+0.75x the frame-free arm's at exploration scale. The
+preregistration of this control (@sec-nb-frame-af-x-prereg) asked whether
+one axis, $\hat x$, carries that gain (the angle of attack as a direct
+invariant) or whether both are needed, with the predicted signature of a
+lost sign: the one-axis arm matching the two-axis arm at positive angles
+and trailing it below zero.
+
+**What was run.** The third arm, inlet direction plus $\hat x$ only
+(K = 2), same 160-case subset, protocol and seeds as the two verdict arms;
+float32 relative L2 on the 40 test airfoils, means over cases then seeds.
+
+**What we saw.** The one-axis arm is nearly the frame-free arm:
+
+| arm | pressure | velocity | eddy viscosity | ÷ frame-free (pressure / velocity) |
+|---|---:|---:|---:|---|
+| inlet only (K = 1) | 0.3546 | 0.1303 | 0.2576 | 1 / 1 |
+| inlet + $\hat x$ (K = 2) | 0.3317 | 0.1220 | 0.2522 | 0.94 / 0.94 |
+| inlet + $\hat x$ + $\hat y$ (K = 3) | 0.2666 | 0.1158 | 0.2122 | 0.75 / 0.89 |
+
+: FRAME-AF-X, two seeds. Data: results/frame_af_x_2026-09-24.json (reducer frame_af_x_reduce_2026-09-24.py).
+
+The fraction of the two-axis log-gain that one axis recovers is
+0.23 on pressure, 0.56 on velocity and 0.11 on eddy
+viscosity. **The "both axes needed" bar fires (pressure fraction below
+0.5), but not through the sign-loss signature.** By angle of attack the
+one-axis arm trails the two-axis arm on pressure by 1.20x below zero
+degrees (19 cases), 1.47x at 0 to 5 (5 cases), 1.24x at 5 to 10
+(10 cases) and 1.30x at 10 and above (6 cases): everywhere, not
+only at negative angles. The predicted pattern (match at positive angles,
+trail below zero) is refuted. One more observation: the one-axis arm's
+seed spread is small (0.335, 0.328) where the frame-free
+arm's is large (0.301, 0.408), so the seed-tightening seen
+in the verdict rung comes with the first extra direction, the accuracy
+with the second.
+
+**Why it matters: the reading changes.** In AirfRANS the inlet direction
+lies within a few degrees of $\hat x$. A global direction enters ISLA
+through dot products with relative vectors (@sec-isla-inputs-rank), so
+$\hat x$ adds almost the same invariant the inlet already supplies: the
+two directions are nearly collinear and the second is close to redundant.
+The axis that carries new information is $\hat y$, normal to the inlet.
+With inlet and $\hat y$ (or $\hat x$ and $\hat y$) the per-slice
+invariants hold both in-plane components of every relative vector, which
+is the complete relative position in 2-D; with the inlet alone they hold
+one component and a length. The mechanism is therefore not the angle of
+attack as such but **completing the in-plane frame**: a second,
+non-collinear global direction lets the geometry region resolve where a
+query sits relative to an anchor in both directions, not just along the
+flow. This is the same reading as the OLBC frame2 instrument on a domain
+with no flow direction at all, and it predicts that on a 3-D fixed-frame
+dataset whose inlet is along $\hat x$ (the wings), the axes worth adding
+are the two normal to it. The staged wing lane is changed accordingly
+(body $\hat y$ and $\hat z$, not $\hat x$ and $\hat y$;
+@sec-nb-frame-af-local-verdict, addendum). No accuracy claim is attached
+at this scale (@sec-protocol).
+
+**What's next.** The direct test of the new reading: the inlet plus
+$\hat y$ only (K = 2), preregistered below (@sec-nb-frame-af-y-prereg)
+and training on the same GPU.
+
+## 2026-09-24 — Preregistration, FRAME-AF-Y: does the axis normal to the inlet alone carry the frame gain? Two seeds, laptop GPU {#sec-nb-frame-af-y-prereg}
+
+**Question.** FRAME-AF-X (@sec-nb-frame-af-x-verdict) found that adding
+$\hat x$, nearly collinear with the inlet, recovers 0.23 of the two-axis
+pressure log-gain. The completing-the-frame reading predicts that
+$\hat y$ alone, normal to the inlet, recovers most of it.
+
+**Arm.** Inlet direction plus $\hat y$ (K = 2), same subset, protocol and
+seeds (42, 43); float32 relative L2 on the 40 test airfoils. Fraction
+recovered on the log scale, $f_y = \ln(e_\text{base} / e_y) / \ln(e_\text{base} / e_{xy})$.
+
+**Bars.** *Reading supported*: $f_y \geq 0.8$ on pressure and the
+$\hat y$ arm within 10% of the two-axis arm on pressure in every angle
+bin. *Reading refuted*: $f_y \leq 0.5$ on pressure (then the gain needs
+the pair as such, and the collinearity argument is wrong). *Between*:
+reported as measured. Prediction: supported (0.7). Launched 2026-09-24
+00:51 EDT, about 2.4 hours including inference; reducer extends
+`frame_af_x_reduce_2026-09-24.py` with the fourth arm.
