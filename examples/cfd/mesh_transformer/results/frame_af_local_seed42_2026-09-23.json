@@ -1,0 +1,80 @@
+{
+ "protocol": "FRAME-AF local mechanism rung reduction (2026-09-23, #sec-nb-frame-af-local-prereg): float32 per-case relative L2 of the\ntwo arms (baseline: freestream direction as the one global vector; frame: plus the laboratory axes, K = 3) on the 40 local\ntest airfoils, from the recipe's infer.py metrics.jsonl (one row per case); field means, frame \u00f7 baseline, per-angle bins,\nand the preregistered verdict (pays / neutral / hurts). usage: python frame_af_local_reduce_2026-09-23.py <infer_root>\nwhere <infer_root>/<arm>/<run>/metrics.jsonl holds the rows; writes frame_af_local_2026-09-23.json beside this script.",
+ "n_cases": 40,
+ "means": {
+  "frameaf_base_seed42": {
+   "pressure_l2": 0.30079437531530856,
+   "velocity_l2": 0.13026842344552278,
+   "nut_l2": 0.22666330058127643
+  },
+  "frameaf_frame_seed42": {
+   "pressure_l2": 0.24827545788139105,
+   "velocity_l2": 0.11485804710537195,
+   "nut_l2": 0.22046803403645754
+  }
+ },
+ "frame_over_base": {
+  "pressure_l2": 0.8253992702527618,
+  "velocity_l2": 0.8817029028788751,
+  "nut_l2": 0.9726675358166444
+ },
+ "by_aoa": {
+  "aoa<0": {
+   "frameaf_base_seed42": {
+    "n": 19,
+    "pressure_l2": 0.29764269174713837,
+    "velocity_l2": 0.11014806890958234,
+    "nut_l2": 0.24034251664814196
+   },
+   "frameaf_frame_seed42": {
+    "n": 19,
+    "pressure_l2": 0.29715489752982793,
+    "velocity_l2": 0.10269338147420633,
+    "nut_l2": 0.20836006301014046
+   }
+  },
+  "0-5": {
+   "frameaf_base_seed42": {
+    "n": 5,
+    "pressure_l2": 0.4216124087572098,
+    "velocity_l2": 0.13694290593266487,
+    "nut_l2": 0.17687110900878905
+   },
+   "frameaf_frame_seed42": {
+    "n": 5,
+    "pressure_l2": 0.14349984228610993,
+    "velocity_l2": 0.12279981821775436,
+    "nut_l2": 0.1767615407705307
+   }
+  },
+  "5-10": {
+   "frameaf_base_seed42": {
+    "n": 10,
+    "pressure_l2": 0.27923313453793525,
+    "velocity_l2": 0.13394581750035287,
+    "nut_l2": 0.22475062012672425
+   },
+   "frameaf_frame_seed42": {
+    "n": 10,
+    "pressure_l2": 0.21237673237919807,
+    "velocity_l2": 0.10152034424245357,
+    "nut_l2": 0.25869981944561005
+   }
+  },
+  ">=10": {
+   "frameaf_base_seed42": {
+    "n": 6,
+    "pressure_l2": 0.24602841337521872,
+    "velocity_l2": 0.18229182064533234,
+    "nut_l2": 0.22802707677086195
+   },
+   "frameaf_frame_seed42": {
+    "n": 6,
+    "pressure_l2": 0.24063478782773018,
+    "velocity_l2": 0.1689908504486084,
+    "nut_l2": 0.23151237765947977
+   }
+  }
+ },
+ "verdict": "frame pays"
+}

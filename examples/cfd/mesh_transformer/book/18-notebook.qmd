@@ -26815,3 +26815,42 @@ is not repeated at scale. Prediction: neutral-to-pays on pressure at the
 negative angles, neutral elsewhere (0.5); a laptop rung of 120 cases is
 where a frame that helps memorization would help most, so a null here is
 the more informative outcome.
+
+## 2026-09-23 — Interim, FRAME-AF (local rung, seed 42): the laboratory frame as global vectors makes ISLA 17% better on AirfRANS interior pressure and 12% on velocity at exploration scale; the bar "frame pays" is met on one seed; the second seed is training {#sec-nb-frame-af-local-interim}
+
+**Numbers** (`results/frame_af_local_seed42_2026-09-23.json`, from
+`frame_af_local_reduce_2026-09-23.py`; float32 relative L2 on the 40 local
+test airfoils, 20,000 queries, epoch 300, seed 42):
+
+| arm | pressure | velocity | eddy viscosity |
+|---|---|---|---|
+| baseline (freestream direction, $K = 1$) | 0.301 | 0.130 | 0.227 |
+| + laboratory frame ($K = 3$, fused kernel) | 0.248 | 0.115 | 0.221 |
+| frame ÷ baseline | **0.83** | **0.88** | 0.97 |
+
+Training-time validation losses at epoch 299: 0.0147 (baseline) against
+0.0103 (frame). By angle bin the pressure gain is concentrated between 0
+and 10 degrees (0.42 to 0.14 at 0 to 5 degrees, 12 cases; 0.28 to 0.21 at 5
+to 10) and absent below 0 and above 10 degrees (0.30 / 0.30 and 0.25 /
+0.24). Both arms trained cleanly (no Traceback; 3.5 GB peak; the frame arm
+at 0.11 s per step against the baseline's 0.08, the first training run of
+the three-direction fused kernel).
+
+**Reading.** The preregistered bar (pressure at least 10% better, velocity
+not worse by more than 5%) is met, so the positional channel is a live
+candidate for the AirfRANS deficit: giving ISLA a frame to express position
+in, without breaking its equivariance in the dataset's frame, removes a
+sixth of its pressure error at this scale. The angle pattern does not match
+the prediction (gain at negative angles): the gain sits in the
+mid-angle bins, and the 0-to-5-degree baseline value (0.42 against 0.25 to
+0.30 elsewhere) suggests one or two hard cases in a 12-case bin that the
+frame arm handles, which one seed cannot separate from initialization.
+Caveats stated with the number: one seed, 120 training cases, 192 wide,
+20,000 queries, 40 test airfoils; nothing here is a standing.
+
+**Next.** Seed 43 of both arms is training on the same GPU (about 3.5
+hours). If the two-seed mean holds the bar, the reference-scale twin (R1,
+800 training airfoils, 100,000 queries, two seeds, against
+GeoTransolver-volume; frame variant of `isla_volume_airfrans_ref`) is
+staged for launch when the cluster is reachable, and the same frame
+instrument goes on the 35-wing rung as the wing anatomy preregistered.
