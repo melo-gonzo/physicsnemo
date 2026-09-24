@@ -27292,3 +27292,52 @@ overcomplete in-plane description is the mechanism. Prediction: H fails
 keeps its value as the test of whether the gain survives at R1 and 800
 airfoils; its interpretation waits on H. No accuracy claim at this
 scale (@sec-protocol).
+
+## 2026-09-24 — Derivation and preregistration, FRAME-AF-Y-EAGER: what a global direction adds to ISLA's invariants, why the inlet-plus-y arm already had complete information, and the eager-kernel twin that rules out a K = 2 fused-path defect {#sec-nb-frame-af-derivation}
+
+**What K global directions add, read from the class.** Three places
+(`physicsnemo/experimental/models/isla/model.py`, the `_InputSet` and
+`_relational_invariants` docstrings and the constructor):
+
+- The *seed* of each boundary token gains one channel per direction,
+  $\hat n_i \cdot \hat g_k$ (the only origin-free scalars of the set
+  $\{\hat n_i, \hat g_k\}$). There are no direction-direction cosines
+  $\hat g_j \cdot \hat g_k$ in the seed, so the angle of attack is *not* a
+  seed feature in any arm; with two in-plane directions the token normal
+  is nevertheless determined exactly (two independent projections of a
+  unit in-plane vector).
+- The *geometry region* of every slice layer gains one channel per
+  direction per point-anchor pair, $\hat r_{is} \cdot \hat g_k$ (width
+  $5 + K$ with no per-token vector inputs); two non-collinear directions
+  determine every in-plane relative vector exactly.
+- The *head basis* gains $\hat g_k$ and the spherical complements of
+  $(\hat u_i, \hat g_k)$: $m = 2K + 3$ true vectors. This touches the
+  velocity output only; pressure and eddy viscosity are scalars read
+  from the hidden state.
+
+**Consequence for the arms.** Inlet plus $\hat y$ (K = 2) already gives
+every token its exact in-plane normal and every pair its exact in-plane
+relative vector, in the case-dependent frame $(\hat u, \hat y)$. The
+inlet plus $\hat x$ plus $\hat y$ arm (K = 3), F and G add channels that
+are functions of channels the K = 2 arm has. On information the K = 2
+and K = 3 arms are equal, so the measured gap (pressure
+0.36 against 0.27, @sec-nb-frame-af-g-verdict) is representational:
+either the count of geometry and seed channels ($5 + K$ and $K$) or the
+specific linear combinations exposed. H (inlet, $\hat y$, $-\hat y$)
+tests the count reading with a channel that is an exact negation of
+another.
+
+**One more candidate that the derivation cannot exclude.** Every K = 2
+arm so far ran on the fused Triton geometry kernel, whose K = 2 path
+(compile-time direction count, halved tiles) is exercised in training
+for the first time by these arms; its forward and backward are tested
+exact against the eager region for (K, P') = (2, 0) at unit-test scale,
+but not through a 300-epoch bf16 training run. **Y-EAGER**: the inlet
+plus $\hat y$ arm with `geo_kernel: eager`, seed 42 only (the eager
+region runs about nine times slower on this GPU, 0.93 s against 0.10 s
+per step, so one seed takes about nine hours). Bar: if Y-EAGER lands
+within 10% of the fused $\hat y$ arm on pressure (0.36 to 0.38), the
+kernel is cleared and the K = 2 result stands; if it lands within 10% of
+the two-axis arm (0.27), the fused K = 2 training path is defective and
+every K = 2 verdict above is void until the kernel is repaired.
+Prediction: cleared (0.8). Launched 2026-09-24 10:52 EDT.
