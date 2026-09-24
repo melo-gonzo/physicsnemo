@@ -1,5 +1,5 @@
-# FRAME-3D (2026-09-24): isla_surface_ref plus two body axes as global directions; needs code_v4 (fused kernel, three directions).
 # @package _global_
+# FRAME-3D (2026-09-24): isla_surface_ref plus two body axes as global directions; needs code_v4 (fused kernel, three directions).
 # ---------------------------------------------------------------------------
 # ISLA -- SURFACE task, REFERENCE CONFIGURATION candidate (REF campaign, 2026-09-22).
 # ---------------------------------------------------------------------------
