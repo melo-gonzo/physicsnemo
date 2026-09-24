@@ -35,6 +35,7 @@ AF = J("airfrans_reduction_2026-09-22.json"); AFA = AF["arms"]
 AFG = {f: AFA["gt_volume_1e-3"][f] for f, _ in FIELDS}
 AFI = ref_arm("isla_r1|af"); AFI_R2 = ref_arm("isla_r2|af")
 AFR = {f: AFG[f]["mean"] / AFI[f]["mean"] for f, _ in FIELDS}
+FAF = J("frame_af_local_2026-09-23.json")  # FRAME-AF local mechanism rung, two seeds (frame ÷ frame-free arm)
 AFP = {f: [g / i for g, i in zip(AFG[f]["seeds"], AFI[f]["seeds"])] for f, _ in FIELDS}
 spread = lambda s: abs(s[0] / s[1] - 1) * 100
 lead = lambda r: f"{(r - 1) * 100:.0f}%"
@@ -643,7 +644,10 @@ print(f"**One architecture covers the surface and the interior: ISLA with query 
       f"both datasets (by {lead(RATIO['velocity_l2'])} on the DrivAerML Volume task, {AFR['velocity_l2']:.2f}x on AirfRANS), leads on pressure "
       f"on the cars (by {lead(RATIO['pressure_l2'])}) and trails on pressure on the airfoils (by {trail(AFR['pressure_l2'])}), at "
       f"{ISLA_PARAMS / 27.6:.2f}x GeoTransolver-volume's parameters.** The AirfRANS pressure and eddy-viscosity deficits are the open standings on the flow datasets. "
-      "Both are seed-robust (every paired ratio below one) and neither has a located mechanism. On the solids the picture is one of targets, "
+      "Both are seed-robust (every paired ratio below one). One candidate mechanism for the pressure deficit has a mechanism-scale reading: "
+      f"with the laboratory frame given as two more global vectors (K = 3), ISLA's interior pressure error on a 160-airfoil subset at exploration "
+      f"scale falls to {FAF['frame_over_base']['pressure_l2']:.2f}x the frame-free arm's and velocity to {FAF['frame_over_base']['velocity_l2']:.2f}x, "
+      f"two seeds (@sec-nb-frame-af-local-verdict); the reference-scale twin is staged and no accuracy claim is made at that scale. On the solids the picture is one of targets, "
       f"not of physics: ISLA leads at the small lug rungs and ties at the large ones on the lug's frame-free scalar (GeoTransolver-512 ÷ ISLA {lug_ratio[2400]:.2f} at 2,400 lugs), trails on "
       "Tensile2d's frame components at 400 cases with the steeper learning curve, and trails by a constant factor of three on the fixed-mesh "
       "Poisson set, where the gap is value transport and the boundary-value extension is the candidate remedy (@sec-interior-olbc). An "

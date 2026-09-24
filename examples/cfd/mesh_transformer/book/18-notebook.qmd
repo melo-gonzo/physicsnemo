@@ -26818,6 +26818,8 @@ the more informative outcome.
 
 ## 2026-09-23 — Interim, FRAME-AF (local rung, seed 42): the laboratory frame as global vectors makes ISLA 17% better on AirfRANS interior pressure and 12% on velocity at exploration scale; the bar "frame pays" is met on one seed; the second seed is training {#sec-nb-frame-af-local-interim}
 
+*Superseded by the two-seed verdict, @sec-nb-frame-af-local-verdict: the by-angle reading below (gain at 0 to 10 degrees) did not hold on two seeds.*
+
 **Numbers** (`results/frame_af_local_seed42_2026-09-23.json`, from
 `frame_af_local_reduce_2026-09-23.py`; float32 relative L2 on the 40 local
 test airfoils, 20,000 queries, epoch 300, seed 42):
@@ -26872,3 +26874,89 @@ with the wing: the input is the body frame (chord and span axes), which is
 what the airfoil rung tests too, since AirfRANS has no rotation and body
 and laboratory frames coincide there. Both twins launch when the cluster
 is reachable and the two-seed local mean holds the bar.
+
+## 2026-09-23 — Verdict, FRAME-AF (local rung, two seeds): the laboratory frame as global vectors cuts ISLA's AirfRANS interior pressure error by 25% and velocity by 11% at exploration scale; frame pays on both seeds; the reference-scale twins are staged {#sec-nb-frame-af-local-verdict}
+
+**Setting.** ISLA is the boundary-first surrogate of this book: it tokenizes
+the boundary sample, routes tokens to slices through geometric invariants,
+and decodes interior fields at query points. Its inputs are equivariant by
+construction, so a scalar output cannot depend on where the laboratory axes
+point unless a global vector carries that information. On AirfRANS (2-D
+airfoils in a wind tunnel at fixed orientation, one inlet direction per
+case) the reference ISLA trails GeoTransolver-volume on interior pressure
+while leading on velocity (@sec-interior-open). The wing anatomy located
+the surface deficit by angle of attack, and the OLBC mechanism study found
+that giving a fixed-frame problem its own axes as global vectors recovers
+part of a gap. This rung asks whether the same instrument moves the
+airfoil interior.
+
+**What was tested.** Two arms on a 160-case local AirfRANS subset (120
+training, 40 test airfoils), ISLA 192 wide, 12 layers, 256 slices, cosine
+routing, 20,000 interior queries, 300 epochs, learning rate 1e-3 (the
+width rule), on the laptop GPU. The frame-free arm has the inlet direction
+as its one global vector. The frame arm adds the laboratory axes
+$\hat x$ and $\hat y$ as two more global vectors (K = 3, the fused kernel
+with three directions; its first training use). Seeds 42 and 43 of each
+arm. Bars from the preregistration (@sec-nb-frame-af-local-prereg):
+*frame pays* if pressure improves by at least 10% and velocity is not more
+than 5% worse on the two-seed means.
+
+**What we saw.** Float32 relative L2 over the 40 test airfoils (means over
+cases, then over seeds):
+
+| field | frame-free arm | frame arm | frame ÷ frame-free | per seed (42, 43) |
+|---|---:|---:|---:|---|
+| pressure | 0.3546 | 0.2666 | **0.75** | 0.83, 0.70 |
+| velocity | 0.1303 | 0.1158 | **0.89** | 0.88, 0.90 |
+| eddy viscosity | 0.2576 | 0.2122 | 0.82 | 0.97, 0.71 |
+
+: FRAME-AF local rung, two seeds. Data: results/frame_af_local_2026-09-23.json (reducer frame_af_local_reduce_2026-09-23.py; the seed-42 interim artifact frame_af_local_seed42_2026-09-23.json is superseded by this file).
+
+**The bar is met on each seed separately and on the means: frame pays.**
+Two cautions travel with the number. First, the frame-free arm is the
+noisy one: its pressure error is 0.301 on seed 42 and
+0.408 on seed 43, a spread as large as the seed-42 gain, while
+the frame arm sits at 0.248 and 0.285. Part
+of what the frame buys at this scale is a tighter seed distribution, not
+only a lower mean. Velocity is the cleaner signal: the frame-free arm
+scores 0.1303 on both seeds and the frame arm improves it by
+12% and 10%. Second, by angle of attack (two-seed means,
+frame ÷ frame-free on pressure): 0.79 below zero degrees
+(19 cases), 0.41 at 0 to 5 degrees (5 cases),
+0.87 at 5 to 10 (10 cases) and
+0.78 at 10 and above (6 cases). The seed-42
+reading that the gain sat at 0 to 10 degrees does not hold on two seeds:
+the gain is everywhere except the 5-to-10-degree bin, and largest in the
+five-case 0-to-5 bin. The preregistered prediction (neutral-to-pays at
+negative angles, neutral elsewhere) was too cautious; the frame pays at
+every angle.
+
+**Why it matters.** AirfRANS is a fixed-frame problem: the tunnel axes are
+physical (the inlet direction varies within a few degrees of $\hat x$, the
+airfoil chord is aligned with $\hat x$ by construction), and a scalar
+field such as pressure legitimately depends on the airfoil's orientation
+relative to those axes. Without the frame, ISLA sees only the angle between
+the inlet direction and the chord through the boundary tokens' invariants
+against one global vector, which is exactly the small quantity (a few
+degrees) the pressure field is most sensitive to. With the frame, the
+angle of attack is a direct invariant (inlet direction dot $\hat x$). This
+is the same mechanism as the OLBC frame2 instrument and the Tensile2d frame
+ladder: **on a dataset whose physics references a frame, give the model
+the frame as global vectors.** It is contract-preserving (rotate the
+frame with the data and the output rotates), unlike coordinates fed as
+scalars. It is not a claim about the reference configuration: 192 wide,
+120 training airfoils and 20,000 queries are exploration scale, where no
+accuracy claim is made (@sec-protocol).
+
+**What's next.** The reference-scale twin is staged as campaign group
+`fa` (R1, 800 training airfoils, 100,000 queries, seeds 42 and 43, code_v4;
+baseline = the internal-geometry reference pair; the GeoTransolver-volume
+row from the interior scoreboard is the standing to beat). Its bar: the
+frame arm's pressure at least 10% below the frame-free reference pair with
+velocity not worse by more than 5%, both seeds. If met, the AirfRANS
+interior row of the scoreboard gains a frame variant labeled as such, and
+the frame becomes the recommended input on fixed-frame datasets in
+@sec-using-inputs. The 35-wing body-frame lane (frame written before
+`CenterMesh` so the rotation augmentation carries it) launches alongside;
+its bar is in @sec-nb-hl35-percase. Both launch when the cluster is
+reachable.

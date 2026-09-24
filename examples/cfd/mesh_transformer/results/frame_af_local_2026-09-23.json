@@ -1,22 +1,60 @@
 {
- "protocol": "FRAME-AF local mechanism rung reduction (2026-09-23, #sec-nb-frame-af-local-prereg): float32 per-case relative L2 of the\ntwo arms (baseline: freestream direction as the one global vector; frame: plus the laboratory axes, K = 3) on the 40 local\ntest airfoils, from the recipe's infer.py metrics.jsonl (one row per case); field means, frame \u00f7 baseline, per-angle bins,\nand the preregistered verdict (pays / neutral / hurts). usage: python frame_af_local_reduce_2026-09-23.py <infer_root>\nwhere <infer_root>/<arm>/<run>/metrics.jsonl holds the rows; writes frame_af_local_2026-09-23.json beside this script.",
+ "protocol": "FRAME-AF local mechanism rung reduction (2026-09-23, #sec-nb-frame-af-local-prereg): float32 per-case relative L2 of the\ntwo arms (baseline: freestream direction as the one global vector; frame: plus the laboratory axes, K = 3) on the 40 local\ntest airfoils, seeds 42 and 43, from the recipe's infer.py metrics.jsonl (one row per case); per-seed and seed-mean field\nmeans, frame \u00f7 baseline (verdict on the two-seed means), per-angle bins, and the preregistered verdict (pays / neutral / hurts). usage: python frame_af_local_reduce_2026-09-23.py <infer_root>\nwhere <infer_root>/<arm>/<run>/metrics.jsonl holds the rows; writes frame_af_local_2026-09-23.json beside this script.",
  "n_cases": 40,
+ "seeds": [
+  42,
+  43
+ ],
  "means": {
   "frameaf_base_seed42": {
    "pressure_l2": 0.30079437531530856,
    "velocity_l2": 0.13026842344552278,
    "nut_l2": 0.22666330058127643
   },
+  "frameaf_base_seed43": {
+   "pressure_l2": 0.40832084249705075,
+   "velocity_l2": 0.1302637778222561,
+   "nut_l2": 0.28860119804739953
+  },
   "frameaf_frame_seed42": {
    "pressure_l2": 0.24827545788139105,
    "velocity_l2": 0.11485804710537195,
    "nut_l2": 0.22046803403645754
+  },
+  "frameaf_frame_seed43": {
+   "pressure_l2": 0.2848828128539026,
+   "velocity_l2": 0.11676400639116764,
+   "nut_l2": 0.20393007108941674
+  }
+ },
+ "seed_means": {
+  "base": {
+   "pressure_l2": 0.35455760890617966,
+   "velocity_l2": 0.13026610063388944,
+   "nut_l2": 0.257632249314338
+  },
+  "frame": {
+   "pressure_l2": 0.2665791353676468,
+   "velocity_l2": 0.11581102674826979,
+   "nut_l2": 0.21219905256293714
   }
  },
  "frame_over_base": {
-  "pressure_l2": 0.8253992702527618,
-  "velocity_l2": 0.8817029028788751,
-  "nut_l2": 0.9726675358166444
+  "pressure_l2": 0.7518640939339902,
+  "velocity_l2": 0.8890342628260182,
+  "nut_l2": 0.8236509719869439
+ },
+ "frame_over_base_per_seed": {
+  "42": {
+   "pressure_l2": 0.8253992702527618,
+   "velocity_l2": 0.8817029028788751,
+   "nut_l2": 0.9726675358166444
+  },
+  "43": {
+   "pressure_l2": 0.6976935370522025,
+   "velocity_l2": 0.8963658842329233,
+   "nut_l2": 0.706615469613967
+  }
  },
  "by_aoa": {
   "aoa<0": {
@@ -26,11 +64,23 @@
     "velocity_l2": 0.11014806890958234,
     "nut_l2": 0.24034251664814196
    },
+   "frameaf_base_seed43": {
+    "n": 19,
+    "pressure_l2": 0.4548972590189231,
+    "velocity_l2": 0.11222825944423676,
+    "nut_l2": 0.2767779948680024
+   },
    "frameaf_frame_seed42": {
     "n": 19,
     "pressure_l2": 0.29715489752982793,
     "velocity_l2": 0.10269338147420633,
     "nut_l2": 0.20836006301014046
+   },
+   "frameaf_frame_seed43": {
+    "n": 19,
+    "pressure_l2": 0.30067511157769905,
+    "velocity_l2": 0.10540542065312988,
+    "nut_l2": 0.20764335695850222
    }
   },
   "0-5": {
@@ -40,11 +90,23 @@
     "velocity_l2": 0.13694290593266487,
     "nut_l2": 0.17687110900878905
    },
+   "frameaf_base_seed43": {
+    "n": 5,
+    "pressure_l2": 0.42063958048820493,
+    "velocity_l2": 0.129082028567791,
+    "nut_l2": 0.16472988128662108
+   },
    "frameaf_frame_seed42": {
     "n": 5,
     "pressure_l2": 0.14349984228610993,
     "velocity_l2": 0.12279981821775436,
     "nut_l2": 0.1767615407705307
+   },
+   "frameaf_frame_seed43": {
+    "n": 5,
+    "pressure_l2": 0.20065832287073135,
+    "velocity_l2": 0.1274919293820858,
+    "nut_l2": 0.15642017424106597
    }
   },
   "5-10": {
@@ -54,11 +116,23 @@
     "velocity_l2": 0.13394581750035287,
     "nut_l2": 0.22475062012672425
    },
+   "frameaf_base_seed43": {
+    "n": 10,
+    "pressure_l2": 0.3345003381371498,
+    "velocity_l2": 0.12659384980797767,
+    "nut_l2": 0.3679799847304821
+   },
    "frameaf_frame_seed42": {
     "n": 10,
     "pressure_l2": 0.21237673237919807,
     "velocity_l2": 0.10152034424245357,
     "nut_l2": 0.25869981944561005
+   },
+   "frameaf_frame_seed43": {
+    "n": 10,
+    "pressure_l2": 0.32222292721271517,
+    "velocity_l2": 0.10574057623744011,
+    "nut_l2": 0.21981746926903725
    }
   },
   ">=10": {
@@ -68,11 +142,81 @@
     "velocity_l2": 0.18229182064533234,
     "nut_l2": 0.22802707677086195
    },
+   "frameaf_base_seed43": {
+    "n": 6,
+    "pressure_l2": 0.3735974157849948,
+    "velocity_l2": 0.19447759042183557,
+    "nut_l2": 0.2969694609443347
+   },
    "frameaf_frame_seed42": {
     "n": 6,
     "pressure_l2": 0.24063478782773018,
     "velocity_l2": 0.1689908504486084,
     "nut_l2": 0.23151237765947977
+   },
+   "frameaf_frame_seed43": {
+    "n": 6,
+    "pressure_l2": 0.24282741794983545,
+    "velocity_l2": 0.16216530899206796,
+    "nut_l2": 0.2052839162449042
+   }
+  }
+ },
+ "by_aoa_seed_mean": {
+  "aoa<0": {
+   "base": {
+    "n": 19,
+    "pressure_l2": 0.37626997538303075,
+    "velocity_l2": 0.11118816417690955,
+    "nut_l2": 0.2585602557580722
+   },
+   "frame": {
+    "n": 19,
+    "pressure_l2": 0.2989150045537635,
+    "velocity_l2": 0.10404940106366811,
+    "nut_l2": 0.20800170998432133
+   }
+  },
+  "0-5": {
+   "base": {
+    "n": 5,
+    "pressure_l2": 0.4211259946227074,
+    "velocity_l2": 0.13301246725022792,
+    "nut_l2": 0.17080049514770507
+   },
+   "frame": {
+    "n": 5,
+    "pressure_l2": 0.17207908257842064,
+    "velocity_l2": 0.1251458737999201,
+    "nut_l2": 0.16659085750579833
+   }
+  },
+  "5-10": {
+   "base": {
+    "n": 10,
+    "pressure_l2": 0.3068667363375425,
+    "velocity_l2": 0.13026983365416528,
+    "nut_l2": 0.29636530242860315
+   },
+   "frame": {
+    "n": 10,
+    "pressure_l2": 0.2672998297959566,
+    "velocity_l2": 0.10363046023994685,
+    "nut_l2": 0.23925864435732364
+   }
+  },
+  ">=10": {
+   "base": {
+    "n": 6,
+    "pressure_l2": 0.30981291458010674,
+    "velocity_l2": 0.18838470553358394,
+    "nut_l2": 0.2624982688575983
+   },
+   "frame": {
+    "n": 6,
+    "pressure_l2": 0.2417311028887828,
+    "velocity_l2": 0.16557807972033817,
+    "nut_l2": 0.21839814695219198
    }
   }
  },
