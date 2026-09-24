@@ -27089,3 +27089,79 @@ the pair as such, and the collinearity argument is wrong). *Between*:
 reported as measured. Prediction: supported (0.7). Launched 2026-09-24
 00:51 EDT, about 2.4 hours including inference; reducer extends
 `frame_af_x_reduce_2026-09-24.py` with the fourth arm.
+
+## 2026-09-24 — Verdict, FRAME-AF-Y: the axis normal to the inlet alone recovers none of the pressure gain; both single-axis readings are refuted and the gain belongs to the pair; two discriminating controls launched {#sec-nb-frame-af-y-verdict}
+
+**Setting.** Two controls have now tried to attribute the FRAME-AF gain
+(@sec-nb-frame-af-local-verdict: the two laboratory axes as global
+vectors cut ISLA's AirfRANS interior pressure error to
+0.75x the frame-free arm's at exploration scale) to one axis.
+FRAME-AF-X (@sec-nb-frame-af-x-verdict) found $\hat x$ nearly useless
+and proposed that $\hat y$, normal to the inlet, carries the gain by
+completing the in-plane frame. This entry tests that proposal
+(@sec-nb-frame-af-y-prereg).
+
+**What was run.** The fourth arm, inlet direction plus $\hat y$ only
+(K = 2), same subset, protocol and seeds; float32 relative L2 on the 40
+test airfoils, means over cases then seeds.
+
+**What we saw.**
+
+| arm | pressure | velocity | eddy viscosity | ÷ frame-free (p / v / ν) |
+|---|---:|---:|---:|---|
+| inlet only (K = 1) | 0.3546 | 0.1303 | 0.2576 | 1 / 1 / 1 |
+| inlet + $\hat x$ (K = 2) | 0.3317 | 0.1220 | 0.2522 | 0.94 / 0.94 / 0.98 |
+| inlet + $\hat y$ (K = 2) | 0.3598 | 0.1282 | 0.2287 | 1.01 / 0.98 / 0.89 |
+| inlet + $\hat x$ + $\hat y$ (K = 3) | 0.2666 | 0.1158 | 0.2122 | 0.75 / 0.89 / 0.82 |
+
+: The four FRAME-AF arms, two seeds each. Data: results/frame_af_xy_2026-09-24.json (reducer frame_af_x_reduce_2026-09-24.py; supersedes frame_af_x_2026-09-24.json).
+
+**The reading is refuted.** $\hat y$ alone recovers -0.05 of the two-axis
+pressure log-gain (per seed 0.376 and 0.343 against the
+frame-free 0.301 and 0.408), 0.13 on velocity, and trails
+the two-axis arm on pressure by 1.35x below zero degrees, 2.30x at 0 to 5,
+1.13x at 5 to 10 and 1.20x at 10 and above. On eddy viscosity it
+recovers 0.62, the one field where a single axis does something. Taken
+with FRAME-AF-X ($\hat x$ alone: 0.23 on pressure), **neither axis carries
+the pressure gain; the pair does.** Two consecutive one-axis readings
+(the signed angle of attack; the completed in-plane frame) were wrong,
+and the mechanism is open.
+
+**What the pair has that neither single axis has.** With the inlet
+$\hat u$ and both axes, the invariant set holds (i) the signed angle of
+attack twice over, as $\hat u \cdot \hat x = \cos\alpha$ and
+$\hat u \cdot \hat y = \sin\alpha$; (ii) every relative vector and
+every normal in a *fixed* laboratory frame, $(r \cdot \hat x, r \cdot \hat y)$,
+the same frame for every case; and (iii) three directions rather than
+two, so a larger invariant set and head basis. The $\hat y$ arm has the
+signed angle ($\sin\alpha$) and a complete but *case-dependent* frame
+$(\hat u, \hat y)$ that rotates with the inlet by a few degrees per
+case; the $\hat x$ arm has an unsigned angle and a nearly degenerate
+frame. The candidates left are therefore (a) the fixedness of the frame
+across cases, (b) the count of directions, and (c) an interaction the
+invariants do not expose one at a time.
+
+**Two controls launched to split (a) from (b) and (c)** (both seeds,
+same protocol, 2026-09-24 03:17 EDT, training in parallel on the laptop
+GPU, about 4.5 hours):
+
+- *E*, $\hat x$ and $\hat y$ without the inlet direction (K = 2; the
+  inlet speed stays as the scalar input). The fixed frame is present,
+  the angle of attack is absent from the global inputs. Bar: if E
+  reaches within 10% of the two-axis arm on pressure, the gain is the
+  fixed frame and the angle of attack is not the point (then the model
+  must be reading the angle from elsewhere, which would itself need
+  explaining); if E is at or above the frame-free arm, the pair's gain
+  needs the inlet and the fixed frame together.
+- *F*, inlet plus $\hat y$ plus a fixed in-plane direction at 45
+  degrees (K = 3). Three directions and a fixed complete frame, but not
+  the orthonormal $(\hat x, \hat y)$ pair. Bar: if F is within 10% of
+  the two-axis arm on pressure, orthogonality is irrelevant and the
+  count-plus-fixed-frame reading holds; if F sits with the one-axis
+  arms (fraction recovered below 0.5), the orthonormal pair as such
+  matters, which would point at how the direction-direction invariants
+  enter (@sec-isla-inputs-rank).
+
+Prediction: E near the frame-free arm (0.6) and F near the two-axis arm
+(0.6). Reducer: `frame_af_x_reduce_2026-09-24.py` with arms `framee`,
+`framef`. No accuracy claim at this scale (@sec-protocol).
