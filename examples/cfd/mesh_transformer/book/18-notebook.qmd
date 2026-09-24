@@ -26854,3 +26854,21 @@ hours). If the two-seed mean holds the bar, the reference-scale twin (R1,
 GeoTransolver-volume; frame variant of `isla_volume_airfrans_ref`) is
 staged for launch when the cluster is reachable, and the same frame
 instrument goes on the 35-wing rung as the wing anatomy preregistered.
+
+**Addendum, 2026-09-23 evening (staging of the two twins).** The
+reference-scale AirfRANS twin is staged as campaign group `fa` (two lanes,
+seeds 42 and 43, 100,000 queries, 800 training airfoils, `code_v4`; the
+frame variant of `isla_volume_airfrans_ref` with the constant laboratory
+frame set by `SetDomainGlobalField` in the dataset pipeline, as in the
+local rung). Its baseline is the internal-geometry pair of the same
+configuration without the frame. The wing lane needed one design decision.
+The HiLift pipeline augments training with a random rotation about the
+vertical axis, and the recipe inserts the augmentations right after the
+`CenterMesh` transform. A constant frame written after that point would
+stay fixed in the laboratory while the wing turns, and the frame would then
+be noise relative to the geometry. The frame is therefore written before
+`CenterMesh`, so the rotation (which transforms global vectors) carries it
+with the wing: the input is the body frame (chord and span axes), which is
+what the airfoil rung tests too, since AirfRANS has no rotation and body
+and laboratory frames coincide there. Both twins launch when the cluster
+is reachable and the two-seed local mean holds the bar.
