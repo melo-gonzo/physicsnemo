@@ -72,7 +72,7 @@ if HAS_TRITON:
 
 MAX_SLICES = 1024
 #: Per-point vectors the kernels are unrolled for: global directions plus token rank-1 vectors.
-MAX_DIRECTIONS = 3
+MAX_DIRECTIONS = 4
 
 
 def _next_pow2(x: int) -> int:
@@ -163,10 +163,11 @@ if HAS_TRITON:
         mask_n = offs_n < N
         mask_s = offs_s < S
         mask = mask_n[:, None] & mask_s[None, :]
-        # invariant / weight index of the second and third per-point vectors: a global
+        # invariant / weight index of the second, third and fourth per-point vectors: a global
         # direction sits right after the first (2 + j); a token vector after n.m (5 + K + j')
         IDX_E: tl.constexpr = 3 if K >= 2 else 6
         IDX_F: tl.constexpr = 4 if K >= 3 else 7
+        IDX_G: tl.constexpr = 5 if K >= 4 else 8
 
         r0, r1, r2 = _load3(r_ptr, pid_b * r_sb + offs_n * r_sn, mask_n)
         n0, n1, n2 = _load3(n_ptr, pid_b * n_sb + offs_n * n_sn, mask_n)
@@ -175,6 +176,8 @@ if HAS_TRITON:
             e0, e1, e2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + d_sk, mask_n)
         if T >= 3:
             f0, f1, f2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + 2 * d_sk, mask_n)
+        if T >= 4:
+            i0, i1, i2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + 3 * d_sk, mask_n)
         z0, z1, z2 = _load3(z_ptr, pid_b * z_sb + offs_s * z_ss, mask_s)
         m0, m1, m2 = _load3(m_ptr, pid_b * m_sb + offs_s * m_ss, mask_s)
 
@@ -193,6 +196,8 @@ if HAS_TRITON:
             g2b = h0 * e0[:, None] + h1 * e1[:, None] + h2 * e2[:, None]
         if T >= 3:
             g2c = h0 * f0[:, None] + h1 * f1[:, None] + h2 * f2[:, None]
+        if T >= 4:
+            g2d = h0 * i0[:, None] + h1 * i1[:, None] + h2 * i2[:, None]
         g3 = h0 * n0[:, None] + h1 * n1[:, None] + h2 * n2[:, None]
         g4 = h0 * m0[None, :] + h1 * m1[None, :] + h2 * m2[None, :]
         g5 = (
@@ -211,6 +216,8 @@ if HAS_TRITON:
             w2b = _rn(tl.load(w_ptr + IDX_E), LIN_BF16)
         if T >= 3:
             w2c = _rn(tl.load(w_ptr + IDX_F), LIN_BF16)
+        if T >= 4:
+            w2d = _rn(tl.load(w_ptr + IDX_G), LIN_BF16)
         bb = _rn(tl.load(b_ptr), LIN_BF16)
         q0 = _rn(g0, LIN_BF16)
         q1 = _rn(g1, LIN_BF16)
@@ -225,6 +232,9 @@ if HAS_TRITON:
         if T >= 3:
             q2c = _rn(g2c, LIN_BF16)
             bias = bias + q2c * w2c
+        if T >= 4:
+            q2d = _rn(g2d, LIN_BF16)
+            bias = bias + q2d * w2d
         if not RELATIVE:
             zmag = tl.maximum(_sqrt(z0 * z0 + z1 * z1 + z2 * z2, F64), eps)
             zh0 = _div(z0, zmag, F64)
@@ -273,6 +283,8 @@ if HAS_TRITON:
             tl.store(po + IDX_E, _rn(tl.sum(mq * q2b, axis=1), LIN_BF16).to(ot), mask=mask_n)
         if T >= 3:
             tl.store(po + IDX_F, _rn(tl.sum(mq * q2c, axis=1), LIN_BF16).to(ot), mask=mask_n)
+        if T >= 4:
+            tl.store(po + IDX_G, _rn(tl.sum(mq * q2d, axis=1), LIN_BF16).to(ot), mask=mask_n)
         tl.store(po + 2 + K, _rn(tl.sum(mq * q3, axis=1), LIN_BF16).to(ot), mask=mask_n)
         tl.store(po + 3 + K, _rn(tl.sum(mq * q4, axis=1), LIN_BF16).to(ot), mask=mask_n)
         tl.store(po + 4 + K, _rn(tl.sum(mq * q5, axis=1), LIN_BF16).to(ot), mask=mask_n)
@@ -345,10 +357,11 @@ if HAS_TRITON:
         mask_n = offs_n < N
         mask_s = offs_s < S
         mask = mask_n[:, None] & mask_s[None, :]
-        # invariant / weight index of the second and third per-point vectors: a global
+        # invariant / weight index of the second, third and fourth per-point vectors: a global
         # direction sits right after the first (2 + j); a token vector after n.m (5 + K + j')
         IDX_E: tl.constexpr = 3 if K >= 2 else 6
         IDX_F: tl.constexpr = 4 if K >= 3 else 7
+        IDX_G: tl.constexpr = 5 if K >= 4 else 8
 
         r0, r1, r2 = _load3(r_ptr, pid_b * r_sb + offs_n * r_sn, mask_n)
         n0, n1, n2 = _load3(n_ptr, pid_b * n_sb + offs_n * n_sn, mask_n)
@@ -357,6 +370,8 @@ if HAS_TRITON:
             e0, e1, e2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + d_sk, mask_n)
         if T >= 3:
             f0, f1, f2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + 2 * d_sk, mask_n)
+        if T >= 4:
+            i0, i1, i2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + 3 * d_sk, mask_n)
         z0, z1, z2 = _load3(z_ptr, pid_b * z_sb + offs_s * z_ss, mask_s)
         m0, m1, m2 = _load3(m_ptr, pid_b * m_sb + offs_s * m_ss, mask_s)
 
@@ -376,6 +391,8 @@ if HAS_TRITON:
             g2b = h0 * e0[:, None] + h1 * e1[:, None] + h2 * e2[:, None]
         if T >= 3:
             g2c = h0 * f0[:, None] + h1 * f1[:, None] + h2 * f2[:, None]
+        if T >= 4:
+            g2d = h0 * i0[:, None] + h1 * i1[:, None] + h2 * i2[:, None]
         g3 = h0 * n0[:, None] + h1 * n1[:, None] + h2 * n2[:, None]
         g4 = h0 * m0[None, :] + h1 * m1[None, :] + h2 * m2[None, :]
         g5 = (
@@ -393,6 +410,8 @@ if HAS_TRITON:
             w2b = _rn(tl.load(w_ptr + IDX_E), LIN_BF16)
         if T >= 3:
             w2c = _rn(tl.load(w_ptr + IDX_F), LIN_BF16)
+        if T >= 4:
+            w2d = _rn(tl.load(w_ptr + IDX_G), LIN_BF16)
         bb = _rn(tl.load(b_ptr), LIN_BF16)
         q0 = _rn(g0, LIN_BF16)
         q1 = _rn(g1, LIN_BF16)
@@ -407,6 +426,9 @@ if HAS_TRITON:
         if T >= 3:
             q2c = _rn(g2c, LIN_BF16)
             bias = bias + q2c * w2c
+        if T >= 4:
+            q2d = _rn(g2d, LIN_BF16)
+            bias = bias + q2d * w2d
         if not RELATIVE:
             zmag_raw = _sqrt(z0 * z0 + z1 * z1 + z2 * z2, F64)
             zmag = tl.maximum(zmag_raw, eps)
@@ -456,6 +478,8 @@ if HAS_TRITON:
             gp2b = tl.load(gp + IDX_E, mask=mask_n, other=0.0).to(bias.dtype)
         if T >= 3:
             gp2c = tl.load(gp + IDX_F, mask=mask_n, other=0.0).to(bias.dtype)
+        if T >= 4:
+            gp2d = tl.load(gp + IDX_G, mask=mask_n, other=0.0).to(bias.dtype)
         # pooled = sum_s mix_s geo_s  ->  d/dmix_s = sum_g gp_g geo_gs ; d/dgeo_gs = mix_s gp_g
         gmix = (
             gmix_in
@@ -470,6 +494,8 @@ if HAS_TRITON:
             gmix = gmix + gp2b[:, None] * q2b
         if T >= 3:
             gmix = gmix + gp2c[:, None] * q2c
+        if T >= 4:
+            gmix = gmix + gp2d[:, None] * q2d
         if not RELATIVE:
             gp6 = tl.load(gp + 5 + K, mask=mask_n, other=0.0).to(bias.dtype)
             gp7 = tl.load(gp + 6 + K, mask=mask_n, other=0.0).to(bias.dtype)
@@ -495,6 +521,8 @@ if HAS_TRITON:
             gg2b = gb * w2b + mix * gp2b[:, None]
         if T >= 3:
             gg2c = gb * w2c + mix * gp2c[:, None]
+        if T >= 4:
+            gg2d = gb * w2d + mix * gp2d[:, None]
         tile = pid_b * n_tiles + pid_n
         NG: tl.constexpr = (5 + T) if RELATIVE else (7 + K)
         gw = gw_part_ptr + tile * NG
@@ -505,6 +533,8 @@ if HAS_TRITON:
             tl.store(gw + IDX_E, tl.sum(tl.sum(gb * q2b, axis=1), axis=0))
         if T >= 3:
             tl.store(gw + IDX_F, tl.sum(tl.sum(gb * q2c, axis=1), axis=0))
+        if T >= 4:
+            tl.store(gw + IDX_G, tl.sum(tl.sum(gb * q2d, axis=1), axis=0))
         tl.store(gw + 2 + K, tl.sum(tl.sum(gb * q3, axis=1), axis=0))
         tl.store(gw + 3 + K, tl.sum(tl.sum(gb * q4, axis=1), axis=0))
         tl.store(gw + 4 + K, tl.sum(tl.sum(gb * q5, axis=1), axis=0))
@@ -522,6 +552,10 @@ if HAS_TRITON:
             v0 = v0 + gg2c * f0[:, None]
             v1 = v1 + gg2c * f1[:, None]
             v2 = v2 + gg2c * f2[:, None]
+        if T >= 4:
+            v0 = v0 + gg2d * i0[:, None]
+            v1 = v1 + gg2d * i1[:, None]
+            v2 = v2 + gg2d * i2[:, None]
         vdoth = v0 * h0 + v1 * h1 + v2 * h2
         # rel_hat = rel / dist: numerator -> v/dist ; denominator -> -(v.rel)/dist^2 = -vdoth/dist
         gdist = gg0 + _div(gg1, dist, F64) - _div(vdoth, dist, F64)
@@ -616,6 +650,10 @@ if HAS_TRITON:
             tl.store(gd + 2 * gd_sk + 0, tl.sum(tl.where(mask, gg2c * h0, 0.0), axis=1), mask=mask_n)
             tl.store(gd + 2 * gd_sk + 1, tl.sum(tl.where(mask, gg2c * h1, 0.0), axis=1), mask=mask_n)
             tl.store(gd + 2 * gd_sk + 2, tl.sum(tl.where(mask, gg2c * h2, 0.0), axis=1), mask=mask_n)
+        if T >= 4:
+            tl.store(gd + 3 * gd_sk + 0, tl.sum(tl.where(mask, gg2d * h0, 0.0), axis=1), mask=mask_n)
+            tl.store(gd + 3 * gd_sk + 1, tl.sum(tl.where(mask, gg2d * h1, 0.0), axis=1), mask=mask_n)
+            tl.store(gd + 3 * gd_sk + 2, tl.sum(tl.where(mask, gg2d * h2, 0.0), axis=1), mask=mask_n)
 
 
 def _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias, n_global):
