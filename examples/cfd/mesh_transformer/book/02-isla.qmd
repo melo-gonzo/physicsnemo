@@ -729,7 +729,7 @@ is a direction shared by every token (it is normalized and joins the head
 basis) and a rank-0 field is a parameter appended to every seed. The cost
 is one scalar per slice per extra vector in the geometry region. That is
 why the fused kernel takes the global directions and the rank-1 per-token
-inputs as one set of at most three vectors per token, and hands a model
+inputs as one set of at most four vectors per token, and hands a model
 with rank-2 per-token inputs, or more vectors than that, to the eager
 region (@sec-arch-switches). Planar datasets that store a
 boundary vector component by component (OLBC elasticity's prescribed

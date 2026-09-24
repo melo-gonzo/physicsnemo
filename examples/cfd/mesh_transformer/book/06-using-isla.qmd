@@ -368,10 +368,10 @@ print(": Training cost at the reporting protocol on the DrivAerML Surface task: 
 
 Two practical consequences:
 
-- **Leave `geo_kernel` at its default (`null`).** On CUDA with one to three
-  global directions, the model selects the fused kernel at the first
+- **Leave `geo_kernel` at its default (`null`).** On CUDA with one to four
+  per-point vectors, the model selects the fused kernel at the first
   forward pass and logs the choice. Off CUDA, with rank-2 per-token inputs,
-  or with more than three vectors in all, it falls back to the eager
+  or with more than four vectors in all, it falls back to the eager
   recompute region. Force `eager` only to reproduce the exact arithmetic
   path of a checkpoint trained on the eager region.
 - **On the eager path, leave `geo_checkpoint: true` unless you are short
