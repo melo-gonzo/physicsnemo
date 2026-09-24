@@ -1157,7 +1157,7 @@ def test_rms_distance_converges_on_koch_curve_where_total_measure_diverges():
 
 
 def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices():
-    """geo_kernel=None (auto) picks the fused Triton region only where it can run: on CUDA with one to three
+    """geo_kernel=None (auto) picks the fused Triton region only where it can run: on CUDA with one to four
     global directions and at most 1024 slices. On CPU it must resolve to eager at the first forward pass, cache the
     decision, and leave the outputs identical to an explicit eager model with the same weights."""
     torch.manual_seed(0)
@@ -1177,12 +1177,12 @@ def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices(
     assert all(torch.equal(ya[k], ye[k]) for k in ya.keys())
     assert all(b.geo_kernel == "eager" for b in auto.blocks)
     assert auto._geo_kernel_cache[1] == "eager"
-    # four global directions: auto silently stays eager (off CUDA it does anyway); an explicit fused request is
-    # refused at construction (the kernel is unrolled for one to three)
+    # five global directions: auto silently stays eager (off CUDA it does anyway); an explicit fused request is
+    # refused at construction (the kernel is unrolled for one to four)
     two = (
         ISLA(
             outputs=PV,
-            global_inputs={"g1": 1, "g2": 1, "g3": 1, "g4": 1},
+            global_inputs={"g1": 1, "g2": 1, "g3": 1, "g4": 1, "g5": 1},
             hidden=32,
             n_layers=2,
             n_slices=8,
@@ -1191,10 +1191,10 @@ def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices(
         .eval()
     )
     assert two.resolve_geo_kernel(pts) == "eager"
-    with pytest.raises(ValueError, match="one to three per-point vectors"):
+    with pytest.raises(ValueError, match="one to four per-point vectors"):
         ISLA(
             outputs=PV,
-            global_inputs={"g1": 1, "g2": 1, "g3": 1, "g4": 1},
+            global_inputs={"g1": 1, "g2": 1, "g3": 1, "g4": 1, "g5": 1},
             hidden=32,
             n_layers=2,
             n_slices=8,

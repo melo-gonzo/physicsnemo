@@ -772,7 +772,7 @@ class _SliceBlock(nn.Module):
             ### 10k tokens, 256 slices, hidden 192 (A35b memory derivation).
             if self.geo_kernel == "fused":
                 ### The fused kernel takes the global directions and the token's rank-1
-                ### vectors as one per-point vector set (at most three in all, no rank-2
+                ### vectors as one per-point vector set (at most four in all, no rank-2
                 ### inputs; enforced at construction / resolution).
                 bias, point_mix, pooled = _fused_geo_region()(
                     self.geo_logit,
@@ -1351,7 +1351,7 @@ class ISLA(Module):
         geo_kernel: ``None`` (default) selects automatically at the first
             forward pass: ``"fused"`` (exact Triton kernel for the per-layer
             geometry region) when the inputs are on CUDA, Triton is available,
-            there are one to three per-point vectors (global directions plus rank-1
+            there are one to four per-point vectors (global directions plus rank-1
             boundary or query inputs), at most 1024 slices and no rank-2 inputs,
             else ``"eager"`` (the
             PyTorch reference region). Pass ``"eager"`` or ``"fused"`` to force
@@ -1587,9 +1587,9 @@ class ISLA(Module):
                     "geo_kernel='fused' does not support rank-2 boundary or query inputs "
                     "(kernel follow-up); use geo_kernel='eager' or None"
                 )
-            if not 1 <= K + self.n_block_vecs <= 3 or K < 1:
+            if not 1 <= K + self.n_block_vecs <= 4 or K < 1:
                 raise ValueError(
-                    f"geo_kernel='fused' is written for one to three per-point vectors "
+                    f"geo_kernel='fused' is written for one to four per-point vectors "
                     f"(global directions plus rank-1 token inputs); got {K} global "
                     f"direction(s) and {self.n_block_vecs} token vector(s)"
                 )
@@ -1807,7 +1807,7 @@ class ISLA(Module):
 
         ``"eager"`` or ``"fused"`` when the constructor fixed it; under the
         default (auto) the fused kernel when ``points`` is on CUDA, Triton is
-        importable, the model has one to three per-point vectors (global directions
+        importable, the model has one to four per-point vectors (global directions
         plus rank-1 token inputs), at most 1024 slices and no rank-2 inputs, else the
         eager region. The
         decision is cached per device and logged once.

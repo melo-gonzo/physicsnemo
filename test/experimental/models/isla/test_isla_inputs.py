@@ -286,14 +286,14 @@ def test_field_validation_errors():
 
 
 def test_fused_kernel_refuses_tensor_inputs_and_auto_falls_back():
-    """The fused kernel takes rank-1 token inputs as per-point vectors (at most three
-    with the global directions); rank-2 inputs and more than three vectors are refused
+    """The fused kernel takes rank-1 token inputs as per-point vectors (at most four
+    with the global directions); rank-2 inputs and more than four vectors are refused
     and auto falls back to eager (off CUDA it does anyway)."""
     base = dict(outputs=OUT, global_inputs={"g": 1}, hidden=32, n_layers=1, n_slices=8)
     ISLA(boundary_inputs={"trac": 1}, geo_kernel="fused", **base)  # K = 1, P' = 1: accepted
-    ISLA(boundary_inputs={"trac": 1, "disp": 1}, geo_kernel="fused", **base)  # K + P' = 3
-    with pytest.raises(ValueError, match="one to three per-point vectors"):
-        ISLA(boundary_inputs={"trac": 1, "disp": 1, "u": 1}, geo_kernel="fused", **base)
+    ISLA(boundary_inputs={"trac": 1, "disp": 1, "u": 1}, geo_kernel="fused", **base)  # K + P' = 4
+    with pytest.raises(ValueError, match="one to four per-point vectors"):
+        ISLA(boundary_inputs={"trac": 1, "disp": 1, "u": 1, "v": 1}, geo_kernel="fused", **base)
     with pytest.raises(ValueError, match="does not support rank-2"):
         ISLA(query_inputs={"S": 2}, query_tokens=True, geo_kernel="fused", **base)
     ### rank-0 inputs never touch the geometry region: the fused kernel stays available

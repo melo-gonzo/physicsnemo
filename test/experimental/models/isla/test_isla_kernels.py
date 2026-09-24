@@ -105,7 +105,7 @@ def _assert_same(ref, opt, dtype, out_tol, grad_tol, n=700, batch=1):
 # --------------------------------------------------------------------------- fused region
 @cuda_only
 @pytest.mark.parametrize("dtype", [torch.float64, torch.float32])
-@pytest.mark.parametrize("K,P", [(1, 0), (2, 0), (3, 0), (1, 1), (1, 2), (2, 1)])
+@pytest.mark.parametrize("K,P", [(1, 0), (2, 0), (3, 0), (4, 0), (1, 1), (1, 2), (1, 3), (2, 1), (2, 2), (3, 1)])
 def test_fused_geo_region_matches_eager_region(dtype, K, P):
     """Region level: forward outputs (bias, mix, pooled) and every input gradient, for
     K global directions plus P per-token rank-1 vectors (the (5 + K + P)-invariant set
