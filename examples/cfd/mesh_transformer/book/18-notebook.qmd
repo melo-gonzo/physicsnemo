@@ -27502,3 +27502,40 @@ within 5% of the three-direction arms on pressure and velocity;
 worse by more than 5% (then too many directions cost something, which
 would bound the recommendation). Prediction: saturated (0.6), continues
 (0.3). Launched 2026-09-24 18:59 EDT, two seeds, about 2.4 hours.
+
+## 2026-09-24 — Verdict, FRAME-AF-K4: a fourth distinct in-plane direction adds nothing beyond the third (0.98x the two-axis arm on pressure); the gain saturates once the plane is overcomplete; the local ladder is complete at nine arms {#sec-nb-frame-af-k4-verdict}
+
+**Setting and question.** The FRAME-AF ladder (@sec-nb-frame-af-h-verdict)
+found that three distinct in-plane directions beside the inlet cut ISLA's
+AirfRANS interior pressure error by a quarter at exploration scale, and
+that two do not. With the fused kernel extended to four vectors
+(@sec-nb-frame-af-k4-prereg), the ninth arm asks whether a fourth
+distinct direction ($\hat x$, $\hat y$ and the 45-degree direction
+beside the inlet, K = 4) pays beyond the third.
+
+**What we saw** (float32 relative L2 on the 40 test airfoils, two seeds;
+data results/frame_af_xy_2026-09-24.json): K = 4 scores 0.2612 on
+pressure (per seed 0.275, 0.248), 0.1123 on velocity and
+0.2037 on eddy viscosity: 0.98x, 0.97x and 0.96x the two-axis
+K = 3 arm, and 0.74x, 0.86x, 0.79x the inlet-only arm. The three
+K = 3 arms with distinct directions sit at 0.264 to 0.268 on pressure;
+K = 4 sits at 0.261.
+
+**Saturated.** The preregistered *saturated* bar (within 5% of the
+three-direction arms on pressure and velocity) fires; the *continues* bar
+(10% better) does not. The 2-D picture is now complete: one extra
+direction beside the inlet gives nothing, two give the full quarter, three
+give the same quarter. **The gain is a step, not a slope, and the step
+sits at the first overcomplete description of the plane.** The
+prediction for 3-D sharpens accordingly: the step should sit at four
+directions (inlet plus three), with three directions (a complete 3-D
+basis) still on the floor and five adding nothing. The staged FRAME-3D
+lanes (K = 3 and K = 4 on DrivAerML Surface at R1 and 200,000 cells,
+campaign `fa` rows 2 to 5) test exactly that pair; if both hold, the
+class default for any dataset could become "the problem's condition
+vector plus a fixed overcomplete set of directions for its ambient
+dimension", chosen inside the model rather than supplied by the dataset
+yaml, since the ladder says the directions' identity does not matter.
+That design change waits on the 3-D result and on the reference-scale
+AirfRANS twin (rows 0 to 1). No accuracy claim at exploration scale
+(@sec-protocol).
