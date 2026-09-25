@@ -27613,3 +27613,55 @@ converted from the raw AirfRANS set, split `local_train240`; two arms,
 two seeds, launched 2026-09-25 01:32 EDT, about 4.7 hours) is the point
 closest to the twin and decides the interim reading: within 0.07 of 0.75
 keeps "constant factor"; above 0.85 reopens "shrinks".
+
+## 2026-09-25 — Verdict, FRAME-AF-SIZE: across 30, 60, 120 and 240 training airfoils the direction-count step on pressure is 0.76, 0.90, 0.75, 0.90 (no trend, seed ranges overlap at 240), on velocity a steady 0.89 to 0.93, on eddy viscosity growing with data; the reference-scale twin's 10% bar is a coin flip {#sec-nb-frame-af-size-verdict}
+
+**Setting.** The size ladder (@sec-nb-frame-af-size-prereg,
+@sec-nb-frame-af-size-interim) asks how the gain from two extra in-plane
+directions beside the inlet depends on training data, as the guide to
+what the 800-airfoil reference-scale twin (campaign `fa`) should show.
+The 240-airfoil rung, built from 120 further training cases converted
+from the raw AirfRANS set, completes it.
+
+**What we saw** (float32 relative L2 on the same 40 test airfoils, two
+seeds; 300 epochs at every size; data results/frame_af_size_2026-09-25.json):
+
+| training airfoils | inlet only, pressure (seeds) | inlet + $\hat x$ + $\hat y$, pressure (seeds) | K = 3 ÷ K = 1, pressure | velocity | eddy viscosity |
+|---:|---|---|---:|---:|---:|
+| 30 | 0.7783 (0.826, 0.730) | 0.5912 (0.559, 0.624) | **0.76** | 0.92 | 0.94 |
+| 60 | 0.4505 (0.465, 0.436) | 0.4064 (0.396, 0.417) | **0.90** | 0.93 | 0.92 |
+| 120 | 0.3546 (0.301, 0.408) | 0.2666 (0.248, 0.285) | **0.75** | 0.89 | 0.82 |
+| 240 | 0.2529 (0.242, 0.264) | 0.2276 (0.253, 0.202) | **0.90** | 0.90 | 0.78 |
+
+: The direction-count step against training-set size, exploration scale (192 x 12, 20,000 queries).
+
+**Reading.** On pressure the step alternates between a quarter (30, 120)
+and a tenth (60, 240) with no trend in training data, and at 240 the
+seed ranges overlap (inlet-only 0.242 and 0.264, with the frame 0.253
+and 0.202): **at this scale the pressure step is real on the pooled
+evidence of four rungs but its size is not pinned better than "10 to
+25%", and a single two-seed rung can land on either end.** On velocity
+the step is steady, 0.89 to 0.93 at every size. On eddy viscosity it
+grows with data, from 0.94 at 30 to 0.78 at 240, the one field where the
+extra directions help more the more the model has to fit. No
+preregistered bar fires (the "shrinks" bar needed monotone behavior; the
+240 rung's 0.90 sits above the interim's 0.85 threshold but the ladder
+is not monotone).
+
+**What this says about the twin.** The reference-scale AirfRANS twin's
+bar is a pressure gain of at least 10% against the frame-free reference
+pair. On this ladder that bar is a coin flip: the 60- and 240-airfoil
+rungs sit at it, the 30- and 120-airfoil rungs clear it. The twin should
+therefore be read with its seeds shown and with velocity and eddy
+viscosity beside pressure, and a result between 0.85 and 0.95 on pressure
+is the expected outcome rather than a failure of the mechanism. The
+mechanism ladder (@sec-nb-frame-af-h-verdict) is untouched by this: it
+was run at the 120-airfoil rung, where the step is largest, and asks
+which directions carry it, not how large it is.
+
+**Limits.** One dataset, exploration width, fixed epochs (the 30-airfoil
+models see one eighth of the optimizer steps of the 240-airfoil models),
+and two seeds per arm; the 60 and 240 rungs share nothing but their
+ratio. A third seed at 240 would settle whether 0.90 there is the value
+or the noise, and is not run: the twin at R1 with 800 airfoils is the
+better use of the next compute.
