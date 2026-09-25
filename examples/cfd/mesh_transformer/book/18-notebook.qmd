@@ -27531,11 +27531,14 @@ prediction for 3-D sharpens accordingly: the step should sit at four
 directions (inlet plus three), with three directions (a complete 3-D
 basis) still on the floor and five adding nothing. The staged FRAME-3D
 lanes (K = 3 and K = 4 on DrivAerML Surface at R1 and 200,000 cells,
-campaign `fa` rows 2 to 5) test exactly that pair; if both hold, the
-class default for any dataset could become "the problem's condition
-vector plus a fixed overcomplete set of directions for its ambient
-dimension", chosen inside the model rather than supplied by the dataset
-yaml, since the ladder says the directions' identity does not matter.
-That design change waits on the 3-D result and on the reference-scale
-AirfRANS twin (rows 0 to 1). No accuracy claim at exploration scale
+campaign `fa` rows 2 to 5) test exactly that pair. If both hold, the
+recipe rule becomes "supply the problem's condition vector plus fixed
+directions until the set is overcomplete for the ambient dimension" (two
+more in 2-D, three more in 3-D), and the directions' identity does not
+matter. The set has to come from the dataset, not from inside the model:
+a direction generated internally from fewer supplied true vectors than
+the ambient dimension is either in their span (no new projection) or a
+pseudovector (a cross product, which breaks the reflection contract; G's
+perpendicular is the 2-D instance). That rule waits on the 3-D result
+and on the reference-scale AirfRANS twin (rows 0 to 1). No accuracy claim at exploration scale
 (@sec-protocol).
