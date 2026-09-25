@@ -1,0 +1,134 @@
+{
+ "protocol": "FRAME-AF-SIZE reduction (2026-09-25, #sec-nb-frame-af-size-prereg): the direction-count step (inlet + x + y over inlet\nonly, K = 3 / K = 1) against training-set size on the local AirfRANS rung. Float32 per-case relative L2 on the 40 test\nairfoils from infer.py metrics.jsonl; per size the two-seed mean of each arm and the ratio; the 120 rung is the ladder's\nbase / frame pair. usage: python frame_af_size_reduce_2026-09-25.py <infer_root>; writes frame_af_size_2026-09-25.json.",
+ "sizes": {
+  "30": {
+   "n_cases": 40,
+   "per_run": {
+    "base_seed42": {
+     "pressure_l2": 0.8264142218977213,
+     "velocity_l2": 0.18499426692724227,
+     "nut_l2": 0.4071152236312628
+    },
+    "base_seed43": {
+     "pressure_l2": 0.7301586125046015,
+     "velocity_l2": 0.19012189283967018,
+     "nut_l2": 0.4317638365551829
+    },
+    "frame_seed42": {
+     "pressure_l2": 0.558673769980669,
+     "velocity_l2": 0.157394908182323,
+     "nut_l2": 0.3757800333201885
+    },
+    "frame_seed43": {
+     "pressure_l2": 0.6237533923238516,
+     "velocity_l2": 0.18765376266092063,
+     "nut_l2": 0.4090269673615694
+    }
+   },
+   "mean": {
+    "base": {
+     "pressure_l2": 0.7782864172011614,
+     "velocity_l2": 0.18755807988345624,
+     "nut_l2": 0.4194395300932229
+    },
+    "frame": {
+     "pressure_l2": 0.5912135811522603,
+     "velocity_l2": 0.17252433542162182,
+     "nut_l2": 0.39240350034087895
+    }
+   }
+  },
+  "60": {
+   "n_cases": 40,
+   "per_run": {
+    "base_seed42": {
+     "pressure_l2": 0.4648527208715677,
+     "velocity_l2": 0.14520553732290864,
+     "nut_l2": 0.3128793738782406
+    },
+    "base_seed43": {
+     "pressure_l2": 0.43605122715234756,
+     "velocity_l2": 0.14330371115356683,
+     "nut_l2": 0.2905926344916224
+    },
+    "frame_seed42": {
+     "pressure_l2": 0.39606243213638664,
+     "velocity_l2": 0.13478659680113197,
+     "nut_l2": 0.2797953072935343
+    },
+    "frame_seed43": {
+     "pressure_l2": 0.4166711736470461,
+     "velocity_l2": 0.13445604201406242,
+     "nut_l2": 0.27795857694000004
+    }
+   },
+   "mean": {
+    "base": {
+     "pressure_l2": 0.45045197401195763,
+     "velocity_l2": 0.14425462423823773,
+     "nut_l2": 0.3017360041849315
+    },
+    "frame": {
+     "pressure_l2": 0.40636680289171634,
+     "velocity_l2": 0.1346213194075972,
+     "nut_l2": 0.27887694211676717
+    }
+   }
+  },
+  "120": {
+   "n_cases": 40,
+   "per_run": {
+    "base_seed42": {
+     "pressure_l2": 0.30079437531530856,
+     "velocity_l2": 0.13026842344552278,
+     "nut_l2": 0.22666330058127643
+    },
+    "base_seed43": {
+     "pressure_l2": 0.40832084249705075,
+     "velocity_l2": 0.1302637778222561,
+     "nut_l2": 0.28860119804739953
+    },
+    "frame_seed42": {
+     "pressure_l2": 0.24827545788139105,
+     "velocity_l2": 0.11485804710537195,
+     "nut_l2": 0.22046803403645754
+    },
+    "frame_seed43": {
+     "pressure_l2": 0.2848828128539026,
+     "velocity_l2": 0.11676400639116764,
+     "nut_l2": 0.20393007108941674
+    }
+   },
+   "mean": {
+    "base": {
+     "pressure_l2": 0.35455760890617966,
+     "velocity_l2": 0.13026610063388944,
+     "nut_l2": 0.257632249314338
+    },
+    "frame": {
+     "pressure_l2": 0.2665791353676468,
+     "velocity_l2": 0.11581102674826979,
+     "nut_l2": 0.21219905256293714
+    }
+   }
+  }
+ },
+ "ratio_k3_over_k1": {
+  "30": {
+   "pressure_l2": 0.7596349725315212,
+   "velocity_l2": 0.9198448583437407,
+   "nut_l2": 0.935542485119762
+  },
+  "60": {
+   "pressure_l2": 0.9021312511351742,
+   "velocity_l2": 0.9332201315451001,
+   "nut_l2": 0.9242415165869492
+  },
+  "120": {
+   "pressure_l2": 0.7518640939339902,
+   "velocity_l2": 0.8890342628260182,
+   "nut_l2": 0.8236509719869439
+  }
+ },
+ "verdict_30_60_120": "between (reported as measured)"
+}

@@ -27575,3 +27575,41 @@ shrinks (0.35). Launched 2026-09-24 21:33 EDT, two arms in parallel on
 the laptop GPU, about 1.8 hours in all. A 240-airfoil rung follows if
 the conversion of 120 further training cases from the raw AirfRANS set
 finishes in time.
+
+## 2026-09-25 — Interim, FRAME-AF-SIZE (30, 60, 120 airfoils): the direction-count step is 0.76, 0.90 and 0.75 on pressure, not monotone in training data; neither the "shrinks" nor the "grows" bar fires; the 240-airfoil rung is training {#sec-nb-frame-af-size-interim}
+
+**Setting.** The preregistration (@sec-nb-frame-af-size-prereg) asked
+whether the gain from two extra in-plane directions beside the inlet (the
+direction-count step of the FRAME-AF ladder, 0.75 on pressure at 120
+training airfoils) shrinks, holds or grows with training data, as a guide
+to what the 800-airfoil reference-scale twin should show.
+
+**What we saw** (float32 relative L2 on the 40 test airfoils, two seeds;
+data results/frame_af_size_2026-09-25.json, reducer
+frame_af_size_reduce_2026-09-25.py):
+
+| training airfoils | inlet only, pressure (seeds) | inlet + $\hat x$ + $\hat y$, pressure (seeds) | K = 3 ÷ K = 1, pressure | velocity | eddy viscosity |
+|---:|---|---|---:|---:|---:|
+| 30 | 0.7783 (0.826, 0.730) | 0.5912 (0.559, 0.624) | **0.76** | 0.92 | 0.94 |
+| 60 | 0.4505 (0.465, 0.436) | 0.4064 (0.396, 0.417) | **0.90** | 0.93 | 0.92 |
+| 120 | 0.3546 (0.301, 0.408) | 0.2666 (0.248, 0.285) | **0.75** | 0.89 | 0.82 |
+
+: The direction-count step against training-set size, exploration scale (192 x 12, 20,000 queries, 300 epochs at every size).
+
+**Reading.** The step is present at every size (velocity 0.92, 0.93,
+0.89; eddy viscosity 0.94, 0.92, 0.82) but its pressure ratio is not
+monotone: 0.76 at 30, 0.90 at 60, 0.75 at 120. No preregistered bar
+fires. Two things are visible in the seeds. At 30 airfoils the inlet-only
+arm is very noisy (0.83 and 0.73) and both arms are poor in absolute
+terms (0.78 and 0.59), so the ratio there is a ratio of two badly
+trained models. At 60 the frame arm improves less than the inlet-only arm
+does between 30 and 60, and the ratio narrows. **The direction-count
+step is therefore not a small-data substitute that fades with data; at
+this scale it is a roughly constant factor with a noisy 60-case rung.**
+That is the reading the reference-scale twin needs: nothing here
+predicts that the step vanishes at 800 airfoils, and nothing here
+guarantees it either. The 240-airfoil rung (120 further training cases
+converted from the raw AirfRANS set, split `local_train240`; two arms,
+two seeds, launched 2026-09-25 01:32 EDT, about 4.7 hours) is the point
+closest to the twin and decides the interim reading: within 0.07 of 0.75
+keeps "constant factor"; above 0.85 reopens "shrinks".
