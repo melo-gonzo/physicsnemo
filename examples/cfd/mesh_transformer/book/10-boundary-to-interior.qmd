@@ -658,3 +658,32 @@ print(f"**One architecture covers the surface and the interior: ISLA with query 
       "results/ratevol_reduction_2026-09-20.json; results/ref_surface_2026-09-23.json; results/airfrans_reduction_2026-09-22.json; "
       "results/solids_lug_2026-09-22.json; results/olbc_2026-09-22.json.")
 ```
+
+```{python}
+#| label: fig-frame-af-ladder
+#| fig-cap: >
+#|   The direction-count ladder on the AirfRANS interior task at exploration scale (ISLA 192 wide, 12 layers, 120 training airfoils,
+#|   20,000 queries; float32 relative L2 of pressure on 40 test airfoils; two seeds as dots, bar = seed mean). Every arm has the
+#|   inlet direction as a global vector except E. K counts the global directions. Solid bars: three or more distinct in-plane
+#|   directions. Hatched bars: one or two. How to read this: the step sits between two and three distinct directions and does not
+#|   move with a fourth; the identity of the directions (x, y, a 45-degree direction, the inlet's own perpendicular) does not
+#|   matter, and an exact copy (H) recovers a third of the step. A mechanism reading only; no accuracy claim at this scale.
+#|   Data: results/frame_af_xy_2026-09-24.json.
+#| fig-alt: Bar chart of pressure relative L2 for nine ISLA arms with different sets of global directions; the K = 3 and K = 4 arms with distinct directions sit at 0.26, the K = 1 and K = 2 arms at 0.33 to 0.36, the no-inlet arm at 0.91.
+LAD = J("frame_af_xy_2026-09-24.json")
+ARMS = [("base", "inlet only\n(K = 1)", False), ("framex", "inlet + x\n(K = 2)", False), ("framey", "inlet + y\n(K = 2)", False),
+        ("frameh", "inlet + y + (−y)\n(K = 3, copy)", False), ("frame", "inlet + x + y\n(K = 3)", True), ("framef", "inlet + y + 45°\n(K = 3)", True),
+        ("frameg", "inlet + ⊥ + y\n(K = 3)", True), ("framek4", "inlet + x + y + 45°\n(K = 4)", True), ("framee", "x + y, no inlet\n(K = 2)", False)]
+fig, ax = plt.subplots(figsize=(8.4, 3.9))
+for i, (key, lab, distinct) in enumerate(ARMS):
+    m = LAD["seed_means"][key]["pressure_l2"]
+    seeds = [LAD["per_run"][f"{key}_seed{s}"]["pressure_l2"] for s in LAD["seeds"]]
+    ax.bar(i, m, width=0.64, color=BLUE if distinct else BLUE_PALE, edgecolor=BLUE, hatch="" if distinct else "///", zorder=3)
+    ax.plot([i] * len(seeds), seeds, ls="none", marker="o", ms=4, color=INK, zorder=5)
+    ax.text(i, m + 0.012, f"{m:.2f}", ha="center", va="bottom", fontsize=8.5, color=INK, zorder=6)
+ax.axhline(LAD["seed_means"]["base"]["pressure_l2"], color=BASELINE, lw=1, zorder=2)
+ax.set_xticks(range(len(ARMS))); ax.set_xticklabels([a[1] for a in ARMS], fontsize=8)
+ax.set_ylabel("interior pressure\nrelative L2 [–]", rotation=0, ha="right", va="center"); ax.set_ylim(0, 1.0)
+ax.set_xlabel("global directions given to ISLA (exploration-scale rung, 120 training airfoils)")
+plt.tight_layout(); plt.show()
+```
