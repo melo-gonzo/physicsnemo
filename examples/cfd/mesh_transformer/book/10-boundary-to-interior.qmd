@@ -671,10 +671,10 @@ print(f"**One architecture covers the surface and the interior: ISLA with query 
 #|   Data: results/frame_af_xy_2026-09-24.json.
 #| fig-alt: Bar chart of pressure relative L2 for nine ISLA arms with different sets of global directions; the K = 3 and K = 4 arms with distinct directions sit at 0.26, the K = 1 and K = 2 arms at 0.33 to 0.36, the no-inlet arm at 0.91.
 LAD = J("frame_af_xy_2026-09-24.json")
-ARMS = [("base", "inlet only\n(K = 1)", False), ("framex", "inlet + x\n(K = 2)", False), ("framey", "inlet + y\n(K = 2)", False),
-        ("frameh", "inlet + y + (−y)\n(K = 3, copy)", False), ("frame", "inlet + x + y\n(K = 3)", True), ("framef", "inlet + y + 45°\n(K = 3)", True),
-        ("frameg", "inlet + ⊥ + y\n(K = 3)", True), ("framek4", "inlet + x + y + 45°\n(K = 4)", True), ("framee", "x + y, no inlet\n(K = 2)", False)]
-fig, ax = plt.subplots(figsize=(8.4, 3.9))
+ARMS = [("base", "inlet\n(K = 1)", False), ("framex", "inlet, x\n(K = 2)", False), ("framey", "inlet, y\n(K = 2)", False),
+        ("frameh", "inlet, y, −y\n(K = 3, copy)", False), ("frame", "inlet, x, y\n(K = 3)", True), ("framef", "inlet, y, 45°\n(K = 3)", True),
+        ("frameg", "inlet, ⊥, y\n(K = 3)", True), ("framek4", "inlet, x, y, 45°\n(K = 4)", True), ("framee", "x, y\n(no inlet)", False)]
+fig, ax = plt.subplots(figsize=(9.2, 4.2))
 for i, (key, lab, distinct) in enumerate(ARMS):
     m = LAD["seed_means"][key]["pressure_l2"]
     seeds = [LAD["per_run"][f"{key}_seed{s}"]["pressure_l2"] for s in LAD["seeds"]]
@@ -682,7 +682,7 @@ for i, (key, lab, distinct) in enumerate(ARMS):
     ax.plot([i] * len(seeds), seeds, ls="none", marker="o", ms=4, color=INK, zorder=5)
     ax.text(i, m + 0.012, f"{m:.2f}", ha="center", va="bottom", fontsize=8.5, color=INK, zorder=6)
 ax.axhline(LAD["seed_means"]["base"]["pressure_l2"], color=BASELINE, lw=1, zorder=2)
-ax.set_xticks(range(len(ARMS))); ax.set_xticklabels([a[1] for a in ARMS], fontsize=8)
+ax.set_xticks(range(len(ARMS))); ax.set_xticklabels([a[1] for a in ARMS], fontsize=8.5)
 ax.set_ylabel("interior pressure\nrelative L2 [–]", rotation=0, ha="right", va="center"); ax.set_ylim(0, 1.0)
 ax.set_xlabel("global directions given to ISLA (exploration-scale rung, 120 training airfoils)")
 plt.tight_layout(); plt.show()
