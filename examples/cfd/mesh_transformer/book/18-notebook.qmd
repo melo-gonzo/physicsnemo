@@ -27542,3 +27542,36 @@ pseudovector (a cross product, which breaks the reflection contract; G's
 perpendicular is the 2-D instance). That rule waits on the 3-D result
 and on the reference-scale AirfRANS twin (rows 0 to 1). No accuracy claim at exploration scale
 (@sec-protocol).
+
+## 2026-09-24 — Preregistration, FRAME-AF-SIZE: does the direction-count step shrink or grow with training data? Inlet-only against inlet + x + y at 30, 60 and 120 training airfoils {#sec-nb-frame-af-size-prereg}
+
+**Question.** The nine-arm ladder (@sec-nb-frame-af-k4-verdict) fixed
+the direction-count step at 120 training airfoils and exploration
+scale. Before the reference-scale twin (800 airfoils, R1) reports, the
+cheapest informative question is how the step depends on training data.
+Two readings: if the extra directions act as an inductive bias that
+substitutes for data, the step is largest with few cases and shrinks as
+data grows, and the 800-airfoil twin may show little; if they change
+what the model can represent at convergence, the step holds or grows
+with data.
+
+**Arms.** Inlet only (K = 1) and inlet + $\hat x$ + $\hat y$ (K = 3), at
+30 and 60 training airfoils drawn as fixed random subsets of the 120
+(`local_train30` $\subset$ `local_train60` $\subset$ `local_train` in the
+local manifest; angle-of-attack ranges $-3.4$ to $13.7$ degrees in both
+subsets, $-4.8$ to $14.5$ in the full 120), seeds 42 and 43, the same 40
+test airfoils, 300 epochs, learning rate 1e-3, 20,000 queries, fused
+kernel. Fixed epochs means fewer optimizer steps at the small sizes, as
+in the book's training-case ladders. The 120-case rung is the ladder's
+inlet-only and two-axis arms.
+
+**Quantity and bars.** The pressure ratio K = 3 ÷ K = 1 at each size
+(two-seed means), against 0.75 at 120. *Shrinks with data*: the ratio at
+30 is at least 0.10 below the ratio at 120 (a larger gain with less
+data) and monotone across 30, 60, 120. *Holds*: every ratio within 0.07
+of 0.75. *Grows with data*: the ratio at 30 is at least 0.10 above 0.75
+and monotone. Otherwise reported as measured. Prediction: holds (0.5),
+shrinks (0.35). Launched 2026-09-24 21:33 EDT, two arms in parallel on
+the laptop GPU, about 1.8 hours in all. A 240-airfoil rung follows if
+the conversion of 120 further training cases from the raw AirfRANS set
+finishes in time.
