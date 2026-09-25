@@ -596,8 +596,20 @@ def _relational_invariants(
     return torch.cat(feats, dim=-1)
 
 
+def _geo_bias_head(n_geo: int, geo_bias: str) -> nn.Module:
+    """The map from a pair's invariants to its routing-bias scalar. ``"linear"`` (the
+    class default, the fused kernel's arithmetic) is one Linear(n_geo, 1); ``"mlp"``
+    (GEO-BIAS study, 2026-09-25) is Linear(n_geo, 16) -> GELU -> Linear(16, 1), a
+    nonlinear function of the same invariants, eager region only."""
+    if geo_bias == "linear":
+        return nn.Linear(n_geo, 1)
+    if geo_bias == "mlp":
+        return nn.Sequential(nn.Linear(n_geo, 16), nn.GELU(), nn.Linear(16, 1))
+    raise ValueError(f"geo_bias must be 'linear' or 'mlp', got {geo_bias!r}")
+
+
 def _geo_region(
-    lin: nn.Linear,
+    lin: nn.Module,
     logits_pre,
     r,
     n_hat,
@@ -694,6 +706,7 @@ class _SliceBlock(nn.Module):
         n_block_tens: int = 0,
         routing_norm: str = "cosine",
         routing_temperature: float = 10.0,
+        geo_bias: str = "linear",
     ) -> None:
         super().__init__()
         self.use_relational_geo = use_relational_geo
@@ -723,7 +736,7 @@ class _SliceBlock(nn.Module):
         ### crash DDP (A35b nogeo, 2026-09-05).
         self.geo_width = hidden // 2
         if use_relational_geo:
-            self.geo_logit = nn.Linear(self.n_geo, 1)
+            self.geo_logit = _geo_bias_head(self.n_geo, geo_bias)
             self.geo_feat = nn.Linear(self.n_geo, self.geo_width)
         self.slice_mlp = nn.Sequential(
             nn.LayerNorm(hidden),
@@ -849,6 +862,7 @@ class _ReadBlock(nn.Module):
         n_block_tens: int = 0,
         routing_norm: str = "cosine",
         routing_temperature: float = 10.0,
+        geo_bias: str = "linear",
     ) -> None:
         super().__init__()
         self.geo_checkpoint = bool(geo_checkpoint)
@@ -858,7 +872,7 @@ class _ReadBlock(nn.Module):
         self.assign = _RoutingLogits(
             hidden, n_slices, routing_norm, routing_temperature
         )
-        self.geo_logit = nn.Linear(n_geo, 1)
+        self.geo_logit = _geo_bias_head(n_geo, geo_bias)
         self.geo_feat = nn.Linear(n_geo, hidden // 2)
         self.broadcast = nn.Linear(2 * hidden + hidden // 2, hidden)
         self.local_read = nn.Linear(2 * hidden, hidden)
@@ -1356,6 +1370,12 @@ class ISLA(Module):
             else ``"eager"`` (the
             PyTorch reference region). Pass ``"eager"`` or ``"fused"`` to force
             one; ``"fused"`` raises when its constraints cannot be met.
+        geo_bias: ``"linear"`` (default): the per-pair routing bias is one linear map of the
+            geometric invariants (the fused kernel's arithmetic). ``"mlp"``: a two-layer
+            map (16 hidden units, GELU) of the same invariants; eager region only, so
+            ``geo_kernel`` resolves to ``"eager"`` and ``"fused"`` raises. A study option
+            (GEO-BIAS, 2026-09-25): does a nonlinear bias make extra global directions
+            unnecessary?
         routing_norm: ``"cosine"`` (default): each block's point-to-slice
             routing logits are ``routing_temperature`` times the cosine between
             the normalized token state and a learned prototype per slice, which
@@ -1453,9 +1473,15 @@ class ISLA(Module):
         routing_temperature: float = 10.0,
         interior_geometry: str = "nearest_boundary",
         interior_nn_chunk: int | None = None,
+        geo_bias: str = "linear",
         eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
+        ### GEO-BIAS (2026-09-25): the pair invariants -> routing-bias map; "mlp" is the
+        ### eager-only nonlinear variant of the direction-count study (#sec-nb-geo-bias-prereg).
+        if geo_bias not in ("linear", "mlp"):
+            raise ValueError(f"geo_bias must be 'linear' or 'mlp', got {geo_bias!r}")
+        self.geo_bias = geo_bias
         if interior_geometry not in ("nearest_boundary", "provided"):
             raise ValueError(
                 "interior_geometry must be 'nearest_boundary' or 'provided', "
@@ -1582,6 +1608,11 @@ class ISLA(Module):
         self.n_block_vecs = self.bin.n_block_vecs + self.qin.n_block_vecs
         self.n_block_tens = self.bin.n_block_tens + self.qin.n_block_tens
         if geo_kernel == "fused":
+            if geo_bias != "linear":
+                raise ValueError(
+                    "geo_kernel='fused' implements the linear routing bias only; use geo_kernel='eager' "
+                    "or None with geo_bias='mlp'"
+                )
             if self.n_block_tens:
                 raise ValueError(
                     "geo_kernel='fused' does not support rank-2 boundary or query inputs "
@@ -1620,6 +1651,7 @@ class ISLA(Module):
                 n_block_tens=self.n_block_tens,
                 routing_norm=routing_norm,
                 routing_temperature=routing_temperature,
+                geo_bias=geo_bias,
             )
             for _ in range(n_layers)
         )
@@ -1649,6 +1681,7 @@ class ISLA(Module):
                     n_block_tens=self.n_block_tens,
                     routing_norm=routing_norm,
                     routing_temperature=routing_temperature,
+                    geo_bias=geo_bias,
                 )
                 for _ in range(n_decoder_layers)
             )
@@ -1828,6 +1861,7 @@ class ISLA(Module):
             and HAS_TRITON
             and self.n_global_vectors >= 1
             and self.n_global_vectors + self.n_block_vecs <= MAX_DIRECTIONS
+            and self.geo_bias == "linear"
             and self.n_slices <= MAX_SLICES
             and not self.n_block_tens
         )

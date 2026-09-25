@@ -27665,3 +27665,52 @@ and two seeds per arm; the 60 and 240 rungs share nothing but their
 ratio. A third seed at 240 would settle whether 0.90 there is the value
 or the noise, and is not run: the twin at R1 with 800 airfoils is the
 better use of the next compute.
+
+## 2026-09-25 — Preregistration, GEO-BIAS: is the linearity of the routing bias in the invariants what the extra directions repair? Inlet-only ISLA with a two-layer MLP bias, two seeds, laptop GPU {#sec-nb-geo-bias-prereg}
+
+**Setting.** The direction-count ladder (@sec-nb-frame-af-h-verdict)
+found that ISLA's interior pressure error on the AirfRANS rung drops a
+quarter once two more distinct in-plane directions join the inlet as
+global vectors, that the directions' identity does not matter, and that
+the inlet-plus-one-axis arms already carry complete geometric
+information. The gap is representational. Reading the class again
+(@sec-nb-frame-af-derivation) points at one specific place: in every
+slice layer the per-pair routing bias is *one linear map* of the pair's
+invariants, `geo_logit = nn.Linear(n_geo, 1)`, and the fused kernel is
+built around that linearity. With the inlet alone, the bias can be
+affine in distance, log-distance, the inlet component of the relative
+direction and the two normal cosines. With two more directions it can
+be affine in the *full* relative direction, in any orientation, so a
+slice can carve the plane along any line rather than only along the
+flow. That is a hypothesis about a bottleneck in the architecture, not
+about the inputs.
+
+**Change.** A constructor option `geo_bias` on `physicsnemo.experimental.models.ISLA`:
+`"linear"` (the default, unchanged) or `"mlp"`, a two-layer map
+(16 hidden units, GELU) of the same invariants to the routing bias, in
+every slice and query block. It consumes invariants only, so every
+contract is untouched (tested: rotation equivariance, translation
+invariance). It runs on the eager region; the fused kernel implements
+the linear bias only and refuses the option, and the auto-resolution
+falls back to eager. Parameter cost: 16 (n_geo + 2) + 1 per block, about
+160 parameters per layer at K = 1.
+
+**Arm.** The inlet-only configuration (K = 1) of the ladder with
+`geo_bias: mlp` and `geo_kernel: eager`, same 120-airfoil subset,
+protocol and seeds (42, 43), float32 relative L2 on the 40 test
+airfoils. The eager region runs about nine times slower per step on the
+laptop GPU than the fused kernel; the two seeds run in parallel (about
+14 hours). Comparators: the inlet-only linear arm (pressure 0.355,
+fused; the eager twin of a K = 2 arm reproduced its fused result within
+4%, @sec-nb-frame-af-y-eager-verdict) and the two-axis K = 3 arm
+(0.267).
+
+**Bars.** Fraction of the two-axis pressure log-gain recovered by the
+MLP bias at K = 1, $f = \ln(e_{K=1} / e_\text{mlp}) / \ln(e_{K=1} / e_{K=3})$.
+*Linearity is the bottleneck*: $f \geq 0.8$ on pressure and velocity
+(then the class default should move toward the nonlinear bias and the
+fused kernel needs a nonlinear variant). *Part of it*: $0.4 \leq f < 0.8$.
+*Not the bottleneck*: $f < 0.4$ (the extra projections do something a
+nonlinear map of fewer projections cannot; the mechanism moves to the
+seed features or the head basis). Prediction: part of it (0.45),
+bottleneck (0.3), not (0.25). Launched 2026-09-25 12:05 EDT.
