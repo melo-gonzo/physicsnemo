@@ -426,5 +426,203 @@
   "fields": {
    "u": 0.059777256687084446
   }
+ },
+ "tn_elasticity_isla_r1_tensor_n2048_seed42": {
+  "group": "tn",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "displacement": 0.8077990029123612,
+   "sig11": 0.9808543680701405,
+   "sig12": 0.8918052827939391,
+   "sig22": 0.7809610905824229,
+   "stress": 0.8774532407987863
+  }
+ },
+ "om_poisson_isla_r1_ext_n2048_seed42": {
+  "group": "om",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "u": 0.1250073196424637
+  }
+ },
+ "om_poisson_isla_r1_s1024_n2048_seed42": {
+  "group": "om",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "u": 0.36641840724041685
+  }
+ },
+ "v2_elasticity_isla_r1_ext_n2048_seed42": {
+  "group": "v2",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "displacement": 0.2721061719203135,
+   "sig11": 0.3143600666662678,
+   "sig12": 0.34183348540682346,
+   "sig22": 0.3370844544842839,
+   "stress": 0.32286793389357626
+  }
+ },
+ "v2_elasticity_isla_r1_ext_n2048_seed43": {
+  "group": "v2",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "displacement": 0.27302511436573695,
+   "sig11": 0.3052758262201678,
+   "sig12": 0.3332538847171236,
+   "sig22": 0.324803941330174,
+   "stress": 0.3131695821066387
+  }
+ },
+ "v2_elasticity_isla_r1_rankio_n2048_seed42": {
+  "group": "v2",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "displacement": 0.20051099493866786,
+   "sig11": 0.2983340971986763,
+   "sig12": 0.3034818008018192,
+   "sig22": 0.3094076232810039,
+   "stress": 0.2965875621885061
+  }
+ },
+ "v2_elasticity_isla_r1_rankio_n2048_seed43": {
+  "group": "v2",
+  "n_cases": 256,
+  "epoch": 500,
+  "fields": {
+   "displacement": 0.24094451509881765,
+   "sig11": 0.3395140135544352,
+   "sig12": 0.3540970472386107,
+   "sig22": 0.3428693296154961,
+   "stress": 0.3373161190538667
+  }
+ },
+ "v2_t2d_isla_r1_tensor_frame2_n400_seed42": {
+  "group": "v2",
+  "n_cases": 100,
+  "epoch": 500,
+  "fields": {
+   "displacement": 0.008477257881313562,
+   "q": 1.1647219917923213,
+   "sig11": 0.015854720156639815,
+   "sig12": 0.013270054389722645,
+   "sig22": 0.010436803498305381,
+   "stress": 0.012521834210492671
+  }
+ },
+ "v2_t2d_isla_r1_tensor_frame2_n400_seed43": {
+  "group": "v2",
+  "n_cases": 100,
+  "epoch": 500,
+  "fields": {
+   "displacement": 0.008525049728341401,
+   "q": 0.6096547888964414,
+   "sig11": 0.012583496491424739,
+   "sig12": 0.012910451064817608,
+   "sig22": 0.010150553537532686,
+   "stress": 0.01150285754352808
+  }
+ },
+ "rb_hl_isla_geometry_scarce_seed42": {
+  "group": "rb",
+  "n_cases": 180,
+  "epoch": 500,
+  "fields": {
+   "density": 0.11330284844670031,
+   "pressure": 0.09306346892068783,
+   "tau_wall": 0.17243269855777424,
+   "temperature": 0.09812676614771286,
+   "velocity": 0.10915152635425329
+  }
+ },
+ "rb_hl_isla_geometry_scarce_seed43": {
+  "group": "rb",
+  "n_cases": 180,
+  "epoch": 500,
+  "fields": {
+   "density": 0.10432360416485204,
+   "pressure": 0.08517378256138829,
+   "tau_wall": 0.16267122642861473,
+   "temperature": 0.09179031714383099,
+   "velocity": 0.10370161291211843
+  }
+ },
+ "rb_hl_isla_geometry_super_scarce_seed42": {
+  "group": "rb",
+  "n_cases": 180,
+  "epoch": 500,
+  "fields": {
+   "density": 0.3270353476206462,
+   "pressure": 0.2787694183488687,
+   "tau_wall": 0.36153929688864284,
+   "temperature": 0.22320671363009348,
+   "velocity": 0.2429888665262196
+  }
+ },
+ "rb_hl_isla_geometry_super_scarce_seed43": {
+  "group": "rb",
+  "n_cases": 180,
+  "epoch": 500,
+  "fields": {
+   "density": 0.30600314864681827,
+   "pressure": 0.2614242612901661,
+   "tau_wall": 0.36037261560559275,
+   "temperature": 0.21855719797313214,
+   "velocity": 0.2439699488795466
+  }
+ },
+ "rb_hl_isla_single_aoa_12_seed42": {
+  "group": "rb",
+  "n_cases": 18,
+  "epoch": 500,
+  "fields": {
+   "density": 0.029973633483880095,
+   "pressure": 0.02384400124558144,
+   "tau_wall": 0.07715731859207153,
+   "temperature": 0.04595752163893647,
+   "velocity": 0.04862100610302554
+  }
+ },
+ "rb_hl_isla_single_aoa_12_seed43": {
+  "group": "rb",
+  "n_cases": 18,
+  "epoch": 500,
+  "fields": {
+   "density": 0.028618188988831308,
+   "pressure": 0.02286693774577644,
+   "tau_wall": 0.07526135258376598,
+   "temperature": 0.044513001727561154,
+   "velocity": 0.0469186223215527
+  }
+ },
+ "rb_hl_isla_super_scarce_area_seed42": {
+  "group": "rb",
+  "n_cases": 183,
+  "epoch": 500,
+  "fields": {
+   "density": 0.19598743425366658,
+   "pressure": 0.15059551427680287,
+   "tau_wall": 0.262030462179679,
+   "temperature": 0.13047570503148875,
+   "velocity": 0.17042525141128426
+  }
+ },
+ "rb_hl_isla_super_scarce_area_seed43": {
+  "group": "rb",
+  "n_cases": 184,
+  "epoch": 500,
+  "fields": {
+   "density": 0.19022905741534804,
+   "pressure": 0.14584830239334184,
+   "tau_wall": 0.25315663493845775,
+   "temperature": 0.12788510271955444,
+   "velocity": 0.1666856017773566
+  }
  }
 }

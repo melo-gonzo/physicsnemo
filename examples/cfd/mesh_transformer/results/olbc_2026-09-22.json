@@ -365,6 +365,58 @@
     }
    }
   },
+  "ol_elasticity_isla_r2_n8448_seed42": {
+   "set": "elasticity",
+   "arm": "isla_r2",
+   "n": 8448,
+   "seed": 42,
+   "n_cases": 256,
+   "epoch": 120,
+   "fields": {
+    "displacement": {
+     "mean": 0.9999573323875666,
+     "median": 0.9999841153621674
+    },
+    "sig11": {
+     "mean": 0.999962286092341,
+     "median": 0.9999480545520782
+    },
+    "sig12": {
+     "mean": 1.0000075376592577,
+     "median": 1.0000032186508179
+    },
+    "sig22": {
+     "mean": 0.9999659894965589,
+     "median": 0.9999653697013855
+    }
+   }
+  },
+  "ol_elasticity_isla_r2_n8448_seed43": {
+   "set": "elasticity",
+   "arm": "isla_r2",
+   "n": 8448,
+   "seed": 43,
+   "n_cases": 12288,
+   "epoch": 120,
+   "fields": {
+    "displacement": {
+     "mean": NaN,
+     "median": NaN
+    },
+    "sig11": {
+     "mean": NaN,
+     "median": NaN
+    },
+    "sig12": {
+     "mean": NaN,
+     "median": NaN
+    },
+    "sig22": {
+     "mean": NaN,
+     "median": NaN
+    }
+   }
+  },
   "ol_poisson_gt256_n8448_seed42": {
    "set": "poisson",
    "arm": "gt256",
@@ -558,6 +610,34 @@
     "u": {
      "mean": 0.06642188581463415,
      "median": 0.06115243583917618
+    }
+   }
+  },
+  "ol_poisson_isla_r2_n8448_seed42": {
+   "set": "poisson",
+   "arm": "isla_r2",
+   "n": 8448,
+   "seed": 42,
+   "n_cases": 317,
+   "epoch": 120,
+   "fields": {
+    "u": {
+     "mean": 1.0002114864929994,
+     "median": 1.000658392906189
+    }
+   }
+  },
+  "ol_poisson_isla_r2_n8448_seed43": {
+   "set": "poisson",
+   "arm": "isla_r2",
+   "n": 8448,
+   "seed": 43,
+   "n_cases": 256,
+   "epoch": 120,
+   "fields": {
+    "u": {
+     "mean": 1.0002895831130445,
+     "median": 1.000819444656372
     }
    }
   }
@@ -815,6 +895,42 @@
     }
    }
   },
+  "elasticity|isla_r2|n8448": {
+   "lanes": [
+    "ol_elasticity_isla_r2_n8448_seed42",
+    "ol_elasticity_isla_r2_n8448_seed43"
+   ],
+   "fields": {
+    "displacement": {
+     "mean": NaN,
+     "seeds": [
+      0.9999573323875666,
+      NaN
+     ]
+    },
+    "sig11": {
+     "mean": NaN,
+     "seeds": [
+      0.999962286092341,
+      NaN
+     ]
+    },
+    "sig12": {
+     "mean": NaN,
+     "seeds": [
+      1.0000075376592577,
+      NaN
+     ]
+    },
+    "sig22": {
+     "mean": NaN,
+     "seeds": [
+      0.9999659894965589,
+      NaN
+     ]
+    }
+   }
+  },
   "poisson|gt256|n8448": {
    "lanes": [
     "ol_poisson_gt256_n8448_seed42",
@@ -919,6 +1035,21 @@
      ]
     }
    }
+  },
+  "poisson|isla_r2|n8448": {
+   "lanes": [
+    "ol_poisson_isla_r2_n8448_seed42",
+    "ol_poisson_isla_r2_n8448_seed43"
+   ],
+   "fields": {
+    "u": {
+     "mean": 1.000250534803022,
+     "seeds": [
+      1.0002114864929994,
+      1.0002895831130445
+     ]
+    }
+   }
   }
  },
  "gt512_over_isla": {
@@ -940,6 +1071,12 @@
    "sig12": 0.4512357254152331,
    "sig22": 0.4775478175928341
   },
+  "elasticity|isla_r2|n8448": {
+   "displacement": NaN,
+   "sig11": NaN,
+   "sig12": NaN,
+   "sig22": NaN
+  },
   "poisson|isla_r1|n2048": {
    "u": 0.24840995695133247
   },
@@ -948,6 +1085,9 @@
   },
   "poisson|isla_r1|n8448": {
    "u": 0.35022328949311266
+  },
+  "poisson|isla_r2|n8448": {
+   "u": 0.028925573477888603
   }
  },
  "learning_curve_exponents": {
