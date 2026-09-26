@@ -1,0 +1,64 @@
+{
+ "protocol": "GEO-BIAS (2026-09-26, #sec-nb-geo-bias-prereg): inlet-only ISLA 192x12 with geo_bias=mlp (eager region) on the 160-airfoil local rung, two seeds, float32 per-case relative L2 on 40 test airfoils, cases matched by name (the manifest index shifted after the size-ladder splits were added); comparators = the ladder's inlet-only linear arm and the inlet + x + y arm. Both seeds resumed from checkpoints after a CUDA driver fault near epoch 220.",
+ "n_cases": 40,
+ "per_run": {
+  "base_seed42": {
+   "pressure_l2": 0.30079437531530856,
+   "velocity_l2": 0.13026842344552278,
+   "nut_l2": 0.22666330058127643
+  },
+  "base_seed43": {
+   "pressure_l2": 0.40832084249705075,
+   "velocity_l2": 0.1302637778222561,
+   "nut_l2": 0.28860119804739953
+  },
+  "mlpbias_seed42": {
+   "pressure_l2": 0.34815726075321435,
+   "velocity_l2": 0.11893636276945471,
+   "nut_l2": 0.24269059337675572
+  },
+  "mlpbias_seed43": {
+   "pressure_l2": 0.31785858124494554,
+   "velocity_l2": 0.11380233522504568,
+   "nut_l2": 0.21538794944062828
+  },
+  "frame_seed42": {
+   "pressure_l2": 0.24827545788139105,
+   "velocity_l2": 0.11485804710537195,
+   "nut_l2": 0.22046803403645754
+  },
+  "frame_seed43": {
+   "pressure_l2": 0.2848828128539026,
+   "velocity_l2": 0.11676400639116764,
+   "nut_l2": 0.20393007108941674
+  }
+ },
+ "seed_means": {
+  "base": {
+   "pressure_l2": 0.35455760890617966,
+   "velocity_l2": 0.13026610063388944,
+   "nut_l2": 0.257632249314338
+  },
+  "mlpbias": {
+   "pressure_l2": 0.33300792099907994,
+   "velocity_l2": 0.1163693489972502,
+   "nut_l2": 0.229039271408692
+  },
+  "frame": {
+   "pressure_l2": 0.2665791353676468,
+   "velocity_l2": 0.11581102674826979,
+   "nut_l2": 0.21219905256293714
+  }
+ },
+ "mlp_over_base": {
+  "pressure_l2": 0.9392209125800991,
+  "velocity_l2": 0.8933202761960626,
+  "nut_l2": 0.8890163091703649
+ },
+ "fraction_recovered": {
+  "pressure_l2": 0.21986195752100726,
+  "velocity_l2": 0.9591105831796485,
+  "nut_l2": 0.6063638899780237
+ },
+ "verdict": "not the bottleneck"
+}

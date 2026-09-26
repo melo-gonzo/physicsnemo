@@ -27987,3 +27987,62 @@ together.
 the 3.4% at K = 3 is the least certain number in the table. The wing
 body-frame lane (fa rows 6 and 7) remains staged for launch after the
 AirfRANS twin.
+
+## 2026-09-26 — Verdict, GEO-BIAS: a nonlinear routing bias at K = 1 recovers all of the two-axis gain on velocity (0.96 of the log-gap) and a fifth of it on pressure (0.22); linearity is the bottleneck for the vector field, not for the scalar {#sec-nb-geo-bias-verdict}
+
+**Setting.** The direction-count ladder (@sec-nb-frame-af-h-verdict)
+left one architectural suspect for why two extra global directions
+help ISLA's interior fields: the per-pair routing bias is one *linear*
+map of the geometric invariants, and extra directions widen what that
+linear map can express. The preregistration (@sec-nb-geo-bias-prereg)
+replaced the linear map by a two-layer MLP (16 units) at K = 1 on the
+same 160-airfoil rung, two seeds, eager region, and asked what fraction
+of the two-axis log-gain it recovers. Both seeds hit a CUDA driver fault
+on the laptop near epoch 220 (simultaneously, so external) and resumed
+from their checkpoints; the runs completed 300 epochs.
+
+**What we saw** (float32 relative L2 on the 40 test airfoils, two-seed
+means with seeds in parentheses for pressure; data results/geo_bias_2026-09-26.json):
+
+| arm (K = 1 unless stated) | pressure | velocity | eddy viscosity |
+|---|---|---|---|
+| inlet only, linear bias (ladder baseline) | 0.3546 (0.301, 0.408) | 0.1303 | 0.2576 |
+| inlet only, **MLP bias** | 0.3330 (0.348, 0.318) | 0.1164 | 0.2290 |
+| inlet + $\hat x$ + $\hat y$, linear bias (K = 3) | 0.2666 (0.248, 0.285) | 0.1158 | 0.2122 |
+| MLP ÷ linear at K = 1 | 0.94 | 0.89 | 0.89 |
+| fraction of the two-axis log-gain recovered | **0.22** | **0.96** | 0.61 |
+
+: GEO-BIAS, exploration scale (192 x 12, 120 training airfoils, 20,000 queries).
+
+**Split verdict.** On the deciding field, pressure, the "not the
+bottleneck" clause fires (0.22 < 0.4): the nonlinear bias buys 6% where
+two directions buy 25%. On velocity the opposite clause would fire: the
+MLP bias at K = 1 matches the two-axis arm (0.1164 against 0.1158), recovering
+0.96 of the gain, and on eddy viscosity 0.61. **The linearity of the
+routing bias is the whole story for the vector field and a small part
+of it for the scalar.** That is a useful separation. Velocity leaves
+through the equivariant head basis, which at K = 1 has $2K + 3 = 5$ true
+vectors and at K = 3 has 9; the head basis was a candidate for the
+velocity gain, and this result rules it out: a K = 1 basis with a better
+routing reaches the same velocity error, so the extra directions helped
+velocity through routing, not through the head. Pressure is read from
+the hidden state, and its gain from extra directions runs mostly through
+something the routing bias does not touch: the seed features
+$\hat n_i \cdot \hat g_k$ (a token's normal orientation in a fixed frame)
+or the pooled invariants $\hat r_{is} \cdot \hat g_k$ read back into the
+hidden state, which are linear in the directions and richer at K = 3.
+
+**Consequences.** (i) The nonlinear bias is a real architectural gain at
+K = 1 (11% on velocity and eddy viscosity, 6% on pressure, about 160
+parameters per layer) but it runs on the eager region only, nine times
+slower per step than the fused kernel here; it enters the class as an
+option and the recommended path stays linear until a fused kernel with a
+nonlinear bias exists (engineering candidate, recorded in the ledger).
+(ii) The pressure mechanism is narrowed to the seed and read-back
+channels; the cheap next control is K = 1 with the MLP bias *and* a
+richer seed, which the class does not yet expose, so it is not run. (iii)
+At reference scale the whole question is smaller: FRAME-3D found 5% for
+three body axes on DrivAerML at 200,000 cells (@sec-nb-frame3d-verdict),
+so the exploration-scale mechanism work here bounds, rather than
+motivates, changes to the reference configuration. No accuracy claim at
+this scale (@sec-protocol).
