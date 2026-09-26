@@ -7,3 +7,5 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 5	fa	fa_dr435_frame4_seed43	drivaer_ml_surface_frame4	isla_surface_ref_frame4	-	5e-4	43	200000	code_v4
 6	fa	fa_dr435_frame4_r2_seed42	drivaer_ml_surface_frame4	isla_surface_ref_frame4	++model.n_layers=24	5e-4	42	200000	code_v4
 7	fa	fa_dr435_frame4_r2_seed43	drivaer_ml_surface_frame4	isla_surface_ref_frame4	++model.n_layers=24	5e-4	43	200000	code_v4
+10	fa	fa_af_frame_provided_seed42	airfrans_volume_frame	isla_volume_airfrans_ref_provided_frame	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	42	100000	code_v4
+11	fa	fa_af_frame_provided_seed43	airfrans_volume_frame	isla_volume_airfrans_ref_provided_frame	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	43	100000	code_v4
