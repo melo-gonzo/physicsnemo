@@ -1,0 +1,5 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	gb	gb_af_mlpbias_seed42	airfrans_volume	isla_volume_airfrans_ref_mlpbias	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	42	100000	code_v5
+1	gb	gb_af_mlpbias_seed43	airfrans_volume	isla_volume_airfrans_ref_mlpbias	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	43	100000	code_v5
+2	gb	gb_dr435_mlpbias_seed42	drivaer_ml_surface	isla_surface_ref_mlpbias	-	5e-4	42	200000	code_v5
+3	gb	gb_dr435_mlpbias_seed43	drivaer_ml_surface	isla_surface_ref_mlpbias	-	5e-4	43	200000	code_v5

@@ -28407,3 +28407,55 @@ with or without them. Both seeds of both arms agree; the finding is one
 dataset and joins the depth-does-not-pay results on DeepJEB++
 (@sec-nb-deepjeb-r2-rate-verdict) and the OLBC and lug relaunches at the
 depth rate that are still training.
+
+## 2026-09-26 — Preregistration, GEO-BIAS-PROTO: does the nonlinear routing bias carry the frame's velocity gain at protocol scale, on AirfRANS and DrivAerML Surface? Reference configuration with the MLP bias, K = 1, two seeds each, campaign gb {#sec-nb-geo-bias-proto-prereg}
+
+**Setting.** The frame ladder on the 160-airfoil rung
+(@sec-nb-frame-af-h-verdict) traced the gain from two extra global
+directions to the number of distinct directions the routing bias sees,
+not to the physics of a frame. The GEO-BIAS arm
+(@sec-nb-geo-bias-verdict) then replaced the linear map from a
+point-anchor pair's invariants to its routing bias with a two-layer MLP
+(Linear(n_geo, 16), GELU, Linear(16, 1)) at K = 1 and recovered 0.96 of the
+two-axis log-gain on velocity, 0.61 on eddy viscosity and 0.22 on
+pressure. Both were exploration-scale results (192 wide, 120 training
+airfoils, 20,000 queries), where no accuracy claim is made
+(@sec-protocol). The question is whether the mechanism survives at the
+reference configuration on two datasets. The fused geometry kernel
+computes the linear bias only, so these lanes run the eager region; the
+MLP inside the kernel is the engineering follow-up, started alongside.
+
+**Hypothesis.** The nonlinearity of the pair-to-bias map is the capacity
+that the extra directions supply for the vector field: at protocol scale
+the MLP bias at K = 1 recovers most of the frame's velocity gain and
+little of its pressure gain, on both datasets where the frame was
+measured.
+
+**Arms and comparators.** Four lanes, campaign gb, code_v5 and recipe_v3
+(the snapshot that carries `geo_bias`): AirfRANS, the reference
+configuration on the internal geometry with `geo_bias: mlp`, 800 training
+airfoils, 100,000 queries, seeds 42 and 43; DrivAerML Surface, the
+reference with `geo_bias: mlp`, 435 cars, 200,000 cells, seeds 42 and 43.
+Comparators are the scored pairs: the AirfRANS internal-geometry
+reference pair (0.0341 / 0.0206 / 0.0355 pressure / velocity / eddy
+viscosity, @sec-nb-internal-geometry-verdict) and its frame arm (0.83 /
+0.78 / 0.84 of it, @sec-nb-frame-af-ref-verdict); the DrivAerML reference
+pair (0.0419 pressure) and its body-axes arms (K = 3: 0.966, K = 4: 0.952,
+@sec-nb-frame3d-verdict).
+
+**Bars, in the fraction of the frame's log-gain the MLP recovers,
+seed means, both seeds on the same side.** On AirfRANS: *mechanism holds*
+if velocity recovers at least 0.5 of the frame's log-gain (the MLP arm at
+or below 0.88 of the reference's velocity error) while pressure recovers
+less than 0.5 (above 0.91 of the reference's pressure error); *general
+improvement* if both fields recover at least 0.5; *null* if velocity
+recovers under 0.25 (above 0.94). On DrivAerML Surface (one scalar field):
+*carries over to 3-D* if pressure reaches 0.952 of the reference or
+better, the K = 4 arm's mark; *3-D null* if it stays above 0.976 (under
+half the K = 4 gain); between, reported. Predictions: AirfRANS mechanism
+holds (0.7), DrivAerML 3-D null (0.6, since pressure was the field the
+MLP did not recover in 2-D). The eager region's step time and memory are
+recorded beside the reference's as the price the fused follow-up must
+remove; the result enters the book only with the fused kernel exact
+against this eager path, so the accuracy claim and the speed claim are
+one configuration.
