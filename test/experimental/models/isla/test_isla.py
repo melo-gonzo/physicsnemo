@@ -1232,10 +1232,11 @@ def test_kernel_readout_recompute_matches_dense_gradient():
         assert torch.allclose(a, c, atol=1e-10, rtol=0)
 
 
-def test_geo_bias_mlp_is_equivariant_and_eager_only():
+def test_geo_bias_mlp_is_equivariant_and_runs_on_both_kernels():
     """geo_bias='mlp' (a nonlinear map of the pair invariants to the routing bias) keeps
     the contracts (rotation equivariance, translation invariance) because it consumes the
-    same invariants; it is refused with the fused kernel and auto resolves to eager."""
+    same invariants; on CPU it resolves to the eager region, and the fused kernel accepts
+    it (its exactness is tested in test_isla_kernels.py)."""
     torch.manual_seed(0)
     m = _isla(hidden=64, n_layers=2, n_slices=16, geo_bias="mlp").double().eval()
     n = 300
@@ -1250,8 +1251,8 @@ def test_geo_bias_mlp_is_equivariant_and_eager_only():
         sh = m(points=pts + 5.0, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
     _assert_rotated(rot, base, q)
     assert all(torch.allclose(sh[k], base[k], atol=1e-9, rtol=1e-9) for k in base.keys())
-    assert m.resolve_geo_kernel(pts) == "eager"
-    with pytest.raises(ValueError, match="linear routing bias only"):
-        _isla(hidden=64, n_layers=1, n_slices=16, geo_bias="mlp", geo_kernel="fused")
+    assert m.resolve_geo_kernel(pts) == "eager"  # CPU points: no Triton path
+    fused = _isla(hidden=64, n_layers=1, n_slices=16, geo_bias="mlp", geo_kernel="fused")
+    assert fused.geo_kernel == "fused" and fused.geo_bias == "mlp"
     with pytest.raises(ValueError, match="geo_bias must be"):
         _isla(hidden=64, n_layers=1, n_slices=16, geo_bias="quadratic")

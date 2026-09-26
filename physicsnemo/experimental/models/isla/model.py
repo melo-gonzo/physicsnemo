@@ -598,9 +598,10 @@ def _relational_invariants(
 
 def _geo_bias_head(n_geo: int, geo_bias: str) -> nn.Module:
     """The map from a pair's invariants to its routing-bias scalar. ``"linear"`` (the
-    class default, the fused kernel's arithmetic) is one Linear(n_geo, 1); ``"mlp"``
-    (GEO-BIAS study, 2026-09-25) is Linear(n_geo, 16) -> GELU -> Linear(16, 1), a
-    nonlinear function of the same invariants, eager region only."""
+    class default) is one Linear(n_geo, 1); ``"mlp"`` (GEO-BIAS study, 2026-09-25) is
+    Linear(n_geo, 16) -> GELU -> Linear(16, 1), a nonlinear function of the same
+    invariants. Both run on the eager region and inside the fused kernel (the kernel
+    evaluates the hidden units one tile at a time, 2026-09-26)."""
     if geo_bias == "linear":
         return nn.Linear(n_geo, 1)
     if geo_bias == "mlp":
@@ -1389,11 +1390,11 @@ class ISLA(Module):
             PyTorch reference region). Pass ``"eager"`` or ``"fused"`` to force
             one; ``"fused"`` raises when its constraints cannot be met.
         geo_bias: ``"linear"`` (default): the per-pair routing bias is one linear map of the
-            geometric invariants (the fused kernel's arithmetic). ``"mlp"``: a two-layer
-            map (16 hidden units, GELU) of the same invariants; eager region only, so
-            ``geo_kernel`` resolves to ``"eager"`` and ``"fused"`` raises. A study option
-            (GEO-BIAS, 2026-09-25): does a nonlinear bias make extra global directions
-            unnecessary?
+            geometric invariants. ``"mlp"``: a two-layer map (16 hidden units, GELU) of the
+            same invariants, on the eager region and in the fused kernel alike. A study
+            option (GEO-BIAS, 2026-09-25): does a nonlinear bias make extra global
+            directions unnecessary? Exploration scale said yes for the vector field
+            (0.96 of the two-axis velocity gain at K = 1) and no for pressure (0.22).
         routing_norm: ``"cosine"`` (default): each block's point-to-slice
             routing logits are ``routing_temperature`` times the cosine between
             the normalized token state and a learned prototype per slice, which
@@ -1635,11 +1636,6 @@ class ISLA(Module):
         self.n_block_vecs = self.bin.n_block_vecs + self.qin.n_block_vecs
         self.n_block_tens = self.bin.n_block_tens + self.qin.n_block_tens
         if geo_kernel == "fused":
-            if geo_bias != "linear":
-                raise ValueError(
-                    "geo_kernel='fused' implements the linear routing bias only; use geo_kernel='eager' "
-                    "or None with geo_bias='mlp'"
-                )
             if self.n_block_tens:
                 raise ValueError(
                     "geo_kernel='fused' does not support rank-2 boundary or query inputs "
@@ -1888,7 +1884,6 @@ class ISLA(Module):
             and HAS_TRITON
             and self.n_global_vectors >= 1
             and self.n_global_vectors + self.n_block_vecs <= MAX_DIRECTIONS
-            and self.geo_bias == "linear"
             and self.n_slices <= MAX_SLICES
             and not self.n_block_tens
         )
