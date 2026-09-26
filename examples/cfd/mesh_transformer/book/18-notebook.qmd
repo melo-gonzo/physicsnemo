@@ -27834,7 +27834,7 @@ scalars and trailed GeoTransolver-512 by a factor of about two
 0.46 at 2,048). The rank-spec interface lets the same vectors enter
 as rank-1 boundary inputs (through their frame cosines and norm) and the
 stress leave through the symmetric rank-2 head. At 512 cases this
-recovered 43 to 65% of the log-gap (@sec-nb-rankio-verdict); the 2,048-case
+recovered 43 to 65% of the log-gap (@sec-nb-rankio-verdict-elasticity); the 2,048-case
 twin was the "reproduce before it counts" step. A second arm (`ext`)
 extends the prescribed vectors to every query as rank-1 query inputs, the
 vector form of the Poisson boundary-value extension.
