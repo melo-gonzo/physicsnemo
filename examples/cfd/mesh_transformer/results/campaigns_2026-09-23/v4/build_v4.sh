@@ -28,7 +28,9 @@ cat > kernel/v4/verify_v4.sbatch <<'SB'
 #SBATCH -p batch
 #SBATCH -q normal
 #SBATCH -N 1
-#SBATCH --gpus-per-node=1
+#SBATCH --gpus-per-node=4
+#SBATCH --segment=1
+#SBATCH --ntasks-per-node=1
 #SBATCH -o sbatch_logs/%x-%j.log
 #SBATCH -e sbatch_logs/%x-%j.log
 T=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0

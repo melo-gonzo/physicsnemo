@@ -19,9 +19,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 DIRS = [ROOT / "campaigns_2026-09-22" / "ref" / "metrics", ROOT / "campaigns_2026-09-23" / "rb" / "metrics"]
-PAT_REF = re.compile(r"^ref_(isla_r1_lr1e3|isla_r1|isla_r2|gt_w512)_(dr435|hl35|drvol|af)_seed(\d+)$")
+PAT_REF = re.compile(r"^ref_(isla_r1_lr1e3|isla_r1|isla_r2|gt_w512)_(dr435|hl35|hl210|drvol|af)_seed(\d+)$")
 PAT_RB = re.compile(r"^rb_dr_isla_vol_n(\d+)_seed(\d+)$")
-DATASET = {"dr435": "DrivAerML Surface, 435 cars, 200,000 cells", "hl35": "HiLiftAeroML, 35 wings, 200,000 cells",
+DATASET = {"dr435": "DrivAerML Surface, 435 cars, 200,000 cells", "hl35": "HiLiftAeroML, 35 wings, 200,000 cells", "hl210": "HiLiftAeroML, 210 wings, 200,000 cells",
            "drvol": "DrivAerML Volume, 435 cars, 200,000 cells and 200,000 queries",
            "af": "AirfRANS interior, 800 airfoils, 100,000 queries"}
 ARM = {"isla_r1": "ISLA R1 (384 x 12, cosine, fused, 5e-4)", "isla_r2": "ISLA R2 (384 x 24, 5e-4)",

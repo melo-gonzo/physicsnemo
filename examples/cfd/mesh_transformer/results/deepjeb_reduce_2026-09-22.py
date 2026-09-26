@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent
 MET = ROOT / "campaigns_2026-09-22" / "jb" / "metrics"
 FIELDS = ["von_mises", "displacement"]
 LOADS = ["ver", "hor", "dia", "tor"]
-RUNG_CASES = {"n256": 256, "n1024": 1024, "n4096": 4096, "full": 12451}
+RUNG_CASES = {"n256": 256, "n1024": 1024, "n4096": 4096, "full": 12451, "full_e40": 12451}
 
 
 def lane_means(path: Path) -> dict:
@@ -39,7 +39,7 @@ def main() -> None:
     lanes = {}
     for p in sorted(MET.glob("jb_*/*/metrics.jsonl")):
         name = p.parent.name
-        m = re.match(r"jb_(isla_r[12]|gt512_lr3e3|gt512|gt256)_(n256|n1024|n4096|full)_seed(\d+)", name)
+        m = re.match(r"jb_(isla_r[12]|gt512_lr3e3|gt512|gt256)_(n256|n1024|n4096|full_e40|full)_seed(\d+)", name)
         lanes[name] = {"arm": m.group(1), "rung": m.group(2), "seed": int(m.group(3)), **lane_means(p)}
     summary: dict[str, dict] = {}
     for name, d in lanes.items():

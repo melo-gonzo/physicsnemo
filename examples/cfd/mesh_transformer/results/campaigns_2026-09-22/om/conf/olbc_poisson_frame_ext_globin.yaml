@@ -1,0 +1,30 @@
+# OLBC-MECH combined variant (2026-09-23; old-API form 2026-09-25): olbc_poisson.yaml plus the constant laboratory frame as
+# global vectors (frame_xy, as olbc_poisson_frame.yaml) and the boundary-value extension fields (as olbc_poisson_ext.yaml).
+train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/olbc_poisson_pdmsh
+manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/olbc_poisson_pdmsh/manifest.json
+
+pipeline:
+  reader:
+    _target_: ${dp:DomainMeshReader}
+    path: ${train_datadir}
+    pattern: "*_*/*.pdmsh"
+    subsample_n_points: ${sampling_resolution}   # interior queries (16,598 nodes per case: set sampling_resolution >= 16598 to keep every node)
+    subsample_n_cells: ${sampling_resolution}    # larger than the 1,120 boundary segments: the boundary is kept whole
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    - _target_: ${dp:SetDomainGlobalField}             # OLBC-MECH (2026-09-22): the laboratory frame as constant global vectors
+      fields:
+        frame_xy: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+    - _target_: ${dp:BoundaryValueExtension}            # LIT-EXT (2026-09-22): prescribed values extended into the interior per condition type
+      boundary: outer
+      value_field: bc_value_g
+      label_fields: [bc_dirichlet, bc_neumann, bc_robin]
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:                                    # pooled over all nodes of train (manifest _stats; 2026-09-22)
+        u: {type: scalar, mean: 3.26e-3, std: 1.0845}
+        source: {type: scalar, mean: -7.0e-3, std: 11.517}      # input field, standardized in place (not a target)
+
+targets:
+  u: scalar

@@ -27714,3 +27714,208 @@ fused kernel needs a nonlinear variant). *Part of it*: $0.4 \leq f < 0.8$.
 nonlinear map of fewer projections cannot; the mechanism moves to the
 seed features or the head basis). Prediction: part of it (0.45),
 bottleneck (0.3), not (0.25). Launched 2026-09-25 12:05 EDT.
+
+## 2026-09-25 — Cluster back: the queue since the outage, four preregistered campaigns scored, every 24-layer lane on the solids and OLBC sets at the mean-field plateau, and the fa lanes launched {#sec-nb-cluster-return-2026-09-25}
+
+**Setting.** The cluster was unreachable from this workstation from
+2026-09-23 13:50 to 2026-09-25 (a VPN fault on the host). Jobs kept
+running; the local work of the interval is the FRAME-AF ladder and its
+follow-ups (@sec-nb-frame-af-h-verdict, @sec-nb-frame-af-size-verdict,
+@sec-nb-geo-bias-prereg). On return the runbook was executed in order:
+the `code_v4` snapshot (the four-vector fused kernel) built and verified
+(48 kernel and interior-geometry tests pass on a GB300, job 875171, after
+two false starts: the verify job needs the full-node GPU header this
+cluster's QOS demands, and the test copy raced the first submission);
+the OLBC frame-plus-extension lanes relaunched; the fa lanes (the
+AirfRANS reference-scale frame twin and the two DrivAerML FRAME-3D
+falsifiers) launched as rows 0 to 5 of campaign `fa`; the GeoTransolver-512
+pair on the 210-wing rung launched (ref rows 38 and 39). Since the outage
+began 405 ISLA links completed, 9 failed and 796 hit the wall clock and
+chained on; every failed chain other than the four below re-linked on its
+own.
+
+**Two operational findings.** (i) The four OLBC frame-plus-extension lanes
+(om rows 11 to 14) failed in a minute, four times each, and tripped the
+two-strike guard: their lane rows had an empty `code` column, which the
+lane script resolves to the oldest snapshot (`code_ref`, class path
+`physicsnemo.experimental.nn.ISLA`), and the configs were written for the
+current API. The om campaign has run on that snapshot throughout, so the
+configs were rewritten in its form (`global_vectors: frame_xy`,
+`n_query_scalars: 8`, eager region) and the rows relaunched. Lesson,
+recorded in the runbook memory: an empty code column is not an error.
+(ii) **Every 24-layer (R2) lane on the solids, OLBC and DeepJEB sets sits
+at the mean-field plateau**: relative L2 of 1.00 on the Poisson and
+elasticity sets at 8,448 cases (one elasticity seed NaN), 0.986 on the
+lug at 2,400, 1.01 and 1.16 on DeepJEB++ (von Mises and displacement),
+with validation losses of 0.3 to 0.4 flat from the first epochs against
+0.002 for the 12-layer twins. The aero R2 lanes at the same rate (5e-4)
+trained normally (DrivAerML Surface 0.041, the 210-wing rung 0.051).
+This is the depth half of the rate rule of @sec-using-config, which
+prescribes 2.5e-4 at 384 wide and 24 layers; the campaigns took the R1
+rate for R2. Eight lanes relaunched at 2.5e-4 (`*_lr25e4`: OLBC Poisson
+and elasticity at 8,448, lug at 2,400, DeepJEB++ full, two seeds each);
+until they report, every R2 row on those sets in the ledger is a rate
+failure, not a depth result. Data: results/cluster_return_reductions_2026-09-25.json.
+
+## 2026-09-25 — Verdict, INTERNAL-GEOMETRY: the nearest-sampled-boundary geometry costs 14% (DrivAerML Volume) and 27% (AirfRANS) on interior velocity against the stored full-mesh signed distance; the "price is real" clause fires; provided geometry stays the accurate option {#sec-nb-internal-geometry-verdict}
+
+**Setting.** ISLA's interior queries need a direction and a signed
+distance to the boundary. Since 2026-09-23 the class computes both inside
+the model from the sampled boundary (`interior_geometry:
+nearest_boundary`, the exact Triton search) unless the caller supplies a
+full-mesh signed-distance field (`provided`). The preregistration
+(@sec-nb-internal-geometry-prereg) ran the reference configuration both
+ways on the two interior datasets, two seeds each: internal within 3% on
+every field on both datasets keeps the stored field unnecessary; worse by
+more than 3% on any field on either dataset means the near-wall price of
+the sampled boundary is real.
+
+**What we saw** (float32 relative L2, seed means; DrivAerML Volume on 48
+validation cars at 200,000 cells; AirfRANS on the 200 test airfoils at
+100,000 queries):
+
+| dataset, field | provided (stored SDF) | internal (nearest sampled cell) | internal ÷ provided |
+|---|---:|---:|---:|
+| DrivAerML Volume, pressure | 0.0397 | 0.0409 | 1.03 |
+| DrivAerML Volume, velocity | 0.0576 | 0.0655 | **1.14** |
+| DrivAerML Volume, eddy viscosity | 0.0874 | 0.0894 | 1.02 |
+| AirfRANS, pressure | 0.0328 | 0.0341 | 1.04 |
+| AirfRANS, velocity | 0.0161 | 0.0206 | **1.27** |
+| AirfRANS, eddy viscosity | 0.0323 | 0.0355 | 1.10 |
+
+: INTERNAL-GEOMETRY, campaign sg, two seeds per arm. Data: results/cluster_return_reductions_2026-09-25.json (group internal_geometry).
+
+**The price is real, and it is a velocity price.** Pressure and eddy
+viscosity sit at 2 to 4% on the cars and 4 and 10% on the airfoils;
+velocity pays 14% on the cars and 27% on the airfoils. The prediction
+(within 3% everywhere on AirfRANS, because the airfoil boundary is kept
+whole) was wrong on the field that matters most: the boundary was whole,
+so the loss is not from a missing part of the wall but from *where on a
+cell* the distance is measured. The internal search returns the distance
+to the nearest sampled cell *centroid* and the direction to it; the stored
+field is the distance to the nearest point *on the surface*. Near the
+wall, where the boundary layer sets the velocity, the centroid distance
+overstates the true distance by up to half a cell and rotates the
+direction toward the centroid, and those are exactly the two invariants
+the query's slice routing and head basis consume. On the airfoils the
+cells are line segments up to a few percent of chord long at the
+trailing edge, on the cars surface triangles; both are coarse next to
+the first cell of the boundary layer.
+
+**Consequences.** (i) `interior_geometry: provided` stays documented as
+the accurate option wherever the dataset carries a full-mesh field, and
+the interior scoreboard rows keep it. (ii) The class default is not
+changed on this evidence alone, because the fix is mechanical and cheap
+and should be tried first: project onto the cell instead of stopping at
+its centroid. For a boundary cell with centroid $c$ and unit normal $n$,
+the signed plane distance $(q - c) \cdot n$ and the foot-point direction
+$q - c - ((q - c) \cdot n)\, n$ recover the true distance to first order
+in the cell size for queries whose nearest surface point lies inside the
+cell; for line cells the in-plane analog. This is one line in the
+nearest-boundary geometry after the search and costs nothing at
+200,000 x 200,000. **Preregistered follow-up (INTERNAL-GEOMETRY-PROJ):**
+the same four-lane pair with the projected distance and direction; bar as
+before (within 3% of provided on every field on both datasets keeps the
+internal geometry as default; velocity still worse by more than 3% on
+either dataset makes `provided` the documented default where a stored
+field exists and internal the fallback). Prediction: the velocity gap
+closes to within 3% on AirfRANS (line cells, exact projection) and to
+within 5% on the cars (0.6). (iii) The figure of merit for the earlier
+speed work (the Triton search at 0.13 s per step) stands; what it computes
+must change, not how fast.
+
+## 2026-09-25 — Verdict, RANK-IO at 2,048 elasticity cases: prescribed displacement and traction as rank-1 boundary inputs with the equivariant stress head recover 63 to 72% of the log-gap to GeoTransolver-512, reproducing the 512-case result at four times the data; the boundary-value extension of the same vectors recovers 35 to 76% {#sec-nb-rankio-verdict-2048}
+
+**Setting.** On the OLBC elasticity set (one fixed steel plate, per-sample
+random prescribed displacement and traction segments) the reference ISLA
+fed the prescribed vectors component by component as laboratory-frame
+scalars and trailed GeoTransolver-512 by a factor of about two
+(GeoTransolver ÷ ISLA 0.62 on $\sigma_{11}$ at 512 cases,
+0.46 at 2,048). The rank-spec interface lets the same vectors enter
+as rank-1 boundary inputs (through their frame cosines and norm) and the
+stress leave through the symmetric rank-2 head. At 512 cases this
+recovered 43 to 65% of the log-gap (@sec-nb-rankio-verdict); the 2,048-case
+twin was the "reproduce before it counts" step. A second arm (`ext`)
+extends the prescribed vectors to every query as rank-1 query inputs, the
+vector form of the Poisson boundary-value extension.
+
+**What we saw** (relative L2, two seeds each; GeoTransolver-512 ÷ arm and
+the fraction of the log-gap recovered):
+
+| arm, 2,048 cases | $\sigma_{11}$ | $\sigma_{22}$ | $\sigma_{12}$ | displacement |
+|---|---|---|---|---|
+| ISLA, components as scalars (R1) | 0.5548 | 0.5032 | 0.5341 | 0.3570 |
+| ISLA, rank-1 inputs + rank-2 head (RANK-IO) | 0.3189 (GT÷ 0.81, f 0.72) | 0.3261 (0.80, 0.66) | 0.3288 (0.81, 0.70) | 0.2207 (0.75, 0.63) |
+| ISLA, RANK-IO + vector extension (ext) | 0.3098 (0.83, 0.76) | 0.3309 (0.79, 0.64) | 0.3375 (0.79, 0.66) | 0.2726 (0.61, 0.35) |
+| ISLA, rank-2 head with scalar inputs (TENSOR-HEAD, one seed) | 0.9809 (0.26) | 0.7810 (0.33) | 0.8918 (0.30) | 0.8078 (0.20) |
+| GeoTransolver-512 | 0.2571 | 0.2611 | 0.2671 | 0.1654 |
+
+: OLBC elasticity at 2,048 training cases, 256 test samples, float32 at every node. GT÷ = GeoTransolver-512 ÷ the arm; f = fraction of the log-gap between the scalar-input ISLA and GeoTransolver-512 recovered. Data: results/cluster_return_reductions_2026-09-25.json (group elasticity).
+
+**Reproduced.** RANK-IO recovers 66 to 72% of the log-gap on the three
+stress components and 63% on displacement at 2,048 cases, against 51 to
+65% and 43% at 512: the fraction *grows* with data, and GeoTransolver's
+lead shrinks from a factor of two to 1.2 to 1.3. The vector extension on
+top recovers a similar share on stress (64 to 76%) and less on
+displacement (35%), so it is not additive with the rank-1 inputs here.
+The one-seed TENSOR-HEAD arm, which has the rank-2 head but keeps the
+prescribed vectors as scalars, is *worse* than the scalar baseline (0.98
+against 0.55 on $\sigma_{11}$): with laboratory-component inputs the
+equivariant head has nothing equivariant to build the tensor from, and
+the head's basis constraint costs rather than helps. **The input side is
+what pays; the head is right only once its inputs are vectors.** That
+reading also explains the Tensile2d tensor-axis result
+(@sec-nb-tensor-axis-verdict-400). RANK-IO is the recommended
+configuration for vector boundary data, with two datasets and two rungs
+behind it (elasticity 512 and 2,048; the DeepJEB++ load vector at 1,024,
+where it is neutral, @sec-nb-deepjeb-e40-verdict).
+
+## 2026-09-25 — Interim, OLBC-MECH at 2,048 Poisson cases (one seed each): the boundary-value extension recovers 83% of the log-gap to GeoTransolver-512 as at 512, and the domain frame now recovers 67% (19% at 512); four times the slices still 5% {#sec-nb-olbc-mech-2048-interim}
+
+At 2,048 training cases the scalar-input reference ISLA scores
+0.3949 on $u$ against GeoTransolver-512's 0.0981
+(GeoTransolver ÷ ISLA 0.25, the same factor of four as at 512), two seeds
+each. The mechanism arms have one seed scored so far (the second is in
+the scorer): the boundary-value extension 0.1250 (fraction of the
+log-gap 0.83), the domain frame as two global vectors 0.1555
+(0.67), 1,024 slices 0.3664 (0.05). The extension reproduces its
+512-case share; the frame's share more than triples with data, which fits
+the direction-count reading of @sec-nb-frame-af-h-verdict (two extra
+distinct directions on a 2-D domain, K = 2 here with no condition vector,
+the case the ladder did not run); slices stay irrelevant. The combined
+frame-plus-extension lanes (om rows 11 to 14) are relaunched and decide
+additivity (@sec-nb-olbc-mech-combined-prereg). Second seeds pending.
+Data: results/cluster_return_reductions_2026-09-25.json (group poisson_n2048).
+
+## 2026-09-25 — Verdict, DEEPJEB equal-epoch bracket: at 40 epochs on all 12,451 brackets ISLA leads GeoTransolver-512 by 5% on von Mises stress and 7% on displacement (16% and 31% at equal steps); the load vector as a rank-1 input is neutral {#sec-nb-deepjeb-e40-verdict}
+
+**Setting.** DeepJEB++ is the surface task with a load direction as the
+physical global vector (@sec-nb-deepjeb-prereg). The ladder ran at equal
+optimizer steps, which gives the full 12,451-bracket rung ten epochs;
+the equal-epoch bracket (40 epochs, both architectures) asks whether the
+standing at the top rung is an artifact of the short schedule.
+
+**What we saw** (two seeds each, 5,540 test brackets): at 40 epochs ISLA
+R1 scores 0.4408 on von Mises and 0.1872 on displacement,
+GeoTransolver-512 0.4643 and 0.2010: GeoTransolver ÷ ISLA
+1.05 and 1.07. At equal steps (ten epochs) the ratios were 1.16 and
+1.31. **ISLA's lead survives the longer schedule and shrinks**: both
+models improve by 13 to 40% with four times the epochs, GeoTransolver
+more, so part of the equal-steps lead was GeoTransolver's slower start.
+The lead that remains (5 to 7%) is the standing to quote for DeepJEB++.
+The load vector entered as a rank-1 global input rather than through the
+one-hot scalars (RANK-IO arm, 1,024 brackets) is neutral: 0.99x and
+1.03x the scalar-input ISLA. The 24-layer lanes at this rung sat at the
+plateau (@sec-nb-cluster-return-2026-09-25) and are relaunched at the
+depth rate. Data: results/cluster_return_reductions_2026-09-25.json (group deepjeb).
+
+## 2026-09-25 — Interim, REF on the 210-wing rung: ISLA R1 0.0513, R2 0.0508 on pressure (two seeds each); the GeoTransolver-512 pair is launched and the 35-wing anatomy's 210-case twin waits on it {#sec-nb-ref-hl210-interim}
+
+The reference configuration on HiLiftAeroML's 210-wing rung at 200,000
+cells scores 0.0513 on surface pressure (R1) and 0.0508 (R2, 24
+layers), two seeds each, against 0.1460 at 35 wings: 2.8x better with six
+times the wings, an exponent of about 0.58 on this pair of rungs. No
+GeoTransolver-512 lane existed at 210 wings under the reference protocol;
+a pair is launched (ref rows 38 and 39, learning rate 3e-3, 200,000
+cells). Its per-case rows feed the preregistered 210-case twin of the
+wing anatomy (@sec-nb-hl35-percase). Data: results/cluster_return_reductions_2026-09-25.json (group hl210).
