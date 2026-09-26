@@ -28228,3 +28228,68 @@ the rule prescribes, 24 layers train and buy a few percent, the same
 picture as on DrivAerML Surface. The second seed and the OLBC and lug
 R2 relaunches are in flight; the DeepJEB depth row is restated when the
 pair is in. Data: results/batch2_reductions_2026-09-26.json (group deepjeb_r2_rate).
+
+## 2026-09-26 — Verdict, INTERNAL-GEOMETRY-PROJ: the tangent-plane distance does not fix the internal geometry (AirfRANS velocity 1.06x but pressure 1.12x the stored field; DrivAerML Volume 1.16x on velocity, worse than the centroid's 1.14x); where a dataset carries a stored signed-distance field, `provided` is the documented default {#sec-nb-internal-geometry-proj-verdict}
+
+**Setting.** The internal nearest-boundary geometry costs 14% (DrivAerML
+Volume) and 27% (AirfRANS) on interior velocity against the stored
+signed-distance field (@sec-nb-internal-geometry-verdict). The
+preregistered fix measured the distance to the nearest sampled cell's
+tangent plane instead of to its centroid (`interior_geometry:
+nearest_plane`, code_v5), exact on a flat wall. Both halves are scored:
+the AirfRANS pair (@sec-nb-internal-geometry-proj-interim) and now the
+DrivAerML Volume pair (sg rows 8 and 9, R1, 200,000 cells, 48 validation
+cars, two seeds).
+
+**What we saw** (float32 relative L2, two-seed means, ratio to the
+provided-geometry pair; data results/batch2_reductions_2026-09-26.json,
+groups proj_af and proj_drvol):
+
+| dataset | geometry | pressure | velocity | eddy viscosity |
+|---|---|---:|---:|---:|
+| AirfRANS | internal, centroid | 1.04 | 1.27 | 1.10 |
+| AirfRANS | internal, tangent plane | 1.12 | 1.06 | 1.10 |
+| DrivAerML Volume | internal, centroid | 1.03 | 1.14 | 1.02 |
+| DrivAerML Volume | internal, tangent plane | 1.05 | 1.16 | 1.03 |
+
+: Internal geometries ÷ provided geometry (above 1 = worse than the stored field). DrivAerML plane seeds on pressure 0.0417, 0.0414 against provided 0.0397.
+
+**Refuted as a fix.** On the airfoils the plane distance trades a
+velocity gain for a pressure loss; on the cars it is worse than the
+centroid on every field. The centroid overstates the distance near a
+flat wall by up to half a cell, the plane understates it wherever the
+nearest surface point is a cell edge or corner, and on a closed
+triangulated car surface that is common enough to cancel the gain. The
+stored field is the true distance to the nearest point on the surface,
+which neither one-sample estimate reproduces; a correct internal
+estimate needs the cell's extent (its vertices) or a second-nearest
+sample, neither of which the model receives, and it is not worth
+carrying through the Triton search for a velocity price the stored field
+removes for free.
+
+**Decisions.** (i) Where a dataset carries a full-mesh signed-distance
+field and gradient, `interior_geometry: provided` is the documented
+default and the recipe's interior configurations use it (the scoreboard
+rows already do). (ii) `nearest_boundary` stays as the fallback for
+datasets without a stored field, with its measured price stated in the
+class docstring (14 to 27% on interior velocity, 3 to 4% on pressure).
+(iii) `nearest_plane` stays in the class as a documented, measured-worse
+option so the record is runnable (@sec-nb-internal-geometry-proj-interim),
+not as a recommendation. (iv) The frame result on AirfRANS
+(@sec-nb-frame-af-ref-verdict) was measured on the internal centroid
+geometry and still beat the provided-geometry reference on pressure; a
+frame arm on the provided geometry is the natural next lane and is
+preregistered in the FRAME ledger row.
+
+## 2026-09-26 — Verdict, DeepJEB R2 at the depth rate: 24 layers train at 2.5e-4 and score within 2% of 12 layers (0.98x on von Mises, 1.01x on displacement, two seeds); depth does not pay on DeepJEB++ {#sec-nb-deepjeb-r2-rate-verdict}
+
+The second seed of the relaunched 24-layer DeepJEB++ full-rung lane is
+scored: R2 at 2.5e-4 gives 0.4974 on von Mises (seeds 0.5074,
+0.4874) and 0.2536 on displacement against the R1 pair's
+0.5075 and 0.2504. The seeds straddle R1 (one 4% better, one at
+parity), so the DEEPJEB ledger's depth clause (R2 within 1.5% of R1 means
+depth does not pay) fires: **depth does not pay on DeepJEB++**, as on
+DrivAerML Surface where it bought 2.6%. GeoTransolver-512 ÷ R2 is
+1.19 and 1.29. The plateau at 5e-4 was a rate failure and nothing
+else. The OLBC and lug R2 relaunches decide the same question on the
+fixed-mesh sets. Data: results/batch2_reductions_2026-09-26.json (group deepjeb_r2_rate).

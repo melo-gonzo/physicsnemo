@@ -1417,8 +1417,13 @@ class ISLA(Module):
             ``query_normals`` / ``support_normals`` are refused.
             ``"nearest_plane"`` (INTERNAL-GEOMETRY-PROJ, 2026-09-25): the same
             search, but the distance to the nearest sample's tangent plane and
-            the direction from its foot point; exact on a flat wall, first order
-            in the cell size elsewhere, understated at edges. The default's
+            the direction from its foot point; exact on a flat wall, understated
+            at edges. Measured worse than ``"provided"`` on both interior datasets
+            (2026-09-26: velocity 1.06x / 1.16x, pressure 1.12x / 1.05x the stored
+            field on AirfRANS / DrivAerML Volume) and kept as a documented option
+            only. Where the dataset carries a full-mesh signed-distance field and
+            gradient, pass them with ``"provided"``: the internal geometries cost
+            14 to 27% on interior velocity against it. The default's
             distance is that to the *sampled* boundary and overestimates the wall distance
             near the wall by up to about the sample spacing (module docstring).
             ``"provided"``: the caller supplies ``query_normals`` (and
