@@ -28293,3 +28293,49 @@ DrivAerML Surface where it bought 2.6%. GeoTransolver-512 ÷ R2 is
 1.19 and 1.29. The plateau at 5e-4 was a rate failure and nothing
 else. The OLBC and lug R2 relaunches decide the same question on the
 fixed-mesh sets. Data: results/batch2_reductions_2026-09-26.json (group deepjeb_r2_rate).
+
+## 2026-09-26 — Launched, FRAME-WING: the body frame (span and up axes) on the 35-wing rung at the reference configuration, two seeds, campaign fa rows 8-9 {#sec-nb-frame-wing-launch}
+
+**Setting.** The body frame as extra global directions is now the
+recommended input on fixed-frame datasets, on the strength of two
+protocol-scale results: on AirfRANS the two laboratory axes cut interior
+pressure error 17% (@sec-nb-frame-af-ref-verdict), and on DrivAerML
+Surface the three body axes cut pressure error 4.8%
+(@sec-nb-frame3d-verdict). The high-lift wing rung is the third fixed-frame
+dataset in the program and the one where ISLA trails GeoTransolver-512
+most: 0.77 of its pressure error at 4 to 14 degrees and 0.67 from 16
+degrees, where the flow separates (@sec-nb-hl35-percase). The wing lane
+was preregistered there and staged on 2026-09-23; it waited on the
+code_v4 snapshot (the fused kernel with up to four per-point vectors).
+
+**What was launched.** Two lanes, fa rows 8 and 9 (seeds 42 and 43), on
+the 35-wing super-scarce split at 200,000 cells,
+the reference configuration and its rate 5e-4, code_v4. The dataset
+variant writes two constant global vectors, span $\hat y = (0, 1, 0)$ and
+up $\hat z = (0, 0, 1)$, before the centering step so that the rotation
+augmentation, inserted right after centering, rotates them with the wing.
+The model reads them beside the far-field direction as three global
+directions (K = 3), the same channel as the DrivAerML body-frame lanes.
+The five surface targets (pressure, temperature, density, velocity, wall
+shear) are the ones the reference pair predicts. The staged model file
+carried the DrivAerML output pair by mistake; the outputs dict was
+corrected to the five HiLift targets before launch. The first launch
+(jobs 882507 and 882508) failed on both seeds within a minute with
+"Model YAML must declare `input_type`": the staging script had placed a
+comment line above the Hydra `# @package _global_` directive, which must
+be the first line, so the model block landed under the wrong
+configuration key. The directive was moved back to the top and the pair
+relaunched at 10:45 EDT (the two-strike blocked markers cleared).
+
+**Prediction and bar.** On the cars, the span and up pair bought 3.4% of
+pressure error. The expectation here is a gain of the same order, not the
+2-D step. The preregistered bar (@sec-nb-hl35-percase) is on the deficit
+to GeoTransolver-512: the frame pair's pressure error must narrow the
+log-gap by at least 10% in either angle group, which is 2.6% of pressure
+error at 4 to 14 degrees and 4% at 16 to 22 degrees, both seeds, against
+the reference pair. A gain at high angle only would locate the frame's
+value at separation, where the angle of attack matters most to the
+pressure field. **One caveat is recorded in advance:** the reference
+pair ran on the code_ref snapshot and this pair runs on code_v4; the two
+snapshots are exact on the kernel (@sec-nb-frame-af-y-eager-verdict) and
+share every configuration value, but the comparison is across snapshots.
