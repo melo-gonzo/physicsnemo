@@ -28149,3 +28149,82 @@ and the mechanism ladder says any two distinct fixed directions do. Open:
 the frame arm on the provided (or projected) geometry; the wing lane
 (fa rows 8 and 9); the body frame with 24 layers on DrivAerML (fa rows 6
 and 7, running).
+
+## 2026-09-26 — Interim, INTERNAL-GEOMETRY-PROJ (AirfRANS half): the tangent-plane distance recovers most of the velocity price (1.27x to 1.06x the stored field) but costs pressure (1.04x to 1.12x); the DrivAerML half is in the scorer {#sec-nb-internal-geometry-proj-interim}
+
+**Setting.** INTERNAL-GEOMETRY (@sec-nb-internal-geometry-verdict) found
+that computing a query's wall distance and direction from the nearest
+sampled boundary *centroid* costs 27% on AirfRANS interior velocity
+against the stored signed-distance field, and preregistered the fix of
+measuring to the nearest cell's tangent plane instead
+(`interior_geometry: nearest_plane`, code_v5). The AirfRANS pair (sg
+rows 10 and 11, two seeds, R1, 800 airfoils, 100,000 queries) is scored;
+the DrivAerML Volume pair is training.
+
+**What we saw** (float32 relative L2 on the 200 test airfoils, two-seed
+means; data results/batch2_reductions_2026-09-26.json, group proj_af):
+
+| geometry | pressure | velocity | eddy viscosity | ÷ provided (p / v / ν) |
+|---|---|---|---|---|
+| provided (stored SDF and gradient) | 0.0328 | 0.0161 | 0.0323 | 1 / 1 / 1 |
+| internal, nearest centroid | 0.0341 | 0.0206 | 0.0355 | 1.04 / 1.27 / 1.10 |
+| internal, nearest tangent plane | 0.0369 (0.0360, 0.0377) | 0.0170 | 0.0357 | **1.12 / 1.06 / 1.10** |
+
+: AirfRANS interior task, reference configuration, three geometries for the query's distance and direction.
+
+**Reading.** The projection does what it was built for on velocity: the
+price falls from 27% to 6%, so the centroid measurement was indeed the
+near-wall velocity's problem. It does not clear the 3% bar, and it moves
+pressure the wrong way, from 4% to 12% worse than the stored field, with
+eddy viscosity unchanged. The pressure loss is the projection's known
+failure: at the trailing edge and at the leading-edge nose the nearest
+cell's tangent plane understates the distance (the true nearest point is
+the cell's end, not its plane), and the airfoil pressure field is set
+exactly there. The centroid distance overstates near a flat wall; the
+plane distance understates near a corner; the stored field does neither.
+On this half the preregistered "velocity still worse by more than 3%"
+clause fires, and a hybrid (plane distance clamped from below by the
+nearest-vertex distance, which needs the cell extent the model does not
+receive) is the only cheap route left inside the model. Verdict after the
+DrivAerML half (sg rows 8 and 9), where the cells are triangles on a
+closed surface and the corner case is rarer.
+
+## 2026-09-26 — Verdict, OLBC-MECH combined channel at 512 Poisson cases: the domain frame on top of the boundary-value extension recovers 0.90 of the log-gap against 0.84 for the extension alone, so the two channels are redundant and the extension is the recipe on Poisson {#sec-nb-olbc-mech-combined-verdict}
+
+**Setting.** On the fixed-mesh OLBC Poisson set ISLA trails
+GeoTransolver-512 by a factor of about three. The mechanism study
+(@sec-nb-olbc-mech-verdict) found that a parameter-free boundary-value
+extension as query scalars recovers 84% of the log-gap at 512 cases and
+the domain frame as two global vectors 19%; the combined arm
+(@sec-nb-olbc-mech-combined-prereg) asked whether the two add
+(recovering at least $\min(1, f + e - 0.1)$) or are redundant (within 0.1
+of the larger). The four combined lanes relaunched on 2026-09-25 in the
+old-API form after a snapshot mismatch (@sec-nb-cluster-return-2026-09-25);
+the 512-case pair is scored.
+
+**What we saw** (relative L2 on $u$ over 256 test samples, two seeds;
+data results/batch2_reductions_2026-09-26.json, group olbc_combined_512):
+baseline ISLA 0.8671, GeoTransolver-512 0.2791; extension 0.3328 (fraction
+0.84), frame 0.6947 (0.20), **frame + extension 0.3113 (0.90;
+seeds 0.3034, 0.3193)**. The additive threshold was 0.94;
+the combination sits 0.06 above the extension alone, inside the 0.1 band.
+**Redundant.** The frame's small contribution at 512 cases is already
+contained in the extension's; on the Poisson set the recipe is the
+extension (six query scalars, no per-query cost beyond them), and the
+frame is not worth its two directions here. The 2,048-case twin is in
+the scorer; at that rung the frame alone recovered 67% (one seed,
+@sec-nb-olbc-mech-2048-interim), so the additivity question is live
+there in a way it is not at 512. GeoTransolver-512 ÷ ISLA moves from
+0.32 to 0.90 with the combined channel.
+
+## 2026-09-26 — Interim, DeepJEB R2 at the depth rate: the 24-layer model trains at 2.5e-4 where it sat at the plateau at 5e-4, and its one scored seed is 4% better than R1 on von Mises {#sec-nb-deepjeb-r2-rate-interim}
+
+The eight 24-layer lanes relaunched at 2.5e-4 after the plateau finding
+(@sec-nb-cluster-return-2026-09-25) have their first scored member: the
+DeepJEB++ full rung, seed 43, at 0.4874 on von Mises and
+0.2453 on displacement against the R1 pair's 0.5075 and 0.2504
+(0.96x and 0.98x). The depth rule holds on this dataset too: at the rate
+the rule prescribes, 24 layers train and buy a few percent, the same
+picture as on DrivAerML Surface. The second seed and the OLBC and lug
+R2 relaunches are in flight; the DeepJEB depth row is restated when the
+pair is in. Data: results/batch2_reductions_2026-09-26.json (group deepjeb_r2_rate).

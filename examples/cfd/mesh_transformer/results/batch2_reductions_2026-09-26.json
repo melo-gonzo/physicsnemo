@@ -1,0 +1,99 @@
+{
+ "protocol": "2026-09-26 second batch: INTERNAL-GEOMETRY-PROJ AirfRANS half (sg_af_plane vs sg_af_provided / sg_af_internal), OLBC-MECH combined frame+extension at 512 Poisson cases (om rows 13-14) with the single-channel arms and GeoTransolver-512, DeepJEB R2 at the depth rate (one seed). Float32 per-case relative L2, two-seed means unless stated.",
+ "groups": {
+  "proj_af": {
+   "plane": {
+    "pressure_l2": 0.03685753887752071,
+    "nut_l2": 0.03567312845261768,
+    "velocity_l2": 0.017047216386999936
+   },
+   "plane_per_seed": {
+    "42": {
+     "pressure_l2": 0.03601091066608206,
+     "nut_l2": 0.03533406651113182,
+     "velocity_l2": 0.016381642697378993
+    },
+    "43": {
+     "pressure_l2": 0.037704167088959364,
+     "nut_l2": 0.03601219039410353,
+     "velocity_l2": 0.017712790076620875
+    }
+   },
+   "provided": {
+    "pressure_l2": 0.03281833085029856,
+    "nut_l2": 0.03233322395888698,
+    "velocity_l2": 0.016127241897009495
+   },
+   "internal": {
+    "pressure_l2": 0.03407232453813776,
+    "nut_l2": 0.03547716143541038,
+    "velocity_l2": 0.020553591693751514
+   },
+   "plane_over_provided": {
+    "pressure_l2": 1.1230778020261627,
+    "nut_l2": 1.103296364692167,
+    "velocity_l2": 1.0570447504827862
+   },
+   "internal_over_provided": {
+    "pressure_l2": 1.038210160460607,
+    "nut_l2": 1.0972355086062884,
+    "velocity_l2": 1.2744641535737617
+   },
+   "plane_over_internal": {
+    "pressure_l2": 1.0817441832084398,
+    "nut_l2": 1.0055237513171418,
+    "velocity_l2": 0.8294032809935818
+   }
+  },
+  "olbc_combined_512": {
+   "base": 0.8670549198868684,
+   "gt512": 0.27905043042846955,
+   "ext": {
+    "u": 0.33280388345883694,
+    "per_seed": {
+     "42": 0.31834829197032377,
+     "43": 0.3472594749473501
+    },
+    "frac": 0.8446155636602639,
+    "gt_over": 0.8384830955945984
+   },
+   "frame": {
+    "u": 0.6946735401870683,
+    "per_seed": {
+     "42": 0.673154771910049,
+     "43": 0.7161923084640875
+    },
+    "frac": 0.1955176807072239,
+    "gt_over": 0.4017000998099398
+   },
+   "frame_ext": {
+    "u": 0.31133384064014535,
+    "per_seed": {
+     "42": 0.3034017620666418,
+     "43": 0.3192659192136489
+    },
+    "frac": 0.9034380232642819,
+    "gt_over": 0.8963061318830724
+   },
+   "additive_threshold": 0.9401332443674878,
+   "verdict": "redundant"
+  },
+  "deepjeb_r2_rate": {
+   "r2_lr25e4_per_seed": {
+    "42": null,
+    "43": {
+     "von_mises_l2": 0.4873708978712236,
+     "displacement_l2": 0.245299744451358
+    }
+   },
+   "r1": {
+    "von_mises_l2": 0.5074518099241931,
+    "displacement_l2": 0.2503804591133205
+   },
+   "r2_over_r1_seed43": {
+    "von_mises_l2": 0.9604279427913177,
+    "displacement_l2": 0.9797080224233352
+   }
+  }
+ }
+}
