@@ -1,0 +1,106 @@
+{
+ "protocol": "2026-09-26 third batch. OLBC Poisson at 2,048 cases: float32 per-case relative L2 on u over the 256 test cases; ISLA R1 (inlet-free, K = 0) baseline and GeoTransolver-512 from results/olbc_2026-09-22.json; single-channel arms and the combined frame + extension arm from campaign om (rows 11-12 are the 2,048 combined pair). Fractions are of the log-gap ln(base/arm)/ln(base/gt512). FRAME-3D-R2: DrivAerML Surface, 435 cars, 200,000 cells, 48 validation cars, ISLA R2 (384x24) with inlet + body x, y, z at lr 5e-4; R1 references from results/frame3d_2026-09-26.json.",
+ "groups": {
+  "olbc_combined_2048": {
+   "base": 0.39494188419485,
+   "base_per_seed": {
+    "42": 0.39675149114918895,
+    "43": 0.39313227724051103
+   },
+   "gt512": 0.09810749645112082,
+   "gt512_per_seed": {
+    "42": 0.09671778025222011,
+    "43": 0.09949721265002154
+   },
+   "ext": {
+    "u": 0.1250073196424637,
+    "per_seed": {
+     "42": 0.1250073196424637
+    },
+    "n_seeds": 1,
+    "frac": 0.8260121424205572,
+    "gt_over": 0.7848140151450357
+   },
+   "frame2": {
+    "u": 0.15553341510531027,
+    "per_seed": {
+     "42": 0.15553341510531027
+    },
+    "n_seeds": 1,
+    "frac": 0.6691282117110902,
+    "gt_over": 0.6307808285743172
+   },
+   "leak": {
+    "u": 0.059777256687084446,
+    "per_seed": {
+     "42": 0.059777256687084446
+    },
+    "n_seeds": 1,
+    "frac": 1.3557460063712272,
+    "gt_over": 1.6412177789402982
+   },
+   "s1024": {
+    "u": 0.36641840724041685,
+    "per_seed": {
+     "42": 0.36641840724041685
+    },
+    "n_seeds": 1,
+    "frac": 0.05382645925211903,
+    "gt_over": 0.26774718330880654
+   },
+   "frame_ext": {
+    "u": 0.1227521514701948,
+    "per_seed": {
+     "42": 0.11644605464243796,
+     "43": 0.12905824829795165
+    },
+    "n_seeds": 2,
+    "frac": 0.8390841089422919,
+    "gt_over": 0.7992323985860411
+   },
+   "additive_threshold": 1.0,
+   "redundant_band": [
+    0.7260121424205572,
+    0.9260121424205572
+   ],
+   "verdict": "redundant"
+  },
+  "frame3d_r2": {
+   "per_seed": {
+    "42": {
+     "pressure_l2": 0.039741031204660736,
+     "wss_l2": 0.06204738630913198
+    },
+    "43": {
+     "pressure_l2": 0.03937590878922492,
+     "wss_l2": 0.06191855979462465
+    }
+   },
+   "seed_means": {
+    "pressure_l2": 0.03955846999694283,
+    "wss_l2": 0.06198297305187832
+   },
+   "ratio_to_r1": {
+    "pressure_l2": 0.9434935349919114,
+    "wss_l2": 0.94397919022766
+   },
+   "ratio_to_k4": {
+    "pressure_l2": 0.991281534708014,
+    "wss_l2": 0.990704018389776
+   },
+   "ratio_to_r2": {
+    "pressure_l2": 0.9683519903093787,
+    "wss_l2": 0.9668061581665974
+   },
+   "gt512_over": {
+    "pressure_l2": 1.03722286151297,
+    "wss_l2": 1.05651986585048
+   },
+   "product_of_gains": {
+    "pressure_l2": 0.9273583599669842,
+    "wss_l2": 0.9303396027668133
+   },
+   "verdict": "redundant"
+  }
+ }
+}
