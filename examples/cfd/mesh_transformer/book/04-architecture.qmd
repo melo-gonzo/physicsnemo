@@ -598,13 +598,21 @@ The distance is to the *sampled* boundary, 200,000 of up to 17 million
 cells on a DrivAerML car. Near the wall it therefore overestimates the true
 wall distance by up to about the sample spacing, and the direction deviates
 from the true gradient of the signed-distance field by the same order. Far
-from the wall both agree with the full-resolution field. Whether that price
-is measurable is a preregistered measurement
-(@sec-nb-internal-geometry-prereg). `interior_geometry="provided"` is the
-alternative. The caller supplies the direction (`query_normals`, the stored
-gradient of a full-resolution signed-distance field) and the distance as a
-declared rank-0 query input. This is the form of every interior lane the
-evidence chapters report.
+from the wall both agree with the full-resolution field. That price is
+measured: against the stored field the internal geometry costs 14%
+(DrivAerML Volume) and 27% (AirfRANS) on interior velocity and 3 to 4% on
+pressure at the reference configuration, two seeds each
+(@sec-nb-internal-geometry-verdict). Measuring to the nearest cell's
+tangent plane instead of its centroid (`interior_geometry="nearest_plane"`)
+does not repair it: it understates the distance at edges and corners as the
+centroid overstates it near a flat wall, and it is worse than the stored
+field on both datasets (@sec-nb-internal-geometry-proj-verdict). So
+`interior_geometry="provided"` is the documented choice wherever a dataset
+carries a full-mesh signed-distance field: the caller supplies the direction
+(`query_normals`, the stored gradient) and the distance as a declared rank-0
+query input. This is the form of every interior lane the evidence chapters
+report; the internal search is the fallback for datasets without such a
+field.
 
 A query's measure bias is not an area but a learned share of the boundary's
 total measure, split equally over the $Q$ queries
