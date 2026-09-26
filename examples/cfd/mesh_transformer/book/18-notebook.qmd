@@ -28649,3 +28649,16 @@ gain (the additive clause is the same, 10% and 5%). If the Volume twin is
 additive too, the recommended AirfRANS and DrivAerML Volume inputs are the
 frame plus the stored field, and the scoreboard rows carry them as the
 labeled variant.
+
+*Addendum, protocol scale (2026-09-26, 14:40 EDT; data
+results/geo_bias_kernel_timing_2026-09-26.json, key protocol_scale).*
+Whole-epoch wall time on one GB300 node, epochs 5 to 40, seed 42 lanes of
+campaign gb: with the MLP bias the fused kernel takes 57.5 s per epoch on
+AirfRANS (800 airfoils, 100,000 queries) against 84.4 s for the eager
+region, and 53.6 s against 78.6 s on DrivAerML Surface (435 cars, 200,000
+cells), 0.68x on both. Against the fused linear kernel of the frame lanes
+(34.2 s at K = 3 on AirfRANS, 24.6 s at K = 4 on DrivAerML) the MLP bias
+costs 1.7x and 2.2x the epoch, so at the reference width the region's
+arithmetic is a visible share of the step and the MLP bias is not free.
+The optimization candidates above are the follow-up if GEO-BIAS-PROTO
+finds a gain worth paying for.

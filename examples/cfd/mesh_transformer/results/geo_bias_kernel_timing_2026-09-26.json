@@ -17,5 +17,30 @@
   "eager_mlp_over_fused_mlp": 2.663565891472868,
   "eager_mlp_mem_over_fused_mlp_mem": 4.555555555555555
  },
- "note": "the MLP branch is arithmetic-bound (16 hidden units x erf per pair); the linear kernel is memory-bound. Optimization candidates: hoist the per-unit weight loads, tanh-free erf, larger BLOCK_N for the MLP branch."
+ "note": "the MLP branch is arithmetic-bound (16 hidden units x erf per pair); the linear kernel is memory-bound. Optimization candidates: hoist the per-unit weight loads, tanh-free erf, larger BLOCK_N for the MLP branch.",
+ "protocol_scale": {
+  "note": "AGA GB300 node (4 GPUs, DDP), whole training epoch wall time from the train.log timestamps, epochs 5-40, single seed 42 lanes; AirfRANS 800 airfoils x 100,000 queries; DrivAerML Surface 435 cars x 200,000 cells. Fused-linear comparators are the frame lanes (K = 3 / K = 4) of campaign fa, not K = 1 lanes, so the linear ratio is an upper bound on the MLP's price against K = 1.",
+  "s_per_epoch": {
+   "airfrans": {
+    "fused_mlp": 57.5,
+    "eager_mlp": 84.4,
+    "fused_linear_frame_k3": 34.2
+   },
+   "drivaer_surface": {
+    "fused_mlp": 53.6,
+    "eager_mlp": 78.6,
+    "fused_linear_frame_k4": 24.6
+   }
+  },
+  "ratios": {
+   "airfrans": {
+    "fused_over_eager_mlp": 0.6812796208530805,
+    "fused_mlp_over_fused_linear": 1.6812865497076022
+   },
+   "drivaer_surface": {
+    "fused_over_eager_mlp": 0.6819338422391859,
+    "fused_mlp_over_fused_linear": 2.178861788617886
+   }
+  }
+ }
 }
