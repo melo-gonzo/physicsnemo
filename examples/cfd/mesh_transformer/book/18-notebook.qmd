@@ -28509,3 +28509,83 @@ protocol scale against the eager pair and, incidentally, check the two
 paths agree at scale. Optimization candidates if the price matters:
 hoisting the per-unit weight loads, a cheaper erf, a larger tile for the
 MLP branch.
+
+## 2026-09-26 — Verdict, FORCEREF: on the 200,000-cell DrivAerML checkpoints the drag error against the full surface is 2.6% for both ISLA and GeoTransolver-512, of which 2.4% is the 200,000-cell sample itself; against the sampled cells the model error is 0.9% (ISLA) and 0.8% (GeoTransolver-512) {#sec-nb-forceref-verdict}
+
+**Setting.** Every DrivAerML Surface number in this book is a field error
+on 200,000 cells drawn from a vehicle surface of 14.6 to 19.8 million
+cells (1.2% of the area). The quantity an engineer takes from such a
+surrogate is the integrated load, and the FORCEREF ledger row asked for
+lift and drag on the reference checkpoints with the force reference
+stated twice: integrated over the sampled cells the model was scored on,
+and over the full surface. The two references differ by the sampling
+error of the Horvitz-Thompson estimate, which the recipe's force
+integration already forms (each retained cell carries the inverse
+inclusion probability $N/k$ as its measure weight, so the sampled sum is
+an unbiased estimate of the full-surface integral). The force
+coefficient vector is $\sum_c (-C_p \mathbf{n} + \mathbf{C}_f)_c A_c w_c$
+with $A_\text{ref} = 1$, $C_p = (p - p_\infty)/q_\infty$,
+$\mathbf{C}_f = \boldsymbol{\tau}_w/q_\infty$; drag is the component
+along $\mathbf{U}_\infty$ and lift the component along $z$
+orthogonalized against it. The cell normals follow the cell winding, as
+in the recipe; on this dataset that makes the drag coefficient negative
+(the stored winding points inward), a common sign that every relative
+error and correlation below ignores.
+
+**What was run.** Evaluation only. The four reference checkpoints (ISLA
+reference seeds 42 and 43, GeoTransolver-512 seeds 42 and 43, 500 epochs
+at 200,000 cells) were scored on the 48 validation cars by the same
+inference command as the P200KFLEET scorer (float32, 200,000 cells,
+code_ref snapshot) with the per-car predictions kept
+(kernel/forceref/forceref_aga.sbatch). A separate integrator
+(kernel/forceref/forceref_integrate.py, copied to
+results/campaigns_2026-09-26/forceref/) then formed three coefficients per
+car: the prediction on the sampled cells, the ground truth on the same
+cells, and the ground truth on all cells of the full validation mesh,
+read from the raw dataset in physical units. The integrator reproduces
+the recipe's own per-car force numbers to $9 \times 10^{-8}$, and the
+200,000 sampled cells are the same for all four checkpoints (the reader
+draws them with a per-case generator; the sampled truth agrees across
+runs to the last bit). Reducer results/forceref_reduce_2026-09-26.py;
+artifact results/forceref_2026-09-26.json.
+
+**What we saw** (48 cars, two seeds per architecture, relative L1 over
+the population of cars). The sampled-cell truth misses the full-surface
+drag by 2.4% (median per car 1.7%, worst car 11.3%, run_17, where the
+sample reads 0.503 against 0.567) and the full-surface lift by 30%
+(mean absolute error 0.040 on a mean lift magnitude of 0.137; median per
+car 0.034, worst 0.137). The sample's represented area matches the full
+area to 0.06%, so the weights are consistent; the error is the
+statistical noise of a 1.2% sample of a signed integrand with heavy
+cancellation, and lift, the smaller residual of the larger pressure
+forces, suffers more than drag. **Against the full surface, ISLA's drag
+error is 2.62% (seeds 2.56%, 2.68%) and GeoTransolver-512's is 2.65%
+(2.59%, 2.72%)**; against the sampled truth the same predictions are
+0.92% (0.85%, 0.99%) and 0.85% (0.84%, 0.85%) off. Lift reads the same
+way: 31.3% and 31.5% against the full surface, 9.9% and 8.4% against the
+sampled cells. Correlation of predicted with true drag over the 48 cars
+is 0.974 (ISLA) and 0.974 (GeoTransolver-512) against the full surface
+and 0.997 and 0.998 against the sampled cells; the sampled truth itself
+correlates with the full-surface truth at 0.976 for drag and 0.951 for
+lift. GeoTransolver-512 ÷ ISLA is 1.01 on drag and 1.01 on lift against
+the full surface, 0.92 on drag and 0.85 on lift against the sampled
+cells. On 37 of 48 cars the sampling error in drag exceeds ISLA's model
+error at the same cells (38 of 48 for lift).
+
+**Why it matters.** Two readings. First, at the reporting protocol the
+force error an engineer would see is set by the 200,000-cell sample, not
+by the model: both architectures predict the sampled-cell integral to
+within 1% in drag, and the sample misses the full surface by 2.4%. A
+force claim on this dataset therefore needs either the full surface at
+inference (the recipe's default; the P200KFLEET protocol caps the cells
+at the training count) or a stated sampling band; the book's field
+errors are unaffected, since they are computed on the same cells for
+every model. Second, the two architectures are indistinguishable in
+integrated load against the full surface (ratios 1.01), and against the
+sampled cells GeoTransolver-512 is 8% better in drag and 15% better in
+lift; the drag difference is inside the seed spread and the lift
+difference outside it. Both facts are one dataset (DrivAerML
+Surface), so the sampling reading is interim until a second surface set
+with full-mesh loads is measured; the side force is in the artifact and
+not discussed, its per-car magnitudes being too small for a relative
+error to mean anything.
