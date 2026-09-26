@@ -5,3 +5,5 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 3	fa	fa_dr435_frame_seed43	drivaer_ml_surface_frame	isla_surface_ref_frame	-	5e-4	43	200000	code_v4
 4	fa	fa_dr435_frame4_seed42	drivaer_ml_surface_frame4	isla_surface_ref_frame4	-	5e-4	42	200000	code_v4
 5	fa	fa_dr435_frame4_seed43	drivaer_ml_surface_frame4	isla_surface_ref_frame4	-	5e-4	43	200000	code_v4
+6	fa	fa_dr435_frame4_r2_seed42	drivaer_ml_surface_frame4	isla_surface_ref_frame4	++model.n_layers=24	5e-4	42	200000	code_v4
+7	fa	fa_dr435_frame4_r2_seed43	drivaer_ml_surface_frame4	isla_surface_ref_frame4	++model.n_layers=24	5e-4	43	200000	code_v4
