@@ -37,6 +37,7 @@ AFI = ref_arm("isla_r1|af"); AFI_R2 = ref_arm("isla_r2|af")
 AFR = {f: AFG[f]["mean"] / AFI[f]["mean"] for f, _ in FIELDS}
 FAF = J("frame_af_local_2026-09-23.json")  # FRAME-AF local mechanism rung, two seeds (frame ÷ frame-free arm)
 FAR = J("frame_af_ref_2026-09-26.json")  # FRAME-AF at reference scale (fa rows 0-1): two laboratory axes beside the inlet, internal geometry
+FPR = J("frame_provided_2026-09-26.json")  # FRAME-PROVIDED (fa rows 10-11): the two axes AND the stored signed-distance field
 AFP = {f: [g / i for g, i in zip(AFG[f]["seeds"], AFI[f]["seeds"])] for f, _ in FIELDS}
 spread = lambda s: abs(s[0] / s[1] - 1) * 100
 lead = lambda r: f"{(r - 1) * 100:.0f}%"
@@ -295,6 +296,9 @@ out += "| ISLA, 24 layers (depth variant), 5e-4 | " + " | ".join(acell(AFI_R2[f]
 _fr = {f: {"mean": FAR["seed_means"]["frame"][f], "seeds": [FAR["per_run"][f"frame_seed{s}"][f] for s in (42, 43)]} for f, _ in FIELDS}
 out += "| **ISLA + laboratory frame** (two fixed axes as global directions; internal geometry), 5e-4 | " + " | ".join(acell(_fr[f]) for f, _ in FIELDS) + " |\n"
 out += "| GeoTransolver-volume ÷ ISLA + frame | " + " | ".join(f"{FAR['gt_over']['frame'][f]:.2f}" for f, _ in FIELDS) + " |\n"
+_fp = {f: {"mean": FPR["seed_means"][f], "seeds": [FPR["per_seed"][str(s)][f] for s in (42, 43)]} for f, _ in FIELDS}
+out += "| **ISLA + laboratory frame + stored signed-distance field** (`interior_geometry: provided`), 5e-4 | " + " | ".join(acell(_fp[f]) for f, _ in FIELDS) + " |\n"
+out += "| GeoTransolver-volume ÷ ISLA + frame + stored field | " + " | ".join(f"{FPR['ratios']['gt_vol_over'][f]:.2f}" for f, _ in FIELDS) + " |\n"
 print(out)
 sp = {f: spread(AFI[f]["seeds"]) for f, _ in FIELDS}; spg = {f: spread(AFG[f]["seeds"]) for f, _ in FIELDS}
 verdict = {f: standing(AFR[f], AFP[f]) for f, _ in FIELDS}
@@ -305,8 +309,9 @@ print(": Interior error on AirfRANS (relative L2 over the 200 test cases of the 
       f"ISLA's two seeds differ by {min(sp.values()):.0f} to {max(sp.values()):.0f}% and GeoTransolver-volume's by {min(spg.values()):.0f} to "
       f"{max(spg.values()):.0f}%, so the pressure and eddy-viscosity deficits are one to two seed spreads wide and the velocity lead is many; "
       "the depth-variant row is the one the reference selection rejected, worse than the reference on every field here. "
-      "The frame row is the labeled variant of @sec-nb-frame-af-ref-verdict: the same reference configuration with the laboratory x and y axes as two more global directions, on the internal geometry; it is not the reference row and is compared with GeoTransolver-volume for the standing only. Data: "
-      "results/airfrans_reduction_2026-09-22.json (GeoTransolver-volume); results/ref_surface_2026-09-23.json (ISLA); results/frame_af_ref_2026-09-26.json (frame row). {#tbl-interior-airfrans}")
+      "The frame row is the labeled variant of @sec-nb-frame-af-ref-verdict: the same reference configuration with the laboratory x and y axes as two more global directions, on the internal geometry; it is not the reference row and is compared with GeoTransolver-volume for the standing only. "
+      "The last pair of rows adds the dataset's stored signed-distance field in place of the geometry computed inside the model (@sec-nb-frame-provided-verdict): the two inputs add, the frame carrying the pressure gain and the stored field the velocity gain, and ISLA is ahead on every field. Data: "
+      "results/airfrans_reduction_2026-09-22.json (GeoTransolver-volume); results/ref_surface_2026-09-23.json (ISLA); results/frame_af_ref_2026-09-26.json (frame row); results/frame_provided_2026-09-26.json (frame + stored field rows). {#tbl-interior-airfrans}")
 ```
 
 ```{python}

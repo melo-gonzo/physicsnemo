@@ -1,0 +1,36 @@
+# @package _global_
+# FRAME-VOL variant (2026-09-26): the reference plus the three body axes as global directions.
+# ISLA -- DrivAerML VOLUME task (boundary -> interior), REFERENCE CONFIGURATION candidate (REF campaign, 2026-09-22).
+# Query tokens carry the signed distance; the query mass is the class default (source_total, measure-rescale invariant).
+# 384 wide, 12 layers (24 via ++model.n_layers=24), cosine routing, fused geometry kernel, RMS-pairwise-distance unit.
+input_type: tensors
+output_type: fields
+forward_kwargs:
+  points: boundaries.vehicle.cell_centroids
+  normals: boundaries.vehicle.cell_normals
+  measure_weights: boundaries.vehicle.cell_data.quadrature_measure
+  global_inputs:
+    freestream: global_data.U_inf_dir
+    frame_x: global_data.frame_x        # FRAME-VOL: three body axes as further global directions (K = 4)
+    frame_y: global_data.frame_y
+    frame_z: global_data.frame_z
+  query_points: interior.points
+  query_normals: interior.point_data.sdf_normals
+  query_inputs:
+    sdf: interior.point_data.sdf
+model:
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs: {velocity: 1, pressure: 0, nut: 0}
+  global_inputs: {freestream: 1, frame_x: 1, frame_y: 1, frame_z: 1}
+  query_inputs: {sdf: 0}
+  interior_geometry: provided   # INTERNAL-GEOMETRY twin: the full-mesh SDF and its gradient from the dataset
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  scale_mode: rms_distance
+  routing_norm: cosine
+  routing_temperature: 10.0
+  geo_kernel: fused
+  query_tokens: true
+  query_mass: source_total

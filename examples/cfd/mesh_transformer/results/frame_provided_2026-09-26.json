@@ -1,0 +1,82 @@
+{
+ "protocol": "FRAME-PROVIDED (2026-09-26, prereg in the FRAME-PROVIDED ledger row and @sec-nb-internal-geometry-proj-verdict (iv)): AirfRANS, ISLA R1 (384x12x256, cosine, fused K<=4 kernel, lr 5e-4) with the two laboratory axes as global directions beside the inlet (K = 3) AND interior_geometry=provided (the dataset's stored signed-distance field), 800 training airfoils, 100,000 queries, 500 epochs, seeds 42/43 (campaign fa rows 10-11, code_v4/recipe_v4); float32 per-case relative L2 on the 200 test airfoils. Comparators: the provided-geometry reference pair (sg_af_provided), the internal-geometry frame arm (fa_af_frame), the internal-geometry reference pair (sg_af_internal), GeoTransolver-volume (from frame_af_ref_2026-09-26.json).",
+ "n_cases": 200,
+ "per_seed": {
+  "42": {
+   "pressure_l2": 0.025206114281900227,
+   "nut_l2": 0.028921813759952782,
+   "velocity_x_l2": 0.010756486374884845,
+   "velocity_y_l2": 0.027862571473233403,
+   "velocity_z_l2": 1.3580240177757906e-07,
+   "velocity_l2": 0.012497817338444293
+  },
+  "43": {
+   "pressure_l2": 0.02713964997092262,
+   "nut_l2": 0.0299908862891607,
+   "velocity_x_l2": 0.011735699968412519,
+   "velocity_y_l2": 0.02932717639952898,
+   "velocity_z_l2": 1.3580240177757906e-07,
+   "velocity_l2": 0.013536168283317239
+  }
+ },
+ "seed_means": {
+  "pressure_l2": 0.026172882126411424,
+  "velocity_l2": 0.013016992810880767,
+  "nut_l2": 0.02945635002455674
+ },
+ "comparators": {
+  "provided_ref": {
+   "pressure_l2": 0.03281833085029856,
+   "nut_l2": 0.03233322395888698,
+   "velocity_l2": 0.016127241897009495
+  },
+  "internal_ref": {
+   "pressure_l2": 0.03407232453813776,
+   "nut_l2": 0.03547716143541038,
+   "velocity_l2": 0.020553591693751514
+  },
+  "frame_internal": {
+   "pressure_l2": 0.028158487054752185,
+   "velocity_l2": 0.01609616298926994,
+   "nut_l2": 0.029662867751903833
+  },
+  "gt_vol": {
+   "pressure_l2": 0.02769027151283808,
+   "velocity_l2": 0.03793887558858842,
+   "nut_l2": 0.02931844344129786
+  },
+  "isla_ref_scoreboard": {
+   "pressure_l2": 0.03127504014293663,
+   "velocity_l2": 0.015302993059158325,
+   "nut_l2": 0.032222567268181596
+  }
+ },
+ "ratios": {
+  "over_provided_ref": {
+   "pressure_l2": 0.7975080221416355,
+   "velocity_l2": 0.8071431490895249,
+   "nut_l2": 0.9110242165152383
+  },
+  "over_frame_internal": {
+   "pressure_l2": 0.92948467279226,
+   "velocity_l2": 0.808701602957064,
+   "nut_l2": 0.9930378367636474
+  },
+  "over_internal_ref": {
+   "pressure_l2": 0.7681566339013839,
+   "velocity_l2": 0.633319616582539,
+   "nut_l2": 0.8302904976821465
+  },
+  "over_isla_ref_scoreboard": {
+   "pressure_l2": 0.8368616637034912,
+   "velocity_l2": 0.8506174419971089,
+   "nut_l2": 0.9141527979256832
+  },
+  "gt_vol_over": {
+   "pressure_l2": 1.0579756321484914,
+   "velocity_l2": 2.91456530243112,
+   "nut_l2": 0.9953182732027589
+  }
+ },
+ "verdict": "additive"
+}

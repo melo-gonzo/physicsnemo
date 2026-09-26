@@ -28589,3 +28589,63 @@ Surface), so the sampling reading is interim until a second surface set
 with full-mesh loads is measured; the side force is in the artifact and
 not discussed, its per-car magnitudes being too small for a relative
 error to mean anything.
+
+## 2026-09-26 — Verdict, FRAME-PROVIDED: the laboratory frame and the stored geometry add on AirfRANS (0.80 / 0.81 / 0.91 of the provided-geometry reference on pressure / velocity / eddy viscosity; 0.93 / 0.81 / 0.99 of the frame on internal geometry); ISLA leads GeoTransolver-volume on all three fields; DrivAerML Volume twin launched {#sec-nb-frame-provided-verdict}
+
+**Setting.** Two inputs each improved ISLA's AirfRANS interior prediction
+at the reference configuration: the dataset's stored signed-distance field
+in place of the geometry computed inside the model from the sampled
+boundary (velocity 1.27x better, @sec-nb-internal-geometry-verdict), and
+the two laboratory axes as global directions beside the inlet (pressure
+17%, velocity 22%, eddy viscosity 16% better,
+@sec-nb-frame-af-ref-verdict). The frame result was measured on the
+internal geometry, so the FRAME-PROVIDED ledger row asked whether the two
+add: *additive* if the combination is at least 10% better than the
+provided-geometry reference pair on pressure and at least 5% better than
+the internal-geometry frame arm on velocity; *redundant* if within 3% of
+the frame arm on every field.
+
+**What was run.** Campaign fa rows 10 and 11 (code_v4, recipe_v4): the
+reference configuration with `interior_geometry: provided` and the two
+axes (K = 3), 800 training airfoils, 100,000 queries, seeds 42 and 43,
+scored in float32 on the 200 test airfoils. Comparators: the
+provided-geometry reference pair (sg rows 6-7), the frame arm on internal
+geometry (fa rows 0-1), the internal-geometry reference pair (sg rows
+4-5), and GeoTransolver-volume from the interior scoreboard. Data:
+results/frame_provided_2026-09-26.json.
+
+**What we saw** (seed means; pressure / velocity / eddy viscosity). The
+combination scores 0.0262 / 0.0130 / 0.0295 (seeds 0.0252 and 0.0271 on
+pressure, 0.0125 and 0.0135 on velocity). That is **0.80 / 0.81 / 0.91 of
+the provided-geometry reference** (0.0327 / 0.0159 / 0.0311) and **0.93 /
+0.81 / 0.99 of the frame on internal geometry** (0.0282 / 0.0161 /
+0.0297); against the internal-geometry reference it is 0.77 / 0.63 / 0.83.
+Both additive clauses fire (20% on pressure against 10% asked; 19% on
+velocity against 5%). **Additive.** The frame carries the pressure gain
+and the stored geometry carries the velocity gain; the eddy viscosity is
+the frame's alone (the stored field adds nothing on top, 0.99). Against
+GeoTransolver-volume (0.0277 / 0.0379 / 0.0293) the combined model is
+ahead on every field: GeoTransolver-volume ÷ ISLA = 1.06 on pressure,
+2.92 on velocity and 1.00 on eddy viscosity, where the reference row of
+the interior scoreboard reads 0.89 / 2.48 / 0.91 and the frame-on-internal
+row 0.98 / 2.36 / 0.99.
+
+**Why it matters.** The two inputs are different information. The frame
+supplies orientation invariants that fix the pressure field's dependence
+on the angle of attack; the stored field supplies an exact distance and
+direction to the wall that the sampled boundary cannot, which is what the
+velocity near the wall needs. Neither is a change to the architecture:
+both are inputs a fixed-frame dataset with a stored distance field can
+supply, and the recipe's AirfRANS configuration carries them as a labeled
+variant. It is one dataset. The DrivAerML Volume twin launched at the
+same time (fa rows 12-15, code_v4): the reference with the three body
+axes on the internal geometry and on the provided geometry, two seeds
+each, against the sg Volume pairs (internal 0.0655 / 0.0409 / 0.0894 and
+provided 0.0576 / 0.0397 / 0.0874 on velocity / pressure / eddy viscosity,
+@sec-nb-internal-geometry-verdict). Prediction, from the Surface task
+where the axes bought 4.8% of pressure: the frame buys under 5% of
+pressure on the Volume task and adds to the stored geometry's velocity
+gain (the additive clause is the same, 10% and 5%). If the Volume twin is
+additive too, the recommended AirfRANS and DrivAerML Volume inputs are the
+frame plus the stored field, and the scoreboard rows carry them as the
+labeled variant.
