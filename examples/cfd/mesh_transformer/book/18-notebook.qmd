@@ -27919,3 +27919,71 @@ GeoTransolver-512 lane existed at 210 wings under the reference protocol;
 a pair is launched (ref rows 38 and 39, learning rate 3e-3, 200,000
 cells). Its per-case rows feed the preregistered 210-case twin of the
 wing anatomy (@sec-nb-hl35-percase). Data: results/cluster_return_reductions_2026-09-25.json (group hl210).
+
+## 2026-09-26 — Verdict, FRAME-3D (DrivAerML Surface, 435 cars, 200,000 cells): two body axes beside the inlet improve ISLA's pressure by 3.4% and three by 4.8%, both seeds; the 2-D step does not transfer as a step, and neither preregistered bar fires; with the body frame ISLA edges GeoTransolver-512 {#sec-nb-frame3d-verdict}
+
+**Setting.** The nine-arm AirfRANS ladder (@sec-nb-frame-af-h-verdict,
+@sec-nb-frame-af-k4-verdict) found a step: beside the inlet direction,
+two more distinct in-plane directions cut ISLA's interior pressure error
+by a quarter at exploration scale, one more direction did nothing, and a
+fourth added nothing. The reading was an overcomplete direction set for
+the ambient plane, with a sharp 3-D prediction: three directions (a
+complete basis) should sit on the floor and four should show the step.
+The falsifier ran at reference scale on the surface task: ISLA R1 at
+200,000 cells on 435 DrivAerML cars with the inlet plus the body
+$\hat y$ and $\hat z$ (K = 3) and plus all three body axes (K = 4, the
+four-vector fused kernel), two seeds each, against the R1 reference pair
+and GeoTransolver-512 (bars in the FRAME-3D ledger row: K = 3 within 3%
+of R1 and K = 4 at least 10% better confirms the reading; K = 3 gaining
+10% refutes it toward "any extra direction pays"; neither gaining bounds
+the finding to 2-D or exploration scale). The body axes are written
+before the centering transform, so the random rotation augmentation
+carries them with the car.
+
+**What we saw** (float32 relative L2 on the 48 validation cars, seed
+means with seeds in parentheses; data results/frame3d_2026-09-26.json):
+
+| arm | pressure | wall shear | ÷ R1 (pressure / shear) | GeoTransolver-512 ÷ arm (pressure) |
+|---|---|---|---|---:|
+| ISLA R1, inlet only (reference) | 0.0419 (0.0421, 0.0418) | 0.0657 | 1 / 1 | 0.979 |
+| ISLA R1, inlet + body $\hat y$, $\hat z$ (K = 3) | 0.0405 (0.0413, 0.0397) | 0.0633 | 0.966 / 0.964 | 1.013 |
+| ISLA R1, inlet + body $\hat x$, $\hat y$, $\hat z$ (K = 4) | 0.0399 (0.0401, 0.0397) | 0.0626 | **0.952 / 0.953** | **1.028** |
+| ISLA R2 (24 layers), inlet only | 0.0409 (0.0415, 0.0402) | 0.0641 | 0.974 / 0.976 | 1.004 |
+| GeoTransolver-512 (3e-3) | 0.0410 (0.0415, 0.0405) | 0.0655 | 0.979 / 0.997 | 1 |
+
+: FRAME-3D, campaign fa rows 2 to 5 on code_v4, against the REF pairs. Two seeds each; every K = 4 seed is below every R1 seed.
+
+**Neither bar fires.** K = 3 is not flat (3.4% better, just outside the
+3% band) and K = 4 is not a step (4.8%, half the 10% bar). The gain is
+small and monotone in the number of directions, with no sign of the
+2-D ladder's structure (nothing at two, everything at three). The 3-D
+prediction of the overcompleteness reading is therefore not confirmed:
+either the reading does not transfer from a plane to a volume, or the
+step is an exploration-scale phenomenon that a 68M-parameter model at
+200,000 cells no longer needs (the same directions bought 25% at 192
+wide on 120 airfoils and 10% at 240 airfoils in the size ladder,
+@sec-nb-frame-af-size-verdict; here, at 435 cars and twice the width,
+5%). The AirfRANS reference-scale twin (fa rows 0 and 1, in the scorer)
+separates the two: it is the same 2-D problem at R1 and 800 airfoils.
+
+**What the small gain is worth.** Five percent on DrivAerML Surface at
+200,000 cells is the size of the standing itself: the reference ISLA
+trails GeoTransolver-512 by 2% (GeoTransolver ÷ ISLA 0.979), and with the
+three body axes it leads by 3% (1.028), both seeds of the K = 4 arm below
+both seeds of GeoTransolver-512, and it does so at a fraction of the
+parameters. The body axes are legitimate inputs under the contracts
+(they rotate with the car, so the model stays equivariant; they carry
+the same information GeoTransolver reads from absolute coordinates) and
+they cost nothing at inference. Whether they become part of the
+reference configuration is a decision for after the AirfRANS twin
+reports (the two-datasets rule, @sec-protocol), and it is a change of
+the recommended *inputs*, not of the architecture. Depth (R2) buys a
+similar 2.6%, so on this dataset the two cheapest improvements to the
+reference are the body frame and 24 layers, and they are not yet tested
+together.
+
+**Limits.** One dataset at reference scale; the K = 3 arm's seeds split
+(0.0413 against 0.0397) more than the K = 4 arm's (0.0401, 0.0397), so
+the 3.4% at K = 3 is the least certain number in the table. The wing
+body-frame lane (fa rows 6 and 7) remains staged for launch after the
+AirfRANS twin.
