@@ -36,6 +36,7 @@ AFG = {f: AFA["gt_volume_1e-3"][f] for f, _ in FIELDS}
 AFI = ref_arm("isla_r1|af"); AFI_R2 = ref_arm("isla_r2|af")
 AFR = {f: AFG[f]["mean"] / AFI[f]["mean"] for f, _ in FIELDS}
 FAF = J("frame_af_local_2026-09-23.json")  # FRAME-AF local mechanism rung, two seeds (frame ÷ frame-free arm)
+FAR = J("frame_af_ref_2026-09-26.json")  # FRAME-AF at reference scale (fa rows 0-1): two laboratory axes beside the inlet, internal geometry
 AFP = {f: [g / i for g, i in zip(AFG[f]["seeds"], AFI[f]["seeds"])] for f, _ in FIELDS}
 spread = lambda s: abs(s[0] / s[1] - 1) * 100
 lead = lambda r: f"{(r - 1) * 100:.0f}%"
@@ -291,6 +292,9 @@ out += "| GeoTransolver-volume, 1e-3 | " + " | ".join(acell(AFG[f]) for f, _ in 
 out += "| **ISLA, query tokens + signed distance, 5e-4** | " + " | ".join(acell(AFI[f]) for f, _ in FIELDS) + " |\n"
 out += "| GeoTransolver-volume ÷ ISLA (paired by seed) | " + " | ".join(f"{AFR[f]:.2f} ({' / '.join(f'{r:.2f}' for r in AFP[f])})" for f, _ in FIELDS) + " |\n"
 out += "| ISLA, 24 layers (depth variant), 5e-4 | " + " | ".join(acell(AFI_R2[f]) for f, _ in FIELDS) + " |\n"
+_fr = {f: {"mean": FAR["seed_means"]["frame"][f], "seeds": [FAR["per_run"][f"frame_seed{s}"][f] for s in (42, 43)]} for f, _ in FIELDS}
+out += "| **ISLA + laboratory frame** (two fixed axes as global directions; internal geometry), 5e-4 | " + " | ".join(acell(_fr[f]) for f, _ in FIELDS) + " |\n"
+out += "| GeoTransolver-volume ÷ ISLA + frame | " + " | ".join(f"{FAR['gt_over']['frame'][f]:.2f}" for f, _ in FIELDS) + " |\n"
 print(out)
 sp = {f: spread(AFI[f]["seeds"]) for f, _ in FIELDS}; spg = {f: spread(AFG[f]["seeds"]) for f, _ in FIELDS}
 verdict = {f: standing(AFR[f], AFP[f]) for f, _ in FIELDS}
@@ -301,7 +305,7 @@ print(": Interior error on AirfRANS (relative L2 over the 200 test cases of the 
       f"ISLA's two seeds differ by {min(sp.values()):.0f} to {max(sp.values()):.0f}% and GeoTransolver-volume's by {min(spg.values()):.0f} to "
       f"{max(spg.values()):.0f}%, so the pressure and eddy-viscosity deficits are one to two seed spreads wide and the velocity lead is many; "
       "the last row is the depth variant the reference selection rejected, worse than the reference on every field here. Data: "
-      "results/airfrans_reduction_2026-09-22.json (GeoTransolver-volume); results/ref_surface_2026-09-23.json (ISLA). {#tbl-interior-airfrans}")
+       The frame row is the labeled variant of @sec-nb-frame-af-ref-verdict: the same reference configuration with the laboratory x and y axes as two more global directions, on the internal geometry; it is not the reference row and is compared with GeoTransolver-volume for the standing only. "results/airfrans_reduction_2026-09-22.json (GeoTransolver-volume); results/ref_surface_2026-09-23.json (ISLA). {#tbl-interior-airfrans}")
 ```
 
 ```{python}
@@ -649,7 +653,10 @@ print(f"**One architecture covers the surface and the interior: ISLA with query 
       f"scale falls to {FAF['frame_over_base']['pressure_l2']:.2f}x the frame-free arm's and velocity to {FAF['frame_over_base']['velocity_l2']:.2f}x, "
       f"two seeds (@sec-nb-frame-af-local-verdict). An eight-arm control ladder located the gain not in the frame as physics but in the count of distinct "
       f"directions: three distinct in-plane directions beside the inlet give it in full whatever their angles or information, two give nothing, and an exact copy of the "
-      f"second gives a third (@sec-nb-frame-af-h-verdict). The reference-scale twin and a 3-D falsifier are staged; no accuracy claim is made at exploration scale. On the solids the picture is one of targets, "
+      f"second gives a third (@sec-nb-frame-af-h-verdict). **At reference scale the frame pays on both datasets**: on AirfRANS the two axes cut ISLA's interior pressure "
+      f"error to {FAR['frame_over_internal']['pressure_l2']:.2f}x and velocity to {FAR['frame_over_internal']['velocity_l2']:.2f}x its own (two seeds, 800 airfoils), closing the pressure and eddy-viscosity deficits to GeoTransolver-volume to "
+      f"parity ({FAR['gt_over']['frame']['pressure_l2']:.2f} and {FAR['gt_over']['frame']['nut_l2']:.2f}) with the velocity lead intact ({FAR['gt_over']['frame']['velocity_l2']:.2f}x; the frame row of @tbl-interior-airfrans, @sec-nb-frame-af-ref-verdict); on DrivAerML "
+      f"Surface three body axes buy 5% (@sec-nb-frame3d-verdict). The frame is therefore the recommended global input on fixed-frame datasets; the reference configuration is unchanged. On the solids the picture is one of targets, "
       f"not of physics: ISLA leads at the small lug rungs and ties at the large ones on the lug's frame-free scalar (GeoTransolver-512 ÷ ISLA {lug_ratio[2400]:.2f} at 2,400 lugs), trails on "
       "Tensile2d's frame components at 400 cases with the steeper learning curve, and trails by a constant factor of three on the fixed-mesh "
       "Poisson set, where the gap is value transport and the boundary-value extension is the candidate remedy (@sec-interior-olbc). An "

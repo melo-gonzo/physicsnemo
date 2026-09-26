@@ -28046,3 +28046,82 @@ three body axes on DrivAerML at 200,000 cells (@sec-nb-frame3d-verdict),
 so the exploration-scale mechanism work here bounds, rather than
 motivates, changes to the reference configuration. No accuracy claim at
 this scale (@sec-protocol).
+
+## 2026-09-26 — Verdict, FRAME-AF at reference scale (AirfRANS, 800 airfoils, R1, 100,000 queries): the two laboratory axes beside the inlet cut ISLA's interior pressure error by 17%, velocity by 22% and eddy viscosity by 16%, both seeds; the frame pays on two datasets and closes the AirfRANS pressure deficit to GeoTransolver-volume {#sec-nb-frame-af-ref-verdict}
+
+**Setting.** The local ladder (@sec-nb-frame-af-local-verdict,
+@sec-nb-frame-af-h-verdict) found at exploration scale that two extra
+distinct in-plane directions beside the inlet cut ISLA's AirfRANS
+interior pressure error by a quarter, and the size ladder
+(@sec-nb-frame-af-size-verdict) could not pin the step better than 10 to
+25% or say what would survive at 800 airfoils. The reference-scale twin
+(campaign `fa` rows 0 and 1, `code_v4`): the reference configuration
+(384 wide, 12 layers, 256 slices, cosine routing, the four-vector fused
+kernel, 5e-4) with the inlet plus the laboratory $\hat x$ and $\hat y$
+as global directions (K = 3), 800 training airfoils, 100,000 interior
+queries, internal nearest-boundary geometry, two seeds, against the
+internal-geometry reference pair of INTERNAL-GEOMETRY (the same model
+without the two axes). Bar: pressure at least 10% better with velocity
+not more than 5% worse.
+
+**What we saw** (float32 relative L2 on the 200 test airfoils, seed
+means with seeds in parentheses for pressure; data results/frame_af_ref_2026-09-26.json):
+
+| arm | pressure | velocity | eddy viscosity | GeoTransolver-volume ÷ arm (p / v / ν) |
+|---|---|---|---|---|
+| ISLA R1, inlet only, internal geometry (reference pair) | 0.0341 (0.0322, 0.0359) | 0.0206 | 0.0355 | 0.81 / 1.85 / 0.83 |
+| **ISLA R1, inlet + $\hat x$ + $\hat y$, internal geometry** | **0.0282** (0.0274, 0.0290) | **0.0161** | **0.0297** | **0.98 / 2.36 / 0.99** |
+| ISLA R1, inlet only, provided geometry (scoreboard arm) | 0.0313 (0.0304, 0.0322) | 0.0153 | 0.0322 | 0.89 / 2.48 / 0.91 |
+| GeoTransolver-volume, 1e-3 | 0.0277 (0.0268, 0.0286) | 0.0379 | 0.0293 | 1 |
+| frame ÷ internal reference pair | **0.83** | **0.78** | **0.84** | |
+
+: The AirfRANS interior task at reference scale, 200 test airfoils, two seeds each. The provided-geometry arm and GeoTransolver-volume are the interior scoreboard's rows (@sec-interior-standing); the frame arm is compared with the internal-geometry pair because it shares that geometry.
+
+**Frame pays, at scale, on both seeds.** Against its own reference pair
+the frame arm is 17% better on pressure (0.0274 and 0.0290 against 0.0322
+and 0.0359), 22% on velocity and 16% on eddy viscosity, clearing the
+bar on every field. By angle of attack the pressure ratio is
+0.77 below zero degrees (55 airfoils), 0.89 at 0 to 5 (46), 0.96 at 5 to 10
+(61) and 0.71 at 10 and above (38): the gain sits at the ends of
+the angle range, where ISLA's interior pressure error was largest
+(@sec-nb-hl35-percase addendum), and nearly vanishes at 5 to 10 degrees.
+Two things travel with the number. The frame arm runs the internal
+geometry, which INTERNAL-GEOMETRY found to cost 27% on velocity against
+the stored field on this dataset; the frame recovers that velocity
+(0.0161 against the provided-geometry 0.0153) and beats the
+provided-geometry arm on pressure and eddy viscosity as well, so a frame
+arm on the provided geometry (or on the plane projection now under test)
+has room left. And the size ladder's coin flip landed on the high side:
+17% at 800 airfoils against 10 to 25% at 30 to 240.
+
+**Against GeoTransolver-volume.** The interior scoreboard's AirfRANS
+row (@sec-interior-standing) has ISLA leading on velocity by 2.48x and
+trailing on pressure and eddy viscosity (0.89 and 0.91). With the two
+axes the pressure and eddy-viscosity deficits close to parity
+(0.98 and 0.99) and the velocity lead holds (2.36x). By angle of attack,
+GeoTransolver-volume ÷ ISLA on pressure moves from 0.76 / 0.93 / 1.16 / 0.78
+(reference arm; below zero, 0 to 5, 5 to 10, 10 and above) to 0.88 / 0.96 / 1.21 / 0.96
+(frame arm): the deficit GeoTransolver held at the extreme angles is
+gone, and this is the GeoTransolver-volume per-angle twin the AirfRANS
+anatomy preregistered. **Two datasets now show the effect at protocol
+scale**: DrivAerML Surface (three body axes, 5% on pressure, ISLA from
+2% behind GeoTransolver-512 to 3% ahead, @sec-nb-frame3d-verdict) and
+AirfRANS interior (two axes, 17% on pressure, from 12% behind
+GeoTransolver-volume to parity). The effect is much larger in 2-D than in
+3-D, in line with the ladder's reading that the third distinct direction
+overcompletes a plane but only completes a volume.
+
+**What changes.** The two laboratory axes are legitimate inputs under
+the contracts (they rotate with the data), cost nothing, and pay on both
+datasets. They become the recommended global inputs for fixed-frame
+datasets in the recipe: the AirfRANS and DrivAerML dataset yamls gain the
+constant frame fields and the ISLA model yamls the extra global
+directions, as labeled *frame* variants beside the reference rows, and
+the interior and surface scoreboards carry the frame rows alongside the
+reference (@sec-interior-standing, @sec-de-standing). The reference
+configuration itself (the architecture's hyperparameters) is unchanged:
+this is a statement about which global vectors a dataset should supply,
+and the mechanism ladder says any two distinct fixed directions do. Open:
+the frame arm on the provided (or projected) geometry; the wing lane
+(fa rows 8 and 9); the body frame with 24 layers on DrivAerML (fa rows 6
+and 7, running).

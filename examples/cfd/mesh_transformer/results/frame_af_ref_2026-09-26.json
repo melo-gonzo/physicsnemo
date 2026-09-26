@@ -1,0 +1,171 @@
+{
+ "protocol": "FRAME-AF reference-scale twin (2026-09-26): AirfRANS interior task at R1 (384x12x256, cosine, fused K = 3), 800 training airfoils, 100,000 queries, float32 per-case relative L2 on the 200 test airfoils; frame arm = fa_af_frame (inlet + lab x + lab y) against the internal-geometry reference pair sg_af_internal (inlet only); sg_af_provided for context. Bars (#sec-nb-frame-af-local-prereg / fa ledger): pressure >= 10% better with velocity not > 5% worse = frame pays.",
+ "n_cases": 200,
+ "per_run": {
+  "internal_seed42": {
+   "pressure_l2": 0.03221161481924355,
+   "velocity_l2": 0.01944024385884404,
+   "nut_l2": 0.03473264620173722
+  },
+  "internal_seed43": {
+   "pressure_l2": 0.035933034257031975,
+   "velocity_l2": 0.021666939528658988,
+   "nut_l2": 0.03622167666908353
+  },
+  "frame_seed42": {
+   "pressure_l2": 0.027354751310776918,
+   "velocity_l2": 0.01574995334027335,
+   "nut_l2": 0.028403452313505113
+  },
+  "frame_seed43": {
+   "pressure_l2": 0.02896222279872745,
+   "velocity_l2": 0.016442372638266534,
+   "nut_l2": 0.03092228319030255
+  },
+  "provided_seed42": {
+   "pressure_l2": 0.03198647666024044,
+   "velocity_l2": 0.015714894547127187,
+   "nut_l2": 0.029275651783682407
+  },
+  "provided_seed43": {
+   "pressure_l2": 0.0333549716277048,
+   "velocity_l2": 0.01613099731039256,
+   "nut_l2": 0.032953616245649756
+  },
+  "gt_vol_seed42": {
+   "pressure_l2": 0.026782066838350146,
+   "velocity_l2": 0.037021180796436966,
+   "nut_l2": 0.029597753621637822
+  },
+  "gt_vol_seed43": {
+   "pressure_l2": 0.028598476187326013,
+   "velocity_l2": 0.03885657038073987,
+   "nut_l2": 0.029039133260957896
+  },
+  "isla_ref_seed42": {
+   "pressure_l2": 0.030368366655893625,
+   "velocity_l2": 0.015222934493795037,
+   "nut_l2": 0.03131348838564008
+  },
+  "isla_ref_seed43": {
+   "pressure_l2": 0.03218171362997964,
+   "velocity_l2": 0.015383051624521613,
+   "nut_l2": 0.0331316461507231
+  }
+ },
+ "seed_means": {
+  "internal": {
+   "pressure_l2": 0.03407232453813776,
+   "velocity_l2": 0.020553591693751514,
+   "nut_l2": 0.03547716143541038
+  },
+  "frame": {
+   "pressure_l2": 0.028158487054752185,
+   "velocity_l2": 0.01609616298926994,
+   "nut_l2": 0.029662867751903833
+  },
+  "provided": {
+   "pressure_l2": 0.032670724143972624,
+   "velocity_l2": 0.015922945928759875,
+   "nut_l2": 0.031114634014666083
+  },
+  "gt_vol": {
+   "pressure_l2": 0.02769027151283808,
+   "velocity_l2": 0.03793887558858842,
+   "nut_l2": 0.02931844344129786
+  },
+  "isla_ref": {
+   "pressure_l2": 0.03127504014293663,
+   "velocity_l2": 0.015302993059158325,
+   "nut_l2": 0.032222567268181596
+  }
+ },
+ "frame_over_internal": {
+  "pressure_l2": 0.8264328142106621,
+  "velocity_l2": 0.7831313976215323,
+  "nut_l2": 0.8361116434275038
+ },
+ "by_aoa_pressure": {
+  "aoa<0": {
+   "n": 55,
+   "internal": 0.055111937326463786,
+   "frame": 0.04245360626585104,
+   "frame_over_internal_p": 0.7703159846181921
+  },
+  "0-5": {
+   "n": 46,
+   "internal": 0.032468769010966236,
+   "frame": 0.029009296052643786,
+   "frame_over_internal_p": 0.8934522908104701
+  },
+  "5-10": {
+   "n": 61,
+   "internal": 0.021772999652340762,
+   "frame": 0.020916340380265817,
+   "frame_over_internal_p": 0.9606549724083219
+  },
+  ">=10": {
+   "n": 38,
+   "internal": 0.025305052667758184,
+   "frame": 0.01806380749238949,
+   "frame_over_internal_p": 0.7138419243602308
+  }
+ },
+ "verdict": "frame pays",
+ "gt_over": {
+  "internal": {
+   "pressure_l2": 0.8126910003408739,
+   "velocity_l2": 1.8458513798404488,
+   "nut_l2": 0.8264033044096534
+  },
+  "frame": {
+   "pressure_l2": 0.983372134269725,
+   "velocity_l2": 2.3570136319990866,
+   "nut_l2": 0.9883887049125967
+  },
+  "provided": {
+   "pressure_l2": 0.847556099179596,
+   "velocity_l2": 2.3826543001734106,
+   "nut_l2": 0.9422718399155336
+  },
+  "isla_ref": {
+   "pressure_l2": 0.8853792476775394,
+   "velocity_l2": 2.4791800820874896,
+   "nut_l2": 0.9098729842748615
+  }
+ },
+ "by_aoa_gt_over_isla_ref_pressure": {
+  "aoa<0": {
+   "n": 55,
+   "gt": 0.03729234908453443,
+   "isla_ref": 0.04920160496099429,
+   "frame": 0.04245360626585104,
+   "gt_over_ref": 0.7579498496867898,
+   "gt_over_frame": 0.8784259422156973
+  },
+  "0-5": {
+   "n": 46,
+   "gt": 0.02792372934155814,
+   "isla_ref": 0.029937604644700237,
+   "frame": 0.029009296052643786,
+   "gt_over_ref": 0.9327309139444259,
+   "gt_over_frame": 0.9625786606777481
+  },
+  "5-10": {
+   "n": 61,
+   "gt": 0.0253445268341447,
+   "isla_ref": 0.02181527918952777,
+   "frame": 0.020916340380265817,
+   "gt_over_ref": 1.1617787062890819,
+   "gt_over_frame": 1.2117094278144753
+  },
+  ">=10": {
+   "n": 38,
+   "gt": 0.01727545832430846,
+   "isla_ref": 0.022133102934611473,
+   "frame": 0.01806380749238949,
+   "gt_over_ref": 0.7805258203219807,
+   "gt_over_frame": 0.9563575304700754
+  }
+ }
+}
