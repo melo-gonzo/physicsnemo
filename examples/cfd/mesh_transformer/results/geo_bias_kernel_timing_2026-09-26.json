@@ -1,0 +1,21 @@
+{
+ "protocol": "2026-09-26, RTX 4090 laptop (quiet machine not asserted; relative numbers only): one ISLA geometry region (routing bias + point->slice softmax + pooled invariants) at B=1, N=20,000 points, S=256 slices, K=1, bf16 autocast, forward + backward, mean of 10 steps after 3 warm-ups; peak allocated memory of the region alone.",
+ "ms_per_step": {
+  "fused_linear": 5.81,
+  "fused_mlp": 38.7,
+  "eager_linear": 79.26,
+  "eager_mlp": 103.08
+ },
+ "peak_gib": {
+  "fused_linear": 0.18,
+  "fused_mlp": 0.18,
+  "eager_linear": 0.49,
+  "eager_mlp": 0.82
+ },
+ "ratios": {
+  "fused_mlp_over_fused_linear": 6.66092943201377,
+  "eager_mlp_over_fused_mlp": 2.663565891472868,
+  "eager_mlp_mem_over_fused_mlp_mem": 4.555555555555555
+ },
+ "note": "the MLP branch is arithmetic-bound (16 hidden units x erf per pair); the linear kernel is memory-bound. Optimization candidates: hoist the per-unit weight loads, tanh-free erf, larger BLOCK_N for the MLP branch."
+}

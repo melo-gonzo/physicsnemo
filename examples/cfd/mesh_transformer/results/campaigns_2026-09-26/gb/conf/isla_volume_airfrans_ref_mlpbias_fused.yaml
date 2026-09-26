@@ -1,0 +1,33 @@
+# @package _global_
+# GEO-BIAS-PROTO fused twin (2026-09-26): the reference plus geo_bias: mlp under the fused kernel (code_v6). Everything else identical to the reference file.
+# ISLA -- AirfRANS interior task, REFERENCE CONFIGURATION candidate (REF campaign, 2026-09-22): as isla_volume_ref with
+# the airfoil boundary (line cells with precomputed in-plane normals), one global vector (inlet direction) and one
+# global scalar (inlet speed).
+input_type: tensors
+output_type: fields
+forward_kwargs:
+  points: boundaries.airfoil.cell_centroids
+  normals: boundaries.airfoil.cell_data.normals
+  measure_weights: boundaries.airfoil.cell_data.quadrature_measure
+  global_inputs:
+    freestream: global_data.U_inf_dir
+    u_inf: global_data.U_inf_mag          # the inlet speed: a rank-0 global input
+  query_points: interior.points
+  # INTERNAL-GEOMETRY (2026-09-23): the queries' direction and signed wall distance are computed
+  # inside the model from the boundary sample (interior_geometry: nearest_boundary, the class default);
+  # the stored sdf / sdf_normals are not read. The *_provided twin reads them.
+model:
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs: {velocity: 1, pressure: 0, nut: 0}
+  global_inputs: {freestream: 1, u_inf: 0}
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  scale_mode: rms_distance
+  routing_norm: cosine
+  routing_temperature: 10.0
+  geo_kernel: fused                     # GEO-BIAS-PROTO fused twin (2026-09-26): the MLP routing bias inside the Triton kernel (code_v6)
+  geo_bias: mlp                         # Linear(n_geo,16)-GELU-Linear(16,1) from the pair invariants to the routing bias
+  query_tokens: true
+  query_mass: source_total

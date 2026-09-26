@@ -28459,3 +28459,53 @@ recorded beside the reference's as the price the fused follow-up must
 remove; the result enters the book only with the fused kernel exact
 against this eager path, so the accuracy claim and the speed claim are
 one configuration.
+
+## 2026-09-26 — Engineering, the MLP routing bias runs inside the fused geometry kernel: exact against the eager region, 2.7x faster and 4.5x leaner than eager on the laptop GPU, 6.7x the linear kernel's region time {#sec-nb-geo-bias-kernel}
+
+**Setting.** ISLA's per-layer geometry region evaluates, for every
+point-anchor pair, a handful of relational invariants, a routing bias from
+them, the point-to-slice softmax and the mix-weighted pooling of the
+invariants. The fused Triton kernel (@sec-nb-kernel-study) computes that
+region on register tiles and never writes the (points x slices x
+invariants) intermediates. Until today it implemented only the linear
+bias head, so the MLP head of the GEO-BIAS study
+(@sec-nb-geo-bias-verdict) ran on the eager region, which on the laptop
+GPU is nine times slower at exploration scale and materializes a (points x
+slices x 16) hidden tensor per layer at protocol scale.
+
+**What changed** (commit 9b799ac4). The kernel takes a compile-time
+hidden width `H` (0 for the linear head). For `H > 0` it evaluates the
+hidden units one at a time on the tile: pre-activation, exact-erf GELU,
+and the unit's contribution to the bias, so no per-unit tensor is ever
+larger than one tile. The backward recomputes each unit, accumulates the
+gradient on the invariants across units, and writes the per-tile partial
+sums of the weight gradients (W1, b1, W2) beside the linear kernel's,
+reduced by torch as before (deterministic, no atomics). The Python wrapper
+packs the Sequential's parameters into one flat buffer, so autograd routes
+the gradient back through the concatenation without a new custom op. The
+class no longer refuses `geo_bias="mlp"` under `geo_kernel="fused"` and
+the automatic resolution picks the fused path for it.
+
+**Verification.** Region level, both heads, every (K, P) in the kernel
+grid, float64 and float32: outputs and every gradient agree with the eager
+region to 1e-16 and 1e-7 relative. Model level, K = 2 with the MLP head in
+float64: forward 1e-11, every parameter gradient 1e-10. The 51 kernel tests
+and the 29 model tests that touch the region pass; the cluster snapshot
+code_v6 (code_v5 plus this overlay) is under its own verification job.
+
+**Cost** (data results/geo_bias_kernel_timing_2026-09-26.json; laptop
+GPU, one region, 20,000 points x 256 slices, K = 1, bf16, forward +
+backward): fused linear 5.8 ms and 0.18 GiB; fused MLP 38.7 ms and 0.18
+GiB; eager linear 79 ms and 0.49 GiB; eager MLP 103 ms and 0.82 GiB. The
+fused MLP is 2.7x faster and 4.5x leaner than the eager MLP, and its
+memory is the linear kernel's; but it costs 6.7x the linear kernel's
+region time, because the region turns from memory-bound into
+arithmetic-bound (16 hidden units and 16 error functions per pair). Whether
+that matters at the reference configuration is a model-level question:
+the region is one part of a block whose attention and MLP GEMMs dominate
+at 384 wide. The fused twin lanes of GEO-BIAS-PROTO (campaign gb rows 4-5,
+code_v6, one seed per dataset) measure the step time and memory at
+protocol scale against the eager pair and, incidentally, check the two
+paths agree at scale. Optimization candidates if the price matters:
+hoisting the per-unit weight loads, a cheaper erf, a larger tile for the
+MLP branch.
