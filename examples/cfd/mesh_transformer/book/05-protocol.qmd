@@ -840,6 +840,17 @@ A comparison that departs from it says so in the same sentence.**
 | validation and test | all architectures at all rungs scored on the same validation cases; a sealed test split is evaluated exactly once with the checkpoint and configuration declared in writing beforehand |
 | preregistration | every experiment states its prediction and its falsifier in readout units before it runs; the dated record is the notebook (@sec-notebook) |
 
+The book's accuracy numbers are field errors on the sampled cells, and
+they compare architectures fairly because every model is scored on the
+same cells. They are not statements about integrated loads. On the
+DrivAerML Surface reference checkpoints the 200,000-cell sample alone
+misses the full-surface drag by 2.4% and the lift by 30% (the
+Horvitz-Thompson estimate of a signed integrand with heavy cancellation),
+while both ISLA and GeoTransolver-512 predict the sampled-cell drag to
+within 1%; against the full surface the two architectures' drag errors
+are 2.62% and 2.65% (@sec-nb-forceref-verdict, one dataset). A force
+claim needs the full surface at inference or a stated sampling band.
+
 Because the rungs of a ladder share one rate and one schedule, a difference
 between rungs is a difference in data and nothing else. When a result
 favors one architecture, the strongest controls for the other (a higher
