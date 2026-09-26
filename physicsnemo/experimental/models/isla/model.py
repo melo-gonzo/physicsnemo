@@ -1039,6 +1039,7 @@ def nearest_boundary_geometry(
     *,
     chunk: int | None = None,
     eps: float = 1e-12,
+    projection: str = "centroid",
 ) -> tuple[
     Float[torch.Tensor, "batch queries"], Float[torch.Tensor, "batch queries 3"]
 ]:
@@ -1078,7 +1079,20 @@ def nearest_boundary_geometry(
     distance by up to about the sample spacing near the wall and :math:`u_q`
     deviates from the true SDF gradient by the same order; far from the wall
     both agree with the full-mesh field.
+
+    ``projection="plane"`` (INTERNAL-GEOMETRY-PROJ, 2026-09-25) measures the
+    distance to the nearest sample's *tangent plane* instead of to the sample
+    itself: :math:`d_q = (x_q - y_{i^*}) \cdot \hat n_{i^*}` and
+    :math:`u_q = \operatorname{sign}(d_q)\, \hat n_{i^*}`, the direction from
+    the foot point on that plane. For a query whose nearest surface point lies
+    inside the nearest cell this is the true wall distance to first order in the
+    cell size (exact on a flat wall); at edges and corners it can understate it.
+    The INTERNAL-GEOMETRY verdict (@sec-nb-internal-geometry-verdict) located
+    the internal geometry's velocity price in the centroid measurement, which
+    this option removes.
     """
+    if projection not in ("centroid", "plane"):
+        raise ValueError(f"projection must be 'centroid' or 'plane', got {projection!r}")
     b, nq, _ = query_points.shape
     n = points.shape[1]
     with torch.autocast(query_points.device.type, enabled=False), torch.no_grad():
@@ -1115,6 +1129,10 @@ def nearest_boundary_geometry(
     n_star = torch.gather(normals, 1, gather)
     n_star = n_star / n_star.norm(dim=-1, keepdim=True).clamp_min(eps)
     diff = query_points - y
+    if projection == "plane":
+        d_plane = (diff * n_star).sum(-1, keepdim=True)
+        sign = torch.where(d_plane >= 0, 1.0, -1.0).to(d_plane)
+        return d_plane.squeeze(-1), sign * n_star
     dist = diff.norm(dim=-1, keepdim=True)
     on_wall = dist <= eps
     u = torch.where(on_wall, n_star, diff / dist.clamp_min(eps))
@@ -1396,8 +1414,12 @@ class ISLA(Module):
             positive on the side the normal points to), and ``d / L`` with its
             signed log enters the query embedding as a built-in channel; the
             caller passes ``query_points`` / ``support_points`` only and
-            ``query_normals`` / ``support_normals`` are refused. The distance is
-            that to the *sampled* boundary and overestimates the wall distance
+            ``query_normals`` / ``support_normals`` are refused.
+            ``"nearest_plane"`` (INTERNAL-GEOMETRY-PROJ, 2026-09-25): the same
+            search, but the distance to the nearest sample's tangent plane and
+            the direction from its foot point; exact on a flat wall, first order
+            in the cell size elsewhere, understated at edges. The default's
+            distance is that to the *sampled* boundary and overestimates the wall distance
             near the wall by up to about the sample spacing (module docstring).
             ``"provided"``: the caller supplies ``query_normals`` (and
             ``support_normals``; e.g. the stored SDF gradient) and any distance
@@ -1482,9 +1504,9 @@ class ISLA(Module):
         if geo_bias not in ("linear", "mlp"):
             raise ValueError(f"geo_bias must be 'linear' or 'mlp', got {geo_bias!r}")
         self.geo_bias = geo_bias
-        if interior_geometry not in ("nearest_boundary", "provided"):
+        if interior_geometry not in ("nearest_boundary", "nearest_plane", "provided"):
             raise ValueError(
-                "interior_geometry must be 'nearest_boundary' or 'provided', "
+                "interior_geometry must be 'nearest_boundary', 'nearest_plane' or 'provided', "
                 f"got {interior_geometry!r}"
             )
         self.interior_geometry = interior_geometry
@@ -1769,7 +1791,7 @@ class ISLA(Module):
         ### query_inputs. Under "provided" the caller passes query_normals (and
         ### any distance as a declared query input), the form of every interior
         ### lane trained before this date.
-        self.n_query_builtin = 2 if interior_geometry == "nearest_boundary" else 0
+        self.n_query_builtin = 0 if interior_geometry == "provided" else 2
         self.n_query_features = self.n_query_builtin + self.qin.n_features
         if self.n_query_features and (self.query_tokens or query_independent):
             width = self.n_query_features
@@ -1924,7 +1946,7 @@ class ISLA(Module):
                 f"Expected measure_weights of shape {(b, n)} but got tensor of shape {tuple(measure_weights.shape)}"
             )
         self.bin.validate("boundary_inputs", boundary_inputs, b, n)
-        internal = self.interior_geometry == "nearest_boundary"
+        internal = self.interior_geometry != "provided"
         for name, pts, nrm, fields in (
             ("query", query_points, query_normals, query_inputs),
             ("support", support_points, support_normals, support_inputs),
@@ -2124,7 +2146,7 @@ class ISLA(Module):
         h = self.embed(self._token_seed(n_hat, g_hat, b_feat, g_scalars, n))
         vecs, tens = self._block_extras(b_vecs, b_tens, None, None, b, n, points)
 
-        internal = self.interior_geometry == "nearest_boundary"
+        internal = self.interior_geometry != "provided"
 
         def _query_class(q_pts, q_nrm, fields, kind: str):
             """Frame quantities, seed state and block stacks of a query-side token
@@ -2142,6 +2164,7 @@ class ISLA(Module):
                         n_hat[:, :n_boundary],
                         chunk=self.interior_nn_chunk,
                         eps=self.eps,
+                        projection="plane" if self.interior_geometry == "nearest_plane" else "centroid",
                     )
                     s = (d / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
                     builtin = torch.cat(
