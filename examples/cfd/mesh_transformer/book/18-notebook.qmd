@@ -27920,6 +27920,30 @@ a pair is launched (ref rows 38 and 39, learning rate 3e-3, 200,000
 cells). Its per-case rows feed the preregistered 210-case twin of the
 wing anatomy (@sec-nb-hl35-percase). Data: results/cluster_return_reductions_2026-09-25.json (group hl210).
 
+## 2026-09-26 — Preregistration, GEO-BIAS-K3: do the nonlinear routing bias and the two extra directions add, or are they one mechanism? Inlet + x + y with the MLP bias, two seeds, laptop GPU {#sec-nb-geo-bias-k3-prereg}
+
+**Question.** GEO-BIAS (@sec-nb-geo-bias-verdict) found that a two-layer
+routing bias at K = 1 recovers all of the two-axis velocity gain and a
+fifth of the pressure gain. If the bias and the directions are one
+mechanism for velocity, adding the bias to the K = 3 arm should leave
+velocity where the K = 3 arm has it; if they are different mechanisms,
+velocity should improve again. For pressure, where the bias recovered
+only a fifth, an additive gain would say the two act on different
+channels (routing against seed and read-back).
+
+**Arm.** Inlet + $\hat x$ + $\hat y$ (K = 3) with `geo_bias: mlp` on the
+eager region, same 160-airfoil rung, protocol and seeds (42, 43) as the
+ladder; float32 relative L2 on the 40 test airfoils, two-seed means.
+Comparators: the K = 3 linear arm (pressure 0.267, velocity 0.116) and
+the K = 1 MLP arm (0.333, 0.116).
+
+**Bars.** *One mechanism* (velocity): the K = 3 MLP arm within 3% of the
+K = 3 linear arm on velocity. *Additive* (velocity): at least 8% better.
+*Additive* (pressure): at least 6% better than the K = 3 linear arm (the
+bias's own gain at K = 1). *Not additive* (pressure): within 3%.
+Prediction: one mechanism on velocity (0.7), additive on pressure (0.5).
+Launched 2026-09-26 03:14 EDT, two seeds in parallel, about 11 hours.
+
 ## 2026-09-26 — Verdict, FRAME-3D (DrivAerML Surface, 435 cars, 200,000 cells): two body axes beside the inlet improve ISLA's pressure by 3.4% and three by 4.8%, both seeds; the 2-D step does not transfer as a step, and neither preregistered bar fires; with the body frame ISLA edges GeoTransolver-512 {#sec-nb-frame3d-verdict}
 
 **Setting.** The nine-arm AirfRANS ladder (@sec-nb-frame-af-h-verdict,
@@ -28075,7 +28099,7 @@ means with seeds in parentheses for pressure; data results/frame_af_ref_2026-09-
 | GeoTransolver-volume, 1e-3 | 0.0277 (0.0268, 0.0286) | 0.0379 | 0.0293 | 1 |
 | frame ÷ internal reference pair | **0.83** | **0.78** | **0.84** | |
 
-: The AirfRANS interior task at reference scale, 200 test airfoils, two seeds each. The provided-geometry arm and GeoTransolver-volume are the interior scoreboard's rows (@sec-interior-standing); the frame arm is compared with the internal-geometry pair because it shares that geometry.
+: The AirfRANS interior task at reference scale, 200 test airfoils, two seeds each. The provided-geometry arm and GeoTransolver-volume are the interior scoreboard's rows (@sec-interior-airfrans); the frame arm is compared with the internal-geometry pair because it shares that geometry.
 
 **Frame pays, at scale, on both seeds.** Against its own reference pair
 the frame arm is 17% better on pressure (0.0274 and 0.0290 against 0.0322
@@ -28095,7 +28119,7 @@ has room left. And the size ladder's coin flip landed on the high side:
 17% at 800 airfoils against 10 to 25% at 30 to 240.
 
 **Against GeoTransolver-volume.** The interior scoreboard's AirfRANS
-row (@sec-interior-standing) has ISLA leading on velocity by 2.48x and
+row (@sec-interior-airfrans) has ISLA leading on velocity by 2.48x and
 trailing on pressure and eddy viscosity (0.89 and 0.91). With the two
 axes the pressure and eddy-viscosity deficits close to parity
 (0.98 and 0.99) and the velocity lead holds (2.36x). By angle of attack,
@@ -28118,7 +28142,7 @@ datasets in the recipe: the AirfRANS and DrivAerML dataset yamls gain the
 constant frame fields and the ISLA model yamls the extra global
 directions, as labeled *frame* variants beside the reference rows, and
 the interior and surface scoreboards carry the frame rows alongside the
-reference (@sec-interior-standing, @sec-de-standing). The reference
+reference (@sec-interior-airfrans, @sec-de-result). The reference
 configuration itself (the architecture's hyperparameters) is unchanged:
 this is a statement about which global vectors a dataset should supply,
 and the mechanism ladder says any two distinct fixed directions do. Open:
