@@ -304,8 +304,9 @@ print(": Interior error on AirfRANS (relative L2 over the 200 test cases of the 
       f"ISLA {verdict['pressure_l2']} on pressure, {verdict['velocity_l2']} on velocity, {verdict['nut_l2']} on eddy viscosity. How to read this: "
       f"ISLA's two seeds differ by {min(sp.values()):.0f} to {max(sp.values()):.0f}% and GeoTransolver-volume's by {min(spg.values()):.0f} to "
       f"{max(spg.values()):.0f}%, so the pressure and eddy-viscosity deficits are one to two seed spreads wide and the velocity lead is many; "
-      "the last row is the depth variant the reference selection rejected, worse than the reference on every field here. Data: "
-       The frame row is the labeled variant of @sec-nb-frame-af-ref-verdict: the same reference configuration with the laboratory x and y axes as two more global directions, on the internal geometry; it is not the reference row and is compared with GeoTransolver-volume for the standing only. "results/airfrans_reduction_2026-09-22.json (GeoTransolver-volume); results/ref_surface_2026-09-23.json (ISLA). {#tbl-interior-airfrans}")
+      "the depth-variant row is the one the reference selection rejected, worse than the reference on every field here. "
+      "The frame row is the labeled variant of @sec-nb-frame-af-ref-verdict: the same reference configuration with the laboratory x and y axes as two more global directions, on the internal geometry; it is not the reference row and is compared with GeoTransolver-volume for the standing only. Data: "
+      "results/airfrans_reduction_2026-09-22.json (GeoTransolver-volume); results/ref_surface_2026-09-23.json (ISLA); results/frame_af_ref_2026-09-26.json (frame row). {#tbl-interior-airfrans}")
 ```
 
 ```{python}
