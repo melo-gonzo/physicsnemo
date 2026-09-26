@@ -28662,3 +28662,85 @@ costs 1.7x and 2.2x the epoch, so at the reference width the region's
 arithmetic is a visible share of the step and the MLP bias is not free.
 The optimization candidates above are the follow-up if GEO-BIAS-PROTO
 finds a gain worth paying for.
+
+## 2026-09-26 — Verdict, SCALE-HL: on the 510-wing rung cells are flat above 100,000 for GeoTransolver and Transolver (0.99, 0.98), GeoTransolver does not gain from width (512 ÷ 256 = 1.00), ISLA does (384 ÷ 192 = 0.84 linear, 0.96 cosine; 768 ÷ 384 = 0.97), and the deficit is width-independent under cosine routing (0.90 to 0.93) but not under linear (0.77 to 0.92); GeoTransolver-512 holds the wing memory frontier {#sec-nb-scalehl-verdict}
+
+**Setting.** ISO-COST (@sec-nb-isocost-verdict) found on 435 DrivAerML
+cars that neither ISLA nor GeoTransolver turns cells per case into
+accuracy above 100,000, that a width doubling buys both about 7%, that
+ISLA-768 does not improve on ISLA-384, and that ISLA-384 at 100,000 cells
+sits on the iso-memory frontier against GeoTransolver-512. SCALE-HL
+(@sec-nb-scalehl-prereg) is the second-dataset twin on the 510-wing
+HiLiftAeroML rung: twelve lanes at 100,000 training cells (ISLA 192 / 384
+/ 768 at the width rule, GeoTransolver 256 / 512 at 3e-3, Transolver 256),
+scored in float32 at 200,000 cells on the 180 validation wings, two seeds,
+with the fleet's 200,000-cell medium-rung lanes as the cells comparison.
+The twelve were launched on 2026-09-20 with linear routing, two days
+before cosine routing became the class default; the ROUTE-NORM 510-wing
+lanes (cosine 192 and 384 at 1e-3, linear 384 at 1e-3, 100,000 cells) are
+read beside them. Data: results/scalehl_2026-09-26.json (reducer
+results/scalehl_reduce_2026-09-26.py; step time and memory from each
+lane's own log, results/campaigns_2026-09-20/shl/cost_2026-09-26.tsv).
+
+**What we saw** (seed-mean pressure relative L2; seeds in parentheses).
+
+- *Cells.* GeoTransolver-256 at 100,000 cells scores 0.0383 (0.0377,
+  0.0389) against 0.0388 at 200,000 cells at the same 3e-3 rate, a ratio of
+  0.99; Transolver-256 0.0401 against 0.0409, 0.98. **Cells are flat above
+  100,000 on the wings for both baselines**, inside the 2% bar. ISLA-192
+  cannot be read: its 200,000-cell fleet lane is linear-routed at 1e-3 and
+  one seed sat at a validation loss 22 times the other's (0.121 against
+  0.0055, the plateau signature ROUTING-SAT measured as routing collapse),
+  scoring 0.5945 against 0.0556; the 100,000-cell pair is 0.0495 (0.0450,
+  0.0539). The clause is decided by the cosine twin launched today
+  (campaign sc, cosine 192 at 1e-3, 200,000 cells, two seeds) against the
+  cosine 192 lane at 100,000 cells (0.0427; 0.0433, 0.0421).
+- *Width.* **GeoTransolver-512 scores 0.0382 (0.0368, 0.0396) against
+  GeoTransolver-256's 0.0383: a ratio of 1.00, no gain from doubling
+  width**, where the cars gave 7%; GeoTransolver is not parameter-bound at
+  510 wings. ISLA-384 at 5e-4 scores 0.0416 (0.0409, 0.0424) against
+  ISLA-192's 0.0495, a ratio of 0.84 under linear routing, but the 192 pair
+  is the unstable one (seeds 18% apart); under cosine routing 384 at 1e-3
+  scores 0.0411 (0.0413, 0.0409) against 192's 0.0427, a ratio of 0.96.
+  **Width carries for ISLA on both readings (4% under cosine), not for
+  GeoTransolver.**
+- *Turnover.* ISLA-768 at 2.5e-4 scores 0.0405 (0.0409, 0.0401), 0.97 of
+  ISLA-384: a 3% gain, so **the DrivAerML turnover at 384 is not
+  reproduced** on the wings; the third doubling still pays there.
+- *Deficit under width.* GeoTransolver ÷ ISLA at the default widths is
+  0.77 (256 against linear 192) and at matched parameters 0.92 (512
+  against 384): a rise of 0.14, which under the preregistered instrument
+  reads as width closing part of the deficit. Under cosine routing the
+  same ratios are 0.90 (256 against cosine 192) and 0.93 (512 against
+  cosine 384), a rise of 0.03: **width-independent**. The two readings
+  differ because the linear 192 lane's deficit is training instability,
+  not capacity; the cosine reading is the one that describes the
+  architecture. With ISLA-768 the ratio is 0.94.
+- *Iso-memory.* GeoTransolver-512 peaks at 51.8 GB per GPU at 100,000
+  cells; ISLA's best lane under that budget is ISLA-768 at 40.1 GB and
+  0.0405, and GeoTransolver-256 at 40.2 GB scores 0.0383. **On the wings
+  GeoTransolver holds the memory frontier** (0.94 at equal memory), where
+  on the cars ISLA did. Step times: ISLA 0.16 / 0.17 / 0.22 s at 192 / 384
+  / 768, GeoTransolver 0.27 / 0.30 s at 256 / 512, Transolver 0.17 s.
+- *Routing, beside.* The linear 384 control at 1e-3 plateaued at 0.68
+  (both seeds; 16x the cosine lane's error at the same rate), the
+  collapse ROUTE-NORM predicted; linear 384 at the rule rate 5e-4 trained
+  cleanly (0.0416) and cosine 384 at 1e-3 is 1% better than it.
+
+**Why it matters.** Two of the four DrivAerML statements carry to the
+wings: cells stop paying at 100,000 for the baselines (ISLA's reading
+pending the cosine twin), and width pays for ISLA. Two do not: on the
+wings GeoTransolver has stopped gaining from width at 510 cases while
+ISLA has not, and the ISLA turnover moves from 384 to at least 768. The
+wing deficit narrows with ISLA's width (0.90 at 192, 0.93 at 384, 0.94 at
+768 under cosine routing against GeoTransolver's best), and it narrows
+with data (0.77 at 35 wings, @sec-nb-hl35-percase; 0.93 at 510): both
+say ISLA is the more capacity- and data-bound model on wings, and the
+learning-curve statement of @sec-nb-campaigns-2026-09-21-prereg is the place where
+that is measured directly (its wing half, cosine ISLA 192 / 384 / 768 and
+GeoTransolver 1,024 at 100,000 cells, is in flight). For the reference
+configuration nothing changes: 384 wide at 100,000 cells remains the
+frontier point on the cars, and on the wings a wider ISLA is the labeled
+option for a user with the memory. The width-carries and turnover
+statements in @sec-equal-budget are restated as one dataset each, with
+the wing numbers beside.

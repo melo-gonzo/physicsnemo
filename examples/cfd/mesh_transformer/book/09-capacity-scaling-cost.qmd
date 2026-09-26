@@ -34,6 +34,7 @@ RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
 mean = statistics.mean
 ISOJ = J("isocost_reduction_2026-09-20.json")
+SHL = J("scalehl_2026-09-26.json")  # SCALE-HL: the same ladders on the 510-wing HiLiftAeroML rung (100,000 cells; ROUTE-NORM cosine lanes beside)
 ISO = ISOJ["configurations"]
 # the reference configuration at the reporting protocol (REF), its depth variant and the parameter-matched GeoTransolver-512
 REF = J("ref_surface_2026-09-23.json")["summary"]
@@ -263,9 +264,33 @@ Three readings carry the figure.
    `{python} f"{100 * isla_depth[1][0] / gt_width[2][0]:.0f}%"` of its
    parameters.
 
-These are one dataset's numbers. The same ladders on HiLiftAeroML decide
-whether "width, not cells" and the shared floor are properties of the
-architectures or of DrivAerML (@sec-program-status).
+The same ladders on the 510-wing HiLiftAeroML rung
+(@sec-nb-scalehl-verdict; results/scalehl_2026-09-26.json) carry two of
+these statements and overturn two. Cells stop paying at 100,000 there as
+well: GeoTransolver-256 at 100,000 cells scores
+`{python} f"{SHL['bars']['cells_flat']['gt_256_c100k_over_c200k_lr3e3']:.2f}"`
+of its 200,000-cell twin and Transolver-256
+`{python} f"{SHL['bars']['cells_flat']['transolver_256_c100k_over_c200k']:.2f}"`.
+Width pays for ISLA on the wings (cosine 384 ÷ 192 =
+`{python} f"{SHL['arms']['isla_cos_384_lr1e3_c100k']['seed_means']['pressure_l2'] / SHL['arms']['isla_cos_192_c100k']['seed_means']['pressure_l2']:.2f}"`,
+768 ÷ 384 = `{python} f"{SHL['bars']['turnover']['isla_768_over_384']:.2f}"`)
+but not for GeoTransolver (512 ÷ 256 =
+`{python} f"{SHL['bars']['width_carries']['gt_512_over_256']:.2f}"`), so
+the ISLA turnover at 384 is a DrivAerML fact and the GeoTransolver width
+gain is one too. The wing deficit is width-independent under cosine
+routing (GeoTransolver ÷ ISLA
+`{python} f"{SHL['arms']['gt_256_c100k']['seed_means']['pressure_l2'] / SHL['arms']['isla_cos_192_c100k']['seed_means']['pressure_l2']:.2f}"`
+at 192 and
+`{python} f"{SHL['arms']['gt_512_c100k']['seed_means']['pressure_l2'] / SHL['arms']['isla_cos_384_lr1e3_c100k']['seed_means']['pressure_l2']:.2f}"`
+at 384), and at equal memory GeoTransolver holds the wing frontier
+(GeoTransolver-512 at
+`{python} f"{SHL['arms']['gt_512_c100k']['mem_peak_gb']:.0f}"` GB scores
+`{python} f"{SHL['arms']['gt_512_c100k']['seed_means']['pressure_l2']:.4f}"`
+against ISLA-768 at
+`{python} f"{SHL['arms']['isla_768_c100k']['mem_peak_gb']:.0f}"` GB at
+`{python} f"{SHL['arms']['isla_768_c100k']['seed_means']['pressure_l2']:.4f}"`),
+where on the cars ISLA does. The shared floor is a DrivAerML measurement
+until the wing learning-curve lanes land (@sec-program-status).
 
 ## The memory and time frontier {#sec-review-frontier}
 
