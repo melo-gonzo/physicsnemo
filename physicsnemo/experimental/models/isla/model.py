@@ -753,6 +753,62 @@ def _local_region(
     return torch.cat(outs_h, dim=1), torch.cat(outs_g, dim=1)
 
 
+def _knn_indices(r: torch.Tensor, k: int, chunk: int = 2048) -> torch.Tensor:
+    """Indices of the ``k`` nearest tokens (the token itself included) for every
+    token, (B, N, k), by row-chunked exact distances; positions only, so the
+    result is shared by every slice block of the forward pass."""
+    b, n, _ = r.shape
+    k = min(int(k), n)
+    out = []
+    with torch.no_grad():
+        for i0 in range(0, n, chunk):
+            d2 = torch.cdist(r[:, i0 : i0 + chunk], r).square()
+            out.append(torch.topk(d2, k, dim=-1, largest=False).indices)
+    return torch.cat(out, dim=1)
+
+
+def _local_region_knn(
+    h: torch.Tensor,
+    log_w: torch.Tensor,
+    r: torch.Tensor,
+    n_hat: torch.Tensor,
+    g_hat: torch.Tensor,
+    idx: torch.Tensor,
+    rho: float,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """:func:`_local_region` restricted to each token's ``k`` nearest tokens
+    (``idx`` from :func:`_knn_indices`): the same kernel and pair invariants,
+    with the softmax over the neighbourhood instead of over all tokens. Equal to
+    the dense form when ``k`` is the token count; O(N k) otherwise, which is what
+    makes the channel affordable at 200,000 tokens. Recomputed in backward."""
+    def _run(h, log_w, r, n_hat, g_hat, idx):
+        b, n, k = idx.shape
+        gather = lambda t: torch.gather(t, 1, idx.reshape(b, n * k, 1).expand(-1, -1, t.shape[-1])).reshape(b, n, k, t.shape[-1])
+        r_j, n_j, h_j, logw_j = gather(r), gather(n_hat), gather(h), gather(log_w)
+        rel = r[:, :, None, :] - r_j  # (B, N, k, 3)
+        d2 = rel.square().sum(-1)
+        dist = d2.clamp_min(eps * eps).sqrt()
+        rel_hat = rel / dist[..., None]
+        kern = torch.softmax(-d2 / (rho * rho) + logw_j[..., 0], dim=-1)  # (B, N, k)
+        feats = [
+            (dist / rho)[..., None],
+            torch.log(dist / rho)[..., None],
+            (rel_hat[..., None, :] * g_hat[:, :, None, :, :]).sum(-1),  # (B, N, k, K)
+            (rel_hat * n_hat[:, :, None, :]).sum(-1, keepdim=True),
+            (rel_hat * n_j).sum(-1, keepdim=True),
+            (n_hat[:, :, None, :] * n_j).sum(-1, keepdim=True),
+        ]
+        geo = torch.cat(feats, dim=-1)
+        pooled_h = (kern[..., None].to(h_j.dtype) * h_j).sum(2)
+        pooled_geo = (kern[..., None] * geo).sum(2)
+        return pooled_h, pooled_geo
+
+    if torch.is_grad_enabled():
+        return checkpoint(_run, h, log_w, r, n_hat, g_hat, idx, use_reentrant=False)
+    return _run(h, log_w, r, n_hat, g_hat, idx)
+
+
 class _SliceBlock(nn.Module):
     """One pre-LN layer of measure-weighted soft-slice attention + MLP."""
 
@@ -836,11 +892,14 @@ class _SliceBlock(nn.Module):
         eps: float,
         vecs=None,
         tens=None,
+        nbr_idx=None,
     ) -> Float[torch.Tensor, "batch tokens hidden"]:
         if self.local_rho is not None:
-            pooled_h, pooled_geo = _local_region(
-                self.local_value(self.local_norm(h)), log_w, r, n_hat, g_hat, self.local_rho, eps
-            )
+            hv = self.local_value(self.local_norm(h))
+            if nbr_idx is not None:
+                pooled_h, pooled_geo = _local_region_knn(hv, log_w, r, n_hat, g_hat, nbr_idx, self.local_rho, eps)
+            else:
+                pooled_h, pooled_geo = _local_region(hv, log_w, r, n_hat, g_hat, self.local_rho, eps)
             h = h + self.local_out(torch.cat([pooled_h, self.local_geo(pooled_geo.to(h.dtype))], dim=-1))
         ### Soft assignment of points to slices; measure weights enter as a
         ### log-space bias so slice states are quadrature-weighted means.
@@ -1479,8 +1538,11 @@ class ISLA(Module):
             token states and of the token-pair invariants (distance, its log, the
             unit separation against each global direction and both normals, the
             normals' dot product), before the slice routing. Relative geometry
-            only, so the contracts hold; O(N^2) per layer, written for fixed-mesh
-            sets of tens of thousands of tokens (LOCAL-AGG study, 2026-09-27).
+            only, so the contracts hold (LOCAL-AGG study, 2026-09-27).
+        local_k: With ``local_rho``, the number of nearest tokens each token's kernel
+            runs over (default 32; the neighbour indices are computed once per forward
+            from the positions). ``0`` is the dense form over all tokens, O(N^2) per
+            layer and equal to ``local_k = N``; the default is O(N k).
         routing_norm: ``"cosine"`` (default): each block's point-to-slice
             routing logits are ``routing_temperature`` times the cosine between
             the normalized token state and a learned prototype per slice, which
@@ -1589,14 +1651,20 @@ class ISLA(Module):
         interior_nn_chunk: int | None = None,
         geo_bias: str = "linear",
         local_rho: float | None = None,
+        local_k: int = 32,
         eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
         ### LOCAL-AGG (2026-09-27): radius, in frame units (the rms_distance length unit), of
         ### the local relational aggregation among tokens in every slice block; None = off.
+        ### local_k > 0 restricts each token's kernel to its k nearest tokens (O(N k));
+        ### local_k = 0 is the dense O(N^2) form.
         if local_rho is not None and not local_rho > 0:
             raise ValueError(f"local_rho must be positive or None, got {local_rho!r}")
+        if int(local_k) < 0:
+            raise ValueError(f"local_k must be 0 (dense) or positive, got {local_k!r}")
         self.local_rho = None if local_rho is None else float(local_rho)
+        self.local_k = int(local_k)
         ### GEO-BIAS (2026-09-25): the pair invariants -> routing-bias map; "mlp" is the
         ### eager-only nonlinear variant of the direction-count study (#sec-nb-geo-bias-prereg).
         if geo_bias not in ("linear", "mlp"):
@@ -2369,8 +2437,11 @@ class ISLA(Module):
                 tens = torch.cat([tens, q_tens], dim=1)
             n = n + nq
 
+        nbr_idx = None
+        if self.local_rho is not None and self.local_k > 0:
+            nbr_idx = _knn_indices(r, self.local_k)  # positions only; shared by every block
         for block in self.blocks:
-            h = block(h, log_w, r, n_hat, g_hat, self.eps, vecs, tens)
+            h = block(h, log_w, r, n_hat, g_hat, self.eps, vecs, tens, nbr_idx=nbr_idx)
 
         ### The head frame builds its slice anchors from the SOURCE tokens
         ### (src_r, src_logw, and h); the branches below overwrite n_hat, g_out

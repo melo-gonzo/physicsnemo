@@ -1285,3 +1285,24 @@ def test_local_rho_aggregation_keeps_the_contracts_and_is_off_by_default():
     assert not any(".local_" in k for k, _ in plain.named_parameters()) and plain.local_rho is None
     with pytest.raises(ValueError, match="local_rho must be positive"):
         _isla(hidden=64, n_layers=1, n_slices=16, local_rho=0.0)
+
+
+def test_local_k_nearest_form_equals_the_dense_form_at_k_equal_n():
+    """local_k = N reproduces the dense O(N^2) local aggregation (local_k = 0) to
+    roundoff; the default k = 32 keeps the contracts (covered above) and a negative k is
+    rejected."""
+    torch.manual_seed(0)
+    n = 250
+    dense = _isla(hidden=64, n_layers=2, n_slices=16, local_rho=0.05, local_k=0).double().eval()
+    knn = _isla(hidden=64, n_layers=2, n_slices=16, local_rho=0.05, local_k=n).double().eval()
+    knn.load_state_dict(dense.state_dict())
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor([3.0, 2.0, 1.0], dtype=torch.float64)
+    nrm = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=torch.float64), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    with torch.no_grad():
+        a = dense(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
+        b = knn(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
+    assert all(torch.allclose(a[k], b[k], atol=1e-12, rtol=1e-12) for k in a.keys())
+    with pytest.raises(ValueError, match="local_k must be"):
+        _isla(hidden=64, n_layers=1, n_slices=16, local_rho=0.05, local_k=-1)
