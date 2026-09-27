@@ -29076,3 +29076,60 @@ the place a third seed will be read before the sentence in
 GeoTransolver-512 (about 2x on the stresses) is not a depth deficit; the
 RANK-IO channel remains the lever that moved it
 (@sec-nb-rankio-verdict-2048).
+
+## 2026-09-27 — Preregistration, LOCAL-AGG: does a contract-preserving local relational aggregation among tokens close the fixed-mesh Poisson deficit that value transport leaves? OLBC Poisson at 512 and 2,048 cases, two seeds, against the extension arm and GeoTransolver-512 {#sec-nb-local-agg-prereg}
+
+**Setting.** ISLA's largest remaining deficit is on the fixed-mesh OLBC
+Poisson set, where GeoTransolver-512 ÷ ISLA is 0.25 at 2,048 cases for
+the reference and 0.76 with the boundary-value extension
+(@sec-nb-olbc-mech-combined-2048-verdict and addendum). OLBC-MECH located
+what the extension does not supply: absolute coordinates fed as a
+contract-breaking diagnostic overshoot GeoTransolver by 40 to 60%, four
+times the slices recover nothing, and the domain frame recovers nothing
+on top of the extension. GeoTransolver has one channel ISLA lacks
+entirely: a local neighbourhood embedding (its ball queries), which gives
+every token its surroundings at a resolution 256 anchors cannot reach.
+The same channel is the natural suspect for the separated-flow regime on
+the wings (@sec-nb-frame-wing-verdict) and was the query-to-query
+candidate the ledger carried as LIT-LOCALQ.
+
+**The change** (commit on 2026-09-27, `local_rho` in the ISLA class).
+Before the slice routing in every slice block, each token receives the
+measure-weighted Gaussian-kernel average over all tokens of the
+projected token states and of the token-pair invariants (distance in
+units of the radius, its log, the unit separation against each global
+direction and against both normals, the normals' dot product), with
+kernel $\mathrm{softmax}_j(-|r_i - r_j|^2 / \rho^2 + \log w_j)$. Relative
+geometry only: rotation equivariance, translation invariance and
+measure-rescale invariance hold to roundoff (tested). The radius $\rho$
+is in frame units, the RMS pairwise distance of the boundary sample. The
+released path is unchanged when the option is off. The eager evaluation
+is O(N^2) per layer: 88 times the reference step at 20,000 tokens on the
+laptop GPU, which is what a fused kernel is for; the OLBC sets have about
+20,000 tokens, so the study runs there first, on the fused kernel once it
+is exact against this eager path.
+
+**Hypothesis.** The local channel supplies the positional resolution
+the extension does not, and the two add: ISLA with the extension and the
+local aggregation closes most of the remaining Poisson gap.
+
+**Arms** (OLBC Poisson, reference configuration with the extension as
+query scalars, K = 0 plus the extension's channels, two seeds, 500
+epochs): $\rho$ = 0.05 and $\rho$ = 0.15 at 2,048 cases; $\rho$ = 0.05 at
+512 cases. Comparators: the extension arm (0.1298 at 2,048, 0.333 at
+512), the reference pair, GeoTransolver-512 (0.0981 at 2,048, 0.279 at
+512). The radius pair is the instrument's own control: a gain that
+depends strongly on $\rho$ says the channel is a resolution channel; a
+gain flat in $\rho$ says it is something else.
+
+**Bars, in the fraction of the log-gap between the reference and
+GeoTransolver-512 recovered, seed means** (the extension recovers 0.80
+at 2,048 and 0.84 at 512). *Closes*: the local arm recovers at least 0.95
+at 2,048 cases, i.e. within 7% of GeoTransolver-512's error. *Pays*: at
+least 0.88 (half the remaining gap). *Null*: within 0.03 of the
+extension alone. Prediction: pays at 2,048 (0.5), closes (0.25), null
+(0.25); the smaller radius better. Whatever the outcome, the cost of the
+channel (step time against the reference on the fused kernel) is
+recorded beside the accuracy, and the block enters the class as a
+documented option, not the reference, until a second dataset (the lug or
+Tensile2d, both fixed-mesh) reproduces the reading.
