@@ -29609,3 +29609,119 @@ channel as the interior half of a unified token design in which an
 interior token carries the smooth continuation of what a boundary token
 carries. Kept as an input for now, labeled PDE-derived preprocessing,
 pending his call.
+
+## 2026-09-27 — Peter's call on the boundary-value extension: admissible (it derives from one sample's geometry and boundary data), but the inverse-square kernel is crude; the harmonic middle path is approved and the parallel threads go into the tech tree {#sec-nb-extension-call}
+
+**The call.** Peter read the plain definition of the boundary-value
+extension (@sec-nb-ruling-dataset-frame-inputs) and ruled: the
+construction is admissible because it derives purely from the geometry
+and the boundary condition type and value of each sample, nothing that
+needs knowledge beyond a single sample (which is what made the rejected
+frame vectors dataset-specific). The inverse-square kernel is the weak
+part: a crude approximation that happens to suit Poisson-like problems
+and does not generalize. Using the governing equation's own kernel is
+unattractive because it requires knowing the equations. The middle path
+is approved: per-type harmonic measures and harmonic extensions from
+Laplace solves, read as a PDE-agnostic geometric construction (the
+probability that a random walk from the query first reaches boundary
+type k), with the inverse-square version kept as the ablation control.
+Peter also asked that the parallel threads from today's discussion be
+tracked in the tech tree; the rows HARMONIC, EXT-ABL and UNIFIED-TOKENS
+are added below and in the ledger.
+
+## 2026-09-27 — Preregistration, HARMONIC: per-type harmonic measures and harmonic extensions as the interior geometry channel, on OLBC Poisson (against the inverse-square extension) and AirfRANS interior (against the stored distance field) {#sec-nb-harmonic-prereg}
+
+**Setting.** An interior token in ISLA knows its distance and direction
+to the nearest boundary sample, either computed in the model or read
+from a stored signed distance field. Both are a minimum over boundaries
+and have a kink on the medial axis (the set of points equidistant from
+two boundaries), which shows up as a seam in the slice assignments while
+the physics is smooth there. On the OLBC Poisson set the inverse-square
+boundary-value extension (six query scalars, @sec-nb-olbc-mech-verdict)
+recovered 0.84 of the log-gap to GeoTransolver-512 at 512 cases and 0.80
+at 2,048 (two seeds each, @sec-nb-olbc-mech-combined-2048-verdict).
+
+**Instrument.** A mesh-free preprocessing on the interior point cloud: a
+symmetric k-nearest-neighbour graph (k = 12 in two dimensions) with
+self-tuning Gaussian weights and its graph Laplacian; boundary nodes are
+the interior nodes tagged with a condition type. For each type k the
+*harmonic measure* $\varphi_k$ solves the discrete Laplace equation with
+$\varphi_k = 1$ on the type-k boundary nodes and 0 on every other boundary
+node, so the $\varphi_k$ are smooth, non-negative and sum to one; the
+*harmonic extension* $h_k$ solves the same equation with the prescribed
+value on the type-k nodes and 0 elsewhere, so $\sum_k h_k$ is the
+harmonic extension of all the boundary data. One sparse factorization
+per case serves every right-hand side. Fields are written once into a
+copy of the dataset (never in place) and read as query scalars, six on
+OLBC Poisson (`hm_*`, `hx_*`) in place of the six `ext_*` scalars, so the
+arm is a drop-in swap. Validation before any lane: the unit square with
+one edge of type A reproduces the series solution of Laplace to 3% RMS,
+the measures sum to one to 1e-6, and every field is unchanged under
+rotation and translation to 1e-6. The datum this input is: the geometry
+and the boundary condition labels and values of the one sample.
+
+**Arms and bars (OLBC Poisson, 512 and 2,048 cases, two seeds, float32
+per-case relative L2 on $u$ over the 256 test cases; fractions of the
+log-gap between the frame-free reference and GeoTransolver-512 as in
+@sec-nb-olbc-mech-verdict).** `hm`: reference plus the six harmonic
+fields. Bars against the extension's fraction $f_{\text{ext}}$ (0.84 /
+0.80): *the kernel pays*: $f_{\text{hm}} \ge f_{\text{ext}} + 0.05$ on both
+rungs; *kernel-insensitive*: within 0.05 of $f_{\text{ext}}$ on both (the
+value-transport path is what matters, the kernel does not); *hurts*: below
+$f_{\text{ext}} - 0.05$ on either rung. Prediction: the kernel pays at
+512 (0.5) where the crude kernel's error is largest relative to the data,
+kernel-insensitive at 2,048 (0.5).
+
+**Companion EXT-ABL (same rungs and seeds).** The extension's six
+scalars split into values-only (`ext_*`, three scalars) and distances-only
+(`ext_dist_*`), to attribute the 0.84: *values carry it* if values-only
+recovers $\ge 0.75$ of $f_{\text{ext}}$ and distances-only $\le 0.35$;
+*distances carry it* for the reverse; *joint* if both $\le 0.5$; *either*
+if both $\ge 0.75$. Prediction: values carry it (0.6).
+
+**AirfRANS half (800 airfoils, 100,000 queries, reference configuration,
+two seeds).** `hm` adds the harmonic measure of the airfoil (the far field
+tagged as the complementary type by the case's largest stored distances)
+on top of the provided-geometry reference `sg_af_provided`, keeping the
+stored distance field. Bars, ratio hm ÷ provided on pressure / velocity /
+eddy viscosity: *pays* if any field $\le 0.95$ with none $> 1.03$; *null*
+if all within 3%; *hurts* if any $> 1.05$. Prediction: null-to-pays (the
+seam is visible but the stored field is already smooth away from the
+medial axis of a convex-ish airfoil): 0.5 / 0.4 / 0.1.
+
+**Provenance.** Reducer to be written beside results/local_agg_reduce_2026-09-27.py
+(same log-gap conventions); lanes on code_v7 with new recipe files only.
+Standing requires both OLBC rungs and the AirfRANS half; a second
+dataset beyond OLBC is the two-dataset rule.
+
+## 2026-09-27 — Planned, UNIFIED-TOKENS: one token set for surface and interior tasks (boundary tokens plus label-free interior collocation tokens, outputs read at any requested points); first test on DrivAerML {#sec-nb-unified-prereg}
+
+**Idea (Peter's question).** A surface task is the interior task with the
+query set on the boundary: a boundary point is a query at distance zero
+whose direction is the normal, whose type indicator is its own type and
+whose prescribed data are the boundary values. With HARMONIC's fields the
+interior features become the smooth continuation of the boundary ones
+(harmonic measure to type indicator, harmonic extension to prescribed
+data), so one token design serves both tasks. The deeper content: with
+boundary tokens only ISLA is a boundary-element method; interior
+collocation tokens (no labels needed) make it finite-element-like, which
+a nonlinear volume problem such as Navier-Stokes may need even for a
+surface readout.
+
+**First tests (DrivAerML, where both surface and volume data exist).**
+(a) The volume-trained reference model evaluated at boundary points it
+was never asked for, against the surface-trained model on surface
+pressure and wall shear (evaluation only, no training). (b) The surface
+model trained with unlabeled interior collocation tokens (query tokens on
+a volume sample with no loss on them), two seeds, against the surface
+reference pair at 200,000 cells. Bars for (b): pressure $\le 0.97$ of the
+surface reference on both seeds = interior tokens help the surface
+readout (the boundary-only path becomes the special case to retire);
+within 3% = the boundary-only operator already carries the interior
+physics at this regime; $> 1.03$ = hurts. Open design points recorded,
+not yet decided: the area measure of boundary tokens against the volume
+measure of interior tokens in one routing softmax (normalize per family
+and derive the relative weight rather than guess), and how to generate
+collocation points for surface-only datasets. Status: PLANNED until (a)
+is scripted and (b) has a loss mask in the recipe; depends on HARMONIC
+for the unified feature set.
