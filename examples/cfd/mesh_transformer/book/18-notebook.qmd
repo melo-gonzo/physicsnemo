@@ -29428,3 +29428,44 @@ holds on AirfRANS (0.6) with a pressure cost of 5 to 15%; on DrivAerML
 Volume, where the frame's velocity gain was 10 to 13%, null-to-holds
 (0.5). Exploration-scale ratios for reference: seed-only ÷ frame 1.16 /
 0.95 / 1.16 on AirfRANS.
+
+## 2026-09-27 — SCALE-LAW wing half: the 510-wing rung is complete; a fourth rung at 1,260 wings is launched because the separable law needs four training-set sizes to fit {#sec-nb-scalelaw-wing-rung4}
+
+**Setting.** SCALE-LAW (@sec-nb-campaigns-2026-09-21-prereg) fits the
+separable law $\varepsilon(n, P) = \varepsilon_\infty + a\,n^{-\alpha} +
+b\,P^{-\beta}$ to surface-pressure error against training cases $n$ and
+parameters $P$ for cosine ISLA (192 / 384 / 768 wide) and GeoTransolver
+(256 / 512 / 1,024), at 100,000 cells, two seeds. The DrivAerML half
+(five rungs) accepted the law for ISLA (@sec-nb-scalelaw-drivaerml-verdict).
+The wing half had three rungs (35 / 210 / 510 wings) and the 510-wing
+lanes finished today.
+
+**State of the wing grid.** All nine ISLA configurations and seven of
+the nine GeoTransolver configurations were in the campaign; the two
+GeoTransolver widths missing at 510 wings (256 and 512) come from the
+SCALE-HL campaign's lanes at the same protocol (100,000 cells, 500
+epochs, rate 3e-3; runs `shl_med_gt_w256_c100k` and `shl_med_gt_w512_c100k`,
+recorded as pseudo-rows 100-103 of
+results/campaigns_2026-09-21/sl/lanes_plus_shl_2026-09-27.tsv). One score,
+ISLA 768 at 510 wings seed 42, is still being written by the scorer.
+Two-seed means at 510 wings so far: ISLA 0.0424 / 0.0415 / 0.038 (192 /
+384 / 768, the last on one seed), GeoTransolver 0.039 (one seed) / 0.0382
+/ 0.0363 (256 / 512 / 1,024).
+
+**Why a fourth rung.** The reducer's fit gate requires at least four
+distinct training-set sizes (five parameters, two seeds per point), a
+gate written before the wing ladder existed and kept so the wing fit is
+not under-determined. All four HiLift manifests (35 / 210 / 510 / 1,260
+training wings) validate on the same 180 held-out wings (checked today
+by set intersection: 180 of 180 shared), so a 1,260-wing rung is a clean
+fourth point on the same readout. Launched: campaign sl rows 80-91, the
+six configurations at two seeds each on `highlift_surface_full`, same
+rates and extras as the 510-wing rows (ISLA 1e-3 / 5e-4 / 5e-4,
+GeoTransolver 3e-3 / 3e-3 / 1e-3), 500 epochs. At the 510-wing pace
+(about five days) the 1,260-wing lanes take about twelve days on the
+four-hour chains. Until then the wing half reports local exponents only
+(35 to 210 wings: ISLA 0.50 / 0.57 / 0.52 by width, GeoTransolver 0.45 /
+0.46 / 0.47; 210 to 510: ISLA 0.31 / 0.28, GeoTransolver 0.23 / 0.30),
+and the verdict entry follows the fourth rung. Reducer:
+results/scalelaw_reduce_2026-09-27.py (the 2026-09-22 reducer with the
+1,260 rung added); interim artifact results/scalelaw_2026-09-27.json.
