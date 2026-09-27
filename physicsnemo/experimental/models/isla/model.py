@@ -1840,8 +1840,15 @@ class ISLA(Module):
             for _ in range(n_layers)
         )
         ### Head frame: per-point soft slice anchor for the radial basis vector.
-        self.frame_assign = _RoutingLogits(
-            hidden, n_slices, routing_norm, routing_temperature
+        ### Built only when an output of rank >= 1 reads the token basis: a scalar-only
+        ### model never touches the radial direction, and a parameter that receives no
+        ### gradient stops DDP at the second step (found on the OLBC Poisson lanes,
+        ### 2026-09-27).
+        self.needs_frame = any(spec.rank >= 1 for spec in self.output_specs.values())
+        self.frame_assign = (
+            _RoutingLogits(hidden, n_slices, routing_norm, routing_temperature)
+            if self.needs_frame
+            else None
         )
         ### v5a (query_independent): encode/decode split. Queries decode
         ### passively from final encoder slices and anchors: query-independent
@@ -2526,6 +2533,15 @@ class ISLA(Module):
             r_out = q_r
         else:
             h_out = h
+        coeffs = self.head(self.norm_out(h_out))
+        if not self.needs_frame:
+            ### Scalar-only outputs read the coefficients directly; no token basis.
+            out: dict[str, torch.Tensor] = {}
+            start = 0
+            for name, spec in self.output_specs.items():
+                out[name] = coeffs[..., start] if spec.channels == 1 else coeffs[..., start : start + spec.channels]
+                start += spec.channels
+            return _fields_to_tensordict(out, [b, n])
         ### Head frame: the radial basis vector is the direction from the token's
         ### soft slice anchor (measure-weighted mean of source positions), not
         ### from a centroid; translation covariant.
@@ -2536,7 +2552,6 @@ class ISLA(Module):
         b_f = torch.softmax(self.frame_assign(h_out), dim=-1)
         u = r_out - torch.einsum("bns,bsc->bnc", b_f, z_f).to(r_out.dtype)
         r_hat = u / u.norm(dim=-1, keepdim=True).clamp_min(self.eps)
-        coeffs = self.head(self.norm_out(h_out))
 
         ### The token basis. True vectors: the global directions, the normal, the
         ### radial direction and the e_theta complements of (rhat, n) and each

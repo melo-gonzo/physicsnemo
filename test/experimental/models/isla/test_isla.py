@@ -1306,3 +1306,28 @@ def test_local_k_nearest_form_equals_the_dense_form_at_k_equal_n():
     assert all(torch.allclose(a[k], b[k], atol=1e-12, rtol=1e-12) for k in a.keys())
     with pytest.raises(ValueError, match="local_k must be"):
         _isla(hidden=64, n_layers=1, n_slices=16, local_rho=0.05, local_k=-1)
+
+
+def test_scalar_only_model_has_no_frame_routing_and_every_parameter_gets_a_gradient():
+    """A model whose outputs are all rank 0 never reads the token basis, so the head's
+    frame routing is not built (a parameter without a gradient stops DDP at the second
+    step; found on the OLBC Poisson lanes, 2026-09-27); with a vector output the frame
+    routing exists. In both cases every parameter receives a gradient, and the
+    scalar-only outputs equal the head coefficients directly."""
+    torch.manual_seed(0)
+    n = 200
+    pts = torch.randn(1, n, 3) * torch.tensor([3.0, 2.0, 1.0])
+    nrm = torch.nn.functional.normalize(torch.randn(1, n, 3), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1)
+    w = torch.rand(1, n) + 0.5
+    for outs in ({"u": 0}, {"u": 0, "q": {"rank": 0, "channels": 3}}, {"u": 0, "v": 1}):
+        m = ISLA(outputs=outs, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8)
+        has_vec = any(v == 1 or (isinstance(v, dict) and v.get("rank", 0) >= 1) for v in outs.values())
+        assert m.needs_frame == has_vec and (m.frame_assign is not None) == has_vec
+        out = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
+        sum(v.square().mean() for v in out.values()).backward()
+        missing = [k for k, p in m.named_parameters() if p.grad is None]
+        assert not missing, missing
+        assert out["u"].shape == (1, n)
+        if "q" in outs:
+            assert out["q"].shape == (1, n, 3)
