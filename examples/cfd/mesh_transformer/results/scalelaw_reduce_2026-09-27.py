@@ -44,6 +44,7 @@ N_OF = {
     "super_scarce": 35,
     "scarce": 210,
     "medium": 510,
+    "full": 1260,
 }
 RECIPE_WIDTH = {"isla": 192, "gt": 256}
 
