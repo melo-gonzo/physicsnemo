@@ -28955,3 +28955,47 @@ it. The mechanism reading if depth pays here and nowhere else: the lug's
 von Mises field is the smoothest target in the book and the one whose
 error is closest to the seed noise, so the depth clause is the least
 resolved measurement of the ladder.
+
+*Addendum 2026-09-27 to @sec-nb-olbc-mech-combined-2048-verdict (second
+seeds of the single-channel arms at 2,048 cases; data
+results/batch3_reductions_2026-09-26.json, rerun).* With seed 43 the
+extension recovers 0.80 of the log-gap (0.1298; seeds 0.1250, 0.1346)
+and the frame 0.61 (0.1689; 0.1555, 0.1822), against 0.83 and 0.67 on
+seed 42 alone. The combined arm's 0.84 sits 0.04 above the extension:
+redundant, as written. GeoTransolver-512 ÷ ISLA with the extension is
+0.76 at 2,048 cases on two seeds.
+
+## 2026-09-27 — Verdict, OLBC Poisson depth at the depth rate: ISLA 24 layers at 2.5e-4 on 8,448 cases scores 0.114 against 12 layers' 0.083 (1.38x, both seeds worse), so depth does not pay on the fixed-mesh Poisson set either, and here it costs; fourth dataset {#sec-nb-olbc-r2-rate-verdict}
+
+**Setting.** The 24-layer ISLA (R2) at the reference rate 5e-4 sat at the
+mean-field plateau on every fixed-mesh set (OLBC Poisson and elasticity,
+lug) and on DeepJEB++, a rate failure rather than a capacity one
+(@sec-nb-cluster-return-2026-09-25); the relaunches at the depth rate
+2.5e-4 decide the depth clause of each ledger row (24 layers within 1.5%
+of 12 means depth does not pay). DeepJEB++ read 0.98 / 1.01
+(@sec-nb-deepjeb-r2-rate-verdict); the lug read 0.86 on the mean but
+0.99 / 0.75 paired, undecided (@sec-nb-lug-r2-rate-interim). The OLBC
+Poisson pair (8,448 cases, 120 epochs, the ladder's full rung) is scored.
+Data: results/olbc_2026-09-22.json (reducer
+results/olbc_reduce_2026-09-22.py, arm `isla_r2_lr25e4`).
+
+**What we saw** (relative L2 on $u$ over the 256 test cases). **R2 at
+2.5e-4 scores 0.1144 (seeds 0.1201, 0.1087) against R1's 0.0826
+(0.0988, 0.0664): 1.38x on the mean, and both R2 seeds are above both R1
+seeds' mean** (paired 1.22 and 1.64). GeoTransolver-512 (0.0289) ÷ ISLA
+falls from 0.35 to 0.25, and the 5e-4 pair stays at its plateau (1.000).
+The R1 pair's own seeds are 40% apart on this rung, the widest spread in
+the Poisson ladder, so the size of the loss is uncertain; its sign is
+not.
+
+**Reading.** Depth does not pay on the Poisson set, and at the depth rate
+it costs. That makes four datasets on which 24 layers fail the 1.5%
+clause (DrivAerML Surface 2.6%, DeepJEB++ within 2%, the 35-wing rung
+within 4% by angle, OLBC Poisson 38% worse) against none where it
+clearly pays (the lug's third seeds decide the one open case). The
+Poisson result also says something about the mechanism of the OLBC
+deficit: whatever ISLA lacks on a fixed mesh with random boundary data,
+it is not depth, which is consistent with OLBC-MECH's reading that the
+gap is value transport (@sec-nb-olbc-mech-verdict). The elasticity R2
+pair at the depth rate is one epoch from done and follows the same
+reducer. The reference stays at 12 layers on every dataset.

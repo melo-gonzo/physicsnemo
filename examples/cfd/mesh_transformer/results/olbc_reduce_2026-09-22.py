@@ -35,7 +35,7 @@ def main() -> None:
     lanes = {}
     for p in sorted(MET.glob("ol_*/*/metrics.jsonl")):
         name = p.parent.name
-        m = re.match(r"ol_(poisson|elasticity)_(isla_r[12]|gt512|gt256)_n(\d+)_seed(\d+)", name)
+        m = re.match(r"ol_(poisson|elasticity)_(isla_r[12](?:_lr25e4)?|gt512|gt256)_n(\d+)_seed(\d+)", name)
         lanes[name] = {"set": m.group(1), "arm": m.group(2), "n": int(m.group(3)), "seed": int(m.group(4)), **lane_means(p)}
     summary: dict[str, dict] = {}
     for name, d in lanes.items():
