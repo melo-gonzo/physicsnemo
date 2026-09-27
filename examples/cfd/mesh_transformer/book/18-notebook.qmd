@@ -29725,3 +29725,46 @@ and derive the relative weight rather than guess), and how to generate
 collocation points for surface-only datasets. Status: PLANNED until (a)
 is scripted and (b) has a loss mask in the recipe; depends on HARMONIC
 for the unified feature set.
+
+## 2026-09-27 — Verdict, UNIFIED-TOKENS test (a): the volume-trained DrivAerML model has almost no skill at the wall (surface pressure 0.76 against the surface pair's 0.045, 17x), so a unified design must train on wall queries rather than inherit them {#sec-nb-unified-a-verdict}
+
+**Setting.** UNIFIED-TOKENS (@sec-nb-unified-prereg) asks whether a
+surface task is the interior task with the queries placed on the
+boundary. The cheapest test uses models that already exist: the
+frame-free provided-geometry DrivAerML Volume pair
+(`sg_drvol_provided`, the reference of the DrivAerML Volume table,
+interior pressure 0.0403 / 0.0391 on its own task) evaluated at the
+surface dataset's 200,000 vehicle cell centroids on the 48 validation
+cars, the same draw the fleet scorer uses, against the surface-trained
+reference pair `p200k_dr_isla` (0.0442 / 0.0449). Evaluation only; no
+training. The volume model reads a query's signed distance and its
+gradient, so at the wall the query scalar is 0 and the direction is the
+normal into the fluid.
+
+**What we saw (measure-weighted relative L2 on pressure, two-seed
+means).** Volume model at the wall **0.762** (0.749 / 0.776), 17.1x the
+surface pair's 0.0446. Per car the prediction correlates with the target
+at only 0.42 to 0.55; its mean is right (-0.30 against -0.34) but its
+standard deviation is 0.23 against 0.38, so the model returns a smoothed,
+low-variance field at the boundary. Two conventions had to be settled on
+the way and are recorded: the surface dataset's vehicle cell normals
+point into the body (mean dot product with an outward radial proxy
+-0.23), while the volume model's query directions are the distance
+gradient pointing into the fluid, so the wall query normal is minus the
+stored cell normal (the first pass with the stored normals scored 0.880
+and is kept as the record). And the volume set's nearest-wall training
+points sit at a signed distance of about 2.5e-7, so 0 is inside the
+training range; yet setting the query scalar to 2.5e-7 instead of 0
+changes the score from 0.76 to 0.64, a sensitivity to a 1e-7 shift that
+is an anomaly to chase (which path scales the query scalar so steeply?).
+
+**Verdict.** A model trained with a volume loss puts negligible weight on
+the measure-zero wall and does not generalize to it: the answer to "is
+the surface a special case of the interior model" is no for an inherited
+model at this regime. This does not decide the unified design; it
+sharpens it. Any single token set serving both tasks must include wall
+queries in training, and the live question is test (b): whether
+label-free interior collocation tokens improve a surface-trained readout.
+Artifact results/unified_a_2026-09-27.json (script
+results/unified_eval_2026-09-27.py; metrics under
+results/campaigns_2026-09-27/unified/metrics).
