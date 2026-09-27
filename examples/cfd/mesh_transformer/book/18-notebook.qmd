@@ -29024,3 +29024,55 @@ costs a little. This is the outcome the prediction named (3-D null,
 recovers the vector field's gain, not the scalar's, and with GEO-BIAS-K3
 that the bias can cost pressure. The AirfRANS twin, where the velocity
 clause lives, is at epoch 474 of 500; the eager pairs follow.
+
+*Addendum 2026-09-27, AirfRANS fused twin (seed 42; data
+results/geo_bias_proto_interim_2026-09-27.json).* At the reference
+configuration on 800 airfoils the MLP bias at K = 1 scores 0.0349 /
+0.0192 / 0.0327 (pressure / velocity / eddy viscosity): 1.02 / 0.93 /
+0.92 of the internal-geometry reference pair, where the frame arm stands
+at 0.83 / 0.78 / 0.84. In the preregistration's units the bias recovers
+**0.28 of the frame's velocity log-gain** (0.46 of the eddy-viscosity
+gain, none of the pressure gain), against 0.96 at exploration scale;
+velocity sits between the null threshold (0.94 of the reference) and the
+mechanism threshold (0.88). One seed, and the eager pair decides, but the
+direction is clear on both datasets: **at protocol scale the nonlinear
+routing bias is not the capacity the extra directions supply.** The
+frame's velocity gain on AirfRANS is mostly something else, most likely
+the seed's orientation invariants, which the bias does not touch.
+GeoTransolver-volume ÷ this model is 0.79 / 1.98 / 0.90.
+
+## 2026-09-27 — Verdict, OLBC elasticity depth at the depth rate: 24 layers at 2.5e-4 on 8,448 cases scores 0.95 to 0.97 of 12 layers on the four fields, but paired by seed one seed is at parity and one 12% better; depth is within seed noise on the elasticity set and the reference stays at 12 layers {#sec-nb-olbc-elasticity-r2-rate-verdict}
+
+**Setting.** The last of the 24-layer relaunches at the depth rate
+(@sec-nb-cluster-return-2026-09-25): the OLBC steel elasticity set at its
+full rung (8,448 cases, 120 epochs, equal optimizer steps to 2,048 x 500),
+ISLA R1 with the two domain axes as global directions, targets
+displacement and the three stress components, against the 12-layer pair
+and GeoTransolver-512 and -256. Depth clause: 24 layers within 1.5% of
+12 means depth does not pay. Data: results/olbc_2026-09-22.json.
+
+**What we saw** (relative L2 over 256 test cases; displacement /
+$\sigma_{11}$ / $\sigma_{12}$ / $\sigma_{22}$). R2 at 2.5e-4: 0.0834 /
+0.2185 / 0.2068 / 0.2099 against R1's 0.0877 / 0.2250 / 0.2163 / 0.2206,
+ratios **0.95 / 0.97 / 0.96 / 0.95 on the means**. Paired by seed the
+gain is one seed's: seed 42 gives 1.02 / 1.00 / 0.99 / 0.97 and seed 43
+gives 0.88 / 0.94 / 0.93 / 0.93; the R2 seeds are 20% apart on
+displacement where the R1 seeds are 5% apart. GeoTransolver-512 ÷ ISLA
+moves from 0.57 / 0.45 / 0.45 / 0.48 to 0.60 / 0.47 / 0.47 / 0.50; the
+5e-4 pair stays at its plateau (1.000) with one seed's scorer output
+NaN, recorded as measured.
+
+**Reading.** The same split as the lug (@sec-nb-lug-r2-rate-interim): a
+mean gain of 3 to 5% carried by one seed while the other sits at parity,
+which two seeds cannot separate from noise. Across the six datasets where
+depth has now been measured at the reference width and its rate, 24
+layers buys 2.6% on DrivAerML Surface, within 2% on DeepJEB++, within 4%
+on the wings by angle, costs 38% on OLBC Poisson, and is seed-split on the
+two solids (lug, elasticity), with the lug's third seeds still to score.
+**Nowhere does depth clear the 1.5% clause on both seeds, so the
+reference stays at 12 layers on every dataset,** and the two solids are
+the place a third seed will be read before the sentence in
+@sec-interior-tensile2d is touched. The elasticity deficit to
+GeoTransolver-512 (about 2x on the stresses) is not a depth deficit; the
+RANK-IO channel remains the lever that moved it
+(@sec-nb-rankio-verdict-2048).

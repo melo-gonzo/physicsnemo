@@ -21,5 +21,33 @@
    "pressure_l2": 0.9449875246414217,
    "wss_l2": 0.9612002162151907
   }
+ },
+ "airfrans_fused_mlp_k1_seed42": {
+  "values": {
+   "pressure_l2": 0.03490070360712707,
+   "velocity_l2": 0.019198475829325615,
+   "nut_l2": 0.03268609218299389
+  },
+  "over_internal_ref": {
+   "pressure_l2": 1.024312373171431,
+   "velocity_l2": 0.934069145450726,
+   "nut_l2": 0.9213277179038717
+  },
+  "frame_over_internal_ref": {
+   "pressure_l2": 0.8264328142106621,
+   "velocity_l2": 0.7831313976215323,
+   "nut_l2": 0.8361116434275038
+  },
+  "fraction_of_frame_log_gain": {
+   "pressure_l2": -0.1260068903370454,
+   "velocity_l2": 0.27900788375321167,
+   "nut_l2": 0.4577800145492277
+  },
+  "gt_vol_over": {
+   "pressure_l2": 0.7934015263572924,
+   "velocity_l2": 1.9761399772494908,
+   "nut_l2": 0.8969699796830356
+  },
+  "bar_reading": "velocity 0.93 of the reference: between the null threshold (0.94) and the mechanism threshold (0.88); pressure 1.02 (no gain)"
  }
 }
