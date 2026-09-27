@@ -1,0 +1,25 @@
+{
+ "protocol": "GEO-BIAS-PROTO interim (2026-09-27): fused-kernel twin (code_v6, gbf row 5) of the MLP routing bias at K = 1, DrivAerML Surface, R1, 435 cars, 200,000 cells, seed 42 only; float32 relative L2 on the 48 validation cars; comparators from frame3d_2026-09-26.json (R1 pair, K = 4 axes pair, GeoTransolver-512 pair). The eager pair (gb rows 2-3) decides the bar.",
+ "fused_mlp_k1_seed42": {
+  "pressure_l2": 0.043419567324842014,
+  "wss_l2": 0.06812965838859479
+ },
+ "ratios": {
+  "over_r1_mean": {
+   "pressure_l2": 1.0355830512732276,
+   "wss_l2": 1.0375910768643564
+  },
+  "over_r1_seed42": {
+   "pressure_l2": 1.0319449882696852,
+   "wss_l2": 1.0358096837434123
+  },
+  "over_k4_axes": {
+   "pressure_l2": 1.0880353900809012,
+   "wss_l2": 1.088949481022969
+  },
+  "gt512_over": {
+   "pressure_l2": 0.9449875246414217,
+   "wss_l2": 0.9612002162151907
+  }
+ }
+}

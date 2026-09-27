@@ -28999,3 +28999,28 @@ it is not depth, which is consistent with OLBC-MECH's reading that the
 gap is value transport (@sec-nb-olbc-mech-verdict). The elasticity R2
 pair at the depth rate is one epoch from done and follows the same
 reducer. The reference stays at 12 layers on every dataset.
+
+## 2026-09-27 — Interim, GEO-BIAS-PROTO (DrivAerML Surface, fused twin, one seed): the MLP routing bias at K = 1 scores 1.03 of the reference on pressure and wall shear, above the 3-D null threshold; the eager pair decides {#sec-nb-geo-bias-proto-interim}
+
+**Setting.** GEO-BIAS-PROTO (@sec-nb-geo-bias-proto-prereg) runs the
+two-layer routing bias at K = 1 at the reference configuration on
+AirfRANS and DrivAerML Surface, two seeds each on the eager region, with
+a fused-kernel twin per dataset (code_v6, @sec-nb-geo-bias-kernel) for
+the protocol-scale speed number. The DrivAerML bar: pressure at 0.952 of
+the reference or better carries the frame's gain to 3-D; above 0.976 is
+a 3-D null. The fused twin (seed 42) is the first lane of the campaign to
+score; the eager pair is at epoch 330 of 500 after the relaunch. Data:
+results/geo_bias_proto_interim_2026-09-27.json.
+
+**What we saw.** The fused MLP bias at K = 1 scores 0.0434 on pressure
+and 0.0681 on wall shear: **1.03 of the reference pair on both fields**
+(1.03 of the reference's own seed 42), 1.09 of the three-axes arm, and
+GeoTransolver-512 ÷ this model is 0.95. One seed, so the reading is
+interim, but it sits on the wrong side of the null threshold with 5
+points to spare: at the reference width and 435 cars, replacing the
+linear pair-to-bias map by a nonlinear one does not buy pressure and
+costs a little. This is the outcome the prediction named (3-D null,
+0.6), and it agrees with the exploration-scale finding that the bias
+recovers the vector field's gain, not the scalar's, and with GEO-BIAS-K3
+that the bias can cost pressure. The AirfRANS twin, where the velocity
+clause lives, is at epoch 474 of 500; the eager pairs follow.
