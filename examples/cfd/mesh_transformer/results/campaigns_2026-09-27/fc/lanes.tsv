@@ -1,0 +1,5 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	fc	fc_af_frame_provided_seedonly_seed42	airfrans_volume_frame	isla_volume_airfrans_ref_provided_frame_seedonly	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	42	100000	code_v8
+1	fc	fc_af_frame_provided_seedonly_seed43	airfrans_volume_frame	isla_volume_airfrans_ref_provided_frame_seedonly	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	43	100000	code_v8
+2	fc	fc_drvol_frame4_provided_seedonly_seed42	drivaer_ml_volume_reference_frame4	isla_volume_ref_provided_frame4_seedonly	+training.val_interval=10	5e-4	42	200000	code_v8
+3	fc	fc_drvol_frame4_provided_seedonly_seed43	drivaer_ml_volume_reference_frame4	isla_volume_ref_provided_frame4_seedonly	+training.val_interval=10	5e-4	43	200000	code_v8
