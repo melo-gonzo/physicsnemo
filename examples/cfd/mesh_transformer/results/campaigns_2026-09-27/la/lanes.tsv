@@ -15,3 +15,5 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 13	la	la_poisson_ext_ctrl_n512_seed43	olbc_poisson_ext	isla_olbc_poisson_ext_ctrl	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
 14	la	la_af_frame_provided_local05_seed42	airfrans_volume_frame	isla_volume_airfrans_ref_provided_frame_local05	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	42	100000	code_v7
 15	la	la_af_frame_provided_local05_seed43	airfrans_volume_frame	isla_volume_airfrans_ref_provided_frame_local05	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	43	100000	code_v7
+16	la	la_af_provided_local05_seed42	airfrans_volume	isla_volume_airfrans_ref_provided_local05	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	42	100000	code_v7
+17	la	la_af_provided_local05_seed43	airfrans_volume	isla_volume_airfrans_ref_provided_local05	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	43	100000	code_v7
