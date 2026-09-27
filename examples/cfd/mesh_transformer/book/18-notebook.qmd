@@ -29306,3 +29306,39 @@ aggregation and not by the code snapshot, and an AirfRANS interior twin
 the preregistration's, read per dataset against each dataset's own best
 ISLA arm and GeoTransolver reference. Artifact:
 results/local_agg_2026-09-27.json (reducer beside it).
+
+## 2026-09-27 — Interim, FRAME-CHANNEL (seed 42): neither channel alone recovers the frame's pressure gain (seed-only 0.304, geometry-only 0.363 against base 0.301 and frame 0.248), while each alone beats the full frame on velocity; the second seeds are training {#sec-nb-frame-channel-interim}
+
+**Setting.** FRAME-CHANNEL (@sec-nb-frame-channel-prereg) gives the
+three global directions (freestream plus two laboratory axes) either to
+the token seed only or to the slice blocks' geometry channels only, on
+the local AirfRANS rung, to learn which channel carries the frame's
+pressure gain. Seed 42 of both arms is scored on the 40 local test
+airfoils; the seed 43 pair is training.
+
+**What we saw (seed 42, float32 relative L2; base and frame from the
+FRAME-AF rung, same seed).** Pressure: base 0.301, frame 0.248, seed-only
+**0.304**, geometry-only **0.363**. Neither channel alone recovers any of
+the frame's pressure gain (fractions of the log-gain -0.06 and -0.98); the
+geometry-only arm is 21% worse than the frame-free base. Velocity: base
+0.130, frame 0.115, seed-only **0.112**, geometry-only **0.107**; each
+channel alone beats the full frame (fractions 1.22 and 1.60). Eddy
+viscosity: base 0.227, frame 0.221, seed-only 0.251, geometry-only 0.201.
+Per angle, the full frame's pressure gain is largest between 0 and 5
+degrees (0.172 against base 0.421) and neither channel-only arm gets
+there (0.341 and 0.420); above 10 degrees the geometry-only arm is the
+best of the four on pressure (0.192).
+
+**Reading, held loosely until seed 43.** On pressure this reads as the
+preregistered "joint" clause: the frame's gain needs the directions in
+both the seed and the geometry channels, which is the outcome the
+GEO-BIAS-PROTO verdict made most likely once the routing bias's
+nonlinearity was ruled out (a token needs both to know where it sits and
+to route by where its neighbours sit). The velocity result is the
+anomaly to keep: splitting the directions across channels helps velocity
+beyond the full frame, so the full frame's extra invariants in the
+geometry channels may be costing velocity what they buy pressure. If
+seed 43 agrees, the protocol-scale question becomes whether a
+K = 3 model with fewer geometry invariants trades pressure for velocity,
+and no channel-only arm goes to the 800-airfoil twin under the 0.9 bar.
+Artifact: results/frame_channel_2026-09-27.json (interim, one seed).

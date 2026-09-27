@@ -1,0 +1,212 @@
+{
+ "protocol": "FRAME-CHANNEL reduction (2026-09-27, #sec-nb-frame-channel-prereg): which channel carries the laboratory frame's gain on the\nlocal AirfRANS rung. Arms (frameaf_<arm>_seed{42,43}, 192 x 12 x 256, cosine, fused, 20,000 queries, 300 epochs, lr 1e-3, 40\nlocal test airfoils): base (K = 1) and frame (K = 3, all channels) from the FRAME-AF rung; seedonly (geometry_directions 1: the\nthree directions enter the token seed only) and geoonly (seed_directions 1: the geometry channels only). Readout: float32 per-case\nrelative L2 (pressure, velocity, eddy viscosity) from the recipe's infer.py metrics.jsonl; two-seed means; fraction of the frame's\nlog-gain ln(base/arm)/ln(base/frame) per field. Bars on pressure: seed carries it (seedonly >= 0.75 and geoonly <= 0.35); geometry\ncarries it (reverse); joint (both <= 0.5); either (both >= 0.75); between otherwise. usage: python frame_channel_reduce_2026-09-27.py\n<infer_root>  where <infer_root>/<run>/<run or *>/metrics.jsonl holds the rows; arms with one scored seed are reported as interim;\nwrites frame_channel_2026-09-27.json beside this script.",
+ "n_cases": 40,
+ "means": {
+  "base_seed42": {
+   "pressure_l2": 0.30079437531530856,
+   "velocity_l2": 0.13026842344552278,
+   "nut_l2": 0.22666330058127643
+  },
+  "base_seed43": {
+   "pressure_l2": 0.40832084249705075,
+   "velocity_l2": 0.1302637778222561,
+   "nut_l2": 0.28860119804739953
+  },
+  "frame_seed42": {
+   "pressure_l2": 0.24827545788139105,
+   "velocity_l2": 0.11485804710537195,
+   "nut_l2": 0.22046803403645754
+  },
+  "frame_seed43": {
+   "pressure_l2": 0.2848828128539026,
+   "velocity_l2": 0.11676400639116764,
+   "nut_l2": 0.20393007108941674
+  },
+  "seedonly_seed42": {
+   "pressure_l2": 0.3042771995998919,
+   "velocity_l2": 0.11167530538514256,
+   "nut_l2": 0.25064699817448854
+  },
+  "geoonly_seed42": {
+   "pressure_l2": 0.3631419468671083,
+   "velocity_l2": 0.10649762907996774,
+   "nut_l2": 0.20069511607289314
+  }
+ },
+ "seed_means": {
+  "base": {
+   "pressure_l2": 0.35455760890617966,
+   "velocity_l2": 0.13026610063388944,
+   "nut_l2": 0.257632249314338
+  },
+  "frame": {
+   "pressure_l2": 0.2665791353676468,
+   "velocity_l2": 0.11581102674826979,
+   "nut_l2": 0.21219905256293714
+  },
+  "seedonly": {
+   "pressure_l2": 0.3042771995998919,
+   "velocity_l2": 0.11167530538514256,
+   "nut_l2": 0.25064699817448854
+  },
+  "geoonly": {
+   "pressure_l2": 0.3631419468671083,
+   "velocity_l2": 0.10649762907996774,
+   "nut_l2": 0.20069511607289314
+  }
+ },
+ "n_seeds": {
+  "base": 2,
+  "frame": 2,
+  "seedonly": 1,
+  "geoonly": 1
+ },
+ "ratio_to_base": {
+  "seedonly": {
+   "pressure_l2": 0.858188322452297,
+   "velocity_l2": 0.8572860079615342,
+   "nut_l2": 0.9728867361968854
+  },
+  "geoonly": {
+   "pressure_l2": 1.0242114052703921,
+   "velocity_l2": 0.8175390877729382,
+   "nut_l2": 0.7789984235553692
+  }
+ },
+ "ratio_to_frame": {
+  "seedonly": {
+   "pressure_l2": 1.1414141589898048,
+   "velocity_l2": 0.9642890536484341,
+   "nut_l2": 1.1811881115734386
+  },
+  "geoonly": {
+   "pressure_l2": 1.3622294421740433,
+   "velocity_l2": 0.9195810802321447,
+   "nut_l2": 0.9457870506437253
+  }
+ },
+ "fraction_of_frame_gain": {
+  "seedonly": {
+   "pressure_l2": 0.5362267732837059,
+   "velocity_l2": 1.3091679534309364,
+   "nut_l2": 0.14168256643286645
+  },
+  "geoonly": {
+   "pressure_l2": -0.0838814205520215,
+   "velocity_l2": 1.7127819607098327,
+   "nut_l2": 1.2872959910996795
+  }
+ },
+ "fraction_per_seed": {
+  "seedonly": {
+   "42": {
+    "pressure_l2": -0.05999453409574369,
+    "velocity_l2": 1.223203838622897,
+    "nut_l2": -3.6293475299018274
+   }
+  },
+  "geoonly": {
+   "42": {
+    "pressure_l2": -0.981650016036198,
+    "velocity_l2": 1.6002716076867165,
+    "nut_l2": 4.390682332822434
+   }
+  }
+ },
+ "by_aoa": {
+  "aoa<0": {
+   "n": 19,
+   "base": {
+    "pressure_l2": 0.37626997538303075,
+    "velocity_l2": 0.11118816417690955,
+    "nut_l2": 0.2585602557580722
+   },
+   "frame": {
+    "pressure_l2": 0.2989150045537635,
+    "velocity_l2": 0.10404940106366811,
+    "nut_l2": 0.20800170998432133
+   },
+   "seedonly": {
+    "pressure_l2": 0.3064395526522084,
+    "velocity_l2": 0.10776981221217859,
+    "nut_l2": 0.2308875887017501
+   },
+   "geoonly": {
+    "pressure_l2": 0.36181482358982686,
+    "velocity_l2": 0.10323432185932209,
+    "nut_l2": 0.19963743302382922
+   }
+  },
+  "0-5": {
+   "n": 5,
+   "base": {
+    "pressure_l2": 0.4211259946227074,
+    "velocity_l2": 0.13301246725022792,
+    "nut_l2": 0.17080049514770507
+   },
+   "frame": {
+    "pressure_l2": 0.17207908257842064,
+    "velocity_l2": 0.1251458737999201,
+    "nut_l2": 0.16659085750579833
+   },
+   "seedonly": {
+    "pressure_l2": 0.34061282575130464,
+    "velocity_l2": 0.1203424520790577,
+    "nut_l2": 0.23787652850151061
+   },
+   "geoonly": {
+    "pressure_l2": 0.42042666077613833,
+    "velocity_l2": 0.11919771283864974,
+    "nut_l2": 0.19730425477027894
+   }
+  },
+  "5-10": {
+   "n": 10,
+   "base": {
+    "pressure_l2": 0.3068667363375425,
+    "velocity_l2": 0.13026983365416528,
+    "nut_l2": 0.29636530242860315
+   },
+   "frame": {
+    "pressure_l2": 0.2672998297959566,
+    "velocity_l2": 0.10363046023994685,
+    "nut_l2": 0.23925864435732364
+   },
+   "seedonly": {
+    "pressure_l2": 0.3172064196318388,
+    "velocity_l2": 0.08464797921478748,
+    "nut_l2": 0.30899745896458625
+   },
+   "geoonly": {
+    "pressure_l2": 0.4397961631417274,
+    "velocity_l2": 0.08506147935986519,
+    "nut_l2": 0.2299232840538025
+   }
+  },
+  ">=10": {
+   "n": 6,
+   "base": {
+    "pressure_l2": 0.30981291458010674,
+    "velocity_l2": 0.18838470553358394,
+    "nut_l2": 0.2624982688575983
+   },
+   "frame": {
+    "pressure_l2": 0.2417311028887828,
+    "velocity_l2": 0.16557807972033817,
+    "nut_l2": 0.21839814695219198
+   },
+   "seedonly": {
+    "pressure_l2": 0.2456013597548008,
+    "velocity_l2": 0.16186562180519104,
+    "nut_l2": 0.2266097515821457
+   },
+   "geoonly": {
+    "pressure_l2": 0.1918502151966095,
+    "velocity_l2": 0.14197494834661484,
+    "nut_l2": 0.1581565501789252
+   }
+  }
+ },
+ "verdict": "between",
+ "interim": true
+}

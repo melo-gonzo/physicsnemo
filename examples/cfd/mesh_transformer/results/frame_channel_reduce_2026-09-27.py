@@ -25,7 +25,8 @@ def load(run):
             if l.strip():
                 r = json.loads(l)
                 if r.get("phase") == "infer_step":
-                    per[r["sample_id"]] = {f: r["metrics"][f] for f in FIELDS}
+                    # the leading index is the split's draw order and differs between runs; key by the case name
+                    per[r["sample_id"].split("_", 1)[1]] = {f: r["metrics"][f] for f in FIELDS}
     return per
 
 
