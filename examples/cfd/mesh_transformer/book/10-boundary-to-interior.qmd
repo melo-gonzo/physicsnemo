@@ -635,12 +635,24 @@ and absolute coordinates fed to every token overshoot to 27% *better* than
 GeoTransolver-512, so position is sufficient but is not what the
 contract-preserving remedies lack. And a parameter-free **boundary-value
 extension** recovers 84% of the log-gap (0.333 against the reference's
-0.867 and GeoTransolver-512's 0.279, seed means). The extension is the
-measure-weighted inverse-square-distance average of the prescribed values
-per condition type, plus the distance to the nearest labeled cell,
-evaluated at every query as six query scalars. The missing ingredient is
-value transport, and an invariant, mesh-consistent quadrature of the
-boundary data supplies most of it without touching the contracts. The
+0.867 and GeoTransolver-512's 0.279, seed means). The extension gives
+every interior query six numbers computed before training with no
+learned parameters. For each of the three condition types (Dirichlet,
+Neumann, Robin) it takes the prescribed values on all boundary cells of
+that type and averages them with weights equal to each cell's measure
+divided by its squared distance to the query, and it records the distance
+from the query to the nearest cell of that type. A query next to the
+Dirichlet wall therefore sees roughly the Dirichlet value there, a query
+in the middle sees a blend of every wall, and the distances say how close
+each type is. The inverse-square average is a crude stand-in for the
+harmonic extension of the boundary data (the solution of Laplace's
+equation with those values on the boundary), which for a Poisson problem
+is one half of the answer by superposition; the exact form, one Laplace
+solve per condition type per case, is the next instrument
+(@sec-nb-ruling-dataset-frame-inputs). The missing ingredient is value
+transport, and a quadrature of the boundary data that is invariant and
+consistent with the mesh supplies most of it without touching the
+contracts. The
 extension holds at 2,048 cases (0.80 of the log-gap, two seeds), and the
 domain-axes diagnostic added on top of it recovers nothing more at either
 rung (0.90 against 0.84 at 512, 0.84 against 0.80 at 2,048, two seeds

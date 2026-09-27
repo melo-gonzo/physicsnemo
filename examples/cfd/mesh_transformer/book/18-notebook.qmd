@@ -29586,7 +29586,26 @@ aggregation of LOCAL-AGG passes: it uses geometry and boundary data only,
 and local interaction among tokens is how a PDE propagates information.
 The RANK-IO inputs pass: prescribed displacement and traction are boundary
 conditions. The freestream and load directions pass. The boundary-value
-extension (LIT-EXT) is computed from boundary data and geometry alone, so
-it is not a dataset prior, but it is a hand-built feature a solver would
-compute for itself; it is kept for now, labeled as PDE-derived
-preprocessing, pending Peter's read.
+extension (LIT-EXT) is the open question. In plain terms: on the OLBC
+sets every boundary cell carries a condition type (Dirichlet, Neumann,
+Robin) and a prescribed value, and a plain interior query sees only its
+distance and direction to the nearest boundary cell, never the prescribed
+values. The extension hands each interior query six numbers computed
+before training with no learned parameters: for each of the three types,
+the prescribed values of that type averaged over the boundary with
+weights equal to each cell's measure divided by its squared distance to
+the query, and the distance to the nearest cell of that type. It is a
+function of the boundary data and the geometry alone, so it carries no
+dataset prior and no pose, and on Poisson it recovers about 0.84 of the
+log-gap to GeoTransolver-512. What makes it questionable is that it is a
+hand-built feature a solver would compute for itself, with an arbitrary
+inverse-square kernel standing in for the PDE's own kernel (the harmonic
+extension of the boundary data, one half of a Poisson solution by
+superposition). The recommendation put to Peter: replace it with the
+exact form, per-type harmonic measures and the harmonic extension from
+one Laplace solve per type per case in preprocessing, keep the
+inverse-square version only as the ablation control, and treat the whole
+channel as the interior half of a unified token design in which an
+interior token carries the smooth continuation of what a boundary token
+carries. Kept as an input for now, labeled PDE-derived preprocessing,
+pending his call.
