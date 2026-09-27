@@ -1,7 +1,7 @@
 {
  "protocol": "FRAME-VOL (2026-09-26, prereg in the FRAME-VOL ledger row and @sec-nb-frame-provided-verdict): DrivAerML Volume, 435 cars, 200,000 interior queries, 48 validation cars, float32 per-case relative L2; ISLA R1 with the three body axes beside the inlet (K = 4, four-vector fused kernel) on the provided (stored SDF) geometry, fa rows 14-15, code_v4; the frame-on-internal pair (rows 12-13) is still training. Comparators: sg Volume pairs (provided, internal) and GeoTransolver-volume (ratevol_reduction_2026-09-20.json).",
  "n_cases": 48,
- "status": "interim (provided half; internal half training)",
+ "status": "complete",
  "frame_provided": {
   "per_seed": {
    "42": {
@@ -64,7 +64,52 @@
    "pressure_l2": 1.2018821400997612,
    "velocity_l2": 1.7500133299207927,
    "nut_l2": 0.9648003393487069
+  },
+  "frame_internal_over_internal_ref": {
+   "pressure_l2": 0.9479499922396756,
+   "velocity_l2": 0.8665339062385965,
+   "nut_l2": 0.9557673608078555
+  },
+  "frame_provided_over_frame_internal": {
+   "pressure_l2": 0.9829188624256593,
+   "velocity_l2": 0.9105303744250248,
+   "nut_l2": 0.9876386470931505
+  },
+  "gt_vol_over_frame_internal": {
+   "pressure_l2": 1.230060376166828,
+   "velocity_l2": 1.774863526064879,
+   "nut_l2": 0.9871114276643246
   }
  },
- "frame_pays_on_provided": "bar (3% pressure, both seeds) evaluated against the provided PAIR MEAN: True"
+ "frame_pays_on_provided": "bar (3% pressure, both seeds) evaluated against the provided PAIR MEAN: True",
+ "frame_internal": {
+  "per_seed": {
+   "42": {
+    "velocity_x_l2": 0.044678813545033336,
+    "velocity_y_l2": 0.0870591717151304,
+    "velocity_z_l2": 0.11191750116025408,
+    "velocity_l2": 0.0568318246708562,
+    "pressure_l2": 0.0388598310140272,
+    "nut_l2": 0.0860111453415205
+   },
+   "43": {
+    "velocity_x_l2": 0.04450678809856375,
+    "velocity_y_l2": 0.0870810505002737,
+    "velocity_z_l2": 0.11230885020146768,
+    "velocity_l2": 0.05677019936653475,
+    "pressure_l2": 0.038719543372280896,
+    "nut_l2": 0.08484765770845115
+   }
+  },
+  "seed_means": {
+   "pressure_l2": 0.03878968719315405,
+   "velocity_l2": 0.056801012018695474,
+   "nut_l2": 0.08542940152498582
+  }
+ },
+ "verdict": {
+  "frame_pays_internal_both_seeds": true,
+  "frame_pays_provided_both_seeds": true,
+  "additivity": "between"
+ }
 }

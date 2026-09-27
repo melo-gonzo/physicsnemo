@@ -24,6 +24,7 @@ lane_params = lambda lane: json.loads(open(RES / f"campaigns_2026-09-22/ref/metr
 ISLA_PARAMS = lane_params("ref_isla_r1_drvol_seed42"); R2_PARAMS = lane_params("ref_isla_r2_drvol_seed42")
 # DrivAerML Volume task: GeoTransolver-volume and ISLA with query tokens, 200,000 cells and 200,000 queries per car
 RVA = J("ratevol_reduction_2026-09-20.json")["arms"]
+FV = J("frame_vol_2026-09-26.json")  # FRAME-VOL (fa rows 12-15): the three body axes on the internal and on the stored geometry
 GTV = {f: RVA["gt_vol_unit"][f] for f, _ in FIELDS}
 ISLAV = ref_arm("isla_r1|drvol"); ISLAV_R2 = ref_arm("isla_r2|drvol")
 RATIO = {f: GTV[f]["mean"] / ISLAV[f]["mean"] for f, _ in FIELDS}
@@ -227,14 +228,21 @@ out += "| GeoTransolver-volume, 27.6M, 1e-3 | " + " | ".join(cell(GTV[f]) for f,
 out += f"| **ISLA with query tokens + signed distance, {ISLA_PARAMS:.1f}M, 5e-4** | " + " | ".join(cell(ISLAV[f], GTV[f]) for f, _ in FIELDS) + " |\n"
 out += "| paired by seed, GeoTransolver-volume ÷ ISLA | " + " | ".join(" / ".join(f"{r:.2f}" for r in PAIRED[f]) for f, _ in FIELDS) + " |\n"
 out += f"| ISLA, 24 layers (depth variant, {R2_PARAMS:.1f}M), 5e-4 | " + " | ".join(cell(ISLAV_R2[f], GTV[f]) for f, _ in FIELDS) + " |\n"
+_fvi = {f: {"mean": FV["frame_internal"]["seed_means"][f], "seeds": [FV["frame_internal"]["per_seed"][str(s)][f] for s in (42, 43)]} for f, _ in FIELDS}
+_fvp = {f: {"mean": FV["frame_provided"]["seed_means"][f], "seeds": [FV["frame_provided"]["per_seed"][str(s)][f] for s in (42, 43)]} for f, _ in FIELDS}
+out += "| **ISLA + body axes** (three axes as further global directions; geometry computed inside the model), 5e-4 | " + " | ".join(cell(_fvi[f], GTV[f]) for f, _ in FIELDS) + " |\n"
+out += "| **ISLA + body axes + stored signed-distance field** (`interior_geometry: provided`), 5e-4 | " + " | ".join(cell(_fvp[f], GTV[f]) for f, _ in FIELDS) + " |\n"
 print(out)
 print(": Interior error on the DrivAerML Volume task at the reporting protocol: relative L2 over the 48 validation cars (arithmetic mean over "
       "cars, then over seeds; seeds in parentheses), float32, 200,000 boundary cells and 200,000 interior queries per car, 500 epochs. The "
       "ratio after each ISLA cell is GeoTransolver-volume ÷ ISLA (above 1 favors ISLA); the paired row divides seed by seed. How to read "
       "this: the arms are not resource-matched and do not receive the same inputs (@sec-interior-task); ISLA is the reference "
       "configuration with the `source_total` query mass (@sec-interior-query-tokens), and the last row is the depth variant the reference "
-      "selection rejected. The AirfRANS twin of this table is @tbl-interior-airfrans. Data: results/ratevol_reduction_2026-09-20.json "
-      "(GeoTransolver-volume); results/ref_surface_2026-09-23.json (ISLA). {#tbl-interior-200k}")
+      "selection rejected. The last two rows are the labeled input variants of @sec-nb-frame-vol-verdict: the same reference configuration "
+      "with the car's three body axes as further global directions, on the geometry computed inside the model and on the dataset's stored "
+      "signed-distance field; the frame pays on both geometries and the stored field adds 9% of velocity on top of it. The AirfRANS twin of "
+      "this table is @tbl-interior-airfrans. Data: results/ratevol_reduction_2026-09-20.json "
+      "(GeoTransolver-volume); results/ref_surface_2026-09-23.json (ISLA); results/frame_vol_2026-09-26.json (body-axes rows). {#tbl-interior-200k}")
 ```
 
 ```{python}
