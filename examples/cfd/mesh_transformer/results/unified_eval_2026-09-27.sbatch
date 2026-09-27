@@ -23,9 +23,11 @@ cd $T/recipe_v3/src
 mkdir -p $T/unified_eval
 trap 'echo "rc=$?" > $T/unified_eval/STATUS_$SLURM_JOB_ID' EXIT
 for s in 42 43; do
-  RANK=0 WORLD_SIZE=1 LOCAL_RANK=0 MASTER_ADDR=127.0.0.1 MASTER_PORT=$((29700 + s)) CUDA_VISIBLE_DEVICES=$((s - 42)) $PY $T/kernel/unified/unified_eval_2026-09-27.py --run sg_drvol_provided_seed$s --seed $s --out $T/unified_eval \
-    > $T/unified_eval/sg_drvol_provided_seed$s.log 2>&1 &
+  RANK=0 WORLD_SIZE=1 LOCAL_RANK=0 MASTER_ADDR=127.0.0.1 MASTER_PORT=$((29700 + s)) CUDA_VISIBLE_DEVICES=$((s - 42)) $PY $T/kernel/unified/unified_eval_2026-09-27.py --run sg_drvol_provided_seed$s --seed $s --out $T/unified_eval --flip-normals --tag _flip \
+    > $T/unified_eval/sg_drvol_provided_seed${s}_flip.log 2>&1 &
+  RANK=0 WORLD_SIZE=1 LOCAL_RANK=0 MASTER_ADDR=127.0.0.1 MASTER_PORT=$((29710 + s)) CUDA_VISIBLE_DEVICES=$((s - 40)) $PY $T/kernel/unified/unified_eval_2026-09-27.py --run sg_drvol_provided_seed$s --seed $s --out $T/unified_eval --flip-normals --sdf 2.5e-7 --tag _flip_sdfeps \
+    > $T/unified_eval/sg_drvol_provided_seed${s}_flip_sdfeps.log 2>&1 &
 done
 wait
-grep -h SUMMARY $T/unified_eval/sg_drvol_provided_seed4?.log
+grep -h SUMMARY $T/unified_eval/sg_drvol_provided_seed4?_flip*.log
 echo UNIFIED-EVAL-DONE

@@ -50,6 +50,9 @@ def main() -> None:
     ap.add_argument("--dataset", default="drivaer_ml_surface")
     ap.add_argument("--cells", type=int, default=200000)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--flip-normals", action="store_true", help="query normals = -cell_normals (the surface dataset's cell normals point INTO the body; the volume model's query normals are the distance gradient pointing into the fluid; measured 2026-09-27 diagnostic)")
+    ap.add_argument("--sdf", type=float, default=0.0, help="query sdf value at the wall (0 = exact; near-wall training points sit at |sdf| ~ 1e-7)")
+    ap.add_argument("--tag", default="")
     a = ap.parse_args()
 
     DistributedManager.initialize()
@@ -73,12 +76,12 @@ def main() -> None:
     assert epoch > 0, f"no checkpoint restored from {ckpt}"
     model.eval()
 
-    out_dir = Path(a.out) / a.run
+    out_dir = Path(a.out) / (a.run + a.tag)
     out_dir.mkdir(parents=True, exist_ok=True)
     f = open(out_dir / "metrics.jsonl", "w")
     log = lambda rec: (f.write(json.dumps(rec) + "\n"), f.flush())
     log({"phase": "config", "model": "ISLA", "run": a.run, "dataset": a.dataset, "infer_split": "val", "checkpoint": ckpt,
-         "epoch": epoch, "cells": a.cells, "seed": a.seed, "note": "volume model evaluated at surface cell centroids (sdf = 0, normal = cell normal)"})
+         "epoch": epoch, "cells": a.cells, "seed": a.seed, "note": "volume model evaluated at surface cell centroids", "flip_normals": a.flip_normals, "sdf": a.sdf})
 
     tot = 0.0
     tot_cp_unw = 0.0
@@ -88,7 +91,8 @@ def main() -> None:
         domain, meta = dataset[idx]
         veh = domain.boundaries["vehicle"]
         pts = veh.cell_centroids.to(device).float()[None]  # (1, N, 3)
-        nrm = veh.cell_normals.to(device).float()[None]  # outward cell normals
+        nrm = veh.cell_normals.to(device).float()[None]  # the boundary tokens' normals, as trained
+        qn = -nrm if a.flip_normals else nrm  # query normals: distance gradient into the fluid = -cell_normals on this dataset
         w = extract_target_measure(domain)
         if w is None:
             w = veh.cell_data["quadrature_measure"]
@@ -98,7 +102,7 @@ def main() -> None:
         assert domain.interior.points.shape[0] == pts.shape[1], "interior points are not the cell centroids"
         with torch.no_grad():
             out = model(points=pts, normals=nrm, measure_weights=w, global_inputs={"freestream": g},
-                        query_points=pts, query_normals=nrm, query_inputs={"sdf": torch.zeros_like(w)})
+                        query_points=pts, query_normals=qn, query_inputs={"sdf": torch.full_like(w, a.sdf)})
         pred = out["pressure"].float().reshape(1, -1)
         l2 = _relative_l2(pred, target, w).item()
         l2_unw = _relative_l2(pred, target, None).item()
