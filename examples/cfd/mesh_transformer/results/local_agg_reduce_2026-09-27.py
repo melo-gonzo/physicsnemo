@@ -28,6 +28,8 @@ for n in (512, 2048):
     frac = lambda u: math.log(b / u) / math.log(b / g)
     rung = {"base": b, "base_per_seed": base, "gt512": g, "gt512_per_seed": gt, "arms": {}}
     arms = {"ext": f"om_poisson_isla_r1_ext_n{n}_seed{{s}}"}
+    if n == 512:
+        arms["ext_ctrl_v7"] = f"la_poisson_ext_ctrl_n{n}_seed{{s}}"
     for rho in ("05", "15"):
         if n == 512 and rho == "15":
             continue
@@ -55,7 +57,55 @@ for n in (512, 2048):
                         else "hurts" if f < e - 0.03 else "between")
         a["interim"] = a["n_seeds"] < 2
     out["rungs"][str(n)] = rung
+# --- elasticity twin (added 2026-09-27 14:30): the RANK-IO arm (rank-1 boundary inputs + rank-2 stress head, campaign v2)
+# is the best ISLA arm and plays the extension's role; la_elasticity_tensor_ctrl (code_v7, 2,048 only) is the same-snapshot
+# control; fields displacement / sig11 / sig22 / sig12; the verdict reads the mean over the four field fractions.
+EF = ("displacement", "sig11", "sig22", "sig12")
+out["elasticity"] = {}
+for n in (512, 2048):
+    base = {f: st.mean(ol[f"ol_elasticity_isla_r1_n{n}_seed{s}"]["fields"][f]["mean"] for s in (42, 43)) for f in EF}
+    gt = {f: st.mean(ol[f"ol_elasticity_gt512_n{n}_seed{s}"]["fields"][f]["mean"] for s in (42, 43)) for f in EF}
+    rung = {"base": base, "gt512": gt, "arms": {}}
+    arms = {"rankio": (f"v2_elasticity_isla_r1_rankio_n{n}_seed{{s}}", "2026-09-22"),
+            "rankio_local05": (f"la_elasticity_tensor_local05_n{n}_seed{{s}}", "2026-09-27")}
+    if n == 2048:
+        arms["rankio_ctrl_v7"] = (f"la_elasticity_tensor_ctrl_n{n}_seed{{s}}", "2026-09-27")
+    for arm, (pat, camp) in arms.items():
+        ps = {}
+        for s in (42, 43):
+            vals = {}
+            for f in EF:
+                r = per_case(pat.format(s=s), camp, f"{f}_l2")
+                if r:
+                    vals[f] = r[0]
+            if vals:
+                ps[s] = vals
+        if not ps:
+            rung["arms"][arm] = {"status": "not scored"}
+            continue
+        m = {f: st.mean(ps[s][f] for s in ps) for f in EF}
+        fr = {f: math.log(base[f] / m[f]) / math.log(base[f] / gt[f]) for f in EF}
+        rung["arms"][arm] = {"means": m, "per_seed": ps, "n_seeds": len(ps), "frac": fr, "frac_mean": st.mean(fr.values()),
+                             "gt512_over": {f: gt[f] / m[f] for f in EF}}
+    ref = rung["arms"]["rankio"].get("frac_mean")
+    for arm, a in rung["arms"].items():
+        if arm == "rankio" or "frac_mean" not in a or ref is None:
+            continue
+        f = a["frac_mean"]
+        a["ratio_to_rankio"] = {k: a["means"][k] / rung["arms"]["rankio"]["means"][k] for k in EF}
+        a["verdict"] = ("closes" if f >= 0.95 else "pays" if f >= 0.88 else "null" if abs(f - ref) <= 0.03
+                        else "hurts" if f < ref - 0.03 else "between")
+        a["interim"] = a["n_seeds"] < 2
+    out["elasticity"][str(n)] = rung
 json.dump(out, open(f"{R}/local_agg_2026-09-27.json", "w"), indent=1)
+for n, rung in out["elasticity"].items():
+    print(f"== elasticity {n} cases: base {[round(v, 3) for v in rung['base'].values()]} gt512 {[round(v, 3) for v in rung['gt512'].values()]}")
+    for arm, a in rung["arms"].items():
+        if "means" in a:
+            print(f"  {arm:16s} {[round(v, 4) for v in a['means'].values()]} frac {[round(v, 2) for v in a['frac'].values()]} "
+                  f"mean {a['frac_mean']:.3f} {a.get('verdict', '')}{' (one seed)' if a.get('interim') else ''}")
+        else:
+            print(f"  {arm:16s} {a['status']}")
 for n, rung in out["rungs"].items():
     print(f"== {n} cases: base {rung['base']:.4f} gt512 {rung['gt512']:.4f}")
     for arm, a in rung["arms"].items():
