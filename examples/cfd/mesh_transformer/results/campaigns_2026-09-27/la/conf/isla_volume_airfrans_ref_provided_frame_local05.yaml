@@ -1,0 +1,36 @@
+# @package _global_
+# LOCAL-AGG AirfRANS twin (2026-09-27): isla_volume_airfrans_ref_provided_frame plus local_rho 0.05, local_k 32 (code_v7); pairs with airfrans_volume_frame.yaml.
+# FRAME + provided geometry (2026-09-26): isla_volume_airfrans_ref_provided plus the laboratory frame as global vectors; pairs with airfrans_volume_frame.yaml (which carries the stored sdf). Prereg: FRAME ledger row / #sec-nb-internal-geometry-proj-verdict (iv).
+input_type: tensors
+output_type: fields
+forward_kwargs:
+  points: boundaries.airfoil.cell_centroids
+  normals: boundaries.airfoil.cell_data.normals
+  measure_weights: boundaries.airfoil.cell_data.quadrature_measure
+  global_inputs:
+    freestream: global_data.U_inf_dir
+    frame_x: global_data.frame_x            # FRAME on the provided geometry (2026-09-26): the two laboratory axes beside the inlet (K = 3)
+    frame_y: global_data.frame_y
+    u_inf: global_data.U_inf_mag          # the inlet speed: a rank-0 global input
+  query_points: interior.points
+  query_normals: interior.point_data.sdf_normals
+  query_inputs:
+    sdf: interior.point_data.sdf
+model:
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs: {velocity: 1, pressure: 0, nut: 0}
+  global_inputs: {freestream: 1, frame_x: 1, frame_y: 1, u_inf: 0}
+  query_inputs: {sdf: 0}
+  interior_geometry: provided   # INTERNAL-GEOMETRY twin: the full-mesh SDF and its gradient from the dataset
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  scale_mode: rms_distance
+  routing_norm: cosine
+  routing_temperature: 10.0
+  geo_kernel: fused
+  query_tokens: true
+  query_mass: source_total
+  local_rho: 0.05
+  local_k: 32

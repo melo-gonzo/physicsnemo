@@ -5,3 +5,13 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 3	la	la_poisson_ext_local15_n2048_seed43	olbc_poisson_ext	isla_olbc_poisson_ext_local15	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
 4	la	la_poisson_ext_local05_n512_seed42	olbc_poisson_ext	isla_olbc_poisson_ext_local05	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
 5	la	la_poisson_ext_local05_n512_seed43	olbc_poisson_ext	isla_olbc_poisson_ext_local05	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+6	la	la_elasticity_tensor_local05_n512_seed42	olbc_elasticity_tensor	isla_olbc_elasticity_tensor_local05	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+7	la	la_elasticity_tensor_local05_n512_seed43	olbc_elasticity_tensor	isla_olbc_elasticity_tensor_local05	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+8	la	la_elasticity_tensor_local05_n2048_seed42	olbc_elasticity_tensor	isla_olbc_elasticity_tensor_local05	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+9	la	la_elasticity_tensor_local05_n2048_seed43	olbc_elasticity_tensor	isla_olbc_elasticity_tensor_local05	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+10	la	la_elasticity_tensor_ctrl_n2048_seed42	olbc_elasticity_tensor	isla_olbc_elasticity_tensor_ctrl	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+11	la	la_elasticity_tensor_ctrl_n2048_seed43	olbc_elasticity_tensor	isla_olbc_elasticity_tensor_ctrl	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+12	la	la_poisson_ext_ctrl_n512_seed42	olbc_poisson_ext	isla_olbc_poisson_ext_ctrl	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+13	la	la_poisson_ext_ctrl_n512_seed43	olbc_poisson_ext	isla_olbc_poisson_ext_ctrl	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+14	la	la_af_frame_provided_local05_seed42	airfrans_volume_frame	isla_volume_airfrans_ref_provided_frame_local05	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	42	100000	code_v7
+15	la	la_af_frame_provided_local05_seed43	airfrans_volume_frame	isla_volume_airfrans_ref_provided_frame_local05	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	43	100000	code_v7
