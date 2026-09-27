@@ -29479,7 +29479,7 @@ results/scalelaw_reduce_2026-09-27.py (the 2026-09-22 reducer with the
 Poisson interim @sec-nb-local-agg-interim) is OLBC elasticity, where the
 best ISLA arm is the RANK-IO configuration (prescribed displacement and
 traction as rank-1 boundary inputs, the stress as one symmetric rank-2
-output; @sec-nb-rankio-verdict) and GeoTransolver-512 leads it by about
+output; @sec-nb-rankio-verdict-elasticity) and GeoTransolver-512 leads it by about
 1.3 to 1.5x on the stresses at 512 cases. The twin adds the k-nearest
 local aggregation ($\rho = 0.05$, 32 neighbours) to that arm; the
 reference numbers are the frame-free ISLA reference and GeoTransolver-512
