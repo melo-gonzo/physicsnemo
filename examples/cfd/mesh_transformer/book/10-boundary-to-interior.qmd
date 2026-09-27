@@ -657,10 +657,24 @@ extension holds at 2,048 cases (0.80 of the log-gap, two seeds), and the
 domain-axes diagnostic added on top of it recovers nothing more at either
 rung (0.90 against 0.84 at 512, 0.84 against 0.80 at 2,048, two seeds
 each): the positional information those axes carry is already in the
-extension's distance scalar, so the extension alone is the recipe on this
-set (@sec-nb-olbc-mech-combined-2048-verdict). Its vector-data form on the
-elasticity set is the rank-1 input channel of @sec-nb-rankio-verdict-2048.
-Two readings for the architecture travel with it.
+extension's distance scalar, so the extension alone was the recipe on this
+set (@sec-nb-olbc-mech-combined-2048-verdict). What closes the rest is a
+**local relational aggregation among tokens**: each token pools its 32
+nearest tokens with measure-weighted Gaussian kernel weights over their
+states and pair invariants before the slice routing, a path the slice
+attention did not provide. With the extension and this aggregation ISLA
+scores 0.229 at 512 cases and 0.081 at 2,048 against GeoTransolver-512's
+0.279 and 0.098, on both seeds at both rungs, a 20% lead where it had
+trailed by 3x; the aggregation's radius (0.05 or 0.15 of the frame
+length) does not matter, and the step costs 1.5x
+(@sec-nb-local-agg-poisson-verdict, results/local_agg_2026-09-27.json).
+The same aggregation on the elasticity set improves the stresses by 3 to
+4% at 512 cases and leaves displacement unchanged
+(@sec-nb-local-agg-elasticity-interim); its 2,048 rung and an AirfRANS
+twin are running, so whether the gain is general or a Poisson property is
+open. The extension's vector-data form on the elasticity set is the
+rank-1 input channel of @sec-nb-rankio-verdict-2048. Two readings for
+the architecture travel with it.
 A boundary-data-to-solution map on a fixed domain is where ISLA's
 geometry-first design has the least to offer and GeoTransolver's
 coordinate-reading embedding the most. And the OLBC Poisson set is the

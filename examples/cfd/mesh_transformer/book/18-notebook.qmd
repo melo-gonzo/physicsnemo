@@ -29839,3 +29839,54 @@ kernel. So the native run is 10% cheaper than the embedded eager run and
 follow-up before any 2-D lane runs natively at protocol scale, and the
 recipe's datapipe must deliver two-component point arrays and a `dim: 2`
 in the model configs.
+
+## 2026-09-27 — Verdict, LOCAL-AGG on OLBC Poisson (512 and 2,048 cases, two seeds each): local relational aggregation closes the fixed-mesh gap and overshoots it at both rungs, ISLA 0.229 / 0.081 against GeoTransolver-512 0.279 / 0.098; the radius is insensitive (0.05 vs 0.15); the same-snapshot control shows part of the earlier gap was the code snapshot {#sec-nb-local-agg-poisson-verdict}
+
+**Setting.** LOCAL-AGG (@sec-nb-local-agg-prereg) adds a contract-preserving
+local relational aggregation among tokens: each token pools its 32
+nearest tokens with measure-weighted Gaussian kernel weights over their
+states and pair invariants, before the slice routing. The question was
+whether this closes what the boundary-value extension leaves on the OLBC
+Poisson set, where GeoTransolver-512 led ISLA by about 3x at the reference
+configuration and the extension recovered 0.80 to 0.84 of the log-gap.
+The 512-case interim (@sec-nb-local-agg-interim) said closes; this entry
+adds the 2,048 rung, the second radius and the same-snapshot control.
+
+**What we saw (float32 per-case relative L2 on $u$ over the 256 test
+cases; fractions of the log-gap between the frame-free reference and
+GeoTransolver-512).** At 512 cases: reference 0.867, GeoTransolver-512
+0.279, extension 0.333 (campaign om, code_ref), extension on code_v7
+(the control) 0.299 (0.277 / 0.320; fraction 0.94), **extension + local
+aggregation 0.229 (0.231 / 0.227; fraction 1.17)**. At 2,048 cases:
+reference 0.395, GeoTransolver-512 0.098, extension 0.130 (0.125 /
+0.135; fraction 0.80), **extension + local aggregation at radius 0.05:
+0.081 (0.084 / 0.078; fraction 1.14)**, at radius 0.15: 0.082 (0.083 /
+0.081; fraction 1.13). GeoTransolver-512 ÷ ISLA = 1.22 at 512 and 1.21 at
+2,048, on every seed. The step cost is 1.5x the extension arm's at 20,000
+tokens.
+
+**Verdict.** The preregistered *closes* clause (fraction $\ge 0.95$) fires
+at both rungs on both seeds: ISLA with the boundary-value extension and
+local aggregation leads GeoTransolver-512 by about 20% on the one dataset
+where it trailed by 3x. The radius does not matter between 0.05 and 0.15,
+so the gain is the existence of a direct local path among tokens, not
+its scale. The control matters for the attribution: the extension alone
+on code_v7 already recovers 0.94 at 512 against 0.85 on code_ref (the
+snapshots differ in the routing default and the provided-geometry mode),
+so against the fair control the aggregation moves the fraction from 0.94
+to 1.17 at 512, a 23% lower error, and the 2,048 comparison awaits its
+own control only in the sense that the extension arm there is a code_ref
+run; the gain over it (0.130 to 0.081) is far larger than the snapshot
+effect measured at 512 (0.333 to 0.299).
+
+**Mechanism reading.** The slice routing pools tokens by learned state
+over the whole domain; on a fixed mesh where the difficulty is the local
+propagation of boundary data, a token had no path to its neighbours'
+states except through the slices. The extension gives every interior
+token the right boundary value, and the aggregation lets the tokens
+smooth it locally, which is what a Poisson solution is. The elasticity
+twin at 512 was *between* (0.545 to 0.605, @sec-nb-local-agg-elasticity-interim);
+its 2,048 rung with a same-snapshot control and the frame-free AirfRANS
+twin decide whether this is a Poisson-specific gain or a general one.
+Under the two-dataset rule this is a standing on OLBC Poisson and an
+interim for the architecture. Artifact results/local_agg_2026-09-27.json.
