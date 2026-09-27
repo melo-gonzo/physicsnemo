@@ -16,7 +16,8 @@
 
 r"""ISLA: Invariant Slice Attention.
 
-An O(3)/SE(3)-equivariant soft-slice transformer for steady boundary-value PDE
+An O(d)/SE(d)-equivariant soft-slice transformer (any spatial dimension d >= 2;
+the program's datasets are two- and three-dimensional) for steady boundary-value PDE
 surrogates. A boundary sample (positions, unit normals, quadrature measures)
 goes in, together with the problem's data as *named fields of declared
 tensor rank*: global inputs (a direction, a diffusivity, a Reynolds number),
@@ -79,12 +80,16 @@ on the normalized final token state emits invariant coefficients; a rank-
 products of :math:`r` vectors from the token's basis: the *true* vectors
 :math:`t_1, \dots, t_m` (the global directions, the normal, the radial
 direction from the token's soft anchor and the :math:`e_\theta`
-complements; :math:`m = 2K + 3`) for even parity, and products with exactly
-one *pseudovector* factor (the cross products of the primary true vectors
-:math:`\hat g_k, \hat n_i, \hat u_i`; :math:`p = \binom{K+2}{2}` of them) for
-odd parity, plus the isotropic tensors of that rank and parity (the identity
-at rank 2, the three products of Kronecker deltas at rank 4, the Levi-Civita
-symbol at rank 3 odd). A symmetric spec uses the symmetrized basis with one
+complements; :math:`m = 2K + 3` in every dimension) for even parity, and
+products with exactly one *pseudovector* factor for odd parity, the
+pseudovectors being the Levi-Civita construction from the primary true vectors
+:math:`\hat g_k, \hat n_i, \hat u_i`: their pairwise cross products in three
+dimensions (:math:`p = \binom{K+2}{2}`), their perpendiculars in two
+(:math:`p = K + 2`); odd parity is refused in four or more dimensions, where a
+pseudovector needs :math:`d - 1` vectors. Plus the isotropic tensors of that
+rank and parity (the identity at rank 2, the three products of Kronecker
+deltas at rank 4, the Levi-Civita symbol, of rank :math:`d`, for odd parity).
+A symmetric spec uses the symmetrized basis with one
 coefficient per unordered multi-index. Coefficient counts are in the class
 docstring; ranks above 4 are refused.
 
@@ -185,7 +190,7 @@ from torch.utils.checkpoint import checkpoint
 
 from physicsnemo.core.meta import ModelMetaData
 from physicsnemo.core.module import Module
-from physicsnemo.nn.functional.equivariant_ops import spherical_basis
+from physicsnemo.nn.functional.equivariant_ops import vector_project
 
 logger = logging.getLogger(__name__)
 
@@ -212,15 +217,14 @@ class RankSpec:
     parity: str = "even"
     channels: int = 1
 
-    @property
-    def size(self) -> int:
-        """Number of components per token: ``channels`` at rank 0, ``3**rank`` above."""
-        return self.channels if self.rank == 0 else 3**self.rank
+    def size(self, dim: int = 3) -> int:
+        """Number of components per token in ``dim`` spatial dimensions: ``channels``
+        at rank 0, ``dim**rank`` above."""
+        return self.channels if self.rank == 0 else int(dim) ** self.rank
 
-    @property
-    def shape(self) -> tuple[int, ...]:
-        """Trailing component shape: ``()`` at rank 0, ``(3,) * rank`` above."""
-        return () if self.rank == 0 else (3,) * self.rank
+    def shape(self, dim: int = 3) -> tuple[int, ...]:
+        """Trailing component shape: ``()`` at rank 0, ``(dim,) * rank`` above."""
+        return () if self.rank == 0 else (int(dim),) * self.rank
 
 
 def _parse_rank_spec(kind: str, name: str, spec) -> RankSpec:
@@ -397,8 +401,9 @@ class _InputSet:
     * block tensors (``rho^T T rho`` in every slice layer): the ``Q`` rank-2 inputs.
     """
 
-    def __init__(self, specs: dict[str, RankSpec], n_frame: int, scaled_scalars: bool):
+    def __init__(self, specs: dict[str, RankSpec], n_frame: int, scaled_scalars: bool, dim: int = 3):
         self.specs = specs
+        self.dim = int(dim)
         self.n_frame = f = int(n_frame)
         self.scaled_scalars = bool(scaled_scalars)
         self.n_scalar = sum(s.channels for s in specs.values() if s.rank == 0)
@@ -443,20 +448,21 @@ class _InputSet:
             )
         for name, spec in self.specs.items():
             t = fields[name]
-            if not isinstance(t, torch.Tensor) or t.numel() != b * n * spec.size:
+            size = spec.size(self.dim)
+            if not isinstance(t, torch.Tensor) or t.numel() != b * n * size:
                 raise ValueError(
                     f"{kind}[{name!r}]: expected a tensor of shape "
-                    f"{(b, n, *spec.shape) if spec.rank else (b, n) + ((spec.channels,) if spec.channels > 1 else ())} "
-                    f"({b * n * spec.size} elements), got "
+                    f"{(b, n, *spec.shape(self.dim)) if spec.rank else (b, n) + ((spec.channels,) if spec.channels > 1 else ())} "
+                    f"({b * n * size} elements), got "
                     f"{tuple(t.shape) if isinstance(t, torch.Tensor) else type(t).__name__}"
                 )
 
     def features(self, fields, b: int, n: int, frame, *, gauge=None, eps=0.0):
         """Invariants of one token class.
 
-        ``frame`` is ``(B, N, F, 3)``: the token's true frame vectors
-        ``[n_hat, g_1..g_K]``. Returns ``(seed (B, N, n_features), vecs
-        (B, N, n_block_vecs, 3), tens (B, N, n_block_tens, 3, 3))``; ``gauge``
+        ``frame`` is ``(B, N, F, d)``: the token's true frame vectors
+        ``[n_hat, g_1..g_K]`` in ``d`` spatial dimensions. Returns ``(seed (B, N,
+        n_features), vecs (B, N, n_block_vecs, d), tens (B, N, n_block_tens, d, d))``; ``gauge``
         (``(B, 1, 1)``) divides the rank-0 channels when ``scaled_scalars``.
         """
         ### The invariants and the derived vectors are geometry: computed in the
@@ -467,6 +473,7 @@ class _InputSet:
 
     def _features(self, fields, b, n, frame, gauge, eps):
         dtype = frame.dtype
+        d = frame.shape[-1]
         seed, vecs, tens = [], [], []
         for name, spec in self.specs.items():
             if spec.rank == 0:
@@ -477,8 +484,8 @@ class _InputSet:
                 seed.append(s)
         if self.rank1:
             v = torch.stack(
-                [fields[name].reshape(b, n, 3).to(dtype) for name in self.rank1], dim=2
-            )  # (B, N, P, 3)
+                [fields[name].reshape(b, n, d).to(dtype) for name in self.rank1], dim=2
+            )  # (B, N, P, d)
             seed.append(_contract_vectors(v, frame).flatten(2))  # (B, N, P*F)
             seed.append(v.norm(dim=-1))  # (B, N, P)
             p = v.shape[2]
@@ -487,9 +494,9 @@ class _InputSet:
                 seed.append((v[:, :, iu] * v[:, :, ju]).sum(-1))  # (B, N, P(P-1)/2)
             vecs.append(v)
         for name, symmetric in self.rank2:
-            t = fields[name].reshape(b, n, 3, 3).to(dtype)
+            t = fields[name].reshape(b, n, d, d).to(dtype)
             ### a^T T b over the frame pairs, as (T b) . a with T b a derived vector.
-            tb = torch.einsum("bnij,bnfj->bnfi", t, frame)  # (B, N, F, 3): T a
+            tb = torch.einsum("bnij,bnfj->bnfi", t, frame)  # (B, N, F, d): T a
             ia, ib = _pair_indices(self.n_frame, symmetric)
             seed.append(
                 (frame[:, :, ia.to(t.device)] * tb[:, :, ib.to(t.device)]).sum(-1)
@@ -501,13 +508,13 @@ class _InputSet:
                 vecs.append(torch.einsum("bnji,bnfj->bnfi", t, frame))  # T^T a
             tens.append(t)
         seed_t = torch.cat(seed, -1) if seed else frame.new_zeros(b, n, 0)
-        vecs_t = torch.cat(vecs, 2) if vecs else frame.new_zeros(b, n, 0, 3)
-        tens_t = torch.stack(tens, 2) if tens else frame.new_zeros(b, n, 0, 3, 3)
+        vecs_t = torch.cat(vecs, 2) if vecs else frame.new_zeros(b, n, 0, d)
+        tens_t = torch.stack(tens, 2) if tens else frame.new_zeros(b, n, 0, d, d)
         return seed_t, vecs_t, tens_t
 
 
 def _contract_vectors(x, y):
-    """Dot products of per-token vector stacks ``x (B, N, P, 3)`` and ``y (B, N, F, 3)``
+    """Dot products of per-token vector stacks ``x (B, N, P, d)`` and ``y (B, N, F, d)``
     -> ``(B, N, P, F)``. Broadcast multiply-and-sum, not einsum: einsum is autocast
     to bf16 and the geometry must stay in the input precision."""
     return (x[:, :, :, None, :] * y[:, :, None, :, :]).sum(-1)
@@ -546,14 +553,14 @@ def _softmax_over_points(
 
 
 def _relational_invariants(
-    r: Float[torch.Tensor, "batch tokens 3"],
-    n_hat: Float[torch.Tensor, "batch tokens 3"],
-    g_hat: Float[torch.Tensor, "batch tokens vectors 3"],
-    z_pos: Float[torch.Tensor, "batch slices 3"],
-    m_s: Float[torch.Tensor, "batch slices 3"],
+    r: Float[torch.Tensor, "batch tokens dim"],
+    n_hat: Float[torch.Tensor, "batch tokens dim"],
+    g_hat: Float[torch.Tensor, "batch tokens vectors dim"],
+    z_pos: Float[torch.Tensor, "batch slices dim"],
+    m_s: Float[torch.Tensor, "batch slices dim"],
     eps: float,
-    vecs: Float[torch.Tensor, "batch tokens extra 3"] | None = None,
-    tens: Float[torch.Tensor, "batch tokens tensors 3 3"] | None = None,
+    vecs: Float[torch.Tensor, "batch tokens extra dim"] | None = None,
+    tens: Float[torch.Tensor, "batch tokens tensors dim dim"] | None = None,
 ) -> Float[torch.Tensor, "batch tokens slices geo"]:
     """The point-anchor invariants: distance and its log, the unit relative
     vector dotted with each global direction (K terms), with the point normal
@@ -886,9 +893,9 @@ class _SliceBlock(nn.Module):
         self,
         h: Float[torch.Tensor, "batch tokens hidden"],
         log_w: Float[torch.Tensor, "batch tokens 1"],
-        r: Float[torch.Tensor, "batch tokens 3"],
-        n_hat: Float[torch.Tensor, "batch tokens 3"],
-        g_hat: Float[torch.Tensor, "batch tokens vectors 3"],
+        r: Float[torch.Tensor, "batch tokens dim"],
+        n_hat: Float[torch.Tensor, "batch tokens dim"],
+        g_hat: Float[torch.Tensor, "batch tokens vectors dim"],
         eps: float,
         vecs=None,
         tens=None,
@@ -909,7 +916,7 @@ class _SliceBlock(nn.Module):
         )  # normalized over points
         ### Equivariant anchors: weighted mean position AND mean normal
         ### direction per slice (v3b) -- anchors gain orientation.
-        z_pos = torch.einsum("bns,bnc->bsc", a, r)  # (B, S, 3)
+        z_pos = torch.einsum("bns,bnc->bsc", a, r)  # (B, S, d)
         m_s = torch.einsum("bns,bnc->bsc", a, n_hat)
         m_s = m_s / m_s.norm(dim=-1, keepdim=True).clamp_min(eps)
         ### Geometry refines the routing and the readback. A35b ablation:
@@ -1171,15 +1178,15 @@ def _nn_kernel_available() -> bool:
 
 
 def nearest_boundary_geometry(
-    query_points: Float[torch.Tensor, "batch queries 3"],
-    points: Float[torch.Tensor, "batch tokens 3"],
-    normals: Float[torch.Tensor, "batch tokens 3"],
+    query_points: Float[torch.Tensor, "batch queries dim"],
+    points: Float[torch.Tensor, "batch tokens dim"],
+    normals: Float[torch.Tensor, "batch tokens dim"],
     *,
     chunk: int | None = None,
     eps: float = 1e-12,
     projection: str = "centroid",
 ) -> tuple[
-    Float[torch.Tensor, "batch queries"], Float[torch.Tensor, "batch queries 3"]
+    Float[torch.Tensor, "batch queries"], Float[torch.Tensor, "batch queries dim"]
 ]:
     r"""Signed distance and direction from the nearest boundary sample to each query.
 
@@ -1234,7 +1241,9 @@ def nearest_boundary_geometry(
     b, nq, _ = query_points.shape
     n = points.shape[1]
     with torch.autocast(query_points.device.type, enabled=False), torch.no_grad():
-        if query_points.is_cuda and _nn_kernel_available():
+        if query_points.is_cuda and points.shape[-1] == 3 and _nn_kernel_available():
+            ### The Triton search is written for three components; other dimensions
+            ### take the exact float64 expansion below.
             from .nn_kernel import nearest_index
 
             idx = nearest_index(query_points, points)  # (B, Q)
@@ -1251,9 +1260,9 @@ def nearest_boundary_geometry(
                 chunk = max(1, NN_CHUNK_BYTES // (b * n * 8))  # the block is float64
             c = points.mean(dim=1, keepdim=True)
             scale = (points - c).norm(dim=-1).amax(dim=1).clamp_min(eps)[:, None, None]
-            y_s = ((points - c) / scale).double()  # (B, N, 3)
+            y_s = ((points - c) / scale).double()  # (B, N, d)
             y_sq = y_s.square().sum(-1)  # (B, N)
-            y_t = y_s.transpose(1, 2)  # (B, 3, N)
+            y_t = y_s.transpose(1, 2)  # (B, d, N)
             idx = []
             for i0 in range(0, nq, chunk):
                 q_s = ((query_points[:, i0 : i0 + chunk] - c) / scale).double()
@@ -1262,7 +1271,7 @@ def nearest_boundary_geometry(
                 )  # (B, q, N), one fused pass
                 idx.append(approx.argmin(dim=-1))
             idx = torch.cat(idx, dim=1)  # (B, Q)
-    gather = idx[..., None].expand(b, nq, 3)
+    gather = idx[..., None].expand(b, nq, points.shape[-1])
     y = torch.gather(points, 1, gather)
     n_star = torch.gather(normals, 1, gather)
     n_star = n_star / n_star.norm(dim=-1, keepdim=True).clamp_min(eps)
@@ -1286,17 +1295,31 @@ def nearest_boundary_geometry(
 ### ---------------------------------------------------------------------------
 
 
-def _isotropic_tensors(rank: int, symmetric: bool, parity: str) -> list[torch.Tensor]:
-    """The constant (isotropic) tensors of a rank and parity, each of shape (3,)*rank.
+def _levi_civita(dim: int) -> torch.Tensor:
+    """The Levi-Civita symbol of ``dim`` dimensions, shape ``(dim,)*dim``: the sign
+    of the permutation at each permuted multi-index, zero elsewhere. An isotropic
+    pseudotensor of rank ``dim`` in every dimension (``J`` at ``dim = 2``, the
+    familiar rank-3 symbol at ``dim = 3``)."""
+    eps = torch.zeros((dim,) * dim, dtype=torch.float64)
+    for perm in itertools.permutations(range(dim)):
+        inversions = sum(1 for i in range(dim) for j in range(i + 1, dim) if perm[i] > perm[j])
+        eps[perm] = -1.0 if inversions % 2 else 1.0
+    return eps
+
+
+def _isotropic_tensors(rank: int, symmetric: bool, parity: str, dim: int = 3) -> list[torch.Tensor]:
+    """The constant (isotropic) tensors of a rank and parity in ``dim`` spatial
+    dimensions, each of shape ``(dim,)*rank``.
 
     Even parity: the identity at rank 2; at rank 4 the three products of
     Kronecker deltas ``d_ij d_kl, d_ik d_jl, d_il d_jk`` (their sum alone for a
     symmetric spec, the only fully symmetric isotropic rank-4 tensor). Odd
-    parity: the Levi-Civita symbol at rank 3 (a pseudotensor, antisymmetric, so
-    not for a symmetric spec). No isotropic tensor exists at ranks 0, 1, at even
-    rank 3, or at odd ranks 1, 2, 4.
+    parity: the Levi-Civita symbol, which has rank ``dim`` (rank 2 in two
+    dimensions, rank 3 in three; a pseudotensor, antisymmetric, so not for a
+    symmetric spec). No isotropic tensor exists at ranks 0, 1, at even rank 3,
+    or at odd ranks other than ``dim``.
     """
-    eye = torch.eye(3, dtype=torch.float64)
+    eye = torch.eye(dim, dtype=torch.float64)
     if parity == "even":
         if rank == 2:
             return [eye]
@@ -1308,18 +1331,8 @@ def _isotropic_tensors(rank: int, symmetric: bool, parity: str) -> list[torch.Te
             ]
             return [sum(terms)] if symmetric else terms
         return []
-    if rank == 3 and not symmetric:
-        eps3 = torch.zeros(3, 3, 3, dtype=torch.float64)
-        for (i, j, k), s in (
-            ((0, 1, 2), 1.0),
-            ((1, 2, 0), 1.0),
-            ((2, 0, 1), 1.0),
-            ((0, 2, 1), -1.0),
-            ((2, 1, 0), -1.0),
-            ((1, 0, 2), -1.0),
-        ):
-            eps3[i, j, k] = s
-        return [eps3]
+    if rank == dim and not symmetric:
+        return [_levi_civita(dim)]
     return []
 
 
@@ -1337,8 +1350,9 @@ class _OutputLayout:
     then pseudo for odd) to its free coefficient, or to the trailing zero slot.
     """
 
-    def __init__(self, spec: RankSpec, n_true: int, n_pseudo: int) -> None:
+    def __init__(self, spec: RankSpec, n_true: int, n_pseudo: int, dim: int = 3) -> None:
         self.spec = spec
+        self.dim = int(dim)
         r = spec.rank
         self.n_true, self.n_pseudo = n_true, n_pseudo
         self.n_vec = n_true if spec.parity == "even" else n_true + n_pseudo
@@ -1361,18 +1375,18 @@ class _OutputLayout:
         self.index = torch.tensor(
             [i if i >= 0 else self.n_free for i in index], dtype=torch.long
         )
-        self.iso = _isotropic_tensors(r, spec.symmetric, spec.parity)
+        self.iso = _isotropic_tensors(r, spec.symmetric, spec.parity, self.dim)
         self.n_coeffs = self.n_free + len(self.iso)
 
 
 def _assemble_output(coeffs, layout: _OutputLayout, true_vecs, pseudo_vecs):
     """Contract one output's coefficients ``(B, N, n_coeffs)`` with the token basis.
 
-    ``true_vecs`` is ``(B, N, m, 3)``, ``pseudo_vecs`` ``(B, N, p, 3)``. Returns
-    ``(B, N)`` at rank 0 and ``(B, N, 3, ..., 3)`` with ``rank`` trailing axes
+    ``true_vecs`` is ``(B, N, m, d)``, ``pseudo_vecs`` ``(B, N, p, d)``. Returns
+    ``(B, N)`` at rank 0 and ``(B, N, d, ..., d)`` with ``rank`` trailing axes
     otherwise. The full coefficient tensor over ordered multi-indices is
     gathered from the free coefficients and contracted one index at a time,
-    so the basis itself is never materialized (peak ``(B, N, n_vec**(r-1), 3)``).
+    so the basis itself is never materialized (peak ``(B, N, n_vec**(r-1), d)``).
     """
     b, n = coeffs.shape[:2]
     r = layout.spec.rank
@@ -1390,9 +1404,9 @@ def _assemble_output(coeffs, layout: _OutputLayout, true_vecs, pseudo_vecs):
     x = c_full  # (B, N, n_vec**r), indices (j1, ..., jr) row-major
     for _ in range(r):
         x = x.reshape(b, n, layout.n_vec, -1)  # split j1 from the rest
-        x = torch.einsum("bnjR,bnja->bnRa", x, u)  # (B, N, rest, 3)
+        x = torch.einsum("bnjR,bnja->bnRa", x, u)  # (B, N, rest, d)
         x = x.reshape(b, n, -1)  # (rest, a1) flattened: j2 leads again
-    out = x.reshape(b, n, *layout.spec.shape)
+    out = x.reshape(b, n, *layout.spec.shape(layout.dim))
     if layout.iso:
         iso = torch.stack(layout.iso).to(device=out.device, dtype=out.dtype)
         c_iso = coeffs[..., layout.n_free :].to(out.dtype)
@@ -1400,6 +1414,36 @@ def _assemble_output(coeffs, layout: _OutputLayout, true_vecs, pseudo_vecs):
             out.shape
         )
     return out
+
+
+def _polar_complement(r_hat: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+    """The component of ``v`` orthogonal to the unit vector ``r_hat``, with the
+    sign convention of the polar basis vector ``e_theta`` of
+    :func:`physicsnemo.nn.functional.equivariant_ops.spherical_basis` (``-v``
+    projected off ``r_hat``; zero where ``r_hat`` is zero), in any dimension.
+    Left unnormalized, so it vanishes smoothly where ``v`` is parallel to
+    ``r_hat``. In three dimensions this is exactly that function's ``e_theta``."""
+    e = vector_project(-v, r_hat)
+    zero = torch.all(r_hat == 0.0, dim=-1, keepdim=True)
+    return torch.where(zero, torch.zeros_like(e), e)
+
+
+def _pseudovectors(primaries: list[torch.Tensor], dim: int) -> list[torch.Tensor]:
+    """The pseudovector basis from a list of true vectors ``(..., dim)`` by the
+    Levi-Civita construction: in three dimensions the pairwise cross products
+    (in list order, ``i < j``), in two the perpendiculars ``J v = (-v_y, v_x)`` of
+    each vector. A pseudovector in ``dim`` dimensions is the contraction of the
+    Levi-Civita symbol with ``dim - 1`` vectors; other dimensions return no
+    pseudovectors (odd-parity outputs are refused there at construction)."""
+    if dim == 3:
+        return [
+            torch.cross(primaries[i], primaries[j], dim=-1)
+            for i in range(len(primaries))
+            for j in range(i + 1, len(primaries))
+        ]
+    if dim == 2:
+        return [torch.stack([-v[..., 1], v[..., 0]], dim=-1) for v in primaries]
+    return []
 
 
 ### ---------------------------------------------------------------------------
@@ -1431,10 +1475,11 @@ class ISLA(Module):
             :class:`~tensordict.TensorDict` of batch size ``(B, N)`` with these
             names as (nested) leaves; a rank-0 field has shape ``(B, N)`` (or
             ``(B, N, channels)`` when ``channels > 1``), a rank-``r`` field
-            ``(B, N, 3, ..., 3)`` with ``r`` trailing axes. Ranks up to 4. Each
+            ``(B, N, d, ..., d)`` with ``r`` trailing axes (``d`` the spatial
+            dimension, ``dim``). Ranks up to 4. Each
             field's coefficients come from the shared linear head; with ``m =
-            2K + 3`` true basis vectors and ``p = (K+2)(K+1)/2`` pseudovectors
-            the counts per field are ``1`` at rank 0; ``m`` (even) or ``p``
+            2K + 3`` true basis vectors and ``p`` pseudovectors (``(K+2)(K+1)/2``
+            in three dimensions, ``K + 2`` in two) the counts per field are ``1`` at rank 0; ``m`` (even) or ``p``
             (odd) at rank 1; ``m^2 + 1`` (even, the identity included) or
             ``m(m+1)/2 + 1`` (even symmetric), ``2pm`` or ``pm`` (odd) at rank
             2; ``m^3`` or ``C(m+2, 3)`` (even), ``3pm^2 + 1`` (odd, the
@@ -1584,20 +1629,29 @@ class ISLA(Module):
             512 MiB budget (about 640 queries against 200,000 float32 boundary
             points, i.e. some 300 blocks for 200,000 queries). Cost only, never
             the result.
+        dim: Spatial dimension of the points (default 3). Every geometric
+            quantity is built for ``dim`` dimensions and the head's basis
+            follows it (pseudovectors by the Levi-Civita construction: cross
+            products in three dimensions, perpendiculars in two; odd-parity
+            outputs are refused for ``dim >= 4``). The fused Triton geometry
+            kernel and the Triton nearest-neighbour search are written for
+            three dimensions; other dimensions run the eager region and the
+            exact float64 search. A two-dimensional problem should be passed
+            with ``dim=2`` rather than embedded with a zero third coordinate.
         eps: Numerical floor for norms and logarithms.
 
     Forward inputs (all keyword-only): ``points`` and ``normals`` of shape
-    ``(B, N, 3)``; ``measure_weights`` ``(B, N)`` (required by
+    ``(B, N, d)`` with ``d = dim`` (3 by default); ``measure_weights`` ``(B, N)`` (required by
     ``scale_mode="rms_distance"`` and ``"total_measure"``; Horvitz-Thompson
     corrected so they sum to the boundary measure); ``global_inputs`` ``{name:
     tensor}`` with a rank-0 field of shape ``(B,)`` or ``(B, channels)`` and a
-    rank-1 field ``(B, 3)`` (a single case's values, shape ``(3,)`` or
+    rank-1 field ``(B, d)`` (a single case's values, shape ``(d,)`` or
     ``(channels,)``, is shared across the batch); ``boundary_inputs`` ``{name:
-    tensor}`` with shapes ``(B, N)`` / ``(B, N, channels)``, ``(B, N, 3)``,
-    ``(B, N, 3, 3)`` by rank; ``query_points`` ``(B, Q, 3)`` and
+    tensor}`` with shapes ``(B, N)`` / ``(B, N, channels)``, ``(B, N, d)``,
+    ``(B, N, d, d)`` by rank; ``query_points`` ``(B, Q, d)`` and
     ``query_inputs`` (shapes as for boundary inputs over ``Q``) for the
-    interior modes, plus ``query_normals`` ``(B, Q, 3)`` under
-    ``interior_geometry="provided"`` only; ``support_points`` ``(B, M, 3)``
+    interior modes, plus ``query_normals`` ``(B, Q, d)`` under
+    ``interior_geometry="provided"`` only; ``support_points`` ``(B, M, d)``
     (``support_normals`` likewise) and ``support_inputs`` (the ``query_inputs``
     fields over ``M``) with ``support_tokens``. Each named mapping may be flat
     with dotted names, nested, or a TensorDict. Returns a
@@ -1652,9 +1706,18 @@ class ISLA(Module):
         geo_bias: str = "linear",
         local_rho: float | None = None,
         local_k: int = 32,
+        dim: int = 3,
         eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
+        ### ND-GENERIC (2026-09-27): the spatial dimension of the points. Every
+        ### geometric quantity is built for d dimensions; the head's basis and the
+        ### coefficient count depend on d (pseudovectors exist by the Levi-Civita
+        ### construction: perpendiculars in two dimensions, cross products in three),
+        ### which is why d is a constructor argument and forward checks the points.
+        if int(dim) < 2:
+            raise ValueError(f"dim must be at least 2, got {dim!r}")
+        self.dim = int(dim)
         ### LOCAL-AGG (2026-09-27): radius, in frame units (the rms_distance length unit), of
         ### the local relational aggregation among tokens in every slice block; None = off.
         ### local_k > 0 restricts each token's kernel to its k nearest tokens (O(N k));
@@ -1789,13 +1852,18 @@ class ISLA(Module):
             raise ValueError(f"unknown query_scalar_scale {query_scalar_scale!r}")
         self.query_scalar_scale = query_scalar_scale
         n_frame = 1 + K  # {n_hat, g_1..g_K}
-        self.bin = _InputSet(self.boundary_specs, n_frame, scaled_scalars=False)
+        self.bin = _InputSet(self.boundary_specs, n_frame, scaled_scalars=False, dim=self.dim)
         self.qin = _InputSet(
-            self.query_specs, n_frame, scaled_scalars=(query_scalar_scale == "length")
+            self.query_specs, n_frame, scaled_scalars=(query_scalar_scale == "length"), dim=self.dim
         )
         self.n_block_vecs = self.bin.n_block_vecs + self.qin.n_block_vecs
         self.n_block_tens = self.bin.n_block_tens + self.qin.n_block_tens
         if geo_kernel == "fused":
+            if self.dim != 3:
+                raise ValueError(
+                    f"geo_kernel='fused' is written for three spatial dimensions; got dim={self.dim} "
+                    "(use geo_kernel='eager' or None, which resolves to the eager region)"
+                )
             if self.n_block_tens:
                 raise ValueError(
                     "geo_kernel='fused' does not support rank-2 boundary or query inputs "
@@ -1880,14 +1948,30 @@ class ISLA(Module):
         ### HEADS (2026-09-22): one linear head emits every output's invariant
         ### coefficients; each output is contracted with tensor products of the
         ### token's basis vectors (_OutputLayout / _assemble_output). True
-        ### vectors: g_1..g_K, n, rhat, e_th(rhat, n), e_th(rhat, g_k), m = 2K+3.
-        ### Pseudovectors: the cross products of the primaries {g_k, n, rhat},
-        ### p = C(K+2, 2). For K = 1 and outputs {scalar: 0, vector: 1} the
-        ### head has width 1 + 5.
+        ### vectors: g_1..g_K, n, rhat, e_th(rhat, n), e_th(rhat, g_k), m = 2K+3 in
+        ### every dimension. Pseudovectors (ND-GENERIC, 2026-09-27) by the
+        ### Levi-Civita construction from the primaries {g_k, n, rhat}: their
+        ### perpendiculars in two dimensions (p = K + 2), their pairwise cross
+        ### products in three (p = C(K+2, 2)); a pseudovector in d dimensions needs
+        ### d - 1 vectors, so odd-parity outputs are refused for d >= 4 until a
+        ### dataset needs them. For K = 1 in 3-D and outputs {scalar: 0, vector: 1}
+        ### the head has width 1 + 5.
         self.n_true_basis = 3 + 2 * K
-        self.n_pseudo_basis = (K + 2) * (K + 1) // 2
+        if self.dim == 3:
+            self.n_pseudo_basis = (K + 2) * (K + 1) // 2
+        elif self.dim == 2:
+            self.n_pseudo_basis = K + 2
+        else:
+            self.n_pseudo_basis = 0
+            odd = [n for n, sp in self.output_specs.items() if sp.parity == "odd"]
+            if odd:
+                raise NotImplementedError(
+                    f"odd-parity outputs {odd!r} in dim={self.dim}: a pseudovector needs "
+                    f"{self.dim - 1} vectors (the Levi-Civita construction); only two and "
+                    "three dimensions are implemented"
+                )
         self.output_layouts = {
-            name: _OutputLayout(spec, self.n_true_basis, self.n_pseudo_basis)
+            name: _OutputLayout(spec, self.n_true_basis, self.n_pseudo_basis, self.dim)
             for name, spec in self.output_specs.items()
         }
         self.n_head_coeffs = sum(
@@ -1901,7 +1985,7 @@ class ISLA(Module):
         ### query normal must be supplied, e.g. the SDF gradient), a learned
         ### measure weight and a learned token-type offset. This is
         ### GeoTransolver's interior mechanism (queries as tokens) on ISLA's
-        ### equivariant routing: exactly SE(3)-covariant, NOT query-independent.
+        ### equivariant routing: exactly SE(d)-covariant, NOT query-independent.
         ### Outputs are returned for the query tokens only.
         self.query_tokens = bool(query_tokens)
         if self.query_tokens:
@@ -1979,7 +2063,7 @@ class ISLA(Module):
 
     @staticmethod
     def _dots(x, g_hat):
-        """x (B, N, 3) against the K unit global directions g_hat (B, N, K, 3) -> (B, N, K).
+        """x (B, N, d) against the K unit global directions g_hat (B, N, K, d) -> (B, N, K).
         Multiply-and-sum rather than einsum so autocast leaves the geometry in fp32."""
         return (x[:, :, None, :] * g_hat).sum(-1)
 
@@ -2014,16 +2098,17 @@ class ISLA(Module):
 
     def _block_extras(self, b_vecs, b_tens, q_vecs, q_tens, b: int, n: int, like):
         """The union block-level stacks of one token class: [boundary-derived vectors,
-        query-derived vectors] (B, N, P', 3) and [boundary tensors, query tensors]
-        (B, N, Q, 3, 3); zeros where the class has no such field."""
+        query-derived vectors] (B, N, P', d) and [boundary tensors, query tensors]
+        (B, N, Q, d, d); zeros where the class has no such field."""
         if not (self.n_block_vecs or self.n_block_tens):
             return None, None
+        d = self.dim
         if b_vecs is None:
-            b_vecs = like.new_zeros(b, n, self.bin.n_block_vecs, 3)
-            b_tens = like.new_zeros(b, n, self.bin.n_block_tens, 3, 3)
+            b_vecs = like.new_zeros(b, n, self.bin.n_block_vecs, d)
+            b_tens = like.new_zeros(b, n, self.bin.n_block_tens, d, d)
         if q_vecs is None:
-            q_vecs = like.new_zeros(b, n, self.qin.n_block_vecs, 3)
-            q_tens = like.new_zeros(b, n, self.qin.n_block_tens, 3, 3)
+            q_vecs = like.new_zeros(b, n, self.qin.n_block_vecs, d)
+            q_tens = like.new_zeros(b, n, self.qin.n_block_tens, d, d)
         return torch.cat([b_vecs, q_vecs], 2), torch.cat([b_tens, q_tens], 2)
 
     def resolve_geo_kernel(self, points: torch.Tensor) -> str:
@@ -2050,6 +2135,7 @@ class ISLA(Module):
         ok = (
             points.is_cuda
             and HAS_TRITON
+            and self.dim == 3  # the fused kernel is written for three components
             and self.n_global_vectors >= 1
             and self.n_global_vectors + self.n_block_vecs <= MAX_DIRECTIONS
             and self.n_slices <= MAX_SLICES
@@ -2100,14 +2186,15 @@ class ISLA(Module):
         support_inputs,
     ) -> None:
         """Shape and presence checks for :meth:`forward` (MOD-005 format)."""
-        if points.ndim != 3 or points.shape[-1] != 3:
+        d = self.dim
+        if points.ndim != 3 or points.shape[-1] != d:
             raise ValueError(
-                f"Expected points of shape (B, N, 3) but got tensor of shape {tuple(points.shape)}"
+                f"Expected points of shape (B, N, {d}) (this model has dim={d}) but got tensor of shape {tuple(points.shape)}"
             )
         b, n, _ = points.shape
         if normals.shape != points.shape:
             raise ValueError(
-                f"Expected normals of shape {(b, n, 3)} but got tensor of shape {tuple(normals.shape)}"
+                f"Expected normals of shape {(b, n, d)} but got tensor of shape {tuple(normals.shape)}"
             )
         if measure_weights is not None and measure_weights.numel() != b * n:
             raise ValueError(
@@ -2120,10 +2207,10 @@ class ISLA(Module):
             ("support", support_points, support_normals, support_inputs),
         ):
             if pts is not None and (
-                pts.ndim != 3 or pts.shape[0] != b or pts.shape[-1] != 3
+                pts.ndim != 3 or pts.shape[0] != b or pts.shape[-1] != d
             ):
                 raise ValueError(
-                    f"Expected {name}_points of shape ({b}, M, 3) but got tensor of shape {tuple(pts.shape)}"
+                    f"Expected {name}_points of shape ({b}, M, {d}) but got tensor of shape {tuple(pts.shape)}"
                 )
             if nrm is not None and internal:
                 raise ValueError(
@@ -2169,7 +2256,7 @@ class ISLA(Module):
             )
 
     def _global_fields(self, global_inputs, b: int, points):
-        """Assemble the unit global directions (B, K, 3) and the global scalars
+        """Assemble the unit global directions (B, K, d) and the global scalars
         (B, S) from the named per-case fields. A single case's values (one row) are
         shared across the batch."""
         fields = _flatten_fields("global_inputs", global_inputs) or {}
@@ -2200,13 +2287,13 @@ class ISLA(Module):
 
         if K:
             gv = torch.stack(
-                [_rows(k, fields[k], 3) for k in self.global_vector_names], 1
+                [_rows(k, fields[k], self.dim) for k in self.global_vector_names], 1
             )
             ### Each direction is normalized; the magnitude, if it means anything,
             ### is a rank-0 global input.
-            g_unit = gv / gv.norm(dim=-1, keepdim=True).clamp_min(self.eps)  # (B, K, 3)
+            g_unit = gv / gv.norm(dim=-1, keepdim=True).clamp_min(self.eps)  # (B, K, d)
         else:
-            g_unit = points.new_zeros(b, 0, 3)
+            g_unit = points.new_zeros(b, 0, self.dim)
         if self.n_global_scalars:
             g_scalars = torch.cat(
                 [
@@ -2222,16 +2309,16 @@ class ISLA(Module):
     def forward(
         self,
         *,
-        points: Float[torch.Tensor, "batch tokens 3"],
-        normals: Float[torch.Tensor, "batch tokens 3"],
+        points: Float[torch.Tensor, "batch tokens dim"],
+        normals: Float[torch.Tensor, "batch tokens dim"],
         measure_weights: Float[torch.Tensor, "batch tokens"] | None = None,
         global_inputs: Mapping[str, torch.Tensor] | None = None,
         boundary_inputs: Mapping[str, torch.Tensor] | None = None,
-        query_points: Float[torch.Tensor, "batch queries 3"] | None = None,
-        query_normals: Float[torch.Tensor, "batch queries 3"] | None = None,
+        query_points: Float[torch.Tensor, "batch queries dim"] | None = None,
+        query_normals: Float[torch.Tensor, "batch queries dim"] | None = None,
         query_inputs: Mapping[str, torch.Tensor] | None = None,
-        support_points: Float[torch.Tensor, "batch support 3"] | None = None,
-        support_normals: Float[torch.Tensor, "batch support 3"] | None = None,
+        support_points: Float[torch.Tensor, "batch support dim"] | None = None,
+        support_normals: Float[torch.Tensor, "batch support dim"] | None = None,
         support_inputs: Mapping[str, torch.Tensor] | None = None,
     ) -> TensorDict:
         ### Named fields arrive flat with dotted names, nested, or as TensorDicts;
@@ -2272,7 +2359,7 @@ class ISLA(Module):
         self._apply_geo_kernel(points)
         K = self.n_global_vectors
         g_unit, g_scalars = self._global_fields(global_inputs, b, points)
-        g_hat = g_unit[:, None].expand(b, n, K, 3)
+        g_hat = g_unit[:, None].expand(b, n, K, self.dim)
 
         ### Frame: no origin; the one length unit is a measure-weighted integral
         ### of the geometry (the RMS pairwise distance or the square root of the
@@ -2308,7 +2395,7 @@ class ISLA(Module):
 
         ### Boundary inputs: invariants against the token's frame {n, g_k}.
         if self.bin:
-            frame = torch.cat([n_hat[:, :, None], g_hat], dim=2)  # (B, N, 1+K, 3)
+            frame = torch.cat([n_hat[:, :, None], g_hat], dim=2)  # (B, N, 1+K, d)
             b_feat, b_vecs, b_tens = self.bin.features(boundary_inputs, b, n, frame)
         else:
             b_feat, b_vecs, b_tens = None, None, None
@@ -2341,7 +2428,7 @@ class ISLA(Module):
                     )
             else:
                 q_nhat = q_nrm / q_nrm.norm(dim=-1, keepdim=True).clamp_min(self.eps)
-            q_g = g_unit[:, None].expand(bq, nq, K, 3)
+            q_g = g_unit[:, None].expand(bq, nq, K, self.dim)
             if self.qin:
                 if fields is None:
                     raise ValueError(f"query_inputs declared: {kind} needs its fields")
@@ -2555,28 +2642,25 @@ class ISLA(Module):
         r_hat = u / u.norm(dim=-1, keepdim=True).clamp_min(self.eps)
 
         ### The token basis. True vectors: the global directions, the normal, the
-        ### radial direction and the e_theta complements of (rhat, n) and each
-        ### (rhat, g_k), left unnormalized so they vanish smoothly where the pair
-        ### is parallel. Pseudovectors: the cross products of the primaries
-        ### {g_k, n, rhat} (for K = 1: g x n, g x rhat, n x rhat), which flip sign
-        ### under a reflection while their coefficients do not.
+        ### radial direction and the polar complements of (rhat, n) and each
+        ### (rhat, g_k) (the vector's component orthogonal to rhat, left
+        ### unnormalized so it vanishes smoothly where the pair is parallel; any
+        ### dimension). Pseudovectors: the Levi-Civita construction from the
+        ### primaries {g_k, n, rhat}: in three dimensions their pairwise cross
+        ### products (for K = 1: g x n, g x rhat, n x rhat), in two their
+        ### perpendiculars; both flip sign under a reflection while their
+        ### coefficients do not.
         gs = [g_out[:, :, k] for k in range(K)]
-        _, e_th_n, _ = spherical_basis(r_hat, n_hat, normalize_basis_vectors=False)
-        true_basis = gs + [n_hat, r_hat, e_th_n]
+        true_basis = gs + [n_hat, r_hat, _polar_complement(r_hat, n_hat)]
         for g in gs:
-            _, e_th, _ = spherical_basis(r_hat, g, normalize_basis_vectors=False)
-            true_basis.append(e_th)
+            true_basis.append(_polar_complement(r_hat, g))
         primaries = gs + [n_hat, r_hat]
-        pseudo_basis = [
-            torch.cross(primaries[i], primaries[j], dim=-1)
-            for i in range(len(primaries))
-            for j in range(i + 1, len(primaries))
-        ]
-        true_vecs = torch.stack(true_basis, dim=-2)  # (B, N, m, 3)
+        pseudo_basis = _pseudovectors(primaries, self.dim)
+        true_vecs = torch.stack(true_basis, dim=-2)  # (B, N, m, d)
         pseudo_vecs = (
             torch.stack(pseudo_basis, dim=-2)
             if pseudo_basis
-            else true_vecs.new_zeros(b, n, 0, 3)
+            else true_vecs.new_zeros(b, n, 0, self.dim)
         )
 
         out: dict[str, torch.Tensor] = {}
