@@ -28923,3 +28923,35 @@ interior. With both inputs ISLA leads GeoTransolver-volume on every
 DrivAerML Volume field, as on AirfRANS. The FRAME program's protocol-scale
 record is now four datasets for the frame (two surface, two interior) and
 two for the frame with the stored field.
+
+## 2026-09-26 — Interim, lug depth at the depth rate: ISLA 24 layers at 2.5e-4 on 2,400 lugs scores 0.86 of the 12-layer pair on the mean but 0.99 and 0.75 seed by seed; the 12-layer pair's 21% seed spread decides nothing, so a third seed of each runs {#sec-nb-lug-r2-rate-interim}
+
+**Setting.** On the GINOT Bracket Lug set (600 test lugs, von Mises
+relative L2) the 24-layer ISLA at the reference rate 5e-4 sat at the
+mean-field plateau (0.986, both seeds) and was relaunched at the depth
+rate 2.5e-4 (@sec-nb-cluster-return-2026-09-25), as on DeepJEB++ where
+the relaunch trained and scored within 2% of 12 layers
+(@sec-nb-deepjeb-r2-rate-verdict). The SOLIDS ledger's depth clause is
+1.5%: 24 layers within 1.5% of 12 means depth does not pay. Data:
+results/solids_lug_2026-09-22.json (reducer
+results/solids_lug_reduce_2026-09-22.py).
+
+**What we saw.** The 24-layer pair at 2.5e-4 scores **0.00185 (seeds
+0.00191, 0.00179)** against the 12-layer pair's 0.00215 (0.00192,
+0.00238), GeoTransolver-512's 0.00217 (0.00183, 0.00250) and
+GeoTransolver-256's 0.00202 (0.00214, 0.00190). On the means 24 layers
+is 14% better than 12 and GeoTransolver-512 ÷ ISLA moves from 1.01 to
+1.17. Seed by seed the picture is different: seed 42 gives 0.00191
+against 0.00192 (parity) and seed 43 gives 0.00179 against 0.00238 (25%
+better). The 12-layer pair's seeds are 21% apart, the widest spread in the
+lug ladder, and the 24-layer pair's are 6% apart; GeoTransolver-512's are
+31% apart. **At this rung two seeds cannot say whether depth pays or the
+12-layer seed 43 is an outlier.** Rather than call 14% on one seed, a
+third seed (44) of the 12-layer and the 24-layer configurations runs at
+2,400 lugs; the depth clause is then read on three paired ratios. This is
+the one place in the program where a third seed is spent, because the
+standing (ISLA ahead of the parameter match by 17% or at parity) turns on
+it. The mechanism reading if depth pays here and nowhere else: the lug's
+von Mises field is the smoothest target in the book and the one whose
+error is closest to the seed noise, so the depth clause is the least
+resolved measurement of the ladder.
