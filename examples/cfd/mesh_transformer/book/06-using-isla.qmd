@@ -120,19 +120,12 @@ Three of these need a word.
   For external aerodynamics `ComputeFreestreamDirection` writes `U_inf_dir`
   from the solver's velocity. This is also the fair-comparison rule for
   every architecture in the book (@sec-unit-direction-rule).
-- **On a fixed-frame dataset, also pass the frame.** When every case shares
-  a physical frame (a wind-tunnel airfoil at a fixed chord line, a car on a
-  ground plane, a plate loaded in its own axes), write the frame's axes as
-  constant global vectors in the dataset pipeline (`SetDomainGlobalField`,
-  before `CenterMesh` so a rotation augmentation carries them with the
-  body) and declare them as rank-1 global inputs beside the condition
-  vector. The fused kernel takes up to four directions in all. This is the
-  recommended input on both datasets where it was measured at protocol
-  scale: 17% on AirfRANS interior pressure and 5% on DrivAerML surface
-  pressure (@sec-nb-frame-af-ref-verdict, @sec-nb-frame3d-verdict); the
-  mechanism ladder found that any two distinct fixed directions do the same
-  work (@sec-nb-frame-af-h-verdict). The recipe ships the variants
-  (`drivaer_ml_surface_frame.yaml` with `isla_surface_frame.yaml`).
+- **A global direction must be a datum of the problem.** The inlet
+  direction, a load direction, a body-force direction (gravity) are
+  admissible. The axes of the dataset's coordinate frame are not: they
+  describe how the cases were posed, not the PDE, and a solver never takes
+  them (@sec-pose-prior). Ground planes and symmetry planes are real
+  boundaries and belong in the boundary geometry, not in `global_inputs`.
 - **A magnitude that matters is a rank-0 global input.** Declare it
   (`u_inf: 0`; a standardized parameter vector is `params: {rank: 0,
   channels: 6}`) and pass it under its name. No fixed power of a far-field
@@ -198,7 +191,7 @@ norm to the seed and one relational cosine per slice
 (@sec-isla-inputs-rank). The tests in `test_isla_global_inputs.py`,
 `test_isla_inputs.py` and `test_isla_heads.py` cover zero and two
 directions, global scalars, rank-1 and rank-2 inputs and every output rank
-and parity. The frame-input and rank-1-input solids configurations run the
+and parity. The rank-1-input solids configurations run the
 fused geometry kernel; its limits are in @sec-isla-inputs-rank and the
 switch in @sec-using-cost.
 :::

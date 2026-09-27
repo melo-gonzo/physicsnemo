@@ -67,12 +67,14 @@ AFX = J("airfrans_extrap_2026-09-22.json")["splits"]
 afx_on = {sp: {f: AFX[sp]["gt_over_isla_on_split"][f]["mean"] for f in FIELDS} for sp in ("reynolds", "aoa")}
 afx_g = {sp: {f: AFX[sp]["growth"][f]["g_gt_over_g_isla"] for f in FIELDS} for sp in ("reynolds", "aoa")}
 # --- solids and the fixed-mesh boundary-data sets ----------------------------------------------------------
-SF = J("solids_frame_2026-09-22.json"); T2 = SF["gt512_over_isla"]["isla_r1|frame2|n400"]; T2X = SF["learning_curve_exponents"]
+SF = J("solids_frame_2026-09-22.json"); _LM = J("lane_means_2026-09-23.json")
+T2 = {f: SF["summary"]["gt512|gt|n400"]["fields"][f]["mean"] / mean(_LM[f"v2_t2d_isla_r1_tensor_axis_n400_seed{s}"]["fields"][f] for s in (42, 43)) for f in ("sig11", "sig22", "sig12", "displacement")}  # tensor head + load axis at 400 cases
+_LA = J("local_agg_2026-09-27.json")["elasticity"]["512"]; olbc_e_rankio = {f: _LA["gt512"][f] / _LA["arms"]["rankio"]["means"][f] for f in ("sig11", "sig22", "sig12", "displacement")}
 T2F = ("sig11", "sig22", "sig12", "displacement"); T2N = {"sig11": "σ11", "sig22": "σ22", "sig12": "σ12", "displacement": "displacement"}
 LUG = J("solids_lug_2026-09-22.json"); LUGR = LUG["gt512_over_isla"]; LUGX = LUG["learning_curve_exponents"]
 lug = {300: LUGR["isla_r1_lr25e4|n300"], 600: LUGR["isla_r1|n600"], 1200: LUGR["isla_r1|n1200"], 2400: LUGR["isla_r1|n2400"]}  # 300 at the half rate, as preregistered
 OLJ = J("olbc_2026-09-22.json"); OL = OLJ["gt512_over_isla"]; OLX = OLJ["learning_curve_exponents"]
-olbc_p = {n: OL[f"poisson|isla_r1|n{n}"]["u"] for n in (512, 2048, 8448)}; olbc_e = OL["elasticity|isla_r1|n512"]
+olbc_p = {n: OL[f"poisson|isla_r1|n{n}"]["u"] for n in (512, 2048, 8448)}; olbc_e = olbc_e_rankio  # rank-1 inputs + tensor output at 512 cases
 # --- pose, draws, laws, territories -------------------------------------------------------------------------
 PP = J("p200k_pose_r1_2026-09-23.json"); PV, PA = PP["verdict"], PP["arms"]
 TAD = J("trainarea_dr_reduction_2026-09-20.json"); TA = J("trainarea_reduction_2026-09-20.json")
@@ -131,8 +133,8 @@ rebuilt once, at the output, from a basis that rotates with the body. The
 forward pass with every tensor shape is @sec-architecture, and the
 contracts it holds to roundoff are @sec-isla-contracts. Its general
 boundary interface ($K$ global directions, $S$ global scalars, per-cell
-boundary scalars, frame vectors for component targets, interior queries as
-tokens) is @sec-isla-inputs and @sec-arch-modes.
+boundary scalars, rank-1 boundary inputs and tensor outputs for component
+targets, interior queries as tokens) is @sec-isla-inputs and @sec-arch-modes.
 
 ## Where ISLA is better and where it is worse {#sec-vs-standing}
 
@@ -174,10 +176,10 @@ rows = [
  ("", "AirfRANS interior task, 800 airfoils, 100,000 queries", tri(af), "ISLA leads on velocity, trails on pressure and eddy viscosity", "@sec-interior-airfrans"),
  ("**Extrapolation of a global condition**", "AirfRANS, outside the training Reynolds band: standing on the split; ratio of error growths", f"{tri(afx_on['reynolds'])}; growth {tri(afx_g['reynolds'])}", "ISLA leads on every field; its error grows less on pressure and eddy viscosity, the same on velocity", "@sec-interior-extrapolation"),
  ("", "AirfRANS, outside the training angle-of-attack band", f"{tri(afx_on['aoa'])}; growth {tri(afx_g['aoa'])}", "as above, wider", "@sec-interior-extrapolation"),
- ("**Solids** (labeled boundary, global scalars, frame vectors)", "PLAID Tensile2d, 400 cases, GeoTransolver-512: σ11 / σ22 / σ12 / displacement", " / ".join(f"{T2[f]:.2f}" for f in T2F), "GeoTransolver leads 1.1 to 1.5x; tie on σ12; ISLA's learning-curve exponents larger on every field", "@sec-interior-tensile2d"),
+ ("**Solids** (labeled boundary, global scalars, load direction, tensor output)", "PLAID Tensile2d, 400 cases, GeoTransolver-512: σ11 / σ22 / σ12 / displacement", " / ".join(f"{T2[f]:.2f}" for f in T2F), "GeoTransolver leads 1.3 to 2x; the open standing on the solids", "@sec-interior-tensile2d"),
  ("", "GINOT lug, 300 (half rate) / 600 / 1,200 / 2,400 lugs, GeoTransolver-512", " / ".join(f"{lug[n]:.2f}" for n in (300, 600, 1200, 2400)), "ISLA leads at the two small rungs and ties at the two large ones on the frame-free scalar target; two seeds in every cell", "@sec-interior-lug"),
  ("**Fixed-mesh boundary data**", "OLBC Poisson (K = 0), 512 / 2,048 / 8,448 cases, GeoTransolver-512", " / ".join(f"{olbc_p[n]:.2f}" for n in (512, 2048, 8448)), "GeoTransolver leads by a constant factor of three with the same exponent; the gap is value transport, and a boundary-value extension recovers 84% of it at one rung (two seeds)", "@sec-interior-olbc"),
- ("", "OLBC elasticity (K = 2 frame) at 512 cases: σ11 / σ22 / σ12 / displacement", " / ".join(f"{olbc_e[f]:.2f}" for f in T2F), "GeoTransolver leads; ISLA at the predict-zero error at this rung", "@sec-interior-olbc"),
+ ("", "OLBC elasticity (rank-1 boundary inputs, tensor output) at 512 cases: σ11 / σ22 / σ12 / displacement", " / ".join(f"{olbc_e_rankio[f]:.2f}" for f in T2F), "GeoTransolver leads 1.2 to 1.5x", "@sec-interior-olbc"),
  ("**Pose**", "DrivAerML Surface task, every case in its own random pose; rotation-augmented GeoTransolver ÷ ISLA without augmentation", f"{PV['gt_aug_posed_over_isla_posed']:.2f}", f"ISLA leads; its own posed ÷ native is {PA['isla']['posed_over_native']:.3f}, GeoTransolver's {PA['gt_unit']['posed_over_native']:.2f}; a GeoTransolver trained in a canonical frame is pose-invariant at about a percent", "@sec-pose-contract, @sec-pose"),
  ("**Discretization: inference draw**", "error under the 10:1 biased draw ÷ own uniform-draw error, cars (100,000 cells) and 35 wings (200,000): ISLA; GeoTransolver", f"cars {dens_cars['isla']:.2f}x; {dens_cars['gt_unit']:.1f}x — wings {dens_wings['isla']:.2f}x; {dens_wings['gt_unit']:.1f}x", "ISLA within a few percent; GeoTransolver by factors (the frame, not the aggregation)", "@sec-robustness-density"),
  ("**Discretization: training law**", "area-trained ÷ uniform-trained, scored on the uniform draw, wings; cars: ISLA; GeoTransolver", f"wings {law_wings['isla']:.2f}x; {law_wings['gt_unit']:.1f}x — cars {law_cars['isla']:.2f}x; {law_cars['gt_unit']:.1f}x", "ISLA weakly dependent; a GeoTransolver checkpoint is usable only on the law it was trained under", "@sec-training-law"),
@@ -185,7 +187,6 @@ rows = [
  ("**Discretization: where the slices sit**", "anchor or slice-centroid displacement between the uniform and the biased draw [body RMS radii], cars; wings: ISLA; GeoTransolver", f"cars {disp['cars'][0]:.3f}; {disp['cars'][1]:.2f} — wings {disp['wings'][0]:.4f}; {disp['wings'][1]:.2f}", "GeoTransolver's slices follow the points; ISLA's nearly do not", "@sec-territories"),
  ("**Learning-curve exponent** (error against training cases)", "DrivAerML Surface (reducible error, fitted law): ISLA; GeoTransolver", f"{alpha_dr['isla'][0]:.2f} (accepted); {alpha_dr['gt'][0]:.2f} (fit not accepted)", "the same within the bootstrap; GeoTransolver's small-data lead is an offset", "@sec-compute-allocation"),
  ("", "AirfRANS interior pressure: ISLA fitted; GeoTransolver-volume local (100 airfoils up)", f"{alpha_af_isla:.2f}; {min(alpha_af_gt_local):.2f} to {max(alpha_af_gt_local):.2f}", "ISLA steeper: GeoTransolver-volume's pressure lead shrinks with cases", "@sec-compute-allocation"),
- ("", "Tensile2d σ11 / σ22 / σ12 / displacement: ISLA; GeoTransolver-512", " / ".join(f"{T2X[f'isla_r1|frame2|{f}']['exponent']:.2f}" for f in T2F) + "; " + " / ".join(f"{T2X[f'gt512|gt|{f}']['exponent']:.2f}" for f in T2F), "ISLA steeper on every field", "@sec-interior-tensile2d"),
  ("", "GINOT lug, 300 to 2,400 lugs: ISLA; GeoTransolver-512", f"{LUGX['isla_r1']['exponent']:.2f}; {LUGX['gt512']['exponent']:.2f}", "ISLA steeper", "@sec-interior-lug"),
  ("", "OLBC Poisson, 512 to 8,448 cases: ISLA; GeoTransolver-512", f"{OLX['poisson|isla_r1|u']['exponent']:.2f}; {OLX['poisson|gt512|u']['exponent']:.2f}", "the same exponent and a constant gap: the one dataset where ISLA's curve is not steeper", "@sec-interior-olbc"),
  ("**Cost at 200,000 tokens** (step ÷ ; memory ÷)", f"reference ISLA (384 x 12, {c_r1[2] / 1e6:.0f}M) against GeoTransolver-256 ({c_g256[2] / 1e6:.0f}M) and the parameter-matched GeoTransolver-512 ({c_g512[2] / 1e6:.0f}M)", f"{c_r1[0] / c_g256[0]:.2f}; {c_r1[1] / c_g256[1]:.2f} — {c_r1[0] / c_g512[0]:.2f}; {c_r1[1] / c_g512[1]:.2f}", "ISLA at parity accuracy in half the memory of its parameter match; slower than the recipe-default GeoTransolver by a tenth", "@sec-cost-sweep"),
@@ -416,15 +417,19 @@ That is the accepted price of full-tensor equivariance. ISLA's price is
 zero at parity. A second new element is small and crisp. Scalar heads
 on invariants are reflection-invariant, so a frame-component target
 (a stress $\sigma_{12}$, a laboratory-axis displacement) is representable
-only when the frame is supplied as global vectors, and $\sigma_{12}$ is
-unrepresentable with a single axis (@sec-isla-heads). No prior work we read
-states this clause, and every aerodynamic benchmark hides it.
+only as a view of a predicted tensor, and $\sigma_{12}$ is
+unrepresentable by a scalar head with a single axis (@sec-isla-heads). No
+prior work we read states this clause, and every aerodynamic benchmark
+hides it. A third element is a rule rather than a mechanism: every input
+ISLA takes is a datum of the PDE problem (geometry, boundary data,
+parameters, load and body-force directions), and the dataset's own axes
+are refused even where they buy accuracy (@sec-pose-prior).
 
 *Evidence.* The contracts; the pose result against augmentation
 (@sec-pose-contract); the full-data standing (a lead over the recipe
 width, parity with the parameter match, @sec-scoreboard-200k) and the
-shared capacity floor (@sec-shared-floor); the Tensile2d frame ladder (@sec-interior-tensile2d,
-@sec-nb-solids-frame-interim).
+shared capacity floor (@sec-shared-floor); the Tensile2d tensor-head lanes (@sec-interior-tensile2d,
+@sec-nb-solids-frame-interim); the pose-prior diagnostic (@sec-pose-prior).
 
 *Publication-worthy?* Yes: "exact SE(3) covariance at zero accuracy and
 zero time cost in a slice transformer" is a statement the equivariance
@@ -561,8 +566,8 @@ GeoTransolver.
 ### (f) The general boundary interface {#sec-vs-novel-interface}
 
 *The idea.* One model reads $K$ global unit directions, $S$ global scalars,
-per-cell boundary scalars, frame vectors for component targets, and
-interior queries as interacting tokens, and the same class trains on
+per-cell boundary scalars, rank-1 boundary inputs and tensor outputs for
+component targets, and interior queries as interacting tokens, and the same class trains on
 cars, wings, airfoils, a tensile specimen, a lug and a fixed-mesh
 Poisson problem (@sec-isla-inputs, @sec-arch-modes).
 
@@ -580,12 +585,12 @@ benchmark to test exactly this.
 
 *What is new.* The typed contract: directions enter as unit vectors and
 magnitudes as scalars for every model (@sec-unit-direction-rule), a
-component target requires its frame as global vectors, and every channel
-keeps the covariance contracts under test. That is interface design, not a
+component target is a view of a tensor output, every input is a datum of
+the PDE problem, and every channel keeps the covariance contracts under test. That is interface design, not a
 mechanism, and the OLBC mechanism study says the value channel is the weak one.
 
 *Evidence.* The contract tests; the unit-direction control on the
-baselines; the Tensile2d frame ladder; the OLBC mechanism study
+baselines; the Tensile2d tensor-head lanes; the OLBC mechanism study
 (@sec-interior-olbc).
 
 *Publication-worthy?* The component clause, yes (it belongs with (b)); the

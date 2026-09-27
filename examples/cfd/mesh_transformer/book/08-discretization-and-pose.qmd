@@ -584,3 +584,78 @@ print("A GeoTransolver trained in a canonical frame is exactly pose-invariant at
       "algebraic construction and holds to roundoff in float64. On the trained GPU path it holds to 3e-5 in float32 and to about 4% "
       "under bf16 autocast, so the contract is exercised at deployment under float32 inference (@sec-isla-contracts).")
 ```
+
+## What a pose prior would buy, and why ISLA does not take it {#sec-pose-prior}
+
+**Every input ISLA takes is a datum of the PDE problem: the geometry, the
+boundary data, the material or flow parameters, and the directions the
+physics names (an inlet, a load, gravity). The axes of the dataset's
+coordinate frame are none of these, and ISLA refuses them even where they
+buy accuracy.** A solver never asks which way the dataset's $x$ axis
+points. Rotating a whole problem rotates its solution, so a fixed axis
+carries no information about the PDE; the only thing it carries is how
+the cases were posed. On a dataset where every airfoil has its chord along
+$x$, every car points along $x$ and every wing sits in one pose, handing
+the model those axes tells it the canonical pose of the training set.
+That is exactly the prior GeoTransolver has by construction, because it
+reads absolute coordinates, and it is the prior that the pose test above
+shows does not survive a change of pose. A model that needs it has stopped
+solving the PDE and started remembering where things sit.
+
+That refusal has a price on fixed-pose datasets, and the price was
+measured before the ruling that set it (2026-09-27; @sec-nb-ruling-dataset-frame-inputs).
+Because giving ISLA the dataset's axes as extra global directions makes it
+ISLA plus GeoTransolver's pose prior, the difference between the frame-free
+ISLA and that diagnostic arm is a measurement of how much of
+GeoTransolver's lead on a fixed-pose dataset is pose memorization rather
+than a better operator. @tbl-pose-prior reports it on every dataset where
+it was run, at the reporting protocol, two seeds each. It is a diagnostic
+of the baseline's lead. It is not an ISLA configuration, the arms are not
+in the recipe's recommended inputs, and no standing in this book uses
+them.
+
+```{python}
+#| label: tbl-pose-prior
+#| output: asis
+FAR = J("frame_af_ref_2026-09-26.json"); F3 = J("frame3d_2026-09-26.json"); FW = J("frame_wing_2026-09-26.json")
+FPR = J("frame_provided_2026-09-26.json"); FV = J("frame_vol_2026-09-26.json")
+FIELDS = [("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity")]
+rows = [
+    ("AirfRANS interior, 800 airfoils, 100,000 queries, internal geometry: pressure / velocity / eddy viscosity", "inlet + the two laboratory axes",
+     " / ".join(f"{FAR['frame_over_internal'][f]:.2f}" for f, _ in FIELDS), " / ".join(f"{FAR['gt_over']['internal'][f]:.2f} → {FAR['gt_over']['frame'][f]:.2f}" for f, _ in FIELDS)),
+    ("AirfRANS interior, stored signed-distance field", "inlet + the two laboratory axes",
+     " / ".join(f"{FPR['ratios']['over_provided_ref'][f]:.2f}" for f, _ in FIELDS), " / ".join(f"{FPR['comparators']['gt_vol'][f] / FPR['comparators']['provided_ref'][f]:.2f} → {FPR['ratios']['gt_vol_over'][f]:.2f}" for f, _ in FIELDS)),
+    ("DrivAerML Surface, 435 cars, 200,000 cells: pressure / wall shear", "inlet + the three body axes",
+     " / ".join(f"{F3['ratio_to_r1']['isla_r1_k4'][f]:.2f}" for f in ("pressure_l2", "wss_l2")), f"{F3['gt512_over']['isla_r1']['pressure_l2']:.2f} → {F3['gt512_over']['isla_r1_k4']['pressure_l2']:.2f} (pressure)"),
+    ("HiLiftAeroML 35 wings, 200,000 cells: pressure", "far field + the span and up axes",
+     f"{FW['fields']['pressure_l2']['frame_over_r1']:.2f}", f"{FW['fields']['pressure_l2']['gt512_over_r1']:.2f} → {FW['fields']['pressure_l2']['gt512_over_frame']:.2f}"),
+    ("DrivAerML Volume, 435 cars, stored signed-distance field: pressure / velocity / eddy viscosity", "inlet + the three body axes",
+     " / ".join(f"{FV['ratios']['frame_provided_over_provided_ref'][f]:.2f}" for f, _ in FIELDS), " / ".join(f"{FV['ratios']['gt_vol_over_provided_ref'][f]:.2f} → {FV['ratios']['gt_vol_over_frame_provided'][f]:.2f}" for f, _ in FIELDS)),
+]
+out = "| dataset and readout | axes given to the diagnostic arm | diagnostic ÷ ISLA | GeoTransolver ÷ ISLA, before → with the pose prior |\n|---|---|---|---|\n"
+for r in rows:
+    out += "| " + " | ".join(r) + " |\n"
+print(out)
+print(": The pose-prior diagnostic: ISLA at the reference configuration with the dataset's coordinate axes added as global directions, an "
+      "input the book rejects, against the frame-free ISLA and the input-matched GeoTransolver (GeoTransolver-512 on the surfaces, "
+      "GeoTransolver-volume on the interior tasks), float32 at the reporting protocol, two seeds per arm, seed means. The third column is "
+      "the diagnostic arm's error divided by ISLA's (below one: the axes buy accuracy); the last is GeoTransolver ÷ ISLA before and with "
+      "the axes (above one favors ISLA). How to read this: the column of gains is the price ISLA pays for refusing the pose prior on a "
+      "dataset that never changes pose, and the amount by which the baseline's lead shrinks is the share of that lead that is pose "
+      "memorization; it is not a configuration and it is not evidence for ISLA. Data: results/frame_af_ref_2026-09-26.json, "
+      "results/frame_provided_2026-09-26.json, results/frame3d_2026-09-26.json, results/frame_wing_2026-09-26.json, "
+      "results/frame_vol_2026-09-26.json. {#tbl-pose-prior}")
+```
+
+Two readings follow. On AirfRANS the axes close most of the pressure and
+eddy-viscosity gap to GeoTransolver-volume, so most of that lead is the
+fixed pose of the airfoils: every chord lies along $x$ and every angle of
+attack is a rotation of the inlet about a known origin. On the wings the
+axes recover about half of the gap at low angles and a quarter at high,
+so the pose is part of the wing deficit and the separated regime is the
+rest (@sec-de-strata). On the cars the axes buy 5%, the smallest effect,
+on the one dataset where ISLA is already at parity with its parameter
+match. None of this changes what ISLA is given. Where a plane of the
+problem is physical, a ground plane under a car or the symmetry plane of a
+half-wing, it is a boundary and belongs in the boundary geometry, not in
+the list of directions.

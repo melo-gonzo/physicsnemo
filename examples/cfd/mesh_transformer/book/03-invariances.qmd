@@ -157,11 +157,11 @@ at the reporting protocol on the DrivAerML Surface task, is in
 The contract also has a clause that the aerodynamic datasets never
 exercise. An output that is a *component in a frame* (a stress
 $\sigma_{12}$, a displacement along a laboratory axis) is an invariant of
-the body together with the frame. ISLA can represent it only when that
-frame is supplied as global vectors, or when the head predicts the tensor
-itself and the component is read off it. The clause is stated with the
-contract in @sec-isla-heads and measured on PLAID Tensile2d in
-@sec-nb-solids-frame-interim.
+the body together with the frame. ISLA represents it by predicting the
+tensor itself and reading the component off it (@sec-isla-heads). The
+other route, supplying the dataset's axes as global vectors, is rejected:
+those axes are not a datum of the PDE (@sec-pose-prior). The clause was
+found on PLAID Tensile2d (@sec-nb-solids-frame-interim).
 
 ::: {.callout-warning collapse="true" title="Exact describes the algebra and the float32 path"}
 The contract tests run in float64. On the trained GPU path in float32 the

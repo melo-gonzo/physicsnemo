@@ -29508,3 +29508,85 @@ code_v7, so the 2,048 rung, which carries a same-snapshot control
 without the aggregation, is the clean comparison; it and the Poisson
 2,048 lanes are past epoch 340 of 500. Artifact:
 results/local_agg_2026-09-27.json.
+
+## 2026-09-27 — Ruling (Peter): dataset-specific frame vectors are not PDE inputs; every FRAME arm is demoted to a pose-prior diagnostic, the FRAME-CHANNEL-PROTO and AirfRANS frame LOCAL-AGG lanes are cancelled, and the direction-count options are removed {#sec-nb-ruling-dataset-frame-inputs}
+
+**The ruling.** Peter reviewed the frame program today and rejected it:
+giving ISLA the axes of a dataset's coordinate frame as global vectors
+(the laboratory $x, y$ on AirfRANS, the body axes on DrivAerML Surface and
+Volume, the span and up axes on the wings, the square's axes on the OLBC
+sets, the laboratory axes on Tensile2d and the OLBC elasticity set) is not
+a physical input. His test, which the program now adopts for every input
+and mechanism: would a traditional PDE solver need it? Geometry, boundary
+data, material and flow parameters, and the directions the physics names
+(an inlet, a load, gravity) pass. A fixed dataset axis does not: rotating
+the problem rotates the solution, so the axis carries no information about
+the PDE and only tells the model the pose the training set was recorded
+in. That is the absolute-position prior GeoTransolver has by construction,
+handed to ISLA through a formally equivariant door. "Your goal is NOT an
+unqualified hill climb on accuracy"; a solver that required
+dataset-specific direction vectors would be "inconsistent with first
+principles physics, so I don't trust your method." The equivariance
+contract was preserved by every frame arm and I let that formal property
+stand in for the physical question; the arms should not have been run.
+Peter added a standing instruction: when no principled idea is ready,
+pause and say so rather than fill the compute with inputs or mechanisms a
+solver would not need.
+
+**What each result now means.** Because the frame arm is ISLA plus the
+pose prior GeoTransolver has by construction, frame-free against frame is
+a measurement of how much of GeoTransolver's lead on a fixed-pose dataset
+is pose memorization. That is the only reading these results keep, and it
+lives in one place, @sec-pose-prior, as a diagnostic of the baseline.
+Affected and reread: FRAME-AF at reference scale (@sec-nb-frame-af-ref-verdict;
+0.83 / 0.78 / 0.84 of the frame-free ISLA on pressure / velocity / eddy
+viscosity: most of GeoTransolver-volume's AirfRANS pressure and
+eddy-viscosity lead is the fixed pose), FRAME-PROVIDED
+(@sec-nb-frame-provided-verdict), FRAME-3D and FRAME-3D-R2
+(@sec-nb-frame3d-verdict, @sec-nb-frame3d-r2-verdict; 5% on the cars),
+FRAME-WING (@sec-nb-frame-wing-verdict; about half of the low-angle gap and
+a quarter of the high-angle widening), FRAME-VOL
+(@sec-nb-frame-vol-verdict), the FRAME-AF mechanism ladder
+(@sec-nb-frame-af-h-verdict), GEO-BIAS and GEO-BIAS-PROTO (which measured
+whether a routing nonlinearity carries the prior's gain; they now read as
+diagnostics of a rejected input), FRAME-CHANNEL
+(@sec-nb-frame-channel-verdict, which located the prior's gain in the
+joint use of the seed and the geometry channels), the OLBC `frame2` arms
+of the mechanism study (@sec-nb-olbc-mech-verdict; the extension alone was
+already the recipe), and the Tensile2d and OLBC elasticity frame lanes
+(@sec-nb-solids-frame-interim), whose finding that a scalar head cannot
+produce a frame component without a frame stands, with the tensor head as
+the configuration and the frame route rejected. The recommendation "pass
+the frame on fixed-frame datasets" is withdrawn from the usage chapter,
+the frame rows are removed from the interior tables and the scoreboard
+sentences of the surface chapter, the Tensile2d standing is restated on
+the tensor head with the load direction as the one global vector
+(@sec-interior-tensile2d) and the OLBC elasticity standing on the rank-1
+inputs with the tensor output (@sec-interior-olbc). Ledger rows FRAME-AF,
+FRAME-3D, FRAME-3D-R2, FRAME-PROVIDED, FRAME-WING, FRAME-VOL and
+FRAME-CHANNEL are STOPPED under the ruling; the mechanism controls are
+marked diagnostic; the decision is recorded in @sec-principled-ledger.
+
+**What was cancelled and replaced.** FRAME-CHANNEL-PROTO (campaign fc
+rows 0-3, the seed-only frame split at the reference configuration on
+AirfRANS and DrivAerML Volume) was cancelled at epoch 90 to 100 of 500 and
+its lanes marked BLOCKED; it studied a mechanism of the rejected input.
+The AirfRANS LOCAL-AGG twin (campaign la rows 14-15) ran the local
+aggregation on top of the provided-geometry frame arm; it was cancelled
+and relaunched as rows 16-17 on the frame-free provided-geometry reference
+(`isla_volume_airfrans_ref_provided` plus `local_rho: 0.05`, `local_k: 32`),
+against the `sg_af_provided` pair. The `seed_directions` and
+`geometry_directions` options added to ISLA this morning existed only for
+the frame study and are removed from the class and its tests; the code_v8
+snapshot that carried them stays on the cluster unused. The frame
+configurations and artifacts stay on disk as labeled diagnostics.
+
+**What passes the test, and one open question.** The local relational
+aggregation of LOCAL-AGG passes: it uses geometry and boundary data only,
+and local interaction among tokens is how a PDE propagates information.
+The RANK-IO inputs pass: prescribed displacement and traction are boundary
+conditions. The freestream and load directions pass. The boundary-value
+extension (LIT-EXT) is computed from boundary data and geometry alone, so
+it is not a dataset prior, but it is a hand-built feature a solver would
+compute for itself; it is kept for now, labeled as PDE-derived
+preprocessing, pending Peter's read.

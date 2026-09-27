@@ -583,7 +583,6 @@ print(f": The training-car ladder of the DrivAerML Surface task at the reporting
 #|   olbc_2026-09-22.json, deepjeb_2026-09-22.json.
 #| code-fold: true
 AFX = J("airfrans_scale_2026-09-22.json")["fits"]
-T2X = J("solids_frame_2026-09-22.json")["learning_curve_exponents"]
 LUGX = J("solids_lug_2026-09-22.json")["learning_curve_exponents"]
 OLX = J("olbc_2026-09-22.json")["learning_curve_exponents"]
 JBX = J("deepjeb_2026-09-22.json")["learning_curve_exponents"]
@@ -592,13 +591,8 @@ ROWS = [  # (label, ISLA exponent, GeoTransolver exponent)
     ("DrivAerML Surface, pressure, 27 to 218 cars", RBX["isla_r1"]["exponent"], RBX["gt256_lr3e3"]["exponent"]),
     ("AirfRANS interior, pressure, 100 to 800 airfoils", af_local("isla", "pressure_l2"), af_local("gt", "pressure_l2")),
     ("AirfRANS interior, velocity, 100 to 800 airfoils", af_local("isla", "velocity_l2"), af_local("gt", "velocity_l2")),
-    ("Tensile2d, $\\sigma_{11}$, 32 to 400 cases", T2X["isla_r1|frame2|sig11"]["exponent"], T2X["gt512|gt|sig11"]["exponent"]),
-    ("Tensile2d, $\\sigma_{12}$, 32 to 400 cases", T2X["isla_r1|frame2|sig12"]["exponent"], T2X["gt512|gt|sig12"]["exponent"]),
-    ("Tensile2d, displacement, 32 to 400 cases", T2X["isla_r1|frame2|displacement"]["exponent"], T2X["gt512|gt|displacement"]["exponent"]),
     ("GINOT lug, von Mises, 300 to 2,400 lugs", LUGX["isla_r1"]["exponent"], LUGX["gt512"]["exponent"]),
     ("OLBC Poisson, $u$, 512 to 8,448 cases", OLX["poisson|isla_r1|u"]["exponent"], OLX["poisson|gt512|u"]["exponent"]),
-    ("OLBC elasticity, $\\sigma_{11}$, 512 to 8,448 cases", OLX["elasticity|isla_r1|sig11"]["exponent"], OLX["elasticity|gt512|sig11"]["exponent"]),
-    ("OLBC elasticity, displacement, 512 to 8,448 cases", OLX["elasticity|isla_r1|displacement"]["exponent"], OLX["elasticity|gt512|displacement"]["exponent"]),
     ("DeepJEB++, von Mises, 256 to 12,451 brackets (equal steps)", JBX["isla_r1|von_mises"]["exponent"], JBX["gt512|von_mises"]["exponent"]),
 ]
 fig, ax = plt.subplots(figsize=(8.0, 0.42 * len(ROWS) + 1.2))
@@ -631,9 +625,9 @@ print(f"**Across the datasets with a training-case ladder, ISLA's error falls fa
       f"{len(steeper)} of {len(steeper) + len(flatter) + len(same)} fields, at the same rate on {len(same)}, and slower on {len(flatter)}.** "
       f"Steeper: {lst(steeper)}. Same rate (within 5%): {lst(same)}. Slower: {lst(flatter)}. "
       "On the DrivAerML Surface task both architectures approach one floor, so the total-error exponents there understate the "
-      "reducible-error law of @tbl-scaling-fit; on OLBC Poisson the gap is a constant factor (@sec-interior-olbc); on the OLBC "
-      "elasticity stresses, frame components of a field that varies with the boundary data on a fixed mesh, GeoTransolver-512's "
-      "curve is the steeper one and the gap widens with data. A steeper curve is what a model with the right inductive bias shows "
+      "reducible-error law of @tbl-scaling-fit; on OLBC Poisson the gap is a constant factor (@sec-interior-olbc). The solids with "
+      "tensor targets (Tensile2d, OLBC elasticity) have two rungs under the tensor-head configuration and no ladder yet, so they are "
+      "absent here (@sec-interior-tensile2d, @sec-interior-olbc). A steeper curve is what a model with the right inductive bias shows "
       "while the data are scarce for the problem's variation, which is why the ladders, and not one full-data row, are the evidence "
       "for or against the architecture.")
 ```

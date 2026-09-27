@@ -61,15 +61,14 @@ model reads and in what the boundary cells carry.
   path, so the same labels and values are also written as nodal fields on
   the interior points (`tag_*`, `bc_*_node`) and enter its local embedding
   there.
-- **Global vectors are unit directions; the laboratory frame is a global
-  vector when the targets are components.** For external aerodynamics
-  `ComputeFreestreamDirection` writes `U_inf_dir` from the solver's
-  velocity. Where the targets are components in a fixed frame (the stress
-  components of Tensile2d and of the OLBC elasticity set), the frame axes
-  $+x, +y$ enter as two constant global vectors (`SetDomainGlobalField`),
-  because ISLA's scalar heads are invariant under rotation and reflection
-  and cannot otherwise tell $\sigma_{11}$ from $\sigma_{22}$ or fix the
-  sign of $\sigma_{12}$ (@sec-isla-heads). A dataset with no global
+- **Global vectors are unit directions and must be data of the problem.**
+  For external aerodynamics `ComputeFreestreamDirection` writes `U_inf_dir`
+  from the solver's velocity; for a loaded solid the load direction is the
+  global vector. Where the targets are components in a fixed frame (the
+  stress components of Tensile2d and of the OLBC elasticity set), the
+  stress is predicted as a symmetric tensor and the components are read
+  off it (@sec-isla-heads). Feeding the dataset's axes $+x, +y$ as global
+  vectors is rejected: they are not a datum of the PDE (@sec-pose-prior). A dataset with no global
   direction ($K = 0$) runs ISLA with the eager geometry kernel; the fused
   kernel is written for $K = 1$.
 - **Normalization statistics come from the manifest.** Every converter
@@ -412,11 +411,12 @@ input scalars but no output fields; the converter writes them under
   `bc_pressure`), the six standardized input scalars `params_std` as
   global scalars, every node as an interacting query with `sdf`; outputs
   `q`, `sig11`, `sig22`, `sig12` as scalars and `displacement` as a
-  vector. The base yaml has $K = 0$ (the load axis is $+y$ for every
-  sample); the frame lanes add the laboratory frame $+x, +y$ as two
-  global vectors, which is what lets the scalar heads produce frame
-  components (@sec-isla-heads; the finding is
-  @sec-nb-solids-frame-interim). GeoTransolver
+  vector. The configuration the book reports (`isla_tensile2d_tensor`)
+  passes the load direction $+y$ as the one global vector and predicts the
+  stress as a tensor. The earlier lanes that added the dataset's axes
+  $+x, +y$ as two global vectors are the pose-prior diagnostic of
+  @sec-pose-prior, not a configuration (the finding that scalar heads
+  cannot produce components without a frame is @sec-nb-solids-frame-interim). GeoTransolver
   (`geotransolver_tensile2d.yaml`, 512 wide): the interior points with
   coordinates, `sdf`, `sdf_normals` and the three nodal tags in its local
   embedding, `params_std` as its global embedding, radii 0.05 / 0.2 / 0.8
@@ -436,10 +436,10 @@ input scalars but no output fields; the converter writes them under
   scored on `val_100`.
 - **Pitfalls.** `q` is heavy-tailed under z-scoring (the per-case maximum
   ranges over four decades in `train_400`), so it is reported but excluded
-  from the headline fields. Without the frame vectors ISLA fits the
-  training set and validates 20 to 60 times worse than GeoTransolver, and
-  the reflection-odd $\sigma_{12}$ needs both frame vectors, not the load
-  axis alone. The leaderboard's Tensile2d numbers are on the withheld test
+  from the headline fields. With scalar heads and no tensor output ISLA
+  fits the training set and validates 20 to 60 times worse than
+  GeoTransolver: a component target is a view of a tensor, and the head
+  must produce the tensor. The leaderboard's Tensile2d numbers are on the withheld test
   set and are not comparable to `val_100` figures.
 
 ## GINOT Bracket Lug {#sec-data-lug}
@@ -547,12 +547,14 @@ chaining, and makes sure that the loops close.
   (three one-hot types, $g$, $\alpha$), no global vector or scalar
   ($K = 0$, eager kernel), every node as a query with two query scalars,
   `sdf` and the standardized `source`; output `u`. ISLA on elasticity
-  (`isla_olbc_elasticity.yaml`): the 1,312 cells with eight boundary
-  scalars (per component: two one-hot types, the prescribed displacement
-  and the traction component, the latter two standardized), the
-  laboratory frame `frame_xy` = $(+x, +y)$ as two global vectors
-  ($K = 2$), every node as a query with `sdf`; outputs the three stress
-  components as scalars and `displacement` as a vector. GeoTransolver-512
+  (`isla_olbc_elasticity_tensor.yaml`): the 1,312 cells with eight boundary
+  scalars (per component: two one-hot types) and the prescribed
+  displacement and traction stacked into two rank-1 boundary inputs
+  (`StackScalarFields`), no global vector ($K = 0$), every node as a
+  query with `sdf`; outputs the stress as a symmetric rank-2 tensor and
+  `displacement` as a vector (`isla_olbc_elasticity_tensor.yaml`). The
+  earlier scalar-input lanes with the domain axes as two global vectors
+  are the pose-prior diagnostic of @sec-pose-prior. GeoTransolver-512
   on both: the interior points with coordinates, `sdf`, `sdf_normals` and
   the nodal tags and values in its local embedding; no global embedding
   (it works in absolute coordinates and needs no frame).

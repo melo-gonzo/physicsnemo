@@ -679,26 +679,23 @@ laboratory components the dataset stores off the predicted tensor
 (`symmetric_tensor` targets with a `components` mapping). No laboratory
 frame enters anywhere. The tests hold the covariance to $10^{-12}$ in
 float64 for random rotations and mirrors, for every rank and parity the
-class admits. The frame route, the one the measurements below use, passes
-the frame itself as global directions ($K = 2$ in the plane, $K = 3$ in
-space). It also keeps the contract intact, because rotating the body and
-the frame together leaves the components unchanged. But it asks the network
-to learn the frame's effect from data. The clause was measured on PLAID
-Tensile2d with the frame route, where the targets are the in-plane stress
-components. With no frame ISLA fits the training set, and its validation
-error is 20 to 60 times GeoTransolver's (memorization). With the load axis
-alone every field is repaired except $\sigma_{12}$, which is odd under the
-in-plane reflection and stays unrepresentable. With the full frame every
-field is repaired, four to twelve times in float32 relative L2 at 32 cases.
-The remaining gap to GeoTransolver (2 to 4 times at 32 and 64 cases,
-narrowing with cases) is a standing question for the Tensile2d ladder, not
-a representability one (@sec-nb-solids-frame-interim). Absolute coordinates
-add nothing beyond the frame, and removing the odd component repairs
-nothing else, so the mechanism is the contract and not the trunk.
-GeoTransolver reads absolute coordinates and has no such clause. That is
-why the aerodynamic datasets, whose outputs are a true scalar and a vector,
-never exposed it. The tensor head against the frame route on the same two
-datasets is preregistered in @sec-nb-tensor-head-prereg.
+class admits. The other conceivable route, passing the dataset's own axes
+as global directions so that scalar heads can produce the components, also
+keeps the contract intact, but it is rejected: those axes are not a datum
+of the PDE, and a model that needs them has been told the pose of the
+training set (@sec-pose-prior). The clause itself was found on PLAID
+Tensile2d, where the targets are the in-plane stress components. With
+scalar heads and no directions ISLA fits the training set, and its
+validation error is 20 to 60 times GeoTransolver's (memorization); with
+the load axis alone every field is repaired except $\sigma_{12}$, which
+is odd under the in-plane reflection and stays unrepresentable by a scalar
+head (@sec-nb-solids-frame-interim). Absolute coordinates add nothing, and
+removing the odd component repairs nothing else, so the mechanism is the
+contract and not the trunk. GeoTransolver reads absolute coordinates and
+has no such clause. That is why the aerodynamic datasets, whose outputs
+are a true scalar and a vector, never exposed it. The tensor head with the
+load direction as the one global vector is the configuration the solids
+chapters report (@sec-interior-tensile2d).
 
 ### Inputs of any rank enter through invariants {#sec-isla-inputs-rank}
 

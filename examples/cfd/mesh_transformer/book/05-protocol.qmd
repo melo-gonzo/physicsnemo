@@ -596,10 +596,11 @@ model reads every mesh node as a query in all four:
   sample, the bottom edge is fixed, and five material parameters vary too.
   The model receives the outer polyline with per-cell labels (loaded,
   fixed, pinned) and the applied pressure as boundary scalars. It receives
-  $P$ and the material parameters as six global scalars, and the laboratory
-  frame as two global vectors, because its targets are stress components in
-  that frame (@sec-isla-heads). It predicts the three stress components,
-  the cumulated plastic strain and the displacement.
+  $P$ and the material parameters as six global scalars, and the load
+  direction as its one global vector. It predicts the stress as a
+  symmetric tensor, from which the recipe reads the three components the
+  dataset stores (@sec-isla-heads), the cumulated plastic strain and the
+  displacement.
 - **GINOT Bracket Lug** (@fig-problem-lug; details: @sec-data-lug): a
   three-dimensional elastoplastic lug clamped at one end and pressed on the
   lower half of its hole. Hole radius, length, thickness and pressure vary.
@@ -614,8 +615,8 @@ model reads every mesh node as a query in all four:
   $-\nabla^2 u = f$ on a square with a random source (the $K = 0$ case,
   with the type and the value as per-cell boundary scalars). The second is
   plane-strain steel elasticity on a disc with two holes (per component a
-  free segment, a prescribed displacement and two tractions; the laboratory
-  frame as $K = 2$).
+  free segment, a prescribed displacement and two tractions, which enter as
+  rank-1 boundary inputs; the stress is predicted as a tensor, $K = 0$).
 
 Their standings are in @sec-interior-tensile2d, @sec-interior-lug,
 @sec-surface-deepjeb and @sec-interior-olbc; the open axis they represent
@@ -630,8 +631,8 @@ adopted, with the conversion in progress, are in @sec-data-scouted.
 #|   edge is loaded by the pressure $P$ (a traction $-P\,n$; negative $P$ pulls),
 #|   the bottom edge is fixed ($u_2 = 0$) with its left corner pinned
 #|   ($u_1 = 0$, marked), and the curved notches are free; the box lists the
-#|   six global scalars of this sample and the arrows the laboratory frame,
-#|   the two global vectors. Middle: the axial stress $\sigma_{22}$ at the
+#|   six global scalars of this sample and the arrow the load direction, the
+#|   one global vector. Middle: the axial stress $\sigma_{22}$ at the
 #|   mesh nodes. Right: the displacement magnitude $|u|$. How to read this:
 #|   the specimen's coordinates and stresses are in the dataset's units (a
 #|   unit half-width; MPa-scale stresses); the nodes drawn are all 6,171 of
@@ -766,14 +767,15 @@ plt.show()
 #|   two concentric rings (outer ring: the $x$ component; inner ring: the $y$
 #|   component), a prescribed displacement (value), a traction (flux) or free;
 #|   the smaller hole is clamped in both components, the larger is free. The
-#|   arrows are the laboratory frame, the two global vectors. Middle: the von
+#|   arrows are the dataset's coordinate axes, drawn for orientation only
+#|   (they are not model inputs). Middle: the von
 #|   Mises stress from the three stress components at the nodes. Right: the
 #|   displacement magnitude. What varies per sample: where the outer circle is
 #|   cut, which condition each segment and component carries, and the values.
 #|   What the model receives: the loops' cells with normals, lengths, the
 #|   per-component one-hot type and the prescribed displacement and traction
-#|   components as boundary scalars, the frame, and every node as a query; it
-#|   predicts the three stress components and the displacement. How to read
+#|   components as rank-1 boundary inputs, and every node as a query; it
+#|   predicts the stress tensor and the displacement. How to read
 #|   this: all quantities are in the dataset's dimensionless units (stress per
 #|   100 MPa, length per metre). Data:
 #|   results/problem_figures_2026-09-22/olbc_elasticity.npz.

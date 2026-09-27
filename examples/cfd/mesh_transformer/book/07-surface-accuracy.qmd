@@ -71,8 +71,6 @@ EARLIER = "earlier protocol (192 wide, 1e-3)"
 isla_lab = lambda r: "ISLA" if r["isla_ref"] else f"ISLA, {EARLIER}"
 GT512_W = ref_seeds("gt_w512|hl35"); R2_W = ref_seeds("isla_r2|hl35"); R1_LR_W = ref_seeds("isla_r1_lr1e3|hl35")
 PC = J("drivaer435_percase_2026-09-23.json")  # per-car anatomy of the 435-car standing (ISLA against GeoTransolver-512)
-B3 = J("batch3_reductions_2026-09-26.json")["groups"]["frame3d_r2"]  # FRAME-3D-R2: the axes and 24 layers together (fa rows 6-7)
-F3 = J("frame3d_2026-09-26.json")  # FRAME-3D: the reference with two or three body axes as further global directions (fa rows 2-5)
 ```
 
 ```{python}
@@ -124,13 +122,7 @@ print(f"**At 435 training cars ISLA scores {mean(r['isla']):.4f}, GeoTransolver-
       f"(Spearman correlation of the per-car errors {PC['spearman_isla_r1_gt512']:.2f}; results/drivaer435_percase_2026-09-23.json), so what "
       "remains at full data is the difficulty of the case, not the architecture (@sec-shared-floor). "
       f"Doubling ISLA's depth to 24 layers buys {(1 - mean(R2) / mean(r['isla'])) * 100:.1f}% at twice the step time and memory, inside the 1.5% "
-      f"bar the reference selection set (@sec-nb-ref-verdict). Giving the reference the car's three body axes as further global directions "
-      f"(a labeled input variant, not the reference row) buys {(1 - F3['ratio_to_r1']['isla_r1_k4']['pressure_l2']) * 100:.1f}% on pressure and "
-      f"{(1 - F3['ratio_to_r1']['isla_r1_k4']['wss_l2']) * 100:.1f}% on wall shear at no cost, both seeds below both reference seeds, which puts ISLA "
-      f"{(F3['gt512_over']['isla_r1_k4']['pressure_l2'] - 1) * 100:.0f}% ahead of GeoTransolver-512 (@sec-nb-frame3d-verdict; the same input pays 17% on the AirfRANS "
-      "interior task, @sec-nb-frame-af-ref-verdict, so it is the recommended input on fixed-frame datasets). "
-      f"The two do not add: 24 layers on top of the axes reach {B3['ratio_to_r1']['pressure_l2']:.3f} of the reference, "
-      f"{(1 - B3['ratio_to_k4']['pressure_l2']) * 100:.0f}% beyond the axes alone (@sec-nb-frame3d-r2-verdict). "
+      f"bar the reference selection set (@sec-nb-ref-verdict). "
       f"The rate control at 1e-3 is {(mean(R1_LR) / mean(r['isla']) - 1) * 100:.0f}% "
       "worse than 5e-4 on both seeds. GeoTransolver's best rate depends on how much data it sees, so the ladder table names its rate on "
       "every row. ISLA trains at 5e-4 on every rung and Transolver at 3e-3. @tbl-scoreboard-435 lists every configuration at 435 cars with "
@@ -452,7 +444,6 @@ print(f"**ISLA's error is paid for in geometries, not cases.** Cutting the train
 #|   Data: results/hl35_percase_2026-09-23.json.
 #| code-fold: true
 HP = J("hl35_percase_2026-09-23.json")
-FW = J("frame_wing_2026-09-26.json")  # FRAME-WING: the body frame (span, up) on the 35-wing rung (fa rows 8-9)
 aoas = sorted(int(a) for a in HP["by_aoa"]); rows = [HP["by_aoa"][str(a)] for a in aoas]
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.6, 6.2), sharex=True, gridspec_kw={"height_ratios": [1.3, 1.0]})
 clean_axes(ax1); clean_axes(ax2)
@@ -485,12 +476,9 @@ print(f"**The wing deficit is a regime effect as much as a data effect: against 
       "is the absolute position of every cell (@sec-part-baseline); in the separated regime the pressure depends on where along the chord "
       "and span a cell sits more than on its local geometry, which is the same positional channel the fixed-mesh OLBC sets isolate "
       "(@sec-interior-olbc). This is a location of the deficit, not its mechanism: the notebook preregisters the 210-case twin of this "
-      "anatomy (@sec-nb-hl35-percase). "
-      f"Giving the reference the wing's span and up axes as two further global directions (the labeled input variant of @sec-nb-frame-wing-verdict) "
-      f"cuts its pressure error to {FW['fields']['pressure_l2']['frame_over_r1']:.2f} of the reference on both seeds and moves the ratio to "
-      f"{FW['bar']['4_to_14']['per_seed']['42']['gt512'] / statistics.mean(v['isla_frame'] for v in FW['bar']['4_to_14']['per_seed'].values()):.2f} at 4 to 14 degrees and "
-      f"{FW['bar']['16_to_22']['per_seed']['42']['gt512'] / statistics.mean(v['isla_frame'] for v in FW['bar']['16_to_22']['per_seed'].values()):.2f} at 16 to 22, "
-      "so orientation is part of the wing deficit at every angle and the separated regime keeps the rest.")
+      "anatomy (@sec-nb-hl35-percase). How much of the deficit is the fixed pose itself is quantified by the pose-prior diagnostic "
+      "of @sec-pose-prior, which gives ISLA the dataset's axes as inputs, an input the book rejects: about half of the low-angle gap and a "
+      "quarter of the high-angle widening, so the separated regime keeps the rest.")
 ```
 
 ## A second surface task: DeepJEB++ brackets {#sec-surface-deepjeb}

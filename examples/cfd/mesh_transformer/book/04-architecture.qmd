@@ -839,7 +839,7 @@ AF, AFm = load_slices("ref_isla_r1_af_seed42")
 LG, LGm = load_slices("so_lug_isla_r1_n300_seed43")
 L_REF_DR = json.load(open(PF / "drivaer.json"))["L_ref"]        # the recipe divides DrivAerML positions by L_ref = 5 m
 RUNS = {"DrivAerML Surface task, 435 cars": (DR, DRm), "AirfRANS interior task, 800 airfoils": (AF, AFm),
-        "PLAID Tensile2d with the frame, 64 cases": (T2, T2m), "GINOT lug, 300 cases": (LG, LGm)}
+        "PLAID Tensile2d, 64 cases (the pose-prior diagnostic model, @sec-pose-prior)": (T2, T2m), "GINOT lug, 300 cases": (LG, LGm)}
 ```
 
 ```{python}
@@ -915,15 +915,17 @@ plt.show()
 #| label: fig-routing-tensile2d
 #| fig-cap: >
 #|   The same instrument on a solid: PLAID Tensile2d, one validation specimen,
-#|   the ISLA trained on 64 cases with the laboratory frame as two global
-#|   vectors. Top row: every token (the 496 boundary cells as squares, the
+#|   the ISLA trained on 64 cases with scalar heads and the dataset's axes as
+#|   two global vectors (the pose-prior diagnostic model of @sec-pose-prior,
+#|   shown here only as a routing instrument; the reported configuration
+#|   predicts the stress as a tensor). Top row: every token (the 496 boundary cells as squares, the
 #|   mesh nodes as dots, all of them interacting query tokens) colored by its
 #|   dominant slice at the first, sixth and last layer, faded where undecided,
 #|   stars at the anchors of the slices above the uniform mass. Bottom row:
 #|   the soft assignment $\pi_{is}$ of the three slices that dominate the most
 #|   tokens in the sixth layer. How to read this: in the first layer the
 #|   routing can only see each token's seed (its type, its normal against the
-#|   frame, the boundary labels and the global scalars), so it separates
+#|   given directions, the boundary labels and the global scalars), so it separates
 #|   boundary from interior and the flat edges from the curved ones; the
 #|   deeper layers cut the specimen into regions of the plane. Coordinates are
 #|   the dataset's (the specimen spans $[-1, 1]^2$). Data:
@@ -1043,7 +1045,7 @@ print(
     f"surface offers few distinct values of it. From the "
     f"second layer on, the token states carry position through the relational invariants, and the effective number rises to "
     f"{min(ne_dr[1:6]):.0f} to {max(ne_dr[1:6]):.0f} in layers 2 to 6 and {min(ne_dr[6:]):.0f} to {max(ne_dr[6:]):.0f} in layers 7 to 12. "
-    f"The specimen model, whose seed already carries the boundary labels, the frame and six global scalars, starts at {ne_t2[0]:.0f} "
+    f"The specimen model, whose seed already carries the boundary labels, two given directions and six global scalars, starts at {ne_t2[0]:.0f} "
     f"and stays between {min(ne_t2):.0f} and {max(ne_t2):.0f}. The assignment is soft throughout: in the sixth layer "
     f"{undecided(DR, 5):.0f}% of the car's tokens and {undecided(T2, 5):.0f}% of the specimen's give no single slice more than half "
     f"their weight, and in the last layer {undecided(DR, 11):.0f}% and {undecided(T2, 11):.0f}%. Anchors sit inside the body, not on "
