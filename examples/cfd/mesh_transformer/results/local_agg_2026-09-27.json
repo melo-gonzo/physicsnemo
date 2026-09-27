@@ -1,0 +1,87 @@
+{
+ "protocol": "LOCAL-AGG reduction (2026-09-27, #sec-nb-local-agg-prereg): does a contract-preserving local relational aggregation among\ntokens (ISLA local_rho / local_k, k-nearest form with k = 32) close the fixed-mesh OLBC Poisson deficit that the boundary-value\nextension leaves? Arms: la_poisson_ext_local05_n512, la_poisson_ext_local05_n2048, la_poisson_ext_local15_n2048 (two seeds each,\nextension + local aggregation, code_v7). References: ISLA R1 (K = 0) and GeoTransolver-512 per rung from results/olbc_2026-09-22.json;\nthe extension-only arm from campaign om (om_poisson_isla_r1_ext_n{512,2048}). Readout: float32 per-case relative L2 on u over the\ntest cases; fractions of the log-gap ln(base/arm)/ln(base/gt512) on the two-seed means. Bars: closes >= 0.95; pays >= 0.88; null\nwithin 0.03 of the extension's fraction; between otherwise; hurts if below the extension by more than 0.03. Lanes not yet scored\nare skipped and reported. usage: python local_agg_reduce_2026-09-27.py  (writes local_agg_2026-09-27.json beside this script).",
+ "rungs": {
+  "512": {
+   "base": 0.8670549198868684,
+   "base_per_seed": {
+    "42": 0.8860613200813532,
+    "43": 0.8480485196923837
+   },
+   "gt512": 0.27905043042846955,
+   "gt512_per_seed": {
+    "42": 0.2832762734615244,
+    "43": 0.2748245873954147
+   },
+   "arms": {
+    "ext": {
+     "u": 0.33280388345883694,
+     "per_seed": {
+      "42": 0.31834829197032377,
+      "43": 0.3472594749473501
+     },
+     "n_seeds": 2,
+     "n_cases": 256,
+     "frac": 0.8446155636602639,
+     "gt512_over": 0.8384830955945984,
+     "frac_per_seed": {
+      "42": 0.8837854965147692,
+      "43": 0.8071113549030808
+     }
+    },
+    "ext_local05": {
+     "u": 0.22900327770184958,
+     "per_seed": {
+      "42": 0.23096499158418737,
+      "43": 0.2270415638195118
+     },
+     "n_seeds": 2,
+     "n_cases": 256,
+     "frac": 1.1743446190424895,
+     "gt512_over": 1.2185433904215937,
+     "frac_per_seed": {
+      "42": 1.1668207969018762,
+      "43": 1.1819331706407985
+     },
+     "ratio_to_ext": 0.6881027808985107,
+     "verdict": "closes",
+     "interim": false
+    }
+   }
+  },
+  "2048": {
+   "base": 0.39494188419485,
+   "base_per_seed": {
+    "42": 0.39675149114918895,
+    "43": 0.39313227724051103
+   },
+   "gt512": 0.09810749645112082,
+   "gt512_per_seed": {
+    "42": 0.09671778025222011,
+    "43": 0.09949721265002154
+   },
+   "arms": {
+    "ext": {
+     "u": 0.12980777879784,
+     "per_seed": {
+      "42": 0.1250073196424637,
+      "43": 0.1346082379532163
+     },
+     "n_seeds": 2,
+     "n_cases": 256,
+     "frac": 0.7989545424525768,
+     "gt512_over": 0.7557905801925126,
+     "frac_per_seed": {
+      "42": 0.8260121424205572,
+      "43": 0.772879621161814
+     }
+    },
+    "ext_local05": {
+     "status": "not scored"
+    },
+    "ext_local15": {
+     "status": "not scored"
+    }
+   }
+  }
+ }
+}

@@ -29259,3 +29259,50 @@ scale (@sec-nb-frame-af-ref-verdict), and the winning channel-only arm
 goes to the 800-airfoil reference twin only if it recovers $\ge 0.9$ of
 the gain, because a cheaper variant that matches the full frame is worth
 a protocol-scale run and one that trails it is not.
+
+## 2026-09-27 — Interim, LOCAL-AGG (OLBC Poisson, 512 cases, two seeds): local relational aggregation among tokens closes the fixed-mesh deficit and overshoots it, ISLA + extension + local aggregation 0.229 against GeoTransolver-512 0.279; 1.5x step cost; the 2,048 rung and a second dataset are running {#sec-nb-local-agg-interim}
+
+**Setting.** On the OLBC Poisson set (fixed square mesh, boundary-value
+problems with varying boundary data) ISLA trailed GeoTransolver-512 by
+about 3x at the reference configuration, and the boundary-value extension
+(the boundary data continued into the interior as a query scalar)
+recovered 0.80 to 0.84 of the log-gap on both rungs
+(@sec-nb-olbc-mech-verdict). The LOCAL-AGG preregistration
+(@sec-nb-local-agg-prereg) asked whether a contract-preserving local
+relational aggregation among tokens, a measure-weighted Gaussian kernel
+over each token's 32 nearest tokens and their pair invariants applied
+before the slice routing, closes what the extension leaves.
+
+**What we saw.** The 512-case rung is scored on both seeds (256 test
+cases, float32 relative L2 on the solution $u$, the same cases as every
+other arm). ISLA + extension + local aggregation at $\rho = 0.05$ scores
+**0.229 (seeds 0.231 / 0.227)** against the extension arm's 0.333 (0.318
+/ 0.347), the frame-free reference's 0.867 and GeoTransolver-512's 0.279
+(0.283 / 0.275). The fraction of the log-gap recovered is **1.17**, above
+the "closes" bar of 0.95, and the model now leads GeoTransolver-512 on
+both seeds: GeoTransolver-512 ÷ ISLA = 1.22. The training step is 0.050 s
+against 0.031 to 0.035 s for the extension arm at the same token count
+(20,000 query tokens), a 1.5x cost.
+
+**Reading.** At this rung the preregistered "closes" clause fires with
+margin. The mechanism reading is that the slice routing, which pools
+tokens by learned state, had no path for a token to read its immediate
+neighbours' states, and on a fixed mesh whose difficulty is the local
+propagation of boundary data across the interior that path is the
+missing capacity; the extension gave each interior token the right
+boundary value, the aggregation lets the tokens smooth it. This is one
+rung of one dataset and counts as interim under the two-dataset rule.
+
+**What runs now.** The 2,048-case lanes at $\rho = 0.05$ and $0.15$ are at
+epoch 130 of 500 (about one minute per epoch, not the seven estimated
+from the dense form). Staged and launched on code_v7 (campaign la rows
+6-15): the OLBC elasticity twin (the RANK-IO arm, rank-1 boundary inputs
+with the rank-2 stress head, plus local aggregation at 512 and 2,048
+cases), an elasticity control and a Poisson control on code_v7 without
+the aggregation so the twin differs from its control only by the
+aggregation and not by the code snapshot, and an AirfRANS interior twin
+(the provided-geometry frame arm plus local aggregation at 800 airfoils,
+100,000 queries) as the first non-fixed-mesh test. Bars for the twins are
+the preregistration's, read per dataset against each dataset's own best
+ISLA arm and GeoTransolver reference. Artifact:
+results/local_agg_2026-09-27.json (reducer beside it).
