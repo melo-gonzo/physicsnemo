@@ -12,8 +12,7 @@ seen this program. Every term is defined where it first appears. Every
 number is computed from a checked-in artifact as the page renders.
 
 ::: {.callout-note collapse="true" title="Where the name comes from"}
-ISLA is pronounced "eye-la". An *isla* is an island, a shape defined
-entirely by its boundary. The boundary is what the method takes as input.
+An *isla* is an island, a shape defined entirely by its boundary. The boundary is what the method takes as input.
 The code class is `physicsnemo.experimental.models.ISLA`.
 :::
 

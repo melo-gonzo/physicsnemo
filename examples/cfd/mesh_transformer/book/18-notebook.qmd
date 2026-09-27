@@ -6192,8 +6192,8 @@ question now rests on the small-data carrier and the interior
 
 A colleague pointed out that "MeshTransformer" is already the name of
 other published architectures. Peter chose **ISLA — Invariant Slice
-Attention** (pronounced "eye-la"; an *isla* is an island, a shape defined
-entirely by its boundary) for the soft-slice equivariant architecture the
+Attention** (an *isla* is an island, a shape defined entirely by its
+boundary) for the soft-slice equivariant architecture the
 entries above this one were written under the name MeshTransformer2 / MT2
 (those mentions were replaced by ISLA on 2026-09-21; see the nomenclature
 note at the top of this notebook). The code package moves to
