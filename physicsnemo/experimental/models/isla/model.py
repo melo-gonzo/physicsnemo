@@ -690,6 +690,69 @@ class _RoutingLogits(nn.Module):
         )
 
 
+def _local_region(
+    h: torch.Tensor,
+    log_w: torch.Tensor,
+    r: torch.Tensor,
+    n_hat: torch.Tensor,
+    g_hat: torch.Tensor,
+    rho: float,
+    eps: float,
+    chunk: int = 2048,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Local relational aggregation (LOCAL-AGG, 2026-09-27): for every token, the
+    measure-weighted Gaussian-kernel average over all tokens of (i) the token states
+    and (ii) the pair invariants, with kernel ``softmax_j(-|r_i - r_j|^2 / rho^2 +
+    log w_j)`` over the source tokens. The pair invariants are the anchor
+    invariants of :func:`_relational_invariants` written for a token pair: the
+    distance in units of ``rho``, its log, the unit separation dotted with each
+    global direction (K terms), with the receiving token's normal and with the
+    source token's normal, and the two normals' dot product (width 5 + K). The
+    kernel is exactly invariant to a uniform rescale of the measure weights and
+    every term depends on relative positions only, so the block keeps the
+    class's rotation and translation contracts. Row-chunked and recomputed in
+    backward (the (chunk, N) kernel and (chunk, N, 3) separations are never
+    stored). Cost is O(N^2) per layer: written for the fixed-mesh sets of 10 to
+    50 thousand tokens; a neighbour-restricted kernel is the follow-up for
+    200,000-token surfaces. Returns (pooled states (B, N, H), pooled invariants
+    (B, N, 5 + K))."""
+    b, n, _ = r.shape
+    k_dirs = g_hat.shape[2]
+
+    def _chunk(r_c, n_c, g_c, r_all, n_all, h_all, logw_all):
+        rel = r_c[:, :, None, :] - r_all[:, None, :, :]  # (B, c, N, 3), receiver minus source
+        d2 = rel.square().sum(-1)
+        dist = d2.clamp_min(eps * eps).sqrt()
+        rel_hat = rel / dist[..., None]
+        logits = -d2 / (rho * rho) + logw_all[:, None, :, 0]
+        kern = torch.softmax(logits, dim=-1)  # (B, c, N)
+        feats = [
+            dist / rho,
+            torch.log(dist / rho),
+            (rel_hat[..., None, :] * g_c[:, :, None, :, :]).sum(-1),  # (B, c, N, K)
+            (rel_hat * n_c[:, :, None, :]).sum(-1, keepdim=True),
+            (rel_hat * n_all[:, None, :, :]).sum(-1, keepdim=True),
+            (n_c[:, :, None, :] * n_all[:, None, :, :]).sum(-1, keepdim=True),
+        ]
+        feats = [f if f.dim() == 4 else f[..., None] for f in feats]
+        geo = torch.cat(feats, dim=-1)  # (B, c, N, 5 + K)
+        pooled_h = torch.einsum("bcn,bnh->bch", kern.to(h_all.dtype), h_all)
+        pooled_geo = torch.einsum("bcn,bcng->bcg", kern, geo)
+        return pooled_h, pooled_geo
+
+    outs_h, outs_g = [], []
+    for i0 in range(0, n, chunk):
+        sl = slice(i0, i0 + chunk)
+        args = (r[:, sl], n_hat[:, sl], g_hat[:, sl], r, n_hat, h, log_w)
+        if torch.is_grad_enabled():
+            ph, pg = checkpoint(_chunk, *args, use_reentrant=False)
+        else:
+            ph, pg = _chunk(*args)
+        outs_h.append(ph)
+        outs_g.append(pg)
+    return torch.cat(outs_h, dim=1), torch.cat(outs_g, dim=1)
+
+
 class _SliceBlock(nn.Module):
     """One pre-LN layer of measure-weighted soft-slice attention + MLP."""
 
@@ -708,10 +771,20 @@ class _SliceBlock(nn.Module):
         routing_norm: str = "cosine",
         routing_temperature: float = 10.0,
         geo_bias: str = "linear",
+        local_rho: float | None = None,
     ) -> None:
         super().__init__()
         self.use_relational_geo = use_relational_geo
         self.fast_point_softmax = bool(fast_point_softmax)
+        ### LOCAL-AGG (2026-09-27): optional local relational aggregation among the
+        ### tokens before the slice routing (_local_region); None disables it and the
+        ### block is the released arithmetic.
+        self.local_rho = None if local_rho is None else float(local_rho)
+        if self.local_rho is not None:
+            self.local_norm = nn.LayerNorm(hidden)
+            self.local_value = nn.Linear(hidden, hidden)
+            self.local_geo = nn.Linear(5 + n_global_vectors, hidden // 2)
+            self.local_out = nn.Linear(hidden + hidden // 2, hidden)
         ### KERNEL STUDY (2026-09-13): "fused" evaluates the dense geometry region
         ### (invariants -> routing bias -> point->slice mix -> pooled invariants) in
         ### one Triton kernel per direction that never materializes a (B,N,S,.)
@@ -764,6 +837,11 @@ class _SliceBlock(nn.Module):
         vecs=None,
         tens=None,
     ) -> Float[torch.Tensor, "batch tokens hidden"]:
+        if self.local_rho is not None:
+            pooled_h, pooled_geo = _local_region(
+                self.local_value(self.local_norm(h)), log_w, r, n_hat, g_hat, self.local_rho, eps
+            )
+            h = h + self.local_out(torch.cat([pooled_h, self.local_geo(pooled_geo.to(h.dtype))], dim=-1))
         ### Soft assignment of points to slices; measure weights enter as a
         ### log-space bias so slice states are quadrature-weighted means.
         logits = self.assign(self.norm_assign(h))  # (B, N, S)
@@ -1395,6 +1473,14 @@ class ISLA(Module):
             option (GEO-BIAS, 2026-09-25): does a nonlinear bias make extra global
             directions unnecessary? Exploration scale said yes for the vector field
             (0.96 of the two-axis velocity gain at K = 1) and no for pressure (0.22).
+        local_rho: ``None`` (default): no local aggregation. A positive radius, in
+            frame units (the ``rms_distance`` length unit), adds to every slice block
+            a measure-weighted Gaussian-kernel aggregation over all tokens of the
+            token states and of the token-pair invariants (distance, its log, the
+            unit separation against each global direction and both normals, the
+            normals' dot product), before the slice routing. Relative geometry
+            only, so the contracts hold; O(N^2) per layer, written for fixed-mesh
+            sets of tens of thousands of tokens (LOCAL-AGG study, 2026-09-27).
         routing_norm: ``"cosine"`` (default): each block's point-to-slice
             routing logits are ``routing_temperature`` times the cosine between
             the normalized token state and a learned prototype per slice, which
@@ -1502,9 +1588,15 @@ class ISLA(Module):
         interior_geometry: str = "nearest_boundary",
         interior_nn_chunk: int | None = None,
         geo_bias: str = "linear",
+        local_rho: float | None = None,
         eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
+        ### LOCAL-AGG (2026-09-27): radius, in frame units (the rms_distance length unit), of
+        ### the local relational aggregation among tokens in every slice block; None = off.
+        if local_rho is not None and not local_rho > 0:
+            raise ValueError(f"local_rho must be positive or None, got {local_rho!r}")
+        self.local_rho = None if local_rho is None else float(local_rho)
         ### GEO-BIAS (2026-09-25): the pair invariants -> routing-bias map; "mlp" is the
         ### eager-only nonlinear variant of the direction-count study (#sec-nb-geo-bias-prereg).
         if geo_bias not in ("linear", "mlp"):
@@ -1675,6 +1767,7 @@ class ISLA(Module):
                 routing_norm=routing_norm,
                 routing_temperature=routing_temperature,
                 geo_bias=geo_bias,
+                local_rho=self.local_rho,
             )
             for _ in range(n_layers)
         )

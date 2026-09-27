@@ -1256,3 +1256,32 @@ def test_geo_bias_mlp_is_equivariant_and_runs_on_both_kernels():
     assert fused.geo_kernel == "fused" and fused.geo_bias == "mlp"
     with pytest.raises(ValueError, match="geo_bias must be"):
         _isla(hidden=64, n_layers=1, n_slices=16, geo_bias="quadratic")
+
+
+def test_local_rho_aggregation_keeps_the_contracts_and_is_off_by_default():
+    """local_rho (LOCAL-AGG, 2026-09-27): the measure-weighted Gaussian aggregation of
+    token states and pair invariants before the slice routing keeps rotation
+    equivariance, translation invariance and measure-rescale invariance (its kernel is
+    a softmax over sources with log-weight logits, its features are pair invariants);
+    a model built without it has no local parameters and rejects a non-positive radius."""
+    torch.manual_seed(0)
+    m = _isla(hidden=64, n_layers=2, n_slices=16, local_rho=0.05).double().eval()
+    n = 300
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor([3.0, 2.0, 1.0], dtype=torch.float64)
+    nrm = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=torch.float64), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    q = _rotation()
+    with torch.no_grad():
+        base = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
+        rot = m(points=pts @ q.T, normals=nrm @ q.T, global_inputs={"g": drv @ q.T}, measure_weights=w)
+        sh = m(points=pts + 5.0, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
+        sc = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w * 2.5)
+    _assert_rotated(rot, base, q)
+    assert all(torch.allclose(sh[k], base[k], atol=1e-9, rtol=1e-9) for k in base.keys())
+    assert all(torch.allclose(sc[k], base[k], atol=1e-9, rtol=1e-9) for k in base.keys())
+    assert sum(1 for k, _ in m.named_parameters() if ".local_" in k) == 16  # norm, value, geo, out: 4 modules x (weight, bias) per block, 2 blocks
+    plain = _isla(hidden=64, n_layers=2, n_slices=16)
+    assert not any(".local_" in k for k, _ in plain.named_parameters()) and plain.local_rho is None
+    with pytest.raises(ValueError, match="local_rho must be positive"):
+        _isla(hidden=64, n_layers=1, n_slices=16, local_rho=0.0)
