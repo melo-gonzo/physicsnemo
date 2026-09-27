@@ -427,6 +427,10 @@ flowchart TB
     LITSLICEATT{{"LIT-SLICEATT: inter-slice attention as a control<br/>PLANNED"}}:::planned
     LITCARBENCH{{"LIT-CARBENCH: ISLA and GeoTransolver under CarBench<br/>PLANNED"}}:::planned
     LITOLBCBASE{{"LIT-OLBCBASE: published OLBC baselines beside the ladder<br/>PLANNED"}}:::planned
+    LOCALAGG["LOCAL-AGG: contract-preserving local relational aggregation among tokens (k-nearest, measure-weighted); OLBC Poisson closes at 512 (1.17 of the log-gap), elasticity between; 2,048 rungs and the frame-free AirfRANS twin running<br/>RUNNING"]:::running
+    OLBC --> LOCALAGG
+    LITEXT --> LOCALAGG
+    LOCALAGG --> UNIFIED
     OLBC --> LITEXT
     OLBC --> LITTEMP
     TERRITORY --> LITTEMP
