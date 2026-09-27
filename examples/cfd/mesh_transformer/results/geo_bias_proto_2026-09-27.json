@@ -1,0 +1,143 @@
+{
+ "protocol": "GEO-BIAS-PROTO interim (2026-09-27): fused-kernel twin (code_v6, gbf row 5) of the MLP routing bias at K = 1, DrivAerML Surface, R1, 435 cars, 200,000 cells, seed 42 only; float32 relative L2 on the 48 validation cars; comparators from frame3d_2026-09-26.json (R1 pair, K = 4 axes pair, GeoTransolver-512 pair). The eager pair (gb rows 2-3) decides the bar.",
+ "fused_mlp_k1_seed42": {
+  "pressure_l2": 0.043419567324842014,
+  "wss_l2": 0.06812965838859479
+ },
+ "ratios": {
+  "over_r1_mean": {
+   "pressure_l2": 1.0355830512732276,
+   "wss_l2": 1.0375910768643564
+  },
+  "over_r1_seed42": {
+   "pressure_l2": 1.0319449882696852,
+   "wss_l2": 1.0358096837434123
+  },
+  "over_k4_axes": {
+   "pressure_l2": 1.0880353900809012,
+   "wss_l2": 1.088949481022969
+  },
+  "gt512_over": {
+   "pressure_l2": 0.9449875246414217,
+   "wss_l2": 0.9612002162151907
+  }
+ },
+ "airfrans_fused_mlp_k1_seed42": {
+  "values": {
+   "pressure_l2": 0.03490070360712707,
+   "velocity_l2": 0.019198475829325615,
+   "nut_l2": 0.03268609218299389
+  },
+  "over_internal_ref": {
+   "pressure_l2": 1.024312373171431,
+   "velocity_l2": 0.934069145450726,
+   "nut_l2": 0.9213277179038717
+  },
+  "frame_over_internal_ref": {
+   "pressure_l2": 0.8264328142106621,
+   "velocity_l2": 0.7831313976215323,
+   "nut_l2": 0.8361116434275038
+  },
+  "fraction_of_frame_log_gain": {
+   "pressure_l2": -0.1260068903370454,
+   "velocity_l2": 0.27900788375321167,
+   "nut_l2": 0.4577800145492277
+  },
+  "gt_vol_over": {
+   "pressure_l2": 0.7934015263572924,
+   "velocity_l2": 1.9761399772494908,
+   "nut_l2": 0.8969699796830356
+  },
+  "bar_reading": "velocity 0.93 of the reference: between the null threshold (0.94) and the mechanism threshold (0.88); pressure 1.02 (no gain)"
+ },
+ "drivaer_eager_pair": {
+  "per_seed": {
+   "42": {
+    "pressure_l2": 0.043303547349448,
+    "wss_l2": 0.06808791751973331
+   },
+   "43": {
+    "pressure_l2": 0.04320713567237059,
+    "wss_l2": 0.06814381883790095
+   }
+  },
+  "seed_means": {
+   "pressure_l2": 0.0432553415109093,
+   "wss_l2": 0.06811586817881712
+  },
+  "over_r1_mean": {
+   "pressure_l2": 1.031666165869513,
+   "wss_l2": 1.0373810567504762
+  },
+  "paired_over_r1_pressure": {
+   "42": 1.0291875625392237,
+   "43": 1.034162307378054
+  },
+  "over_k4_axes": {
+   "pressure_l2": 1.0839201142149115,
+   "wss_l2": 1.0887290653899575
+  },
+  "gt512_over": {
+   "pressure_l2": 0.9485753207371099,
+   "wss_l2": 0.9613948133476115
+  },
+  "fused_twin_over_eager_seed42": {
+   "pressure_l2": 1.0026792256638413,
+   "wss_l2": 1.0006130436997047
+  },
+  "bar": "3-D null (pressure 1.03 of the reference, above the 0.976 null threshold, both seeds)"
+ },
+ "airfrans_eager_pair": {
+  "per_seed": {
+   "42": {
+    "pressure_l2": 0.030401916030262197,
+    "nut_l2": 0.036084044086081644,
+    "velocity_x_l2": 0.017179327511361666,
+    "velocity_y_l2": 0.035828419631080966,
+    "velocity_z_l2": 1.169400797923393e-07,
+    "velocity_l2": 0.01849079537072352
+   },
+   "43": {
+    "pressure_l2": 0.03213888327325029,
+    "nut_l2": 0.03195321994700602,
+    "velocity_x_l2": 0.018709372569407735,
+    "velocity_y_l2": 0.03712912743112871,
+    "velocity_z_l2": 1.169400797923393e-07,
+    "velocity_l2": 0.019881066871540887
+   }
+  },
+  "seed_means": {
+   "pressure_l2": 0.031270399651756244,
+   "velocity_l2": 0.019185931121132205,
+   "nut_l2": 0.03401863201654383
+  },
+  "over_internal_ref": {
+   "pressure_l2": 0.9177653733825741,
+   "velocity_l2": 0.9334588040378806,
+   "nut_l2": 0.9588882154080465
+  },
+  "paired_over_internal_ref_velocity": {
+   "42": 0.899638157954889,
+   "43": 0.967279450120872
+  },
+  "fraction_of_frame_log_gain": {
+   "pressure_l2": 0.45014168856273423,
+   "velocity_l2": 0.2816817347292884,
+   "nut_l2": 0.2345384685225883
+  },
+  "gt_vol_over": {
+   "pressure_l2": 0.885510636934981,
+   "velocity_l2": 1.977432075047998,
+   "nut_l2": 0.8618348741078069
+  },
+  "fused_twin_over_eager_seed42": {
+   "pressure_l2": 1.1479771068503302,
+   "velocity_l2": 1.0382720399211474,
+   "nut_l2": 0.9058322871188816
+  }
+ },
+ "verdict": {
+  "airfrans": "between",
+  "drivaer": "3-D null"
+ }
+}

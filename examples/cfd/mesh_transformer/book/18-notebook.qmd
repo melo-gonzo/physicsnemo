@@ -29133,3 +29133,58 @@ channel (step time against the reference on the fused kernel) is
 recorded beside the accuracy, and the block enters the class as a
 documented option, not the reference, until a second dataset (the lug or
 Tensile2d, both fixed-mesh) reproduces the reading.
+
+## 2026-09-27 — Verdict, GEO-BIAS-PROTO: at the reference configuration the MLP routing bias at K = 1 recovers 0.28 of the frame's velocity gain on AirfRANS (between the mechanism and null thresholds) and costs 3% on DrivAerML Surface (3-D null, both seeds); the bias's nonlinearity is not the capacity the extra directions supply, and the reference stays linear {#sec-nb-geo-bias-proto-verdict}
+
+**Setting.** GEO-BIAS-PROTO (@sec-nb-geo-bias-proto-prereg) took the
+exploration-scale finding that a two-layer routing bias at K = 1 recovers
+0.96 of the two-axis velocity gain (@sec-nb-geo-bias-verdict) to the
+reference configuration on two datasets: AirfRANS (800 airfoils, 100,000
+queries, internal geometry) and DrivAerML Surface (435 cars, 200,000
+cells), two seeds each on the eager region plus one fused-kernel twin per
+dataset (code_v6, @sec-nb-geo-bias-kernel). Bars, in the fraction of the
+frame's log-gain the bias recovers: on AirfRANS velocity at least 0.5 with
+pressure under 0.5 is *mechanism holds*, both at least 0.5 is *general
+improvement*, velocity under 0.25 is *null*; on DrivAerML pressure at
+0.952 of the reference or better *carries to 3-D*, above 0.976 is *3-D
+null*. Data: results/geo_bias_proto_2026-09-27.json.
+
+**What we saw** (float32 relative L2, seed means; pressure / velocity /
+eddy viscosity). AirfRANS, eager pair: 0.0313 / 0.0192 / 0.0340 against
+the internal-geometry reference pair's 0.0341 / 0.0206 / 0.0355, that is
+0.92 / 0.93 / 0.96 of the reference where the frame arm stands at 0.83 /
+0.78 / 0.84. **The bias recovers 0.28 of the frame's velocity log-gain,
+0.45 of the pressure gain and 0.24 of the eddy-viscosity gain**: velocity
+sits between the null threshold (0.25) and the mechanism threshold
+(0.5), so the AirfRANS reading is *between*, and the pressure fraction
+is not the one the exploration rung gave (0.22) but also not reliable:
+the two eager seeds are 6% apart on pressure (0.0304, 0.0321) and 13%
+apart on eddy viscosity, and the fused twin, the same configuration under
+a different arithmetic order, lands 15% above eager seed 42 on pressure
+(1.02 of the reference) while agreeing on velocity (1.04). Velocity is the
+one field where the three runs agree, at 0.93 of the reference.
+DrivAerML Surface, eager pair: **0.0433 / 0.0681 on pressure / wall
+shear, 1.03 / 1.04 of the reference on both seeds (paired 1.029 and
+1.034), above the 3-D null threshold**; GeoTransolver-512 ÷ this model is
+0.95; the fused twin matches eager seed 42 to 0.3% on both fields.
+GeoTransolver-volume ÷ ISLA with the bias on AirfRANS is 0.89 / 1.98 /
+0.86.
+
+**Verdict.** *Between* on AirfRANS, *3-D null* on DrivAerML: the
+hypothesis that the nonlinearity of the pair-to-bias map is what the
+extra directions supply does not hold at the reference configuration.
+At exploration scale (192 wide, 120 airfoils) the nonlinear bias recovered
+nearly all of the velocity gain; at 384 wide with 800 airfoils it
+recovers a quarter, and on the cars it costs 3%. The reading that fits
+all of GEO-BIAS, GEO-BIAS-K3 (@sec-nb-geo-bias-k3-verdict) and this:
+the linear bias is a capacity limit only when the model is small and the
+data scarce; at the reference configuration the frame's gain comes
+through the seed's orientation invariants, which the routing bias does
+not touch, and a nonlinear bias with the direction cosines as inputs is
+at best neutral and on the cars a small cost. Consequences: the reference
+stays linear; `geo_bias="mlp"` remains a documented option (its fused
+kernel is exact and 0.68x the eager epoch); the frame remains the
+recommended input on fixed-frame datasets; and the mechanism question
+moves to the seed and read-back channels, where a direct test would give
+the directions to the seed only or to the geometry channels only.
+Two datasets, two seeds each, at protocol scale.
