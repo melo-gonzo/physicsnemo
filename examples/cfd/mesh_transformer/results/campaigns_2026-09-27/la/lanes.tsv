@@ -1,0 +1,7 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	la	la_poisson_ext_local05_n2048_seed42	olbc_poisson_ext	isla_olbc_poisson_ext_local05	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+1	la	la_poisson_ext_local05_n2048_seed43	olbc_poisson_ext	isla_olbc_poisson_ext_local05	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+2	la	la_poisson_ext_local15_n2048_seed42	olbc_poisson_ext	isla_olbc_poisson_ext_local15	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+3	la	la_poisson_ext_local15_n2048_seed43	olbc_poisson_ext	isla_olbc_poisson_ext_local15	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+4	la	la_poisson_ext_local05_n512_seed42	olbc_poisson_ext	isla_olbc_poisson_ext_local05	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+5	la	la_poisson_ext_local05_n512_seed43	olbc_poisson_ext	isla_olbc_poisson_ext_local05	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7

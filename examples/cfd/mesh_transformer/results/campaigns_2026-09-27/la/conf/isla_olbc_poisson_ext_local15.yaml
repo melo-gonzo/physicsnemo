@@ -1,0 +1,45 @@
+# @package _global_
+# LOCAL-AGG variant (2026-09-27): the extension configuration plus local_rho 0.15, local_k 32 (code_v7).
+# LIT-EXT (2026-09-22): the baseline plus six boundary-value-extension query scalars (olbc_poisson_ext.yaml).
+# ISLA on OLBC poisson-square-bc5 (2026-09-22): boundary tokens from the square polyline (line cells) with the one-hot BC type,
+# the BC value g and the Robin alpha as boundary scalars; no global condition (the material and domain are fixed, the source is
+# a field, and a scalar Poisson solution needs no frame: K = 0); every mesh node as an interacting query token with the signed
+# distance and the (standardized) source as its two query scalars.
+input_type: tensors
+output_type: fields
+forward_kwargs:
+  points: boundaries.outer.cell_centroids
+  normals: boundaries.outer.cell_data.normals              # precomputed in-plane outward normals (a curve in 3-D has no cell_normals)
+  measure_weights: boundaries.outer.cell_data.quadrature_measure
+  boundary_inputs:                                         # per-boundary-cell fields: which condition, and its value (all rank 0)
+    bc_dirichlet: boundaries.outer.cell_data.bc_dirichlet
+    bc_neumann: boundaries.outer.cell_data.bc_neumann
+    bc_robin: boundaries.outer.cell_data.bc_robin
+    bc_value_g: boundaries.outer.cell_data.bc_value_g
+    bc_robin_alpha: boundaries.outer.cell_data.bc_robin_alpha
+  query_points: interior.points
+  query_normals: interior.point_data.sdf_normals
+  query_inputs:
+    sdf: interior.point_data.sdf
+    source: interior.point_data.source                     # standardized in place by the dataset yaml
+    ext_dirichlet: interior.point_data.ext_dirichlet       # LIT-EXT: boundary values extended to the node, per condition type
+    ext_neumann: interior.point_data.ext_neumann
+    ext_robin: interior.point_data.ext_robin
+    ext_dist_dirichlet: interior.point_data.ext_dist_dirichlet
+    ext_dist_neumann: interior.point_data.ext_dist_neumann
+    ext_dist_robin: interior.point_data.ext_dist_robin
+model:
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs: {u: 0}
+  boundary_inputs: {bc_dirichlet: 0, bc_neumann: 0, bc_robin: 0, bc_value_g: 0, bc_robin_alpha: 0}
+  query_inputs: {sdf: 0, source: 0, ext_dirichlet: 0, ext_neumann: 0, ext_robin: 0, ext_dist_dirichlet: 0, ext_dist_neumann: 0, ext_dist_robin: 0}
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  query_tokens: true
+  geo_checkpoint: true
+  geo_kernel: eager
+  local_rho: 0.15                      # LOCAL-AGG (2026-09-27): local relational aggregation among tokens, radius in frame units
+  local_k: 32                          # k nearest tokens per kernel (O(N k))
+  interior_geometry: provided          # the dataset supplies the SDF normals as query normals
