@@ -36,3 +36,4 @@ model:
   query_tokens: true
   geo_checkpoint: true
   geo_kernel: eager              # the fused kernel requires one global direction
+  interior_geometry: provided          # code_v7: the dataset supplies the SDF normals as query normals

@@ -1,5 +1,5 @@
-# HARMONIC twin (2026-09-27): isla_volume_airfrans_ref_provided plus the query scalar hm_airfoil; pairs with datasets/airfrans_volume_hm.yaml.
 # @package _global_
+# HARMONIC twin (2026-09-27): isla_volume_airfrans_ref_provided plus the query scalar hm_airfoil; pairs with datasets/airfrans_volume_hm.yaml.
 # ISLA -- AirfRANS interior task, REFERENCE CONFIGURATION candidate (REF campaign, 2026-09-22): as isla_volume_ref with
 # the airfoil boundary (line cells with precomputed in-plane normals), one global vector (inlet direction) and one
 # global scalar (inlet speed).

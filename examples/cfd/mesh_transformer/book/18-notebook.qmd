@@ -29796,3 +29796,46 @@ six extension scalars). Rows 4-11: `ext_valonly` and `ext_distonly` at both
 rungs. Rows 12-13: `hm_af_provided_hm` (the provided-geometry AirfRANS
 reference plus the airfoil's harmonic measure). Two seeds each; bars in
 @sec-nb-harmonic-prereg; reducer results/harmonic_reduce_2026-09-27.py.
+
+## 2026-09-27 — ND-GENERIC, first pass done: ISLA takes a `dim` argument and builds every geometric quantity for d components; 3-D numerics bitwise unchanged; odd parity by the Levi-Civita construction (2-D perpendiculars, 3-D cross products); the fused kernels stay 3-D {#sec-nb-ndgeneric-pass1}
+
+**Setting.** Peter asked whether ISLA generalizes to other dimensions, as
+GLOBE and the mesh module do. The audit (@sec-nb-ruling-dataset-frame-inputs
+era, same day) found the model written for three components throughout:
+shapes, the pseudovector basis built from cross products, the rank-3
+Levi-Civita term, and the Triton kernels loading three components. The
+two-dimensional datasets (AirfRANS, OLBC, Tensile2d) run embedded in three
+dimensions with the third coordinate zero, which is correct but pays for
+a dead axis and a pseudovector basis that points out of the plane.
+
+**What changed (commit 2b77562e).** ISLA takes `dim` (default 3), checked
+against the points at forward; the head's coefficient count depends on d,
+so it is a constructor argument rather than an inference from the data.
+Every shape, invariant, seed, rank-1 and rank-2 input, block extra,
+nearest-boundary geometry, local aggregation and head basis is built for d
+components. The true-vector basis (directions, normal, pooled direction
+and their complements; 2K + 3 vectors in every d) is unchanged in form.
+Odd parity uses the Levi-Civita construction: in two dimensions the
+perpendiculars of the K + 2 primary vectors (p = K + 2), in three the
+pairwise cross products as before (p = C(K + 2, 2)), and it is refused
+with a clear error for d of four and above, where a pseudovector needs
+d minus 1 vectors. The isotropic odd term is the Levi-Civita symbol of
+rank d. The fused Triton geometry kernel and the Triton nearest-neighbour
+search stay three-dimensional and refuse other d; two-dimensional runs
+take the eager region and the float64 search.
+
+**Checks.** 201 tests before, 207 after (new: Levi-Civita and pseudovector
+construction; 2-D rotation, translation, magnitude and reflection
+contracts for ranks 0 to 2 of both parities; 2-D gradients, k-nearest
+aggregation and interior query tokens; 2-D rank-1 and rank-2 inputs; a
+4-D even-parity smoke test with odd parity refused; dimension-mismatch
+refusal). A seeded 3-D fixture reproduces bitwise on all four outputs and
+the parameter counts are unchanged (41,364 for a scalar plus vector
+spec). On the RTX 4090 at 20,000 tokens, hidden 192, 12 layers, 256
+slices: a native 2-D training step is 315 ms against 350 ms for the same
+problem embedded in 3-D on the eager path, and 85 ms for the 3-D fused
+kernel. So the native run is 10% cheaper than the embedded eager run and
+3.7x slower than the fused kernel; a two-dimensional fused kernel is the
+follow-up before any 2-D lane runs natively at protocol scale, and the
+recipe's datapipe must deliver two-component point arrays and a `dim: 2`
+in the model configs.
