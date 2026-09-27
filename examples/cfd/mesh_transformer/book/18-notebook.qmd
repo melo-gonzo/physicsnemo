@@ -29342,3 +29342,89 @@ seed 43 agrees, the protocol-scale question becomes whether a
 K = 3 model with fewer geometry invariants trades pressure for velocity,
 and no channel-only arm goes to the 800-airfoil twin under the 0.9 bar.
 Artifact: results/frame_channel_2026-09-27.json (interim, one seed).
+
+## 2026-09-27 — Verdict, FRAME-CHANNEL: the frame's pressure gain needs the directions in both the token seed and the geometry channels (seed-only recovers 0.49 of the log-gain with seeds at -0.06 / 0.74, geometry-only -0.22 and hurts); either channel alone beats the full frame on velocity by 4 to 5% on both seeds {#sec-nb-frame-channel-verdict}
+
+**Setting.** The laboratory frame as global vectors ($K = 3$: freestream
+plus two fixed axes) cuts ISLA's AirfRANS interior pressure error by 17 to
+25% (@sec-nb-frame-af-ref-verdict). FRAME-CHANNEL
+(@sec-nb-frame-channel-prereg) asked which of ISLA's three uses of the
+directions carries that gain, by giving the two axes to the token seed
+only (`geometry_directions: 1`) or to the slice blocks' geometry channels
+only (`seed_directions: 1`) on the local AirfRANS rung (160 airfoils,
+192 x 12 x 256, 20,000 queries, 300 epochs; exploration scale, mechanism
+only). Both arms are now scored on seeds 42 and 43 against the FRAME-AF
+base and frame arms from the same rung and seeds (40 test airfoils,
+float32 relative L2).
+
+**What we saw.** Two-seed means, pressure / velocity / eddy viscosity:
+base 0.355 / 0.130 / 0.258; frame 0.267 / 0.116 / 0.212; **seed-only
+0.309 / 0.110 / 0.246**; **geometry-only 0.378 / 0.111 / 0.209**. On
+pressure, the field that decides, the seed-only arm recovers **0.49** of
+the frame's log-gain and the geometry-only arm **-0.22** (it is 7% worse
+than the frame-free base and 42% worse than the frame). The seed-only
+fraction is the mean of two seeds that disagree, -0.06 and 0.74, and the
+disagreement is the base arm's: base pressure is 0.301 on seed 42 and
+0.408 on seed 43 while seed-only is 0.304 and 0.313, so seed-only is a
+steady 0.31 that the frame-free model reaches on its good seed and misses
+on its bad one. On velocity both channel-only arms beat the full frame
+(0.953 and 0.960 of the frame's error), on both seeds, with fractions of
+the frame's gain above 1 (1.41 and 1.35). On eddy viscosity the
+geometry-only arm equals the frame (0.985) and the seed-only arm is 16%
+worse. Per angle, the frame's pressure gain concentrates between 0 and 5
+degrees (0.172 against base 0.421) and neither channel-only arm reaches
+it there (0.349, 0.448); above 10 degrees the geometry-only arm is the
+best of the four on pressure (0.208).
+
+**Verdict.** The preregistered *joint* clause fires: both channel-only
+arms are at or below 0.5 of the pressure gain, so the frame's pressure
+gain needs the directions in both the seed and the geometry channels.
+The seed-only fraction sits at the clause boundary (0.49), so the
+sharper statement is: the seed channel carries at most half of the gain
+and the geometry channels carry none on their own, yet the two together
+carry all of it. The mechanism reading is that a boundary token needs to
+know its own station in the fixed frame (the seed cosines $n \cdot g_k$)
+and the routing needs to compare tokens by their relative positions in
+the same frame ($\mathrm{rel} \cdot g_k$) for the pressure field to be
+resolved; each alone is a frame the other half of the network cannot
+use. The prediction "seed carries it" (0.5) was wrong; "joint" (0.3) was
+the second candidate.
+
+**The anomaly, kept.** Both channel-only arms beat the full frame on
+velocity on both seeds. Fewer directions in one channel helps velocity,
+so the full frame's extra invariants in the geometry channels cost
+velocity what they buy on pressure, or the seed's extra cosines do the
+same. Under the 0.9 bar no channel-only arm replaces the frame at
+protocol scale, but the velocity result earns its own protocol-scale
+test: FRAME-CHANNEL-PROTO (preregistered below) runs the seed-only split
+at the reference configuration on AirfRANS (800 airfoils, 100,000
+queries) and DrivAerML Volume (frame of four directions) against the
+scored full-frame pairs, asking whether the velocity gain survives at
+scale and what it costs on pressure. Artifact:
+results/frame_channel_2026-09-27.json; the options stay in ISLA as
+documented mechanism-study switches with the default at all $K$.
+
+## 2026-09-27 — Preregistration, FRAME-CHANNEL-PROTO: does giving the frame to the token seed only keep the velocity gain and lose the pressure gain at the reference configuration on AirfRANS and DrivAerML Volume? {#sec-nb-frame-channel-proto-prereg}
+
+**Instrument.** Reference configuration (384 x 12 x 256, cosine, fused,
+lr 5e-4) with the provided-geometry frame arms already scored at protocol
+scale as controls: AirfRANS `fa_af_frame_provided` (K = 3, 800 airfoils,
+100,000 queries; @sec-nb-frame-provided-verdict) and DrivAerML Volume
+`fa_drvol_frame4_provided` (K = 4, 435 cars, 200,000 cells;
+@sec-nb-frame-vol-verdict). Treatment: the same configurations with
+`geometry_directions: 1` (the geometry channels see the inlet direction
+only; the seed and the output basis see every direction). Two seeds each,
+four lanes, on a verified snapshot code_v8 (code_v7 plus the
+direction-count options).
+
+**Bars (ratio treatment ÷ full frame, two-seed means).** *Velocity gain
+holds*: velocity $\le 0.97$ on both datasets. *Pressure cost*: pressure
+$\ge 1.05$ on a dataset means the split loses the frame's pressure gain
+there, as at exploration scale. *Free lunch*: velocity $\le 0.97$ with
+pressure $\le 1.02$ on both datasets would make the split the better
+frame arm and send it to the recommended configuration for interior
+problems. *Null*: every field within 3% on both. Prediction: velocity
+holds on AirfRANS (0.6) with a pressure cost of 5 to 15%; on DrivAerML
+Volume, where the frame's velocity gain was 10 to 13%, null-to-holds
+(0.5). Exploration-scale ratios for reference: seed-only ÷ frame 1.16 /
+0.95 / 1.16 on AirfRANS.
