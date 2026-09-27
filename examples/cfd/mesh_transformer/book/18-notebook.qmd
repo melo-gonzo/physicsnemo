@@ -28744,3 +28744,48 @@ frontier point on the cars, and on the wings a wider ISLA is the labeled
 option for a user with the memory. The width-carries and turnover
 statements in @sec-equal-budget are restated as one dataset each, with
 the wing numbers beside.
+
+## 2026-09-26 — Verdict, FRAME-WING: the body frame (span and up axes) cuts ISLA's 35-wing pressure error 11% on both seeds and narrows the log-gap to GeoTransolver-512 by half at 4 to 14 degrees and by a quarter at 16 to 22 degrees; every surface field improves 8 to 11%; third dataset for the frame at protocol scale {#sec-nb-frame-wing-verdict}
+
+**Setting.** The body frame as extra global directions was measured at
+protocol scale on AirfRANS (pressure 17% better,
+@sec-nb-frame-af-ref-verdict) and DrivAerML Surface (4.8%,
+@sec-nb-frame3d-verdict). The 35-wing HiLiftAeroML rung is the dataset
+where ISLA trails GeoTransolver-512 most, 0.71 of its pressure error
+overall, 0.77 at 4 to 14 degrees and 0.67 at 16 to 22 degrees where the
+flow separates (@sec-nb-hl35-percase). The lane (@sec-nb-frame-wing-launch)
+gave the reference configuration the wing's span and up axes beside the
+far-field direction (K = 3), placed before centering so the rotation
+augmentation carries them with the wing; two seeds, 200,000 cells,
+code_v4. The preregistered bar: the log-gap to GeoTransolver-512 narrows
+by at least 10% in either angle group, both seeds. The prediction was a
+gain of the cars' order, 3 to 5%.
+
+**What we saw** (float32 relative L2 on the 180 validation wings, seed
+means; data results/frame_wing_2026-09-26.json, reducer
+results/frame_wing_reduce_2026-09-26.py). **Pressure 0.1302 (seeds 0.1285,
+0.1320) against the reference pair's 0.1460, a ratio of 0.89**, and every
+other field moves with it: temperature 0.92, density 0.90, velocity 0.93,
+wall shear 0.92 of the reference. GeoTransolver-512 ÷ ISLA on pressure
+moves from 0.71 to 0.80 overall. By angle group the log-gap narrows by
+0.50 and 0.46 (seeds 42, 43) at 4 to 14 degrees, where GeoTransolver ÷
+ISLA goes from 0.78 to 0.88, and by 0.31 and 0.24 at 16 to 22 degrees,
+from 0.67 to 0.75; **both clauses fire on both seeds, five and two times
+the 10% bar.** The gain is nearly uniform across angles (frame ÷ reference
+0.83 to 0.92 at every angle), largest at 12 and 16 degrees.
+
+**Why it matters.** Three datasets now carry the frame result at the
+reference configuration, and the wings are the one where it was predicted
+smallest and came out at 11%. The reading from the ladder holds: the
+frame's value is a richer set of distinct directions for the routing bias
+and the seed, and it pays most where the pressure field depends on the
+body's orientation relative to the flow, which on a high-lift wing at
+angle of attack is everywhere. What it does not do is close the separated
+regime: at 20 and 22 degrees GeoTransolver ÷ ISLA stays at 0.67 and 0.70,
+so the deficit there is still the positional channel named in
+@sec-nb-hl35-percase, not orientation. The frame becomes the labeled
+variant row on the 35-wing rung as on the cars and airfoils; the caveat
+from the launch entry stands, that this pair ran on code_v4 while the
+reference pair ran on code_ref (the two snapshots are exact on the kernel
+and share every configuration value). The 210-case twin runs when the
+GeoTransolver pair on that rung scores.
