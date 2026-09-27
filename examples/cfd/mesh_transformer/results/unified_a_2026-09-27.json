@@ -1,0 +1,70 @@
+{
+ "protocol": "UNIFIED-TOKENS test (a), 2026-09-27: volume-trained provided-geometry ISLA (sg_drvol_provided_seed42/43, code_v3/recipe_v3, 435 cars, 200k interior queries, lr 5e-4) evaluated at the surface dataset's 200,000 vehicle cell centroids of the 48 validation cars (same draw and seed as the fleet scorer); query normals = -cell_normals (the distance gradient into the fluid; the surface dataset's cell normals point into the body, diagnostic 2026-09-27), query sdf = 0 (variant: 2.5e-7, the median |sdf| of the volume set's nearest-wall training points); measure-weighted relative L2 on pressure (Cp) per car, the fleet metric; surface reference p200k_dr_isla_seed42/43 (code_ref/recipe_globin, 200k cells). Pressure only: the volume model has no wall-shear output. First pass with unflipped normals kept for the record.",
+ "runs": {
+  "p200k_dr_isla_seed42": {
+   "pressure_l2": 0.04420152314317723,
+   "n_cars": 48
+  },
+  "p200k_dr_isla_seed43": {
+   "pressure_l2": 0.04490542931792637,
+   "n_cars": 48
+  },
+  "sg_drvol_provided_seed42_at_surface": {
+   "pressure_l2": 0.9488059046367804,
+   "n_cars": 48
+  },
+  "sg_drvol_provided_seed43_at_surface": {
+   "pressure_l2": 0.811280599484841,
+   "n_cars": 48
+  },
+  "sg_drvol_provided_seed42_flip": {
+   "pressure_l2": 0.7485658141473929,
+   "n_cars": 48
+  },
+  "sg_drvol_provided_seed43_flip": {
+   "pressure_l2": 0.7757018121580282,
+   "n_cars": 48
+  },
+  "sg_drvol_provided_seed42_flip_sdfeps": {
+   "pressure_l2": 0.6787114044030508,
+   "n_cars": 48
+  },
+  "sg_drvol_provided_seed43_flip_sdfeps": {
+   "pressure_l2": 0.5905945686002573,
+   "n_cars": 48
+  }
+ },
+ "volume_at_boundary_at_surface": {
+  "label": "unflipped normals, sdf 0",
+  "per_seed": {
+   "42": 0.9488059046367804,
+   "43": 0.811280599484841
+  },
+  "mean": 0.8800432520608107,
+  "ratio_to_surface_pair": 19.752515999129507
+ },
+ "volume_at_boundary_flip": {
+  "label": "flipped normals, sdf 0",
+  "per_seed": {
+   "42": 0.7485658141473929,
+   "43": 0.7757018121580282
+  },
+  "mean": 0.7621338131527106,
+  "ratio_to_surface_pair": 17.10604598413109
+ },
+ "volume_at_boundary_flip_sdfeps": {
+  "label": "flipped normals, sdf 2.5e-7",
+  "per_seed": {
+   "42": 0.6787114044030508,
+   "43": 0.5905945686002573
+  },
+  "mean": 0.634652986501654,
+  "ratio_to_surface_pair": 14.244746767177089
+ },
+ "surface_pair_mean": 0.0445534762305518,
+ "volume_model_interior_pressure_l2": {
+  "42": 0.04027161250511805,
+  "43": 0.03912661721309026,
+  "source": "p200k_fp32/sg_drvol_provided_seed4?/metrics.jsonl infer_summary"
+ }
+}
