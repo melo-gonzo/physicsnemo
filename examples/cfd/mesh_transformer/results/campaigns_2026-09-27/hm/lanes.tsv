@@ -1,0 +1,15 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	hm	hm_poisson_hm_n512_seed42	olbc_poisson_hm	isla_olbc_poisson_hm	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+1	hm	hm_poisson_hm_n512_seed43	olbc_poisson_hm	isla_olbc_poisson_hm	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+2	hm	hm_poisson_hm_n2048_seed42	olbc_poisson_hm	isla_olbc_poisson_hm	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+3	hm	hm_poisson_hm_n2048_seed43	olbc_poisson_hm	isla_olbc_poisson_hm	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+4	hm	hm_poisson_ext_valonly_n512_seed42	olbc_poisson_ext	isla_olbc_poisson_ext_valonly	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+5	hm	hm_poisson_ext_valonly_n512_seed43	olbc_poisson_ext	isla_olbc_poisson_ext_valonly	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+6	hm	hm_poisson_ext_valonly_n2048_seed42	olbc_poisson_ext	isla_olbc_poisson_ext_valonly	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+7	hm	hm_poisson_ext_valonly_n2048_seed43	olbc_poisson_ext	isla_olbc_poisson_ext_valonly	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+8	hm	hm_poisson_ext_distonly_n512_seed42	olbc_poisson_ext	isla_olbc_poisson_ext_distonly	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+9	hm	hm_poisson_ext_distonly_n512_seed43	olbc_poisson_ext	isla_olbc_poisson_ext_distonly	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+10	hm	hm_poisson_ext_distonly_n2048_seed42	olbc_poisson_ext	isla_olbc_poisson_ext_distonly	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+11	hm	hm_poisson_ext_distonly_n2048_seed43	olbc_poisson_ext	isla_olbc_poisson_ext_distonly	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+12	hm	hm_af_provided_hm_seed42	airfrans_volume_hm	isla_volume_airfrans_ref_provided_hm	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	42	100000	code_v7
+13	hm	hm_af_provided_hm_seed43	airfrans_volume_hm	isla_volume_airfrans_ref_provided_hm	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	43	100000	code_v7

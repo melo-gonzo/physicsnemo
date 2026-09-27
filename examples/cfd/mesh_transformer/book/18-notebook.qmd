@@ -29768,3 +29768,31 @@ label-free interior collocation tokens improve a surface-trained readout.
 Artifact results/unified_a_2026-09-27.json (script
 results/unified_eval_2026-09-27.py; metrics under
 results/campaigns_2026-09-27/unified/metrics).
+
+## 2026-09-27 — HARMONIC and EXT-ABL launched: the harmonic-measure transform validated (unit-square series error 0.7%, partition of unity to 1e-9, invariant to 1e-6), both datasets converted, fourteen lanes on code_v7 {#sec-nb-harmonic-launch}
+
+**Validation of the instrument** (`src/harmonic.py`, `tests/test_harmonic.py`, seven
+tests). On a jittered grid on the unit square with the left edge as type A
+and the other three edges as type B, the harmonic measure of A matches the
+series solution of Laplace's equation at 20 interior probes to 0.74% RMS
+relative to the maximum (bar 3%; 0.47% with 8 neighbours, 1.2% with 16,
+0.4% on finer grids). The measures sum to one to 7e-10 and are exactly 1
+and 0 on their own and the other boundary nodes. The per-type harmonic
+extensions equal a direct solve of the same operator to 1e-6 and sum to
+the extension of the full data. Rotating by 0.7 rad and translating leaves
+every field unchanged to 1e-6. An absent type gives zero fields.
+
+**Precompute (CPU partition, 60 workers).** OLBC Poisson: 8,704 of 8,704
+cases in 158 s, median 1.03 s per case (16,598 nodes, 1,116 boundary
+nodes), written to a copy of the dataset (14 GB) with the manifest. AirfRANS:
+1,000 of 1,000 cases in 109 s, median 4.6 s per case (177,416 nodes; the
+far field tagged as the complementary type by the case's 99th-percentile
+stored distance), 9.7 GB. Read-back confirmed the fields and that the
+targets are retained.
+
+**Lanes (campaign hm, code_v7 / recipe_v4 with new files only).** Rows 0-3:
+`hm_poisson_hm` at 512 and 2,048 cases (six harmonic fields in place of the
+six extension scalars). Rows 4-11: `ext_valonly` and `ext_distonly` at both
+rungs. Rows 12-13: `hm_af_provided_hm` (the provided-geometry AirfRANS
+reference plus the airfoil's harmonic measure). Two seeds each; bars in
+@sec-nb-harmonic-prereg; reducer results/harmonic_reduce_2026-09-27.py.
