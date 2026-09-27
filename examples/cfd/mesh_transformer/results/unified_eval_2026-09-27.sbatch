@@ -23,7 +23,7 @@ cd $T/recipe_v3/src
 mkdir -p $T/unified_eval
 trap 'echo "rc=$?" > $T/unified_eval/STATUS_$SLURM_JOB_ID' EXIT
 for s in 42 43; do
-  CUDA_VISIBLE_DEVICES=$((s - 42)) $PY $T/kernel/unified/unified_eval_2026-09-27.py --run sg_drvol_provided_seed$s --seed $s --out $T/unified_eval \
+  RANK=0 WORLD_SIZE=1 LOCAL_RANK=0 MASTER_ADDR=127.0.0.1 MASTER_PORT=$((29700 + s)) CUDA_VISIBLE_DEVICES=$((s - 42)) $PY $T/kernel/unified/unified_eval_2026-09-27.py --run sg_drvol_provided_seed$s --seed $s --out $T/unified_eval \
     > $T/unified_eval/sg_drvol_provided_seed$s.log 2>&1 &
 done
 wait
