@@ -1,0 +1,107 @@
+{
+ "protocol": "GEO-BIAS-K3 reduction (prereg @sec-nb-geo-bias-k3-prereg): inlet + x + y (K = 3) WITH the MLP routing bias on the local\n160-airfoil AirfRANS rung (192 wide, 120 training airfoils, 20,000 queries, 300 epochs, lr 1e-3, eager region), two seeds,\nfloat32 per-case relative L2 on the 40 test airfoils, cases matched by name (the manifest index prefix shifted between\nsplits). Comparators from the same local ladder: the K = 3 linear arm (frameaf_frame), the K = 1 MLP arm (frameaf_mlpbias)\nand the inlet-only linear base (frameaf_base). Bars: one mechanism on velocity = K3-MLP within 3% of K3-linear; additive\nvelocity = >= 8% better; additive pressure = >= 6% better; not additive pressure = within 3%.\nusage: python geo_bias_k3_reduce_2026-09-26.py [out.json]",
+ "n_cases": 40,
+ "per_run": {
+  "base": {
+   "42": {
+    "pressure_l2": 0.30079437531530856,
+    "velocity_l2": 0.13026842344552278,
+    "nut_l2": 0.22666330058127643
+   },
+   "43": {
+    "pressure_l2": 0.40832084249705075,
+    "velocity_l2": 0.1302637778222561,
+    "nut_l2": 0.28860119804739953
+   }
+  },
+  "mlpbias_k1": {
+   "42": {
+    "pressure_l2": 0.34815726075321435,
+    "velocity_l2": 0.11893636276945471,
+    "nut_l2": 0.24269059337675572
+   },
+   "43": {
+    "pressure_l2": 0.31785858124494554,
+    "velocity_l2": 0.11380233522504568,
+    "nut_l2": 0.21538794944062828
+   }
+  },
+  "frame_k3": {
+   "42": {
+    "pressure_l2": 0.24827545788139105,
+    "velocity_l2": 0.11485804710537195,
+    "nut_l2": 0.22046803403645754
+   },
+   "43": {
+    "pressure_l2": 0.2848828128539026,
+    "velocity_l2": 0.11676400639116764,
+    "nut_l2": 0.20393007108941674
+   }
+  },
+  "framemlp_k3": {
+   "42": {
+    "pressure_l2": 0.3025647328235209,
+    "velocity_l2": 0.10706795807927846,
+    "nut_l2": 0.20916905738413333
+   },
+   "43": {
+    "pressure_l2": 0.33481488870456816,
+    "velocity_l2": 0.10626337099820375,
+    "nut_l2": 0.19556414633989333
+   }
+  }
+ },
+ "seed_means": {
+  "base": {
+   "pressure_l2": 0.35455760890617966,
+   "velocity_l2": 0.13026610063388944,
+   "nut_l2": 0.257632249314338
+  },
+  "mlpbias_k1": {
+   "pressure_l2": 0.33300792099907994,
+   "velocity_l2": 0.1163693489972502,
+   "nut_l2": 0.229039271408692
+  },
+  "frame_k3": {
+   "pressure_l2": 0.2665791353676468,
+   "velocity_l2": 0.11581102674826979,
+   "nut_l2": 0.21219905256293714
+  },
+  "framemlp_k3": {
+   "pressure_l2": 0.31868981076404457,
+   "velocity_l2": 0.1066656645387411,
+   "nut_l2": 0.20236660186201333
+  }
+ },
+ "ratios": {
+  "framemlp_over_frame": {
+   "pressure_l2": 1.1954791972917551,
+   "velocity_l2": 0.9210320254788232,
+   "nut_l2": 0.9536640216713147
+  },
+  "framemlp_over_mlpbias": {
+   "pressure_l2": 0.9570036947106885,
+   "velocity_l2": 0.9166130553953825,
+   "nut_l2": 0.8835454313898657
+  },
+  "framemlp_over_base": {
+   "pressure_l2": 0.8988378834886994,
+   "velocity_l2": 0.81882902781072,
+   "nut_l2": 0.7854862983985563
+  },
+  "frame_over_base": {
+   "pressure_l2": 0.7518640939339902,
+   "velocity_l2": 0.8890342628260182,
+   "nut_l2": 0.8236509719869439
+  },
+  "mlpbias_over_base": {
+   "pressure_l2": 0.9392209125800991,
+   "velocity_l2": 0.8933202761960626,
+   "nut_l2": 0.8890163091703649
+  }
+ },
+ "verdict": {
+  "velocity": "between",
+  "pressure": "between"
+ }
+}

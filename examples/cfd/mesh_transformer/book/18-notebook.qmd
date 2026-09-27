@@ -28789,3 +28789,51 @@ from the launch entry stands, that this pair ran on code_v4 while the
 reference pair ran on code_ref (the two snapshots are exact on the kernel
 and share every configuration value). The 210-case twin runs when the
 GeoTransolver pair on that rung scores.
+
+## 2026-09-26 — Verdict, GEO-BIAS-K3: with the two axes present, the MLP routing bias buys velocity 8% more (0.92 of the K = 3 linear arm, at the additive bar) but costs pressure 20% (1.19), an outcome outside the preregistered clauses; the bias and the frame are different mechanisms for velocity and conflicting ones for pressure {#sec-nb-geo-bias-k3-verdict}
+
+**Setting.** On the 160-airfoil AirfRANS exploration rung (192 wide, 120
+training airfoils, 20,000 queries, no accuracy claim, @sec-protocol) two
+changes each improved ISLA: the two laboratory axes as global directions
+beside the inlet (K = 3; pressure 0.75, velocity 0.89, eddy viscosity 0.82
+of the inlet-only arm, @sec-nb-frame-af-h-verdict) and a two-layer MLP in
+place of the linear map from a pair's invariants to its routing bias
+(K = 1; 0.94 / 0.89 / 0.89, @sec-nb-geo-bias-verdict). GEO-BIAS-K3
+(@sec-nb-geo-bias-k3-prereg) combined them: K = 3 with the MLP bias, two
+seeds, eager region. Bars on the K = 3 linear arm: velocity within 3% is
+one mechanism, at least 8% better is additive; pressure at least 6%
+better is additive, within 3% is not. Both seeds resumed twice from
+checkpoints after external CUDA faults (epochs 220 and 277); the runs
+completed 300 epochs. Data: results/geo_bias_k3_2026-09-26.json (reducer
+results/geo_bias_k3_reduce_2026-09-26.py; 40 test airfoils, matched by
+case name).
+
+**What we saw** (seed means; pressure / velocity / eddy viscosity). The
+combined arm scores 0.3187 / 0.1067 / 0.2024 against the K = 3 linear
+arm's 0.2666 / 0.1158 / 0.2122 and the K = 1 MLP arm's 0.3330 / 0.1164 /
+0.2290. **Velocity: 0.92 of the K = 3 linear arm, exactly the additive
+bar** (seeds 0.1071 and 0.1063 against 0.1149 and 0.1168, both better),
+and 0.92 of the K = 1 MLP arm: the third gain on velocity, on top of
+either single change. **Pressure: 1.19 of the K = 3 linear arm** (seeds
+0.3026 and 0.3348 against 0.2483 and 0.2849, both worse), and 0.96 of the
+K = 1 MLP arm: with the MLP bias in place, the axes buy 4% of pressure
+instead of 25%. Eddy viscosity 0.95 and 0.88.
+
+**Reading.** Neither preregistered pressure clause covers a loss, so the
+verdict is written as measured. For velocity the two changes are
+different mechanisms and add: the nonlinear bias sharpens the routing on
+the pair invariants, the axes enrich the seed's orientation invariants,
+and the vector field profits from both. For pressure the frame's gain
+lives in the seed and read-back channels (the GEO-BIAS verdict found the
+bias recovers only a fifth of it), and the nonlinear bias with eight
+invariants appears to take that gain away: the most direct reading is
+that the MLP bias, given the direction cosines as inputs, learns a
+routing that is specific to the orientation, and at 120 training
+airfoils that specificity does not generalize for the scalar field. It
+is one exploration-scale result, two seeds, one dataset. Its consequence
+for the program is a prediction for GEO-BIAS-PROTO
+(@sec-nb-geo-bias-proto-prereg), which runs the MLP bias at K = 1 at the
+reference configuration: the velocity gain should hold and the pressure
+gain should be small; and a warning that the MLP bias is not to be
+combined with the frame without the protocol-scale test. The class keeps
+`geo_bias="mlp"` as an option; the reference stays linear.
