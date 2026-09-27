@@ -1,0 +1,70 @@
+{
+ "protocol": "FRAME-VOL (2026-09-26, prereg in the FRAME-VOL ledger row and @sec-nb-frame-provided-verdict): DrivAerML Volume, 435 cars, 200,000 interior queries, 48 validation cars, float32 per-case relative L2; ISLA R1 with the three body axes beside the inlet (K = 4, four-vector fused kernel) on the provided (stored SDF) geometry, fa rows 14-15, code_v4; the frame-on-internal pair (rows 12-13) is still training. Comparators: sg Volume pairs (provided, internal) and GeoTransolver-volume (ratevol_reduction_2026-09-20.json).",
+ "n_cases": 48,
+ "status": "interim (provided half; internal half training)",
+ "frame_provided": {
+  "per_seed": {
+   "42": {
+    "velocity_x_l2": 0.04083924946219971,
+    "velocity_y_l2": 0.0805796707669894,
+    "velocity_z_l2": 0.09845213561008374,
+    "velocity_l2": 0.05167424438210825,
+    "pressure_l2": 0.03797053243033588,
+    "nut_l2": 0.08483441461188097
+   },
+   "43": {
+    "velocity_x_l2": 0.04097628434343884,
+    "velocity_y_l2": 0.08046729226286213,
+    "velocity_z_l2": 0.09869116637855768,
+    "velocity_l2": 0.051763849100098014,
+    "pressure_l2": 0.0382836979891484,
+    "nut_l2": 0.08391234247634809
+   }
+  },
+  "seed_means": {
+   "pressure_l2": 0.03812711520974214,
+   "velocity_l2": 0.05171904674110313,
+   "nut_l2": 0.08437337854411453
+  }
+ },
+ "comparators": {
+  "provided_ref": {
+   "velocity_l2": 0.05760758661199361,
+   "pressure_l2": 0.03969911493671437,
+   "nut_l2": 0.0874049635604024
+  },
+  "internal_ref": {
+   "velocity_l2": 0.06554967048577964,
+   "pressure_l2": 0.040919550093046084,
+   "nut_l2": 0.0893830497128268
+  },
+  "gt_vol": {
+   "pressure_l2": 0.04771365722020467,
+   "velocity_l2": 0.10081404447555542,
+   "nut_l2": 0.08432833850383759
+  }
+ },
+ "ratios": {
+  "frame_provided_over_provided_ref": {
+   "pressure_l2": 0.9604021467612514,
+   "velocity_l2": 0.8977818683752233,
+   "nut_l2": 0.9653156423525897
+  },
+  "frame_provided_over_internal_ref": {
+   "pressure_l2": 0.9317579280086344,
+   "velocity_l2": 0.7890054420994087,
+   "nut_l2": 0.9439527831640615
+  },
+  "gt_vol_over_frame_provided": {
+   "pressure_l2": 1.2514363323247963,
+   "velocity_l2": 1.9492633918837217,
+   "nut_l2": 0.9994661818567169
+  },
+  "gt_vol_over_provided_ref": {
+   "pressure_l2": 1.2018821400997612,
+   "velocity_l2": 1.7500133299207927,
+   "nut_l2": 0.9648003393487069
+  }
+ },
+ "frame_pays_on_provided": "bar (3% pressure, both seeds) evaluated against the provided PAIR MEAN: True"
+}

@@ -28837,3 +28837,42 @@ reference configuration: the velocity gain should hold and the pressure
 gain should be small; and a warning that the MLP bias is not to be
 combined with the frame without the protocol-scale test. The class keeps
 `geo_bias="mlp"` as an option; the reference stays linear.
+
+## 2026-09-26 — Interim, FRAME-VOL (provided-geometry half): on DrivAerML Volume the three body axes on the stored signed-distance field cut pressure 4%, velocity 10% and eddy viscosity 3.5% against the provided reference pair (both seeds); GeoTransolver-volume ÷ ISLA 1.25 / 1.95 / 1.00; the frame-on-internal pair is still training {#sec-nb-frame-vol-interim}
+
+**Setting.** FRAME-PROVIDED (@sec-nb-frame-provided-verdict) found on
+AirfRANS that the laboratory frame and the stored signed-distance field
+add. The DrivAerML Volume twin launched with it (fa rows 12 to 15): the
+reference configuration with the three body axes beside the inlet
+(K = 4) on the internal geometry and on the provided geometry, 435 cars,
+200,000 interior queries, two seeds each, code_v4. The FRAME-VOL ledger
+row's first clause is that the frame pays on the Volume task at all:
+pressure at least 3% better than the same-geometry reference pair on both
+seeds. The provided-geometry pair (rows 14 and 15) is scored; the
+internal-geometry pair (rows 12 and 13) is at epoch 430 of 500 and decides
+the additivity clause.
+
+**What we saw** (float32 relative L2 on the 48 validation cars; data
+results/frame_vol_2026-09-26.json). The frame on the stored field scores
+**0.0381 / 0.0517 / 0.0844 on pressure / velocity / eddy viscosity (seeds
+0.0380 and 0.0383 on pressure) against the provided reference pair's
+0.0397 / 0.0576 / 0.0874: 0.96 / 0.90 / 0.97**, both seeds under the 3%
+pressure bar (0.956, 0.964). Against the internal-geometry reference it is
+0.93 / 0.79 / 0.94. GeoTransolver-volume (0.0477 / 0.1008 / 0.0843) ÷ this
+model is **1.25 on pressure, 1.95 on velocity and 1.00 on eddy
+viscosity**, where the provided reference stood at 1.20 / 1.75 / 0.97.
+
+**Reading, interim.** The frame pays on the Volume task, 4% of pressure
+against 4.8% on the Surface task of the same cars, and a 10% velocity
+gain that the Surface task had no field to show. With the stored field
+underneath, ISLA leads GeoTransolver-volume by a quarter on pressure and a
+factor of two on velocity and ties on eddy viscosity, the same picture as
+AirfRANS with the frame and the stored field. Whether the frame's gain
+here is additive with the stored field's (the AirfRANS reading) or
+overlaps it waits for the internal-geometry pair; the additive clause is
+at least 10% better than the provided pair on pressure and 5% better than
+the frame-on-internal arm on velocity, and the 4% pressure gain already
+says the pressure half of that clause will not fire on this dataset. The
+finding that the frame is worth having on both interior tasks is now two
+datasets at protocol scale (AirfRANS, DrivAerML Volume), matching the two
+surface tasks (DrivAerML Surface, HiLiftAeroML 35-wing).
