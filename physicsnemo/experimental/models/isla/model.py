@@ -1539,6 +1539,12 @@ class ISLA(Module):
             unit separation against each global direction and both normals, the
             normals' dot product), before the slice routing. Relative geometry
             only, so the contracts hold (LOCAL-AGG study, 2026-09-27).
+        seed_directions: How many of the global directions, in input order, enter the
+            token seed as ``n . g_k`` (default all). ``geometry_directions``: how many
+            enter the slice blocks' geometry channels (the routing bias and the
+            pooled invariants; default all). The output basis always sees every
+            direction. Mechanism study options (FRAME-CHANNEL, 2026-09-27): which
+            channel carries the frame's gain.
         local_k: With ``local_rho``, the number of nearest tokens each token's kernel
             runs over (default 32; the neighbour indices are computed once per forward
             from the positions). ``0`` is the dense form over all tokens, O(N^2) per
@@ -1652,6 +1658,8 @@ class ISLA(Module):
         geo_bias: str = "linear",
         local_rho: float | None = None,
         local_k: int = 32,
+        seed_directions: int | None = None,
+        geometry_directions: int | None = None,
         eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
@@ -1730,6 +1738,21 @@ class ISLA(Module):
             n for n, s in self.global_specs.items() if s.rank == 0
         ]
         self.n_global_vectors = K = len(self.global_vector_names)
+        ### FRAME-CHANNEL (2026-09-27): how many of the K global directions (in input
+        ### order) enter the token seed (n . g_k) and the slice blocks' geometry channels
+        ### (rel . g_k in the routing bias and the pooled invariants). The output basis
+        ### always sees all K. None = all K.
+        for _name, _val in (
+            ("seed_directions", seed_directions),
+            ("geometry_directions", geometry_directions),
+        ):
+            if _val is not None and not (0 <= int(_val) <= K):
+                raise ValueError(
+                    f"{_name} must be between 0 and the number of global directions "
+                    f"({K}), got {_val!r}"
+                )
+        self.k_seed = K if seed_directions is None else int(seed_directions)
+        self.k_geo = K if geometry_directions is None else int(geometry_directions)
         self.n_global_scalars = sum(
             self.global_specs[n].channels for n in self.global_scalar_names
         )
@@ -1801,16 +1824,16 @@ class ISLA(Module):
                     "geo_kernel='fused' does not support rank-2 boundary or query inputs "
                     "(kernel follow-up); use geo_kernel='eager' or None"
                 )
-            if not 1 <= K + self.n_block_vecs <= 4 or K < 1:
+            if not 1 <= self.k_geo + self.n_block_vecs <= 4 or self.k_geo < 1:
                 raise ValueError(
                     f"geo_kernel='fused' is written for one to four per-point vectors "
-                    f"(global directions plus rank-1 token inputs); got {K} global "
-                    f"direction(s) and {self.n_block_vecs} token vector(s)"
+                    f"(global directions plus rank-1 token inputs); got {self.k_geo} global "
+                    f"direction(s) in the geometry channels and {self.n_block_vecs} token vector(s)"
                 )
         ### Seed width: the K invariants n.g_k (the only origin-free scalars of
         ### {n, g_k}; positions enter through the anchors), the boundary inputs'
         ### invariants and the global scalars.
-        n_seed = K + self.bin.n_features + self.n_global_scalars
+        n_seed = self.k_seed + self.bin.n_features + self.n_global_scalars
         ### With no global inputs and no other seed channel the seed is empty;
         ### every token then starts from one learned embedding and all
         ### separation comes from the slice blocks' relational anchors.
@@ -1829,7 +1852,7 @@ class ISLA(Module):
                 geo_checkpoint=geo_checkpoint,
                 fast_point_softmax=self.fast_point_softmax,
                 geo_kernel=geo_kernel,
-                n_global_vectors=K,
+                n_global_vectors=self.k_geo,
                 n_block_vecs=self.n_block_vecs,
                 n_block_tens=self.n_block_tens,
                 routing_norm=routing_norm,
@@ -1867,7 +1890,7 @@ class ISLA(Module):
                     mlp_ratio,
                     geo_checkpoint=geo_checkpoint,
                     geo_kernel=geo_kernel,
-                    n_global_vectors=K,
+                    n_global_vectors=self.k_geo,
                     n_block_vecs=self.n_block_vecs,
                     n_block_tens=self.n_block_tens,
                     routing_norm=routing_norm,
@@ -1987,7 +2010,7 @@ class ISLA(Module):
         """The per-token seed invariants: the K terms n.g_k (an empty tensor when
         K = 0). Positions have no origin, so they carry no seed scalar; they
         enter through the point-to-anchor invariants of the slice blocks."""
-        return self._dots(n_hat, g_hat)
+        return self._dots(n_hat, g_hat[:, :, : self.k_seed])
 
     def _with_global_scalars(self, inv, g_scalars, n_tokens: int):
         """Append the global scalar inputs (B, S) to every token's seed features;
@@ -2197,6 +2220,7 @@ class ISLA(Module):
             return t
 
         K = self.n_global_vectors
+
         if K:
             gv = torch.stack(
                 [_rows(k, fields[k], 3) for k in self.global_vector_names], 1
@@ -2448,7 +2472,7 @@ class ISLA(Module):
         if self.local_rho is not None and self.local_k > 0:
             nbr_idx = _knn_indices(r, self.local_k)  # positions only; shared by every block
         for block in self.blocks:
-            h = block(h, log_w, r, n_hat, g_hat, self.eps, vecs, tens, nbr_idx=nbr_idx)
+            h = block(h, log_w, r, n_hat, g_hat[:, :, : self.k_geo], self.eps, vecs, tens, nbr_idx=nbr_idx)
 
         ### The head frame builds its slice anchors from the SOURCE tokens
         ### (src_r, src_logw, and h); the branches below overwrite n_hat, g_out
@@ -2517,7 +2541,7 @@ class ISLA(Module):
                     q_h,
                     q_r,
                     q_nhat,
-                    q_g,
+                    q_g[:, :, : self.k_geo],
                     z_states,
                     z_pos,
                     m_s,

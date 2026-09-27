@@ -29188,3 +29188,74 @@ recommended input on fixed-frame datasets; and the mechanism question
 moves to the seed and read-back channels, where a direct test would give
 the directions to the seed only or to the geometry channels only.
 Two datasets, two seeds each, at protocol scale.
+
+## 2026-09-27 — Preregistration, FRAME-CHANNEL: which channel carries the frame's gain? The three global directions given to the token seed only, or to the geometry channels only, on the local AirfRANS rung, two seeds each {#sec-nb-frame-channel-prereg}
+
+**Setting.** ISLA reads its $K$ global directions (unit vectors such as
+the freestream direction and, in the frame arms, two fixed laboratory
+axes) in three places: the *token seed*, where each boundary token starts
+from the cosines between its normal and every direction ($n \cdot g_k$);
+the *geometry channels* of every slice block, where the relative-position
+invariants $\mathrm{rel} \cdot g_k$ enter the routing bias and the pooled
+pair invariants; and the *output basis*, where vector outputs are
+assembled from the directions, the normal and the pooled position. Giving
+the laboratory frame to all three at once ($K = 3$) improved AirfRANS
+interior error by 17 to 25% on pressure at both scales
+(@sec-nb-frame-af-local-verdict, @sec-nb-frame-af-ref-verdict) and 5% on
+DrivAerML Surface pressure. The GEO-BIAS-PROTO verdict
+(@sec-nb-geo-bias-proto-verdict) refuted the nearest mechanistic account,
+that the routing bias's nonlinearity was the capacity the directions
+supply, and pointed at the seed and read-back channels as the place for a
+direct test.
+
+**Question.** Is the frame's gain carried by the token seed (each boundary
+point learning where it sits on the airfoil from its normal's orientation
+in the laboratory frame), by the geometry channels (the routing and the
+pooled invariants seeing relative positions resolved along fixed axes), or
+by both jointly?
+
+**Instrument.** Two new constructor options,
+`seed_directions` and `geometry_directions`, take the first $m \le K$
+directions in input order for the named channel and leave the other
+channels at all $K$; the output basis always sees all $K$
+(`test_direction_channel_split_keeps_the_contracts_and_defaults_to_all_directions`:
+both at $K$ reproduces the plain model bit for bit, and every split keeps
+rotation equivariance, magnitude invariance and trained parameters). With
+the freestream direction first and the two axes after it, two arms on the
+local AirfRANS rung (160 airfoils, 192 x 12 x 256, cosine routing, fused
+kernel, 20,000 interior queries, 300 epochs, learning rate 1e-3, exactly
+the FRAME-AF local recipe): *seed-only* (`geometry_directions: 1`, so the
+seed sees all three directions and the geometry channels see the
+freestream only) and *geometry-only* (`seed_directions: 1`). Seeds 42 and
+43, one RTX 4090 laptop GPU, two runs in parallel. Readout: float32
+relative L2 on the 40 local test airfoils for pressure, velocity and eddy
+viscosity, against the FRAME-AF base and frame arms already on disk
+(results/frame_af_local_2026-09-23.json; base 0.355 / 0.130 / 0.258, frame
+0.267 / 0.116 / 0.212 on the two-seed means).
+
+**Bars (fraction of the frame's log-gain recovered on the two-seed means,
+per field; the gap being $\log(\text{base}/\text{frame})$).** *Seed
+carries it*: seed-only recovers $\ge 0.75$ of the pressure gain and
+geometry-only $\le 0.35$. *Geometry carries it*: the reverse. *Joint*:
+both arms $\le 0.5$, so neither channel alone gives the gain and the
+frame's effect requires the directions in both places. *Either suffices*:
+both arms $\ge 0.75$ (the directions are redundant across channels).
+Anything between the thresholds is recorded as between. Velocity and eddy
+viscosity are read the same way as supporting evidence; pressure decides,
+because pressure is the field the frame moved most. A seed-only recovery
+above the frame arm itself (fraction $> 1$) would mean the geometry
+channels' extra invariants were hurting and would send a K = 3 fused
+kernel with fewer geometry invariants to protocol scale.
+
+**Prediction.** Seed carries it (0.5): the AirfRANS deficit sits at the
+ends of the angle range and on pressure, which reads like each boundary
+point needing to know its station on the airfoil (leading edge versus
+trailing edge, upper versus lower surface), a property of the normal's
+orientation in the fixed frame that the seed encodes directly and the
+geometry channels only indirectly. Joint (0.3), either (0.15), geometry
+(0.05). This is an exploration-scale mechanism reading; whichever
+channel wins, the standing stays with the full frame arm at protocol
+scale (@sec-nb-frame-af-ref-verdict), and the winning channel-only arm
+goes to the 800-airfoil reference twin only if it recovers $\ge 0.9$ of
+the gain, because a cheaper variant that matches the full frame is worth
+a protocol-scale run and one that trails it is not.
