@@ -29446,11 +29446,14 @@ GeoTransolver widths missing at 510 wings (256 and 512) come from the
 SCALE-HL campaign's lanes at the same protocol (100,000 cells, 500
 epochs, rate 3e-3; runs `shl_med_gt_w256_c100k` and `shl_med_gt_w512_c100k`,
 recorded as pseudo-rows 100-103 of
-results/campaigns_2026-09-21/sl/lanes_plus_shl_2026-09-27.tsv). One score,
-ISLA 768 at 510 wings seed 42, is still being written by the scorer.
-Two-seed means at 510 wings so far: ISLA 0.0424 / 0.0415 / 0.038 (192 /
-384 / 768, the last on one seed), GeoTransolver 0.039 (one seed) / 0.0382
-/ 0.0363 (256 / 512 / 1,024).
+results/campaigns_2026-09-21/sl/lanes_plus_shl_2026-09-27.tsv). With the
+last score written the three-rung grid is complete on both seeds for all
+eighteen configurations. Two-seed means at 510 wings: ISLA 0.0424 /
+0.0415 / 0.0389 (192 / 384 / 768; seeds 0.0434 / 0.0415, 0.0419 / 0.0410,
+0.0397 / 0.0381), GeoTransolver 0.0387 / 0.0382 / 0.0363 (256 / 512 /
+1,024). Width pays on the wings at 510 cases for both architectures (ISLA
+8% from 192 to 768, GeoTransolver 6% from 256 to 1,024), where at 35 and
+210 wings the widest GeoTransolver was not the best.
 
 **Why a fourth rung.** The reducer's fit gate requires at least four
 distinct training-set sizes (five parameters, two seeds per point), a
