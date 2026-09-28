@@ -30401,3 +30401,77 @@ two-dimensional pseudovector and no out-of-plane cross products), not
 speed. The 2,048 pair is at epoch 340 and closes the ledger criterion if
 it agrees. Data: results/harmonic_2026-09-27.json (poisson, 512, arm
 nd_distonly_2d).
+
+## 2026-09-28 — Preregistration, LOCAL-AGG stencil diagnostic on AirfRANS: does the aggregation's loss on a resampled point cloud disappear when each airfoil keeps one fixed query draw? Two arms on a fixed draw, two seeds {#sec-nb-local-agg-stencil-prereg}
+
+**Setting.** The local relational aggregation pays on both fixed-mesh OLBC
+sets and hurts on the AirfRANS interior task by 13 to 37%
+(@sec-nb-local-agg-elasticity-verdict). The one structural difference
+between those tasks is how the queries are drawn: an OLBC case is one
+fixed mesh whose 16,598 or 11,786 nodes are all present at every epoch,
+while an AirfRANS case has about 177,000 nodes of which the datapipe draws
+100,000 afresh every epoch, so the 32 nearest tokens of a physical point
+differ from visit to visit and the aggregation learns from a stencil that
+never repeats. The geometry also varies on AirfRANS and not on OLBC, so the
+resampling is a hypothesis, not a diagnosis.
+
+**Instrument.** A recipe reader, `FixedDrawDomainMeshReader`, ignores the
+epoch in the subsampling seed, so each airfoil keeps the draw of epoch 0 for
+the whole run (test-time draws are unchanged). Two arms on this reader,
+campaign la rows 18-21 on code_v7, 800 airfoils, 100,000 queries, seeds 42
+and 43: the frame-free interior reference (no aggregation) as the fixed-draw
+control, and the same model with the aggregation ($\rho$ 0.05, 32
+neighbours). The comparison is aggregation ÷ control on the fixed draw
+against the resampled pair's 1.13 / 1.20 / 1.37 (pressure / velocity / eddy
+viscosity).
+
+**Bars (two-seed means, every field).** *Stencil hypothesis supported*:
+aggregation ÷ control at or below 1.03 on every field under the fixed draw.
+*Refuted*: at or above 1.10 on any field (the loss survives a fixed
+stencil, so it is about the varying geometry or the point cloud itself).
+*Between* otherwise. Also read: fixed-draw control ÷ resampled reference,
+the price of losing the per-epoch augmentation (expected above one; it
+does not enter the verdict). Prediction: supported (0.45), between (0.35),
+refuted (0.2). If supported, the remedy for point clouds is a stencil that
+is a function of position and not of the draw (a fixed per-case
+neighbour graph, or aggregation over the boundary tokens only, which are
+never resampled); if refuted, the aggregation stays a fixed-mesh option.
+
+## 2026-09-28 — Preregistration, HARMONIC and EXT-DIST on OLBC elasticity: the per-condition-type geometry channel (harmonic measures or nearest distances, four per-component types) on top of the rank-1-input arm, 512 and 2,048 cases, two seeds; plus the harmonic channel with local aggregation at 2,048 {#sec-nb-harmonic-elasticity-prereg}
+
+**Setting.** On the OLBC Poisson set one geometry scalar per condition type
+(the harmonic measure or the nearest distance of each type) recovers more
+than the whole log-gap to GeoTransolver-512 and the harmonic encoding is 6%
+better at 2,048 cases (@sec-nb-harmonic-2048-verdict). The two-dataset rule
+asks for a second set. OLBC elasticity is the natural one: a fixed mesh with
+three boundary loops whose exterior circle is cut per sample and per
+component into a free segment, a prescribed-displacement segment and two
+traction segments, so the condition types are per component, Dirichlet-x,
+Neumann-x, Dirichlet-y, Neumann-y (four types; the free surface is the
+complement). The rank-1-input arm (RANK-IO, on code_v7) is the base:
+0.201 / 0.297 / 0.305 / 0.301 on displacement and the three stresses at
+2,048 cases, GeoTransolver-512 0.165 / 0.257 / 0.261 / 0.267
+(@sec-nb-local-agg-elasticity-ctrl-2048); the 512 base is the code_v2
+RANK-IO record 0.670 / 0.740 / 0.751 / 0.780 (a snapshot confound of about
+0.1 in log-gap fraction is known from the 2,048 control and is read against).
+
+**Arms (campaign hm rows 30-39, code_v7, recipe_v4).** Harmonic measures
+(four `hm_*` query scalars from Laplace solves on the interior point cloud,
+dataset `olbc_elasticity_hm_pdmsh`, measures only since the prescribed data
+are vectors and the Poisson study showed value channels hurt) at 512 and
+2,048; nearest distances (four `ext_dist_*` query scalars from the
+extension transform with the distance fields only) at 512 and 2,048;
+harmonic measures with the local aggregation at 2,048. Two seeds each.
+
+**Bars (two-seed means of the ratio to the base at the same rung, on the
+three stresses; displacement read separately).** *Pays*: at or below 0.95
+on every stress on both seeds. *Null*: within 3%. *Hurts*: above 1.05 on
+any stress. Encoding: harmonic ÷ distances at or below 0.95 on the stress
+mean at 2,048 = the Poisson 6% edge reproduces; within 5% = interchangeable.
+Combination: measures plus aggregation ÷ the better single arm at 2,048 at
+or below 0.90 on the stress mean = additive, as on Poisson. Prediction:
+pays on the stresses at both rungs (0.55), null (0.3); the aggregation
+already closes the stresses at 2,048 so the combination's value is whether
+it also lifts displacement (base 0.201, aggregation 0.216,
+GeoTransolver-512 0.165). The inputs are admissible: geometry and condition
+labels of the one sample.
