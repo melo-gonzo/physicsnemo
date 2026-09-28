@@ -30125,3 +30125,36 @@ stress concentration at the hole needs more sequential refinement) is
 kept as the hypothesis it is. ISLA at either depth is at parity with or
 ahead of both GeoTransolver widths at 2,400 lugs. Artifact
 results/solids_lug_2026-09-22.json (refreshed with the third seeds).
+
+## 2026-09-28 — Status, LOCAL-AGG elasticity 2,048-case control scored (two seeds): the RANK-IO arm rebuilt on the current snapshot scores 0.201 / 0.297 / 0.305 / 0.301, 6 to 9% better than the code_v2 RANK-IO record; the aggregation twin is compared against this arm {#sec-nb-local-agg-elasticity-ctrl-2048}
+
+**Setting.** The LOCAL-AGG elasticity interim (@sec-nb-local-agg-elasticity-interim)
+compared a code_v7 aggregation arm against a RANK-IO record trained on
+code_v2 and flagged the snapshot difference as a confound. The 2,048-case
+rung carries a same-snapshot control: the RANK-IO configuration
+(prescribed displacement and traction as rank-1 boundary inputs, one
+symmetric rank-2 stress output, boundary-value extension) on code_v7 with
+no local aggregation. Both seeds of that control are scored; the
+aggregation twin is at epoch 340 of 500.
+
+**What we saw (2,048 cases, 256 test cases, relative L2 on displacement /
+$\sigma_{11}$ / $\sigma_{22}$ / $\sigma_{12}$).** The code_v7 control scores
+**0.201 / 0.297 / 0.305 / 0.301** (seed 42: 0.207 / 0.309 / 0.318 / 0.311;
+seed 43: 0.194 / 0.286 / 0.293 / 0.290), against the code_v2 RANK-IO
+record 0.221 / 0.319 / 0.326 / 0.329 (seed 42: 0.201 / 0.298 / 0.309 /
+0.303; seed 43: 0.241 / 0.340 / 0.343 / 0.354). Ratios 0.91 / 0.93 /
+0.94 / 0.91. Fraction of the log-gap to GeoTransolver-512 (0.165 / 0.257 /
+0.261 / 0.267): 0.75 / 0.81 / 0.76 / 0.83, mean **0.787**, against 0.677
+for the code_v2 record. GeoTransolver-512 ÷ control 0.82 / 0.87 / 0.85 /
+0.89.
+
+**Reading.** The gain over the code_v2 record is almost entirely seed 43:
+the code_v2 seed 43 sat 20% above its seed 42 on displacement, and the
+code_v7 pair is within 7%. The current snapshot differs from code_v2 in
+the rms-distance normalization, the fused kernel and the routing default,
+so the 0.11 shift in log-gap fraction is not attributable to one of them
+here and is recorded as a snapshot effect. Consequence for the LOCAL-AGG
+elasticity verdict: the "pays" bar (fraction 0.88 or above, both seeds)
+and the "between" clause are read against the control's 0.787, not the
+code_v2 record's 0.677. Artifact results/local_agg_2026-09-27.json
+(elasticity, 2048, arm rankio_ctrl_v7).
