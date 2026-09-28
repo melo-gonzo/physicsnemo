@@ -30489,3 +30489,72 @@ both fixed-mesh sets, hurts on the resampled point cloud. The fixed-draw
 diagnostic (@sec-nb-local-agg-stencil-prereg, la rows 18-21) is training
 and separates the resampling from the varying geometry. Artifact
 results/local_agg_2026-09-27.json (airfrans, two seeds).
+
+## 2026-09-28 — Preregistration, LOCAL-LPR: polynomial-reproduction stencil weights and finite-difference channels for the local aggregation, after the meshfree exterior calculus of Shaffer, Kinch, Hsieh and Trask (arXiv 2605.08436); AirfRANS interior (two arms) and OLBC Poisson 512 (regression check), two seeds {#sec-nb-local-lpr-prereg}
+
+**Setting.** The local relational aggregation pays on the two fixed-mesh
+OLBC sets and hurts by 13 to 22% on the AirfRANS interior, whose 100,000
+queries are redrawn from a 177,000-node cloud every epoch
+(@sec-nb-local-agg-airfrans-verdict). The fixed-draw diagnostic
+(@sec-nb-local-agg-stencil-prereg) asks whether the redraw is the cause.
+This entry preregisters the remedy that the meshfree-calculus paper Peter
+pointed at suggests, and it is a test of the same hypothesis by a different
+instrument. In that paper the discrete divergence on an epsilon-ball graph
+is given edge weights chosen so that the stencil reproduces linear vector
+polynomials at every node (one sparse quadratic program), which makes the
+operator a consistent estimate of the continuum divergence for any
+quasi-uniform point cloud; and the learned flux law reads invariant
+edge-frame features, the midpoint state and the state difference along the
+edge divided by its length. Our aggregation instead pools the 32 nearest
+tokens with normalized measure-weighted Gaussian weights, a smoother whose
+first moment is O(h) on an asymmetric stencil: the pooled value at a
+physical point depends on which neighbours the draw supplied.
+
+**The change (ISLA `local_weights="lpr"`, `local_gradient`; commit
+56e0c74f).** With `lpr`, each token's neighbour weights are the value row
+of the weighted least-squares fit of an affine field over its neighbours
+(a generalized moving least squares stencil of degree one, computed from
+positions only, no parameters, a (d + 1) by (d + 1) solve per token). They
+sum to one and have zero first moment, so an affine field is reproduced
+exactly at the token (tested to 1e-4) and the pooled value is a consistent
+estimate of the same continuum quantity for any neighbour draw, which is
+the property the Gaussian weights lack. With `local_gradient`, the fit's
+gradient of the token states, projected on the receiving token's normal and
+on each global direction (K + 1 invariant channels per hidden unit, in units
+of the state per radius), is pooled alongside: the edge-frame directional
+derivative of the paper's flux law, made a token feature. Both keep the
+rotation, translation and reflection contracts (tests); the default path is
+unchanged.
+
+**Arms (campaign lw, code_v10 = code_v9 plus the overlay of 56e0c74f,
+recipe_v4; two seeds each).** On AirfRANS interior (800 airfoils, 100,000
+queries, the resampled datapipe, against the frame-free reference pair
+`sg_af_provided` 0.0328 / 0.0161 / 0.0323 and the Gaussian aggregation
+0.0370 / 0.0188 / 0.0393): `lw_af_provided_local05_lpr` (weights only) and
+`lw_af_provided_local05_lpr_grad` (weights plus the finite-difference
+channels). On OLBC Poisson at 512 cases (fixed mesh, where the Gaussian
+aggregation with the per-type distances scores 0.164):
+`lw_poisson_ext_distonly_local05_lpr_n512`, the regression check that
+consistent weights do not undo the fixed-mesh gain.
+
+**Bars (two-seed means).** AirfRANS, lpr arm ÷ frame-free reference, the
+same bars as the stencil diagnostic: *stencil cause confirmed and remedied*
+at or below 1.03 on every field (and *pays* if any field is at or below
+0.97 with none above 1.03); *refuted* at or above 1.10 on any field (the
+loss is not the weights' draw dependence); *between* otherwise. Gradient
+arm ÷ lpr arm: *pays* at or below 0.95 on any field with none above 1.03,
+*null* within 3%, *hurts* above 1.05. Poisson 512, lpr ÷ Gaussian: within
+0.05 = consistent weights cost nothing on a fixed mesh; below 0.95 = they
+pay there too; above 1.05 = a fixed-mesh regression that would confine them
+to point clouds. Prediction: AirfRANS between (0.4), confirmed (0.35),
+refuted (0.25); gradient channel null (0.5); Poisson within 0.05 (0.7).
+Reading with the fixed-draw diagnostic: if the diagnostic says *supported*
+and the lpr arm says *confirmed*, the resampled stencil is the mechanism
+and the consistent weights are the remedy; if the diagnostic says
+*supported* and the lpr arm says *refuted*, the draw dependence lives in
+something the weights do not fix (the neighbour set itself); if the
+diagnostic says *refuted*, the lpr arm's result stands on its own as a
+discretization-invariance property. The inputs are admissible: neighbour
+positions of the one sample and nothing else. Launched without waiting
+for the diagnostic (no result dependency; the reading above covers every
+combination).
