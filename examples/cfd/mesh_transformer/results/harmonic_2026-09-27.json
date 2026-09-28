@@ -1,0 +1,112 @@
+{
+ "protocol": "HARMONIC + EXT-ABL reduction (2026-09-27, #sec-nb-harmonic-prereg). OLBC Poisson at 512 and 2,048 cases: float32 per-case\nrelative L2 on u over the 256 test cases; fractions of the log-gap ln(base/arm)/ln(base/gt512) with the frame-free ISLA reference\nand GeoTransolver-512 from results/olbc_2026-09-22.json; the inverse-square extension arm from campaign om. Arms (campaign hm,\ncode_v7/recipe_v4): hm_poisson_hm_n{512,2048} (six harmonic fields), hm_poisson_ext_valonly_n{...} (three value averages),\nhm_poisson_ext_distonly_n{...} (three per-type distances); two seeds each. Bars: HARMONIC kernel pays if f_hm >= f_ext + 0.05 on\nboth rungs, kernel-insensitive within 0.05 on both, hurts below f_ext - 0.05 on either; EXT-ABL values carry (valonly >= 0.75 f_ext\nand distonly <= 0.35 f_ext), distances carry (reverse), joint (both <= 0.5 f_ext), either (both >= 0.75 f_ext). AirfRANS half:\nhm_af_provided_hm_seed{42,43} against the sg_af_provided pair (campaign 2026-09-23/sg metrics), ratios on pressure / velocity /\neddy viscosity; pays if any <= 0.95 with none > 1.03, null within 3%, hurts if any > 1.05. Unscored lanes are reported as such.\nusage: python harmonic_reduce_2026-09-27.py  (writes harmonic_2026-09-27.json beside this script).",
+ "poisson": {
+  "512": {
+   "base": 0.8670549198868684,
+   "gt512": 0.27905043042846955,
+   "arms": {
+    "ext": {
+     "u": 0.33280388345883694,
+     "per_seed": {
+      "42": 0.31834829197032377,
+      "43": 0.3472594749473501
+     },
+     "n_seeds": 2,
+     "frac": 0.8446155636602639,
+     "gt512_over": 0.8384830955945984,
+     "frac_per_seed": {
+      "42": 0.8837854965147692,
+      "43": 0.8071113549030808
+     }
+    },
+    "hm": {
+     "u": 0.2495949381554965,
+     "per_seed": {
+      "42": 0.24175827886210755,
+      "43": 0.25743159744888544
+     },
+     "n_seeds": 2,
+     "frac": 1.0983965766785928,
+     "gt512_over": 1.1180131796367698,
+     "frac_per_seed": {
+      "42": 1.12653515073948,
+      "43": 1.071127969331872
+     },
+     "frac_minus_ext": 0.2537810130183289,
+     "share_of_ext": 1.3004692595510934,
+     "interim": false,
+     "verdict": "kernel pays"
+    },
+    "ext_valonly": {
+     "u": 0.30661883180437144,
+     "per_seed": {
+      "42": 0.29734474257566035,
+      "43": 0.31589292103308253
+     },
+     "n_seeds": 2,
+     "frac": 0.9168986046807275,
+     "gt512_over": 0.9100890143841815,
+     "frac_per_seed": {
+      "42": 0.9439894624118464,
+      "43": 0.8906150595309538
+     },
+     "frac_minus_ext": 0.07228304102046357,
+     "share_of_ext": 1.0855809958168596,
+     "interim": false
+    },
+    "ext_distonly": {
+     "u": 0.20227988544138498,
+     "per_seed": {
+      "42": 0.19961745329055702,
+      "43": 0.20494231759221293
+     },
+     "n_seeds": 2,
+     "frac": 1.2837941507545927,
+     "gt512_over": 1.3795263420263826,
+     "frac_per_seed": {
+      "42": 1.2954810114371718,
+      "43": 1.2722601126146182
+     },
+     "frac_minus_ext": 0.4391785870943288,
+     "share_of_ext": 1.5199745375175004,
+     "interim": false
+    }
+   },
+   "ext_abl_verdict": "either suffices"
+  },
+  "2048": {
+   "base": 0.39494188419485,
+   "gt512": 0.09810749645112082,
+   "arms": {
+    "ext": {
+     "u": 0.12980777879784,
+     "per_seed": {
+      "42": 0.1250073196424637,
+      "43": 0.1346082379532163
+     },
+     "n_seeds": 2,
+     "frac": 0.7989545424525768,
+     "gt512_over": 0.7557905801925126,
+     "frac_per_seed": {
+      "42": 0.8260121424205572,
+      "43": 0.772879621161814
+     }
+    },
+    "hm": {
+     "status": "not scored"
+    },
+    "ext_valonly": {
+     "status": "not scored"
+    },
+    "ext_distonly": {
+     "status": "not scored"
+    }
+   }
+  }
+ },
+ "airfrans": {
+  "status": "not scored",
+  "ref_seeds": 2,
+  "hm_seeds": 0
+ }
+}

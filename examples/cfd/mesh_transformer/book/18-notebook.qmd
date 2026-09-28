@@ -29890,3 +29890,60 @@ its 2,048 rung with a same-snapshot control and the frame-free AirfRANS
 twin decide whether this is a Poisson-specific gain or a general one.
 Under the two-dataset rule this is a standing on OLBC Poisson and an
 interim for the architecture. Artifact results/local_agg_2026-09-27.json.
+
+## 2026-09-27 — Interim, HARMONIC and EXT-ABL at 512 Poisson cases (two seeds): the harmonic fields beat the extension (0.250 against 0.299 on the same snapshot) and GeoTransolver-512 (0.279), but the per-type distances alone score 0.202, better than every arm including the value averages they were bundled with; two follow-up arms launched {#sec-nb-harmonic-interim-512}
+
+**Setting.** HARMONIC (@sec-nb-harmonic-prereg) swaps the six inverse-square
+extension scalars for six harmonic fields (three per-type harmonic
+measures, three per-type harmonic extensions of the prescribed values);
+EXT-ABL splits the extension into its three value averages and its three
+per-type distances. All arms run on code_v7 with the provided-geometry
+mode; the fair reference is the extension on the same snapshot (0.299,
+fraction 0.94; @sec-nb-local-agg-poisson-verdict), not the older 0.333.
+
+**What we saw (512 cases, 256 test cases, float32 relative L2 on $u$,
+two seeds; fractions of the log-gap between the frame-free reference
+0.867 and GeoTransolver-512 0.279).**
+
+| arm | $u$ | seeds | fraction |
+|---|---|---|---|
+| extension, code_ref (om) | 0.333 | 0.318 / 0.347 | 0.85 |
+| extension, code_v7 (control) | 0.299 | 0.277 / 0.320 | 0.94 |
+| values only (three averages) | 0.307 | 0.297 / 0.316 | 0.92 |
+| **distances only (three per-type distances)** | **0.202** | 0.200 / 0.205 | **1.28** |
+| harmonic measures + extensions (six fields) | 0.250 | 0.242 / 0.257 | 1.10 |
+| extension + local aggregation (LOCAL-AGG) | 0.229 | 0.231 / 0.227 | 1.17 |
+| GeoTransolver-512 | 0.279 | 0.283 / 0.275 | 1.00 |
+
+: HARMONIC and EXT-ABL at 512 cases beside the LOCAL-AGG and control arms. {#tbl-harmonic-512}
+
+**Reading.** Against the preregistered bars the harmonic arm is "kernel
+pays" (0.16 above the control's fraction; 11% better than GeoTransolver-512),
+and EXT-ABL reads "either suffices" because both halves clear 0.75 of the
+extension's fraction. But the numbers say more than the clauses. The
+distances alone are the best arm on the set, 32% better than the full
+extension on the same snapshot and 19% better than the harmonic fields,
+and adding the value averages to them makes things worse (0.202 to
+0.299). So the inverse-square value averages were not the working part
+of the extension; the per-type distances were, and the averages were
+noise the model had to learn around. This is Peter's per-type distance
+vector (@sec-nb-extension-call) landing as the strongest single interior
+channel measured so far, and it says the harmonic measures, which
+compress distance into a probability in [0, 1] that saturates near the
+walls, lose metric information the distances keep. Anomaly to chase: is
+it the harmonic *extensions* (the value half) that drag the harmonic arm
+down, as the value averages drag the extension down, and do measures plus
+distances add? Both seeds agree on every ordering.
+
+**Follow-up arms (preregistered here, launched now on campaign hm rows
+14-21, 512 and 2,048 cases, two seeds each).** `hm_measures_only`: the
+three harmonic measures without the value extensions. `hm_plus_dist`: the
+three measures plus the three per-type distances. Bars against the
+distances-only arm at the same rung: *measures redundant* if
+measures-only is within 3% of distances-only and measures plus distances
+within 3% of distances-only; *measures add* if measures plus distances is
+$\ge 5\%$ better than distances-only on both seeds; *values hurt* if
+measures-only beats the six-field harmonic arm by $\ge 5\%$ (the value
+half was the drag). Prediction: values hurt (0.6), measures redundant
+(0.5), measures add (0.3). The 2,048 rung of every arm is training.
+Artifact results/harmonic_2026-09-27.json.
