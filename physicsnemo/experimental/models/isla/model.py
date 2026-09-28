@@ -603,19 +603,6 @@ def _relational_invariants(
     return torch.cat(feats, dim=-1)
 
 
-def _geo_bias_head(n_geo: int, geo_bias: str) -> nn.Module:
-    """The map from a pair's invariants to its routing-bias scalar. ``"linear"`` (the
-    class default) is one Linear(n_geo, 1); ``"mlp"`` (GEO-BIAS study, 2026-09-25) is
-    Linear(n_geo, 16) -> GELU -> Linear(16, 1), a nonlinear function of the same
-    invariants. Both run on the eager region and inside the fused kernel (the kernel
-    evaluates the hidden units one tile at a time, 2026-09-26)."""
-    if geo_bias == "linear":
-        return nn.Linear(n_geo, 1)
-    if geo_bias == "mlp":
-        return nn.Sequential(nn.Linear(n_geo, 16), nn.GELU(), nn.Linear(16, 1))
-    raise ValueError(f"geo_bias must be 'linear' or 'mlp', got {geo_bias!r}")
-
-
 def _geo_region(
     lin: nn.Module,
     logits_pre,
@@ -884,7 +871,6 @@ class _SliceBlock(nn.Module):
         n_block_tens: int = 0,
         routing_norm: str = "cosine",
         routing_temperature: float = 10.0,
-        geo_bias: str = "linear",
         local_rho: float | None = None,
         local_weights: str = "gaussian",
         local_gradient: bool = False,
@@ -931,7 +917,7 @@ class _SliceBlock(nn.Module):
         ### crash DDP (A35b nogeo, 2026-09-05).
         self.geo_width = hidden // 2
         if use_relational_geo:
-            self.geo_logit = _geo_bias_head(self.n_geo, geo_bias)
+            self.geo_logit = nn.Linear(self.n_geo, 1)
             self.geo_feat = nn.Linear(self.n_geo, self.geo_width)
         self.slice_mlp = nn.Sequential(
             nn.LayerNorm(hidden),
@@ -1069,7 +1055,6 @@ class _ReadBlock(nn.Module):
         n_block_tens: int = 0,
         routing_norm: str = "cosine",
         routing_temperature: float = 10.0,
-        geo_bias: str = "linear",
     ) -> None:
         super().__init__()
         self.geo_checkpoint = bool(geo_checkpoint)
@@ -1079,7 +1064,7 @@ class _ReadBlock(nn.Module):
         self.assign = _RoutingLogits(
             hidden, n_slices, routing_norm, routing_temperature
         )
-        self.geo_logit = _geo_bias_head(n_geo, geo_bias)
+        self.geo_logit = nn.Linear(n_geo, 1)
         self.geo_feat = nn.Linear(n_geo, hidden // 2)
         self.broadcast = nn.Linear(2 * hidden + hidden // 2, hidden)
         self.local_read = nn.Linear(2 * hidden, hidden)
@@ -1246,7 +1231,6 @@ def nearest_boundary_geometry(
     *,
     chunk: int | None = None,
     eps: float = 1e-12,
-    projection: str = "centroid",
 ) -> tuple[
     Float[torch.Tensor, "batch queries"], Float[torch.Tensor, "batch queries dim"]
 ]:
@@ -1286,20 +1270,7 @@ def nearest_boundary_geometry(
     distance by up to about the sample spacing near the wall and :math:`u_q`
     deviates from the true SDF gradient by the same order; far from the wall
     both agree with the full-mesh field.
-
-    ``projection="plane"`` (INTERNAL-GEOMETRY-PROJ, 2026-09-25) measures the
-    distance to the nearest sample's *tangent plane* instead of to the sample
-    itself: :math:`d_q = (x_q - y_{i^*}) \cdot \hat n_{i^*}` and
-    :math:`u_q = \operatorname{sign}(d_q)\, \hat n_{i^*}`, the direction from
-    the foot point on that plane. For a query whose nearest surface point lies
-    inside the nearest cell this is the true wall distance to first order in the
-    cell size (exact on a flat wall); at edges and corners it can understate it.
-    The INTERNAL-GEOMETRY verdict (@sec-nb-internal-geometry-verdict) located
-    the internal geometry's velocity price in the centroid measurement, which
-    this option removes.
     """
-    if projection not in ("centroid", "plane"):
-        raise ValueError(f"projection must be 'centroid' or 'plane', got {projection!r}")
     b, nq, _ = query_points.shape
     n = points.shape[1]
     with torch.autocast(query_points.device.type, enabled=False), torch.no_grad():
@@ -1338,10 +1309,6 @@ def nearest_boundary_geometry(
     n_star = torch.gather(normals, 1, gather)
     n_star = n_star / n_star.norm(dim=-1, keepdim=True).clamp_min(eps)
     diff = query_points - y
-    if projection == "plane":
-        d_plane = (diff * n_star).sum(-1, keepdim=True)
-        sign = torch.where(d_plane >= 0, 1.0, -1.0).to(d_plane)
-        return d_plane.squeeze(-1), sign * n_star
     dist = diff.norm(dim=-1, keepdim=True)
     on_wall = dist <= eps
     u = torch.where(on_wall, n_star, diff / dist.clamp_min(eps))
@@ -1633,12 +1600,6 @@ class ISLA(Module):
             else ``"eager"`` (the
             PyTorch reference region). Pass ``"eager"`` or ``"fused"`` to force
             one; ``"fused"`` raises when its constraints cannot be met.
-        geo_bias: ``"linear"`` (default): the per-pair routing bias is one linear map of the
-            geometric invariants. ``"mlp"``: a two-layer map (16 hidden units, GELU) of the
-            same invariants, on the eager region and in the fused kernel alike. A study
-            option (GEO-BIAS, 2026-09-25): does a nonlinear bias make extra global
-            directions unnecessary? Exploration scale said yes for the vector field
-            (0.96 of the two-axis velocity gain at K = 1) and no for pressure (0.22).
         local_rho: ``None`` (default): no local aggregation. A positive radius, in
             frame units (the ``rms_distance`` length unit), adds to every slice block
             a measure-weighted Gaussian-kernel aggregation over all tokens of the
@@ -1686,13 +1647,7 @@ class ISLA(Module):
             signed log enters the query embedding as a built-in channel; the
             caller passes ``query_points`` / ``support_points`` only and
             ``query_normals`` / ``support_normals`` are refused.
-            ``"nearest_plane"`` (INTERNAL-GEOMETRY-PROJ, 2026-09-25): the same
-            search, but the distance to the nearest sample's tangent plane and
-            the direction from its foot point; exact on a flat wall, understated
-            at edges. Measured worse than ``"provided"`` on both interior datasets
-            (2026-09-26: velocity 1.06x / 1.16x, pressure 1.12x / 1.05x the stored
-            field on AirfRANS / DrivAerML Volume) and kept as a documented option
-            only. Where the dataset carries a full-mesh signed-distance field and
+            Where the dataset carries a full-mesh signed-distance field and
             gradient, pass them with ``"provided"``: the internal geometries cost
             14 to 27% on interior velocity against it. The default's
             distance is that to the *sampled* boundary and overestimates the wall distance
@@ -1780,7 +1735,6 @@ class ISLA(Module):
         routing_temperature: float = 10.0,
         interior_geometry: str = "nearest_boundary",
         interior_nn_chunk: int | None = None,
-        geo_bias: str = "linear",
         local_rho: float | None = None,
         local_k: int = 32,
         local_weights: str = "gaussian",
@@ -1815,15 +1769,9 @@ class ISLA(Module):
             raise ValueError("local_weights='lpr' and local_gradient require local_rho and local_k > 0")
         self.local_weights = str(local_weights)
         self.local_gradient = bool(local_gradient)
-        ### GEO-BIAS (2026-09-25): the pair invariants -> routing-bias map; "mlp" is the
-        ### eager-only nonlinear variant of the direction-count study (#sec-nb-geo-bias-prereg).
-        if geo_bias not in ("linear", "mlp"):
-            raise ValueError(f"geo_bias must be 'linear' or 'mlp', got {geo_bias!r}")
-        self.geo_bias = geo_bias
-        if interior_geometry not in ("nearest_boundary", "nearest_plane", "provided"):
+        if interior_geometry not in ("nearest_boundary", "provided"):
             raise ValueError(
-                "interior_geometry must be 'nearest_boundary', 'nearest_plane' or 'provided', "
-                f"got {interior_geometry!r}"
+                f"interior_geometry must be 'nearest_boundary' or 'provided', got {interior_geometry!r}"
             )
         self.interior_geometry = interior_geometry
         self.interior_nn_chunk = (
@@ -1989,7 +1937,6 @@ class ISLA(Module):
                 n_block_tens=self.n_block_tens,
                 routing_norm=routing_norm,
                 routing_temperature=routing_temperature,
-                geo_bias=geo_bias,
                 local_rho=self.local_rho,
                 local_weights=self.local_weights,
                 local_gradient=self.local_gradient,
@@ -2029,8 +1976,7 @@ class ISLA(Module):
                     n_block_tens=self.n_block_tens,
                     routing_norm=routing_norm,
                     routing_temperature=routing_temperature,
-                    geo_bias=geo_bias,
-                )
+                    )
                 for _ in range(n_decoder_layers)
             )
         self.norm_out = nn.LayerNorm(hidden)
@@ -2509,7 +2455,6 @@ class ISLA(Module):
                         n_hat[:, :n_boundary],
                         chunk=self.interior_nn_chunk,
                         eps=self.eps,
-                        projection="plane" if self.interior_geometry == "nearest_plane" else "centroid",
                     )
                     s = (d / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
                     builtin = torch.cat(

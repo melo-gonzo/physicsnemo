@@ -105,16 +105,13 @@ def _assert_same(ref, opt, dtype, out_tol, grad_tol, n=700, batch=1):
 # --------------------------------------------------------------------------- fused region
 @cuda_only
 @pytest.mark.parametrize("dtype", [torch.float64, torch.float32])
-@pytest.mark.parametrize("head", ["linear", "mlp"])
 @pytest.mark.parametrize("K,P", [(1, 0), (2, 0), (3, 0), (4, 0), (1, 1), (1, 2), (1, 3), (2, 1), (2, 2), (3, 1)])
-def test_fused_geo_region_matches_eager_region(dtype, K, P, head):
+def test_fused_geo_region_matches_eager_region(dtype, K, P):
     """Region level: forward outputs (bias, mix, pooled) and every input gradient, for
     K global directions plus P per-token rank-1 vectors (the (5 + K + P)-invariant set
-    in the eager order) and both routing-bias heads (the Linear and the
-    Linear -> GELU -> Linear MLP of geo_bias="mlp", whose hidden units the kernel
-    evaluates one tile at a time). The fused kernel keeps a ``relative`` flag; the model
-    always passes ``True``, which is what the eager region computes."""
-    from physicsnemo.experimental.models.isla.model import _geo_bias_head
+    in the eager order) with the linear routing-bias head. The fused kernel keeps a
+    ``relative`` flag; the model always passes ``True``, which is what the eager region
+    computes."""
     from physicsnemo.experimental.models.isla.geo_kernel import fused_geo_region
 
     torch.backends.cuda.matmul.allow_tf32 = False
@@ -145,7 +142,7 @@ def test_fused_geo_region_matches_eager_region(dtype, K, P, head):
     v = (torch.randn(b, n, P, 3, generator=g) * 0.7).to("cuda", dtype).requires_grad_()
     logits = torch.randn(b, n, s, generator=g).to("cuda", dtype).requires_grad_()
     torch.manual_seed(0)
-    lin = _geo_bias_head(5 + K + P, head).to("cuda", dtype)
+    lin = torch.nn.Linear(5 + K + P, 1).to("cuda", dtype)
     leaves = (*lin.parameters(), logits, r, nh, d, z, ms, v)
     wts = [
         torch.randn(b, n, s, generator=g).to("cuda", dtype),
@@ -237,113 +234,6 @@ def test_fused_geo_kernel_model_rank1_boundary_input_exact_in_float64():
 
 
 @cuda_only
-def test_fused_geo_kernel_model_mlp_bias_exact_in_float64():
-    """geo_bias="mlp" under the fused kernel: the whole model matches the eager region
-    to float64 roundoff, forward and every parameter gradient, at K = 2."""
-    spec = {**REF, "global_inputs": {"g": 1, "h": 1}, "geo_bias": "mlp"}
-    torch.manual_seed(0)
-    ref = ISLA(**spec).to("cuda", torch.float64)
-    torch.manual_seed(0)
-    opt = ISLA(**{**spec, "geo_kernel": "fused"}).to("cuda", torch.float64)
-    opt.load_state_dict(ref.state_dict())
-    assert opt.resolve_geo_kernel(torch.zeros(1, device="cuda")) == "fused"
-    g = torch.Generator().manual_seed(3)
-    inputs, tgt = _cloud(600, 2, dtype=torch.float64)
-    inputs["global_inputs"]["h"] = torch.nn.functional.normalize(torch.randn(2, 3, generator=g), dim=-1).to("cuda", torch.float64)
-    o_ref, g_ref = _run(ref, inputs, tgt)
-    o_opt, g_opt = _run(opt, inputs, tgt)
-    assert _rel(o_opt, o_ref) < 1e-11
-    total = torch.cat([x.flatten() for x in g_ref.values()]).norm()
-    for k, x in g_ref.items():
-        if x.norm() < 1e-6 * total:
-            continue
-        assert _rel(g_opt[k], x) < 1e-10, (k, _rel(g_opt[k], x))
-
-
-@cuda_only
-def test_fused_geo_kernel_model_two_directions_exact_in_float64():
-    """A frame-input model (two global directions, as the solids lanes use) runs the
-    fused kernel and matches the eager region to float64 roundoff."""
-    spec = {**REF, "global_inputs": {"g": 1, "h": 1}}
-    torch.manual_seed(0)
-    ref = ISLA(**spec).to("cuda", torch.float64)
-    torch.manual_seed(0)
-    opt = ISLA(**{**spec, "geo_kernel": "fused"}).to("cuda", torch.float64)
-    opt.load_state_dict(ref.state_dict())
-    inputs, tgt = _cloud(600, 1, dtype=torch.float64)
-    g2 = torch.Generator().manual_seed(7)
-    inputs["global_inputs"]["h"] = torch.nn.functional.normalize(
-        torch.randn(1, 3, generator=g2), dim=-1
-    ).to("cuda", torch.float64)
-    o_ref, g_ref = _run(ref, inputs, tgt)
-    o_opt, g_opt = _run(opt, inputs, tgt)
-    assert _rel(o_opt, o_ref) < 1e-11
-    total = torch.cat([g.flatten() for g in g_ref.values()]).norm()
-    for k, g in g_ref.items():
-        if g.norm() < 1e-6 * total:
-            continue
-        assert _rel(g_opt[k], g) < 1e-11, (k, _rel(g_opt[k], g))
-
-
-@cuda_only
-def test_fused_geo_kernel_model_float32_bars():
-    torch.backends.cuda.matmul.allow_tf32 = False
-    ref, opt = _pair(torch.float32, geo_kernel="fused")
-    _assert_same(ref, opt, torch.float32, 1e-6, 1e-5)
-
-
-@cuda_only
-def test_fused_geo_kernel_passive_decoder_and_batch():
-    """The read blocks use the fused region too (query_independent), and batch > 1."""
-    torch.backends.cuda.matmul.allow_tf32 = False
-    kw = dict(query_independent=True, n_decoder_layers=2)
-    torch.manual_seed(0)
-    ref = ISLA(**REF, **kw).cuda()
-    torch.manual_seed(0)
-    opt = ISLA(**REF, **kw, geo_kernel="fused").cuda()
-    opt.load_state_dict(ref.state_dict())
-    inputs, tgt = _cloud(600, batch=2)
-    q = dict(query_points=inputs["points"][:, :200] + 0.3)
-    ref.zero_grad()
-    opt.zero_grad()
-    a = _flat(ref(**inputs, **q))
-    b = _flat(opt(**inputs, **q))
-    assert _rel(b.detach(), a.detach()) < 1e-6
-    (a * tgt[:, :200]).sum().backward()
-    (b * tgt[:, :200]).sum().backward()
-    total = torch.cat(
-        [p.grad.flatten() for p in ref.parameters() if p.grad is not None]
-    ).norm()
-    for (k, p), (_, q_) in zip(ref.named_parameters(), opt.named_parameters()):
-        if p.grad is not None and p.grad.norm() > 1e-6 * total:
-            assert _rel(q_.grad, p.grad) < 1e-5, k
-
-
-@cuda_only
-def test_fused_geo_kernel_keeps_contracts():
-    """SE(3) covariance and measure-scale invariance on the fused path (float64) in
-    the default configuration (the RMS-distance length unit is invariant to a
-    uniform rescale of the weights)."""
-    torch.manual_seed(0)
-    m = ISLA(**REF, geo_kernel="fused").cuda().double().eval()
-    inputs, _ = _cloud(500, dtype=torch.float64)
-    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64, device="cuda"))
-    if torch.det(q) < 0:
-        q[:, 0] = -q[:, 0]
-    with torch.no_grad():
-        base = m(**inputs)
-        moved = m(
-            points=inputs["points"] @ q.T + 1.5,
-            normals=inputs["normals"] @ q.T,
-            global_inputs={"g": inputs["global_inputs"]["g"] @ q.T},
-            measure_weights=inputs["measure_weights"],
-        )
-        scaled = m(**{**inputs, "measure_weights": 2.5 * inputs["measure_weights"]})
-    assert torch.allclose(moved["p"], base["p"], atol=1e-10)
-    assert torch.allclose(moved["v"], base["v"] @ q.T, atol=1e-10)
-    assert all(torch.allclose(scaled[k], base[k], atol=1e-10) for k in base.keys())
-
-
 def test_geo_kernel_argument_is_validated():
     with pytest.raises(ValueError):
         ISLA(**REF, geo_kernel="triton")

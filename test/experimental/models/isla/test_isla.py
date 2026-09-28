@@ -1232,32 +1232,6 @@ def test_kernel_readout_recompute_matches_dense_gradient():
         assert torch.allclose(a, c, atol=1e-10, rtol=0)
 
 
-def test_geo_bias_mlp_is_equivariant_and_runs_on_both_kernels():
-    """geo_bias='mlp' (a nonlinear map of the pair invariants to the routing bias) keeps
-    the contracts (rotation equivariance, translation invariance) because it consumes the
-    same invariants; on CPU it resolves to the eager region, and the fused kernel accepts
-    it (its exactness is tested in test_isla_kernels.py)."""
-    torch.manual_seed(0)
-    m = _isla(hidden=64, n_layers=2, n_slices=16, geo_bias="mlp").double().eval()
-    n = 300
-    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor([3.0, 2.0, 1.0], dtype=torch.float64)
-    nrm = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=torch.float64), dim=-1)
-    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
-    w = torch.rand(1, n, dtype=torch.float64) + 0.5
-    q = _rotation()
-    with torch.no_grad():
-        base = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-        rot = m(points=pts @ q.T, normals=nrm @ q.T, global_inputs={"g": drv @ q.T}, measure_weights=w)
-        sh = m(points=pts + 5.0, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-    _assert_rotated(rot, base, q)
-    assert all(torch.allclose(sh[k], base[k], atol=1e-9, rtol=1e-9) for k in base.keys())
-    assert m.resolve_geo_kernel(pts) == "eager"  # CPU points: no Triton path
-    fused = _isla(hidden=64, n_layers=1, n_slices=16, geo_bias="mlp", geo_kernel="fused")
-    assert fused.geo_kernel == "fused" and fused.geo_bias == "mlp"
-    with pytest.raises(ValueError, match="geo_bias must be"):
-        _isla(hidden=64, n_layers=1, n_slices=16, geo_bias="quadratic")
-
-
 def test_local_rho_aggregation_keeps_the_contracts_and_is_off_by_default():
     """local_rho (LOCAL-AGG, 2026-09-27): the measure-weighted Gaussian aggregation of
     token states and pair invariants before the slice routing keeps rotation
@@ -1331,4 +1305,3 @@ def test_scalar_only_model_has_no_frame_routing_and_every_parameter_gets_a_gradi
         assert out["u"].shape == (1, n)
         if "q" in outs:
             assert out["q"].shape == (1, n, 3)
-

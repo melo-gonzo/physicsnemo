@@ -105,44 +105,6 @@ if HAS_TRITON:
             return tl.math.sqrt_rn(x)
 
     @triton.jit
-    def _gelu(x):
-        """torch.nn.GELU(approximate='none'): 0.5 x (1 + erf(x / sqrt 2))."""
-        return 0.5 * x * (1.0 + libdevice.erf(x * 0.7071067811865476))
-
-    @triton.jit
-    def _gelu_grad(x):
-        """d/dx of the exact GELU: Phi(x) + x phi(x)."""
-        return 0.5 * (1.0 + libdevice.erf(x * 0.7071067811865476)) + x * libdevice.exp(
-            -0.5 * x * x
-        ) * 0.3989422804014327
-
-    @triton.jit
-    def _mlp_hidden(
-        j, q0, q1, q2, q2b, q2c, q2d, q3, q4, q5, w_ptr, K: tl.constexpr, T: tl.constexpr, H: tl.constexpr, LIN_BF16: tl.constexpr
-    ):
-        """Pre-activation of hidden unit ``j`` of the MLP routing bias on the tile:
-        b1[j] + sum_g W1[j, g] q_g, rounded as the bfloat16 Linear would round it. The
-        flat weight buffer is [W1 (H x NG, row-major), b1 (H), W2 (H)] with
-        NG = 5 + T; b2 travels as the kernel's ``b_ptr``."""
-        NG: tl.constexpr = 5 + T
-        IDX_E: tl.constexpr = 3 if K >= 2 else 6
-        IDX_F: tl.constexpr = 4 if K >= 3 else 7
-        IDX_G: tl.constexpr = 5 if K >= 4 else 8
-        h = _rn(tl.load(w_ptr + H * NG + j), LIN_BF16) + q0 * _rn(tl.load(w_ptr + j * NG + 0), LIN_BF16)
-        h = h + q1 * _rn(tl.load(w_ptr + j * NG + 1), LIN_BF16)
-        h = h + q2 * _rn(tl.load(w_ptr + j * NG + 2), LIN_BF16)
-        if T >= 2:
-            h = h + q2b * _rn(tl.load(w_ptr + j * NG + IDX_E), LIN_BF16)
-        if T >= 3:
-            h = h + q2c * _rn(tl.load(w_ptr + j * NG + IDX_F), LIN_BF16)
-        if T >= 4:
-            h = h + q2d * _rn(tl.load(w_ptr + j * NG + IDX_G), LIN_BF16)
-        h = h + q3 * _rn(tl.load(w_ptr + j * NG + 2 + K), LIN_BF16)
-        h = h + q4 * _rn(tl.load(w_ptr + j * NG + 3 + K), LIN_BF16)
-        h = h + q5 * _rn(tl.load(w_ptr + j * NG + 4 + K), LIN_BF16)
-        return _rn(h, LIN_BF16)
-
-    @triton.jit
     def _load3(ptr, offs, mask):
         return (
             tl.load(ptr + offs, mask=mask, other=0.0),
@@ -187,7 +149,6 @@ if HAS_TRITON:
         po_sn,
         K: tl.constexpr,
         T: tl.constexpr,
-        H: tl.constexpr,
         RELATIVE: tl.constexpr,
         LIN_BF16: tl.constexpr,
         LOGIT_BF16: tl.constexpr,
@@ -207,7 +168,6 @@ if HAS_TRITON:
         IDX_E: tl.constexpr = 3 if K >= 2 else 6
         IDX_F: tl.constexpr = 4 if K >= 3 else 7
         IDX_G: tl.constexpr = 5 if K >= 4 else 8
-        NG: tl.constexpr = 5 + T  # width of the relative invariant set (the MLP head's input)
 
         r0, r1, r2 = _load3(r_ptr, pid_b * r_sb + offs_n * r_sn, mask_n)
         n0, n1, n2 = _load3(n_ptr, pid_b * n_sb + offs_n * n_sn, mask_n)
@@ -262,48 +222,38 @@ if HAS_TRITON:
             q2c = _rn(g2c, LIN_BF16)
         if T >= 4:
             q2d = _rn(g2d, LIN_BF16)
-        if H == 0:
-            w0 = _rn(tl.load(w_ptr + 0), LIN_BF16)
-            w1 = _rn(tl.load(w_ptr + 1), LIN_BF16)
-            w2 = _rn(tl.load(w_ptr + 2), LIN_BF16)
-            w3 = _rn(tl.load(w_ptr + 2 + K), LIN_BF16)
-            w4 = _rn(tl.load(w_ptr + 3 + K), LIN_BF16)
-            w5 = _rn(tl.load(w_ptr + 4 + K), LIN_BF16)
-            bias = q0 * w0 + q1 * w1 + q2 * w2 + q3 * w3 + q4 * w4 + q5 * w5
-            if T >= 2:
-                w2b = _rn(tl.load(w_ptr + IDX_E), LIN_BF16)
-                bias = bias + q2b * w2b
-            if T >= 3:
-                w2c = _rn(tl.load(w_ptr + IDX_F), LIN_BF16)
-                bias = bias + q2c * w2c
-            if T >= 4:
-                w2d = _rn(tl.load(w_ptr + IDX_G), LIN_BF16)
-                bias = bias + q2d * w2d
-            if not RELATIVE:
-                zmag = tl.maximum(_sqrt(z0 * z0 + z1 * z1 + z2 * z2, F64), eps)
-                zh0 = _div(z0, zmag, F64)
-                zh1 = _div(z1, zmag, F64)
-                zh2 = _div(z2, zmag, F64)
-                g6 = tl.zeros_like(g0) + zmag[None, :]
-                g7 = (
-                    zh0[None, :] * d0[:, None]
-                    + zh1[None, :] * d1[:, None]
-                    + zh2[None, :] * d2[:, None]
-                )
-                w6 = _rn(tl.load(w_ptr + 5 + K), LIN_BF16)
-                w7 = _rn(tl.load(w_ptr + 6 + K), LIN_BF16)
-                q6 = _rn(g6, LIN_BF16)
-                q7 = _rn(g7, LIN_BF16)
-                bias = bias + q6 * w6 + q7 * w7
-        else:
-            ### MLP routing bias (geo_bias="mlp"): Linear(NG, H) -> GELU -> Linear(H, 1) on the
-            ### same invariants; each hidden unit is one tile-sized temporary, never a
-            ### (B, N, S, H) tensor. Relative invariant set only.
-            bias = tl.zeros_like(q0)
-            for j in tl.static_range(H):
-                hj = _mlp_hidden(j, q0, q1, q2, q2b, q2c, q2d, q3, q4, q5, w_ptr, K, T, H, LIN_BF16)
-                aj = _rn(_gelu(hj), LIN_BF16)
-                bias = bias + aj * _rn(tl.load(w_ptr + H * NG + H + j), LIN_BF16)
+        w0 = _rn(tl.load(w_ptr + 0), LIN_BF16)
+        w1 = _rn(tl.load(w_ptr + 1), LIN_BF16)
+        w2 = _rn(tl.load(w_ptr + 2), LIN_BF16)
+        w3 = _rn(tl.load(w_ptr + 2 + K), LIN_BF16)
+        w4 = _rn(tl.load(w_ptr + 3 + K), LIN_BF16)
+        w5 = _rn(tl.load(w_ptr + 4 + K), LIN_BF16)
+        bias = q0 * w0 + q1 * w1 + q2 * w2 + q3 * w3 + q4 * w4 + q5 * w5
+        if T >= 2:
+            w2b = _rn(tl.load(w_ptr + IDX_E), LIN_BF16)
+            bias = bias + q2b * w2b
+        if T >= 3:
+            w2c = _rn(tl.load(w_ptr + IDX_F), LIN_BF16)
+            bias = bias + q2c * w2c
+        if T >= 4:
+            w2d = _rn(tl.load(w_ptr + IDX_G), LIN_BF16)
+            bias = bias + q2d * w2d
+        if not RELATIVE:
+            zmag = tl.maximum(_sqrt(z0 * z0 + z1 * z1 + z2 * z2, F64), eps)
+            zh0 = _div(z0, zmag, F64)
+            zh1 = _div(z1, zmag, F64)
+            zh2 = _div(z2, zmag, F64)
+            g6 = tl.zeros_like(g0) + zmag[None, :]
+            g7 = (
+                zh0[None, :] * d0[:, None]
+                + zh1[None, :] * d1[:, None]
+                + zh2[None, :] * d2[:, None]
+            )
+            w6 = _rn(tl.load(w_ptr + 5 + K), LIN_BF16)
+            w7 = _rn(tl.load(w_ptr + 6 + K), LIN_BF16)
+            q6 = _rn(g6, LIN_BF16)
+            q7 = _rn(g7, LIN_BF16)
+            bias = bias + q6 * w6 + q7 * w7
         bias = _rn(bias + bb, LIN_BF16)
 
         l_off = pid_b * l_sb + offs_n[:, None] * l_sn + offs_s[None, :]
@@ -342,10 +292,8 @@ if HAS_TRITON:
         tl.store(po + 3 + K, _rn(tl.sum(mq * q4, axis=1), LIN_BF16).to(ot), mask=mask_n)
         tl.store(po + 4 + K, _rn(tl.sum(mq * q5, axis=1), LIN_BF16).to(ot), mask=mask_n)
         if not RELATIVE:
-            if H == 0:
-                tl.store(po + 5 + K, _rn(tl.sum(mq * q6, axis=1), LIN_BF16).to(ot), mask=mask_n)
-                tl.store(po + 6 + K, _rn(tl.sum(mq * q7, axis=1), LIN_BF16).to(ot), mask=mask_n)
-
+            tl.store(po + 5 + K, _rn(tl.sum(mq * q6, axis=1), LIN_BF16).to(ot), mask=mask_n)
+            tl.store(po + 6 + K, _rn(tl.sum(mq * q7, axis=1), LIN_BF16).to(ot), mask=mask_n)
     @triton.jit
     def _geo_bwd_kernel(
         r_ptr,
@@ -397,7 +345,6 @@ if HAS_TRITON:
         gd_sk,
         K: tl.constexpr,
         T: tl.constexpr,
-        H: tl.constexpr,
         NW: tl.constexpr,
         RELATIVE: tl.constexpr,
         LIN_BF16: tl.constexpr,
@@ -418,7 +365,6 @@ if HAS_TRITON:
         IDX_E: tl.constexpr = 3 if K >= 2 else 6
         IDX_F: tl.constexpr = 4 if K >= 3 else 7
         IDX_G: tl.constexpr = 5 if K >= 4 else 8
-        NG: tl.constexpr = 5 + T  # width of the relative invariant set (the MLP head's input)
 
         r0, r1, r2 = _load3(r_ptr, pid_b * r_sb + offs_n * r_sn, mask_n)
         n0, n1, n2 = _load3(n_ptr, pid_b * n_sb + offs_n * n_sn, mask_n)
@@ -473,46 +419,39 @@ if HAS_TRITON:
             q2c = _rn(g2c, LIN_BF16)
         if T >= 4:
             q2d = _rn(g2d, LIN_BF16)
-        if H == 0:
-            w0 = _rn(tl.load(w_ptr + 0), LIN_BF16)
-            w1 = _rn(tl.load(w_ptr + 1), LIN_BF16)
-            w2 = _rn(tl.load(w_ptr + 2), LIN_BF16)
-            w3 = _rn(tl.load(w_ptr + 2 + K), LIN_BF16)
-            w4 = _rn(tl.load(w_ptr + 3 + K), LIN_BF16)
-            w5 = _rn(tl.load(w_ptr + 4 + K), LIN_BF16)
-            bias = q0 * w0 + q1 * w1 + q2 * w2 + q3 * w3 + q4 * w4 + q5 * w5
-            if T >= 2:
-                w2b = _rn(tl.load(w_ptr + IDX_E), LIN_BF16)
-                bias = bias + q2b * w2b
-            if T >= 3:
-                w2c = _rn(tl.load(w_ptr + IDX_F), LIN_BF16)
-                bias = bias + q2c * w2c
-            if T >= 4:
-                w2d = _rn(tl.load(w_ptr + IDX_G), LIN_BF16)
-                bias = bias + q2d * w2d
-            if not RELATIVE:
-                zmag_raw = _sqrt(z0 * z0 + z1 * z1 + z2 * z2, F64)
-                zmag = tl.maximum(zmag_raw, eps)
-                zh0 = _div(z0, zmag, F64)
-                zh1 = _div(z1, zmag, F64)
-                zh2 = _div(z2, zmag, F64)
-                g6 = tl.zeros_like(g0) + zmag[None, :]
-                g7 = (
-                    zh0[None, :] * d0[:, None]
-                    + zh1[None, :] * d1[:, None]
-                    + zh2[None, :] * d2[:, None]
-                )
-                w6 = _rn(tl.load(w_ptr + 5 + K), LIN_BF16)
-                w7 = _rn(tl.load(w_ptr + 6 + K), LIN_BF16)
-                q6 = _rn(g6, LIN_BF16)
-                q7 = _rn(g7, LIN_BF16)
-                bias = bias + q6 * w6 + q7 * w7
-        else:
-            bias = tl.zeros_like(q0)
-            for j in tl.static_range(H):
-                hj = _mlp_hidden(j, q0, q1, q2, q2b, q2c, q2d, q3, q4, q5, w_ptr, K, T, H, LIN_BF16)
-                aj = _rn(_gelu(hj), LIN_BF16)
-                bias = bias + aj * _rn(tl.load(w_ptr + H * NG + H + j), LIN_BF16)
+        w0 = _rn(tl.load(w_ptr + 0), LIN_BF16)
+        w1 = _rn(tl.load(w_ptr + 1), LIN_BF16)
+        w2 = _rn(tl.load(w_ptr + 2), LIN_BF16)
+        w3 = _rn(tl.load(w_ptr + 2 + K), LIN_BF16)
+        w4 = _rn(tl.load(w_ptr + 3 + K), LIN_BF16)
+        w5 = _rn(tl.load(w_ptr + 4 + K), LIN_BF16)
+        bias = q0 * w0 + q1 * w1 + q2 * w2 + q3 * w3 + q4 * w4 + q5 * w5
+        if T >= 2:
+            w2b = _rn(tl.load(w_ptr + IDX_E), LIN_BF16)
+            bias = bias + q2b * w2b
+        if T >= 3:
+            w2c = _rn(tl.load(w_ptr + IDX_F), LIN_BF16)
+            bias = bias + q2c * w2c
+        if T >= 4:
+            w2d = _rn(tl.load(w_ptr + IDX_G), LIN_BF16)
+            bias = bias + q2d * w2d
+        if not RELATIVE:
+            zmag_raw = _sqrt(z0 * z0 + z1 * z1 + z2 * z2, F64)
+            zmag = tl.maximum(zmag_raw, eps)
+            zh0 = _div(z0, zmag, F64)
+            zh1 = _div(z1, zmag, F64)
+            zh2 = _div(z2, zmag, F64)
+            g6 = tl.zeros_like(g0) + zmag[None, :]
+            g7 = (
+                zh0[None, :] * d0[:, None]
+                + zh1[None, :] * d1[:, None]
+                + zh2[None, :] * d2[:, None]
+            )
+            w6 = _rn(tl.load(w_ptr + 5 + K), LIN_BF16)
+            w7 = _rn(tl.load(w_ptr + 6 + K), LIN_BF16)
+            q6 = _rn(g6, LIN_BF16)
+            q7 = _rn(g7, LIN_BF16)
+            bias = bias + q6 * w6 + q7 * w7
         bias = _rn(bias + bb, LIN_BF16)
         l_off = pid_b * l_sb + offs_n[:, None] * l_sn + offs_s[None, :]
         logit = tl.load(logit_ptr + l_off, mask=mask, other=0.0).to(bias.dtype)
@@ -580,74 +519,34 @@ if HAS_TRITON:
         tile = pid_b * n_tiles + pid_n
         gw = gw_part_ptr + tile * NW
         tl.store(gb_part_ptr + tile, tl.sum(tl.sum(gb, axis=1), axis=0))
-        if H == 0:
-            # Linear backward: d/dgeo_g = gb w_g ; d/dw_g = sum gb geo_g ; d/db = sum gb
-            gq0 = gb * w0
-            gq1 = gb * w1
-            gq2 = gb * w2
-            gq3 = gb * w3
-            gq4 = gb * w4
-            gq5 = gb * w5
-            gq2b = gq2
-            gq2c = gq2
-            gq2d = gq2
-            if T >= 2:
-                gq2b = gb * w2b
-            if T >= 3:
-                gq2c = gb * w2c
-            if T >= 4:
-                gq2d = gb * w2d
-            tl.store(gw + 0, tl.sum(tl.sum(gb * q0, axis=1), axis=0))
-            tl.store(gw + 1, tl.sum(tl.sum(gb * q1, axis=1), axis=0))
-            tl.store(gw + 2, tl.sum(tl.sum(gb * q2, axis=1), axis=0))
-            if T >= 2:
-                tl.store(gw + IDX_E, tl.sum(tl.sum(gb * q2b, axis=1), axis=0))
-            if T >= 3:
-                tl.store(gw + IDX_F, tl.sum(tl.sum(gb * q2c, axis=1), axis=0))
-            if T >= 4:
-                tl.store(gw + IDX_G, tl.sum(tl.sum(gb * q2d, axis=1), axis=0))
-            tl.store(gw + 2 + K, tl.sum(tl.sum(gb * q3, axis=1), axis=0))
-            tl.store(gw + 3 + K, tl.sum(tl.sum(gb * q4, axis=1), axis=0))
-            tl.store(gw + 4 + K, tl.sum(tl.sum(gb * q5, axis=1), axis=0))
-        else:
-            # MLP backward, one hidden unit at a time: a_j = gelu(h_j); d/dW2_j = sum gb a_j ;
-            # gh_j = gb W2_j gelu'(h_j); d/db1_j = sum gh_j ; d/dW1_jg = sum gh_j q_g ; d/dq_g += gh_j W1_jg
-            gq0 = tl.zeros_like(gb)
-            gq1 = tl.zeros_like(gb)
-            gq2 = tl.zeros_like(gb)
-            gq3 = tl.zeros_like(gb)
-            gq4 = tl.zeros_like(gb)
-            gq5 = tl.zeros_like(gb)
-            gq2b = tl.zeros_like(gb)
-            gq2c = tl.zeros_like(gb)
-            gq2d = tl.zeros_like(gb)
-            for j in tl.static_range(H):
-                hj = _mlp_hidden(j, q0, q1, q2, q2b, q2c, q2d, q3, q4, q5, w_ptr, K, T, H, LIN_BF16)
-                aj = _rn(_gelu(hj), LIN_BF16)
-                tl.store(gw + H * NG + H + j, tl.sum(tl.sum(gb * aj, axis=1), axis=0))
-                gh = gb * _rn(tl.load(w_ptr + H * NG + H + j), LIN_BF16) * _gelu_grad(hj)
-                tl.store(gw + H * NG + j, tl.sum(tl.sum(gh, axis=1), axis=0))
-                tl.store(gw + j * NG + 0, tl.sum(tl.sum(gh * q0, axis=1), axis=0))
-                tl.store(gw + j * NG + 1, tl.sum(tl.sum(gh * q1, axis=1), axis=0))
-                tl.store(gw + j * NG + 2, tl.sum(tl.sum(gh * q2, axis=1), axis=0))
-                tl.store(gw + j * NG + 2 + K, tl.sum(tl.sum(gh * q3, axis=1), axis=0))
-                tl.store(gw + j * NG + 3 + K, tl.sum(tl.sum(gh * q4, axis=1), axis=0))
-                tl.store(gw + j * NG + 4 + K, tl.sum(tl.sum(gh * q5, axis=1), axis=0))
-                gq0 = gq0 + gh * _rn(tl.load(w_ptr + j * NG + 0), LIN_BF16)
-                gq1 = gq1 + gh * _rn(tl.load(w_ptr + j * NG + 1), LIN_BF16)
-                gq2 = gq2 + gh * _rn(tl.load(w_ptr + j * NG + 2), LIN_BF16)
-                gq3 = gq3 + gh * _rn(tl.load(w_ptr + j * NG + 2 + K), LIN_BF16)
-                gq4 = gq4 + gh * _rn(tl.load(w_ptr + j * NG + 3 + K), LIN_BF16)
-                gq5 = gq5 + gh * _rn(tl.load(w_ptr + j * NG + 4 + K), LIN_BF16)
-                if T >= 2:
-                    tl.store(gw + j * NG + IDX_E, tl.sum(tl.sum(gh * q2b, axis=1), axis=0))
-                    gq2b = gq2b + gh * _rn(tl.load(w_ptr + j * NG + IDX_E), LIN_BF16)
-                if T >= 3:
-                    tl.store(gw + j * NG + IDX_F, tl.sum(tl.sum(gh * q2c, axis=1), axis=0))
-                    gq2c = gq2c + gh * _rn(tl.load(w_ptr + j * NG + IDX_F), LIN_BF16)
-                if T >= 4:
-                    tl.store(gw + j * NG + IDX_G, tl.sum(tl.sum(gh * q2d, axis=1), axis=0))
-                    gq2d = gq2d + gh * _rn(tl.load(w_ptr + j * NG + IDX_G), LIN_BF16)
+        # Linear backward: d/dgeo_g = gb w_g ; d/dw_g = sum gb geo_g ; d/db = sum gb
+        gq0 = gb * w0
+        gq1 = gb * w1
+        gq2 = gb * w2
+        gq3 = gb * w3
+        gq4 = gb * w4
+        gq5 = gb * w5
+        gq2b = gq2
+        gq2c = gq2
+        gq2d = gq2
+        if T >= 2:
+            gq2b = gb * w2b
+        if T >= 3:
+            gq2c = gb * w2c
+        if T >= 4:
+            gq2d = gb * w2d
+        tl.store(gw + 0, tl.sum(tl.sum(gb * q0, axis=1), axis=0))
+        tl.store(gw + 1, tl.sum(tl.sum(gb * q1, axis=1), axis=0))
+        tl.store(gw + 2, tl.sum(tl.sum(gb * q2, axis=1), axis=0))
+        if T >= 2:
+            tl.store(gw + IDX_E, tl.sum(tl.sum(gb * q2b, axis=1), axis=0))
+        if T >= 3:
+            tl.store(gw + IDX_F, tl.sum(tl.sum(gb * q2c, axis=1), axis=0))
+        if T >= 4:
+            tl.store(gw + IDX_G, tl.sum(tl.sum(gb * q2d, axis=1), axis=0))
+        tl.store(gw + 2 + K, tl.sum(tl.sum(gb * q3, axis=1), axis=0))
+        tl.store(gw + 3 + K, tl.sum(tl.sum(gb * q4, axis=1), axis=0))
+        tl.store(gw + 4 + K, tl.sum(tl.sum(gb * q5, axis=1), axis=0))
         gg0 = gq0 + mix * gp0[:, None]
         gg1 = gq1 + mix * gp1[:, None]
         gg2 = gq2 + mix * gp2[:, None]
@@ -736,7 +635,7 @@ if HAS_TRITON:
         gd0 = gg2 * h0
         gd1 = gg2 * h1
         gd2 = gg2 * h2
-        if not RELATIVE and H == 0:
+        if not RELATIVE:
             gg6 = gb * w6 + mix * gp6[:, None]
             gg7 = gb * w7 + mix * gp7[:, None]
             tl.store(gw + 5 + K, tl.sum(tl.sum(gb * q6, axis=1), axis=0))
@@ -781,7 +680,7 @@ def _geo_width(t: int, k: int, relative: bool) -> int:
     return (5 + t) if relative else (7 + k)
 
 
-def _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias, n_global, mlp_hidden=0):
+def _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias, n_global):
     b, n, _ = r.shape
     s = z_pos.shape[1]
     if not (r.is_cuda and r.dtype in (torch.float32, torch.float64)):
@@ -815,13 +714,7 @@ def _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias, n_global, mlp_
         raise ValueError("geometry tensors must have unit last stride")
     if bias.numel() != 1:
         raise ValueError("the routing bias head must end in one scalar bias")
-    if mlp_hidden:
-        ng = 5 + t
-        if weight.numel() != mlp_hidden * ng + 2 * mlp_hidden:
-            raise ValueError(
-                f"MLP routing bias needs a flat [W1 ({mlp_hidden}x{ng}), b1, W2] buffer of {mlp_hidden * ng + 2 * mlp_hidden} weights, got {weight.numel()}"
-            )
-    elif weight.shape[-1] not in (5 + t, 7 + n_global):
+    if weight.shape[-1] not in (5 + t, 7 + n_global):
         raise ValueError(f"routing Linear must be {5 + t}->1 (relative) or {7 + n_global}->1 for {t} vectors")
 
 
@@ -863,15 +756,12 @@ def _geo_region_fwd(
     relative: bool,
     lin_bf16: bool,
     n_global: int,
-    mlp_hidden: int,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias, n_global, mlp_hidden)
+    _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias, n_global)
     b, n, s = logits_pre.shape
     t, k = d_hat.shape[2], n_global
     if not relative and t != 1:
         raise ValueError("the non-relative (absolute-anchor) invariant set is written for one global direction")
-    if not relative and mlp_hidden:
-        raise ValueError("the MLP routing bias is written for the relative invariant set")
     ng = _geo_width(t, k, relative)
     out_dt = torch.bfloat16 if lin_bf16 else r.dtype
     bias_out = torch.empty(b, n, s, device=r.device, dtype=out_dt)
@@ -917,7 +807,6 @@ def _geo_region_fwd(
         pooled.stride(1),
         K=k,
         T=t,
-        H=mlp_hidden,
         RELATIVE=relative,
         LIN_BF16=lin_bf16,
         LOGIT_BF16=logits_pre.dtype == torch.bfloat16,
@@ -930,7 +819,7 @@ def _geo_region_fwd(
 
 
 @_geo_region_fwd.register_fake
-def _(logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, eps, relative, lin_bf16, n_global, mlp_hidden):
+def _(logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, eps, relative, lin_bf16, n_global):
     b, n, s = logits_pre.shape
     out_dt = torch.bfloat16 if lin_bf16 else r.dtype
     return (
@@ -957,7 +846,6 @@ def _geo_region_bwd(
     relative: bool,
     lin_bf16: bool,
     n_global: int,
-    mlp_hidden: int,
 ) -> tuple[
     torch.Tensor,
     torch.Tensor,
@@ -1036,7 +924,6 @@ def _geo_region_bwd(
         gd.stride(2),
         K=k,
         T=t,
-        H=mlp_hidden,
         NW=nw,
         RELATIVE=relative,
         LIN_BF16=lin_bf16,
@@ -1070,7 +957,6 @@ def _(
     relative,
     lin_bf16,
     n_global,
-    mlp_hidden,
 ):
     b, n, s = logits_pre.shape
     e = lambda *shape, dt=r.dtype: torch.empty(*shape, device=r.device, dtype=dt)  # noqa: E731
@@ -1087,9 +973,9 @@ def _(
 
 
 def _setup_context(ctx, inputs, output):
-    logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, eps, relative, lin_bf16, n_global, mlp_hidden = inputs
+    logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, eps, relative, lin_bf16, n_global = inputs
     ctx.save_for_backward(logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias)
-    ctx.eps, ctx.relative, ctx.lin_bf16, ctx.n_global, ctx.mlp_hidden = eps, relative, lin_bf16, n_global, mlp_hidden
+    ctx.eps, ctx.relative, ctx.lin_bf16, ctx.n_global = eps, relative, lin_bf16, n_global
 
 
 def _backward(ctx, grad_bias, grad_mix, grad_pooled):
@@ -1122,9 +1008,8 @@ def _backward(ctx, grad_bias, grad_mix, grad_pooled):
         ctx.relative,
         ctx.lin_bf16,
         ctx.n_global,
-        ctx.mlp_hidden,
     )
-    return glogit, gr, gn, gd, gz, gm, gw, gb, None, None, None, None, None
+    return glogit, gr, gn, gd, gz, gm, gw, gb, None, None, None, None
 
 
 _geo_region_fwd.register_autograd(_backward, setup_context=_setup_context)
@@ -1150,28 +1035,12 @@ def fused_geo_region(
     direction dots right after log distance, the token-vector dots after n.m),
     so the routing Linear's weights mean the same on both paths. ``n_global``
     defaults to T (every vector a global direction). ``lin`` is the routing-bias
-    head: ``nn.Linear(n_geo, 1)`` (geo_bias="linear") or the ``nn.Sequential``
-    Linear(n_geo, H) -> GELU -> Linear(H, 1) of geo_bias="mlp", whose weights are
-    packed into one flat buffer [W1, b1, W2] (autograd routes the gradient back
-    through the concatenation) with the final bias as the kernel's scalar bias."""
+    head, ``nn.Linear(n_geo, 1)``."""
     if not HAS_TRITON:
         raise RuntimeError("fused geo region requires triton")
-    if isinstance(lin, torch.nn.Linear):
-        weight, bias, mlp_hidden = lin.weight, lin.bias, 0
-    else:
-        l1, l2 = lin[0], lin[-1]
-        if not (
-            isinstance(l1, torch.nn.Linear)
-            and isinstance(l2, torch.nn.Linear)
-            and len(lin) == 3
-            and isinstance(lin[1], torch.nn.GELU)
-            and lin[1].approximate == "none"
-            and l2.out_features == 1
-        ):
-            raise ValueError("fused geo region supports a Linear head or Linear -> GELU -> Linear(., 1)")
-        mlp_hidden = l1.out_features
-        weight = torch.cat([l1.weight.reshape(-1), l1.bias.reshape(-1), l2.weight.reshape(-1)])
-        bias = l2.bias
+    if not isinstance(lin, torch.nn.Linear):
+        raise ValueError("fused geo region takes the linear routing-bias head, nn.Linear(n_geo, 1)")
+    weight, bias = lin.weight, lin.bias
     lin_bf16 = (
         torch.is_autocast_enabled("cuda")
         and torch.get_autocast_dtype("cuda") == torch.bfloat16
@@ -1191,5 +1060,4 @@ def fused_geo_region(
         bool(relative),
         bool(lin_bf16),
         int(d_hat.shape[2] if n_global is None else n_global),
-        int(mlp_hidden),
     )
