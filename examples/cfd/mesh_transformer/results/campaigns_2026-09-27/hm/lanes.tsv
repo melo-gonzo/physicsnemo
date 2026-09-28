@@ -13,3 +13,11 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code
 11	hm	hm_poisson_ext_distonly_n2048_seed43	olbc_poisson_ext	isla_olbc_poisson_ext_distonly	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
 12	hm	hm_af_provided_hm_seed42	airfrans_volume_hm	isla_volume_airfrans_ref_provided_hm	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	42	100000	code_v7
 13	hm	hm_af_provided_hm_seed43	airfrans_volume_hm	isla_volume_airfrans_ref_provided_hm	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	43	100000	code_v7
+14	hm	hm_poisson_hm_measures_n512_seed42	olbc_poisson_hm	isla_olbc_poisson_hm_measures	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+15	hm	hm_poisson_hm_measures_n512_seed43	olbc_poisson_hm	isla_olbc_poisson_hm_measures	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+16	hm	hm_poisson_hm_measures_n2048_seed42	olbc_poisson_hm	isla_olbc_poisson_hm_measures	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+17	hm	hm_poisson_hm_measures_n2048_seed43	olbc_poisson_hm	isla_olbc_poisson_hm_measures	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+18	hm	hm_poisson_hm_plus_dist_n512_seed42	olbc_poisson_hm_ext	isla_olbc_poisson_hm_plus_dist	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+19	hm	hm_poisson_hm_plus_dist_n512_seed43	olbc_poisson_hm_ext	isla_olbc_poisson_hm_plus_dist	train_split=train_n512 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7
+20	hm	hm_poisson_hm_plus_dist_n2048_seed42	olbc_poisson_hm_ext	isla_olbc_poisson_hm_plus_dist	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	42	20000	code_v7
+21	hm	hm_poisson_hm_plus_dist_n2048_seed43	olbc_poisson_hm_ext	isla_olbc_poisson_hm_plus_dist	train_split=train_n2048 val_split=test +training.val_interval=10 training.num_epochs=500	5e-4	43	20000	code_v7

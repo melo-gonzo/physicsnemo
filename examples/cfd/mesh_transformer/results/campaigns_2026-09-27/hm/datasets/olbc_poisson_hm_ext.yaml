@@ -1,0 +1,38 @@
+# HARMONIC follow-up (2026-09-27): the harmonic-field dataset copy plus the BoundaryValueExtension transform, so a model can read hm_* and ext_dist_* together.
+# OLBC poisson-square-bc5 (Mousavi, Mishra, De Lorenzis; arXiv 2602.04923; Zenodo record 18377514, CC BY 4.0) as a
+# boundary-to-interior scalar-PDE dataset, converted to native DomainMesh files by kernel/olbc_convert.py --set poisson
+# (2026-09-22). -lap u = f on the square [-1, 1]^2 with the "Mixed+" boundary configuration: the boundary is cut into four
+# random segments carrying non-homogeneous Dirichlet (u = g), Neumann (du/dn = g) or Robin (alpha u + du/dn = g) conditions
+# whose values g (and alpha) are random sinusoids, and the source f is a random sinusoid that varies per sample. One fixed
+# mesh of 16,598 nodes (1,120 on the boundary) embedded at z = 0: interior = every node with u (target), source (input field),
+# sdf (<= 0: nodes inside or on the boundary; positive-outside convention), sdf_normals (outward at the boundary), nodal BC
+# tags tag_dirichlet / tag_neumann / tag_robin and nodal values bc_value_node / bc_robin_alpha_node (for models without a
+# boundary-token path); boundary "outer" = the closed square polyline as 1,120 line cells with outward in-plane normals,
+# segment lengths as the quadrature measure, per-cell one-hot BC type bc_dirichlet / bc_neumann / bc_robin, bc_value_g (the
+# g of the cell's type) and bc_robin_alpha (0 off Robin cells). No per-sample scalar parameters. Splits: train (8448), test
+# (256), nested train_n512 / train_n2048 (seed-0 prefixes of train); select with train_split=train_n512 val_split=test.
+train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/olbc_poisson_hm_pdmsh
+manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/olbc_poisson_hm_pdmsh/manifest.json
+
+pipeline:
+  reader:
+    _target_: ${dp:DomainMeshReader}
+    path: ${train_datadir}
+    pattern: "*_*/*.pdmsh"
+    subsample_n_points: ${sampling_resolution}   # interior queries (16,598 nodes per case: set sampling_resolution >= 16598 to keep every node)
+    subsample_n_cells: ${sampling_resolution}    # larger than the 1,120 boundary segments: the boundary is kept whole
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    - _target_: ${dp:BoundaryValueExtension}            # LIT-EXT (2026-09-22): prescribed values extended into the interior per condition type
+      boundary: outer
+      value_field: bc_value_g
+      label_fields: [bc_dirichlet, bc_neumann, bc_robin]
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:                                    # pooled over all nodes of train (manifest _stats; 2026-09-22)
+        u: {type: scalar, mean: 3.26e-3, std: 1.0845}
+        source: {type: scalar, mean: -7.0e-3, std: 11.517}      # input field, standardized in place (not a target)
+
+targets:
+  u: scalar

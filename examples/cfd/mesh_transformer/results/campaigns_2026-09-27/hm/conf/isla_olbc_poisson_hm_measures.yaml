@@ -1,0 +1,39 @@
+# @package _global_
+# HARMONIC follow-up measures-only (2026-09-27): (2026-09-27): the baseline plus six harmonic query scalars (olbc_poisson_hm.yaml): per condition type the harmonic measure
+# inverse-square extension approximated. Pairs with datasets/olbc_poisson_hm.yaml.
+# ISLA on OLBC poisson-square-bc5 (2026-09-22): boundary tokens from the square polyline (line cells) with the one-hot BC type,
+# the BC value g and the Robin alpha as boundary scalars; no global condition (the material and domain are fixed, the source is
+# a field, and a scalar Poisson solution needs no frame: K = 0); every mesh node as an interacting query token with the signed
+# distance and the (standardized) source as its two query scalars.
+input_type: tensors
+output_type: fields
+forward_kwargs:
+  points: boundaries.outer.cell_centroids
+  normals: boundaries.outer.cell_data.normals              # precomputed in-plane outward normals (a curve in 3-D has no cell_normals)
+  measure_weights: boundaries.outer.cell_data.quadrature_measure
+  boundary_inputs:                                         # per-boundary-cell fields: which condition, and its value (all rank 0)
+    bc_dirichlet: boundaries.outer.cell_data.bc_dirichlet
+    bc_neumann: boundaries.outer.cell_data.bc_neumann
+    bc_robin: boundaries.outer.cell_data.bc_robin
+    bc_value_g: boundaries.outer.cell_data.bc_value_g
+    bc_robin_alpha: boundaries.outer.cell_data.bc_robin_alpha
+  query_points: interior.points
+  query_normals: interior.point_data.sdf_normals
+  query_inputs:
+    sdf: interior.point_data.sdf
+    source: interior.point_data.source                     # standardized in place by the dataset yaml
+    hm_dirichlet: interior.point_data.hm_dirichlet         # HARMONIC: hitting probability of each condition type (sum to one)
+    hm_neumann: interior.point_data.hm_neumann
+    hm_robin: interior.point_data.hm_robin
+model:
+  _target_: physicsnemo.experimental.models.ISLA
+  outputs: {u: 0}
+  boundary_inputs: {bc_dirichlet: 0, bc_neumann: 0, bc_robin: 0, bc_value_g: 0, bc_robin_alpha: 0}
+  hidden: 384
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  query_tokens: true
+  geo_checkpoint: true
+  geo_kernel: eager              # the fused kernel requires one global direction
+  interior_geometry: provided          # code_v7: the dataset supplies the SDF normals as query normals
