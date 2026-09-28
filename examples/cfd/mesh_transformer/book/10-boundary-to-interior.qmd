@@ -684,8 +684,8 @@ matching it (0.244 / 0.256 / 0.258 against 0.257 / 0.261 / 0.267 at
 displacement's extension already served, moves from 0.201 to 0.216
 (GeoTransolver-512 0.165); on the AirfRANS interior, a point cloud whose
 100,000 queries are redrawn every epoch, the same aggregation hurts every
-field by 13 to 37% on the one seed scored
-(@sec-nb-local-agg-elasticity-verdict). The aggregation is therefore a
+field by 13 to 22% on two seeds
+(@sec-nb-local-agg-airfrans-verdict). The aggregation is therefore a
 documented option for fixed-mesh interior tasks and not part of the
 reference configuration; whether the AirfRANS loss is the resampled
 stencil is the open follow-up. The extension's vector-data form on the elasticity set is the

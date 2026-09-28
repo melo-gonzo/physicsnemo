@@ -30475,3 +30475,17 @@ already closes the stresses at 2,048 so the combination's value is whether
 it also lifts displacement (base 0.201, aggregation 0.216,
 GeoTransolver-512 0.165). The inputs are admissible: geometry and condition
 labels of the one sample.
+
+## 2026-09-28 — Status, LOCAL-AGG on AirfRANS interior, second seed: the aggregation hurts on both seeds (twin ÷ reference 1.13 / 1.17 / 1.22 on pressure / velocity / eddy viscosity; seed 43 1.13 / 1.13 / 1.08), the AirfRANS reading is final and the stencil diagnostic decides its cause {#sec-nb-local-agg-airfrans-verdict}
+
+The second seed of the AirfRANS aggregation twin
+(@sec-nb-local-agg-elasticity-verdict) is scored. Two-seed means: reference
+0.0328 / 0.0161 / 0.0323, with aggregation 0.0370 / 0.0188 / 0.0393, ratios
+**1.13 / 1.17 / 1.22**; per seed 1.13 / 1.20 / 1.37 (seed 42) and 1.13 / 1.13
+/ 1.08 (seed 43). The *hurts* clause holds on every field on both seeds
+(pressure identically so, the eddy-viscosity loss varies 1.08 to 1.37
+between seeds). The verdict for the interior aggregation stands: pays on
+both fixed-mesh sets, hurts on the resampled point cloud. The fixed-draw
+diagnostic (@sec-nb-local-agg-stencil-prereg, la rows 18-21) is training
+and separates the resampling from the varying geometry. Artifact
+results/local_agg_2026-09-27.json (airfrans, two seeds).
