@@ -1421,3 +1421,20 @@ class RestrictToPlane(MeshTransform):
 
     def extra_repr(self) -> str:
         return f"axis={self.axis}, vector_fields={self.vector_fields}, atol={self.atol}"
+
+
+@register()
+class FixedDrawDomainMeshReader(DomainMeshReader):
+    r"""``DomainMeshReader`` whose per-case subsample is the same at every epoch (LOCAL-AGG stencil diagnostic, 2026-09-28).
+
+    The base reader folds the epoch into each case's subsampling seed, so a point-cloud interior task (AirfRANS: 100,000 of
+    ~177,000 nodes per airfoil) presents a different query draw every epoch. A local aggregation among tokens then sees a
+    different neighbour stencil for the same physical point at every visit. This reader ignores ``set_epoch`` so each case
+    keeps the draw of epoch 0 for the whole run; the draw still depends on the base seed and the case index. Training on a
+    fixed draw removes that augmentation, so the diagnostic pairs an aggregation arm with a no-aggregation control on the
+    same fixed draw and compares the ratio with the resampled pair. Test-time draws are unaffected (the evaluator sets its
+    own generator).
+    """
+
+    def set_epoch(self, epoch: int) -> None:  # noqa: D401 - deliberately a no-op
+        self._epoch = 0
