@@ -1331,3 +1331,93 @@ class HarmonicBoundaryMeasures(MeshTransform):
 
     def extra_repr(self) -> str:
         return f"boundary={self.boundary!r}, labels={self.label_fields}, value={self.value_field!r}, prefix={self.prefix!r}"
+
+
+@register()
+class RestrictToPlane(MeshTransform):
+    r"""Restrict a planar problem stored in three-dimensional coordinates to its plane (ND-GENERIC, 2026-09-28).
+
+    Two-dimensional datasets (the OLBC square, Tensile2d, AirfRANS) are stored as ``DomainMesh`` files with a
+    third coordinate that is constant (usually zero) on every point. This transform drops that axis from the
+    points of the interior and of every boundary and from the named vector fields (normals, SDF normals,
+    prescribed vectors), so the model sees ``d = 2`` components and runs its native two-dimensional path
+    (``ISLA(dim=2)``) instead of a three-dimensional model on a plane. It refuses a mesh whose dropped coordinate
+    is not constant within ``atol`` (the problem is then not planar). Cell centroids follow the points; scalar
+    fields and cell connectivity are untouched. Place first in the pipeline so every later transform (boundary-value
+    extension, harmonic measures, normalization) already works in the plane.
+
+    Args:
+        axis: the coordinate index to drop (default 2, the ``z`` of a problem in the ``xy`` plane).
+        vector_fields: dotted field names whose trailing component is a spatial vector, e.g.
+            ``interior.point_data.sdf_normals`` or ``boundaries.outer.cell_data.normals``. Missing names are
+            skipped so one list can serve several dataset variants.
+        atol: tolerance for the constancy check of the dropped coordinate; ``None`` disables the check.
+    """
+
+    def __init__(self, axis: int = 2, vector_fields: Sequence[str] = (), atol: float | None = 1e-6) -> None:
+        super().__init__()
+        self.axis = int(axis)
+        self.vector_fields = [str(f) for f in vector_fields]
+        self.atol = None if atol is None else float(atol)
+
+    def _keep(self, n: int) -> list[int]:
+        if not 0 <= self.axis < n:
+            raise ValueError(f"RestrictToPlane: axis {self.axis} is not a coordinate of {n}-dimensional points.")
+        return [i for i in range(n) if i != self.axis]
+
+    def _drop(self, v: torch.Tensor, what: str) -> torch.Tensor:
+        return v[..., self._keep(v.shape[-1])]
+
+    def _check_planar(self, points: torch.Tensor, what: str) -> None:
+        if self.atol is None or points.shape[0] == 0:
+            return
+        z = points[:, self.axis]
+        spread = float((z.max() - z.min()).item())
+        if spread > self.atol:
+            raise ValueError(
+                f"RestrictToPlane: coordinate {self.axis} of {what} spans {spread:.3e} > atol {self.atol:.1e}; "
+                "the problem is not planar, so the axis cannot be dropped."
+            )
+
+    def _project_mesh(self, mesh: Mesh, what: str, vec: dict[str, set[str]]) -> Mesh:
+        self._check_planar(mesh.points, what)
+        pd, cd = mesh.point_data.clone(), mesh.cell_data.clone()
+        for name in vec.get("point_data", ()):
+            if name in pd.keys():
+                pd[name] = self._drop(pd[name], name)
+        for name in vec.get("cell_data", ()):
+            if name in cd.keys():
+                cd[name] = self._drop(cd[name], name)
+        return Mesh(points=self._drop(mesh.points, what), cells=mesh.cells, point_data=pd, cell_data=cd, global_data=mesh.global_data)
+
+    def _split_fields(self) -> tuple[dict[str, set[str]], dict[str, dict[str, set[str]]]]:
+        interior: dict[str, set[str]] = {}
+        boundaries: dict[str, dict[str, set[str]]] = {}
+        for f in self.vector_fields:
+            parts = f.split(".")
+            if parts[0] == "interior" and len(parts) == 3:
+                interior.setdefault(parts[1], set()).add(parts[2])
+            elif parts[0] == "boundaries" and len(parts) == 4:
+                boundaries.setdefault(parts[1], {}).setdefault(parts[2], set()).add(parts[3])
+            else:
+                raise ValueError(
+                    f"RestrictToPlane: vector field {f!r} must be 'interior.<point_data|cell_data>.<name>' or "
+                    "'boundaries.<boundary>.<point_data|cell_data>.<name>'."
+                )
+        return interior, boundaries
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        interior, _ = self._split_fields()
+        return self._project_mesh(mesh, "the mesh points", interior)
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        interior, boundaries = self._split_fields()
+        new_interior = self._project_mesh(domain.interior, "the interior points", interior)
+        new_boundaries = {
+            name: self._project_mesh(b, f"boundary {name!r}", boundaries.get(name, {}))
+            for name, b in domain.boundaries.items()
+        }
+        return DomainMesh(interior=new_interior, boundaries=new_boundaries, global_data=domain.global_data)
+
+    def extra_repr(self) -> str:
+        return f"axis={self.axis}, vector_fields={self.vector_fields}, atol={self.atol}"
