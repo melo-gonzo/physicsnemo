@@ -29947,3 +29947,36 @@ measures-only beats the six-field harmonic arm by $\ge 5\%$ (the value
 half was the drag). Prediction: values hurt (0.6), measures redundant
 (0.5), measures add (0.3). The 2,048 rung of every arm is training.
 Artifact results/harmonic_2026-09-27.json.
+
+## 2026-09-27 — Verdict, HARMONIC on AirfRANS interior (800 airfoils, two seeds): the airfoil's harmonic measure on top of the stored distance field is 4% better on pressure, unchanged on velocity and 6% worse on eddy viscosity; with one boundary type the harmonic channel is nearly redundant with the distance field {#sec-nb-harmonic-airfrans-verdict}
+
+**Setting.** The AirfRANS half of HARMONIC (@sec-nb-harmonic-prereg) adds
+the harmonic measure of the airfoil (the far field tagged as the
+complementary type) as a query scalar on top of the provided-geometry
+reference, which already reads the stored signed distance field and its
+gradient. Reference configuration, 800 airfoils, 100,000 queries, two
+seeds, against the `sg_af_provided` pair on the same test split.
+
+**What we saw (relative L2, two-seed means; ratio harmonic ÷
+reference).** Pressure 0.0314 against 0.0328 (**0.956**; seeds 0.938 /
+0.973). Velocity 0.01605 against 0.01613 (0.995). Eddy viscosity 0.0341
+against 0.0323 (**1.056**; seeds 1.112 / 1.006). Under the preregistered
+clauses the eddy-viscosity ratio above 1.05 fires *hurts* while pressure
+clears the *pays* threshold, so the honest reading is mixed: a small
+consistent gain on pressure, nothing on velocity, and a seed-dependent
+loss on eddy viscosity.
+
+**Reading.** AirfRANS has one boundary type, the airfoil, and its
+harmonic measure against the far field is a smooth monotone function of
+the distance the model already reads, so the channel adds little
+information and the effects are at the few-percent level in both
+directions. This is consistent with the OLBC result
+(@sec-nb-harmonic-interim-512), where the strong gain came from the
+per-type distances on a domain with three condition types: the value of
+a per-type geometry channel scales with the number of boundary types the
+problem has. Where the routing seam of the minimum-distance geometry sits
+(the medial axis) the AirfRANS interior is far from the airfoil and the
+fields are smooth, so the seam cost the reference little to begin with.
+No configuration change on AirfRANS follows from this; the standing
+there stays with the provided-geometry reference. Artifact
+results/harmonic_2026-09-27.json.
