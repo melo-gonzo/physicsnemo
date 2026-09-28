@@ -30694,3 +30694,56 @@ AirfRANS arms (two seeds each, about a day out) decide, and if they pay
 the weights become a point-cloud option gated by the datapipe, not a
 replacement. Artifact results/harmonic_2026-09-27.json (poisson, 512, arm
 lpr_distonly_local05).
+
+## 2026-09-28 — Ruling (Peter) and preregistration, UNIVERSAL: per-dataset options read as p-hacking; the program wants one architecture; every option gets an always-on test on datasets its rule was not fitted on, and either becomes the default everywhere or is deleted; the local aggregation goes first (lug, Tensile2d, DrivAerML Volume, with same-snapshot references, two seeds) {#sec-nb-universal-prereg}
+
+**The ruling.** Peter reviewed the day's ledger and objected to its shape:
+"we are making lots of different variants that are dataset-specific ... I
+really just want one model architecture that works well across many types
+of physics and problem setups. Making tons of little tweaks that are
+different for each dataset feels a little like p-hacking." The objection
+is accepted on the following points. The book quotes the best ISLA arm
+per dataset against a GeoTransolver-512 frozen at one configuration, and
+the choice of which arm to quote is made after the test scores exist. The
+local aggregation's scope (on for fixed meshes, off for resampled point
+clouds) was derived from the three datasets that now confirm it. The
+per-type geometry channel pays on Poisson and hurt on elasticity at 512
+cases, and gating it on where it pays would be a forking path. The pushed
+back part: inputs a solver also needs (condition types, geometry, and
+scalars computed from them without parameters) are not tweaks, but their
+inclusion must be a universal rule, tested where it was not fitted.
+
+**The discipline adopted.** An option is a scaffold with two fates: it
+becomes part of the reference configuration and is on for every dataset,
+or it is deleted. No option keeps a per-dataset setting. Consequences:
+(1) the headline scoreboard quotes the reference configuration only, one
+recipe on every dataset, and every other number moves to a separately
+labelled ablation table (a book edit, pending Peter's confirmation of the
+restructure); (2) every surviving option gets an *always-on* test on the
+datasets its rule was not fitted on; (3) options that already failed
+their test are removed rather than documented.
+
+**Preregistration, UNIVERSAL-AGG (campaign un rows 0-11, code_v10,
+recipe_v4, two seeds each).** The local aggregation ($\rho$ 0.05, 32
+neighbours) on top of the reference configuration, paired with the
+reference configuration on the same snapshot, on three datasets it has
+never seen, all of which draw their interior queries afresh per epoch:
+the lug at 2,400 cases (scalar von Mises stress, 20,000 queries), Tensile2d
+at 400 cases (tensor stress and displacement, 20,000 queries), and
+DrivAerML Volume (pressure, velocity, eddy viscosity, 200,000 queries).
+The aggregation rule fitted so far predicts *hurts* on all three (they are
+resampled clouds like AirfRANS); the "one model" hypothesis needs
+*neutral or better* on all three.
+
+**Bars (two-seed means, aggregation ÷ same-snapshot reference, every
+field).** *Default-on candidate*: at or below 1.03 on every field of every
+dataset. *Not part of the model*: above 1.05 on any field of any dataset,
+in which case the Poisson and elasticity results stand as findings about a
+mechanism and the option is scheduled for deletion unless the AirfRANS
+LOCAL-LPR arms show that consistent weights remove the loss, in which case
+the lpr form is what gets the universal test. *Between* otherwise (a
+single dataset within 1.03 to 1.05 triggers a third seed there before a
+call). Prediction: not part of the model (0.55), between (0.3),
+default-on candidate (0.15). The same test is owed to the per-type
+geometry channel once the elasticity 2,048 rung reports, and to any option
+proposed after today.
