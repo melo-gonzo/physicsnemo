@@ -30158,3 +30158,54 @@ elasticity verdict: the "pays" bar (fraction 0.88 or above, both seeds)
 and the "between" clause are read against the control's 0.787, not the
 code_v2 record's 0.677. Artifact results/local_agg_2026-09-27.json
 (elasticity, 2048, arm rankio_ctrl_v7).
+
+## 2026-09-28 — Preregistration, ND-GENERIC pass 2: the OLBC Poisson distances-only arm rerun natively in two dimensions (`dim: 2` on a plane-restricted datapipe), 512 and 2,048 cases, two seeds, against the embedded three-dimensional arm {#sec-nb-ndgeneric-2d-prereg}
+
+**Setting.** Pass 1 of ND-GENERIC (@sec-nb-ndgeneric-pass1) gave ISLA a
+`dim` argument so that every geometric quantity (relative vectors, the
+isotropic tensors, the pseudovectors, the rank specs of vector and tensor
+inputs and outputs) is built for $d$ components, with the three-dimensional
+numerics bitwise unchanged. Every two-dimensional dataset in the program
+(the OLBC square, Tensile2d, AirfRANS) has so far run as a
+three-dimensional model on a plane at $z = 0$. The second pass closes the
+loop on a real dataset: a recipe transform, `RestrictToPlane`, drops the
+constant coordinate from the interior nodes, the boundary polyline and the
+named vector fields (in-plane boundary normals, SDF normals) and refuses a
+mesh whose dropped coordinate is not constant, so the model receives
+two-component points and runs its native two-dimensional path. The
+boundary-value extension computed in the plane equals the embedded one to
+roundoff (recipe test `tests/test_restrict_to_plane.py`), so the arm
+differs from its control in the model's dimension only.
+
+**Question.** Does the native two-dimensional model reproduce the embedded
+three-dimensional one? The embedded model carries a third component in
+every relative vector and normal that is identically zero, and its
+pseudovector features (cross products of in-plane vectors) point out of the
+plane, so it spends parameters on components that carry no information.
+The two-dimensional model has none of that. If the code path is right, the
+two should agree within seed noise; a difference in either direction is
+informative (a gain would say the dead components cost accuracy, a loss
+would say the two-dimensional path has a defect or that the extra
+components were doing work).
+
+**Arms (campaign nd, code_v9 = code_v8 plus the ISLA overlay of commit
+2b77562e, recipe_v4).** `nd_poisson_ext_distonly_2d_n{512,2048}_seed{42,43}`:
+the distances-only arm (@sec-nb-harmonic-followup-512; three per-type
+distances as query scalars, K = 0, eager geometry region, provided SDF
+normals) with `dim: 2` on the dataset `olbc_poisson_ext_2d`. Controls: the
+scored embedded arm `hm_poisson_ext_distonly_n512_seed{42,43}` (0.202
+mean) and the 2,048 pair when it scores. Same rate 5e-4, 500 epochs,
+20,000 interior queries, 256 test cases, float32 scoring.
+
+**Bars (mean of two seeds, ratio native ÷ embedded on the relative L2 of
+u).** Within 0.03 of one on both rungs: **dimension-generic path
+validated** and the ledger acceptance criterion for ND-GENERIC is met on
+the accuracy side. Below 0.97 on both rungs: the embedding costs accuracy
+and the native path becomes the recommendation for planar problems. Above
+1.03 on either rung: a defect or a capacity effect; the follow-up is a
+seeded fixture comparing the two paths layer by layer before any further
+two-dimensional lane. Also recorded: step time and peak memory of the two
+arms from the training logs (the native model has fewer geometry
+features, so it must not be slower). Pending after this pass: the
+two-dimensional fused Triton kernel and a second native dataset
+(Tensile2d or AirfRANS).
