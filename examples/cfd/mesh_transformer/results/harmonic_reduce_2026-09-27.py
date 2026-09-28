@@ -89,6 +89,38 @@ for n in (512, 2048):
             fu["measures_add"] = pd_["u"] <= 0.95 * d0["u"] and all(pd_["per_seed"][s_] <= 0.95 * d0["per_seed"][s_] for s_ in pd_["per_seed"] if s_ in d0["per_seed"])
         rung["followup"] = fu
     out["poisson"][str(n)] = rung
+# HARMONIC-EL (2026-09-28, #sec-nb-harmonic-elasticity-prereg): the per-component geometry channel on OLBC elasticity on top of the
+# RANK-IO arm. Bases: 512 = the code_v2 RANK-IO record, 2048 = the code_v7 control (both in local_agg_2026-09-27.json); GT-512 per
+# field from the same artifact. Ratios arm / base per field; stress mean over sig11/sig22/sig12; bars: pays <= 0.95 on every stress
+# on both seeds, null within 3%, hurts > 1.05 on any stress; harmonic / distances <= 0.95 on the stress mean at 2048 = edge reproduces.
+EF = ("displacement", "sig11", "sig22", "sig12")
+la = json.load(open(f"{R}/local_agg_2026-09-27.json"))["elasticity"]
+out["elasticity"] = {}
+for n, base_arm in ((512, "rankio"), (2048, "rankio_ctrl_v7")):
+    base = la[str(n)]["arms"][base_arm]; gt = la[str(n)]["gt512"]
+    rung = {"base_arm": base_arm, "base": base["means"], "base_per_seed": base["per_seed"], "gt512": gt, "arms": {}}
+    for arm, pat in {"hm_measures": f"hm_elasticity_tensor_hm_measures_n{n}_seed{{s}}", "distonly": f"hm_elasticity_tensor_distonly_n{n}_seed{{s}}",
+                     "hm_measures_local05": f"hm_elasticity_tensor_hm_measures_local05_n{n}_seed{{s}}"}.items():
+        ps = {}
+        for sd in (42, 43):
+            vals = {f: r[0] for f in EF if (r := per_case(pat.format(s=sd), f"{f}_l2"))}
+            if len(vals) == len(EF):
+                ps[str(sd)] = vals
+        if not ps:
+            rung["arms"][arm] = {"status": "not scored"}; continue
+        means = {f: st.mean(v[f] for v in ps.values()) for f in EF}
+        ratio = {f: means[f] / base["means"][f] for f in EF}
+        ratio_ps = {sd: {f: ps[sd][f] / base["per_seed"][sd][f] for f in EF} for sd in ps if sd in base["per_seed"]}
+        stress = [f for f in EF if f != "displacement"]
+        smean = st.mean(ratio[f] for f in stress)
+        verdict = ("pays" if all(ratio[f] <= 0.95 for f in stress) and all(ratio_ps[sd][f] <= 0.95 for sd in ratio_ps for f in stress)
+                   else "hurts" if any(ratio[f] > 1.05 for f in stress) else "null" if all(abs(ratio[f] - 1) <= 0.03 for f in stress) else "between")
+        rung["arms"][arm] = {"means": means, "per_seed": ps, "n_seeds": len(ps), "ratio_to_base": ratio, "ratio_per_seed": ratio_ps,
+                             "stress_mean_ratio": smean, "gt512_over": {f: gt[f] / means[f] for f in EF}, "verdict": verdict, "interim": len(ps) < 2}
+    h, d0 = rung["arms"]["hm_measures"], rung["arms"]["distonly"]
+    if "means" in h and "means" in d0:
+        rung["harmonic_over_distances_stress"] = st.mean(h["means"][f] / d0["means"][f] for f in ("sig11", "sig22", "sig12"))
+    out["elasticity"][str(n)] = rung
 F = ("pressure_l2", "velocity_l2", "nut_l2")
 ref = {s: {f: per_case(f"sg_af_provided_seed{s}", f)[0] for f in F} for s in (42, 43) if per_case(f"sg_af_provided_seed{s}", F[0])}
 hm = {s: {f: r[0] for f in F if (r := per_case(f"hm_af_provided_hm_seed{s}", f))} for s in (42, 43)}
@@ -109,4 +141,9 @@ for n, rung in out["poisson"].items():
     for arm, a in rung["arms"].items():
         print(f"  {arm:13s} " + (f"u {a['u']:.4f} seeds {[round(x, 4) for x in a['per_seed'].values()]} frac {a['frac']:.3f} {a.get('verdict', '')}"
                                  f"{' (one seed)' if a.get('interim') else ''}" if "u" in a else a["status"]))
+for n, rung in out["elasticity"].items():
+    print(f"== Elasticity {n} (base {rung['base_arm']}): base {[round(rung['base'][f],4) for f in EF]} gt512 {[round(rung['gt512'][f],4) for f in EF]}")
+    for arm, a in rung["arms"].items():
+        print(f"  {arm:20s} " + (f"{[round(a['means'][f],4) for f in EF]} ratio {[round(a['ratio_to_base'][f],3) for f in EF]} stress {a['stress_mean_ratio']:.3f} {a['verdict']}{' (one seed)' if a['interim'] else ''}" if "means" in a else a["status"]))
+    if "harmonic_over_distances_stress" in rung: print(f"  harmonic/distances stress {rung['harmonic_over_distances_stress']:.3f}")
 print("== AirfRANS:", {k: (round(v, 3) if isinstance(v, float) else v) for k, v in out["airfrans"].items() if k in ("ratio", "verdict", "status", "n_seeds")})

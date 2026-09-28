@@ -30558,3 +30558,74 @@ discretization-invariance property. The inputs are admissible: neighbour
 positions of the one sample and nothing else. Launched without waiting
 for the diagnostic (no result dependency; the reading above covers every
 combination).
+
+## 2026-09-28 — Verdict, ND-GENERIC pass 2 (512 and 2,048 Poisson cases, two seeds each): the native two-dimensional model reproduces the embedded three-dimensional one at both rungs (0.2016 against 0.2023 and 0.0743 against 0.0744; per-seed ratios 0.99 to 1.00) at the same parameter count and step time; the dimension-generic path is validated {#sec-nb-ndgeneric-2d-verdict}
+
+**Setting.** ND-GENERIC gave ISLA a `dim` argument (pass 1,
+@sec-nb-ndgeneric-pass1) and a plane-restricting datapipe transform (pass 2,
+@sec-nb-ndgeneric-2d-prereg). The acceptance criterion was that a
+two-dimensional dataset run natively matches the same run embedded in
+three dimensions within seed noise. The 512-case interim
+(@sec-nb-ndgeneric-2d-interim) met it; this entry adds the 2,048 rung.
+
+**What we saw (relative L2 on u, 256 test cases, seed means with seeds in
+parentheses).** At 2,048 cases the native two-dimensional distances-only
+arm scores **0.0743** (0.0699 / 0.0787) against the embedded arm's 0.0744
+(0.0705 / 0.0783): ratio 0.998, per seed 0.991 / 1.004. At 512 cases
+0.2016 against 0.2023, ratio 0.997 (0.993 / 1.001). Parameter count
+34,310,858 in both models at both rungs; training step 0.148 s in both;
+peak memory 7.36 against 7.44 GB.
+
+**Verdict.** *Validated* on both rungs by the preregistered clause
+(within 0.03). The embedded model's dead third components cost nothing
+measurable, as the identical parameter count predicts (with scalar inputs
+and outputs and no global direction, no tensor in the model has a size
+that depends on the spatial dimension). The native path's value is the
+contract, not speed: a two-dimensional problem is treated as one, with the
+two-dimensional pseudovector and no out-of-plane cross products, and the
+same code serves any dimension the mesh module does. **ND-GENERIC is
+DONE.** The recipe transform `RestrictToPlane` is the documented way to run
+a planar dataset (OLBC, Tensile2d, AirfRANS); the remaining engineering
+item is a two-dimensional fused Triton kernel, which matters only when a
+two-dimensional problem needs a global direction at large token counts.
+Artifact results/harmonic_2026-09-27.json (poisson, arm nd_distonly_2d,
+both rungs).
+
+## 2026-09-28 — Interim, HARMONIC-EL at 512 elasticity cases (two seeds): both per-component geometry channels hurt on top of the rank-1-input arm (nearest distances 1.07 to 1.16 of the base per field, harmonic measures 1.10 to 1.15), against the prediction; the 2,048 rung with its same-snapshot control decides {#sec-nb-harmonic-elasticity-interim}
+
+**Setting.** HARMONIC-EL (@sec-nb-harmonic-elasticity-prereg) asks whether
+the per-condition-type geometry channel that closed the Poisson gap
+reproduces on OLBC elasticity, where the condition types are per
+component (Dirichlet-x, Neumann-x, Dirichlet-y, Neumann-y) and the base arm
+already carries the prescribed displacement and traction as rank-1
+boundary inputs (RANK-IO). At 512 cases the base is the code_v2 RANK-IO
+record, 0.670 / 0.740 / 0.751 / 0.780 on displacement / $\sigma_{11}$ /
+$\sigma_{22}$ / $\sigma_{12}$; the arms ran on code_v7, whose known
+snapshot effect at 2,048 cases favours code_v7 by about 0.1 in log-gap
+fraction, so the confound, if it acts here, flatters the arms.
+
+**What we saw (256 test cases, relative L2, seed means).** Four nearest
+distances: 0.776 / 0.801 / 0.807 / 0.833, ratios to the base **1.16 / 1.08
+/ 1.08 / 1.07** (seed 42: 1.07 / 1.03 / 1.03 / 1.03; seed 43: 1.24 / 1.13 /
+1.11 / 1.11). Four harmonic measures: 0.770 / 0.836 / 0.843 / 0.852,
+ratios **1.15 / 1.13 / 1.12 / 1.09** (seed 42: 1.20 / 1.20 / 1.18 / 1.14;
+seed 43: 1.10 / 1.06 / 1.07 / 1.05). Harmonic ÷ distances on the stress
+mean 1.04. GeoTransolver-512: 0.447 / 0.626 / 0.651 / 0.636.
+
+**Reading.** The *hurts* clause (above 1.05 on any stress) holds for both
+encodings on the means and on three of four seed-arm pairs; the
+prediction (pays 0.55, null 0.30) is not met at this rung. Two candidate
+mechanisms, neither measured: the elasticity base already receives the
+condition structure through the rank-1 boundary inputs and the
+per-component tags, so four more scalars per query add capacity the model
+must learn to ignore at 512 cases (an overfitting reading, which the
+2,048 rung would shrink); or the per-component types are tied to the
+laboratory axes, so a scalar "distance to the nearest x-Dirichlet cell"
+carries the frame in a way the equivariant vector inputs do not, and the
+token seed has to reconcile the two. The Poisson result stands
+(one dataset); the elasticity 2,048 lanes, read against the code_v7
+control 0.201 / 0.297 / 0.305 / 0.301, decide whether the channel is a
+Poisson property or a general one, and the combined arm at 2,048 says
+whether it adds anything to the aggregation that already closes the
+stresses there. Artifact results/harmonic_2026-09-27.json (elasticity,
+512).
