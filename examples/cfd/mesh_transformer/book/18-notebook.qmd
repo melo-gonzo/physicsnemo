@@ -30029,3 +30029,33 @@ of the two single arms at the same rung: *additive* $\le 0.90$ on both
 seeds; *redundant* within 5%; *hurts* $> 1.05$. Prediction: additive
 (0.5), redundant (0.4). The datum the inputs are: the geometry and the
 boundary condition labels of the one sample.
+
+## 2026-09-27 — Verdict, REF on the 510-wing rung: 12 and 24 layers are within seed noise (0.0404 against 0.0397 on pressure, two seeds each); GeoTransolver-512 ÷ ISLA 0.95 at the protocol cell count, the wing deficit narrowed from the 35-wing rung {#sec-nb-ref-hl510-verdict}
+
+**Setting.** The reference-configuration board (@sec-nb-refboard-prereg)
+runs ISLA at R1 (384 x 12 x 256, cosine routing, fused kernel, 5e-4) and
+R2 (384 x 24, the depth rule 2.5e-4) on every HiLift rung at 200,000
+cells. The 510-wing pair finished and scored today (180 validation
+wings, float32 relative L2).
+
+**What we saw.** Pressure: R1 **0.0404** (0.0405 / 0.0403), R2 **0.0397**
+(0.0399 / 0.0396); R2 ÷ R1 = 0.98. Wall shear: R1 0.0889 (0.0892 /
+0.0886), R2 0.0878 (0.0876 / 0.0881); 0.99. The SCALE-LAW GeoTransolver-512
+pair at 510 wings and 100,000 cells scores 0.0382 (0.0368 / 0.0396;
+@sec-nb-scalelaw-wing-rung4), and SCALE-HL found GeoTransolver's cell
+count flat between 100,000 and 200,000 (0.99), so the protocol-scale
+standing on this rung is GeoTransolver-512 ÷ ISLA R1 = **0.95** on
+pressure, against 0.89 at 35 wings (@sec-nb-frame-wing-verdict era
+numbers for the frame-free pair) and about 0.90 at 210 wings on the
+interim (@sec-nb-ref-hl210-interim).
+
+**Verdict.** Depth is null on the wings as on the cars (ROUTE-NORM found
+0.0413 / 0.0407 at 12 / 24 layers on 435 cars) and on OLBC elasticity, and
+costs on OLBC Poisson; the reference stays at 12 layers on every dataset
+where it has been tested. The wing deficit against GeoTransolver-512
+shrinks with training cases (0.89, about 0.90, 0.95 at 35, 210, 510
+wings), consistent with the steeper ISLA learning curve of the SCALE-LAW
+wing half (local exponents 0.50 to 0.57 against 0.45 to 0.47 between 35
+and 210 wings). The 210-wing GeoTransolver-512 pair is 62 of 180 cases
+into scoring and decides the 210-case anatomy twin. Metrics under
+results/campaigns_2026-09-22/ref/metrics.
