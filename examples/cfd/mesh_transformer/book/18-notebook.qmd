@@ -30059,3 +30059,37 @@ wing half (local exponents 0.50 to 0.57 against 0.45 to 0.47 between 35
 and 210 wings). The 210-wing GeoTransolver-512 pair is 62 of 180 cases
 into scoring and decides the 210-case anatomy twin. Metrics under
 results/campaigns_2026-09-22/ref/metrics.
+
+## 2026-09-27 — Verdict, REF on the 210-wing rung and the WING-ANATOMY twin: GeoTransolver-512 ÷ ISLA 0.90 on pressure and 0.94 on wall shear; the deficit is 0.92 below 16 degrees and 0.87 above, a widening of 0.05 that misses the preregistered 0.08, so the 35-wing angle location does not reproduce at 210 wings {#sec-nb-ref-hl210-verdict}
+
+**Setting.** The 35-wing rung located ISLA's deficit against
+GeoTransolver-512 by angle of attack: 0.77 up to 14 degrees, 0.67 from 16
+degrees, where both errors double at flow separation
+(@sec-nb-hl35-percase). The 210-case twin was preregistered with the bar
+"a widening of at least 0.08 between the 4-14 and 16-22 degree ratios".
+The GeoTransolver-512 pair at 210 wings finished scoring tonight (180
+validation wings on 118 geometries, 200,000 cells, float32).
+
+**What we saw.** Pressure: GeoTransolver-512 **0.0461** (0.0453 / 0.0468),
+ISLA R1 **0.0513** (0.0550 / 0.0476; @sec-nb-ref-hl210-interim), ratio
+**0.90**; R2 0.0508. Wall shear: 0.1039 against 0.1103, ratio 0.94. By
+angle (GeoTransolver-512 ÷ ISLA, seed-mean per case): 0.84 / 0.87 / 0.87
+/ 0.92 / 0.88 / 1.11 at 4 to 14 degrees and 0.81 / 0.89 / 0.86 / 0.92 at
+16 to 22; group means **0.92 and 0.87**, a widening of 0.05. Spearman
+rank correlation of the per-case errors 0.97; ISLA is the more accurate
+model on 33 of 180 cases. The 24-layer variant is within 4% of the
+reference in every group but one (1.11 at 16 degrees).
+
+**Verdict.** The bar is missed: the 35-wing angle location does not
+reproduce at 210 wings. The deficit shrank from 0.77 to 0.92 below 16
+degrees and from 0.67 to 0.87 above, so the separated regime improved
+more with data than the attached one, and what remains is a nearly
+uniform 8 to 13% across angles with one angle (14 degrees) where ISLA
+leads. With the 510-wing rung at 0.95 (@sec-nb-ref-hl510-verdict) the
+wing deficit is a learning-rate-of-data effect that closes with cases,
+not a fixed regime failure, which is the SCALE-LAW reading (steeper ISLA
+exponents) and the reason the 1,260-wing rung matters. The ISLA pressure
+seeds at 210 wings differ by 15% (0.0550 / 0.0476), the largest seed
+spread on the wing ladder; a third seed is not warranted under the
+seeds rule, but the standing is quoted with its spread. Artifact
+results/hl210_percase_2026-09-27.json.
