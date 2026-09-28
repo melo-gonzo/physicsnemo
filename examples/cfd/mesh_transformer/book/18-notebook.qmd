@@ -29980,3 +29980,52 @@ fields are smooth, so the seam cost the reference little to begin with.
 No configuration change on AirfRANS follows from this; the standing
 there stays with the provided-geometry reference. Artifact
 results/harmonic_2026-09-27.json.
+
+## 2026-09-27 — Verdict, HARMONIC follow-ups at 512 Poisson cases (two seeds): the three harmonic measures alone score 0.207, the same as the three per-type distances (0.202); adding the value extensions (0.250) or stacking measures with distances (0.232) hurts; one geometry scalar per boundary type is the channel, and the two encodings are interchangeable here {#sec-nb-harmonic-followup-512}
+
+**Setting.** The 512-case interim (@sec-nb-harmonic-interim-512) left two
+questions: was the six-field harmonic arm dragged down by its value half,
+as the extension was, and do harmonic measures add to per-type distances?
+Two arms answered them: `hm_measures` (the three harmonic measures only)
+and `hm_plus_dist` (measures plus the three per-type distances).
+
+**What we saw (512 cases, two seeds; relative L2 on $u$).** Measures only
+**0.207** (0.201 / 0.213), against distances only 0.202 (0.200 / 0.205),
+the six-field harmonic arm 0.250 (0.242 / 0.257), and measures plus
+distances **0.232** (0.213 / 0.250). GeoTransolver-512 is 0.279 and the
+extension on the same snapshot 0.299.
+
+**Verdict against the preregistered clauses.** *Values hurt* fires:
+measures alone are 17% better than the six fields, so the harmonic
+extensions of the prescribed values, like the inverse-square value
+averages before them, cost accuracy rather than adding it. *Measures
+add* does not fire; the combination is 15% worse than distances alone
+and its seed spread widens (0.213 / 0.250), so redundant encodings of
+the same geometry hurt at this training-set size. *Measures redundant*
+does not fire on the letter of its clause only because the combination
+is not within 3%; on the mean, measures alone and distances alone differ
+by 2.4%, which is the seed spread.
+
+**Reading.** The channel that closes the fixed-mesh gap is one geometry
+scalar per boundary-condition type, telling each interior point how it
+stands relative to every type of boundary; whether that scalar is the
+minimum distance or the harmonic measure does not matter at this rung.
+The prescribed values themselves should not be fed as smeared fields;
+the model reads them from the boundary tokens through the routing and
+does better without a preprocessed version. The harmonic measure remains
+the principled choice (smooth, dimension-agnostic, a partition of unity)
+and the 2,048 rung decides whether the tie holds where the seam of the
+minimum distance might matter more. Both channels beat the local
+aggregation arm (0.229), and the two mechanisms are different in kind (a
+per-token input against a token-to-token path), so their combination is
+the next arm.
+
+**Preregistration, per-type channel plus local aggregation (campaign hm
+rows 22-29, 512 and 2,048 cases, two seeds).** `hm_measures_local05`: the
+three harmonic measures plus the k-nearest local aggregation
+(`local_rho` 0.05, 32 neighbours); `ext_distonly_local05`: the three
+per-type distances plus the same aggregation. Bars, ratio to the better
+of the two single arms at the same rung: *additive* $\le 0.90$ on both
+seeds; *redundant* within 5%; *hurts* $> 1.05$. Prediction: additive
+(0.5), redundant (0.4). The datum the inputs are: the geometry and the
+boundary condition labels of the one sample.

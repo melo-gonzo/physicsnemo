@@ -30,7 +30,9 @@ for n in (512, 2048):
     frac = lambda u: math.log(b / u) / math.log(b / g)
     rung = {"base": b, "gt512": g, "arms": {}}
     for arm, pat in {"ext": f"om_poisson_isla_r1_ext_n{n}_seed{{s}}", "hm": f"hm_poisson_hm_n{n}_seed{{s}}",
-                     "ext_valonly": f"hm_poisson_ext_valonly_n{n}_seed{{s}}", "ext_distonly": f"hm_poisson_ext_distonly_n{n}_seed{{s}}"}.items():
+                     "ext_valonly": f"hm_poisson_ext_valonly_n{n}_seed{{s}}", "ext_distonly": f"hm_poisson_ext_distonly_n{n}_seed{{s}}",
+                     "hm_measures": f"hm_poisson_hm_measures_n{n}_seed{{s}}", "hm_plus_dist": f"hm_poisson_hm_plus_dist_n{n}_seed{{s}}",
+                     "ext_ctrl_v7": f"la_poisson_ext_ctrl_n{n}_seed{{s}}", "ext_local05": f"la_poisson_ext_local05_n{n}_seed{{s}}"}.items():
         ps = {s: r[0] for s in (42, 43) if (r := per_case(pat.format(s=s), "u_l2"))}
         if not ps:
             rung["arms"][arm] = {"status": "not scored"}
@@ -40,7 +42,7 @@ for n in (512, 2048):
                              "frac_per_seed": {s: frac(v) for s, v in ps.items()}}
     e = rung["arms"]["ext"].get("frac")
     if e is not None:
-        for arm in ("hm", "ext_valonly", "ext_distonly"):
+        for arm in ("hm", "ext_valonly", "ext_distonly", "hm_measures", "hm_plus_dist", "ext_ctrl_v7", "ext_local05"):
             a = rung["arms"][arm]
             if "frac" in a:
                 a["frac_minus_ext"] = a["frac"] - e
@@ -55,6 +57,20 @@ for n in (512, 2048):
             sv, sd = v["frac"] / e, dd["frac"] / e
             rung["ext_abl_verdict"] = ("values carry it" if sv >= 0.75 and sd <= 0.35 else "distances carry it" if sd >= 0.75 and sv <= 0.35
                                        else "joint" if sv <= 0.5 and sd <= 0.5 else "either suffices" if sv >= 0.75 and sd >= 0.75 else "between")
+    d0 = rung["arms"]["ext_distonly"]
+    if "u" in d0:
+        for arm in ("hm_measures", "hm_plus_dist", "hm"):
+            a = rung["arms"][arm]
+            if "u" in a:
+                a["ratio_to_distonly"] = a["u"] / d0["u"]
+        m, pd_, h6 = rung["arms"]["hm_measures"], rung["arms"]["hm_plus_dist"], rung["arms"]["hm"]
+        fu = {}
+        if "u" in m and "u" in h6:
+            fu["values_hurt"] = m["u"] <= 0.95 * h6["u"]
+        if "u" in m and "u" in pd_:
+            fu["measures_redundant"] = abs(m["u"] / d0["u"] - 1) <= 0.03 and abs(pd_["u"] / d0["u"] - 1) <= 0.03
+            fu["measures_add"] = pd_["u"] <= 0.95 * d0["u"] and all(pd_["per_seed"][s_] <= 0.95 * d0["per_seed"][s_] for s_ in pd_["per_seed"] if s_ in d0["per_seed"])
+        rung["followup"] = fu
     out["poisson"][str(n)] = rung
 F = ("pressure_l2", "velocity_l2", "nut_l2")
 ref = {s: {f: per_case(f"sg_af_provided_seed{s}", f)[0] for f in F} for s in (42, 43) if per_case(f"sg_af_provided_seed{s}", F[0])}
