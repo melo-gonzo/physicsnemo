@@ -30747,3 +30747,27 @@ call). Prediction: not part of the model (0.55), between (0.3),
 default-on candidate (0.15). The same test is owed to the per-type
 geometry channel once the elasticity 2,048 rung reports, and to any option
 proposed after today.
+
+## 2026-09-28 — Status, first pruning under the UNIVERSAL ruling: `geo_bias="mlp"` and `interior_geometry="nearest_plane"` removed from ISLA (model, fused kernel, tests, recipe configs); 184 tests pass; the consistent-weight and gradient channels stay pending their AirfRANS test {#sec-nb-universal-prune-1}
+
+Under the ruling of @sec-nb-universal-prereg an option that failed its test
+is deleted rather than documented. Two had: the routing-bias MLP head
+(GEO-BIAS-PROTO, @sec-nb-geo-bias-proto-verdict: 0.28 of a rejected input's
+gain on AirfRANS and 3% worse on DrivAerML Surface) and the tangent-plane
+projection of the internal nearest-boundary geometry (INTERNAL-GEOMETRY-PROJ,
+@sec-nb-internal-geometry-proj-verdict: 1.05 to 1.16x the stored field on
+both interior datasets). Commit 85ba5137 removes both: the `geo_bias`
+argument and its two-layer head, the fused kernel's hidden-unit evaluation
+path and flat weight packing (about 7,300 characters of Triton), the
+`nearest_plane` mode and the `projection` plumbing of the nearest-boundary
+search, their tests, and the two recipe configurations that used the MLP
+head. The routing bias is one linear map of the pair invariants and the
+internal geometry is the centroid measurement; both were already the
+reference. The ISLA suite is 184 tests including the CUDA kernel tests on
+the local GPU; the recipe's configuration tests pass. Cluster snapshots
+code_v2 through code_v10 keep the old code for reproducibility of the
+recorded runs; the next snapshot carries the deletion. Still pending under
+the same rule: `local_weights="lpr"` and `local_gradient` (deleted or
+universalized on the AirfRANS LOCAL-LPR result), the local aggregation
+itself (UNIVERSAL-AGG), and the per-type geometry channel (on the
+elasticity 2,048 result).
