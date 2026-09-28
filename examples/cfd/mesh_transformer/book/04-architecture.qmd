@@ -603,10 +603,10 @@ measured: against the stored field the internal geometry costs 14%
 (DrivAerML Volume) and 27% (AirfRANS) on interior velocity and 3 to 4% on
 pressure at the reference configuration, two seeds each
 (@sec-nb-internal-geometry-verdict). Measuring to the nearest cell's
-tangent plane instead of its centroid (`interior_geometry="nearest_plane"`)
-does not repair it: it understates the distance at edges and corners as the
-centroid overstates it near a flat wall, and it is worse than the stored
-field on both datasets (@sec-nb-internal-geometry-proj-verdict). So
+tangent plane instead of its centroid was tested and removed from the
+class: it understates the distance at edges and corners as the centroid
+overstates it near a flat wall, and it was worse than the stored field on
+both datasets (@sec-nb-internal-geometry-proj-verdict). So
 `interior_geometry="provided"` is the documented choice wherever a dataset
 carries a full-mesh signed-distance field: the caller supplies the direction
 (`query_normals`, the stored gradient) and the distance as a declared rank-0

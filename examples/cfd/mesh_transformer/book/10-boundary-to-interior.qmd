@@ -583,8 +583,8 @@ print(f"**On the OLBC sets, one fixed mesh per set whose boundary is cut per sam
       f"{OLR['poisson|isla_r1|n8448']['u']:.2f} at 512 / 2,048 / 8,448 cases) with the same learning-curve exponent "
       f"({OLX['poisson|isla_r1|u']['exponent']:.2f} against {OLX['poisson|gt512|u']['exponent']:.2f}), and on the elasticity set by "
       f"{1 / el_lo[512]:.1f} to {1 / el_hi[512]:.1f}x at 512 cases and {1 / el_lo[2048]:.1f} to {1 / el_hi[2048]:.1f}x at 2,048 across the four "
-      f"fields; on Poisson the gap is located in value transport, and two parameter-free, contract-preserving remedies, a per-condition-type "
-      f"geometry channel and a local aggregation among tokens, turn it into a 1.70x lead at 512 cases (0.164 against 0.279).** These "
+      f"fields; on Poisson the gap is located in value transport. Two parameter-free, contract-preserving remedies close it as ablations "
+      f"(@sec-olbc-ablations); neither is part of the reference configuration and no ablation enters the ratios above.** These "
       "sets (@sec-data-olbc) are the complement of every other dataset in the book: the geometry never varies and only the boundary data "
       "do, so the task is the pure boundary-data-to-solution map on a known domain. On the Poisson set ($-\\nabla^2 u = f$ on a square, a "
       "random sinusoidal source and four random boundary segments per sample) ISLA reads the boundary segments with the condition type and "
@@ -619,6 +619,40 @@ print(": The OLBC ladders: relative L2 over the 256 test samples of each set (me
       "GeoTransolver-512); results/local_agg_2026-09-27.json (the elasticity ISLA arm). {#tbl-olbc-ladder}")
 ```
 
+### Ablations: principled remedies on the fixed mesh {#sec-olbc-ablations}
+
+```{python}
+#| label: tbl-olbc-ablations
+#| output: asis
+HM = J("harmonic_2026-09-27.json")["poisson"]
+def acell(a, key):
+    x = HM[str(a)]["arms"].get(key, {})
+    if "u" not in x: return "running"
+    return f"{x['u']:.4f} ({' / '.join(f'{v:.4f}' for v in x['per_seed'].values())}) | {x['gt512_over']:.2f}"
+ABL = [("**reference ISLA** (K = 0, no extension, no aggregation)", None),
+       ("boundary-value extension, six inverse-square scalars (values + distances per condition type)", "ext"),
+       ("per-type nearest distances only (three scalars)", "ext_distonly"),
+       ("per-type harmonic measures only (three Laplace solves)", "hm_measures"),
+       ("extension + local aggregation (32 nearest tokens, rho 0.05)", "ext_local05"),
+       ("per-type distances + local aggregation", "ext_distonly_local05"),
+       ("per-type harmonic measures + local aggregation", "hm_measures_local05")]
+out = "| ISLA arm (OLBC Poisson, relative L2 on $u$) | 512 cases (seeds) | GeoTransolver-512 ÷ arm | 2,048 cases (seeds) | GeoTransolver-512 ÷ arm |\n|---|---|---:|---|---:|\n"
+for label, key in ABL:
+    if key is None:
+        out += f"| {label} | {HM['512']['base']:.4f} | {HM['512']['gt512'] / HM['512']['base']:.2f} | {HM['2048']['base']:.4f} | {HM['2048']['gt512'] / HM['2048']['base']:.2f} |\n"
+    else:
+        out += f"| {label} | {acell(512, key)} | {acell(2048, key)} |\n"
+out += f"| GeoTransolver-512 | {HM['512']['gt512']:.4f} | | {HM['2048']['gt512']:.4f} | |\n"
+print(out)
+print(": **Ablations, not the reference.** Every row below the first is a preregistered option added to the reference ISLA on the OLBC Poisson "
+      "set: parameter-free query scalars computed from one sample's geometry and condition labels (the extension, the per-type distances, "
+      "the per-type harmonic measures) and the local relational aggregation among tokens, alone and combined. Two seeds per cell, 256 test "
+      "cases, float32. How to read this: the ratios in this table are labelled by arm and are never the book's 'GeoTransolver-512 ÷ ISLA', "
+      "which is the reference row; the options are under a universalization test (@sec-nb-universal-prereg) and become part of the "
+      "reference only if they are neutral or better on every dataset, otherwise they are removed. Data: results/harmonic_2026-09-27.json, "
+      "results/local_agg_2026-09-27.json. {#tbl-olbc-ablations}")
+```
+
 **What is missing, and what supplies it.** Two mechanisms could explain a
 three-fold gap on a fixed mesh. Either ISLA resolves position too coarsely
 through 256 anchors (a fixed geometry gives every sample the same anchor
@@ -635,7 +669,8 @@ and absolute coordinates fed to every token overshoot to 27% *better* than
 GeoTransolver-512, so position is sufficient but is not what the
 contract-preserving remedies lack. And a parameter-free **boundary-value
 extension** recovers 84% of the log-gap (0.333 against the reference's
-0.867 and GeoTransolver-512's 0.279, seed means). The extension gives
+0.867 and GeoTransolver-512's 0.279, seed means; @tbl-olbc-ablations
+holds every arm of this passage). The extension gives
 every interior query six numbers computed before training with no
 learned parameters. For each of the three condition types (Dirichlet,
 Neumann, Robin) it takes the prescribed values on all boundary cells of
@@ -669,14 +704,14 @@ independent remedy is a **local relational aggregation among tokens**:
 each token pools its 32 nearest tokens with measure-weighted Gaussian
 kernel weights over their states and pair invariants before the slice
 routing, a path the slice attention did not provide. With the extension
-and this aggregation ISLA scores 0.229 at 512 cases and 0.081 at 2,048
+and this aggregation the arm scores 0.229 at 512 cases and 0.081 at 2,048
 against GeoTransolver-512's 0.279 and 0.098, on both seeds at both rungs;
 the aggregation's radius (0.05 or 0.15 of the frame length) does not
 matter, and the step costs 1.5x (@sec-nb-local-agg-poisson-verdict,
 results/local_agg_2026-09-27.json). The two remedies act on different
 paths and their gains compound: **the per-type distances with the
 aggregation score 0.164 at 512 cases and 0.062 at 2,048, GeoTransolver-512
-÷ ISLA 1.70 and 1.58**, on both seeds at both rungs, and the harmonic
+÷ that arm 1.70 and 1.58**, on both seeds at both rungs, and the harmonic
 measures with the aggregation reach 0.061 at 2,048 with a wider seed
 spread (@sec-nb-combined-verdict). On
 the elasticity set the aggregation on top of the rank-1-input arm takes
@@ -687,10 +722,12 @@ displacement's extension already served, moves from 0.201 to 0.216
 (GeoTransolver-512 0.165); on the AirfRANS interior, a point cloud whose
 100,000 queries are redrawn every epoch, the same aggregation hurts every
 field by 13 to 22% on two seeds
-(@sec-nb-local-agg-airfrans-verdict). The aggregation is therefore a
-documented option for fixed-mesh interior tasks and not part of the
-reference configuration; whether the AirfRANS loss is the resampled
-stencil is the open follow-up. The extension's vector-data form on the elasticity set is the
+(@sec-nb-local-agg-airfrans-verdict). The aggregation is therefore not
+part of the reference configuration. Under the program's option policy it
+is not set per dataset either: it is under a universalization test on the
+datasets its fixed-mesh rule was not fitted on (@sec-nb-universal-prereg),
+and it becomes part of every ISLA or none; whether the AirfRANS loss is the
+resampled stencil is the open follow-up. The extension's vector-data form on the elasticity set is the
 rank-1 input channel of @sec-nb-rankio-verdict-2048. Two readings for
 the architecture travel with it.
 A boundary-data-to-solution map on a fixed domain is where ISLA's

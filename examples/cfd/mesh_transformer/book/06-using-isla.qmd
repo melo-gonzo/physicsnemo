@@ -54,7 +54,13 @@ same dimensions. This is the one place the book states them, and the width
 and depth ladders of @sec-review-frontier are deviations from it. Lanes of
 the earlier protocol ran 192 wide at 1e-3 and are labeled so wherever they
 appear. ISLA has one frame and one routing form. The rows below are the
-options that remain on it.
+options that remain on it. The option policy (2026-09-28): an option is a
+scaffold under a universalization test, run always-on across the datasets
+its rule was not fitted on (@sec-nb-universal-prereg); it becomes part of
+the reference configuration for every dataset or it is deleted, and no
+option is set per dataset. Every ratio the book labels "GeoTransolver ÷
+ISLA" is the reference configuration; an option's number is labelled by
+arm.
 
 | configuration | recipe config | when to use | what you give up |
 |---|---|---|---|
