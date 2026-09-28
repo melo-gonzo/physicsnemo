@@ -211,6 +211,26 @@
       "43": 1.0008445626197067
      },
      "nd_verdict": "validated (within 0.03)"
+    },
+    "lpr_distonly_local05": {
+     "u": 0.1784969885557075,
+     "per_seed": {
+      "42": 0.17205236680456437,
+      "43": 0.18494161030685063
+     },
+     "n_seeds": 2,
+     "frac": 1.3941227195433976,
+     "gt512_over": 1.5633341082467624,
+     "frac_per_seed": {
+      "42": 1.4265585700634784,
+      "43": 1.3628374426037952
+     },
+     "ratio_to_gaussian": 1.0863491594454686,
+     "ratio_to_gaussian_per_seed": {
+      "42": 1.031956902971468,
+      "43": 1.1423643982641571
+     },
+     "lpr_verdict": "fixed-mesh regression"
     }
    },
    "ext_abl_verdict": "either suffices",
@@ -380,10 +400,42 @@
      "interim": false
     },
     "hm_measures_local05": {
-     "status": "not scored"
+     "u": 0.06056106927644578,
+     "per_seed": {
+      "42": 0.06519547917923774,
+      "43": 0.05592665937365382
+     },
+     "n_seeds": 2,
+     "frac": 1.3463920643223763,
+     "gt512_over": 1.6199762920843623,
+     "frac_per_seed": {
+      "42": 1.2934451301705585,
+      "43": 1.403556223904024
+     },
+     "ratio_to_distonly": 0.8137149178420602,
+     "ratio_to_distonly_per_seed": {
+      "42": 0.9246374594191608,
+      "43": 0.7138820810023131
+     }
     },
     "ext_distonly_local05": {
-     "status": "not scored"
+     "u": 0.06216159230825724,
+     "per_seed": {
+      "42": 0.0638239931940916,
+      "43": 0.06049919142242288
+     },
+     "n_seeds": 2,
+     "frac": 1.3276618799947713,
+     "gt512_over": 1.5782654981649933,
+     "frac_per_seed": {
+      "42": 1.3087113930243166,
+      "43": 1.3471260945435266
+     },
+     "ratio_to_distonly": 0.8352199784840678,
+     "ratio_to_distonly_per_seed": {
+      "42": 0.9051863052456002,
+      "43": 0.7722486763073558
+     }
     },
     "nd_distonly_2d": {
      "u": 0.07428806179996172,
@@ -404,10 +456,32 @@
       "43": 1.00440666387758
      },
      "nd_verdict": "validated (within 0.03)"
+    },
+    "lpr_distonly_local05": {
+     "status": "not scored"
     }
    },
    "ext_abl_verdict": "either suffices",
-   "combined": {},
+   "combined": {
+    "ext_distonly_local05": {
+     "ratio_to_channel_only": 0.8352199784840678,
+     "per_seed": {
+      "42": 0.9051863052456002,
+      "43": 0.7722486763073558
+     },
+     "vs_local05": 0.7677399469392211,
+     "verdict": "pays"
+    },
+    "hm_measures_local05": {
+     "ratio_to_channel_only": 0.8656305914601082,
+     "per_seed": {
+      "42": 0.9806746788282436,
+      "43": 0.7614937739587996
+     },
+     "vs_local05": 0.7479723473348797,
+     "verdict": "null within 5%"
+    }
+   },
    "followup": {
     "values_hurt": true,
     "measures_redundant": false,

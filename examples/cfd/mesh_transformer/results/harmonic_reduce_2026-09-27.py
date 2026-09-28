@@ -34,7 +34,8 @@ for n in (512, 2048):
                      "hm_measures": f"hm_poisson_hm_measures_n{n}_seed{{s}}", "hm_plus_dist": f"hm_poisson_hm_plus_dist_n{n}_seed{{s}}",
                      "ext_ctrl_v7": f"la_poisson_ext_ctrl_n{n}_seed{{s}}", "ext_local05": f"la_poisson_ext_local05_n{n}_seed{{s}}",
                      "hm_measures_local05": f"hm_poisson_hm_measures_local05_n{n}_seed{{s}}", "ext_distonly_local05": f"hm_poisson_ext_distonly_local05_n{n}_seed{{s}}",
-                     "nd_distonly_2d": f"nd_poisson_ext_distonly_2d_n{n}_seed{{s}}"}.items():
+                     "nd_distonly_2d": f"nd_poisson_ext_distonly_2d_n{n}_seed{{s}}",
+                     "lpr_distonly_local05": f"lw_poisson_ext_distonly_local05_lpr_n{n}_seed{{s}}"}.items():
         ps = {s: r[0] for s in (42, 43) if (r := per_case(pat.format(s=s), "u_l2"))}
         if not ps:
             rung["arms"][arm] = {"status": "not scored"}
@@ -76,6 +77,13 @@ for n in (512, 2048):
                              "verdict": "pays" if ratio <= 0.95 and all(v <= 0.95 for v in ps_.values()) else "hurts" if ratio >= 1.05 else "null within 5%"}
         rung["combined"] = comb
         # ND-GENERIC pass 2: native 2-D vs the embedded 3-D distances-only arm; within 0.03 = validated
+        # LOCAL-LPR fixed-mesh regression check: lpr weights vs Gaussian weights, both with the per-type distances
+        lp, ga = rung["arms"]["lpr_distonly_local05"], rung["arms"]["ext_distonly_local05"]
+        if "u" in lp and "u" in ga:
+            r_ = lp["u"] / ga["u"]
+            lp["ratio_to_gaussian"] = r_
+            lp["ratio_to_gaussian_per_seed"] = {s_: lp["per_seed"][s_] / ga["per_seed"][s_] for s_ in lp["per_seed"] if s_ in ga["per_seed"]}
+            lp["lpr_verdict"] = "within 0.05 (no fixed-mesh cost)" if abs(r_ - 1) <= 0.05 else "pays on the fixed mesh" if r_ < 0.95 else "fixed-mesh regression"
         nd = rung["arms"]["nd_distonly_2d"]
         if "u" in nd:
             r_ = nd["ratio_to_distonly"]

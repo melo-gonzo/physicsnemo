@@ -675,8 +675,10 @@ the aggregation's radius (0.05 or 0.15 of the frame length) does not
 matter, and the step costs 1.5x (@sec-nb-local-agg-poisson-verdict,
 results/local_agg_2026-09-27.json). The two remedies act on different
 paths and their gains compound: **the per-type distances with the
-aggregation score 0.164 at 512 cases, GeoTransolver-512 ÷ ISLA 1.70**, on
-both seeds (@sec-nb-combined-512-interim; the 2,048 rung is running). On
+aggregation score 0.164 at 512 cases and 0.062 at 2,048, GeoTransolver-512
+÷ ISLA 1.70 and 1.58**, on both seeds at both rungs, and the harmonic
+measures with the aggregation reach 0.061 at 2,048 with a wider seed
+spread (@sec-nb-combined-verdict). On
 the elasticity set the aggregation on top of the rank-1-input arm takes
 the three stress components from trailing GeoTransolver-512 by 1.2x to
 matching it (0.244 / 0.256 / 0.258 against 0.257 / 0.261 / 0.267 at

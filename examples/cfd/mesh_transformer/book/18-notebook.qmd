@@ -30629,3 +30629,68 @@ Poisson property or a general one, and the combined arm at 2,048 says
 whether it adds anything to the aggregation that already closes the
 stresses there. Artifact results/harmonic_2026-09-27.json (elasticity,
 512).
+
+## 2026-09-28 — Verdict, per-type channel plus local aggregation on OLBC Poisson (512 and 2,048 cases, two seeds): the two remedies compound at both rungs (distances plus aggregation 0.164 and 0.062 against 0.202 and 0.074 for the distances alone; GeoTransolver-512 ÷ ISLA 1.70 and 1.58); the harmonic encoding under aggregation is 0.061 at 2,048 with a 15% seed split {#sec-nb-combined-verdict}
+
+**Setting.** The 512-case interim (@sec-nb-combined-512-interim) found the
+per-condition-type geometry channel and the local relational aggregation
+additive. This entry closes the study at 2,048 cases. References at 2,048:
+distances alone 0.0744, harmonic measures alone 0.0700, aggregation alone
+(with the inverse-square extension) 0.0810, GeoTransolver-512 0.0981, the
+frame-free ISLA 0.395.
+
+**What we saw (2,048 cases, 256 test cases, relative L2 on u, seed means
+with seeds in parentheses).** Distances plus aggregation **0.0622** (0.0638
+/ 0.0605): 0.84 of the distances alone (per seed 0.91 / 0.77), 0.77 of the
+aggregation alone; GeoTransolver-512 ÷ ISLA **1.58**. Harmonic measures
+plus aggregation **0.0606** (0.0652 / 0.0559): 0.87 of the measures alone
+(per seed 0.98 / 0.76), 0.75 of the aggregation alone; GeoTransolver-512 ÷
+ISLA **1.62**. Log-gap fractions 1.33 and 1.35 against 1.20 and 1.24 for
+the channels alone.
+
+**Verdicts against the bars (additive at or below 0.90 of the better
+single arm on both seeds; redundant within 5%; hurts above 1.05).** The
+distances arm is *additive* on the means at both rungs (0.81 and 0.84) and
+on three of four seed readings (seed 42 at 2,048 sits at 0.905, at the
+clause boundary). The harmonic arm is *additive* on the means (0.86 and
+0.87) but the seeds split: 0.90 / 0.81 at 512 and 0.98 / 0.76 at 2,048, so
+one seed at each rung is at or inside the redundant band. **The two
+remedies compound on the fixed-mesh Poisson set at both rungs; the
+distances are the steadier partner for the aggregation, the harmonic
+measures reach the lower mean with the wider spread.** The best ISLA on
+this set is now 0.0606 against GeoTransolver-512's 0.0981 at 2,048 cases,
+where the frame-free reference trailed by 4x a week ago, with no learned
+parameters added by the channel and 1.5x step cost from the aggregation.
+
+**What's next.** The same two-remedy recipe is the boundary-data recipe
+for fixed-mesh interior problems; its second dataset is the elasticity set
+(HARMONIC-EL, whose 512 rung hurt for the channel alone and whose 2,048
+rung with the aggregation is training). Artifact
+results/harmonic_2026-09-27.json (poisson, combined, both rungs).
+
+## 2026-09-28 — Interim, LOCAL-LPR fixed-mesh check at 512 Poisson cases (two seeds): polynomial-reproduction weights cost 9% against the Gaussian weights on the fixed mesh (0.179 against 0.164; 1.03 / 1.14 per seed), a *fixed-mesh regression* by the preregistered bar; the AirfRANS arms decide whether they earn a place on point clouds {#sec-nb-local-lpr-poisson-interim}
+
+**Setting.** LOCAL-LPR (@sec-nb-local-lpr-prereg) swaps the aggregation's
+normalized Gaussian weights for degree-one polynomial-reproduction weights,
+which make the pooled value a consistent estimate for any neighbour draw.
+The Poisson 512 lanes are the regression check on a fixed mesh, where the
+draw never changes and the consistency property buys nothing by
+construction; the bar was within 0.05 of the Gaussian arm.
+
+**What we saw (256 test cases, relative L2 on u).** Distances plus
+aggregation with lpr weights **0.1785** (0.1721 / 0.1849) against the same
+arm with Gaussian weights 0.1643 (0.1667 / 0.1619): ratio **1.09**, per
+seed 1.03 / 1.14. Still 1.56x ahead of GeoTransolver-512 (0.279).
+
+**Reading.** The *fixed-mesh regression* clause (above 1.05) holds on the
+mean and on one seed; the other seed is within the band. A plausible
+mechanism, not measured: the reproduction weights are not a convex
+combination (they take both signs and their absolute sum exceeds one on
+asymmetric stencils), so the pooled state carries more variance than the
+Gaussian smoother's, and on a fixed mesh the smoother's O(h) bias is a
+fixed function of position that the network absorbs for free. The
+consistency property can therefore only pay where the stencil moves; the
+AirfRANS arms (two seeds each, about a day out) decide, and if they pay
+the weights become a point-cloud option gated by the datapipe, not a
+replacement. Artifact results/harmonic_2026-09-27.json (poisson, 512, arm
+lpr_distonly_local05).
