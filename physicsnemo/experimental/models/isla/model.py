@@ -774,6 +774,44 @@ def _knn_indices(r: torch.Tensor, k: int, chunk: int = 2048) -> torch.Tensor:
     return torch.cat(out, dim=1)
 
 
+def _lpr_weights(
+    rel_over_rho: torch.Tensor, kern: torch.Tensor, n_hat: torch.Tensor, g_hat: torch.Tensor, gradient: bool, reg: float = 1e-6
+) -> tuple[torch.Tensor, torch.Tensor | None]:
+    """Local-polynomial-reproduction stencil weights (LOCAL-LPR, 2026-09-28). For a
+    token with neighbour separations ``rel_over_rho = (r_i - r_j) / rho`` (B, N, k, d)
+    and positive kernel weights ``kern`` (B, N, k), the weighted least-squares fit
+    ``h_j ~ c + G . (r_j - r_i)`` gives value weights ``a0`` (B, N, k) that reproduce
+    every affine field exactly at the token (they sum to one and have zero first
+    moment), and gradient weights ``rho * G`` (B, N, d, k). Unlike a normalized
+    Gaussian kernel, whose first moment is O(h) on an asymmetric stencil, the fit
+    depends on the neighbour positions only through what a consistent estimator
+    needs, so the pooled value is the same continuum quantity for any draw of the
+    neighbours (the meshfree GMLS / moment-matching idea, cf. Mirzaei 2012 and the
+    MEEC construction of Shaffer et al. 2026). With ``gradient`` the gradient is
+    projected on the receiving normal and on each global direction, giving
+    (B, N, 1 + K, k) invariant finite-difference weights (units of the pooled
+    state per ``rho``); the projections rotate with the field, so the contracts
+    hold. Solved in float32 as (d + 1) x (d + 1) normal equations with a relative
+    ridge ``reg``. Returns ``(a0, grad_weights or None)``."""
+    b, n, k, d = rel_over_rho.shape
+    x = -rel_over_rho.float()  # (r_j - r_i) / rho
+    P = torch.cat([torch.ones(b, n, k, 1, device=x.device, dtype=x.dtype), x], dim=-1)  # (B, N, k, d+1)
+    W = kern.float()[..., None]  # (B, N, k, 1)
+    PtW = (P * W).transpose(-1, -2)  # (B, N, d+1, k)
+    A = PtW @ P  # (B, N, d+1, d+1)
+    tr = A.diagonal(dim1=-2, dim2=-1).sum(-1, keepdim=True)[..., None] / (d + 1)
+    A = A + reg * tr * torch.eye(d + 1, device=x.device, dtype=x.dtype)
+    M = torch.linalg.solve(A, PtW)  # (B, N, d+1, k): rows = value weights, rho * gradient weights
+    a0 = M[..., 0, :]
+    if not gradient:
+        return a0, None
+    Gw = M[..., 1:, :]  # (B, N, d, k)
+    proj = [torch.einsum("bnd,bndk->bnk", n_hat.float(), Gw)[:, :, None, :]]
+    if g_hat.shape[2] > 0:
+        proj.append(torch.einsum("bnvd,bndk->bnvk", g_hat.float(), Gw))
+    return a0, torch.cat(proj, dim=2)  # (B, N, 1 + K, k)
+
+
 def _local_region_knn(
     h: torch.Tensor,
     log_w: torch.Tensor,
@@ -783,12 +821,19 @@ def _local_region_knn(
     idx: torch.Tensor,
     rho: float,
     eps: float,
+    weights: str = "gaussian",
+    gradient: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """:func:`_local_region` restricted to each token's ``k`` nearest tokens
     (``idx`` from :func:`_knn_indices`): the same kernel and pair invariants,
     with the softmax over the neighbourhood instead of over all tokens. Equal to
     the dense form when ``k`` is the token count; O(N k) otherwise, which is what
-    makes the channel affordable at 200,000 tokens. Recomputed in backward."""
+    makes the channel affordable at 200,000 tokens. Recomputed in backward.
+    ``weights="lpr"`` replaces the normalized Gaussian weights by the
+    local-polynomial-reproduction weights of :func:`_lpr_weights` (consistent
+    value estimate, draw-independent to first order), and ``gradient`` appends the
+    normal- and direction-projected finite-difference channels to the pooled
+    states (width ``H * (2 + K)`` instead of ``H``)."""
     def _run(h, log_w, r, n_hat, g_hat, idx):
         b, n, k = idx.shape
         gather = lambda t: torch.gather(t, 1, idx.reshape(b, n * k, 1).expand(-1, -1, t.shape[-1])).reshape(b, n, k, t.shape[-1])
@@ -798,6 +843,9 @@ def _local_region_knn(
         dist = d2.clamp_min(eps * eps).sqrt()
         rel_hat = rel / dist[..., None]
         kern = torch.softmax(-d2 / (rho * rho) + logw_j[..., 0], dim=-1)  # (B, N, k)
+        grad_w = None
+        if weights == "lpr":
+            kern, grad_w = _lpr_weights(rel / rho, kern, n_hat, g_hat, gradient)
         feats = [
             (dist / rho)[..., None],
             torch.log(dist / rho)[..., None],
@@ -808,7 +856,10 @@ def _local_region_knn(
         ]
         geo = torch.cat(feats, dim=-1)
         pooled_h = (kern[..., None].to(h_j.dtype) * h_j).sum(2)
-        pooled_geo = (kern[..., None] * geo).sum(2)
+        pooled_geo = (kern[..., None].to(geo.dtype) * geo).sum(2)
+        if grad_w is not None:
+            fd = torch.einsum("bnvk,bnkh->bnvh", grad_w.to(h_j.dtype), h_j)  # (B, N, 1 + K, H)
+            pooled_h = torch.cat([pooled_h, fd.flatten(2)], dim=-1)
         return pooled_h, pooled_geo
 
     if torch.is_grad_enabled():
@@ -835,19 +886,26 @@ class _SliceBlock(nn.Module):
         routing_temperature: float = 10.0,
         geo_bias: str = "linear",
         local_rho: float | None = None,
+        local_weights: str = "gaussian",
+        local_gradient: bool = False,
     ) -> None:
         super().__init__()
         self.use_relational_geo = use_relational_geo
         self.fast_point_softmax = bool(fast_point_softmax)
         ### LOCAL-AGG (2026-09-27): optional local relational aggregation among the
         ### tokens before the slice routing (_local_region); None disables it and the
-        ### block is the released arithmetic.
+        ### block is the released arithmetic. LOCAL-LPR (2026-09-28): local_weights
+        ### "lpr" = polynomial-reproduction stencil weights, local_gradient = the
+        ### projected finite-difference channels (k-nearest path only).
         self.local_rho = None if local_rho is None else float(local_rho)
+        self.local_weights = str(local_weights)
+        self.local_gradient = bool(local_gradient)
         if self.local_rho is not None:
             self.local_norm = nn.LayerNorm(hidden)
             self.local_value = nn.Linear(hidden, hidden)
             self.local_geo = nn.Linear(5 + n_global_vectors, hidden // 2)
-            self.local_out = nn.Linear(hidden + hidden // 2, hidden)
+            pooled_width = hidden * (2 + n_global_vectors) if self.local_gradient else hidden
+            self.local_out = nn.Linear(pooled_width + hidden // 2, hidden)
         ### KERNEL STUDY (2026-09-13): "fused" evaluates the dense geometry region
         ### (invariants -> routing bias -> point->slice mix -> pooled invariants) in
         ### one Triton kernel per direction that never materializes a (B,N,S,.)
@@ -904,8 +962,12 @@ class _SliceBlock(nn.Module):
         if self.local_rho is not None:
             hv = self.local_value(self.local_norm(h))
             if nbr_idx is not None:
-                pooled_h, pooled_geo = _local_region_knn(hv, log_w, r, n_hat, g_hat, nbr_idx, self.local_rho, eps)
+                pooled_h, pooled_geo = _local_region_knn(
+                    hv, log_w, r, n_hat, g_hat, nbr_idx, self.local_rho, eps, self.local_weights, self.local_gradient
+                )
             else:
+                if self.local_weights != "gaussian" or self.local_gradient:
+                    raise ValueError("local_weights='lpr' and local_gradient need the k-nearest path (local_k > 0)")
                 pooled_h, pooled_geo = _local_region(hv, log_w, r, n_hat, g_hat, self.local_rho, eps)
             h = h + self.local_out(torch.cat([pooled_h, self.local_geo(pooled_geo.to(h.dtype))], dim=-1))
         ### Soft assignment of points to slices; measure weights enter as a
@@ -1588,6 +1650,21 @@ class ISLA(Module):
             runs over (default 32; the neighbour indices are computed once per forward
             from the positions). ``0`` is the dense form over all tokens, O(N^2) per
             layer and equal to ``local_k = N``; the default is O(N k).
+        local_weights: ``"gaussian"`` (default): the aggregation's weights are the
+            normalized measure-weighted Gaussian kernel over the neighbours, a
+            smoother whose first moment is O(h) on an asymmetric stencil, so the
+            pooled value depends on which neighbours a point cloud's draw supplied.
+            ``"lpr"``: local-polynomial-reproduction weights (the weighted
+            least-squares fit of an affine field over the neighbours), which
+            reproduce affine fields exactly and make the pooled value a consistent
+            estimate of the same continuum quantity for any neighbour draw
+            (LOCAL-LPR study, 2026-09-28; the meshfree GMLS construction). Needs
+            ``local_k > 0``.
+        local_gradient: With ``local_weights="lpr"``, also pool the fitted gradient
+            of the token states projected on the receiving token's normal and on
+            each global direction (``1 + K`` invariant finite-difference channels
+            per hidden unit, in units of the state per ``local_rho``), the
+            edge-frame directional derivative of a meshfree flux law. Default off.
         routing_norm: ``"cosine"`` (default): each block's point-to-slice
             routing logits are ``routing_temperature`` times the cosine between
             the normalized token state and a learned prototype per slice, which
@@ -1706,6 +1783,8 @@ class ISLA(Module):
         geo_bias: str = "linear",
         local_rho: float | None = None,
         local_k: int = 32,
+        local_weights: str = "gaussian",
+        local_gradient: bool = False,
         dim: int = 3,
         eps: float = 1e-12,
     ) -> None:
@@ -1728,6 +1807,14 @@ class ISLA(Module):
             raise ValueError(f"local_k must be 0 (dense) or positive, got {local_k!r}")
         self.local_rho = None if local_rho is None else float(local_rho)
         self.local_k = int(local_k)
+        ### LOCAL-LPR (2026-09-28): stencil weights and the finite-difference channels of the
+        ### local aggregation; both need the k-nearest path.
+        if local_weights not in ("gaussian", "lpr"):
+            raise ValueError(f"local_weights must be 'gaussian' or 'lpr', got {local_weights!r}")
+        if (local_weights == "lpr" or bool(local_gradient)) and not (self.local_rho is not None and self.local_k > 0):
+            raise ValueError("local_weights='lpr' and local_gradient require local_rho and local_k > 0")
+        self.local_weights = str(local_weights)
+        self.local_gradient = bool(local_gradient)
         ### GEO-BIAS (2026-09-25): the pair invariants -> routing-bias map; "mlp" is the
         ### eager-only nonlinear variant of the direction-count study (#sec-nb-geo-bias-prereg).
         if geo_bias not in ("linear", "mlp"):
@@ -1904,6 +1991,8 @@ class ISLA(Module):
                 routing_temperature=routing_temperature,
                 geo_bias=geo_bias,
                 local_rho=self.local_rho,
+                local_weights=self.local_weights,
+                local_gradient=self.local_gradient,
             )
             for _ in range(n_layers)
         )
