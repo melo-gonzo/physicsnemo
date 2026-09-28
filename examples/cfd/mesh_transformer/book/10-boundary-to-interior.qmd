@@ -583,8 +583,8 @@ print(f"**On the OLBC sets, one fixed mesh per set whose boundary is cut per sam
       f"{OLR['poisson|isla_r1|n8448']['u']:.2f} at 512 / 2,048 / 8,448 cases) with the same learning-curve exponent "
       f"({OLX['poisson|isla_r1|u']['exponent']:.2f} against {OLX['poisson|gt512|u']['exponent']:.2f}), and on the elasticity set by "
       f"{1 / el_lo[512]:.1f} to {1 / el_hi[512]:.1f}x at 512 cases and {1 / el_lo[2048]:.1f} to {1 / el_hi[2048]:.1f}x at 2,048 across the four "
-      f"fields; on Poisson the gap is located in value transport, and a "
-      f"parameter-free boundary-value extension recovers most of it at 512 cases.** These "
+      f"fields; on Poisson the gap is located in value transport, and two parameter-free, contract-preserving remedies, a per-condition-type "
+      f"geometry channel and a local aggregation among tokens, turn it into a 1.70x lead at 512 cases (0.164 against 0.279).** These "
       "sets (@sec-data-olbc) are the complement of every other dataset in the book: the geometry never varies and only the boundary data "
       "do, so the task is the pure boundary-data-to-solution map on a known domain. On the Poisson set ($-\\nabla^2 u = f$ on a square, a "
       "random sinusoidal source and four random boundary segments per sample) ISLA reads the boundary segments with the condition type and "
@@ -641,38 +641,54 @@ learned parameters. For each of the three condition types (Dirichlet,
 Neumann, Robin) it takes the prescribed values on all boundary cells of
 that type and averages them with weights equal to each cell's measure
 divided by its squared distance to the query, and it records the distance
-from the query to the nearest cell of that type. A query next to the
-Dirichlet wall therefore sees roughly the Dirichlet value there, a query
-in the middle sees a blend of every wall, and the distances say how close
-each type is. The inverse-square average is a crude stand-in for the
-harmonic extension of the boundary data (the solution of Laplace's
-equation with those values on the boundary), which for a Poisson problem
-is one half of the answer by superposition; the exact form, one Laplace
-solve per condition type per case, is the next instrument
-(@sec-nb-ruling-dataset-frame-inputs). The missing ingredient is value
-transport, and a quadrature of the boundary data that is invariant and
-consistent with the mesh supplies most of it without touching the
-contracts. The
-extension holds at 2,048 cases (0.80 of the log-gap, two seeds), and the
-domain-axes diagnostic added on top of it recovers nothing more at either
+from the query to the nearest cell of that type. Splitting the six into
+their two halves locates the gain: **the three per-type distances alone
+score 0.202 at 512 cases and 0.074 at 2,048, better than the six together
+(0.299 and 0.130 on the same code) and better than GeoTransolver-512
+(0.279 and 0.098), while the three value averages alone score 0.307 and
+0.098** (two seeds each; @sec-nb-harmonic-2048-verdict). The channel that
+matters tells a query how each type of wall reaches it; the prescribed
+values reach the readout better through the slice attention than through
+any pre-computed average, and adding the averages to the distances
+interferes. The exact form of that geometry channel is the **harmonic
+measure** of each condition type, the solution of Laplace's equation that
+is one on that type's boundary and zero on the others (the probability
+that a random walk from the query first hits a wall of that type),
+computed mesh-free on the interior point cloud with one sparse solve per
+type per case. It scores the same as the distances at 512 cases (0.207)
+and 6% better at 2,048 (0.070 against 0.074, on both seeds); stacking the
+two encodings hurts (0.232 and 0.080), and carrying the harmonic
+extension of the values alongside hurts as it did for the inverse-square
+averages. Both encodings are admissible: each derives from one sample's
+geometry and its condition labels and nothing else. The domain-axes
+diagnostic added on top of the extension recovers nothing more at either
 rung (0.90 against 0.84 at 512, 0.84 against 0.80 at 2,048, two seeds
 each): the positional information those axes carry is already in the
-extension's distance scalar, so the extension alone was the recipe on this
-set (@sec-nb-olbc-mech-combined-2048-verdict). What closes the rest is a
-**local relational aggregation among tokens**: each token pools its 32
-nearest tokens with measure-weighted Gaussian kernel weights over their
-states and pair invariants before the slice routing, a path the slice
-attention did not provide. With the extension and this aggregation ISLA
-scores 0.229 at 512 cases and 0.081 at 2,048 against GeoTransolver-512's
-0.279 and 0.098, on both seeds at both rungs, a 20% lead where it had
-trailed by 3x; the aggregation's radius (0.05 or 0.15 of the frame
-length) does not matter, and the step costs 1.5x
-(@sec-nb-local-agg-poisson-verdict, results/local_agg_2026-09-27.json).
-The same aggregation on the elasticity set improves the stresses by 3 to
-4% at 512 cases and leaves displacement unchanged
-(@sec-nb-local-agg-elasticity-interim); its 2,048 rung and an AirfRANS
-twin are running, so whether the gain is general or a Poisson property is
-open. The extension's vector-data form on the elasticity set is the
+distance scalars (@sec-nb-olbc-mech-combined-2048-verdict). A second,
+independent remedy is a **local relational aggregation among tokens**:
+each token pools its 32 nearest tokens with measure-weighted Gaussian
+kernel weights over their states and pair invariants before the slice
+routing, a path the slice attention did not provide. With the extension
+and this aggregation ISLA scores 0.229 at 512 cases and 0.081 at 2,048
+against GeoTransolver-512's 0.279 and 0.098, on both seeds at both rungs;
+the aggregation's radius (0.05 or 0.15 of the frame length) does not
+matter, and the step costs 1.5x (@sec-nb-local-agg-poisson-verdict,
+results/local_agg_2026-09-27.json). The two remedies act on different
+paths and their gains compound: **the per-type distances with the
+aggregation score 0.164 at 512 cases, GeoTransolver-512 ÷ ISLA 1.70**, on
+both seeds (@sec-nb-combined-512-interim; the 2,048 rung is running). On
+the elasticity set the aggregation on top of the rank-1-input arm takes
+the three stress components from trailing GeoTransolver-512 by 1.2x to
+matching it (0.244 / 0.256 / 0.258 against 0.257 / 0.261 / 0.267 at
+2,048 cases, two seeds) while displacement, the field the prescribed
+displacement's extension already served, moves from 0.201 to 0.216
+(GeoTransolver-512 0.165); on the AirfRANS interior, a point cloud whose
+100,000 queries are redrawn every epoch, the same aggregation hurts every
+field by 13 to 37% on the one seed scored
+(@sec-nb-local-agg-elasticity-verdict). The aggregation is therefore a
+documented option for fixed-mesh interior tasks and not part of the
+reference configuration; whether the AirfRANS loss is the resampled
+stencil is the open follow-up. The extension's vector-data form on the elasticity set is the
 rank-1 input channel of @sec-nb-rankio-verdict-2048. Two readings for
 the architecture travel with it.
 A boundary-data-to-solution map on a fixed domain is where ISLA's

@@ -13,7 +13,7 @@ import glob, json, math, os, statistics as st
 R = os.path.dirname(os.path.abspath(__file__))
 
 
-def per_case(run, field, camps=("2026-09-27", "2026-09-22", "2026-09-23")):
+def per_case(run, field, camps=("2026-09-28", "2026-09-27", "2026-09-22", "2026-09-23")):
     for camp in camps:
         fs = glob.glob(f"{R}/campaigns_{camp}/*/metrics/{run}/**/metrics.jsonl", recursive=True)
         if fs:
@@ -32,7 +32,9 @@ for n in (512, 2048):
     for arm, pat in {"ext": f"om_poisson_isla_r1_ext_n{n}_seed{{s}}", "hm": f"hm_poisson_hm_n{n}_seed{{s}}",
                      "ext_valonly": f"hm_poisson_ext_valonly_n{n}_seed{{s}}", "ext_distonly": f"hm_poisson_ext_distonly_n{n}_seed{{s}}",
                      "hm_measures": f"hm_poisson_hm_measures_n{n}_seed{{s}}", "hm_plus_dist": f"hm_poisson_hm_plus_dist_n{n}_seed{{s}}",
-                     "ext_ctrl_v7": f"la_poisson_ext_ctrl_n{n}_seed{{s}}", "ext_local05": f"la_poisson_ext_local05_n{n}_seed{{s}}"}.items():
+                     "ext_ctrl_v7": f"la_poisson_ext_ctrl_n{n}_seed{{s}}", "ext_local05": f"la_poisson_ext_local05_n{n}_seed{{s}}",
+                     "hm_measures_local05": f"hm_poisson_hm_measures_local05_n{n}_seed{{s}}", "ext_distonly_local05": f"hm_poisson_ext_distonly_local05_n{n}_seed{{s}}",
+                     "nd_distonly_2d": f"nd_poisson_ext_distonly_2d_n{n}_seed{{s}}"}.items():
         ps = {s: r[0] for s in (42, 43) if (r := per_case(pat.format(s=s), "u_l2"))}
         if not ps:
             rung["arms"][arm] = {"status": "not scored"}
@@ -59,10 +61,25 @@ for n in (512, 2048):
                                        else "joint" if sv <= 0.5 and sd <= 0.5 else "either suffices" if sv >= 0.75 and sd >= 0.75 else "between")
     d0 = rung["arms"]["ext_distonly"]
     if "u" in d0:
-        for arm in ("hm_measures", "hm_plus_dist", "hm"):
+        for arm in ("hm_measures", "hm_plus_dist", "hm", "hm_measures_local05", "ext_distonly_local05", "nd_distonly_2d"):
             a = rung["arms"][arm]
             if "u" in a:
                 a["ratio_to_distonly"] = a["u"] / d0["u"]
+                a["ratio_to_distonly_per_seed"] = {s_: a["per_seed"][s_] / d0["per_seed"][s_] for s_ in a["per_seed"] if s_ in d0["per_seed"]}
+        # COMBINED (hm rows 22-29): per-type channel + local aggregation; pays if <= 0.95 of the channel-only arm on both seeds
+        comb = {}
+        for arm, ref in (("ext_distonly_local05", "ext_distonly"), ("hm_measures_local05", "hm_measures")):
+            a, r_ = rung["arms"][arm], rung["arms"][ref]
+            if "u" in a and "u" in r_:
+                ratio = a["u"] / r_["u"]; ps_ = {s_: a["per_seed"][s_] / r_["per_seed"][s_] for s_ in a["per_seed"] if s_ in r_["per_seed"]}
+                comb[arm] = {"ratio_to_channel_only": ratio, "per_seed": ps_, "vs_local05": a["u"] / rung["arms"]["ext_local05"]["u"] if "u" in rung["arms"]["ext_local05"] else None,
+                             "verdict": "pays" if ratio <= 0.95 and all(v <= 0.95 for v in ps_.values()) else "hurts" if ratio >= 1.05 else "null within 5%"}
+        rung["combined"] = comb
+        # ND-GENERIC pass 2: native 2-D vs the embedded 3-D distances-only arm; within 0.03 = validated
+        nd = rung["arms"]["nd_distonly_2d"]
+        if "u" in nd:
+            r_ = nd["ratio_to_distonly"]
+            nd["nd_verdict"] = "validated (within 0.03)" if abs(r_ - 1) <= 0.03 else "embedding costs" if r_ < 0.97 else "defect or capacity effect"
         m, pd_, h6 = rung["arms"]["hm_measures"], rung["arms"]["hm_plus_dist"], rung["arms"]["hm"]
         fu = {}
         if "u" in m and "u" in h6:

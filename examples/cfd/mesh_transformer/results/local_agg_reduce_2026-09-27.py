@@ -97,7 +97,25 @@ for n in (512, 2048):
                         else "hurts" if f < ref - 0.03 else "between")
         a["interim"] = a["n_seeds"] < 2
     out["elasticity"][str(n)] = rung
+# AirfRANS twin (la rows 16-17): the frame-free interior reference (isla_volume_airfrans_ref_provided) + local aggregation
+# (rho 0.05, k 32) against the sg_af_provided pair; ratios twin / reference on pressure / velocity / eddy viscosity; pays if any
+# <= 0.95 with none > 1.03 (both seeds on the paying field), hurts if any > 1.05, null within 3%, between otherwise.
+F = ("pressure_l2", "velocity_l2", "nut_l2")
+ref = {s: {f: per_case(f"sg_af_provided_seed{s}", "2026-09-23", f)[0] for f in F} for s in (42, 43) if per_case(f"sg_af_provided_seed{s}", "2026-09-23", F[0])}
+tw = {s: {f: r[0] for f in F if (r := per_case(f"la_af_provided_local05_seed{s}", "2026-09-27", f))} for s in (42, 43)}
+tw = {s: v for s, v in tw.items() if v}
+if ref and tw:
+    rm = {f: st.mean(ref[s][f] for s in ref) for f in F}; tm = {f: st.mean(tw[s][f] for s in tw) for f in F}
+    ratio = {f: tm[f] / rm[f] for f in F}
+    ps = {s: {f: tw[s][f] / ref[s][f] for f in F} for s in tw if s in ref}
+    v = ("pays" if any(r <= 0.95 and all(ps[s][f] <= 0.95 for s in ps) for f, r in ratio.items()) and all(r <= 1.03 for r in ratio.values())
+         else "hurts" if any(r > 1.05 for r in ratio.values()) else "null" if all(abs(r - 1) <= 0.03 for r in ratio.values()) else "between")
+    out["airfrans"] = {"reference": rm, "twin": tm, "ratio": ratio, "per_seed": {"reference": ref, "twin": tw, "ratio": ps}, "n_seeds": len(tw),
+                       "verdict": v, "interim": len(tw) < 2}
+else:
+    out["airfrans"] = {"status": "not scored", "ref_seeds": len(ref), "twin_seeds": len(tw)}
 json.dump(out, open(f"{R}/local_agg_2026-09-27.json", "w"), indent=1)
+print("== AirfRANS twin:", {k: ({f: round(x, 3) for f, x in v.items()} if isinstance(v, dict) and k == "ratio" else v) for k, v in out["airfrans"].items() if k in ("ratio", "verdict", "status", "n_seeds")})
 for n, rung in out["elasticity"].items():
     print(f"== elasticity {n} cases: base {[round(v, 3) for v in rung['base'].values()]} gt512 {[round(v, 3) for v in rung['gt512'].values()]}")
     for arm, a in rung["arms"].items():

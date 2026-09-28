@@ -30209,3 +30209,195 @@ arms from the training logs (the native model has fewer geometry
 features, so it must not be slower). Pending after this pass: the
 two-dimensional fused Triton kernel and a second native dataset
 (Tensile2d or AirfRANS).
+
+## 2026-09-28 — Verdict, HARMONIC and EXT-ABL at 2,048 Poisson cases (two seeds): the per-type distances alone score 0.0744 and the harmonic measures alone 0.0700 (6% better on both seeds), both ahead of GeoTransolver-512's 0.0981; the value channels hurt at both rungs and stacking the two encodings hurts; the geometry-per-type channel is the mechanism, and the harmonic measure is the better encoding at the larger rung {#sec-nb-harmonic-2048-verdict}
+
+**Setting.** Two preregistered studies (@sec-nb-harmonic-prereg) share the
+OLBC Poisson set, a fixed square mesh whose boundary is cut per sample into
+random Dirichlet, Neumann and Robin segments with random values.
+EXT-ABL splits the six-scalar boundary-value extension into its two
+halves, the three per-type inverse-square value averages and the three
+per-type nearest distances. HARMONIC replaces the inverse-square kernel by
+Laplace solves on the interior point cloud: the harmonic measure of each
+condition type (the hitting probability, 1 on that type's boundary nodes
+and 0 on the others) and the harmonic extension of the prescribed values.
+The 512-case verdicts (@sec-nb-harmonic-followup-512) found the distances
+alone (0.202) and the measures alone (0.207) interchangeable and best,
+with every arm that carried values worse. This entry closes both studies
+at 2,048 cases; the reference numbers are the frame-free ISLA (0.395), the
+inverse-square extension (0.130) and GeoTransolver-512 (0.0981).
+
+**What we saw (2,048 cases, 256 test cases, relative L2 on u, seed
+means with seeds in parentheses).** Distances only **0.0744** (0.0705 /
+0.0783); harmonic measures only **0.0700** (0.0665 / 0.0734); the six
+harmonic fields 0.0768 (0.0748 / 0.0788); measures plus distances 0.0795
+(0.0774 / 0.0815); values only 0.0976 (0.0899 / 0.1053). Fractions of the
+log-gap between the reference and GeoTransolver-512: 1.20 / 1.24 / 1.18 /
+1.15 / 1.00. GeoTransolver-512 ÷ arm: 1.32 / 1.40 / 1.28 / 1.23 / 1.01. The
+ratio of measures-only to distances-only is 0.94 on both seeds (0.943 /
+0.937), against 1.02 at 512.
+
+**Verdicts against the bars.** EXT-ABL: the values-only arm recovers 1.00
+of the extension's 0.80 and the distances-only arm 1.20, so the
+preregistered clause is *either suffices* on paper; the reading that
+matters is that each half alone beats the two together (0.130), so the
+value averages and the distances interfere when both are present, and the
+distances are the better half at both rungs. HARMONIC: the six harmonic
+fields recover 1.18 against the extension's 0.80, *kernel pays* by the
+preregistered clause at both rungs (1.10 at 512); but the follow-up
+clauses say where the gain lives: the value channels hurt at both rungs
+(the six fields are 3% worse than the measures alone here, 21% at 512),
+stacking the measures with the distances hurts (7% worse than the
+distances at 2,048, 15% at 512), and the measures are not redundant with
+the distances at 2,048 (6% better on both seeds) though they were within
+2% at 512. **The mechanism is one geometry scalar per condition type that
+tells a query how strongly each type of wall reaches it; the prescribed
+values reach the readout better through the slice attention than through
+any pre-computed average, and the harmonic measure is the better encoding
+of the geometry scalar once the model has 2,048 cases to learn from.**
+Both encodings are admissible inputs: they derive from one sample's
+geometry and its condition labels and nothing else.
+
+**Why it matters.** The three per-type distances are a signed-distance
+field split by condition type, the harmonic measures are the same
+information passed through the domain's own Laplace operator, so the
+6% at 2,048 is the price of the crude encoding, not a different channel.
+Against GeoTransolver-512 the frame-free ISLA trailed by 4x at this rung
+(0.395 against 0.098) and now leads by 1.40x with three pre-computed
+scalars per query and no learned parameters added. Artifact
+results/harmonic_2026-09-27.json (poisson, 2048).
+
+**What's next.** The combined arms (per-type channel plus local
+aggregation, @sec-nb-combined-512-interim) at 2,048 are at epoch 350; the
+elasticity set (three condition types, vector data) is the second dataset
+for the harmonic measure and is the next lane to stage.
+
+## 2026-09-28 — Interim, per-type channel plus local aggregation at 512 Poisson cases (two seeds): distances plus aggregation 0.164 (0.81 of the distances alone, both seeds; additive), measures plus aggregation 0.177 (0.86 of the measures alone; 0.90 / 0.81 per seed); GeoTransolver-512 ÷ ISLA 1.70; the 2,048 rung decides {#sec-nb-combined-512-interim}
+
+**Setting.** Two remedies for the fixed-mesh Poisson deficit each close
+it alone: the per-type geometry channel (three distances or three
+harmonic measures as query scalars, @sec-nb-harmonic-followup-512) and the
+local relational aggregation among tokens (k-nearest pooling of token
+states and pair invariants before the slice routing,
+@sec-nb-local-agg-poisson-verdict). They act on different paths (a
+per-token input against a token-to-token path), so their combination
+was preregistered with the bars: *additive* at or below 0.90 of the
+better single arm on both seeds, *redundant* within 5%, *hurts* above
+1.05.
+
+**What we saw (512 cases, 256 test cases, relative L2 on u).** Distances
+plus aggregation **0.164** (0.167 / 0.162), against the distances alone
+0.202 and the aggregation alone 0.229: ratio to the better single arm
+0.81, per seed 0.84 / 0.79, **additive**. Harmonic measures plus
+aggregation **0.177** (0.182 / 0.173), against the measures alone 0.207:
+ratio 0.86, per seed 0.90 / 0.81 against the distances-only arm (0.91 on
+seed 42, which misses the 0.90 clause by one point) and 0.90 / 0.81
+against the measures themselves; additive on one seed and at the boundary
+on the other. GeoTransolver-512 (0.279) ÷ ISLA with distances and
+aggregation = **1.70**, against 1.38 for the distances alone and 1.22 for
+the aggregation alone.
+
+**Reading.** The two remedies carry different information, as the
+preregistration argued: the channel tells each query how each condition
+type reaches it, the aggregation lets neighbouring queries share what
+they resolved, and the gains compound (the log-gap fraction goes from
+1.28 or 1.17 to 1.47). This is the 512-case rung only; the 2,048 lanes
+(hm rows 24-25 and 28-29) are at epoch 350 and decide, together with
+whether the harmonic encoding keeps its 6% edge under aggregation. Data:
+results/harmonic_2026-09-27.json (poisson, 512, combined).
+
+## 2026-09-28 — Verdict, LOCAL-AGG on OLBC elasticity at 2,048 cases (two seeds) and interim on AirfRANS (one seed): with the aggregation ISLA's three stress components reach GeoTransolver-512 (ratios 1.05 / 1.02 / 1.03) while displacement trails at 0.77; against the same-snapshot control the stresses improve 14 to 18% and displacement worsens 7%, with a 20% seed split; on AirfRANS interior the aggregation hurts every field (1.13 / 1.20 / 1.37) {#sec-nb-local-agg-elasticity-verdict}
+
+**Setting.** LOCAL-AGG (@sec-nb-local-agg-prereg) adds a contract-preserving
+local relational aggregation among tokens to ISLA. On the OLBC Poisson
+set it closed the fixed-mesh gap at both rungs
+(@sec-nb-local-agg-poisson-verdict). The second fixed-mesh dataset is OLBC
+elasticity (a steel disc with two holes, prescribed displacement and
+tractions per boundary segment, four target fields: displacement and the
+three stress components), where the best ISLA arm is RANK-IO (the
+prescribed vectors as rank-1 boundary inputs and the stress as one
+symmetric rank-2 output). The 512-case interim
+(@sec-nb-local-agg-elasticity-interim) read *between*: stresses 3 to 4%
+better, displacement unchanged. The 2,048 rung carries a same-snapshot
+control without the aggregation (@sec-nb-local-agg-elasticity-ctrl-2048;
+0.201 / 0.297 / 0.305 / 0.301, log-gap fraction 0.787). The third
+dataset is the AirfRANS interior task (800 airfoils, 100,000 interior
+queries drawn per epoch from a point cloud, varying geometry), the
+frame-free reference pair `sg_af_provided` against the same model with the
+aggregation.
+
+**What we saw on elasticity (2,048 cases, 256 test cases, relative L2 on
+displacement / $\sigma_{11}$ / $\sigma_{22}$ / $\sigma_{12}$).** With the
+aggregation **0.216 / 0.244 / 0.256 / 0.258** (seed 42: 0.198 / 0.229 /
+0.239 / 0.241; seed 43: 0.233 / 0.259 / 0.272 / 0.276). GeoTransolver-512:
+0.165 / 0.257 / 0.261 / 0.267, so GeoTransolver-512 ÷ ISLA = **0.77 / 1.05
+/ 1.02 / 1.03**. Fractions of the log-gap from the scalar-input reference
+to GeoTransolver-512: 0.65 / 1.07 / 1.03 / 1.05, mean 0.95, the
+preregistered *closes* clause on the mean, met by the three stresses and
+missed by displacement. Against the same-snapshot control, aggregation ÷
+control = 1.07 / 0.82 / 0.84 / 0.86 on the means; per seed, seed 42 gives
+0.96 / 0.74 / 0.75 / 0.77 and seed 43 gives 1.20 / 0.91 / 0.93 / 0.95. The
+two aggregation seeds are 18% apart on displacement and 13% on the
+stresses where the control pair is within 7%.
+
+**What we saw on AirfRANS (one seed, 200 test airfoils, relative L2 on
+pressure / velocity / eddy viscosity).** Reference 0.0328 / 0.0161 /
+0.0323; with the aggregation 0.0368 / 0.0191 / 0.0417, ratios **1.13 /
+1.20 / 1.37**: the *hurts* clause (any field above 1.05) on every field.
+The second seed has finished training and is being scored; the reading
+would need a reversal of 20 to 37% on that seed to change.
+
+**Verdicts.** On elasticity the aggregation is the difference between
+trailing GeoTransolver-512 by 1.2x on the stresses and matching it: the
+stress fields close on both seeds (worst per-seed GeoTransolver-512 ÷ ISLA
+0.97 on seed 43's $\sigma_{12}$), and displacement, the one field that
+was already the closest to GeoTransolver-512 without aggregation, moves
+the other way. With Poisson this is **the second fixed-mesh dataset on
+which the aggregation pays**, and the reading is sharpened: the
+aggregation pays on the fields whose deficit was value transport across
+the fixed mesh (the stress components, which the boundary tractions
+determine through the interior) and not on the field that the extension
+of the prescribed displacement already served. On AirfRANS it hurts on
+every field. The mechanism is not measured; the hypothesis for the
+follow-up is that the neighbourhoods on a fixed mesh are the same at
+every epoch and at test time, so the pooled statistics are a stable
+function of position, while on the AirfRANS point cloud the 100,000
+queries are redrawn every epoch and the 32 nearest neighbours of a query
+change from draw to draw, so the aggregation sees a different stencil each
+time and learns a noisier function. **The aggregation enters the class as
+a documented option recommended for fixed-mesh interior tasks and not for
+resampled point clouds; it is not part of the reference configuration.**
+
+**What's next.** Score the second AirfRANS seed; test the stencil
+hypothesis with a fixed query draw on AirfRANS (a diagnostic that isolates
+the resampling from the geometry variation); a fused local kernel is
+justified only if a surface task shows a gain. Artifact
+results/local_agg_2026-09-27.json (elasticity 2048, airfrans).
+
+## 2026-09-28 — Interim, ND-GENERIC pass 2 at 512 Poisson cases (two seeds): the native two-dimensional model scores 0.2016 against the embedded three-dimensional 0.2023 (ratio 0.997; 0.993 / 1.001 per seed), same parameter count, same step time, 1% less memory; the dimension-generic path is validated at this rung {#sec-nb-ndgeneric-2d-interim}
+
+**Setting.** ND-GENERIC pass 2 (@sec-nb-ndgeneric-2d-prereg) reran the
+distances-only arm of the OLBC Poisson set with `dim: 2` on a datapipe
+that drops the constant third coordinate (`RestrictToPlane`), against the
+same arm run as a three-dimensional model on the plane. The bar was
+agreement within 0.03 on the two-seed mean at both rungs.
+
+**What we saw (512 cases, 256 test cases, relative L2 on u).** Native
+two-dimensional **0.2016** (0.1981 / 0.2051); embedded three-dimensional
+0.2023 (0.1996 / 0.2049); ratio 0.997, per seed 0.993 / 1.001. Both models
+have 34,310,858 parameters: with no global direction and scalar inputs
+and outputs no tensor in the model has a size that depends on the spatial
+dimension, and the geometry feature count ($2K + 3$) is dimension-free by
+construction. Training steps take 0.148 s in both (128 steps per epoch),
+peak memory 7.36 against 7.44 GB.
+
+**Reading.** The two-dimensional path reproduces the embedded model to
+within seed noise, at the same cost: the *validated* clause at this rung.
+The embedded model's dead third components (zero in every relative vector
+and normal) cost nothing measurable here, which is what the identical
+parameter count predicts; the native path's value is correctness of
+contract (a two-dimensional problem is treated as one, with the
+two-dimensional pseudovector and no out-of-plane cross products), not
+speed. The 2,048 pair is at epoch 340 and closes the ledger criterion if
+it agrees. Data: results/harmonic_2026-09-27.json (poisson, 512, arm
+nd_distonly_2d).

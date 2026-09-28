@@ -36,7 +36,11 @@
      "share_of_ext": 1.3004692595510934,
      "interim": false,
      "verdict": "kernel pays",
-     "ratio_to_distonly": 1.2339088368122597
+     "ratio_to_distonly": 1.2339088368122597,
+     "ratio_to_distonly_per_seed": {
+      "42": 1.2111079210604476,
+      "43": 1.2561173332738134
+     }
     },
     "ext_valonly": {
      "u": 0.30661883180437144,
@@ -88,7 +92,11 @@
      "frac_minus_ext": 0.418587657101674,
      "share_of_ext": 1.4955954816741284,
      "interim": false,
-     "ratio_to_distonly": 1.0236187461938906
+     "ratio_to_distonly": 1.0236187461938906,
+     "ratio_to_distonly_per_seed": {
+      "42": 1.0080374122835227,
+      "43": 1.0387952418566662
+     }
     },
     "hm_plus_dist": {
      "u": 0.23164130763325375,
@@ -106,7 +114,11 @@
      "frac_minus_ext": 0.3196261428968268,
      "share_of_ext": 1.3784279578174958,
      "interim": false,
-     "ratio_to_distonly": 1.1451524561021016
+     "ratio_to_distonly": 1.1451524561021016,
+     "ratio_to_distonly_per_seed": {
+      "42": 1.0663314429875208,
+      "43": 1.2219255212677902
+     }
     },
     "ext_ctrl_v7": {
      "u": 0.2985501634757384,
@@ -141,9 +153,87 @@
      "frac_minus_ext": 0.32972905538222563,
      "share_of_ext": 1.3903895092263006,
      "interim": false
+    },
+    "hm_measures_local05": {
+     "u": 0.17742410365463002,
+     "per_seed": {
+      "42": 0.18161085613246541,
+      "43": 0.17323735117679462
+     },
+     "n_seeds": 2,
+     "frac": 1.3994404805890281,
+     "gt512_over": 1.5727876014617674,
+     "frac_per_seed": {
+      "42": 1.378867920998326,
+      "43": 1.42050434200279
+     },
+     "ratio_to_distonly": 0.8771218317999421,
+     "ratio_to_distonly_per_seed": {
+      "42": 0.9097944750758754,
+      "43": 0.8452980975920076
+     }
+    },
+    "ext_distonly_local05": {
+     "u": 0.16430904097796883,
+     "per_seed": {
+      "42": 0.16672437221859582,
+      "43": 0.16189370973734185
+     },
+     "n_seeds": 2,
+     "frac": 1.4671772873626985,
+     "gt512_over": 1.6983266944263016,
+     "frac_per_seed": {
+      "42": 1.4543054462979044,
+      "43": 1.4802397515161791
+     },
+     "ratio_to_distonly": 0.812285614159995,
+     "ratio_to_distonly_per_seed": {
+      "42": 0.8352194132840526,
+      "43": 0.7899476869363423
+     }
+    },
+    "nd_distonly_2d": {
+     "u": 0.20163125329418108,
+     "per_seed": {
+      "42": 0.1981471023755148,
+      "43": 0.20511540421284735
+     },
+     "n_seeds": 2,
+     "frac": 1.2866271150922475,
+     "gt512_over": 1.3839641715728142,
+     "frac_per_seed": {
+      "42": 1.3020021734228968,
+      "43": 1.2715154721629578
+     },
+     "ratio_to_distonly": 0.9967933927499091,
+     "ratio_to_distonly_per_seed": {
+      "42": 0.9926341565288782,
+      "43": 1.0008445626197067
+     },
+     "nd_verdict": "validated (within 0.03)"
     }
    },
    "ext_abl_verdict": "either suffices",
+   "combined": {
+    "ext_distonly_local05": {
+     "ratio_to_channel_only": 0.812285614159995,
+     "per_seed": {
+      "42": 0.8352194132840526,
+      "43": 0.7899476869363423
+     },
+     "vs_local05": 0.7174964595567523,
+     "verdict": "pays"
+    },
+    "hm_measures_local05": {
+     "ratio_to_channel_only": 0.8568833220975424,
+     "per_seed": {
+      "42": 0.9025403858919322,
+      "43": 0.8137292736162172
+     },
+     "vs_local05": 0.7747666558975065,
+     "verdict": "pays"
+    }
+   },
    "followup": {
     "values_hurt": true,
     "measures_redundant": false,
@@ -169,19 +259,105 @@
      }
     },
     "hm": {
-     "status": "not scored"
+     "u": 0.0768297863578482,
+     "per_seed": {
+      "42": 0.07484110559744295,
+      "43": 0.07881846711825347
+     },
+     "n_seeds": 2,
+     "frac": 1.1755408828720912,
+     "gt512_over": 1.2769461051755102,
+     "frac_per_seed": {
+      "42": 1.1943716488176899,
+      "43": 1.1571913624356258
+     },
+     "frac_minus_ext": 0.37658634041951444,
+     "share_of_ext": 1.4713488945985527,
+     "interim": false,
+     "verdict": "kernel pays",
+     "ratio_to_distonly": 1.0323058037271917,
+     "ratio_to_distonly_per_seed": {
+      "42": 1.0614369372068149,
+      "43": 1.0060871140516883
+     }
     },
     "ext_valonly": {
-     "status": "not scored"
+     "u": 0.09761796701786807,
+     "per_seed": {
+      "42": 0.08991364468238316,
+      "43": 0.10532228935335297
+     },
+     "n_seeds": 2,
+     "frac": 1.003591804157925,
+     "gt512_over": 1.0050147472663833,
+     "frac_per_seed": {
+      "42": 1.0626234287071572,
+      "43": 0.9490467630179147
+     },
+     "frac_minus_ext": 0.20463726170534824,
+     "share_of_ext": 1.2561312951262116,
+     "interim": false
     },
     "ext_distonly": {
-     "status": "not scored"
+     "u": 0.07442541355521826,
+     "per_seed": {
+      "42": 0.07050923420320032,
+      "43": 0.07834159290723619
+     },
+     "n_seeds": 2,
+     "frac": 1.1983710106017424,
+     "gt512_over": 1.3181988754195122,
+     "frac_per_seed": {
+      "42": 1.2371839330077419,
+      "43": 1.1615489211532033
+     },
+     "frac_minus_ext": 0.39941646814916565,
+     "share_of_ext": 1.499923896700135,
+     "interim": false
     },
     "hm_measures": {
-     "status": "not scored"
+     "u": 0.06996179418092652,
+     "per_seed": {
+      "42": 0.0664802309947845,
+      "43": 0.07344335736706853
+     },
+     "n_seeds": 2,
+     "frac": 1.2427806358131492,
+     "gt512_over": 1.4023010358683394,
+     "frac_per_seed": {
+      "42": 1.2794328885695947,
+      "43": 1.2079087735270595
+     },
+     "frac_minus_ext": 0.44382609336057244,
+     "share_of_ext": 1.5555085674813802,
+     "interim": false,
+     "ratio_to_distonly": 0.940025601994404,
+     "ratio_to_distonly_per_seed": {
+      "42": 0.9428585028053964,
+      "43": 0.9374759261537147
+     }
     },
     "hm_plus_dist": {
-     "status": "not scored"
+     "u": 0.07948718630359508,
+     "per_seed": {
+      "42": 0.07744128723425092,
+      "43": 0.08153308537293924
+     },
+     "n_seeds": 2,
+     "frac": 1.1511249741276863,
+     "gt512_over": 1.234255494670637,
+     "frac_per_seed": {
+      "42": 1.1698484866630698,
+      "43": 1.132877309677397
+     },
+     "frac_minus_ext": 0.35217043167510953,
+     "share_of_ext": 1.4407890724221186,
+     "interim": false,
+     "ratio_to_distonly": 1.0680113486318938,
+     "ratio_to_distonly_per_seed": {
+      "42": 1.0983141160074599,
+      "43": 1.0407381615214548
+     }
     },
     "ext_ctrl_v7": {
      "status": "not scored"
@@ -202,7 +378,23 @@
      "frac_minus_ext": 0.3389256273254486,
      "share_of_ext": 1.4242114029229218,
      "interim": false
+    },
+    "hm_measures_local05": {
+     "status": "not scored"
+    },
+    "ext_distonly_local05": {
+     "status": "not scored"
+    },
+    "nd_distonly_2d": {
+     "status": "not scored"
     }
+   },
+   "ext_abl_verdict": "either suffices",
+   "combined": {},
+   "followup": {
+    "values_hurt": true,
+    "measures_redundant": false,
+    "measures_add": false
    }
   }
  },
