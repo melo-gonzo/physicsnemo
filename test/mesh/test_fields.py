@@ -18,7 +18,7 @@ import pytest
 import torch
 from tensordict import TensorDict
 
-from physicsnemo.mesh import FieldLayout, RankSpec, ScalarVectorFields
+from physicsnemo.mesh import RankSpec
 from physicsnemo.mesh.fields import (
     flatten_rank_spec,
     flatten_rank_specs,
@@ -82,115 +82,6 @@ def test_validate_rank_spec_and_data_reports_schema_errors():
         "  - missing leaf 'velocity' (declared rank 1)\n"
         "  - rank mismatch for 'pressure': declared 0, got 1"
     )
-
-
-def test_field_layout_pack_is_deterministic_and_round_trips():
-    ranks = {
-        "wind": 1,
-        "state": {"temperature": 0},
-        "pressure": 0,
-        "displacement": 1,
-    }
-    reordered_ranks = {
-        "pressure": 0,
-        "displacement": 1,
-        "state": {"temperature": 0},
-        "wind": 1,
-    }
-    data = _mixed_fields()
-    layout = FieldLayout(ranks, spatial_dim=3)
-    reordered_layout = FieldLayout(reordered_ranks, spatial_dim=3)
-
-    assert layout.scalar_names == ("pressure", "state.temperature")
-    assert layout.vector_names == ("displacement", "wind")
-    assert layout.flat_rank_spec == {
-        "displacement": 1,
-        "pressure": 0,
-        "state.temperature": 0,
-        "wind": 1,
-    }
-
-    packed = layout.pack(data)
-    reordered = reordered_layout.pack(data)
-    torch.testing.assert_close(packed.scalars, reordered.scalars)
-    torch.testing.assert_close(packed.vectors, reordered.vectors)
-    torch.testing.assert_close(
-        packed.scalars,
-        torch.stack((data["pressure"], data["state", "temperature"]), dim=-1),
-    )
-    torch.testing.assert_close(
-        packed.vectors,
-        torch.stack((data["displacement"], data["wind"]), dim=-2),
-    )
-
-    unpacked = layout.unpack(packed)
-    assert set(unpacked.keys()) == {"displacement", "pressure", "state", "wind"}
-    for key in ("pressure", ("state", "temperature"), "displacement", "wind"):
-        torch.testing.assert_close(unpacked[key], data[key])
-
-
-def test_field_layout_preserves_polar_vector_transformation():
-    data = _mixed_fields()
-    layout = FieldLayout(
-        {"pressure": 0, "wind": 1, "displacement": 1},
-        spatial_dim=3,
-    )
-    packed = layout.pack(data)
-    rotation = torch.tensor([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
-    rotated_data = data.clone()
-    rotated_data["wind"] = data["wind"] @ rotation.T
-    rotated_data["displacement"] = data["displacement"] @ rotation.T
-    rotated = layout.pack(rotated_data)
-
-    torch.testing.assert_close(rotated.scalars, packed.scalars)
-    torch.testing.assert_close(rotated.vectors, packed.vectors @ rotation.T)
-
-
-@pytest.mark.parametrize(
-    ("ranks", "expected_scalar_shape", "expected_vector_shape"),
-    [
-        ({"pressure": 0}, (4, 1), (4, 0, 3)),
-        ({"wind": 1}, (4, 0), (4, 1, 3)),
-    ],
-)
-def test_field_layout_supports_scalar_or_vector_only(
-    ranks, expected_scalar_shape, expected_vector_shape
-):
-    layout = FieldLayout(ranks, spatial_dim=3)
-    packed = layout.pack(_mixed_fields())
-    assert packed.scalars.shape == expected_scalar_shape
-    assert packed.vectors.shape == expected_vector_shape
-    round_trip = layout.pack(layout.unpack(packed))
-    torch.testing.assert_close(round_trip.scalars, packed.scalars)
-    torch.testing.assert_close(round_trip.vectors, packed.vectors)
-
-
-def test_field_layout_rejects_non_vector_rank_and_wrong_vector_dimension():
-    with pytest.raises(ValueError, match="must be one of .* got 2"):
-        FieldLayout({"stress": 2}, spatial_dim=3)
-
-    layout = FieldLayout({"velocity": 1}, spatial_dim=3)
-    wrong_dim = TensorDict({"velocity": torch.zeros(5, 2)}, batch_size=[5])
-    with pytest.raises(ValueError, match=r"must have shape \(5, 3\)"):
-        layout.pack(wrong_dim)
-
-
-def test_field_layout_validates_packed_shapes_and_dtype():
-    layout = FieldLayout({"pressure": 0, "velocity": 1}, spatial_dim=3)
-    with pytest.raises(ValueError, match="vectors must have shape"):
-        layout.unpack(
-            ScalarVectorFields(
-                scalars=torch.empty(5, 1),
-                vectors=torch.empty(4, 1, 3),
-            )
-        )
-    with pytest.raises(ValueError, match="must have the same dtype"):
-        layout.unpack(
-            ScalarVectorFields(
-                scalars=torch.empty(5, 1, dtype=torch.float32),
-                vectors=torch.empty(5, 1, 3, dtype=torch.float64),
-            )
-        )
 
 
 def test_rank_spec_parse_accepts_int_rank_spec_and_mapping():
@@ -303,41 +194,6 @@ def test_validate_rank_spec_accepts_widened_leaves():
         )
     with pytest.raises(ValueError, match="parity must be 'even' or 'odd'"):
         validate_rank_spec({"surface": {"shear": {"rank": 1, "parity": "axial"}}})
-
-
-def test_field_layout_accepts_rank_spec_leaves_and_dotted_names():
-    data = _mixed_fields()
-    reference = FieldLayout({"pressure": 0, "state": {"temperature": 0}, "wind": 1}, 3)
-    layout = FieldLayout(
-        {
-            "pressure": RankSpec(rank=0),
-            "state.temperature": {"rank": 0},
-            "wind": {"rank": 1, "parity": "even"},
-        },
-        spatial_dim=3,
-    )
-    assert layout.flat_rank_spec == reference.flat_rank_spec
-    packed = layout.pack(data)
-    expected = reference.pack(data)
-    torch.testing.assert_close(packed.scalars, expected.scalars)
-    torch.testing.assert_close(packed.vectors, expected.vectors)
-    unpacked = layout.unpack(packed)
-    torch.testing.assert_close(
-        unpacked["state", "temperature"], data["state", "temperature"]
-    )
-
-
-def test_field_layout_rejects_pseudovectors_and_symmetric_leaves():
-    with pytest.raises(ValueError, match="has parity 'odd'; FieldLayout packs"):
-        FieldLayout({"vorticity": {"rank": 1, "parity": "odd"}}, spatial_dim=3)
-    with pytest.raises(ValueError, match="has parity 'odd'"):
-        FieldLayout({"vorticity": RankSpec(rank=1, parity="odd")}, spatial_dim=3)
-    with pytest.raises(ValueError, match="only meaningful for rank >= 2"):
-        FieldLayout({"wind": {"rank": 1, "symmetric": True}}, spatial_dim=3)
-    with pytest.raises(ValueError, match="must be one of .* got 2"):
-        FieldLayout({"stress": {"rank": 2, "symmetric": True}}, spatial_dim=3)
-    with pytest.raises(ValueError, match="is a group of"):
-        FieldLayout({"surface": 0, "surface.pressure": 0}, spatial_dim=3)
 
 
 def test_validate_data_contains_ranks_reports_schema_errors():

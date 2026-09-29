@@ -16,10 +16,8 @@
 
 from physicsnemo.mesh.domain_mesh import DomainMesh
 from physicsnemo.mesh.fields import (
-    FieldLayout,
     RankSpec,
     RankSpecDict,
-    ScalarVectorFields,
     flatten_rank_spec,
     flatten_rank_specs,
     is_leaf_spec,
@@ -32,13 +30,11 @@ from physicsnemo.mesh.mesh import MESH_FIELD_ASSOCIATIONS, Mesh, MeshFieldAssoci
 
 __all__ = [
     "DomainMesh",
-    "FieldLayout",
     "MESH_FIELD_ASSOCIATIONS",
     "Mesh",
     "MeshFieldAssociation",
     "RankSpec",
     "RankSpecDict",
-    "ScalarVectorFields",
     "flatten_rank_spec",
     "flatten_rank_specs",
     "is_leaf_spec",

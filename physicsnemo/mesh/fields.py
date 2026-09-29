@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-r"""Semantic tensor-rank field specifications and scalar/vector layouts.
+r"""Semantic tensor-rank field specifications.
 
 Mesh models commonly need to turn named physical fields into dense channel
 tensors.  A plain concatenation is not sufficient: a scalar field and a
 Cartesian vector field transform differently under a change of frame.  This
-module gives every named field a declared transformation law and a stable,
-name-based channel order.
+module gives every named field a declared transformation law that models and
+data pipelines can validate against.
 
 :class:`RankSpec` is the per-field declaration: the tensor ``rank`` (0 scalar,
 1 vector, 2 rank-2 tensor, ...), whether a rank >= 2 tensor is fully
@@ -36,26 +36,20 @@ also contain the separator (``"surface.pressure"``) to denote nesting, so the
 nested and dotted forms describe the same field.  A name cannot be both a
 field and a group of fields.
 
-The currently supported :class:`FieldLayout` leaves are
-
-* rank 0: one scalar per point, with shape ``(N,)``;
-* rank 1: one polar (parity ``"even"``) vector per point, with shape ``(N, D)``.
-
-Consequently, a rank-1 leaf is not an arbitrary feature axis of length ``D``:
-it is explicitly promised to transform as a polar vector.  Axial vectors and
-higher-order tensors are declared through :class:`RankSpec` and are not
-silently treated as polar vectors here.
+A rank-1 leaf is not an arbitrary feature axis of length ``D``: it is
+explicitly promised to transform as a vector, and a rank-0 leaf has shape
+``(N,)`` with no feature axis.  Axial vectors and higher-order tensors are
+declared through :class:`RankSpec` rather than silently treated as polar
+vectors.
 """
 
 from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Collection, Mapping
-from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Literal, NamedTuple, TypeAlias, Union
+from typing import Any, Literal, TypeAlias, Union
 
-import torch
 from tensordict import TensorDict
 
 
@@ -423,250 +417,9 @@ def validate_data_contains_ranks(
         )
 
 
-class ScalarVectorFields(NamedTuple):
-    r"""Dense scalar and polar-vector channels for a collection of points.
-
-    ``scalars`` has shape ``(N, C_s)`` and ``vectors`` has shape
-    ``(N, C_v, D)``.  Shape validation belongs to the :class:`FieldLayout`
-    that defines ``C_s``, ``C_v``, and ``D``.
-    """
-
-    scalars: torch.Tensor
-    vectors: torch.Tensor
-
-
-def _td_key(path: tuple[str, ...]) -> str | tuple[str, ...]:
-    """Use a string for top-level TensorDict keys and tuples for nested keys."""
-    return path[0] if len(path) == 1 else path
-
-
-class FieldLayout:
-    r"""Deterministic packing layout for named scalar and polar-vector fields.
-
-    Channel order is lexicographic by the flattened field name and therefore
-    does not depend on dictionary or TensorDict construction order.  Scalars
-    and vectors are packed separately so that equivariant code cannot
-    accidentally mix their transformation laws.
-
-    Parameters
-    ----------
-    rank_spec : RankSpecDict
-        Nested or flat field schema.  Only rank-0 and polar (parity
-        ``"even"``) rank-1 leaves are supported; leaves may be given as
-        integers, :class:`RankSpec` instances, or mappings with a ``"rank"``
-        key.
-    spatial_dim : int
-        Cartesian vector dimension ``D``.
-    sep : str, default="."
-        Separator used for public flattened names and sorting, and to split
-        flat names into nested TensorDict paths.
-
-    Notes
-    -----
-    Each rank-0 leaf must have shape ``(N,)`` and each rank-1 leaf must have
-    shape ``(N, D)``.  Multiple channels must be represented by multiple named
-    leaves rather than an extra unnamed feature dimension.
-    """
-
-    def __init__(
-        self,
-        rank_spec: RankSpecDict,
-        spatial_dim: int,
-        *,
-        sep: str = ".",
-    ) -> None:
-        if isinstance(spatial_dim, bool) or not isinstance(spatial_dim, int):
-            raise TypeError(f"spatial_dim must be an integer, got {spatial_dim!r}")
-        if spatial_dim < 1:
-            raise ValueError(f"spatial_dim must be positive, got {spatial_dim}")
-        if not isinstance(sep, str):
-            raise TypeError(f"sep must be a string, got {type(sep).__name__}")
-        if not sep:
-            raise ValueError("sep must not be empty")
-
-        leaves = _leaf_entries(
-            rank_spec, sep=sep, source_label="rank_spec", allowed_ranks=(0, 1)
-        )
-        if not leaves:
-            raise ValueError("rank_spec must contain at least one field leaf")
-
-        entries = []
-        for path, leaf in leaves:
-            name = sep.join(path)
-            if leaf.parity != "even":
-                raise ValueError(
-                    f"Field {name!r} in rank_spec has parity {leaf.parity!r}; "
-                    f"FieldLayout packs scalars and polar vectors only"
-                )
-            entries.append((name, path, leaf.rank))
-
-        entries.sort(key=lambda entry: entry[0])
-        self._rank_spec = deepcopy(rank_spec)
-        self.spatial_dim = spatial_dim
-        self.sep = sep
-        self._entries = tuple(entries)
-        self._scalar_entries = tuple(entry for entry in entries if entry[2] == 0)
-        self._vector_entries = tuple(entry for entry in entries if entry[2] == 1)
-
-    @property
-    def rank_spec(self) -> RankSpecDict:
-        """A defensive copy of the named-field schema."""
-        return deepcopy(self._rank_spec)
-
-    @property
-    def flat_rank_spec(self) -> dict[str, int]:
-        """Field ranks in deterministic packed-name order."""
-        return {name: rank for name, _, rank in self._entries}
-
-    @property
-    def scalar_names(self) -> tuple[str, ...]:
-        """Names of scalar channels in packed order."""
-        return tuple(name for name, _, _ in self._scalar_entries)
-
-    @property
-    def vector_names(self) -> tuple[str, ...]:
-        """Names of polar-vector channels in packed order."""
-        return tuple(name for name, _, _ in self._vector_entries)
-
-    @property
-    def n_scalars(self) -> int:
-        """Number of packed scalar channels."""
-        return len(self._scalar_entries)
-
-    @property
-    def n_vectors(self) -> int:
-        """Number of packed polar-vector channels."""
-        return len(self._vector_entries)
-
-    def pack(self, data: TensorDict) -> ScalarVectorFields:
-        r"""Pack named point fields into deterministic scalar/vector channels.
-
-        Extra leaves in ``data`` are ignored.  All selected leaves must share
-        dtype and device, in addition to satisfying the semantic shapes in this
-        layout.
-        """
-        if data.batch_dims != 1:
-            raise ValueError(
-                "FieldLayout expects a point TensorDict with one batch dimension "
-                f"(N,), got batch_size={tuple(data.batch_size)}"
-            )
-        validate_data_contains_ranks(
-            data=data,
-            declared_ranks=self._rank_spec,
-            source_label="data",
-        )
-
-        n_points = data.batch_size[0]
-        selected: list[torch.Tensor] = []
-        scalar_tensors: list[torch.Tensor] = []
-        vector_tensors: list[torch.Tensor] = []
-
-        for name, path, rank in self._entries:
-            tensor = data[_td_key(path)]
-            expected = (n_points,) if rank == 0 else (n_points, self.spatial_dim)
-            if tuple(tensor.shape) != expected:
-                kind = "scalar" if rank == 0 else "polar vector"
-                raise ValueError(
-                    f"Field {name!r} is declared as a {kind} and must have "
-                    f"shape {expected}, got {tuple(tensor.shape)}"
-                )
-            selected.append(tensor)
-            if rank == 0:
-                scalar_tensors.append(tensor)
-            else:
-                vector_tensors.append(tensor)
-
-        reference = selected[0]
-        for name, tensor in zip(
-            (name for name, _, _ in self._entries), selected, strict=True
-        ):
-            if tensor.device != reference.device:
-                raise ValueError(
-                    f"All packed fields must share a device; field {name!r} is "
-                    f"on {tensor.device}, expected {reference.device}"
-                )
-            if tensor.dtype != reference.dtype:
-                raise ValueError(
-                    f"All packed fields must share a dtype; field {name!r} has "
-                    f"{tensor.dtype}, expected {reference.dtype}"
-                )
-
-        scalars = (
-            torch.stack(scalar_tensors, dim=-1)
-            if scalar_tensors
-            else reference.new_empty((n_points, 0))
-        )
-        vectors = (
-            torch.stack(vector_tensors, dim=-2)
-            if vector_tensors
-            else reference.new_empty((n_points, 0, self.spatial_dim))
-        )
-        return ScalarVectorFields(scalars=scalars, vectors=vectors)
-
-    def unpack(self, fields: ScalarVectorFields) -> TensorDict:
-        r"""Unpack scalar/vector channels to a TensorDict matching ``rank_spec``."""
-        scalars, vectors = fields
-        if scalars.ndim != 2:
-            raise ValueError(
-                f"scalars must have shape (N, {self.n_scalars}), got "
-                f"{tuple(scalars.shape)}"
-            )
-        if vectors.ndim != 3:
-            raise ValueError(
-                f"vectors must have shape (N, {self.n_vectors}, "
-                f"{self.spatial_dim}), got {tuple(vectors.shape)}"
-            )
-
-        n_points = scalars.shape[0]
-        expected_scalars = (n_points, self.n_scalars)
-        expected_vectors = (n_points, self.n_vectors, self.spatial_dim)
-        if tuple(scalars.shape) != expected_scalars:
-            raise ValueError(
-                f"scalars must have shape {expected_scalars}, got "
-                f"{tuple(scalars.shape)}"
-            )
-        if tuple(vectors.shape) != expected_vectors:
-            raise ValueError(
-                f"vectors must have shape {expected_vectors}, got "
-                f"{tuple(vectors.shape)}"
-            )
-        if vectors.shape[0] != n_points:
-            raise ValueError(
-                "scalars and vectors must contain the same number of points"
-            )
-        if vectors.device != scalars.device:
-            raise ValueError("scalars and vectors must be on the same device")
-        if vectors.dtype != scalars.dtype:
-            raise ValueError("scalars and vectors must have the same dtype")
-
-        nested: dict[str, object] = {}
-
-        def _assign(path: tuple[str, ...], tensor: torch.Tensor) -> None:
-            target = nested
-            for key in path[:-1]:
-                child = target.setdefault(key, {})
-                # The schema validation guarantees that a path component is
-                # either always a group or always a leaf.
-                target = child  # type: ignore[assignment]
-            target[path[-1]] = tensor
-
-        for index, (_, path, _) in enumerate(self._scalar_entries):
-            _assign(path, scalars[:, index])
-        for index, (_, path, _) in enumerate(self._vector_entries):
-            _assign(path, vectors[:, index, :])
-
-        return TensorDict(
-            nested,
-            batch_size=torch.Size([n_points]),
-            device=scalars.device,
-        )
-
-
 __all__ = [
-    "FieldLayout",
     "RankSpec",
     "RankSpecDict",
-    "ScalarVectorFields",
     "flatten_rank_spec",
     "flatten_rank_specs",
     "is_leaf_spec",
