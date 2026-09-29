@@ -44,6 +44,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unified external aero recipe: `NonDimensionalizeByMetadata` gains
   `scale_geometry` so chained instances scale the geometry once; inference
   re-dimensionalizes with the field maps of every instance.
+- Extends the diffusion module to support flow matching. The new API
+  surface covers three pieces:
+  - New losses in `physicsnemo.diffusion.metrics.losses` train against a
+    flow/velocity target: `FlowMatchingLoss`, plus `WeightedFlowMatchingLoss`
+    for an element-wise weight such as a binary mask. Their
+    `MultiDiffusionFlowMatchingLoss` and
+    `MultiDiffusionWeightedFlowMatchingLoss` counterparts provide patch-based
+    flow-matching training on large spatial domains. `MultiDiffusionModel2D`
+    and `MultiDiffusionPredictor` support both patch-based diffusion and flow
+    matching during training and inference.
+  - A dedicated `RectifiedFlowNoiseScheduler` in
+    `physicsnemo.diffusion.noise_schedulers` provides a rectified-flow
+    schedule.
+  - Module-wide support for flow predictors, enabled by new conversion
+    functions in `LinearGaussianNoiseScheduler` (`x0_to_flow` / `flow_to_x0`
+    / `score_to_flow` / `flow_to_score`) and the corresponding conversion
+    callbacks everywhere conversions between prediction types are necessary.
 
 ### Changed
 
@@ -54,6 +71,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Sampling, centroid conversion, geometric transformations, subdivision and
   GLOBE use the mesh-owned measure API. Point measures carry their represented
   dimension so geometric scaling preserves their physical units.
+
+  **Migration from 2.2.x:** meshes saved with `cell_data["_measure_weights"]`
+  must be regenerated or converted once before integration:
+
+  ```python
+  from physicsnemo.mesh.calculus import set_cell_measures
+
+  if "_measure_weights" in mesh.cell_data:
+      weights = mesh.cell_data.pop("_measure_weights")
+      set_cell_measures(mesh, mesh.cell_areas * weights)
+  ```
+
+  Replace `compose_measure_weights` calls with `scale_measures`. Consumers
+  should read complete measures with `cell_measures` instead of multiplying
+  `cell_areas` by `cell_measure_weights`. Update stored-field mappings from
+  `cell_data._measure_weights` to `cell_data._effective_measure` and remove any
+  subsequent multiplication by geometric areas.
 
 - `Mesh.slice_points` picks its cell-remapping algorithm by mesh shape: the
   full-mesh lookup table as before, or a binary search over the kept ids when the
@@ -76,6 +110,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`physicsnemo.experimental.nn.mesh_attention`), its tests, and its Laplace
   example program under `examples/cfd/mesh_transformer`. The last commit
   carrying it is tagged `mt1-final`.
+- Removes the opt-in `physicsnemo.compat` import-alias layer and the
+  `PHYSICSNEMO_ENABLE_COMPAT` environment variable. The layer mapped pre-v2.0
+  module paths onto their v2.0 locations; three minor releases later, callers
+  should import from the current paths listed in `v2.0-MIGRATION-GUIDE.md`.
+  Checkpoint loading is unaffected.
 - Removes `physicsnemo.utils.mesh`, deprecated since 2.1 with removal scheduled
   for 2.2. The `vtk` and `stl` entries leave the `utils-extras` extra with it.
   Replacements:
@@ -144,6 +183,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 ### Dependencies
+
+- Drops `onnx`, `torchvision` and `pandas` from the required dependencies.
+  `pandas` is now optional via `datapipes-extras` or `model-extras`.
 
 ## [2.2.1] - 2026-XX-YY
 
