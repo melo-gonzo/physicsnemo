@@ -30873,3 +30873,23 @@ GeoTransolver-physics per dataset; where the FLARE++ backend is better by
 more than 3 percent it replaces the physics-attention number as the
 GeoTransolver baseline in the scoreboard (the book then quotes both), and
 every ISLA ratio on that dataset is restated against it.
+
+## 2026-09-29 — Amendment to the PROTO-COND preregistration: launched now rather than after the pruning wave, with same-snapshot reference pairs and AirfRANS interior added (campaign pc rows 0-19, code_v11) {#sec-nb-proto-cond-launch}
+
+Peter's standing rule that the program is not compute-limited applies:
+the prototype test does not depend on any pending verdict, so it launches
+now. Two changes against @sec-nb-proto-cond-prereg, both tightening the
+comparison. First, every dataset gets a same-snapshot reference pair
+(static prototypes, code_v11) beside the conditioned pair, so the ratio
+never crosses a snapshot; the published references (frame-free Poisson
+0.867 / 0.395, cars 0.0446, wings 0.0404) are the sanity check on the new
+reference pairs, not the denominator. Second, AirfRANS interior (800
+airfoils, 100,000 queries, the provided-geometry reference) is added as a
+fifth dataset, so the neutrality clause is tested on a resampled point
+cloud as well. Lanes: OLBC Poisson at 512 and 2,048, DrivAerML Surface at
+435 cars and 200,000 cells, HiLift at 510 wings and 200,000 cells, AirfRANS
+interior; two arms, two seeds each, twenty lanes; the reference
+configuration with `+model.slice_prototypes=conditioned` as the only
+override on the conditioned arm; learning rate 5e-4 throughout. Bars are
+unchanged. The book and this branch are now `psharpe/isla` (renamed from
+`psharpe/mesh-transformer` this morning, with upstream main merged).
