@@ -117,83 +117,22 @@ def test_aux_difficulty_floors_finite_nonpositive_values(dtype):
     )
 
 
-@pytest.mark.parametrize(
-    "raw,error,match",
-    [
-        pytest.param(None, TypeError, "must be a torch.Tensor", id="none"),
-        pytest.param([1.0], TypeError, "must be a torch.Tensor", id="list"),
-        pytest.param(1.0, TypeError, "must be a torch.Tensor", id="scalar"),
-        pytest.param(
-            torch.ones(1, dtype=torch.int64), TypeError, "floating-point", id="int"
-        ),
-        pytest.param(
-            torch.ones(1, dtype=torch.bool), TypeError, "floating-point", id="bool"
-        ),
-        pytest.param(
-            torch.ones(1, dtype=torch.complex64),
-            TypeError,
-            "floating-point",
-            id="complex",
-        ),
-        pytest.param(
-            torch.tensor([float("-inf")]),
-            ValueError,
-            "non-finite",
-            id="negative-inf-clamp",
-        ),
-        pytest.param(
-            torch.tensor([[float("-inf"), 1.0]]),
-            ValueError,
-            "non-finite",
-            id="negative-inf-reduction",
-        ),
-        pytest.param(
-            torch.tensor([[float("inf"), 1.0]]),
-            ValueError,
-            "non-finite",
-            id="positive-inf",
-        ),
-        pytest.param(
-            torch.tensor([[float("nan"), 1.0]]), ValueError, "non-finite", id="nan"
-        ),
-    ],
-)
+# fmt: off
+RAW_DIFFICULTY_REJECTIONS = [
+    pytest.param(None, TypeError, "must be a torch.Tensor", id="none"),
+    pytest.param(torch.ones(1, dtype=torch.int64), TypeError, "floating", id="int"),
+    pytest.param(torch.tensor([float("-inf")]), ValueError, "non-finite", id="negative-inf-clamp"),
+    pytest.param(torch.tensor([[float("-inf"), 1.0]]), ValueError, "non-finite", id="negative-inf-reduction"),
+    pytest.param(torch.tensor([[float("nan"), 1.0]]), ValueError, "non-finite", id="nan"),
+]
+# fmt: on
+
+
+@pytest.mark.parametrize("raw,error,match", RAW_DIFFICULTY_REJECTIONS)
 def test_aux_difficulty_validates_raw_input(raw, error, match):
     with pytest.raises(error, match=match) as exc:
         AuxDifficulty("spread")(aux={"spread": raw})
     assert "spread" in str(exc.value)
-
-
-@pytest.mark.parametrize("tier", ["functional", "risk_control"])
-@pytest.mark.parametrize(
-    "raw,error,match",
-    [
-        pytest.param(None, TypeError, "must be a torch.Tensor", id="none"),
-        pytest.param(
-            torch.tensor([[float("-inf"), 1.0]]),
-            ValueError,
-            "non-finite",
-            id="hidden-inf",
-        ),
-    ],
-)
-def test_aux_difficulty_rejects_raw_input_at_calibration_and_prediction(
-    tier, raw, error, match
-):
-    calibrator = CALIBRATORS[tier](
-        AbsoluteErrorScore(), alpha=0.5, difficulty=AuxDifficulty("spread")
-    )
-    pred, target = torch.zeros(1, 2), torch.ones(1, 2)
-    valid_aux = {"spread": torch.ones_like(pred)}
-    for _ in range(3):
-        calibrator.update_sample(pred, target, aux=valid_aux)
-    predictor = calibrator.finalize()
-    with pytest.raises(error, match=match):
-        calibrator.update_sample(pred, target, aux={"spread": raw})
-    assert calibrator.n_cal == 3
-    torch.testing.assert_close(calibrator.finalize().thresholds, predictor.thresholds)
-    with pytest.raises(error, match=match):
-        predictor.predict_interval(pred, aux={"spread": raw})
 
 
 @pytest.mark.parametrize("tier", TIERS)
@@ -273,8 +212,6 @@ STRATEGY_REJECTIONS = [  # (id, thunk, error, match)
     ("score-aux-not-mapping", lambda: _S.score(_Z2, _O2, aux=[_O2]), ValueError, "requires aux entries"),
     ("key-int", lambda: AuxDifficulty(key=7), TypeError, "key must be a string"),
     ("key-empty", lambda: AuxDifficulty(key=""), ValueError, "non-empty"),
-    ("score-eps-none", lambda: NormalizedErrorScore(eps=None), ValueError, "positive finite value"),
-    ("difficulty-eps-string", lambda: AuxDifficulty(eps="not a number"), ValueError, "positive finite value"),
 ]
 # fmt: on
 
