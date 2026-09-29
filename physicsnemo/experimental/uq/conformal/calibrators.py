@@ -208,14 +208,12 @@ class _SplitCalibratorBase:
 
         Nothing is written to the score store or the schema until every field has
         passed validation and ``stage``, so a rejected sample leaves the
-        calibrator exactly as it was. A supplied ``points`` tensor must
-        satisfy the coordinate contract and align with every field's leading
-        (point) axis so a contradictory coordinate tensor cannot be silently
-        accepted.
+        calibrator exactly as it was. A supplied ``points`` tensor, already
+        checked against the coordinate contract by the caller, must align
+        with every field's leading (point) axis so a contradictory coordinate
+        tensor cannot be silently accepted.
         """
         with torch.no_grad():
-            if points is not None:
-                check_points(points)
             _tensor_mode, schema, fields = self._validated_fields(
                 prediction, target, aux
             )
@@ -327,7 +325,6 @@ class CellwiseCalibrator(_SplitCalibratorBase):
         keys: Sequence[str] | None = None,
     ) -> None:
         super().__init__(score, alpha, keys=keys)
-        self._shapes: dict[str, tuple[int, ...]] = {}
         self._mesh_fingerprint: str | None = None
 
     @property
@@ -388,24 +385,20 @@ class CellwiseCalibrator(_SplitCalibratorBase):
             )
 
         def stage(key, prediction_field, target_field, aux_field):
-            check_point_alignment(key, target_field, points, "target")
             score = check_finite(
                 key,
                 "the nonconformity scores",
                 self._score.score(prediction_field, target_field, aux_field),
             )
-            shape = tuple(score.shape)
-            if key in self._shapes and shape != self._shapes[key]:
+            if key in self._scores and score.shape != self._scores[key][0].shape:
                 raise ValueError(
-                    f"Field '{key}': score shape {shape} differs from the "
-                    f"first sample's {self._shapes[key]}. Cellwise "
-                    "calibration requires an identical output layout."
+                    f"Field '{key}': score shape {tuple(score.shape)} differs "
+                    f"from the first sample's {tuple(self._scores[key][0].shape)}. "
+                    "Cellwise calibration requires an identical output layout."
                 )
             return score.detach().cpu().contiguous()
 
         self._collect(prediction, target, aux, points, stage)
-        for key, scores in self._scores.items():
-            self._shapes.setdefault(key, tuple(scores[-1].shape))
         self._mesh_fingerprint = fingerprint
 
     def finalize(self) -> ConformalPredictor:
@@ -505,6 +498,8 @@ class _ScaledCalibratorBase(_SplitCalibratorBase):
             )
             return self._reduce(_normalized_scores(raw, difficulty, key))
 
+        if points is not None:
+            check_points(points)
         self._collect(prediction, target, aux, points, stage)
 
 
@@ -619,19 +614,14 @@ def _crc_threshold(sorted_scores: list[Tensor], alpha: float) -> float:
     def corrected_risk(candidate: Tensor) -> Fraction:
         total_loss = Fraction()
         for scores in scores64:
-            probe = candidate.to(device=scores.device)
-            exceed = scores.numel() - int(torch.searchsorted(scores, probe, right=True))
+            exceed = scores.numel() - int(
+                torch.searchsorted(scores, candidate, right=True)
+            )
             total_loss += Fraction(exceed, scores.numel())
         return (total_loss + 1) / (n + 1)
 
-    # Duplicate candidates are harmless: corrected_risk is a function of the
-    # probe value alone and monotone non-increasing in it, so a sorted list
-    # with repeats selects the same smallest feasible threshold that a
-    # deduplicated one would, without torch.unique's extra full-corpus
-    # workspace on top of the pooled buffer.
+    # Duplicates are harmless: corrected_risk is monotone in the probe value.
     candidates = torch.cat(scores64).sort().values
-    if corrected_risk(candidates[-1]) > alpha_exact:  # pragma: no cover
-        raise RuntimeError("CRC bound is infeasible even at the maximal score.")
 
     lo = -1
     hi = candidates.numel() - 1
@@ -641,10 +631,7 @@ def _crc_threshold(sorted_scores: list[Tensor], alpha: float) -> float:
             hi = mid
         else:
             lo = mid
-    threshold = candidates[hi]
-    if corrected_risk(threshold) > alpha_exact:  # pragma: no cover
-        raise RuntimeError("CRC threshold selection violated its risk bound.")
-    return float(threshold)
+    return float(candidates[hi])
 
 
 def _sorted_point_scores(normalized: Tensor) -> Tensor:
