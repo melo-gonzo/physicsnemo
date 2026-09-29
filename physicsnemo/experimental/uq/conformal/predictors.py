@@ -26,7 +26,7 @@ from tensordict import TensorDict
 from torch import Tensor
 
 from ._containers import TENSOR_KEY, field_items, pack_fields, slice_aux
-from ._quantile import conformal_quantile_index, validate_alpha, validate_n_cal
+from ._quantile import require_feasible_alpha
 from ._validation import (
     TIERS,
     Tier,
@@ -58,17 +58,6 @@ from .scores import (
 __all__ = ["ConformalPredictor"]
 
 _SIGNED_THRESHOLD_KINDS = ("quantile_regression",)
-
-
-def _validate_alpha_n_cal(alpha, n_cal) -> tuple[float, int]:
-    """Validate the fitted sample count and target error level."""
-    alpha = validate_alpha(alpha)
-    n_cal = validate_n_cal(n_cal)
-    # A fitted predictor must describe an order statistic that its claimed
-    # calibration population could actually produce. This exact-rational
-    # check is shared with split calibration and direct predictor construction.
-    conformal_quantile_index(n_cal, alpha)
-    return alpha, n_cal
 
 
 def _validate_mesh_fingerprint(value: object) -> str:
@@ -198,7 +187,8 @@ class ConformalPredictor:
     ) -> None:
         if tier not in TIERS:
             raise ValueError(f"tier must be one of {TIERS}, got {tier!r}.")
-        alpha, n_cal = _validate_alpha_n_cal(alpha, n_cal)
+        require_feasible_alpha(n_cal, alpha)
+        alpha = float(alpha)
         score_snapshot = _snapshot_score(score)
         score_kind = _score_kind(score_snapshot)
 

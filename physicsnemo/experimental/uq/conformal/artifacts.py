@@ -25,7 +25,7 @@ import torch
 from tensordict import TensorDict
 from torch import Tensor
 
-from ._containers import TENSOR_KEY, pack_fields
+from ._containers import pack_fields
 from ._validation import validate_provenance
 from .difficulty import _DIFFICULTY_REGISTRY, _difficulty_kind
 from .predictors import ConformalPredictor
@@ -102,14 +102,9 @@ def _resolve_strategy(
             f"Unknown built-in {what} kind {kind!r}; expected one of "
             f"{sorted(registry)!r}."
         )
-    kwargs = spec["kwargs"]
-    if not isinstance(kwargs, Mapping):
-        raise ValueError(
-            f"Artifact {what} kwargs must be a mapping, got {type(kwargs).__name__}."
-        )
     expected_types = kwarg_types[kind]
     kwargs = _check_exact_keys(
-        kwargs, set(expected_types), f"Artifact {what} {kind!r} kwargs"
+        spec["kwargs"], set(expected_types), f"Artifact {what} {kind!r} kwargs"
     )
     for name, expected_type in expected_types.items():
         value = kwargs[name]
@@ -128,14 +123,11 @@ def _resolve_strategy(
 
 def _wire_thresholds(value: object) -> Tensor | TensorDict:
     """Validate the tensor-only threshold mapping stored in an artifact."""
-    if not isinstance(value, Mapping) or not value:
-        raise ValueError("Artifact thresholds must be a non-empty mapping.")
-    if TENSOR_KEY in value and len(value) != 1:
-        raise ValueError(
-            f"Artifact thresholds may use reserved key {TENSOR_KEY!r} only as "
-            "the sole key."
-        )
+    if not isinstance(value, Mapping):
+        raise ValueError("Artifact thresholds must be a mapping.")
     for key, threshold in value.items():
+        if type(key) is not str:
+            raise TypeError(f"Artifact threshold keys must be strings, got {key!r}.")
         if not isinstance(threshold, Tensor):
             raise TypeError(
                 f"Artifact threshold {key!r} must be a torch.Tensor, got "
@@ -146,15 +138,8 @@ def _wire_thresholds(value: object) -> Tensor | TensorDict:
 
 def _parse_artifact(payload: object) -> ConformalPredictor:
     """Validate the one supported conformal artifact schema."""
-    marker = payload.get("format") if isinstance(payload, Mapping) else None
-    if (
-        not isinstance(payload, Mapping)
-        or type(marker) is not str
-        or marker != _ARTIFACT_FORMAT
-    ):
-        marker = (
-            payload.get("format") if isinstance(payload, Mapping) else type(payload)
-        )
+    marker = payload.get("format") if isinstance(payload, Mapping) else type(payload)
+    if type(marker) is not str or marker != _ARTIFACT_FORMAT:
         raise ValueError(
             "Not a conformal predictor artifact (format marker missing or "
             f"unknown: {marker!r})."
