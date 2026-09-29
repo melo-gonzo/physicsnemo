@@ -48,9 +48,50 @@
    "reading": "hurts"
   },
   "poisson_2048": {
-   "status": "not scored",
-   "ref_seeds": 0,
-   "cond_seeds": 0
+   "fields": [
+    "u_l2"
+   ],
+   "reference": {
+    "u_l2": 0.06671914235630538
+   },
+   "conditioned": {
+    "u_l2": 0.11508283355578897
+   },
+   "ratio": {
+    "u_l2": 1.7248847855567933
+   },
+   "per_seed": {
+    "reference": {
+     "42": {
+      "u_l2": 0.0673562423689873
+     },
+     "43": {
+      "u_l2": 0.06608204234362347
+     }
+    },
+    "conditioned": {
+     "42": {
+      "u_l2": 0.1328968940215418
+     },
+     "43": {
+      "u_l2": 0.09726877309003612
+     }
+    },
+    "ratio": {
+     "42": {
+      "u_l2": 1.9730449524412792
+     },
+     "43": {
+      "u_l2": 1.4719395714836285
+     }
+    }
+   },
+   "n_seeds": {
+    "reference": 2,
+    "conditioned": 2
+   },
+   "interim": false,
+   "reading": "hurts"
   },
   "drivaer_435": {
    "fields": [

@@ -31401,3 +31401,31 @@ at or below 0.97, nothing above 1.03). (3) Cost: the Warp query per forward must
 above that the form is an inference-only option at most. **Adoption rule:** the exact form becomes the only form if (1) and the 2-D
 follow-up pass and (3) holds; otherwise it is removed and the sampled form stays, with the stored-SDF declared inputs as the
 documented way to give the model exact wall geometry where a dataset has it.
+
+## 2026-09-29 — Verdict, PROTO-COND at Poisson 2,048 (two seeds): conditioned ÷ static 1.73 (1.97 / 1.47), the deleted clause a second time; and the current-snapshot Poisson 2,048 reference scores 0.0667 (0.0674 / 0.0661) where the withdrawn 2026-09-22 reference had 0.395, so ISLA leads the stronger GeoTransolver-512 (FLARE++, 0.0755) 1.13x and physics attention (0.0981) 1.47x at 2,048 cases with no channel {#sec-nb-olbc-ref-2048}
+
+**Setting.** @sec-nb-olbc-reference-correction withdrew the OLBC frame-free references of 2026-09-22 (loss plateaus) and deferred the
+chapter-10 restatement to the same-snapshot Poisson 2,048 reference pair (campaign pc rows 4-5, code_v11, rate 5e-4, 500 epochs). That pair
+and its PROTO-COND partner (pc rows 6-7, the first, uncentered conditioned form) are scored (float32, 256 test cases).
+
+**What we saw.** Reference 0.0667 (0.0674 / 0.0661); conditioned prototypes 0.1151 (0.1329 / 0.0973), ratio 1.73 (1.97 / 1.47). The
+reference's validation loss falls to 0.0021 by epoch 200 and keeps falling; the withdrawn reference had sat at 0.056. Against the two
+GeoTransolver-512 backends at 2,048 cases (@sec-nb-gt-fpp-poisson-verdict): physics attention 0.0981, FLARE++ 0.0755; **GeoTransolver-512
+÷ ISLA = 1.47 (physics attention) and 1.13 (FLARE++, the stronger backend at this rung)**. At 512 cases the same ratios are 1.39 and 1.49
+(physics attention is the stronger backend there, @sec-nb-gt-fpp-poisson-512). Every ISLA number quoted here is the reference
+configuration with no option.
+
+**What this does to the channel readings on Poisson.** Against the healthy reference the code_v7 arms of 2026-09-27/28 read differently
+from their original "fraction of the log-gap" framing (cross-snapshot, listed for the record; the same-snapshot code_v11 arms at 2,048
+are training, pc rows 30-39): per-type distances 1.12 (worse), harmonic measures 1.05 (worse), distances with the aggregation 0.93. At
+512 cases the code_v11 arms read 1.01, 1.03 and 0.82 (@sec-nb-olbc-v11-512). **So on the Poisson set the per-type geometry channel is
+neutral at 512 and slightly worse at 2,048 against the reference in either encoding; only the aggregation paid, and it is removed.** The
+HARMONIC and HARMONIC-EL rows of the ledger are re-marked accordingly: the channel's remaining case is the 10 to 14% stress gain on
+elasticity at 2,048 (against a healthy same-snapshot control), which is one dataset at one rung and fails the universalization bar at 512
+on the same set (@sec-nb-harmonic-elasticity-512-verdict). The channel is therefore not part of the model unless the code_v11 elasticity
+pairs at 2,048 and 8,448 reverse the 512 reading; the decision follows those lanes.
+
+**PROTO-COND.** The first form is deleted on the evidence (1.99 at 512, 1.73 at 2,048, neutral on cars, pays on AirfRANS); its code left
+ISLA in the option pass of this morning (commit 7f68970b1). PROTO-COND-2 carries the idea forward (@sec-nb-proto-cond-2-poisson-512).
+Data: results/proto_cond_2026-09-29.json, results/olbc_ref_2026-09-29.json (the consolidated current-snapshot OLBC artifact that chapter
+10 now reads).
