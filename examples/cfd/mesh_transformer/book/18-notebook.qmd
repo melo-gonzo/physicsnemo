@@ -31375,3 +31375,29 @@ dataset-specific option and, under the one-model rule, it is removed**: the code
 7f68970b1), together with the polynomial-reproducing weights and the gradient channels. Its Poisson gain (0.82 at 512, @sec-nb-olbc-v11-512)
 stays on record as a measured effect of a removed option, not as part of the architecture. The DrivAerML Volume pair
 (un_drvol_{ref,local05}) completes the record when it lands and cannot change the verdict. Data: results/universal_agg_2026-09-28.json.
+
+## 2026-09-29 — Preregistration, EXACT-SDF: the interior token's wall distance and direction from the exact point-to-triangle signed distance of the boundary mesh (physicsnemo.mesh.spatial.sdf) against the nearest-sample form the model uses today {#sec-nb-exact-sdf-prereg}
+
+**Setting.** In interior mode every prediction point carries a wall distance and a wall direction computed inside ISLA from the
+boundary sample: the distance to the nearest boundary cell centroid, signed by that cell's normal, and the unit direction from the
+centroid to the point. This overestimates the true wall distance by up to a sample spacing and tilts the direction by the same order;
+@sec-nb-internal-geometry-verdict measured the cost of this geometry against a dataset's stored signed-distance field at 14 to 27% on
+interior velocity. The library has the exact quantity: `signed_distance_field` (Warp point-to-triangle queries with pseudo-normal
+signing) from the same boundary meshes the mesh-native forward now receives with their cells. Today's audit
+(@sec-nb-olbc-ref-lanes is the API pass; the audit itself found the nearest-neighbour kernel and this) asked whether ISLA should use it.
+Peter's ruling: a preregistered comparison, not a switch.
+
+**Design.** A temporary constructor option `wall_geometry`, `"sampled"` (the form above, the reference) or `"exact"` (per query, the
+exact signed distance to the nearest triangle of any boundary mesh and the unit direction from the closest surface point; distance
+and direction enter the query embedding exactly as today). The exact form needs a triangle 2-manifold boundary in three dimensions and
+is not differentiable in the boundary positions (the sampled form is). Under the option rule one form survives the verdict.
+
+**Predictions and falsifiers** (same-snapshot pairs, two seeds, float32 scoring at the protocol query counts):
+(1) DrivAerML Volume, 435 cars, 200,000 cells, 100,000 queries: exact ÷ sampled at or below 0.90 on velocity (the field the stored SDF
+helped most) and at or below 0.97 on pressure; above 1.03 on any field refutes. (2) AirfRANS interior (a 2-D polyline boundary): not
+applicable to the exact form; the sampled form stays there by construction, so the option cannot be universal unless a 2-D exact
+distance (point-to-segment) is added; if (1) passes, the 2-D form is implemented and tested on AirfRANS before adoption (bar: pressure
+at or below 0.97, nothing above 1.03). (3) Cost: the Warp query per forward must stay under 10% of the step time at 200,000 x 100,000;
+above that the form is an inference-only option at most. **Adoption rule:** the exact form becomes the only form if (1) and the 2-D
+follow-up pass and (3) holds; otherwise it is removed and the sampled form stays, with the stored-SDF declared inputs as the
+documented way to give the model exact wall geometry where a dataset has it.
