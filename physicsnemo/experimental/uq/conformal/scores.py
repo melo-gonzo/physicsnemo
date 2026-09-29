@@ -251,15 +251,21 @@ class NormalizedErrorScore(_NonconformityScore):
     Parameters
     ----------
     eps : float, optional
-        Smallest :math:`\sigma` used, so near-zero values do not blow up the
-        score. Default is ``1e-8``.
+        Smallest :math:`\sigma` used, in the units of ``sigma``, so zero or
+        near-zero spread does not blow up the score. Pick it for your output
+        scale (for example a small fraction of a typical ``sigma``). Default
+        is ``1e-8``.
 
     Notes
     -----
-    ``sigma`` must be finite; zero or negative values are replaced by a
-    floor. The floor is the larger of ``eps`` and the smallest positive
-    normal value of the ``sigma`` dtype, so it still takes effect in
-    low-precision dtypes. Calling :meth:`score` or :meth:`interval` without
+    Pass the raw predictive standard deviation, for example
+    ``variance.sqrt()`` from an ensemble or a GP head; do not clamp it
+    yourself. ``sigma`` must be finite; values below the floor, including
+    ensemble members that agree exactly, are raised to the floor. The floor
+    is the larger of ``eps`` and the smallest positive normal value of the
+    ``sigma`` dtype, so it still takes effect in low-precision dtypes; an
+    ``eps`` too large for that dtype raises ``ValueError``. Use the same
+    ``sigma`` construction at calibration and prediction. Calling :meth:`score` or :meth:`interval` without
     ``aux["sigma"]`` raises ``ValueError``. Do not combine this score with
     ``AuxDifficulty("sigma")``: that scales by sigma twice, and calibrators
     raise ``ValueError``.
