@@ -54,107 +54,6 @@ def _minimum_hits_at_target(n_samples: int, alpha: float) -> int:
     return math.ceil(n_samples * (1 - alpha_as_fraction(alpha)))
 
 
-class _TierOps:
-    """Per-tier empirical event definition and report vocabulary.
-
-    The accumulator itself is tier-agnostic; adding a guarantee tier means
-    adding exactly one subclass here (its event statistic, target metadata,
-    and report-entry fields), so a new tier cannot silently inherit another
-    tier's aggregation.
-    """
-
-    has_element_map = False
-
-    def stage(self, element_covered: Tensor) -> tuple[float, Tensor | None]:
-        """One sample's event coverage and optional per-element hit counts."""
-        raise NotImplementedError
-
-    def target_metadata(self, alpha: float) -> dict:
-        return {"target_coverage": 1.0 - alpha}
-
-    def entry(
-        self, counters: _FieldCounters, hits: Tensor | None, alpha: float
-    ) -> dict:
-        """Tier-specific fields of one per-key report entry."""
-        raise NotImplementedError
-
-
-class _RiskControlOps(_TierOps):
-    """Per-point miscoverage risk, equally weighted per sample."""
-
-    def stage(self, element_covered: Tensor) -> tuple[float, Tensor | None]:
-        if element_covered.ndim > 1:
-            point_covered = element_covered.reshape(element_covered.shape[0], -1).all(
-                dim=1
-            )
-        else:
-            point_covered = element_covered.reshape(-1)
-        return float(point_covered.to(torch.float64).mean()), None
-
-    def target_metadata(self, alpha: float) -> dict:
-        return {"target_risk": alpha}
-
-    def entry(
-        self, counters: _FieldCounters, hits: Tensor | None, alpha: float
-    ) -> dict:
-        if not counters.n_samples:
-            return {"empirical_mean_risk": None}
-        return {"empirical_mean_risk": 1.0 - counters.coverage_sum / counters.n_samples}
-
-
-class _FunctionalOps(_TierOps):
-    """Whole-field simultaneous containment per sample."""
-
-    def stage(self, element_covered: Tensor) -> tuple[float, Tensor | None]:
-        return float(element_covered.all()), None
-
-    def entry(
-        self, counters: _FieldCounters, hits: Tensor | None, alpha: float
-    ) -> dict:
-        if not counters.n_samples:
-            return {"whole_field_coverage": None}
-        return {"whole_field_coverage": counters.coverage_sum / counters.n_samples}
-
-
-class _CellwiseOps(_TierOps):
-    """Per-element marginal coverage on a fixed discretization."""
-
-    has_element_map = True
-
-    def stage(self, element_covered: Tensor) -> tuple[float, Tensor | None]:
-        # Hit counts stay on the update device; finalize() reduces them to
-        # a handful of scalars, so full coverage maps are only ever built
-        # on demand by ``empirical_coverage_map``.
-        return 0.0, element_covered.detach().to(torch.int64)
-
-    def entry(
-        self, counters: _FieldCounters, hits: Tensor | None, alpha: float
-    ) -> dict:
-        if hits is None or not counters.n_samples:
-            return {
-                "mean_element_coverage": None,
-                "minimum_element_coverage": None,
-                "fraction_elements_at_or_above_target": None,
-            }
-        n_samples = counters.n_samples
-        return {
-            "mean_element_coverage": float(hits.to(torch.float64).mean()) / n_samples,
-            "minimum_element_coverage": float(hits.min()) / n_samples,
-            "fraction_elements_at_or_above_target": float(
-                (hits >= _minimum_hits_at_target(n_samples, alpha))
-                .to(torch.float64)
-                .mean()
-            ),
-        }
-
-
-_TIER_OPS: dict[Tier, _TierOps] = {
-    "cellwise": _CellwiseOps(),
-    "functional": _FunctionalOps(),
-    "risk_control": _RiskControlOps(),
-}
-
-
 class CoverageAccumulator:
     r"""Accumulate empirical evaluation statistics aligned to a predictor tier.
 
@@ -222,7 +121,6 @@ class CoverageAccumulator:
         if tier not in TIERS:
             raise ValueError(f"tier must be one of {TIERS}, got {tier!r}.")
         self._tier = tier
-        self._ops = _TIER_OPS[tier]
         self._alpha = validate_alpha(alpha)
         self._n_cal = validate_n_cal(n_cal)
         self._keys = normalize_keys(keys)
@@ -288,7 +186,7 @@ class CoverageAccumulator:
                 expected = "plain tensors" if self._tensor_mode else "TensorDicts"
                 raise TypeError(f"This accumulator expects {expected}; got {name}.")
 
-        staged: list[tuple[str, float, float, int, Tensor | None]] = []
+        staged: list[tuple[str, float | Tensor, float, int]] = []
         for key in self._counters:
             lo_field = containers["lo"][key]
             hi_field = containers["hi"][key]
@@ -321,31 +219,38 @@ class CoverageAccumulator:
                     "targets consistently, and restart diagnostics."
                 )
 
-            coverage_value, element_hits = self._ops.stage(element_covered)
-            if element_hits is not None:
-                previous = self._element_hits.get(key)
-                if previous is not None and previous.shape != element_hits.shape:
-                    raise ValueError(
-                        f"Field '{key}': elementwise coverage requires a fixed "
-                        "sample shape across updates."
-                    )
+            match self._tier:
+                case "cellwise":
+                    # Hit counts stay on the update device; finalize() reduces
+                    # them to a handful of scalars.
+                    coverage = element_covered.to(torch.int64)
+                    previous = self._element_hits.get(key)
+                    if previous is not None and previous.shape != coverage.shape:
+                        raise ValueError(
+                            f"Field '{key}': elementwise coverage requires a fixed "
+                            "sample shape across updates."
+                        )
+                case "functional":
+                    coverage = float(element_covered.all())
+                case "risk_control":
+                    points = torch.atleast_1d(element_covered)
+                    point_covered = points.reshape(points.shape[0], -1).all(dim=1)
+                    coverage = float(point_covered.to(torch.float64).mean())
 
-            staged.append(
-                (key, coverage_value, width_total, widths.numel(), element_hits)
-            )
+            staged.append((key, coverage, width_total, widths.numel()))
 
-        for key, coverage_value, width_total, width_count, element_hits in staged:
+        for key, coverage, width_total, width_count in staged:
             counters = self._counters[key]
-            counters.coverage_sum += coverage_value
             counters.width_sum = width_total
             counters.width_count += width_count
             counters.n_samples += 1
-            if element_hits is not None:
-                if key in self._element_hits:
-                    previous = self._element_hits[key]
-                    previous += element_hits.to(device=previous.device)
-                else:
-                    self._element_hits[key] = element_hits.clone()
+            if isinstance(coverage, float):
+                counters.coverage_sum += coverage
+            elif key in self._element_hits:
+                previous = self._element_hits[key]
+                previous += coverage.to(device=previous.device)
+            else:
+                self._element_hits[key] = coverage
 
     @property
     def empirical_coverage_map(self) -> Float[Tensor, "*dims"] | TensorDict:
@@ -360,7 +265,7 @@ class CoverageAccumulator:
             before the first update.
         """
         self._reject_multi_rank()
-        if not self._ops.has_element_map:
+        if self._tier != "cellwise":
             raise RuntimeError(
                 "empirical_coverage_map is available only for cellwise predictors."
             )
@@ -402,19 +307,45 @@ class CoverageAccumulator:
             "alpha": self._alpha,
             "n_cal": self._n_cal,
         }
-        metadata.update(self._ops.target_metadata(self._alpha))
+        if self._tier == "risk_control":
+            metadata["target_risk"] = self._alpha
+        else:
+            metadata["target_coverage"] = 1.0 - self._alpha
         report: dict = {"_meta": metadata}
         for key, counters in self._counters.items():
+            n = counters.n_samples
             entry: dict = {
-                "n_samples": counters.n_samples,
+                "n_samples": n,
                 "element_weighted_mean_interval_width": (
                     counters.width_sum / counters.width_count
                     if counters.width_count
                     else None
                 ),
             }
-            entry.update(
-                self._ops.entry(counters, self._element_hits.get(key), self._alpha)
-            )
+            match self._tier:
+                case "cellwise" if n:
+                    hits = self._element_hits[key]
+                    at_target = hits >= _minimum_hits_at_target(n, self._alpha)
+                    entry.update(
+                        mean_element_coverage=float(hits.to(torch.float64).mean()) / n,
+                        minimum_element_coverage=float(hits.min()) / n,
+                        fraction_elements_at_or_above_target=float(
+                            at_target.to(torch.float64).mean()
+                        ),
+                    )
+                case "cellwise":
+                    entry.update(
+                        mean_element_coverage=None,
+                        minimum_element_coverage=None,
+                        fraction_elements_at_or_above_target=None,
+                    )
+                case "functional":
+                    entry["whole_field_coverage"] = (
+                        counters.coverage_sum / n if n else None
+                    )
+                case "risk_control":
+                    entry["empirical_mean_risk"] = (
+                        1.0 - counters.coverage_sum / n if n else None
+                    )
             report["value" if key == TENSOR_KEY else key] = entry
         return report
