@@ -127,6 +127,7 @@ class _SplitCalibratorBase:
         self._n = 0
         self._tensor_mode: bool | None = None
         self._schema: tuple[str, ...] | None = None
+        self._scores: dict[str, list[Tensor]] = {}
 
     @property
     def score(self) -> _NonconformityScore:
@@ -201,12 +202,11 @@ class _SplitCalibratorBase:
         target: Tensor | TensorDict,
         aux: Mapping | None,
         points: Tensor | None,
-        store: dict[str, list],
         stage: _Stage,
     ) -> None:
         """Validate, stage every field, then commit one sample transactionally.
 
-        Nothing is written to ``store`` or the schema until every field has
+        Nothing is written to the score store or the schema until every field has
         passed validation and ``stage``, so a rejected sample leaves the
         calibrator exactly as it was. A supplied ``points`` tensor must
         satisfy the coordinate contract and align with every field's leading
@@ -226,7 +226,7 @@ class _SplitCalibratorBase:
                 staged[key] = stage(key, prediction_field, target_field, aux_field)
             self._tensor_mode, self._schema = _tensor_mode, schema
             for key, record in staged.items():
-                store.setdefault(key, []).append(record)
+                self._scores.setdefault(key, []).append(record)
             self._n += 1
 
     def _require_finalizable(self) -> None:
@@ -234,14 +234,12 @@ class _SplitCalibratorBase:
         if self._n == 0:
             raise RuntimeError("No calibration samples collected.")
 
-    def _conformal_thresholds(
-        self, store: Mapping[str, list[Tensor]]
-    ) -> Tensor | TensorDict:
+    def _conformal_thresholds(self) -> Tensor | TensorDict:
         k = conformal_quantile_index(self._n, self._alpha)
         return pack_fields(
             {
                 key: kth_smallest_of_samples(per_sample, k)
-                for key, per_sample in store.items()
+                for key, per_sample in self._scores.items()
             }
         )
 
@@ -329,7 +327,6 @@ class CellwiseCalibrator(_SplitCalibratorBase):
         keys: Sequence[str] | None = None,
     ) -> None:
         super().__init__(score, alpha, keys=keys)
-        self._scores: dict[str, list[Tensor]] = {}
         self._shapes: dict[str, tuple[int, ...]] = {}
         self._mesh_fingerprint: str | None = None
 
@@ -406,7 +403,7 @@ class CellwiseCalibrator(_SplitCalibratorBase):
                 )
             return score.detach().cpu().contiguous()
 
-        self._collect(prediction, target, aux, points, self._scores, stage)
+        self._collect(prediction, target, aux, points, stage)
         for key, scores in self._scores.items():
             self._shapes.setdefault(key, tuple(scores[-1].shape))
         self._mesh_fingerprint = fingerprint
@@ -425,13 +422,19 @@ class CellwiseCalibrator(_SplitCalibratorBase):
         self._require_finalizable()
         return self._build_predictor(
             "cellwise",
-            self._conformal_thresholds(self._scores),
+            self._conformal_thresholds(),
             mesh_fingerprint=self._mesh_fingerprint,
         )
 
 
 class _ScaledCalibratorBase(_SplitCalibratorBase):
-    """Shared difficulty handling for the tiers that permit varying point sets."""
+    """Shared difficulty handling and collection for varying point sets.
+
+    Subclasses set ``_reduce`` to map one field's float64 normalized scores
+    to the CPU record retained for ``finalize``.
+    """
+
+    _reduce: Callable[[Tensor], Tensor]
 
     def __init__(
         self,
@@ -450,8 +453,44 @@ class _ScaledCalibratorBase(_SplitCalibratorBase):
         r"""Defensive copy of the fixed difficulty field, or ``None``."""
         return copy.deepcopy(self._difficulty)
 
-    def _normalized_scores_stage(self, points: Tensor | None) -> _Stage:
-        """Stage function producing each field's float64 normalized scores."""
+    def update_sample(
+        self,
+        prediction: Float[Tensor, "*dims"] | TensorDict,
+        target: Float[Tensor, "*dims"] | TensorDict,
+        *,
+        aux: Mapping[str, Float[Tensor, "*dims"]] | Mapping[str, Mapping] | None = None,
+        points: Float[Tensor, "n_points n_spatial_dims"] | None = None,
+    ) -> None:
+        r"""Collect one sample's difficulty-normalized scores.
+
+        Parameters
+        ----------
+        prediction : torch.Tensor | TensorDict
+            Model output of shape :math:`(n_{\text{points}}, *\text{dims})`
+            (any shape :math:`(*\text{dims})` when neither ``points`` nor a
+            difficulty field is used), or a field container of such tensors.
+        target : torch.Tensor | TensorDict
+            Observed values, same shape and container type as ``prediction``.
+        aux : Mapping[str, torch.Tensor] | Mapping[str, Mapping], optional
+            Auxiliary tensors read by the score or the difficulty field, each
+            of the same shape as ``prediction``. For ``TensorDict`` inputs,
+            nest the mapping by field name. Default is ``None``.
+        points : torch.Tensor, optional
+            Mesh coordinates of shape
+            :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`; may differ
+            between samples. Default is ``None``.
+
+        Returns
+        -------
+        None
+            The sample's reduced scores are committed to the calibrator.
+
+        Notes
+        -----
+        Nothing is committed unless every field validates, so a rejected
+        sample leaves the calibrator unchanged. Raises ``ValueError`` on a
+        shape mismatch, non-finite values, or a non-positive difficulty.
+        """
 
         def stage(key, prediction_field, target_field, aux_field):
             difficulty = (
@@ -464,9 +503,9 @@ class _ScaledCalibratorBase(_SplitCalibratorBase):
                 "the nonconformity scores",
                 self._score.score(prediction_field, target_field, aux_field),
             )
-            return _normalized_scores(raw, difficulty, key)
+            return self._reduce(_normalized_scores(raw, difficulty, key))
 
-        return stage
+        self._collect(prediction, target, aux, points, stage)
 
 
 class FunctionalBandCalibrator(_ScaledCalibratorBase):
@@ -528,64 +567,7 @@ class FunctionalBandCalibrator(_ScaledCalibratorBase):
     torch.Size([80, 2])
     """
 
-    def __init__(
-        self,
-        score: _Score,
-        alpha: float,
-        *,
-        difficulty: AuxDifficulty | None = None,
-        keys: Sequence[str] | None = None,
-    ) -> None:
-        super().__init__(score, alpha, difficulty=difficulty, keys=keys)
-        self._sup_scores: dict[str, list[Tensor]] = {}
-
-    def update_sample(
-        self,
-        prediction: Float[Tensor, "*dims"] | TensorDict,
-        target: Float[Tensor, "*dims"] | TensorDict,
-        *,
-        aux: Mapping[str, Float[Tensor, "*dims"]] | Mapping[str, Mapping] | None = None,
-        points: Float[Tensor, "n_points n_spatial_dims"] | None = None,
-    ) -> None:
-        r"""Collect one sample's supremum of difficulty-normalized scores.
-
-        Parameters
-        ----------
-        prediction : torch.Tensor | TensorDict
-            Model output of shape :math:`(n_{\text{points}}, *\text{dims})`
-            (any shape :math:`(*\text{dims})` when neither ``points`` nor a
-            difficulty field is used), or a field container of such tensors.
-        target : torch.Tensor | TensorDict
-            Observed values, same shape and container type as ``prediction``.
-        aux : Mapping[str, torch.Tensor] | Mapping[str, Mapping], optional
-            Auxiliary tensors read by the score or the difficulty field, each
-            of the same shape as ``prediction``. For ``TensorDict`` inputs,
-            nest the mapping by field name. Default is ``None``.
-        points : torch.Tensor, optional
-            Mesh coordinates of shape
-            :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`; may differ
-            between samples. Default is ``None``.
-
-        Returns
-        -------
-        None
-            The sample's supremum score is committed to the calibrator.
-
-        Notes
-        -----
-        Nothing is committed unless every field validates, so a rejected
-        sample leaves the calibrator unchanged. Raises ``ValueError`` on a
-        shape mismatch, non-finite values, or a non-positive difficulty.
-        """
-        normalized = self._normalized_scores_stage(points)
-        self._collect(
-            prediction,
-            target,
-            aux,
-            points,
-            self._sup_scores,
-            lambda *field: normalized(*field).amax().detach().cpu(),
-        )
+    _reduce = staticmethod(lambda normalized: normalized.amax().detach().cpu())
 
     def finalize(self) -> ConformalPredictor:
         r"""Fit the scalar band threshold and build the predictor.
@@ -601,7 +583,7 @@ class FunctionalBandCalibrator(_ScaledCalibratorBase):
         self._require_finalizable()
         return self._build_predictor(
             "functional",
-            self._conformal_thresholds(self._sup_scores),
+            self._conformal_thresholds(),
             difficulty=self._difficulty,
         )
 
@@ -711,7 +693,8 @@ class RiskControlCalibrator(_ScaledCalibratorBase):
 
     Notes
     -----
-    Each sample's sorted float64 point scores are retained on the CPU until
+    Trailing dimensions are reduced by ``max`` into one score per point, and
+    each sample's sorted float64 point scores are retained on the CPU until
     :meth:`finalize`, which pools them to search the threshold. The risk
     bound is evaluated with exact rational arithmetic on the declared
     ``alpha``. Calibration is single-rank: :meth:`finalize` raises
@@ -743,64 +726,7 @@ class RiskControlCalibrator(_ScaledCalibratorBase):
     torch.Size([30, 2])
     """
 
-    def __init__(
-        self,
-        score: _Score,
-        alpha: float,
-        *,
-        difficulty: AuxDifficulty | None = None,
-        keys: Sequence[str] | None = None,
-    ) -> None:
-        super().__init__(score, alpha, difficulty=difficulty, keys=keys)
-        self._samples: dict[str, list[Tensor]] = {}
-
-    def update_sample(
-        self,
-        prediction: Float[Tensor, "*dims"] | TensorDict,
-        target: Float[Tensor, "*dims"] | TensorDict,
-        *,
-        aux: Mapping[str, Float[Tensor, "*dims"]] | Mapping[str, Mapping] | None = None,
-        points: Float[Tensor, "n_points n_spatial_dims"] | None = None,
-    ) -> None:
-        r"""Collect one sample's sorted difficulty-normalized point scores.
-
-        Parameters
-        ----------
-        prediction : torch.Tensor | TensorDict
-            Model output of shape :math:`(n_{\text{points}}, *\text{dims})`,
-            or a field container of such tensors. Trailing dimensions are
-            reduced by ``max`` into one score per point.
-        target : torch.Tensor | TensorDict
-            Observed values, same shape and container type as ``prediction``.
-        aux : Mapping[str, torch.Tensor] | Mapping[str, Mapping], optional
-            Auxiliary tensors read by the score or the difficulty field, each
-            of the same shape as ``prediction``. For ``TensorDict`` inputs,
-            nest the mapping by field name. Default is ``None``.
-        points : torch.Tensor, optional
-            Mesh coordinates of shape
-            :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`; may differ
-            between samples. Default is ``None``.
-
-        Returns
-        -------
-        None
-            The sample's sorted point scores are committed to the calibrator.
-
-        Notes
-        -----
-        Nothing is committed unless every field validates, so a rejected
-        sample leaves the calibrator unchanged. Raises ``ValueError`` on a
-        shape mismatch, non-finite values, or a non-positive difficulty.
-        """
-        normalized = self._normalized_scores_stage(points)
-        self._collect(
-            prediction,
-            target,
-            aux,
-            points,
-            self._samples,
-            lambda *field: _sorted_point_scores(normalized(*field)),
-        )
+    _reduce = staticmethod(_sorted_point_scores)
 
     def finalize(self) -> ConformalPredictor:
         r"""Fit the CRC threshold and build the predictor.
@@ -819,7 +745,7 @@ class RiskControlCalibrator(_ScaledCalibratorBase):
                 _crc_threshold(samples, self._alpha),
                 dtype=torch.float64,
             )
-            for key, samples in self._samples.items()
+            for key, samples in self._scores.items()
         }
         return self._build_predictor(
             "risk_control", pack_fields(thresholds), difficulty=self._difficulty
