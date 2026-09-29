@@ -30954,7 +30954,7 @@ and values as boundary scalars, signed distance and source as query
 scalars, K = 0, no extension, no channel, no aggregation) on code_v11
 scores **0.2004** (0.1996 / 0.2011, two seeds). The book's reference for
 this configuration was 0.867, from the 2026-09-22 OLBC campaign on the
-code_ref snapshot (@sec-nb-olbc-verdict). The two runs are the same
+code_ref snapshot (@sec-nb-olbc-interim, @sec-nb-olbc-mech-verdict). The two runs are the same
 recipe, dataset, split, rate, epochs and readout; they differ in the
 snapshot. The old lanes' validation loss went 0.281 at epoch 1, 0.219 by
 epoch 10, and 0.219 at epoch 500: a plateau from the first tenth of
