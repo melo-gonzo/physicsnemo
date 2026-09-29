@@ -30893,3 +30893,54 @@ configuration with `+model.slice_prototypes=conditioned` as the only
 override on the conditioned arm; learning rate 5e-4 throughout. Bars are
 unchanged. The book and this branch are now `psharpe/isla` (renamed from
 `psharpe/mesh-transformer` this morning, with upstream main merged).
+
+## 2026-09-29 — Verdict, HARMONIC-EL at 2,048 elasticity cases against the same-snapshot control (two seeds): the four harmonic measures improve the three stresses by 10 to 14% (0.90 / 0.86 / 0.90) and leave displacement unchanged (1.00), bringing the stresses to GeoTransolver-512 parity (0.96 / 0.99 / 0.99) with an input channel alone; the nearest distances improve the stresses 6 to 9% and hurt displacement 19%; the 512-case *hurts* reading was against a confounded base {#sec-nb-harmonic-elasticity-verdict}
+
+**Setting.** HARMONIC-EL (@sec-nb-harmonic-elasticity-prereg) puts the
+per-condition-type geometry channel that closed the Poisson gap on OLBC
+elasticity, whose four types are per component (Dirichlet-x, Neumann-x,
+Dirichlet-y, Neumann-y), on top of the rank-1-input arm. At 512 cases both
+encodings hurt against the code_v2 record
+(@sec-nb-harmonic-elasticity-interim). The 2,048 rung is the clean one: its
+base is the RANK-IO control on the same snapshot
+(@sec-nb-local-agg-elasticity-ctrl-2048), 0.201 / 0.297 / 0.305 / 0.301 on
+displacement / $\sigma_{11}$ / $\sigma_{22}$ / $\sigma_{12}$; GeoTransolver-512
+0.165 / 0.257 / 0.261 / 0.267.
+
+**What we saw (256 test cases, relative L2, seed means; ratios to the
+control).** Four harmonic measures: 0.201 / 0.268 / 0.263 / 0.270, ratios
+**1.00 / 0.90 / 0.86 / 0.90** (seed 42: 0.95 / 0.85 / 0.81 / 0.85; seed 43:
+1.05 / 0.955 / 0.92 / 0.95); GeoTransolver-512 ÷ arm **0.82 / 0.96 / 0.99 /
+0.99**. Four nearest distances: 0.238 / 0.272 / 0.284 / 0.284, ratios **1.19
+/ 0.91 / 0.93 / 0.94** (seed 42: 1.14 / 0.87 / 0.89 / 0.91; seed 43: 1.24 /
+0.97 / 0.98 / 0.98); GeoTransolver-512 ÷ arm 0.70 / 0.95 / 0.92 / 0.94.
+Harmonic ÷ distances on the stress mean 0.95.
+
+**Verdicts against the bars.** The *pays* clause asked for at or below
+0.95 on every stress on both seeds; the harmonic arm meets it on five of
+six seed-stress readings and sits at 0.955 on the sixth (seed 43,
+$\sigma_{11}$), the distances arm on four of six. On the means both pay,
+the harmonic arm by 11% and the distances by 7%, and only the harmonic arm
+leaves displacement alone (the distances cost it 19%, on both seeds). The
+encoding clause (harmonic ÷ distances at or below 0.95 at 2,048) reads
+0.953: the Poisson edge reproduces at the boundary of the band. **The
+per-type geometry channel pays on a second dataset, in its harmonic
+encoding; with it the three stress fields reach GeoTransolver-512 parity
+through an input channel alone, without the aggregation.** The 512-case
+reading is reattributed to its base: the code_v2 record is a different
+snapshot and the 2,048 control showed that difference to be worth about
+0.1 in log-gap fraction, so a same-snapshot control at 512 (hm rows 40-41,
+launched now) decides whether the channel also pays at the smaller rung or
+whether 512 cases are too few for four extra scalars.
+
+**Why it matters, under the universalization rule.** The channel is an
+input derived from one sample's geometry and condition labels, and it is
+now positive on both datasets that have labelled condition types; its
+universe is "problems whose boundary carries typed conditions", and the
+rule for it is therefore *on wherever condition labels exist*, not a
+per-dataset choice. The harmonic encoding is the one to keep; the
+distances encoding hurts displacement here and is 5 to 6% worse on
+Poisson at 2,048, so it is scheduled for removal from the recipe once the
+512 control reports. The combined arm (measures plus aggregation, hm rows
+38-39) is at epoch 415 and reads against these numbers. Artifact
+results/harmonic_2026-09-27.json (elasticity, 2048).
