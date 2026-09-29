@@ -218,18 +218,21 @@ def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
 
 def test_isla_backbone_is_the_pre_refactor_backbone():
     """With no per-token inputs, the pre-head token state (``norm_out`` output) of
-    the surface model is bitwise the one the pre-rank-spec code produced for the
-    same parameters and token tensors. ``data/isla_backbone_v1.pth`` was recorded
-    from that code with a forward hook on ``norm_out`` (seed 0 parameters, seed 1234
-    inputs, as here); the tensors enter through the internal batched routine, which
-    the Mesh wrapper calls."""
+    the surface model is the one the pre-rank-spec code produced for the same
+    parameters and token tensors. ``data/isla_backbone_v1.pth`` was recorded from
+    that code with a forward hook on ``norm_out`` (seed 0 parameters, seed 1234
+    inputs, as here) on an x86 CPU; the tensors enter through the internal batched
+    routine, which the Mesh wrapper calls. Compared at float32 tolerance: the same
+    graph gives bitwise-identical values on the recording architecture and differs
+    at the last bits across CPU architectures (BLAS reduction order), which is not a
+    property of the model."""
     ref = torch.load(DATA_DIR / "isla_backbone_v1.pth", weights_only=True)["default"]
     model = _instantiate_model(**CONFIGS["default"])
     captured = {}
     model.norm_out.register_forward_hook(lambda mod, i, o: captured.setdefault("x", o.detach().clone()))
     with torch.no_grad():
         model._forward_tensors(**_make_tensors("cpu"))
-    assert torch.equal(captured["x"], ref["norm_out"])
+    torch.testing.assert_close(captured["x"], ref["norm_out"], atol=1e-6, rtol=1e-5)
 
 
 # ---------------------------------------------------------------------------
