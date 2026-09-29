@@ -132,49 +132,6 @@ def _unwrapped_class_name(model: torch.nn.Module) -> str:
     return type(inner).__name__
 
 
-def _legacy_checkpoint_filename(
-    fs,
-    path: str,
-    name: str,
-    inner: torch.nn.Module,
-    epoch: int | None,
-    model_type: str,
-    distributed: bool = False,
-) -> str | None:
-    """Return the weights file saved under a *legacy class name* of ``inner``, if any.
-
-    The weights filename is derived from the model's class name, so renaming a
-    class orphans every checkpoint written before the rename. A class may declare
-    the names it used to have as ``_legacy_class_names = ("OldName", ...)``; when
-    the current-name file is absent, the loader looks for the same checkpoint
-    under each legacy name (keeping any disambiguating numeric suffix) and, if
-    found, loads it with a warning naming both files. Returns ``None`` when no
-    legacy file exists, so the caller proceeds to refuse or skip as before.
-    """
-    current = _unwrapped_class_name(inner)
-    legacy_names = tuple(
-        getattr(type(_unwrap_fsdp(inner)), "_legacy_class_names", ()) or ()
-    )
-    if not legacy_names or not name.startswith(current):
-        return None
-    suffix = name[len(current) :]
-    for legacy in legacy_names:
-        candidate = _get_checkpoint_filename(
-            path,
-            legacy + suffix,
-            index=epoch,
-            model_type=model_type,
-            distributed=distributed,
-        )
-        if fs.exists(candidate):
-            checkpoint_logging.warning(
-                f"Model '{name}' has no weights file under its current class name; loading "
-                f"{candidate}, written under the legacy class name '{legacy}'."
-            )
-            return candidate
-    return None
-
-
 def _cpu_offload_state_dict(state_dict: dict[str, Any]) -> dict[str, Any]:
     """Move every tensor in *state_dict* to CPU (shallow copy)."""
     out: dict[str, Any] = {}
@@ -794,12 +751,7 @@ def _resolve_checkpoint_files(
         filename = _get_checkpoint_filename(
             path, name, index=epoch, model_type=model_type, distributed=distributed
         )
-        if fs.exists(filename):
-            model_files[name] = filename
-        else:
-            model_files[name] = _legacy_checkpoint_filename(
-                fs, path, name, inner, epoch, model_type, distributed=distributed
-            )
+        model_files[name] = filename if fs.exists(filename) else None
     return checkpoint_filename, model_files
 
 

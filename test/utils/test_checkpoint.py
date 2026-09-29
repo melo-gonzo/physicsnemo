@@ -427,37 +427,3 @@ def test_compiled_model_checkpointing(
     assert torch.allclose(original_output, new_output, rtol=rtol, atol=atol)
 
 
-def test_load_checkpoint_finds_legacy_class_name(tmp_path):
-    """A checkpoint written under a class's former name loads into the renamed class
-    when the class declares that name, instead of being refused; the loaded weights
-    are the saved ones and the epoch is restored."""
-    from physicsnemo.utils import load_checkpoint, save_checkpoint
-
-    if not DistributedManager.is_initialized():
-        DistributedManager.initialize()
-
-    class RenamedFC(FullyConnected):
-        _legacy_class_names = ("FullyConnected",)
-
-    model = FullyConnected(in_features=8, out_features=8, num_layers=2, layer_size=8)
-    ckpt_dir = tmp_path / "run"
-    save_checkpoint(
-        str(ckpt_dir),
-        models=model,
-        optimizer=torch.optim.Adam(model.parameters()),
-        epoch=3,
-    )
-    assert len(list(ckpt_dir.glob("FullyConnected.0.3.mdlus"))) == 1
-
-    renamed = RenamedFC(in_features=8, out_features=8, num_layers=2, layer_size=8)
-    assert load_checkpoint(str(ckpt_dir), models=renamed) == 3
-    x = torch.randn(4, 8)
-    with torch.no_grad():
-        assert torch.equal(renamed(x), model(x))
-
-    # Without the declaration the same directory is still refused (not silently skipped).
-    fresh = type("UnrelatedFC", (FullyConnected,), {})(
-        in_features=8, out_features=8, num_layers=2, layer_size=8
-    )
-    with pytest.raises(FileNotFoundError, match="uninitialized"):
-        load_checkpoint(str(ckpt_dir), models=fresh)
