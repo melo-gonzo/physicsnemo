@@ -31358,3 +31358,20 @@ ranges 0.03 to 0.30 (means 0.18 and 0.15), the prototypes sit 0.10 to 0.21 seed-
 (static 0.09 to 0.13), same-node Jensen-Shannon divergence across boundary data 0.30 bits (static 0.25 to 0.34). The centered form is a
 bounded, sample-dependent perturbation of static routing, not a different regime; the accuracy gain on this set
 (@sec-nb-proto-cond-2-poisson-512) comes from that perturbation. Data: results/proto_cond2_diag_2026-09-29.json.
+
+## 2026-09-29 — Verdict, UNIVERSAL-AGG on the lug (2,400 cases, two seeds): always-on aggregation ÷ same-snapshot reference 1.29 on von Mises stress (1.20 / 1.37); with Tensile2d (1.05 to 1.09), AirfRANS (1.13 to 1.22), the fixed-draw test and the elasticity combined arm, the aggregation fails on five datasets and is removed from the model; the DrivAerML Volume pair completes the record {#sec-nb-universal-agg-lug-verdict}
+
+**Setting.** The universalization test (@sec-nb-universal-prereg) switches the local relational aggregation on everywhere and asks
+whether it is neutral or better on datasets its fixed-mesh rule was not fitted on, against same-snapshot references (code_v10). The lug
+pair (un_lug_{ref,local05}_n2400, 2,400 training lugs, rate 5e-4, 500 epochs, float32 on the held-out lugs) is the second such dataset.
+
+**What we saw.** Reference von Mises relative L2 0.0019; with the aggregation 0.0024; ratio 1.29 (seed 42 1.20, seed 43 1.37). The
+*not part of the model* clause (worse than 1.05 on any field) fires on both seeds.
+
+**Reading and consequence.** The aggregation now hurts on every dataset outside the fixed Poisson mesh where it was found (Tensile2d
+1.05 to 1.09, AirfRANS 1.13 to 1.22, lug 1.29) and does not compound with the harmonic channel on elasticity
+(@sec-nb-harmonic-elasticity-combined-verdict); its consistent-weights repair was refuted (@sec-nb-local-lpr-verdict). **It is a
+dataset-specific option and, under the one-model rule, it is removed**: the code left ISLA in this morning's option pass (commit
+7f68970b1), together with the polynomial-reproducing weights and the gradient channels. Its Poisson gain (0.82 at 512, @sec-nb-olbc-v11-512)
+stays on record as a measured effect of a removed option, not as part of the architecture. The DrivAerML Volume pair
+(un_drvol_{ref,local05}) completes the record when it lands and cannot change the verdict. Data: results/universal_agg_2026-09-28.json.

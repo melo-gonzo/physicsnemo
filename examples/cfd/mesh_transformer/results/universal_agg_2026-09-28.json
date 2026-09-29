@@ -104,13 +104,54 @@
    "interim": false
   },
   "lug": {
-   "status": "not scored",
-   "ref_seeds": 0,
-   "agg_seeds": 0
+   "fields": [
+    "von_mises_l2"
+   ],
+   "reference": {
+    "von_mises_l2": 0.0018939312647368448
+   },
+   "aggregation": {
+    "von_mises_l2": 0.0024332646905289345
+   },
+   "ratio": {
+    "von_mises_l2": 1.284769271110284
+   },
+   "per_seed": {
+    "reference": {
+     "42": {
+      "von_mises_l2": 0.0019581419706810265
+     },
+     "43": {
+      "von_mises_l2": 0.0018297205587926631
+     }
+    },
+    "aggregation": {
+     "42": {
+      "von_mises_l2": 0.0023579395199582603
+     },
+     "43": {
+      "von_mises_l2": 0.002508589861099608
+     }
+    },
+    "ratio": {
+     "42": {
+      "von_mises_l2": 1.2041718911413697
+     },
+     "43": {
+      "von_mises_l2": 1.3710234871902491
+     }
+    }
+   },
+   "n_seeds": {
+    "reference": 2,
+    "aggregation": 2
+   },
+   "verdict": "not part of the model",
+   "interim": false
   },
   "drvol": {
    "status": "not scored",
-   "ref_seeds": 0,
+   "ref_seeds": 2,
    "agg_seeds": 0
   }
  },
