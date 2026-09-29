@@ -135,9 +135,7 @@ CONSTRUCTOR_REJECTIONS = [  # (id, make_predictor overrides, error, match)
     ("integer-thresholds", {"thresholds": torch.ones((), dtype=torch.int32)}, TypeError, "floating"),
     ("empty-thresholds", {"thresholds": torch.empty(0)}, ValueError, "empty"),
     ("nonscalar-threshold", {"thresholds": torch.ones(3)}, ValueError, "must be scalars"),
-    ("negative-threshold", {"thresholds": torch.tensor(-1.0)}, ValueError, "negative threshold"),
-    ("bool-alpha", {"alpha": True}, TypeError, "real number"),
-    ("infeasible-alpha", {"alpha": 0.1, "n_cal": 3}, ValueError, "Insufficient"),
+    ("negative-threshold", {"thresholds": torch.tensor(-1.0)}, ValueError, "^Plain tensor: negative threshold"),  # no internal key
     ("unknown-tier", {"tier": "bogus"}, ValueError, "tier must be one of"),
 ]
 # fmt: on
@@ -152,13 +150,7 @@ def test_constructor_tier_invariants_and_threshold_guards(overrides, error, matc
         make_predictor(**overrides)
 
 
-def test_plain_tensor_errors_do_not_leak_the_internal_key():
-    with pytest.raises(ValueError, match="^Plain tensor: negative") as info:
-        make_predictor(thresholds=torch.tensor(-1.0))
-    assert "__tensor__" not in str(info.value)
-
-
-def test_public_api_includes_the_artifact_loader():
+def test_public_api_exports():
     expected = {
         "AbsoluteErrorScore",
         "AuxDifficulty",

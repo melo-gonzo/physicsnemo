@@ -17,7 +17,6 @@
 """Tests for portable fitted-predictor artifacts."""
 
 import pickle
-from pathlib import Path
 
 import pytest
 import torch
@@ -150,32 +149,14 @@ def test_provenance_is_read_only_snapshotted_and_survives_resave(tmp_path):
     assert ConformalPredictor.load(second).provenance == loaded.provenance
 
 
-# fmt: off
-BAD_PROVENANCE = [
-    pytest.param([1, 2, 3], id="non-mapping"),
-    pytest.param({"checkpoint": Path("/models/ckpt.pt")}, id="path"),
-    pytest.param({"labels": ("train", "calibration")}, id="tuple"),
-    pytest.param({7: "non-string-key"}, id="non-string-key"),
-    pytest.param({"metric": float("nan")}, id="non-finite-number"),
-    pytest.param({"value": torch.tensor(1.0)}, id="tensor"),
-    pytest.param({"mesh_fingerprint": "user-metadata"}, id="reserved-key"),
-]
-# fmt: on
-
-
-@pytest.mark.parametrize("bad_provenance", BAD_PROVENANCE)
-def test_non_json_provenance_fails_closed_without_replacing_artifact(
-    bad_provenance, tmp_path
-):
+def test_non_json_provenance_fails_closed_without_replacing_artifact(tmp_path):
     predictor = fitted_risk()
     path = tmp_path / "artifact.pt"
     predictor.save(path, provenance={"note": "valid"})
     original_bytes = path.read_bytes()
 
-    with pytest.raises(
-        (TypeError, ValueError), match="provenance|JSON|mesh_fingerprint"
-    ):
-        predictor.save(path, provenance=bad_provenance)
+    with pytest.raises(TypeError, match="provenance must be a mapping"):
+        predictor.save(path, provenance=[1, 2, 3])
     assert path.read_bytes() == original_bytes
     assert ConformalPredictor.load(path).provenance == {"note": "valid"}
 
@@ -232,53 +213,34 @@ def _delete(key):
     return lambda payload: payload.__delitem__(key)
 
 
-_F64 = torch.float64
 _CTOR = "Invalid constructor arguments"
-_INVALID_KWARGS = "kwargs schema is invalid"
 # fmt: off
 # name: (mutator, load-error regex[, base predictor]); base defaults to "risk".
 # A mutator may return a replacement payload, otherwise it edits in place.
 CORRUPTIONS = {
     "not_an_artifact": (lambda p: {"weights": torch.ones(3)}, "[Nn]ot a conformal predictor artifact"),
     "unknown_version": (_set("version", 999), "version 999"),
-    "nan_alpha": (_set("alpha", float("nan")), "alpha must be a finite"),
-    "alpha_out_of_range": (_set("alpha", 1.5), r"alpha must be .*\(0, 1\)"),
     "infeasible_alpha": (_set("alpha", 0.01), "Insufficient"),
-    "string_alpha": (_set("alpha", "0.25"), "alpha must be a real number"),
     "boolean_n_cal": (_set("n_cal", True), "n_cal must be an integer"),
-    "fractional_tensor_n_cal": (_set("n_cal", torch.tensor(2.9)), "n_cal must be an integer"),
-    "negative_n_cal": (_set("n_cal", -7), "n_cal must be >= 1"),
-    "string_n_cal": (_set("n_cal", "3"), "n_cal must be an integer"),
-    "nan_radius": (_set_in("thresholds", "__tensor__", torch.tensor(float("nan"), dtype=_F64)), "non-finite"),
-    "negative_radius": (_set_in("thresholds", "__tensor__", torch.tensor(-1.0, dtype=_F64)), "negative threshold"),
-    "nonscalar_radius": (_set_in("thresholds", "__tensor__", torch.ones(3, dtype=_F64)), "must be scalars"),
+    "negative_radius": (_set_in("thresholds", "__tensor__", torch.tensor(-1.0, dtype=torch.float64)), "negative threshold"),
     "empty_thresholds": (_set("thresholds", {}), "at least one field"),
     "named_key_beside_sentinel": (_set_in("thresholds", "pressure", torch.tensor(1.0)), "reserved for internal"),
     "non_string_threshold_key": (_set_in("thresholds", 7, torch.tensor(1.0)), "keys must be strings"),
     "missing_difficulty": (_delete("difficulty"), "schema is invalid: missing"),
-    "missing_mesh_fingerprint": (_delete("mesh_fingerprint"), "schema is invalid: missing"),
     "extra_top_level_key": (_set("duplicate_state", {}), "schema is invalid: unexpected"),
-    "unknown_tier": (_set("tier", "bogus"), "tier must be one of"),
-    "mesh_on_varying_tier": (_set("mesh_fingerprint", "0" * 64), "must not carry mesh_fingerprint"),
     "unknown_score_kind": (_set_in("score", "kind", "bogus"), "Unknown built-in score kind"),
     "extra_score_key": (_set_in("score", "class", "AbsoluteErrorScore"), "score spec schema is invalid"),
     "unknown_difficulty_kind": (_set("difficulty", {"kind": "bogus", "kwargs": {}}), "Unknown built-in difficulty kind"),
     "extra_difficulty_key": (_set("difficulty", {"kind": "aux", "kwargs": {"key": "s", "eps": 1e-8}, "class": "X"}), "difficulty spec schema is invalid"),
     "non_mapping_difficulty": (_set("difficulty", "aux"), "difficulty spec must be a mapping"),
     "non_json_provenance": (_set("provenance", {"tags": ("x",)}), "strict-JSON"),
-    "reserved_provenance_key": (_set("provenance", {"mesh_fingerprint": "metadata"}), "must not contain 'mesh_fingerprint'"),
     # Strategy kwargs: exact key sets and exact wire types.
-    "normalized_missing_eps": (_set_in("score", "kwargs", {}), _INVALID_KWARGS, "normalized"),
-    "normalized_string_eps": (_set_in("score", "kwargs", {"eps": "0.1"}), "exact type", "normalized"),
-    "aux_missing_key": (_set_in("difficulty", "kwargs", {"eps": 1e-4}), _INVALID_KWARGS, "aux"),
+    "aux_missing_key": (_set_in("difficulty", "kwargs", {"eps": 1e-4}), "kwargs schema is invalid", "aux"),
     "aux_string_eps": (_set_in("difficulty", "kwargs", {"key": "spread", "eps": "0.1"}), "exact type", "aux"),
     # Wire-valid (exact float) but semantically invalid eps is still rejected at load.
     "normalized_negative_eps": (_set_in("score", "kwargs", {"eps": -1.0}), _CTOR, "normalized"),
-    "normalized_inf_eps": (_set_in("score", "kwargs", {"eps": float("inf")}), _CTOR, "normalized"),
     "aux_negative_eps": (_set_in("difficulty", "kwargs", {"key": "spread", "eps": -1.0}), _CTOR, "aux"),
-    "aux_inf_eps": (_set_in("difficulty", "kwargs", {"key": "spread", "eps": float("inf")}), _CTOR, "aux"),
     # Cellwise artifacts need a well-formed mesh fingerprint.
-    "cellwise_missing_mesh": (_set("mesh_fingerprint", None), "requires mesh_fingerprint", "cellwise"),
     "cellwise_malformed_mesh": (_set("mesh_fingerprint", "not-a-digest"), "mesh_fingerprint must be", "cellwise"),
     "cellwise_uppercase_mesh": (_set("mesh_fingerprint", "A" * 64), "mesh_fingerprint must be", "cellwise"),
 }

@@ -22,6 +22,7 @@ routes through them with the same error and leaves its state untouched.
 """
 
 from fractions import Fraction
+from pathlib import Path
 
 import pytest
 import torch
@@ -112,6 +113,8 @@ VALIDATOR_CASES = [
     ("fingerprint-order-sensitive", lambda: points_fingerprint(_P64) != points_fingerprint(_P64.flip(0)), True),
     ("fingerprint-value-identity", lambda: points_fingerprint(_P64) == points_fingerprint(_P64.clone()), True),
     ("provenance-not-mapping", lambda: validate_provenance([1, 2, 3]), (TypeError, "mapping")),
+    ("provenance-path", lambda: validate_provenance({"checkpoint": Path("/ckpt.pt")}), (TypeError, "strict-JSON")),
+    ("provenance-tensor", lambda: validate_provenance({"value": torch.tensor(1.0)}), (TypeError, "strict-JSON")),
     ("provenance-tuple", lambda: validate_provenance({"labels": ("a",)}), (TypeError, "strict-JSON")),
     ("provenance-non-string-key", lambda: validate_provenance({7: "x"}), (TypeError, "keys must be strings")),
     ("provenance-nan", lambda: validate_provenance({"m": float("nan")}), (ValueError, "finite")),
