@@ -31043,3 +31043,26 @@ the option's verdict is already *deleted*; the wings, AirfRANS and Poisson
 2,048 pairs complete the record, and the prototype-collapse diagnostic on
 the Poisson checkpoints names the mechanism before removal. Artifact
 results/proto_cond_2026-09-29.json.
+
+## 2026-09-29 — Status, OLBC-REF-FIX and GT-FPP: same-snapshot ISLA reference pairs launched for the whole OLBC ladder (Poisson 8,448; elasticity 512 / 2,048 / 8,448 on code_v11, campaign pc rows 20-27), and the FLARE++ baseline scoring repaired {#sec-nb-olbc-ref-lanes}
+
+**Setting.** The correction entry (@sec-nb-olbc-reference-correction) withdrew every OLBC ratio that was measured against the
+2026-09-22 frame-free ISLA references, because those runs sat on a loss plateau from epoch 10. Chapter 10 is to be restated in
+one pass quoting references trained on the current code snapshot only. The Poisson 512 and 2,048 reference pairs of that
+snapshot already exist or are training (campaign pc rows 0-1 scored, rows 4-5 at epoch about 225 of 500). The remaining
+reference cells of the OLBC ladders had no current-snapshot run: the Poisson 8,448-case rung, and every elasticity rung
+(the elasticity controls of the LOCAL-AGG and HARMONIC-EL studies are healthy, validation loss 0.017 and falling at
+2,048 cases, but they live on the earlier code_v7 snapshot).
+
+**What was launched.** Eight lanes on code_v11 with recipe_v4, two seeds each, at the reference configuration and the recipe's
+learning rate 5e-4: the Poisson reference at 8,448 cases (120 epochs, the same optimizer-step count as 2,048 cases for 500
+epochs), and the elasticity reference with the prescribed displacement and traction as rank-1 boundary inputs and the stress as a
+tensor output at 512 and 2,048 cases (500 epochs) and 8,448 cases (120 epochs). Run ids pc_poisson_ref_n8448_seed42/43 and
+pc_elasticity_ref_n{512,2048,8448}_seed42/43. GeoTransolver-512 and GeoTransolver-256 are unchanged across snapshots, so their
+existing lanes stand. When these land, the chapter 10 OLBC ladders quote one snapshot end to end, and the code_v7 elasticity
+controls remain the same-snapshot bases of their own ablation arms only.
+
+**GT-FPP scoring.** The six trained FLARE++ GeoTransolver lanes (DrivAerML 435 at two rates, AirfRANS interior) had failed their
+float32 scoring: the fleet manifest carried the training override `model.attention_type=GALE_FPP` without the Hydra append
+prefix, and the inference configuration has no such key. The scorer now adds the prefix itself and the manifest rows are
+corrected; the scoring array was resubmitted (job 923719). The GT-FPP reducer runs when it returns.
