@@ -2,18 +2,124 @@
  "protocol": "GT-FPP reduction (2026-09-29, #sec-nb-proto-cond-prereg): GeoTransolver with the released FLARE++ backend (attention_type=GALE_FPP,\ncampaign gf on code_v11) against the physics-attention GeoTransolver references of the book, per flagship benchmark: DrivAerML Surface\n435 cars at 200k (gf_dr_gt_fpp_lr3e3 vs p200k_dr_gt_unit_lr3e3; gf_dr_gt_fpp_lr1e3 vs p200k_dr_gt_unit; results/p200k_trio_reduction_2026-09-19.json),\nHiLift 510 wings width 512 at 100k (gf_hl_gt512_fpp_medium_c100k vs shl_med_gt_w512_c100k; results/scalehl_2026-09-26.json), AirfRANS interior\n(gf_af_gt_vol_fpp vs af_gt_vol_lr1e3; results/airfrans_reduction_2026-09-22.json), OLBC Poisson 2,048 width 512 (gf_poisson_gt512_fpp_n2048 vs\nol_poisson_gt512_n2048; results/olbc_2026-09-22.json). Readout: float32 per-case relative L2 per field, two seeds; ratio FLARE++ /\nphysics-attention on seed means and per seed. Reading: FLARE++ better by more than 3% on a dataset's headline field replaces the\nGeoTransolver baseline there (the book quotes both). usage: python gt_fpp_reduce_2026-09-29.py",
  "datasets": {
   "drivaer_435_lr3e3": {
-   "status": "not scored",
-   "reference": {
+   "fields": [
+    "pressure_l2",
+    "wss_l2"
+   ],
+   "headline": "pressure_l2",
+   "physics_attention": {
     "pressure_l2": 0.04447605709234874,
     "wss_l2": 0.06830833603938422
-   }
+   },
+   "flare_pp": {
+    "pressure_l2": 0.2102671330794692,
+    "wss_l2": 0.255564248499771
+   },
+   "ratio": {
+    "pressure_l2": 4.727647791324597,
+    "wss_l2": 3.7413332444874885
+   },
+   "per_seed": {
+    "physics_attention": {
+     "42": {
+      "pressure_l2": 0.04408769806226095,
+      "wss_l2": 0.06756786505381267
+     },
+     "43": {
+      "pressure_l2": 0.04486441612243652,
+      "wss_l2": 0.06904880702495575
+     }
+    },
+    "flare_pp": {
+     "42": {
+      "pressure_l2": 0.23559458833187819,
+      "wss_x_l2": 0.2239916461209456,
+      "wss_y_l2": 0.45937940788765746,
+      "wss_z_l2": 0.3789984645942847,
+      "wss_l2": 0.27782397406796616
+     },
+     "43": {
+      "pressure_l2": 0.18493967782706022,
+      "wss_x_l2": 0.18211160910626253,
+      "wss_y_l2": 0.4098530150949955,
+      "wss_z_l2": 0.3164940687517325,
+      "wss_l2": 0.23330452293157578
+     }
+    },
+    "ratio": {
+     "42": {
+      "pressure_l2": 5.343771589053479,
+      "wss_l2": 4.1117767128900775
+     },
+     "43": {
+      "pressure_l2": 4.122190676066162,
+      "wss_l2": 3.378834957239079
+     }
+    }
+   },
+   "n_seeds": 2,
+   "interim": false,
+   "reading": "physics attention stronger"
   },
   "drivaer_435_lr1e3": {
-   "status": "not scored",
-   "reference": {
+   "fields": [
+    "pressure_l2",
+    "wss_l2"
+   ],
+   "headline": "pressure_l2",
+   "physics_attention": {
     "pressure_l2": 0.04551743964354197,
     "wss_l2": 0.06994886696338654
-   }
+   },
+   "flare_pp": {
+    "pressure_l2": 0.04511396342422813,
+    "wss_l2": 0.06968245026655495
+   },
+   "ratio": {
+    "pressure_l2": 0.9911357883379742,
+    "wss_l2": 0.9961912650140419
+   },
+   "per_seed": {
+    "physics_attention": {
+     "42": {
+      "pressure_l2": 0.04550311962763468,
+      "wss_l2": 0.07000722984472911
+     },
+     "43": {
+      "pressure_l2": 0.04553175965944926,
+      "wss_l2": 0.06989050408204396
+     }
+    },
+    "flare_pp": {
+     "42": {
+      "pressure_l2": 0.04528336257984241,
+      "wss_x_l2": 0.05260672296086947,
+      "wss_y_l2": 0.12314147874712944,
+      "wss_z_l2": 0.10152522179608543,
+      "wss_l2": 0.06999977747909725
+     },
+     "43": {
+      "pressure_l2": 0.04494456426861385,
+      "wss_x_l2": 0.05229689545618991,
+      "wss_y_l2": 0.12105915741994977,
+      "wss_z_l2": 0.101058437799414,
+      "wss_l2": 0.06936512305401266
+     }
+    },
+    "ratio": {
+     "42": {
+      "pressure_l2": 0.9951705058995821,
+      "wss_l2": 0.9998935486285003
+     },
+     "43": {
+      "pressure_l2": 0.987103608662892,
+      "wss_l2": 0.9924827981292771
+     }
+    }
+   },
+   "n_seeds": 2,
+   "interim": false,
+   "reading": "within 3%"
   },
   "hilift_510_w512": {
    "status": "not scored",
@@ -26,12 +132,74 @@
    }
   },
   "airfrans_interior": {
-   "status": "not scored",
-   "reference": {
+   "fields": [
+    "pressure_l2",
+    "velocity_l2",
+    "nut_l2"
+   ],
+   "headline": "pressure_l2",
+   "physics_attention": {
     "pressure_l2": 0.0276902711391449,
     "velocity_l2": 0.03793887615203857,
     "nut_l2": 0.029318443536758422
-   }
+   },
+   "flare_pp": {
+    "pressure_l2": 0.03167968654655851,
+    "velocity_l2": 0.04945588790345937,
+    "nut_l2": 0.03401749674929306
+   },
+   "ratio": {
+    "pressure_l2": 1.144072818477169,
+    "velocity_l2": 1.3035675517974443,
+    "nut_l2": 1.1602763532328424
+   },
+   "per_seed": {
+    "physics_attention": {
+     "42": {
+      "pressure_l2": 0.026782066822052003,
+      "velocity_l2": 0.03702118158340454,
+      "nut_l2": 0.02959775447845459
+     },
+     "43": {
+      "pressure_l2": 0.028598475456237792,
+      "velocity_l2": 0.038856570720672605,
+      "nut_l2": 0.029039132595062255
+     }
+    },
+    "flare_pp": {
+     "42": {
+      "pressure_l2": 0.03088461437029764,
+      "nut_l2": 0.034488867917098105,
+      "velocity_x_l2": 0.04228549346327782,
+      "velocity_y_l2": 0.08713417902588844,
+      "velocity_z_l2": 943016.1796875,
+      "velocity_l2": 0.05280135988257825
+     },
+     "43": {
+      "pressure_l2": 0.03247475872281939,
+      "nut_l2": 0.033546125581488014,
+      "velocity_x_l2": 0.035314212804660204,
+      "velocity_y_l2": 0.0804738877620548,
+      "velocity_z_l2": 498966.530703125,
+      "velocity_l2": 0.04611041592434049
+     }
+    },
+    "ratio": {
+     "42": {
+      "pressure_l2": 1.1531826343166187,
+      "velocity_l2": 1.4262472893692697,
+      "nut_l2": 1.1652528553206276
+     },
+     "43": {
+      "pressure_l2": 1.1355416050940617,
+      "velocity_l2": 1.186682588533441,
+      "nut_l2": 1.155204118844518
+     }
+    }
+   },
+   "n_seeds": 2,
+   "interim": false,
+   "reading": "physics attention stronger"
   },
   "poisson_2048_w512": {
    "status": "not scored",

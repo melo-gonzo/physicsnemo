@@ -31073,3 +31073,33 @@ against a reference from a third snapshot. To make every ratio in that table a s
 elasticity harmonic-measures arm were relaunched on code_v11 at 512 and 2,048 cases, two seeds each (campaign pc rows 28-43, run
 ids pc_poisson_{distonly,hm_measures,distonly_local05}_n{512,2048}_seed42/43 and pc_elasticity_hm_measures_n{512,2048}_seed42/43).
 The code_v7 lanes stay in the record; the chapter's ablation table will read the code_v11 arms against the code_v11 references.
+
+## 2026-09-29 — Interim, GT-FPP (two of four benchmarks): GeoTransolver with the FLARE++ backend matches physics attention within 1% on DrivAerML Surface at its own best rate (0.0451 against 0.0455 at 1e-3; 0.0445 for physics attention at 3e-3), diverges at 3e-3 (0.21 / 0.18), and trails on the AirfRANS interior by 14 / 30 / 16% (pressure / velocity / eddy viscosity); no baseline is replaced so far {#sec-nb-gt-fpp-interim}
+
+**Setting.** The book's baseline is GeoTransolver with its physics attention (the released architecture, unchanged). Peter asked for
+GeoTransolver with the released FLARE++ attention backend (`attention_type=GALE_FPP`, a linear-cost attention with learned latent
+queries) as a steel-man check on the flagship benchmarks (@sec-nb-proto-cond-prereg). The rule: where FLARE++ is better than physics
+attention by more than 3% on a dataset's headline field, it replaces the baseline there and every ISLA ratio on that dataset is restated.
+Campaign gf trains the FLARE++ variant with the same recipe, cells, epochs and seeds as the physics-attention lanes it is compared with.
+
+**What we saw (float32, two seeds, ratio FLARE++ ÷ physics attention on seed means).**
+
+| benchmark | field | physics attention | FLARE++ | ratio | reading |
+|---|---|--:|--:|--:|---|
+| DrivAerML Surface, 435 cars, 200k cells, rate 3e-3 | pressure | 0.0445 | 0.2103 (0.236 / 0.185) | 4.73 | FLARE++ unstable at this rate |
+| DrivAerML Surface, 435 cars, 200k cells, rate 1e-3 | pressure | 0.0455 | 0.0451 (0.0453 / 0.0449) | 0.99 | within 3% |
+| DrivAerML Surface, rate 1e-3 | wall shear | 0.0699 | 0.0697 | 1.00 | within 3% |
+| AirfRANS interior, 100k queries | pressure | 0.0277 | 0.0317 (0.0309 / 0.0325) | 1.14 | physics attention stronger |
+| AirfRANS interior | velocity | 0.0379 | 0.0495 | 1.30 | physics attention stronger |
+| AirfRANS interior | eddy viscosity | 0.0293 | 0.0340 | 1.16 | physics attention stronger |
+
+: GT-FPP interim. Data: results/gt_fpp_2026-09-29.json (FLARE++ lanes gf_dr_gt_fpp_lr{3e3,1e3}_seed42/43, gf_af_gt_vol_fpp_seed42/43 on code_v11; physics-attention references from results/p200k_trio_reduction_2026-09-19.json and results/airfrans_reduction_2026-09-22.json). {#tbl-gt-fpp-interim}
+
+**The 3e-3 lanes are a training failure, not a capacity reading.** Both seeds fell to a validation loss of 0.0012 by epoch 40 (the same
+trajectory as the 1e-3 lanes) and then rose, to 0.0081 and 0.0056 by epoch 60 and to 0.0108 and 0.0085 at epoch 500, with no NaN. The
+physics-attention GeoTransolver trains cleanly at 3e-3 and that is its best rate on this dataset (0.0445 against 0.0455 at 1e-3), so the
+comparison that matters is best rate against best rate: **FLARE++ at 1e-3 (0.0451) against physics attention at 3e-3 (0.0445), ratio
+1.01, within the 3% band.** On the AirfRANS interior FLARE++ is 14 to 30% worse on every field on both seeds.
+
+**Standing.** No baseline is replaced by the two benchmarks scored so far. The HiLift 510-wing pair (width 512, 100k cells; epoch 24 of
+500) and the OLBC Poisson 2,048 pair (epoch about 455) are pending; the verdict closes when they land. ISLA's ratios are unchanged.
