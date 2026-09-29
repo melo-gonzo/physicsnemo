@@ -31219,3 +31219,53 @@ distances) and on elasticity (10 to 14% on the stresses), neutral at 512 on Pois
 decision waits for the code_v11 pairs (@sec-nb-olbc-ref-lanes), which put the channel and its reference on one snapshot at both rungs on
 both sets; if the 512 elasticity cost reproduces there, the channel stays an option documented as paying only above a training-set size,
 which under the rule is not a reference setting.
+
+## 2026-09-29 — Interim, PROTO-COND on the AirfRANS interior (800 airfoils, 100,000 queries, two seeds): the conditioned prototypes PAY 18% on pressure and eddy viscosity (0.82 / 0.98 / 0.82, both seeds on pressure), taking ISLA's pressure from 0.84 of GeoTransolver-volume to parity; with the 2.0x loss on the fixed Poisson mesh and the measured collapse mechanism, the option is dataset-dependent as built, and a collapse-proof form is preregistered as PROTO-COND-2 {#sec-nb-proto-cond-airfrans-interim}
+
+**Setting.** Sample-conditioned slice prototypes (@sec-nb-proto-cond-prereg) are 2.0x worse than the static reference on OLBC Poisson
+at 512 cases and neutral on DrivAerML Surface; @sec-nb-proto-cond-mechanism measured why: on the fixed mesh the attention-weighted
+value term is the same for every seed and swamps it, so the 256 prototypes collapse onto one direction and the routing degenerates
+toward one pool. The AirfRANS interior pair (pc_af_{ref,cond}, code_v11, same snapshot, the provided stored-field geometry, rate 5e-4,
+500 epochs) is the third dataset.
+
+**What we saw** (float32 relative L2 over the 200 test airfoils at 100,000 queries; ratio conditioned ÷ static on seed means, per seed
+in parentheses):
+
+| field | static reference | conditioned | ratio | GeoTransolver-volume | GeoTransolver-volume ÷ static | ÷ conditioned |
+|---|--:|--:|--:|--:|--:|--:|
+| pressure | 0.0331 (0.0330 / 0.0332) | 0.0270 (0.0269 / 0.0271) | 0.82 (0.82 / 0.82) | 0.0277 | 0.84 | 1.03 |
+| velocity | 0.0161 | 0.0158 | 0.98 (0.91 / 1.05) | 0.0379 | 2.35 | 2.39 |
+| eddy viscosity | 0.0347 (0.0337 / 0.0357) | 0.0285 (0.0263 / 0.0307) | 0.82 (0.78 / 0.86) | 0.0293 | 0.85 | 1.03 |
+
+: PROTO-COND on the AirfRANS interior. Data: results/proto_cond_2026-09-29.json; GeoTransolver-volume from results/airfrans_reduction_2026-09-22.json. {#tbl-proto-cond-airfrans}
+
+**Reading.** This is the first option in the program that closes the AirfRANS pressure deficit with an input that is PDE data only (the
+token states themselves), where the earlier remedies either broke the input rules (dataset axes, @sec-pose-prior) or hurt
+(aggregation, @sec-nb-local-agg-airfrans-verdict). The pressure gain is identical on both seeds; eddy viscosity gains on both; velocity
+is neutral. So the record of the option as built reads: pays 18% on AirfRANS, neutral on DrivAerML Surface, 2.0x worse on the fixed
+Poisson mesh. **Under the one-model rule that is a dataset-dependent option and it is not adopted.** But the failure has a measured
+mechanism that is a defect of the construction, not of the idea: the part of the synthesized prototype that is common to all 256 seeds
+carries no routing information (cosine logits compare a token against the prototypes relative to one another) and is what collapses
+the routing when it dominates. A form that cannot collapse is the next rung.
+
+### Preregistration, PROTO-COND-2: centered, scale-bounded conditioned prototypes {#sec-nb-proto-cond-2-prereg}
+
+**Design.** In every slice block, with seeds $S \in \mathbb{R}^{256 \times H}$ and the attended value term
+$\Delta_k = \sum_i \mathrm{softmax}_i(S_k \cdot k(x_i)/\sqrt{H} + \log w_i)\, v(x_i)$ as in the first form, the prototypes become
+
+$$P_k = S_k + g \cdot \frac{\mathrm{rms}(S)}{\mathrm{rms}(\tilde\Delta)} \, \tilde\Delta_k, \qquad \tilde\Delta_k = \Delta_k - \frac{1}{256}\sum_{k'} \Delta_{k'},$$
+
+with one learned scalar gate $g$ per block initialized at 0.1 and $\mathrm{rms}$ the root-mean-square entry over the matrix. Centering
+removes the seed-independent component exactly, so a token cloud whose attention is the same for every seed changes nothing; the
+scale bound keeps the sample-dependent part at a fraction $g$ of the seeds' own spread, so the prototypes cannot collapse by
+displacement. The construction is permutation-invariant and measure-aware as before, and its cost is the first form's.
+
+**Predictions and falsifiers** (same-snapshot pairs on one new snapshot, two seeds each, float32; ratios PROTO-COND-2 ÷ static):
+(1) OLBC Poisson 512: within 1.05 (collapse removed), with the diagnostic of @sec-nb-proto-cond-mechanism showing pairwise prototype
+cosine below 0.3 and effective rank above 100 on the trained checkpoints; a ratio above 1.05 or a cosine above 0.5 refutes the
+mechanism reading. (2) AirfRANS interior: pressure at or below 0.91 on both seeds (at least half the first form's gain survives the
+centering); above 0.97 means the gain lived in the common component and the idea is refuted as a routing effect. (3) DrivAerML Surface
+435 at 200,000 cells: within 1.03 on pressure and wall shear. (4) OLBC Poisson 2,048: within 1.05. **Adoption rule:** PROTO-COND-2
+becomes part of the reference configuration only if it is neutral or better on all four (and the 510-wing pair, launched with them,
+when it lands); otherwise it is removed together with the first form, and the AirfRANS gain is recorded as a lead for a future
+mechanism, not as an option.
