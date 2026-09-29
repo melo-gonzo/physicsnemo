@@ -145,7 +145,7 @@ def _wire_thresholds(value: object) -> Tensor | TensorDict:
 
 
 def _parse_artifact(payload: object) -> ConformalPredictor:
-    """Validate the schema and take ownership of freshly deserialized tensors."""
+    """Validate the one supported conformal artifact schema."""
     marker = payload.get("format") if isinstance(payload, Mapping) else None
     if (
         not isinstance(payload, Mapping)
@@ -179,8 +179,7 @@ def _parse_artifact(payload: object) -> ConformalPredictor:
             "difficulty",
         )
     )
-    predictor = object.__new__(ConformalPredictor)
-    predictor._initialize(
+    return ConformalPredictor(
         tier=payload["tier"],
         score=score,
         alpha=payload["alpha"],
@@ -190,7 +189,6 @@ def _parse_artifact(payload: object) -> ConformalPredictor:
         mesh_fingerprint=payload["mesh_fingerprint"],
         provenance=payload["provenance"],
     )
-    return predictor
 
 
 def _artifact_payload(
@@ -198,9 +196,10 @@ def _artifact_payload(
 ) -> dict:
     """Encode public predictor state.
 
-    CPU thresholds share the predictor's storage; accelerator thresholds
-    require a CPU copy for serialization. Semantic validation happens on the
-    read-back in :func:`_save_predictor`, without cloning the loaded tensors.
+    The threshold entries are serialized as CPU views of the predictor's own
+    (already validated, standalone) storage; ``torch.save`` only reads them,
+    so no second full-size copy is materialized here. Semantic validation
+    happens once, on the read-back in :func:`_save_predictor`.
     """
     chosen_provenance = predictor.provenance if provenance is None else provenance
     difficulty = predictor.difficulty
@@ -239,8 +238,8 @@ def _save_predictor(
     try:
         with os.fdopen(descriptor, "wb") as handle:
             torch.save(payload, handle)
-        # Release any accelerator-to-CPU copy before read-back. The private
-        # loader adopts the loaded storage, avoiding another full-size clone.
+        # Release the payload before the integrity read-back so at most one
+        # extra full-size threshold copy is ever live beside the predictor.
         del payload
         _load_predictor(temporary, map_location="cpu")
         os.replace(temporary, path)
