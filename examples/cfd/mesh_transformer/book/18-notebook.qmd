@@ -30771,3 +30771,40 @@ the same rule: `local_weights="lpr"` and `local_gradient` (deleted or
 universalized on the AirfRANS LOCAL-LPR result), the local aggregation
 itself (UNIVERSAL-AGG), and the per-type geometry channel (on the
 elasticity 2,048 result).
+
+## 2026-09-28 — Interim, UNIVERSAL-AGG on Tensile2d (400 cases, two seeds): the always-on aggregation is worse than the same-snapshot reference on every field (displacement 1.09, stresses 1.05 / 1.05 / 1.05, the scalar q 1.53 with a 0.88 / 2.60 seed split); the *not part of the model* clause fires on the first held-out dataset {#sec-nb-universal-agg-t2d-interim}
+
+**Setting.** UNIVERSAL-AGG (@sec-nb-universal-prereg) switches the local
+relational aggregation on everywhere and pairs it with the reference
+configuration on the same snapshot, on three datasets the aggregation's
+fixed-mesh rule was never fitted on. Tensile2d is the first to score: a
+plane-strain tensile specimen with random holes, 400 training cases, 100
+validation cases, one mesh per case with 20,000 interior queries redrawn
+per epoch, targets a scalar q, the displacement vector and the symmetric
+stress tensor.
+
+**What we saw (relative L2, two-seed means, aggregation ÷ reference).**
+Displacement 0.0110 against 0.0101, ratio **1.09** (per seed 1.11 / 1.08).
+$\sigma_{11}$ / $\sigma_{22}$ / $\sigma_{12}$ 0.0138 / 0.0110 / 0.0150
+against 0.0132 / 0.0106 / 0.0143, ratios **1.05 / 1.05 / 1.05** (seed 42:
+1.10 / 1.10 / 1.07; seed 43: 1.01 / 1.00 / 1.03). The scalar q 0.622 against
+0.406, ratio 1.53, but per seed 0.88 and 2.60, so that field is unreadable
+at two seeds (its reference error of 0.41 says the field is barely learned
+by either arm).
+
+**Verdict.** The *not part of the model* clause (above 1.05 on any field of
+any dataset) holds on displacement on both seeds and on the stress means
+at the boundary of the band, before the lug and DrivAerML Volume pairs
+report. The aggregation rule fitted on OLBC (pays on fixed meshes) has now
+failed on both resampled datasets it was tested on (AirfRANS 1.13 to 1.22,
+Tensile2d 1.05 to 1.09), and under the ruling **the aggregation in its
+Gaussian form is not part of ISLA**. The Poisson and elasticity results
+stand as findings about a mechanism (local relational pooling closes the
+value-transport gap on a fixed mesh) and not as a recipe. What decides
+whether any form survives is the AirfRANS LOCAL-LPR pair: if the consistent
+weights remove the AirfRANS loss, the lpr form takes the universal test;
+if not, `local_rho`, `local_k`, `local_weights` and `local_gradient` are
+deleted together and the fixed-mesh results are recorded as a closed
+mechanism study. The lug and DrivAerML Volume pairs run to completion so
+the record has the aggregation's cost on every dataset class. Artifact
+results/universal_agg_2026-09-28.json.

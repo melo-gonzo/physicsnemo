@@ -1,0 +1,122 @@
+{
+ "protocol": "UNIVERSAL-AGG reduction (2026-09-28, #sec-nb-universal-prereg): the local aggregation switched on everywhere (rho 0.05, k 32) against\nthe same-snapshot reference configuration (code_v10), on the three datasets the aggregation's rule was not fitted on: Tensile2d at 400\ncases (un_t2d_{ref,local05}_n400), the lug at 2,400 cases (un_lug_{ref,local05}_n2400) and DrivAerML Volume (un_drvol_{ref,local05}).\nReadout: float32 per-case relative L2 per field (test split), two seeds; ratio aggregation / reference per field on seed means and per\nseed. Bars: default-on candidate if <= 1.03 on every field of every dataset; not part of the model if > 1.05 on any field of any\ndataset; between otherwise. usage: python un_reduce_2026-09-28.py  (writes universal_agg_2026-09-28.json).",
+ "datasets": {
+  "t2d": {
+   "fields": [
+    "displacement_l2",
+    "q_l2",
+    "sig11_l2",
+    "sig12_l2",
+    "sig22_l2"
+   ],
+   "reference": {
+    "displacement_l2": 0.010099056279286742,
+    "q_l2": 0.4058516689389944,
+    "sig11_l2": 0.013174701237585396,
+    "sig12_l2": 0.014310771927703171,
+    "sig22_l2": 0.010553243712056428
+   },
+   "aggregation": {
+    "displacement_l2": 0.011013734443113207,
+    "q_l2": 0.6222198355942965,
+    "sig11_l2": 0.013827778045088052,
+    "sig12_l2": 0.014960529918316753,
+    "sig22_l2": 0.011044212707784027
+   },
+   "ratio": {
+    "displacement_l2": 1.0905706571516467,
+    "q_l2": 1.533121293355641,
+    "sig11_l2": 1.0495705212380473,
+    "sig12_l2": 1.045403420157634,
+    "sig22_l2": 1.0465230415523046
+   },
+   "per_seed": {
+    "reference": {
+     "42": {
+      "q_l2": 0.5040535728633404,
+      "displacement_x_l2": 0.02337735050357878,
+      "displacement_y_l2": 0.0072600655304268,
+      "displacement_z_l2": 0.0,
+      "displacement_l2": 0.00969285260885954,
+      "sig11_l2": 0.012909896136261523,
+      "sig22_l2": 0.010122943269088865,
+      "sig12_l2": 0.013670377340167761,
+      "stress_l2": 0.01176178448367864
+     },
+     "43": {
+      "q_l2": 0.3076497650146484,
+      "displacement_x_l2": 0.027403622902929782,
+      "displacement_y_l2": 0.007162565779872239,
+      "displacement_z_l2": 0.0,
+      "displacement_l2": 0.010505259949713946,
+      "sig11_l2": 0.013439506338909269,
+      "sig22_l2": 0.010983544155023992,
+      "sig12_l2": 0.014951166515238583,
+      "stress_l2": 0.012689527235925197
+     }
+    },
+    "aggregation": {
+     "42": {
+      "q_l2": 0.4450455076247454,
+      "displacement_x_l2": 0.02898667844943702,
+      "displacement_y_l2": 0.007122768023982644,
+      "displacement_z_l2": 0.0,
+      "displacement_l2": 0.010734102725982665,
+      "sig11_l2": 0.014146762271411716,
+      "sig22_l2": 0.011161153195425868,
+      "sig12_l2": 0.014553384012542666,
+      "stress_l2": 0.012751984186470508
+     },
+     "43": {
+      "q_l2": 0.7993941635638475,
+      "displacement_x_l2": 0.02980061201378703,
+      "displacement_y_l2": 0.007721832180395722,
+      "displacement_z_l2": 0.0,
+      "displacement_l2": 0.01129336616024375,
+      "sig11_l2": 0.013508793818764388,
+      "sig22_l2": 0.010927272220142186,
+      "sig12_l2": 0.015367675824090838,
+      "stress_l2": 0.012767414264380932
+     }
+    },
+    "ratio": {
+     "42": {
+      "displacement_l2": 1.107424528066319,
+      "q_l2": 0.8829329491637323,
+      "sig11_l2": 1.0958075976828399,
+      "sig12_l2": 1.064592706580261,
+      "sig22_l2": 1.1025600854157953
+     },
+     "43": {
+      "displacement_l2": 1.0750201531711039,
+      "q_l2": 2.5983902946449033,
+      "sig11_l2": 1.005155507807197,
+      "sig12_l2": 1.0278579807420203,
+      "sig22_l2": 0.9948767051793509
+     }
+    }
+   },
+   "n_seeds": {
+    "reference": 2,
+    "aggregation": 2
+   },
+   "verdict": "not part of the model",
+   "interim": false
+  },
+  "lug": {
+   "status": "not scored",
+   "ref_seeds": 0,
+   "agg_seeds": 0
+  },
+  "drvol": {
+   "status": "not scored",
+   "ref_seeds": 0,
+   "agg_seeds": 0
+  }
+ },
+ "overall": {
+  "worst_ratio": 1.533121293355641,
+  "complete": false,
+  "verdict": "not part of the model"
+ }
+}
