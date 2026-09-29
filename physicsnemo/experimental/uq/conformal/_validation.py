@@ -40,10 +40,10 @@ __all__ = [
     "Tier",
     "broadcast_difficulty",
     "clamp_min_floor",
-    "multi_rank_active",
     "normalize_keys",
     "positive_finite_float",
     "require_matching_keys",
+    "require_single_rank",
     "validate_provenance",
     "check_aux",
     "check_difficulty",
@@ -122,19 +122,24 @@ def check_point_alignment(
     return tensor
 
 
-def multi_rank_active() -> bool:
-    """True when an initialized ``torch.distributed`` group spans ranks.
+def require_single_rank(what: str) -> None:
+    """Fail closed when an initialized ``torch.distributed`` group spans ranks.
 
     Probes ``torch.distributed`` directly rather than
     :class:`~physicsnemo.distributed.DistributedManager`: the manager is a
     singleton the caller must initialize first, while this guard has to be
     correct for any process group, including ones set up outside physicsnemo.
+    A rank-local result would silently void the guarantee.
     """
-    return (
+    if (
         torch.distributed.is_available()
         and torch.distributed.is_initialized()
         and torch.distributed.get_world_size() > 1
-    )
+    ):
+        raise NotImplementedError(
+            f"Conformal {what} supports single-rank execution only. Gather the "
+            "exact, deduplicated samples onto one rank first."
+        )
 
 
 def clamp_min_floor(t: Tensor, eps: float) -> Tensor:

@@ -33,8 +33,8 @@ from ._validation import (
     _field_label,
     check_exact_shape,
     check_real,
-    multi_rank_active,
     normalize_keys,
+    require_single_rank,
 )
 
 __all__ = ["CoverageAccumulator"]
@@ -265,7 +265,7 @@ class CoverageAccumulator:
             in float64. Raises ``RuntimeError`` for non-cellwise tiers or
             before the first update.
         """
-        self._reject_multi_rank()
+        require_single_rank("diagnostics")
         if self._tier != "cellwise":
             raise RuntimeError(
                 "empirical_coverage_map is available only for cellwise predictors."
@@ -278,14 +278,6 @@ class CoverageAccumulator:
                 for key, hits in self._element_hits.items()
             }
         )
-
-    @staticmethod
-    def _reject_multi_rank() -> None:
-        if multi_rank_active():
-            raise NotImplementedError(
-                "Conformal diagnostics are single-rank only. Gather evaluation "
-                "samples onto one rank before reporting coverage."
-            )
 
     def finalize(self) -> dict:
         r"""Return a strict-JSON tier-aligned empirical diagnostic report.
@@ -302,7 +294,7 @@ class CoverageAccumulator:
             ``empirical_mean_risk`` (risk control). Statistics are ``None``
             before the first update.
         """
-        self._reject_multi_rank()
+        require_single_rank("diagnostics")
         metadata = {
             "tier": self._tier,
             "alpha": self._alpha,

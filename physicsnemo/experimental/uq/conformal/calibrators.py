@@ -61,10 +61,10 @@ from ._validation import (
     check_point_alignment,
     check_points,
     check_real,
-    multi_rank_active,
     normalize_keys,
     points_fingerprint,
     require_matching_keys,
+    require_single_rank,
 )
 from .difficulty import (
     AuxDifficulty,
@@ -101,15 +101,6 @@ def _normalized_scores(raw: Tensor, difficulty: Tensor | None, key: str) -> Tens
             "the difficulty field or score before calibration."
         )
     return normalized
-
-
-def _reject_multi_rank() -> None:
-    """Fail closed instead of fitting a rank-local calibration result."""
-    if multi_rank_active():
-        raise NotImplementedError(
-            "Conformal calibration is single-rank only. Gather the exact, "
-            "deduplicated calibration samples onto one rank before finalize()."
-        )
 
 
 class _SplitCalibratorBase:
@@ -229,7 +220,7 @@ class _SplitCalibratorBase:
             self._n += 1
 
     def _require_finalizable(self) -> None:
-        _reject_multi_rank()
+        require_single_rank("calibration")
         if self._n == 0:
             raise RuntimeError("No calibration samples collected.")
 
