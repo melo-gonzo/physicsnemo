@@ -31347,3 +31347,14 @@ the static reference there. The prototype-collapse diagnostic on these checkpoin
 100 were the mechanism bar) is running and will be appended to results/proto_cond2_diag_2026-09-29.json. The AirfRANS pair (bar:
 pressure at or below 0.91 on both seeds), DrivAerML Surface (within 1.03), Poisson 2,048 (within 1.05) and the 510-wing pair complete
 the universalization test; adoption into the reference configuration requires all of them. Data: results/proto_cond2_2026-09-29.json.
+
+## 2026-09-29 — Mechanism check, PROTO-COND-2 on the Poisson 512 checkpoints: the collapse is gone in all 24 block-seed cells (pairwise prototype cosine 0.03 to 0.05 and effective rank 160 to 175, against 0.92 and 22 for the first form; static seeds 0.04 to 0.05 and 156 to 170), the learned gate holds the sample-dependent part at 10 to 20% of the seed norm, and the routing statistics match the static model's {#sec-nb-proto-cond-2-mechanism}
+
+Same instrument as @sec-nb-proto-cond-mechanism (code_v12 checkpoints pc2_poisson_cent_n512_seed42/43 against the static pair, first
+32 test samples, all 12 blocks, float32). The preregistered mechanism bar (@sec-nb-proto-cond-2-prereg: pairwise cosine below 0.3 and
+effective rank above 100) is met in every block of both seeds; the first form failed it in every block. Per block, the learned gate $g$
+ranges 0.03 to 0.30 (means 0.18 and 0.15), the prototypes sit 0.10 to 0.21 seed-norms from the seeds with a cross-sample spread of 4 to
+13%, and the routing behaves like the static model's: per-token effective slices 85 to 105 (static 80 to 106), top weight 0.10 to 0.12
+(static 0.09 to 0.13), same-node Jensen-Shannon divergence across boundary data 0.30 bits (static 0.25 to 0.34). The centered form is a
+bounded, sample-dependent perturbation of static routing, not a different regime; the accuracy gain on this set
+(@sec-nb-proto-cond-2-poisson-512) comes from that perturbation. Data: results/proto_cond2_diag_2026-09-29.json.
