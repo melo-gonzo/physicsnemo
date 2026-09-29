@@ -27,9 +27,8 @@ from torch import Tensor
 
 from ._containers import pack_fields
 from ._validation import validate_provenance
-from .difficulty import _DIFFICULTY_REGISTRY
 from .predictors import ConformalPredictor
-from .scores import _SCORE_REGISTRY, _strategy_kind
+from .scores import _DIFFICULTY_REGISTRY, _SCORE_REGISTRY, _strategy_kind
 
 __all__: list[str] = []
 

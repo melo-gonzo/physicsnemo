@@ -66,14 +66,12 @@ from ._validation import (
     require_matching_keys,
     require_single_rank,
 )
-from .difficulty import (
-    _DIFFICULTY_REGISTRY,
-    AuxDifficulty,
-    _check_no_double_scale,
-)
 from .predictors import ConformalPredictor
 from .scores import (
+    _DIFFICULTY_REGISTRY,
     _SCORE_REGISTRY,
+    AuxDifficulty,
+    _check_no_double_scale,
     _NonconformityScore,
     _Score,
     _snapshot_strategy,

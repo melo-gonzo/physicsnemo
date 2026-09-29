@@ -32,6 +32,19 @@ Scores operate on plain tensors; field-container (``TensorDict``) iteration
 is handled by the calibrators. Optional ``aux`` inputs carry the built-in
 score data: predicted standard deviations (``"sigma"``) or quantile heads
 (``"lo"``/``"hi"``).
+
+:class:`AuxDifficulty` is the one shipped difficulty field: a positive
+per-point scale :math:`s(x)` that the functional-band and conformal risk
+control (CRC) tiers multiply into the fitted threshold. Because :math:`s` is
+evaluated per query point, calibration samples and queries may have
+different point sets. No difficulty field (:math:`s = 1`) is valid but
+conservative.
+
+.. warning::
+    The difficulty field must be fixed independently of the calibration
+    samples: fit it on training residuals or a split disjoint from
+    calibration. Fitting :math:`s` on the calibration set voids the coverage
+    guarantee (the scores are no longer exchangeable with test scores).
 """
 
 import copy
@@ -42,10 +55,11 @@ from jaxtyping import Float
 from torch import Tensor
 
 from ._quantile import cast_directed
-from ._validation import clamp_min_floor, positive_finite_float
+from ._validation import check_real, clamp_min_floor, positive_finite_float
 
 __all__ = [
     "AbsoluteErrorScore",
+    "AuxDifficulty",
     "NormalizedErrorScore",
     "QuantileRegressionScore",
 ]
@@ -405,6 +419,139 @@ _SCORE_REGISTRY: dict[str, type[_NonconformityScore]] = {
     "quantile_regression": QuantileRegressionScore,
 }
 """Private identifiers for the exact built-in score types."""
+
+
+class AuxDifficulty:
+    r"""Per-point difficulty :math:`s(x)` read from the ``aux`` mapping.
+
+    Use it with
+    :class:`~physicsnemo.experimental.uq.conformal.FunctionalBandCalibrator` or
+    :class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator` when
+    the model emits a per-point uncertainty proxy (a predicted sigma,
+    MC-dropout or ensemble spread) that should widen the band where the
+    model is least confident. Multi-channel inputs of shape
+    :math:`(n_{\text{points}}, C)` are reduced by ``max`` over the trailing
+    dimensions so one scale per point dominates every channel.
+
+    Parameters
+    ----------
+    key : str, optional
+        Aux key to read. Default is ``"sigma"``.
+    eps : float, optional
+        Lower clamp keeping :math:`s` positive. Default is ``1e-8``.
+
+    Notes
+    -----
+    Pairing this field with a score that already divides by the same aux key
+    (:class:`~physicsnemo.experimental.uq.conformal.NormalizedErrorScore` on
+    ``"sigma"``) would scale every interval twice; calibrators and predictors
+    raise ``ValueError`` on that combination. The aux entry must be a finite
+    real floating-point tensor at every calibration and prediction call.
+    Validation precedes reduction and clamping, so neither operation can
+    hide NaN or infinity. Finite nonpositive values use the positive floor.
+    ``difficulty=None`` on a calibrator or predictor means :math:`s = 1`;
+    ``aux=None`` or an entry of ``None`` cannot supply an ``AuxDifficulty``.
+
+    Examples
+    --------
+    >>> import torch
+    >>> from physicsnemo.experimental.uq.conformal import AuxDifficulty
+    >>> _ = torch.manual_seed(0)
+    >>> difficulty = AuxDifficulty("sigma")
+    >>> sigma = torch.rand(50, 3) + 0.1
+    >>> difficulty(aux={"sigma": sigma}).shape
+    torch.Size([50])
+    """
+
+    def __init__(self, key: str = "sigma", eps: float = 1e-8) -> None:
+        if not isinstance(key, str):
+            raise TypeError(f"key must be a string, got {type(key).__name__}.")
+        if not key:
+            raise ValueError("key must be a non-empty string.")
+        self.key = key
+        self.eps = positive_finite_float(eps, "eps")
+
+    def __call__(
+        self,
+        points: Float[Tensor, "n_points n_spatial_dims"] | None = None,
+        aux: Mapping[str, Tensor] | None = None,
+    ) -> Float[Tensor, " n_points"]:
+        r"""Evaluate :math:`s` from the per-point ``aux`` entry ``key``.
+
+        Parameters
+        ----------
+        points : torch.Tensor, optional
+            Mesh coordinates of shape
+            :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`. Accepted
+            for API uniformity and unused. Default is ``None``.
+        aux : Mapping[str, torch.Tensor], optional
+            Must contain ``key`` with a finite real floating-point tensor of
+            shape :math:`(n_{\text{points}}, *\text{dims})`. The default
+            ``None`` means no aux mapping and raises ``ValueError`` here;
+            an entry of ``None`` raises ``TypeError``.
+
+        Returns
+        -------
+        torch.Tensor
+            Positive difficulty values of shape :math:`(n_{\text{points}},)`,
+            reduced by ``max`` over any trailing dimensions and clamped below
+            by the larger of ``eps`` and the dtype's smallest positive
+            normal value.
+        """
+        if not isinstance(aux, Mapping) or self.key not in aux:
+            raise ValueError(
+                f"AuxDifficulty requires aux entry '{self.key}' at every call; "
+                "pass aux={key: tensor}."
+            )
+        s = aux[self.key]
+        if not isinstance(s, Tensor):
+            raise TypeError(
+                f"AuxDifficulty aux '{self.key}' must be a torch.Tensor, got "
+                f"{type(s).__name__}."
+            )
+        check_real(self.key, "difficulty aux", s)
+        if s.ndim >= 2:
+            # Reduce EVERY trailing (non-point) dimension: the contract is
+            # one positive scale per leading point, matching the
+            # risk-control loss's point risk unit (max over components).
+            s = s.amax(dim=tuple(range(1, s.ndim)))
+        return clamp_min_floor(s, self.eps)
+
+
+def _check_no_double_scale(
+    score: _NonconformityScore, difficulty: AuxDifficulty | None
+) -> None:
+    """Reject the known ergonomic footgun of dividing by the same aux twice.
+
+    A score that divides its residual by an aux key (advertised via
+    ``score.scale_aux_keys``, e.g.
+    :class:`~physicsnemo.experimental.uq.conformal.NormalizedErrorScore` on
+    ``"sigma"``) paired with an :class:`AuxDifficulty` reading the same key
+    scales every interval by that value twice. This is an ergonomics guard,
+    not a conformal-validity requirement: it catches the one structural
+    built-in pairing (``AuxDifficulty`` on a divisor key). Reading a key
+    additively (CQR reads ``lo``/``hi``) is not dividing by it, so those
+    pairings are allowed.
+
+    Run from calibrator and predictor construction so the rule is enforced
+    consistently.
+    """
+    if isinstance(difficulty, AuxDifficulty):
+        if difficulty.key in score.scale_aux_keys:
+            raise ValueError(
+                f"Double-scaling: score {type(score).__name__} already divides the "
+                f"residual by aux '{difficulty.key}', and AuxDifficulty(key="
+                f"'{difficulty.key}') would divide by it again. Pair AuxDifficulty("
+                f"'{difficulty.key}') with a score that does not scale by it (e.g. "
+                "AbsoluteErrorScore), or use the scaling score with no difficulty "
+                "field."
+            )
+
+
+_DIFFICULTY_REGISTRY: dict[str, type[AuxDifficulty]] = {
+    "aux": AuxDifficulty,
+}
+"""Private identifiers for the exact built-in difficulty field types."""
 
 
 def _strategy_kind(strategy: object, registry: Mapping[str, type]) -> str | None:

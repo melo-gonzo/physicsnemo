@@ -69,10 +69,10 @@ from .calibrators import (
     RiskControlCalibrator,
 )
 from .diagnostics import CoverageAccumulator
-from .difficulty import AuxDifficulty
 from .predictors import ConformalPredictor
 from .scores import (
     AbsoluteErrorScore,
+    AuxDifficulty,
     NormalizedErrorScore,
     QuantileRegressionScore,
 )

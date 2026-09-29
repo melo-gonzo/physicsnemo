@@ -44,13 +44,11 @@ from ._validation import (
     validate_provenance,
 )
 from .diagnostics import CoverageAccumulator
-from .difficulty import (
+from .scores import (
     _DIFFICULTY_REGISTRY,
+    _SCORE_REGISTRY,
     AuxDifficulty,
     _check_no_double_scale,
-)
-from .scores import (
-    _SCORE_REGISTRY,
     _NonconformityScore,
     _Score,
     _snapshot_strategy,

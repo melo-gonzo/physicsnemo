@@ -146,7 +146,6 @@ layers =
    artifacts | calibrators
    predictors
    diagnostics
-   difficulty
    scores
    _quantile
    _validation
