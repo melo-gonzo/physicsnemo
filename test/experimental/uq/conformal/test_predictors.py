@@ -23,14 +23,12 @@ import torch
 from tensordict import TensorDict
 
 import physicsnemo.experimental.uq.conformal as conformal
-import physicsnemo.experimental.uq.conformal.predictors as predictor_module
 from physicsnemo.experimental.uq.conformal import (
     AbsoluteErrorScore,
     AuxDifficulty,
     CellwiseCalibrator,
     ConformalPredictor,
 )
-from physicsnemo.experimental.uq.conformal._containers import field_items
 from physicsnemo.experimental.uq.conformal._validation import points_fingerprint
 from test.experimental.uq.conformal._helpers import fit, make_predictor
 
@@ -94,7 +92,7 @@ def test_exact_cellwise_mesh_identity_and_point_alignment():
 
 
 @pytest.mark.parametrize("mutation", ["data", "numpy"])
-def test_mesh_storage_mutations_are_rejected_even_after_prediction_is_cached(mutation):
+def test_mesh_storage_mutations_are_rejected(mutation):
     points = torch.arange(4.0).reshape(4, 1)
     prediction = torch.zeros(4, 2)
     calibrator = CellwiseCalibrator(AbsoluteErrorScore(), alpha=0.5)
@@ -222,47 +220,3 @@ def test_aux_and_points_are_keyword_only():
         CellwiseCalibrator(AbsoluteErrorScore(), alpha=0.2).update_sample(
             torch.zeros(4, 2), torch.zeros(4, 2), points
         )
-
-
-@pytest.mark.parametrize("fields", [None, ["pressure", "velocity"]])
-def test_cellwise_slack_cache_reuses_and_replaces_without_changing_bounds(
-    fields, device, monkeypatch
-):
-    predictor, points = fit("cellwise", n_samples=5, shape=(6, 3), fields=fields)
-    thresholds = dict(field_items(predictor.thresholds))
-    inflate = predictor_module._slack_threshold
-    calls = []
-
-    def count_inflation(threshold, prediction):
-        calls.append((prediction.dtype, prediction.device))
-        return inflate(threshold, prediction)
-
-    monkeypatch.setattr(predictor_module, "_slack_threshold", count_inflation)
-    for dtype in (
-        torch.float32,
-        torch.float32,
-        torch.float64,
-        torch.float16,
-        torch.float16,
-        torch.float32,
-    ):
-        values = torch.linspace(-2, 2, 18, device=device, dtype=dtype).reshape(6, 3)
-        prediction = (
-            TensorDict({key: values for key in fields}, batch_size=[])
-            if fields
-            else values
-        )
-        lo, hi = predictor.predict_interval(prediction, points=points.to(device))
-        lows, highs = dict(field_items(lo)), dict(field_items(hi))
-        for key, threshold in thresholds.items():
-            expected = AbsoluteErrorScore().interval(values, threshold.to(device))
-            assert torch.equal(lows[key], expected[0])
-            assert torch.equal(highs[key], expected[1])
-    assert len(calls) == 4 * len(thresholds)
-    assert set(predictor._slack_cache) == set(thresholds)
-    assert all(entry[2].nbytes == 8 * 18 for entry in predictor._slack_cache.values())
-    assert all(not entry[2].requires_grad for entry in predictor._slack_cache.values())
-    predictor.to("cpu")
-    assert not predictor._slack_cache
-    predictor.predict_interval(prediction.cpu(), points=points.cpu())
-    assert len(calls) == 5 * len(thresholds)

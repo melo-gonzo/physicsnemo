@@ -49,12 +49,9 @@ from .difficulty import (
     _snapshot_difficulty,
 )
 from .scores import (
-    AbsoluteErrorScore,
     _NonconformityScore,
-    _outward_interval,
     _Score,
     _score_kind,
-    _slack_threshold,
     _snapshot_score,
 )
 
@@ -264,7 +261,6 @@ class ConformalPredictor:
         self._difficulty = difficulty_snapshot
         self._mesh_fingerprint = mesh_snapshot
         self._provenance = {} if provenance is None else validate_provenance(provenance)
-        self._slack_cache: dict[str, tuple[torch.dtype, torch.device, Tensor]] = {}
 
     @property
     def tier(self) -> Tier:
@@ -324,9 +320,9 @@ class ConformalPredictor:
     def to(self, device: torch.device | str) -> "ConformalPredictor":
         r"""Move the fitted thresholds to ``device`` in place.
 
-        Follows the ``torch.nn.Module.to`` convention. Threshold storage moves
-        and cached interval inflation is released. Subsequent predictions on
-        that device need no threshold transfer.
+        Follows the ``torch.nn.Module.to`` convention. Only threshold storage
+        moves, so the per-call device transfer in :meth:`predict_interval`
+        becomes a no-op for predictions on that device.
 
         Parameters
         ----------
@@ -342,7 +338,6 @@ class ConformalPredictor:
             key: value.to(device=device)
             for key, value in self._thresholds_by_key.items()
         }
-        self._slack_cache.clear()
         return self
 
     def _threshold_for(
@@ -418,12 +413,6 @@ class ConformalPredictor:
         or finiteness violation and ``KeyError`` when the prediction fields
         do not match the fitted fields.
 
-        Cellwise absolute-error prediction caches one inflated float64
-        threshold per field for its most recent prediction dtype and device
-        (eight additional bytes per element). Changing dtype/device replaces
-        that entry; :meth:`to` clears it. Mesh coordinates are still hashed
-        on every call, and caches are not serialized.
-
         Outward rounding can return infinite endpoints near the prediction
         dtype's limits. If finite bounds are needed for diagnostics, upcast
         the prediction before this call or rescale the model outputs and
@@ -462,27 +451,11 @@ class ConformalPredictor:
             check_real(key, "prediction", prediction_field)
             check_aux(key, self._score, prediction_field, aux_field)
             threshold = self._threshold_for(key, prediction_field, aux_field, points)
-            if self._tier == "cellwise" and type(self._score) is AbsoluteErrorScore:
-                signature = (prediction_field.dtype, prediction_field.device)
-                cached = self._slack_cache.get(key)
-                if cached is None or cached[:2] != signature:
-                    inflated = _slack_threshold(
-                        threshold.to(device=prediction_field.device), prediction_field
-                    )
-                    cached = (*signature, inflated)
-                    self._slack_cache[key] = cached
-                p = prediction_field.to(torch.float64)
-                lo_field, hi_field = _outward_interval(
-                    prediction_field, p - cached[2], p + cached[2]
-                )
-            else:
-                lo_field, hi_field = self._score.interval(
-                    prediction_field,
-                    threshold.to(device=prediction_field.device),
-                    aux_field,
-                )
-            lo_out[key] = lo_field
-            hi_out[key] = hi_field
+            lo_out[key], hi_out[key] = self._score.interval(
+                prediction_field,
+                threshold.to(device=prediction_field.device),
+                aux_field,
+            )
 
         if isinstance(prediction, TensorDict):
             lo = prediction.empty()

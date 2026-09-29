@@ -54,7 +54,6 @@ def test_save_load_round_trip(tier, tmp_path):
     path = tmp_path / f"{tier}.pt"
     predictor.save(path)
     loaded = ConformalPredictor.load(path)
-    assert not loaded._slack_cache
     assert type(loaded) is ConformalPredictor
     assert loaded.tier == tier
     assert loaded.alpha == predictor.alpha
@@ -68,12 +67,9 @@ def test_save_load_round_trip(tier, tmp_path):
 def test_artifact_has_one_exact_schema_and_cellwise_load_requires_the_mesh(tmp_path):
     provenance = {"dataset": "drivaer", "epoch": 300}
     path = tmp_path / "artifact.pt"
-    predictor = make_predictor(
+    make_predictor(
         tier="cellwise", thresholds=torch.ones(6, 3), mesh_fingerprint=_MESH
-    )
-    predictor.predict_interval(torch.zeros(6, 3), points=_MESH_POINTS)
-    assert predictor._slack_cache
-    predictor.save(path, provenance=provenance)
+    ).save(path, provenance=provenance)
     payload = torch.load(path, weights_only=True)
 
     assert set(payload) == {
