@@ -59,6 +59,13 @@ def test_cellwise_uses_exact_conformal_rank_and_returns_one_predictor():
     assert predictor.mesh_fingerprint == points_fingerprint(points)
 
 
+def test_plain_tensor_errors_do_not_leak_internal_key():
+    calibrator = FunctionalBandCalibrator(AbsoluteErrorScore(), alpha=0.2)
+    with pytest.raises(ValueError, match="^Plain tensor: empty sample") as excinfo:
+        calibrator.update_sample(torch.empty(0), torch.empty(0))
+    assert TENSOR_KEY not in str(excinfo.value)
+
+
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
 def test_cellwise_retains_contiguous_scores_without_changing_bits(dtype):
     """Flattening retained scores needs no corpus copy or dtype conversion."""

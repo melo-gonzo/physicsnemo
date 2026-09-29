@@ -52,6 +52,7 @@ from ._quantile import (
     validate_alpha,
 )
 from ._validation import (
+    _field_label,
     broadcast_difficulty,
     check_aux,
     check_difficulty,
@@ -94,7 +95,7 @@ def _normalized_scores(raw: Tensor, difficulty: Tensor | None, key: str) -> Tens
     underflow = (raw64 != 0) & (normalized.abs() < torch.finfo(torch.float64).tiny)
     if bool(underflow.any()):
         raise ValueError(
-            f"Field '{key}': {int(underflow.sum())} normalized score(s) "
+            f"{_field_label(key)}: {int(underflow.sum())} normalized score(s) "
             "fell below the float64 normal range; subnormal or zero quotients "
             "lose relative precision needed for interval inversion. Rescale "
             "the difficulty field or score before calibration."
@@ -183,7 +184,7 @@ class _SplitCalibratorBase:
             target_field = target_items[key]
             if prediction_field.numel() == 0:
                 raise ValueError(
-                    f"Field '{key}': empty sample; every calibration sample "
+                    f"{_field_label(key)}: empty sample; every calibration sample "
                     "must contain at least one value."
                 )
             check_exact_shape(
@@ -392,7 +393,7 @@ class CellwiseCalibrator(_SplitCalibratorBase):
             )
             if key in self._scores and score.shape != self._scores[key][0].shape:
                 raise ValueError(
-                    f"Field '{key}': score shape {tuple(score.shape)} differs "
+                    f"{_field_label(key)}: score shape {tuple(score.shape)} differs "
                     f"from the first sample's {tuple(self._scores[key][0].shape)}. "
                     "Cellwise calibration requires an identical output layout."
                 )
