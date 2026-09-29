@@ -31066,3 +31066,10 @@ controls remain the same-snapshot bases of their own ablation arms only.
 float32 scoring: the fleet manifest carried the training override `model.attention_type=GALE_FPP` without the Hydra append
 prefix, and the inference configuration has no such key. The scorer now adds the prefix itself and the manifest rows are
 corrected; the scoring array was resubmitted (job 923719). The GT-FPP reducer runs when it returns.
+
+**Ablation arms re-referenced too (added the same morning).** The Poisson ablation table of chapter 10 compared arms trained on the
+code_v7 snapshot (per-type distances, per-type harmonic measures, distances with the local aggregation, at 512 and 2,048 cases)
+against a reference from a third snapshot. To make every ratio in that table a same-snapshot pair, the three Poisson arms and the
+elasticity harmonic-measures arm were relaunched on code_v11 at 512 and 2,048 cases, two seeds each (campaign pc rows 28-43, run
+ids pc_poisson_{distonly,hm_measures,distonly_local05}_n{512,2048}_seed42/43 and pc_elasticity_hm_measures_n{512,2048}_seed42/43).
+The code_v7 lanes stay in the record; the chapter's ablation table will read the code_v11 arms against the code_v11 references.
