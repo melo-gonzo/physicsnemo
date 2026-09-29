@@ -29,7 +29,13 @@ REFS = {
     "hilift_510_w512": ({s: {k: v for k, v in shl[f"shl_med_gt_w512_c100k_seed{s}"].items() if k.endswith("_l2")} for s in ("42", "43")}, "gf_hl_gt512_fpp_medium_c100k_seed{s}", "pressure_l2"),
     "airfrans_interior": ({s: afr[f"af_gt_vol_lr1e3_seed{s}"] for s in ("42", "43")}, "gf_af_gt_vol_fpp_seed{s}", "pressure_l2"),
     "poisson_2048_w512": ({s: {"u_l2": ol[f"ol_poisson_gt512_n2048_seed{s}"]["fields"]["u"]["mean"]} for s in ("42", "43")}, "gf_poisson_gt512_fpp_n2048_seed{s}", "u_l2"),
+    # OLBC ladder (gf rows 10-19, 2026-09-29): Poisson 512 / 8,448 and elasticity 512 / 2,048 / 8,448 against the physics-attention lanes of olbc_2026-09-22.json
+    "poisson_512_w512": ({s: {"u_l2": ol[f"ol_poisson_gt512_n512_seed{s}"]["fields"]["u"]["mean"]} for s in ("42", "43")}, "gf_poisson_gt512_fpp_n512_seed{s}", "u_l2"),
+    "poisson_8448_w512": ({s: {"u_l2": ol[f"ol_poisson_gt512_n8448_seed{s}"]["fields"]["u"]["mean"]} for s in ("42", "43")}, "gf_poisson_gt512_fpp_n8448_seed{s}", "u_l2"),
 }
+for n in (512, 2048, 8448):
+    REFS[f"elasticity_{n}_w512"] = ({s: {f"{f}_l2": ol[f"ol_elasticity_gt512_n{n}_seed{s}"]["fields"][f]["mean"] for f in ("displacement", "sig11", "sig22", "sig12")} for s in ("42", "43")},
+                                    f"gf_elasticity_gt512_fpp_n{n}_seed{{s}}", "sig11_l2")
 out = {"protocol": __doc__, "datasets": {}}
 for name, (ref, pat, head) in REFS.items():
     fpp = {s: per_case(pat.format(s=s)) for s in ("42", "43")}; fpp = {s: v for s, v in fpp.items() if v}

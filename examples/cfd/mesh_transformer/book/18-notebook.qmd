@@ -31305,3 +31305,14 @@ the mechanism is not separately measured. **Verdict: refuted on both datasets (P
 1.94 and 4.4 to 6.2x).** Under the universalization rule both forms leave the model together with the Gaussian aggregation they were
 meant to repair: `local_weights`, `local_gradient`, and the aggregation itself (`local_rho`, `local_k`) are removed once the last
 record lanes (lug and DrivAerML Volume universalization pairs) are scored, and the source stays in the repository history.
+
+## 2026-09-29 — Status, GT-FPP on OLBC Poisson at 512 cases: the FLARE++ backend is 7% *worse* than physics attention here (0.299 against 0.279; 1.04 / 1.10 per seed), so the stronger GeoTransolver changes with the rung on this set; chapter 10 will quote both backends and take the stronger at each rung {#sec-nb-gt-fpp-poisson-512}
+
+The 512-case pair of the FLARE++ ladder (gf_poisson_gt512_fpp_n512, code_v11, width 512, rate 1e-3, 500 epochs, float32 over the
+256 test cases) scores 0.2957 / 0.3013 against the physics-attention lanes' 0.2833 / 0.2748: FLARE++ ÷ physics attention 1.07, above
+the 3% band on both seeds. At 2,048 cases the same pair was 0.77 (@sec-nb-gt-fpp-poisson-verdict). The two GeoTransolver backends
+therefore cross between the rungs on this set, and the "replaces the baseline on the dataset" rule of the preregistration is too coarse
+to apply as written. **The reading the chapter will use: both backends are quoted on the OLBC ladders, and the headline
+GeoTransolver-512 ÷ ISLA ratio at each rung is taken against the stronger backend at that rung** (physics attention at 512, FLARE++ at
+2,048; 8,448 pending, gf rows 12-13). Against the current-snapshot ISLA reference at 512 cases (0.2004, @sec-nb-olbc-reference-correction)
+the stronger GeoTransolver-512 leads by 1.39x in ISLA's favor either way. Data: results/gt_fpp_2026-09-29.json.
