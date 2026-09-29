@@ -16,16 +16,14 @@
 
 r"""Private helpers shared by the conformal package.
 
-Field-container dispatch (a plain tensor or a ``TensorDict``), exact
-conformal rank and order-statistic arithmetic, and the input-contract
-validators. Each rule lives in one function so the calibrate and predict
-boundaries cannot drift apart.
+Field-container handling (plain tensor or ``TensorDict``), exact conformal
+rank arithmetic, and input validators that calibration and prediction share,
+so both apply the same checks.
 
-Threshold dtype policy: the calibrated threshold must never round below the
-selecting order statistic, or the finite-sample guarantee is void.
-Quantiles are computed in the scores' promoted dtype (no silent down-casts),
-and :func:`cast_directed` rounds in a chosen direction whenever precision
-must be reduced.
+A calibrated threshold must never round below its order statistic, or the
+finite-sample guarantee fails. Quantiles therefore stay in the scores'
+promoted dtype, and :func:`cast_directed` rounds outward whenever a cast
+loses precision.
 """
 
 import hashlib
@@ -51,10 +49,7 @@ def field_items(
     x: Tensor | TensorDict,
     keys: Sequence[str] | None = None,
 ) -> list[tuple[str, Tensor]]:
-    """Normalize a tensor or ``TensorDict`` into sorted ``(key, tensor)`` pairs.
-
-    A plain tensor maps to one pair keyed by :data:`TENSOR_KEY`.
-    """
+    """Return sorted ``(key, tensor)`` pairs; a plain tensor uses :data:`TENSOR_KEY`."""
     if isinstance(x, Tensor):
         if keys is not None:
             raise TypeError(
@@ -111,7 +106,7 @@ def slice_aux(
     aux: Mapping[str, Tensor] | Mapping[str, Mapping[str, Tensor]] | None,
     field: str,
 ) -> Mapping[str, Tensor] | None:
-    """Select one field's aux mapping (nested by field for ``TensorDict`` inputs)."""
+    """Return one field's aux mapping; ``TensorDict`` inputs nest aux by field."""
     if aux is None:
         return None
     if not isinstance(aux, Mapping):
@@ -133,7 +128,7 @@ def slice_aux(
 
 
 def validate_alpha(alpha: object) -> float:
-    """Return ``alpha`` as a float in ``(0, 1)``, rejecting non-float-exact values."""
+    """Return ``alpha`` as a float in ``(0, 1)``; reject values that are not exact floats."""
     if isinstance(alpha, bool) or not isinstance(alpha, Real):
         raise TypeError(f"alpha must be a real number, got {alpha!r}.")
     as_float = float(alpha)
@@ -150,7 +145,7 @@ def validate_alpha(alpha: object) -> float:
 
 
 def validate_n_cal(n_cal: object) -> int:
-    """Return ``n_cal`` as a positive ``int`` (``bool`` is not an int here)."""
+    """Return ``n_cal`` as a positive ``int``; reject ``bool``."""
     if isinstance(n_cal, bool) or not isinstance(n_cal, int):
         raise TypeError(f"n_cal must be an integer, got {n_cal!r}.")
     if n_cal < 1:
@@ -159,10 +154,10 @@ def validate_n_cal(n_cal: object) -> int:
 
 
 def alpha_as_fraction(alpha: float) -> Fraction:
-    """The declared ``alpha`` as an exact rational (the shortest round-trip decimal).
+    """Return ``alpha`` as an exact fraction of its shortest decimal form.
 
-    All rank arithmetic is exact on the typed decimal: no float tolerance both
-    keeps ``150 * 0.82 == 123`` and rounds ``alpha=0.49999999995`` up.
+    Exact arithmetic keeps ``150 * 0.82 == 123`` and still rounds
+    ``alpha=0.49999999995`` up; no single float tolerance does both.
     """
     return Fraction(str(validate_alpha(alpha)))
 
@@ -170,8 +165,8 @@ def alpha_as_fraction(alpha: float) -> Fraction:
 def require_feasible_alpha(n_cal: int, alpha: float) -> None:
     """Require ``alpha >= 1 / (n_cal + 1)``.
 
-    Below it the quantile rank exceeds ``n_cal`` and the CRC bound is
-    unsatisfiable even at zero risk; both tiers share this one check.
+    Below that, the quantile rank exceeds ``n_cal`` and the CRC bound cannot be
+    met even at zero risk.
     """
     alpha_exact = alpha_as_fraction(alpha)
     n_cal = validate_n_cal(n_cal)
@@ -187,7 +182,7 @@ def require_feasible_alpha(n_cal: int, alpha: float) -> None:
 
 
 def conformal_quantile_index(n_cal: int, alpha: float) -> int:
-    """Return ``k = ceil((n_cal + 1)(1 - alpha))`` exactly, ``1 <= k <= n_cal``."""
+    """Return ``k = ceil((n_cal + 1)(1 - alpha))`` exactly; ``1 <= k <= n_cal``."""
     require_feasible_alpha(n_cal, alpha)
     return math.ceil((n_cal + 1) * (1 - alpha_as_fraction(alpha)))
 
@@ -198,10 +193,10 @@ def kth_smallest_of_samples(
     *,
     chunk_numel: int = 2**26,
 ) -> Float[Tensor, "*dims"]:
-    """``torch.kthvalue(torch.stack(per_sample), k, dim=0)`` in ``chunk_numel`` chunks.
+    """Return the elementwise ``k``-th smallest value across samples.
 
-    Uses ``kthvalue`` rather than ``torch.quantile``: exact, and free of the
-    ``2**24``-element input limit. Computed in the samples' promoted dtype.
+    ``kthvalue`` is exact and, unlike ``torch.quantile``, has no
+    ``2**24``-element limit. The result uses the samples' promoted dtype.
     """
     n = len(per_sample)
     first = per_sample[0]
@@ -237,13 +232,13 @@ def cast_directed(t: Tensor, dtype: torch.dtype, *, up: bool) -> Tensor:
 
 
 Tier = Literal["cellwise", "functional", "risk_control"]
-"""The one shared spelling of the guarantee-tier vocabulary."""
+"""Guarantee tier names."""
 
 TIERS: tuple[str, ...] = get_args(Tier)
 
 
 def _field_label(key: str) -> str:
-    """Name a field in user-facing messages without leaking the tensor sentinel."""
+    """Name a field in error messages; plain tensors never show :data:`TENSOR_KEY`."""
     return "Plain tensor" if key == TENSOR_KEY else f"Field '{key}'"
 
 
@@ -266,9 +261,10 @@ def check_points(points: Tensor) -> Tensor:
 def points_fingerprint(
     points: Tensor,
 ) -> str:
-    """Return an order-sensitive exact SHA-256 fingerprint of point coordinates.
+    """Return a SHA-256 hash of point coordinates, dtype, and shape; order matters.
 
-    Not memoized: ``.data`` or ``.numpy()`` writes skip the version counter.
+    Not cached: in-place writes through ``.data`` or ``.numpy()`` do not bump
+    the version counter.
     """
     check_points(points)
     tensor = points.detach().cpu().contiguous()
@@ -282,7 +278,7 @@ def points_fingerprint(
 def check_point_alignment(
     key: str, tensor: Tensor, points: Tensor, name: str = "prediction"
 ) -> Tensor:
-    """Require one leading tensor entry per supplied mesh point."""
+    """Require one leading entry of ``tensor`` per mesh point."""
     if tensor.ndim == 0 or tensor.shape[0] != points.shape[0]:
         raise ValueError(
             f"{_field_label(key)} ({name}): when points= is supplied it must have one "
@@ -293,7 +289,7 @@ def check_point_alignment(
 
 
 def require_single_rank(what: str) -> None:
-    """Fail closed when any initialized ``torch.distributed`` group spans ranks."""
+    """Raise when ``torch.distributed`` is initialized with more than one rank."""
     if (
         torch.distributed.is_available()
         and torch.distributed.is_initialized()
@@ -308,7 +304,7 @@ def require_single_rank(what: str) -> None:
 def clamp_min_floor(t: Tensor, eps: float) -> Tensor:
     """Clamp ``t`` to at least ``max(eps, finfo(t.dtype).tiny)``.
 
-    ``eps`` alone can underflow to zero in float16; every scale floor shares this.
+    ``eps`` alone can underflow to zero in float16.
     """
     if not math.isfinite(eps):
         raise ValueError(f"eps must be finite, got {eps}.")
@@ -325,7 +321,7 @@ def clamp_min_floor(t: Tensor, eps: float) -> Tensor:
 
 
 def broadcast_difficulty(t: Tensor, ref: Tensor, key: str) -> Tensor:
-    """Right-pad per-point difficulty with singleton dims to match ``ref``."""
+    """Reshape per-point difficulty to ``(n_points, 1, ...)`` to broadcast on ``ref``."""
     if t.ndim == 0:
         return t
     if ref.shape[0] != t.shape[0]:
@@ -338,7 +334,7 @@ def broadcast_difficulty(t: Tensor, ref: Tensor, key: str) -> Tensor:
 
 
 def normalize_keys(keys: Sequence[str] | None) -> tuple[str, ...] | None:
-    """Normalize ``keys`` to a deduplicated tuple or ``None``; reject a bare string."""
+    """Return ``keys`` as a deduplicated tuple or ``None``; reject a single string."""
     if keys is None:
         return None
     if isinstance(keys, str):
@@ -366,7 +362,7 @@ def positive_finite_float(value: object, name: str) -> float:
 def require_matching_keys(
     present: Iterable[str], expected: Iterable[str], subject: str
 ) -> None:
-    """Require two field-key sets to match exactly."""
+    """Raise ``KeyError`` unless both key sets are equal."""
     present = set(present)
     expected = set(expected)
     if present != expected:
@@ -377,7 +373,7 @@ def require_matching_keys(
 def check_exact_shape(
     key: str, name: str, tensor: Tensor, reference_name: str, reference: Tensor
 ) -> Tensor:
-    """Require ``tensor.shape == reference.shape`` exactly."""
+    """Require ``tensor.shape == reference.shape``, with no broadcasting."""
     if tensor.shape != reference.shape:
         raise ValueError(
             f"{_field_label(key)}: {name} shape {tuple(tensor.shape)} != "
@@ -394,9 +390,9 @@ def check_aux(
     prediction: Tensor,
     aux: Mapping[str, Tensor] | None,
 ) -> None:
-    """Require the aux entries a score reads to be finite and prediction-shaped.
+    """Require the score's aux entries to be finite and match the prediction shape.
 
-    Shared by calibrate and predict: ``+inf`` sigma would otherwise zero a score.
+    An infinite sigma would otherwise make the score zero.
     """
     if aux is None:
         return
@@ -426,7 +422,7 @@ def check_floating(key: str, name: str, tensor: Tensor) -> Tensor:
 
 
 def check_finite(key: str, name: str, tensor: Tensor) -> Tensor:
-    """Reject NaN/inf values with an actionable per-field message."""
+    """Reject NaN and inf values with a per-field message."""
     if not torch.isfinite(tensor).all():
         n_bad = int((~torch.isfinite(tensor)).sum())
         raise ValueError(
@@ -443,7 +439,7 @@ def check_real(key: str, name: str, tensor: Tensor) -> Tensor:
 
 
 def _strict_json_snapshot(value: Any, name: str) -> Any:
-    """Validate and detach a strict-JSON value without implicit coercion."""
+    """Return a copy of a strict-JSON value; reject other types without coercion."""
     if value is None or type(value) in (str, int, bool):
         return value
     if type(value) is float:
@@ -470,7 +466,7 @@ def _strict_json_snapshot(value: Any, name: str) -> Any:
 
 
 def validate_provenance(value: object) -> dict:
-    """Snapshot a predictor's strict-JSON provenance mapping."""
+    """Validate and copy a predictor's strict-JSON provenance mapping."""
     if not isinstance(value, Mapping):
         raise TypeError(f"provenance must be a mapping, got {type(value).__name__}.")
     snapshot = _strict_json_snapshot(value, "provenance")

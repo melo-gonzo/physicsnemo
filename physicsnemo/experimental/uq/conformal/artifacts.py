@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-r"""Portable, ``weights_only``-safe artifacts for fitted conformal predictors."""
+r"""Save and load conformal predictors as ``weights_only``-safe files."""
 
 import os
 import tempfile
@@ -43,7 +43,7 @@ _SCHEMA_KEYS = {
     "mesh_fingerprint",
     "provenance",
 }
-# One kwarg table per strategy kind, shared by encoder and decoder.
+# Saved constructor kwargs and their exact types, per strategy kind.
 _SCORE_KWARG_TYPES = {
     "absolute_error": {},
     "normalized_error": {"eps": float},
@@ -55,7 +55,7 @@ _DIFFICULTY_KWARG_TYPES = {
 
 
 def _check_exact_keys(value: object, expected: set[str], where: str) -> Mapping:
-    """Require one exact mapping schema."""
+    """Require a mapping with exactly the ``expected`` keys."""
     if not isinstance(value, Mapping):
         raise ValueError(f"{where} must be a mapping, got {type(value).__name__}.")
     keys = set(value)
@@ -72,7 +72,7 @@ def _check_exact_keys(value: object, expected: set[str], where: str) -> Mapping:
 
 
 def _strategy_spec(strategy: object, registry: Mapping, kwarg_types: Mapping) -> dict:
-    """Encode one exact built-in strategy from the shared kwarg table."""
+    """Encode a built-in score or difficulty as ``{"kind", "kwargs"}``."""
     kind = _strategy_kind(strategy, registry)
     return {
         "kind": kind,
@@ -86,7 +86,7 @@ def _resolve_strategy(
     kwarg_types: Mapping[str, Mapping[str, type]],
     what: str,
 ):
-    """Reconstruct one exact built-in strategy spec."""
+    """Rebuild a built-in score or difficulty from its saved spec."""
     spec = _check_exact_keys(spec, {"kind", "kwargs"}, f"Artifact {what} spec")
     kind = spec["kind"]
     if type(kind) is not str or kind not in registry:
@@ -114,7 +114,7 @@ def _resolve_strategy(
 
 
 def _wire_thresholds(value: object) -> Tensor | TensorDict:
-    """Validate the tensor-only threshold mapping stored in an artifact."""
+    """Check the saved threshold mapping and repack it."""
     if not isinstance(value, Mapping):
         raise ValueError("Artifact thresholds must be a mapping.")
     for key, threshold in value.items():
@@ -129,7 +129,7 @@ def _wire_thresholds(value: object) -> Tensor | TensorDict:
 
 
 def _parse_artifact(payload: object) -> ConformalPredictor:
-    """Validate the one supported conformal artifact schema."""
+    """Check a loaded payload against the artifact schema and build the predictor."""
     marker = payload.get("format") if isinstance(payload, Mapping) else type(payload)
     if type(marker) is not str or marker != _ARTIFACT_FORMAT:
         raise ValueError(
@@ -171,7 +171,7 @@ def _parse_artifact(payload: object) -> ConformalPredictor:
 def _artifact_payload(
     predictor: ConformalPredictor, provenance: Mapping | None
 ) -> dict:
-    """Encode public predictor state; :func:`_save_predictor` validates the read-back."""
+    """Encode a predictor as a ``torch.save`` payload."""
     chosen_provenance = predictor.provenance if provenance is None else provenance
     difficulty = predictor.difficulty
     return {
@@ -203,7 +203,7 @@ def _save_predictor(
     *,
     provenance: Mapping | None = None,
 ) -> None:
-    """Atomically write a weights-only-safe conformal artifact."""
+    """Write the artifact atomically after checking that it loads."""
     payload = _artifact_payload(predictor, provenance)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -211,7 +211,7 @@ def _save_predictor(
     try:
         with os.fdopen(descriptor, "wb") as handle:
             torch.save(payload, handle)
-        # Free the payload so the read-back is the only extra threshold copy.
+        # Free the payload first so saving keeps at most one extra threshold copy.
         del payload
         _load_predictor(temporary, map_location="cpu")
         os.replace(temporary, path)
@@ -226,7 +226,7 @@ def _save_predictor(
 def _load_predictor(
     path: Path | str, map_location: str | torch.device = "cpu"
 ) -> ConformalPredictor:
-    """Implementation of :meth:`ConformalPredictor.load`."""
+    """Load and validate an artifact for :meth:`ConformalPredictor.load`."""
     payload = torch.load(path, map_location=map_location, weights_only=True)
     try:
         return _parse_artifact(payload)

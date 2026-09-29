@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-r"""Single-rank, tier-aligned empirical diagnostics for conformal intervals."""
+r"""Held-out coverage and width checks for fitted conformal predictors."""
 
 import math
 from collections.abc import Sequence
@@ -46,7 +46,7 @@ __all__ = ["CoverageAccumulator"]
 
 @dataclass
 class _FieldCounters:
-    """Minimal streaming state for one field."""
+    """Running totals for one field."""
 
     coverage_sum: float = 0.0
     width_sum: float = 0.0
@@ -55,42 +55,47 @@ class _FieldCounters:
 
 
 def _minimum_hits_at_target(n_samples: int, alpha: float) -> int:
-    """Exact count required for empirical coverage of at least ``1 - alpha``."""
+    """Smallest hit count that reaches coverage ``1 - alpha`` over ``n_samples``."""
     return math.ceil(n_samples * (1 - alpha_as_fraction(alpha)))
 
 
 class CoverageAccumulator:
-    r"""Accumulate empirical evaluation statistics aligned to a predictor tier.
+    r"""Measure coverage and interval width of a fitted predictor on held-out data.
 
-    Create instances through ``coverage_accumulator()`` on a fitted
-    :class:`~physicsnemo.experimental.uq.conformal.ConformalPredictor`,
-    which fixes the aggregation to the predictor's guarantee tier so a report
-    cannot silently describe a different empirical event than the fitted
-    guarantee. Feed held-out ``(lo, hi, target)`` triples through
-    :meth:`update` and read the report from :meth:`finalize`. The empirical
-    event per tier is: element covered (cellwise, per-element marginal
-    coverage), whole field covered simultaneously (functional), and fraction
-    of miscovered points per sample (conformal risk control (CRC)).
+    Use it to check that a
+    :class:`~physicsnemo.experimental.uq.conformal.ConformalPredictor` reaches
+    its target on data not used for calibration, and to compare interval
+    widths across scores or tiers. Get one from
+    ``predictor.coverage_accumulator()`` instead of constructing it, so the
+    report measures the event that the predictor's tier guarantees:
+
+    - ``"cellwise"``: how often each element lies inside its interval.
+    - ``"functional"``: how often a whole sample lies inside its band.
+    - ``"risk_control"``: the mean fraction of points per sample that fall
+      outside the interval.
+
+    Call :meth:`update` once per held-out sample, then :meth:`finalize` for
+    the report.
 
     Parameters
     ----------
     tier : {"cellwise", "functional", "risk_control"}
-        Guarantee tier whose empirical event is accumulated.
+        Tier of the predictor; selects the reported statistic.
     alpha : float
-        Target miscoverage (or risk) level in :math:`(0, 1)`, reported as
-        metadata and used for the cellwise at-target fraction.
+        The predictor's target miscoverage (or risk) level in :math:`(0, 1)`.
+        Reported in the metadata and used to count cellwise elements at or
+        above target coverage.
     n_cal : int
-        Number of calibration samples of the predictor, reported as metadata.
+        Number of calibration samples of the predictor; reported only.
     keys : Sequence[str], optional
-        Calibrated field names for ``TensorDict`` inputs; ``None`` selects
-        plain-tensor mode. Default is ``None``.
+        Calibrated field names for ``TensorDict`` inputs, or ``None`` for
+        plain tensors. Default is ``None``.
 
     Notes
     -----
-    Diagnostics are single-rank: :meth:`finalize` and
-    :attr:`empirical_coverage_map` raise ``NotImplementedError`` when an
-    initialized ``torch.distributed`` group spans several ranks. Gather
-    evaluation samples onto one rank first.
+    Runs on one rank: :meth:`finalize` and :attr:`empirical_coverage_map`
+    raise ``NotImplementedError`` when ``torch.distributed`` is initialized
+    with more than one rank. Gather the held-out samples onto one rank first.
 
     Examples
     --------
@@ -140,18 +145,18 @@ class CoverageAccumulator:
         hi: Float[Tensor, "*dims"] | TensorDict,
         target: Float[Tensor, "*dims"] | TensorDict,
     ) -> None:
-        r"""Validate and accumulate one interval/target sample transactionally.
+        r"""Add one held-out sample to the statistics.
 
-        Field containers may carry a superset of the fitted fields (e.g. the
-        model's natural full output as ``target``): the fitted keys are
-        selected automatically, mirroring ``predict_interval`` on
+        ``TensorDict`` inputs may contain fields beyond the calibrated ones (for
+        example the model's full output as ``target``); only the calibrated
+        fields are read, as in ``predict_interval`` on
         :class:`~physicsnemo.experimental.uq.conformal.ConformalPredictor`.
 
         Parameters
         ----------
         lo : torch.Tensor | TensorDict
-            Lower bounds of shape :math:`(*\text{dims})`, or a field container
-            of such tensors.
+            Lower bounds from ``predict_interval``, of shape
+            :math:`(*\text{dims})`, or a ``TensorDict`` of such tensors.
         hi : torch.Tensor | TensorDict
             Upper bounds, same shape and container type as ``lo``.
         target : torch.Tensor | TensorDict
@@ -160,26 +165,33 @@ class CoverageAccumulator:
         Returns
         -------
         None
-            The sample's statistics are committed to the accumulator.
+
+        Raises
+        ------
+        TypeError
+            If the inputs are plain tensors for a predictor calibrated on
+            ``TensorDict`` fields (or the reverse), or use a non-floating
+            dtype.
+        KeyError
+            If a ``TensorDict`` lacks a calibrated field.
+        ValueError
+            If ``target`` is empty, shapes differ, a value is NaN or
+            infinite, a width or the running width sum overflows float64, or
+            (cellwise) the sample shape differs from earlier samples.
 
         Notes
         -----
-        Nothing is committed unless every field validates, so a rejected
-        sample leaves the accumulator unchanged. Raises ``ValueError`` on a
-        shape mismatch, non-finite value, width or width-sum overflow, or
-        (cellwise tier) a sample shape that differs from earlier updates,
-        and ``TypeError`` when the container type does not match the fitted
-        mode.
+        A rejected sample is not counted, even in fields that passed.
 
-        Diagnostics require finite bounds and targets. Conservative prediction
-        bounds may become infinite when they overflow the prediction's dtype.
-        Upcast the prediction (e.g. to float32) before calling
-        ``predict_interval`` and recompute the bounds; upcasting infinite
-        bounds afterward does not repair them. If widths or their accumulated
-        sum overflow float64, rescale interval bounds and targets consistently
-        and restart diagnostics.
+        Prediction bounds are rounded outward, so they can overflow to
+        infinity in the prediction's dtype and be rejected here. Cast the
+        prediction to a wider dtype (for example float32) before calling
+        ``predict_interval`` and recompute the bounds; casting infinite
+        bounds afterward does not fix them. If widths overflow float64,
+        rescale bounds and targets by the same factor and start a new
+        accumulator.
         """
-        # field_items(..., self._keys) yields exactly the keys of self._counters.
+        # field_items with self._keys returns the same keys as self._counters.
         inputs = (("lo", lo), ("hi", hi), ("target", target))
         containers = {
             name: dict(field_items(value, self._keys)) for name, value in inputs
@@ -210,8 +222,7 @@ class CoverageAccumulator:
                     "endpoints are finite. Rescale interval bounds and targets "
                     "consistently, and restart diagnostics."
                 )
-            # Quantile regression may produce an empty prediction set when a
-            # valid negative calibrated threshold contracts a narrower base band.
+            # A negative quantile-regression threshold can give hi < lo: width 0.
             widths = widths.clamp_min(0.0)
             # Nonnegative widths make this catch both sample and total overflow.
             width_total = self._counters[key].width_sum + float(widths.sum())
@@ -256,15 +267,24 @@ class CoverageAccumulator:
 
     @property
     def empirical_coverage_map(self) -> Float[Tensor, "*dims"] | TensorDict:
-        r"""Per-element empirical coverage for a cellwise predictor.
+        r"""Fraction of samples in which each element was covered (cellwise only).
+
+        Use it to locate the regions of the mesh that the predictor under- or
+        over-covers.
 
         Returns
         -------
         torch.Tensor | TensorDict
-            Fraction of accumulated samples in which each element was
-            covered, of the calibrated shape :math:`(*\text{dims})` per field,
-            in float64. Raises ``RuntimeError`` for non-cellwise tiers or
-            before the first update.
+            Float64 coverage per element, of the calibrated shape
+            :math:`(*\text{dims})`, one tensor per field for ``TensorDict``
+            inputs.
+
+        Raises
+        ------
+        RuntimeError
+            If the tier is not cellwise, or before the first :meth:`update`.
+        NotImplementedError
+            If ``torch.distributed`` runs with more than one rank.
         """
         require_single_rank("diagnostics")
         if self._tier != "cellwise":
@@ -281,19 +301,32 @@ class CoverageAccumulator:
         )
 
     def finalize(self) -> dict:
-        r"""Return a strict-JSON tier-aligned empirical diagnostic report.
+        r"""Return the coverage report as a JSON-serializable ``dict``.
 
         Returns
         -------
         dict
-            ``{"_meta": {...}, <field>: {...}}`` where ``_meta`` records the
-            tier, ``alpha``, ``n_cal``, and the target coverage or risk, and
-            each field entry (``"value"`` in plain-tensor mode) records
-            ``n_samples``, the element-weighted mean interval width, and the
-            tier's empirical statistic: per-element coverage summaries
-            (cellwise), ``whole_field_coverage`` (functional), or
-            ``empirical_mean_risk`` (risk control). Statistics are ``None``
-            before the first update.
+            ``{"_meta": {...}, <field>: {...}}``. ``_meta`` holds ``tier``,
+            ``alpha``, ``n_cal``, and ``target_coverage`` (``1 - alpha``), or
+            ``target_risk`` (``alpha``) for risk control. Each field entry
+            (key ``"value"`` for plain tensors) holds ``n_samples``,
+            ``element_weighted_mean_interval_width`` (mean width over every
+            element of every sample), and the tier's statistic:
+
+            - cellwise: ``mean_element_coverage``,
+              ``minimum_element_coverage``, and
+              ``fraction_elements_at_or_above_target``.
+            - functional: ``whole_field_coverage``, the fraction of samples
+              inside the band everywhere.
+            - risk control: ``empirical_mean_risk``, the mean fraction of
+              points per sample with any value outside the interval.
+
+            Statistics are ``None`` before the first :meth:`update`.
+
+        Raises
+        ------
+        NotImplementedError
+            If ``torch.distributed`` runs with more than one rank.
         """
         require_single_rank("diagnostics")
         metadata = {

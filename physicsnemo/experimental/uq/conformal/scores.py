@@ -16,35 +16,41 @@
 
 r"""Nonconformity scores for conformal prediction.
 
-A nonconformity score quantifies, elementwise, how badly a prediction
-disagrees with an observed target. Every score also knows how to invert a
-calibrated threshold into a prediction interval, so calibrators and fitted
-predictors are score-agnostic.
+A score measures, per element, how far a target falls from a prediction,
+and turns a calibrated threshold back into an interval ``(lo, hi)``. Pass a
+score to a calibrator; you rarely need to call its methods yourself.
 
-That invertibility is what separates a nonconformity score from an error
-metric: a metric (MAE, RMSE) is a scalar read after the fact, whereas a
-score is an elementwise residual. Its returned interval conservatively
-encloses the sublevel set :math:`\{y : \text{score}(\hat y, y) \le t\}`.
-The ``...Score`` suffix marks that distinction; these classes are not error
-metrics and are not interchangeable with ``physicsnemo`` metrics.
+Choose the score by what your model outputs:
 
-Scores operate on plain tensors; field-container (``TensorDict``) iteration
-is handled by the calibrators. Optional ``aux`` inputs carry the built-in
-score data: predicted standard deviations (``"sigma"``) or quantile heads
-(``"lo"``/``"hi"``).
+- :class:`AbsoluteErrorScore`: a point prediction only. The interval
+  half-width comes only from the calibrated threshold.
+- :class:`NormalizedErrorScore`: a mean and a standard deviation, with the
+  standard deviation passed as ``aux["sigma"]``. Intervals widen where
+  sigma is large.
+- :class:`QuantileRegressionScore`: lower and upper quantile heads, passed
+  as ``aux["lo"]`` and ``aux["hi"]``. Intervals follow the heads.
 
-:class:`AuxDifficulty` is the one shipped difficulty field: a positive
-per-point scale :math:`s(x)` that the functional-band and conformal risk
-control (CRC) tiers multiply into the fitted threshold. Because :math:`s` is
-evaluated per query point, calibration samples and queries may have
-different point sets. No difficulty field (:math:`s = 1`) is valid but
-conservative.
+Scores are not error metrics: a metric such as MAE or RMSE reduces to one
+number, while a score returns one value per element and can be inverted
+into an interval. Do not use them in place of ``physicsnemo`` metrics.
+
+For tensor inputs, ``aux`` maps each key to a tensor; for ``TensorDict``
+inputs, it maps each field name to such a mapping.
+
+:class:`AuxDifficulty` is an optional per-point scale :math:`s(x)` for the
+functional-band and conformal risk control (CRC) calibrators. The fitted
+threshold is multiplied by :math:`s(x)`, so the band widens where
+:math:`s` is large. Because :math:`s` is evaluated at each query point,
+calibration and deployment samples may have different point sets. Without
+a difficulty field (:math:`s = 1`) coverage still holds, but bands can be
+wider than needed.
 
 .. warning::
-    The difficulty field must be fixed independently of the calibration
-    samples: fit it on training residuals or a split disjoint from
-    calibration. Fitting :math:`s` on the calibration set voids the coverage
-    guarantee (the scores are no longer exchangeable with test scores).
+    Whatever produces the difficulty values must not see the calibration
+    samples: fit it on training data or on a split separate from
+    calibration. If :math:`s` is fit on the calibration set, the coverage
+    guarantee no longer holds, because calibration scores are no longer
+    exchangeable with test scores.
 """
 
 import copy
@@ -65,7 +71,7 @@ __all__ = [
 
 
 def _coarsest_finfo(*tensors: Tensor | None) -> torch.finfo:
-    """``finfo`` of the least-precise floating dtype among the inputs (aux included)."""
+    """``finfo`` of the least precise floating dtype among the inputs."""
     infos = [
         torch.finfo(t.dtype)
         for t in tensors
@@ -77,10 +83,7 @@ def _coarsest_finfo(*tensors: Tensor | None) -> torch.finfo:
 
 
 def _slack_threshold(threshold: Tensor, *dtype_sources: Tensor | None) -> Tensor:
-    """Float64 threshold inflated by ``4 * eps * |t| + 4 * tiny`` of the coarsest dtype.
-
-    The slack dominates score rounding, so no score-admitted target is excluded.
-    """
+    """Float64 threshold, inflated so rounding cannot exclude an admitted target."""
     t = threshold.to(torch.float64)
     fi = _coarsest_finfo(*dtype_sources)
     return t + (t.abs() * (4.0 * fi.eps) + 4.0 * fi.tiny)
@@ -89,7 +92,7 @@ def _slack_threshold(threshold: Tensor, *dtype_sources: Tensor | None) -> Tensor
 def _outward_interval(
     prediction: Tensor, lo64: Tensor, hi64: Tensor
 ) -> tuple[Tensor, Tensor]:
-    """Round float64 endpoints outward: ``score <= threshold`` implies ``lo <= y <= hi``."""
+    """Cast float64 bounds to the prediction dtype, rounding outward."""
     return (
         cast_directed(lo64, prediction.dtype, up=False),
         cast_directed(hi64, prediction.dtype, up=True),
@@ -99,7 +102,7 @@ def _outward_interval(
 def _require_aux(
     aux: Mapping[str, Tensor] | None, keys: tuple[str, ...], score_name: str
 ) -> None:
-    """Require the aux keys a score reads; entry types are checked by ``check_aux``."""
+    """Raise ``ValueError`` if ``aux`` lacks any of ``keys``."""
     missing = [k for k in keys if not isinstance(aux, Mapping) or k not in aux]
     if missing:
         raise ValueError(
@@ -110,20 +113,10 @@ def _require_aux(
 
 
 class _NonconformityScore:
-    r"""Internal base shared by the shipped score strategies.
+    """Base class for the built-in scores.
 
-    Only the shipped subclasses below are accepted by calibrators and
-    predictors (they are the serializable strategies). :meth:`score`
-    (calibration time) and :meth:`interval` (prediction time) are related by
-    the property that the prediction set
-    :math:`\{y : \text{score}(\hat y, y) \le t\}` lies within
-    :math:`[\text{lo}, \text{hi}] = \text{interval}(\hat y, t)` elementwise.
-    Finite-precision inversion gives a conservative enclosure of this
-    sublevel set.
-
-    ``aux_keys`` lists the aux keys a score reads; ``scale_aux_keys`` is the
-    subset it divides the residual by. Intervals must never round inward, or
-    the finite-sample coverage is lost.
+    ``aux_keys`` lists the aux entries a score reads; ``scale_aux_keys`` lists
+    the ones it divides by.
     """
 
     aux_keys: tuple[str, ...] = ()
@@ -135,7 +128,9 @@ class _NonconformityScore:
         target: Float[Tensor, "*dims"],
         aux: Mapping[str, Tensor] | None = None,
     ) -> Float[Tensor, "*dims"]:
-        r"""Elementwise nonconformity of ``target`` given ``prediction``.
+        r"""Per-element nonconformity of ``target`` given ``prediction``.
+
+        Larger values mean the target fits the prediction worse.
 
         Parameters
         ----------
@@ -144,16 +139,21 @@ class _NonconformityScore:
         target : torch.Tensor
             Observed values, same shape as ``prediction``.
         aux : Mapping[str, torch.Tensor], optional
-            Finite real floating-point tensors read by the score
-            (``aux_keys``), each of the same shape as ``prediction``.
-            Default is ``None``, which means no aux mapping; only scores
-            without required aux keys allow omission. Required entries must
-            be tensors, not ``None``.
+            Extra model outputs the score needs, each a finite real
+            floating-point tensor of the same shape as ``prediction``:
+            ``{"sigma": ...}`` for ``NormalizedErrorScore`` and
+            ``{"lo": ..., "hi": ...}`` for ``QuantileRegressionScore``.
+            ``AbsoluteErrorScore`` needs none. Default is ``None``.
 
         Returns
         -------
         torch.Tensor
             Nonconformity scores of shape :math:`(*\text{dims})`.
+
+        Raises
+        ------
+        ValueError
+            If a required ``aux`` entry is missing.
         """
         raise NotImplementedError
 
@@ -163,41 +163,45 @@ class _NonconformityScore:
         threshold: Float[Tensor, "*dims"] | Float[Tensor, ""],
         aux: Mapping[str, Tensor] | None = None,
     ) -> tuple[Float[Tensor, "*dims"], Float[Tensor, "*dims"]]:
-        r"""Invert a calibrated ``threshold`` into an interval ``(lo, hi)``.
+        r"""Turn a calibrated ``threshold`` into an interval ``(lo, hi)``.
 
         Parameters
         ----------
         prediction : torch.Tensor
             Model output of shape :math:`(*\text{dims})`.
         threshold : torch.Tensor
-            Fitted conformal quantile broadcastable against ``prediction``:
-            an elementwise tensor of shape :math:`(*\text{dims})` for the
-            cellwise tier, or a scalar (already multiplied by the difficulty
-            field, when one is configured) for the functional and
-            risk-control tiers.
+            Fitted threshold, broadcastable against ``prediction``: one value
+            per element of shape :math:`(*\text{dims})` for the cellwise
+            calibrator, or a scalar (already multiplied by the difficulty
+            field, when one is set) for the functional-band and risk-control
+            calibrators.
         aux : Mapping[str, torch.Tensor], optional
-            Finite real floating-point tensors read by the score
-            (``aux_keys``), each of the same shape as ``prediction``.
-            Default is ``None``, which means no aux mapping; only scores
-            without required aux keys allow omission. Required entries must
-            be tensors, not ``None``.
+            The same ``aux`` entries that :meth:`score` needs. Default is
+            ``None``.
 
         Returns
         -------
         tuple[torch.Tensor, torch.Tensor]
             Lower and upper bounds ``(lo, hi)``, each of shape
-            :math:`(*\text{dims})` and in the dtype of ``prediction``.
+            :math:`(*\text{dims})` and in the dtype of ``prediction``. Bounds
+            are rounded outward, so every target the threshold admits lies
+            inside them, even in low precision.
+
+        Raises
+        ------
+        ValueError
+            If a required ``aux`` entry is missing.
         """
         raise NotImplementedError
 
 
 class AbsoluteErrorScore(_NonconformityScore):
-    r"""Absolute error residual :math:`|y - \hat y|`.
+    r"""Absolute error :math:`|y - \hat y|`, for models that output a point prediction.
 
-    The default score for deterministic models: no architectural
-    requirements and no aux inputs. A calibrated threshold :math:`t` inverts
-    to the interval :math:`[\hat y - t, \hat y + t]`. This is the split
-    conformal score of `Distribution-Free Predictive Inference for Regression
+    The default choice: it needs no ``aux`` inputs and no change to the
+    model. A threshold :math:`t` gives the interval
+    :math:`[\hat y - t, \hat y + t]`. This is the split conformal score of
+    `Distribution-Free Predictive Inference for Regression
     <https://arxiv.org/abs/1604.04173>`_ (Lei et al., 2018).
 
     Examples
@@ -235,28 +239,30 @@ class AbsoluteErrorScore(_NonconformityScore):
 
 
 class NormalizedErrorScore(_NonconformityScore):
-    r"""Sigma-normalized residual :math:`|y - \mu| / \max(\sigma, \epsilon)`.
+    r"""Error scaled by predicted spread, :math:`|y - \mu| / \max(\sigma, \epsilon)`.
 
-    For probabilistic models emitting a mean :math:`\mu` and standard
-    deviation :math:`\sigma` (NLL heads, MC-dropout or ensemble spread). The
-    resulting intervals scale with the model's own uncertainty, giving
-    input-dependent widths. A calibrated threshold :math:`t` inverts to
-    :math:`[\mu - t\sigma, \mu + t\sigma]`. The prediction is :math:`\mu`;
-    :math:`\sigma` is read from ``aux["sigma"]``.
+    Use it when the model outputs a mean :math:`\mu` (passed as
+    ``prediction``) and a standard deviation :math:`\sigma` (passed as
+    ``aux["sigma"]``), for example from an NLL head, MC dropout, or an
+    ensemble. A threshold :math:`t` gives
+    :math:`[\mu - t\sigma, \mu + t\sigma]`, so intervals are wider where the
+    model is less certain.
 
     Parameters
     ----------
     eps : float, optional
-        Lower clamp :math:`\epsilon` on ``sigma`` to avoid division blow-up.
-        Default is ``1e-8``.
+        Smallest :math:`\sigma` used, so near-zero values do not blow up the
+        score. Default is ``1e-8``.
 
     Notes
     -----
-    The effective floor is the larger of ``eps`` and the smallest positive
-    normal value of the ``sigma`` dtype, so the clamp cannot underflow to a
-    no-op in low-precision dtypes. Raw sigma values must be finite before
-    clamping; finite nonpositive values use the floor. Calling :meth:`score`
-    or :meth:`interval` without ``aux["sigma"]`` raises ``ValueError``.
+    ``sigma`` must be finite; zero or negative values are replaced by a
+    floor. The floor is the larger of ``eps`` and the smallest positive
+    normal value of the ``sigma`` dtype, so it still takes effect in
+    low-precision dtypes. Calling :meth:`score` or :meth:`interval` without
+    ``aux["sigma"]`` raises ``ValueError``. Do not combine this score with
+    ``AuxDifficulty("sigma")``: that scales by sigma twice, and calibrators
+    raise ``ValueError``.
 
     Examples
     --------
@@ -288,7 +294,7 @@ class NormalizedErrorScore(_NonconformityScore):
     ) -> Float[Tensor, "*dims"]:
         _require_aux(aux, self.aux_keys, type(self).__name__)
         sigma = clamp_min_floor(aux["sigma"], self.eps)
-        # Divide in float64, then round up so thresholds can only grow.
+        # Round the float64 quotient up so thresholds can only grow.
         s64 = (target.to(torch.float64) - prediction.to(torch.float64)).abs()
         s64 = s64 / sigma.to(torch.float64)
         out_dtype = torch.result_type(prediction, target)
@@ -301,34 +307,33 @@ class NormalizedErrorScore(_NonconformityScore):
         aux: Mapping[str, Tensor] | None = None,
     ) -> tuple[Float[Tensor, "*dims"], Float[Tensor, "*dims"]]:
         _require_aux(aux, self.aux_keys, type(self).__name__)
-        # The exact clamp used by score(), then upcast.
+        # Same clamp as score(), so the interval inverts the score.
         sigma = clamp_min_floor(aux["sigma"], self.eps).to(torch.float64)
         p = prediction.to(torch.float64)
-        # Sigma embeds exactly in float64, so its dtype does not round the division.
+        # Sigma converts to float64 without rounding, so it needs no slack.
         half = _slack_threshold(threshold, prediction) * sigma
         return _outward_interval(prediction, p - half, p + half)
 
 
 class QuantileRegressionScore(_NonconformityScore):
-    r"""Conformalized quantile regression (CQR) score.
+    r"""Conformalized quantile regression (CQR) score, for models with quantile heads.
 
-    For models with quantile-regression heads emitting lower and upper
-    quantile estimates :math:`q_{lo}` and :math:`q_{hi}` (read from
-    ``aux["lo"]`` and ``aux["hi"]``), the score
-    :math:`\max(q_{lo} - y,\; y - q_{hi})` is the signed distance to the
-    nearest violated bound, so a calibrated threshold :math:`t` inverts to
-    :math:`[q_{lo} - t, q_{hi} + t]`; :math:`t` may be negative when the base
-    band is already conservative. Introduced in `Conformalized Quantile
+    Use it when the model outputs lower and upper quantile estimates
+    :math:`q_{lo}` and :math:`q_{hi}`, passed as ``aux["lo"]`` and
+    ``aux["hi"]``. The score :math:`\max(q_{lo} - y,\; y - q_{hi})` is the
+    signed distance to the nearest violated bound, negative inside the band.
+    A threshold :math:`t` gives :math:`[q_{lo} - t, q_{hi} + t]`. When the
+    heads already cover more than needed, :math:`t` is negative and
+    calibration shrinks the band. Introduced in `Conformalized Quantile
     Regression <https://arxiv.org/abs/1905.03222>`_ (Romano, Patterson and
     Candes, 2019).
 
     Notes
     -----
-    ``prediction`` is unused by the score itself (the heads carry the
-    information) but is threaded through for API uniformity; its dtype sets
-    the dtype of the returned interval. Calling :meth:`score` or
-    :meth:`interval` without both ``aux["lo"]`` and ``aux["hi"]`` raises
-    ``ValueError``.
+    The score ignores the values of ``prediction``; pass the point prediction
+    anyway, because the returned interval takes its dtype. Calling
+    :meth:`score` or :meth:`interval` without both ``aux["lo"]`` and
+    ``aux["hi"]`` raises ``ValueError``.
 
     Examples
     --------
@@ -371,46 +376,52 @@ class QuantileRegressionScore(_NonconformityScore):
 
 
 _Score = AbsoluteErrorScore | NormalizedErrorScore | QuantileRegressionScore
-"""The shipped (and serializable) score strategies accepted by the public API."""
+"""Built-in score types accepted by calibrators and predictors."""
 
 _SCORE_REGISTRY: dict[str, type[_NonconformityScore]] = {
     "absolute_error": AbsoluteErrorScore,
     "normalized_error": NormalizedErrorScore,
     "quantile_regression": QuantileRegressionScore,
 }
-"""Private identifiers for the exact built-in score types."""
+"""Serialization names of the built-in score types."""
 
 
 class AuxDifficulty:
-    r"""Per-point difficulty :math:`s(x)` read from the ``aux`` mapping.
+    r"""Per-point difficulty :math:`s(x)` read from an ``aux`` entry.
 
     Use it with
     :class:`~physicsnemo.experimental.uq.conformal.FunctionalBandCalibrator` or
     :class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator` when
-    the model emits a per-point uncertainty proxy (a predicted sigma,
-    MC-dropout or ensemble spread) that should widen the band where the
-    model is least confident. Multi-channel inputs of shape
-    :math:`(n_{\text{points}}, C)` are reduced by ``max`` over the trailing
-    dimensions so one scale per point dominates every channel.
+    the model outputs a per-point uncertainty estimate (a predicted sigma,
+    MC-dropout or ensemble spread). The fitted threshold is multiplied by
+    :math:`s(x)`, so the band widens where the model is less confident. Pass
+    the same ``aux`` entry at calibration and at prediction.
+
+    For an entry of shape :math:`(n_{\text{points}}, C)` or with more
+    trailing dimensions, :math:`s` is the maximum over the trailing
+    dimensions, so each point gets one scale large enough for every channel.
 
     Parameters
     ----------
     key : str, optional
-        Aux key to read. Default is ``"sigma"``.
+        Name of the ``aux`` entry to read. Default is ``"sigma"``.
     eps : float, optional
-        Lower clamp keeping :math:`s` positive. Default is ``1e-8``.
+        Smallest allowed :math:`s`; zero or negative values are replaced by
+        it. Default is ``1e-8``.
 
     Notes
     -----
-    Pairing this field with a score that already divides by the same aux key
-    (:class:`~physicsnemo.experimental.uq.conformal.NormalizedErrorScore` on
-    ``"sigma"``) would scale every interval twice; calibrators and predictors
-    raise ``ValueError`` on that combination. The aux entry must be a finite
-    real floating-point tensor at every calibration and prediction call.
-    Validation precedes reduction and clamping, so neither operation can
-    hide NaN or infinity. Finite nonpositive values use the positive floor.
-    ``difficulty=None`` on a calibrator or predictor means :math:`s = 1`;
-    ``aux=None`` or an entry of ``None`` cannot supply an ``AuxDifficulty``.
+    Do not pair ``AuxDifficulty("sigma")`` with
+    :class:`~physicsnemo.experimental.uq.conformal.NormalizedErrorScore`: the
+    score already divides by sigma, so intervals would scale by sigma twice.
+    Calibrators and predictors raise ``ValueError`` on that pair; use
+    ``AbsoluteErrorScore`` with this field, or ``NormalizedErrorScore``
+    without one.
+
+    The entry must be present on every calibration and prediction call and
+    must be a finite real floating-point tensor; NaN or infinity raises an
+    error rather than being hidden by the maximum or the floor.
+    ``difficulty=None`` on a calibrator or predictor means :math:`s = 1`.
 
     Examples
     --------
@@ -436,27 +447,37 @@ class AuxDifficulty:
         points: Float[Tensor, "n_points n_spatial_dims"] | None = None,
         aux: Mapping[str, Tensor] | None = None,
     ) -> Float[Tensor, " n_points"]:
-        r"""Evaluate :math:`s` from the per-point ``aux`` entry ``key``.
+        r"""Return one positive scale per point from ``aux[key]``.
+
+        Calibrators and predictors call this for you; call it directly to
+        inspect the scales.
 
         Parameters
         ----------
         points : torch.Tensor, optional
             Mesh coordinates of shape
-            :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`. Accepted
-            for API uniformity and unused. Default is ``None``.
+            :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`. Ignored.
+            Default is ``None``.
         aux : Mapping[str, torch.Tensor], optional
-            Must contain ``key`` with a finite real floating-point tensor of
-            shape :math:`(n_{\text{points}}, *\text{dims})`. The default
-            ``None`` means no aux mapping and raises ``ValueError`` here;
-            an entry of ``None`` raises ``TypeError``.
+            Must contain ``key``, a finite real floating-point tensor of
+            shape :math:`(n_{\text{points}}, *\text{dims})`. Default is
+            ``None``.
 
         Returns
         -------
         torch.Tensor
-            Positive difficulty values of shape :math:`(n_{\text{points}},)`,
-            reduced by ``max`` over any trailing dimensions and clamped below
-            by the larger of ``eps`` and the dtype's smallest positive
-            normal value.
+            Positive scales of shape :math:`(n_{\text{points}},)`: the
+            maximum over trailing dimensions, clamped below by the larger of
+            ``eps`` and the dtype's smallest positive normal value.
+
+        Raises
+        ------
+        ValueError
+            If ``aux`` is ``None`` or lacks ``key``, or the entry holds NaN
+            or infinity.
+        TypeError
+            If the entry is not a floating-point tensor (for example
+            ``None``).
         """
         if not isinstance(aux, Mapping) or self.key not in aux:
             raise ValueError(
@@ -471,7 +492,7 @@ class AuxDifficulty:
             )
         check_real(self.key, "difficulty aux", s)
         if s.ndim >= 2:
-            # One scale per leading point, matching the CRC point-risk unit.
+            # One scale per point, the unit in which risk control counts misses.
             s = s.amax(dim=tuple(range(1, s.ndim)))
         return clamp_min_floor(s, self.eps)
 
@@ -479,7 +500,7 @@ class AuxDifficulty:
 def _check_no_double_scale(
     score: _NonconformityScore, difficulty: AuxDifficulty | None
 ) -> None:
-    """Reject an ``AuxDifficulty`` on a key in ``score.scale_aux_keys`` (double scaling)."""
+    """Raise ``ValueError`` if ``difficulty`` reads a key the score divides by."""
     if isinstance(difficulty, AuxDifficulty):
         if difficulty.key in score.scale_aux_keys:
             raise ValueError(
@@ -495,16 +516,16 @@ def _check_no_double_scale(
 _DIFFICULTY_REGISTRY: dict[str, type[AuxDifficulty]] = {
     "aux": AuxDifficulty,
 }
-"""Private identifiers for the exact built-in difficulty field types."""
+"""Serialization names of the built-in difficulty types."""
 
 
 def _strategy_kind(strategy: object, registry: Mapping[str, type]) -> str | None:
-    """Registry identifier for an exact built-in strategy type, otherwise ``None``."""
+    """Serialization name of a built-in strategy, or ``None`` for any other type."""
     return {cls: kind for kind, cls in registry.items()}.get(type(strategy))
 
 
 def _snapshot_strategy(strategy: object, registry: Mapping[str, type], what: str):
-    """Require and snapshot one of the shipped strategies in ``registry``."""
+    """Deep-copy a built-in strategy; raise ``TypeError`` for any other type."""
     if _strategy_kind(strategy, registry) is None:
         names = ", ".join(sorted(cls.__name__ for cls in registry.values()))
         raise TypeError(

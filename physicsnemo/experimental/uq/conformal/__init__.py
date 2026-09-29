@@ -16,22 +16,47 @@
 
 r"""Post-hoc conformal prediction for spatio-temporal fields.
 
-Three calibrators provide per-output-element marginal coverage on a fixed
-discretization
-(:class:`~physicsnemo.experimental.uq.conformal.CellwiseCalibrator`),
-simultaneous functional bands
-(:class:`~physicsnemo.experimental.uq.conformal.FunctionalBandCalibrator`),
-or expected point-risk control by conformal risk control (CRC)
-(:class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator`). All
-accept tensors and ``TensorDict`` field containers. Cellwise and functional
-calibrators fit the conformal quantile of their scores at rank
-:math:`k = \lceil (n_{cal} + 1)(1 - \alpha) \rceil` over :math:`n_{cal}`
-calibration samples. CRC instead fits an exact corrected-risk threshold.
-The functional and risk-control tiers may multiply the fitted threshold
-by a per-point difficulty field :math:`s(x)` before the score inverts it into
-an interval.
+Wrap a trained model's field predictions in calibrated prediction intervals
+without retraining it. Collect predictions and targets on a held-out
+calibration set, fit a calibrator, then call the fitted predictor on new
+model outputs to get ``(lo, hi)`` bounds with a stated coverage level.
 
-Typical two-phase usage::
+Pick the calibrator by the guarantee you need:
+
+- :class:`~physicsnemo.experimental.uq.conformal.CellwiseCalibrator`: every
+  output element is covered with probability at least :math:`1 - \alpha`.
+  Every sample must use the same mesh, with the same points in the same
+  order, and you pass the coordinates as ``points=`` on every call.
+- :class:`~physicsnemo.experimental.uq.conformal.FunctionalBandCalibrator`:
+  one band contains the whole field at once with probability at least
+  :math:`1 - \alpha`. Point sets may differ between samples.
+- :class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator`: the
+  expected fraction of points outside the band is at most :math:`\alpha`.
+  Point sets may differ between samples. Bands are much tighter than the
+  whole-field band.
+
+The whole-field and risk-control calibrators also accept ``points=``; when
+given, it only checks that the prediction has one leading entry per point.
+
+Pick the score by what the model outputs:
+:class:`~physicsnemo.experimental.uq.conformal.AbsoluteErrorScore` for a
+point prediction,
+:class:`~physicsnemo.experimental.uq.conformal.NormalizedErrorScore` for a
+mean plus a standard deviation in ``aux["sigma"]``, and
+:class:`~physicsnemo.experimental.uq.conformal.QuantileRegressionScore` for
+quantile heads in ``aux["lo"]`` and ``aux["hi"]``. The whole-field and
+risk-control calibrators also accept an
+:class:`~physicsnemo.experimental.uq.conformal.AuxDifficulty` to widen the
+band where a per-point uncertainty estimate is large.
+
+All calibrators accept plain tensors or ``TensorDict`` containers of fields.
+With :math:`n_{cal}` calibration samples, the cellwise and whole-field
+calibrators use the :math:`k`-th smallest score,
+:math:`k = \lceil (n_{cal} + 1)(1 - \alpha) \rceil`, so ``alpha`` must be
+at least :math:`1 / (n_{cal} + 1)`. The risk-control calibrator solves for
+the smallest threshold that meets its risk bound.
+
+Typical usage::
 
     calibrator = RiskControlCalibrator(AbsoluteErrorScore(), alpha=0.1)
     for pred, target in calibration_set:
@@ -40,15 +65,9 @@ Typical two-phase usage::
 
     lo, hi = predictor.predict_interval(model_output)
 
-``points=`` (mesh coordinates) is required on every call for
-:class:`~physicsnemo.experimental.uq.conformal.CellwiseCalibrator`, whose
-guarantee is tied to one fixed discretization. Other tiers accept optional
-coordinates to validate point-axis alignment; ``AuxDifficulty`` reads its
-scales from ``aux``, not coordinates.
-
-Fitted predictors round-trip through portable, ``weights_only``-safe
-artifacts, and every tier reports held-out empirical coverage aligned with
-its own guarantee::
+Save a fitted predictor, load it elsewhere (the file loads with
+``weights_only=True``), and check its coverage on held-out data. The
+coverage report measures the same quantity the calibrator guarantees::
 
     predictor.save("predictor.pt", provenance={"dataset": "holdout-v1"})
     predictor = ConformalPredictor.load("predictor.pt")
@@ -59,8 +78,11 @@ its own guarantee::
         accumulator.update(lo, hi, target)
     report = accumulator.finalize()
 
-Guarantees assume calibration and prediction samples are exchangeable. See
-the calibrator docstrings for each tier's exact statement.
+Every guarantee assumes the calibration and deployment samples are
+exchangeable, for example drawn independently from the same distribution.
+If deployment data drifts away from the calibration data, the stated
+coverage is no longer guaranteed. Each calibrator's docstring states its exact
+guarantee.
 """
 
 from .calibrators import (

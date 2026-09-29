@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-r"""The fitted in-memory conformal predictor value type."""
+r"""Fitted conformal predictors that turn model outputs into intervals."""
 
 import copy
 from collections.abc import Mapping
@@ -63,7 +63,7 @@ _SIGNED_THRESHOLD_KINDS = ("quantile_regression",)
 
 
 def _validate_mesh_fingerprint(value: object) -> str:
-    """Validate the SHA-256 hex digest produced by ``points_fingerprint``."""
+    """Check that a mesh fingerprint is a lowercase SHA-256 hex digest."""
     if (
         type(value) is not str
         or len(value) != 64
@@ -80,7 +80,7 @@ def _validate_thresholds(
     thresholds: Tensor | TensorDict,
     score_kind: str,
 ) -> dict[str, Tensor]:
-    """Validate, detach, and clone fitted thresholds."""
+    """Check thresholds against the tier and score, and return detached copies."""
     out: dict[str, Tensor] = {}
     for key, value in field_items(thresholds):
         check_floating(key, "threshold", value)
@@ -100,7 +100,7 @@ def _validate_thresholds(
                     f"{_field_label(key)}: {tier} thresholds must be scalars, got "
                     f"shape {tuple(value.shape)}."
                 )
-            # float64 so scalar promotion at predict time cannot shrink the rank.
+            # float64 so a low-precision prediction cannot round the threshold down.
             threshold = value.to(torch.float64)
         if score_kind not in _SIGNED_THRESHOLD_KINDS and bool((threshold < 0).any()):
             raise ValueError(
@@ -112,23 +112,28 @@ def _validate_thresholds(
 
 
 class ConformalPredictor:
-    r"""A fitted conformal interval rule for exactly one guarantee tier.
+    r"""Turn new model outputs into intervals with a calibrated guarantee.
 
-    Instances are produced by a calibrator's ``finalize()`` or by
-    :meth:`load`; the constructor is public so artifacts and tests can build
-    one directly. A predictor holds the fitted threshold (a conformal
-    quantile or a CRC risk threshold) for each field and turns a new
-    prediction into lower and upper bounds through
-    :meth:`predict_interval`. Cellwise predictors carry the exact
-    calibration-mesh fingerprint; functional and conformal risk control
-    (CRC) predictors may instead carry a difficulty field :math:`s(x)`.
+    You normally get a predictor from a calibrator's ``finalize()`` or from
+    :meth:`load`, then call :meth:`predict_interval` on each new model
+    output. Use :meth:`coverage_accumulator` to check coverage on held-out
+    data and :meth:`save` to reuse the predictor later. Build one directly
+    only to restore thresholds you computed elsewhere.
+
+    The predictor inherits the guarantee of the calibrator that produced it,
+    which assumes new samples are exchangeable with the calibration samples.
+    A cellwise predictor works only on the calibration mesh (same
+    coordinates, dtype, and point order). Functional and risk-control
+    predictors accept any mesh and may widen intervals per point through a
+    difficulty field :math:`s(x)`.
 
     Parameters
     ----------
     tier : {"cellwise", "functional", "risk_control"}
-        Guarantee tier the thresholds were fitted for.
+        Guarantee tier of the calibrator that produced ``thresholds``.
     score : AbsoluteErrorScore | NormalizedErrorScore | QuantileRegressionScore
-        Nonconformity score used at calibration, snapshotted at construction.
+        Score used during calibration. The predictor keeps its own copy, so
+        later changes to ``score`` have no effect.
     alpha : float
         Target miscoverage (or risk) level in :math:`(0, 1)`.
     n_cal : int
@@ -136,27 +141,32 @@ class ConformalPredictor:
         :math:`\alpha \ge 1 / (n_{cal} + 1)` so the conformal rank
         :math:`k = \lceil (n_{cal} + 1)(1 - \alpha) \rceil` exists.
     thresholds : torch.Tensor | TensorDict
-        Fitted thresholds: one tensor of shape :math:`(*\text{dims})` per
-        field for the cellwise tier, one scalar per field otherwise. Scalars
-        are stored in float64.
+        A tensor for one field, or a ``TensorDict`` keyed by field name.
+        Cellwise: one tensor of shape :math:`(*\text{dims})` per field.
+        Other tiers: one scalar per field, stored in float64. Values must be
+        finite, and nonnegative unless ``score`` is a
+        :class:`~physicsnemo.experimental.uq.conformal.QuantileRegressionScore`.
     difficulty : AuxDifficulty, optional
-        Difficulty field multiplying the scalar threshold at prediction time
+        Per-point scale applied to the threshold at prediction time
         (functional and risk-control tiers only). Default is ``None``.
     mesh_fingerprint : str, optional
-        SHA-256 hex digest of the calibration coordinates (cellwise tier
-        only). Default is ``None``.
+        Calibration mesh digest, required for the cellwise tier and rejected
+        otherwise. Take it from ``CellwiseCalibrator.mesh_fingerprint``.
+        Default is ``None``.
     provenance : Mapping, optional
-        Strict-JSON metadata stored alongside the artifact. Default is
-        ``None``.
+        Strict-JSON metadata saved with the artifact, for example
+        ``{"dataset": "holdout-v1"}``. Default is ``None``.
 
-    Notes
-    -----
-    Construction raises ``ValueError`` when the tier-dependent state is
-    inconsistent (a cellwise predictor without ``mesh_fingerprint`` or with a
-    difficulty field, a scalar-threshold tier given a non-scalar threshold, a
-    negative threshold for a nonnegative score, or an infeasible
-    ``alpha``/``n_cal`` pair). Predictors round-trip through
-    ``weights_only``-safe artifacts via :meth:`save` and :meth:`load`.
+    Raises
+    ------
+    ValueError
+        If ``tier`` is unknown; if ``alpha`` is infeasible for ``n_cal``
+        (collect more calibration samples or raise ``alpha``); if a cellwise
+        predictor lacks ``mesh_fingerprint`` or has a difficulty field; if a
+        non-cellwise predictor has ``mesh_fingerprint``; if a threshold has
+        the wrong shape for the tier, is empty, non-finite, or negative for a
+        nonnegative score; or if ``difficulty`` reads the same aux key the
+        score already divides by.
 
     Examples
     --------
@@ -230,52 +240,52 @@ class ConformalPredictor:
 
     @property
     def tier(self) -> Tier:
-        r"""The fitted guarantee tier."""
+        r"""Guarantee tier: ``"cellwise"``, ``"functional"``, or ``"risk_control"``."""
         return self._tier
 
     @property
     def alpha(self) -> float:
-        r"""The fitted target miscoverage or risk level."""
+        r"""Target miscoverage level, or target risk for ``"risk_control"``."""
         return self._alpha
 
     @property
     def n_cal(self) -> int:
-        r"""The number of exchangeable calibration samples."""
+        r"""Number of calibration samples behind the thresholds."""
         return self._n_cal
 
     @property
     def score(self) -> _NonconformityScore:
-        r"""A defensive copy of the fitted built-in score strategy."""
+        r"""A copy of the calibration score; editing it has no effect here."""
         return copy.deepcopy(self._score)
 
     @property
     def difficulty(self) -> AuxDifficulty | None:
-        r"""A defensive copy of the fitted difficulty field, or ``None``."""
+        r"""A copy of the difficulty field, or ``None`` if intervals are not scaled."""
         return copy.deepcopy(self._difficulty)
 
     @property
     def mesh_fingerprint(self) -> str | None:
-        r"""The exact calibration-mesh digest for a cellwise predictor."""
+        r"""Calibration mesh digest for a cellwise predictor, else ``None``."""
         return self._mesh_fingerprint
 
     @property
     def provenance(self) -> dict:
-        r"""A defensive copy of strict-JSON artifact provenance."""
+        r"""A copy of the metadata saved with this predictor."""
         return copy.deepcopy(self._provenance)
 
     @property
     def _tensor_mode(self) -> bool:
-        """Whether calibration used a plain tensor rather than a ``TensorDict``."""
+        """Whether calibration used a plain tensor instead of a ``TensorDict``."""
         return set(self._thresholds_by_key) == {TENSOR_KEY}
 
     @property
     def keys(self) -> list[str] | None:
-        r"""Sorted calibrated field names, or ``None`` for plain-tensor mode."""
+        r"""Sorted calibrated field names, or ``None`` if calibrated on a tensor."""
         return None if self._tensor_mode else sorted(self._thresholds_by_key)
 
     @property
     def thresholds(self) -> Tensor | TensorDict:
-        r"""A defensive clone of the fitted thresholds in their public container."""
+        r"""A copy of the thresholds, as a tensor or ``TensorDict`` like the input."""
         return pack_fields(
             {
                 key: value.detach().clone()
@@ -284,11 +294,10 @@ class ConformalPredictor:
         )
 
     def to(self, device: torch.device | str) -> "ConformalPredictor":
-        r"""Move the fitted thresholds to ``device`` in place.
+        r"""Move the thresholds to ``device`` in place, like ``nn.Module.to``.
 
-        Follows the ``torch.nn.Module.to`` convention. Only threshold storage
-        moves, so the per-call device transfer in :meth:`predict_interval`
-        becomes a no-op for predictions on that device.
+        Call it once with the device of your model outputs so
+        :meth:`predict_interval` does not copy the thresholds on every call.
 
         Parameters
         ----------
@@ -339,51 +348,66 @@ class ConformalPredictor:
     ) -> tuple[
         Float[Tensor, "*dims"] | TensorDict, Float[Tensor, "*dims"] | TensorDict
     ]:
-        r"""Construct lower and upper bounds for one prediction sample.
+        r"""Return lower and upper bounds for one model output.
 
-        A ``TensorDict`` prediction may carry a superset of the calibrated
-        fields (e.g. when calibration restricted ``keys=``): the fitted
-        fields are selected automatically and the returned containers hold
-        exactly the calibrated fields.
+        Pass the same kind of input used at calibration. A ``TensorDict``
+        may contain extra fields (for example when calibration used
+        ``keys=``); the bounds contain only the calibrated fields.
 
         Parameters
         ----------
         prediction : torch.Tensor | TensorDict
-            Model output of shape :math:`(*\text{dims})`, or a field container
-            of such tensors. For the cellwise tier the shape must equal the
-            calibrated shape; when ``points`` is supplied the leading
-            dimension must be :math:`n_{\text{points}}`.
+            Model output for one sample, of shape :math:`(*\text{dims})`, or
+            a ``TensorDict`` of such tensors. For the cellwise tier the shape
+            must equal the calibration shape. When ``points`` is given, the
+            leading dimension must be :math:`n_{\text{points}}`.
         aux : Mapping[str, torch.Tensor] | Mapping[str, Mapping], optional
-            Auxiliary tensors read by the score or the difficulty field, each
-            of shape :math:`(*\text{dims})`. For ``TensorDict`` inputs, nest
-            the mapping by field name. Default is ``None``.
+            Extra tensors the score or difficulty field reads, each with the
+            shape of the prediction: ``"sigma"`` for
+            :class:`~physicsnemo.experimental.uq.conformal.NormalizedErrorScore`,
+            ``"lo"`` and ``"hi"`` for
+            :class:`~physicsnemo.experimental.uq.conformal.QuantileRegressionScore`,
+            and the ``key`` of an ``AuxDifficulty``. For ``TensorDict``
+            inputs, nest by field name, for example
+            ``aux={"pressure": {"sigma": s}}``. Default is ``None``.
         points : torch.Tensor, optional
             Mesh coordinates of shape
             :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`. Required
-            for the cellwise tier, where they must reproduce the calibration
-            mesh fingerprint exactly. Default is ``None``.
+            for the cellwise tier, where they must match the calibration
+            coordinates, dtype, and point order. Other tiers use them only to
+            check that each field has one leading entry per point. Default is
+            ``None``.
 
         Returns
         -------
         tuple[torch.Tensor | TensorDict, torch.Tensor | TensorDict]
-            Lower and upper bounds ``(lo, hi)`` in the container type and
-            dtype of ``prediction``, each of shape :math:`(*\text{dims})`.
+            Lower and upper bounds ``(lo, hi)`` with the container type,
+            dtype, and shape :math:`(*\text{dims})` of ``prediction``.
+
+        Raises
+        ------
+        ValueError
+            If a shape differs from calibration, values are not finite, or
+            (cellwise) ``points`` is missing or describes a different mesh.
+            If meshes vary between samples, calibrate with
+            :class:`~physicsnemo.experimental.uq.conformal.FunctionalBandCalibrator`
+            or
+            :class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator`
+            instead.
+        KeyError
+            If the prediction fields do not match the calibrated fields.
 
         Notes
         -----
-        Input validation forces host-device synchronizations on every call:
-        finiteness checks on the prediction, aux, and difficulty values, and
-        for the cellwise tier a CPU SHA-256 digest of ``points``. This method
-        is therefore not intended for use inside ``torch.compile`` regions.
-        Calling :meth:`to` with the prediction device beforehand avoids the
-        per-call threshold transfer. Raises ``ValueError`` on a shape, mesh,
-        or finiteness violation and ``KeyError`` when the prediction fields
-        do not match the fitted fields.
+        Bounds are rounded outward so the stated coverage holds in the
+        prediction dtype. Near the dtype's limits this can give infinite
+        endpoints. If you need finite bounds, upcast the prediction first or
+        rescale the model outputs and recalibrate. Do not clip bounds
+        inward: that can remove coverage.
 
-        Outward rounding can return infinite endpoints near the prediction
-        dtype's limits. If finite bounds are needed for diagnostics, upcast
-        the prediction before this call or rescale the model outputs and
-        recalibrate. Do not clip bounds inward: doing so can remove coverage.
+        Each call checks its inputs on the host, which synchronizes with the
+        GPU, and the cellwise tier also hashes ``points`` on the CPU. This
+        method is not intended for use inside ``torch.compile`` regions.
         """
         selection = None if self._tensor_mode else list(self._thresholds_by_key)
         items = field_items(prediction, selection)
@@ -433,15 +457,18 @@ class ConformalPredictor:
         return pack_fields(lo_out), pack_fields(hi_out)
 
     def coverage_accumulator(self) -> CoverageAccumulator:
-        r"""Create empirical diagnostics aligned with this predictor's tier.
+        r"""Return an accumulator that checks this predictor on held-out data.
+
+        Feed it the ``(lo, hi)`` from :meth:`predict_interval` together with
+        the matching targets; its report measures the same guarantee this
+        predictor states.
 
         Returns
         -------
         CoverageAccumulator
-            A fresh
+            A new, empty
             :class:`~physicsnemo.experimental.uq.conformal.CoverageAccumulator`
-            fixed to this predictor's tier, ``alpha``, ``n_cal``, and field
-            keys.
+            set to this predictor's tier, ``alpha``, ``n_cal``, and fields.
         """
         return CoverageAccumulator(
             tier=self._tier,
@@ -451,24 +478,27 @@ class ConformalPredictor:
         )
 
     def save(self, path: Path | str, *, provenance: Mapping | None = None) -> None:
-        r"""Atomically write a portable, ``weights_only``-safe artifact.
+        r"""Write the predictor to ``path`` so :meth:`load` can restore it.
+
+        The file holds only tensors and plain metadata, so it loads with
+        ``torch.load(..., weights_only=True)``. The saved file is checked
+        before it replaces ``path``, so a failed save leaves any existing
+        file untouched.
 
         Parameters
         ----------
         path : Path | str
-            Destination file. Parent directories are created; the file is
-            written to a temporary sibling, read back for validation, then
-            renamed into place.
+            Destination file. Missing parent directories are created.
         provenance : Mapping, optional
-            Strict-JSON metadata to store instead of the predictor's own
-            provenance. Default is ``None``.
+            Strict-JSON metadata to save instead of :attr:`provenance`.
+            Default is ``None``, which saves :attr:`provenance`.
 
         Returns
         -------
         None
             The artifact is written to ``path``.
         """
-        from .artifacts import _save_predictor  # artifacts depends on this module
+        from .artifacts import _save_predictor  # avoids a circular import
 
         _save_predictor(self, path, provenance=provenance)
 
@@ -476,8 +506,7 @@ class ConformalPredictor:
     def load(
         cls, path: Path | str, map_location: str | torch.device = "cpu"
     ) -> "ConformalPredictor":
-        r"""Load and semantically validate a fitted predictor artifact.
-
+        r"""Restore a predictor written by :meth:`save`.
 
         Parameters
         ----------
@@ -489,8 +518,15 @@ class ConformalPredictor:
         Returns
         -------
         ConformalPredictor
-            The reconstructed predictor.
+            The restored predictor.
+
+        Raises
+        ------
+        ValueError
+            If the file is not a conformal predictor artifact, was written by
+            an unsupported format version (re-run calibration), or holds
+            invalid predictor state.
         """
-        from .artifacts import _load_predictor  # artifacts depends on this module
+        from .artifacts import _load_predictor  # avoids a circular import
 
         return _load_predictor(path, map_location=map_location)
