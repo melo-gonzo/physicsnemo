@@ -14,26 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ISLA in two and four spatial dimensions (ND-GENERIC, 2026-09-27): the contracts
-of the three-dimensional tests, on a native two-dimensional problem and on a
-four-dimensional even-parity smoke test, plus the invariants of the dimension
-handling (Levi-Civita symbol, pseudovector counts, refusals)."""
+"""ISLA in two and four spatial dimensions: the contracts of the three-dimensional
+tests on a native two-dimensional problem (a polyline boundary, ``Mesh[1, 2]``) and
+on a four-dimensional even-parity smoke test (``Mesh[3, 4]``), plus the invariants
+of the dimension handling (Levi-Civita symbol, pseudovector counts, refusals)."""
 
 import pytest
 import torch
 
 from physicsnemo.experimental.models.isla import ISLA
 from physicsnemo.experimental.models.isla.model import _levi_civita, _pseudovectors
+from test.experimental.models.isla._meshes import (
+    cloud,
+    law,
+    orthogonal,
+    outputs,
+    soup,
+    transform,
+)
 
 pytestmark = pytest.mark.filterwarnings("ignore::UserWarning")
-
-
-def _rotation(d: int, generator: torch.Generator) -> torch.Tensor:
-    """A random proper rotation in ``d`` dimensions (det +1)."""
-    q, _ = torch.linalg.qr(torch.randn(d, d, generator=generator, dtype=torch.float64))
-    if torch.det(q) < 0:
-        q[:, 0] = -q[:, 0]
-    return q.float()
 
 
 def _reflection(d: int) -> torch.Tensor:
@@ -43,23 +43,21 @@ def _reflection(d: int) -> torch.Tensor:
 
 
 def _problem(d: int, n: int = 160, seed: int = 0):
-    g = torch.Generator().manual_seed(seed)
-    pts = torch.randn(1, n, d, generator=g) * (1.0 + torch.arange(d, dtype=torch.float32))
-    nrm = torch.nn.functional.normalize(torch.randn(1, n, d, generator=g), dim=-1)
-    drv = torch.nn.functional.normalize(torch.randn(1, d, generator=g), dim=-1)
-    w = torch.rand(1, n, generator=g) + 0.5
-    return pts, nrm, drv, w
+    pts, nrm, w, drv = cloud(n, d, seed=seed, dtype=torch.float32)
+    return soup(pts, nrm, w), drv
 
 
 def _model(d: int, outputs, **kw):
     torch.manual_seed(1)
-    return ISLA(
-        outputs=outputs, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8, dim=d, **kw
-    )
+    return ISLA(outputs=outputs, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8, dim=d, **kw)
 
 
-OUT2 = {"p": 0, "v": 1, "w": {"rank": 1, "parity": "odd"}, "t": {"rank": 2, "symmetric": True},
-        "a": {"rank": 2, "parity": "odd"}}
+def _run(m, mesh, drv, q=None):
+    with torch.no_grad():
+        return outputs(m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}))
+
+
+OUT2 = {"p": 0, "v": 1, "w": {"rank": 1, "parity": "odd"}, "t": {"rank": 2, "symmetric": True}, "a": {"rank": 2, "parity": "odd"}}
 
 
 def test_levi_civita_symbol_and_pseudovector_counts():
@@ -76,36 +74,34 @@ def test_levi_civita_symbol_and_pseudovector_counts():
     m3 = _model(3, {"p": 0})
     assert (m2.n_true_basis, m2.n_pseudo_basis) == (5, 3)
     assert (m3.n_true_basis, m3.n_pseudo_basis) == (5, 3)
-    m2k = _model(2, {"p": 0})
-    assert m2k.output_layouts["p"].dim == 2
+    assert m2.output_layouts["p"].dim == 2
 
 
 def test_two_dimensional_contracts_rotation_translation_magnitude_and_reflection():
-    """Rotation equivariance of every rank and parity under a random SO(2) map,
-    translation invariance, magnitude invariance of the global direction, and the
-    reflection behaviour: even fields transform as tensors, odd fields pick up the
-    extra sign."""
+    """On a polyline boundary: rotation equivariance of every rank and parity under a
+    random SO(2) map, translation invariance, magnitude invariance of the global
+    direction, and the reflection behaviour: even fields transform as tensors, odd
+    fields pick up the extra sign."""
     d = 2
     m = _model(d, OUT2)
-    pts, nrm, drv, w = _problem(d)
-    g = torch.Generator().manual_seed(3)
-    q = _rotation(d, g)
-    with torch.no_grad():
-        base = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-        rot = m(points=pts @ q.T, normals=nrm @ q.T, global_inputs={"g": drv @ q.T}, measure_weights=w)
-        shifted = m(points=pts + 7.0, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-        mag = m(points=pts, normals=nrm, global_inputs={"g": 3.5 * drv}, measure_weights=w)
-        r = _reflection(d)
-        ref = m(points=pts @ r.T, normals=nrm @ r.T, global_inputs={"g": drv @ r.T}, measure_weights=w)
+    mesh, drv = _problem(d)
+    assert mesh.n_manifold_dims == 1
+    q = orthogonal(d, 3).float()
+    r = _reflection(d)
+    base = _run(m, mesh, drv)
+    rot = _run(m, transform(mesh, q), drv @ q.T)
+    shifted = _run(m, transform(mesh, shift=torch.full((d,), 7.0)), drv)
+    mag = _run(m, mesh, 3.5 * drv)
+    ref = _run(m, transform(mesh, r), drv @ r.T)
     tol = dict(rtol=1e-4, atol=1e-5)
-    assert base["p"].shape == (1, pts.shape[1]) and base["v"].shape == (1, pts.shape[1], 2)
-    assert base["t"].shape == (1, pts.shape[1], 2, 2)
+    n = mesh.n_cells
+    assert base["p"].shape == (n,) and base["v"].shape == (n, 2) and base["t"].shape == (n, 2, 2)
     torch.testing.assert_close(rot["p"], base["p"], **tol)
     torch.testing.assert_close(rot["v"], base["v"] @ q.T, **tol)
     torch.testing.assert_close(rot["w"], base["w"] @ q.T, **tol)
-    torch.testing.assert_close(rot["t"], torch.einsum("ij,bnjk,lk->bnil", q, base["t"], q), **tol)
-    torch.testing.assert_close(rot["a"], torch.einsum("ij,bnjk,lk->bnil", q, base["a"], q), **tol)
-    for k in base.keys():
+    torch.testing.assert_close(rot["t"], law(base["t"], q, 2), **tol)
+    torch.testing.assert_close(rot["a"], law(base["a"], q, 2), **tol)
+    for k in base:
         ### a shift of 7 length units moves the float32 positions' roundoff by ~1e-5
         torch.testing.assert_close(shifted[k], base[k], rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(mag[k], base[k], **tol)
@@ -113,31 +109,29 @@ def test_two_dimensional_contracts_rotation_translation_magnitude_and_reflection
     torch.testing.assert_close(ref["p"], base["p"], **tol)
     torch.testing.assert_close(ref["v"], base["v"] @ r.T, **tol)
     torch.testing.assert_close(ref["w"], -(base["w"] @ r.T), **tol)
-    torch.testing.assert_close(ref["t"], torch.einsum("ij,bnjk,lk->bnil", r, base["t"], r), **tol)
-    torch.testing.assert_close(ref["a"], -torch.einsum("ij,bnjk,lk->bnil", r, base["a"], r), **tol)
+    torch.testing.assert_close(ref["t"], law(base["t"], r, 2), **tol)
+    torch.testing.assert_close(ref["a"], -law(base["a"], r, 2), **tol)
     ### the symmetric spec is symmetric, the odd rank-2 field is nonzero (its basis has
     ### the perpendiculars and the 2-D Levi-Civita symbol as content)
     torch.testing.assert_close(base["t"], base["t"].transpose(-1, -2))
     assert base["a"].abs().max() > 0 and base["w"].abs().max() > 0
 
 
-def test_two_dimensional_gradients_and_interior_mode():
+def test_two_dimensional_gradients_and_interior_task():
     d = 2
-    pts, nrm, drv, w = _problem(d)
-    ### interior query tokens with the internal nearest-boundary geometry in 2-D
-    mq = _model(d, {"p": 0, "v": 1})
-    q = torch.randn(1, 50, d) * 0.5
-    out = mq(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w, query_points=q)
+    mesh, drv = _problem(d)
+    ### prediction-point tokens with the internal nearest-boundary geometry in 2-D
+    mq = _model(d, {"p": 0, "v": 1}, interior=True)
+    q = torch.randn(50, d) * 0.5
+    out = outputs(mq(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}))
     sum(v.square().mean() for v in out.values()).backward()
     missing = [k for k, p in mq.named_parameters() if p.grad is None]
     assert not missing, missing
     mq.eval()
-    g = torch.Generator().manual_seed(5)
-    rq = _rotation(d, g)
-    with torch.no_grad():
-        o1 = mq(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w, query_points=q)
-        o2 = mq(points=pts @ rq.T, normals=nrm @ rq.T, global_inputs={"g": drv @ rq.T}, measure_weights=w, query_points=q @ rq.T)
-    assert o1["p"].shape == (1, 50) and o1["v"].shape == (1, 50, 2)
+    rq = orthogonal(d, 5).float()
+    o1 = _run(mq, mesh, drv, q)
+    o2 = _run(mq, transform(mesh, rq), drv @ rq.T, q @ rq.T)
+    assert o1["p"].shape == (50,) and o1["v"].shape == (50, 2)
     torch.testing.assert_close(o2["p"], o1["p"], rtol=1e-4, atol=1e-5)
     torch.testing.assert_close(o2["v"], o1["v"] @ rq.T, rtol=1e-4, atol=1e-5)
 
@@ -146,35 +140,33 @@ def test_two_dimensional_rank_inputs_keep_the_contracts():
     """Rank-1 and rank-2 boundary inputs in two dimensions: the invariant seeds and
     the block contractions are built for d components."""
     d = 2
-    pts, nrm, drv, w = _problem(d)
+    pts, nrm, w, drv = cloud(160, d, dtype=torch.float32)
     g = torch.Generator().manual_seed(9)
-    trac = torch.randn(1, pts.shape[1], d, generator=g)
-    sym = torch.randn(1, pts.shape[1], d, d, generator=g)
+    trac = torch.randn(160, d, generator=g)
+    sym = torch.randn(160, d, d, generator=g)
     sym = sym + sym.transpose(-1, -2)
     m = _model(d, {"p": 0, "v": 1}, boundary_inputs={"trac": 1, "sig": {"rank": 2, "symmetric": True}})
-    q = _rotation(d, g)
-    with torch.no_grad():
-        base = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w, boundary_inputs={"trac": trac, "sig": sym})
-        rot = m(points=pts @ q.T, normals=nrm @ q.T, global_inputs={"g": drv @ q.T}, measure_weights=w,
-                boundary_inputs={"trac": trac @ q.T, "sig": torch.einsum("ij,bnjk,lk->bnil", q, sym, q)})
+    mesh = soup(pts, nrm, w, cell_data={"trac": trac, "sig": sym})
+    q = orthogonal(d, 9).float()
+    base = _run(m, mesh, drv)
+    rot = _run(m, transform(mesh, q, specs=m.boundary_specs), drv @ q.T)
     torch.testing.assert_close(rot["p"], base["p"], rtol=1e-4, atol=1e-5)
     torch.testing.assert_close(rot["v"], base["v"] @ q.T, rtol=1e-4, atol=1e-5)
 
 
 def test_four_dimensional_even_parity_smoke_and_odd_refused():
     d = 4
-    pts, nrm, drv, w = _problem(d, n=120)
+    mesh, drv = _problem(d, n=120)
+    assert mesh.n_manifold_dims == 3
     m = _model(d, {"p": 0, "v": 1, "t": 2})
     assert m.n_pseudo_basis == 0 and m.output_layouts["t"].iso[0].shape == (4, 4)
-    g = torch.Generator().manual_seed(11)
-    q = _rotation(d, g)
-    with torch.no_grad():
-        base = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-        rot = m(points=pts @ q.T, normals=nrm @ q.T, global_inputs={"g": drv @ q.T}, measure_weights=w)
-    assert base["v"].shape == (1, 120, 4) and base["t"].shape == (1, 120, 4, 4)
+    q = orthogonal(d, 11).float()
+    base = _run(m, mesh, drv)
+    rot = _run(m, transform(mesh, q), drv @ q.T)
+    assert base["v"].shape == (120, 4) and base["t"].shape == (120, 4, 4)
     torch.testing.assert_close(rot["p"], base["p"], rtol=1e-4, atol=1e-5)
     torch.testing.assert_close(rot["v"], base["v"] @ q.T, rtol=1e-4, atol=1e-5)
-    torch.testing.assert_close(rot["t"], torch.einsum("ij,bnjk,lk->bnil", q, base["t"], q), rtol=1e-4, atol=1e-5)
+    torch.testing.assert_close(rot["t"], law(base["t"], q, 2), rtol=1e-4, atol=1e-5)
     with pytest.raises(NotImplementedError):
         _model(d, {"w": {"rank": 1, "parity": "odd"}})
     with pytest.raises(ValueError):
@@ -184,15 +176,17 @@ def test_four_dimensional_even_parity_smoke_and_odd_refused():
 
 
 def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
-    pts, nrm, drv, w = _problem(3)
+    mesh3, drv3 = _problem(3)
     m2 = _model(2, {"p": 0})
-    with pytest.raises(ValueError):
-        m2(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
+    with pytest.raises(ValueError, match="has 3 spatial dimensions; this model has dim=2"):
+        m2(boundary_meshes={"wall": mesh3}, global_data={"g": drv3})
     ### The 3-D model with a K = 1 direction keeps its parameter count (the head has
     ### m = 5 true and p = 3 pseudo vectors in both dimensions for K = 1, so the
-    ### 2-D model of the same spec has the same count too). 42549 = 41364 for the
-    ### backbone and heads plus 1185 for the query side (qt.logw 1, qt.type_offset 32,
-    ### qt.embed 2 x 32 + 32 + 32 x 32 + 32).
+    ### 2-D model of the same spec has the same count too). A surface model has the
+    ### 41364 backbone-and-head parameters; the interior model adds 1185 for the
+    ### prediction-point side (qt.logw 1, qt.type_offset 32, qt.embed 2 x 32 + 32 +
+    ### 32 x 32 + 32).
     m3 = _model(3, {"p": 0, "v": 1})
-    assert sum(p.numel() for p in m3.parameters()) == 42549
-    assert sum(p.numel() for p in _model(2, {"p": 0, "v": 1}).parameters()) == 42549
+    assert sum(p.numel() for p in m3.parameters()) == 41364
+    assert sum(p.numel() for p in _model(2, {"p": 0, "v": 1}).parameters()) == 41364
+    assert sum(p.numel() for p in _model(3, {"p": 0, "v": 1}, interior=True).parameters()) == 41364 + 1185

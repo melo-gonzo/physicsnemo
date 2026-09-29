@@ -29,6 +29,7 @@ import torch
 
 from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla.model import _geo_region
+from test.experimental.models.isla._meshes import cloud, outputs, soup
 
 cuda_only = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA kernels")
 
@@ -42,22 +43,12 @@ REF = dict(
 )
 
 
-def _cloud(n=700, batch=1, seed=0, device="cuda", dtype=torch.float32):
-    g = torch.Generator().manual_seed(seed)
-    pts = (torch.randn(batch, n, 3, generator=g) * torch.tensor([3.0, 2.0, 1.0])).to(
-        device, dtype
-    )
-    nrm = torch.nn.functional.normalize(
-        torch.randn(batch, n, 3, generator=g), dim=-1
-    ).to(device, dtype)
-    drv = torch.nn.functional.normalize(torch.randn(batch, 3, generator=g), dim=-1).to(
-        device, dtype
-    )
-    w = (torch.rand(batch, n, generator=g) + 0.5).to(device, dtype)
-    tgt = torch.randn(batch, n, 4, generator=g).to(device, dtype)
-    return dict(
-        points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w
-    ), tgt
+def _boundary(n=700, seed=0, device="cuda", dtype=torch.float32, cell_data=None):
+    """One boundary soup of ``n`` cells with a global direction, and a target."""
+    pts, nrm, w, drv = cloud(n, seed=seed, dtype=torch.float32)
+    mesh = soup(pts, nrm, w, cell_data=cell_data).to(device).to(dtype)
+    tgt = torch.randn(n, 4, generator=torch.Generator().manual_seed(seed + 1)).to(device, dtype)
+    return dict(boundary_meshes={"wall": mesh}, global_data={"g": drv.to(device, dtype)}), tgt
 
 
 def _flat(o):
@@ -70,13 +61,9 @@ def _rel(a, b):
 
 def _run(model, inputs, target):
     model.zero_grad(set_to_none=True)
-    out = _flat(model(**inputs))
+    out = _flat(outputs(model(**inputs)))
     torch.nn.functional.mse_loss(out.float(), target.float()).backward()
-    grads = {
-        k.replace("_orig_mod.", ""): p.grad.detach().clone()
-        for k, p in model.named_parameters()
-        if p.grad is not None  # the query-side parameters are unused without query_points
-    }
+    grads = {k.replace("_orig_mod.", ""): p.grad.detach().clone() for k, p in model.named_parameters()}
     return out.detach(), grads
 
 
@@ -89,8 +76,8 @@ def _pair(dtype, device="cuda", **kw):
     return ref, opt
 
 
-def _assert_same(ref, opt, dtype, out_tol, grad_tol, n=700, batch=1):
-    inputs, tgt = _cloud(n, batch, dtype=dtype)
+def _assert_same(ref, opt, dtype, out_tol, grad_tol, n=700):
+    inputs, tgt = _boundary(n, dtype=dtype)
     o_ref, g_ref = _run(ref, inputs, tgt)
     o_opt, g_opt = _run(opt, inputs, tgt)
     assert _rel(o_opt, o_ref) < out_tol, _rel(o_opt, o_ref)
@@ -118,26 +105,12 @@ def test_fused_geo_region_matches_eager_region(dtype, K, P):
     g = torch.Generator().manual_seed(0)
 
     def mk(*shape):
-        return (
-            (torch.randn(*shape, generator=g) * 0.1).to("cuda", dtype).requires_grad_()
-        )
+        return (torch.randn(*shape, generator=g) * 0.1).to("cuda", dtype).requires_grad_()
 
     r, z = mk(b, n, 3), mk(b, s, 3)
-    nh = (
-        torch.nn.functional.normalize(torch.randn(b, n, 3, generator=g), dim=-1)
-        .to("cuda", dtype)
-        .requires_grad_()
-    )
-    ms = (
-        torch.nn.functional.normalize(torch.randn(b, s, 3, generator=g), dim=-1)
-        .to("cuda", dtype)
-        .requires_grad_()
-    )
-    d = (
-        torch.nn.functional.normalize(torch.randn(b, 1, K, 3, generator=g), dim=-1)
-        .to("cuda", dtype)
-        .requires_grad_()
-    )
+    nh = torch.nn.functional.normalize(torch.randn(b, n, 3, generator=g), dim=-1).to("cuda", dtype).requires_grad_()
+    ms = torch.nn.functional.normalize(torch.randn(b, s, 3, generator=g), dim=-1).to("cuda", dtype).requires_grad_()
+    d = torch.nn.functional.normalize(torch.randn(b, 1, K, 3, generator=g), dim=-1).to("cuda", dtype).requires_grad_()
     v = (torch.randn(b, n, P, 3, generator=g) * 0.7).to("cuda", dtype).requires_grad_()
     logits = torch.randn(b, n, s, generator=g).to("cuda", dtype).requires_grad_()
     torch.manual_seed(0)
@@ -186,11 +159,7 @@ def test_fused_geo_region_bf16_autocast_forward_matches_eager():
     z = (torch.randn(b, s, 3, generator=g) * 0.1).cuda()
     nh = torch.nn.functional.normalize(torch.randn(b, n, 3, generator=g), dim=-1).cuda()
     ms = torch.nn.functional.normalize(torch.randn(b, s, 3, generator=g), dim=-1).cuda()
-    d = (
-        torch.nn.functional.normalize(torch.randn(b, 1, 1, 3, generator=g), dim=-1)
-        .cuda()
-        .expand(b, n, 1, 3)
-    )
+    d = torch.nn.functional.normalize(torch.randn(b, 1, 1, 3, generator=g), dim=-1).cuda().expand(b, n, 1, 3)
     logits = torch.randn(b, n, s, generator=g).cuda().bfloat16()
     torch.manual_seed(0)
     lin = torch.nn.Linear(6, 1).cuda()
@@ -219,9 +188,8 @@ def test_fused_geo_kernel_model_rank1_boundary_input_exact_in_float64():
     torch.manual_seed(0)
     opt = ISLA(**{**spec, "geo_kernel": "fused"}).to("cuda", torch.float64)
     opt.load_state_dict(ref.state_dict())
-    inputs, tgt = _cloud(600, 1, dtype=torch.float64)
-    g2 = torch.Generator().manual_seed(9)
-    inputs["boundary_inputs"] = {"t": (torch.randn(1, 600, 3, generator=g2) * 0.5).to("cuda", torch.float64)}
+    t = torch.randn(600, 3, generator=torch.Generator().manual_seed(9)) * 0.5
+    inputs, tgt = _boundary(600, dtype=torch.float64, cell_data={"t": t})
     o_ref, g_ref = _run(ref, inputs, tgt)
     o_opt, g_opt = _run(opt, inputs, tgt)
     assert _rel(o_opt, o_ref) < 1e-11
@@ -247,7 +215,7 @@ def test_torch_compile_fullgraph_matches_eager(geo_kernel):
     torch.backends.cuda.matmul.allow_tf32 = False
     torch._dynamo.reset()
     ref, opt = _pair(torch.float32, geo_kernel=geo_kernel)
-    inputs, _ = _cloud(300)
+    inputs, _ = _boundary(300)
     ex = torch._dynamo.explain(opt)(**inputs)
     assert ex.graph_break_count == 0, ex.break_reasons
     compiled = torch.compile(opt, fullgraph=True)

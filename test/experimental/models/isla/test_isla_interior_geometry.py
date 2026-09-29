@@ -14,15 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The interior geometry of the query tokens.
+"""The interior geometry of the prediction-point tokens.
 
-For every interior token the model derives its signed distance from the boundary
-sample itself (the nearest boundary point gives the distance, the nearest sample's
-normal the sign, positive on the side the normal points to), and its direction from
-the same search unless the caller supplies ``query_normals``. These tests pin the
-geometry against a brute-force computation, its sign convention, the contracts in
-both forms, and the exact equivalence of the two forms when the supplied normals are
-the internal directions.
+For every prediction point the model derives its signed distance from the boundary
+tokens itself (the nearest boundary token gives the distance, that token's normal
+the sign, positive on the side the normal points to) and its direction from the same
+search; neither is an input. These tests pin the geometry against a brute-force
+computation, its sign convention, and the contracts of the interior task.
 """
 
 import pytest
@@ -30,17 +28,24 @@ import torch
 
 from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla.model import nearest_boundary_geometry
+from test.experimental.models.isla._meshes import (
+    cloud,
+    orthogonal,
+    outputs,
+    points_mesh,
+    soup,
+    transform,
+)
 
 D = torch.float64
 PV = {"p": 0, "v": 1}
 
 
 def _cloud(n, seed, batch=1, scale=(3.0, 2.0, 1.0)):
+    """Batched tensors for the tensor-level geometry function."""
     g = torch.Generator().manual_seed(seed)
     pts = torch.randn(batch, n, 3, dtype=D, generator=g) * torch.tensor(scale, dtype=D)
-    nrm = torch.nn.functional.normalize(
-        torch.randn(batch, n, 3, dtype=D, generator=g), dim=-1
-    )
+    nrm = torch.nn.functional.normalize(torch.randn(batch, n, 3, dtype=D, generator=g), dim=-1)
     w = torch.rand(batch, n, dtype=D, generator=g) + 0.5
     return pts, nrm, w
 
@@ -76,16 +81,10 @@ def test_sign_convention_is_positive_on_the_normal_side():
     of the exact distance to the sphere."""
     g = torch.Generator().manual_seed(0)
     n = 20000
-    dirs = torch.nn.functional.normalize(
-        torch.randn(1, n, 3, dtype=D, generator=g), dim=-1
-    )
+    dirs = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=D, generator=g), dim=-1)
     pts, nrm = 2.0 * dirs, dirs  # radius 2, outward normals
-    q_dirs = torch.nn.functional.normalize(
-        torch.randn(1, 30, 3, dtype=D, generator=g), dim=-1
-    )
-    radii = torch.cat(
-        [torch.full((15,), 3.0, dtype=D), torch.full((15,), 1.0, dtype=D)]
-    )
+    q_dirs = torch.nn.functional.normalize(torch.randn(1, 30, 3, dtype=D, generator=g), dim=-1)
+    radii = torch.cat([torch.full((15,), 3.0, dtype=D), torch.full((15,), 1.0, dtype=D)])
     q = q_dirs * radii[None, :, None]
     d, u = nearest_boundary_geometry(q, pts, nrm)
     assert (d[0, :15] > 0).all() and (d[0, 15:] < 0).all()
@@ -106,9 +105,7 @@ def test_on_wall_queries_take_the_sample_normal():
 def test_nearest_boundary_geometry_is_covariant_and_scales():
     pts, nrm, _ = _cloud(100, 0)
     q, _, _ = _cloud(20, 1, scale=(4.0, 4.0, 4.0))
-    R, _ = torch.linalg.qr(torch.randn(3, 3, dtype=D))
-    if torch.det(R) > 0:
-        R[:, 0] = -R[:, 0]  # a reflection
+    R = orthogonal(3, 0, improper=True)
     t = torch.tensor([1.0, -2.0, 0.5], dtype=D)
     d, u = nearest_boundary_geometry(q, pts, nrm)
     d2, u2 = nearest_boundary_geometry(q @ R.T + t, pts @ R.T + t, nrm @ R.T)
@@ -127,139 +124,97 @@ def test_geometry_is_differentiable_in_the_positions():
 
 def _model(**kw):
     torch.manual_seed(0)
-    return (
-        ISLA(
-            outputs=PV, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8, **kw
-        )
-        .double()
-        .eval()
-    )
+    return ISLA(outputs=PV, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8, interior=True, **kw).double().eval()
 
 
-@pytest.mark.parametrize(
-    "kw",
-    [dict(), dict(query_inputs={"tag": 0, "flux": 1})],
-    ids=["no_inputs", "inputs"],
-)
-def test_supplied_normals_equal_to_the_internal_directions_are_the_same_function(kw):
-    """The direction is dispatched on the data: handing the model the internally
-    computed nearest-sample directions as ``query_normals`` gives the same function
-    as leaving them out (to roundoff: the supplied normals are renormalized). The
-    built-in distance channel is the same in both calls."""
-    m = _model(**kw)
-    pts, nrm, w = _cloud(120, 0)
-    drv = torch.tensor([[0.3, 1.0, 0.2]], dtype=D)
-    q, _, _ = _cloud(25, 1, scale=(4.0, 4.0, 4.0))
-    qi = None
-    if "query_inputs" in kw:
-        qi = {"tag": torch.rand(1, 25, dtype=D), "flux": torch.randn(1, 25, 3, dtype=D)}
-    _, u_q = nearest_boundary_geometry(q, pts, nrm)
-    common = dict(points=pts, normals=nrm, measure_weights=w, global_inputs={"g": drv})
-    with torch.no_grad():
-        a = m(**common, query_points=q, query_inputs=qi)
-        b = m(**common, query_points=q, query_normals=u_q, query_inputs=qi)
-        c = m(**common, query_points=q, query_normals=2.5 * u_q, query_inputs=qi)
-    assert all(torch.allclose(a[k], b[k], atol=1e-12, rtol=0) for k in a.keys())
-    assert all(torch.allclose(a[k], c[k], atol=1e-12, rtol=0) for k in a.keys())
-    assert a["p"].shape == (1, 25)
-
-
-def test_supplied_normals_are_live_and_validated():
-    """Other directions than the internal ones change the prediction (the direction
-    enters every invariant); mismatched or orphaned normals are refused."""
-    pts, nrm, w = _cloud(40, 0)
-    q, qn, _ = _cloud(5, 1, scale=(4.0, 4.0, 4.0))
-    common = dict(
-        points=pts,
-        normals=nrm,
-        measure_weights=w,
-        global_inputs={"g": torch.ones(1, 3, dtype=D)},
-    )
-    m = _model()
-    with torch.no_grad():
-        internal = m(**common, query_points=q)
-        supplied = m(**common, query_points=q, query_normals=qn)
-    assert not torch.allclose(internal["p"], supplied["p"], atol=1e-6)
-    with pytest.raises(ValueError, match="Expected query_normals of shape"):
-        m(**common, query_points=q, query_normals=qn[:, :3])
-    with pytest.raises(ValueError, match="query_normals given without query_points"):
-        m(**common, query_normals=qn)
-    with pytest.raises(TypeError, match="interior_geometry"):
-        _model(interior_geometry="provided")
-
-
-@pytest.mark.parametrize("supplied", [False, True], ids=["internal", "supplied"])
-def test_interior_contracts(supplied):
+def test_interior_contracts():
     """Rotation and reflection covariance, translation invariance and geometric-scale
-    invariance in the interior mode, with the query directions computed inside or
-    supplied and rotated along; the distance channel is live."""
-    pts, nrm, w = _cloud(200, 0)
-    drv = torch.tensor([[0.3, 1.0, 0.2]], dtype=D)
-    q, qn, _ = _cloud(40, 1, scale=(4.0, 4.0, 4.0))
+    invariance in the interior task, with the prediction-point directions computed
+    inside; the distance channel is live."""
+    pts, nrm, w, _ = cloud(200)
+    mesh = soup(pts, nrm, w)
+    drv = torch.tensor([0.3, 1.0, 0.2], dtype=D)
+    q, _, _, _ = cloud(40, seed=1, scale=(4.0, 4.0, 4.0))
     m = _model()
 
-    def call(R, t, k=1.0, q=q):
-        extra = dict(query_points=k * q @ R.T + t)
-        if supplied:
-            extra["query_normals"] = qn @ R.T
+    def call(R=None, t=None, k=1.0, q=q):
+        R = torch.eye(3, dtype=D) if R is None else R
+        t = torch.zeros(3, dtype=D) if t is None else t
         with torch.no_grad():
-            return m(
-                points=k * pts @ R.T + t,
-                normals=nrm @ R.T,
-                measure_weights=k * k * w,
-                global_inputs={"g": drv @ R.T},
-                **extra,
+            return outputs(
+                m(boundary_meshes={"wall": transform(mesh, R, t, scale=k)}, prediction_points=k * q @ R.T + t, global_data={"g": drv @ R.T})
             )
 
-    base = call(torch.eye(3, dtype=D), torch.zeros(3, dtype=D))
+    base = call()
     for improper in (False, True):
-        R, _ = torch.linalg.qr(
-            torch.randn(3, 3, dtype=D, generator=torch.Generator().manual_seed(4))
-        )
-        if (torch.det(R) < 0) != improper:
-            R[:, 0] = -R[:, 0]
+        R = orthogonal(3, 4, improper)
         out = call(R, torch.tensor([2.0, -5.0, 1.0], dtype=D), k=2.5)
-        assert torch.allclose(out["p"], base["p"], atol=1e-11), (supplied, improper)
-        assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-11), (supplied, improper)
+        assert torch.allclose(out["p"], base["p"], atol=1e-11), improper
+        assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-11), improper
     ### the distance channel is live: moving the queries off the boundary changes p
-    far = call(torch.eye(3, dtype=D), torch.zeros(3, dtype=D), q=q * 3.0)
+    far = call(q=q * 3.0)
     assert not torch.allclose(far["p"], base["p"], atol=1e-6)
+
+
+def test_stored_distance_is_an_ordinary_query_input():
+    """A dataset's stored signed distance (and its gradient) enter as declared
+    query_inputs of rank 0 and 1 from the prediction Mesh's point_data; the built-in
+    geometry is computed regardless, so the two channels coexist and both are live."""
+    pts, nrm, w, _ = cloud(120)
+    mesh = soup(pts, nrm, w)
+    drv = torch.tensor([0.3, 1.0, 0.2], dtype=D)
+    q, _, _, _ = cloud(25, seed=1, scale=(4.0, 4.0, 4.0))
+    d, grad = nearest_boundary_geometry(q[None], pts[None], nrm[None])
+    m = _model(query_inputs={"geometry.sdf": 0, "geometry.grad": 1})
+    assert m.qt.embed[0].in_features == 2 + (2 + (2 + 1))  # built-in pair, scaled scalar pair, vector cosines and norm
+
+    def call(sdf, g):
+        with torch.no_grad():
+            return outputs(
+                m(
+                    boundary_meshes={"wall": mesh},
+                    prediction_points=points_mesh(q, {"geometry": {"sdf": sdf, "grad": g}}),
+                    global_data={"g": drv},
+                )
+            )
+
+    base = call(d[0], grad[0])
+    assert base["p"].shape == (25,)
+    assert not torch.allclose(call(2 * d[0], grad[0])["p"], base["p"], atol=1e-6)
+    assert not torch.allclose(call(d[0], -grad[0])["p"], base["p"], atol=1e-6)
+
+
+def test_no_query_normals_argument():
+    """The prediction-point direction is never an input."""
+    pts, nrm, w, _ = cloud(20)
+    m = _model()
+    with pytest.raises(TypeError, match="query_normals"):
+        m(boundary_meshes={"wall": soup(pts, nrm, w)}, prediction_points=pts[:3], global_data={"g": nrm[0]}, query_normals=nrm[:3])
+    with pytest.raises(TypeError, match="interior_geometry"):
+        _model(interior_geometry="provided")
 
 
 def test_fused_kernel_stays_available_with_the_built_in_distance():
     """The built-in distance enters the embedding, not the geometry region, so a model
     without rank-1 or rank-2 per-token inputs keeps the fused kernel."""
-    m = ISLA(
-        outputs=PV,
-        global_inputs={"g": 1},
-        hidden=32,
-        n_layers=1,
-        n_slices=8,
-        geo_kernel="fused",
-    )
+    m = ISLA(outputs=PV, global_inputs={"g": 1}, hidden=32, n_layers=1, n_slices=8, interior=True, geo_kernel="fused")
     assert m.n_query_builtin == 2 and m.qt.embed[0].in_features == 2
     assert not (m.n_block_vecs or m.n_block_tens)
 
 
-def test_checkpoint_round_trip_keeps_the_chunk_size(tmp_path):
+def test_checkpoint_round_trip_keeps_the_chunk_size_and_the_task(tmp_path):
     from physicsnemo.core.module import Module
 
     m = _model(interior_nn_chunk=3)
     m.save(tmp_path / "m.mdlus")
     m2 = Module.from_checkpoint(str(tmp_path / "m.mdlus")).double().eval()
-    assert m2.interior_nn_chunk == 3
-    pts, nrm, w = _cloud(50, 0)
-    q, _, _ = _cloud(8, 1)
-    kw = dict(
-        points=pts,
-        normals=nrm,
-        measure_weights=w,
-        global_inputs={"g": torch.ones(1, 3, dtype=D)},
-        query_points=q,
-    )
+    assert m2.interior_nn_chunk == 3 and m2.interior is True
+    pts, nrm, w, _ = cloud(50)
+    q, _, _, _ = cloud(8, seed=1)
+    kw = dict(boundary_meshes={"wall": soup(pts, nrm, w)}, prediction_points=q, global_data={"g": torch.ones(3, dtype=D)})
     with torch.no_grad():
-        a, b = m(**kw), m2(**kw)
-    assert all(torch.equal(a[k], b[k]) for k in a.keys())
+        a, b = outputs(m(**kw)), outputs(m2(**kw))
+    assert all(torch.equal(a[k], b[k]) for k in a)
 
 
 def test_nearest_boundary_geometry_near_wall_dense_cluster_matches_brute_force():

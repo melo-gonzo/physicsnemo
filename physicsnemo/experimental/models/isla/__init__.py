@@ -14,10 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ISLA (Invariant Slice Attention): an O(3)/SE(3)-equivariant soft-slice transformer
-for steady boundary-value PDE surrogates with named inputs and outputs of declared
-tensor rank. See :mod:`physicsnemo.experimental.models.isla.model`."""
+"""ISLA (Invariant Slice Attention): an O(d)/SE(d)-equivariant soft-slice transformer
+for steady boundary-value PDE surrogates on the mesh-native API (boundary Meshes in,
+a point-cloud Mesh out) with named inputs and outputs of declared tensor rank
+(:class:`~physicsnemo.mesh.fields.RankSpec`, re-exported here). See
+:mod:`physicsnemo.experimental.models.isla.model`."""
 
-from physicsnemo.experimental.models.isla.model import ISLA, RankSpec
+from physicsnemo.experimental.models.isla.model import ISLA
+from physicsnemo.mesh.fields import RankSpec
 
 __all__ = ["ISLA", "RankSpec"]

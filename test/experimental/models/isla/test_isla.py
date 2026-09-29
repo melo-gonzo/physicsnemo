@@ -17,186 +17,157 @@
 """Contract tests for ISLA (Invariant Slice Attention): every guarantee is exact by construction.
 
 The model under test declares one scalar output ``p`` and one vector output ``v``
-and one global direction ``g``; ``forward`` returns ``{"p": (B, N), "v": (B, N, 3)}``.
+and one global direction ``g``. The boundary is a ``Mesh[2, 3]`` built by
+:func:`soup` around a prescribed cloud (its cell centroids, normals and effective
+measures are the cloud's points, normals and weights); ``forward`` returns a
+point-cloud Mesh with ``point_data["p"]`` of shape ``(N,)`` and ``point_data["v"]``
+of shape ``(N, 3)``.
 """
 
 import pytest
 import torch
 
 from physicsnemo.experimental.models import ISLA
+from physicsnemo.mesh import Mesh
+from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
+from test.experimental.models.isla._meshes import (
+    cloud,
+    orthogonal,
+    outputs,
+    points_mesh,
+    refine,
+    same,
+    soup,
+    transform,
+)
 
 # The frame is origin-free (positions enter only as point-to-anchor differences) with
 # one data-derived length unit, the measure-weighted RMS pairwise distance.
 
 PV = {"p": 0, "v": 1}
 G = {"g": 1}
-
-#: The query-side submodule: its parameters are unused in a boundary-only forward pass.
-QUERY_PARAMS = ("qt",)
+D = torch.float64
 
 
 def _isla(**kw):
     return ISLA(outputs=PV, global_inputs=G, **kw)
 
 
-def _same(a, b, atol, rtol=1e-5):
-    """Two output dicts agree key by key."""
-    assert a.keys() == b.keys()
-    return all(torch.allclose(a[k], b[k], atol=atol, rtol=rtol) for k in a.keys())
-
-
-def _rows(d, sl):
-    """Slice the token axis of every output."""
-    return {k: v[:, sl] for k, v in d.items()}
+def _rows(out, sl):
+    """Slice the point axis of every output."""
+    return {k: v[sl] for k, v in outputs(out).items()}
 
 
 def _assert_rotated(rot, base, q, atol=1e-10):
+    rot, base = outputs(rot), outputs(base)
     assert torch.allclose(rot["p"], base["p"], atol=atol)
     assert torch.allclose(rot["v"], base["v"] @ q.T, atol=atol)
 
 
-def _rotation():
-    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64))
-    if torch.det(q) < 0:
-        q[:, 0] = -q[:, 0]
-    return q
+def _rotation(seed=0):
+    return orthogonal(3, seed)
 
 
-def _is_query_param(name: str) -> bool:
-    return name.split(".")[0] in QUERY_PARAMS
+def _run(m, mesh, drv, q=None, **kw):
+    with torch.no_grad():
+        return m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}, **kw)
 
 
 @pytest.fixture
 def setup():
     torch.manual_seed(0)
     m = _isla(hidden=64, n_layers=3, n_slices=32).double().eval()
-    n = 500
     ### Anisotropic cloud: generic for vehicle geometry; an isotropic cloud is the
     ### degenerate corner.
-    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
-        [3.0, 2.0, 1.0], dtype=torch.float64
-    )
-    nrm = torch.nn.functional.normalize(
-        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
-    )
-    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
-    w = torch.rand(1, n, dtype=torch.float64) + 0.5
-    with torch.no_grad():
-        base = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-    return m, pts, nrm, drv, w, base
+    pts, nrm, w, drv = cloud(500)
+    mesh = soup(pts, nrm, w)
+    return m, mesh, drv, _run(m, mesh, drv)
 
 
 def test_rotation_equivariance(setup):
-    m, pts, nrm, drv, w, base = setup
+    m, mesh, drv, base = setup
     q = _rotation()
-    with torch.no_grad():
-        rot = m(
-            points=pts @ q.T,
-            normals=nrm @ q.T,
-            global_inputs={"g": drv @ q.T},
-            measure_weights=w,
-        )
-    _assert_rotated(rot, base, q)
+    _assert_rotated(_run(m, transform(mesh, q), drv @ q.T), base, q)
 
 
 def test_translation_invariance(setup):
-    m, pts, nrm, drv, w, base = setup
-    shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
-    with torch.no_grad():
-        tr = m(
-            points=pts + shift, normals=nrm, global_inputs={"g": drv}, measure_weights=w
-        )
-    assert _same(tr, base, atol=1e-10)
+    m, mesh, drv, base = setup
+    shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
+    assert same(_run(m, transform(mesh, shift=shift), drv), base, atol=1e-10)
 
 
 @pytest.mark.parametrize("k", [0.5, 2.0, 4.0])
 def test_global_vector_magnitude_invariance(setup, k):
     """Rank-1 global inputs enter as unit directions: rescaling one leaves every
     output unchanged (a physically meaningful magnitude is a rank-0 global input)."""
-    m, pts, nrm, drv, w, base = setup
+    m, mesh, drv, base = setup
+    assert same(_run(m, mesh, drv * k), base, atol=1e-10)
+
+
+def test_measure_scale_invariance(setup):
+    m, mesh, drv, base = setup
+    w = mesh.cell_data[EFFECTIVE_MEASURE_KEY]
+    scaled = mesh.with_data(cell_data={EFFECTIVE_MEASURE_KEY: w * 137.0})
+    assert same(_run(m, scaled, drv), base, atol=1e-9)
+
+
+def test_token_permutation_equivariance(setup):
+    """Reordering the boundary cells permutes the outputs and changes nothing else."""
+    m, mesh, drv, base = setup
+    perm = torch.randperm(mesh.n_cells, generator=torch.Generator().manual_seed(3))
+    permuted = Mesh(
+        points=mesh.points,
+        cells=mesh.cells[perm],
+        cell_data={EFFECTIVE_MEASURE_KEY: mesh.cell_data[EFFECTIVE_MEASURE_KEY][perm]},
+    )
+    out = _run(m, permuted, drv)
+    assert torch.allclose(out.points, base.points[perm])
+    assert same(outputs(out), _rows(base, perm), atol=1e-10)
+
+
+def test_several_boundary_meshes_are_one_token_set(setup):
+    """The cells of every boundary mesh are the tokens, concatenated in sorted key
+    order: two meshes carrying halves of the cloud give the outputs of the whole
+    cloud, in that order, whatever the mapping's insertion order."""
+    m, mesh, drv, base = setup
+    n = mesh.n_cells // 2
+    w = mesh.cell_data[EFFECTIVE_MEASURE_KEY]
+    parts = {
+        "b_rear": Mesh(points=mesh.points, cells=mesh.cells[n:], cell_data={EFFECTIVE_MEASURE_KEY: w[n:]}),
+        "a_front": Mesh(points=mesh.points, cells=mesh.cells[:n], cell_data={EFFECTIVE_MEASURE_KEY: w[:n]}),
+    }
     with torch.no_grad():
-        sc = m(points=pts, normals=nrm, global_inputs={"g": drv * k}, measure_weights=w)
-    assert _same(sc, base, atol=1e-10)
+        out = m(boundary_meshes=parts, global_data={"g": drv})
+    assert torch.allclose(out.points, base.points, atol=1e-12)
+    assert same(out, base, atol=1e-10)
 
 
-def test_measure_weight_scale_invariance(setup):
-    m, pts, nrm, drv, w, base = setup
-    with torch.no_grad():
-        ws = m(
-            points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w * 137.0
-        )
-    assert _same(ws, base, atol=1e-9)
-
-
-def test_collated_input_shapes(setup):
-    m, pts, nrm, drv, w, base = setup
-    with torch.no_grad():
-        out = m(
-            points=pts,
-            normals=nrm,
-            global_inputs={"g": drv[:, None, :]},
-            measure_weights=w[..., None].squeeze(-1),
-        )
-    assert _same(out, base, atol=1e-12)
-
-
-def test_no_measure_weights_is_the_uniform_quadrature(setup):
-    """``measure_weights=None`` gives every cell the same weight: the same output as
-    any constant weight vector."""
-    m, pts, nrm, drv, w, base = setup
-    with torch.no_grad():
-        none = m(points=pts, normals=nrm, global_inputs={"g": drv})
-        const = m(
-            points=pts,
-            normals=nrm,
-            global_inputs={"g": drv},
-            measure_weights=torch.full_like(w, 0.37),
-        )
-    assert _same(none, const, atol=1e-10)
-    assert not _same(none, base, atol=1e-3)
+def test_no_effective_measures_is_the_geometric_quadrature(setup):
+    """Without ``_effective_measure`` the cells' geometric measures are the weights;
+    the soup's cells are congruent, so this is the uniform quadrature: the same
+    output as any constant measure vector."""
+    m, mesh, drv, base = setup
+    none = _run(m, mesh.with_data(cell_data={}), drv)
+    const = _run(
+        m,
+        mesh.with_data(cell_data={EFFECTIVE_MEASURE_KEY: torch.full((mesh.n_cells,), 0.37, dtype=D)}),
+        drv,
+    )
+    assert same(none, const, atol=1e-10)
+    assert not same(none, base, atol=1e-3)
 
 
 def test_boundary_scalar_contracts():
-    """Two rank-0 boundary fields (one leaf per scalar) ride along under a rotation."""
+    """Two rank-0 boundary fields (one leaf per scalar) in ``cell_data`` ride along
+    under a rotation."""
     torch.manual_seed(0)
-    m = (
-        _isla(
-            hidden=64,
-            n_layers=2,
-            n_slices=16,
-            boundary_inputs={"bc_a": 0, "bc_b": 0},
-        )
-        .double()
-        .eval()
-    )
-    n = 300
-    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
-        [3.0, 2.0, 1.0], dtype=torch.float64
-    )
-    nrm = torch.nn.functional.normalize(
-        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
-    )
-    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
-    w = torch.rand(1, n, dtype=torch.float64) + 0.5
-    bs = {"bc_a": torch.randn(1, n, dtype=torch.float64), "bc_b": torch.randn(1, n, dtype=torch.float64)}
-    with torch.no_grad():
-        base = m(
-            points=pts,
-            normals=nrm,
-            global_inputs={"g": drv},
-            measure_weights=w,
-            boundary_inputs=bs,
-        )
+    m = _isla(hidden=64, n_layers=2, n_slices=16, boundary_inputs={"bc_a": 0, "bc_b": 0}).double().eval()
+    pts, nrm, w, drv = cloud(300)
+    bs = {"bc_a": torch.randn(300, dtype=D), "bc_b": torch.randn(300, dtype=D)}
+    mesh = soup(pts, nrm, w, cell_data=bs)
+    base = _run(m, mesh, drv)
     q = _rotation()
-    with torch.no_grad():
-        rot = m(
-            points=pts @ q.T,
-            normals=nrm @ q.T,
-            global_inputs={"g": drv @ q.T},
-            measure_weights=w,
-            boundary_inputs=bs,
-        )
-    _assert_rotated(rot, base, q)
+    _assert_rotated(_run(m, transform(mesh, q, specs=m.boundary_specs), drv @ q.T), base, q)
     assert m.embed[0].in_features == 1 + 2
 
 
@@ -205,36 +176,30 @@ def test_head_runs_under_bf16_autocast():
     kept in the input precision by construction)."""
     torch.manual_seed(0)
     m = _isla(hidden=32, n_layers=1, n_slices=8)
-    pts = torch.randn(1, 128, 3)
-    nrm = torch.nn.functional.normalize(torch.randn(1, 128, 3), dim=-1)
-    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1)
-    w = torch.rand(1, 128) + 0.5
+    pts, nrm, w, drv = cloud(128, dtype=torch.float32)
+    mesh = soup(pts, nrm, w)
     with torch.autocast("cpu", dtype=torch.bfloat16):
-        out = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
+        out = outputs(m(boundary_meshes={"wall": mesh}, global_data={"g": drv}))
     sum(o.float().sum() for o in out.values()).backward()
     assert all(torch.isfinite(o.float()).all() for o in out.values())
 
 
 @pytest.mark.parametrize("kw", [{}, {"geo_checkpoint": True}])
-@pytest.mark.parametrize("interior", [False, True], ids=["boundary", "interior"])
-def test_parameters_receive_gradients(kw, interior):
-    """DDP requires every parameter to take part in the loss. In the interior mode
-    every parameter receives a gradient; a boundary-only forward leaves exactly the
-    query-side parameters (the query token type, routing mass and embedding) unused."""
+@pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
+def test_every_parameter_receives_a_gradient(kw, interior):
+    """DDP requires every parameter to take part in the loss. A surface model owns
+    no prediction-point parameters and an interior model uses all of its own, so
+    in both tasks every parameter receives a gradient."""
     torch.manual_seed(0)
-    m = _isla(hidden=32, n_layers=2, n_slices=8, **kw)
-    pts = torch.randn(1, 128, 3)
-    nrm = torch.nn.functional.normalize(torch.randn(1, 128, 3), dim=-1)
-    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1)
-    w = torch.rand(1, 128) + 0.5
-    fk = dict(query_points=torch.randn(1, 20, 3)) if interior else {}
-    out = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w, **fk)
+    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=interior, **kw)
+    pts, nrm, w, drv = cloud(128, dtype=torch.float32)
+    q = torch.randn(20, 3) if interior else None
+    out = outputs(m(boundary_meshes={"wall": soup(pts, nrm, w)}, prediction_points=q, global_data={"g": drv}))
     sum(o.sum() for o in out.values()).backward()
     unused = [n for n, p in m.named_parameters() if p.grad is None]
-    if interior:
-        assert not unused, unused
-    else:
-        assert unused and all(_is_query_param(n) for n in unused), unused
+    assert not unused, unused
+    assert (m.qt is not None) == interior
+    assert not any(n.startswith("qt") for n, _ in m.named_parameters()) or interior
 
 
 def test_geo_pool_then_project_is_exact():
@@ -247,201 +212,101 @@ def test_geo_pool_then_project_is_exact():
 
     torch.manual_seed(0)
     blk = _SliceBlock(64, 32).double()
-    geo = torch.randn(2, 50, 32, blk.n_geo, dtype=torch.float64)
-    mix = torch.softmax(torch.randn(2, 50, 32, dtype=torch.float64), dim=-1)
+    geo = torch.randn(2, 50, 32, blk.n_geo, dtype=D)
+    mix = torch.softmax(torch.randn(2, 50, 32, dtype=D), dim=-1)
     old = torch.einsum("bns,bnsg->bng", mix, blk.geo_feat(geo))
     new = blk.geo_feat(torch.einsum("bns,bnsg->bng", mix, geo))
     assert torch.allclose(old, new, atol=1e-12, rtol=0.0)
 
 
-@pytest.mark.parametrize("interior", [False, True], ids=["boundary", "interior"])
+@pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
 def test_geo_checkpoint_is_exact(interior):
     """Recomputing the per-slice invariants in backward (geo_checkpoint=True)
     changes what autograd stores, not what it computes: identical forward
     output and gradients (to roundoff) against the stored-activation path."""
     torch.manual_seed(0)
-    kw = dict(hidden=32, n_layers=2, n_slices=8)
+    kw = dict(hidden=32, n_layers=2, n_slices=8, interior=interior)
     ref = _isla(**kw).double()
     ckp = _isla(geo_checkpoint=True, **kw).double()
     ckp.load_state_dict(ref.state_dict())
-    pts = torch.randn(1, 40, 3, dtype=torch.float64)
-    nrm = torch.nn.functional.normalize(
-        torch.randn(1, 40, 3, dtype=torch.float64), dim=-1
-    )
-    drive = torch.tensor([[1.0, 0.2, 0.0]], dtype=torch.float64)
-    w = torch.rand(1, 40, dtype=torch.float64) + 0.5
-    fk = dict(query_points=torch.randn(1, 17, 3, dtype=torch.float64)) if interior else {}
+    pts, nrm, w, _ = cloud(40)
+    mesh = soup(pts, nrm, w)
+    drive = torch.tensor([1.0, 0.2, 0.0], dtype=D)
+    q = torch.randn(17, 3, dtype=D) if interior else None
     outs = []
     for m in (ref, ckp):
-        out = m(
-            points=pts,
-            normals=nrm,
-            global_inputs={"g": drive},
-            measure_weights=w,
-            **fk,
-        )
+        out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drive}))
         sum(o.square().sum() for o in out.values()).backward()
         outs.append(out)
-    assert all(torch.equal(outs[0][k], outs[1][k]) for k in outs[0].keys())
-    for (n, p), (_, q) in zip(ref.named_parameters(), ckp.named_parameters()):
-        if not interior and _is_query_param(n):
-            continue
-        assert p.grad is not None and q.grad is not None, n
-        assert torch.allclose(p.grad, q.grad, atol=1e-11, rtol=1e-9), n
+    assert all(torch.equal(outs[0][k], outs[1][k]) for k in outs[0])
+    for (n, p), (_, g) in zip(ref.named_parameters(), ckp.named_parameters()):
+        assert p.grad is not None and g.grad is not None, n
+        assert torch.allclose(p.grad, g.grad, atol=1e-11, rtol=1e-9), n
 
 
 def test_query_scalars_contracts():
-    """Per-query rank-0 inputs on the query tokens (e.g. a stored signed distance),
-    with the directions supplied as query_normals: exact rotation/translation
-    covariance is untouched (scalars are invariants), the channel changes the
-    output and receives gradients, geometric-scale equivariance holds (rank-0 query
-    inputs are lengths and are divided by the frame's length unit), and misuse
-    raises."""
+    """Per-prediction-point rank-0 inputs (e.g. a stored signed distance) in the
+    prediction Mesh's point_data: exact rotation/translation covariance is untouched
+    (scalars are invariants), the channel changes the output and receives
+    gradients, geometric-scale equivariance holds (rank-0 query inputs are lengths
+    and are divided by the frame's length unit), and misuse raises."""
     torch.manual_seed(0)
-    m = _isla(hidden=32, n_layers=2, n_slices=8, query_inputs={"sdf": 0}).double()
-    pts = torch.randn(1, 40, 3, dtype=torch.float64)
-    nrm = torch.nn.functional.normalize(
-        torch.randn(1, 40, 3, dtype=torch.float64), dim=-1
-    )
-    drive = torch.tensor([[1.0, 0.3, 0.0]], dtype=torch.float64)
-    w = torch.rand(1, 40, dtype=torch.float64) + 0.5
-    q = torch.randn(1, 12, 3, dtype=torch.float64)
-    qn = torch.nn.functional.normalize(
-        torch.randn(1, 12, 3, dtype=torch.float64), dim=-1
-    )
-    sdf = torch.randn(1, 12, dtype=torch.float64) * 0.3
-    out = m(
-        points=pts,
-        normals=nrm,
-        global_inputs={"g": drive},
-        measure_weights=w,
-        query_points=q,
-        query_normals=qn,
-        query_inputs={"sdf": sdf},
-    )
-    assert out["p"].shape == (1, 12) and out["v"].shape == (1, 12, 3)
+    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, query_inputs={"sdf": 0}).double()
+    pts, nrm, w, _ = cloud(40)
+    mesh = soup(pts, nrm, w)
+    drive = torch.tensor([1.0, 0.3, 0.0], dtype=D)
+    q = torch.randn(12, 3, dtype=D)
+    sdf = torch.randn(12, dtype=D) * 0.3
+    out = m(boundary_meshes={"wall": mesh}, prediction_points=points_mesh(q, {"sdf": sdf}), global_data={"g": drive})
+    assert out.point_data["p"].shape == (12,) and out.point_data["v"].shape == (12, 3)
+    assert torch.equal(out.points, q)
     ### scalar channel is live
-    out2 = m(
-        points=pts,
-        normals=nrm,
-        global_inputs={"g": drive},
-        measure_weights=w,
-        query_points=q,
-        query_normals=qn,
-        query_inputs={"sdf": sdf * 2},
-    )
-    assert not _same(out, out2, atol=1e-8)
+    out2 = _run(m, mesh, drive, points_mesh(q, {"sdf": sdf * 2}))
+    assert not same(out, out2, atol=1e-8)
     ### rotation + translation covariance (scalars ride along unchanged)
     R = _rotation()
-    t = torch.tensor([0.4, -1.1, 2.0], dtype=torch.float64)
-    rot = m(
-        points=pts @ R.T + t,
-        normals=nrm @ R.T,
-        global_inputs={"g": drive @ R.T},
-        measure_weights=w,
-        query_points=q @ R.T + t,
-        query_normals=qn @ R.T,
-        query_inputs={"sdf": sdf},
-    )
+    t = torch.tensor([0.4, -1.1, 2.0], dtype=D)
+    rot = _run(m, transform(mesh, R, t), drive @ R.T, points_mesh(q @ R.T + t, {"sdf": sdf}))
     _assert_rotated(rot, out, R)
     ### geometric-scale equivariance: lengths scale, so must the scalar
     s = 3.7
-    sc = m(
-        points=pts * s,
-        normals=nrm,
-        global_inputs={"g": drive},
-        measure_weights=w * s**2,
-        query_points=q * s,
-        query_normals=qn,
-        query_inputs={"sdf": sdf * s},
-    )
-    assert _same(sc, out, atol=1e-10)
+    sc = _run(m, transform(mesh, scale=s), drive, points_mesh(q * s, {"sdf": sdf * s}))
+    assert same(sc, out, atol=1e-10)
     ### gradients reach the query-input embedding
-    sum(o.square().sum() for o in out.values()).backward()
-    assert all(
-        p.grad is not None and p.grad.abs().sum() > 0 for p in m.qt.embed.parameters()
-    )
-    with pytest.raises(ValueError, match="pass query_inputs"):
-        m(
-            points=pts,
-            normals=nrm,
-            global_inputs={"g": drive},
-            measure_weights=w,
-            query_points=q,
-            query_normals=qn,
-        )
-    with pytest.raises(ValueError, match="without query_points"):
-        m(
-            points=pts,
-            normals=nrm,
-            global_inputs={"g": drive},
-            measure_weights=w,
-            query_inputs={"sdf": sdf},
-        )
-    with pytest.raises(ValueError, match="without query_points"):
-        m(
-            points=pts,
-            normals=nrm,
-            global_inputs={"g": drive},
-            measure_weights=w,
-            query_normals=qn,
-        )
+    sum(o.square().sum() for o in outputs(out).values()).backward()
+    assert all(p.grad is not None and p.grad.abs().sum() > 0 for p in m.qt.embed.parameters())
+    with pytest.raises(ValueError, match="missing the declared fields \\['sdf'\\]"):
+        m(boundary_meshes={"wall": mesh}, prediction_points=points_mesh(q), global_data={"g": drive})
+    with pytest.raises(ValueError, match="pass prediction_points as a Mesh"):
+        m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drive})
+    with pytest.raises(ValueError, match="interior=True"):
+        m(boundary_meshes={"wall": mesh}, global_data={"g": drive})
 
 
-def test_interior_mode_contracts():
-    """The interior mode (query_points given; interior queries as interacting
-    tokens): exactly rotation/translation-covariant, finite, and -- by design --
-    NOT query-set independent; every parameter receives a gradient."""
+def test_interior_task_contracts():
+    """The interior task (prediction points as interacting tokens): exactly
+    rotation/translation-covariant, finite, and -- by design -- NOT query-set
+    independent; every parameter receives a gradient."""
     torch.manual_seed(0)
     n, nq = 400, 150
-    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
-        [3.0, 2.0, 1.0], dtype=torch.float64
-    )
-    nrm = torch.nn.functional.normalize(
-        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
-    )
-    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
-    w = torch.rand(1, n, dtype=torch.float64) + 0.5
-    qpts = torch.randn(1, nq, 3, dtype=torch.float64) * 4.0
-    m = _isla(hidden=64, n_layers=2, n_slices=16).double().eval()
+    pts, nrm, w, drv = cloud(n)
+    mesh = soup(pts, nrm, w)
+    qpts = torch.randn(nq, 3, dtype=D) * 4.0
+    m = _isla(hidden=64, n_layers=2, n_slices=16, interior=True).double().eval()
     q = _rotation()
-    shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
-    with torch.no_grad():
-        base = m(
-            points=pts,
-            normals=nrm,
-            global_inputs={"g": drv},
-            measure_weights=w,
-            query_points=qpts,
-        )
-        rot = m(
-            points=pts @ q.T + shift,
-            normals=nrm @ q.T,
-            global_inputs={"g": drv @ q.T},
-            measure_weights=w,
-            query_points=qpts @ q.T + shift,
-        )
-        sub = m(
-            points=pts,
-            normals=nrm,
-            global_inputs={"g": drv},
-            measure_weights=w,
-            query_points=qpts[:, :50],
-        )
-    assert base["p"].shape == (1, nq) and base["v"].shape == (1, nq, 3)
-    assert all(torch.isfinite(o).all() for o in base.values())
+    shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
+    base = _run(m, mesh, drv, qpts)
+    rot = _run(m, transform(mesh, q, shift), drv @ q.T, qpts @ q.T + shift)
+    sub = _run(m, mesh, drv, qpts[:50])
+    assert base.point_data["p"].shape == (nq,) and base.point_data["v"].shape == (nq, 3)
+    assert base.n_cells == 0 and torch.equal(base.points, qpts)
+    assert all(torch.isfinite(o).all() for o in outputs(base).values())
     _assert_rotated(rot, base, q)
     # interacting mode: predictions at shared queries depend on the query set
-    assert not _same(sub, _rows(base, slice(0, 50)), atol=1e-6)
+    assert not same(outputs(sub), _rows(base, slice(0, 50)), atol=1e-6)
     # every parameter receives a gradient (DDP safety)
     m.train()
-    out = m(
-        points=pts,
-        normals=nrm,
-        global_inputs={"g": drv},
-        measure_weights=w,
-        query_points=qpts,
-    )
+    out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=qpts, global_data={"g": drv}))
     sum(o.square().mean() for o in out.values()).backward()
     missing = [k for k, p in m.named_parameters() if p.grad is None]
     assert not missing, missing
@@ -449,227 +314,116 @@ def test_interior_mode_contracts():
 
 @pytest.mark.parametrize("extra", [{}, {"query_inputs": {"sdf": 0}}])
 def test_query_mass_refinement_invariance(extra):
-    """Splitting every boundary token into two half-weight copies leaves the
-    discrete boundary measure unchanged (positions, normals, total area, every
-    integral). The query tokens' weight is a fraction of the total boundary
-    measure, so the output is exactly unchanged and the geometric-scale contract
-    still holds."""
-    torch.manual_seed(42)
-    pts = torch.randn(1, 60, 3, dtype=torch.float64) * torch.tensor(
-        [3.0, 2.0, 1.0], dtype=torch.float64
-    )
-    nrm = torch.nn.functional.normalize(torch.randn_like(pts), dim=-1)
-    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
-    w = torch.rand(1, 60, dtype=torch.float64) + 0.5
-    q = pts[:, :17] * 1.3
-    fk = dict(query_points=q)
-    if extra:
-        fk["query_inputs"] = {"sdf": q.norm(dim=-1)}
+    """Splitting every boundary cell into two coincident half-measure copies leaves
+    the discrete boundary measure unchanged (positions, normals, total area, every
+    integral). The prediction-point tokens' weight is a fraction of the total
+    boundary measure, so the output is exactly unchanged and the geometric-scale
+    contract still holds."""
+    pts, nrm, w, drv = cloud(60, seed=42)
+    mesh = soup(pts, nrm, w)
+    q = pts[:17] * 1.3
+    qm = points_mesh(q, {"sdf": q.norm(dim=-1)} if extra else None)
     torch.manual_seed(0)
-    m = _isla(hidden=32, n_layers=2, n_slices=8, **extra).double().eval()
-    refined = dict(
-        points=pts.repeat_interleave(2, 1),
-        normals=nrm.repeat_interleave(2, 1),
-        global_inputs={"g": drv},
-        measure_weights=w.repeat_interleave(2, 1) / 2,
-    )
+    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, **extra).double().eval()
     s = 3.7
-    scaled_fk = {**fk, "query_points": q * s}
-    if extra:
-        scaled_fk["query_inputs"] = {"sdf": fk["query_inputs"]["sdf"] * s}
-    with torch.no_grad():
-        a = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w, **fk)
-        b = m(**refined, **fk)
-        c = m(
-            points=pts * s,
-            normals=nrm,
-            global_inputs={"g": drv},
-            measure_weights=w * s**2,
-            **scaled_fk,
-        )
-    assert _same(b, a, atol=1e-10, rtol=0.0)
-    assert _same(c, a, atol=1e-10, rtol=0.0)
+    qm_s = points_mesh(q * s, {"sdf": q.norm(dim=-1) * s} if extra else None)
+    a = _run(m, mesh, drv, qm)
+    b = _run(m, refine(mesh), drv, qm)
+    c = _run(m, transform(mesh, scale=s), drv, qm_s)
+    assert same(b, a, atol=1e-10, rtol=0.0)
+    assert same(c, a, atol=1e-10, rtol=0.0)
 
 
-@pytest.mark.parametrize("interior", [False, True], ids=["boundary", "interior"])
+@pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
 def test_geometric_scale_equivariance(interior):
     """A similarity of the geometry (points x k + shift, areas x k^2) leaves the
-    output exactly unchanged, for the boundary alone and with interior queries
+    output exactly unchanged, for the boundary alone and with prediction points
     that are moved along."""
     torch.manual_seed(0)
-    n = 400
-    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
-        [3.0, 2.0, 1.0], dtype=torch.float64
-    )
-    nrm = torch.nn.functional.normalize(
-        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
-    )
-    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
-    w = torch.rand(1, n, dtype=torch.float64) + 0.5
-    m = _isla(hidden=64, n_layers=2, n_slices=16).double().eval()
+    pts, nrm, w, drv = cloud(400)
+    mesh = soup(pts, nrm, w)
+    m = _isla(hidden=64, n_layers=2, n_slices=16, interior=interior).double().eval()
     k = 2.7
-    shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
-    fk = dict(query_points=pts[:, :50] * 1.5) if interior else {}
-    fk_sc = {"query_points": k * fk["query_points"] + shift} if interior else {}
-    with torch.no_grad():
-        a = m(
-            points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w, **fk
-        )
-        b = m(
-            points=k * pts + shift,
-            normals=nrm,
-            global_inputs={"g": drv},
-            measure_weights=k * k * w,
-            **fk_sc,
-        )
-    assert _same(b, a, atol=1e-10, rtol=0.0)
+    shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
+    q = pts[:50] * 1.5 if interior else None
+    a = _run(m, mesh, drv, q)
+    b = _run(m, transform(mesh, shift=shift, scale=k), drv, k * q + shift if interior else None)
+    assert same(b, a, atol=1e-10, rtol=0.0)
 
 
 def test_boundary_scalars_reach_the_interior_prediction():
-    """Boundary inputs are per-boundary-cell data: query tokens carry zeros in the
-    channel, and the interior prediction depends on the boundary data."""
+    """Boundary inputs are per-boundary-cell data: prediction-point tokens carry
+    zeros in the channel, and the interior prediction depends on the boundary data."""
     torch.manual_seed(0)
-    pts = torch.randn(1, 60, 3, dtype=torch.float64) * torch.tensor(
-        [3.0, 2.0, 1.0], dtype=torch.float64
-    )
-    nrm = torch.nn.functional.normalize(torch.randn_like(pts), dim=-1)
-    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
-    w = torch.rand(1, 60, dtype=torch.float64) + 0.5
-    bs = {"bc_a": torch.randn(1, 60, dtype=torch.float64), "bc_b": torch.randn(1, 60, dtype=torch.float64)}
-    m = (
-        _isla(hidden=32, n_layers=2, n_slices=8, boundary_inputs={"bc_a": 0, "bc_b": 0})
-        .double()
-        .eval()
-    )
-    q = pts[:, :17] * 0.5
-    with torch.no_grad():
-        out = m(
-            points=pts,
-            normals=nrm,
-            global_inputs={"g": drv},
-            measure_weights=w,
-            boundary_inputs=bs,
-            query_points=q,
-        )
-        out2 = m(
-            points=pts,
-            normals=nrm,
-            global_inputs={"g": drv},
-            measure_weights=w,
-            boundary_inputs={k: 2 * v for k, v in bs.items()},
-            query_points=q,
-        )
-    assert out["p"].shape == (1, 17) and out["v"].shape == (1, 17, 3)
-    assert all(torch.isfinite(o).all() for o in out.values())
-    assert not _same(out, out2, atol=1e-6)
+    pts, nrm, w, drv = cloud(60)
+    bs = {"bc_a": torch.randn(60, dtype=D), "bc_b": torch.randn(60, dtype=D)}
+    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, boundary_inputs={"bc_a": 0, "bc_b": 0}).double().eval()
+    q = pts[:17] * 0.5
+    out = _run(m, soup(pts, nrm, w, cell_data=bs), drv, q)
+    out2 = _run(m, soup(pts, nrm, w, cell_data={k: 2 * v for k, v in bs.items()}), drv, q)
+    assert out.point_data["p"].shape == (17,) and out.point_data["v"].shape == (17, 3)
+    assert all(torch.isfinite(o).all() for o in outputs(out).values())
+    assert not same(out, out2, atol=1e-6)
 
 
 def _biased_poisson_subsample(pts, w, n_expected, bias, generator):
     """10:1 Poisson subsample with exact Horvitz-Thompson weights, mirroring the
     recipe's PoissonBiasedSubsampleMesh (bias toward x below the median)."""
-    x = pts[0, :, 0]
+    x = pts[:, 0]
     b = torch.where(x < x.median(), torch.full_like(x, bias), torch.ones_like(x))
     pi = (n_expected / b.sum() * b).clamp(max=1.0)
     keep = torch.rand(x.shape[0], dtype=pi.dtype, generator=generator) < pi
     idx = keep.nonzero(as_tuple=True)[0]
-    return pts[:, idx], (w[:, idx] / pi[idx]), idx
+    return idx, w[idx] / pi[idx]
 
 
 def _frame_cloud(n=300, seed=0):
-    torch.manual_seed(seed)
-    pts = (
-        torch.randn(1, n, 3, dtype=torch.float64)
-        * torch.tensor([3.0, 2.0, 1.0], dtype=torch.float64)
-        + 5.0
-    )
-    nrm = torch.nn.functional.normalize(
-        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
-    )
-    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
-    w = torch.rand(1, n, dtype=torch.float64) + 0.5
-    return pts, nrm, drv, w
+    pts, nrm, w, drv = cloud(n, seed=seed)
+    return soup(pts + 5.0, nrm, w), drv
 
 
 def test_frame_contracts():
     """The origin-free frame: exact translation invariance without centering
-    (1e-12, fp64), rotation equivariance, and the feature widths (one seed
-    invariant n.g, six relational invariants in the slice blocks)."""
-    pts, nrm, drv, w = _frame_cloud()
-    shift = torch.tensor([300.0, -70.0, 1100.0], dtype=torch.float64)
+    (fp64), rotation equivariance, and the feature widths (one seed invariant
+    n.g, six relational invariants in the slice blocks)."""
+    mesh, drv = _frame_cloud()
+    shift = torch.tensor([300.0, -70.0, 1100.0], dtype=D)
     torch.manual_seed(1)
     m = _isla(hidden=64, n_layers=2, n_slices=16).double().eval()
     assert m.embed[0].in_features == 1
     assert m.blocks[0].geo_logit.in_features == 6
-    with torch.no_grad():
-        base = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-        assert all(torch.isfinite(o).all() for o in base.values())
-        assert _same(
-            m(points=pts + shift, normals=nrm, global_inputs={"g": drv}, measure_weights=w),
-            base,
-            atol=1e-12,
-        )
-        q = _rotation()
-        rot = m(
-            points=pts @ q.T,
-            normals=nrm @ q.T,
-            global_inputs={"g": drv @ q.T},
-            measure_weights=w,
-        )
-        _assert_rotated(rot, base, q)
+    base = _run(m, mesh, drv)
+    assert all(torch.isfinite(o).all() for o in outputs(base).values())
+    ### the cell normals are recomputed from the shifted vertices (a 1e3 shift on
+    ### 0.2 cells costs ~1e-13 in the normals), hence 1e-10 rather than 1e-12
+    assert same(_run(m, transform(mesh, shift=shift), drv), base, atol=1e-10)
+    q = _rotation()
+    _assert_rotated(_run(m, transform(mesh, q), drv @ q.T), base, q)
 
 
 def test_frame_is_sampling_consistent():
     """The discriminating contract of the origin-free frame. Under a 10:1 biased
     Poisson subsample with exact HT weights, a model whose frame carries no
-    sample statistic moves its predictions at fixed interior queries between the
+    sample statistic moves its predictions at fixed prediction points between the
     uniform and the biased draw by no more than the measure noise -- the same
     order as between two independent uniform draws."""
-    torch.manual_seed(0)
-    n_full = 100000
-    pts = torch.randn(1, n_full, 3, dtype=torch.float64) * torch.tensor(
-        [3.0, 2.0, 1.0], dtype=torch.float64
-    )
-    nrm = torch.nn.functional.normalize(
-        torch.randn(1, n_full, 3, dtype=torch.float64), dim=-1
-    )
-    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
-    w = torch.rand(1, n_full, dtype=torch.float64) + 0.5
-    q = pts[:, :40] * 1.2
+    pts, nrm, w, drv = cloud(100000)
+    q = pts[:40] * 1.2
     torch.manual_seed(1)
-    m = _isla(hidden=32, n_layers=2, n_slices=8).double().eval()
+    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True).double().eval()
     n_sub = 10000
     d_bias, d_noise = [], []
 
     def _flat(o):
-        return torch.cat([o["p"][..., None], o["v"]], dim=-1)
+        return torch.cat([o.point_data["p"][..., None], o.point_data["v"]], dim=-1)
+
+    def _draw(bias, g):
+        idx, w_ht = _biased_poisson_subsample(pts, w, n_sub, bias, g)
+        return _run(m, soup(pts[idx], nrm[idx], w_ht), drv, q)
 
     for seed in range(4):
         g = torch.Generator().manual_seed(100 + seed)
-        p_u, w_u, iu = _biased_poisson_subsample(pts, w, n_sub, 1.0, g)
-        p_u2, w_u2, iu2 = _biased_poisson_subsample(pts, w, n_sub, 1.0, g)
-        p_b, w_b, ib = _biased_poisson_subsample(pts, w, n_sub, 10.0, g)
-        with torch.no_grad():
-            o_u = m(
-                points=p_u,
-                normals=nrm[:, iu],
-                global_inputs={"g": drv},
-                measure_weights=w_u,
-                query_points=q,
-            )
-            o_u2 = m(
-                points=p_u2,
-                normals=nrm[:, iu2],
-                global_inputs={"g": drv},
-                measure_weights=w_u2,
-                query_points=q,
-            )
-            o_b = m(
-                points=p_b,
-                normals=nrm[:, ib],
-                global_inputs={"g": drv},
-                measure_weights=w_b,
-                query_points=q,
-            )
+        o_u, o_u2, o_b = _draw(1.0, g), _draw(1.0, g), _draw(10.0, g)
         d_bias.append(float((_flat(o_b) - _flat(o_u)).norm()))
         d_noise.append(float((_flat(o_u2) - _flat(o_u)).norm()))
     ### measure-noise level: the biased draw's HT estimates have a larger variance
@@ -681,34 +435,36 @@ def test_frame_is_sampling_consistent():
 
 
 def test_defaults_are_the_reference_configuration():
-    """The class defaults: the automatic geometry kernel, static prototypes, one
-    seed invariant n.g and six relational invariants."""
+    """The class defaults: a surface task, the automatic geometry kernel, static
+    prototypes, one seed invariant n.g and six relational invariants; an interior
+    model adds the prediction-point embedding over the built-in distance pair."""
     m = _isla(hidden=32, n_layers=2, n_slices=8)
+    assert m.interior is False and m.qt is None
     assert m.geo_kernel == "auto"
     assert m.slice_prototypes == "static"
     assert m.embed[0].in_features == 1
     assert m.blocks[0].geo_logit.in_features == 6
-    assert m.qt.embed[0].in_features == 2  # the built-in distance pair
+    mi = _isla(hidden=32, n_layers=2, n_slices=8, interior=True)
+    assert mi.qt.embed[0].in_features == 2  # the built-in distance pair
 
 
 def test_constructor_and_forward_are_keyword_only():
     """Every constructor argument and every forward input is keyword-only
     (inputs read as the recipe's forward_kwargs mapping and models can be
     hot-swapped without positional bookkeeping)."""
-    pts = torch.randn(1, 16, 3)
-    nrm = torch.nn.functional.normalize(torch.randn(1, 16, 3), dim=-1)
-    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1)
-    w = torch.rand(1, 16) + 0.5
+    pts, nrm, w, drv = cloud(16, dtype=torch.float32)
+    mesh = soup(pts, nrm, w)
     with pytest.raises(TypeError):
         ISLA(PV, G)
     with pytest.raises(TypeError):
         ISLA(hidden=32, n_layers=1, n_slices=8)  # outputs is required
     m = _isla(hidden=32, n_layers=1, n_slices=8)
     with pytest.raises(TypeError):
-        m(pts, nrm, {"g": drv}, w)
-    out = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-    assert out["p"].shape == (1, 16) and out["v"].shape == (1, 16, 3)
-    assert all(torch.isfinite(o).all() for o in out.values())
+        m({"wall": mesh}, None, {"g": drv})
+    out = m(boundary_meshes={"wall": mesh}, global_data={"g": drv})
+    assert out.point_data["p"].shape == (16,) and out.point_data["v"].shape == (16, 3)
+    assert torch.allclose(out.points, mesh.cell_centroids)
+    assert all(torch.isfinite(o).all() for o in outputs(out).values())
 
 
 @pytest.mark.parametrize(
@@ -735,53 +491,69 @@ def test_unknown_constructor_argument_raises_type_error(name):
         _isla(hidden=32, n_layers=1, n_slices=8, **{name: 1})
 
 
+def test_interior_flag_structures_the_forward():
+    """A surface model refuses prediction points and query_inputs; an interior
+    model requires prediction points; a bare tensor is accepted only without
+    declared query_inputs."""
+    pts, nrm, w, drv = cloud(20, dtype=torch.float32)
+    mesh = soup(pts, nrm, w)
+    surface = _isla(hidden=32, n_layers=1, n_slices=8)
+    with pytest.raises(ValueError, match="interior=False"):
+        surface(boundary_meshes={"wall": mesh}, prediction_points=pts[:3], global_data={"g": drv})
+    with pytest.raises(ValueError, match="declare them with interior=True"):
+        _isla(hidden=32, n_layers=1, n_slices=8, query_inputs={"sdf": 0})
+    interior = _isla(hidden=32, n_layers=1, n_slices=8, interior=True)
+    with pytest.raises(ValueError, match="pass prediction_points"):
+        interior(boundary_meshes={"wall": mesh}, global_data={"g": drv})
+    out = interior(boundary_meshes={"wall": mesh}, prediction_points=points_mesh(pts[:3] * 2), global_data={"g": drv})
+    assert out.point_data["p"].shape == (3,)
+    with pytest.raises(ValueError, match="tensor of shape \\(N, 3\\)"):
+        interior(boundary_meshes={"wall": mesh}, prediction_points=pts[:3, :2], global_data={"g": drv})
+
+
+def test_mesh_validation_errors():
+    """Dimension and type mismatches are refused at the API boundary with the
+    offending mesh named."""
+    pts, nrm, w, drv = cloud(20, dtype=torch.float32)
+    m = _isla(hidden=32, n_layers=1, n_slices=8)
+    with pytest.raises(ValueError, match="non-empty mapping"):
+        m(boundary_meshes={}, global_data={"g": drv})
+    with pytest.raises(TypeError, match="must be a physicsnemo.mesh.Mesh"):
+        m(boundary_meshes={"wall": pts}, global_data={"g": drv})
+    with pytest.raises(ValueError, match="boundary_meshes\\['cloud'\\]: the boundary of a 3-dimensional domain is a Mesh\\[2, 3\\]"):
+        m(boundary_meshes={"cloud": Mesh(points=pts)}, global_data={"g": drv})
+    pts2, nrm2, w2, _ = cloud(20, d=2, dtype=torch.float32)
+    with pytest.raises(ValueError, match="has 2 spatial dimensions; this model has dim=3"):
+        m(boundary_meshes={"wall": soup(pts2, nrm2, w2)}, global_data={"g": drv})
+    with pytest.raises(ValueError, match="global_data is missing the declared fields \\['g'\\]"):
+        m(boundary_meshes={"wall": soup(pts, nrm, w)})
+    with pytest.raises(TypeError, match="global_data must be"):
+        m(boundary_meshes={"wall": soup(pts, nrm, w)}, global_data=drv)
+
+
 def test_rms_distance_scale_contracts():
     """The RMS-pairwise-distance length unit keeps exact translation invariance and
-    rotation covariance, is invariant to a geometric rescale of the points (with or
-    without the matching weight rescale) AND to a uniform rescale of the weights
-    alone, and needs no centre."""
-    pts, nrm, drv, w = _frame_cloud()
+    rotation covariance, is invariant to a geometric rescale of the boundary (with
+    or without the matching measure rescale) AND to a uniform rescale of the
+    measures alone, and needs no centre."""
+    mesh, drv = _frame_cloud()
     torch.manual_seed(1)
     m = _isla(hidden=64, n_layers=2, n_slices=16).double().eval()
-    shift = torch.tensor([300.0, -70.0, 1100.0], dtype=torch.float64)
-    gi = {"g": drv}
-    with torch.no_grad():
-        base = m(points=pts, normals=nrm, global_inputs=gi, measure_weights=w)
-        assert all(torch.isfinite(o).all() for o in base.values())
-        assert _same(
-            m(points=pts + shift, normals=nrm, global_inputs=gi, measure_weights=w),
-            base,
-            atol=1e-12,
-        )
-        q = _rotation()
-        rot = m(
-            points=pts @ q.T,
-            normals=nrm @ q.T,
-            global_inputs={"g": drv @ q.T},
-            measure_weights=w,
-        )
-        _assert_rotated(rot, base, q)
-        assert _same(
-            m(
-                points=pts * 2.5,
-                normals=nrm,
-                global_inputs=gi,
-                measure_weights=w * 2.5**2,
-            ),
-            base,
-            atol=1e-10,
-        )
-        assert _same(
-            m(points=pts, normals=nrm, global_inputs=gi, measure_weights=w * 137.0),
-            base,
-            atol=1e-10,
-        )  # weight rescale alone: invariant (the unit is normalized)
-        assert _same(
-            m(points=pts * 2.5, normals=nrm, global_inputs=gi, measure_weights=w),
-            base,
-            atol=1e-10,
-        )  # a rescale of the points alone is invariant too: the unit is a length of the sample and the
-        # routing bias log w is uniform-rescale invariant, so weights and positions decouple
+    shift = torch.tensor([300.0, -70.0, 1100.0], dtype=D)
+    w = mesh.cell_data[EFFECTIVE_MEASURE_KEY]
+    base = _run(m, mesh, drv)
+    assert all(torch.isfinite(o).all() for o in outputs(base).values())
+    assert same(_run(m, transform(mesh, shift=shift), drv), base, atol=1e-10)
+    q = _rotation()
+    _assert_rotated(_run(m, transform(mesh, q), drv @ q.T), base, q)
+    assert same(_run(m, transform(mesh, scale=2.5), drv), base, atol=1e-10)
+    # measure rescale alone: invariant (the unit is normalized)
+    assert same(_run(m, mesh.with_data(cell_data={EFFECTIVE_MEASURE_KEY: w * 137.0}), drv), base, atol=1e-10)
+    # a rescale of the points alone is invariant too: the unit is a length of the
+    # sample and the routing bias log w is uniform-rescale invariant, so measures
+    # and positions decouple
+    scaled_points_only = transform(mesh, scale=2.5).with_data(cell_data={EFFECTIVE_MEASURE_KEY: w})
+    assert same(_run(m, scaled_points_only, drv), base, atol=1e-10)
 
 
 def _koch_curve(level: int):
@@ -807,9 +579,7 @@ def _koch_curve(level: int):
     xy = torch.stack(pts).double()
     mids = (xy[:-1] + xy[1:]) / 2
     seg = (xy[1:] - xy[:-1]).norm(dim=-1)
-    return torch.cat([mids, torch.zeros(len(mids), 1, dtype=torch.float64)], dim=-1)[
-        None
-    ], seg[None]
+    return torch.cat([mids, torch.zeros(len(mids), 1, dtype=D)], dim=-1)[None], seg[None]
 
 
 def test_rms_distance_converges_on_koch_curve_where_total_measure_diverges():
@@ -825,9 +595,7 @@ def test_rms_distance_converges_on_koch_curve_where_total_measure_diverges():
         totals.append(w.sum().item())
         rms.append(rms_pairwise_distance(pts, w).item())
     for a, b in zip(totals[:-1], totals[1:]):
-        assert (
-            abs(b / a - 4.0 / 3.0) < 1e-6
-        )  # the measure diverges geometrically (float64 polyline arithmetic)
+        assert abs(b / a - 4.0 / 3.0) < 1e-6  # the measure diverges geometrically
     rel = [abs(b - a) / a for a, b in zip(rms[:-1], rms[1:])]
     assert all(r < 1e-3 for r in rel[4:]), rel
     assert rel[-1] < 1e-4, rel
@@ -835,49 +603,30 @@ def test_rms_distance_converges_on_koch_curve_where_total_measure_diverges():
 
 
 def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices():
-    """geo_kernel=None (auto) picks the fused Triton region only where it can run: on CUDA with one to four
-    global directions and at most 1024 slices. On CPU it must resolve to eager at the first forward pass, cache the
-    decision, and leave the outputs identical to an explicit eager model with the same weights."""
+    """geo_kernel=None (auto) picks the fused Triton region only where it can run: on
+    CUDA with one to four global directions and at most 1024 slices. On CPU it must
+    resolve to eager at the first forward pass, cache the decision, and leave the
+    outputs identical to an explicit eager model with the same weights."""
     torch.manual_seed(0)
-    pts = torch.randn(1, 64, 3, dtype=torch.float64)
-    nrm = torch.nn.functional.normalize(
-        torch.randn(1, 64, 3, dtype=torch.float64), dim=-1
-    )
-    drv = torch.tensor([[[1.0, 0.0, 0.0]]], dtype=torch.float64)
-    w = torch.rand(1, 64, dtype=torch.float64) + 0.1
+    pts, nrm, w, _ = cloud(64)
+    mesh = soup(pts, nrm, w)
+    drv = torch.tensor([1.0, 0.0, 0.0], dtype=D)
     auto = _isla(hidden=32, n_layers=2, n_slices=8).double().eval()
     assert auto.geo_kernel == "auto" and auto.resolve_geo_kernel(pts) == "eager"
     eager = _isla(hidden=32, n_layers=2, n_slices=8, geo_kernel="eager").double().eval()
     eager.load_state_dict(auto.state_dict())
-    with torch.no_grad():
-        ya = auto(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-        ye = eager(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-    assert all(torch.equal(ya[k], ye[k]) for k in ya.keys())
+    ya, ye = outputs(_run(auto, mesh, drv)), outputs(_run(eager, mesh, drv))
+    assert all(torch.equal(ya[k], ye[k]) for k in ya)
     assert all(b.geo_kernel == "eager" for b in auto.blocks)
     assert auto._geo_kernel_cache[1] == "eager"
-    # five global directions: auto silently stays eager (off CUDA it does anyway); an explicit fused request is
-    # refused at construction (the kernel is unrolled for one to four)
-    two = (
-        ISLA(
-            outputs=PV,
-            global_inputs={"g1": 1, "g2": 1, "g3": 1, "g4": 1, "g5": 1},
-            hidden=32,
-            n_layers=2,
-            n_slices=8,
-        )
-        .double()
-        .eval()
-    )
+    # five global directions: auto silently stays eager (off CUDA it does anyway); an
+    # explicit fused request is refused at construction (the kernel is unrolled for
+    # one to four)
+    five = {"g1": 1, "g2": 1, "g3": 1, "g4": 1, "g5": 1}
+    two = ISLA(outputs=PV, global_inputs=five, hidden=32, n_layers=2, n_slices=8).double().eval()
     assert two.resolve_geo_kernel(pts) == "eager"
     with pytest.raises(ValueError, match="one to four per-point vectors"):
-        ISLA(
-            outputs=PV,
-            global_inputs={"g1": 1, "g2": 1, "g3": 1, "g4": 1, "g5": 1},
-            hidden=32,
-            n_layers=2,
-            n_slices=8,
-            geo_kernel="fused",
-        )
+        ISLA(outputs=PV, global_inputs=five, hidden=32, n_layers=2, n_slices=8, geo_kernel="fused")
     with pytest.raises(ValueError, match="geo_kernel must be"):
         _isla(hidden=32, n_layers=2, n_slices=8, geo_kernel="turbo")
 
@@ -886,23 +635,20 @@ def test_scalar_only_model_has_no_frame_routing_and_every_parameter_gets_a_gradi
     """A model whose outputs are all rank 0 never reads the token basis, so the head's
     frame routing is not built (a parameter without a gradient stops DDP at the second
     step); with a vector output the frame routing exists. In both cases every
-    parameter receives a gradient in the interior mode, and the scalar-only outputs
+    parameter receives a gradient in the interior task, and the scalar-only outputs
     equal the head coefficients directly."""
     torch.manual_seed(0)
-    n = 200
-    pts = torch.randn(1, n, 3) * torch.tensor([3.0, 2.0, 1.0])
-    nrm = torch.nn.functional.normalize(torch.randn(1, n, 3), dim=-1)
-    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1)
-    w = torch.rand(1, n) + 0.5
-    q = torch.randn(1, 30, 3) * 2.0
+    pts, nrm, w, drv = cloud(200, dtype=torch.float32)
+    mesh = soup(pts, nrm, w)
+    q = torch.randn(30, 3) * 2.0
     for outs in ({"u": 0}, {"u": 0, "q1": 0, "q2": 0}, {"u": 0, "v": 1}):
-        m = ISLA(outputs=outs, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8)
+        m = ISLA(outputs=outs, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8, interior=True)
         has_vec = any(v == 1 for v in outs.values())
         assert m.needs_frame == has_vec and (m.frame_assign is not None) == has_vec
-        out = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w, query_points=q)
+        out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}))
         sum(v.square().mean() for v in out.values()).backward()
         missing = [k for k, p in m.named_parameters() if p.grad is None]
         assert not missing, missing
-        assert out["u"].shape == (1, 30)
+        assert out["u"].shape == (30,)
         if "q1" in outs:
-            assert out["q2"].shape == (1, 30) and m.head.out_features == 3
+            assert out["q2"].shape == (30,) and m.head.out_features == 3

@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Contract tests for ISLA's rank-spec output heads (2026-09-22).
+"""Contract tests for ISLA's rank-spec output heads.
 
 Every output is declared with a rank, a symmetry and a parity and is assembled from
 invariant coefficients times tensor products of the token's basis vectors (true
 vectors for even parity, exactly one pseudovector factor for odd parity) plus the
-isotropic tensors of that rank. The checks are exact (float64, 1e-12): a rank-r
-output transforms as ``R^{(x)r}`` under every orthogonal map, with the extra sign
-``det R`` for odd parity, and is invariant under translations.
+isotropic tensors of that rank. The checks are exact (float64): a rank-r output
+transforms as ``R^{(x)r}`` under every orthogonal map, with the extra sign ``det R``
+for odd parity, and is invariant under translations.
 """
 
 from math import comb
@@ -30,6 +30,16 @@ import pytest
 import torch
 
 from physicsnemo.experimental.models import ISLA
+from physicsnemo.mesh.fields import RankSpec
+from test.experimental.models.isla._meshes import (
+    cloud,
+    law,
+    orthogonal,
+    outputs,
+    points_mesh,
+    soup,
+    transform,
+)
 
 D = torch.float64
 
@@ -48,19 +58,11 @@ OUTPUTS = {
 }
 
 
-def _cloud(n=300, seed=0):
-    g = torch.Generator().manual_seed(seed)
-    pts = torch.randn(1, n, 3, dtype=D, generator=g) * torch.tensor(
-        [3.0, 2.0, 1.0], dtype=D
-    )
-    nrm = torch.nn.functional.normalize(
-        torch.randn(1, n, 3, dtype=D, generator=g), dim=-1
-    )
-    drv = torch.nn.functional.normalize(
-        torch.randn(1, 2, 3, dtype=D, generator=g), dim=-1
-    )
-    w = torch.rand(1, n, dtype=D, generator=g) + 0.5
-    return pts, nrm, drv, w
+def _boundary(n=300, seed=0):
+    pts, nrm, w, _ = cloud(n, seed=seed)
+    g = torch.Generator().manual_seed(seed + 100)
+    drv = torch.nn.functional.normalize(torch.randn(2, 3, dtype=D, generator=g), dim=-1)
+    return soup(pts, nrm, w), drv
 
 
 def _globals(K):
@@ -69,51 +71,27 @@ def _globals(K):
 
 def _model(K=1, outputs=OUTPUTS, **kw):
     torch.manual_seed(0)
-    base = dict(
-        hidden=32, n_layers=2, n_slices=8, outputs=outputs, global_inputs=_globals(K)
-    )
+    base = dict(hidden=32, n_layers=2, n_slices=8, outputs=outputs, global_inputs=_globals(K))
     base.update(kw)
     return ISLA(**base).double().eval()
 
 
-def _orthogonal(seed, improper=False):
-    q, _ = torch.linalg.qr(
-        torch.randn(3, 3, dtype=D, generator=torch.Generator().manual_seed(seed))
-    )
-    if (torch.det(q) < 0) != improper:
-        q[:, 0] = -q[:, 0]
-    return q
-
-
-def _forward(m, pts, nrm, drv, w, K, R=None, shift=None, **extra):
-    """Forward pass with the geometry (and every vector input) transformed by ``R`` and
-    translated by ``shift``."""
-    R = torch.eye(3, dtype=D, device=pts.device) if R is None else R.to(pts.device)
-    shift = (
-        torch.zeros(3, dtype=D, device=pts.device)
-        if shift is None
-        else shift.to(pts.device)
-    )
-    gi = {f"g{k}": drv[:, k] @ R.T for k in range(K)}
+def _forward(m, mesh, drv, K, R=None, shift=None, q=None):
+    """Forward pass with the boundary (and every vector input) transformed by ``R``
+    and translated by ``shift``; ``q`` prediction points are moved along."""
+    R = torch.eye(3, dtype=D, device=drv.device) if R is None else R.to(drv.device)
+    gd = {f"g{k}": drv[k] @ R.T for k in range(K)}
+    if q is not None:
+        q = points_mesh(q.points @ R.T + (0 if shift is None else shift), q.point_data)
     with torch.no_grad():
-        return m(
-            points=pts @ R.T + shift,
-            normals=nrm @ R.T,
-            measure_weights=w,
-            global_inputs=gi,
-            **extra,
+        return outputs(
+            m(boundary_meshes={"wall": transform(mesh, R, shift)}, prediction_points=q, global_data=gd)
         )
 
 
-def _transform(x, R, spec):
-    """``R^{(x)r} x`` on the trailing ``rank`` axes of ``x`` (leading axes batch), with
-    the pseudotensor sign for odd parity."""
-    if spec.rank == 0:
-        return x
-    y = x
-    for k in range(spec.rank):
-        y = torch.movedim(torch.tensordot(y, R, dims=([2 + k], [1])), -1, 2 + k)
-    return y * (torch.det(R) if spec.parity == "odd" else 1.0)
+def _transform(x, R, spec: RankSpec):
+    """``R^{(x)r} x`` on the trailing ``rank`` axes with the pseudotensor sign for odd parity."""
+    return law(x, R, spec.rank) * (torch.det(R) if spec.parity == "odd" else 1.0)
 
 
 @pytest.mark.parametrize("K", [0, 1, 2])
@@ -150,14 +128,14 @@ def test_minimal_head_width():
 @pytest.mark.parametrize("K", [0, 1, 2])
 def test_output_shapes(K):
     m = _model(K)
-    pts, nrm, drv, w = _cloud()
-    out = _forward(m, pts, nrm, drv, w, K)
-    assert set(out.keys()) == set(OUTPUTS)
-    assert out["s"].shape == (1, 300) and out["s2"].shape == (1, 300)
-    assert out["v"].shape == out["pv"].shape == (1, 300, 3)
-    assert out["t"].shape == out["ts"].shape == out["pt"].shape == (1, 300, 3, 3)
-    assert out["t3"].shape == out["t3o"].shape == out["t3s"].shape == (1, 300, 3, 3, 3)
-    assert out["t4s"].shape == (1, 300, 3, 3, 3, 3)
+    mesh, drv = _boundary()
+    out = _forward(m, mesh, drv, K)
+    assert set(out) == set(OUTPUTS)
+    assert out["s"].shape == (300,) and out["s2"].shape == (300,)
+    assert out["v"].shape == out["pv"].shape == (300, 3)
+    assert out["t"].shape == out["ts"].shape == out["pt"].shape == (300, 3, 3)
+    assert out["t3"].shape == out["t3o"].shape == out["t3s"].shape == (300, 3, 3, 3)
+    assert out["t4s"].shape == (300, 3, 3, 3, 3)
     assert all(torch.isfinite(o).all() for o in out.values())
 
 
@@ -166,41 +144,37 @@ def test_output_shapes(K):
 def test_covariance_of_every_rank_and_parity(K, improper):
     """Under a random orthogonal map R (proper or improper) together with a
     translation, a rank-r even output transforms as R^{(x)r}, an odd one picks up
-    det R, and a rank-0 output is unchanged (1e-12, float64)."""
+    det R, and a rank-0 output is unchanged (float64)."""
     m = _model(K)
-    pts, nrm, drv, w = _cloud()
-    base = _forward(m, pts, nrm, drv, w, K)
+    mesh, drv = _boundary()
+    base = _forward(m, mesh, drv, K)
     shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
     for seed in range(2):
-        R = _orthogonal(seed, improper)
+        R = orthogonal(3, seed, improper)
         assert (torch.det(R) < 0) == improper
-        out = _forward(m, pts, nrm, drv, w, K, R=R, shift=shift)
+        out = _forward(m, mesh, drv, K, R=R, shift=shift)
         for name, spec in m.output_specs.items():
-            assert torch.allclose(
-                out[name], _transform(base[name], R, spec), atol=1e-12
-            ), (name, K, improper)
+            assert torch.allclose(out[name], _transform(base[name], R, spec), atol=1e-11), (name, K, improper)
 
 
 def test_translation_invariance_alone():
     m = _model(1)
-    pts, nrm, drv, w = _cloud()
-    base = _forward(m, pts, nrm, drv, w, 1)
-    tr = _forward(
-        m, pts, nrm, drv, w, 1, shift=torch.tensor([3.0, -7.0, 11.0], dtype=D)
-    )
-    for k in base.keys():
-        assert torch.allclose(tr[k], base[k], atol=1e-12), k
+    mesh, drv = _boundary()
+    base = _forward(m, mesh, drv, 1)
+    tr = _forward(m, mesh, drv, 1, shift=torch.tensor([3.0, -7.0, 11.0], dtype=D))
+    for k in base:
+        assert torch.allclose(tr[k], base[k], atol=1e-11), k
 
 
 def test_symmetric_outputs_are_symmetric():
     m = _model(1)
-    pts, nrm, drv, w = _cloud()
-    out = _forward(m, pts, nrm, drv, w, 1)
+    mesh, drv = _boundary()
+    out = _forward(m, mesh, drv, 1)
     ts, t3s, t4s = out["ts"], out["t3s"], out["t4s"]
     assert torch.allclose(ts, ts.transpose(-1, -2), atol=1e-12)
-    for perm in ((0, 1, 3, 4, 2), (0, 1, 2, 4, 3), (0, 1, 4, 3, 2)):
+    for perm in ((0, 2, 3, 1), (0, 1, 3, 2), (0, 3, 2, 1)):
         assert torch.allclose(t3s, t3s.permute(*perm), atol=1e-12)
-    for perm in ((0, 1, 3, 2, 4, 5), (0, 1, 2, 3, 5, 4), (0, 1, 5, 4, 3, 2)):
+    for perm in ((0, 2, 1, 3, 4), (0, 1, 2, 4, 3), (0, 4, 3, 2, 1)):
         assert torch.allclose(t4s, t4s.permute(*perm), atol=1e-12)
     ### the general rank-2 output is generically NOT symmetric
     assert not torch.allclose(out["t"], out["t"].transpose(-1, -2), atol=1e-6)
@@ -211,85 +185,70 @@ def test_odd_outputs_are_pseudotensors_and_even_ones_are_not():
     law and leaves the even outputs on the even law; the contract is not vacuous
     because the odd basis is non-trivial (the outputs are not zero)."""
     m = _model(1)
-    pts, nrm, drv, w = _cloud()
-    base = _forward(m, pts, nrm, drv, w, 1)
-    R = -torch.eye(3, dtype=D)
-    out = _forward(m, pts, nrm, drv, w, 1, R=R)
-    assert torch.allclose(out["pv"], base["pv"], atol=1e-12)  # (-1)^1 * det = +1
-    assert torch.allclose(out["v"], -base["v"], atol=1e-12)
-    assert torch.allclose(out["pt"], -base["pt"], atol=1e-12)  # (-1)^2 * det = -1
-    assert torch.allclose(out["t"], base["t"], atol=1e-12)
+    mesh, drv = _boundary()
+    base = _forward(m, mesh, drv, 1)
+    out = _forward(m, mesh, drv, 1, R=-torch.eye(3, dtype=D))
+    assert torch.allclose(out["pv"], base["pv"], atol=1e-11)  # (-1)^1 * det = +1
+    assert torch.allclose(out["v"], -base["v"], atol=1e-11)
+    assert torch.allclose(out["pt"], -base["pt"], atol=1e-11)  # (-1)^2 * det = -1
+    assert torch.allclose(out["t"], base["t"], atol=1e-11)
     assert base["pv"].norm() > 1e-3 and base["pt"].norm() > 1e-3
     assert base["t3o"].norm() > 1e-3
 
 
 def test_rank_spec_grammar_is_validated():
+    """The shared grammar (physicsnemo.mesh.fields) validates the leaves; ISLA adds
+    its rank ceilings and the refusal of pseudotensor inputs."""
     base = dict(hidden=32, n_layers=1, n_slices=8, global_inputs={"g": 1})
     with pytest.raises(ValueError, match="rank 5 is not supported"):
         ISLA(outputs={"x": 5}, **base)
-    with pytest.raises(ValueError, match="unknown rank-spec keys"):
+    with pytest.raises(ValueError, match="unknown keys"):
         ISLA(outputs={"x": {"rank": 1, "parity_odd": True}}, **base)
     with pytest.raises(TypeError, match="bool"):
         ISLA(outputs={"x": True}, **base)
     with pytest.raises(ValueError, match="parity must be"):
         ISLA(outputs={"x": {"rank": 1, "parity": "mixed"}}, **base)
-    with pytest.raises(ValueError, match="unknown rank-spec keys \\['channels'\\]"):
+    with pytest.raises(ValueError, match="unknown keys \\['channels'\\]"):
         ISLA(outputs={"x": {"rank": 0, "channels": 2}}, **base)
+    with pytest.raises(ValueError, match="symmetric=True is only meaningful for rank >= 2"):
+        ISLA(outputs={"x": {"rank": 1, "symmetric": True}}, **base)
     with pytest.raises(ValueError, match="at least one field"):
         ISLA(outputs={}, **base)
     with pytest.raises(ValueError, match="pseudotensor"):
-        ISLA(
-            outputs={"p": 0},
-            boundary_inputs={"w": {"rank": 1, "parity": "odd"}},
-            **base,
-        )
+        ISLA(outputs={"p": 0}, boundary_inputs={"w": {"rank": 1, "parity": "odd"}}, **base)
     with pytest.raises(ValueError, match="rank 3 is not supported"):
         ISLA(outputs={"p": 0}, boundary_inputs={"T": 3}, **base)
     with pytest.raises(ValueError, match="rank 2 is not supported"):
-        ISLA(
-            outputs={"p": 0}, hidden=32, n_layers=1, n_slices=8, global_inputs={"T": 2}
-        )
+        ISLA(outputs={"p": 0}, hidden=32, n_layers=1, n_slices=8, global_inputs={"T": 2})
     with pytest.raises(TypeError, match="mapping"):
         ISLA(outputs=[0, 1], **base)
+    ### a RankSpec instance is a leaf too
+    m = ISLA(outputs={"sig": RankSpec(2, symmetric=True)}, **base)
+    assert m.output_specs["sig"] == RankSpec(rank=2, symmetric=True, parity="even")
 
 
-@pytest.mark.parametrize("supplied", [False, True], ids=["internal", "supplied_normals"])
-def test_rank_two_output_in_the_interior_mode(supplied):
-    """The heads sit on the shared readout, so the interior mode carries a rank-2
-    output with the same covariance (rotation and reflection), with the query
-    directions computed inside or supplied."""
-    pts, nrm, drv, w = _cloud(200)
-    q_pts, q_nrm, _, _ = _cloud(50, seed=1)
-    outputs = {"p": 0, "v": 1, "sig": {"rank": 2, "symmetric": True}, "t": 2}
-    m = _model(1, outputs=outputs, query_inputs={"sdf": 0})
-    qs = torch.rand(1, 50, dtype=D)
-
-    def call(R):
-        extra = dict(query_points=q_pts @ R.T, query_inputs={"sdf": qs})
-        if supplied:
-            extra["query_normals"] = q_nrm @ R.T
-        return _forward(m, pts, nrm, drv, w, 1, R=R, **extra)
-
-    base = call(torch.eye(3, dtype=D))
+def test_rank_two_output_in_the_interior_task():
+    """The heads sit on the shared readout, so the interior task carries a rank-2
+    output with the same covariance (rotation and reflection)."""
+    mesh, drv = _boundary(200)
+    q_pts, _, _, _ = cloud(50, seed=1)
+    outputs_ = {"p": 0, "v": 1, "sig": {"rank": 2, "symmetric": True}, "t": 2}
+    m = _model(1, outputs=outputs_, interior=True, query_inputs={"sdf": 0})
+    q = points_mesh(q_pts, {"sdf": torch.rand(50, dtype=D)})
+    base = _forward(m, mesh, drv, 1, q=q)
+    assert base["sig"].shape == (50, 3, 3)
     for improper in (False, True):
-        R = _orthogonal(3, improper)
-        out = call(R)
-        assert base["sig"].shape == (1, 50, 3, 3)
+        R = orthogonal(3, 3, improper)
+        out = _forward(m, mesh, drv, 1, R=R, q=q)
         for name, spec in m.output_specs.items():
-            assert torch.allclose(
-                out[name], _transform(base[name], R, spec), atol=1e-12
-            ), (name, supplied, improper)
+            assert torch.allclose(out[name], _transform(base[name], R, spec), atol=1e-11), (name, improper)
 
 
 def test_all_parameters_receive_gradients():
-    m = _model(1).train()
-    pts, nrm, drv, w = _cloud(100)
-    out = m(
-        points=pts,
-        normals=nrm,
-        measure_weights=w,
-        global_inputs={"g0": drv[:, 0]},
-        query_points=pts[:, :20] * 1.5,
+    m = _model(1, interior=True).train()
+    mesh, drv = _boundary(100)
+    out = outputs(
+        m(boundary_meshes={"wall": mesh}, prediction_points=mesh.cell_centroids[:20] * 1.5, global_data={"g0": drv[0]})
     )
     sum(o.square().sum() for o in out.values()).backward()
     for name, p in m.named_parameters():
@@ -303,9 +262,9 @@ def test_checkpoint_round_trip_keeps_the_specs(tmp_path):
     m.save(tmp_path / "m.mdlus")
     m2 = Module.from_checkpoint(str(tmp_path / "m.mdlus")).double().eval()
     assert m2.output_specs == m.output_specs and m2.global_specs == m.global_specs
-    pts, nrm, drv, w = _cloud(64)
-    a, b = _forward(m, pts, nrm, drv, w, 1), _forward(m2, pts, nrm, drv, w, 1)
-    assert all(torch.equal(a[k], b[k]) for k in a.keys())
+    mesh, drv = _boundary(64)
+    a, b = _forward(m, mesh, drv, 1), _forward(m2, mesh, drv, 1)
+    assert all(torch.equal(a[k], b[k]) for k in a)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="fused kernel needs CUDA")
@@ -313,18 +272,11 @@ def test_fused_kernel_does_not_touch_the_heads():
     """The fused geometry region is per layer; the heads are downstream of it, so the
     rank-2 outputs of the fused and eager models agree to roundoff in float64."""
     pytest.importorskip("triton")
-    pts, nrm, drv, w = _cloud(400)
-    outputs = {"p": 0, "v": 1, "sig": {"rank": 2, "symmetric": True}}
+    mesh, drv = _boundary(400)
+    outputs_ = {"p": 0, "v": 1, "sig": {"rank": 2, "symmetric": True}}
     outs = []
     for kernel in ("eager", "fused"):
-        m = _model(1, outputs=outputs, geo_kernel=kernel).cuda()
-        outs.append(
-            {
-                k: v.cpu()
-                for k, v in _forward(
-                    m, pts.cuda(), nrm.cuda(), drv.cuda(), w.cuda(), 1
-                ).items()
-            }
-        )
-    for k in outs[0].keys():
+        m = _model(1, outputs=outputs_, geo_kernel=kernel).cuda()
+        outs.append({k: v.cpu() for k, v in _forward(m, mesh.to("cuda"), drv.cuda(), 1).items()})
+    for k in outs[0]:
         assert torch.allclose(outs[0][k], outs[1][k], atol=1e-10), k

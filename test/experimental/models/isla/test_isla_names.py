@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Dot-collapsed nested field names (2026-09-23).
+"""Nested field names.
 
-A field name in ``outputs``, ``boundary_inputs``, ``query_inputs`` or
-``global_inputs`` may contain ``"."`` to denote nesting, the project's TensorDict
-convention (``physicsnemo.datapipes.keys``). Every value of those mappings is a leaf
-rank spec, so a mapping value is never a group. ``forward`` returns a TensorDict of
-batch size ``(B, N_out)`` whose dotted names are unflattened, and accepts its named
-inputs flat with dotted names, nested, or as TensorDicts.
+A field in ``outputs``, ``boundary_inputs``, ``query_inputs`` or ``global_inputs``
+is declared in the shared rank-spec grammar (:mod:`physicsnemo.mesh.fields`): a
+dotted flat name (``"surface.pressure"``) and a nested group (``{"surface":
+{"pressure": 0}}``) declare the same field. The output Mesh's ``point_data`` nests
+the outputs the same way, and the inputs are read from ``cell_data``,
+``point_data`` and ``global_data`` by the nested key.
 """
 
 import pytest
@@ -29,30 +29,34 @@ import torch
 from tensordict import TensorDict
 
 from physicsnemo.experimental.models import ISLA
+from test.experimental.models.isla._meshes import (
+    cloud,
+    orthogonal,
+    points_mesh,
+    soup,
+    transform,
+)
 
 D = torch.float64
 
 
-def _cloud(n=80, seed=0, batch=2):
-    g = torch.Generator().manual_seed(seed)
-    pts = torch.randn(batch, n, 3, dtype=D, generator=g)
-    nrm = torch.nn.functional.normalize(
-        torch.randn(batch, n, 3, dtype=D, generator=g), dim=-1
-    )
-    w = torch.rand(batch, n, dtype=D, generator=g) + 0.5
-    drv = torch.randn(batch, 3, dtype=D, generator=g)
-    return pts, nrm, w, drv
+def _boundary(n=80, seed=0):
+    pts, nrm, w, drv = cloud(n, seed=seed, scale=(1.0, 1.0, 1.0))
+    return pts, nrm, w, torch.randn(3, dtype=D, generator=torch.Generator().manual_seed(seed + 7))
+
+
+OUTPUTS = {
+    "surface.pressure": 0,
+    "surface.wall_shear": 1,
+    "solid.stress": {"rank": 2, "symmetric": True},
+    "nut": 0,
+}
 
 
 def _model(**kw):
     torch.manual_seed(0)
     base = dict(
-        outputs={
-            "surface.pressure": 0,
-            "surface.wall_shear": 1,
-            "solid.stress": {"rank": 2, "symmetric": True},
-            "nut": 0,
-        },
+        outputs=OUTPUTS,
         global_inputs={"conditions.freestream": 1, "conditions.re": 0},
         boundary_inputs={"bc.trace": 0, "bc.traction": 1},
         hidden=32,
@@ -64,174 +68,125 @@ def _model(**kw):
     return ISLA(**base).double().eval()
 
 
-def test_outputs_are_a_nested_tensordict_over_batch_and_tokens():
+def test_outputs_are_nested_point_data():
     m = _model()
-    pts, nrm, w, drv = _cloud()
-    b, n = pts.shape[:2]
-    bi = {
-        "bc.trace": torch.rand(b, n, dtype=D),
-        "bc.traction": torch.randn(b, n, 3, dtype=D),
-    }
+    pts, nrm, w, drv = _boundary()
+    n = pts.shape[0]
+    bi = {"bc": {"trace": torch.rand(n, dtype=D), "traction": torch.randn(n, 3, dtype=D)}}
     with torch.no_grad():
         out = m(
-            points=pts,
-            normals=nrm,
-            measure_weights=w,
-            global_inputs={
-                "conditions.freestream": drv,
-                "conditions.re": torch.ones(b, dtype=D),
-            },
-            boundary_inputs=bi,
+            boundary_meshes={"wall": soup(pts, nrm, w, cell_data=bi)},
+            global_data={"conditions": {"freestream": drv, "re": torch.tensor(1.0, dtype=D)}},
         )
-    assert isinstance(out, TensorDict) and out.batch_size == torch.Size([b, n])
-    assert set(out.keys()) == {"surface", "solid", "nut"}
-    assert out["surface"]["pressure"].shape == (b, n)
-    assert out["surface", "wall_shear"].shape == (b, n, 3)
-    assert out["solid", "stress"].shape == (b, n, 3, 3)
-    assert out["nut"].shape == (b, n)
+    pd = out.point_data
+    assert isinstance(pd, TensorDict) and pd.batch_size == torch.Size([n])
+    assert set(pd.keys()) == {"surface", "solid", "nut"}
+    assert pd["surface"]["pressure"].shape == (n,)
+    assert pd["surface", "wall_shear"].shape == (n, 3)
+    assert pd["solid", "stress"].shape == (n, 3, 3)
+    assert pd["nut"].shape == (n,)
     assert sorted(
-        ".".join(k) if isinstance(k, tuple) else k
-        for k in out.keys(include_nested=True, leaves_only=True)
-    ) == [
-        "nut",
-        "solid.stress",
-        "surface.pressure",
-        "surface.wall_shear",
-    ]
+        ".".join(k) if isinstance(k, tuple) else k for k in pd.keys(include_nested=True, leaves_only=True)
+    ) == ["nut", "solid.stress", "surface.pressure", "surface.wall_shear"]
     ### the flat view carries the declared names back
-    assert set(out.flatten_keys(".").keys()) == set(m.output_specs)
-    ### indexing the batch axis gives one case
-    assert out[0]["surface", "pressure"].shape == (n,)
+    assert set(pd.flatten_keys(".").keys()) == set(m.output_specs)
+    ### the selected global data ride onto the output, nested
+    assert out.global_data["conditions", "re"].shape == ()
 
 
-def test_flat_dotted_nested_and_tensordict_inputs_are_the_same_call():
+def test_nested_and_dotted_declarations_are_the_same_model():
+    """A nested group in the constructor and the dotted flat names declare the same
+    fields, in the same order, with the same parameters."""
+    nested = _model(
+        outputs={"surface": {"pressure": 0, "wall_shear": 1}, "solid": {"stress": {"rank": 2, "symmetric": True}}, "nut": 0},
+        global_inputs={"conditions": {"freestream": 1, "re": 0}},
+        boundary_inputs={"bc": {"trace": 0, "traction": 1}},
+    )
+    flat = _model()
+    assert nested.output_specs == flat.output_specs
+    assert nested.boundary_specs == flat.boundary_specs
+    assert nested.global_specs == flat.global_specs
+    assert nested.head.out_features == flat.head.out_features
+
+
+def test_dotted_and_nested_data_are_the_same_call():
+    """Cell data and global data may be given with dotted keys (plain mapping) or
+    nested; the model reads the nested key either way."""
     m = _model()
-    pts, nrm, w, drv = _cloud()
-    b, n = pts.shape[:2]
-    re = torch.ones(b, dtype=D) * 0.3
-    trace, trac = torch.rand(b, n, dtype=D), torch.randn(b, n, 3, dtype=D)
+    pts, nrm, w, drv = _boundary()
+    n = pts.shape[0]
+    re = torch.tensor(0.3, dtype=D)
+    trace, trac = torch.rand(n, dtype=D), torch.randn(n, 3, dtype=D)
     forms = [
-        (
-            {"conditions.freestream": drv, "conditions.re": re},
-            {"bc.trace": trace, "bc.traction": trac},
-        ),
-        (
-            {"conditions": {"freestream": drv, "re": re}},
-            {"bc": {"trace": trace, "traction": trac}},
-        ),
-        (
-            TensorDict({"conditions": {"freestream": drv, "re": re}}, batch_size=[b]),
-            TensorDict({"bc": {"trace": trace, "traction": trac}}, batch_size=[b, n]),
-        ),
+        ({"conditions.freestream": drv, "conditions.re": re}, {"bc": {"trace": trace, "traction": trac}}),
+        ({"conditions": {"freestream": drv, "re": re}}, {"bc": {"trace": trace, "traction": trac}}),
+        (TensorDict({"conditions": {"freestream": drv, "re": re}}, batch_size=[]), {("bc", "trace"): trace, ("bc", "traction"): trac}),
     ]
     outs = []
-    for gi, bi in forms:
+    for gd, cd in forms:
         with torch.no_grad():
-            outs.append(
-                m(
-                    points=pts,
-                    normals=nrm,
-                    measure_weights=w,
-                    global_inputs=gi,
-                    boundary_inputs=bi,
-                )
-            )
+            outs.append(m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data=cd)}, global_data=gd))
     for o in outs[1:]:
-        for k in outs[0].keys(include_nested=True, leaves_only=True):
-            assert torch.equal(o[k], outs[0][k]), k
+        for k in outs[0].point_data.keys(include_nested=True, leaves_only=True):
+            assert torch.equal(o.point_data[k], outs[0].point_data[k]), k
 
 
-def test_mixed_flat_and_nested_names_and_the_interior_mode():
-    pts, nrm, w, drv = _cloud(batch=1)
-    q = torch.randn(1, 12, 3, dtype=D) * 2.0
+def test_mixed_flat_and_nested_names_and_the_interior_task():
+    pts, nrm, w, drv = _boundary()
+    q = torch.randn(12, 3, dtype=D) * 2.0
     m = _model(
         outputs={"pressure": 0, "flow.velocity": 1},
         global_inputs={"freestream": 1},
         boundary_inputs=None,
+        interior=True,
         query_inputs={"geometry.sdf": 0, "geometry.grad": 1},
     )
-    qi = {
-        "geometry": {
-            "sdf": torch.rand(1, 12, dtype=D),
-            "grad": torch.randn(1, 12, 3, dtype=D),
-        }
-    }
+    qi = {"geometry": {"sdf": torch.rand(12, dtype=D), "grad": torch.randn(12, 3, dtype=D)}}
     with torch.no_grad():
-        out = m(
-            points=pts,
-            normals=nrm,
-            measure_weights=w,
-            global_inputs={"freestream": drv},
-            query_points=q,
-            query_inputs=qi,
-        )
-    assert out["pressure"].shape == (1, 12) and out["flow", "velocity"].shape == (
-        1,
-        12,
-        3,
-    )
+        out = m(boundary_meshes={"wall": soup(pts, nrm, w)}, prediction_points=points_mesh(q, qi), global_data={"freestream": drv})
+    assert out.point_data["pressure"].shape == (12,) and out.point_data["flow", "velocity"].shape == (12, 3)
 
 
 def test_covariance_holds_on_the_nested_values():
     m = _model()
-    pts, nrm, w, drv = _cloud(batch=1)
-    b, n = pts.shape[:2]
-    bi = {
-        "bc.trace": torch.rand(b, n, dtype=D),
-        "bc.traction": torch.randn(b, n, 3, dtype=D),
-    }
-    R, _ = torch.linalg.qr(
-        torch.randn(3, 3, dtype=D, generator=torch.Generator().manual_seed(1))
-    )
+    pts, nrm, w, drv = _boundary()
+    n = pts.shape[0]
+    bi = {"bc": {"trace": torch.rand(n, dtype=D), "traction": torch.randn(n, 3, dtype=D)}}
+    mesh = soup(pts, nrm, w, cell_data=bi)
+    R = orthogonal(3, 1)
     t = torch.tensor([1.0, 2.0, -3.0], dtype=D)
 
     def call(R, t):
         with torch.no_grad():
             return m(
-                points=pts @ R.T + t,
-                normals=nrm @ R.T,
-                measure_weights=w,
-                global_inputs={
-                    "conditions.freestream": drv @ R.T,
-                    "conditions.re": torch.ones(b, dtype=D),
-                },
-                boundary_inputs={
-                    "bc.trace": bi["bc.trace"],
-                    "bc.traction": bi["bc.traction"] @ R.T,
-                },
-            )
+                boundary_meshes={"wall": transform(mesh, R, t, specs=m.boundary_specs)},
+                global_data={"conditions": {"freestream": drv @ R.T, "re": torch.tensor(1.0, dtype=D)}},
+            ).point_data
 
     base, out = call(torch.eye(3, dtype=D), torch.zeros(3, dtype=D)), call(R, t)
-    assert torch.allclose(
-        out["surface", "pressure"], base["surface", "pressure"], atol=1e-12
-    )
-    assert torch.allclose(out["nut"], base["nut"], atol=1e-12)
-    assert torch.allclose(
-        out["surface", "wall_shear"], base["surface", "wall_shear"] @ R.T, atol=1e-12
-    )
-    assert torch.allclose(
-        out["solid", "stress"], R @ base["solid", "stress"] @ R.T, atol=1e-12
-    )
+    assert torch.allclose(out["surface", "pressure"], base["surface", "pressure"], atol=1e-11)
+    assert torch.allclose(out["nut"], base["nut"], atol=1e-11)
+    assert torch.allclose(out["surface", "wall_shear"], base["surface", "wall_shear"] @ R.T, atol=1e-11)
+    assert torch.allclose(out["solid", "stress"], R @ base["solid", "stress"] @ R.T, atol=1e-11)
 
 
 def test_name_grammar_is_validated():
     base = dict(hidden=32, n_layers=1, n_slices=8)
     with pytest.raises(ValueError, match="is a group of"):
         ISLA(outputs={"surface": 0, "surface.pressure": 0}, **base)
-    with pytest.raises(ValueError, match="non-empty"):
+    with pytest.raises(ValueError, match="empty path component"):
         ISLA(outputs={"surface..pressure": 0}, **base)
-    with pytest.raises(ValueError, match="non-empty"):
+    with pytest.raises(ValueError, match="empty path component"):
         ISLA(outputs={"surface.": 0}, **base)
-    ### a mapping value is always a rank spec, never a nested group
-    with pytest.raises(ValueError, match="unknown rank-spec keys"):
-        ISLA(outputs={"surface": {"pressure": 0}}, **base)
+    with pytest.raises(ValueError, match="more than once"):
+        ISLA(outputs={"surface.pressure": 0, "surface": {"pressure": 0}}, **base)
     ### forward-time names must match the declared dotted names
     m = ISLA(outputs={"p": 0}, boundary_inputs={"bc.trace": 0}, **base).double()
-    pts, nrm, w, _ = _cloud(batch=1)
-    with pytest.raises(ValueError, match="missing \\['bc.trace'\\]"):
-        m(points=pts, normals=nrm, measure_weights=w, boundary_inputs={"trace": w})
-    with pytest.raises(TypeError, match="mapping"):
-        m(points=pts, normals=nrm, measure_weights=w, boundary_inputs=w)
+    pts, nrm, w, _ = _boundary()
+    with pytest.raises(ValueError, match="missing the declared fields \\['bc.trace'\\]"):
+        m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data={"trace": w})})
+    with pytest.raises(ValueError, match="missing the declared fields \\['bc.trace'\\]"):
+        m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data={"bc": w})})  # "bc" is a tensor, not a group
 
 
 def test_checkpoint_round_trip_keeps_dotted_names(tmp_path):

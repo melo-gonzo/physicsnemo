@@ -9,22 +9,24 @@ import torch
 
 from physicsnemo.experimental.models.isla import ISLA
 from physicsnemo.experimental.models.isla.model import _RoutingLogits
+from physicsnemo.mesh import Mesh
+from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
+from test.experimental.models.isla._meshes import (
+    orthogonal,
+    outputs,
+    rescale_measures,
+    soup,
+    transform,
+)
 
 
 def _problem(n=300, seed=0):
     g = torch.Generator().manual_seed(seed)
-    r = torch.rand(1, n, 3, generator=g) * 2 - 1
-    nrm = torch.randn(1, n, 3, generator=g); nrm = nrm / nrm.norm(dim=-1, keepdim=True)
-    w = torch.rand(1, n, generator=g) + 0.5
-    drv = torch.tensor([[0.6, 0.8, 0.0]])
-    return r, nrm, w, drv
-
-
-def _rotation(g):
-    q, _ = torch.linalg.qr(torch.randn(3, 3, generator=g).double())  # orthogonal to double precision
-    if torch.det(q) < 0:
-        q[:, 0] = -q[:, 0]
-    return q
+    r = (torch.rand(n, 3, generator=g) * 2 - 1).double()
+    nrm = torch.nn.functional.normalize(torch.randn(n, 3, generator=g), dim=-1).double()
+    w = (torch.rand(n, generator=g) + 0.5).double()
+    drv = torch.tensor([0.6, 0.8, 0.0]).double()
+    return soup(r, nrm, w), drv
 
 
 KW = dict(outputs={"p": 0, "v": 1}, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8)
@@ -32,23 +34,27 @@ KW = dict(outputs={"p": 0, "v": 1}, global_inputs={"g": 1}, hidden=32, n_layers=
 
 def test_centered_prototypes_keep_every_contract():
     m = ISLA(**KW, slice_prototypes="centered").double().eval()
-    r, nrm, w, drv = _problem()
-    r, nrm, w, drv = r.double(), nrm.double(), w.double(), drv.double()
-    g = torch.Generator().manual_seed(7)
-    q = _rotation(g); refl = torch.diag(torch.tensor([1.0, -1.0, 1.0])).double()
-    perm = torch.randperm(r.shape[1], generator=g)
-    with torch.no_grad():
-        base = m(points=r, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-        rot = m(points=r @ q.T, normals=nrm @ q.T, global_inputs={"g": drv @ q.T}, measure_weights=w)
-        sh = m(points=r + 3.0, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-        rf = m(points=r @ refl.T, normals=nrm @ refl.T, global_inputs={"g": drv @ refl.T}, measure_weights=w)
-        pm = m(points=r[:, perm], normals=nrm[:, perm], global_inputs={"g": drv}, measure_weights=w[:, perm])
-        sc = m(points=r, normals=nrm, global_inputs={"g": drv}, measure_weights=3.7 * w)
+    mesh, drv = _problem()
+    q = orthogonal(3, 7)
+    refl = torch.diag(torch.tensor([1.0, -1.0, 1.0])).double()
+    perm = torch.randperm(mesh.n_cells, generator=torch.Generator().manual_seed(7))
+    permuted = Mesh(points=mesh.points, cells=mesh.cells[perm], cell_data={EFFECTIVE_MEASURE_KEY: mesh.cell_data[EFFECTIVE_MEASURE_KEY][perm]})
+
+    def run(mesh, g):
+        with torch.no_grad():
+            return outputs(m(boundary_meshes={"wall": mesh}, global_data={"g": g}))
+
+    base = run(mesh, drv)
+    rot = run(transform(mesh, q), drv @ q.T)
+    sh = run(transform(mesh, shift=torch.full((3,), 3.0).double()), drv)
+    rf = run(transform(mesh, refl), drv @ refl.T)
+    pm = run(permuted, drv)
+    sc = run(rescale_measures(mesh, 3.7), drv)
     tol = dict(rtol=1e-8, atol=1e-8)
     torch.testing.assert_close(rot["p"], base["p"], **tol); torch.testing.assert_close(rot["v"], base["v"] @ q.T, **tol)
     torch.testing.assert_close(sh["p"], base["p"], **tol); torch.testing.assert_close(sh["v"], base["v"], **tol)
     torch.testing.assert_close(rf["p"], base["p"], **tol); torch.testing.assert_close(rf["v"], base["v"] @ refl.T, **tol)
-    torch.testing.assert_close(pm["p"], base["p"][:, perm], **tol); torch.testing.assert_close(pm["v"], base["v"][:, perm], **tol)
+    torch.testing.assert_close(pm["p"], base["p"][perm], **tol); torch.testing.assert_close(pm["v"], base["v"][perm], **tol)
     torch.testing.assert_close(sc["p"], base["p"], **tol); torch.testing.assert_close(sc["v"], base["v"], **tol)
 
 

@@ -23,23 +23,16 @@ from physicsnemo.experimental.models.isla.model import (
     ROUTING_TEMPERATURE,
     _RoutingLogits,
 )
+from test.experimental.models.isla._meshes import (
+    cloud,
+    orthogonal,
+    outputs,
+    rescale_measures,
+    soup,
+    transform,
+)
 
 PV = {"p": 0, "v": 1}
-
-
-def _cloud(n=300, seed=0):
-    g = torch.Generator().manual_seed(seed)
-    pts = torch.randn(1, n, 3, dtype=torch.float64, generator=g) * torch.tensor(
-        [3.0, 2.0, 1.0], dtype=torch.float64
-    )
-    nrm = torch.nn.functional.normalize(
-        torch.randn(1, n, 3, dtype=torch.float64, generator=g), dim=-1
-    )
-    drv = torch.nn.functional.normalize(
-        torch.randn(1, 3, dtype=torch.float64, generator=g), dim=-1
-    )
-    w = torch.rand(1, n, dtype=torch.float64, generator=g) + 0.5
-    return pts, nrm, drv, w
 
 
 def test_cosine_routing_logits_are_bounded_and_bias_free():
@@ -57,38 +50,25 @@ def test_cosine_routing_logits_are_bounded_and_bias_free():
 
 def test_cosine_routing_keeps_the_contracts_and_all_parameters_train():
     torch.manual_seed(0)
-    m = (
-        ISLA(outputs=PV, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8)
-        .double()
-        .eval()
-    )
-    pts, nrm, drv, w = _cloud()
-    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64))
-    if torch.det(q) < 0:
-        q[:, 0] = -q[:, 0]
+    m = ISLA(outputs=PV, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8, interior=True).double().eval()
+    pts, nrm, w, drv = cloud(300)
+    mesh = soup(pts, nrm, w)
+    q = orthogonal(3, 0)
     shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
-    with torch.no_grad():
-        base = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-        moved = m(
-            points=pts @ q.T + shift,
-            normals=nrm @ q.T,
-            global_inputs={"g": drv @ q.T},
-            measure_weights=w,
-        )
-        rescaled = m(
-            points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=137.0 * w
-        )
+    probe = pts[:20] * 1.5
+
+    def run(mesh, g, q):
+        with torch.no_grad():
+            return outputs(m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": g}))
+
+    base = run(mesh, drv, probe)
+    moved = run(transform(mesh, q, shift), drv @ q.T, probe @ q.T + shift)
+    rescaled = run(rescale_measures(mesh, 137.0), drv, probe)
     assert torch.allclose(moved["p"], base["p"], atol=1e-10)
     assert torch.allclose(moved["v"], base["v"] @ q.T, atol=1e-10)
-    assert all(torch.allclose(rescaled[k], base[k], atol=1e-9) for k in base.keys())
+    assert all(torch.allclose(rescaled[k], base[k], atol=1e-9) for k in base)
     m.train()
-    out = m(
-        points=pts,
-        normals=nrm,
-        global_inputs={"g": drv},
-        measure_weights=w,
-        query_points=pts[:, :20] * 1.5,
-    )
+    out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=probe, global_data={"g": drv}))
     sum(o.square().mean() for o in out.values()).backward()
     missing = [n for n, p in m.named_parameters() if p.grad is None]
     assert not missing, missing
