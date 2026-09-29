@@ -16,6 +16,7 @@
 
 """Tests for portable fitted-predictor artifacts."""
 
+import pickle
 from pathlib import Path
 
 import pytest
@@ -320,6 +321,22 @@ def test_corrupted_artifacts_fail_to_load_with_a_named_reason(tmp_path, corrupti
     torch.save(payload, path)
     with pytest.raises(ValueError, match=match):
         ConformalPredictor.load(path)
+
+
+_PICKLE_SIDE_EFFECTS = []
+
+
+class _Exploit:
+    def __reduce__(self):
+        return (_PICKLE_SIDE_EFFECTS.append, ("executed",))
+
+
+def test_load_refuses_pickled_code(tmp_path):
+    path = tmp_path / "artifact.pt"
+    torch.save({"format": "physicsnemo.uq.conformal", "payload": _Exploit()}, path)
+    with pytest.raises(pickle.UnpicklingError, match="Weights only load failed"):
+        ConformalPredictor.load(path)
+    assert _PICKLE_SIDE_EFFECTS == []
 
 
 def test_atomic_save_preserves_previous_artifact(tmp_path, monkeypatch):
