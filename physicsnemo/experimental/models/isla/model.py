@@ -670,6 +670,20 @@ class _RoutingLogits(nn.Module):
     invariant and the contracts hold; the routing stays bounded by the
     temperature. Adds ``2 hidden^2`` parameters per block (the key and value
     maps). Cosine mode only.
+
+    ``centered`` (PROTO-COND-2, 2026-09-29): the same attended value term, centered
+    across the slices and scale-bounded before it is added to the seeds:
+    ``P = seeds + Delta_c * b / (rms(Delta_c) + b)`` with ``b = g rms(seeds)``,
+    ``Delta_c = Delta - mean_S(Delta)``, ``rms`` over all entries (per sample for
+    ``Delta_c``) and ``g`` one learned scalar (init 0.1). The seed-independent
+    component of the value term is common to every prototype, carries no routing
+    information under cosine logits and, when it dominates, collapses the
+    prototypes onto one direction (PROTO-COND mechanism); centering removes it
+    exactly. The bound is a smooth saturation: a small centered term (near-uniform
+    attention, roundoff) passes through unchanged and a large one is held to an
+    rms of at most ``g rms(seeds)``, so the sample-dependent part never exceeds a
+    fraction ``g`` of the seeds' spread and is never amplified to it. One scalar
+    per block beyond ``conditioned``.
     """
 
     def __init__(
@@ -678,16 +692,21 @@ class _RoutingLogits(nn.Module):
         n_slices: int,
         mode: str = "cosine",
         temperature: float = 10.0,
-        conditioned: bool = False,
+        slice_prototypes: str = "static",
     ) -> None:
         super().__init__()
         if mode not in ("linear", "cosine"):
             raise ValueError(f"routing_norm must be 'linear' or 'cosine', got {mode!r}")
-        if conditioned and mode != "cosine":
+        if slice_prototypes not in ("static", "conditioned", "centered"):
+            raise ValueError(
+                f"slice_prototypes must be 'static', 'conditioned' or 'centered', got {slice_prototypes!r}"
+            )
+        if slice_prototypes != "static" and mode != "cosine":
             raise ValueError("conditioned slice prototypes require routing_norm='cosine'")
         self.mode = mode
         self.temperature = float(temperature)
-        self.conditioned = bool(conditioned)
+        self.conditioned = slice_prototypes != "static"
+        self.centered = slice_prototypes == "centered"
         lin = nn.Linear(hidden, n_slices, bias=(mode == "linear"))
         self.weight = lin.weight
         self.bias = lin.bias
@@ -695,15 +714,23 @@ class _RoutingLogits(nn.Module):
             self.k_proj = nn.Linear(hidden, hidden, bias=False)
             self.v_proj = nn.Linear(hidden, hidden, bias=False)
             self.scale = 1.0 / math.sqrt(hidden)
+        if self.centered:
+            self.gain = nn.Parameter(torch.tensor(0.1))
 
     def prototypes(self, x: torch.Tensor, log_w: torch.Tensor | None) -> torch.Tensor:
         """Per-sample prototypes (B, S, hidden) from the seeds and the token states."""
-        seeds = self.weight  # (S, H)
-        att = torch.einsum("sh,bnh->bsn", seeds.to(x.dtype), self.k_proj(x)) * self.scale  # (B, S, N)
+        seeds = self.weight.to(x.dtype)  # (S, H)
+        att = torch.einsum("sh,bnh->bsn", seeds, self.k_proj(x)) * self.scale  # (B, S, N)
         if log_w is not None:
             att = att + log_w[..., 0][:, None, :].to(att.dtype)
         att = torch.softmax(att if att.dtype in (torch.float32, torch.float64) else att.float(), dim=-1).to(x.dtype)
-        return seeds.to(x.dtype)[None] + torch.einsum("bsn,bnh->bsh", att, self.v_proj(x))
+        delta = torch.einsum("bsn,bnh->bsh", att, self.v_proj(x))  # (B, S, H)
+        if self.centered:
+            delta = delta - delta.mean(dim=1, keepdim=True)
+            bound = self.gain.to(x.dtype) * seeds.square().mean().sqrt()  # g rms(seeds), scalar
+            rms_delta = delta.square().mean(dim=(1, 2), keepdim=True).sqrt()  # (B, 1, 1)
+            delta = delta * (bound / (rms_delta + bound))
+        return seeds[None] + delta
 
     def forward(self, x: torch.Tensor, log_w: torch.Tensor | None = None) -> torch.Tensor:
         if self.mode == "linear":
@@ -943,7 +970,7 @@ class _SliceBlock(nn.Module):
         self.geo_checkpoint = bool(geo_checkpoint)
         self.norm_assign = nn.LayerNorm(hidden)
         self.assign = _RoutingLogits(
-            hidden, n_slices, routing_norm, routing_temperature, conditioned=(slice_prototypes == "conditioned")
+            hidden, n_slices, routing_norm, routing_temperature, slice_prototypes=slice_prototypes
         )
         ### Relational geometry (v2): per-slice equivariant anchors and
         ### point-anchor invariants -- many local, data-adaptive reference
@@ -1669,8 +1696,17 @@ class ISLA(Module):
             adapt to the sample's boundary data before routing (the FLARE++
             routing-query idea). Token states are invariant, so the prototypes and
             the contracts are unchanged; cosine routing keeps the logits bounded;
-            ``2 hidden^2`` parameters per block are added. Under the universalization
-            rule: default everywhere or deleted.
+            ``2 hidden^2`` parameters per block are added. ``"centered"``
+            (PROTO-COND-2, 2026-09-29): centered, scale-bounded conditioned
+            prototypes: the attended value term is centered across the slices and
+            passed through a smooth saturation that holds its rms to at most a
+            learned fraction ``g`` (one scalar per block, init 0.1) of the seeds'
+            rms spread, small terms passing through unchanged. The seed-independent
+            component of the value term carries no routing information under
+            cosine logits and, when it dominates, collapses the prototypes onto one
+            direction; centering removes it exactly and the bound keeps the
+            sample-dependent part below ``g`` times the seeds' spread. Under the
+            universalization rule: default everywhere or deleted.
         routing_norm: ``"cosine"`` (default): each block's point-to-slice
             routing logits are ``routing_temperature`` times the cosine between
             the normalized token state and a learned prototype per slice, which
@@ -1815,11 +1851,14 @@ class ISLA(Module):
             raise ValueError("local_weights='lpr' and local_gradient require local_rho and local_k > 0")
         self.local_weights = str(local_weights)
         self.local_gradient = bool(local_gradient)
-        ### PROTO-COND (2026-09-29): static or per-sample (seed-attention) slice prototypes.
-        if slice_prototypes not in ("static", "conditioned"):
-            raise ValueError(f"slice_prototypes must be 'static' or 'conditioned', got {slice_prototypes!r}")
-        if slice_prototypes == "conditioned" and routing_norm != "cosine":
-            raise ValueError("slice_prototypes='conditioned' requires routing_norm='cosine'")
+        ### PROTO-COND (2026-09-29): static or per-sample (seed-attention) slice prototypes;
+        ### PROTO-COND-2: the centered, scale-bounded variant.
+        if slice_prototypes not in ("static", "conditioned", "centered"):
+            raise ValueError(
+                f"slice_prototypes must be 'static', 'conditioned' or 'centered', got {slice_prototypes!r}"
+            )
+        if slice_prototypes != "static" and routing_norm != "cosine":
+            raise ValueError(f"slice_prototypes={slice_prototypes!r} requires routing_norm='cosine'")
         self.slice_prototypes = str(slice_prototypes)
         if interior_geometry not in ("nearest_boundary", "provided"):
             raise ValueError(

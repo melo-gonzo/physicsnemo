@@ -31253,12 +31253,15 @@ the routing when it dominates. A form that cannot collapse is the next rung.
 **Design.** In every slice block, with seeds $S \in \mathbb{R}^{256 \times H}$ and the attended value term
 $\Delta_k = \sum_i \mathrm{softmax}_i(S_k \cdot k(x_i)/\sqrt{H} + \log w_i)\, v(x_i)$ as in the first form, the prototypes become
 
-$$P_k = S_k + g \cdot \frac{\mathrm{rms}(S)}{\mathrm{rms}(\tilde\Delta)} \, \tilde\Delta_k, \qquad \tilde\Delta_k = \Delta_k - \frac{1}{256}\sum_{k'} \Delta_{k'},$$
+$$P_k = S_k + \frac{g\,\mathrm{rms}(S)}{\mathrm{rms}(\tilde\Delta) + g\,\mathrm{rms}(S)} \, \tilde\Delta_k, \qquad \tilde\Delta_k = \Delta_k - \frac{1}{256}\sum_{k'} \Delta_{k'},$$
 
-with one learned scalar gate $g$ per block initialized at 0.1 and $\mathrm{rms}$ the root-mean-square entry over the matrix. Centering
-removes the seed-independent component exactly, so a token cloud whose attention is the same for every seed changes nothing; the
-scale bound keeps the sample-dependent part at a fraction $g$ of the seeds' own spread, so the prototypes cannot collapse by
-displacement. The construction is permutation-invariant and measure-aware as before, and its cost is the first form's.
+with one learned scalar gate $g$ per block initialized at 0.1 and $\mathrm{rms}$ the root-mean-square entry over the matrix (over the
+seeds for $S$, over the sample's $256 \times H$ entries for $\tilde\Delta$). Centering removes the seed-independent component exactly,
+so a token cloud whose attention is the same for every seed changes nothing. The factor is a smooth bound, not a normalization: a
+small centered term passes through unchanged (the factor tends to one) and a large one saturates at a root-mean-square of
+$g\,\mathrm{rms}(S)$, so the prototypes cannot collapse by displacement and a near-uniform attention (the fixed-mesh regime) is not
+amplified into a full-magnitude perturbation. (The first draft of this entry normalized rather than bounded; that form would have
+turned roundoff in the identical-attention case into a perturbation of the full bound, and was replaced before any lane ran.) The construction is permutation-invariant and measure-aware as before, and its cost is the first form's.
 
 **Predictions and falsifiers** (same-snapshot pairs on one new snapshot, two seeds each, float32; ratios PROTO-COND-2 ÷ static):
 (1) OLBC Poisson 512: within 1.05 (collapse removed), with the diagnostic of @sec-nb-proto-cond-mechanism showing pairwise prototype
