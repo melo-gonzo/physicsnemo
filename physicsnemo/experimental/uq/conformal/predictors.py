@@ -25,9 +25,8 @@ from jaxtyping import Float
 from tensordict import TensorDict
 from torch import Tensor
 
-from ._containers import TENSOR_KEY, field_items, pack_fields, slice_aux
-from ._quantile import require_feasible_alpha
-from ._validation import (
+from ._utils import (
+    TENSOR_KEY,
     TIERS,
     Tier,
     _field_label,
@@ -39,8 +38,12 @@ from ._validation import (
     check_point_alignment,
     check_points,
     check_real,
+    field_items,
+    pack_fields,
     points_fingerprint,
+    require_feasible_alpha,
     require_matching_keys,
+    slice_aux,
     validate_provenance,
 )
 from .diagnostics import CoverageAccumulator

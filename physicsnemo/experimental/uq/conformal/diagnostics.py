@@ -25,16 +25,20 @@ from jaxtyping import Float
 from tensordict import TensorDict
 from torch import Tensor
 
-from ._containers import TENSOR_KEY, field_items, pack_fields
-from ._quantile import alpha_as_fraction, validate_alpha, validate_n_cal
-from ._validation import (
+from ._utils import (
+    TENSOR_KEY,
     TIERS,
     Tier,
     _field_label,
+    alpha_as_fraction,
     check_exact_shape,
     check_real,
+    field_items,
     normalize_keys,
+    pack_fields,
     require_single_rank,
+    validate_alpha,
+    validate_n_cal,
 )
 
 __all__ = ["CoverageAccumulator"]

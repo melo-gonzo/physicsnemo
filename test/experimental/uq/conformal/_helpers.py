@@ -34,7 +34,7 @@ from physicsnemo.experimental.uq.conformal import (
     FunctionalBandCalibrator,
     RiskControlCalibrator,
 )
-from physicsnemo.experimental.uq.conformal._validation import (
+from physicsnemo.experimental.uq.conformal._utils import (
     TIERS,
     broadcast_difficulty,
 )

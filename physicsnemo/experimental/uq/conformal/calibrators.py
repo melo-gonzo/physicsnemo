@@ -43,16 +43,9 @@ from jaxtyping import Float
 from tensordict import TensorDict
 from torch import Tensor
 
-from ._containers import field_items, pack_fields, slice_aux
-from ._quantile import (
-    alpha_as_fraction,
-    conformal_quantile_index,
-    kth_smallest_of_samples,
-    require_feasible_alpha,
-    validate_alpha,
-)
-from ._validation import (
+from ._utils import (
     _field_label,
+    alpha_as_fraction,
     broadcast_difficulty,
     check_aux,
     check_difficulty,
@@ -61,10 +54,17 @@ from ._validation import (
     check_point_alignment,
     check_points,
     check_real,
+    conformal_quantile_index,
+    field_items,
+    kth_smallest_of_samples,
     normalize_keys,
+    pack_fields,
     points_fingerprint,
+    require_feasible_alpha,
     require_matching_keys,
     require_single_rank,
+    slice_aux,
+    validate_alpha,
 )
 from .predictors import ConformalPredictor
 from .scores import (

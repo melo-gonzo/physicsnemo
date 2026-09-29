@@ -29,7 +29,7 @@ from physicsnemo.experimental.uq.conformal import (
     CellwiseCalibrator,
     ConformalPredictor,
 )
-from physicsnemo.experimental.uq.conformal._validation import points_fingerprint
+from physicsnemo.experimental.uq.conformal._utils import points_fingerprint
 from test.experimental.uq.conformal._helpers import fit, make_predictor
 
 _MESH = "0" * 64

@@ -32,12 +32,7 @@ from physicsnemo.experimental.uq.conformal import (
     AbsoluteErrorScore,
     NormalizedErrorScore,
 )
-from physicsnemo.experimental.uq.conformal._quantile import (
-    conformal_quantile_index,
-    validate_alpha,
-    validate_n_cal,
-)
-from physicsnemo.experimental.uq.conformal._validation import (
+from physicsnemo.experimental.uq.conformal._utils import (
     check_aux,
     check_difficulty,
     check_exact_shape,
@@ -45,10 +40,13 @@ from physicsnemo.experimental.uq.conformal._validation import (
     check_floating,
     check_points,
     check_real,
+    conformal_quantile_index,
     normalize_keys,
     points_fingerprint,
     positive_finite_float,
     require_matching_keys,
+    validate_alpha,
+    validate_n_cal,
     validate_provenance,
 )
 from test.experimental.uq.conformal._helpers import CALIBRATORS, TIERS, fitted_risk

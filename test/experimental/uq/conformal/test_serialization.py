@@ -27,7 +27,7 @@ from physicsnemo.experimental.uq.conformal import (
     NormalizedErrorScore,
     QuantileRegressionScore,
 )
-from physicsnemo.experimental.uq.conformal._validation import points_fingerprint
+from physicsnemo.experimental.uq.conformal._utils import points_fingerprint
 from test.experimental.uq.conformal._helpers import (
     TIERS,
     fit,

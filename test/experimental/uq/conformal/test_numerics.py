@@ -40,16 +40,14 @@ from physicsnemo.experimental.uq.conformal import (
     QuantileRegressionScore,
     RiskControlCalibrator,
 )
-from physicsnemo.experimental.uq.conformal._containers import (
+from physicsnemo.experimental.uq.conformal._utils import (
     TENSOR_KEY,
-    field_items,
-    pack_fields,
-    slice_aux,
-)
-from physicsnemo.experimental.uq.conformal._quantile import (
     cast_directed,
     conformal_quantile_index,
+    field_items,
     kth_smallest_of_samples,
+    pack_fields,
+    slice_aux,
 )
 from physicsnemo.experimental.uq.conformal.calibrators import _crc_threshold
 from test.experimental.uq.conformal._helpers import (

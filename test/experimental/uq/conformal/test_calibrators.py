@@ -30,8 +30,7 @@ from physicsnemo.experimental.uq.conformal import (
     QuantileRegressionScore,
     RiskControlCalibrator,
 )
-from physicsnemo.experimental.uq.conformal._containers import TENSOR_KEY
-from physicsnemo.experimental.uq.conformal._validation import points_fingerprint
+from physicsnemo.experimental.uq.conformal._utils import TENSOR_KEY, points_fingerprint
 from test.experimental.uq.conformal._helpers import (
     CALIBRATOR_CLASSES,
     TIERS,
