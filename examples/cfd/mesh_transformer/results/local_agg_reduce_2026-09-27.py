@@ -114,6 +114,23 @@ if ref and tw:
                        "verdict": v, "interim": len(tw) < 2}
 else:
     out["airfrans"] = {"status": "not scored", "ref_seeds": len(ref), "twin_seeds": len(tw)}
+# LOCAL-AGG-STENCIL (la rows 18-21, #sec-nb-local-agg-stencil-prereg): aggregation vs no-aggregation control, both on one fixed query draw
+# per airfoil (FixedDrawDomainMeshReader). Supported if aggregation / control <= 1.03 on every field under the fixed draw; refuted if
+# >= 1.10 on any field; between otherwise. Also read: fixed-draw control / resampled reference (the augmentation price).
+fref = {s: {f: r[0] for f in F if (r := per_case(f"la_af_fixeddraw_ref_seed{s}", "2026-09-27", f))} for s in (42, 43)}; fref = {s: v for s, v in fref.items() if v}
+fagg = {s: {f: r[0] for f in F if (r := per_case(f"la_af_fixeddraw_local05_seed{s}", "2026-09-27", f))} for s in (42, 43)}; fagg = {s: v for s, v in fagg.items() if v}
+if fref and fagg:
+    frm = {f: st.mean(fref[s][f] for s in fref) for f in F}; fam = {f: st.mean(fagg[s][f] for s in fagg) for f in F}
+    ratio = {f: fam[f] / frm[f] for f in F}; ps = {s: {f: fagg[s][f] / fref[s][f] for f in F} for s in fagg if s in fref}
+    v = "supported" if all(r <= 1.03 for r in ratio.values()) else "refuted" if any(r >= 1.10 for r in ratio.values()) else "between"
+    aug = {f: frm[f] / rm[f] for f in F} if ref else None
+    resampled = {f: tm[f] / rm[f] for f in F} if (ref and tw) else None
+    out["stencil"] = {"fixed_reference": frm, "fixed_aggregation": fam, "ratio": ratio, "per_seed": {"reference": fref, "aggregation": fagg, "ratio": ps},
+                      "fixed_control_over_resampled_reference": aug, "resampled_aggregation_over_reference": resampled, "n_seeds": min(len(fref), len(fagg)), "verdict": v}
+    print("== STENCIL (fixed draw): agg/ctrl", {f: round(x, 3) for f, x in ratio.items()}, "per seed", {s: {f: round(x, 3) for f, x in r.items()} for s, r in ps.items()}, "->", v)
+    print("   fixed ctrl / resampled ref", {f: round(x, 3) for f, x in aug.items()} if aug else None, " resampled agg / ref", {f: round(x, 3) for f, x in resampled.items()} if resampled else None)
+else:
+    out["stencil"] = {"status": "not scored", "ref_seeds": len(fref), "agg_seeds": len(fagg)}
 json.dump(out, open(f"{R}/local_agg_2026-09-27.json", "w"), indent=1)
 print("== AirfRANS twin:", {k: ({f: round(x, 3) for f, x in v.items()} if isinstance(v, dict) and k == "ratio" else v) for k, v in out["airfrans"].items() if k in ("ratio", "verdict", "status", "n_seeds")})
 for n, rung in out["elasticity"].items():

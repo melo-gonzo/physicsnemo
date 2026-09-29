@@ -30998,3 +30998,48 @@ seed attention toward the mean token state so every prototype collapses
 toward one direction and the routing loses resolution, is testable on the
 saved checkpoints (prototype pairwise cosine) before the option is
 removed. Artifact results/proto_cond_2026-09-29.json.
+
+## 2026-09-29 — Verdict, LOCAL-AGG-STENCIL (AirfRANS, fixed query draw, two seeds): the aggregation hurts more, not less, when every airfoil keeps one draw (aggregation ÷ control 1.26 / 1.20 / 1.34 against 1.13 / 1.17 / 1.22 under resampling); the resampled-stencil hypothesis is refuted, and fixing the draw costs the reference itself 28% on pressure {#sec-nb-local-agg-stencil-verdict}
+
+**Setting.** The stencil diagnostic (@sec-nb-local-agg-stencil-prereg) asked
+whether the local aggregation's 13 to 22% loss on the AirfRANS interior
+came from the 100,000 queries being redrawn every epoch, so that the 32
+nearest neighbours of a physical point changed from visit to visit. A
+recipe reader held each airfoil's draw fixed for the whole run; the
+aggregation and a no-aggregation control both trained on it.
+
+**What we saw (200 test airfoils, relative L2 on pressure / velocity /
+eddy viscosity, two-seed means).** Fixed-draw control 0.0421 / 0.0174 /
+0.0467; fixed-draw aggregation 0.0529 / 0.0209 / 0.0627; aggregation ÷
+control **1.26 / 1.20 / 1.34** (seed 42: 1.34 / 1.29 / 1.56; seed 43: 1.18
+/ 1.12 / 1.16). The same ratio under the resampled datapipe was 1.13 /
+1.17 / 1.22. Fixing the draw costs the control 1.28 / 1.08 / 1.45 against
+the resampled reference (0.0328 / 0.0161 / 0.0323): the per-epoch redraw is
+a large augmentation on this dataset.
+
+**Verdict.** *Refuted* (above 1.10 on every field). The aggregation's loss
+on a resampled point cloud is not the moving stencil; with the stencil
+frozen the loss grows. What remains as a mechanism candidate is the
+geometry variation itself: on the fixed OLBC meshes the pooled
+neighbourhood statistics are a stable function of position across every
+sample, on AirfRANS each airfoil's neighbourhoods are different physical
+configurations, and a k-nearest pool learned on one family does not
+transfer to another. That reading is consistent with Tensile2d
+(@sec-nb-universal-agg-t2d-interim), where geometry varies per case and
+the aggregation also hurts. **Under the universalization rule the
+Gaussian aggregation is deleted**; the LOCAL-LPR arms on AirfRANS, whose
+premise was draw consistency, lose that premise and are read only as a
+record when they land. The deletion follows the lug and DrivAerML Volume
+pairs, which complete the universalization record. Artifact
+results/local_agg_2026-09-27.json (stencil).
+
+## 2026-09-29 — Interim, PROTO-COND on DrivAerML Surface (435 cars, 200,000 cells, two seeds): conditioned ÷ static 1.01 on pressure and wall shear (neutral), against the 1.99 on Poisson 512 {#sec-nb-proto-cond-dr-interim}
+
+Same-snapshot pairs on the cars: static 0.0436 / 0.0685, conditioned 0.0442
+/ 0.0695 on pressure / wall shear, ratios **1.014 / 1.013** (seed 42 1.02 /
+1.02, seed 43 1.005 / 1.006): *neutral* by the bars, at a 10% parameter
+cost. With the Poisson reading (1.99, @sec-nb-olbc-reference-correction)
+the option's verdict is already *deleted*; the wings, AirfRANS and Poisson
+2,048 pairs complete the record, and the prototype-collapse diagnostic on
+the Poisson checkpoints names the mechanism before removal. Artifact
+results/proto_cond_2026-09-29.json.
