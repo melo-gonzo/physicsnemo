@@ -159,45 +159,26 @@ def test_boundary_inputs_covariance(improper):
 
 
 @pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])
-@pytest.mark.parametrize(
-    "mode",
-    ["query_tokens", "passive_queries", "passive_boundary", "support"],
-)
-def test_query_inputs_covariance(mode, improper):
-    """Rank-0/1/2 per-query fields on the interacting query tokens, on passive queries
-    at distinct points, on passive queries that ARE the boundary points, and on
-    support tokens (with their own field set)."""
+@pytest.mark.parametrize("supplied", [False, True], ids=["internal", "supplied_normals"])
+def test_query_inputs_covariance(supplied, improper):
+    """Rank-0/1/2 per-query fields on the query tokens, with the query directions
+    computed inside or supplied as query_normals."""
     pts, nrm, w = _cloud(200, 0)
     drv = torch.tensor([[0.3, 1.0, 0.2]], dtype=D)
     q_pts, q_nrm, _ = _cloud(40, 3)
-    kw = {
-        "query_tokens": dict(query_tokens=True),
-        "passive_queries": dict(query_independent=True, n_decoder_layers=1),
-        "passive_boundary": dict(query_independent=True, n_decoder_layers=1),
-        "support": dict(
-            query_independent=True, n_decoder_layers=1, support_tokens=True
-        ),
-    }[mode]
-    m = _model(query_inputs=QIN, boundary_inputs={"trac": 1}, **kw)
+    m = _model(query_inputs=QIN, boundary_inputs={"trac": 1})
     bf = {
         "trac": torch.randn(
             1, 200, 3, dtype=D, generator=torch.Generator().manual_seed(5)
         )
     }
-    n_q = 200 if mode == "passive_boundary" else 40
+    n_q = 40
     qf = _query_fields(n_q)
-    sf = _query_fields(30, seed=7)
-    s_pts, s_nrm, _ = _cloud(30, 8)
 
     def call(R, shift):
-        extra = dict(query_inputs=_move(qf, m.query_specs, R))
-        if mode != "passive_boundary":
-            extra.update(query_points=q_pts @ R.T + shift)
-        if mode == "support":
-            extra.update(
-                support_points=s_pts @ R.T + shift,
-                support_inputs=_move(sf, m.query_specs, R),
-            )
+        extra = dict(query_inputs=_move(qf, m.query_specs, R), query_points=q_pts @ R.T + shift)
+        if supplied:
+            extra["query_normals"] = q_nrm @ R.T
         with torch.no_grad():
             return m(
                 points=pts @ R.T + shift,
@@ -212,11 +193,9 @@ def test_query_inputs_covariance(mode, improper):
     assert base["p"].shape == (1, n_q) and base["sig"].shape == (1, n_q, 3, 3)
     ### the query vector field is live
     qf2 = {**qf, "u": 3.0 * qf["u"]}
-    extra = dict(query_inputs=qf2)
-    if mode != "passive_boundary":
-        extra.update(query_points=q_pts)
-    if mode == "support":
-        extra.update(support_points=s_pts, support_inputs=sf)
+    extra = dict(query_inputs=qf2, query_points=q_pts)
+    if supplied:
+        extra["query_normals"] = q_nrm
     with torch.no_grad():
         other = m(
             points=pts,
@@ -247,7 +226,7 @@ def test_geometry_width_and_seed_width():
     m = _model(boundary_inputs={"A": 2})
     assert m.n_block_vecs == 2 * 2 and m.bin.n_features == 4 + 2
     ### query inputs widen the union stack for every token, boundary ones included
-    m = _model(query_tokens=True, query_inputs={"u": 1}, boundary_inputs={"v": 1})
+    m = _model(query_inputs={"u": 1}, boundary_inputs={"v": 1})
     assert m.blocks[0].n_geo == 5 + 1 + 2
 
 
@@ -273,7 +252,7 @@ def test_field_validation_errors():
     with pytest.raises(ValueError, match="declares no boundary_inputs"):
         m0(**common, boundary_inputs={"trac": trac})
     ### query fields are refused where the model declares none, and required where it does
-    mq = _model(query_tokens=True, query_inputs={"sdf": 0})
+    mq = _model(query_inputs={"sdf": 0})
     q, qn, _ = _cloud(7, 1)
     with pytest.raises(ValueError, match="pass query_inputs"):
         mq(**common, query_points=q)
@@ -295,20 +274,22 @@ def test_fused_kernel_refuses_tensor_inputs_and_auto_falls_back():
     with pytest.raises(ValueError, match="one to four per-point vectors"):
         ISLA(boundary_inputs={"trac": 1, "disp": 1, "u": 1, "v": 1}, geo_kernel="fused", **base)
     with pytest.raises(ValueError, match="does not support rank-2"):
-        ISLA(query_inputs={"S": 2}, query_tokens=True, geo_kernel="fused", **base)
+        ISLA(query_inputs={"S": 2}, geo_kernel="fused", **base)
     ### rank-0 inputs never touch the geometry region: the fused kernel stays available
     ISLA(boundary_inputs={"tag": 0}, geo_kernel="fused", **base)
-    m = ISLA(query_inputs={"S": 2}, query_tokens=True, **base)
+    m = ISLA(query_inputs={"S": 2}, **base)
     assert m.geo_kernel == "auto"
     assert m.resolve_geo_kernel(torch.zeros(1, 4, 3)) == "eager"
 
 
 def test_rank0_query_inputs_are_scaled_by_the_gauge():
-    """With query_scalar_scale="length" a rank-0 query field is a length: rescaling the
-    geometry (points x s, weights x s^2) together with the field leaves the output
-    unchanged, while rank-1 query fields are never scaled (they are physical
-    vectors, not lengths) and a rescale of the geometry alone changes the output."""
-    m = _model(query_tokens=True, query_inputs={"sdf": 0, "u": 1})
+    """A rank-0 query field is a length: rescaling the geometry (points x s, weights
+    x s^2) together with the field leaves the output unchanged, while rank-1 query
+    fields are never scaled (they are physical vectors, not lengths) and a rescale
+    of the geometry alone changes the output. The scaled pair takes two embedding
+    channels per rank-0 field, after the built-in distance pair."""
+    m = _model(query_inputs={"sdf": 0, "u": 1})
+    assert m.qin.n_features == 2 + (2 + 1) and m.qt.embed[0].in_features == 2 + m.qin.n_features
     pts, nrm, w = _cloud(60, 0)
     q, qn, _ = _cloud(12, 1)
     drv = torch.tensor([[1.0, 0.3, 0.0]], dtype=D)
@@ -330,39 +311,13 @@ def test_rank0_query_inputs_are_scaled_by_the_gauge():
     base, scaled, geo_only = call(1.0, 1.0), call(s, s), call(s, 1.0)
     assert all(torch.allclose(scaled[k], base[k], atol=1e-10) for k in base.keys())
     assert not torch.allclose(geo_only["p"], base["p"], atol=1e-6)
-    ### query_scalar_scale="none" enters the raw value (one channel instead of the
-    ### scaled pair, so its own parameters): the geometric rescale then changes it
-    m_raw = _model(
-        query_tokens=True, query_inputs={"sdf": 0, "u": 1}, query_scalar_scale="none"
-    )
-    assert m_raw.qt_embed[0].in_features == m.qt_embed[0].in_features - 1
-    with torch.no_grad():
-        a = m_raw(
-            points=pts,
-            normals=nrm,
-            measure_weights=w,
-            global_inputs={"g": drv},
-            query_points=q,
-            query_inputs={"sdf": sdf, "u": u},
-        )
-        b = m_raw(
-            points=s * pts,
-            normals=nrm,
-            measure_weights=w * s**2,
-            global_inputs={"g": drv},
-            query_points=s * q,
-            query_inputs={"sdf": s * sdf, "u": u},
-        )
-    assert not torch.allclose(a["p"], b["p"], atol=1e-6)
 
 
 def test_geo_checkpoint_is_exact_with_tensor_inputs():
     """The recompute path carries the extra vectors and quadratic forms bitwise."""
     torch.manual_seed(0)
-    ref = _model(boundary_inputs=BIN, query_tokens=True, query_inputs=QIN)
-    ckp = _model(
-        boundary_inputs=BIN, query_tokens=True, query_inputs=QIN, geo_checkpoint=True
-    )
+    ref = _model(boundary_inputs=BIN, query_inputs=QIN)
+    ckp = _model(boundary_inputs=BIN, query_inputs=QIN, geo_checkpoint=True)
     ckp.load_state_dict(ref.state_dict())
     pts, nrm, w = _cloud(50, 0)
     q, qn, _ = _cloud(9, 1)

@@ -35,7 +35,7 @@ D = torch.float64
 
 OUTPUTS = {
     "s": 0,
-    "s2": {"rank": 0, "channels": 2},
+    "s2": 0,
     "v": 1,
     "pv": {"rank": 1, "parity": "odd"},
     "t": 2,
@@ -124,7 +124,7 @@ def test_coefficient_counts_match_the_docstring(K):
     assert m.n_true_basis == mm and m.n_pseudo_basis == p
     expected = {
         "s": 1,
-        "s2": 1,  # per channel
+        "s2": 1,
         "v": mm,
         "pv": p,
         "t": mm**2 + 1,
@@ -137,7 +137,7 @@ def test_coefficient_counts_match_the_docstring(K):
     }
     for name, n in expected.items():
         assert m.output_layouts[name].n_coeffs == n, name
-    assert m.head.out_features == sum(expected.values()) + 1  # s2 has two channels
+    assert m.head.out_features == sum(expected.values())
     assert m.n_head_coeffs == m.head.out_features
 
 
@@ -153,7 +153,7 @@ def test_output_shapes(K):
     pts, nrm, drv, w = _cloud()
     out = _forward(m, pts, nrm, drv, w, K)
     assert set(out.keys()) == set(OUTPUTS)
-    assert out["s"].shape == (1, 300) and out["s2"].shape == (1, 300, 2)
+    assert out["s"].shape == (1, 300) and out["s2"].shape == (1, 300)
     assert out["v"].shape == out["pv"].shape == (1, 300, 3)
     assert out["t"].shape == out["ts"].shape == out["pt"].shape == (1, 300, 3, 3)
     assert out["t3"].shape == out["t3o"].shape == out["t3s"].shape == (1, 300, 3, 3, 3)
@@ -233,8 +233,8 @@ def test_rank_spec_grammar_is_validated():
         ISLA(outputs={"x": True}, **base)
     with pytest.raises(ValueError, match="parity must be"):
         ISLA(outputs={"x": {"rank": 1, "parity": "mixed"}}, **base)
-    with pytest.raises(ValueError, match="channels"):
-        ISLA(outputs={"x": {"rank": 1, "channels": 2}}, **base)
+    with pytest.raises(ValueError, match="unknown rank-spec keys \\['channels'\\]"):
+        ISLA(outputs={"x": {"rank": 0, "channels": 2}}, **base)
     with pytest.raises(ValueError, match="at least one field"):
         ISLA(outputs={}, **base)
     with pytest.raises(ValueError, match="pseudotensor"):
@@ -253,52 +253,44 @@ def test_rank_spec_grammar_is_validated():
         ISLA(outputs=[0, 1], **base)
 
 
-def test_rank_two_output_in_the_interior_modes():
-    """The heads sit on the shared readout, so the query-token and passive paths carry
-    a rank-2 output with the same covariance (rotation and reflection)."""
+@pytest.mark.parametrize("supplied", [False, True], ids=["internal", "supplied_normals"])
+def test_rank_two_output_in_the_interior_mode(supplied):
+    """The heads sit on the shared readout, so the interior mode carries a rank-2
+    output with the same covariance (rotation and reflection), with the query
+    directions computed inside or supplied."""
     pts, nrm, drv, w = _cloud(200)
     q_pts, q_nrm, _, _ = _cloud(50, seed=1)
     outputs = {"p": 0, "v": 1, "sig": {"rank": 2, "symmetric": True}, "t": 2}
-    for kw in (
-        dict(query_tokens=True, query_inputs={"sdf": 0}),
-        dict(query_independent=True, n_decoder_layers=1, query_inputs={"sdf": 0}),
-    ):
-        m = _model(1, outputs=outputs, **kw)
-        qs = torch.rand(1, 50, dtype=D)
-        base = _forward(
-            m,
-            pts,
-            nrm,
-            drv,
-            w,
-            1,
-            query_points=q_pts,
-            query_inputs={"sdf": qs},
-        )
-        for improper in (False, True):
-            R = _orthogonal(3, improper)
-            out = _forward(
-                m,
-                pts,
-                nrm,
-                drv,
-                w,
-                1,
-                R=R,
-                query_points=q_pts @ R.T,
-                query_inputs={"sdf": qs},
-            )
-            assert base["sig"].shape == (1, 50, 3, 3)
-            for name, spec in m.output_specs.items():
-                assert torch.allclose(
-                    out[name], _transform(base[name], R, spec), atol=1e-12
-                ), (name, kw, improper)
+    m = _model(1, outputs=outputs, query_inputs={"sdf": 0})
+    qs = torch.rand(1, 50, dtype=D)
+
+    def call(R):
+        extra = dict(query_points=q_pts @ R.T, query_inputs={"sdf": qs})
+        if supplied:
+            extra["query_normals"] = q_nrm @ R.T
+        return _forward(m, pts, nrm, drv, w, 1, R=R, **extra)
+
+    base = call(torch.eye(3, dtype=D))
+    for improper in (False, True):
+        R = _orthogonal(3, improper)
+        out = call(R)
+        assert base["sig"].shape == (1, 50, 3, 3)
+        for name, spec in m.output_specs.items():
+            assert torch.allclose(
+                out[name], _transform(base[name], R, spec), atol=1e-12
+            ), (name, supplied, improper)
 
 
 def test_all_parameters_receive_gradients():
     m = _model(1).train()
     pts, nrm, drv, w = _cloud(100)
-    out = m(points=pts, normals=nrm, measure_weights=w, global_inputs={"g0": drv[:, 0]})
+    out = m(
+        points=pts,
+        normals=nrm,
+        measure_weights=w,
+        global_inputs={"g0": drv[:, 0]},
+        query_points=pts[:, :20] * 1.5,
+    )
     sum(o.square().sum() for o in out.values()).backward()
     for name, p in m.named_parameters():
         assert p.grad is not None and torch.isfinite(p.grad).all(), name

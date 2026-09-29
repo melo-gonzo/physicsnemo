@@ -14,15 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The internal interior geometry (``interior_geometry="nearest_boundary"``, 2026-09-23).
+"""The interior geometry of the query tokens.
 
-For every interior token the model derives its direction and signed distance from
-the boundary sample itself instead of reading a stored signed-distance field: the
-nearest boundary point gives the distance, the difference direction the "normal",
-and the nearest sample's normal the sign (positive on the side the normal points
-to). These tests pin the geometry against a brute-force computation, its sign
-convention, the contracts in the internal mode, and the exact equivalence with
-``interior_geometry="provided"`` fed the same quantities.
+For every interior token the model derives its signed distance from the boundary
+sample itself (the nearest boundary point gives the distance, the nearest sample's
+normal the sign, positive on the side the normal points to), and its direction from
+the same search unless the caller supplies ``query_normals``. These tests pin the
+geometry against a brute-force computation, its sign convention, the contracts in
+both forms, and the exact equivalence of the two forms when the supplied normals are
+the internal directions.
 """
 
 import pytest
@@ -138,133 +138,95 @@ def _model(**kw):
 
 @pytest.mark.parametrize(
     "kw",
-    [
-        dict(query_tokens=True),
-        dict(query_independent=True, n_decoder_layers=1),
-        dict(query_independent=True, n_decoder_layers=1, support_tokens=True),
-        dict(query_tokens=True, query_inputs={"tag": 0, "flux": 1}),
-    ],
-    ids=["query_tokens", "passive", "support", "query_tokens+inputs"],
+    [dict(), dict(query_inputs={"tag": 0, "flux": 1})],
+    ids=["no_inputs", "inputs"],
 )
-def test_internal_mode_equals_provided_mode_fed_its_own_geometry(kw):
-    """The built-in distance channel has the layout of one declared rank-0 query
-    input under query_scalar_scale="length" (the pair [d/L, sign(d) log|d|/L]), so
-    a "provided" model with the same weights, handed the internally computed
-    direction as query_normals and the internal distance as its first query input,
-    is the same function (to roundoff: the provided path renormalizes the unit
-    direction it is handed)."""
-    internal = _model(**kw)
-    declared = {"_d": 0, **kw.get("query_inputs", {})}
-    provided = _model(**{**kw, "query_inputs": declared}, interior_geometry="provided")
-    provided.load_state_dict(internal.state_dict())
+def test_supplied_normals_equal_to_the_internal_directions_are_the_same_function(kw):
+    """The direction is dispatched on the data: handing the model the internally
+    computed nearest-sample directions as ``query_normals`` gives the same function
+    as leaving them out (to roundoff: the supplied normals are renormalized). The
+    built-in distance channel is the same in both calls."""
+    m = _model(**kw)
     pts, nrm, w = _cloud(120, 0)
     drv = torch.tensor([[0.3, 1.0, 0.2]], dtype=D)
     q, _, _ = _cloud(25, 1, scale=(4.0, 4.0, 4.0))
-    s, _, _ = _cloud(15, 2, scale=(4.0, 4.0, 4.0))
-    qi = {}
+    qi = None
     if "query_inputs" in kw:
         qi = {"tag": torch.rand(1, 25, dtype=D), "flux": torch.randn(1, 25, 3, dtype=D)}
-    extra_i = dict(query_points=q, query_inputs=qi or None)
-    d_q, u_q = nearest_boundary_geometry(q, pts, nrm)
-    extra_p = dict(query_points=q, query_normals=u_q, query_inputs={"_d": d_q, **qi})
-    if kw.get("support_tokens"):
-        d_s, u_s = nearest_boundary_geometry(s, pts, nrm)
-        extra_i.update(support_points=s)
-        extra_p.update(
-            support_points=s, support_normals=u_s, support_inputs={"_d": d_s}
-        )
+    _, u_q = nearest_boundary_geometry(q, pts, nrm)
     common = dict(points=pts, normals=nrm, measure_weights=w, global_inputs={"g": drv})
     with torch.no_grad():
-        a = internal(**common, **extra_i)
-        b = provided(**common, **extra_p)
+        a = m(**common, query_points=q, query_inputs=qi)
+        b = m(**common, query_points=q, query_normals=u_q, query_inputs=qi)
+        c = m(**common, query_points=q, query_normals=2.5 * u_q, query_inputs=qi)
     assert all(torch.allclose(a[k], b[k], atol=1e-12, rtol=0) for k in a.keys())
+    assert all(torch.allclose(a[k], c[k], atol=1e-12, rtol=0) for k in a.keys())
     assert a["p"].shape == (1, 25)
 
 
-def test_internal_mode_refuses_normals_and_provided_mode_requires_them():
+def test_supplied_normals_are_live_and_validated():
+    """Other directions than the internal ones change the prediction (the direction
+    enters every invariant); mismatched or orphaned normals are refused."""
     pts, nrm, w = _cloud(40, 0)
-    q, qn, _ = _cloud(5, 1)
+    q, qn, _ = _cloud(5, 1, scale=(4.0, 4.0, 4.0))
     common = dict(
         points=pts,
         normals=nrm,
         measure_weights=w,
         global_inputs={"g": torch.ones(1, 3, dtype=D)},
     )
-    m = _model(query_tokens=True)
-    with pytest.raises(ValueError, match="derives the query directions"):
-        m(**common, query_points=q, query_normals=qn)
-    m_sup = _model(query_independent=True, n_decoder_layers=1, support_tokens=True)
-    with pytest.raises(ValueError, match="derives the support directions"):
-        m_sup(**common, query_points=q, support_points=q, support_normals=qn)
-    p = _model(query_tokens=True, interior_geometry="provided")
-    with pytest.raises(ValueError, match="needs query_normals"):
-        p(**common, query_points=q)
-    with pytest.raises(ValueError, match="interior_geometry must be"):
-        _model(interior_geometry="sdf")
+    m = _model()
+    with torch.no_grad():
+        internal = m(**common, query_points=q)
+        supplied = m(**common, query_points=q, query_normals=qn)
+    assert not torch.allclose(internal["p"], supplied["p"], atol=1e-6)
+    with pytest.raises(ValueError, match="Expected query_normals of shape"):
+        m(**common, query_points=q, query_normals=qn[:, :3])
+    with pytest.raises(ValueError, match="query_normals given without query_points"):
+        m(**common, query_normals=qn)
+    with pytest.raises(TypeError, match="interior_geometry"):
+        _model(interior_geometry="provided")
 
 
-def test_internal_mode_contracts_with_all_interior_arrangements():
+@pytest.mark.parametrize("supplied", [False, True], ids=["internal", "supplied"])
+def test_interior_contracts(supplied):
     """Rotation and reflection covariance, translation invariance and geometric-scale
-    invariance in the internal mode, where no direction is supplied for the queries;
-    the queries of a subset decode identically on the passive path."""
+    invariance in the interior mode, with the query directions computed inside or
+    supplied and rotated along; the distance channel is live."""
     pts, nrm, w = _cloud(200, 0)
     drv = torch.tensor([[0.3, 1.0, 0.2]], dtype=D)
-    q, _, _ = _cloud(40, 1, scale=(4.0, 4.0, 4.0))
-    s, _, _ = _cloud(20, 2, scale=(4.0, 4.0, 4.0))
-    for kw, extra in (
-        (dict(query_tokens=True), dict(query_points=q)),
-        (dict(query_independent=True, n_decoder_layers=1), dict(query_points=q)),
-        (
-            dict(query_independent=True, n_decoder_layers=1, support_tokens=True),
-            dict(query_points=q, support_points=s),
-        ),
-    ):
-        m = _model(**kw)
+    q, qn, _ = _cloud(40, 1, scale=(4.0, 4.0, 4.0))
+    m = _model()
 
-        def call(R, t, k=1.0):
-            moved = {name: k * v @ R.T + t for name, v in extra.items()}
-            with torch.no_grad():
-                return m(
-                    points=k * pts @ R.T + t,
-                    normals=nrm @ R.T,
-                    measure_weights=k * k * w,
-                    global_inputs={"g": drv @ R.T},
-                    **moved,
-                )
-
-        base = call(torch.eye(3, dtype=D), torch.zeros(3, dtype=D))
-        for improper in (False, True):
-            R, _ = torch.linalg.qr(
-                torch.randn(3, 3, dtype=D, generator=torch.Generator().manual_seed(4))
-            )
-            if (torch.det(R) < 0) != improper:
-                R[:, 0] = -R[:, 0]
-            out = call(R, torch.tensor([2.0, -5.0, 1.0], dtype=D), k=2.5)
-            assert torch.allclose(out["p"], base["p"], atol=1e-11), (kw, improper)
-            assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-11), (kw, improper)
-        ### the distance channel is live: moving the queries off the boundary changes p
+    def call(R, t, k=1.0, q=q):
+        extra = dict(query_points=k * q @ R.T + t)
+        if supplied:
+            extra["query_normals"] = qn @ R.T
         with torch.no_grad():
-            far = m(
-                points=pts,
-                normals=nrm,
-                measure_weights=w,
-                global_inputs={"g": drv},
-                **{**extra, "query_points": q * 3.0},
+            return m(
+                points=k * pts @ R.T + t,
+                normals=nrm @ R.T,
+                measure_weights=k * k * w,
+                global_inputs={"g": drv @ R.T},
+                **extra,
             )
-        assert not torch.allclose(far["p"], base["p"], atol=1e-6)
-        if kw.get("query_independent"):
-            with torch.no_grad():
-                sub = m(
-                    points=pts,
-                    normals=nrm,
-                    measure_weights=w,
-                    global_inputs={"g": drv},
-                    **{**extra, "query_points": q[:, :7]},
-                )
-            assert torch.allclose(sub["p"], base["p"][:, :7], atol=1e-12, rtol=0)
+
+    base = call(torch.eye(3, dtype=D), torch.zeros(3, dtype=D))
+    for improper in (False, True):
+        R, _ = torch.linalg.qr(
+            torch.randn(3, 3, dtype=D, generator=torch.Generator().manual_seed(4))
+        )
+        if (torch.det(R) < 0) != improper:
+            R[:, 0] = -R[:, 0]
+        out = call(R, torch.tensor([2.0, -5.0, 1.0], dtype=D), k=2.5)
+        assert torch.allclose(out["p"], base["p"], atol=1e-11), (supplied, improper)
+        assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-11), (supplied, improper)
+    ### the distance channel is live: moving the queries off the boundary changes p
+    far = call(torch.eye(3, dtype=D), torch.zeros(3, dtype=D), q=q * 3.0)
+    assert not torch.allclose(far["p"], base["p"], atol=1e-6)
 
 
-def test_fused_kernel_stays_available_in_the_internal_mode():
+def test_fused_kernel_stays_available_with_the_built_in_distance():
     """The built-in distance enters the embedding, not the geometry region, so a model
     without rank-1 or rank-2 per-token inputs keeps the fused kernel."""
     m = ISLA(
@@ -273,20 +235,19 @@ def test_fused_kernel_stays_available_in_the_internal_mode():
         hidden=32,
         n_layers=1,
         n_slices=8,
-        query_tokens=True,
         geo_kernel="fused",
     )
-    assert m.n_query_builtin == 2 and m.qt_embed[0].in_features == 2
+    assert m.n_query_builtin == 2 and m.qt.embed[0].in_features == 2
     assert not (m.n_block_vecs or m.n_block_tens)
 
 
-def test_checkpoint_round_trip_keeps_the_mode(tmp_path):
+def test_checkpoint_round_trip_keeps_the_chunk_size(tmp_path):
     from physicsnemo.core.module import Module
 
-    m = _model(query_tokens=True, interior_nn_chunk=3)
+    m = _model(interior_nn_chunk=3)
     m.save(tmp_path / "m.mdlus")
     m2 = Module.from_checkpoint(str(tmp_path / "m.mdlus")).double().eval()
-    assert m2.interior_geometry == "nearest_boundary" and m2.interior_nn_chunk == 3
+    assert m2.interior_nn_chunk == 3
     pts, nrm, w = _cloud(50, 0)
     q, _, _ = _cloud(8, 1)
     kw = dict(

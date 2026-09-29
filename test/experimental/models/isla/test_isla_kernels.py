@@ -14,9 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""KERNEL STUDY (2026-09-13): the implementation options of ISLA's geometry region
-compute the same thing as the eager reference (geo_kernel="eager", geo_checkpoint=True,
-fast_point_softmax=True).
+"""The implementation options of ISLA's geometry region compute the same thing as the
+eager reference (geo_kernel="eager", geo_checkpoint=True).
 
 Bars from the study brief, applied to the reference configuration's arithmetic:
 the fused Triton region reproduces the eager forward to 1e-6 relative in float32 and
@@ -40,7 +39,6 @@ REF = dict(
     n_layers=3,
     n_slices=32,
     geo_checkpoint=True,
-    fast_point_softmax=True,
 )
 
 
@@ -77,6 +75,7 @@ def _run(model, inputs, target):
     grads = {
         k.replace("_orig_mod.", ""): p.grad.detach().clone()
         for k, p in model.named_parameters()
+        if p.grad is not None  # the query-side parameters are unused without query_points
     }
     return out.detach(), grads
 

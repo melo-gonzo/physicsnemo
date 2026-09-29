@@ -121,25 +121,17 @@ def test_two_dimensional_contracts_rotation_translation_magnitude_and_reflection
     assert base["a"].abs().max() > 0 and base["w"].abs().max() > 0
 
 
-def test_two_dimensional_gradients_local_aggregation_and_interior_modes():
+def test_two_dimensional_gradients_and_interior_mode():
     d = 2
     pts, nrm, drv, w = _problem(d)
-    m = _model(d, {"p": 0, "v": 1}, local_rho=0.3, local_k=8)
-    out = m(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-    sum(v.square().mean() for v in out.values()).backward()
-    missing = [k for k, p in m.named_parameters() if p.grad is None]
-    assert not missing, missing
-    ### k-nearest local aggregation equals the dense form at k = N in two dimensions
-    md = _model(d, {"p": 0, "v": 1}, local_rho=0.3, local_k=0)
-    mk = _model(d, {"p": 0, "v": 1}, local_rho=0.3, local_k=pts.shape[1])
-    mk.load_state_dict(md.state_dict())
-    with torch.no_grad():
-        od = md(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-        ok = mk(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
-    torch.testing.assert_close(ok["v"], od["v"], rtol=1e-5, atol=1e-6)
     ### interior query tokens with the internal nearest-boundary geometry in 2-D
-    mq = _model(d, {"p": 0, "v": 1}, query_tokens=True)
+    mq = _model(d, {"p": 0, "v": 1})
     q = torch.randn(1, 50, d) * 0.5
+    out = mq(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w, query_points=q)
+    sum(v.square().mean() for v in out.values()).backward()
+    missing = [k for k, p in mq.named_parameters() if p.grad is None]
+    assert not missing, missing
+    mq.eval()
     g = torch.Generator().manual_seed(5)
     rq = _rotation(d, g)
     with torch.no_grad():
@@ -198,7 +190,9 @@ def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
         m2(points=pts, normals=nrm, global_inputs={"g": drv}, measure_weights=w)
     ### The 3-D model with a K = 1 direction keeps its parameter count (the head has
     ### m = 5 true and p = 3 pseudo vectors in both dimensions for K = 1, so the
-    ### 2-D model of the same spec has the same count too).
+    ### 2-D model of the same spec has the same count too). 42549 = 41364 for the
+    ### backbone and heads plus 1185 for the query side (qt.logw 1, qt.type_offset 32,
+    ### qt.embed 2 x 32 + 32 + 32 x 32 + 32).
     m3 = _model(3, {"p": 0, "v": 1})
-    assert sum(p.numel() for p in m3.parameters()) == 41364
-    assert sum(p.numel() for p in _model(2, {"p": 0, "v": 1}).parameters()) == 41364
+    assert sum(p.numel() for p in m3.parameters()) == 42549
+    assert sum(p.numel() for p in _model(2, {"p": 0, "v": 1}).parameters()) == 42549

@@ -14,14 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ISLA global inputs (2026-09-14; rank-spec grammar 2026-09-22): zero or more rank-1
-global inputs (directions) and zero or more rank-0 global inputs (scalars, with
-``channels`` for a parameter vector). The contracts tested here are exact (float64,
-tolerance 1e-10): SE(3) covariance and measure-scale invariance for K = 0 and K = 2
-directions, magnitude invariance of every direction, scalar conditioning that
-changes the output while preserving every covariance contract, the K = 1 parameter
-layout of the former single-direction model, and the fused kernel refusing
-K != 1."""
+"""ISLA global inputs: zero or more rank-1 global inputs (directions) and zero or
+more rank-0 global inputs (scalars, one name per scalar). The contracts tested here
+are exact (float64, tolerance 1e-10): SE(3) covariance and measure-scale invariance
+for K = 0 and K = 2 directions, magnitude invariance of every direction, scalar
+conditioning that changes the output while preserving every covariance contract,
+the K = 1 parameter layout of the former single-direction model, and the fused
+kernel refusing K outside one to four."""
 
 import pytest
 import torch
@@ -102,19 +101,17 @@ def _assert_se3(m, pts, nrm, w, gi, extra=None, atol=1e-10):
         )
     assert torch.allclose(moved["p"], base["p"], atol=atol)
     assert torch.allclose(moved["v"], base["v"] @ R.T, atol=atol)
-    if m.scale_mode != "total_measure":
-        ### Measure-scale invariance holds under the RMS-distance unit (normalized
-        ### weights); under the total-measure unit the weights carry physical area
-        ### and a rescale is a different geometry.
-        with torch.no_grad():
-            rescaled = m(
-                points=pts,
-                normals=nrm,
-                measure_weights=137.0 * w,
-                global_inputs=gi,
-                **extra,
-            )
-        assert _same(rescaled, base, atol=1e-9)
+    ### Measure-scale invariance: the RMS-distance unit uses normalized weights and
+    ### the routing bias is a log-weight, so a uniform rescale changes nothing.
+    with torch.no_grad():
+        rescaled = m(
+            points=pts,
+            normals=nrm,
+            measure_weights=137.0 * w,
+            global_inputs=gi,
+            **extra,
+        )
+    assert _same(rescaled, base, atol=1e-9)
     return base
 
 
@@ -183,17 +180,14 @@ def test_two_global_vectors():
         )
 
 
-def test_two_vectors_passive_and_query_token_paths():
-    """The interior paths carry the K directions to the query side as well."""
+def test_two_vectors_interior_path():
+    """The interior mode carries the K directions to the query side as well."""
     pts, nrm, w = _sample()
     q = torch.randn(2, 40, 3, dtype=D)
     gv = torch.randn(2, 2, 3, dtype=D)
     gi = {"g1": gv[:, 0], "g2": gv[:, 1]}
-    two = {"g1": 1, "g2": 1}
-    m_passive = _model(two, query_independent=True, n_decoder_layers=1)
-    _assert_se3(m_passive, pts, nrm, w, gi, extra=dict(query_points=q))
-    m_qt = _model(two, query_tokens=True, query_mass="source_total")
-    _assert_se3(m_qt, pts, nrm, w, gi, extra=dict(query_points=q))
+    m = _model({"g1": 1, "g2": 1})
+    _assert_se3(m, pts, nrm, w, gi, extra=dict(query_points=q))
 
 
 def test_global_scalars_condition_every_token():
@@ -230,16 +224,14 @@ def test_global_scalars_condition_every_token():
     m0 = _model()
     with pytest.raises(ValueError, match="unexpected"):
         m0(points=pts, normals=nrm, measure_weights=w, global_inputs=gi)
-    ### a parameter vector packs the scalars under one name with `channels`
-    m_ch = _model({"g": 1, "params": {"rank": 0, "channels": 2}})
-    assert m_ch.embed[0].in_features == 3 and m_ch.n_global_scalars == 2
-    _assert_se3(m_ch, pts, nrm, w, {"g": gv, "params": gs})
-    ### the passive and interacting query paths take the scalars as well
+    ### a rank-0 global input is one scalar; a parameter vector is several names
+    with pytest.raises(ValueError, match="unknown rank-spec keys"):
+        _model({"g": 1, "params": {"rank": 0, "channels": 2}})
+    with pytest.raises(ValueError, match="rows for a batch"):
+        m(points=pts, normals=nrm, measure_weights=w, global_inputs={"g": gv, "kappa": gs, "E": gs[:, 1]})
+    ### the interior mode takes the scalars as well
     q = torch.randn(2, 30, 3, dtype=D)
-    m_passive = _model(spec, query_independent=True, n_decoder_layers=1)
-    _assert_se3(m_passive, pts, nrm, w, gi, extra=dict(query_points=q))
-    m_qt = _model(spec, query_tokens=True, query_mass="source_total")
-    _assert_se3(m_qt, pts, nrm, w, gi, extra=dict(query_points=q))
+    _assert_se3(m, pts, nrm, w, gi, extra=dict(query_points=q))
 
 
 def test_no_global_inputs_at_all_with_scalars_only():
@@ -314,50 +306,27 @@ def test_bad_global_specs_rejected():
         ISLA(outputs=PV, global_inputs={"T": 2}, hidden=32, n_layers=1, n_slices=8)
 
 
-def test_boundary_data_reaches_every_interior_path():
+def test_boundary_data_reaches_the_interior_prediction():
     """A boundary-value problem needs the per-cell boundary data (Dirichlet trace)
-    on the boundary tokens and zeros on every token that is not a boundary cell.
-    All three interior paths accept it, the covariance contracts hold, and the
-    interior prediction depends on the boundary data."""
+    on the boundary tokens and zeros on the query tokens. The covariance contracts
+    hold, and the interior prediction depends on the boundary data."""
     pts, nrm, w = _sample()
     bsc = torch.randn(2, pts.shape[1], dtype=D)
     q = torch.randn(2, 30, 3, dtype=D) * 0.5
     gi = {"kappa": torch.tensor([[0.7], [2.0]], dtype=D)}
-    common = dict(global_inputs={"kappa": 0}, boundary_inputs={"trace": 0})
-    arms = [
-        (
-            _model(query_tokens=True, query_mass="source_total", **common),
-            dict(query_points=q),
-        ),
-        (
-            _model(query_independent=True, n_decoder_layers=1, **common),
-            dict(query_points=q),
-        ),
-        (
-            _model(
-                query_independent=True,
-                support_tokens=True,
-                query_mass="source_total",
-                n_decoder_layers=1,
-                **common,
-            ),
-            dict(query_points=q, support_points=q),
-        ),
-    ]
-    for m, extra in arms:
-        assert (
-            m.embed[0].in_features == 2
-        )  # boundary scalar + global scalar (no directions)
-        base = _assert_se3(
-            m, pts, nrm, w, gi, extra=dict(extra, boundary_inputs={"trace": bsc})
+    m = _model(global_inputs={"kappa": 0}, boundary_inputs={"trace": 0})
+    extra = dict(query_points=q)
+    assert m.embed[0].in_features == 2  # boundary scalar + global scalar (no directions)
+    base = _assert_se3(
+        m, pts, nrm, w, gi, extra=dict(extra, boundary_inputs={"trace": bsc})
+    )
+    with torch.no_grad():
+        other = m(
+            points=pts,
+            normals=nrm,
+            measure_weights=w,
+            global_inputs=gi,
+            boundary_inputs={"trace": bsc + 1.0},
+            **extra,
         )
-        with torch.no_grad():
-            other = m(
-                points=pts,
-                normals=nrm,
-                measure_weights=w,
-                global_inputs=gi,
-                boundary_inputs={"trace": bsc + 1.0},
-                **extra,
-            )
-        assert base["p"].shape[1] == 30 and not _same(other, base, atol=1e-3)
+    assert base["p"].shape[1] == 30 and not _same(other, base, atol=1e-3)

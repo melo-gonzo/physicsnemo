@@ -21,17 +21,16 @@ non-regression against golden outputs stored next to this file; checkpoint save 
 ``Module.from_checkpoint`` round trip; a committed reference ``.mdlus``; and the
 pre-refactor backbone golden.
 
-**Regenerating the goldens** (the rank-spec API of 2026-09-22 produced the current
-``isla_*_v1.*`` files): delete ``data/isla_default_v1.pth``,
-``data/isla_query_independent_v1.pth``, ``data/isla_default_v1.mdlus`` and
+**Regenerating the goldens**: delete ``data/isla_default_v1.pth``,
+``data/isla_interior_v1.pth``, ``data/isla_default_v1.mdlus`` and
 ``data/isla_default_checkpoint_output_v1.pth`` and run
 
     uv run --no-sync python -m pytest test/experimental/models/isla/test_isla_release.py
 
 twice: the first run recreates each missing file from the current code (and fails on
 purpose), the second run must pass. ``data/isla_backbone_v1.pth`` is NOT regenerated:
-it was recorded from the pre-refactor code (a forward hook on ``norm_out`` under
-``CONFIGS`` / ``_make_inputs`` below) and pins the backbone bitwise.
+it was recorded from the pre-rank-spec code (a forward hook on ``norm_out`` under
+``CONFIGS["default"]`` / ``_make_inputs`` below) and pins the backbone bitwise.
 """
 
 from pathlib import Path
@@ -47,20 +46,11 @@ DATA_DIR = Path(__file__).parent / "data"
 #: Every configuration declares one scalar and one vector output and one global direction.
 IO = dict(outputs={"p": 0, "v": 1}, global_inputs={"g": 1})
 
-#: Small configurations that exercise the two forward paths users see: the
-#: boundary-to-boundary model and the query-independent (interior) decoder.
+#: One small configuration; the two forward paths users see (boundary-to-boundary
+#: and interior) are entered by the data (``query_points`` given or not).
 CONFIGS = {
     "default": dict(hidden=32, n_layers=2, n_slices=8, geo_kernel="eager", **IO),
-    "query_independent": dict(
-        hidden=32,
-        n_layers=2,
-        n_slices=8,
-        query_independent=True,
-        n_decoder_layers=2,
-        geo_kernel="eager",
-        interior_geometry="provided",
-        **IO,
-    ),
+    "interior": dict(hidden=32, n_layers=2, n_slices=8, geo_kernel="eager", **IO),
 }
 
 
@@ -85,11 +75,6 @@ def _make_inputs(device, query: bool = False, seed: int = 1234) -> dict:
     inputs = dict(points=pts, normals=nrm, measure_weights=w)
     if query:
         inputs["query_points"] = torch.randn(b, 40, 3, generator=gen) * 2.0
-        # the goldens predate the internal geometry: the interior configuration is
-        # interior_geometry="provided" and the queries carry a direction
-        inputs["query_normals"] = torch.nn.functional.normalize(
-            torch.randn(b, 40, 3, generator=gen), dim=-1
-        )
     inputs = {k: v.to(device) for k, v in inputs.items()}
     inputs["global_inputs"] = {"g": g.to(device)}
     return inputs
@@ -131,14 +116,11 @@ def test_isla_constructor_attributes(config):
         assert m.n_slices == 256
         assert len(m.blocks) == 12
         assert m.norm_out.normalized_shape == (384,)  # the reference width
-        assert m.scale_mode == "rms_distance"
         assert m.geo_kernel == "auto"
-        assert m.use_measure_weights is True
+        assert m.slice_prototypes == "static"
+        assert m.interior_nn_chunk is None
         assert m.n_global_vectors == 1 and m.n_global_scalars == 0
         assert m.boundary_specs == {} and m.query_specs == {}
-        assert m.query_independent is False
-        assert m.query_tokens is False and m.support_tokens is False
-        assert m.interior_geometry == "nearest_boundary"
         assert m.eps == 1e-12
     else:
         m = ISLA(
@@ -151,31 +133,26 @@ def test_isla_constructor_attributes(config):
                 "stress": {"rank": 2, "symmetric": True},
             },
             global_inputs={"g1": 1, "g2": 1, "re": 0},
-            boundary_inputs={"trace": {"rank": 0, "channels": 2}, "traction": 1},
+            boundary_inputs={"trace": 0, "traction": 1},
             query_inputs={"sdf": 0},
             hidden=64,
             n_layers=3,
             n_slices=16,
-            scale_mode="total_measure",
             geo_kernel="eager",
-            query_independent=True,
-            n_decoder_layers=2,
-            local_readout_rho=0.05,
-            interior_geometry="provided",
+            geo_checkpoint=True,
+            interior_nn_chunk=512,
+            slice_prototypes="centered",
             eps=1e-8,
         )
         assert len(m.output_specs) == 6 and m.output_specs["stress"].symmetric
         assert m.n_slices == 16
-        assert len(m.blocks) == 3 and len(m.read_blocks) == 2
-        assert m.scale_mode == "total_measure"
+        assert len(m.blocks) == 3 and all(b.geo_checkpoint for b in m.blocks)
         assert m.geo_kernel == "eager"
         assert m.n_global_vectors == 2 and m.n_global_scalars == 1
         assert list(m.boundary_specs) == ["trace", "traction"]
-        assert m.boundary_specs["trace"].channels == 2
         assert list(m.query_specs) == ["sdf"]
-        assert m.query_independent is True
-        assert m.local_readout_rho == 0.05
-        assert m.interior_geometry == "provided"
+        assert m.interior_nn_chunk == 512
+        assert m.slice_prototypes == "centered"
         assert m.eps == 1e-8
     assert isinstance(m, Module)
 
@@ -188,7 +165,7 @@ def test_isla_constructor_attributes(config):
 @pytest.mark.parametrize("config", list(CONFIGS))
 def test_isla_forward_non_regression(device, config):
     model = _instantiate_model(**CONFIGS[config]).to(device)
-    inputs = _make_inputs(device, query=(config == "query_independent"))
+    inputs = _make_inputs(device, query=(config == "interior"))
     with torch.no_grad():
         out = model(**inputs)
     n_out = inputs["query_points"].shape[1] if "query_points" in inputs else 64
@@ -198,21 +175,20 @@ def test_isla_forward_non_regression(device, config):
     _assert_dict_close(out, ref, atol=tol, rtol=tol)
 
 
-@pytest.mark.parametrize("config", list(CONFIGS))
-def test_isla_backbone_is_the_pre_refactor_backbone(config):
-    """The rank-spec API (2026-09-22) changed the heads and the input grammar only:
-    with no per-token inputs, the pre-head token state (``norm_out`` output) is
-    bitwise the one the pre-refactor code produced for the same parameters and
-    inputs. ``data/isla_backbone_v1.pth`` was recorded from that code with a forward
-    hook on ``norm_out`` (seed 0 parameters, seed 1234 inputs, as here)."""
-    ref = torch.load(DATA_DIR / "isla_backbone_v1.pth", weights_only=True)[config]
-    model = _instantiate_model(**CONFIGS[config])
+def test_isla_backbone_is_the_pre_refactor_backbone():
+    """With no per-token inputs, the pre-head token state (``norm_out`` output) of
+    the boundary-to-boundary model is bitwise the one the pre-rank-spec code
+    produced for the same parameters and inputs. ``data/isla_backbone_v1.pth`` was
+    recorded from that code with a forward hook on ``norm_out`` (seed 0 parameters,
+    seed 1234 inputs, as here)."""
+    ref = torch.load(DATA_DIR / "isla_backbone_v1.pth", weights_only=True)["default"]
+    model = _instantiate_model(**CONFIGS["default"])
     captured = {}
     model.norm_out.register_forward_hook(
         lambda mod, i, o: captured.setdefault("x", o.detach().clone())
     )
     with torch.no_grad():
-        model(**_make_inputs("cpu", query=(config == "query_independent")))
+        model(**_make_inputs("cpu"))
     assert torch.equal(captured["x"], ref["norm_out"])
 
 
@@ -222,17 +198,16 @@ def test_isla_backbone_is_the_pre_refactor_backbone(config):
 
 
 def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
-    model = _instantiate_model(seed=3, **CONFIGS["query_independent"]).to(device)
+    model = _instantiate_model(seed=3, **CONFIGS["interior"]).to(device)
     inputs = _make_inputs(device, query=True)
-    path = tmp_path / "isla_qi.mdlus"
+    path = tmp_path / "isla_interior.mdlus"
     model.save(path)
     loaded = Module.from_checkpoint(str(path)).to(device).eval()
     assert isinstance(loaded, ISLA)
     for name in (
         "n_slices",
-        "scale_mode",
         "geo_kernel",
-        "query_independent",
+        "slice_prototypes",
         "n_global_vectors",
         "output_specs",
         "global_specs",
@@ -255,7 +230,6 @@ def test_isla_reference_checkpoint_matches_golden(device):
     assert isinstance(model, ISLA)
     assert (
         model.n_slices == 8
-        and model.scale_mode == "rms_distance"
         and model.geo_kernel == "eager"
         and list(model.output_specs) == ["p", "v"]
     )

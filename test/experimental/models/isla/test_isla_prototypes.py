@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""PROTO-COND (2026-09-29): sample-conditioned slice prototypes. Contracts (rotation, translation, reflection, token
-permutation, uniform measure rescale), parameter accounting, and the cosine-only restriction. PROTO-COND-2: the
-centered, scale-bounded variant; exactness of the construction and collapse-proofness."""
+"""Sample-conditioned slice prototypes (``slice_prototypes="centered"``). Contracts (rotation, translation,
+reflection, token permutation, uniform measure rescale), parameter accounting, exactness of the centered,
+scale-bounded construction and collapse-proofness."""
 
 import pytest
 import torch
@@ -30,9 +30,8 @@ def _rotation(g):
 KW = dict(outputs={"p": 0, "v": 1}, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8)
 
 
-@pytest.mark.parametrize("mode", ["conditioned", "centered"])
-def test_conditioned_prototypes_keep_every_contract(mode):
-    m = ISLA(**KW, slice_prototypes=mode).double().eval()
+def test_centered_prototypes_keep_every_contract():
+    m = ISLA(**KW, slice_prototypes="centered").double().eval()
     r, nrm, w, drv = _problem()
     r, nrm, w, drv = r.double(), nrm.double(), w.double(), drv.double()
     g = torch.Generator().manual_seed(7)
@@ -55,22 +54,21 @@ def test_conditioned_prototypes_keep_every_contract(mode):
 
 def test_prototypes_depend_on_the_sample_and_static_is_unchanged():
     torch.manual_seed(0)
-    rl = _RoutingLogits(16, 4, "cosine", 10.0, slice_prototypes="conditioned")
+    rl = _RoutingLogits(16, 4, slice_prototypes="centered")
     x1, x2 = torch.randn(1, 50, 16), torch.randn(1, 50, 16)
     lw = torch.zeros(1, 50, 1)
     p1, p2 = rl.prototypes(x1, lw), rl.prototypes(x2, lw)
     assert p1.shape == (1, 4, 16) and not torch.allclose(p1, p2)
     assert rl(x1, lw).abs().max() <= 10.0 + 1e-5  # bounded by the temperature
     n_static = sum(p.numel() for p in ISLA(**KW).parameters())
-    n_cond = sum(p.numel() for p in ISLA(**KW, slice_prototypes="conditioned").parameters())
     n_cent = sum(p.numel() for p in ISLA(**KW, slice_prototypes="centered").parameters())
-    assert n_cond - n_static == KW["n_layers"] * 2 * KW["hidden"] ** 2  # the key and value maps per block
-    assert n_cent - n_cond == KW["n_layers"]  # one gain scalar per block
+    assert n_cent - n_static == KW["n_layers"] * (2 * KW["hidden"] ** 2 + 1)  # key and value maps plus the gain, per block
+    assert not hasattr(_RoutingLogits(16, 4), "k_proj")
 
 
 def test_centered_prototypes_are_centered_and_scale_bounded():
     torch.manual_seed(0)
-    rl = _RoutingLogits(16, 4, "cosine", 10.0, slice_prototypes="centered").eval()
+    rl = _RoutingLogits(16, 4, slice_prototypes="centered").eval()
     x = torch.randn(2, 50, 16)
     lw = torch.randn(2, 50, 1)
     with torch.no_grad():
@@ -89,7 +87,7 @@ def test_centered_prototypes_are_centered_and_scale_bounded():
 
 def test_centered_prototypes_equal_the_seeds_on_identical_tokens():
     torch.manual_seed(0)
-    rl = _RoutingLogits(16, 4, "cosine", 10.0, slice_prototypes="centered").eval()
+    rl = _RoutingLogits(16, 4, slice_prototypes="centered").eval()
     x = torch.randn(1, 1, 16).expand(1, 50, 16).clone()  # every token identical: one value for every seed
     lw = torch.randn(1, 50, 1)
     with torch.no_grad():
@@ -97,11 +95,9 @@ def test_centered_prototypes_equal_the_seeds_on_identical_tokens():
     torch.testing.assert_close(protos, rl.weight[None].expand_as(protos), rtol=0, atol=1e-6)
 
 
-def test_conditioned_requires_cosine_routing():
-    for mode in ("static", "conditioned", "centered"):
+def test_slice_prototypes_is_validated():
+    for mode in ("static", "centered"):
         ISLA(**KW, slice_prototypes=mode)
-    for mode in ("conditioned", "centered"):
-        with pytest.raises(ValueError, match="cosine"):
-            ISLA(**KW, slice_prototypes=mode, routing_norm="linear")
-    with pytest.raises(ValueError, match="slice_prototypes"):
-        ISLA(**KW, slice_prototypes="dynamic")
+    for mode in ("conditioned", "dynamic"):
+        with pytest.raises(ValueError, match="'static' or 'centered'"):
+            ISLA(**KW, slice_prototypes=mode)

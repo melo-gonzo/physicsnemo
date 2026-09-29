@@ -141,40 +141,35 @@ def test_flat_dotted_nested_and_tensordict_inputs_are_the_same_call():
             assert torch.equal(o[k], outs[0][k]), k
 
 
-def test_mixed_flat_and_nested_names_and_the_interior_paths():
+def test_mixed_flat_and_nested_names_and_the_interior_mode():
     pts, nrm, w, drv = _cloud(batch=1)
     q = torch.randn(1, 12, 3, dtype=D) * 2.0
-    for kw in (
-        dict(query_tokens=True),
-        dict(query_independent=True, n_decoder_layers=1),
-    ):
-        m = _model(
-            outputs={"pressure": 0, "flow.velocity": 1},
-            global_inputs={"freestream": 1},
-            boundary_inputs=None,
-            query_inputs={"geometry.sdf": 0, "geometry.grad": 1},
-            **kw,
-        )
-        qi = {
-            "geometry": {
-                "sdf": torch.rand(1, 12, dtype=D),
-                "grad": torch.randn(1, 12, 3, dtype=D),
-            }
+    m = _model(
+        outputs={"pressure": 0, "flow.velocity": 1},
+        global_inputs={"freestream": 1},
+        boundary_inputs=None,
+        query_inputs={"geometry.sdf": 0, "geometry.grad": 1},
+    )
+    qi = {
+        "geometry": {
+            "sdf": torch.rand(1, 12, dtype=D),
+            "grad": torch.randn(1, 12, 3, dtype=D),
         }
-        with torch.no_grad():
-            out = m(
-                points=pts,
-                normals=nrm,
-                measure_weights=w,
-                global_inputs={"freestream": drv},
-                query_points=q,
-                query_inputs=qi,
-            )
-        assert out["pressure"].shape == (1, 12) and out["flow", "velocity"].shape == (
-            1,
-            12,
-            3,
+    }
+    with torch.no_grad():
+        out = m(
+            points=pts,
+            normals=nrm,
+            measure_weights=w,
+            global_inputs={"freestream": drv},
+            query_points=q,
+            query_inputs=qi,
         )
+    assert out["pressure"].shape == (1, 12) and out["flow", "velocity"].shape == (
+        1,
+        12,
+        3,
+    )
 
 
 def test_covariance_holds_on_the_nested_values():
