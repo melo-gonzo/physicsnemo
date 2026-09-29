@@ -31316,3 +31316,15 @@ to apply as written. **The reading the chapter will use: both backends are quote
 GeoTransolver-512 ÷ ISLA ratio at each rung is taken against the stronger backend at that rung** (physics attention at 512, FLARE++ at
 2,048; 8,448 pending, gf rows 12-13). Against the current-snapshot ISLA reference at 512 cases (0.2004, @sec-nb-olbc-reference-correction)
 the stronger GeoTransolver-512 leads by 1.39x in ISLA's favor either way. Data: results/gt_fpp_2026-09-29.json.
+
+## 2026-09-29 — Status, OLBC 512-case pairs on the current snapshot (code_v11, two seeds): per-type distances 1.01 and harmonic measures 1.03 of the reference on Poisson (neutral), distances with the aggregation 0.82; on elasticity the harmonic measures hurt 1.12 / 1.12 / 1.12 / 1.09, the same numbers as on code_v7 {#sec-nb-olbc-v11-512}
+
+The same-snapshot pairs launched in @sec-nb-olbc-ref-lanes are scored at 512 cases (float32, 256 test cases, ratio arm ÷ reference on seed
+means, per seed in parentheses). Poisson, relative L2 on $u$: reference 0.2004; per-type nearest distances 0.2023 (1.01; 1.04 / 0.98);
+per-type harmonic measures 0.2071 (1.03; 1.05 / 1.02); distances with the local aggregation 0.1644 (0.82; 0.88 / 0.76). Elasticity,
+reference 0.685 / 0.745 / 0.751 / 0.779 (displacement, three stresses); harmonic measures 1.12 / 1.12 / 1.12 / 1.09 (both seeds above
+1.08 on every field). The elasticity numbers agree with the code_v7 pair (@sec-nb-harmonic-elasticity-512-verdict) to the third digit,
+and the Poisson reference agrees with the PROTO-COND reference pair on the same snapshot, so the two snapshots compute the same model on
+these paths. At 512 cases, therefore: **the per-type channel is neutral on Poisson and costs 9 to 12% on elasticity; only the
+aggregation pays, and it is scheduled for removal as a dataset-specific option.** The 2,048 and 8,448 pairs complete the ladder.
+Data: results/campaigns_2026-09-29/pc/metrics.
