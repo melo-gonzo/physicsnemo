@@ -515,8 +515,7 @@ print(f"**At 35 wings the deficit is largest in the separated regime, and that l
       f"geometries), and ISLA is the more accurate model on {R['isla_better_count']} of the {HP['n_cases']} cases. The 24-layer variant "
       "moves no angle group by more than 4%, so depth does not buy the separated regime either. What GeoTransolver-512 has and ISLA does not "
       "is the absolute position of every cell (@sec-part-baseline); in the separated regime the pressure depends on where along the chord "
-      "and span a cell sits more than on its local geometry, which is the same positional channel the fixed-mesh OLBC sets isolate "
-      "(@sec-interior-olbc). This is a location of the deficit at one rung, not its mechanism, and the 210-case twin says the location is "
+      "and span a cell sits more than on its local geometry. This is a location of the deficit at one rung, not its mechanism, and the 210-case twin says the location is "
       "not a fixed property of the regime (@sec-nb-hl35-percase, @sec-nb-ref-hl210-verdict). How much of the deficit is the fixed pose itself is quantified by the pose-prior diagnostic "
       "of @sec-pose-prior, which gives ISLA the dataset's axes as inputs, an input the book rejects: about half of the low-angle gap and a "
       "quarter of the high-angle widening, so the separated regime keeps the rest.")

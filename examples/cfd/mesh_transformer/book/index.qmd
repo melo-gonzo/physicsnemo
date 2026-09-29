@@ -40,9 +40,9 @@ parameters. On the boundary-to-interior tasks ISLA leads
 GeoTransolver-volume on velocity on both datasets and on pressure on the
 cars. It trails on pressure on the airfoils. On the solids ISLA leads
 GeoTransolver-512 on the lug. It trails on Tensile2d at 400 cases but has
-the steeper learning curve. On the fixed-mesh OLBC Poisson set it trails by
-a constant factor of three with the same learning-curve exponent. That is
-the one dataset where ISLA's curve is not steeper. @tbl-thesis carries the
+the steeper learning curve. On the fixed-mesh OLBC Poisson set it leads
+GeoTransolver-512 at both scored rungs with no option, and on the OLBC
+elasticity set it trails. @tbl-thesis carries the
 numbers, one row per dataset and task. Each row's chapter carries the
 study behind it.
 
@@ -79,8 +79,13 @@ LUGR = J("solids_lug_2026-09-22.json")["gt512_over_isla"]
 lug = {300: LUGR["isla_r1_lr25e4|n300"], 600: LUGR["isla_r1|n600"], 1200: LUGR["isla_r1|n1200"], 2400: LUGR["isla_r1|n2400"]}
 _LM = J("lane_means_2026-09-23.json"); _SFG = J("solids_frame_2026-09-22.json")["summary"]["gt512|gt|n400"]["fields"]
 T2 = {f: _SFG[f]["mean"] / statistics.mean(_LM[f"v2_t2d_isla_r1_tensor_axis_n400_seed{s}"]["fields"][f] for s in (42, 43)) for f in ("sig11", "sig22", "sig12", "displacement")}  # tensor head + load axis, 400 cases
-OLJ = J("olbc_2026-09-22.json"); olbc = {n: OLJ["gt512_over_isla"][f"poisson|isla_r1|n{n}"]["u"] for n in (512, 2048, 8448)}
-olbc_x = (OLJ["learning_curve_exponents"]["poisson|isla_r1|u"]["exponent"], OLJ["learning_curve_exponents"]["poisson|gt512|u"]["exponent"])
+OLB = J("olbc_ref_2026-09-29.json")  # current-snapshot OLBC ladders; the headline ratio at each rung is against the stronger GeoTransolver-512 backend there
+def olbc_head(s, n, f):
+    r = OLB[s][str(n)]; b = r.get("stronger_gt512"); x = r.get("gt512_over_isla", {}).get(b) if b else None
+    return f"{x['ratio'][f]:.2f}" if x else "training"
+olbc = {n: olbc_head("poisson", n, "u_l2") for n in (512, 2048, 8448)}
+olbc_e = {n: [olbc_head("elasticity", n, f) for f in ("sig11_l2", "sig22_l2", "sig12_l2", "displacement_l2")] for n in (512, 2048)}
+olbc_backend = {n: {"physics": "physics attention", "flarepp": "FLARE++", None: "training"}[OLB["poisson"][str(n)].get("stronger_gt512")] for n in (512, 2048)}
 JBR = J("deepjeb_2026-09-22.json")["gt512_over_isla"]; JBS = J("deepjeb_2026-09-22.json")["summary"]
 jb_full = {f: JBS["gt256|full"]["fields"][f]["mean"] / JBS["isla_r1|full"]["fields"][f]["mean"] for f in ("von_mises", "displacement")}
 # every case in a random pose, DrivAerML Surface task at the reporting protocol
@@ -153,8 +158,10 @@ rows = [
      "ISLA leads at three rungs and ties one; its learning-curve exponent is larger (@sec-interior-lug)"),
     ("**PLAID Tensile2d** (2-D solid, stress predicted as a tensor, load direction as the global vector), 400 cases, GeoTransolver-512: σ11 / σ22 / σ12 / displacement", "—", "—", " / ".join(f"{T2[f]:.2f}" for f in ("sig11", "sig22", "sig12", "displacement")),
      "GeoTransolver-512 leads 1.3 to 2x; the open standing on the solids (@sec-interior-tensile2d)"),
-    ("**OLBC Poisson** (one fixed mesh, random labeled boundary data), 512 / 2,048 / 8,448 cases, GeoTransolver-512", "—", "—", " / ".join(f"{olbc[n]:.2f}" for n in (512, 2048, 8448)),
-     f"GeoTransolver leads by a constant factor of three with the same exponent ({olbc_x[0]:.2f} against {olbc_x[1]:.2f}); the gap is value transport; parameter-free remedies close it as ablations, not as the reference (@sec-interior-olbc)"),
+    ("**OLBC Poisson** (one fixed mesh, random labeled boundary data), 512 / 2,048 / 8,448 cases, GeoTransolver-512 with the stronger of its two attention backends at each rung", "—", "—", " / ".join(olbc[n] for n in (512, 2048, 8448)),
+     f"ISLA leads at both scored rungs with no option ({olbc_backend[512]} is the stronger backend at 512 cases, {olbc_backend[2048]} at 2,048); the 8,448-case rung is training (@sec-interior-olbc)"),
+    ("**OLBC elasticity** (the same fixed-mesh construction; prescribed displacement and traction as rank-1 boundary inputs, stress as a tensor), 512 cases, GeoTransolver-512: σ11 / σ22 / σ12 / displacement", "—", "—", " / ".join(olbc_e[512]),
+     f"GeoTransolver-512 leads on every field; at 2,048 cases {' / '.join(olbc_e[2048])} against an interim reference (@sec-interior-olbc)"),
     ("**DeepJEB++** (brackets, load direction as the global vector; surface von Mises / displacement), 12,451 brackets at equal optimizer steps, best GeoTransolver arm", "—", "—", f"{jb_full['von_mises']:.2f} / {jb_full['displacement']:.2f}",
      f"ISLA leads or ties at every rung of the equal-step ladder ({JBR['isla_r1|n256']['von_mises']:.2f} / {JBR['isla_r1|n1024']['von_mises']:.2f} on von Mises at 256 / 1,024 brackets); equal-compute standings, not a learning curve (@sec-surface-deepjeb)"),
 ]
@@ -170,7 +177,7 @@ print(f": The thesis in {len(rows)} rows, one dataset and task per row. How to r
       "results/p200k_fleet_reduction_2026-09-22.json (35-wing baselines), results/cost_sweep_ref_gb300_bf16_2026-09-22.json, "
       "results/trainarea_dr_reduction_2026-09-20.json and results/trainarea_reduction_2026-09-20.json (sampling consistency and the training law), "
       "results/cap435_reduction_2026-09-20.json, results/routenorm_extension_2026-09-21.json and results/routenorm_p200k_2026-09-22.json (capacity), results/ratevol_reduction_2026-09-20.json (GeoTransolver-volume), "
-      "results/airfrans_reduction_2026-09-22.json, results/airfrans_extrap_2026-09-22.json, results/solids_lug_2026-09-22.json, results/solids_frame_2026-09-22.json, results/olbc_2026-09-22.json, results/deepjeb_2026-09-22.json. {#tbl-thesis}")
+      "results/airfrans_reduction_2026-09-22.json, results/airfrans_extrap_2026-09-22.json, results/solids_lug_2026-09-22.json, results/solids_frame_2026-09-22.json, results/olbc_ref_2026-09-29.json, results/deepjeb_2026-09-22.json. {#tbl-thesis}")
 ```
 
 ## Names, symbols and colors {#sec-key}
@@ -318,8 +325,9 @@ outside it.**
 - **Not that ISLA's learning curve is always the steeper one.** It is on
   Tensile2d, on the lug and on AirfRANS pressure. On the DrivAerML Surface
   task the two architectures' exponents are the same within the fit. On
-  the fixed-mesh OLBC Poisson set they are equal, with a constant
-  three-fold gap (@sec-compute-allocation, @sec-interior-olbc).
+  the fixed-mesh OLBC sets the exponents wait for the 8,448-case rung
+  (@sec-compute-allocation, @sec-interior-olbc).
 - **Not that the solid and fixed-mesh standings are final.** The lug's
-  largest rung, the OLBC extension and the DeepJEB equal-epoch companion
-  each await seeds or lanes in flight (@sec-program-status).
+  largest rung, the OLBC 8,448-case rung and the current-snapshot
+  elasticity references, and the DeepJEB equal-epoch companion each await
+  seeds or lanes in flight (@sec-program-status).

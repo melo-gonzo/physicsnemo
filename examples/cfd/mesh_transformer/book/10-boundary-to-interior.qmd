@@ -61,7 +61,8 @@ print("**On the task that asks for the field rather than the wall pressure, how 
       "context fail, and an exact boundary-integral prior is the wrong prior for separated flow (@sec-interior-negatives). "
       "The chapter closes with the solid-mechanics datasets and the fixed-mesh OLBC sets, where every mesh node is a query. On the lug ISLA leads GeoTransolver-512 "
       "at the 300- and 600-lug rungs and ties at 1,200 and 2,400. On Tensile2d it trails at 400 cases with the steeper learning curve. On the fixed-mesh OLBC sets, where only "
-      "the boundary data vary, GeoTransolver-512 leads by a factor of three, and the mechanism is located (@sec-interior-olbc). Every ratio "
+      "the boundary data vary, ISLA leads GeoTransolver-512 on the Poisson set at both scored rungs with no option and trails it on the "
+      "elasticity set's stresses and displacement (@sec-interior-olbc). Every ratio "
       "is GeoTransolver-volume ÷ ISLA (GeoTransolver-512 ÷ ISLA on the solids), above one favoring ISLA. Protocol: @sec-protocol.")
 ```
 
@@ -561,179 +562,193 @@ The standing above is the artifact's (@sec-program-status).
 ```{python}
 #| label: setup-olbc
 #| include: false
-OL = J("olbc_2026-09-22.json"); OLS = OL["summary"]; OLR = OL["gt512_over_isla"]; OLX = OL["learning_curve_exponents"]
+# Every OLBC number below is read from the consolidated current-snapshot artifact: ISLA at the reference configuration with no option,
+# GeoTransolver-512 with both released attention backends, and the ablation arms as ratios to the same-snapshot reference.
+OLB = J("olbc_ref_2026-09-29.json"); OLP = OLB["poisson"]; OLE = OLB["elasticity"]
 OL_RUNGS = (512, 2048, 8448)
-OL_EL = [("sig11", "$\\sigma_{11}$"), ("sig22", "$\\sigma_{22}$"), ("sig12", "$\\sigma_{12}$"), ("displacement", "displacement")]
-LAE = J("local_agg_2026-09-27.json")["elasticity"]  # the rank-1-input, tensor-output elasticity arm (RANK-IO) and GeoTransolver-512 per rung
-EL_RUNGS = (512, 2048)
-def el_isla(n): a = LAE[str(n)]["arms"]["rankio"]; return {f: dict(mean=a["means"][f], seeds=[a["per_seed"][str(sd)][f] for sd in (42, 43)]) for f, _ in OL_EL}
-def el_gt(n): d = OLS[f"elasticity|gt512|n{n}"]["fields"]; return {f: dict(mean=d[f]["mean"], seeds=d[f]["seeds"]) for f, _ in OL_EL}
-ELI = {n: el_isla(n) for n in EL_RUNGS}; ELG = {n: el_gt(n) for n in EL_RUNGS}
-ELR = {n: {f: ELG[n][f]["mean"] / ELI[n][f]["mean"] for f, _ in OL_EL} for n in EL_RUNGS}
+PF = "u_l2"
+OL_EL = [("displacement_l2", "displacement"), ("sig11_l2", "$\\sigma_{11}$"), ("sig22_l2", "$\\sigma_{22}$"), ("sig12_l2", "$\\sigma_{12}$")]
+EL_STRESS = [f for f, _ in OL_EL if f != "displacement_l2"]
+BACKEND = {"physics": "physics attention", "flarepp": "FLARE++"}
+TRAINING = "training"
+def scored(cell): return bool(cell) and "means" in cell
+def seeds_of(cell, f): return [cell["per_seed"][s][f] for s in sorted(cell["per_seed"])]
+def num(cell, f, nd=4):
+    """Seed mean with the per-seed values in parentheses, or 'training' for a cell that has not landed."""
+    if not scored(cell): return TRAINING
+    return f"{cell['means'][f]:.{nd}f} ({' / '.join(f'{v:.{nd}f}' for v in seeds_of(cell, f))})"
+def gt_ratio(rung, backend, f):
+    """GeoTransolver-512 (given backend) ÷ ISLA reference at one rung and field; None until both sides are scored."""
+    r = rung.get("gt512_over_isla", {}).get(backend); return r["ratio"][f] if r else None
+def fmt_ratio(x, nd=2): return f"{x:.{nd}f}" if x is not None else TRAINING
+def stronger(rung): return rung.get("stronger_gt512")
+def headline(rung, f):
+    """GeoTransolver-512 ÷ ISLA against the stronger backend at that rung, with the backend name."""
+    b = stronger(rung); r = gt_ratio(rung, b, f) if b else None
+    return r, (BACKEND[b] if b else None)
+def arm_ratio(rung, key, f):
+    a = rung["arms"].get(key, {}); return a["ratio"][f] if "ratio" in a else None
+def arm_seeds(rung, key, f):
+    a = rung["arms"].get(key, {}); return [a["per_seed"][s][f] for s in sorted(a["per_seed"])] if "ratio" in a else None
+def arm_cell(rung, key, f, nd=2):
+    r = arm_ratio(rung, key, f)
+    return TRAINING if r is None else f"{r:.{nd}f} ({' / '.join(f'{v:.{nd}f}' for v in arm_seeds(rung, key, f))})"
+def span(vals, nd=2):
+    vals = [v for v in vals if v is not None]
+    return f"{min(vals):.{nd}f} to {max(vals):.{nd}f}" if vals else TRAINING
+# the Poisson headline ratios (stronger backend) and the elasticity spans per rung
+P_HEAD = {n: headline(OLP[str(n)], PF) for n in OL_RUNGS}
+E_STRESS = {n: span(gt_ratio(OLE[str(n)], stronger(OLE[str(n)]), f) if stronger(OLE[str(n)]) else None for f in EL_STRESS) for n in OL_RUNGS}
+E_DISP = {n: fmt_ratio(gt_ratio(OLE[str(n)], stronger(OLE[str(n)]), "displacement_l2") if stronger(OLE[str(n)]) else None) for n in OL_RUNGS}
+E_INTERIM = {n: bool(OLE[str(n)].get("reference_interim_code_v7")) for n in OL_RUNGS}
+def rung_word(n): return f"{n:,}"
 ```
 
 ```{python}
 #| label: olbc-lede
 #| output: asis
-el_lo = {n: max(ELR[n].values()) for n in EL_RUNGS}; el_hi = {n: min(ELR[n].values()) for n in EL_RUNGS}
+p512, p2048 = P_HEAD[512], P_HEAD[2048]
+p2048_phys = gt_ratio(OLP["2048"], "physics", PF)
+p8448 = P_HEAD[8448]
+eight = (f"and {fmt_ratio(p8448[0])} at 8,448 cases (against {p8448[1]})" if p8448[0] is not None
+         else "the 8,448-case rung of each set is training")
+e_in = " (reference from an earlier code snapshot, interim)" if E_INTERIM[2048] else ""
 print(f"**On the OLBC sets, one fixed mesh per set whose boundary is cut per sample into random labeled Dirichlet, Neumann and Robin "
-      f"segments with random values, GeoTransolver-512 leads ISLA by a factor of about three on the Poisson set at every rung "
-      f"(GeoTransolver-512 ÷ ISLA {OLR['poisson|isla_r1|n512']['u']:.2f} / {OLR['poisson|isla_r1|n2048']['u']:.2f} / "
-      f"{OLR['poisson|isla_r1|n8448']['u']:.2f} at 512 / 2,048 / 8,448 cases) with the same learning-curve exponent "
-      f"({OLX['poisson|isla_r1|u']['exponent']:.2f} against {OLX['poisson|gt512|u']['exponent']:.2f}), and on the elasticity set by "
-      f"{1 / el_lo[512]:.1f} to {1 / el_hi[512]:.1f}x at 512 cases and {1 / el_lo[2048]:.1f} to {1 / el_hi[2048]:.1f}x at 2,048 across the four "
-      f"fields; on Poisson the gap is located in value transport. Two parameter-free, contract-preserving remedies close it as ablations "
-      f"(@sec-olbc-ablations); neither is part of the reference configuration and no ablation enters the ratios above.** These "
-      "sets (@sec-data-olbc) are the complement of every other dataset in the book: the geometry never varies and only the boundary data "
-      "do, so the task is the pure boundary-data-to-solution map on a known domain. On the Poisson set ($-\\nabla^2 u = f$ on a square, a "
-      "random sinusoidal source and four random boundary segments per sample) ISLA reads the boundary segments with the condition type and "
-      "value as boundary scalars and every node as a query ($K = 0$); on the elasticity set (steel, a disc with two holes, prescribed "
-      "displacement and tractions per component) it receives the prescribed displacement and traction as rank-1 boundary inputs and "
-      "predicts the stress as a symmetric tensor ($K = 0$; @sec-isla-inputs-rank). "
-      "GeoTransolver-512 reads every node with the nodal condition tags. The 256 test samples of each set are scored in float32 at every "
-      "node; the 8,448-case rung trains for 120 epochs, the same optimizer-step count as 2,048 cases for 500.")
+      f"segments with random values, ISLA at the reference configuration with no option leads GeoTransolver-512 on the Poisson set at "
+      f"both scored rungs: GeoTransolver-512 ÷ ISLA {fmt_ratio(p512[0])} at 512 cases and {fmt_ratio(p2048[0])} at 2,048, each against the "
+      f"stronger of GeoTransolver's two released attention backends at that rung ({p512[1]} at 512, {p2048[1]} at 2,048; "
+      f"{fmt_ratio(p2048_phys)} against physics attention at 2,048). On the elasticity set GeoTransolver-512 leads: on the three stress "
+      f"components GeoTransolver-512 ÷ ISLA is {E_STRESS[512]} at 512 cases and {E_STRESS[2048]} at 2,048{e_in}, and on displacement "
+      f"{E_DISP[512]} and {E_DISP[2048]}; {eight}.** These sets (@sec-data-olbc) are the complement of every other dataset in the book: "
+      "the geometry never varies and only the boundary data do, so the task is the pure boundary-data-to-solution map on a known domain. "
+      "On the Poisson set ($-\\nabla^2 u = f$ on a square, a random sinusoidal source and four random boundary segments per sample) ISLA "
+      "reads the boundary segments with the condition type and value as boundary scalars and every node as a query ($K = 0$); on the "
+      "elasticity set (steel, a disc with two holes, prescribed displacement and tractions per component) it receives the prescribed "
+      "displacement and traction as rank-1 boundary inputs and predicts the stress as a symmetric tensor ($K = 0$; @sec-isla-inputs-rank). "
+      "GeoTransolver-512 reads every node with the nodal condition tags; it is scored with both of its released attention backends, "
+      "physics attention and FLARE++, and the headline ratio at each rung is taken against whichever is stronger there, because the two "
+      "cross between the rungs on the Poisson set (@sec-nb-gt-fpp-poisson-verdict, @sec-nb-gt-fpp-poisson-512). The 256 test samples of "
+      "each set are scored in float32 at every node; two seeds per cell; the 8,448-case rung trains for 120 epochs, the same "
+      "optimizer-step count as 2,048 cases for 500.")
 ```
 
 ```{python}
 #| label: tbl-olbc-ladder
 #| output: asis
-def ocell(g, f="u"): d = g["fields"][f]; return f"{d['mean']:.4f} ({' / '.join(f'{v:.4f}' for v in d['seeds'])})" + (" (one seed)" if len(d["seeds"]) == 1 else "")
-out = "| OLBC Poisson, training cases | ISLA $u$ | GeoTransolver-512 $u$ | GeoTransolver-512 ÷ ISLA |\n|---:|---|---|---:|\n"
+def gt_cell(rung, backend, f, nd=4):
+    cell = rung.get(f"gt512_{backend}"); s = num(cell, f, nd)
+    return f"**{s}** (stronger)" if scored(cell) and stronger(rung) == backend and scored(rung.get(f"gt512_{'flarepp' if backend == 'physics' else 'physics'}")) else s
+out = ("| OLBC Poisson, training cases | ISLA $u$ | GeoTransolver-512 $u$, physics attention | GeoTransolver-512 $u$, FLARE++ | "
+       "GeoTransolver-512 ÷ ISLA (stronger backend) |\n|---:|---|---|---|---:|\n")
 for n in OL_RUNGS:
-    out += f"| {n:,} | {ocell(OLS[f'poisson|isla_r1|n{n}'])} | {ocell(OLS[f'poisson|gt512|n{n}'])} | {OLR[f'poisson|isla_r1|n{n}']['u']:.2f} |\n"
-out += f"| 8,448, GeoTransolver-256 | | {ocell(OLS['poisson|gt256|n8448'])} | {OLS['poisson|gt256|n8448']['fields']['u']['mean'] / OLS['poisson|isla_r1|n8448']['fields']['u']['mean']:.2f} |\n"
-out += f"| exponent, 512 to 8,448 | {OLX['poisson|isla_r1|u']['exponent']:.2f} | {OLX['poisson|gt512|u']['exponent']:.2f} | |\n"
-out += "\n| OLBC elasticity, training cases | " + " | ".join(f"ISLA {l} | GeoTransolver-512 {l} | ratio" for _, l in OL_EL) + " |\n|---:|" + "---|" * (3 * len(OL_EL)) + "\n"
-for n in EL_RUNGS:
-    out += f"| {n:,} | " + " | ".join(f"{ELI[n][f]['mean']:.3f} | {ELG[n][f]['mean']:.3f} | {ELR[n][f]:.2f}" for f, _ in OL_EL) + " |\n"
+    r = OLP[str(n)]; h = P_HEAD[n]
+    out += (f"| {n:,} | {num(r['reference'], PF)} | {gt_cell(r, 'physics', PF)} | {gt_cell(r, 'flarepp', PF)} | "
+            f"{fmt_ratio(h[0])}{f' ({h[1]})' if h[0] is not None else ''} |\n")
+g256 = OLP["8448"].get("gt256_physics")
+if scored(g256):
+    ref8 = OLP["8448"]["reference"]
+    out += (f"| 8,448, GeoTransolver-256 (physics attention) | | {num(g256, PF)} | | "
+            f"{fmt_ratio(g256['means'][PF] / ref8['means'][PF]) if scored(ref8) else TRAINING} |\n")
+out += "| learning-curve exponent, 512 to 8,448 | pending the 8,448 rung | pending the 8,448 rung | pending the 8,448 rung | |\n"
+out += ("\n| OLBC elasticity, training cases, field | ISLA | GeoTransolver-512, physics attention | GeoTransolver-512, FLARE++ | "
+        "GeoTransolver-512 ÷ ISLA (stronger backend) |\n|---|---|---|---|---:|\n")
+for n in OL_RUNGS:
+    r = OLE[str(n)]; b = stronger(r)
+    for f, lab in OL_EL:
+        ref = num(r["reference"], f, 3) + (" (interim)" if scored(r["reference"]) and E_INTERIM[n] else "")
+        ratio = fmt_ratio(gt_ratio(r, b, f)) if b else TRAINING
+        out += f"| {n:,}, {lab} | {ref} | {gt_cell(r, 'physics', f, 3)} | {gt_cell(r, 'flarepp', f, 3)} | {ratio}{f' ({BACKEND[b]})' if b and gt_ratio(r, b, f) is not None else ''} |\n"
 print(out)
 print(": The OLBC ladders: relative L2 over the 256 test samples of each set (mean over samples, then over seeds; seeds in parentheses), "
-      "float32 at every node, ISLA at the reference configuration against GeoTransolver-512. Top: the Poisson set's solution $u$ along the "
-      "512 / 2,048 / 8,448-case ladder, with GeoTransolver-256 at the full rung (width does not pay for GeoTransolver here) and the "
-      "least-squares learning-curve exponents. Bottom: the elasticity set at 512 and 2,048 cases, per field (two seeds per cell), ISLA "
-      "with the prescribed displacement and traction as rank-1 boundary inputs and the stress as a tensor output "
-      "(@sec-nb-rankio-verdict-elasticity, @sec-nb-rankio-verdict-2048). How to read this: a ratio below one is a GeoTransolver lead; "
-      "the 8,448-case rung and the exponents exist only for the earlier scalar-input lanes with the domain's axes as global vectors, an "
-      "input the book rejects (@sec-pose-prior), so they are not reported here. Data: results/olbc_2026-09-22.json (Poisson, "
-      "GeoTransolver-512); results/local_agg_2026-09-27.json (the elasticity ISLA arm). {#tbl-olbc-ladder}")
+      "float32 at every node. ISLA is the reference configuration with no option; GeoTransolver-512 is scored with both of its released "
+      "attention backends, and **the ratio column is GeoTransolver-512 ÷ ISLA against the stronger backend at that rung** (marked in bold "
+      "where both are scored; the backend is named beside the ratio). Top: the Poisson set's solution $u$ along the 512 / 2,048 / 8,448-case "
+      "ladder, with GeoTransolver-256 at the full rung. Bottom: the elasticity set per field, ISLA with the prescribed displacement and "
+      "traction as rank-1 boundary inputs and the stress as a tensor output. A cell marked *training* has not landed; the 2,048-case "
+      "elasticity reference marked *interim* is the same configuration trained on an earlier code snapshot and is replaced by the "
+      "current-snapshot pair when it lands. Learning-curve exponents are stated once three current-snapshot rungs exist. How to read this: a "
+      "ratio above one is an ISLA lead and below one a GeoTransolver-512 lead; the two backends are not averaged, and a ratio against the "
+      "weaker backend is never the headline. Data: results/olbc_ref_2026-09-29.json. {#tbl-olbc-ladder}")
 ```
 
-### Ablations: principled remedies on the fixed mesh {#sec-olbc-ablations}
+### Ablations: per-type geometry channels on the fixed mesh {#sec-olbc-ablations}
+
+**Every ablation is an option added to the reference ISLA and read as arm
+÷ reference on the same code snapshot; none is part of the model.** Two
+parameter-free query scalars were tested, each derived from one sample's
+geometry and condition labels and nothing else. The **per-type nearest
+distance** gives each interior query, for each of the three condition
+types (Dirichlet, Neumann, Robin), the distance to the nearest boundary
+cell of that type. The **per-type harmonic measure** is the exact form of
+the same idea: the solution of Laplace's equation that is one on that
+type's boundary and zero on the others (the probability that a random walk
+from the query first hits a wall of that type), computed on the interior
+point cloud with one sparse solve per type per case. On the elasticity set
+the types are per component (four measures). Both channels keep the
+invariance contracts.
 
 ```{python}
 #| label: tbl-olbc-ablations
 #| output: asis
-HM = J("harmonic_2026-09-27.json")["poisson"]
-def acell(a, key):
-    x = HM[str(a)]["arms"].get(key, {})
-    if "u" not in x: return "running"
-    return f"{x['u']:.4f} ({' / '.join(f'{v:.4f}' for v in x['per_seed'].values())}) | {x['gt512_over']:.2f}"
-ABL = [("**reference ISLA** (K = 0, no extension, no aggregation)", None),
-       ("boundary-value extension, six inverse-square scalars (values + distances per condition type)", "ext"),
-       ("per-type nearest distances only (three scalars)", "ext_distonly"),
-       ("per-type harmonic measures only (three Laplace solves)", "hm_measures"),
-       ("extension + local aggregation (32 nearest tokens, rho 0.05)", "ext_local05"),
-       ("per-type distances + local aggregation", "ext_distonly_local05"),
-       ("per-type harmonic measures + local aggregation", "hm_measures_local05")]
-out = "| ISLA arm (OLBC Poisson, relative L2 on $u$) | 512 cases (seeds) | GeoTransolver-512 ÷ arm | 2,048 cases (seeds) | GeoTransolver-512 ÷ arm |\n|---|---|---:|---|---:|\n"
-for label, key in ABL:
-    if key is None:
-        out += f"| {label} | {HM['512']['base']:.4f} | {HM['512']['gt512'] / HM['512']['base']:.2f} | {HM['2048']['base']:.4f} | {HM['2048']['gt512'] / HM['2048']['base']:.2f} |\n"
-    else:
-        out += f"| {label} | {acell(512, key)} | {acell(2048, key)} |\n"
-out += f"| GeoTransolver-512 | {HM['512']['gt512']:.4f} | | {HM['2048']['gt512']:.4f} | |\n"
+P_ARMS = [("per-type nearest distances (three scalars)", "distances"),
+          ("per-type harmonic measures (three Laplace solves)", "harmonic_measures"),
+          ("per-type distances + local relational aggregation (removed option, @sec-nb-universal-agg-lug-verdict)", "distances_local05")]
+out = "| ISLA arm on OLBC Poisson, relative L2 on $u$ | arm ÷ reference, 512 cases (seeds) | arm ÷ reference, 2,048 cases (seeds) |\n|---|---:|---:|\n"
+out += f"| reference ISLA (no option) | {num(OLP['512']['reference'], PF)} | {num(OLP['2048']['reference'], PF)} |\n"
+for label, key in P_ARMS:
+    out += f"| {label} | {arm_cell(OLP['512'], key, PF)} | {arm_cell(OLP['2048'], key, PF)} |\n"
+def el_arm_cell(n):
+    """The harmonic-measures arm on elasticity: the current-snapshot arm where scored; where the reference itself is the earlier snapshot's
+    control (interim), the arm trained on that snapshot is the same-snapshot pair."""
+    r = OLE[str(n)]; key = "v7_harmonic_measures" if E_INTERIM[n] else "harmonic_measures"
+    return " / ".join(fmt_ratio(arm_ratio(r, key, f)) for f, _ in OL_EL) if arm_ratio(r, key, "displacement_l2") is not None else TRAINING
+out += ("\n| ISLA arm on OLBC elasticity, arm ÷ reference: displacement / $\\sigma_{11}$ / $\\sigma_{22}$ / $\\sigma_{12}$ | 512 cases | 2,048 cases |\n|---|---:|---:|\n"
+        f"| per-type harmonic measures (four Laplace solves) | {el_arm_cell(512)} | {el_arm_cell(2048)}"
+        f"{' (against the interim reference, same snapshot)' if E_INTERIM[2048] and el_arm_cell(2048) != TRAINING else ''} |\n")
 print(out)
-print(": **Ablations, not the reference.** Every row below the first is a preregistered option added to the reference ISLA on the OLBC Poisson "
-      "set: parameter-free query scalars computed from one sample's geometry and condition labels (the extension, the per-type distances, "
-      "the per-type harmonic measures) and the local relational aggregation among tokens, alone and combined. Two seeds per cell, 256 test "
-      "cases, float32. How to read this: the ratios in this table are labelled by arm and are never the book's 'GeoTransolver-512 ÷ ISLA', "
-      "which is the reference row; the options are under a universalization test (@sec-nb-universal-prereg) and become part of the "
-      "reference only if they are neutral or better on every dataset, otherwise they are removed. Data: results/harmonic_2026-09-27.json, "
-      "results/local_agg_2026-09-27.json. {#tbl-olbc-ablations}")
+print(": **Ablations, not the reference.** Each row is one option added to the reference ISLA, reported as arm ÷ reference where both were "
+      "trained on the same code snapshot (below one: the option helps). Two seeds per cell, 256 test cases, float32; the reference row "
+      "holds the absolute error with its seeds. The aggregation row is a removed option and is listed for its measured effect only. "
+      "How to read this: these ratios are never the book's GeoTransolver-512 ÷ ISLA, which is @tbl-olbc-ladder's reference row; a cell "
+      "marked *training* has not landed. Data: results/olbc_ref_2026-09-29.json. {#tbl-olbc-ablations}")
 ```
 
-**What is missing, and what supplies it.** Two mechanisms could explain a
-three-fold gap on a fixed mesh. Either ISLA resolves position too coarsely
-through 256 anchors (a fixed geometry gives every sample the same anchor
-scaffold, and the solution varies on the scale of the boundary segments),
-or ISLA lacks a direct path from the prescribed boundary values to the
-interior query, which GeoTransolver's local embedding of the tagged nodes
-supplies. The diagnostic study at 512 Poisson cases ran one variant per
-mechanism against the reference (@sec-nb-olbc-mech-verdict, two seeds
-each except the slice count). Four times the slices recovers nothing. Two
-diagnostics that break the rules of the book locate the positional
-channel: the domain's own axes as global vectors (an input the book
-rejects, @sec-pose-prior) recover 19% of the log-gap to GeoTransolver-512,
-and absolute coordinates fed to every token overshoot to 27% *better* than
-GeoTransolver-512, so position is sufficient but is not what the
-contract-preserving remedies lack. And a parameter-free **boundary-value
-extension** recovers 84% of the log-gap (0.333 against the reference's
-0.867 and GeoTransolver-512's 0.279, seed means; @tbl-olbc-ablations
-holds every arm of this passage). The extension gives
-every interior query six numbers computed before training with no
-learned parameters. For each of the three condition types (Dirichlet,
-Neumann, Robin) it takes the prescribed values on all boundary cells of
-that type and averages them with weights equal to each cell's measure
-divided by its squared distance to the query, and it records the distance
-from the query to the nearest cell of that type. Splitting the six into
-their two halves locates the gain: **the three per-type distances alone
-score 0.202 at 512 cases and 0.074 at 2,048, better than the six together
-(0.299 and 0.130 on the same code) and better than GeoTransolver-512
-(0.279 and 0.098), while the three value averages alone score 0.307 and
-0.098** (two seeds each; @sec-nb-harmonic-2048-verdict). The channel that
-matters tells a query how each type of wall reaches it; the prescribed
-values reach the readout better through the slice attention than through
-any pre-computed average, and adding the averages to the distances
-interferes. The exact form of that geometry channel is the **harmonic
-measure** of each condition type, the solution of Laplace's equation that
-is one on that type's boundary and zero on the others (the probability
-that a random walk from the query first hits a wall of that type),
-computed mesh-free on the interior point cloud with one sparse solve per
-type per case. It scores the same as the distances at 512 cases (0.207)
-and 6% better at 2,048 (0.070 against 0.074, on both seeds); stacking the
-two encodings hurts (0.232 and 0.080), and carrying the harmonic
-extension of the values alongside hurts as it did for the inverse-square
-averages. Both encodings are admissible: each derives from one sample's
-geometry and its condition labels and nothing else. The domain-axes
-diagnostic added on top of the extension recovers nothing more at either
-rung (0.90 against 0.84 at 512, 0.84 against 0.80 at 2,048, two seeds
-each): the positional information those axes carry is already in the
-distance scalars (@sec-nb-olbc-mech-combined-2048-verdict). A second,
-independent remedy is a **local relational aggregation among tokens**:
-each token pools its 32 nearest tokens with measure-weighted Gaussian
-kernel weights over their states and pair invariants before the slice
-routing, a path the slice attention did not provide. With the extension
-and this aggregation the arm scores 0.229 at 512 cases and 0.081 at 2,048
-against GeoTransolver-512's 0.279 and 0.098, on both seeds at both rungs;
-the aggregation's radius (0.05 or 0.15 of the frame length) does not
-matter, and the step costs 1.5x (@sec-nb-local-agg-poisson-verdict,
-results/local_agg_2026-09-27.json). The two remedies act on different
-paths and their gains compound: **the per-type distances with the
-aggregation score 0.164 at 512 cases and 0.062 at 2,048, GeoTransolver-512
-÷ that arm 1.70 and 1.58**, on both seeds at both rungs, and the harmonic
-measures with the aggregation reach 0.061 at 2,048 with a wider seed
-spread (@sec-nb-combined-verdict). On
-the elasticity set the aggregation on top of the rank-1-input arm takes
-the three stress components from trailing GeoTransolver-512 by 1.2x to
-matching it (0.244 / 0.256 / 0.258 against 0.257 / 0.261 / 0.267 at
-2,048 cases, two seeds) while displacement, the field the prescribed
-displacement's extension already served, moves from 0.201 to 0.216
-(GeoTransolver-512 0.165); on the AirfRANS interior, a point cloud whose
-100,000 queries are redrawn every epoch, the same aggregation hurts every
-field by 13 to 22% on two seeds
-(@sec-nb-local-agg-airfrans-verdict). The aggregation is therefore not
-part of the reference configuration. Under the program's option policy it
-is not set per dataset either: it is under a universalization test on the
-datasets its fixed-mesh rule was not fitted on (@sec-nb-universal-prereg),
-and it becomes part of every ISLA or none; whether the AirfRANS loss is the
-resampled stencil is the open follow-up. The extension's vector-data form on the elasticity set is the
-rank-1 input channel of @sec-nb-rankio-verdict-2048. Two readings for
-the architecture travel with it.
-A boundary-data-to-solution map on a fixed domain is where ISLA's
-geometry-first design has the least to offer and GeoTransolver's
-coordinate-reading embedding the most. And the OLBC Poisson set is the
-one dataset in the book where ISLA's learning curve is not steeper than
-GeoTransolver's: the exponents are equal and the gap is a constant factor.
+```{python}
+#| label: para-olbc-ablations
+#| output: asis
+d512, h512 = arm_ratio(OLP["512"], "distances", PF), arm_ratio(OLP["512"], "harmonic_measures", PF)
+d2048, h2048 = arm_ratio(OLP["2048"], "distances", PF), arm_ratio(OLP["2048"], "harmonic_measures", PF)
+d2048x, h2048x = arm_ratio(OLP["2048"], "v7_distances", PF), arm_ratio(OLP["2048"], "v7_harmonic_measures", PF)
+agg512 = arm_ratio(OLP["512"], "distances_local05", PF)
+if d2048 is not None and h2048 is not None:
+    two = f"at 2,048 cases the same-snapshot arms read {d2048:.2f} (distances) and {h2048:.2f} (harmonic measures)"
+else:
+    two = (f"at 2,048 cases the arms trained on an earlier snapshot read {d2048x:.2f} (distances) and {h2048x:.2f} (harmonic measures) "
+           f"against the current reference, slightly worse, a cross-snapshot reading that stands until the same-snapshot 2,048-case arms land")
+e512 = OLE["512"]; e2048 = OLE["2048"]
+ek512 = "v7_harmonic_measures" if E_INTERIM[512] else "harmonic_measures"
+ek2048 = "v7_harmonic_measures" if E_INTERIM[2048] else "harmonic_measures"
+hs512 = [arm_ratio(e512, ek512, f) for f, _ in OL_EL]; hs2048 = [arm_ratio(e2048, ek2048, f) for f in EL_STRESS]; hd2048 = arm_ratio(e2048, ek2048, "displacement_l2")
+pct = lambda r: f"{abs(r - 1) * 100:.0f}%"
+pspan = lambda rs: (lambda s: f"{pct(s[0])} to {pct(s[-1])}" if pct(s[0]) != pct(s[-1]) else pct(s[0]))(sorted(rs, key=lambda r: abs(r - 1)))
+el512 = (f"cost {pspan(hs512)} on every field at 512 cases against the same-snapshot reference" if None not in hs512
+         else "are training at 512 cases")
+el2048 = (f"improved the three stresses by {pspan(hs2048)} and left displacement unchanged ({hd2048:.2f}) at 2,048 cases "
+          f"against the {'earlier-snapshot control that is the interim reference' if E_INTERIM[2048] else 'same-snapshot reference'}" if None not in hs2048 and hd2048 is not None
+          else "are training at 2,048 cases")
+print(f"**On the Poisson set the per-type channel is neutral at 512 cases in either encoding (arm ÷ reference {d512:.2f} for the distances, "
+      f"{h512:.2f} for the harmonic measures); {two}. On the elasticity set the harmonic measures {el512} "
+      f"(@sec-nb-harmonic-elasticity-512-verdict, @sec-nb-olbc-v11-512) and {el2048} (@sec-nb-harmonic-elasticity-verdict).** A channel that "
+      "pays on one dataset at one rung and costs on the same dataset at another is not a universal setting: under the one-model rule the "
+      "per-type channel is not part of ISLA unless the current-snapshot elasticity pairs reverse the 512-case reading, and the decision "
+      "follows those lanes (@sec-nb-olbc-ref-2048). The local relational aggregation among tokens (each token pooling its 32 nearest "
+      f"tokens before the slice routing), which paid on the fixed Poisson mesh ({agg512:.2f} of the reference at 512 cases with the distances), "
+      "hurt on every dataset whose geometry varies, did not compound with the harmonic measures on elasticity, and its "
+      "polynomial-reproducing variant hurt as much, so both were removed from the model (@sec-nb-universal-agg-lug-verdict, "
+      "@sec-nb-harmonic-elasticity-combined-verdict, @sec-nb-local-lpr-verdict). Two diagnostics that break the book's input rules were "
+      "also run on the Poisson set, the domain's own axes as global vectors and absolute coordinates fed to every token; both remain "
+      "rejected inputs whatever they score (@sec-pose-prior).")
+```
 
 ## Standing and open designs {#sec-interior-open}
 
@@ -748,11 +763,13 @@ print(f"**One architecture covers the surface and the interior: ISLA with query 
       "pose-prior diagnostic of @sec-pose-prior, which gives ISLA the dataset's axes as inputs (an input the book rejects) and closes most "
       "of the pressure gap; the mechanism of the rest is open. On the solids the picture is one of targets, "
       f"not of physics: ISLA leads at the small lug rungs and ties at the large ones on the lug's scalar target (GeoTransolver-512 ÷ ISLA {lug_ratio[2400]:.2f} at 2,400 lugs), trails on "
-      "Tensile2d's stress tensor at 400 cases with the steeper learning-curve slope, and trails by a constant factor of three on the fixed-mesh "
-      "Poisson set, where the gap is value transport and the boundary-value extension is the candidate remedy (@sec-interior-olbc). An "
+      f"Tensile2d's stress tensor at 400 cases with the steeper learning-curve slope, leads on the fixed-mesh OLBC Poisson set at both scored rungs "
+      f"with no option (GeoTransolver-512 ÷ ISLA {fmt_ratio(P_HEAD[512][0])} at 512 cases and {fmt_ratio(P_HEAD[2048][0])} at 2,048, each against "
+      f"the stronger GeoTransolver backend at that rung), and trails GeoTransolver-512 on the OLBC elasticity set: on the stresses by "
+      f"{E_STRESS[2048]} at 2,048 cases and {E_STRESS[512]} at 512, on displacement by {E_DISP[512]} to {E_DISP[2048]} (@sec-interior-olbc). An "
       "interior decode whose prediction at a point is independent of the request and matches the interacting configuration's accuracy is "
       "a design, not a result. @sec-limits collects the interior limits alongside the book's others. Data: "
       "results/ratevol_reduction_2026-09-20.json; results/ref_surface_2026-09-23.json; results/airfrans_reduction_2026-09-22.json; "
-      "results/solids_lug_2026-09-22.json; results/olbc_2026-09-22.json.")
+      "results/solids_lug_2026-09-22.json; results/olbc_ref_2026-09-29.json.")
 ```
 

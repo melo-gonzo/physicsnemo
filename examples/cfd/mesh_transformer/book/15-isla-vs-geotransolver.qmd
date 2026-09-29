@@ -5,13 +5,13 @@ transformer, given different things to see, and the standing between them
 has one shape: ISLA is the more accurate or the only usable model wherever
 the evaluation departs from the training conventions, ISLA leads or ties
 at lower cost on geometry-varying tasks, and GeoTransolver leads on small
-training sets, on the small wing rungs and on the fixed-mesh boundary-data
-problems.** The departures from the training conventions are pose,
+training sets, on the small wing rungs and on the solids' tensor
+targets.** The departures from the training conventions are pose,
 sampling draw, sampling law and the range of a global condition. On
 geometry-varying tasks ISLA leads GeoTransolver at its recipe width or
 ties its parameter match at lower cost, and leads on most field
-quantities. On the fixed-mesh boundary-data problems GeoTransolver leads
-by a factor of three. This appendix steps back from the chapter-by-chapter
+quantities. On the fixed-mesh boundary-data problems ISLA leads on the
+scalar Poisson set and trails on the elasticity tensor. This appendix steps back from the chapter-by-chapter
 evidence and reads the whole standing in one table and one figure. It then
 asks the question a paper must answer: which of ISLA's ideas are new,
 which are adopted, and which are worth telling others about. It ends with
@@ -69,12 +69,19 @@ afx_g = {sp: {f: AFX[sp]["growth"][f]["g_gt_over_g_isla"] for f in FIELDS} for s
 # --- solids and the fixed-mesh boundary-data sets ----------------------------------------------------------
 SF = J("solids_frame_2026-09-22.json"); _LM = J("lane_means_2026-09-23.json")
 T2 = {f: SF["summary"]["gt512|gt|n400"]["fields"][f]["mean"] / mean(_LM[f"v2_t2d_isla_r1_tensor_axis_n400_seed{s}"]["fields"][f] for s in (42, 43)) for f in ("sig11", "sig22", "sig12", "displacement")}  # tensor head + load axis at 400 cases
-_LA = J("local_agg_2026-09-27.json")["elasticity"]["512"]; olbc_e_rankio = {f: _LA["gt512"][f] / _LA["arms"]["rankio"]["means"][f] for f in ("sig11", "sig22", "sig12", "displacement")}
 T2F = ("sig11", "sig22", "sig12", "displacement"); T2N = {"sig11": "σ11", "sig22": "σ22", "sig12": "σ12", "displacement": "displacement"}
 LUG = J("solids_lug_2026-09-22.json"); LUGR = LUG["gt512_over_isla"]; LUGX = LUG["learning_curve_exponents"]
 lug = {300: LUGR["isla_r1_lr25e4|n300"], 600: LUGR["isla_r1|n600"], 1200: LUGR["isla_r1|n1200"], 2400: LUGR["isla_r1|n2400"]}  # 300 at the half rate, as preregistered
-OLJ = J("olbc_2026-09-22.json"); OL = OLJ["gt512_over_isla"]; OLX = OLJ["learning_curve_exponents"]
-olbc_p = {n: OL[f"poisson|isla_r1|n{n}"]["u"] for n in (512, 2048, 8448)}; olbc_e = olbc_e_rankio  # rank-1 inputs + tensor output at 512 cases
+# OLBC: current-snapshot ISLA references; the headline GeoTransolver-512 ÷ ISLA at each rung is against the stronger of its two attention backends there
+OLB = J("olbc_ref_2026-09-29.json")
+def olbc_head(s, n, f):
+    r = OLB[s][str(n)]; b = r.get("stronger_gt512"); x = r.get("gt512_over_isla", {}).get(b) if b else None
+    return x["ratio"][f] if x else None
+olbc_p = {n: olbc_head("poisson", n, "u_l2") for n in (512, 2048, 8448)}  # None until the rung is scored
+olbc_e = {n: {f: olbc_head("elasticity", n, f + "_l2") for f in T2F} for n in (512, 2048)}  # rank-1 inputs + tensor output
+olbc_scored = [n for n in (512, 2048, 8448) if olbc_p[n] is not None]
+olbc_fmt = lambda x: f"{x:.2f}" if x is not None else "training"
+olbc_ext512 = OLB["poisson"]["512"]["arms"].get("v7_extension", {}).get("ratio", {}).get("u_l2")  # the six-scalar inverse-square extension, arm ÷ reference (cross-snapshot)
 # --- pose, draws, laws, territories -------------------------------------------------------------------------
 PP = J("p200k_pose_r1_2026-09-23.json"); PV, PA = PP["verdict"], PP["arms"]
 TAD = J("trainarea_dr_reduction_2026-09-20.json"); TA = J("trainarea_reduction_2026-09-20.json")
@@ -143,8 +150,9 @@ targets, interior queries as tokens) is @sec-isla-inputs and @sec-arch-modes.
 #| output: asis
 print(f"**Read across every axis the program has measured, the pattern is one sentence long: where the task varies the geometry, "
       f"ISLA leads GeoTransolver at its recipe width or ties its parameter match at lower cost, leads on the field quantities and "
-      f"trails on small training sets; where the task varies only the boundary data on one fixed mesh, GeoTransolver leads by a "
-      f"factor; and wherever the evaluation leaves the training conventions, ISLA is the model whose error does not move.** At full "
+      f"trails on small training sets; where the task varies only the boundary data on one fixed mesh, ISLA leads on the scalar "
+      f"Poisson problem and trails on the elasticity tensor; and wherever the evaluation leaves the training conventions, ISLA is the "
+      f"model whose error does not move.** At full "
       f"data on the DrivAerML Surface task ISLA leads GeoTransolver-256 by {pct(gt435 / isla435)} (GeoTransolver ÷ ISLA {gt435 / isla435:.2f}) "
       f"and ties the parameter-matched GeoTransolver-512 ({gt512_435 / isla435:.2f}) at half its memory. Below full data GeoTransolver-256 "
       f"leads by {pct(lad[27])} at 27 cars and {pct(lad[54])} at 54, and ISLA leads from 109 cars up. On the HiLiftAeroML rungs "
@@ -155,9 +163,10 @@ print(f"**Read across every axis the program has measured, the pattern is one se
       f"on the cars and trails by {pct(af['pressure_l2'])} on the airfoils. Outside the AirfRANS training range it leads on every field. "
       f"On the solids GeoTransolver-512 leads ISLA by {pct(T2['sig11'])} to {pct(T2['displacement'])} on Tensile2d at 400 cases, and ISLA "
       f"leads on the lug ladder at the two small rungs and ties at the two large ones ({lug[300]:.2f} / {lug[600]:.2f} / {lug[1200]:.2f} / {lug[2400]:.2f} at 300 / 600 / "
-      f"1,200 / 2,400 lugs). On the fixed-mesh OLBC Poisson set GeoTransolver-512 leads {1 / olbc_p[512]:.1f} to {1 / olbc_p[2048]:.1f}x "
-      f"at every rung with the same learning-curve exponent, and {1 / max(olbc_e.values()):.1f} to {1 / min(olbc_e.values()):.1f}x on "
-      f"elasticity at 512 cases. Under a 10:1 sampling bias ISLA's error moves {pct(dens_cars['isla'])} on the cars where GeoTransolver's grows "
+      f"1,200 / 2,400 lugs). On the fixed-mesh OLBC Poisson set ISLA leads GeoTransolver-512 with no option at both scored rungs "
+      f"({olbc_fmt(olbc_p[512])} at 512 cases and {olbc_fmt(olbc_p[2048])} at 2,048, each against the stronger of GeoTransolver's two attention "
+      f"backends there), and on the OLBC elasticity set GeoTransolver-512 leads by {pct(max(olbc_e[512].values()))} to {pct(min(olbc_e[512].values()))} "
+      f"at 512 cases. Under a 10:1 sampling bias ISLA's error moves {pct(dens_cars['isla'])} on the cars where GeoTransolver's grows "
       f"{dens_cars['gt_unit']:.1f}x. Trained under the other sampling law ISLA moves {pct(law_wings['isla'])} and {pct(law_cars['isla'])} "
       f"where GeoTransolver degrades {law_wings['gt_unit']:.1f}x and {law_cars['gt_unit']:.1f}x. In arbitrary poses ISLA leads the "
       f"rotation-augmented GeoTransolver by {pct(PV['gt_aug_posed_over_isla_posed'])}. @tbl-vs-standing carries every axis with its anchor.")
@@ -178,8 +187,8 @@ rows = [
  ("", "AirfRANS, outside the training angle-of-attack band", f"{tri(afx_on['aoa'])}; growth {tri(afx_g['aoa'])}", "as above, wider", "@sec-interior-extrapolation"),
  ("**Solids** (labeled boundary, global scalars, load direction, tensor output)", "PLAID Tensile2d, 400 cases, GeoTransolver-512: σ11 / σ22 / σ12 / displacement", " / ".join(f"{T2[f]:.2f}" for f in T2F), "GeoTransolver leads 1.3 to 2x; the open standing on the solids", "@sec-interior-tensile2d"),
  ("", "GINOT lug, 300 (half rate) / 600 / 1,200 / 2,400 lugs, GeoTransolver-512", " / ".join(f"{lug[n]:.2f}" for n in (300, 600, 1200, 2400)), "ISLA leads at the two small rungs and ties at the two large ones on the frame-free scalar target; two seeds in every cell", "@sec-interior-lug"),
- ("**Fixed-mesh boundary data**", "OLBC Poisson (K = 0), 512 / 2,048 / 8,448 cases, GeoTransolver-512", " / ".join(f"{olbc_p[n]:.2f}" for n in (512, 2048, 8448)), "GeoTransolver leads by a constant factor of three with the same exponent; the gap is value transport, and parameter-free remedies close it as ablations that are not the reference (@tbl-olbc-ablations)", "@sec-interior-olbc"),
- ("", "OLBC elasticity (rank-1 boundary inputs, tensor output) at 512 cases: σ11 / σ22 / σ12 / displacement", " / ".join(f"{olbc_e_rankio[f]:.2f}" for f in T2F), "GeoTransolver leads 1.2 to 1.5x", "@sec-interior-olbc"),
+ ("**Fixed-mesh boundary data**", "OLBC Poisson (K = 0), 512 / 2,048 / 8,448 cases, GeoTransolver-512 with the stronger of its two attention backends at each rung", " / ".join(olbc_fmt(olbc_p[n]) for n in (512, 2048, 8448)), "ISLA leads at both scored rungs with no option; the 8,448-case rung is training; the per-type geometry channels are neutral or worse here and are not part of the model (@tbl-olbc-ablations)", "@sec-interior-olbc"),
+ ("", "OLBC elasticity (rank-1 boundary inputs, tensor output), 512 cases; 2,048 cases (interim reference): σ11 / σ22 / σ12 / displacement, GeoTransolver-512", " / ".join(olbc_fmt(olbc_e[512][f]) for f in T2F) + "; " + " / ".join(olbc_fmt(olbc_e[2048][f]) for f in T2F), f"GeoTransolver-512 leads on every field at both rungs, on the stresses by {pct(max(olbc_e[512][f] for f in T2F[:3]))} to {pct(min(olbc_e[512][f] for f in T2F[:3]))} at 512 cases", "@sec-interior-olbc"),
  ("**Pose**", "DrivAerML Surface task, every case in its own random pose; rotation-augmented GeoTransolver ÷ ISLA without augmentation", f"{PV['gt_aug_posed_over_isla_posed']:.2f}", f"ISLA leads; its own posed ÷ native is {PA['isla']['posed_over_native']:.3f}, GeoTransolver's {PA['gt_unit']['posed_over_native']:.2f}; a GeoTransolver trained in a canonical frame is pose-invariant at about a percent", "@sec-pose-contract, @sec-pose"),
  ("**Discretization: inference draw**", "error under the 10:1 biased draw ÷ own uniform-draw error, cars (100,000 cells) and 35 wings (200,000): ISLA; GeoTransolver", f"cars {dens_cars['isla']:.2f}x; {dens_cars['gt_unit']:.1f}x — wings {dens_wings['isla']:.2f}x; {dens_wings['gt_unit']:.1f}x", "ISLA within a few percent; GeoTransolver by factors (the frame, not the aggregation)", "@sec-robustness-density"),
  ("**Discretization: training law**", "area-trained ÷ uniform-trained, scored on the uniform draw, wings; cars: ISLA; GeoTransolver", f"wings {law_wings['isla']:.2f}x; {law_wings['gt_unit']:.1f}x — cars {law_cars['isla']:.2f}x; {law_cars['gt_unit']:.1f}x", "ISLA weakly dependent; a GeoTransolver checkpoint is usable only on the law it was trained under", "@sec-training-law"),
@@ -188,11 +197,11 @@ rows = [
  ("**Learning-curve exponent** (error against training cases)", "DrivAerML Surface (reducible error, fitted law): ISLA; GeoTransolver", f"{alpha_dr['isla'][0]:.2f} (accepted); {alpha_dr['gt'][0]:.2f} (fit not accepted)", "the same within the bootstrap; GeoTransolver's small-data lead is an offset", "@sec-compute-allocation"),
  ("", "AirfRANS interior pressure: ISLA fitted; GeoTransolver-volume local (100 airfoils up)", f"{alpha_af_isla:.2f}; {min(alpha_af_gt_local):.2f} to {max(alpha_af_gt_local):.2f}", "ISLA steeper: GeoTransolver-volume's pressure lead shrinks with cases", "@sec-compute-allocation"),
  ("", "GINOT lug, 300 to 2,400 lugs: ISLA; GeoTransolver-512", f"{LUGX['isla_r1']['exponent']:.2f}; {LUGX['gt512']['exponent']:.2f}", "ISLA steeper", "@sec-interior-lug"),
- ("", "OLBC Poisson, 512 to 8,448 cases: ISLA; GeoTransolver-512", f"{OLX['poisson|isla_r1|u']['exponent']:.2f}; {OLX['poisson|gt512|u']['exponent']:.2f}", "the same exponent and a constant gap: the one dataset where ISLA's curve is not steeper", "@sec-interior-olbc"),
+ ("", "OLBC Poisson, 512 to 8,448 cases: ISLA; GeoTransolver-512", "pending the 8,448 rung", "two current-snapshot rungs so far; exponents are stated once three exist", "@sec-interior-olbc"),
  ("**Cost at 200,000 tokens** (step ÷ ; memory ÷)", f"reference ISLA (384 x 12, {c_r1[2] / 1e6:.0f}M) against GeoTransolver-256 ({c_g256[2] / 1e6:.0f}M) and the parameter-matched GeoTransolver-512 ({c_g512[2] / 1e6:.0f}M)", f"{c_r1[0] / c_g256[0]:.2f}; {c_r1[1] / c_g256[1]:.2f} — {c_r1[0] / c_g512[0]:.2f}; {c_r1[1] / c_g512[1]:.2f}", "ISLA at parity accuracy in half the memory of its parameter match; slower than the recipe-default GeoTransolver by a tenth", "@sec-cost-sweep"),
  ("", f"ISLA under the earlier protocol, 192 wide ({c_i192[2] / 1e6:.1f}M) against GeoTransolver-256 ({c_g256[2] / 1e6:.1f}M), the parameter-matched pair of that protocol", f"{c_i192[0] / c_g256[0]:.2f}; {c_i192[1] / c_g256[1]:.2f}", "faster and under half the memory at parity accuracy on the cars (earlier protocol)", "@sec-cost-sweep"),
  ("**Capacity floor**", f"DrivAerML Surface, 435 cars: GeoTransolver-1,024 ({g1024['params'] / 1e6:.0f}M, {g1024['peak_mem_gb']:.0f} GB) ÷ ISLA 384 x 24 ({i384x24['params'] / 1e6:.0f}M) and ÷ ISLA 384 x 12 ({i384['params'] / 1e6:.0f}M, {i384['peak_mem_gb']:.0f} GB)", f"{g1024['pressure_l2_mean'] / i384x24['pressure_l2_mean']:.3f}; {g1024['pressure_l2_mean'] / i384['pressure_l2_mean']:.3f}", "the same floor; ISLA reaches it at half the parameters along its depth axis, and holds the memory frontier below about 70 GB", "@sec-shared-floor, @sec-review-frontier"),
- ("**Trainability**", "learning-rate ceiling; plateaus", "see reading", "linear-routed ISLA has a rate ceiling (1/width, at least 1/depth) whose failure is total routing collapse; cosine routing removes it. GeoTransolver's best rate moves with data (3e-3 at the protocol). ISLA showed a delayed plateau escape on the 300-lug rung and memorization on the 512-case OLBC sets; GeoTransolver did neither", "@sec-isla-routing-forms, @sec-nb-solids-tensile2d-verdict, @sec-nb-olbc-interim"),
+ ("**Trainability**", "learning-rate ceiling; plateaus", "see reading", "linear-routed ISLA has a rate ceiling (1/width, at least 1/depth) whose failure is total routing collapse; cosine routing removes it. GeoTransolver's best rate moves with data (3e-3 at the protocol). ISLA showed a delayed plateau escape on the 300-lug rung and an early validation plateau on the 512-case OLBC elasticity set; GeoTransolver did neither", "@sec-isla-routing-forms, @sec-nb-solids-tensile2d-verdict, @sec-nb-harmonic-elasticity-512-verdict"),
  ("**Query independence**", "does the prediction at a point depend on the other points requested", "both: yes", "both interacting configurations depend on the request; ISLA alone offers an exact query-independent decoder, several times less accurate on every interior field", "@sec-interior-companion, @sec-arch-passive-decoder"),
  ("**What each needs at inference**", "inputs and conventions", "see reading", "ISLA: positions, normals, cell measures (Horvitz–Thompson weights under any draw), global directions as unit vectors, global scalars; no frame, no center, no canonical pose, no mesher convention. GeoTransolver: coordinates in the training frame (or a canonical frame, or augmentation), the training sampling law and mesher habits; GeoTransolver-volume: the signed distance and its gradient from the full-resolution surface at every query", "@sec-part-baseline, @sec-interior-task, @sec-pose"),
 ]
@@ -205,7 +214,7 @@ print(": The standing by axis. Ratios are GeoTransolver (or GeoTransolver-volume
       "Seeds, paired counts, rates and controls are in the chapter each row cites; every cell holds two seeds. How to read this: rows are different instruments and are not comparable with one another; the table ranks nothing, it locates. "
       "Data: results/ref_surface_2026-09-23.json, refboard_ladder_2026-09-23.json, p200k_trio_reduction_2026-09-19.json, p200k_fleet_reduction_2026-09-22.json, "
       "p200k_fleet_interim_2026-09-20.json, ratevol_reduction_2026-09-20.json, routenorm_extension_2026-09-21.json, airfrans_reduction_2026-09-22.json, airfrans_extrap_2026-09-22.json, "
-      "solids_frame_2026-09-22.json, solids_lug_2026-09-22.json, olbc_2026-09-22.json, p200k_pose_r1_2026-09-23.json, trainarea_dr_reduction_2026-09-20.json, "
+      "solids_frame_2026-09-22.json, solids_lug_2026-09-22.json, olbc_ref_2026-09-29.json, p200k_pose_r1_2026-09-23.json, trainarea_dr_reduction_2026-09-20.json, "
       "trainarea_reduction_2026-09-20.json, wingbench_200k_reduction_2026-09-19.json, territory_2026-09-21.json, territory_wings_2026-09-21.json, scalelaw_drivaerml_2026-09-22.json, "
       "airfrans_scale_2026-09-22.json, cost_sweep_ref_gb300_bf16_2026-09-22.json, cap435_interim_2026-09-20.json. {#tbl-vs-standing}")
 ```
@@ -242,8 +251,8 @@ acc = [
  ("AirfRANS, outside the angle band", [(afx_on["aoa"][f], FNAME[f][0]) for f in FIELDS]),
  ("Tensile2d, 400 cases (σ11, σ22, σ12, u)", [(T2[f], {"sig11": "11", "sig22": "22", "sig12": "12", "displacement": "u"}[f]) for f in T2F]),
  ("GINOT lug, 300 → 2,400", [(lug[n], str(n)) for n in (300, 600, 1200, 2400)]),
- ("OLBC Poisson, 512 → 8,448", [(olbc_p[n], str(n)) for n in (512, 2048, 8448)]),
- ("OLBC elasticity, 512", [(olbc_e[f], {"sig11": "11", "sig22": "22", "sig12": "12", "displacement": "u"}[f]) for f in T2F]),
+ (f"OLBC Poisson, {' → '.join(f'{n:,}' for n in olbc_scored)} (stronger GeoTransolver-512 backend)", [(olbc_p[n], str(n)) for n in olbc_scored]),
+ ("OLBC elasticity, 512", [(olbc_e[512][f], {"sig11": "11", "sig22": "22", "sig12": "12", "displacement": "u"}[f]) for f in T2F]),
  ("random poses (augmented GeoTransolver ÷ ISLA)", [(PV["gt_aug_posed_over_isla_posed"], "")]),
 ]
 cons = [
@@ -305,16 +314,17 @@ plt.show()
   the same and the offset is gone at 435 cars. The boundary-first
   representation is the data-hungrier one at the bottom of a ladder and
   the steeper one along it.
-- **Fixed-mesh boundary-data tasks favor GeoTransolver so far, by
-  factors.** On the OLBC sets the geometry is identical in every sample
-  and the whole signal is in per-cell boundary scalars and a nodal source
-  (@sec-data-olbc). The standing is a constant 3x deficit on Poisson at
-  every rung with the same learning-curve exponent and 1.4 to 2x on
-  elasticity at 512 cases. The mechanism study and the ablations that
-  close the gap (labelled as ablations, not as the reference) are in
-  @sec-interior-olbc.
-  This is the one axis on which the ordering runs the other way from the
-  rest of the book, and @sec-vs-ideas is mostly about it.
+- **Fixed-mesh boundary-data tasks split by target.** On the OLBC sets
+  the geometry is identical in every sample and the whole signal is in
+  per-cell boundary scalars and a nodal source (@sec-data-olbc). On the
+  scalar Poisson problem ISLA leads GeoTransolver-512 at both scored rungs
+  with no option, against the stronger of GeoTransolver's two attention
+  backends at each rung; on the elasticity tensor GeoTransolver-512 leads
+  on every field at both rungs. The per-type geometry channels tested
+  there are neutral or worse on Poisson and cost at 512 elasticity cases,
+  so none is part of the model (@sec-interior-olbc). Elasticity is the
+  axis on which the ordering runs the other way from the rest of the
+  book, together with Tensile2d: both are tensor targets on solids.
 - **Consistency is ISLA's, and it is a property of the frame plus the
   measure, not of the attention.** Under the biased inference draw, under
   the swapped training law and in arbitrary poses ISLA's error moves by
@@ -328,8 +338,8 @@ plt.show()
   The memory advantage is real and useful (half the memory at parity
   against the parameter match) and is not what the architecture is for.
 
-Open on this page: the two largest HiLiftAeroML rungs, the OLBC mechanism
-at 2,048 cases, the DeepJEB equal-epoch companion, third seeds of the
+Open on this page: the two largest HiLiftAeroML rungs, the OLBC 8,448-case
+rung and the current-snapshot elasticity references, the DeepJEB equal-epoch companion, third seeds of the
 interior standing, and the reference-configuration re-run of every evidence
 lane (@sec-program-status).
 
@@ -518,15 +528,14 @@ of @sec-arch-routing-trained are the picture of it.
 *Evidence.* Removing the relational invariants from routing and read-back
 is the largest single-factor effect measured (@sec-de-limits); the
 territory probe shows the anchors are functions of the surface
-(@sec-territories). The evidence *against* is as important: on a fixed
-mesh the anchors barely move between samples and positional resolution is
-only as fine as the partition. On the OLBC Poisson set at 512 cases four
-times the slices recover none of the gap and a parameter-free extension of
-the boundary values recovers most of it, so there the missing ingredient is
-value transport, not anchor resolution (@sec-interior-olbc).
+(@sec-territories). The bound on the mechanism is as important: on a
+fixed mesh the anchors barely move between samples, so positional
+resolution is only as fine as the partition; yet on the OLBC Poisson set
+ISLA leads GeoTransolver-512 at both scored rungs with no positional
+channel added, so 256 anchors resolve that problem (@sec-interior-olbc).
 
 *Publication-worthy?* Yes, as the core mechanism of the architecture
-paper, stated with the OLBC caveat and the diagnostics that resolve it.
+paper, stated with the fixed-mesh bound and the OLBC evidence.
 
 ### (e) Cosine routing against slice collapse {#sec-vs-novel-cosine}
 
@@ -588,11 +597,11 @@ benchmark to test exactly this.
 magnitudes as scalars for every model (@sec-unit-direction-rule), a
 component target is a view of a tensor output, every input is a datum of
 the PDE problem, and every channel keeps the covariance contracts under test. That is interface design, not a
-mechanism, and the OLBC mechanism study says the value channel is the weak one.
+mechanism.
 
 *Evidence.* The contract tests; the unit-direction control on the
-baselines; the Tensile2d tensor-head lanes; the OLBC mechanism study
-(@sec-interior-olbc).
+baselines; the Tensile2d tensor-head lanes; the OLBC sets, where the
+boundary data enter through this interface alone (@sec-interior-olbc).
 
 *Publication-worthy?* The component clause, yes (it belongs with (b)); the
 interface as a whole is an engineering contribution to the code, not a
@@ -616,7 +625,7 @@ of learning-curve exponents on industrial CFD.
 
 *What is new.* The measurement itself: on four datasets the exponents are
 the same on one (DrivAerML) and larger for ISLA on three (AirfRANS,
-Tensile2d, the lug), with the OLBC sets so far running the other way; and
+Tensile2d, the lug), with the OLBC ladders pending their third rung; and
 the AirfRANS extrapolation splits, where the in-distribution pressure
 ordering inverts outside the training band (@sec-compute-allocation,
 @sec-interior-tensile2d, @sec-interior-extrapolation). The mechanism is a
@@ -664,7 +673,7 @@ Ranked by how much of it is new and how much evidence stands behind it:
    component clause of the scalar heads as its sharpest corollary.
 3. **The boundary-first learning curve** (idea g): steeper exponents on
    three datasets and the extrapolation crossover, stated with the OLBC
-   counterexample and its mechanism diagnostics; the paper that a
+   ladders once their third rung lands; the paper that a
    practitioner with a fixed budget would read.
 4. **Routing collapse in slice attention and its removal** (idea e): a
    short, useful note, larger if GeoTransolver is shown to share the
@@ -682,14 +691,14 @@ coordinating thread can schedule them.
 
 | idea | source | ISLA weakness it targets | smallest discriminating experiment | acceptance bar | ledger row |
 |---|---|---|---|---|---|
-| Boundary-value extension as a query scalar: give every interior query a fixed, parameter-free extension of the boundary data (a measure-weighted inverse-distance average of the prescribed values $g$ over the labeled cells, per condition type), so the value reaches the readout directly instead of only through the slices | Mousavi et al. (2026), learned function extensions; BENO's two-branch boundary embedding | the fixed-mesh boundary-data gap (OLBC), hypothesis M2, value transport | OLBC Poisson at 2,048 cases, the reference ISLA with the extension as rank-0 `query_inputs`, two seeds, against the reference configuration and GeoTransolver-512 | closes at least half the log-gap to GeoTransolver-512 at 2,048 cases; if the frame diagnostic already closes it, the two are compared at matched cost | LIT-EXT |
-| Per-token adaptive routing temperature (a learned $\tau_i$ added to the cosine form), the sharpness control of Transolver++ inside the bounded logit | Luo et al. (2025) | anchor-based positional resolution (OLBC hypothesis M1); the too-soft wing routing (dominant-slice floors near 0.2 on the wings, @sec-territories) | OLBC Poisson at 2,048 cases and the 35-wing rung at the reporting protocol, two seeds | OLBC ratio improves by 20% or more; the wing rung within seed noise or better; the collapse-free property kept (every block above 4 active slices) | LIT-TEMP |
+| Boundary-value extension as a query scalar: give every interior query a fixed, parameter-free extension of the boundary data (a measure-weighted inverse-distance average of the prescribed values $g$ over the labeled cells, per condition type), so the value reaches the readout directly instead of only through the slices | Mousavi et al. (2026), learned function extensions; BENO's two-branch boundary embedding | a direct value path from the boundary data to the readout on the fixed-mesh sets | OLBC Poisson at 512 cases, the reference ISLA with the extension as rank-0 `query_inputs`, two seeds, against the reference configuration | run: the six-scalar extension scores `{python} olbc_fmt(olbc_ext512)` of the reference at 512 cases (arm ÷ reference, arm and reference on different code snapshots), so the value path through the slices is the better one; the row is closed (@sec-interior-olbc) | LIT-EXT |
+| Per-token adaptive routing temperature (a learned $\tau_i$ added to the cosine form), the sharpness control of Transolver++ inside the bounded logit | Luo et al. (2025) | the too-soft wing routing (dominant-slice floors near 0.2 on the wings, @sec-territories) | the 35-wing rung at the reporting protocol and OLBC Poisson at 2,048 cases as the fixed-mesh control, two seeds | the wing rung improves by 5% or more on both seeds; OLBC Poisson within seed noise or better; the collapse-free property kept (every block above 4 active slices) | LIT-TEMP |
 | Measure-weighted local aggregation among interior queries: a translation-invariant Gaussian kernel over query-to-query distances (the passive decoder's $\kappa$ of @sec-arch-passive-decoder, applied inside the interacting configuration) | GeoTransolver's multi-radius ball queries (Adams et al., 2025); DoMINO (Ranade et al., 2025); Erwin's ball-tree locality (Zhdanov et al., 2025); GAOT's multiscale encoders | the interior pressure deficit (13% cars, 17% airfoils); the notebook records query-to-query aggregation as the untested candidate after surface-patch features were falsified | DrivAerML Volume task at the reporting protocol, one kernel width in length units, two seeds; AirfRANS as the second dataset | pressure ratio from 0.95 to at least 1.00 with velocity moving by no more than 3%; falsified if pressure moves under 3% | LIT-LOCALQ |
 | Parity-typed invariants: one reflection-odd relational scalar per anchor, the triple product $(\hat n_i \times \hat g_1) \cdot \hat\rho_{is}$, so scalar heads can represent pseudo-scalar components with a single global axis | GLOBE's parity-equivariance (Sharpe, 2025); GATr's typed algebra (Brehmer et al., 2023) | the $\sigma_{12}$ clause: unrepresentable with the load axis alone (@sec-isla-heads) | Tensile2d at 32 and 400 cases with the load axis $+y$ only, plus the odd scalar, two seeds, against the two-vector frame configuration | $\sigma_{12}$ within 1.5x of the frame configuration at both rungs with the other fields unchanged; scalar outputs stay exactly rotation-invariant (contract test) | LIT-PARITY |
 | Measure-weighted training loss: weight each token's loss by its Horvitz–Thompson measure so the objective is an integral over the surface rather than a mean over the drawn points | M³'s reframing of the training measure (Mei et al., 2026) | the residual training-law dependence (8% on the cars) and the wing deficit's mesher-pattern hypothesis | the training-law twin on the cars (uniform and area-trained, scored on the uniform draw) with the weighted loss for ISLA and, as an ablation, for GeoTransolver; two seeds | ISLA's area ÷ uniform factor from 1.08 to at most 1.03 without a change in the uniform-draw error beyond seed noise | LIT-MLOSS |
 | Inter-slice attention as a control: add Transolver's attention among the $M$ slice states to ISLA's per-slice MLP, which is the one piece of physics attention ISLA lacks | Hu et al. (2025) argue slice-slice interaction is not where the value is; Wu et al. (2024) | the wing deficit on the small recurring-geometry rungs; a capacity question | 35-wing rung and 435 cars at the reporting protocol, two seeds | a 3% gain on either dataset adopts it as a candidate; null on both closes the question and supports the linear-attention reading | LIT-SLICEATT |
 | An external, independently run benchmark: enter ISLA and GeoTransolver in CarBench's protocol on DrivAerNet++ (8,000 cars, cross-category splits, subsampled against full-mesh scoring) | Elrefaie et al. (2025) | the validation-set-only limit of the HiLiftAeroML figures and the absence of a program-level held-out confirmation (@sec-limits-validation) | the CarBench training and evaluation pipeline run unmodified with both models at the recipe widths | reported as measured; the cross-category split is the reading of interest | LIT-CARBENCH |
-| Published baselines on the OLBC sets: compare the ISLA and GeoTransolver ladders with the learned-extension GAOT and RIGNO numbers of the OLBC paper on the same sets | Mousavi et al. (2026); Wen et al. (2025); Mousavi et al. (2025) | the fixed-mesh gap in context: whether GeoTransolver's lead there is a lead over the field or only over ISLA | the 8,448-case rung scored on the published test split and metric | reported as measured, with the metric difference stated | LIT-OLBCBASE |
+| Published baselines on the OLBC sets: compare the ISLA and GeoTransolver ladders with the learned-extension GAOT and RIGNO numbers of the OLBC paper on the same sets | Mousavi et al. (2026); Wen et al. (2025); Mousavi et al. (2025) | the fixed-mesh standings in context: whether ISLA's Poisson lead and GeoTransolver-512's elasticity lead are leads over the field or only over each other | the 8,448-case rung scored on the published test split and metric | reported as measured, with the metric difference stated | LIT-OLBCBASE |
 
 : Ideas from the literature, each with the weakness it targets, its smallest discriminating experiment and its bar. How to read this: the bars are written before any of these runs; a row is not evidence of anything until its node is DONE in @sec-program-status. The last column is the node identifier in that chapter's ledger. {#tbl-vs-ideas}
 
