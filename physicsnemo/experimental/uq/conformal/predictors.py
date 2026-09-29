@@ -45,15 +45,16 @@ from ._validation import (
 )
 from .diagnostics import CoverageAccumulator
 from .difficulty import (
+    _DIFFICULTY_REGISTRY,
     AuxDifficulty,
     _check_no_double_scale,
-    _snapshot_difficulty,
 )
 from .scores import (
+    _SCORE_REGISTRY,
     _NonconformityScore,
     _Score,
-    _score_kind,
-    _snapshot_score,
+    _snapshot_strategy,
+    _strategy_kind,
 )
 
 __all__ = ["ConformalPredictor"]
@@ -190,8 +191,8 @@ class ConformalPredictor:
             raise ValueError(f"tier must be one of {TIERS}, got {tier!r}.")
         require_feasible_alpha(n_cal, alpha)
         alpha = float(alpha)
-        score_snapshot = _snapshot_score(score)
-        score_kind = _score_kind(score_snapshot)
+        score_snapshot = _snapshot_strategy(score, _SCORE_REGISTRY, "score")
+        score_kind = _strategy_kind(score_snapshot, _SCORE_REGISTRY)
 
         if tier == "cellwise":
             if difficulty is not None:
@@ -211,7 +212,11 @@ class ConformalPredictor:
                     f"A {tier} predictor must not carry mesh_fingerprint; its "
                     "calibration statistic permits varying point sets."
                 )
-            difficulty_snapshot = _snapshot_difficulty(difficulty)
+            difficulty_snapshot = (
+                None
+                if difficulty is None
+                else _snapshot_strategy(difficulty, _DIFFICULTY_REGISTRY, "difficulty")
+            )
             _check_no_double_scale(score_snapshot, difficulty_snapshot)
             mesh_snapshot = None
 

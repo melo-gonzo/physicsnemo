@@ -18,7 +18,7 @@ r"""Portable, ``weights_only``-safe artifacts for fitted conformal predictors.""
 
 import os
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 
 import torch
@@ -27,9 +27,9 @@ from torch import Tensor
 
 from ._containers import pack_fields
 from ._validation import validate_provenance
-from .difficulty import _DIFFICULTY_REGISTRY, _difficulty_kind
+from .difficulty import _DIFFICULTY_REGISTRY
 from .predictors import ConformalPredictor
-from .scores import _SCORE_REGISTRY, _score_kind
+from .scores import _SCORE_REGISTRY, _strategy_kind
 
 __all__: list[str] = []
 
@@ -77,11 +77,9 @@ def _check_exact_keys(value: object, expected: set[str], where: str) -> Mapping:
     return value
 
 
-def _strategy_spec(
-    strategy: object, kind_of: Callable[[object], str | None], kwarg_types: Mapping
-) -> dict:
+def _strategy_spec(strategy: object, registry: Mapping, kwarg_types: Mapping) -> dict:
     """Encode one exact built-in strategy from the shared kwarg table."""
-    kind = kind_of(strategy)
+    kind = _strategy_kind(strategy, registry)
     return {
         "kind": kind,
         "kwargs": {name: getattr(strategy, name) for name in kwarg_types[kind]},
@@ -192,7 +190,7 @@ def _artifact_payload(
         "format": _ARTIFACT_FORMAT,
         "version": _ARTIFACT_VERSION,
         "tier": predictor.tier,
-        "score": _strategy_spec(predictor.score, _score_kind, _SCORE_KWARG_TYPES),
+        "score": _strategy_spec(predictor.score, _SCORE_REGISTRY, _SCORE_KWARG_TYPES),
         "alpha": predictor.alpha,
         "n_cal": predictor.n_cal,
         "thresholds": {
@@ -202,7 +200,9 @@ def _artifact_payload(
         "difficulty": (
             None
             if difficulty is None
-            else _strategy_spec(difficulty, _difficulty_kind, _DIFFICULTY_KWARG_TYPES)
+            else _strategy_spec(
+                difficulty, _DIFFICULTY_REGISTRY, _DIFFICULTY_KWARG_TYPES
+            )
         ),
         "mesh_fingerprint": predictor.mesh_fingerprint,
         "provenance": validate_provenance(chosen_provenance),

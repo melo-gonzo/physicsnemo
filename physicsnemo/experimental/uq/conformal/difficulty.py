@@ -32,7 +32,6 @@ field (:math:`s = 1`) is valid but conservative.
     guarantee (the scores are no longer exchangeable with test scores).
 """
 
-import copy
 from collections.abc import Mapping
 
 from jaxtyping import Float
@@ -175,28 +174,3 @@ _DIFFICULTY_REGISTRY: dict[str, type[AuxDifficulty]] = {
     "aux": AuxDifficulty,
 }
 """Private identifiers for the exact built-in difficulty field types."""
-
-
-def _difficulty_kind(difficulty: AuxDifficulty) -> str | None:
-    """Identifier for an exact built-in difficulty type, otherwise ``None``."""
-    for kind, cls in _DIFFICULTY_REGISTRY.items():
-        if type(difficulty) is cls:
-            return kind
-    return None
-
-
-def _snapshot_difficulty(difficulty: AuxDifficulty | None) -> AuxDifficulty | None:
-    """Require and snapshot one of the shipped difficulty strategies.
-
-    ``None`` means no difficulty field (``s = 1``) and passes through; the
-    single validation shared by calibrators and fitted predictors.
-    """
-    if difficulty is None:
-        return None
-    if _difficulty_kind(difficulty) is None:
-        names = ", ".join(sorted(cls.__name__ for cls in _DIFFICULTY_REGISTRY.values()))
-        raise TypeError(
-            f"difficulty must be None or one of the shipped strategies ({names}); "
-            f"got {type(difficulty).__name__}."
-        )
-    return copy.deepcopy(difficulty)

@@ -67,12 +67,17 @@ from ._validation import (
     require_single_rank,
 )
 from .difficulty import (
+    _DIFFICULTY_REGISTRY,
     AuxDifficulty,
     _check_no_double_scale,
-    _snapshot_difficulty,
 )
 from .predictors import ConformalPredictor
-from .scores import _NonconformityScore, _Score, _snapshot_score
+from .scores import (
+    _SCORE_REGISTRY,
+    _NonconformityScore,
+    _Score,
+    _snapshot_strategy,
+)
 
 __all__ = [
     "CellwiseCalibrator",
@@ -113,7 +118,7 @@ class _SplitCalibratorBase:
         *,
         keys: Sequence[str] | None = None,
     ) -> None:
-        self._score = _snapshot_score(score)
+        self._score = _snapshot_strategy(score, _SCORE_REGISTRY, "score")
         self._alpha = validate_alpha(alpha)
         self._keys = normalize_keys(keys)
         self._n = 0
@@ -430,7 +435,11 @@ class _ScaledCalibratorBase(_SplitCalibratorBase):
         keys: Sequence[str] | None = None,
     ) -> None:
         super().__init__(score, alpha, keys=keys)
-        self._difficulty = _snapshot_difficulty(difficulty)
+        self._difficulty = (
+            None
+            if difficulty is None
+            else _snapshot_strategy(difficulty, _DIFFICULTY_REGISTRY, "difficulty")
+        )
         _check_no_double_scale(self._score, self._difficulty)
 
     @property

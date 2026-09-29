@@ -407,23 +407,20 @@ _SCORE_REGISTRY: dict[str, type[_NonconformityScore]] = {
 """Private identifiers for the exact built-in score types."""
 
 
-def _score_kind(score: _NonconformityScore) -> str | None:
-    """Identifier for an exact built-in score type, otherwise ``None``."""
-    for kind, cls in _SCORE_REGISTRY.items():
-        if type(score) is cls:
-            return kind
-    return None
+def _strategy_kind(strategy: object, registry: Mapping[str, type]) -> str | None:
+    """Registry identifier for an exact built-in strategy type, otherwise ``None``."""
+    return {cls: kind for kind, cls in registry.items()}.get(type(strategy))
 
 
-def _snapshot_score(score: _Score) -> _NonconformityScore:
-    """Require and snapshot one of the shipped score strategies.
+def _snapshot_strategy(strategy: object, registry: Mapping[str, type], what: str):
+    """Require and snapshot one of the shipped strategies in ``registry``.
 
     The single validation used by calibrators and fitted predictors alike.
     """
-    if _score_kind(score) is None:
-        names = ", ".join(sorted(cls.__name__ for cls in _SCORE_REGISTRY.values()))
+    if _strategy_kind(strategy, registry) is None:
+        names = ", ".join(sorted(cls.__name__ for cls in registry.values()))
         raise TypeError(
-            f"score must be one of the shipped strategies ({names}); got "
-            f"{type(score).__name__}."
+            f"{what} must be one of the shipped strategies ({names}); got "
+            f"{type(strategy).__name__}."
         )
-    return copy.deepcopy(score)
+    return copy.deepcopy(strategy)
