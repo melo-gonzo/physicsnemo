@@ -1,0 +1,77 @@
+{
+ "protocol": "PROTO-COND reduction (2026-09-29, #sec-nb-proto-cond-prereg, #sec-nb-proto-cond-launch): sample-conditioned slice prototypes\n(ISLA slice_prototypes='conditioned') against the static reference on the same snapshot (code_v11), campaign pc: OLBC Poisson 512 and\n2,048 (pc_poisson_{ref,cond}_n{512,2048}), DrivAerML Surface 435 at 200k (pc_dr_{ref,cond}), HiLift 510 medium at 200k (pc_hl_{ref,cond}_medium),\nAirfRANS interior (pc_af_{ref,cond}); two seeds each. Readout: float32 per-case relative L2 per primary field; ratio conditioned / reference\non seed means and per seed. Bars (two-seed means): reference candidate = <= 0.97 on >= 1 dataset and <= 1.03 on every field of every\ndataset; deleted = > 1.05 on any field of any dataset, or no dataset <= 0.97; between otherwise. usage: python proto_cond_reduce_2026-09-29.py",
+ "datasets": {
+  "poisson_512": {
+   "fields": [
+    "u_l2"
+   ],
+   "reference": {
+    "u_l2": 0.2004155661124969
+   },
+   "conditioned": {
+    "u_l2": 0.3991151704103686
+   },
+   "ratio": {
+    "u_l2": 1.9914379813508998
+   },
+   "per_seed": {
+    "reference": {
+     "42": {
+      "u_l2": 0.19234648971178103
+     },
+     "43": {
+      "u_l2": 0.20848464251321275
+     }
+    },
+    "conditioned": {
+     "42": {
+      "u_l2": 0.3822642713203095
+     },
+     "43": {
+      "u_l2": 0.4159660695004277
+     }
+    },
+    "ratio": {
+     "42": {
+      "u_l2": 1.9873732652626421
+     },
+     "43": {
+      "u_l2": 1.9951880603103214
+     }
+    }
+   },
+   "n_seeds": {
+    "reference": 2,
+    "conditioned": 2
+   },
+   "interim": false,
+   "reading": "hurts"
+  },
+  "poisson_2048": {
+   "status": "not scored",
+   "ref_seeds": 0,
+   "cond_seeds": 0
+  },
+  "drivaer_435": {
+   "status": "not scored",
+   "ref_seeds": 2,
+   "cond_seeds": 0
+  },
+  "hilift_510": {
+   "status": "not scored",
+   "ref_seeds": 0,
+   "cond_seeds": 0
+  },
+  "airfrans": {
+   "status": "not scored",
+   "ref_seeds": 0,
+   "cond_seeds": 0
+  }
+ },
+ "overall": {
+  "worst_ratio": 1.9914379813508998,
+  "best_ratio": 1.9914379813508998,
+  "complete": false,
+  "verdict": "deleted"
+ }
+}
