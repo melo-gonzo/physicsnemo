@@ -288,19 +288,6 @@ def check_point_alignment(
     return tensor
 
 
-def require_single_rank(what: str) -> None:
-    """Raise when ``torch.distributed`` is initialized with more than one rank."""
-    if (
-        torch.distributed.is_available()
-        and torch.distributed.is_initialized()
-        and torch.distributed.get_world_size() > 1
-    ):
-        raise NotImplementedError(
-            f"Conformal {what} supports single-rank execution only. Gather the "
-            "exact, deduplicated samples onto one rank first."
-        )
-
-
 def clamp_min_floor(t: Tensor, eps: float) -> Tensor:
     """Clamp ``t`` to at least ``max(eps, finfo(t.dtype).tiny)``.
 

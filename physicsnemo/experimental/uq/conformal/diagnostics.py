@@ -36,7 +36,6 @@ from ._utils import (
     field_items,
     normalize_keys,
     pack_fields,
-    require_single_rank,
     validate_alpha,
     validate_n_cal,
 )
@@ -93,9 +92,9 @@ class CoverageAccumulator:
 
     Notes
     -----
-    Runs on one rank: :meth:`finalize` and :attr:`empirical_coverage_map`
-    raise ``NotImplementedError`` when ``torch.distributed`` is initialized
-    with more than one rank. Gather the held-out samples onto one rank first.
+    The accumulator does not communicate across ranks: its report covers
+    only the samples passed to :meth:`update` in this process. To report on
+    a held-out set split across ranks, send every sample to one process.
 
     Examples
     --------
@@ -283,10 +282,7 @@ class CoverageAccumulator:
         ------
         RuntimeError
             If the tier is not cellwise, or before the first :meth:`update`.
-        NotImplementedError
-            If ``torch.distributed`` runs with more than one rank.
         """
-        require_single_rank("diagnostics")
         if self._tier != "cellwise":
             raise RuntimeError(
                 "empirical_coverage_map is available only for cellwise predictors."
@@ -322,13 +318,7 @@ class CoverageAccumulator:
               points per sample with any value outside the interval.
 
             Statistics are ``None`` before the first :meth:`update`.
-
-        Raises
-        ------
-        NotImplementedError
-            If ``torch.distributed`` runs with more than one rank.
         """
-        require_single_rank("diagnostics")
         metadata = {
             "tier": self._tier,
             "alpha": self._alpha,

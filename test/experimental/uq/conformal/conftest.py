@@ -24,8 +24,7 @@ import torch
 def fake_multi_rank(monkeypatch):
     """Return an ``activate()`` that fakes a two-rank ``torch.distributed`` group.
 
-    Deferred so tests can build fitted objects first (``finalize`` itself
-    fails closed under multi-rank).
+    Deferred so tests can build fitted objects before the fake group exists.
     """
 
     def activate():

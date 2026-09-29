@@ -33,6 +33,12 @@ sample fixes which of the two you use and which fields it has; later
 samples must match. A sample that fails a check raises and leaves the
 calibrator unchanged, so you can skip it and continue.
 
+Calibration runs in the process that holds the calibrator and does not
+communicate across ranks. Predictions may be computed on many GPUs, but
+every calibration sample must reach the process that calls ``finalize``;
+a rank that sees only part of the samples fits a threshold from that part
+alone, which does not carry the stated guarantee for the full split.
+
 The split conformal construction follows `Distribution-Free Predictive
 Inference for Regression <https://arxiv.org/abs/1604.04173>`_ (Lei et al.,
 2018): with :math:`n_{cal}` calibration scores the fitted threshold is the
@@ -70,7 +76,6 @@ from ._utils import (
     points_fingerprint,
     require_feasible_alpha,
     require_matching_keys,
-    require_single_rank,
     slice_aux,
     validate_alpha,
 )
@@ -223,7 +228,6 @@ class _SplitCalibratorBase:
             self._n += 1
 
     def _require_finalizable(self) -> None:
-        require_single_rank("calibration")
         if self._n == 0:
             raise RuntimeError("No calibration samples collected.")
 
@@ -427,9 +431,6 @@ class CellwiseCalibrator(_SplitCalibratorBase):
         ValueError
             If :math:`\alpha < 1 / (n_{cal} + 1)`. Collect more samples or
             raise ``alpha``.
-        NotImplementedError
-            If an initialized ``torch.distributed`` group has more than one
-            rank. Gather the samples onto one rank first.
         """
         self._require_finalizable()
         return self._build_predictor(
@@ -621,9 +622,6 @@ class FunctionalBandCalibrator(_ScaledCalibratorBase):
         ValueError
             If :math:`\alpha < 1 / (n_{cal} + 1)`. Collect more samples or
             raise ``alpha``.
-        NotImplementedError
-            If an initialized ``torch.distributed`` group has more than one
-            rank. Gather the samples onto one rank first.
         """
         self._require_finalizable()
         return self._build_predictor(
@@ -772,9 +770,6 @@ class RiskControlCalibrator(_ScaledCalibratorBase):
         ValueError
             If :math:`\alpha < 1 / (n_{cal} + 1)`. Collect more samples or
             raise ``alpha``.
-        NotImplementedError
-            If an initialized ``torch.distributed`` group has more than one
-            rank. Gather the samples onto one rank first.
         """
         self._require_finalizable()
         thresholds = {

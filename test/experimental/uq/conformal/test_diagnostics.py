@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for tier-aligned, single-rank empirical conformal diagnostics."""
+"""Tests for tier-aligned empirical conformal diagnostics."""
 
 import json
 
@@ -345,8 +345,8 @@ FINALIZERS = {
 
 
 @pytest.mark.parametrize("finalizer", sorted(FINALIZERS))
-def test_finalizers_fail_closed_in_multi_rank_group(finalizer, fake_multi_rank):
+def test_finalizers_run_per_process_in_multi_rank_job(finalizer, fake_multi_rank):
+    """Rank 0 of a multi-GPU job can fit and report on samples it gathered."""
     finalize = FINALIZERS[finalizer]()
     fake_multi_rank()
-    with pytest.raises(NotImplementedError, match="single-rank"):
-        finalize()
+    assert finalize() is not None

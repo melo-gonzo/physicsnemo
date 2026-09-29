@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the contracted single-rank conformal calibrators."""
+"""Tests for the contracted conformal calibrators."""
 
 import pytest
 import torch
