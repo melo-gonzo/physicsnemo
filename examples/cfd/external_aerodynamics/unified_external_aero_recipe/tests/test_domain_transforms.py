@@ -270,25 +270,3 @@ def test_stack_scalar_fields_builds_a_zero_padded_vector():
     with pytest.raises(ValueError):
         StackScalarFields(fields=["a", "b", "c", "d"], output_field="bc")
 
-
-def test_rotate_global_vector_in_plane_writes_a_rotated_copy():
-    """A (3,) global vector rotated about z by the given angle lands in a NEW leaf; the source is kept;
-    a missing field or a non-(3,) field is refused (FRAME-AF-G control instrument, 2026-09-24)."""
-    import math
-
-    from domain_transforms import RotateGlobalVectorInPlane
-
-    mesh = _two_triangles()
-    mesh.global_data["U_inf_dir"] = torch.tensor([math.cos(0.2), math.sin(0.2), 0.0])
-    out = RotateGlobalVectorInPlane(input_field="U_inf_dir", output_field="U_inf_perp", angle_deg=90.0)(mesh)
-    expect = torch.tensor([-math.sin(0.2), math.cos(0.2), 0.0])
-    assert torch.allclose(out.global_data["U_inf_perp"], expect, atol=1e-6)
-    assert torch.equal(out.global_data["U_inf_dir"], mesh.global_data["U_inf_dir"])
-    # the rotated copy stays a unit vector and is orthogonal to the source
-    assert abs(float(out.global_data["U_inf_perp"].norm()) - 1.0) < 1e-6
-    assert abs(float(out.global_data["U_inf_perp"] @ out.global_data["U_inf_dir"])) < 1e-6
-    with pytest.raises(KeyError):
-        RotateGlobalVectorInPlane(input_field="missing", output_field="x")(mesh)
-    mesh.global_data["bad"] = torch.tensor([1.0, 2.0])
-    with pytest.raises(ValueError):
-        RotateGlobalVectorInPlane(input_field="bad", output_field="x")(mesh)

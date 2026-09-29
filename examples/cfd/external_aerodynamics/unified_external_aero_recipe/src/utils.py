@@ -76,8 +76,8 @@ def initialize_from_checkpoint(
 ###
 ###     stress: {type: symmetric_tensor, components: {sig11: xx, sig22: yy, sig12: xy}}
 ###
-### A tensor target needs a model with ``output_type: fields`` (ISLA), whose output
-### for the target is the whole ``(B, N, 3, 3)`` tensor; the recipe reads the listed
+### A tensor target needs a mesh-output model (ISLA), whose output Mesh carries the
+### whole ``(N, 3, 3)`` tensor in its point_data; the recipe reads the listed
 ### laboratory components off it, and the loss and the metrics keep the
 ### per-component metric names (``sig11_l2``), so results stay comparable with
 ### lanes that predicted the same components as separate scalars. Normalization is
@@ -305,8 +305,8 @@ def field_dim(field_type: FieldType, n_spatial_dims: int = 3) -> int:
 
     Args:
         field_type: ``"scalar"`` or ``"vector"``. A symmetric-tensor target has
-            no flat layout (it is predicted as a whole tensor by a
-            ``output_type: fields`` model) and raises.
+            no flat layout (it is predicted as a whole tensor by a mesh-output
+            model) and raises.
         n_spatial_dims: Dimensionality of vector fields. Default 3.
 
     Raises:
@@ -318,8 +318,8 @@ def field_dim(field_type: FieldType, n_spatial_dims: int = 3) -> int:
     if kind == "vector":
         return n_spatial_dims
     raise ValueError(
-        "a symmetric_tensor target has no flat channel layout; it needs a model with "
-        "output_type: fields (ISLA), which returns the tensor itself"
+        "a symmetric_tensor target has no flat channel layout; it needs a mesh-output "
+        "model (output_type: mesh, e.g. ISLA), which returns the tensor itself"
     )
 
 

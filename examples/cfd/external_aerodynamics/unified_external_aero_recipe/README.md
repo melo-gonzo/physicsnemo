@@ -302,8 +302,8 @@ Available models and datasets:
 
 | Group | Files |
 |---|---|
-| `model/` (`conf/model/*.yaml`) | `geotransolver_{surface,volume,volume_highlift}`, `transolver_{surface,volume}`, `flare_{surface,volume}`, `globe_{surface,volume}`, `isla_{surface,surface_reference,volume_reference,volume_support}`, `domino_{surface,volume}` |
-| `dataset/` (`datasets/*.yaml`) | `drivaer_ml_{surface,volume,volume_reference,volume_support}`, `highlift_{surface,volume}`, `shift_suv_{estate,fastback}_surface` |
+| `model/` (`conf/model/*.yaml`) | `geotransolver_{surface,volume,volume_highlift}`, `transolver_{surface,volume}`, `flare_{surface,volume}`, `globe_{surface,volume}`, `isla_{surface,volume,volume_sdf}`, `domino_{surface,volume}` |
+| `dataset/` (`datasets/*.yaml`) | `drivaer_ml_{surface,volume,volume_reference}`, `highlift_{surface,volume}`, `shift_suv_{estate,fastback}_surface` |
 
 Pick one of each on the CLI:
 
@@ -345,42 +345,41 @@ to set it above 1.
 ### ISLA (Invariant Slice Attention)
 
 `physicsnemo.experimental.models.ISLA` is an equivariant slice-attention
-surrogate for steady boundary-value problems. A boundary sample (points,
-unit normals, quadrature measures) and the problem's data as named fields of
-declared tensor rank (global, per-boundary-cell and per-query inputs) go in;
-named fields of declared rank come out (`output_type: fields`: the model
-returns `{name: tensor}` keyed by the dataset's target names). Three contracts hold by construction rather than by
-augmentation: rotation and translation covariance (the backbone sees only
-invariants of the per-point vector set; the frame is re-attached at the
-vector heads), measure-aware routing (slice states are quadrature-weighted
-means, so the routing reads a sampled integral rather than a point
-population), and, with `query_independent: true`, query independence (a
-prediction at one point does not depend on which other points are queried).
-The constructor and `forward()` are keyword-only, so a call reads exactly as
-the `forward_kwargs:` mapping does.
+surrogate for steady boundary-value problems. It is mesh-native, on the
+same contract as GLOBE (`input_type: mesh`, `output_type: mesh`): `forward()`
+takes the boundary as named `Mesh` objects (`boundary_meshes`), the case's
+`global_data` as a TensorDict and, for an interior task, the prediction
+points as a point-cloud `Mesh` (`prediction_points`); it returns a
+point-cloud `Mesh` whose `point_data` holds the declared outputs by name.
+One case per call, no batch axis. From each boundary Mesh the model reads
+the cell centroids, cell normals and cell measures (the Horvitz-Thompson
+corrected `cell_data._effective_measure` when present, else the geometric
+cell area); the problem's data enter as named fields of declared tensor
+rank (`global_inputs` from `global_data`, `boundary_inputs` from each
+boundary's `cell_data`, `query_inputs` from the prediction Mesh's
+`point_data`). Two contracts hold by construction rather than by
+augmentation: rotation, reflection and translation covariance (the backbone
+sees only invariants of the per-point vector set; the frame is re-attached
+at the heads), and measure-aware routing (slice states are
+quadrature-weighted means, so the routing reads a sampled integral rather
+than a point population). The constructor and `forward()` are keyword-only,
+so a call reads exactly as the `forward_kwargs:` mapping does.
 
-**Reference configuration** (`conf/model/isla_surface.yaml`):
-the origin-free frame (positions enter only as point-to-anchor
-differences, no centroid anywhere; ISLA's only frame since the
-centered-frame options were removed on 2026-09-20) with the
-RMS-pairwise-distance length unit (`scale_mode: rms_distance`; the length
-unit is the measure-weighted root-mean-square pairwise distance of the
-sample, normalized and center-free, so no per-dataset reference length is
-needed; `scale_mode: total_measure`, the square root of the total quadrature
-measure, remains an option and was the default until 2026-09-18); `hidden: 192`, `n_layers: 12`, `n_slices: 256`, `mlp_ratio: 4`;
-`geo_checkpoint: true` (rebuilds the per-slice geometric invariants in
-backward instead of storing them: same forward and gradients bitwise, lower
-peak memory; set `false` to trade memory for speed). The geometry region
-runs the eager PyTorch kernel by default; the fused Triton kernel is an
-exact opt-in via `+model.geo_kernel=fused` (CUDA only).
+**Reference configuration** (`conf/model/isla_surface.yaml`): the
+origin-free frame (positions enter only as point-to-anchor differences, no
+centroid anywhere) with the measure-weighted RMS-pairwise-distance length
+unit, so no per-dataset reference length is needed; `hidden: 384`,
+`n_layers: 12`, `n_slices: 256`, `mlp_ratio: 4`; `geo_checkpoint: true`
+(rebuilds the per-slice geometric invariants in backward instead of storing
+them: same forward and gradients bitwise, lower peak memory; set `false` to
+trade memory for speed); `geo_kernel: null` selects the exact fused Triton
+geometry kernel wherever it can run (CUDA) and the eager PyTorch region
+otherwise.
 
-**Learning rate.** 1e-3 at `hidden: 192` (the protocol rate). Above 192
-use the width rule `lr = 1e-3 × 192 / hidden` (3.75e-4 at 512): at width
-512 the relative frame diverges at 1e-3 because the slice routing hardens
-to one slice per token, trains cleanly under the rule, and the rule costs
-the centered variant nothing (measured at 512 × 80,000 cells on
-DrivAerML; the book's notebook records the divergence mechanism and both
-controls).
+**Learning rate.** 5e-4 at `hidden: 384`, pinned in every ISLA config (the
+recipe default of 3e-3 drives ISLA to a mean-field plateau within five
+epochs). For other widths start from the width rule `lr = 1e-3 × 192 /
+hidden` (3.75e-4 at 512); a CLI override still wins.
 
 **Inference sampler.** For inference at a fixed cell budget, replace the
 dataset's `SubsampleMesh` stage with the recipe's `StratifiedSubsampleMesh`
@@ -394,66 +393,73 @@ and leaves the baselines within 0.4%. It is never worse than the
 independent draw on either dataset; the book records it as a labelled
 scoreboard row and keeps the independent draw for its headline comparisons.
 
-**Data-to-model mapping** (surface reference):
+**Data-to-model mapping** (surface task, `isla_surface.yaml`):
 
 ```yaml
 forward_kwargs:
-  points: interior.points
-  normals: boundaries.vehicle.cell_data.normals
-  global_vectors: global_data.U_inf_dir
-  measure_weights: interior.point_data._effective_measure
+  boundary_meshes:
+    vehicle: boundaries.vehicle
+  global_data: global_data
+model:
+  outputs: {pressure: 0, wss: 1}
+  global_inputs: {U_inf_dir: 1}
 ```
 
-`U_inf_dir` is the unit freestream direction, written by
-`ComputeFreestreamDirection` in the surface dataset YAMLs (`U_inf` stays
-physical, so inference-side re-dimensionalization is unaffected).
+A surface task (`interior: false`, the default) predicts at the boundary
+cells themselves and passes no prediction points: the surface dataset's
+`MeshToDomainMesh` puts the targets at the vehicle's cell centroids in cell
+order, which is the order of the output Mesh's points. The interior task
+(`isla_volume.yaml`, `interior: true`) adds `prediction_points: interior`,
+the dataset's interior point-cloud Mesh; the prediction points join the
+encoder as interacting tokens and each one's signed distance to the nearest
+boundary token and direction to it are computed inside the model, never
+read from the dataset. `isla_volume_sdf.yaml` declares the dataset's stored
+`sdf` (rank 0) and `sdf_normals` (rank 1) as `query_inputs`, read from
+`interior.point_data`, for the internal-versus-stored geometry measurement.
+
+`global_data` is passed through whole; the model selects the leaves it
+declares under `global_inputs` by name (`U_inf_dir`, the unit freestream
+direction that `ComputeFreestreamDirection` writes in the dataset YAMLs;
+`U_inf` stays physical, so inference-side re-dimensionalization is
+unaffected) and ignores the rest. External aerodynamics has this one global
+direction; other PDEs declare their own global vectors and scalars under
+their dataset's leaf names.
+
 `_effective_measure` is the Horvitz-Thompson cell measure that
-`MeshToDomainMesh` records for the subsampled interior points. It carries
-the represented surface measure through subsampling for routing and
-geometry scaling. The volume reference reads the equivalent
-`boundaries.vehicle.cell_data._effective_measure` written by
-`ComposeQuadratureMeasure` in `datasets/drivaer_ml_volume_reference.yaml`.
-Both fields store complete measures, including all sampling corrections; do not
-multiply them by cell area again. Explicit point measures carry their represented
-dimension and follow geometric scaling, including physical-coordinate inference
-exports. Native volume query points have no implied volume measure.
+`SubsampleMesh` writes on a subsampled surface and `MeshToDomainMesh` keeps
+on `boundaries.vehicle.cell_data` (and records for the interior points as
+the target measure); the volume reference dataset materializes the
+equivalent boundary field with `ComposeQuadratureMeasure`
+(`datasets/drivaer_ml_volume_reference.yaml`). Both store complete
+measures, including all sampling corrections; do not multiply them by cell
+area again. Explicit point measures carry their represented dimension and
+follow geometric scaling, including physical-coordinate inference exports.
+Native volume query points have no implied volume measure.
 
-For cached meshes or saved configuration overrides from before this unification,
-convert `_measure_weights` to `cell_areas * weights` and remove the old key;
-rename centroid `_target_quadrature_measure` to `_effective_measure` using
-`set_point_measures(..., dimension=2)`. Update field mappings to the paths above
-and remove the old `ComposeQuadratureMeasure.output_field` option. The
+For cached meshes or saved configuration overrides from before this
+unification, convert `_measure_weights` to `cell_areas * weights` and
+remove the old key; rename centroid `_target_quadrature_measure` to
+`_effective_measure` using `set_point_measures(..., dimension=2)`. The
 [mesh calculus documentation](../../../../docs/api/mesh/calculus.rst)
-provides conversion examples. ISLA's model parameters and checkpoint layout
-are unchanged.
-
-**Variants.** The centered-frame variants (the constant gauge, `isla_surface_constant_gauge.yaml`, and the similarity gauge, `similarity_gauge: true`) were removed from the class and the recipe on 2026-09-20; ISLA has one frame, origin-free, with `scale_mode: rms_distance` (default) or `total_measure` as its length unit. The names `isla_surface_reference` and `isla_volume_reference`, under which the reference configurations were first introduced, remain as pointers to `isla_surface` and `isla_volume`.
-
-**Interior modes.** `query_tokens: true` admits the interior query points
-as interacting tokens carrying the SDF gradient as `query_normals` and the
-SDF as a rank-0 query input (`query_inputs: {sdf: 0}`); this is the interior
-reference (`isla_volume.yaml`). `query_independent: true` instead
-decodes queries passively through `n_decoder_layers` read blocks, and
-`support_tokens: true` adds a per-case computational support
-(`support_points` / `support_normals` / `support_inputs`) as interacting
-tokens next to the boundary (`isla_volume_support.yaml`).
+provides conversion examples.
 
 **Fields of declared rank.** The model YAML declares `outputs:` (the
 dataset's target names with their ranks: `pressure: 0`, `wss: 1`,
 `stress: {rank: 2, symmetric: true}`), `global_inputs:` (rank 1 = a global
-direction, normalized inside the model; rank 0 = a PDE parameter, with
-`channels` for a parameter vector), `boundary_inputs:` (per-cell fields of
-rank 0 to 2: a condition tag, a prescribed traction as a rank-1 field, a
-prescribed stress as a rank-2 field) and `query_inputs:` (per-query fields
-of rank 0 to 2). `forward_kwargs:` maps each declared name to a dataset
-path under the same block names (`global_inputs: {freestream:
-global_data.U_inf_dir}`). Every input enters through O(3)-invariants and
-every output leaves through an equivariant basis, so a target declared with
-a rank transforms as that rank; a symmetric-tensor target reads its listed
-laboratory components off the predicted tensor. The freestream direction is
-the one-global-direction instance. Planar datasets that store a boundary
-vector component by component stack it with `StackScalarFields`
-(`src/domain_transforms.py`).
+direction, normalized inside the model; rank 0 = a PDE parameter),
+`boundary_inputs:` (per-cell fields of rank 0 to 2 read from every boundary
+Mesh's `cell_data`: a condition tag, a prescribed traction as a rank-1
+field, a prescribed stress as a rank-2 field) and `query_inputs:`
+(per-prediction-point fields of rank 0 to 2 read from the prediction Mesh's
+`point_data`). A name may be dotted for a nested leaf. Every input enters
+through invariants and every output leaves through an equivariant basis, so
+a target declared with a rank transforms as that rank; a symmetric-tensor
+target (`{type: symmetric_tensor, components: {...}}` in the dataset's
+`targets:`) reads its listed laboratory components off the predicted
+`(N, 3, 3)` leaf. Planar datasets that store a boundary vector component by
+component stack it with `StackScalarFields` (`src/domain_transforms.py`);
+`RestrictToPlane` drops the constant axis so a planar problem runs with
+`dim: 2`.
 
 **Measured standing.** At the reporting protocol of 200,000 sampled cells
 and 435 DrivAerML training cases, float32 pressure relative L2 is 0.0444
@@ -718,17 +724,15 @@ python src/train.py model=flare_surface dataset=drivaer_ml_surface \
 python src/train.py model=flare_volume dataset=drivaer_ml_volume \
     training.optimizer.lr=1e-3 training.scheduler.gamma=0.5
 
-# ISLA (Invariant Slice Attention), reference configuration: relative frame,
-# RMS-distance scale, geo_checkpoint on. Add +model.geo_kernel=fused for the
-# exact fused Triton geometry kernel (CUDA only, opt-in).
-python src/train.py model=isla_surface dataset=drivaer_ml_surface \
-    training.optimizer.lr=1e-3 compile=false
+# ISLA (Invariant Slice Attention), surface reference configuration (mesh in,
+# mesh out; lr 5e-4 pinned in the config). geo_kernel: null picks the exact
+# fused Triton geometry kernel on CUDA; force with model.geo_kernel=eager|fused.
+python src/train.py model=isla_surface dataset=drivaer_ml_surface compile=false
 
-# ISLA interior reference: boundary -> volume queries as SDF query tokens.
+# ISLA interior reference: boundary -> interior prediction points as tokens.
 # Pair with drivaer_ml_volume_reference, which writes the Horvitz-Thompson
-# corrected boundary measure used by routing and geometry scaling.
-python src/train.py model=isla_volume \
-    dataset=drivaer_ml_volume_reference training.optimizer.lr=1e-3 compile=false
+# corrected boundary measure the model reads from the boundary Mesh.
+python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference compile=false
 
 # GLOBE (mesh-native)
 # ~143 GB/GPU at sampling_resolution=50000 in bf16; 200000 does not fit
@@ -745,8 +749,7 @@ python src/train.py model=geotransolver_surface dataset=highlift_surface \
 
 # HiLift surface (ISLA reference configuration)
 python src/train.py model=isla_surface dataset=highlift_surface \
-    training.optimizer.lr=1e-3 compile=false training.num_epochs=200 \
-    sampling_resolution=100000
+    compile=false training.num_epochs=200 sampling_resolution=100000
 
 # HiLift volume
 python src/train.py model=geotransolver_volume_highlift dataset=highlift_volume \

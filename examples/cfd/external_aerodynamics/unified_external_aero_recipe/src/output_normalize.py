@@ -20,16 +20,15 @@ The recipe's loss / metrics consume `TensorDict[name -> tensor]` predictions
 keyed by the field names declared in the dataset YAML's ``targets:`` block.
 Different model output conventions need different unpacking:
 
-- **Mesh output** (e.g. GLOBE): ``output.point_data.select(*target_config)``
-  yields a TensorDict with batch_size ``[N]`` matching the mesh's points.
+- **Mesh output** (GLOBE, ISLA): a point-cloud ``Mesh`` whose ``point_data``
+  holds one leaf per target name (a dotted target name is a nested leaf),
+  each at its natural rank -- ``(N,)`` for a scalar, ``(N, 3)`` for a vector,
+  ``(N, 3, 3)`` for a symmetric tensor, of which the listed laboratory
+  components are read off. The result has batch_size ``[N]`` matching the
+  mesh's points.
 - **Tensor output** (e.g. GeoTransolver / Transolver / FLARE): a ``(B, N, C)``
   tensor whose channels are concatenated in ``target_config`` order; we
   slice by per-field dim count and squeeze the trailing 1 for scalars.
-- **Fields output** (ISLA): a TensorDict (or ``{name: tensor}`` mapping) keyed
-  by the target names, a dotted target name being a nested leaf, each tensor of
-  its declared rank -- ``(B, N)`` for a scalar, ``(B, N, 3)`` for a vector,
-  ``(B, N, 3, 3)`` for a symmetric tensor, of which the listed laboratory
-  components are read off.
 
 Kept in its own module (separate from ``train.py``) so tests can exercise
 the slicing logic without paying the cost of importing tensorboard.
@@ -37,7 +36,6 @@ the slicing logic without paying the cost of importing tensorboard.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
 from typing import Any, Literal, TypeAlias
 
 import torch
@@ -56,25 +54,24 @@ from physicsnemo.datapipes.keys import as_nested_key, format_leaf_keys
 from physicsnemo.mesh import Mesh
 
 ### Recipe-wide I/O contract literal: every model declares whether its
-### `forward()` consumes / returns Mesh-like objects, plain `(B, N, C)`
-### tensors, or (output side only) a mapping of named fields of declared
-### rank. The collate, output normalizer, and forward-pass dispatch all key
-### off this same enum.
-IOType: TypeAlias = Literal["mesh", "tensors", "fields"]
+### `forward()` consumes / returns Mesh-like objects or plain `(B, N, C)`
+### tensors. The collate, output normalizer, and forward-pass dispatch all
+### key off this same enum.
+IOType: TypeAlias = Literal["mesh", "tensors"]
 
 
 def require_output_type(cfg: DictConfig) -> IOType:
     """Return the model's declared ``output_type``, or raise if missing/invalid.
 
     Both entry points (``train.py`` / ``infer.py``) require the model YAML
-    to declare ``output_type`` (``"mesh"``, ``"tensors"`` or ``"fields"``) so
-    the forward output can be unpacked; this is the shared validation.
+    to declare ``output_type`` (``"mesh"`` or ``"tensors"``) so the forward
+    output can be unpacked; this is the shared validation.
     """
     output_type = cfg.get("output_type", None)
-    if output_type not in ("mesh", "tensors", "fields"):
+    if output_type not in ("mesh", "tensors"):
         raise ValueError(
             f"Model YAML must declare `output_type` as one of 'mesh', "
-            f"'tensors', 'fields'; got {output_type!r}."
+            f"'tensors'; got {output_type!r}."
         )
     return output_type
 
@@ -91,7 +88,7 @@ def split_concat_by_target(
     (so the leaf is shape ``(B, N)``); a ``"vector"`` field eats
     ``n_spatial_dims`` channels and keeps its trailing dim (leaf shape
     ``(B, N, n_spatial_dims)``). A symmetric-tensor target has no flat layout
-    and raises (``field_dim``): it needs a ``"fields"`` model.
+    and raises (``field_dim``): it needs a mesh-output model.
 
     Args:
         tensor: Concatenated output tensor, shape ``(B, N, C)`` where
@@ -156,65 +153,46 @@ def explode_tensor_targets(
     return out
 
 
-def _fields_lookup(output: Mapping[str, Any]) -> tuple[Callable[[str], Any], list]:
-    """``(get, available)`` for a ``fields`` output: a TensorDict is addressed by
-    nested key (a dotted target name is a nested leaf, as ISLA returns it), a plain
-    mapping by its own (possibly dotted) string keys."""
-    if isinstance(output, TensorDict):
-
-        def get(name: str) -> Any:
-            ### ``TensorDict.get`` raises ValueError for a path that runs through a
-            ### leaf tensor; that is "not found" here.
-            try:
-                return output.get(as_nested_key(name), None)
-            except ValueError:
-                return None
-
-        return get, format_leaf_keys(output)
-    return (lambda name: output.get(name, None), sorted(output))
-
-
-def select_fields_by_target(
-    output: Mapping[str, Any], target_config: dict[str, FieldType]
+def select_mesh_fields_by_target(
+    output: Mesh, target_config: dict[str, FieldType]
 ) -> TensorDict:
-    """Adapt a ``fields`` model output into the per-field TensorDict.
+    """Adapt a mesh-output model's ``Mesh`` into the per-field TensorDict.
 
-    The model's output names are the target names (the model YAML declares its
-    ``outputs:`` with the dataset's target names, dotted where the dataset nests
-    them). The output is a TensorDict (ISLA; a dotted name is a nested leaf) or
-    a plain ``{name: tensor}`` mapping. A ``"scalar"`` target takes the
-    ``(B, N)`` field; a ``"vector"`` target the ``(B, N, 3)`` field; a
-    symmetric-tensor target reads its listed laboratory components off the
-    ``(B, N, 3, 3)`` field, in the YAML's component order (leaf shape
-    ``(B, N, n_listed)``, matching :func:`forward_kwargs.extract_targets`).
+    The output Mesh's ``point_data`` holds one leaf per target name (the model
+    YAML declares its outputs with the dataset's target names, dotted where the
+    dataset nests them). A ``"scalar"`` target takes the ``(N,)`` leaf; a
+    ``"vector"`` target the ``(N, 3)`` leaf; a symmetric-tensor target reads its
+    listed laboratory components off the ``(N, 3, 3)`` leaf, in the YAML's
+    component order (leaf shape ``(N, n_listed)``, matching
+    :func:`forward_kwargs.extract_targets`). The result keeps the mesh's
+    batch_size ``[N]`` and device.
 
     Raises:
-        KeyError: If a target name is missing from the output.
-        ValueError: If a field's shape does not match its declared type.
+        KeyError: If a target name is missing from the output's ``point_data``.
+        ValueError: If a leaf's shape does not match its declared type.
     """
-    get, available = _fields_lookup(output)
-    fields = {name: get(name) for name in target_config}
-    missing = [name for name, f in fields.items() if not isinstance(f, torch.Tensor)]
+    pd = output.point_data
+    keys = [as_nested_key(name) for name in target_config]
+    missing = [name for name, key in zip(target_config, keys) if key not in pd]
     if missing:
         raise KeyError(
-            f"Model output is missing target fields {missing!r}; "
-            f"available: {available!r}."
+            f"Mesh output is missing target fields {missing!r}; "
+            f"available: {format_leaf_keys(pd)!r}"
         )
-    any_field = next(iter(fields.values()))
-    out = TensorDict({}, batch_size=any_field.shape[:2], device=any_field.device)
-    for name, ftype in target_config.items():
-        field = fields[name]
+    out = TensorDict({}, batch_size=pd.batch_size, device=pd.device)
+    for (name, ftype), key in zip(target_config.items(), keys):
+        field = pd[key]
         kind = field_kind(ftype)
-        expected = {"scalar": 2, "vector": 3, "symmetric_tensor": 4}[kind]
+        expected = {"scalar": 1, "vector": 2, "symmetric_tensor": 3}[kind]
         if field.ndim != expected:
             raise ValueError(
                 f"Output field {name!r} is declared {kind!r} and must have "
-                f"{expected} dims ((B, N{', 3' * (expected - 2)})), got shape "
+                f"{expected} dims ((N{', 3' * (expected - 1)})), got shape "
                 f"{tuple(field.shape)}."
             )
         if kind == "symmetric_tensor":
             field = select_tensor_components(field, ftype)
-        out.set(as_nested_key(name), field)
+        out.set(key, field)
     return out
 
 
@@ -227,9 +205,11 @@ def normalize_output_to_tensordict(
     """Adapt a model output into a `TensorDict` keyed by target name.
 
     For ``output_type == "mesh"``, the output is expected to be a `Mesh`
-    whose `.point_data` contains one tensor per target name (e.g. GLOBE);
-    we return ``output.point_data.select(*target_config)`` so the result
-    inherits the mesh's batch_size (``[N]``) and device.
+    whose `.point_data` contains one leaf per target name at its natural
+    rank (GLOBE, ISLA); we select them via
+    :func:`select_mesh_fields_by_target`, so the result inherits the mesh's
+    batch_size (``[N]``) and device and a symmetric-tensor target is reduced
+    to its listed components.
 
     For ``output_type == "tensors"``, the output is expected to be a
     ``(B, N, C)`` tensor whose channels are concatenated in
@@ -238,17 +218,12 @@ def normalize_output_to_tensordict(
     returns a ``(vol, surf)`` tuple; we take the non-None element
     automatically.
 
-    For ``output_type == "fields"``, the output is a TensorDict or a
-    ``{name: tensor}`` mapping keyed by the target names (ISLA; a dotted
-    target name is a nested leaf); we select the targets via
-    :func:`select_fields_by_target`.
-
     Args:
         output: Raw model output. ``Mesh`` for ``output_type='mesh'``;
             ``Tensor`` (or DoMINO ``(vol, surf)`` tuple) for
-            ``output_type='tensors'``; a mapping for ``output_type='fields'``.
+            ``output_type='tensors'``.
         target_config: Ordered ``{name: "scalar" | "vector" | tensor spec}`` mapping.
-        output_type: ``"mesh"``, ``"tensors"`` or ``"fields"``.
+        output_type: ``"mesh"`` or ``"tensors"``.
         n_spatial_dims: Vector-field dimensionality. Default 3.
 
     Returns:
@@ -259,18 +234,7 @@ def normalize_output_to_tensordict(
             raise TypeError(
                 f"output_type='mesh' but model returned {type(output).__name__}"
             )
-        keys = [as_nested_key(name) for name in target_config]
-        missing = [
-            name
-            for name, key in zip(target_config, keys)
-            if key not in output.point_data
-        ]
-        if missing:
-            raise KeyError(
-                f"Mesh output is missing target fields {missing!r}; "
-                f"available: {format_leaf_keys(output.point_data)!r}"
-            )
-        return output.point_data.select(*keys)
+        return select_mesh_fields_by_target(output, target_config)
 
     if output_type == "tensors":
         if isinstance(output, tuple):
@@ -305,12 +269,5 @@ def normalize_output_to_tensordict(
                 f"trailing channel dim (e.g. ``out.unsqueeze(-1)``)."
             )
         return split_concat_by_target(output, target_config, n_spatial_dims)
-
-    if output_type == "fields":
-        if not isinstance(output, Mapping):
-            raise TypeError(
-                f"output_type='fields' but model returned {type(output).__name__}"
-            )
-        return select_fields_by_target(output, target_config)
 
     raise ValueError(f"Unknown output_type {output_type!r}")

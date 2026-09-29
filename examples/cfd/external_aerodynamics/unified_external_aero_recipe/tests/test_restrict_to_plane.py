@@ -77,11 +77,11 @@ def test_isla_runs_natively_in_two_dimensions_on_the_restricted_domain():
     from physicsnemo.experimental.models import ISLA
 
     d2 = RestrictToPlane(vector_fields=VEC).apply_to_domain(_square_domain())
-    model = ISLA(outputs={"u": 0}, boundary_inputs={"bc_dirichlet": 0, "bc_value_g": 0}, query_inputs={"sdf": 0},
-                 hidden=32, n_layers=1, n_slices=8, dim=2, geo_kernel="eager", interior_geometry="provided", query_tokens=True)
-    b = d2.boundaries["outer"]
-    out = model(points=b.cell_centroids[None], normals=b.cell_data["normals"][None], measure_weights=b.cell_data["quadrature_measure"][None],
-                boundary_inputs={"bc_dirichlet": b.cell_data["bc_dirichlet"][None], "bc_value_g": b.cell_data["bc_value_g"][None]},
-                query_points=d2.interior.points[None], query_normals=d2.interior.point_data["sdf_normals"][None],
-                query_inputs={"sdf": torch.zeros(1, 200)})
-    assert out["u"].shape[:2] == (1, 200)
+    model = ISLA(outputs={"u": 0}, boundary_inputs={"bc_dirichlet": 0, "bc_value_g": 0},
+                 query_inputs={"sdf_normals": 1}, interior=True,
+                 hidden=32, n_layers=1, n_slices=8, dim=2, geo_kernel="eager")
+    ### The restricted boundary is a Mesh[1, 2] (a polyline): its cells carry the normals
+    ### and lengths ISLA reads; the interior Mesh's point_data carries the declared query input.
+    out = model(boundary_meshes={"outer": d2.boundaries["outer"]}, prediction_points=d2.interior)
+    assert out.point_data["u"].shape == (200,)
+    torch.testing.assert_close(out.points, d2.interior.points)

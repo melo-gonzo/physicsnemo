@@ -14,16 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The ISLA recipe configurations compose to the intended architecture (2026-09-15).
+"""The ISLA recipe configurations compose to the mesh contract and run end to end.
 
-The plain names carry the reference configuration (origin-free frame, RMS-pairwise-distance
-scale): ``model=isla_surface`` and ``model=isla_volume``. The deprecated ``_reference`` names resolve to
-the plain files. The interior reference pairs the Horvitz-Thompson-corrected boundary measure with
-the total-measure scale (2026-09-14)."""
+``model=isla_surface`` (surface task: predictions at the boundary cells) and
+``model=isla_volume`` / ``model=isla_volume_sdf`` (interior task: predictions at the
+dataset's interior points) all declare ``input_type: mesh`` / ``output_type: mesh`` and
+map the DomainMesh's boundary and global data onto ISLA's keyword-only mesh forward.
+Each config is composed with Hydra, instantiated at a reduced width, and driven through
+collate -> resolve_forward_kwargs -> ISLA.forward -> normalize_output_to_tensordict ->
+loss on a tiny synthetic DomainMesh shaped like the paired dataset's output."""
 
 import sys
 from pathlib import Path
 
+import hydra
 import pytest
 import torch
 from hydra import compose, initialize_config_dir
@@ -32,15 +36,29 @@ from omegaconf import OmegaConf
 _RECIPE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_RECIPE_ROOT / "src"))
 
+from collate import build_collate_fn  # noqa: E402
+from conftest import make_volume_domain_mesh  # noqa: E402
 from domain_transforms import ComposeQuadratureMeasure  # noqa: E402
+from loss import LossCalculator  # noqa: E402
+from output_normalize import normalize_output_to_tensordict  # noqa: E402
 
-from physicsnemo.mesh import Mesh  # noqa: E402
-from physicsnemo.mesh.calculus.measure import scale_measures  # noqa: E402
+from physicsnemo.datapipes.transforms.mesh import MeshToDomainMesh  # noqa: E402
+from physicsnemo.mesh import DomainMesh, Mesh  # noqa: E402
+from physicsnemo.mesh.calculus.measure import (  # noqa: E402
+    cell_measures,
+    scale_measures,
+)
 
 ISLA_TARGET = "physicsnemo.experimental.models.ISLA"
+SMALL = ["model.hidden=16", "model.n_layers=1", "model.n_slices=4", "model.geo_kernel=eager"]
+CONFIGS = [
+    ("isla_surface", "drivaer_ml_surface"),
+    ("isla_volume", "drivaer_ml_volume_reference"),
+    ("isla_volume_sdf", "drivaer_ml_volume_reference"),
+]
 
 
-def _compose(model, dataset):
+def _compose(model, dataset, *extra):
     """The recipe's model configs are `@package _global_`: the architecture block lands at cfg.model and
     the data-to-model mapping at cfg.forward_kwargs."""
     with initialize_config_dir(
@@ -48,70 +66,157 @@ def _compose(model, dataset):
     ):
         return compose(
             config_name="train",
-            overrides=[f"model={model}", f"dataset={dataset}", "+out_dim=5"],
+            overrides=[f"model={model}", f"dataset={dataset}", "+out_dim=5", *extra],
         )
 
 
-def test_plain_surface_name_is_the_reference_configuration():
-    """Surface defaults route the complete point measure to ISLA."""
-    cfg = _compose("isla_surface", "drivaer_ml_surface")
-    m = cfg.model
-    assert m._target_ == ISLA_TARGET
-    assert m.scale_mode == "rms_distance"
-    assert "frame_mode" not in m and "reference_length" not in m
-    assert m.geo_checkpoint is True
-    assert cfg.output_type == "fields"
-    ### Outputs are declared by the dataset's target names and ranks.
-    assert OmegaConf.to_container(m.outputs) == {"pressure": 0, "wss": 1}
-    assert OmegaConf.to_container(m.global_inputs) == {"freestream": 1}
-    assert cfg.forward_kwargs.global_inputs.freestream == "global_data.U_inf_dir"
-    assert (
-        cfg.forward_kwargs.measure_weights == "interior.point_data._effective_measure"
+def _surface_domain(n_cells: int = 12) -> DomainMesh:
+    """What drivaer_ml_surface.yaml hands the collate: a 1-in-3 cell subsample of a surface
+    with its Horvitz-Thompson measure, then MeshToDomainMesh (interior = cell centroids
+    carrying the targets; boundaries.vehicle = the surface, its cell_data keeping the
+    measure and the `normals` field the tensor-input models read)."""
+    g = torch.Generator().manual_seed(0)
+    mesh = Mesh(
+        points=torch.randn(n_cells * 3, 3, generator=g),
+        cells=torch.arange(n_cells * 3).reshape(n_cells, 3),
+        cell_data={
+            "pressure": torch.randn(n_cells, generator=g),
+            "wss": torch.randn(n_cells, 3, generator=g),
+        },
+        global_data={
+            "U_inf": torch.tensor([30.0, 0.0, 0.0]),
+            "U_inf_dir": torch.tensor([1.0, 0.0, 0.0]),
+            "L_ref": torch.tensor(5.0),
+        },
+    )
+    scale_measures(mesh, 3.0)
+    mesh.cell_data["normals"] = mesh.cell_normals
+    return MeshToDomainMesh(cell_data_targets=["pressure", "wss"])(mesh)
+
+
+def _volume_domain() -> DomainMesh:
+    """What drivaer_ml_volume_reference.yaml hands the collate: an interior point cloud
+    with sdf / sdf_normals and the targets, a vehicle boundary with the corrected measure
+    materialized by ComposeQuadratureMeasure, and U_inf_dir in global_data."""
+    domain = make_volume_domain_mesh(n_pts=64)
+    vehicle = domain.boundaries["vehicle"]
+    scale_measures(vehicle, 4.0)
+    vehicle = ComposeQuadratureMeasure()(vehicle)
+    gd = domain.global_data.clone()
+    gd["U_inf_dir"] = torch.tensor([1.0, 0.0, 0.0])
+    return DomainMesh(interior=domain.interior, boundaries={"vehicle": vehicle}, global_data=gd)
+
+
+def _targets(dataset: str) -> dict:
+    return OmegaConf.to_container(
+        OmegaConf.load(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml").targets
     )
 
 
-@pytest.mark.parametrize(
-    "deprecated, plain, dataset",
-    [
-        ("isla_surface_reference", "isla_surface", "drivaer_ml_surface"),
-        ("isla_volume_reference", "isla_volume", "drivaer_ml_volume_reference"),
-    ],
-)
-def test_deprecated_reference_names_resolve_to_the_plain_configs(
-    deprecated, plain, dataset
-):
-    """Deprecated config aliases retain the current model and field mappings."""
-    old, new = _compose(deprecated, dataset), _compose(plain, dataset)
-    for key in ("model", "forward_kwargs"):
-        assert OmegaConf.to_container(
-            old[key], resolve=False
-        ) == OmegaConf.to_container(new[key], resolve=False), key
+def _run(cfg, domain: DomainMesh, targets: dict):
+    """collate -> forward -> normalize -> loss for one composed config."""
+    model = hydra.utils.instantiate(cfg.model)
+    spec = OmegaConf.to_container(cfg.forward_kwargs, resolve=True)
+    batch = build_collate_fn(cfg.input_type, spec, targets)([(domain, {})])
+    with torch.no_grad():
+        out = model(**batch["forward_kwargs"])
+    assert isinstance(out, Mesh)
+    pred = normalize_output_to_tensordict(out, targets, cfg.output_type)
+    total, td = LossCalculator(targets, loss_type="mse")(
+        pred.float(), batch["targets"].float(), batch.get("target_measure")
+    )
+    assert torch.isfinite(total)
+    assert set(td.keys()) >= {f"loss/{name}" for name in targets}
+    return batch, out, pred
+
+
+@pytest.mark.parametrize("model, dataset", CONFIGS)
+def test_isla_configs_declare_the_mesh_contract(model, dataset):
+    """Every ISLA config is mesh in, mesh out; the model's outputs are the dataset's
+    targets by name and rank, and the freestream direction is declared under the
+    dataset's own leaf name so the model can select it from the pass-through
+    global_data."""
+    cfg = _compose(model, dataset)
+    m = cfg.model
+    assert m._target_ == ISLA_TARGET
+    assert cfg.input_type == "mesh" and cfg.output_type == "mesh"
+    assert cfg.forward_kwargs.boundary_meshes == {"vehicle": "boundaries.vehicle"}
+    assert cfg.forward_kwargs.global_data == "global_data"
+    assert OmegaConf.to_container(m.global_inputs) == {"U_inf_dir": 1}
+    assert m.hidden == 384 and m.n_layers == 12 and m.n_slices == 256 and m.mlp_ratio == 4
+    assert m.geo_checkpoint is True and m.geo_kernel is None
+    ### Removed options never come back through a config.
+    for gone in (
+        "scale_mode", "query_tokens", "query_mass", "query_independent",
+        "support_tokens", "n_decoder_layers", "interior_geometry", "use_measure_weights",
+    ):
+        assert gone not in m, gone
+    for gone in ("points", "normals", "measure_weights", "global_inputs", "query_points", "query_normals", "query_inputs"):
+        assert gone not in cfg.forward_kwargs, gone
+    ### Every output name is a dataset target.
+    targets = _targets(dataset)
+    assert set(OmegaConf.to_container(m.outputs)) == set(targets)
+
+
+def test_isla_surface_composes_and_runs():
+    """Surface task: no prediction points; the output Mesh's points are the boundary cells
+    in cell order, which is where MeshToDomainMesh put the targets, and the boundary
+    measure ISLA reads is the corrected measure aligned with the target measure."""
+    cfg = _compose("isla_surface", "drivaer_ml_surface", *SMALL)
+    assert "prediction_points" not in cfg.forward_kwargs
+    assert not cfg.model.get("interior", False)
+    assert OmegaConf.to_container(cfg.model.outputs) == {"pressure": 0, "wss": 1}
+    domain = _surface_domain()
+    batch, out, pred = _run(cfg, domain, _targets("drivaer_ml_surface"))
+    torch.testing.assert_close(out.points, domain.interior.points)
+    torch.testing.assert_close(
+        cell_measures(batch["forward_kwargs"]["boundary_meshes"]["vehicle"]),
+        batch["target_measure"],
+    )
+    assert pred["pressure"].shape == (12,) and pred["wss"].shape == (12, 3)
+    ### The pass-through global_data is what the model selected its direction from.
+    assert torch.equal(out.global_data["U_inf_dir"], domain.global_data["U_inf_dir"])
+
+
+def test_isla_volume_composes_and_runs():
+    """Interior task: the interior Mesh is the prediction-point cloud; no query inputs
+    are declared, so the stored sdf / sdf_normals are not read."""
+    cfg = _compose("isla_volume", "drivaer_ml_volume_reference", *SMALL)
+    assert cfg.model.interior is True
+    assert cfg.forward_kwargs.prediction_points == "interior"
+    assert cfg.model.get("query_inputs") is None
+    assert OmegaConf.to_container(cfg.model.outputs) == {"velocity": 1, "pressure": 0, "nut": 0}
+    domain = _volume_domain()
+    batch, out, pred = _run(cfg, domain, _targets("drivaer_ml_volume_reference"))
+    assert batch["forward_kwargs"]["prediction_points"] is domain.interior
+    torch.testing.assert_close(out.points, domain.interior.points)
+    assert pred["velocity"].shape == (64, 3) and pred["nut"].shape == (64,)
+
+
+def test_isla_volume_sdf_declares_the_stored_wall_geometry_as_query_inputs():
+    """The stored SDF and its gradient enter as declared rank-0 / rank-1 query inputs read
+    from the prediction Mesh's point_data; everything else is isla_volume."""
+    cfg = _compose("isla_volume_sdf", "drivaer_ml_volume_reference", *SMALL)
+    base = _compose("isla_volume", "drivaer_ml_volume_reference", *SMALL)
+    assert OmegaConf.to_container(cfg.model.query_inputs) == {"sdf": 0, "sdf_normals": 1}
+    assert OmegaConf.to_container(cfg.forward_kwargs) == OmegaConf.to_container(base.forward_kwargs)
+    domain = _volume_domain()
+    _, out, _ = _run(cfg, domain, _targets("drivaer_ml_volume_reference"))
+    torch.testing.assert_close(out.points, domain.interior.points)
+    ### Without the declared leaves the model refuses the prediction Mesh.
+    model = hydra.utils.instantiate(cfg.model)
+    bare = Mesh(points=domain.interior.points)
+    with pytest.raises(ValueError, match="missing the declared fields"):
+        model(
+            boundary_meshes={"vehicle": domain.boundaries["vehicle"]},
+            prediction_points=bare,
+            global_data=domain.global_data,
+        )
 
 
 def test_isla_volume_composes_with_the_corrected_measure_dataset():
-    """The volume pipeline materializes the boundary measure expected by ISLA."""
+    """The volume pipeline materializes the boundary measure ISLA reads from cell_data."""
     ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "drivaer_ml_volume_reference.yaml")
-    cfg = _compose("isla_volume", "drivaer_ml_volume_reference")
-    m = cfg.model
-    assert m.scale_mode == "rms_distance"
-    assert m.query_tokens is True
-    ### The interior geometry (direction and wall distance of every query) is computed
-    ### inside the model from the boundary sample (2026-09-23): no stored SDF is read.
-    assert m.get("query_inputs") is None and m.get("interior_geometry") is None
-    assert "query_normals" not in cfg.forward_kwargs
-    assert "query_inputs" not in cfg.forward_kwargs
-    assert cfg.forward_kwargs.query_points == "interior.points"
-    assert OmegaConf.to_container(m.outputs) == {"velocity": 1, "pressure": 0, "nut": 0}
-    ### the "_provided" variant keeps the stored field for the INTERNAL-GEOMETRY measurement
-    prov = _compose("isla_volume_provided", "drivaer_ml_volume_reference")
-    assert prov.model.interior_geometry == "provided"
-    assert OmegaConf.to_container(prov.model.query_inputs) == {"sdf": 0}
-    assert prov.forward_kwargs.query_inputs.sdf == "interior.point_data.sdf"
-    assert prov.forward_kwargs.query_normals == "interior.point_data.sdf_normals"
-    assert (
-        cfg.forward_kwargs.measure_weights
-        == "boundaries.vehicle.cell_data._effective_measure"
-    )
     raw = OmegaConf.to_container(
         ds.pipeline.transforms, resolve=False
     )  # ${dp:...} nodes kept as strings
@@ -121,11 +226,10 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
     assert ds.pipeline.reader.boundary_subsample == "cells"
 
 
-def test_total_measure_scale_sees_the_surface_area_through_the_corrected_field():
+def test_corrected_measure_sees_the_surface_area():
     """End to end on a toy surface: raw areas of a 1-in-5 subsample sum to a fifth of the
-    body; the corrected field sums to the body, so a measure-weighted length unit (the
-    RMS pairwise distance, or the optional total-measure unit checked here directly) is the
-    body's and not the subsample's."""
+    body; the corrected field ISLA reads sums to the body, so its measure-weighted length
+    unit is the body's and not the subsample's."""
     g = torch.Generator().manual_seed(0)
     pts = torch.rand(3000, 3, generator=g)
     mesh = Mesh(points=pts, cells=torch.arange(3000).reshape(1000, 3))
@@ -133,29 +237,18 @@ def test_total_measure_scale_sees_the_surface_area_through_the_corrected_field()
     sub = mesh.slice_cells(torch.arange(0, 1000, 5))
     scale_measures(sub, 5.0)
     sub = ComposeQuadratureMeasure()(sub)
-    raw_L = float(sub.cell_areas.sum().sqrt())
-    corrected_L = float(sub.cell_data["_effective_measure"].sum().sqrt())
-    assert abs(corrected_L**2 - full) / full < 0.15
-    assert raw_L**2 / full < 0.3
+    raw = float(sub.cell_areas.sum())
+    corrected = float(cell_measures(sub).sum())
+    assert abs(corrected - full) / full < 0.15
+    assert raw / full < 0.3
 
 
-@pytest.mark.parametrize(
-    "model, dataset",
-    [
-        ("isla_surface", "drivaer_ml_surface"),
-        ("isla_volume", "drivaer_ml_volume_reference"),
-        ("isla_volume_support", "drivaer_ml_volume_support"),
-    ],
-)
+@pytest.mark.parametrize("model, dataset", CONFIGS)
 def test_isla_global_vector_is_produced_by_the_dataset_pipeline(model, dataset):
-    """The ISLA configs read the unit freestream direction as ``global_data.U_inf_dir``;
-    the paired dataset must compute it (``ComputeFreestreamDirection`` -> ``U_inf_dir``).
-    The volume reference dataset lacked the transform until 2026-09-18 and the
-    interior configuration could not run as shipped."""
+    """The ISLA configs declare the unit freestream direction as ``U_inf_dir``; the paired
+    dataset must compute it (``ComputeFreestreamDirection`` -> ``U_inf_dir``)."""
     cfg = _compose(model, dataset)
-    gv = cfg.forward_kwargs.global_inputs.get("freestream")
-    assert gv == "global_data.U_inf_dir", gv
-    assert OmegaConf.to_container(cfg.model.global_inputs) == {"freestream": 1}
+    assert OmegaConf.to_container(cfg.model.global_inputs) == {"U_inf_dir": 1}
     ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
     raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
     producers = [
@@ -169,35 +262,16 @@ def test_isla_global_vector_is_produced_by_the_dataset_pipeline(model, dataset):
     )
 
 
-@pytest.mark.parametrize(
-    "model, dataset",
-    [
-        ("isla_surface", "drivaer_ml_surface"),
-        ("isla_surface_reference", "drivaer_ml_surface"),
-        ("isla_volume", "drivaer_ml_volume_reference"),
-        ("isla_volume_support", "drivaer_ml_volume_support"),
-    ],
-)
+@pytest.mark.parametrize("model, dataset", CONFIGS)
 def test_isla_configs_pin_the_protocol_learning_rate(model, dataset):
-    """The recipe's default rate (3e-3, GeoTransolver's) drives the relative frame to a mean-field
-    plateau within five epochs (LR-REF, 2026-09-18), so every ISLA config must carry its own rate:
-    5e-4, the reference configuration's (REF, 2026-09-23)."""
+    """The recipe's default rate (3e-3, GeoTransolver's) drives ISLA to a mean-field
+    plateau within five epochs, so every ISLA config carries its own rate: 5e-4, the
+    reference configuration's (REF, 2026-09-23)."""
     cfg = _compose(model, dataset)
     assert cfg.training.optimizer.lr == pytest.approx(5.0e-4)
 
 
 def test_cli_override_still_wins_over_the_pinned_rate():
     """Explicit learning-rate overrides take precedence over model defaults."""
-    with initialize_config_dir(
-        config_dir=str(_RECIPE_ROOT / "conf"), version_base=None
-    ):
-        cfg = compose(
-            config_name="train",
-            overrides=[
-                "model=isla_surface",
-                "dataset=drivaer_ml_surface",
-                "+out_dim=5",
-                "training.optimizer.lr=3.75e-4",
-            ],
-        )
+    cfg = _compose("isla_surface", "drivaer_ml_surface", "training.optimizer.lr=3.75e-4")
     assert cfg.training.optimizer.lr == pytest.approx(3.75e-4)

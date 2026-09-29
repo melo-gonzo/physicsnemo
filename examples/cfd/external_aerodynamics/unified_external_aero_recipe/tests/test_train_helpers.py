@@ -120,13 +120,14 @@ def test_forward_pass_preserves_query_measure_in_loss_metrics_and_gradients():
     ],
 )
 def test_isla_training_on_filtered_thin_triangles(device):
-    """Thin faces keep positive measures through filtering, ISLA, and weighted loss."""
+    """Thin faces keep positive measures through filtering, ISLA's mesh forward, and the
+    weighted loss; the boundary Mesh carries the corrected measure ISLA reads."""
     from collate import build_collate_fn
     from domain_transforms import DropDegenerateCells
 
     from physicsnemo.datapipes.transforms.mesh import MeshToDomainMesh
     from physicsnemo.experimental.models import ISLA
-    from physicsnemo.mesh.calculus import scale_measures
+    from physicsnemo.mesh.calculus import cell_measures, scale_measures
 
     mesh = Mesh(
         points=torch.tensor(
@@ -150,34 +151,33 @@ def test_isla_training_on_filtered_thin_triangles(device):
     scale_measures(mesh, 3.0)
     with pytest.warns(UserWarning, match="dropping 1 cell"):
         filtered = DropDegenerateCells()(mesh)
-    filtered.cell_data["normals"] = filtered.cell_normals
     domain = MeshToDomainMesh(cell_data_targets=["pressure"])(filtered)
     targets = {"pressure": "scalar"}
     batch = build_collate_fn(
-        "tensors",
+        "mesh",
         {
-            "points": "interior.points",
-            "normals": "boundaries.vehicle.cell_data.normals",
-            "global_inputs": {"freestream": "global_data.U_inf_dir"},
-            "measure_weights": "interior.point_data._effective_measure",
+            "boundary_meshes": {"vehicle": "boundaries.vehicle"},
+            "global_data": "global_data",
         },
         targets,
     )([(domain, {})])
     measure = batch["target_measure"]
-    torch.testing.assert_close(measure, measure.new_tensor([[0.00015, 1.5]]))
+    torch.testing.assert_close(measure, measure.new_tensor([0.00015, 1.5]))
+    ### The boundary Mesh keeps the same corrected measure in its cell_data, which
+    ### is what ISLA reads as the boundary tokens' quadrature measure.
     torch.testing.assert_close(
-        batch["forward_kwargs"]["measure_weights"].reshape_as(measure), measure
+        cell_measures(batch["forward_kwargs"]["boundary_meshes"]["vehicle"]), measure
     )
     model = ISLA(
         outputs={"pressure": 0},
-        global_inputs={"freestream": 1},
+        global_inputs={"U_inf_dir": 1},
         hidden=16,
         n_layers=1,
         n_slices=4,
         geo_kernel="eager",
     ).to(device)
     with torch.no_grad():
-        prediction = model(**batch["forward_kwargs"])["pressure"]
+        prediction = model(**batch["forward_kwargs"]).point_data["pressure"]
         error = prediction - batch["targets"]["pressure"]
         expected = (measure * error.square()).sum() / measure.sum()
     loss, _, _ = train.forward_pass(
@@ -186,7 +186,7 @@ def test_isla_training_on_filtered_thin_triangles(device):
         "float32",
         train.LossCalculator(targets, loss_type="mse"),
         train.MetricCalculator(targets, metrics=["mae"]),
-        output_type="fields",
+        output_type="mesh",
         target_config=targets,
     )
     torch.testing.assert_close(loss, expected)

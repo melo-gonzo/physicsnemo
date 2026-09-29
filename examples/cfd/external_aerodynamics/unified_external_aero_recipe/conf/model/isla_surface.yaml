@@ -16,54 +16,58 @@
 # limitations under the License.
 
 # ---------------------------------------------------------------------------
-# ISLA (Invariant Slice Attention) -- SURFACE recipe (reference configuration).
+# ISLA (Invariant Slice Attention) -- SURFACE task (reference configuration).
 # ---------------------------------------------------------------------------
-# The ISLA reference configuration: ISLA's one frame has no origin (positions
-# enter only through point-to-anchor differences; no centroid and no per-sample
-# frame anywhere in the forward pass; the centered-frame options were removed
-# on 2026-09-20), and the length unit is the measure-weighted root-mean-square
-# pairwise distance of the sampled surface (scale_mode=rms_distance: normalized,
-# center-free, finite on any boundary with a finite second moment; validated
-# against the total-measure unit on 2026-09-18, LEN-RMS, within 1.3%), so no
-# per-dataset reference length is needed. scale_mode=total_measure (the square
-# root of the total quadrature measure) remains an option and is the unit of
-# runs trained before then. Translation invariance is exact without centering;
-# the frame carries no information about where the mesher put its cells. The
-# setting is also the class default and is stated here explicitly.
+# ISLA is mesh-native: forward() takes the boundary as named Mesh objects,
+# the case's global data as a TensorDict and, for an interior task, the
+# prediction points as a point-cloud Mesh; it returns a point-cloud Mesh whose
+# point_data holds the declared outputs. One case per call, no batch axis
+# (the same contract as GLOBE; the recipe keeps the DomainMesh end-to-end
+# for `input_type: mesh`).
 #
-# Consumes the same DomainMesh paths as the GeoTransolver template plus the
-# recorded target quadrature measure (measure_weights). The freestream
-# direction is external aerodynamics' one global vector input (K = 1); other
-# PDEs pass their own global vectors and global scalars (see the ISLA class
-# docstring).
+# Surface task (`interior: false`, the class default): the outputs are
+# predicted at the boundary cells themselves, so no prediction points are
+# passed. The surface dataset's `MeshToDomainMesh` (interior_points:
+# cell_centroids) makes `interior` a point cloud at the vehicle's cell
+# centroids, in cell order, with the targets in its point_data, and keeps the
+# whole triangulated surface as `boundaries.vehicle`: the output Mesh's
+# points are the boundary cells in that same order, so predictions and
+# targets align point for point.
 #
-# The centered-frame variant (isla_surface_constant_gauge.yaml) was removed on
-# 2026-09-20 together with the class options that selected it.
-# Naming note: until 2026-09-15 this file carried the constant gauge and the
-# reference configuration lived in isla_surface_reference.yaml, which is now a
-# pointer to this file.
-input_type: tensors
-output_type: fields
+# From each boundary Mesh the model reads its cell centroids, cell normals
+# and cell measures; the quadrature measure is
+# `cell_data._effective_measure` when present (the Horvitz-Thompson corrected
+# measure that `SubsampleMesh` writes and `MeshToDomainMesh` keeps on the
+# boundary), else the geometric cell area. The `normals` cell_data field the
+# dataset computes for the tensor-input models is ignored.
+#
+# Frame: no origin (positions enter only through point-to-anchor
+# differences) and one length unit, the measure-weighted RMS pairwise
+# distance of the boundary sample; translation invariance is exact without
+# centering and no per-dataset reference length is needed.
+#
+# Global inputs are read from `global_data` by the declared name. External
+# aerodynamics has one global direction, the unit freestream `U_inf_dir`
+# written by the dataset's `ComputeFreestreamDirection`; other PDEs declare
+# their own global vectors and scalars under their dataset's leaf names.
+input_type: mesh
+output_type: mesh
 
 # Learning rate: 5e-4, the reference configuration's rate (REF verdict,
-# 2026-09-23, book notebook: ref-verdict), which is also the width rule
-# lr = 1e-3 x 192 / hidden at hidden 384 (the 192-wide protocol of 2026-09-17
-# trained at 1e-3). Pinned here because the recipe's default of 3e-3
+# 2026-09-23), which is also the width rule lr = 1e-3 x 192 / hidden at
+# hidden 384. Pinned here because the recipe's default of 3e-3
 # (GeoTransolver's) drives ISLA within five epochs to a mean-field plateau
-# (validation loss 0.06 against 0.0008 at 1e-3, 192 wide; notebook:
-# lrref-verdict) and 1e-2 diverges. For other widths start from the width rule
-# (3.75e-4 at 512; notebook: relframe-divergence, corner-wlr, cg-wlr verdicts).
-# A CLI override still wins.
+# (validation loss 0.06 against 0.0008 at 1e-3, 192 wide; book notebook:
+# lrref-verdict) and 1e-2 diverges. For other widths start from the width
+# rule (3.75e-4 at 512). A CLI override still wins.
 training:
   optimizer:
     lr: 5.0e-4
 
 forward_kwargs:
-  points: interior.points
-  normals: boundaries.vehicle.cell_data.normals
-  measure_weights: interior.point_data._effective_measure
-  global_inputs:
-    freestream: global_data.U_inf_dir   # the one global direction of external aerodynamics; other PDEs pass their own fields
+  boundary_meshes:
+    vehicle: boundaries.vehicle       # Mesh[2, 3]; centroids, normals and measures are read from it
+  global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
 model:
   _target_: physicsnemo.experimental.models.ISLA
@@ -71,18 +75,18 @@ model:
     pressure: 0
     wss: 1
   global_inputs:
-    freestream: 1                # a rank-1 global input: normalized to a unit direction inside the model
+    U_inf_dir: 1                 # a rank-1 global input, read from global_data.U_inf_dir; normalized to a unit direction inside the model
   hidden: 384                  # the reference configuration (REF verdict, 2026-09-23); also the class defaults
   n_layers: 12
   n_slices: 256
   mlp_ratio: 4
-  scale_mode: rms_distance
   # Rebuild the per-slice geometric invariants inside backward instead of
   # storing them: forward and gradients bitwise identical, lower peak training
   # memory for a modest step-time cost. Set false to trade memory for speed.
   geo_checkpoint: true
-  # Geometry kernel: null = automatic (2026-09-19 ruling): the exact fused Triton kernel
-  # wherever it can run (CUDA, one global direction, <= 1024 slices, no rank-1/2 per-token
-  # inputs; about a third of the eager step time and memory at 200,000 cells), the eager
-  # PyTorch region otherwise. Force with `eager` or `fused`.
+  # Geometry kernel: null = automatic: the exact fused Triton kernel wherever
+  # it can run (CUDA, one to four per-point vectors, <= 1024 slices, no rank-2
+  # per-token inputs; about a third of the eager step time and memory at
+  # 200,000 cells), the eager PyTorch region otherwise. Force with `eager` or
+  # `fused`.
   geo_kernel: null

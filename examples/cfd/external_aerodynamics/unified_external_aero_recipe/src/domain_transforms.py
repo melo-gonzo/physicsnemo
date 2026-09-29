@@ -38,11 +38,6 @@ that consume the full boundary-value problem instead read the whole
   boundary: ``MeshToDomainMesh.apply_to_domain`` is an identity
   passthrough.  :class:`BoundaryMeshToDomainMesh` adds exactly that
   domain-aware path.
-- ``SetGlobalField`` only defines the ``Mesh`` path; its default
-  ``apply_to_domain`` broadcast writes each sub-mesh's own ``global_data``
-  and never the *domain-level* ``global_data`` that the recipe contract
-  (and DomainMesh-native models) read.  :class:`SetDomainGlobalField`
-  overrides the domain path to inject at the domain level.
 - ``NonDimensionalizeByMetadata`` never touches ``global_data``, so a
   declared freestream drive would be the RAW physical vector.
   :class:`ComputeFreestreamDirection` derives the unit direction as a new
@@ -58,9 +53,6 @@ YAML configs.  Import this module before Hydra instantiation
 
 from __future__ import annotations
 
-import math
-import json
-import zlib
 from collections.abc import Sequence
 from warnings import warn
 
@@ -74,7 +66,6 @@ from physicsnemo.datapipes.registry import register
 from physicsnemo.datapipes.transforms.mesh import (
     MeshToDomainMesh,
     RandomRotateMesh,
-    SetGlobalField,
     SubsampleMesh,
 )
 from physicsnemo.datapipes.transforms.mesh.base import MeshTransform
@@ -153,36 +144,6 @@ class TopologyAwareDomainMeshReader(DomainMeshReader):
                 for name in dm.boundary_names
             },
             global_data=dm.global_data,
-        )
-
-
-@register()
-class SetDomainGlobalField(SetGlobalField):
-    r"""``SetGlobalField`` that injects into *domain-level* ``global_data``.
-
-    Identical to :class:`~physicsnemo.datapipes.transforms.mesh.SetGlobalField`
-    on a bare ``Mesh``.  On a ``DomainMesh`` the base class's default
-    ``apply_to_domain`` broadcast would set every sub-mesh's own
-    ``global_data`` while leaving ``DomainMesh.global_data`` -- the level
-    the recipe contract reads freestream conditions from -- untouched.
-    This override writes the constant fields at the domain level instead
-    (sub-mesh ``global_data`` is left unchanged).
-
-    Typical use: inject the constant scale gauge ``reference_length: 1.0``
-    into an already-nondimensionalized DomainMesh pipeline (positions are
-    scaled by ``L_ref`` in ``NonDimensionalizeByMetadata``, so the gauge in
-    that space is exactly 1.0).
-    """
-
-    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
-        """Set the configured domain-level global fields."""
-        reference = domain.interior.points
-        new_gd = domain.global_data.clone()
-        new_gd.update(self._fields.to(device=reference.device, dtype=reference.dtype))
-        return DomainMesh(
-            interior=domain.interior,
-            boundaries=domain.boundaries,
-            global_data=new_gd,
         )
 
 
@@ -266,139 +227,6 @@ class ComputeFreestreamDirection(MeshTransform):
         return (
             f"{self._output_field} = {self._velocity_field} / |{self._velocity_field}|"
         )
-
-
-@register()
-class RotateGlobalVectorInPlane(MeshTransform):
-    r"""Write a copy of a ``(3,)`` global vector rotated about ``z`` into ``global_data``.
-
-    ``global_data[output_field] = R_z(angle) @ global_data[input_field]``. Used by the FRAME-AF
-    mechanism controls (2026-09-24) to build a *case-dependent* second in-plane direction (the
-    inlet direction rotated by 90 degrees), as opposed to the fixed laboratory axes that
-    ``SetDomainGlobalField`` writes. Domain-aware like :class:`ComputeFreestreamDirection`.
-    """
-
-    def __init__(self, input_field: str, output_field: str, angle_deg: float = 90.0) -> None:
-        super().__init__()
-        self._input_field = input_field
-        self._output_field = output_field
-        a = math.radians(angle_deg)
-        self._rot = torch.tensor(
-            [[math.cos(a), -math.sin(a), 0.0], [math.sin(a), math.cos(a), 0.0], [0.0, 0.0, 1.0]]
-        )
-
-    def _rotated(self, global_data: TensorDict) -> torch.Tensor:
-        if self._input_field not in global_data.keys():
-            raise KeyError(
-                f"RotateGlobalVectorInPlane: {self._input_field!r} not found in global_data "
-                f"(available: {sorted(global_data.keys())!r})."
-            )
-        v = global_data[self._input_field].float()
-        if v.shape != (3,):
-            raise ValueError(f"RotateGlobalVectorInPlane: expected a (3,) vector, got {tuple(v.shape)}.")
-        return self._rot.to(v.device) @ v
-
-    def __call__(self, mesh: Mesh) -> Mesh:
-        new_gd = mesh.global_data.clone()
-        new_gd[self._output_field] = self._rotated(mesh.global_data)
-        new_mesh = mesh.copy()  # ty: ignore[unresolved-attribute]
-        new_mesh.global_data = new_gd
-        return new_mesh
-
-    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
-        new_gd = domain.global_data.clone()
-        new_gd[self._output_field] = self._rotated(domain.global_data)
-        return DomainMesh(interior=domain.interior, boundaries=domain.boundaries, global_data=new_gd)
-
-    def extra_repr(self) -> str:
-        return f"{self._output_field} = R_z @ {self._input_field}"
-
-
-@register()
-class SplitInteriorSupport(MeshTransform):
-    r"""Move a deterministic prefix of the interior points into a ``support``
-    boundary (transfer program D1, 2026-09-09).
-
-    ISLA's ``support_tokens`` mode needs an interior *support* set that is a
-    function of the case, not of the requested output points. The volume
-    reader already draws the interior sample deterministically per case
-    (``subsample_n_points`` with a per-index generator), so the first
-    ``n_support`` interior points are a reproducible per-case set. This
-    transform moves them, with the listed ``point_data`` fields (e.g. the
-    signed distance and its gradient), into ``boundaries[boundary_name]`` as
-    a points-only ``Mesh``; the remaining interior points, which keep every
-    field including the targets, are the passive queries the loss scores.
-    Run it *after* the SDF transform (so the support carries the SDF) and
-    before target injection; the ``targets:`` block then attaches to the
-    reduced interior only.
-
-    At inference the same transform yields the same support for a case, so a
-    sentinel-query study can hold the support fixed while the requested
-    query set varies (see the eval skeleton in
-    ``examples/cfd/mesh_transformer/research/transfer_program/studies/computational_support``).
-    """
-
-    def __init__(
-        self,
-        n_support: int,
-        boundary_name: str = "support",
-        point_data_fields: tuple[str, ...] = ("sdf", "sdf_normals"),
-    ) -> None:
-        super().__init__()
-        if n_support <= 0:
-            raise ValueError("n_support must be positive")
-        self.n_support = int(n_support)
-        self.boundary_name = boundary_name
-        self.point_data_fields = tuple(point_data_fields)
-
-    def __call__(
-        self, mesh: Mesh
-    ) -> Mesh:  # bare Mesh: identity (support needs a DomainMesh)
-        return mesh
-
-    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
-        """Split interior samples into support inputs and prediction queries."""
-        interior = domain.interior
-        n = interior.points.shape[0]
-        if n <= self.n_support:
-            raise ValueError(
-                f"SplitInteriorSupport: interior has {n} points, need more than n_support={self.n_support}"
-            )
-        idx = torch.arange(n, device=interior.points.device)
-        support = interior.slice_points(idx[: self.n_support])
-        queries = interior.slice_points(idx[self.n_support :])
-        keep = {
-            k: support.point_data[k]
-            for k in self.point_data_fields
-            if k in support.point_data.keys()
-        }
-        missing = [k for k in self.point_data_fields if k not in keep]
-        if missing:
-            raise KeyError(
-                f"SplitInteriorSupport: interior point_data lacks {missing!r}"
-            )
-        support_mesh = Mesh(
-            points=support.points,
-            cells=support.cells,
-            point_data=TensorDict(keep, batch_size=[support.points.shape[0]]),
-            global_data=interior.global_data,
-        )
-        boundaries = (
-            dict(domain.boundaries.items())
-            if hasattr(domain.boundaries, "items")
-            else {name: domain.boundaries[name] for name in domain.boundary_names}
-        )
-        if self.boundary_name in boundaries:
-            raise KeyError(
-                f"SplitInteriorSupport: boundary {self.boundary_name!r} already exists"
-            )
-        boundaries[self.boundary_name] = support_mesh
-        return DomainMesh(
-            interior=queries, boundaries=boundaries, global_data=domain.global_data
-        )
-
-    def extra_repr(self) -> str:
-        return f"n_support={self.n_support}, boundary_name={self.boundary_name!r}, fields={self.point_data_fields!r}"
 
 
 @register()
@@ -965,70 +793,6 @@ class StackScalarFields(MeshTransform):
             f"{self._association}[{self._output_field!r}] = stack({self._fields}, "
             f"pad to {self._n_components})"
         )
-
-
-@register()
-class SetGlobalFieldsFromTable(MeshTransform):
-    r"""Per-case global fields from a JSON table keyed by case name.
-
-    FRAME-FULL (2026-09-10): the frame of a surface (area-weighted centroid,
-    RMS radius) is a property of the geometry, so it is computed once per
-    case from the FULL mesh and passed in as ``global_data`` instead of being
-    estimated from the sampled points: no sampling dependence, no estimator
-    variance. The table is ``{case_name: {field: value, ...}, ...}`` (keys
-    starting with ``_`` are provenance and ignored); the case is identified
-    through ``global_data[key_field]``, the CRC-32 case key
-    :class:`~merge_global_data.MeshReaderWithGlobalData` writes with
-    ``store_case_key: true``, so every listed name is hashed the same way at
-    construction (a hash collision among the listed names is an error).
-    Fields are written in the mesh's dtype; place after
-    ``NonDimensionalizeByMetadata`` and give the table's values in the same
-    coordinates (the frame datasets omit ``CenterMesh``, whose shift is a
-    sample statistic).
-    """
-
-    def __init__(
-        self, table: str, fields: Sequence[str], key_field: str = "case_key"
-    ) -> None:
-        super().__init__()
-        self._table_path = str(table)
-        self._fields = tuple(fields)
-        self._key_field = key_field
-        with open(self._table_path) as f:
-            raw = json.load(f)
-        self._rows: dict[int, TensorDict] = {}
-        for name, row in raw.items():
-            if name.startswith("_"):
-                continue
-            key = zlib.crc32(name.encode()) & 0x7FFFFFFF
-            if key in self._rows:
-                raise ValueError(
-                    f"SetGlobalFieldsFromTable: case-key collision for {name!r} in {table}"
-                )
-            self._rows[key] = TensorDict(
-                {k: torch.as_tensor(row[k], dtype=torch.float64) for k in self._fields},
-                batch_size=[],
-            )
-
-    def __call__(self, mesh: Mesh) -> Mesh:
-        if self._key_field not in mesh.global_data.keys():
-            raise KeyError(
-                f"SetGlobalFieldsFromTable: global_data[{self._key_field!r}] missing; "
-                f"set store_case_key: true on the reader."
-            )
-        key = int(mesh.global_data[self._key_field])
-        if key not in self._rows:
-            raise KeyError(
-                f"SetGlobalFieldsFromTable: case key {key} not in {self._table_path}"
-            )
-        new_gd = mesh.global_data.clone()
-        new_gd.update(
-            self._rows[key].to(device=mesh.points.device, dtype=mesh.points.dtype)
-        )
-        return mesh.with_data(global_data=new_gd)
-
-    def extra_repr(self) -> str:
-        return f"{list(self._fields)} from {self._table_path} ({len(self._rows)} cases) by {self._key_field}"
 
 
 @register()
