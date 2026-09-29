@@ -30,6 +30,7 @@ from ._quantile import require_feasible_alpha
 from ._validation import (
     TIERS,
     Tier,
+    _field_label,
     broadcast_difficulty,
     check_aux,
     check_difficulty,
@@ -83,19 +84,19 @@ def _validate_thresholds(
     for key, value in field_items(thresholds):
         check_floating(key, "threshold", value)
         if value.numel() == 0:
-            raise ValueError(f"Field '{key}': empty threshold tensor.")
+            raise ValueError(f"{_field_label(key)}: empty threshold tensor.")
         check_finite(key, "threshold", value)
         if tier == "cellwise":
             if value.ndim == 0:
                 raise ValueError(
-                    f"Field '{key}': cellwise thresholds must have at least one "
+                    f"{_field_label(key)}: cellwise thresholds must have at least one "
                     "dimension, got a scalar."
                 )
             threshold = value
         else:
             if value.ndim != 0:
                 raise ValueError(
-                    f"Field '{key}': {tier} thresholds must be scalars, got "
+                    f"{_field_label(key)}: {tier} thresholds must be scalars, got "
                     f"shape {tuple(value.shape)}."
                 )
             # Scalar fitted thresholds always live in float64. This prevents
@@ -103,7 +104,7 @@ def _validate_thresholds(
             threshold = value.to(torch.float64)
         if score_kind not in _SIGNED_THRESHOLD_KINDS and bool((threshold < 0).any()):
             raise ValueError(
-                f"Field '{key}': negative threshold for nonnegative score "
+                f"{_field_label(key)}: negative threshold for nonnegative score "
                 f"kind {score_kind!r}."
             )
         out[key] = threshold.detach().clone()
@@ -312,7 +313,7 @@ class ConformalPredictor:
         if self._tier == "cellwise":
             if threshold.shape != prediction.shape:
                 raise ValueError(
-                    f"Field '{key}': prediction shape {tuple(prediction.shape)} "
+                    f"{_field_label(key)}: prediction shape {tuple(prediction.shape)} "
                     f"differs from calibrated shape {tuple(threshold.shape)}."
                 )
             return threshold

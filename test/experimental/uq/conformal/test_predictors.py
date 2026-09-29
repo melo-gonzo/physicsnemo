@@ -152,6 +152,12 @@ def test_constructor_tier_invariants_and_threshold_guards(overrides, error, matc
         make_predictor(**overrides)
 
 
+def test_plain_tensor_errors_do_not_leak_the_internal_key():
+    with pytest.raises(ValueError, match="^Plain tensor: negative") as info:
+        make_predictor(thresholds=torch.tensor(-1.0))
+    assert "__tensor__" not in str(info.value)
+
+
 def test_public_api_includes_the_artifact_loader():
     expected = {
         "AbsoluteErrorScore",
