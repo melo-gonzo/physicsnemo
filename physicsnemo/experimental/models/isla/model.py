@@ -658,6 +658,18 @@ class _RoutingLogits(nn.Module):
     one slice however its weights grow (ROUTING-SAT measured that state as the
     mean-field plateau's mechanism). The parameter is ``weight`` in both modes
     so the two share a state-dict layout; ``bias`` exists only in linear mode.
+
+    ``conditioned`` (PROTO-COND, 2026-09-29; the FLARE++ idea of input-synthesized
+    routing queries, Shaffer-independent: arXiv 2608.11519): the prototypes are not
+    the static rows of ``weight`` but are synthesized per sample: each static row
+    acts as a seed that attends over the token states with a measure-weighted
+    softmax (``log_w`` enters as a log-space bias, so the summary is a quadrature
+    of the tokens and invariant to a uniform rescale of the weights), and the
+    seed plus the attended value is the prototype the cosine routing compares
+    against. Token states are invariant features, so the prototypes are
+    invariant and the contracts hold; the routing stays bounded by the
+    temperature. Adds ``2 hidden^2`` parameters per block (the key and value
+    maps). Cosine mode only.
     """
 
     def __init__(
@@ -666,19 +678,41 @@ class _RoutingLogits(nn.Module):
         n_slices: int,
         mode: str = "cosine",
         temperature: float = 10.0,
+        conditioned: bool = False,
     ) -> None:
         super().__init__()
         if mode not in ("linear", "cosine"):
             raise ValueError(f"routing_norm must be 'linear' or 'cosine', got {mode!r}")
+        if conditioned and mode != "cosine":
+            raise ValueError("conditioned slice prototypes require routing_norm='cosine'")
         self.mode = mode
         self.temperature = float(temperature)
+        self.conditioned = bool(conditioned)
         lin = nn.Linear(hidden, n_slices, bias=(mode == "linear"))
         self.weight = lin.weight
         self.bias = lin.bias
+        if self.conditioned:
+            self.k_proj = nn.Linear(hidden, hidden, bias=False)
+            self.v_proj = nn.Linear(hidden, hidden, bias=False)
+            self.scale = 1.0 / math.sqrt(hidden)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def prototypes(self, x: torch.Tensor, log_w: torch.Tensor | None) -> torch.Tensor:
+        """Per-sample prototypes (B, S, hidden) from the seeds and the token states."""
+        seeds = self.weight  # (S, H)
+        att = torch.einsum("sh,bnh->bsn", seeds.to(x.dtype), self.k_proj(x)) * self.scale  # (B, S, N)
+        if log_w is not None:
+            att = att + log_w[..., 0][:, None, :].to(att.dtype)
+        att = torch.softmax(att if att.dtype in (torch.float32, torch.float64) else att.float(), dim=-1).to(x.dtype)
+        return seeds.to(x.dtype)[None] + torch.einsum("bsn,bnh->bsh", att, self.v_proj(x))
+
+    def forward(self, x: torch.Tensor, log_w: torch.Tensor | None = None) -> torch.Tensor:
         if self.mode == "linear":
             return F.linear(x, self.weight, self.bias)
+        if self.conditioned:
+            protos = self.prototypes(x, log_w)
+            return self.temperature * torch.einsum(
+                "bnh,bsh->bns", F.normalize(x, dim=-1), F.normalize(protos, dim=-1)
+            )
         return self.temperature * F.linear(
             F.normalize(x, dim=-1), F.normalize(self.weight, dim=-1)
         )
@@ -874,6 +908,7 @@ class _SliceBlock(nn.Module):
         local_rho: float | None = None,
         local_weights: str = "gaussian",
         local_gradient: bool = False,
+        slice_prototypes: str = "static",
     ) -> None:
         super().__init__()
         self.use_relational_geo = use_relational_geo
@@ -908,7 +943,7 @@ class _SliceBlock(nn.Module):
         self.geo_checkpoint = bool(geo_checkpoint)
         self.norm_assign = nn.LayerNorm(hidden)
         self.assign = _RoutingLogits(
-            hidden, n_slices, routing_norm, routing_temperature
+            hidden, n_slices, routing_norm, routing_temperature, conditioned=(slice_prototypes == "conditioned")
         )
         ### Relational geometry (v2): per-slice equivariant anchors and
         ### point-anchor invariants -- many local, data-adaptive reference
@@ -958,7 +993,7 @@ class _SliceBlock(nn.Module):
             h = h + self.local_out(torch.cat([pooled_h, self.local_geo(pooled_geo.to(h.dtype))], dim=-1))
         ### Soft assignment of points to slices; measure weights enter as a
         ### log-space bias so slice states are quadrature-weighted means.
-        logits = self.assign(self.norm_assign(h))  # (B, N, S)
+        logits = self.assign(self.norm_assign(h), log_w)  # (B, N, S)
         a = _softmax_over_points(
             logits + log_w, self.fast_point_softmax
         )  # normalized over points
@@ -1626,6 +1661,16 @@ class ISLA(Module):
             each global direction (``1 + K`` invariant finite-difference channels
             per hidden unit, in units of the state per ``local_rho``), the
             edge-frame directional derivative of a meshfree flux law. Default off.
+        slice_prototypes: ``"static"`` (default): each slice block routes tokens against
+            a learned prototype per slice that is the same for every sample.
+            ``"conditioned"`` (PROTO-COND, 2026-09-29): the prototypes are synthesized
+            per sample, each seed attending over the token states with a
+            measure-weighted softmax and adding the attended value, so the slots
+            adapt to the sample's boundary data before routing (the FLARE++
+            routing-query idea). Token states are invariant, so the prototypes and
+            the contracts are unchanged; cosine routing keeps the logits bounded;
+            ``2 hidden^2`` parameters per block are added. Under the universalization
+            rule: default everywhere or deleted.
         routing_norm: ``"cosine"`` (default): each block's point-to-slice
             routing logits are ``routing_temperature`` times the cosine between
             the normalized token state and a learned prototype per slice, which
@@ -1739,6 +1784,7 @@ class ISLA(Module):
         local_k: int = 32,
         local_weights: str = "gaussian",
         local_gradient: bool = False,
+        slice_prototypes: str = "static",
         dim: int = 3,
         eps: float = 1e-12,
     ) -> None:
@@ -1769,6 +1815,12 @@ class ISLA(Module):
             raise ValueError("local_weights='lpr' and local_gradient require local_rho and local_k > 0")
         self.local_weights = str(local_weights)
         self.local_gradient = bool(local_gradient)
+        ### PROTO-COND (2026-09-29): static or per-sample (seed-attention) slice prototypes.
+        if slice_prototypes not in ("static", "conditioned"):
+            raise ValueError(f"slice_prototypes must be 'static' or 'conditioned', got {slice_prototypes!r}")
+        if slice_prototypes == "conditioned" and routing_norm != "cosine":
+            raise ValueError("slice_prototypes='conditioned' requires routing_norm='cosine'")
+        self.slice_prototypes = str(slice_prototypes)
         if interior_geometry not in ("nearest_boundary", "provided"):
             raise ValueError(
                 f"interior_geometry must be 'nearest_boundary' or 'provided', got {interior_geometry!r}"
@@ -1940,6 +1992,7 @@ class ISLA(Module):
                 local_rho=self.local_rho,
                 local_weights=self.local_weights,
                 local_gradient=self.local_gradient,
+                slice_prototypes=self.slice_prototypes,
             )
             for _ in range(n_layers)
         )
