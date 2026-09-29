@@ -43,9 +43,7 @@ _SCHEMA_KEYS = {
     "mesh_fingerprint",
     "provenance",
 }
-# The single authoritative kwarg table per strategy kind: the encoder reads
-# these attributes off the live strategy, and the decoder type-checks the
-# same names: one list, so the two directions cannot drift apart.
+# One kwarg table per strategy kind, shared by encoder and decoder.
 _SCORE_KWARG_TYPES = {
     "absolute_error": {},
     "normalized_error": {"eps": float},
@@ -173,13 +171,7 @@ def _parse_artifact(payload: object) -> ConformalPredictor:
 def _artifact_payload(
     predictor: ConformalPredictor, provenance: Mapping | None
 ) -> dict:
-    """Encode public predictor state.
-
-    The threshold entries are serialized as CPU views of the predictor's own
-    (already validated, standalone) storage; ``torch.save`` only reads them,
-    so no second full-size copy is materialized here. Semantic validation
-    happens once, on the read-back in :func:`_save_predictor`.
-    """
+    """Encode public predictor state; :func:`_save_predictor` validates the read-back."""
     chosen_provenance = predictor.provenance if provenance is None else provenance
     difficulty = predictor.difficulty
     return {
@@ -219,8 +211,7 @@ def _save_predictor(
     try:
         with os.fdopen(descriptor, "wb") as handle:
             torch.save(payload, handle)
-        # Release the payload before the integrity read-back so at most one
-        # extra full-size threshold copy is ever live beside the predictor.
+        # Free the payload so the read-back is the only extra threshold copy.
         del payload
         _load_predictor(temporary, map_location="cpu")
         os.replace(temporary, path)
@@ -235,31 +226,7 @@ def _save_predictor(
 def _load_predictor(
     path: Path | str, map_location: str | torch.device = "cpu"
 ) -> ConformalPredictor:
-    r"""Load and semantically validate a fitted predictor artifact.
-
-    :meth:`~physicsnemo.experimental.uq.conformal.ConformalPredictor.load` is
-    the equivalent class-level entry point.
-
-    Parameters
-    ----------
-    path : Path | str
-        Artifact written by
-        :meth:`~physicsnemo.experimental.uq.conformal.ConformalPredictor.save`.
-    map_location : str | torch.device, optional
-        Device for the loaded thresholds. Default is ``"cpu"``.
-
-    Returns
-    -------
-    ConformalPredictor
-        The reconstructed
-        :class:`~physicsnemo.experimental.uq.conformal.ConformalPredictor`.
-
-    Notes
-    -----
-    The file is read with ``torch.load(weights_only=True)``. Raises
-    ``ValueError`` when the payload is not a conformal artifact, has an
-    unsupported version, or fails the schema and predictor validation.
-    """
+    """Implementation of :meth:`ConformalPredictor.load`."""
     payload = torch.load(path, map_location=map_location, weights_only=True)
     try:
         return _parse_artifact(payload)

@@ -100,8 +100,7 @@ def _validate_thresholds(
                     f"{_field_label(key)}: {tier} thresholds must be scalars, got "
                     f"shape {tuple(value.shape)}."
                 )
-            # Scalar fitted thresholds always live in float64. This prevents
-            # deployment-time scalar promotion from shrinking a calibrated rank.
+            # float64 so scalar promotion at predict time cannot shrink the rank.
             threshold = value.to(torch.float64)
         if score_kind not in _SIGNED_THRESHOLD_KINDS and bool((threshold < 0).any()):
             raise ValueError(

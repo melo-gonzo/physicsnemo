@@ -65,13 +65,7 @@ __all__ = [
 
 
 def _coarsest_finfo(*tensors: Tensor | None) -> torch.finfo:
-    """``finfo`` of the least-precise floating dtype among the inputs.
-
-    The slack that protects the inversion must be sized by the dtype the
-    score arithmetic actually rounds in, which is driven by the aux tensors
-    as much as by the prediction (float16 CQR heads with a float64
-    prediction round in float16, not float64).
-    """
+    """``finfo`` of the least-precise floating dtype among the inputs (aux included)."""
     infos = [
         torch.finfo(t.dtype)
         for t in tensors
@@ -83,16 +77,9 @@ def _coarsest_finfo(*tensors: Tensor | None) -> torch.finfo:
 
 
 def _slack_threshold(threshold: Tensor, *dtype_sources: Tensor | None) -> Tensor:
-    """Threshold in float64 with a conservative inflation for the working dtypes.
+    """Float64 threshold inflated by ``4 * eps * |t| + 4 * tiny`` of the coarsest dtype.
 
-    A target whose finite-precision score equals the threshold can sit up
-    to 0.5 ulp (of the threshold, in the working dtype) beyond the exact
-    inverse, plus rounding from the score's own arithmetic (division,
-    normalization). Inflating the threshold by ``4 * eps * |threshold| + 4 *
-    tiny``, with ``eps``/``tiny`` taken from the coarsest dtype involved in
-    the score arithmetic, dominates that envelope, so the outward-rounded
-    interval never excludes a score-admitted target (see
-    :func:`_outward_interval`).
+    The slack dominates score rounding, so no score-admitted target is excluded.
     """
     t = threshold.to(torch.float64)
     fi = _coarsest_finfo(*dtype_sources)
@@ -102,14 +89,7 @@ def _slack_threshold(threshold: Tensor, *dtype_sources: Tensor | None) -> Tensor
 def _outward_interval(
     prediction: Tensor, lo64: Tensor, hi64: Tensor
 ) -> tuple[Tensor, Tensor]:
-    """Round float64 endpoints outward into the prediction's dtype.
-
-    Together with :func:`_slack_threshold` this implements the package's
-    theorem-preserving inversion policy: ``score(prediction, y, aux) <=
-    threshold`` (evaluated in the working dtype) implies ``lo <= y <= hi``.
-    The interval conservatively encloses the score sublevel set. Near zero,
-    the ``4 * tiny`` threshold inflation can span many ulps.
-    """
+    """Round float64 endpoints outward: ``score <= threshold`` implies ``lo <= y <= hi``."""
     return (
         cast_directed(lo64, prediction.dtype, up=False),
         cast_directed(hi64, prediction.dtype, up=True),
@@ -141,25 +121,9 @@ class _NonconformityScore:
     Finite-precision inversion gives a conservative enclosure of this
     sublevel set.
 
-    Notes
-    -----
-    ``aux_keys`` lists the keys a score reads from the ``aux`` mapping;
-    ``scale_aux_keys`` is the subset it divides the residual by (a
-    multiplicative scale). The latter is empty for scores that only read aux
-    additively (quantile bounds) and is used to detect a double-scaling
-    pairing with an
-    :class:`~physicsnemo.experimental.uq.conformal.AuxDifficulty` on the same
-    key: reading a key is not dividing by it, so a CQR score that reads
-    ``lo``/``hi`` remains coherent with an ``AuxDifficulty`` scale.
-
-    Exact finite-sample coverage is only preserved if the interval never
-    rounds inward: a target whose finite-precision score is admitted by the
-    threshold must land inside the constructed bounds. Interval endpoints
-    are therefore computed in float64 with a conservative threshold inflation
-    and rounded outward into the working dtype (:func:`_slack_threshold` and
-    :func:`_outward_interval`). The ``4 * tiny`` term can dominate near zero,
-    so the excess width need not be only a few ulps. Any change to this
-    arithmetic must preserve the containment property.
+    ``aux_keys`` lists the aux keys a score reads; ``scale_aux_keys`` is the
+    subset it divides the residual by. Intervals must never round inward, or
+    the finite-sample coverage is lost.
     """
 
     aux_keys: tuple[str, ...] = ()
@@ -324,9 +288,7 @@ class NormalizedErrorScore(_NonconformityScore):
     ) -> Float[Tensor, "*dims"]:
         _require_aux(aux, self.aux_keys, type(self).__name__)
         sigma = clamp_min_floor(aux["sigma"], self.eps)
-        # Divide in float64 (input dtypes embed exactly), then round the
-        # result *up* into the callers' dtype: calibration thresholds built
-        # from up-rounded scores can only grow, never shrink.
+        # Divide in float64, then round up so thresholds can only grow.
         s64 = (target.to(torch.float64) - prediction.to(torch.float64)).abs()
         s64 = s64 / sigma.to(torch.float64)
         out_dtype = torch.result_type(prediction, target)
@@ -342,8 +304,7 @@ class NormalizedErrorScore(_NonconformityScore):
         # The exact clamp used by score(), then upcast.
         sigma = clamp_min_floor(aux["sigma"], self.eps).to(torch.float64)
         p = prediction.to(torch.float64)
-        # Sigma embeds exactly in float64; its storage dtype does not round
-        # the division. score() rounds up into result_type(prediction, target).
+        # Sigma embeds exactly in float64, so its dtype does not round the division.
         half = _slack_threshold(threshold, prediction) * sigma
         return _outward_interval(prediction, p - half, p + half)
 
@@ -510,9 +471,7 @@ class AuxDifficulty:
             )
         check_real(self.key, "difficulty aux", s)
         if s.ndim >= 2:
-            # Reduce EVERY trailing (non-point) dimension: the contract is
-            # one positive scale per leading point, matching the
-            # risk-control loss's point risk unit (max over components).
+            # One scale per leading point, matching the CRC point-risk unit.
             s = s.amax(dim=tuple(range(1, s.ndim)))
         return clamp_min_floor(s, self.eps)
 
@@ -520,21 +479,7 @@ class AuxDifficulty:
 def _check_no_double_scale(
     score: _NonconformityScore, difficulty: AuxDifficulty | None
 ) -> None:
-    """Reject the known ergonomic footgun of dividing by the same aux twice.
-
-    A score that divides its residual by an aux key (advertised via
-    ``score.scale_aux_keys``, e.g.
-    :class:`~physicsnemo.experimental.uq.conformal.NormalizedErrorScore` on
-    ``"sigma"``) paired with an :class:`AuxDifficulty` reading the same key
-    scales every interval by that value twice. This is an ergonomics guard,
-    not a conformal-validity requirement: it catches the one structural
-    built-in pairing (``AuxDifficulty`` on a divisor key). Reading a key
-    additively (CQR reads ``lo``/``hi``) is not dividing by it, so those
-    pairings are allowed.
-
-    Run from calibrator and predictor construction so the rule is enforced
-    consistently.
-    """
+    """Reject an ``AuxDifficulty`` on a key in ``score.scale_aux_keys`` (double scaling)."""
     if isinstance(difficulty, AuxDifficulty):
         if difficulty.key in score.scale_aux_keys:
             raise ValueError(
@@ -559,10 +504,7 @@ def _strategy_kind(strategy: object, registry: Mapping[str, type]) -> str | None
 
 
 def _snapshot_strategy(strategy: object, registry: Mapping[str, type], what: str):
-    """Require and snapshot one of the shipped strategies in ``registry``.
-
-    The single validation used by calibrators and fitted predictors alike.
-    """
+    """Require and snapshot one of the shipped strategies in ``registry``."""
     if _strategy_kind(strategy, registry) is None:
         names = ", ".join(sorted(cls.__name__ for cls in registry.values()))
         raise TypeError(

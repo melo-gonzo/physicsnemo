@@ -51,13 +51,9 @@ def field_items(
     x: Tensor | TensorDict,
     keys: Sequence[str] | None = None,
 ) -> list[tuple[str, Tensor]]:
-    """Normalize a tensor or field container into ``(key, tensor)`` pairs.
+    """Normalize a tensor or ``TensorDict`` into sorted ``(key, tensor)`` pairs.
 
-    Plain tensors map to a single pair keyed by the reserved internal
-    :data:`TENSOR_KEY`; :class:`TensorDict` inputs map to their (optionally
-    restricted) items in sorted key order. Arbitrary mappings are rejected:
-    the fitted/calibration container contract has exactly two supported
-    representations.
+    A plain tensor maps to one pair keyed by :data:`TENSOR_KEY`.
     """
     if isinstance(x, Tensor):
         if keys is not None:
@@ -105,12 +101,7 @@ def field_items(
 def pack_fields(
     items: Mapping[str, Tensor],
 ) -> Tensor | TensorDict:
-    """Inverse of :func:`field_items`.
-
-    A single :data:`TENSOR_KEY` entry unpacks to a plain tensor; anything
-    else packs into a :class:`~tensordict.TensorDict` with an empty batch
-    size.
-    """
+    """Inverse of :func:`field_items`."""
     if set(items.keys()) == {TENSOR_KEY}:
         return items[TENSOR_KEY]
     return TensorDict(dict(items), batch_size=[])
@@ -120,13 +111,7 @@ def slice_aux(
     aux: Mapping[str, Tensor] | Mapping[str, Mapping[str, Tensor]] | None,
     field: str,
 ) -> Mapping[str, Tensor] | None:
-    """Select the aux entries for one field.
-
-    In plain-tensor mode (``field == TENSOR_KEY``) the aux mapping is used
-    as-is. In field-container mode, ``aux`` is keyed by field name, each
-    value being the aux mapping for that field (e.g. ``{"pressure":
-    {"sigma": ...}}``). Missing fields resolve to ``None``.
-    """
+    """Select one field's aux mapping (nested by field for ``TensorDict`` inputs)."""
     if aux is None:
         return None
     if not isinstance(aux, Mapping):
@@ -148,14 +133,7 @@ def slice_aux(
 
 
 def validate_alpha(alpha: object) -> float:
-    """Return a finite float ``alpha`` strictly between zero and one.
-
-    Only values exactly representable as a Python float are accepted: all
-    rank and risk arithmetic in this package is exact on the declared value
-    (see :func:`alpha_as_fraction`), so silently flooring an exact rational
-    (``Fraction(1, 3)``) to float would compute a different rank than the
-    caller asked for, and could mask an infeasible level as feasible.
-    """
+    """Return ``alpha`` as a float in ``(0, 1)``, rejecting non-float-exact values."""
     if isinstance(alpha, bool) or not isinstance(alpha, Real):
         raise TypeError(f"alpha must be a real number, got {alpha!r}.")
     as_float = float(alpha)
@@ -181,36 +159,19 @@ def validate_n_cal(n_cal: object) -> int:
 
 
 def alpha_as_fraction(alpha: float) -> Fraction:
-    """The user's declared ``alpha`` as an exact rational.
+    """The declared ``alpha`` as an exact rational (the shortest round-trip decimal).
 
-    ``str(alpha)`` recovers the shortest decimal that round-trips to the
-    given float, i.e. the number the user actually typed (``0.18``, not
-    ``0.17999999999999999...``). That typed decimal is the ``alpha``
-    contract for the whole package (:func:`validate_alpha` rejects values a
-    float cannot represent exactly, so nothing is silently floored first).
-    All rank/parameter arithmetic goes through exact rational arithmetic
-    on that declared value: a floating tolerance can neither be small
-    enough to respect a genuinely requested offset nor large enough to
-    absorb representation error (``alpha=0.49999999995`` must round the
-    rank up, while ``150 * 0.82`` must stay exactly ``123``).
+    All rank arithmetic is exact on the typed decimal: no float tolerance both
+    keeps ``150 * 0.82 == 123`` and rounds ``alpha=0.49999999995`` up.
     """
     return Fraction(str(validate_alpha(alpha)))
 
 
 def require_feasible_alpha(n_cal: int, alpha: float) -> None:
-    r"""Require ``alpha >= 1 / (n_cal + 1)``, the shared finite-sample floor.
+    """Require ``alpha >= 1 / (n_cal + 1)``.
 
-    Below the floor the conformal quantile rank exceeds ``n_cal``
-    (:math:`\lceil (n + 1)(1 - \alpha) \rceil > n \iff \alpha < 1/(n + 1)`,
-    so the prediction set would be infinite) and the conformal risk control
-    (CRC) bound :math:`(\hat R(\lambda) + 1)/(n + 1) \le \alpha` is
-    unsatisfiable even at zero risk. Both are the same algebraic constraint,
-    so both boundaries share this one check.
-
-    Notes
-    -----
-    Raises ``ValueError`` if ``n_cal < 1`` or ``alpha`` is infeasible for
-    ``n_cal``.
+    Below it the quantile rank exceeds ``n_cal`` and the CRC bound is
+    unsatisfiable even at zero risk; both tiers share this one check.
     """
     alpha_exact = alpha_as_fraction(alpha)
     n_cal = validate_n_cal(n_cal)
@@ -226,31 +187,8 @@ def require_feasible_alpha(n_cal: int, alpha: float) -> None:
 
 
 def conformal_quantile_index(n_cal: int, alpha: float) -> int:
-    r"""Return the order-statistic index of the conformal quantile.
-
-    Parameters
-    ----------
-    n_cal : int
-        Number of calibration samples.
-    alpha : float
-        Target miscoverage level in :math:`(0, 1)`.
-
-    Returns
-    -------
-    int
-        :math:`k = \lceil (n_{cal} + 1)(1 - \alpha) \rceil` computed with
-        exact rational arithmetic on the declared ``alpha``, such that the
-        :math:`k`-th smallest calibration score is the conformal quantile.
-        Always satisfies :math:`1 \le k \le n_{cal}`.
-
-    Notes
-    -----
-    Raises ``ValueError`` if ``alpha`` is outside :math:`(0, 1)`,
-    ``n_cal < 1``, or ``n_cal`` is too small for the requested level (see
-    :func:`require_feasible_alpha`).
-    """
+    """Return ``k = ceil((n_cal + 1)(1 - alpha))`` exactly, ``1 <= k <= n_cal``."""
     require_feasible_alpha(n_cal, alpha)
-    # 1 <= k <= n_cal holds whenever alpha is feasible (checked above).
     return math.ceil((n_cal + 1) * (1 - alpha_as_fraction(alpha)))
 
 
@@ -260,41 +198,10 @@ def kth_smallest_of_samples(
     *,
     chunk_numel: int = 2**26,
 ) -> Float[Tensor, "*dims"]:
-    r"""``k``-th smallest across per-sample tensors, without stacking the corpus.
+    """``torch.kthvalue(torch.stack(per_sample), k, dim=0)`` in ``chunk_numel`` chunks.
 
-    Equivalent to ``torch.kthvalue(torch.stack(per_sample), k, dim=0)``.
-    With contiguous inputs, flattening uses views; temporary stacks and
-    native selection workspace scale with the chunk size, in addition to
-    the retained scores and output. Noncontiguous inputs remain correct,
-    but flattening may copy each full sample. Callers that need bounded
-    temporary memory should retain contiguous scores at collection time.
-
-    Uses :func:`torch.kthvalue` rather than :func:`torch.quantile`: exact
-    (no interpolation ambiguity) and free of the ``2**24``-element input
-    limit that elementwise calibration stacks routinely exceed.
-
-    Computed in the promoted common dtype of the samples (exactly what a
-    full ``torch.stack`` would produce), never a down-cast of any sample's
-    order statistic (see the module docstring's threshold dtype policy).
-
-    Parameters
-    ----------
-    per_sample : Sequence[torch.Tensor]
-        One calibration-score tensor per sample, all of one shape
-        :math:`(*\text{dims})` (``torch.stack`` rejects mismatched shapes).
-    k : int
-        Order-statistic index in ``[1, len(per_sample)]`` (as produced by
-        :func:`conformal_quantile_index`; ``torch.kthvalue`` rejects others).
-    chunk_numel : int, optional
-        Target limit on the number of elements stacked per
-        :func:`torch.kthvalue` call. Each chunk includes at least one element
-        per sample. Default is ``2**26``.
-
-    Returns
-    -------
-    torch.Tensor
-        The per-element ``k``-th smallest scores, of shape
-        :math:`(*\text{dims})`.
+    Uses ``kthvalue`` rather than ``torch.quantile``: exact, and free of the
+    ``2**24``-element input limit. Computed in the samples' promoted dtype.
     """
     n = len(per_sample)
     first = per_sample[0]
@@ -314,15 +221,9 @@ def kth_smallest_of_samples(
 
 
 def cast_directed(t: Tensor, dtype: torch.dtype, *, up: bool) -> Tensor:
-    """Cast to ``dtype`` with directed rounding.
+    """Cast to ``dtype``, rounding toward ``+inf`` (``up=True``) or ``-inf``.
 
-    Round-to-nearest can land on either side of the true value; this bumps
-    every element that landed on the wrong side to the next representable
-    value toward ``+inf`` (``up=True``) or ``-inf`` (``up=False``). The
-    wrong-side test compares in float64, which represents every supported
-    source dtype exactly. Total bit width is not a precision order (bfloat16
-    and float16 are both 16 bits with different mantissas), so no dtype-pair
-    shortcut is taken.
+    Outward rounding keeps a threshold from landing below its order statistic.
     """
     cast = t.to(dtype)
     if dtype == t.dtype or not (t.is_floating_point() and cast.is_floating_point()):
@@ -347,12 +248,7 @@ def _field_label(key: str) -> str:
 
 
 def check_points(points: Tensor) -> Tensor:
-    """Validate the coordinate-tensor contract: dense, 2-D, floating, finite.
-
-    The contract is one row per mesh point, ``(n_points, n_spatial_dims)``;
-    every boundary that accepts ``points=`` must enforce it so a
-    contradictory coordinate tensor cannot be silently accepted.
-    """
+    """Require finite floating ``points`` of shape ``(n_points, n_spatial_dims)``."""
     if not isinstance(points, Tensor):
         raise TypeError(f"points must be a torch.Tensor, got {type(points).__name__}.")
     if points.ndim != 2 or points.shape[0] == 0 or points.shape[1] == 0:
@@ -370,14 +266,9 @@ def check_points(points: Tensor) -> Tensor:
 def points_fingerprint(
     points: Tensor,
 ) -> str:
-    """Return an order-sensitive exact fingerprint of point coordinates.
+    """Return an order-sensitive exact SHA-256 fingerprint of point coordinates.
 
-    Deliberately recomputed on every call: memoizing per tensor object via
-    the autograd version counter is unsound for an exactness gate, because
-    in-place writes through ``.data`` or ``.numpy()`` aliasing (e.g. a
-    reused staging buffer refilled by a data reader) never bump the version
-    counter and would let a mutated mesh pass with a stale digest. A trusted
-    fast path must be an explicit opt-in API, not a silent cache.
+    Not memoized: ``.data`` or ``.numpy()`` writes skip the version counter.
     """
     check_points(points)
     tensor = points.detach().cpu().contiguous()
@@ -402,14 +293,7 @@ def check_point_alignment(
 
 
 def require_single_rank(what: str) -> None:
-    """Fail closed when an initialized ``torch.distributed`` group spans ranks.
-
-    Probes ``torch.distributed`` directly rather than
-    :class:`~physicsnemo.distributed.DistributedManager`: the manager is a
-    singleton the caller must initialize first, while this guard has to be
-    correct for any process group, including ones set up outside physicsnemo.
-    A rank-local result would silently void the guarantee.
-    """
+    """Fail closed when any initialized ``torch.distributed`` group spans ranks."""
     if (
         torch.distributed.is_available()
         and torch.distributed.is_initialized()
@@ -422,18 +306,9 @@ def require_single_rank(what: str) -> None:
 
 
 def clamp_min_floor(t: Tensor, eps: float) -> Tensor:
-    """Clamp ``t`` with a dtype-aware positive floor.
+    """Clamp ``t`` to at least ``max(eps, finfo(t.dtype).tiny)``.
 
-    ``eps`` alone can underflow to zero in low-precision dtypes (``1e-8``
-    is unrepresentable in float16), turning the clamp into a no-op and the
-    subsequent division into inf/NaN. The effective floor is the larger
-    of ``eps`` and the dtype's smallest positive normal value; every
-    boundary that floors a scale (score, interval, difficulty) must share
-    this exact function so calibration and prediction normalize
-    identically.
-
-    ``eps`` must be finite and representable in ``t.dtype``; otherwise a
-    ``ValueError`` names the dtype instead of an opaque cast overflow.
+    ``eps`` alone can underflow to zero in float16; every scale floor shares this.
     """
     if not math.isfinite(eps):
         raise ValueError(f"eps must be finite, got {eps}.")
@@ -463,12 +338,7 @@ def broadcast_difficulty(t: Tensor, ref: Tensor, key: str) -> Tensor:
 
 
 def normalize_keys(keys: Sequence[str] | None) -> tuple[str, ...] | None:
-    """Normalize a ``keys`` argument to a deduplicated tuple or ``None``.
-
-    Rejects a bare string (``"pressure"`` would iterate to a character
-    list); unknown or non-string names surface from ``field_items`` as
-    missing fields.
-    """
+    """Normalize ``keys`` to a deduplicated tuple or ``None``; reject a bare string."""
     if keys is None:
         return None
     if isinstance(keys, str):
@@ -496,13 +366,7 @@ def positive_finite_float(value: object, name: str) -> float:
 def require_matching_keys(
     present: Iterable[str], expected: Iterable[str], subject: str
 ) -> None:
-    """Require two field-key sets to match exactly.
-
-    Used where a container's keys are not already restricted to the
-    reference set (calibration prediction/target, and a plain-tensor
-    predictor handed a ``TensorDict``), so both boundaries report the
-    identical sorted symmetric difference.
-    """
+    """Require two field-key sets to match exactly."""
     present = set(present)
     expected = set(expected)
     if present != expected:
@@ -530,15 +394,9 @@ def check_aux(
     prediction: Tensor,
     aux: Mapping[str, Tensor] | None,
 ) -> None:
-    """Require the aux entries a score reads to match the prediction shape.
+    """Require the aux entries a score reads to be finite and prediction-shaped.
 
-    Entries must also be finite. One function enforces the identical aux
-    contract at the calibrate and predict boundaries so they cannot drift
-    apart: a ``NormalizedErrorScore`` with ``+inf`` sigma would otherwise
-    divide a finite residual to a zero score that passes the
-    score-finiteness check and drags the threshold toward zero, yet the
-    identical aux is rejected at predict time. Two passes (all shapes first,
-    then finiteness) preserve the error precedence across keys.
+    Shared by calibrate and predict: ``+inf`` sigma would otherwise zero a score.
     """
     if aux is None:
         return
@@ -557,13 +415,7 @@ def check_aux(
 
 
 def check_floating(key: str, name: str, tensor: Tensor) -> Tensor:
-    """Require real floating-point data at a conformal API boundary.
-
-    Integer predictions make score inverses cast fractional endpoints back
-    to integers, silently collapsing an otherwise valid interval. Targets
-    and score aux follow the same contract so calibration and prediction
-    cannot use different arithmetic domains.
-    """
+    """Require a floating dtype: integer data would truncate interval endpoints."""
     if not tensor.is_floating_point():
         raise TypeError(
             f"{_field_label(key)}: {name} must use a floating-point dtype, got "
@@ -586,10 +438,7 @@ def check_finite(key: str, name: str, tensor: Tensor) -> Tensor:
 
 
 def check_real(key: str, name: str, tensor: Tensor) -> Tensor:
-    """Require finite floating-point data.
-
-    Runs :func:`check_floating` then :func:`check_finite`.
-    """
+    """Require finite floating-point data."""
     return check_finite(key, name, check_floating(key, name, tensor))
 
 

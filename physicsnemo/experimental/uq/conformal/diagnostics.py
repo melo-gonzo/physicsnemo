@@ -179,9 +179,7 @@ class CoverageAccumulator:
         sum overflow float64, rescale interval bounds and targets consistently
         and restart diagnostics.
         """
-        # field_items(container, self._keys) already selects the fitted fields
-        # (dropping a superset's extras, raising on a missing fitted key), so
-        # the resulting key sets always match self._counters exactly.
+        # field_items(..., self._keys) yields exactly the keys of self._counters.
         inputs = (("lo", lo), ("hi", hi), ("target", target))
         containers = {
             name: dict(field_items(value, self._keys)) for name, value in inputs
@@ -226,8 +224,7 @@ class CoverageAccumulator:
 
             match self._tier:
                 case "cellwise":
-                    # Hit counts stay on the update device; finalize() reduces
-                    # them to a handful of scalars.
+                    # Hit counts stay on device until finalize().
                     coverage = element_covered.to(torch.int64)
                     previous = self._element_hits.get(key)
                     if previous is not None and previous.shape != coverage.shape:

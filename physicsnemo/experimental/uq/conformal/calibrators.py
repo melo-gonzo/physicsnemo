@@ -198,15 +198,7 @@ class _SplitCalibratorBase:
         points: Tensor | None,
         stage: _Stage,
     ) -> None:
-        """Validate, stage every field, then commit one sample transactionally.
-
-        Nothing is written to the score store or the schema until every field has
-        passed validation and ``stage``, so a rejected sample leaves the
-        calibrator exactly as it was. A supplied ``points`` tensor, already
-        checked against the coordinate contract by the caller, must align
-        with every field's leading (point) axis so a contradictory coordinate
-        tensor cannot be silently accepted.
-        """
+        """Validate and stage every field, then commit; a rejected sample changes nothing."""
         with torch.no_grad():
             _tensor_mode, schema, fields = self._validated_fields(
                 prediction, target, aux
@@ -415,11 +407,7 @@ class CellwiseCalibrator(_SplitCalibratorBase):
 
 
 class _ScaledCalibratorBase(_SplitCalibratorBase):
-    """Shared difficulty handling and collection for varying point sets.
-
-    Subclasses set ``_reduce`` to map one field's float64 normalized scores
-    to the CPU record retained for ``finalize``.
-    """
+    """Shared difficulty handling; subclasses set ``_reduce`` to the retained record."""
 
     _reduce: Callable[[Tensor], Tensor]
 
@@ -582,18 +570,10 @@ class FunctionalBandCalibrator(_ScaledCalibratorBase):
 
 
 def _crc_threshold(sorted_scores: list[Tensor], alpha: float) -> float:
-    r"""Return the smallest observed threshold satisfying the exact CRC bound.
+    """Smallest observed ``lambda`` with ``(R(lambda) + 1) / (n + 1) <= alpha``.
 
-    Conformal risk control (CRC) selects the smallest :math:`\lambda` with
-    :math:`(\hat R(\lambda) + 1)/(n + 1) \le \alpha`, where :math:`\hat R`
-    is the summed per-sample point-miscoverage fraction over the :math:`n`
-    calibration samples (`Conformal Risk Control
-    <https://arxiv.org/abs/2208.02814>`_, Angelopoulos et al., 2022).
-    Feasibility is evaluated with rational arithmetic over integer exceedance
-    counts and the user's declared decimal ``alpha``. With equal sample
-    lengths, select the pooled order statistic whose rank permits exactly
-    that many exceedances. Unequal lengths use an exact binary search over
-    observed float64 scores with equal weight per sample.
+    Exact rational risk: a pooled order statistic for equal sample lengths,
+    else a binary search over observed scores.
     """
     n = len(sorted_scores)
 
