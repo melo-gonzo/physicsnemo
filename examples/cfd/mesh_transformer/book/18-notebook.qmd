@@ -31103,3 +31103,42 @@ comparison that matters is best rate against best rate: **FLARE++ at 1e-3 (0.045
 
 **Standing.** No baseline is replaced by the two benchmarks scored so far. The HiLift 510-wing pair (width 512, 100k cells; epoch 24 of
 500) and the OLBC Poisson 2,048 pair (epoch about 455) are pending; the verdict closes when they land. ISLA's ratios are unchanged.
+
+## 2026-09-29 — Mechanism, PROTO-COND: on the fixed Poisson mesh the sample-conditioned prototypes collapse onto one direction (pairwise cosine 0.92 / 0.93, effective rank 22 to 24 of 256, against 0.04 to 0.05 and 156 to 170 for the static seeds), so every query spreads its weight over 200 to 250 slices and the routing stops carrying the boundary data (same-node divergence across samples 0.07 bits against 0.25 to 0.34 static); on DrivAerML the collapse is confined to the early blocks and the later blocks recover, matching the neutral score {#sec-nb-proto-cond-mechanism}
+
+**Setting.** The sample-conditioned prototypes (@sec-nb-proto-cond-prereg) replace the 256 learned routing seeds of each slice block by
+seeds plus an attention-weighted average of the block's token states, one prototype matrix per sample. They score 2.0x worse than the
+static reference on the OLBC Poisson set at 512 cases on both seeds (@sec-nb-olbc-reference-correction) and are neutral on DrivAerML
+Surface (@sec-nb-proto-cond-dr-interim). Before the option is removed under the universalization rule, the failure is measured rather
+than asserted, on the trained checkpoints (code_v11, float32, eval mode, the first 32 held-out samples, all 12 slice blocks; Poisson at
+every node of the fixed mesh, 17,718 tokens; DrivAerML at 200,000 cells). Routing weights are the softmax over slices per token after
+the geometric bias, the block's actual mixing weights.
+
+**What we saw (mean over the 12 blocks; both Poisson seeds agree).**
+
+| quantity | Poisson conditioned (seed 42 / 43) | Poisson static (42 / 43) | DrivAerML conditioned | DrivAerML static |
+|---|---|---|---|---|
+| prototype displacement from the seeds, Frobenius, relative | 17.7 / 17.8 | 0 | 7.9 | 0 |
+| mean pairwise cosine among the 256 prototypes | 0.923 / 0.931 | 0.050 / 0.042 | 0.773 | 0.082 |
+| effective rank of the prototype matrix | 24 / 22 | 156 / 170 | 79 | 166 |
+| per-token effective number of slices, exp of the routing entropy | 204 / 203 | 80 / 106 | 152 | 82 |
+| mean top-slice weight per token | 0.045 / 0.043 | 0.134 / 0.093 | 0.110 | 0.183 |
+| same node, different boundary data: Jensen-Shannon divergence of the routing [bits] | 0.078 / 0.073 | 0.337 / 0.248 | not defined (meshes differ) | |
+
+: PROTO-COND mechanism diagnostic. The seeds the conditioned runs learned are themselves spread (pairwise cosine 0.013 to 0.017, effective rank 193 to 197); the collapse is in the synthesized prototypes. Data: results/proto_cond_diag_2026-09-29.json (runs pc_poisson_{cond,ref}_n512_seed42/43, pc_dr_{cond,ref}_seed42). {#tbl-proto-cond-mechanism}
+
+**Reading.** The option is neither a no-op nor a fragmentation of the routing. On Poisson the attended value term dominates the seed
+(the prototypes sit 14 to 19 seed-norms away from the seeds), and because that term is an attention-weighted average of the same token
+cloud for every seed, all 256 prototypes point nearly the same way. Cosine routing against near-identical prototypes gives
+near-identical logits for every slice, so each query spreads its weight over 200 to 250 of the 256 slices where the static model uses
+80 to 105 with a top weight two to three times larger. **The slice mechanism degenerates toward one mean-field pool in most blocks, and
+the routing of a given node barely responds to the boundary data (0.07 bits against 0.25 to 0.34 for the static model): the routing
+carries less sample information, not more.** Per block, the collapse holds in every block (cosine 0.76 to 0.99); the routing sharpens
+only in blocks 4 to 6 and 8. On DrivAerML the same collapse occurs in the early blocks (cosine 0.995, effective rank 10 in the first)
+and relaxes with depth (cosine 0.56 to 0.75, effective rank 128 to 161 in the last four), and the middle blocks reach static-like
+sharpness, which is consistent with the neutral score there. Why the two datasets differ is inferred, not measured: 200,000 surface
+tokens with a global condition vector and varied geometry give the key and value projections enough variation for different seeds to
+attend to different regions, whereas on the fixed square with weak per-token geometric variation every seed attends to essentially the
+same mixture. **Consequence.** The preregistered deletion clause (worse than 1.05 on any field of any dataset) is met on Poisson with
+the mechanism now measured; the option is removed when the AirfRANS and Poisson 2,048 pairs complete the record (the 510-wing pair
+completes it later and cannot change the verdict).
