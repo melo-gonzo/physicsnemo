@@ -30808,3 +30808,68 @@ deleted together and the fixed-mesh results are recorded as a closed
 mechanism study. The lug and DrivAerML Volume pairs run to completion so
 the record has the aggregation's cost on every dataset class. Artifact
 results/universal_agg_2026-09-28.json.
+
+## 2026-09-29 — Preregistration, PROTO-COND: sample-conditioned slice prototypes (the FLARE++ routing-query idea inside ISLA's slice block), and GT-FPP: GeoTransolver with the FLARE++ backend added to the flagship baselines {#sec-nb-proto-cond-prereg}
+
+**Setting.** Peter asked whether the FLARE and FLARE++ attention layers in
+PhysicsNeMo could serve ISLA. ISLA's slice block is already a FLARE-class
+two-pass mechanism (gather tokens into slices, scatter back), with two
+things FLARE lacks: measure weights in the gather softmax (quadrature
+consistency) and the equivariant geometric bias on the routing (the pose
+robustness). Swapping the block for the shipped layer would remove both, so
+it is not done. FLARE++'s one new idea, routing queries synthesized per
+sample from learned seeds attending over the input, transfers cleanly:
+ISLA's slice prototypes are static per layer, and a sample-conditioned
+version is an architectural change with no dataset-specific input, on for
+every dataset by construction.
+
+**The change (ISLA `slice_prototypes="conditioned"`, commit 27903e6c).**
+In every slice block each static prototype acts as a seed that attends over
+the token states with a softmax whose logits carry the measure weights as a
+log-space bias (a quadrature of the tokens, invariant to a uniform rescale
+of the weights); the seed plus the attended value is the prototype the
+cosine routing compares against. Token states are invariant features, so
+the prototypes are invariant and rotation, translation, reflection, token
+permutation and measure-rescale contracts all hold (tested to 1e-8 in
+double); the cosine temperature still bounds the logits, which is the
+guard against the routing collapse the reference removed. Cost: two
+hidden-by-hidden maps per block, about 3.5 million parameters on the
+34 million of the reference (10 percent), and one slices-by-tokens
+attention per block.
+
+**Hypothesis and instruments.** Static prototypes must cover every
+sample's condition layout with one set of slots; conditioned prototypes can
+reallocate slots to the segments that carry the data. The prediction is a
+gain on the boundary-data problems and neutrality elsewhere. Lanes
+(campaign pc, to launch when the pruning wave settles, i.e. after the
+AirfRANS LOCAL-LPR and elasticity 2,048 verdicts): the reference
+configuration with conditioned prototypes and no other option, against the
+reference, two seeds each, on OLBC Poisson at 512 and 2,048 cases (the
+frame-free reference, 0.867 / 0.395, GeoTransolver-512 0.279 / 0.098),
+DrivAerML Surface at 435 cars and 200,000 cells (reference 0.0446), and
+HiLift at 510 wings and 100,000 cells (reference 0.0404). Also recorded:
+step time and peak memory.
+
+**Bars (two-seed means, conditioned ÷ static reference per field).**
+*Reference candidate*: at or below 0.97 on at least one dataset and at or
+below 1.03 on every field of every dataset; it then goes to the full
+board before becoming the reference. *Deleted*: above 1.05 on any field of
+any dataset, or no dataset at or below 0.97 (a neutral change that costs
+10 percent of the parameters is not kept). *Between* otherwise (a third
+seed where a dataset sits in 1.03 to 1.05). Prediction: deleted (0.5),
+reference candidate (0.3), between (0.2).
+
+**GT-FPP, the baseline check (campaign gf rows 0-9, code_v11 = code_v10
+plus the released GeoTransolver package with its FLARE++ backend).** Every
+ratio in the book is against GeoTransolver with physics attention. The
+released model now carries a FLARE++ backend (`attention_type=GALE_FPP`),
+so the steel-man rule requires the stronger of the two as the baseline.
+Lanes: DrivAerML Surface at 435 cars and 200,000 cells at both rates the
+physics-attention reference used (3e-3 and 1e-3), HiLift 510 wings at width
+512 and 100,000 cells, AirfRANS interior (GeoTransolver-volume), and OLBC
+Poisson at 2,048 cases (width 512); two seeds each, otherwise the
+physics-attention lanes' protocol. Reading: GeoTransolver-FLARE++ ÷
+GeoTransolver-physics per dataset; where the FLARE++ backend is better by
+more than 3 percent it replaces the physics-attention number as the
+GeoTransolver baseline in the scoreboard (the book then quotes both), and
+every ISLA ratio on that dataset is restated against it.
