@@ -31328,3 +31328,22 @@ and the Poisson reference agrees with the PROTO-COND reference pair on the same 
 these paths. At 512 cases, therefore: **the per-type channel is neutral on Poisson and costs 9 to 12% on elasticity; only the
 aggregation pays, and it is scheduled for removal as a dataset-specific option.** The 2,048 and 8,448 pairs complete the ladder.
 Data: results/campaigns_2026-09-29/pc/metrics.
+
+## 2026-09-29 — Interim, PROTO-COND-2 on OLBC Poisson at 512 cases (two seeds): the centered, scale-bounded prototypes score 0.86 of the static reference (0.96 / 0.76 per seed) where the first form scored 1.99; prediction (1) of the preregistration holds and the collapse-proof form pays on the very set that broke the original {#sec-nb-proto-cond-2-poisson-512}
+
+**Setting.** @sec-nb-proto-cond-2-prereg preregistered a collapse-proof form of the sample-conditioned slice prototypes (the attended
+value term centered across the 256 slices and smoothly bounded at a learned fraction $g$ of the seeds' spread) and predicted that on
+the fixed Poisson mesh, where the first form collapsed the routing and scored 2.0x worse, this form would be within 1.05 of the static
+reference. Same-snapshot pairs on code_v12 (campaign pc2, rate 5e-4, 500 epochs, float32 over the 256 test cases).
+
+**What we saw.** Static reference 0.2004 (0.1923 / 0.2085 per seed, identical to the code_v11 reference pair to four digits, so the
+snapshot change did not move the reference); centered prototypes **0.1719 (0.1854 / 0.1583), ratio 0.86 (0.96 / 0.76)**. The
+validation loss of both centered lanes lies below the reference's from epoch 200 on (0.0152 and 0.0139 against 0.0190) and is flat
+by epoch 400, so the gain is not a late-training artifact. The seed spread is wide (seed 43 gains 24%, seed 42 4%); with two seeds the
+mean is the reading and the spread is recorded.
+
+**Reading.** The preregistered falsifier (a ratio above 1.05) is not met; the form is not merely harmless on the fixed mesh but ahead of
+the static reference there. The prototype-collapse diagnostic on these checkpoints (pairwise cosine below 0.3 and effective rank above
+100 were the mechanism bar) is running and will be appended to results/proto_cond2_diag_2026-09-29.json. The AirfRANS pair (bar:
+pressure at or below 0.91 on both seeds), DrivAerML Surface (within 1.03), Poisson 2,048 (within 1.05) and the 510-wing pair complete
+the universalization test; adoption into the reference configuration requires all of them. Data: results/proto_cond2_2026-09-29.json.
