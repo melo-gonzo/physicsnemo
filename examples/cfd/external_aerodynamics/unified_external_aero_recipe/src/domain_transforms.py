@@ -54,6 +54,7 @@ YAML configs.  Import this module before Hydra instantiation
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Literal
 from warnings import warn
 
 import numpy as np
@@ -73,8 +74,8 @@ from physicsnemo.datapipes.transforms.mesh.transforms import (
     _compact_points,
 )
 from physicsnemo.mesh import DomainMesh, Mesh
-from physicsnemo.mesh.geometry import compute_cell_areas
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, scale_measures
+from physicsnemo.mesh.geometry import compute_cell_areas
 
 
 @register()
@@ -466,7 +467,7 @@ class PoissonBiasedSubsampleMesh(MeshTransform):
         n_cells_expected: int,
         bias: float = 10.0,
         compact: bool = True,
-        weight_mode: str = "front_back",
+        weight_mode: Literal["front_back", "area"] = "front_back",
     ) -> None:
         super().__init__()
         self.n_cells_expected = int(n_cells_expected)
@@ -726,7 +727,7 @@ class StackScalarFields(MeshTransform):
         self,
         fields: Sequence[str],
         output_field: str,
-        association: str = "cell_data",
+        association: Literal["cell_data", "point_data"] = "cell_data",
         n_components: int = 3,
     ) -> None:
         super().__init__()
@@ -1052,7 +1053,11 @@ class HarmonicBoundaryMeasures(MeshTransform):
         return mesh  # a bare Mesh has no interior/boundary split
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
-        from harmonic import harmonic_boundary_fields, node_types_from_boundary, node_types_from_tags
+        from harmonic import (
+            harmonic_boundary_fields,
+            node_types_from_boundary,
+            node_types_from_tags,
+        )
 
         bnd = domain.boundaries[self.boundary]
         x = domain.interior.points.detach().cpu().numpy()

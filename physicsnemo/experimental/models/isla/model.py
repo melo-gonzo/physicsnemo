@@ -188,6 +188,7 @@ import logging
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Literal
 
 import torch
 import torch.nn as nn
@@ -213,6 +214,11 @@ logger = logging.getLogger(__name__)
 
 #: Bound of the cosine routing logits: each block's point-to-slice logit is this
 #: times the cosine between the token state and a slice prototype.
+GeoKernel = Literal["eager", "fused"]
+"""Geometry-region backend: the PyTorch reference region or the exact fused Triton kernel."""
+SlicePrototypes = Literal["static", "centered"]
+"""Slice-routing prototypes: one learned prototype per slice, or the seeds plus a centered, scale-bounded sample-conditioned term."""
+
 ROUTING_TEMPERATURE = 10.0
 
 
@@ -594,7 +600,7 @@ class _RoutingLogits(nn.Module):
     """
 
     def __init__(
-        self, hidden: int, n_slices: int, slice_prototypes: str = "static"
+        self, hidden: int, n_slices: int, slice_prototypes: SlicePrototypes = "static"
     ) -> None:
         super().__init__()
         if slice_prototypes not in ("static", "centered"):
@@ -662,11 +668,11 @@ class _SliceBlock(nn.Module):
         n_slices: int,
         mlp_ratio: int = 4,
         geo_checkpoint: bool = False,
-        geo_kernel: str = "eager",
+        geo_kernel: GeoKernel = "eager",
         n_global_vectors: int = 1,
         n_block_vecs: int = 0,
         n_block_tens: int = 0,
-        slice_prototypes: str = "static",
+        slice_prototypes: SlicePrototypes = "static",
     ) -> None:
         super().__init__()
         ### "fused" evaluates the dense geometry region (invariants -> routing bias
@@ -1200,8 +1206,8 @@ class ISLA(Module):
         n_slices: int = 256,
         mlp_ratio: int = 4,
         geo_checkpoint: bool = False,
-        geo_kernel: str | None = None,
-        slice_prototypes: str = "static",
+        geo_kernel: GeoKernel | None = None,
+        slice_prototypes: SlicePrototypes = "static",
         dim: int = 3,
         eps: float = 1e-12,
     ) -> None:
