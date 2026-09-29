@@ -32,7 +32,6 @@ from ._utils import (
     _field_label,
     broadcast_difficulty,
     check_aux,
-    check_difficulty,
     check_finite,
     check_floating,
     check_point_alignment,
@@ -327,8 +326,9 @@ class ConformalPredictor:
         scalar = threshold.to(device=prediction.device)
         if self._difficulty is None:
             return scalar
-        difficulty = check_difficulty(self._difficulty(points, aux))
-        difficulty = difficulty.to(device=prediction.device, dtype=torch.float64)
+        difficulty = self._difficulty(points, aux).to(
+            device=prediction.device, dtype=torch.float64
+        )
         return scalar * broadcast_difficulty(difficulty, prediction, key)
 
     def predict_interval(

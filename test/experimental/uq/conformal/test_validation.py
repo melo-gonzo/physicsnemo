@@ -34,7 +34,6 @@ from physicsnemo.experimental.uq.conformal import (
 )
 from physicsnemo.experimental.uq.conformal._utils import (
     check_aux,
-    check_difficulty,
     check_exact_shape,
     check_finite,
     check_floating,
@@ -56,7 +55,6 @@ _I64 = torch.zeros(3, dtype=torch.int64)
 _INF3 = torch.tensor([1.0, torch.inf, 1.0])
 _N = NormalizedErrorScore()
 _P64 = torch.tensor([[0.0, 1.0], [2.0, 3.0]], dtype=torch.float64)
-_POSITIVE = "finite and strictly positive"
 _NOT_REAL = (TypeError, "real number")
 _NOT_EXACT = (TypeError, "exactly representable")
 _NOT_INT = (TypeError, "integer")
@@ -74,9 +72,6 @@ VALIDATOR_CASES = [
     ("check_aux-not-tensor", lambda: check_aux("k", _N, _F, {"sigma": 1.0}), (TypeError, "must be a torch.Tensor")),
     ("check_aux-integer", lambda: check_aux("k", _N, _F, {"sigma": _I64}), (TypeError, "floating")),
     ("check_aux-nonfinite", lambda: check_aux("k", _N, _F, {"sigma": _INF3}), (ValueError, "non-finite")),
-    ("check_difficulty-integer", lambda: check_difficulty(_I64), (TypeError, "floating")),
-    ("check_difficulty-zero", lambda: check_difficulty(torch.tensor([1.0, 0.0])), (ValueError, _POSITIVE)),
-    ("check_difficulty-nan", lambda: check_difficulty(torch.tensor([1.0, torch.nan])), (ValueError, _POSITIVE)),
     ("keys-bare-string", lambda: normalize_keys("pressure"), (TypeError, "bare string")),
     ("keys-order-preserved", lambda: normalize_keys(["b", "a"]), ("b", "a")),
     ("keys-none", lambda: normalize_keys(None), None),

@@ -48,7 +48,6 @@ from ._utils import (
     alpha_as_fraction,
     broadcast_difficulty,
     check_aux,
-    check_difficulty,
     check_exact_shape,
     check_finite,
     check_point_alignment,
@@ -488,7 +487,7 @@ class _ScaledCalibratorBase(_SplitCalibratorBase):
             difficulty = (
                 None
                 if self._difficulty is None
-                else check_difficulty(self._difficulty(points, aux_field))
+                else self._difficulty(points, aux_field)
             )
             raw = check_finite(
                 key,

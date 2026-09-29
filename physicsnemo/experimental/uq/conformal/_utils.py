@@ -431,10 +431,21 @@ def clamp_min_floor(t: Tensor, eps: float) -> Tensor:
     boundary that floors a scale (score, interval, difficulty) must share
     this exact function so calibration and prediction normalize
     identically.
+
+    ``eps`` must be finite and representable in ``t.dtype``; otherwise a
+    ``ValueError`` names the dtype instead of an opaque cast overflow.
     """
+    if not math.isfinite(eps):
+        raise ValueError(f"eps must be finite, got {eps}.")
     floor = eps
     if t.is_floating_point():
-        floor = max(eps, float(torch.finfo(t.dtype).tiny))
+        info = torch.finfo(t.dtype)
+        if eps > info.max:
+            raise ValueError(
+                f"eps={eps} exceeds the largest finite {t.dtype} value "
+                f"({info.max}); use a smaller eps or a wider dtype."
+            )
+        floor = max(eps, float(info.tiny))
     return t.clamp_min(floor)
 
 
@@ -620,19 +631,3 @@ def validate_provenance(value: object) -> dict:
             "predictor state."
         )
     return snapshot
-
-
-def check_difficulty(s: Tensor) -> Tensor:
-    """Difficulty values must be finite and strictly positive."""
-    if not s.is_floating_point():
-        raise TypeError(
-            "Difficulty values must use a floating-point dtype; got "
-            f"{s.dtype}. Integer difficulty would truncate interval scaling."
-        )
-    if not torch.isfinite(s).all() or not (s > 0).all():
-        raise ValueError(
-            "Difficulty values must be finite and strictly positive; got "
-            f"min={float(s.min()) if s.numel() else 'empty'}, "
-            f"finite={bool(torch.isfinite(s).all())}."
-        )
-    return s

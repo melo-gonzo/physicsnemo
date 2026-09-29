@@ -117,6 +117,16 @@ def test_aux_difficulty_floors_finite_nonpositive_values(dtype):
     )
 
 
+def test_aux_difficulty_rejects_eps_unrepresentable_in_aux_dtype():
+    sigma = {"sigma": torch.ones(3, dtype=torch.float16)}
+    with pytest.raises(ValueError, match="torch.float16"):
+        AuxDifficulty("sigma", eps=1e6)(aux=sigma)
+    difficulty = AuxDifficulty("sigma")
+    difficulty.eps = float("nan")
+    with pytest.raises(ValueError, match="eps must be finite"):
+        difficulty(aux=sigma)
+
+
 # fmt: off
 RAW_DIFFICULTY_REJECTIONS = [
     pytest.param(None, TypeError, "must be a torch.Tensor", id="none"),
