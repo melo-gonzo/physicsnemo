@@ -30,6 +30,7 @@ from ._quantile import alpha_as_fraction, validate_alpha, validate_n_cal
 from ._validation import (
     TIERS,
     Tier,
+    _field_label,
     check_exact_shape,
     check_real,
     multi_rank_active,
@@ -192,7 +193,7 @@ class CoverageAccumulator:
             hi_field = containers["hi"][key]
             target_field = containers["target"][key]
             if target_field.numel() == 0:
-                raise ValueError(f"Field '{key}': empty target tensor.")
+                raise ValueError(f"{_field_label(key)}: empty target tensor.")
             check_exact_shape(key, "lo", lo_field, "target", target_field)
             check_exact_shape(key, "hi", hi_field, "target", target_field)
             check_real(key, "lo", lo_field)
@@ -203,7 +204,7 @@ class CoverageAccumulator:
             widths = hi_field.to(torch.float64) - lo_field.to(torch.float64)
             if not bool(torch.isfinite(widths).all()):
                 raise ValueError(
-                    f"Field '{key}': interval width overflows even though both "
+                    f"{_field_label(key)}: interval width overflows even though both "
                     "endpoints are finite. Rescale interval bounds and targets "
                     "consistently, and restart diagnostics."
                 )
@@ -214,7 +215,7 @@ class CoverageAccumulator:
             width_total = self._counters[key].width_sum + float(widths.sum())
             if not math.isfinite(width_total):
                 raise ValueError(
-                    f"Field '{key}': interval width sum overflows float64 within "
+                    f"{_field_label(key)}: interval width sum overflows float64 within "
                     "this sample or across updates. Rescale interval bounds and "
                     "targets consistently, and restart diagnostics."
                 )
@@ -227,7 +228,7 @@ class CoverageAccumulator:
                     previous = self._element_hits.get(key)
                     if previous is not None and previous.shape != coverage.shape:
                         raise ValueError(
-                            f"Field '{key}': elementwise coverage requires a fixed "
+                            f"{_field_label(key)}: elementwise coverage requires a fixed "
                             "sample shape across updates."
                         )
                 case "functional":
