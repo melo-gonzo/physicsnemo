@@ -23,6 +23,7 @@ Supports CUDA stream-aware prefetching for overlapped IO and computation.
 
 from __future__ import annotations
 
+import threading
 from typing import Any, Optional, Sequence, Union
 
 import torch
@@ -123,6 +124,11 @@ class MeshDataset(DatasetBase):
         self.cache_host_views = max(1, int(cache_host_views))
         self._host_cache: dict[int, list[tuple[Any, dict[str, Any]]]] = {}
         self._host_cache_cursor: dict[int, int] = {}
+        # One lock per index: concurrent worker threads (num_workers > 1 or the
+        # dataset's own prefetch) must read an index at most
+        # ``cache_host_views`` times; the outer lock guards the lock table.
+        self._host_cache_lock = threading.Lock()
+        self._host_cache_index_locks: dict[int, threading.Lock] = {}
         self.transforms = list(transforms) if transforms else []
         self._device = torch.device(device) if isinstance(device, str) else device
 
@@ -225,18 +231,30 @@ class MeshDataset(DatasetBase):
     # Producer / consumer split (overrides DatasetBase defaults)
     # ------------------------------------------------------------------
 
-    def _read_host(self, index: int) -> tuple[Union[Mesh, DomainMesh, TensorDict], dict[str, Any]]:
-        """Read one sample from the reader, through the host cache when enabled."""
-        if self.cache_host:
+    def _read_host(
+        self, index: int
+    ) -> tuple[Union[Mesh, DomainMesh, TensorDict], dict[str, Any]]:
+        """Read one sample from the reader, through the host cache when enabled.
+
+        The per-index lock is held across the disk read so that concurrent
+        requests for one index (worker threads, prefetch) read it at most
+        ``cache_host_views`` times and later requests all see the same views.
+        Requests for different indices do not wait on each other.
+        """
+        if not self.cache_host:
+            return self.reader[index]
+        with self._host_cache_lock:
+            index_lock = self._host_cache_index_locks.setdefault(
+                index, threading.Lock()
+            )
+        with index_lock:
             views = self._host_cache.setdefault(index, [])
-            if len(views) >= self.cache_host_views:
-                cursor = self._host_cache_cursor.get(index, 0)
-                self._host_cache_cursor[index] = (cursor + 1) % len(views)
-                return views[cursor]
-        data, metadata = self.reader[index]
-        if self.cache_host:
-            self._host_cache[index].append((data, metadata))
-        return data, metadata
+            if len(views) < self.cache_host_views:
+                views.append(self.reader[index])
+                return views[-1]
+            cursor = self._host_cache_cursor.get(index, 0)
+            self._host_cache_cursor[index] = (cursor + 1) % len(views)
+            return views[cursor]
 
     def _load_host(self, work_item: int) -> HostPayload:
         """Producer stage: read a mesh sample on a worker thread.

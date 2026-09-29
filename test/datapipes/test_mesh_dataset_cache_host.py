@@ -34,9 +34,12 @@ class _CountingReader:
 
     def __getitem__(self, index: int):
         self.reads[index] = self.reads.get(index, 0) + 1
-        pts = torch.tensor(
-            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0]]
-        ) + index
+        pts = (
+            torch.tensor(
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0]]
+            )
+            + index
+        )
         cells = torch.tensor([[0, 1, 2], [1, 3, 2]])
         return Mesh(points=pts, cells=cells), {"index": index}
 
@@ -68,7 +71,43 @@ def test_cache_host_off_rereads():
 def test_cache_host_views_reads_k_views_then_cycles():
     reader = _CountingReader()
     ds = MeshDataset(reader, cache_host=True, cache_host_views=3)
-    got = [ds[0][0].points[0, 0].item() for _ in range(7)]  # reader returns index-offset points; views identical here
+    got = [
+        ds[0][0].points[0, 0].item() for _ in range(7)
+    ]  # reader returns index-offset points; views identical here
     assert reader.reads == {0: 3}  # three views read, then cycled
     assert len(got) == 7 and all(g == 0.0 for g in got)
+    ds.close()
+
+
+class _SlowCountingReader(_CountingReader):
+    """Counting reader whose reads overlap in time, so a race would over-read."""
+
+    def __getitem__(self, index: int):
+        import time
+
+        time.sleep(0.02)
+        return super().__getitem__(index)
+
+
+def test_cache_host_concurrent_requests_read_at_most_k_views():
+    from concurrent.futures import ThreadPoolExecutor
+
+    reader = _SlowCountingReader()
+    ds = MeshDataset(reader, cache_host=True, cache_host_views=2)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda _: ds._read_host(0), range(16)))
+    assert reader.reads == {0: 2}
+    assert len({id(data) for data, _ in results}) == 2
+    ds.close()
+
+
+def test_cache_host_concurrent_requests_serve_one_identical_sample():
+    from concurrent.futures import ThreadPoolExecutor
+
+    reader = _SlowCountingReader()
+    ds = MeshDataset(reader, cache_host=True, num_workers=4)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda _: ds._read_host(1), range(8)))
+    assert reader.reads == {1: 1}
+    assert len({id(data) for data, _ in results}) == 1
     ds.close()
