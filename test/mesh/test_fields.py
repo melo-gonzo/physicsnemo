@@ -18,9 +18,11 @@ import pytest
 import torch
 from tensordict import TensorDict
 
-from physicsnemo.mesh import FieldLayout, ScalarVectorFields
+from physicsnemo.mesh import FieldLayout, RankSpec, ScalarVectorFields
 from physicsnemo.mesh.fields import (
     flatten_rank_spec,
+    flatten_rank_specs,
+    is_leaf_spec,
     rank_counts,
     ranks_from_tensordict,
     validate_data_contains_ranks,
@@ -189,6 +191,153 @@ def test_field_layout_validates_packed_shapes_and_dtype():
                 vectors=torch.empty(5, 1, 3, dtype=torch.float64),
             )
         )
+
+
+def test_rank_spec_parse_accepts_int_rank_spec_and_mapping():
+    assert RankSpec.parse(1) == RankSpec(rank=1)
+    spec = RankSpec(rank=2, symmetric=True, parity="odd")
+    assert RankSpec.parse(spec) is spec
+    assert RankSpec.parse({"rank": 2, "symmetric": True, "parity": "odd"}) == spec
+    assert RankSpec.parse({"rank": 0}) == RankSpec(rank=0)
+
+    assert RankSpec(rank=0).shape(3) == ()
+    assert RankSpec(rank=0).size(3) == 1
+    assert RankSpec(rank=1).shape(2) == (2,)
+    assert RankSpec(rank=2).shape(3) == (3, 3)
+    assert RankSpec(rank=2).size(3) == 9
+
+
+@pytest.mark.parametrize(
+    ("spec", "error", "match"),
+    [
+        (True, TypeError, "got a bool"),
+        (1.0, TypeError, "must be an integer rank"),
+        (-1, ValueError, "must be non-negative"),
+        ({"symmetric": True}, ValueError, "must contain a 'rank' key"),
+        ({"rank": 1, "channels": 3}, ValueError, r"unknown keys \['channels'\]"),
+        ({"rank": True}, TypeError, "rank must be an integer"),
+        ({"rank": 1, "parity": "axial"}, ValueError, "parity must be 'even' or 'odd'"),
+        ({"rank": 1, "symmetric": True}, ValueError, "only meaningful for rank >= 2"),
+        ({"rank": 2, "symmetric": 1}, TypeError, "symmetric must be a bool"),
+    ],
+)
+def test_rank_spec_parse_rejects_invalid_specs(spec, error, match):
+    with pytest.raises(error, match=match):
+        RankSpec.parse(spec, source_label="outputs['x']")
+
+
+def test_is_leaf_spec_distinguishes_groups_from_leaf_mappings():
+    assert is_leaf_spec(0)
+    assert is_leaf_spec(RankSpec(rank=1))
+    assert is_leaf_spec({"rank": 2})
+    assert not is_leaf_spec({"pressure": 0})
+    assert not is_leaf_spec({})
+
+
+def test_flatten_rank_specs_treats_nested_and_dotted_names_alike():
+    stress = RankSpec(rank=2, symmetric=True)
+    nested = {
+        "surface": {"pressure": 0, "shear": {"rank": 1}},
+        "stress": stress,
+        "vorticity": {"rank": 1, "parity": "odd"},
+    }
+    dotted = {
+        "surface.pressure": 0,
+        "surface.shear": 1,
+        "stress": {"rank": 2, "symmetric": True},
+        "vorticity": RankSpec(rank=1, parity="odd"),
+    }
+    expected = {
+        "surface.pressure": RankSpec(rank=0),
+        "surface.shear": RankSpec(rank=1),
+        "stress": stress,
+        "vorticity": RankSpec(rank=1, parity="odd"),
+    }
+    assert flatten_rank_specs(nested) == expected
+    assert flatten_rank_specs(dotted) == expected
+    assert list(flatten_rank_specs(nested)) == list(expected)
+    assert flatten_rank_spec(dotted) == {
+        "surface.pressure": 0,
+        "surface.shear": 1,
+        "stress": 2,
+        "vorticity": 1,
+    }
+    assert rank_counts(nested) == {0: 1, 1: 2, 2: 1}
+
+    assert flatten_rank_specs({"a/b": {"c": 0}}, sep="/") == {"a/b/c": RankSpec(rank=0)}
+    assert flatten_rank_spec({"a.b": 0}, sep="/") == {"a.b": 0}
+
+
+def test_flatten_rank_specs_rejects_group_leaf_conflicts_and_bad_names():
+    with pytest.raises(ValueError, match="'surface' is a group of 'surface.pressure'"):
+        flatten_rank_specs({"surface": 0, "surface.pressure": 0})
+    with pytest.raises(ValueError, match="is a group of"):
+        flatten_rank_specs(
+            {"surface": {"pressure": {"mean": 0}}, "surface.pressure": 0}
+        )
+    with pytest.raises(ValueError, match="more than once"):
+        flatten_rank_specs({"surface": {"pressure": 0}, "surface.pressure": 1})
+    with pytest.raises(ValueError, match="empty path component"):
+        flatten_rank_specs({"surface..pressure": 0})
+    with pytest.raises(TypeError, match="must be strings"):
+        flatten_rank_specs({1: 0})
+    with pytest.raises(TypeError, match="must be a mapping"):
+        flatten_rank_specs([("pressure", 0)])
+
+
+def test_validate_rank_spec_accepts_widened_leaves():
+    validate_rank_spec(
+        {
+            "pressure": 0,
+            "velocity": RankSpec(rank=1),
+            "stress": {"rank": 2, "symmetric": True},
+            "surface": {"vorticity": {"rank": 1, "parity": "odd"}},
+        }
+    )
+    validate_rank_spec({"velocity": {"rank": 1}}, allowed_ranks=(0, 1))
+    with pytest.raises(ValueError, match="must be one of .* got 2"):
+        validate_rank_spec({"stress": RankSpec(rank=2)}, allowed_ranks=(0, 1))
+    with pytest.raises(ValueError, match=r"outputs\['stress'\] has unknown keys"):
+        validate_rank_spec(
+            {"stress": {"rank": 2, "channels": 2}}, source_label="outputs"
+        )
+    with pytest.raises(ValueError, match="parity must be 'even' or 'odd'"):
+        validate_rank_spec({"surface": {"shear": {"rank": 1, "parity": "axial"}}})
+
+
+def test_field_layout_accepts_rank_spec_leaves_and_dotted_names():
+    data = _mixed_fields()
+    reference = FieldLayout({"pressure": 0, "state": {"temperature": 0}, "wind": 1}, 3)
+    layout = FieldLayout(
+        {
+            "pressure": RankSpec(rank=0),
+            "state.temperature": {"rank": 0},
+            "wind": {"rank": 1, "parity": "even"},
+        },
+        spatial_dim=3,
+    )
+    assert layout.flat_rank_spec == reference.flat_rank_spec
+    packed = layout.pack(data)
+    expected = reference.pack(data)
+    torch.testing.assert_close(packed.scalars, expected.scalars)
+    torch.testing.assert_close(packed.vectors, expected.vectors)
+    unpacked = layout.unpack(packed)
+    torch.testing.assert_close(
+        unpacked["state", "temperature"], data["state", "temperature"]
+    )
+
+
+def test_field_layout_rejects_pseudovectors_and_symmetric_leaves():
+    with pytest.raises(ValueError, match="has parity 'odd'; FieldLayout packs"):
+        FieldLayout({"vorticity": {"rank": 1, "parity": "odd"}}, spatial_dim=3)
+    with pytest.raises(ValueError, match="has parity 'odd'"):
+        FieldLayout({"vorticity": RankSpec(rank=1, parity="odd")}, spatial_dim=3)
+    with pytest.raises(ValueError, match="only meaningful for rank >= 2"):
+        FieldLayout({"wind": {"rank": 1, "symmetric": True}}, spatial_dim=3)
+    with pytest.raises(ValueError, match="must be one of .* got 2"):
+        FieldLayout({"stress": {"rank": 2, "symmetric": True}}, spatial_dim=3)
+    with pytest.raises(ValueError, match="is a group of"):
+        FieldLayout({"surface": 0, "surface.pressure": 0}, spatial_dim=3)
 
 
 def test_validate_data_contains_ranks_reports_schema_errors():

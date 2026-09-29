@@ -14,54 +14,292 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-r"""Semantic scalar and vector field layout utilities.
+r"""Semantic tensor-rank field specifications and scalar/vector layouts.
 
 Mesh models commonly need to turn named physical fields into dense channel
 tensors.  A plain concatenation is not sufficient: a scalar field and a
 Cartesian vector field transform differently under a change of frame.  This
-module keeps those two representations separate while giving them a stable,
+module gives every named field a declared transformation law and a stable,
 name-based channel order.
 
-``RankSpecDict`` describes the semantic tensor rank of every named leaf.  The
-currently supported :class:`FieldLayout` leaves are
+:class:`RankSpec` is the per-field declaration: the tensor ``rank`` (0 scalar,
+1 vector, 2 rank-2 tensor, ...), whether a rank >= 2 tensor is fully
+``symmetric`` under index permutation, and its ``parity`` (``"even"`` for a
+true tensor, ``"odd"`` for a pseudotensor that flips sign under an improper
+rotation).  Multiple channels are represented by multiple named leaves, never
+by an extra unnamed feature axis.
+
+``RankSpecDict`` maps field names to leaf specs.  A leaf is written as a bare
+integer rank, a :class:`RankSpec`, or a mapping with a ``"rank"`` key; a
+mapping without a ``"rank"`` key is a nested group of fields.  A flat name may
+also contain the separator (``"surface.pressure"``) to denote nesting, so the
+nested and dotted forms describe the same field.  A name cannot be both a
+field and a group of fields.
+
+The currently supported :class:`FieldLayout` leaves are
 
 * rank 0: one scalar per point, with shape ``(N,)``;
-* rank 1: one polar vector per point, with shape ``(N, D)``.
+* rank 1: one polar (parity ``"even"``) vector per point, with shape ``(N, D)``.
 
 Consequently, a rank-1 leaf is not an arbitrary feature axis of length ``D``:
 it is explicitly promised to transform as a polar vector.  Axial vectors and
-higher-order tensors require additional representation metadata and are not
-silently treated as rank-1 fields here.
+higher-order tensors are declared through :class:`RankSpec` and are not
+silently treated as polar vectors here.
 """
 
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from copy import deepcopy
-from typing import NamedTuple, TypeAlias, Union
+from dataclasses import dataclass
+from typing import Any, Literal, NamedTuple, TypeAlias, Union
 
 import torch
 from tensordict import TensorDict
 
+
+@dataclass(frozen=True)
+class RankSpec:
+    r"""Transformation law of one named tensor field.
+
+    Parameters
+    ----------
+    rank : int
+        Number of spatial indices: 0 for a scalar, 1 for a vector, 2 for a
+        rank-2 tensor, and so on.
+    symmetric : bool, default=False
+        Whether the field is fully symmetric under any permutation of its
+        indices.  Only meaningful for ``rank >= 2``; rejected below that.
+    parity : {"even", "odd"}, default="even"
+        ``"even"`` for a true tensor and ``"odd"`` for a pseudotensor, which
+        additionally flips sign under an improper rotation.
+
+    Examples
+    --------
+    >>> RankSpec.parse(1)
+    RankSpec(rank=1, symmetric=False, parity='even')
+    >>> RankSpec.parse({"rank": 2, "symmetric": True}).shape(3)
+    (3, 3)
+    """
+
+    rank: int
+    symmetric: bool = False
+    parity: Literal["even", "odd"] = "even"
+
+    def __post_init__(self) -> None:
+        if isinstance(self.rank, bool) or not isinstance(self.rank, int):
+            raise TypeError(f"rank must be an integer, got {self.rank!r}")
+        if self.rank < 0:
+            raise ValueError(f"rank must be non-negative, got {self.rank}")
+        if not isinstance(self.symmetric, bool):
+            raise TypeError(f"symmetric must be a bool, got {self.symmetric!r}")
+        if self.symmetric and self.rank < 2:
+            raise ValueError(
+                f"symmetric=True is only meaningful for rank >= 2, got rank {self.rank}"
+            )
+        if self.parity not in ("even", "odd"):
+            raise ValueError(f"parity must be 'even' or 'odd', got {self.parity!r}")
+
+    def size(self, dim: int) -> int:
+        r"""Number of components per point in ``dim`` spatial dimensions."""
+        return dim**self.rank
+
+    def shape(self, dim: int) -> tuple[int, ...]:
+        r"""Trailing component shape: ``()`` at rank 0, ``(dim,) * rank`` above."""
+        return () if self.rank == 0 else (dim,) * self.rank
+
+    @classmethod
+    def parse(cls, spec: object, *, source_label: str = "rank spec") -> RankSpec:
+        r"""Normalize a leaf spec to a :class:`RankSpec`.
+
+        Parameters
+        ----------
+        spec : int, RankSpec, or Mapping
+            A bare integer rank, an existing :class:`RankSpec`, or a mapping
+            with the required key ``"rank"`` and the optional keys
+            ``"symmetric"`` and ``"parity"``.
+        source_label : str, default="rank spec"
+            Human-readable name used in error messages.
+
+        Raises
+        ------
+        TypeError
+            If ``spec`` is a bool, is none of the accepted forms, or a field
+            has the wrong type.
+        ValueError
+            If the mapping has unknown keys or lacks ``"rank"``, or a field
+            value is invalid (negative rank, bad parity, symmetric below
+            rank 2).
+        """
+        if isinstance(spec, cls):
+            return spec
+        if isinstance(spec, bool):
+            raise TypeError(
+                f"{source_label} must be an integer rank, a RankSpec, or a "
+                f"mapping with a 'rank' key; got a bool"
+            )
+        if isinstance(spec, int):
+            fields: dict[str, Any] = {"rank": spec}
+        elif isinstance(spec, Mapping):
+            unknown = set(spec) - {"rank", "symmetric", "parity"}
+            if unknown:
+                raise ValueError(
+                    f"{source_label} has unknown keys {sorted(map(str, unknown))!r}; "
+                    f"allowed keys are ['parity', 'rank', 'symmetric']"
+                )
+            if "rank" not in spec:
+                raise ValueError(f"{source_label} mapping must contain a 'rank' key")
+            fields = dict(spec)
+        else:
+            raise TypeError(
+                f"{source_label} must be an integer rank, a RankSpec, or a "
+                f"mapping with a 'rank' key; got {type(spec).__name__}"
+            )
+        try:
+            return cls(**fields)
+        except (TypeError, ValueError) as error:
+            raise type(error)(f"{source_label}: {error}") from None
+
+
 # TODO: replace with ``type RankSpecDict = ...`` after Python 3.11 support is
 # dropped (PEP 695).
-RankSpecDict: TypeAlias = dict[str, Union[int, "RankSpecDict"]]
+RankSpecDict: TypeAlias = dict[
+    str, Union[int, RankSpec, Mapping[str, Any], "RankSpecDict"]
+]
 
 
-def flatten_rank_spec(rank_spec: RankSpecDict, sep: str = ".") -> dict[str, int]:
-    r"""Flatten a nested rank specification to separator-joined names.
+def is_leaf_spec(value: object) -> bool:
+    r"""Decide whether a ``RankSpecDict`` value is a field leaf or a group.
 
-    The insertion order of ``rank_spec`` is retained for compatibility.  Code
-    that assigns positional channels should sort the returned names, as
-    :class:`FieldLayout` does.
+    A mapping without a ``"rank"`` key is a nested group of fields; every
+    other value (an integer, a :class:`RankSpec`, a mapping with ``"rank"``,
+    or anything invalid that :meth:`RankSpec.parse` will reject) is a leaf.
+    """
+    return not isinstance(value, Mapping) or "rank" in value
+
+
+def _split_name(name: str, sep: str, source_label: str) -> tuple[str, ...]:
+    """Split a field name on ``sep`` into non-empty path components."""
+    if not isinstance(name, str):
+        raise TypeError(f"All keys in {source_label} must be strings; got {name!r}")
+    path = tuple(name.split(sep))
+    if not all(path):
+        raise ValueError(
+            f"Field name {name!r} in {source_label} has an empty path component"
+        )
+    return path
+
+
+def _leaf_entries(
+    rank_spec: RankSpecDict,
+    *,
+    sep: str,
+    source_label: str,
+    allowed_ranks: Collection[int] | None = None,
+) -> list[tuple[tuple[str, ...], RankSpec]]:
+    """Walk ``rank_spec`` and return validated ``(path, RankSpec)`` leaves.
+
+    Nested groups and separator-containing names are both expanded to path
+    tuples.  Duplicate names and names that are simultaneously a field and a
+    group of fields are refused.
+    """
+    if not isinstance(rank_spec, Mapping):
+        raise TypeError(
+            f"{source_label} must be a mapping, got {type(rank_spec).__name__}"
+        )
+    allowed = None if allowed_ranks is None else frozenset(allowed_ranks)
+    entries: list[tuple[tuple[str, ...], RankSpec]] = []
+
+    def _walk(spec: Mapping[str, Any], prefix: tuple[str, ...]) -> None:
+        for key, value in spec.items():
+            path = (*prefix, *_split_name(key, sep, source_label))
+            if not is_leaf_spec(value):
+                _walk(value, path)
+                continue
+            name = sep.join(path)
+            leaf = RankSpec.parse(value, source_label=f"{source_label}[{name!r}]")
+            if allowed is not None and leaf.rank not in allowed:
+                raise ValueError(
+                    f"Rank for {name!r} in {source_label} must be one of "
+                    f"{sorted(allowed)}, got {leaf.rank}"
+                )
+            entries.append((path, leaf))
+
+    _walk(rank_spec, ())
+
+    seen: set[tuple[str, ...]] = set()
+    for path, _ in entries:
+        if path in seen:
+            raise ValueError(
+                f"{source_label} declares the field {sep.join(path)!r} more than once"
+            )
+        seen.add(path)
+    for path in seen:
+        for depth in range(1, len(path)):
+            if path[:depth] in seen:
+                raise ValueError(
+                    f"{source_label}: {sep.join(path[:depth])!r} is a group of "
+                    f"{sep.join(path)!r}; a name cannot be both a field and a "
+                    f"group of fields"
+                )
+    return entries
+
+
+def flatten_rank_specs(rank_spec: RankSpecDict, sep: str = ".") -> dict[str, RankSpec]:
+    r"""Flatten a rank specification to separator-joined names and leaf specs.
+
+    Nested groups and separator-containing flat names are treated alike, so
+    ``{"surface": {"pressure": 0}}`` and ``{"surface.pressure": 0}`` flatten
+    to the same result.  The insertion order of ``rank_spec`` is retained.
 
     Parameters
     ----------
     rank_spec : RankSpecDict
-        Mapping from field names to integer ranks or nested mappings.
+        Mapping from field names to leaf specs (integer ranks,
+        :class:`RankSpec` instances, or mappings with a ``"rank"`` key) or to
+        nested groups.
     sep : str, default="."
-        Separator used to join nested path components.
+        Separator used to join nested path components and to split flat names.
+
+    Returns
+    -------
+    dict[str, RankSpec]
+        Flat field-name to :class:`RankSpec` mapping.
+
+    Raises
+    ------
+    TypeError
+        If a key is not a string or a leaf is not an accepted spec form.
+    ValueError
+        If a leaf spec is invalid, a name is declared twice, or a name is
+        both a field and a group of fields.
+
+    Examples
+    --------
+    >>> flatten_rank_specs({"fluid": {"pressure": 0}, "stress": {"rank": 2}})
+    {'fluid.pressure': RankSpec(rank=0, symmetric=False, parity='even'), 'stress': RankSpec(rank=2, symmetric=False, parity='even')}
+    """
+    return {
+        sep.join(path): leaf
+        for path, leaf in _leaf_entries(rank_spec, sep=sep, source_label="rank_spec")
+    }
+
+
+def flatten_rank_spec(rank_spec: RankSpecDict, sep: str = ".") -> dict[str, int]:
+    r"""Flatten a nested rank specification to separator-joined names and ranks.
+
+    This is :func:`flatten_rank_specs` reduced to the integer rank of every
+    leaf; symmetry and parity are dropped.  The insertion order of
+    ``rank_spec`` is retained for compatibility.  Code that assigns positional
+    channels should sort the returned names, as :class:`FieldLayout` does.
+
+    Parameters
+    ----------
+    rank_spec : RankSpecDict
+        Mapping from field names to leaf specs or nested mappings.
+    sep : str, default="."
+        Separator used to join nested path components and to split flat names.
 
     Returns
     -------
@@ -75,14 +313,9 @@ def flatten_rank_spec(rank_spec: RankSpecDict, sep: str = ".") -> dict[str, int]
     >>> flatten_rank_spec({"fluid": {"pressure": 0, "velocity": 1}})
     {'fluid.pressure': 0, 'fluid.velocity': 1}
     """
-    result: dict[str, int] = {}
-    for key, value in rank_spec.items():
-        if isinstance(value, dict):
-            for sub_key, rank in flatten_rank_spec(value, sep=sep).items():
-                result[f"{key}{sep}{sub_key}"] = rank
-        else:
-            result[key] = value
-    return result
+    return {
+        name: leaf.rank for name, leaf in flatten_rank_specs(rank_spec, sep=sep).items()
+    }
 
 
 def validate_rank_spec(
@@ -91,59 +324,33 @@ def validate_rank_spec(
     allowed_ranks: Collection[int] | None = None,
     source_label: str = "rank_spec",
 ) -> None:
-    r"""Validate the structure and integer leaves of a rank specification.
+    r"""Validate the structure and leaves of a rank specification.
+
+    Every leaf is validated through :meth:`RankSpec.parse`, so integer ranks,
+    :class:`RankSpec` instances, and mappings with a ``"rank"`` key are all
+    accepted.
 
     Parameters
     ----------
     rank_spec : RankSpecDict
         Rank specification to validate.
     allowed_ranks : Collection[int] or None, optional
-        If supplied, every leaf must belong to this collection.  Otherwise all
-        non-negative integer ranks are accepted.
+        If supplied, every leaf rank must belong to this collection.
+        Otherwise all non-negative integer ranks are accepted.
     source_label : str, default="rank_spec"
         Human-readable name used in error messages.
 
     Raises
     ------
     TypeError
-        If a key is not a string or a leaf is not an integer.
+        If a key is not a string or a leaf is not an accepted spec form.
     ValueError
-        If a rank is negative or is not in ``allowed_ranks``.
+        If a leaf spec is invalid, a rank is not in ``allowed_ranks``, or a
+        name is declared twice or is both a field and a group of fields.
     """
-    allowed = None if allowed_ranks is None else frozenset(allowed_ranks)
-
-    def _validate(spec: RankSpecDict, path: tuple[str, ...]) -> None:
-        for key, value in spec.items():
-            if not isinstance(key, str):
-                raise TypeError(
-                    f"All keys in {source_label} must be strings; got "
-                    f"{key!r} at {'.'.join(path) or '<root>'}"
-                )
-            leaf_path = (*path, key)
-            if isinstance(value, dict):
-                _validate(value, leaf_path)
-                continue
-            if isinstance(value, bool) or not isinstance(value, int):
-                raise TypeError(
-                    f"Rank for {'.'.join(leaf_path)!r} in {source_label} must "
-                    f"be an integer, got {value!r}"
-                )
-            if value < 0:
-                raise ValueError(
-                    f"Rank for {'.'.join(leaf_path)!r} in {source_label} must "
-                    f"be non-negative, got {value}"
-                )
-            if allowed is not None and value not in allowed:
-                raise ValueError(
-                    f"Rank for {'.'.join(leaf_path)!r} in {source_label} must "
-                    f"be one of {sorted(allowed)}, got {value}"
-                )
-
-    if not isinstance(rank_spec, dict):
-        raise TypeError(
-            f"{source_label} must be a dict, got {type(rank_spec).__name__}"
-        )
-    _validate(rank_spec, ())
+    _leaf_entries(
+        rank_spec, sep=".", source_label=source_label, allowed_ranks=allowed_ranks
+    )
 
 
 def rank_counts(rank_spec: RankSpecDict) -> Counter[int]:
@@ -228,21 +435,6 @@ class ScalarVectorFields(NamedTuple):
     vectors: torch.Tensor
 
 
-def _rank_entries(
-    rank_spec: RankSpecDict,
-    path: tuple[str, ...] = (),
-) -> list[tuple[tuple[str, ...], int]]:
-    """Return rank leaves as unambiguous key paths."""
-    entries: list[tuple[tuple[str, ...], int]] = []
-    for key, value in rank_spec.items():
-        leaf_path = (*path, key)
-        if isinstance(value, dict):
-            entries.extend(_rank_entries(value, leaf_path))
-        else:
-            entries.append((leaf_path, value))
-    return entries
-
-
 def _td_key(path: tuple[str, ...]) -> str | tuple[str, ...]:
     """Use a string for top-level TensorDict keys and tuples for nested keys."""
     return path[0] if len(path) == 1 else path
@@ -259,12 +451,15 @@ class FieldLayout:
     Parameters
     ----------
     rank_spec : RankSpecDict
-        Nested or flat field schema.  Only rank-0 and rank-1 leaves are
-        supported.
+        Nested or flat field schema.  Only rank-0 and polar (parity
+        ``"even"``) rank-1 leaves are supported; leaves may be given as
+        integers, :class:`RankSpec` instances, or mappings with a ``"rank"``
+        key.
     spatial_dim : int
         Cartesian vector dimension ``D``.
     sep : str, default="."
-        Separator used only for public flattened names and sorting.
+        Separator used for public flattened names and sorting, and to split
+        flat names into nested TensorDict paths.
 
     Notes
     -----
@@ -280,11 +475,6 @@ class FieldLayout:
         *,
         sep: str = ".",
     ) -> None:
-        validate_rank_spec(
-            rank_spec,
-            allowed_ranks=(0, 1),
-            source_label="rank_spec",
-        )
         if isinstance(spatial_dim, bool) or not isinstance(spatial_dim, int):
             raise TypeError(f"spatial_dim must be an integer, got {spatial_dim!r}")
         if spatial_dim < 1:
@@ -294,20 +484,21 @@ class FieldLayout:
         if not sep:
             raise ValueError("sep must not be empty")
 
-        entries = [
-            (sep.join(path), path, rank) for path, rank in _rank_entries(rank_spec)
-        ]
-        if not entries:
+        leaves = _leaf_entries(
+            rank_spec, sep=sep, source_label="rank_spec", allowed_ranks=(0, 1)
+        )
+        if not leaves:
             raise ValueError("rank_spec must contain at least one field leaf")
 
-        # A literal key containing ``sep`` can otherwise collide with a nested
-        # path in public names and make deterministic ordering ambiguous.
-        names = [name for name, _, _ in entries]
-        if len(names) != len(set(names)):
-            raise ValueError(
-                f"rank_spec contains field paths that collide when flattened "
-                f"with separator {sep!r}"
-            )
+        entries = []
+        for path, leaf in leaves:
+            name = sep.join(path)
+            if leaf.parity != "even":
+                raise ValueError(
+                    f"Field {name!r} in rank_spec has parity {leaf.parity!r}; "
+                    f"FieldLayout packs scalars and polar vectors only"
+                )
+            entries.append((name, path, leaf.rank))
 
         entries.sort(key=lambda entry: entry[0])
         self._rank_spec = deepcopy(rank_spec)
@@ -473,9 +664,12 @@ class FieldLayout:
 
 __all__ = [
     "FieldLayout",
+    "RankSpec",
     "RankSpecDict",
     "ScalarVectorFields",
     "flatten_rank_spec",
+    "flatten_rank_specs",
+    "is_leaf_spec",
     "rank_counts",
     "ranks_from_tensordict",
     "validate_data_contains_ranks",
