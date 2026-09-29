@@ -33,6 +33,8 @@ from physicsnemo.experimental.uq.conformal import (
     NormalizedErrorScore,
 )
 from physicsnemo.experimental.uq.conformal._utils import (
+    TENSOR_KEY,
+    broadcast_difficulty,
     check_aux,
     check_exact_shape,
     check_finite,
@@ -72,6 +74,8 @@ VALIDATOR_CASES = [
     ("check_aux-not-tensor", lambda: check_aux("k", _N, _F, {"sigma": 1.0}), (TypeError, "must be a torch.Tensor")),
     ("check_aux-integer", lambda: check_aux("k", _N, _F, {"sigma": _I64}), (TypeError, "floating")),
     ("check_aux-nonfinite", lambda: check_aux("k", _N, _F, {"sigma": _INF3}), (ValueError, "non-finite")),
+    ("check_aux-plain-label", lambda: check_aux(TENSOR_KEY, _N, _F, {"sigma": 1.0}), (TypeError, "^Plain tensor: aux")),
+    ("broadcast_difficulty-plain-label", lambda: broadcast_difficulty(torch.ones(2), _F, TENSOR_KEY), (ValueError, "^Plain tensor: difficulty")),
     ("keys-bare-string", lambda: normalize_keys("pressure"), (TypeError, "bare string")),
     ("keys-order-preserved", lambda: normalize_keys(["b", "a"]), ("b", "a")),
     ("keys-none", lambda: normalize_keys(None), None),

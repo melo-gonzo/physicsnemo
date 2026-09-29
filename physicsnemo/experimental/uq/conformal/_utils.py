@@ -455,7 +455,7 @@ def broadcast_difficulty(t: Tensor, ref: Tensor, key: str) -> Tensor:
         return t
     if ref.shape[0] != t.shape[0]:
         raise ValueError(
-            f"Field '{key}': difficulty has {t.shape[0]} points but the "
+            f"{_field_label(key)}: difficulty has {t.shape[0]} points but the "
             f"leading dimension is {ref.shape[0]}; per-point difficulty "
             "must align with the leading (point) dimension."
         )
@@ -546,7 +546,7 @@ def check_aux(
     for aux_key in present:
         if not isinstance(aux[aux_key], Tensor):
             raise TypeError(
-                f"Field '{key}': aux '{aux_key}' must be a torch.Tensor, got "
+                f"{_field_label(key)}: aux '{aux_key}' must be a torch.Tensor, got "
                 f"{type(aux[aux_key]).__name__}."
             )
         check_exact_shape(
