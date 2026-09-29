@@ -31190,3 +31190,32 @@ not compound with the harmonic channel on the elasticity set; its Poisson gain d
 the aggregation fails to pay (AirfRANS, Tensile2d, the fixed-draw stencil test, now elasticity on top of the measures), and it closes the
 last open elasticity cell of the aggregation's record. The remaining universalization pairs (lug, DrivAerML Volume) complete the record;
 the removal of the aggregation from ISLA under the universalization rule (@sec-nb-universal-prereg) proceeds when they are scored.
+
+## 2026-09-29 — Verdict, HARMONIC-EL at 512 elasticity cases against the same-snapshot control (two seeds): the harmonic measures hurt every field by 9 to 12% (1.12 / 1.12 / 1.12 / 1.09) and the distances hurt on one seed (1.28 / 1.17 / 1.16 / 1.15) and are neutral on the other; the channel pays at 2,048 cases and costs at 512, so its universalization is undecided on this set {#sec-nb-harmonic-elasticity-512-verdict}
+
+**Setting.** @sec-nb-harmonic-elasticity-verdict recorded that the 512-case reading of the per-type geometry channel on OLBC elasticity
+had been measured against a base from another code snapshot and deferred it to a same-snapshot control pair (campaign hm rows 40-41,
+code_v7, the rank-1-input tensor-output ISLA with no channel). That pair is scored.
+
+**What we saw** (float32 relative L2 over 256 test cases, ratio arm ÷ control; per seed in parentheses):
+
+| arm at 512 cases | displacement | $\sigma_{11}$ | $\sigma_{22}$ | $\sigma_{12}$ |
+|---|--:|--:|--:|--:|
+| control (no channel) | 0.685 (0.725 / 0.645) | 0.745 | 0.751 | 0.779 |
+| harmonic measures | 1.12 (1.11 / 1.13) | 1.12 (1.14 / 1.10) | 1.12 (1.13 / 1.12) | 1.09 (1.10 / 1.08) |
+| per-type nearest distances | 1.13 (1.00 / 1.28) | 1.08 (0.98 / 1.17) | 1.08 (0.99 / 1.16) | 1.07 (0.99 / 1.15) |
+| GeoTransolver-512 ÷ control | 0.65 | 0.84 | 0.87 | 0.82 |
+
+: HARMONIC-EL at 512 cases, same-snapshot control hm_elasticity_tensor_ctrl_n512. Data: results/harmonic_2026-09-27.json. {#tbl-harmonic-el-512}
+
+**Reading.** The *hurts* reading of 2026-09-28 stands on the same-snapshot base: at 512 cases the four harmonic measures cost 9 to 12% on
+every field on both seeds, and the distances cost on one seed and are neutral on the other. At 2,048 cases the same measures improve the
+stresses by 10 to 14% (@sec-nb-harmonic-elasticity-verdict). Every 512-case elasticity lane, control and arms alike, has a validation loss
+that is flat from about epoch 100 while the training loss keeps falling, the signature of a training set too small for the model, and
+in that regime four extra per-query scalars are four more things to fit to the training cases; that reading is consistent with the
+numbers and is not separately tested. **For the universalization rule the channel is now: better at 2,048 on Poisson (6% against the
+distances) and on elasticity (10 to 14% on the stresses), neutral at 512 on Poisson against the healthy reference
+(@sec-nb-olbc-reference-correction), and worse by 9 to 12% at 512 on elasticity.** It does not meet "neutral or better everywhere". The
+decision waits for the code_v11 pairs (@sec-nb-olbc-ref-lanes), which put the channel and its reference on one snapshot at both rungs on
+both sets; if the 512 elasticity cost reproduces there, the channel stays an option documented as paying only above a training-set size,
+which under the rule is not a reference setting.

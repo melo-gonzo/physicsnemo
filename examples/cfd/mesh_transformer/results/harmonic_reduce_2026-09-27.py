@@ -104,8 +104,20 @@ for n in (512, 2048):
 EF = ("displacement", "sig11", "sig22", "sig12")
 la = json.load(open(f"{R}/local_agg_2026-09-27.json"))["elasticity"]
 out["elasticity"] = {}
+def ctrl_v7(n):
+    """Same-snapshot (code_v7) control pair hm_elasticity_tensor_ctrl_n{n}; None until both seeds are scored."""
+    ps = {}
+    for sd in (42, 43):
+        vals = {f: r[0] for f in EF if (r := per_case(f"hm_elasticity_tensor_ctrl_n{n}_seed{sd}", f"{f}_l2"))}
+        if len(vals) == len(EF):
+            ps[str(sd)] = vals
+    return {"means": {f: st.mean(v[f] for v in ps.values()) for f in EF}, "per_seed": ps} if len(ps) == 2 else None
+
+
 for n, base_arm in ((512, "rankio"), (2048, "rankio_ctrl_v7")):
     base = la[str(n)]["arms"][base_arm]; gt = la[str(n)]["gt512"]
+    if n == 512 and (c := ctrl_v7(512)):   # 2026-09-29: the 512 control (hm rows 40-41) replaces the cross-snapshot code_v2 record
+        base, base_arm = c, "ctrl_v7_hm40"
     rung = {"base_arm": base_arm, "base": base["means"], "base_per_seed": base["per_seed"], "gt512": gt, "arms": {}}
     for arm, pat in {"hm_measures": f"hm_elasticity_tensor_hm_measures_n{n}_seed{{s}}", "distonly": f"hm_elasticity_tensor_distonly_n{n}_seed{{s}}",
                      "hm_measures_local05": f"hm_elasticity_tensor_hm_measures_local05_n{n}_seed{{s}}"}.items():
