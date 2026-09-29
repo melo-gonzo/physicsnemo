@@ -1,0 +1,156 @@
+{
+ "protocol": "LOCAL-LPR AirfRANS interior (2026-09-29, #sec-nb-local-lpr-prereg): GMLS/local-polynomial-regression stencil weights (local_weights='lpr') and finite-difference gradient channels (local_gradient=True) on the 32-nearest-token aggregation (rho 0.05) vs the same-snapshot provided-geometry reference (sg_af_provided, code_v3 K=0 path unchanged through code_v10) and the Gaussian-weight aggregation (la_af_provided_local05, code_v7); float32 per-case relative L2 at 100k queries, 200 test airfoils, two seeds; ratio arm / reference.",
+ "arms": {
+  "provided_ref": {
+   "means": {
+    "pressure_l2": 0.03281833085029856,
+    "velocity_l2": 0.016127241897009495,
+    "nut_l2": 0.03233322395888698
+   },
+   "per_seed": {
+    "42": {
+     "pressure_l2": 0.03249945812074538,
+     "velocity_l2": 0.015933422365344268,
+     "nut_l2": 0.030415697624951703
+    },
+    "43": {
+     "pressure_l2": 0.03313720357985175,
+     "velocity_l2": 0.01632106142867472,
+     "nut_l2": 0.034250750292822256
+    }
+   },
+   "ratio_to_ref": {
+    "pressure_l2": 1.0,
+    "velocity_l2": 1.0,
+    "nut_l2": 1.0
+   },
+   "ratio_per_seed": {
+    "42": {
+     "pressure_l2": 1.0,
+     "velocity_l2": 1.0,
+     "nut_l2": 1.0
+    },
+    "43": {
+     "pressure_l2": 1.0,
+     "velocity_l2": 1.0,
+     "nut_l2": 1.0
+    }
+   }
+  },
+  "gauss_local05": {
+   "means": {
+    "pressure_l2": 0.037049502375302835,
+    "velocity_l2": 0.018786436254158614,
+    "nut_l2": 0.03928855795180425
+   },
+   "per_seed": {
+    "42": {
+     "pressure_l2": 0.03678007934708148,
+     "velocity_l2": 0.019076095297932624,
+     "nut_l2": 0.041710385475307706
+    },
+    "43": {
+     "pressure_l2": 0.03731892540352419,
+     "velocity_l2": 0.018496777210384608,
+     "nut_l2": 0.0368667304283008
+    }
+   },
+   "ratio_to_ref": {
+    "pressure_l2": 1.128927078720269,
+    "velocity_l2": 1.1648883531437708,
+    "nut_l2": 1.215114150131186
+   },
+   "ratio_per_seed": {
+    "42": {
+     "pressure_l2": 1.131713618437338,
+     "velocity_l2": 1.1972377848605693,
+     "nut_l2": 1.3713440339139331
+    },
+    "43": {
+     "pressure_l2": 1.126194167639874,
+     "velocity_l2": 1.1333072478905901,
+     "nut_l2": 1.07637730890896
+    }
+   }
+  },
+  "lpr_local05": {
+   "means": {
+    "pressure_l2": 0.03634656289193247,
+    "velocity_l2": 0.019209703493730298,
+    "nut_l2": 0.06273475023917854
+   },
+   "per_seed": {
+    "42": {
+     "pressure_l2": 0.036485284423854736,
+     "velocity_l2": 0.018865910644776055,
+     "nut_l2": 0.05956558803362506
+    },
+    "43": {
+     "pressure_l2": 0.03620784136001021,
+     "velocity_l2": 0.01955349634268454,
+     "nut_l2": 0.06590391244473202
+    }
+   },
+   "ratio_to_ref": {
+    "pressure_l2": 1.107507967353002,
+    "velocity_l2": 1.1911338353083418,
+    "nut_l2": 1.9402565707319614
+   },
+   "ratio_per_seed": {
+    "42": {
+     "pressure_l2": 1.1226428541762388,
+     "velocity_l2": 1.1840463531431922,
+     "nut_l2": 1.9583830944176688
+    },
+    "43": {
+     "pressure_l2": 1.0926643605504927,
+     "velocity_l2": 1.1980529837557445,
+     "nut_l2": 1.9241596718698204
+    }
+   }
+  },
+  "lpr_grad_local05": {
+   "means": {
+    "pressure_l2": 0.19791996623389424,
+    "velocity_l2": 0.07065083676483483,
+    "nut_l2": 0.20141211818903684
+   },
+   "per_seed": {
+    "42": {
+     "pressure_l2": 0.17766055220738053,
+     "velocity_l2": 0.06930767277255655,
+     "nut_l2": 0.2047357616946101
+    },
+    "43": {
+     "pressure_l2": 0.21817938026040792,
+     "velocity_l2": 0.0719940007571131,
+     "nut_l2": 0.19808847468346358
+    }
+   },
+   "ratio_to_ref": {
+    "pressure_l2": 6.030774908593308,
+    "velocity_l2": 4.380838162905943,
+    "nut_l2": 6.229261840549542
+   },
+   "ratio_per_seed": {
+    "42": {
+     "pressure_l2": 5.466569674710191,
+     "velocity_l2": 4.349829633795629,
+     "nut_l2": 6.7312531910053535
+    },
+    "43": {
+     "pressure_l2": 6.5841216726286005,
+     "velocity_l2": 4.411110213127791,
+     "nut_l2": 5.783478405288421
+    }
+   }
+  }
+ },
+ "lpr_over_gauss": {
+  "pressure_l2": 0.9810270195737111,
+  "velocity_l2": 1.022530470060706,
+  "nut_l2": 1.5967689706538994
+ },
+ "poisson_512_lpr_over_gauss": 1.0863491594454686,
+ "verdict": "refuted: lpr weights hurt like the Gaussian weights (1.11 / 1.19 / 1.94 vs 1.13 / 1.17 / 1.22), gradient channels 4.4 to 6.2x worse (training loss 10x the reference, no NaN); Poisson 512 lpr / Gaussian 1.09"
+}

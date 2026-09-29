@@ -31272,3 +31272,36 @@ centering); above 0.97 means the gain lived in the common component and the idea
 becomes part of the reference configuration only if it is neutral or better on all four (and the 510-wing pair, launched with them,
 when it lands); otherwise it is removed together with the first form, and the AirfRANS gain is recorded as a lead for a future
 mechanism, not as an option.
+
+## 2026-09-29 — Verdict, LOCAL-LPR on the AirfRANS interior (two seeds): polynomial-reproducing stencil weights hurt like the Gaussian weights (1.11 / 1.19 / 1.94 of the reference on pressure / velocity / eddy viscosity against 1.13 / 1.17 / 1.22), and the finite-difference gradient channels are 4.4 to 6.2x worse; refuted on both datasets, both forms are removed with the aggregation {#sec-nb-local-lpr-verdict}
+
+**Setting.** @sec-nb-local-lpr-prereg borrowed two ideas from the meshfree exterior-calculus paper for ISLA's local relational
+aggregation (32 nearest tokens, radius 0.05): weights from a weighted least-squares affine fit that reproduce constants and linear
+functions exactly (generalized moving least squares, `local_weights="lpr"`), and finite-difference channels that carry the fitted
+gradient of the token state projected on the boundary normal and the global directions (`local_gradient=True`). The hypothesis was that
+the Gaussian aggregation's AirfRANS loss (13 to 22%) came from weights that do not reproduce even a constant field on an irregular
+resampled stencil, so consistent weights would remove it. The Poisson 512 check had already read as a regression (lpr ÷ Gaussian 1.09).
+Lanes lw_af_provided_local05_lpr and lw_af_provided_local05_lpr_grad (code_v10) against the provided-geometry reference pair
+sg_af_provided (the K = 0 path is unchanged between those snapshots) and the Gaussian arm la_af_provided_local05.
+
+**What we saw** (float32 relative L2 over the 200 test airfoils at 100,000 queries, seed means; ratio arm ÷ reference, per seed in
+parentheses):
+
+| arm | pressure | velocity | eddy viscosity |
+|---|--:|--:|--:|
+| reference (no aggregation) | 0.0328 | 0.0161 | 0.0323 |
+| Gaussian weights | 1.13 (1.13 / 1.13) | 1.17 (1.20 / 1.13) | 1.22 (1.37 / 1.08) |
+| polynomial-reproducing weights | 1.11 (1.12 / 1.09) | 1.19 (1.18 / 1.20) | 1.94 (1.96 / 1.92) |
+| polynomial-reproducing weights + gradient channels | 6.03 (5.47 / 6.58) | 4.38 (4.35 / 4.41) | 6.23 (6.73 / 5.78) |
+
+: LOCAL-LPR on the AirfRANS interior. Data: results/local_lpr_2026-09-29.json. {#tbl-local-lpr-airfrans}
+
+**Reading.** Consistent weights do not remove the loss: pressure and velocity are the same as with Gaussian weights within 2 to 4%, and
+eddy viscosity is 1.9x worse on both seeds. The stencil-consistency hypothesis is refuted for the second time (the fixed-draw test,
+@sec-nb-local-agg-stencil-verdict, had already shown the loss is not the resampling). The gradient channels are a training failure of a
+mild kind: no NaN, but the training loss settles 10x above the reference's (0.0016 against 0.00018 at epoch 500) and the validation
+loss 2x above, so the model with the projected finite-difference gradients in its token states fits the training airfoils far worse;
+the mechanism is not separately measured. **Verdict: refuted on both datasets (Poisson 512 regression 1.09, AirfRANS 1.11 / 1.19 /
+1.94 and 4.4 to 6.2x).** Under the universalization rule both forms leave the model together with the Gaussian aggregation they were
+meant to repair: `local_weights`, `local_gradient`, and the aggregation itself (`local_rho`, `local_k`) are removed once the last
+record lanes (lug and DrivAerML Volume universalization pairs) are scored, and the source stays in the repository history.
