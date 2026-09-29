@@ -134,7 +134,6 @@ def test_isla_constructor_attributes(config):
         assert m.geo_kernel == "auto"
         assert m.slice_prototypes == "static"
         assert m.interior is False and m.qt is None
-        assert m.interior_nn_chunk is None
         assert m.n_global_vectors == 1 and m.n_global_scalars == 0
         assert m.boundary_specs == {} and m.query_specs == {}
         assert m.eps == 1e-12
@@ -157,7 +156,6 @@ def test_isla_constructor_attributes(config):
             n_slices=16,
             geo_kernel="eager",
             geo_checkpoint=True,
-            interior_nn_chunk=512,
             slice_prototypes="centered",
             eps=1e-8,
         )
@@ -169,7 +167,6 @@ def test_isla_constructor_attributes(config):
         assert list(m.boundary_specs) == ["trace", "traction"]
         assert list(m.query_specs) == ["sdf"]
         assert m.interior is True and m.qt is not None
-        assert m.interior_nn_chunk == 512
         assert m.slice_prototypes == "centered"
         assert m.eps == 1e-8
     assert isinstance(m, Module)

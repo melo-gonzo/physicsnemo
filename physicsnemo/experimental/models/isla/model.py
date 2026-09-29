@@ -139,11 +139,11 @@ and the direction :math:`u_q = (x_q - y_{i^*}) / |x_q - y_{i^*}|`.
 built-in rank-0 channel ahead of the declared ``query_inputs``. A dataset's
 stored signed-distance field or its gradient enter, if wanted, as ordinary
 declared ``query_inputs`` (rank 0 / rank 1) like any other PDE data. The
-search is a chunked nearest-neighbour pass over the prediction points
-(:func:`nearest_boundary_geometry`: an exact brute-force pass, a fused
-Triton kernel on CUDA and a float64 matmul expansion elsewhere; the
-:math:`N_q \times N` distance matrix is never materialized;
-``interior_nn_chunk`` sizes the fallback's blocks). Because the boundary is a
+nearest token comes from the library's nearest-neighbour search
+(:func:`physicsnemo.nn.functional.neighbors.knn.knn`, ``k=1``: cuML on
+CUDA, a scipy KD-tree on CPU, torch otherwise, in any dimension), and
+:func:`nearest_boundary_geometry` builds the distance and direction from the
+gathered sample. Because the boundary is a
 sample (200,000 of up to 17 million cells on a DrivAerML car), the internal
 distance overestimates the true wall distance near the wall by up to about
 the sample spacing, and the internal direction deviates from the true SDF
@@ -207,6 +207,7 @@ from physicsnemo.mesh.fields import (
     validate_rank_spec,
 )
 from physicsnemo.nn.functional.equivariant_ops import vector_project
+from physicsnemo.nn.functional.neighbors.knn.knn import knn
 
 logger = logging.getLogger(__name__)
 
@@ -809,29 +810,11 @@ def rms_pairwise_distance(
     return (2.0 * var).sqrt().clamp_min(eps)
 
 
-#: Memory budget, in bytes, of one chunk of the nearest-boundary distance block
-#: when ``interior_nn_chunk`` is not given (2 GiB of float64: about 1,300 queries
-#: per chunk against 200,000 boundary points; the search is memory-bound, so
-#: fewer, larger chunks are faster).
-NN_CHUNK_BYTES = 2 * 2**30
-
-
-def _nn_kernel_available() -> bool:
-    """Whether the Triton nearest-neighbour kernel can run (imported lazily so
-    the module loads without triton)."""
-    try:
-        from .nn_kernel import HAS_TRITON
-    except Exception:  # pragma: no cover
-        return False
-    return bool(HAS_TRITON)
-
-
 def nearest_boundary_geometry(
     query_points: Float[torch.Tensor, "batch queries dim"],
     points: Float[torch.Tensor, "batch tokens dim"],
     normals: Float[torch.Tensor, "batch tokens dim"],
     *,
-    chunk: int | None = None,
     eps: float = 1e-12,
 ) -> tuple[
     Float[torch.Tensor, "batch queries"], Float[torch.Tensor, "batch queries dim"]
@@ -839,13 +822,10 @@ def nearest_boundary_geometry(
     r"""Signed distance and direction from the nearest boundary sample to each query.
 
     For every query :math:`x_q` the nearest boundary point :math:`y_{i^*}` is
-    found by an exact brute-force search: on CUDA with Triton a fused kernel
-    (:mod:`nn_kernel`) streams the samples past ``BLOCK_Q`` queries at a time
-    and keeps the running minimum of the exact float32 ``|x_q - y_i|^2``, so no
-    ``N_q x N`` block is ever written; elsewhere a chunked float64 matmul
-    expansion ``|y|^2 - 2 x.y`` on centred, scaled coordinates (whose distance
-    resolution, ``sqrt(eps64) R ~ 1e-8 R``, is below the float32 resolution of
-    the coordinates) selects the same sample; then
+    found by the library's nearest-neighbour search
+    (:func:`physicsnemo.nn.functional.neighbors.knn.knn` with ``k=1``, one
+    call per batch element: cuML on CUDA, a scipy KD-tree on CPU, torch
+    otherwise; any spatial dimension); then
 
     .. math::
 
@@ -863,9 +843,7 @@ def nearest_boundary_geometry(
 
     The search runs without gradient (an argmin); :math:`d_q, u_q` are then
     rebuilt from the gathered sample, so they are differentiable in the
-    positions. ``normals`` are renormalized. ``chunk`` is the number of
-    queries per distance block of the float64 fallback; ``None`` derives it
-    from :data:`NN_CHUNK_BYTES`.
+    positions. ``normals`` are renormalized.
 
     Because the boundary is a *sample* (200,000 of up to 17 million cells on
     a DrivAerML car), :math:`\lvert d_q \rvert` overestimates the true wall
@@ -874,37 +852,14 @@ def nearest_boundary_geometry(
     both agree with the full-mesh field.
     """
     b, nq, _ = query_points.shape
-    n = points.shape[1]
     with torch.autocast(query_points.device.type, enabled=False), torch.no_grad():
-        if query_points.is_cuda and points.shape[-1] == 3 and _nn_kernel_available():
-            ### The Triton search is written for three components; other dimensions
-            ### take the exact float64 expansion below.
-            from .nn_kernel import nearest_index
-
-            idx = nearest_index(query_points, points)  # (B, Q)
-        else:
-            ### Float64 expanded form |y|^2 - 2 x.y (|x|^2 is constant per query) on
-            ### coordinates centred and scaled by the boundary sample. The expansion
-            ### cancels catastrophically: its squared-distance error is ~eps R^2, a
-            ### distance resolution of sqrt(eps) R, which at fp32 would be 2e-4 R
-            ### (coarser than the near-wall sample spacing) and at fp64 is 1e-8 R
-            ### (below the fp32 resolution of the coordinates themselves). The exact
-            ### element-wise cdist path is ~100x slower at 200,000 x 200,000.
-            if chunk is None:
-                chunk = max(1, NN_CHUNK_BYTES // (b * n * 8))  # the block is float64
-            c = points.mean(dim=1, keepdim=True)
-            scale = (points - c).norm(dim=-1).amax(dim=1).clamp_min(eps)[:, None, None]
-            y_s = ((points - c) / scale).double()  # (B, N, d)
-            y_sq = y_s.square().sum(-1)  # (B, N)
-            y_t = y_s.transpose(1, 2)  # (B, d, N)
-            idx = []
-            for i0 in range(0, nq, chunk):
-                q_s = ((query_points[:, i0 : i0 + chunk] - c) / scale).double()
-                approx = torch.baddbmm(
-                    y_sq[:, None, :].expand(b, q_s.shape[1], n), q_s, y_t, beta=1.0, alpha=-2.0
-                )  # (B, q, N), one fused pass
-                idx.append(approx.argmin(dim=-1))
-            idx = torch.cat(idx, dim=1)  # (B, Q)
+        ### knn is unbatched; the batch axis is one in practice.
+        idx = torch.stack(
+            [
+                knn(points[i].contiguous(), query_points[i].contiguous(), 1)[0][:, 0]
+                for i in range(b)
+            ]
+        ).long()  # (B, Q)
     gather = idx[..., None].expand(b, nq, points.shape[-1])
     y = torch.gather(points, 1, gather)
     n_star = torch.gather(normals, 1, gather)
@@ -1192,9 +1147,6 @@ class ISLA(Module):
             else ``"eager"`` (the PyTorch reference region). Pass ``"eager"`` or
             ``"fused"`` to force one; ``"fused"`` raises when its constraints
             cannot be met.
-        interior_nn_chunk: Queries per distance block of the nearest-boundary
-            search's float64 fallback; ``None`` derives it from
-            :data:`NN_CHUNK_BYTES`. Cost only, never the result.
         slice_prototypes: ``"static"`` (default): each slice block routes tokens
             against a learned prototype per slice that is the same for every
             sample. ``"centered"``: centered, scale-bounded sample-conditioned
@@ -1212,9 +1164,9 @@ class ISLA(Module):
             dimensions and the head's basis follows it (pseudovectors by the
             Levi-Civita construction: cross products in three dimensions,
             perpendiculars in two; odd-parity outputs are refused for ``dim >=
-            4``). The fused Triton geometry kernel and the Triton
-            nearest-neighbour search are written for three dimensions; other
-            dimensions run the eager region and the exact float64 search. A
+            4``). The fused Triton geometry kernel is written for three
+            dimensions; other dimensions run the eager region. The
+            nearest-boundary search works in any dimension. A
             two-dimensional problem is passed with ``dim=2`` (polyline
             boundaries) rather than embedded with a zero third coordinate.
         eps: Numerical floor for norms and logarithms.
@@ -1249,7 +1201,6 @@ class ISLA(Module):
         mlp_ratio: int = 4,
         geo_checkpoint: bool = False,
         geo_kernel: str | None = None,
-        interior_nn_chunk: int | None = None,
         slice_prototypes: str = "static",
         dim: int = 3,
         eps: float = 1e-12,
@@ -1268,9 +1219,6 @@ class ISLA(Module):
                 f"slice_prototypes must be 'static' or 'centered', got {slice_prototypes!r}"
             )
         self.slice_prototypes = str(slice_prototypes)
-        self.interior_nn_chunk = (
-            None if interior_nn_chunk is None else int(interior_nn_chunk)
-        )
         ### Every input and output is a named field of declared rank; the grammar
         ### is the mesh models' shared one (physicsnemo.mesh.fields), flattened to
         ### dotted names here.
@@ -1932,7 +1880,7 @@ class ISLA(Module):
             ### direction to it (the token's "normal" in every invariant).
             with torch.autocast(points.device.type, enabled=False):
                 d, q_nhat = nearest_boundary_geometry(
-                    query_points, points, n_hat, chunk=self.interior_nn_chunk, eps=self.eps
+                    query_points, points, n_hat, eps=self.eps
                 )
                 s = (d / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
                 builtin = torch.cat([s, torch.sign(s) * torch.log(s.abs() + self.eps)], -1)

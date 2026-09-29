@@ -63,11 +63,10 @@ def _brute_force(q, pts, nrm):
     return sign * d, u
 
 
-@pytest.mark.parametrize("chunk", [None, 1, 7, 1000])
-def test_nearest_boundary_geometry_matches_brute_force(chunk):
+def test_nearest_boundary_geometry_matches_brute_force():
     pts, nrm, _ = _cloud(150, 0, batch=2)
     q, _, _ = _cloud(45, 1, batch=2, scale=(4.0, 4.0, 4.0))
-    d, u = nearest_boundary_geometry(q, pts, nrm, chunk=chunk)
+    d, u = nearest_boundary_geometry(q, pts, nrm)
     d_ref, u_ref = _brute_force(q, pts, nrm)
     assert d.shape == (2, 45) and u.shape == (2, 45, 3)
     assert torch.equal(d, d_ref) or torch.allclose(d, d_ref, atol=1e-14, rtol=0)
@@ -202,13 +201,13 @@ def test_fused_kernel_stays_available_with_the_built_in_distance():
     assert not (m.n_block_vecs or m.n_block_tens)
 
 
-def test_checkpoint_round_trip_keeps_the_chunk_size_and_the_task(tmp_path):
+def test_checkpoint_round_trip_keeps_the_task(tmp_path):
     from physicsnemo.core.module import Module
 
-    m = _model(interior_nn_chunk=3)
+    m = _model()
     m.save(tmp_path / "m.mdlus")
     m2 = Module.from_checkpoint(str(tmp_path / "m.mdlus")).double().eval()
-    assert m2.interior_nn_chunk == 3 and m2.interior is True
+    assert m2.interior is True
     pts, nrm, w, _ = cloud(50)
     q, _, _, _ = cloud(8, seed=1)
     kw = dict(boundary_meshes={"wall": soup(pts, nrm, w)}, prediction_points=q, global_data={"g": torch.ones(3, dtype=D)})
@@ -218,11 +217,12 @@ def test_checkpoint_round_trip_keeps_the_chunk_size_and_the_task(tmp_path):
 
 
 def test_nearest_boundary_geometry_near_wall_dense_cluster_matches_brute_force():
-    """The matmul candidate search must return the true nearest sample where it is
-    hardest: queries a hair off a dense cluster of boundary samples far from the
-    cloud's centre (large |x|^2 relative to the separations), in float32 inputs,
-    against a float64 brute force (the fallback expansion runs in float64, so its
-    resolution is below fp32 coordinate ties; the CUDA kernel forms exact differences)."""
+    """Queries a hair off a dense cluster of boundary samples far from the cloud's
+    centre (large |x|^2 relative to the separations), in float32 inputs, against a
+    float64 brute force. The CPU KD-tree returns the true nearest sample. cuML on
+    CUDA resolves such near-ties only to about the sample spacing (its float32
+    expanded distance cancels), which is accepted: the reported distance is never
+    below the true one and exceeds it by at most the cluster's spacing."""
     g = torch.Generator().manual_seed(3)
     n, q_n = 5000, 400
     pts64, nrm64, _ = _cloud(n, 0)
@@ -236,26 +236,41 @@ def test_nearest_boundary_geometry_near_wall_dense_cluster_matches_brute_force()
     q64 = centre + 2e-3 * torch.randn(1, q_n, 3, dtype=D, generator=g)
     pts, nrm, q = pts64.float(), nrm64.float(), q64.float()
     d_ref, u_ref = _brute_force(q.double(), pts.double(), nrm.double())
-    d, u = nearest_boundary_geometry(q, pts, nrm, chunk=64)
+    d, u = nearest_boundary_geometry(q, pts, nrm)
     assert torch.allclose(d.double(), d_ref, atol=1e-9, rtol=1e-5)
     assert torch.allclose(u.double(), u_ref, atol=1e-5, rtol=0)
     if torch.cuda.is_available():
-        ### the Triton kernel path (CUDA) against the same float64 truth
-        d_k, u_k = nearest_boundary_geometry(q.cuda(), pts.cuda(), nrm.cuda())
-        assert torch.allclose(d_k.cpu().double(), d_ref, atol=1e-9, rtol=1e-5)
-        assert torch.allclose(u_k.cpu().double(), u_ref, atol=1e-5, rtol=0)
+        d_k, _ = nearest_boundary_geometry(q.cuda(), pts.cuda(), nrm.cuda())
+        excess = d_k.cpu().double().abs() - d_ref.abs()
+        assert (excess >= -1e-6).all()
+        assert (excess <= 2e-3).all()
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="Triton kernel")
-def test_triton_nearest_index_matches_float64_path_at_scale():
-    """The kernel and the float64 fallback pick the same sample (up to exact ties,
-    which leave d and u unchanged) on a large random cloud with a padded tail."""
-    from physicsnemo.experimental.models.isla.nn_kernel import nearest_index
+def _check_against_cdist_argmin(device, dim):
+    """d and u from ``nearest_boundary_geometry`` against ``torch.cdist(...).argmin``
+    on a random ``dim``-dimensional cloud, on ``device``."""
+    g = torch.Generator().manual_seed(dim)
+    pts = torch.randn(1, 3000, dim, dtype=D, generator=g).to(device)
+    nrm = torch.nn.functional.normalize(torch.randn(1, 3000, dim, dtype=D, generator=g), dim=-1).to(device)
+    q = 1.5 * torch.randn(1, 500, dim, dtype=D, generator=g).to(device)
+    d, u = nearest_boundary_geometry(q, pts, nrm)
+    dist = torch.cdist(q, pts)
+    idx = dist.argmin(-1)
+    y = pts.gather(1, idx[..., None].expand(1, 500, dim))
+    n_star = nrm.gather(1, idx[..., None].expand(1, 500, dim))
+    u_ref = torch.nn.functional.normalize(q - y, dim=-1)
+    d_ref = torch.where((u_ref * n_star).sum(-1) >= 0, 1.0, -1.0).to(D) * dist.gather(-1, idx[..., None])[..., 0]
+    assert d.shape == (1, 500) and u.shape == (1, 500, dim)
+    assert torch.allclose(d, d_ref, atol=1e-12, rtol=0)
+    assert torch.allclose(u, u_ref, atol=1e-12, rtol=0)
 
-    g = torch.Generator(device="cuda").manual_seed(0)
-    pts = torch.randn(2, 30001, 3, device="cuda", generator=g)
-    q = 1.5 * torch.randn(2, 4099, 3, device="cuda", generator=g)
-    idx = nearest_index(q, pts)
-    d_k = (q - torch.gather(pts, 1, idx[..., None].expand(2, 4099, 3))).norm(dim=-1)
-    d_ref = torch.cdist(q.double(), pts.double()).amin(-1)
-    assert torch.allclose(d_k.double(), d_ref, atol=1e-6, rtol=1e-6)
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_nearest_boundary_geometry_matches_cdist_argmin_on_cpu(dim):
+    _check_against_cdist_argmin("cpu", dim)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA search")
+@pytest.mark.parametrize("dim", [2, 3])
+def test_nearest_boundary_geometry_matches_cdist_argmin_on_cuda(dim):
+    _check_against_cdist_argmin("cuda", dim)
