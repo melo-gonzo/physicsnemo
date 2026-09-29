@@ -31142,3 +31142,51 @@ attend to different regions, whereas on the fixed square with weak per-token geo
 same mixture. **Consequence.** The preregistered deletion clause (worse than 1.05 on any field of any dataset) is met on Poisson with
 the mechanism now measured; the option is removed when the AirfRANS and Poisson 2,048 pairs complete the record (the 510-wing pair
 completes it later and cannot change the verdict).
+
+## 2026-09-29 — Verdict, GT-FPP on OLBC Poisson at 2,048 cases: GeoTransolver-512 with the FLARE++ backend scores 0.0755 against 0.0981 for physics attention (0.78 / 0.75 on the two seeds), so FLARE++ replaces the GeoTransolver baseline on this set and every ISLA ratio on it is restated; the FLARE++ ladder (Poisson 512 and 8,448; elasticity 512 / 2,048 / 8,448) is launched {#sec-nb-gt-fpp-poisson-verdict}
+
+**Setting.** The steel-man rule of @sec-nb-gt-fpp-interim: where GeoTransolver with the released FLARE++ attention backend beats
+GeoTransolver with physics attention by more than 3% on a dataset's headline field, it becomes the baseline there. On DrivAerML Surface
+the two were within 1% at their best rates and on the AirfRANS interior physics attention was 14 to 30% stronger. The OLBC Poisson set
+(a fixed square mesh, random labeled boundary segments and a random source per sample) at 2,048 training cases is the third benchmark.
+
+**What we saw.** Float32 relative L2 on $u$ over the 256 test cases, width 512, rate 1e-3, 500 epochs, two seeds each:
+
+| GeoTransolver-512 backend | seed 42 | seed 43 | mean | ratio FLARE++ ÷ physics attention |
+|---|--:|--:|--:|--:|
+| physics attention (the book's baseline lanes, ol_poisson_gt512_n2048) | 0.0967 | 0.0995 | 0.0981 | |
+| FLARE++ (gf_poisson_gt512_fpp_n2048) | 0.0759 | 0.0751 | 0.0755 | 0.77 (0.78 / 0.75) |
+
+: GT-FPP on OLBC Poisson 2,048. Data: results/gt_fpp_2026-09-29.json; results/olbc_2026-09-22.json. {#tbl-gt-fpp-poisson}
+
+**Reading and consequence.** The bar is met by a wide margin on both seeds. On the boundary-data-to-solution map on a fixed mesh, the
+latent-query attention of FLARE++ is the stronger GeoTransolver, where on the geometry-varying flow datasets physics attention is
+equal or stronger. **From here the OLBC Poisson baseline in the book is GeoTransolver-512 with FLARE++, and the chapter quotes both
+backends.** The chapter 10 restatement (pending the same-snapshot ISLA reference pairs, @sec-nb-olbc-ref-lanes) uses it. To give the
+new baseline the same ladder as the old, FLARE++ GeoTransolver-512 lanes were launched on the Poisson set at 512 and 8,448 cases and on
+the elasticity set at 512, 2,048 and 8,448 cases (two seeds each, 120 epochs at 8,448; campaign gf rows 10-19, code_v11). The HiLift
+510-wing FLARE++ pair remains the last open GT-FPP cell.
+
+## 2026-09-29 — Verdict, HARMONIC-EL combined arm at 2,048 elasticity cases (two seeds): the local aggregation on top of the harmonic measures does not compound; stresses 0.91 / 0.91 / 0.96 of the same-snapshot control against 0.90 / 0.86 / 0.90 for the measures alone, displacement 1.22 against 1.00 {#sec-nb-harmonic-elasticity-combined-verdict}
+
+**Setting.** @sec-nb-harmonic-elasticity-verdict found that the four per-type harmonic measures improve the three stress components of
+the OLBC elasticity set by 10 to 14% at 2,048 cases against the same-snapshot control (code_v7) and leave displacement unchanged. On the
+Poisson set the measures and the local relational aggregation (32 nearest tokens, radius 0.05) compounded (@sec-nb-combined-verdict).
+The combined arm on elasticity (hm_elasticity_tensor_hm_measures_local05_n2048, two seeds) tests whether they compound here too.
+
+**What we saw** (float32 relative L2 over 256 test cases, ratio arm ÷ control on seed means, seeds in parentheses):
+
+| arm at 2,048 cases | displacement | $\sigma_{11}$ | $\sigma_{22}$ | $\sigma_{12}$ |
+|---|--:|--:|--:|--:|
+| harmonic measures | 1.00 | 0.90 | 0.86 | 0.90 |
+| harmonic measures + local aggregation | 1.22 (1.10 / 1.34) | 0.91 (0.84 / 0.98) | 0.91 (0.83 / 1.00) | 0.96 (0.88 / 1.05) |
+| per-type nearest distances | 1.19 | 0.91 | 0.93 | 0.94 |
+
+: HARMONIC-EL combined arm. Control: la_elasticity_tensor_ctrl_n2048 (0.201 / 0.297 / 0.306 / 0.301). Data: results/harmonic_2026-09-27.json. {#tbl-harmonic-el-combined}
+
+**Reading.** The aggregation adds nothing to the stresses (the seed-mean ratios are within 0.01 to 0.06 of the measures alone, and the
+second seed is at or above the control) and costs 22% on displacement, the field the measures had left intact. **The aggregation does
+not compound with the harmonic channel on the elasticity set; its Poisson gain does not transfer.** This is the fourth dataset on which
+the aggregation fails to pay (AirfRANS, Tensile2d, the fixed-draw stencil test, now elasticity on top of the measures), and it closes the
+last open elasticity cell of the aggregation's record. The remaining universalization pairs (lug, DrivAerML Volume) complete the record;
+the removal of the aggregation from ISLA under the universalization rule (@sec-nb-universal-prereg) proceeds when they are scored.

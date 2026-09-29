@@ -202,10 +202,48 @@
    "reading": "physics attention stronger"
   },
   "poisson_2048_w512": {
-   "status": "not scored",
-   "reference": {
+   "fields": [
+    "u_l2"
+   ],
+   "headline": "u_l2",
+   "physics_attention": {
     "u_l2": 0.09810749645112082
-   }
+   },
+   "flare_pp": {
+    "u_l2": 0.07547586067084922
+   },
+   "ratio": {
+    "u_l2": 0.7693179767200853
+   },
+   "per_seed": {
+    "physics_attention": {
+     "42": {
+      "u_l2": 0.09671778025222011
+     },
+     "43": {
+      "u_l2": 0.09949721265002154
+     }
+    },
+    "flare_pp": {
+     "42": {
+      "u_l2": 0.07587860899366206
+     },
+     "43": {
+      "u_l2": 0.07507311234803637
+     }
+    },
+    "ratio": {
+     "42": {
+      "u_l2": 0.7845362951443491
+     },
+     "43": {
+      "u_l2": 0.7545247786197167
+     }
+    }
+   },
+   "n_seeds": 2,
+   "interim": false,
+   "reading": "FLARE++ stronger (replaces baseline)"
   }
  }
 }
