@@ -76,6 +76,9 @@ from physicsnemo.datapipes.transforms.mesh.transforms import (
 from physicsnemo.mesh import DomainMesh, Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, scale_measures
 from physicsnemo.mesh.geometry import compute_cell_areas
+from physicsnemo.mesh.projections import project
+from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
+from physicsnemo.nn.functional.neighbors import knn
 
 
 @register()
@@ -537,30 +540,18 @@ class StratifiedSubsampleMesh(MeshTransform):
     drawn twice.
     """
 
-    def __init__(self, n_cells: int, compact: bool = True, bits: int = 16) -> None:
+    def __init__(self, n_cells: int, compact: bool = True) -> None:
         super().__init__()
         self.n_cells = int(n_cells)
         self.compact = compact
-        if not 1 <= int(bits) <= 21:
-            raise ValueError(f"bits must be in [1, 21], got {bits!r}")
-        self.bits = int(bits)
         self._generator: torch.Generator | None = None
 
-    def _morton_order(self, centroids: torch.Tensor) -> torch.Tensor:
-        ### Quantize each axis to ``bits`` levels over the centroid bounding
-        ### box and interleave the bits (x in bit 3b, y in 3b+1, z in 3b+2):
-        ### a Z-order curve, so consecutive codes are spatial neighbours.
-        lo = centroids.min(dim=0).values
-        span = (centroids.max(dim=0).values - lo).clamp_min(1e-12)
-        levels = 2**self.bits
-        q = ((centroids - lo) / span * (levels - 1)).round().long().clamp(0, levels - 1)
-        code = torch.zeros(
-            centroids.shape[0], dtype=torch.int64, device=centroids.device
-        )
-        for b in range(self.bits):
-            for axis in range(3):
-                code |= ((q[:, axis] >> b) & 1) << (3 * b + axis)
-        return torch.argsort(code)
+    @staticmethod
+    def _morton_order(centroids: torch.Tensor) -> torch.Tensor:
+        ### Z-order (Morton) curve through the centroid bounding box, so
+        ### consecutive positions are spatial neighbours; the BVH's code
+        ### quantizes every axis at the full int64 budget (21 bits in 3-D).
+        return _compute_morton_codes(centroids).argsort(stable=True)
 
     def __call__(self, mesh: Mesh) -> Mesh:
         n_before = mesh.n_cells
@@ -591,7 +582,7 @@ class StratifiedSubsampleMesh(MeshTransform):
         return mesh
 
     def extra_repr(self) -> str:
-        return f"n_cells={self.n_cells}, bits={self.bits}"
+        return f"n_cells={self.n_cells}"
 
 
 def _pose_rotation_for_key(key: int, salt: int) -> torch.Tensor:
@@ -1076,11 +1067,9 @@ class HarmonicBoundaryMeasures(MeshTransform):
                 values = pd[self.node_value_field].detach().cpu().numpy().reshape(x.shape[0], -1)
             else:
                 # carry the prescribed cell value to the boundary node through its nearest cell
-                from scipy.spatial import cKDTree
-
-                y = bnd.cell_centroids.detach().cpu().numpy()
+                y = bnd.cell_centroids.detach().cpu().to(torch.float64)
                 g = bnd.cell_data[self.value_field].detach().cpu().numpy().reshape(y.shape[0], -1)
-                j = cKDTree(y).query(x, k=1)[1]
+                j = knn(y, torch.from_numpy(x).to(torch.float64), 1)[0].reshape(-1).numpy()
                 values = g[j]
         phi, hx = harmonic_boundary_fields(x, t, len(self.label_fields), values=values, k=self.k)
         new_pd = pd.clone()
@@ -1134,9 +1123,6 @@ class RestrictToPlane(MeshTransform):
             raise ValueError(f"RestrictToPlane: axis {self.axis} is not a coordinate of {n}-dimensional points.")
         return [i for i in range(n) if i != self.axis]
 
-    def _drop(self, v: torch.Tensor, what: str) -> torch.Tensor:
-        return v[..., self._keep(v.shape[-1])]
-
     def _check_planar(self, points: torch.Tensor, what: str) -> None:
         if self.atol is None or points.shape[0] == 0:
             return
@@ -1150,14 +1136,19 @@ class RestrictToPlane(MeshTransform):
 
     def _project_mesh(self, mesh: Mesh, what: str, vec: dict[str, set[str]]) -> Mesh:
         self._check_planar(mesh.points, what)
+        keep = self._keep(mesh.n_spatial_dims)
+        ### The named vector fields lose the axis by hand: ``project``'s own field
+        ### detection (``transform_*_data=True``) raises on every non-scalar field
+        ### whose leading component count differs from the spatial dimension, and
+        ### recipe data carries ``(N, 1)`` and ``(N, C)`` scalar-channel fields.
         pd, cd = mesh.point_data.clone(), mesh.cell_data.clone()
         for name in vec.get("point_data", ()):
             if name in pd.keys():
-                pd[name] = self._drop(pd[name], name)
+                pd[name] = pd[name][..., keep]
         for name in vec.get("cell_data", ()):
             if name in cd.keys():
-                cd[name] = self._drop(cd[name], name)
-        return Mesh(points=self._drop(mesh.points, what), cells=mesh.cells, point_data=pd, cell_data=cd, global_data=mesh.global_data)
+                cd[name] = cd[name][..., keep]
+        return project(mesh.with_data(point_data=pd, cell_data=cd), keep_dims=keep)
 
     def _split_fields(self) -> tuple[dict[str, set[str]], dict[str, dict[str, set[str]]]]:
         interior: dict[str, set[str]] = {}
@@ -1181,12 +1172,16 @@ class RestrictToPlane(MeshTransform):
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
         interior, boundaries = self._split_fields()
-        new_interior = self._project_mesh(domain.interior, "the interior points", interior)
-        new_boundaries = {
-            name: self._project_mesh(b, f"boundary {name!r}", boundaries.get(name, {}))
-            for name, b in domain.boundaries.items()
-        }
-        return DomainMesh(interior=new_interior, boundaries=new_boundaries, global_data=domain.global_data)
+        ### Not ``domain.apply_to_meshes``: the per-boundary vector-field lists
+        ### are keyed by boundary name, which that callback does not receive.
+        return DomainMesh(
+            interior=self._project_mesh(domain.interior, "the interior points", interior),
+            boundaries={
+                name: self._project_mesh(b, f"boundary {name!r}", boundaries.get(name, {}))
+                for name, b in domain.boundaries.items()
+            },
+            global_data=domain.global_data,
+        )
 
     def extra_repr(self) -> str:
         return f"axis={self.axis}, vector_fields={self.vector_fields}, atol={self.atol}"

@@ -57,6 +57,17 @@ def test_count_weights_and_no_duplicates():
     assert torch.allclose(w, torch.full_like(w, 4000 / 400))
 
 
+def test_morton_order_is_a_permutation_and_the_draw_is_seed_deterministic():
+    """The Z-order sort visits every cell once; a fixed generator seed reproduces the draw exactly."""
+    mesh = _surface(1000)
+    order = StratifiedSubsampleMesh._morton_order(mesh.cell_centroids)
+    assert order.shape == (1000,)
+    assert torch.equal(order.sort().values, torch.arange(1000))
+    t = StratifiedSubsampleMesh(n_cells=100, compact=False)
+    a, b = _draw(t, mesh, 7), _draw(t, mesh, 7)
+    assert torch.equal(a.cells, b.cells) and torch.equal(a.points, b.points)
+
+
 def test_inclusion_frequency_is_n_over_N():
     """Every cell has the requested inclusion frequency across repeated draws."""
     mesh = _surface(200)

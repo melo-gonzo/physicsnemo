@@ -54,6 +54,7 @@ from utils import (
 )
 
 from physicsnemo.datapipes.keys import as_nested_key
+from physicsnemo.metrics.general.relative_error import relative_l2
 
 ### Recipe-wide alias for the metric-name enum that the dataset YAMLs use.
 MetricName: TypeAlias = Literal["mae", "l1", "l2"]
@@ -107,19 +108,16 @@ def _relative_l2(
     target_measure: torch.Tensor | None = None,
     eps: float = 1e-8,
 ) -> Float[torch.Tensor, ""]:
-    """``sqrt(sum diff^2) / sqrt(sum target^2)``, over the spatial axis."""
-    diff_sq = (pred - target) ** 2
-    if pred.ndim == 0:
-        return torch.sqrt(diff_sq) / (torch.sqrt(target**2) + eps)
-    spatial_axis = -1
+    """``sqrt(sum diff^2 / max(sum target^2, eps))`` over the spatial axis, averaged over the leading axes.
+
+    The library kernel, with the same arguments :mod:`loss` passes it: ``eps`` floors the summed
+    squared target energy (not the norm), so an all-zero target reads ``||diff|| / sqrt(eps)``.
+    """
+    dim = -1 if pred.ndim > 0 else None
     if target_measure is None:
-        num = torch.sqrt(torch.sum(diff_sq, dim=spatial_axis))
-        denom = torch.sqrt(torch.sum(target**2, dim=spatial_axis))
-    else:
-        relative_weights = normalize_target_measure(target_measure)
-        num = torch.sqrt(torch.sum(diff_sq * relative_weights, dim=spatial_axis))
-        denom = torch.sqrt(torch.sum(target**2 * relative_weights, dim=spatial_axis))
-    return torch.mean(num / (denom + eps))
+        return relative_l2(pred, target, dim=dim, eps=eps).mean()
+    relative_weights = normalize_target_measure(target_measure)
+    return relative_l2(pred, target, dim=dim, weights=relative_weights, eps=eps).mean()
 
 
 METRIC_FUNCTIONS: dict[MetricName, Callable[..., torch.Tensor]] = {

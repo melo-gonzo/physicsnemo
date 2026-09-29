@@ -45,8 +45,16 @@ from __future__ import annotations
 
 import numpy as np
 import scipy.sparse as sp
+import torch
 from scipy.sparse.linalg import splu
-from scipy.spatial import cKDTree
+
+from physicsnemo.nn.functional.neighbors import knn
+
+
+def _knn(points: np.ndarray, queries: np.ndarray, k: int) -> tuple[np.ndarray, np.ndarray]:
+    """``(distances, indices)`` of the ``k`` nearest ``points`` to each query, float64 on the CPU."""
+    idx, dist = knn(torch.from_numpy(points), torch.from_numpy(queries), k)
+    return dist.numpy(), idx.numpy()
 
 
 def default_k(points: np.ndarray) -> int:
@@ -58,8 +66,7 @@ def knn_laplacian(points: np.ndarray, k: int) -> sp.csr_matrix:
     """Symmetric k-NN graph Laplacian ``L = D - W`` with self-tuning Gaussian weights."""
     x = np.asarray(points, dtype=np.float64)
     n = x.shape[0]
-    tree = cKDTree(x)
-    dist, idx = tree.query(x, k=k + 1)  # column 0 is the point itself
+    dist, idx = _knn(x, x, k + 1)  # column 0 is the point itself
     dist, idx = dist[:, 1:], idx[:, 1:]
     sigma = np.maximum(dist[:, -1], 1e-300)
     rows = np.repeat(np.arange(n), k)
@@ -159,11 +166,11 @@ def node_types_from_boundary(
     """
     x = np.asarray(points, dtype=np.float64)
     y = np.asarray(centroids, dtype=np.float64)
-    tree = cKDTree(y)
     if tol is None:
-        dd, _ = tree.query(y, k=2)
+        dd, _ = _knn(y, y, 2)
         tol = 0.75 * float(np.median(dd[:, 1]))
-    d, j = tree.query(x, k=1)
+    d, j = _knn(y, x, 1)
+    d, j = d[:, 0], j[:, 0]
     t = np.full(x.shape[0], -1, dtype=np.int64)
     on = d <= tol
     t[on] = np.asarray(cell_types).reshape(-1)[j[on]]
