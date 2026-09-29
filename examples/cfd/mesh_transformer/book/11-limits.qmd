@@ -113,17 +113,17 @@ dependence is measured. At the exploration budget a checkpoint trained at
 one request size and scored at a fifth of it loses more on every field
 than either margin against GeoTransolver-volume. Training over a range of
 request sizes reduces that penalty by about 40% at a 3.7% pressure cost
-and does not remove it (@sec-nb-qcount-verdict). The default
-query mass `source_total` removes the count scaling of the routing weight
-by construction, while the dependence through the shared slices remains
-(@sec-interior-companion). The interacting configuration is therefore
-deployed at its training request count, and every interior number in the
-book states that count. Evaluate-anywhere semantics is available only as
-the optional passive decoder, which is exactly query-independent in float64
-and several times less accurate on every interior field
-(@sec-arch-passive-decoder). What would move this: a query-independent
-decode within seed noise of the interacting one on either interior
-dataset.
+and does not remove it (@sec-nb-qcount-verdict). The queries' routing mass,
+a learned fraction of the total boundary measure split over the request,
+removes the count scaling of the routing weight by construction, while the
+dependence through the shared slices remains (@sec-interior-companion). The
+interacting configuration is therefore deployed at its training request
+count, and every interior number in the book states that count. The class
+has no evaluate-anywhere decode: the request-independent decoder that was
+built was several times less accurate on every interior field and was
+removed (@sec-arch-passive-decoder). What would move this: a
+query-independent decode within seed noise of the interacting one on either
+interior dataset.
 
 ### Cross-family transfer {#sec-limits-transfer}
 
@@ -186,7 +186,7 @@ starting point and a stated remainder.**
 | Problems outside external aerodynamics | the interface accepts zero or more global vector inputs and zero or more global scalar inputs, and per-cell boundary data through the boundary-scalar channel (@sec-isla-inputs); the contract tests cover zero and two global directions; a screened-Poisson acceptance case trains with no global vector and one global scalar, and the scalar is decisive where the boundary data cannot substitute for it (@sec-nb-globin-accept-verdict) | a production dataset outside external aerodynamics with a baseline trained on it under the protocol (@sec-limits-datasets) |
 | Cost at scale | with the exact fused geometry kernel, the default on CUDA, ISLA's step tracks GeoTransolver's at every token count in about half its memory, and ISLA holds the accuracy-against-memory frontier below about 70 GB at 435 cars (@sec-cost-sweep, @sec-review-frontier) | cost logs for the depth ladder, which reaches the floor at half GeoTransolver's parameters but is absent from the cost frontier; the gap below GeoTransolver's footprint is headroom for a wider or deeper model, since on DrivAerML cells past 100,000 buy nothing |
 | Sampling conventions | ISLA's convention-swap penalty converges under refinement, and so does that of GeoTransolver and Transolver + ISLA's measure-weighted pooling + Horvitz–Thompson-centered datapipe (ablation); GeoTransolver's and Transolver's as released does not (@sec-consistency-bench) | at 10,000 cells no architecture is consistent across conventions; the fine-mesh limit is within a few percent of reached at 40,000 |
-| Query-count consistency of the interior decode | `query_mass="source_total"` is the default: the total query mass is a learned fraction of the total source measure divided by the query count, so neither refining the source nor changing the request size moves the balance between surface and queries, and the optional passive decoder's local readout is invariant to a rescaling of the measure (@sec-isla-contracts); count augmentation reduces the interacting decode's dependence without removing it | a decode whose prediction at a point is independent of the request at the interacting configuration's accuracy (@sec-interior-open) |
+| Query-count consistency of the interior decode | the total query mass is a learned fraction of the total source measure divided by the query count, so neither refining the source nor changing the request size moves the balance between surface and queries (@sec-isla-contracts); count augmentation reduces the interacting decode's dependence without removing it | a decode whose prediction at a point is independent of the request at the interacting configuration's accuracy (@sec-interior-open) |
 
 ## What would change the recommendation {#sec-review-roads}
 

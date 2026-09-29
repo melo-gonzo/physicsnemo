@@ -136,20 +136,23 @@ Every constructor argument and every `forward` input is keyword-only.
 Every field other than the geometry is *named* and carries a declared
 tensor rank. The constructor takes `outputs`, `global_inputs`,
 `boundary_inputs` and `query_inputs`. Each is a mapping from a field name
-to a rank spec: an integer rank (0 scalar, 1 vector, 2 rank-2 tensor, ...)
-or a mapping `{rank, symmetric, parity, channels}`. In the mapping form,
-`symmetric` marks a fully symmetric tensor, `parity: odd` marks a
-pseudotensor output, and `channels` packs several independent scalars,
-such as a standardized parameter vector, under one rank-0 name. `forward`
-takes `points` (batch, $N$, 3), `normals` (batch, $N$, 3),
-`measure_weights` (batch, $N$), and the same four names as mappings from
-field name to tensor. A rank-1 global input is (batch, 3), and a rank-0 one
-is (batch,) or (batch, channels). A per-cell or per-query field is
-(batch, $N$), (batch, $N$, 3) or (batch, $N$, 3, 3) by rank. For
-off-surface prediction `forward` also takes `query_points` (batch, $Q$, 3)
-and any `query_inputs` over the queries. A query's direction and signed
-wall distance are computed inside the model. `interior_geometry: provided`
-is the switch that takes them from the caller instead (@sec-arch-switches).
+to a rank spec, the grammar every mesh model shares
+(`physicsnemo.mesh.fields`): an integer rank (0 scalar, 1 vector, 2 rank-2
+tensor, ...) or a mapping `{rank, symmetric, parity}`. In the mapping form,
+`symmetric` marks a fully symmetric tensor and `parity: odd` marks a
+pseudotensor output. One name declares one field; several independent
+scalars, such as a standardized parameter vector, are several rank-0 names.
+`forward` takes the boundary as `boundary_meshes`, a mapping from a name to
+a `Mesh` of codimension one whose cells are the tokens (centroid, normal
+and effective measure), with the `boundary_inputs` in each mesh's
+`cell_data`; the per-case `global_inputs` in `global_data`, a rank-1 field
+a `(3,)` vector and a rank-0 field a scalar; and, on the interior task,
+`prediction_points`, a point cloud carrying the `query_inputs` in its
+`point_data`. It returns a point-cloud `Mesh` with the outputs in its
+`point_data`, `(N,)`, `(N, 3)` or `(N, 3, 3)` by rank. A prediction point's
+direction and signed wall distance are computed inside the model from the
+boundary sample; a dataset's stored signed-distance field enters, if
+wanted, as a declared query input like any other datum (@sec-arch-modes).
 Each named mapping can be given flat with dotted names, nested, or as a
 TensorDict. The output is a TensorDict of batch size (batch, tokens) whose
 leaves are the output names. A dotted name is unflattened into a group
@@ -400,19 +403,19 @@ geometric rescale (@sec-isla-contracts).
 
 
 **ISLA routes on a bounded cosine, and the bound is what makes wide and
-deep ISLA trainable. The linear map is the alternative form.** The routing
-logit is a learned function of the normalized token state
-$\tilde h_i \equiv \mathrm{LN}(h_i)$. In ISLA's form it is a temperature $T$
-times the cosine between $\tilde h_i$ and a learned prototype $p_s$ per
-slice, so every logit lies in $[-T, T]$ whatever the weights do, and no
-block can route every point to one slice. The alternative form is an affine
-map of $\tilde h_i$, and nothing bounds it:
+deep ISLA trainable.** The routing logit is a learned function of the
+normalized token state $\tilde h_i \equiv \mathrm{LN}(h_i)$: a fixed
+temperature $T$ times the cosine between $\tilde h_i$ and a prototype $p_s$
+per slice, so every logit lies in $[-T, T]$ whatever the weights do, and no
+block can route every point to one slice. The form it replaced, and the
+one the class no longer carries, is an affine map of $\tilde h_i$, which
+nothing bounds:
 
 $$
 \lambda_{is} = T\,\frac{\tilde h_i \cdot p_s}{\lVert \tilde h_i \rVert\,\lVert p_s \rVert}
-\quad (\texttt{routing\_norm="cosine"},\ T = 10),
+\quad (\text{ISLA},\ T = 10),
 \qquad
-\lambda_{is} = W_a \tilde h_i + b_a \quad (\texttt{routing\_norm="linear"}).
+\lambda_{is} = W_a \tilde h_i + b_a \quad (\text{the linear form, removed}).
 $$
 
 Under the linear form the weights can grow without limit. As they grow,
@@ -428,9 +431,10 @@ that state routes every point of every block to a single slice with all
 anchors coincident. The relational invariants then carry no information,
 and the network can emit only a per-case constant. The plateau is total
 routing collapse, not a poorly conditioned optimum, and bounding the logits
-makes it unreachable. The temperature is `routing_temperature`. The frame
-and head contracts hold under either form. The collapsed note below is the
-one place in the book where the linear form appears with numbers.
+makes it unreachable. The temperature is the class constant
+`ROUTING_TEMPERATURE`, 10. The frame and head contracts do not depend on
+the routing form. The collapsed note below is the one place in the book
+where the linear form appears with numbers.
 
 ::: {.callout-note collapse="true" title="The learning-rate ceiling of the linear form, measured"}
 ```{python}
@@ -777,17 +781,17 @@ weights.
 
 | contract | test | tolerance |
 |---|---|---|
-| rotation covariance: scalars unchanged, vectors $v \mapsto vQ^\top$ for a proper rotation $Q$ | `test_rotation_equivariance`, `test_qi_rotation_equivariance` | $10^{-10}$ |
-| translation invariance, with no centering anywhere | `test_translation_invariance`, `test_relative_frame_contracts` | $10^{-10}$ / $10^{-12}$ |
-| geometric-scale invariance: points $\times k$ (with or without areas $\times k^2$) leave every output unchanged; so does a rescale of the areas alone, because the unit is normalized | `test_rms_distance_scale_contracts`, `test_measure_weight_scale_invariance`, `test_geometric_scale_equivariance` | $10^{-10}$ / $10^{-9}$ |
+| rotation covariance: scalars unchanged, vectors $v \mapsto vQ^\top$ for a proper rotation $Q$ | `test_rotation_equivariance`, `test_frame_contracts` | $10^{-10}$ |
+| translation invariance, with no centering anywhere | `test_translation_invariance`, `test_translation_invariance_alone` | $10^{-10}$ / $10^{-11}$ |
+| geometric-scale invariance: points $\times k$ (with or without areas $\times k^2$) leave every output unchanged; so does a rescale of the areas alone, because the unit is normalized | `test_rms_distance_scale_contracts`, `test_measure_scale_invariance`, `test_geometric_scale_equivariance` | $10^{-10}$ / $10^{-9}$ |
 | the length unit stays finite under refinement of a boundary whose total measure diverges (Koch curve) | `test_rms_distance_converges_on_koch_curve_where_total_measure_diverges` | converges |
-| query independence of the optional passive decoder (`query_independent=True`, @sec-arch-passive-decoder): 50 queries alone equal the same 50 among 150 | `test_query_set_independence` | $10^{-12}$, rtol 0 |
-| off-surface queries keep every contract | `test_interior_queries_contracts` | $10^{-10}$ / $10^{-12}$ |
-| zero and several global vectors; global scalars; magnitude invariance | `test_isla_global_inputs.py` (12 tests) | $10^{-10}$ |
+| re-representing the boundary measure on finer cells leaves the interior prediction unchanged | `test_query_mass_refinement_invariance` | $10^{-10}$, rtol 0 |
+| prediction points off the surface keep every contract | `test_interior_contracts`, `test_interior_task_contracts` | $10^{-11}$ / $10^{-6}$ |
+| several boundary meshes are one token set; a mesh without stored measures uses its geometric quadrature | `test_several_boundary_meshes_are_one_token_set`, `test_no_effective_measures_is_the_geometric_quadrature` | $10^{-10}$ |
+| zero and several global vectors; global scalars; magnitude invariance | `test_isla_global_inputs.py` | $10^{-10}$ |
 | pool-then-project equals project-then-pool; the geometry recompute reproduces outputs and gradients | `test_geo_pool_then_project_is_exact`, `test_geo_checkpoint_is_exact` | $10^{-12}$ / exact (outputs), $10^{-11}$ (gradients) |
-| every parameter receives a gradient (five configurations); heads run under bf16 autocast | `test_all_parameters_receive_gradients`, `test_head_variants_run_under_bf16_autocast` | exact / finite |
-| removing the relational invariants (`use_relational_geo=False`) keeps the contracts | `test_a35b_ablation_flags_run_and_differ` | $10^{-10}$ |
-| the diagnostics break covariance by design | `test_raw_coord_channel_breaks_equivariance_by_design` | $> 10^{-3}$ |
+| every parameter receives a gradient; heads run under bf16 autocast | `test_all_parameters_receive_gradients`, `test_head_runs_under_bf16_autocast` | exact / finite |
+| the same contracts in two dimensions, reflection included | `test_two_dimensional_contracts_rotation_translation_magnitude_and_reflection` | $10^{-4}$ |
 
 ::: {.callout-warning collapse="true" title="What is not a contract"}
 - **Reflection covariance of vectors** (see idea 6).
@@ -796,22 +800,8 @@ weights.
   token, and so is every interior query in the reported configuration, so
   the prediction at a point depends on which other points are in the
   request. The interacting interior configuration is deployed at its
-  training query count (@sec-interior-companion). The optional passive
-  decoder has the exact contract, at a measured accuracy price
-  (@sec-arch-passive-decoder).
-- **Refinement of the source measure, in the query-token interior
-  configuration, under the `query_mass="geometric_mean"` option.** With
-  that option a query's routing weight is a learned factor times the
-  geometric mean of the source weights, so halving every source cell shifts
-  the balance between surface and queries, and the uniform-rescale contracts
-  cannot detect it. The default, `query_mass="source_total"`, gives the
-  queries a learned fraction of the total boundary measure, which does not
-  change when the same measure is re-represented on finer cells, so the
-  dependence is absent by construction.
-- **Composition of optional channels.** Each optional channel preserves the
-  contracts alone. Not every pair composes (the optional passive decoder
-  with boundary scalars fails on a shape when source and query counts
-  differ). No such combination is behind any number in the book.
+  training query count (@sec-interior-companion). A request-independent
+  decode was built, priced and removed (@sec-arch-passive-decoder).
 - **Completeness of the representation.** The anchors are first moments,
   so two non-congruent arrangements with the same first moments are
   indistinguishable to every layer

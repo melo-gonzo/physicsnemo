@@ -172,22 +172,21 @@ ISLA with query tokens admits the queries into the encoder as tokens. Each
 query is seeded exactly as a boundary token is, from the invariants of its
 position, its wall normal and the global direction, plus a learned type
 embedding and the signed distance as a query scalar. In every lane of this
-chapter the normal and the distance are the dataset's full-mesh
-signed-distance field and its gradient (`interior_geometry: provided`). The
-class derives both from the boundary sample by default, and whether the
-sampled-boundary distance costs accuracy is the preregistered measurement
-of @sec-nb-internal-geometry-prereg. Each query enters the
+chapter the queries also carry the dataset's full-mesh signed-distance
+field and its gradient as inputs; the class derives a direction and a
+distance from the boundary sample itself, and what the sampled-boundary
+geometry costs without the stored field is the measurement of
+@sec-nb-internal-geometry-verdict. Each query enters the
 measure-weighted routing with a learned weight relative to the surface
 measure. The twelve slice layers run over surface and query tokens together,
 and the heads read the query tokens. Every invariant is a function of
 relative geometry, so rotation and translation covariance hold by
 construction (@sec-isla-contracts). What is given up is query independence:
 a query's prediction depends on the other queries in the request. The
-`query_mass` option sets the query weight relative to the surface measure.
-The class default, `source_total`, gives the queries a learned
-fraction of the total boundary measure, so re-representing the same
-surface at another refinement leaves the routing unchanged
-(measure-rescale invariant). Every standing of this chapter is under
+queries' total routing weight is a learned fraction of the total boundary
+measure, split equally over them, so re-representing the same surface at
+another refinement leaves the routing unchanged (measure-rescale
+invariant). Every standing of this chapter is under
 it. The alternative, `geometric_mean`, gives each query the mean boundary
 log-weight plus a learned offset. It therefore depends on how finely the
 surface is sampled and on how many queries are asked for. The query-count
@@ -229,7 +228,7 @@ print(": Interior error on the DrivAerML Volume task at the reporting protocol: 
       "cars, then over seeds; seeds in parentheses), float32, 200,000 boundary cells and 200,000 interior queries per car, 500 epochs. The "
       "ratio after each ISLA cell is GeoTransolver-volume ÷ ISLA (above 1 favors ISLA); the paired row divides seed by seed. How to read "
       "this: the arms are not resource-matched and do not receive the same inputs (@sec-interior-task); ISLA is the reference "
-      "configuration with the `source_total` query mass (@sec-interior-query-tokens), and the last row is the depth variant the reference "
+      "configuration (@sec-interior-query-tokens), and the last row is the depth variant the reference "
       "selection rejected. The AirfRANS twin of "
       "this table is @tbl-interior-airfrans. Data: results/ratevol_reduction_2026-09-20.json "
       "(GeoTransolver-volume); results/ref_surface_2026-09-23.json (ISLA). {#tbl-interior-200k}")
@@ -395,13 +394,13 @@ with the request size, most for eddy viscosity and least for pressure
 (results/qcount_reduction_2026-09-11.json,
 results/isla_qt_companion_dependence_2026-09-08.json). Training over a
 range of counts reduces the dependence and does not remove it, so
-query-count consistency is an architectural question. The class default
-query mass, `source_total`, removes the count-scaling of the query weight
-by construction (@sec-isla-contracts). The dependence through the shared
-slices remains. Where a prediction at a point must not depend on the other
-points requested, the class keeps an optional read-only decoder whose
-predictions are exactly query-independent. Its measured accuracy price
-keeps it out of this chapter's results (@sec-arch-passive-decoder).
+query-count consistency is an architectural question. The queries' routing
+mass, a learned fraction of the total boundary measure split over the
+request, removes the count-scaling of the query weight by construction
+(@sec-isla-contracts). The dependence through the shared slices remains. A
+read-only decoder whose predictions were exactly query-independent was
+built and priced at several times the interacting decode's error, and the
+class no longer carries it (@sec-arch-passive-decoder).
 
 ## What does not work {#sec-interior-negatives}
 

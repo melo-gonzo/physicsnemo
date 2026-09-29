@@ -3,12 +3,14 @@
 **ISLA ships as one class with one reference configuration, trained and
 evaluated by the unified external-aerodynamics recipe. This chapter is the
 operating manual.** It tells you which configuration to run and what the
-few remaining options are for. It states what the model needs from your
-data and the commands that train and evaluate it. It tells you how to set
-the learning rate when you change the width or depth, how to use the
-inference sampler that removes most of the draw noise at a fixed cell
-budget, how to load a checkpoint, and what a step costs. Everything here is
-about ISLA unless an option is named. The reasons behind each
+few remaining arguments are for. It states what the model needs from your
+data (a dictionary of boundary meshes, a point cloud to predict at, and the
+problem's named fields of declared rank), how to read the prediction off
+the returned mesh, and the commands that train and evaluate it. It tells
+you how to set the learning rate when you change the width or depth, how to
+use the inference sampler that removes most of the draw noise at a fixed
+cell budget, how to load a checkpoint, and what a step costs. Everything
+here is about ISLA unless an option is named. The reasons behind each
 recommendation are in @sec-isla and the evidence chapters, cited where they
 apply.
 
@@ -24,159 +26,197 @@ RES = Path("..") / "results"
 
 ## Which configuration {#sec-using-config}
 
-**Run ISLA as the class ships it: cosine routing, the RMS-pairwise-distance
-length unit, the fused geometry kernel where it can run, and interior
-queries carrying a share of the total boundary measure.** Those are the
-class defaults, so `ISLA(outputs=..., global_inputs=...)` with nothing else
-is the reference configuration. The recipe's `isla_surface.yaml` names the
-fields, fixes the dimensions and states the frame setting explicitly:
+**Run ISLA as the class ships it. The constructor takes the field
+declarations and the task; everything else is a default.** A surface model
+that predicts pressure and wall shear stress under one far-field direction
+is
 
-```yaml
-model:
-  _target_: physicsnemo.experimental.models.ISLA
-  outputs:              # the dataset's targets, by name and tensor rank
-    pressure: 0         #   rank 0: a scalar field
-    wss: 1              #   rank 1: a vector field (a stress tensor would be {rank: 2, symmetric: true})
-  global_inputs:
-    freestream: 1       # one rank-1 global input: the far-field flow direction
-  hidden: 384                 # the reference configuration; also the class defaults
-  n_layers: 12
-  n_slices: 256
-  mlp_ratio: 4
-  scale_mode: rms_distance    # length unit = measure-weighted RMS pairwise distance of the sample (the frame has no origin)
-  geo_kernel: null            # automatic: the fused Triton kernel on CUDA with one to three global vectors, the eager region otherwise
+```python
+from physicsnemo.experimental.models import ISLA
+model = ISLA(outputs={"pressure": 0, "wss": 1}, global_inputs={"freestream": 1})
 ```
 
-The reference configuration is 384 wide with 12 layers and 256 slices, at
-learning rate 5e-4 (the reference selection, @sec-nb-ref-verdict). The
-class defaults and the recipe's `isla_surface` and `isla_volume` state the
-same dimensions. This is the one place the book states them, and the width
-and depth ladders of @sec-review-frontier are deviations from it. Lanes of
-the earlier protocol ran 192 wide at 1e-3 and are labeled so wherever they
-appear. ISLA has one frame and one routing form. The rows below are the
-options that remain on it. The option policy (2026-09-28): an option is a
-scaffold under a universalization test, run always-on across the datasets
-its rule was not fitted on (@sec-nb-universal-prereg); it becomes part of
-the reference configuration for every dataset or it is deleted, and no
-option is set per dataset. Every ratio the book labels "GeoTransolver ÷
-ISLA" is the reference configuration; an option's number is labelled by
-arm.
+and an interior model adds `interior=True`. The defaults are the reference
+configuration: 384 wide with 12 layers and 256 slices, cosine routing at a
+fixed temperature, the RMS-pairwise-distance length unit, the fused
+geometry kernel where it can run, and prediction points that carry a
+learned share of the total boundary measure. The recipe's ISLA
+configurations (`isla_surface`, `isla_volume`) state the same dimensions and
+train at learning rate 5e-4 (the reference selection, @sec-nb-ref-verdict).
+This is the one place the book states them, and the width and depth ladders
+of @sec-review-frontier are deviations from it. Lanes of the earlier
+protocol ran 192 wide at 1e-3 and are labeled so wherever they appear.
 
-| configuration | recipe config | when to use | what you give up |
-|---|---|---|---|
-| **ISLA** (cosine routing, RMS-pairwise-distance length unit, fused geometry kernel, `query_mass: source_total`) | `isla_surface`, `isla_volume` | every new surface or interior task | nothing among ISLA's options; the standing against GeoTransolver and Transolver, dataset by dataset and task by task, is in @sec-surface and @sec-interior |
-| query mass `geometric_mean` (`query_mass: geometric_mean`) | option on `isla_volume`, `isla_volume_support` | interior tasks only, when a boundary is guaranteed to arrive at one fixed refinement | the refinement contract: each query's routing weight becomes the mean boundary log-weight plus a learned offset, so re-representing the same surface on finer cells shifts the balance between surface and queries (@sec-isla-contracts) |
+**The option policy.** An option is a scaffold under a universalization
+test, run always-on across the datasets its rule was not fitted on
+(@sec-nb-universal-prereg); it becomes part of the reference configuration
+for every dataset or it is deleted, and no option is set per dataset. Every
+ratio the book labels "GeoTransolver ÷ ISLA" is the reference
+configuration; an option's number is labelled by arm. What remains on the
+class is short:
 
-Every checkpoint stores its constructor arguments, so a model saved under
-any option loads in the configuration that trained it (@sec-using-checkpoint).
+- **the sizes** `hidden`, `n_layers`, `n_slices`, `mlp_ratio`, which set
+  capacity and are the axes of the ladders in @sec-capacity;
+- **the three cost knobs** `geo_kernel`, `geo_checkpoint` and
+  `interior_nn_chunk`, which change how the arithmetic is executed and never
+  what is computed (@sec-using-cost);
+- **the one option in flight**, `slice_prototypes`: `"static"` (the
+  default) or `"centered"`, sample-conditioned prototypes under their
+  universalization test (@sec-nb-proto-cond-2-prereg);
+- **the spatial dimension** `dim`, 3 by default and 2 for a planar
+  problem, which is not an option in the policy's sense but a statement
+  about the data (@sec-arch-switches).
 
-::: {.callout-note title="When query independence is required"}
-Both configurations above predict at a point as a function of the whole
-request. Deploy an interior surrogate built from `isla_volume` at its
-training query count (@sec-using-checkpoint). If a deployment needs the
-prediction at a point to be exactly the same whatever else is asked for
-(chunked or streaming inference over arbitrary point sets, or a per-point
-answer that must not change between requests), use the read-only decoder
-behind `query_independent: true`. It can take a per-case interacting
-support set (`support_tokens: true`; recipe config `isla_volume_support`).
-It holds the contract exactly and is several times less accurate than the
-interacting decode on every interior field. What it is, what it costs and
-when it is worth the price are in @sec-arch-passive-decoder.
+Every checkpoint stores its constructor arguments, so a saved model loads
+in the configuration that trained it (@sec-using-checkpoint).
+
+::: {.callout-note title="The prediction at a point depends on the request"}
+An interior prediction is a function of the whole set of prediction points,
+because those points are interacting tokens (@sec-arch-modes). Deploy an
+interior model at its training point count and state that count with every
+interior number (@sec-using-checkpoint, @sec-interior-companion). A decode
+whose answer at a point is independent of the request was built, priced at
+several times the interacting decode's error, and removed from the class
+(@sec-arch-passive-decoder).
 :::
 
 ## What the model needs from your data {#sec-using-inputs}
 
-**ISLA takes three geometry arrays per case plus named fields of declared
-rank. The two that are easy to get wrong are the measure weights, which
-must sum to the boundary's measure, and the global directions, which must
-be directions.** The forward call is keyword-only, so the recipe's
-`forward_kwargs:` mapping reads exactly as the call does. The field names
-under `global_inputs`, `boundary_inputs` and `query_inputs` are the ones
-the model block declares, with their ranks. The model returns a TensorDict
-keyed by the `outputs:` names (`output_type: fields`). For the surface
-task:
+**ISLA takes the boundary as named meshes, the prediction points as a point
+cloud, and the problem's data as named fields of declared rank; it returns
+a point cloud with the outputs in its point data. The two inputs that are
+easy to get wrong are the effective measures, which must sum to the
+boundary's measure, and the global directions, which must be directions.**
+The forward call is keyword-only and takes three things:
 
-```yaml
-forward_kwargs:
-  points: interior.points                                  # (B, N, 3) sampled cell centroids ("interior" is the datapipe's name for the sampled point set, not the fluid domain)
-  normals: boundaries.vehicle.cell_data.normals            # (B, N, 3) unit outward normals
-  measure_weights: interior.point_data._effective_measure   # (B, N) area each sampled cell stands for
-  global_inputs:
-    freestream: global_data.U_inf_dir                      # (B, 3) the one global direction of external aerodynamics
+- `boundary_meshes`: a mapping from a name (one entry per boundary
+  condition or part) to a `Mesh` of codimension one, a surface in three
+  dimensions or a polyline in two. Its cells are the tokens: the cell
+  centroid is the position, the cell normal the outward normal, and the
+  cell's effective measure (`cell_data["_effective_measure"]`, when present,
+  else the geometric measure) the area it stands for. Every declared
+  `boundary_inputs` field is read from each mesh's `cell_data` by name.
+- `prediction_points`: for the interior task, a point-cloud `Mesh` whose
+  `points` are the prediction points and whose `point_data` carries the
+  declared `query_inputs`, or a bare `(N, dim)` tensor when none are
+  declared. Omitted on a surface task, where the outputs come back at the
+  boundary cells.
+- `global_data`: a TensorDict or mapping with the declared `global_inputs`
+  as leaves: a `(dim,)` vector for a rank-1 field, a scalar for a rank-0
+  field. Extra leaves are ignored; a missing one is an error.
+
+The running example shows the whole exchange on the Joukowski airfoil in
+two dimensions, with a model too small to predict anything, so the shapes
+can be read:
+
+```{python}
+#| label: using-forward-demo
+#| echo: true
+import warnings; warnings.filterwarnings("ignore")
+import torch
+from physicsnemo.mesh import Mesh
+from physicsnemo.experimental.models import ISLA
+
+J = joukowski(n_cells=80)                                                   # the book's running example
+verts = torch.as_tensor(J["xy"], dtype=torch.float32)                        # (81, 2) polyline vertices, closed
+cells = torch.stack([torch.arange(80), torch.arange(1, 81)], dim=1)          # (80, 2) segments; a cell's normal follows its vertex order
+airfoil = Mesh(points=verts, cells=cells)                                    # Mesh[1, 2]: a polyline in the plane
+outward = ((airfoil.cell_centroids - verts.mean(0)) * airfoil.cell_normals).sum(-1)
+if outward.mean() < 0:                                                       # the model reads the cell normals as outward: orient the cells so they are
+    airfoil = Mesh(points=verts, cells=cells.flip(1))
+    outward = -outward
+assert outward.mean() > 0
+
+surface = ISLA(outputs={"cp": 0, "tau": 1}, global_inputs={"freestream": 1}, hidden=32, n_layers=2, n_slices=8, dim=2).eval()
+with torch.no_grad():
+    out = surface(boundary_meshes={"airfoil": airfoil}, global_data={"freestream": torch.tensor([1.0, 0.1])})
+print("surface task:", {k: tuple(v.shape) for k, v in out.point_data.items()}, "at", tuple(out.points.shape), "boundary cells")
+
+interior = ISLA(outputs={"cp": 0}, global_inputs={"freestream": 1}, interior=True, hidden=32, n_layers=2, n_slices=8, dim=2).eval()
+grid = torch.stack(torch.meshgrid(torch.linspace(-1.5, 2.5, 40), torch.linspace(-1.5, 1.5, 30), indexing="ij"), -1).reshape(-1, 2)
+with torch.no_grad():
+    field = interior(boundary_meshes={"airfoil": airfoil}, prediction_points=grid, global_data={"freestream": torch.tensor([1.0, 0.1])})
+print("interior task:", tuple(field.point_data["cp"].shape), "predictions at", tuple(field.points.shape), "points")
 ```
 
-Three of these need a word.
+The output is a point-cloud `Mesh`. On the surface task its `points` are
+the boundary token positions in token order (the meshes concatenated in
+sorted key order); on the interior task they are the prediction points.
+Its `point_data` holds one leaf per declared output at its natural shape:
+`(N,)` at rank 0, `(N, dim)` at rank 1, `(N, dim, dim)` at rank 2. Its
+`global_data` is the selected `global_data` passed through.
 
-- **The measure weights must sum to the boundary's measure.** When the
+Four of the inputs need a word.
+
+- **The effective measures must sum to the boundary's measure.** When the
   recipe keeps $n$ of $N$ cells, each kept cell carries the Horvitz–Thompson
-  weight: its area times $N/n$. The weights then stand for the full surface
-  at any `sampling_resolution`, and the routing's quadrature sums read the
-  surface area rather than the retained fraction of it. The length unit
-  normalizes the weights and is indifferent to the factor, but the
-  quadrature sums are not. The surface dataset stores this in
-  `interior.point_data._effective_measure`. The volume dataset uses
-  `boundaries.vehicle.cell_data._effective_measure` through its
-  `ComposeQuadratureMeasure` stage. Both are complete measures, including
-  sampling corrections. Point measures carry their represented dimension
-  and follow geometric scaling: on a two-dimensional problem such as
-  AirfRANS the measure is the segment length.
+  weight: its area times $N/n$, stored as the mesh's `_effective_measure`
+  cell field. The measures then stand for the full surface at any
+  `sampling_resolution`, and the routing's quadrature sums read the surface
+  area rather than the retained fraction of it. The length unit normalizes
+  the measures and is indifferent to the factor, but the quadrature sums
+  are not. A boundary passed whole, like the airfoil above, needs no such
+  field: the geometric measure of each cell is the measure. Measures carry
+  their represented dimension and follow geometric scaling: on a
+  two-dimensional problem such as AirfRANS the measure is the segment
+  length.
 - **A rank-1 global input is a direction.** The problem's global
   directions (the rank-1 entries of `global_inputs`) enter as unit vectors.
   The model normalizes each again internally and discards its magnitude.
-  For external aerodynamics `ComputeFreestreamDirection` writes `U_inf_dir`
-  from the solver's velocity. This is also the fair-comparison rule for
-  every architecture in the book (@sec-unit-direction-rule).
+  For external aerodynamics the recipe's `ComputeFreestreamDirection`
+  writes the direction from the solver's velocity. This is also the
+  fair-comparison rule for every architecture in the book
+  (@sec-unit-direction-rule).
 - **A global direction must be a datum of the problem.** The inlet
   direction, a load direction, a body-force direction (gravity) are
   admissible. The axes of the dataset's coordinate frame are not: they
   describe how the cases were posed, not the PDE, and a solver never takes
   them (@sec-pose-prior). Ground planes and symmetry planes are real
-  boundaries and belong in the boundary geometry, not in `global_inputs`.
+  boundaries and belong among the boundary meshes, not in `global_inputs`.
 - **A magnitude that matters is a rank-0 global input.** Declare it
-  (`u_inf: 0`; a standardized parameter vector is `params: {rank: 0,
-  channels: 6}`) and pass it under its name. No fixed power of a far-field
-  speed is a physical law for every output (a pressure coefficient is degree
-  zero, a dimensional pressure degree two), so the model learns the
-  dependence like any other parameter. The AirfRANS configuration passes
-  the inlet speed this way (`global_data.U_inf_mag`).
+  (`u_inf: 0`) and pass it under its name; a parameter vector is several
+  rank-0 names, one per parameter. No fixed power of a far-field speed is a
+  physical law for every output (a pressure coefficient is degree zero, a
+  dimensional pressure degree two), so the model learns the dependence like
+  any other parameter. The AirfRANS configuration passes the inlet speed
+  this way.
 
-For the interior task the model needs one more array, the query positions,
-and nothing else about them. `isla_volume` adds
+For the interior task the model needs the prediction points and nothing
+else about them. It computes each point's direction and signed distance to
+the wall from the boundary sample (the nearest boundary cell,
+@sec-arch-modes). No signed-distance field has to be stored, sampled or
+declared. The distance is to the sampled boundary, not the full mesh. A
+dataset that carries a full-mesh signed-distance field can pass it, and its
+gradient, as declared `query_inputs` (`sdf: 0`, `sdf_gradient: 1`) in the
+prediction mesh's `point_data`; they enter like any other PDE datum, and
+what they buy over the built-in geometry is measured in
+@sec-nb-internal-geometry-verdict.
 
-```yaml
-forward_kwargs:
-  points: boundaries.vehicle.cell_centroids
-  normals: boundaries.vehicle.cell_normals
-  measure_weights: boundaries.vehicle.cell_data._effective_measure
-  global_inputs:
-    freestream: global_data.U_inf_dir
-  query_points: interior.points          # (B, Q, 3); direction and wall distance are derived inside the model
-```
-
-The model computes each query's direction and signed distance to the wall
-from the boundary sample (the nearest boundary cell, @sec-arch-modes). No
-signed-distance field has to be stored, sampled or declared. The distance
-is to the sampled boundary, not the full mesh. The `isla_volume_provided`
-configuration keeps the dataset's full-mesh field instead
-(`interior_geometry: provided`, with `query_normals:
-interior.point_data.sdf_normals` and `query_inputs: {sdf:
-interior.point_data.sdf}`). It exists to measure that difference
-(@sec-nb-internal-geometry-prereg) and to load interior checkpoints trained
-with it.
+**The recipe's contract.** In the recipe a model configuration declares
+`input_type: mesh` and `output_type: mesh`. Under the first, the datapipe's
+`Mesh` objects and per-case tensors pass to `forward` as they are, one case
+per step with no batch axis, through a `forward_kwargs` mapping whose keys
+are the three argument names above and whose values name the datapipe
+fields (the boundary meshes under `boundary_meshes`, the sampled interior
+point set under `prediction_points`, the case's global tensors under
+`global_data`). Under the second, the recipe reads its targets out of the
+returned mesh's `point_data` by the same names as the `outputs`
+declaration. GLOBE uses the same contract, so the two models are swapped by
+changing the model block alone.
 
 ::: {.callout-note collapse="true" title="Nested field names"}
 A dataset that stores its fields in groups (`solution/pressure` on disk,
 `solution.pressure` in a config) names its targets with a dot, and the
-model's `outputs:` block uses the same dotted names. A dot is the only way
-to spell a group, because every value of `outputs`, `global_inputs`,
+model's `outputs` declaration uses the same dotted names. A dot is the only
+way to spell a group, because every value of `outputs`, `global_inputs`,
 `boundary_inputs` and `query_inputs` is a rank spec. So
 `outputs: {"solution.pressure": 0, "solution.velocity": 1}` declares two
-leaves of one group. The model returns a TensorDict in which
-`out["solution", "pressure"]` and `out["solution"]["pressure"]` both
-address the first. The recipe reads its targets by the same dotted names,
-so `output_type: fields` consumes the nested output unchanged. The input
-mappings accept a flat dict with dotted names, a nested dict, or a
-TensorDict.
+leaves of one group, and `{"solution": {"pressure": 0, "velocity": 1}}`
+declares the same model. The returned mesh's `point_data` is nested the
+same way, so `out.point_data["solution", "pressure"]` and
+`out.point_data["solution"]["pressure"]` both address the first. The same
+dotted names address the fields in the meshes' `cell_data` and
+`point_data` and in `global_data`.
 :::
 
 ::: {.callout-note collapse="true" title="Problems other than external aerodynamics"}
@@ -184,22 +224,23 @@ The architecture knows only that it was handed named fields of declared
 rank. A buoyant flow passes gravity as its one direction. A magnetized flow
 passes two. Steady conduction with pinned temperatures passes no direction
 and supplies the pinned values as a rank-0 boundary input
-(`boundary_inputs: {trace: 0}`). An elasticity problem passes its
-prescribed displacement and traction as rank-1 boundary inputs
-(`bc_displacement: 1`, `bc_traction: 1`). A planar dataset that stored the
-components separately stacks them with `StackScalarFields` in its dataset
-yaml. It predicts the stress as a symmetric rank-2 output
+(`boundary_inputs: {trace: 0}`) on the mesh of the pinned boundary. An
+elasticity problem passes its prescribed displacement and traction as
+rank-1 boundary inputs (`bc_displacement: 1`, `bc_traction: 1`); a planar
+dataset that stored the components separately stacks them with
+`StackScalarFields` in its dataset yaml, and is passed with `dim=2`. It
+predicts the stress as a symmetric rank-2 output
 (`stress: {rank: 2, symmetric: true}`), and the recipe reads off its
 laboratory components for a `symmetric_tensor` target. Each global
 direction adds one seed cosine, one relational cosine and two vectors to
 the output basis. Each rank-1 boundary input adds its frame cosines and
 norm to the seed and one relational cosine per slice
 (@sec-isla-inputs-rank). The tests in `test_isla_global_inputs.py`,
-`test_isla_inputs.py` and `test_isla_heads.py` cover zero and two
-directions, global scalars, rank-1 and rank-2 inputs and every output rank
-and parity. The rank-1-input solids configurations run the
-fused geometry kernel; its limits are in @sec-isla-inputs-rank and the
-switch in @sec-using-cost.
+`test_isla_inputs.py`, `test_isla_heads.py` and `test_isla_nd.py` cover zero
+and two directions, global scalars, rank-1 and rank-2 inputs, every output
+rank and parity, and two dimensions. The rank-1-input solids
+configurations run the fused geometry kernel in three dimensions; its
+limits are in @sec-isla-inputs-rank and the switch in @sec-using-cost.
 :::
 
 ## Training {#sec-using-train}
@@ -216,9 +257,8 @@ recipe root:
 python src/train.py model=isla_surface dataset=drivaer_ml_surface \
     training.optimizer.lr=5e-4 compile=false
 
-# DrivAerML Volume task: boundary -> interior, queries as interacting tokens; the queries' direction and
-# wall distance are computed inside the model from the boundary sample (model=isla_volume_provided reads
-# the dataset's full-mesh signed-distance field instead).
+# DrivAerML Volume task: boundary -> interior, the prediction points as interacting tokens; their direction and
+# wall distance are computed inside the model from the boundary sample.
 python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference \
     training.optimizer.lr=5e-4 compile=false
 
@@ -310,24 +350,27 @@ No configuration has to be repeated:
 ```python
 from physicsnemo.experimental.models import ISLA
 model = ISLA.from_checkpoint("checkpoints/isla_surface.mdlus").eval()
-out = model(points=x, normals=n, measure_weights=w, global_inputs={"freestream": g_hat})
-p, tau = out["pressure"], out["wss"]  # (B, N) and (B, N, 3)
+out = model(boundary_meshes={"vehicle": vehicle}, global_data={"freestream": g_hat})
+p, tau = out.point_data["pressure"], out.point_data["wss"]  # (N,) and (N, 3), at out.points
 ```
 
-`points` and `normals` are (B, N, 3). `measure_weights` is (B, N) and sums
-to the boundary's measure. `global_inputs` is a mapping from each declared
-name to its tensor: (B, 3) for a direction, (B,) or (B, channels) for a
-rank-0 field. The output is a TensorDict of batch size (B, N) keyed by the
-declared output names (a dotted name is a nested leaf), each field with as
-many trailing axes of size 3 as its rank. For interior prediction with
-`isla_volume`, add `query_points` (B, Q, 3) and read the output at the
-query rows. The model derives each query's direction and signed wall
-distance from the boundary sample. A checkpoint trained with
-`interior_geometry: provided` takes `query_normals` and
-`query_inputs={"sdf": ...}` instead, as its constructor arguments record.
-Deploy at the training query count (200,000 at the reporting protocol on
-DrivAerML), because the interacting decode's prediction at a point depends
-on the joint query set (@sec-interior-companion).
+`vehicle` is a `Mesh` whose cells are the sampled surface, with the
+Horvitz–Thompson measures in its `_effective_measure` cell field when the
+surface is subsampled. `global_data` maps each declared name to its tensor:
+`(3,)` for a direction, a scalar for a rank-0 field. The output is a
+point-cloud `Mesh` whose `point_data` is keyed by the declared output names
+(a dotted name is a nested leaf), each field with as many trailing axes of
+size 3 as its rank. For interior prediction with a model built with
+`interior=True`, pass `prediction_points` (a `(Q, 3)` tensor, or a
+point-cloud `Mesh` carrying the declared `query_inputs` in its
+`point_data`) and read the output at those points. The model derives each
+point's direction and signed wall distance from the boundary sample; a
+checkpoint that declared a stored signed-distance field among its
+`query_inputs` expects it in the prediction mesh's `point_data`, as its
+constructor arguments record. Deploy at the training point count (200,000
+at the reporting protocol on DrivAerML), because the interacting decode's
+prediction at a point depends on the joint request
+(@sec-interior-companion).
 
 ## Cost {#sec-using-cost}
 
@@ -378,33 +421,40 @@ print(": Training cost at the reporting protocol on the DrivAerML Surface task: 
       "Data: results/cost_sweep_ref_gb300_bf16_2026-09-22.json. {#tbl-isla-cost}")
 ```
 
-Two practical consequences:
+Three practical consequences:
 
-- **Leave `geo_kernel` at its default (`null`).** On CUDA with one to four
-  per-point vectors, the model selects the fused kernel at the first
-  forward pass and logs the choice. Off CUDA, with rank-2 per-token inputs,
-  or with more than four vectors in all, it falls back to the eager
-  recompute region. Force `eager` only to reproduce the exact arithmetic
-  path of a checkpoint trained on the eager region.
+- **Leave `geo_kernel` at its default (`null`).** On CUDA in three
+  dimensions with one to four per-point vectors, the model selects the
+  fused kernel at the first forward pass and logs the choice. Off CUDA, in
+  two dimensions, with rank-2 per-token inputs, or with more than four
+  vectors in all, it falls back to the eager recompute region. Force
+  `eager` only to reproduce the exact arithmetic path of a checkpoint
+  trained on the eager region.
 - **On the eager path, leave `geo_checkpoint: true` unless you are short
   of time and long on memory.** It is bitwise identical in outputs and
   gradients. Under the fused kernel the recompute is built in and the flag
   has no effect.
+- **Leave `interior_nn_chunk` at its default.** It sizes the blocks of the
+  nearest-boundary search's float64 fallback (off CUDA or outside three
+  dimensions) and changes cost only; on CUDA in three dimensions the fused
+  search ignores it.
 
 ## Contracts you can check on your own data {#sec-using-contracts}
 
 **Each contract is a one-line test on a loaded checkpoint, and a residual
 far above float32 rounding points at the inputs, not the model.** The
 contracts are exact properties of the code (@sec-isla-contracts), and each
-is cheap to test on a loaded checkpoint. Rotate and translate the inputs by
-a random rigid motion, then compare the scalars (unchanged) and the vectors
-(rotated). Scale the points by $k$ and the measure weights by $k^2$
-(unchanged). Scale the measure weights alone (unchanged). In float32 the
-residuals on the trained checkpoints are at the level of float32 roundoff.
-In bf16 autocast they are several percent, mostly rounding
-(@sec-isla-contracts). A residual far above these on your own data points
-at the inputs, not the model: normals with inconsistent orientation,
-weights that do not sum to the boundary's measure, or positions that were
-centered or scaled by something sample-dependent before the model saw them.
-The model normalizes the normals and the global vectors itself, so their
-magnitudes cannot cause a residual.
+is cheap to test on a loaded checkpoint. Rotate and translate the boundary
+meshes and the global directions by a random rigid motion, then compare
+the scalars (unchanged) and the vectors (rotated). Scale the mesh by $k$,
+with the effective measures by $k^2$ (unchanged). Scale the effective
+measures alone (unchanged). Split every boundary cell into two coincident
+half-measure copies (unchanged: the same measure, re-represented). In
+float32 the residuals on the trained checkpoints are at the level of
+float32 roundoff. In bf16 autocast they are several percent, mostly
+rounding (@sec-isla-contracts). A residual far above these on your own
+data points at the inputs, not the model: cells with inconsistent
+orientation, effective measures that do not sum to the boundary's measure,
+or positions that were centered or scaled by something sample-dependent
+before the model saw them. The model normalizes the normals and the global
+vectors itself, so their magnitudes cannot cause a residual.
