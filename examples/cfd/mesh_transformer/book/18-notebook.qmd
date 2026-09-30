@@ -31429,3 +31429,52 @@ pairs at 2,048 and 8,448 reverse the 512 reading; the decision follows those lan
 ISLA in the option pass of this morning (commit 7f68970b1). PROTO-COND-2 carries the idea forward (@sec-nb-proto-cond-2-poisson-512).
 Data: results/proto_cond_2026-09-29.json, results/olbc_ref_2026-09-29.json (the consolidated current-snapshot OLBC artifact that chapter
 10 now reads).
+
+## 2026-09-29 — Verdict, GT-FPP on the OLBC ladder: the FLARE++ backend replaces physics attention only on Poisson at 2,048 cases; it ties on elasticity at 512 and 2,048 (mean stress ratio 0.99 / 0.97), loses on Poisson at 512 and 8,448 (1.07 / 1.18) and fails to train on elasticity at 8,448 (4.6x worse, both seeds); chapter 10 takes the stronger backend per rung under the 3% rule {#sec-nb-gt-fpp-olbc-verdict}
+
+**Setting.** GT-FPP is the steel-man check of @sec-nb-gt-fpp-interim: wherever GeoTransolver with the released FLARE++ attention
+backend (input-conditioned dynamic routing, `attention_type=GALE_FPP`) beats GeoTransolver with physics attention by more than 3%
+on a dataset's headline field, FLARE++ becomes the baseline there and every ISLA ratio on that dataset is restated. The Poisson
+2,048 rung already fired (@sec-nb-gt-fpp-poisson-verdict) and Poisson 512 did not (@sec-nb-gt-fpp-poisson-512). This entry closes
+the rest of the OLBC ladder: Poisson at 8,448 training cases and elasticity at 512 / 2,048 / 8,448, campaign gf rows 10 to 19.
+
+**Instrument.** GeoTransolver width 512 in both backends, learning rate 1e-3, the OLBC protocol of chapter 10 (500 epochs at 512
+and 2,048 cases, 120 epochs at 8,448 so that the step count matches), two seeds, float32 scoring on the 256 held-out cases. The
+elasticity FLARE++ lanes read the `olbc_elasticity_gt` dataset file (the same fields without the stacked-scalar transform that
+GeoTransolver cannot consume); the 512 and 2,048 rungs, which also used it, tie their physics-attention twins, so the file is not
+a confound. The headline for elasticity is the mean of the three stress fields; displacement is reported beside it. Reducers
+`results/gt_fpp_reduce_2026-09-29.py` (artifact `gt_fpp_2026-09-29.json`) and `results/olbc_ref_reduce_2026-09-29.py`
+(artifact `olbc_ref_2026-09-29.json`, read by chapter 10) now apply the same rule: physics attention is the baseline unless
+FLARE++ is better by more than 3% on the headline; a difference inside 3% is a tie and physics attention stays.
+
+**What we saw** (FLARE++ ÷ physics attention on seed means; per seed in parentheses):
+
+| rung | headline | FLARE++ ÷ physics | per seed | displacement | reading |
+|---|---|---|---|---|---|
+| Poisson 512 | $u$ | 1.07 | 1.04 / 1.10 | | physics attention stronger |
+| Poisson 2,048 | $u$ | 0.77 | 0.78 / 0.75 | | FLARE++ replaces the baseline |
+| Poisson 8,448 | $u$ | 1.18 | 1.25 / 1.11 | | physics attention stronger |
+| elasticity 512 | mean stress | 0.99 | 0.98 / 1.00 | 1.05 | tie |
+| elasticity 2,048 | mean stress | 0.97 | 0.99 / 0.96 | 1.05 | tie (inside 3%) |
+| elasticity 8,448 | mean stress | 4.57 | 4.44 / 4.72 | 6.36 | physics attention stronger |
+
+Absolute values: Poisson $u$ at 8,448 is 0.0289 (physics) against 0.0341 (FLARE++); elasticity stresses at 8,448 are 0.098 to
+0.105 (physics) against 0.458 to 0.472 (FLARE++), displacement 0.050 against 0.318.
+
+**The 8,448-case elasticity failure is a training failure, not a scoring one.** Both FLARE++ lanes completed their 120 epochs
+and were scored at epoch 120, like their twins. Their validation loss ends at 0.0370 (seed 42; the last three epochs read 0.054,
+0.040, 0.037, still falling slowly) against 0.00159 for physics attention at the same epoch, a 23x gap that matches the 4.4 to
+6.4x gap in relative L2. No NaN appears in either log. The same backend at the same rate trained normally on the two smaller
+elasticity rungs and on Poisson at 8,448, so the failure is specific to the largest elasticity rung; the mechanism is not
+measured here, and the earlier observation that FLARE++ diverges at 3e-3 on DrivAerML (@sec-nb-gt-fpp-interim) is the only
+related reading. FLARE++ is a released baseline and is not tuned further (@sec-nb-gt-fpp-interim).
+
+**Why it matters.** The stronger GeoTransolver backend changes with the rung and the set, so no single backend is "the" baseline
+on OLBC. Chapter 10 therefore quotes both backends at every rung and takes the stronger one for the headline ratio under the 3%
+rule: FLARE++ at Poisson 2,048 only, physics attention everywhere else. With the current-snapshot ISLA references
+(@sec-nb-olbc-ref-2048), the headline GeoTransolver-512 ÷ ISLA ratios are 1.39 (Poisson 512), 1.13 (Poisson 2,048, FLARE++)
+and 0.52 (Poisson 8,448, from the same artifact; the 8,448 reference pair gets its own reading when campaign pc closes), and
+0.82 to 0.89 on elasticity at 2,048 (interim, one current-snapshot seed); the elasticity 8,448 reference pair is not scored yet.
+
+**What is next.** GT-FPP has one open pair, GeoTransolver-512 with FLARE++ on the 510 HiLift wings at 100k cells
+(`gf_hl_gt512_fpp_medium_c100k`, two seeds); the ledger row closes when it is scored. Nothing else in the program depends on it.

@@ -47,6 +47,16 @@ def ratio(a, b, fields):
     return {"ratio": r, "per_seed": ps}
 
 
+def stronger(cands, score):
+    """The GT-FPP steel-man rule (@sec-nb-gt-fpp-interim): physics attention is the baseline unless FLARE++ beats it by more
+    than 3% on the headline score; a difference inside 3% is a tie and physics attention stays."""
+    if "flarepp" not in cands:
+        return "physics"
+    if "physics" not in cands:
+        return "flarepp"
+    return "flarepp" if score(cands["flarepp"]) < 0.97 * score(cands["physics"]) else "physics"
+
+
 out = {"protocol": __doc__, "poisson": {}, "elasticity": {}}
 for n in (512, 2048, 8448):
     ref = pair(f"pc_poisson_ref_n{n}_seed{{s}}", PF)
@@ -55,7 +65,7 @@ for n in (512, 2048, 8448):
     rung = {"reference": ref, "gt512_physics": gt, "gt512_flarepp": fpp, "gt256_physics": gt256, "arms": {}}
     cands = {k: v for k, v in (("physics", gt), ("flarepp", fpp)) if v}
     if cands:
-        best = min(cands, key=lambda k: cands[k]["means"]["u_l2"]); rung["stronger_gt512"] = best
+        best = stronger(cands, lambda v: v["means"]["u_l2"]); rung["stronger_gt512"] = best
         if ref:
             rung["gt512_over_isla"] = {k: ratio(v, ref, PF) for k, v in cands.items()}
             rung["gt512_over_isla"]["stronger"] = rung["gt512_over_isla"][best]
@@ -78,7 +88,7 @@ for n in (512, 2048, 8448):
     rung = {"reference": ref, "reference_interim_code_v7": interim, "gt512_physics": gt, "gt512_flarepp": fpp, "arms": {}}
     cands = {k: v for k, v in (("physics", gt), ("flarepp", fpp)) if v}
     if cands:
-        best = min(cands, key=lambda k: st.mean(cands[k]["means"][f] for f in EF[1:])); rung["stronger_gt512"] = best
+        best = stronger(cands, lambda v: st.mean(v["means"][f] for f in EF[1:])); rung["stronger_gt512"] = best
         if ref:
             rung["gt512_over_isla"] = {k: ratio(v, ref, EF) for k, v in cands.items()}
             rung["gt512_over_isla"]["stronger"] = rung["gt512_over_isla"][best]

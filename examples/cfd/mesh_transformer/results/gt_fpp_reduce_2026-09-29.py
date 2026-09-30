@@ -35,7 +35,7 @@ REFS = {
 }
 for n in (512, 2048, 8448):
     REFS[f"elasticity_{n}_w512"] = ({s: {f"{f}_l2": ol[f"ol_elasticity_gt512_n{n}_seed{s}"]["fields"][f]["mean"] for f in ("displacement", "sig11", "sig22", "sig12")} for s in ("42", "43")},
-                                    f"gf_elasticity_gt512_fpp_n{n}_seed{{s}}", "sig11_l2")
+                                    f"gf_elasticity_gt512_fpp_n{n}_seed{{s}}", ("sig11_l2", "sig22_l2", "sig12_l2"))
 out = {"protocol": __doc__, "datasets": {}}
 for name, (ref, pat, head) in REFS.items():
     fpp = {s: per_case(pat.format(s=s)) for s in ("42", "43")}; fpp = {s: v for s, v in fpp.items() if v}
@@ -45,8 +45,9 @@ for name, (ref, pat, head) in REFS.items():
     rm = {f: st.mean(ref[s][f] for s in ref) for f in fields}; fm = {f: st.mean(fpp[s][f] for s in fpp) for f in fields}
     ratio = {f: fm[f] / rm[f] for f in fields}
     ps = {s: {f: fpp[s][f] / ref[s][f] for f in fields} for s in fpp if s in ref}
-    r = ratio[head]
-    out["datasets"][name] = {"fields": fields, "headline": head, "physics_attention": rm, "flare_pp": fm, "ratio": ratio, "per_seed": {"physics_attention": ref, "flare_pp": fpp, "ratio": ps},
+    heads = (head,) if isinstance(head, str) else head  # a tuple averages the headline over several fields (the three stresses)
+    r = st.mean(fm[f] for f in heads) / st.mean(rm[f] for f in heads)
+    out["datasets"][name] = {"fields": fields, "headline": list(heads), "headline_ratio": r, "physics_attention": rm, "flare_pp": fm, "ratio": ratio, "per_seed": {"physics_attention": ref, "flare_pp": fpp, "ratio": ps},
                              "n_seeds": len(fpp), "interim": len(fpp) < 2,
                              "reading": "FLARE++ stronger (replaces baseline)" if r < 0.97 else "physics attention stronger" if r > 1.03 else "within 3%"}
 json.dump(out, open(f"{R}/gt_fpp_2026-09-29.json", "w"), indent=1)
