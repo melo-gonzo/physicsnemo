@@ -38,7 +38,7 @@ from test.experimental.models.isla._meshes import (
 )
 
 D = torch.float64
-PV = {"p": 0, "v": 1}
+PV = {"p": {"rank": 0}, "v": {"rank": 1}}
 
 
 def _boundary(n=200, seed=0):
@@ -49,7 +49,7 @@ def _boundary(n=200, seed=0):
 def _model(global_inputs=None, **kw):
     torch.manual_seed(0)
     if global_inputs is None:
-        global_inputs = {"g": 1}
+        global_inputs = {"g": {"rank": 1}}
     return ISLA(outputs=PV, global_inputs=global_inputs, hidden=32, n_layers=2, n_slices=8, **kw).to(D).eval()
 
 
@@ -100,7 +100,7 @@ def test_two_global_vectors():
     """K = 2 (a freestream and a gravity direction): both directions rotate with the
     geometry, the output rotates with them, and rescaling either's magnitude
     changes nothing."""
-    m = _model(global_inputs={"g1": 1, "g2": 1})
+    m = _model(global_inputs={"g1": {"rank": 1}, "g2": {"rank": 1}})
     mesh = _boundary()
     gv = torch.randn(2, 3, dtype=D, generator=torch.Generator().manual_seed(1))
     gd = {"g1": gv[0], "g2": gv[1]}
@@ -123,7 +123,7 @@ def test_two_vectors_interior_path():
     mesh = _boundary()
     q = torch.randn(40, 3, dtype=D, generator=torch.Generator().manual_seed(2))
     gv = torch.randn(2, 3, dtype=D, generator=torch.Generator().manual_seed(1))
-    m = _model({"g1": 1, "g2": 1}, interior=True)
+    m = _model({"g1": {"rank": 1}, "g2": {"rank": 1}}, interior=True)
     _assert_se3(m, mesh, {"g1": gv[0], "g2": gv[1]}, q=q)
 
 
@@ -132,7 +132,7 @@ def test_global_scalars_condition_every_token():
     reach the prediction-point side too, and leave every covariance contract intact.
     A TensorDict with nested groups is read by dotted name."""
     mesh = _boundary()
-    m = _model({"g": 1, "cond.kappa": 0, "cond.E": 0}, interior=True)
+    m = _model({"g": {"rank": 1}, "cond.kappa": {"rank": 0}, "cond.E": {"rank": 0}}, interior=True)
     assert m.embed[0].in_features == 1 + 2  # n.g plus the two scalars
     assert m.n_global_scalars == 2
     gv = torch.randn(3, dtype=D, generator=torch.Generator().manual_seed(1))
@@ -148,7 +148,7 @@ def test_global_scalars_condition_every_token():
         _run(m, mesh, {"g": gv}, q)
     ### a rank-0 global input is one scalar; a parameter vector is several names
     with pytest.raises(ValueError, match="unknown keys"):
-        _model({"g": 1, "params": {"rank": 0, "channels": 2}})
+        _model({"g": {"rank": 1}, "params": {"rank": 0, "channels": 2}})
     with pytest.raises(ValueError, match="gives 2 rows for a batch of 1"):
         _run(m, mesh, {**gd, "cond.kappa": torch.zeros(2, dtype=D)}, q)
 
@@ -156,7 +156,7 @@ def test_global_scalars_condition_every_token():
 def test_no_global_inputs_at_all_with_scalars_only():
     """K = 0 with S = 1: a parameterized PDE family with no preferred direction."""
     mesh = _boundary()
-    m = _model({"kappa": 0})
+    m = _model({"kappa": {"rank": 0}})
     assert not m.constant_seed and m.embed[0].in_features == 1
     base = _assert_se3(m, mesh, {"kappa": torch.tensor([0.5], dtype=D)})
     other = _run(m, mesh, {"kappa": torch.tensor([1.0], dtype=D)})
@@ -175,16 +175,16 @@ def test_one_vector_layout():
 
 def test_fused_kernel_refuses_other_vector_counts():
     """The fused Triton region is unrolled for one to four global directions."""
-    for spec in ({}, {"g1": 1, "g2": 1, "g3": 1, "g4": 1, "g5": 1}):
+    for spec in ({}, {"g1": {"rank": 1}, "g2": {"rank": 1}, "g3": {"rank": 1}, "g4": {"rank": 1}, "g5": {"rank": 1}}):
         with pytest.raises(ValueError, match="one to four per-point vectors"):
             ISLA(outputs=PV, global_inputs=spec, hidden=32, n_layers=1, n_slices=8, geo_kernel="fused")
 
 
 def test_bad_global_specs_rejected():
     with pytest.raises(ValueError, match="non-negative"):
-        ISLA(outputs=PV, global_inputs={"g": -1}, hidden=32, n_layers=1, n_slices=8)
+        ISLA(outputs=PV, global_inputs={"g": {"rank": -1}}, hidden=32, n_layers=1, n_slices=8)
     with pytest.raises(ValueError, match="rank 2 is not supported"):
-        ISLA(outputs=PV, global_inputs={"T": 2}, hidden=32, n_layers=1, n_slices=8)
+        ISLA(outputs=PV, global_inputs={"T": {"rank": 2}}, hidden=32, n_layers=1, n_slices=8)
 
 
 def test_boundary_data_reaches_the_interior_prediction():
@@ -195,7 +195,7 @@ def test_boundary_data_reaches_the_interior_prediction():
     bsc = torch.randn(200, dtype=D, generator=torch.Generator().manual_seed(3))
     q = torch.randn(30, 3, dtype=D, generator=torch.Generator().manual_seed(2)) * 0.5
     gd = {"kappa": torch.tensor(0.7, dtype=D)}
-    m = _model(global_inputs={"kappa": 0}, boundary_inputs={"trace": 0}, interior=True)
+    m = _model(global_inputs={"kappa": {"rank": 0}}, boundary_inputs={"trace": {"rank": 0}}, interior=True)
     assert m.embed[0].in_features == 2  # boundary scalar + global scalar (no directions)
     base = _assert_se3(m, soup(pts, nrm, w, cell_data={"trace": bsc}), gd, q=q)
     other = _run(m, soup(pts, nrm, w, cell_data={"trace": bsc + 1.0}), gd, q)

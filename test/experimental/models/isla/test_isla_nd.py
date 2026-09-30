@@ -49,7 +49,7 @@ def _problem(d: int, n: int = 160, seed: int = 0):
 
 def _model(d: int, outputs, **kw):
     torch.manual_seed(1)
-    return ISLA(outputs=outputs, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8, dim=d, **kw)
+    return ISLA(outputs=outputs, global_inputs={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, dim=d, **kw)
 
 
 def _run(m, mesh, drv, q=None):
@@ -57,7 +57,7 @@ def _run(m, mesh, drv, q=None):
         return outputs(m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}))
 
 
-OUT2 = {"p": 0, "v": 1, "w": {"rank": 1, "parity": "odd"}, "t": {"rank": 2, "symmetric": True}, "a": {"rank": 2, "parity": "odd"}}
+OUT2 = {"p": {"rank": 0}, "v": {"rank": 1}, "w": {"rank": 1, "parity": "odd"}, "t": {"rank": 2, "symmetric": True}, "a": {"rank": 2, "parity": "odd"}}
 
 
 def test_levi_civita_symbol_and_pseudovector_counts():
@@ -70,8 +70,8 @@ def test_levi_civita_symbol_and_pseudovector_counts():
     assert len(ps) == 2 and torch.equal(ps[0], torch.tensor([[0.0, 1.0]])) and torch.equal(ps[1], torch.tensor([[-1.0, 0.0]]))
     v3 = [torch.tensor([[1.0, 0.0, 0.0]]), torch.tensor([[0.0, 1.0, 0.0]]), torch.tensor([[0.0, 0.0, 1.0]])]
     assert len(_pseudovectors(v3, 3)) == 3 and _pseudovectors(v3, 4) == []
-    m2 = _model(2, {"p": 0})
-    m3 = _model(3, {"p": 0})
+    m2 = _model(2, {"p": {"rank": 0}})
+    m3 = _model(3, {"p": {"rank": 0}})
     assert (m2.n_true_basis, m2.n_pseudo_basis) == (5, 3)
     assert (m3.n_true_basis, m3.n_pseudo_basis) == (5, 3)
     assert m2.output_layouts["p"].dim == 2
@@ -121,7 +121,7 @@ def test_two_dimensional_gradients_and_interior_task():
     d = 2
     mesh, drv = _problem(d)
     ### prediction-point tokens with the internal nearest-boundary geometry in 2-D
-    mq = _model(d, {"p": 0, "v": 1}, interior=True)
+    mq = _model(d, {"p": {"rank": 0}, "v": {"rank": 1}}, interior=True)
     q = torch.randn(50, d) * 0.5
     out = outputs(mq(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}))
     sum(v.square().mean() for v in out.values()).backward()
@@ -145,7 +145,7 @@ def test_two_dimensional_rank_inputs_keep_the_contracts():
     trac = torch.randn(160, d, generator=g)
     sym = torch.randn(160, d, d, generator=g)
     sym = sym + sym.transpose(-1, -2)
-    m = _model(d, {"p": 0, "v": 1}, boundary_inputs={"trac": 1, "sig": {"rank": 2, "symmetric": True}})
+    m = _model(d, {"p": {"rank": 0}, "v": {"rank": 1}}, boundary_inputs={"trac": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}})
     mesh = soup(pts, nrm, w, cell_data={"trac": trac, "sig": sym})
     q = orthogonal(d, 9).float()
     base = _run(m, mesh, drv)
@@ -158,7 +158,7 @@ def test_four_dimensional_even_parity_smoke_and_odd_refused():
     d = 4
     mesh, drv = _problem(d, n=120)
     assert mesh.n_manifold_dims == 3
-    m = _model(d, {"p": 0, "v": 1, "t": 2})
+    m = _model(d, {"p": {"rank": 0}, "v": {"rank": 1}, "t": {"rank": 2}})
     assert m.n_pseudo_basis == 0 and m.output_layouts["t"].iso[0].shape == (4, 4)
     q = orthogonal(d, 11).float()
     base = _run(m, mesh, drv)
@@ -170,14 +170,14 @@ def test_four_dimensional_even_parity_smoke_and_odd_refused():
     with pytest.raises(NotImplementedError):
         _model(d, {"w": {"rank": 1, "parity": "odd"}})
     with pytest.raises(ValueError):
-        ISLA(outputs={"p": 0}, dim=1)
+        ISLA(outputs={"p": {"rank": 0}}, dim=1)
     with pytest.raises(ValueError):
-        ISLA(outputs={"p": 0}, global_inputs={"g": 1}, dim=2, geo_kernel="fused")
+        ISLA(outputs={"p": {"rank": 0}}, global_inputs={"g": {"rank": 1}}, dim=2, geo_kernel="fused")
 
 
 def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
     mesh3, drv3 = _problem(3)
-    m2 = _model(2, {"p": 0})
+    m2 = _model(2, {"p": {"rank": 0}})
     with pytest.raises(ValueError, match="has 3 spatial dimensions; this model has dim=2"):
         m2(boundary_meshes={"wall": mesh3}, global_data={"g": drv3})
     ### The 3-D model with a K = 1 direction keeps its parameter count (the head has
@@ -186,7 +186,7 @@ def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
     ### 41364 backbone-and-head parameters; the interior model adds 1185 for the
     ### prediction-point side (qt.logw 1, qt.type_offset 32, qt.embed 2 x 32 + 32 +
     ### 32 x 32 + 32).
-    m3 = _model(3, {"p": 0, "v": 1})
+    m3 = _model(3, {"p": {"rank": 0}, "v": {"rank": 1}})
     assert sum(p.numel() for p in m3.parameters()) == 41364
-    assert sum(p.numel() for p in _model(2, {"p": 0, "v": 1}).parameters()) == 41364
-    assert sum(p.numel() for p in _model(3, {"p": 0, "v": 1}, interior=True).parameters()) == 41364 + 1185
+    assert sum(p.numel() for p in _model(2, {"p": {"rank": 0}, "v": {"rank": 1}}).parameters()) == 41364
+    assert sum(p.numel() for p in _model(3, {"p": {"rank": 0}, "v": {"rank": 1}}, interior=True).parameters()) == 41364 + 1185

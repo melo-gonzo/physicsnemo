@@ -672,7 +672,7 @@ class SetConstantCellField(MeshTransform):
     YAML (e.g. ``0.0`` in the DrivAerML pipeline, ``1.0`` in the SHIFT-SUV
     pipelines) and rides along into ``boundaries.<name>.cell_data`` like
     ``normals``.  Transfer-program campaign C (T1, complete conditioning):
-    lets ISLA read it as a rank-0 boundary input (``boundary_inputs: {cond: 0}``
+    lets ISLA read it as a rank-0 boundary input (``boundary_inputs: {cond: {rank: 0}}``
     with ``forward_kwargs.boundary_inputs.cond`` pointing at the field) and
     GeoTransolver / Transolver as an extra per-point functional channel
     (append the field to ``forward_kwargs.local_embedding`` and raise

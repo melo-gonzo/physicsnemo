@@ -36,14 +36,15 @@ the token's own tensor inputs), and the frame is re-attached only at the
 heads, so exact rotation, reflection and translation covariance is paid once
 at the network's edges instead of in every layer.
 
-**Rank specs.** Inputs and outputs are declared in the rank-spec grammar
+**Rank specs.** Inputs and outputs are declared in the field-schema grammar
 shared by every mesh model (:mod:`physicsnemo.mesh.fields`): a mapping from a
-field name to a leaf spec, an ``int`` rank (0 scalar, 1 vector, 2 rank-2
-tensor, ...), a :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping
-``{"rank": r, "symmetric": bool, "parity": "even" | "odd"}``; a mapping
-without a ``"rank"`` key is a nested group, and a flat name may contain
-``"."`` for the same nesting (``{"surface": {"pressure": 0}}`` and
-``{"surface.pressure": 0}`` declare the same field). ``symmetric`` (rank
+field name to a field declaration, a :class:`~physicsnemo.mesh.fields.RankSpec`
+or a mapping ``{"rank": r, "symmetric": bool, "parity": "even" | "odd"}``
+(``r`` = 0 scalar, 1 vector, 2 rank-2 tensor, ...); a mapping without a
+``"rank"`` key is a nested group, and a flat name may contain ``"."`` for the
+same nesting (``{"surface": {"pressure": {"rank": 0}}}`` and
+``{"surface.pressure": {"rank": 0}}`` declare the same field). Each parsed
+declaration is a :class:`~physicsnemo.mesh.fields.FieldSchema`. ``symmetric`` (rank
 :math:`\ge 2`) means fully symmetric under index permutation and
 ``parity="odd"`` (outputs only) a pseudotensor that flips sign under a
 reflection (a vorticity). One name declares one field; several independent
@@ -207,12 +208,7 @@ from physicsnemo.core.meta import ModelMetaData
 from physicsnemo.core.module import Module
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import cell_measures
-from physicsnemo.mesh.fields import (
-    RankSpec,
-    RankSpecDict,
-    flatten_rank_specs,
-    validate_rank_spec,
-)
+from physicsnemo.mesh.fields import FieldSchema, FieldSchemaLike, RankSpec
 from physicsnemo.mesh.spatial.sdf import signed_distance_field
 from physicsnemo.nn.functional.equivariant_ops import vector_project
 from physicsnemo.nn.functional.neighbors.knn.knn import knn
@@ -236,20 +232,19 @@ ROUTING_TEMPERATURE = 10.0
 ### ---------------------------------------------------------------------------
 
 
-def _declare(kind: str, specs, *, max_rank: int, allow_odd: bool) -> dict[str, RankSpec]:
-    """Flatten and check one of the constructor's rank-spec mappings (``None`` is
-    the empty mapping).
+def _declare(
+    kind: str, specs: FieldSchemaLike | None, *, max_rank: int, allow_odd: bool
+) -> FieldSchema:
+    """Parse and check one of the constructor's field declarations (``None`` is
+    the empty schema).
 
-    The grammar is :mod:`physicsnemo.mesh.fields`: a leaf is an ``int`` rank, a
-    :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping with a ``"rank"``
-    key; a mapping without one is a nested group, and a flat name may contain
-    ``"."`` for the same nesting. ISLA's own limits are applied to the flattened
-    leaves: ``max_rank`` per mapping, and pseudotensor inputs refused.
+    The grammar is :meth:`~physicsnemo.mesh.fields.FieldSchema.parse`: a field
+    is a :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping with a
+    ``"rank"`` key; a mapping without one is a nested group, and a flat name may
+    contain ``"."`` for the same nesting. ISLA's own limits are applied to the
+    parsed fields: ``max_rank`` per declaration, and pseudotensor inputs refused.
     """
-    if specs is None:
-        return {}
-    validate_rank_spec(specs, source_label=kind)
-    out = flatten_rank_specs(specs)
+    out = FieldSchema({}) if specs is None else FieldSchema.parse(specs, label=kind)
     for name, spec in out.items():
         if spec.rank > max_rank:
             if kind == "outputs":
@@ -274,18 +269,11 @@ def _declare(kind: str, specs, *, max_rank: int, allow_odd: bool) -> dict[str, R
     return out
 
 
-def _key(name: str) -> str | tuple[str, ...]:
-    """A flat dotted field name as a TensorDict key: ``"a"`` -> ``"a"``,
-    ``"a.b"`` -> ``("a", "b")``."""
-    path = tuple(name.split("."))
-    return path[0] if len(path) == 1 else path
-
-
 def _leaf(data: TensorDict, name: str) -> torch.Tensor | None:
     """The leaf tensor at a dotted name of a TensorDict, ``None`` when absent
     (including when a prefix of the name is a tensor rather than a group)."""
     try:
-        value = data.get(_key(name), None)
+        value = data.get(FieldSchema.key(name), None)
     except ValueError:
         return None
     return value if isinstance(value, torch.Tensor) else None
@@ -328,7 +316,7 @@ class _InputSet:
     the frame's unit; boundary scalars enter raw.
     """
 
-    specs: dict[str, RankSpec]
+    specs: Mapping[str, RankSpec]
     n_frame: int
     scaled_scalars: bool
     dim: int = 3
@@ -1124,13 +1112,17 @@ class ISLA(Module):
     the module docstring for the contracts). Every argument is keyword-only.
 
     **Rank specs.** ``outputs``, ``boundary_inputs``, ``query_inputs`` and
-    ``global_inputs`` are :data:`~physicsnemo.mesh.fields.RankSpecDict`
-    mappings, the rank-spec grammar shared by every mesh model: a leaf is an
-    ``int`` rank, a :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping
+    ``global_inputs`` are :data:`~physicsnemo.mesh.fields.FieldSchemaLike`
+    declarations, the grammar shared by every mesh model
+    (:meth:`~physicsnemo.mesh.fields.FieldSchema.parse`): a field is a
+    :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping
     ``{"rank": r, "symmetric": False, "parity": "even"}``; a mapping without a
     ``"rank"`` key is a nested group, and a flat name may contain ``"."`` for
-    the same nesting (``{"surface": {"pressure": 0}}`` and
-    ``{"surface.pressure": 0}`` declare the same field). ``symmetric`` means
+    the same nesting (``{"surface": {"pressure": {"rank": 0}}}`` and
+    ``{"surface.pressure": {"rank": 0}}`` declare the same field). The parsed
+    declarations are the :class:`~physicsnemo.mesh.fields.FieldSchema`
+    attributes ``output_specs``, ``boundary_specs``, ``query_specs`` and
+    ``global_specs``. ``symmetric`` means
     fully symmetric under index permutation (rank :math:`\ge 2` only);
     ``parity="odd"`` declares a pseudotensor output (outputs only). One name
     declares one field; several scalars are several rank-0 names.
@@ -1158,8 +1150,9 @@ class ISLA(Module):
             (odd) at rank 2. For ``K = 1`` (``m = 5, p = 3``): a vector costs
             5, a symmetric rank-2 tensor 16, a pseudovector 3.
         boundary_inputs: Per-cell boundary fields, a rank spec per name with
-            ranks 0 to 2 and even parity (a prescribed traction as ``1``, a
-            Dirichlet trace or a condition tag as ``0``). One declaration
+            ranks 0 to 2 and even parity (a prescribed traction as
+            ``{"rank": 1}``, a Dirichlet trace or a condition tag as
+            ``{"rank": 0}``). One declaration
             applies to every boundary mesh: each mesh's ``cell_data`` must
             carry every declared field (per-boundary declarations are a
             follow-up). Their invariants widen the boundary tokens' seed;
@@ -1270,10 +1263,10 @@ class ISLA(Module):
     def __init__(
         self,
         *,
-        outputs: RankSpecDict,
-        boundary_inputs: RankSpecDict | None = None,
-        query_inputs: RankSpecDict | None = None,
-        global_inputs: RankSpecDict | None = None,
+        outputs: FieldSchemaLike,
+        boundary_inputs: FieldSchemaLike | None = None,
+        query_inputs: FieldSchemaLike | None = None,
+        global_inputs: FieldSchemaLike | None = None,
         interior: bool = False,
         hidden: int = 384,
         n_layers: int = 12,
@@ -1802,7 +1795,7 @@ class ISLA(Module):
             ### takes those as nested keys only in tuple form.
             td = TensorDict({}, batch_size=[], device=device)
             for name, value in global_data.items():
-                td.set(_key(name) if isinstance(name, str) else name, value)
+                td.set(FieldSchema.key(name) if isinstance(name, str) else name, value)
         else:
             raise TypeError(
                 f"global_data must be a TensorDict or a mapping of name to tensor, got "
@@ -1811,7 +1804,7 @@ class ISLA(Module):
         missing = sorted(name for name in self.global_specs if _leaf(td, name) is None)
         if missing:
             raise ValueError(f"global_data is missing the declared fields {missing!r}")
-        return td.select(*(_key(name) for name in self.global_specs))
+        return td.select(*(FieldSchema.key(name) for name in self.global_specs))
 
     def forward(
         self,
@@ -1912,7 +1905,7 @@ class ISLA(Module):
         )
         point_data = TensorDict({}, batch_size=[out_points.shape[0]], device=out_points.device)
         for name, value in fields.items():
-            point_data.set(_key(name), value[0])
+            point_data.set(FieldSchema.key(name), value[0])
         return Mesh(points=out_points, point_data=point_data, global_data=global_td)
 
     def _forward_tensors(

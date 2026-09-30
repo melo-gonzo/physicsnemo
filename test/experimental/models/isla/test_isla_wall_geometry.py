@@ -40,7 +40,7 @@ from physicsnemo.mesh.primitives.surfaces import sphere_icosahedral
 from test.experimental.models.isla._meshes import orthogonal, outputs, transform
 
 D = torch.float64
-PV = {"p": 0, "v": 1}
+PV = {"p": {"rank": 0}, "v": {"rank": 1}}
 R = 2.0
 
 
@@ -60,7 +60,7 @@ def _radial_queries(radii, n_per: int = 25, seed: int = 0):
 
 def _model(**kw):
     torch.manual_seed(0)
-    return ISLA(outputs=PV, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8, interior=True, **kw).double().eval()
+    return ISLA(outputs=PV, global_inputs={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True, **kw).double().eval()
 
 
 def test_exact_matches_the_analytic_sphere_distance_where_sampled_overestimates():

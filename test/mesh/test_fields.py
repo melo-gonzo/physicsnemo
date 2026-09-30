@@ -18,74 +18,26 @@ import pytest
 import torch
 from tensordict import TensorDict
 
-from physicsnemo.mesh import RankSpec
-from physicsnemo.mesh.fields import (
-    flatten_rank_spec,
-    flatten_rank_specs,
-    is_leaf_spec,
-    rank_counts,
-    ranks_from_tensordict,
-    validate_data_contains_ranks,
-    validate_rank_spec,
-)
+from physicsnemo.mesh import FieldSchema, RankSpec
 
 
 def _mixed_fields(n: int = 4) -> TensorDict:
     return TensorDict(
         {
-            # Deliberately not in lexicographic order.
-            "wind": torch.arange(n * 3, dtype=torch.float32).reshape(n, 3),
-            "state": {"temperature": torch.arange(n, dtype=torch.float32) + 20},
-            "displacement": -torch.arange(n * 3, dtype=torch.float32).reshape(n, 3),
-            "pressure": torch.arange(n, dtype=torch.float32) + 100,
-            "ignored": torch.ones(n),
+            "wind": torch.zeros(n, 3),
+            "state": {"temperature": torch.zeros(n)},
+            "displacement": torch.zeros(n, 3),
+            "pressure": torch.zeros(n),
+            "stress": torch.zeros(n, 3, 3),
         },
         batch_size=[n],
     )
 
 
-def test_rank_spec_helpers():
-    ranks = {"wind": 1, "state": {"temperature": 0}, "pressure": 0}
-    assert flatten_rank_spec(ranks) == {
-        "wind": 1,
-        "state.temperature": 0,
-        "pressure": 0,
-    }
-    assert rank_counts(ranks) == {0: 2, 1: 1}
-    assert ranks_from_tensordict(_mixed_fields()) == {
-        "wind": 1,
-        "state": {"temperature": 0},
-        "displacement": 1,
-        "pressure": 0,
-        "ignored": 0,
-    }
+### RankSpec --------------------------------------------------------------------
 
 
-def test_validate_rank_spec_and_data_reports_schema_errors():
-    validate_rank_spec({"scalar": 0, "tensor": 2})
-    with pytest.raises(ValueError, match="must be one of .* got 2"):
-        validate_rank_spec({"tensor": 2}, allowed_ranks=(0, 1))
-    with pytest.raises(TypeError, match="must be an integer"):
-        validate_rank_spec({"bad": True})
-    with pytest.raises(ValueError, match="must be non-negative"):
-        validate_rank_spec({"bad": -1})
-
-    data = TensorDict({"pressure": torch.zeros(3, 2)}, batch_size=[3])
-    with pytest.raises(ValueError) as error:
-        validate_data_contains_ranks(
-            data=data,
-            declared_ranks={"pressure": 0, "velocity": 1},
-            source_label="boundary data",
-        )
-    assert str(error.value) == (
-        "boundary data does not contain its declared rank spec:\n"
-        "  - missing leaf 'velocity' (declared rank 1)\n"
-        "  - rank mismatch for 'pressure': declared 0, got 1"
-    )
-
-
-def test_rank_spec_parse_accepts_int_rank_spec_and_mapping():
-    assert RankSpec.parse(1) == RankSpec(rank=1)
+def test_rank_spec_parse_accepts_rank_spec_and_mapping():
     spec = RankSpec(rank=2, symmetric=True, parity="odd")
     assert RankSpec.parse(spec) is spec
     assert RankSpec.parse({"rank": 2, "symmetric": True, "parity": "odd"}) == spec
@@ -101,12 +53,13 @@ def test_rank_spec_parse_accepts_int_rank_spec_and_mapping():
 @pytest.mark.parametrize(
     ("spec", "error", "match"),
     [
-        (True, TypeError, "got a bool"),
-        (1.0, TypeError, "must be an integer rank"),
-        (-1, ValueError, "must be non-negative"),
+        (0, TypeError, r"got int \(write \{'rank': 0\}\)"),
+        (True, TypeError, "got bool"),
+        (1.0, TypeError, "got float"),
         ({"symmetric": True}, ValueError, "must contain a 'rank' key"),
         ({"rank": 1, "channels": 3}, ValueError, r"unknown keys \['channels'\]"),
         ({"rank": True}, TypeError, "rank must be an integer"),
+        ({"rank": -1}, ValueError, "must be non-negative"),
         ({"rank": 1, "parity": "axial"}, ValueError, "parity must be 'even' or 'odd'"),
         ({"rank": 1, "symmetric": True}, ValueError, "only meaningful for rank >= 2"),
         ({"rank": 2, "symmetric": 1}, TypeError, "symmetric must be a bool"),
@@ -114,27 +67,22 @@ def test_rank_spec_parse_accepts_int_rank_spec_and_mapping():
 )
 def test_rank_spec_parse_rejects_invalid_specs(spec, error, match):
     with pytest.raises(error, match=match):
-        RankSpec.parse(spec, source_label="outputs['x']")
+        RankSpec.parse(spec, label="outputs['x']")
 
 
-def test_is_leaf_spec_distinguishes_groups_from_leaf_mappings():
-    assert is_leaf_spec(0)
-    assert is_leaf_spec(RankSpec(rank=1))
-    assert is_leaf_spec({"rank": 2})
-    assert not is_leaf_spec({"pressure": 0})
-    assert not is_leaf_spec({})
+### FieldSchema.parse -----------------------------------------------------------
 
 
-def test_flatten_rank_specs_treats_nested_and_dotted_names_alike():
+def test_parse_treats_nested_and_dotted_names_alike_and_keeps_order():
     stress = RankSpec(rank=2, symmetric=True)
     nested = {
-        "surface": {"pressure": 0, "shear": {"rank": 1}},
+        "surface": {"pressure": {"rank": 0}, "shear": {"rank": 1}},
         "stress": stress,
         "vorticity": {"rank": 1, "parity": "odd"},
     }
     dotted = {
-        "surface.pressure": 0,
-        "surface.shear": 1,
+        "surface.pressure": {"rank": 0},
+        "surface.shear": RankSpec(1),
         "stress": {"rank": 2, "symmetric": True},
         "vorticity": RankSpec(rank=1, parity="odd"),
     }
@@ -144,68 +92,120 @@ def test_flatten_rank_specs_treats_nested_and_dotted_names_alike():
         "stress": stress,
         "vorticity": RankSpec(rank=1, parity="odd"),
     }
-    assert flatten_rank_specs(nested) == expected
-    assert flatten_rank_specs(dotted) == expected
-    assert list(flatten_rank_specs(nested)) == list(expected)
-    assert flatten_rank_spec(dotted) == {
+    schema = FieldSchema.parse(nested)
+    assert dict(schema) == expected
+    assert list(schema) == list(expected)
+    assert FieldSchema.parse(dotted) == schema
+    assert schema.ranks == {
         "surface.pressure": 0,
         "surface.shear": 1,
         "stress": 2,
         "vorticity": 1,
     }
-    assert rank_counts(nested) == {0: 1, 1: 2, 2: 1}
+    assert (schema.count(0), schema.count(1), schema.count(2)) == (1, 2, 1)
+    assert schema["stress"] is stress
+    assert "surface.shear" in schema and "surface" not in schema
+    assert len(schema) == 4
 
-    assert flatten_rank_specs({"a/b": {"c": 0}}, sep="/") == {"a/b/c": RankSpec(rank=0)}
-    assert flatten_rank_spec({"a.b": 0}, sep="/") == {"a.b": 0}
+
+def test_parse_is_idempotent_and_direct_construction_matches():
+    schema = FieldSchema.parse({"pressure": {"rank": 0}})
+    assert FieldSchema.parse(schema) is schema
+    assert FieldSchema({"pressure": RankSpec(0)}) == schema
+    assert FieldSchema.parse({}) == FieldSchema({})
+    assert repr(schema) == (
+        "FieldSchema({'pressure': RankSpec(rank=0, symmetric=False, parity='even')})"
+    )
 
 
-def test_flatten_rank_specs_rejects_group_leaf_conflicts_and_bad_names():
+def test_parse_rejects_integer_leaves():
+    with pytest.raises(TypeError, match=r"outputs\['pressure'\] must be a RankSpec"):
+        FieldSchema.parse({"pressure": 0}, label="outputs")
+    with pytest.raises(TypeError, match=r"outputs\['fluid.velocity'\].*got int"):
+        FieldSchema.parse({"fluid": {"velocity": 1}}, label="outputs")
+
+
+def test_parse_rejects_group_leaf_conflicts_and_bad_names():
     with pytest.raises(ValueError, match="'surface' is a group of 'surface.pressure'"):
-        flatten_rank_specs({"surface": 0, "surface.pressure": 0})
+        FieldSchema.parse({"surface": {"rank": 0}, "surface.pressure": {"rank": 0}})
     with pytest.raises(ValueError, match="is a group of"):
-        flatten_rank_specs(
-            {"surface": {"pressure": {"mean": 0}}, "surface.pressure": 0}
+        FieldSchema.parse(
+            {
+                "surface": {"pressure": {"mean": {"rank": 0}}},
+                "surface.pressure": {"rank": 0},
+            }
         )
     with pytest.raises(ValueError, match="more than once"):
-        flatten_rank_specs({"surface": {"pressure": 0}, "surface.pressure": 1})
+        FieldSchema.parse(
+            {"surface": {"pressure": {"rank": 0}}, "surface.pressure": {"rank": 1}}
+        )
     with pytest.raises(ValueError, match="empty path component"):
-        flatten_rank_specs({"surface..pressure": 0})
+        FieldSchema.parse({"surface..pressure": {"rank": 0}})
     with pytest.raises(TypeError, match="must be strings"):
-        flatten_rank_specs({1: 0})
-    with pytest.raises(TypeError, match="must be a mapping"):
-        flatten_rank_specs([("pressure", 0)])
+        FieldSchema.parse({1: {"rank": 0}})
+    with pytest.raises(TypeError, match="fields must be a mapping"):
+        FieldSchema.parse([("pressure", {"rank": 0})])
+    with pytest.raises(ValueError, match=r"outputs\['shear'\]: parity must be"):
+        FieldSchema.parse({"shear": {"rank": 1, "parity": "axial"}}, label="outputs")
 
 
-def test_validate_rank_spec_accepts_widened_leaves():
-    validate_rank_spec(
-        {
-            "pressure": 0,
-            "velocity": RankSpec(rank=1),
-            "stress": {"rank": 2, "symmetric": True},
-            "surface": {"vorticity": {"rank": 1, "parity": "odd"}},
-        }
+def test_direct_construction_is_validated_too():
+    with pytest.raises(TypeError, match="must be a RankSpec.*use FieldSchema.parse"):
+        FieldSchema({"pressure": {"rank": 0}})
+    with pytest.raises(ValueError, match="is a group of"):
+        FieldSchema({"a": RankSpec(0), "a.b": RankSpec(0)})
+    with pytest.raises(TypeError, match="fields must be a mapping"):
+        FieldSchema([("a", RankSpec(0))])
+
+
+def test_schema_is_immutable():
+    schema = FieldSchema.parse({"pressure": {"rank": 0}})
+    with pytest.raises(AttributeError):
+        schema.fields = {}  # frozen dataclass
+    with pytest.raises(TypeError):
+        schema["velocity"] = RankSpec(1)  # Mapping, not MutableMapping
+
+
+### TensorDict interplay --------------------------------------------------------
+
+
+def test_key_maps_dotted_names_to_tensordict_keys():
+    assert FieldSchema.key("pressure") == "pressure"
+    assert FieldSchema.key("state.temperature") == ("state", "temperature")
+    data = _mixed_fields()
+    schema = FieldSchema.parse({"state.temperature": {"rank": 0}, "wind": {"rank": 1}})
+    for name in schema:
+        assert data[FieldSchema.key(name)].shape[0] == 4
+
+
+def test_from_tensordict_reads_ranks_from_leaf_shapes():
+    schema = FieldSchema.from_tensordict(_mixed_fields())
+    assert schema.ranks == {
+        "wind": 1,
+        "state.temperature": 0,
+        "displacement": 1,
+        "pressure": 0,
+        "stress": 2,
+    }
+    batched = TensorDict({"velocity": torch.zeros(2, 5, 3)}, batch_size=[2, 5])
+    assert FieldSchema.from_tensordict(batched).ranks == {"velocity": 1}
+
+
+def test_check_accepts_supersets_and_reports_schema_errors():
+    schema = FieldSchema.parse(
+        {"pressure": {"rank": 0}, "state": {"temperature": {"rank": 0}}}
     )
-    validate_rank_spec({"velocity": {"rank": 1}}, allowed_ranks=(0, 1))
-    with pytest.raises(ValueError, match="must be one of .* got 2"):
-        validate_rank_spec({"stress": RankSpec(rank=2)}, allowed_ranks=(0, 1))
-    with pytest.raises(ValueError, match=r"outputs\['stress'\] has unknown keys"):
-        validate_rank_spec(
-            {"stress": {"rank": 2, "channels": 2}}, source_label="outputs"
-        )
-    with pytest.raises(ValueError, match="parity must be 'even' or 'odd'"):
-        validate_rank_spec({"surface": {"shear": {"rank": 1, "parity": "axial"}}})
+    schema.check(_mixed_fields(), label="data")  # extra leaves are fine
 
-
-def test_validate_data_contains_ranks_reports_schema_errors():
     data = TensorDict({"pressure": torch.zeros(3, 2)}, batch_size=[3])
+    declared = FieldSchema.parse(
+        {"pressure": {"rank": 0}, "velocity": {"rank": 1}, "fluid.T": {"rank": 0}}
+    )
     with pytest.raises(ValueError) as error:
-        validate_data_contains_ranks(
-            data=data,
-            declared_ranks={"pressure": 0, "velocity": 1},
-            source_label="boundary data",
-        )
+        declared.check(data, label="boundary data")
     assert str(error.value) == (
-        "boundary data does not contain its declared rank spec:\n"
-        "  - missing leaf 'velocity' (declared rank 1)\n"
+        "boundary data does not contain its declared fields:\n"
+        "  - missing field 'velocity' (declared rank 1)\n"
+        "  - missing field 'fluid.T' (declared rank 0)\n"
         "  - rank mismatch for 'pressure': declared 0, got 1"
     )

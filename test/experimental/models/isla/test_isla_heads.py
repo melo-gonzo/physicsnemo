@@ -44,14 +44,14 @@ from test.experimental.models.isla._meshes import (
 D = torch.float64
 
 OUTPUTS = {
-    "s": 0,
-    "s2": 0,
-    "v": 1,
+    "s": {"rank": 0},
+    "s2": {"rank": 0},
+    "v": {"rank": 1},
     "pv": {"rank": 1, "parity": "odd"},
-    "t": 2,
+    "t": {"rank": 2},
     "ts": {"rank": 2, "symmetric": True},
     "pt": {"rank": 2, "parity": "odd"},
-    "t3": 3,
+    "t3": {"rank": 3},
     "t3o": {"rank": 3, "parity": "odd"},
     "t3s": {"rank": 3, "symmetric": True},
     "t4s": {"rank": 4, "symmetric": True},
@@ -66,7 +66,7 @@ def _boundary(n=300, seed=0):
 
 
 def _globals(K):
-    return {f"g{k}": 1 for k in range(K)}
+    return {f"g{k}": {"rank": 1} for k in range(K)}
 
 
 def _model(K=1, outputs=OUTPUTS, **kw):
@@ -121,7 +121,7 @@ def test_coefficient_counts_match_the_docstring(K):
 
 def test_minimal_head_width():
     """One scalar and one true vector over K = 1: a head of width 1 + 5."""
-    m = _model(1, outputs={"p": 0, "v": 1})
+    m = _model(1, outputs={"p": {"rank": 0}, "v": {"rank": 1}})
     assert m.head.out_features == 6
 
 
@@ -197,15 +197,20 @@ def test_odd_outputs_are_pseudotensors_and_even_ones_are_not():
 
 
 def test_rank_spec_grammar_is_validated():
-    """The shared grammar (physicsnemo.mesh.fields) validates the leaves; ISLA adds
-    its rank ceilings and the refusal of pseudotensor inputs."""
-    base = dict(hidden=32, n_layers=1, n_slices=8, global_inputs={"g": 1})
+    """The shared grammar (FieldSchema.parse) validates the fields; ISLA adds its
+    rank ceilings and the refusal of pseudotensor inputs. A bare integer is not a
+    field declaration."""
+    base = dict(hidden=32, n_layers=1, n_slices=8, global_inputs={"g": {"rank": 1}})
     with pytest.raises(ValueError, match="rank 5 is not supported"):
-        ISLA(outputs={"x": 5}, **base)
+        ISLA(outputs={"x": {"rank": 5}}, **base)
     with pytest.raises(ValueError, match="unknown keys"):
         ISLA(outputs={"x": {"rank": 1, "parity_odd": True}}, **base)
     with pytest.raises(TypeError, match="bool"):
         ISLA(outputs={"x": True}, **base)
+    with pytest.raises(TypeError, match="outputs\\['x'\\] must be a RankSpec or a mapping"):
+        ISLA(outputs={"x": 0}, **base)
+    with pytest.raises(TypeError, match="global_inputs\\['g'\\] must be a RankSpec or a mapping"):
+        ISLA(outputs={"x": {"rank": 0}}, hidden=32, n_layers=1, n_slices=8, global_inputs={"g": 1})
     with pytest.raises(ValueError, match="parity must be"):
         ISLA(outputs={"x": {"rank": 1, "parity": "mixed"}}, **base)
     with pytest.raises(ValueError, match="unknown keys \\['channels'\\]"):
@@ -215,11 +220,11 @@ def test_rank_spec_grammar_is_validated():
     with pytest.raises(ValueError, match="at least one field"):
         ISLA(outputs={}, **base)
     with pytest.raises(ValueError, match="pseudotensor"):
-        ISLA(outputs={"p": 0}, boundary_inputs={"w": {"rank": 1, "parity": "odd"}}, **base)
+        ISLA(outputs={"p": {"rank": 0}}, boundary_inputs={"w": {"rank": 1, "parity": "odd"}}, **base)
     with pytest.raises(ValueError, match="rank 3 is not supported"):
-        ISLA(outputs={"p": 0}, boundary_inputs={"T": 3}, **base)
+        ISLA(outputs={"p": {"rank": 0}}, boundary_inputs={"T": {"rank": 3}}, **base)
     with pytest.raises(ValueError, match="rank 2 is not supported"):
-        ISLA(outputs={"p": 0}, hidden=32, n_layers=1, n_slices=8, global_inputs={"T": 2})
+        ISLA(outputs={"p": {"rank": 0}}, hidden=32, n_layers=1, n_slices=8, global_inputs={"T": {"rank": 2}})
     with pytest.raises(TypeError, match="mapping"):
         ISLA(outputs=[0, 1], **base)
     ### a RankSpec instance is a leaf too
@@ -232,8 +237,8 @@ def test_rank_two_output_in_the_interior_task():
     output with the same covariance (rotation and reflection)."""
     mesh, drv = _boundary(200)
     q_pts, _, _, _ = cloud(50, seed=1)
-    outputs_ = {"p": 0, "v": 1, "sig": {"rank": 2, "symmetric": True}, "t": 2}
-    m = _model(1, outputs=outputs_, interior=True, query_inputs={"sdf": 0})
+    outputs_ = {"p": {"rank": 0}, "v": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}, "t": {"rank": 2}}
+    m = _model(1, outputs=outputs_, interior=True, query_inputs={"sdf": {"rank": 0}})
     q = points_mesh(q_pts, {"sdf": torch.rand(50, dtype=D)})
     base = _forward(m, mesh, drv, 1, q=q)
     assert base["sig"].shape == (50, 3, 3)
@@ -273,7 +278,7 @@ def test_fused_kernel_does_not_touch_the_heads():
     rank-2 outputs of the fused and eager models agree to roundoff in float64."""
     pytest.importorskip("triton")
     mesh, drv = _boundary(400)
-    outputs_ = {"p": 0, "v": 1, "sig": {"rank": 2, "symmetric": True}}
+    outputs_ = {"p": {"rank": 0}, "v": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}}
     outs = []
     for kernel in ("eager", "fused"):
         m = _model(1, outputs=outputs_, geo_kernel=kernel).cuda()

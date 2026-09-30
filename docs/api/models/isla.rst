@@ -20,12 +20,18 @@ Rank specs
 ----------
 
 ``outputs``, ``boundary_inputs``, ``query_inputs`` and ``global_inputs`` map a
-field name to a rank spec: an ``int`` rank (0 scalar, 1 vector, 2 rank-2
-tensor, ...) or a mapping ``{"rank": r, "symmetric": False, "parity": "even",
-"channels": 1}``. ``symmetric`` declares a fully symmetric tensor,
-``parity="odd"`` a pseudotensor output (a vorticity), ``channels`` packs
-several independent scalars under one rank-0 name. Inputs take ranks 0 to 2
-(global inputs 0 to 1) and even parity; outputs take ranks 0 to 4.
+field name to a field declaration in the grammar shared by every mesh model
+(:meth:`physicsnemo.mesh.fields.FieldSchema.parse`): a
+:class:`~physicsnemo.mesh.fields.RankSpec` or a mapping ``{"rank": r,
+"symmetric": False, "parity": "even"}`` (``r`` = 0 scalar, 1 vector, 2 rank-2
+tensor, ...); a mapping without a ``"rank"`` key is a nested group, and a name
+may contain ``"."`` for the same nesting. ``symmetric`` declares a fully
+symmetric tensor, ``parity="odd"`` a pseudotensor output (a vorticity). One
+name declares one field; several independent scalars are several rank-0
+names. Inputs take ranks 0 to 2 (global inputs 0 to 1) and even parity;
+outputs take ranks 0 to 4. The parsed declarations are the model's
+:class:`~physicsnemo.mesh.fields.FieldSchema` attributes ``output_specs``,
+``boundary_specs``, ``query_specs`` and ``global_specs``.
 
 Contracts
 ---------
@@ -50,8 +56,8 @@ reference configuration:
 .. code-block:: python
 
     model = ISLA(
-        outputs={"pressure": 0, "wss": 1},          # a scalar and a vector field
-        global_inputs={"freestream": 1},            # one global direction
+        outputs={"pressure": {"rank": 0}, "wss": {"rank": 1}},  # a scalar and a vector field
+        global_inputs={"freestream": {"rank": 1}},  # one global direction
         hidden=192,
         n_layers=12,
         n_slices=256,
@@ -70,8 +76,8 @@ reference configuration:
 A tensor-valued target is declared with its rank
 (``outputs={"stress": {"rank": 2, "symmetric": True}}`` returns ``(B, N, 3,
 3)``); a prescribed boundary vector is a rank-1 boundary input
-(``boundary_inputs={"traction": 1}``, passed as ``boundary_inputs={"traction":
-(B, N, 3)}``). Interior queries are passed as ``query_points`` (with
+(``boundary_inputs={"traction": {"rank": 1}}``, passed as
+``boundary_inputs={"traction": (B, N, 3)}``). Interior queries are passed as ``query_points`` (with
 ``query_normals`` and ``query_inputs``); ``query_tokens=True`` admits them as
 interacting tokens, ``query_independent=True`` decodes them passively, and
 ``support_tokens=True`` adds a per-case computational support
@@ -86,5 +92,8 @@ the reference configuration, its variants, and the data-to-model mapping.
     :members:
     :exclude-members: forward
 
-.. autoclass:: physicsnemo.experimental.models.isla.model.RankSpec
+.. autoclass:: physicsnemo.mesh.fields.RankSpec
+    :members:
+
+.. autoclass:: physicsnemo.mesh.fields.FieldSchema
     :members:

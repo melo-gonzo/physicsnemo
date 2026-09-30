@@ -48,7 +48,7 @@ from test.experimental.models.isla._meshes import outputs, soup
 DATA_DIR = Path(__file__).parent / "data"
 
 #: Every configuration declares one scalar and one vector output and one global direction.
-IO = dict(outputs={"p": 0, "v": 1}, global_inputs={"g": 1})
+IO = dict(outputs={"p": {"rank": 0}, "v": {"rank": 1}}, global_inputs={"g": {"rank": 1}})
 
 #: One small configuration in its two task structures (a surface task and an interior
 #: task; the constructor's ``interior`` flag).
@@ -140,16 +140,16 @@ def test_isla_constructor_attributes(config):
     else:
         m = ISLA(
             outputs={
-                "p": 0,
-                "q": 0,
-                "nut": 0,
-                "u": 1,
-                "tau": 1,
+                "p": {"rank": 0},
+                "q": {"rank": 0},
+                "nut": {"rank": 0},
+                "u": {"rank": 1},
+                "tau": {"rank": 1},
                 "stress": {"rank": 2, "symmetric": True},
             },
-            global_inputs={"g1": 1, "g2": 1, "re": 0},
-            boundary_inputs={"trace": 0, "traction": 1},
-            query_inputs={"sdf": 0},
+            global_inputs={"g1": {"rank": 1}, "g2": {"rank": 1}, "re": {"rank": 0}},
+            boundary_inputs={"trace": {"rank": 0}, "traction": {"rank": 1}},
+            query_inputs={"sdf": {"rank": 0}},
             interior=True,
             hidden=64,
             n_layers=3,

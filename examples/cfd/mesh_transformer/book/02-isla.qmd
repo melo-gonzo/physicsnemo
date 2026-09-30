@@ -137,10 +137,11 @@ Every field other than the geometry is *named* and carries a declared
 tensor rank. The constructor takes `outputs`, `global_inputs`,
 `boundary_inputs` and `query_inputs`. Each is a mapping from a field name
 to a rank spec, the grammar every mesh model shares
-(`physicsnemo.mesh.fields`): an integer rank (0 scalar, 1 vector, 2 rank-2
-tensor, ...) or a mapping `{rank, symmetric, parity}`. In the mapping form,
-`symmetric` marks a fully symmetric tensor and `parity: odd` marks a
-pseudotensor output. One name declares one field; several independent
+(`physicsnemo.mesh.fields.FieldSchema.parse`): a mapping `{rank, symmetric,
+parity}` whose `rank` is 0 for a scalar, 1 for a vector, 2 for a rank-2
+tensor, and so on (a bare integer is not accepted; a mapping without a
+`rank` key is a nested group of fields). `symmetric` marks a fully symmetric
+tensor and `parity: odd` marks a pseudotensor output. One name declares one field; several independent
 scalars, such as a standardized parameter vector, are several rank-0 names.
 `forward` takes the boundary as `boundary_meshes`, a mapping from a name to
 a `Mesh` of codimension one whose cells are the tokens (centroid, normal

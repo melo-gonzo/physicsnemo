@@ -169,8 +169,8 @@ def test_isla_training_on_filtered_thin_triangles(device):
         cell_measures(batch["forward_kwargs"]["boundary_meshes"]["vehicle"]), measure
     )
     model = ISLA(
-        outputs={"pressure": 0},
-        global_inputs={"U_inf_dir": 1},
+        outputs={"pressure": {"rank": 0}},
+        global_inputs={"U_inf_dir": {"rank": 1}},
         hidden=16,
         n_layers=1,
         n_slices=4,

@@ -28,8 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adds `physicsnemo.experimental.models.ISLA` (Invariant Slice Attention), an
   O(3)/SE(3)-equivariant, measure-aware slice-attention surrogate for steady
   boundary-value problems. Inputs (global, per-boundary-cell, per-query) and
-  outputs are named fields of declared tensor rank (`outputs={"pressure": 0,
-  "wss": 1, "stress": {"rank": 2, "symmetric": True}}`); every input enters
+  outputs are named fields of declared tensor rank (`outputs={"pressure":
+  {"rank": 0}, "wss": {"rank": 1}, "stress": {"rank": 2, "symmetric": True}}`);
+  every input enters
   through O(3)-invariants and every output leaves through an exactly
   equivariant basis (ranks up to 4, even or odd parity). Interior query modes
   are included. The API is keyword-only; the reference configuration and its
@@ -64,6 +65,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `physicsnemo.mesh.fields` is rebuilt around two types. `RankSpec` (frozen
+  dataclass: `rank`, `symmetric`, `parity`) is one field's transformation law;
+  `FieldSchema` is an immutable, insertion-ordered mapping from dotted field
+  names to `RankSpec`, parsed once at a model's boundary with
+  `FieldSchema.parse` (nested groups and dotted names flatten alike) and
+  queried with `.ranks`, `.count(rank)`, `FieldSchema.key(name)` and
+  `.check(tensordict, label=...)`. Validation is construction, so an invalid
+  schema cannot exist. Integer leaves are no longer accepted: a field is
+  declared as `{"rank": n}` (YAML: `pressure: {rank: 0}`) or a `RankSpec`,
+  and any mapping without a `"rank"` key is a nested group. GLOBE, ISLA and
+  the unified external-aerodynamics recipe configs are updated accordingly.
 - Mesh integration uses a shared `_effective_measure` field for complete cell
   and point measures. Cell measures fall back to geometry; point measures are
   explicit and independent of connectivity. `Mesh.integrate_samples` evaluates
@@ -106,6 +118,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `physicsnemo.mesh.fields`: `RankSpecDict`, `flatten_rank_spec`,
+  `flatten_rank_specs`, `validate_rank_spec`, `is_leaf_spec`, `rank_counts`,
+  `ranks_from_tensordict` and `validate_data_contains_ranks`, replaced by
+  `FieldSchema` (see Changed).
 - Removes the exact-kernel MeshTransformer
   (`physicsnemo.experimental.nn.mesh_attention`), its tests, and its Laplace
   example program under `examples/cfd/mesh_transformer`. The last commit

@@ -401,8 +401,8 @@ forward_kwargs:
     vehicle: boundaries.vehicle
   global_data: global_data
 model:
-  outputs: {pressure: 0, wss: 1}
-  global_inputs: {U_inf_dir: 1}
+  outputs: {pressure: {rank: 0}, wss: {rank: 1}}
+  global_inputs: {U_inf_dir: {rank: 1}}
 ```
 
 A surface task (`interior: false`, the default) predicts at the boundary
@@ -444,8 +444,8 @@ remove the old key; rename centroid `_target_quadrature_measure` to
 provides conversion examples.
 
 **Fields of declared rank.** The model YAML declares `outputs:` (the
-dataset's target names with their ranks: `pressure: 0`, `wss: 1`,
-`stress: {rank: 2, symmetric: true}`), `global_inputs:` (rank 1 = a global
+dataset's target names with their ranks: `pressure: {rank: 0}`, `wss: {rank: 1}`,
+`stress: {rank: 2, symmetric: true}`; a bare integer is not a rank spec), `global_inputs:` (rank 1 = a global
 direction, normalized inside the model; rank 0 = a PDE parameter),
 `boundary_inputs:` (per-cell fields of rank 0 to 2 read from every boundary
 Mesh's `cell_data`: a condition tag, a prescribed traction as a rank-1

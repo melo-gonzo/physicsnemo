@@ -61,11 +61,11 @@ forward_kwargs:
 model:
   _target_: physicsnemo.experimental.models.ISLA
   outputs:                       # the dataset's targets, by name and tensor rank
-    velocity: 1
-    pressure: 0
-    nut: 0
+    velocity: {rank: 1}
+    pressure: {rank: 0}
+    nut: {rank: 0}
   global_inputs:
-    U_inf_dir: 1                 # the unit freestream direction, read from global_data.U_inf_dir
+    U_inf_dir: {rank: 1}         # the unit freestream direction, read from global_data.U_inf_dir
   interior: true                 # predict at prediction_points, which join the encoder as tokens
   hidden: 384                  # the reference configuration (REF verdict, 2026-09-23); also the class defaults
   n_layers: 12

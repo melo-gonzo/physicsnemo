@@ -33,7 +33,7 @@ is
 
 ```python
 from physicsnemo.experimental.models import ISLA
-model = ISLA(outputs={"pressure": 0, "wss": 1}, global_inputs={"freestream": 1})
+model = ISLA(outputs={"pressure": {"rank": 0}, "wss": {"rank": 1}}, global_inputs={"freestream": {"rank": 1}})
 ```
 
 and an interior model adds `interior=True`. The defaults are the reference
@@ -127,12 +127,12 @@ if outward.mean() < 0:                                                       # t
     outward = -outward
 assert outward.mean() > 0
 
-surface = ISLA(outputs={"cp": 0, "tau": 1}, global_inputs={"freestream": 1}, hidden=32, n_layers=2, n_slices=8, dim=2).eval()
+surface = ISLA(outputs={"cp": {"rank": 0}, "tau": {"rank": 1}}, global_inputs={"freestream": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, dim=2).eval()
 with torch.no_grad():
     out = surface(boundary_meshes={"airfoil": airfoil}, global_data={"freestream": torch.tensor([1.0, 0.1])})
 print("surface task:", {k: tuple(v.shape) for k, v in out.point_data.items()}, "at", tuple(out.points.shape), "boundary cells")
 
-interior = ISLA(outputs={"cp": 0}, global_inputs={"freestream": 1}, interior=True, hidden=32, n_layers=2, n_slices=8, dim=2).eval()
+interior = ISLA(outputs={"cp": {"rank": 0}}, global_inputs={"freestream": {"rank": 1}}, interior=True, hidden=32, n_layers=2, n_slices=8, dim=2).eval()
 grid = torch.stack(torch.meshgrid(torch.linspace(-1.5, 2.5, 40), torch.linspace(-1.5, 1.5, 30), indexing="ij"), -1).reshape(-1, 2)
 with torch.no_grad():
     field = interior(boundary_meshes={"airfoil": airfoil}, prediction_points=grid, global_data={"freestream": torch.tensor([1.0, 0.1])})
@@ -174,7 +174,7 @@ Four of the inputs need a word.
   them (@sec-pose-prior). Ground planes and symmetry planes are real
   boundaries and belong among the boundary meshes, not in `global_inputs`.
 - **A magnitude that matters is a rank-0 global input.** Declare it
-  (`u_inf: 0`) and pass it under its name; a parameter vector is several
+  (`u_inf: {rank: 0}`) and pass it under its name; a parameter vector is several
   rank-0 names, one per parameter. No fixed power of a far-field speed is a
   physical law for every output (a pressure coefficient is degree zero, a
   dimensional pressure degree two), so the model learns the dependence like
@@ -187,7 +187,7 @@ the wall from the boundary sample (the nearest boundary cell,
 @sec-arch-modes). No signed-distance field has to be stored, sampled or
 declared. The distance is to the sampled boundary, not the full mesh. A
 dataset that carries a full-mesh signed-distance field can pass it, and its
-gradient, as declared `query_inputs` (`sdf: 0`, `sdf_gradient: 1`) in the
+gradient, as declared `query_inputs` (`sdf: {rank: 0}`, `sdf_gradient: {rank: 1}`) in the
 prediction mesh's `point_data`; they enter like any other PDE datum, and
 what they buy over the built-in geometry is measured in
 @sec-nb-internal-geometry-verdict.
@@ -207,11 +207,12 @@ changing the model block alone.
 ::: {.callout-note collapse="true" title="Nested field names"}
 A dataset that stores its fields in groups (`solution/pressure` on disk,
 `solution.pressure` in a config) names its targets with a dot, and the
-model's `outputs` declaration uses the same dotted names. A dot is the only
-way to spell a group, because every value of `outputs`, `global_inputs`,
-`boundary_inputs` and `query_inputs` is a rank spec. So
-`outputs: {"solution.pressure": 0, "solution.velocity": 1}` declares two
-leaves of one group, and `{"solution": {"pressure": 0, "velocity": 1}}`
+model's `outputs` declaration uses the same dotted names. A dotted name or a
+nested mapping spells a group: every value of `outputs`, `global_inputs`,
+`boundary_inputs` and `query_inputs` is a `{rank: ...}` spec or a nested
+group of them (a mapping without a `rank` key). So
+`outputs: {"solution.pressure": {"rank": 0}, "solution.velocity": {"rank": 1}}` declares two
+leaves of one group, and `{"solution": {"pressure": {"rank": 0}, "velocity": {"rank": 1}}}`
 declares the same model. The returned mesh's `point_data` is nested the
 same way, so `out.point_data["solution", "pressure"]` and
 `out.point_data["solution"]["pressure"]` both address the first. The same
@@ -224,9 +225,9 @@ The architecture knows only that it was handed named fields of declared
 rank. A buoyant flow passes gravity as its one direction. A magnetized flow
 passes two. Steady conduction with pinned temperatures passes no direction
 and supplies the pinned values as a rank-0 boundary input
-(`boundary_inputs: {trace: 0}`) on the mesh of the pinned boundary. An
+(`boundary_inputs: {trace: {rank: 0}}`) on the mesh of the pinned boundary. An
 elasticity problem passes its prescribed displacement and traction as
-rank-1 boundary inputs (`bc_displacement: 1`, `bc_traction: 1`); a planar
+rank-1 boundary inputs (`bc_displacement: {rank: 1}`, `bc_traction: {rank: 1}`); a planar
 dataset that stored the components separately stacks them with
 `StackScalarFields` in its dataset yaml, and is passed with `dim=2`. It
 predicts the stress as a symmetric rank-2 output

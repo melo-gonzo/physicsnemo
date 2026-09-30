@@ -261,9 +261,9 @@ def test_isla_end_to_end_through_collate_and_loss():
     fk = batch["forward_kwargs"]
     assert fk["boundary_meshes"]["outer"] is surface
     model = ISLA(
-        outputs={"q": 0, "stress": {"rank": 2, "symmetric": True}, "displacement": 1},
-        global_inputs={"load_dir": 1},
-        boundary_inputs={"traction": 1, "fixed": 0},
+        outputs={"q": {"rank": 0}, "stress": {"rank": 2, "symmetric": True}, "displacement": {"rank": 1}},
+        global_inputs={"load_dir": {"rank": 1}},
+        boundary_inputs={"traction": {"rank": 1}, "fixed": {"rank": 0}},
         hidden=16,
         n_layers=1,
         n_slices=4,

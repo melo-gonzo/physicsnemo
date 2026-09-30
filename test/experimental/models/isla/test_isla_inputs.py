@@ -39,9 +39,9 @@ from test.experimental.models.isla._meshes import (
 )
 
 D = torch.float64
-OUT = {"p": 0, "v": 1, "sig": {"rank": 2, "symmetric": True}}
-BIN = {"trac": 1, "T": {"rank": 2, "symmetric": True}, "A": 2, "tag": 0}
-QIN = {"sdf": 0, "u": 1, "S": {"rank": 2, "symmetric": True}}
+OUT = {"p": {"rank": 0}, "v": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}}
+BIN = {"trac": {"rank": 1}, "T": {"rank": 2, "symmetric": True}, "A": {"rank": 2}, "tag": {"rank": 0}}
+QIN = {"sdf": {"rank": 0}, "u": {"rank": 1}, "S": {"rank": 2, "symmetric": True}}
 DRV = torch.tensor([0.3, 1.0, 0.2], dtype=D)
 
 
@@ -80,7 +80,7 @@ def _move(fields, specs, R):
 
 def _model(**kw):
     torch.manual_seed(0)
-    base = dict(outputs=OUT, global_inputs={"g": 1}, hidden=32, n_layers=2, n_slices=8)
+    base = dict(outputs=OUT, global_inputs={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8)
     base.update(kw)
     return ISLA(**base).double().eval()
 
@@ -129,7 +129,7 @@ def test_query_inputs_covariance(improper):
     """Rank-0/1/2 per-prediction-point fields in the prediction Mesh's point_data."""
     pts, nrm, w, _ = cloud(200)
     q_pts, _, _, _ = cloud(40, seed=3)
-    m = _model(interior=True, query_inputs=QIN, boundary_inputs={"trac": 1})
+    m = _model(interior=True, query_inputs=QIN, boundary_inputs={"trac": {"rank": 1}})
     bf = {"trac": torch.randn(200, 3, dtype=D, generator=torch.Generator().manual_seed(5))}
     mesh = soup(pts, nrm, w, cell_data=bf)
     n_q = 40
@@ -165,8 +165,8 @@ def test_geometry_width_and_seed_width():
     the frame cosines, the norm, the frame contractions, the trace and the norm."""
     for K in (0, 1, 2):
         m = _model(
-            global_inputs={f"g{k}": 1 for k in range(K)},
-            boundary_inputs={"v": 1, "T": {"rank": 2, "symmetric": True}},
+            global_inputs={f"g{k}": {"rank": 1} for k in range(K)},
+            boundary_inputs={"v": {"rank": 1}, "T": {"rank": 2, "symmetric": True}},
         )
         F = 1 + K
         assert m.blocks[0].n_geo == 5 + K + (1 + F) + 1
@@ -174,17 +174,17 @@ def test_geometry_width_and_seed_width():
         assert m.bin.n_features == (F + 1) + (F * (F + 1) // 2 + 2)
         assert m.embed[0].in_features == K + m.bin.n_features
     ### a non-symmetric rank-2 input contracts both T a and T^T a and all F^2 pairs
-    m = _model(boundary_inputs={"A": 2})
+    m = _model(boundary_inputs={"A": {"rank": 2}})
     assert m.n_block_vecs == 2 * 2 and m.bin.n_features == 4 + 2
     ### query inputs widen the union stack for every token, boundary ones included
-    m = _model(interior=True, query_inputs={"u": 1}, boundary_inputs={"v": 1})
+    m = _model(interior=True, query_inputs={"u": {"rank": 1}}, boundary_inputs={"v": {"rank": 1}})
     assert m.blocks[0].n_geo == 5 + 1 + 2
 
 
 def test_field_validation_errors():
     """Declared fields are read from cell_data / point_data by name and checked for
     shape; extras there are ignored (like GLOBE)."""
-    m = _model(boundary_inputs={"trac": 1, "tag": 0})
+    m = _model(boundary_inputs={"trac": {"rank": 1}, "tag": {"rank": 0}})
     pts, nrm, w, _ = cloud(20)
     gd = {"g": torch.ones(3, dtype=D)}
     trac, tag = torch.randn(20, 3, dtype=D), torch.rand(20, dtype=D)
@@ -207,7 +207,7 @@ def test_field_validation_errors():
             global_data=gd,
         )
     ### query fields are required where the model declares them
-    mq = _model(interior=True, query_inputs={"sdf": 0})
+    mq = _model(interior=True, query_inputs={"sdf": {"rank": 0}})
     q = pts[:7] * 2
     with pytest.raises(ValueError, match="prediction_points.point_data is missing the declared fields \\['sdf'\\]"):
         mq(boundary_meshes={"wall": soup(pts, nrm, w)}, prediction_points=points_mesh(q), global_data=gd)
@@ -221,16 +221,16 @@ def test_fused_kernel_refuses_tensor_inputs_and_auto_falls_back():
     """The fused kernel takes rank-1 token inputs as per-point vectors (at most four
     with the global directions); rank-2 inputs and more than four vectors are refused
     and auto falls back to eager (off CUDA it does anyway)."""
-    base = dict(outputs=OUT, global_inputs={"g": 1}, hidden=32, n_layers=1, n_slices=8)
-    ISLA(boundary_inputs={"trac": 1}, geo_kernel="fused", **base)  # K = 1, P' = 1: accepted
-    ISLA(boundary_inputs={"trac": 1, "disp": 1, "u": 1}, geo_kernel="fused", **base)  # K + P' = 4
+    base = dict(outputs=OUT, global_inputs={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8)
+    ISLA(boundary_inputs={"trac": {"rank": 1}}, geo_kernel="fused", **base)  # K = 1, P' = 1: accepted
+    ISLA(boundary_inputs={"trac": {"rank": 1}, "disp": {"rank": 1}, "u": {"rank": 1}}, geo_kernel="fused", **base)  # K + P' = 4
     with pytest.raises(ValueError, match="one to four per-point vectors"):
-        ISLA(boundary_inputs={"trac": 1, "disp": 1, "u": 1, "v": 1}, geo_kernel="fused", **base)
+        ISLA(boundary_inputs={"trac": {"rank": 1}, "disp": {"rank": 1}, "u": {"rank": 1}, "v": {"rank": 1}}, geo_kernel="fused", **base)
     with pytest.raises(ValueError, match="does not support rank-2"):
-        ISLA(interior=True, query_inputs={"S": 2}, geo_kernel="fused", **base)
+        ISLA(interior=True, query_inputs={"S": {"rank": 2}}, geo_kernel="fused", **base)
     ### rank-0 inputs never touch the geometry region: the fused kernel stays available
-    ISLA(boundary_inputs={"tag": 0}, geo_kernel="fused", **base)
-    m = ISLA(interior=True, query_inputs={"S": 2}, **base)
+    ISLA(boundary_inputs={"tag": {"rank": 0}}, geo_kernel="fused", **base)
+    m = ISLA(interior=True, query_inputs={"S": {"rank": 2}}, **base)
     assert m.geo_kernel == "auto"
     assert m.resolve_geo_kernel(torch.zeros(1, 4, 3)) == "eager"
 
@@ -241,7 +241,7 @@ def test_rank0_query_inputs_are_scaled_by_the_gauge():
     fields are never scaled (they are physical vectors, not lengths) and a rescale
     of the geometry alone changes the output. The scaled pair takes two embedding
     channels per rank-0 field, after the built-in distance pair."""
-    m = _model(interior=True, query_inputs={"sdf": 0, "u": 1})
+    m = _model(interior=True, query_inputs={"sdf": {"rank": 0}, "u": {"rank": 1}})
     assert m.qin.n_features == 2 + (2 + 1) and m.qt.embed[0].in_features == 2 + m.qin.n_features
     pts, nrm, w, _ = cloud(60)
     mesh = soup(pts, nrm, w)

@@ -142,7 +142,7 @@ def test_isla_configs_declare_the_mesh_contract(model, dataset):
     assert cfg.input_type == "mesh" and cfg.output_type == "mesh"
     assert cfg.forward_kwargs.boundary_meshes == {"vehicle": "boundaries.vehicle"}
     assert cfg.forward_kwargs.global_data == "global_data"
-    assert OmegaConf.to_container(m.global_inputs) == {"U_inf_dir": 1}
+    assert OmegaConf.to_container(m.global_inputs) == {"U_inf_dir": {"rank": 1}}
     assert m.hidden == 384 and m.n_layers == 12 and m.n_slices == 256 and m.mlp_ratio == 4
     assert m.geo_checkpoint is True and m.geo_kernel is None
     ### Removed options never come back through a config.
@@ -165,7 +165,7 @@ def test_isla_surface_composes_and_runs():
     cfg = _compose("isla_surface", "drivaer_ml_surface", *SMALL)
     assert "prediction_points" not in cfg.forward_kwargs
     assert not cfg.model.get("interior", False)
-    assert OmegaConf.to_container(cfg.model.outputs) == {"pressure": 0, "wss": 1}
+    assert OmegaConf.to_container(cfg.model.outputs) == {"pressure": {"rank": 0}, "wss": {"rank": 1}}
     domain = _surface_domain()
     batch, out, pred = _run(cfg, domain, _targets("drivaer_ml_surface"))
     torch.testing.assert_close(out.points, domain.interior.points)
@@ -185,7 +185,7 @@ def test_isla_volume_composes_and_runs():
     assert cfg.model.interior is True
     assert cfg.forward_kwargs.prediction_points == "interior"
     assert cfg.model.get("query_inputs") is None
-    assert OmegaConf.to_container(cfg.model.outputs) == {"velocity": 1, "pressure": 0, "nut": 0}
+    assert OmegaConf.to_container(cfg.model.outputs) == {"velocity": {"rank": 1}, "pressure": {"rank": 0}, "nut": {"rank": 0}}
     domain = _volume_domain()
     batch, out, pred = _run(cfg, domain, _targets("drivaer_ml_volume_reference"))
     assert batch["forward_kwargs"]["prediction_points"] is domain.interior
@@ -198,7 +198,7 @@ def test_isla_volume_sdf_declares_the_stored_wall_geometry_as_query_inputs():
     from the prediction Mesh's point_data; everything else is isla_volume."""
     cfg = _compose("isla_volume_sdf", "drivaer_ml_volume_reference", *SMALL)
     base = _compose("isla_volume", "drivaer_ml_volume_reference", *SMALL)
-    assert OmegaConf.to_container(cfg.model.query_inputs) == {"sdf": 0, "sdf_normals": 1}
+    assert OmegaConf.to_container(cfg.model.query_inputs) == {"sdf": {"rank": 0}, "sdf_normals": {"rank": 1}}
     assert OmegaConf.to_container(cfg.forward_kwargs) == OmegaConf.to_container(base.forward_kwargs)
     domain = _volume_domain()
     _, out, _ = _run(cfg, domain, _targets("drivaer_ml_volume_reference"))
@@ -248,7 +248,7 @@ def test_isla_global_vector_is_produced_by_the_dataset_pipeline(model, dataset):
     """The ISLA configs declare the unit freestream direction as ``U_inf_dir``; the paired
     dataset must compute it (``ComputeFreestreamDirection`` -> ``U_inf_dir``)."""
     cfg = _compose(model, dataset)
-    assert OmegaConf.to_container(cfg.model.global_inputs) == {"U_inf_dir": 1}
+    assert OmegaConf.to_container(cfg.model.global_inputs) == {"U_inf_dir": {"rank": 1}}
     ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
     raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
     producers = [

@@ -17,10 +17,11 @@
 """ISLA (Invariant Slice Attention): an O(d)/SE(d)-equivariant soft-slice transformer
 for steady boundary-value PDE surrogates on the mesh-native API (boundary Meshes in,
 a point-cloud Mesh out) with named inputs and outputs of declared tensor rank
-(:class:`~physicsnemo.mesh.fields.RankSpec`, re-exported here). See
+(:class:`~physicsnemo.mesh.fields.RankSpec` and
+:class:`~physicsnemo.mesh.fields.FieldSchema`, re-exported here). See
 :mod:`physicsnemo.experimental.models.isla.model`."""
 
 from physicsnemo.experimental.models.isla.model import ISLA
-from physicsnemo.mesh.fields import RankSpec
+from physicsnemo.mesh.fields import FieldSchema, RankSpec
 
-__all__ = ["ISLA", "RankSpec"]
+__all__ = ["ISLA", "FieldSchema", "RankSpec"]

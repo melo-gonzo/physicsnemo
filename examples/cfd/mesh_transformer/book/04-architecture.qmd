@@ -496,7 +496,7 @@ import torch
 from physicsnemo.experimental.models import ISLA
 cnt = lambda mod: sum(p.numel() for p in mod.parameters())
 widths = (192, 384)
-models = {w: ISLA(outputs={"pressure": 0, "wss": 1}, global_inputs={"freestream": 1}, hidden=w, n_layers=12, n_slices=256) for w in widths}
+models = {w: ISLA(outputs={"pressure": {"rank": 0}, "wss": {"rank": 1}}, global_inputs={"freestream": {"rank": 1}}, hidden=w, n_layers=12, n_slices=256) for w in widths}
 def rows_for(m):
     blk = m.blocks[0]
     return [
@@ -990,7 +990,7 @@ above.
 | argument (default) | stage | what it sets |
 |---|---|---|
 | `hidden` (384), `n_layers` (12), `n_slices` (256), `mlp_ratio` (4); the defaults are the reference configuration, @sec-using-config | all | $d$, the number of slice layers, $M$, and the MLP expansion |
-| `outputs` (required) | 5 | the output fields by name and rank spec (`{pressure: 0, wss: 1, stress: {rank: 2, symmetric: true}}`; `parity: odd` for a pseudotensor); each field costs the coefficient count of @sec-arch-head and is returned as a leaf of the output Mesh's `point_data` under its name. A dotted name (`surface.pressure`) is a nested leaf of the output and, in any input mapping, of the input; every declared value is a leaf spec, so a group is only ever spelled with a dot, and several independent scalars are several rank-0 names |
+| `outputs` (required) | 5 | the output fields by name and rank spec (`{pressure: {rank: 0}, wss: {rank: 1}, stress: {rank: 2, symmetric: true}}`; `parity: odd` for a pseudotensor); each field costs the coefficient count of @sec-arch-head and is returned as a leaf of the output Mesh's `point_data` under its name. A dotted name (`surface.pressure`) is a nested leaf of the output and, in any input mapping, of the input; every declared value is a `{rank: ...}` spec or a nested group (a mapping without a `rank` key), and several independent scalars are several rank-0 names |
 | `global_inputs` (none) | 1, 2, 3d, 5 | the per-case fields by name and rank, read from `global_data`: each rank-1 field is a global direction $\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed |
 | `boundary_inputs` (none) | 2, 3d | per-cell fields by name and rank 0 to 2, read from every boundary mesh's `cell_data`: their invariants $\beta_i$ join the seed (prediction-point tokens carry zeros), and rank-1 and rank-2 fields add their contractions with $\hat\rho_{is}$ to the relational invariants (@sec-isla-inputs-rank) |
 | `query_inputs` (none) | interior | per-prediction-point fields by name and rank 0 to 2 (a material label, a source term, a stored signed distance and its gradient), read from the prediction Mesh's `point_data` and carried by the prediction-point tokens through their own embedding after the built-in distance channel; rank-0 fields are divided by $L$ and paired with a signed log |
