@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """RestrictToPlane (ND-GENERIC, 2026-09-28): a planar DomainMesh stored in three coordinates becomes a native
-two-dimensional one; the boundary-value extension computed in the plane equals the embedded one; non-planar input is refused."""
+two-dimensional one; non-planar input is refused; ISLA runs natively on the restricted domain."""
 
 import pytest
 import torch
@@ -9,7 +9,7 @@ from tensordict import TensorDict
 
 from physicsnemo.mesh import DomainMesh, Mesh
 
-from domain_transforms import BoundaryValueExtension, RestrictToPlane
+from domain_transforms import RestrictToPlane
 
 
 def _square_domain(z: float = 0.0, n_side: int = 8, n_int: int = 200, seed: int = 0) -> DomainMesh:
@@ -52,15 +52,6 @@ def test_drops_the_constant_axis_from_points_and_vectors():
     torch.testing.assert_close(d2.interior.point_data["u"], d3.interior.point_data["u"])
     torch.testing.assert_close(d2.boundaries["outer"].cells, d3.boundaries["outer"].cells)
     torch.testing.assert_close(d2.boundaries["outer"].cell_data["bc_value_g"], d3.boundaries["outer"].cell_data["bc_value_g"])
-
-
-def test_extension_in_the_plane_equals_the_embedded_extension():
-    d3 = _square_domain()
-    ext = BoundaryValueExtension(boundary="outer", value_field="bc_value_g", label_fields=["bc_dirichlet", "bc_neumann"])
-    e3 = ext.apply_to_domain(d3).interior.point_data
-    e2 = ext.apply_to_domain(RestrictToPlane(vector_fields=VEC).apply_to_domain(d3)).interior.point_data
-    for k in ("ext_dirichlet", "ext_dist_dirichlet", "ext_neumann", "ext_dist_neumann"):
-        torch.testing.assert_close(e2[k], e3[k])
 
 
 def test_non_planar_input_is_refused_and_missing_fields_are_skipped():

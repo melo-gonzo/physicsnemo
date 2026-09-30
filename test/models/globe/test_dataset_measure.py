@@ -34,6 +34,11 @@ def test_subsample_preserves_represented_measure(geometry_only, explicit):
         Path(__file__).parents[3]
         / "examples/cfd/external_aerodynamics/globe/drivaer/dataset.py"
     )
+    if not path.is_file():
+        ### The subject under test lives in the examples tree, which
+        ### package-only checkouts (e.g. ``git archive`` of physicsnemo/ and
+        ### test/) do not carry.
+        pytest.skip(f"GLOBE DrivAerML example dataset module not found: {path}")
     spec = importlib.util.spec_from_file_location("globe_drivaer_dataset", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

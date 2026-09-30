@@ -31628,3 +31628,34 @@ so the stored field's advantage lies elsewhere (it is a smooth volumetric field 
 surface, and it enters as a declared input rather than through the routing geometry). Under the option rule one form survives:
 the sampled form, which is differentiable in the boundary positions and needs no Warp dependency. The `wall_geometry` option and
 the exact path are removed from the model and its tests; the 2-D follow-up on AirfRANS is dropped with it.
+
+## 2026-09-30 — Ruling (Peter) and program turn: fixed-mesh work is deprioritized because real CAE varies geometry and fixed meshes do not exercise ISLA's discretization independence; rejected machinery is deleted on the verdict; the PROTO-COND-2 adoption rule stands as written; one equal-epoch Poisson 8,448 pair runs as the last fixed-mesh lane; the next program is the wing deficit's mechanism {#sec-nb-ruling-fixed-mesh-2026-09-30}
+
+**Setting.** Five decisions were open after the same-snapshot OLBC ladder closed (@sec-nb-olbc-ref-ladder-verdict): whether to
+delete the refuted harmonic and distance channels, how to read the PROTO-COND-2 adoption rule, what to do about the Poisson
+8,448 seed spread, which program comes next, and the two known failing tests. Peter ruled on all five.
+
+**The rulings.**
+
+1. **Delete the machinery of rejected experiments, always.** The per-type harmonic measures (`src/harmonic.py`,
+   `src/precompute_harmonic.py`, `HarmonicBoundaryMeasures`) and the inverse-square boundary-value extension
+   (`BoundaryValueExtension`, the "distances" channel) are removed from the recipe with their tests: 720 lines, 8 tests. The
+   recipe suite passes (333) except the one known failure being fixed separately. The `hm_measures` and `_ext` dataset variants
+   were cluster-only and stay on the cluster as provenance of the closed lanes.
+2. **The PROTO-COND-2 adoption rule as written governs**: neutral or better on every dataset, wings included. The AirfRANS
+   pressure clause (at or below 0.91) was a mechanism reading and does not block adoption. If the HiLift 510 pair scores within
+   1.03 on pressure, `slice_prototypes="centered"` becomes the reference default and the static form is deleted.
+3. **The Poisson 8,448 seed spread** (ISLA 0.073 / 0.039, both lanes still descending under the equal-step budget) gets one
+   equal-epoch pair: ISLA reference and GeoTransolver-512, both at 500 epochs (campaign pc rows 44 to 47, `*_n8448_e500_*`).
+   Cheap, and not a priority: it is the last fixed-mesh lane.
+4. **Fixed-mesh work is deprioritized, and further fixed-mesh programs are nixed.** Very few real CAE datasets share one mesh;
+   geometry variation is the point of CAE, and discretization independence is one of ISLA's strengths, so a fixed-mesh problem
+   neither matters much in practice nor exercises what ISLA does right. The OLBC sets stay in the book as the closed
+   boundary-data stress test (chapter 10); no new lanes are launched on them beyond ruling 3. The solids gap read against
+   GeoTransolver exists only on the fixed-mesh OLBC elasticity set: on the geometry-varying solids (lug, DeepJEB++, Tensile2d
+   with the tensor head) ISLA is at parity or ahead, so there is no geometry-varying elasticity gap to study. The program's open
+   question is therefore **the wing deficit's mechanism**: 10% at 210 wings, 31% on the fixed-angle rung, closing with data
+   (@sec-nb-ref-hl210-verdict), where the per-case anatomy located nothing. The first instrument is a no-training surface
+   anatomy (excess error by high-lift element and by curvature bin, preregistered in @sec-nb-wing-anatomy-surface).
+5. **Fix the two known failing tests now** (the aarch64-only GLOBE subsample-measure test; the recipe's missing
+   degenerate-cell warning) and then decide whether each fix rides an open upstream PR or a later one.
