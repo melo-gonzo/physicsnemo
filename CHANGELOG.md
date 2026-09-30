@@ -29,14 +29,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   O(3)/SE(3)-equivariant, measure-aware slice-attention surrogate for steady
   boundary-value problems. Inputs (global, per-boundary-cell, per-query) and
   outputs are named fields of declared tensor rank (`outputs={"pressure":
-  {"rank": 0}, "wss": {"rank": 1}, "stress": {"rank": 2, "symmetric": True}}`);
-  every input enters
-  through O(3)-invariants and every output leaves through an exactly
-  equivariant basis (ranks up to 4, even or odd parity). Interior query modes
-  are included. The API is keyword-only; the reference configuration and its
-  variants are documented in the unified external-aerodynamics recipe.
-- Adds `DropDegenerateCells` to the unified external aerodynamics surface
-  pipelines, dropping collapsed or non-finite cells before centroid conversion.
+  {"rank": 0}, "wss": {"rank": 1}, "stress": {"rank": 2, "symmetric": True}}`,
+  see `FieldSchema` under Changed); every input enters through O(3)-invariants
+  and every output leaves through an exactly equivariant basis (ranks up to 4,
+  even or odd parity). `forward` is mesh-native, as GLOBE's: it takes the
+  boundary as named `Mesh` objects, the case's `global_data`, and for an
+  interior task (`interior=True`) the prediction points as a point-cloud
+  `Mesh`, and returns a point-cloud `Mesh` carrying the outputs in its
+  `point_data`. Constructor and `forward` are keyword-only. An exact fused
+  Triton kernel for the per-layer geometry region is selected automatically
+  on CUDA. The unified external-aerodynamics recipe gains ISLA model configs
+  (`isla_surface`, `isla_volume`, `isla_volume_sdf`).
+- `MeshDataset(cache_host=True, cache_host_views=k)` keeps each sample's
+  first `k` reads in host memory and serves later requests for the same
+  index from that cache (single- or few-sample fitting; `k > 1` keeps `k`
+  stochastic subsample views per index).
+- `DomainMeshReader` gains `boundary_subsample` (`"both"`, `"cells"`,
+  `"points"`), choosing which of the two subsamples apply to the in-file
+  boundary meshes, and `interior_n_points_range`, which draws the interior
+  point count per sample from a closed integer range (query-count
+  augmentation), reproducibly under `set_epoch`.
+- Mesh readers load saved meshes with `tensordict` memory maps opened
+  read-only (`physicsnemo.datapipes.readers.mesh.read_only_memory_maps`), so
+  page faults on a networked file system no longer take write extent locks
+  (observed as a training hang on a Lustre-hosted dataset).
+- `CenterMesh` gains `store_center_as` (records the subtracted center in
+  `global_data`) and `use_measure_weighting` (centers by effective cell
+  measure rather than raw cell area, so a subsampled mesh is centered where
+  the full mesh would be).
+- `GeoTransolver` and `Transolver` gain `measure_weighted_slices` and a
+  keyword-only `measure_weights` argument to `forward`, weighting the slice
+  pooling of every GALE / physics-attention block and of the GeoTransolver
+  context tokenizers by a per-point quadrature measure. Off by default; with
+  the default the models are unchanged.
 - `MeshToDomainMesh` in `cell_centroids` mode records each source cell's
   complete effective measure on the interior under the mesh-owned
   `_effective_measure` point-data key, so
@@ -119,13 +144,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - `physicsnemo.mesh.fields`: `RankSpecDict`, `flatten_rank_spec`,
-  `flatten_rank_specs`, `validate_rank_spec`, `is_leaf_spec`, `rank_counts`,
-  `ranks_from_tensordict` and `validate_data_contains_ranks`, replaced by
-  `FieldSchema` (see Changed).
-- Removes the exact-kernel MeshTransformer
-  (`physicsnemo.experimental.nn.mesh_attention`), its tests, and its Laplace
-  example program under `examples/cfd/mesh_transformer`. The last commit
-  carrying it is tagged `mt1-final`.
+  `rank_counts`, `ranks_from_tensordict` and `validate_data_contains_ranks`
+  (also re-exported from `physicsnemo.mesh`), replaced by `FieldSchema` (see
+  Changed).
 - Removes the opt-in `physicsnemo.compat` import-alias layer and the
   `PHYSICSNEMO_ENABLE_COMPAT` environment variable. The layer mapped pre-v2.0
   module paths onto their v2.0 locations; three minor releases later, callers
@@ -154,12 +175,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before DDP forward and forward/loss failures before backward; failures
   inside model collectives or backward still rely on the process-group
   timeout. An optional `training.divergence_loss_threshold` aborts on
-  non-finite or exploding losses. Epoch schedulers advance before saving,
-  legacy scheduler state is migrated, fp16 `GradScaler` state is persisted,
+  non-finite or exploding losses. Epoch schedulers advance before saving
+  (checkpoints written by earlier recipe versions, which saved before the
+  step, are advanced once on resume), fp16 `GradScaler` state is persisted,
   and the final epoch is always checkpointed. Resume metadata reports
   scheduler/scaler restoration; exact trajectory continuation is unverified
   because RNG and stochastic data state are not restored.
-||||||| c911a874d
+- Checkpoint loading resolves model weights at the selected training
+  checkpoint's filename index, preventing resumes that mix epochs. Missing
+  required weights raise before any model or training state is restored.
+  Distributed loads validate on every rank using rank 0's file lookup.
+- Unified external aero recipe: near-wall SDF normals ignore subresolution
+  sign noise without reversing resolved interior normals, including on
+  translated geometry. Stored signed distances are unchanged.
 - Mesh slicing reuses integer indices across connectivity, fields, and caches
   to avoid repeated CUDA synchronization for the same boolean mask.
   Point slicing skips mask processing when the output has no cells because
@@ -169,14 +197,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   thin faces and their quadrature measures without Gram cancellation or
   overflow/underflow in the norm.
 
-- Checkpoint loading resolves model weights at the selected training checkpoint's
-  filename index, preventing resumes that mix epochs. Missing required weights
-  raise before any model or training state is restored. Distributed loads validate
-  on every rank using rank 0's file lookup.
-- Unified external aero recipe: near-wall SDF normals ignore subresolution sign
-  noise without reversing resolved interior normals, including on translated
-  geometry. Stored signed distances are unchanged.
-||||||| e3dae21a3
 - Fixes mesh dtype handling: preserves integer-coordinate precision, normalizes
   connectivity safely, and rejects integer `.to()` casts. Floating/complex casts
   preserve the source mesh.

@@ -6,8 +6,9 @@ slice-attention surrogate for steady boundary-value problems. A boundary sample
 (positions, unit normals, quadrature measures) goes in together with the
 problem's data as *named fields of declared tensor rank*: global inputs (a
 direction, a PDE parameter), per-boundary-cell inputs (a condition tag, a
-prescribed traction, a prescribed stress) and, in the interior modes, per-query
-inputs (the signed distance). Named fields of declared rank come out: scalars,
+prescribed traction, a prescribed stress) and, for an interior task, per-query
+inputs (a source term, a material label). Named fields of declared rank come
+out: scalars,
 vectors, tensors up to rank 4, each exactly covariant. The attention operates
 only on invariants of the per-point vector set, and the frame is re-attached
 at the heads, so rotation, reflection and translation covariance hold by
@@ -46,42 +47,48 @@ Contracts
   integral of the sampled geometry.
 - **Measure-aware aggregation.** Slice states are quadrature-weighted means, so
   the routing reads a sampled integral rather than a raw point population.
-- **Query independence (optional).** With ``query_independent=True`` queries are
-  decoded by passive read blocks and a prediction at one point does not depend
-  on which other points are queried.
 
-Every constructor argument and every ``forward`` input is keyword-only. The
-reference configuration:
+Mesh API
+--------
+
+``forward`` follows the mesh-native contract of the mesh models (GLOBE's): one
+case per call, no batch axis. The boundary is a mapping of named
+:class:`~physicsnemo.mesh.Mesh` objects (one per boundary condition or part,
+each a ``Mesh[dim - 1, dim]`` whose cells have normals); the per-case data is
+a ``TensorDict`` or mapping; for an interior task (``interior=True``) the
+prediction points are a point-cloud ``Mesh`` (or a bare ``(N, dim)`` tensor
+when no ``query_inputs`` are declared). The result is a point-cloud ``Mesh``
+whose ``point_data`` holds the declared outputs. Every constructor argument
+and every ``forward`` input is keyword-only. The reference configuration (the
+class defaults) on a surface task:
 
 .. code-block:: python
 
     model = ISLA(
         outputs={"pressure": {"rank": 0}, "wss": {"rank": 1}},  # a scalar and a vector field
-        global_inputs={"freestream": {"rank": 1}},  # one global direction
-        hidden=192,
+        global_inputs={"U_inf_dir": {"rank": 1}},  # one global direction
+        hidden=384,
         n_layers=12,
         n_slices=256,
         mlp_ratio=4,
         geo_checkpoint=True,
     )
     out = model(
-        points=points,                              # (B, N, 3)
-        normals=normals,                            # (B, N, 3)
-        measure_weights=measure,                    # (B, N)
-        global_inputs={"freestream": direction},    # (B, 3)
+        boundary_meshes={"vehicle": surface},       # Mesh[2, 3], cells with normals
+        global_data={"U_inf_dir": direction},       # (3,)
     )
-    out["pressure"]                                 # (B, N)
-    out["wss"]                                      # (B, N, 3)
+    out.point_data["pressure"]                      # (N,), one per boundary cell
+    out.point_data["wss"]                           # (N, 3)
 
 A tensor-valued target is declared with its rank
-(``outputs={"stress": {"rank": 2, "symmetric": True}}`` returns ``(B, N, 3,
-3)``); a prescribed boundary vector is a rank-1 boundary input
-(``boundary_inputs={"traction": {"rank": 1}}``, passed as
-``boundary_inputs={"traction": (B, N, 3)}``). Interior queries are passed as ``query_points`` (with
-``query_normals`` and ``query_inputs``); ``query_tokens=True`` admits them as
-interacting tokens, ``query_independent=True`` decodes them passively, and
-``support_tokens=True`` adds a per-case computational support
-(``support_points``, ``support_normals``, ``support_inputs``).
+(``outputs={"stress": {"rank": 2, "symmetric": True}}`` gives ``(N, 3, 3)``);
+a prescribed boundary vector is a rank-1 boundary input
+(``boundary_inputs={"traction": {"rank": 1}}``, read from each boundary mesh's
+``cell_data["traction"]``). An interior task is built with ``interior=True``
+and called with ``prediction_points=``; each prediction point's signed
+distance to the nearest boundary token and the direction to it are computed
+inside the model and are never an input, so a dataset's stored signed
+distance enters, if wanted, as an ordinary declared ``query_inputs`` field.
 
 The unified external-aerodynamics recipe
 (``examples/cfd/external_aerodynamics/unified_external_aero_recipe``) documents
