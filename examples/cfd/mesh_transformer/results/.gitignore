@@ -1,0 +1,13 @@
+# Dead cluster artifacts: never tracked. Results (json, jsonl, tsv, npz, yaml, md, reducer .py) stay tracked.
+.done
+SNAPSHOT_USED
+STATUS
+STATUS_*
+DONE_*
+RUN_*
+BLOCKED_*
+execution_source/
+*.lock
+*.sha256
+*.log
+__pycache__/
