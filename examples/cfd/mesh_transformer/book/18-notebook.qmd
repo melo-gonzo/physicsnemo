@@ -31523,3 +31523,33 @@ gain at two rungs is the first component since the frame that pays on a fixed-me
 decides adoption: within 1.03 on pressure adopts PROTO-COND-2 into the reference configuration (`slice_prototypes="centered"`
 becomes the default and the static form is deleted under the one-model rule); worse than 1.03 on both seeds deletes the option.
 A prototype-cosine check on the 2,048 checkpoints (bar < 0.3, as at 512) is run with the wing reduction.
+
+## 2026-09-29 — Status, deflection at 200,000 cells: the first ISLA twin (192 wide, linear routing) fell to the mean-field plateau on both seeds (validation loss 0.0088 / 0.0101 at epoch 26, then 0.143 / 0.157 from epoch 76 to 500) and is not an arm; the reference-configuration twin is healthy at epoch 367 (0.0022 / 0.0020, level with GeoTransolver's 0.0022) and becomes the ISLA arm of the 200k sealed test {#sec-nb-p200k-deflection-plateau}
+
+**Setting.** The deflection split trains on the 144 milder HiLift geometries and tests on 360 sealed high-deflection cases
+(@sec-nb-deflection-prereg). At 10,000 cells the sealed test was falsified: ISLA 1.16x unit-direction GeoTransolver on
+pressure, both degrading 1.23 to 1.25x across the geometry boundary (@sec-nb-deflection-verdict). P200K-FLEET re-runs the
+split at the 200,000-cell protocol (group defl: `p200k_hl_isla_deflection`, `p200k_hl_gt_unit_deflection`, two seeds, lr 1e-3,
+launched 2026-09-19 before cosine routing and the 384-wide reference configuration were adopted). REF-BOARD runs the same split
+under the reference configuration (`rb_hl_isla_deflection`, rows 20-21: 384 wide, cosine routing, lr 5e-4).
+
+**What we saw.** The four group-defl lanes trained to 500 epochs and were scored on the 180-case validation list. GeoTransolver
+is healthy: validation loss 0.00222 / 0.00216 at 500, float32 pressure relative L2 0.0262 / 0.0246. The two ISLA lanes are not:
+validation loss reaches 0.0088 (seed 42) and 0.0101 (seed 43) at epoch 26, rises to 0.095 / 0.148 by epoch 51 and 0.164 / 0.158
+by epoch 76, and stays flat at 0.143 / 0.157 to epoch 500 with the training loss at the same value (0.1436); no NaN. Float32
+pressure relative L2 on validation is 0.688 / 0.694, the mean-field level. This is the loss signature of the routing collapse
+measured in ROUTING-SAT (@sec-nb-routingsat-verdict): one active slice per block, output near the field mean. It occurred under
+linear routing at lr 1e-3 and 192 width, the setting ROUTE-NORM found collapse-prone and replaced with cosine routing
+(@sec-nb-routenorm-p200k-verdict); it was not re-run because the reference configuration supersedes that setting.
+
+**The reference-configuration twin is healthy.** `rb_hl_isla_deflection` seeds 42 / 43 are at epoch 367 of 500 with validation
+loss 0.00224 / 0.00196 at epoch 351, still descending slowly and level with GeoTransolver's final 0.00222 / 0.00216 on the same
+list (the 10k arms had ISLA 1.18x GeoTransolver on validation pressure). It becomes the ISLA arm of the 200k sealed test.
+
+**What was done.** The sealed-test evaluator for the 200k twin (`highlift/hl_defl_test_eval_p200k_aga.sbatch`, the 10k script
+with the p200k / rb lanes, their code snapshots and 200,000 cells) was submitted for the GeoTransolver pair (job 933538 tasks 2-3
+running); its ISLA tasks for the plateaued lanes were cancelled. The reference-configuration pair runs once both seeds report
+"Training completed" (tasks 4-5). The 200k reduction (`results/deflection_p200k_reduce_2026-09-29.py`) takes the rb lanes as the
+ISLA arm, records the plateaued lanes under "superseded", and applies the 10k bars unchanged: carried at or below 0.7x
+GeoTransolver on sealed pressure with $d \le 4$; falsified at or above 0.9x. The entry that reads it closes both the P200K-FLEET
+deflection row and the REF-BOARD deflection twin.
