@@ -31659,3 +31659,181 @@ delete the refuted harmonic and distance channels, how to read the PROTO-COND-2 
    anatomy (excess error by high-lift element and by curvature bin, preregistered in @sec-nb-wing-anatomy-surface).
 5. **Fix the two known failing tests now** (the aarch64-only GLOBE subsample-measure test; the recipe's missing
    degenerate-cell warning) and then decide whether each fix rides an open upstream PR or a later one.
+
+## 2026-09-30 — Verdict, WING-ANATOMY-SURFACE: ISLA's excess pressure error on the wings is uniform across curvature (every curvature bin within 0.10 of the whole-surface ratio, 1.21 / 1.02 at 210 wings and 1.47 / 1.42 on the fixed-angle rung, both seeds, both rungs), so H2 is refuted and the curvature axis reads H3; the five-wing element pilot puts the flap (1.37 / 1.30 at 210 wings) and the gap band (1.83 / 1.80 on the fixed-angle wing) over the bar, leaving H1 open on the flap and the coves {#sec-nb-wing-anatomy-surface}
+
+**Setting.** On the HiLiftAeroML wings ISLA (reference configuration)
+trails GeoTransolver-512 by 10% on surface pressure at 210 training wings
+(0.0513 against 0.0461, @sec-nb-ref-hl210-verdict) and GeoTransolver-256
+by 31% on the fixed-angle rung (126 training geometries at one angle of
+attack of 12 degrees, 18 validation geometries; ISLA 0.0300 against
+0.0207 at GeoTransolver's better rate 3e-3, @sec-nb-fleet-single-aoa-verdict),
+while on the DrivAerML Surface task the two are at parity car by car
+(Spearman 0.91, @sec-nb-hl35-percase addendum). The per-case anatomy
+found no location: the deficit is spread over every angle of attack
+(@sec-nb-ref-hl210-verdict). The next resolution is spatial: where on the
+wing surface does ISLA's excess pressure error sit? Nothing is trained; the
+existing checkpoints are re-scored with their per-cell predictions kept.
+
+**Hypotheses (fixed before computing).** H1, *local resolution*: the
+excess concentrates on the thin high-lift elements (slat, flap) and in the
+gaps between elements, where 200,000 sampled cells leave few cells per
+element and per cove. H2, *curvature*: the excess concentrates in
+high-curvature regions (leading and trailing edges) regardless of element.
+H3, *global*: the excess is spatially uniform, a scale or normalization
+deficit rather than a local one.
+
+**Instrument.** The float32 fleet scorer (`infer.py`, validation split,
+200,000 cells per case) run once more with `+save_predictions=true` on
+the four lanes of each rung, so every sampled cell carries its predicted
+and true pressure, its triangle (area) and its normal. Lanes and
+checkpoints: the 210-wing rung `ref_isla_r1_hl210_seed{42,43}`
+(`code_ref`) against `ref_gt_w512_hl210_seed{42,43}` (`code_ref`, 512
+wide, 3e-3), 180 validation wings; the fixed-angle rung
+`p200k_hl_isla_single_aoa_12_seed{42,43}` (`code_lean`, 1e-3) against
+`p200k_hl_gt_unit_single_aoa_12_lr3e3_seed{42,43}` (`code_lean`, 256
+wide, 3e-3; no 512-wide lane exists on this rung), 18 validation wings;
+all epoch-500 checkpoints, `recipe_globin`. Prediction job 938092; analysis
+script `$T/highlift/wing_anatomy_surface.py`.
+
+*Surface classes.* Curvature: the dataset's boundary meshes hold 290
+million triangles per wing and the 200,000-cell sample is a disconnected
+set of triangles, so curvature is measured on the sample itself as the
+normal turning rate $\kappa_i \equiv \operatorname{median}_j \lVert n_i -
+n_j \rVert / \lVert x_i - x_j \rVert$ over the 16 nearest sampled
+neighbours (the prediction geometry is in units of $L_\text{ref}$ = 275.8
+in, the mean aerodynamic chord, so $\kappa$ is in 1/$L_\text{ref}$ and is
+also written in 1/in; a curvature magnitude that saturates for radii below
+the mean sample spacing of 0.013 $L_\text{ref}$, 3.6 in, but still ranks
+those cells at the top). Bins by area-weighted quantiles of $\kappa$ pooled over the
+rung's validation samples: high curvature = the 10% of surface area with
+the largest $\kappa$, medium = the next 40%, low = the remaining 50%.
+Element: the dataset has no per-cell element or patch field, and only 41
+of the 1,800 case directories carry an STL geometry file (4 of the 180
+validation wings on the 210-wing rung, 1 of the 18 on the fixed-angle
+rung). Where it exists, the STL is one connected component (slat tracks
+and flap-track fairings weld the elements), so the element label comes
+from a span-station segmentation (4-inch bins; the largest connected
+piece per bin is the main wing and body, a smaller piece is slat if the
+nearest main triangles lie behind it and flap if ahead, and a piece
+farther than 0.25 $L_\text{ref}$ from the main wing, the tail and
+nacelle, is excluded) and is transferred to the sampled cells by nearest
+STL triangle after the CenterMesh translation is recovered by three
+nearest-neighbour iterations; the gap band is every cell within 0.02
+$L_\text{ref}$ ($L_\text{ref}$ = 275.8 in, the mean aerodynamic chord) of a
+triangle of another element. The element readout is therefore a pilot on
+five wings, stated as such, and it under-segments a slat whose cove is
+sealed in the STL.
+
+*Readout.* Per class and case, the area-weighted RMS pressure error of
+the class divided by the area-weighted standard deviation of the case's
+true pressure over the whole surface (one denominator per case, so
+classes of a case are on one footing and the whole-surface value
+reproduces the ranking of the relative L2), averaged over the validation
+cases; then the ratio ISLA ÷ GeoTransolver per seed pair (42 with 42, 43
+with 43). The whole-surface ratio is the reference. **Bar: a class ratio
+at least 0.15 above the whole-surface ratio on both seed pairs = that
+class carries the excess** (H1 if slat, flap or the gap band clear it; H2
+if the high-curvature bin clears it on both rungs; H3 if no class clears
+it and every class ratio is within 0.15 of the whole-surface value). Also
+recorded, not part of the bar: each model's error share per class (the
+fraction of its total area-weighted squared error in the class) against
+the class's area share. Prediction: H2 or H3 (0.4 each); H1 is the
+program's prior from the resolution argument but the fixed-angle
+deficit did not move between 10,000 and 200,000 cells
+(@sec-nb-fleet-single-aoa-verdict), which argues against a resolution
+mechanism.
+
+**What we saw (curvature, every validation wing; artifact
+`results/wing_anatomy_surface_2026-09-30.json`, reducer and figure
+`results/wing_anatomy_surface_2026-09-30.{py,png}`; prediction job 938092,
+analysis job 941525, after two defective analysis passes: a float32
+nearest-neighbour search that lost the neighbour distances, and an
+alignment that matched $L_\text{ref}$-unit coordinates to an inch-unit
+STL).** The re-scoring reproduces the standings to the fourth digit
+(210 wings: ISLA 0.0550 / 0.0476, GeoTransolver-512 0.0453 / 0.0468;
+fixed angle: ISLA 0.0302 / 0.0298, GeoTransolver-256 0.0206 / 0.0208),
+and the whole-surface ratio of the class metric reproduces their ratio:
+ISLA ÷ GeoTransolver **1.21 / 1.02** at 210 wings (seeds 42 / 43) and
+**1.47 / 1.42** on the fixed-angle rung. The mean sample spacing is 3.6
+in; the curvature bin edges are 0.0057 and 0.68 per inch at 210 wings
+(radii 177 in and 1.5 in), 0.0060 and 0.44 per inch on the fixed-angle
+rung. Class ratios, seeds 42 / 43, with the excess over the whole-surface
+ratio in parentheses:
+
+| class (share of area) | 210 wings, ISLA ÷ GeoTransolver-512 | fixed angle, ISLA ÷ GeoTransolver-256 |
+|---|---|---|
+| whole surface | 1.21 / 1.02 | 1.47 / 1.42 |
+| high curvature (10%) | 1.22 / 1.10 (+0.01 / +0.08) | 1.44 / 1.38 (−0.02 / −0.04) |
+| medium curvature (40%) | 1.20 / 1.00 (0.00 / −0.02) | 1.49 / 1.47 (+0.02 / +0.05) |
+| low curvature (50%) | 1.22 / 1.07 (+0.01 / +0.06) | 1.45 / 1.33 (−0.02 / −0.09) |
+
+The largest curvature-bin excess is +0.08 (high curvature, 210 wings, seed 43); no curvature class comes closer than 0.07 to the 0.15 bar on either rung. The
+error is not on the edges for either model: at 210 wings the
+high-curvature tenth of the surface carries 5 to 6% of each model's
+squared error (ISLA 0.054 / 0.059, GeoTransolver 0.054 / 0.056), the
+medium bin 68 to 70% on 40% of the area, and the shares of the two
+architectures agree to within 0.01 in every bin; on the fixed-angle
+rung the high-curvature tenth carries 17 to 18% for both.
+
+**What we saw (elements, pilot on the five wings with an STL).** The
+alignment residual is 0.56 to 0.64 in (median distance from a sampled
+cell to its nearest STL triangle centroid, against a 3.6-in sample
+spacing), and the element labels cover 0.7 to 3.5% of the sampled area
+as slat, 3.3 to 5.6% as flap and 3.0 to 5.0% as gap band, so the
+segmentation under-reads the slat (the STL slat area is 2.7% on LHC001
+and 0.8% on LHC002, whose slat cove is sealed in the STL). On the four
+210-wing pilot wings (LHC001 at 16 degrees, LHC002 at 6 and 18, LHC004
+at 6) the flap reads **1.37 / 1.30** (+0.16 / +0.28 over the pilot's
+whole-surface 1.21 / 1.02) and clears the bar; the gap band 1.27 / 1.19
+(+0.06 / +0.18, one seed); the slat 1.08 / 0.82 (−0.13 / −0.20, ISLA
+better on one seed); the main wing and body 1.17 / 0.98. On the one
+fixed-angle pilot wing (LHC002 at 12 degrees) the gap band reads
+**1.83 / 1.80** (+0.40 / +0.35) and clears the bar; the slat 1.61 / 1.41
+(+0.18 / −0.03), the flap 1.48 / 1.29 (+0.05 / −0.15), the main wing and
+body 1.38 / 1.43. The flap holds 8 to 11% of each model's squared error
+on 5% of the area and the gap band 11 to 15% on 3 to 5%. The curvature
+proxy against the STL's discrete mean curvature on these wings: Spearman
+0.67 to 0.69 over the cells, but only 9 to 18% of the area the proxy
+ranks in its top tenth is in the STL's top tenth, so the proxy ranks
+curvature coarsely and the "high curvature" bin is the sample's rapidly
+turning tenth, not a sharp leading-edge set.
+
+**Reading.** **H2 is refuted on both rungs and both seeds**: the excess
+does not sit on high-curvature regions; ISLA's ratio is the same on the
+edges, on the flats and in between, to within 0.10, and both
+architectures place their error on the same parts of the surface. On
+the curvature axis the picture is **H3**: the excess is uniform, a
+factor applied everywhere, which is the signature of a global deficit
+(scale, normalization, or the whole-wing map) rather than a local
+resolution failure. The element pilot leaves **H1 open on the flap and
+the gaps**: the flap on four wings and the gap band on one clear the bar,
+and the gap band is 0.06 to 0.40 above the whole-surface ratio on all
+five wings and both seeds; the slat does not carry the excess anywhere.
+Five wings with approximate labels are not a verdict, and the two
+readings are consistent with one mechanism: the flap and the coves are
+the regions whose pressure depends on the neighbouring element
+(the slat wake over the main element, the main-element trailing edge
+over the flap), a non-local dependence that a model with absolute
+positions can index and a relative-frame model must route through the
+slices; the flat remainder of the wing carries a uniform 2 to 47% excess
+that no surface class explains. Nothing here varies an input, so it is a
+location, not a mechanism.
+
+**What is next.** (1) Element labels for every wing: the STL exists for
+41 of 1,800 cases, so the label has to come from the boundary mesh
+itself; a one-time preprocessing job that segments the 290-million-cell
+vehicle mesh of each validation wing by span station (the same rule,
+run on the full mesh, where slat and flap are separated by their coves
+in nearly every station) and writes a per-cell element id into the
+per-case `_cache`, which the reader then carries into the sample. With
+that, the flap and gap-band bar is decided on 180 wings. (2) The
+uniform component is the larger one on both rungs and is the
+preregistration target for the next instrument: a per-case scale
+diagnostic (the regression slope of ISLA's prediction on the truth,
+area-weighted, per wing, against GeoTransolver's), which separates a
+gain error from a shape error at zero training cost. (3) The
+positional channel stays the candidate for the flap and cove excess:
+the fixed-angle rung is where the relative frame has the least to do
+(one angle, one freestream direction) and the deficit is largest, and
+the gap band's 1.8 there is the largest class ratio in this study.
