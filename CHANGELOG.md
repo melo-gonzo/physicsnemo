@@ -145,6 +145,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `RandomRotateMesh` stores its `axes` as a tuple. Hydra instantiates
+  transforms with OmegaConf containers, and a `ListConfig` rejected the
+  one-element index tensor drawn for the axis, so every augmented sample
+  raised `KeyValidationError`; a plain sequence indexes by tensor through
+  `__index__`.
 - Unified external aerodynamics recipe: synchronizes data-loading failures
   before DDP forward and forward/loss failures before backward; failures
   inside model collectives or backward still rely on the process-group

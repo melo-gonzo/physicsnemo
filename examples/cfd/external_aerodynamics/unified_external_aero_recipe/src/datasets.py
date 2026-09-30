@@ -391,10 +391,15 @@ def build_dataset(
         for t in cfg.pipeline.transforms:
             t = _resolve_transform_paths(t, base_dir)
             t = _maybe_inject_targets(t, target_names)
-            resolved.append(hydra.utils.instantiate(t))
+            resolved.append(hydra.utils.instantiate(t, _convert_="all"))
 
         if augment and "augmentations" in cfg.pipeline and cfg.pipeline.augmentations:
-            aug = [hydra.utils.instantiate(a) for a in cfg.pipeline.augmentations]
+            ### Plain Python containers, not OmegaConf nodes: a ListConfig
+            ### rejects the tensor index RandomRotateMesh draws for `axes`.
+            aug = [
+                hydra.utils.instantiate(a, _convert_="all")
+                for a in cfg.pipeline.augmentations
+            ]
             insert_idx = next(
                 (
                     i + 1
