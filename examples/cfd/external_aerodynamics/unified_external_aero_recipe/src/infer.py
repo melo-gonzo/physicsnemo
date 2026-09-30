@@ -630,9 +630,7 @@ def main(cfg: DictConfig) -> None:
     ### Per-key running extrema of the per-sample metrics. The summary is a
     ### mean of per-sample values, so it can never lie outside their range;
     ### `_check_summary_in_range` turns a violation into an error instead of a
-    ### plausible-looking number (2026-09-10: a legacy snapshot's evaluation at
-    ### 80,000 cells wrote an aggregate of 0.814 over per-case values of
-    ### 0.05-0.08, and only a later re-evaluation exposed it).
+    ### plausible-looking number.
     minima: dict[str, float] = {k: math.inf for k in totals}
     maxima: dict[str, float] = {k: -math.inf for k in totals}
     count = 0
