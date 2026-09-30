@@ -6202,7 +6202,7 @@ backward-compatible alias `MeshTransformer2` (the alias was removed on
 2026-09-20, @sec-nb-no-legacy-compat); the recipe config becomes
 `isla_surface.yaml` with the old file kept as a pointer. Reader-facing
 chapters use ISLA throughout. Artifact keys (`mt2_*`) and the
-`examples/cfd/mesh_transformer/` directory are unchanged as provenance. The
+`examples/cfd/isla/` directory are unchanged as provenance. The
 exact-kernel predecessor keeps its own name in the archive.
 
 ## 2026-09-07 — W2-F launched (unseen-geometry ladder) with a GeoTransolver learning-rate steel-man at the single angle, on the strength of an early single-angle read {#sec-nb-w2f-launch}
@@ -15048,7 +15048,7 @@ of *why* ISLA under-fits large-cell regions goes to the main session under the
 physically-principled-change rule.
 
 **Artifacts.** Reduction
-`examples/cfd/mesh_transformer/results/overfit_single_case_2026-09-11.json`
+`examples/cfd/isla/results/overfit_single_case_2026-09-11.json`
 (every arm's last loss, and the float32 and bf16 evaluations at 10,000 and
 40,000 cells; interior arms filled in by the addendum); facing-distance splits
 `results/overfit_hlreg_isla_vs_transolver_2026-09-11.json`,
@@ -15217,7 +15217,7 @@ weights-off point mean does not. This entry proposes no change; the mechanistic
 argument and the discretization-consistency tests belong to the main session.
 
 **Artifacts.**
-`examples/cfd/mesh_transformer/results/overfit_routing_probe_2026-09-11.json`
+`examples/cfd/isla/results/overfit_routing_probe_2026-09-11.json`
 (probe 1, per layer, on and off, both datasets, with the measure floors) and
 `results/overfit_slice_state_variance_2026-09-11.json` (probe 2, per layer:
 V_view, V_slice, effective distinct states, anchor jitter and spread).

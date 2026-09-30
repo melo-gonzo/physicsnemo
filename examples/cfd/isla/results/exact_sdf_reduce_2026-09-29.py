@@ -4,7 +4,7 @@ signed distance of the boundary mesh (physicsnemo.mesh.spatial.sdf, wall_geometr
 code_v13 + recipe_v5 (campaign ex). Float32 scoring on the held-out cars. Bars: exact / sampled at or below 0.90 on velocity and
 0.97 on pressure adopts (pending the 2-D form on AirfRANS); above 1.03 on any field refutes; otherwise the sampled form stays."""
 import glob, json, statistics as st
-R = "/home/psharpe/gh/physicsnemo/examples/cfd/mesh_transformer/results"
+R = "/home/psharpe/gh/physicsnemo/examples/cfd/isla/results"
 def per_case(run):
     fs = glob.glob(f"{R}/campaigns_2026-09-29/ex/metrics/{run}/**/metrics.jsonl", recursive=True)
     if not fs: return None

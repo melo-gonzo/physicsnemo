@@ -18,7 +18,7 @@
 
 Run once from the repository root with the project virtualenv:
 
-    .venv/bin/python examples/cfd/mesh_transformer/book/archive/figures.py
+    .venv/bin/python examples/cfd/isla/book/archive/figures.py
 
 Cheap figures (bar charts and line plots from the checked-in results JSONs)
 are generated at render time inside the book's executable chunks; this script

@@ -36,7 +36,7 @@ import subprocess
 from pathlib import Path
 
 manifest = json.loads(Path(
-    "examples/cfd/mesh_transformer/archived_artifacts.json"
+    "examples/cfd/isla/archived_artifacts.json"
 ).read_text())
 for artifact in manifest["artifacts"]:
     path = Path(artifact["path"])

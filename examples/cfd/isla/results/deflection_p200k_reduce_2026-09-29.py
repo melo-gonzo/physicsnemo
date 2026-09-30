@@ -13,7 +13,7 @@ import glob
 import json
 import statistics as st
 
-R = "/home/psharpe/gh/physicsnemo/examples/cfd/mesh_transformer/results"
+R = "/home/psharpe/gh/physicsnemo/examples/cfd/isla/results"
 D = f"{R}/campaigns_2026-09-19/defl"
 ARMS = {"isla": "rb_hl_isla_deflection_seed{s}", "gt": "p200k_hl_gt_unit_deflection_seed{s}"}
 VAL_DIR = {"isla": f"{R}/campaigns_2026-09-23/rb/metrics", "gt": f"{D}/metrics"}

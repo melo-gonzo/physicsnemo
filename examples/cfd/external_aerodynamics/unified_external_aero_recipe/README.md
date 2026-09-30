@@ -461,12 +461,12 @@ and 0.0473 for Transolver. These are two-seed means at each model's
 protocol learning rate: ISLA matches GeoTransolver and leads Transolver
 by about 6%. The earlier total-measure ISLA variant scores 0.0446 under
 the same protocol. See the
-[recorded results](../../mesh_transformer/results/p200k_trio_reduction_2026-09-19.json).
+[recorded results](../../isla/results/p200k_trio_reduction_2026-09-19.json).
 GeoTransolver remains more data-efficient below the full DrivAerML training
 set, and the baselines lead on the 35-case HiLiftAeroML benchmark. Pose,
 sampling, interior-field and resource comparisons have their own protocols;
 the full evidence and caveats are in
-[`examples/cfd/mesh_transformer/book`](../../mesh_transformer/book).
+[`examples/cfd/isla/book`](../../isla/book).
 
 ## Scripts
 

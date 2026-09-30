@@ -679,7 +679,7 @@ their numbers as measurements of that protocol only.
 ## Provenance {#sec-provenance}
 
 Every quantitative claim in the polished chapters is computed live from a
-checked-in artifact under `examples/cfd/mesh_transformer/results/` (JSON
+checked-in artifact under `examples/cfd/isla/results/` (JSON
 reductions of evaluation runs, each named with the date of the run that
 produced it), or is a literal quoted from one of those files with the file
 named in the caption. The lab notebook (@sec-notebook) holds, for every

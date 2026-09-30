@@ -5292,7 +5292,7 @@ ceiling at Re≈5000** where the Newton solver stops converging
 unseen (4000,5000]) is the top data point. It was generated on the
 **DFW cluster** (`ssh dfw1`; x86 — needed because the fast sparse
 solver pypardiso is x86-only) at
-`~/coreai_modulus_cae/users/psharpe/agents/2026-07-22-e1-re1000-dfw/repo/examples/cfd/mesh_transformer/datasets/ns_cavity_star/v2-re1000/`.
+`~/coreai_modulus_cae/users/psharpe/agents/2026-07-22-e1-re1000-dfw/repo/examples/cfd/isla/datasets/ns_cavity_star/v2-re1000/`.
 
 **State: 450 `.npz` cases written, then the job crashed (EXIT_CODE=1).**
 The crash is **not an infrastructure bug** — it is the physics ceiling
