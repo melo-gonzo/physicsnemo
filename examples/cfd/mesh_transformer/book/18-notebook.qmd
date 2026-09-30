@@ -31553,3 +31553,78 @@ running); its ISLA tasks for the plateaued lanes were cancelled. The reference-c
 ISLA arm, records the plateaued lanes under "superseded", and applies the 10k bars unchanged: carried at or below 0.7x
 GeoTransolver on sealed pressure with $d \le 4$; falsified at or above 0.9x. The entry that reads it closes both the P200K-FLEET
 deflection row and the REF-BOARD deflection twin.
+
+## 2026-09-29 — Verdict, OLBC-REF-FIX and HARMONIC: the same-snapshot ISLA ladder is complete; ISLA leads GeoTransolver-512 on Poisson at 512 (1.39x) and 2,048 (1.13x vs FLARE++) and trails at 8,448 (0.52; per seed 0.37 / 0.80), trails on elasticity at every rung (0.65 to 0.88); the harmonic and distance channels are neutral or worse everywhere except elasticity 2,048 stresses (0.86 to 0.90) and are refuted as universal channels {#sec-nb-olbc-ref-ladder-verdict}
+
+**Setting.** The 2026-09-22 OLBC frame-free ISLA references were plateaued runs (@sec-nb-olbc-reference-correction), so every
+OLBC ratio and every "log-gap fraction" was withdrawn and same-snapshot reference pairs were launched on code_v11 for the
+whole ladder (campaign pc, @sec-nb-olbc-ref-lanes): Poisson at 512 / 2,048 / 8,448 training cases and elasticity at
+512 / 2,048 / 8,448, two seeds each, with the interior-geometry arms (distances = the inverse-square extension's wall distance;
+per-type harmonic measures) at 512 and 2,048 on the same snapshot. GeoTransolver-512 is read in both backends and the headline
+takes the stronger under the 3% rule (@sec-nb-gt-fpp-olbc-verdict). Protocol as chapter 10: equal optimizer steps (500 epochs
+at 512 and 2,048, 120 at 8,448), float32 on the 256 held-out cases. Reducer `results/olbc_ref_reduce_2026-09-29.py`, artifact
+`olbc_ref_2026-09-29.json`, which chapter 10 reads.
+
+**Every reference is healthy.** Each pair's validation loss is at its minimum at the last logged epoch (Poisson 8,448:
+0.00144 / 0.00074 at epoch 120; elasticity 8,448: 0.00250 / 0.00221; elasticity 2,048 within 0.2% of its minimum). None shows
+the flat-from-epoch-10 trace of the withdrawn runs.
+
+**What we saw** (GeoTransolver-512 ÷ ISLA, stronger backend; seed means; ISLA per seed in parentheses):
+
+| set, cases | ISLA | GeoTransolver-512 (backend) | GeoTransolver ÷ ISLA |
+|---|---|---|---|
+| Poisson 512 | 0.200 (0.192 / 0.208) | 0.279 (physics) | 1.39 |
+| Poisson 2,048 | 0.0667 (0.0674 / 0.0661) | 0.0755 (FLARE++) | 1.13 |
+| Poisson 8,448 | 0.0558 (0.0730 / 0.0386) | 0.0289 (physics; GeoTransolver-256 0.0287) | 0.52 (per seed 0.37 / 0.80) |
+| elasticity 512, displacement / stresses | 0.685 / 0.745, 0.751, 0.779 | 0.447 / 0.626, 0.651, 0.636 (physics) | 0.65 / 0.84, 0.87, 0.82 |
+| elasticity 2,048 | 0.202 / 0.299, 0.307, 0.302 | 0.165 / 0.257, 0.261, 0.267 (physics) | 0.82 / 0.86, 0.85, 0.88 |
+| elasticity 8,448 | 0.0698 / 0.117, 0.123, 0.114 | 0.0500 / 0.102, 0.105, 0.098 (physics) | 0.72 / 0.87, 0.86, 0.85 |
+
+**Poisson crosses over between 2,048 and 8,448 cases.** ISLA is the more data-efficient model on the fixed-mesh Poisson set
+(1.39x and 1.13x ahead at 512 and 2,048 cases with no geometry channel) and the less accurate one at 8,448, where GeoTransolver
+at either width reaches 0.029. Two readings temper the 8,448 rung: the ISLA seeds differ by 1.9x (0.073 against 0.039; validation
+loss 0.00144 against 0.00074) where GeoTransolver's differ by 14%, and under the equal-step budget every 8,448 lane is still
+descending at its last epoch, ISLA's more steeply. The sign is the same on both seeds, so "GeoTransolver leads at 8,448" stands;
+its size does not. This replaces the withdrawn 0.32 / 0.25 / 0.35 ladder of @sec-nb-olbc-mech-verdict, which was measured against
+plateaued references.
+
+**Elasticity: GeoTransolver-512 leads at every rung**, by 12 to 18% on the stresses and 18 to 35% on displacement, the gap
+narrowing with data (0.84 to 0.87 on the first stress from 512 to 8,448). The rank-1 input and rank-2 head (RANK-IO) are part of
+the reference on this set; the remaining deficit is the honest standing.
+
+**The interior-geometry channels do not generalize.** Against the healthy references on one snapshot: the distance channel is
+1.01 at Poisson 512 and 1.12 at 2,048; the per-type harmonic measures are 1.03 and 1.05 on Poisson, 1.12 / 1.12 / 1.12 / 1.09
+(displacement / stresses) on elasticity 512 and 1.00 / 0.90 / 0.86 / 0.90 on elasticity 2,048; on the AirfRANS interior the
+harmonic measures read 0.96 / 1.01 / 1.10 (pressure / velocity / eddy viscosity, @sec-nb-harmonic-airfrans-verdict). **One rung of one set
+pays; every other reading is neutral or worse.** The "extension recovers 0.80 to 0.84 of the log-gap" mechanism of @sec-nb-olbc-mech-verdict
+was an artifact of the plateaued base and is withdrawn with it. Under the one-model rule (@sec-nb-universal-agg-lug-verdict) neither
+channel is a candidate for the reference: HARMONIC closes as refuted-as-universal, and the harmonic preprocessing
+(`recipe/src/harmonic.py`, the `hm_measures` dataset variants) and the distance-channel variants are proposed for deletion with the
+aggregation code; the reference configuration keeps no interior geometry channel on the fixed-mesh sets.
+
+**What is next.** Nothing on OLBC is running. The Poisson 8,448 seed spread is the one loose end; a third seed is not a compute
+priority (@sec-nb-seeds-ruling); the rung is quoted with its per-seed range.
+
+## 2026-09-29 — Verdict, EXACT-SDF: the exact point-to-triangle wall distance and direction change nothing on DrivAerML Volume (exact ÷ sampled 1.00 / 1.00 / 0.99 on pressure / velocity / eddy viscosity, per seed within 0.97 to 1.01); the sampled nearest-boundary form stays as the only form and the exact option is removed {#sec-nb-exact-sdf-verdict}
+
+**Setting.** @sec-nb-exact-sdf-prereg asked whether the interior token's wall distance and direction should come from the exact
+signed distance of the boundary mesh (`physicsnemo.mesh.spatial.sdf`, Warp point-to-triangle queries) instead of the nearest
+boundary sample, after INTERNAL-GEOMETRY had measured the sampled form 14 to 27% behind a dataset's stored signed-distance field
+on interior velocity (@sec-nb-internal-geometry-verdict). Bars: exact ÷ sampled at or below 0.90 on velocity and 0.97 on pressure
+adopts (pending a 2-D form on AirfRANS); above 1.03 on any field refutes; otherwise the sampled form stays.
+
+**Instrument.** DrivAerML Volume, 435 cars, 200,000 boundary cells and 100,000 interior queries, the reference configuration at
+lr 5e-4, two seeds per arm, code_v13 (the mesh-native API) with recipe_v5, campaign ex; float32 scoring on the held-out cars.
+All four lanes trained to 500 epochs with validation loss within 2% of its minimum at the end (no plateau). Reducer
+`results/exact_sdf_reduce_2026-09-29.py`, artifact `exact_sdf_2026-09-29.json`.
+
+**What we saw.** Pressure 0.0410 (sampled) against 0.0412 (exact), velocity 0.0655 against 0.0656, eddy viscosity 0.0887 against
+0.0878: ratios 1.004 / 1.002 / 0.990, per seed 1.005 / 1.003, 0.999 / 1.006 and 0.974 / 1.007. Neither bar is met and nothing is
+refuted: **the exact wall geometry is indistinguishable from the sampled one at 200,000 boundary cells.**
+
+**Why it matters.** The 14 to 27% velocity gap to the stored field is therefore not a distance-accuracy problem at this
+resolution: with 200,000 samples the nearest-sample distance and the exact distance agree to well under the model's sensitivity,
+so the stored field's advantage lies elsewhere (it is a smooth volumetric field the mesh pipeline computed once with the full
+surface, and it enters as a declared input rather than through the routing geometry). Under the option rule one form survives:
+the sampled form, which is differentiable in the boundary positions and needs no Warp dependency. The `wall_geometry` option and
+the exact path are removed from the model and its tests; the 2-D follow-up on AirfRANS is dropped with it.

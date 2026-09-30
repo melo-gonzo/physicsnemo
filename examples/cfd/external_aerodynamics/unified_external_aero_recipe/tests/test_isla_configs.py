@@ -193,7 +193,7 @@ def test_isla_volume_composes_and_runs():
     assert pred["velocity"].shape == (64, 3) and pred["nut"].shape == (64,)
 
 
-def test_isla_volume_sdf_declares_the_stored_wall_geometry_as_query_inputs():
+def test_isla_volume_sdf_declares_the_stored_sdf_as_query_inputs():
     """The stored SDF and its gradient enter as declared rank-0 / rank-1 query inputs read
     from the prediction Mesh's point_data; everything else is isla_volume."""
     cfg = _compose("isla_volume_sdf", "drivaer_ml_volume_reference", *SMALL)

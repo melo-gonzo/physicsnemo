@@ -150,13 +150,7 @@ distance overestimates the true wall distance near the wall by up to about
 the sample spacing, and the internal direction deviates from the true SDF
 gradient by the same order; far from the wall both agree with the full-mesh
 field. The geometry is built from pairwise differences, so every covariance
-contract holds. ``wall_geometry="exact"`` replaces the nearest-sample
-construction by the exact point-to-triangle query of
-:func:`physicsnemo.mesh.spatial.sdf.signed_distance_field` over the boundary
-meshes' cells (:func:`exact_boundary_geometry`): the distance to the nearest
-point of the surface, signed by the angle-weighted pseudo-normal there, and the
-direction from that point to the query. The two forms are a preregistered
-comparison; one survives.
+contract holds.
 
 **Global inputs.** Rank-1 global inputs are the :math:`K` global directions:
 each is normalized to a unit direction inside the model (a direction is what
@@ -193,7 +187,7 @@ prediction_points=..., global_data=...)`` returns a point-cloud ``Mesh``; see
 import itertools
 import logging
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -209,7 +203,6 @@ from physicsnemo.core.module import Module
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import cell_measures
 from physicsnemo.mesh.fields import FieldSchema, FieldSchemaLike, RankSpec
-from physicsnemo.mesh.spatial.sdf import signed_distance_field
 from physicsnemo.nn.functional.equivariant_ops import vector_project
 from physicsnemo.nn.functional.neighbors.knn.knn import knn
 
@@ -221,8 +214,6 @@ GeoKernel = Literal["eager", "fused"]
 """Geometry-region backend: the PyTorch reference region or the exact fused Triton kernel."""
 SlicePrototypes = Literal["static", "centered"]
 """Slice-routing prototypes: one learned prototype per slice, or the seeds plus a centered, scale-bounded sample-conditioned term."""
-WallGeometry = Literal["sampled", "exact"]
-"""Prediction-point wall geometry: from the nearest boundary sample (cell centroid), or the exact point-to-triangle query over the boundary meshes' cells."""
 
 ROUTING_TEMPERATURE = 10.0
 
@@ -878,51 +869,6 @@ def nearest_boundary_geometry(
     return d.squeeze(-1), u
 
 
-def exact_boundary_geometry(
-    meshes: Sequence[Mesh],
-    query_points: Float[torch.Tensor, "queries 3"],
-    *,
-    eps: float = 1e-12,
-) -> tuple[torch.Tensor, Float[torch.Tensor, "queries 3"]]:
-    r"""Exact signed distance and direction from the boundary surface to each query.
-
-    The ``wall_geometry="exact"`` form of :func:`nearest_boundary_geometry`:
-    for every query :math:`x_q` the nearest point :math:`y_q` of the boundary
-    surface (the union of the meshes' triangles, not their centroids) comes
-    from :func:`physicsnemo.mesh.spatial.sdf.signed_distance_field`, one call
-    per mesh; the mesh with the smallest :math:`\lvert d \rvert` wins per
-    query. Then :math:`d_q` is that mesh's signed distance (signed by the
-    angle-weighted pseudo-normal of the closest feature: **positive on the side
-    the normals point to**, the convention of the sampled form) and
-    :math:`u_q = (x_q - y_q) / \lvert x_q - y_q \rvert`. A query on the wall
-    takes the normal of the cell it hits as :math:`u_q` and :math:`d_q = 0`.
-
-    Every mesh must be a triangle surface in three dimensions with at least
-    one cell; the Warp query runs in float32 and without gradient, so neither
-    output is differentiable in the positions. Returned in the dtype of
-    ``query_points``, shapes ``(Q,)`` and ``(Q, 3)``.
-    """
-    with torch.autocast(query_points.device.type, enabled=False), torch.no_grad():
-        sdfs, hits, hit_normals = [], [], []
-        for mesh in meshes:
-            sdf, hit, face = signed_distance_field(mesh, query_points)
-            sdfs.append(sdf)
-            hits.append(hit)
-            hit_normals.append(mesh.cell_normals[face.long()])
-        best = torch.stack(sdfs).abs().argmin(dim=0)  # (Q,)
-        q_idx = torch.arange(query_points.shape[0], device=query_points.device)
-        d = torch.stack(sdfs)[best, q_idx].to(query_points.dtype)
-        y = torch.stack(hits)[best, q_idx].to(query_points.dtype)
-        n_star = torch.stack(hit_normals)[best, q_idx].to(query_points.dtype)
-        n_star = n_star / n_star.norm(dim=-1, keepdim=True).clamp_min(eps)
-        diff = query_points - y
-        dist = diff.norm(dim=-1, keepdim=True)
-        on_wall = dist <= eps
-        u = torch.where(on_wall, n_star, diff / dist.clamp_min(eps))
-        d = torch.where(on_wall.squeeze(-1), torch.zeros_like(d), d)
-    return d, u
-
-
 ### ---------------------------------------------------------------------------
 ### Output heads: the rank-r equivariant expansion
 ### ---------------------------------------------------------------------------
@@ -1211,26 +1157,6 @@ class ISLA(Module):
             (:class:`_RoutingLogits`). Token states are invariant, so the
             prototypes and the contracts are unchanged; ``2 hidden^2 + 1``
             parameters per block are added.
-        wall_geometry: How an interior task's prediction points get their
-            built-in wall distance and direction (ignored for a surface task).
-            ``"sampled"`` (default): from the nearest boundary token (cell
-            centroid): its distance, signed by that token's normal, and the
-            unit direction from it to the point
-            (:func:`nearest_boundary_geometry`); overestimates the wall
-            distance by up to about a sample spacing near the wall, and is
-            differentiable in the positions. ``"exact"``: from the nearest
-            point of the boundary surface itself, by the point-to-triangle
-            query of :func:`physicsnemo.mesh.spatial.sdf.signed_distance_field`
-            over every boundary mesh's cells (the mesh with the smallest
-            ``|d|`` wins per point): the exact signed distance and the unit
-            direction from the closest surface point
-            (:func:`exact_boundary_geometry`). Requires ``dim=3`` and every
-            boundary mesh to be a triangle surface (a closed 2-manifold for a
-            reliable sign) with cells; runs in float32 inside Warp and is not
-            differentiable in the boundary or query positions. Either way the
-            distance (in frame units, with its signed logarithm) and the
-            direction enter the prediction-point embedding and invariants as
-            before. A preregistered comparison: one form survives.
         dim: Spatial dimension of the domain (default 3). Every boundary mesh
             is a ``Mesh[dim - 1, dim]`` and every prediction point has ``dim``
             coordinates. Every geometric quantity is built for ``dim``
@@ -1275,7 +1201,6 @@ class ISLA(Module):
         geo_checkpoint: bool = False,
         geo_kernel: GeoKernel | None = None,
         slice_prototypes: SlicePrototypes = "static",
-        wall_geometry: WallGeometry = "sampled",
         dim: int = 3,
         eps: float = 1e-12,
     ) -> None:
@@ -1293,18 +1218,6 @@ class ISLA(Module):
                 f"slice_prototypes must be 'static' or 'centered', got {slice_prototypes!r}"
             )
         self.slice_prototypes = str(slice_prototypes)
-        ### The prediction points' wall geometry: from the nearest boundary sample
-        ### or from the exact point-to-triangle query (Warp; three dimensions).
-        if wall_geometry not in ("sampled", "exact"):
-            raise ValueError(
-                f"wall_geometry must be 'sampled' or 'exact', got {wall_geometry!r}"
-            )
-        if wall_geometry == "exact" and self.dim != 3:
-            raise ValueError(
-                f"wall_geometry='exact' uses the triangle-surface signed-distance query, "
-                f"which exists for three spatial dimensions; got dim={self.dim}"
-            )
-        self.wall_geometry = str(wall_geometry)
         ### Every input and output is a named field of declared rank; the grammar
         ### is the mesh models' shared one (physicsnemo.mesh.fields), flattened to
         ### dotted names here.
@@ -1732,15 +1645,6 @@ class ISLA(Module):
                 mesh.n_cells,
                 f"boundary_meshes[{name!r}].cell_data",
             )
-            if (
-                self.wall_geometry == "exact"
-                and prediction_points is not None
-                and mesh.n_cells == 0
-            ):
-                raise ValueError(
-                    f"boundary_meshes[{name!r}] has no cells; wall_geometry='exact' "
-                    "queries the distance to the boundary's triangles"
-                )
         if prediction_points is None:
             if self.interior:
                 raise ValueError(
@@ -1833,12 +1737,9 @@ class ISLA(Module):
                 declared ``query_inputs``, or a bare ``(N, dim)`` tensor when
                 none are declared. The points join the encoder as interacting
                 tokens; each one's built-in geometry, its signed distance to
-                the boundary and the direction from it, is computed inside the
-                model, from the boundary tokens
-                (:func:`nearest_boundary_geometry`, ``wall_geometry="sampled"``)
-                or from the boundary meshes' triangles
-                (:func:`exact_boundary_geometry`, ``wall_geometry="exact"``),
-                and is never an input. A
+                the nearest boundary token and the direction to it, is computed
+                inside the model from the boundary tokens
+                (:func:`nearest_boundary_geometry`) and is never an input. A
                 dataset's stored signed-distance field or its gradient enter, if
                 wanted, as ordinary declared ``query_inputs`` (rank 0 / rank 1)
                 like any other PDE data. ``None`` for a surface task
@@ -1886,12 +1787,6 @@ class ISLA(Module):
         else:
             out_points, query_inputs = prediction_points, None
             query_points = out_points[None]
-        ### The exact wall geometry needs the meshes' cells, which only this
-        ### wrapper sees; the batched routine takes the result as given.
-        query_geometry = None
-        if query_points is not None and self.wall_geometry == "exact":
-            d, u = exact_boundary_geometry(meshes, out_points, eps=self.eps)
-            query_geometry = (d[None], u[None])
         ### One case: a batch axis of one for the batched machinery below.
         fields = self._forward_tensors(
             points=points[None],
@@ -1901,7 +1796,6 @@ class ISLA(Module):
             boundary_inputs=boundary_inputs,
             query_points=query_points,
             query_inputs=query_inputs,
-            query_geometry=query_geometry,
         )
         point_data = TensorDict({}, batch_size=[out_points.shape[0]], device=out_points.device)
         for name, value in fields.items():
@@ -1918,7 +1812,6 @@ class ISLA(Module):
         boundary_inputs: Mapping[str, torch.Tensor] | None = None,
         query_points: Float[torch.Tensor, "batch queries dim"] | None = None,
         query_inputs: Mapping[str, torch.Tensor] | None = None,
-        query_geometry: tuple[torch.Tensor, torch.Tensor] | None = None,
     ) -> dict[str, torch.Tensor]:
         """The batched network on token tensors; :meth:`forward` is its only
         caller and the release tests pin it.
@@ -1928,11 +1821,8 @@ class ISLA(Module):
         ``boundary_inputs`` and ``query_inputs`` flat ``{dotted name: tensor}``
         mappings over the declared fields (per-case values ``(B,)`` / ``(B, d)``,
         one row shared across the batch; per-token values ``(B, N, ...)``);
-        ``query_points`` ``(B, Q, d)`` for an interior model, with
-        ``query_geometry`` their precomputed signed distance ``(B, Q)`` and
-        direction ``(B, Q, d)`` (``wall_geometry="exact"``; ``None`` computes
-        the sampled form here). Returns ``{dotted name: (B, N_out, ...)}`` over
-        the tokens the head read.
+        ``query_points`` ``(B, Q, d)`` for an interior model. Returns
+        ``{dotted name: (B, N_out, ...)}`` over the tokens the head read.
         """
         b, n, _ = points.shape
         if not torch.compiler.is_compiling():
@@ -1988,13 +1878,10 @@ class ISLA(Module):
             ### to the nearest boundary token (the built-in channel) and the
             ### direction to it (the token's "normal" in every invariant).
             with torch.autocast(points.device.type, enabled=False):
-                if query_geometry is None:
-                    d, q_nhat = nearest_boundary_geometry(
-                        query_points, points, n_hat, eps=self.eps
-                    )
-                else:
-                    d, q_nhat = (t.to(query_points.dtype) for t in query_geometry)
-                s = (d / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
+                d, q_nhat = nearest_boundary_geometry(
+                    query_points, points, n_hat, eps=self.eps
+                )
+                s =(d / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
                 builtin = torch.cat([s, torch.sign(s) * torch.log(s.abs() + self.eps)], -1)
             q_g = g_unit[:, None].expand(bq, nq, K, self.dim)
             if self.qin:

@@ -1,0 +1,64 @@
+{
+ "protocol": "EXACT-SDF (prereg @sec-nb-exact-sdf-prereg): the interior token's wall distance and direction from the exact point-to-triangle\nsigned distance of the boundary mesh (physicsnemo.mesh.spatial.sdf, wall_geometry=\"exact\") against the nearest-sample form\n(wall_geometry=\"sampled\"), DrivAerML Volume 435 cars, 200,000 boundary cells x 100,000 queries, reference configuration, two seeds,\ncode_v13 + recipe_v5 (campaign ex). Float32 scoring on the held-out cars. Bars: exact / sampled at or below 0.90 on velocity and\n0.97 on pressure adopts (pending the 2-D form on AirfRANS); above 1.03 on any field refutes; otherwise the sampled form stays.",
+ "per_seed_values": {
+  "exact": {
+   "42": {
+    "pressure_l2": 0.04172560692920039,
+    "velocity_l2": 0.0659205752890557,
+    "nut_l2": 0.08712646675606568
+   },
+   "43": {
+    "pressure_l2": 0.04062061842220525,
+    "velocity_l2": 0.06532170266533892,
+    "nut_l2": 0.08853801696871717
+   }
+  },
+  "sampled": {
+   "42": {
+    "pressure_l2": 0.04151588352397084,
+    "velocity_l2": 0.06596294223951797,
+    "nut_l2": 0.08948378637433052
+   },
+   "43": {
+    "pressure_l2": 0.04050293557035426,
+    "velocity_l2": 0.06495798689623673,
+    "nut_l2": 0.08794482874994476
+   }
+  }
+ },
+ "means": {
+  "exact": {
+   "pressure_l2": 0.04117311267570282,
+   "velocity_l2": 0.06562113897719732,
+   "nut_l2": 0.08783224186239143
+  },
+  "sampled": {
+   "pressure_l2": 0.04100940954716255,
+   "velocity_l2": 0.06546046456787735,
+   "nut_l2": 0.08871430756213763
+  }
+ },
+ "ratio_exact_over_sampled": {
+  "pressure_l2": 1.0039918431001063,
+  "velocity_l2": 1.0024545259551796,
+  "nut_l2": 0.9900572328862693
+ },
+ "per_seed_ratio": {
+  "42": {
+   "pressure_l2": 1.0050516425865887,
+   "velocity_l2": 0.9993577158776753,
+   "nut_l2": 0.9736564609771468
+  },
+  "43": {
+   "pressure_l2": 1.0029055388256134,
+   "velocity_l2": 1.0055992463202899,
+   "nut_l2": 1.0067450039667374
+  }
+ },
+ "verdict": {
+  "adopt_pending_2d": false,
+  "refuted": false,
+  "neither_sampled_stays": true,
+  "n_seeds": 2
+ }
+}
