@@ -31478,3 +31478,48 @@ and 0.52 (Poisson 8,448, from the same artifact; the 8,448 reference pair gets i
 
 **What is next.** GT-FPP has one open pair, GeoTransolver-512 with FLARE++ on the 510 HiLift wings at 100k cells
 (`gf_hl_gt512_fpp_medium_c100k`, two seeds); the ledger row closes when it is scored. Nothing else in the program depends on it.
+
+## 2026-09-29 — Interim, PROTO-COND-2 on three of four datasets: the centered, scale-bounded conditioned prototypes pay 0.86 / 0.78 on OLBC Poisson at 512 / 2,048 cases, are neutral on DrivAerML Surface (1.00 / 1.00), and keep about a quarter of the first form's AirfRANS gain (pressure 0.95 against 0.82; velocity 1.03, one seed 1.06); the wing pair decides adoption {#sec-nb-proto-cond-2-interim}
+
+**Setting.** PROTO-COND-2 (@sec-nb-proto-cond-2-prereg) is the collapse-proof form of sample-conditioned slice prototypes:
+learned seeds attend over the token states, the result is centered across slices and added to the static seeds through a smooth
+bound at $g$ times the seeds' RMS. The first form (uncentered) doubled the Poisson error through prototype collapse
+(@sec-nb-proto-cond-mechanism) while paying 0.82 on AirfRANS pressure, and was deleted. This form was launched on the code_v12
+snapshot with same-snapshot static references (campaign pc2), two seeds, on OLBC Poisson 512 / 2,048, DrivAerML Surface 435 at
+200,000 cells, the AirfRANS interior and HiLift 510 medium. The first reading, Poisson 512 at 0.86, is in
+@sec-nb-proto-cond-2-poisson-512 with its mechanism check (no collapse in any of the 24 block-seed cells).
+
+**What we saw** (centered ÷ static on seed means, then per seed; reducer `results/proto_cond2_reduce_2026-09-29.py`, artifact
+`proto_cond2_2026-09-29.json`):
+
+| dataset | field | ratio | seed 42 | seed 43 | preregistered bar | reading |
+|---|---|---|---|---|---|---|
+| OLBC Poisson 512 | $u$ | 0.86 | 0.96 | 0.76 | within 1.05 | pays |
+| OLBC Poisson 2,048 | $u$ | 0.78 | 0.90 | 0.66 | within 1.05 | pays |
+| DrivAerML Surface 435 | pressure / wall shear | 1.00 / 1.00 | 1.01 / 1.00 | 0.99 / 0.99 | within 1.03 | neutral |
+| AirfRANS interior | pressure | 0.95 | 0.94 | 0.97 | at or below 0.91 on both seeds | between |
+| AirfRANS interior | velocity / eddy viscosity | 1.03 / 0.95 | 0.99 / 0.94 | 1.06 / 0.96 | | |
+| HiLift 510 medium | | | | | neutral or better | training, epoch 85 of 500 |
+
+Absolute values: Poisson $u$ 0.200 against 0.172 at 512 and 0.0674 against 0.0527 at 2,048; DrivAerML pressure 0.0436 against
+0.0434; AirfRANS pressure 0.0331 against 0.0316, velocity 0.0162 against 0.0166.
+
+**The references are healthy and the seed spread is real.** Every pair's validation loss is still at or within 1% of its
+minimum at the last epoch (no plateaued run of the kind that spoiled the 2026-09-22 references, @sec-nb-olbc-reference-correction).
+The Poisson gain is carried unevenly by the seeds: at 2,048 cases the seed-43 pair ends with validation loss 0.00092 against
+0.00225 (ratio 0.66 in float32 relative L2) while the seed-42 pair ends at 0.00214 against 0.00203 and scores 0.90. Two seeds
+cannot separate "pays 10 to 35%" from "pays about 20%"; they do establish the sign on both rungs.
+
+**Reading against the preregistration.** Clauses (1), (3) and (4) hold: Poisson 512 and 2,048 are far inside 1.05 and pay, and
+DrivAerML is neutral. Clause (2) lands between its two thresholds: AirfRANS pressure is 0.94 / 0.97, below the 0.97 that would
+have refuted the routing reading but above the 0.91 that would have shown half of the first form's gain surviving. **About a
+quarter of the first form's AirfRANS pressure gain survives the centering (0.82 to 0.95), so most of that gain lived in the
+common component that the centering removes, which is the component that collapsed the fixed-mesh problems.** Velocity is 1.03
+on the mean and 1.06 on one seed, the only field on any dataset outside 1.03. Under the adoption rule (neutral or better on
+every dataset, wings included), the form is a reference candidate on the three datasets read so far; the same-snapshot Poisson
+gain at two rungs is the first component since the frame that pays on a fixed-mesh boundary-data problem.
+
+**What is next.** The HiLift 510 medium pair (`pc2_hl_ref_medium`, `pc2_hl_cent_medium`, two seeds) is at epoch 85 of 500 and
+decides adoption: within 1.03 on pressure adopts PROTO-COND-2 into the reference configuration (`slice_prototypes="centered"`
+becomes the default and the static form is deleted under the one-model rule); worse than 1.03 on both seeds deletes the option.
+A prototype-cosine check on the 2,048 checkpoints (bar < 0.3, as at 512) is run with the wing reduction.
