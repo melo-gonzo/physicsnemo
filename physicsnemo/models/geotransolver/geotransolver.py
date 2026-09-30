@@ -285,15 +285,6 @@ class GeoTransolver(Module):
         ``"output"``. The default ``("blocks",)`` matches Transolver's
         block-only policy. ``checkpointing_ratio`` applies to the block stack;
         other selected components are either fully checkpointed or disabled.
-    measure_weighted_slices : bool, optional, default=False
-        Whether slice pooling (in the GALE blocks and the geometry / local
-        context tokenizers) weights each point by the ``measure_weights``
-        passed to :meth:`forward`. The stock pooling counts every sampled
-        point equally, so slice tokens are means over the sampler's draw and
-        drift with its density; weighting by the quadrature measure makes them
-        surface integrals. When ``False`` the kwarg is ignored, so existing
-        configs and checkpoints are unaffected. Requires
-        ``attention_type="GALE"``.
 
     Forward
     -------
@@ -314,10 +305,6 @@ class GeoTransolver(Module):
         used. Default is ``None``.
     time : torch.Tensor | None, optional
         Time embedding (currently not implemented). Default is ``None``.
-    measure_weights : torch.Tensor | None, optional, keyword-only
-        Per-point quadrature measure, any layout reshapeable to
-        :math:`(B, N)`. Used only when ``measure_weighted_slices=True``.
-        Default is ``None``.
 
     Outputs
     -------
@@ -453,17 +440,10 @@ class GeoTransolver(Module):
         activation_checkpointing: bool = False,
         checkpointing_ratio: float = 1.0,
         activation_checkpointing_components: tuple[str, ...] | list[str] = ("blocks",),
-        measure_weighted_slices: bool = False,
     ) -> None:
         super().__init__(meta=GeoTransolverMetaData())
         self.__name__ = "GeoTransolver"
 
-        if measure_weighted_slices and attention_type != "GALE":
-            raise ValueError(
-                "measure_weighted_slices=True requires attention_type='GALE' "
-                f"(slice pooling); got {attention_type!r}"
-            )
-        self.measure_weighted_slices = measure_weighted_slices
         if attention_type == "GALE_FPP" and plus:
             raise ValueError(
                 "attention_type='GALE_FPP' implements FLARE++ and requires "
@@ -703,14 +683,12 @@ class GeoTransolver(Module):
         block: nn.Module,
         x: tuple[torch.Tensor, ...] | list[torch.Tensor],
         embedding_states: torch.Tensor | None,
-        measure_weights: torch.Tensor | None,
     ) -> list[torch.Tensor]:
         r"""Checkpoint a multi-stream GALE block with explicit tensor inputs."""
         return checkpoint_block(
             block,
             x,
             embedding_states,
-            measure_weights,
             use_te=self.use_te,
             te_module=te,
         )
@@ -721,7 +699,6 @@ class GeoTransolver(Module):
         local_positions: tuple[torch.Tensor, ...] | None,
         geometry: torch.Tensor | None,
         global_embedding: torch.Tensor | None,
-        measure_weights: torch.Tensor | None,
     ) -> tuple[
         torch.Tensor | None,
         list[torch.Tensor] | None,
@@ -735,7 +712,6 @@ class GeoTransolver(Module):
             local_positions,
             geometry,
             global_embedding,
-            measure_weights,
         )
 
     def forward(
@@ -754,7 +730,6 @@ class GeoTransolver(Module):
         geometry: Float[torch.Tensor, "batch tokens geometry_dim"] | None = None,
         time: torch.Tensor | None = None,
         *,
-        measure_weights: torch.Tensor | None = None,
         return_embedding_states: bool = False,
         return_point_features: bool = False,
     ) -> (
@@ -783,12 +758,6 @@ class GeoTransolver(Module):
             Geometry features of shape :math:`(B, N, C_{geo})`. Default is ``None``.
         time : torch.Tensor | None, optional
             Time embedding (not yet implemented). Default is ``None``.
-        measure_weights : torch.Tensor | None, optional, keyword-only
-            Per-point quadrature measure, any layout reshapeable to
-            :math:`(B, N)`, weighting the slice pooling in every GALE block
-            and in the geometry / local context tokenizers. Ignored unless
-            the model was built with ``measure_weighted_slices=True``.
-            Default is ``None``.
         return_embedding_states : bool, optional, keyword-only
             If ``True``, return ``(output, embedding_states)`` instead of just
             ``output``.  The ``embedding_states`` tensor contains geometry/global
@@ -837,11 +806,6 @@ class GeoTransolver(Module):
         local_embedding = _normalize_tensor(local_embedding)
         if local_positions is not None:
             local_positions = _normalize_tensor(local_positions)
-
-        # Full-object pickles from before this flag existed lack the attribute;
-        # treat them like the historical default (unweighted pooling).
-        if not getattr(self, "measure_weighted_slices", False):
-            measure_weights = None
 
         unflatten_output = False
         if self.structured_shape is not None:
@@ -909,11 +873,7 @@ class GeoTransolver(Module):
         # return value (detached geometry latent) is consumed by an optional
         # external OOD guard wrapper via a forward hook, not here.
         embedding_states, local_embedding_bq, _ = self._build_context(
-            local_embedding,
-            local_positions,
-            geometry,
-            global_embedding,
-            measure_weights,
+            local_embedding, local_positions, geometry, global_embedding
         )
 
         # Project inputs to hidden dimension: (B, N, C) -> (B, N, n_hidden)
@@ -929,16 +889,11 @@ class GeoTransolver(Module):
             ]
 
         # Pass through GALE transformer blocks with context cross-attention
-        # The measure is only handed over when there is one (GALEBlock does
-        # the same toward its attention), so the block call is unchanged
-        # for every existing configuration.
         for block_idx, block in enumerate(self.blocks):
             if self._should_checkpoint_block(block_idx):
-                x = self._checkpoint_block(block, x, embedding_states, measure_weights)
-            elif measure_weights is None:
-                x = block(tuple(x), embedding_states)
+                x = self._checkpoint_block(block, x, embedding_states)
             else:
-                x = block(tuple(x), embedding_states, measure_weights)
+                x = block(tuple(x), embedding_states)
 
         # Per-point features just before the output projection. Shape per
         # stream: (B, N, effective_hidden). Captured for pointwise heads.

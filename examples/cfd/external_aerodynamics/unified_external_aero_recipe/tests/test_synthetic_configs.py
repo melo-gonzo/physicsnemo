@@ -150,8 +150,7 @@ def _surface_domain_mesh(
     """Surface DomainMesh sized for synthetic E2E testing (80 cells default).
 
     Carries the per-point quadrature measure the centroid-producing
-    ``MeshToDomainMesh`` terminal records, which the measure-weighted
-    (``*_mw``) templates consume as ``forward_kwargs.measure_weights``.
+    ``MeshToDomainMesh`` terminal records.
     """
     domain = make_surface_domain_mesh(target_config, n_cells=n_cells)
     domain.interior.point_data[EFFECTIVE_MEASURE_KEY] = torch.rand(n_cells) + 0.5
@@ -266,21 +265,7 @@ _TENSOR_INPUT_RECIPES: list[_RecipeSpec] = [
         ["+model.attention_type=GALE_FA"],
     ),
     _RecipeSpec(
-        "geotransolver_surface_mw",
-        "geotransolver_surface_mw",
-        "drivaer_ml_surface",
-        "surface",
-        [],
-    ),
-    _RecipeSpec(
         "transolver_surface", "transolver_surface", "drivaer_ml_surface", "surface", []
-    ),
-    _RecipeSpec(
-        "transolver_surface_mw",
-        "transolver_surface_mw",
-        "drivaer_ml_surface",
-        "surface",
-        [],
     ),
     _RecipeSpec(
         "transolver_volume", "transolver_volume", "drivaer_ml_volume", "volume", []

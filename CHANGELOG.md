@@ -57,11 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `global_data`) and `use_measure_weighting` (centers by effective cell
   measure rather than raw cell area, so a subsampled mesh is centered where
   the full mesh would be).
-- `GeoTransolver` and `Transolver` gain `measure_weighted_slices` and a
-  keyword-only `measure_weights` argument to `forward`, weighting the slice
-  pooling of every GALE / physics-attention block and of the GeoTransolver
-  context tokenizers by a per-point quadrature measure. Off by default; with
-  the default the models are unchanged.
 - `MeshToDomainMesh` in `cell_centroids` mode records each source cell's
   complete effective measure on the interior under the mesh-owned
   `_effective_measure` point-data key, so

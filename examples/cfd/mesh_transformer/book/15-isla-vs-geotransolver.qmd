@@ -466,9 +466,9 @@ recipe explicitly, quadrature weights in the normalization and aggregation
 of attention so that the layer has a unique limit under refinement; IPOT
 (Lee and Oh, 2024) and LNO (Wang and Wang, 2024) decouple discretization
 from processing through inducing points and latent tokens. Transolver and
-GeoTransolver do not weight their slices by cell measure (the GeoTransolver
-implementation in this tree carries an optional `measure_weighted_slices`
-switch that is off in the public model; @sec-part-baseline). M³ (Mei et
+GeoTransolver do not weight their slices by cell measure (a measure-weighted
+variant was tested as a diagnostic and not adopted, the baselines stay as
+released; @sec-part-baseline). M³ (Mei et
 al., 2026) identifies the biased empirical measure induced by mesh
 discretization as a *training* problem and rebalances supervision across
 space. RIGNO and GAOT report robustness to unseen resolutions (Mousavi et

@@ -109,7 +109,6 @@ def checkpoint_block(
     block: nn.Module,
     streams: tuple[torch.Tensor, ...] | list[torch.Tensor],
     embedding_states: torch.Tensor | None,
-    measure_weights: torch.Tensor | None = None,
     *,
     use_te: bool,
     te_module: Any,
@@ -119,16 +118,11 @@ def checkpoint_block(
     checkpoint_inputs = tuple(streams)
     if embedding_states is not None:
         checkpoint_inputs = (*checkpoint_inputs, embedding_states)
-    if measure_weights is not None:
-        checkpoint_inputs = (*checkpoint_inputs, measure_weights)
 
     def block_forward(*inputs: torch.Tensor) -> tuple[torch.Tensor, ...]:
         block_streams = tuple(inputs[:stream_count])
-        rest = iter(inputs[stream_count:])
-        context = next(rest) if embedding_states is not None else None
-        if measure_weights is None:
-            return tuple(block(block_streams, context))
-        return tuple(block(block_streams, context, next(rest)))
+        context = inputs[stream_count] if embedding_states is not None else None
+        return tuple(block(block_streams, context))
 
     outputs = run_checkpoint(
         block_forward,
