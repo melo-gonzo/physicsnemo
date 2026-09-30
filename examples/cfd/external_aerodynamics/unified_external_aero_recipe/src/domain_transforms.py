@@ -55,7 +55,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Literal
-from warnings import warn
 
 import torch
 from tensordict import TensorDict
@@ -74,7 +73,6 @@ from physicsnemo.datapipes.transforms.mesh.transforms import (
 )
 from physicsnemo.mesh import DomainMesh, Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, scale_measures
-from physicsnemo.mesh.geometry import compute_cell_areas
 from physicsnemo.mesh.projections import project
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 
@@ -279,40 +277,6 @@ class BoundaryMeshToDomainMesh(MeshToDomainMesh):
             boundaries=new_boundaries,
             global_data=domain.global_data,
         )
-
-
-@register()
-class DropDegenerateCells(MeshTransform):
-    r"""Drop cells with non-finite or degenerate current geometry.
-
-    Recompute geometric measures from the current coordinates, in the mesh's
-    dtype, using the same area routine as ``Mesh.cell_areas``. Its direct
-    triangle area calculation preserves thin valid faces without Gram
-    cancellation. Cached areas are ignored: centering, rotation, and scaling
-    can collapse a face through rounding. Cells whose area is zero or
-    non-finite in the mesh's dtype cannot supply usable quadrature weights.
-
-    Place this last in the transform chain so it sees the same coordinates
-    the model will. Meshes without rejected cells pass through unchanged.
-    Only cells and their associated data are sliced; vertices are retained.
-    """
-
-    def __call__(self, mesh: Mesh) -> Mesh:
-        if mesh.n_cells == 0:
-            return mesh
-        cell_points = mesh.points[mesh.cells]
-        edges = cell_points[:, 1:] - cell_points[:, :1]
-        finite_points = torch.isfinite(cell_points).all(dim=(-2, -1))
-        areas = compute_cell_areas(edges)
-        keep = finite_points & torch.isfinite(areas) & (areas > 0)
-        n_bad = int((~keep).sum())
-        if n_bad == 0:
-            return mesh
-        warn(
-            f"DropDegenerateCells: dropping {n_bad} cell(s) with "
-            "non-finite or degenerate geometry"
-        )
-        return mesh.slice_cells(keep)
 
 
 @register()

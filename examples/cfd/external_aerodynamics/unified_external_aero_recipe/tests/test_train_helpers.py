@@ -119,11 +119,10 @@ def test_forward_pass_preserves_query_measure_in_loss_metrics_and_gradients():
         ),
     ],
 )
-def test_isla_training_on_filtered_thin_triangles(device):
-    """Thin faces keep positive measures through filtering, ISLA's mesh forward, and the
-    weighted loss; the boundary Mesh carries the corrected measure ISLA reads."""
+def test_isla_training_on_thin_triangles(device):
+    """Thin faces keep positive measures through ISLA's mesh forward and the weighted
+    loss; the boundary Mesh carries the corrected measure ISLA reads."""
     from collate import build_collate_fn
-    from domain_transforms import DropDegenerateCells
 
     from physicsnemo.datapipes.transforms.mesh import MeshToDomainMesh
     from physicsnemo.experimental.models import ISLA
@@ -135,23 +134,18 @@ def test_isla_training_on_filtered_thin_triangles(device):
                 [0.0, 0.0, 0.0],
                 [1.0, 0.0, 0.0],
                 [1.0, 1e-4, 0.0],
-                [3.0, 0.0, 0.0],
-                [4.0, 0.0, 0.0],
-                [3.0, 0.0, 0.0],
                 [5.0, 0.0, 0.0],
                 [6.0, 0.0, 0.0],
                 [5.0, 1.0, 0.0],
             ],
             device=device,
         ),
-        cells=torch.arange(9, device=device).reshape(3, 3),
-        cell_data={"pressure": torch.tensor([1.0, 2.0, 3.0], device=device)},
+        cells=torch.arange(6, device=device).reshape(2, 3),
+        cell_data={"pressure": torch.tensor([1.0, 3.0], device=device)},
         global_data={"U_inf_dir": torch.tensor([1.0, 0.0, 0.0], device=device)},
     )
     scale_measures(mesh, 3.0)
-    with pytest.warns(UserWarning, match="dropping 1 cell"):
-        filtered = DropDegenerateCells()(mesh)
-    domain = MeshToDomainMesh(cell_data_targets=["pressure"])(filtered)
+    domain = MeshToDomainMesh(cell_data_targets=["pressure"])(mesh)
     targets = {"pressure": "scalar"}
     batch = build_collate_fn(
         "mesh",

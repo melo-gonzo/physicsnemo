@@ -77,12 +77,6 @@ pipeline:
     - _target_: ${dp:PrefixPlusRandomSubsampleMesh}
       n_prefix: 5000
       n_cells: 5000
-    # Guard against fp32-manufactured degenerate slivers (2026-08-02
-    # amendment): raw areas are all positive, but ~1e-11 slivers sit deep
-    # enough in cross-product cancellation that centering/rotation/device
-    # rounding can zero them; drop such cells just before the model, on the
-    # same device and points the model's measure validation will see.
-    - _target_: ${dp:DropDegenerateCells}
     # Constant scale gauge for models that declare an explicit reference
     # length read from global_data (the constant-gauge ISLA variants'
     # `reference_length_key: reference_length`). The value is in the

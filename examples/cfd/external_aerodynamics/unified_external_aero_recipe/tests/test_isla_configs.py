@@ -222,7 +222,6 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
     )  # ${dp:...} nodes kept as strings
     targets = [t["_target_"] for t in raw]
     assert "ComposeQuadratureMeasure" in targets[-1], targets
-    assert "DropDegenerateCells" in targets[-2], targets
     assert ds.pipeline.reader.boundary_subsample == "cells"
 
 

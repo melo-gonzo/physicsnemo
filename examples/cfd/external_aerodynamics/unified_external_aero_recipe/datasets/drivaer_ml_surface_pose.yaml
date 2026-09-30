@@ -72,7 +72,6 @@ pipeline:
       field_name: normals
     - _target_: ${dp:SubsampleMesh}
       n_cells: ${sampling_resolution}
-    - _target_: ${dp:DropDegenerateCells}
     - _target_: ${dp:SetGlobalField}
       fields:
         reference_length: 8.0

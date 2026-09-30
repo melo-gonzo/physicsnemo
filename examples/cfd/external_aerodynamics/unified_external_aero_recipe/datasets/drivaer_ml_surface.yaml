@@ -76,9 +76,6 @@ pipeline:
       field_name: normals
     - _target_: ${dp:SubsampleMesh}
       n_cells: ${sampling_resolution}
-    # Check the final coordinates for collapsed/non-finite faces. Direct
-    # cross products preserve thin valid faces despite Gram-area cancellation.
-    - _target_: ${dp:DropDegenerateCells}
     # Constant scale gauge for models that declare an explicit reference
     # length read from global_data (the constant-gauge ISLA variants'
     # `reference_length_key: reference_length`). The value is in the
