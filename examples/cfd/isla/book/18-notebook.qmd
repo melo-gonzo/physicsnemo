@@ -32478,3 +32478,44 @@ under the reference configuration, the row shows the earlier value in the
 table cell with its label and nothing in prose; an unlanded rung is not a
 row. Only the status chapter and this notebook cite notebook anchors or
 carry dates. Each concept has one home chapter and one centerpiece.
+
+## 2026-10-01 — Verdict, deflection sealed test at the reporting protocol: the reference ISLA is 1.10x unit-direction GeoTransolver on sealed pressure (0.0356 against 0.0325, two seeds), at parity on velocity and wall shear (1.00), and both degrade from validation by the same factor (1.32 against 1.28); falsified, as at the exploration budget (1.16x) {#sec-nb-deflection-p200k-verdict}
+
+**Setting.** The deflection split (@sec-nb-deflection-prereg, instrument
+as amended @sec-nb-deflection-amend) trains on the 144 milder HiLiftAeroML
+flap settings and scores once on the sealed 360-case high-deflection list;
+the claim under test was that ISLA's geometry generalization carries across
+that parameter boundary better than GeoTransolver's. At the exploration
+budget (10,000 cells, 192 wide, linear routing) it was falsified
+(@sec-nb-deflection-verdict: ISLA 1.157x on sealed pressure). The
+200,000-cell twin's first ISLA pair fell to the mean-field plateau and was
+superseded (@sec-nb-p200k-deflection-plateau); the reference configuration
+pair `rb_hl_isla_deflection_seed42/43` replaced it, against the
+unit-direction GeoTransolver pair at 1e-3, both scored in float32 on the
+sealed test (`highlift/hl_defl_test_eval_p200k_aga.sbatch`) and on the
+180-case validation list. Reducer
+`results/deflection_p200k_reduce_2026-09-29.py`, artifact
+`results/deflection_p200k_2026-09-29.json`; the validation scoring of the
+ISLA pair had not been submitted by the evaluation pump and was nudged
+through today.
+
+**What we saw (seed means; seeds 42 / 43).** Sealed pressure: ISLA
+0.0356 (0.0376 / 0.0336), GeoTransolver 0.0325 (0.0329 / 0.0320), ISLA ÷
+GeoTransolver **1.10**; validation pressure 0.0269 against 0.0254 (1.06).
+Velocity 0.0533 against 0.0533 (1.00), wall shear 0.0804 against 0.0805
+(1.00), temperature 1.02, density 1.09. Degradation sealed ÷ validation on
+pressure: ISLA **1.32**, GeoTransolver **1.28**. Against the exploration
+budget the sealed pressure ratio moved from 1.157 to 1.097 and both models'
+sealed errors fell (ISLA 0.89x, GeoTransolver 0.94x of their 10,000-cell
+values), while the degradation factors rose slightly (1.23 → 1.32, 1.25 →
+1.28).
+
+**Reading.** Falsified under the preregistered bars (carried needed ISLA at
+most 0.7x with a degradation at most 4; falsified at or above 0.9x): ISLA is
+the worse model on the sealed set by the same margin it trails on the
+in-distribution wings, and the two architectures lose the same fraction of
+their accuracy across the boundary. There is no extrapolation advantage to
+either side; the deflection split measures the in-distribution wing deficit
+one more time. The limits chapter now states this as the measured
+geometry-parameter extrapolation result (@sec-limits-regime). The P200K-FLEET
+deflection half is complete.

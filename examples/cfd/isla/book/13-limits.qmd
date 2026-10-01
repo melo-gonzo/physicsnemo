@@ -137,11 +137,35 @@ velocity, and it leads on every field outside the training range
 three-dimensional flow. No ISLA lane exists on the HiLiftAeroML sealed
 regime splits (angle of attack, attached to separated flow), and the finding
 that GeoTransolver and Transolver lose about an order of magnitude across
-that boundary is a mechanism finding on those architectures
-on those architectures, not a comparison with ISLA. What would move
-this: the sealed regime splits run once with ISLA and the unit-direction
-baselines at the reporting protocol. A split across geometry *classes*
-remains the open test, and none of this book's datasets provides one.
+that boundary is a mechanism finding on those architectures, not a
+comparison with ISLA. What would move this: the sealed regime splits run
+once with ISLA and the unit-direction baselines at the reporting protocol.
+
+```{python}
+#| label: setup-limits-deflection
+#| include: false
+import json
+_defl = json.load(open("../results/deflection_p200k_2026-09-29.json"))
+_dp = _defl["readout"]["pressure_l2"]; _dv = _defl["readout"]["velocity_l2"]; _dt = _defl["readout"]["tau_wall_l2"]
+_gt_over_isla_p = 1 / _dp["isla_over_gt_test"]
+```
+
+**Across a geometry-parameter boundary ISLA does not generalize better
+than GeoTransolver.** On the HiLiftAeroML deflection split (trained on the
+144 milder flap settings, scored once on the sealed 360-case
+high-deflection test, both models at the reporting protocol, ISLA in the
+reference configuration against unit-direction GeoTransolver) the sealed
+pressure ratio GeoTransolver ÷ ISLA is
+`{python} f"{_gt_over_isla_p:.2f}"` (ISLA the worse), velocity and wall
+shear `{python} f"{1/_dv['isla_over_gt_test']:.2f}"` and
+`{python} f"{1/_dt['isla_over_gt_test']:.2f}"`, and both models degrade
+from their validation error to the sealed test by the same factor
+(ISLA `{python} f"{_dp['d_isla']:.2f}"`, GeoTransolver
+`{python} f"{_dp['d_gt']:.2f}"`; results/deflection_p200k_2026-09-29.json).
+The preregistered claim that ISLA's geometry generalization carries across
+that boundary is falsified, at this protocol as at the exploration budget.
+A split across geometry *classes* remains the open test, and none of this
+book's datasets provides one.
 
 ### Interior accuracy {#sec-limits-interior}
 

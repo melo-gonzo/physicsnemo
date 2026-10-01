@@ -89,7 +89,7 @@ for k in keys:
             "d_isla_10k": ten_k["readout"][k]["d_isla"], "d_isla_200k": readout[k].get("d_isla"),
             "d_gt_10k": ten_k["readout"][k]["d_gt"], "d_gt_200k": readout[k].get("d_gt"),
             "isla_test_200k_over_10k": arms["isla"][k]["test_mean"] / ten_k["arms"]["isla"][k]["test_mean"],
-            "gt_test_200k_over_10k": arms["gt"][k]["test_mean"] / ten_k["arms"]["gt"][k]["test_mean"],
+            "gt_test_200k_over_10k": arms["gt"][k]["test_mean"] / ten_k["arms"]["geotransolver"][k]["test_mean"],  # the 10k artifact names the arm in full
         }
 
 superseded = {}
