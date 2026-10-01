@@ -32190,3 +32190,137 @@ the option stays removed, the Poisson gain stays on record as the
 measured effect of a removed option, and the record is complete. Data:
 `results/universal_agg_2026-09-28.json` (regenerated; `complete: true`,
 worst ratio 1.53 on the Tensile2d scalar field).
+
+## 2026-10-01 — Verdict, ISLA-PERF-2: a real four-rank training step of the reference ISLA at 200,000 cells is GPU-bound (kernels 241 of 242 ms on DrivAerML Surface); backward is 2.2 times forward and the fused geometry kernel's backward alone is 42 ms against a 4.6 ms forward; about 1,500 small elementwise and copy kernels per step take 92 ms; the dataloader waits 7 to 9 ms; saved activations total 51 GiB, led by 18 GiB of float32 residual-stream copies and 14 GiB of pre- and post-GELU MLP hidden states {#sec-nb-isla-perf-2-verdict}
+
+**Setting.** The 2026-09-09 profile (@sec-nb-isla-perf-verdict) found and
+fixed the point-softmax kernel that was 85 to 95% of the step and left
+the dense geometry region as the next cost; that region has since been
+fused into one Triton kernel per layer (@sec-nb-kernel-study).
+Every timing in the book since then is the synthetic cost sweep (one
+GPU, random cloud, no data, no DDP, no loss): 117 ms per step and 34.9
+GiB for the reference configuration at 200,000 cells. The question here
+is where a *real* fleet step spends its time and memory, so that any
+further optimization is aimed by measurement. Peter's question of
+2026-10-01 (runtime and memory levers for ISLA) is the trigger.
+
+**Instrument.** `results/isla_train_profile_2026-10-01.py`, run as a
+fleet lane runs (torchrun, four GB300 ranks, DDP, batch 1 per rank, bf16
+autocast, the recipe's reader, transforms, collate, Huber loss, metrics
+and Muon optimizer; code_v15 + recipe_v7, the archive of 5511b5f1): twelve
+steps of the reference ISLA (384 wide, 12 layers, 256 slices, cosine
+routing, fused geometry kernel, geo_checkpoint on and moot under the
+fused path) on DrivAerML Surface (`isla_surface`, 200,000 sampled cells)
+and DrivAerML Volume (`isla_volume`, 200,000 interior plus 200,000
+boundary tokens). A CUDA sync after every phase splits each step into the
+dataloader wait, the host-to-device copy, forward plus loss, backward
+(with the DDP all-reduce) and the optimizer; steps 6 to 8 run under
+torch.profiler with kernel time bucketed by family, device kernels only
+(the CPU-side op and annotation rows carry their children's device time
+and were double-counted in a first pass); one extra step on rank 0
+attributes every autograd-saved tensor to the module whose forward
+created it. Artifacts: `results/isla_train_profile_drivaer_ml_{surface,volume}_2026-10-01.json`
+and the surface key-averages table. Jobs 955356 (final), 953516, 953596,
+953825, 954198, 954658 (superseded; see the lessons below).
+
+**What we saw (median over nine timed steps, rank 0; the four ranks agree within 7%).**
+
+| phase | Surface, 200k cells | Volume, 200k + 200k tokens |
+|---|---:|---:|
+| dataloader wait | 8.7 ms | 26 ms |
+| host-to-device | 0.4 ms | 0.8 ms |
+| forward + loss + metrics | 69 ms | 159 ms |
+| backward (incl. all-reduce) | 146 ms | 269 ms |
+| optimizer (Muon) | 19 ms | 18 ms |
+| whole step | 242 ms | 475 ms |
+| device kernel time per step (annotations removed) | 241 ms | 426 ms |
+| peak allocated memory | 44.9 GiB | 88.5 GiB |
+
+Kernel time by family on the surface (of 241 ms): elementwise and copy
+kernels 92 ms (38%; 1,211 `copy_` calls, 251 `div`, 243 `sum`, 447 `mul`,
+332 `add_` per step), the fused geometry kernel 47 ms (20%; **backward
+42.4 ms, forward 4.6 ms**, twelve calls each), the NCCL all-reduce 37 ms of
+elapsed kernel time (overlapped with backward; six ring-LL calls of the
+137 MB float32 gradient), GEMMs 30 ms (12%; `mm` 14 ms, `bmm` 9 ms),
+the Muon optimizer 26 ms (11%), LayerNorm and GELU 22 ms (9%), the point
+softmax 0.2 ms (the 2026-09-09 fix holds). On the volume: elementwise 174
+ms, geometry 93 ms (backward 82, forward 9), GEMMs 54 ms, LayerNorm and
+GELU 43 ms, optimizer 33 ms, the cuML nearest-neighbour search 24 ms (5%
+of the step), NCCL 14 ms.
+
+Saved activations (rank 0, surface): **51.3 GiB** in total for a 44.9 GiB
+peak. By module: the routing logits (`blocks.*.assign`) 12.1 GiB, the
+slice block's own einsums and softmaxes 9.8 GiB, the MLP's second Linear
+6.9 GiB and its GELU 6.9 GiB, the broadcast Linear 4.3 GiB, the two
+LayerNorms 3.5 GiB each, the MLP's first Linear 1.7 GiB. By shape:
+**18.0 GiB of (200,000, 384) float32** (sixty copies, five per layer: the
+residual stream and LayerNorm inputs kept in float32 under autocast),
+13.7 GiB of (200,000, 1,536) bfloat16 (the MLP hidden state saved twice,
+before and after GELU), 4.8 GiB of (256, 200,000) float32 (the two
+point-normalized softmaxes per layer, saved as bmm operands), 4.3 GiB of
+(200,000, 960) bfloat16 (the concatenated broadcast input), 4.0 GiB of
+(200,000, 384) bfloat16. The volume doubles every figure (400,000 tokens).
+
+**Reading, ranked by expected gain per unit of work.**
+
+1. *The fused geometry kernel's backward* is the single largest kernel
+   and nine times its forward (42 against 4.6 ms; 82 against 9 ms on the
+   volume). The forward shows what the arithmetic costs; the backward
+   re-derives the invariants, accumulates three incoming gradients and
+   writes per-tile partial sums for the anchor and Linear gradients. A
+   backward at two to three times the forward is the normal ratio, so 25
+   to 30 ms per step (10 to 12%) is on the table in that one kernel:
+   tile shape, register pressure at S = 256, the libdevice
+   transcendentals, and the partial-sum layout are the things to look at.
+2. *The elementwise and copy soup* around the fused region is 38% of the
+   kernel time and about 1,500 launches per step: autocast casts, the
+   transposes of the point softmax, the measure and bias adds, the
+   normalizations and the einsum reshapes. These are exactly what
+   `torch.compile` fuses; the earlier trial (@sec-nb-isla-perf-verdict,
+   round 2) compiled only the geometry region and lost, but that region
+   is now a custom op the compiler can treat as opaque. A compiled slice
+   block with the fused kernel as a leaf, or a second Triton kernel
+   covering the point softmax, the three poolings and the readback (the
+   slice-attention primitive), is the lever; plausible gain 40 to 60 ms
+   (15 to 25%) and, because the (256, 200,000) float32 softmaxes would no
+   longer be saved, about 5 GiB.
+3. *Memory, independent of time*: the 18 GiB of float32 (N, 384) copies
+   are the residual stream and LayerNorm inputs; keeping the stream in
+   bfloat16 between blocks (with the LayerNorm in float32 internally)
+   halves them, and fusing GELU into the first MLP GEMM's epilogue drops
+   the 6.9 GiB pre-activation. Together about 16 GiB of the 45 (35%),
+   at no arithmetic change the loss would notice. Whole-block activation
+   checkpointing remains the blunt instrument (about 1.3 times the step
+   for roughly a twelve-fold activation cut).
+4. *The optimizer* is 11% of the step: Muon's Newton-Schulz iterations
+   over 34M parameters every step. Fewer iterations, bfloat16 iterates
+   or a fused implementation are recipe-level choices; AdamW would cost
+   about 3 ms here.
+5. *Not levers*: the dataloader (4% surface, 6% volume), the host copy,
+   the GEMMs (12%), the point softmax, the nearest-neighbour search (5%
+   of the volume step), and NCCL (overlapped). The input pipeline the
+   2026-10-01 discussion guessed at is not where the time goes.
+
+**Two lessons from getting here.** (1) TF32: the first profile enabled
+`torch.backends.cuda.matmul.allow_tf32` (copied from the synthetic
+script). The lanes never do, and with it on the dataset's GPU-side
+rotation quantizes the mesh coordinates so that **43,187 of 200,000
+sampled DrivAerML surface cells collapse to zero area** (three vertices
+with identical x and y; `results/degenerate_diag_tf32_2026-10-01.json`);
+with it off the same case has none. recipe_v6's intermediate
+degenerate-cell filter had masked this as "dropping 43k cells" and
+recipe_v7, where the filter is deleted, surfaced it as the loss's
+positive-measure check. No lane trained under either; the deletion of
+the filter stands. TF32 is off in the training path and must stay off
+upstream of any geometry transform. (2) Profiling under DDP: an
+`all_gather_object` of the per-rank results mis-sized its NCCL buffer
+("more than 1EB"), and running the extra attribution step on rank 0
+alone deadlocked its DDP backward against the other ranks' barrier until
+the one-hour timeout, twice. Per-rank files plus a barrier, and every
+rank runs every step.
+
+**What is next.** Items 1 to 3 are engineering with exactness tests
+already in place (`test/experimental/models/isla`); each is measured by
+re-running this profiler, which is now a one-command job
+(`kernel/perf/isla_train_profile.sbatch`). None changes the
+architecture; Peter's decision on 2026-10-01 is which, if any, to fund.

@@ -1,0 +1,172 @@
+{
+ "dataset": "drivaer_ml_surface",
+ "recipe": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/recipe_v7",
+ "meshes": [
+  {
+   "name": "boundary_meshes.vehicle",
+   "n_points": 582040,
+   "n_cells": 200000,
+   "cells_shape": [
+    200000,
+    3
+   ],
+   "points_dtype": "torch.float32",
+   "cell_data_stats": {
+    "CpMeanTrim": {
+     "n": 200000,
+     "nonfinite": 0,
+     "nonpositive": 177253,
+     "min": -3.3192172050476074,
+     "median": -0.27473610639572144,
+     "name": "CpMeanTrim"
+    },
+    "pPrime2MeanTrim": {
+     "n": 200000,
+     "nonfinite": 0,
+     "nonpositive": 0,
+     "min": 0.21429046988487244,
+     "median": 1651.12060546875,
+     "name": "pPrime2MeanTrim"
+    },
+    "_effective_measure": {
+     "n": 200000,
+     "nonfinite": 0,
+     "nonpositive": 43187,
+     "min": 0.0,
+     "median": 1.6356671039829962e-06,
+     "name": "_effective_measure"
+    },
+    "normals": {
+     "n": 200000,
+     "nonfinite": 0,
+     "nonpositive": 43187,
+     "min": 0.0,
+     "median": 1.0,
+     "name": "normals"
+    }
+   },
+   "attr_cell_areas": {
+    "n": 200000,
+    "nonfinite": 0,
+    "nonpositive": 43187,
+    "min": 0.0,
+    "median": 1.9650901350587446e-08,
+    "name": "cell_areas"
+   },
+   "recomputed_area_f64": {
+    "n_zero_or_nonfinite": 43191,
+    "n_repeated_vertex": 0,
+    "min_positive": 2.3271697069393582e-12,
+    "median": 1.9650901013398877e-08
+   },
+   "degenerate_examples": [
+    {
+     "cell": 8,
+     "verts": [
+      530904,
+      142332,
+      199220
+     ],
+     "points": [
+      [
+       0.2470099925994873,
+       0.18677079677581787,
+       -0.02877715229988098
+      ],
+      [
+       0.2470099925994873,
+       0.18677079677581787,
+       -0.028728336095809937
+      ],
+      [
+       0.2470099925994873,
+       0.18677079677581787,
+       -0.028703927993774414
+      ]
+     ]
+    },
+    {
+     "cell": 12,
+     "verts": [
+      82454,
+      21988,
+      231949
+     ],
+     "points": [
+      [
+       0.28137660026550293,
+       0.16070294380187988,
+       -0.08337807655334473
+      ],
+      [
+       0.28137660026550293,
+       0.16070294380187988,
+       -0.08337807655334473
+      ],
+      [
+       0.28137660026550293,
+       0.1606053113937378,
+       -0.08337807655334473
+      ]
+     ]
+    },
+    {
+     "cell": 25,
+     "verts": [
+      84699,
+      163821,
+      134280
+     ],
+     "points": [
+      [
+       -0.30519890785217285,
+       -0.17935073375701904,
+       -0.0841103196144104
+      ],
+      [
+       -0.30519890785217285,
+       -0.17944836616516113,
+       -0.0841103196144104
+      ],
+      [
+       -0.30519890785217285,
+       -0.17944836616516113,
+       -0.0841103196144104
+      ]
+     ]
+    }
+   ],
+   "compare__effective_measure": {
+    "pipeline_bad": 43187,
+    "pipeline_bad_but_f64_area_positive": 0,
+    "ratio_median_pipeline_over_f64": 83.23623665259807
+   }
+  }
+ ],
+ "target_measure": {
+  "n": 200000,
+  "nonfinite": 0,
+  "nonpositive": 43187,
+  "min": 0.0,
+  "median": 1.6356671039829962e-06,
+  "name": "target_measure"
+ },
+ "targets": {
+  "pressure": {
+   "n": 200000,
+   "nonfinite": 0,
+   "nonpositive": 177253,
+   "min": -3.3192172050476074,
+   "median": -0.27473607659339905,
+   "name": "pressure"
+  },
+  "wss": {
+   "n": 200000,
+   "nonfinite": 0,
+   "nonpositive": 0,
+   "min": 0.00061989805014758,
+   "median": 0.46976110655407843,
+   "name": "wss"
+  }
+ }
+}
