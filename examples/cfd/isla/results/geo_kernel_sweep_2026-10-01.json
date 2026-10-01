@@ -1,0 +1,566 @@
+{
+ "protocol": "PERF-3a (2026-10-01): launch-configuration sweep of ISLA's fused geometry kernels on the GB300.\n\nThe fused region's forward runs BLOCK_N = 8 points x all S slices per program with 4 warps and the backward\nBLOCK_N = 4 (defaults tuned on an RTX 4090, kernel study 2026-09-13). ISLA-PERF-2 measured the backward at\n42 ms per step against a 4.6 ms forward at 200,000 cells x 256 slices (twelve layers), nine times the forward.\nThis sweeps (BLOCK_N, num_warps) for both kernels at the reporting shape (B=1, N=200,000, S=256, K=1, bf16\nautocast as in training) and reports median kernel time over 20 timed calls after 3 warm-ups, plus exactness\nagainst the default configuration: the per-point outputs (bias, mix, pooled) and the per-point gradients\n(logits, r, n_hat, d_hat) must be bitwise identical (the tile size does not change any per-point reduction);\nthe per-slice and per-weight gradients (z_pos, m_s, weight, bias) are summed over tiles in a different order\nand must agree to 1e-5 relative.\n\nUsage: python geo_kernel_sweep.py <out.json>\n",
+ "summary": {
+  "gpu": "NVIDIA GB300",
+  "shape": {
+   "B": 1,
+   "N": 200000,
+   "S": 256,
+   "K": 1
+  },
+  "default": {
+   "cfg": [
+    8,
+    4,
+    4
+   ],
+   "fwd_ms": 0.5575998220592737,
+   "bwd_ms": 3.7620319053530693
+  },
+  "best_fwd": {
+   "fwd_block": 4,
+   "bwd_block": 4,
+   "warps": 4,
+   "fwd_ms": 0.48860814422369003,
+   "bwd_ms": 3.754847915843129,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "best_bwd": {
+   "fwd_block": 8,
+   "bwd_block": 2,
+   "warps": 4,
+   "fwd_ms": 0.5568959750235081,
+   "bwd_ms": 2.519712084904313,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    3.1605762274011795e-07,
+    3.605349832014326e-07,
+    6.23155301582301e-06,
+    2.5817082587309415e-06
+   ]
+  },
+  "speedup_fwd": 1.1412004254353947,
+  "speedup_bwd": 1.493040386594778
+ },
+ "results": [
+  {
+   "fwd_block": 8,
+   "bwd_block": 4,
+   "warps": 4,
+   "fwd_ms": 0.5575998220592737,
+   "bwd_ms": 3.7620319053530693,
+   "default": true,
+   "exact": true
+  },
+  {
+   "fwd_block": 4,
+   "bwd_block": 4,
+   "warps": 4,
+   "fwd_ms": 0.48860814422369003,
+   "bwd_ms": 3.754847915843129,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 4,
+   "warps": 4,
+   "fwd_ms": 0.5557283293455839,
+   "bwd_ms": 3.7449118681252003,
+   "exact_bitwise_pointwise": true,
+   "reduced_grad_rel": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "fwd_block": 16,
+   "bwd_block": 4,
+   "warps": 4,
+   "fwd_ms": 0.6607838440686464,
+   "bwd_ms": 3.7512159906327724,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "fwd_block": 32,
+   "bwd_block": 4,
+   "warps": 4,
+   "fwd_ms": 2.238719956949353,
+   "bwd_ms": 3.757311962544918,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "fwd_block": 64,
+   "bwd_block": 4,
+   "warps": 4,
+   "fwd_ms": 4.680735990405083,
+   "bwd_ms": 3.7643040996044874,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "fwd_block": 128,
+   "bwd_block": 4,
+   "warps": 4,
+   "fwd_ms": 4.921712214127183,
+   "bwd_ms": 3.7565918173640966,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 2,
+   "warps": 4,
+   "fwd_ms": 0.5568959750235081,
+   "bwd_ms": 2.519712084904313,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    3.1605762274011795e-07,
+    3.605349832014326e-07,
+    6.23155301582301e-06,
+    2.5817082587309415e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 4,
+   "warps": 4,
+   "fwd_ms": 0.5587521009147167,
+   "bwd_ms": 3.760111751034856,
+   "exact_bitwise_pointwise": true,
+   "reduced_grad_rel": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 8,
+   "warps": 4,
+   "fwd_ms": 0.5515201482921839,
+   "bwd_ms": 2.6736799627542496,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    3.100328740401892e-07,
+    3.568584077129344e-07,
+    4.075626748090144e-06,
+    5.737129527005891e-07
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 16,
+   "warps": 4,
+   "fwd_ms": 0.5763359367847443,
+   "bwd_ms": 8.525119861587882,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.826555487445148e-07,
+    3.3598308846194413e-07,
+    4.414306658873102e-06,
+    1.1474259054011782e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 32,
+   "warps": 4,
+   "fwd_ms": 0.5560161080211401,
+   "bwd_ms": 9.661167860031128,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.753244530140364e-07,
+    3.3060919690797164e-07,
+    5.604736543318722e-06,
+    0.0
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 64,
+   "warps": 4,
+   "fwd_ms": 0.5595521070063114,
+   "bwd_ms": 11.68268802575767,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.637739271449391e-07,
+    3.223423448162066e-07,
+    6.031195425748592e-06,
+    1.1474259054011782e-06
+   ]
+  },
+  {
+   "fwd_block": 4,
+   "bwd_block": 4,
+   "warps": 8,
+   "fwd_ms": 0.6031838711351156,
+   "bwd_ms": 3.9081440772861242,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2333927063300507e-07,
+    2.925665967268287e-07,
+    6.148708507680567e-06,
+    1.7211388012583484e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 4,
+   "warps": 8,
+   "fwd_ms": 0.5736001767218113,
+   "bwd_ms": 3.914607921615243,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2333927063300507e-07,
+    2.925665967268287e-07,
+    6.148708507680567e-06,
+    1.7211388012583484e-06
+   ]
+  },
+  {
+   "fwd_block": 16,
+   "bwd_block": 4,
+   "warps": 8,
+   "fwd_ms": 0.7497116457670927,
+   "bwd_ms": 3.919903887435794,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2333927063300507e-07,
+    2.925665967268287e-07,
+    6.148708507680567e-06,
+    1.7211388012583484e-06
+   ]
+  },
+  {
+   "fwd_block": 32,
+   "bwd_block": 4,
+   "warps": 8,
+   "fwd_ms": 0.79959980212152,
+   "bwd_ms": 3.9072639774531126,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2333927063300507e-07,
+    2.925665967268287e-07,
+    6.148708507680567e-06,
+    1.7211388012583484e-06
+   ]
+  },
+  {
+   "fwd_block": 64,
+   "bwd_block": 4,
+   "warps": 8,
+   "fwd_ms": 4.256080137565732,
+   "bwd_ms": 3.9199041202664375,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2333927063300507e-07,
+    2.925665967268287e-07,
+    6.148708507680567e-06,
+    1.7211388012583484e-06
+   ]
+  },
+  {
+   "fwd_block": 128,
+   "bwd_block": 4,
+   "warps": 8,
+   "fwd_ms": 6.269552046433091,
+   "bwd_ms": 3.935424145311117,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2333927063300507e-07,
+    2.925665967268287e-07,
+    6.148708507680567e-06,
+    1.7211388012583484e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 2,
+   "warps": 8,
+   "fwd_ms": 0.5767038092017174,
+   "bwd_ms": 3.0286880210042,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    3.187179231645132e-07,
+    3.6396696145857277e-07,
+    4.624896973837167e-06,
+    4.876560069533298e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 4,
+   "warps": 8,
+   "fwd_ms": 0.5732800345867872,
+   "bwd_ms": 3.9131520316004753,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2333927063300507e-07,
+    2.925665967268287e-07,
+    6.148708507680567e-06,
+    1.7211388012583484e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 8,
+   "warps": 8,
+   "fwd_ms": 0.5640638992190361,
+   "bwd_ms": 3.863952122628689,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.925847866208642e-07,
+    2.942746277767583e-07,
+    3.2014366979638e-07,
+    5.737129527005891e-07
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 16,
+   "warps": 8,
+   "fwd_ms": 0.5708478856831789,
+   "bwd_ms": 2.7091680094599724,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.7858087037202495e-07,
+    3.0208329349079577e-07,
+    4.013932993984781e-06,
+    2.2948518108023563e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 32,
+   "warps": 8,
+   "fwd_ms": 0.577680068090558,
+   "bwd_ms": 8.320096181705594,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.6903936145572516e-07,
+    2.8742755375787965e-07,
+    6.928296897967812e-06,
+    3.442277602516697e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 64,
+   "warps": 8,
+   "fwd_ms": 0.576831866055727,
+   "bwd_ms": 9.646591963246465,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.5936012093552563e-07,
+    3.041034233319806e-07,
+    7.004576218605507e-06,
+    2.2948518108023563e-06
+   ]
+  },
+  {
+   "fwd_block": 4,
+   "bwd_block": 4,
+   "warps": 16,
+   "fwd_ms": 0.8345439564436674,
+   "bwd_ms": 3.6268639378249645,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2776421815251524e-07,
+    3.1447501669390476e-07,
+    5.553173650696408e-06,
+    3.729134050445282e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 4,
+   "warps": 16,
+   "fwd_ms": 0.863984227180481,
+   "bwd_ms": 3.6152799148112535,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2776421815251524e-07,
+    3.1447501669390476e-07,
+    5.553173650696408e-06,
+    3.729134050445282e-06
+   ]
+  },
+  {
+   "fwd_block": 16,
+   "bwd_block": 4,
+   "warps": 16,
+   "fwd_ms": 0.7515200413763523,
+   "bwd_ms": 3.6227679811418056,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2776421815251524e-07,
+    3.1447501669390476e-07,
+    5.553173650696408e-06,
+    3.729134050445282e-06
+   ]
+  },
+  {
+   "fwd_block": 32,
+   "bwd_block": 4,
+   "warps": 16,
+   "fwd_ms": 0.6666241679340601,
+   "bwd_ms": 3.6170396488159895,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2776421815251524e-07,
+    3.1447501669390476e-07,
+    5.553173650696408e-06,
+    3.729134050445282e-06
+   ]
+  },
+  {
+   "fwd_block": 64,
+   "bwd_block": 4,
+   "warps": 16,
+   "fwd_ms": 1.8201761413365602,
+   "bwd_ms": 3.6259519401937723,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2776421815251524e-07,
+    3.1447501669390476e-07,
+    5.553173650696408e-06,
+    3.729134050445282e-06
+   ]
+  },
+  {
+   "fwd_block": 128,
+   "bwd_block": 4,
+   "warps": 16,
+   "fwd_ms": 2.9046719428151846,
+   "bwd_ms": 3.621536074206233,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2776421815251524e-07,
+    3.1447501669390476e-07,
+    5.553173650696408e-06,
+    3.729134050445282e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 2,
+   "warps": 16,
+   "fwd_ms": 0.8701600600033998,
+   "bwd_ms": 5.516400095075369,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    3.1270559475160553e-07,
+    3.874170602102822e-07,
+    5.520364538824651e-06,
+    3.1554211545881117e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 4,
+   "warps": 16,
+   "fwd_ms": 0.8646238129585981,
+   "bwd_ms": 3.6305440589785576,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2776421815251524e-07,
+    3.1447501669390476e-07,
+    5.553173650696408e-06,
+    3.729134050445282e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 8,
+   "warps": 16,
+   "fwd_ms": 0.865840120241046,
+   "bwd_ms": 4.046543966978788,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    3.0847888865537243e-07,
+    3.304802760339953e-07,
+    5.384983978728997e-06,
+    1.7211388012583484e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 16,
+   "warps": 16,
+   "fwd_ms": 0.8663518819957972,
+   "bwd_ms": 3.9219839964061975,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.8355981385175255e-07,
+    3.6000028558191843e-07,
+    5.610115749732358e-06,
+    2.2948518108023563e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 32,
+   "warps": 16,
+   "fwd_ms": 0.8614081889390945,
+   "bwd_ms": 4.7220641281455755,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.8214031999596045e-07,
+    3.4219786471112457e-07,
+    5.56905160919996e-06,
+    1.1474259054011782e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 64,
+   "warps": 16,
+   "fwd_ms": 0.8622882887721062,
+   "bwd_ms": 7.91172799654305,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.6133218966606364e-07,
+    3.4338168575231975e-07,
+    5.564187176787527e-06,
+    2.2948518108023563e-06
+   ]
+  }
+ ]
+}

@@ -1,0 +1,184 @@
+{
+ "protocol": "PERF-3a (2026-10-01): launch-configuration sweep of ISLA's fused geometry kernels on the GB300.\n\nThe fused region's forward runs BLOCK_N = 8 points x all S slices per program with 4 warps and the backward\nBLOCK_N = 4 (defaults tuned on an RTX 4090, kernel study 2026-09-13). ISLA-PERF-2 measured the backward at\n42 ms per step against a 4.6 ms forward at 200,000 cells x 256 slices (twelve layers), nine times the forward.\nThis sweeps (BLOCK_N, num_warps) for both kernels at the reporting shape (B=1, N=200,000, S=256, K=1, bf16\nautocast as in training) and reports median kernel time over 20 timed calls after 3 warm-ups, plus exactness\nagainst the default configuration: the per-point outputs (bias, mix, pooled) and the per-point gradients\n(logits, r, n_hat, d_hat) must be bitwise identical (the tile size does not change any per-point reduction);\nthe per-slice and per-weight gradients (z_pos, m_s, weight, bias) are summed over tiles in a different order\nand must agree to 1e-5 relative.\n\nUsage: python geo_kernel_sweep.py <out.json>\n",
+ "summary": {
+  "gpu": "NVIDIA GB300",
+  "shape": {
+   "B": 1,
+   "N": 200000,
+   "S": 256,
+   "K": 1
+  },
+  "default": {
+   "cfg": [
+    8,
+    4,
+    4
+   ],
+   "fwd_ms": 0.5617302376776934,
+   "bwd_ms": 3.7600581999868155
+  },
+  "best_fwd": {
+   "fwd_block": 4,
+   "bwd_block": 4,
+   "warps": 4,
+   "fwd_ms": 0.4890409763902426,
+   "bwd_ms": 3.749370574951172,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    8.400775186601095e-06
+   ]
+  },
+  "best_bwd": {
+   "fwd_block": 8,
+   "bwd_block": 2,
+   "warps": 4,
+   "fwd_ms": 0.5605772603303194,
+   "bwd_ms": 2.4899099953472614,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    3.1605762274011795e-07,
+    3.605349832014326e-07,
+    6.23155301582301e-06,
+    2.5817082587309415e-06,
+    1.980727756745182e-05
+   ]
+  },
+  "speedup_fwd": 1.1486363409135814,
+  "speedup_bwd": 1.510118119535646
+ },
+ "results": [
+  {
+   "fwd_block": 8,
+   "bwd_block": 4,
+   "warps": 4,
+   "fwd_ms": 0.5617302376776934,
+   "bwd_ms": 3.7600581999868155,
+   "default": true,
+   "exact": true
+  },
+  {
+   "fwd_block": 4,
+   "bwd_block": 4,
+   "warps": 4,
+   "fwd_ms": 0.4890409763902426,
+   "bwd_ms": 3.749370574951172,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    8.400775186601095e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 4,
+   "warps": 4,
+   "fwd_ms": 0.5562258884310722,
+   "bwd_ms": 3.75665002502501,
+   "exact_bitwise_pointwise": true,
+   "reduced_grad_rel": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 2,
+   "warps": 4,
+   "fwd_ms": 0.5605772603303194,
+   "bwd_ms": 2.4899099953472614,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    3.1605762274011795e-07,
+    3.605349832014326e-07,
+    6.23155301582301e-06,
+    2.5817082587309415e-06,
+    1.980727756745182e-05
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 8,
+   "warps": 4,
+   "fwd_ms": 0.5665295757353306,
+   "bwd_ms": 2.668375615030527,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    3.100328740401892e-07,
+    3.568584077129344e-07,
+    4.075626748090144e-06,
+    5.737129527005891e-07,
+    9.700863301986828e-06
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 4,
+   "warps": 8,
+   "fwd_ms": 0.5908822640776634,
+   "bwd_ms": 3.903514938428998,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2333927063300507e-07,
+    2.925665967268287e-07,
+    6.148708507680567e-06,
+    1.7211388012583484e-06,
+    1.980727756745182e-05
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 16,
+   "warps": 8,
+   "fwd_ms": 0.5777778569608927,
+   "bwd_ms": 2.694055438041687,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.7858087037202495e-07,
+    3.0208329349079577e-07,
+    4.013932993984781e-06,
+    2.2948518108023563e-06,
+    9.823933396546636e-06
+   ]
+  },
+  {
+   "fwd_block": 32,
+   "bwd_block": 4,
+   "warps": 16,
+   "fwd_ms": 0.6550580728799105,
+   "bwd_ms": 3.6163299810141325,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2776421815251524e-07,
+    3.1447501669390476e-07,
+    5.553173650696408e-06,
+    3.729134050445282e-06,
+    2.231453254353255e-05
+   ]
+  },
+  {
+   "fwd_block": 8,
+   "bwd_block": 4,
+   "warps": 16,
+   "fwd_ms": 0.859010498970747,
+   "bwd_ms": 3.6352418828755617,
+   "exact_bitwise_pointwise": false,
+   "reduced_grad_rel": [
+    2.2776421815251524e-07,
+    3.1447501669390476e-07,
+    5.553173650696408e-06,
+    3.729134050445282e-06,
+    2.231453254353255e-05
+   ]
+  }
+ ]
+}

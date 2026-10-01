@@ -719,10 +719,22 @@ def _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias, n_global):
 
 
 #: Launch configuration (points per program, warps per program); ``None`` picks the
-#: defaults below, which were tuned on an RTX 4090 (kernel study 2026-09-13).
+#: defaults below: tuned on an RTX 4090 (kernel study 2026-09-13) for compute
+#: capability below 10, and on a GB300 (PERF-3 sweep 2026-10-01: at 200,000 points x
+#: 256 slices the backward is register-bound and runs 1.5x faster at 2 points per
+#: program, the forward 1.14x faster at 4; results/geo_kernel_sweep_2026-10-01.json)
+#: for Blackwell-class devices. The tile size changes only the floating-point
+#: summation order (pointwise outputs agree to about 1e-5 relative).
 FWD_BLOCK_N: int | None = None
 BWD_BLOCK_N: int | None = None
 NUM_WARPS: int = 4
+
+
+def _blackwell() -> bool:
+    try:
+        return torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 10
+    except Exception:  # pragma: no cover - no device
+        return False
 
 
 def _fwd_block(s, k=1):
@@ -731,14 +743,20 @@ def _fwd_block(s, k=1):
     5.2 ms against 1.2 ms per region step at K = 2 on the 4090, 2026-09-23)."""
     if FWD_BLOCK_N is not None:
         return FWD_BLOCK_N
-    base = 8 if s <= 256 else 4 if s <= 512 else 2
+    if _blackwell():
+        base = 4 if s <= 256 else 2 if s <= 512 else 1
+    else:
+        base = 8 if s <= 256 else 4 if s <= 512 else 2
     return base if k == 1 else max(1, base // 2)
 
 
 def _bwd_block(s, k=1):
     if BWD_BLOCK_N is not None:
         return BWD_BLOCK_N
-    base = 4 if s <= 256 else 2 if s <= 512 else 1
+    if _blackwell():
+        base = 2 if s <= 256 else 1
+    else:
+        base = 4 if s <= 256 else 2 if s <= 512 else 1
     return base if k == 1 else max(1, base // 2)
 
 
