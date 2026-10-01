@@ -28,9 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adds `physicsnemo.experimental.models.ISLA` (Invariant Slice Attention), an
   O(3)/SE(3)-equivariant, measure-aware slice-attention surrogate for steady
   boundary-value problems. Inputs (global, per-boundary-cell, per-query) and
-  outputs are named fields of declared tensor rank (`outputs={"pressure":
-  {"rank": 0}, "wss": {"rank": 1}, "stress": {"rank": 2, "symmetric": True}}`,
-  see `FieldSchema` under Changed); every input enters through O(3)-invariants
+  outputs are named fields of declared tensor rank, declared by
+  `global_schema`, `boundary_schema`, `query_schema` and `output_schema`
+  (`output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}, "stress":
+  {"rank": 2, "symmetric": True}}`, see `FieldSchema` under Changed); every
+  input enters through O(3)-invariants
   and every output leaves through an exactly equivariant basis (ranks up to 4,
   even or odd parity). `forward` is mesh-native, as GLOBE's: it takes the
   boundary as named `Mesh` objects, the case's `global_data`, and for an

@@ -50,7 +50,7 @@ D = torch.float64
 
 
 def _isla(**kw):
-    return ISLA(outputs=PV, global_inputs=G, **kw)
+    return ISLA(output_schema=PV, global_schema=G, **kw)
 
 
 def _rows(out, sl):
@@ -161,13 +161,13 @@ def test_boundary_scalar_contracts():
     """Two rank-0 boundary fields (one leaf per scalar) in ``cell_data`` ride along
     under a rotation."""
     torch.manual_seed(0)
-    m = _isla(hidden=64, n_layers=2, n_slices=16, boundary_inputs={"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}).double().eval()
+    m = _isla(hidden=64, n_layers=2, n_slices=16, boundary_schema={"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}).double().eval()
     pts, nrm, w, drv = cloud(300)
     bs = {"bc_a": torch.randn(300, dtype=D), "bc_b": torch.randn(300, dtype=D)}
     mesh = soup(pts, nrm, w, cell_data=bs)
     base = _run(m, mesh, drv)
     q = _rotation()
-    _assert_rotated(_run(m, transform(mesh, q, specs=m.boundary_specs), drv @ q.T), base, q)
+    _assert_rotated(_run(m, transform(mesh, q, specs=m.boundary_schema), drv @ q.T), base, q)
     assert m.embed[0].in_features == 1 + 2
 
 
@@ -251,7 +251,7 @@ def test_query_scalars_contracts():
     gradients, geometric-scale equivariance holds (rank-0 query inputs are lengths
     and are divided by the frame's length unit), and misuse raises."""
     torch.manual_seed(0)
-    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, query_inputs={"sdf": {"rank": 0}}).double()
+    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, query_schema={"sdf": {"rank": 0}}).double()
     pts, nrm, w, _ = cloud(40)
     mesh = soup(pts, nrm, w)
     drive = torch.tensor([1.0, 0.3, 0.0], dtype=D)
@@ -312,7 +312,7 @@ def test_interior_task_contracts():
     assert not missing, missing
 
 
-@pytest.mark.parametrize("extra", [{}, {"query_inputs": {"sdf": {"rank": 0}}}])
+@pytest.mark.parametrize("extra", [{}, {"query_schema": {"sdf": {"rank": 0}}}])
 def test_query_mass_refinement_invariance(extra):
     """Splitting every boundary cell into two coincident half-measure copies leaves
     the discrete boundary measure unchanged (positions, normals, total area, every
@@ -357,7 +357,7 @@ def test_boundary_scalars_reach_the_interior_prediction():
     torch.manual_seed(0)
     pts, nrm, w, drv = cloud(60)
     bs = {"bc_a": torch.randn(60, dtype=D), "bc_b": torch.randn(60, dtype=D)}
-    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, boundary_inputs={"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}).double().eval()
+    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, boundary_schema={"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}).double().eval()
     q = pts[:17] * 0.5
     out = _run(m, soup(pts, nrm, w, cell_data=bs), drv, q)
     out2 = _run(m, soup(pts, nrm, w, cell_data={k: 2 * v for k, v in bs.items()}), drv, q)
@@ -492,16 +492,16 @@ def test_unknown_constructor_argument_raises_type_error(name):
 
 
 def test_interior_flag_structures_the_forward():
-    """A surface model refuses prediction points and query_inputs; an interior
-    model requires prediction points; a bare tensor is accepted only without
-    declared query_inputs."""
+    """A surface model refuses prediction points and a query_schema; an interior
+    model requires prediction points; a bare tensor is accepted only when the
+    query_schema declares no fields."""
     pts, nrm, w, drv = cloud(20, dtype=torch.float32)
     mesh = soup(pts, nrm, w)
     surface = _isla(hidden=32, n_layers=1, n_slices=8)
     with pytest.raises(ValueError, match="interior=False"):
         surface(boundary_meshes={"wall": mesh}, prediction_points=pts[:3], global_data={"g": drv})
     with pytest.raises(ValueError, match="declare them with interior=True"):
-        _isla(hidden=32, n_layers=1, n_slices=8, query_inputs={"sdf": {"rank": 0}})
+        _isla(hidden=32, n_layers=1, n_slices=8, query_schema={"sdf": {"rank": 0}})
     interior = _isla(hidden=32, n_layers=1, n_slices=8, interior=True)
     with pytest.raises(ValueError, match="pass prediction_points"):
         interior(boundary_meshes={"wall": mesh}, global_data={"g": drv})
@@ -623,10 +623,10 @@ def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices(
     # explicit fused request is refused at construction (the kernel is unrolled for
     # one to four)
     five = {"g1": {"rank": 1}, "g2": {"rank": 1}, "g3": {"rank": 1}, "g4": {"rank": 1}, "g5": {"rank": 1}}
-    two = ISLA(outputs=PV, global_inputs=five, hidden=32, n_layers=2, n_slices=8).double().eval()
+    two = ISLA(output_schema=PV, global_schema=five, hidden=32, n_layers=2, n_slices=8).double().eval()
     assert two.resolve_geo_kernel(pts) == "eager"
     with pytest.raises(ValueError, match="one to four per-point vectors"):
-        ISLA(outputs=PV, global_inputs=five, hidden=32, n_layers=2, n_slices=8, geo_kernel="fused")
+        ISLA(output_schema=PV, global_schema=five, hidden=32, n_layers=2, n_slices=8, geo_kernel="fused")
     with pytest.raises(ValueError, match="geo_kernel must be"):
         _isla(hidden=32, n_layers=2, n_slices=8, geo_kernel="turbo")
 
@@ -642,7 +642,7 @@ def test_scalar_only_model_has_no_frame_routing_and_every_parameter_gets_a_gradi
     mesh = soup(pts, nrm, w)
     q = torch.randn(30, 3) * 2.0
     for outs in ({"u": {"rank": 0}}, {"u": {"rank": 0}, "q1": {"rank": 0}, "q2": {"rank": 0}}, {"u": {"rank": 0}, "v": {"rank": 1}}):
-        m = ISLA(outputs=outs, global_inputs={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True)
+        m = ISLA(output_schema=outs, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True)
         has_vec = any(v["rank"] == 1 for v in outs.values())
         assert m.needs_frame == has_vec and (m.frame_assign is not None) == has_vec
         out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}))

@@ -80,7 +80,7 @@ def _move(fields, specs, R):
 
 def _model(**kw):
     torch.manual_seed(0)
-    base = dict(outputs=OUT, global_inputs={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8)
+    base = dict(output_schema=OUT, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8)
     base.update(kw)
     return ISLA(**base).double().eval()
 
@@ -90,14 +90,14 @@ def _assert_covariant(m, call, improper):
     base = call(torch.eye(3, dtype=D), torch.zeros(3, dtype=D))
     R = orthogonal(3, 4, improper)
     out = call(R, torch.tensor([2.0, -5.0, 1.0], dtype=D))
-    for name, spec in m.output_specs.items():
+    for name, spec in m.output_schema.items():
         assert torch.allclose(out[name], law(base[name], R, spec.rank), atol=1e-11), (name, improper)
     return base
 
 
 @pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])
 def test_boundary_inputs_covariance(improper):
-    m = _model(boundary_inputs=BIN)
+    m = _model(boundary_schema=BIN)
     pts, nrm, w, _ = cloud(200)
     bf = _boundary_fields(200)
     mesh = soup(pts, nrm, w, cell_data=bf)
@@ -105,7 +105,7 @@ def test_boundary_inputs_covariance(improper):
     def call(R, shift):
         with torch.no_grad():
             return outputs(
-                m(boundary_meshes={"wall": transform(mesh, R, shift, specs=m.boundary_specs)}, global_data={"g": DRV @ R.T})
+                m(boundary_meshes={"wall": transform(mesh, R, shift, specs=m.boundary_schema)}, global_data={"g": DRV @ R.T})
             )
 
     base = _assert_covariant(m, call, improper)
@@ -119,7 +119,7 @@ def test_boundary_inputs_covariance(improper):
     R = orthogonal(3, 6, False)
     with torch.no_grad():
         skew = outputs(
-            m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data=_move(bf, m.boundary_specs, R))}, global_data={"g": DRV})
+            m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data=_move(bf, m.boundary_schema, R))}, global_data={"g": DRV})
         )
     assert not torch.allclose(skew["p"], base["p"], atol=1e-6)
 
@@ -129,7 +129,7 @@ def test_query_inputs_covariance(improper):
     """Rank-0/1/2 per-prediction-point fields in the prediction Mesh's point_data."""
     pts, nrm, w, _ = cloud(200)
     q_pts, _, _, _ = cloud(40, seed=3)
-    m = _model(interior=True, query_inputs=QIN, boundary_inputs={"trac": {"rank": 1}})
+    m = _model(interior=True, query_schema=QIN, boundary_schema={"trac": {"rank": 1}})
     bf = {"trac": torch.randn(200, 3, dtype=D, generator=torch.Generator().manual_seed(5))}
     mesh = soup(pts, nrm, w, cell_data=bf)
     n_q = 40
@@ -139,8 +139,8 @@ def test_query_inputs_covariance(improper):
         with torch.no_grad():
             return outputs(
                 m(
-                    boundary_meshes={"wall": transform(mesh, R, shift, specs=m.boundary_specs)},
-                    prediction_points=points_mesh(q_pts @ R.T + shift, _move(qf, m.query_specs, R)),
+                    boundary_meshes={"wall": transform(mesh, R, shift, specs=m.boundary_schema)},
+                    prediction_points=points_mesh(q_pts @ R.T + shift, _move(qf, m.query_schema, R)),
                     global_data={"g": DRV @ R.T},
                 )
             )
@@ -165,8 +165,8 @@ def test_geometry_width_and_seed_width():
     the frame cosines, the norm, the frame contractions, the trace and the norm."""
     for K in (0, 1, 2):
         m = _model(
-            global_inputs={f"g{k}": {"rank": 1} for k in range(K)},
-            boundary_inputs={"v": {"rank": 1}, "T": {"rank": 2, "symmetric": True}},
+            global_schema={f"g{k}": {"rank": 1} for k in range(K)},
+            boundary_schema={"v": {"rank": 1}, "T": {"rank": 2, "symmetric": True}},
         )
         F = 1 + K
         assert m.blocks[0].n_geo == 5 + K + (1 + F) + 1
@@ -174,17 +174,17 @@ def test_geometry_width_and_seed_width():
         assert m.bin.n_features == (F + 1) + (F * (F + 1) // 2 + 2)
         assert m.embed[0].in_features == K + m.bin.n_features
     ### a non-symmetric rank-2 input contracts both T a and T^T a and all F^2 pairs
-    m = _model(boundary_inputs={"A": {"rank": 2}})
+    m = _model(boundary_schema={"A": {"rank": 2}})
     assert m.n_block_vecs == 2 * 2 and m.bin.n_features == 4 + 2
     ### query inputs widen the union stack for every token, boundary ones included
-    m = _model(interior=True, query_inputs={"u": {"rank": 1}}, boundary_inputs={"v": {"rank": 1}})
+    m = _model(interior=True, query_schema={"u": {"rank": 1}}, boundary_schema={"v": {"rank": 1}})
     assert m.blocks[0].n_geo == 5 + 1 + 2
 
 
 def test_field_validation_errors():
     """Declared fields are read from cell_data / point_data by name and checked for
     shape; extras there are ignored (like GLOBE)."""
-    m = _model(boundary_inputs={"trac": {"rank": 1}, "tag": {"rank": 0}})
+    m = _model(boundary_schema={"trac": {"rank": 1}, "tag": {"rank": 0}})
     pts, nrm, w, _ = cloud(20)
     gd = {"g": torch.ones(3, dtype=D)}
     trac, tag = torch.randn(20, 3, dtype=D), torch.rand(20, dtype=D)
@@ -207,7 +207,7 @@ def test_field_validation_errors():
             global_data=gd,
         )
     ### query fields are required where the model declares them
-    mq = _model(interior=True, query_inputs={"sdf": {"rank": 0}})
+    mq = _model(interior=True, query_schema={"sdf": {"rank": 0}})
     q = pts[:7] * 2
     with pytest.raises(ValueError, match="prediction_points.point_data is missing the declared fields \\['sdf'\\]"):
         mq(boundary_meshes={"wall": soup(pts, nrm, w)}, prediction_points=points_mesh(q), global_data=gd)
@@ -221,16 +221,16 @@ def test_fused_kernel_refuses_tensor_inputs_and_auto_falls_back():
     """The fused kernel takes rank-1 token inputs as per-point vectors (at most four
     with the global directions); rank-2 inputs and more than four vectors are refused
     and auto falls back to eager (off CUDA it does anyway)."""
-    base = dict(outputs=OUT, global_inputs={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8)
-    ISLA(boundary_inputs={"trac": {"rank": 1}}, geo_kernel="fused", **base)  # K = 1, P' = 1: accepted
-    ISLA(boundary_inputs={"trac": {"rank": 1}, "disp": {"rank": 1}, "u": {"rank": 1}}, geo_kernel="fused", **base)  # K + P' = 4
+    base = dict(output_schema=OUT, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8)
+    ISLA(boundary_schema={"trac": {"rank": 1}}, geo_kernel="fused", **base)  # K = 1, P' = 1: accepted
+    ISLA(boundary_schema={"trac": {"rank": 1}, "disp": {"rank": 1}, "u": {"rank": 1}}, geo_kernel="fused", **base)  # K + P' = 4
     with pytest.raises(ValueError, match="one to four per-point vectors"):
-        ISLA(boundary_inputs={"trac": {"rank": 1}, "disp": {"rank": 1}, "u": {"rank": 1}, "v": {"rank": 1}}, geo_kernel="fused", **base)
+        ISLA(boundary_schema={"trac": {"rank": 1}, "disp": {"rank": 1}, "u": {"rank": 1}, "v": {"rank": 1}}, geo_kernel="fused", **base)
     with pytest.raises(ValueError, match="does not support rank-2"):
-        ISLA(interior=True, query_inputs={"S": {"rank": 2}}, geo_kernel="fused", **base)
+        ISLA(interior=True, query_schema={"S": {"rank": 2}}, geo_kernel="fused", **base)
     ### rank-0 inputs never touch the geometry region: the fused kernel stays available
-    ISLA(boundary_inputs={"tag": {"rank": 0}}, geo_kernel="fused", **base)
-    m = ISLA(interior=True, query_inputs={"S": {"rank": 2}}, **base)
+    ISLA(boundary_schema={"tag": {"rank": 0}}, geo_kernel="fused", **base)
+    m = ISLA(interior=True, query_schema={"S": {"rank": 2}}, **base)
     assert m.geo_kernel == "auto"
     assert m.resolve_geo_kernel(torch.zeros(1, 4, 3)) == "eager"
 
@@ -241,7 +241,7 @@ def test_rank0_query_inputs_are_scaled_by_the_gauge():
     fields are never scaled (they are physical vectors, not lengths) and a rescale
     of the geometry alone changes the output. The scaled pair takes two embedding
     channels per rank-0 field, after the built-in distance pair."""
-    m = _model(interior=True, query_inputs={"sdf": {"rank": 0}, "u": {"rank": 1}})
+    m = _model(interior=True, query_schema={"sdf": {"rank": 0}, "u": {"rank": 1}})
     assert m.qin.n_features == 2 + (2 + 1) and m.qt.embed[0].in_features == 2 + m.qin.n_features
     pts, nrm, w, _ = cloud(60)
     mesh = soup(pts, nrm, w)
@@ -269,8 +269,8 @@ def test_rank0_query_inputs_are_scaled_by_the_gauge():
 def test_geo_checkpoint_is_exact_with_tensor_inputs():
     """The recompute path carries the extra vectors and quadratic forms bitwise."""
     torch.manual_seed(0)
-    ref = _model(interior=True, boundary_inputs=BIN, query_inputs=QIN)
-    ckp = _model(interior=True, boundary_inputs=BIN, query_inputs=QIN, geo_checkpoint=True)
+    ref = _model(interior=True, boundary_schema=BIN, query_schema=QIN)
+    ckp = _model(interior=True, boundary_schema=BIN, query_schema=QIN, geo_checkpoint=True)
     ckp.load_state_dict(ref.state_dict())
     pts, nrm, w, _ = cloud(50)
     q, _, _, _ = cloud(9, seed=1)

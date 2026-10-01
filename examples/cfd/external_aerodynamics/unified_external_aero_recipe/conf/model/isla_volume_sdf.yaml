@@ -28,6 +28,6 @@ defaults:
   - isla_volume
 
 model:
-  query_inputs:
+  query_schema:
     sdf: {rank: 0}               # rank-0 per-point input: a length, scaled by the frame's length unit inside the model
     sdf_normals: {rank: 1}       # rank-1 per-point input: the stored SDF gradient, never scaled

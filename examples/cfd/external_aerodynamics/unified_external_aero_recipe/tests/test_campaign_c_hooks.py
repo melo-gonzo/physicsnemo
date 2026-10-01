@@ -52,8 +52,8 @@ def test_constant_cell_field_survives_cell_slicing():
 def test_initialize_from_checkpoint_loads_weights_only(tmp_path):
     torch.manual_seed(0)
     src = ISLA(
-        outputs={"p": {"rank": 0}, "v": {"rank": 1}},
-        global_inputs={"g": {"rank": 1}},
+        output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+        global_schema={"g": {"rank": 1}},
         hidden=32,
         n_layers=2,
         n_slices=8,
@@ -63,8 +63,8 @@ def test_initialize_from_checkpoint_loads_weights_only(tmp_path):
     assert saved, "save_checkpoint wrote no .mdlus file"
     torch.manual_seed(1)
     dst = ISLA(
-        outputs={"p": {"rank": 0}, "v": {"rank": 1}},
-        global_inputs={"g": {"rank": 1}},
+        output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+        global_schema={"g": {"rank": 1}},
         hidden=32,
         n_layers=2,
         n_slices=8,
@@ -79,16 +79,16 @@ def test_initialize_from_checkpoint_loads_weights_only(tmp_path):
 
 def test_initialize_from_checkpoint_rejects_architecture_mismatch(tmp_path):
     src = ISLA(
-        outputs={"p": {"rank": 0}, "v": {"rank": 1}},
-        global_inputs={"g": {"rank": 1}},
+        output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+        global_schema={"g": {"rank": 1}},
         hidden=32,
         n_layers=2,
         n_slices=8,
     )
     save_checkpoint(str(tmp_path), models=src, epoch=1)
     other = ISLA(
-        outputs={"p": {"rank": 0}, "v": {"rank": 1}},
-        global_inputs={"g": {"rank": 1}},
+        output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+        global_schema={"g": {"rank": 1}},
         hidden=48,
         n_layers=2,
         n_slices=8,

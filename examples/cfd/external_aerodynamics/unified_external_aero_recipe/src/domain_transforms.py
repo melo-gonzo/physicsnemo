@@ -634,8 +634,9 @@ class SetConstantCellField(MeshTransform):
     YAML (e.g. ``0.0`` in the DrivAerML pipeline, ``1.0`` in the SHIFT-SUV
     pipelines) and rides along into ``boundaries.<name>.cell_data`` like
     ``normals``.  Transfer-program campaign C (T1, complete conditioning):
-    lets ISLA read it as a rank-0 boundary input (``boundary_inputs: {cond: {rank: 0}}``
-    with ``forward_kwargs.boundary_inputs.cond`` pointing at the field) and
+    lets ISLA read it as a rank-0 boundary input
+    (``boundary_schema: {cond: {rank: 0}}``, read from each boundary mesh's
+    ``cell_data``) and
     GeoTransolver / Transolver as an extra per-point functional channel
     (append the field to ``forward_kwargs.local_embedding`` and raise
     ``functional_dim`` by one).  A scalar is an invariant, so every ISLA
@@ -671,8 +672,8 @@ class StackScalarFields(MeshTransform):
     ``fields: [bc_disp_x, bc_disp_y]`` (each ``(N,)`` or ``(N, 1)``) becomes
     ``output_field`` of shape ``(N, 3)`` with a zero third component: how a planar
     dataset that stored a boundary vector component by component presents it as
-    ONE rank-1 field to a model with tensor-valued inputs (ISLA's
-    ``boundary_inputs``). ``association`` is ``"cell_data"`` or ``"point_data"``.
+    ONE rank-1 field to a model with tensor-valued inputs (a field of ISLA's
+    ``boundary_schema``). ``association`` is ``"cell_data"`` or ``"point_data"``.
     The source fields are kept.
     """
 

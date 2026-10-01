@@ -348,9 +348,9 @@ One case per call, no batch axis. From each boundary Mesh the model reads
 the cell centroids, cell normals and cell measures (the Horvitz-Thompson
 corrected `cell_data._effective_measure` when present, else the geometric
 cell area); the problem's data enter as named fields of declared tensor
-rank (`global_inputs` from `global_data`, `boundary_inputs` from each
-boundary's `cell_data`, `query_inputs` from the prediction Mesh's
-`point_data`). Two contracts hold by construction rather than by
+rank (`global_schema` fields from `global_data`, `boundary_schema` fields
+from each boundary's `cell_data`, `query_schema` fields from the prediction
+Mesh's `point_data`). Two contracts hold by construction rather than by
 augmentation: rotation, reflection and translation covariance (the backbone
 sees only invariants of the per-point vector set; the frame is re-attached
 at the heads), and measure-aware routing (slice states are
@@ -394,8 +394,8 @@ forward_kwargs:
     vehicle: boundaries.vehicle
   global_data: global_data
 model:
-  outputs: {pressure: {rank: 0}, wss: {rank: 1}}
-  global_inputs: {U_inf_dir: {rank: 1}}
+  output_schema: {pressure: {rank: 0}, wss: {rank: 1}}
+  global_schema: {U_inf_dir: {rank: 1}}
 ```
 
 A surface task (`interior: false`, the default) predicts at the boundary
@@ -407,11 +407,11 @@ the dataset's interior point-cloud Mesh; the prediction points join the
 encoder as interacting tokens and each one's signed distance to the nearest
 boundary token and direction to it are computed inside the model, never
 read from the dataset. `isla_volume_sdf.yaml` declares the dataset's stored
-`sdf` (rank 0) and `sdf_normals` (rank 1) as `query_inputs`, read from
+`sdf` (rank 0) and `sdf_normals` (rank 1) as `query_schema` fields, read from
 `interior.point_data`, for the internal-versus-stored geometry measurement.
 
 `global_data` is passed through whole; the model selects the leaves it
-declares under `global_inputs` by name (`U_inf_dir`, the unit freestream
+declares under `global_schema` by name (`U_inf_dir`, the unit freestream
 direction that `ComputeFreestreamDirection` writes in the dataset YAMLs;
 `U_inf` stays physical, so inference-side re-dimensionalization is
 unaffected) and ignores the rest. External aerodynamics has this one global
@@ -436,13 +436,13 @@ remove the old key; rename centroid `_target_quadrature_measure` to
 [mesh calculus documentation](../../../../docs/api/mesh/calculus.rst)
 provides conversion examples.
 
-**Fields of declared rank.** The model YAML declares `outputs:` (the
+**Fields of declared rank.** The model YAML declares `output_schema:` (the
 dataset's target names with their ranks: `pressure: {rank: 0}`, `wss: {rank: 1}`,
-`stress: {rank: 2, symmetric: true}`; a bare integer is not a rank spec), `global_inputs:` (rank 1 = a global
+`stress: {rank: 2, symmetric: true}`; a bare integer is not a rank spec), `global_schema:` (rank 1 = a global
 direction, normalized inside the model; rank 0 = a PDE parameter),
-`boundary_inputs:` (per-cell fields of rank 0 to 2 read from every boundary
+`boundary_schema:` (per-cell fields of rank 0 to 2 read from every boundary
 Mesh's `cell_data`: a condition tag, a prescribed traction as a rank-1
-field, a prescribed stress as a rank-2 field) and `query_inputs:`
+field, a prescribed stress as a rank-2 field) and `query_schema:`
 (per-prediction-point fields of rank 0 to 2 read from the prediction Mesh's
 `point_data`). A name may be dotted for a nested leaf. Every input enters
 through invariants and every output leaves through an equivariant basis, so

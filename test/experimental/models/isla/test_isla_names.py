@@ -16,7 +16,7 @@
 
 """Nested field names.
 
-A field in ``outputs``, ``boundary_inputs``, ``query_inputs`` or ``global_inputs``
+A field in ``output_schema``, ``boundary_schema``, ``query_schema`` or ``global_schema``
 is declared in the shared rank-spec grammar (:mod:`physicsnemo.mesh.fields`): a
 dotted flat name (``"surface.pressure"``) and a nested group (``{"surface":
 {"pressure": {"rank": 0}}}``) declare the same field. The output Mesh's ``point_data`` nests
@@ -56,9 +56,9 @@ OUTPUTS = {
 def _model(**kw):
     torch.manual_seed(0)
     base = dict(
-        outputs=OUTPUTS,
-        global_inputs={"conditions.freestream": {"rank": 1}, "conditions.re": {"rank": 0}},
-        boundary_inputs={"bc.trace": {"rank": 0}, "bc.traction": {"rank": 1}},
+        output_schema=OUTPUTS,
+        global_schema={"conditions.freestream": {"rank": 1}, "conditions.re": {"rank": 0}},
+        boundary_schema={"bc.trace": {"rank": 0}, "bc.traction": {"rank": 1}},
         hidden=32,
         n_layers=1,
         n_slices=8,
@@ -89,7 +89,7 @@ def test_outputs_are_nested_point_data():
         ".".join(k) if isinstance(k, tuple) else k for k in pd.keys(include_nested=True, leaves_only=True)
     ) == ["nut", "solid.stress", "surface.pressure", "surface.wall_shear"]
     ### the flat view carries the declared names back
-    assert set(pd.flatten_keys(".").keys()) == set(m.output_specs)
+    assert set(pd.flatten_keys(".").keys()) == set(m.output_schema)
     ### the selected global data ride onto the output, nested
     assert out.global_data["conditions", "re"].shape == ()
 
@@ -98,14 +98,14 @@ def test_nested_and_dotted_declarations_are_the_same_model():
     """A nested group in the constructor and the dotted flat names declare the same
     fields, in the same order, with the same parameters."""
     nested = _model(
-        outputs={"surface": {"pressure": {"rank": 0}, "wall_shear": {"rank": 1}}, "solid": {"stress": {"rank": 2, "symmetric": True}}, "nut": {"rank": 0}},
-        global_inputs={"conditions": {"freestream": {"rank": 1}, "re": {"rank": 0}}},
-        boundary_inputs={"bc": {"trace": {"rank": 0}, "traction": {"rank": 1}}},
+        output_schema={"surface": {"pressure": {"rank": 0}, "wall_shear": {"rank": 1}}, "solid": {"stress": {"rank": 2, "symmetric": True}}, "nut": {"rank": 0}},
+        global_schema={"conditions": {"freestream": {"rank": 1}, "re": {"rank": 0}}},
+        boundary_schema={"bc": {"trace": {"rank": 0}, "traction": {"rank": 1}}},
     )
     flat = _model()
-    assert nested.output_specs == flat.output_specs
-    assert nested.boundary_specs == flat.boundary_specs
-    assert nested.global_specs == flat.global_specs
+    assert nested.output_schema == flat.output_schema
+    assert nested.boundary_schema == flat.boundary_schema
+    assert nested.global_schema == flat.global_schema
     assert nested.head.out_features == flat.head.out_features
 
 
@@ -135,11 +135,11 @@ def test_mixed_flat_and_nested_names_and_the_interior_task():
     pts, nrm, w, drv = _boundary()
     q = torch.randn(12, 3, dtype=D) * 2.0
     m = _model(
-        outputs={"pressure": {"rank": 0}, "flow.velocity": {"rank": 1}},
-        global_inputs={"freestream": {"rank": 1}},
-        boundary_inputs=None,
+        output_schema={"pressure": {"rank": 0}, "flow.velocity": {"rank": 1}},
+        global_schema={"freestream": {"rank": 1}},
+        boundary_schema=None,
         interior=True,
-        query_inputs={"geometry.sdf": {"rank": 0}, "geometry.grad": {"rank": 1}},
+        query_schema={"geometry.sdf": {"rank": 0}, "geometry.grad": {"rank": 1}},
     )
     qi = {"geometry": {"sdf": torch.rand(12, dtype=D), "grad": torch.randn(12, 3, dtype=D)}}
     with torch.no_grad():
@@ -159,7 +159,7 @@ def test_covariance_holds_on_the_nested_values():
     def call(R, t):
         with torch.no_grad():
             return m(
-                boundary_meshes={"wall": transform(mesh, R, t, specs=m.boundary_specs)},
+                boundary_meshes={"wall": transform(mesh, R, t, specs=m.boundary_schema)},
                 global_data={"conditions": {"freestream": drv @ R.T, "re": torch.tensor(1.0, dtype=D)}},
             ).point_data
 
@@ -173,15 +173,15 @@ def test_covariance_holds_on_the_nested_values():
 def test_name_grammar_is_validated():
     base = dict(hidden=32, n_layers=1, n_slices=8)
     with pytest.raises(ValueError, match="is a group of"):
-        ISLA(outputs={"surface": {"rank": 0}, "surface.pressure": {"rank": 0}}, **base)
+        ISLA(output_schema={"surface": {"rank": 0}, "surface.pressure": {"rank": 0}}, **base)
     with pytest.raises(ValueError, match="empty path component"):
-        ISLA(outputs={"surface..pressure": {"rank": 0}}, **base)
+        ISLA(output_schema={"surface..pressure": {"rank": 0}}, **base)
     with pytest.raises(ValueError, match="empty path component"):
-        ISLA(outputs={"surface.": {"rank": 0}}, **base)
+        ISLA(output_schema={"surface.": {"rank": 0}}, **base)
     with pytest.raises(ValueError, match="more than once"):
-        ISLA(outputs={"surface.pressure": {"rank": 0}, "surface": {"pressure": {"rank": 0}}}, **base)
+        ISLA(output_schema={"surface.pressure": {"rank": 0}, "surface": {"pressure": {"rank": 0}}}, **base)
     ### forward-time names must match the declared dotted names
-    m = ISLA(outputs={"p": {"rank": 0}}, boundary_inputs={"bc.trace": {"rank": 0}}, **base).double()
+    m = ISLA(output_schema={"p": {"rank": 0}}, boundary_schema={"bc.trace": {"rank": 0}}, **base).double()
     pts, nrm, w, _ = _boundary()
     with pytest.raises(ValueError, match="missing the declared fields \\['bc.trace'\\]"):
         m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data={"trace": w})})
@@ -195,5 +195,5 @@ def test_checkpoint_round_trip_keeps_dotted_names(tmp_path):
     m = _model()
     m.save(tmp_path / "m.mdlus")
     m2 = Module.from_checkpoint(str(tmp_path / "m.mdlus")).double().eval()
-    assert list(m2.output_specs) == list(m.output_specs)
-    assert list(m2.boundary_specs) == ["bc.trace", "bc.traction"]
+    assert list(m2.output_schema) == list(m.output_schema)
+    assert list(m2.boundary_schema) == ["bc.trace", "bc.traction"]

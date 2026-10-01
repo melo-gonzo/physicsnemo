@@ -69,9 +69,9 @@ def _globals(K):
     return {f"g{k}": {"rank": 1} for k in range(K)}
 
 
-def _model(K=1, outputs=OUTPUTS, **kw):
+def _model(K=1, output_schema=OUTPUTS, **kw):
     torch.manual_seed(0)
-    base = dict(hidden=32, n_layers=2, n_slices=8, outputs=outputs, global_inputs=_globals(K))
+    base = dict(hidden=32, n_layers=2, n_slices=8, output_schema=output_schema, global_schema=_globals(K))
     base.update(kw)
     return ISLA(**base).double().eval()
 
@@ -121,7 +121,7 @@ def test_coefficient_counts_match_the_docstring(K):
 
 def test_minimal_head_width():
     """One scalar and one true vector over K = 1: a head of width 1 + 5."""
-    m = _model(1, outputs={"p": {"rank": 0}, "v": {"rank": 1}})
+    m = _model(1, output_schema={"p": {"rank": 0}, "v": {"rank": 1}})
     assert m.head.out_features == 6
 
 
@@ -153,7 +153,7 @@ def test_covariance_of_every_rank_and_parity(K, improper):
         R = orthogonal(3, seed, improper)
         assert (torch.det(R) < 0) == improper
         out = _forward(m, mesh, drv, K, R=R, shift=shift)
-        for name, spec in m.output_specs.items():
+        for name, spec in m.output_schema.items():
             assert torch.allclose(out[name], _transform(base[name], R, spec), atol=1e-11), (name, K, improper)
 
 
@@ -200,36 +200,36 @@ def test_rank_spec_grammar_is_validated():
     """The shared grammar (FieldSchema.parse) validates the fields; ISLA adds its
     rank ceilings and the refusal of pseudotensor inputs. A bare integer is not a
     field declaration."""
-    base = dict(hidden=32, n_layers=1, n_slices=8, global_inputs={"g": {"rank": 1}})
+    base = dict(hidden=32, n_layers=1, n_slices=8, global_schema={"g": {"rank": 1}})
     with pytest.raises(NotImplementedError, match="rank 5 is not supported"):
-        ISLA(outputs={"x": {"rank": 5}}, **base)
+        ISLA(output_schema={"x": {"rank": 5}}, **base)
     with pytest.raises(ValueError, match="unknown keys"):
-        ISLA(outputs={"x": {"rank": 1, "parity_odd": True}}, **base)
+        ISLA(output_schema={"x": {"rank": 1, "parity_odd": True}}, **base)
     with pytest.raises(TypeError, match="bool"):
-        ISLA(outputs={"x": True}, **base)
-    with pytest.raises(TypeError, match="outputs\\['x'\\] must be a RankSpec or a mapping"):
-        ISLA(outputs={"x": 0}, **base)
-    with pytest.raises(TypeError, match="global_inputs\\['g'\\] must be a RankSpec or a mapping"):
-        ISLA(outputs={"x": {"rank": 0}}, hidden=32, n_layers=1, n_slices=8, global_inputs={"g": 1})
+        ISLA(output_schema={"x": True}, **base)
+    with pytest.raises(TypeError, match="output_schema\\['x'\\] must be a RankSpec or a mapping"):
+        ISLA(output_schema={"x": 0}, **base)
+    with pytest.raises(TypeError, match="global_schema\\['g'\\] must be a RankSpec or a mapping"):
+        ISLA(output_schema={"x": {"rank": 0}}, hidden=32, n_layers=1, n_slices=8, global_schema={"g": 1})
     with pytest.raises(ValueError, match="parity must be"):
-        ISLA(outputs={"x": {"rank": 1, "parity": "mixed"}}, **base)
+        ISLA(output_schema={"x": {"rank": 1, "parity": "mixed"}}, **base)
     with pytest.raises(ValueError, match="unknown keys \\['channels'\\]"):
-        ISLA(outputs={"x": {"rank": 0, "channels": 2}}, **base)
+        ISLA(output_schema={"x": {"rank": 0, "channels": 2}}, **base)
     with pytest.raises(ValueError, match="symmetric=True is only meaningful for rank >= 2"):
-        ISLA(outputs={"x": {"rank": 1, "symmetric": True}}, **base)
+        ISLA(output_schema={"x": {"rank": 1, "symmetric": True}}, **base)
     with pytest.raises(ValueError, match="at least one field"):
-        ISLA(outputs={}, **base)
+        ISLA(output_schema={}, **base)
     with pytest.raises(NotImplementedError, match="pseudotensor"):
-        ISLA(outputs={"p": {"rank": 0}}, boundary_inputs={"w": {"rank": 1, "parity": "odd"}}, **base)
+        ISLA(output_schema={"p": {"rank": 0}}, boundary_schema={"w": {"rank": 1, "parity": "odd"}}, **base)
     with pytest.raises(NotImplementedError, match="rank 3 is not supported"):
-        ISLA(outputs={"p": {"rank": 0}}, boundary_inputs={"T": {"rank": 3}}, **base)
+        ISLA(output_schema={"p": {"rank": 0}}, boundary_schema={"T": {"rank": 3}}, **base)
     with pytest.raises(NotImplementedError, match="rank 2 is not supported"):
-        ISLA(outputs={"p": {"rank": 0}}, hidden=32, n_layers=1, n_slices=8, global_inputs={"T": {"rank": 2}})
+        ISLA(output_schema={"p": {"rank": 0}}, hidden=32, n_layers=1, n_slices=8, global_schema={"T": {"rank": 2}})
     with pytest.raises(TypeError, match="mapping"):
-        ISLA(outputs=[0, 1], **base)
+        ISLA(output_schema=[0, 1], **base)
     ### a RankSpec instance is a leaf too
-    m = ISLA(outputs={"sig": RankSpec(2, symmetric=True)}, **base)
-    assert m.output_specs["sig"] == RankSpec(rank=2, symmetric=True, parity="even")
+    m = ISLA(output_schema={"sig": RankSpec(2, symmetric=True)}, **base)
+    assert m.output_schema["sig"] == RankSpec(rank=2, symmetric=True, parity="even")
 
 
 def test_rank_two_output_in_the_interior_task():
@@ -238,14 +238,14 @@ def test_rank_two_output_in_the_interior_task():
     mesh, drv = _boundary(200)
     q_pts, _, _, _ = cloud(50, seed=1)
     outputs_ = {"p": {"rank": 0}, "v": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}, "t": {"rank": 2}}
-    m = _model(1, outputs=outputs_, interior=True, query_inputs={"sdf": {"rank": 0}})
+    m = _model(1, output_schema=outputs_, interior=True, query_schema={"sdf": {"rank": 0}})
     q = points_mesh(q_pts, {"sdf": torch.rand(50, dtype=D)})
     base = _forward(m, mesh, drv, 1, q=q)
     assert base["sig"].shape == (50, 3, 3)
     for improper in (False, True):
         R = orthogonal(3, 3, improper)
         out = _forward(m, mesh, drv, 1, R=R, q=q)
-        for name, spec in m.output_specs.items():
+        for name, spec in m.output_schema.items():
             assert torch.allclose(out[name], _transform(base[name], R, spec), atol=1e-11), (name, improper)
 
 
@@ -266,7 +266,7 @@ def test_checkpoint_round_trip_keeps_the_specs(tmp_path):
     m = _model(1)
     m.save(tmp_path / "m.mdlus")
     m2 = Module.from_checkpoint(str(tmp_path / "m.mdlus")).double().eval()
-    assert m2.output_specs == m.output_specs and m2.global_specs == m.global_specs
+    assert m2.output_schema == m.output_schema and m2.global_schema == m.global_schema
     mesh, drv = _boundary(64)
     a, b = _forward(m, mesh, drv, 1), _forward(m2, mesh, drv, 1)
     assert all(torch.equal(a[k], b[k]) for k in a)
@@ -281,7 +281,7 @@ def test_fused_kernel_does_not_touch_the_heads():
     outputs_ = {"p": {"rank": 0}, "v": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}}
     outs = []
     for kernel in ("eager", "fused"):
-        m = _model(1, outputs=outputs_, geo_kernel=kernel).cuda()
+        m = _model(1, output_schema=outputs_, geo_kernel=kernel).cuda()
         outs.append({k: v.cpu() for k, v in _forward(m, mesh.to("cuda"), drv.cuda(), 1).items()})
     for k in outs[0]:
         assert torch.allclose(outs[0][k], outs[1][k], atol=1e-10), k

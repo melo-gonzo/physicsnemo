@@ -29,7 +29,7 @@ def _problem(n=300, seed=0):
     return soup(r, nrm, w), drv
 
 
-KW = dict(outputs={"p": {"rank": 0}, "v": {"rank": 1}}, global_inputs={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8)
+KW = dict(output_schema={"p": {"rank": 0}, "v": {"rank": 1}}, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8)
 
 
 def test_centered_prototypes_keep_every_contract():

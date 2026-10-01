@@ -29,7 +29,7 @@ leading batch dimension on every tensor.
 | symbol | shape | code | meaning |
 |---|---|---|---|
 | $x_i, n_i, w_i$ | $N{\times}3,\ N{\times}3,\ N$ | `cell_centroids`, `cell_normals`, `cell_measures` of the boundary meshes | sampled boundary positions, outward normals, the surface area each sample stands for (the cell's effective measure when the mesh carries one, else its geometric measure) |
-| $g_k$, $\sigma$ | $K{\times}3$, $S$ | `global_inputs` (rank 1, rank 0) | the problem's global directions and scalars, as named fields (external aerodynamics, the benchmark instance: $K = 1$, the far-field flow direction; $S = 0$ on the surface tasks, $S = 1$ on AirfRANS) |\n| $v_{ip}$, $T_{iq}$ | $N{\times}P{\times}3$, $N{\times}Q{\times}3{\times}3$ | `boundary_inputs`, `query_inputs` (rank 1, rank 2) | per-token tensor inputs (a prescribed traction, a prescribed stress); $P = Q = 0$ on the aerodynamic tasks |
+| $g_k$, $\sigma$ | $K{\times}3$, $S$ | `global_schema` (rank 1, rank 0) | the problem's global directions and scalars, as named fields (external aerodynamics, the benchmark instance: $K = 1$, the far-field flow direction; $S = 0$ on the surface tasks, $S = 1$ on AirfRANS) |\n| $v_{ip}$, $T_{iq}$ | $N{\times}P{\times}3$, $N{\times}Q{\times}3{\times}3$ | `boundary_schema`, `query_schema` (rank 1, rank 2) | per-token tensor inputs (a prescribed traction, a prescribed stress); $P = Q = 0$ on the aerodynamic tasks |
 | $\hat g_k$, $\hat n_i$ | $K{\times}3$, $N{\times}3$ | `g_unit`, `n_hat` | the same directions and normals, normalized to unit length |
 | $L$ | scalar | `gauge` | the length unit: the measure-weighted RMS pairwise distance of the sample |
 | $r_i$ | $N{\times}3$ | `r` | position in length units, $x_i / L$; used only inside differences |
@@ -143,8 +143,8 @@ h_i \equiv \mathrm{MLP}_{\mathrm{embed}}(s_i),
 $$
 
 where $\beta_i$ are the invariants of the optional per-cell boundary
-inputs and $\sigma$ the global scalars, broadcast to every token. For
-`boundary_inputs`, a rank-0 field is its own scalar. A rank-1 field $v_i$
+inputs and $\sigma$ the global scalars, broadcast to every token. Of the
+`boundary_schema` fields, a rank-0 field is its own scalar. A rank-1 field $v_i$
 contributes $v_i \cdot \hat n_i$, $v_i \cdot \hat g_k$ and $\lvert v_i
 \rvert$. A rank-2 field contributes its frame contractions, trace and
 Frobenius norm (@sec-isla-inputs-rank). On the aerodynamic tasks of this
@@ -496,7 +496,7 @@ import torch
 from physicsnemo.experimental.models import ISLA
 cnt = lambda mod: sum(p.numel() for p in mod.parameters())
 widths = (192, 384)
-models = {w: ISLA(outputs={"pressure": {"rank": 0}, "wss": {"rank": 1}}, global_inputs={"freestream": {"rank": 1}}, hidden=w, n_layers=12, n_slices=256) for w in widths}
+models = {w: ISLA(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, global_schema={"freestream": {"rank": 1}}, hidden=w, n_layers=12, n_slices=256) for w in widths}
 def rows_for(m):
     blk = m.blocks[0]
     return [
@@ -580,8 +580,8 @@ flowchart LR
 **Prediction points as tokens** (`interior=True`;
 @sec-interior-query-tokens). Each prediction point $q$ arrives as a
 position $x_q$ (the `points` of the prediction `Mesh`, or a bare
-$Q{\times}3$ tensor) and whatever per-point fields were declared as
-`query_inputs` (its `point_data`). Its invariants need two more
+$Q{\times}3$ tensor) and whatever per-point fields were declared in
+`query_schema` (from its `point_data`). Its invariants need two more
 quantities: a direction to stand in for the normal, and a distance to the
 wall. Both are functions of the boundary sample and of $x_q$, and the model
 always computes them itself; they are never inputs. With $i^* \equiv
@@ -621,7 +621,7 @@ wall distance by up to about the sample spacing, and the direction deviates
 from the true gradient of the signed-distance field by the same order. Far
 from the wall both agree with the full-resolution field. A dataset that
 stores a full-mesh signed-distance field and its gradient passes them as
-ordinary declared `query_inputs` (a rank-0 and a rank-1 field, like any
+ordinary `query_schema` fields (a rank-0 and a rank-1 field, like any
 other PDE datum); the model's own geometry is computed regardless. What
 the sampled-boundary geometry costs against such a stored field is measured
 in @sec-nb-internal-geometry-verdict, and the tangent-plane distance that
@@ -990,10 +990,10 @@ above.
 | argument (default) | stage | what it sets |
 |---|---|---|
 | `hidden` (384), `n_layers` (12), `n_slices` (256), `mlp_ratio` (4); the defaults are the reference configuration, @sec-using-config | all | $d$, the number of slice layers, $M$, and the MLP expansion |
-| `outputs` (required) | 5 | the output fields by name and rank spec (`{pressure: {rank: 0}, wss: {rank: 1}, stress: {rank: 2, symmetric: true}}`; `parity: odd` for a pseudotensor); each field costs the coefficient count of @sec-arch-head and is returned as a leaf of the output Mesh's `point_data` under its name. A dotted name (`surface.pressure`) is a nested leaf of the output and, in any input mapping, of the input; every declared value is a `{rank: ...}` spec or a nested group (a mapping of mappings), and several independent scalars are several rank-0 names |
-| `global_inputs` (none) | 1, 2, 3d, 5 | the per-case fields by name and rank, read from `global_data`: each rank-1 field is a global direction $\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed |
-| `boundary_inputs` (none) | 2, 3d | per-cell fields by name and rank 0 to 2, read from every boundary mesh's `cell_data`: their invariants $\beta_i$ join the seed (prediction-point tokens carry zeros), and rank-1 and rank-2 fields add their contractions with $\hat\rho_{is}$ to the relational invariants (@sec-isla-inputs-rank) |
-| `query_inputs` (none) | interior | per-prediction-point fields by name and rank 0 to 2 (a material label, a source term, a stored signed distance and its gradient), read from the prediction Mesh's `point_data` and carried by the prediction-point tokens through their own embedding after the built-in distance channel; rank-0 fields are divided by $L$ and paired with a signed log |
+| `output_schema` (required) | 5 | the output fields by name and rank spec (`{pressure: {rank: 0}, wss: {rank: 1}, stress: {rank: 2, symmetric: true}}`; `parity: odd` for a pseudotensor); each field costs the coefficient count of @sec-arch-head and is returned as a leaf of the output Mesh's `point_data` under its name. A dotted name (`surface.pressure`) is a nested leaf of the output and, in any input mapping, of the input; every declared value is a `{rank: ...}` spec or a nested group (a mapping of mappings), and several independent scalars are several rank-0 names |
+| `global_schema` (none) | 1, 2, 3d, 5 | the per-case fields by name and rank, read from `global_data`: each rank-1 field is a global direction $\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed |
+| `boundary_schema` (none) | 2, 3d | per-cell fields by name and rank 0 to 2, read from every boundary mesh's `cell_data`: their invariants $\beta_i$ join the seed (prediction-point tokens carry zeros), and rank-1 and rank-2 fields add their contractions with $\hat\rho_{is}$ to the relational invariants (@sec-isla-inputs-rank) |
+| `query_schema` (none) | interior | per-prediction-point fields by name and rank 0 to 2 (a material label, a source term, a stored signed distance and its gradient), read from the prediction Mesh's `point_data` and carried by the prediction-point tokens through their own embedding after the built-in distance channel; rank-0 fields are divided by $L$ and paired with a signed log |
 | `interior` (`False`) | modes | the task: `False` predicts at the boundary cells and takes no prediction points; `True` predicts at the prediction points, which join the encoder as interacting tokens with the built-in nearest-boundary direction and signed distance (@sec-arch-modes) |
 | `geo_kernel` (`None`, automatic), `geo_checkpoint` (off) | 3c–3e, 3h | how the geometry region is executed: `None` resolves at the first forward pass to `"fused"` (the Triton kernel) when the inputs are on CUDA, Triton is importable, the global directions and rank-1 per-token inputs together number one to four, there are at most 1,024 slices and no rank-2 per-token input, and to `"eager"` (the PyTorch region) otherwise; either name forces that path, and `"fused"` raises where its constraints fail. `geo_checkpoint` rebuilds the eager region in backward instead of storing it. Neither changes the function computed beyond roundoff |
 | `interior_nn_chunk` (`None`) | interior | prediction points per block of the exact nearest-neighbour search's float64 fallback; `None` derives it from a fixed byte budget. Cost only, never the result |

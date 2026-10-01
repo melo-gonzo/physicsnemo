@@ -48,7 +48,7 @@ from test.experimental.models.isla._meshes import outputs, soup
 DATA_DIR = Path(__file__).parent / "data"
 
 #: Every configuration declares one scalar and one vector output and one global direction.
-IO = dict(outputs={"p": {"rank": 0}, "v": {"rank": 1}}, global_inputs={"g": {"rank": 1}})
+IO = dict(output_schema={"p": {"rank": 0}, "v": {"rank": 1}}, global_schema={"g": {"rank": 1}})
 
 #: One small configuration in its two task structures (a surface task and an interior
 #: task; the constructor's ``interior`` flag).
@@ -125,8 +125,8 @@ def _assert_dict_close(out: dict, ref: dict, atol: float, rtol: float) -> None:
 def test_isla_constructor_attributes(config):
     if config == "minimal":
         m = ISLA(**IO)
-        assert list(m.output_specs) == ["p", "v"]
-        assert (m.output_specs["p"].rank, m.output_specs["v"].rank) == (0, 1)
+        assert list(m.output_schema) == ["p", "v"]
+        assert (m.output_schema["p"].rank, m.output_schema["v"].rank) == (0, 1)
         assert m.n_head_coeffs == 1 + 5  # a scalar and a true vector over m = 5
         assert m.n_slices == 256
         assert len(m.blocks) == 12
@@ -135,11 +135,11 @@ def test_isla_constructor_attributes(config):
         assert m.slice_prototypes == "static"
         assert m.interior is False and m.qt is None
         assert m.n_global_vectors == 1 and m.n_global_scalars == 0
-        assert m.boundary_specs == {} and m.query_specs == {}
+        assert m.boundary_schema == {} and m.query_schema == {}
         assert m.eps == 1e-12
     else:
         m = ISLA(
-            outputs={
+            output_schema={
                 "p": {"rank": 0},
                 "q": {"rank": 0},
                 "nut": {"rank": 0},
@@ -147,9 +147,9 @@ def test_isla_constructor_attributes(config):
                 "tau": {"rank": 1},
                 "stress": {"rank": 2, "symmetric": True},
             },
-            global_inputs={"g1": {"rank": 1}, "g2": {"rank": 1}, "re": {"rank": 0}},
-            boundary_inputs={"trace": {"rank": 0}, "traction": {"rank": 1}},
-            query_inputs={"sdf": {"rank": 0}},
+            global_schema={"g1": {"rank": 1}, "g2": {"rank": 1}, "re": {"rank": 0}},
+            boundary_schema={"trace": {"rank": 0}, "traction": {"rank": 1}},
+            query_schema={"sdf": {"rank": 0}},
             interior=True,
             hidden=64,
             n_layers=3,
@@ -159,13 +159,13 @@ def test_isla_constructor_attributes(config):
             slice_prototypes="centered",
             eps=1e-8,
         )
-        assert len(m.output_specs) == 6 and m.output_specs["stress"].symmetric
+        assert len(m.output_schema) == 6 and m.output_schema["stress"].symmetric
         assert m.n_slices == 16
         assert len(m.blocks) == 3 and all(b.geo_checkpoint for b in m.blocks)
         assert m.geo_kernel == "eager"
         assert m.n_global_vectors == 2 and m.n_global_scalars == 1
-        assert list(m.boundary_specs) == ["trace", "traction"]
-        assert list(m.query_specs) == ["sdf"]
+        assert list(m.boundary_schema) == ["trace", "traction"]
+        assert list(m.query_schema) == ["sdf"]
         assert m.interior is True and m.qt is not None
         assert m.slice_prototypes == "centered"
         assert m.eps == 1e-8
@@ -247,7 +247,7 @@ def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
     model.save(path)
     loaded = Module.from_checkpoint(str(path)).to(device).eval()
     assert isinstance(loaded, ISLA)
-    for name in ("n_slices", "geo_kernel", "slice_prototypes", "interior", "n_global_vectors", "output_specs", "global_specs"):
+    for name in ("n_slices", "geo_kernel", "slice_prototypes", "interior", "n_global_vectors", "output_schema", "global_schema"):
         assert getattr(loaded, name) == getattr(model, name), name
     with torch.no_grad():
         _assert_dict_close(outputs(loaded(**inputs)), outputs(model(**inputs)), atol=0.0, rtol=0.0)
@@ -262,7 +262,7 @@ def test_isla_reference_checkpoint_matches_golden(device):
         raise IOError(f"Reference checkpoint {ckpt} was missing and has been created; commit it and re-run.")
     model = Module.from_checkpoint(str(ckpt)).to(device).eval()
     assert isinstance(model, ISLA)
-    assert model.n_slices == 8 and model.geo_kernel == "eager" and list(model.output_specs) == ["p", "v"]
+    assert model.n_slices == 8 and model.geo_kernel == "eager" and list(model.output_schema) == ["p", "v"]
     assert model.interior is False
     inputs = _make_inputs(device)
     with torch.no_grad():
@@ -270,6 +270,18 @@ def test_isla_reference_checkpoint_matches_golden(device):
     ref = _load_or_create_reference("isla_default_checkpoint_output_v1.pth", out)
     tol = 1e-5 if device == "cpu" else 1e-4
     _assert_dict_close(out, ref, atol=tol, rtol=tol)
+
+
+def test_isla_0_1_0_checkpoint_declarations_are_renamed():
+    """The reference checkpoint is a 0.1.0 one (``outputs``, ``global_inputs``, ...):
+    it loads through the backward-compatibility mapper, which renames the field
+    declarations to ``output_schema``, ``global_schema`` and so on."""
+    ckpt = DATA_DIR / "isla_default_v1.mdlus"
+    with pytest.warns(UserWarning, match="0.1.0 ISLA checkpoint"):
+        model = Module.from_checkpoint(str(ckpt))
+    assert list(model.output_schema) == ["p", "v"] and list(model.global_schema) == ["g"]
+    assert model.boundary_schema == {} and model.query_schema == {}
+    assert ISLA.__model_checkpoint_version__ == "0.2.0"
 
 
 def test_isla_unknown_constructor_argument_is_a_type_error():

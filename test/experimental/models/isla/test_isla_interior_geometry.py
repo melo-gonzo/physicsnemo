@@ -123,7 +123,7 @@ def test_geometry_is_differentiable_in_the_positions():
 
 def _model(**kw):
     torch.manual_seed(0)
-    return ISLA(outputs=PV, global_inputs={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True, **kw).double().eval()
+    return ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True, **kw).double().eval()
 
 
 def test_interior_contracts():
@@ -156,15 +156,15 @@ def test_interior_contracts():
 
 
 def test_stored_distance_is_an_ordinary_query_input():
-    """A dataset's stored signed distance (and its gradient) enter as declared
-    query_inputs of rank 0 and 1 from the prediction Mesh's point_data; the built-in
+    """A dataset's stored signed distance (and its gradient) enter as query_schema
+    fields of rank 0 and 1 from the prediction Mesh's point_data; the built-in
     geometry is computed regardless, so the two channels coexist and both are live."""
     pts, nrm, w, _ = cloud(120)
     mesh = soup(pts, nrm, w)
     drv = torch.tensor([0.3, 1.0, 0.2], dtype=D)
     q, _, _, _ = cloud(25, seed=1, scale=(4.0, 4.0, 4.0))
     d, grad = nearest_boundary_geometry(q[None], pts[None], nrm[None])
-    m = _model(query_inputs={"geometry.sdf": {"rank": 0}, "geometry.grad": {"rank": 1}})
+    m = _model(query_schema={"geometry.sdf": {"rank": 0}, "geometry.grad": {"rank": 1}})
     assert m.qt.embed[0].in_features == 2 + (2 + (2 + 1))  # built-in pair, scaled scalar pair, vector cosines and norm
 
     def call(sdf, g):
@@ -196,7 +196,7 @@ def test_no_query_normals_argument():
 def test_fused_kernel_stays_available_with_the_built_in_distance():
     """The built-in distance enters the embedding, not the geometry region, so a model
     without rank-1 or rank-2 per-token inputs keeps the fused kernel."""
-    m = ISLA(outputs=PV, global_inputs={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True, geo_kernel="fused")
+    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True, geo_kernel="fused")
     assert m.n_query_builtin == 2 and m.qt.embed[0].in_features == 2
     assert not (m.n_block_vecs or m.n_block_tens)
 

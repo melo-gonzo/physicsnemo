@@ -70,8 +70,8 @@ fields at query points.** Per case, the inputs are:
   PDE, such as a diffusivity, a Reynolds number or a far-field speed. They
   are appended to the seed of every token. The surface tasks of this book
   have $S = 0$. The AirfRANS interior task has $S = 1$, the inlet speed.
-- Optionally, per-cell boundary data (`boundary_inputs`) and per-query
-  fields (`query_inputs`). The boundary data is whatever a boundary
+- Optionally, per-cell boundary data (declared in `boundary_schema`) and
+  per-query fields (declared in `query_schema`). The boundary data is whatever a boundary
   condition prescribes at each cell, as named fields of declared tensor
   rank: a condition tag or a Dirichlet trace at rank 0, a prescribed
   traction at rank 1, a prescribed stress at rank 2. A per-query field is a
@@ -134,8 +134,8 @@ plt.show()
 ::: {.callout-note collapse="true" title="Tensor shapes and keyword names"}
 Every constructor argument and every `forward` input is keyword-only.
 Every field other than the geometry is *named* and carries a declared
-tensor rank. The constructor takes `outputs`, `global_inputs`,
-`boundary_inputs` and `query_inputs`. Each is a mapping from a field name
+tensor rank. The constructor takes `output_schema`, `global_schema`,
+`boundary_schema` and `query_schema`. Each is a mapping from a field name
 to a rank spec, the grammar every mesh model shares
 (`physicsnemo.mesh.fields.FieldSchema.parse`): a mapping `{rank, symmetric,
 parity}` whose `rank` is 0 for a scalar, 1 for a vector, 2 for a rank-2
@@ -145,10 +145,10 @@ tensor and `parity: odd` marks a pseudotensor output. One name declares one fiel
 scalars, such as a standardized parameter vector, are several rank-0 names.
 `forward` takes the boundary as `boundary_meshes`, a mapping from a name to
 a `Mesh` of codimension one whose cells are the tokens (centroid, normal
-and effective measure), with the `boundary_inputs` in each mesh's
-`cell_data`; the per-case `global_inputs` in `global_data`, a rank-1 field
+and effective measure), with the `boundary_schema` fields in each
+mesh's `cell_data`; the per-case `global_schema` fields in `global_data`, a rank-1 field
 a `(3,)` vector and a rank-0 field a scalar; and, on the interior task,
-`prediction_points`, a point cloud carrying the `query_inputs` in its
+`prediction_points`, a point cloud carrying the `query_schema` fields in its
 `point_data`. It returns a point-cloud `Mesh` with the outputs in its
 `point_data`, `(N,)`, `(N, 3)` or `(N, 3, 3)` by rank. A prediction point's
 direction and signed wall distance are computed inside the model from the
