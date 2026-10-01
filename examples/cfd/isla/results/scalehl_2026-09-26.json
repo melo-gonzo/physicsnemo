@@ -378,12 +378,12 @@
   "isla_cos_192_c200k": {
    "runs": {
     "sc_hl_cos_w192_med_c200k_seed42": {
-     "pressure_l2": 0.04090383726281005,
-     "temperature_l2": 0.0485161870185818,
-     "density_l2": 0.05427137883259105,
-     "velocity_l2": 0.061900202378437116,
-     "tau_wall_l2": 0.09193080944287313,
-     "n_cases": 77
+     "pressure_l2": 0.04324033089602987,
+     "temperature_l2": 0.048711839059574734,
+     "density_l2": 0.0586781886820164,
+     "velocity_l2": 0.06211554869595501,
+     "tau_wall_l2": 0.09473665919568804,
+     "n_cases": 180
     },
     "sc_hl_cos_w192_med_c200k_seed43": {
      "pressure_l2": 0.043438995857205655,
@@ -396,14 +396,14 @@
    },
    "n_seeds": 2,
    "seed_means": {
-    "pressure_l2": 0.04217141656000785,
-    "temperature_l2": 0.04866553965571617,
-    "density_l2": 0.056506544578629636,
-    "velocity_l2": 0.06171670608171416,
-    "tau_wall_l2": 0.09310610371522207
+    "pressure_l2": 0.043339663376617765,
+    "temperature_l2": 0.048763365676212644,
+    "density_l2": 0.05870994950334231,
+    "velocity_l2": 0.06182437924047311,
+    "tau_wall_l2": 0.09450902859162953
    },
    "pressure_l2_seeds": [
-    0.04090383726281005,
+    0.04324033089602987,
     0.043438995857205655
    ],
    "step_s_median": 0.2225,
@@ -482,7 +482,7 @@
   "cells_flat": {
    "isla_192_c100k_over_c200k": 0.15213557903008657,
    "isla_192_c100k_over_c200k_void": "the linear 200k arm averages a plateaued seed (p200k_hl_isla_medium_seed42, 0.594); void, see #sec-nb-p200k-hl-ladder-verdict",
-   "isla_cos_192_c100k_over_c200k": 1.0122513494562382,
+   "isla_cos_192_c100k_over_c200k": 0.9849655026250109,
    "gt_256_c100k_over_c200k_lr3e3": 0.9963831939676776,
    "gt_256_c100k_over_c200k_lr1e3": 1.002332365469507,
    "transolver_256_c100k_over_c200k": 0.9820942862920025,

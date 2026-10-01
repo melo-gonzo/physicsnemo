@@ -32125,7 +32125,7 @@ parallel), chained anatomy reduction 944510
 `results/wing_element_anatomy_2026-09-30.py`. Verdict follows in a
 separate entry; the ledger row WING-MECH carries the state.
 
-## 2026-10-01 — Verdict, SCALE-HL cells clause: ISLA cosine-192 at 100,000 cells scores 1.01 of its 200,000-cell twin on the 510-wing rung (0.0427 against 0.0422, two seeds), inside the 2% bar, so cells are flat above 100,000 for all three architectures on both datasets; a stale 9-case GeoTransolver-256 seed corrected (ratio 0.99 → 1.00) {#sec-nb-scalehl-cells-verdict}
+## 2026-10-01 — Verdict, SCALE-HL cells clause: ISLA cosine-192 at 100,000 cells scores 0.98 of its 200,000-cell twin on the 510-wing rung (0.0427 against 0.0433, two seeds; corrected the same day from 1.01 after a 77-of-180-case partial scoring was caught), inside the 2% bar, so cells are flat above 100,000 for all three architectures on both datasets; a stale 9-case GeoTransolver-256 seed corrected (ratio 0.99 → 1.00) {#sec-nb-scalehl-cells-verdict}
 
 **Setting.** SCALE-HL (@sec-nb-scalehl-prereg, verdict
 @sec-nb-scalehl-verdict) asked whether the DrivAerML scaling picture
@@ -32141,12 +32141,16 @@ cosine-192 lane at 100,000 cells on the same rung, both scored in float32
 at 200,000 cells on the 180 validation wings.
 
 **What we saw.** The cosine-192 lane at 100,000 cells scores **0.0427**
-(0.0433 / 0.0421) and at 200,000 cells **0.0422** (0.0409 / 0.0434), a
-ratio 100,000 ÷ 200,000 of **1.01**, inside the 2% bar; the seed spread
-at 200,000 (6%) is wider than the gap between the arms (1%), and the
-seeds cross (seed 43 is the better at 100,000 and the worse at 200,000).
-The 200,000-cell lane costs 0.222 s per step against 0.172 and 29.6 GB
-against 15.2 GB. Re-running the reducer over the current metrics files
+(0.0433 / 0.0421) and at 200,000 cells **0.0433** (0.0432 / 0.0434), a
+ratio 100,000 ÷ 200,000 of **0.98**, inside the 2% bar; the 200,000-cell
+seeds agree to 0.5% and the 100,000-cell pair brackets them. The
+200,000-cell lane costs 0.222 s per step against 0.172 and 29.6 GB
+against 15.2 GB. [Correction, same day: the first reduction read seed 42
+at 200,000 cells as 0.0409 from a metrics file the evaluator was still
+writing (77 of 180 cases) and reported the ratio as 1.01 with crossing
+seeds; the complete file gives 0.0432. The verdict does not move. The
+scored-lane waiter now requires the metrics file to be ten minutes
+quiet, and the fetch refreshes a local copy whose remote has more rows.] Re-running the reducer over the current metrics files
 also corrected the GeoTransolver-256 100,000-cell arm: the 2026-09-26
 artifact had averaged seed 42 over a 9-case partial scoring (0.0377); the
 full 180-case file gives 0.0385, so the arm is 0.0387 (not 0.0383), the
@@ -32157,7 +32161,7 @@ regenerated with the new arm `isla_cos_192_c200k` and the voided linear
 arm marked.
 
 **Reading.** **Cells are flat above 100,000 per case on the wings for
-all three architectures** (ISLA 1.01, GeoTransolver 1.00, Transolver
+all three architectures** (ISLA 0.98, GeoTransolver 1.00, Transolver
 0.98), as on DrivAerML (ISO-COST, @sec-nb-isocost-verdict). The reporting
 protocol's 200,000 cells buys no accuracy on either dataset over 100,000
 at 1.3 times the step time and twice the memory for ISLA; the ruling
