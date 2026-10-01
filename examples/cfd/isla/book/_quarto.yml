@@ -20,17 +20,19 @@ book:
     - part: "III. Evidence"
       chapters:
         - 07-surface-accuracy.qmd
-        - 08-discretization-and-pose.qmd
-        - 09-capacity-scaling-cost.qmd
-        - 10-boundary-to-interior.qmd
+        - 08-data-efficiency.qmd
+        - 09-discretization-and-pose.qmd
+        - 10-capacity-scaling-cost.qmd
+        - 11-boundary-to-interior.qmd
+        - 12-beyond-aero.qmd
     - part: "IV. Limits and status"
       chapters:
-        - 11-limits.qmd
-        - 12-program-status.qmd
+        - 13-limits.qmd
+        - 14-program-status.qmd
   appendices:
-    - 13-design-decisions.qmd
-    - 14-datasets.qmd
-    - 15-isla-vs-geotransolver.qmd
+    - 15-design-decisions.qmd
+    - 16-datasets.qmd
+    - 17-literature.qmd
     - 18-notebook.qmd
 
 execute:

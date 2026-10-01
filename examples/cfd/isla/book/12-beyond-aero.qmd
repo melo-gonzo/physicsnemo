@@ -1,0 +1,358 @@
+# Beyond external aerodynamics {#sec-beyond-aero}
+
+```{python}
+#| label: setup-beyond
+#| include: false
+import json, statistics, math
+from pathlib import Path
+import sys; sys.path.insert(0, ".")
+from palette import *
+RES = Path("..") / "results"
+J = lambda p: json.load(open(RES / p))
+mean = statistics.mean
+pct = lambda r: f"{abs(1 - r) * 100:.0f}%"
+lead = lambda r: f"{(r - 1) * 100:.0f}%"
+trail = lambda r: f"{(1 - r) * 100:.0f}%"
+```
+
+**Four datasets outside external aerodynamics exercise the parts of the
+interface the aerodynamic sets leave idle, and ISLA leads GeoTransolver-512
+where the target is a frame-free scalar and trails it where the target is a
+stress tensor.** The four are a generated bracket family under prescribed
+loads (DeepJEB++), two solids (PLAID Tensile2d, the GINOT bracket lug) and
+two fixed-mesh problems whose boundary conditions are randomly placed and
+labeled (the OLBC Poisson and elasticity sets); each is drawn on one sample
+in @sec-datasets-beyond-aero and converted as @sec-datasets-detail records.
+Protocol: @sec-protocol, float32, two seeds per cell, ISLA at the reference
+configuration against the parameter-matched GeoTransolver-512, and every
+ratio is GeoTransolver-512 ÷ ISLA, above one favoring ISLA.
+
+## DeepJEB++ brackets: a load direction instead of a freestream {#sec-surface-deepjeb}
+
+```{python}
+#| label: setup-deepjeb
+#| include: false
+JB = J("deepjeb_2026-09-22.json"); JBS = JB["summary"]
+JB_RUNGS = [("n256", 256, 500), ("n1024", 1024, 125), ("n4096", 4096, 32), ("full", 12451, 10)]
+JB_FIELDS = [("von_mises", "von Mises stress"), ("displacement", "displacement")]
+def jb_best(rung, f):
+    """The GeoTransolver arm with the lowest mean on this rung and field, as the preregistration specifies."""
+    cands = {a: JBS[f"{a}|{rung}"] for a in ("gt512", "gt512_lr3e3", "gt256") if f"{a}|{rung}" in JBS}
+    a = min(cands, key=lambda a: cands[a]["fields"][f]["mean"]); return a, cands[a]
+JB_NAME = {"gt512": "GeoTransolver-512 (1e-3)", "gt512_lr3e3": "GeoTransolver-512 (3e-3)", "gt256": "GeoTransolver-256 (1e-3)"}
+jb_ratio = {(rung, f): jb_best(rung, f)[1]["fields"][f]["mean"] / JBS[f"isla_r1|{rung}"]["fields"][f]["mean"]
+            for rung, _, _ in JB_RUNGS for f, _ in JB_FIELDS}
+```
+
+```{python}
+#| label: para-deepjeb-lede
+#| output: asis
+vm = [jb_ratio[(r, "von_mises")] for r, _, _ in JB_RUNGS]; dp = [jb_ratio[(r, "displacement")] for r, _, _ in JB_RUNGS]
+print(f"**On DeepJEB++, a surface task whose global vector is a load direction rather than a freestream, ISLA leads or ties the best "
+      f"GeoTransolver arm at every rung of an equal-step ladder on both fields: GeoTransolver ÷ ISLA {min(vm):.2f} to {max(vm):.2f} on von "
+      f"Mises stress and {min(dp):.2f} to {max(dp):.2f} on displacement over 256 to 12,451 training brackets.** DeepJEB++ "
+      "(@sec-datasets-beyond-aero) is a family of generated jet-engine brackets. Each is solved by linear static finite elements under four "
+      "load cases applied at the lug bore with the bolt holes clamped: three force directions and a torque about the lug axis. The "
+      "surface mesh carries the fixed and loaded labels and the traction as boundary scalars. The load direction enters ISLA as the one "
+      "global vector, and a force/torque one-hot enters as two global scalars (a moment axis is a pseudovector, so the model is told when the "
+      "vector is an axis). The targets are von Mises stress and displacement at the surface cells. The test set is 1,385 held-out "
+      "brackets under all four loads (5,540 files), scored in float32 over every surface cell. The ladder holds the optimizer-step "
+      "budget fixed at about 130,000 steps while the training set grows (500, 125, 32 and 10 epochs at 256, 1,024, 4,096 and 12,451 "
+      "brackets). It is therefore an equal-compute comparison at each rung and not a learning curve. Both architectures are flat above 1,024 "
+      "brackets at this budget, which says the models are step-limited there, and the data exponent is not readable from it "
+      "and the data exponent is not readable from it.")
+```
+
+```{python}
+#| label: tbl-deepjeb-surface
+#| output: asis
+def jbcell(g, f):
+    s = g["fields"][f]["seeds"]
+    return f"{g['fields'][f]['mean']:.3f}" + (" (one seed)" if len(s) == 1 else "")
+out = "| training brackets (epochs) | ISLA: von Mises / displacement | best GeoTransolver arm | its von Mises / displacement | GeoTransolver ÷ ISLA |\n|---:|---|---|---|---:|\n"
+for rung, n, ep in JB_RUNGS:
+    i = JBS[f"isla_r1|{rung}"]
+    a_vm, g_vm = jb_best(rung, "von_mises"); a_dp, g_dp = jb_best(rung, "displacement")
+    arm = JB_NAME[a_vm] if a_vm == a_dp else f"{JB_NAME[a_vm]} / {JB_NAME[a_dp]}"
+    out += (f"| {n:,} ({ep}) | {jbcell(i, 'von_mises')} / {jbcell(i, 'displacement')} | {arm} | {jbcell(g_vm, 'von_mises')} / "
+            f"{jbcell(g_dp, 'displacement')} | {jb_ratio[(rung, 'von_mises')]:.2f} / {jb_ratio[(rung, 'displacement')]:.2f} |\n")
+print(out)
+print(": DeepJEB++ at equal optimizer steps (about 130,000; epochs in parentheses): relative L2 of von Mises stress and displacement over "
+      "every surface cell, mean over the 5,540 clean test files, float32, two seeds unless marked. ISLA is the reference configuration "
+      "(384 x 12, 5e-4, the load direction as the global vector); the GeoTransolver column is the arm with the lowest mean on that rung "
+      "and field, as preregistered, among GeoTransolver-512 at 1e-3 and 3e-3 and GeoTransolver-256 at 1e-3 where they were run. How to read "
+      "this: the ratio is GeoTransolver ÷ ISLA, above one favoring ISLA. The rows are equal-compute standings, not a learning curve, and the "
+      "flatness above 1,024 brackets is the step budget. Data: results/deepjeb_2026-09-22.json; the notebook table of the same numbers is "
+      "@tbl-deepjeb-equalstep. {#tbl-deepjeb-surface}")
+```
+
+```{python}
+#| label: para-deepjeb-reading
+#| output: asis
+g512f = JBS["gt512|full"]["fields"]["von_mises"]["mean"]; g256f = JBS["gt256|full"]["fields"]["von_mises"]["mean"]
+g3 = JBS["gt512_lr3e3|full"]["fields"]["von_mises"]["mean"]; g1 = JBS["gt512|full"]["fields"]["von_mises"]["mean"]
+print(f"**Two things qualify every row of @tbl-deepjeb-surface.** Absolute errors are high for every model, a von Mises relative L2 near "
+      f"0.5, and that is the dataset: a census of the labels found unphysical stress maxima on a tenth of the brackets, and the clean split "
+      f"used here removes those without making the remaining stress fields smooth. And the ladder holds optimizer steps fixed rather than "
+      f"epochs, so the flatness above 1,024 brackets is the step budget; at this budget the wider GeoTransolver-512 converges more slowly "
+      f"({(g512f / g256f - 1) * 100:.0f}% behind 256 wide on von Mises) and the 3e-3 rate the surface protocol uses on the cars is "
+      f"{(g3 / g1 - 1) * 100:.0f}% worse than 1e-3 here. Every row is an equal-compute standing, never a learning curve.")
+```
+
+## A solid: PLAID Tensile2d {#sec-interior-tensile2d}
+
+```{python}
+#| label: setup-tensile2d
+#| include: false
+SF = J("solids_frame_2026-09-22.json"); SFS = SF["summary"]
+LM = J("lane_means_2026-09-23.json")  # per-lane float32 means; the tensor-head lanes with the load direction as the one global vector
+T2D_FIELDS = [("sig11", "$\\sigma_{11}$"), ("sig22", "$\\sigma_{22}$"), ("sig12", "$\\sigma_{12}$"), ("displacement", "displacement")]
+T2D_RUNGS = (32, 400)
+def t2_isla(n):
+    runs = [LM[f"v2_t2d_isla_r1_tensor_axis_n{n}_seed{s}"]["fields"] for s in (42, 43)]
+    return {f: dict(mean=statistics.mean(r[f] for r in runs), seeds=[r[f] for r in runs]) for f, _ in T2D_FIELDS}
+def t2_gt(n):
+    d = SFS[f"gt512|gt|n{n}"]["fields"]
+    return {f: dict(mean=d[f]["mean"], seeds=d[f].get("seeds", [])) for f, _ in T2D_FIELDS}
+T2I = {n: t2_isla(n) for n in T2D_RUNGS}; T2G = {n: t2_gt(n) for n in T2D_RUNGS}
+T2R = {n: {f: T2G[n][f]["mean"] / T2I[n][f]["mean"] for f, _ in T2D_FIELDS} for n in T2D_RUNGS}
+import math
+slope = lambda arm, f: math.log(arm[32][f]["mean"] / arm[400][f]["mean"]) / math.log(400 / 32)
+r400 = T2R[400]
+```
+
+```{python}
+#| label: tensile2d-lede
+#| output: asis
+print(f"**On the first solid-mechanics dataset, PLAID Tensile2d, GeoTransolver-512 leads ISLA at "
+      f"400 training cases by {trail(r400['sig11'])} on $\\sigma_{{11}}$, {trail(r400['sig22'])} on $\\sigma_{{22}}$, "
+      f"{trail(r400['sig12'])} on $\\sigma_{{12}}$ and {trail(r400['displacement'])} on the displacement; between 32 and 400 cases "
+      f"ISLA's error falls faster on every field (two-point slopes {slope(T2I, 'sig11'):.2f} against {slope(T2G, 'sig11'):.2f} on "
+      f"$\\sigma_{{11}}$), so the gap narrows with data and is the open standing on the solids.** "
+      f"Tensile2d (@sec-data-tensile2d) is two-dimensional elasto-viscoplastic tension: per case a load $P$ on the top "
+      f"edge and five constitutive scalars vary, the geometry barely does, and the targets are the displacement and the "
+      f"three in-plane stress components. Every mesh node is an interacting query token; ISLA reads the boundary polyline "
+      f"with its condition labels, receives the load direction as its one global vector and the six scalars, and predicts "
+      f"the stress as a symmetric tensor whose components the recipe reads off (@sec-isla-heads); GeoTransolver reads every "
+      f"node with the nodal condition tags in its local embedding. Both models use the reference configurations (ISLA at "
+      f"384 x 12; GeoTransolver-512, its parameter match).")
+```
+
+```{python}
+#| label: tensile2d-ladder-table
+#| output: asis
+def tcell(d): return f"{d['mean']:.4f}" + (f" ({' / '.join(f'{v:.4f}' for v in d['seeds'])})" if d["seeds"] else "")
+hdr = "| training cases | " + " | ".join(f"ISLA {l} | GeoTransolver {l} | ratio" for _, l in T2D_FIELDS) + " |"
+print(hdr); print("|" + "---|" * (1 + 3 * len(T2D_FIELDS)))
+for n in T2D_RUNGS:
+    print(f"| {n} | " + " | ".join(f"{tcell(T2I[n][f])} | {tcell(T2G[n][f])} | {T2R[n][f]:.2f}" for f, _ in T2D_FIELDS) + " |")
+print("| two-point slope, 32 to 400 | " + " | ".join(f"{slope(T2I, f):.2f} | {slope(T2G, f):.2f} | " for f, _ in T2D_FIELDS) + " |")
+print()
+print(": PLAID Tensile2d, float32 relative L2 on the 100 held-out cases at 500 epochs (mean of two seeds; seeds in parentheses), ISLA "
+      "with the tensor head and the load direction as its one global vector against GeoTransolver-512, at 32 and 400 training cases; "
+      "the last row is the learning-curve slope between the two rungs (error proportional to cases to the minus alpha). How to read "
+      "this: a ratio below one is a GeoTransolver lead; only two rungs exist under this configuration, so the slope is a two-point "
+      "estimate and not a fitted exponent. The five-rung ladder measured earlier used the dataset's axes as global vectors, an input "
+      "the book rejects; it is reported only as the pose-prior diagnostic of @sec-pose-prior. Data: results/lane_means_2026-09-23.json "
+      "(ISLA); results/solids_frame_2026-09-22.json (GeoTransolver-512). {#tbl-tensile2d-ladder}")
+```
+
+This table measures two things and does not measure a third. It measures
+the standing of the general interface on a problem with one global
+direction, the load, and six global scalars: a 1.3x to 2x GeoTransolver
+lead at 400 cases, the direction the preregistration predicted. It measures the learning-curve slope between
+the two rungs, steeper for ISLA on every field, the same ordering as the
+AirfRANS ladder (@sec-interior-airfrans) and the DrivAerML law
+(@sec-compute-allocation). It does not measure geometry generalization or
+discretization invariance, since the specimen shape hardly varies and each
+case has one mesh. Those axes stay with the aerodynamic datasets. This is
+the dataset on which the component clause of the output contract binds: a
+scalar-head configuration with no direction at all fits the training set
+and memorizes it, validating 20 to 60 times worse than GeoTransolver,
+because a stress component is a view of a tensor and not a channel
+(@sec-isla-heads). The 24-layer depth variant is 9% to 27% *worse* than 12
+layers at 400 cases on every field, so depth does not pay on Tensile2d at
+this data size.
+
+## A second solid: the GINOT bracket lug {#sec-interior-lug}
+
+```{python}
+#| label: setup-lug
+#| include: false
+LUG = J("solids_lug_2026-09-22.json"); LUGS = LUG["summary"]; LUGR = LUG["gt512_over_isla"]; LUGX = LUG["learning_curve_exponents"]
+LUG_RUNGS = (300, 600, 1200, 2400)
+# the 300-lug rung is reported at the half rate (2.5e-4), the rerun the preregistration prescribes for a lane that sat on a plateau;
+# the 5e-4 lane at 300 lugs is shown beside it
+lug_isla = {300: LUGS["isla_r1_lr25e4|n300"], 600: LUGS["isla_r1|n600"], 1200: LUGS["isla_r1|n1200"], 2400: LUGS["isla_r1|n2400"]}
+lug_ratio = {300: LUGR["isla_r1_lr25e4|n300"], 600: LUGR["isla_r1|n600"], 1200: LUGR["isla_r1|n1200"], 2400: LUGR["isla_r1|n2400"]}
+```
+
+```{python}
+#| label: lug-lede
+#| output: asis
+print(f"**On the GINOT bracket lug, a three-dimensional elastoplastic solid whose target is a true scalar (von Mises stress) and whose load "
+      f"is a pressure on the hole with no global direction, ISLA leads GeoTransolver-512 at the two small rungs of the training-case ladder and ties at the two large ones: "
+      f"GeoTransolver-512 ÷ ISLA {lug_ratio[300]:.2f} / {lug_ratio[600]:.2f} / {lug_ratio[1200]:.2f} / {lug_ratio[2400]:.2f} "
+      f"at 300 / 600 / 1,200 / 2,400 lugs, with learning-curve exponents {LUGX['isla_r1']['exponent']:.2f} against "
+      f"{LUGX['gt512']['exponent']:.2f}.** The lug (@sec-data-lug) is clamped at one end and pressed on the lower half of its hole; three "
+      "geometry parameters and the pressure vary, and the target is the nodal von Mises stress. ISLA reads the boundary triangles with the "
+      "clamped, hole, loaded and pressure labels as boundary scalars, the four design parameters as global scalars, and every node as a "
+      "query with its signed distance ($K = 0$: no global vector); GeoTransolver-512 reads every node with the nodal tags and the "
+      "parameters in its global embedding. The 600 test lugs are scored in float32 at every node.")
+```
+
+```{python}
+#| label: tbl-lug-ladder
+#| output: asis
+def lcell(g): return f"{g['mean']:.4f} ({' / '.join(f'{v:.4f}' for v in g['seeds'])})" + (" (one seed)" if len(g["seeds"]) == 1 else "")
+out = "| training lugs | ISLA (rate) | GeoTransolver-512 (1e-3) | GeoTransolver-512 ÷ ISLA |\n|---:|---|---|---:|\n"
+for n in LUG_RUNGS:
+    rate = "2.5e-4, the half-rate rerun" if n == 300 else "5e-4"
+    out += f"| {n:,} | {lcell(lug_isla[n])} ({rate}) | {lcell(LUGS[f'gt512|n{n}'])} | {lug_ratio[n]:.2f} |\n"
+out += f"| 300, the 5e-4 lane | {lcell(LUGS['isla_r1|n300'])} (5e-4; seed 42 escaped a plateau late) | {lcell(LUGS['gt512|n300'])} | {LUGR['isla_r1|n300']:.2f} |\n"
+out += f"| exponent, 300 to 2,400 | {LUGX['isla_r1']['exponent']:.2f} | {LUGX['gt512']['exponent']:.2f} | |\n"
+print(out)
+print(": GINOT bracket lug: relative L2 of von Mises stress over the 600 test lugs (mean over lugs, then over seeds; seeds in parentheses), "
+      "float32 at every node, 500 epochs, ISLA at the reference configuration against GeoTransolver-512, its parameter match. The 300-lug "
+      "row is reported at 2.5e-4; at 5e-4 one seed did not train, and that lane is the row below. "
+      "The exponent is the least-squares learning-curve exponent over the "
+      "four rungs, ISLA's from the half-rate 300-lug value. How to read this: a ratio above one is an ISLA lead; the 2,400-lug ISLA cell "
+      "holds one scored seed in the artifact. Data: results/solids_lug_2026-09-22.json. {#tbl-lug-ladder}")
+```
+
+The lug and Tensile2d pull in opposite directions on the standing and the
+same direction on the learning curve. Tensile2d's targets are the
+components of a stress tensor, which ISLA predicts as a tensor
+(@sec-isla-heads), and GeoTransolver-512 leads there at 400 cases. The
+lug's target is a frame-free scalar and its loading has no direction of
+its own, and ISLA leads. On both, ISLA's error falls faster with cases
+than GeoTransolver-512's. The largest lug rung carries one scored ISLA
+seed, which the table says, and no width or depth control.
+
+## Boundary data on a fixed mesh: the OLBC sets {#sec-interior-olbc}
+
+```{python}
+#| label: setup-olbc
+#| include: false
+# Every OLBC number below is read from one consolidated artifact: ISLA at the reference configuration with no option,
+# and GeoTransolver-512 with both of its released attention backends.
+OLB = J("olbc_ref_2026-09-29.json"); OLP = OLB["poisson"]; OLE = OLB["elasticity"]
+OL_RUNGS = (512, 2048, 8448)
+PF = "u_l2"
+OL_EL = [("displacement_l2", "displacement"), ("sig11_l2", "$\\sigma_{11}$"), ("sig22_l2", "$\\sigma_{22}$"), ("sig12_l2", "$\\sigma_{12}$")]
+EL_STRESS = [f for f, _ in OL_EL if f != "displacement_l2"]
+BACKEND = {"physics": "physics attention", "flarepp": "FLARE++"}
+seeds_of = lambda cell, f: [cell["per_seed"][s][f] for s in sorted(cell["per_seed"])]
+def num(cell, f, nd=4):
+    return f"{cell['means'][f]:.{nd}f} ({' / '.join(f'{v:.{nd}f}' for v in seeds_of(cell, f))})"
+gt_ratio = lambda rung, backend, f: rung["gt512_over_isla"][backend]["ratio"][f]
+fmt_ratio = lambda x, nd=2: f"{x:.{nd}f}"
+stronger = lambda rung: rung["stronger_gt512"]
+def headline(rung, f):
+    """GeoTransolver-512 ÷ ISLA against the stronger backend at that rung, with the backend name."""
+    b = stronger(rung); return gt_ratio(rung, b, f), BACKEND[b]
+def span(vals, nd=2):
+    return f"{min(vals):.{nd}f} to {max(vals):.{nd}f}"
+P_HEAD = {n: headline(OLP[str(n)], PF) for n in OL_RUNGS}
+E_STRESS = {n: span([gt_ratio(OLE[str(n)], stronger(OLE[str(n)]), f) for f in EL_STRESS]) for n in OL_RUNGS}
+E_DISP = {n: fmt_ratio(gt_ratio(OLE[str(n)], stronger(OLE[str(n)]), "displacement_l2")) for n in OL_RUNGS}
+ol_exp = lambda means: math.log(means[0] / means[-1]) / math.log(8448 / 512)
+```
+
+```{python}
+#| label: olbc-lede
+#| output: asis
+print(f"**On the OLBC sets, where one fixed mesh per set carries a boundary cut per sample into random labeled Dirichlet, Neumann and "
+      f"Robin segments, ISLA with no option leads GeoTransolver-512 on the scalar Poisson set at the two small rungs "
+      f"(GeoTransolver-512 ÷ ISLA {fmt_ratio(P_HEAD[512][0])} at 512 cases and {fmt_ratio(P_HEAD[2048][0])} at 2,048) and trails it at "
+      f"8,448 ({fmt_ratio(P_HEAD[8448][0])}), and trails it on the elasticity tensor at every rung, by {E_STRESS[8448]} on the stresses and "
+      f"{E_DISP[8448]} on displacement at 8,448 cases.** These sets (@sec-data-olbc) are the complement of every other dataset in the book: "
+      "the geometry never varies and only the boundary data do, so the task is the pure boundary-data-to-solution map on a known domain. "
+      "The ladders are @tbl-olbc-ladder; the backend each ratio is taken against is named there, because GeoTransolver's two released "
+      "attention backends cross between the rungs on the Poisson set.")
+```
+
+On the Poisson set ($-\nabla^2 u = f$ on a square, with a random
+sinusoidal source and four random boundary segments per sample) ISLA reads
+the boundary segments with the condition type and value as boundary
+scalars and every node as a query, and the problem has no global vector
+($K = 0$). On the elasticity set (steel, a disc with two holes, a
+prescribed displacement and tractions per component) it receives the
+prescribed displacement and traction as rank-1 boundary inputs and
+predicts the stress as a symmetric tensor (@sec-isla-inputs-rank).
+GeoTransolver-512 reads every node with the nodal condition tags. The 256
+test samples of each set are scored in float32 at every node, two seeds per
+cell; the 512- and 2,048-case rungs train for 500 epochs and the
+8,448-case rung for 120, the same optimizer-step count as 2,048 cases at
+500, which is a stated deviation from the protocol and applies to both
+architectures alike.
+
+```{python}
+#| label: tbl-olbc-ladder
+#| output: asis
+def gt_cell(rung, backend, f, nd=4):
+    cell = rung[f"gt512_{backend}"]; txt = num(cell, f, nd)
+    return f"**{txt}** (stronger)" if stronger(rung) == backend else txt
+out = ("| OLBC Poisson, training cases | ISLA $u$ | GeoTransolver-512 $u$, physics attention | GeoTransolver-512 $u$, FLARE++ | "
+       "GeoTransolver-512 ÷ ISLA (stronger backend) |\n|---:|---|---|---|---:|\n")
+for n in OL_RUNGS:
+    r = OLP[str(n)]; h = P_HEAD[n]
+    out += (f"| {n:,} | {num(r['reference'], PF)} | {gt_cell(r, 'physics', PF)} | {gt_cell(r, 'flarepp', PF)} | "
+            f"{fmt_ratio(h[0])} ({h[1]}) |\n")
+g256 = OLP["8448"].get("gt256_physics")
+if g256 and "means" in g256:
+    out += (f"| 8,448, GeoTransolver-256 (physics attention) | | {num(g256, PF)} | | "
+            f"{fmt_ratio(g256['means'][PF] / OLP['8448']['reference']['means'][PF])} |\n")
+isla_p = [OLP[str(n)]["reference"]["means"][PF] for n in OL_RUNGS]
+gt_p = [OLP[str(n)][f"gt512_{stronger(OLP[str(n)])}"]["means"][PF] for n in OL_RUNGS]
+out += f"| learning-curve exponent, 512 to 8,448 | {ol_exp(isla_p):.2f} | | | {ol_exp(gt_p):.2f} (GeoTransolver-512) |\n"
+out += ("\n| OLBC elasticity, training cases, field | ISLA | GeoTransolver-512, physics attention | GeoTransolver-512, FLARE++ | "
+        "GeoTransolver-512 ÷ ISLA (stronger backend) |\n|---|---|---|---|---:|\n")
+for n in OL_RUNGS:
+    r = OLE[str(n)]; b = stronger(r)
+    for f, lab in OL_EL:
+        out += (f"| {n:,}, {lab} | {num(r['reference'], f, 3)} | {gt_cell(r, 'physics', f, 3)} | {gt_cell(r, 'flarepp', f, 3)} | "
+                f"{fmt_ratio(gt_ratio(r, b, f))} ({BACKEND[b]}) |\n")
+print(out)
+print(": The OLBC ladders: relative L2 over the 256 test samples of each set (mean over samples, then over seeds; seeds in parentheses), "
+      "float32 at every node, two seeds per cell. ISLA is the reference configuration with no option; GeoTransolver-512 is scored with both "
+      "of its released attention backends, and **the ratio column is GeoTransolver-512 ÷ ISLA against the stronger backend at that rung**, "
+      "which is marked in bold and named beside the ratio. Top: the Poisson set's solution $u$ along the 512 / 2,048 / 8,448-case ladder, "
+      "with GeoTransolver-256 at the full rung, and the learning-curve exponent of each architecture's total error over the ladder. Bottom: "
+      "the elasticity set per field, ISLA with the prescribed displacement and traction as rank-1 boundary inputs and the stress as a tensor "
+      "output. How to read this: a ratio above one is an ISLA lead and below one a GeoTransolver-512 lead; the two backends are never "
+      "averaged, and a ratio against the weaker backend is never the headline. The 8,448-case rung trains for 120 epochs rather than 500 "
+      "for both architectures, so it is an equal-step rung and its exponent is a compute statement as much as a data one. "
+      "Data: results/olbc_ref_2026-09-29.json. {#tbl-olbc-ladder}")
+```
+
+```{python}
+#| label: para-olbc-reading
+#| output: asis
+print(f"**The Poisson lead is a small-data lead: GeoTransolver-512's error falls faster along the ladder ("
+      f"exponent {ol_exp(gt_p):.2f} against ISLA's {ol_exp(isla_p):.2f}) and it overtakes between 2,048 and 8,448 cases.** The elasticity "
+      f"ordering does not move with data: GeoTransolver-512 leads on every field at every rung, by {E_STRESS[512]} on the stresses at 512 "
+      f"cases and {E_STRESS[8448]} at 8,448. These two sets are the one place in the book where the geometry carries no information at all, "
+      "so what separates the architectures here is how each reads per-cell boundary data, and the elasticity set is the harder test because "
+      "its boundary data are rank-1 and its target a tensor. Per-type geometry channels added to ISLA on these meshes are neutral or worse "
+      "and are not part of the model (@sec-olbc-ablations).")
+```
+
+## What the general interface buys here, and where it trails {#sec-beyond-standing}
+
+```{python}
+#| label: para-beyond-open
+#| output: asis
+print(f"**One interface covers four problems outside external aerodynamics, and the standings split by target rather than by physics: "
+      f"ISLA leads where the target is a frame-free scalar and trails where it is a tensor.** On the GINOT lug's von Mises stress it "
+      f"leads GeoTransolver-512 at the two small rungs and ties at the two large ones (GeoTransolver-512 ÷ ISLA {lug_ratio[2400]:.2f} at "
+      f"2,400 lugs) with the steeper learning curve; on DeepJEB++ it leads or ties the best GeoTransolver arm at every rung of an "
+      f"equal-step ladder; and on the scalar OLBC Poisson set it leads at 512 and 2,048 cases with no option "
+      f"({fmt_ratio(P_HEAD[512][0])} and {fmt_ratio(P_HEAD[2048][0])}) before GeoTransolver-512 overtakes at 8,448 "
+      f"({fmt_ratio(P_HEAD[8448][0])}). On PLAID Tensile2d's stress tensor GeoTransolver-512 leads at 400 cases, and on the OLBC "
+      f"elasticity set it leads on every field at every rung, by {E_STRESS[8448]} on the stresses and {E_DISP[8448]} on displacement at "
+      f"8,448 cases. The two tensor-target solids are the open standings of this chapter and the ones that most need a located mechanism; "
+      "the limits of all of them are collected in @sec-limits-datasets. "
+      "Data: results/deepjeb_2026-09-22.json; results/lane_means_2026-09-23.json; results/solids_frame_2026-09-22.json; "
+      "results/solids_lug_2026-09-22.json; results/olbc_ref_2026-09-29.json.")
+```

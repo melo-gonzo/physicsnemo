@@ -46,26 +46,6 @@ def standing(r, p):
     return f"is level (ratio {r:.2f})"
 ```
 
-```{python}
-#| label: para-interior-lede
-#| output: asis
-print("**On the task that asks for the field rather than the wall pressure, how an architecture treats an interior point decides the "
-      "result.** ISLA admits its interior queries as interacting tokens and gives them the signed distance to the wall, the same input "
-      "GeoTransolver's volume configuration receives. On the DrivAerML Volume task at the reporting protocol (200,000 boundary cells and "
-      f"200,000 interior queries per car, 48 validation cars, float32) ISLA leads GeoTransolver-volume on interior velocity by "
-      f"{lead(RATIO['velocity_l2'])} and on interior pressure by {lead(RATIO['pressure_l2'])}, and {standing(RATIO['nut_l2'], PAIRED['nut_l2'])} "
-      f"on eddy viscosity. On AirfRANS (interior task), a second dataset and a second PDE regime, ISLA leads on velocity by "
-      f"{AFR['velocity_l2']:.2f}x and trails on pressure by {trail(AFR['pressure_l2'])} and on eddy viscosity by {trail(AFR['nut_l2'])}, "
-      "both seeds agreeing on every field. Because the queries interact, a prediction at one point depends on the other points in the "
-      "request, so the deployment query count is fixed at the training count (@sec-interior-companion). Two other ways to supply interior "
-      "context fail, and an exact boundary-integral prior is the wrong prior for separated flow (@sec-interior-negatives). "
-      "The chapter closes with the solid-mechanics datasets and the fixed-mesh OLBC sets, where every mesh node is a query. On the lug ISLA leads GeoTransolver-512 "
-      "at the 300- and 600-lug rungs and ties at 1,200 and 2,400. On Tensile2d it trails at 400 cases with the steeper learning curve. On the fixed-mesh OLBC sets, where only "
-      "the boundary data vary, ISLA leads GeoTransolver-512 on the Poisson set at both scored rungs with no option and trails it on the "
-      "elasticity set's stresses and displacement (@sec-interior-olbc). Every ratio "
-      "is GeoTransolver-volume ÷ ISLA (GeoTransolver-512 ÷ ISLA on the solids), above one favoring ISLA. Protocol: @sec-protocol.")
-```
-
 ## The task {#sec-interior-task}
 
 A surrogate that returns only wall pressure answers one engineering
@@ -175,9 +155,8 @@ position, its wall normal and the global direction, plus a learned type
 embedding and the signed distance as a query scalar. In every lane of this
 chapter the queries also carry the dataset's full-mesh signed-distance
 field and its gradient as inputs; the class derives a direction and a
-distance from the boundary sample itself, and what the sampled-boundary
-geometry costs without the stored field is the measurement of
-@sec-nb-internal-geometry-verdict. Each query enters the
+distance from the boundary sample itself, and the model's own
+geometry is computed regardless (@sec-arch-modes). Each query enters the
 measure-weighted routing with a learned weight relative to the surface
 measure. The twelve slice layers run over surface and query tokens together,
 and the heads read the query tokens. Every invariant is a function of
@@ -187,14 +166,20 @@ a query's prediction depends on the other queries in the request. The
 queries' total routing weight is a learned fraction of the total boundary
 measure, split equally over them, so re-representing the same surface at
 another refinement leaves the routing unchanged (measure-rescale
-invariant). Every standing of this chapter is under
-it. The alternative, `geometric_mean`, gives each query the mean boundary
-log-weight plus a learned offset. It therefore depends on how finely the
-surface is sampled and on how many queries are asked for. The query-count
-instruments of @sec-interior-companion were read under that option at the
-exploration budget. Nothing else changes: the reference configuration's
+invariant). Nothing else changes: the reference configuration's
 width, depth and slice count, the surface configuration's
 hyperparameters, no local features.
+
+```{python}
+#| label: para-interior-lede
+#| output: asis
+print(f"**On the task that asks for the field rather than the wall pressure, ISLA leads GeoTransolver-volume on interior velocity on both "
+      f"datasets, by {lead(RATIO['velocity_l2'])} on the DrivAerML Volume task and {AFR['velocity_l2']:.2f}x on AirfRANS, leads on pressure "
+      f"on the cars by {lead(RATIO['pressure_l2'])} and trails on pressure on the airfoils by {trail(AFR['pressure_l2'])}.** The standings "
+      "are @tbl-interior-200k (the cars), @tbl-interior-airfrans (the airfoils) and @tbl-interior-airfrans-extrap (outside the AirfRANS "
+      "training range). Every ratio is GeoTransolver-volume ÷ ISLA, above one favoring ISLA; the protocol is @sec-protocol, and the two "
+      "architectures are not resource-matched and do not receive the same inputs, which this chapter states once above.")
+```
 
 ## The DrivAerML Volume task {#sec-interior-results}
 
@@ -332,8 +317,8 @@ Reynolds-number band and tests on 496 outside it. `aoa` trains on 804
 inside an angle-of-attack band and tests on 196 outside. Both
 architectures were trained on each split as on the full split (500
 epochs, 100,000 queries, two seeds) and scored on the split's test cases.
-The ISLA lanes of this study are the earlier protocol's (192 wide, cosine
-routing, 1e-3). Every growth factor divides a configuration's split
+The ISLA lanes of this study are 192 wide with cosine routing at 1e-3.
+Every growth factor divides a configuration's split
 error by the same configuration's full-split error, so the readout is
 within-configuration and the reference re-run is not required for it.
 The readout that separates extrapolation from the smaller training sets is
@@ -384,9 +369,7 @@ ISLA's stay within 4%.
 other points are asked for with it, so a surrogate built from it is
 queried in batches of at least the training count** (@sec-using-checkpoint).
 Because the queries route through the same slices as the surface, a
-prediction at one point is a function of the whole request. Under the
-`geometric_mean` option each query's routing weight also scales with the
-query count (@sec-interior-query-tokens). Two instruments establish the
+prediction at one point is a function of the whole request. Two instruments establish the
 rule at the exploration budget. A checkpoint trained at a fixed query count
 and scored at a fifth of it loses more on every field than either margin
 against GeoTransolver-volume, while twice the count gains a little. And
@@ -399,9 +382,9 @@ query-count consistency is an architectural question. The queries' routing
 mass, a learned fraction of the total boundary measure split over the
 request, removes the count-scaling of the query weight by construction
 (@sec-isla-contracts). The dependence through the shared slices remains. A
-read-only decoder whose predictions were exactly query-independent was
-built and priced at several times the interacting decode's error, and the
-class no longer carries it (@sec-arch-passive-decoder).
+read-only decoder whose predictions are exactly query-independent is
+several times less accurate on every interior field, which is why the class
+offers none (@sec-arch-passive-decoder, @sec-principled-decisions).
 
 ## What does not work {#sec-interior-negatives}
 
@@ -424,352 +407,13 @@ DrivAerML Volume task, and its far-field output decays to identically zero.
 ISLA therefore evaluates no exact boundary-integral kernels and places no
 latent tokens off the surface.
 
-## A solid: PLAID Tensile2d {#sec-interior-tensile2d}
 
-```{python}
-#| label: setup-tensile2d
-#| include: false
-SF = J("solids_frame_2026-09-22.json"); SFS = SF["summary"]
-LM = J("lane_means_2026-09-23.json")  # per-lane float32 means; the tensor-head lanes with the load direction as the one global vector
-T2D_FIELDS = [("sig11", "$\\sigma_{11}$"), ("sig22", "$\\sigma_{22}$"), ("sig12", "$\\sigma_{12}$"), ("displacement", "displacement")]
-T2D_RUNGS = (32, 400)
-def t2_isla(n):
-    runs = [LM[f"v2_t2d_isla_r1_tensor_axis_n{n}_seed{s}"]["fields"] for s in (42, 43)]
-    return {f: dict(mean=statistics.mean(r[f] for r in runs), seeds=[r[f] for r in runs]) for f, _ in T2D_FIELDS}
-def t2_gt(n):
-    d = SFS[f"gt512|gt|n{n}"]["fields"]
-    return {f: dict(mean=d[f]["mean"], seeds=d[f].get("seeds", [])) for f, _ in T2D_FIELDS}
-T2I = {n: t2_isla(n) for n in T2D_RUNGS}; T2G = {n: t2_gt(n) for n in T2D_RUNGS}
-T2R = {n: {f: T2G[n][f]["mean"] / T2I[n][f]["mean"] for f, _ in T2D_FIELDS} for n in T2D_RUNGS}
-import math
-slope = lambda arm, f: math.log(arm[32][f]["mean"] / arm[400][f]["mean"]) / math.log(400 / 32)
-r400 = T2R[400]
-```
+## What the interior standing does not say {#sec-interior-open}
 
-```{python}
-#| label: tensile2d-lede
-#| output: asis
-print(f"**On the first solid-mechanics dataset, PLAID Tensile2d, GeoTransolver-512 leads ISLA at "
-      f"400 training cases by {trail(r400['sig11'])} on $\\sigma_{{11}}$, {trail(r400['sig22'])} on $\\sigma_{{22}}$, "
-      f"{trail(r400['sig12'])} on $\\sigma_{{12}}$ and {trail(r400['displacement'])} on the displacement; between 32 and 400 cases "
-      f"ISLA's error falls faster on every field (two-point slopes {slope(T2I, 'sig11'):.2f} against {slope(T2G, 'sig11'):.2f} on "
-      f"$\\sigma_{{11}}$), so the gap narrows with data and is the open standing on the solids.** "
-      f"Tensile2d (@sec-data-tensile2d) is two-dimensional elasto-viscoplastic tension: per case a load $P$ on the top "
-      f"edge and five constitutive scalars vary, the geometry barely does, and the targets are the displacement and the "
-      f"three in-plane stress components. Every mesh node is an interacting query token; ISLA reads the boundary polyline "
-      f"with its condition labels, receives the load direction as its one global vector and the six scalars, and predicts "
-      f"the stress as a symmetric tensor whose components the recipe reads off (@sec-isla-heads); GeoTransolver reads every "
-      f"node with the nodal condition tags in its local embedding. Both models use the reference configurations (ISLA at "
-      f"384 x 12; GeoTransolver-512, its parameter match).")
-```
-
-```{python}
-#| label: tensile2d-ladder-table
-#| output: asis
-def tcell(d): return f"{d['mean']:.4f}" + (f" ({' / '.join(f'{v:.4f}' for v in d['seeds'])})" if d["seeds"] else "")
-hdr = "| training cases | " + " | ".join(f"ISLA {l} | GeoTransolver {l} | ratio" for _, l in T2D_FIELDS) + " |"
-print(hdr); print("|" + "---|" * (1 + 3 * len(T2D_FIELDS)))
-for n in T2D_RUNGS:
-    print(f"| {n} | " + " | ".join(f"{tcell(T2I[n][f])} | {tcell(T2G[n][f])} | {T2R[n][f]:.2f}" for f, _ in T2D_FIELDS) + " |")
-print("| two-point slope, 32 to 400 | " + " | ".join(f"{slope(T2I, f):.2f} | {slope(T2G, f):.2f} | " for f, _ in T2D_FIELDS) + " |")
-print()
-print(": PLAID Tensile2d, float32 relative L2 on the 100 held-out cases at 500 epochs (mean of two seeds; seeds in parentheses), ISLA "
-      "with the tensor head and the load direction as its one global vector against GeoTransolver-512, at 32 and 400 training cases; "
-      "the last row is the learning-curve slope between the two rungs (error proportional to cases to the minus alpha). How to read "
-      "this: a ratio below one is a GeoTransolver lead; only two rungs exist under this configuration, so the slope is a two-point "
-      "estimate and not a fitted exponent. The five-rung ladder measured earlier used the dataset's axes as global vectors, an input "
-      "the book rejects; it is reported only as the pose-prior diagnostic of @sec-pose-prior. Data: results/lane_means_2026-09-23.json "
-      "(ISLA); results/solids_frame_2026-09-22.json (GeoTransolver-512). {#tbl-tensile2d-ladder}")
-```
-
-This table measures two things and does not measure a third. It measures
-the standing of the general interface on a problem with one global
-direction, the load, and six global scalars: a 1.3x to 2x GeoTransolver
-lead at 400 cases, the direction the preregistration predicted
-(@sec-nb-solids-prereg). It measures the learning-curve slope between
-the two rungs, steeper for ISLA on every field, the same ordering as the
-AirfRANS ladder (@sec-interior-airfrans) and the DrivAerML law
-(@sec-compute-allocation). It does not measure geometry generalization or
-discretization invariance, since the specimen shape hardly varies and each
-case has one mesh. Those axes stay with the aerodynamic datasets. A
-scalar-head configuration with no direction at all fits the training set
-and memorizes it (validation error 20 to 60 times GeoTransolver's); it is
-the ablation behind the component clause of the output contract and is
-reported in @sec-nb-solids-frame-interim, not here. The 24-layer depth
-variant is 9% to 27% *worse* than 12 layers at 400 cases on every field on
-the diagnostic lanes, so depth does not pay on Tensile2d at this data size
-(@sec-nb-solids-tensile2d-verdict).
-
-## A second solid: the GINOT bracket lug {#sec-interior-lug}
-
-```{python}
-#| label: setup-lug
-#| include: false
-LUG = J("solids_lug_2026-09-22.json"); LUGS = LUG["summary"]; LUGR = LUG["gt512_over_isla"]; LUGX = LUG["learning_curve_exponents"]
-LUG_RUNGS = (300, 600, 1200, 2400)
-# the 300-lug rung is reported at the half rate (2.5e-4), the rerun the preregistration prescribes for a lane that sat on a plateau;
-# the 5e-4 lane at 300 lugs is shown beside it
-lug_isla = {300: LUGS["isla_r1_lr25e4|n300"], 600: LUGS["isla_r1|n600"], 1200: LUGS["isla_r1|n1200"], 2400: LUGS["isla_r1|n2400"]}
-lug_ratio = {300: LUGR["isla_r1_lr25e4|n300"], 600: LUGR["isla_r1|n600"], 1200: LUGR["isla_r1|n1200"], 2400: LUGR["isla_r1|n2400"]}
-```
-
-```{python}
-#| label: lug-lede
-#| output: asis
-print(f"**On the GINOT bracket lug, a three-dimensional elastoplastic solid whose target is a true scalar (von Mises stress) and whose load "
-      f"is a pressure on the hole with no global direction, ISLA leads GeoTransolver-512 at the two small rungs of the training-case ladder and ties at the two large ones: "
-      f"GeoTransolver-512 ÷ ISLA {lug_ratio[300]:.2f} / {lug_ratio[600]:.2f} / {lug_ratio[1200]:.2f} / {lug_ratio[2400]:.2f} "
-      f"at 300 / 600 / 1,200 / 2,400 lugs, with learning-curve exponents {LUGX['isla_r1']['exponent']:.2f} against "
-      f"{LUGX['gt512']['exponent']:.2f}.** The lug (@sec-data-lug) is clamped at one end and pressed on the lower half of its hole; three "
-      "geometry parameters and the pressure vary, and the target is the nodal von Mises stress. ISLA reads the boundary triangles with the "
-      "clamped, hole, loaded and pressure labels as boundary scalars, the four design parameters as global scalars, and every node as a "
-      "query with its signed distance ($K = 0$: no global vector); GeoTransolver-512 reads every node with the nodal tags and the "
-      "parameters in its global embedding. The 600 test lugs are scored in float32 at every node.")
-```
-
-```{python}
-#| label: tbl-lug-ladder
-#| output: asis
-def lcell(g): return f"{g['mean']:.4f} ({' / '.join(f'{v:.4f}' for v in g['seeds'])})" + (" (one seed)" if len(g["seeds"]) == 1 else "")
-out = "| training lugs | ISLA (rate) | GeoTransolver-512 (1e-3) | GeoTransolver-512 ÷ ISLA |\n|---:|---|---|---:|\n"
-for n in LUG_RUNGS:
-    rate = "2.5e-4, the half-rate rerun" if n == 300 else "5e-4"
-    out += f"| {n:,} | {lcell(lug_isla[n])} ({rate}) | {lcell(LUGS[f'gt512|n{n}'])} | {lug_ratio[n]:.2f} |\n"
-out += f"| 300, the 5e-4 lane | {lcell(LUGS['isla_r1|n300'])} (5e-4; seed 42 escaped a plateau late) | {lcell(LUGS['gt512|n300'])} | {LUGR['isla_r1|n300']:.2f} |\n"
-out += f"| exponent, 300 to 2,400 | {LUGX['isla_r1']['exponent']:.2f} | {LUGX['gt512']['exponent']:.2f} | |\n"
-print(out)
-print(": GINOT bracket lug: relative L2 of von Mises stress over the 600 test lugs (mean over lugs, then over seeds; seeds in parentheses), "
-      "float32 at every node, 500 epochs, ISLA at the reference configuration against GeoTransolver-512, its parameter match. The 300-lug "
-      "row is ISLA's half-rate rerun: the 5e-4 pair at that rung sat on a loss plateau for 90 to 150 epochs and one seed escaped it late, "
-      "and the preregistration prescribes that a plateau lane be reported and its half-rate rerun replace it in the ladder with the rate "
-      "stated (@sec-nb-solids-prereg); the 5e-4 lane is the row below. The exponent is the least-squares learning-curve exponent over the "
-      "four rungs, ISLA's from the half-rate 300-lug value. How to read this: a ratio above one is an ISLA lead; the 2,400-lug ISLA cell "
-      "holds one scored seed in the artifact. Data: results/solids_lug_2026-09-22.json. {#tbl-lug-ladder}")
-```
-
-The lug and Tensile2d pull in opposite directions on the standing and the
-same direction on the learning curve. Tensile2d's targets are the
-components of a stress tensor, which ISLA predicts as a tensor
-(@sec-isla-heads), and GeoTransolver-512 leads there at 400 cases. The
-lug's target is a frame-free scalar and its loading has no direction of
-its own, and ISLA leads. On both, ISLA's error falls faster with cases
-than GeoTransolver-512's. The 2,400-lug rung awaits its second ISLA seed
-and the width and depth controls (GeoTransolver-256, the 24-layer ISLA).
-The standing above is the artifact's (@sec-program-status).
-
-## Boundary data on a fixed mesh: the OLBC sets {#sec-interior-olbc}
-
-```{python}
-#| label: setup-olbc
-#| include: false
-# Every OLBC number below is read from the consolidated current-snapshot artifact: ISLA at the reference configuration with no option,
-# GeoTransolver-512 with both released attention backends, and the ablation arms as ratios to the same-snapshot reference.
-OLB = J("olbc_ref_2026-09-29.json"); OLP = OLB["poisson"]; OLE = OLB["elasticity"]
-OL_RUNGS = (512, 2048, 8448)
-PF = "u_l2"
-OL_EL = [("displacement_l2", "displacement"), ("sig11_l2", "$\\sigma_{11}$"), ("sig22_l2", "$\\sigma_{22}$"), ("sig12_l2", "$\\sigma_{12}$")]
-EL_STRESS = [f for f, _ in OL_EL if f != "displacement_l2"]
-BACKEND = {"physics": "physics attention", "flarepp": "FLARE++"}
-TRAINING = "training"
-def scored(cell): return bool(cell) and "means" in cell
-def seeds_of(cell, f): return [cell["per_seed"][s][f] for s in sorted(cell["per_seed"])]
-def num(cell, f, nd=4):
-    """Seed mean with the per-seed values in parentheses, or 'training' for a cell that has not landed."""
-    if not scored(cell): return TRAINING
-    return f"{cell['means'][f]:.{nd}f} ({' / '.join(f'{v:.{nd}f}' for v in seeds_of(cell, f))})"
-def gt_ratio(rung, backend, f):
-    """GeoTransolver-512 (given backend) ÷ ISLA reference at one rung and field; None until both sides are scored."""
-    r = rung.get("gt512_over_isla", {}).get(backend); return r["ratio"][f] if r else None
-def fmt_ratio(x, nd=2): return f"{x:.{nd}f}" if x is not None else TRAINING
-def stronger(rung): return rung.get("stronger_gt512")
-def headline(rung, f):
-    """GeoTransolver-512 ÷ ISLA against the stronger backend at that rung, with the backend name."""
-    b = stronger(rung); r = gt_ratio(rung, b, f) if b else None
-    return r, (BACKEND[b] if b else None)
-def arm_ratio(rung, key, f):
-    a = rung["arms"].get(key, {}); return a["ratio"][f] if "ratio" in a else None
-def arm_seeds(rung, key, f):
-    a = rung["arms"].get(key, {}); return [a["per_seed"][s][f] for s in sorted(a["per_seed"])] if "ratio" in a else None
-def arm_cell(rung, key, f, nd=2):
-    r = arm_ratio(rung, key, f)
-    return TRAINING if r is None else f"{r:.{nd}f} ({' / '.join(f'{v:.{nd}f}' for v in arm_seeds(rung, key, f))})"
-def span(vals, nd=2):
-    vals = [v for v in vals if v is not None]
-    return f"{min(vals):.{nd}f} to {max(vals):.{nd}f}" if vals else TRAINING
-# the Poisson headline ratios (stronger backend) and the elasticity spans per rung
-P_HEAD = {n: headline(OLP[str(n)], PF) for n in OL_RUNGS}
-E_STRESS = {n: span(gt_ratio(OLE[str(n)], stronger(OLE[str(n)]), f) if stronger(OLE[str(n)]) else None for f in EL_STRESS) for n in OL_RUNGS}
-E_DISP = {n: fmt_ratio(gt_ratio(OLE[str(n)], stronger(OLE[str(n)]), "displacement_l2") if stronger(OLE[str(n)]) else None) for n in OL_RUNGS}
-E_INTERIM = {n: bool(OLE[str(n)].get("reference_interim_code_v7")) for n in OL_RUNGS}
-def rung_word(n): return f"{n:,}"
-```
-
-```{python}
-#| label: olbc-lede
-#| output: asis
-p512, p2048 = P_HEAD[512], P_HEAD[2048]
-p2048_phys = gt_ratio(OLP["2048"], "physics", PF)
-p8448 = P_HEAD[8448]
-eight = (f"and {fmt_ratio(p8448[0])} at 8,448 cases (against {p8448[1]})" if p8448[0] is not None
-         else "the 8,448-case rung of each set is training")
-e_in = " (reference from an earlier code snapshot, interim)" if E_INTERIM[2048] else ""
-print(f"**On the OLBC sets, one fixed mesh per set whose boundary is cut per sample into random labeled Dirichlet, Neumann and Robin "
-      f"segments with random values, ISLA at the reference configuration with no option leads GeoTransolver-512 on the Poisson set at "
-      f"both scored rungs: GeoTransolver-512 ÷ ISLA {fmt_ratio(p512[0])} at 512 cases and {fmt_ratio(p2048[0])} at 2,048, each against the "
-      f"stronger of GeoTransolver's two released attention backends at that rung ({p512[1]} at 512, {p2048[1]} at 2,048; "
-      f"{fmt_ratio(p2048_phys)} against physics attention at 2,048). On the elasticity set GeoTransolver-512 leads: on the three stress "
-      f"components GeoTransolver-512 ÷ ISLA is {E_STRESS[512]} at 512 cases and {E_STRESS[2048]} at 2,048{e_in}, and on displacement "
-      f"{E_DISP[512]} and {E_DISP[2048]}; {eight}.** These sets (@sec-data-olbc) are the complement of every other dataset in the book: "
-      "the geometry never varies and only the boundary data do, so the task is the pure boundary-data-to-solution map on a known domain. "
-      "On the Poisson set ($-\\nabla^2 u = f$ on a square, a random sinusoidal source and four random boundary segments per sample) ISLA "
-      "reads the boundary segments with the condition type and value as boundary scalars and every node as a query ($K = 0$); on the "
-      "elasticity set (steel, a disc with two holes, prescribed displacement and tractions per component) it receives the prescribed "
-      "displacement and traction as rank-1 boundary inputs and predicts the stress as a symmetric tensor ($K = 0$; @sec-isla-inputs-rank). "
-      "GeoTransolver-512 reads every node with the nodal condition tags; it is scored with both of its released attention backends, "
-      "physics attention and FLARE++, and the headline ratio at each rung is taken against whichever is stronger there, because the two "
-      "cross between the rungs on the Poisson set (@sec-nb-gt-fpp-poisson-verdict, @sec-nb-gt-fpp-poisson-512). The 256 test samples of "
-      "each set are scored in float32 at every node; two seeds per cell; the 8,448-case rung trains for 120 epochs, the same "
-      "optimizer-step count as 2,048 cases for 500.")
-```
-
-```{python}
-#| label: tbl-olbc-ladder
-#| output: asis
-def gt_cell(rung, backend, f, nd=4):
-    cell = rung.get(f"gt512_{backend}"); s = num(cell, f, nd)
-    return f"**{s}** (stronger)" if scored(cell) and stronger(rung) == backend and scored(rung.get(f"gt512_{'flarepp' if backend == 'physics' else 'physics'}")) else s
-out = ("| OLBC Poisson, training cases | ISLA $u$ | GeoTransolver-512 $u$, physics attention | GeoTransolver-512 $u$, FLARE++ | "
-       "GeoTransolver-512 ÷ ISLA (stronger backend) |\n|---:|---|---|---|---:|\n")
-for n in OL_RUNGS:
-    r = OLP[str(n)]; h = P_HEAD[n]
-    out += (f"| {n:,} | {num(r['reference'], PF)} | {gt_cell(r, 'physics', PF)} | {gt_cell(r, 'flarepp', PF)} | "
-            f"{fmt_ratio(h[0])}{f' ({h[1]})' if h[0] is not None else ''} |\n")
-g256 = OLP["8448"].get("gt256_physics")
-if scored(g256):
-    ref8 = OLP["8448"]["reference"]
-    out += (f"| 8,448, GeoTransolver-256 (physics attention) | | {num(g256, PF)} | | "
-            f"{fmt_ratio(g256['means'][PF] / ref8['means'][PF]) if scored(ref8) else TRAINING} |\n")
-out += "| learning-curve exponent, 512 to 8,448 | pending the 8,448 rung | pending the 8,448 rung | pending the 8,448 rung | |\n"
-out += ("\n| OLBC elasticity, training cases, field | ISLA | GeoTransolver-512, physics attention | GeoTransolver-512, FLARE++ | "
-        "GeoTransolver-512 ÷ ISLA (stronger backend) |\n|---|---|---|---|---:|\n")
-for n in OL_RUNGS:
-    r = OLE[str(n)]; b = stronger(r)
-    for f, lab in OL_EL:
-        ref = num(r["reference"], f, 3) + (" (interim)" if scored(r["reference"]) and E_INTERIM[n] else "")
-        ratio = fmt_ratio(gt_ratio(r, b, f)) if b else TRAINING
-        out += f"| {n:,}, {lab} | {ref} | {gt_cell(r, 'physics', f, 3)} | {gt_cell(r, 'flarepp', f, 3)} | {ratio}{f' ({BACKEND[b]})' if b and gt_ratio(r, b, f) is not None else ''} |\n"
-print(out)
-print(": The OLBC ladders: relative L2 over the 256 test samples of each set (mean over samples, then over seeds; seeds in parentheses), "
-      "float32 at every node. ISLA is the reference configuration with no option; GeoTransolver-512 is scored with both of its released "
-      "attention backends, and **the ratio column is GeoTransolver-512 ÷ ISLA against the stronger backend at that rung** (marked in bold "
-      "where both are scored; the backend is named beside the ratio). Top: the Poisson set's solution $u$ along the 512 / 2,048 / 8,448-case "
-      "ladder, with GeoTransolver-256 at the full rung. Bottom: the elasticity set per field, ISLA with the prescribed displacement and "
-      "traction as rank-1 boundary inputs and the stress as a tensor output. A cell marked *training* has not landed; the 2,048-case "
-      "elasticity reference marked *interim* is the same configuration trained on an earlier code snapshot and is replaced by the "
-      "current-snapshot pair when it lands. Learning-curve exponents are stated once three current-snapshot rungs exist. How to read this: a "
-      "ratio above one is an ISLA lead and below one a GeoTransolver-512 lead; the two backends are not averaged, and a ratio against the "
-      "weaker backend is never the headline. Data: results/olbc_ref_2026-09-29.json. {#tbl-olbc-ladder}")
-```
-
-### Ablations: per-type geometry channels on the fixed mesh {#sec-olbc-ablations}
-
-**Every ablation is an option added to the reference ISLA and read as arm
-÷ reference on the same code snapshot; none is part of the model.** Two
-parameter-free query scalars were tested, each derived from one sample's
-geometry and condition labels and nothing else. The **per-type nearest
-distance** gives each interior query, for each of the three condition
-types (Dirichlet, Neumann, Robin), the distance to the nearest boundary
-cell of that type. The **per-type harmonic measure** is the exact form of
-the same idea: the solution of Laplace's equation that is one on that
-type's boundary and zero on the others (the probability that a random walk
-from the query first hits a wall of that type), computed on the interior
-point cloud with one sparse solve per type per case. On the elasticity set
-the types are per component (four measures). Both channels keep the
-invariance contracts.
-
-```{python}
-#| label: tbl-olbc-ablations
-#| output: asis
-P_ARMS = [("per-type nearest distances (three scalars)", "distances"),
-          ("per-type harmonic measures (three Laplace solves)", "harmonic_measures"),
-          ("per-type distances + local relational aggregation (removed option, @sec-nb-universal-agg-lug-verdict)", "distances_local05")]
-out = "| ISLA arm on OLBC Poisson, relative L2 on $u$ | arm ÷ reference, 512 cases (seeds) | arm ÷ reference, 2,048 cases (seeds) |\n|---|---:|---:|\n"
-out += f"| reference ISLA (no option) | {num(OLP['512']['reference'], PF)} | {num(OLP['2048']['reference'], PF)} |\n"
-for label, key in P_ARMS:
-    out += f"| {label} | {arm_cell(OLP['512'], key, PF)} | {arm_cell(OLP['2048'], key, PF)} |\n"
-def el_arm_cell(n):
-    """The harmonic-measures arm on elasticity: the current-snapshot arm where scored; where the reference itself is the earlier snapshot's
-    control (interim), the arm trained on that snapshot is the same-snapshot pair."""
-    r = OLE[str(n)]; key = "v7_harmonic_measures" if E_INTERIM[n] else "harmonic_measures"
-    return " / ".join(fmt_ratio(arm_ratio(r, key, f)) for f, _ in OL_EL) if arm_ratio(r, key, "displacement_l2") is not None else TRAINING
-out += ("\n| ISLA arm on OLBC elasticity, arm ÷ reference: displacement / $\\sigma_{11}$ / $\\sigma_{22}$ / $\\sigma_{12}$ | 512 cases | 2,048 cases |\n|---|---:|---:|\n"
-        f"| per-type harmonic measures (four Laplace solves) | {el_arm_cell(512)} | {el_arm_cell(2048)}"
-        f"{' (against the interim reference, same snapshot)' if E_INTERIM[2048] and el_arm_cell(2048) != TRAINING else ''} |\n")
-print(out)
-print(": **Ablations, not the reference.** Each row is one option added to the reference ISLA, reported as arm ÷ reference where both were "
-      "trained on the same code snapshot (below one: the option helps). Two seeds per cell, 256 test cases, float32; the reference row "
-      "holds the absolute error with its seeds. The aggregation row is a removed option and is listed for its measured effect only. "
-      "How to read this: these ratios are never the book's GeoTransolver-512 ÷ ISLA, which is @tbl-olbc-ladder's reference row; a cell "
-      "marked *training* has not landed. Data: results/olbc_ref_2026-09-29.json. {#tbl-olbc-ablations}")
-```
-
-```{python}
-#| label: para-olbc-ablations
-#| output: asis
-d512, h512 = arm_ratio(OLP["512"], "distances", PF), arm_ratio(OLP["512"], "harmonic_measures", PF)
-d2048, h2048 = arm_ratio(OLP["2048"], "distances", PF), arm_ratio(OLP["2048"], "harmonic_measures", PF)
-d2048x, h2048x = arm_ratio(OLP["2048"], "v7_distances", PF), arm_ratio(OLP["2048"], "v7_harmonic_measures", PF)
-agg512 = arm_ratio(OLP["512"], "distances_local05", PF)
-if d2048 is not None and h2048 is not None:
-    two = f"at 2,048 cases the same-snapshot arms read {d2048:.2f} (distances) and {h2048:.2f} (harmonic measures)"
-else:
-    two = (f"at 2,048 cases the arms trained on an earlier snapshot read {d2048x:.2f} (distances) and {h2048x:.2f} (harmonic measures) "
-           f"against the current reference, slightly worse, a cross-snapshot reading that stands until the same-snapshot 2,048-case arms land")
-e512 = OLE["512"]; e2048 = OLE["2048"]
-ek512 = "v7_harmonic_measures" if E_INTERIM[512] else "harmonic_measures"
-ek2048 = "v7_harmonic_measures" if E_INTERIM[2048] else "harmonic_measures"
-hs512 = [arm_ratio(e512, ek512, f) for f, _ in OL_EL]; hs2048 = [arm_ratio(e2048, ek2048, f) for f in EL_STRESS]; hd2048 = arm_ratio(e2048, ek2048, "displacement_l2")
-pct = lambda r: f"{abs(r - 1) * 100:.0f}%"
-pspan = lambda rs: (lambda s: f"{pct(s[0])} to {pct(s[-1])}" if pct(s[0]) != pct(s[-1]) else pct(s[0]))(sorted(rs, key=lambda r: abs(r - 1)))
-el512 = (f"cost {pspan(hs512)} on every field at 512 cases against the same-snapshot reference" if None not in hs512
-         else "are training at 512 cases")
-el2048 = (f"improved the three stresses by {pspan(hs2048)} and left displacement unchanged ({hd2048:.2f}) at 2,048 cases "
-          f"against the {'earlier-snapshot control that is the interim reference' if E_INTERIM[2048] else 'same-snapshot reference'}" if None not in hs2048 and hd2048 is not None
-          else "are training at 2,048 cases")
-print(f"**On the Poisson set the per-type channel is neutral at 512 cases in either encoding (arm ÷ reference {d512:.2f} for the distances, "
-      f"{h512:.2f} for the harmonic measures); {two}. On the elasticity set the harmonic measures {el512} "
-      f"(@sec-nb-harmonic-elasticity-512-verdict, @sec-nb-olbc-v11-512) and {el2048} (@sec-nb-harmonic-elasticity-verdict).** A channel that "
-      "pays on one dataset at one rung and costs on the same dataset at another is not a universal setting: under the one-model rule the "
-      "per-type channel is not part of ISLA unless the current-snapshot elasticity pairs reverse the 512-case reading, and the decision "
-      "follows those lanes (@sec-nb-olbc-ref-2048). The local relational aggregation among tokens (each token pooling its 32 nearest "
-      f"tokens before the slice routing), which paid on the fixed Poisson mesh ({agg512:.2f} of the reference at 512 cases with the distances), "
-      "hurt on every dataset whose geometry varies, did not compound with the harmonic measures on elasticity, and its "
-      "polynomial-reproducing variant hurt as much, so both were removed from the model (@sec-nb-universal-agg-lug-verdict, "
-      "@sec-nb-harmonic-elasticity-combined-verdict, @sec-nb-local-lpr-verdict). Two diagnostics that break the book's input rules were "
-      "also run on the Poisson set, the domain's own axes as global vectors and absolute coordinates fed to every token; both remain "
-      "rejected inputs whatever they score (@sec-pose-prior).")
-```
-
-## Standing and open designs {#sec-interior-open}
-
-```{python}
-#| label: para-interior-open
-#| output: asis
-print(f"**One architecture covers the surface and the interior: ISLA with query tokens leads GeoTransolver-volume on interior velocity on "
-      f"both datasets (by {lead(RATIO['velocity_l2'])} on the DrivAerML Volume task, {AFR['velocity_l2']:.2f}x on AirfRANS), leads on pressure "
-      f"on the cars (by {lead(RATIO['pressure_l2'])}) and trails on pressure on the airfoils (by {trail(AFR['pressure_l2'])}), at "
-      f"{ISLA_PARAMS / 27.6:.2f}x GeoTransolver-volume's parameters.** The AirfRANS pressure and eddy-viscosity deficits are the open standings on the flow datasets. "
-      "Both are seed-robust (every paired ratio below one). How much of them is the fixed pose of the dataset is measured by the "
-      "pose-prior diagnostic of @sec-pose-prior, which gives ISLA the dataset's axes as inputs (an input the book rejects) and closes most "
-      "of the pressure gap; the mechanism of the rest is open. On the solids the picture is one of targets, "
-      f"not of physics: ISLA leads at the small lug rungs and ties at the large ones on the lug's scalar target (GeoTransolver-512 ÷ ISLA {lug_ratio[2400]:.2f} at 2,400 lugs), trails on "
-      f"Tensile2d's stress tensor at 400 cases with the steeper learning-curve slope, leads on the fixed-mesh OLBC Poisson set at both scored rungs "
-      f"with no option (GeoTransolver-512 ÷ ISLA {fmt_ratio(P_HEAD[512][0])} at 512 cases and {fmt_ratio(P_HEAD[2048][0])} at 2,048, each against "
-      f"the stronger GeoTransolver backend at that rung), and trails GeoTransolver-512 on the OLBC elasticity set: on the stresses by "
-      f"{E_STRESS[2048]} at 2,048 cases and {E_STRESS[512]} at 512, on displacement by {E_DISP[512]} to {E_DISP[2048]} (@sec-interior-olbc). An "
-      "interior decode whose prediction at a point is independent of the request and matches the interacting configuration's accuracy is "
-      "a design, not a result. @sec-limits collects the interior limits alongside the book's others. Data: "
-      "results/ratevol_reduction_2026-09-20.json; results/ref_surface_2026-09-23.json; results/airfrans_reduction_2026-09-22.json; "
-      "results/solids_lug_2026-09-22.json; results/olbc_ref_2026-09-29.json.")
-```
-
+**The interior lead is velocity on two datasets and pressure on one,
+measured at the training query count by two models that are neither
+resource-matched nor input-matched.** The AirfRANS pressure and
+eddy-viscosity deficits are the open standings on the flow datasets, and
+the scope of each, together with the third seeds that would settle them,
+is in @sec-limits-interior. The same interface on problems that are not
+external aerodynamics is @sec-beyond-aero.

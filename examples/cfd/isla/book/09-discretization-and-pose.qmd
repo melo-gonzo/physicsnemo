@@ -12,9 +12,10 @@ J = lambda p: json.load(open(RES / p))
 mean = statistics.mean
 ARMS = (("ISLA", "isla", "isla_ref"), ("GeoTransolver", "gt_unit", "gt"), ("Transolver", "transolver_unit", "t"))
 # the inference-draw probes and the training-law swap: DrivAerML Surface task (435 cars, 100,000 cells) and the 35-wing rung (200,000 cells).
-# ISLA rows are the reference configuration R1 (REF-BOARD inference half, 2026-09-23); the baselines are the released
+# ISLA rows are the reference configuration; the baselines are the released
 # checkpoints of the training-law study (cars) and the 200k fleet (wings), probed under the same draws.
 TC = J("trainarea_dr_reduction_2026-09-20.json"); TW = J("trainarea_reduction_2026-09-20.json")
+TAR1 = J("trainarea_dr_r1_2026-09-23.json")["arms"]  # the reference configuration's area-law twin at 200,000 cells
 WB = J("wingbench_200k_reduction_2026-09-19.json")["arms"]
 CR = J("consistency_r1_2026-09-23.json")["arms"]
 DENS = {"DrivAerML Surface task, 435 training cars, 100,000 cells": {"isla": CR["isla_r1_dr435_100k"], "gt_unit": TC["arms"]["gt_unit_uniform"], "transolver_unit": TC["arms"]["transolver_unit_uniform"]},
@@ -32,25 +33,16 @@ POSE = J("p200k_pose_r1_2026-09-23.json"); PA, PV, PN = POSE["arms"], POSE["verd
 #| output: asis
 dc, dw = DENS["DrivAerML Surface task, 435 training cars, 100,000 cells"], DENS["HiLiftAeroML, 35 training cases, 200,000 cells"]
 tl = lambda d, m: d["verdict"][f"{m}_area_over_uniform_unif"]
-print(f"**ISLA's prediction is a function of the surface and only weakly of the sample drawn from it, and its pose covariance is exact. "
-      f"GeoTransolver's and Transolver's predictions are functions of the sample.** Under a 10:1 spatially biased draw at inference, ISLA's "
-      f"surface-pressure error grows {factor(dc['isla']):.2f}x on the DrivAerML Surface task at 100,000 cells ({factor(CR200):.2f}x at its "
-      f"200,000-cell protocol) and {factor(dw['isla']):.2f}x on the 35-wing "
-      f"HiLiftAeroML rung. GeoTransolver's grows {factor(dc['gt_unit']):.1f}x and {factor(dw['gt_unit']):.1f}x, Transolver's "
-      f"{factor(dc['transolver_unit']):.1f}x and {factor(dw['transolver_unit']):.1f}x. Trained under a different sampling law and scored on "
-      f"the usual one, GeoTransolver is {tl(TC, 'gt_unit'):.1f}x (cars) and {tl(TW, 'gt_unit'):.1f}x (wings) worse than its own "
-      f"uniform-trained twin, Transolver {tl(TC, 'transolver_unit'):.1f}x and {tl(TW, 'transolver_unit'):.1f}x, and ISLA "
-      f"{abs(1 - tl(TC, 'isla')) * 100:.0f}% and {abs(1 - tl(TW, 'isla')) * 100:.0f}%. Inside the networks, GeoTransolver's slice "
-      f"centroids move {TT['GeoTransolver']['summary']['displacement_median']:.2f} body radii between a uniform and a biased draw of the same "
-      f"car. ISLA's anchors move {TT['ISLA']['summary']['displacement_median']:.3f}. When every case arrives in its own random pose, ISLA's error "
-      f"moves {(PV['isla_posed_over_native'] - 1) * 100:.1f}%, and ISLA is {(PV['gt_aug_posed_over_isla_posed'] - 1) * 100:.0f}% and "
-      f"{(PV['t_aug_posed_over_isla_posed'] - 1) * 100:.0f}% more accurate than the rotation-augmented baselines. The principle these probes "
-      "test, and the four sampling draws they use, are in @sec-discretization-centerpiece and @sec-sampling-laws. The metric is the "
-      "area-weighted relative L2 error of surface pressure in float32 (@sec-metrics). The protocol is that of @sec-protocol. ISLA is the reference "
-      "configuration throughout (@sec-using-config). The baselines are the released GeoTransolver-256 and Transolver-256 "
-      "checkpoints. Each section names its cell budget. The DrivAerML probes run at 100,000 cells per case, the scaling budget at which "
-      "every model's error is flat in the count (@sec-shared-floor). The wing probes and the pose study run at the 200,000-cell reporting "
-      "protocol.")
+print(f"**ISLA's prediction is a function of the surface and only weakly of the sample drawn from it, where GeoTransolver's and "
+      f"Transolver's are functions of the sample: under a 10:1 biased draw at inference ISLA's error grows "
+      f"{(factor(dc['isla']) - 1) * 100:.0f}% on the cars where GeoTransolver's grows {factor(dc['gt_unit']):.1f}x, and trained under the "
+      f"other sampling law ISLA moves {abs(1 - tl(TC, 'isla')) * 100:.0f}% where GeoTransolver moves {tl(TC, 'gt_unit'):.1f}x.** "
+      "The four readouts are the inference draw (@tbl-density), convergence under refinement (@tbl-consistency-40k), the training law "
+      "(@tbl-scoreboard-training-law) and where the slices sit (@tbl-territory); pose, which ISLA holds as an exact contract, is "
+      "@tbl-pose and @tbl-pose-200k. Protocol: @sec-protocol, ISLA at the reference configuration and the baselines at their released "
+      "checkpoints; the metric is the area-weighted relative L2 of surface pressure in float32 (@sec-metrics), the DrivAerML probes run "
+      "at 100,000 cells per case and the wing probes and the pose study at the 200,000-cell reporting protocol, and each section names "
+      "its budget.")
 ```
 
 ## Sampling-density robustness {#sec-robustness-density}
@@ -89,7 +81,7 @@ and every downstream quantity moves with it.
 #|   by the same checkpoint's error under the independent uniform draw, on a
 #|   log axis; 1 is exact consistency and the gray band marks up to 1.5x.
 #|   Top: the DrivAerML Surface task (435 training cars, 48 validation cars,
-#|   100,000 cells per draw; ISLA is the reference configuration R1, trained
+#|   100,000 cells per draw; ISLA is the reference configuration, trained
 #|   at 200,000 cells, GeoTransolver and Transolver the uniform-trained
 #|   100,000-cell checkpoints of the training-law study). Bottom:
 #|   HiLiftAeroML, 35 training cases, 180 validation cases, 200,000 cells
@@ -136,7 +128,7 @@ print(": The inference-draw change on two datasets (float32, seed means, the see
       "error under the 10:1 front/back biased draw and under the stratified draw, each divided by the same checkpoint's error under the "
       "independent uniform draw, every draw with exact Horvitz–Thompson weights, each architecture at its reporting-protocol rate. ISLA is "
       "the reference configuration trained at 200,000 cells, probed at 100,000 cells beside the baselines and at its own 200,000-cell "
-      "protocol. The 192-wide lanes' factors are in the notebook (@sec-nb-refboard-probes). How to "
+      "protocol. How to "
       "read this: 1 is exact consistency. The stratified column keeps the sampling law and only spreads the cells, so it bounds the "
       "draw-to-draw noise the biased column is read against. Transolver's two DrivAerML seeds differ by a factor of two in their biased "
       "factor, so its bar there is a coarse number. The ordering does not depend on it. It does not show the ablations that locate the "
@@ -148,7 +140,7 @@ Two things follow. The sensitivity is the **frame, not the aggregation**.
 GeoTransolver given ISLA's measure-weighted pooling (an ablation, not a
 modification of the public model, @sec-part-baseline) keeps its factor.
 Given in addition a datapipe centered on the Horvitz–Thompson centroid, it
-comes close to one (@sec-nb-steelman-verdict; @tbl-consistency-40k carries
+comes close to one (@tbl-consistency-40k carries
 the pooling ablation). What those ablations buy consistency with is a body
 centroid, a point the physics does not distinguish and that is ill-posed
 for an open, truncated or multi-body boundary, and they remain
@@ -382,13 +374,15 @@ absorbs the point pattern it was fitted on and is wrong on any other.
 ISLA's aggregates are measure-weighted integrals, the same under any draw
 that carries its weights. @sec-territories looks at this directly in the
 two trained networks. Two qualifications travel with the figure. First,
-ISLA is not indifferent. Its 8% on the cars for the 192-wide lanes of the
-table, and 5% for the reference configuration re-run at 200,000 cells
-(seeds 4% and 6%; @sec-nb-refboard-area-twin,
-results/trainarea_dr_r1_2026-09-23.json), sit at or past the 5% bar the
-DrivAerML twin preregistered (@sec-nb-trainarea-dr-verdict). The statement
-is therefore "weakly dependent" beside baselines that are dependent by
-factors of 2.4 to 9.6. Part of the few percent is the quadrature noise of
+ISLA is not indifferent: at the reporting protocol on the cars the
+reference configuration's area-trained ÷ uniform-trained factor is
+`{python} f"{TAR1['isla_r1_area']['mean']['unif'] / TAR1['isla_r1_uniform']['mean']['unif']:.2f}"`
+(seeds
+`{python} " and ".join(f"{a / u:.2f}" for a, u in zip(TAR1['isla_r1_area']['seeds']['unif'], TAR1['isla_r1_uniform']['seeds']['unif']))`;
+results/trainarea_dr_r1_2026-09-23.json), at the 5% bar the DrivAerML
+study preregistered, so the statement is "weakly dependent" beside
+baselines that are dependent by factors of 2.4 to 9.6. Part of the few
+percent is the quadrature noise of
 an area-proportional draw whose weights span four decades on these meshes
 (@fig-consistency-curves). Second, the baselines' dependence is much
 larger on the cars than on the wings, although the cars' cell-area spread
@@ -424,9 +418,9 @@ print(f"**GeoTransolver's slices follow the points and ISLA's nearly do not. On 
 #| fig-cap: >
 #|   Slice territories of one validation car at block 6, one half of the
 #|   body seen from the side, each point colored by its dominant slice (256
-#|   slices; a fixed permutation of a 256-color map keeps neighboring slice
-#|   indices in distinct colors, and two slices may still share a hue). Top
-#|   row ISLA (reference configuration R1, seed 42), bottom row
+#|   slices in the book's shuffled 20-hue qualitative map, so two slices may
+#|   share a hue). Top
+#|   row ISLA (reference configuration, seed 42), bottom row
 #|   GeoTransolver-256; left column the uniform draw, right column the
 #|   10:1-biased draw of the same surface (denser toward the front), both
 #|   at 100,000 expected cells. How to read this: colors are slice
@@ -438,13 +432,13 @@ print(f"**GeoTransolver's slices follow the points and ISLA's nearly do not. On 
 #|   point. Data: results/territory_pictures_r1_2026-09-23.npz.
 #| code-fold: true
 T = np.load(RES / "territory_pictures_r1_2026-09-23.npz")
-perm = np.random.default_rng(0).permutation(256); cmap = plt.get_cmap("turbo", 256)
+SLICE_COLS = slice_colors(256)                           # the book's slice-label map (STYLE.md)
 fig, axs = plt.subplots(2, 2, figsize=(10.0, 5.6), sharex=True, sharey=True)
 for i, (name, label) in enumerate((("isla", STYLE["isla_ref"]["label"]), ("gt", STYLE["gt"]["label"]))):
     for j, draw in enumerate(("unif", "biased")):
         ax = axs[i, j]; p = T[f"{name}_{draw}_points"]; d = T[f"{name}_{draw}_dominant"].astype(int)
         m = p[:, 1] > 0                                  # one half of the car
-        ax.scatter(p[m, 0], p[m, 2], c=cmap(perm[d[m] % 256]), s=1.2, linewidths=0, rasterized=True)
+        ax.scatter(p[m, 0], p[m, 2], c=SLICE_COLS[d[m] % 256], s=1.2, linewidths=0, rasterized=True)
         ax.set_aspect("equal"); ax.grid(False)
         ax.set_title(f"{label}, {'uniform draw' if draw == 'unif' else '10:1-biased draw'}", fontsize=9.5, loc="left")
         if draw == "biased":
@@ -466,7 +460,7 @@ plt.show()
 #|   this: the floor is below one for both models because soft boundaries
 #|   move under any resampling; what matters is whether the biased draw
 #|   costs more agreement than a fresh uniform draw does. ISLA is the
-#|   reference configuration R1, seed 42 (its block 0 routes every token to
+#|   reference configuration, seed 42 (its block 0 routes every token to
 #|   one dominant slice, so both agreements there are 1); GeoTransolver-256
 #|   is averaged over its eight heads. Four validation cars, 100,000
 #|   expected cells per draw; the axis runs from 0 to 1, the full range of
@@ -499,11 +493,12 @@ print(": Slice territories under a change of draw on two datasets, medians over 
       "fractions of tokens whose dominant slice agrees with that of the nearest token of the other draw. The excess is floor minus biased "
       "agreement. The displacement is the RMS motion of a slice's anchor (ISLA) or weight-averaged centroid (GeoTransolver) between the "
       "uniform and the biased draw, and the last column is the same motion between the two uniform draws (the displacement's own resampling "
-      "floor). How to read this: on the cars both agreement and displacement separate the models. On the wings only the displacement does, "
+      "floor). The probe preregistered 0.05 as an unchanged bias excess and 0.02 as an unchanged anchor displacement. "
+      "How to read this: on the cars both agreement and displacement separate the models. On the wings only the displacement does, "
       "because both wing checkpoints route softly (floors near 0.2, GeoTransolver's deep blocks nearly uniform over slices), so the "
       "agreement columns there measure the softness of the routing and not its dependence on the draw. Weighting each slice by the tokens "
-      "it owns instead of counting every slice once changes each displacement by 10% or less and no ordering (@sec-nb-territory-massweighted; "
-      "results/territory_massweighted_2026-09-23.json). Data: "
+      "it owns instead of counting every slice once changes each displacement by 10% or less and no ordering "
+      "(results/territory_massweighted_2026-09-23.json). Data: "
       "results/territory_r1_2026-09-23.json; results/territory_r1_200k_2026-09-23.json; results/territory_wings_r1_2026-09-23.json. "
       "{#tbl-territory}")
 ```
@@ -513,25 +508,15 @@ print(": Slice territories under a change of draw on two datasets, medians over 
 #| output: asis
 I200 = TT200["ISLA"]["summary"]
 deep = [r_["excess"] for r_ in TT["ISLA"]["per_block"] if r_["block"] >= 8]; shallow = [r_["excess"] for r_ in TT["ISLA"]["per_block"] if 1 <= r_["block"] < 6]
-print(f"On the cars ISLA's agreement between two uniform draws is {I['floor_median']:.2f} in median over blocks, and between the uniform and the biased draw "
-      f"it is {I['agreement_biased_median']:.2f}, a bias excess of {I['excess_median']:+.2f} ({I43['excess_median']:+.2f} for the second seed). GeoTransolver's floor is "
-      f"{G['floor_median']:.2f} and its biased agreement {G['agreement_biased_median']:.2f}, an excess of {G['excess_median']:+.2f}. The anchors move accordingly. "
-      f"ISLA's slice anchors move by {I['displacement_median']:.2f} and {I43['displacement_median']:.2f} of the body's RMS radius, against a resampling floor of "
-      f"{I['displacement_floor_median']:.2f} and {I43['displacement_floor_median']:.2f} between two uniform draws. GeoTransolver's weight-averaged centroids move by "
-      f"{G['displacement_median']:.2f} (floor {G['displacement_floor_median']:.2f}). On the wings the displacement reproduces: {GW['displacement_median']:.2f} for "
-      f"GeoTransolver's centroids against {IW['displacement_median']:.4f} and {IW43['displacement_median']:.4f} for ISLA's anchors. The agreement columns "
-      f"there no longer separate the models (excess {IW['excess_median']:+.2f} and {IW43['excess_median']:+.2f} against {GW['excess_median']:+.2f}). Two qualifications follow. "
-      f"First, ISLA's territories are *nearly*, not exactly, functions of the surface. The cars' excess of {I['excess_median']:.2f} is just past the 0.05 the probe "
-      f"preregistered as \"unchanged\". It is carried by the deep blocks ({min(deep):.2f} to {max(deep):.2f} in blocks 8 to 11 against {min(shallow):.2f} to "
-      f"{max(shallow):.2f} in blocks 1 to 5), and it falls to {I200['excess_median']:+.2f} when the same checkpoint is probed at 200,000 cells. That is the signature "
-      "of quadrature noise from a draw whose weights span a decade, the same source this chapter gives for ISLA's error growth under the biased draw. "
-      f"Second, the anchors' motion under the reference configuration ({I['displacement_median']:.2f} to {I43['displacement_median']:.2f} radii at 100,000 cells, {I200['displacement_median']:.2f} at "
-      f"200,000) is several times the 0.02 preregistered and larger than the 192-wide lane's 0.04 (@sec-nb-refboard-probes). The reference configuration spreads its routing over "
-      "more slices (170 to 240 effective slices in blocks 6 to 11 against 140 to 200 for the 192-wide lane, @sec-nb-refboard-probes), so each anchor averages fewer tokens and moves more under any "
-      f"resampling. The two-uniform-draw floor shows this: under the bias ISLA's anchors move {I['displacement_median'] / I['displacement_floor_median']:.1f}x and "
-      f"{I43['displacement_median'] / I43['displacement_floor_median']:.1f}x as far as under a fresh uniform draw, and GeoTransolver's centroids move "
-      f"{G['displacement_median'] / G['displacement_floor_median']:.0f}x as far. The agreement result is single-dataset, where the displacement result "
-      "holds on both (@sec-nb-territory-wings).")
+print("Three findings carry @tbl-territory. **The anchors move far less than the centroids**: under the bias ISLA's anchors move "
+      f"{I['displacement_median'] / I['displacement_floor_median']:.1f}x and {I43['displacement_median'] / I43['displacement_floor_median']:.1f}x "
+      f"as far as under a fresh uniform draw where GeoTransolver's centroids move {G['displacement_median'] / G['displacement_floor_median']:.0f}x "
+      "as far, and that ordering is the one result of this section that holds on both datasets. **ISLA's residual excess is carried by the "
+      f"deep blocks** ({min(deep):.2f} to {max(deep):.2f} in blocks 8 to 11 against {min(shallow):.2f} to {max(shallow):.2f} in blocks 1 to 5), "
+      "where each anchor averages fewest tokens, since the reference configuration spreads its routing over 170 to 240 effective slices in "
+      "those blocks. **And the excess halves with the cell count**: the same checkpoint probed at 200,000 cells reads "
+      f"{I200['excess_median']:+.2f} against {I['excess_median']:+.2f} at 100,000, the signature of quadrature noise from a draw whose weights "
+      "span a decade and the same source this chapter gives for ISLA's error growth under the biased draw.")
 ```
 
 ## Pose: a contract, not an accuracy edge {#sec-pose-contract}
@@ -551,8 +536,7 @@ print(f"**ISLA is exactly covariant to rotations and translations. When geometri
       f"(seeds {pseeds('isla')}), {PA['isla']['posed_over_native']:.3f}x its native-frame {PN['isla']:.4f}. GeoTransolver trained with rotation "
       f"augmentation scores {PA['gt_unit']['posed_mean']:.4f} ({PA['gt_unit']['posed_over_native']:.2f}x its native-pose {PN['gt_unit']:.4f}). "
       f"Transolver with augmentation scores {PA['transolver_unit']['posed_mean']:.4f} ({PA['transolver_unit']['posed_over_native']:.2f}x its {PN['transolver_unit']:.4f}). "
-      f"Augmented baseline ÷ posed ISLA is {PV['gt_aug_posed_over_isla_posed']:.2f} and {PV['t_aug_posed_over_isla_posed']:.2f} "
-      "(@sec-nb-p200k-pose-verdict).")
+      f"Augmented baseline ÷ posed ISLA is {PV['gt_aug_posed_over_isla_posed']:.2f} and {PV['t_aug_posed_over_isla_posed']:.2f}.")
 ```
 
 ```{python}
@@ -568,7 +552,7 @@ print(": Pose at the reporting protocol on the DrivAerML Surface task (435 train
       "float32, two seeds): surface-pressure error with every case in the dataset's native pose, and with every training and validation "
       "case rotated into its own random pose. ISLA is the reference configuration in both columns (native: results/ref_surface_2026-09-23.json); "
       "the baselines' native-pose references are their lanes of @tbl-scoreboard-200k at 1e-3, and their posed rows are the rotation-augmented "
-      "lanes of the earlier protocol (released models, not re-run). How to read this: the last column is the accuracy lead exact covariance buys against augmentation in the posed setting. "
+      "lanes of the released baselines. How to read this: the last column is the accuracy lead exact covariance buys against augmentation in the posed setting. "
       "Posed ÷ native is each model's own cost of the setting. Data: results/p200k_pose_r1_2026-09-23.json; "
       "results/ref_surface_2026-09-23.json; results/p200k_trio_reduction_2026-09-19.json. {#tbl-pose-200k}")
 ```
@@ -577,7 +561,7 @@ print(": Pose at the reporting protocol on the DrivAerML Surface task (435 train
 #| label: para-pose-canonical
 #| output: asis
 print("A GeoTransolver trained in a canonical frame is exactly pose-invariant at about a percent of in-distribution accuracy "
-      "(@sec-pose). What ISLA's construction buys is generality: it needs no known global direction to canonicalize against and no "
+      "(@tbl-pose). What ISLA's construction buys is generality: it needs no known global direction to canonicalize against and no "
       "sign-resolvable principal frame. Where those fail, on a geometry with a degenerate inertia tensor or in a setting without a global "
       f"direction, the canonicalized model has no frame to compute, the augmented model pays the {(PA['gt_unit']['posed_over_native']-1)*100:.0f} to "
       f"{(PA['transolver_unit']['posed_over_native']-1)*100:.0f}% above, and the equivariant one is unaffected. The covariance is exact by "
@@ -585,77 +569,64 @@ print("A GeoTransolver trained in a canonical frame is exactly pose-invariant at
       "under bf16 autocast, so the contract is exercised at deployment under float32 inference (@sec-isla-contracts).")
 ```
 
-## What a pose prior would buy, and why ISLA does not take it {#sec-pose-prior}
+### What canonicalization buys, measured {#sec-pose-canonicalization}
+
+**A baseline that consumes raw coordinates can be made exactly
+pose-invariant by canonicalizing its input, at about a percent of
+accuracy, and the canonicalization must be in the training pipeline.**
+@sec-pose states the construction and what it needs. @tbl-pose measures
+GeoTransolver on the DrivAerML Surface task under three treatments, each
+in the dataset's pose and on an SO(3) orbit.
+
+```{python}
+#| label: tbl-pose
+#| output: asis
+p1 = J("p1_canonicalization_control_2026-09-02.json")
+pp = J("p1pp_canonical_training_2026-09-03.json")
+raw_in = [p1["table"][f"inpose|raw|gt_fixed_seed{s}"]["pressure_l2"] for s in (42, 43)]
+raw_orb = [p1["table"][f"orbit|raw|gt_fixed_seed{s}"]["pressure_l2"] for s in (42, 43)]
+eval_canon_in = [p1["table"][f"inpose|canon|gt_fixed_seed{s}"]["pressure_l2"] for s in (42, 43)]
+eval_canon_orb = [p1["table"][f"orbit|canon|gt_fixed_seed{s}"]["pressure_l2"] for s in (42, 43)]
+tr_in = [pp["results"][f"gt_canon_seed{s}"]["inpose_canon"][0] for s in (42, 43)]
+tr_orb = [pp["results"][f"gt_canon_seed{s}"]["orbit_SO3_canon"][0] for s in (42, 43)]
+pref = mean(raw_in)
+orbit_ratios = [v / p1["prior"]["gt_inpose_pressure_l2"] for v in p1["prior"]["gt_p1_orbit_pressure_l2"].values()]
+fx = lambda r: f"{r:.0f}x" if r >= 10 else f"{r:.2f}x"
+def prow(name, a, b):
+    return f"| {name} | {a[0]:.4f} / {a[1]:.4f} ({fx(mean(a)/pref)}) | {b[0]:.4f} / {b[1]:.4f} ({fx(mean(b)/pref)}) |\n"
+out = "| GeoTransolver treatment | in pose (seed 42 / 43) | SO(3) orbit (seed 42 / 43) |\n|---|---|---|\n"
+out += prow("trained and evaluated in the recipe frame", raw_in, raw_orb)
+out += prow("trained in the recipe frame, canonicalized at inference only", eval_canon_in, eval_canon_orb)
+out += prow("trained and evaluated in the canonical frame", tr_in, tr_orb)
+print(out)
+print(f": Pose dependence of GeoTransolver on the DrivAerML Surface task: area-weighted relative L2 of surface pressure over the 48 "
+      f"validation cars, the full training split, learning rate 3e-3, 500 epochs, 10,000 sampled cells per case, seed 42 / seed 43, scored in bfloat16 "
+      f"(labeled: within-architecture pose factors only, never compared across architectures); the parenthesized factor divides the seed "
+      f"mean by the in-pose seed mean of the first row ({pref:.4f}). Across three seeds of the recipe-frame model the "
+      f"orbit penalty spans {min(orbit_ratios):.0f} to {max(orbit_ratios):.0f}x. How to read this: ISLA is not shown "
+      f"because its orbit and in-pose predictions agree to roundoff by construction; wall shear behaves the same way. The table "
+      f"measures the pose mechanism at the exploration budget, not the reporting-protocol standing, which is @tbl-pose-200k. "
+      f"Data: results/p1_canonicalization_control_2026-09-02.json (rows 1 and 2), "
+      f"results/p1pp_canonical_training_2026-09-03.json (row 3). {{#tbl-pose}}")
+```
+
+Three things follow. GeoTransolver in the recipe frame is not pose-robust:
+a random orientation multiplies its error by more than twenty.
+Canonicalization applied only at inference to a model trained in one exact
+pose is pose-invariant but costs 1.6 to 1.7x, because that model is
+hypersensitive to the sub-degree tilt of the frame estimate; a model that
+sees the estimator's tilt noise during training learns to ignore it. And
+on this data ISLA's exact equivariance and canonicalized GeoTransolver
+deliver the same pose invariance, which is why no accuracy claim in this
+book is attributed to equivariance.
+
+## What ISLA is not given {#sec-pose-inputs}
 
 **Every input ISLA takes is a datum of the PDE problem: the geometry, the
 boundary data, the material or flow parameters, and the directions the
-physics names (an inlet, a load, gravity). The axes of the dataset's
-coordinate frame are none of these, and ISLA refuses them even where they
-buy accuracy.** A solver never asks which way the dataset's $x$ axis
-points. Rotating a whole problem rotates its solution, so a fixed axis
-carries no information about the PDE; the only thing it carries is how
-the cases were posed. On a dataset where every airfoil has its chord along
-$x$, every car points along $x$ and every wing sits in one pose, handing
-the model those axes tells it the canonical pose of the training set.
-That is exactly the prior GeoTransolver has by construction, because it
-reads absolute coordinates, and it is the prior that the pose test above
-shows does not survive a change of pose. A model that needs it has stopped
-solving the PDE and started remembering where things sit.
-
-That refusal has a price on fixed-pose datasets, and the price was
-measured before the ruling that set it (2026-09-27; @sec-nb-ruling-dataset-frame-inputs).
-Because giving ISLA the dataset's axes as extra global directions makes it
-ISLA plus GeoTransolver's pose prior, the difference between the frame-free
-ISLA and that diagnostic arm is a measurement of how much of
-GeoTransolver's lead on a fixed-pose dataset is pose memorization rather
-than a better operator. @tbl-pose-prior reports it on every dataset where
-it was run, at the reporting protocol, two seeds each. It is a diagnostic
-of the baseline's lead. It is not an ISLA configuration, the arms are not
-in the recipe's recommended inputs, and no standing in this book uses
-them.
-
-```{python}
-#| label: tbl-pose-prior
-#| output: asis
-FAR = J("frame_af_ref_2026-09-26.json"); F3 = J("frame3d_2026-09-26.json"); FW = J("frame_wing_2026-09-26.json")
-FPR = J("frame_provided_2026-09-26.json"); FV = J("frame_vol_2026-09-26.json")
-FIELDS = [("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity")]
-rows = [
-    ("AirfRANS interior, 800 airfoils, 100,000 queries, internal geometry: pressure / velocity / eddy viscosity", "inlet + the two laboratory axes",
-     " / ".join(f"{FAR['frame_over_internal'][f]:.2f}" for f, _ in FIELDS), " / ".join(f"{FAR['gt_over']['internal'][f]:.2f} → {FAR['gt_over']['frame'][f]:.2f}" for f, _ in FIELDS)),
-    ("AirfRANS interior, stored signed-distance field", "inlet + the two laboratory axes",
-     " / ".join(f"{FPR['ratios']['over_provided_ref'][f]:.2f}" for f, _ in FIELDS), " / ".join(f"{FPR['comparators']['gt_vol'][f] / FPR['comparators']['provided_ref'][f]:.2f} → {FPR['ratios']['gt_vol_over'][f]:.2f}" for f, _ in FIELDS)),
-    ("DrivAerML Surface, 435 cars, 200,000 cells: pressure / wall shear", "inlet + the three body axes",
-     " / ".join(f"{F3['ratio_to_r1']['isla_r1_k4'][f]:.2f}" for f in ("pressure_l2", "wss_l2")), f"{F3['gt512_over']['isla_r1']['pressure_l2']:.2f} → {F3['gt512_over']['isla_r1_k4']['pressure_l2']:.2f} (pressure)"),
-    ("HiLiftAeroML 35 wings, 200,000 cells: pressure", "far field + the span and up axes",
-     f"{FW['fields']['pressure_l2']['frame_over_r1']:.2f}", f"{FW['fields']['pressure_l2']['gt512_over_r1']:.2f} → {FW['fields']['pressure_l2']['gt512_over_frame']:.2f}"),
-    ("DrivAerML Volume, 435 cars, stored signed-distance field: pressure / velocity / eddy viscosity", "inlet + the three body axes",
-     " / ".join(f"{FV['ratios']['frame_provided_over_provided_ref'][f]:.2f}" for f, _ in FIELDS), " / ".join(f"{FV['ratios']['gt_vol_over_provided_ref'][f]:.2f} → {FV['ratios']['gt_vol_over_frame_provided'][f]:.2f}" for f, _ in FIELDS)),
-]
-out = "| dataset and readout | axes given to the diagnostic arm | diagnostic ÷ ISLA | GeoTransolver ÷ ISLA, before → with the pose prior |\n|---|---|---|---|\n"
-for r in rows:
-    out += "| " + " | ".join(r) + " |\n"
-print(out)
-print(": The pose-prior diagnostic: ISLA at the reference configuration with the dataset's coordinate axes added as global directions, an "
-      "input the book rejects, against the frame-free ISLA and the input-matched GeoTransolver (GeoTransolver-512 on the surfaces, "
-      "GeoTransolver-volume on the interior tasks), float32 at the reporting protocol, two seeds per arm, seed means. The third column is "
-      "the diagnostic arm's error divided by ISLA's (below one: the axes buy accuracy); the last is GeoTransolver ÷ ISLA before and with "
-      "the axes (above one favors ISLA). How to read this: the column of gains is the price ISLA pays for refusing the pose prior on a "
-      "dataset that never changes pose, and the amount by which the baseline's lead shrinks is the share of that lead that is pose "
-      "memorization; it is not a configuration and it is not evidence for ISLA. Data: results/frame_af_ref_2026-09-26.json, "
-      "results/frame_provided_2026-09-26.json, results/frame3d_2026-09-26.json, results/frame_wing_2026-09-26.json, "
-      "results/frame_vol_2026-09-26.json. {#tbl-pose-prior}")
-```
-
-Two readings follow. On AirfRANS the axes close most of the pressure and
-eddy-viscosity gap to GeoTransolver-volume, so most of that lead is the
-fixed pose of the airfoils: every chord lies along $x$ and every angle of
-attack is a rotation of the inlet about a known origin. On the wings the
-axes recover about half of the gap at low angles and a quarter at high,
-so the pose is part of the wing deficit and the separated regime is the
-rest (@sec-de-strata). On the cars the axes buy 5%, the smallest effect,
-on the one dataset where ISLA is already at parity with its parameter
-match. None of this changes what ISLA is given. Where a plane of the
-problem is physical, a ground plane under a car or the symmetry plane of a
-half-wing, it is a boundary and belongs in the boundary geometry, not in
-the list of directions.
+physics names (an inlet, a load, gravity).** The axes of the dataset's
+coordinate frame are none of these. A solver never asks which way the
+dataset's $x$ axis points, and on a dataset where every car points along
+$x$ those axes tell a model the canonical pose of the training set rather
+than anything about the equations. What refusing them costs on a
+fixed-pose dataset is priced in @sec-pose-prior.

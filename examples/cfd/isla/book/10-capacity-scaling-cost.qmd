@@ -1,27 +1,16 @@
 # Capacity, scaling laws and cost {#sec-capacity}
 
-**On the DrivAerML Surface task at 435 training cars, cells per case stop
-paying at 100,000 for every architecture, width and depth pay until a
-shared floor near 0.040, and the compute-optimal rule is to collect cases
-until about 200 and then widen. ISLA, at its reference configuration of
-384 wide and 12 layers, sits at the accuracy-against-memory frontier of the
-reporting protocol: more accurate than GeoTransolver at its recipe width in
-0.7x the memory, and as accurate as the parameter-matched GeoTransolver-512
-in half the memory and 0.85x the step time. It reaches the floor with fewer
-parameters along its depth axis, and it lowers the training-case curve
-without steepening it.** This chapter is the home of every capacity,
-scaling and cost result. The accuracy standings themselves live in
-@sec-surface and @sec-interior. The protocol is @sec-protocol. The metric
-throughout is the area-weighted relative L2 of surface pressure in float32
-over the 48 DrivAerML validation cars (@sec-metrics), and every ratio is
-baseline ÷ ISLA, above one favoring ISLA. Two budgets appear: the reporting
-protocol of 200,000 cells per case and, for the capacity and scaling
-studies, 100,000 cells (labeled in every caption). The first section shows
-the two to be equivalent budgets for accuracy. The capacity and scaling
-studies are studies of deviations from the reference configuration. Their
-ISLA lanes span widths from 192 to 1,536 and depths from 12 to 48 layers,
-each labeled, and "ISLA" without a qualifier means the reference
-configuration (@sec-using-config).
+**On the DrivAerML Surface task, cells stop paying at 100,000, width and
+depth pay until a shared floor near 0.040, and compute should go to cases
+below about 200 and to width above it.** The scope is one dataset and one
+task throughout, at two budgets: the reporting protocol of 200,000 cells
+per case and, for the capacity and scaling studies, 100,000 cells, labeled
+in every caption; the metric is the area-weighted relative L2 of surface
+pressure in float32 over the 48 DrivAerML validation cars (@sec-metrics),
+every ratio is baseline ÷ ISLA, and the capacity and scaling lanes are
+deviations from the reference configuration spanning widths from 192 to
+1,536 and depths from 12 to 48 layers, each labeled, so that "ISLA"
+without a qualifier means the reference configuration (@sec-using-config).
 
 ```{python}
 #| label: setup-capacity
@@ -39,7 +28,10 @@ ISO = ISOJ["configurations"]
 # the reference configuration at the reporting protocol (REF), its depth variant and the parameter-matched GeoTransolver-512
 REF = J("ref_surface_2026-09-23.json")["summary"]
 refm = lambda k, f="pressure_l2": REF[k]["fields"][f]["mean"]
-GT256_435 = J("p200k_trio_reduction_2026-09-19.json")["arms"]["gt_unit_lr3e3"]["pressure_mean"]
+P2A = J("p200k_trio_reduction_2026-09-19.json")["arms"]
+TENK = J("p200k_trio_reduction_2026-09-19.json")["tenk_reference"]
+QV = J("quadvar_reduction_2026-09-17.json")["arms"]  # the stratified and 40,000-cell draws of one pair of 435-car checkpoints
+GT256_435 = P2A["gt_unit_lr3e3"]["pressure_mean"]
 RB = J("refboard_ladder_2026-09-23.json"); RBS = RB["summary"]; RBX = RB["learning_curve_exponents"]
 ```
 
@@ -63,8 +55,28 @@ and GeoTransolver-256 by
 `{python} f"{100 * abs(ISO['gt_unit|w256|c200k|lr3e-3|ep1000']['pressure_l2_mean'] / ISO['gt_unit|w256|c200k|lr3e-3|ep500']['pressure_l2_mean'] - 1):.2f}"`%,
 so the protocol is converged and neither cells nor epochs are a lever past
 the reporting protocol. What buys accuracy past 100,000 cells is width and
-depth (@sec-shared-floor). The step from smaller counts up to the
-protocol, which is not flat, is in @sec-surface.
+depth (@sec-shared-floor).
+
+### Below the protocol the cell count still pays {#sec-deficit-anatomy}
+
+The step from smaller counts up to the protocol is not flat, and the part
+of it that is ISLA's own is quadrature noise: ISLA's slice states are
+measure-weighted means over the drawn cells (@sec-isla-quadrature), so at
+a small count they inherit more of the draw's variance than the baselines'
+unweighted aggregates do. Two readings of one pair of 435-car checkpoints
+locate it. A stratified draw of the same 10,000 cells, which keeps the
+inclusion law and only spreads the cells, moves GeoTransolver ÷ ISLA from
+`{python} f"{QV['gt_unit']['unif']['10000'] / QV['isla_ref']['unif']['10000']:.3f}"`
+to
+`{python} f"{QV['gt_unit']['strat']['10000']['mean'] / QV['isla_ref']['strat']['10000']['mean']:.3f}"`,
+an independent 40,000-cell draw moves it to
+`{python} f"{QV['gt_unit']['unif']['40000'] / QV['isla_ref']['unif']['40000']:.3f}"`,
+and at 200,000 cells the same configuration reads
+`{python} f"{TENK['gt_unit'] / TENK['isla']:.2f}"`
+at 10,000 cells against
+`{python} f"{min(P2A['gt_unit_lr1e3']['pressure_mean'], P2A['gt_unit_lr3e3']['pressure_mean']) / P2A['isla']['pressure_mean']:.3f}"`
+at the protocol. For deployment the consequence is the recommendation of
+@sec-using-sampler: use the stratified draw, or more cells.
 
 ```{python}
 #| label: tbl-cells-ladder
@@ -252,9 +264,9 @@ Three readings carry the figure.
    better than the 12-layer reference on the cars and
    `{python} f"{100 * abs(1 - refm('isla_r2|hl35') / refm('isla_r1|hl35')):.1f}%"`
    apart from it on the 35-wing rung, both inside the 1.5% bar, at twice
-   the step time and memory (@tbl-cost-200k). On the Tensile2d solid it
+   the step time and memory (@tbl-isla-cost). On the Tensile2d solid it
    is 9 to 27% worse (@sec-interior-tensile2d). The reference stays at 12
-   layers (results/ref_surface_2026-09-23.json; @sec-nb-ref-verdict).
+   layers (results/ref_surface_2026-09-23.json).
 3. **Both architectures reach the same floor, and ISLA reaches it with
    fewer parameters.** At matched parameters of about 140M the two are
    identical within a seed spread (GeoTransolver-1,024 ÷ ISLA-384×48 =
@@ -264,36 +276,41 @@ Three readings carry the figure.
    `{python} f"{100 * isla_depth[1][0] / gt_width[2][0]:.0f}%"` of its
    parameters.
 
-The same ladders on the 510-wing HiLiftAeroML rung
-(@sec-nb-scalehl-verdict; results/scalehl_2026-09-26.json) carry two of
-these statements and overturn two. Cells stop paying at 100,000 there as
-well: GeoTransolver-256 at 100,000 cells scores
-`{python} f"{SHL['bars']['cells_flat']['gt_256_c100k_over_c200k_lr3e3']:.2f}"`
-of its 200,000-cell twin and Transolver-256
-`{python} f"{SHL['bars']['cells_flat']['transolver_256_c100k_over_c200k']:.2f}"`,
-and ISLA (cosine, 192 wide)
-`{python} f"{SHL['bars']['cells_flat']['isla_cos_192_c100k_over_c200k']:.2f}"`
-(@sec-nb-scalehl-cells-verdict).
-Width pays for ISLA on the wings (cosine 384 ÷ 192 =
-`{python} f"{SHL['arms']['isla_cos_384_lr1e3_c100k']['seed_means']['pressure_l2'] / SHL['arms']['isla_cos_192_c100k']['seed_means']['pressure_l2']:.2f}"`,
-768 ÷ 384 = `{python} f"{SHL['bars']['turnover']['isla_768_over_384']:.2f}"`)
-but not for GeoTransolver (512 ÷ 256 =
-`{python} f"{SHL['bars']['width_carries']['gt_512_over_256']:.2f}"`), so
-the ISLA turnover at 384 is a DrivAerML fact and the GeoTransolver width
-gain is one too. The wing deficit is width-independent under cosine
-routing (GeoTransolver ÷ ISLA
-`{python} f"{SHL['arms']['gt_256_c100k']['seed_means']['pressure_l2'] / SHL['arms']['isla_cos_192_c100k']['seed_means']['pressure_l2']:.2f}"`
-at 192 and
-`{python} f"{SHL['arms']['gt_512_c100k']['seed_means']['pressure_l2'] / SHL['arms']['isla_cos_384_lr1e3_c100k']['seed_means']['pressure_l2']:.2f}"`
-at 384), and at equal memory GeoTransolver holds the wing frontier
-(GeoTransolver-512 at
-`{python} f"{SHL['arms']['gt_512_c100k']['mem_peak_gb']:.0f}"` GB scores
-`{python} f"{SHL['arms']['gt_512_c100k']['seed_means']['pressure_l2']:.4f}"`
-against ISLA-768 at
-`{python} f"{SHL['arms']['isla_768_c100k']['mem_peak_gb']:.0f}"` GB at
-`{python} f"{SHL['arms']['isla_768_c100k']['seed_means']['pressure_l2']:.4f}"`),
-where on the cars ISLA does. The shared floor is a DrivAerML measurement
-until the wing learning-curve lanes land (@sec-program-status).
+The shared floor is measured on DrivAerML; on the wings it is not
+established (@sec-limits). @tbl-scalehl puts the same readings, and the
+memory frontier, on the 510-wing HiLiftAeroML rung: two reproduce and
+three do not.
+
+```{python}
+#| label: tbl-scalehl
+#| output: asis
+SA = SHL["arms"]
+rows = [
+    ("cells stop paying at 100,000",
+     f"GeoTransolver-256 {SHL['bars']['cells_flat']['gt_256_c100k_over_c200k_lr3e3']:.2f}, Transolver-256 {SHL['bars']['cells_flat']['transolver_256_c100k_over_c200k']:.2f}, ISLA {SHL['bars']['cells_flat']['isla_cos_192_c100k_over_c200k']:.2f} (100,000 ÷ 200,000 cells)",
+     "**reproduces**"),
+    ("width pays for both architectures",
+     f"ISLA 384 ÷ 192 = {SA['isla_cos_384_lr1e3_c100k']['seed_means']['pressure_l2'] / SA['isla_cos_192_c100k']['seed_means']['pressure_l2']:.2f}, but GeoTransolver 512 ÷ 256 = {SHL['bars']['width_carries']['gt_512_over_256']:.2f}",
+     "**does not**: width pays for ISLA and not for GeoTransolver here"),
+    ("ISLA's width turns over at 384",
+     f"768 ÷ 384 = {SHL['bars']['turnover']['isla_768_over_384']:.2f}",
+     "**does not**: no turnover on the wings"),
+    ("the deficit is width-independent",
+     f"GeoTransolver ÷ ISLA {SA['gt_256_c100k']['seed_means']['pressure_l2'] / SA['isla_cos_192_c100k']['seed_means']['pressure_l2']:.2f} at 192 wide and {SA['gt_512_c100k']['seed_means']['pressure_l2'] / SA['isla_cos_384_lr1e3_c100k']['seed_means']['pressure_l2']:.2f} at 384",
+     "**reproduces**"),
+    ("ISLA holds the memory frontier",
+     f"GeoTransolver-512 at {SA['gt_512_c100k']['mem_peak_gb']:.0f} GB scores {SA['gt_512_c100k']['seed_means']['pressure_l2']:.4f} against ISLA-768 at {SA['isla_768_c100k']['mem_peak_gb']:.0f} GB at {SA['isla_768_c100k']['seed_means']['pressure_l2']:.4f}",
+     "**does not**: GeoTransolver holds the wing frontier"),
+]
+out = "| the DrivAerML reading | what the 510-wing rung measures | verdict |\n|---|---|---|\n"
+for r in rows: out += "| " + " | ".join(r) + " |\n"
+print(out)
+print(": The same ladders on the 510-wing HiLiftAeroML rung: surface-pressure area-weighted relative L2 on the 180 validation cases, "
+      "float32, 100,000 cells per case, 500 epochs, two seeds, ISLA under cosine routing at the width rule's rate and GeoTransolver at "
+      "3e-3. How to read this: each row restates a DrivAerML reading of this chapter and says whether the wing rung reproduces it; the "
+      "cells and deficit rows do and the width and frontier rows do not, so the width turnover at 384 and the memory frontier are "
+      "DrivAerML facts. Data: results/scalehl_2026-09-26.json. {#tbl-scalehl}")
+```
 
 ## The memory and time frontier {#sec-review-frontier}
 
@@ -312,14 +329,33 @@ percentile of the logged steps is the *GPU-floor step time*, the cost of
 the network alone. The median is the wall clock a user waits.
 @fig-equal-budget draws error against both costs with each model's
 frontier, the best error attainable at or under a budget. @tbl-equal-budget
-lists every lane. The frontier is a statement about the cost-logged lanes
-only. ISLA's depth ladder, which reaches the floor at 68M parameters
-(@sec-shared-floor), logged no cost and is absent, so the ISLA frontier
-above 70 GB is an upper bound on what the architecture can do there.
+lists every lane. One limit bounds the claim. The frontier is a statement
+about the cost-logged lanes only, and ISLA's depth ladder, which reaches
+the floor at 68M parameters (@sec-shared-floor), carries no cost log. The
+ISLA frontier above 70 GB is therefore an upper bound on what the
+architecture can do there.
 
 ```{python}
 #| label: fig-equal-budget
-#| fig-cap: "Error against training cost for every cost-logged lane of the cell-count ladder and the width and depth ladders on the DrivAerML Surface task (435 cars, 500 epochs, two-seed means with the seeds as short bars; trained at 100,000 to 600,000 cells per case, every lane scored in float32 at 200,000 cells). Top: peak GPU memory per device; bottom: GPU-floor step time (tenth percentile of the logged steps). The step lines are each model's frontier, the best error attainable at or under a budget; only the lanes on a frontier are labeled, width x training cells (L24 for the 24-layer GeoTransolver), and every lane is listed in @tbl-equal-budget; GeoTransolver's recipe default (256 wide, 200,000 cells) is ringed. How to read this: below about 70 GB and 0.3 s the ISLA frontier lies under GeoTransolver's at every budget; above it GeoTransolver-1,024 and GeoTransolver-512 with 24 layers sit about 1% below ISLA's best lane here. ISLA's depth ladder, which reaches the same floor (@fig-capacity), logged no cost and is absent, so the ISLA frontier above 70 GB is an upper bound. Data: results/isocost_reduction_2026-09-20.json and results/cap435_interim_2026-09-20.json."
+#| fig-cap: >
+#|   Error against training cost for every cost-logged lane of the
+#|   cell-count ladder and the width and depth ladders on the DrivAerML
+#|   Surface task (435 cars, 500 epochs, two-seed means with the seeds as
+#|   short bars; trained at 100,000 to 600,000 cells per case, every lane
+#|   scored in float32 at 200,000 cells). Top: peak GPU memory per device;
+#|   bottom: GPU-floor step time (the tenth percentile of the logged steps).
+#|   The step lines are each model's frontier, the best error attainable at
+#|   or under a budget; only the lanes that set a frontier are labeled,
+#|   width x training cells (L24 for the 24-layer GeoTransolver), and every
+#|   lane is listed in @tbl-equal-budget; GeoTransolver's recipe default
+#|   (256 wide, 200,000 cells) is ringed. How to read this: below about
+#|   70 GB and 0.3 s the ISLA frontier lies under GeoTransolver's at every
+#|   budget, and above it GeoTransolver-1,024 and GeoTransolver-512 with 24
+#|   layers sit about 1% below ISLA's best lane here; the figure shows only
+#|   the lanes that logged a cost, which is why the ISLA frontier above
+#|   70 GB is an upper bound. Data:
+#|   results/isocost_reduction_2026-09-20.json and
+#|   results/cap435_interim_2026-09-20.json.
 #| fig-alt: "Two stacked scatter plots of validation pressure error against training cost, one against peak memory and one against GPU-floor step time, with ISLA points in blue, GeoTransolver in red and Transolver in amber, each with a step-shaped frontier line and labels on the frontier points only."
 #| code-fold: true
 cfgs = [c for c in ISO.values() if c["status"] == "complete" and c["epochs"] == 500 and c.get("peak_mem_gb") and c.get("step_s_p10")]
@@ -534,7 +570,7 @@ the coefficients, not a slope. ISLA shows the same non-monotonicity in
 milder form at 27 cars, so the effect is not one architecture's.
 
 **The reference configuration lowers the curve without steepening it.**
-The scaling study above runs at 100,000 cells with the earlier protocol's
+The scaling study above runs at 100,000 cells with the narrower ISLA
 widths. The reporting protocol's training-car ladder (@sec-scoreboard-200k)
 gives the same reading for ISLA as shipped. @tbl-refboard-exponents puts
 the learning-curve exponent of the total error over 27 to 218 cars (the
@@ -549,7 +585,7 @@ fitted law's $\alpha \approx 1.3$ for the reducible part.
 ```{python}
 #| label: tbl-refboard-exponents
 #| output: asis
-RBN = {"isla_r1": "ISLA (384 wide, 5e-4)", "isla_192": "ISLA, earlier protocol (192 wide, 1e-3)", "gt256_lr3e3": "GeoTransolver-256 (3e-3)",
+RBN = {"isla_r1": "ISLA (384 wide, 5e-4)", "isla_192": "ISLA, 192 wide (1e-3)", "gt256_lr3e3": "GeoTransolver-256 (3e-3)",
        "gt256": "GeoTransolver-256 (1e-3)", "transolver256": "Transolver-256 (3e-3)"}
 out = "| configuration | 27 cars | 54 | 109 | 218 | exponent, 27 to 218 cars |\n|---|--:|--:|--:|--:|--:|\n"
 for a, name in RBN.items():
@@ -657,8 +693,7 @@ recipe's width is the right place to spend. A claim that one architecture
 **The same axis on a second dataset and task.** On AirfRANS
 (two-dimensional incompressible airfoil flow, the interior task of
 @sec-interior-airfrans) the training-case axis runs over nested subsets
-of 50, 100, 200, 400 and 800 airfoils for ISLA under the earlier protocol
-(192 wide, 1e-3) and GeoTransolver-volume, two seeds each, 500 epochs at
+of 50, 100, 200, 400 and 800 airfoils for ISLA at 192 wide and 1e-3 and GeoTransolver-volume, two seeds each, 500 epochs at
 100,000 interior queries (@fig-scaling-airfrans). The 800-airfoil standing
 of the reference configuration is @tbl-interior-airfrans. The curve has a
 different shape there. No floor is within reach at 800 airfoils, and ISLA's
@@ -689,9 +724,8 @@ AirfRANS range measured.
 #| label: fig-scaling-airfrans
 #| fig-cap: >
 #|   Interior error against training airfoils on AirfRANS (interior task)
-#|   for ISLA under the earlier protocol (192 wide, cosine routing, 1e-3;
-#|   the reference configuration's ladder is in flight) and
-#|   GeoTransolver-volume (1e-3), 500 epochs
+#|   for ISLA at 192 wide with cosine routing at 1e-3 and
+#|   GeoTransolver-volume at 1e-3, 500 epochs
 #|   at 100,000 interior queries, two-seed means with the seeds as short
 #|   bars, float32 on the 200 test airfoils; left, pressure; middle,
 #|   velocity; right, eddy viscosity (a standardized field, so its ratios
@@ -754,27 +788,18 @@ c_isla, c_r2, c_i192, c_g256, c_g512, c_t = (cost(a) for a in ("isla_ref_r1_384x
 ```{python}
 #| label: para-cost-lede
 #| output: asis
-print(f"**At the reporting protocol ISLA ({c_isla[2] / 1e6:.1f}M parameters) trains a step in {c_isla[0]:.0f} ms and {c_isla[1]:.1f} GiB "
-      f"against GeoTransolver-256's {c_g256[0]:.0f} ms and {c_g256[1]:.1f} GiB and GeoTransolver-512's {c_g512[0]:.0f} ms and "
-      f"{c_g512[1]:.1f} GiB, and it is the most accurate of the three on the DrivAerML Surface task at 435 cars "
-      f"({refm('isla_r1|dr435'):.4f} against {GT256_435:.4f} and {refm('gt_w512|dr435'):.4f}). On this dataset the accuracy-against-memory "
-      f"frontier at the protocol is therefore ISLA's: GeoTransolver-256 is {(1 - refm('isla_r1|dr435') / GT256_435) * 100:.0f}% less accurate in "
-      f"{c_g256[1] / c_isla[1]:.1f}x the memory, and GeoTransolver-512, the parameter match, is as accurate in {c_g512[1] / c_isla[1]:.1f}x the memory "
-      f"and {c_g512[0] / c_isla[0]:.2f}x the step time.** Against the recipe-default GeoTransolver the one cost ISLA pays is step time, "
-      f"{c_isla[0] / c_g256[0]:.2f}x, inside the cost-parity clause of the reference selection (@sec-nb-ref-verdict). The 24-layer depth "
-      f"variant costs {c_r2[0] / c_isla[0]:.1f}x ISLA's time and {c_r2[1] / c_isla[1]:.1f}x its memory for the 1.5% of @sec-shared-floor, which "
-      "is why it is not the reference. The token budget decides the cost comparison more than the architecture does. @fig-cost-sweep sweeps "
-      "the training step from 2,500 to 600,000 tokens per case on the compiled path every model trains on, with the training logs of the "
-      "cell-count ladder as a second instrument on the memory axis. Every arm is linear in tokens above 100,000 (the slice attention is "
-      "linear in points, and no quadratic term appears up to 600,000). Every arm is launch-bound below about 40,000, where the GPU is not saturated. "
-      "ISLA's step is with the fused geometry kernel (`geo_kernel=None` resolves to it on CUDA, @sec-using-cost). On the fallback path, the "
-      "eager geometry region with its per-slice invariants recomputed in the backward pass, the step grows linearly from 20,000 tokens on "
-      f"and is several times GeoTransolver's at 200,000. At the recipe default of 200,000 cells every model fits one GB300. The earlier "
-      f"protocol's ISLA at 192 wide ({c_i192[2] / 1e6:.1f}M) remains the cheapest model per token after Transolver ({c_i192[0]:.0f} ms, "
-      f"{c_i192[1]:.1f} GiB). At 600,000 cells its training-log peak is "
+print(f"**On the DrivAerML Surface task at the reporting protocol ISLA holds the accuracy-against-memory frontier: GeoTransolver-256 "
+      f"is {(1 - refm('isla_r1|dr435') / GT256_435) * 100:.0f}% less accurate at {c_g256[1] / c_isla[1]:.2f}x ISLA's memory, and the "
+      f"parameter-matched GeoTransolver-512 is as accurate at {c_g512[1] / c_isla[1]:.2f}x its memory and {c_g512[0] / c_isla[0]:.2f}x its "
+      f"step time.** The per-configuration footprints are @tbl-isla-cost; what the token budget does to them is @fig-cost-sweep. Every arm "
+      "is linear in tokens above 100,000, because the slice attention is linear in points and no quadratic term appears up to 600,000, and "
+      "every arm is launch-bound below about 40,000, where the GPU is not saturated. ISLA's step is with the fused geometry kernel "
+      "(`geo_kernel=None` resolves to it on CUDA, @sec-using-cost); on the fallback eager geometry region, whose per-slice invariants are "
+      "recomputed in the backward pass, the step grows linearly from 20,000 tokens on and is several times GeoTransolver's at 200,000. At "
+      f"the recipe default of 200,000 cells every model fits one GB300, and the narrowest ISLA at 192 wide ({c_i192[2] / 1e6:.1f}M, "
+      f"{c_i192[0]:.0f} ms, {c_i192[1]:.1f} GiB) is the cheapest model per token after Transolver: at 600,000 cells its training-log peak is "
       f"{ISO['isla|w192|c600k|lr1e-3|ep500']['peak_mem_gb']:.0f} GB, about what GeoTransolver-256 needs at 200,000 "
-      f"({ISO['gt_unit|w256|c200k|lr3e-3|ep500']['peak_mem_gb']:.0f} GB). The per-configuration footprint table of the shipped "
-      "configurations is @sec-using-cost.")
+      f"({ISO['gt_unit|w256|c200k|lr3e-3|ep500']['peak_mem_gb']:.0f} GB).")
 ```
 
 ```{python}
@@ -783,7 +808,7 @@ print(f"**At the reporting protocol ISLA ({c_isla[2] / 1e6:.1f}M parameters) tra
 #|   Training-step time (top) and peak memory (bottom) against the number
 #|   of tokens per case, 2,500 to 600,000, for ISLA (the reference
 #|   configuration, 384 wide with 12 layers, solid blue), its 24-layer depth
-#|   variant (dash-dot blue), the earlier protocol's ISLA at 192 wide (pale
+#|   variant (dash-dot blue), ISLA at 192 wide (pale
 #|   blue), GeoTransolver at 256 (red) and 512 wide (light red) and
 #|   Transolver at 256 wide (amber).
 #|   Lines: one GB300, bf16 autocast, batch of one case, AdamW step
@@ -796,7 +821,7 @@ print(f"**At the reporting protocol ISLA ({c_isla[2] / 1e6:.1f}M parameters) tra
 #|   are logarithmic and the lines are joined measurements, not fits; below
 #|   about 40,000 tokens every model is launch-bound and the lines are flat;
 #|   the 200,000-token column is the reporting protocol and its numbers are
-#|   in @tbl-cost-200k; the training lanes of this book are dominated by
+#|   in @tbl-isla-cost; the training lanes of this book are dominated by
 #|   data loading, so the top panel ranks the models' step cost, not their
 #|   wall-clock. Data: results/cost_sweep_ref_gb300_bf16_2026-09-22.json;
 #|   results/isocost_reduction_2026-09-20.json.
@@ -804,7 +829,7 @@ print(f"**At the reporting protocol ISLA ({c_isla[2] / 1e6:.1f}M parameters) tra
 #| code-fold: true
 COST_ARMS = [("isla_ref_r1_384x12_cos_fused", "isla_ref", "ISLA (reference configuration, 384 x 12)", dict(color=BLUE, ls="-")),
              ("isla_ref_r2_384x24_cos_fused", "isla_ref", "ISLA, 24 layers (384 x 24, depth variant)", dict(color=BLUE, ls="-.")),
-             ("isla_192x12_cos_fused", "isla_ref", "ISLA, earlier protocol (192 x 12)", dict(color=BLUE_PALE, ls="-")),
+             ("isla_192x12_cos_fused", "isla_ref", "ISLA, 192 x 12", dict(color=BLUE_PALE, ls="-")),
              ("geotransolver_256", "gt", "GeoTransolver 256 (recipe default)", dict(color=RED, ls="-")),
              ("geotransolver_512", "gt", "GeoTransolver 512", dict(color=RED_LIGHT, ls="-")),
              ("transolver_256", "t", "Transolver 256", {})]
@@ -835,24 +860,3 @@ ax0.legend(loc="upper left", fontsize=8.2); ax1.legend(loc="upper left", fontsiz
 plt.show()
 ```
 
-```{python}
-#| label: tbl-cost-200k
-#| output: asis
-ref = at200["geotransolver_256"]
-ACC = {"isla_ref_r1_384x12_cos_fused": refm("isla_r1|dr435"), "isla_ref_r2_384x24_cos_fused": refm("isla_r2|dr435"),
-       "isla_192x12_cos_fused": J("p200k_trio_reduction_2026-09-19.json")["arms"]["isla"]["pressure_mean"], "geotransolver_256": GT256_435,
-       "geotransolver_512": refm("gt_w512|dr435"), "transolver_256": J("p200k_trio_reduction_2026-09-19.json")["arms"]["transolver_unit_lr3e3"]["pressure_mean"]}
-out = "| model | parameters | step [ms] | peak memory [GB] | step ÷ GeoTransolver-256 | memory ÷ GeoTransolver-256 | error at 435 cars |\n|---|--:|--:|--:|--:|--:|--:|\n"
-for arm, key, lab, ov in COST_ARMS:
-    r = at200[arm]
-    out += (f"| {lab} | {r['n_params'] / 1e6:.1f}M | {st.median(r['step_ms']):.0f} | {r['peak_allocated_gib'] * GIB_TO_GB:.1f} | "
-            f"{st.median(r['step_ms']) / st.median(ref['step_ms']):.2f} | {r['peak_allocated_gib'] / ref['peak_allocated_gib']:.2f} | {ACC[arm]:.4f} |\n")
-print(out)
-print(": Step time and peak memory at the reporting protocol's 200,000 tokens per case, one GB300, bf16, batch of one, compiled, "
-      "ISLA with the fused geometry kernel. The two ratio columns are to GeoTransolver's recipe default, and below one is cheaper. The last "
-      "column is the same configuration's surface-pressure error on the DrivAerML Surface task at 435 training cars under the reporting "
-      "protocol (two-seed means, @sec-scoreboard-200k). How to read this: ISLA steps 11% slower than GeoTransolver-256 in 29% less "
-      "memory and is 7% more accurate. It is faster, smaller and as accurate as the parameter-matched GeoTransolver-512. The 24-layer "
-      "variant costs twice ISLA's time and memory for 1.5%. Data: results/cost_sweep_ref_gb300_bf16_2026-09-22.json; "
-      "results/ref_surface_2026-09-23.json; results/p200k_trio_reduction_2026-09-19.json. {#tbl-cost-200k}")
-```
