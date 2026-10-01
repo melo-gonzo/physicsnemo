@@ -46,16 +46,16 @@ def _boundary(n=200, seed=0):
     return soup(pts, nrm, w)
 
 
-def _model(global_inputs=None, **kw):
+def _model(global_schema=None, **kw):
     torch.manual_seed(0)
-    if global_inputs is None:
-        global_inputs = {"g": {"rank": 1}}
-    return ISLA(outputs=PV, global_inputs=global_inputs, hidden=32, n_layers=2, n_slices=8, **kw).to(D).eval()
+    if global_schema is None:
+        global_schema = {"g": {"rank": 1}}
+    return ISLA(output_schema=PV, global_schema=global_schema, hidden=32, n_layers=2, n_slices=8, **kw).to(D).eval()
 
 
 def _rotate_globals(m, gd, R):
     """Rotate the rank-1 entries of a global_data dict, leave the rank-0 ones."""
-    return {k: (v @ R.T if m.global_specs[k].rank == 1 else v) for k, v in gd.items()}
+    return {k: (v @ R.T if m.global_schema[k].rank == 1 else v) for k, v in gd.items()}
 
 
 def _run(m, mesh, gd, q=None):
@@ -81,7 +81,7 @@ def test_zero_global_vectors():
     """K = 0: no direction anywhere in the problem (steady conduction with pinned
     boundary values). The seed is constant and the model is still exactly
     SE(3)-covariant and measure-scale invariant; global_data may be None."""
-    m = _model(global_inputs={})
+    m = _model(global_schema={})
     mesh = _boundary()
     assert m.constant_seed
     assert m.embed[0].in_features == 1
@@ -100,7 +100,7 @@ def test_two_global_vectors():
     """K = 2 (a freestream and a gravity direction): both directions rotate with the
     geometry, the output rotates with them, and rescaling either's magnitude
     changes nothing."""
-    m = _model(global_inputs={"g1": {"rank": 1}, "g2": {"rank": 1}})
+    m = _model(global_schema={"g1": {"rank": 1}, "g2": {"rank": 1}})
     mesh = _boundary()
     gv = torch.randn(2, 3, dtype=D, generator=torch.Generator().manual_seed(1))
     gd = {"g1": gv[0], "g2": gv[1]}
@@ -177,14 +177,14 @@ def test_fused_kernel_refuses_other_vector_counts():
     """The fused Triton region is unrolled for one to four global directions."""
     for spec in ({}, {"g1": {"rank": 1}, "g2": {"rank": 1}, "g3": {"rank": 1}, "g4": {"rank": 1}, "g5": {"rank": 1}}):
         with pytest.raises(ValueError, match="one to four per-point vectors"):
-            ISLA(outputs=PV, global_inputs=spec, hidden=32, n_layers=1, n_slices=8, geo_kernel="fused")
+            ISLA(output_schema=PV, global_schema=spec, hidden=32, n_layers=1, n_slices=8, geo_kernel="fused")
 
 
 def test_bad_global_specs_rejected():
     with pytest.raises(ValueError, match="non-negative"):
-        ISLA(outputs=PV, global_inputs={"g": {"rank": -1}}, hidden=32, n_layers=1, n_slices=8)
+        ISLA(output_schema=PV, global_schema={"g": {"rank": -1}}, hidden=32, n_layers=1, n_slices=8)
     with pytest.raises(NotImplementedError, match="rank 2 is not supported"):
-        ISLA(outputs=PV, global_inputs={"T": {"rank": 2}}, hidden=32, n_layers=1, n_slices=8)
+        ISLA(output_schema=PV, global_schema={"T": {"rank": 2}}, hidden=32, n_layers=1, n_slices=8)
 
 
 def test_boundary_data_reaches_the_interior_prediction():
@@ -195,7 +195,7 @@ def test_boundary_data_reaches_the_interior_prediction():
     bsc = torch.randn(200, dtype=D, generator=torch.Generator().manual_seed(3))
     q = torch.randn(30, 3, dtype=D, generator=torch.Generator().manual_seed(2)) * 0.5
     gd = {"kappa": torch.tensor(0.7, dtype=D)}
-    m = _model(global_inputs={"kappa": {"rank": 0}}, boundary_inputs={"trace": {"rank": 0}}, interior=True)
+    m = _model(global_schema={"kappa": {"rank": 0}}, boundary_schema={"trace": {"rank": 0}}, interior=True)
     assert m.embed[0].in_features == 2  # boundary scalar + global scalar (no directions)
     base = _assert_se3(m, soup(pts, nrm, w, cell_data={"trace": bsc}), gd, q=q)
     other = _run(m, soup(pts, nrm, w, cell_data={"trace": bsc + 1.0}), gd, q)

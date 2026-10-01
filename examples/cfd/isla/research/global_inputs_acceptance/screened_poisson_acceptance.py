@@ -237,9 +237,9 @@ def make_cases_sphere(
 def build(arm: str, seed: int) -> ISLA:
     torch.manual_seed(seed)
     return ISLA(
-        outputs={"u": 0},
-        boundary_inputs={"trace": 0},
-        global_inputs={"kappa": 0} if arm == "isla_scalar" else None,
+        output_schema={"u": 0},
+        boundary_schema={"trace": 0},
+        global_schema={"kappa": 0} if arm == "isla_scalar" else None,
         hidden=128,
         n_layers=6,
         n_slices=64,

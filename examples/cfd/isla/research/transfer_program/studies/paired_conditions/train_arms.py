@@ -102,9 +102,9 @@ def make(arm, seed):
     if arm == "M":
         return MLP()
     return ISLA(
-        outputs={"p": 0, "v": 1},
-        global_inputs={"g": 1},
-        boundary_inputs={"cond": 0} if arm == "B" else None,
+        output_schema={"p": 0, "v": 1},
+        global_schema={"g": 1},
+        boundary_schema={"cond": 0} if arm == "B" else None,
         hidden=64,
         n_layers=4,
         n_slices=32,

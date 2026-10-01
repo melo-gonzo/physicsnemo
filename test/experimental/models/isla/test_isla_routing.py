@@ -50,7 +50,7 @@ def test_cosine_routing_logits_are_bounded_and_bias_free():
 
 def test_cosine_routing_keeps_the_contracts_and_all_parameters_train():
     torch.manual_seed(0)
-    m = ISLA(outputs=PV, global_inputs={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True).double().eval()
+    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True).double().eval()
     pts, nrm, w, drv = cloud(300)
     mesh = soup(pts, nrm, w)
     q = orthogonal(3, 0)

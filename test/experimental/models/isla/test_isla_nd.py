@@ -49,7 +49,7 @@ def _problem(d: int, n: int = 160, seed: int = 0):
 
 def _model(d: int, outputs, **kw):
     torch.manual_seed(1)
-    return ISLA(outputs=outputs, global_inputs={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, dim=d, **kw)
+    return ISLA(output_schema=outputs, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, dim=d, **kw)
 
 
 def _run(m, mesh, drv, q=None):
@@ -145,11 +145,11 @@ def test_two_dimensional_rank_inputs_keep_the_contracts():
     trac = torch.randn(160, d, generator=g)
     sym = torch.randn(160, d, d, generator=g)
     sym = sym + sym.transpose(-1, -2)
-    m = _model(d, {"p": {"rank": 0}, "v": {"rank": 1}}, boundary_inputs={"trac": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}})
+    m = _model(d, {"p": {"rank": 0}, "v": {"rank": 1}}, boundary_schema={"trac": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}})
     mesh = soup(pts, nrm, w, cell_data={"trac": trac, "sig": sym})
     q = orthogonal(d, 9).float()
     base = _run(m, mesh, drv)
-    rot = _run(m, transform(mesh, q, specs=m.boundary_specs), drv @ q.T)
+    rot = _run(m, transform(mesh, q, specs=m.boundary_schema), drv @ q.T)
     torch.testing.assert_close(rot["p"], base["p"], rtol=1e-4, atol=1e-5)
     torch.testing.assert_close(rot["v"], base["v"] @ q.T, rtol=1e-4, atol=1e-5)
 
@@ -170,9 +170,9 @@ def test_four_dimensional_even_parity_smoke_and_odd_refused():
     with pytest.raises(NotImplementedError):
         _model(d, {"w": {"rank": 1, "parity": "odd"}})
     with pytest.raises(ValueError):
-        ISLA(outputs={"p": {"rank": 0}}, dim=1)
+        ISLA(output_schema={"p": {"rank": 0}}, dim=1)
     with pytest.raises(ValueError):
-        ISLA(outputs={"p": {"rank": 0}}, global_inputs={"g": {"rank": 1}}, dim=2, geo_kernel="fused")
+        ISLA(output_schema={"p": {"rank": 0}}, global_schema={"g": {"rank": 1}}, dim=2, geo_kernel="fused")
 
 
 def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
