@@ -24116,7 +24116,7 @@ R1 is inside the "cost parity" clause against GeoTransolver-256 (time
 ratio 1.11, memory ratio 0.71) and beats it outright on memory; R2 fails
 both cost ratios, so choosing R2 would be an accuracy purchase priced at
 double the step. The book's cost figure (@fig-cost-sweep) and the 200k
-cost table (@tbl-cost-200k) are redrawn from this artifact. The earlier
+cost table (now @tbl-isla-cost in the using-ISLA chapter) are redrawn from this artifact. The earlier
 sweep's eager-region fallback arm is no longer drawn; the fused kernel is
 the default and the eager path is named once in @sec-using-cost.
 
@@ -25163,8 +25163,9 @@ and with any ideas the review suggests added to the to-do list. It is the
 new appendix `15-isla-vs-geotransolver.qmd` (@sec-isla-vs-geotransolver),
 registered after the datasets appendix and before this notebook.
 
-**What it contains.** One computed table and one figure (@tbl-vs-standing,
-@fig-vs-standing) put every measured axis on one page: surface accuracy at
+**What it contains.** One computed table and one figure (a standing table and figure in
+the literature appendix; both removed in the 2026-10-01 book pass as a third
+restatement of the evidence, the standing lives in @tbl-thesis) put every measured axis on one page: surface accuracy at
 full data and on every DrivAerML and HiLiftAeroML rung, the two interior
 tasks, the AirfRANS extrapolation splits, Tensile2d, the lug ladder and
 the OLBC sets (the last two labeled interim), pose, the biased inference
@@ -25195,7 +25196,7 @@ names what could not be verified in session.
 
 **Ideas entered.** Eight literature-derived experiments with a targeted
 weakness, a smallest discriminating form and a preregistered bar
-(@tbl-vs-ideas), added as PLANNED nodes LIT-EXT, LIT-TEMP, LIT-LOCALQ,
+(an ideas table since folded into the open questions of the limits chapter), added as PLANNED nodes LIT-EXT, LIT-TEMP, LIT-LOCALQ,
 LIT-PARITY, LIT-MLOSS, LIT-SLICEATT, LIT-CARBENCH and LIT-OLBCBASE to the
 tech tree and ledger of @sec-program-status and noted in `CLAIMS.md`'s
 pending list. The two aimed at the OLBC gap (a fixed boundary-value
@@ -26063,7 +26064,7 @@ the rate control and GeoTransolver-512 (one seed) beside it, the anatomy
 paragraph is labeled as the earlier protocol's mechanism study, and a
 DeepJEB++ section (`#sec-surface-deepjeb`, `#tbl-deepjeb-surface`) carries
 the equal-step ladder with its caveat. Chapter 09: the cost section names
-the reference as ISLA with its accuracy beside its cost (`#tbl-cost-200k`
+the reference as ISLA with its accuracy beside its cost (`#tbl-isla-cost`
 gains an error column), the depth reading quotes the 24-layer variant's
 1.5% at twice the cost, and `#sec-compute-allocation` gains
 `#tbl-refboard-exponents` (0.53 against 0.52: the reference lowers the
@@ -32424,3 +32425,56 @@ compile scope that works is the one whose inputs are shape-constant.
 Three profiler bugs cost half a day and are recorded in
 @sec-nb-isla-perf-2-verdict (TF32, the all-gather, the lone-rank
 backward).
+
+
+## 2026-10-01 — Book pass with fresh eyes: an Opus 5 review through the pi harness named the degradation mechanism (chapters stopped deleting: new lanes arrive as labels, caveats and status pointers beside old numbers); the evidence part is now six chapters, every notebook citation left the documentation chapters, program status left the front matter, 110,908 → 103,855 words {#sec-nb-book-pass-2026-10-01}
+
+**Setting.** Peter (2026-10-01): "we go through this loop where I ask you
+to overhaul the book, and it's great; then bit by bit it gets worse (more
+convoluted, hard to follow) as we add more things over time", with the
+suggestion to have an Opus-class model review or rewrite it with fresh
+eyes. The pi harness reached Opus 5 (Opus 5.5 is gated on a newer Claude
+Code client than pi presents); it read index and chapters 01 to 15 cold
+against STYLE.md and Peter's rules and wrote the review at
+`research/book_review_opus5_2026-10-01.md` (brief beside it). Its
+verdict: not followable on one pass; the reader is lost on the thesis
+table (sixteen rows mixing three ISLA configurations, three cell
+budgets, undefined vocabulary, migration state), again at chapter 07's
+350-word computed lede, and cumulatively (pose in four chapters,
+discretization in five, the output-component clause in five, the whole
+standing restated a third time in the literature appendix). Its named
+mechanism: the book had stopped deleting.
+
+**What changed (five commits, cceed55b5 to 53302f00f).** Evidence part
+split into six chapters (07 DrivAerML surface; 08 data efficiency and the
+wing deficit; 09 discretization and pose, now the one home for the pose
+tables; 10 capacity, scaling and cost; 11 boundary to interior; 12 beyond
+external aerodynamics with Tensile2d, the lug, DeepJEB++ and the OLBC
+sets). Front matter: one thesis table, reference configuration only, a
+four-sentence thesis, the names-and-colors key and the "what this book
+does not claim" list moved to the appendices and the limits chapter. The
+trained-routing pictures moved from the architecture reference to the
+payoff of idea 3 in chapter 02; the pose-prior diagnostic and the OLBC
+ablations moved to the design-decision appendix; the six non-aerodynamic
+dataset problem figures moved beside their conversions; the literature
+appendix lost its standing table, figure and ideas table and keeps the
+novel-contributions argument and bibliography. Every `@sec-nb-*` citation
+left the documentation chapters (55 occurrences); program status, dates,
+"earlier protocol" prose, "R1", "in flight" and "interim" cells are gone
+from chapters. Two number conflicts fixed from the artifacts: the ledger's
+REF-BOARD row had the 210-wing GeoTransolver-256 ratio (0.89) in the
+35-wing slot (GeoTransolver-512 ÷ ISLA there is 0.71,
+`results/ref_surface_2026-09-23.json`), and the literature appendix's
+210-wing row used different lanes than chapter 07. The architecture
+chapter lost a documented argument that no longer exists
+(`interior_nn_chunk`) and gained the `compile_blocks` row. Render: zero
+cell errors, zero unresolved cross-references outside this file; the four
+notebook references to the deleted tables are repointed in this entry's
+commit.
+
+**Rule for the loop, so it does not repeat.** A result lands in the book
+by replacing a number, never beside one. If a lane has not been re-run
+under the reference configuration, the row shows the earlier value in the
+table cell with its label and nothing in prose; an unlanded rung is not a
+row. Only the status chapter and this notebook cite notebook anchors or
+carry dates. Each concept has one home chapter and one centerpiece.
