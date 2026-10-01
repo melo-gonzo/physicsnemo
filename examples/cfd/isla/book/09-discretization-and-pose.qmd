@@ -23,7 +23,7 @@ DENS = {"DrivAerML Surface task, 435 training cars, 100,000 cells": {"isla": CR[
 CR200 = CR["isla_r1_dr435_200k"]
 factor = lambda a, draw="biased": a["mean"][draw] / a["mean"]["unif"]
 seed_factors = lambda a, draw="biased": [s[draw] / s["unif"] for s in a["per_seed"].values()]
-# slice territories on both datasets (ISLA R1 against the released GeoTransolver-256), and pose at the reporting protocol
+# slice territories on both datasets (ISLA at the reference configuration against the released GeoTransolver-256), and pose at the reporting protocol
 TT = J("territory_r1_2026-09-23.json")["models"]; TTW = J("territory_wings_r1_2026-09-23.json")["models"]; TT200 = J("territory_r1_200k_2026-09-23.json")["models"]
 POSE = J("p200k_pose_r1_2026-09-23.json"); PA, PV, PN = POSE["arms"], POSE["verdict"], POSE["native_frame_reference"]
 ```
