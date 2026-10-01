@@ -25,24 +25,20 @@ J = lambda p: json.load(open(RES / p))
 mean = statistics.mean
 ```
 
-## The properties a PDE surrogate must have {#sec-four-properties}
+## Two of the four properties are the subject of this chapter {#sec-four-properties}
 
-**Four properties are commonly required of any discretization of a
-boundary-driven PDE. Each has a measurement in this book, and the
-measurements differ in kind.** Every architecture compared here has two of
-them, global interaction and units invariance, by construction or by
-nondimensionalization. The other two are the subject of this chapter. They
-are established differently: one as a test that passes to roundoff, the
-other as a convergence measurement read against a bar.
+**Two of the properties a discretization of a boundary-driven PDE must
+have come free, and two do not.** Global interaction, the ability of every
+boundary patch to influence every output, is built into every architecture
+compared here, because slice routing runs over the whole boundary with no
+neighborhoods or cutoffs. Units invariance comes from nondimensionalizing
+the coordinates, which every model does. The two that remain, spatial
+equivariance and discretization invariance, are what this chapter defines,
+and they are established differently: one as a test that passes to
+roundoff in float64 (@sec-isla-contracts), the other as a convergence
+measurement read against a preregistered bar (@sec-principle).
 
-| property | what it means | how it is established in this book |
-|---|---|---|
-| spatial equivariance | a rigidly moved input gives the rigidly moved output | a float64 contract for ISLA (@sec-isla-contracts); an accuracy under transformed inputs for GeoTransolver and Transolver, which consume raw coordinates (@sec-pose, @sec-pose-contract) |
-| global interaction | every boundary patch can influence every output | by construction in every architecture compared: slice routing over the whole boundary, no neighborhoods or cutoffs |
-| discretization invariance | the answer does not depend on how the surface was meshed or sampled | an acceptance criterion (@sec-principle): convergence to one field under refinement and to the same field under two sampling laws, measured at inference (@sec-robustness-density, @sec-consistency-bench) and under a change of the training law (@sec-training-law) |
-| units invariance | no weight sees a meter; the measure enters only as quadrature weight | coordinates nondimensionalized for every model; exact scale covariance a contract for ISLA, whose length unit is a measure-weighted integral of the geometry (@sec-isla-frame) |
-
-## Part A: equivariance and pose {#sec-equivariance-centerpiece}
+## A rigid motion of the body must move the field with it {#sec-equivariance-centerpiece}
 
 **A rigid motion of the boundary must produce the rigid motion of the
 field: scalars unchanged, vectors rotated with the body.** For a steady
@@ -79,51 +75,17 @@ pipeline is invariant exactly when the frame estimate depends on the
 pose-free geometry alone. The canonical frame used here sends the global
 direction $\hat g_1$ to $+x$. It fixes the roll about that axis from the
 area-weighted principal axes of the surface in the transverse plane, with
-the sign from the third moment. @tbl-pose measures GeoTransolver on the
-DrivAerML Surface task under three treatments, each *in pose* (cars as the
-dataset provides them) and on an *SO(3) orbit* (each car in a uniformly
-random orientation). Vector outputs are rotated back before scoring.
+the sign from the third moment. Vector outputs are rotated back before
+scoring.
 
-```{python}
-#| label: tbl-pose
-#| output: asis
-p1 = J("p1_canonicalization_control_2026-09-02.json")
-pp = J("p1pp_canonical_training_2026-09-03.json")
-raw_in = [p1["table"][f"inpose|raw|gt_fixed_seed{s}"]["pressure_l2"] for s in (42, 43)]
-raw_orb = [p1["table"][f"orbit|raw|gt_fixed_seed{s}"]["pressure_l2"] for s in (42, 43)]
-eval_canon_in = [p1["table"][f"inpose|canon|gt_fixed_seed{s}"]["pressure_l2"] for s in (42, 43)]
-eval_canon_orb = [p1["table"][f"orbit|canon|gt_fixed_seed{s}"]["pressure_l2"] for s in (42, 43)]
-tr_in = [pp["results"][f"gt_canon_seed{s}"]["inpose_canon"][0] for s in (42, 43)]
-tr_orb = [pp["results"][f"gt_canon_seed{s}"]["orbit_SO3_canon"][0] for s in (42, 43)]
-ref = mean(raw_in)
-orbit_ratios = [v / p1["prior"]["gt_inpose_pressure_l2"] for v in p1["prior"]["gt_p1_orbit_pressure_l2"].values()]
-fx = lambda r: f"{r:.0f}x" if r >= 10 else f"{r:.2f}x"
-def row(name, a, b):
-    return f"| {name} | {a[0]:.4f} / {a[1]:.4f} ({fx(mean(a)/ref)}) | {b[0]:.4f} / {b[1]:.4f} ({fx(mean(b)/ref)}) |\n"
-out = "| GeoTransolver treatment | in pose (seed 42 / 43) | SO(3) orbit (seed 42 / 43) |\n|---|---|---|\n"
-out += row("trained and evaluated in the recipe frame", raw_in, raw_orb)
-out += row("trained in the recipe frame, canonicalized at inference only", eval_canon_in, eval_canon_orb)
-out += row("trained and evaluated in the canonical frame", tr_in, tr_orb)
-print(out)
-print(f": Pose dependence of GeoTransolver on the DrivAerML Surface task: area-weighted relative L2 of surface pressure over the 48 "
-      f"validation cars, the full training split, learning rate 3e-3, 500 epochs, 10,000 sampled cells per case, seed 42 / seed 43, scored in bfloat16 "
-      f"(labeled: within-architecture pose factors only, never compared across architectures); the parenthesized factor divides the seed "
-      f"mean by the in-pose seed mean of the first row ({ref:.4f}). Across three seeds of the recipe-frame model the "
-      f"orbit penalty spans {min(orbit_ratios):.0f} to {max(orbit_ratios):.0f}x. How to read this: ISLA is not shown "
-      f"because its orbit and in-pose predictions agree to roundoff by construction; wall shear behaves the same way. The table "
-      f"measures the pose mechanism, not the reporting-protocol standing, which is in @sec-pose-contract. "
-      f"Data: results/p1_canonicalization_control_2026-09-02.json (rows 1 and 2), "
-      f"results/p1pp_canonical_training_2026-09-03.json (row 3). {{#tbl-pose}}")
-```
-
-Three things follow (the factors are bfloat16, within-architecture, from
-@tbl-pose). First, GeoTransolver in the recipe frame is not pose-robust: a
-random orientation multiplies its error by more than twenty. Second,
-canonicalization must be in the training pipeline. Applied only at
+Three things follow from measuring GeoTransolver that way on the DrivAerML
+Surface task (@tbl-pose). First, GeoTransolver in the recipe frame is not
+pose-robust: a random orientation multiplies its error by more than twenty.
+Second, canonicalization must be in the training pipeline. Applied only at
 inference to a model trained in one exact pose, it is pose-invariant but
 costs 1.6 to 1.7x, because that model is hypersensitive to the sub-degree
 tilt of the frame estimate. A model that sees the estimator's tilt noise
-during training learns to ignore it (third row). Third, on this data ISLA's
+during training learns to ignore it. Third, on this data ISLA's
 exact equivariance and canonicalized GeoTransolver deliver the same pose
 invariance. No accuracy claim in this book is therefore attributed to
 equivariance, and the pose contract is scored as a contract.
@@ -148,7 +110,8 @@ They fail in three settings a general PDE surrogate meets:
 
 ISLA needs neither a frame estimate nor a global direction at inference.
 In these settings the contract is the difference between a working
-surrogate and the first row of @tbl-pose. Against baselines that learn pose
+surrogate and a model whose error a random orientation multiplies by more
+than twenty (@tbl-pose). Against baselines that learn pose
 from rotation augmentation rather than from a canonical frame, the contract
 also earns accuracy when cases arrive in arbitrary poses. That measurement,
 at the reporting protocol on the DrivAerML Surface task, is in
@@ -160,8 +123,9 @@ $\sigma_{12}$, a displacement along a laboratory axis) is an invariant of
 the body together with the frame. ISLA represents it by predicting the
 tensor itself and reading the component off it (@sec-isla-heads). The
 other route, supplying the dataset's axes as global vectors, is rejected:
-those axes are not a datum of the PDE (@sec-pose-prior). The clause was
-found on PLAID Tensile2d (@sec-nb-solids-frame-interim).
+those axes are not a datum of the PDE (@sec-pose-inputs). The clause binds
+on PLAID Tensile2d, whose targets are stress components
+(@sec-interior-tensile2d).
 
 ::: {.callout-warning collapse="true" title="Exact describes the algebra and the float32 path"}
 The contract tests run in float64. On the trained GPU path in float32 the
@@ -171,7 +135,7 @@ of the prediction, most of it ordinary bfloat16 rounding. Where a contract
 is load-bearing, infer in float32 (@sec-isla-contracts, @sec-using-sampler).
 :::
 
-## Part B: discretization {#sec-discretization-centerpiece}
+## The answer must not depend on how the surface was meshed {#sec-discretization-centerpiece}
 
 **The physics does not depend on how a surface was meshed, so a model's
 answer must not either. The precise form of "must not" is numerical
@@ -387,7 +351,8 @@ count is therefore the expected signature of a consistent model. A
 residual that stays fixed as the count grows, or a trained function that
 is wrong on every draw but the one it was fitted on, is what the criterion
 rejects. The book's statement of what ISLA holds is exactly this weaker,
-convergent form. The exact forms it holds are the contracts of Part A.
+convergent form. The exact forms it holds are the equivariance contracts
+above (@sec-equivariance-centerpiece).
 
 ::: {.callout-note collapse="true" title="Why the mechanism is the frame as much as the aggregation"}
 Two things a model reads from a sample can break consistency: the weights

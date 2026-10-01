@@ -132,7 +132,7 @@ described with those tasks in @sec-interior.
 |---|---|---|--:|--:|--:|
 | GeoTransolver | centered coordinates, unit normal; coordinates again through the geometry encoder | the far-field vector through the global-context projector: a unit direction under the protocol | 12 | 256 | 256 |
 | Transolver | centered coordinates, unit normal | the far-field vector, broadcast per point: a unit direction under the protocol | 8 | 256 | 256 |
-| ISLA | position, unit normal, measure weight, through invariants and anchors only | unit direction(s) and global scalars | 12 | see @sec-using-config | 256 |
+| ISLA | position, unit normal, measure weight, through invariants and anchors only | unit direction(s) and global scalars | 12 | 384 | 256 |
 
 : The three architectures compared on the aerodynamic datasets. *Per-point
 inputs*: channels attached to each of the 200,000 sampled surface cells per
@@ -232,7 +232,7 @@ control, because learning-rate, training-length and seed controls vary the
 optimizer and cannot detect an input-scale defect. On the DrivAerML Surface
 task and the DrivAerML Volume task, whose solver velocity is of order tens
 of meters per second, the trained difference between the two inputs is
-inside seed spread (@sec-nb-udrv-int-verdict). The rule applies on every
+inside seed spread. The rule applies on every
 dataset regardless, because a rule that depends on the dataset's units is
 not a rule.
 
@@ -252,7 +252,7 @@ in @sec-metrics and the training recipe in @sec-protocol.
 2. **Matched epochs: 500 for every arm.** Doubling GeoTransolver's budget at
    the small rungs does not lower its error (@sec-data-efficiency). At
    435 cars and 200,000 cells, 1,000 epochs move neither ISLA nor
-   GeoTransolver outside seed spread (@sec-nb-isocost-verdict). So 500
+   GeoTransolver outside seed spread (@sec-equal-budget). So 500
    under-trains neither.
 3. **Each architecture at its own best learning rate, chosen by
    validation.** ISLA runs at 1e-3 at width 192 and at the width rule's
@@ -292,25 +292,6 @@ rotated pose, a biased sampling density) is reported as such and never
 mixed into an in-family number. Its limits bind where stated: 48 cars is a
 small validation set and two seeds a thin noise estimate (@sec-limits).
 
-### Configuration of the evidence lanes {#sec-evidence-lane-config}
-
-**Every standing in the book is the reference configuration's
-(@sec-using-config: 384 wide, 12 layers, cosine routing, the fused
-geometry kernel, 5e-4) wherever its lane has been scored. The rows that
-still carry the earlier protocol's ISLA (192 wide, linear routing, 1e-3)
-are labeled "earlier protocol" in their table or caption, and the re-run
-of @sec-program-status re-measures them.** This paragraph is the one place
-the book explains the label. Individual tables and captions carry it and
-do not narrate the difference. The standings under the reference
-configuration are the DrivAerML Surface ladder and its 435-car row, the
-35-wing rung of HiLiftAeroML, the DrivAerML Volume and AirfRANS interior
-tasks, the sampling-consistency and territory probes, and every solid and
-fixed-mesh dataset. The earlier protocol's lanes remain on the 210-wing,
-geometry and fixed-angle rungs of HiLiftAeroML, the pose and training-law
-studies, the AirfRANS extrapolation splits and the capacity, scaling and
-cost-frontier studies at 100,000 cells (which are studies of deviations by
-design).
-
 ## Resource matching {#sec-resource-matching}
 
 **Every cross-architecture comparison states, on both sides, the parameter
@@ -334,8 +315,8 @@ which side has more and whether it bought accuracy (@sec-equal-budget).
 part of the protocol, not a tuning afterthought.** GeoTransolver's best rate
 at the reporting protocol is 3e-3 on every DrivAerML rung and on the wings,
 found by the two-rate control of rule 3. Transolver runs at 3e-3. ISLA runs
-at 5e-4 in the reference configuration, and the earlier protocol's 192-wide
-lanes ran at 1e-3 (@sec-using-lr). Why ISLA's rate does not follow the
+at 5e-4 in the reference configuration, and its 192-wide
+lanes run at 1e-3 (@sec-using-lr). Why ISLA's rate does not follow the
 baselines' is a property of the routing form, explained once in
 @sec-isla-routing-forms.
 
@@ -488,49 +469,6 @@ the airfoil, and the model predicts pressure, velocity and turbulent
 viscosity at them. The interior results are in @sec-interior-airfrans.
 @fig-problem-airfrans shows one test case (details: @sec-data-airfrans).
 
-```{python}
-#| label: fig-problem-airfrans
-#| fig-cap: >
-#|   The AirfRANS problem, on one test airfoil. Top: the boundary the model
-#|   sees, the airfoil polyline of about a thousand segments with their
-#|   outward normals (every twelfth drawn), the inlet direction $\hat g_1$
-#|   (black arrow, the one global vector, at the angle of attack) and the inlet
-#|   speed as the one global scalar; the interior queries carry the signed
-#|   distance to the airfoil. Middle: the pressure coefficient
-#|   $C_p = p / \tfrac{1}{2} U_\infty^2$ (kinematic pressure) at the interior
-#|   mesh points in a window around the airfoil. Bottom: the speed ratio
-#|   $|U| / U_\infty$ at the same points. What varies per sample is the
-#|   airfoil shape, the inlet speed and its direction. What the model
-#|   predicts: pressure, velocity and turbulent viscosity at the queries. How
-#|   to read this: the queried domain extends well beyond this window (its
-#|   extent is printed); the dots are 70,000 of the case's 179,000 mesh points
-#|   and their density follows the mesh, fine near the wall and in the wake.
-#|   Data: results/problem_figures_2026-09-22/airfrans.npz.
-#| code-fold: true
-A, Am = load_problem("airfrans")
-bp, bc, bn = A["bnd_points"], A["bnd_cells"], A["bnd_normals"]; mid = bp[bc].mean(axis=1)
-ip = A["int_points"]
-fig, axes = plt.subplots(3, 1, figsize=(8, 7.2), sharex=True, gridspec_kw=dict(hspace=0.22))
-ax = axes[0]
-ax.add_collection(LineCollection(bp[bc][:, :, :2], colors=BC["free"], linewidths=2.0, zorder=3))
-k = slice(None, None, 12); ax.quiver(mid[k, 0], mid[k, 1], bn[k, 0], bn[k, 1], color=MUTED, scale=28, width=0.0025, headwidth=3, zorder=2)
-u = A["U_inf_dir"]; ax.annotate("", xy=(-0.45 + 0.3 * u[0], 0.38 + 0.3 * u[1]), xytext=(-0.45, 0.38), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0))
-ax.text(-0.1, 0.40, f"inlet: uniform flow along $\\hat g_1$ at {Am['aoa_deg']:.2f}° (the global vector); $U_\\infty$ = {Am['U_inf_mag']:.1f} m/s (the global scalar); Re = {Am['Re']:.2g}", ha="left", va="center", fontsize=8.5, color=INK2)
-ib = A["interior_bbox"]
-map_axes(ax); ax.set_xlim(-0.5, 1.5); ax.set_ylim(-0.55, 0.55); ax.set_ylabel("y / chord [–]")
-ax.set_title(f"the boundary: {Am['n_boundary_cells']:,} line cells (position, normal, length), a no-slip wall; queries fill {ib[0,0]:.0f} < x < {ib[1,0]:.0f}, {ib[0,1]:.0f} < y < {ib[1,1]:.0f} chords", fontsize=9.2)
-ax = axes[1]
-sc = field_scatter(ax, ip[:, :2], A["int_cp"], s=2.5, signed=True, vmin=-1.0, vmax=1.0); map_axes(ax); ax.set_ylim(-0.55, 0.55)
-ax.add_collection(LineCollection(bp[bc][:, :, :2], colors=INK, linewidths=0.8, zorder=3)); ax.set_ylabel("y / chord [–]")
-ax.set_title("pressure coefficient $C_p$ at the interior points (target)", fontsize=9.5)
-small_colorbar(fig, sc, ax, "$C_p$ [–]", extend="both")
-ax = axes[2]
-sc = field_scatter(ax, ip[:, :2], A["int_umag"], s=2.5, vmin=0, vmax=1.3); map_axes(ax); ax.set_ylim(-0.55, 0.55)
-ax.add_collection(LineCollection(bp[bc][:, :, :2], colors=WHITE, linewidths=0.8, zorder=3)); ax.set_ylabel("y / chord [–]"); ax.set_xlabel("x / chord [–]")
-ax.set_title("speed ratio $|U| / U_\\infty$ at the interior points (target)", fontsize=9.5)
-small_colorbar(fig, sc, ax, "$|U| / U_\\infty$ [–]", extend="max")
-plt.show()
-```
 
 ### SHIFT-SUV {#sec-shift-suv}
 
@@ -545,39 +483,6 @@ reported alongside the geometry-family shift rather than corrected.
 @fig-problem-shift-suv shows one fastback case (details:
 @sec-data-shift-suv).
 
-```{python}
-#| label: fig-problem-shift-suv
-#| fig-cap: >
-#|   The SHIFT-SUV zero-shot target, on one fastback case. The vehicle surface
-#|   (150,000 of its 5 million cells at their centroids) colored by the
-#|   pressure coefficient $C_p = (p - p_\infty) / \tfrac{1}{2}\rho U_\infty^2$,
-#|   seen from the side and from above; the black arrow is the far-field
-#|   direction $\hat g_1$. What varies per sample is the geometry; the far-field
-#|   speed is fixed and lower than DrivAerML's, a covariate shift every model
-#|   sees alike since none receives the Reynolds number. What the model
-#|   receives is exactly what it receives on DrivAerML (positions, normals,
-#|   areas, $\hat g_1$), which is what makes the zero-shot transfer possible.
-#|   How to read this: the same color scale as @fig-problem-drivaer, so the
-#|   two bodies can be compared by eye. Data:
-#|   results/problem_figures_2026-09-22/shift_suv.npz.
-#| code-fold: true
-S_, Sm = load_problem("shift_suv")
-sp, cp = S_["surf_points"], S_["surf_cp"]
-norm = TwoSlopeNorm(vcenter=0.0, vmin=-1.5, vmax=1.0)
-fig, axes = plt.subplots(2, 1, figsize=(8, 5.6), sharex=True, gridspec_kw=dict(height_ratios=[1.0, 1.15], hspace=0.15))
-ax = axes[0]
-depth_scatter(ax, sp[:, [0, 2]], sp[:, 1], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
-U = S_["U_inf"]; bb = S_["surf_bbox"]; x0 = bb[0, 0] - 1.9; z0 = 0.5 * (bb[0, 2] + bb[1, 2])
-ax.annotate("", xy=(x0 + 1.2, z0), xytext=(x0, z0), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0))
-ax.text(x0 + 0.6, z0 - 0.1, f"far field: $U_\\infty$ = {np.linalg.norm(U):.0f} m/s\nalong $\\hat g_1$", ha="center", va="top", fontsize=8.2, color=INK2)
-ax.set_xlim(x0 - 0.2, bb[1, 0] + 0.3)
-ax.set_ylabel("z [m]"); ax.set_title(f"side view: $C_p$ on the {Sm['family']} family", fontsize=9.5)
-ax = axes[1]
-sc = depth_scatter(ax, sp[:, [0, 1]], sp[:, 2], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
-ax.set_ylabel("y [m]"); ax.set_xlabel("x [m]"); ax.set_title("top view: $C_p$", fontsize=9.5)
-cb = fig.colorbar(sc, ax=axes, fraction=0.025, pad=0.01, extend="min"); cb.set_label("$C_p$ [–]"); cb.outline.set_visible(False)
-plt.show()
-```
 
 ### Datasets beyond external aerodynamics {#sec-datasets-beyond-aero}
 
@@ -586,9 +491,10 @@ external aerodynamics is its benchmark instance, not its scope.** The next
 benchmark instances are steady problems whose boundary conditions and loads
 vary per sample. They exercise the global vector and scalar inputs and the
 per-cell boundary scalars, which the aerodynamic datasets leave at $K = 1$
-and $n_b = 0$. Each is drawn below on one sample, with its boundary
-conditions labeled where they act and one reference field beside them. The
-model reads every mesh node as a query in all four:
+and $n_b = 0$. Each is drawn on one sample in @sec-datasets-detail, with
+its boundary conditions labeled where they act and one reference field
+beside them. The model reads every mesh node as a query on the four
+interior sets:
 
 - **PLAID Tensile2d** (@fig-problem-tensile2d; details:
   @sec-data-tensile2d): two-dimensional elasto-viscoplastic tension of a
@@ -617,210 +523,104 @@ model reads every mesh node as a query in all four:
   plane-strain steel elasticity on a disc with two holes (per component a
   free segment, a prescribed displacement and two tractions, which enter as
   rank-1 boundary inputs; the stress is predicted as a tensor, $K = 0$).
+- **DeepJEB++** (details: @sec-data-deepjeb): generated jet-engine
+  brackets solved by linear static finite elements under four load cases
+  applied at the lug bore with the bolt holes clamped. It is a surface
+  task: the model receives the surface triangles with the fixed and loaded
+  labels and the traction as boundary scalars, the load direction as its
+  one global vector and a force-or-torque one-hot as two global scalars,
+  and predicts von Mises stress and displacement at the cells.
 
-Their standings are in @sec-interior-tensile2d, @sec-interior-lug,
-@sec-surface-deepjeb and @sec-interior-olbc; the open axis they represent
+Their standings are in @sec-beyond-aero; the open axis they represent
 is stated in @sec-limits-datasets, and the datasets scouted but not
-adopted, with the conversion in progress, are in @sec-data-scouted.
+adopted are in @sec-program-status.
+
+
+
+
+
+### Splits {#sec-splits}
+
+**Every split in the book is either the dataset's curated manifest used
+unchanged or a fixed-seed permutation recorded in the manifest.** DrivAerML
+has one validation set of 48 cars, shared by the Surface and Volume tasks
+and by every experiment, with a training set of 435 cars or a nested rung
+of 27, 54, 109 or 218 (@sec-car-ladder). HiLiftAeroML's splits are the
+ones the data-efficiency, geometry and regime results read, and they are
+below. The other datasets' splits are in @sec-datasets-detail.
+
+**Each HiLiftAeroML split holds out one question, and the splits are the
+dataset's curated manifests, used unchanged.** @tbl-hilift-splits lists
+them. The *data-efficiency* family is nested (@fig-hilift-splits): 35
+training cases $\subset$ 210 $\subset$ 510 $\subset$ 1,260, all scored on
+one shared 180-case validation set (180 cases on 118 geometries), with a
+360-case test set that no data-efficiency experiment touches. Because the
+rungs are subsets of the same 1,260 cases, a validation geometry can appear
+in training at other angles. These rungs measure sample complexity, not
+unseen geometry. The two *regime-extrapolation* splits hold out flow
+physics, with stall onset determined per geometry from the lift curve. The
+*geometry* family holds out geometries at all ten angles. The three
+*fixed-angle* splits remove the direction dependence entirely and so control
+for whether an advantage comes from representing the far-field direction.
+
+| family | split | train | val | test | what it holds out |
+|---|---|---:|---:|---:|---|
+| data efficiency | nested rungs | 35, 210, 510, 1,260 | 180 | 360 | nothing; measures sample complexity (validation geometries may recur in training at other angles) |
+| regime extrapolation | angle of attack | 788 (angles up to 12°) | 112 | 900 (14° and above) | higher angles of attack |
+| regime extrapolation | stall | 942 (pre-stall) | 135 | 723 (post-stall) | post-stall flow |
+| unseen geometry | geometry | 1,260, 210 or 40 cases (126, 21 or 4 geometries) | 18 geometries, all ten angles | 36 geometries, all ten angles | the geometry itself |
+| fixed angle | 4°, 12°, 22° | 126 geometries at one angle | 18 geometries at that angle | — | the far-field direction as a variable |
+
+: The HiLiftAeroML splits, in cases unless a cell says geometries. Every
+split is a curated manifest of the dataset revision named above; the
+fixed-angle splits have no test set. How to read this: a row is one
+question; the manifests overlap (see the warning), so the test columns are
+held out per checkpoint, not per program. {#tbl-hilift-splits}
 
 ```{python}
-#| label: fig-problem-tensile2d
+#| label: fig-hilift-splits
 #| fig-cap: >
-#|   The PLAID Tensile2d problem, on one validation specimen. Left: the outer
-#|   boundary, 496 line cells, colored by the condition each carries: the top
-#|   edge is loaded by the pressure $P$ (a traction $-P\,n$; negative $P$ pulls),
-#|   the bottom edge is fixed ($u_2 = 0$) with its left corner pinned
-#|   ($u_1 = 0$, marked), and the curved notches are free; the box lists the
-#|   six global scalars of this sample and the arrow the load direction, the
-#|   one global vector. Middle: the axial stress $\sigma_{22}$ at the
-#|   mesh nodes. Right: the displacement magnitude $|u|$. How to read this:
-#|   the specimen's coordinates and stresses are in the dataset's units (a
-#|   unit half-width; MPa-scale stresses); the nodes drawn are all 6,171 of
-#|   this sample and every one is a query token; the loaded and fixed edges
-#|   are where the per-cell boundary scalars are nonzero. Data:
-#|   results/problem_figures_2026-09-22/tensile2d.npz.
+#|   The HiLiftAeroML data-efficiency family, to scale. The bar is the
+#|   1,800-case grid; the nested training rungs (35, 210, 510, 1,260 cases)
+#|   are subsets of one another, all scored on the same 180 validation
+#|   cases, and the 360-case test set is sealed. How to read this: widths
+#|   are case counts; the bar does not show which angles or geometries fall
+#|   in each rung, and the regime, geometry and fixed-angle families are
+#|   separate manifests not drawn here.
 #| code-fold: true
-T, Tm = load_problem("tensile2d")
-bp, bc = T["bnd_points"], T["bnd_cells"]; mid = bp[bc].mean(axis=1)
-kinds = np.where(T["bc_loaded"] > 0.5, "flux", np.where(T["bc_fixed"] > 0.5, "value", "free"))
-fig, axes = plt.subplots(1, 3, figsize=(8, 4.2), sharey=True, gridspec_kw=dict(wspace=0.15, width_ratios=[1.75, 1, 1]))
-ax = axes[0]
-ax.scatter(T["int_points"][:, 0], T["int_points"][:, 1], s=1.2, c=GRID, lw=0, rasterized=True)
-bc_segments(ax, bp, bc, kinds, lw=4.5)
-pin = mid[T["bc_pinned"] > 0.5]; ax.plot(pin[:, 0], pin[:, 1], marker="^", ms=9, color=BC["value"], mec=INK, ls="none", zorder=5)
-ax.text(0.0, 1.07, f"top edge: pressure P = {Tm['globals']['P']:.1f} (flux)", ha="center", va="bottom", fontsize=8.5, color=BC["flux"], path_effects=halo())
-ax.text(0.0, -1.08, "bottom edge: fixed $u_2$ = 0 (value)\ntriangle: pinned $u_1$ = 0", ha="center", va="top", fontsize=8.5, color=BC["value"], path_effects=halo())
-ax.text(0.72, 0.0, "notches: free", ha="center", va="center", fontsize=8.5, color=BC["free"], rotation=90)
-for v, lab in ((np.array([1, 0]), "$\\hat g_1$"), (np.array([0, 1]), "$\\hat g_2$")):
-    ax.annotate("", xy=(-2.4 + 0.35 * v[0], -1.1 + 0.35 * v[1]), xytext=(-2.4, -1.1), arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.6))
-    ax.text(-2.4 + 0.5 * v[0], -1.1 + 0.5 * v[1], lab, ha="center", va="center", fontsize=8.5, color=INK)
-g = Tm["globals"]
-ax.text(-2.45, 1.0, "global scalars\n" + "\n".join(f"{k} = {g[k]:g}" for k in ("P", "p1", "p2", "p3", "p4", "p5")), ha="left", va="top", fontsize=7.8, color=INK2,
-        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=BASELINE))
-map_axes(ax); ax.set_xlim(-2.55, 1.3); ax.set_ylim(-1.5, 1.35); ax.set_ylabel("y [dataset units]"); ax.set_xlabel("x [dataset units]")
-ax.set_title("conditions and global inputs", fontsize=9.5)
-ax = axes[1]
-sc = field_scatter(ax, T["int_points"][:, :2], T["sig22"], s=4.0, vmin=0, vmax=float(np.quantile(T["sig22"], 0.995))); map_axes(ax); ax.set_xlabel("x [dataset units]")
-ax.set_title("axial stress $\\sigma_{22}$ (target)", fontsize=9.5); small_colorbar(fig, sc, ax, "$\\sigma_{22}$ [MPa]", extend="max")
-ax = axes[2]
-um = np.linalg.norm(T["displacement"], axis=1)
-sc = field_scatter(ax, T["int_points"][:, :2], um * 1e3, s=4.0, vmin=0); map_axes(ax); ax.set_xlabel("x [dataset units]")
-ax.set_title("displacement magnitude $|u|$ (target)", fontsize=9.5); small_colorbar(fig, sc, ax, "$|u|$ [$10^{-3}$ length units]")
+fig, ax = plt.subplots(figsize=(9.0, 1.9))
+shades = ["#1f5aa3", BLUE, BLUE_LIGHT, BLUE_PALE]
+for n, col in zip([1260, 510, 210, 35], shades):
+    ax.barh(0, n, left=0, height=0.6, color=col, edgecolor="white", lw=0.8)
+ax.barh(0, 180, left=1260, height=0.6, color=BASELINE, edgecolor="white", lw=0.8)
+ax.barh(0, 360, left=1440, height=0.6, color=PAPER, edgecolor=BASELINE, lw=0.8, hatch="///")
+for x, label in [(35 / 2, "35"), (35 + 175 / 2, "210"), (210 + 300 / 2, "510"),
+                 (510 + 750 / 2, "1,260 training cases (nested rungs)")]:
+    ax.text(x, 0, label, ha="center", va="center", fontsize=9, color="white" if x > 200 else INK)
+ax.text(1260 + 90, 0, "val\n180", ha="center", va="center", fontsize=9, color=INK)
+ax.text(1440 + 180, 0, "sealed test 360", ha="center", va="center", fontsize=9, color=INK)
+ax.set_xlim(0, 1800); ax.set_ylim(-0.6, 0.6); ax.set_yticks([]); ax.grid(False)
+ax.spines["left"].set_visible(False)
+ax.set_xticks([0, 35, 210, 510, 1260, 1440, 1800])
+ax.set_xticklabels(["0", "35", "210", "510", "1,260", "1,440", "1,800"], fontsize=8.5)
+ax.set_xlabel("cases [count]")
+fig.tight_layout()
 plt.show()
 ```
 
-```{python}
-#| label: fig-problem-lug
-#| fig-cap: >
-#|   The GINOT Bracket Lug problem, on one test bracket. Left: the surface
-#|   triangles that are the model's boundary tokens, colored by condition: the
-#|   end face is clamped (value), the lower half of the hole carries the
-#|   pressure (flux), the rest of the hole and the outer surface are free;
-#|   orthographic view from above and in front (azimuth −60°, elevation 30°).
-#|   Right: the von Mises stress at the mesh nodes projected along the hole's
-#|   axis, the top face nearest; the box lists the four global scalars. What
-#|   varies per sample: the hole radius, the length, the thickness and the
-#|   pressure. How to read this: every node is a query token and the stress
-#|   is the one target; the projection shows the top face's nodes over the
-#|   interior ones, so the stress concentration at the hole is read on the
-#|   surface. Data: results/problem_figures_2026-09-22/lug.npz.
-#| code-fold: true
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-Lg, Lm = load_problem("lug")
-bp, bc = Lg["bnd_points"] * 1e3, Lg["bnd_cells"]
-kinds = np.where(Lg["bc_loaded"] > 0.5, "flux", np.where(Lg["bc_fixed"] > 0.5, "value", "free"))
-fig = plt.figure(figsize=(8, 3.6))
-ax = fig.add_subplot(1, 2, 1, projection="3d"); ax.set_proj_type("ortho")
-tri = bp[bc]
-face = np.array([BC[k] if k != "free" else "#d9d8d0" for k in kinds])
-coll = Poly3DCollection(tri, facecolors=face, edgecolors="none", linewidths=0.1); ax.add_collection3d(coll)
-ext = bp.max(0) - bp.min(0); c0 = 0.5 * (bp.max(0) + bp.min(0)); R = 0.5 * ext.max()
-ax.set_xlim(bp[:, 0].min(), bp[:, 0].max()); ax.set_ylim(bp[:, 1].min(), bp[:, 1].max()); ax.set_zlim(bp[:, 2].min(), bp[:, 2].max()); ax.set_box_aspect(tuple(ext / ext.max()), zoom=1.0)
-ax.view_init(elev=30, azim=-60); ax.set_axis_off()
-ax.text2D(0.02, 0.90, "clamped end face: $u$ = 0 (value)", transform=ax.transAxes, color=BC["value"], fontsize=8.5, path_effects=halo())
-ax.text2D(0.98, 0.14, "lower half of the hole:\npressure p (flux)", transform=ax.transAxes, color=BC["flux"], fontsize=8.5, ha="right", path_effects=halo())
-ax.text2D(0.5, 0.02, "outer surface and upper hole: free", transform=ax.transAxes, color=BC["free"], fontsize=8.5, ha="center")
-ax.set_title("boundary tokens and their conditions", fontsize=9.5, loc="left")
-ax2 = fig.add_subplot(1, 2, 2)
-ip = Lg["int_points"] * 1e3
-sc = depth_scatter(ax2, ip[:, [0, 1]], ip[:, 2], Lg["von_mises"], s=6, cmap=SEQUENTIAL, vmin=0, vmax=float(np.quantile(Lg["von_mises"], 0.995))); map_axes(ax2)
-g = Lm["globals"]
-ax2.set_xlabel("x [mm]"); ax2.set_ylabel("y [mm]"); ax2.set_title("von Mises stress at the nodes (target)", fontsize=9.5)
-small_colorbar(fig, sc, ax2, "von Mises [MPa]", extend="max")
-fig.text(0.5, 0.0, f"this sample's global scalars: hole radius {1e3 * g['hole_radius']:.1f} mm, length {1e3 * g['length']:.1f} mm, thickness {1e3 * g['thickness']:.1f} mm, pressure {g['pressure_mpa']:.1f} MPa",
-         ha="center", va="top", fontsize=8.5, color=INK2)
-plt.show()
-```
 
-```{python}
-#| label: fig-problem-olbc-poisson
-#| fig-cap: >
-#|   The OLBC Poisson problem, $-\nabla^2 u = f$ on the square, on one test
-#|   sample. Left: the boundary, 1,120 line cells, colored by the type of
-#|   condition each segment carries in this sample (Dirichlet $u = g$, Neumann
-#|   $\partial u / \partial n = g$, Robin $\alpha u + \partial u / \partial n = g$),
-#|   with the prescribed value $g$ drawn as a curve offset from the edge (its
-#|   scale in the corner). Middle: the source $f$, an input field given at the
-#|   mesh nodes. Right: the solution $u$, the target. What varies per sample:
-#|   where the segments are cut, which type each carries, the functions $g$
-#|   and the source $f$; the mesh is the same for every sample. What the model
-#|   receives: the boundary cells with positions, normals, lengths, a one-hot
-#|   type and $g$ (and $\alpha$) as per-cell boundary scalars, no global
-#|   vector, and every node as a query carrying $f$. How to read this: the
-#|   Robin type appears in some samples and not others; this sample has none.
-#|   Data: results/problem_figures_2026-09-22/olbc_poisson.npz.
-#| code-fold: true
-O, Om = load_problem("olbc_poisson")
-bp, bc, bn = O["bnd_points"], O["bnd_cells"], O["bnd_normals"]; mid = bp[bc].mean(axis=1)
-kinds = np.where(O["bc_dirichlet"] > 0.5, "value", np.where(O["bc_neumann"] > 0.5, "flux", np.where(O["bc_robin"] > 0.5, "robin", "free")))
-fig, axes = plt.subplots(1, 3, figsize=(8, 3.7), gridspec_kw=dict(wspace=0.3))
-ax = axes[0]
-bc_segments(ax, bp, bc, kinds, lw=4.0)
-gscale = 0.12 / max(1e-9, float(np.abs(O["bc_value_g"]).max()))
-off = mid[:, :2] + bn[:, :2] * (0.06 + gscale * O["bc_value_g"][:, None])
-for k in ("value", "flux", "robin"):
-    m = kinds == k
-    if m.any():
-        ax.scatter(off[m, 0], off[m, 1], s=2.5, c=BC[k], lw=0, rasterized=True)
-ax.plot([1.08, 1.08], [-1.0, -1.0 + 0.12], color=INK2, lw=1.0); ax.text(1.12, -0.94, f"g = {float(np.abs(O['bc_value_g']).max()):.1f}", fontsize=7.5, color=INK2, va="center")
-present = [k for k in ("value", "flux", "robin") if (kinds == k).any()]
-bc_legend(ax, present, loc="lower center")
-map_axes(ax); ax.set_xlim(-1.4, 1.4); ax.set_ylim(-2.05, 1.3); ax.set_xlabel("x [–]"); ax.set_ylabel("y [–]")
-ax.set_title("conditions: type, and value $g$", fontsize=9.5)
-ax = axes[1]
-sc = field_scatter(ax, O["int_points"][:, :2], O["source"], s=2.5, signed=True); map_axes(ax); ax.set_xlabel("x [–]")
-ax.set_title("source $f$ (input at the nodes)", fontsize=9.5); small_colorbar(fig, sc, ax, "$f$ [–]")
-ax = axes[2]
-sc = field_scatter(ax, O["int_points"][:, :2], O["u"], s=2.5, signed=True); map_axes(ax); ax.set_xlabel("x [–]")
-ax.set_title("solution $u$ (target)", fontsize=9.5); small_colorbar(fig, sc, ax, "$u$ [–]")
-for ax in axes[1:]:
-    ax.set_ylim(-1.05, 1.05); ax.set_yticklabels([])
-plt.show()
-```
-
-```{python}
-#| label: fig-problem-olbc-elasticity
-#| fig-cap: >
-#|   The OLBC elasticity problem, plane-strain steel on a disc with two holes,
-#|   on one test sample. Left: the three boundary loops; on the outer circle
-#|   each of the two displacement components has its own condition, drawn as
-#|   two concentric rings (outer ring: the $x$ component; inner ring: the $y$
-#|   component), a prescribed displacement (value), a traction (flux) or free;
-#|   the smaller hole is clamped in both components, the larger is free. The
-#|   arrows are the dataset's coordinate axes, drawn for orientation only
-#|   (they are not model inputs). Middle: the von
-#|   Mises stress from the three stress components at the nodes. Right: the
-#|   displacement magnitude. What varies per sample: where the outer circle is
-#|   cut, which condition each segment and component carries, and the values.
-#|   What the model receives: the loops' cells with normals, lengths, the
-#|   per-component one-hot type and the prescribed displacement and traction
-#|   components as rank-1 boundary inputs, and every node as a query; it
-#|   predicts the stress tensor and the displacement. How to read
-#|   this: all quantities are in the dataset's dimensionless units (stress per
-#|   100 MPa, length per metre). Data:
-#|   results/problem_figures_2026-09-22/olbc_elasticity.npz.
-#| code-fold: true
-E, Em = load_problem("olbc_elasticity")
-bp, bc, bn = E["bnd_points"], E["bnd_cells"], E["bnd_normals"]; mid = bp[bc].mean(axis=1)
-def kinds_of(comp):
-    return np.where(E[f"bc_dirichlet_{comp}"] > 0.5, "value", np.where(E[f"bc_neumann_{comp}"] > 0.5, "flux", "free"))
-kx, ky = kinds_of("x"), kinds_of("y")
-fig, axes = plt.subplots(1, 3, figsize=(8, 3.9), gridspec_kw=dict(wspace=0.3))
-ax = axes[0]
-outer = E["loop_id"] < 0.5
-segs = bp[bc][:, :, :2]
-ax.add_collection(LineCollection(segs[outer] + 0.045 * bn[outer, None, :2], colors=[BC[k] for k in kx[outer]], linewidths=4.0, capstyle="butt"))
-ax.add_collection(LineCollection(segs[outer] - 0.0 * bn[outer, None, :2], colors=[BC[k] for k in ky[outer]], linewidths=4.0, capstyle="butt"))
-ax.add_collection(LineCollection(segs[~outer], colors=[BC[k] for k in kx[~outer]], linewidths=4.0, capstyle="butt"))
-ax.scatter(E["int_points"][:, 0], E["int_points"][:, 1], s=0.8, c=GRID, lw=0, rasterized=True, zorder=0)
-for v, lab in ((np.array([1, 0]), "$\\hat g_1$"), (np.array([0, 1]), "$\\hat g_2$")):
-    ax.annotate("", xy=(1.05 + 0.3 * v[0], 0.8 + 0.3 * v[1]), xytext=(1.05, 0.8), arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.6))
-    ax.text(1.05 + 0.46 * v[0], 0.8 + 0.46 * v[1], lab, ha="center", va="center", fontsize=8.5, color=INK)
-bc_legend(ax, ["value", "flux", "free"], loc="lower center")
-map_axes(ax); ax.set_xlim(-1.55, 1.6); ax.set_ylim(-2.15, 1.3); ax.set_xlabel("x [–]"); ax.set_ylabel("y [–]")
-ax.set_title("conditions, per component\nouter ring: on $u_x$; inner ring: on $u_y$", fontsize=9.0)
-vm = np.sqrt(E["sig11"] ** 2 - E["sig11"] * E["sig22"] + E["sig22"] ** 2 + 3 * E["sig12"] ** 2)
-ax = axes[1]
-sc = field_scatter(ax, E["int_points"][:, :2], vm, s=2.5, vmin=0, vmax=float(np.quantile(vm, 0.995))); map_axes(ax); ax.set_xlabel("x [–]")
-ax.set_title("von Mises stress (from targets)", fontsize=9.5); small_colorbar(fig, sc, ax, "$\\sigma_\\mathrm{vM}$ [–]", extend="max")
-ax = axes[2]
-um = np.linalg.norm(E["displacement"], axis=1)
-sc = field_scatter(ax, E["int_points"][:, :2], um * 1e4, s=2.5, vmin=0); map_axes(ax); ax.set_xlabel("x [–]")
-ax.set_title("displacement $|u|$ (target)", fontsize=9.5); small_colorbar(fig, sc, ax, "$|u|$ [$10^{-4}$]")
-for ax in axes[1:]:
-    ax.set_ylim(-1.05, 1.05); ax.set_yticklabels([])
-plt.show()
-```
-
-**Splits.** Every split in the book is either the dataset's curated
-manifest used unchanged or a fixed-seed permutation recorded in the
-manifest; the HiLiftAeroML split table, which holds out one question per
-split, and the other datasets' splits are in @sec-splits. Two facts bear on
-reading the results. DrivAerML has one validation set of 48 cars, shared by
-the Surface and Volume tasks and by every experiment, with a training set
-of 435 cars or a nested rung of 27, 54, 109 or 218 (@sec-data-efficiency).
-The HiLiftAeroML test manifests overlap, so a test split is sealed per
-checkpoint, not per program (@sec-limits-validation).
+::: {.callout-warning collapse="true" title="The HiLiftAeroML manifests overlap, so a test split is sealed per checkpoint, not per program"}
+The manifests are separate but not disjoint. The angle-of-attack and stall
+test sets between them contain every one of the 180 geometries. The
+360-case data-efficiency test set shares 179 cases with them, the geometry
+test set 182 and the deflection test set 182 (37 and 40 of their cases also
+sit in the shared validation set). A test split is therefore *held out per
+checkpoint*, since no model evaluated on it trained on it. But once the
+regime-extrapolation tests are read, no HiLiftAeroML geometry remains
+unexposed at the level of the program, and no later evaluation on these
+manifests is an independent program-level confirmation
+(@sec-limits-validation).
+:::
 
 ## Protocol {#sec-protocol}
 
@@ -841,17 +641,6 @@ A comparison that departs from it says so in the same sentence.**
 | datasets | a result counts when it is reproduced on two datasets; a single-dataset result is labeled as such |
 | validation and test | all architectures at all rungs scored on the same validation cases; a sealed test split is evaluated exactly once with the checkpoint and configuration declared in writing beforehand |
 | preregistration | every experiment states its prediction and its falsifier in readout units before it runs; the dated record is the notebook (@sec-notebook) |
-
-The book's accuracy numbers are field errors on the sampled cells, and
-they compare architectures fairly because every model is scored on the
-same cells. They are not statements about integrated loads. On the
-DrivAerML Surface reference checkpoints the 200,000-cell sample alone
-misses the full-surface drag by 2.4% and the lift by 30% (the
-Horvitz-Thompson estimate of a signed integrand with heavy cancellation),
-while both ISLA and GeoTransolver-512 predict the sampled-cell drag to
-within 1%; against the full surface the two architectures' drag errors
-are 2.62% and 2.65% (@sec-nb-forceref-verdict, one dataset). A force
-claim needs the full surface at inference or a stated sampling band.
 
 Because the rungs of a ladder share one rate and one schedule, a difference
 between rungs is a difference in data and nothing else. When a result

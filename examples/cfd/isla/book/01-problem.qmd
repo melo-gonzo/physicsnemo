@@ -203,8 +203,8 @@ separately (@sec-splits).
 
 **A learned operator earns the name only if it behaves like an operator
 away from its training distribution, and "away" has several independent
-directions, each measured by its own split or probe.** Six are measured,
-one question per split, never two combined into one score:
+directions, each read by its own split or probe.** Six are named, one
+question per split, never two combined into one score:
 
 - **Data efficiency**: accuracy against the number of training cases on a
   fixed validation set (@sec-data-efficiency).
@@ -215,7 +215,9 @@ one question per split, never two combined into one score:
   at any condition, as distinct from geometries seen at other conditions
   (@sec-splits).
 - **Cross-family transfer**: zero-shot evaluation on a vehicle family
-  different from the training family (@sec-shift-suv).
+  different from the training family. The dataset for it is
+  @sec-shift-suv, and the axis is unmeasured for ISLA
+  (@sec-limits-transfer).
 - **Pose**: the same cases presented in arbitrary rigid poses (@sec-pose).
   The physics does not depend on where the body sits in the laboratory, so
   the answer must not either.
@@ -299,7 +301,29 @@ checkpoint.** Training runs in bfloat16 (@sec-protocol). Scoring in
 bfloat16 adds an architecture-dependent offset of several percent to the
 mean error. The offset is larger for GeoTransolver and Transolver than for
 ISLA, so a bfloat16 comparison flatters ISLA. Every bfloat16 number in the
-book is labeled as such (@sec-nb-fp32-instrument).
+book is labeled as such (@sec-protocol).
+
+**A field error on the sampled cells is not a statement about an
+integrated load.** Every model is scored on the same cells, so the field
+comparison is fair; the integral of a signed field over a sample is not,
+because drag and lift are integrals with heavy cancellation. On the
+DrivAerML Surface task, with the reference checkpoints scored at the
+reporting protocol:
+
+```{python}
+#| label: para-force-limit
+#| output: asis
+FR = J("forceref_2026-09-26.json")["summary"]
+sm = lambda m, c, k: FR["models"][m][c]["seed_mean"][k]
+print(f"- the 200,000-cell sample alone misses the full-surface drag by {100 * FR['sampling']['CD']['rel_l1_sampled_vs_full']:.1f}% "
+      f"and the lift by {100 * FR['sampling']['CL']['rel_l1_sampled_vs_full']:.0f}%;\n"
+      f"- against the sampled cells both architectures predict drag to within "
+      f"{100 * max(sm('ISLA', 'CD', 'rel_l1_vs_sampled'), sm('GeoTransolver-512', 'CD', 'rel_l1_vs_sampled')):.1f}%;\n"
+      f"- against the full surface their drag errors are {100 * sm('ISLA', 'CD', 'rel_l1_vs_full'):.2f}% (ISLA) and "
+      f"{100 * sm('GeoTransolver-512', 'CD', 'rel_l1_vs_full'):.2f}% (GeoTransolver-512).\n\n"
+      "A force claim therefore needs the full surface at inference or a stated sampling band. One dataset. "
+      "Data: results/forceref_2026-09-26.json.")
+```
 
 ```{python}
 #| label: para-metric-calibration
