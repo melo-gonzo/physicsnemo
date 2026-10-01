@@ -1,0 +1,1938 @@
+{
+ "protocol": "P200K-FLEET HiLift group (`hl`): the complete wing ladder at the reporting protocol (200,000 cells, float32, 180\nvalidation wings, two seeds), the 200k-against-10k comparison the fleet preregistration promised, and the wing half\nof SCALE-LAW's case exponents for the three models.\n\nInputs: results/campaigns_2026-09-19/hl/metrics/<run>/<run>/metrics.jsonl for the lanes\np200k_hl_{isla,gt_unit,transolver_unit}_<rung>_seed{42,43} and p200k_hl_gt_unit_<rung>_lr3e3_seed{42,43}\n(ISLA 192 wide, linear routing, lr 1e-3, the configuration of 2026-09-19; unit-direction GeoTransolver-256 at 1e-3 and\n3e-3; Transolver-256 at 3e-3). One scoring block per file: the block whose config row carries the highest epoch.\nREF-BOARD values of the reference configuration (384 wide, cosine routing, 5e-4) are read beside from\nresults/ref_surface_2026-09-23.json (35 and 210 wings) and results/campaigns_2026-09-22/ref/metrics (510 wings).\n10,000-cell predecessors: results/p200k_fleet_reduction_2026-09-19.json (tenk_reference blocks, the 35- and 4-geometry\nrungs), results/frame_reduction_2026-09-11.json (relative-frame ISLA at 10k on the 210-, 21-geometry and fixed-angle\nrungs) and results/fp32_reeval/fp32_shift_2026-09-09.json (unit-direction GeoTransolver and Transolver at 10k on the\nfixed-angle rung). The 510- and 1,260-wing rungs have no 10,000-cell twin of the same configuration.\n\nPlateau exclusion: a lane whose train.log shows the mean-field signature (validation loss descending to about 0.01 and\nthen jumping to 0.12 to 0.16 and staying flat, training loss at the same value) is excluded from every mean, ratio and\nfit and recorded under \"excluded\". The signature was read on the cluster train logs on 2026-09-30 (runs/<run>/train.log,\nval_interval 25) and is confirmed here by the scored pressure error above 0.4 (the mean-field level is 0.6 to 0.7).\n\nusage: python p200k_hl_ladder_2026-09-30.py   (writes p200k_hl_ladder_2026-09-30.json and .png beside itself)",
+ "rungs": {
+  "super_scarce": {
+   "n_train": 35,
+   "label": "35 wings (random split)",
+   "n_val": 180,
+   "arms": {
+    "isla": {
+     "runs": {
+      "p200k_hl_isla_super_scarce_seed42": {
+       "pressure_l2": 0.1503813878736562,
+       "velocity_l2": 0.1704771365556452,
+       "tau_wall_l2": 0.26166917987995675,
+       "temperature_l2": 0.12910603988501762,
+       "density_l2": 0.19792619339293904,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_isla_super_scarce_seed43": {
+       "pressure_l2": 0.1495765353863438,
+       "velocity_l2": 0.16915441126459174,
+       "tau_wall_l2": 0.26053105543057126,
+       "temperature_l2": 0.12782675437629223,
+       "density_l2": 0.1976370078408056,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "1e-3",
+     "seed_means": {
+      "pressure_l2": 0.14997896163000002,
+      "velocity_l2": 0.16981577391011848,
+      "tau_wall_l2": 0.261100117655264,
+      "temperature_l2": 0.12846639713065494,
+      "density_l2": 0.19778160061687233
+     },
+     "pressure_l2_seeds": [
+      0.1503813878736562,
+      0.1495765353863438
+     ],
+     "excluded_runs": []
+    },
+    "gt_unit": {
+     "runs": {
+      "p200k_hl_gt_unit_super_scarce_seed42": {
+       "pressure_l2": 0.1062705546617508,
+       "velocity_l2": 0.13168238922953607,
+       "tau_wall_l2": 0.20215726751420232,
+       "temperature_l2": 0.09791109433604611,
+       "density_l2": 0.1399526482447982,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_super_scarce_seed43": {
+       "pressure_l2": 0.11329564676723547,
+       "velocity_l2": 0.134704465046525,
+       "tau_wall_l2": 0.20864929345746835,
+       "temperature_l2": 0.10213684253394603,
+       "density_l2": 0.15002372053762278,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.10978310071449313,
+      "velocity_l2": 0.13319342713803053,
+      "tau_wall_l2": 0.20540328048583534,
+      "temperature_l2": 0.10002396843499607,
+      "density_l2": 0.14498818439121047
+     },
+     "pressure_l2_seeds": [
+      0.1062705546617508,
+      0.11329564676723547
+     ],
+     "excluded_runs": []
+    },
+    "transolver_unit": {
+     "runs": {
+      "p200k_hl_transolver_unit_super_scarce_seed42": {
+       "pressure_l2": 0.11147063345544868,
+       "velocity_l2": 0.1345054529193375,
+       "tau_wall_l2": 0.20880673693286048,
+       "temperature_l2": 0.10007633121891155,
+       "density_l2": 0.14689986573325264,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_transolver_unit_super_scarce_seed43": {
+       "pressure_l2": 0.10870310223350922,
+       "velocity_l2": 0.13352006408903333,
+       "tau_wall_l2": 0.20634498049815495,
+       "temperature_l2": 0.09914556522336271,
+       "density_l2": 0.1431339846096105,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.11008686784447895,
+      "velocity_l2": 0.13401275850418543,
+      "tau_wall_l2": 0.2075758587155077,
+      "temperature_l2": 0.09961094822113713,
+      "density_l2": 0.14501692517143155
+     },
+     "pressure_l2_seeds": [
+      0.11147063345544868,
+      0.10870310223350922
+     ],
+     "excluded_runs": []
+    }
+   },
+   "gt_better": {
+    "arm": "gt_unit",
+    "lr": "3e-3",
+    "other": {}
+   },
+   "ratios_over_isla": {
+    "gt_better_rate": {
+     "pressure_l2": 0.7319900039402154,
+     "velocity_l2": 0.7843407244872803,
+     "tau_wall_l2": 0.7866839828737023,
+     "temperature_l2": 0.7786002462049909,
+     "density_l2": 0.7330721560498982
+    },
+    "gt_unit": {
+     "pressure_l2": 0.7319900039402154
+    },
+    "transolver_unit": {
+     "pressure_l2": 0.7340154022139761,
+     "velocity_l2": 0.7891655493388784,
+     "tau_wall_l2": 0.7950048455725881,
+     "temperature_l2": 0.7753852403895878,
+     "density_l2": 0.7332174717927754
+    }
+   }
+  },
+  "scarce": {
+   "n_train": 210,
+   "label": "210 wings (random split)",
+   "n_val": 180,
+   "arms": {
+    "isla": {
+     "runs": {
+      "p200k_hl_isla_scarce_seed42": {
+       "pressure_l2": 0.05344727908571561,
+       "velocity_l2": 0.07860953240758843,
+       "tau_wall_l2": 0.11822503610617585,
+       "temperature_l2": 0.05681867218679852,
+       "density_l2": 0.072520892518676,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_isla_scarce_seed43": {
+       "pressure_l2": 0.05673310195820199,
+       "velocity_l2": 0.0816950261592865,
+       "tau_wall_l2": 0.12305918696026007,
+       "temperature_l2": 0.058917271656294665,
+       "density_l2": 0.0766862923382885,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "1e-3",
+     "seed_means": {
+      "pressure_l2": 0.0550901905219588,
+      "velocity_l2": 0.08015227928343746,
+      "tau_wall_l2": 0.12064211153321797,
+      "temperature_l2": 0.05786797192154659,
+      "density_l2": 0.07460359242848225
+     },
+     "pressure_l2_seeds": [
+      0.05344727908571561,
+      0.05673310195820199
+     ],
+     "excluded_runs": []
+    },
+    "gt_unit": {
+     "runs": {
+      "p200k_hl_gt_unit_scarce_seed42": {
+       "pressure_l2": 0.05024582771584392,
+       "velocity_l2": 0.0742830971048938,
+       "tau_wall_l2": 0.11088113664752908,
+       "temperature_l2": 0.055921401807831395,
+       "density_l2": 0.06719988736634454,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_scarce_seed43": {
+       "pressure_l2": 0.04755339315161109,
+       "velocity_l2": 0.07170181535184383,
+       "tau_wall_l2": 0.10706506528788143,
+       "temperature_l2": 0.05398915467990769,
+       "density_l2": 0.0638666885594527,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "1e-3",
+     "seed_means": {
+      "pressure_l2": 0.04889961043372751,
+      "velocity_l2": 0.07299245622836881,
+      "tau_wall_l2": 0.10897310096770525,
+      "temperature_l2": 0.054955278243869546,
+      "density_l2": 0.06553328796289862
+     },
+     "pressure_l2_seeds": [
+      0.05024582771584392,
+      0.04755339315161109
+     ],
+     "excluded_runs": []
+    },
+    "gt_unit_lr3e3": {
+     "runs": {
+      "p200k_hl_gt_unit_scarce_lr3e3_seed42": {
+       "pressure_l2": 0.048436377694209415,
+       "velocity_l2": 0.07309064842346642,
+       "tau_wall_l2": 0.10780831074549092,
+       "temperature_l2": 0.05400363553522362,
+       "density_l2": 0.06518805215342177,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_scarce_lr3e3_seed43": {
+       "pressure_l2": 0.048653826655613054,
+       "velocity_l2": 0.07100260245303312,
+       "tau_wall_l2": 0.10641111359000206,
+       "temperature_l2": 0.05426057328780492,
+       "density_l2": 0.06528365639969706,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.04854510217491123,
+      "velocity_l2": 0.07204662543824977,
+      "tau_wall_l2": 0.1071097121677465,
+      "temperature_l2": 0.05413210441151427,
+      "density_l2": 0.06523585427655942
+     },
+     "pressure_l2_seeds": [
+      0.048436377694209415,
+      0.048653826655613054
+     ],
+     "excluded_runs": []
+    },
+    "transolver_unit": {
+     "runs": {
+      "p200k_hl_transolver_unit_scarce_seed42": {
+       "pressure_l2": 0.05284362274946438,
+       "velocity_l2": 0.07700544144544337,
+       "tau_wall_l2": 0.11732943546440866,
+       "temperature_l2": 0.057865922980838355,
+       "density_l2": 0.0707743463313414,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_transolver_unit_scarce_seed43": {
+       "pressure_l2": 0.0527251328031222,
+       "velocity_l2": 0.07771714590489864,
+       "tau_wall_l2": 0.11827398381299442,
+       "temperature_l2": 0.057555702711559006,
+       "density_l2": 0.07051563158424365,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.05278437777629329,
+      "velocity_l2": 0.077361293675171,
+      "tau_wall_l2": 0.11780170963870154,
+      "temperature_l2": 0.05771081284619868,
+      "density_l2": 0.07064498895779253
+     },
+     "pressure_l2_seeds": [
+      0.05284362274946438,
+      0.0527251328031222
+     ],
+     "excluded_runs": []
+    }
+   },
+   "gt_better": {
+    "arm": "gt_unit_lr3e3",
+    "lr": "3e-3",
+    "other": {
+     "gt_unit": 0.04889961043372751
+    }
+   },
+   "ratios_over_isla": {
+    "gt_better_rate": {
+     "pressure_l2": 0.8811932163415062,
+     "velocity_l2": 0.8988718235132881,
+     "tau_wall_l2": 0.8878302178775658,
+     "temperature_l2": 0.9354415337883768,
+     "density_l2": 0.8744331493030569
+    },
+    "gt_unit": {
+     "pressure_l2": 0.8876282686703771
+    },
+    "gt_unit_lr3e3": {
+     "pressure_l2": 0.8811932163415062
+    },
+    "transolver_unit": {
+     "pressure_l2": 0.9581447672658452,
+     "velocity_l2": 0.9651789614316909,
+     "tau_wall_l2": 0.9764559666735082,
+     "temperature_l2": 0.9972841786202395,
+     "density_l2": 0.9469381655516846
+    }
+   }
+  },
+  "medium": {
+   "n_train": 510,
+   "label": "510 wings (random split)",
+   "n_val": 180,
+   "arms": {
+    "isla": {
+     "runs": {
+      "p200k_hl_isla_medium_seed43": {
+       "pressure_l2": 0.05564108085301187,
+       "velocity_l2": 0.08065576812045441,
+       "tau_wall_l2": 0.12818466023438507,
+       "temperature_l2": 0.05825558308925893,
+       "density_l2": 0.07553959381249216,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 1,
+     "lr": "1e-3",
+     "seed_means": {
+      "pressure_l2": 0.05564108085301187,
+      "velocity_l2": 0.08065576812045441,
+      "tau_wall_l2": 0.12818466023438507,
+      "temperature_l2": 0.05825558308925893,
+      "density_l2": 0.07553959381249216
+     },
+     "pressure_l2_seeds": [
+      0.05564108085301187
+     ],
+     "excluded_runs": [
+      "p200k_hl_isla_medium_seed42"
+     ]
+    },
+    "gt_unit": {
+     "runs": {
+      "p200k_hl_gt_unit_medium_seed42": {
+       "pressure_l2": 0.03954423208617502,
+       "velocity_l2": 0.057415897047354114,
+       "tau_wall_l2": 0.08916191125495566,
+       "temperature_l2": 0.047307060058746075,
+       "density_l2": 0.05341279994075497,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_medium_seed43": {
+       "pressure_l2": 0.0376630026795384,
+       "velocity_l2": 0.057290216204192904,
+       "tau_wall_l2": 0.08776489835646417,
+       "temperature_l2": 0.046057910699811244,
+       "density_l2": 0.05087831833710273,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "1e-3",
+     "seed_means": {
+      "pressure_l2": 0.03860361738285671,
+      "velocity_l2": 0.05735305662577351,
+      "tau_wall_l2": 0.08846340480570991,
+      "temperature_l2": 0.04668248537927866,
+      "density_l2": 0.05214555913892885
+     },
+     "pressure_l2_seeds": [
+      0.03954423208617502,
+      0.0376630026795384
+     ],
+     "excluded_runs": []
+    },
+    "gt_unit_lr3e3": {
+     "runs": {
+      "p200k_hl_gt_unit_medium_lr3e3_seed42": {
+       "pressure_l2": 0.03770345744883848,
+       "velocity_l2": 0.05692874048319128,
+       "tau_wall_l2": 0.08741489510155387,
+       "temperature_l2": 0.046118630479193394,
+       "density_l2": 0.05101341393051876,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_medium_lr3e3_seed43": {
+       "pressure_l2": 0.03996476369599501,
+       "velocity_l2": 0.05736425808734364,
+       "tau_wall_l2": 0.08886058483686712,
+       "temperature_l2": 0.04715446967424618,
+       "density_l2": 0.05397907007071707,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.038834110572416744,
+      "velocity_l2": 0.05714649928526746,
+      "tau_wall_l2": 0.0881377399692105,
+      "temperature_l2": 0.04663655007671978,
+      "density_l2": 0.052496242000617914
+     },
+     "pressure_l2_seeds": [
+      0.03770345744883848,
+      0.03996476369599501
+     ],
+     "excluded_runs": []
+    },
+    "transolver_unit": {
+     "runs": {
+      "p200k_hl_transolver_unit_medium_seed42": {
+       "pressure_l2": 0.04042194460829099,
+       "velocity_l2": 0.05955126610481077,
+       "tau_wall_l2": 0.09259763430390093,
+       "temperature_l2": 0.04772745509528452,
+       "density_l2": 0.054796149312622014,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_transolver_unit_medium_seed43": {
+       "pressure_l2": 0.041287262768795095,
+       "velocity_l2": 0.06025050301104784,
+       "tau_wall_l2": 0.09365249768727356,
+       "temperature_l2": 0.047942925203177666,
+       "density_l2": 0.055886402395036484,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.040854603688543045,
+      "velocity_l2": 0.0599008845579293,
+      "tau_wall_l2": 0.09312506599558724,
+      "temperature_l2": 0.04783519014923109,
+      "density_l2": 0.05534127585382925
+     },
+     "pressure_l2_seeds": [
+      0.04042194460829099,
+      0.041287262768795095
+     ],
+     "excluded_runs": []
+    }
+   },
+   "gt_better": {
+    "arm": "gt_unit",
+    "lr": "1e-3",
+    "other": {
+     "gt_unit_lr3e3": 0.038834110572416744
+    }
+   },
+   "ratios_over_isla": {
+    "gt_better_rate": {
+     "pressure_l2": 0.6937970433183468,
+     "velocity_l2": 0.7110843770047576,
+     "tau_wall_l2": 0.6901247360172034,
+     "temperature_l2": 0.8013392520293201,
+     "density_l2": 0.6903076453967564
+    },
+    "gt_unit": {
+     "pressure_l2": 0.6937970433183468
+    },
+    "gt_unit_lr3e3": {
+     "pressure_l2": 0.697939543536287
+    },
+    "transolver_unit": {
+     "pressure_l2": 0.7342525174244808,
+     "velocity_l2": 0.742673288641564,
+     "tau_wall_l2": 0.7264914992582457,
+     "temperature_l2": 0.8211262785909847,
+     "density_l2": 0.732612833359945
+    }
+   }
+  },
+  "full": {
+   "n_train": 1260,
+   "label": "1,260 wings (random split)",
+   "n_val": 180,
+   "arms": {
+    "gt_unit": {
+     "runs": {
+      "p200k_hl_gt_unit_full_seed42": {
+       "pressure_l2": 0.03154329480603337,
+       "velocity_l2": 0.04912719138794475,
+       "tau_wall_l2": 0.07727781405879391,
+       "temperature_l2": 0.041157472599297765,
+       "density_l2": 0.04315727927411596,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_full_seed43": {
+       "pressure_l2": 0.03309017297708326,
+       "velocity_l2": 0.04939643790324529,
+       "tau_wall_l2": 0.07827925508220991,
+       "temperature_l2": 0.042105897288355565,
+       "density_l2": 0.045032572146091195,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "1e-3",
+     "seed_means": {
+      "pressure_l2": 0.032316733891558314,
+      "velocity_l2": 0.04926181464559502,
+      "tau_wall_l2": 0.0777785345705019,
+      "temperature_l2": 0.041631684943826665,
+      "density_l2": 0.04409492571010358
+     },
+     "pressure_l2_seeds": [
+      0.03154329480603337,
+      0.03309017297708326
+     ],
+     "excluded_runs": []
+    },
+    "gt_unit_lr3e3": {
+     "runs": {
+      "p200k_hl_gt_unit_full_lr3e3_seed42": {
+       "pressure_l2": 0.0341085165583839,
+       "velocity_l2": 0.05018125606907738,
+       "tau_wall_l2": 0.08009345843974087,
+       "temperature_l2": 0.04243365546895398,
+       "density_l2": 0.046407865919172765,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_full_lr3e3_seed43": {
+       "pressure_l2": 0.034698754704246916,
+       "velocity_l2": 0.05038940476046668,
+       "tau_wall_l2": 0.07999197045962016,
+       "temperature_l2": 0.04303672064302696,
+       "density_l2": 0.0472413572586245,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.034403635631315405,
+      "velocity_l2": 0.05028533041477203,
+      "tau_wall_l2": 0.08004271444968052,
+      "temperature_l2": 0.04273518805599047,
+      "density_l2": 0.04682461158889863
+     },
+     "pressure_l2_seeds": [
+      0.0341085165583839,
+      0.034698754704246916
+     ],
+     "excluded_runs": []
+    },
+    "transolver_unit": {
+     "runs": {
+      "p200k_hl_transolver_unit_full_seed42": {
+       "pressure_l2": 0.03576458952803579,
+       "velocity_l2": 0.052542587969866064,
+       "tau_wall_l2": 0.08348096352484491,
+       "temperature_l2": 0.043725355186810096,
+       "density_l2": 0.048716618751900066,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_transolver_unit_full_seed43": {
+       "pressure_l2": 0.0367788928716133,
+       "velocity_l2": 0.053207196378045614,
+       "tau_wall_l2": 0.08478888345675337,
+       "temperature_l2": 0.04456404985653029,
+       "density_l2": 0.04997719065803621,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.03627174119982454,
+      "velocity_l2": 0.05287489217395584,
+      "tau_wall_l2": 0.08413492349079914,
+      "temperature_l2": 0.044144702521670194,
+      "density_l2": 0.049346904704968136
+     },
+     "pressure_l2_seeds": [
+      0.03576458952803579,
+      0.0367788928716133
+     ],
+     "excluded_runs": []
+    }
+   },
+   "gt_better": {
+    "arm": "gt_unit",
+    "lr": "1e-3",
+    "other": {
+     "gt_unit_lr3e3": 0.034403635631315405
+    }
+   }
+  },
+  "geometry_super_scarce": {
+   "n_train": 40,
+   "label": "4 geometries at all angles (held-out geometries)",
+   "n_val": 180,
+   "arms": {
+    "isla": {
+     "runs": {
+      "p200k_hl_isla_geometry_super_scarce_seed42": {
+       "pressure_l2": 0.2777711976319551,
+       "velocity_l2": 0.2518383738481336,
+       "tau_wall_l2": 0.37293534974257153,
+       "temperature_l2": 0.22508920112417805,
+       "density_l2": 0.328554617613554,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_isla_geometry_super_scarce_seed43": {
+       "pressure_l2": 0.2540790198991696,
+       "velocity_l2": 0.24293083002169927,
+       "tau_wall_l2": 0.36072381345762145,
+       "temperature_l2": 0.2143601068192058,
+       "density_l2": 0.2995086484485202,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "1e-3",
+     "seed_means": {
+      "pressure_l2": 0.26592510876556236,
+      "velocity_l2": 0.24738460193491646,
+      "tau_wall_l2": 0.3668295816000965,
+      "temperature_l2": 0.21972465397169194,
+      "density_l2": 0.3140316330310371
+     },
+     "pressure_l2_seeds": [
+      0.2777711976319551,
+      0.2540790198991696
+     ],
+     "excluded_runs": []
+    },
+    "gt_unit": {
+     "runs": {
+      "p200k_hl_gt_unit_geometry_super_scarce_seed42": {
+       "pressure_l2": 0.1923724341309733,
+       "velocity_l2": 0.1826528560784128,
+       "tau_wall_l2": 0.2940560197664632,
+       "temperature_l2": 0.16620026665429274,
+       "density_l2": 0.23271280539532502,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_geometry_super_scarce_seed43": {
+       "pressure_l2": 0.2117811923639642,
+       "velocity_l2": 0.19404738437798288,
+       "tau_wall_l2": 0.31270021920402846,
+       "temperature_l2": 0.17981127645406458,
+       "density_l2": 0.2530020055257612,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "1e-3",
+     "seed_means": {
+      "pressure_l2": 0.20207681324746873,
+      "velocity_l2": 0.18835012022819786,
+      "tau_wall_l2": 0.30337811948524585,
+      "temperature_l2": 0.17300577155417868,
+      "density_l2": 0.2428574054605431
+     },
+     "pressure_l2_seeds": [
+      0.1923724341309733,
+      0.2117811923639642
+     ],
+     "excluded_runs": []
+    },
+    "gt_unit_lr3e3": {
+     "runs": {
+      "p200k_hl_gt_unit_geometry_super_scarce_lr3e3_seed42": {
+       "pressure_l2": 0.18026178524725966,
+       "velocity_l2": 0.1775020418067773,
+       "tau_wall_l2": 0.28101682000690037,
+       "temperature_l2": 0.15448913408650292,
+       "density_l2": 0.21964870488478078,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_geometry_super_scarce_lr3e3_seed43": {
+       "pressure_l2": 0.17931796825594373,
+       "velocity_l2": 0.17892146565847927,
+       "tau_wall_l2": 0.2827460030714671,
+       "temperature_l2": 0.15488414338065518,
+       "density_l2": 0.21904744758374162,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.17978987675160168,
+      "velocity_l2": 0.1782117537326283,
+      "tau_wall_l2": 0.2818814115391837,
+      "temperature_l2": 0.15468663873357905,
+      "density_l2": 0.2193480762342612
+     },
+     "pressure_l2_seeds": [
+      0.18026178524725966,
+      0.17931796825594373
+     ],
+     "excluded_runs": []
+    },
+    "transolver_unit": {
+     "runs": {
+      "p200k_hl_transolver_unit_geometry_super_scarce_seed42": {
+       "pressure_l2": 0.18829608853492472,
+       "velocity_l2": 0.18430109437968994,
+       "tau_wall_l2": 0.2928068225582441,
+       "temperature_l2": 0.16092522334721354,
+       "density_l2": 0.22888469683627288,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_transolver_unit_geometry_super_scarce_seed43": {
+       "pressure_l2": 0.19754253096050686,
+       "velocity_l2": 0.18670453607208198,
+       "tau_wall_l2": 0.2958958190348413,
+       "temperature_l2": 0.16478453853891956,
+       "density_l2": 0.2385755427595642,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.1929193097477158,
+      "velocity_l2": 0.18550281522588596,
+      "tau_wall_l2": 0.2943513207965427,
+      "temperature_l2": 0.16285488094306655,
+      "density_l2": 0.23373011979791852
+     },
+     "pressure_l2_seeds": [
+      0.18829608853492472,
+      0.19754253096050686
+     ],
+     "excluded_runs": []
+    }
+   },
+   "gt_better": {
+    "arm": "gt_unit_lr3e3",
+    "lr": "3e-3",
+    "other": {
+     "gt_unit": 0.20207681324746873
+    }
+   },
+   "ratios_over_isla": {
+    "gt_better_rate": {
+     "pressure_l2": 0.6760921433338705,
+     "velocity_l2": 0.7203833720399194,
+     "tau_wall_l2": 0.7684260639767051,
+     "temperature_l2": 0.7040021951906589,
+     "density_l2": 0.6984903849243177
+    },
+    "gt_unit": {
+     "pressure_l2": 0.7599012149906392
+    },
+    "gt_unit_lr3e3": {
+     "pressure_l2": 0.6760921433338705
+    },
+    "transolver_unit": {
+     "pressure_l2": 0.7254648146737886,
+     "velocity_l2": 0.7498559480864102,
+     "tau_wall_l2": 0.8024198035300032,
+     "temperature_l2": 0.7411770959668815,
+     "density_l2": 0.7442884576370622
+    }
+   }
+  },
+  "geometry_scarce": {
+   "n_train": 210,
+   "label": "21 geometries at all angles (held-out geometries)",
+   "n_val": 180,
+   "arms": {
+    "isla": {
+     "runs": {
+      "p200k_hl_isla_geometry_scarce_seed42": {
+       "pressure_l2": 0.09103456160260572,
+       "velocity_l2": 0.10834236099488205,
+       "tau_wall_l2": 0.16969417275653945,
+       "temperature_l2": 0.09397919057971901,
+       "density_l2": 0.11212283979273505,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_isla_geometry_scarce_seed43": {
+       "pressure_l2": 0.09236406855699089,
+       "velocity_l2": 0.11253734417259693,
+       "tau_wall_l2": 0.17793268234365517,
+       "temperature_l2": 0.09684853750384516,
+       "density_l2": 0.11367242777099212,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "1e-3",
+     "seed_means": {
+      "pressure_l2": 0.09169931507979831,
+      "velocity_l2": 0.11043985258373949,
+      "tau_wall_l2": 0.17381342755009732,
+      "temperature_l2": 0.09541386404178209,
+      "density_l2": 0.11289763378186359
+     },
+     "pressure_l2_seeds": [
+      0.09103456160260572,
+      0.09236406855699089
+     ],
+     "excluded_runs": []
+    },
+    "gt_unit": {
+     "runs": {
+      "p200k_hl_gt_unit_geometry_scarce_seed42": {
+       "pressure_l2": 0.09133685324341059,
+       "velocity_l2": 0.10817497186362743,
+       "tau_wall_l2": 0.16942812725901604,
+       "temperature_l2": 0.09518512580543756,
+       "density_l2": 0.1113155413005087,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_geometry_scarce_seed43": {
+       "pressure_l2": 0.0887536030055748,
+       "velocity_l2": 0.10604719500988721,
+       "tau_wall_l2": 0.16646333473424116,
+       "temperature_l2": 0.0926933026769095,
+       "density_l2": 0.10820024340516991,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "1e-3",
+     "seed_means": {
+      "pressure_l2": 0.0900452281244927,
+      "velocity_l2": 0.10711108343675732,
+      "tau_wall_l2": 0.1679457309966286,
+      "temperature_l2": 0.09393921424117353,
+      "density_l2": 0.10975789235283931
+     },
+     "pressure_l2_seeds": [
+      0.09133685324341059,
+      0.0887536030055748
+     ],
+     "excluded_runs": []
+    },
+    "gt_unit_lr3e3": {
+     "runs": {
+      "p200k_hl_gt_unit_geometry_scarce_lr3e3_seed42": {
+       "pressure_l2": 0.08987255633498231,
+       "velocity_l2": 0.10607611479030715,
+       "tau_wall_l2": 0.16671552033060127,
+       "temperature_l2": 0.09515938063462576,
+       "density_l2": 0.108889373867876,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_geometry_scarce_lr3e3_seed43": {
+       "pressure_l2": 0.08511444966619214,
+       "velocity_l2": 0.10161380455311801,
+       "tau_wall_l2": 0.15855788878268665,
+       "temperature_l2": 0.08916240197916826,
+       "density_l2": 0.10416652138034503,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.08749350300058722,
+      "velocity_l2": 0.10384495967171259,
+      "tau_wall_l2": 0.16263670455664397,
+      "temperature_l2": 0.092160891306897,
+      "density_l2": 0.10652794762411052
+     },
+     "pressure_l2_seeds": [
+      0.08987255633498231,
+      0.08511444966619214
+     ],
+     "excluded_runs": []
+    },
+    "transolver_unit": {
+     "runs": {
+      "p200k_hl_transolver_unit_geometry_scarce_seed42": {
+       "pressure_l2": 0.08453181192485823,
+       "velocity_l2": 0.10392898610896534,
+       "tau_wall_l2": 0.16179131662680044,
+       "temperature_l2": 0.08928350628250176,
+       "density_l2": 0.1033288962725136,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_transolver_unit_geometry_scarce_seed43": {
+       "pressure_l2": 0.09070029057976273,
+       "velocity_l2": 0.1080832325336006,
+       "tau_wall_l2": 0.16908659086459213,
+       "temperature_l2": 0.09514131070011192,
+       "density_l2": 0.11020824199335442,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.08761605125231048,
+      "velocity_l2": 0.10600610932128296,
+      "tau_wall_l2": 0.16543895374569628,
+      "temperature_l2": 0.09221240849130684,
+      "density_l2": 0.106768569132934
+     },
+     "pressure_l2_seeds": [
+      0.08453181192485823,
+      0.09070029057976273
+     ],
+     "excluded_runs": []
+    }
+   },
+   "gt_better": {
+    "arm": "gt_unit_lr3e3",
+    "lr": "3e-3",
+    "other": {
+     "gt_unit": 0.0900452281244927
+    }
+   },
+   "ratios_over_isla": {
+    "gt_better_rate": {
+     "pressure_l2": 0.9541347492557484,
+     "velocity_l2": 0.9402852072169653,
+     "tau_wall_l2": 0.9356970105762862,
+     "temperature_l2": 0.9659067079239071,
+     "density_l2": 0.9435799852983605
+    },
+    "gt_unit": {
+     "pressure_l2": 0.981961839585539
+    },
+    "gt_unit_lr3e3": {
+     "pressure_l2": 0.9541347492557484
+    },
+    "transolver_unit": {
+     "pressure_l2": 0.9554711632913016,
+     "velocity_l2": 0.9598537741700197,
+     "tau_wall_l2": 0.9518191780552322,
+     "temperature_l2": 0.9664466418729952,
+     "density_l2": 0.9457113099396581
+    }
+   }
+  },
+  "single_aoa_12": {
+   "n_train": 126,
+   "label": "126 geometries at 12 degrees (fixed angle)",
+   "n_val": 18,
+   "arms": {
+    "isla": {
+     "runs": {
+      "p200k_hl_isla_single_aoa_12_seed42": {
+       "pressure_l2": 0.030205737385484908,
+       "velocity_l2": 0.0556665129131741,
+       "tau_wall_l2": 0.088617285920514,
+       "temperature_l2": 0.0489040342056089,
+       "density_l2": 0.03760871818910042,
+       "n_cases": 18,
+       "epoch": 500
+      },
+      "p200k_hl_isla_single_aoa_12_seed43": {
+       "pressure_l2": 0.029757029480404325,
+       "velocity_l2": 0.0546644799825218,
+       "tau_wall_l2": 0.08938859899838765,
+       "temperature_l2": 0.0489191808220413,
+       "density_l2": 0.03761521137009064,
+       "n_cases": 18,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "1e-3",
+     "seed_means": {
+      "pressure_l2": 0.029981383432944618,
+      "velocity_l2": 0.05516549644784795,
+      "tau_wall_l2": 0.08900294245945083,
+      "temperature_l2": 0.0489116075138251,
+      "density_l2": 0.03761196477959553
+     },
+     "pressure_l2_seeds": [
+      0.030205737385484908,
+      0.029757029480404325
+     ],
+     "excluded_runs": []
+    },
+    "gt_unit": {
+     "runs": {
+      "p200k_hl_gt_unit_single_aoa_12_seed42": {
+       "pressure_l2": 0.022137102153566148,
+       "velocity_l2": 0.0459513482120302,
+       "tau_wall_l2": 0.07368032158248955,
+       "temperature_l2": 0.04393358580354187,
+       "density_l2": 0.02788323846956094,
+       "n_cases": 18,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_single_aoa_12_seed43": {
+       "pressure_l2": 0.021766320233129792,
+       "velocity_l2": 0.04565482483141952,
+       "tau_wall_l2": 0.07307425845000479,
+       "temperature_l2": 0.043940747881101236,
+       "density_l2": 0.027416164572868083,
+       "n_cases": 18,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "1e-3",
+     "seed_means": {
+      "pressure_l2": 0.02195171119334797,
+      "velocity_l2": 0.045803086521724864,
+      "tau_wall_l2": 0.07337729001624717,
+      "temperature_l2": 0.04393716684232155,
+      "density_l2": 0.02764970152121451
+     },
+     "pressure_l2_seeds": [
+      0.022137102153566148,
+      0.021766320233129792
+     ],
+     "excluded_runs": []
+    },
+    "gt_unit_lr3e3": {
+     "runs": {
+      "p200k_hl_gt_unit_single_aoa_12_lr3e3_seed42": {
+       "pressure_l2": 0.020559934847470786,
+       "velocity_l2": 0.04362834017309877,
+       "tau_wall_l2": 0.0701685460905234,
+       "temperature_l2": 0.04271108843386173,
+       "density_l2": 0.02623396532403098,
+       "n_cases": 18,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_single_aoa_12_lr3e3_seed43": {
+       "pressure_l2": 0.02084378230695923,
+       "velocity_l2": 0.04412762406799528,
+       "tau_wall_l2": 0.07054182700812817,
+       "temperature_l2": 0.04273647328631745,
+       "density_l2": 0.026105691885782614,
+       "n_cases": 18,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.02070185857721501,
+      "velocity_l2": 0.04387798212054703,
+      "tau_wall_l2": 0.0703551865493258,
+      "temperature_l2": 0.04272378086008959,
+      "density_l2": 0.026169828604906797
+     },
+     "pressure_l2_seeds": [
+      0.020559934847470786,
+      0.02084378230695923
+     ],
+     "excluded_runs": []
+    },
+    "transolver_unit": {
+     "runs": {
+      "p200k_hl_transolver_unit_single_aoa_12_seed42": {
+       "pressure_l2": 0.02351254317909479,
+       "velocity_l2": 0.046669540719853506,
+       "tau_wall_l2": 0.07514990038341945,
+       "temperature_l2": 0.04383646075924238,
+       "density_l2": 0.02955443836334679,
+       "n_cases": 18,
+       "epoch": 500
+      },
+      "p200k_hl_transolver_unit_single_aoa_12_seed43": {
+       "pressure_l2": 0.023999136148227587,
+       "velocity_l2": 0.04685592672063245,
+       "tau_wall_l2": 0.07460386554400127,
+       "temperature_l2": 0.04437761277788215,
+       "density_l2": 0.029864028820561037,
+       "n_cases": 18,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.02375583966366119,
+      "velocity_l2": 0.04676273372024298,
+      "tau_wall_l2": 0.07487688296371037,
+      "temperature_l2": 0.044107036768562265,
+      "density_l2": 0.02970923359195391
+     },
+     "pressure_l2_seeds": [
+      0.02351254317909479,
+      0.023999136148227587
+     ],
+     "excluded_runs": []
+    }
+   },
+   "gt_better": {
+    "arm": "gt_unit_lr3e3",
+    "lr": "3e-3",
+    "other": {
+     "gt_unit": 0.02195171119334797
+    }
+   },
+   "ratios_over_isla": {
+    "gt_better_rate": {
+     "pressure_l2": 0.6904904379584788,
+     "velocity_l2": 0.7953881492216452,
+     "tau_wall_l2": 0.7904815796554049,
+     "temperature_l2": 0.8734896077176263,
+     "density_l2": 0.6957846727300966
+    },
+    "gt_unit": {
+     "pressure_l2": 0.7321780611773452
+    },
+    "gt_unit_lr3e3": {
+     "pressure_l2": 0.6904904379584788
+    },
+    "transolver_unit": {
+     "pressure_l2": 0.7923530185587574,
+     "velocity_l2": 0.8476808282592231,
+     "tau_wall_l2": 0.8412854777000637,
+     "temperature_l2": 0.9017703365422042,
+     "density_l2": 0.789887839309877
+    }
+   }
+  },
+  "super_scarce_area": {
+   "n_train": 35,
+   "label": "35 wings, area-law training draw",
+   "n_val": 180,
+   "arms": {
+    "isla": {
+     "runs": {
+      "p200k_hl_isla_super_scarce_area_seed42": {
+       "pressure_l2": 0.15181043162528013,
+       "velocity_l2": 0.17344178751938874,
+       "tau_wall_l2": 0.2648644340535005,
+       "temperature_l2": 0.1298581601637933,
+       "density_l2": 0.20094732923640146,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_isla_super_scarce_area_seed43": {
+       "pressure_l2": 0.14251564488642746,
+       "velocity_l2": 0.16594609564377202,
+       "tau_wall_l2": 0.2518464358316527,
+       "temperature_l2": 0.12463057256407208,
+       "density_l2": 0.18825829360220167,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "1e-3",
+     "seed_means": {
+      "pressure_l2": 0.1471630382558538,
+      "velocity_l2": 0.16969394158158038,
+      "tau_wall_l2": 0.2583554349425766,
+      "temperature_l2": 0.1272443663639327,
+      "density_l2": 0.19460281141930158
+     },
+     "pressure_l2_seeds": [
+      0.15181043162528013,
+      0.14251564488642746
+     ],
+     "excluded_runs": []
+    },
+    "gt_unit": {
+     "runs": {
+      "p200k_hl_gt_unit_super_scarce_area_seed42": {
+       "pressure_l2": 0.11139545020543867,
+       "velocity_l2": 0.13675293057329124,
+       "tau_wall_l2": 0.20759534384641382,
+       "temperature_l2": 0.10068757625089751,
+       "density_l2": 0.14648998042361605,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_gt_unit_super_scarce_area_seed43": {
+       "pressure_l2": 0.12339093751377529,
+       "velocity_l2": 0.14021932341986232,
+       "tau_wall_l2": 0.21794328913092614,
+       "temperature_l2": 0.10795972249988052,
+       "density_l2": 0.16226616688072681,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.11739319385960698,
+      "velocity_l2": 0.13848612699657678,
+      "tau_wall_l2": 0.21276931648866998,
+      "temperature_l2": 0.10432364937538902,
+      "density_l2": 0.15437807365217143
+     },
+     "pressure_l2_seeds": [
+      0.11139545020543867,
+      0.12339093751377529
+     ],
+     "excluded_runs": []
+    },
+    "transolver_unit": {
+     "runs": {
+      "p200k_hl_transolver_unit_super_scarce_area_seed42": {
+       "pressure_l2": 0.1262975418733226,
+       "velocity_l2": 0.14819299090239738,
+       "tau_wall_l2": 0.2287574667483568,
+       "temperature_l2": 0.11202147987981638,
+       "density_l2": 0.16610925199670923,
+       "n_cases": 180,
+       "epoch": 500
+      },
+      "p200k_hl_transolver_unit_super_scarce_area_seed43": {
+       "pressure_l2": 0.1253403573193484,
+       "velocity_l2": 0.1480767171829939,
+       "tau_wall_l2": 0.22871277017725838,
+       "temperature_l2": 0.1110182801882426,
+       "density_l2": 0.16376060073574383,
+       "n_cases": 180,
+       "epoch": 500
+      }
+     },
+     "n_seeds": 2,
+     "lr": "3e-3",
+     "seed_means": {
+      "pressure_l2": 0.1258189495963355,
+      "velocity_l2": 0.14813485404269564,
+      "tau_wall_l2": 0.22873511846280759,
+      "temperature_l2": 0.11151988003402949,
+      "density_l2": 0.16493492636622653
+     },
+     "pressure_l2_seeds": [
+      0.1262975418733226,
+      0.1253403573193484
+     ],
+     "excluded_runs": []
+    }
+   },
+   "gt_better": {
+    "arm": "gt_unit",
+    "lr": "3e-3",
+    "other": {}
+   },
+   "ratios_over_isla": {
+    "gt_better_rate": {
+     "pressure_l2": 0.7977084140890748,
+     "velocity_l2": 0.8160935252364302,
+     "tau_wall_l2": 0.8235527018657888,
+     "temperature_l2": 0.8198685125046091,
+     "density_l2": 0.7932982700827493
+    },
+    "gt_unit": {
+     "pressure_l2": 0.7977084140890748
+    },
+    "transolver_unit": {
+     "pressure_l2": 0.8549629790708042,
+     "velocity_l2": 0.8729531099463548,
+     "tau_wall_l2": 0.8853505191932479,
+     "temperature_l2": 0.876422927165754,
+     "density_l2": 0.8475464725473516
+    }
+   }
+  }
+ },
+ "excluded": {
+  "p200k_hl_isla_medium_seed42": {
+   "pressure_l2": 0.5944754242897033,
+   "velocity_l2": 0.389844029976262,
+   "tau_wall_l2": 0.6114830954207314,
+   "temperature_l2": 0.3659502680930826,
+   "density_l2": 0.7862610542111926,
+   "n_cases": 180,
+   "epoch": 500,
+   "val_loss_log": {
+    "25": 0.0161,
+    "50": 0.0112,
+    "75": 0.0245,
+    "100": 0.1534,
+    "499": 0.1212,
+    "train_499": 0.1223
+   },
+   "reason": "mean-field plateau (validation loss flat at 0.12 to 0.16 from before epoch 100; scored pressure error at the field-mean level)"
+  },
+  "p200k_hl_isla_full_seed42": {
+   "pressure_l2": 0.690825777583652,
+   "velocity_l2": 0.44814246743917463,
+   "tau_wall_l2": 0.6825839345653851,
+   "temperature_l2": 0.3946414684255918,
+   "density_l2": 0.9207846138212415,
+   "n_cases": 180,
+   "epoch": 500,
+   "val_loss_log": {
+    "25": 0.0225,
+    "50": 0.1432,
+    "75": 0.1632,
+    "100": 0.1512,
+    "499": 0.1517,
+    "train_499": 0.1542
+   },
+   "reason": "mean-field plateau (validation loss flat at 0.12 to 0.16 from before epoch 100; scored pressure error at the field-mean level)"
+  },
+  "p200k_hl_isla_full_seed43": {
+   "pressure_l2": 0.6948442260424296,
+   "velocity_l2": 0.43891948411862053,
+   "tau_wall_l2": 0.6852707725432184,
+   "temperature_l2": 0.3935013790925344,
+   "density_l2": 0.9290452629327774,
+   "n_cases": 180,
+   "epoch": 500,
+   "val_loss_log": {
+    "25": 0.0103,
+    "50": 0.1549,
+    "75": 0.1506,
+    "100": 0.1545,
+    "499": 0.1483,
+    "train_499": 0.151
+   },
+   "reason": "mean-field plateau (validation loss flat at 0.12 to 0.16 from before epoch 100; scored pressure error at the field-mean level)"
+  }
+ },
+ "ladder": {
+  "isla": {
+   "alpha": 0.3975045144177456,
+   "a": 0.5735167037773454,
+   "rungs": [
+    35,
+    210,
+    510
+   ],
+   "per_seed": {
+    "42": {
+     "alpha": 0.5773536796625497,
+     "rungs": [
+      35,
+      210
+     ]
+    },
+    "43": {
+     "alpha": 0.39405122300343204,
+     "rungs": [
+      35,
+      210,
+      510
+     ]
+    }
+   },
+   "alpha_range_over_seeds": [
+    0.39405122300343204,
+    0.5773536796625497
+   ],
+   "local_exponents": {
+    "35-210": 0.5589608291764074,
+    "210-510": -0.011213892719513827
+   },
+   "points": [
+    [
+     35,
+     0.14997896163000002
+    ],
+    [
+     210,
+     0.0550901905219588
+    ],
+    [
+     510,
+     0.05564108085301187
+    ]
+   ]
+  },
+  "gt_better": {
+   "alpha": 0.3472150649423563,
+   "a": 0.3511102639327304,
+   "rungs": [
+    35,
+    210,
+    510,
+    1260
+   ],
+   "per_seed": {
+    "42": {
+     "alpha": 0.3409442886892632,
+     "rungs": [
+      35,
+      210,
+      510,
+      1260
+     ]
+    },
+    "43": {
+     "alpha": 0.3533761948139257,
+     "rungs": [
+      35,
+      210,
+      510,
+      1260
+     ]
+    }
+   },
+   "alpha_range_over_seeds": [
+    0.3409442886892632,
+    0.3533761948139257
+   ],
+   "local_exponents": {
+    "35-210": 0.4554256941147205,
+    "210-510": 0.2582514321999879,
+    "510-1260": 0.1965388692808957
+   },
+   "points": [
+    [
+     35,
+     0.10978310071449313
+    ],
+    [
+     210,
+     0.04854510217491123
+    ],
+    [
+     510,
+     0.03860361738285671
+    ],
+    [
+     1260,
+     0.032316733891558314
+    ]
+   ],
+   "crossover_cases_vs_isla": 17279.054009633357,
+   "crossover_cases_vs_isla_reference": 300.75951623051134,
+   "alpha_35_to_510": 0.3995918795461696
+  },
+  "transolver_unit": {
+   "alpha": 0.3194264043390655,
+   "a": 0.3208585030676111,
+   "rungs": [
+    35,
+    210,
+    510,
+    1260
+   ],
+   "per_seed": {
+    "42": {
+     "alpha": 0.327212742194018,
+     "rungs": [
+      35,
+      210,
+      510,
+      1260
+     ]
+    },
+    "43": {
+     "alpha": 0.31164907152838034,
+     "rungs": [
+      35,
+      210,
+      510,
+      1260
+     ]
+    }
+   },
+   "alpha_range_over_seeds": [
+    0.31164907152838034,
+    0.327212742194018
+   ],
+   "local_exponents": {
+    "35-210": 0.4102417221479467,
+    "210-510": 0.28873530556045796,
+    "510-1260": 0.13154926002036751
+   },
+   "points": [
+    [
+     35,
+     0.11008686784447895
+    ],
+    [
+     210,
+     0.05278437777629329
+    ],
+    [
+     510,
+     0.040854603688543045
+    ],
+    [
+     1260,
+     0.03627174119982454
+    ]
+   ],
+   "crossover_cases_vs_isla": 1700.259305900555,
+   "crossover_cases_vs_isla_reference": 203.54079215503359,
+   "alpha_35_to_510": 0.3758347632134752
+  },
+  "isla_reference_configuration": {
+   "alpha": 0.4947922718899935,
+   "a": 0.8150274186244834,
+   "rungs": [
+    35,
+    210,
+    510
+   ],
+   "local_exponents": {
+    "35-210": 0.5839995733697103,
+    "210-510": 0.26896854848652585
+   },
+   "points": [
+    [
+     35,
+     0.1460326643039783
+    ],
+    [
+     210,
+     0.05128732056667407
+    ],
+    [
+     510,
+     0.04039826775745799
+    ]
+   ],
+   "per_seed": {
+    "42": {
+     "alpha": 0.4867165600561508,
+     "rungs": [
+      35,
+      210,
+      510
+     ]
+    },
+    "43": {
+     "alpha": 0.503286472081361,
+     "rungs": [
+      35,
+      210,
+      510
+     ]
+    }
+   },
+   "alpha_range_over_seeds": [
+    0.4867165600561508,
+    0.503286472081361
+   ]
+  }
+ },
+ "tenk": {
+  "super_scarce": {
+   "isla": {
+    "tenk_mean": 0.15288564504848584,
+    "tenk_seeds": [
+     0.15673730108473036,
+     0.14903398901224135
+    ],
+    "tenk_arm": "isla",
+    "p200k_arm": "isla",
+    "p200k_lr": "1e-3",
+    "p200k_mean": 0.14997896163000002,
+    "p200k_over_tenk": 0.9809878591442381
+   },
+   "gt": {
+    "tenk_mean": 0.11024877676326367,
+    "tenk_seeds": [
+     0.11164901451104217,
+     0.10884853901548518
+    ],
+    "tenk_arm": "gt_unit_lr3e3",
+    "p200k_arm": "gt_unit",
+    "p200k_lr": "3e-3",
+    "p200k_mean": 0.10978310071449313,
+    "p200k_over_tenk": 0.9957761340992428
+   },
+   "transolver": {
+    "tenk_mean": 0.11417645832730663,
+    "tenk_seeds": [
+     0.11690741953336531,
+     0.11221861477113432,
+     0.11340334067742029
+    ],
+    "tenk_arm": "transolver_unit",
+    "p200k_arm": "transolver_unit",
+    "p200k_lr": "3e-3",
+    "p200k_mean": 0.11008686784447895,
+    "p200k_over_tenk": 0.9641818414869363
+   },
+   "gt_over_isla_tenk": 0.7211192177545485,
+   "transolver_over_isla_tenk": 0.746809540497389,
+   "source": "results/fp32_reeval/fp32_shift_35_2026-09-09.json; results/relframe_reduction_2026-09-11.json (rf_hl_mt2_meas_super_scarce)"
+  },
+  "geometry_super_scarce": {
+   "isla": {
+    "tenk_mean": 0.25193776399311096,
+    "tenk_seeds": [
+     0.2599062309910854,
+     0.24396929699513648
+    ],
+    "tenk_arm": "isla",
+    "p200k_arm": "isla",
+    "p200k_lr": "1e-3",
+    "p200k_mean": 0.26592510876556236,
+    "p200k_over_tenk": 1.055519047842442
+   },
+   "gt": {
+    "tenk_mean": 0.18838799374385012,
+    "tenk_seeds": [
+     0.18851985666486953,
+     0.18825613082283074
+    ],
+    "tenk_arm": "gt_unit",
+    "p200k_arm": "gt_unit_lr3e3",
+    "p200k_lr": "3e-3",
+    "p200k_mean": 0.17978987675160168,
+    "p200k_over_tenk": 0.9543595277948591
+   },
+   "transolver": {
+    "tenk_mean": 0.19280370037174888,
+    "tenk_seeds": [
+     0.1875535098214944,
+     0.19805389092200332
+    ],
+    "tenk_arm": "transolver_unit",
+    "p200k_arm": "transolver_unit",
+    "p200k_lr": "3e-3",
+    "p200k_mean": 0.1929193097477158,
+    "p200k_over_tenk": 1.000599622184346
+   },
+   "gt_over_isla_tenk": 0.7477560757783078,
+   "transolver_over_isla_tenk": 0.7652830497337467,
+   "source": "results/fp32_reeval/fp32_shift_2026-09-09.json; results/frame_reduction_2026-09-11.json (rf_hl_mt2_meas_geometry_super_scarce)"
+  },
+  "single_aoa_12": {
+   "isla": {
+    "tenk_mean": 0.039809305531283215,
+    "tenk_seeds": [
+     0.03626193633923928,
+     0.040495779986182846,
+     0.04267020026842753
+    ],
+    "tenk_arm": "isla",
+    "p200k_arm": "isla",
+    "p200k_lr": "1e-3",
+    "p200k_mean": 0.029981383432944618,
+    "p200k_over_tenk": 0.7531250051419371
+   },
+   "gt": {
+    "tenk_mean": 0.026971505489200354,
+    "tenk_seeds": [
+     0.02719305155591832,
+     0.026749959422482386
+    ],
+    "tenk_arm": "gt_unit",
+    "p200k_arm": "gt_unit_lr3e3",
+    "p200k_lr": "3e-3",
+    "p200k_mean": 0.02070185857721501,
+    "p200k_over_tenk": 0.7675455337672652
+   },
+   "transolver": {
+    "tenk_mean": 0.029799554807444416,
+    "tenk_seeds": [
+     0.029803290652732056,
+     0.029795818962156773
+    ],
+    "tenk_arm": "transolver_unit",
+    "p200k_arm": "transolver_unit",
+    "p200k_lr": "3e-3",
+    "p200k_mean": 0.02375583966366119,
+    "p200k_over_tenk": 0.7971877371042668
+   },
+   "gt_over_isla_tenk": 0.6775176087411378,
+   "transolver_over_isla_tenk": 0.7485575146249946,
+   "source": "results/frame_reduction_2026-09-11.json (rf_hl_mt2_meas_single_aoa_12, three seeds); results/fp32_reeval/fp32_shift_2026-09-09.json (udrv_hl_* at 1e-3 / 3e-3)"
+  },
+  "scarce": {
+   "isla": {
+    "tenk_mean": 0.07157891051222881,
+    "tenk_seeds": [
+     0.07059899914181894,
+     0.07255882188263867
+    ],
+    "tenk_arm": "isla",
+    "p200k_arm": "isla",
+    "p200k_lr": "1e-3",
+    "p200k_mean": 0.0550901905219588,
+    "p200k_over_tenk": 0.7696427638773153
+   },
+   "source": "results/frame_reduction_2026-09-11.json (rf_hl_mt2_meas_scarce); no unit-direction baseline twin at 10k on this rung"
+  },
+  "geometry_scarce": {
+   "isla": {
+    "tenk_mean": 0.10663349647074938,
+    "tenk_seeds": [
+     0.10484451076222791,
+     0.10842248217927085
+    ],
+    "tenk_arm": "isla",
+    "p200k_arm": "isla",
+    "p200k_lr": "1e-3",
+    "p200k_mean": 0.09169931507979831,
+    "p200k_over_tenk": 0.8599484975619489
+   },
+   "source": "results/frame_reduction_2026-09-11.json (rf_hl_mt2_meas_geometry_scarce); no unit-direction baseline twin at 10k on this rung"
+  }
+ },
+ "refboard": {
+  "super_scarce": {
+   "isla_reference_pressure_l2_seeds": [
+    0.1455502722412348,
+    0.1465150563667218
+   ],
+   "isla_reference_pressure_l2_mean": 0.1460326643039783,
+   "earlier_protocol_isla_mean": 0.14997896163000002,
+   "reference_over_earlier": 0.973687660701657,
+   "gt256_better_rate_over_isla_reference": 0.7517708537178442,
+   "gt512_pressure_l2_seeds": [
+    0.10223847641092208,
+    0.10607334821381503
+   ],
+   "gt512_over_isla_reference": 0.7132370884883671
+  },
+  "scarce": {
+   "isla_reference_pressure_l2_seeds": [
+    0.054971813783049585,
+    0.04760282735029856
+   ],
+   "isla_reference_pressure_l2_mean": 0.05128732056667407,
+   "earlier_protocol_isla_mean": 0.0550901905219588,
+   "reference_over_earlier": 0.9309701070325958,
+   "gt256_better_rate_over_isla_reference": 0.9465322352296036,
+   "gt512_pressure_l2_seeds": [
+    0.04528549580524365,
+    0.04681376247252855
+   ],
+   "gt512_over_isla_reference": 0.8978755105566704
+  },
+  "medium": {
+   "isla_reference_pressure_l2_seeds": [
+    0.04054244471093019,
+    0.040254090803985794
+   ],
+   "isla_reference_pressure_l2_mean": 0.04039826775745799,
+   "earlier_protocol_isla_mean": 0.05564108085301187,
+   "reference_over_earlier": 0.7260510963864789,
+   "gt256_better_rate_over_isla_reference": 0.955576056246373
+  },
+  "source": "results/ref_surface_2026-09-23.json (hl35, hl210; GeoTransolver-512 at 3e-3 on the same rungs); results/campaigns_2026-09-22/ref/metrics/ref_isla_r1_hl510_seed*/ (hl510); @sec-nb-ref-hl510-verdict quotes GeoTransolver-512 \u00f7 reference 0.95 at 510 wings from the 100,000-cell SCALE-LAW pair"
+ },
+ "ladder_table": {
+  "super_scarce": {
+   "n_train": 35,
+   "isla": 0.14997896163000002,
+   "isla_seeds": [
+    0.1503813878736562,
+    0.1495765353863438
+   ],
+   "gt_better_arm": "3e-3",
+   "gt_better": 0.10978310071449313,
+   "gt_better_seeds": [
+    0.1062705546617508,
+    0.11329564676723547
+   ],
+   "transolver": 0.11008686784447895,
+   "transolver_seeds": [
+    0.11147063345544868,
+    0.10870310223350922
+   ],
+   "gt_over_isla": 0.7319900039402154,
+   "transolver_over_isla": 0.7340154022139761
+  },
+  "scarce": {
+   "n_train": 210,
+   "isla": 0.0550901905219588,
+   "isla_seeds": [
+    0.05344727908571561,
+    0.05673310195820199
+   ],
+   "gt_better_arm": "3e-3",
+   "gt_better": 0.04854510217491123,
+   "gt_better_seeds": [
+    0.048436377694209415,
+    0.048653826655613054
+   ],
+   "transolver": 0.05278437777629329,
+   "transolver_seeds": [
+    0.05284362274946438,
+    0.0527251328031222
+   ],
+   "gt_over_isla": 0.8811932163415062,
+   "transolver_over_isla": 0.9581447672658452
+  },
+  "medium": {
+   "n_train": 510,
+   "isla": 0.05564108085301187,
+   "isla_seeds": [
+    0.05564108085301187
+   ],
+   "gt_better_arm": "1e-3",
+   "gt_better": 0.03860361738285671,
+   "gt_better_seeds": [
+    0.03954423208617502,
+    0.0376630026795384
+   ],
+   "transolver": 0.040854603688543045,
+   "transolver_seeds": [
+    0.04042194460829099,
+    0.041287262768795095
+   ],
+   "gt_over_isla": 0.6937970433183468,
+   "transolver_over_isla": 0.7342525174244808
+  },
+  "full": {
+   "n_train": 1260,
+   "isla": null,
+   "isla_seeds": null,
+   "gt_better_arm": "1e-3",
+   "gt_better": 0.032316733891558314,
+   "gt_better_seeds": [
+    0.03154329480603337,
+    0.03309017297708326
+   ],
+   "transolver": 0.03627174119982454,
+   "transolver_seeds": [
+    0.03576458952803579,
+    0.0367788928716133
+   ],
+   "gt_over_isla": null,
+   "transolver_over_isla": null
+  },
+  "geometry_super_scarce": {
+   "n_train": 40,
+   "isla": 0.26592510876556236,
+   "isla_seeds": [
+    0.2777711976319551,
+    0.2540790198991696
+   ],
+   "gt_better_arm": "3e-3",
+   "gt_better": 0.17978987675160168,
+   "gt_better_seeds": [
+    0.18026178524725966,
+    0.17931796825594373
+   ],
+   "transolver": 0.1929193097477158,
+   "transolver_seeds": [
+    0.18829608853492472,
+    0.19754253096050686
+   ],
+   "gt_over_isla": 0.6760921433338705,
+   "transolver_over_isla": 0.7254648146737886
+  },
+  "geometry_scarce": {
+   "n_train": 210,
+   "isla": 0.09169931507979831,
+   "isla_seeds": [
+    0.09103456160260572,
+    0.09236406855699089
+   ],
+   "gt_better_arm": "3e-3",
+   "gt_better": 0.08749350300058722,
+   "gt_better_seeds": [
+    0.08987255633498231,
+    0.08511444966619214
+   ],
+   "transolver": 0.08761605125231048,
+   "transolver_seeds": [
+    0.08453181192485823,
+    0.09070029057976273
+   ],
+   "gt_over_isla": 0.9541347492557484,
+   "transolver_over_isla": 0.9554711632913016
+  },
+  "single_aoa_12": {
+   "n_train": 126,
+   "isla": 0.029981383432944618,
+   "isla_seeds": [
+    0.030205737385484908,
+    0.029757029480404325
+   ],
+   "gt_better_arm": "3e-3",
+   "gt_better": 0.02070185857721501,
+   "gt_better_seeds": [
+    0.020559934847470786,
+    0.02084378230695923
+   ],
+   "transolver": 0.02375583966366119,
+   "transolver_seeds": [
+    0.02351254317909479,
+    0.023999136148227587
+   ],
+   "gt_over_isla": 0.6904904379584788,
+   "transolver_over_isla": 0.7923530185587574
+  },
+  "super_scarce_area": {
+   "n_train": 35,
+   "isla": 0.1471630382558538,
+   "isla_seeds": [
+    0.15181043162528013,
+    0.14251564488642746
+   ],
+   "gt_better_arm": "3e-3",
+   "gt_better": 0.11739319385960698,
+   "gt_better_seeds": [
+    0.11139545020543867,
+    0.12339093751377529
+   ],
+   "transolver": 0.1258189495963355,
+   "transolver_seeds": [
+    0.1262975418733226,
+    0.1253403573193484
+   ],
+   "gt_over_isla": 0.7977084140890748,
+   "transolver_over_isla": 0.8549629790708042
+  }
+ }
+}

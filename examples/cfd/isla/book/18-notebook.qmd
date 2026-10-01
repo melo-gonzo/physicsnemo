@@ -31837,3 +31837,195 @@ positional channel stays the candidate for the flap and cove excess:
 the fixed-angle rung is where the relative frame has the least to do
 (one angle, one freestream direction) and the deficit is largest, and
 the gap band's 1.8 there is the largest class ratio in this study.
+
+## 2026-09-30 — Verdict, P200K-FLEET HiLift ladder complete: at 200,000 cells GeoTransolver-256 at its better rate ÷ ISLA (earlier protocol) reads 0.73 / 0.88 / 0.69 at 35 / 210 / 510 wings and both 1,260-wing ISLA lanes fell to the mean-field plateau; the baselines' learning-curve exponents are 0.35 (GeoTransolver) and 0.32 (Transolver) over 35 to 1,260 wings against 0.49 for the reference configuration over 35 to 510, where it is at parity with Transolver (1.01) and 4% behind GeoTransolver-256 (0.96) {#sec-nb-p200k-hl-ladder-verdict}
+
+**Setting.** The fleet that moves every evidence lane to the reporting
+protocol (@sec-nb-proto200k-fleet-prereg) ran its HiLiftAeroML group
+(`hl`) at 200,000 sampled cells per case, float32, two seeds, on eight
+rungs: the random-split case ladder of 35, 210, 510 and 1,260 training
+wings (a *rung* is one training-set size; all four validate on the same
+180 held-out wings), the held-out-geometry rungs of 4 and 21 training
+geometries at all their angles, the fixed-angle rung (126 geometries at
+12 degrees, 18 validation wings) and the 35-wing rung trained under the
+area-proportional sampling law. Three models: ISLA in the configuration
+of 2026-09-19 (192 wide, linear routing, learning rate 1e-3; the *earlier
+protocol* in the book's nomenclature, since superseded by the reference
+configuration of 384 wide, cosine routing, 5e-4), unit-direction
+GeoTransolver-256 at 1e-3 and at 3e-3 (each wing row takes its better
+rate and says which), and Transolver-256 at 3e-3. The 1,260-wing rung and
+the GeoTransolver 3e-3 controls on it were the last to score (today).
+Earlier entries read the rungs as they landed (@sec-nb-p200k-wings-35,
+@sec-nb-p200k-wings-geo4, @sec-nb-fleet-single-aoa-verdict,
+@sec-nb-wing-rungs-210-verdict); this entry closes the group, states the
+200,000-against-10,000-cell comparison the fleet preregistration
+promised, and supplies the wing half of SCALE-LAW's case exponents
+(@sec-nb-scalelaw-wing-rung4).
+
+**Instrument.** Reducer `results/p200k_hl_ladder_2026-09-30.py`, artifact
+`results/p200k_hl_ladder_2026-09-30.json`, figure
+`results/p200k_hl_ladder_2026-09-30.png`; metrics under
+`results/campaigns_2026-09-19/hl/metrics/<run>/<run>/metrics.jsonl`. The
+readout is the area-weighted relative L2 of surface pressure on the
+validation wings (the other four fields are in the artifact). Where a
+scoring job was interrupted and restarted (the 35-wing files hold two
+scoring blocks at epoch 500) one row per validation case is kept, the
+last written. The *learning-curve exponent* is the least-squares slope of
+log error on log training wings through the seed means (error
+$\propto n^{-\alpha}$), with the per-seed slopes as the range; *local*
+exponents are the same slope between adjacent rungs. A lane is excluded
+when its train log shows the *mean-field plateau*: validation loss that
+descends to about 0.01 and then jumps to 0.12 to 0.16 and stays flat with
+the training loss at the same value, the routing-collapse signature of
+ROUTING-SAT (@sec-nb-routingsat-verdict), confirmed by a scored pressure
+error at the field-mean level (0.6 to 0.7). Every `hl` train log was
+read for it today.
+
+**Three ISLA lanes plateaued; one is excluded from SCALE-HL's record as
+well.** `p200k_hl_isla_full_seed42` and `seed43` (1,260 wings) reached
+validation loss 0.0225 and 0.0103 at epoch 25, jumped to 0.143 and 0.155
+by epoch 50, and sat at 0.152 and 0.148 through epoch 499 with training
+loss 0.154 and 0.151; their scored pressure errors are 0.691 and 0.695.
+`p200k_hl_isla_medium_seed42` (510 wings) reached 0.0112 at epoch 50, rose
+to 0.0245 at 75 and 0.153 at 100, and sat at 0.121 to epoch 499 (training
+0.122); scored 0.594. This is the lane SCALE-HL already called "unreadable"
+(ledger row SCALEHL; `results/scalehl_2026-09-26.json` carries it inside
+the `isla_192_c200k` arm, whose seed mean 0.325 and cells-flat ratio 0.15
+are therefore void; the cosine 200,000-cell twin in campaign `sc` replaces
+it). The three lanes are recorded under `excluded` in the artifact and
+enter no mean, ratio or fit. The surviving 510-wing lane
+(`p200k_hl_isla_medium_seed43`) has a clean loss (0.0055 at epoch 499,
+after a bump to 0.0143 at epoch 100) but scores 0.0556, no better than the
+210-wing pair's 0.0551, where the reference configuration on the same
+rung scores 0.0404 (@sec-nb-ref-hl510-verdict). Every GeoTransolver and
+Transolver lane is clean (validation loss at or near its minimum at
+epoch 499; the 1,260-wing GeoTransolver pair at 0.0025, Transolver
+0.0028). No other ISLA lane shows the signature; the 4-geometry pair's
+loss (0.066 / 0.060) is high because the rung is hard, descending to its
+minimum near epoch 100 to 125 and drifting up 1 to 4%, not jumping.
+
+**What we saw** (surface pressure, seed means with seeds; ratio =
+baseline ÷ ISLA at the earlier protocol; GeoTransolver at the better of
+its two rates, named):
+
+| rung | ISLA (earlier protocol) | GeoTransolver-256 (rate) | Transolver-256 | GeoTransolver ÷ ISLA | Transolver ÷ ISLA |
+|---|--:|--:|--:|--:|--:|
+| 35 wings | 0.1500 (0.1504 / 0.1496) | 0.1098 (0.1063 / 0.1133; 3e-3) | 0.1101 (0.1115 / 0.1087) | 0.73 | 0.73 |
+| 210 wings | 0.0551 (0.0534 / 0.0567) | 0.0485 (0.0484 / 0.0487; 3e-3) | 0.0528 (0.0528 / 0.0527) | 0.88 | 0.96 |
+| 510 wings | 0.0556 (one seed; seed 42 plateaued) | 0.0386 (0.0395 / 0.0377; 1e-3) | 0.0409 (0.0404 / 0.0413) | 0.69 | 0.73 |
+| 1,260 wings | none (both seeds plateaued) | 0.0323 (0.0315 / 0.0331; 1e-3) | 0.0363 (0.0358 / 0.0368) | — | — |
+| 4 geometries | 0.2659 (0.2778 / 0.2541) | 0.1798 (0.1803 / 0.1793; 3e-3) | 0.1929 (0.1883 / 0.1975) | 0.68 | 0.73 |
+| 21 geometries | 0.0917 (0.0910 / 0.0924) | 0.0875 (0.0899 / 0.0851; 3e-3) | 0.0876 (0.0845 / 0.0907) | 0.95 | 0.96 |
+| fixed angle, 126 geometries | 0.0300 (0.0302 / 0.0298) | 0.0207 (0.0206 / 0.0208; 3e-3) | 0.0238 (0.0235 / 0.0240) | 0.69 | 0.79 |
+| 35 wings, area-law draw | 0.1472 (0.1518 / 0.1425) | 0.1174 (0.1114 / 0.1234; 3e-3) | 0.1258 (0.1263 / 0.1253) | 0.80 | 0.86 |
+
+: The P200K-FLEET HiLift group at 200,000 cells, float32, 180 validation wings (18 on the fixed-angle rung), two seeds. Data: results/p200k_hl_ladder_2026-09-30.json. {#tbl-p200k-hl-ladder}
+
+GeoTransolver's other rate on each rung: 1e-3 scores 0.0489 at 210 wings,
+0.2021 at 4 geometries, 0.0900 at 21 geometries and 0.0220 at the fixed
+angle; 3e-3 scores 0.0388 (0.0377 / 0.0400) at 510 wings and 0.0344
+(0.0341 / 0.0347) at 1,260. The rate that wins therefore flips with
+data: 3e-3 by 1 to 11% on the small rungs, 1e-3 by 1% at 510 wings and by
+6% at 1,260, where on DrivAerML the 3e-3 margin only shrank (31% at 27
+cars to 2% at 435; @sec-nb-proto200k-verdict). Transolver ÷ GeoTransolver
+at 1,260 wings is 1.12. Velocity and wall shear follow pressure on every
+rung (at 210 wings GeoTransolver ÷ ISLA 0.90 and 0.89, Transolver 0.97
+and 0.98).
+
+**Beside the reference configuration.** Where REF-BOARD has the rung
+(@sec-nb-ref-hl210-verdict, @sec-nb-ref-hl510-verdict), the reference
+configuration scores 0.1460 (0.1456 / 0.1465) at 35 wings, 0.0513
+(0.0550 / 0.0476) at 210 and 0.0404 (0.0405 / 0.0403) at 510: 3%, 7% and
+27% below the earlier protocol. Against it, GeoTransolver-256 at its
+better rate reads **0.75 / 0.95 / 0.96** and Transolver **0.75 / 1.03 /
+1.01** at 35 / 210 / 510 wings; GeoTransolver-512, the parameter match,
+reads 0.71 (0.1042) and 0.90 (0.0461) at 35 and 210 wings at 200,000
+cells and 0.95 at 510 from its 100,000-cell SCALE-LAW pair (0.0382). The
+book's scoreboard uses the reference-configuration rows wherever they
+exist (35, 210, 510 wings) and the earlier-protocol rows, labeled, on
+the rungs REF-BOARD has not reached (4 and 21 geometries, fixed angle,
+area-law draw, all training in `rb`); the earlier-protocol 510-wing
+value (one seed, 0.0556) is not a standing.
+
+**200,000 against 10,000 cells.** The fleet preregistration promised
+each wing rung's ratio against its 10,000-cell predecessor, with "the
+budget was the gap" if GeoTransolver ÷ ISLA rose by 0.03 or more and
+"the wings differ" if it moved less. Three rungs have a unit-direction
+twin of the same configurations at 10,000 cells. 35 wings: ISLA 0.1529
+to 0.1500 (0.98), GeoTransolver 0.1102 to 0.1098 (1.00), Transolver
+0.1142 to 0.1101 (0.96); GeoTransolver ÷ ISLA 0.72 to 0.73. 4
+geometries: ISLA 0.2519 to 0.2659 (1.06), GeoTransolver 0.1884 at 1e-3
+to 0.1798 at 3e-3 (0.95; 1.07 at the matched rate 1e-3), Transolver
+0.1928 to 0.1929 (1.00); the ratio 0.75 to 0.76 at the matched rate and
+0.68 at the better rate. Fixed angle: ISLA 0.0398 (three seeds) to
+0.0300 (0.75), GeoTransolver 0.0270 to 0.0207 (0.77), Transolver 0.0298
+to 0.0238 (0.80); the ratio 0.68 to 0.69. On the 210-wing and
+21-geometry rungs only ISLA has a same-configuration 10,000-cell twin
+(the relative-frame lanes of @sec-nb-relframe-verdict): 0.0716 (0.0706 /
+0.0726) to 0.0551 (0.77) and 0.1066 (0.1048 / 0.1084) to 0.0917 (0.86);
+the 10,000-cell baselines there were fed the physical velocity and are
+not twins. The 510- and 1,260-wing rungs have no 10,000-cell twin of any
+model (the lanes there predate the relative frame and the unit-direction
+protocol). So the
+"within 2%" that held on the 35-wing rung is that rung's property: the
+budget moves every model by 20 to 25% on the fixed-angle rung and ISLA
+by 14 to 23% on the two 210-case rungs, and still moves the ratio at a
+matched rate by at most 0.01 on every rung that has a twin. "The wings
+differ" is the group's reading on all three.
+
+**The wing half of SCALE-LAW.** Over the four-rung case ladder
+GeoTransolver-256 at its better rate has exponent **0.35** (seeds 0.34
+and 0.35; local 0.46, 0.26, 0.20 over 35 to 210, 210 to 510, 510 to
+1,260 wings) and Transolver **0.32** (0.31 and 0.33; local 0.41, 0.29,
+0.13): both curves flatten with data as the DrivAerML curves did
+(@sec-nb-scalelaw-drivaerml-verdict). ISLA at the earlier protocol has
+no 1,260-wing point; over 35 to 510 wings (seed 43 at 510) its exponent
+is 0.40 (seed 42 over 35 to 210: 0.58; seed 43 over 35 to 510: 0.39),
+with local exponents 0.56 and then −0.01, the 510-wing stall. The
+reference configuration over the same three rungs has exponent **0.49**
+(0.49 and 0.50; local 0.58, 0.27), against 0.40 for GeoTransolver and
+0.38 for Transolver on the matched 35-to-510 ladder. ISLA's curve is the
+steeper by 0.09 to 0.11, and the whole difference is in the first step:
+from 210 to 510 wings the three local exponents are 0.27, 0.26 and 0.29.
+The fitted laws of GeoTransolver-256 and the reference configuration
+meet at about 300 wings and those of Transolver at about 200, but the
+measured 510-wing ratios (0.96 and 1.01) say the GeoTransolver curves
+have not crossed, so no crossover is established; Transolver and the
+reference configuration are at parity from 210 wings (1.03, 1.01). The
+figure draws the four series with their fits (the plateaued lanes are
+not drawn).
+
+**Reading.** (1) The HiLift ladder at the reporting protocol is
+complete for the baselines and complete for ISLA only in the reference
+configuration, and only to 510 wings: the 192-wide linear-routed
+configuration cannot supply the large rungs on this dataset, three of
+its four lanes at 510 and 1,260 wings having plateaued and the fourth
+having stalled at its 210-wing error. This is the collapse ROUTE-NORM
+measured at width 384 on this rung (@sec-nb-routenorm-p200k-verdict) and
+the deflection split showed at 192 (@sec-nb-p200k-deflection-plateau),
+now at 192 on the two largest random-split rungs; the configuration is
+retired from every wing table and the entries that quoted its 510-wing
+lane are superseded here. (2) The wing deficit shrinks with training
+cases under both ISLA configurations and most under the reference one:
+GeoTransolver-256 ÷ reference 0.75 → 0.95 → 0.96 and Transolver 0.75 →
+1.03 → 1.01 from 35 to 510 wings. Against Transolver the deficit has
+closed; against GeoTransolver-256 what remains at 510 wings is 4%, inside
+the 2% to 3% seed spread of the two, and against GeoTransolver-512 5%.
+(3) The SCALE-LAW synthesis that ISLA's data exponent is the steeper
+(8 of 10 ladder fields on 2026-09-23) gains the wings' pressure field:
+0.49 against 0.40 and 0.38 on a matched ladder, with the caveat that the
+steepness sits in the 35-to-210 step and the last step is shared. The
+compute-allocation reading from DrivAerML ("cases first") therefore
+holds on the wings, with the crossover not yet reached at 510.
+
+**What is next.** The fourth ISLA point: the SCALE-LAW 1,260-wing
+cosine lanes (campaign sl rows 80 to 91, 100,000 cells, about 2026-10-09)
+give the exponent's fourth rung at 100,000 cells, and a reference-
+configuration twin at 200,000 cells on `highlift_surface_full`
+(`rb_hl_isla_full`, not yet in REF-BOARD) is proposed so the scoreboard's
+1,260-wing row is a same-protocol pair against GeoTransolver's 0.0323.
+The SCALE-HL cells clause waits on the cosine 200,000-cell medium twin
+(campaign `sc`). The ledger rows P200KFLEET (wing half complete; the
+earlier-protocol 510-wing value and the 1,260-wing ISLA row void),
+SCALE-HL (the `isla_192_c200k` arm void) and SCALE-LAW (wing exponents as
+above) are Peter's to update.
