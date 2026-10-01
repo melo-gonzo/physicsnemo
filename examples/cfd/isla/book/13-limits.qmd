@@ -5,25 +5,79 @@ as a fact about the evidence: what is measured, on which split, with which
 instrument, and what would move it.** The claims themselves live in the
 evidence chapters with their numbers and are not restated here; the thesis
 table of the front matter (@sec-verdict) is the list of what is established.
-This chapter reduces each headline claim to its limit, lists the open
-questions with the readout that would settle each, names the datasets that
-extend the program beyond external aerodynamics, and ends with the two
-outcomes that would change the recommendation. Ratios throughout are
+This chapter is the one home for every scope statement in the book. It
+reduces each headline claim to its limit, says what the book does not
+claim, lists the open questions with the readout that would settle each,
+names the datasets that extend the program beyond external aerodynamics,
+and ends with the two outcomes that would change the recommendation. Ratios throughout are
 baseline ÷ ISLA, above one favoring ISLA; the metric is the area-weighted
 relative L2 in float32 (@sec-metrics); protocol: @sec-protocol.
 
+## What this book does not claim {#sec-not-claimed}
+
+**Each claim in this book has a scope, and the list below names what sits
+outside it; the sections above state each one with its instrument.**
+
+- **Not that ISLA is more accurate in distribution in general**
+  (@sec-limits-in-distribution).
+- **Not that equivariance is an accuracy edge in general.** A baseline
+  trained in a canonical frame is exactly pose-invariant. ISLA's pose lead
+  is against baselines that learn pose from augmentation, in random poses
+  (@sec-pose, @sec-pose-contract).
+- **Not that discretization consistency is an exact invariance.** It is a
+  fine-mesh-limit property: ISLA's residual under a biased draw is
+  quadrature variance that shrinks with cell count (@sec-principle,
+  @sec-robustness-density).
+- **Not that ISLA is indifferent to the training sampling law.** Its
+  dependence is weak beside GeoTransolver and Transolver, whose errors
+  change by factors. Why the cars show the larger dependence is an open
+  question (@sec-training-law).
+- **Not that the interior lead is unconditional** (@sec-limits-interior).
+- **Not that either architecture extrapolates across a flow regime** or
+  transfers zero-shot to a different vehicle family (@sec-limits-regime,
+  @sec-limits-transfer).
+- **Not that the HiLiftAeroML numbers are test-set numbers**
+  (@sec-limits-validation).
+- **Not that ISLA's learning curve is always the steeper one.** It is on
+  Tensile2d, on the lug and on AirfRANS pressure. On the DrivAerML Surface
+  task the two architectures' exponents are the same within the fit, and on
+  the fixed-mesh OLBC Poisson set GeoTransolver-512's is the steeper
+  (@sec-compute-allocation, @sec-interior-olbc).
+
 ## Limits of each headline claim {#sec-review-honesty}
 
-### The HiLiftAeroML ladder {#sec-limits-data-efficiency}
+### Surface accuracy, in distribution {#sec-limits-in-distribution}
 
-**The ladder is a statement about the range of training-set sizes every
-production CFD dataset in this program occupies, not a scaling law, and
-its ISLA arms are measured at the reporting protocol on the rungs
-@sec-data-efficiency lists.** Its limits, the rungs it does and does not
-cover, the seed bands that measure initialization rather than the choice
-of training cases, and the draw controls that bound the latter, are stated
-beside the ladder in @sec-de-limits and @sec-de-controls and are not
-repeated here.
+**The in-distribution lead is against GeoTransolver at its recipe width,
+on one dataset, from 109 cars up, and no mechanism for it is claimed.** At
+matched parameters (GeoTransolver-512) the two are at parity at 435 cars,
+so what ISLA buys at full data is cost rather than accuracy: the same
+error with GeoTransolver-512 at 1.17x ISLA's step time and 1.90x its
+memory (@tbl-scoreboard-435). Below 109 cars GeoTransolver-256 leads. On
+the wings both baselines lead on every rung, and ISLA's width, depth and
+learning rate, the cell count and GeoTransolver's width all leave that
+ordering where it is (@tbl-wing-controls). What ISLA buys elsewhere is
+stated with its scope where it is measured: exact pose covariance
+(@sec-pose-contract), weak dependence on the law the training sample is
+drawn by (@sec-training-law), slice territories that stay put under a
+change of draw (@sec-territories), the interior leads on two datasets
+(@sec-interior) and the memory frontier (@sec-review-frontier). What would
+move this: a mechanism for the wing deficit, located and removed by a
+principled configuration (@sec-open-questions).
+
+### The data-efficiency ladders {#sec-limits-data-efficiency}
+
+**The ladders are data-efficiency measurements over the range of
+training-set sizes every production CFD dataset in this program occupies,
+not scaling laws.** On the DrivAerML Surface task the flattening has a
+measured cause: a shared floor of about 0.040 that both architectures
+reach given width and depth, with the cell count flat above 100,000
+(@sec-shared-floor). On the wings the flattening is not attributed. Seeds
+do not measure the choice of training cases: every seed at a rung trains
+on the same curated subset, so a seed range measures initialization, and
+the between-draw intervals of @sec-de-controls, three to eleven times
+wider at 35 cases, are the uncertainty to read. What would move this: a
+ladder whose rungs are each averaged over several training draws.
 
 ### The HiLiftAeroML accuracy figures are validation-set figures {#sec-limits-validation}
 
@@ -31,11 +85,16 @@ repeated here.
 180-case validation set on final-epoch checkpoints; no checkpoint is
 selected on validation error, but no HiLiftAeroML split remains that
 could confirm the numbers independently of the program's own history.**
-Which decisions the validation set entered, and why every remaining test
-split is held out per checkpoint but is not a program-level confirmation,
-is stated beside the ladder in @sec-de-limits. What would move this: a
-sealed evaluation of the 35-case checkpoints on the 360 test cases is a
-within-protocol held-out check of the 35-case ratios; an independent
+The validation set entered more than one decision: each architecture's
+learning rate on the full split (@sec-lr-protocol), the baselines' rate per
+rung, the design of the ablations and the choice of what to present. The
+sealed test splits were spent on regime extrapolation and the deflection
+split, which between them read every one of the 180 geometries
+(results/hilift_exposure_ledger_2026-09-08.json), and because those test
+sets cover every geometry (@sec-splits) every remaining test split is held
+out per checkpoint but is not a program-level confirmation. What would move
+this: a sealed evaluation of the 35-case checkpoints on the 360 test cases
+is a within-protocol held-out check of the 35-case ratios; an independent
 confirmation needs geometries no part of the program has scored, which on
 HiLiftAeroML means a prospective dataset.
 
@@ -43,12 +102,12 @@ HiLiftAeroML means a prospective dataset.
 
 **On the DrivAerML Surface task there is no in-distribution gap left to
 explain at the reporting protocol; on the wings the deficit is measured on
-every rung and not decomposed.** The DrivAerML decomposition is
-@sec-deficit-anatomy; the limits on the mechanism are these.
+every rung and not decomposed.** What the cell count contributes below
+the protocol is @sec-equal-budget; the limits on the mechanism are these.
 
 - **No single ingredient of ISLA is load-bearing for its own accuracy,
   as far as it is measured.** The single-factor ablations on the 35-wing
-  rung (@sec-nb-a35-verdict) each move the error by a fraction of the
+  rung each move the error by a fraction of the
   deficit to the baselines, and the exactness of the covariance contract
   neither costs nor buys anything measurable in distribution at that rung;
   the decomposition is unmeasured at the reporting protocol. What would
@@ -79,7 +138,7 @@ three-dimensional flow. No ISLA lane exists on the HiLiftAeroML sealed
 regime splits (angle of attack, attached to separated flow), and the finding
 that GeoTransolver and Transolver lose about an order of magnitude across
 that boundary is a mechanism finding on those architectures
-(@sec-nb-hl-sealed-test), not a comparison with ISLA. What would move
+on those architectures, not a comparison with ISLA. What would move
 this: the sealed regime splits run once with ISLA and the unit-direction
 baselines at the reporting protocol. A split across geometry *classes*
 remains the open test, and none of this book's datasets provides one.
@@ -113,7 +172,7 @@ dependence is measured. At the exploration budget a checkpoint trained at
 one request size and scored at a fifth of it loses more on every field
 than either margin against GeoTransolver-volume. Training over a range of
 request sizes reduces that penalty by about 40% at a 3.7% pressure cost
-and does not remove it (@sec-nb-qcount-verdict). The queries' routing mass,
+and does not remove it. The queries' routing mass,
 a learned fraction of the total boundary measure split over the request,
 removes the count scaling of the routing weight by construction, while the
 dependence through the shared slices remains (@sec-interior-companion). The
@@ -130,7 +189,7 @@ interior dataset.
 **Whether ISLA transfers zero-shot across vehicle families is unmeasured:
 no ISLA lane exists for it at any budget, and the finding that
 cross-family error is governed by the diversity of the training data is a
-mechanism finding on the architectures tested (@sec-nb-xfam-verdict), not
+mechanism finding on the architectures tested, not
 a ranking.** What would move this: a corpus in which geometry, pose, scale
 and regime vary one at a time, with ISLA and the unit-direction baselines
 trained on it under the protocol.
@@ -148,12 +207,12 @@ baseline ÷ ISLA, so above one favors ISLA.
 | What is the mechanism of the wing deficit? Its location is known: against GeoTransolver-512 the ratio is 0.77 up to 14 degrees and 0.67 from 16 degrees, where the flow separates and both errors double, and the two models rank the cases alike (@sec-de-strata) | the mesher-pattern hypothesis (validation geometries recur in training with a different mesh) tested by a split that holds geometries out entirely at matched case count, at the reporting protocol; the positional hypothesis (GeoTransolver reads absolute position) is quantified by the pose-prior diagnostic (@sec-pose-prior): giving ISLA the dataset's axes, a rejected input, recovers about half of the low-angle gap and a quarter of the high-angle widening, so position in the fixed pose is part of the deficit and the separated regime keeps the rest | the ratio moves toward parity when recurrence is removed, or does not |
 | What is ISLA's ratio on the two largest HiLiftAeroML rungs (510 and 1,260 cases)? | ISLA trained there at the reporting protocol | reported as measured |
 | Do the 35-case ratios hold on cases no decision has read? | the 35-case ISLA and unit-direction baseline checkpoints scored once on the 360-case sealed test | the validation ratios reproduced within their seed spread |
-| Do the capacity floor and the memory frontier reproduce on the wings? | the wing scaling study: ISLA and GeoTransolver width and depth ladders on the HiLiftAeroML rungs at the scaling budget (@sec-nb-scalehl-prereg) | both ladders flatten at one floor, and the best ISLA at or under each memory budget is at least as accurate as the best GeoTransolver, or not |
+| Do the capacity floor and the memory frontier reproduce on the wings? On the 510-wing rung the cells and width-independence readings reproduce and the width turnover and the memory frontier do not (@tbl-scalehl) | the width and depth ladders of @sec-shared-floor on a second wing rung at the scaling budget | both ladders flatten at one floor, and the best ISLA at or under each memory budget is at least as accurate as the best GeoTransolver, or not |
 | Why does ISLA's training-law dependence differ between datasets (1% on the wings, 8% on the cars)? | the twin training under a third law, or on a third dataset, with the same independent uniform readout (@sec-training-law) | no bar is preregistered; reported as measured |
-| Does the architecture match a same-size baseline on a problem that is not external aerodynamics? | a dataset outside external aerodynamics with GeoTransolver trained on it under the fair-comparison protocol (@sec-limits-datasets); the screened-Poisson acceptance case already trains with $K = 0$ global vectors and one global scalar (@sec-nb-globin-accept-verdict) | the error at the level of the same-size baseline on that problem |
+| Does the architecture match a same-size baseline on a problem that is not external aerodynamics? | a dataset outside external aerodynamics with GeoTransolver trained on it under the fair-comparison protocol (@sec-limits-datasets); the screened-Poisson acceptance case already trains with $K = 0$ global vectors and one global scalar | the error at the level of the same-size baseline on that problem |
 | Does either architecture extrapolate across geometry classes? | a split across classes rather than along one parameter of one family | none of this book's datasets provides one |
 | Does the interior pressure deficit survive a third seed? | third seeds of the interior configuration at the reporting protocol on both interior datasets | no bar is preregistered; the velocity lead and level eddy viscosity must not move by more than 5% |
-| Do the extrapolation splits of AirfRANS (Reynolds number, angle of attack) separate the architectures? | ISLA and GeoTransolver-volume trained on each split, the readout the growth of error from the in-distribution to the extrapolation test set (@sec-nb-airfrans-extrap-prereg) | a 10% difference in error growth counts |
+| Do the extrapolation splits of AirfRANS (Reynolds number, angle of attack) separate the architectures? | ISLA and GeoTransolver-volume trained on each split, the readout the growth of error from the in-distribution to the extrapolation test set | a 10% difference in error growth counts |
 
 ### Datasets beyond external aerodynamics {#sec-limits-datasets}
 
@@ -183,7 +242,7 @@ starting point and a stated remainder.**
 
 | direction | what is in place | what remains |
 |---|---|---|
-| Problems outside external aerodynamics | the interface accepts zero or more global vector inputs and zero or more global scalar inputs, and per-cell boundary data through the boundary-scalar channel (@sec-isla-inputs); the contract tests cover zero and two global directions; a screened-Poisson acceptance case trains with no global vector and one global scalar, and the scalar is decisive where the boundary data cannot substitute for it (@sec-nb-globin-accept-verdict) | a production dataset outside external aerodynamics with a baseline trained on it under the protocol (@sec-limits-datasets) |
+| Problems outside external aerodynamics | the interface accepts zero or more global vector inputs and zero or more global scalar inputs, and per-cell boundary data through the boundary-scalar channel (@sec-isla-inputs); the contract tests cover zero and two global directions; a screened-Poisson acceptance case trains with no global vector and one global scalar, and the scalar is decisive where the boundary data cannot substitute for it | a production dataset outside external aerodynamics with a baseline trained on it under the protocol (@sec-limits-datasets) |
 | Cost at scale | with the exact fused geometry kernel, the default on CUDA, ISLA's step tracks GeoTransolver's at every token count in about half its memory, and ISLA holds the accuracy-against-memory frontier below about 70 GB at 435 cars (@sec-cost-sweep, @sec-review-frontier) | cost logs for the depth ladder, which reaches the floor at half GeoTransolver's parameters but is absent from the cost frontier; the gap below GeoTransolver's footprint is headroom for a wider or deeper model, since on DrivAerML cells past 100,000 buy nothing |
 | Sampling conventions | ISLA's convention-swap penalty converges under refinement, and so does that of GeoTransolver and Transolver + ISLA's measure-weighted pooling + Horvitz–Thompson-centered datapipe (ablation); GeoTransolver's and Transolver's as released does not (@sec-consistency-bench) | at 10,000 cells no architecture is consistent across conventions; the fine-mesh limit is within a few percent of reached at 40,000 |
 | Query-count consistency of the interior decode | the total query mass is a learned fraction of the total source measure divided by the query count, so neither refining the source nor changing the request size moves the balance between surface and queries (@sec-isla-contracts); count augmentation reduces the interacting decode's dependence without removing it | a decode whose prediction at a point is independent of the request at the interacting configuration's accuracy (@sec-interior-open) |
@@ -208,7 +267,7 @@ frame, and the ablations of GeoTransolver and Transolver given
 a Horvitz–Thompson center (@sec-robustness-density). Those ablations
 locate the property. GeoTransolver and Transolver are stable, in use and
 published, and are not modified, so measure weighting and a sample-free
-frame reach users through ISLA (@sec-nb-ruling-released-baselines). Two
+frame reach users through ISLA (@sec-principled-ledger). Two
 outcomes would change the recommendation.
 
 **ISLA gains an in-distribution accuracy claim below full data and on the
