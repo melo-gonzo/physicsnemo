@@ -32029,3 +32029,96 @@ The SCALE-HL cells clause waits on the cosine 200,000-cell medium twin
 earlier-protocol 510-wing value and the 1,260-wing ISLA row void),
 SCALE-HL (the `isla_192_c200k` arm void) and SCALE-LAW (wing exponents as
 above) are Peter's to update.
+
+## 2026-09-30 — Preregistration, WING-ELEMENT-ANATOMY: element labels for all 198 validation wings from a span-station segmentation of each 290-million-cell boundary mesh (connected components cannot separate the elements: one welded body holds 99.3% of the area), to decide the flap and gap-band bar of H1 on both wing rungs {#sec-nb-wing-element-anatomy}
+
+**Setting.** The surface anatomy of 2026-09-30
+(@sec-nb-wing-anatomy-surface) located ISLA's excess pressure error over
+GeoTransolver on the HiLiftAeroML wings by curvature on every validation
+wing (uniform, H2 refuted) and by high-lift element on only five wings,
+because the dataset carries no per-cell element id and only 41 of 1,800
+cases ship an STL. On those five the flap (1.37 / 1.30 at 210 wings) and
+the gap band (1.83 / 1.80 on the fixed-angle wing) cleared the bar, so
+H1 (the excess sits on the thin elements and in the gaps between them)
+stayed open. This entry preregisters the full-scale element readout: an
+element label for every cell of every validation wing, derived from the
+boundary mesh itself, and the same bar read on 180 wings of the 210-wing
+rung and 18 wings of the fixed-angle rung.
+
+**What is tested.** H1 against H3 on the element axis. A surface class
+carries the excess when its ISLA ÷ GeoTransolver ratio (case mean of the
+area-weighted RMS pressure error of the class, divided by the
+area-weighted standard deviation of the case's true pressure) is at
+least 0.15 above the whole-surface ratio on both seed pairs (42 / 42 and
+43 / 43), the bar of the surface anatomy unchanged. Classes: slat, main
+wing and body, flap, other bodies (tail, nacelle), the gap band (every
+sampled slat, main or flap cell within 0.02 L_ref, 5.5 in, of a
+full-mesh cell of a different element among those three), and each
+element outside the gap band. Prediction if the pilot holds: the flap
+and the gap band clear the bar on the 210-wing rung on both seeds and
+the slat does not; the fixed-angle rung repeats the gap band. If no
+class clears the bar on either rung, H1 is refuted and the wing deficit
+is H3 (uniform) on both axes. Lanes and checkpoints are the surface
+anatomy's: `ref_isla_r1_hl210` against `ref_gt_w512_hl210` and
+`p200k_hl_isla_single_aoa_12` against
+`p200k_hl_gt_unit_single_aoa_12_lr3e3` (GeoTransolver-256, the only
+GeoTransolver lane on that rung), seeds 42 and 43, epoch 500, the saved
+200,000-cell float32 predictions of job 938092.
+
+**Instrument.** `highlift/wing_element_labels.py` on the cluster. The
+first idea, labelling the elements as the connected components of the
+full vehicle mesh, failed on the pilot wing LHC001 at 16 degrees (job
+942006, vertex adjacency through `physicsnemo.mesh` and
+`scipy.sparse.csgraph.connected_components` over 147 million points):
+one welded component holds 99.3% of the surface area, because slat
+tracks, flap-track fairings and pylons connect every element to the
+main wing, and the remaining 2.5 million components are fragments below
+1e-5 of the area. The label therefore comes from a span-station
+segmentation of the full mesh, the rule fixed before any readout: cells
+are binned by span in 1-in stations; inside a station the cells split
+into connected pieces; the largest piece is `main` (wing plus body at
+that station); a piece below 1% of the station's area is a fragment and
+takes the label of its nearest larger piece; a piece farther than 0.25
+L_ref from the main piece, or with an (x, z) bounding-box diagonal over
+0.5 L_ref, is `other`; otherwise it is `slat` when the 20 nearest main
+cells to its centroid lie aft of it and `flap` when they lie ahead.
+Bracket stations, where a track welds the element to the main wing so
+the station has no separate piece, are repaired from their neighbours:
+in a station without a slat (flap) piece whose neighbours within 3
+stations on both sides have one, the main cells within 1.2 in of those
+neighbours' slat (flap) cells are relabelled. The saved predictions keep
+the sampled cells in block order without their ids, so the sample is
+mapped back onto the full mesh by recovering the reader's contiguous
+block start from consecutive-centroid differences and accepting the
+match when the 99th-percentile nearest-cell distance is below 0.05 in.
+
+**Pilot (two wings, jobs 942006 and 942148).** The mapping is exact: the
+99th-percentile distance from a sampled cell to its full-mesh cell is
+0.0001 in on all four lanes of LHC002 at 12 degrees, against a 3.6-in
+sample spacing. The labels: LHC001 at 16 degrees reads slat 5.3%, main
+48.1%, flap 5.9%, other 40.6% of the surface area with 63 slat and 28
+flap bracket stations repaired; LHC002 at 12 degrees reads slat 2.1%,
+main 69.9%, flap 3.5%, other 24.4% (47 and 31 stations repaired). The
+STL of LHC001 gives slat 2.7%, flap 4.0% and other bodies 11%, so the
+full-mesh rule reads the thin elements about 1.5 to 2 times larger
+than the STL (the repair adds track and cove area that the STL
+segmentation, which under-read the slat, missed) and assigns 2 to 4
+times the STL's area to `other`. The `other` class is reported but is
+not a target of H1; the slat and flap over-read is in the direction of
+diluting their ratios toward the whole-surface value, so it works
+against the prediction, not for it. The gap band defined against the
+full mesh holds 17% of the sampled cells on LHC002, against 3 to 5% in
+the STL pilot, because it now includes the main-wing cells facing the
+slat and flap coves from both sides. One case costs 7,300 to 14,100 s
+for the segmentation (single process, 18 to 20 GB peak) and about 250 s
+per lane for the mapping; the second pilot case was wall-killed at 4 h
+after writing its labels, so the script resumes from a written label
+file.
+
+**Jobs.** Label array 944509 (20 tasks of 10 cases, CPU partition,
+`cpu-normal`, 10 h wall, 300 GB per node; the cases of a task run in
+parallel), chained anatomy reduction 944510
+(`highlift/wing_element_anatomy.py` →
+`wing_element_anatomy_2026-09-30.json`), reducer and figure
+`results/wing_element_anatomy_2026-09-30.py`. Verdict follows in a
+separate entry; the ledger row WING-MECH carries the state.
