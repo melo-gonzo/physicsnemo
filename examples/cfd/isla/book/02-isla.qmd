@@ -139,8 +139,8 @@ tensor rank. The constructor takes `outputs`, `global_inputs`,
 to a rank spec, the grammar every mesh model shares
 (`physicsnemo.mesh.fields.FieldSchema.parse`): a mapping `{rank, symmetric,
 parity}` whose `rank` is 0 for a scalar, 1 for a vector, 2 for a rank-2
-tensor, and so on (a bare integer is not accepted; a mapping without a
-`rank` key is a nested group of fields). `symmetric` marks a fully symmetric
+tensor, and so on (a bare integer is not accepted; a mapping of mappings
+is a nested group of fields). `symmetric` marks a fully symmetric
 tensor and `parity: odd` marks a pseudotensor output. One name declares one field; several independent
 scalars, such as a standardized parameter vector, are several rank-0 names.
 `forward` takes the boundary as `boundary_meshes`, a mapping from a name to

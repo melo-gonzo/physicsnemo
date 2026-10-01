@@ -210,7 +210,7 @@ A dataset that stores its fields in groups (`solution/pressure` on disk,
 model's `outputs` declaration uses the same dotted names. A dotted name or a
 nested mapping spells a group: every value of `outputs`, `global_inputs`,
 `boundary_inputs` and `query_inputs` is a `{rank: ...}` spec or a nested
-group of them (a mapping without a `rank` key). So
+group of them (a mapping of mappings). So
 `outputs: {"solution.pressure": {"rank": 0}, "solution.velocity": {"rank": 1}}` declares two
 leaves of one group, and `{"solution": {"pressure": {"rank": 0}, "velocity": {"rank": 1}}}`
 declares the same model. The returned mesh's `point_data` is nested the

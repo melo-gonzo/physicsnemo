@@ -201,7 +201,7 @@ def test_rank_spec_grammar_is_validated():
     rank ceilings and the refusal of pseudotensor inputs. A bare integer is not a
     field declaration."""
     base = dict(hidden=32, n_layers=1, n_slices=8, global_inputs={"g": {"rank": 1}})
-    with pytest.raises(ValueError, match="rank 5 is not supported"):
+    with pytest.raises(NotImplementedError, match="rank 5 is not supported"):
         ISLA(outputs={"x": {"rank": 5}}, **base)
     with pytest.raises(ValueError, match="unknown keys"):
         ISLA(outputs={"x": {"rank": 1, "parity_odd": True}}, **base)
@@ -219,11 +219,11 @@ def test_rank_spec_grammar_is_validated():
         ISLA(outputs={"x": {"rank": 1, "symmetric": True}}, **base)
     with pytest.raises(ValueError, match="at least one field"):
         ISLA(outputs={}, **base)
-    with pytest.raises(ValueError, match="pseudotensor"):
+    with pytest.raises(NotImplementedError, match="pseudotensor"):
         ISLA(outputs={"p": {"rank": 0}}, boundary_inputs={"w": {"rank": 1, "parity": "odd"}}, **base)
-    with pytest.raises(ValueError, match="rank 3 is not supported"):
+    with pytest.raises(NotImplementedError, match="rank 3 is not supported"):
         ISLA(outputs={"p": {"rank": 0}}, boundary_inputs={"T": {"rank": 3}}, **base)
-    with pytest.raises(ValueError, match="rank 2 is not supported"):
+    with pytest.raises(NotImplementedError, match="rank 2 is not supported"):
         ISLA(outputs={"p": {"rank": 0}}, hidden=32, n_layers=1, n_slices=8, global_inputs={"T": {"rank": 2}})
     with pytest.raises(TypeError, match="mapping"):
         ISLA(outputs=[0, 1], **base)

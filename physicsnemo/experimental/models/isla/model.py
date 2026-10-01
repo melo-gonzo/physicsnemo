@@ -39,9 +39,9 @@ at the network's edges instead of in every layer.
 **Rank specs.** Inputs and outputs are declared in the field-schema grammar
 shared by every mesh model (:mod:`physicsnemo.mesh.fields`): a mapping from a
 field name to a field declaration, a :class:`~physicsnemo.mesh.fields.RankSpec`
-or a mapping ``{"rank": r, "symmetric": bool, "parity": "even" | "odd"}``
-(``r`` = 0 scalar, 1 vector, 2 rank-2 tensor, ...); a mapping without a
-``"rank"`` key is a nested group, and a flat name may contain ``"."`` for the
+or a mapping of values ``{"rank": r, "symmetric": bool, "parity": "even" |
+"odd"}`` (``r`` = 0 scalar, 1 vector, 2 rank-2 tensor, ...); a mapping of
+mappings is a nested group, and a flat name may contain ``"."`` for the
 same nesting (``{"surface": {"pressure": {"rank": 0}}}`` and
 ``{"surface.pressure": {"rank": 0}}`` declare the same field). Each parsed
 declaration is a :class:`~physicsnemo.mesh.fields.FieldSchema`. ``symmetric`` (rank
@@ -230,10 +230,11 @@ def _declare(
     the empty schema).
 
     The grammar is :meth:`~physicsnemo.mesh.fields.FieldSchema.parse`: a field
-    is a :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping with a
-    ``"rank"`` key; a mapping without one is a nested group, and a flat name may
-    contain ``"."`` for the same nesting. ISLA's own limits are applied to the
-    parsed fields: ``max_rank`` per declaration, and pseudotensor inputs refused.
+    is a :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping of values such
+    as ``{"rank": 0}``; a mapping of mappings is a nested group, and a flat name
+    may contain ``"."`` for the same nesting. ISLA's own limits are applied to
+    the parsed fields, raising :class:`NotImplementedError` (as GLOBE does):
+    ``max_rank`` per declaration, and pseudotensor inputs refused.
     """
     out = FieldSchema({}) if specs is None else FieldSchema.parse(specs, label=kind)
     for name, spec in out.items():
@@ -247,12 +248,12 @@ def _declare(
                 )
             else:
                 why = "see the module docstring for how higher ranks would enter"
-            raise ValueError(
+            raise NotImplementedError(
                 f"{kind}[{name!r}]: rank {spec.rank} is not supported "
                 f"(maximum {max_rank}; {why})"
             )
         if spec.parity == "odd" and not allow_odd:
-            raise ValueError(
+            raise NotImplementedError(
                 f"{kind}[{name!r}]: pseudotensor (parity='odd') inputs are not supported; "
                 "input invariants are formed with true vectors only so that they are "
                 "invariant under reflections"
@@ -371,7 +372,7 @@ class _InputSet:
             )
         for name, spec in self.specs.items():
             t = fields[name]
-            size = spec.size(self.dim)
+            size = spec.numel(self.dim)
             if not isinstance(t, torch.Tensor) or t.numel() != b * n * size:
                 raise ValueError(
                     f"{kind}[{name!r}]: expected a tensor of shape "
@@ -1061,9 +1062,9 @@ class ISLA(Module):
     ``global_inputs`` are :data:`~physicsnemo.mesh.fields.FieldSchemaLike`
     declarations, the grammar shared by every mesh model
     (:meth:`~physicsnemo.mesh.fields.FieldSchema.parse`): a field is a
-    :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping
-    ``{"rank": r, "symmetric": False, "parity": "even"}``; a mapping without a
-    ``"rank"`` key is a nested group, and a flat name may contain ``"."`` for
+    :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping of values
+    ``{"rank": r, "symmetric": False, "parity": "even"}``; a mapping of
+    mappings is a nested group, and a flat name may contain ``"."`` for
     the same nesting (``{"surface": {"pressure": {"rank": 0}}}`` and
     ``{"surface.pressure": {"rank": 0}}`` declare the same field). The parsed
     declarations are the :class:`~physicsnemo.mesh.fields.FieldSchema`
@@ -1247,8 +1248,9 @@ class ISLA(Module):
                 f"query_inputs {sorted(self.query_specs)!r} are per-prediction-point "
                 "fields of the interior task; declare them with interior=True"
             )
-        ### Checkpoints store the constructor arguments as JSON: keep the spec
-        ### mappings there as plain dicts whatever container the caller passed
+        ### Checkpoints store the constructor arguments as JSON. A FieldSchema
+        ### is a dict and serializes as it stands; recording the parsed schemas
+        ### keeps the metadata JSON-safe whatever container the caller passed
         ### (a Hydra DictConfig, for instance).
         for key, specs in (
             ("outputs", self.output_specs),
@@ -1256,9 +1258,7 @@ class ISLA(Module):
             ("query_inputs", self.query_specs),
             ("global_inputs", self.global_specs),
         ):
-            self._args["__args__"][key] = (
-                {name: vars(spec) for name, spec in specs.items()} if specs else None
-            )
+            self._args["__args__"][key] = specs or None
         ### The problem's global data are zero or more global DIRECTIONS (each
         ### enters as a unit direction: one seed term n.g_k per token, one
         ### direction cosine rel.g_k per point-anchor pair, and the head basis
