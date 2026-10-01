@@ -77,3 +77,11 @@ model:
   # per-token inputs), the eager PyTorch region otherwise. Force with `eager`
   # or `fused`.
   geo_kernel: null
+  # Run every slice block under torch.compile (built at the first step; parameter
+  # names and checkpoints unchanged; the fused kernel stays a custom-op leaf). At
+  # 200,000 cells on four GB300 ranks: step 221 -> 180 ms and peak memory
+  # 44.9 -> 32.9 GiB on DrivAerML Surface, 475 -> 308 ms and 88.5 -> 64.5 GiB on
+  # the Volume, at bfloat16 roundoff (PERF-3, 2026-10-01). The recipe's own
+  # `compile` flag compiles the whole model and recompiles every case (the mesh
+  # vertex count varies); leave it false and use this instead.
+  compile_blocks: true
