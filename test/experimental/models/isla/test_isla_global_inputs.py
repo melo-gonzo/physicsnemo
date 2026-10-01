@@ -183,7 +183,7 @@ def test_fused_kernel_refuses_other_vector_counts():
 def test_bad_global_specs_rejected():
     with pytest.raises(ValueError, match="non-negative"):
         ISLA(outputs=PV, global_inputs={"g": {"rank": -1}}, hidden=32, n_layers=1, n_slices=8)
-    with pytest.raises(ValueError, match="rank 2 is not supported"):
+    with pytest.raises(NotImplementedError, match="rank 2 is not supported"):
         ISLA(outputs=PV, global_inputs={"T": {"rank": 2}}, hidden=32, n_layers=1, n_slices=8)
 
 

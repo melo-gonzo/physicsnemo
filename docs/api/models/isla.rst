@@ -23,10 +23,10 @@ Rank specs
 ``outputs``, ``boundary_inputs``, ``query_inputs`` and ``global_inputs`` map a
 field name to a field declaration in the grammar shared by every mesh model
 (:meth:`physicsnemo.mesh.fields.FieldSchema.parse`): a
-:class:`~physicsnemo.mesh.fields.RankSpec` or a mapping ``{"rank": r,
+:class:`~physicsnemo.mesh.fields.RankSpec` or a mapping of values ``{"rank": r,
 "symmetric": False, "parity": "even"}`` (``r`` = 0 scalar, 1 vector, 2 rank-2
-tensor, ...); a mapping without a ``"rank"`` key is a nested group, and a name
-may contain ``"."`` for the same nesting. ``symmetric`` declares a fully
+tensor, ...); a mapping of mappings is a nested group, and a name may contain
+``"."`` for the same nesting. ``symmetric`` declares a fully
 symmetric tensor, ``parity="odd"`` a pseudotensor output (a vorticity). One
 name declares one field; several independent scalars are several rank-0
 names. Inputs take ranks 0 to 2 (global inputs 0 to 1) and even parity;
