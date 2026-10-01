@@ -298,11 +298,11 @@ small validation set and two seeds a thin noise estimate (@sec-limits).
 count, the cells per case and the training memory, or says in the same
 sentence where they differ and whether the difference could buy accuracy.**
 The 435-car row of the DrivAerML Surface task is stated twice for this
-reason: against GeoTransolver at its recipe width (which ISLA leads by 7%
-in 0.7x the memory at 1.25x the parameters) and against the
-parameter-matched GeoTransolver-512 (parity at 1.9x ISLA's memory), both
-at the same cells per case. The footprints of both sides are read from
-the reference cost sweep in @sec-cost-sweep. Memory is not a controlled
+reason: against GeoTransolver at its recipe width, which ISLA leads by 7%
+and which costs 1.41x ISLA's memory at 0.80x its parameters, and against
+the parameter-matched GeoTransolver-512, which is at parity and costs
+1.90x ISLA's memory, both at the same cells per case. The footprints of
+both sides are read from the cost table of @sec-using-cost. Memory is not a controlled
 variable in any comparison and no accuracy result depends on it. The
 checkpoints in this book are trained by implementations of the same
 function that differ only in footprint. Where the two architectures are

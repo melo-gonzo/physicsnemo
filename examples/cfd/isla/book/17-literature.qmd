@@ -1,27 +1,13 @@
-# ISLA and GeoTransolver, side by side; and what is new in ISLA {#sec-isla-vs-geotransolver}
+# ISLA against the literature {#sec-isla-vs-geotransolver}
 
 **ISLA and GeoTransolver are the same kind of machine, a slice-attention
-transformer, given different things to see, and the standing between them
-has one shape: ISLA is the more accurate or the only usable model wherever
-the evaluation departs from the training conventions, ISLA leads or ties
-at lower cost on geometry-varying tasks, and GeoTransolver leads on small
-training sets, on the small wing rungs and on the solids' tensor
-targets.** The departures from the training conventions are pose,
-sampling draw, sampling law and the range of a global condition. On
-geometry-varying tasks ISLA leads GeoTransolver at its recipe width or
-ties its parameter match at lower cost, and leads on most field
-quantities. On the fixed-mesh boundary-data problems ISLA leads on the
-scalar Poisson set and trails on the elasticity tensor. This appendix steps back from the chapter-by-chapter
-evidence and reads the whole standing in one table and one figure. It then
-asks the question a paper must answer: which of ISLA's ideas are new,
-which are adopted, and which are worth telling others about. It ends with
-the ideas from the literature that the comparison says we should try.
-Nothing here restates a chapter's argument. Every row points to the
-chapter that holds the study, and every number is computed from the
-artifact the chapter cites. Ratios are baseline ÷ ISLA, above one favoring
-ISLA. The metric is the area-weighted relative L2 in float32 (@sec-metrics)
-under the reporting protocol (@sec-protocol) unless a row says otherwise.
-
+transformer, given different things to see.** This appendix asks the
+question a paper must answer: which of ISLA's ideas are new, which are
+adopted, and which are worth telling others about. It restates no
+standing; the evidence is @tbl-thesis and the chapters it cites. Ratios,
+where they appear, are baseline ÷ ISLA, above one favoring ISLA, and the
+metric is the area-weighted relative L2 in float32 (@sec-metrics) under
+the reporting protocol (@sec-protocol).
 
 ## What each is {#sec-vs-what}
 
@@ -380,8 +366,8 @@ inputs; AB-UPT keeps attention quadratic on a reduced anchor set and
 decodes the rest by cross attention. Activation recomputation is standard.
 
 *What is new.* Nothing conceptually; the numbers are useful: with it, ISLA
-tracks GeoTransolver's step at every token count in about half the memory
-of its parameter match, and a 200,000-cell case that would not fit
+tracks GeoTransolver's step at every token count while its parameter
+match costs 1.90x its memory, and a 200,000-cell case that would not fit
 otherwise does (@sec-using-cost).
 
 *Publication-worthy?* As a systems paragraph in the architecture paper.
