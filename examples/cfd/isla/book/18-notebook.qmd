@@ -32328,3 +32328,99 @@ already in place (`test/experimental/models/isla`); each is measured by
 re-running this profiler, which is now a one-command job
 (`kernel/perf/isla_train_profile.sbatch`). None changes the
 architecture; Peter's decision on 2026-10-01 is which, if any, to fund.
+
+## 2026-10-01 — Verdict, PERF-3: two of the profiled levers adopted. (1) Blackwell launch defaults for the fused geometry kernel (backward 3.76 → 2.49 ms per layer; real step 242 → 221 ms). (2) Per-block `torch.compile` (`compile_blocks`): DrivAerML Surface step 221 → 180 ms and peak memory 44.9 → 32.9 GiB, Volume 475 → 308 ms and 88.5 → 64.5 GiB, at bfloat16 roundoff; whole-model compile recompiles every case on the mesh vertex count and is not the way. Training-neutrality pairs launched (group pf) {#sec-nb-perf-3-verdict}
+
+**Setting.** ISLA-PERF-2 (@sec-nb-isla-perf-2-verdict) measured a real
+four-rank training step of the reference ISLA at 200,000 cells on GB300
+at 242 ms and 44.9 GiB on DrivAerML Surface (475 ms, 88.5 GiB on the
+Volume) and ranked the levers: the fused geometry kernel's backward (42 ms,
+nine times its forward), the elementwise and copy glue around it (92 ms,
+1,500 launches), and the saved activations (51 GiB, led by 18 GiB of
+float32 residual copies and 14 GiB of MLP hidden states). Peter asked
+(2026-10-01) that the levers be tried. Every number below is from the
+same profiler (`results/isla_train_profile_2026-10-01.py`, four GB300
+ranks, DDP, bf16 autocast, the recipe's data path; code_v15 + recipe_v7
+unless stated) and every change is checked against the eager path.
+
+**Lever 1, kernel launch configuration (adopted).** A sweep of (points
+per program, warps) for both fused kernels at 200,000 points by 256
+slices (`results/geo_kernel_sweep_2026-10-01.json`, candidates in
+`geo_kernel_sweep_candidates_2026-10-01.json`): the defaults tuned on an
+RTX 4090 (forward 8, backward 4, four warps) run 0.56 and 3.76 ms per
+layer; the backward is register-bound and is fastest at **2 points per
+program (2.49 ms, 1.5x)**, the forward at 4 (0.49 ms, 1.14x); 16 points
+and above are 2 to 3 times slower, more warps do not help. The tile size
+changes only the floating-point summation order: pointwise outputs and
+per-point gradients agree with the defaults to 1e-5 relative, the
+tile-summed anchor and weight gradients to 6e-6. The defaults are now
+chosen by compute capability (Blackwell: 4 and 2; older devices keep the
+4090 values), the ISLA suite passes (167 tests, job 957622) and the real
+step falls from **242 to 221 ms** (geometry backward 42 → 25 ms).
+Commit 9d03ab74. Even at its best the backward is five times its
+forward, so the remaining asymmetry is the kernel's structure (it holds
+all 256 slices of a tile in registers and recomputes the forward), a
+rewrite rather than a tuning.
+
+**Lever 2, torch.compile (adopted as per-block compile).** Three scopes
+were tried. *Whole model* through the recipe's `compile` flag: inductor's
+generated backward trips a size assertion on a reduction output, and with
+the assertion disabled it is numerically right (losses track eager to
+bfloat16 noise) and cuts peak memory to 32.4 GiB, but it **recompiles on
+every step** (12 s per step): the dynamo log names the guard, the
+vehicle mesh's vertex count, 581,092 to 584,973 points across cases for
+the same 200,000 cells, so the mesh-facing forward can never be
+compiled statically, and `dynamic=True` at that scope hits a dynamo
+error on the custom op's float argument. *MLP stacks only*: no gain
+(249 ms, same memory). ***Per slice block***: the blocks see only the
+(B, 200,000, ·) tensors, which are constant across cases, so each of the
+twelve compiles once; the fused geometry op is a registered custom op
+and stays a leaf. Result on the surface: **step 177 to 185 ms, peak
+32.9 GiB, saved activations 32 GiB** (the 18 GiB of float32 residual
+copies and the 4.8 GiB float32 point-softmaxes are gone; the 13.7 GiB
+MLP hidden state remains), losses matching eager at the fourth digit
+(0.0564 against 0.0564 at step 11); with inductor's size assertion on,
+the same; with `dynamic=True`, 168 ms, so datasets whose token count
+varies per case are served by torch's default (static first, dynamic
+after the second distinct shape); at 150,000 cells 151 ms and 24.8 GiB.
+On the Volume: **308 ms and 64.5 GiB** from 475 and 88.5. Implemented as
+the `compile_blocks` constructor option (commit 9459aa17: the compiled
+object is each block's bound forward, so parameter names, the state dict
+and the eager path are unchanged; an equivalence test on CPU and CUDA at
+float64 1e-9) and set to true in the recipe's ISLA yamls (commit
+343b284e); the class default stays false, as for any module.
+
+**Levers not pursued.** The bfloat16 residual stream is unnecessary: the
+compiled blocks already stop saving the float32 copies. The Muon
+optimizer's 11% is a recipe choice. The dataloader (4 to 6%), the GEMMs
+(12%), the point softmax and the nearest-neighbour search were never
+levers.
+
+**Net.** Surface step 242 → about 180 ms (1.35x) and memory 44.9 → 32.9
+GiB (0.73x); Volume 475 → 308 ms (1.54x) and 88.5 → 64.5 GiB (0.73x),
+with no change to the architecture or its arithmetic beyond
+floating-point ordering. Against the parameter-matched GeoTransolver-512
+in the synthetic sweep (137 ms, 66.5 GiB at 200,000 cells, single GPU),
+the real ISLA step is now near its time and at half its memory; a
+matched real-step profile of GeoTransolver is the fair comparison and is
+not yet run.
+
+**Preregistration, PERF-3 training neutrality (group `pf`, eight lanes,
+code_v16 + recipe_v8 at 343b284e).** Compiled against eager blocks on
+the same snapshot, DrivAerML Surface (`pf_dr_cb` / `pf_dr_nocb`) and
+DrivAerML Volume (`pf_vol_cb` / `pf_vol_nocb`), seeds 42 and 43, the
+reference configuration, 500 epochs, float32 scoring on the held-out
+cases. Bar (the KERNEL-NEUTRAL rule): the seed-mean ratio compiled ÷
+eager within 3% on every field of both datasets, seeds within their own
+spread. If met, `compile_blocks: true` stays the recipe default; if any
+field is worse than 3% on both seeds, the default reverts and the lane
+is investigated as a numerics question (bfloat16 reordering is the only
+mechanism on the table). The pairs also give the first measured
+500-epoch wall-clock gain of the compiled path.
+
+**Lessons.** Profile the real step, not the synthetic one, and after
+every change: the input pipeline I guessed at was 4% of the step; the
+compile scope that works is the one whose inputs are shape-constant.
+Three profiler bugs cost half a day and are recorded in
+@sec-nb-isla-perf-2-verdict (TF32, the all-gather, the lone-rank
+backward).
