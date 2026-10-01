@@ -150,14 +150,87 @@
    "interim": false
   },
   "drvol": {
-   "status": "not scored",
-   "ref_seeds": 2,
-   "agg_seeds": 0
+   "fields": [
+    "nut_l2",
+    "pressure_l2",
+    "velocity_l2"
+   ],
+   "reference": {
+    "nut_l2": 0.08506952358099322,
+    "pressure_l2": 0.03950152051402256,
+    "velocity_l2": 0.05746650012830894
+   },
+   "aggregation": {
+    "nut_l2": 0.08485085715074092,
+    "pressure_l2": 0.040850280997498586,
+    "velocity_l2": 0.062121327384375036
+   },
+   "ratio": {
+    "nut_l2": 0.9974295561906596,
+    "pressure_l2": 1.0341445206646471,
+    "velocity_l2": 1.0810007090334888
+   },
+   "per_seed": {
+    "reference": {
+     "42": {
+      "velocity_x_l2": 0.044041040353477,
+      "velocity_y_l2": 0.09337939042598009,
+      "velocity_z_l2": 0.11128346947953105,
+      "velocity_l2": 0.05743510648608208,
+      "pressure_l2": 0.03976402664557099,
+      "nut_l2": 0.08664445873970787
+     },
+     "43": {
+      "velocity_x_l2": 0.04443973939244946,
+      "velocity_y_l2": 0.09261775575578213,
+      "velocity_z_l2": 0.11067647952586412,
+      "velocity_l2": 0.05749789377053579,
+      "pressure_l2": 0.039239014382474124,
+      "nut_l2": 0.08349458842227857
+     }
+    },
+    "aggregation": {
+     "42": {
+      "velocity_x_l2": 0.04894828128938874,
+      "velocity_y_l2": 0.10219640300298731,
+      "velocity_z_l2": 0.11305406549945474,
+      "velocity_l2": 0.06235514891644319,
+      "pressure_l2": 0.040993611056668065,
+      "nut_l2": 0.08385450400722523
+     },
+     "43": {
+      "velocity_x_l2": 0.048059795051813126,
+      "velocity_y_l2": 0.10168118060876925,
+      "velocity_z_l2": 0.11482143572842081,
+      "velocity_l2": 0.06188750585230688,
+      "pressure_l2": 0.0407069509383291,
+      "nut_l2": 0.08584721029425661
+     }
+    },
+    "ratio": {
+     "42": {
+      "nut_l2": 0.9677999635168354,
+      "pressure_l2": 1.030922029654007,
+      "velocity_l2": 1.0856626326888306
+     },
+     "43": {
+      "nut_l2": 1.028176938367305,
+      "pressure_l2": 1.0374101281328467,
+      "velocity_l2": 1.0763438761650865
+     }
+    }
+   },
+   "n_seeds": {
+    "reference": 2,
+    "aggregation": 2
+   },
+   "verdict": "not part of the model",
+   "interim": false
   }
  },
  "overall": {
   "worst_ratio": 1.533121293355641,
-  "complete": false,
+  "complete": true,
   "verdict": "not part of the model"
  }
 }
