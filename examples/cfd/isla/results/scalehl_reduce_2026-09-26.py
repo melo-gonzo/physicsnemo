@@ -13,8 +13,9 @@ import csv, glob, json, os, statistics as st, sys
 R = os.path.dirname(os.path.abspath(__file__)); M = f"{R}/campaigns_2026-09-20/shl/metrics"
 FIELDS = ["pressure_l2", "temperature_l2", "density_l2", "velocity_l2", "tau_wall_l2"]
 def lane(run):
-    p = f"{M}/{run}/metrics.jsonl"
-    if not os.path.exists(p): return None
+    hits = sorted(glob.glob(f"{M}/{run}/**/metrics.jsonl", recursive=True))
+    if not hits: return None
+    p = hits[0]
     rows = [json.loads(l)["metrics"] for l in open(p) if '"infer_step"' in l]
     keys = [k for k in FIELDS if k in rows[0]]
     return {k: st.mean(r[k] for r in rows) for k in keys} | {"n_cases": len(rows)}
