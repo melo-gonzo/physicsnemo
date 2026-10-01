@@ -270,7 +270,10 @@ these statements and overturn two. Cells stop paying at 100,000 there as
 well: GeoTransolver-256 at 100,000 cells scores
 `{python} f"{SHL['bars']['cells_flat']['gt_256_c100k_over_c200k_lr3e3']:.2f}"`
 of its 200,000-cell twin and Transolver-256
-`{python} f"{SHL['bars']['cells_flat']['transolver_256_c100k_over_c200k']:.2f}"`.
+`{python} f"{SHL['bars']['cells_flat']['transolver_256_c100k_over_c200k']:.2f}"`,
+and ISLA (cosine, 192 wide)
+`{python} f"{SHL['bars']['cells_flat']['isla_cos_192_c100k_over_c200k']:.2f}"`
+(@sec-nb-scalehl-cells-verdict).
 Width pays for ISLA on the wings (cosine 384 ÷ 192 =
 `{python} f"{SHL['arms']['isla_cos_384_lr1e3_c100k']['seed_means']['pressure_l2'] / SHL['arms']['isla_cos_192_c100k']['seed_means']['pressure_l2']:.2f}"`,
 768 ÷ 384 = `{python} f"{SHL['bars']['turnover']['isla_768_over_384']:.2f}"`)

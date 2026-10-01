@@ -28686,7 +28686,9 @@ lane's own log, results/campaigns_2026-09-20/shl/cost_2026-09-26.tsv).
 
 - *Cells.* GeoTransolver-256 at 100,000 cells scores 0.0383 (0.0377,
   0.0389) against 0.0388 at 200,000 cells at the same 3e-3 rate, a ratio of
-  0.99; Transolver-256 0.0401 against 0.0409, 0.98. **Cells are flat above
+  0.99 [superseded 2026-10-01: the seed-42 value was a 9-case partial
+  scoring; the full 180-case file gives 0.0385, the arm 0.0387 and the
+  ratio 1.00, @sec-nb-scalehl-cells-verdict]; Transolver-256 0.0401 against 0.0409, 0.98. **Cells are flat above
   100,000 on the wings for both baselines**, inside the 2% bar. ISLA-192
   cannot be read: its 200,000-cell fleet lane is linear-routed at 1e-3 and
   one seed sat at a validation loss 22 times the other's (0.121 against
@@ -32122,3 +32124,43 @@ parallel), chained anatomy reduction 944510
 `wing_element_anatomy_2026-09-30.json`), reducer and figure
 `results/wing_element_anatomy_2026-09-30.py`. Verdict follows in a
 separate entry; the ledger row WING-MECH carries the state.
+
+## 2026-10-01 — Verdict, SCALE-HL cells clause: ISLA cosine-192 at 100,000 cells scores 1.01 of its 200,000-cell twin on the 510-wing rung (0.0427 against 0.0422, two seeds), inside the 2% bar, so cells are flat above 100,000 for all three architectures on both datasets; a stale 9-case GeoTransolver-256 seed corrected (ratio 0.99 → 1.00) {#sec-nb-scalehl-cells-verdict}
+
+**Setting.** SCALE-HL (@sec-nb-scalehl-prereg, verdict
+@sec-nb-scalehl-verdict) asked whether the DrivAerML scaling picture
+holds on the 510-wing HiLiftAeroML rung. Its cells clause, that doubling
+the training sample from 100,000 to 200,000 cells per case changes the
+pressure error by less than 2%, closed on 2026-09-26 for GeoTransolver-256
+and Transolver-256 but not for ISLA, whose 200,000-cell fleet lane was
+linear-routed and had one seed on the mean-field plateau (0.5945 against
+0.0556; the arm was voided in @sec-nb-p200k-hl-ladder-verdict). The
+replacement twin, campaign `sc`: ISLA 192 wide with cosine routing at
+1e-3, 200,000 training cells, seeds 42 and 43, against the ROUTE-NORM
+cosine-192 lane at 100,000 cells on the same rung, both scored in float32
+at 200,000 cells on the 180 validation wings.
+
+**What we saw.** The cosine-192 lane at 100,000 cells scores **0.0427**
+(0.0433 / 0.0421) and at 200,000 cells **0.0422** (0.0409 / 0.0434), a
+ratio 100,000 ÷ 200,000 of **1.01**, inside the 2% bar; the seed spread
+at 200,000 (6%) is wider than the gap between the arms (1%), and the
+seeds cross (seed 43 is the better at 100,000 and the worse at 200,000).
+The 200,000-cell lane costs 0.222 s per step against 0.172 and 29.6 GB
+against 15.2 GB. Re-running the reducer over the current metrics files
+also corrected the GeoTransolver-256 100,000-cell arm: the 2026-09-26
+artifact had averaged seed 42 over a 9-case partial scoring (0.0377); the
+full 180-case file gives 0.0385, so the arm is 0.0387 (not 0.0383), the
+cells ratio 1.00 (not 0.99), GeoTransolver-256 ÷ linear ISLA-192 0.78
+(not 0.77) and the width rise 0.14 → 0.14 (0.136 against 0.143); no
+verdict moves. The artifact `results/scalehl_2026-09-26.json` is
+regenerated with the new arm `isla_cos_192_c200k` and the voided linear
+arm marked.
+
+**Reading.** **Cells are flat above 100,000 per case on the wings for
+all three architectures** (ISLA 1.01, GeoTransolver 1.00, Transolver
+0.98), as on DrivAerML (ISO-COST, @sec-nb-isocost-verdict). The reporting
+protocol's 200,000 cells buys no accuracy on either dataset over 100,000
+at 1.3 times the step time and twice the memory for ISLA; the ruling
+that the recipe default stays at 200,000 is Peter's (2026-09-18) and is
+about the protocol, not the evidence. SCALE-HL is complete; the ledger
+row moves to DONE.

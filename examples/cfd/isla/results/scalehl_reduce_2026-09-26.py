@@ -4,7 +4,8 @@ Inputs: results/campaigns_2026-09-20/shl/metrics/<run>/metrics.jsonl (float32 fl
 validation wings) for the shl lanes (100,000 training cells: ISLA linear-routed 192/384/768 at the width rule,
 GeoTransolver 256/512 at 3e-3, Transolver 256 at 3e-3), the fleet's 200,000-cell medium-rung lanes (ISLA 192 at 1e-3,
 GeoTransolver 256 at 1e-3 and 3e-3, Transolver 256), and the ROUTE-NORM 510-wing lanes (cosine 192 and 384 at 1e-3,
-linear 384 at 1e-3, 100,000 cells) read beside; results/campaigns_2026-09-20/shl/cost_2026-09-26.tsv (median step
+linear 384 at 1e-3, 100,000 cells) read beside, and the campaign sc cosine-192 twin at 200,000 cells (2026-10-01) that
+decides the ISLA cells clause after the linear 200,000-cell arm was voided by a plateaued seed; results/campaigns_2026-09-20/shl/cost_2026-09-26.tsv (median step
 time and peak memory from each train.log). Bars are the preregistration's, on seed-mean pressure relative L2.
 usage: python scalehl_reduce_2026-09-26.py [out.json]
 """
@@ -22,7 +23,7 @@ ARMS = {
  "isla_192_c100k": "shl_med_isla_w192_c100k_seed{}", "isla_384_c100k": "shl_med_isla_w384_c100k_seed{}", "isla_768_c100k": "shl_med_isla_w768_c100k_seed{}",
  "gt_256_c100k": "shl_med_gt_w256_c100k_seed{}", "gt_512_c100k": "shl_med_gt_w512_c100k_seed{}", "transolver_256_c100k": "shl_med_transolver_w256_c100k_seed{}",
  "isla_192_c200k": "p200k_hl_isla_medium_seed{}", "gt_256_c200k_lr1e3": "p200k_hl_gt_unit_medium_seed{}", "gt_256_c200k_lr3e3": "p200k_hl_gt_unit_medium_lr3e3_seed{}", "transolver_256_c200k": "p200k_hl_transolver_unit_medium_seed{}",
- "isla_cos_192_c100k": "rn_cos_w192_lr1e_3_med_c100k_seed{}", "isla_cos_384_lr1e3_c100k": "rn_cos_w384_lr1e_3_med_c100k_seed{}", "isla_lin_384_lr1e3_c100k": "rn_lin_w384_lr1e_3_med_c100k_seed{}",
+ "isla_cos_192_c100k": "rn_cos_w192_lr1e_3_med_c100k_seed{}", "isla_cos_192_c200k": "sc_hl_cos_w192_med_c200k_seed{}", "isla_cos_384_lr1e3_c100k": "rn_cos_w384_lr1e_3_med_c100k_seed{}", "isla_lin_384_lr1e3_c100k": "rn_lin_w384_lr1e_3_med_c100k_seed{}",
 }
 out = {"protocol": __doc__.strip(), "arms": {}}
 for a, pat in ARMS.items():
@@ -39,7 +40,8 @@ for a, pat in ARMS.items():
 A = out["arms"]; P = lambda a: A[a]["seed_means"]["pressure_l2"]
 bars = {}
 def ratio(a, b): return P(a) / P(b) if a in A and b in A else None
-bars["cells_flat"] = {"isla_192_c100k_over_c200k": ratio("isla_192_c100k", "isla_192_c200k"), "gt_256_c100k_over_c200k_lr3e3": ratio("gt_256_c100k", "gt_256_c200k_lr3e3"),
+bars["cells_flat"] = {"isla_192_c100k_over_c200k": ratio("isla_192_c100k", "isla_192_c200k"), "isla_192_c100k_over_c200k_void": "the linear 200k arm averages a plateaued seed (p200k_hl_isla_medium_seed42, 0.594); void, see #sec-nb-p200k-hl-ladder-verdict",
+                      "isla_cos_192_c100k_over_c200k": ratio("isla_cos_192_c100k", "isla_cos_192_c200k"), "gt_256_c100k_over_c200k_lr3e3": ratio("gt_256_c100k", "gt_256_c200k_lr3e3"),
                       "gt_256_c100k_over_c200k_lr1e3": ratio("gt_256_c100k", "gt_256_c200k_lr1e3"), "transolver_256_c100k_over_c200k": ratio("transolver_256_c100k", "transolver_256_c200k"), "bar": "within 2% (0.98 to 1.02) for ISLA-192 and GeoTransolver-256"}
 bars["width_carries"] = {"isla_384_over_192": ratio("isla_384_c100k", "isla_192_c100k"), "gt_512_over_256": ratio("gt_512_c100k", "gt_256_c100k"), "bar": "at most 0.97 for each model (3% gain); within 3% = not parameter-bound"}
 bars["turnover"] = {"isla_768_over_384": ratio("isla_768_c100k", "isla_384_c100k"), "bar": "gain under 1% (ratio above 0.99) or a loss reproduces the DrivAerML turnover"}

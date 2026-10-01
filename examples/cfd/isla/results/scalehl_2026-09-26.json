@@ -1,5 +1,5 @@
 {
- "protocol": "SCALE-HL reduction (prereg #sec-nb-scalehl-prereg): the DrivAerML scaling picture on the 510-wing HiLift rung.\n\nInputs: results/campaigns_2026-09-20/shl/metrics/<run>/metrics.jsonl (float32 fleet scores at 200,000 cells on the 180\nvalidation wings) for the shl lanes (100,000 training cells: ISLA linear-routed 192/384/768 at the width rule,\nGeoTransolver 256/512 at 3e-3, Transolver 256 at 3e-3), the fleet's 200,000-cell medium-rung lanes (ISLA 192 at 1e-3,\nGeoTransolver 256 at 1e-3 and 3e-3, Transolver 256), and the ROUTE-NORM 510-wing lanes (cosine 192 and 384 at 1e-3,\nlinear 384 at 1e-3, 100,000 cells) read beside; results/campaigns_2026-09-20/shl/cost_2026-09-26.tsv (median step\ntime and peak memory from each train.log). Bars are the preregistration's, on seed-mean pressure relative L2.\nusage: python scalehl_reduce_2026-09-26.py [out.json]",
+ "protocol": "SCALE-HL reduction (prereg #sec-nb-scalehl-prereg): the DrivAerML scaling picture on the 510-wing HiLift rung.\n\nInputs: results/campaigns_2026-09-20/shl/metrics/<run>/metrics.jsonl (float32 fleet scores at 200,000 cells on the 180\nvalidation wings) for the shl lanes (100,000 training cells: ISLA linear-routed 192/384/768 at the width rule,\nGeoTransolver 256/512 at 3e-3, Transolver 256 at 3e-3), the fleet's 200,000-cell medium-rung lanes (ISLA 192 at 1e-3,\nGeoTransolver 256 at 1e-3 and 3e-3, Transolver 256), and the ROUTE-NORM 510-wing lanes (cosine 192 and 384 at 1e-3,\nlinear 384 at 1e-3, 100,000 cells) read beside, and the campaign sc cosine-192 twin at 200,000 cells (2026-10-01) that\ndecides the ISLA cells clause after the linear 200,000-cell arm was voided by a plateaued seed; results/campaigns_2026-09-20/shl/cost_2026-09-26.tsv (median step\ntime and peak memory from each train.log). Bars are the preregistration's, on seed-mean pressure relative L2.\nusage: python scalehl_reduce_2026-09-26.py [out.json]",
  "arms": {
   "isla_192_c100k": {
    "runs": {
@@ -106,12 +106,12 @@
   "gt_256_c100k": {
    "runs": {
     "shl_med_gt_w256_c100k_seed42": {
-     "pressure_l2": 0.03772825271719032,
-     "temperature_l2": 0.05069389566779137,
-     "density_l2": 0.044912886081470385,
-     "velocity_l2": 0.06811312999990252,
-     "tau_wall_l2": 0.08645335667663151,
-     "n_cases": 9
+     "pressure_l2": 0.03849127777955598,
+     "temperature_l2": 0.04621850042086509,
+     "density_l2": 0.05214715137456854,
+     "velocity_l2": 0.05712636599524153,
+     "tau_wall_l2": 0.08812281605270174,
+     "n_cases": 180
     },
     "shl_med_gt_w256_c100k_seed43": {
      "pressure_l2": 0.038896032474521135,
@@ -124,14 +124,14 @@
    },
    "n_seeds": 2,
    "seed_means": {
-    "pressure_l2": 0.038312142595855726,
-    "temperature_l2": 0.04864585478272703,
-    "density_l2": 0.048802075452274746,
-    "velocity_l2": 0.06258643450629381,
-    "tau_wall_l2": 0.08732605972844694
+    "pressure_l2": 0.038693655127038554,
+    "temperature_l2": 0.04640815715926389,
+    "density_l2": 0.05241920809882382,
+    "velocity_l2": 0.05709305250396331,
+    "tau_wall_l2": 0.08816078941648206
    },
    "pressure_l2_seeds": [
-    0.03772825271719032,
+    0.03849127777955598,
     0.038896032474521135
    ],
    "step_s_median": 0.265,
@@ -375,6 +375,40 @@
    "step_s_median": 0.1725,
    "mem_peak_gb": 15.16
   },
+  "isla_cos_192_c200k": {
+   "runs": {
+    "sc_hl_cos_w192_med_c200k_seed42": {
+     "pressure_l2": 0.04090383726281005,
+     "temperature_l2": 0.0485161870185818,
+     "density_l2": 0.05427137883259105,
+     "velocity_l2": 0.061900202378437116,
+     "tau_wall_l2": 0.09193080944287313,
+     "n_cases": 77
+    },
+    "sc_hl_cos_w192_med_c200k_seed43": {
+     "pressure_l2": 0.043438995857205655,
+     "temperature_l2": 0.04881489229285055,
+     "density_l2": 0.058741710324668225,
+     "velocity_l2": 0.06153320978499121,
+     "tau_wall_l2": 0.09428139798757103,
+     "n_cases": 180
+    }
+   },
+   "n_seeds": 2,
+   "seed_means": {
+    "pressure_l2": 0.04217141656000785,
+    "temperature_l2": 0.04866553965571617,
+    "density_l2": 0.056506544578629636,
+    "velocity_l2": 0.06171670608171416,
+    "tau_wall_l2": 0.09310610371522207
+   },
+   "pressure_l2_seeds": [
+    0.04090383726281005,
+    0.043438995857205655
+   ],
+   "step_s_median": 0.2225,
+   "mem_peak_gb": 29.58
+  },
   "isla_cos_384_lr1e3_c100k": {
    "runs": {
     "rn_cos_w384_lr1e_3_med_c100k_seed42": {
@@ -447,14 +481,16 @@
  "bars": {
   "cells_flat": {
    "isla_192_c100k_over_c200k": 0.15213557903008657,
-   "gt_256_c100k_over_c200k_lr3e3": 0.9865590335695299,
-   "gt_256_c100k_over_c200k_lr1e3": 0.9924495473025172,
+   "isla_192_c100k_over_c200k_void": "the linear 200k arm averages a plateaued seed (p200k_hl_isla_medium_seed42, 0.594); void, see #sec-nb-p200k-hl-ladder-verdict",
+   "isla_cos_192_c100k_over_c200k": 1.0122513494562382,
+   "gt_256_c100k_over_c200k_lr3e3": 0.9963831939676776,
+   "gt_256_c100k_over_c200k_lr1e3": 1.002332365469507,
    "transolver_256_c100k_over_c200k": 0.9820942862920025,
    "bar": "within 2% (0.98 to 1.02) for ISLA-192 and GeoTransolver-256"
   },
   "width_carries": {
    "isla_384_over_192": 0.8421474458126704,
-   "gt_512_over_256": 0.9981052637561758,
+   "gt_512_over_256": 0.9882641240573721,
    "bar": "at most 0.97 for each model (3% gain); within 3% = not parameter-bound"
   },
   "turnover": {
@@ -462,9 +498,9 @@
    "bar": "gain under 1% (ratio above 0.99) or a loss reproduces the DrivAerML turnover"
   },
   "deficit_under_width": {
-   "gt256_over_isla192": 0.7747194373045387,
+   "gt256_over_isla192": 0.7824340978130994,
    "gt512_over_isla384": 0.9181902197206058,
-   "change": 0.14347078241606703,
+   "change": 0.1357561219075064,
    "bar": "+0.05 or more: width closes part of the deficit; -0.05 or less: widens; within 0.05: width-independent"
   },
   "iso_memory": {

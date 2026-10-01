@@ -25,3 +25,5 @@ shl_med_isla_w768_c100k_seed42	0.216	40.06	36863	500
 shl_med_isla_w768_c100k_seed43	0.215	40.04	36913	500
 shl_med_transolver_w256_c100k_seed42	0.171	27.18	36001	500
 shl_med_transolver_w256_c100k_seed43	0.17	27.18	36647	500
+sc_hl_cos_w192_med_c200k_seed42	0.222	29.58	40905	500
+sc_hl_cos_w192_med_c200k_seed43	0.223	29.56	40767	500
