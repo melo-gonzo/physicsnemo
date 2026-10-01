@@ -23,7 +23,7 @@ import pytest
 import torch
 
 from physicsnemo.experimental.models.isla import ISLA
-from physicsnemo.experimental.models.isla.model import _levi_civita, _pseudovectors
+from physicsnemo.experimental.models.isla.heads import _levi_civita, _pseudovectors
 from test.experimental.models.isla._meshes import (
     cloud,
     law,

@@ -28,7 +28,7 @@ import pytest
 import torch
 
 from physicsnemo.experimental.models import ISLA
-from physicsnemo.experimental.models.isla.model import _geo_region
+from physicsnemo.experimental.models.isla.blocks import _geo_region
 from test.experimental.models.isla._meshes import cloud, outputs, soup
 
 cuda_only = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA kernels")
@@ -95,9 +95,7 @@ def _assert_same(ref, opt, dtype, out_tol, grad_tol, n=700):
 def test_fused_geo_region_matches_eager_region(dtype, K, P):
     """Region level: forward outputs (bias, mix, pooled) and every input gradient, for
     K global directions plus P per-token rank-1 vectors (the (5 + K + P)-invariant set
-    in the eager order) with the linear routing-bias head. The fused kernel keeps a
-    ``relative`` flag; the model always passes ``True``, which is what the eager region
-    computes."""
+    in the eager order) with the linear routing-bias head."""
     from physicsnemo.experimental.models.isla.geo_kernel import fused_geo_region
 
     torch.backends.cuda.matmul.allow_tf32 = False
@@ -122,21 +120,21 @@ def test_fused_geo_region_matches_eager_region(dtype, K, P):
         torch.randn(b, n, 5 + K + P, generator=g).to("cuda", dtype),
     ]
 
-    def run(fn, *extra):
+    def run(fn):
         for t in leaves:
             t.grad = None
         d_n = d.expand(b, n, K, 3)  # both regions take the K global directions as (B, N, K, 3)
         if fn is _geo_region:
             outs = fn(lin, logits, r, nh, d_n, z, ms, 1e-12, v if P else None)
         else:  # the fused kernel takes the directions and the token vectors as one (B, N, K + P, 3) set
-            outs = fn(lin, logits, r, nh, torch.cat([d_n, v], 2) if P else d_n, z, ms, 1e-12, *extra, n_global=K)
+            outs = fn(lin, logits, r, nh, torch.cat([d_n, v], 2) if P else d_n, z, ms, 1e-12, n_global=K)
         sum((o * w).sum() for o, w in zip(outs, wts)).backward()
         return [o.detach() for o in outs], [
             (t.grad.detach().clone() if t.grad is not None else torch.zeros_like(t)) for t in leaves
         ]
 
     o_ref, g_ref = run(_geo_region)
-    o_f, g_f = run(fused_geo_region, True)
+    o_f, g_f = run(fused_geo_region)
     tol = 1e-11 if dtype == torch.float64 else 1e-6
     for a, bb in zip(o_f, o_ref):
         assert _rel(a, bb) < tol, _rel(a, bb)
@@ -165,7 +163,7 @@ def test_fused_geo_region_bf16_autocast_forward_matches_eager():
     lin = torch.nn.Linear(6, 1).cuda()
     with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
         ref = _geo_region(lin, logits, r, nh, d, z, ms, 1e-12)
-        fused = fused_geo_region(lin, logits, r, nh, d, z, ms, 1e-12, True)
+        fused = fused_geo_region(lin, logits, r, nh, d, z, ms, 1e-12)
     assert [t.dtype for t in fused] == [t.dtype for t in ref]
     for a, bb in zip(fused, ref):
         assert _rel(a, bb) < 1e-4, _rel(a, bb)

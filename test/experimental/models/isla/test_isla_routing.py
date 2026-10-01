@@ -19,7 +19,7 @@
 import torch
 
 from physicsnemo.experimental.models import ISLA
-from physicsnemo.experimental.models.isla.model import (
+from physicsnemo.experimental.models.isla.blocks import (
     ROUTING_TEMPERATURE,
     _RoutingLogits,
 )

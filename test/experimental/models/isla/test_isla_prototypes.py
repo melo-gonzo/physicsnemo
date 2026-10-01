@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from physicsnemo.experimental.models.isla import ISLA
-from physicsnemo.experimental.models.isla.model import _RoutingLogits
+from physicsnemo.experimental.models.isla.blocks import _RoutingLogits
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from test.experimental.models.isla._meshes import (

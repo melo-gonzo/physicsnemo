@@ -1,0 +1,373 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""ISLA's backbone: the slice block and the pieces it is made of.
+
+:class:`_SliceBlock` is one pre-LN layer of measure-weighted soft-slice attention and
+MLP; :class:`_RoutingLogits` produces its point-to-slice logits, :class:`_QueryTokens`
+the prediction-point tokens' own parameters, and :func:`_relational_invariants` /
+:func:`_geo_region` the per-layer geometry region that the fused Triton kernel of
+:mod:`physicsnemo.experimental.models.isla.geo_kernel` replaces exactly. Private to
+:mod:`physicsnemo.experimental.models.isla`."""
+
+import math
+from typing import Literal
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from jaxtyping import Float
+from torch.utils.checkpoint import checkpoint
+
+GeoKernel = Literal["eager", "fused"]
+"""Geometry-region backend: the PyTorch reference region or the exact fused Triton kernel."""
+SlicePrototypes = Literal["static", "centered"]
+"""Slice-routing prototypes: one learned prototype per slice, or the seeds plus a centered, scale-bounded sample-conditioned term."""
+
+#: Bound of the cosine routing logits: each block's point-to-slice logit is this
+#: times the cosine between the token state and a slice prototype.
+ROUTING_TEMPERATURE = 10.0
+
+
+def _softmax_over_points(x: Float[torch.Tensor, "batch tokens slices"]):
+    """Softmax over the point dimension (dim 1) of a (B, N, S) tensor.
+
+    Reduces along a contiguous last dimension after a transpose, which uses
+    PyTorch's row-parallel softmax kernel: a softmax over a *middle* dimension
+    is served by the "spatial" kernel, which parallelizes over the B*S columns
+    only and walks the N points serially (85-95% of the training step at 10k
+    to 80k tokens on a GB300, and the source of the superlinear token
+    scaling). Same arithmetic as ``torch.softmax(x, dim=1)`` up to summation
+    order; against a float64 reference the row-parallel kernel carries a
+    ~1e-7 float32 floor where the middle-dimension kernel carries ~1e-4.
+    """
+    return torch.softmax(x.transpose(1, 2), dim=-1).transpose(1, 2)
+
+
+def _relational_invariants(
+    r: Float[torch.Tensor, "batch tokens dim"],
+    n_hat: Float[torch.Tensor, "batch tokens dim"],
+    g_hat: Float[torch.Tensor, "batch tokens vectors dim"],
+    z_pos: Float[torch.Tensor, "batch slices dim"],
+    m_s: Float[torch.Tensor, "batch slices dim"],
+    eps: float,
+    vecs: Float[torch.Tensor, "batch tokens extra dim"] | None = None,
+    tens: Float[torch.Tensor, "batch tokens tensors dim dim"] | None = None,
+) -> Float[torch.Tensor, "batch tokens slices geo"]:
+    """The point-anchor invariants: distance and its log, the unit relative
+    vector dotted with each global direction (K terms), with the point normal
+    and with the anchor normal, the point normal dotted with the anchor normal,
+    then the unit relative vector dotted with each of the token's extra vectors
+    (its rank-1 inputs and the vectors derived from its rank-2 inputs) and the
+    quadratic form of each rank-2 input in the unit relative vector. Width
+    ``5 + K + P' + Q``; for K = 1 and no inputs this is the original 6-wide set
+    in its original order. Every term depends on the anchors' positions
+    relative to the point only, so no frame origin is referred to."""
+    z = z_pos[:, None, :, :]
+    m = m_s[:, None, :, :]
+    rel = r[:, :, None, :] - z  # (B, N, S, 3)
+    dist = rel.norm(dim=-1, keepdim=True).clamp_min(eps)
+    rel_hat = rel / dist
+    n_exp = n_hat[:, :, None, :]
+    feats = [
+        dist,
+        torch.log(dist),
+        ### Broadcast multiply-and-sum, not einsum: einsum is autocast to bf16 and
+        ### the geometry must stay in the input precision (for K = 1 this is the
+        ### former (rel_hat * d).sum(-1) arithmetic exactly).
+        (rel_hat[..., None, :] * g_hat[:, :, None, :, :]).sum(-1),  # (B, N, S, K)
+        (rel_hat * n_exp).sum(-1, keepdim=True),
+        (rel_hat * m).sum(-1, keepdim=True),
+        (n_exp * m).sum(-1, keepdim=True),
+    ]
+    if vecs is not None and vecs.shape[2]:
+        ### The token's vector inputs, contracted with the anchor direction exactly
+        ### as the global directions are above.
+        feats.append((rel_hat[..., None, :] * vecs[:, :, None, :, :]).sum(-1))
+    if tens is not None and tens.shape[2]:
+        ### rho^T T rho per rank-2 input. einsum (autocast disabled, so the geometry
+        ### stays in the input precision) rather than a broadcast product, which
+        ### would materialize a (B, N, S, Q, 3, 3) intermediate.
+        with torch.autocast(rel_hat.device.type, enabled=False):
+            t_rho = torch.einsum("bnqij,bnsj->bnsqi", tens, rel_hat)  # (B, N, S, Q, 3)
+            feats.append(torch.einsum("bnsqi,bnsi->bnsq", t_rho, rel_hat))
+    return torch.cat(feats, dim=-1)
+
+
+def _geo_region(
+    lin: nn.Module,
+    logits_pre,
+    r,
+    n_hat,
+    g_hat,
+    z_pos,
+    m_s,
+    eps: float,
+    vecs=None,
+    tens=None,
+):
+    """One recompute region per layer: the per-slice routing bias from the
+    invariants and the invariants pooled over slices by the resulting
+    point->slice mix. Returns (bias (B,N,S), mix (B,N,S), pooled (B,N,geo)); the
+    (B,N,S,geo) invariants and their (B,N,S,3) intermediates never leave the
+    region, so under checkpointing they are rebuilt in backward, not stored."""
+    geo = _relational_invariants(r, n_hat, g_hat, z_pos, m_s, eps, vecs, tens)
+    bias = lin(geo).squeeze(-1)
+    mix = torch.softmax(logits_pre + bias, dim=-1)  # normalized over slices
+    return bias, mix, torch.einsum("bns,bnsg->bng", mix, geo)
+
+
+def _fused_vectors(g_hat, vecs):
+    """The fused kernel's per-point vector set: the K global directions followed by
+    the token's rank-1 vectors (if any), (B, N, K + P', 3)."""
+    if vecs is None or vecs.shape[2] == 0:
+        return g_hat
+    return torch.cat([g_hat, vecs], dim=2)
+
+
+def _fused_geo_region():
+    """The Triton-fused dense geometry region (geo_kernel="fused"); imported lazily so
+    that the module loads without triton and the eager path never touches it."""
+    from .geo_kernel import fused_geo_region
+
+    return fused_geo_region
+
+
+def _geo_width(n_global_vectors: int, n_vecs: int = 0, n_tens: int = 0) -> int:
+    """Width of _relational_invariants: dist, log dist, K rel.g_k, rel.n, rel.m,
+    n.m (5 + K), then P' rel.v and Q rho^T T rho; K = 1 alone gives the original 6."""
+    return 5 + int(n_global_vectors) + int(n_vecs) + int(n_tens)
+
+
+class _RoutingLogits(nn.Module):
+    """Point-to-slice routing logits, ``(B, N, hidden) -> (B, N, S)``.
+
+    :data:`ROUTING_TEMPERATURE` times the cosine between the token state and a
+    learned prototype per slice (the rows of ``weight``), so every logit lies in
+    ``[-T, T]`` and no block can route every point to one slice however its
+    weights grow.
+
+    ``slice_prototypes="static"``: the prototypes are the rows of ``weight``,
+    the same for every sample. ``"centered"``: the prototypes are synthesized
+    per sample. Each static row acts as a seed that attends over the token
+    states with a measure-weighted softmax (``log_w`` enters as a log-space
+    bias, so the summary is a quadrature of the tokens and invariant to a
+    uniform rescale of the weights); the attended value term is centered
+    across the slices and scale-bounded before it is added to the seeds:
+    ``P = seeds + Delta_c * b / (rms(Delta_c) + b)`` with ``b = g rms(seeds)``,
+    ``Delta_c = Delta - mean_S(Delta)``, ``rms`` over all entries (per sample for
+    ``Delta_c``) and ``g`` one learned scalar (init 0.1). The seed-independent
+    component of the value term is common to every prototype, carries no routing
+    information under cosine logits and, when it dominates, collapses the
+    prototypes onto one direction; centering removes it exactly. The bound is a
+    smooth saturation: a small centered term (near-uniform attention, roundoff)
+    passes through unchanged and a large one is held to an rms of at most
+    ``g rms(seeds)``, so the sample-dependent part never exceeds a fraction
+    ``g`` of the seeds' spread and is never amplified to it. Token states are
+    invariant features, so the prototypes are invariant and the contracts hold.
+    Adds ``2 hidden^2 + 1`` parameters per block (the key and value maps and
+    the gain).
+    """
+
+    def __init__(
+        self, hidden: int, n_slices: int, slice_prototypes: SlicePrototypes = "static"
+    ) -> None:
+        super().__init__()
+        if slice_prototypes not in ("static", "centered"):
+            raise ValueError(
+                f"slice_prototypes must be 'static' or 'centered', got {slice_prototypes!r}"
+            )
+        self.centered = slice_prototypes == "centered"
+        self.weight = nn.Linear(hidden, n_slices, bias=False).weight
+        if self.centered:
+            self.k_proj = nn.Linear(hidden, hidden, bias=False)
+            self.v_proj = nn.Linear(hidden, hidden, bias=False)
+            self.scale = 1.0 / math.sqrt(hidden)
+            self.gain = nn.Parameter(torch.tensor(0.1))
+
+    def prototypes(self, x: torch.Tensor, log_w: torch.Tensor | None) -> torch.Tensor:
+        """Per-sample prototypes (B, S, hidden) from the seeds and the token states."""
+        seeds = self.weight.to(x.dtype)  # (S, H)
+        att = torch.einsum("sh,bnh->bsn", seeds, self.k_proj(x)) * self.scale  # (B, S, N)
+        if log_w is not None:
+            att = att + log_w[..., 0][:, None, :].to(att.dtype)
+        att = torch.softmax(att if att.dtype in (torch.float32, torch.float64) else att.float(), dim=-1).to(x.dtype)
+        delta = torch.einsum("bsn,bnh->bsh", att, self.v_proj(x))  # (B, S, H)
+        delta = delta - delta.mean(dim=1, keepdim=True)
+        bound = self.gain.to(x.dtype) * seeds.square().mean().sqrt()  # g rms(seeds), scalar
+        rms_delta = delta.square().mean(dim=(1, 2), keepdim=True).sqrt()  # (B, 1, 1)
+        return seeds[None] + delta * (bound / (rms_delta + bound))
+
+    def forward(self, x: torch.Tensor, log_w: torch.Tensor | None = None) -> torch.Tensor:
+        if self.centered:
+            protos = self.prototypes(x, log_w)
+            return ROUTING_TEMPERATURE * torch.einsum(
+                "bnh,bsh->bns", F.normalize(x, dim=-1), F.normalize(protos, dim=-1)
+            )
+        return ROUTING_TEMPERATURE * F.linear(
+            F.normalize(x, dim=-1), F.normalize(self.weight, dim=-1)
+        )
+
+
+class _QueryTokens(nn.Module):
+    """The query tokens' own parameters (the interior mode): a learned token-type
+    offset, the log of the learned fraction of the total boundary measure that is
+    their routing weight, and the embedding of their per-query features (the
+    built-in signed distance to the sampled boundary as ``[d/L, sign(d) log(|d|/L +
+    eps)]`` ahead of the fields declared in ``query_schema``)."""
+
+    def __init__(self, hidden: int, n_features: int) -> None:
+        super().__init__()
+        self.logw = nn.Parameter(torch.zeros(1))
+        self.type_offset = nn.Parameter(torch.zeros(hidden))
+        self.embed = nn.Sequential(
+            nn.Linear(n_features, hidden), nn.GELU(), nn.Linear(hidden, hidden)
+        )
+
+    def forward(self, h_seed: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:
+        """The query tokens' initial state from their seed embedding and features."""
+        return h_seed + self.type_offset.to(h_seed.dtype) + self.embed(feat).to(h_seed.dtype)
+
+
+class _SliceBlock(nn.Module):
+    """One pre-LN layer of measure-weighted soft-slice attention + MLP."""
+
+    def __init__(
+        self,
+        hidden: int,
+        n_slices: int,
+        mlp_ratio: int = 4,
+        geo_checkpoint: bool = False,
+        geo_kernel: GeoKernel = "eager",
+        n_global_vectors: int = 1,
+        n_block_vecs: int = 0,
+        n_block_tens: int = 0,
+        slice_prototypes: SlicePrototypes = "static",
+    ) -> None:
+        super().__init__()
+        ### "fused" evaluates the dense geometry region (invariants -> routing bias
+        ### -> point->slice mix -> pooled invariants) in one Triton kernel per
+        ### direction that never materializes a (B,N,S,.) tensor (see
+        ### geo_kernel.py); same arithmetic as _geo_region, recompute built in, so
+        ### geo_checkpoint is moot on that path.
+        self.geo_kernel = geo_kernel
+        self.n_geo = _geo_width(n_global_vectors, n_block_vecs, n_block_tens)
+        ### Activation recompute: the per-slice geometry tensors -- rel (B,N,S,3),
+        ### rel_hat, dist and two bf16 copies of the (B,N,S,geo) invariants -- are
+        ### 76% of ISLA's saved activations at 10k tokens. With geo_checkpoint the
+        ### invariants are rebuilt from (r, n_hat, g_hat, z_pos, m_s) inside
+        ### backward instead of stored; the forward is bitwise unchanged (same
+        ### ops, same order).
+        self.geo_checkpoint = bool(geo_checkpoint)
+        self.norm_assign = nn.LayerNorm(hidden)
+        self.assign = _RoutingLogits(hidden, n_slices, slice_prototypes)
+        ### Relational geometry: per-slice equivariant anchors and point-anchor
+        ### invariants -- many local, data-adaptive reference points instead of
+        ### any global frame (smooth by construction).
+        self.geo_width = hidden // 2
+        self.geo_logit = nn.Linear(self.n_geo, 1)
+        self.geo_feat = nn.Linear(self.n_geo, self.geo_width)
+        self.slice_mlp = nn.Sequential(
+            nn.LayerNorm(hidden),
+            nn.Linear(hidden, mlp_ratio * hidden),
+            nn.GELU(),
+            nn.Linear(mlp_ratio * hidden, hidden),
+        )
+        self.broadcast = nn.Linear(2 * hidden + hidden // 2, hidden)
+        self.norm_mlp = nn.LayerNorm(hidden)
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden, mlp_ratio * hidden),
+            nn.GELU(),
+            nn.Linear(mlp_ratio * hidden, hidden),
+        )
+
+    def forward(
+        self,
+        h: Float[torch.Tensor, "batch tokens hidden"],
+        log_w: Float[torch.Tensor, "batch tokens 1"],
+        r: Float[torch.Tensor, "batch tokens dim"],
+        n_hat: Float[torch.Tensor, "batch tokens dim"],
+        g_hat: Float[torch.Tensor, "batch tokens vectors dim"],
+        eps: float,
+        vecs=None,
+        tens=None,
+    ) -> Float[torch.Tensor, "batch tokens hidden"]:
+        ### Soft assignment of points to slices; measure weights enter as a
+        ### log-space bias so slice states are quadrature-weighted means.
+        logits = self.assign(self.norm_assign(h), log_w)  # (B, N, S)
+        a = _softmax_over_points(logits + log_w)  # normalized over points
+        ### Equivariant anchors: weighted mean position AND mean normal
+        ### direction per slice -- anchors gain orientation.
+        z_pos = torch.einsum("bns,bnc->bsc", a, r)  # (B, S, d)
+        m_s = torch.einsum("bns,bnc->bsc", a, n_hat)
+        m_s = m_s / m_s.norm(dim=-1, keepdim=True).clamp_min(eps)
+        ### Geometry refines the routing and the readback. Pool the invariants
+        ### over slices FIRST, then project: exactly equal to projecting then
+        ### pooling (the projection is affine and point_mix sums to one over
+        ### slices), but the saved activation is (B, N, geo) instead of
+        ### (B, N, S, hidden/2) -- ~0.5 GB per layer at 10k tokens, 256 slices,
+        ### hidden 192.
+        if self.geo_kernel == "fused":
+            ### The fused kernel takes the global directions and the token's rank-1
+            ### vectors as one per-point vector set (at most four in all, no rank-2
+            ### inputs; enforced at construction / resolution).
+            bias, point_mix, pooled = _fused_geo_region()(
+                self.geo_logit,
+                logits,
+                r,
+                n_hat,
+                _fused_vectors(g_hat, vecs),
+                z_pos,
+                m_s,
+                eps,
+                n_global=g_hat.shape[2],
+            )
+        elif self.geo_checkpoint:
+            bias, point_mix, pooled = checkpoint(
+                _geo_region,
+                self.geo_logit,
+                logits,
+                r,
+                n_hat,
+                g_hat,
+                z_pos,
+                m_s,
+                eps,
+                vecs,
+                tens,
+                use_reentrant=False,
+            )
+        else:
+            bias, point_mix, pooled = _geo_region(
+                self.geo_logit,
+                logits,
+                r,
+                n_hat,
+                g_hat,
+                z_pos,
+                m_s,
+                eps,
+                vecs,
+                tens,
+            )
+        logits = logits + bias
+        a = _softmax_over_points(logits + log_w)
+        z = torch.einsum("bns,bnh->bsh", a, h)  # slice states
+        z = z + self.slice_mlp(z)
+        back = torch.einsum("bns,bsh->bnh", point_mix, z)
+        geo_pool = self.geo_feat(pooled)
+        h = h + self.broadcast(torch.cat([h, back, geo_pool], dim=-1))
+        return h + self.mlp(self.norm_mlp(h))

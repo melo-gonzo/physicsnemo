@@ -16,10 +16,10 @@
 
 r"""Fused Triton kernel for ISLA's per-layer geometry region (KERNEL STUDY, 2026-09-13).
 
-The dense geometry region of a slice block (``model._geo_region``) evaluates the
-point-anchor relational invariants on the (B, N, S) point-slice grid, the (5+K)->1
-routing-bias Linear on them (K the global directions, 1 to 3; the legacy absolute-anchor
-set adds two more and is written for K = 1), the point->slice softmax of the pre-logits plus
+The dense geometry region of a slice block (``blocks._geo_region``) evaluates the
+point-anchor relational invariants on the (B, N, S) point-slice grid, the (5+T)->1
+routing-bias Linear on them (T the per-point vectors: the global directions followed by
+the token's rank-1 inputs), the point->slice softmax of the pre-logits plus
 that bias, and the mix-weighted pooling of the invariants back to the points. In
 eager PyTorch every intermediate of that computation -- rel (B,N,S,3), dist, rel_hat,
 the four dot products and the concatenated (B,N,S,geo) invariants -- is written to
@@ -149,7 +149,6 @@ if HAS_TRITON:
         po_sn,
         K: tl.constexpr,
         T: tl.constexpr,
-        RELATIVE: tl.constexpr,
         LIN_BF16: tl.constexpr,
         LOGIT_BF16: tl.constexpr,
         F64: tl.constexpr,
@@ -238,22 +237,6 @@ if HAS_TRITON:
         if T >= 4:
             w2d = _rn(tl.load(w_ptr + IDX_G), LIN_BF16)
             bias = bias + q2d * w2d
-        if not RELATIVE:
-            zmag = tl.maximum(_sqrt(z0 * z0 + z1 * z1 + z2 * z2, F64), eps)
-            zh0 = _div(z0, zmag, F64)
-            zh1 = _div(z1, zmag, F64)
-            zh2 = _div(z2, zmag, F64)
-            g6 = tl.zeros_like(g0) + zmag[None, :]
-            g7 = (
-                zh0[None, :] * d0[:, None]
-                + zh1[None, :] * d1[:, None]
-                + zh2[None, :] * d2[:, None]
-            )
-            w6 = _rn(tl.load(w_ptr + 5 + K), LIN_BF16)
-            w7 = _rn(tl.load(w_ptr + 6 + K), LIN_BF16)
-            q6 = _rn(g6, LIN_BF16)
-            q7 = _rn(g7, LIN_BF16)
-            bias = bias + q6 * w6 + q7 * w7
         bias = _rn(bias + bb, LIN_BF16)
 
         l_off = pid_b * l_sb + offs_n[:, None] * l_sn + offs_s[None, :]
@@ -291,9 +274,7 @@ if HAS_TRITON:
         tl.store(po + 2 + K, _rn(tl.sum(mq * q3, axis=1), LIN_BF16).to(ot), mask=mask_n)
         tl.store(po + 3 + K, _rn(tl.sum(mq * q4, axis=1), LIN_BF16).to(ot), mask=mask_n)
         tl.store(po + 4 + K, _rn(tl.sum(mq * q5, axis=1), LIN_BF16).to(ot), mask=mask_n)
-        if not RELATIVE:
-            tl.store(po + 5 + K, _rn(tl.sum(mq * q6, axis=1), LIN_BF16).to(ot), mask=mask_n)
-            tl.store(po + 6 + K, _rn(tl.sum(mq * q7, axis=1), LIN_BF16).to(ot), mask=mask_n)
+
     @triton.jit
     def _geo_bwd_kernel(
         r_ptr,
@@ -346,7 +327,6 @@ if HAS_TRITON:
         K: tl.constexpr,
         T: tl.constexpr,
         NW: tl.constexpr,
-        RELATIVE: tl.constexpr,
         LIN_BF16: tl.constexpr,
         LOGIT_BF16: tl.constexpr,
         F64: tl.constexpr,
@@ -435,23 +415,6 @@ if HAS_TRITON:
         if T >= 4:
             w2d = _rn(tl.load(w_ptr + IDX_G), LIN_BF16)
             bias = bias + q2d * w2d
-        if not RELATIVE:
-            zmag_raw = _sqrt(z0 * z0 + z1 * z1 + z2 * z2, F64)
-            zmag = tl.maximum(zmag_raw, eps)
-            zh0 = _div(z0, zmag, F64)
-            zh1 = _div(z1, zmag, F64)
-            zh2 = _div(z2, zmag, F64)
-            g6 = tl.zeros_like(g0) + zmag[None, :]
-            g7 = (
-                zh0[None, :] * d0[:, None]
-                + zh1[None, :] * d1[:, None]
-                + zh2[None, :] * d2[:, None]
-            )
-            w6 = _rn(tl.load(w_ptr + 5 + K), LIN_BF16)
-            w7 = _rn(tl.load(w_ptr + 6 + K), LIN_BF16)
-            q6 = _rn(g6, LIN_BF16)
-            q7 = _rn(g7, LIN_BF16)
-            bias = bias + q6 * w6 + q7 * w7
         bias = _rn(bias + bb, LIN_BF16)
         l_off = pid_b * l_sb + offs_n[:, None] * l_sn + offs_s[None, :]
         logit = tl.load(logit_ptr + l_off, mask=mask, other=0.0).to(bias.dtype)
@@ -502,10 +465,6 @@ if HAS_TRITON:
             gmix = gmix + gp2c[:, None] * q2c
         if T >= 4:
             gmix = gmix + gp2d[:, None] * q2d
-        if not RELATIVE:
-            gp6 = tl.load(gp + 5 + K, mask=mask_n, other=0.0).to(bias.dtype)
-            gp7 = tl.load(gp + 6 + K, mask=mask_n, other=0.0).to(bias.dtype)
-            gmix = gmix + gp6[:, None] * q6 + gp7[:, None] * q7
         # softmax backward over slices
         dot = tl.sum(gmix * mix, axis=1)
         glogit = mix * (gmix - dot[:, None])
@@ -631,30 +590,10 @@ if HAS_TRITON:
             tl.sum(tl.where(mask, gg4 * h2 + gg5 * n2[:, None], 0.0), axis=0),
             mask=mask_s,
         )
-        # d: g2 = rel_hat.d (+ g7 = zhat.d)
+        # d: g2 = rel_hat.d
         gd0 = gg2 * h0
         gd1 = gg2 * h1
         gd2 = gg2 * h2
-        if not RELATIVE:
-            gg6 = gb * w6 + mix * gp6[:, None]
-            gg7 = gb * w7 + mix * gp7[:, None]
-            tl.store(gw + 5 + K, tl.sum(tl.sum(gb * q6, axis=1), axis=0))
-            tl.store(gw + 6 + K, tl.sum(tl.sum(gb * q7, axis=1), axis=0))
-            gd0 = gd0 + gg7 * zh0[None, :]
-            gd1 = gd1 + gg7 * zh1[None, :]
-            gd2 = gd2 + gg7 * zh2[None, :]
-            # z through zmag (g6) and zhat (g7): zhat = z / zmag
-            u0 = tl.sum(tl.where(mask, gg7 * d0[:, None], 0.0), axis=0)
-            u1 = tl.sum(tl.where(mask, gg7 * d1[:, None], 0.0), axis=0)
-            u2 = tl.sum(tl.where(mask, gg7 * d2[:, None], 0.0), axis=0)
-            udotzh = u0 * zh0 + u1 * zh1 + u2 * zh2
-            gzmag = tl.sum(tl.where(mask, gg6, 0.0), axis=0) - _div(udotzh, zmag, F64)
-            zok = zmag_raw >= eps
-            zsafe = tl.where(zmag_raw > 0, zmag_raw, 1.0)
-            zscale = tl.where(zok, _div(gzmag, zsafe, F64), 0.0)
-            gz0 = gz0 + _div(u0, zmag, F64) + zscale * z0
-            gz1 = gz1 + _div(u1, zmag, F64) + zscale * z1
-            gz2 = gz2 + _div(u2, zmag, F64) + zscale * z2
         tl.store(gz_part + 0, gz0, mask=mask_s)
         tl.store(gz_part + 1, gz1, mask=mask_s)
         tl.store(gz_part + 2, gz2, mask=mask_s)
@@ -676,8 +615,10 @@ if HAS_TRITON:
             tl.store(gd + 3 * gd_sk + 2, tl.sum(tl.where(mask, gg2d * h2, 0.0), axis=1), mask=mask_n)
 
 
-def _geo_width(t: int, k: int, relative: bool) -> int:
-    return (5 + t) if relative else (7 + k)
+def _geo_width(t: int) -> int:
+    """Invariants per point-slice pair for ``t`` per-point vectors: distance, its log,
+    the ``t`` direction cosines, rel.n, rel.m and n.m."""
+    return 5 + t
 
 
 def _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias, n_global):
@@ -714,8 +655,8 @@ def _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias, n_global):
         raise ValueError("geometry tensors must have unit last stride")
     if bias.numel() != 1:
         raise ValueError("the routing bias head must end in one scalar bias")
-    if weight.shape[-1] not in (5 + t, 7 + n_global):
-        raise ValueError(f"routing Linear must be {5 + t}->1 (relative) or {7 + n_global}->1 for {t} vectors")
+    if weight.shape[-1] != _geo_width(t):
+        raise ValueError(f"routing Linear must be {_geo_width(t)}->1 for {t} vectors")
 
 
 #: Launch configuration (points per program, warps per program); ``None`` picks the
@@ -771,16 +712,13 @@ def _geo_region_fwd(
     weight: torch.Tensor,
     bias: torch.Tensor,
     eps: float,
-    relative: bool,
     lin_bf16: bool,
     n_global: int,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias, n_global)
     b, n, s = logits_pre.shape
     t, k = d_hat.shape[2], n_global
-    if not relative and t != 1:
-        raise ValueError("the non-relative (absolute-anchor) invariant set is written for one global direction")
-    ng = _geo_width(t, k, relative)
+    ng = _geo_width(t)
     out_dt = torch.bfloat16 if lin_bf16 else r.dtype
     bias_out = torch.empty(b, n, s, device=r.device, dtype=out_dt)
     mix_out = torch.empty(b, n, s, device=r.device, dtype=r.dtype)
@@ -825,7 +763,6 @@ def _geo_region_fwd(
         pooled.stride(1),
         K=k,
         T=t,
-        RELATIVE=relative,
         LIN_BF16=lin_bf16,
         LOGIT_BF16=logits_pre.dtype == torch.bfloat16,
         F64=r.dtype == torch.float64,
@@ -837,13 +774,13 @@ def _geo_region_fwd(
 
 
 @_geo_region_fwd.register_fake
-def _(logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, eps, relative, lin_bf16, n_global):
+def _(logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, eps, lin_bf16, n_global):
     b, n, s = logits_pre.shape
     out_dt = torch.bfloat16 if lin_bf16 else r.dtype
     return (
         torch.empty(b, n, s, device=r.device, dtype=out_dt),
         torch.empty(b, n, s, device=r.device, dtype=r.dtype),
-        torch.empty(b, n, _geo_width(d_hat.shape[2], n_global, relative), device=r.device, dtype=out_dt),
+        torch.empty(b, n, _geo_width(d_hat.shape[2]), device=r.device, dtype=out_dt),
     )
 
 
@@ -861,7 +798,6 @@ def _geo_region_bwd(
     grad_mix: torch.Tensor,
     grad_pooled: torch.Tensor,
     eps: float,
-    relative: bool,
     lin_bf16: bool,
     n_global: int,
 ) -> tuple[
@@ -943,7 +879,6 @@ def _geo_region_bwd(
         K=k,
         T=t,
         NW=nw,
-        RELATIVE=relative,
         LIN_BF16=lin_bf16,
         LOGIT_BF16=logits_pre.dtype == torch.bfloat16,
         F64=r.dtype == torch.float64,
@@ -972,7 +907,6 @@ def _(
     grad_mix,
     grad_pooled,
     eps,
-    relative,
     lin_bf16,
     n_global,
 ):
@@ -991,9 +925,9 @@ def _(
 
 
 def _setup_context(ctx, inputs, output):
-    logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, eps, relative, lin_bf16, n_global = inputs
+    logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, eps, lin_bf16, n_global = inputs
     ctx.save_for_backward(logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias)
-    ctx.eps, ctx.relative, ctx.lin_bf16, ctx.n_global = eps, relative, lin_bf16, n_global
+    ctx.eps, ctx.lin_bf16, ctx.n_global = eps, lin_bf16, n_global
 
 
 def _backward(ctx, grad_bias, grad_mix, grad_pooled):
@@ -1006,7 +940,7 @@ def _backward(ctx, grad_bias, grad_mix, grad_pooled):
         grad_pooled = torch.zeros(
             logits_pre.shape[0],
             logits_pre.shape[1],
-            _geo_width(d_hat.shape[2], ctx.n_global, ctx.relative),
+            _geo_width(d_hat.shape[2]),
             device=r.device,
             dtype=r.dtype,
         )
@@ -1023,11 +957,10 @@ def _backward(ctx, grad_bias, grad_mix, grad_pooled):
         grad_mix,
         grad_pooled,
         ctx.eps,
-        ctx.relative,
         ctx.lin_bf16,
         ctx.n_global,
     )
-    return glogit, gr, gn, gd, gz, gm, gw, gb, None, None, None, None
+    return glogit, gr, gn, gd, gz, gm, gw, gb, None, None, None
 
 
 _geo_region_fwd.register_autograd(_backward, setup_context=_setup_context)
@@ -1042,10 +975,9 @@ def fused_geo_region(
     z_pos,
     m_s,
     eps: float,
-    relative: bool = False,
     n_global: int | None = None,
 ):
-    """Drop-in for ``model._geo_region``: returns (bias (B,N,S), mix (B,N,S),
+    """Drop-in for ``blocks._geo_region``: returns (bias (B,N,S), mix (B,N,S),
     pooled (B,N,geo)) from one fused kernel. ``d_hat`` holds the per-point unit
     vectors as (B, N, T, 3): the ``n_global`` global directions first (K, at
     least one), then the token's rank-1 vectors (P' = T - K), T at most
@@ -1075,7 +1007,6 @@ def fused_geo_region(
         weight,
         bias,
         float(eps),
-        bool(relative),
         bool(lin_bf16),
         int(d_hat.shape[2] if n_global is None else n_global),
     )

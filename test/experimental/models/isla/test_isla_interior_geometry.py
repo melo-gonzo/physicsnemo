@@ -27,7 +27,7 @@ import pytest
 import torch
 
 from physicsnemo.experimental.models import ISLA
-from physicsnemo.experimental.models.isla.model import nearest_boundary_geometry
+from physicsnemo.experimental.models.isla.geometry import nearest_boundary_geometry
 from test.experimental.models.isla._meshes import (
     cloud,
     orthogonal,

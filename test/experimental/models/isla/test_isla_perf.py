@@ -20,7 +20,7 @@ roundoff in float32."""
 
 import torch
 
-from physicsnemo.experimental.models.isla.model import _softmax_over_points
+from physicsnemo.experimental.models.isla.blocks import _softmax_over_points
 
 
 def test_softmax_over_points_matches_middle_dim_softmax():

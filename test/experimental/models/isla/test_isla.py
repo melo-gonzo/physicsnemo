@@ -208,7 +208,7 @@ def test_geo_pool_then_project_is_exact():
     mix is a softmax over slices, so the bias passes through unchanged). This
     is the identity behind the memory saving: the saved activation is
     (B, N, geo) instead of (B, N, S, hidden/2)."""
-    from physicsnemo.experimental.models.isla.model import _SliceBlock
+    from physicsnemo.experimental.models.isla.blocks import _SliceBlock
 
     torch.manual_seed(0)
     blk = _SliceBlock(64, 32).double()
@@ -587,7 +587,7 @@ def test_rms_distance_converges_on_koch_curve_where_total_measure_diverges():
     bound ((4/3)^level for the Koch curve) while the RMS pairwise distance
     converges: the relative differences between successive levels fall below 1e-3
     from level 4 on, and the last two levels agree to 1e-4."""
-    from physicsnemo.experimental.models.isla.model import rms_pairwise_distance
+    from physicsnemo.experimental.models.isla.geometry import rms_pairwise_distance
 
     totals, rms = [], []
     for level in range(0, 7):
