@@ -1147,6 +1147,15 @@ class ISLA(Module):
             else ``"eager"`` (the PyTorch reference region). Pass ``"eager"`` or
             ``"fused"`` to force one; ``"fused"`` raises when its constraints
             cannot be met.
+        compile_blocks: Run every slice block through :func:`torch.compile`
+            (default ``False``). The compiled function is the block's forward,
+            built at the first forward pass, so parameter names, checkpoints and
+            the eager path are unchanged; the fused geometry kernel stays a
+            custom-op leaf. Compiles once per distinct token count (the
+            reporting protocol's fixed sample compiles once); with a token count
+            that changes every case, leave it off. On four GB300 ranks at
+            200,000 cells it cut the training step by 19 to 35% and peak memory
+            by 27% at bfloat16-roundoff differences (PERF-3, 2026-10-01).
         slice_prototypes: ``"static"`` (default): each slice block routes tokens
             against a learned prototype per slice that is the same for every
             sample. ``"centered"``: centered, scale-bounded sample-conditioned
@@ -1229,11 +1238,23 @@ class ISLA(Module):
         mlp_ratio: int = 4,
         geo_checkpoint: bool = False,
         geo_kernel: GeoKernel | None = None,
+        compile_blocks: bool = False,
         slice_prototypes: SlicePrototypes = "static",
         dim: int = 3,
         eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
+        ### compile_blocks: run each slice block through torch.compile (built lazily at
+        ### the first forward pass, on the block's bound forward so parameter names and
+        ### checkpoints are unchanged). The blocks see only the (B, n_tokens, .) tensors,
+        ### so a fixed token count per case compiles once; the mesh-facing forward,
+        ### whose vertex count varies per case, stays eager. The fused geometry kernel
+        ### is a registered custom op and stays a leaf. Measured 2026-10-01 (PERF-3,
+        ### four GB300 ranks, 200,000 cells): step 221 -> 180 ms and peak memory
+        ### 44.9 -> 32.9 GiB on DrivAerML Surface, 475 -> 308 ms and 88.5 -> 64.5 GiB
+        ### on DrivAerML Volume, losses at bfloat16 roundoff of the eager path.
+        self.compile_blocks = bool(compile_blocks)
+        self._block_forwards: list | None = None
         ### The spatial dimension of the points. Every geometric quantity is built
         ### for d dimensions; the head's basis and the coefficient count depend on
         ### d (pseudovectors exist by the Levi-Civita construction: perpendiculars
@@ -1525,6 +1546,15 @@ class ISLA(Module):
                 "geometry kernel is not used (kernel follow-up); running the eager region."
             )
         return chosen
+
+    def _block_callables(self):
+        """The slice blocks as callables: the modules themselves, or their forwards
+        under :func:`torch.compile` when ``compile_blocks`` is set (built once)."""
+        if not self.compile_blocks or torch.compiler.is_compiling():
+            return self.blocks
+        if self._block_forwards is None:
+            self._block_forwards = [torch.compile(block.forward) for block in self.blocks]
+        return self._block_forwards
 
     def _apply_geo_kernel(self, points: torch.Tensor) -> None:
         """Write the resolved kernel name into the blocks, once per resolution."""
@@ -1939,7 +1969,7 @@ class ISLA(Module):
                 tens = torch.cat([tens, q_tens], dim=1)
             n = n + nq
 
-        for block in self.blocks:
+        for block in self._block_callables():
             h = block(h, log_w, r, n_hat, g_hat, self.eps, vecs, tens)
 
         ### The head frame builds its slice anchors from ALL tokens (src_r, src_logw

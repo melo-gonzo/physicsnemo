@@ -220,3 +220,28 @@ def test_torch_compile_fullgraph_matches_eager(geo_kernel):
     assert ex.graph_break_count == 0, ex.break_reasons
     compiled = torch.compile(opt, fullgraph=True)
     _assert_same(ref, compiled, torch.float32, 1e-6, 1e-5, n=300)
+
+
+# --------------------------------------------------------------------------- compiled blocks
+@pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=cuda_only)])
+def test_compile_blocks_matches_eager(device):
+    """``compile_blocks=True`` runs each slice block's forward under torch.compile and
+    leaves parameter names, the state dict and the arithmetic unchanged: outputs and
+    gradients match the eager model to float64 roundoff (the compiled blocks reorder
+    floating-point sums only), and the model compiles once."""
+    ref, opt = _pair(torch.float64, device=device, compile_blocks=True)
+    assert set(opt.state_dict()) == set(ref.state_dict())
+    inputs, tgt = _boundary(500, device=device, dtype=torch.float64)
+    o_ref, g_ref = _run(ref, inputs, tgt)
+    o_opt, g_opt = _run(opt, inputs, tgt)
+    assert opt._block_forwards is not None and len(opt._block_forwards) == len(opt.blocks)
+    assert _rel(o_opt, o_ref) < 1e-9, _rel(o_opt, o_ref)
+    total = torch.cat([g.flatten() for g in g_ref.values()]).norm()
+    for k, g in g_ref.items():
+        if g.norm() < 1e-6 * total:
+            continue
+        assert _rel(g_opt[k], g) < 1e-9, (k, _rel(g_opt[k], g))
+    # a second call with the same shapes reuses the compiled blocks (no rebuild)
+    built = opt._block_forwards
+    _run(opt, inputs, tgt)
+    assert opt._block_forwards is built
