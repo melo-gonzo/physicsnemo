@@ -445,8 +445,11 @@ Three practical consequences:
   names, the state dict and the eager path unchanged. On four GB300 ranks
   at 200,000 cells it takes the DrivAerML Surface step from 221 to 180 ms
   and its peak memory from 44.9 to 32.9 GiB, and the Volume step from 475
-  to 308 ms and 88.5 to 64.5 GiB, with losses at bfloat16 roundoff. The
-  recipe's ISLA configurations set it.
+  to 308 ms and 88.5 to 64.5 GiB. Models trained with it score the same
+  as models trained eagerly on both DrivAerML tasks, every field within
+  seed noise (`results/perf3_neutrality_2026-10-01.json`), and a 500-epoch
+  run finishes in about two thirds of the eager wall-clock. The recipe's
+  ISLA configurations set it.
 
 ## Contracts you can check on your own data {#sec-using-contracts}
 

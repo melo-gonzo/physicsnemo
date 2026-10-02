@@ -1,0 +1,195 @@
+{
+ "protocol": "PERF-3 neutrality reduction (2026-10-01, #sec-nb-perf-3-verdict): the reference ISLA configuration trained with per-block\ntorch.compile (compile_blocks=true, the recipe default since 343b284e) against the same snapshot trained eagerly\n(compile_blocks=false), on DrivAerML Surface (pf_dr_{cb,nocb}) and DrivAerML Volume (pf_vol_{cb,nocb}), 200,000 cells, two seeds\neach, code_v16 + recipe_v8. Readout: float32 per-case relative L2 per field on the test split, averaged over cases, then over seeds.\nRatio = compiled / eager per field (below 1 favors compiled). Bar (the KERNEL-NEUTRAL rule): neutral if every field on both datasets\nis within 3% of 1 on the seed means; otherwise the compiled default is withdrawn. A compile is a numerics change only (operator\nfusion, different accumulation order), so the prediction is a null: no field moves beyond seed noise.\nusage: python perf3_reduce_2026-10-01.py  (writes perf3_neutrality_2026-10-01.json).",
+ "bar": 0.03,
+ "datasets": {
+  "drivaerml_surface": {
+   "fields": [
+    "pressure_l2",
+    "wss_l2"
+   ],
+   "eager": {
+    "pressure_l2": 0.04358151915948838,
+    "wss_l2": 0.06858216575346887
+   },
+   "compiled": {
+    "pressure_l2": 0.043788534201060735,
+    "wss_l2": 0.06895401410292834
+   },
+   "ratio": {
+    "pressure_l2": 1.004750064834013,
+    "wss_l2": 1.0054219394411683
+   },
+   "max_abs_deviation": 0.005421939441168311,
+   "per_seed": {
+    "eager": {
+     "42": {
+      "pressure_l2": 0.043269713409245014,
+      "wss_x_l2": 0.0505656322153906,
+      "wss_y_l2": 0.11773819010704756,
+      "wss_z_l2": 0.1027247126524647,
+      "wss_l2": 0.06814324436709285
+     },
+     "43": {
+      "pressure_l2": 0.043893324909731746,
+      "wss_x_l2": 0.051261871277044214,
+      "wss_y_l2": 0.11937822153170903,
+      "wss_z_l2": 0.10371489931518833,
+      "wss_l2": 0.0690210871398449
+     }
+    },
+    "compiled": {
+     "42": {
+      "pressure_l2": 0.04325816648391386,
+      "wss_x_l2": 0.05085118797918161,
+      "wss_y_l2": 0.11807001351068418,
+      "wss_z_l2": 0.10373899231975277,
+      "wss_l2": 0.06854761166808505
+     },
+     "43": {
+      "pressure_l2": 0.04431890191820761,
+      "wss_x_l2": 0.0516589613010486,
+      "wss_y_l2": 0.11968431916708748,
+      "wss_z_l2": 0.10398557813217242,
+      "wss_l2": 0.06936041653777163
+     }
+    },
+    "ratio": {
+     "42": {
+      "pressure_l2": 0.9997331407023212,
+      "wss_l2": 1.005934077614706
+     },
+     "43": {
+      "pressure_l2": 1.0096957113490737,
+      "wss_l2": 1.0049163148827143
+     }
+    }
+   },
+   "n_cases": {
+    "nocb_seed42": 48,
+    "cb_seed42": 48,
+    "nocb_seed43": 48,
+    "cb_seed43": 48
+   },
+   "n_seeds": {
+    "eager": 2,
+    "compiled": 2
+   },
+   "within_bar": true,
+   "interim": false,
+   "wall_clock_hours": {
+    "compiled": {
+     "42": 2.28,
+     "43": 2.36
+    },
+    "eager": {
+     "42": 3.39,
+     "43": 3.41
+    },
+    "ratio_compiled_over_eager": 0.6823529411764705,
+    "links": 2
+   }
+  },
+  "drivaerml_volume": {
+   "fields": [
+    "nut_l2",
+    "pressure_l2",
+    "velocity_l2"
+   ],
+   "eager": {
+    "nut_l2": 0.08825269911903888,
+    "pressure_l2": 0.04108408636723955,
+    "velocity_l2": 0.06576022036218396
+   },
+   "compiled": {
+    "nut_l2": 0.08815287495963275,
+    "pressure_l2": 0.04090468055801466,
+    "velocity_l2": 0.06540426367428154
+   },
+   "ratio": {
+    "nut_l2": 0.9988688826471871,
+    "pressure_l2": 0.9956332043599259,
+    "velocity_l2": 0.9945870514736426
+   },
+   "max_abs_deviation": 0.005412948526357431,
+   "per_seed": {
+    "eager": {
+     "42": {
+      "velocity_x_l2": 0.05084089531252781,
+      "velocity_y_l2": 0.10282902838662267,
+      "velocity_z_l2": 0.1350813596509397,
+      "velocity_l2": 0.06622976243185501,
+      "pressure_l2": 0.041575249982997775,
+      "nut_l2": 0.08727496777040263
+     },
+     "43": {
+      "velocity_x_l2": 0.05004591650019089,
+      "velocity_y_l2": 0.10123918779815237,
+      "velocity_z_l2": 0.1337278288168212,
+      "velocity_l2": 0.0652906782925129,
+      "pressure_l2": 0.04059292275148133,
+      "nut_l2": 0.08923043046767513
+     }
+    },
+    "compiled": {
+     "42": {
+      "velocity_x_l2": 0.050744735868647695,
+      "velocity_y_l2": 0.10227402268598478,
+      "velocity_z_l2": 0.1356917784238855,
+      "velocity_l2": 0.0661472852807492,
+      "pressure_l2": 0.04150400923875471,
+      "nut_l2": 0.08836956415325403
+     },
+     "43": {
+      "velocity_x_l2": 0.0493357398857673,
+      "velocity_y_l2": 0.10054448976491888,
+      "velocity_z_l2": 0.13332455232739449,
+      "velocity_l2": 0.06466124206781387,
+      "pressure_l2": 0.04030535187727461,
+      "nut_l2": 0.08793618576601148
+     }
+    },
+    "ratio": {
+     "42": {
+      "nut_l2": 1.0125419282391601,
+      "pressure_l2": 0.9982864626364917,
+      "velocity_l2": 0.9987546814592507
+     },
+     "43": {
+      "nut_l2": 0.9854954784496696,
+      "pressure_l2": 0.9929157386383017,
+      "velocity_l2": 0.9903594779352874
+     }
+    }
+   },
+   "n_cases": {
+    "nocb_seed42": 48,
+    "cb_seed42": 48,
+    "nocb_seed43": 48,
+    "cb_seed43": 48
+   },
+   "n_seeds": {
+    "eager": 2,
+    "compiled": 2
+   },
+   "within_bar": true,
+   "interim": false,
+   "wall_clock_hours": {
+    "compiled": {
+     "42": 5.2,
+     "43": 5.11
+    },
+    "eager": {
+     "42": 7.42,
+     "43": 7.35
+    },
+    "ratio_compiled_over_eager": 0.6980365605958023,
+    "links": 3
+   }
+  }
+ },
+ "overall": {
+  "worst_abs_deviation": 0.005421939441168311,
+  "complete": true,
+  "verdict": "neutral (compiled default stands)"
+ }
+}

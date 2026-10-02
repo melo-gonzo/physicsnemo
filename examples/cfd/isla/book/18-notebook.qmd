@@ -32519,3 +32519,65 @@ either side; the deflection split measures the in-distribution wing deficit
 one more time. The limits chapter now states this as the measured
 geometry-parameter extrapolation result (@sec-limits-regime). The P200K-FLEET
 deflection half is complete.
+
+## 2026-10-02 — Verdict, PERF-3 training neutrality: per-block compile is neutral on both DrivAerML tasks (compiled ÷ eager 0.995 to 1.005 on every field, two seeds, worst deviation 0.5%) and cuts 500-epoch chain wall-clock to 0.68 (Surface) and 0.70 (Volume) of eager; `compile_blocks: true` stays the recipe default {#sec-nb-perf-3-neutrality-verdict}
+
+**Setting.** PERF-3 (@sec-nb-perf-3-verdict, whose preregistration
+paragraph defined this test) adopted two profiled levers into the reference ISLA:
+Blackwell launch defaults for the fused geometry kernel and a per-block
+`torch.compile` of each slice block's forward (`compile_blocks`). The
+compile changes only how the arithmetic is executed (operator fusion and
+a different bfloat16 accumulation order), so the prereg's prediction was a
+null: no scored field moves beyond seed noise. The bar was the
+KERNEL-NEUTRAL rule, compiled ÷ eager within 3% on every field of both
+datasets on the seed means.
+
+**Instrument.** Eight lanes, group `pf`, code_v16 + recipe_v8 at
+343b284e: the reference configuration at 200,000 cells, learning rate
+5e-4, 500 epochs, seeds 42 and 43, trained with and without
+`compile_blocks` on DrivAerML Surface (`pf_dr_cb`, `pf_dr_nocb`) and
+DrivAerML Volume (`pf_vol_cb`, `pf_vol_nocb`). Readout: float32 per-case
+relative L2 on the 48 held-out cases, averaged over cases then seeds;
+reducer `results/perf3_reduce_2026-10-01.py`, artifact
+`results/perf3_neutrality_2026-10-01.json`. Wall-clock is the sum of
+each lane's chain-link elapsed times from `sacct`; both arms of a pair
+have the same link count (Surface two, Volume three), so link startup
+and the wall-killed tail of a link enter both arms alike.
+
+**What we saw.** Every field is within 1% on the seed means and within
+1.3% on every single seed:
+
+| Task | Field | Eager | Compiled | Compiled ÷ eager | Seed 42 | Seed 43 |
+|---|---|---|---|---|---|---|
+| DrivAerML Surface | pressure | 0.0436 | 0.0438 | 1.005 | 1.000 | 1.010 |
+| DrivAerML Surface | wall shear | 0.0686 | 0.0690 | 1.005 | 1.006 | 1.005 |
+| DrivAerML Volume | pressure | 0.0411 | 0.0409 | 0.996 | 0.998 | 0.993 |
+| DrivAerML Volume | velocity | 0.0658 | 0.0654 | 0.995 | 0.999 | 0.990 |
+| DrivAerML Volume | eddy viscosity | 0.0883 | 0.0882 | 0.999 | 1.013 | 0.985 |
+
+: PERF-3 neutrality pairs: float32 relative L2 on the 48 held-out cases, seed means and per-seed ratios (`results/perf3_neutrality_2026-10-01.json`). {#tbl-nb-perf3-neutrality}
+
+The worst seed-mean deviation is 0.5% (Surface, both fields, compiled
+slightly worse); the Volume fields lean the other way by the same
+amount; the per-seed ratios straddle 1 on every field. The chain
+wall-clock for 500 epochs fell from 3.39 and 3.41 hours (eager) to 2.28
+and 2.36 hours (compiled) on Surface, ratio 0.68, and from 7.42 and
+7.35 hours to 5.20 and 5.11 hours on Volume, ratio 0.70. These are
+whole-chain numbers (data loading, validation, checkpointing and the
+first-call compile included), so they are smaller gains than the
+profiled step ratios (180 ÷ 221 = 0.81 Surface, 308 ÷ 475 = 0.65
+Volume) would suggest on Surface and about equal on Volume; the Surface
+profile was taken before the eager arm's own kernel-default gain, so
+the two measurements are not the same comparison.
+
+**Verdict.** Bar met on both datasets, both seeds: **neutral**.
+`compile_blocks: true` stays the recipe default; the class default
+remains `False` so that a bare constructor has no compile step. PERF-3
+is DONE. The ledger row carries the measured wall-clock ratio; the
+using-ISLA chapter states the neutrality beside the step numbers.
+
+**What is next.** The geometry backward is still five times its forward
+(all 256 slices in registers plus forward recompute); that is a kernel
+rewrite, not tuning, and is not scheduled. A matched real-step profile
+of GeoTransolver at 200,000 cells remains the fair cost comparison and
+is not yet run.
