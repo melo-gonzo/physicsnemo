@@ -138,7 +138,19 @@ ax.set_title("displacement magnitude $|u|$ (target)", fontsize=9.5); small_color
 plt.show()
 ```
 
-**Diversity.** The specimen shape hardly varies and every case has one mesh, so this set is the complement of the aerodynamic ones: the variation is in the load and in the five constitutive scalars (@sec-data-tensile2d), and a surrogate has to represent how the field depends on a parameter of the physics rather than on shape (@sec-parametric). What it does not vary is as important as what it does: no geometry generalization and no discretization change can be read from it.
+```{python}
+#| label: para-tensile2d-diversity
+#| output: asis
+G = J("tensile2d_geometry_2026-10-02.json"); W = G["waist_width"]; NB = G["n_boundary"]; NI = G["n_interior"]
+print(f"**Diversity.** Every one of the {G['n_ok']} cases has its own geometry and its own mesh: the specimen's waist width spans "
+      f"{W['min']:.2f} to {W['max']:.2f} of the unit half-width (a factor of {W['max_over_min']:.1f}; quartiles {W['q25']:.2f} and {W['q75']:.2f}), "
+      f"the boundary polyline has {NB['min']} to {NB['max']} segments and the interior {NI['min']:,} to {NI['max']:,} nodes, with "
+      f"{100 * G['distinct_interior_node_counts_fraction']:.0f}% of the cases on a node count no other case shares. On top of the shape "
+      "vary the load and the five constitutive scalars (@sec-data-tensile2d), so a surrogate has to represent how the field depends on "
+      "a parameter of the physics as well as on shape (@sec-parametric). What the set does not offer is a geometry family as wide as "
+      "the aerodynamic ones: the notch moves and widens, the outline stays a tension specimen. "
+      "Data: results/tensile2d_geometry_2026-10-02.json.")
+```
 
 ### Files, conversion and normalization {#sec-data-tensile2d}
 
