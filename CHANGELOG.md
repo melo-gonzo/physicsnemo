@@ -108,6 +108,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `NotImplementedError` for fields it does not implement (rank 2 and above,
   pseudotensors) instead of silently dropping or misreading them. The GLOBE
   examples and the unified external-aerodynamics recipe configs are updated.
+- Refresh core, optional, development, and container dependency versions.
+  Require PyTorch 2.13 or newer and TensorDict 0.14.2 or newer;
+  use PyTorch 2.13's CUDA 12.9 wheels for the CUDA 12 backend. NATTEN
+  extras select PyTorch 2.13 to match their prebuilt kernels. Python support remains
+  3.11 through 3.14.
+
 - Mesh integration uses a shared `_effective_measure` field for complete cell
   and point measures. Cell measures fall back to geometry; point measures are
   explicit and independent of connectivity. `Mesh.integrate_samples` evaluates
