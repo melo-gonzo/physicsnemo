@@ -72,7 +72,7 @@ from physicsnemo.datapipes.transforms.mesh.transforms import (
     _compact_points,
 )
 from physicsnemo.mesh import DomainMesh, Mesh
-from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, scale_measures
+from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, cell_measures, scale_measures
 from physicsnemo.mesh.projections import project
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 
@@ -887,6 +887,38 @@ class ComposeQuadratureMeasure(MeshTransform):
 
         set_cell_measures(mesh, cell_measures(mesh).to(mesh.points.dtype))
         return mesh
+
+
+@register()
+class DropDegenerateCells(MeshTransform):
+    r"""Drop cells whose geometric measure is zero or non-finite (2026-10-02).
+
+    The HiLift wing surfaces carry a few exactly degenerate triangles per case (53 to 137 of
+    200,000 sampled cells, zero area to the bit, from repeated vertices): they have no usable
+    quadrature weight and no normal, the mesh collate refuses a zero target measure, and a
+    model that reads the boundary as tokens would carry them as garbage. This transform
+    recomputes every cell's measure from the current coordinates (any manifold dimension:
+    segment length, triangle area, tetrahedron volume) and slices away the cells whose measure
+    is not finite and positive, together with their cell data; vertices are kept. Meshes
+    without such cells pass through unchanged. Place it before the terminal conversion so it
+    sees the coordinates the model will see.
+    """
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        if mesh.n_cells == 0:
+            return mesh
+        m = cell_measures(mesh)
+        keep = torch.isfinite(m) & (m > 0)
+        if bool(keep.all()):
+            return mesh
+        return mesh.slice_cells(keep)
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        return DomainMesh(
+            interior=self(domain.interior) if domain.interior.n_cells else domain.interior,
+            boundaries={name: self(b) for name, b in domain.boundaries.items()},
+            global_data=domain.global_data,
+        )
 
 
 @register()
