@@ -46,6 +46,17 @@ def log(msg):
     print(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {msg}", flush=True)
 
 
+def exact_knn(points, queries, k):
+    """Exact nearest neighbours by a chunked float64 cdist: the float64 checks use it instead of the library search
+    (cuML on CUDA computes its distances in single precision and can return out-of-range indices on posed 2-D input)."""
+    ii, vv = [], []
+    for qc in queries.double().split(8192):
+        v, i = torch.cdist(qc, points.double()).topk(k, largest=False)
+        ii.append(i)
+        vv.append(v)
+    return torch.cat(ii), torch.cat(vv)
+
+
 def main():
     p = argparse.ArgumentParser()
     for k in ("model", "dataset", "run-id", "task", "out"):
@@ -55,6 +66,7 @@ def main():
     p.add_argument("--extra", default="")
     p.add_argument("--max-cases", type=int, default=0)
     p.add_argument("--runs-dir", default=None, help="checkpoint root (default <task>/runs)")
+    p.add_argument("--n-detail", type=int, default=2, help="cases with the float64 and posed checks")
     a = p.parse_args()
     for k, v in dict(RANK="0", WORLD_SIZE="1", LOCAL_RANK="0", MASTER_ADDR="127.0.0.1", MASTER_PORT=str(27000 + os.getpid() % 20000)).items():
         os.environ.setdefault(k, v)
@@ -65,8 +77,10 @@ def main():
     from output_normalize import normalize_output_to_tensordict, require_output_type
     from utils import get_autocast_context, recursive_to_device
 
+    import physicsnemo.experimental.models.isla.geometry as geom
     from physicsnemo import datapipes  # noqa: F401
     from physicsnemo.distributed import DistributedManager
+    from physicsnemo.mesh import Mesh
     from physicsnemo.utils import load_checkpoint
 
     t0 = time.time()
@@ -97,10 +111,31 @@ def main():
     log(f"loaded epoch {ep}, learned query routing mass log-weight {logw:.4f}")
     calc = MetricCalculator(target_config=tc, metrics=resolve_metrics(cfg))
 
-    def predict(fk, pts, support=None):
+    def predict(fk, pts, support=None, dtype=torch.float32):
         with torch.no_grad(), get_autocast_context(cfg.precision):
             out = model(**{**fk, "prediction_points": pts, "support_points": support})
-        return normalize_output_to_tensordict(out, tc, ot).float()
+        return normalize_output_to_tensordict(out, tc, ot).to(dtype)
+
+    library_knn = geom.knn
+    vq = [n for n, sp in model.query_schema.items() if sp.rank == 1]
+    vg = [n for n, sp in model.global_schema.items() if sp.rank == 1]
+
+    def move(fk, sets, R, t):
+        """The case under x -> R x + t: fresh boundary meshes (geometry recomputed), point sets and their true vectors
+        moved, rank-1 global directions rotated; R = I, t = 0 is the identically rebuilt reference."""
+        dt = sets[0].points.dtype
+        R, t = R.to(dev, dt), t.to(dev, dt)
+        bm = {k: Mesh(points=m.points.to(dt) @ R.T + t, cells=m.cells, cell_data=m.cell_data.to(dt)) for k, m in fk["boundary_meshes"].items()}
+        out = []
+        for q in sets:
+            pd = q.point_data.to(dt).clone()
+            for nme in vq:
+                pd[nme] = pd[nme] @ R.T
+            out.append(Mesh(points=q.points @ R.T + t, point_data=pd))
+        gd = fk["global_data"].to(dt).clone()
+        for nme in vg:
+            gd[nme] = gd[nme] @ R.T
+        return {**fk, "boundary_meshes": bm, "global_data": gd}, out
 
     def scores(pred, tgt):
         m = calc(pred, tgt, None)
@@ -152,7 +187,33 @@ def main():
         sup2 = predict(fk, pp.slice_points(Brest), support=pp.slice_points(A2))
         sdf = pp.point_data["sdf"].reshape(-1).abs() if "sdf" in pp.point_data.keys() else pp.points.norm(dim=-1)
         qs = torch.tensor([0.1, 0.5, 0.9], device=dev, dtype=sdf.dtype)
-        rec = {"case": ci, "sample_index": int(idx), "n_interior": n, "n_support": a.request, "n_eval": nb,
+        detail = {}
+        if ci < a.n_detail:
+            ### covariance with the support moved along (float32 and float64), and float64 independence
+            gen = torch.Generator().manual_seed(5000 + ci)
+            q, _ = torch.linalg.qr(torch.randn(pp.points.shape[-1], pp.points.shape[-1], generator=gen, dtype=torch.float64))
+            if torch.det(q) < 0:
+                q[:, 0] = -q[:, 0]
+            t = torch.randn(pp.points.shape[-1], generator=gen, dtype=torch.float64) * float(ppA.points.std(0).norm())
+            eye, zero = torch.eye(q.shape[0], dtype=torch.float64), torch.zeros(q.shape[0], dtype=torch.float64)
+            for tag, dt in (("fp32", torch.float32), ("fp64", torch.float64)):
+                if dt == torch.float64:
+                    model.double()
+                    geom.knn = exact_knn
+                A_, B_ = ppA.to(dt), ppB.to(dt)
+                fk0, (A0, B0) = move(fk, [A_, B_], eye, zero)
+                fk1, (A1, B1) = move(fk, [A_, B_], q, t)
+                y0 = predict(fk0, B0, support=A0, dtype=dt)
+                y1 = predict(fk1, B1, support=A1, dtype=dt)
+                y1["velocity"] = y1["velocity"] @ q.to(dev, dt)
+                detail[f"posed_rel_{tag}"] = {f: float((y1[f] - y0[f]).norm() / y0[f].norm()) for f in FIELDS}
+                if dt == torch.float64:
+                    al = predict(fk0, B0.slice_points(s), support=A0, dtype=dt)
+                    detail["sentinel_alone_maxdiff_fp64"] = maxdiff(al, y0[s], tB[s].double())
+                    model.float()
+                    geom.knn = library_knn
+            log("detail " + json.dumps(detail))
+        rec = {"case": ci, "sample_index": int(idx), "n_interior": n, "n_support": a.request, "n_eval": nb, **detail,
                "law_check_quantiles": {"A": [float(x) for x in sdf[A].quantile(qs)], "B": [float(x) for x in sdf[B].quantile(qs)]},
                "interacting": scores(inter, tB), "support": scores(sup, tB), "no_support": scores(nosup, tB),
                "sentinel_alone_maxdiff": maxdiff(alone, sup[s], tB[s]),
@@ -172,6 +233,10 @@ def main():
     summ["sentinel_alone_maxdiff_max"] = {f: max(c["sentinel_alone_maxdiff"][f] for c in cases) for f in FIELDS}
     summ["support_swap_rel_change_mean"] = {f: sum(c["support_swap"]["rel_change"][f] for c in cases) / len(cases) for f in FIELDS}
     summ["support_swap_score_ratio"] = {f: sum(c["support_swap"]["swapped"][f] for c in cases) / sum(c["support_swap"]["support"][f] for c in cases) for f in FIELDS}
+    det = [c for c in cases if "posed_rel_fp64" in c]
+    if det:
+        for k in ("posed_rel_fp32", "posed_rel_fp64", "sentinel_alone_maxdiff_fp64"):
+            summ[f"{k}_max"] = {f: max(c[k][f] for c in det) for f in FIELDS}
     out = {"run_id": a.run_id, "model": a.model, "dataset": a.dataset, "epoch": ep, "query_logw": logw, "request": a.request,
            "n_cases": len(cases), "summary": summ, "cases": cases, "seconds": round(time.time() - t0, 1)}
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)

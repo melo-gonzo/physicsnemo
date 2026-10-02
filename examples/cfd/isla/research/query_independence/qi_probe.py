@@ -64,6 +64,17 @@ def parse():
     return p.parse_args()
 
 
+def exact_knn(points, queries, k):
+    """Exact nearest neighbours by a chunked float64 cdist: the float64 checks use it instead of the library search
+    (cuML on CUDA computes its distances in single precision and can return out-of-range indices on posed 2-D input)."""
+    ii, vv = [], []
+    for qc in queries.double().split(8192):
+        v, i = torch.cdist(qc, points.double()).topk(k, largest=False)
+        ii.append(i)
+        vv.append(v)
+    return torch.cat(ii), torch.cat(vv)
+
+
 def main():
     a = parse()
     os.environ.setdefault("RANK", "0")
@@ -78,6 +89,7 @@ def main():
     from output_normalize import normalize_output_to_tensordict, require_output_type
     from utils import get_autocast_context, recursive_to_device
 
+    import physicsnemo.experimental.models.isla.geometry as geom
     from physicsnemo import datapipes  # noqa: F401 - registers ${dp:...}
     from physicsnemo.distributed import DistributedManager
     from physicsnemo.experimental.models.isla.geometry import rms_pairwise_distance
@@ -144,6 +156,7 @@ def main():
             q[:, 0] = -q[:, 0]
         return q
 
+    library_knn = geom.knn
     vec_queries = [n for n, s in getattr(model, "query_schema", {}).items() if s.rank == 1]
     vec_globals = [n for n, s in model.global_schema.items() if s.rank == 1]
 
@@ -230,6 +243,7 @@ def main():
                 ### The same readouts in float64 (structural: exact up to float64 roundoff), and the float32 floor
                 ### (native float32 against native float64). The model is cast in place and cast back (exact).
                 model.double()
+                geom.knn = exact_knn
                 fk64 = {**fk, "boundary_meshes": {k: m.to(torch.float64) for k, m in fk["boundary_meshes"].items()},
                         "global_data": fk["global_data"].to(torch.float64)}
                 pp64, tgt64, d64 = pp.to(torch.float64), tgt.double(), torch.float64
@@ -249,6 +263,7 @@ def main():
                                "posed_rel": {f: float((back64[f] - ref64[f]).norm() / ref64[f].norm()) for f in FIELDS},
                                "rebuild_vs_native_rel": {f: float((ref64[f] - nat64[f]).norm() / nat64[f].norm()) for f in FIELDS}}
                 model.float()
+                geom.knn = library_knn
                 log("fp64 " + json.dumps(rec["fp64"]))
         rec["seconds"] = round(time.time() - tc, 2)
         cases.append(rec)
