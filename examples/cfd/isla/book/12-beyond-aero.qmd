@@ -328,12 +328,15 @@ print(": The OLBC ladders: relative L2 over the 256 test samples of each set (me
 #| label: para-olbc-reading
 #| output: asis
 isla8 = seeds_of(OLP["8448"]["reference"], PF)
+EQ = J("poisson8448_equal_epoch_2026-10-02.json"); eq = EQ["ratio_gt512_over_isla"]
 print(f"**The Poisson lead is a small-data lead: GeoTransolver-512's error falls faster along the ladder "
       f"(exponent {ol_exp(gt_p):.2f} against ISLA's {ol_exp(isla_p):.2f}) and it overtakes between 2,048 and 8,448 cases, and the "
       f"elasticity ordering does not move with data at all, GeoTransolver-512 leading on every field at every rung by "
       f"{E_STRESS[512]} on the stresses at 512 cases and {E_STRESS[8448]} at 8,448.** ISLA's two Poisson seeds at the full rung differ "
       f"by a factor of {max(isla8) / min(isla8):.1f}, so the size of that deficit is coarse, though both of them sit above both "
-      "GeoTransolver-512 seeds. These two sets are the one place in the book where the geometry carries no information at all, so what "
+      f"GeoTransolver-512 seeds. The crossover is not a step-count artifact: with both architectures trained for 500 epochs at 8,448 cases "
+      f"the ratio is {eq['seed_means']:.2f} (per seed {eq['per_seed']['42']:.2f} / {eq['per_seed']['43']:.2f}; "
+      f"results/poisson8448_equal_epoch_2026-10-02.json) and ISLA's seeds still differ by {EQ['isla_seed_spread']:.1f}x. These two sets are the one place in the book where the geometry carries no information at all, so what "
       "separates the architectures here is how each reads per-cell boundary data, and the elasticity set is the harder test because its "
       "boundary data are rank-1 and its target a tensor. Per-type geometry channels added to ISLA on these meshes are neutral or worse "
       "and are not part of the model (@sec-olbc-ablations).")

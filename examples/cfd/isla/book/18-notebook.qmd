@@ -32801,3 +32801,39 @@ scaling with cases already say.
 above are replaced, not appended. The per-cell predictions
 (`highlift/anatomy_preds`, about 30 GB) are deleted after that. WING-MECH
 closes with this entry; a mechanism lane is not scheduled.
+
+## 2026-10-02 — Verdict, POISSON-8448-EQ: at equal epochs (500) on 8,448 Poisson cases GeoTransolver-512 ÷ ISLA is 0.50 (0.38 / 0.69 per seed), so the crossover of the equal-step ladder is confirmed and is not a step-count artifact; ISLA's seed spread (0.050 / 0.030) persists at convergence {#sec-nb-poisson-8448-equal-epoch}
+
+**Setting.** The same-snapshot OLBC ladder (@sec-nb-olbc-ref-ladder-verdict)
+trains its 8,448-case rung for 120 epochs so that the optimizer-step count
+matches the 512 and 2,048 rungs; there GeoTransolver-512 overtook ISLA
+(0.52, per seed 0.37 / 0.80) with both models still descending and ISLA's
+two seeds 1.9x apart. Ruling 3 of 2026-09-30
+(@sec-nb-ruling-fixed-mesh-2026-09-30) bought one equal-epoch pair to
+settle whether the crossover survives convergence: ISLA reference and
+GeoTransolver-512, both at 500 epochs, two seeds, the last fixed-mesh lane.
+Bar: above 1.0 on both seeds reverses the reading, below 0.9 on both
+confirms it.
+
+**Instrument.** `pc_poisson_ref_n8448_e500` and
+`pc_poisson_gt512_n8448_e500`, seeds 42 and 43, code_v11 + recipe_v4,
+20,000 nodes (every node of the fixed mesh), float32 relative L2 of $u$ on
+the 256 held-out cases; reducer
+`results/poisson8448_equal_epoch_reduce_2026-10-02.py`, artifact
+`results/poisson8448_equal_epoch_2026-10-02.json`.
+
+**What we saw.** ISLA 0.0503 / 0.0300, GeoTransolver-512 0.0192 / 0.0207;
+GeoTransolver-512 ÷ ISLA 0.50 on seed means, 0.38 and 0.69 per seed, both
+below 0.9. Against the 120-epoch rung (ISLA 0.073 / 0.039,
+GeoTransolver-512 0.029) both models gained from the extra epochs by about
+the same factor, so the ratio did not move (0.52 to 0.50), and ISLA's
+seeds stayed 1.7x apart where GeoTransolver-512's agree within 8%.
+
+**Verdict.** Confirmed: on the largest fixed-mesh Poisson rung
+GeoTransolver-512 is twice as accurate as the reference ISLA at equal
+epochs as at equal steps. The seed spread is ISLA's, not the budget's:
+the two reference seeds converge to errors 1.7x apart on a problem whose
+geometry carries no information, which is the fixed-mesh regime Peter
+deprioritized (ruling 4). Chapter 12 states the equal-epoch ratio beside
+the ladder. POISSON-8448-EQ is DONE and no further fixed-mesh lane is
+scheduled.

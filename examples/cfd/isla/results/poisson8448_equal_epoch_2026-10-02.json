@@ -1,0 +1,37 @@
+{
+ "protocol": "Equal-epoch companion at the largest OLBC Poisson rung (ruling 3 of 2026-09-30, #sec-nb-rulings-2026-09-30): the reference\nISLA and GeoTransolver-512 both trained for 500 epochs on 8,448 cases (campaign pc rows 44 to 47, code_v11 + recipe_v4, lanes\npc_poisson_{ref,gt512}_n8448_e500_seed{42,43}), float32 relative L2 of u on the 256 held-out cases, averaged over cases then seeds.\nRatio = GeoTransolver-512 / ISLA (below 1 favors GeoTransolver). Companion to the equal-step rung of olbc_ref_2026-09-29.json\n(120 epochs at 8,448 so that the step count matches the 512 and 2,048 rungs). usage: python poisson8448_equal_epoch_reduce_2026-10-02.py",
+ "lanes": {
+  "ref_seed42": {
+   "u_l2": 0.050348593256785534,
+   "n_cases": 256
+  },
+  "ref_seed43": {
+   "u_l2": 0.030009844733285718,
+   "n_cases": 256
+  },
+  "gt512_seed42": {
+   "u_l2": 0.019178929194822558,
+   "n_cases": 256
+  },
+  "gt512_seed43": {
+   "u_l2": 0.020709363372588996,
+   "n_cases": 256
+  }
+ },
+ "isla_u_l2": {
+  "42": 0.050348593256785534,
+  "43": 0.030009844733285718
+ },
+ "gt512_u_l2": {
+  "42": 0.019178929194822558,
+  "43": 0.020709363372588996
+ },
+ "ratio_gt512_over_isla": {
+  "seed_means": 0.4963796405841037,
+  "per_seed": {
+   "42": 0.38092284122035114,
+   "43": 0.6900856554455611
+  }
+ },
+ "isla_seed_spread": 1.677735879817495
+}
