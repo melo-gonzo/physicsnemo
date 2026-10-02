@@ -609,7 +609,7 @@ print(f": The training-car ladder of the DrivAerML Surface task at the reporting
 #|   with a training-case ladder: the negative log-log slope of the total
 #|   error against training cases over the rungs named on the left (ISLA the
 #|   reference configuration; GeoTransolver at its recipe width on the cars and
-#|   at the 512-wide parameter match on the solids and fixed-mesh sets;
+#|   at the 512-wide parameter match on the solids and brackets;
 #|   GeoTransolver-volume on AirfRANS). Squares are ISLA, circles
 #|   GeoTransolver, the gray bar joins the pair. How to read this: a point to
 #|   the right falls faster with data. The exponents are of the total error,

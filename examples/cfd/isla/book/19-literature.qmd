@@ -41,10 +41,9 @@ targets, interior queries as tokens) is @sec-isla-inputs and @sec-arch-modes.
 
 **Where the task varies the geometry, ISLA leads GeoTransolver at its
 recipe width or ties its parameter match at lower cost and leads on the
-field quantities; where the task varies only the boundary data on one
-fixed mesh, ISLA leads on the scalar Poisson problem while the data are
-scarce; and wherever the evaluation leaves the training conventions, ISLA
-is the model whose error does not move.** The standing row by row is
+field quantities; where the target is a stress tensor on a solid,
+GeoTransolver-512 leads; and wherever the evaluation leaves the training
+conventions, ISLA is the model whose error does not move.** The standing row by row is
 @tbl-thesis and the chapters it cites; this appendix does not restate it.
 Three things carry it. The learning-curve exponents say why the
 small-data deficits and the full-data parities are one reading: on the
@@ -296,8 +295,8 @@ GeoTransolver.
 *The idea.* One model reads $K$ global unit directions, $S$ global scalars,
 per-cell boundary scalars, rank-1 boundary inputs and tensor outputs for
 component targets, and interior queries as interacting tokens, and the same class trains on
-cars, wings, airfoils, a tensile specimen, a lug and a fixed-mesh
-Poisson problem (@sec-isla-inputs, @sec-arch-modes).
+cars, wings, airfoils, a tensile specimen, a lug and a family of
+brackets (@sec-isla-inputs, @sec-arch-modes).
 
 *Closest prior work.* GNOT's heterogeneous normalized attention takes
 multiple input functions, geometries and parameters through cross
