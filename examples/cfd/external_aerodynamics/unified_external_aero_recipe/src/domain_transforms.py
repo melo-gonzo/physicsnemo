@@ -995,6 +995,98 @@ class SqueezeScalarFields(MeshTransform):
 
 
 @register()
+class SplitGlobalVector(MeshTransform):
+    r"""Standardize a per-case global vector and split it into NAMED rank-0 global fields (2026-10-02).
+
+    A converted dataset stores its per-case parameters as one vector in ``global_data`` (the lug's
+    ``params`` = [hole radius, length, thickness, pressure], Tensile2d's six input scalars, DeepJEB++'s
+    ``load_type`` one-hot). A model with a declared field grammar reads several independent scalars as several
+    rank-0 names, never as an unnamed channel axis (ISLA's ``global_schema``); the tensor-input baselines
+    read the vector whole as their global embedding. This transform serves both from one set of statistics:
+    component ``i`` of ``global_data[field]`` becomes the leaf ``names[i]`` holding ``(x_i - mean_i) / std_i``
+    (a 0-d tensor, a rank-0 field), and, when ``output_field`` is given, the standardized vector is written
+    whole under that name. ``mean`` / ``std`` default to 0 / 1 (a one-hot tag is split without scaling); the
+    raw field stays. Writing over an existing leaf is refused, so the raw per-case scalars a dataset also
+    stores (the lug's ``pressure`` in Pa) are never silently replaced by their z-scores. Works on a bare Mesh
+    (its ``global_data``, the surface pipelines before ``MeshToDomainMesh``) and on a DomainMesh (the
+    domain-level ``global_data`` the recipe's ``forward_kwargs`` read).
+
+    Example (GINOT lug; statistics over the train split from the converter manifest)::
+
+        - _target_: ${dp:SplitGlobalVector}
+          field: params
+          names: [hole_radius_std, length_std, thickness_std, pressure_std]
+          mean: [0.0124862, 0.100103, 0.0225110, 75300663.3]
+          std: [0.00144079, 0.0115957, 0.00423982, 14360825.0]
+          output_field: params_std
+    """
+
+    def __init__(
+        self,
+        field: str,
+        names: Sequence[str],
+        mean: Sequence[float] | float | None = None,
+        std: Sequence[float] | float | None = None,
+        output_field: str | None = None,
+    ) -> None:
+        super().__init__()
+        self.field = str(field)
+        self.names = [str(n) for n in names]
+        if not self.names or len(set(self.names)) != len(self.names):
+            raise ValueError(f"SplitGlobalVector: names must be non-empty and distinct, got {self.names!r}")
+        self.output_field = None if output_field is None else str(output_field)
+        n = len(self.names)
+        self._mean = torch.as_tensor(0.0 if mean is None else mean, dtype=torch.float32).reshape(-1)
+        self._std = torch.as_tensor(1.0 if std is None else std, dtype=torch.float32).reshape(-1)
+        for label, t in (("mean", self._mean), ("std", self._std)):
+            if t.numel() not in (1, n):
+                raise ValueError(
+                    f"SplitGlobalVector: {label} has {t.numel()} entries for {n} names {self.names!r}"
+                )
+        if bool((self._std <= 0).any()):
+            raise ValueError(f"SplitGlobalVector: std must be positive, got {std!r}")
+        self._mean = self._mean.expand(n).clone()
+        self._std = self._std.expand(n).clone()
+
+    def _split(self, gd: TensorDict | None) -> TensorDict:
+        if gd is None or self.field not in gd.keys():
+            available = [] if gd is None else sorted(str(k) for k in gd.keys())
+            raise KeyError(f"SplitGlobalVector needs global_data[{self.field!r}]; available: {available!r}")
+        x = gd[self.field]
+        if x.numel() != len(self.names):
+            raise ValueError(
+                f"SplitGlobalVector: global_data[{self.field!r}] has {x.numel()} entries "
+                f"for {len(self.names)} names {self.names!r}"
+            )
+        taken = [n for n in (*self.names, *([self.output_field] if self.output_field else [])) if n in gd.keys()]
+        if taken:
+            raise ValueError(
+                f"SplitGlobalVector: global_data already has {taken!r}; choose names that do not overwrite a leaf"
+            )
+        z = (x.reshape(-1).to(torch.float32) - self._mean.to(x.device)) / self._std.to(x.device)
+        z = z.to(x.dtype if x.is_floating_point() else torch.float32)
+        new_gd = gd.clone()
+        for i, name in enumerate(self.names):
+            new_gd[name] = z[i].clone()
+        if self.output_field is not None:
+            new_gd[self.output_field] = z
+        return new_gd
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        return mesh.with_data(global_data=self._split(mesh.global_data))
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        return DomainMesh(
+            interior=domain.interior,
+            boundaries=domain.boundaries,
+            global_data=self._split(domain.global_data),
+        )
+
+    def extra_repr(self) -> str:
+        return f"field={self.field!r}, names={self.names}, output_field={self.output_field!r}"
+
+
+@register()
 class RestrictToPlane(MeshTransform):
     r"""Restrict a planar problem stored in three-dimensional coordinates to its plane (ND-GENERIC, 2026-09-28).
 
