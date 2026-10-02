@@ -1,6 +1,3 @@
-# ISLA, interior task, on AirfRANS (airfrans_volume_2d): the reference configuration of isla_volume.yaml in two
-# dimensions, with the airfoil boundary, the inlet direction and speed as global inputs and the stored signed
-# distance and its gradient as per-query inputs.
 # @package _global_
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
 # SPDX-FileCopyrightText: All rights reserved.
@@ -17,6 +14,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# ISLA, interior task, on AirfRANS (airfrans_volume_2d): the reference configuration of isla_volume.yaml in two
+# dimensions, with the airfoil boundary, the inlet direction and speed as global inputs and the stored signed
+# distance and its gradient as per-query inputs.
 
 # ---------------------------------------------------------------------------
 # ISLA -- INTERIOR (volume) task (reference configuration).

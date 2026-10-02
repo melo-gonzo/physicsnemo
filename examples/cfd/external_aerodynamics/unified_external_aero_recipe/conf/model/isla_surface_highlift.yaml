@@ -1,5 +1,3 @@
-# ISLA, surface task, on the HiLift wing datasets (highlift_surface_*): the reference configuration of isla_surface.yaml
-# with the wings' five cell targets (pressure, temperature, density scalars; velocity and wall shear vectors).
 # @package _global_
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
 # SPDX-FileCopyrightText: All rights reserved.
@@ -16,6 +14,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# ISLA, surface task, on the HiLift wing datasets (highlift_surface_*): the reference configuration of isla_surface.yaml
+# with the wings' five cell targets (pressure, temperature, density scalars; velocity and wall shear vectors).
 
 # ---------------------------------------------------------------------------
 # ISLA (Invariant Slice Attention) -- SURFACE task (reference configuration).
