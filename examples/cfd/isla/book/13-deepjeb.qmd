@@ -89,7 +89,7 @@ def protocol_table(artifact, label, setting):
 
 <!-- fig-deepjeb-samples: pending CHAR -->
 
-**Diversity.** This is the most geometrically diverse set in the book: the brackets are generated shapes spanning a design space rather than morphs of one body, each appears under four loads whose direction is a genuine global variable, and the loading itself changes kind between force and torque (@sec-parametric). The price is label quality: a census of the stress fields found unphysical maxima on a tenth of the brackets, and the clean split used here removes those without making the remaining fields smooth.
+**Diversity.** The geometry is the most varied in the book: the brackets are generated shapes spanning a design space rather than morphs of one body, each appears under four loads whose direction is a genuine global variable, and the loading itself changes kind between force and torque (@sec-parametric). The price is label quality: a census of the stress fields found unphysical maxima on a tenth of the brackets, and the clean split used here removes those without making the remaining fields smooth.
 
 ### Files, conversion and normalization {#sec-data-deepjeb}
 

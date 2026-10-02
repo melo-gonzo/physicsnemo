@@ -186,7 +186,7 @@ cb2 = fig.colorbar(sc2, ax=[ax], fraction=0.025, pad=0.01, extend="max"); cb2.se
 plt.show()
 ```
 
-**Diversity.** The set is narrow by design. Every case is a morph of one body (the DrivAer notchback) under one far-field condition, so the operator is learned as a function of shape within one family (@sec-parametric): a validation car differs from the training cars in the same parameters they differ in from one another. The far-field direction, the speed and the ground clearance never change, which is why the dataset carries no global scalar ($K = 1$, $S = 0$) and why a lead on it says nothing about a change of family or of regime (@sec-limits-transfer).
+**Diversity.** The set is narrow by design. Every case is a morph of one body (the DrivAer notchback) under one far-field condition, so the operator is learned as a function of shape within one family (@sec-parametric): a validation car differs from the training cars in the same parameters they differ in from one another. The far-field direction and the speed never change, which is why the dataset carries no global scalar ($K = 1$, $S = 0$) and why a lead on it says nothing about a change of family or of regime (@sec-limits-transfer).
 
 ### Files, conversion and normalization {#sec-data-drivaer}
 

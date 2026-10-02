@@ -138,7 +138,7 @@ ax.set_title("displacement magnitude $|u|$ (target)", fontsize=9.5); small_color
 plt.show()
 ```
 
-**Diversity.** The specimen shape hardly varies and every case has one mesh, so this set is the complement of the aerodynamic ones: the variation is in the load and in the five constitutive scalars, which run over wide ranges (@sec-data-tensile2d), and a surrogate has to represent how the field depends on a parameter of the physics rather than on shape (@sec-parametric). What it does not vary is as important as what it does: no geometry generalization and no discretization change can be read from it.
+**Diversity.** The specimen shape hardly varies and every case has one mesh, so this set is the complement of the aerodynamic ones: the variation is in the load and in the five constitutive scalars (@sec-data-tensile2d), and a surrogate has to represent how the field depends on a parameter of the physics rather than on shape (@sec-parametric). What it does not vary is as important as what it does: no geometry generalization and no discretization change can be read from it.
 
 ### Files, conversion and normalization {#sec-data-tensile2d}
 

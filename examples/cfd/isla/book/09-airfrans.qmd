@@ -152,7 +152,7 @@ small_colorbar(fig, sc, ax, "$|U| / U_\\infty$ [–]", extend="max")
 plt.show()
 ```
 
-**Diversity.** All three parts of the interface vary here: the shape (four- and five-digit NACA sections), the direction of the inlet and its speed, which enters as the one global scalar (@sec-parametric). The regime spans attached flow to the onset of separation at the high incidences, and the two published extrapolation splits hold out the top of the Reynolds range and of the angle range. The geometry family is nonetheless narrow, smooth airfoils of one parameterization, and the flow is planar, so the dataset tests the global inputs more than it tests geometry.
+**Diversity.** All three parts of the interface vary here: the shape (four- and five-digit NACA sections), the direction of the inlet and its speed, which enters as the one global scalar (@sec-parametric), and the two published extrapolation splits each hold out part of one of those ranges. The geometry family is nonetheless narrow, smooth airfoils of one parameterization, and the flow is planar, so the dataset tests the global inputs more than it tests geometry.
 
 ### Files, conversion and normalization {#sec-data-airfrans}
 

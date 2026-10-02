@@ -126,7 +126,7 @@ fig.text(0.5, 0.0, f"this sample's global scalars: hole radius {1e3 * g['hole_ra
 plt.show()
 ```
 
-**Diversity.** The shape varies by three parameters of one topology and the load by one, so the geometric variation is modest and parametric, as on DrivAerML, while the loading varies as it does not there (@sec-parametric). Every case has its own mesh, but the meshes are the same generator's output at similar resolution, so the set exercises parameter and load generalization within one family rather than a change of mesher or of geometry class.
+**Diversity.** The shape varies by three parameters of one topology and the load by one, so the geometric variation is modest and parametric, as on DrivAerML, while the loading varies as it does not there (@sec-parametric). Every case has its own mesh of the same kind (the corner nodes of a quadratic hex mesh, 5 to 15 thousand nodes), so the set exercises parameter and load generalization within one family rather than a change of mesher or of geometry class.
 
 ### Files, conversion and normalization {#sec-data-lug}
 
