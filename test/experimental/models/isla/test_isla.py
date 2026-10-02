@@ -435,13 +435,12 @@ def test_frame_is_sampling_consistent():
 
 
 def test_defaults_are_the_reference_configuration():
-    """The class defaults: a surface task, the automatic geometry kernel, static
-    prototypes, one seed invariant n.g and six relational invariants; an interior
-    model adds the prediction-point embedding over the built-in distance pair."""
+    """The class defaults: a surface task, the automatic geometry kernel, one
+    seed invariant n.g and six relational invariants; an interior model adds the
+    prediction-point embedding over the built-in distance pair."""
     m = _isla(hidden=32, n_layers=2, n_slices=8)
     assert m.interior is False and m.qt is None
     assert m.geo_kernel == "auto"
-    assert m.slice_prototypes == "static"
     assert m.embed[0].in_features == 1
     assert m.blocks[0].geo_logit.in_features == 6
     mi = _isla(hidden=32, n_layers=2, n_slices=8, interior=True)

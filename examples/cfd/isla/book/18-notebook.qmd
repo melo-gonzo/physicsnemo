@@ -32634,3 +32634,99 @@ numbers the book compares against were the weaker of two released
 backends. On the flagship surface and interior benchmarks they were not;
 the one place the stronger backend changes is a single Poisson rung,
 which chapter 12 already quotes under the 3% rule.
+
+## 2026-10-02 — Verdict, PROTO-COND-2 adopted: the 510-wing pair reads 0.98 centered ÷ static on pressure (0.95 / 1.02) and 0.98 to 0.99 on every other field, inside the 1.03 adoption bar; the 2,048-case checkpoints keep prototype cosine 0.06 to 0.07 and effective rank 132 to 151; the centered, scale-bounded sample-conditioned prototypes are now the routing of every slice block and the static form is deleted {#sec-nb-proto-cond-2-adopted}
+
+**Setting.** PROTO-COND-2 (@sec-nb-proto-cond-2-prereg) is the collapse-proof
+form of sample-conditioned slice prototypes: in every block, learned seeds
+attend over the token states with a measure-weighted softmax, the attended
+term is centered across the slices and smoothly bounded to a learned
+fraction $g$ of the seeds' spread, and the result is added to the seeds.
+Three datasets had been read (@sec-nb-proto-cond-2-interim): Poisson 512
+and 2,048 pay 0.86 and 0.78, DrivAerML Surface is neutral (1.00 / 1.00),
+AirfRANS pressure 0.95 with velocity 1.03 (one seed 1.06). Peter's rule of
+2026-09-30 left the decision to the 510-wing pair: within 1.03 on pressure
+adopts the centered form as the default and deletes the static one under
+the one-model rule; worse than 1.03 on both seeds deletes the option. The
+prereg also asked for the prototype-cosine check on the 2,048 checkpoints
+(bar below 0.3, effective rank above 100, as at 512) to be run with the
+wing reduction.
+
+**Instrument.** Lanes `pc2_hl_cent_medium` against `pc2_hl_ref_medium`,
+seeds 42 and 43, code_v12 + recipe_v4, the reference configuration at
+100,000 cells (the SCALE-HL rung), 500 epochs, float32 relative L2 on the
+180 held-out wings; reducer `results/proto_cond2_reduce_2026-09-29.py`,
+artifact `results/proto_cond2_2026-09-29.json`. The cosine check is the
+PROTO-COND diagnostic (`kernel/pc/diag/proto_cond_diag.py`, job 969702) on
+the four 2,048-case checkpoints, float32 eval-mode inference over the first
+32 test samples at every node; artifact
+`results/proto_cond2_diag_n2048_2026-10-02.json`.
+
+**What we saw** (centered ÷ static on seed means; per seed in parentheses):
+
+| Field | Static | Centered | Centered ÷ static | Seed 42 | Seed 43 |
+|---|---|---|---|---|---|
+| pressure (headline) | 0.0422 | 0.0415 | 0.98 | 0.95 | 1.02 |
+| temperature | 0.0488 | 0.0483 | 0.99 | 0.97 | 1.01 |
+| density | 0.0568 | 0.0558 | 0.98 | 0.95 | 1.01 |
+| velocity | 0.0615 | 0.0608 | 0.99 | 0.97 | 1.01 |
+| wall shear | 0.0954 | 0.0940 | 0.99 | 0.96 | 1.01 |
+
+: PROTO-COND-2 on the 510 HiLift wings at 100,000 cells: the reference ISLA with centered and with static prototypes, float32 relative L2 on the 180 held-out wings (`results/proto_cond2_2026-09-29.json`). {#tbl-nb-proto-cond-2-wings}
+
+Every field is inside the bar on the mean and on both seeds; seed 42 favors
+the centered form by 3 to 5%, seed 43 the static form by 1 to 2%, so the
+wings read as neutral with a lean toward the centered form. On the 2,048
+Poisson checkpoints the centered arm's prototypes have mean pairwise cosine
+0.068 and 0.060 (seeds 42 and 43; the static seeds of the reference arm
+0.064 and 0.068), effective rank 132 and 151 (reference 127 and 140), a
+trained gain of 0.149 and 0.145 (from 0.1), a relative prototype
+displacement of 0.14, and 182 to 184 effective active slices (reference 173
+to 192). No collapse at either rung.
+
+**Verdict.** Adopted. Over the full set the form is neutral or better
+everywhere: 0.86 and 0.78 on Poisson at 512 and 2,048 cases, 1.00 on
+DrivAerML Surface, 0.95 on AirfRANS pressure (velocity 1.03), 0.98 on the
+wings; the only reading outside 1.03 anywhere is one AirfRANS velocity seed
+at 1.06. The centered, scale-bounded prototypes are now the routing of
+every slice block and of the head frame; the `slice_prototypes` option and
+the static form are gone from the class, the tests and the book, and the
+class default is what every lane called `centered`. The change adds
+$2d^2 + 1$ parameters per block and to the head frame (3.8M at the
+reference width, 34.3M to 38.1M on DrivAerML Surface).
+
+**Two corrections made while adopting.** (1) The head frame's routing
+logits were computed from the token states alone, without the measures,
+so under the sample-conditioned form the frame's prototypes were an
+*unweighted* summary of the tokens and the vector outputs lost exact
+refinement invariance (the scalar outputs were unaffected; the
+refinement-invariance contract test caught it at 1.7e-3 on a doubled mesh). The frame now synthesizes its
+prototypes once from all tokens with their measures and reads them for
+both of its routings; the contract tests pass at 1e-10 again. The trained
+pairs above carry the unweighted frame in their vector fields (wall shear
+and velocity), so those two ratios come from a frame the shipped class no
+longer has; the scalar headline does not depend on it. (2) When every
+token state is identical (a two-cell planar probe whose only block-0
+feature is the same for both cells) the centered term is exactly zero and
+the root in the bound had an infinite gradient; the mean square is floored
+at $10^{-30}$ before the root, which is 15 orders below any value the term
+takes on real data. The goldens of the release tests (forward outputs, the
+reference checkpoint and its outputs, the backbone recording) were
+regenerated from the adopted architecture; the 0.1.0 checkpoint-mapper test
+now rewrites the reference checkpoint to the old declarations rather than
+carrying a stale fixture.
+
+**Why it matters.** This is the first routing change since the cosine form
+that pays on a fixed-mesh boundary-data problem (Poisson, 0.78 to 0.86)
+without a price anywhere else, and the mechanism is measured: the gain that
+survived the centering is the slice-dependent part of the token summary,
+the common component that collapsed the first form is removed exactly, and
+the trained prototypes stay as spread as static seeds. The architecture
+chapter is the source of truth for the construction (@sec-arch-layer).
+
+**What is next.** Every evidence lane trained before this entry carries
+static prototypes; headline ratios are restated as reference-configuration
+lanes are re-run under the adopted class on the new snapshot (code_v18),
+starting with the DrivAerML Surface and the 510-wing rungs that the thesis
+table quotes. Until then the thesis table's values are the static-prototype
+ones, labeled by their artifacts.

@@ -29,10 +29,11 @@ backbone golden.
     uv run --no-sync python -m pytest test/experimental/models/isla/test_isla_release.py
 
 twice: the first run recreates each missing file from the current code (and fails on
-purpose), the second run must pass. ``data/isla_backbone_v1.pth`` is NOT regenerated:
-it was recorded from the pre-rank-spec code (a forward hook on ``norm_out`` under
-``CONFIGS["default"]`` / ``_make_tensors`` below) and pins the backbone bitwise
-through the internal batched routine.
+purpose), the second run must pass. ``data/isla_backbone_v1.pth`` is regenerated only
+when the backbone changes by decision (a forward hook on ``norm_out`` under
+``CONFIGS["default"]`` / ``_make_tensors`` below; last recorded 2026-10-02 when the
+sample-conditioned prototypes became the routing of every block) and pins the
+backbone bitwise through the internal batched routine.
 """
 
 from pathlib import Path
@@ -132,7 +133,6 @@ def test_isla_constructor_attributes(config):
         assert len(m.blocks) == 12
         assert m.norm_out.normalized_shape == (384,)  # the reference width
         assert m.geo_kernel == "auto"
-        assert m.slice_prototypes == "static"
         assert m.interior is False and m.qt is None
         assert m.n_global_vectors == 1 and m.n_global_scalars == 0
         assert m.boundary_schema == {} and m.query_schema == {}
@@ -156,7 +156,6 @@ def test_isla_constructor_attributes(config):
             n_slices=16,
             geo_kernel="eager",
             geo_checkpoint=True,
-            slice_prototypes="centered",
             eps=1e-8,
         )
         assert len(m.output_schema) == 6 and m.output_schema["stress"].symmetric
@@ -167,7 +166,6 @@ def test_isla_constructor_attributes(config):
         assert list(m.boundary_schema) == ["trace", "traction"]
         assert list(m.query_schema) == ["sdf"]
         assert m.interior is True and m.qt is not None
-        assert m.slice_prototypes == "centered"
         assert m.eps == 1e-8
     assert isinstance(m, Module)
 
@@ -218,9 +216,9 @@ def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
 
 def test_isla_backbone_is_the_pre_refactor_backbone():
     """With no per-token inputs, the pre-head token state (``norm_out`` output) of
-    the surface model is the one the pre-rank-spec code produced for the same
-    parameters and token tensors. ``data/isla_backbone_v1.pth`` was recorded from
-    that code with a forward hook on ``norm_out`` (seed 0 parameters, seed 1234
+    the surface model is the one recorded when the backbone was last changed by
+    decision, for the same parameters and token tensors. ``data/isla_backbone_v1.pth``
+    was recorded with a forward hook on ``norm_out`` (seed 0 parameters, seed 1234
     inputs, as here) on an x86 CPU; the tensors enter through the internal batched
     routine, which the Mesh wrapper calls. Compared at float32 tolerance: the same
     graph gives bitwise-identical values on the recording architecture and differs
@@ -247,7 +245,7 @@ def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
     model.save(path)
     loaded = Module.from_checkpoint(str(path)).to(device).eval()
     assert isinstance(loaded, ISLA)
-    for name in ("n_slices", "geo_kernel", "slice_prototypes", "interior", "n_global_vectors", "output_schema", "global_schema"):
+    for name in ("n_slices", "geo_kernel", "interior", "n_global_vectors", "output_schema", "global_schema"):
         assert getattr(loaded, name) == getattr(model, name), name
     with torch.no_grad():
         _assert_dict_close(outputs(loaded(**inputs)), outputs(model(**inputs)), atol=0.0, rtol=0.0)
@@ -272,13 +270,32 @@ def test_isla_reference_checkpoint_matches_golden(device):
     _assert_dict_close(out, ref, atol=tol, rtol=tol)
 
 
-def test_isla_0_1_0_checkpoint_declarations_are_renamed():
-    """The reference checkpoint is a 0.1.0 one (``outputs``, ``global_inputs``, ...):
-    it loads through the backward-compatibility mapper, which renames the field
-    declarations to ``output_schema``, ``global_schema`` and so on."""
-    ckpt = DATA_DIR / "isla_default_v1.mdlus"
+def test_isla_0_1_0_checkpoint_declarations_are_renamed(tmp_path):
+    """A 0.1.0 checkpoint (``outputs``, ``global_inputs``, ...) loads through the
+    backward-compatibility mapper, which renames the field declarations to
+    ``output_schema``, ``global_schema`` and so on. The fixture is the committed
+    reference checkpoint rewritten to the 0.1.0 declarations and file version, so
+    the mapper is exercised against the current architecture's weights."""
+    import json
+    import zipfile
+
+    src = DATA_DIR / "isla_default_v1.mdlus"
+    old = tmp_path / "isla_0_1_0.mdlus"
+    renamed = {new: old_name for old_name, new in ISLA._RENAMED_ARGS.items()}
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(old, "w", zipfile.ZIP_STORED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "args.json":
+                args = json.loads(data)
+                args["__args__"] = {renamed.get(k, k): v for k, v in args["__args__"].items()}
+                data = json.dumps(args).encode()
+            elif item.filename == "metadata.json":
+                meta = json.loads(data)
+                meta["mdlus_file_version"] = "0.1.0"
+                data = json.dumps(meta).encode()
+            zout.writestr(item, data)
     with pytest.warns(UserWarning, match="0.1.0 ISLA checkpoint"):
-        model = Module.from_checkpoint(str(ckpt))
+        model = Module.from_checkpoint(str(old))
     assert list(model.output_schema) == ["p", "v"] and list(model.global_schema) == ["g"]
     assert model.boundary_schema == {} and model.query_schema == {}
     assert ISLA.__model_checkpoint_version__ == "0.2.0"

@@ -39,9 +39,11 @@ def test_cosine_routing_logits_are_bounded_and_bias_free():
     torch.manual_seed(0)
     r = _RoutingLogits(64, 32)
     assert r.weight.shape == (32, 64)
-    assert set(dict(r.named_parameters())) == {"weight"}
+    # the seeds, the key and value maps of the prototype synthesis and its gain; no bias anywhere
+    assert set(dict(r.named_parameters())) == {"weight", "k_proj.weight", "v_proj.weight", "gain"}
     with torch.no_grad():
-        r.weight.mul_(1000.0)  # however large the weights grow ...
+        r.weight.mul_(1000.0)  # however large the seeds grow ...
+        r.k_proj.weight.mul_(1000.0); r.v_proj.weight.mul_(1000.0); r.gain.fill_(1000.0)  # ... or the synthesis maps ...
         x = torch.randn(2, 50, 64) * 100.0  # ... or the state
         out = r(x)
     assert ROUTING_TEMPERATURE == 10.0

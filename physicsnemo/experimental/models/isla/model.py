@@ -105,11 +105,15 @@ carries no information about where the mesher placed its cells.
 
 **Routing.** Each block routes tokens to slices by bounded cosine logits:
 :data:`ROUTING_TEMPERATURE` times the cosine between the normalized token
-state and a learned prototype per slice, so every logit lies in
-:math:`[-T, T]` and no block can route every point to one slice however its
-weights grow. The quadrature measure enters the routing as a log-space bias,
-so slice states are measure-weighted (quadrature) means; with no measures the
-weights are uniform.
+state and a prototype per slice, so every logit lies in :math:`[-T, T]` and
+no block can route every point to one slice however its weights grow. The
+prototypes are synthesized per sample: learned seeds attend over the token
+states with a measure-weighted softmax, the attended term is centered across
+the slices and smoothly bounded to a learned fraction of the seeds' spread,
+and the result is added to the seeds (:class:`_RoutingLogits`). The
+quadrature measure enters the routing as a log-space bias, so slice states
+are measure-weighted (quadrature) means; with no measures the weights are
+uniform.
 
 **Surface and interior tasks.** ``interior=False`` (a surface task) predicts
 at the boundary cells themselves. ``interior=True`` (an interior task)
@@ -199,7 +203,6 @@ from physicsnemo.core.meta import ModelMetaData
 from physicsnemo.core.module import Module
 from physicsnemo.experimental.models.isla.blocks import (
     GeoKernel,
-    SlicePrototypes,
     _QueryTokens,
     _RoutingLogits,
     _SliceBlock,
@@ -329,17 +332,6 @@ class ISLA(Module):
             that changes every case, leave it off. On four GB300 ranks at
             200,000 cells it cut the training step by 19 to 35% and peak memory
             by 27% at bfloat16-roundoff differences (PERF-3, 2026-10-01).
-        slice_prototypes: ``"static"`` (default): each slice block routes tokens
-            against a learned prototype per slice that is the same for every
-            sample. ``"centered"``: centered, scale-bounded sample-conditioned
-            prototypes: each seed attends over the token states with a
-            measure-weighted softmax, the attended value term is centered across
-            the slices and passed through a smooth saturation that holds its rms
-            to at most a learned fraction ``g`` (one scalar per block, init 0.1)
-            of the seeds' rms spread, and the result is added to the seeds
-            (:class:`_RoutingLogits`). Token states are invariant, so the
-            prototypes and the contracts are unchanged; ``2 hidden^2 + 1``
-            parameters per block are added.
         dim: Spatial dimension of the domain (default 3). Every boundary mesh
             is a ``Mesh[dim - 1, dim]`` and every prediction point has ``dim``
             coordinates. Every geometric quantity is built for ``dim``
@@ -412,7 +404,6 @@ class ISLA(Module):
         geo_checkpoint: bool = False,
         geo_kernel: GeoKernel | None = None,
         compile_blocks: bool = False,
-        slice_prototypes: SlicePrototypes = "static",
         dim: int = 3,
         eps: float = 1e-12,
     ) -> None:
@@ -436,11 +427,6 @@ class ISLA(Module):
         if int(dim) < 2:
             raise ValueError(f"dim must be at least 2, got {dim!r}")
         self.dim = int(dim)
-        if slice_prototypes not in ("static", "centered"):
-            raise ValueError(
-                f"slice_prototypes must be 'static' or 'centered', got {slice_prototypes!r}"
-            )
-        self.slice_prototypes = str(slice_prototypes)
         ### Every input and output is a named field of declared rank; the grammar
         ### is the mesh models' shared one (physicsnemo.mesh.fields), flattened to
         ### dotted names here.
@@ -560,7 +546,6 @@ class ISLA(Module):
                 n_global_vectors=K,
                 n_block_vecs=self.n_block_vecs,
                 n_block_tens=self.n_block_tens,
-                slice_prototypes=self.slice_prototypes,
             )
             for _ in range(n_layers)
         )
@@ -1163,10 +1148,14 @@ class ISLA(Module):
             return {name: coeffs[..., i] for i, name in enumerate(self.output_schema)}
         ### Head frame: the radial basis vector is the direction from the token's
         ### soft slice anchor (measure-weighted mean of token positions), not
-        ### from a centroid; translation covariant.
-        a_f = _softmax_over_points(self.frame_assign(h) + src_logw)
+        ### from a centroid; translation covariant. The frame's prototypes are
+        ### synthesized once from ALL tokens with their measures (the same
+        ### quadrature that weights the anchors), so the frame is refinement
+        ### invariant like the blocks; both routings read those prototypes.
+        protos_f = self.frame_assign.prototypes(h, src_logw)
+        a_f = _softmax_over_points(self.frame_assign.logits(h, protos_f) + src_logw)
         z_f = torch.einsum("bns,bnc->bsc", a_f, src_r)
-        b_f = torch.softmax(self.frame_assign(h_out), dim=-1)
+        b_f = torch.softmax(self.frame_assign.logits(h_out, protos_f), dim=-1)
         u = r_out - torch.einsum("bns,bsc->bnc", b_f, z_f).to(r_out.dtype)
         r_hat = u / u.norm(dim=-1, keepdim=True).clamp_min(self.eps)
 

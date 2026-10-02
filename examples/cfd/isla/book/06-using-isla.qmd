@@ -60,10 +60,6 @@ class is short:
 - **the three cost knobs** `geo_kernel`, `geo_checkpoint` and
   `compile_blocks`, which change how the arithmetic is executed and never
   what is computed (@sec-using-cost);
-- **the routing prototypes** `slice_prototypes`: `"static"` (the default)
-  routes against learned prototypes shared by every sample, `"centered"`
-  synthesizes them from the sample's own token states, and the contracts
-  hold under both (@sec-arch-switches);
 - **the spatial dimension** `dim`, 3 by default and 2 for a planar
   problem, which is not an option in the policy's sense but a statement
   about the data (@sec-arch-switches).

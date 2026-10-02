@@ -222,13 +222,30 @@ $$
 \lambda_{is} = T\, \frac{\tilde h_i \cdot p_s}{\lVert \tilde h_i \rVert\, \lVert p_s \rVert} .
 $$
 
-The prototypes are learned rows shared by every sample
-(`slice_prototypes="static"`, the default). Under
-`slice_prototypes="centered"` they are synthesized from the sample's own
-token states by a centered, scale-bounded attention over the tokens, which
-leaves every contract intact because token states are invariant. The bound
-on the logit, and what an unbounded affine logit does without it, are in
-@sec-isla-routing-forms.
+The prototypes are synthesized per sample from learned seeds $S_s$ and the
+sample's own token states. Each seed attends over the tokens with a
+measure-weighted softmax; the attended value term is centered across the
+slices and passed through a smooth bound before it is added to the seed:
+
+$$
+\Delta_s = \sum_i \mathrm{softmax}_i\!\left(\tfrac{S_s \cdot k(\tilde h_i)}{\sqrt{H}} + \ell_i\right) v(\tilde h_i),
+\qquad
+\tilde\Delta_s = \Delta_s - \tfrac{1}{S}\textstyle\sum_{s'} \Delta_{s'},
+\qquad
+p_s = S_s + \frac{g\,\mathrm{rms}(S)}{\mathrm{rms}(\tilde\Delta) + g\,\mathrm{rms}(S)}\, \tilde\Delta_s ,
+$$
+
+with $k$ and $v$ linear maps, $g$ one learned scalar per block (initialized
+at 0.1) and $\mathrm{rms}$ the root-mean-square entry of a matrix. Centering
+removes the component common to every prototype, which carries no routing
+information under a cosine and, when it dominates, folds every prototype
+onto one direction; the bound holds the sample-dependent part to a fraction
+$g$ of the seeds' spread, so a token cloud whose attention is the same for
+every seed leaves the prototypes equal to the seeds. Token states are
+invariant, so the prototypes are invariant and every contract holds
+(`_RoutingLogits`). The bound on the logit, and what an unbounded affine
+logit does without it, are in @sec-isla-routing-forms; what the
+sample-conditioned prototypes buy is in @sec-beyond-aero.
 
 **b. Provisional routing.** A softmax over the *tokens*, for each slice,
 with the measure bias:
@@ -523,8 +540,9 @@ out += ("\n: Parameter count of ISLA at 12 layers, 256 slices, one scalar and on
 print(out)
 ```
 
-The two per-layer MLPs hold four fifths of the total. The broadcast maps
-and the routing maps (at $d \times M$ each) hold most of the rest. Width $d$
+The two per-layer MLPs hold most of the total. The broadcast maps and the
+routing maps (the $M \times d$ seeds plus the $2d^2$ key and value maps of
+the prototype synthesis, per block) hold most of the rest. Width $d$
 therefore sets the count quadratically and the slice count $M$ linearly.
 That is why the capacity ladders of @sec-equal-budget move width and not
 slices.
@@ -688,6 +706,5 @@ above.
 | `interior` (`False`) | modes | the task: `False` predicts at the boundary cells and takes no prediction points; `True` predicts at the prediction points, which join the encoder as interacting tokens with the built-in nearest-boundary direction and signed distance (@sec-arch-modes) |
 | `geo_kernel` (`None`, automatic), `geo_checkpoint` (off) | 3c–3e, 3h | how the geometry region is executed: `None` resolves at the first forward pass to `"fused"` (the Triton kernel) when the inputs are on CUDA, Triton is importable, the global directions and rank-1 per-token inputs together number one to four, there are at most 1,024 slices and no rank-2 per-token input, and to `"eager"` (the PyTorch region) otherwise; either name forces that path, and `"fused"` raises where its constraints fail. `geo_checkpoint` rebuilds the eager region in backward instead of storing it. Neither changes the function computed beyond roundoff |
 | `compile_blocks` (`False`) | 3 | each slice block's forward is wrapped in `torch.compile`, built lazily at the first call. Parameter names, the state dict and the eager path are unchanged, and the fused geometry kernel stays a custom-op leaf. Measured on four GB300 ranks at 200,000 cells per case: the DrivAerML Surface step falls from 221 to 180 ms and peak memory from 44.9 to 32.9 GiB, the Volume step from 475 to 308 ms and 88.5 to 64.5 GiB, with losses at bfloat16 roundoff. The recipe's ISLA configurations set it true |
-| `slice_prototypes` (`"static"`) | 3a, 4 | where the routing prototypes come from: `"static"` routes against learned prototypes shared by every sample; `"centered"` synthesizes them from the sample's own token states with a centered, scale-bounded attention over the tokens. The contracts hold under both |
 | `dim` (3) | all | the spatial dimension: every boundary mesh is a `Mesh[dim - 1, dim]` (a polyline in two dimensions), every prediction point has `dim` coordinates, and the head's basis follows it (perpendiculars instead of cross products in two dimensions; odd-parity outputs refused for `dim >= 4`). The fused kernels are written for three dimensions; other dimensions run the eager region and the host nearest-neighbour search. A planar problem is passed with `dim=2`, never embedded with a zero third coordinate |
 | `eps` ($10^{-12}$) | 1, 3c, 3d, 4 | the floor under every norm and logarithm |

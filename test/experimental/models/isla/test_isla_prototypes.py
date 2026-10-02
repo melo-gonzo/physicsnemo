@@ -1,10 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Sample-conditioned slice prototypes (``slice_prototypes="centered"``). Contracts (rotation, translation,
+"""Sample-conditioned slice prototypes (the routing of every slice block). Contracts (rotation, translation,
 reflection, token permutation, uniform measure rescale), parameter accounting, exactness of the centered,
 scale-bounded construction and collapse-proofness."""
 
-import pytest
 import torch
 
 from physicsnemo.experimental.models.isla import ISLA
@@ -33,7 +32,7 @@ KW = dict(output_schema={"p": {"rank": 0}, "v": {"rank": 1}}, global_schema={"g"
 
 
 def test_centered_prototypes_keep_every_contract():
-    m = ISLA(**KW, slice_prototypes="centered").double().eval()
+    m = ISLA(**KW).double().eval()
     mesh, drv = _problem()
     q = orthogonal(3, 7)
     refl = torch.diag(torch.tensor([1.0, -1.0, 1.0])).double()
@@ -58,23 +57,22 @@ def test_centered_prototypes_keep_every_contract():
     torch.testing.assert_close(sc["p"], base["p"], **tol); torch.testing.assert_close(sc["v"], base["v"], **tol)
 
 
-def test_prototypes_depend_on_the_sample_and_static_is_unchanged():
+def test_prototypes_depend_on_the_sample_and_are_accounted_for():
     torch.manual_seed(0)
-    rl = _RoutingLogits(16, 4, slice_prototypes="centered")
+    rl = _RoutingLogits(16, 4)
     x1, x2 = torch.randn(1, 50, 16), torch.randn(1, 50, 16)
     lw = torch.zeros(1, 50, 1)
     p1, p2 = rl.prototypes(x1, lw), rl.prototypes(x2, lw)
     assert p1.shape == (1, 4, 16) and not torch.allclose(p1, p2)
     assert rl(x1, lw).abs().max() <= 10.0 + 1e-5  # bounded by the temperature
-    n_static = sum(p.numel() for p in ISLA(**KW).parameters())
-    n_cent = sum(p.numel() for p in ISLA(**KW, slice_prototypes="centered").parameters())
-    assert n_cent - n_static == KW["n_layers"] * (2 * KW["hidden"] ** 2 + 1)  # key and value maps plus the gain, per block
-    assert not hasattr(_RoutingLogits(16, 4), "k_proj")
+    # per block: the seeds (S x H), the key and value maps (2 H^2) and the gain
+    n_routing = sum(p.numel() for b in ISLA(**KW).blocks for p in b.assign.parameters())
+    assert n_routing == KW["n_layers"] * (KW["n_slices"] * KW["hidden"] + 2 * KW["hidden"] ** 2 + 1)
 
 
 def test_centered_prototypes_are_centered_and_scale_bounded():
     torch.manual_seed(0)
-    rl = _RoutingLogits(16, 4, slice_prototypes="centered").eval()
+    rl = _RoutingLogits(16, 4).eval()
     x = torch.randn(2, 50, 16)
     lw = torch.randn(2, 50, 1)
     with torch.no_grad():
@@ -93,17 +91,9 @@ def test_centered_prototypes_are_centered_and_scale_bounded():
 
 def test_centered_prototypes_equal_the_seeds_on_identical_tokens():
     torch.manual_seed(0)
-    rl = _RoutingLogits(16, 4, slice_prototypes="centered").eval()
+    rl = _RoutingLogits(16, 4).eval()
     x = torch.randn(1, 1, 16).expand(1, 50, 16).clone()  # every token identical: one value for every seed
     lw = torch.randn(1, 50, 1)
     with torch.no_grad():
         protos = rl.prototypes(x, lw)
     torch.testing.assert_close(protos, rl.weight[None].expand_as(protos), rtol=0, atol=1e-6)
-
-
-def test_slice_prototypes_is_validated():
-    for mode in ("static", "centered"):
-        ISLA(**KW, slice_prototypes=mode)
-    for mode in ("conditioned", "dynamic"):
-        with pytest.raises(ValueError, match="'static' or 'centered'"):
-            ISLA(**KW, slice_prototypes=mode)

@@ -408,8 +408,11 @@ geometric rescale (@sec-isla-contracts).
 one slice.** The routing logit is a learned function of the
 normalized token state $\tilde h_i \equiv \mathrm{LN}(h_i)$: a fixed
 temperature $T$ times the cosine between $\tilde h_i$ and a prototype $p_s$
-per slice, so every logit lies in $[-T, T]$ whatever the weights do. An
-unbounded affine logit has no such bound:
+per slice, so every logit lies in $[-T, T]$ whatever the weights do. The
+prototypes are not fixed rows: each is a learned seed plus a centered,
+bounded summary of the sample's own tokens, so the slices a block offers
+adapt to the case in front of it while every logit keeps its bound
+(@sec-arch-layer). An unbounded affine logit has no such bound:
 
 $$
 \lambda_{is} = T\,\frac{\tilde h_i \cdot p_s}{\lVert \tilde h_i \rVert\,\lVert p_s \rVert}

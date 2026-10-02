@@ -34,8 +34,6 @@ from torch.utils.checkpoint import checkpoint
 
 GeoKernel = Literal["eager", "fused"]
 """Geometry-region backend: the PyTorch reference region or the exact fused Triton kernel."""
-SlicePrototypes = Literal["static", "centered"]
-"""Slice-routing prototypes: one learned prototype per slice, or the seeds plus a centered, scale-bounded sample-conditioned term."""
 
 #: Bound of the cosine routing logits: each block's point-to-slice logit is this
 #: times the cosine between the token state and a slice prototype.
@@ -156,16 +154,14 @@ class _RoutingLogits(nn.Module):
     """Point-to-slice routing logits, ``(B, N, hidden) -> (B, N, S)``.
 
     :data:`ROUTING_TEMPERATURE` times the cosine between the token state and a
-    learned prototype per slice (the rows of ``weight``), so every logit lies in
-    ``[-T, T]`` and no block can route every point to one slice however its
-    weights grow.
+    prototype per slice, so every logit lies in ``[-T, T]`` and no block can
+    route every point to one slice however its weights grow.
 
-    ``slice_prototypes="static"``: the prototypes are the rows of ``weight``,
-    the same for every sample. ``"centered"``: the prototypes are synthesized
-    per sample. Each static row acts as a seed that attends over the token
-    states with a measure-weighted softmax (``log_w`` enters as a log-space
-    bias, so the summary is a quadrature of the tokens and invariant to a
-    uniform rescale of the weights); the attended value term is centered
+    The prototypes are synthesized per sample from learned seeds (the rows of
+    ``weight``) and the sample's own token states. Each seed attends over the
+    token states with a measure-weighted softmax (``log_w`` enters as a
+    log-space bias, so the summary is a quadrature of the tokens and invariant
+    to a uniform rescale of the weights); the attended value term is centered
     across the slices and scale-bounded before it is added to the seeds:
     ``P = seeds + Delta_c * b / (rms(Delta_c) + b)`` with ``b = g rms(seeds)``,
     ``Delta_c = Delta - mean_S(Delta)``, ``rms`` over all entries (per sample for
@@ -178,25 +174,18 @@ class _RoutingLogits(nn.Module):
     ``g rms(seeds)``, so the sample-dependent part never exceeds a fraction
     ``g`` of the seeds' spread and is never amplified to it. Token states are
     invariant features, so the prototypes are invariant and the contracts hold.
-    Adds ``2 hidden^2 + 1`` parameters per block (the key and value maps and
-    the gain).
+    A token cloud whose attention is the same for every seed leaves the
+    prototypes equal to the seeds. Costs ``2 hidden^2 + 1`` parameters per
+    block beyond the seeds (the key and value maps and the gain).
     """
 
-    def __init__(
-        self, hidden: int, n_slices: int, slice_prototypes: SlicePrototypes = "static"
-    ) -> None:
+    def __init__(self, hidden: int, n_slices: int) -> None:
         super().__init__()
-        if slice_prototypes not in ("static", "centered"):
-            raise ValueError(
-                f"slice_prototypes must be 'static' or 'centered', got {slice_prototypes!r}"
-            )
-        self.centered = slice_prototypes == "centered"
         self.weight = nn.Linear(hidden, n_slices, bias=False).weight
-        if self.centered:
-            self.k_proj = nn.Linear(hidden, hidden, bias=False)
-            self.v_proj = nn.Linear(hidden, hidden, bias=False)
-            self.scale = 1.0 / math.sqrt(hidden)
-            self.gain = nn.Parameter(torch.tensor(0.1))
+        self.k_proj = nn.Linear(hidden, hidden, bias=False)
+        self.v_proj = nn.Linear(hidden, hidden, bias=False)
+        self.scale = 1.0 / math.sqrt(hidden)
+        self.gain = nn.Parameter(torch.tensor(0.1))
 
     def prototypes(self, x: torch.Tensor, log_w: torch.Tensor | None) -> torch.Tensor:
         """Per-sample prototypes (B, S, hidden) from the seeds and the token states."""
@@ -208,18 +197,23 @@ class _RoutingLogits(nn.Module):
         delta = torch.einsum("bsn,bnh->bsh", att, self.v_proj(x))  # (B, S, H)
         delta = delta - delta.mean(dim=1, keepdim=True)
         bound = self.gain.to(x.dtype) * seeds.square().mean().sqrt()  # g rms(seeds), scalar
-        rms_delta = delta.square().mean(dim=(1, 2), keepdim=True).sqrt()  # (B, 1, 1)
+        ### The mean square is floored before the root: when every token state is
+        ### identical (a two-cell planar probe whose only block-0 feature, n.g, is the
+        ### same for both) the centered term is exactly zero and sqrt'(0) is infinite;
+        ### the floor makes that point's gradient zero instead of NaN and is 1e-15
+        ### below any float32 value the term takes otherwise.
+        rms_delta = delta.square().mean(dim=(1, 2), keepdim=True).clamp_min(1e-30).sqrt()  # (B, 1, 1)
         return seeds[None] + delta * (bound / (rms_delta + bound))
 
-    def forward(self, x: torch.Tensor, log_w: torch.Tensor | None = None) -> torch.Tensor:
-        if self.centered:
-            protos = self.prototypes(x, log_w)
-            return ROUTING_TEMPERATURE * torch.einsum(
-                "bnh,bsh->bns", F.normalize(x, dim=-1), F.normalize(protos, dim=-1)
-            )
-        return ROUTING_TEMPERATURE * F.linear(
-            F.normalize(x, dim=-1), F.normalize(self.weight, dim=-1)
+    @staticmethod
+    def logits(x: torch.Tensor, protos: torch.Tensor) -> torch.Tensor:
+        """Bounded cosine logits (B, N, S) of token states against given prototypes."""
+        return ROUTING_TEMPERATURE * torch.einsum(
+            "bnh,bsh->bns", F.normalize(x, dim=-1), F.normalize(protos, dim=-1)
         )
+
+    def forward(self, x: torch.Tensor, log_w: torch.Tensor | None = None) -> torch.Tensor:
+        return self.logits(x, self.prototypes(x, log_w))
 
 
 class _QueryTokens(nn.Module):
@@ -255,7 +249,6 @@ class _SliceBlock(nn.Module):
         n_global_vectors: int = 1,
         n_block_vecs: int = 0,
         n_block_tens: int = 0,
-        slice_prototypes: SlicePrototypes = "static",
     ) -> None:
         super().__init__()
         ### "fused" evaluates the dense geometry region (invariants -> routing bias
@@ -273,7 +266,7 @@ class _SliceBlock(nn.Module):
         ### ops, same order).
         self.geo_checkpoint = bool(geo_checkpoint)
         self.norm_assign = nn.LayerNorm(hidden)
-        self.assign = _RoutingLogits(hidden, n_slices, slice_prototypes)
+        self.assign = _RoutingLogits(hidden, n_slices)
         ### Relational geometry: per-slice equivariant anchors and point-anchor
         ### invariants -- many local, data-adaptive reference points instead of
         ### any global frame (smooth by construction).

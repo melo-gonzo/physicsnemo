@@ -87,6 +87,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `physicsnemo.experimental.models.ISLA` routes every slice block (and its head
+  frame) on sample-conditioned prototypes: learned seeds plus a centered,
+  scale-bounded, measure-weighted summary of the sample's own token states.
+  The `slice_prototypes` constructor argument and the static form are removed;
+  checkpoints of the static form no longer load.
 - `physicsnemo.mesh.fields` is rebuilt around two types. `RankSpec` (`rank`,
   `symmetric`, `parity`; `shape(n_spatial_dims)`, `numel(n_spatial_dims)`) is
   one field's transformation law; `FieldSchema` is an insertion-ordered

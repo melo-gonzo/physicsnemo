@@ -183,10 +183,13 @@ def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
     ### The 3-D model with a K = 1 direction keeps its parameter count (the head has
     ### m = 5 true and p = 3 pseudo vectors in both dimensions for K = 1, so the
     ### 2-D model of the same spec has the same count too). A surface model has the
-    ### 41364 backbone-and-head parameters; the interior model adds 1185 for the
+    ### 41364 backbone-and-head parameters plus 2 x 32^2 + 1 = 2049 for each of its
+    ### three prototype synthesizers (two blocks and the head frame: the key and
+    ### value maps and the gain); the interior model adds 1185 for the
     ### prediction-point side (qt.logw 1, qt.type_offset 32, qt.embed 2 x 32 + 32 +
     ### 32 x 32 + 32).
+    n_surface = 41364 + 3 * (2 * 32**2 + 1)
     m3 = _model(3, {"p": {"rank": 0}, "v": {"rank": 1}})
-    assert sum(p.numel() for p in m3.parameters()) == 41364
-    assert sum(p.numel() for p in _model(2, {"p": {"rank": 0}, "v": {"rank": 1}}).parameters()) == 41364
-    assert sum(p.numel() for p in _model(3, {"p": {"rank": 0}, "v": {"rank": 1}}, interior=True).parameters()) == 41364 + 1185
+    assert sum(p.numel() for p in m3.parameters()) == n_surface
+    assert sum(p.numel() for p in _model(2, {"p": {"rank": 0}, "v": {"rank": 1}}).parameters()) == n_surface
+    assert sum(p.numel() for p in _model(3, {"p": {"rank": 0}, "v": {"rank": 1}}, interior=True).parameters()) == n_surface + 1185

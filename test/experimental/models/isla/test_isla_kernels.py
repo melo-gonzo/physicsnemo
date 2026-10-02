@@ -85,7 +85,11 @@ def _assert_same(ref, opt, dtype, out_tol, grad_tol, n=700):
     for k, g in g_ref.items():
         if g.norm() < 1e-6 * total:
             continue  # geo_logit.bias: a constant over slices cancels in both softmaxes; its gradient is roundoff
-        assert _rel(g_opt[k], g) < grad_tol, (k, _rel(g_opt[k], g))
+        # relative to the parameter's own gradient, floored at 1e-3 of the whole gradient: a
+        # scalar such as a block's prototype gain is a reduction over every token and slice
+        # whose gradient can nearly cancel, and its own norm is then a roundoff-sized yardstick
+        scale = torch.maximum(g.norm(), 1e-3 * total)
+        assert (g_opt[k] - g).norm() / scale < grad_tol, (k, _rel(g_opt[k], g))
 
 
 # --------------------------------------------------------------------------- fused region
