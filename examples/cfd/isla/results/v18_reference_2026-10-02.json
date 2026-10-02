@@ -1,0 +1,141 @@
+{
+ "protocol": "code_v18 reference lanes (PROTO-COND-2 adopted, 2026-10-02, #sec-nb-proto-cond-2-adopted): the mesh-native ISLA reference\nconfiguration with sample-conditioned centered prototypes in every block and in the head frame (code_v18 = 7ef7c34fa, static\nprototypes deleted) against the last static-prototype lanes on the same recipe (recipe_v8) and the same per-block compile\n(group pf, code_v16 `pf_*_cb_*`, PERF-3 neutrality pairs), two seeds each, DrivAerML Surface (435 cars, 200,000 cells) and\nDrivAerML Volume (200,000 boundary cells, 200,000 interior queries), HiLift 210-wing medium rung and AirfRANS when scored.\nReadout: float32 per-case relative L2 per primary field, seed means; ratio v18 / static. Reads\ncampaigns_2026-10-02/v18/metrics/<run>/**/metrics.jsonl and campaigns_2026-10-01/pf/metrics/<run>/**/metrics.jsonl.\nusage: python v18_reference_reduce_2026-10-02.py",
+ "datasets": {
+  "drivaer_surface": {
+   "fields": [
+    "pressure_l2",
+    "wss_l2"
+   ],
+   "v18": {
+    "pressure_l2": 0.043538020070021353,
+    "wss_l2": 0.06832563811137031
+   },
+   "static": {
+    "pressure_l2": 0.043788534201060735,
+    "wss_l2": 0.06895401410292834
+   },
+   "ratio": {
+    "pressure_l2": 0.9942790016699551,
+    "wss_l2": 0.9908870281196386
+   },
+   "per_seed": {
+    "v18": {
+     "42": {
+      "pressure_l2": 0.04327094655794402,
+      "wss_x_l2": 0.05037473716462652,
+      "wss_y_l2": 0.11727497649068634,
+      "wss_z_l2": 0.10243983333930373,
+      "wss_l2": 0.06790238937052588,
+      "n_cases": 48
+     },
+     "43": {
+      "pressure_l2": 0.043805093582098685,
+      "wss_x_l2": 0.05103660103244086,
+      "wss_y_l2": 0.11896546681722005,
+      "wss_z_l2": 0.10338553429270785,
+      "wss_l2": 0.06874888685221474,
+      "n_cases": 48
+     }
+    },
+    "static": {
+     "42": {
+      "pressure_l2": 0.04325816648391386,
+      "wss_x_l2": 0.05085118797918161,
+      "wss_y_l2": 0.11807001351068418,
+      "wss_z_l2": 0.10373899231975277,
+      "wss_l2": 0.06854761166808505,
+      "n_cases": 48
+     },
+     "43": {
+      "pressure_l2": 0.04431890191820761,
+      "wss_x_l2": 0.0516589613010486,
+      "wss_y_l2": 0.11968431916708748,
+      "wss_z_l2": 0.10398557813217242,
+      "wss_l2": 0.06936041653777163,
+      "n_cases": 48
+     }
+    }
+   },
+   "n_seeds": {
+    "v18": 2,
+    "static": 2
+   },
+   "interim": false
+  },
+  "drivaer_volume": {
+   "fields": [
+    "nut_l2",
+    "pressure_l2",
+    "velocity_l2"
+   ],
+   "v18": {
+    "nut_l2": 0.0870626651449129,
+    "pressure_l2": 0.04075183804767828,
+    "velocity_l2": 0.06514433623912434
+   },
+   "static": {
+    "nut_l2": 0.08815287495963275,
+    "pressure_l2": 0.04090468055801466,
+    "velocity_l2": 0.06540426367428154
+   },
+   "ratio": {
+    "nut_l2": 0.9876327367063288,
+    "pressure_l2": 0.9962634469148437,
+    "velocity_l2": 0.9960258334769786
+   },
+   "per_seed": {
+    "v18": {
+     "42": {
+      "velocity_x_l2": 0.049492839413384594,
+      "velocity_y_l2": 0.10045725759118795,
+      "velocity_z_l2": 0.13357510402177772,
+      "velocity_l2": 0.0647746065321068,
+      "pressure_l2": 0.040677953123425446,
+      "nut_l2": 0.08793502463959157,
+      "n_cases": 48
+     },
+     "43": {
+      "velocity_x_l2": 0.050511748141919575,
+      "velocity_y_l2": 0.10129523742944002,
+      "velocity_z_l2": 0.13303399893144766,
+      "velocity_l2": 0.06551406594614188,
+      "pressure_l2": 0.0408257229719311,
+      "nut_l2": 0.08619030565023422,
+      "n_cases": 48
+     }
+    },
+    "static": {
+     "42": {
+      "velocity_x_l2": 0.050744735868647695,
+      "velocity_y_l2": 0.10227402268598478,
+      "velocity_z_l2": 0.1356917784238855,
+      "velocity_l2": 0.0661472852807492,
+      "pressure_l2": 0.04150400923875471,
+      "nut_l2": 0.08836956415325403,
+      "n_cases": 48
+     },
+     "43": {
+      "velocity_x_l2": 0.0493357398857673,
+      "velocity_y_l2": 0.10054448976491888,
+      "velocity_z_l2": 0.13332455232739449,
+      "velocity_l2": 0.06466124206781387,
+      "pressure_l2": 0.04030535187727461,
+      "nut_l2": 0.08793618576601148,
+      "n_cases": 48
+     }
+    }
+   },
+   "n_seeds": {
+    "v18": 2,
+    "static": 2
+   },
+   "interim": false
+  },
+  "hilift_210": {
+   "status": "not scored"
+  },
+  "airfrans": {
+   "status": "not scored"
+  }
+ }
+}

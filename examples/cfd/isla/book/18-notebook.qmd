@@ -32731,6 +32731,24 @@ starting with the DrivAerML Surface and the 510-wing rungs that the thesis
 table quotes. Until then the thesis table's values are the static-prototype
 ones, labeled by their artifacts.
 
+**The code_v18 reference lanes, DrivAerML half (later the same day).** The
+reference configuration trained on the adopted snapshot (lanes `v18_dr_ref`
+and `v18_vol_ref`, two seeds, recipe_v8) against the last static-prototype
+lanes on the same recipe and the same per-block compile (the PERF-3 pairs
+`pf_dr_cb` and `pf_vol_cb`, code_v16): Surface pressure 0.0435 against
+0.0438 (ratio 0.994; seeds 1.000 and 0.988), wall shear 0.0683 against
+0.0690 (0.991); Volume pressure 0.0408 against 0.0409 (0.996), velocity
+0.0651 against 0.0654 (0.996), eddy viscosity 0.0871 against 0.0882
+(0.988), with per-seed ratios between 0.979 and 1.013. The adopted class
+is neutral to one percent better on both DrivAerML tasks, inside the
+adoption bar on every field, so the thesis-table values for these two rows
+can be restated from the v18 lanes without a change in reading
+(`results/v18_reference_reduce_2026-10-02.py`,
+`results/v18_reference_2026-10-02.json`). The wing and AirfRANS halves
+are scored when their lanes finish; under the characterization campaign
+(@sec-nb-char-prereg) every row is in any case replaced by the
+reference-configuration lanes of REF-80.
+
 ## 2026-10-02 — Verdict, WING-ELEMENT-ANATOMY: on the 210-wing rung no element class carries ISLA's excess (largest both-seed excess +0.06 / −0.01 on the slat core, bar +0.15), so the deficit is uniform over the elements as over curvature (H3); on the fixed-angle rung the slat alone clears the bar (+0.16 / +0.26; its core +0.28 / +0.38, 3% of the area, 17% of the error) while the flap and the gap band of the five-wing pilot do not {#sec-nb-wing-element-anatomy-verdict}
 
 **Setting.** WING-MECH asks where on the wing ISLA's excess pressure error
