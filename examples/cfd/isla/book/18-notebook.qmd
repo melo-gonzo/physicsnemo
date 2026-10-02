@@ -32837,3 +32837,84 @@ geometry carries no information, which is the fixed-mesh regime Peter
 deprioritized (ruling 4). Chapter 12 states the equal-epoch ratio beside
 the ladder. POISSON-8448-EQ is DONE and no further fixed-mesh lane is
 scheduled.
+
+## 2026-10-02 — Preregistration, CHAR: the characterization campaign on the frozen architecture. Every benchmark re-run under the mesh-native class only, on seven geometry-varying datasets, with one 80 GB reference configuration per architecture and two realism protocols (uniform point clouds, rotated and translated validation) per dataset and model; fixed-mesh datasets leave the book {#sec-nb-char-prereg}
+
+**Setting (Peter, 2026-10-02).** "Let's pause the architectural
+modifications, since I think we're set on this front." The adopted class
+(@sec-nb-proto-cond-2-adopted) is frozen. What follows is characterization:
+the benchmark record is rebuilt from lanes of this class only, so that no
+static-prototype, tensor-path or earlier-snapshot lane is load-bearing. No
+new dataset enters except AeroZoo, when Peter says it is ready.
+
+**Datasets and tasks.** DrivAerML (surface; volume), HighLiftAeroML
+(surface at the 210-wing rung; volume), AirfRANS (interior, two
+dimensions), Shift-SUV (surface), Tensile2D (interior, two dimensions,
+solids), the bracket lug (interior, solids), DeepJEB++ (surface, solids).
+OLBC is the one fixed-mesh set: a fixed mesh is unrealistic for almost any
+engineering case and does not exercise discretization independence, so it
+is not mentioned in the book; its chapters, tables and ledger rows are
+removed, and the lanes stay on the cluster as provenance.
+
+**Fairness rules.** Boundary conditions enter ISLA as boundary meshes with
+per-boundary-cell fields, never as one-hot scalar fields on the interior
+mesh; every dataset config is checked against this before its lane runs.
+The stored signed distance and its gradient are given to both ISLA and
+GeoTransolver, computed from the boundary alone (ISLA's measured best
+practice is the stored field, @sec-nb-internal-geometry-verdict; nothing
+in it needs a volume mesh). No baseline trains with rotation or translation
+augmentation: the `augmentations:` block of every dataset config is off for
+every architecture. Per-case parameter vectors (the lug's and Tensile2D's
+`params`, DeepJEB++'s load type) enter as named rank-0 global fields, one
+per component, as the field grammar requires.
+
+**One reference configuration per architecture (REF-80).** The most
+accurate configuration that trains within 80 GB of peak device memory per
+GPU at the reporting protocol (200,000 cells; 100,000 on AirfRANS), batch
+one, bfloat16, the recipe's optimizer. Memory is measured, not estimated:
+one profiled real training step per candidate on DrivAerML Surface
+(`kernel/char/mem_probe`), the frontier is the set of candidates under 80
+GB. For ISLA the candidates spend its memory lead along each axis: width
+384 / 512 / 768, 12 / 24 layers, 256 / 512 slices, 200,000 / 400,000 cells.
+For GeoTransolver: width 256 / 512 / 1,024 and 12 / 24 layers at 256
+slices. For Transolver: width 256 / 512 / 1,024 and 8 / 16 layers. The
+frontier candidates train for 500 epochs, two seeds, on DrivAerML Surface
+and the 210-wing rung (two datasets); the reference configuration per
+architecture is the candidate with the lowest seed-mean headline error on
+both, ties within 3% resolved toward the cheaper step. The learning rate
+follows the width rule of @sec-using-lr for ISLA and the recipe defaults
+for the baselines. Prediction: ISLA's frontier lies at larger capacity than
+the baselines' (its 384 x 12 reference uses 33 GB where GeoTransolver-512
+uses about 80), and its best spend is width before depth (the capacity
+ladders of @sec-capacity), with 400,000 cells neutral above 200,000 (the
+cells law of @sec-nb-isocost-verdict).
+
+**Lanes.** For every dataset and task, the three reference configurations
+train for 500 epochs, two seeds each, at the reporting protocol. Scoring
+in float32 on the held-out split under three protocols: (i) the native
+validation mesh, as every earlier lane; (ii) the uniform point cloud,
+every validation case resampled by area-weighted (surface) or
+volume-weighted (interior) uniform sampling of the same cell budget, which
+is what a user gets from an STL without a simulation mesh (the draw of
+@sec-nb-trainarea-dr-verdict); (iii) the rotated and translated
+validation set, every case under one random rotation and translation per
+case (the pose test of @sec-pose-prior, now on every dataset). Ratios are
+baseline ÷ ISLA per field. Prediction: ISLA is near parity on (i) and
+ahead on (ii) and (iii) on every dataset; a baseline that holds its (i)
+error on (iii) within 3% refutes the pose reading for that dataset.
+
+**Book.** Results are organized by dataset, one chapter each with the
+same layout: several samples (geometry, boundary conditions with their
+types and values, global variables, the predicted fields), the diversity
+of the set, the three-protocol table for the three architectures, the
+training-cases ladder where one exists, and the cost line. The scaling
+chapter stays. Chapter 3 absorbs chapter 9; chapter 5 absorbs the dataset
+appendix; chapter 1 separates the boundary-to-field problem from the
+surface task; chapter 4 shows each stage in code; chapter 2 extends the
+routing pictures to more datasets.
+
+**Order.** (0) the file-count quota and the mesh-native configs for
+Shift-SUV, DeepJEB++, the lug, Tensile2D and HiLift volume; (1) REF-80
+probes, then the frontier lanes; (2) the dataset lanes under the three
+reference configurations; (3) the three scorings; (4) the book. Each step
+has its own entry and ledger row.
