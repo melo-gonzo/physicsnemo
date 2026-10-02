@@ -1,0 +1,95 @@
+# ISLA, interior task, on AirfRANS (airfrans_volume_2d): the reference configuration of isla_volume.yaml in two
+# dimensions, with the airfoil boundary, the inlet direction and speed as global inputs and the stored signed
+# distance and its gradient as per-query inputs.
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ---------------------------------------------------------------------------
+# ISLA -- INTERIOR (volume) task (reference configuration).
+# ---------------------------------------------------------------------------
+# Boundary -> interior on DrivAerML volume data. Interior task
+# (`interior: true`): the outputs are predicted at `prediction_points`, the
+# dataset's interior point cloud passed as a Mesh; the prediction points join
+# the encoder as interacting tokens. The same mesh contract as
+# isla_surface.yaml otherwise: the boundary as named Mesh objects (centroids,
+# normals and measures read from the Mesh), the case's global data as a
+# TensorDict, one case per call; the output is a point-cloud Mesh at the
+# prediction points with the output_schema fields in its point_data.
+#
+# Each prediction point's built-in geometry, its signed distance to the
+# nearest boundary token and the direction to it, is computed inside the
+# model from the boundary sample and is never an input; this configuration
+# declares no `query_schema`, so the dataset's stored sdf / sdf_normals are
+# not read. isla_volume_sdf.yaml declares them as query inputs (the stored
+# field is computed on the full mesh, the internal one on the 200,000-cell
+# sample; the INTERNAL-GEOMETRY measurement).
+#
+# The boundary measure must sum to the surface area: a subsampled boundary's
+# raw cell areas sum to the kept fraction of it, so the model reads the
+# Horvitz-Thompson corrected `cell_data._effective_measure` that the reader's
+# cell subsample writes and `ComposeQuadratureMeasure` materializes in
+# datasets/drivaer_ml_volume_reference.yaml. Pair this model config with
+# that dataset config.
+input_type: mesh
+output_type: mesh
+
+# Learning rate pinned at the reference configuration's rate, 5e-4 (REF
+# verdict, 2026-09-23; the width rule 1e-3 x 192 / hidden at 384): the recipe
+# default of 3e-3 drives the model to a mean-field plateau (book notebook:
+# lrref-verdict; see isla_surface.yaml).
+training:
+  optimizer:
+    lr: 5.0e-4
+
+forward_kwargs:
+  boundary_meshes:
+    airfoil: boundaries.airfoil       # Mesh[1, 2] after RestrictToPlane: line cells with in-plane normals and segment lengths
+  prediction_points: interior         # the interior point-cloud Mesh (its point_data carries any query_schema fields)
+  global_data: global_data            # the case's TensorDict; the model selects its declared leaves
+
+model:
+  _target_: physicsnemo.experimental.models.ISLA
+  output_schema:                 # the dataset's targets, by name and tensor rank
+    velocity: {rank: 1}
+    pressure: {rank: 0}
+    nut: {rank: 0}
+  global_schema:
+    U_inf_dir: {rank: 1}         # the unit inlet direction, read from global_data.U_inf_dir
+    U_inf_mag: {rank: 0}         # the inlet speed, a rank-0 global input (the Reynolds number varies across cases)
+  query_schema:
+    sdf: {rank: 0}               # the stored signed distance to the airfoil (a length, scaled by the frame's length unit inside the model)
+    sdf_normals: {rank: 1}       # the stored SDF gradient, in the plane after RestrictToPlane
+  dim: 2                         # the problem is planar: pair with datasets/airfrans_volume_2d.yaml (RestrictToPlane first in its pipeline)
+  interior: true                 # predict at prediction_points, which join the encoder as tokens
+  hidden: 384                  # the reference configuration (REF verdict, 2026-09-23); also the class defaults
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  geo_checkpoint: true
+  # Geometry kernel: null = automatic: the exact fused Triton kernel wherever
+  # it can run (CUDA, one to four per-point vectors, <= 1024 slices, no rank-2
+  # per-token inputs), the eager PyTorch region otherwise. Force with `eager`
+  # or `fused`.
+  geo_kernel: null
+  # Run every slice block under torch.compile (built at the first step; parameter
+  # names and checkpoints unchanged; the fused kernel stays a custom-op leaf). At
+  # 200,000 cells on four GB300 ranks: step 221 -> 180 ms and peak memory
+  # 44.9 -> 32.9 GiB on DrivAerML Surface, 475 -> 308 ms and 88.5 -> 64.5 GiB on
+  # the Volume, at bfloat16 roundoff (PERF-3, 2026-10-01). The recipe's own
+  # `compile` flag compiles the whole model and recompiles every case (the mesh
+  # vertex count varies); leave it false and use this instead.
+  compile_blocks: true

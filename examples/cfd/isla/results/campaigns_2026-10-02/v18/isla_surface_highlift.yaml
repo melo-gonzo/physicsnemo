@@ -1,0 +1,105 @@
+# ISLA, surface task, on the HiLift wing datasets (highlift_surface_*): the reference configuration of isla_surface.yaml
+# with the wings' five cell targets (pressure, temperature, density scalars; velocity and wall shear vectors).
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ---------------------------------------------------------------------------
+# ISLA (Invariant Slice Attention) -- SURFACE task (reference configuration).
+# ---------------------------------------------------------------------------
+# ISLA is mesh-native: forward() takes the boundary as named Mesh objects,
+# the case's global data as a TensorDict and, for an interior task, the
+# prediction points as a point-cloud Mesh; it returns a point-cloud Mesh whose
+# point_data holds the output_schema fields. One case per call, no batch axis
+# (the same contract as GLOBE; the recipe keeps the DomainMesh end-to-end
+# for `input_type: mesh`).
+#
+# Surface task (`interior: false`, the class default): the outputs are
+# predicted at the boundary cells themselves, so no prediction points are
+# passed. The surface dataset's `MeshToDomainMesh` (interior_points:
+# cell_centroids) makes `interior` a point cloud at the vehicle's cell
+# centroids, in cell order, with the targets in its point_data, and keeps the
+# whole triangulated surface as `boundaries.vehicle`: the output Mesh's
+# points are the boundary cells in that same order, so predictions and
+# targets align point for point.
+#
+# From each boundary Mesh the model reads its cell centroids, cell normals
+# and cell measures; the quadrature measure is
+# `cell_data._effective_measure` when present (the Horvitz-Thompson corrected
+# measure that `SubsampleMesh` writes and `MeshToDomainMesh` keeps on the
+# boundary), else the geometric cell area. The `normals` cell_data field the
+# dataset computes for the tensor-input models is ignored.
+#
+# Frame: no origin (positions enter only through point-to-anchor
+# differences) and one length unit, the measure-weighted RMS pairwise
+# distance of the boundary sample; translation invariance is exact without
+# centering and no per-dataset reference length is needed.
+#
+# Global inputs are read from `global_data` by the declared name. External
+# aerodynamics has one global direction, the unit freestream `U_inf_dir`
+# written by the dataset's `ComputeFreestreamDirection`; other PDEs declare
+# their own global vectors and scalars under their dataset's leaf names.
+input_type: mesh
+output_type: mesh
+
+# Learning rate: 5e-4, the reference configuration's rate (REF verdict,
+# 2026-09-23), which is also the width rule lr = 1e-3 x 192 / hidden at
+# hidden 384. Pinned here because the recipe's default of 3e-3
+# (GeoTransolver's) drives ISLA within five epochs to a mean-field plateau
+# (validation loss 0.06 against 0.0008 at 1e-3, 192 wide; book notebook:
+# lrref-verdict) and 1e-2 diverges. For other widths start from the width
+# rule (3.75e-4 at 512). A CLI override still wins.
+training:
+  optimizer:
+    lr: 5.0e-4
+
+forward_kwargs:
+  boundary_meshes:
+    vehicle: boundaries.vehicle       # Mesh[2, 3]; centroids, normals and measures are read from it
+  global_data: global_data            # the case's TensorDict; the model selects its declared leaves
+
+model:
+  _target_: physicsnemo.experimental.models.ISLA
+  output_schema:                 # the HiLift wing targets, by name and tensor rank (0 scalar, 1 vector)
+    pressure: {rank: 0}
+    temperature: {rank: 0}
+    density: {rank: 0}
+    velocity: {rank: 1}
+    tau_wall: {rank: 1}
+  global_schema:
+    U_inf_dir: {rank: 1}         # a rank-1 global input, read from global_data.U_inf_dir; normalized to a unit direction inside the model
+  hidden: 384                  # the reference configuration (REF verdict, 2026-09-23); also the class defaults
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  # Rebuild the per-slice geometric invariants inside backward instead of
+  # storing them: forward and gradients bitwise identical, lower peak training
+  # memory for a modest step-time cost. Set false to trade memory for speed.
+  geo_checkpoint: true
+  # Geometry kernel: null = automatic: the exact fused Triton kernel wherever
+  # it can run (CUDA, one to four per-point vectors, <= 1024 slices, no rank-2
+  # per-token inputs; about a third of the eager step time and memory at
+  # 200,000 cells), the eager PyTorch region otherwise. Force with `eager` or
+  # `fused`.
+  geo_kernel: null
+  # Run every slice block under torch.compile (built at the first step; parameter
+  # names and checkpoints unchanged; the fused kernel stays a custom-op leaf). At
+  # 200,000 cells on four GB300 ranks: step 221 -> 180 ms and peak memory
+  # 44.9 -> 32.9 GiB on DrivAerML Surface, 475 -> 308 ms and 88.5 -> 64.5 GiB on
+  # the Volume, at bfloat16 roundoff (PERF-3, 2026-10-01). The recipe's own
+  # `compile` flag compiles the whole model and recompiles every case (the mesh
+  # vertex count varies); leave it false and use this instead.
+  compile_blocks: true

@@ -1,0 +1,33 @@
+# AirfRANS restricted to its plane (2026-10-02): airfrans_volume.yaml with RestrictToPlane first in the pipeline, so the
+# interior points, the airfoil polyline, the in-plane boundary normals, the SDF normals and the velocity target carry two
+# components and the model runs its native two-dimensional path (pair with conf/model/isla_volume_airfrans.yaml, dim: 2).
+# Everything else (reader, non-dimensionalization, nut normalization, splits, targets) is airfrans_volume.yaml verbatim.
+train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh
+manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh/manifest.json
+pipeline:
+  reader:
+    _target_: ${dp:DomainMeshReader}
+    path: ${train_datadir}
+    pattern: "airFoil2D_SST_*/*.pdmsh"
+    subsample_n_points: ${sampling_resolution}   # interior queries (each case has ~177k points)
+    subsample_n_cells: ${sampling_resolution}    # larger than any airfoil's ~1,000 segments: the boundary is kept whole
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    - _target_: ${dp:RestrictToPlane}                       # first: everything after it is two-dimensional
+      axis: 2
+      vector_fields: [interior.point_data.sdf_normals, interior.point_data.velocity, boundaries.airfoil.cell_data.normals]
+    - _target_: ${dp:NonDimensionalizeByMetadata}
+      fields:
+        velocity: velocity          # U / |U_inf|
+        pressure: pressure          # (p - p_inf) / (0.5 rho_inf |U_inf|^2) with rho_inf = 1, p_inf = 0 (kinematic p)
+        nut: identity
+      association: point_data
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:
+        nut: {type: scalar, mean: 7.9e-4, std: 2.4e-3}   # raw nut [m^2/s], mean and std over the converter per-case statistics (2026-09-21)
+targets:
+  pressure: scalar
+  nut: scalar
+  velocity: vector
