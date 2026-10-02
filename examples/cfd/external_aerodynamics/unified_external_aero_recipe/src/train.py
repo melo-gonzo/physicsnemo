@@ -762,6 +762,22 @@ def _run_epoch(
         f"({n_local} steps, {epoch_dt / n:.3f}s/step avg)"
     )
 
+    ### Peak device memory of the epoch, the maximum over ranks: the cost line of
+    ### every lane (the reference-configuration frontier is "the most accurate
+    ### model that trains under 80 GB per GPU", read from this record, 2026-10-02).
+    ### The allocator statistic is reset after the read so each epoch reports its
+    ### own peak.
+    peak_gib = None
+    if torch.cuda.is_available() and dist_manager.device.type == "cuda":
+        peak = torch.tensor(
+            [torch.cuda.max_memory_allocated(dist_manager.device) / 2**30],
+            device=dist_manager.device,
+        )
+        if dist.is_available() and dist.is_initialized():
+            dist.all_reduce(peak, op=dist.ReduceOp.MAX)
+        peak_gib = float(peak.item())
+        torch.cuda.reset_peak_memory_stats(dist_manager.device)
+
     if is_rank0:
         _log_to_tensorboard(writer, avg_losses, "epoch", epoch)
         _log_to_tensorboard(writer, avg_metrics, "epoch/metrics", epoch)
@@ -774,6 +790,8 @@ def _run_epoch(
                     "loss": avg_loss,
                     **avg_losses,
                     **avg_metrics,
+                    "epoch_seconds": epoch_dt,
+                    **({"peak_memory_gib": peak_gib} if peak_gib is not None else {}),
                 }
             )
 
