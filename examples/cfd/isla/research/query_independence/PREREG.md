@@ -132,3 +132,60 @@ one field and the passive arm not at all.
   query-side capacity if it is near the wall.
 - **Falsified:** writes carry information reads cannot; the support-token
   route is the next node, with this pair as its reference.
+
+## Amendment 1 (2026-10-02 13:40 PDT, before any QI lane passed epoch 120)
+
+**A third arm, found during the campaign: an independent support at inference.**
+`ISLA.forward(support_points=...)` (commit 2082d37f5) lets an *interacting*
+model take a support that writes with its learned routing mass while the
+prediction points only read. On the two finished v18 references (the same
+class, `isla_volume` / `isla_volume_airfrans`, no retraining), six held-out
+cases per checkpoint, a support drawn as a seeded random half of a twice
+larger interior sample (training law and count) gave support ÷ interacting
+0.97 to 1.01 on every field of both datasets, exact independence of the
+request (sentinel max difference 1e-5 to 2e-4 of the RMS target, float32
+noise), and 11x to 23x worse with nothing writing. That result is
+exploratory. Its confirmation is preregistered here on the QI interacting
+lanes, which are still training:
+
+- **Arm C:** `qi_drvol_int_seed{42,43}` and `qi_af_int_seed{42,43}` at epoch
+  500, every held-out case, read with a twice-larger interior sample
+  (DrivAerML: 400,000 points, `drivaer_ml_volume_reference_sdf_400k`;
+  AirfRANS: every point, `airfrans_volume_2d_all`). Support A: a seeded
+  random half (200,000; 100,000 on AirfRANS); evaluation points B: the
+  rest. Readout: per-case relative L2 on B for (i) B as interacting tokens
+  at the training request count (padded with A's head where B is smaller)
+  and (ii) B as passive readers behind A; also (iii) B with nothing
+  writing, and the sensitivity to the support draw (half of A swapped).
+  Script `support_probe.py`.
+- **Bars for arm C:** support ÷ interacting <= 1.03 on every field of both
+  datasets (seed means of the per-case means), no seed above 1.06:
+  supported; >= 1.10 on any field: falsified.
+- **Prediction:** supported on both datasets, by the v18 result.
+
+**The float32 floor of readouts 2, 4 and 5.** The 1e-4 and 1e-3 float32
+thresholds were set before the floor of the interior task was measured.
+Smoke runs on epoch 7 to 43 checkpoints measured: native float32 against
+float64 differs by 2e-4 to 1.5e-3 relative L2 and up to 0.1 to 0.18 of the
+RMS target at single points; the passive arm's sentinel and chunked
+differences in float64 are 3e-15 to 3e-13 (structural independence) and in
+float32 up to 2.6e-4 of the RMS target (DrivAerML) and 4e-5 (AirfRANS). The
+independence contract (readouts 2, 5) is therefore graded in float64 (bar
+1e-9 of the RMS target) and the float32 numbers are reported against the
+measured float32 floor, not the guessed 1e-4.
+
+**Readout 4 fails for both arms, for a reason unrelated to the arms.** The
+posed residual in float64 is 2e-3 (DrivAerML) and 1e-2 to 2.4e-2
+(AirfRANS) relative L2 in both arms. Diagnosis (`posed_diag.py`):
+(a) on DrivAerML every moving point (about 240 of 200,000) is a sign flip
+of the built-in signed distance at a point on or within 4e-5 of the wall,
+where the direction to the nearest sampled centroid is tangent to that
+centroid's cell (u . n ~ 0) and the sign is decided by rounding;
+(b) on AirfRANS 4,435 of 100,000 points change their nearest boundary
+sample under a translation with the library kNN (cuML on CUDA), carrying
+all of the residual; an exact float64 search has no flips. Both are
+properties of the current class's interior geometry, present in the
+interacting reference; neither involves the write path. Readout 4 is
+reported for both arms against each other (passive ÷ interacting residual)
+instead of against the 1e-3 bar, and the two causes go to Peter as
+findings about the class.
