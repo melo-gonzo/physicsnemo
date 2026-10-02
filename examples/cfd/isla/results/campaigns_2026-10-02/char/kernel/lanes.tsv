@@ -1,0 +1,13 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code
+0	cc	cc_smoke_jeb_isla	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_n256 val_split=test	5e-4	42	20000	code_v18
+1	cc	cc_smoke_jeb_gt	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_n256 val_split=test	1e-3	42	20000	code_v18
+2	cc	cc_smoke_jeb_tr	deepjebpp_surface	transolver_surface_deepjebpp	train_split=train_n256 val_split=test	1e-3	42	20000	code_v18
+3	cc	cc_smoke_lug_isla	ginot_lug_volume	isla_lug	train_split=train_n300 val_split=test	5e-4	42	20000	code_v18
+4	cc	cc_smoke_lug_gt	ginot_lug_volume	geotransolver_lug	train_split=train_n300 val_split=test	1e-3	42	20000	code_v18
+5	cc	cc_smoke_lug_tr	ginot_lug_volume	transolver_lug	train_split=train_n300 val_split=test	1e-3	42	20000	code_v18
+6	cc	cc_smoke_t2d_isla	plaid_tensile2d_2d	isla_tensile2d	train_split=train_400 val_split=val_100	5e-4	42	20000	code_v18
+7	cc	cc_smoke_t2d_gt	plaid_tensile2d	geotransolver_tensile2d	train_split=train_400 val_split=val_100	1e-3	42	20000	code_v18
+8	cc	cc_smoke_t2d_tr	plaid_tensile2d	transolver_tensile2d	train_split=train_400 val_split=val_100	1e-3	42	20000	code_v18
+9	cc	cc_smoke_suv_isla	shift_suv_surface	isla_surface	-	5e-4	42	20000	code_v18
+10	cc	cc_smoke_suv_gt	shift_suv_surface	geotransolver_surface	-	1e-3	42	20000	code_v18
+11	cc	cc_smoke_suv_tr	shift_suv_surface	transolver_surface	-	1e-3	42	20000	code_v18
