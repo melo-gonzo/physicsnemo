@@ -34,8 +34,8 @@ has three parts.
   outward unit normal $n_i$ and its measure $w_i$ (area in three dimensions,
   length in two). A cell can also carry **per-cell boundary scalars**, the
   data its boundary condition prescribes (a wall temperature, a prescribed
-  flux). This channel is optional, and none of the benchmark datasets uses
-  it.
+  flux). This channel is optional; the aerodynamic datasets leave it empty
+  and the solids and brackets fill it (@sec-datasets).
 - **$K$ global vector inputs.** Directions that belong to the problem rather
   than to any cell: a gravity or body-force direction, an applied field, the
   far-field flow direction. Each enters as a unit vector $\hat g_k$. A
@@ -123,6 +123,20 @@ fig.tight_layout(w_pad=3.0)
 plt.show()
 ```
 
+**The surface task and the interior task are the same problem with the
+prediction points placed differently.** The boundary-to-field map of
+@fig-problem-schematic takes the boundary and the global conditions and
+returns the field at whatever points are requested. When the requested
+points are the boundary cells themselves, the output is the surface field,
+pressure and wall shear on the body: that is the *surface task*, and it is
+the boundary-to-field problem with the prediction points on the boundary.
+When the requested points lie in the volume the boundary bounds, the
+output is the interior field: that is the *interior task*. One model, one
+forward pass; only the prediction points differ, and a model built for the
+problem must accept either set (@sec-arch-modes). The book names the two
+tasks separately on every dataset that carries both, because they are
+scored on different instruments, not because they are different problems.
+
 **Why steady, boundary-driven problems.** The admitted class is steady,
 well-posed, free of interior sources, and governed by the same equations
 everywhere in the domain. For such problems the boundary data and the
@@ -197,7 +211,7 @@ enter only in nondimensional form, scaled by the dataset's reference
 length, so learned weights never see units. No architecture is told how the
 field depends on any global input. Because HiLiftAeroML is a full
 geometry-by-direction grid, its axes of variation can each be held out
-separately (@sec-splits).
+separately (@sec-data-hilift-splits).
 
 ### What generalization means here
 
@@ -213,7 +227,7 @@ question per split, never two combined into one score:
   (@sec-limits-regime).
 - **Unseen geometry**: validation geometries that never appear in training
   at any condition, as distinct from geometries seen at other conditions
-  (@sec-splits).
+  (@sec-data-hilift-splits).
 - **Cross-family transfer**: zero-shot evaluation on a vehicle family
   different from the training family. The dataset for it is
   @sec-shift-suv, and the axis is unmeasured for ISLA
