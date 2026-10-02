@@ -1,0 +1,58 @@
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Transolver on PLAID Tensile2d (plaid_tensile2d, the three-coordinate form): the volume template (transolver_volume.yaml)
+# with the interior inputs coordinates, stored signed distance and its gradient (the wall geometry ISLA reads as query
+# inputs) and the nodal BC tags, and the six standardized input scalars (global_data.params_std, written by the dataset's
+# SplitGlobalVector) broadcast over the points as `fx`. Transolver has no boundary-token path, so the loaded / fixed / pinned
+# edges reach it through the nodal tags on the interior points, as in geotransolver_tensile2d.yaml.
+dataset_reader_overrides:
+  drop_in_file_boundaries: true   # this point-based model consumes only the interior
+
+input_type: tensors
+output_type: tensors
+
+forward_kwargs:
+  embedding:
+    - interior.points
+    - interior.point_data.sdf
+    - interior.point_data.sdf_normals
+    - interior.point_data.tag_top
+    - interior.point_data.tag_bottom
+    - interior.point_data.tag_bottomleft
+  fx:
+    source: global_data.params_std
+    expand_like: embedding
+
+model:
+  _target_: physicsnemo.models.transolver.Transolver
+  out_dim: ${out_dim}     # 4 scalars + displacement (3) = 7, from the dataset's targets block
+  functional_dim: 6       # fx = standardized [P, p1, p2, p3, p4, p5]
+  embedding_dim: 10       # embedding = points (3) + SDF (1) + SDF normals (3) + three nodal tags
+  n_layers: 12
+  n_hidden: 256
+  dropout: 0.0
+  n_head: 8
+  act: "gelu"
+  mlp_ratio: 4
+  slice_num: 256
+  unified_pos: false
+  structured_shape: null  # unstructured mesh
+  use_te: false
+  plus: false
+  activation_checkpointing: false
+  checkpointing_ratio: 1.0
