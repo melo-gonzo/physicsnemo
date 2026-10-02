@@ -132,8 +132,11 @@ like an area. With ``query_independent=True`` the prediction-point tokens are
 passive instead: they carry no routing weight, so at every depth they read the
 slices, anchors and prototypes the boundary formed and never write into them,
 and the prediction at a point is a function of that point and the boundary
-alone (any request can be split into chunks with the same result). The two
-tasks own different parameter sets (the interior task
+alone (any request can be split into chunks with the same result). An
+interacting model can instead be given ``support_points``: they write as the
+prediction points otherwise would and the prediction points only read, so a
+prediction depends on its point, the boundary and the support, never on the
+rest of the request. The two tasks own different parameter sets (the interior task
 adds the prediction-point embedding, type offset and routing mass), which is
 why the choice is a constructor argument: a parameter that takes no part in
 a forward pass stops DDP.
@@ -855,9 +858,9 @@ class ISLA(Module):
                     f"got {tuple(t.shape)}"
                 )
 
-    def _validate_meshes(self, boundary_meshes, prediction_points) -> None:
+    def _validate_meshes(self, boundary_meshes, prediction_points, support_points=None) -> None:
         """Mesh-level checks for :meth:`forward`: dimensions, declared fields,
-        and the task structure (``interior``)."""
+        and the task structure (``interior``, ``query_independent``)."""
         d = self.dim
         if not isinstance(boundary_meshes, Mapping) or not boundary_meshes:
             raise ValueError("boundary_meshes must be a non-empty mapping of name to Mesh")
@@ -898,32 +901,36 @@ class ISLA(Module):
                 "the boundary cells), so prediction_points must be None; build with "
                 "interior=True for an interior task"
             )
-        if isinstance(prediction_points, Mesh):
-            if prediction_points.n_spatial_dims != d:
+        self._validate_point_set(prediction_points, "prediction_points")
+        if support_points is not None:
+            if self.query_independent:
                 raise ValueError(
-                    f"prediction_points has {prediction_points.n_spatial_dims} spatial "
+                    "support_points write into the slices with the routing mass of interacting "
+                    "tokens; this model was built with query_independent=True and has none"
+                )
+            self._validate_point_set(support_points, "support_points")
+
+    def _validate_point_set(self, pts, label: str) -> None:
+        """An interior point set: a point-cloud Mesh carrying the ``query_schema``
+        fields, or a bare ``(N, dim)`` tensor when none are declared."""
+        d = self.dim
+        if isinstance(pts, Mesh):
+            if pts.n_spatial_dims != d:
+                raise ValueError(
+                    f"{label} has {pts.n_spatial_dims} spatial "
                     f"dimensions; this model has dim={d}"
                 )
-            self._check_fields(
-                self.query_schema,
-                prediction_points.point_data,
-                prediction_points.n_points,
-                "prediction_points.point_data",
-            )
+            self._check_fields(self.query_schema, pts.point_data, pts.n_points, f"{label}.point_data")
             return
-        if (
-            not isinstance(prediction_points, torch.Tensor)
-            or prediction_points.ndim != 2
-            or prediction_points.shape[-1] != d
-        ):
+        if not isinstance(pts, torch.Tensor) or pts.ndim != 2 or pts.shape[-1] != d:
             raise ValueError(
-                f"prediction_points must be a point-cloud Mesh or a tensor of shape (N, {d}); "
-                f"got {tuple(prediction_points.shape) if isinstance(prediction_points, torch.Tensor) else type(prediction_points).__name__}"
+                f"{label} must be a point-cloud Mesh or a tensor of shape (N, {d}); "
+                f"got {tuple(pts.shape) if isinstance(pts, torch.Tensor) else type(pts).__name__}"
             )
         if self.query_schema:
             raise ValueError(
                 f"this model's query_schema declares {sorted(self.query_schema)!r}; pass "
-                "prediction_points as a Mesh whose point_data carries them"
+                f"{label} as a Mesh whose point_data carries them"
             )
 
     def _select_global_data(self, global_data, device) -> TensorDict:
@@ -954,6 +961,7 @@ class ISLA(Module):
         *,
         boundary_meshes: Mapping[str, Mesh],
         prediction_points: Mesh | Float[torch.Tensor, "n_points dim"] | None = None,
+        support_points: Mesh | Float[torch.Tensor, "n_support dim"] | None = None,
         global_data: TensorDict | Mapping[str, torch.Tensor] | None = None,
     ) -> Mesh:
         r"""Predict the declared output fields for one case.
@@ -985,6 +993,17 @@ class ISLA(Module):
                 like any other PDE data. ``None`` for a surface task
                 (``interior=False``): the outputs are predicted at the boundary
                 tokens.
+            support_points: Interior points that write instead of the request
+                (interior task, ``query_independent=False``): given as
+                ``prediction_points`` are, they join the encoder as interacting
+                tokens with the learned routing mass split over them, the
+                prediction points become passive readers, and the outputs are
+                returned for the prediction points only. A prediction then
+                depends on its own point, the boundary and the support, never on
+                the rest of the request; with the request as its own support it
+                is the interacting prediction. ``None`` (default): the
+                prediction points write themselves (or, with
+                ``query_independent``, nothing in the interior writes).
             global_data: The case's per-case fields, a TensorDict (or mapping)
                 with the ``global_schema`` fields as leaves (a rank-0 field a
                 scalar, a rank-1 field a ``(dim,)`` vector); extra leaves are
@@ -1004,7 +1023,7 @@ class ISLA(Module):
         ### Validation at the API boundary (skipped under torch.compile): fail
         ### here with the offending mesh, not inside the network.
         if not torch.compiler.is_compiling():
-            self._validate_meshes(boundary_meshes, prediction_points)
+            self._validate_meshes(boundary_meshes, prediction_points, support_points)
         meshes = [boundary_meshes[name] for name in names]
         points = torch.cat([mesh.cell_centroids for mesh in meshes])
         normals = torch.cat([mesh.cell_normals for mesh in meshes])
@@ -1015,18 +1034,25 @@ class ISLA(Module):
         } or None
         global_td = self._select_global_data(global_data, points.device)
         global_inputs = {name: _leaf(global_td, name) for name in self.global_schema}
+        def _point_set(pts):
+            if isinstance(pts, Mesh):
+                return pts.points, {name: _leaf(pts.point_data, name) for name in self.query_schema}
+            return pts, {}
+
+        n_support = 0
         if prediction_points is None:
             out_points, query_points, query_inputs = points, None, None
-        elif isinstance(prediction_points, Mesh):
-            out_points = prediction_points.points
-            query_points = out_points[None]
-            query_inputs = {
-                name: _leaf(prediction_points.point_data, name)[None]
-                for name in self.query_schema
-            } or None
         else:
-            out_points, query_inputs = prediction_points, None
-            query_points = out_points[None]
+            out_points, q_in = _point_set(prediction_points)
+            q_pts = out_points
+            if support_points is not None:
+                ### The support's tokens lead the interior tokens; the head reads the rest.
+                s_pts, s_in = _point_set(support_points)
+                n_support = s_pts.shape[0]
+                q_pts = torch.cat([s_pts, q_pts])
+                q_in = {name: torch.cat([s_in[name], q_in[name]]) for name in q_in}
+            query_points = q_pts[None]
+            query_inputs = {name: t[None] for name, t in q_in.items()} or None
         ### One case: a batch axis of one for the batched machinery below.
         fields = self._forward_tensors(
             points=points[None],
@@ -1036,6 +1062,7 @@ class ISLA(Module):
             boundary_inputs=boundary_inputs,
             query_points=query_points,
             query_inputs=query_inputs,
+            n_support=n_support,
         )
         point_data = TensorDict({}, batch_size=[out_points.shape[0]], device=out_points.device)
         for name, value in fields.items():
@@ -1052,6 +1079,7 @@ class ISLA(Module):
         boundary_inputs: Mapping[str, torch.Tensor] | None = None,
         query_points: Float[torch.Tensor, "batch queries dim"] | None = None,
         query_inputs: Mapping[str, torch.Tensor] | None = None,
+        n_support: int = 0,
     ) -> dict[str, torch.Tensor]:
         """The batched network on token tensors; :meth:`forward` is its only
         caller and the release tests pin it.
@@ -1061,7 +1089,8 @@ class ISLA(Module):
         ``boundary_inputs`` and ``query_inputs`` flat ``{dotted name: tensor}``
         mappings over the declared fields (per-case values ``(B,)`` / ``(B, d)``,
         one row shared across the batch; per-token values ``(B, N, ...)``);
-        ``query_points`` ``(B, Q, d)`` for an interior model. Returns
+        ``query_points`` ``(B, Q, d)`` for an interior model, of which the first
+        ``n_support`` are a support that writes while the rest read. Returns
         ``{dotted name: (B, N_out, ...)}`` over the tokens the head read.
         """
         b, n, _ = points.shape
@@ -1138,6 +1167,17 @@ class ISLA(Module):
                 ### over points (routing prototypes, anchors, slice states, head-frame
                 ### anchors), so they read every block's slices and never write.
                 q_logw = log_w.new_full((bq, nq, 1), -math.inf)
+            elif n_support:
+                ### An explicit support writes with the interacting routing mass, split
+                ### over the support; the prediction points behind it only read.
+                s_logw = (
+                    self.qt.logw.to(log_w.dtype)
+                    + torch.logsumexp(log_w[:, :n_boundary], dim=1, keepdim=True)
+                    - math.log(n_support)
+                )
+                q_logw = torch.cat(
+                    [s_logw.expand(bq, n_support, 1), log_w.new_full((bq, nq - n_support, 1), -math.inf)], dim=1
+                )
             else:
                 ### The query tokens' total routing weight is a learned fraction of the
                 ### total boundary measure, split equally (see __init__): rescaling the
@@ -1169,9 +1209,9 @@ class ISLA(Module):
         r_out = r  # positions of the tokens the head reads (radial basis)
         g_out = g_hat  # the global directions seen by the tokens the head reads
         if interior:
-            h_out = h[:, n_boundary:]
-            n_hat, g_out, b, n = q_nhat, q_g, bq, nq
-            r_out = q_r
+            h_out = h[:, n_boundary + n_support :]
+            n_hat, g_out, b, n = q_nhat[:, n_support:], q_g[:, n_support:], bq, nq - n_support
+            r_out = q_r[:, n_support:]
         else:
             h_out = h
         coeffs = self.head(self.norm_out(h_out))

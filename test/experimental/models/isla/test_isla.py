@@ -355,6 +355,51 @@ def test_query_independent_interior_contracts():
         _isla(hidden=32, n_layers=1, n_slices=8, query_independent=True)
 
 
+def test_support_points_make_an_interacting_model_query_independent():
+    """support_points write with the interacting routing mass and the prediction points
+    only read: a prediction depends on its own point, the boundary and the support
+    (alone, a prefix, any order, any chunking: exact); with the request as its own
+    support it is the interacting prediction; covariance and the similarity gauge
+    hold with the support moved along; every parameter receives a gradient; misuse
+    raises."""
+    torch.manual_seed(0)
+    pts, nrm, w, drv = cloud(400)
+    mesh = soup(pts, nrm, w)
+    sup = torch.randn(120, 3, dtype=D) * 4.0
+    qpts = torch.randn(150, 3, dtype=D) * 4.0
+    m = _isla(hidden=64, n_layers=2, n_slices=16, interior=True).double().eval()
+    with torch.no_grad():
+        m.qt.logw.fill_(0.3)
+
+    def run(q, s=sup, msh=mesh, g=drv):
+        return _run(m, msh, g, q, support_points=s)
+
+    base = run(qpts)
+    assert base.point_data["p"].shape == (150,) and torch.equal(base.points, qpts)
+    perm = torch.randperm(150, generator=torch.Generator().manual_seed(1))
+    assert same(run(qpts[:50]), _rows(base, slice(0, 50)), atol=1e-12)
+    assert same(run(qpts[perm]), _rows(base, perm), atol=1e-12)
+    chunks = [outputs(run(c)) for c in qpts.split(40)]
+    assert same({k: torch.cat([c[k] for c in chunks]) for k in chunks[0]}, base, atol=1e-12)
+    assert same(_run(m, mesh, drv, qpts, support_points=qpts), _run(m, mesh, drv, qpts), atol=1e-10)
+    assert not same(run(qpts, s=sup * 0.5), base, atol=1e-6)
+    q = _rotation()
+    shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
+    _assert_rotated(run(qpts @ q.T + shift, s=sup @ q.T + shift, msh=transform(mesh, q, shift), g=drv @ q.T), base, q)
+    k = 2.7
+    assert same(run(k * qpts + shift, s=k * sup + shift, msh=transform(mesh, shift=shift, scale=k)), base, atol=1e-10, rtol=0.0)
+    m.train()
+    out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=qpts, support_points=sup, global_data={"g": drv}))
+    sum(o.square().mean() for o in out.values()).backward()
+    missing = [n for n, p in m.named_parameters() if p.grad is None]
+    assert not missing, missing
+    passive = _isla(hidden=32, n_layers=1, n_slices=8, interior=True, query_independent=True).double()
+    with pytest.raises(ValueError, match="query_independent=True"):
+        passive(boundary_meshes={"wall": mesh}, prediction_points=qpts, support_points=sup, global_data={"g": drv})
+    with pytest.raises(ValueError, match="support_points must be a point-cloud Mesh"):
+        m(boundary_meshes={"wall": mesh}, prediction_points=qpts, support_points=sup[:, :2], global_data={"g": drv})
+
+
 @pytest.mark.parametrize("extra", [{}, {"query_schema": {"sdf": {"rank": 0}}}])
 def test_query_mass_refinement_invariance(extra):
     """Splitting every boundary cell into two coincident half-measure copies leaves
