@@ -890,6 +890,79 @@ class ComposeQuadratureMeasure(MeshTransform):
 
 
 @register()
+class SqueezeScalarFields(MeshTransform):
+    r"""Drop the trailing singleton channel of named scalar fields, ``(N, 1)`` to ``(N,)`` (2026-10-02).
+
+    Converted datasets store some per-point scalars as one-channel columns (AirfRANS keeps its
+    signed distance as ``(N, 1)``); a model with a declared field grammar reads a rank-0 field as a
+    plain ``(N,)`` tensor (ISLA's ``query_schema``, ``boundary_schema``) and refuses the column. This
+    transform squeezes exactly one trailing axis of length one from each named field and leaves
+    everything else untouched; a field that is already ``(N,)`` passes through, and a field whose
+    trailing axis is not of length one is refused (it is not a scalar).
+
+    Args:
+        fields: dotted field names, e.g. ``interior.point_data.sdf`` or
+            ``boundaries.airfoil.cell_data.bc_value``. Missing names are skipped so one list can
+            serve several dataset variants.
+    """
+
+    def __init__(self, fields: Sequence[str]) -> None:
+        super().__init__()
+        self.fields = [str(f) for f in fields]
+
+    @staticmethod
+    def _squeeze(name: str, val: torch.Tensor) -> torch.Tensor:
+        if val.ndim == 1:
+            return val
+        if val.ndim == 2 and val.shape[-1] == 1:
+            return val[..., 0]
+        raise ValueError(
+            f"SqueezeScalarFields: {name} has shape {tuple(val.shape)}; a scalar field is (N,) or (N, 1)."
+        )
+
+    def _apply(self, mesh: Mesh, specs: list[tuple[str, str, str]]) -> Mesh:
+        pd, cd = mesh.point_data.clone(), mesh.cell_data.clone()
+        for assoc, key, full in specs:
+            data = pd if assoc == "point_data" else cd
+            if key in data.keys():
+                data[key] = self._squeeze(full, data[key])
+        return mesh.with_data(point_data=pd, cell_data=cd)
+
+    def _split(self) -> tuple[list, dict[str, list]]:
+        interior: list = []
+        boundaries: dict[str, list] = {}
+        for full in self.fields:
+            parts = full.split(".")
+            if len(parts) == 3 and parts[0] == "interior" and parts[1] in ("point_data", "cell_data"):
+                interior.append((parts[1], parts[2], full))
+            elif len(parts) == 4 and parts[0] == "boundaries" and parts[2] in ("point_data", "cell_data"):
+                boundaries.setdefault(parts[1], []).append((parts[2], parts[3], full))
+            else:
+                raise ValueError(
+                    f"SqueezeScalarFields: field {full!r} must be interior.<point_data|cell_data>.<name> or "
+                    "boundaries.<boundary>.<point_data|cell_data>.<name>"
+                )
+        return interior, boundaries
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        ### A bare Mesh is treated as an interior: only the interior.* names apply.
+        interior, _ = self._split()
+        return self._apply(mesh, interior)
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        interior_specs, boundary_specs = self._split()
+        interior = self._apply(domain.interior, interior_specs)
+        boundaries = {
+            name: (self._apply(bnd, boundary_specs[name]) if name in boundary_specs else bnd)
+            for name, bnd in domain.boundaries.items()
+        }
+        return DomainMesh(interior=interior, boundaries=boundaries, global_data=domain.global_data)
+
+    def extra_repr(self) -> str:
+        return f"fields={self.fields}"
+
+
+@register()
 class RestrictToPlane(MeshTransform):
     r"""Restrict a planar problem stored in three-dimensional coordinates to its plane (ND-GENERIC, 2026-09-28).
 
