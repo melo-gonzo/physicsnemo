@@ -32654,8 +32654,8 @@ wing reduction.
 
 **Instrument.** Lanes `pc2_hl_cent_medium` against `pc2_hl_ref_medium`,
 seeds 42 and 43, code_v12 + recipe_v4, the reference configuration at
-100,000 cells (the SCALE-HL rung), 500 epochs, float32 relative L2 on the
-180 held-out wings; reducer `results/proto_cond2_reduce_2026-09-29.py`,
+200,000 cells (the reporting protocol), 500 epochs, float32 relative L2 on
+the 180 held-out wings; reducer `results/proto_cond2_reduce_2026-09-29.py`,
 artifact `results/proto_cond2_2026-09-29.json`. The cosine check is the
 PROTO-COND diagnostic (`kernel/pc/diag/proto_cond_diag.py`, job 969702) on
 the four 2,048-case checkpoints, float32 eval-mode inference over the first
@@ -32672,7 +32672,7 @@ the four 2,048-case checkpoints, float32 eval-mode inference over the first
 | velocity | 0.0615 | 0.0608 | 0.99 | 0.97 | 1.01 |
 | wall shear | 0.0954 | 0.0940 | 0.99 | 0.96 | 1.01 |
 
-: PROTO-COND-2 on the 510 HiLift wings at 100,000 cells: the reference ISLA with centered and with static prototypes, float32 relative L2 on the 180 held-out wings (`results/proto_cond2_2026-09-29.json`). {#tbl-nb-proto-cond-2-wings}
+: PROTO-COND-2 on the 510 HiLift wings at 200,000 cells: the reference ISLA with centered and with static prototypes, float32 relative L2 on the 180 held-out wings (`results/proto_cond2_2026-09-29.json`). {#tbl-nb-proto-cond-2-wings}
 
 Every field is inside the bar on the mean and on both seeds; seed 42 favors
 the centered form by 3 to 5%, seed 43 the static form by 1 to 2%, so the

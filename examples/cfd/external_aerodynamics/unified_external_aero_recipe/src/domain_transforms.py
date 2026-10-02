@@ -980,14 +980,35 @@ class RestrictToPlane(MeshTransform):
         vector_fields: dotted field names whose trailing component is a spatial vector, e.g.
             ``interior.point_data.sdf_normals`` or ``boundaries.outer.cell_data.normals``. Missing names are
             skipped so one list can serve several dataset variants.
+        global_fields: names of per-case vectors in ``global_data`` (``global_data.U_inf_dir`` or just
+            ``U_inf_dir``) whose last axis is spatial and loses the dropped coordinate too, so a model's
+            rank-1 global inputs carry ``d = 2`` components. Missing names are skipped.
         atol: tolerance for the constancy check of the dropped coordinate; ``None`` disables the check.
     """
 
-    def __init__(self, axis: int = 2, vector_fields: Sequence[str] = (), atol: float | None = 1e-6) -> None:
+    def __init__(
+        self,
+        axis: int = 2,
+        vector_fields: Sequence[str] = (),
+        global_fields: Sequence[str] = (),
+        atol: float | None = 1e-6,
+    ) -> None:
         super().__init__()
         self.axis = int(axis)
         self.vector_fields = [str(f) for f in vector_fields]
+        self.global_fields = [str(f).removeprefix("global_data.") for f in global_fields]
         self.atol = None if atol is None else float(atol)
+
+    def _project_global(self, global_data):
+        """Drop the axis from the named per-case vectors; scalars and unnamed entries pass through."""
+        if not self.global_fields or global_data is None:
+            return global_data
+        gd = global_data.clone()
+        for name in self.global_fields:
+            if name in gd.keys():
+                val = gd[name]
+                gd[name] = val[..., self._keep(val.shape[-1])]
+        return gd
 
     def _keep(self, n: int) -> list[int]:
         if not 0 <= self.axis < n:
@@ -1051,11 +1072,14 @@ class RestrictToPlane(MeshTransform):
                 name: self._project_mesh(b, f"boundary {name!r}", boundaries.get(name, {}))
                 for name, b in domain.boundaries.items()
             },
-            global_data=domain.global_data,
+            global_data=self._project_global(domain.global_data),
         )
 
     def extra_repr(self) -> str:
-        return f"axis={self.axis}, vector_fields={self.vector_fields}, atol={self.atol}"
+        return (
+            f"axis={self.axis}, vector_fields={self.vector_fields}, "
+            f"global_fields={self.global_fields}, atol={self.atol}"
+        )
 
 
 @register()

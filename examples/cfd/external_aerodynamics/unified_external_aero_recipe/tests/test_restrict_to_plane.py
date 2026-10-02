@@ -76,3 +76,14 @@ def test_isla_runs_natively_in_two_dimensions_on_the_restricted_domain():
     out = model(boundary_meshes={"outer": d2.boundaries["outer"]}, prediction_points=d2.interior)
     assert out.point_data["u"].shape == (200,)
     torch.testing.assert_close(out.points, d2.interior.points)
+
+
+def test_named_global_vectors_lose_the_axis_too():
+    d = _square_domain()
+    d = DomainMesh(interior=d.interior, boundaries=d.boundaries,
+                   global_data=TensorDict({"U_inf_dir": torch.tensor([0.6, 0.8, 0.0]), "U_inf_mag": torch.tensor(30.0),
+                                           "Re": torch.tensor(1e6)}, batch_size=[]))
+    out = RestrictToPlane(axis=2, vector_fields=VEC, global_fields=["global_data.U_inf_dir", "U_inf", "missing"]).apply_to_domain(d)
+    torch.testing.assert_close(out.global_data["U_inf_dir"], torch.tensor([0.6, 0.8]))
+    assert out.global_data["U_inf_mag"].shape == () and out.global_data["Re"].shape == ()  # scalars untouched
+    assert out.interior.points.shape[1] == 2

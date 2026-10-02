@@ -17,6 +17,7 @@ pipeline:
     - _target_: ${dp:RestrictToPlane}                       # first: everything after it is two-dimensional
       axis: 2
       vector_fields: [interior.point_data.sdf_normals, interior.point_data.velocity, boundaries.airfoil.cell_data.normals]
+      global_fields: [global_data.U_inf_dir, global_data.U_inf]   # the per-case inlet vectors lose the axis as well
     - _target_: ${dp:SqueezeScalarFields}                   # the stored (N, 1) scalar columns become the (N,) fields the model's schema reads
       fields: [interior.point_data.sdf, interior.point_data.pressure, interior.point_data.nut]
     - _target_: ${dp:NonDimensionalizeByMetadata}
