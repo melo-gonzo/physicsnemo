@@ -32918,3 +32918,51 @@ Shift-SUV, DeepJEB++, the lug, Tensile2D and HiLift volume; (1) REF-80
 probes, then the frontier lanes; (2) the dataset lanes under the three
 reference configurations; (3) the three scorings; (4) the book. Each step
 has its own entry and ledger row.
+
+## 2026-10-02 — Status, CHAR step 0: four datasets run through the mesh-native recipe under all three architectures (12 of 12 smoke lanes to a metric); HiLift volume has no volume targets on the cluster and leaves the campaign; the reference-frontier memory probes read eager memory only, so the frontier is measured from one-epoch real lanes; Tensile2D is geometry-varying, not fixed-mesh {#sec-nb-char-configs-2026-10-02}
+
+**Configs (a fresh agent, brief in the session record).** DeepJEB++, the
+lug, Tensile2D and Shift-SUV each trained one epoch at 20,000 cells under
+ISLA, GeoTransolver and Transolver with augmentation off and produced a
+validation metric (lanes `cc_smoke_*`, jobs 974975 to 975002). What it
+took: a `SplitGlobalVector` recipe transform (a per-case parameter vector
+standardized and split into named rank-0 global fields: the lug's four
+parameters, Tensile2D's six, DeepJEB++'s load-type one-hot; the retired
+standardization transform the dataset configs still referenced no longer
+existed), ISLA configs `isla_lug`, `isla_tensile2d` (two-dimensional,
+`RestrictToPlane` first) and `isla_surface_deepjebpp` with boundary
+conditions as boundary-cell fields, Transolver configs for the three solids
+sets, `SqueezeScalarFields` on the stored one-column signed distance, and
+the lug's boundary pressure scaled to order one. The stored signed distance
+and its gradient go to ISLA and to both baselines on the interior sets.
+One deviation is structural: GeoTransolver and Transolver read Tensile2D's
+boundary-condition tags on the interior nodes, because a per-boundary-cell
+input is a path they do not have; ISLA reads them on the boundary mesh.
+**HiLift volume is excluded**: the cluster copy carries an interior for
+31 of 1,800 cases and those interiors are bare point clouds without
+targets, so no architecture can be scored on it until a volume conversion
+exists.
+
+**REF-80 probes.** Twenty-five profiled training steps on DrivAerML
+Surface (kernel/char/probe_*.json) gave peak memory per rank in the eager
+path only: the profiler's compile switch did not engage for ISLA (step
+223 ms and 44.4 GB for the reference, the eager figures of
+@sec-nb-perf-3-verdict), and the recipe compiles every architecture in a
+lane (`compile: true`), so the probe over-reads lane memory by an unknown
+factor per architecture. Eager, the 80 GB line falls at GeoTransolver
+width 256 (78 GB at 200,000 cells; width 512 is 98 GB at 200,000 and 50 GB
+at 100,000 cells), Transolver widths 256 and 512 at 200,000 cells (52, 65
+GB) and width 1,024 at 100,000 (47 GB), and ISLA at width 512 with 512
+slices (64 GB), with width 768, 24 layers and 400,000 cells just over
+(82 to 88 GB eager). The frontier is therefore read from real lanes: the
+recipe's epoch summary now records the epoch's peak device memory
+(maximum over ranks) and wall time, and 19 one-epoch lanes (group `rf1`,
+jobs 975278 to 975307) run every candidate as the campaign would.
+
+**Tensile2D is not a fixed-mesh set.** Checked because the dataset chapter
+said the shape hardly varies: across eight cases the boundary polyline has
+442 to 496 segments, the interior point arrays differ in size and content,
+and the specimen waist width (normalized half-domain) runs from 0.41 to
+1.37. A job over every case writes the distribution
+(`results/tensile2d_geometry_2026-10-02.json`); the chapter sentence is
+replaced from it. Tensile2D stays in the campaign.
