@@ -33005,3 +33005,19 @@ seeds on DrivAerML Surface (group `r80`, jobs 976553 to 976582); four
 ISLA probes at 100,000 cells (width 768, 24 layers, both, width 512 with
 24 layers) decide whether ISLA's frontier extends along the cells axis
 too, and the 210-wing twin follows.
+
+**The cells axis, later the same day.** The four ISLA probes at 100,000
+cells recorded: width 768 42.1 GiB, 24 layers 43.3, width 512 with 24
+layers 55.7, and width 768 with 24 layers 81.2. So three of the four
+over-budget ISLA shapes fit under 80 GiB at half the training cells, and
+only the largest (297M parameters) misses by 1.2 GiB. The frontier set
+of ISLA therefore has fourteen members in all: the four at 200,000 cells
+and these three at 100,000. They joined the DrivAerML Surface lanes (rows
+22 to 27 of `kernel/char/r80_lanes.tsv`), and the whole frontier of the
+three architectures, fourteen candidates with two seeds, launched as the
+210-wing twin on `highlift_surface_medium` (rows 28 to 55, validation
+every 25 epochs as in the other wing lanes). The scorer evaluates every
+`*_c100k_*` lane at 100,000 cells, the training count, as it does for
+AirfRANS. The reference configurations are chosen when both datasets are
+scored: lowest seed-mean headline error, ties within 3% to the cheaper
+candidate.

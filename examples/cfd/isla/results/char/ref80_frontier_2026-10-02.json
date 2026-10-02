@@ -62,6 +62,16 @@
    "compile_whole_model": true,
    "on_frontier": false
   },
+  "isla_c400k_nc": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_c400k_nc",
+   "n_parameters": 38093287,
+   "train_peak_gib": 88.09410858154297,
+   "epoch_seconds": 77.32153623599152,
+   "val_peak_gib": 3.053049087524414,
+   "compile_whole_model": false,
+   "on_frontier": false
+  },
   "isla_d24": {
    "architecture": "ISLA",
    "lane": "rf1_isla_d24",
@@ -72,6 +82,26 @@
    "compile_whole_model": true,
    "on_frontier": false
   },
+  "isla_d24_c100k": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_d24_c100k",
+   "n_parameters": 75641671,
+   "train_peak_gib": 43.299110412597656,
+   "epoch_seconds": 71.24113945593126,
+   "val_peak_gib": 2.1033568382263184,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "isla_d24_nc": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_d24_nc",
+   "n_parameters": 75641671,
+   "train_peak_gib": 85.36224365234375,
+   "epoch_seconds": 79.29917402938008,
+   "val_peak_gib": 2.559048652648926,
+   "compile_whole_model": false,
+   "on_frontier": false
+  },
   "isla_ref": {
    "architecture": "ISLA",
    "lane": "rf1_isla_ref",
@@ -80,6 +110,16 @@
    "epoch_seconds": 59.201770815998316,
    "val_peak_gib": 1.9991583824157715,
    "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "isla_ref_nc": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_ref_nc",
+   "n_parameters": 38093287,
+   "train_peak_gib": 44.413848876953125,
+   "epoch_seconds": 67.0117307677865,
+   "val_peak_gib": 1.9991583824157715,
+   "compile_whole_model": false,
    "on_frontier": true
   },
   "isla_s512": {
@@ -112,6 +152,26 @@
    "compile_whole_model": true,
    "on_frontier": false
   },
+  "isla_w512_d24_c100k": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w512_d24_c100k",
+   "n_parameters": 133295815,
+   "train_peak_gib": 55.681556701660156,
+   "epoch_seconds": 68.969367615995,
+   "val_peak_gib": 3.1536030769348145,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "isla_w512_d24_nc": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w512_d24_nc",
+   "n_parameters": 133295815,
+   "train_peak_gib": 109.35567474365234,
+   "epoch_seconds": 83.57323450199328,
+   "val_peak_gib": 3.7523460388183594,
+   "compile_whole_model": false,
+   "on_frontier": false
+  },
   "isla_w512_s512": {
    "architecture": "ISLA",
    "lane": "rf1_isla_w512_s512",
@@ -122,6 +182,16 @@
    "compile_whole_model": true,
    "on_frontier": true
   },
+  "isla_w512_s512_nc": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w512_s512_nc",
+   "n_parameters": 68813415,
+   "train_peak_gib": 64.27253723144531,
+   "epoch_seconds": 74.76276022009552,
+   "val_peak_gib": 3.0803375244140625,
+   "compile_whole_model": false,
+   "on_frontier": true
+  },
   "isla_w768": {
    "architecture": "ISLA",
    "lane": "rf1_isla_w768",
@@ -130,6 +200,36 @@
    "epoch_seconds": 72.04286007996416,
    "val_peak_gib": 4.798287868499756,
    "compile_whole_model": true,
+   "on_frontier": false
+  },
+  "isla_w768_c100k": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w768_c100k",
+   "n_parameters": 149619559,
+   "train_peak_gib": 42.14573287963867,
+   "epoch_seconds": 65.3089801389724,
+   "val_peak_gib": 3.6738929748535156,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "isla_w768_d24_c100k": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w768_d24_c100k",
+   "n_parameters": 297264583,
+   "train_peak_gib": 81.23770141601562,
+   "epoch_seconds": 75.01221405999968,
+   "val_peak_gib": 5.874645233154297,
+   "compile_whole_model": true,
+   "on_frontier": false
+  },
+  "isla_w768_nc": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w768_nc",
+   "n_parameters": 149619559,
+   "train_peak_gib": 82.08153533935547,
+   "epoch_seconds": 74.62696972803678,
+   "val_peak_gib": 4.798287868499756,
+   "compile_whole_model": false,
    "on_frontier": false
   },
   "t_h1024": {
@@ -195,10 +295,15 @@
  },
  "frontier": {
   "ISLA": [
+   "isla_w512_s512_nc",
    "isla_w512_s512",
    "isla_w512",
+   "isla_w512_d24_c100k",
    "isla_s512",
-   "isla_ref"
+   "isla_ref_nc",
+   "isla_ref",
+   "isla_d24_c100k",
+   "isla_w768_c100k"
   ],
   "GeoTransolver": [
    "gt_h256",
