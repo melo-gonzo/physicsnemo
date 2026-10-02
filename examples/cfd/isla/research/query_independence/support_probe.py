@@ -67,6 +67,7 @@ def main():
     p.add_argument("--max-cases", type=int, default=0)
     p.add_argument("--runs-dir", default=None, help="checkpoint root (default <task>/runs)")
     p.add_argument("--n-detail", type=int, default=2, help="cases with the float64 and posed checks")
+    p.add_argument("--n-uniform", type=int, default=20000, help="size of the volume-uniform-like evaluation set (0: off)")
     a = p.parse_args()
     for k, v in dict(RANK="0", WORLD_SIZE="1", LOCAL_RANK="0", MASTER_ADDR="127.0.0.1", MASTER_PORT=str(27000 + os.getpid() % 20000)).items():
         os.environ.setdefault(k, v)
@@ -81,6 +82,7 @@ def main():
     from physicsnemo import datapipes  # noqa: F401
     from physicsnemo.distributed import DistributedManager
     from physicsnemo.mesh import Mesh
+    from physicsnemo.mesh.calculus.measure import cell_measures
     from physicsnemo.utils import load_checkpoint
 
     t0 = time.time()
@@ -187,6 +189,31 @@ def main():
         sup2 = predict(fk, pp.slice_points(Brest), support=pp.slice_points(A2))
         sdf = pp.point_data["sdf"].reshape(-1).abs() if "sdf" in pp.point_data.keys() else pp.points.norm(dim=-1)
         qs = torch.tensor([0.1, 0.5, 0.9], device=dev, dtype=sdf.dtype)
+        uni = {}
+        if a.n_uniform > 0:
+            ### "Evaluate anywhere": a volume-uniform-like subset U of B near the body (|sdf| < 0.5 L, L the boundary's
+            ### RMS pairwise distance), drawn with probability proportional to r_16^d (the distance to B's 16th nearest
+            ### neighbour, a local-volume proxy) without replacement. U behind the support A (passive), U requested alone
+            ### (interacting, the request law shifted), and U inside an on-protocol interacting request (padded with A).
+            dd = pp.points.shape[-1]
+            bpts = torch.cat([m.cell_centroids for m in fk["boundary_meshes"].values()])
+            meas = torch.cat([cell_measures(m) for m in fk["boundary_meshes"].values()])
+            L = float(geom.rms_pairwise_distance(bpts[None], meas[None]).reshape(()))
+            xb = pp.points[B]
+            rk = torch.cat([torch.cdist(c, xb).topk(17, largest=False).values[:, -1] for c in xb.split(8192)])
+            sdfb = pp.point_data["sdf"].reshape(-1)[B].abs() if "sdf" in pp.point_data.keys() else torch.zeros_like(rk)
+            wgt = rk.double() ** dd * (sdfb < 0.5 * L)
+            m_u = min(a.n_uniform, int((wgt > 0).sum()) // 2)
+            U = B[torch.multinomial(wgt / wgt.sum(), m_u, replacement=False, generator=torch.Generator(device=dev).manual_seed(6000 + ci))]
+            ppU, tU = pp.slice_points(U), tgt[U]
+            u_sup = predict(fk, ppU, support=ppA)
+            u_alone = predict(fk, ppU)
+            u_in = predict(fk, pp.slice_points(torch.cat([U, A[: a.request - m_u]])))[:m_u]
+            uni = {"n": m_u, "L": L, "support": scores(u_sup, tU), "interacting_alone": scores(u_alone, tU),
+                   "interacting_in_request": scores(u_in, tU),
+                   "sdf_quantiles_B": [float(x) for x in sdfb.quantile(sdfb.new_tensor([0.1, 0.5, 0.9]))],
+                   "sdf_quantiles_U": [float(x) for x in pp.point_data["sdf"].reshape(-1)[U].abs().quantile(sdfb.new_tensor([0.1, 0.5, 0.9]))]
+                   if "sdf" in pp.point_data.keys() else None}
         detail = {}
         if ci < a.n_detail:
             ### covariance with the support moved along (float32 and float64), and float64 independence
@@ -196,10 +223,10 @@ def main():
                 q[:, 0] = -q[:, 0]
             t = torch.randn(pp.points.shape[-1], generator=gen, dtype=torch.float64) * float(ppA.points.std(0).norm())
             eye, zero = torch.eye(q.shape[0], dtype=torch.float64), torch.zeros(q.shape[0], dtype=torch.float64)
+            geom.knn = exact_knn  # the posed checks compare like with like under an exact search
             for tag, dt in (("fp32", torch.float32), ("fp64", torch.float64)):
                 if dt == torch.float64:
                     model.double()
-                    geom.knn = exact_knn
                 A_, B_ = ppA.to(dt), ppB.to(dt)
                 fk0, (A0, B0) = move(fk, [A_, B_], eye, zero)
                 fk1, (A1, B1) = move(fk, [A_, B_], q, t)
@@ -211,9 +238,10 @@ def main():
                     al = predict(fk0, B0.slice_points(s), support=A0, dtype=dt)
                     detail["sentinel_alone_maxdiff_fp64"] = maxdiff(al, y0[s], tB[s].double())
                     model.float()
-                    geom.knn = library_knn
+            geom.knn = library_knn
             log("detail " + json.dumps(detail))
         rec = {"case": ci, "sample_index": int(idx), "n_interior": n, "n_support": a.request, "n_eval": nb, **detail,
+               **({"uniform": uni} if uni else {}),
                "law_check_quantiles": {"A": [float(x) for x in sdf[A].quantile(qs)], "B": [float(x) for x in sdf[B].quantile(qs)]},
                "interacting": scores(inter, tB), "support": scores(sup, tB), "no_support": scores(nosup, tB),
                "sentinel_alone_maxdiff": maxdiff(alone, sup[s], tB[s]),
@@ -225,7 +253,11 @@ def main():
         log(f"case {ci + 1}/{len(idxs)} n={n} eval={nb} interacting " + " ".join(f"{f}={rec['interacting'][f]:.4f}" for f in FIELDS)
             + " | support/interacting " + " ".join(f"{f}={v:.3f}" for f, v in r.items())
             + " | no_support/interacting " + " ".join(f"{f}={rec['no_support'][f] / rec['interacting'][f]:.3f}" for f in FIELDS)
-            + f" | sentinel maxdiff p={rec['sentinel_alone_maxdiff']['pressure']:.1e} | swap change p={rec['support_swap']['rel_change']['pressure']:.1e} ({rec['seconds']} s)")
+            + f" | sentinel maxdiff p={rec['sentinel_alone_maxdiff']['pressure']:.1e} | swap change p={rec['support_swap']['rel_change']['pressure']:.1e}"
+            + (f" | uniform n={uni['n']} support/in-request p={uni['support']['pressure'] / uni['interacting_in_request']['pressure']:.3f}"
+               f" u={uni['support']['velocity'] / uni['interacting_in_request']['velocity']:.3f}, alone/in-request p={uni['interacting_alone']['pressure'] / uni['interacting_in_request']['pressure']:.3f}"
+               f" u={uni['interacting_alone']['velocity'] / uni['interacting_in_request']['velocity']:.3f}" if uni else "")
+            + f" ({rec['seconds']} s)")
     mean = lambda key: {f: sum(c[key][f] for c in cases) / len(cases) for f in FIELDS}  # noqa: E731
     summ = {k: mean(k) for k in ("interacting", "support", "no_support")}
     summ["support_over_interacting"] = {f: summ["support"][f] / summ["interacting"][f] for f in FIELDS}
@@ -233,6 +265,9 @@ def main():
     summ["sentinel_alone_maxdiff_max"] = {f: max(c["sentinel_alone_maxdiff"][f] for c in cases) for f in FIELDS}
     summ["support_swap_rel_change_mean"] = {f: sum(c["support_swap"]["rel_change"][f] for c in cases) / len(cases) for f in FIELDS}
     summ["support_swap_score_ratio"] = {f: sum(c["support_swap"]["swapped"][f] for c in cases) / sum(c["support_swap"]["support"][f] for c in cases) for f in FIELDS}
+    un = [c for c in cases if "uniform" in c]
+    if un:
+        summ["uniform"] = {k: {f: sum(c["uniform"][k][f] for c in un) / len(un) for f in FIELDS} for k in ("support", "interacting_alone", "interacting_in_request")}
     det = [c for c in cases if "posed_rel_fp64" in c]
     if det:
         for k in ("posed_rel_fp32", "posed_rel_fp64", "sentinel_alone_maxdiff_fp64"):

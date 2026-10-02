@@ -228,6 +228,7 @@ def main():
             ### vertices); the loaded meshes may carry cached geometry from the converter, whose effect on the native
             ### prediction is reported separately as rebuild_vs_native.
             eye, zero = torch.eye(pp.points.shape[-1], dtype=torch.float64), torch.zeros(pp.points.shape[-1], dtype=torch.float64)
+            geom.knn = exact_knn  # the posed readout compares like with like under an exact search
             fkr, ppr = posed(fk, pp, eye, zero)
             ref = predict(fkr, ppr)
             fkp, ppp = posed(fk, pp, R, t)
@@ -236,6 +237,7 @@ def main():
             back = pz.clone()
             back["velocity"] = pz["velocity"] @ Rf
             rec["posed"] = {f: float((back[f] - ref[f]).norm() / ref[f].norm()) for f in FIELDS}
+            geom.knn = library_knn
             rec["rebuild_vs_native"] = {f: float((ref[f] - native[f]).norm() / native[f].norm()) for f in FIELDS}
             rec["cached_boundary_geometry"] = {k: sorted(".".join(x) if isinstance(x, tuple) else x for x in m._cache.keys(include_nested=True, leaves_only=True))
                                                for k, m in fk["boundary_meshes"].items()}

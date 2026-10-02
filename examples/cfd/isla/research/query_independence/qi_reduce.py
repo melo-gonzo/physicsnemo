@@ -75,6 +75,24 @@ def main():
         res["verdict_accuracy"] = verdict
         res["better_fields"] = [f"{ds}:{f}" for ds, f, r, p in ratios if r <= 0.97 and max(p) < 1]
         res["fields_above_1.03"] = [f"{ds}:{f}" for ds, f, r, p in ratios if r > 1.03 or max(p) > 1.06]
+    ### arm C (amendment 1): the interacting lanes made query-independent at inference by an independent support
+    res["support"] = {}
+    for ds in DATASETS:
+        per = {}
+        for seed in SEEDS:
+            pj = task / "eval" / "support" / f"qi_{ds}_int_seed{seed}.json"
+            if pj.exists():
+                per[seed] = json.load(open(pj))["summary"]
+            else:
+                res["missing"].append(str(pj))
+        if len(per) == len(SEEDS):
+            ratio = {f: sum(per[s]["support"][f] for s in SEEDS) / sum(per[s]["interacting"][f] for s in SEEDS) for f in FIELDS}
+            paired = {f: [per[s]["support_over_interacting"][f] for s in SEEDS] for f in FIELDS}
+            res["support"][ds] = {"per_seed": per, "ratio_support_over_interacting": ratio, "paired": paired}
+    if len(res["support"]) == len(DATASETS):
+        rs = [(r, p) for ds in res["support"] for f, r in res["support"][ds]["ratio_support_over_interacting"].items() for p in [res["support"][ds]["paired"][f]]]
+        res["verdict_support"] = ("SUPPORTED (equal or better)" if all(r <= 1.03 and max(p) <= 1.06 for r, p in rs)
+                                  else "FALSIFIED" if any(r >= 1.10 for r, _ in rs) else "BETWEEN")
     out.write_text(json.dumps(res, indent=1))
     ### human-readable summary
     for ds, d in r1.items():
@@ -98,6 +116,18 @@ def main():
         if "fp64_case0" in s:
             print("  float64: " + "; ".join(f"{k} {fmt(v, e=True)}" for k, v in s["fp64_case0"].items()))
         print("  bands " + "; ".join(f"{b}: n={v['n']} p={v['pressure']:.4f} u={v['velocity']:.4f} nut={v['nut']:.4f}" for b, v in s["bands_pooled_rel_l2"].items()))
+    for ds, d in res["support"].items():
+        print(f"\n## Arm C, {DATASETS[ds]}: support / interacting " + " ".join(f"{f}={v:.3f} ({' / '.join(f'{x:.3f}' for x in d['paired'][f])})" for f, v in d["ratio_support_over_interacting"].items()))
+        for seed, s in d["per_seed"].items():
+            print(f"  seed {seed}: interacting {fmt(s['interacting'])} | support {fmt(s['support'])} | no support {fmt(s['no_support'])}")
+            if "uniform" in s:
+                u = s["uniform"]
+                print(f"    uniform-like U: support {fmt(u['support'])} | in request {fmt(u['interacting_in_request'])} | alone {fmt(u['interacting_alone'])}")
+            for k in ("sentinel_alone_maxdiff_fp64_max", "posed_rel_fp32_max", "posed_rel_fp64_max"):
+                if k in s:
+                    print(f"    {k} {fmt(s[k], e=True)}")
+    if "verdict_support" in res:
+        print(f"\nArm C verdict: {res['verdict_support']}")
     if res["missing"]:
         print(f"\nmissing ({len(res['missing'])}): " + ", ".join(res["missing"]))
 

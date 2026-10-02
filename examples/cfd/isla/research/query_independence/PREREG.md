@@ -189,3 +189,21 @@ interacting reference; neither involves the write path. Readout 4 is
 reported for both arms against each other (passive ÷ interacting residual)
 instead of against the 1e-3 bar, and the two causes go to Peter as
 findings about the class.
+
+## Amendment 2 (2026-10-02 14:00 PDT, QI lanes at epoch <= 130)
+
+**A secondary readout for arm C, "evaluate anywhere".** Per held-out case a
+volume-uniform-like set U of 20,000 evaluation points near the body
+(|stored sdf| < 0.5 L, L the boundary's RMS pairwise distance), drawn from
+B with probability proportional to the cube (square in 2-D) of each
+point's 16th-nearest-neighbour distance: what a user who asks for a
+uniform grid around the body gets. Three predictions at U: behind the
+support A (passive), U requested alone (interacting; SMART's RQ3 for this
+model) and U inside an on-protocol interacting request padded with A's
+head. No bar: it is reported beside arm C. Smoke on the v18 references
+(three AirfRANS airfoils, one DrivAerML car): support ÷ in-request 0.66 to
+1.00, U alone ÷ in-request 1.3x to 12x.
+
+The posed checks of both probes now use an exact float64 nearest-neighbour
+search for the reference and the posed case alike (`exact_knn`); the
+library search's translation sensitivity is reported from `posed_diag.py`.
