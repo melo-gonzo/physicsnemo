@@ -32581,3 +32581,56 @@ using-ISLA chapter states the neutrality beside the step numbers.
 rewrite, not tuning, and is not scheduled. A matched real-step profile
 of GeoTransolver at 200,000 cells remains the fair cost comparison and
 is not yet run.
+
+## 2026-10-02 — Verdict, GT-FPP closes: on the 510 HiLift wings at 100,000 cells, GeoTransolver-512 with the FLARE++ backend is 1.18x worse than physics attention on pressure (1.25 / 1.12 per seed) and 1.11x to 1.17x worse on every other field; physics attention stays the wing baseline, and the steel-man check ends with FLARE++ replacing the baseline at OLBC Poisson 2,048 only {#sec-nb-gt-fpp-hilift-verdict}
+
+**Setting.** GT-FPP is the steel-man check on the GeoTransolver baseline:
+the released FLARE++ attention backend against the released physics
+attention, same width, same rate, same protocol, on every flagship
+benchmark. Its rule: if FLARE++ is better by more than 3% on a dataset's
+headline field, it becomes the baseline there and every ISLA ratio on
+that dataset is restated. The DrivAerML, AirfRANS and OLBC readings are in
+@sec-nb-gt-fpp-interim, @sec-nb-gt-fpp-poisson-verdict,
+@sec-nb-gt-fpp-poisson-512 and @sec-nb-gt-fpp-olbc-verdict. This entry
+closes the last open pair, the 510-wing HiLift rung.
+
+**Instrument.** GeoTransolver width 512 with FLARE++
+(`gf_hl_gt512_fpp_medium_c100k`, seeds 42 and 43, code_v11, learning rate
+1e-3, 500 epochs, 100,000 cells, the SCALE-HL protocol) against the
+physics-attention twins of `results/scalehl_2026-09-26.json`
+(`shl_med_gt_w512_c100k`). Float32 relative L2 on the 180 held-out
+wings; reducer `results/gt_fpp_reduce_2026-09-29.py`, artifact
+`results/gt_fpp_2026-09-29.json`. The headline is pressure.
+
+**What we saw** (FLARE++ ÷ physics attention on seed means; per seed in
+parentheses):
+
+| Field | Physics attention | FLARE++ | FLARE++ ÷ physics | Seed 42 | Seed 43 |
+|---|---|---|---|---|---|
+| pressure (headline) | 0.0382 | 0.0451 | 1.18 | 1.25 | 1.12 |
+| temperature | 0.0466 | 0.0517 | 1.11 | 1.14 | 1.07 |
+| density | 0.0515 | 0.0604 | 1.17 | 1.23 | 1.12 |
+| velocity | 0.0573 | 0.0651 | 1.14 | 1.16 | 1.12 |
+| wall shear | 0.0880 | 0.1015 | 1.15 | 1.18 | 1.13 |
+
+: GT-FPP on the 510 HiLift wings at 100,000 cells: GeoTransolver-512 under the two backends, float32 relative L2 on the 180 held-out wings (`results/gt_fpp_2026-09-29.json`). {#tbl-nb-gt-fpp-hilift}
+
+FLARE++ is worse on every field and on both seeds; the smallest per-seed
+ratio is 1.07 (temperature, seed 43). Both lanes completed 500 epochs
+without NaN; this is a plain accuracy gap, not a training failure of the
+elasticity 8,448 kind.
+
+**Verdict.** Physics attention stays the GeoTransolver baseline on the
+wings; no wing ratio in chapter 08 changes. Across the whole check,
+FLARE++ replaces the baseline at OLBC Poisson 2,048 only (0.77), ties
+within 3% on DrivAerML Surface at the best rates and on elasticity at
+512 and 2,048, and is weaker on AirfRANS (1.14 to 1.30), the wings
+(1.18), Poisson 512 and 8,448 (1.07, 1.18), and elasticity 8,448 (where
+it fails to train, 4.4x to 6.4x). GT-FPP is DONE. FLARE++ is a released
+baseline and is not tuned further.
+
+**Why it matters.** The steel-man question was whether the GeoTransolver
+numbers the book compares against were the weaker of two released
+backends. On the flagship surface and interior benchmarks they were not;
+the one place the stronger backend changes is a single Poisson rung,
+which chapter 12 already quotes under the 3% rule.

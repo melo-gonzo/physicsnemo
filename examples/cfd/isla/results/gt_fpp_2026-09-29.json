@@ -128,14 +128,103 @@
    "reading": "within 3%"
   },
   "hilift_510_w512": {
-   "status": "not scored",
-   "reference": {
+   "fields": [
+    "pressure_l2",
+    "temperature_l2",
+    "density_l2",
+    "velocity_l2",
+    "tau_wall_l2"
+   ],
+   "headline": [
+    "pressure_l2"
+   ],
+   "headline_ratio": 1.179465319502421,
+   "physics_attention": {
     "pressure_l2": 0.0382395511907008,
     "temperature_l2": 0.04663183255535033,
     "density_l2": 0.051495539355609146,
     "velocity_l2": 0.057293878826830125,
     "tau_wall_l2": 0.08796748872846366
-   }
+   },
+   "flare_pp": {
+    "pressure_l2": 0.0451022244627691,
+    "temperature_l2": 0.05165248850050072,
+    "density_l2": 0.060372613768817654,
+    "velocity_l2": 0.06505373217579391,
+    "tau_wall_l2": 0.10151782267623477
+   },
+   "ratio": {
+    "pressure_l2": 1.179465319502421,
+    "temperature_l2": 1.107665851201345,
+    "density_l2": 1.1723853080148694,
+    "velocity_l2": 1.1354394833768862,
+    "tau_wall_l2": 1.1540379763437152
+   },
+   "per_seed": {
+    "physics_attention": {
+     "42": {
+      "pressure_l2": 0.036835722169942325,
+      "temperature_l2": 0.04559725592326787,
+      "density_l2": 0.04985893999950753,
+      "velocity_l2": 0.056987816819714175,
+      "tau_wall_l2": 0.08679933579017719
+     },
+     "43": {
+      "pressure_l2": 0.039643380211459266,
+      "temperature_l2": 0.04766640918743279,
+      "density_l2": 0.05313213871171077,
+      "velocity_l2": 0.05759994083394607,
+      "tau_wall_l2": 0.08913564166675012
+     }
+    },
+    "flare_pp": {
+     "42": {
+      "pressure_l2": 0.04591295069290532,
+      "temperature_l2": 0.052187631879415775,
+      "density_l2": 0.061403602102978364,
+      "velocity_x_l2": 0.05303605967718694,
+      "velocity_y_l2": 0.16310527125994365,
+      "velocity_z_l2": 0.09826801593104999,
+      "velocity_l2": 0.0658343219715688,
+      "tau_wall_x_l2": 0.08732976805832651,
+      "tau_wall_y_l2": 0.18249950462745296,
+      "tau_wall_z_l2": 0.11081751878890726,
+      "tau_wall_l2": 0.1024864937696192
+     },
+     "43": {
+      "pressure_l2": 0.04429149823263288,
+      "temperature_l2": 0.05111734512158566,
+      "density_l2": 0.05934162543465694,
+      "velocity_x_l2": 0.05123060827867852,
+      "velocity_y_l2": 0.16069674359427558,
+      "velocity_z_l2": 0.097877962473366,
+      "velocity_l2": 0.06427314238001904,
+      "tau_wall_x_l2": 0.08479644743104776,
+      "tau_wall_y_l2": 0.17964097377326754,
+      "tau_wall_z_l2": 0.11081354727761614,
+      "tau_wall_l2": 0.10054915158285035
+     }
+    },
+    "ratio": {
+     "42": {
+      "pressure_l2": 1.2464246114433435,
+      "temperature_l2": 1.1445344861813251,
+      "density_l2": 1.2315464810039054,
+      "velocity_l2": 1.1552350247043381,
+      "tau_wall_l2": 1.1807290094634257
+     },
+     "43": {
+      "pressure_l2": 1.1172482769224112,
+      "temperature_l2": 1.0723976484274949,
+      "density_l2": 1.1168687516352047,
+      "velocity_l2": 1.1158543125124214,
+      "tau_wall_l2": 1.1280465333807965
+     }
+    }
+   },
+   "n_seeds": 2,
+   "interim": false,
+   "reading": "physics attention stronger"
   },
   "airfrans_interior": {
    "fields": [
