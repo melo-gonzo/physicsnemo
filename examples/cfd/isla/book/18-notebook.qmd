@@ -24736,7 +24736,7 @@ statistics, splits, pitfalls). Peter asked that the detailed dataset
 material go into appendix chapters of the book.
 
 **What was done.** A new appendix chapter `14-datasets.qmd`
-(`@sec-datasets-detail`, registered before the notebook) now holds the
+(`@sec-datasets`, registered before the notebook) now holds the
 detail: a conventions section for what every converted dataset shares
 (the `DomainMesh` layout and the two reader patterns, the positive-outside
 signed distance, boundary conditions as per-cell 0/1 labels and per-cell
@@ -26074,7 +26074,7 @@ under the reference (GeoTransolver-volume ÷ ISLA 1.14 / 1.77 / 1.01 and
 the "a third of the parameters" clause becomes 1.25x; an ISLA-only volume
 ladder (54 / 109 / 435 cars); new sections `#sec-interior-lug` (1.06 half
 rate / 1.08 / 0.99 / 1.13; exponents 0.65 against 0.47) and
-`#sec-interior-olbc` (0.32 / 0.25 / 0.35 with equal exponents 0.84 against
+`#sec-nb-olbc-ref-ladder-verdict` (0.32 / 0.25 / 0.35 with equal exponents 0.84 against
 0.81; the mechanism verdict with its one-seed caveat). Index, 05, 06, 11,
 13, 15, STYLE.md and CLAIMS.md restated to match; 12 carries REF as DONE,
 REF-BOARD RUNNING with the ladder verdict, and the SOLIDS / OLBC / DEEPJEB
@@ -26655,7 +26655,7 @@ the baselines' augmented lanes, which are what they are (released models).
 **Setting.** On the OLBC Poisson set (one fixed square mesh, random
 labeled Dirichlet, Neumann and Robin segments and a random source per
 sample) ISLA trails GeoTransolver-512 by a factor of three at every rung
-(@sec-interior-olbc). The mechanism study at 512 cases found the gap in
+(@sec-nb-olbc-ref-ladder-verdict). The mechanism study at 512 cases found the gap in
 value transport: a parameter-free extension of the prescribed boundary
 values into the interior (`ext`) recovers 84% of the log-gap, the domain's
 axes as two global vectors (`frame2`) recover 19%, four times the slices
@@ -26691,7 +26691,7 @@ recovers 84%; 0.6); at 2,048 additive (the frame's 67% is positional and
 the extension's contribution is value transport; 0.6). Whatever the
 outcome, the standing that enters the book is against GeoTransolver-512
 at the same rung with both seeds, and the mechanism section of
-@sec-interior-olbc gains one sentence.
+@sec-nb-olbc-ref-ladder-verdict gains one sentence.
 
 ## 2026-09-23 — Finding, the 35-wing deficit by angle of attack: GeoTransolver-512 ÷ ISLA is 0.77 up to 14 degrees and 0.67 from 16 degrees, where both errors double; the two models rank the cases alike (Spearman 0.80); 210-case twin preregistered {#sec-nb-hl35-percase}
 
@@ -29565,7 +29565,7 @@ the frame rows are removed from the interior tables and the scoreboard
 sentences of the surface chapter, the Tensile2d standing is restated on
 the tensor head with the load direction as the one global vector
 (@sec-interior-tensile2d) and the OLBC elasticity standing on the rank-1
-inputs with the tensor output (@sec-interior-olbc). Ledger rows FRAME-AF,
+inputs with the tensor output (@sec-nb-olbc-ref-ladder-verdict). Ledger rows FRAME-AF,
 FRAME-3D, FRAME-3D-R2, FRAME-PROVIDED, FRAME-WING, FRAME-VOL and
 FRAME-CHANNEL are STOPPED under the ruling; the mechanism controls are
 marked diagnostic; the decision is recorded in @sec-principled-ledger.
