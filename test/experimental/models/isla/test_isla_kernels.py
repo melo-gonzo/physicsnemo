@@ -247,3 +247,30 @@ def test_compile_blocks_matches_eager(device):
     built = opt._block_forwards
     _run(opt, inputs, tgt)
     assert opt._block_forwards is built
+
+
+@cuda_only
+def test_query_independent_interior_fused_and_compiled_blocks_match_eager():
+    """The training configuration of the passive interior task (fused geometry kernel,
+    compiled blocks) reproduces the eager model in float64, and its predictions stay
+    query-independent on CUDA: a request's prefix gives the prefix of the predictions."""
+    spec = {**REF, "interior": True, "query_independent": True}
+    torch.manual_seed(0)
+    ref = ISLA(**spec, geo_kernel="eager").to("cuda", torch.float64)
+    torch.manual_seed(0)
+    opt = ISLA(**spec, geo_kernel="fused", compile_blocks=True).to("cuda", torch.float64)
+    opt.load_state_dict(ref.state_dict())
+    inputs, _ = _boundary(600, dtype=torch.float64)
+    q = torch.randn(300, 3, generator=torch.Generator().manual_seed(5), dtype=torch.float64).cuda() * 3.0
+    tgt = torch.randn(300, 4, generator=torch.Generator().manual_seed(6), dtype=torch.float64).cuda()
+    o_ref, g_ref = _run(ref, {**inputs, "prediction_points": q}, tgt)
+    o_opt, g_opt = _run(opt, {**inputs, "prediction_points": q}, tgt)
+    assert _rel(o_opt, o_ref) < 1e-9, _rel(o_opt, o_ref)
+    total = torch.cat([g.flatten() for g in g_ref.values()]).norm()
+    for k, g in g_ref.items():
+        if g.norm() < 1e-6 * total:
+            continue
+        assert _rel(g_opt[k], g) < 1e-9, (k, _rel(g_opt[k], g))
+    with torch.no_grad():
+        head = _flat(outputs(opt(**inputs, prediction_points=q[:40])))
+    assert _rel(head, o_opt[:40]) < 1e-12

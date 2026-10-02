@@ -128,7 +128,12 @@ prediction-point tokens. The prediction-point
 tokens' total routing weight is a learned fraction of the total boundary
 measure, split equally over them, so it is invariant to re-representing the
 same measure (splitting a boundary cell in two changes nothing) and scales
-like an area. The two tasks own different parameter sets (the interior task
+like an area. With ``query_independent=True`` the prediction-point tokens are
+passive instead: they carry no routing weight, so at every depth they read the
+slices, anchors and prototypes the boundary formed and never write into them,
+and the prediction at a point is a function of that point and the boundary
+alone (any request can be split into chunks with the same result). The two
+tasks own different parameter sets (the interior task
 adds the prediction-point embedding, type offset and routing mass), which is
 why the choice is a constructor argument: a parameter that takes no part in
 a forward pass stops DDP.
@@ -306,6 +311,14 @@ class ISLA(Module):
             encoder as interacting tokens; ``forward`` requires them. The two
             are different parameter sets (a parameter without a gradient stops
             DDP), so the choice is made at construction.
+        query_independent: Interior task only. ``False`` (default): the
+            prediction points interact, their total routing weight a learned
+            fraction of the boundary measure, and a prediction depends on the
+            other points of the request. ``True``: passive prediction points
+            (zero routing weight, no routing-mass parameter); they pass through
+            every block with the same weights and read its slices at matched
+            depth, so each prediction depends on its own point and the boundary
+            only.
         hidden: Token width of the slice blocks. The defaults ``hidden=384``,
             ``n_layers=12`` and ``n_slices=256`` are the reference
             configuration; the reference training rate is 5e-4.
@@ -397,6 +410,7 @@ class ISLA(Module):
         query_schema: FieldSchemaLike | None = None,
         global_schema: FieldSchemaLike | None = None,
         interior: bool = False,
+        query_independent: bool = False,
         hidden: int = 384,
         n_layers: int = 12,
         n_slices: int = 256,
@@ -458,6 +472,12 @@ class ISLA(Module):
             raise ValueError(
                 f"query_schema {sorted(self.query_schema)!r} declares per-prediction-"
                 "point fields of the interior task; declare them with interior=True"
+            )
+        self.query_independent = bool(query_independent)
+        if self.query_independent and not self.interior:
+            raise ValueError(
+                "query_independent=True concerns the prediction points of the interior "
+                "task; build with interior=True (a surface task predicts at its input cells)"
             )
         ### Checkpoints store the constructor arguments as JSON. A FieldSchema
         ### is a dict and serializes as it stands; recording the parsed schemas
@@ -593,7 +613,8 @@ class ISLA(Module):
         ### Prediction-point tokens (interior=True): the prediction points join the
         ### encoder as INTERACTING tokens, carrying the same {n_q, g_k} invariant
         ### seeds as the boundary tokens plus the parameters of _QueryTokens.
-        ### Exactly SE(d)-covariant, not query-set independent. Outputs are
+        ### Exactly SE(d)-covariant, not query-set independent (unless
+        ### query_independent: passive tokens, no routing mass). Outputs are
         ### returned for these tokens only. The tokens' total routing weight is a
         ### learned fraction exp(qt.logw) of the TOTAL boundary measure, split
         ### equally over them: invariant to any re-representation of the same
@@ -604,7 +625,11 @@ class ISLA(Module):
         ### every parameter it owns takes part in every forward pass.
         self.n_query_builtin = 2
         self.n_query_features = self.n_query_builtin + self.qin.n_features
-        self.qt = _QueryTokens(hidden, self.n_query_features) if self.interior else None
+        self.qt = (
+            _QueryTokens(hidden, self.n_query_features, routing_mass=not self.query_independent)
+            if self.interior
+            else None
+        )
 
     @staticmethod
     def _dots(x, g_hat):
@@ -950,7 +975,8 @@ class ISLA(Module):
                 the prediction points and whose ``point_data`` carries the
                 ``query_schema`` fields, or a bare ``(N, dim)`` tensor when
                 none are declared. The points join the encoder as interacting
-                tokens; each one's built-in geometry, its signed distance to
+                tokens (passive readers with ``query_independent``); each
+                one's built-in geometry, its signed distance to
                 the nearest boundary token and the direction to it, is computed
                 inside the model from the boundary tokens
                 (:func:`nearest_boundary_geometry`) and is never an input. A
@@ -1107,15 +1133,21 @@ class ISLA(Module):
             else:
                 q_feat, q_vecs, q_tens = builtin, None, None
             h_q = self.qt(self.embed(self._token_seed(q_nhat, q_g, None, g_scalars, nq)), q_feat)
-            ### The query tokens' total routing weight is a learned fraction of the
-            ### total boundary measure, split equally (see __init__): rescaling the
-            ### geometry (areas x k^2) shifts every token's log-weight by the same
-            ### 2 log k, so the similarity-gauge contract holds exactly.
-            q_logw = (
-                self.qt.logw.to(log_w.dtype)
-                + torch.logsumexp(log_w[:, :n_boundary], dim=1, keepdim=True)
-                - math.log(nq)
-            )
+            if self.query_independent:
+                ### Passive queries: log-weight -inf leaves them out of every softmax
+                ### over points (routing prototypes, anchors, slice states, head-frame
+                ### anchors), so they read every block's slices and never write.
+                q_logw = log_w.new_full((bq, nq, 1), -math.inf)
+            else:
+                ### The query tokens' total routing weight is a learned fraction of the
+                ### total boundary measure, split equally (see __init__): rescaling the
+                ### geometry (areas x k^2) shifts every token's log-weight by the same
+                ### 2 log k, so the similarity-gauge contract holds exactly.
+                q_logw = (
+                    self.qt.logw.to(log_w.dtype)
+                    + torch.logsumexp(log_w[:, :n_boundary], dim=1, keepdim=True)
+                    - math.log(nq)
+                )
             q_vecs, q_tens = self._block_extras(None, None, q_vecs, q_tens, bq, nq, points)
             h = torch.cat([h, h_q], dim=1)
             r = torch.cat([r, q_r], dim=1)

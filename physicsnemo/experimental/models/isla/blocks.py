@@ -219,13 +219,14 @@ class _RoutingLogits(nn.Module):
 class _QueryTokens(nn.Module):
     """The query tokens' own parameters (the interior mode): a learned token-type
     offset, the log of the learned fraction of the total boundary measure that is
-    their routing weight, and the embedding of their per-query features (the
-    built-in signed distance to the sampled boundary as ``[d/L, sign(d) log(|d|/L +
-    eps)]`` ahead of the fields declared in ``query_schema``)."""
+    their routing weight (``routing_mass=False``, passive tokens: none, ``logw`` is
+    ``None``), and the embedding of their per-query features (the built-in signed
+    distance to the sampled boundary as ``[d/L, sign(d) log(|d|/L + eps)]`` ahead of
+    the fields declared in ``query_schema``)."""
 
-    def __init__(self, hidden: int, n_features: int) -> None:
+    def __init__(self, hidden: int, n_features: int, routing_mass: bool = True) -> None:
         super().__init__()
-        self.logw = nn.Parameter(torch.zeros(1))
+        self.logw = nn.Parameter(torch.zeros(1)) if routing_mass else None
         self.type_offset = nn.Parameter(torch.zeros(hidden))
         self.embed = nn.Sequential(
             nn.Linear(n_features, hidden), nn.GELU(), nn.Linear(hidden, hidden)

@@ -312,6 +312,49 @@ def test_interior_task_contracts():
     assert not missing, missing
 
 
+def test_query_independent_interior_contracts():
+    """query_independent=True: the prediction points read every block's slices and
+    never write into them, so a prediction is exactly independent of the other
+    points of the request (alone, a prefix, any order, any chunking), while
+    rotation/translation covariance, the similarity gauge and boundary-refinement
+    invariance hold as for interacting tokens; there is no routing-mass parameter,
+    every parameter receives a gradient, and bf16 autocast stays finite."""
+    torch.manual_seed(0)
+    pts, nrm, w, drv = cloud(400)
+    mesh = soup(pts, nrm, w)
+    qpts = torch.randn(150, 3, dtype=D) * 4.0
+    m = _isla(hidden=64, n_layers=2, n_slices=16, interior=True, query_independent=True).double().eval()
+    assert m.qt.logw is None and not any(n == "qt.logw" for n, _ in m.named_parameters())
+    base = _run(m, mesh, drv, qpts)
+    perm = torch.randperm(150, generator=torch.Generator().manual_seed(1))
+    assert same(_run(m, mesh, drv, qpts[:50]), _rows(base, slice(0, 50)), atol=1e-12)
+    assert same(_run(m, mesh, drv, qpts[7:8]), _rows(base, slice(7, 8)), atol=1e-12)
+    assert same(_run(m, mesh, drv, qpts[perm]), _rows(base, perm), atol=1e-12)
+    chunks = [outputs(_run(m, mesh, drv, c)) for c in qpts.split(40)]
+    assert same({k: torch.cat([c[k] for c in chunks]) for k in chunks[0]}, base, atol=1e-12)
+    ### the boundary still determines the prediction
+    assert not same(_run(m, soup(pts * 1.1, nrm, w), drv, qpts), base, atol=1e-6)
+    q = _rotation()
+    shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
+    _assert_rotated(_run(m, transform(mesh, q, shift), drv @ q.T, qpts @ q.T + shift), base, q)
+    k = 2.7
+    assert same(_run(m, transform(mesh, shift=shift, scale=k), drv, k * qpts + shift), base, atol=1e-10, rtol=0.0)
+    assert same(_run(m, refine(mesh), drv, qpts), base, atol=1e-10, rtol=0.0)
+    m.train()
+    out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=qpts, global_data={"g": drv}))
+    sum(o.square().mean() for o in out.values()).backward()
+    missing = [n for n, p in m.named_parameters() if p.grad is None]
+    assert not missing, missing
+    m32 = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=True)
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        out = outputs(m32(boundary_meshes={"wall": soup(pts.float(), nrm.float(), w.float())}, prediction_points=qpts.float(), global_data={"g": drv.float()}))
+    sum(o.float().sum() for o in out.values()).backward()
+    assert all(torch.isfinite(o.float()).all() for o in out.values())
+    assert all(torch.isfinite(p.grad).all() for p in m32.parameters() if p.grad is not None)
+    with pytest.raises(ValueError, match="interior=True"):
+        _isla(hidden=32, n_layers=1, n_slices=8, query_independent=True)
+
+
 @pytest.mark.parametrize("extra", [{}, {"query_schema": {"sdf": {"rank": 0}}}])
 def test_query_mass_refinement_invariance(extra):
     """Splitting every boundary cell into two coincident half-measure copies leaves
@@ -479,7 +522,6 @@ def test_constructor_and_forward_are_keyword_only():
         "query_mass",
         "query_scalar_scale",
         "local_rho",
-        "query_independent",
         "query_tokens",
         "support_tokens",
         "interior_geometry",
