@@ -32966,3 +32966,42 @@ and the specimen waist width (normalized half-domain) runs from 0.41 to
 1.37. A job over every case writes the distribution
 (`results/tensile2d_geometry_2026-10-02.json`); the chapter sentence is
 replaced from it. Tensile2D stays in the campaign.
+
+## 2026-10-02 — Status, REF-80 frontier measured from one-epoch lanes: under 80 GiB per GPU on DrivAerML Surface are ISLA to width 512 with 512 slices (64 GiB at 200,000 cells), GeoTransolver width 256 at 200,000 cells (78) or widths 512 and 1,024 at 100,000 (50, 71), Transolver widths 256 and 512 at 200,000 (52, 65) or 1,024 at 100,000 (47); the whole-model compile moves no peak; 22 frontier lanes launched {#sec-nb-ref80-frontier}
+
+**Instrument.** Every candidate of the REF-80 preregistration ran one real
+epoch on DrivAerML Surface as a lane (group `rf1`, code_v18 + recipe_v8,
+four GB300 ranks, batch one, bfloat16), and the recipe's epoch summary now
+records the epoch's peak device memory (maximum over ranks) and wall time
+(`results/char/ref80_frontier_reduce_2026-10-02.py`,
+`results/char/ref80_frontier_2026-10-02.json`). The peak is the training
+epoch's; validation peaks are 2 to 8 GiB.
+
+**What we saw.** Peak memory per candidate (GiB; 200,000 cells unless
+marked): ISLA reference 44.4, 512 slices 52.0, width 512 56.9, width 512
+with 512 slices 64.3, width 768 82.1, 24 layers 85.4, 400,000 cells 88.1,
+width 512 with 24 layers 109.4. GeoTransolver width 256 77.8; width 512
+98.2 at 200,000 and 49.5 at 100,000; width 1,024 71.4 at 100,000; width
+512 with 24 layers 93.5 at 100,000. Transolver width 256 51.6, width 512
+64.9, width 1,024 91.9 at 200,000 and 46.7 at 100,000; width 512 with 16
+layers 62.0 and width 1,024 with 16 layers 91.0 at 100,000. Six ISLA
+candidates re-run with the recipe's whole-model `torch.compile` off read
+the same peak to the decimal and 5 to 10 seconds more per epoch, so
+compilation does not move the memory frontier in a lane; the 27% saving
+the profiler measured under its own per-block compile
+(@sec-nb-perf-3-verdict) does not appear in lanes, which is a cost-line
+fact for the book and nothing more under the frozen architecture. The
+profiler's eager probes matched the lane peaks to the decimal, so both
+instruments agree.
+
+**Frontier and lanes.** Under 80 GiB: ISLA reference, 512 slices, width
+512, width 512 with 512 slices; GeoTransolver width 256 at 200,000 cells,
+widths 512 and 1,024 at 100,000; Transolver widths 256 and 512 at 200,000,
+width 1,024 and width 512 with 16 layers at 100,000. Training cells are a
+free axis for every architecture because the reporting protocol fixes
+evaluation at 200,000 cells, not training (the cells law of
+@sec-nb-isocost-verdict). Eleven candidates train for 500 epochs with two
+seeds on DrivAerML Surface (group `r80`, jobs 976553 to 976582); four
+ISLA probes at 100,000 cells (width 768, 24 layers, both, width 512 with
+24 layers) decide whether ISLA's frontier extends along the cells axis
+too, and the 210-wing twin follows.
