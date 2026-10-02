@@ -133,7 +133,7 @@ one field and the passive arm not at all.
 - **Falsified:** writes carry information reads cannot; the support-token
   route is the next node, with this pair as its reference.
 
-## Amendment 1 (2026-10-02 13:40 PDT, before any QI lane passed epoch 120)
+## Amendment 1 (2026-10-02 13:25 PDT, before any QI lane passed epoch 75)
 
 **A third arm, found during the campaign: an independent support at inference.**
 `ISLA.forward(support_points=...)` (commit 2082d37f5) lets an *interacting*
