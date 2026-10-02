@@ -1,0 +1,280 @@
+# PLAID Tensile2d {#sec-tensile2d}
+
+**Tensile2d is the first solid in the book and the dataset on which the component clause of the output contract binds: its targets are the components of a stress tensor, which ISLA predicts as a tensor and reads off; GeoTransolver-512 leads it at 400 training cases on every field, and ISLA's error falls faster between 32 and 400.** The chapter follows the shared layout. The pose contract is exercised here in its tensor form (@sec-pose, @sec-isla-heads); the discretization instruments of @sec-invariances are not, because each case has one mesh. Protocol: @sec-protocol, float32, two seeds, ISLA at the reference configuration against the parameter-matched GeoTransolver-512; every ratio is GeoTransolver-512 ÷ ISLA, above one favoring ISLA.
+
+```{python}
+#| label: setup-tensile2d
+#| include: false
+import json, statistics, math
+from pathlib import Path
+import sys; sys.path.insert(0, ".")
+from palette import *
+RES = Path("..") / "results"
+J = lambda p: json.load(open(RES / p))
+mean = statistics.mean
+pct = lambda r: f"{abs(1 - r) * 100:.0f}%"
+lead = lambda r: f"{(r - 1) * 100:.0f}%"
+trail = lambda r: f"{(1 - r) * 100:.0f}%"
+SF = J("solids_frame_2026-09-22.json"); SFS = SF["summary"]
+LM = J("lane_means_2026-09-23.json")  # per-lane float32 means; the tensor-head lanes with the load direction as the one global vector
+T2D_FIELDS = [("sig11", "$\\sigma_{11}$"), ("sig22", "$\\sigma_{22}$"), ("sig12", "$\\sigma_{12}$"), ("displacement", "displacement")]
+T2D_RUNGS = (32, 400)
+def t2_isla(n):
+    runs = [LM[f"v2_t2d_isla_r1_tensor_axis_n{n}_seed{s}"]["fields"] for s in (42, 43)]
+    return {f: dict(mean=statistics.mean(r[f] for r in runs), seeds=[r[f] for r in runs]) for f, _ in T2D_FIELDS}
+def t2_gt(n):
+    d = SFS[f"gt512|gt|n{n}"]["fields"]
+    return {f: dict(mean=d[f]["mean"], seeds=d[f].get("seeds", [])) for f, _ in T2D_FIELDS}
+T2I = {n: t2_isla(n) for n in T2D_RUNGS}; T2G = {n: t2_gt(n) for n in T2D_RUNGS}
+T2R = {n: {f: T2G[n][f]["mean"] / T2I[n][f]["mean"] for f, _ in T2D_FIELDS} for n in T2D_RUNGS}
+import math
+slope = lambda arm, f: math.log(arm[32][f]["mean"] / arm[400][f]["mean"]) / math.log(400 / 32)
+r400 = T2R[400]
+from matplotlib.colors import TwoSlopeNorm
+from matplotlib.collections import LineCollection
+PF = RES / "problem_figures_2026-09-22"
+
+def load_problem(name):
+    """One representative sample of a dataset, reduced for plotting (results/problem_figures_2026-09-22/)."""
+    z = np.load(PF / f"{name}.npz"); meta = json.load(open(PF / f"{name}.json"))
+    return {k: z[k] for k in z.files}, meta
+
+def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
+    """Draw line cells colored by boundary-condition kind (keys of palette.BC)."""
+    segs = pts[cells][:, :, :2]
+    ax.add_collection(LineCollection(segs, colors=[BC[k] for k in kinds], linewidths=lw, capstyle="butt", zorder=zorder))
+
+def field_scatter(ax, xy, v, s=3.0, signed=False, vmin=None, vmax=None):
+    if signed:
+        lim = max(abs(np.nanmin(v)), abs(np.nanmax(v))) if vmin is None else None
+        norm = TwoSlopeNorm(vcenter=0.0, vmin=(-lim if vmin is None else vmin), vmax=(lim if vmax is None else vmax))
+        return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=DIVERGING, norm=norm, rasterized=True)
+    return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=SEQUENTIAL, vmin=vmin, vmax=vmax, rasterized=True)
+
+def small_colorbar(fig, sc, ax, label, **kw):
+    cb = fig.colorbar(sc, ax=ax, fraction=0.035, pad=0.02, **kw); cb.outline.set_visible(False); cb.ax.tick_params(labelsize=8)
+    cb.set_label(label, fontsize=8.5)
+    return cb
+
+def bc_legend(ax, kinds, loc="lower right", extra=()):
+    from matplotlib.lines import Line2D
+    handles = [Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds] + list(extra)
+    ax.legend(handles=handles, loc=loc, fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
+
+# ---- the three-protocol headline table ----
+# The three architectures' reference configurations scored on (i) the native validation mesh, (ii) a uniform point cloud of
+# the same budget and (iii) every validation case rotated and translated. Read from results/char/<dataset>.json when that
+# artifact exists; until it does the cell prints nothing and the native-mesh table above is the headline. Expected schema:
+# {"fields": {key: label}, "protocols": {"native": label, "uniform": label, "posed": label}, "isla_arm": name,
+#  "arms": {name: {protocol: {field: {"mean": x, "seeds": [...]}}}}}.
+def protocol_table(artifact, label, setting):
+    p = RES / "char" / artifact
+    if not p.exists():
+        return
+    C = json.load(open(p)); protos = C["protocols"]; fields = C["fields"]; isla = C["arms"][C["isla_arm"]]
+    flab = " / ".join(fields.values())
+    hdr = "| configuration | " + " | ".join(f"{pl}: {flab}" for pl in protos.values()) + " |\n|---|" + "---|" * len(protos) + "\n"
+    rows = []
+    for arm, d in C["arms"].items():
+        rows.append(f"| {arm} | " + " | ".join(" / ".join(f"{d[pk][f]['mean']:.4f}" for f in fields) for pk in protos) + " |")
+        if arm != C["isla_arm"]:
+            rows.append(f"| {arm} ÷ ISLA | " + " | ".join(" / ".join(f"{d[pk][f]['mean'] / isla[pk][f]['mean']:.2f}" for f in fields) for pk in protos) + " |")
+    print(hdr + "\n".join(rows) + "\n")
+    print(f": {setting}: the three architectures at their reference configurations under three scorings of one instrument, the "
+          f"native validation mesh, a uniform point cloud at the same budget, and every validation case rotated and translated; "
+          f"fields {flab}; seed means, float32. How to read this: a ratio is baseline ÷ ISLA, above one favoring ISLA; the three "
+          f"columns share the checkpoint and differ only in how the validation cases are presented. Data: results/char/{artifact}. "
+          f"{{#{label}}}")
+
+```
+
+## The problem: a notched specimen under a varying load and material {#sec-tensile2d-problem}
+
+**Tensile2d is two-dimensional elasto-viscoplastic tension of a notched specimen: the top edge carries a pressure $P$ that varies per sample, the bottom edge is fixed, and five material parameters vary too.** The model receives the outer polyline with per-cell labels (loaded, fixed, pinned) and the applied pressure as boundary scalars, $P$ and the material parameters as six global scalars, and the load direction as its one global vector. It predicts the stress as a symmetric tensor, from which the recipe reads the three components the dataset stores (@sec-isla-heads), the cumulated plastic strain and the displacement. @fig-problem-tensile2d shows one validation specimen.
+
+```{python}
+#| label: fig-problem-tensile2d
+#| fig-cap: >
+#|   The PLAID Tensile2d problem, on one validation specimen. Left: the outer
+#|   boundary, 496 line cells, colored by the condition each carries: the top
+#|   edge is loaded by the pressure $P$ (a traction $-P\,n$; negative $P$ pulls),
+#|   the bottom edge is fixed ($u_2 = 0$) with its left corner pinned
+#|   ($u_1 = 0$, marked), and the curved notches are free; the box lists the
+#|   six global scalars of this sample and the arrow the load direction, the
+#|   one global vector. Middle: the axial stress $\sigma_{22}$ at the
+#|   mesh nodes. Right: the displacement magnitude $|u|$. How to read this:
+#|   the specimen's coordinates and stresses are in the dataset's units (a
+#|   unit half-width; MPa-scale stresses); the nodes drawn are all 6,171 of
+#|   this sample and every one is a query token; the loaded and fixed edges
+#|   are where the per-cell boundary scalars are nonzero. Data:
+#|   results/problem_figures_2026-09-22/tensile2d.npz.
+#| code-fold: true
+T, Tm = load_problem("tensile2d")
+bp, bc = T["bnd_points"], T["bnd_cells"]; mid = bp[bc].mean(axis=1)
+kinds = np.where(T["bc_loaded"] > 0.5, "flux", np.where(T["bc_fixed"] > 0.5, "value", "free"))
+fig, axes = plt.subplots(1, 3, figsize=(8, 4.2), sharey=True, gridspec_kw=dict(wspace=0.15, width_ratios=[1.75, 1, 1]))
+ax = axes[0]
+ax.scatter(T["int_points"][:, 0], T["int_points"][:, 1], s=1.2, c=GRID, lw=0, rasterized=True)
+bc_segments(ax, bp, bc, kinds, lw=4.5)
+pin = mid[T["bc_pinned"] > 0.5]; ax.plot(pin[:, 0], pin[:, 1], marker="^", ms=9, color=BC["value"], mec=INK, ls="none", zorder=5)
+ax.text(0.0, 1.07, f"top edge: pressure P = {Tm['globals']['P']:.1f} (flux)", ha="center", va="bottom", fontsize=8.5, color=BC["flux"], path_effects=halo())
+ax.text(0.0, -1.08, "bottom edge: fixed $u_2$ = 0 (value)\ntriangle: pinned $u_1$ = 0", ha="center", va="top", fontsize=8.5, color=BC["value"], path_effects=halo())
+ax.text(0.72, 0.0, "notches: free", ha="center", va="center", fontsize=8.5, color=BC["free"], rotation=90)
+for v, lab in ((np.array([1, 0]), "$\\hat g_1$"), (np.array([0, 1]), "$\\hat g_2$")):
+    ax.annotate("", xy=(-2.4 + 0.35 * v[0], -1.1 + 0.35 * v[1]), xytext=(-2.4, -1.1), arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.6))
+    ax.text(-2.4 + 0.5 * v[0], -1.1 + 0.5 * v[1], lab, ha="center", va="center", fontsize=8.5, color=INK)
+g = Tm["globals"]
+ax.text(-2.45, 1.0, "global scalars\n" + "\n".join(f"{k} = {g[k]:g}" for k in ("P", "p1", "p2", "p3", "p4", "p5")), ha="left", va="top", fontsize=7.8, color=INK2,
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=BASELINE))
+map_axes(ax); ax.set_xlim(-2.55, 1.3); ax.set_ylim(-1.5, 1.35); ax.set_ylabel("y [dataset units]"); ax.set_xlabel("x [dataset units]")
+ax.set_title("conditions and global inputs", fontsize=9.5)
+ax = axes[1]
+sc = field_scatter(ax, T["int_points"][:, :2], T["sig22"], s=4.0, vmin=0, vmax=float(np.quantile(T["sig22"], 0.995))); map_axes(ax); ax.set_xlabel("x [dataset units]")
+ax.set_title("axial stress $\\sigma_{22}$ (target)", fontsize=9.5); small_colorbar(fig, sc, ax, "$\\sigma_{22}$ [MPa]", extend="max")
+ax = axes[2]
+um = np.linalg.norm(T["displacement"], axis=1)
+sc = field_scatter(ax, T["int_points"][:, :2], um * 1e3, s=4.0, vmin=0); map_axes(ax); ax.set_xlabel("x [dataset units]")
+ax.set_title("displacement magnitude $|u|$ (target)", fontsize=9.5); small_colorbar(fig, sc, ax, "$|u|$ [$10^{-3}$ length units]")
+plt.show()
+```
+
+**Diversity.** The specimen shape hardly varies and every case has one mesh, so this set is the complement of the aerodynamic ones: the variation is in the load and in the five constitutive scalars, which run over wide ranges (@sec-data-tensile2d), and a surrogate has to represent how the field depends on a parameter of the physics rather than on shape (@sec-parametric). What it does not vary is as important as what it does: no geometry generalization and no discretization change can be read from it.
+
+### Files, conversion and normalization {#sec-data-tensile2d}
+
+**702 two-dimensional quasi-static elasto-viscoplastic tension cases of a
+notched specimen (Safran; CC-BY-SA-4.0; Hugging Face
+`PLAID-datasets/Tensile2d`), of which the 500 official training samples
+carry targets.** Plane strain, small deformations; each sample is an
+unstructured triangle mesh of 6 to 12 thousand nodes with coordinates in
+$[-1, 1]$ (a unit half-width), a pressure $P$ on the top edge that varies
+per sample (negative $P$ pulls), a fixed bottom edge ($u_2 = 0$) with its
+bottom-left node pinned ($u_1 = 0$), free curved notches, and five
+constitutive scalars $p_1 \ldots p_5$ that vary too. The source is one
+parquet column of pickled CGNS trees, read with pyarrow and numpy alone.
+The 200 test samples and 2 out-of-distribution samples ship geometry and
+input scalars but no output fields; the converter writes them under
+`withheld/`, which the dataset pattern excludes.
+
+- **Conversion** (`plaid_tensile2d_convert.py`). Interior: every node
+  embedded at $z = 0$ with `displacement` (N, 3) = $(U_1, U_2, 0)$, `q`
+  (cumulated plastic strain), `sig11`, `sig22`, `sig12` (MPa-scale, the
+  dataset's units), `sdf` = −(distance to the outer boundary) and
+  `sdf_normals`, plus the nodal tags `tag_top`, `tag_bottom`,
+  `tag_bottomleft`. Boundary `outer`: every triangle edge owned by exactly
+  one triangle, as line cells with outward in-plane normals, segment
+  lengths as `quadrature_measure`, and the per-cell scalars `bc_loaded`
+  (top edge), `bc_fixed` (bottom edge), `bc_pinned` (cells touching the
+  pinned node), `bc_pressure` (= $P$ on loaded cells, so
+  $\sigma_{22} = -P$ there) and `traction` (= $-P\,n$). `global_data`:
+  `P`, `p1` … `p5`, `params` (6,), `has_targets`, and on training
+  samples the output scalars `max_von_mises`, `max_q`, `max_U2_top`,
+  `max_sig22_top` (never inputs).
+- **What each model receives.** ISLA (`isla_tensile2d.yaml`): the outer
+  cells with four boundary scalars (`bc_loaded`, `bc_fixed`, `bc_pinned`,
+  `bc_pressure`), the six standardized input scalars `params_std` as
+  global scalars, every node as an interacting query with `sdf`; outputs
+  `q`, `sig11`, `sig22`, `sig12` as scalars and `displacement` as a
+  vector. The configuration the book reports (`isla_tensile2d_tensor`)
+  passes the load direction $+y$ as the one global vector and predicts the
+  stress as a tensor. The earlier lanes that added the dataset's axes
+  $+x, +y$ as two global vectors are the pose-prior diagnostic of
+  @sec-pose-prior, not a configuration (the finding that scalar heads
+  cannot produce components without a frame is @sec-isla-heads). GeoTransolver
+  (`geotransolver_tensile2d.yaml`, 512 wide): the interior points with
+  coordinates, `sdf`, `sdf_normals` and the three nodal tags in its local
+  embedding, `params_std` as its global embedding, radii 0.05 / 0.2 / 0.8
+  on the $[-1, 1]$ coordinates.
+- **Normalization** (`plaid_tensile2d.yaml`, from the manifest `_stats`
+  over `train_400`): `params` mean $[-45.0, 14.9, 450.8, 1502.6, 1496.5,
+  75434.8]$ and standard deviation $[2.90, 2.87, 86.1, 286.1, 289.2,
+  14613.8]$; `displacement` mean $[-3.38\times10^{-4}, 1.054\times10^{-3},
+  0]$, isotropic standard deviation $8.22\times10^{-4}$; `sig11`
+  $-0.127 / 28.4$; `sig22` $57.7 / 32.0$; `sig12`
+  $8.1\times10^{-4} / 16.9$; `q` $1.73\times10^{-7} / 8.18\times10^{-6}$.
+- **Splits.** The README's official nested ladder `train_8` …
+  `train_500`, plus `val_100` (100 samples drawn with seed 0 from
+  `train_500` minus `train_250`, so the official ladder up to
+  `train_250` stays disjoint from it) and `train_400` (= `train_500`
+  minus `val_100`). The book's ladder is 32 / 64 / 125 / 250 / 400 cases
+  scored on `val_100`.
+- **Pitfalls.** `q` is heavy-tailed under z-scoring (the per-case maximum
+  ranges over four decades in `train_400`), so it is reported but excluded
+  from the headline fields. With scalar heads and no tensor output ISLA
+  fits the training set and validates 20 to 60 times worse than
+  GeoTransolver: a component target is a view of a tensor, and the head
+  must produce the tensor. The leaderboard's Tensile2d numbers are on the withheld test
+  set and are not comparable to `val_100` figures.
+
+## What is measured {#sec-tensile2d-measured}
+
+**Every mesh node is an interacting query token, and the readout is the float32 relative L2 of the three stress components and the displacement over the 100 held-out specimens of `val_100`, at 500 epochs and two seeds, at 32 and 400 training cases.** ISLA reads the boundary polyline with its condition labels, receives the load direction as its one global vector and the six scalars, and predicts the stress as a symmetric tensor; GeoTransolver-512, its parameter match, reads every node with the nodal condition tags in its local embedding and the scalars in its global embedding (@sec-data-tensile2d). The cumulated plastic strain is reported but excluded from the headline fields because it is heavy-tailed under standardization.
+
+## The standing {#sec-interior-tensile2d}
+
+```{python}
+#| label: tensile2d-lede
+#| output: asis
+print(f"**On the first solid-mechanics dataset, PLAID Tensile2d, GeoTransolver-512 leads ISLA at "
+      f"400 training cases by {trail(r400['sig11'])} on $\\sigma_{{11}}$, {trail(r400['sig22'])} on $\\sigma_{{22}}$, "
+      f"{trail(r400['sig12'])} on $\\sigma_{{12}}$ and {trail(r400['displacement'])} on the displacement; between 32 and 400 cases "
+      f"ISLA's error falls faster on every field (two-point slopes {slope(T2I, 'sig11'):.2f} against {slope(T2G, 'sig11'):.2f} on "
+      f"$\\sigma_{{11}}$), so the gap narrows with data and is the open standing on the solids.** "
+      f"Tensile2d (@sec-data-tensile2d) is two-dimensional elasto-viscoplastic tension: per case a load $P$ on the top "
+      f"edge and five constitutive scalars vary, the geometry barely does, and the targets are the displacement and the "
+      f"three in-plane stress components. Every mesh node is an interacting query token; ISLA reads the boundary polyline "
+      f"with its condition labels, receives the load direction as its one global vector and the six scalars, and predicts "
+      f"the stress as a symmetric tensor whose components the recipe reads off (@sec-isla-heads); GeoTransolver reads every "
+      f"node with the nodal condition tags in its local embedding. Both models use the reference configurations (ISLA at "
+      f"384 x 12; GeoTransolver-512, its parameter match).")
+```
+
+```{python}
+#| label: tensile2d-ladder-table
+#| output: asis
+def tcell(d): return f"{d['mean']:.4f}" + (f" ({' / '.join(f'{v:.4f}' for v in d['seeds'])})" if d["seeds"] else "")
+hdr = "| training cases | " + " | ".join(f"ISLA {l} | GeoTransolver {l} | ratio" for _, l in T2D_FIELDS) + " |"
+print(hdr); print("|" + "---|" * (1 + 3 * len(T2D_FIELDS)))
+for n in T2D_RUNGS:
+    print(f"| {n} | " + " | ".join(f"{tcell(T2I[n][f])} | {tcell(T2G[n][f])} | {T2R[n][f]:.2f}" for f, _ in T2D_FIELDS) + " |")
+print("| two-point slope, 32 to 400 | " + " | ".join(f"{slope(T2I, f):.2f} | {slope(T2G, f):.2f} | " for f, _ in T2D_FIELDS) + " |")
+print()
+print(": PLAID Tensile2d, float32 relative L2 on the 100 held-out cases at 500 epochs (mean of two seeds; seeds in parentheses), ISLA "
+      "with the tensor head and the load direction as its one global vector against GeoTransolver-512, at 32 and 400 training cases; "
+      "the last row is the learning-curve slope between the two rungs (error proportional to cases to the minus alpha). How to read "
+      "this: a ratio below one is a GeoTransolver lead; only two rungs exist under this configuration, so the slope is a two-point "
+      "estimate and not a fitted exponent. The five-rung ladder measured earlier used the dataset's axes as global vectors, an input "
+      "the book rejects; it is reported only as the pose-prior diagnostic of @sec-pose-prior. Data: results/lane_means_2026-09-23.json "
+      "(ISLA); results/solids_frame_2026-09-22.json (GeoTransolver-512). {#tbl-tensile2d-ladder}")
+```
+
+This table measures two things and does not measure a third. It measures
+the standing of the general interface on a problem with one global
+direction, the load, and six global scalars: a 1.3x to 2x GeoTransolver
+lead at 400 cases, the direction the preregistration predicted. It measures the learning-curve slope between
+the two rungs, steeper for ISLA on every field, the same ordering as the
+AirfRANS ladder (@sec-interior-airfrans) and the DrivAerML law
+(@sec-compute-allocation). It does not measure geometry generalization or
+discretization invariance, since the specimen shape hardly varies and each
+case has one mesh. Those axes stay with the aerodynamic datasets. This is
+the dataset on which the component clause of the output contract binds: a
+scalar-head configuration with no direction at all fits the training set
+and memorizes it, validating 20 to 60 times worse than GeoTransolver,
+because a stress component is a view of a tensor and not a channel
+(@sec-isla-heads). The 24-layer depth variant is 9% to 27% *worse* than 12
+layers at 400 cases on every field, so depth does not pay on Tensile2d at
+this data size.
+
+```{python}
+#| label: tbl-tensile2d-protocols
+#| output: asis
+protocol_table("tensile2d.json", "tbl-tensile2d-protocols", "PLAID Tensile2d at 400 training cases")
+```
+
+## Ladders and controls {#sec-tensile2d-ladders}
+
+**The training-case ladder has two rungs under the reference configuration, 32 and 400 cases, and its slope is in @tbl-tensile2d-ladder.** Between them ISLA's error falls faster on every field, the same ordering as the AirfRANS ladder (@sec-airfrans-ladder) and the lug (@sec-interior-lug); the cross-dataset picture of the exponents is @fig-exponents-datasets. The 24-layer depth variant is worse than 12 layers at 400 cases on every field, the largest depth penalty of any dataset in the book, so depth does not pay here at this data size (@sec-shared-floor). The diagnostic that gives ISLA the dataset's axes as global vectors, a rejected input, is priced in @sec-pose-prior.
+
+## What this dataset does not say {#sec-tensile2d-limits}
+
+**Tensile2d measures the general interface on a problem with one global direction and six global scalars, and the learning-curve slope between two rungs; it measures neither geometry generalization nor discretization invariance.** The specimen shape hardly varies and each case has one mesh, so those axes stay with the aerodynamic datasets. The slope is a two-point estimate and not a fitted exponent. The GeoTransolver-512 lead at 400 cases is the open standing on the solids and the one that most needs a located mechanism (@sec-limits-datasets).

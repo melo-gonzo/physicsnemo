@@ -110,7 +110,7 @@ column says "not re-measured" and the row stands on its principle.
 | The reporting protocol: 200,000 sampled cells per case, each architecture at its own best learning rate (a protocol decision) | Reporting at the exploration budget of 10,000 cells, or every architecture at one shared rate | Reporting at 10,000 cells would have reported a full-data ordering on DrivAerML that the count noise of a 10,000-cell draw produces and that 200,000 cells removes; a shared rate of 1e-3 would have understated GeoTransolver on every DrivAerML rung, most at the smallest, where its better rate is 3e-3 | A budget below the one the recipe trains at, and a rate that favors whichever architecture it was tuned on. At 200,000 cells and each model's better rate the reference configuration leads GeoTransolver-256 by 7% at full data on the cars and ties the parameter-matched GeoTransolver-512, and the wing deficit is unchanged from the smaller budget, so the protocol changes no ordering it does not have to (@sec-surface) | @sec-nb-proto200k-fleet-prereg, @sec-nb-proto200k-verdict, @sec-scoreboard-200k | Report where you train, at each model's best |
 | Every input and output is a named field of declared tensor rank; inputs enter through O(3)-invariants against the token's own directions, outputs leave through tensor products of the token's basis (a code decision) | Counted, typed channels (`out_scalars`, `out_vectors`, `n_boundary_scalars`, ...) with a flat concatenated output, and laboratory components of a boundary vector or a target tensor fed or read as separate scalars | Nothing: the aerodynamic configurations are unchanged parameter-for-parameter in the trunk, and the vector head loses only its two pseudovector basis elements | A laboratory component is an invariant only of a set that includes the frame, so component channels read the frame the physics does not provide (the Tensile2d clause, @sec-isla-heads); a flat output cannot say which channels form one tensor, so nothing downstream can hold them to a covariance. With the rank declared, a prescribed traction enters as $v \cdot \hat n$, $v \cdot \hat g_k$, $\lvert v \rvert$ and $v \cdot \hat\rho_{is}$ in every layer, and a stress leaves as a whole tensor whose components are a view | @sec-isla-inputs-rank, @sec-arch-head, @sec-nb-rank-spec-api | A component is a view of a tensor, never a channel |
 | Present ISLA as a new architecture; leave GeoTransolver and Transolver unmodified | Back-port measure weighting and the origin-free frame into GeoTransolver and Transolver | A sampler-consistent GeoTransolver and Transolver at unchanged accuracy | Nothing non-physical; the released architectures are stable and in use, so their measure-consistent ablations locate a property and are never shipped modifications | @sec-nb-mwaw-verdict, @sec-nb-steelman-verdict, @sec-nb-ruling-released-baselines | Released models are not modified |
-| Every input is a datum of the PDE problem: geometry, boundary data, material or flow parameters, body-force and load directions | The dataset's coordinate axes as global vectors (the laboratory frame on AirfRANS and the OLBC sets, the body axes on DrivAerML and the wings), which let the scalar heads produce frame components and let every token know its station in the canonical pose | 5 to 25% on fixed-pose datasets: 17% on AirfRANS interior pressure, 5% on DrivAerML Surface pressure, 11% on the 35-wing rung, 4 to 13% on DrivAerML Volume; component targets on the solids | The pose of the training set. A solver never takes these axes; rotating the problem rotates the solution, so the axes carry no information about the PDE and all of their gain is memorization of where things sit in the dataset's frame, the prior GeoTransolver has by construction and that the pose test (@sec-pose-contract) shows does not survive a change of pose | @sec-pose-prior, @sec-nb-ruling-dataset-frame-inputs | An input a solver would not need is not an input; accuracy bought with it does not count |
+| Every input is a datum of the PDE problem: geometry, boundary data, material or flow parameters, body-force and load directions | The dataset's coordinate axes as global vectors (the laboratory frame on AirfRANS, the body axes on DrivAerML and the wings), which let the scalar heads produce frame components and let every token know its station in the canonical pose | 5 to 25% on fixed-pose datasets: 17% on AirfRANS interior pressure, 5% on DrivAerML Surface pressure, 11% on the 35-wing rung, 4 to 13% on DrivAerML Volume; component targets on the solids | The pose of the training set. A solver never takes these axes; rotating the problem rotates the solution, so the axes carry no information about the PDE and all of their gain is memorization of where things sit in the dataset's frame, the prior GeoTransolver has by construction and that the pose test (@sec-pose-contract) shows does not survive a change of pose | @sec-pose-prior, @sec-nb-ruling-dataset-frame-inputs | An input a solver would not need is not an input; accuracy bought with it does not count |
 
 : The design-decision ledger. Every number is stated in the chapter or notebook entry the row points to and carries its artifact there. How to read this: a row records what the rejected alternative would have bought *in distribution* and what it would have read; it does not rank the decisions by size; a row whose gain column says "nothing" is a decision made on principle with no accuracy at stake, and a row that says "not re-measured" carries its principle without a current number. {#tbl-principled-ledger}
 
@@ -244,86 +244,3 @@ match. None of this changes what ISLA is given. Where a plane of the
 problem is physical, a ground plane under a car or the symmetry plane of a
 half-wing, it is a boundary and belongs in the boundary geometry, not in
 the list of directions.
-
-## Ablations that are not in the model: per-type geometry channels on the OLBC meshes {#sec-olbc-ablations}
-
-**Every ablation is an option added to the reference ISLA and read as arm
-÷ reference on the same code snapshot; none is part of the model.** Two
-parameter-free query scalars were tested, each derived from one sample's
-geometry and condition labels and nothing else. The **per-type nearest
-distance** gives each interior query, for each of the three condition
-types (Dirichlet, Neumann, Robin), the distance to the nearest boundary
-cell of that type. The **per-type harmonic measure** is the exact form of
-the same idea: the solution of Laplace's equation that is one on that
-type's boundary and zero on the others (the probability that a random walk
-from the query first hits a wall of that type), computed on the interior
-point cloud with one sparse solve per type per case. On the elasticity set
-the types are per component (four measures). Both channels keep the
-invariance contracts.
-
-```{python}
-#| label: setup-olbc-ablations
-#| include: false
-OLB = J("olbc_ref_2026-09-29.json"); OLP = OLB["poisson"]; OLE = OLB["elasticity"]
-PF = "u_l2"
-OL_EL = [("displacement_l2", "displacement"), ("sig11_l2", "$\\sigma_{11}$"), ("sig22_l2", "$\\sigma_{22}$"), ("sig12_l2", "$\\sigma_{12}$")]
-EL_STRESS = [f for f, _ in OL_EL if f != "displacement_l2"]
-seeds_of = lambda cell, f: [cell["per_seed"][s][f] for s in sorted(cell["per_seed"])]
-def num(cell, f, nd=4):
-    return f"{cell['means'][f]:.{nd}f} ({' / '.join(f'{v:.{nd}f}' for v in seeds_of(cell, f))})"
-def arm_ratio(rung, key, f):
-    a = rung["arms"].get(key, {}); return a["ratio"][f] if "ratio" in a else None
-def arm_seeds(rung, key, f):
-    a = rung["arms"].get(key, {}); return [a["per_seed"][s][f] for s in sorted(a["per_seed"])] if "ratio" in a else None
-def arm_cell(rung, key, f, nd=2):
-    r = arm_ratio(rung, key, f)
-    return "not scored" if r is None else f"{r:.{nd}f} ({' / '.join(f'{v:.{nd}f}' for v in arm_seeds(rung, key, f))})"
-fmt_ratio = lambda x, nd=2: f"{x:.{nd}f}" if x is not None else "not scored"
-```
-
-```{python}
-#| label: tbl-olbc-ablations
-#| output: asis
-P_ARMS = [("per-type nearest distances (three scalars)", "distances"),
-          ("per-type harmonic measures (three Laplace solves)", "harmonic_measures"),
-          ("per-type distances + local relational aggregation (a removed option)", "distances_local05")]
-out = "| ISLA arm on OLBC Poisson, relative L2 on $u$ | arm ÷ reference, 512 cases (seeds) | arm ÷ reference, 2,048 cases (seeds) |\n|---|---:|---:|\n"
-out += f"| reference ISLA (no option) | {num(OLP['512']['reference'], PF)} | {num(OLP['2048']['reference'], PF)} |\n"
-for label, key in P_ARMS:
-    out += f"| {label} | {arm_cell(OLP['512'], key, PF)} | {arm_cell(OLP['2048'], key, PF)} |\n"
-def el_arm_cell(n):
-    """The harmonic-measures arm on elasticity, as arm ÷ reference on the same code snapshot."""
-    r = OLE[str(n)]
-    return " / ".join(fmt_ratio(arm_ratio(r, "harmonic_measures", f)) for f, _ in OL_EL)
-out += ("\n| ISLA arm on OLBC elasticity, arm ÷ reference: displacement / $\\sigma_{11}$ / $\\sigma_{22}$ / $\\sigma_{12}$ | 512 cases | 2,048 cases |\n|---|---:|---:|\n"
-        f"| per-type harmonic measures (four Laplace solves) | {el_arm_cell(512)} | {el_arm_cell(2048)} |\n")
-print(out)
-print(": **Ablations, not the reference.** Each row is one option added to the reference ISLA, reported as arm ÷ reference where both were "
-      "trained on the same code snapshot (below one: the option helps). Two seeds per cell, 256 test cases, float32; the reference row "
-      "holds the absolute error with its seeds. The aggregation row is a removed option and is listed for its measured effect only. "
-      "How to read this: these ratios are never the book's GeoTransolver-512 ÷ ISLA, which is @tbl-olbc-ladder's reference row. "
-      "Data: results/olbc_ref_2026-09-29.json. {#tbl-olbc-ablations}")
-```
-
-```{python}
-#| label: para-olbc-ablations
-#| output: asis
-d512, h512 = arm_ratio(OLP["512"], "distances", PF), arm_ratio(OLP["512"], "harmonic_measures", PF)
-d2048, h2048 = arm_ratio(OLP["2048"], "distances", PF), arm_ratio(OLP["2048"], "harmonic_measures", PF)
-agg512 = arm_ratio(OLP["512"], "distances_local05", PF)
-hs512 = [arm_ratio(OLE["512"], "harmonic_measures", f) for f, _ in OL_EL]
-hs2048 = [arm_ratio(OLE["2048"], "harmonic_measures", f) for f in EL_STRESS]
-hd2048 = arm_ratio(OLE["2048"], "harmonic_measures", "displacement_l2")
-pct = lambda r: f"{abs(r - 1) * 100:.0f}%"
-pspan = lambda rs: (lambda t: f"{pct(t[0])} to {pct(t[-1])}" if pct(t[0]) != pct(t[-1]) else pct(t[0]))(sorted(rs, key=lambda r: abs(r - 1)))
-print(f"**On the Poisson set the per-type channel is neutral in either encoding (arm ÷ reference {d512:.2f} for the distances and "
-      f"{h512:.2f} for the harmonic measures at 512 cases, {d2048:.2f} and {h2048:.2f} at 2,048). On the elasticity set the harmonic "
-      f"measures cost {pspan(hs512)} on every field at 512 cases and improve the three stresses by {pspan(hs2048)} at 2,048, leaving "
-      f"displacement unchanged ({hd2048:.2f}).** A channel that pays on one dataset at one rung and costs on the same dataset at another "
-      "is not a universal setting, so under the one-model rule the per-type channel is not part of ISLA. The local relational aggregation "
-      f"among tokens (each token pooling its 32 nearest tokens before the slice routing), which paid on the fixed Poisson mesh "
-      f"({agg512:.2f} of the reference at 512 cases with the distances), hurt on every dataset whose geometry varies, did not compound "
-      "with the harmonic measures on elasticity, and its polynomial-reproducing variant hurt as much, so neither is in the model. Two "
-      "diagnostics that break the book's input rules were also run on the Poisson set, the domain's own axes as global vectors and "
-      "absolute coordinates fed to every token; both remain rejected inputs whatever they score (@sec-pose-prior).")
-```

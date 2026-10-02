@@ -1,0 +1,413 @@
+# AirfRANS {#sec-airfrans}
+
+**AirfRANS is the interior task on a second dataset and a second PDE regime, two-dimensional incompressible flow, and the first instance in the book of a global scalar input; on it ISLA leads GeoTransolver-volume on interior velocity and trails on pressure and eddy viscosity, and outside the training range of Reynolds number or angle of attack the pressure ordering inverts.** The chapter follows the shared layout. The pose and discretization instruments of @sec-invariances are run on the two surface datasets and not here; ISLA's contracts hold on this dataset by construction, as on every other (@sec-isla-contracts). Protocol: @sec-protocol; every ratio is GeoTransolver-volume ÷ ISLA, above one favoring ISLA.
+
+```{python}
+#| label: setup-airfrans
+#| include: false
+import json, statistics
+from pathlib import Path
+import sys; sys.path.insert(0, ".")
+from palette import *
+from matplotlib.colors import Normalize
+RES = Path("..") / "results"
+J = lambda p: json.load(open(RES / p))
+mean = statistics.mean
+FIELDS = [("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity")]
+# ISLA is the reference configuration (384 x 12, cosine routing, 5e-4, `source_total` query mass), scored by the fleet scorer
+# on both interior datasets and reduced in results/ref_surface_2026-09-23.json; GeoTransolver-volume is the released baseline
+# of the reporting protocol on each dataset.
+REF = J("ref_surface_2026-09-23.json")
+REFS = REF["summary"]; REFL = REF["lanes"]
+def ref_arm(key):
+    return {f: dict(mean=REFS[key]["fields"][f]["mean"], seeds=REFS[key]["fields"][f]["seeds"]) for f, _ in FIELDS}
+# ISLA's parameter counts on the volume task, from each lane's own config line
+lane_params = lambda lane: json.loads(open(RES / f"campaigns_2026-09-22/ref/metrics/{lane}/{lane}/metrics.jsonl").readline())["num_parameters"] / 1e6
+ISLA_PARAMS = lane_params("ref_isla_r1_drvol_seed42"); R2_PARAMS = lane_params("ref_isla_r2_drvol_seed42")
+# DrivAerML Volume task: GeoTransolver-volume and ISLA with query tokens, 200,000 cells and 200,000 queries per car
+RVA = J("ratevol_reduction_2026-09-20.json")["arms"]
+GTV = {f: RVA["gt_vol_unit"][f] for f, _ in FIELDS}
+ISLAV = ref_arm("isla_r1|drvol"); ISLAV_R2 = ref_arm("isla_r2|drvol")
+RATIO = {f: GTV[f]["mean"] / ISLAV[f]["mean"] for f, _ in FIELDS}
+PAIRED = {f: [g / i for g, i in zip(GTV[f]["seeds"], ISLAV[f]["seeds"])] for f, _ in FIELDS}
+# the interior training-car rungs (54 and 109 cars) of the reference configuration
+VOL_RUNGS = {54: ref_arm("isla_r1|drvol_n54"), 109: ref_arm("isla_r1|drvol_n109"), 435: ISLAV}
+# AirfRANS (interior task): the same pair on 800 training airfoils, 100,000 queries per case
+AF = J("airfrans_reduction_2026-09-22.json"); AFA = AF["arms"]
+AFG = {f: AFA["gt_volume_1e-3"][f] for f, _ in FIELDS}
+AFI = ref_arm("isla_r1|af"); AFI_R2 = ref_arm("isla_r2|af")
+AFR = {f: AFG[f]["mean"] / AFI[f]["mean"] for f, _ in FIELDS}
+AFP = {f: [g / i for g, i in zip(AFG[f]["seeds"], AFI[f]["seeds"])] for f, _ in FIELDS}
+spread = lambda s: abs(s[0] / s[1] - 1) * 100
+lead = lambda r: f"{(r - 1) * 100:.0f}%"
+trail = lambda r: f"{(1 - r) * 100:.0f}%"
+def standing(r, p):
+    """Word a ratio with its paired seeds: a lead or a deficit only when both paired ratios sit on the same side of one."""
+    if r > 1.02 and min(p) > 1: return f"leads by {r:.2f}x" if r >= 1.5 else f"leads by {lead(r)}"
+    if r < 0.98 and max(p) < 1: return f"trails by {trail(r)}"
+    return f"is level (ratio {r:.2f})"
+from matplotlib.colors import TwoSlopeNorm
+from matplotlib.collections import LineCollection
+PF = RES / "problem_figures_2026-09-22"
+
+def load_problem(name):
+    """One representative sample of a dataset, reduced for plotting (results/problem_figures_2026-09-22/)."""
+    z = np.load(PF / f"{name}.npz"); meta = json.load(open(PF / f"{name}.json"))
+    return {k: z[k] for k in z.files}, meta
+
+def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
+    """Draw line cells colored by boundary-condition kind (keys of palette.BC)."""
+    segs = pts[cells][:, :, :2]
+    ax.add_collection(LineCollection(segs, colors=[BC[k] for k in kinds], linewidths=lw, capstyle="butt", zorder=zorder))
+
+def field_scatter(ax, xy, v, s=3.0, signed=False, vmin=None, vmax=None):
+    if signed:
+        lim = max(abs(np.nanmin(v)), abs(np.nanmax(v))) if vmin is None else None
+        norm = TwoSlopeNorm(vcenter=0.0, vmin=(-lim if vmin is None else vmin), vmax=(lim if vmax is None else vmax))
+        return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=DIVERGING, norm=norm, rasterized=True)
+    return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=SEQUENTIAL, vmin=vmin, vmax=vmax, rasterized=True)
+
+def small_colorbar(fig, sc, ax, label, **kw):
+    cb = fig.colorbar(sc, ax=ax, fraction=0.035, pad=0.02, **kw); cb.outline.set_visible(False); cb.ax.tick_params(labelsize=8)
+    cb.set_label(label, fontsize=8.5)
+    return cb
+
+def bc_legend(ax, kinds, loc="lower right", extra=()):
+    from matplotlib.lines import Line2D
+    handles = [Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds] + list(extra)
+    ax.legend(handles=handles, loc=loc, fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
+
+# ---- the three-protocol headline table ----
+# The three architectures' reference configurations scored on (i) the native validation mesh, (ii) a uniform point cloud of
+# the same budget and (iii) every validation case rotated and translated. Read from results/char/<dataset>.json when that
+# artifact exists; until it does the cell prints nothing and the native-mesh table above is the headline. Expected schema:
+# {"fields": {key: label}, "protocols": {"native": label, "uniform": label, "posed": label}, "isla_arm": name,
+#  "arms": {name: {protocol: {field: {"mean": x, "seeds": [...]}}}}}.
+def protocol_table(artifact, label, setting):
+    p = RES / "char" / artifact
+    if not p.exists():
+        return
+    C = json.load(open(p)); protos = C["protocols"]; fields = C["fields"]; isla = C["arms"][C["isla_arm"]]
+    flab = " / ".join(fields.values())
+    hdr = "| configuration | " + " | ".join(f"{pl}: {flab}" for pl in protos.values()) + " |\n|---|" + "---|" * len(protos) + "\n"
+    rows = []
+    for arm, d in C["arms"].items():
+        rows.append(f"| {arm} | " + " | ".join(" / ".join(f"{d[pk][f]['mean']:.4f}" for f in fields) for pk in protos) + " |")
+        if arm != C["isla_arm"]:
+            rows.append(f"| {arm} ÷ ISLA | " + " | ".join(" / ".join(f"{d[pk][f]['mean'] / isla[pk][f]['mean']:.2f}" for f in fields) for pk in protos) + " |")
+    print(hdr + "\n".join(rows) + "\n")
+    print(f": {setting}: the three architectures at their reference configurations under three scorings of one instrument, the "
+          f"native validation mesh, a uniform point cloud at the same budget, and every validation case rotated and translated; "
+          f"fields {flab}; seed means, float32. How to read this: a ratio is baseline ÷ ISLA, above one favoring ISLA; the three "
+          f"columns share the checkpoint and differ only in how the validation cases are presented. Data: results/char/{artifact}. "
+          f"{{#{label}}}")
+
+```
+
+## The problem: NACA airfoils across Reynolds number and incidence {#sec-dataset-airfrans}
+
+**AirfRANS is 1,001 two-dimensional incompressible RANS solutions around NACA-family airfoils at Reynolds numbers of 2 to 6 million and angles of attack of −5° to 15°.** The boundary is the airfoil polyline, about a thousand segments with in-plane normals and segment lengths as the measure weights. The global inputs are the inlet direction as the one global vector and the inlet speed as the one global scalar. The interior queries, 100,000 per case, carry the signed distance to the airfoil, and the model predicts pressure, velocity and turbulent viscosity at them. @fig-problem-airfrans shows one test case.
+
+```{python}
+#| label: fig-problem-airfrans
+#| fig-cap: >
+#|   The AirfRANS problem, on one test airfoil. Top: the boundary the model
+#|   sees, the airfoil polyline of about a thousand segments with their
+#|   outward normals (every twelfth drawn), the inlet direction $\hat g_1$
+#|   (black arrow, the one global vector, at the angle of attack) and the inlet
+#|   speed as the one global scalar; the interior queries carry the signed
+#|   distance to the airfoil. Middle: the pressure coefficient
+#|   $C_p = p / \tfrac{1}{2} U_\infty^2$ (kinematic pressure) at the interior
+#|   mesh points in a window around the airfoil. Bottom: the speed ratio
+#|   $|U| / U_\infty$ at the same points. What varies per sample is the
+#|   airfoil shape, the inlet speed and its direction. What the model
+#|   predicts: pressure, velocity and turbulent viscosity at the queries. How
+#|   to read this: the queried domain extends well beyond this window (its
+#|   extent is printed); the dots are 70,000 of the case's 179,000 mesh points
+#|   and their density follows the mesh, fine near the wall and in the wake.
+#|   Data: results/problem_figures_2026-09-22/airfrans.npz.
+#| code-fold: true
+A, Am = load_problem("airfrans")
+bp, bc, bn = A["bnd_points"], A["bnd_cells"], A["bnd_normals"]; mid = bp[bc].mean(axis=1)
+ip = A["int_points"]
+fig, axes = plt.subplots(3, 1, figsize=(8, 7.2), sharex=True, gridspec_kw=dict(hspace=0.22))
+ax = axes[0]
+ax.add_collection(LineCollection(bp[bc][:, :, :2], colors=BC["free"], linewidths=2.0, zorder=3))
+k = slice(None, None, 12); ax.quiver(mid[k, 0], mid[k, 1], bn[k, 0], bn[k, 1], color=MUTED, scale=28, width=0.0025, headwidth=3, zorder=2)
+u = A["U_inf_dir"]; ax.annotate("", xy=(-0.45 + 0.3 * u[0], 0.38 + 0.3 * u[1]), xytext=(-0.45, 0.38), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0))
+ax.text(-0.1, 0.40, f"inlet: uniform flow along $\\hat g_1$ at {Am['aoa_deg']:.2f}° (the global vector); $U_\\infty$ = {Am['U_inf_mag']:.1f} m/s (the global scalar); Re = {Am['Re']:.2g}", ha="left", va="center", fontsize=8.5, color=INK2)
+ib = A["interior_bbox"]
+map_axes(ax); ax.set_xlim(-0.5, 1.5); ax.set_ylim(-0.55, 0.55); ax.set_ylabel("y / chord [–]")
+ax.set_title(f"the boundary: {Am['n_boundary_cells']:,} line cells (position, normal, length), a no-slip wall; queries fill {ib[0,0]:.0f} < x < {ib[1,0]:.0f}, {ib[0,1]:.0f} < y < {ib[1,1]:.0f} chords", fontsize=9.2)
+ax = axes[1]
+sc = field_scatter(ax, ip[:, :2], A["int_cp"], s=2.5, signed=True, vmin=-1.0, vmax=1.0); map_axes(ax); ax.set_ylim(-0.55, 0.55)
+ax.add_collection(LineCollection(bp[bc][:, :, :2], colors=INK, linewidths=0.8, zorder=3)); ax.set_ylabel("y / chord [–]")
+ax.set_title("pressure coefficient $C_p$ at the interior points (target)", fontsize=9.5)
+small_colorbar(fig, sc, ax, "$C_p$ [–]", extend="both")
+ax = axes[2]
+sc = field_scatter(ax, ip[:, :2], A["int_umag"], s=2.5, vmin=0, vmax=1.3); map_axes(ax); ax.set_ylim(-0.55, 0.55)
+ax.add_collection(LineCollection(bp[bc][:, :, :2], colors=WHITE, linewidths=0.8, zorder=3)); ax.set_ylabel("y / chord [–]"); ax.set_xlabel("x / chord [–]")
+ax.set_title("speed ratio $|U| / U_\\infty$ at the interior points (target)", fontsize=9.5)
+small_colorbar(fig, sc, ax, "$|U| / U_\\infty$ [–]", extend="max")
+plt.show()
+```
+
+**Diversity.** All three parts of the interface vary here: the shape (four- and five-digit NACA sections), the direction of the inlet and its speed, which enters as the one global scalar (@sec-parametric). The regime spans attached flow to the onset of separation at the high incidences, and the two published extrapolation splits hold out the top of the Reynolds range and of the angle range. The geometry family is nonetheless narrow, smooth airfoils of one parameterization, and the flow is planar, so the dataset tests the global inputs more than it tests geometry.
+
+### Files, conversion and normalization {#sec-data-airfrans}
+
+**1,001 two-dimensional incompressible RANS ($k$–$\omega$ SST) solutions
+around NACA-family airfoils at Reynolds numbers of 2 to 6 million and
+angles of attack of −5° to 15°, with published split manifests, converted
+once from raw VTK.** The source (Bonnet et al., 2022) ships one directory
+per case, `airFoil2D_SST_<speed>_<aoa>_<NACA parameters>`, with an
+`_internal.vtu` volume slice of about 177,000 cells carrying velocity `U`,
+pressure `p`, eddy viscosity `nut` and the signed distance
+`implicit_distance` at the points, an `_aerofoil.vtp` polyline and a
+`_freestream.vtp` of the far boundary. The chord is 1 m and the kinematic
+viscosity 1.56e-5 m²/s.
+
+- **Conversion** (`airfrans_convert.py`, @tbl-data-files). The interior is
+  a point cloud in three dimensions at $z = 0$ with `velocity` (N, 3),
+  `pressure`, `nut`, `sdf` (the file's `implicit_distance`, positive
+  outside the airfoil) and `sdf_normals`, the in-plane unit vector from the
+  nearest airfoil point to the query, computed in the converter because the
+  recipe's SDF transform expects a triangulated surface. The boundary
+  `airfoil` is line cells in three dimensions with precomputed in-plane
+  outward normals (a curve in three dimensions has no cell normals of its
+  own) and the segment lengths as `quadrature_measure`. `global_data`
+  holds `U_inf` (parsed from the case name and checked against the
+  freestream boundary's velocity), `U_inf_dir`, `U_inf_mag`, `aoa_deg`,
+  `Re` and the NACA parameters.
+- **Normalization** (`airfrans_volume.yaml`). Pressure is kinematic
+  ($\rho_\infty = 1$, $p_\infty = 0$) and is divided by
+  $\tfrac{1}{2} |U_\infty|^2$; velocity by $|U_\infty|$; `nut` keeps its
+  units and is standardized (mean 7.9e-4, standard deviation 2.4e-3,
+  m²/s, from the converter's per-case statistics).
+- **What the model receives.** ISLA: the airfoil cells, `U_inf_dir` as
+  the one global vector, `U_inf_mag` as the one global scalar, and the
+  interior queries with `sdf` as the query scalar; outputs pressure and
+  `nut` as scalars and velocity as a vector. On a planar problem the
+  three-dimensional vector head's out-of-plane basis coefficient is
+  learnable to zero. GeoTransolver-volume: the interior points with
+  coordinates, `sdf` and `sdf_normals`, and the inlet velocity through the
+  unit-direction rule (@sec-unit-direction-rule).
+- **Splits** (the dataset's manifest, used unchanged). `full`: 800 train /
+  200 test; `scarce`: 200 train; `reynolds`: 504 / 496, an extrapolation
+  in Reynolds number; `aoa`: 804 / 196, an extrapolation in angle of
+  attack. The training-case axis of the scaling study uses nested rungs of
+  50, 100, 200 and 400 airfoils inside `full` (@sec-airfrans-ladder).
+  Every case has about 179,000 interior points; the interior task queries
+  100,000 of them per case per step (@sec-protocol).
+- **License.** As for DrivAerML, not restated here.
+
+## What is measured {#sec-airfrans-measured}
+
+**The interior task of @sec-interior-task on the published `full` split: 800 training airfoils, 200 test airfoils, 100,000 interior queries per case, 500 epochs, two seeds, float32.** GeoTransolver-volume trains at 1e-3 and ISLA at the reference configuration's 5e-4; both are scored at the training query count on the 200 test cases. The metric is the relative L2 per field averaged over cases, with eddy viscosity standardized before scoring, so its ratios are orderings and not physical percentages (@sec-interior-task). As on the cars, the two architectures are not resource-matched and do not receive the same inputs: GeoTransolver-volume reads every interior point with its coordinates, signed distance and distance gradient and never sees the airfoil polyline; ISLA reads the polyline, the inlet direction and speed, and the queries with their signed distance.
+
+## The standing {#sec-interior-airfrans}
+
+```{python}
+#| label: para-airfrans-lead
+#| output: asis
+print(f"**The velocity lead is not a property of car flow: on AirfRANS, a different dataset and a different PDE regime, ISLA leads "
+      f"GeoTransolver-volume on interior velocity by {AFR['velocity_l2']:.2f}x and trails it on pressure by {trail(AFR['pressure_l2'])} and on "
+      f"eddy viscosity by {trail(AFR['nut_l2'])}, with both paired seeds agreeing on every field.** AirfRANS is 1,001 two-dimensional incompressible "
+      "k-omega SST RANS solutions around NACA airfoils; its full split trains on 800 cases and tests on 200. It is the book's instance of the "
+      "general interface with one global scalar: the boundary is the airfoil polyline, the global inputs are the inlet direction as the one "
+      "global vector and the inlet speed as the one global scalar, and the interior queries carry the signed distance to the airfoil "
+      "(@sec-dataset-airfrans, @sec-data-airfrans). Both architectures train for 500 epochs at 100,000 "
+      "interior queries per case (GeoTransolver-volume at 1e-3, ISLA at the reference configuration's 5e-4) and are scored in float32 at "
+      "the same count on the 200 test cases.")
+```
+
+```{python}
+#| label: tbl-interior-airfrans
+#| output: asis
+def acell(d): return f"{d['mean']:.4f} ({' / '.join(f'{v:.4f}' for v in d['seeds'])})"
+out = "| arm, 800 training airfoils, 100,000 queries | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
+out += "| GeoTransolver-volume, 1e-3 | " + " | ".join(acell(AFG[f]) for f, _ in FIELDS) + " |\n"
+out += "| **ISLA, query tokens + signed distance, 5e-4** | " + " | ".join(acell(AFI[f]) for f, _ in FIELDS) + " |\n"
+out += "| GeoTransolver-volume ÷ ISLA (paired by seed) | " + " | ".join(f"{AFR[f]:.2f} ({' / '.join(f'{r:.2f}' for r in AFP[f])})" for f, _ in FIELDS) + " |\n"
+out += "| ISLA, 24 layers (depth variant), 5e-4 | " + " | ".join(acell(AFI_R2[f]) for f, _ in FIELDS) + " |\n"
+print(out)
+sp = {f: spread(AFI[f]["seeds"]) for f, _ in FIELDS}; spg = {f: spread(AFG[f]["seeds"]) for f, _ in FIELDS}
+verdict = {f: standing(AFR[f], AFP[f]) for f, _ in FIELDS}
+print(": Interior error on AirfRANS (relative L2 over the 200 test cases of the full split, float32, two seeds, 100,000 interior queries per "
+      "case, 500 epochs), seed means with the seeds in parentheses. Ratios are GeoTransolver-volume ÷ ISLA (above 1 favors ISLA), as the "
+      "seed mean and paired by seed; a standing is a lead or a deficit only when both paired ratios sit on the same side of one. Standings: "
+      f"ISLA {verdict['pressure_l2']} on pressure, {verdict['velocity_l2']} on velocity, {verdict['nut_l2']} on eddy viscosity. How to read this: "
+      f"ISLA's two seeds differ by {min(sp.values()):.0f} to {max(sp.values()):.0f}% and GeoTransolver-volume's by {min(spg.values()):.0f} to "
+      f"{max(spg.values()):.0f}%, so the pressure and eddy-viscosity deficits are one to two seed spreads wide and the velocity lead is many; "
+      "the depth-variant row is the one the reference selection rejected, worse than the reference on every field here. Data: "
+      "results/airfrans_reduction_2026-09-22.json (GeoTransolver-volume); results/ref_surface_2026-09-23.json (ISLA). {#tbl-interior-airfrans}")
+```
+
+```{python}
+#| label: para-airfrans-reading
+#| output: asis
+print(f"Three things carry with @tbl-interior-airfrans. The velocity lead carries across the two datasets and widens: {AFR['velocity_l2']:.2f}x "
+      f"here against {RATIO['velocity_l2']:.2f}x on the cars. The pressure standing does not carry: ISLA leads by {lead(RATIO['pressure_l2'])} "
+      f"on the cars and trails by {trail(AFR['pressure_l2'])} here, and eddy viscosity, level on the cars, goes to GeoTransolver-volume by "
+      f"{trail(AFR['nut_l2'])}. The two regimes differ in what pressure is (gauge pressure on a three-dimensional body against "
+      "nondimensional pressure in two-dimensional incompressible flow) and in what the boundary is (a 200,000-cell sample of a car against "
+      "a polyline of a few hundred cells). So the velocity lead is a property of how the two architectures treat an interior point, and the "
+      "pressure standing is a property of the dataset. Third, the depth variant is "
+      f"{min((AFI_R2[f]['mean'] / AFI[f]['mean'] - 1) * 100 for f, _ in FIELDS):.0f} to "
+      f"{max((AFI_R2[f]['mean'] / AFI[f]['mean'] - 1) * 100 for f, _ in FIELDS):.0f}% worse than the reference here, the largest depth "
+      "penalty of any dataset in the book beside Tensile2d (@sec-interior-tensile2d). The case-count ladder of this dataset, and how the "
+      "two architectures' errors fall with training airfoils, are in @sec-airfrans-ladder.")
+```
+
+```{python}
+#| label: tbl-airfrans-protocols
+#| output: asis
+protocol_table("airfrans.json", "tbl-airfrans-protocols", "The AirfRANS interior task at 800 training airfoils")
+```
+
+## Ladders and controls {#sec-airfrans-ladders}
+
+### The training-airfoil ladder {#sec-airfrans-ladder}
+
+**On AirfRANS no floor is in reach at 800 airfoils, and on the one task
+where the two architectures' learning-curve exponents differ, ISLA has the
+larger one.** The training-case axis runs over nested subsets of 50, 100,
+200, 400 and 800 airfoils for ISLA at 192 wide and 1e-3 (the earlier
+protocol; the caption says so) and GeoTransolver-volume, two seeds each,
+500 epochs at 100,000 interior queries (@fig-scaling-airfrans). The
+800-airfoil standing of the reference configuration is
+@tbl-interior-airfrans. The curve has a different shape from the cars'
+(@sec-compute-allocation). No floor is within reach at 800 airfoils, and ISLA's
+error falls as a clean power law $n^{-\alpha}$ on pressure and velocity
+($\alpha$ =
+`{python} f"{J('airfrans_scale_2026-09-22.json')['fits']['isla|pressure_l2']['fit']['alpha']:.2f}"`
+on pressure,
+`{python} f"{J('airfrans_scale_2026-09-22.json')['fits']['isla|velocity_l2']['fit']['alpha']:.2f}"`
+on velocity, both fits accepted). GeoTransolver-volume's local exponent
+on pressure is about 0.5 from 100 airfoils up (its 50-airfoil error sits
+above its own trend, so no fit is accepted for it), so **on the one task
+where the two architectures' exponents differ, ISLA has the larger one**:
+GeoTransolver-volume's pressure lead is
+`{python} f"{100 * (1 - J('airfrans_scale_2026-09-22.json')['bars']['ordering']['pressure_l2']['per_rung']['100']['gt_over_isla']):.0f}%"`
+at 100 airfoils and
+`{python} f"{100 * (1 - J('airfrans_scale_2026-09-22.json')['bars']['ordering']['pressure_l2']['per_rung']['800']['gt_over_isla']):.0f}%"`
+at 800, while ISLA's velocity lead holds near 2x from 200 airfoils up. Two
+consequences follow for the compute-allocation rule of
+@sec-compute-allocation. First, the exponents are
+properties of a dataset and a task, not of an architecture, and do not
+transfer (1.28 for the reducible error on the cars, 0.67 for the total
+error on the airfoils). A compute-allocation rule must be measured where
+it will be used. Second, the compute-optimal crossover moves with the
+exponent. With no floor and $\alpha \approx 0.67$ the data term never
+becomes small, and cases stay the better purchase across the whole
+AirfRANS range measured.
+
+```{python}
+#| label: fig-scaling-airfrans
+#| fig-cap: >
+#|   Interior error against training airfoils on AirfRANS (interior task)
+#|   for ISLA at 192 wide with cosine routing at 1e-3 and
+#|   GeoTransolver-volume at 1e-3, 500 epochs
+#|   at 100,000 interior queries, two-seed means with the seeds as short
+#|   bars, float32 on the 200 test airfoils; left, pressure; middle,
+#|   velocity; right, eddy viscosity (a standardized field, so its ratios
+#|   are orderings under that centering, not physical percentages). Dotted
+#|   curves are the fitted $\varepsilon = \varepsilon_\infty + a
+#|   n^{-\alpha}$, drawn only where the fit's RMS relative residual is
+#|   below 3% (ISLA on pressure and velocity); every other series is
+#|   points only, with its local exponents from 100 airfoils up written
+#|   beside it. How to read this: parallel point runs mean the same
+#|   exponent (velocity); converging runs mean ISLA converts cases faster
+#|   (pressure). It does not show a parameter axis (one width per
+#|   architecture). Both axes are logarithmic and span the measured range.
+#|   Data: results/airfrans_scale_2026-09-22.json.
+#| fig-alt: "Three log-log panels of interior error against training airfoils from 50 to 800: ISLA in blue squares with dotted fitted lines on pressure and velocity, GeoTransolver-volume in red circles as points only."
+#| code-fold: true
+AFS = J("airfrans_scale_2026-09-22.json"); AC = AFS["configurations"]; AFF = AFS["fits"]
+fig, axes = plt.subplots(1, 3, figsize=(11.0, 3.9), sharex=True)
+nn = np.geomspace(45, 900, 100)
+for ax, (f, lab) in zip(axes, (("pressure_l2", "interior pressure"), ("velocity_l2", "interior velocity"), ("nut_l2", "interior eddy viscosity"))):
+    for m, key in (("isla", "isla_ref"), ("gt", "gt")):
+        kw = series_kwargs(key)
+        rows = sorted([(c["n"], c[f]["mean"], c[f]["seeds"]) for c in AC.values() if c["arm"] == m and c["status"] == "complete" and f in c])
+        ax.plot([r[0] for r in rows], [r[1] for r in rows], marker=kw["marker"], color=kw["color"], ls="none", ms=6, label=STYLE[key]["label"] + ("-volume" if m == "gt" else ""))
+        for r in rows:
+            ax.plot([r[0]] * len(r[2]), r[2], ls="none", marker="_", color=kw["color"], ms=7, mew=1.1)
+        F = AFF[f"{m}|{f}"]["fit"]; accepted = F["rms_rel_residual"] < 0.03
+        loc = AFF[f"{m}|{f}"]["local_alpha"]; tail = [v for k, v in loc.items() if int(k.split("-")[0]) >= 100]
+        if accepted:
+            ax.plot(nn, F["eps_inf"] + F["a"] * nn ** (-F["alpha"]), color=kw["color"], ls=":", lw=1.1, zorder=0)
+            lab_a = f"α = {F['alpha']:.2f} (fit)"
+        else:
+            lab_a = f"local α {min(tail):.2f} to {max(tail):.2f}"
+        ax.text(rows[-1][0] * 1.08, rows[-1][1], lab_a, fontsize=8, color=kw["color"], va="bottom" if m == "isla" else "top")
+    ax.set_xscale("log"); ax.set_yscale("log"); ax.set_xticks([50, 100, 200, 400, 800]); ax.set_xticklabels(["50", "100", "200", "400", "800"])
+    ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+    ax.set_yticks([0.02, 0.03, 0.05, 0.1, 0.2]); ax.set_yticklabels(["0.02", "0.03", "0.05", "0.10", "0.20"]); ax.set_xlim(42, 1500)
+    ax.set_xlabel("training airfoils [count]"); ax.set_ylabel(f"{lab} relative L2 error [–]")
+axes[1].plot([], [], color=INK2, ls=":", lw=1.1, label="dotted: fitted law (accepted fits only)")
+axes[1].legend(fontsize=8, loc="upper right")
+plt.tight_layout(); plt.show()
+```
+
+### Outside the training range: the AirfRANS extrapolation splits {#sec-interior-extrapolation}
+
+**When the global condition leaves its training range, ISLA's interior
+error grows less than GeoTransolver-volume's on pressure and eddy
+viscosity and the same on velocity, and the in-distribution ordering on
+pressure inverts: outside the training Reynolds band ISLA leads by 15%,
+outside the training angle-of-attack band by 47%.** AirfRANS ships two
+extrapolation splits. `reynolds` trains on 504 airfoils inside a
+Reynolds-number band and tests on 496 outside it. `aoa` trains on 804
+inside an angle-of-attack band and tests on 196 outside. Both
+architectures were trained on each split as on the full split (500
+epochs, 100,000 queries, two seeds) and scored on the split's test cases.
+The ISLA lanes of this study are 192 wide with cosine routing at 1e-3.
+Every growth factor divides a configuration's split
+error by the same configuration's full-split error, so the readout is
+within-configuration and the reference re-run is not required for it.
+The readout that separates extrapolation from the smaller training sets is
+the *growth factor*: each architecture's test error on the split divided
+by its own full-split test error. The bar is the ratio of the two
+growth factors. Above 1.10 with both seed pairs agreeing, ISLA extrapolates
+better. Below 0.90, GeoTransolver-volume does.
+
+```{python}
+#| label: tbl-interior-airfrans-extrap
+#| output: asis
+AFX = json.load(open(RES / "airfrans_extrap_2026-09-22.json"))["splits"]
+fields = [("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity")]
+names = {"reynolds": "Reynolds number", "aoa": "angle of attack"}
+out = "| split | field | ISLA error (growth) | GeoTransolver-volume error (growth) | growth ratio GeoTransolver-volume ÷ ISLA (paired by seed) | GeoTransolver-volume ÷ ISLA on the split | verdict |\n|---|---|--:|--:|---|--:|---|\n"
+for sp in ("reynolds", "aoa"):
+    S = AFX[sp]
+    for f, lab in fields:
+        gi, gg, g = S["arms"]["isla_cosine_1e-3"][f], S["arms"]["gt_volume_1e-3"][f], S["growth"][f]
+        out += (f"| {names[sp]} | {lab} | {gi['mean']:.4f} ({gi['growth_mean']:.2f}) | {gg['mean']:.4f} ({gg['growth_mean']:.2f}) | "
+                f"{g['g_gt_over_g_isla']:.2f} ({', '.join(f'{v:.2f}' for v in g['paired'])}) | {S['gt_over_isla_on_split'][f]['mean']:.2f} | {S['verdict'][f].split(' (')[0]} |\n")
+print(out)
+print(": AirfRANS extrapolation splits (relative L2 on the split's test cases, float32, two seeds, 100,000 queries, 500 epochs). "
+      "Growth = the split's test error divided by the same architecture's full-split test error; the growth ratio compares how much "
+      "each architecture's error grows when the condition leaves its training range (above 1 means ISLA's grows less), and the "
+      "last ratio is the standing on the split itself (above 1 favors ISLA). Bars: 1.10 / 0.90 with both seed pairs agreeing. "
+      "How to read this: the Reynolds split trains on 504 airfoils against the full split's 800, so part of each growth factor is "
+      "data-size; both architectures pay it, which is why the ratio of growths is the readout. "
+      "Data: results/airfrans_extrap_2026-09-22.json. {#tbl-interior-airfrans-extrap}")
+```
+
+Two things travel with @tbl-interior-airfrans-extrap. It is one dataset
+and one task, two-dimensional. The HiLiftAeroML regime splits are the
+second dataset for the claim and are unmeasured (@sec-limits-regime). And
+the mechanism is not measured here. The architecture's premise is that a
+model whose learned maps see only invariant scalars, the boundary and a
+standardized condition vector degrades more gracefully when the
+condition leaves its range than one that concatenates coordinates and the
+raw condition into every token. The numbers go that way, but the
+territory and routing probes that would show *how* have not been run on
+these lanes. GeoTransolver-volume's two seeds also separate under
+extrapolation (its angle-of-attack pressure seeds differ by 16%) where
+ISLA's stay within 4%.
+
+## What this dataset does not say {#sec-airfrans-limits}
+
+**The AirfRANS standing is one two-dimensional dataset: a velocity lead, a pressure and eddy-viscosity deficit, and an extrapolation reading whose mechanism is not measured.** The deficits are one to two seed spreads wide and the third seeds that would settle them are named in @sec-limits-interior; the extrapolation splits are the only regime measurement for ISLA in the book, and their three-dimensional twin on the wings is unmeasured (@sec-limits-regime). Nothing here is a statement about geometry generalization beyond the NACA family, and the pose and discretization contracts are asserted by the tests of @sec-isla-contracts rather than measured on this dataset.

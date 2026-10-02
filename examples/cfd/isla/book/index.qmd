@@ -69,17 +69,11 @@ SLW = J("scalelaw_2026-09-27.json")["configurations"]
 wing = {35: refm("gt_w512|hl35") / refm("isla_r1|hl35"),
         210: mean(ref_lane_seeds("ref_gt_w512_hl210")) / mean(ref_lane_seeds("ref_isla_r1_hl210")),
         510: mean(SLW["hilift|gt|w512|n510"]["pressure_l2_seeds"]) / mean(ref_lane_seeds("ref_isla_r1_hl510"))}
-# the solids and the fixed-mesh boundary-data sets, GeoTransolver-512 (the parameter match) ÷ ISLA
+# the solids, GeoTransolver-512 (the parameter match) ÷ ISLA
 LUGR = J("solids_lug_2026-09-22.json")["gt512_over_isla"]
 lug = {300: LUGR["isla_r1_lr25e4|n300"], 600: LUGR["isla_r1|n600"], 1200: LUGR["isla_r1|n1200"], 2400: LUGR["isla_r1|n2400"]}
 _LM = J("lane_means_2026-09-23.json"); _SFG = J("solids_frame_2026-09-22.json")["summary"]["gt512|gt|n400"]["fields"]
 T2 = {f: _SFG[f]["mean"] / mean(_LM[f"v2_t2d_isla_r1_tensor_axis_n400_seed{s}"]["fields"][f] for s in (42, 43)) for f in ("sig11", "sig22", "sig12", "displacement")}
-OLB = J("olbc_ref_2026-09-29.json")
-def olbc_head(set_, n, f):
-    r = OLB[set_][str(n)]; b = r["stronger_gt512"]
-    return r["gt512_over_isla"][b]["ratio"][f]
-olbc_p = {n: olbc_head("poisson", n, "u_l2") for n in (512, 2048, 8448)}
-olbc_e = {n: [olbc_head("elasticity", n, f) for f in ("sig11_l2", "sig22_l2", "sig12_l2", "displacement_l2")] for n in (512, 2048, 8448)}
 JBS = J("deepjeb_2026-09-22.json")["summary"]
 jb_full = {f: JBS["gt256|full"]["fields"][f]["mean"] / JBS["isla_r1|full"]["fields"][f]["mean"] for f in ("von_mises", "displacement")}
 JBR = J("deepjeb_2026-09-22.json")["gt512_over_isla"]
@@ -117,7 +111,7 @@ rows = [
     ("**DrivAerML Surface task**, 435 cars (GeoTransolver-256 at its recipe width and its better rate, " + gt200_lab + "; GeoTransolver-512, the parameter match; Transolver-256)",
      f"{gt200/isla200:.2f} / {gt512/isla200:.2f} / {t200/isla200:.2f}",
      f"ISLA leads the recipe width by {(gt200/isla200-1)*100:.0f}% at {memx('geotransolver_256'):.2f}x its memory, and ties the parameter match, which costs {memx('geotransolver_512'):.2f}x ISLA's memory and {stepx('geotransolver_512'):.2f}x its step time",
-     "@sec-surface"),
+     "@sec-scoreboard-200k"),
     ("**DrivAerML Surface task**, the training-car ladder, 27 / 54 / 109 / 218 cars (GeoTransolver-256 at its better rate)",
      " / ".join(f"{lad200[n]:.2f}" for n in (27, 54, 109, 218)),
      f"GeoTransolver leads by {(1-lad200[27])*100:.0f}% at 27 cars and {(1-lad200[54])*100:.0f}% at 54; the crossover is between 54 and 109",
@@ -125,7 +119,7 @@ rows = [
     ("**HiLiftAeroML**, the 35- / 210- / 510-wing rungs (GeoTransolver-512, the parameter match)",
      " / ".join(f"{wing[n]:.2f}" for n in (35, 210, 510)),
      "the baselines lead on every rung; the deficit closes with training cases and moves with nothing else",
-     "@sec-data-efficiency"),
+     "@sec-hilift"),
     ("**DrivAerML Volume task**, 200,000 boundary cells and 200,000 interior queries (GeoTransolver-volume): pressure / velocity / eddy viscosity",
      tri(vol_ratio), standing(vol_ratio), "@sec-interior-results"),
     ("**AirfRANS interior task**, 800 training airfoils, 100,000 queries per case (GeoTransolver-volume): pressure / velocity / eddy viscosity",
@@ -134,14 +128,10 @@ rows = [
      " / ".join(f"{lug[n]:.2f}" for n in (300, 600, 1200, 2400)) + f"; {jb_full['von_mises']:.2f} / {jb_full['displacement']:.2f}",
      f"ISLA leads where the target is a frame-free scalar, at the two small lug rungs ({lug[300]:.2f} and {lug[600]:.2f}) and at every DeepJEB++ rung",
      "@sec-interior-lug, @sec-surface-deepjeb"),
-    ("**Tensor targets on solids**: PLAID Tensile2d at 400 cases and OLBC elasticity at 8,448 cases (GeoTransolver-512): σ11 / σ22 / σ12 / displacement",
-     " / ".join(f"{T2[f]:.2f}" for f in ("sig11", "sig22", "sig12", "displacement")) + "; " + " / ".join(f"{v:.2f}" for v in olbc_e[8448]),
+    ("**Tensor targets on a solid**: PLAID Tensile2d at 400 cases (GeoTransolver-512): σ11 / σ22 / σ12 / displacement",
+     " / ".join(f"{T2[f]:.2f}" for f in ("sig11", "sig22", "sig12", "displacement")),
      "GeoTransolver-512 leads on every component; the open standing of the book",
-     "@sec-interior-tensile2d, @sec-interior-olbc"),
-    ("**OLBC Poisson** (one fixed mesh, random labeled boundary data), 512 / 2,048 / 8,448 cases (GeoTransolver-512 with the stronger of its two attention backends at each rung)",
-     " / ".join(f"{olbc_p[n]:.2f}" for n in (512, 2048, 8448)),
-     "ISLA leads where the data are scarce and GeoTransolver-512 overtakes between 2,048 and 8,448 cases",
-     "@sec-interior-olbc"),
+     "@sec-interior-tensile2d"),
     ("**Pose and sampling draw** at 200,000 cells: every case in its own random pose (DrivAerML Surface, baselines rotation-augmented, ISLA not); error under a 10:1 front/back biased draw ÷ under the uniform draw (HiLiftAeroML, 35 wings)",
      f"{pose_lead['gt']:.2f} / {pose_lead['t']:.2f}; ISLA {bfac(bias['isla']):.2f}x against {bfac(bias['gt']):.1f}x and {bfac(bias['t']):.1f}x",
      f"ISLA's own error moves {pose['isla']:.3f}x between native and posed evaluation where the baselines' moves {pose['gt']:.2f}x and {pose['t']:.2f}x, and it is unchanged under the biased draw",
@@ -174,25 +164,27 @@ print(f": The thesis in {len(rows)} rows, one dataset and task per row. "
   the equivariant output basis.
 - **The two invariances ISLA is built for** (@sec-invariances): what
   rigid-motion equivariance and discretization consistency mean, what each
-  buys, and how each is measured.
+  buys, and every pose and discretization measurement of the book.
 - **The ISLA forward pass** (@sec-architecture): the computation stage by
   stage, with every tensor shape and code identifier.
 - **Baselines, datasets and the protocol** (@sec-baselines): GeoTransolver
-  and Transolver, the datasets and splits, and the rules that make a
-  comparison fair.
+  and Transolver, the dataset roster and the conventions they share, and
+  the rules that make a comparison fair.
 - **Using ISLA** (@sec-using): the reference configuration, the inputs, the
   commands, the sampler, checkpoints and cost.
-- **Evidence.** Surface accuracy on the DrivAerML Surface task
-  (@sec-surface). Data efficiency and the wing deficit
-  (@sec-data-efficiency). Discretization and pose
-  (@sec-discretization-evidence). Capacity, scaling laws and cost
-  (@sec-capacity). Boundary to interior (@sec-interior). Beyond external
-  aerodynamics (@sec-beyond-aero).
+- **Evidence, by dataset.** One chapter per dataset, each in the same
+  order: the problem and its diversity, what is measured, the standing of
+  the three architectures, the ladders and controls, and what the dataset
+  does not say. DrivAerML, both tasks (@sec-drivaerml); HiLiftAeroML
+  (@sec-hilift); AirfRANS (@sec-airfrans); Shift-SUV (@sec-shift-suv);
+  PLAID Tensile2d (@sec-tensile2d); the GINOT bracket lug (@sec-lug);
+  DeepJEB++ (@sec-deepjeb). Then capacity, scaling laws and cost
+  (@sec-capacity), the one evidence chapter organized by question rather
+  than by dataset.
 - **Limits and open questions** (@sec-limits), then **program status**
   (@sec-program-status), the one chapter with dates.
 - **Appendices.** The names and colors and the design-decision ledger
-  (@sec-principled-decisions), the datasets in detail
-  (@sec-datasets-detail), ISLA against the literature
+  (@sec-principled-decisions), ISLA against the literature
   (@sec-isla-vs-geotransolver), and the lab notebook (@sec-notebook): every
   preregistration, launch and verdict, including the failures, in the order
   they happened.

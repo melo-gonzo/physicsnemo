@@ -17,22 +17,23 @@ book:
       chapters:
         - 05-protocol.qmd
         - 06-using-isla.qmd
-    - part: "III. Evidence"
+    - part: "III. Evidence, by dataset"
       chapters:
-        - 07-surface-accuracy.qmd
-        - 08-data-efficiency.qmd
-        - 09-discretization-and-pose.qmd
-        - 10-capacity-scaling-cost.qmd
-        - 11-boundary-to-interior.qmd
-        - 12-beyond-aero.qmd
+        - 07-drivaerml.qmd
+        - 08-hilift.qmd
+        - 09-airfrans.qmd
+        - 10-shift-suv.qmd
+        - 11-tensile2d.qmd
+        - 12-lug.qmd
+        - 13-deepjeb.qmd
+        - 15-capacity-scaling-cost.qmd
     - part: "IV. Limits and status"
       chapters:
-        - 13-limits.qmd
+        - 16-limits.qmd
         - 14-program-status.qmd
   appendices:
-    - 15-design-decisions.qmd
-    - 16-datasets.qmd
-    - 17-literature.qmd
+    - 17-design-decisions.qmd
+    - 19-literature.qmd
     - 18-notebook.qmd
 
 execute:

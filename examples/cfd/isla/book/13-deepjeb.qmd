@@ -1,0 +1,206 @@
+# DeepJEB++ {#sec-deepjeb}
+
+**DeepJEB++ is a surface task on generated jet-engine brackets whose global vector is a load direction rather than a freestream; on an equal-step ladder ISLA leads or ties the best GeoTransolver arm at every rung on both fields.** The chapter follows the shared layout. The pose contract holds with the load direction as the one global vector; the discretization instruments of @sec-invariances are not run on this dataset. Protocol: @sec-protocol with one stated deviation, a fixed optimizer-step budget across the ladder; float32, two seeds; every ratio is GeoTransolver ÷ ISLA, above one favoring ISLA.
+
+```{python}
+#| label: setup-deepjeb
+#| include: false
+import json, statistics, math
+from pathlib import Path
+import sys; sys.path.insert(0, ".")
+from palette import *
+RES = Path("..") / "results"
+J = lambda p: json.load(open(RES / p))
+mean = statistics.mean
+pct = lambda r: f"{abs(1 - r) * 100:.0f}%"
+lead = lambda r: f"{(r - 1) * 100:.0f}%"
+trail = lambda r: f"{(1 - r) * 100:.0f}%"
+JB = J("deepjeb_2026-09-22.json"); JBS = JB["summary"]
+JB_RUNGS = [("n256", 256, 500), ("n1024", 1024, 125), ("n4096", 4096, 32), ("full", 12451, 10)]
+JB_FIELDS = [("von_mises", "von Mises stress"), ("displacement", "displacement")]
+def jb_best(rung, f):
+    """The GeoTransolver arm with the lowest mean on this rung and field, as the preregistration specifies."""
+    cands = {a: JBS[f"{a}|{rung}"] for a in ("gt512", "gt512_lr3e3", "gt256") if f"{a}|{rung}" in JBS}
+    a = min(cands, key=lambda a: cands[a]["fields"][f]["mean"]); return a, cands[a]
+JB_NAME = {"gt512": "GeoTransolver-512 (1e-3)", "gt512_lr3e3": "GeoTransolver-512 (3e-3)", "gt256": "GeoTransolver-256 (1e-3)"}
+jb_ratio = {(rung, f): jb_best(rung, f)[1]["fields"][f]["mean"] / JBS[f"isla_r1|{rung}"]["fields"][f]["mean"]
+            for rung, _, _ in JB_RUNGS for f, _ in JB_FIELDS}
+from matplotlib.colors import TwoSlopeNorm
+from matplotlib.collections import LineCollection
+PF = RES / "problem_figures_2026-09-22"
+
+def load_problem(name):
+    """One representative sample of a dataset, reduced for plotting (results/problem_figures_2026-09-22/)."""
+    z = np.load(PF / f"{name}.npz"); meta = json.load(open(PF / f"{name}.json"))
+    return {k: z[k] for k in z.files}, meta
+
+def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
+    """Draw line cells colored by boundary-condition kind (keys of palette.BC)."""
+    segs = pts[cells][:, :, :2]
+    ax.add_collection(LineCollection(segs, colors=[BC[k] for k in kinds], linewidths=lw, capstyle="butt", zorder=zorder))
+
+def field_scatter(ax, xy, v, s=3.0, signed=False, vmin=None, vmax=None):
+    if signed:
+        lim = max(abs(np.nanmin(v)), abs(np.nanmax(v))) if vmin is None else None
+        norm = TwoSlopeNorm(vcenter=0.0, vmin=(-lim if vmin is None else vmin), vmax=(lim if vmax is None else vmax))
+        return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=DIVERGING, norm=norm, rasterized=True)
+    return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=SEQUENTIAL, vmin=vmin, vmax=vmax, rasterized=True)
+
+def small_colorbar(fig, sc, ax, label, **kw):
+    cb = fig.colorbar(sc, ax=ax, fraction=0.035, pad=0.02, **kw); cb.outline.set_visible(False); cb.ax.tick_params(labelsize=8)
+    cb.set_label(label, fontsize=8.5)
+    return cb
+
+def bc_legend(ax, kinds, loc="lower right", extra=()):
+    from matplotlib.lines import Line2D
+    handles = [Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds] + list(extra)
+    ax.legend(handles=handles, loc=loc, fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
+
+# ---- the three-protocol headline table ----
+# The three architectures' reference configurations scored on (i) the native validation mesh, (ii) a uniform point cloud of
+# the same budget and (iii) every validation case rotated and translated. Read from results/char/<dataset>.json when that
+# artifact exists; until it does the cell prints nothing and the native-mesh table above is the headline. Expected schema:
+# {"fields": {key: label}, "protocols": {"native": label, "uniform": label, "posed": label}, "isla_arm": name,
+#  "arms": {name: {protocol: {field: {"mean": x, "seeds": [...]}}}}}.
+def protocol_table(artifact, label, setting):
+    p = RES / "char" / artifact
+    if not p.exists():
+        return
+    C = json.load(open(p)); protos = C["protocols"]; fields = C["fields"]; isla = C["arms"][C["isla_arm"]]
+    flab = " / ".join(fields.values())
+    hdr = "| configuration | " + " | ".join(f"{pl}: {flab}" for pl in protos.values()) + " |\n|---|" + "---|" * len(protos) + "\n"
+    rows = []
+    for arm, d in C["arms"].items():
+        rows.append(f"| {arm} | " + " | ".join(" / ".join(f"{d[pk][f]['mean']:.4f}" for f in fields) for pk in protos) + " |")
+        if arm != C["isla_arm"]:
+            rows.append(f"| {arm} ÷ ISLA | " + " | ".join(" / ".join(f"{d[pk][f]['mean'] / isla[pk][f]['mean']:.2f}" for f in fields) for pk in protos) + " |")
+    print(hdr + "\n".join(rows) + "\n")
+    print(f": {setting}: the three architectures at their reference configurations under three scorings of one instrument, the "
+          f"native validation mesh, a uniform point cloud at the same budget, and every validation case rotated and translated; "
+          f"fields {flab}; seed means, float32. How to read this: a ratio is baseline ÷ ISLA, above one favoring ISLA; the three "
+          f"columns share the checkpoint and differ only in how the validation cases are presented. Data: results/char/{artifact}. "
+          f"{{#{label}}}")
+
+```
+
+## The problem: generated brackets under four load cases {#sec-deepjeb-problem}
+
+**DeepJEB++ is 15,360 generated jet-engine brackets in the SimJEB design space, each solved by linear static finite elements under four load cases applied at the lug bore with the bolt holes clamped.** The model receives the surface triangles with the fixed and loaded labels and the traction as boundary scalars, the load direction as its one global vector and a force-or-torque one-hot as two global scalars (a moment axis is a pseudovector, so the model is told when the vector is an axis), and predicts von Mises stress and displacement at the cells.
+
+<!-- fig-deepjeb-samples: pending CHAR -->
+
+**Diversity.** This is the most geometrically diverse set in the book: the brackets are generated shapes spanning a design space rather than morphs of one body, each appears under four loads whose direction is a genuine global variable, and the loading itself changes kind between force and torque (@sec-parametric). The price is label quality: a census of the stress fields found unphysical maxima on a tenth of the brackets, and the clean split used here removes those without making the remaining fields smooth.
+
+### Files, conversion and normalization {#sec-data-deepjeb}
+
+**15,360 TRELLIS-generated jet-engine brackets in the SimJEB design space
+(Yoo et al., KAIST; Hugging Face `KAIST-SmartDesignLab/DeepJEB-PP`; ODC-By
+1.0), each under four static linear-elastic load cases (Ti-6Al-4V):
+vertical, horizontal and diagonal forces and a torsion about $z$, with the
+bolt holes clamped and the load shared over the lug bore.** The surface is
+decimated to 25,000 vertices with per-vertex displacement (mm) and von
+Mises stress (MPa) per load case, and explicit clamped-bolt and loaded-lug
+vertex index sets.
+
+- **Conversion** (`deepjebpp_convert.py`, @tbl-data-files). One file per
+  (bracket, load): the FEM surface triangles re-wound outward, areas,
+  `bc_fixed` / `bc_loaded` indicators, the traction `bc_load` (force cases
+  $F\,d / A_{\text{loaded}}$; torsion the rigid-twist traction about the
+  lug axis) with its two rotation-invariant scalars `bc_load_n` =
+  $n \cdot t$ and `bc_load_mag` = $|t|$, cell-mean targets, and
+  `global_data` with `load_dir` (the force direction or the moment axis),
+  `load_type` one-hot [force, torque], the magnitude and the bracket's
+  mass and volume.
+- **What each model receives.** It is a surface task in the DrivAerML
+  layout (`deepjebpp_surface.yaml`), with coordinates scaled from mm to
+  0.1 m so a bracket spans about one unit. ISLA
+  (`isla_surface_deepjebpp.yaml`) takes `load_dir` as the one global
+  vector ($K = 1$, the fused kernel), the load-type one-hot as two global
+  scalars (a moment axis is a pseudovector, so the model must know when
+  the vector is an axis) and the four boundary scalars, and predicts von
+  Mises stress and displacement at the cells.
+- **Splits.** Grouped by SimJEB seed pair, because the brackets of one
+  pair are a smooth family and must not straddle a split: a seed-0 draw of
+  10% of the pairs is the test set, the rest train, with nested 256 /
+  1,024 / 4,096-bracket rungs and per-load sub-splits; the authors'
+  pair-grouped and random splits are kept under `official_*`. The ladder
+  of @sec-surface-deepjeb is scored on 1,385 held-out brackets under all
+  four loads (5,540 files).
+- **Pitfalls.** A census of the labels found unphysical stress maxima on
+  a tenth of the brackets; the clean split used in @sec-surface-deepjeb
+  removes them. Published stress errors for Transolver, GNOT and GI-FNO
+  are 30 to 37%, comparable in kind but not in split to the book's
+  figures.
+
+## What is measured {#sec-deepjeb-measured}
+
+**A surface task in the DrivAerML layout: the readout is the float32 relative L2 of von Mises stress and displacement over every surface cell, averaged over the 5,540 clean test files (1,385 held-out brackets under all four loads), two seeds, on a ladder of 256, 1,024, 4,096 and 12,451 training brackets.** The ladder holds the optimizer-step budget fixed at about 130,000 steps while the training set grows (500, 125, 32 and 10 epochs), so each rung is an equal-compute comparison and the ladder is not a learning curve. ISLA is the reference configuration with the load direction as its global vector; the GeoTransolver entry on each rung and field is the arm with the lowest mean among GeoTransolver-512 at 1e-3 and 3e-3 and GeoTransolver-256 at 1e-3 where they were run, as preregistered.
+
+## The standing {#sec-surface-deepjeb}
+
+```{python}
+#| label: para-deepjeb-lede
+#| output: asis
+vm = [jb_ratio[(r, "von_mises")] for r, _, _ in JB_RUNGS]; dp = [jb_ratio[(r, "displacement")] for r, _, _ in JB_RUNGS]
+print(f"**On DeepJEB++, a surface task whose global vector is a load direction rather than a freestream, ISLA leads or ties the best "
+      f"GeoTransolver arm at every rung of an equal-step ladder on both fields: GeoTransolver ÷ ISLA {min(vm):.2f} to {max(vm):.2f} on von "
+      f"Mises stress and {min(dp):.2f} to {max(dp):.2f} on displacement over 256 to 12,451 training brackets.** DeepJEB++ "
+      "(@sec-datasets-beyond-aero) is a family of generated jet-engine brackets. Each is solved by linear static finite elements under four "
+      "load cases applied at the lug bore with the bolt holes clamped: three force directions and a torque about the lug axis. The "
+      "surface mesh carries the fixed and loaded labels and the traction as boundary scalars. The load direction enters ISLA as the one "
+      "global vector, and a force/torque one-hot enters as two global scalars (a moment axis is a pseudovector, so the model is told when the "
+      "vector is an axis). The targets are von Mises stress and displacement at the surface cells. The test set is 1,385 held-out "
+      "brackets under all four loads (5,540 files), scored in float32 over every surface cell. The ladder holds the optimizer-step "
+      "budget fixed at about 130,000 steps while the training set grows (500, 125, 32 and 10 epochs at 256, 1,024, 4,096 and 12,451 "
+      "brackets). It is therefore an equal-compute comparison at each rung and not a learning curve. Both architectures are flat above 1,024 "
+      "brackets at this budget, which says the models are step-limited there, so the data exponent is not readable from it.")
+```
+
+```{python}
+#| label: tbl-deepjeb-surface
+#| output: asis
+def jbcell(g, f):
+    s = g["fields"][f]["seeds"]
+    return f"{g['fields'][f]['mean']:.3f}" + (" (one seed)" if len(s) == 1 else "")
+out = "| training brackets (epochs) | ISLA: von Mises / displacement | best GeoTransolver arm | its von Mises / displacement | GeoTransolver ÷ ISLA |\n|---:|---|---|---|---:|\n"
+for rung, n, ep in JB_RUNGS:
+    i = JBS[f"isla_r1|{rung}"]
+    a_vm, g_vm = jb_best(rung, "von_mises"); a_dp, g_dp = jb_best(rung, "displacement")
+    arm = JB_NAME[a_vm] if a_vm == a_dp else f"{JB_NAME[a_vm]} / {JB_NAME[a_dp]}"
+    out += (f"| {n:,} ({ep}) | {jbcell(i, 'von_mises')} / {jbcell(i, 'displacement')} | {arm} | {jbcell(g_vm, 'von_mises')} / "
+            f"{jbcell(g_dp, 'displacement')} | {jb_ratio[(rung, 'von_mises')]:.2f} / {jb_ratio[(rung, 'displacement')]:.2f} |\n")
+print(out)
+print(": DeepJEB++ at equal optimizer steps (about 130,000; epochs in parentheses): relative L2 of von Mises stress and displacement over "
+      "every surface cell, mean over the 5,540 clean test files, float32, two seeds unless marked. ISLA is the reference configuration "
+      "(384 x 12, 5e-4, the load direction as the global vector); the GeoTransolver column is the arm with the lowest mean on that rung "
+      "and field, as preregistered, among GeoTransolver-512 at 1e-3 and 3e-3 and GeoTransolver-256 at 1e-3 where they were run. How to read "
+      "this: the ratio is GeoTransolver ÷ ISLA, above one favoring ISLA. The rows are equal-compute standings, not a learning curve, and the "
+      "flatness above 1,024 brackets is the step budget. Data: results/deepjeb_2026-09-22.json. {#tbl-deepjeb-surface}")
+```
+
+```{python}
+#| label: para-deepjeb-reading
+#| output: asis
+g512f = JBS["gt512|full"]["fields"]["von_mises"]["mean"]; g256f = JBS["gt256|full"]["fields"]["von_mises"]["mean"]
+g3 = JBS["gt512_lr3e3|full"]["fields"]["von_mises"]["mean"]; g1 = JBS["gt512|full"]["fields"]["von_mises"]["mean"]
+print(f"**Two things qualify every row of @tbl-deepjeb-surface.** Absolute errors are high for every model, a von Mises relative L2 near "
+      f"0.5, and that is the dataset: a census of the labels found unphysical stress maxima on a tenth of the brackets, and the clean split "
+      f"used here removes those without making the remaining stress fields smooth. And the ladder holds optimizer steps fixed rather than "
+      f"epochs, so the flatness above 1,024 brackets is the step budget; at this budget the wider GeoTransolver-512 converges more slowly "
+      f"({(g512f / g256f - 1) * 100:.0f}% behind 256 wide on von Mises) and the 3e-3 rate the surface protocol uses on the cars is "
+      f"{(g3 / g1 - 1) * 100:.0f}% worse than 1e-3 here. Every row is an equal-compute standing, never a learning curve.")
+```
+
+```{python}
+#| label: tbl-deepjeb-protocols
+#| output: asis
+protocol_table("deepjeb_surface.json", "tbl-deepjeb-protocols", "DeepJEB++ at 12,451 training brackets")
+```
+
+## Ladders and controls {#sec-deepjeb-ladders}
+
+**The equal-step ladder is the standing table (@tbl-deepjeb-surface); its near-zero slopes are a compute statement and are drawn as such in @fig-exponents-datasets.** Both architectures are flat above 1,024 brackets at this budget, which says the models are step-limited there, so the data exponent is not readable from it; no width or depth control of ISLA was run on this dataset.
+
+## What this dataset does not say {#sec-deepjeb-limits}
+
+**Every DeepJEB++ row is an equal-compute standing and never a learning curve, on labels a tenth of which were removed as unphysical.** Absolute errors near 0.5 on von Mises stress are a property of the dataset, not of any architecture. The lead says nothing about tensor targets, which Tensile2d measures (@sec-interior-tensile2d), and the published Transolver, GNOT and GI-FNO errors are on another split.

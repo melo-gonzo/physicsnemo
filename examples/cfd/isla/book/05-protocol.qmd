@@ -2,16 +2,18 @@
 
 **ISLA is measured against the two public slice-attention transformers
 with the strongest record on industrial aerodynamics, GeoTransolver and
-Transolver, on three datasets, under one protocol that fixes everything
+Transolver, on seven datasets, under one protocol that fixes everything
 except the architecture.** The baselines are strong, not straw.
 GeoTransolver runs at its recipe width and, where named, at the width that
 matches ISLA's parameter count, and it receives raw coordinates that ISLA
 never sees. Both run at their own best learning rate,
 and neither is ever modified. This chapter says what each baseline computes
 and sees. It states one rule about how a problem's global conditions enter
-any model, lists the protocol as nine rules, and introduces the datasets
-(their details are in @sec-datasets-detail). It closes with the protocol
-table under which every cross-architecture number in the book is produced.
+any model, lists the protocol as twelve rules, and holds what is common to
+every dataset: the roster, the file conventions and the split rule (each
+dataset's own problem, conversion and standing are in its chapter of Part
+III). It closes with the protocol table under which every
+cross-architecture number in the book is produced.
 
 ```{python}
 #| label: setup-baselines
@@ -23,36 +25,8 @@ from pathlib import Path
 RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
 mean = statistics.mean
-from matplotlib.colors import TwoSlopeNorm
-from matplotlib.collections import LineCollection
 PF = RES / "problem_figures_2026-09-22"
-
-def load_problem(name):
-    """One representative sample of a dataset, reduced for plotting (results/problem_figures_2026-09-22/)."""
-    z = np.load(PF / f"{name}.npz"); meta = json.load(open(PF / f"{name}.json"))
-    return {k: z[k] for k in z.files}, meta
-
-def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
-    """Draw line cells colored by boundary-condition kind (keys of palette.BC)."""
-    segs = pts[cells][:, :, :2]
-    ax.add_collection(LineCollection(segs, colors=[BC[k] for k in kinds], linewidths=lw, capstyle="butt", zorder=zorder))
-
-def field_scatter(ax, xy, v, s=3.0, signed=False, vmin=None, vmax=None):
-    if signed:
-        lim = max(abs(np.nanmin(v)), abs(np.nanmax(v))) if vmin is None else None
-        norm = TwoSlopeNorm(vcenter=0.0, vmin=(-lim if vmin is None else vmin), vmax=(lim if vmax is None else vmax))
-        return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=DIVERGING, norm=norm, rasterized=True)
-    return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=SEQUENTIAL, vmin=vmin, vmax=vmax, rasterized=True)
-
-def small_colorbar(fig, sc, ax, label, **kw):
-    cb = fig.colorbar(sc, ax=ax, fraction=0.035, pad=0.02, **kw); cb.outline.set_visible(False); cb.ax.tick_params(labelsize=8)
-    cb.set_label(label, fontsize=8.5)
-    return cb
-
-def bc_legend(ax, kinds, loc="lower right", extra=()):
-    from matplotlib.lines import Line2D
-    handles = [Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds] + list(extra)
-    ax.legend(handles=handles, loc=loc, fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
+meta = {p.stem: json.load(open(p)) for p in sorted(PF.glob("*.json"))}  # the problem-figure metadata of @tbl-data-samples
 ```
 
 ## The baselines and what each one sees {#sec-part-baseline}
@@ -273,6 +247,18 @@ in @sec-metrics and the training recipe in @sec-protocol.
    manifest; sealed per checkpoint, not per program (@sec-splits).
 9. **Preregistered bars**: each experiment states, in readout units and
    before it runs, the value that confirms and the value that refutes.
+10. **Boundary conditions enter ISLA as boundary meshes with per-cell
+    fields**, never as one-hot scalar fields on the interior mesh; a
+    dataset configuration is checked against this before its first lane.
+    GeoTransolver, which has no boundary-token path, receives the same
+    labels and values as nodal fields (@sec-data-conventions).
+11. **The stored signed-distance field and its gradient, computed from the
+    boundary alone, are given to both ISLA and GeoTransolver** on every
+    interior task; neither architecture receives a volume-mesh quantity
+    the other does not.
+12. **No architecture's reference lane trains with augmentation.** The
+    rotation-augmented baselines of the posed evaluation are a labeled
+    control (@sec-pose-contract), never a standing.
 
 ### One instrument per dataset {#sec-review-instrument}
 
@@ -322,305 +308,149 @@ baselines' is a property of the routing form, explained once in
 
 ## Datasets {#sec-datasets}
 
-**Three datasets are training and evaluation sources, a fourth is a
-zero-shot target, and four more, outside external aerodynamics, exercise
-the parts of the interface the aerodynamic sets leave idle.** All supply
-the same input schema: boundary cells with positions, outward normals and
-measures, plus the global conditions. One model implementation therefore
-runs on all of them. Every aerodynamic one is an instance of external
-aerodynamics with $K = 1$ global direction, the far-field flow direction,
-and $S \in \{0, 1\}$ global scalars. This section says, per dataset, what
-the problem is, what varies, what is predicted and what the model receives,
-at the depth the results need. Provenance, conversion, field names, sign
-conventions, normalization, splits and pitfalls are in
-@sec-datasets-detail.
+**Seven datasets carry the evidence, each with its own chapter in Part III,
+and all of them supply the same input schema: boundary cells with
+positions, outward normals and measures, plus the problem's global
+conditions and, where the problem has them, per-cell boundary data.** One
+model implementation therefore runs on all of them. The aerodynamic sets
+are instances of external aerodynamics with $K = 1$ global direction, the
+far-field flow direction, and $S \in \{0, 1\}$ global scalars; the solids
+and the brackets exercise the global scalars, the per-cell boundary
+scalars and, on the lug, $K = 0$. Each chapter of Part III draws its
+dataset on sample cases, states its diversity, and says what is measured on
+it and what the dataset does not say. This section holds only what is
+common to all of them: the roster, the file conventions and the split rule.
 
-| dataset | what it is | what varies | global inputs | role in the book |
-|---|---|---|---|---|
-| **DrivAerML** (cars) | 484 parametrically morphed DrivAer notchback variants; time-averaged surface pressure and wall shear on the vehicle surface, plus volume fields | geometry only; one far-field condition | $K = 1$, $S = 0$ | the Surface task: full-data accuracy, discretization and pose probes, capacity ladders; the Volume task: boundary to interior |
-| **HiLiftAeroML** (wings) | 1,800 cases: 180 high-lift wing geometries (flap and slat settings by Latin hypercube), each at ten angles of attack from 4° to 22°; surface pressure, velocity and wall shear | geometry and far-field direction | $K = 1$, $S = 0$ | data efficiency, unseen geometry, regime extrapolation |
-| **AirfRANS** (airfoils) | 1,001 two-dimensional incompressible RANS solutions around NACA airfoils; pressure, velocity and turbulent viscosity in the volume | geometry, inlet direction and inlet speed | $K = 1$, $S = 1$ | the interior task on a second dataset; the training-case axis |
-| **SHIFT-SUV** | sport-utility bodies in two rear-end families, estate and fastback; surface pressure and wall shear; same reference length and far-field direction as DrivAerML at a lower speed | geometry; a speed shift common to every architecture | $K = 1$, $S = 0$ | zero-shot transfer target only |
+| dataset | what it is | what varies | global inputs | task | chapter |
+|---|---|---|---|---|---|
+| **DrivAerML** (cars) | 484 parametrically morphed DrivAer notchback variants; time-averaged surface pressure and wall shear, plus volume fields | geometry only; one far-field condition | $K = 1$, $S = 0$ | the Surface task and the Volume task | @sec-drivaerml |
+| **HiLiftAeroML** (wings) | 1,800 cases: 180 high-lift wing geometries, each at ten angles of attack from 4° to 22°; surface pressure, velocity and wall shear | geometry and far-field direction | $K = 1$, $S = 0$ | surface, on nested training rungs, geometry holdouts and a fixed angle | @sec-hilift |
+| **AirfRANS** (airfoils) | 1,001 two-dimensional incompressible RANS solutions around NACA airfoils; pressure, velocity and turbulent viscosity in the volume | geometry, inlet direction and inlet speed | $K = 1$, $S = 1$ | interior | @sec-airfrans |
+| **Shift-SUV** | sport-utility bodies in two rear-end families, estate and fastback; surface pressure and wall shear at a lower speed than DrivAerML | geometry; a speed shift common to every architecture | $K = 1$, $S = 0$ | surface; a held-out family | @sec-shift-suv |
+| **PLAID Tensile2d** | two-dimensional elasto-viscoplastic tension of a notched specimen; stress components, plastic strain and displacement at the nodes | the applied pressure and five material parameters; the shape barely | $K = 1$ (the load direction), $S = 6$ | interior (every node a query) | @sec-tensile2d |
+| **GINOT Bracket Lug** | three-dimensional elastoplastic lugs clamped at one end and pressed in the hole; von Mises stress at the nodes | hole radius, length, thickness and pressure | $K = 0$, $S = 4$ | interior (every node a query) | @sec-lug |
+| **DeepJEB++** | generated jet-engine brackets under four static load cases; von Mises stress and displacement on the surface | the shape, the load direction and the load kind | $K = 1$ (the load direction), $S = 2$ | surface | @sec-deepjeb |
 
-: The aerodynamic datasets. The four datasets beyond external aerodynamics are listed in @sec-datasets-beyond-aero. {#tbl-datasets-aero}
-
-### DrivAerML: the Surface task and the Volume task {#sec-benchmarks}
-
-**DrivAerML carries two tasks, named separately throughout the book because
-they measure different things.** Geometry is the only variable, and there
-is one far-field condition. Every model is fed the vehicle surface alone,
-the information diet of every published baseline on the dataset. The recipe
-assigns 435 variants to training and 48 to validation, one validation set
-shared by both tasks and every experiment. The reporting protocol samples
-the recipe's default of 200,000 surface cells per case per step. The
-**DrivAerML Surface task** predicts pressure and wall shear at those cells
-(@sec-surface). The **DrivAerML Volume task** predicts pressure, velocity
-and turbulent viscosity at 200,000 interior query points per car from the
-surface alone (@sec-interior). A sentence that compares architectures on
-DrivAerML names one of the two. @fig-problem-drivaer shows one validation
-car with both tasks' fields (details: @sec-data-drivaer).
-
-```{python}
-#| label: fig-problem-drivaer
-#| fig-cap: >
-#|   The DrivAerML problem, on one validation car. Top and middle: the
-#|   vehicle surface (150,000 of its 17 million cells drawn at their
-#|   centroids) colored by the time-averaged pressure coefficient
-#|   $C_p = (p - p_\infty) / \tfrac{1}{2}\rho U_\infty^2$, the Surface task's
-#|   scalar target, seen from the side and from above; the black arrow is the
-#|   far-field flow direction, the one global vector input, and the far-field
-#|   speed is the same for every car. Bottom: the symmetry plane of the volume
-#|   mesh, colored by the speed ratio $|U| / U_\infty$, with the car's outline
-#|   in black; the Volume task predicts pressure, velocity and turbulent
-#|   viscosity at 200,000 query points drawn from this mesh, whose extent is
-#|   printed. What varies per sample is the geometry only. What the model
-#|   receives: the surface cells' positions, outward normals and areas, and the
-#|   flow direction; the ground plane and the wind-tunnel boundaries are not
-#|   inputs. How to read this: colors are the reference CFD
-#|   fields, not predictions; the surface points are a random subset, so the
-#|   density of dots is not the mesh resolution. Data:
-#|   results/problem_figures_2026-09-22/drivaer.npz.
-#| code-fold: true
-D, Dm = load_problem("drivaer")
-sp, cp = D["surf_points"], D["surf_cp"]
-norm = TwoSlopeNorm(vcenter=0.0, vmin=-1.5, vmax=1.0)
-fig, axes = plt.subplots(3, 1, figsize=(8, 8.8), gridspec_kw=dict(height_ratios=[1.0, 1.15, 1.35], hspace=0.4))
-U = D["U_inf"]; bb = D["surf_bbox"]; x0 = bb[0, 0] - 1.9; z0 = 0.5 * (bb[0, 2] + bb[1, 2])
-ax = axes[0]
-depth_scatter(ax, sp[:, [0, 2]], sp[:, 1], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
-ax.set_ylabel("z [m]"); ax.set_title("side view: surface pressure coefficient $C_p$, the Surface task's scalar target", fontsize=9.5)
-ax.annotate("", xy=(x0 + 1.2, z0), xytext=(x0, z0), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0))
-ax.text(x0 + 0.6, z0 - 0.1, f"far field: uniform flow,\n$U_\\infty$ = {np.linalg.norm(U):.1f} m/s along $\\hat g_1$\n(the one global vector)", ha="center", va="top", fontsize=8.2, color=INK2)
-ax.set_xlim(x0 - 0.2, bb[1, 0] + 0.3)
-ax = axes[1]
-sc = depth_scatter(ax, sp[:, [0, 1]], sp[:, 2], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
-ax.set_ylabel("y [m]"); ax.set_xlabel("x [m]"); ax.set_title("top view: $C_p$", fontsize=9.5); ax.set_xlim(x0 - 0.2, bb[1, 0] + 0.3)
-cb = fig.colorbar(sc, ax=axes[:2], fraction=0.025, pad=0.01, extend="min"); cb.set_label("$C_p$ [–]"); cb.outline.set_visible(False)
-ax = axes[2]
-q, um = D["slice_points"], D["slice_umag"]
-sc2 = ax.scatter(q[:, 0], q[:, 2], c=um, s=1.8, lw=0, cmap=SEQUENTIAL, vmin=0, vmax=1.3, rasterized=True); map_axes(ax)
-sil = sp[np.abs(sp[:, 1]) < 0.03]; ax.scatter(sil[:, 0], sil[:, 2], s=0.8, c=INK, lw=0, rasterized=True)
-ax.set_ylabel("z [m]"); ax.set_xlabel("x [m]"); ax.set_title("symmetry plane $y = 0$ of the volume mesh: speed ratio $|U| / U_\\infty$ (the Volume task queries these points)", fontsize=9.5)
-ib = D["interior_bbox"]
-note(ax, f"volume mesh (query domain): {ib[0,0]:.0f} < x < {ib[1,0]:.0f} m, {ib[0,1]:.0f} < y < {ib[1,1]:.0f} m, {ib[0,2]:.1f} < z < {ib[1,2]:.0f} m\nground plane at z = {ib[0,2]:.2f} m (not an input)", loc="upper right")
-cb2 = fig.colorbar(sc2, ax=[ax], fraction=0.025, pad=0.01, extend="max"); cb2.set_label("$|U| / U_\\infty$ [–]"); cb2.outline.set_visible(False)
-plt.show()
-```
-
-### HiLiftAeroML {#sec-dataset-hilift}
-
-**HiLiftAeroML is a full geometry-by-angle grid, so it can hold out each
-axis of variation on its own.** Every geometry appears at every angle, and
-the dataset supports splits along three independent directions: how many
-cases, which angles, and which geometries (@sec-splits). The model receives
-the surface cells and the far-field direction $\hat g_1$, which carries the
-angle of attack. It predicts pressure, temperature, density, velocity and
-wall shear at those cells, at the same 200,000 cells per case as on the
-cars. It is one of the two datasets on which the data-efficiency ladder is
-measured (@sec-data-efficiency). The other is the DrivAerML Surface task.
-@fig-problem-hilift shows one validation case (details: @sec-data-hilift).
-
-```{python}
-#| label: fig-problem-hilift
-#| fig-cap: >
-#|   The HiLiftAeroML problem, on one validation case (a high-lift wing with
-#|   slat and flap deployed, at 16° angle of attack). The wing surface
-#|   (150,000 of its cells drawn at their centroids) colored by the pressure
-#|   coefficient $C_p$, seen from above (top) and from the side (bottom); the
-#|   black arrow is the far-field flow direction $\hat g_1$, the one global
-#|   vector, which here carries the angle of attack. What varies per sample is
-#|   the geometry (flap and slat settings) and the far-field direction (ten
-#|   angles per geometry). What the model receives: surface cells with
-#|   positions, outward normals and areas, and $\hat g_1$; it predicts
-#|   pressure, temperature, density, velocity and wall shear on those cells.
-#|   How to read this: the flow is compressible and the suction on the slat and
-#|   the wing's leading edge runs far below the color scale's bottom, which is
-#|   clipped; coordinates are converted from the dataset's inches to metres.
-#|   Data: results/problem_figures_2026-09-22/hilift.npz.
-#| code-fold: true
-H, Hm = load_problem("hilift")
-sp, cp = H["surf_points"], H["surf_cp"]
-norm = TwoSlopeNorm(vcenter=0.0, vmin=-4.0, vmax=1.0)
-fig, axes = plt.subplots(2, 1, figsize=(8, 7.2), sharex=True, gridspec_kw=dict(height_ratios=[2.2, 1.0], hspace=0.08))
-ax = axes[0]
-sc = depth_scatter(ax, sp[:, [0, 1]], sp[:, 2], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
-ax.set_ylabel("y [m]"); ax.set_title(f"top view: $C_p$ on the upper surface; angle of attack {Hm['aoa_deg']:.0f}°", fontsize=9.5)
-ax = axes[1]
-depth_scatter(ax, sp[:, [0, 2]], -sp[:, 1], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
-U = H["U_inf"]; u = U / np.linalg.norm(U); bb = H["surf_bbox"]; Lc = 0.14 * (bb[1, 0] - bb[0, 0])
-x0 = bb[0, 0] + 0.02 * (bb[1, 0] - bb[0, 0]); z0 = bb[1, 2] - 0.35 * (bb[1, 2] - bb[0, 2])
-ax.annotate("", xy=(x0 + Lc * u[0], z0 + Lc * u[2]), xytext=(x0, z0), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0))
-ax.text(x0 + 0.5 * Lc, z0 + 0.5 * Lc * u[2] + 0.12 * Lc, f"far field: uniform flow along $\\hat g_1$ at {Hm['aoa_deg']:.0f}°\n(Mach and Reynolds number fixed)", ha="left", va="bottom", fontsize=8.5, color=INK2)
-ax.set_ylabel("z [m]"); ax.set_xlabel("x [m]"); ax.set_title("side view: $C_p$, the slat and the flap deflected below the wing", fontsize=9.5)
-cb = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.01, extend="min"); cb.set_label("$C_p$ [–]"); cb.outline.set_visible(False)
-plt.show()
-```
-
-### AirfRANS {#sec-dataset-airfrans}
-
-**AirfRANS is the interior task on a second dataset and a second PDE
-regime, and the first instance in the book of a global scalar input.** Its
-full split trains on 800 airfoils and tests on 200. The boundary is the
-airfoil polyline, about a thousand segments with in-plane normals and
-segment lengths as the measure weights. The global inputs are the inlet
-direction as the one global vector and the inlet speed as the one global
-scalar. The interior queries, 100,000 per case, carry the signed distance to
-the airfoil, and the model predicts pressure, velocity and turbulent
-viscosity at them. The interior results are in @sec-interior-airfrans.
-@fig-problem-airfrans shows one test case (details: @sec-data-airfrans).
-
-
-### SHIFT-SUV {#sec-shift-suv}
-
-**No main result trains on SHIFT-SUV. Its fastback family is the zero-shot
-target.** The fastback family is held out from every model in the book and
-is the zero-shot target of the cross-family transfer measurements
-(@sec-scoreboard-200k). The estate family is a training source only where a
-two-family model is compared. The model receives exactly what it receives
-on DrivAerML. The lower far-field speed is a covariate shift identical for
-every architecture, since none receives the Reynolds number. It is
-reported alongside the geometry-family shift rather than corrected.
-@fig-problem-shift-suv shows one fastback case (details:
-@sec-data-shift-suv).
-
+: The datasets of the book and the chapter that owns each. *Global inputs*: $K$ unit directions and $S$ scalars (@sec-isla-inputs). How to read this: a row names what varies within the set, which fixes what a model trained on it must learn (@sec-parametric); the per-cell boundary scalars of the solids and brackets are listed in their chapters. {#tbl-datasets}
 
 ### Datasets beyond external aerodynamics {#sec-datasets-beyond-aero}
 
 **The architecture is written for any steady boundary-driven PDE, and
-external aerodynamics is its benchmark instance, not its scope.** The next
-benchmark instances are steady problems whose boundary conditions and loads
-vary per sample. They exercise the global vector and scalar inputs and the
-per-cell boundary scalars, which the aerodynamic datasets leave at $K = 1$
-and $n_b = 0$. Each is drawn on one sample in @sec-datasets-detail, with
-its boundary conditions labeled where they act and one reference field
-beside them. The model reads every mesh node as a query on the four
-interior sets:
+external aerodynamics is its benchmark instance, not its scope.** The
+three sets outside it, Tensile2d, the lug and DeepJEB++, are steady
+problems whose loads and boundary conditions vary per sample, so they
+exercise the global vector and scalar inputs and the per-cell boundary
+scalars that the aerodynamic datasets leave at $K = 1$ and $n_b = 0$.
+Every dataset enters the book's evidence only with GeoTransolver trained
+on it under the fair-comparison protocol and a per-dataset preregistration
+before its first lane; the open axis they represent is stated in
+@sec-limits-datasets.
 
-- **PLAID Tensile2d** (@fig-problem-tensile2d; details:
-  @sec-data-tensile2d): two-dimensional elasto-viscoplastic tension of a
-  notched specimen. The top edge carries a pressure $P$ that varies per
-  sample, the bottom edge is fixed, and five material parameters vary too.
-  The model receives the outer polyline with per-cell labels (loaded,
-  fixed, pinned) and the applied pressure as boundary scalars. It receives
-  $P$ and the material parameters as six global scalars, and the load
-  direction as its one global vector. It predicts the stress as a
-  symmetric tensor, from which the recipe reads the three components the
-  dataset stores (@sec-isla-heads), the cumulated plastic strain and the
-  displacement.
-- **GINOT Bracket Lug** (@fig-problem-lug; details: @sec-data-lug): a
-  three-dimensional elastoplastic lug clamped at one end and pressed on the
-  lower half of its hole. Hole radius, length, thickness and pressure vary.
-  The model receives the surface triangles with labels (fixed, hole,
-  loaded) and the pressure as boundary scalars, and the four design
-  parameters as global scalars. It predicts the von Mises stress. Published
-  Transolver and GNOT numbers exist for it.
-- **OLBC** (@fig-problem-olbc-poisson, @fig-problem-olbc-elasticity;
-  details: @sec-data-olbc): two sets on fixed meshes. Each sample cuts the
-  boundary into random segments carrying labeled Dirichlet, Neumann or
-  Robin conditions with random values. The first set is a Poisson problem
-  $-\nabla^2 u = f$ on a square with a random source (the $K = 0$ case,
-  with the type and the value as per-cell boundary scalars). The second is
-  plane-strain steel elasticity on a disc with two holes (per component a
-  free segment, a prescribed displacement and two tractions, which enter as
-  rank-1 boundary inputs; the stress is predicted as a tensor, $K = 0$).
-- **DeepJEB++** (details: @sec-data-deepjeb): generated jet-engine
-  brackets solved by linear static finite elements under four load cases
-  applied at the lug bore with the bolt holes clamped. It is a surface
-  task: the model receives the surface triangles with the fixed and loaded
-  labels and the traction as boundary scalars, the load direction as its
-  one global vector and a force-or-torque one-hot as two global scalars,
-  and predicts von Mises stress and displacement at the cells.
+### Conventions shared by every dataset {#sec-data-conventions}
 
-Their standings are in @sec-beyond-aero; the open axis they represent
-is stated in @sec-limits-datasets, and the datasets scouted but not
-adopted are in @sec-program-status.
+**A converted case is one native `DomainMesh` file (`.pdmsh`): an
+`interior` point cloud, one or more named `boundaries`, and a
+`global_data` dictionary.** The datasets differ in which of these the
+model reads and in what the boundary cells carry.
 
+- **Two reader layouts.** The *surface* datasets (DrivAerML Surface task,
+  HiLiftAeroML, SHIFT-SUV, DeepJEB++) read only the boundary mesh: the
+  reader walks into the boundary tensordict
+  (`<case>.pdmsh/_tensordict/boundaries/<name>`), merges the parent
+  file's `global_data` onto it (`MeshReaderWithGlobalData`), and the
+  terminal transform `MeshToDomainMesh` places the prediction points at
+  the cell centroids. The *interior* datasets (DrivAerML Volume task,
+  (`DomainMeshReader`): the interior points are the queries and the
+  boundary is kept whole whenever the cell budget exceeds its size.
+- **Signed distance is positive outside the solid.** Interior nodes of a
+  solid carry `sdf` $\le 0$; fluid points outside a body carry `sdf` $> 0$.
+  `sdf_normals` is the gradient of that field, so it is the outward normal
+  at the boundary. Converters negate a source that stores the opposite
+  sign.
+- **Boundary conditions are per-cell scalars.** Each labeled region is a
+  0/1 indicator on the boundary cells (`bc_fixed`, `bc_loaded`,
+  `bc_dirichlet`, …) and each prescribed value is a scalar on the cells it
+  applies to and zero elsewhere (`bc_pressure`, `bc_value_g`, `bc_disp_x`,
+  …). Where a traction vector exists it is stored too (`traction`,
+  `bc_load`), but ISLA has no per-cell vector input. The traction on a
+  pressed face is $-p\,n$, recoverable from the pressure scalar and the
+  cell normal the model already sees. GeoTransolver has no boundary-token
+  path, so the same labels and values are also written as nodal fields on
+  the interior points (`tag_*`, `bc_*_node`) and enter its local embedding
+  there.
+- **Global vectors are unit directions and must be data of the problem.**
+  For external aerodynamics `ComputeFreestreamDirection` writes `U_inf_dir`
+  from the solver's velocity; for a loaded solid the load direction is the
+  global vector. Where the targets are components in a fixed frame (the
+  stress is predicted as a symmetric tensor and the components are read
+  off it (@sec-isla-heads). Feeding the dataset's axes $+x, +y$ as global
+  vectors is rejected: they are not a datum of the PDE (@sec-pose-prior). A dataset with no global
+  direction ($K = 0$) runs ISLA with the eager geometry kernel; the fused
+  kernel is written for $K = 1$.
+- **Normalization statistics come from the manifest.** Every converter
+  writes `manifest.json` next to the files with the named split lists and
+  a `_stats` block of per-field mean and standard deviation pooled over the
+  training split; the dataset yaml copies those values into
+  `NormalizeMeshFields` (targets, and standardized input fields) and
+  `StandardizeDomainGlobalField` (global scalars). Vector targets use one
+  isotropic standard deviation (the Frobenius value divided by
+  $\sqrt{2}$ in two dimensions), so a component's scale is not rescaled
+  per axis.
+- **Splits are named lists in the manifest; nested rungs are prefixes of
+  one permutation.** Where a dataset publishes splits they are used
+  unchanged (HiLiftAeroML, AirfRANS, SHIFT-SUV, PLAID's official ladder,
+  set has to be carved out (Tensile2d), the draw is a fixed-seed
+  permutation recorded in the manifest, and every smaller rung is a prefix
+  of the larger one, so a rung differs from the next only by the cases it
+  lacks.
 
+| dataset | converter | dataset yaml | ISLA yaml |
+|---|---|---|---|
+| DrivAerML (Surface, Volume) | native files from the dataset release | recipe `datasets/drivaer_ml_surface.yaml`, `drivaer_ml_volume.yaml` | recipe `conf/model/isla_surface.yaml`, `isla_volume.yaml` |
+| HiLiftAeroML | native files | recipe `datasets/highlift_surface.yaml` | recipe `conf/model/isla_surface.yaml` |
+| SHIFT-SUV | native files | recipe `datasets/shift_suv_surface.yaml`, `shift_suv_estate_surface.yaml`, `shift_suv_fastback_surface.yaml` | as DrivAerML |
+| AirfRANS | `results/campaigns_2026-09-21/af/airfrans_convert.py` | `results/campaigns_2026-09-21/af/airfrans_volume.yaml` | `results/campaigns_2026-09-21/af/isla_volume_airfrans.yaml` |
+| PLAID Tensile2d | `results/campaigns_2026-09-22/datasets/plaid_tensile2d_convert.py` | `…/datasets/plaid_tensile2d.yaml` | `…/datasets/isla_tensile2d.yaml` |
+| GINOT Bracket Lug | `…/datasets/ginot_lug_convert.py` | `…/datasets/ginot_lug_volume.yaml` | `…/datasets/isla_lug.yaml` |
+| DeepJEB++ | `…/datasets/deepjebpp_convert.py` | `…/datasets/deepjebpp_surface.yaml` | `…/datasets/isla_surface_deepjebpp.yaml` |
 
+: Where each dataset's conversion and configuration live. "Recipe" is the unified external-aerodynamics recipe root (`examples/cfd/external_aerodynamics/unified_external_aero_recipe`); `…/datasets/` abbreviates `results/campaigns_2026-09-22/datasets/`. The GeoTransolver yamls sit beside the ISLA yamls with the prefix `geotransolver_`. {#tbl-data-files}
 
+```{python}
+#| label: tbl-data-samples
+#| output: asis
+rows = [
+    ("DrivAerML", "drivaer", "surface cells", "n_surface_cells", "volume points", "n_interior_points"),
+    ("HiLiftAeroML", "hilift", "surface cells", "n_surface_cells", None, None),
+    ("SHIFT-SUV (fastback)", "shift_suv", "surface cells", "n_surface_cells", None, None),
+    ("AirfRANS", "airfrans", "boundary segments", "n_boundary_cells", "interior points", "n_interior_points"),
+    ("PLAID Tensile2d", "tensile2d", "boundary segments", "n_boundary_cells", "nodes", "n_nodes"),
+    ("GINOT Bracket Lug", "lug", "boundary triangles", "n_boundary_cells", "nodes", "n_nodes"),
+]
+out = "| dataset | sample case (split) | boundary | interior |\n|---|---|---:|---:|\n"
+for name, key, blab, bkey, ilab, ikey in rows:
+    m = meta[key]
+    split = m.get("split", m.get("family", ""))
+    b = f"{m[bkey]:,} {blab}"
+    i = f"{m[ikey]:,} {ilab}" if ikey else "—"
+    out += f"| {name} | `{m['case']}` ({split}) | {b} | {i} |\n"
+print(out)
+```
 
 ### Splits {#sec-splits}
 
 **Every split in the book is either the dataset's curated manifest used
-unchanged or a fixed-seed permutation recorded in the manifest.** DrivAerML
-has one validation set of 48 cars, shared by the Surface and Volume tasks
-and by every experiment, with a training set of 435 cars or a nested rung
-of 27, 54, 109 or 218 (@sec-car-ladder). HiLiftAeroML's splits are the
-ones the data-efficiency, geometry and regime results read, and they are
-below. The other datasets' splits are in @sec-datasets-detail.
-
-**Each HiLiftAeroML split holds out one question, and the splits are the
-dataset's curated manifests, used unchanged.** @tbl-hilift-splits lists
-them. The *data-efficiency* family is nested (@fig-hilift-splits): 35
-training cases $\subset$ 210 $\subset$ 510 $\subset$ 1,260, all scored on
-one shared 180-case validation set (180 cases on 118 geometries), with a
-360-case test set that no data-efficiency experiment touches. Because the
-rungs are subsets of the same 1,260 cases, a validation geometry can appear
-in training at other angles. These rungs measure sample complexity, not
-unseen geometry. The two *regime-extrapolation* splits hold out flow
-physics, with stall onset determined per geometry from the lift curve. The
-*geometry* family holds out geometries at all ten angles. The three
-*fixed-angle* splits remove the direction dependence entirely and so control
-for whether an advantage comes from representing the far-field direction.
-
-| family | split | train | val | test | what it holds out |
-|---|---|---:|---:|---:|---|
-| data efficiency | nested rungs | 35, 210, 510, 1,260 | 180 | 360 | nothing; measures sample complexity (validation geometries may recur in training at other angles) |
-| regime extrapolation | angle of attack | 788 (angles up to 12°) | 112 | 900 (14° and above) | higher angles of attack |
-| regime extrapolation | stall | 942 (pre-stall) | 135 | 723 (post-stall) | post-stall flow |
-| unseen geometry | geometry | 1,260, 210 or 40 cases (126, 21 or 4 geometries) | 18 geometries, all ten angles | 36 geometries, all ten angles | the geometry itself |
-| fixed angle | 4°, 12°, 22° | 126 geometries at one angle | 18 geometries at that angle | — | the far-field direction as a variable |
-
-: The HiLiftAeroML splits, in cases unless a cell says geometries. Every
-split is a curated manifest of the dataset revision named above; the
-fixed-angle splits have no test set. How to read this: a row is one
-question; the manifests overlap (see the warning), so the test columns are
-held out per checkpoint, not per program. {#tbl-hilift-splits}
-
-```{python}
-#| label: fig-hilift-splits
-#| fig-cap: >
-#|   The HiLiftAeroML data-efficiency family, to scale. The bar is the
-#|   1,800-case grid; the nested training rungs (35, 210, 510, 1,260 cases)
-#|   are subsets of one another, all scored on the same 180 validation
-#|   cases, and the 360-case test set is sealed. How to read this: widths
-#|   are case counts; the bar does not show which angles or geometries fall
-#|   in each rung, and the regime, geometry and fixed-angle families are
-#|   separate manifests not drawn here.
-#| code-fold: true
-fig, ax = plt.subplots(figsize=(9.0, 1.9))
-shades = ["#1f5aa3", BLUE, BLUE_LIGHT, BLUE_PALE]
-for n, col in zip([1260, 510, 210, 35], shades):
-    ax.barh(0, n, left=0, height=0.6, color=col, edgecolor="white", lw=0.8)
-ax.barh(0, 180, left=1260, height=0.6, color=BASELINE, edgecolor="white", lw=0.8)
-ax.barh(0, 360, left=1440, height=0.6, color=PAPER, edgecolor=BASELINE, lw=0.8, hatch="///")
-for x, label in [(35 / 2, "35"), (35 + 175 / 2, "210"), (210 + 300 / 2, "510"),
-                 (510 + 750 / 2, "1,260 training cases (nested rungs)")]:
-    ax.text(x, 0, label, ha="center", va="center", fontsize=9, color="white" if x > 200 else INK)
-ax.text(1260 + 90, 0, "val\n180", ha="center", va="center", fontsize=9, color=INK)
-ax.text(1440 + 180, 0, "sealed test 360", ha="center", va="center", fontsize=9, color=INK)
-ax.set_xlim(0, 1800); ax.set_ylim(-0.6, 0.6); ax.set_yticks([]); ax.grid(False)
-ax.spines["left"].set_visible(False)
-ax.set_xticks([0, 35, 210, 510, 1260, 1440, 1800])
-ax.set_xticklabels(["0", "35", "210", "510", "1,260", "1,440", "1,800"], fontsize=8.5)
-ax.set_xlabel("cases [count]")
-fig.tight_layout()
-plt.show()
-```
-
-
-::: {.callout-warning collapse="true" title="The HiLiftAeroML manifests overlap, so a test split is sealed per checkpoint, not per program"}
-The manifests are separate but not disjoint. The angle-of-attack and stall
-test sets between them contain every one of the 180 geometries. The
-360-case data-efficiency test set shares 179 cases with them, the geometry
-test set 182 and the deflection test set 182 (37 and 40 of their cases also
-sit in the shared validation set). A test split is therefore *held out per
-checkpoint*, since no model evaluated on it trained on it. But once the
-regime-extrapolation tests are read, no HiLiftAeroML geometry remains
-unexposed at the level of the program, and no later evaluation on these
-manifests is an independent program-level confirmation
-(@sec-limits-validation).
-:::
+unchanged or a fixed-seed permutation recorded in the manifest, and a
+sealed test split is evaluated once.** DrivAerML has one validation set of
+48 cars, shared by the Surface and Volume tasks and by every experiment,
+with a training set of 435 cars or a nested rung of 27, 54, 109 or 218
+(@sec-car-ladder). HiLiftAeroML's manifests hold out one question each and
+overlap, so a test split there is sealed per checkpoint and not per program
+(@sec-data-hilift-splits). AirfRANS ships its `full`, `reynolds` and
+`aoa` manifests (@sec-data-airfrans), Shift-SUV its two families
+(@sec-data-shift-suv), and the solids and brackets use fixed-seed
+permutations whose smaller rungs are prefixes of the larger ones
+(@sec-data-tensile2d, @sec-data-lug, @sec-data-deepjeb).
 
 ## Protocol {#sec-protocol}
 
@@ -633,7 +463,9 @@ A comparison that departs from it says so in the same sentence.**
 | exploration budget | 10,000 cells per case: appears only as a labeled rung of a cell-count ladder or as the labeled setting of a mechanism control, never as an accuracy standing |
 | epochs and schedule | 500 epochs, one case per step; the learning rate is divided by ten every 100 epochs, so the effective budget is about 300 epochs at a useful rate |
 | arithmetic | bfloat16 autocast in training; float32 at evaluation (@sec-metrics) |
-| augmentation | none |
+| augmentation | none, for every architecture's reference lane; the rotation-augmented baselines of the posed evaluation are a labeled control (@sec-pose-contract) |
+| boundary conditions | boundary meshes with per-cell fields for ISLA, the same labels and values as nodal fields for GeoTransolver (@sec-data-conventions) |
+| signed distance | on the interior tasks the stored signed-distance field and its gradient, computed from the boundary alone, go to both ISLA and GeoTransolver |
 | learning rate | each architecture at its own best rate at the reporting protocol: ISLA $10^{-3}$ at width 192 and the width rule's rate above it (@sec-using-lr), GeoTransolver and Transolver $3 \times 10^{-3}$; every row names the rate it uses (@sec-lr-protocol) |
 | global inputs | each global direction as a unit vector, each magnitude as a scalar, for every architecture (@sec-unit-direction-rule) |
 | seeds | two or more (42 and 43 unless stated), reported individually beside the mean |

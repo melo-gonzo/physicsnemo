@@ -51,8 +51,8 @@ small-data deficits and the full-data parities are one reading: on the
 datasets where the exponents differ ISLA's is the larger, so
 GeoTransolver's small-data lead is an offset that the ladder erodes
 (@sec-compute-allocation). The ordering runs the other way on exactly one
-kind of target, a stress tensor on a solid (@sec-interior-tensile2d,
-@sec-interior-olbc). And consistency is a property of the frame plus the
+kind of target, a stress tensor on a solid (@sec-interior-tensile2d). And
+consistency is a property of the frame plus the
 measure rather than of the attention, which is why the ablations that give
 GeoTransolver a Horvitz–Thompson center recover its consistency
 (@sec-robustness-density) and why the property is portable, though the
@@ -244,14 +244,16 @@ of @sec-arch-routing-trained are the picture of it.
 *Evidence.* Removing the relational invariants from routing and read-back
 is the largest single-factor effect measured (@sec-limits-mechanism); the
 territory probe shows the anchors are functions of the surface
-(@sec-territories). The bound on the mechanism is as important: on a
-fixed mesh the anchors barely move between samples, so positional
-resolution is only as fine as the partition; yet on the OLBC Poisson set
-ISLA leads GeoTransolver-512 at the two small rungs with no positional
-channel added, so 256 anchors resolve that problem (@sec-interior-olbc).
+(@sec-territories). The bound on the mechanism is as important: the
+anchors are formed from the geometry, so where the geometry hardly varies
+between cases they barely move either, and positional resolution is then
+only as fine as the partition. Tensile2d, whose specimen shape barely
+varies, is the dataset where that bound would bind, and GeoTransolver-512
+leads there at 400 cases (@sec-interior-tensile2d); whether the bound is
+the cause is not measured.
 
 *Publication-worthy?* Yes, as the core mechanism of the architecture
-paper, stated with the fixed-mesh bound and the OLBC evidence.
+paper, stated with that bound.
 
 ### (e) Cosine routing against slice collapse {#sec-vs-novel-cosine}
 
@@ -306,8 +308,7 @@ et al., 2024); GINOT feeds loading conditions beside the surface point
 cloud and decodes queries by attention (Liu et al., 2025); MP-PDE puts
 boundary conditions and PDE parameters in the messages; Mousavi et al.
 (2026) extend boundary data into the domain as a learned pseudo-field so
-that any domain-to-domain operator can consume it, and build the OLBC
-benchmark to test exactly this.
+that any domain-to-domain operator can consume it.
 
 *What is new.* The typed contract: directions enter as unit vectors and
 magnitudes as scalars for every model (@sec-unit-direction-rule), a
@@ -316,8 +317,9 @@ the PDE problem, and every channel keeps the covariance contracts under test. Th
 mechanism.
 
 *Evidence.* The contract tests; the unit-direction control on the
-baselines; the Tensile2d tensor-head lanes; the OLBC sets, where the
-boundary data enter through this interface alone (@sec-interior-olbc).
+baselines; the Tensile2d tensor-head lanes (@sec-interior-tensile2d); the
+lug and DeepJEB++, whose loads and labels enter through this interface
+alone (@sec-interior-lug, @sec-surface-deepjeb).
 
 *Publication-worthy?* The component clause, yes (it belongs with (b)); the
 interface as a whole is an engineering contribution to the code, not a
@@ -341,8 +343,7 @@ of learning-curve exponents on industrial CFD.
 
 *What is new.* The measurement itself: on four datasets the exponents are
 the same on one (DrivAerML) and larger for ISLA on three (AirfRANS,
-Tensile2d, the lug), with the OLBC Poisson ladder running the other way; and
-the AirfRANS extrapolation splits, where the in-distribution pressure
+Tensile2d, the lug); and the AirfRANS extrapolation splits, where the in-distribution pressure
 ordering inverts outside the training band (@sec-compute-allocation,
 @sec-interior-tensile2d, @sec-interior-extrapolation). The mechanism is a
 hypothesis, not a result: no probe has been run on those lanes.
@@ -350,7 +351,7 @@ hypothesis, not a result: no probe has been run on those lanes.
 *Publication-worthy?* Yes, as an empirical finding with its scope (four
 datasets, two seeds, exponents fitted over at most five rungs), and the
 most interesting thing to a reader who already has a surrogate; it is not
-yet general: the OLBC Poisson ladder runs the other way.
+yet general: four datasets, and on one of them no difference.
 
 ### (h) The fused geometry kernel {#sec-vs-novel-kernel}
 
@@ -388,9 +389,9 @@ Ranked by how much of it is new and how much evidence stands behind it:
    the pose lead over augmentation, and the memory frontier; with the
    component clause of the scalar heads as its sharpest corollary.
 3. **The boundary-first learning curve** (idea g): steeper exponents on
-   three datasets and the extrapolation crossover, stated with the OLBC
-   Poisson ladder, which runs the other way, beside them; the paper that a
-   practitioner with a fixed budget would read.
+   three datasets and the extrapolation crossover, stated with the
+   DrivAerML tie beside them; the paper that a practitioner with a fixed
+   budget would read.
 4. **Routing collapse in slice attention and its removal** (idea e): a
    short, useful note, larger if GeoTransolver is shown to share the
    ceiling.
@@ -412,9 +413,10 @@ deficit; parity-typed invariants after GLOBE and GATr for the
 $\sigma_{12}$ clause; a measure-weighted training loss after M³ for the
 residual training-law dependence; inter-slice attention as a control after
 Transolver; an externally run benchmark (CarBench on DrivAerNet++) for the
-absence of a program-level held-out confirmation; and the published GAOT
-and RIGNO numbers on the OLBC sets, to say whether the fixed-mesh
-standings are leads over the field or only over each other.
+absence of a program-level held-out confirmation; and the published GINOT,
+Transolver and GNOT numbers on the lug, re-scored on the book's split, to
+say whether that standing is a lead over the field or only over each
+other.
 
 Two ideas were considered and not entered. Query-independent decoding by
 cross attention from the queries to a reduced anchor set (AB-UPT, UPT,
@@ -466,7 +468,7 @@ own use of the model (Transolver, GeoTransolver) or is marked.
 - Luo, H., Wu, H., Zhou, H., Xing, L., Di, Y., Wang, J., Long, M. (2025). *Transolver++: An Accurate Neural Solver for PDEs on Million-Scale Geometries.* arXiv:2502.02414. Abstract and the method section (Eqs. 3 and 4) read.
 - Mei, Y., Song, X., Song, X., Takeishi, N. (2026). *M³: Reframing Training Measures for Discretized Physical Simulations.* arXiv:2605.08843. Abstract read.
 - Mousavi, S., Wen, S., Lingsch, L., Herde, M., Raonić, B., Mishra, S. (2025). *RIGNO: A Graph-based Framework for Robust and Accurate Operator Learning for PDEs on Arbitrary Domains.* NeurIPS 2025; arXiv:2501.19205. Search excerpt; the author list beyond the first author was not verified in session.
-- Mousavi, S., Mishra, S., De Lorenzis, L. (2026). *Imposing Boundary Conditions on Neural Operators via Learned Function Extensions* (the OLBC datasets). arXiv:2602.04923. Abstract and full text read (baselines BENO, RIGNO, GAOT; 18 datasets of 8,704 samples with 256 test samples on fixed unstructured meshes of 11,700 to 17,600 nodes).
+- Mousavi, S., Mishra, S., De Lorenzis, L. (2026). *Imposing Boundary Conditions on Neural Operators via Learned Function Extensions.* arXiv:2602.04923. Abstract and full text read.
 - Pfaff, T., Fortunato, M., Sanchez-Gonzalez, A., Battaglia, P. W. (2021). *Learning Mesh-Based Simulation with Graph Networks* (MeshGraphNets). ICLR 2021; arXiv:2010.03409. Abstract read.
 - Puny, O., Atzmon, M., Ben-Hamu, H., Misra, I., Grover, A., Smith, E. J., Lipman, Y. (2022). *Frame Averaging for Invariant and Equivariant Network Design.* ICLR 2022; arXiv:2110.03336. Abstract read.
 - Qi, C. R., Su, H., Mo, K., Guibas, L. J. (2017). *PointNet: Deep Learning on Point Sets for 3D Classification and Segmentation.* CVPR 2017; arXiv:1612.00593. Abstract read; the unit-sphere normalization of point clouds attributed to point-cloud practice above was not verified from the text in session.

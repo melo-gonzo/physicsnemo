@@ -1025,11 +1025,11 @@ is one scalar per slice per extra vector in the geometry region. That is
 why the fused kernel takes the global directions and the rank-1 per-token
 inputs as one set of at most four vectors per token, and hands a model
 with rank-2 per-token inputs, or more vectors than that, to the eager
-region (@sec-arch-switches). Planar datasets that store a
-boundary vector component by component (OLBC elasticity's prescribed
-displacement and traction) stack the components into one rank-1 field in
-the dataset pipeline (`StackScalarFields`). Feeding laboratory components
-as scalars leaks the frame.
+region (@sec-arch-switches). A dataset that stores a boundary vector
+component by component (a prescribed displacement or traction per axis)
+stacks the components into one rank-1 field in the dataset pipeline
+(`StackScalarFields`). Feeding laboratory components as scalars leaks the
+frame.
 
 ## Why ISLA has no center {#sec-isla-variants}
 
