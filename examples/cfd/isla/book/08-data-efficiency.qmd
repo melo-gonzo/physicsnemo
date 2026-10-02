@@ -340,6 +340,25 @@ print(f"**At 35 wings the deficit is largest in the separated regime, and that l
       "high-angle widening, so the separated regime keeps the rest.")
 ```
 
+```{python}
+#| label: para-hl-anatomy
+#| output: asis
+EA = J("wing_element_anatomy_2026-09-30.json")["rungs"]
+def worst(rung):
+    S = EA[rung]["summary"]
+    return max(min(abs(v) for v in S[c]["excess_over_whole_surface"].values()) for c in S if c != "all")
+h = EA["hl210"]; f = EA["single_aoa_12"]; slat = f["summary"]["slat"]["excess_over_whole_surface"]; core = f["summary"]["slat_core"]["excess_over_whole_surface"]
+print(f"**The deficit has no place on the wing.** Where the excess sits was read two ways on the saved predictions of the 210-wing rung: by surface "
+      f"curvature and by high-lift element, the latter from a per-cell element label of every validation wing's full boundary mesh "
+      f"({h['n_cases_labelled']} of {h['n_cases_shared']} wings). A region carries the excess when its ISLA ÷ GeoTransolver-512 ratio is at least 0.15 "
+      f"above the whole-surface ratio on both seeds. No curvature bin and no element does: at 210 wings the largest excess that both seeds share is "
+      f"{worst('hl210'):.2f}, on a slat that is three percent of the area, and no element's excess keeps its sign from one seed to the other. The "
+      f"slat, flap, gap band and main wing all carry the same ratio as the whole surface. On the fixed-angle rung (18 wings, one angle) the slat alone "
+      f"clears the bar ({slat['42']:+.2f} / {slat['43']:+.2f}; outside the gap band {core['42']:+.2f} / {core['43']:+.2f}), a small part of the error on a small "
+      "part of the surface, and the flap and gap band do not. What separates the two architectures on the wings is spread over the whole surface, "
+      "which is the reading the pose-prior diagnostic gives from the other side (@sec-pose-prior). Data: results/wing_element_anatomy_2026-09-30.json.")
+```
+
 ## What this standing does not say {#sec-de-limits}
 
 **The ladder is a measurement of sample complexity over the range every

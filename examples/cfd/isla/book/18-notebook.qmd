@@ -32730,3 +32730,74 @@ lanes are re-run under the adopted class on the new snapshot (code_v18),
 starting with the DrivAerML Surface and the 510-wing rungs that the thesis
 table quotes. Until then the thesis table's values are the static-prototype
 ones, labeled by their artifacts.
+
+## 2026-10-02 — Verdict, WING-ELEMENT-ANATOMY: on the 210-wing rung no element class carries ISLA's excess (largest both-seed excess +0.06 / −0.01 on the slat core, bar +0.15), so the deficit is uniform over the elements as over curvature (H3); on the fixed-angle rung the slat alone clears the bar (+0.16 / +0.26; its core +0.28 / +0.38, 3% of the area, 17% of the error) while the flap and the gap band of the five-wing pilot do not {#sec-nb-wing-element-anatomy-verdict}
+
+**Setting.** WING-MECH asks where on the wing ISLA's excess pressure error
+against GeoTransolver sits: on the thin elements and in the gaps between
+them (H1), on high curvature (H2, refuted by the surface anatomy of
+@sec-nb-wing-anatomy-surface), or nowhere in particular (H3). The
+preregistration (@sec-nb-wing-element-anatomy) set the bar from the
+surface anatomy: a class carries the excess when its ISLA ÷ GeoTransolver
+ratio is at least 0.15 above the whole-surface ratio on both seed pairs,
+and predicted from the five-wing pilot that the flap and the gap band
+clear it on the 210-wing rung and the gap band again on the fixed-angle
+rung.
+
+**Instrument.** Per-cell element labels from a span-station segmentation
+of every validation wing's full boundary mesh
+(`highlift/wing_element_labels.py`; 190 of the 196 wings of the two rungs
+after two ten-hour resume sweeps, the six unlabelled cases listed in the
+artifact and in a third sweep), read on the saved 200,000-cell float32
+predictions of the surface anatomy: `ref_isla_r1_hl210` against
+`ref_gt_w512_hl210` (GeoTransolver-512) on 174 of the 180 validation wings
+of the 210-wing rung and `p200k_hl_isla_single_aoa_12` against
+`p200k_hl_gt_unit_single_aoa_12_lr3e3` (GeoTransolver-256) on all 18 of
+the fixed-angle rung, seeds 42 and 43 paired. Classes: slat, main wing and
+body, flap, other bodies, the gap band (cells within 0.02 L_ref of another
+of the three elements) and each element outside it. Reducer
+`results/wing_element_anatomy_2026-09-30.py`, artifact
+`results/wing_element_anatomy_2026-09-30.json`, figure beside it.
+
+**What we saw** (excess of the class ratio over the whole-surface ratio,
+seed 42 / seed 43; a class carries at +0.15 on both):
+
+| Class | Area share | 210 wings (whole surface 1.21 / 1.01) | Fixed angle (whole surface 1.47 / 1.42) |
+|---|---|---|---|
+| slat | 0.03 | +0.02 / −0.02 | **+0.16 / +0.26** |
+| slat outside the gap band | 0.01 | +0.06 / −0.01 | **+0.28 / +0.38** |
+| flap | 0.04 | −0.04 / +0.08 | −0.14 / −0.15 |
+| flap outside the gap band | 0.03 | −0.05 / +0.08 | −0.17 / −0.18 |
+| gap band | 0.06 | +0.02 / −0.05 | +0.04 / +0.09 |
+| main wing and body | 0.68 | +0.01 / −0.02 | −0.01 / −0.04 |
+| main outside the gap band | 0.65 | 0.00 / 0.00 | −0.05 / −0.14 |
+| other bodies | 0.25 | −0.04 / +0.05 | +0.06 / 0.00 |
+
+: Element anatomy of ISLA's excess pressure error over GeoTransolver on the two HiLift wing rungs: per class, the ISLA ÷ GeoTransolver ratio minus the whole-surface ratio, per seed pair (`results/wing_element_anatomy_2026-09-30.json`). Bold clears the preregistered +0.15 bar on both seeds. {#tbl-nb-wing-element-anatomy}
+
+On the 210-wing rung every class is within 0.08 of the whole surface on
+both seeds and no two seeds agree on the sign of any excess: the deficit
+has no element. On the fixed-angle rung the slat carries it, +0.16 and
++0.26 on the whole slat and +0.28 and +0.38 on the slat outside the gap
+band; the slat is 3% of the area and about 17% of both models' error,
+so removing its excess entirely would move the whole-surface ratio by a
+few hundredths. The flap and the gap band, which the five-wing pilot put
+at 1.37 / 1.30 and 1.83 / 1.80, read below or at the whole surface on
+every seed of both rungs.
+
+**Verdict.** H1 is refuted on the 210-wing rung and the pilot's
+prediction (flap and gap band) is refuted on both: on the rung that
+matters the excess is uniform over elements as it is over curvature
+(H3). The slat on the fixed-angle rung is a real, two-seed location of a
+small part of the excess, and the only one found; the five-wing pilot was
+a sample of five. With H1 and H2 both uniform on the 210-wing rung, the
+mechanism lane that WING-MECH was to pick has no local target: what
+separates the models on the wings is spread over the whole surface, which
+is what the pose-prior diagnostic (@sec-pose-prior in the book) and the
+scaling with cases already say.
+
+**What is next.** The six unlabelled wings are in a third resume sweep
+(job 970796); the artifact is re-reduced when they land and the numbers
+above are replaced, not appended. The per-cell predictions
+(`highlift/anatomy_preds`, about 30 GB) are deleted after that. WING-MECH
+closes with this entry; a mechanism lane is not scheduled.
