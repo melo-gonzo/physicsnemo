@@ -102,6 +102,21 @@ def nearest_boundary_geometry(
                 for i in range(b)
             ]
         ).long()  # (B, Q)
+        ### The CUDA backend (cuML) expands |x - y|^2 = |x|^2 + |y|^2 - 2 x.y in
+        ### float32. For a query within ~1e-4 of the wall at |x| ~ 1 the squared
+        ### distance is below that form's resolution, the candidate is dropped
+        ### and the query keeps the untouched sentinel (index -1, FLT_MAX),
+        ### which the gathers below would read out of bounds (AirfRANS posed
+        ### validation, 6 of 200 cases, 2026-10-03). Those queries are
+        ### re-searched exactly by the difference form; every other index is
+        ### left as returned.
+        bad = (idx < 0) | (idx >= points.shape[1])
+        if bad.any():
+            for i in range(b):
+                j = bad[i].nonzero()[:, 0]
+                if j.numel():
+                    diff = query_points[i, j, None, :] - points[i, None, :, :]
+                    idx[i, j] = diff.square().sum(-1).argmin(-1)
     gather = idx[..., None].expand(b, nq, points.shape[-1])
     y = torch.gather(points, 1, gather)
     n_star = torch.gather(normals, 1, gather)

@@ -23,6 +23,9 @@ search; neither is an input. These tests pin the geometry against a brute-force
 computation, its sign convention, and the contracts of the interior task.
 """
 
+import math
+import os
+
 import pytest
 import torch
 
@@ -274,3 +277,88 @@ def test_nearest_boundary_geometry_matches_cdist_argmin_on_cpu(dim):
 @pytest.mark.parametrize("dim", [2, 3])
 def test_nearest_boundary_geometry_matches_cdist_argmin_on_cuda(dim):
     _check_against_cdist_argmin("cuda", dim)
+
+
+def _wall_problem(dim: int, seed: int = 5, n: int = 4000, n_q: int = 2000, offsets=(1e-5, 1e-4, 1e-3)):
+    """A unit circle (polyline) or sphere sampled at ``n`` points with outward normals
+    and ``n_q`` queries a sample of ``offsets`` off the wall on both sides, in
+    float32: the near-wall picture of a unit-chord airfoil."""
+    g = torch.Generator().manual_seed(seed)
+    dirs = torch.nn.functional.normalize(torch.randn(n, dim, dtype=D, generator=g), dim=-1)
+    q_dirs = torch.nn.functional.normalize(torch.randn(n_q, dim, dtype=D, generator=g), dim=-1)
+    side = torch.where(torch.rand(n_q, dtype=D, generator=g) < 0.5, 1.0, -1.0)
+    off = torch.tensor(offsets, dtype=D)[torch.randint(len(offsets), (n_q,), generator=g)]
+    q = q_dirs * (1.0 + side * off)[:, None]
+    return dirs.float(), dirs.float(), q.float()
+
+
+def test_sentinel_search_results_are_recomputed_exactly(monkeypatch):
+    """Regression (AirfRANS posed inference, 2026-10-03): cuML's k=1 search returned
+    its untouched sentinel (index -1, distance FLT_MAX) for queries within ~1e-4 of
+    the wall whose squared distance is below the float32 resolution of its expanded
+    distance form, and the gathers read out of bounds (a device-side assert). Such
+    queries are re-searched by the difference form; every other index is left as the
+    backend returned it, so inputs the backend resolves are unchanged. Here the
+    backend is stood in for by one that returns the exact answer with every fifth
+    query (and the last) replaced by the sentinel or an index past the sample."""
+    from physicsnemo.experimental.models.isla import geometry
+
+    pts, nrm, q = _wall_problem(3, n=800, n_q=200)
+    exact = torch.cdist(q.double(), pts.double()).argmin(-1)
+
+    def broken_knn(p, qq, k):
+        idx = exact.clone()
+        idx[::5] = -1
+        idx[-1] = p.shape[0] + 7
+        return idx[:, None], torch.full((qq.shape[0], 1), 3.4e38)
+
+    d_ref, u_ref = nearest_boundary_geometry(q[None], pts[None], nrm[None])
+    monkeypatch.setattr(geometry, "knn", broken_knn)
+    d, u = nearest_boundary_geometry(q[None], pts[None], nrm[None])
+    assert torch.equal(d, d_ref) and torch.equal(u, u_ref)
+    assert torch.isfinite(d).all()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="the CUDA search")
+@pytest.mark.parametrize("dim", [2, 3])
+@pytest.mark.parametrize("shift", [0.0, 1.0, 100.0])
+def test_cuda_search_near_the_wall_never_reads_out_of_bounds(dim, shift):
+    """Near-wall float32 queries on a translated unit circle / sphere through the CUDA
+    search: every result finite, no index outside the sample (the gather would
+    assert), and |d| never below the exact distance (the expanded form can only
+    overestimate a near-tie, by about the sample spacing at |x| ~ 1 and more at
+    |x| ~ 100, which is cuML's documented precision, not a search failure)."""
+    pts, nrm, q = _wall_problem(dim)
+    t = torch.full((dim,), shift)
+    pts, q, nrm = (pts + t).cuda(), (q + t).cuda(), nrm.cuda()
+    d, u = nearest_boundary_geometry(q[None], pts[None], nrm[None])
+    torch.cuda.synchronize()
+    assert torch.isfinite(d).all() and torch.isfinite(u).all()
+    d_ref = torch.cdist(q[None].double(), pts[None].double()).min(-1).values
+    assert (d.double().abs() - d_ref >= -1e-6).all()
+    assert torch.allclose(u.norm(dim=-1), torch.ones_like(d), atol=1e-5)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="the saved case runs on the CUDA search")
+@pytest.mark.skipif("ISLA_AF_POSED_SAMPLE" not in os.environ, reason="set ISLA_AF_POSED_SAMPLE to a forward-kwargs .pt saved by the posed-inference reproduction")
+def test_saved_posed_airfrans_case_runs():
+    """The AirfRANS posed validation case that crashed the 2026-10-03 inference, as
+    saved forward kwargs (boundary polyline, 100,000 interior points with the stored
+    sdf / sdf_normals, inlet vectors), runs through a model of its schema."""
+    saved = torch.load(os.environ["ISLA_AF_POSED_SAMPLE"], weights_only=False)
+    kw = saved["forward_kwargs"]
+    kw = {
+        "boundary_meshes": {k: v.to("cuda") for k, v in kw["boundary_meshes"].items()},
+        "prediction_points": kw["prediction_points"].to("cuda"),
+        "global_data": kw["global_data"].to("cuda"),
+    }
+    torch.manual_seed(0)
+    m = ISLA(
+        output_schema={"velocity": {"rank": 1}, "pressure": {"rank": 0}, "nut": {"rank": 0}},
+        global_schema={"U_inf_dir": {"rank": 1}, "U_inf_mag": {"rank": 0}},
+        query_schema={"sdf": {"rank": 0}, "sdf_normals": {"rank": 1}},
+        dim=2, interior=True, hidden=32, n_layers=2, n_slices=8,
+    ).cuda().eval()
+    with torch.no_grad():
+        out = outputs(m(**kw))
+    assert all(torch.isfinite(v).all() for v in out.values())
