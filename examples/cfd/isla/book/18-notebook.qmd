@@ -33326,3 +33326,35 @@ a lead on one mesh family in one pose. The protocol scorer's native numbers
 differ from the fleet scorer's by about 1% (ISLA width 768: 0.0443 against
 0.0438), a different validation draw of the same checkpoint; the chapter
 table uses the protocol scorer so its three columns share one draw.
+
+## 2026-10-03 — Status, CHAR-LANES Tensile2D scored (first campaign task): at the reference configurations ISLA ties GeoTransolver on the stress components (σ11 0.0086 against 0.0086, σ22 0.0072 against 0.0078, σ12 0.0108 against 0.0111) and trails on displacement (0.0093 against 0.0056) and plastic strain (0.279 against 0.145); the uniform point cloud is the identity here; under the in-plane pose every architecture, ISLA included, falls to the mean-field level, an anomaly under diagnosis {#sec-nb-char-tensile2d-interim}
+
+**Setting.** The six Tensile2D lanes of CHAR-LANES (@sec-nb-char-lanes-launched;
+400 training specimens, 100 validation, 500 epochs, every node; ISLA width 768
+with the symmetric-tensor stress head, GeoTransolver and Transolver width 1,024
+reading the boundary-condition tags on the interior nodes, two seeds each)
+finished first, in under three hours, and were scored natively and under the
+three protocols (`results/char/tensile2d.json`,
+`results/campaigns_2026-10-02/char/cl/metrics/cl_t2d_*`).
+
+**What we saw (seed means over 100 validation specimens, float32).** Native:
+ISLA σ11 / σ22 / σ12 / displacement / plastic strain 0.0086 / 0.0072 / 0.0108 /
+0.0093 / 0.279; GeoTransolver 0.0086 / 0.0078 / 0.0111 / 0.0056 / 0.145;
+Transolver 0.0106 / 0.0088 / 0.0123 / 0.0053 / 0.227. So the frozen class at
+its reference width closes the stress gap this dataset used to show
+(@sec-nb-solids-frame recorded GeoTransolver-512 ahead on every component by
+about 2x under the earlier class): ISLA now ties or leads on all three stress
+components and trails by 1.7x on displacement and 1.9x on the cumulated plastic
+strain. The uniform point-cloud column equals the native one for every
+architecture, as it must: the boundary polyline is kept whole and the interior
+is a point cloud without cell measures, so the area draw is the identity on this
+dataset. **Posed (in-plane rotation plus translation): ISLA 0.81 / 0.74 / 1.14 /
+0.79, GeoTransolver 1.09 / 1.23 / 1.04 / 0.98, Transolver 0.97 / 0.91 / 0.98 /
+0.91.** The baselines' numbers are the expected failure of lab-frame inputs
+trained without augmentation. ISLA's are not expected: its stress head is an
+equivariant symmetric tensor and its displacement head an equivariant vector,
+and on DrivAerML Surface the posed column equals the native one. Rotation-only
+and translation-only scorings and a direct model-level equivariance check on
+one specimen (rotate the DomainMesh, run, rotate back) are being run to
+attribute this to the model or to the posed pipeline; the chapter table shows
+the column as measured until then.
