@@ -207,3 +207,21 @@ head. No bar: it is reported beside arm C. Smoke on the v18 references
 The posed checks of both probes now use an exact float64 nearest-neighbour
 search for the reference and the posed case alike (`exact_knn`); the
 library search's translation sensitivity is reported from `posed_diag.py`.
+
+## Amendment 3 (2026-10-03 09:30 PDT, after the primary verdicts were computed): post-hoc diagnostics
+
+Recorded after readout 1 and arm C were reduced; nothing below changes a
+preregistered verdict. Arm C's AirfRANS "interacting" score on random
+halves (0.0487 / 0.0367 pressure) differed from the protocol score (0.0334
+/ 0.0331) by more than two random subsets of one case can. Cause: the
+AirfRANS interior is stored in a spatially coherent order (adjacent points
+58x closer than random pairs; DrivAerML's order is shuffled), and the
+reader's subsample is one contiguous cyclic block, so every AirfRANS
+training and evaluation request is a spatial chunk of about 56% of the
+domain. Three diagnostics, all float32, every held-out case:
+`support_probe.py --split block` (A a contiguous block, B the points after
+it), `native_block_probe.py` (the support arm scored on the protocol's own
+block, located in an every-point read by coordinate), and
+`full_field_probe.py` (every interior point predicted by the interacting
+model on block tiles and on random requests, by the support arm and by the
+passive checkpoint).

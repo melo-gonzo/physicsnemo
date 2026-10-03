@@ -68,6 +68,9 @@ def main():
     p.add_argument("--runs-dir", default=None, help="checkpoint root (default <task>/runs)")
     p.add_argument("--n-detail", type=int, default=2, help="cases with the float64 and posed checks")
     p.add_argument("--n-uniform", type=int, default=20000, help="size of the volume-uniform-like evaluation set (0: off)")
+    p.add_argument("--split", choices=("random", "block"), default="random",
+                   help="random: A and B seeded random halves; block: A a contiguous (cyclic) block of the stored point "
+                        "order, the reader's own training law, and B the points after it")
     a = p.parse_args()
     for k, v in dict(RANK="0", WORLD_SIZE="1", LOCAL_RANK="0", MASTER_ADDR="127.0.0.1", MASTER_PORT=str(27000 + os.getpid() % 20000)).items():
         os.environ.setdefault(k, v)
@@ -163,8 +166,14 @@ def main():
         n = pp.n_points
         if n <= a.request + 2000:
             raise ValueError(f"case {ci}: the interior sample has {n} points; the readout needs more than request + 2,000")
-        ### A and B are seeded random halves of the case's interior sample, whatever the stored point order.
-        perm = torch.randperm(n, generator=torch.Generator().manual_seed(4000 + ci)).to(dev)
+        if a.split == "random":
+            ### A and B are seeded random halves of the case's interior sample, whatever the stored point order.
+            perm = torch.randperm(n, generator=torch.Generator().manual_seed(4000 + ci)).to(dev)
+        else:
+            ### The reader draws a training request as one contiguous cyclic block of the stored order; A is such a
+            ### block (seeded offset) and B the points after it, so A and the padded request [B, A's head] are blocks.
+            off = int(torch.randint(n, (1,), generator=torch.Generator().manual_seed(4000 + ci)))
+            perm = ((torch.arange(n) + off) % n).to(dev)
         A = perm[: a.request]
         B = perm[a.request : min(n, 2 * a.request)]
         nb = B.numel()
@@ -275,7 +284,7 @@ def main():
     if det:
         for k in ("posed_rel_fp32", "posed_rel_fp64", "sentinel_alone_maxdiff_fp64"):
             summ[f"{k}_max"] = {f: max(c[k][f] for c in det) for f in FIELDS}
-    out = {"run_id": a.run_id, "model": a.model, "dataset": a.dataset, "epoch": ep, "query_logw": logw, "request": a.request,
+    out = {"run_id": a.run_id, "model": a.model, "dataset": a.dataset, "epoch": ep, "query_logw": logw, "request": a.request, "split": a.split,
            "n_cases": len(cases), "summary": summ, "cases": cases, "seconds": round(time.time() - t0, 1)}
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out + ".tmp").write_text(json.dumps(out, indent=1))
