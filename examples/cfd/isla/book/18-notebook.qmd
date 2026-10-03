@@ -33281,3 +33281,48 @@ baseline's recipe. Scorer: `cl_af_*` scores at 100,000 cells (the
 AirfRANS protocol), `cl_jeb_*`, `cl_t2d_*`, `cl_lug_*` at the 200,000-cell
 default, which passes their whole surfaces and node sets through, as
 their earlier lanes were scored; `cl_*` lanes map to code_v20.
+
+## 2026-10-03 — Verdict, CHAR-PROTOCOLS on DrivAerML Surface: every ISLA frontier candidate reads within 1% of its native error on the uniform point cloud and exactly its native error rotated and translated, while every GeoTransolver and Transolver candidate reads 5.8x to 9.6x worse on the point cloud and 23x to 30x worse rotated; at the reference configurations the baselines' native 2% to 9% lead becomes a 4.5x to 7.8x deficit on the point cloud and 17x to 27x in a random pose {#sec-nb-char-protocols-drivaer-surface}
+
+**Setting.** The three scorings of one checkpoint (@sec-nb-char-protocols-instruments)
+applied to the 28 finished DrivAerML Surface frontier lanes (every under-80 GiB
+candidate of the three architectures, two seeds, 500 epochs, baselines without
+augmentation as the campaign's fairness rule requires): the native validation mesh
+at 200,000 cells, a uniform point cloud at the same budget (area-proportional
+Poisson draw with exact Horvitz-Thompson weights, what an STL gives without a
+volume mesh), and every validation car in its own random rotation and
+translation. Float32, 48 cars, seed means
+(`kernel/char/protocol_eval.sbatch`, 84 evaluations; reduced by
+`results/char/protocol_artifacts_2026-10-03.py` into
+`results/char/drivaerml_surface.json`, the table the DrivAerML chapter prints;
+all 14 candidates in `results/campaigns_2026-10-02/char/protocols/`).
+
+**What we saw (pressure, seed means; native / point cloud / posed).** ISLA:
+reference 0.0437 / 0.0438 / 0.0437, 512 slices 0.0430 / 0.0432 / 0.0430, width
+512 0.0432 / 0.0434 / 0.0432, width 768 at 100,000 cells 0.0443 / 0.0450 /
+0.0444, and the same to the third decimal for the other three candidates; the
+largest point-cloud shift of any ISLA candidate is 1.6% (width 768, 100,000
+cells) and the largest posed shift 0.2%. GeoTransolver: width 1,024 at 100,000
+cells 0.0405 / 0.2496 / 1.1533 (6.2x / 28x), width 512 0.0420 / 0.3728 / 1.2671,
+width 256 0.0455 / 0.4377 / 1.2228. Transolver: width 1,024 at 100,000 cells
+0.0433 / 0.3509 / 1.1951 (8.1x / 28x), the other three candidates 5.8x to 7.1x
+and 23x. Wall shear follows pressure on every row. **At the reference
+configurations, GeoTransolver ÷ ISLA is 0.91 / 0.93 (pressure / wall shear) on
+the native mesh, 5.55 / 4.45 on the point cloud and 26 / 17 rotated and
+translated; Transolver ÷ ISLA 0.98 / 0.98, 7.80 / 5.66 and 27 / 19.** The
+baselines' point-cloud and posed errors exceed one, i.e. the prediction is
+worse than predicting the mean field; capacity does not help them (the
+widest candidates are the ones quoted), and the posed numbers are what the
+fairness rule's unaugmented training implies: a model that reads absolute
+coordinates has never seen a rotated car.
+
+**Reading.** On this dataset the three columns measure exactly what the two
+invariances of @sec-invariances promise: the discretization-consistent readout
+makes ISLA's error a property of the surface, not of the mesh that samples it
+(the 1% point-cloud shift is the sampling noise of a 200,000-cell draw), and
+rigid-motion equivariance makes the posed column the native column. The
+baselines' native lead on DrivAerML (2% to 9%, @sec-nb-ref80-drivaer-half) is
+a lead on one mesh family in one pose. The protocol scorer's native numbers
+differ from the fleet scorer's by about 1% (ISLA width 768: 0.0443 against
+0.0438), a different validation draw of the same checkpoint; the chapter
+table uses the protocol scorer so its three columns share one draw.
