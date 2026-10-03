@@ -33104,7 +33104,26 @@ bug under the frozen architecture (bit-identity on non-crashing inputs is
 the acceptance test). (2) The DrivAerML Volume model's error grows 6x to
 12x when the boundary tokens are drawn area-proportionally with exact
 Horvitz-Thompson weights, while the Surface model is unchanged under the
-same construction. A control with the same Poisson path and uniform
-inclusion decides whether this is the instrument or a real sensitivity of
-the volume model to the boundary token law; the reading is recorded when
-the control is scored.
+same construction. The control (same Poisson path, uniform inclusion,
+`drivaer_ml_volume_reference_unifdraw.yaml`) reproduces the native error
+to the third decimal on both tasks (Volume 0.0882 / 0.0408 / 0.0649
+against native 0.0879 / 0.0407 / 0.0648 for eddy viscosity / pressure /
+velocity; Surface 0.0433 / 0.0682 against 0.0433 / 0.0679), and the
+structural check through the recipe's own loader shows the control draws
+what the reader draws (200,296 cells, raw-area sum 0.0163, measure spread
+11,849x against the native 200,000, 0.0162, 18,222x) while the area
+variant changes only the inclusion law (198,620 cells, raw-area sum
+0.0606, spread 6.4x). **So the instrument is clean and the shift is a
+property of the trained volume model**: under the area-proportional
+boundary law its interior error is 0.519 / 0.403 / 0.480 (5.9x / 9.9x /
+7.4x, both seeds within 20% of each other), where the surface model reads
+1.02x on wall shear and 1.00x on pressure. The interior readout therefore
+depends on the boundary token law in a way the surface readout does not;
+the mechanism is not measured here (candidates: the interior queries'
+attention over boundary tokens weights by measure, and the area law moves
+the tokens from the fine-meshed curved features to the flat panels). The
+campaign records it as the volume model's uniform-draw column; the
+baselines' volume numbers under the same protocol come with CHAR-LANES.
+A first version of the control still carried the area law (a text
+substitution that did not match) and reproduced the area numbers to four
+decimals; the structural check caught it before any reading was taken.

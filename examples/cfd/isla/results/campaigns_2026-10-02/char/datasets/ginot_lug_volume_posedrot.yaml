@@ -1,0 +1,59 @@
+# DIAGNOSTIC variant, not a campaign protocol: ginot_lug_volume_posed.yaml with translate: 0 (rotation only).
+# CHAR-PROTOCOLS posed variant (2026-10-02): identical to ginot_lug_volume.yaml except that every case
+# is rigidly posed by a rotation and a translation that are a deterministic function of the case
+# (a rotation uniform on SO(3); translation of one RMS point radius in a random direction),
+# applied as the FIRST transform so geometry, normals, every vector field and the per-case global
+# vectors move together and every architecture is scored on the same posed validation set.
+# This pipeline has NO CenterMesh, so the translation reaches the model: the posed error measures rotation and
+# translation together.
+# Evaluation-only protocol: train natively, score the native checkpoint on this variant.
+
+# GINOT PLASTIC_LUG (Liu, Koric et al. 2025; Zenodo 15293036, CC BY 4.0) as a boundary-to-interior solid-mechanics dataset,
+# converted to native DomainMesh files by kernel/ginot_lug_convert.py (2026-09-22). Three-dimensional elastoplastic lug
+# (E = 200 GPa, nu = 0.3, sigma_y = 380 MPa, linear isotropic hardening H = 571.4 MPa; hex8 corner nodes of the quadratic
+# hex mesh): interior = every mesh node (5k to 15k) with von_mises [MPa], sdf (<= 0 inside the solid, positive-outside
+# convention) and sdf_normals; boundary "surface" = the watertight boundary triangles (split hex faces, 4k to 8.6k) with
+# outward normals, triangle areas as the quadrature measure, and per-cell BC labels bc_fixed (clamped end face x = x_min),
+# bc_hole (the hole's cylindrical surface), bc_loaded (the lower half of the hole, y < axis, carrying the pressure),
+# bc_pressure (= pressure [MPa] on loaded cells) and traction (= -pressure n [MPa]); global_data: hole_radius, length,
+# thickness [m], pressure [Pa], pressure_mpa, params (4,). Splits (no official indices): train 2400 / test 600 from a seed-0
+# permutation, nested train_n300 / train_n600 / train_n1200; select with train_split=train val_split=test.
+# CHAR campaign edit (2026-10-02): the design parameters are standardized AND split into named rank-0 global fields by
+# SplitGlobalVector (ISLA reads the four names; the tensor-input baselines read the standardized vector params_std); the stored
+# (N, 1) signed-distance column is squeezed to the (N,) field a rank-0 schema reads (the baselines' concatenation pads it
+# back); the boundary's bc_pressure is scaled to O(1) (scale only, so unloaded cells stay exactly 0).
+train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/ginot_lug_pdmsh
+manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/ginot_lug_pdmsh/manifest.json
+
+pipeline:
+  reader:
+    _target_: ${dp:CaseKeyDomainMeshReader}   # CHAR-PROTOCOLS posed: DomainMeshReader + the per-case `case_key` FixedRandomPose seeds from
+    path: ${train_datadir}
+    pattern: "lug_*/*.pdmsh"
+    subsample_n_points: ${sampling_resolution}   # interior queries (5k to 15k nodes per case; >= 15210 keeps every node)
+    subsample_n_cells: ${sampling_resolution}    # larger than any case's 8.6k surface triangles: the boundary is kept whole
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    - _target_: ${dp:FixedRandomPose}   # CHAR-PROTOCOLS posed: deterministic per-case pose, first so everything downstream sees it
+      salt: 0
+      translate: 0.0                    # DIAGNOSTIC (2026-10-02): rotation only, to attribute the posed shift of a no-CenterMesh pipeline to rotation vs translation
+    - _target_: ${dp:SplitGlobalVector}                # recipe-local (domain_transforms.py): global_data.params -> one standardized rank-0 leaf per
+      field: params                                    # name (ISLA's global_schema) and the standardized vector params_std (the baselines' global embedding)
+      names: [hole_radius_std, length_std, thickness_std, pressure_std]
+      output_field: params_std
+      mean: [0.0124862, 0.100103, 0.0225110, 75300663.3]   # zero mean / unit std over train (2400); manifest _stats (2026-09-22)
+      std: [0.00144079, 0.0115957, 0.00423982, 14360825.0]
+    - _target_: ${dp:SqueezeScalarFields}              # the stored (N, 1) sdf column becomes the (N,) field a rank-0 schema reads
+      fields: [interior.point_data.sdf]
+    - _target_: ${dp:NormalizeMeshFields}
+      association: cell_data
+      fields:                                    # boundary input: the applied pressure in MPa (train mean 75.3, std 14.4) to O(1);
+        bc_pressure: {type: scalar, mean: 0.0, std: 75.3}   # scale only, so cells off the loaded half stay exactly 0
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:                                    # pooled over all nodes of the train split (manifest _stats; 2026-09-22)
+        von_mises: {type: scalar, mean: 150.2, std: 92.4}   # MPa, 22.8M nodes over 2400 train cases
+
+targets:
+  von_mises: scalar

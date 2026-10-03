@@ -424,16 +424,20 @@ class PoissonBiasedSubsampleMesh(MeshTransform):
       point-cloud generator over the *surface* would produce, as opposed
       to the uniform-over-cells law that reads the mesher's refinement
       pattern (consistency benchmark, 2026-09-10). ``bias`` is unused.
+    - ``"uniform"``: w_i = 1, the same uniform-over-cells inclusion law as
+      ``SubsampleMesh`` / the reader's draw but through this class's Poisson
+      draw and HT measure fold (CHAR-PROTOCOLS control, 2026-10-03: separates
+      the Poisson/HT path from the area law). ``bias`` is unused.
     """
 
-    _WEIGHT_MODES = ("front_back", "area")
+    _WEIGHT_MODES = ("front_back", "area", "uniform")
 
     def __init__(
         self,
         n_cells_expected: int,
         bias: float = 10.0,
         compact: bool = True,
-        weight_mode: Literal["front_back", "area"] = "front_back",
+        weight_mode: Literal["front_back", "area", "uniform"] = "front_back",
     ) -> None:
         super().__init__()
         self.n_cells_expected = int(n_cells_expected)
@@ -454,6 +458,8 @@ class PoissonBiasedSubsampleMesh(MeshTransform):
             return torch.where(
                 torch.isfinite(areas), areas, torch.zeros_like(areas)
             ).clamp_min(0.0)
+        if self.weight_mode == "uniform":
+            return torch.ones(mesh.n_cells, device=mesh.points.device, dtype=mesh.points.dtype)
         x = mesh.cell_centroids[:, 0]
         return torch.where(
             x < x.median(), torch.full_like(x, self.bias), torch.ones_like(x)

@@ -1,0 +1,76 @@
+# CHAR-PROTOCOLS posed variant (2026-10-02): identical to deepjebpp_surface.yaml except that every case
+# is rigidly posed by a rotation and a translation that are a deterministic function of the case
+# (a rotation uniform on SO(3); translation of one RMS point radius in a random direction),
+# applied as the FIRST transform so geometry, normals, every vector field and the per-case global
+# vectors move together and every architecture is scored on the same posed validation set.
+# The pipeline's CenterMesh removes the translation again, so the posed error measures the rotation plus the
+# centering step; the translation is included because the protocol says rotated AND translated.
+# Evaluation-only protocol: train natively, score the native checkpoint on this variant.
+
+# DeepJEB++ surface dataset (Yoo et al., KAIST SmartDesignLab; arXiv 2606.12994; Hugging Face KAIST-SmartDesignLab/DeepJEB-PP
+# v1.1 fields, ODC-By 1.0), converted to native DomainMesh files by kernel/deepjebpp_convert.py (2026-09-22): 15,360
+# TRELLIS-generated jet-engine brackets x 4 static linear-elastic load cases (Ti-6Al-4V), one file per (bracket, load) named
+# <base>-<sub>-IS<aug>_<load>. A SURFACE task in the DrivAerML-surface layout: the reader walks into each .pdmsh's boundary
+# "surface" (the 25k-vertex / ~50k-triangle FEM surface, outward normals, cell_data targets von_mises [MPa] and displacement
+# [mm] = vertex means, per-cell labels bc_fixed (touches a clamped bolt node) / bc_loaded (touches a loaded lug node), the
+# traction bc_load [MPa] (force cases: F d / A_loaded on the loaded cells; torsion: the rigid-twist traction
+# M (a x r_perp) / sum A |r_perp|^2 about the lug axis) and its invariants bc_load_n = n.t, bc_load_mag = |t|), merges the
+# case-level global_data (load_dir unit vector = force direction or moment axis, load_type one-hot [is_force, is_torque],
+# load_magnitude, mass_g, ...), and MeshToDomainMesh puts the prediction points at the cell centroids. Coordinates are scaled
+# mm -> 0.1 m so a bracket spans O(1) (like the L_ref-nondimensionalized cars); the mm-unit targets are standardized below
+# from the manifest _stats (train, all four loads pooled). Splits (manifest.json; select with train_split=... val_split=test):
+# train (13,824 brackets x 4), test (1,536 x 4), grouped by SimJEB seed pair; nested train_n256 / train_n1024 / train_n4096
+# (brackets; files = 4x); per-load <split>_<load>; the authors' official_pairgrouped_* / official_random_*.
+# CHAR campaign edit (2026-10-02): the load-type one-hot is split into the named rank-0 global fields is_force / is_torque by
+# SplitGlobalVector (ISLA's global_schema); the stored vector load_type stays for the tensor-input baselines.
+train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/deepjebpp_pdmsh
+manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/deepjebpp_pdmsh/manifest.json
+
+pipeline:
+  reader:
+    _target_: ${dp:MeshReaderWithGlobalData}
+    path: ${train_datadir}
+    pattern: "*_*/*.pdmsh/_tensordict/boundaries/surface"
+    subsample_n_cells: ${sampling_resolution}   # 50,040 cells per bracket: sampling_resolution >= 50040 keeps the whole surface
+    merge_global_data_from: "../../global_data"
+    store_case_key: true   # CHAR-PROTOCOLS posed: the stable per-case integer FixedRandomPose seeds from
+  augmentations:                                 # applied only with augment=true (src/datasets.py); the CHAR campaign launches every architecture with augment=false
+    - _target_: ${dp:RandomRotateMesh}
+      mode: uniform
+      transform_cell_data: true                  # rotates normals, bc_load and displacement together with the geometry
+      transform_global_data: true                # ... and load_dir
+  transforms:
+    - _target_: ${dp:FixedRandomPose}   # CHAR-PROTOCOLS posed: deterministic per-case pose, first so everything downstream sees it
+      salt: 0
+      translate: 1.0                    # one RMS point radius, drawn from the same keyed stream after the rotation
+    - _target_: ${dp:CenterMesh}
+      use_area_weighting: false
+      store_center_as: center
+    - _target_: ${dp:ScaleMesh}                  # mm -> 0.1 m: bracket extent ~1-2 units (quadrature_measure cell_data stays in mm^2 and is
+      factor: 0.01                               # not read by the surface configs; MeshToDomainMesh recomputes the target measure)
+    - _target_: ${dp:SplitGlobalVector}          # recipe-local (domain_transforms.py): the one-hot load_type -> two rank-0 leaves (no scaling)
+      field: load_type
+      names: [is_force, is_torque]
+    - _target_: ${dp:NormalizeMeshFields}
+      association: cell_data
+      fields:                                    # manifest _stats.train (pooled over the cells of all 55,296 train files, four loads; 2026-09-22).
+                                                 # The von Mises std is dominated by a handful of brackets with unphysical FEA values (per-file max up to
+                                                 # 1.2e7 MPa, |u| up to 665 mm; see the converter report). The 3-epoch smoke lanes of 2026-09-22 ran with
+                                                 # the provisional 17k-file estimates von_mises std 249.5, displacement std 0.5139, bc_load rms 19.69, bc_load_n rms 12.71.
+        von_mises: {type: scalar, mean: 241.6, std: 788.9}
+        displacement: {type: vector, mean: [0.0, 0.0, 0.0], std: 0.7253}
+        bc_load: {type: vector, mean: [0.0, 0.0, 0.0], std: 20.43}      # scale only, so off-load cells stay exactly 0
+        bc_load_n: {type: scalar, mean: 0.0, std: 13.23}
+        bc_load_mag: {type: scalar, mean: 0.0, std: 20.43}
+    - _target_: ${dp:ComputeSurfaceNormals}      # recomputed from the (outward-wound) faces after centering/scaling/rotation
+      store_as: cell_data
+      field_name: normals
+    - _target_: ${dp:SubsampleMesh}
+      n_cells: ${sampling_resolution}
+    - _target_: ${dp:MeshToDomainMesh}
+      interior_points: cell_centroids
+      boundary_name: surface
+
+targets:
+  von_mises: scalar
+  displacement: vector
