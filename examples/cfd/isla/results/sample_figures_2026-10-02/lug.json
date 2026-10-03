@@ -1,0 +1,117 @@
+{
+  "dataset": "GINOT Bracket Lug",
+  "cases": [
+    {
+      "case": "lug_0260",
+      "role": "smallest hole_radius",
+      "split": "test",
+      "n_boundary_cells": 6852,
+      "n_nodes": 10650,
+      "globals": {
+        "hole_radius": 0.010003888979554176,
+        "length": 0.10546085983514786,
+        "thickness": 0.02218600921332836,
+        "pressure": 61057296.0,
+        "pressure_mpa": 61.05729675292969
+      }
+    },
+    {
+      "case": "lug_2761",
+      "role": "largest hole_radius",
+      "split": "test",
+      "n_boundary_cells": 5064,
+      "n_nodes": 6384,
+      "globals": {
+        "hole_radius": 0.014995667152106762,
+        "length": 0.09105423092842102,
+        "thickness": 0.018439853563904762,
+        "pressure": 88979032.0,
+        "pressure_mpa": 88.9790267944336
+      }
+    },
+    {
+      "case": "lug_2671",
+      "role": "smallest thickness",
+      "split": "test",
+      "n_boundary_cells": 4752,
+      "n_nodes": 5656,
+      "globals": {
+        "hole_radius": 0.014180054888129234,
+        "length": 0.08376163244247437,
+        "thickness": 0.01501202117651701,
+        "pressure": 60309428.0,
+        "pressure_mpa": 60.309425354003906
+      }
+    },
+    {
+      "case": "lug_1891",
+      "role": "largest thickness",
+      "split": "test",
+      "n_boundary_cells": 8360,
+      "n_nodes": 14872,
+      "globals": {
+        "hole_radius": 0.010500932112336159,
+        "length": 0.11598412692546844,
+        "thickness": 0.02998628281056881,
+        "pressure": 94285200.0,
+        "pressure_mpa": 94.28520202636719
+      }
+    },
+    {
+      "case": "lug_1421",
+      "role": "smallest pressure_mpa",
+      "split": "test",
+      "n_boundary_cells": 5336,
+      "n_nodes": 7470,
+      "globals": {
+        "hole_radius": 0.011104047298431396,
+        "length": 0.08235925436019897,
+        "thickness": 0.021073635667562485,
+        "pressure": 50143404.0,
+        "pressure_mpa": 50.14340591430664
+      }
+    },
+    {
+      "case": "lug_1422",
+      "role": "largest pressure_mpa",
+      "split": "test",
+      "n_boundary_cells": 5928,
+      "n_nodes": 8976,
+      "globals": {
+        "hole_radius": 0.013324824161827564,
+        "length": 0.08105582743883133,
+        "thickness": 0.025234634056687355,
+        "pressure": 99958456.0,
+        "pressure_mpa": 99.95845794677734
+      }
+    }
+  ],
+  "split": "test",
+  "n_test": 600,
+  "selection": "the test cases with the smallest and the largest hole radius, thickness and pressure (six distinct cases)",
+  "test_ranges": {
+    "hole_radius": [
+      0.010003888979554176,
+      0.014995667152106762
+    ],
+    "length": [
+      0.08004622161388397,
+      0.11995439231395721
+    ],
+    "thickness": [
+      0.01501202117651701,
+      0.02998628281056881
+    ],
+    "pressure_mpa": [
+      50.14340591430664,
+      99.95845794677734
+    ]
+  },
+  "units": "m (lengths), MPa (stress, pressure)",
+  "ranges": {
+    "von_mises": [
+      1.1358962059020996,
+      492.3941345214844
+    ]
+  }
+}

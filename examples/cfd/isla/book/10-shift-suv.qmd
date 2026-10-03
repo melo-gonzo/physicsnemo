@@ -21,6 +21,18 @@ def load_problem(name):
     z = np.load(PF / f"{name}.npz"); meta = json.load(open(PF / f"{name}.json"))
     return {k: z[k] for k in z.files}, meta
 
+SF = RES / "sample_figures_2026-10-02"
+
+def load_samples(name):
+    """Several samples of a dataset, reduced for plotting (results/sample_figures_2026-10-02/); per-sample arrays are
+    concatenated and cut with the matching ``*_offsets`` array via ``part``."""
+    z = np.load(SF / f"{name}.npz"); meta = json.load(open(SF / f"{name}.json"))
+    return {k: z[k] for k in z.files}, meta
+
+def part(a, off, i):
+    """Rows of the concatenated array ``a`` that belong to sample ``i``."""
+    return a[off[i]:off[i + 1]]
+
 def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
     """Draw line cells colored by boundary-condition kind (keys of palette.BC)."""
     segs = pts[cells][:, :, :2]
@@ -105,6 +117,57 @@ ax = axes[1]
 sc = depth_scatter(ax, sp[:, [0, 1]], sp[:, 2], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
 ax.set_ylabel("y [m]"); ax.set_xlabel("x [m]"); ax.set_title("top view: $C_p$", fontsize=9.5)
 cb = fig.colorbar(sc, ax=axes, fraction=0.025, pad=0.01, extend="min"); cb.set_label("$C_p$ [–]"); cb.outline.set_visible(False)
+plt.show()
+```
+
+```{python}
+#| label: para-shift-suv-samples
+#| output: asis
+Ss_, Ssm = load_samples("shift_suv")
+cs = Ssm["cases"]
+def _rng(fam, k):
+    v = [c[k] for c in cs if c["family"] == fam]; return min(v), max(v)
+La, Lb = min(c["length"] for c in cs), max(c["length"] for c in cs); Wa, Wb = min(c["width"] for c in cs), max(c["width"] for c in cs)
+print(f"@fig-shift-suv-samples shows three validation bodies of each family, the first, the middle and the last of each family's validation list. "
+      f"The morphs keep the footprint (length {La:.2f} to {Lb:.2f} m, width {Wa:.2f} to {Wb:.2f} m across the six) and differ in height: "
+      f"the height runs from {_rng('estate', 'height')[0]:.2f} to {_rng('estate', 'height')[1]:.2f} m among the estates shown and from "
+      f"{_rng('fastback', 'height')[0]:.2f} to {_rng('fastback', 'height')[1]:.2f} m among the fastbacks; the far field is "
+      f"{np.linalg.norm(cs[0]['U_inf']):.0f} m/s along $\\hat g_1$ in every case.")
+```
+
+```{python}
+#| label: fig-shift-suv-samples
+#| fig-cap: >
+#|   Six SHIFT-SUV validation bodies, three estates (top row) and three
+#|   fastbacks (bottom row), seen from the side and colored by the surface
+#|   pressure coefficient $C_p$ on one shared scale (60,000 of each body's cells
+#|   at their centroids); the body length, width and height are printed per
+#|   panel and the black arrow is the far-field direction $\hat g_1$, the same
+#|   for every body. How to read this: within a row the bodies are morphs of
+#|   one family, between the rows the rear end changes class; the scale is the
+#|   one of @fig-problem-shift-suv and @fig-problem-drivaer so the three
+#|   car sets can be compared by eye; colors are the reference CFD field, not
+#|   predictions. Data: results/sample_figures_2026-10-02/shift_suv.npz.
+#| code-fold: true
+Ss_, Ssm = load_samples("shift_suv")
+cs = Ssm["cases"]; so = Ss_["surf_offsets"]
+norm = TwoSlopeNorm(vcenter=0.0, vmin=-1.5, vmax=1.0)
+xlim = (min(c["bbox"][0][0] for c in cs) - 0.3, max(c["bbox"][1][0] for c in cs) + 0.3)
+zlim = (min(c["bbox"][0][2] for c in cs) - 0.1, max(c["bbox"][1][2] for c in cs) + 0.6)
+fig, axes = plt.subplots(2, 3, figsize=(8, 4.4), sharex=True, sharey=True, gridspec_kw=dict(hspace=0.3, wspace=0.05))
+for i, c in enumerate(cs):
+    ax = axes[i // 3, i % 3]
+    sp = part(Ss_["surf_points"], so, i); cp = part(Ss_["surf_cp"], so, i)
+    sc = depth_scatter(ax, sp[:, [0, 2]], sp[:, 1], cp, s=1.2, cmap=DIVERGING, norm=norm); map_axes(ax)
+    ax.set_xlim(*xlim); ax.set_ylim(*zlim)
+    ax.set_title(f"{c['family']} {c['case']}\nL {c['length']:.2f} m, W {c['width']:.2f} m, H {c['height']:.2f} m", fontsize=7.8)
+    if i == 0:
+        x0 = c["bbox"][0][0]; z0 = c["bbox"][1][2] + 0.35
+        ax.annotate("", xy=(x0 + 1.2, z0), xytext=(x0, z0), arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.6))
+        ax.text(x0 + 1.35, z0, f"$\\hat g_1$, {np.linalg.norm(c['U_inf']):.0f} m/s", ha="left", va="center", fontsize=7.5, color=INK2)
+    if i % 3 == 0: ax.set_ylabel("z [m]")
+    if i // 3 == 1: ax.set_xlabel("x [m]")
+cb = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.01, extend="min"); cb.set_label("$C_p$ [–]"); cb.outline.set_visible(False)
 plt.show()
 ```
 

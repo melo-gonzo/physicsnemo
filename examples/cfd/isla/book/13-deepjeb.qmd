@@ -34,6 +34,18 @@ def load_problem(name):
     z = np.load(PF / f"{name}.npz"); meta = json.load(open(PF / f"{name}.json"))
     return {k: z[k] for k in z.files}, meta
 
+SF = RES / "sample_figures_2026-10-02"
+
+def load_samples(name):
+    """Several samples of a dataset, reduced for plotting (results/sample_figures_2026-10-02/); per-sample arrays are
+    concatenated and cut with the matching ``*_offsets`` array via ``part``."""
+    z = np.load(SF / f"{name}.npz"); meta = json.load(open(SF / f"{name}.json"))
+    return {k: z[k] for k in z.files}, meta
+
+def part(a, off, i):
+    """Rows of the concatenated array ``a`` that belong to sample ``i``."""
+    return a[off[i]:off[i + 1]]
+
 def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
     """Draw line cells colored by boundary-condition kind (keys of palette.BC)."""
     segs = pts[cells][:, :, :2]
@@ -87,7 +99,63 @@ def protocol_table(artifact, label, setting):
 
 **DeepJEB++ is 15,360 generated jet-engine brackets in the SimJEB design space, each solved by linear static finite elements under four load cases applied at the lug bore with the bolt holes clamped.** The model receives the surface triangles with the fixed and loaded labels and the traction as boundary scalars, the load direction as its one global vector and a force-or-torque one-hot as two global scalars (a moment axis is a pseudovector, so the model is told when the vector is an axis), and predicts von Mises stress and displacement at the cells.
 
-<!-- fig-deepjeb-samples: pending CHAR -->
+```{python}
+#| label: para-deepjeb-samples
+#| output: asis
+Js_, Jsm = load_samples("deepjeb")
+cs = Jsm["cases"]; mr = Jsm["test_mass_range_g"]; lc = Jsm["load_cases"]
+print(f"@fig-deepjeb-samples shows six clean test brackets at the 0, 20, 40, 60, 80 and 100% quantiles of bracket mass (the {Jsm['n_test_brackets']:,} "
+      f"clean test brackets weigh {mr[0]:.0f} to {mr[1]:.0f} g; the six shown {cs[0]['mass_g']:.0f} to {cs[-1]['mass_g']:.0f} g), each under one of the "
+      f"four load cases: vertical, horizontal and diagonal forces of {lc['ver']['magnitude'] / 1e3:.1f}, {lc['hor']['magnitude'] / 1e3:.1f} and "
+      f"{lc['dia']['magnitude'] / 1e3:.1f} kN and a torsion of {lc['tor']['magnitude'] / 1e3:.0f} N·m about $z$, so the load direction and the "
+      "force-or-torque one-hot both change from panel to panel while the clamped bolt holes and the loaded lug bore keep their roles.")
+```
+
+```{python}
+#| label: fig-deepjeb-samples
+#| fig-cap: >
+#|   Six DeepJEB++ clean test brackets spanning the mass range, each under one
+#|   load case, seen along $y$ (the $x$–$z$ plane, in which every load
+#|   direction lies). The surface cells are colored by the von Mises stress on
+#|   one shared scale, except the cells that carry a condition, which are drawn
+#|   in the condition's color: clamped bolt holes (value) and the loaded lug
+#|   bore (flux). The black arrow from the lug is the load direction, the one
+#|   global vector; the text names the load case, its magnitude and the
+#|   force-or-torque one-hot, the two global scalars, and the bracket's mass.
+#|   How to read this: the geometry is generated, not a morph of one body, so
+#|   the six outlines differ in kind; a torsion's arrow is its axis, not a
+#|   force; the stress scale is clipped at the 95th percentile of the cells
+#|   shown because a bracket's maximum sits in a few cells at the bolt holes
+#|   and the lug; colors are the reference FEM field,
+#|   not predictions. Data: results/sample_figures_2026-10-02/deepjeb.npz.
+#| code-fold: true
+Js_, Jsm = load_samples("deepjeb")
+cs = Jsm["cases"]; co = Js_["bnd_cell_offsets"]
+vmax = float(np.quantile(Js_["von_mises"], 0.95))
+NAME = {"ver": "vertical force", "hor": "horizontal force", "dia": "diagonal force", "tor": "torsion about $z$"}
+fig, axes = plt.subplots(2, 3, figsize=(8, 6.4), gridspec_kw=dict(hspace=0.55, wspace=0.18))
+for i, c in enumerate(cs):
+    ax = axes[i // 3, i % 3]
+    cen = part(Js_["centroids"], co, i); vm = part(Js_["von_mises"], co, i)
+    fixed = part(Js_["bc_fixed"], co, i) > 0.5; loaded = part(Js_["bc_loaded"], co, i) > 0.5
+    sc = depth_scatter(ax, cen[:, [0, 2]], cen[:, 1], vm, s=1.6, cmap=SEQUENTIAL, vmin=0, vmax=vmax); map_axes(ax)
+    ax.scatter(cen[fixed, 0], cen[fixed, 2], s=2.0, c=BC["value"], lw=0, rasterized=True, zorder=3)
+    ax.scatter(cen[loaded, 0], cen[loaded, 2], s=2.0, c=BC["flux"], lw=0, rasterized=True, zorder=3)
+    d = np.array(c["load_dir"]); lug = cen[loaded].mean(axis=0); Lc = 0.3 * (cen[:, 2].max() - cen[:, 2].min() + cen[:, 0].max() - cen[:, 0].min()) / 2
+    ax.annotate("", xy=(lug[0] + Lc * d[0], lug[2] + Lc * d[2]), xytext=(lug[0], lug[2]), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0), zorder=6)
+    mag = f"{c['load_magnitude'] / 1e3:.1f} kN" if c["load_type"] == "force" else f"{c['load_magnitude'] / 1e3:.0f} N·m"
+    oh = c["load_type_onehot"]
+    ax.set_title(f"{c['bracket']}, {c['mass_g']:.0f} g\n{NAME[c['load']]}, {mag}\none-hot [force, torque] = [{oh[0]:.0f}, {oh[1]:.0f}]", fontsize=7.8)
+    ax.set_xlabel("x [mm]"); ax.set_ylabel("z [mm]") if i % 3 == 0 else None
+    ax.margins(0.08)
+cb = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.01, extend="max"); cb.set_label("von Mises [MPa]"); cb.outline.set_visible(False)
+from matplotlib.lines import Line2D
+fig.legend(handles=[Line2D([], [], color=BC["value"], marker="o", ls="none", ms=6, label="clamped bolt holes: $u$ = 0 (value)"),
+                    Line2D([], [], color=BC["flux"], marker="o", ls="none", ms=6, label="loaded lug bore: traction (flux)"),
+                    Line2D([], [], color=INK, marker=">", ls="-", ms=6, label="load direction $\\hat g_1$ (force) or axis (torsion)")],
+           loc="lower center", ncol=3, fontsize=7.8, bbox_to_anchor=(0.45, -0.01))
+plt.show()
+```
 
 **Diversity.** The geometry is the most varied in the book: the brackets are generated shapes spanning a design space rather than morphs of one body, each appears under four loads whose direction is a genuine global variable, and the loading itself changes kind between force and torque (@sec-parametric). The price is label quality: a census of the stress fields found unphysical maxima on a tenth of the brackets, and the clean split used here removes those without making the remaining fields smooth.
 

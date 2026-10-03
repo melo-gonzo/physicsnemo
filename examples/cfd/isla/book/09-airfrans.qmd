@@ -55,6 +55,18 @@ def load_problem(name):
     z = np.load(PF / f"{name}.npz"); meta = json.load(open(PF / f"{name}.json"))
     return {k: z[k] for k in z.files}, meta
 
+SF = RES / "sample_figures_2026-10-02"
+
+def load_samples(name):
+    """Several samples of a dataset, reduced for plotting (results/sample_figures_2026-10-02/); per-sample arrays are
+    concatenated and cut with the matching ``*_offsets`` array via ``part``."""
+    z = np.load(SF / f"{name}.npz"); meta = json.load(open(SF / f"{name}.json"))
+    return {k: z[k] for k in z.files}, meta
+
+def part(a, off, i):
+    """Rows of the concatenated array ``a`` that belong to sample ``i``."""
+    return a[off[i]:off[i + 1]]
+
 def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
     """Draw line cells colored by boundary-condition kind (keys of palette.BC)."""
     segs = pts[cells][:, :, :2]
@@ -149,6 +161,54 @@ sc = field_scatter(ax, ip[:, :2], A["int_umag"], s=2.5, vmin=0, vmax=1.3); map_a
 ax.add_collection(LineCollection(bp[bc][:, :, :2], colors=WHITE, linewidths=0.8, zorder=3)); ax.set_ylabel("y / chord [–]"); ax.set_xlabel("x / chord [–]")
 ax.set_title("speed ratio $|U| / U_\\infty$ at the interior points (target)", fontsize=9.5)
 small_colorbar(fig, sc, ax, "$|U| / U_\\infty$ [–]", extend="max")
+plt.show()
+```
+
+```{python}
+#| label: para-airfrans-samples
+#| output: asis
+As_, Asm = load_samples("airfrans")
+cs = Asm["cases"]; tr = Asm["test_ranges"]; Us = [c["U_inf_mag"] for c in cs]
+print(f"@fig-airfrans-samples shows six of the {Asm['n_test']} test cases, chosen to span the two global inputs: the four corners of the "
+      f"(Re, angle of attack) rectangle, which over the test set runs from Re = {tr['Re'][0] / 1e6:.1f} to {tr['Re'][1] / 1e6:.1f} million and from "
+      f"{tr['aoa_deg'][0]:.1f}° to {tr['aoa_deg'][1]:.1f}°, and the two cases nearest its centre, one four-digit and one five-digit NACA section; "
+      f"the inlet speed, the one global scalar, runs from {min(Us):.0f} to {max(Us):.0f} m/s across the six, and every case has its own airfoil and its own mesh.")
+```
+
+```{python}
+#| label: fig-airfrans-samples
+#| fig-cap: >
+#|   Six AirfRANS test cases at the corners and the centre of the (Reynolds
+#|   number, angle of attack) range, each showing the speed ratio
+#|   $|U| / U_\infty$ at the interior mesh points in a window around the
+#|   airfoil (35,000 of each case's points), the airfoil polyline in white and
+#|   the inlet direction $\hat g_1$ as a black arrow at the case's angle; the
+#|   Reynolds number, the angle, the inlet speed (the one global scalar) and
+#|   the NACA family are printed per panel. One color scale for all six. How to
+#|   read this: left to right the Reynolds number rises, top to bottom the
+#|   angle; the stagnation point moves under the nose and the wake leaves the
+#|   trailing edge thicker and inclined as the angle rises, which the model
+#|   must learn from the direction vector alone; dot density follows the
+#|   mesh, fine near the wall and in the wake; colors
+#|   are the reference CFD field, not predictions. Data:
+#|   results/sample_figures_2026-10-02/airfrans.npz.
+#| code-fold: true
+As_, Asm = load_samples("airfrans")
+cs = Asm["cases"]; io = As_["int_offsets"]; po = As_["bnd_point_offsets"]; co = As_["bnd_cell_offsets"]
+fig, axes = plt.subplots(3, 2, figsize=(8, 8.8), sharex=True, sharey=True, gridspec_kw=dict(hspace=0.3, wspace=0.05))
+for i, c in enumerate(cs):
+    ax = axes[i // 2, i % 2]
+    ip = part(As_["int_points"], io, i); um = part(As_["int_umag"], io, i)
+    bp = part(As_["bnd_points"], po, i); bc = part(As_["bnd_cells"], co, i)
+    sc = field_scatter(ax, ip[:, :2], um, s=2.2, vmin=0, vmax=1.3); map_axes(ax)
+    ax.add_collection(LineCollection(bp[bc][:, :, :2], colors=WHITE, linewidths=0.9, zorder=3))
+    u = As_["U_inf_dir"][i]; ax.annotate("", xy=(-0.4 + 0.25 * u[0], 0.4 + 0.25 * u[1]), xytext=(-0.4, 0.4), arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.8))
+    ax.text(-0.1, 0.42, f"$\\hat g_1$ at {c['aoa_deg']:.1f}°", ha="left", va="center", fontsize=7.8, color=INK, path_effects=halo())
+    ax.set_xlim(-0.5, 1.6); ax.set_ylim(-0.6, 0.6)
+    ax.set_title(f"Re = {c['Re'] / 1e6:.1f} million, $\\alpha$ = {c['aoa_deg']:.1f}°\n$U_\\infty$ = {c['U_inf_mag']:.0f} m/s, NACA {'five' if c['naca_five_digit'] else 'four'}-digit section", fontsize=8.3)
+    if i % 2 == 0: ax.set_ylabel("y / chord [–]")
+    if i // 2 == 2: ax.set_xlabel("x / chord [–]")
+cb = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.01, extend="max"); cb.set_label("$|U| / U_\\infty$ [–]"); cb.outline.set_visible(False)
 plt.show()
 ```
 

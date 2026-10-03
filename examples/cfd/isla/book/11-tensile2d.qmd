@@ -39,6 +39,18 @@ def load_problem(name):
     z = np.load(PF / f"{name}.npz"); meta = json.load(open(PF / f"{name}.json"))
     return {k: z[k] for k in z.files}, meta
 
+SF = RES / "sample_figures_2026-10-02"
+
+def load_samples(name):
+    """Several samples of a dataset, reduced for plotting (results/sample_figures_2026-10-02/); per-sample arrays are
+    concatenated and cut with the matching ``*_offsets`` array via ``part``."""
+    z = np.load(SF / f"{name}.npz"); meta = json.load(open(SF / f"{name}.json"))
+    return {k: z[k] for k in z.files}, meta
+
+def part(a, off, i):
+    """Rows of the concatenated array ``a`` that belong to sample ``i``."""
+    return a[off[i]:off[i + 1]]
+
 def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
     """Draw line cells colored by boundary-condition kind (keys of palette.BC)."""
     segs = pts[cells][:, :, :2]
@@ -135,6 +147,65 @@ ax = axes[2]
 um = np.linalg.norm(T["displacement"], axis=1)
 sc = field_scatter(ax, T["int_points"][:, :2], um * 1e3, s=4.0, vmin=0); map_axes(ax); ax.set_xlabel("x [dataset units]")
 ax.set_title("displacement magnitude $|u|$ (target)", fontsize=9.5); small_colorbar(fig, sc, ax, "$|u|$ [$10^{-3}$ length units]")
+plt.show()
+```
+
+```{python}
+#| label: para-tensile2d-samples
+#| output: asis
+Ts_, Tsm = load_samples("tensile2d")
+cs = Tsm["cases"]; gl = [c["globals"] for c in cs]
+_rg = lambda k: (min(x[k] for x in gl), max(x[k] for x in gl))
+print(f"@fig-tensile2d-samples shows six specimens at the 0, 20, 40, 60, 80 and 100% quantiles of the waist width, from "
+      f"{cs[0]['waist_width']:.2f} to {cs[-1]['waist_width']:.2f} of the unit half-width. Across the six the applied pressure $P$ runs from "
+      f"{_rg('P')[0]:.1f} to {_rg('P')[1]:.1f} and the material parameters " + ", ".join(f"$p_{i}$ from {_rg(f'p{i}')[0]:g} to {_rg(f'p{i}')[1]:g}" for i in range(1, 6))
+      + f"; the meshes have {min(c['n_nodes'] for c in cs):,} to {max(c['n_nodes'] for c in cs):,} nodes.")
+```
+
+```{python}
+#| label: fig-tensile2d-samples
+#| fig-cap: >
+#|   Six PLAID Tensile2d specimens spanning the waist-width range, narrowest at
+#|   the top left to widest at the bottom right. In each panel the outer
+#|   boundary is colored by the condition each line cell carries (loaded top
+#|   edge, the pressure $P$ as a traction; fixed bottom edge with the pinned
+#|   corner marked by a triangle; free notches), the nodes are colored by the
+#|   axial stress $\sigma_{22}$ on one shared scale, and the box lists the six
+#|   global scalars of the case, $P$ and the five material parameters. How to
+#|   read this: the shape, the load and the material all change between
+#|   panels; the stress scale is clipped at its top so the notch concentration
+#|   does not wash out the rest; coordinates are the dataset's (a unit
+#|   half-width) and every node drawn is a query token. Data:
+#|   results/sample_figures_2026-10-02/tensile2d.npz.
+#| code-fold: true
+Ts_, Tsm = load_samples("tensile2d")
+cs = Tsm["cases"]; io = Ts_["int_offsets"]; po = Ts_["bnd_point_offsets"]; co = Ts_["bnd_cell_offsets"]
+vmax = float(np.quantile(Ts_["sig22"], 0.995))
+fig, axes = plt.subplots(2, 3, figsize=(8, 5.4), sharex=True, sharey=True, gridspec_kw=dict(hspace=0.3, wspace=0.05))
+for i, c in enumerate(cs):
+    ax = axes[i // 3, i % 3]
+    ip = part(Ts_["int_points"], io, i); s22 = part(Ts_["sig22"], io, i)
+    bp = part(Ts_["bnd_points"], po, i); bc = part(Ts_["bnd_cells"], co, i); mid = bp[bc].mean(axis=1)
+    loaded = part(Ts_["bc_loaded"], co, i); fixed = part(Ts_["bc_fixed"], co, i); pinned = part(Ts_["bc_pinned"], co, i)
+    kinds = np.where(loaded > 0.5, "flux", np.where(fixed > 0.5, "value", "free"))
+    sc = field_scatter(ax, ip[:, :2], s22, s=2.4, vmin=0, vmax=vmax); map_axes(ax)
+    bc_segments(ax, bp, bc, kinds, lw=3.0)
+    pin = mid[pinned > 0.5]; ax.plot(pin[:, 0], pin[:, 1], marker="^", ms=7, color=BC["value"], mec=INK, ls="none", zorder=5)
+    g = c["globals"]
+    ax.text(0.0, 1.06, f"P = {g['P']:.1f}", ha="center", va="bottom", fontsize=8, color=BC["flux"], path_effects=halo())
+    ax.text(-1.95, 1.0, "\n".join(f"$p_{k}$ = {g[f'p{k}']:g}" for k in range(1, 6)), ha="left", va="top", fontsize=7.2, color=INK2,
+            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=BASELINE))
+    ax.set_xlim(-2.0, 1.2); ax.set_ylim(-1.25, 1.3)
+    ax.set_title(f"{c['case']}: waist {c['waist_width']:.2f}", fontsize=8.5)
+    if i % 3 == 0: ax.set_ylabel("y [dataset units]")
+    if i // 3 == 1: ax.set_xlabel("x [dataset units]")
+cb = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.01, extend="max"); cb.set_label("$\\sigma_{22}$ [MPa]"); cb.outline.set_visible(False)
+from matplotlib.lines import Line2D
+fig.legend(handles=[Line2D([], [], color=BC["flux"], lw=4, label="loaded edge: pressure P (flux)"),
+                    Line2D([], [], color=BC["value"], lw=4, label="fixed edge: $u_2$ = 0 (value)"),
+                    Line2D([], [], color=BC["value"], marker="^", mec=INK, ls="none", ms=7, label="pinned corner: $u_1$ = 0"),
+                    Line2D([], [], color=BC["free"], lw=4, label="notches: free")],
+           loc="lower center", ncol=4, fontsize=7.8, bbox_to_anchor=(0.45, -0.01))
 plt.show()
 ```
 

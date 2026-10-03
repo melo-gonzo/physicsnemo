@@ -86,6 +86,18 @@ def load_problem(name):
     z = np.load(PF / f"{name}.npz"); meta = json.load(open(PF / f"{name}.json"))
     return {k: z[k] for k in z.files}, meta
 
+SF = RES / "sample_figures_2026-10-02"
+
+def load_samples(name):
+    """Several samples of a dataset, reduced for plotting (results/sample_figures_2026-10-02/); per-sample arrays are
+    concatenated and cut with the matching ``*_offsets`` array via ``part``."""
+    z = np.load(SF / f"{name}.npz"); meta = json.load(open(SF / f"{name}.json"))
+    return {k: z[k] for k in z.files}, meta
+
+def part(a, off, i):
+    """Rows of the concatenated array ``a`` that belong to sample ``i``."""
+    return a[off[i]:off[i + 1]]
+
 def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
     """Draw line cells colored by boundary-condition kind (keys of palette.BC)."""
     segs = pts[cells][:, :, :2]
@@ -183,6 +195,68 @@ ax.set_ylabel("z [m]"); ax.set_xlabel("x [m]"); ax.set_title("symmetry plane $y 
 ib = D["interior_bbox"]
 note(ax, f"volume mesh (query domain): {ib[0,0]:.0f} < x < {ib[1,0]:.0f} m, {ib[0,1]:.0f} < y < {ib[1,1]:.0f} m, {ib[0,2]:.1f} < z < {ib[1,2]:.0f} m\nground plane at z = {ib[0,2]:.2f} m (not an input)", loc="upper right")
 cb2 = fig.colorbar(sc2, ax=[ax], fraction=0.025, pad=0.01, extend="max"); cb2.set_label("$|U| / U_\\infty$ [–]"); cb2.outline.set_visible(False)
+plt.show()
+```
+
+```{python}
+#| label: para-drivaer-samples
+#| output: asis
+Ds_, Dsm = load_samples("drivaer")
+cs = Dsm["cases"]; Lb = [c["length"] for c in cs]; Wb = [c["width"] for c in cs]; Hb = [c["height"] for c in cs]
+print(f"One car is one point of the family. @fig-drivaer-samples shows six of the {Dsm['n_val']} validation cars, taken at evenly spaced "
+      f"positions of the validation list: among them the body length runs from {min(Lb):.2f} to {max(Lb):.2f} m, the width from {min(Wb):.2f} to "
+      f"{max(Wb):.2f} m and the height from {min(Hb):.2f} to {max(Hb):.2f} m, while the far field is the same {np.linalg.norm(cs[0]['U_inf']):.1f} m/s "
+      "along $\\hat g_1$ in every case, so the global inputs carry no information and the surface alone distinguishes the cases.")
+```
+
+```{python}
+#| label: fig-drivaer-samples
+#| fig-cap: >
+#|   Six DrivAerML validation cars (of 48), taken at evenly spaced positions of
+#|   the validation list, each seen from the side and colored by the surface
+#|   pressure coefficient $C_p$ on one shared scale (60,000 of each car's cells
+#|   drawn at their centroids); the body length, width and height are printed
+#|   per car. Bottom: the symmetry plane $y = 0$ of the volume mesh for the
+#|   first and the last of them, colored by the speed ratio $|U| / U_\infty$,
+#|   with the car's outline in black; these are the points the Volume task
+#|   queries. The far-field flow (black arrow, $\hat g_1$) is the same for every
+#|   car. How to read this: what changes from panel to panel is the geometry
+#|   alone; the colors are the reference CFD fields, not predictions, and the
+#|   dots are a random subset of the cells, so their density is not the mesh
+#|   resolution. Data: results/sample_figures_2026-10-02/drivaer.npz.
+#| code-fold: true
+Ds_, Dsm = load_samples("drivaer")
+cs = Dsm["cases"]; so = Ds_["surf_offsets"]; lo = Ds_["slice_offsets"]
+norm = TwoSlopeNorm(vcenter=0.0, vmin=-1.5, vmax=1.0)
+fig = plt.figure(figsize=(8, 7.8))
+gs = fig.add_gridspec(4, 2, height_ratios=[1, 1, 1, 1.05], hspace=0.7, wspace=0.06)
+xlim = (min(c["bbox"][0][0] for c in cs) - 0.3, max(c["bbox"][1][0] for c in cs) + 0.3)
+zlim = (min(c["bbox"][0][2] for c in cs) - 0.1, max(c["bbox"][1][2] for c in cs) + 0.5)
+surf_axes = []
+for i, c in enumerate(cs):
+    ax = fig.add_subplot(gs[i // 2, i % 2]); surf_axes.append(ax)
+    sp = part(Ds_["surf_points"], so, i); cp = part(Ds_["surf_cp"], so, i)
+    sc = depth_scatter(ax, sp[:, [0, 2]], sp[:, 1], cp, s=2.0, cmap=DIVERGING, norm=norm); map_axes(ax)
+    ax.set_xlim(*xlim); ax.set_ylim(*zlim)
+    ax.set_title(f"{c['case']}: L {c['length']:.2f} m, W {c['width']:.2f} m, H {c['height']:.2f} m", fontsize=8.3)
+    ax.set_ylabel("z [m]") if i % 2 == 0 else ax.set_yticklabels([])
+    ax.set_xlabel("x [m]") if i // 2 == 2 else ax.set_xticklabels([])
+    if i == 0:
+        x0 = c["bbox"][0][0] + 0.1; z0 = c["bbox"][1][2] + 0.28
+        ax.annotate("", xy=(x0 + 0.8, z0), xytext=(x0, z0), arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.8))
+        ax.text(x0 + 0.95, z0, f"$\\hat g_1$, $U_\\infty$ = {np.linalg.norm(c['U_inf']):.1f} m/s (every car)", ha="left", va="center", fontsize=7.6, color=INK2)
+cb = fig.colorbar(sc, ax=surf_axes, fraction=0.02, pad=0.01, extend="min", shrink=0.8); cb.set_label("$C_p$ [–]"); cb.outline.set_visible(False)
+slice_axes = []
+names = [c["case"] for c in cs]
+for j, case in enumerate(Dsm["slice_cases"]):
+    ax = fig.add_subplot(gs[3, j]); slice_axes.append(ax)
+    q = part(Ds_["slice_points"], lo, j); um = part(Ds_["slice_umag"], lo, j)
+    sc2 = ax.scatter(q[:, 0], q[:, 2], c=um, s=1.2, lw=0, cmap=SEQUENTIAL, vmin=0, vmax=1.3, rasterized=True); map_axes(ax)
+    sp = part(Ds_["surf_points"], so, names.index(case)); sil = sp[np.abs(sp[:, 1]) < 0.03]
+    ax.scatter(sil[:, 0], sil[:, 2], s=0.6, c=INK, lw=0, rasterized=True)
+    ax.set_title(f"{case}: symmetry plane, $|U| / U_\\infty$", fontsize=8.3); ax.set_xlabel("x [m]")
+    ax.set_ylabel("z [m]") if j == 0 else ax.set_yticklabels([])
+cb2 = fig.colorbar(sc2, ax=slice_axes, fraction=0.02, pad=0.01, extend="max"); cb2.set_label("$|U| / U_\\infty$ [–]"); cb2.outline.set_visible(False)
 plt.show()
 ```
 

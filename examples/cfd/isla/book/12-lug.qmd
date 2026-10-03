@@ -30,6 +30,18 @@ def load_problem(name):
     z = np.load(PF / f"{name}.npz"); meta = json.load(open(PF / f"{name}.json"))
     return {k: z[k] for k in z.files}, meta
 
+SF = RES / "sample_figures_2026-10-02"
+
+def load_samples(name):
+    """Several samples of a dataset, reduced for plotting (results/sample_figures_2026-10-02/); per-sample arrays are
+    concatenated and cut with the matching ``*_offsets`` array via ``part``."""
+    z = np.load(SF / f"{name}.npz"); meta = json.load(open(SF / f"{name}.json"))
+    return {k: z[k] for k in z.files}, meta
+
+def part(a, off, i):
+    """Rows of the concatenated array ``a`` that belong to sample ``i``."""
+    return a[off[i]:off[i + 1]]
+
 def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
     """Draw line cells colored by boundary-condition kind (keys of palette.BC)."""
     segs = pts[cells][:, :, :2]
@@ -123,6 +135,63 @@ ax2.set_xlabel("x [mm]"); ax2.set_ylabel("y [mm]"); ax2.set_title("von Mises str
 small_colorbar(fig, sc, ax2, "von Mises [MPa]", extend="max")
 fig.text(0.5, 0.0, f"this sample's global scalars: hole radius {1e3 * g['hole_radius']:.1f} mm, length {1e3 * g['length']:.1f} mm, thickness {1e3 * g['thickness']:.1f} mm, pressure {g['pressure_mpa']:.1f} MPa",
          ha="center", va="top", fontsize=8.5, color=INK2)
+plt.show()
+```
+
+```{python}
+#| label: para-lug-samples
+#| output: asis
+Ls_, Lsm = load_samples("lug")
+tr = Lsm["test_ranges"]
+print(f"@fig-lug-samples shows the six test brackets at the ends of three parameter ranges: the smallest and the largest hole radius, thickness and "
+      f"pressure. Over the {Lsm['n_test']} test cases the hole radius runs from {1e3 * tr['hole_radius'][0]:.1f} to {1e3 * tr['hole_radius'][1]:.1f} mm, "
+      f"the length from {1e3 * tr['length'][0]:.0f} to {1e3 * tr['length'][1]:.0f} mm, the thickness from {1e3 * tr['thickness'][0]:.1f} to "
+      f"{1e3 * tr['thickness'][1]:.1f} mm and the pressure from {tr['pressure_mpa'][0]:.0f} to {tr['pressure_mpa'][1]:.0f} MPa.")
+```
+
+```{python}
+#| label: fig-lug-samples
+#| fig-cap: >
+#|   Six GINOT Bracket Lug test cases at the ends of the parameter ranges, one
+#|   per column. Top row: the surface triangles that are the boundary tokens,
+#|   colored by condition (clamped end face, value; pressed lower half of the
+#|   hole, flux; the rest free), in the orthographic view of @fig-problem-lug.
+#|   Bottom row: the von Mises stress at the nodes projected along the hole's
+#|   axis, top face nearest, on one shared scale; the four global scalars of
+#|   each case are printed under it. How to read this: each column is one
+#|   case, chosen as the smallest or the largest value of one parameter among
+#|   the test cases (named above it), so the columns span the ranges rather
+#|   than sample them evenly; the stress scale is clipped at its top. Data:
+#|   results/sample_figures_2026-10-02/lug.npz.
+#| code-fold: true
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+Ls_, Lsm = load_samples("lug")
+cs = Lsm["cases"]; io = Ls_["int_offsets"]; po = Ls_["bnd_point_offsets"]; co = Ls_["bnd_cell_offsets"]
+vmax = float(np.quantile(Ls_["von_mises"], 0.995))
+fig = plt.figure(figsize=(8.5, 3.9))
+gs = fig.add_gridspec(2, 6, height_ratios=[1, 1.0], hspace=0.0, wspace=0.08, left=0.03, right=0.9, top=0.88, bottom=0.16)
+for i, c in enumerate(cs):
+    bp = part(Ls_["bnd_points"], po, i) * 1e3; bc = part(Ls_["bnd_cells"], co, i)
+    loaded = part(Ls_["bc_loaded"], co, i); fixed = part(Ls_["bc_fixed"], co, i)
+    kinds = np.where(loaded > 0.5, "flux", np.where(fixed > 0.5, "value", "free"))
+    ax = fig.add_subplot(gs[0, i], projection="3d"); ax.set_proj_type("ortho")
+    face = np.array([BC[k] if k != "free" else "#d9d8d0" for k in kinds])
+    ax.add_collection3d(Poly3DCollection(bp[bc], facecolors=face, edgecolors="none"))
+    ext = bp.max(0) - bp.min(0)
+    ax.set_xlim(bp[:, 0].min(), bp[:, 0].max()); ax.set_ylim(bp[:, 1].min(), bp[:, 1].max()); ax.set_zlim(bp[:, 2].min(), bp[:, 2].max())
+    ax.set_box_aspect(tuple(ext / ext.max()), zoom=1.45); ax.view_init(elev=30, azim=-60); ax.set_axis_off()
+    ax.set_title(c["role"].replace("pressure_mpa", "pressure").replace("_", " "), fontsize=8, loc="center")
+    ax2 = fig.add_subplot(gs[1, i])
+    ip = part(Ls_["int_points"], io, i) * 1e3; vm = part(Ls_["von_mises"], io, i)
+    sc = depth_scatter(ax2, ip[:, [0, 1]], ip[:, 2], vm, s=5.0, cmap=SEQUENTIAL, vmin=0, vmax=vmax); map_axes(ax2)
+    ax2.set_xticks([]); ax2.set_yticks([])
+    g = c["globals"]
+    ax2.set_xlabel(f"r {1e3 * g['hole_radius']:.1f} mm, L {1e3 * g['length']:.0f} mm\nt {1e3 * g['thickness']:.1f} mm, p {g['pressure_mpa']:.0f} MPa", fontsize=7.4)
+cb = fig.colorbar(sc, ax=fig.axes, fraction=0.025, pad=0.01, extend="max", location="right", shrink=0.45, anchor=(0, 0.0)); cb.set_label("von Mises [MPa]"); cb.outline.set_visible(False)
+from matplotlib.patches import Patch
+fig.legend(handles=[Patch(color=BC["value"], label="clamped end face: $u$ = 0 (value)"), Patch(color=BC["flux"], label="lower half of the hole: pressure p (flux)"),
+                    Patch(color="#d9d8d0", label="outer surface and upper hole: free")], loc="upper center", ncol=3, fontsize=7.8, bbox_to_anchor=(0.46, 1.0))
+fig.text(0.46, 0.53, "von Mises stress at the nodes (target), seen along the hole's axis; the top face nearest", ha="center", va="center", fontsize=8.2, color=INK2)
 plt.show()
 ```
 
