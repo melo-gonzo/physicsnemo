@@ -33034,8 +33034,77 @@ and these three at 100,000. They joined the DrivAerML Surface lanes (rows
 22 to 27 of `kernel/char/r80_lanes.tsv`), and the whole frontier of the
 three architectures, fourteen candidates with two seeds, launched as the
 210-wing twin on `highlift_surface_medium` (rows 28 to 55, validation
-every 25 epochs as in the other wing lanes). The scorer evaluates every
-`*_c100k_*` lane at 100,000 cells, the training count, as it does for
-AirfRANS. The reference configurations are chosen when both datasets are
-scored: lowest seed-mean headline error, ties within 3% to the cheaper
-candidate.
+every 25 epochs as in the other wing lanes). Every candidate is scored at
+the reporting protocol, 200,000 cells, including the `*_c100k_*` lanes
+that trained at 100,000 (their 100,000-cell scoring is kept as a secondary
+reading; the first version of this entry had the scorer evaluate them at
+the training count, which would have compared the architectures at
+different evaluation resolutions, and was corrected on 2026-10-03 before
+any selection). The reference configurations are chosen when both
+datasets are scored: lowest seed-mean headline error, ties within 3% to
+the cheaper candidate.
+
+## 2026-10-03 — Status, CHAR-PROTOCOLS instruments built: `_area` (uniform-on-measure Poisson draw with exact Horvitz-Thompson weights) and `_posed` (keyed rotation plus one-RMS-radius translation, in-plane for planar sets, stress components rotated as a tensor) variants for every campaign dataset, a per-lane protocol scorer, and smoke tests on finished checkpoints: ISLA's posed error equals its native error to three decimals on every centered pipeline, the baselines move 1.1x to 22x; two anomalies opened (a translation crash on AirfRANS, a 6x to 12x area-draw shift of the DrivAerML Volume model) {#sec-nb-char-protocols-instruments}
+
+**Setting.** The characterization campaign (@sec-nb-char-prereg) scores
+every lane under three protocols: the native mesh draw, a uniform-on-the-
+surface point-cloud draw ("what an STL gives without a volume mesh"), and
+the validation cases in a random rigid pose. The instruments existed only
+for DrivAerML Surface (POSE-BENCH and TRAIN-AREA-DR). A fresh agent built
+them for every campaign dataset; the brief and the full report are in the
+session record.
+
+**What was built.** In `recipe_v8/datasets/`, `<base>_area.yaml` and
+`<base>_posed.yaml` beside every campaign base yaml (DrivAerML Surface and
+Volume, HiLift medium, AirfRANS 2-D and 3-D, Shift-SUV, Tensile2D 2-D and
+3-D, lug, DeepJEB++), identical to the base except the protocol transform.
+The area variant draws from a one-million-cell pool with
+`PoissonBiasedSubsampleMesh(weight_mode=area)` in place of the native
+subsampling, on whatever the pipeline subsamples (the boundary surface; the
+interior point clouds carry no cell measure and are untouched; where the
+boundary is kept whole, as on AirfRANS, Tensile2D and the lug, the area
+variant is the identity by construction). The posed variant applies
+`FixedRandomPose(salt=0, translate=1.0)` as the first transform: the
+POSE-BENCH keyed SO(3) rotation (its stream unchanged, verified by digest
+over 503 keys) plus a translation of one RMS point radius in a keyed
+direction; planar problems rotate in their plane only (`axis: 2` for the
+3-D-stored Tensile2D and AirfRANS, placed before `RestrictToPlane` so the
+2-D and 3-D variants of one dataset receive the identical angle), and
+Tensile2D's component-stored stresses rotate as a tensor
+(`symmetric_tensor_fields`). The recipe's `CenterMesh` removes the
+translation on the external-aero and DeepJEB++ pipelines; AirfRANS,
+Tensile2D and the lug have no centering step, so there the translation
+reaches the model. The scorer `kernel/char/protocol_eval.sbatch` evaluates
+a finished lane under the three protocols from the fleet manifest
+(`protocol_launch.sh <run_id>`; reducer `protocol_table.py`), writing to
+`evals_char/<run>/<protocol>/`. Local source change: 335 recipe tests pass
+(d32aee9b4).
+
+**Smoke results (finished or interim checkpoints; ratios against the
+native protocol).** ISLA reference on DrivAerML Surface (`v18_dr_ref`):
+area 0.999 / 1.019 (pressure / wall shear), posed 1.000 / 1.000. ISLA on
+DrivAerML Volume (two seeds): posed 1.000; area 5.9 to 11.9 on every field.
+ISLA on HiLift medium (epoch 97): area 1.003 / 1.006, posed 1.003 / 1.002.
+ISLA on AirfRANS: area identity; rotation-only 1.000; the full posed run
+crashes at validation sample 52 (below). The one-epoch smoke checkpoints of
+Shift-SUV and DeepJEB++ read posed 1.000 for ISLA against 2.86 / 1.61
+(GeoTransolver / Transolver) on Shift-SUV and 1.23 / 1.14 on DeepJEB++;
+interim DrivAerML Surface baselines (epochs 79 and 125) read area 6.5 / 5.5
+and posed 17 / 22. The lug and Tensile2D smoke checkpoints move under
+rotation for every architecture (ISLA 1.15 and 1.45), the frame-component
+territory of @sec-nb-solids-frame; one-epoch checkpoints carry no accuracy
+reading, so these rows wait for the campaign lanes.
+
+**Two anomalies, both open.** (1) ISLA's geometry path raises a CUDA
+index-out-of-bounds on AirfRANS when the case is translated by one RMS
+radius (rotation alone and the native frame complete all 200 cases). A
+rigid translation cannot change any ISLA output, so an index that depends
+on absolute position is a bug; it is being localized and fixed as a
+bug under the frozen architecture (bit-identity on non-crashing inputs is
+the acceptance test). (2) The DrivAerML Volume model's error grows 6x to
+12x when the boundary tokens are drawn area-proportionally with exact
+Horvitz-Thompson weights, while the Surface model is unchanged under the
+same construction. A control with the same Poisson path and uniform
+inclusion decides whether this is the instrument or a real sensitivity of
+the volume model to the boundary token law; the reading is recorded when
+the control is scored.
