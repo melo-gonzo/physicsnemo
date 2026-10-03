@@ -145,9 +145,9 @@ and the direction :math:`u_q = (x_q - y_{i^*}) / |x_q - y_{i^*}|`.
 built-in rank-0 channel ahead of the fields declared in ``query_schema``. A
 dataset's stored signed-distance field or its gradient enter, if wanted, as
 ordinary ``query_schema`` fields (rank 0 / rank 1) like any other PDE data. The
-nearest token comes from the library's nearest-neighbour search
-(:func:`physicsnemo.nn.functional.neighbors.knn.knn`, ``k=1``: cuML on
-CUDA, a scipy KD-tree on CPU, torch otherwise, in any dimension), and
+nearest token comes from an exact brute-force search on the difference-form
+squared distance (a Triton streaming-minimum kernel on CUDA, a chunked
+``torch.cdist`` argmin otherwise, in any dimension), and
 :func:`nearest_boundary_geometry` builds the distance and direction from the
 gathered sample. Because the boundary is a
 sample (200,000 of up to 17 million cells on a DrivAerML car), the internal

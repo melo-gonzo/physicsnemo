@@ -23,14 +23,17 @@ search; neither is an input. These tests pin the geometry against a brute-force
 computation, its sign convention, and the contracts of the interior task.
 """
 
-import math
 import os
 
 import pytest
 import torch
 
 from physicsnemo.experimental.models import ISLA
-from physicsnemo.experimental.models.isla.geometry import nearest_boundary_geometry
+from physicsnemo.experimental.models.isla import geometry
+from physicsnemo.experimental.models.isla.geometry import (
+    _nearest_index,
+    nearest_boundary_geometry,
+)
 from test.experimental.models.isla._meshes import (
     cloud,
     orthogonal,
@@ -219,13 +222,26 @@ def test_checkpoint_round_trip_keeps_the_task(tmp_path):
     assert all(torch.equal(a[k], b[k]) for k in a)
 
 
+def _assert_indices_exact(idx, q, pts):
+    """``idx`` equals the float64 brute-force argmin on the same inputs, except
+    where the two candidates are a tie at the inputs' own precision (their
+    float64 distances agree to within four float32 ulp); returns the tie count."""
+    dist = torch.cdist(q.double(), pts.double())
+    ref = dist.argmin(-1)
+    diff = idx != ref
+    d_idx = dist.gather(-1, idx[..., None])[..., 0]
+    d_ref = dist.gather(-1, ref[..., None])[..., 0]
+    tie = (d_idx - d_ref).abs() <= 4 * torch.finfo(torch.float32).eps * d_ref
+    assert not (diff & ~tie).any(), int((diff & ~tie).sum())
+    return int(diff.sum())
+
+
 def test_nearest_boundary_geometry_near_wall_dense_cluster_matches_brute_force():
     """Queries a hair off a dense cluster of boundary samples far from the cloud's
     centre (large |x|^2 relative to the separations), in float32 inputs, against a
-    float64 brute force. The CPU KD-tree returns the true nearest sample. cuML on
-    CUDA resolves such near-ties only to about the sample spacing (its float32
-    expanded distance cancels), which is accepted: the reported distance is never
-    below the true one and exceeds it by at most the cluster's spacing."""
+    float64 brute force on the same inputs: the exact difference-form search
+    returns the true nearest sample on CPU and CUDA alike (the expanded form of
+    the library's CUDA search resolved these only to the cluster's spacing)."""
     g = torch.Generator().manual_seed(3)
     n, q_n = 5000, 400
     pts64, nrm64, _ = _cloud(n, 0)
@@ -239,14 +255,12 @@ def test_nearest_boundary_geometry_near_wall_dense_cluster_matches_brute_force()
     q64 = centre + 2e-3 * torch.randn(1, q_n, 3, dtype=D, generator=g)
     pts, nrm, q = pts64.float(), nrm64.float(), q64.float()
     d_ref, u_ref = _brute_force(q.double(), pts.double(), nrm.double())
-    d, u = nearest_boundary_geometry(q, pts, nrm)
-    assert torch.allclose(d.double(), d_ref, atol=1e-9, rtol=1e-5)
-    assert torch.allclose(u.double(), u_ref, atol=1e-5, rtol=0)
-    if torch.cuda.is_available():
-        d_k, _ = nearest_boundary_geometry(q.cuda(), pts.cuda(), nrm.cuda())
-        excess = d_k.cpu().double().abs() - d_ref.abs()
-        assert (excess >= -1e-6).all()
-        assert (excess <= 2e-3).all()
+    devices = ["cpu"] + (["cuda"] if torch.cuda.is_available() else [])
+    for dev in devices:
+        d, u = nearest_boundary_geometry(q.to(dev), pts.to(dev), nrm.to(dev))
+        assert torch.allclose(d.cpu().double(), d_ref, atol=1e-9, rtol=1e-6), dev
+        assert torch.allclose(u.cpu().double(), u_ref, atol=1e-5, rtol=0), dev
+        assert _assert_indices_exact(_nearest_index(q[0].to(dev), pts[0].to(dev)).cpu(), q[0], pts[0]) == 0
 
 
 def _check_against_cdist_argmin(device, dim):
@@ -292,51 +306,81 @@ def _wall_problem(dim: int, seed: int = 5, n: int = 4000, n_q: int = 2000, offse
     return dirs.float(), dirs.float(), q.float()
 
 
-def test_sentinel_search_results_are_recomputed_exactly(monkeypatch):
-    """Regression (AirfRANS posed inference, 2026-10-03): cuML's k=1 search returned
-    its untouched sentinel (index -1, distance FLT_MAX) for queries within ~1e-4 of
-    the wall whose squared distance is below the float32 resolution of its expanded
-    distance form, and the gathers read out of bounds (a device-side assert). Such
-    queries are re-searched by the difference form; every other index is left as the
-    backend returned it, so inputs the backend resolves are unchanged. Here the
-    backend is stood in for by one that returns the exact answer with every fifth
-    query (and the last) replaced by the sentinel or an index past the sample."""
-    from physicsnemo.experimental.models.isla import geometry
-
-    pts, nrm, q = _wall_problem(3, n=800, n_q=200)
-    exact = torch.cdist(q.double(), pts.double()).argmin(-1)
-
-    def broken_knn(p, qq, k):
-        idx = exact.clone()
-        idx[::5] = -1
-        idx[-1] = p.shape[0] + 7
-        return idx[:, None], torch.full((qq.shape[0], 1), 3.4e38)
-
-    d_ref, u_ref = nearest_boundary_geometry(q[None], pts[None], nrm[None])
-    monkeypatch.setattr(geometry, "knn", broken_knn)
-    d, u = nearest_boundary_geometry(q[None], pts[None], nrm[None])
-    assert torch.equal(d, d_ref) and torch.equal(u, u_ref)
-    assert torch.isfinite(d).all()
+DEVICES = ["cpu", pytest.param("cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA"))]
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="the CUDA search")
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("dim", [2, 3])
 @pytest.mark.parametrize("shift", [0.0, 1.0, 100.0])
-def test_cuda_search_near_the_wall_never_reads_out_of_bounds(dim, shift):
-    """Near-wall float32 queries on a translated unit circle / sphere through the CUDA
-    search: every result finite, no index outside the sample (the gather would
-    assert), and |d| never below the exact distance (the expanded form can only
-    overestimate a near-tie, by about the sample spacing at |x| ~ 1 and more at
-    |x| ~ 100, which is cuML's documented precision, not a search failure)."""
+def test_search_is_exact_near_a_translated_wall(device, dim, shift):
+    """Regression (AirfRANS posed inference, 2026-10-03): the library's CUDA search
+    (cuML, float32 expanded distance) returned a wrong in-range nearest cell for
+    0.45% of the near-wall queries of native AirfRANS cases, 0.70% of translated
+    ones, and the sentinel -1 within ~1e-4 of the wall at |x| ~ 1, so the trained
+    model's error moved by 5-7% under a rigid translation. Near-wall float32 queries
+    on a unit circle / sphere translated by 0, 1 and 100 radii: the index equals the
+    float64 brute force on the same float32 inputs (up to ties at float32
+    resolution) and |d| equals the exact distance, on every device."""
     pts, nrm, q = _wall_problem(dim)
     t = torch.full((dim,), shift)
-    pts, q, nrm = (pts + t).cuda(), (q + t).cuda(), nrm.cuda()
+    pts, q, nrm = (pts + t).to(device), (q + t).to(device), nrm.to(device)
+    idx = _nearest_index(q, pts)
+    ties = _assert_indices_exact(idx.cpu(), q.cpu(), pts.cpu())
+    assert ties <= 2, ties
     d, u = nearest_boundary_geometry(q[None], pts[None], nrm[None])
-    torch.cuda.synchronize()
-    assert torch.isfinite(d).all() and torch.isfinite(u).all()
     d_ref = torch.cdist(q[None].double(), pts[None].double()).min(-1).values
-    assert (d.double().abs() - d_ref >= -1e-6).all()
+    assert torch.allclose(d.double().abs(), d_ref, atol=1e-10, rtol=1e-6)
     assert torch.allclose(u.norm(dim=-1), torch.ones_like(d), atol=1e-5)
+
+
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("dim", [2, 3])
+def test_search_indices_are_translation_invariant(device, dim):
+    """The same near-wall problem natively and translated by (100, ..., 100) in
+    float32: the returned indices agree except where the float64 brute force on the
+    two (differently rounded) float32 inputs itself disagrees."""
+    pts, _, q = _wall_problem(dim, n=3000, n_q=5000)
+    t = torch.full((dim,), 100.0)
+    native = _nearest_index(q.to(device), pts.to(device)).cpu()
+    moved = _nearest_index((q + t).to(device), (pts + t).to(device)).cpu()
+    ref_native = torch.cdist(q.double(), pts.double()).argmin(-1)
+    ref_moved = torch.cdist((q + t).double(), (pts + t).double()).argmin(-1)
+    changed = native != moved
+    assert not (changed & (ref_native == ref_moved)).any(), int((changed & (ref_native == ref_moved)).sum())
+
+
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("dim", [2, 3])
+def test_search_is_exact_on_random_clouds(device, dim):
+    """Float32 random clouds (queries both inside and well outside the boundary
+    cloud) against the float64 brute force on the same inputs, in 2-D and 3-D."""
+    g = torch.Generator().manual_seed(dim)
+    pts = (torch.randn(6000, dim, dtype=D, generator=g) * torch.arange(dim, 0, -1, dtype=D)).float()
+    q = (torch.randn(3000, dim, dtype=D, generator=g) * 2.0).float()
+    idx = _nearest_index(q.to(device), pts.to(device)).cpu()
+    assert _assert_indices_exact(idx, q, pts) == 0
+
+
+@pytest.mark.parametrize("device", DEVICES)
+def test_torch_search_path_chunks_and_matches_the_kernel(device, monkeypatch):
+    """The chunked torch path (CPU; CUDA without Triton) returns the exact indices
+    across chunk boundaries, in float32 and float64, and agrees with the Triton
+    kernel where both run."""
+    pts, _, q = _wall_problem(3, n=1500, n_q=2 * geometry._TORCH_SEARCH_CHUNK + 17)
+    pts, q = pts.to(device), q.to(device)
+    kernel = _nearest_index(q, pts) if device == "cuda" and geometry.HAS_TRITON else None
+    monkeypatch.setattr(geometry, "HAS_TRITON", False)
+    for dtype in (torch.float32, torch.float64):
+        idx = _nearest_index(q.to(dtype), pts.to(dtype))
+        assert idx.shape == (q.shape[0],) and idx.dtype == torch.int64
+        assert _assert_indices_exact(idx.cpu(), q.cpu().to(dtype), pts.cpu().to(dtype)) <= 2
+    if kernel is not None:
+        ### the two float32 sums may round differently on a tie at float32 resolution
+        torch_idx = _nearest_index(q, pts)
+        dist = torch.cdist(q.double(), pts.double())
+        d_a = dist.gather(-1, torch_idx[:, None])[:, 0]
+        d_b = dist.gather(-1, kernel[:, None])[:, 0]
+        assert ((torch_idx == kernel) | ((d_a - d_b).abs() <= 4 * torch.finfo(torch.float32).eps * d_a)).all()
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="the saved case runs on the CUDA search")

@@ -21,10 +21,114 @@
 direction to the boundary. Both are built from pairwise differences only, so they
 refer to no frame origin."""
 
+import importlib
+
 import torch
 from jaxtyping import Float
 
-from physicsnemo.nn.functional.neighbors.knn.knn import knn
+from physicsnemo.core.version_check import is_package_available
+
+### The exact nearest-boundary search below forms the squared distance from the
+### *difference* x_q - y_i, whose rounding error is set by the coordinates' own
+### precision. The library's CUDA search (cuML) expands it as
+### |x|^2 + |y|^2 - 2 x.y in float32, whose error scales with |x|^2: measured
+### on native AirfRANS cases (2026-10-03) it returned a wrong in-range nearest
+### cell for 0.45% of the near-wall queries (0.70% once the case was rigidly
+### translated) and, within ~1e-4 of the wall at |x| ~ 1, its untouched
+### sentinel (index -1), so the trained model's error moved by 5-7% under a
+### translation that the class specifies as a symmetry. No unexpanded L2 is
+### exposed through cuML's NearestNeighbors (its "euclidean"/"l2"/"sqeuclidean"
+### all map to the expanded forms), hence the kernels here.
+HAS_TRITON = is_package_available("triton")
+if HAS_TRITON:
+    try:
+        triton = importlib.import_module("triton")
+        tl = importlib.import_module("triton.language")
+    except Exception:  # pragma: no cover - a broken triton install is treated as absent
+        HAS_TRITON = False
+
+if HAS_TRITON:
+
+    @triton.jit
+    def _nearest_index_kernel(
+        q_ptr,
+        y_ptr,
+        idx_ptr,
+        Q,
+        N,
+        DIM: tl.constexpr,
+        BLOCK_Q: tl.constexpr,
+        BLOCK_N: tl.constexpr,
+    ):
+        """One program owns ``BLOCK_Q`` queries and streams the ``N`` boundary
+        samples in ``BLOCK_N`` tiles with a running minimum, so no (Q, N) block is
+        ever written; ties go to the smallest index, as ``torch.argmin``."""
+        offs_q = tl.program_id(0) * BLOCK_Q + tl.arange(0, BLOCK_Q)
+        mask_q = offs_q < Q
+        best = tl.full((BLOCK_Q,), float("inf"), q_ptr.dtype.element_ty)
+        best_i = tl.zeros((BLOCK_Q,), tl.int32)
+        for n0 in range(0, N, BLOCK_N):
+            offs_n = n0 + tl.arange(0, BLOCK_N)
+            mask_n = offs_n < N
+            d2 = tl.zeros((BLOCK_Q, BLOCK_N), q_ptr.dtype.element_ty)
+            for k in tl.static_range(DIM):
+                qk = tl.load(q_ptr + offs_q * DIM + k, mask=mask_q, other=0.0)
+                ### padded samples sit at infinity
+                yk = tl.load(y_ptr + offs_n * DIM + k, mask=mask_n, other=float("inf"))
+                diff = qk[:, None] - yk[None, :]
+                d2 += diff * diff
+            tile_min = tl.min(d2, axis=1)
+            tile_arg = tl.argmin(d2, axis=1)
+            take = tile_min < best  # strict: the earliest tile keeps a tie
+            best = tl.where(take, tile_min, best)
+            best_i = tl.where(take, (n0 + tile_arg).to(tl.int32), best_i)
+        tl.store(idx_ptr + offs_q, best_i.to(tl.int64), mask=mask_q)
+
+
+### Queries per chunk of the torch search; bounds its (chunk, N) distance block.
+_TORCH_SEARCH_CHUNK = 4096
+
+
+def _nearest_index(
+    query_points: Float[torch.Tensor, "queries dim"],
+    points: Float[torch.Tensor, "tokens dim"],
+) -> torch.Tensor:
+    """Index ``(Q,)`` of the nearest of ``points`` to each query, by the exact
+    (difference-form) squared distance in the inputs' precision; ties to the
+    smallest index. Triton on CUDA when available, a chunked
+    :func:`torch.cdist` argmin otherwise (CPU included); half types are
+    searched in float32."""
+    q, y = query_points.contiguous(), points.contiguous()
+    if q.dtype in (torch.float16, torch.bfloat16):
+        q, y = q.float(), y.float()
+    nq, dim = q.shape
+    if q.is_cuda and HAS_TRITON:
+        idx = torch.empty(nq, dtype=torch.int64, device=q.device)
+        ### fastest of the tilings measured on a GB300 at 200k x 200k (2026-10-03):
+        ### 69 ms against 118 ms for 64 x 128 and 36 ms for cuML's expanded form
+        block_q, block_n = 64, 256
+        _nearest_index_kernel[(triton.cdiv(nq, block_q),)](
+            q,
+            y,
+            idx,
+            nq,
+            y.shape[0],
+            DIM=dim,
+            BLOCK_Q=block_q,
+            BLOCK_N=block_n,
+            num_warps=4,
+        )
+        return idx
+    return torch.cat(
+        [
+            torch.cdist(
+                q[s : s + _TORCH_SEARCH_CHUNK],
+                y,
+                compute_mode="donot_use_mm_for_euclid_dist",
+            ).argmin(-1)
+            for s in range(0, nq, _TORCH_SEARCH_CHUNK)
+        ]
+    )
 
 
 def rms_pairwise_distance(
@@ -64,10 +168,10 @@ def nearest_boundary_geometry(
     r"""Signed distance and direction from the nearest boundary sample to each query.
 
     For every query :math:`x_q` the nearest boundary point :math:`y_{i^*}` is
-    found by the library's nearest-neighbour search
-    (:func:`physicsnemo.nn.functional.neighbors.knn.knn` with ``k=1``, one
-    call per batch element: cuML on CUDA, a scipy KD-tree on CPU, torch
-    otherwise; any spatial dimension); then
+    found by an exact brute-force search on the difference-form squared
+    distance (:func:`_nearest_index`: a Triton streaming-minimum kernel on
+    CUDA, a chunked :func:`torch.cdist` argmin otherwise; any spatial
+    dimension; ties to the smallest index); then
 
     .. math::
 
@@ -95,28 +199,10 @@ def nearest_boundary_geometry(
     """
     b, nq, _ = query_points.shape
     with torch.autocast(query_points.device.type, enabled=False), torch.no_grad():
-        ### knn is unbatched; the batch axis is one in practice.
+        ### the search is unbatched; the batch axis is one in practice.
         idx = torch.stack(
-            [
-                knn(points[i].contiguous(), query_points[i].contiguous(), 1)[0][:, 0]
-                for i in range(b)
-            ]
-        ).long()  # (B, Q)
-        ### The CUDA backend (cuML) expands |x - y|^2 = |x|^2 + |y|^2 - 2 x.y in
-        ### float32. For a query within ~1e-4 of the wall at |x| ~ 1 the squared
-        ### distance is below that form's resolution, the candidate is dropped
-        ### and the query keeps the untouched sentinel (index -1, FLT_MAX),
-        ### which the gathers below would read out of bounds (AirfRANS posed
-        ### validation, 6 of 200 cases, 2026-10-03). Those queries are
-        ### re-searched exactly by the difference form; every other index is
-        ### left as returned.
-        bad = (idx < 0) | (idx >= points.shape[1])
-        if bad.any():
-            for i in range(b):
-                j = bad[i].nonzero()[:, 0]
-                if j.numel():
-                    diff = query_points[i, j, None, :] - points[i, None, :, :]
-                    idx[i, j] = diff.square().sum(-1).argmin(-1)
+            [_nearest_index(query_points[i], points[i]) for i in range(b)]
+        )  # (B, Q)
     gather = idx[..., None].expand(b, nq, points.shape[-1])
     y = torch.gather(points, 1, gather)
     n_star = torch.gather(normals, 1, gather)
