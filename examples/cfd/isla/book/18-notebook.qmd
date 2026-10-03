@@ -33117,11 +33117,24 @@ with the fix is code_v19 (verify job 997426: 827 passed, 1 failed; the
 failure is the fused-kernel fullgraph gradient check at 2.3e-5 against
 its 1e-5 bar on one projection weight, and the same test fails
 identically on an untouched code_v18 in the same job, so it is a
-run-to-run tolerance of the fused kernel's atomics, not the fix). Observed on the way and left as is under the
-freeze: the same float32 expansion returns a wrong in-range nearest
-boundary cell for 0.3% to 1.4% of near-wall queries on native data too
-(near-ties within its resolution); an exact search would change outputs
-and is an accuracy question for after the campaign, not a bug fix.
+run-to-run tolerance of the fused kernel's atomics, not the fix). Observed on the way: the same float32 expansion returns a
+wrong in-range nearest boundary cell for 0.45% of the near-wall queries on
+native AirfRANS data and 0.70% on translated data, and which queries are
+wrong depends on absolute position. That is the whole of ISLA's apparent
+translation dependence: under code_v19 the posed AirfRANS row reads
+1.001 / 1.063 / 1.040 (eddy viscosity / pressure / velocity) and the
+translation-only variant 1.001 / 1.071 / 1.046, while rotation alone
+reads 1.000; with the exact difference-form search in place of the
+library's, native and translated agree to the fourth decimal
+(0.03164 / 0.03315 / 0.01717 against 0.03164 / 0.03316 / 0.01717) and
+the native error itself moves by 0.1% (`results/campaigns_2026-10-02/
+char/infer_exact_nn.py`, `evals_char_smoke/_tr/`). So the trained
+function is translation-invariant and the library search is not; whether
+the search is replaced by an exact one at bounded memory (the difference
+form materializes queries x boundary cells, 160 GB at the DrivAerML Volume
+size) is being measured as an implementation fix, since the class
+specifies the nearest boundary cell and the library returns a wrong one
+for ~0.5% of near-wall queries.
 (2) The DrivAerML Volume model's error grows 6x to
 12x when the boundary tokens are drawn area-proportionally with exact
 Horvitz-Thompson weights, while the Surface model is unchanged under the
