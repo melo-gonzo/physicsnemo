@@ -232,3 +232,19 @@ def test_case_key_domain_mesh_reader_matches_the_surface_reader_key(tmp_path):
     assert int(dm0.global_data["case_key"]) == k0
     posed = FixedRandomPose(salt=0).apply_to_domain(dm0)
     assert torch.allclose(posed.global_data["U_inf"], dm0.global_data["U_inf"] @ _reference_so3(k0, 0).to(torch.float32).T)
+
+
+def test_rotate_false_is_translation_only_with_the_posed_variants_translation():
+    """Translation-only diagnostic (2026-10-03): no rotation, and the translation vector equals the one
+    the rotating variant applies (the rotation draw is still consumed from the keyed stream)."""
+    m = _mesh(key=42, planar=True)
+    posed = FixedRandomPose(salt=0, translate=1.0, axis=2)(m)
+    tr = FixedRandomPose(salt=0, translate=1.0, axis=2, rotate=False)(m)
+    R2 = _pose_rotation_for_key(42, 0, 2)
+    t_posed = posed.points[0, :2] - m.points[0, :2] @ R2.T
+    t_only = tr.points[0] - m.points[0]
+    assert torch.allclose(tr.points, m.points + t_only)  # rigid translation, no rotation
+    assert torch.allclose(t_only[:2], t_posed) and t_only[2] == 0.0
+    assert torch.allclose(tr.cell_data["wss"], m.cell_data["wss"])  # vectors untouched
+    assert torch.allclose(tr.global_data["U_inf"], m.global_data["U_inf"])
+    assert "rotate=False" in tr.__class__.__name__ or "rotate=False" in FixedRandomPose(rotate=False).extra_repr()

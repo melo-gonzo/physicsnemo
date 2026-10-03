@@ -673,6 +673,10 @@ class FixedRandomPose(MeshTransform):
       ``RestrictToPlane``) are always rotated in their plane. Place the
       transform before ``RestrictToPlane`` so the 3-D baseline variant and the
       2-D variant of a dataset receive the identical pose.
+    * ``rotate``: ``False`` disables the rotation (identity matrix) while the
+      rotation draw is still consumed from the keyed stream, so a
+      translation-only variant carries the SAME translation vector as the
+      posed variant of the dataset (translation-only diagnostic, 2026-10-03).
     * ``symmetric_tensor_fields``: triplets ``[xx, yy, xy]`` of SCALAR field
       names (point or cell data) that are the in-plane components of a
       symmetric rank-2 tensor stored component by component (Tensile2d's
@@ -688,10 +692,12 @@ class FixedRandomPose(MeshTransform):
         translate: float = 0.0,
         axis: int | None = None,
         symmetric_tensor_fields: Sequence[Sequence[str]] = (),
+        rotate: bool = True,
     ) -> None:
         super().__init__()
         self.salt = int(salt)
         self.key_field = key_field
+        self.rotate = bool(rotate)
         self.translate = float(translate)
         if self.translate < 0:
             raise ValueError(f"translate must be >= 0, got {translate}")
@@ -718,6 +724,8 @@ class FixedRandomPose(MeshTransform):
         # move to the mesh's device, since the pipeline may run its transforms on GPU.
         g = _pose_generator(key, self.salt)
         R = _pose_rotation_for_key(key, self.salt, d, self.axis, generator=g)
+        if not self.rotate:
+            R = torch.eye(d, dtype=R.dtype)  # the draw above was still consumed: same translation as the posed variant
         R = R.to(device=points.device, dtype=points.dtype)
         if self.translate == 0.0:
             return R, None
@@ -803,7 +811,7 @@ class FixedRandomPose(MeshTransform):
 
     def extra_repr(self) -> str:
         return (
-            f"salt={self.salt}, key_field={self.key_field!r}, translate={self.translate}, "
+            f"salt={self.salt}, key_field={self.key_field!r}, translate={self.translate}, rotate={self.rotate}, "
             f"axis={self.axis}, symmetric_tensor_fields={self.symmetric_tensor_fields}"
         )
 
