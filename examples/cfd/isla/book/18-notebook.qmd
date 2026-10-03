@@ -33095,13 +33095,30 @@ rotation for every architecture (ISLA 1.15 and 1.45), the frame-component
 territory of @sec-nb-solids-frame; one-epoch checkpoints carry no accuracy
 reading, so these rows wait for the campaign lanes.
 
-**Two anomalies, both open.** (1) ISLA's geometry path raises a CUDA
+**Two anomalies.** (1) ISLA's geometry path raised a CUDA
 index-out-of-bounds on AirfRANS when the case is translated by one RMS
-radius (rotation alone and the native frame complete all 200 cases). A
-rigid translation cannot change any ISLA output, so an index that depends
-on absolute position is a bug; it is being localized and fixed as a
-bug under the frozen architecture (bit-identity on non-crashing inputs is
-the acceptance test). (2) The DrivAerML Volume model's error grows 6x to
+radius (rotation alone and the native frame complete all 200 cases).
+Localized and fixed as a bug (a57f72227): the nearest-boundary search's
+CUDA backend (cuML brute force) evaluates the squared distance in its
+expanded float32 form, and for an interior query within about 1e-4 of the
+wall at unit scale that form has no resolution left, the candidate is
+dropped and the query keeps the library's sentinel (index -1), which the
+following gather read out of bounds. Six of the 200 posed validation cases
+carry 1 to 150 such queries; none of the native cases does, and the pose
+only changes which near-wall values cancel (the posed interior RMS radius
+is 0.85 to 1.75, so this is not a large-coordinate effect). The fix
+re-searches exactly the sentinel queries by the difference form and
+leaves every resolved index as returned, so inputs the backend resolves
+are unchanged by construction; verified bit-identical in float32 on native
+AirfRANS samples and a DrivAerML Volume sample under the same checkpoints,
+with regression tests (23 of 23 on GB300 against the patched snapshot;
+8 of the new tests fail against code_v18, as they should). The snapshot
+with the fix is code_v19. Observed on the way and left as is under the
+freeze: the same float32 expansion returns a wrong in-range nearest
+boundary cell for 0.3% to 1.4% of near-wall queries on native data too
+(near-ties within its resolution); an exact search would change outputs
+and is an accuracy question for after the campaign, not a bug fix.
+(2) The DrivAerML Volume model's error grows 6x to
 12x when the boundary tokens are drawn area-proportionally with exact
 Horvitz-Thompson weights, while the Surface model is unchanged under the
 same construction. The control (same Poisson path, uniform inclusion,
