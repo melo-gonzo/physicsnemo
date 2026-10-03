@@ -189,6 +189,8 @@ def main():
         sup2 = predict(fk, pp.slice_points(Brest), support=pp.slice_points(A2))
         sdf = pp.point_data["sdf"].reshape(-1).abs() if "sdf" in pp.point_data.keys() else pp.points.norm(dim=-1)
         qs = torch.tensor([0.1, 0.5, 0.9], device=dev, dtype=sdf.dtype)
+        ### support count: B behind the leading quarter and half of A (the mass is split over the support)
+        count = {str(a.request // m): scores(predict(fk, ppB, support=pp.slice_points(A[: a.request // m])), tB) for m in (4, 2)}
         uni = {}
         if a.n_uniform > 0:
             ### "Evaluate anywhere": a volume-uniform-like subset U of B near the body (|sdf| < 0.5 L, L the boundary's
@@ -241,7 +243,7 @@ def main():
             geom.knn = library_knn
             log("detail " + json.dumps(detail))
         rec = {"case": ci, "sample_index": int(idx), "n_interior": n, "n_support": a.request, "n_eval": nb, **detail,
-               **({"uniform": uni} if uni else {}),
+               **({"uniform": uni} if uni else {}), "support_count": count,
                "law_check_quantiles": {"A": [float(x) for x in sdf[A].quantile(qs)], "B": [float(x) for x in sdf[B].quantile(qs)]},
                "interacting": scores(inter, tB), "support": scores(sup, tB), "no_support": scores(nosup, tB),
                "sentinel_alone_maxdiff": maxdiff(alone, sup[s], tB[s]),
@@ -265,6 +267,7 @@ def main():
     summ["sentinel_alone_maxdiff_max"] = {f: max(c["sentinel_alone_maxdiff"][f] for c in cases) for f in FIELDS}
     summ["support_swap_rel_change_mean"] = {f: sum(c["support_swap"]["rel_change"][f] for c in cases) / len(cases) for f in FIELDS}
     summ["support_swap_score_ratio"] = {f: sum(c["support_swap"]["swapped"][f] for c in cases) / sum(c["support_swap"]["support"][f] for c in cases) for f in FIELDS}
+    summ["support_count"] = {k: {f: sum(c["support_count"][k][f] for c in cases) / len(cases) for f in FIELDS} for k in cases[0]["support_count"]}
     un = [c for c in cases if "uniform" in c]
     if un:
         summ["uniform"] = {k: {f: sum(c["uniform"][k][f] for c in un) / len(un) for f in FIELDS} for k in ("support", "interacting_alone", "interacting_in_request")}

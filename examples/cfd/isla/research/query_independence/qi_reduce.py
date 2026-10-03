@@ -120,6 +120,8 @@ def main():
         print(f"\n## Arm C, {DATASETS[ds]}: support / interacting " + " ".join(f"{f}={v:.3f} ({' / '.join(f'{x:.3f}' for x in d['paired'][f])})" for f, v in d["ratio_support_over_interacting"].items()))
         for seed, s in d["per_seed"].items():
             print(f"  seed {seed}: interacting {fmt(s['interacting'])} | support {fmt(s['support'])} | no support {fmt(s['no_support'])}")
+            if "support_count" in s:
+                print("    support count: " + "; ".join(f"{k}: {fmt(v)}" for k, v in s["support_count"].items()) + f"; {s.get('request', 'full')}: {fmt(s['support'])}")
             if "uniform" in s:
                 u = s["uniform"]
                 print(f"    uniform-like U: support {fmt(u['support'])} | in request {fmt(u['interacting_in_request'])} | alone {fmt(u['interacting_alone'])}")

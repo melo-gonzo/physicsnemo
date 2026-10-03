@@ -87,7 +87,10 @@ def main():
     t = torch.randn(d, generator=gen, dtype=torch.float64) * 3.0 * L
     eye, zero = torch.eye(d, dtype=torch.float64), torch.zeros(d, dtype=torch.float64)
     cases = {"rotation": (q, zero), "translation": (eye, t), "both": (q, t)}
-    for label, knn_impl in (("library knn (cuML on CUDA)", None), ("exact float64 cdist", "cdist")):
+    library = geom.knn
+    for label, knn_impl in (("exact float64 cdist", "cdist"), ("library knn (cuML on CUDA)", None)):
+        if knn_impl is None:
+            geom.knn = library
         if knn_impl == "cdist":
             def exact(points, queries, k):
                 ii, vv = [], []
