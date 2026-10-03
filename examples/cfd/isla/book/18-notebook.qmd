@@ -33129,12 +33129,27 @@ library's, native and translated agree to the fourth decimal
 (0.03164 / 0.03315 / 0.01717 against 0.03164 / 0.03316 / 0.01717) and
 the native error itself moves by 0.1% (`results/campaigns_2026-10-02/
 char/infer_exact_nn.py`, `evals_char_smoke/_tr/`). So the trained
-function is translation-invariant and the library search is not; whether
-the search is replaced by an exact one at bounded memory (the difference
-form materializes queries x boundary cells, 160 GB at the DrivAerML Volume
-size) is being measured as an implementation fix, since the class
-specifies the nearest boundary cell and the library returns a wrong one
-for ~0.5% of near-wall queries.
+function is translation-invariant and the library search is not. **The
+search is replaced by an exact one (0b43b42b2, snapshot code_v20)**: the
+class specifies the nearest boundary cell, the library returned a wrong
+one for 0.45% of near-wall queries, and no option of the installed
+library reaches an unexpanded distance. The replacement is a Triton
+streaming-minimum kernel (any dimension, O(1) memory, ties to the
+smallest index like `argmin`; a chunked exact torch path without Triton),
+measured against a float64 brute force with zero wrong indices on every
+case: 0.20 ms against the library's 4.2 ms on AirfRANS (100,000 queries x
+858 segments), 68.6 against 36.3 ms at 200,000 x 200,000 in 3-D (+32 ms
+on the ~180 ms training step of the volume task, the price of
+correctness; the chunked difference form costs 834 ms and `cdist` 46 s at
+that size). On the trained checkpoints the native errors move by at most
+0.01% (AirfRANS 0.033151 / 0.017170 / 0.031641; DrivAerML Volume
+0.040675 / 0.064772 / 0.087934) and the translation gap on AirfRANS falls
+from 7.2% / 4.6% to 0.015% / 0.006% (pressure / velocity). The a57f72227
+sentinel repair is removed with the library call. Tests tightened to zero
+mismatches (190 passed locally and on GB300). Lanes trained before this
+entry used the library search; the campaign scores every lane with the
+exact one (protocol and `cl_` scorers map to code_v20), which changes
+their native numbers by the 0.01% above.
 (2) The DrivAerML Volume model's error grows 6x to
 12x when the boundary tokens are drawn area-proportionally with exact
 Horvitz-Thompson weights, while the Surface model is unchanged under the
