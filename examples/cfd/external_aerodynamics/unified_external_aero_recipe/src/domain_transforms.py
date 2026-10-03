@@ -53,6 +53,7 @@ YAML configs.  Import this module before Hydra instantiation
 
 from __future__ import annotations
 
+import zlib
 from collections.abc import Sequence
 from typing import Literal
 
@@ -547,82 +548,289 @@ class StratifiedSubsampleMesh(MeshTransform):
         return f"n_cells={self.n_cells}"
 
 
-def _pose_rotation_for_key(key: int, salt: int) -> torch.Tensor:
-    """Uniform SO(3) rotation matrix drawn from a generator seeded by (key, salt).
+def _pose_generator(key: int, salt: int) -> torch.Generator:
+    """The keyed CPU generator every per-case pose draw comes from."""
+    return torch.Generator().manual_seed((int(key) * 1_000_003 + int(salt)) % (2**63 - 1))
 
-    Same construction as ``RandomRotateMesh(mode="uniform")``: an isotropic
-    Gaussian 4-vector normalized to a unit quaternion. Deterministic in
-    ``key`` and ``salt``, independent of process, worker, epoch or shuffle
-    order.
+
+def _pose_rotation_for_key(
+    key: int,
+    salt: int,
+    n_spatial_dims: int = 3,
+    axis: int | None = None,
+    generator: torch.Generator | None = None,
+) -> torch.Tensor:
+    """Rotation matrix drawn from a generator seeded by (key, salt).
+
+    Three-dimensional points with ``axis=None`` (the default) get a uniform SO(3)
+    rotation, the same construction as ``RandomRotateMesh(mode="uniform")``: an
+    isotropic Gaussian 4-vector normalized to a unit quaternion. This stream is
+    unchanged from POSE-BENCH, so earlier posed lanes reproduce bit for bit.
+
+    A planar problem rotates IN its plane only (CHAR-PROTOCOLS, 2026-10-02): for
+    two-dimensional points, or three-dimensional points with ``axis`` set (the
+    coordinate normal to the plane, e.g. ``axis=2`` for a problem in the ``xy``
+    plane stored with ``z = 0``), the draw is one angle uniform on ``[0, 2 pi)``
+    and the matrix is the SO(2) rotation about that normal. A planar problem
+    rotated out of its plane is meaningless, and the stored-in-3-D and
+    restricted-to-2-D variants of one dataset receive the same in-plane angle.
+
+    Deterministic in ``key`` and ``salt``, independent of process, worker, epoch
+    or shuffle order. Pass ``generator`` to continue drawing (the translation)
+    from the same keyed stream.
     """
-    g = torch.Generator().manual_seed((int(key) * 1_000_003 + int(salt)) % (2**63 - 1))
-    q = torch.randn(4, generator=g, dtype=torch.float64)
-    q = q / q.norm()
-    return RandomRotateMesh._quaternion_to_rotation_matrix(q)
+    g = _pose_generator(key, salt) if generator is None else generator
+    if n_spatial_dims == 3 and axis is None:
+        q = torch.randn(4, generator=g, dtype=torch.float64)
+        q = q / q.norm()
+        return RandomRotateMesh._quaternion_to_rotation_matrix(q)
+    if n_spatial_dims not in (2, 3):
+        raise ValueError(f"FixedRandomPose supports 2-D and 3-D points, got {n_spatial_dims}-D")
+    if n_spatial_dims == 2 and axis is not None:
+        raise ValueError("FixedRandomPose: `axis` names the plane normal of 3-D points; 2-D points have none")
+    angle = torch.rand((), generator=g, dtype=torch.float64) * (2 * torch.pi)
+    c, s = torch.cos(angle), torch.sin(angle)
+    if n_spatial_dims == 2:
+        return torch.stack([torch.stack([c, -s]), torch.stack([s, c])])
+    if not 0 <= int(axis) < 3:
+        raise ValueError(f"FixedRandomPose: axis must be 0, 1 or 2, got {axis}")
+    i, j = [k for k in range(3) if k != int(axis)]
+    R = torch.eye(3, dtype=torch.float64)
+    R[i, i], R[i, j], R[j, i], R[j, j] = c, -s, s, c
+    return R
+
+
+def _pose_translation_direction(
+    generator: torch.Generator, n_spatial_dims: int, axis: int | None
+) -> torch.Tensor:
+    """Unit direction uniform on the sphere (in the plane when ``axis`` is set or the points are 2-D)."""
+    u = torch.randn(n_spatial_dims, generator=generator, dtype=torch.float64)
+    if axis is not None:
+        u[int(axis)] = 0.0
+    return u / u.norm()
+
+
+def _spatial_field_mask(data: TensorDict, n_spatial_dims: int) -> dict:
+    """Nested bool mask selecting the leaves ``Mesh.transform`` can rotate.
+
+    A leaf qualifies when every trailing (non-batch) axis has the spatial
+    dimension: rank-1 vectors ``(..., d)`` and rank-2 tensors ``(..., d, d)``.
+    Recipe data also carries ``(N, 1)`` scalar columns and non-spatial
+    parameter vectors (``naca[5]``, ``params[6]``, ``load_type[2]``) that the
+    all-fields spec ``True`` refuses with an error; the mask leaves them alone.
+    """
+    nb = len(data.batch_size)
+    mask: dict = {}
+    for key, value in data.items(include_nested=True, leaves_only=True):
+        shape = tuple(value.shape[nb:])
+        ok = len(shape) >= 1 and all(s == n_spatial_dims for s in shape)
+        path = key if isinstance(key, tuple) else (key,)
+        node = mask
+        for part in path[:-1]:
+            node = node.setdefault(part, {})
+        node[path[-1]] = ok
+    return mask
 
 
 @register()
 class FixedRandomPose(MeshTransform):
-    """Rotate a case by a uniform SO(3) rotation that is a deterministic function of the case.
+    """Pose a case by a rotation (and optionally a translation) that is a deterministic function of the case.
 
     POSE-BENCH (transfer program, 2026-09-09). Every training and validation
     case receives an independent random pose, but the SAME pose every time
     the case is loaded, so that (a) the validation set is a fixed posed
     benchmark identical for every architecture, and (b) training on posed
-    data is a data property, not an augmentation stream. The rotation is
-    seeded by the reader's ``case_key`` global field
-    (``MeshReaderWithGlobalData(store_case_key=True)``) and ``salt``.
-    Positions, every vector field in point/cell/global data (e.g. wall shear,
-    normals, ``U_inf``) rotate together; scalars are invariant. Place it
-    BEFORE ``ComputeFreestreamDirection`` so the unit direction is computed
-    from the rotated freestream. Deterministic: no generator, never reseeded.
+    data is a data property, not an augmentation stream. The pose is seeded by
+    the reader's ``case_key`` global field (``MeshReaderWithGlobalData(
+    store_case_key=True)`` for a boundary Mesh, :class:`CaseKeyDomainMeshReader`
+    for a DomainMesh) and ``salt``. Positions and every spatial vector or
+    rank-2 tensor field in point/cell/global data (wall shear, normals,
+    ``U_inf``, a load direction) rotate together; scalars and non-spatial
+    vectors (parameter lists, one-hot codes) are invariant. Place it BEFORE
+    ``ComputeFreestreamDirection`` so the unit direction is computed from the
+    rotated freestream, and before ``CenterMesh``. Deterministic: no
+    generator, never reseeded.
+
+    CHAR-PROTOCOLS (2026-10-02) additions, all inert at their defaults:
+
+    * ``translate``: a translation of length ``translate`` times the RMS
+      radius of the points about their centroid, in a direction uniform on
+      the sphere, drawn from the same keyed stream after the rotation. The
+      recipe's ``CenterMesh`` (present in the external-aero and DeepJEB
+      pipelines) removes any translation, so there the posed error measures
+      the rotation plus the centering step; the AirfRANS, Tensile2d and lug
+      pipelines have no ``CenterMesh``, so there the translation reaches the
+      model. It is included because the protocol says rotated AND translated.
+    * ``axis``: for a planar problem stored in 3-D coordinates, the plane
+      normal (``2`` for ``z = 0``); the rotation is then in the plane only and
+      the translation has no component along the normal. 2-D points (after
+      ``RestrictToPlane``) are always rotated in their plane. Place the
+      transform before ``RestrictToPlane`` so the 3-D baseline variant and the
+      2-D variant of a dataset receive the identical pose.
+    * ``symmetric_tensor_fields``: triplets ``[xx, yy, xy]`` of SCALAR field
+      names (point or cell data) that are the in-plane components of a
+      symmetric rank-2 tensor stored component by component (Tensile2d's
+      ``sig11, sig22, sig12``). They are not scalars under rotation; the
+      transform applies ``sigma' = R sigma R^T`` to them. Only defined for
+      in-plane rotations (``axis`` set or 2-D points).
     """
 
-    def __init__(self, salt: int = 0, key_field: str = "case_key") -> None:
+    def __init__(
+        self,
+        salt: int = 0,
+        key_field: str = "case_key",
+        translate: float = 0.0,
+        axis: int | None = None,
+        symmetric_tensor_fields: Sequence[Sequence[str]] = (),
+    ) -> None:
         super().__init__()
         self.salt = int(salt)
         self.key_field = key_field
+        self.translate = float(translate)
+        if self.translate < 0:
+            raise ValueError(f"translate must be >= 0, got {translate}")
+        self.axis = None if axis is None else int(axis)
+        self.symmetric_tensor_fields = [tuple(str(n) for n in t) for t in symmetric_tensor_fields]
+        for t in self.symmetric_tensor_fields:
+            if len(t) != 3:
+                raise ValueError(
+                    f"symmetric_tensor_fields entries are [xx, yy, xy] name triplets, got {t!r}"
+                )
 
-    def _matrix(self, global_data: TensorDict, like: torch.Tensor) -> torch.Tensor:
+    def _pose(
+        self, global_data: TensorDict, points: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """The case's rotation matrix and translation vector (``None`` when ``translate == 0``)."""
         if self.key_field not in global_data.keys():
             raise KeyError(
-                f"FixedRandomPose needs global_data[{self.key_field!r}]; enable "
-                "store_case_key on MeshReaderWithGlobalData"
+                f"FixedRandomPose needs global_data[{self.key_field!r}]; enable store_case_key on "
+                "MeshReaderWithGlobalData or read the DomainMesh with CaseKeyDomainMeshReader"
             )
-        # The draw is made on a CPU generator (device-independent stream); the matrix
-        # moves to the mesh's device, since the pipeline may run its transforms on GPU.
-        return _pose_rotation_for_key(int(global_data[self.key_field]), self.salt).to(
-            device=like.device, dtype=like.dtype
-        )
+        d = points.shape[-1]
+        key = int(global_data[self.key_field])
+        # The draws are made on a CPU generator (device-independent stream); the results
+        # move to the mesh's device, since the pipeline may run its transforms on GPU.
+        g = _pose_generator(key, self.salt)
+        R = _pose_rotation_for_key(key, self.salt, d, self.axis, generator=g)
+        R = R.to(device=points.device, dtype=points.dtype)
+        if self.translate == 0.0:
+            return R, None
+        u = _pose_translation_direction(g, d, self.axis if d == 3 else None)
+        p = points.to(torch.float64)
+        rms = (p - p.mean(dim=0)).norm(dim=-1).square().mean().sqrt()
+        t = (self.translate * rms.cpu()) * u
+        return R, t.to(device=points.device, dtype=points.dtype)
 
-    def __call__(self, mesh: Mesh) -> Mesh:
-        R = self._matrix(mesh.global_data, mesh.points)
-        return mesh.transform(
+    def _in_plane_cos_sin(self, R: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if R.shape[-1] == 2:
+            return R[0, 0], R[1, 0]
+        if self.axis is None:
+            raise ValueError(
+                "FixedRandomPose: symmetric_tensor_fields are in-plane components and need an in-plane "
+                "rotation (set `axis` for 3-D points)"
+            )
+        i, j = [k for k in range(3) if k != self.axis]
+        return R[i, i], R[j, i]
+
+    def _rotate_tensor_components(self, mesh: Mesh, R: torch.Tensor) -> Mesh:
+        if not self.symmetric_tensor_fields:
+            return mesh
+        c, s = self._in_plane_cos_sin(R)
+        new = {}
+        for association in ("point_data", "cell_data"):
+            data = getattr(mesh, association)
+            hit = [t for t in self.symmetric_tensor_fields if all(n in data.keys() for n in t)]
+            if not hit:
+                continue
+            data = data.clone()
+            for xx, yy, xy in hit:
+                sxx, syy, sxy = data[xx], data[yy], data[xy]
+                data[xx] = c * c * sxx + s * s * syy - 2 * c * s * sxy
+                data[yy] = s * s * sxx + c * c * syy + 2 * c * s * sxy
+                data[xy] = c * s * (sxx - syy) + (c * c - s * s) * sxy
+            new[association] = data
+        return mesh.with_data(**new) if new else mesh
+
+    def _transform_mesh(self, mesh: Mesh, R: torch.Tensor, t: torch.Tensor | None) -> Mesh:
+        d = mesh.n_spatial_dims
+        out = mesh.transform(
             R,
-            transform_point_data=True,
-            transform_cell_data=True,
-            transform_global_data=True,
+            transform_point_data=_spatial_field_mask(mesh.point_data, d),
+            transform_cell_data=_spatial_field_mask(mesh.cell_data, d),
+            transform_global_data=_spatial_field_mask(mesh.global_data, d),
             assume_invertible=True,
         )
+        out = self._rotate_tensor_components(out, R)
+        return out if t is None else out.translate(t)
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        R, t = self._pose(mesh.global_data, mesh.points)
+        return self._transform_mesh(mesh, R, t)
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
-        """Apply the sample-specific fixed pose to geometry and vector fields."""
+        """Apply the sample-specific fixed pose to every sub-mesh and the domain's global vectors."""
+        from physicsnemo.mesh.transformations.geometric import (
+            _normalize_transform_mask,
+            _transform_tensordict,
+        )
+
         gd = (
             domain.global_data
             if self.key_field in domain.global_data.keys()
             else domain.interior.global_data
         )
-        R = self._matrix(gd, domain.interior.points)
-        return domain.transform(
+        R, t = self._pose(gd, domain.interior.points)
+        d = domain.interior.n_spatial_dims
+        global_data = domain.global_data.clone()
+        _transform_tensordict(
+            global_data,
             R,
-            transform_point_data=True,
-            transform_cell_data=True,
-            transform_global_data=True,
-            assume_invertible=True,
+            d,
+            "global_data",
+            mask=_normalize_transform_mask(_spatial_field_mask(global_data, d)),
+        )
+        return DomainMesh(
+            interior=self._transform_mesh(domain.interior, R, t),
+            boundaries={name: self._transform_mesh(b, R, t) for name, b in domain.boundaries.items()},
+            global_data=global_data,
         )
 
     def extra_repr(self) -> str:
-        return f"salt={self.salt}, key_field={self.key_field!r}"
+        return (
+            f"salt={self.salt}, key_field={self.key_field!r}, translate={self.translate}, "
+            f"axis={self.axis}, symmetric_tensor_fields={self.symmetric_tensor_fields}"
+        )
+
+
+@register()
+class CaseKeyDomainMeshReader(DomainMeshReader):
+    """``DomainMeshReader`` that stores the stable per-case integer ``case_key`` in ``global_data``.
+
+    The DomainMesh twin of ``MeshReaderWithGlobalData(store_case_key=True)``
+    (CHAR-PROTOCOLS, 2026-10-02): the key is the CRC-32 of the case directory
+    name (the first path component below the reader root, e.g. ``run_1``,
+    ``sample_000123``), so the surface and volume readings of one case share
+    a key, and :class:`FixedRandomPose` draws the same pose for a case on
+    every load regardless of worker, epoch or shuffle order. 0-dim fields are
+    invariant under ``DomainMesh.transform``. Everything else is the stock
+    reader.
+    """
+
+    def _case_key(self, index: int) -> torch.Tensor:
+        sample_path = self._paths[index]
+        try:
+            name = sample_path.relative_to(self._root).parts[0]
+        except ValueError:
+            name = sample_path.name
+        return torch.tensor(zlib.crc32(name.encode()) & 0x7FFFFFFF, dtype=torch.int64)
+
+    def _load_sample(self, index: int) -> DomainMesh:
+        dm = super()._load_sample(index)
+        if "case_key" in dm.global_data.keys():
+            raise ValueError("global_data already has a 'case_key' field")
+        gd = dm.global_data.clone()
+        gd["case_key"] = self._case_key(index)
+        return DomainMesh(interior=dm.interior, boundaries=dm.boundaries, global_data=gd)
 
 
 @register()
