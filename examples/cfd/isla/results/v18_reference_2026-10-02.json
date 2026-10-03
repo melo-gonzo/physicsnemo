@@ -135,7 +135,40 @@
    "status": "not scored"
   },
   "airfrans": {
-   "status": "not scored"
+   "fields": [
+    "nut_l2",
+    "pressure_l2",
+    "velocity_l2"
+   ],
+   "v18": {
+    "nut_l2": 0.03047911236062646,
+    "pressure_l2": 0.03513756565283984,
+    "velocity_l2": 0.01681446934584528
+   },
+   "per_seed": {
+    "v18": {
+     "42": {
+      "pressure_l2": 0.033151210132054985,
+      "nut_l2": 0.03164156882092357,
+      "velocity_x_l2": 0.013851908650249243,
+      "velocity_y_l2": 0.041404824485071004,
+      "velocity_l2": 0.017169771743938328,
+      "n_cases": 200
+     },
+     "43": {
+      "pressure_l2": 0.037123921173624695,
+      "nut_l2": 0.02931665590032935,
+      "velocity_x_l2": 0.013377677875105291,
+      "velocity_y_l2": 0.039820846198126675,
+      "velocity_l2": 0.01645916694775224,
+      "n_cases": 200
+     }
+    }
+   },
+   "n_seeds": {
+    "v18": 2
+   },
+   "interim": false
   }
  }
 }

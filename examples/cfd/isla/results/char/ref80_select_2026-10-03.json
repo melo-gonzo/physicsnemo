@@ -1,0 +1,190 @@
+{
+ "protocol": "REF-80 selection (CHAR, 2026-10-03, #sec-nb-char-prereg): for every candidate configuration of ISLA, GeoTransolver and Transolver\nthat trains under 80 GiB per GPU (results/char/ref80_frontier_2026-10-02.json), the float32 validation error of its 500-epoch\nlanes (group r80, two seeds) on DrivAerML Surface (48 validation cars, scored at 200,000 cells, the reporting protocol, for\nevery candidate; the `_c100k` candidates are additionally scored at their training count of 100,000 cells, kept under\nmetrics_train_count/ as a secondary reading) and on the HiLift 210-wing medium rung when scored. Headline = area-weighted relative L2 of\nsurface pressure, seed mean. Rule (preregistered): per architecture and dataset, the candidate with the lowest seed-mean headline;\ncandidates within 3% of the best are ties and the cheaper one (lower training peak memory) wins. The reference configuration is\nthe candidate that wins on both datasets; if the two datasets disagree, both winners are listed and the decision is written in the\nnotebook. Reads campaigns_2026-10-02/char/r80/metrics/<run>/**/metrics.jsonl.\nusage: python ref80_select_2026-10-03.py",
+ "tie_fraction": 0.03,
+ "datasets": {
+  "drivaer_surface": {
+   "ISLA": {
+    "candidates": {
+     "isla_w512_s512": {
+      "pressure_l2": 0.04431489711472144,
+      "per_seed": {
+       "42": 0.044867371985067926,
+       "43": 0.04376242224437495
+      },
+      "fields": {
+       "pressure_l2": 0.04431489711472144,
+       "wss_x_l2": 0.05223972687963396,
+       "wss_y_l2": 0.12041582989816864,
+       "wss_z_l2": 0.10470217163674533,
+       "wss_l2": 0.0699451055455332
+      },
+      "n_seeds": 2,
+      "n_cases": 48,
+      "peak_memory_gib": 64.27252960205078
+     },
+     "isla_w512": {
+      "pressure_l2": 0.04321310490680238,
+      "per_seed": {
+       "42": 0.0427745101818194,
+       "43": 0.043651699631785355
+      },
+      "fields": {
+       "pressure_l2": 0.04321310490680238,
+       "wss_x_l2": 0.05114753625821322,
+       "wss_y_l2": 0.11697509069927037,
+       "wss_z_l2": 0.10228769659685591,
+       "wss_l2": 0.06826844322495162
+      },
+      "n_seeds": 2,
+      "n_cases": 48,
+      "peak_memory_gib": 56.857391357421875
+     },
+     "isla_s512": {
+      "pressure_l2": 0.04298487744138887,
+      "per_seed": {
+       "42": 0.04314271438245972,
+       "43": 0.04282704050031801
+      },
+      "fields": {
+       "pressure_l2": 0.04298487744138887,
+       "wss_x_l2": 0.05048657701505969,
+       "wss_y_l2": 0.1174655466650923,
+       "wss_z_l2": 0.10190157825127244,
+       "wss_l2": 0.067894481937401
+      },
+      "n_seeds": 2,
+      "n_cases": 48,
+      "peak_memory_gib": 52.04242706298828
+     },
+     "isla_ref": {
+      "pressure_l2": 0.043697088258340955,
+      "per_seed": {
+       "42": 0.04433486758110424,
+       "43": 0.04305930893557767
+      },
+      "fields": {
+       "pressure_l2": 0.043697088258340955,
+       "wss_x_l2": 0.05121922500741979,
+       "wss_y_l2": 0.11871772562153637,
+       "wss_z_l2": 0.10345339472405612,
+       "wss_l2": 0.06882824853528291
+      },
+      "n_seeds": 2,
+      "n_cases": 48,
+      "peak_memory_gib": 44.4049072265625
+     }
+    },
+    "best": 0.04298487744138887,
+    "ties_within_3pct": [
+     "isla_w512",
+     "isla_s512",
+     "isla_ref"
+    ],
+    "winner": "isla_ref",
+    "complete": false
+   },
+   "GeoTransolver": {
+    "candidates": {
+     "gt_h256": {
+      "pressure_l2": 0.045512411898622915,
+      "per_seed": {
+       "42": 0.04552135244011879,
+       "43": 0.04550347135712703
+      },
+      "fields": {
+       "pressure_l2": 0.045512411898622915,
+       "wss_x_l2": 0.052314293376790985,
+       "wss_y_l2": 0.12192505955075225,
+       "wss_z_l2": 0.10104637080803514,
+       "wss_l2": 0.06952897505834699
+      },
+      "n_seeds": 2,
+      "n_cases": 48,
+      "peak_memory_gib": 77.75142669677734
+     }
+    },
+    "best": 0.045512411898622915,
+    "ties_within_3pct": [
+     "gt_h256"
+    ],
+    "winner": "gt_h256",
+    "complete": false
+   },
+   "Transolver": {
+    "candidates": {
+     "t_h512": {
+      "pressure_l2": 0.04659828970519205,
+      "per_seed": {
+       "42": 0.046729344952230654,
+       "43": 0.04646723445815345
+      },
+      "fields": {
+       "pressure_l2": 0.04659828970519205,
+       "wss_x_l2": 0.0545503896040221,
+       "wss_y_l2": 0.1260366487161567,
+       "wss_z_l2": 0.10555683053098619,
+       "wss_l2": 0.07235005463007838
+      },
+      "n_seeds": 2,
+      "n_cases": 48,
+      "peak_memory_gib": 64.86289978027344
+     },
+     "t_h256": {
+      "pressure_l2": 0.05564269803774854,
+      "per_seed": {
+       "42": 0.05545783097234865,
+       "43": 0.05582756510314842
+      },
+      "fields": {
+       "pressure_l2": 0.05564269803774854,
+       "wss_x_l2": 0.061766806175000966,
+       "wss_y_l2": 0.1441456420191874,
+       "wss_z_l2": 0.12027294274109106,
+       "wss_l2": 0.0822736828122288
+      },
+      "n_seeds": 2,
+      "n_cases": 48,
+      "peak_memory_gib": 51.556983947753906
+     }
+    },
+    "best": 0.04659828970519205,
+    "ties_within_3pct": [
+     "t_h512"
+    ],
+    "winner": "t_h512",
+    "complete": false
+   }
+  },
+  "hilift_210": {
+   "ISLA": {
+    "status": "not scored"
+   },
+   "GeoTransolver": {
+    "status": "not scored"
+   },
+   "Transolver": {
+    "status": "not scored"
+   }
+  }
+ },
+ "reference": {
+  "ISLA": {
+   "winners": {
+    "drivaer_surface": "isla_ref"
+   },
+   "agreed": false
+  },
+  "GeoTransolver": {
+   "winners": {
+    "drivaer_surface": "gt_h256"
+   },
+   "agreed": false
+  },
+  "Transolver": {
+   "winners": {
+    "drivaer_surface": "t_h512"
+   },
+   "agreed": false
+  }
+ }
+}
