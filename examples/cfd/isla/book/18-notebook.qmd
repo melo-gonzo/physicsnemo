@@ -33225,3 +33225,59 @@ written here with its reason; note already that the ISLA tie set is wide
 and a tie-break by two GiB of memory between a 150M-parameter model at
 100,000 cells and a 38M-parameter model at 200,000 is not a strong
 preference, so the wing half's ordering will carry the weight.
+
+## 2026-10-03 — Status, CHAR-LANES launched: 36 lanes (DrivAerML Volume, AirfRANS, Shift-SUV, Tensile2D, lug, DeepJEB++; ISLA / GeoTransolver / Transolver; two seeds) under the DrivAerML-half reference configurations on code_v20, after 18 one-epoch smoke lanes all reached a metric; DeepJEB++ needed the degenerate-cell guard; the DrivAerML Volume task exceeds the 80 GiB line at two of the three references (GeoTransolver 94.8, ISLA 81.6 GiB) and runs as specified {#sec-nb-char-lanes-launched}
+
+**Setting.** CHAR-LANES (@sec-nb-char-prereg) trains every dataset x
+task x architecture x two seeds under one reference configuration per
+architecture. The DrivAerML Surface and HiLift 210-wing lanes of the
+REF-80 frontier are already those lanes; the remaining six tasks launched
+today (group `cl`, `kernel/char/cl_lanes.{tsv,sbatch}`, copies in
+`results/campaigns_2026-10-02/char/kernel/cl/`) under the DrivAerML-half
+winners (@sec-nb-ref80-drivaer-half): ISLA width 768 at 100,000 training
+cells (lr 2.5e-4), GeoTransolver width 1,024 at 100,000 (1e-3),
+Transolver width 1,024 at 100,000 (1e-3), baselines with augmentation
+off, the stored signed distance and its gradient to all three on the
+interior tasks. If the wing half changes a winner, that configuration is
+added as extra lanes. Snapshot code_v20 (exact nearest-boundary search).
+
+**Per-task protocol (split, epochs, validation interval, training
+cells), taken from the earlier campaign tables.** DrivAerML Volume: the
+recipe's train / val split, 500 epochs, every epoch, 100,000. AirfRANS:
+800 / 200 (full_train / full_test), 500, every 10, 100,000. Shift-SUV: the
+dataset manifest's train / val (794 / 99 estate bodies), 500, every epoch,
+100,000; no earlier campaign trained on Shift-SUV, so this split is set
+here. Tensile2D: train_400 / val_100, 500, every 10, 20,000 (every node).
+Lug: train / test (2,400 / 600), 500, every 10, 20,000 (every node).
+DeepJEB++: train_clean / test_clean (12,451 / 1,385 brackets), 40 epochs,
+every 2, the whole 50,040-cell surface; about 2,300 s per epoch, the
+longest arm at roughly a day per lane.
+
+**Smoke (18 one-epoch lanes, group `cs`, all to a metric).** Peak device
+memory per lane (GiB): DrivAerML Volume ISLA 81.6, GeoTransolver 94.8,
+Transolver 68.8; AirfRANS 43.3 / 71.2 / 68.7; Shift-SUV 42.1 / 71.4 /
+46.7; Tensile2D 7.5 / 10.6 / 10.3; lug 11.8 / 13.0 / 12.5; DeepJEB++ 22.3
+/ 37.1 / 24.3. Two decisions follow. (1) **DeepJEB++ degenerate
+triangles**: every architecture stopped at training step 2,266 with the
+recipe's measure check ("target_measure must contain one finite positive
+integration weight per target query"): some brackets carry exactly
+zero-area triangles, and the mesh-native target measure recomputed from
+the surface is zero there (the earlier DeepJEB++ lanes ran on a snapshot
+whose loss had no such check). The same guard the wings received on
+2026-10-02, `DropDegenerateCells` before the terminal transform, is now in
+`deepjebpp_surface.yaml` and its `_area` and `_posed` variants (backups
+`.pre_dropdeg`); the smoke reruns passed. (2) **The 80 GiB line on the
+volume task**: at the reference configurations the DrivAerML Volume task
+peaks at 94.8 GiB for GeoTransolver (its volume recipe's local-feature
+path over six radii; the surface task at the same width read 71.4) and
+81.6 GiB for ISLA (100,000 boundary plus 100,000 interior tokens); only
+Transolver fits (68.8). The reference configuration is one per
+architecture by the campaign's rule and was selected on the surface task,
+so the lanes run as specified and the per-task peak memory is reported
+beside the error in the book's cost line; the alternative, lowering the
+volume training cells or dropping the baseline's local features, would
+have made the configuration task-dependent or changed a released
+baseline's recipe. Scorer: `cl_af_*` scores at 100,000 cells (the
+AirfRANS protocol), `cl_jeb_*`, `cl_t2d_*`, `cl_lug_*` at the 200,000-cell
+default, which passes their whole surfaces and node sets through, as
+their earlier lanes were scored; `cl_*` lanes map to code_v20.

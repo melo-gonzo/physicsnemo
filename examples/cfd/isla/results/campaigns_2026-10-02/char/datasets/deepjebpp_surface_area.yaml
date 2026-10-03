@@ -64,6 +64,7 @@ pipeline:
     - _target_: ${dp:PoissonBiasedSubsampleMesh}   # CHAR-PROTOCOLS area: inclusion probability proportional to cell area, exact HT weights
       n_cells_expected: ${sampling_resolution}
       weight_mode: area
+    - _target_: ${dp:DropDegenerateCells}      # 2026-10-03: some brackets carry exactly zero-area triangles; the mesh-native target measure refuses a zero weight
     - _target_: ${dp:MeshToDomainMesh}
       interior_points: cell_centroids
       boundary_name: surface
