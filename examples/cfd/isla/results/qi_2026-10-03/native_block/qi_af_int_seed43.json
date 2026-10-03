@@ -1,0 +1,5647 @@
+{
+ "run_id": "qi_af_int_seed43",
+ "epoch": 500,
+ "dataset": "airfrans_volume_2d",
+ "dataset_all": "airfrans_volume_2d_all",
+ "request": 100000,
+ "n_cases": 200,
+ "summary": {
+  "native": {
+   "pressure": 0.030784372352063657,
+   "velocity": 0.016177414902485907,
+   "nut": 0.028981193215586246
+  },
+  "native_n_cases": 200,
+  "self_support": {
+   "pressure": 0.030784308516886086,
+   "velocity": 0.016177353677339853,
+   "nut": 0.028981764893978836
+  },
+  "self_support_n_cases": 200,
+  "random_support_all": {
+   "pressure": 0.03986615668050945,
+   "velocity": 0.01683237887918949,
+   "nut": 0.03812575130723417
+  },
+  "random_support_all_n_cases": 200,
+  "random_support_outside": {
+   "pressure": 0.18332021025009454,
+   "velocity": 0.10152155478484928,
+   "nut": 0.2844584011565894
+  },
+  "random_support_outside_n_cases": 200,
+  "random_support_all_over_native": {
+   "pressure": 1.295012814443072,
+   "velocity": 1.0404863187753772,
+   "nut": 1.3155342164010668
+  },
+  "random_support_outside_over_native_same_cases": {
+   "pressure": 5.954976380663662,
+   "velocity": 6.275511594207115,
+   "nut": 9.815275687255212
+  },
+  "all_exact_match": true
+ },
+ "cases": [
+  {
+   "case": 0,
+   "n_all": 179033,
+   "n_native": 100000,
+   "n_outside": 79033,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.026464005932211876,
+    "velocity": 0.014652629382908344,
+    "nut": 0.01847582310438156
+   },
+   "self_support": {
+    "pressure": 0.026463253423571587,
+    "velocity": 0.014652877114713192,
+    "nut": 0.01847659982740879
+   },
+   "random_support_outside": {
+    "pressure": 0.09011579304933548,
+    "velocity": 0.06583765894174576,
+    "nut": 0.9175006747245789
+   },
+   "random_support_all": {
+    "pressure": 0.02826654724776745,
+    "velocity": 0.014082835055887699,
+    "nut": 0.0394497849047184
+   },
+   "seconds": 28.34
+  },
+  {
+   "case": 1,
+   "n_all": 172029,
+   "n_native": 100000,
+   "n_outside": 72029,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03897326812148094,
+    "velocity": 0.019563544541597366,
+    "nut": 0.024828851222991943
+   },
+   "self_support": {
+    "pressure": 0.038974329829216,
+    "velocity": 0.01956321857869625,
+    "nut": 0.024829966947436333
+   },
+   "random_support_outside": {
+    "pressure": 0.3276658356189728,
+    "velocity": 0.1651165783405304,
+    "nut": 0.03746654838323593
+   },
+   "random_support_all": {
+    "pressure": 0.05014545097947121,
+    "velocity": 0.021848492324352264,
+    "nut": 0.021957112476229668
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 2,
+   "n_all": 164976,
+   "n_native": 100000,
+   "n_outside": 64976,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.008989159017801285,
+    "velocity": 0.012776519171893597,
+    "nut": 0.04001978039741516
+   },
+   "self_support": {
+    "pressure": 0.008985573425889015,
+    "velocity": 0.012776602990925312,
+    "nut": 0.04002491012215614
+   },
+   "random_support_outside": {
+    "pressure": 0.26038333773612976,
+    "velocity": 0.2242787480354309,
+    "nut": 0.18561914563179016
+   },
+   "random_support_all": {
+    "pressure": 0.03656511381268501,
+    "velocity": 0.016568487510085106,
+    "nut": 0.02920256182551384
+   },
+   "seconds": 1.63
+  },
+  {
+   "case": 3,
+   "n_all": 183075,
+   "n_native": 100000,
+   "n_outside": 83075,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.01422693021595478,
+    "velocity": 0.0337497815489769,
+    "nut": 0.20937547087669373
+   },
+   "self_support": {
+    "pressure": 0.014226132072508335,
+    "velocity": 0.03375053405761719,
+    "nut": 0.209374338388443
+   },
+   "random_support_outside": {
+    "pressure": 0.07823196798563004,
+    "velocity": 0.12182196974754333,
+    "nut": 0.46829792857170105
+   },
+   "random_support_all": {
+    "pressure": 0.037618402391672134,
+    "velocity": 0.04229427129030228,
+    "nut": 0.2398812472820282
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 4,
+   "n_all": 177552,
+   "n_native": 100000,
+   "n_outside": 77552,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.05085336044430733,
+    "velocity": 0.017998820170760155,
+    "nut": 0.031022721901535988
+   },
+   "self_support": {
+    "pressure": 0.05085321515798569,
+    "velocity": 0.017998671159148216,
+    "nut": 0.03102354146540165
+   },
+   "random_support_outside": {
+    "pressure": 0.34096038341522217,
+    "velocity": 0.07363209873437881,
+    "nut": 0.46368956565856934
+   },
+   "random_support_all": {
+    "pressure": 0.04989122226834297,
+    "velocity": 0.01919006183743477,
+    "nut": 0.03585313633084297
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 5,
+   "n_all": 174988,
+   "n_native": 100000,
+   "n_outside": 74988,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.0524483397603035,
+    "velocity": 0.01961430162191391,
+    "nut": 0.03498934581875801
+   },
+   "self_support": {
+    "pressure": 0.05245204642415047,
+    "velocity": 0.019614214077591896,
+    "nut": 0.03499742969870567
+   },
+   "random_support_outside": {
+    "pressure": 0.34089335799217224,
+    "velocity": 0.06701714545488358,
+    "nut": 0.5203798413276672
+   },
+   "random_support_all": {
+    "pressure": 0.048452362418174744,
+    "velocity": 0.02083403989672661,
+    "nut": 0.05964504927396774
+   },
+   "seconds": 1.66
+  },
+  {
+   "case": 6,
+   "n_all": 169927,
+   "n_native": 100000,
+   "n_outside": 69927,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.01629582606256008,
+    "velocity": 0.019168531522154808,
+    "nut": 0.03555374592542648
+   },
+   "self_support": {
+    "pressure": 0.016295887529850006,
+    "velocity": 0.019168592989444733,
+    "nut": 0.03554907441139221
+   },
+   "random_support_outside": {
+    "pressure": 0.051122114062309265,
+    "velocity": 0.06645426154136658,
+    "nut": 0.7364922761917114
+   },
+   "random_support_all": {
+    "pressure": 0.04353637248277664,
+    "velocity": 0.021303342655301094,
+    "nut": 0.043133970350027084
+   },
+   "seconds": 1.65
+  },
+  {
+   "case": 7,
+   "n_all": 179851,
+   "n_native": 100000,
+   "n_outside": 79851,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04731040820479393,
+    "velocity": 0.01892232522368431,
+    "nut": 0.01753649115562439
+   },
+   "self_support": {
+    "pressure": 0.04731208086013794,
+    "velocity": 0.018922189250588417,
+    "nut": 0.01754102110862732
+   },
+   "random_support_outside": {
+    "pressure": 0.32147789001464844,
+    "velocity": 0.12643907964229584,
+    "nut": 0.37833860516548157
+   },
+   "random_support_all": {
+    "pressure": 0.06220417469739914,
+    "velocity": 0.01882948726415634,
+    "nut": 0.03154502436518669
+   },
+   "seconds": 1.72
+  },
+  {
+   "case": 8,
+   "n_all": 180912,
+   "n_native": 100000,
+   "n_outside": 80912,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.0415494404733181,
+    "velocity": 0.011779481545090675,
+    "nut": 0.01832469552755356
+   },
+   "self_support": {
+    "pressure": 0.04155074432492256,
+    "velocity": 0.011779219843447208,
+    "nut": 0.018323320895433426
+   },
+   "random_support_outside": {
+    "pressure": 0.2089574784040451,
+    "velocity": 0.05101366341114044,
+    "nut": 0.594616711139679
+   },
+   "random_support_all": {
+    "pressure": 0.036158666014671326,
+    "velocity": 0.011028426699340343,
+    "nut": 0.04283430799841881
+   },
+   "seconds": 1.66
+  },
+  {
+   "case": 9,
+   "n_all": 179468,
+   "n_native": 100000,
+   "n_outside": 79468,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.016678187996149063,
+    "velocity": 0.014287732541561127,
+    "nut": 0.019549649208784103
+   },
+   "self_support": {
+    "pressure": 0.01667734980583191,
+    "velocity": 0.014287467114627361,
+    "nut": 0.019550103694200516
+   },
+   "random_support_outside": {
+    "pressure": 0.15593823790550232,
+    "velocity": 0.1819763034582138,
+    "nut": 0.052960578352212906
+   },
+   "random_support_all": {
+    "pressure": 0.033883754163980484,
+    "velocity": 0.015955161303281784,
+    "nut": 0.017711548134684563
+   },
+   "seconds": 1.71
+  },
+  {
+   "case": 10,
+   "n_all": 186848,
+   "n_native": 100000,
+   "n_outside": 86848,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.024524610489606857,
+    "velocity": 0.03315625339746475,
+    "nut": 0.04033629223704338
+   },
+   "self_support": {
+    "pressure": 0.0245234165340662,
+    "velocity": 0.033155716955661774,
+    "nut": 0.04032635688781738
+   },
+   "random_support_outside": {
+    "pressure": 0.03868619725108147,
+    "velocity": 0.03676048293709755,
+    "nut": 0.06524576246738434
+   },
+   "random_support_all": {
+    "pressure": 0.05279478058218956,
+    "velocity": 0.030459510162472725,
+    "nut": 0.03855900838971138
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 11,
+   "n_all": 182326,
+   "n_native": 100000,
+   "n_outside": 82326,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04488501325249672,
+    "velocity": 0.014083643443882465,
+    "nut": 0.01778954081237316
+   },
+   "self_support": {
+    "pressure": 0.04488486424088478,
+    "velocity": 0.014083312824368477,
+    "nut": 0.017788495868444443
+   },
+   "random_support_outside": {
+    "pressure": 0.36261385679244995,
+    "velocity": 0.07819229364395142,
+    "nut": 0.5179358124732971
+   },
+   "random_support_all": {
+    "pressure": 0.04971911013126373,
+    "velocity": 0.013466752134263515,
+    "nut": 0.04069923236966133
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 12,
+   "n_all": 180819,
+   "n_native": 100000,
+   "n_outside": 80819,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.016275979578495026,
+    "velocity": 0.011542479507625103,
+    "nut": 0.01476279553025961
+   },
+   "self_support": {
+    "pressure": 0.016270004212856293,
+    "velocity": 0.011542442254722118,
+    "nut": 0.014763480052351952
+   },
+   "random_support_outside": {
+    "pressure": 0.19378863275051117,
+    "velocity": 0.08362835645675659,
+    "nut": 0.039250001311302185
+   },
+   "random_support_all": {
+    "pressure": 0.032485757023096085,
+    "velocity": 0.014006941579282284,
+    "nut": 0.013573368079960346
+   },
+   "seconds": 1.7
+  },
+  {
+   "case": 13,
+   "n_all": 178754,
+   "n_native": 100000,
+   "n_outside": 78754,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.0712367370724678,
+    "velocity": 0.02022557705640793,
+    "nut": 0.02314087189733982
+   },
+   "self_support": {
+    "pressure": 0.07123857736587524,
+    "velocity": 0.020225215703248978,
+    "nut": 0.02314102090895176
+   },
+   "random_support_outside": {
+    "pressure": 0.30552470684051514,
+    "velocity": 0.057898398488759995,
+    "nut": 0.5280576348304749
+   },
+   "random_support_all": {
+    "pressure": 0.08082236349582672,
+    "velocity": 0.020745404064655304,
+    "nut": 0.04584948346018791
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 14,
+   "n_all": 174589,
+   "n_native": 100000,
+   "n_outside": 74589,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.009359542280435562,
+    "velocity": 0.01241167914122343,
+    "nut": 0.020540256053209305
+   },
+   "self_support": {
+    "pressure": 0.009359818883240223,
+    "velocity": 0.012410877272486687,
+    "nut": 0.020541515201330185
+   },
+   "random_support_outside": {
+    "pressure": 0.28402817249298096,
+    "velocity": 0.18523027002811432,
+    "nut": 0.14932359755039215
+   },
+   "random_support_all": {
+    "pressure": 0.0307299867272377,
+    "velocity": 0.017136476933956146,
+    "nut": 0.029419029131531715
+   },
+   "seconds": 1.65
+  },
+  {
+   "case": 15,
+   "n_all": 181077,
+   "n_native": 100000,
+   "n_outside": 81077,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02008631080389023,
+    "velocity": 0.010663236491382122,
+    "nut": 0.01718604750931263
+   },
+   "self_support": {
+    "pressure": 0.02008705586194992,
+    "velocity": 0.010663175955414772,
+    "nut": 0.01718711480498314
+   },
+   "random_support_outside": {
+    "pressure": 0.07291823625564575,
+    "velocity": 0.033722132444381714,
+    "nut": 0.024515684694051743
+   },
+   "random_support_all": {
+    "pressure": 0.030959477648139,
+    "velocity": 0.011545735411345959,
+    "nut": 0.015148943290114403
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 16,
+   "n_all": 176619,
+   "n_native": 100000,
+   "n_outside": 76619,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.026003660634160042,
+    "velocity": 0.01314438134431839,
+    "nut": 0.01475857850164175
+   },
+   "self_support": {
+    "pressure": 0.02600579522550106,
+    "velocity": 0.013144529424607754,
+    "nut": 0.014756851829588413
+   },
+   "random_support_outside": {
+    "pressure": 0.17079734802246094,
+    "velocity": 0.05696035921573639,
+    "nut": 0.4736648201942444
+   },
+   "random_support_all": {
+    "pressure": 0.030898461118340492,
+    "velocity": 0.01406354270875454,
+    "nut": 0.05204646661877632
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 17,
+   "n_all": 183166,
+   "n_native": 100000,
+   "n_outside": 83166,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04891304671764374,
+    "velocity": 0.013468601740896702,
+    "nut": 0.026636820286512375
+   },
+   "self_support": {
+    "pressure": 0.048917610198259354,
+    "velocity": 0.013469036668539047,
+    "nut": 0.026637153699994087
+   },
+   "random_support_outside": {
+    "pressure": 0.20172080397605896,
+    "velocity": 0.06238884478807449,
+    "nut": 0.6181114912033081
+   },
+   "random_support_all": {
+    "pressure": 0.037718724459409714,
+    "velocity": 0.012394950725138187,
+    "nut": 0.04535454884171486
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 18,
+   "n_all": 164052,
+   "n_native": 100000,
+   "n_outside": 64052,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03778095543384552,
+    "velocity": 0.027791080996394157,
+    "nut": 0.03754333406686783
+   },
+   "self_support": {
+    "pressure": 0.03777783736586571,
+    "velocity": 0.027790497988462448,
+    "nut": 0.03754846751689911
+   },
+   "random_support_outside": {
+    "pressure": 0.3190876543521881,
+    "velocity": 0.1981775313615799,
+    "nut": 0.04873915761709213
+   },
+   "random_support_all": {
+    "pressure": 0.04308594390749931,
+    "velocity": 0.024902096018195152,
+    "nut": 0.033108003437519073
+   },
+   "seconds": 1.65
+  },
+  {
+   "case": 19,
+   "n_all": 179688,
+   "n_native": 100000,
+   "n_outside": 79688,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.013486270792782307,
+    "velocity": 0.013692181557416916,
+    "nut": 0.02521282434463501
+   },
+   "self_support": {
+    "pressure": 0.013484600931406021,
+    "velocity": 0.013692389242351055,
+    "nut": 0.025216955691576004
+   },
+   "random_support_outside": {
+    "pressure": 0.033454589545726776,
+    "velocity": 0.03924288973212242,
+    "nut": 0.0496506467461586
+   },
+   "random_support_all": {
+    "pressure": 0.024462155997753143,
+    "velocity": 0.015437344089150429,
+    "nut": 0.023591788485646248
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 20,
+   "n_all": 178646,
+   "n_native": 100000,
+   "n_outside": 78646,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02307453751564026,
+    "velocity": 0.013180515728890896,
+    "nut": 0.020676549524068832
+   },
+   "self_support": {
+    "pressure": 0.02307714708149433,
+    "velocity": 0.013179922476410866,
+    "nut": 0.020676804706454277
+   },
+   "random_support_outside": {
+    "pressure": 0.2880007326602936,
+    "velocity": 0.1879429817199707,
+    "nut": 0.04899192973971367
+   },
+   "random_support_all": {
+    "pressure": 0.026808150112628937,
+    "velocity": 0.012893712148070335,
+    "nut": 0.017469150945544243
+   },
+   "seconds": 1.66
+  },
+  {
+   "case": 21,
+   "n_all": 182380,
+   "n_native": 100000,
+   "n_outside": 82380,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.014014220796525478,
+    "velocity": 0.012170204892754555,
+    "nut": 0.03565621376037598
+   },
+   "self_support": {
+    "pressure": 0.014010808430612087,
+    "velocity": 0.012169836089015007,
+    "nut": 0.035650260746479034
+   },
+   "random_support_outside": {
+    "pressure": 0.04226520285010338,
+    "velocity": 0.03262261673808098,
+    "nut": 0.048967670649290085
+   },
+   "random_support_all": {
+    "pressure": 0.026210132986307144,
+    "velocity": 0.012786760926246643,
+    "nut": 0.030913766473531723
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 22,
+   "n_all": 176717,
+   "n_native": 100000,
+   "n_outside": 76717,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.011732307262718678,
+    "velocity": 0.01196599006652832,
+    "nut": 0.021469032391905785
+   },
+   "self_support": {
+    "pressure": 0.011732777580618858,
+    "velocity": 0.011966240592300892,
+    "nut": 0.021470900624990463
+   },
+   "random_support_outside": {
+    "pressure": 0.3702980875968933,
+    "velocity": 0.21123559772968292,
+    "nut": 0.05850544199347496
+   },
+   "random_support_all": {
+    "pressure": 0.027980288490653038,
+    "velocity": 0.016583820804953575,
+    "nut": 0.015163538046181202
+   },
+   "seconds": 1.65
+  },
+  {
+   "case": 23,
+   "n_all": 181220,
+   "n_native": 100000,
+   "n_outside": 81220,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.00840647891163826,
+    "velocity": 0.0100020170211792,
+    "nut": 0.01759890280663967
+   },
+   "self_support": {
+    "pressure": 0.008406811393797398,
+    "velocity": 0.01000196672976017,
+    "nut": 0.017598945647478104
+   },
+   "random_support_outside": {
+    "pressure": 0.20757395029067993,
+    "velocity": 0.21171994507312775,
+    "nut": 0.06353949010372162
+   },
+   "random_support_all": {
+    "pressure": 0.02844160422682762,
+    "velocity": 0.012825749814510345,
+    "nut": 0.020514216274023056
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 24,
+   "n_all": 179655,
+   "n_native": 100000,
+   "n_outside": 79655,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.021602623164653778,
+    "velocity": 0.01304236613214016,
+    "nut": 0.01914619468152523
+   },
+   "self_support": {
+    "pressure": 0.021604543551802635,
+    "velocity": 0.013041735626757145,
+    "nut": 0.019146155565977097
+   },
+   "random_support_outside": {
+    "pressure": 0.11350251734256744,
+    "velocity": 0.05183873698115349,
+    "nut": 0.039219748228788376
+   },
+   "random_support_all": {
+    "pressure": 0.025704465806484222,
+    "velocity": 0.012656494975090027,
+    "nut": 0.019860321655869484
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 25,
+   "n_all": 180874,
+   "n_native": 100000,
+   "n_outside": 80874,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.0285435002297163,
+    "velocity": 0.01518762856721878,
+    "nut": 0.23467716574668884
+   },
+   "self_support": {
+    "pressure": 0.028543248772621155,
+    "velocity": 0.015187579207122326,
+    "nut": 0.23468205332756042
+   },
+   "random_support_outside": {
+    "pressure": 0.07589972764253616,
+    "velocity": 0.03441262245178223,
+    "nut": 0.0864969938993454
+   },
+   "random_support_all": {
+    "pressure": 0.027510616928339005,
+    "velocity": 0.012630405835807323,
+    "nut": 0.022942060604691505
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 26,
+   "n_all": 197146,
+   "n_native": 100000,
+   "n_outside": 97146,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.01606885902583599,
+    "velocity": 0.028004320338368416,
+    "nut": 0.0481487512588501
+   },
+   "self_support": {
+    "pressure": 0.016067881137132645,
+    "velocity": 0.028003983199596405,
+    "nut": 0.04815378785133362
+   },
+   "random_support_outside": {
+    "pressure": 0.029961833730340004,
+    "velocity": 0.03267035260796547,
+    "nut": 0.06761275231838226
+   },
+   "random_support_all": {
+    "pressure": 0.03681862726807594,
+    "velocity": 0.026213837787508965,
+    "nut": 0.043980710208415985
+   },
+   "seconds": 1.75
+  },
+  {
+   "case": 27,
+   "n_all": 187638,
+   "n_native": 100000,
+   "n_outside": 87638,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.05327610298991203,
+    "velocity": 0.042142290621995926,
+    "nut": 0.02703848108649254
+   },
+   "self_support": {
+    "pressure": 0.05327848717570305,
+    "velocity": 0.04214020445942879,
+    "nut": 0.027040762826800346
+   },
+   "random_support_outside": {
+    "pressure": 0.35621947050094604,
+    "velocity": 0.27562057971954346,
+    "nut": 0.20611874759197235
+   },
+   "random_support_all": {
+    "pressure": 0.026953555643558502,
+    "velocity": 0.047007832676172256,
+    "nut": 0.0408288799226284
+   },
+   "seconds": 1.72
+  },
+  {
+   "case": 28,
+   "n_all": 174681,
+   "n_native": 100000,
+   "n_outside": 74681,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.05273396149277687,
+    "velocity": 0.01826145499944687,
+    "nut": 0.021517189219594002
+   },
+   "self_support": {
+    "pressure": 0.05273343250155449,
+    "velocity": 0.018261611461639404,
+    "nut": 0.02151695266366005
+   },
+   "random_support_outside": {
+    "pressure": 0.18164019286632538,
+    "velocity": 0.07201163470745087,
+    "nut": 0.5029425024986267
+   },
+   "random_support_all": {
+    "pressure": 0.05588020384311676,
+    "velocity": 0.018648799508810043,
+    "nut": 0.04323780536651611
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 29,
+   "n_all": 163590,
+   "n_native": 100000,
+   "n_outside": 63590,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04734977334737778,
+    "velocity": 0.03226330876350403,
+    "nut": 0.044843751937150955
+   },
+   "self_support": {
+    "pressure": 0.04735053330659866,
+    "velocity": 0.03226313367486,
+    "nut": 0.04484769329428673
+   },
+   "random_support_outside": {
+    "pressure": 0.32430487871170044,
+    "velocity": 0.19422434270381927,
+    "nut": 0.07610788941383362
+   },
+   "random_support_all": {
+    "pressure": 0.046317409723997116,
+    "velocity": 0.028905576094985008,
+    "nut": 0.04855138063430786
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 30,
+   "n_all": 180616,
+   "n_native": 100000,
+   "n_outside": 80616,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.023039093241095543,
+    "velocity": 0.01224882435053587,
+    "nut": 0.024180365726351738
+   },
+   "self_support": {
+    "pressure": 0.02303948439657688,
+    "velocity": 0.0122483279556036,
+    "nut": 0.024179937317967415
+   },
+   "random_support_outside": {
+    "pressure": 0.1082649677991867,
+    "velocity": 0.026009075343608856,
+    "nut": 0.04562682658433914
+   },
+   "random_support_all": {
+    "pressure": 0.026521405205130577,
+    "velocity": 0.01232756208628416,
+    "nut": 0.019943639636039734
+   },
+   "seconds": 1.73
+  },
+  {
+   "case": 31,
+   "n_all": 179076,
+   "n_native": 100000,
+   "n_outside": 79076,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.020341813564300537,
+    "velocity": 0.013092787005007267,
+    "nut": 0.020543469116091728
+   },
+   "self_support": {
+    "pressure": 0.020340345799922943,
+    "velocity": 0.013092277571558952,
+    "nut": 0.020542774349451065
+   },
+   "random_support_outside": {
+    "pressure": 0.3073006272315979,
+    "velocity": 0.1807064414024353,
+    "nut": 0.05850689113140106
+   },
+   "random_support_all": {
+    "pressure": 0.024024363607168198,
+    "velocity": 0.013559793122112751,
+    "nut": 0.017946766689419746
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 32,
+   "n_all": 172610,
+   "n_native": 100000,
+   "n_outside": 72610,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.00837589893490076,
+    "velocity": 0.009408957324922085,
+    "nut": 0.02531430870294571
+   },
+   "self_support": {
+    "pressure": 0.008378460071980953,
+    "velocity": 0.009408852085471153,
+    "nut": 0.02530401572585106
+   },
+   "random_support_outside": {
+    "pressure": 0.04475945606827736,
+    "velocity": 0.0781775563955307,
+    "nut": 0.7470506429672241
+   },
+   "random_support_all": {
+    "pressure": 0.030133826658129692,
+    "velocity": 0.014600740745663643,
+    "nut": 0.03451663255691528
+   },
+   "seconds": 1.66
+  },
+  {
+   "case": 33,
+   "n_all": 179123,
+   "n_native": 100000,
+   "n_outside": 79123,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.013381930999457836,
+    "velocity": 0.012266741134226322,
+    "nut": 0.018335307016968727
+   },
+   "self_support": {
+    "pressure": 0.013382241129875183,
+    "velocity": 0.012266754172742367,
+    "nut": 0.018336839973926544
+   },
+   "random_support_outside": {
+    "pressure": 0.2060481160879135,
+    "velocity": 0.18636418879032135,
+    "nut": 0.05572984740138054
+   },
+   "random_support_all": {
+    "pressure": 0.025469450280070305,
+    "velocity": 0.013562968000769615,
+    "nut": 0.01595226675271988
+   },
+   "seconds": 1.66
+  },
+  {
+   "case": 34,
+   "n_all": 184616,
+   "n_native": 100000,
+   "n_outside": 84616,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.034449316561222076,
+    "velocity": 0.012707293033599854,
+    "nut": 0.02027900703251362
+   },
+   "self_support": {
+    "pressure": 0.034448206424713135,
+    "velocity": 0.012707635760307312,
+    "nut": 0.02027958445250988
+   },
+   "random_support_outside": {
+    "pressure": 0.10412091016769409,
+    "velocity": 0.04290091618895531,
+    "nut": 0.031323183327913284
+   },
+   "random_support_all": {
+    "pressure": 0.03767922520637512,
+    "velocity": 0.013021636754274368,
+    "nut": 0.016885535791516304
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 35,
+   "n_all": 170134,
+   "n_native": 100000,
+   "n_outside": 70134,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02734196186065674,
+    "velocity": 0.017635231837630272,
+    "nut": 0.020078174769878387
+   },
+   "self_support": {
+    "pressure": 0.027342377230525017,
+    "velocity": 0.017635399475693703,
+    "nut": 0.02008034475147724
+   },
+   "random_support_outside": {
+    "pressure": 0.18528111279010773,
+    "velocity": 0.0948735848069191,
+    "nut": 0.5888810157775879
+   },
+   "random_support_all": {
+    "pressure": 0.02578701078891754,
+    "velocity": 0.01865268684923649,
+    "nut": 0.0441376194357872
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 36,
+   "n_all": 195043,
+   "n_native": 100000,
+   "n_outside": 95043,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04017333686351776,
+    "velocity": 0.016691680997610092,
+    "nut": 0.03428410738706589
+   },
+   "self_support": {
+    "pressure": 0.040173206478357315,
+    "velocity": 0.016691943630576134,
+    "nut": 0.03428777679800987
+   },
+   "random_support_outside": {
+    "pressure": 0.06282605230808258,
+    "velocity": 0.02324225939810276,
+    "nut": 0.03295072913169861
+   },
+   "random_support_all": {
+    "pressure": 0.04348693788051605,
+    "velocity": 0.016866618767380714,
+    "nut": 0.029927894473075867
+   },
+   "seconds": 1.7
+  },
+  {
+   "case": 37,
+   "n_all": 161811,
+   "n_native": 100000,
+   "n_outside": 61811,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03441070392727852,
+    "velocity": 0.030127575621008873,
+    "nut": 0.03659887611865997
+   },
+   "self_support": {
+    "pressure": 0.03441057354211807,
+    "velocity": 0.03012760542333126,
+    "nut": 0.03659637272357941
+   },
+   "random_support_outside": {
+    "pressure": 0.20044054090976715,
+    "velocity": 0.1488618403673172,
+    "nut": 0.6630694270133972
+   },
+   "random_support_all": {
+    "pressure": 0.038224320858716965,
+    "velocity": 0.029077861458063126,
+    "nut": 0.04053710401058197
+   },
+   "seconds": 1.64
+  },
+  {
+   "case": 38,
+   "n_all": 182220,
+   "n_native": 100000,
+   "n_outside": 82220,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02746174857020378,
+    "velocity": 0.01153393555432558,
+    "nut": 0.017929669469594955
+   },
+   "self_support": {
+    "pressure": 0.027460908517241478,
+    "velocity": 0.011533883400261402,
+    "nut": 0.017930159345269203
+   },
+   "random_support_outside": {
+    "pressure": 0.11754465848207474,
+    "velocity": 0.0677088052034378,
+    "nut": 0.5283912420272827
+   },
+   "random_support_all": {
+    "pressure": 0.03160424157977104,
+    "velocity": 0.011683382093906403,
+    "nut": 0.0360569953918457
+   },
+   "seconds": 1.84
+  },
+  {
+   "case": 39,
+   "n_all": 180727,
+   "n_native": 100000,
+   "n_outside": 80727,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.018558673560619354,
+    "velocity": 0.011223058216273785,
+    "nut": 0.019677018746733665
+   },
+   "self_support": {
+    "pressure": 0.01855621673166752,
+    "velocity": 0.011222279630601406,
+    "nut": 0.019685227423906326
+   },
+   "random_support_outside": {
+    "pressure": 0.12907300889492035,
+    "velocity": 0.048006974160671234,
+    "nut": 0.44216835498809814
+   },
+   "random_support_all": {
+    "pressure": 0.027010874822735786,
+    "velocity": 0.011544018052518368,
+    "nut": 0.037960682064294815
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 40,
+   "n_all": 179644,
+   "n_native": 100000,
+   "n_outside": 79644,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.020608898252248764,
+    "velocity": 0.01464335061609745,
+    "nut": 0.019668634980916977
+   },
+   "self_support": {
+    "pressure": 0.0206088125705719,
+    "velocity": 0.014642116613686085,
+    "nut": 0.019668148830533028
+   },
+   "random_support_outside": {
+    "pressure": 0.30146312713623047,
+    "velocity": 0.18743406236171722,
+    "nut": 0.06834093481302261
+   },
+   "random_support_all": {
+    "pressure": 0.02461829036474228,
+    "velocity": 0.01301696989685297,
+    "nut": 0.018488651141524315
+   },
+   "seconds": 1.77
+  },
+  {
+   "case": 41,
+   "n_all": 178831,
+   "n_native": 100000,
+   "n_outside": 78831,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.008446999825537205,
+    "velocity": 0.01714865118265152,
+    "nut": 0.0255118515342474
+   },
+   "self_support": {
+    "pressure": 0.008444522507488728,
+    "velocity": 0.017148813232779503,
+    "nut": 0.025512682273983955
+   },
+   "random_support_outside": {
+    "pressure": 0.027211086824536324,
+    "velocity": 0.04153118655085564,
+    "nut": 0.049240510910749435
+   },
+   "random_support_all": {
+    "pressure": 0.028868135064840317,
+    "velocity": 0.016982361674308777,
+    "nut": 0.028452325612306595
+   },
+   "seconds": 1.81
+  },
+  {
+   "case": 42,
+   "n_all": 172693,
+   "n_native": 100000,
+   "n_outside": 72693,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.05836653336882591,
+    "velocity": 0.02068362385034561,
+    "nut": 0.05365627631545067
+   },
+   "self_support": {
+    "pressure": 0.05836690589785576,
+    "velocity": 0.020683761686086655,
+    "nut": 0.05365695431828499
+   },
+   "random_support_outside": {
+    "pressure": 0.1389673799276352,
+    "velocity": 0.055094677954912186,
+    "nut": 0.4494144022464752
+   },
+   "random_support_all": {
+    "pressure": 0.05568766966462135,
+    "velocity": 0.021467000246047974,
+    "nut": 0.05222667008638382
+   },
+   "seconds": 1.66
+  },
+  {
+   "case": 43,
+   "n_all": 184662,
+   "n_native": 100000,
+   "n_outside": 84662,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03632298856973648,
+    "velocity": 0.014080316759645939,
+    "nut": 0.020452868193387985
+   },
+   "self_support": {
+    "pressure": 0.03632261976599693,
+    "velocity": 0.014081083238124847,
+    "nut": 0.020453834906220436
+   },
+   "random_support_outside": {
+    "pressure": 0.4180421531200409,
+    "velocity": 0.04222323000431061,
+    "nut": 0.6164800524711609
+   },
+   "random_support_all": {
+    "pressure": 0.040379930287599564,
+    "velocity": 0.014590228907763958,
+    "nut": 0.04931697994470596
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 44,
+   "n_all": 179969,
+   "n_native": 100000,
+   "n_outside": 79969,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.01974848471581936,
+    "velocity": 0.010703116655349731,
+    "nut": 0.011450727470219135
+   },
+   "self_support": {
+    "pressure": 0.019745517522096634,
+    "velocity": 0.010702509433031082,
+    "nut": 0.011451620608568192
+   },
+   "random_support_outside": {
+    "pressure": 0.1356046497821808,
+    "velocity": 0.05139673873782158,
+    "nut": 0.4758686125278473
+   },
+   "random_support_all": {
+    "pressure": 0.027422277256846428,
+    "velocity": 0.011607050895690918,
+    "nut": 0.05249178782105446
+   },
+   "seconds": 1.72
+  },
+  {
+   "case": 45,
+   "n_all": 161056,
+   "n_native": 100000,
+   "n_outside": 61056,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04697828367352486,
+    "velocity": 0.02717297151684761,
+    "nut": 0.03668578714132309
+   },
+   "self_support": {
+    "pressure": 0.046976421028375626,
+    "velocity": 0.027172371745109558,
+    "nut": 0.036686938256025314
+   },
+   "random_support_outside": {
+    "pressure": 0.20153523981571198,
+    "velocity": 0.08193457126617432,
+    "nut": 0.058256879448890686
+   },
+   "random_support_all": {
+    "pressure": 0.054840173572301865,
+    "velocity": 0.02579685114324093,
+    "nut": 0.03259824588894844
+   },
+   "seconds": 1.75
+  },
+  {
+   "case": 46,
+   "n_all": 180590,
+   "n_native": 100000,
+   "n_outside": 80590,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.01572812721133232,
+    "velocity": 0.010363590903580189,
+    "nut": 0.021007128059864044
+   },
+   "self_support": {
+    "pressure": 0.015727072954177856,
+    "velocity": 0.01036321185529232,
+    "nut": 0.021008804440498352
+   },
+   "random_support_outside": {
+    "pressure": 0.2682441174983978,
+    "velocity": 0.20198972523212433,
+    "nut": 0.044374894350767136
+   },
+   "random_support_all": {
+    "pressure": 0.02474799193441868,
+    "velocity": 0.010583947412669659,
+    "nut": 0.015902305021882057
+   },
+   "seconds": 1.75
+  },
+  {
+   "case": 47,
+   "n_all": 185415,
+   "n_native": 100000,
+   "n_outside": 85415,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.027237657457590103,
+    "velocity": 0.015914924442768097,
+    "nut": 0.024021228775382042
+   },
+   "self_support": {
+    "pressure": 0.027239911258220673,
+    "velocity": 0.015914900228381157,
+    "nut": 0.024022802710533142
+   },
+   "random_support_outside": {
+    "pressure": 0.11722365021705627,
+    "velocity": 0.08137167245149612,
+    "nut": 0.6253728270530701
+   },
+   "random_support_all": {
+    "pressure": 0.08104416728019714,
+    "velocity": 0.016279179602861404,
+    "nut": 0.04262945428490639
+   },
+   "seconds": 1.75
+  },
+  {
+   "case": 48,
+   "n_all": 175004,
+   "n_native": 100000,
+   "n_outside": 75004,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.025329915806651115,
+    "velocity": 0.014678613282740116,
+    "nut": 0.019806697964668274
+   },
+   "self_support": {
+    "pressure": 0.025330664590001106,
+    "velocity": 0.01467867661267519,
+    "nut": 0.0198060255497694
+   },
+   "random_support_outside": {
+    "pressure": 0.1214437484741211,
+    "velocity": 0.09057867527008057,
+    "nut": 0.5056445002555847
+   },
+   "random_support_all": {
+    "pressure": 0.0287945494055748,
+    "velocity": 0.016570761799812317,
+    "nut": 0.06249348446726799
+   },
+   "seconds": 1.86
+  },
+  {
+   "case": 49,
+   "n_all": 179936,
+   "n_native": 100000,
+   "n_outside": 79936,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.018168071284890175,
+    "velocity": 0.017240330576896667,
+    "nut": 0.02091366797685623
+   },
+   "self_support": {
+    "pressure": 0.018172290176153183,
+    "velocity": 0.017240675166249275,
+    "nut": 0.02091747522354126
+   },
+   "random_support_outside": {
+    "pressure": 0.10697653889656067,
+    "velocity": 0.11863161623477936,
+    "nut": 0.3567628562450409
+   },
+   "random_support_all": {
+    "pressure": 0.03419134393334389,
+    "velocity": 0.020148565992712975,
+    "nut": 0.026894068345427513
+   },
+   "seconds": 1.71
+  },
+  {
+   "case": 50,
+   "n_all": 181011,
+   "n_native": 100000,
+   "n_outside": 81011,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02518412284553051,
+    "velocity": 0.016515478491783142,
+    "nut": 0.026077672839164734
+   },
+   "self_support": {
+    "pressure": 0.025184428319334984,
+    "velocity": 0.016515549272298813,
+    "nut": 0.026078863069415092
+   },
+   "random_support_outside": {
+    "pressure": 0.29686740040779114,
+    "velocity": 0.18299223482608795,
+    "nut": 0.04475690424442291
+   },
+   "random_support_all": {
+    "pressure": 0.03066636063158512,
+    "velocity": 0.016948100179433823,
+    "nut": 0.02071537636220455
+   },
+   "seconds": 1.74
+  },
+  {
+   "case": 51,
+   "n_all": 158012,
+   "n_native": 100000,
+   "n_outside": 58012,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.045214537531137466,
+    "velocity": 0.034352704882621765,
+    "nut": 0.09600067883729935
+   },
+   "self_support": {
+    "pressure": 0.04521589353680611,
+    "velocity": 0.03435267135500908,
+    "nut": 0.09599868208169937
+   },
+   "random_support_outside": {
+    "pressure": 0.14188611507415771,
+    "velocity": 0.12082983553409576,
+    "nut": 0.8223080039024353
+   },
+   "random_support_all": {
+    "pressure": 0.09892556071281433,
+    "velocity": 0.03740053251385689,
+    "nut": 0.06888744980096817
+   },
+   "seconds": 1.62
+  },
+  {
+   "case": 52,
+   "n_all": 181338,
+   "n_native": 100000,
+   "n_outside": 81338,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.034300219267606735,
+    "velocity": 0.020114025101065636,
+    "nut": 0.048272840678691864
+   },
+   "self_support": {
+    "pressure": 0.03430013731122017,
+    "velocity": 0.020114004611968994,
+    "nut": 0.04827994853258133
+   },
+   "random_support_outside": {
+    "pressure": 0.09404277056455612,
+    "velocity": 0.031093178316950798,
+    "nut": 0.08958426862955093
+   },
+   "random_support_all": {
+    "pressure": 0.03635686635971069,
+    "velocity": 0.01785546913743019,
+    "nut": 0.030652567744255066
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 53,
+   "n_all": 173927,
+   "n_native": 100000,
+   "n_outside": 73927,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.023646632209420204,
+    "velocity": 0.014606260694563389,
+    "nut": 0.022322827950119972
+   },
+   "self_support": {
+    "pressure": 0.023643944412469864,
+    "velocity": 0.014606527052819729,
+    "nut": 0.022321706637740135
+   },
+   "random_support_outside": {
+    "pressure": 0.24275091290473938,
+    "velocity": 0.14089499413967133,
+    "nut": 0.04204178601503372
+   },
+   "random_support_all": {
+    "pressure": 0.023812303319573402,
+    "velocity": 0.014987594448029995,
+    "nut": 0.02010413073003292
+   },
+   "seconds": 1.66
+  },
+  {
+   "case": 54,
+   "n_all": 181206,
+   "n_native": 100000,
+   "n_outside": 81206,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03467361629009247,
+    "velocity": 0.012259973213076591,
+    "nut": 0.015776565298438072
+   },
+   "self_support": {
+    "pressure": 0.03467313200235367,
+    "velocity": 0.01225967612117529,
+    "nut": 0.015772338956594467
+   },
+   "random_support_outside": {
+    "pressure": 0.3375330865383148,
+    "velocity": 0.08641643822193146,
+    "nut": 0.4554210305213928
+   },
+   "random_support_all": {
+    "pressure": 0.04627729207277298,
+    "velocity": 0.01356484368443489,
+    "nut": 0.034955915063619614
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 55,
+   "n_all": 161673,
+   "n_native": 100000,
+   "n_outside": 61673,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.016382474452257156,
+    "velocity": 0.017794959247112274,
+    "nut": 0.020129842683672905
+   },
+   "self_support": {
+    "pressure": 0.016382675617933273,
+    "velocity": 0.017795532941818237,
+    "nut": 0.020126912742853165
+   },
+   "random_support_outside": {
+    "pressure": 0.08076219260692596,
+    "velocity": 0.08218402415513992,
+    "nut": 0.7757514715194702
+   },
+   "random_support_all": {
+    "pressure": 0.04074830934405327,
+    "velocity": 0.022557860240340233,
+    "nut": 0.048407044261693954
+   },
+   "seconds": 1.63
+  },
+  {
+   "case": 56,
+   "n_all": 186070,
+   "n_native": 100000,
+   "n_outside": 86070,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.0060064238496124744,
+    "velocity": 0.011748497374355793,
+    "nut": 0.0294501930475235
+   },
+   "self_support": {
+    "pressure": 0.006006724201142788,
+    "velocity": 0.011748331598937511,
+    "nut": 0.02945050038397312
+   },
+   "random_support_outside": {
+    "pressure": 0.15342499315738678,
+    "velocity": 0.17329414188861847,
+    "nut": 0.19710806012153625
+   },
+   "random_support_all": {
+    "pressure": 0.032750025391578674,
+    "velocity": 0.016594426706433296,
+    "nut": 0.02813580445945263
+   },
+   "seconds": 1.71
+  },
+  {
+   "case": 57,
+   "n_all": 168180,
+   "n_native": 100000,
+   "n_outside": 68180,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04034136235713959,
+    "velocity": 0.016234178096055984,
+    "nut": 0.02351348288357258
+   },
+   "self_support": {
+    "pressure": 0.040340546518564224,
+    "velocity": 0.01623421348631382,
+    "nut": 0.023515064269304276
+   },
+   "random_support_outside": {
+    "pressure": 0.22813154757022858,
+    "velocity": 0.10122250020503998,
+    "nut": 0.6929407119750977
+   },
+   "random_support_all": {
+    "pressure": 0.04669743776321411,
+    "velocity": 0.01693219318985939,
+    "nut": 0.058225926011800766
+   },
+   "seconds": 1.65
+  },
+  {
+   "case": 58,
+   "n_all": 182398,
+   "n_native": 100000,
+   "n_outside": 82398,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.011023624800145626,
+    "velocity": 0.013666494749486446,
+    "nut": 0.027680499479174614
+   },
+   "self_support": {
+    "pressure": 0.011022773571312428,
+    "velocity": 0.013666431419551373,
+    "nut": 0.027683906257152557
+   },
+   "random_support_outside": {
+    "pressure": 0.04135923832654953,
+    "velocity": 0.02299046888947487,
+    "nut": 0.058211974799633026
+   },
+   "random_support_all": {
+    "pressure": 0.04351531341671944,
+    "velocity": 0.014937174506485462,
+    "nut": 0.024210892617702484
+   },
+   "seconds": 1.98
+  },
+  {
+   "case": 59,
+   "n_all": 167090,
+   "n_native": 100000,
+   "n_outside": 67090,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.0556458942592144,
+    "velocity": 0.023616502061486244,
+    "nut": 0.024002429097890854
+   },
+   "self_support": {
+    "pressure": 0.055649373680353165,
+    "velocity": 0.023616848513484,
+    "nut": 0.02400416135787964
+   },
+   "random_support_outside": {
+    "pressure": 0.24183811247348785,
+    "velocity": 0.09778832644224167,
+    "nut": 0.5518236756324768
+   },
+   "random_support_all": {
+    "pressure": 0.0513327419757843,
+    "velocity": 0.0238797590136528,
+    "nut": 0.046386316418647766
+   },
+   "seconds": 1.64
+  },
+  {
+   "case": 60,
+   "n_all": 180895,
+   "n_native": 100000,
+   "n_outside": 80895,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03123684972524643,
+    "velocity": 0.010678528808057308,
+    "nut": 0.010862169787287712
+   },
+   "self_support": {
+    "pressure": 0.031237954273819923,
+    "velocity": 0.010678513906896114,
+    "nut": 0.010861829854547977
+   },
+   "random_support_outside": {
+    "pressure": 0.22980527579784393,
+    "velocity": 0.06613687425851822,
+    "nut": 0.4907947778701782
+   },
+   "random_support_all": {
+    "pressure": 0.039956364780664444,
+    "velocity": 0.011094843037426472,
+    "nut": 0.03929578885436058
+   },
+   "seconds": 1.66
+  },
+  {
+   "case": 61,
+   "n_all": 175312,
+   "n_native": 100000,
+   "n_outside": 75312,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.026395194232463837,
+    "velocity": 0.016476653516292572,
+    "nut": 0.019352948293089867
+   },
+   "self_support": {
+    "pressure": 0.02639576606452465,
+    "velocity": 0.016477050259709358,
+    "nut": 0.019353844225406647
+   },
+   "random_support_outside": {
+    "pressure": 0.1017281636595726,
+    "velocity": 0.0690935030579567,
+    "nut": 0.610393226146698
+   },
+   "random_support_all": {
+    "pressure": 0.028805820271372795,
+    "velocity": 0.016643598675727844,
+    "nut": 0.04989391937851906
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 62,
+   "n_all": 181870,
+   "n_native": 100000,
+   "n_outside": 81870,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03332093358039856,
+    "velocity": 0.016062960028648376,
+    "nut": 0.020804446190595627
+   },
+   "self_support": {
+    "pressure": 0.03331835940480232,
+    "velocity": 0.016062408685684204,
+    "nut": 0.02080150879919529
+   },
+   "random_support_outside": {
+    "pressure": 0.1402312070131302,
+    "velocity": 0.09717804193496704,
+    "nut": 0.5714197754859924
+   },
+   "random_support_all": {
+    "pressure": 0.039458539336919785,
+    "velocity": 0.01733209565281868,
+    "nut": 0.05289674922823906
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 63,
+   "n_all": 182385,
+   "n_native": 100000,
+   "n_outside": 82385,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.007145056501030922,
+    "velocity": 0.021262580528855324,
+    "nut": 0.05893653631210327
+   },
+   "self_support": {
+    "pressure": 0.0071444264613091946,
+    "velocity": 0.021262014284729958,
+    "nut": 0.05893517658114433
+   },
+   "random_support_outside": {
+    "pressure": 0.1011776328086853,
+    "velocity": 0.07937423139810562,
+    "nut": 0.18505755066871643
+   },
+   "random_support_all": {
+    "pressure": 0.04176660254597664,
+    "velocity": 0.019818706437945366,
+    "nut": 0.06583983451128006
+   },
+   "seconds": 1.7
+  },
+  {
+   "case": 64,
+   "n_all": 182099,
+   "n_native": 100000,
+   "n_outside": 82099,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.00975581631064415,
+    "velocity": 0.011722697876393795,
+    "nut": 0.027411647140979767
+   },
+   "self_support": {
+    "pressure": 0.009755956940352917,
+    "velocity": 0.011722533032298088,
+    "nut": 0.027416344732046127
+   },
+   "random_support_outside": {
+    "pressure": 0.04103679209947586,
+    "velocity": 0.01993861421942711,
+    "nut": 0.04750325158238411
+   },
+   "random_support_all": {
+    "pressure": 0.034323450177907944,
+    "velocity": 0.013892574235796928,
+    "nut": 0.02565603330731392
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 65,
+   "n_all": 179804,
+   "n_native": 100000,
+   "n_outside": 79804,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.029588809236884117,
+    "velocity": 0.01486127357929945,
+    "nut": 0.024028852581977844
+   },
+   "self_support": {
+    "pressure": 0.02958921156823635,
+    "velocity": 0.014861354604363441,
+    "nut": 0.024029409512877464
+   },
+   "random_support_outside": {
+    "pressure": 0.06815703958272934,
+    "velocity": 0.024003682658076286,
+    "nut": 0.0973878875374794
+   },
+   "random_support_all": {
+    "pressure": 0.03132037818431854,
+    "velocity": 0.014350433833897114,
+    "nut": 0.050852932035923004
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 66,
+   "n_all": 183739,
+   "n_native": 100000,
+   "n_outside": 83739,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.01581810973584652,
+    "velocity": 0.0108580207452178,
+    "nut": 0.018677935004234314
+   },
+   "self_support": {
+    "pressure": 0.015818530693650246,
+    "velocity": 0.010858232155442238,
+    "nut": 0.01867848075926304
+   },
+   "random_support_outside": {
+    "pressure": 0.2220592349767685,
+    "velocity": 0.1929745227098465,
+    "nut": 0.048220470547676086
+   },
+   "random_support_all": {
+    "pressure": 0.030007969588041306,
+    "velocity": 0.012766676023602486,
+    "nut": 0.017581133171916008
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 67,
+   "n_all": 192790,
+   "n_native": 100000,
+   "n_outside": 92790,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03900148347020149,
+    "velocity": 0.013734065927565098,
+    "nut": 0.024789251387119293
+   },
+   "self_support": {
+    "pressure": 0.03900199010968208,
+    "velocity": 0.013734228909015656,
+    "nut": 0.024790028110146523
+   },
+   "random_support_outside": {
+    "pressure": 0.1406661719083786,
+    "velocity": 0.029062770307064056,
+    "nut": 0.0607478953897953
+   },
+   "random_support_all": {
+    "pressure": 0.045511644333601,
+    "velocity": 0.011303693987429142,
+    "nut": 0.04651477560400963
+   },
+   "seconds": 1.71
+  },
+  {
+   "case": 68,
+   "n_all": 158168,
+   "n_native": 100000,
+   "n_outside": 58168,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.06258216500282288,
+    "velocity": 0.04221734777092934,
+    "nut": 0.05081278458237648
+   },
+   "self_support": {
+    "pressure": 0.0625787228345871,
+    "velocity": 0.04221699386835098,
+    "nut": 0.050814419984817505
+   },
+   "random_support_outside": {
+    "pressure": 0.32644572854042053,
+    "velocity": 0.1354498565196991,
+    "nut": 0.8302057385444641
+   },
+   "random_support_all": {
+    "pressure": 0.06596704572439194,
+    "velocity": 0.042419590055942535,
+    "nut": 0.0555080808699131
+   },
+   "seconds": 1.64
+  },
+  {
+   "case": 69,
+   "n_all": 180933,
+   "n_native": 100000,
+   "n_outside": 80933,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.01858186349272728,
+    "velocity": 0.01797686703503132,
+    "nut": 0.029634281992912292
+   },
+   "self_support": {
+    "pressure": 0.018582746386528015,
+    "velocity": 0.017976989969611168,
+    "nut": 0.029630739241838455
+   },
+   "random_support_outside": {
+    "pressure": 0.10795994848012924,
+    "velocity": 0.12988436222076416,
+    "nut": 0.33473488688468933
+   },
+   "random_support_all": {
+    "pressure": 0.040940701961517334,
+    "velocity": 0.02190403826534748,
+    "nut": 0.04397223889827728
+   },
+   "seconds": 1.7
+  },
+  {
+   "case": 70,
+   "n_all": 180246,
+   "n_native": 100000,
+   "n_outside": 80246,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.018001940101385117,
+    "velocity": 0.012533682398498058,
+    "nut": 0.01811186596751213
+   },
+   "self_support": {
+    "pressure": 0.018001608550548553,
+    "velocity": 0.01253377553075552,
+    "nut": 0.01811263896524906
+   },
+   "random_support_outside": {
+    "pressure": 0.05989697948098183,
+    "velocity": 0.030040735378861427,
+    "nut": 0.06777184456586838
+   },
+   "random_support_all": {
+    "pressure": 0.029787054285407066,
+    "velocity": 0.012683817185461521,
+    "nut": 0.03759760037064552
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 71,
+   "n_all": 169074,
+   "n_native": 100000,
+   "n_outside": 69074,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.013379398733377457,
+    "velocity": 0.013892238959670067,
+    "nut": 0.014832740649580956
+   },
+   "self_support": {
+    "pressure": 0.0133816534653306,
+    "velocity": 0.013892371207475662,
+    "nut": 0.014831069856882095
+   },
+   "random_support_outside": {
+    "pressure": 0.07444535940885544,
+    "velocity": 0.07386169582605362,
+    "nut": 0.44023042917251587
+   },
+   "random_support_all": {
+    "pressure": 0.0351383313536644,
+    "velocity": 0.01683017797768116,
+    "nut": 0.03422914817929268
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 72,
+   "n_all": 169659,
+   "n_native": 100000,
+   "n_outside": 69659,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.0216482263058424,
+    "velocity": 0.015256335027515888,
+    "nut": 0.038445860147476196
+   },
+   "self_support": {
+    "pressure": 0.02164744958281517,
+    "velocity": 0.01525681372731924,
+    "nut": 0.03845023363828659
+   },
+   "random_support_outside": {
+    "pressure": 0.08833055943250656,
+    "velocity": 0.025654997676610947,
+    "nut": 0.05738674849271774
+   },
+   "random_support_all": {
+    "pressure": 0.02845286950469017,
+    "velocity": 0.012860714457929134,
+    "nut": 0.03349091485142708
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 73,
+   "n_all": 179359,
+   "n_native": 100000,
+   "n_outside": 79359,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03717726469039917,
+    "velocity": 0.0214526504278183,
+    "nut": 0.08523832261562347
+   },
+   "self_support": {
+    "pressure": 0.037176743149757385,
+    "velocity": 0.02145247720181942,
+    "nut": 0.08524314314126968
+   },
+   "random_support_outside": {
+    "pressure": 0.07864006608724594,
+    "velocity": 0.03076910600066185,
+    "nut": 0.05900774523615837
+   },
+   "random_support_all": {
+    "pressure": 0.03422153368592262,
+    "velocity": 0.01940418779850006,
+    "nut": 0.05208200961351395
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 74,
+   "n_all": 180113,
+   "n_native": 100000,
+   "n_outside": 80113,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.05025186017155647,
+    "velocity": 0.013240333646535873,
+    "nut": 0.019973671063780785
+   },
+   "self_support": {
+    "pressure": 0.050250351428985596,
+    "velocity": 0.013239802792668343,
+    "nut": 0.0199764221906662
+   },
+   "random_support_outside": {
+    "pressure": 0.2810504138469696,
+    "velocity": 0.05237169191241264,
+    "nut": 0.4346005916595459
+   },
+   "random_support_all": {
+    "pressure": 0.049170415848493576,
+    "velocity": 0.012683948501944542,
+    "nut": 0.032940834760665894
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 75,
+   "n_all": 165745,
+   "n_native": 100000,
+   "n_outside": 65745,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.035477250814437866,
+    "velocity": 0.021433057263493538,
+    "nut": 0.03085261397063732
+   },
+   "self_support": {
+    "pressure": 0.03547724708914757,
+    "velocity": 0.02143276482820511,
+    "nut": 0.030852697789669037
+   },
+   "random_support_outside": {
+    "pressure": 0.1289817988872528,
+    "velocity": 0.060680750757455826,
+    "nut": 0.04696642979979515
+   },
+   "random_support_all": {
+    "pressure": 0.04075608402490616,
+    "velocity": 0.020441683009266853,
+    "nut": 0.027728525921702385
+   },
+   "seconds": 1.65
+  },
+  {
+   "case": 76,
+   "n_all": 181064,
+   "n_native": 100000,
+   "n_outside": 81064,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.010918964631855488,
+    "velocity": 0.008626384660601616,
+    "nut": 0.012289580889046192
+   },
+   "self_support": {
+    "pressure": 0.010918288491666317,
+    "velocity": 0.008626183494925499,
+    "nut": 0.012287728488445282
+   },
+   "random_support_outside": {
+    "pressure": 0.10179828107357025,
+    "velocity": 0.06641016155481339,
+    "nut": 0.5169292092323303
+   },
+   "random_support_all": {
+    "pressure": 0.034832872450351715,
+    "velocity": 0.009960740804672241,
+    "nut": 0.04348128288984299
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 77,
+   "n_all": 177480,
+   "n_native": 100000,
+   "n_outside": 77480,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.13598717749118805,
+    "velocity": 0.016136053949594498,
+    "nut": 0.02778131514787674
+   },
+   "self_support": {
+    "pressure": 0.13598507642745972,
+    "velocity": 0.01613593101501465,
+    "nut": 0.027781294658780098
+   },
+   "random_support_outside": {
+    "pressure": 0.980839729309082,
+    "velocity": 0.08955822885036469,
+    "nut": 0.5212731957435608
+   },
+   "random_support_all": {
+    "pressure": 0.12001616507768631,
+    "velocity": 0.01578686386346817,
+    "nut": 0.05024321749806404
+   },
+   "seconds": 1.66
+  },
+  {
+   "case": 78,
+   "n_all": 183121,
+   "n_native": 100000,
+   "n_outside": 83121,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.0383305661380291,
+    "velocity": 0.016749218106269836,
+    "nut": 0.02316250465810299
+   },
+   "self_support": {
+    "pressure": 0.038328636437654495,
+    "velocity": 0.016747256740927696,
+    "nut": 0.02316324971616268
+   },
+   "random_support_outside": {
+    "pressure": 0.1455535739660263,
+    "velocity": 0.05275723710656166,
+    "nut": 0.5016288161277771
+   },
+   "random_support_all": {
+    "pressure": 0.04377301037311554,
+    "velocity": 0.017412247136235237,
+    "nut": 0.04408939927816391
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 79,
+   "n_all": 187671,
+   "n_native": 100000,
+   "n_outside": 87671,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04964935779571533,
+    "velocity": 0.018069520592689514,
+    "nut": 0.027858834713697433
+   },
+   "self_support": {
+    "pressure": 0.04964875802397728,
+    "velocity": 0.01806933619081974,
+    "nut": 0.027858326211571693
+   },
+   "random_support_outside": {
+    "pressure": 0.09119834750890732,
+    "velocity": 0.02941720001399517,
+    "nut": 0.09374631196260452
+   },
+   "random_support_all": {
+    "pressure": 0.04948180541396141,
+    "velocity": 0.01851838268339634,
+    "nut": 0.053421568125486374
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 80,
+   "n_all": 178435,
+   "n_native": 100000,
+   "n_outside": 78435,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.007512922398746014,
+    "velocity": 0.010637493804097176,
+    "nut": 0.02299792505800724
+   },
+   "self_support": {
+    "pressure": 0.0075122336857020855,
+    "velocity": 0.01063681859523058,
+    "nut": 0.022996950894594193
+   },
+   "random_support_outside": {
+    "pressure": 0.08507312089204788,
+    "velocity": 0.0696781575679779,
+    "nut": 0.09339126199483871
+   },
+   "random_support_all": {
+    "pressure": 0.023434842005372047,
+    "velocity": 0.013049648143351078,
+    "nut": 0.02375718206167221
+   },
+   "seconds": 1.66
+  },
+  {
+   "case": 81,
+   "n_all": 180714,
+   "n_native": 100000,
+   "n_outside": 80714,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02406330779194832,
+    "velocity": 0.025639114901423454,
+    "nut": 0.03741704672574997
+   },
+   "self_support": {
+    "pressure": 0.024063635617494583,
+    "velocity": 0.025638660416007042,
+    "nut": 0.037418968975543976
+   },
+   "random_support_outside": {
+    "pressure": 0.08771321177482605,
+    "velocity": 0.04025326669216156,
+    "nut": 0.06277065724134445
+   },
+   "random_support_all": {
+    "pressure": 0.017326558008790016,
+    "velocity": 0.02022688463330269,
+    "nut": 0.037591688334941864
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 82,
+   "n_all": 180094,
+   "n_native": 100000,
+   "n_outside": 80094,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.033989667892456055,
+    "velocity": 0.012316434644162655,
+    "nut": 0.01763645000755787
+   },
+   "self_support": {
+    "pressure": 0.033989403396844864,
+    "velocity": 0.012316366657614708,
+    "nut": 0.017639022320508957
+   },
+   "random_support_outside": {
+    "pressure": 0.28382304310798645,
+    "velocity": 0.08840493112802505,
+    "nut": 0.43238675594329834
+   },
+   "random_support_all": {
+    "pressure": 0.032243311405181885,
+    "velocity": 0.012579252943396568,
+    "nut": 0.024767808616161346
+   },
+   "seconds": 1.7
+  },
+  {
+   "case": 83,
+   "n_all": 171931,
+   "n_native": 100000,
+   "n_outside": 71931,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.06341207772493362,
+    "velocity": 0.020135778933763504,
+    "nut": 0.026598947122693062
+   },
+   "self_support": {
+    "pressure": 0.0634102001786232,
+    "velocity": 0.020136002451181412,
+    "nut": 0.026599440723657608
+   },
+   "random_support_outside": {
+    "pressure": 0.12070231139659882,
+    "velocity": 0.08423060178756714,
+    "nut": 0.7094323039054871
+   },
+   "random_support_all": {
+    "pressure": 0.046016626060009,
+    "velocity": 0.020536065101623535,
+    "nut": 0.05092819780111313
+   },
+   "seconds": 1.65
+  },
+  {
+   "case": 84,
+   "n_all": 175872,
+   "n_native": 100000,
+   "n_outside": 75872,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02486122027039528,
+    "velocity": 0.014225211925804615,
+    "nut": 0.01704474352300167
+   },
+   "self_support": {
+    "pressure": 0.024857688695192337,
+    "velocity": 0.014225487597286701,
+    "nut": 0.01703956536948681
+   },
+   "random_support_outside": {
+    "pressure": 0.13961926102638245,
+    "velocity": 0.07283380627632141,
+    "nut": 0.4550846517086029
+   },
+   "random_support_all": {
+    "pressure": 0.030270719900727272,
+    "velocity": 0.013973894529044628,
+    "nut": 0.04399799928069115
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 85,
+   "n_all": 180148,
+   "n_native": 100000,
+   "n_outside": 80148,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.07572171092033386,
+    "velocity": 0.0191876832395792,
+    "nut": 0.020095275714993477
+   },
+   "self_support": {
+    "pressure": 0.0757155641913414,
+    "velocity": 0.01918601617217064,
+    "nut": 0.020096495747566223
+   },
+   "random_support_outside": {
+    "pressure": 0.1318598836660385,
+    "velocity": 0.09720675647258759,
+    "nut": 0.6187230944633484
+   },
+   "random_support_all": {
+    "pressure": 0.049634337425231934,
+    "velocity": 0.018019165843725204,
+    "nut": 0.04052480310201645
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 86,
+   "n_all": 180270,
+   "n_native": 100000,
+   "n_outside": 80270,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.015686817467212677,
+    "velocity": 0.0099568422883749,
+    "nut": 0.018025383353233337
+   },
+   "self_support": {
+    "pressure": 0.015686800703406334,
+    "velocity": 0.009956936351954937,
+    "nut": 0.018027929589152336
+   },
+   "random_support_outside": {
+    "pressure": 0.058606576174497604,
+    "velocity": 0.021102778613567352,
+    "nut": 0.03199800103902817
+   },
+   "random_support_all": {
+    "pressure": 0.02916920930147171,
+    "velocity": 0.010064591653645039,
+    "nut": 0.017590587958693504
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 87,
+   "n_all": 179347,
+   "n_native": 100000,
+   "n_outside": 79347,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.036354776471853256,
+    "velocity": 0.013893852941691875,
+    "nut": 0.030408132821321487
+   },
+   "self_support": {
+    "pressure": 0.036355771124362946,
+    "velocity": 0.01389405783265829,
+    "nut": 0.030410222709178925
+   },
+   "random_support_outside": {
+    "pressure": 0.04627819359302521,
+    "velocity": 0.020240673795342445,
+    "nut": 0.05055779963731766
+   },
+   "random_support_all": {
+    "pressure": 0.0233999602496624,
+    "velocity": 0.011308693327009678,
+    "nut": 0.020350195467472076
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 88,
+   "n_all": 179187,
+   "n_native": 100000,
+   "n_outside": 79187,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.042227696627378464,
+    "velocity": 0.02144290693104267,
+    "nut": 0.024582436308264732
+   },
+   "self_support": {
+    "pressure": 0.04222511500120163,
+    "velocity": 0.021441329270601273,
+    "nut": 0.024583125486969948
+   },
+   "random_support_outside": {
+    "pressure": 0.359540730714798,
+    "velocity": 0.1874634027481079,
+    "nut": 0.0885431095957756
+   },
+   "random_support_all": {
+    "pressure": 0.049093980342149734,
+    "velocity": 0.022510657086968422,
+    "nut": 0.03812475502490997
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 89,
+   "n_all": 181354,
+   "n_native": 100000,
+   "n_outside": 81354,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.009797029197216034,
+    "velocity": 0.00960130151361227,
+    "nut": 0.022534631192684174
+   },
+   "self_support": {
+    "pressure": 0.009796833619475365,
+    "velocity": 0.009601669386029243,
+    "nut": 0.02254731021821499
+   },
+   "random_support_outside": {
+    "pressure": 0.049210142344236374,
+    "velocity": 0.03315678983926773,
+    "nut": 0.04787822440266609
+   },
+   "random_support_all": {
+    "pressure": 0.026121782138943672,
+    "velocity": 0.011846180073916912,
+    "nut": 0.018616436049342155
+   },
+   "seconds": 1.7
+  },
+  {
+   "case": 90,
+   "n_all": 182535,
+   "n_native": 100000,
+   "n_outside": 82535,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.021051999181509018,
+    "velocity": 0.021045761182904243,
+    "nut": 0.058908067643642426
+   },
+   "self_support": {
+    "pressure": 0.02105608396232128,
+    "velocity": 0.021045662462711334,
+    "nut": 0.058896224945783615
+   },
+   "random_support_outside": {
+    "pressure": 0.0640813410282135,
+    "velocity": 0.12565195560455322,
+    "nut": 0.39219990372657776
+   },
+   "random_support_all": {
+    "pressure": 0.0448361299932003,
+    "velocity": 0.020918475463986397,
+    "nut": 0.06723889708518982
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 91,
+   "n_all": 191502,
+   "n_native": 100000,
+   "n_outside": 91502,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.05517389252781868,
+    "velocity": 0.030499443411827087,
+    "nut": 0.039320264011621475
+   },
+   "self_support": {
+    "pressure": 0.05517193302512169,
+    "velocity": 0.030500756576657295,
+    "nut": 0.03932119905948639
+   },
+   "random_support_outside": {
+    "pressure": 0.4228019714355469,
+    "velocity": 0.28752511739730835,
+    "nut": 0.08932536095380783
+   },
+   "random_support_all": {
+    "pressure": 0.03409108892083168,
+    "velocity": 0.02746821939945221,
+    "nut": 0.03624310716986656
+   },
+   "seconds": 1.81
+  },
+  {
+   "case": 92,
+   "n_all": 183775,
+   "n_native": 100000,
+   "n_outside": 83775,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03796141967177391,
+    "velocity": 0.01640651933848858,
+    "nut": 0.024587007239460945
+   },
+   "self_support": {
+    "pressure": 0.03796344995498657,
+    "velocity": 0.016406219452619553,
+    "nut": 0.02458648383617401
+   },
+   "random_support_outside": {
+    "pressure": 0.3976651430130005,
+    "velocity": 0.19061104953289032,
+    "nut": 0.05378680303692818
+   },
+   "random_support_all": {
+    "pressure": 0.050502412021160126,
+    "velocity": 0.017626937478780746,
+    "nut": 0.019941041246056557
+   },
+   "seconds": 1.7
+  },
+  {
+   "case": 93,
+   "n_all": 179344,
+   "n_native": 100000,
+   "n_outside": 79344,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04770248010754585,
+    "velocity": 0.016192346811294556,
+    "nut": 0.024191364645957947
+   },
+   "self_support": {
+    "pressure": 0.04769851267337799,
+    "velocity": 0.016192562878131866,
+    "nut": 0.024194777011871338
+   },
+   "random_support_outside": {
+    "pressure": 0.41897305846214294,
+    "velocity": 0.20639267563819885,
+    "nut": 0.11064279824495316
+   },
+   "random_support_all": {
+    "pressure": 0.06080637499690056,
+    "velocity": 0.017821695655584335,
+    "nut": 0.043762847781181335
+   },
+   "seconds": 1.72
+  },
+  {
+   "case": 94,
+   "n_all": 180431,
+   "n_native": 100000,
+   "n_outside": 80431,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02392304129898548,
+    "velocity": 0.010791152715682983,
+    "nut": 0.011792412027716637
+   },
+   "self_support": {
+    "pressure": 0.0239255428314209,
+    "velocity": 0.010790589265525341,
+    "nut": 0.0117934700101614
+   },
+   "random_support_outside": {
+    "pressure": 0.14658363163471222,
+    "velocity": 0.0694127157330513,
+    "nut": 0.44726425409317017
+   },
+   "random_support_all": {
+    "pressure": 0.027229929342865944,
+    "velocity": 0.010989335365593433,
+    "nut": 0.03352084383368492
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 95,
+   "n_all": 177826,
+   "n_native": 100000,
+   "n_outside": 77826,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.042363569140434265,
+    "velocity": 0.014854980632662773,
+    "nut": 0.020476944744586945
+   },
+   "self_support": {
+    "pressure": 0.04236520081758499,
+    "velocity": 0.01485482882708311,
+    "nut": 0.020477818325161934
+   },
+   "random_support_outside": {
+    "pressure": 0.19393926858901978,
+    "velocity": 0.09959885478019714,
+    "nut": 0.7076112627983093
+   },
+   "random_support_all": {
+    "pressure": 0.08235690742731094,
+    "velocity": 0.016065014526247978,
+    "nut": 0.0510808490216732
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 96,
+   "n_all": 183814,
+   "n_native": 100000,
+   "n_outside": 83814,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.047405071556568146,
+    "velocity": 0.02238827385008335,
+    "nut": 0.03535176068544388
+   },
+   "self_support": {
+    "pressure": 0.047406524419784546,
+    "velocity": 0.02238835208117962,
+    "nut": 0.0353543721139431
+   },
+   "random_support_outside": {
+    "pressure": 0.44412487745285034,
+    "velocity": 0.22948746383190155,
+    "nut": 0.03632429987192154
+   },
+   "random_support_all": {
+    "pressure": 0.052964139729738235,
+    "velocity": 0.02284795418381691,
+    "nut": 0.04107699543237686
+   },
+   "seconds": 1.97
+  },
+  {
+   "case": 97,
+   "n_all": 181462,
+   "n_native": 100000,
+   "n_outside": 81462,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.008893980644643307,
+    "velocity": 0.012690176256000996,
+    "nut": 0.016137706115841866
+   },
+   "self_support": {
+    "pressure": 0.008894267491996288,
+    "velocity": 0.012690571136772633,
+    "nut": 0.01613857038319111
+   },
+   "random_support_outside": {
+    "pressure": 0.12439726293087006,
+    "velocity": 0.12531691789627075,
+    "nut": 0.3966318368911743
+   },
+   "random_support_all": {
+    "pressure": 0.024487826973199844,
+    "velocity": 0.013592367060482502,
+    "nut": 0.018849942833185196
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 98,
+   "n_all": 181084,
+   "n_native": 100000,
+   "n_outside": 81084,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02768317051231861,
+    "velocity": 0.012038808315992355,
+    "nut": 0.028229819610714912
+   },
+   "self_support": {
+    "pressure": 0.027685100212693214,
+    "velocity": 0.012038340792059898,
+    "nut": 0.02823067270219326
+   },
+   "random_support_outside": {
+    "pressure": 0.05582333356142044,
+    "velocity": 0.020500972867012024,
+    "nut": 0.039470985531806946
+   },
+   "random_support_all": {
+    "pressure": 0.02735176309943199,
+    "velocity": 0.010682769119739532,
+    "nut": 0.019265560433268547
+   },
+   "seconds": 1.78
+  },
+  {
+   "case": 99,
+   "n_all": 172620,
+   "n_native": 100000,
+   "n_outside": 72620,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.008395438082516193,
+    "velocity": 0.01143497135490179,
+    "nut": 0.03619259223341942
+   },
+   "self_support": {
+    "pressure": 0.008390364237129688,
+    "velocity": 0.011437123641371727,
+    "nut": 0.03619614243507385
+   },
+   "random_support_outside": {
+    "pressure": 0.26462945342063904,
+    "velocity": 0.1358049064874649,
+    "nut": 0.13617709279060364
+   },
+   "random_support_all": {
+    "pressure": 0.04279998689889908,
+    "velocity": 0.01598743349313736,
+    "nut": 0.03488769754767418
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 100,
+   "n_all": 183008,
+   "n_native": 100000,
+   "n_outside": 83008,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.014626224525272846,
+    "velocity": 0.015730520710349083,
+    "nut": 0.02762792259454727
+   },
+   "self_support": {
+    "pressure": 0.014625634998083115,
+    "velocity": 0.01573016308248043,
+    "nut": 0.02762726880609989
+   },
+   "random_support_outside": {
+    "pressure": 0.042877912521362305,
+    "velocity": 0.02390737645328045,
+    "nut": 0.058428458869457245
+   },
+   "random_support_all": {
+    "pressure": 0.03413400426506996,
+    "velocity": 0.014540587551891804,
+    "nut": 0.026140326634049416
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 101,
+   "n_all": 182052,
+   "n_native": 100000,
+   "n_outside": 82052,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.008354623802006245,
+    "velocity": 0.009806429967284203,
+    "nut": 0.013490034267306328
+   },
+   "self_support": {
+    "pressure": 0.008354884572327137,
+    "velocity": 0.00980620551854372,
+    "nut": 0.013490689918398857
+   },
+   "random_support_outside": {
+    "pressure": 0.05850467085838318,
+    "velocity": 0.06848566234111786,
+    "nut": 0.5708916783332825
+   },
+   "random_support_all": {
+    "pressure": 0.03998614102602005,
+    "velocity": 0.01281562726944685,
+    "nut": 0.035421788692474365
+   },
+   "seconds": 1.71
+  },
+  {
+   "case": 102,
+   "n_all": 182531,
+   "n_native": 100000,
+   "n_outside": 82531,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.005655065178871155,
+    "velocity": 0.012916136533021927,
+    "nut": 0.03084193356335163
+   },
+   "self_support": {
+    "pressure": 0.00565346609801054,
+    "velocity": 0.012916010804474354,
+    "nut": 0.03084130585193634
+   },
+   "random_support_outside": {
+    "pressure": 0.06646321713924408,
+    "velocity": 0.02801506407558918,
+    "nut": 0.04993704333901405
+   },
+   "random_support_all": {
+    "pressure": 0.03403015807271004,
+    "velocity": 0.014246756210923195,
+    "nut": 0.027733607217669487
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 103,
+   "n_all": 180836,
+   "n_native": 100000,
+   "n_outside": 80836,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03645218536257744,
+    "velocity": 0.015400458127260208,
+    "nut": 0.02484636753797531
+   },
+   "self_support": {
+    "pressure": 0.03645263984799385,
+    "velocity": 0.015400486998260021,
+    "nut": 0.024846822023391724
+   },
+   "random_support_outside": {
+    "pressure": 0.10693177580833435,
+    "velocity": 0.09271448850631714,
+    "nut": 0.9954984188079834
+   },
+   "random_support_all": {
+    "pressure": 0.04605678468942642,
+    "velocity": 0.014126291498541832,
+    "nut": 0.04751402884721756
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 104,
+   "n_all": 183214,
+   "n_native": 100000,
+   "n_outside": 83214,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.010350391268730164,
+    "velocity": 0.009526647627353668,
+    "nut": 0.01758205145597458
+   },
+   "self_support": {
+    "pressure": 0.010350089520215988,
+    "velocity": 0.00952677708119154,
+    "nut": 0.017580976709723473
+   },
+   "random_support_outside": {
+    "pressure": 0.033502548933029175,
+    "velocity": 0.01985185593366623,
+    "nut": 0.0445002056658268
+   },
+   "random_support_all": {
+    "pressure": 0.03052898310124874,
+    "velocity": 0.009754364378750324,
+    "nut": 0.020411226898431778
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 105,
+   "n_all": 180251,
+   "n_native": 100000,
+   "n_outside": 80251,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.01937680132687092,
+    "velocity": 0.01218869537115097,
+    "nut": 0.024904098361730576
+   },
+   "self_support": {
+    "pressure": 0.01937379688024521,
+    "velocity": 0.012187903746962547,
+    "nut": 0.024905385449528694
+   },
+   "random_support_outside": {
+    "pressure": 0.29258984327316284,
+    "velocity": 0.15394587814807892,
+    "nut": 0.06775713711977005
+   },
+   "random_support_all": {
+    "pressure": 0.02552506886422634,
+    "velocity": 0.012735708616673946,
+    "nut": 0.025191357359290123
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 106,
+   "n_all": 183007,
+   "n_native": 100000,
+   "n_outside": 83007,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.056606799364089966,
+    "velocity": 0.011409839615225792,
+    "nut": 0.021095778793096542
+   },
+   "self_support": {
+    "pressure": 0.056605685502290726,
+    "velocity": 0.011410168372094631,
+    "nut": 0.021094536408782005
+   },
+   "random_support_outside": {
+    "pressure": 0.4146980345249176,
+    "velocity": 0.0996842309832573,
+    "nut": 0.6094880700111389
+   },
+   "random_support_all": {
+    "pressure": 0.0678800567984581,
+    "velocity": 0.010788589715957642,
+    "nut": 0.04446519911289215
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 107,
+   "n_all": 170290,
+   "n_native": 100000,
+   "n_outside": 70290,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.023568375036120415,
+    "velocity": 0.017905021086335182,
+    "nut": 0.03118496760725975
+   },
+   "self_support": {
+    "pressure": 0.023567454889416695,
+    "velocity": 0.017904682084918022,
+    "nut": 0.03118661232292652
+   },
+   "random_support_outside": {
+    "pressure": 0.3360060155391693,
+    "velocity": 0.20241381227970123,
+    "nut": 0.047763749957084656
+   },
+   "random_support_all": {
+    "pressure": 0.03156518563628197,
+    "velocity": 0.015947891399264336,
+    "nut": 0.02465093694627285
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 108,
+   "n_all": 178451,
+   "n_native": 100000,
+   "n_outside": 78451,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04533745348453522,
+    "velocity": 0.011186761781573296,
+    "nut": 0.021121865138411522
+   },
+   "self_support": {
+    "pressure": 0.04533808305859566,
+    "velocity": 0.011186410672962666,
+    "nut": 0.021123234182596207
+   },
+   "random_support_outside": {
+    "pressure": 0.3807811737060547,
+    "velocity": 0.08381012827157974,
+    "nut": 0.46716099977493286
+   },
+   "random_support_all": {
+    "pressure": 0.05240178480744362,
+    "velocity": 0.010998528450727463,
+    "nut": 0.03133663907647133
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 109,
+   "n_all": 177831,
+   "n_native": 100000,
+   "n_outside": 77831,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.027736810967326164,
+    "velocity": 0.016588211059570312,
+    "nut": 0.013814155012369156
+   },
+   "self_support": {
+    "pressure": 0.027736397460103035,
+    "velocity": 0.016588201746344566,
+    "nut": 0.01381339319050312
+   },
+   "random_support_outside": {
+    "pressure": 0.21018223464488983,
+    "velocity": 0.1792476326227188,
+    "nut": 0.3592643737792969
+   },
+   "random_support_all": {
+    "pressure": 0.05493241548538208,
+    "velocity": 0.017856106162071228,
+    "nut": 0.020608633756637573
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 110,
+   "n_all": 184801,
+   "n_native": 100000,
+   "n_outside": 84801,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.031235188245773315,
+    "velocity": 0.0143157122656703,
+    "nut": 0.01209315937012434
+   },
+   "self_support": {
+    "pressure": 0.031234411522746086,
+    "velocity": 0.014316043816506863,
+    "nut": 0.012093651108443737
+   },
+   "random_support_outside": {
+    "pressure": 0.17307104170322418,
+    "velocity": 0.08307565748691559,
+    "nut": 0.43703311681747437
+   },
+   "random_support_all": {
+    "pressure": 0.03202566131949425,
+    "velocity": 0.015644501894712448,
+    "nut": 0.03690065070986748
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 111,
+   "n_all": 179632,
+   "n_native": 100000,
+   "n_outside": 79632,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02196553722023964,
+    "velocity": 0.012390484102070332,
+    "nut": 0.020285988226532936
+   },
+   "self_support": {
+    "pressure": 0.021965283900499344,
+    "velocity": 0.012390493415296078,
+    "nut": 0.020287012681365013
+   },
+   "random_support_outside": {
+    "pressure": 0.07744622230529785,
+    "velocity": 0.028028231114149094,
+    "nut": 0.07175830751657486
+   },
+   "random_support_all": {
+    "pressure": 0.030275890603661537,
+    "velocity": 0.013057716190814972,
+    "nut": 0.04467461258172989
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 112,
+   "n_all": 178812,
+   "n_native": 100000,
+   "n_outside": 78812,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.007283287588506937,
+    "velocity": 0.008991004899144173,
+    "nut": 0.024411121383309364
+   },
+   "self_support": {
+    "pressure": 0.007283505983650684,
+    "velocity": 0.008991345763206482,
+    "nut": 0.024421609938144684
+   },
+   "random_support_outside": {
+    "pressure": 0.05506451800465584,
+    "velocity": 0.04062101989984512,
+    "nut": 0.04800895228981972
+   },
+   "random_support_all": {
+    "pressure": 0.026074863970279694,
+    "velocity": 0.011580628342926502,
+    "nut": 0.01909707859158516
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 113,
+   "n_all": 178136,
+   "n_native": 100000,
+   "n_outside": 78136,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.024365564808249474,
+    "velocity": 0.012118915095925331,
+    "nut": 0.011708240956068039
+   },
+   "self_support": {
+    "pressure": 0.02436506375670433,
+    "velocity": 0.012119605205953121,
+    "nut": 0.011709000915288925
+   },
+   "random_support_outside": {
+    "pressure": 0.08191993087530136,
+    "velocity": 0.09924594312906265,
+    "nut": 0.8951961994171143
+   },
+   "random_support_all": {
+    "pressure": 0.027245130389928818,
+    "velocity": 0.013542882166802883,
+    "nut": 0.03737146034836769
+   },
+   "seconds": 1.65
+  },
+  {
+   "case": 114,
+   "n_all": 180423,
+   "n_native": 100000,
+   "n_outside": 80423,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03487630933523178,
+    "velocity": 0.010727117769420147,
+    "nut": 0.01566469483077526
+   },
+   "self_support": {
+    "pressure": 0.034876346588134766,
+    "velocity": 0.010726901702582836,
+    "nut": 0.015666048973798752
+   },
+   "random_support_outside": {
+    "pressure": 0.2928788959980011,
+    "velocity": 0.09027746319770813,
+    "nut": 0.4578445851802826
+   },
+   "random_support_all": {
+    "pressure": 0.028979139402508736,
+    "velocity": 0.011376668699085712,
+    "nut": 0.03380199521780014
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 115,
+   "n_all": 164862,
+   "n_native": 100000,
+   "n_outside": 64862,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.015283814631402493,
+    "velocity": 0.014018291607499123,
+    "nut": 0.02068297751247883
+   },
+   "self_support": {
+    "pressure": 0.015289613977074623,
+    "velocity": 0.01401920523494482,
+    "nut": 0.02068427763879299
+   },
+   "random_support_outside": {
+    "pressure": 0.06693259626626968,
+    "velocity": 0.09355375170707703,
+    "nut": 0.7019400000572205
+   },
+   "random_support_all": {
+    "pressure": 0.04598310589790344,
+    "velocity": 0.02008170820772648,
+    "nut": 0.043627023696899414
+   },
+   "seconds": 1.63
+  },
+  {
+   "case": 116,
+   "n_all": 177245,
+   "n_native": 100000,
+   "n_outside": 77245,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.006405536085367203,
+    "velocity": 0.00892886146903038,
+    "nut": 0.022257279604673386
+   },
+   "self_support": {
+    "pressure": 0.0064042736776173115,
+    "velocity": 0.008928997442126274,
+    "nut": 0.022260980680584908
+   },
+   "random_support_outside": {
+    "pressure": 0.11209069192409515,
+    "velocity": 0.19673995673656464,
+    "nut": 0.08811737596988678
+   },
+   "random_support_all": {
+    "pressure": 0.02858605980873108,
+    "velocity": 0.012897754088044167,
+    "nut": 0.017185794189572334
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 117,
+   "n_all": 191478,
+   "n_native": 100000,
+   "n_outside": 91478,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.15321777760982513,
+    "velocity": 0.01249669585376978,
+    "nut": 0.053902700543403625
+   },
+   "self_support": {
+    "pressure": 0.15322159230709076,
+    "velocity": 0.012496886774897575,
+    "nut": 0.053903043270111084
+   },
+   "random_support_outside": {
+    "pressure": 0.220173180103302,
+    "velocity": 0.025358913466334343,
+    "nut": 0.13565434515476227
+   },
+   "random_support_all": {
+    "pressure": 0.1488126963376999,
+    "velocity": 0.01377739105373621,
+    "nut": 0.0860881358385086
+   },
+   "seconds": 1.78
+  },
+  {
+   "case": 118,
+   "n_all": 183460,
+   "n_native": 100000,
+   "n_outside": 83460,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.013365023769438267,
+    "velocity": 0.01790815405547619,
+    "nut": 0.03294696658849716
+   },
+   "self_support": {
+    "pressure": 0.013364532962441444,
+    "velocity": 0.017907744273543358,
+    "nut": 0.032947853207588196
+   },
+   "random_support_outside": {
+    "pressure": 0.053154028952121735,
+    "velocity": 0.027019275352358818,
+    "nut": 0.05872608348727226
+   },
+   "random_support_all": {
+    "pressure": 0.02829885482788086,
+    "velocity": 0.01793777011334896,
+    "nut": 0.0359671525657177
+   },
+   "seconds": 1.77
+  },
+  {
+   "case": 119,
+   "n_all": 175021,
+   "n_native": 100000,
+   "n_outside": 75021,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04111577197909355,
+    "velocity": 0.01650530844926834,
+    "nut": 0.03529984503984451
+   },
+   "self_support": {
+    "pressure": 0.0411178357899189,
+    "velocity": 0.016505300998687744,
+    "nut": 0.035293098539114
+   },
+   "random_support_outside": {
+    "pressure": 0.2527224123477936,
+    "velocity": 0.1001347154378891,
+    "nut": 0.05085819587111473
+   },
+   "random_support_all": {
+    "pressure": 0.04006082937121391,
+    "velocity": 0.014914133585989475,
+    "nut": 0.028434449806809425
+   },
+   "seconds": 1.71
+  },
+  {
+   "case": 120,
+   "n_all": 175118,
+   "n_native": 100000,
+   "n_outside": 75118,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.010695927776396275,
+    "velocity": 0.010184692218899727,
+    "nut": 0.026413844898343086
+   },
+   "self_support": {
+    "pressure": 0.010697021149098873,
+    "velocity": 0.010184720158576965,
+    "nut": 0.02642086334526539
+   },
+   "random_support_outside": {
+    "pressure": 0.06447737663984299,
+    "velocity": 0.05470263212919235,
+    "nut": 0.03444799408316612
+   },
+   "random_support_all": {
+    "pressure": 0.020922336727380753,
+    "velocity": 0.010483837686479092,
+    "nut": 0.027970388531684875
+   },
+   "seconds": 1.66
+  },
+  {
+   "case": 121,
+   "n_all": 183015,
+   "n_native": 100000,
+   "n_outside": 83015,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.08232323080301285,
+    "velocity": 0.011451815254986286,
+    "nut": 0.028551531955599785
+   },
+   "self_support": {
+    "pressure": 0.08232221752405167,
+    "velocity": 0.011452039703726768,
+    "nut": 0.02854960970580578
+   },
+   "random_support_outside": {
+    "pressure": 0.609707236289978,
+    "velocity": 0.1085396558046341,
+    "nut": 0.5938292145729065
+   },
+   "random_support_all": {
+    "pressure": 0.0849270299077034,
+    "velocity": 0.011143485084176064,
+    "nut": 0.058883603662252426
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 122,
+   "n_all": 171111,
+   "n_native": 100000,
+   "n_outside": 71111,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.030519159510731697,
+    "velocity": 0.015619749203324318,
+    "nut": 0.024432985112071037
+   },
+   "self_support": {
+    "pressure": 0.030518854036927223,
+    "velocity": 0.015619789250195026,
+    "nut": 0.024431729689240456
+   },
+   "random_support_outside": {
+    "pressure": 0.08645683526992798,
+    "velocity": 0.05983008071780205,
+    "nut": 0.7642166614532471
+   },
+   "random_support_all": {
+    "pressure": 0.035003505647182465,
+    "velocity": 0.016107169911265373,
+    "nut": 0.032383497804403305
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 123,
+   "n_all": 173757,
+   "n_native": 100000,
+   "n_outside": 73757,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.026936879381537437,
+    "velocity": 0.016245955601334572,
+    "nut": 0.02779409848153591
+   },
+   "self_support": {
+    "pressure": 0.026936465874314308,
+    "velocity": 0.016246501356363297,
+    "nut": 0.027796970680356026
+   },
+   "random_support_outside": {
+    "pressure": 0.38175731897354126,
+    "velocity": 0.20633727312088013,
+    "nut": 0.05086369067430496
+   },
+   "random_support_all": {
+    "pressure": 0.030209682881832123,
+    "velocity": 0.0169371385127306,
+    "nut": 0.024038570001721382
+   },
+   "seconds": 1.71
+  },
+  {
+   "case": 124,
+   "n_all": 186236,
+   "n_native": 100000,
+   "n_outside": 86236,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.006297374609857798,
+    "velocity": 0.009946140460669994,
+    "nut": 0.013341549783945084
+   },
+   "self_support": {
+    "pressure": 0.006297566462308168,
+    "velocity": 0.009945787489414215,
+    "nut": 0.013339067809283733
+   },
+   "random_support_outside": {
+    "pressure": 0.08983705192804337,
+    "velocity": 0.11830377578735352,
+    "nut": 0.7159914970397949
+   },
+   "random_support_all": {
+    "pressure": 0.032545171678066254,
+    "velocity": 0.013377944007515907,
+    "nut": 0.030324917286634445
+   },
+   "seconds": 1.62
+  },
+  {
+   "case": 125,
+   "n_all": 181697,
+   "n_native": 100000,
+   "n_outside": 81697,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.009378309361636639,
+    "velocity": 0.011456898413598537,
+    "nut": 0.02289399318397045
+   },
+   "self_support": {
+    "pressure": 0.009377864189445972,
+    "velocity": 0.01145711075514555,
+    "nut": 0.022889984771609306
+   },
+   "random_support_outside": {
+    "pressure": 0.034833088517189026,
+    "velocity": 0.019910501316189766,
+    "nut": 0.04461505264043808
+   },
+   "random_support_all": {
+    "pressure": 0.03028681129217148,
+    "velocity": 0.011071795597672462,
+    "nut": 0.020876245573163033
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 126,
+   "n_all": 191625,
+   "n_native": 100000,
+   "n_outside": 91625,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.039107684046030045,
+    "velocity": 0.019119951874017715,
+    "nut": 0.02350066788494587
+   },
+   "self_support": {
+    "pressure": 0.039108261466026306,
+    "velocity": 0.01911916583776474,
+    "nut": 0.023502107709646225
+   },
+   "random_support_outside": {
+    "pressure": 0.25791656970977783,
+    "velocity": 0.18854816257953644,
+    "nut": 0.06260582059621811
+   },
+   "random_support_all": {
+    "pressure": 0.03954930976033211,
+    "velocity": 0.021278388798236847,
+    "nut": 0.028590520843863487
+   },
+   "seconds": 1.75
+  },
+  {
+   "case": 127,
+   "n_all": 180749,
+   "n_native": 100000,
+   "n_outside": 80749,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.01031447947025299,
+    "velocity": 0.010081415995955467,
+    "nut": 0.01692371815443039
+   },
+   "self_support": {
+    "pressure": 0.010310115292668343,
+    "velocity": 0.010081091895699501,
+    "nut": 0.01692439243197441
+   },
+   "random_support_outside": {
+    "pressure": 0.15152299404144287,
+    "velocity": 0.08197303861379623,
+    "nut": 0.05192603915929794
+   },
+   "random_support_all": {
+    "pressure": 0.027506088837981224,
+    "velocity": 0.010415465570986271,
+    "nut": 0.018448326736688614
+   },
+   "seconds": 1.72
+  },
+  {
+   "case": 128,
+   "n_all": 180939,
+   "n_native": 100000,
+   "n_outside": 80939,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.033271025866270065,
+    "velocity": 0.024489909410476685,
+    "nut": 0.04453054070472717
+   },
+   "self_support": {
+    "pressure": 0.033271946012973785,
+    "velocity": 0.0244890246540308,
+    "nut": 0.04451778531074524
+   },
+   "random_support_outside": {
+    "pressure": 0.03709914907813072,
+    "velocity": 0.031035365536808968,
+    "nut": 0.06867263466119766
+   },
+   "random_support_all": {
+    "pressure": 0.018532419577240944,
+    "velocity": 0.025473814457654953,
+    "nut": 0.037982817739248276
+   },
+   "seconds": 1.77
+  },
+  {
+   "case": 129,
+   "n_all": 158319,
+   "n_native": 100000,
+   "n_outside": 58319,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.07435652613639832,
+    "velocity": 0.04375654458999634,
+    "nut": 0.03424026444554329
+   },
+   "self_support": {
+    "pressure": 0.07435741275548935,
+    "velocity": 0.04375673085451126,
+    "nut": 0.03424166142940521
+   },
+   "random_support_outside": {
+    "pressure": 0.307649701833725,
+    "velocity": 0.17775964736938477,
+    "nut": 0.8588792681694031
+   },
+   "random_support_all": {
+    "pressure": 0.06619250774383545,
+    "velocity": 0.04384544864296913,
+    "nut": 0.0795850083231926
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 130,
+   "n_all": 189563,
+   "n_native": 100000,
+   "n_outside": 89563,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02008352428674698,
+    "velocity": 0.015192597173154354,
+    "nut": 0.012591601349413395
+   },
+   "self_support": {
+    "pressure": 0.020083606243133545,
+    "velocity": 0.01519331056624651,
+    "nut": 0.012594247236847878
+   },
+   "random_support_outside": {
+    "pressure": 0.16061581671237946,
+    "velocity": 0.141855388879776,
+    "nut": 0.4518630802631378
+   },
+   "random_support_all": {
+    "pressure": 0.046635180711746216,
+    "velocity": 0.018008830025792122,
+    "nut": 0.043600574135780334
+   },
+   "seconds": 1.63
+  },
+  {
+   "case": 131,
+   "n_all": 182704,
+   "n_native": 100000,
+   "n_outside": 82704,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.05601977929472923,
+    "velocity": 0.013989018276333809,
+    "nut": 0.03183550387620926
+   },
+   "self_support": {
+    "pressure": 0.056020524352788925,
+    "velocity": 0.013989558443427086,
+    "nut": 0.031833749264478683
+   },
+   "random_support_outside": {
+    "pressure": 0.1167328730225563,
+    "velocity": 0.07908857613801956,
+    "nut": 0.5893288850784302
+   },
+   "random_support_all": {
+    "pressure": 0.036210011690855026,
+    "velocity": 0.00942174345254898,
+    "nut": 0.045761529356241226
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 132,
+   "n_all": 169820,
+   "n_native": 100000,
+   "n_outside": 69820,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.025498203933238983,
+    "velocity": 0.025928489863872528,
+    "nut": 0.025096848607063293
+   },
+   "self_support": {
+    "pressure": 0.02549823559820652,
+    "velocity": 0.025927161797881126,
+    "nut": 0.025099340826272964
+   },
+   "random_support_outside": {
+    "pressure": 0.07389453798532486,
+    "velocity": 0.04498331993818283,
+    "nut": 0.06581491231918335
+   },
+   "random_support_all": {
+    "pressure": 0.028368869796395302,
+    "velocity": 0.024998100474476814,
+    "nut": 0.02637275494635105
+   },
+   "seconds": 1.65
+  },
+  {
+   "case": 133,
+   "n_all": 182170,
+   "n_native": 100000,
+   "n_outside": 82170,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03032924048602581,
+    "velocity": 0.010681957006454468,
+    "nut": 0.02196255885064602
+   },
+   "self_support": {
+    "pressure": 0.030330132693052292,
+    "velocity": 0.010682027786970139,
+    "nut": 0.021964693441987038
+   },
+   "random_support_outside": {
+    "pressure": 0.08856077492237091,
+    "velocity": 0.028010889887809753,
+    "nut": 0.03127027675509453
+   },
+   "random_support_all": {
+    "pressure": 0.03373069688677788,
+    "velocity": 0.010025940835475922,
+    "nut": 0.01931382156908512
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 134,
+   "n_all": 186567,
+   "n_native": 100000,
+   "n_outside": 86567,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.014097372069954872,
+    "velocity": 0.01692398637533188,
+    "nut": 0.0161888524889946
+   },
+   "self_support": {
+    "pressure": 0.014095291495323181,
+    "velocity": 0.01692378707230091,
+    "nut": 0.01619129441678524
+   },
+   "random_support_outside": {
+    "pressure": 0.030335213989019394,
+    "velocity": 0.03219076246023178,
+    "nut": 0.04144912213087082
+   },
+   "random_support_all": {
+    "pressure": 0.0312972217798233,
+    "velocity": 0.01707392930984497,
+    "nut": 0.030861472710967064
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 135,
+   "n_all": 181364,
+   "n_native": 100000,
+   "n_outside": 81364,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04975856840610504,
+    "velocity": 0.008818570524454117,
+    "nut": 0.013973838649690151
+   },
+   "self_support": {
+    "pressure": 0.04975706711411476,
+    "velocity": 0.008817833848297596,
+    "nut": 0.013971519656479359
+   },
+   "random_support_outside": {
+    "pressure": 0.31688663363456726,
+    "velocity": 0.08223139494657516,
+    "nut": 0.4901701807975769
+   },
+   "random_support_all": {
+    "pressure": 0.04406421259045601,
+    "velocity": 0.009386276826262474,
+    "nut": 0.03536823391914368
+   },
+   "seconds": 1.8
+  },
+  {
+   "case": 136,
+   "n_all": 183277,
+   "n_native": 100000,
+   "n_outside": 83277,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.01740177720785141,
+    "velocity": 0.011119496077299118,
+    "nut": 0.025359734892845154
+   },
+   "self_support": {
+    "pressure": 0.01740182377398014,
+    "velocity": 0.011119368486106396,
+    "nut": 0.025370197370648384
+   },
+   "random_support_outside": {
+    "pressure": 0.06591465324163437,
+    "velocity": 0.039063844829797745,
+    "nut": 0.03794146329164505
+   },
+   "random_support_all": {
+    "pressure": 0.02951526641845703,
+    "velocity": 0.011422181501984596,
+    "nut": 0.021096551790833473
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 137,
+   "n_all": 185432,
+   "n_native": 100000,
+   "n_outside": 85432,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.024324234575033188,
+    "velocity": 0.015489079989492893,
+    "nut": 0.022914215922355652
+   },
+   "self_support": {
+    "pressure": 0.024324214085936546,
+    "velocity": 0.015488646924495697,
+    "nut": 0.022913331165909767
+   },
+   "random_support_outside": {
+    "pressure": 0.2787162959575653,
+    "velocity": 0.152083620429039,
+    "nut": 0.5087878108024597
+   },
+   "random_support_all": {
+    "pressure": 0.030884314328432083,
+    "velocity": 0.015523472800850868,
+    "nut": 0.03746131435036659
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 138,
+   "n_all": 165277,
+   "n_native": 100000,
+   "n_outside": 65277,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.028577882796525955,
+    "velocity": 0.02098902314901352,
+    "nut": 0.027280740439891815
+   },
+   "self_support": {
+    "pressure": 0.028578562662005424,
+    "velocity": 0.02098902314901352,
+    "nut": 0.02728041261434555
+   },
+   "random_support_outside": {
+    "pressure": 0.16577216982841492,
+    "velocity": 0.13888652622699738,
+    "nut": 0.5671812295913696
+   },
+   "random_support_all": {
+    "pressure": 0.05114984139800072,
+    "velocity": 0.021189633756875992,
+    "nut": 0.03234841302037239
+   },
+   "seconds": 1.63
+  },
+  {
+   "case": 139,
+   "n_all": 184515,
+   "n_native": 100000,
+   "n_outside": 84515,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02642909623682499,
+    "velocity": 0.01348226796835661,
+    "nut": 0.01785709708929062
+   },
+   "self_support": {
+    "pressure": 0.026430293917655945,
+    "velocity": 0.013482385315001011,
+    "nut": 0.017855586484074593
+   },
+   "random_support_outside": {
+    "pressure": 0.2545264959335327,
+    "velocity": 0.11793465912342072,
+    "nut": 0.4487015902996063
+   },
+   "random_support_all": {
+    "pressure": 0.0328017957508564,
+    "velocity": 0.013425128534436226,
+    "nut": 0.05575740337371826
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 140,
+   "n_all": 189473,
+   "n_native": 100000,
+   "n_outside": 89473,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.030482834205031395,
+    "velocity": 0.0136497737839818,
+    "nut": 0.02130870521068573
+   },
+   "self_support": {
+    "pressure": 0.03048320673406124,
+    "velocity": 0.013649504631757736,
+    "nut": 0.021309619769454002
+   },
+   "random_support_outside": {
+    "pressure": 0.23790189623832703,
+    "velocity": 0.09988860040903091,
+    "nut": 0.6597726345062256
+   },
+   "random_support_all": {
+    "pressure": 0.052495017647743225,
+    "velocity": 0.015205224975943565,
+    "nut": 0.060564037412405014
+   },
+   "seconds": 1.75
+  },
+  {
+   "case": 141,
+   "n_all": 182251,
+   "n_native": 100000,
+   "n_outside": 82251,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02135428786277771,
+    "velocity": 0.011091434396803379,
+    "nut": 0.01197012048214674
+   },
+   "self_support": {
+    "pressure": 0.02135436050593853,
+    "velocity": 0.011091782711446285,
+    "nut": 0.011970601044595242
+   },
+   "random_support_outside": {
+    "pressure": 0.36951297521591187,
+    "velocity": 0.19608932733535767,
+    "nut": 0.04827152192592621
+   },
+   "random_support_all": {
+    "pressure": 0.02560233697295189,
+    "velocity": 0.01257664617151022,
+    "nut": 0.009068000130355358
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 142,
+   "n_all": 179849,
+   "n_native": 100000,
+   "n_outside": 79849,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04711063206195831,
+    "velocity": 0.014382565394043922,
+    "nut": 0.013543126173317432
+   },
+   "self_support": {
+    "pressure": 0.047112736850976944,
+    "velocity": 0.014382577501237392,
+    "nut": 0.013541791588068008
+   },
+   "random_support_outside": {
+    "pressure": 0.24162553250789642,
+    "velocity": 0.12644705176353455,
+    "nut": 0.6293956637382507
+   },
+   "random_support_all": {
+    "pressure": 0.04350174963474274,
+    "velocity": 0.015260069631040096,
+    "nut": 0.04557168856263161
+   },
+   "seconds": 1.66
+  },
+  {
+   "case": 143,
+   "n_all": 190503,
+   "n_native": 100000,
+   "n_outside": 90503,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.009549657814204693,
+    "velocity": 0.011975152418017387,
+    "nut": 0.018084416165947914
+   },
+   "self_support": {
+    "pressure": 0.009550100192427635,
+    "velocity": 0.011974748224020004,
+    "nut": 0.018088052049279213
+   },
+   "random_support_outside": {
+    "pressure": 0.05421619489789009,
+    "velocity": 0.0955343171954155,
+    "nut": 0.47892725467681885
+   },
+   "random_support_all": {
+    "pressure": 0.04503303021192551,
+    "velocity": 0.016018200665712357,
+    "nut": 0.0559968464076519
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 144,
+   "n_all": 181040,
+   "n_native": 100000,
+   "n_outside": 81040,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.019044840708374977,
+    "velocity": 0.011399319395422935,
+    "nut": 0.011196911334991455
+   },
+   "self_support": {
+    "pressure": 0.0190442968159914,
+    "velocity": 0.011399545706808567,
+    "nut": 0.011194187216460705
+   },
+   "random_support_outside": {
+    "pressure": 0.15415401756763458,
+    "velocity": 0.10431865602731705,
+    "nut": 0.48342451453208923
+   },
+   "random_support_all": {
+    "pressure": 0.040385451167821884,
+    "velocity": 0.013890854083001614,
+    "nut": 0.040968913584947586
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 145,
+   "n_all": 162513,
+   "n_native": 100000,
+   "n_outside": 62513,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.09071370959281921,
+    "velocity": 0.036789070814847946,
+    "nut": 0.11224284023046494
+   },
+   "self_support": {
+    "pressure": 0.09071357548236847,
+    "velocity": 0.036789290606975555,
+    "nut": 0.11224515736103058
+   },
+   "random_support_outside": {
+    "pressure": 0.43191102147102356,
+    "velocity": 0.23117753863334656,
+    "nut": 0.1213599443435669
+   },
+   "random_support_all": {
+    "pressure": 0.08469783514738083,
+    "velocity": 0.03641815111041069,
+    "nut": 0.12445945292711258
+   },
+   "seconds": 1.63
+  },
+  {
+   "case": 146,
+   "n_all": 195841,
+   "n_native": 100000,
+   "n_outside": 95841,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.009293671697378159,
+    "velocity": 0.018736111000180244,
+    "nut": 0.053481727838516235
+   },
+   "self_support": {
+    "pressure": 0.009294234216213226,
+    "velocity": 0.01873622089624405,
+    "nut": 0.053489964455366135
+   },
+   "random_support_outside": {
+    "pressure": 0.3347831070423126,
+    "velocity": 0.27514931559562683,
+    "nut": 0.19129668176174164
+   },
+   "random_support_all": {
+    "pressure": 0.05292804166674614,
+    "velocity": 0.027000196278095245,
+    "nut": 0.04247691109776497
+   },
+   "seconds": 1.7
+  },
+  {
+   "case": 147,
+   "n_all": 180868,
+   "n_native": 100000,
+   "n_outside": 80868,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.030771777033805847,
+    "velocity": 0.012475995346903801,
+    "nut": 0.013963315635919571
+   },
+   "self_support": {
+    "pressure": 0.030771685764193535,
+    "velocity": 0.012474853545427322,
+    "nut": 0.0139584019780159
+   },
+   "random_support_outside": {
+    "pressure": 0.2058107852935791,
+    "velocity": 0.09432673454284668,
+    "nut": 0.4612325131893158
+   },
+   "random_support_all": {
+    "pressure": 0.03507614880800247,
+    "velocity": 0.014040897600352764,
+    "nut": 0.0356965996325016
+   },
+   "seconds": 1.76
+  },
+  {
+   "case": 148,
+   "n_all": 182067,
+   "n_native": 100000,
+   "n_outside": 82067,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.031506072729825974,
+    "velocity": 0.013707544654607773,
+    "nut": 0.013893159106373787
+   },
+   "self_support": {
+    "pressure": 0.031505778431892395,
+    "velocity": 0.013707790523767471,
+    "nut": 0.013893509283661842
+   },
+   "random_support_outside": {
+    "pressure": 0.2153400033712387,
+    "velocity": 0.08096843212842941,
+    "nut": 0.48308566212654114
+   },
+   "random_support_all": {
+    "pressure": 0.03204965591430664,
+    "velocity": 0.012121486477553844,
+    "nut": 0.039275746792554855
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 149,
+   "n_all": 180750,
+   "n_native": 100000,
+   "n_outside": 80750,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.030333826318383217,
+    "velocity": 0.011169230565428734,
+    "nut": 0.024585412815213203
+   },
+   "self_support": {
+    "pressure": 0.030334781855344772,
+    "velocity": 0.011169582605361938,
+    "nut": 0.02458755299448967
+   },
+   "random_support_outside": {
+    "pressure": 0.0417332760989666,
+    "velocity": 0.020766092464327812,
+    "nut": 0.031491391360759735
+   },
+   "random_support_all": {
+    "pressure": 0.026047635823488235,
+    "velocity": 0.012279804795980453,
+    "nut": 0.024510452523827553
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 150,
+   "n_all": 177193,
+   "n_native": 100000,
+   "n_outside": 77193,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.07159386575222015,
+    "velocity": 0.02156095579266548,
+    "nut": 0.031742773950099945
+   },
+   "self_support": {
+    "pressure": 0.07160094380378723,
+    "velocity": 0.021560516208410263,
+    "nut": 0.03174725919961929
+   },
+   "random_support_outside": {
+    "pressure": 0.255906879901886,
+    "velocity": 0.12322632223367691,
+    "nut": 0.6373376250267029
+   },
+   "random_support_all": {
+    "pressure": 0.07435888797044754,
+    "velocity": 0.023287717252969742,
+    "nut": 0.06685947626829147
+   },
+   "seconds": 1.76
+  },
+  {
+   "case": 151,
+   "n_all": 179933,
+   "n_native": 100000,
+   "n_outside": 79933,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.00959362555295229,
+    "velocity": 0.017584823071956635,
+    "nut": 0.018747033551335335
+   },
+   "self_support": {
+    "pressure": 0.009593707509338856,
+    "velocity": 0.017584821209311485,
+    "nut": 0.018747380003333092
+   },
+   "random_support_outside": {
+    "pressure": 0.03263169899582863,
+    "velocity": 0.040063850581645966,
+    "nut": 0.06972046196460724
+   },
+   "random_support_all": {
+    "pressure": 0.02301207184791565,
+    "velocity": 0.01694014109671116,
+    "nut": 0.036619145423173904
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 152,
+   "n_all": 180117,
+   "n_native": 100000,
+   "n_outside": 80117,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03626352176070213,
+    "velocity": 0.012580168433487415,
+    "nut": 0.01768483780324459
+   },
+   "self_support": {
+    "pressure": 0.03626369684934616,
+    "velocity": 0.012580130249261856,
+    "nut": 0.017685173079371452
+   },
+   "random_support_outside": {
+    "pressure": 0.10483638942241669,
+    "velocity": 0.023724477738142014,
+    "nut": 0.05272911861538887
+   },
+   "random_support_all": {
+    "pressure": 0.03368347883224487,
+    "velocity": 0.012484094128012657,
+    "nut": 0.03128768131136894
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 153,
+   "n_all": 180757,
+   "n_native": 100000,
+   "n_outside": 80757,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.019372347742319107,
+    "velocity": 0.010753307491540909,
+    "nut": 0.019904688000679016
+   },
+   "self_support": {
+    "pressure": 0.019374225288629532,
+    "velocity": 0.01075360644608736,
+    "nut": 0.019902778789401054
+   },
+   "random_support_outside": {
+    "pressure": 0.15424953401088715,
+    "velocity": 0.0720585510134697,
+    "nut": 0.043029576539993286
+   },
+   "random_support_all": {
+    "pressure": 0.02818497084081173,
+    "velocity": 0.010105930268764496,
+    "nut": 0.017412560060620308
+   },
+   "seconds": 1.74
+  },
+  {
+   "case": 154,
+   "n_all": 181491,
+   "n_native": 100000,
+   "n_outside": 81491,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.04200521856546402,
+    "velocity": 0.01464748103171587,
+    "nut": 0.030835771933197975
+   },
+   "self_support": {
+    "pressure": 0.042004745453596115,
+    "velocity": 0.014647644013166428,
+    "nut": 0.030836869031190872
+   },
+   "random_support_outside": {
+    "pressure": 0.18103796243667603,
+    "velocity": 0.11836593598127365,
+    "nut": 0.6783419251441956
+   },
+   "random_support_all": {
+    "pressure": 0.06141098961234093,
+    "velocity": 0.018122341483831406,
+    "nut": 0.06244669482111931
+   },
+   "seconds": 1.75
+  },
+  {
+   "case": 155,
+   "n_all": 182547,
+   "n_native": 100000,
+   "n_outside": 82547,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02410995587706566,
+    "velocity": 0.01334200706332922,
+    "nut": 0.026852458715438843
+   },
+   "self_support": {
+    "pressure": 0.02410970814526081,
+    "velocity": 0.013341906480491161,
+    "nut": 0.026852518320083618
+   },
+   "random_support_outside": {
+    "pressure": 0.2805149555206299,
+    "velocity": 0.17973332107067108,
+    "nut": 0.2773405611515045
+   },
+   "random_support_all": {
+    "pressure": 0.039061497896909714,
+    "velocity": 0.014479933306574821,
+    "nut": 0.03562334179878235
+   },
+   "seconds": 1.87
+  },
+  {
+   "case": 156,
+   "n_all": 179883,
+   "n_native": 100000,
+   "n_outside": 79883,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02382686361670494,
+    "velocity": 0.01157805509865284,
+    "nut": 0.015733519569039345
+   },
+   "self_support": {
+    "pressure": 0.02382715605199337,
+    "velocity": 0.01157775055617094,
+    "nut": 0.015732742846012115
+   },
+   "random_support_outside": {
+    "pressure": 0.31205523014068604,
+    "velocity": 0.2234581559896469,
+    "nut": 0.049141980707645416
+   },
+   "random_support_all": {
+    "pressure": 0.02990664727985859,
+    "velocity": 0.01370809506624937,
+    "nut": 0.040400128811597824
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 157,
+   "n_all": 190990,
+   "n_native": 100000,
+   "n_outside": 90990,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.016691207885742188,
+    "velocity": 0.013849744573235512,
+    "nut": 0.02646784670650959
+   },
+   "self_support": {
+    "pressure": 0.01669207215309143,
+    "velocity": 0.013849298469722271,
+    "nut": 0.026467885822057724
+   },
+   "random_support_outside": {
+    "pressure": 0.2532854974269867,
+    "velocity": 0.2105196863412857,
+    "nut": 0.06372595578432083
+   },
+   "random_support_all": {
+    "pressure": 0.05266522616147995,
+    "velocity": 0.016599969938397408,
+    "nut": 0.026812076568603516
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 158,
+   "n_all": 183211,
+   "n_native": 100000,
+   "n_outside": 83211,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.07517208158969879,
+    "velocity": 0.021315038204193115,
+    "nut": 0.04421833157539368
+   },
+   "self_support": {
+    "pressure": 0.0751657709479332,
+    "velocity": 0.021314991638064384,
+    "nut": 0.04421965405344963
+   },
+   "random_support_outside": {
+    "pressure": 0.37575799226760864,
+    "velocity": 0.3272351622581482,
+    "nut": 0.06386071443557739
+   },
+   "random_support_all": {
+    "pressure": 0.061537597328424454,
+    "velocity": 0.022420022636651993,
+    "nut": 0.043129682540893555
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 159,
+   "n_all": 183662,
+   "n_native": 100000,
+   "n_outside": 83662,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.009725737385451794,
+    "velocity": 0.015134360641241074,
+    "nut": 0.028646983206272125
+   },
+   "self_support": {
+    "pressure": 0.009725512936711311,
+    "velocity": 0.015134734101593494,
+    "nut": 0.028648311272263527
+   },
+   "random_support_outside": {
+    "pressure": 0.03531307727098465,
+    "velocity": 0.03247702866792679,
+    "nut": 0.06253378838300705
+   },
+   "random_support_all": {
+    "pressure": 0.024630039930343628,
+    "velocity": 0.01544670108705759,
+    "nut": 0.04432745277881622
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 160,
+   "n_all": 179897,
+   "n_native": 100000,
+   "n_outside": 79897,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.023561347275972366,
+    "velocity": 0.011334534734487534,
+    "nut": 0.018871167674660683
+   },
+   "self_support": {
+    "pressure": 0.02356082946062088,
+    "velocity": 0.011334478855133057,
+    "nut": 0.018867099657654762
+   },
+   "random_support_outside": {
+    "pressure": 0.16149677336215973,
+    "velocity": 0.11694970726966858,
+    "nut": 0.541245698928833
+   },
+   "random_support_all": {
+    "pressure": 0.033724334090948105,
+    "velocity": 0.012064474634826183,
+    "nut": 0.04295477643609047
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 161,
+   "n_all": 179490,
+   "n_native": 100000,
+   "n_outside": 79490,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02495032735168934,
+    "velocity": 0.013862764462828636,
+    "nut": 0.011913116089999676
+   },
+   "self_support": {
+    "pressure": 0.02495032176375389,
+    "velocity": 0.01386372558772564,
+    "nut": 0.011911834590137005
+   },
+   "random_support_outside": {
+    "pressure": 0.15275634825229645,
+    "velocity": 0.09040676057338715,
+    "nut": 0.5967402458190918
+   },
+   "random_support_all": {
+    "pressure": 0.03555106744170189,
+    "velocity": 0.013690083287656307,
+    "nut": 0.03949253633618355
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 162,
+   "n_all": 170461,
+   "n_native": 100000,
+   "n_outside": 70461,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.009313967078924179,
+    "velocity": 0.01156829297542572,
+    "nut": 0.023932186886668205
+   },
+   "self_support": {
+    "pressure": 0.009313860908150673,
+    "velocity": 0.011567861773073673,
+    "nut": 0.023931751027703285
+   },
+   "random_support_outside": {
+    "pressure": 0.2971136271953583,
+    "velocity": 0.20834659039974213,
+    "nut": 0.0752093717455864
+   },
+   "random_support_all": {
+    "pressure": 0.023544704541563988,
+    "velocity": 0.012765458784997463,
+    "nut": 0.0230160653591156
+   },
+   "seconds": 1.64
+  },
+  {
+   "case": 163,
+   "n_all": 181065,
+   "n_native": 100000,
+   "n_outside": 81065,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.006330603733658791,
+    "velocity": 0.010771087370812893,
+    "nut": 0.016369029879570007
+   },
+   "self_support": {
+    "pressure": 0.006329898256808519,
+    "velocity": 0.010770965367555618,
+    "nut": 0.01637009158730507
+   },
+   "random_support_outside": {
+    "pressure": 0.15899167954921722,
+    "velocity": 0.22303850948810577,
+    "nut": 0.05068328604102135
+   },
+   "random_support_all": {
+    "pressure": 0.028701871633529663,
+    "velocity": 0.01211632415652275,
+    "nut": 0.031979989260435104
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 164,
+   "n_all": 177703,
+   "n_native": 100000,
+   "n_outside": 77703,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.047162529081106186,
+    "velocity": 0.015798665583133698,
+    "nut": 0.0327763631939888
+   },
+   "self_support": {
+    "pressure": 0.047163207083940506,
+    "velocity": 0.015798822045326233,
+    "nut": 0.032777007669210434
+   },
+   "random_support_outside": {
+    "pressure": 0.04201268404722214,
+    "velocity": 0.019122084602713585,
+    "nut": 0.04298277571797371
+   },
+   "random_support_all": {
+    "pressure": 0.03703898936510086,
+    "velocity": 0.014065142720937729,
+    "nut": 0.02827020175755024
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 165,
+   "n_all": 181248,
+   "n_native": 100000,
+   "n_outside": 81248,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.022636517882347107,
+    "velocity": 0.012162663042545319,
+    "nut": 0.021747827529907227
+   },
+   "self_support": {
+    "pressure": 0.022636258974671364,
+    "velocity": 0.012162829749286175,
+    "nut": 0.021748168393969536
+   },
+   "random_support_outside": {
+    "pressure": 0.06280100345611572,
+    "velocity": 0.02873983234167099,
+    "nut": 0.05554472282528877
+   },
+   "random_support_all": {
+    "pressure": 0.03468573838472366,
+    "velocity": 0.013300012797117233,
+    "nut": 0.042746901512145996
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 166,
+   "n_all": 181639,
+   "n_native": 100000,
+   "n_outside": 81639,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.028861794620752335,
+    "velocity": 0.01367044635117054,
+    "nut": 0.034692440181970596
+   },
+   "self_support": {
+    "pressure": 0.02886207029223442,
+    "velocity": 0.013670102693140507,
+    "nut": 0.0346870943903923
+   },
+   "random_support_outside": {
+    "pressure": 0.08030559867620468,
+    "velocity": 0.025384539738297462,
+    "nut": 0.08472240716218948
+   },
+   "random_support_all": {
+    "pressure": 0.03552688658237457,
+    "velocity": 0.013656748458743095,
+    "nut": 0.049430571496486664
+   },
+   "seconds": 1.78
+  },
+  {
+   "case": 167,
+   "n_all": 180758,
+   "n_native": 100000,
+   "n_outside": 80758,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.019728491082787514,
+    "velocity": 0.011662306264042854,
+    "nut": 0.022688979282975197
+   },
+   "self_support": {
+    "pressure": 0.019730281084775925,
+    "velocity": 0.011663179844617844,
+    "nut": 0.022687267512083054
+   },
+   "random_support_outside": {
+    "pressure": 0.3461862802505493,
+    "velocity": 0.21179893612861633,
+    "nut": 0.04651597887277603
+   },
+   "random_support_all": {
+    "pressure": 0.026729386299848557,
+    "velocity": 0.01091053243726492,
+    "nut": 0.01820782572031021
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 168,
+   "n_all": 191205,
+   "n_native": 100000,
+   "n_outside": 91205,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.014764065854251385,
+    "velocity": 0.016725830733776093,
+    "nut": 0.011139409616589546
+   },
+   "self_support": {
+    "pressure": 0.014764230698347092,
+    "velocity": 0.016725841909646988,
+    "nut": 0.011139798909425735
+   },
+   "random_support_outside": {
+    "pressure": 0.08590278774499893,
+    "velocity": 0.15798398852348328,
+    "nut": 0.164932519197464
+   },
+   "random_support_all": {
+    "pressure": 0.03569817915558815,
+    "velocity": 0.016062863171100616,
+    "nut": 0.041476380079984665
+   },
+   "seconds": 1.77
+  },
+  {
+   "case": 169,
+   "n_all": 180238,
+   "n_native": 100000,
+   "n_outside": 80238,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.010409260168671608,
+    "velocity": 0.011008539237082005,
+    "nut": 0.02434782311320305
+   },
+   "self_support": {
+    "pressure": 0.010406717658042908,
+    "velocity": 0.011007778346538544,
+    "nut": 0.024346958845853806
+   },
+   "random_support_outside": {
+    "pressure": 0.2625221908092499,
+    "velocity": 0.1693984866142273,
+    "nut": 0.0641729086637497
+   },
+   "random_support_all": {
+    "pressure": 0.04540957510471344,
+    "velocity": 0.0151788629591465,
+    "nut": 0.027779333293437958
+   },
+   "seconds": 1.88
+  },
+  {
+   "case": 170,
+   "n_all": 179035,
+   "n_native": 100000,
+   "n_outside": 79035,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.019273877143859863,
+    "velocity": 0.012176698073744774,
+    "nut": 0.021638141945004463
+   },
+   "self_support": {
+    "pressure": 0.019275125116109848,
+    "velocity": 0.012176531367003918,
+    "nut": 0.021637458354234695
+   },
+   "random_support_outside": {
+    "pressure": 0.26592493057250977,
+    "velocity": 0.11204606294631958,
+    "nut": 0.051894087344408035
+   },
+   "random_support_all": {
+    "pressure": 0.02620607614517212,
+    "velocity": 0.011928152292966843,
+    "nut": 0.021347014233469963
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 171,
+   "n_all": 177606,
+   "n_native": 100000,
+   "n_outside": 77606,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.012183541432023048,
+    "velocity": 0.0199518371373415,
+    "nut": 0.03704780712723732
+   },
+   "self_support": {
+    "pressure": 0.012184958904981613,
+    "velocity": 0.019952677190303802,
+    "nut": 0.03704768791794777
+   },
+   "random_support_outside": {
+    "pressure": 0.08755031228065491,
+    "velocity": 0.13583074510097504,
+    "nut": 0.5712828040122986
+   },
+   "random_support_all": {
+    "pressure": 0.03668055683374405,
+    "velocity": 0.024734042584896088,
+    "nut": 0.03350250422954559
+   },
+   "seconds": 1.84
+  },
+  {
+   "case": 172,
+   "n_all": 178503,
+   "n_native": 100000,
+   "n_outside": 78503,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.008193130604922771,
+    "velocity": 0.00980522483587265,
+    "nut": 0.01563427597284317
+   },
+   "self_support": {
+    "pressure": 0.008192702196538448,
+    "velocity": 0.009805455803871155,
+    "nut": 0.01564151979982853
+   },
+   "random_support_outside": {
+    "pressure": 0.030509134754538536,
+    "velocity": 0.018955660983920097,
+    "nut": 0.03938332945108414
+   },
+   "random_support_all": {
+    "pressure": 0.026300711557269096,
+    "velocity": 0.0120857497677207,
+    "nut": 0.021608514711260796
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 173,
+   "n_all": 183004,
+   "n_native": 100000,
+   "n_outside": 83004,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.0387672483921051,
+    "velocity": 0.012748504988849163,
+    "nut": 0.021580256521701813
+   },
+   "self_support": {
+    "pressure": 0.03876372054219246,
+    "velocity": 0.01274804212152958,
+    "nut": 0.02158304676413536
+   },
+   "random_support_outside": {
+    "pressure": 0.12742893397808075,
+    "velocity": 0.11389651149511337,
+    "nut": 0.6036413908004761
+   },
+   "random_support_all": {
+    "pressure": 0.045211728662252426,
+    "velocity": 0.014152886345982552,
+    "nut": 0.03677704185247421
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 174,
+   "n_all": 178724,
+   "n_native": 100000,
+   "n_outside": 78724,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.009883862920105457,
+    "velocity": 0.013011334463953972,
+    "nut": 0.027779554948210716
+   },
+   "self_support": {
+    "pressure": 0.009883339516818523,
+    "velocity": 0.013011610135436058,
+    "nut": 0.027778301388025284
+   },
+   "random_support_outside": {
+    "pressure": 0.11250636726617813,
+    "velocity": 0.19590744376182556,
+    "nut": 0.03076060675084591
+   },
+   "random_support_all": {
+    "pressure": 0.026923971250653267,
+    "velocity": 0.01346383523195982,
+    "nut": 0.010757147334516048
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 175,
+   "n_all": 195082,
+   "n_native": 100000,
+   "n_outside": 95082,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03972494229674339,
+    "velocity": 0.018063543364405632,
+    "nut": 0.02701079659163952
+   },
+   "self_support": {
+    "pressure": 0.0397273451089859,
+    "velocity": 0.01806364208459854,
+    "nut": 0.02701396495103836
+   },
+   "random_support_outside": {
+    "pressure": 0.13339748978614807,
+    "velocity": 0.05563613772392273,
+    "nut": 0.05132611095905304
+   },
+   "random_support_all": {
+    "pressure": 0.03810644522309303,
+    "velocity": 0.01878829300403595,
+    "nut": 0.03465966507792473
+   },
+   "seconds": 1.8
+  },
+  {
+   "case": 176,
+   "n_all": 173188,
+   "n_native": 100000,
+   "n_outside": 73188,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.02647954784333706,
+    "velocity": 0.014779520221054554,
+    "nut": 0.016722699627280235
+   },
+   "self_support": {
+    "pressure": 0.026475589722394943,
+    "velocity": 0.014779534190893173,
+    "nut": 0.01673363707959652
+   },
+   "random_support_outside": {
+    "pressure": 0.18196450173854828,
+    "velocity": 0.1087510958313942,
+    "nut": 0.5614311099052429
+   },
+   "random_support_all": {
+    "pressure": 0.03586367145180702,
+    "velocity": 0.015021746046841145,
+    "nut": 0.042087845504283905
+   },
+   "seconds": 1.7
+  },
+  {
+   "case": 177,
+   "n_all": 176759,
+   "n_native": 100000,
+   "n_outside": 76759,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.010981500148773193,
+    "velocity": 0.011285539716482162,
+    "nut": 0.023678405210375786
+   },
+   "self_support": {
+    "pressure": 0.010981108993291855,
+    "velocity": 0.011286511085927486,
+    "nut": 0.02367604523897171
+   },
+   "random_support_outside": {
+    "pressure": 0.05557907000184059,
+    "velocity": 0.022728340700268745,
+    "nut": 0.04089765623211861
+   },
+   "random_support_all": {
+    "pressure": 0.02340073324739933,
+    "velocity": 0.01142536848783493,
+    "nut": 0.020295703783631325
+   },
+   "seconds": 1.75
+  },
+  {
+   "case": 178,
+   "n_all": 180110,
+   "n_native": 100000,
+   "n_outside": 80110,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.0128428153693676,
+    "velocity": 0.01207143533974886,
+    "nut": 0.017737172544002533
+   },
+   "self_support": {
+    "pressure": 0.012843814678490162,
+    "velocity": 0.01207172404974699,
+    "nut": 0.01773340441286564
+   },
+   "random_support_outside": {
+    "pressure": 0.04132630676031113,
+    "velocity": 0.02204870991408825,
+    "nut": 0.03538930416107178
+   },
+   "random_support_all": {
+    "pressure": 0.022097868844866753,
+    "velocity": 0.011733931489288807,
+    "nut": 0.016010409221053123
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 179,
+   "n_all": 175332,
+   "n_native": 100000,
+   "n_outside": 75332,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.010472306050360203,
+    "velocity": 0.013107512146234512,
+    "nut": 0.027830904349684715
+   },
+   "self_support": {
+    "pressure": 0.010473780333995819,
+    "velocity": 0.013107333332300186,
+    "nut": 0.027831977233290672
+   },
+   "random_support_outside": {
+    "pressure": 0.0854950100183487,
+    "velocity": 0.03961997479200363,
+    "nut": 0.06726593524217606
+   },
+   "random_support_all": {
+    "pressure": 0.026793543249368668,
+    "velocity": 0.01567196287214756,
+    "nut": 0.03037995658814907
+   },
+   "seconds": 1.7
+  },
+  {
+   "case": 180,
+   "n_all": 180744,
+   "n_native": 100000,
+   "n_outside": 80744,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.035613685846328735,
+    "velocity": 0.011166589334607124,
+    "nut": 0.012375026009976864
+   },
+   "self_support": {
+    "pressure": 0.0356140062212944,
+    "velocity": 0.011166173964738846,
+    "nut": 0.012376773171126842
+   },
+   "random_support_outside": {
+    "pressure": 0.38941413164138794,
+    "velocity": 0.1122107282280922,
+    "nut": 0.5192266702651978
+   },
+   "random_support_all": {
+    "pressure": 0.03896373137831688,
+    "velocity": 0.011361295357346535,
+    "nut": 0.04583962634205818
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 181,
+   "n_all": 175451,
+   "n_native": 100000,
+   "n_outside": 75451,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.033586688339710236,
+    "velocity": 0.016953185200691223,
+    "nut": 0.04407275840640068
+   },
+   "self_support": {
+    "pressure": 0.03358481079339981,
+    "velocity": 0.016953133046627045,
+    "nut": 0.04406975209712982
+   },
+   "random_support_outside": {
+    "pressure": 0.4062384068965912,
+    "velocity": 0.25386062264442444,
+    "nut": 0.05138496309518814
+   },
+   "random_support_all": {
+    "pressure": 0.029921842738986015,
+    "velocity": 0.01696072891354561,
+    "nut": 0.037235941737890244
+   },
+   "seconds": 1.64
+  },
+  {
+   "case": 182,
+   "n_all": 183492,
+   "n_native": 100000,
+   "n_outside": 83492,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.024828800931572914,
+    "velocity": 0.01721452735364437,
+    "nut": 0.027964770793914795
+   },
+   "self_support": {
+    "pressure": 0.024828683584928513,
+    "velocity": 0.017213961109519005,
+    "nut": 0.027964411303400993
+   },
+   "random_support_outside": {
+    "pressure": 0.061544813215732574,
+    "velocity": 0.026531390845775604,
+    "nut": 0.05168750882148743
+   },
+   "random_support_all": {
+    "pressure": 0.041007574647665024,
+    "velocity": 0.017510347068309784,
+    "nut": 0.025127524510025978
+   },
+   "seconds": 1.7
+  },
+  {
+   "case": 183,
+   "n_all": 192030,
+   "n_native": 100000,
+   "n_outside": 92030,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.016624124720692635,
+    "velocity": 0.016337111592292786,
+    "nut": 0.024380037561058998
+   },
+   "self_support": {
+    "pressure": 0.016623983159661293,
+    "velocity": 0.016337892040610313,
+    "nut": 0.024380076676607132
+   },
+   "random_support_outside": {
+    "pressure": 0.03738926723599434,
+    "velocity": 0.03384140133857727,
+    "nut": 0.033287741243839264
+   },
+   "random_support_all": {
+    "pressure": 0.03595564141869545,
+    "velocity": 0.015750793740153313,
+    "nut": 0.026978103443980217
+   },
+   "seconds": 1.81
+  },
+  {
+   "case": 184,
+   "n_all": 171970,
+   "n_native": 100000,
+   "n_outside": 71970,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.027217574417591095,
+    "velocity": 0.015576944686472416,
+    "nut": 0.01457957923412323
+   },
+   "self_support": {
+    "pressure": 0.02721794694662094,
+    "velocity": 0.015576950274407864,
+    "nut": 0.014582005329430103
+   },
+   "random_support_outside": {
+    "pressure": 0.13426533341407776,
+    "velocity": 0.12682628631591797,
+    "nut": 0.7288265228271484
+   },
+   "random_support_all": {
+    "pressure": 0.030507175251841545,
+    "velocity": 0.017174560576677322,
+    "nut": 0.05513680726289749
+   },
+   "seconds": 2.41
+  },
+  {
+   "case": 185,
+   "n_all": 184398,
+   "n_native": 100000,
+   "n_outside": 84398,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.0468522384762764,
+    "velocity": 0.012203933671116829,
+    "nut": 0.026454832404851913
+   },
+   "self_support": {
+    "pressure": 0.0468515008687973,
+    "velocity": 0.012203853577375412,
+    "nut": 0.026455380022525787
+   },
+   "random_support_outside": {
+    "pressure": 0.14523202180862427,
+    "velocity": 0.028065519407391548,
+    "nut": 0.08746221661567688
+   },
+   "random_support_all": {
+    "pressure": 0.04899286851286888,
+    "velocity": 0.01313143502920866,
+    "nut": 0.059853553771972656
+   },
+   "seconds": 1.94
+  },
+  {
+   "case": 186,
+   "n_all": 164814,
+   "n_native": 100000,
+   "n_outside": 64814,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.021645501255989075,
+    "velocity": 0.016573062166571617,
+    "nut": 0.030855823308229446
+   },
+   "self_support": {
+    "pressure": 0.02164718136191368,
+    "velocity": 0.01657325215637684,
+    "nut": 0.03084539994597435
+   },
+   "random_support_outside": {
+    "pressure": 0.13744209706783295,
+    "velocity": 0.0788160189986229,
+    "nut": 0.2516750991344452
+   },
+   "random_support_all": {
+    "pressure": 0.025105156004428864,
+    "velocity": 0.01628350093960762,
+    "nut": 0.04373176395893097
+   },
+   "seconds": 1.66
+  },
+  {
+   "case": 187,
+   "n_all": 202823,
+   "n_native": 100000,
+   "n_outside": 102823,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.08065207302570343,
+    "velocity": 0.026305342093110085,
+    "nut": 0.04466124624013901
+   },
+   "self_support": {
+    "pressure": 0.08065402507781982,
+    "velocity": 0.02630462497472763,
+    "nut": 0.04466387629508972
+   },
+   "random_support_outside": {
+    "pressure": 0.13918016850948334,
+    "velocity": 0.03041621670126915,
+    "nut": 0.08030687272548676
+   },
+   "random_support_all": {
+    "pressure": 0.06131679564714432,
+    "velocity": 0.01552706491202116,
+    "nut": 0.043123695999383926
+   },
+   "seconds": 1.73
+  },
+  {
+   "case": 188,
+   "n_all": 180581,
+   "n_native": 100000,
+   "n_outside": 80581,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.00668899854645133,
+    "velocity": 0.009214699268341064,
+    "nut": 0.028873223811388016
+   },
+   "self_support": {
+    "pressure": 0.006690368056297302,
+    "velocity": 0.009214749559760094,
+    "nut": 0.028874171897768974
+   },
+   "random_support_outside": {
+    "pressure": 0.15732014179229736,
+    "velocity": 0.2120334655046463,
+    "nut": 0.11065052449703217
+   },
+   "random_support_all": {
+    "pressure": 0.025227682664990425,
+    "velocity": 0.011346584185957909,
+    "nut": 0.02645808644592762
+   },
+   "seconds": 1.82
+  },
+  {
+   "case": 189,
+   "n_all": 166937,
+   "n_native": 100000,
+   "n_outside": 66937,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.0438416562974453,
+    "velocity": 0.02814020775258541,
+    "nut": 0.04769400507211685
+   },
+   "self_support": {
+    "pressure": 0.04384186491370201,
+    "velocity": 0.02814008668065071,
+    "nut": 0.04769379645586014
+   },
+   "random_support_outside": {
+    "pressure": 0.10379909723997116,
+    "velocity": 0.031397487968206406,
+    "nut": 0.07032477855682373
+   },
+   "random_support_all": {
+    "pressure": 0.046365827322006226,
+    "velocity": 0.02484077960252762,
+    "nut": 0.05203363299369812
+   },
+   "seconds": 1.65
+  },
+  {
+   "case": 190,
+   "n_all": 160737,
+   "n_native": 100000,
+   "n_outside": 60737,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.05144213140010834,
+    "velocity": 0.03233268857002258,
+    "nut": 0.056562360376119614
+   },
+   "self_support": {
+    "pressure": 0.051442842930555344,
+    "velocity": 0.032333049923181534,
+    "nut": 0.056561749428510666
+   },
+   "random_support_outside": {
+    "pressure": 0.21437384188175201,
+    "velocity": 0.047715868800878525,
+    "nut": 0.09460263699293137
+   },
+   "random_support_all": {
+    "pressure": 0.05056300386786461,
+    "velocity": 0.03126993030309677,
+    "nut": 0.05484328046441078
+   },
+   "seconds": 1.63
+  },
+  {
+   "case": 191,
+   "n_all": 172381,
+   "n_native": 100000,
+   "n_outside": 72381,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.0326603427529335,
+    "velocity": 0.018454860895872116,
+    "nut": 0.033388108015060425
+   },
+   "self_support": {
+    "pressure": 0.03266037255525589,
+    "velocity": 0.018455136567354202,
+    "nut": 0.033383872359991074
+   },
+   "random_support_outside": {
+    "pressure": 0.2984677851200104,
+    "velocity": 0.14662401378154755,
+    "nut": 0.5178511738777161
+   },
+   "random_support_all": {
+    "pressure": 0.03775747865438461,
+    "velocity": 0.019432522356510162,
+    "nut": 0.02951652742922306
+   },
+   "seconds": 1.79
+  },
+  {
+   "case": 192,
+   "n_all": 179076,
+   "n_native": 100000,
+   "n_outside": 79076,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.025547659024596214,
+    "velocity": 0.013555902056396008,
+    "nut": 0.014811990782618523
+   },
+   "self_support": {
+    "pressure": 0.02554752491414547,
+    "velocity": 0.013556111603975296,
+    "nut": 0.014814715832471848
+   },
+   "random_support_outside": {
+    "pressure": 0.23783275485038757,
+    "velocity": 0.1295352280139923,
+    "nut": 0.4665337800979614
+   },
+   "random_support_all": {
+    "pressure": 0.03377595916390419,
+    "velocity": 0.01424198318272829,
+    "nut": 0.04710867255926132
+   },
+   "seconds": 1.71
+  },
+  {
+   "case": 193,
+   "n_all": 164027,
+   "n_native": 100000,
+   "n_outside": 64027,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.013983671553432941,
+    "velocity": 0.013811502605676651,
+    "nut": 0.048903219401836395
+   },
+   "self_support": {
+    "pressure": 0.013987869955599308,
+    "velocity": 0.013811732642352581,
+    "nut": 0.048908788710832596
+   },
+   "random_support_outside": {
+    "pressure": 0.21065478026866913,
+    "velocity": 0.23386064171791077,
+    "nut": 0.22508706152439117
+   },
+   "random_support_all": {
+    "pressure": 0.013212757185101509,
+    "velocity": 0.0157171543687582,
+    "nut": 0.04576048254966736
+   },
+   "seconds": 1.64
+  },
+  {
+   "case": 194,
+   "n_all": 186697,
+   "n_native": 100000,
+   "n_outside": 86697,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.06012015417218208,
+    "velocity": 0.02990594319999218,
+    "nut": 0.024666499346494675
+   },
+   "self_support": {
+    "pressure": 0.060118380934000015,
+    "velocity": 0.029906058683991432,
+    "nut": 0.024668505415320396
+   },
+   "random_support_outside": {
+    "pressure": 0.17923730611801147,
+    "velocity": 0.1482163667678833,
+    "nut": 0.5584132671356201
+   },
+   "random_support_all": {
+    "pressure": 0.08324679732322693,
+    "velocity": 0.030603546649217606,
+    "nut": 0.052497498691082
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 195,
+   "n_all": 186918,
+   "n_native": 100000,
+   "n_outside": 86918,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.03876379877328873,
+    "velocity": 0.016666216775774956,
+    "nut": 0.02287481352686882
+   },
+   "self_support": {
+    "pressure": 0.03876406326889992,
+    "velocity": 0.016666309908032417,
+    "nut": 0.022875625640153885
+   },
+   "random_support_outside": {
+    "pressure": 0.08047798275947571,
+    "velocity": 0.03933034464716911,
+    "nut": 0.050903115421533585
+   },
+   "random_support_all": {
+    "pressure": 0.04171280562877655,
+    "velocity": 0.01516443956643343,
+    "nut": 0.038259319961071014
+   },
+   "seconds": 1.7
+  },
+  {
+   "case": 196,
+   "n_all": 185430,
+   "n_native": 100000,
+   "n_outside": 85430,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.026142608374357224,
+    "velocity": 0.014542668126523495,
+    "nut": 0.015651842579245567
+   },
+   "self_support": {
+    "pressure": 0.026142630726099014,
+    "velocity": 0.014542448334395885,
+    "nut": 0.01565142534673214
+   },
+   "random_support_outside": {
+    "pressure": 0.22750458121299744,
+    "velocity": 0.14771690964698792,
+    "nut": 0.5036003589630127
+   },
+   "random_support_all": {
+    "pressure": 0.03594936802983284,
+    "velocity": 0.01753302849829197,
+    "nut": 0.04246895760297775
+   },
+   "seconds": 1.68
+  },
+  {
+   "case": 197,
+   "n_all": 178437,
+   "n_native": 100000,
+   "n_outside": 78437,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.05561424046754837,
+    "velocity": 0.019258564338088036,
+    "nut": 0.021276501938700676
+   },
+   "self_support": {
+    "pressure": 0.05561531335115433,
+    "velocity": 0.01925872638821602,
+    "nut": 0.021280696615576744
+   },
+   "random_support_outside": {
+    "pressure": 0.42503923177719116,
+    "velocity": 0.1375674456357956,
+    "nut": 0.4819924235343933
+   },
+   "random_support_all": {
+    "pressure": 0.06218893826007843,
+    "velocity": 0.019613472744822502,
+    "nut": 0.0336233489215374
+   },
+   "seconds": 1.67
+  },
+  {
+   "case": 198,
+   "n_all": 185507,
+   "n_native": 100000,
+   "n_outside": 85507,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.15034759044647217,
+    "velocity": 0.03644120320677757,
+    "nut": 0.14242762327194214
+   },
+   "self_support": {
+    "pressure": 0.15034164488315582,
+    "velocity": 0.03644075244665146,
+    "nut": 0.1424219310283661
+   },
+   "random_support_outside": {
+    "pressure": 0.2365524172782898,
+    "velocity": 0.0909804031252861,
+    "nut": 0.17312927544116974
+   },
+   "random_support_all": {
+    "pressure": 0.11477534472942352,
+    "velocity": 0.03956335037946701,
+    "nut": 0.1448744237422943
+   },
+   "seconds": 1.69
+  },
+  {
+   "case": 199,
+   "n_all": 182051,
+   "n_native": 100000,
+   "n_outside": 82051,
+   "exact_match": true,
+   "native": {
+    "pressure": 0.048302359879016876,
+    "velocity": 0.013505526818335056,
+    "nut": 0.03171025961637497
+   },
+   "self_support": {
+    "pressure": 0.0483052060008049,
+    "velocity": 0.01350594311952591,
+    "nut": 0.031711362302303314
+   },
+   "random_support_outside": {
+    "pressure": 0.18207427859306335,
+    "velocity": 0.1289212703704834,
+    "nut": 0.5203393697738647
+   },
+   "random_support_all": {
+    "pressure": 0.03403632342815399,
+    "velocity": 0.011926238425076008,
+    "nut": 0.03324427455663681
+   },
+   "seconds": 1.7
+  }
+ ]
+}

@@ -208,7 +208,7 @@ The posed checks of both probes now use an exact float64 nearest-neighbour
 search for the reference and the posed case alike (`exact_knn`); the
 library search's translation sensitivity is reported from `posed_diag.py`.
 
-## Amendment 3 (2026-10-03 09:30 PDT, after the primary verdicts were computed): post-hoc diagnostics
+## Amendment 3 (2026-10-03 09:30 PDT, after the verdicts): post-hoc diagnostics
 
 Recorded after readout 1 and arm C were reduced; nothing below changes a
 preregistered verdict. Arm C's AirfRANS "interacting" score on random

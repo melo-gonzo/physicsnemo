@@ -31,10 +31,16 @@ SEEDS = (42, 43)
 
 
 def summary_of(path):
+    """The scorer's summary, or (when infer.py refused to write it) the arithmetic mean of its per-case rows, which
+    is what the summary is: on the two-dimensional AirfRANS lanes infer.py's range check trips on a velocity_z key
+    that a planar field never produces, after every per-case row has been written."""
     rows = [json.loads(line) for line in open(path) if line.strip()]
     s = [r for r in rows if r.get("phase") == "infer_summary"]
     cfg = next(r for r in rows if r.get("phase") == "config")
-    return {f: s[-1]["metrics"][f"{f}_l2"] for f in FIELDS}, cfg["epoch"], s[-1]["num_samples"]
+    if s:
+        return {f: s[-1]["metrics"][f"{f}_l2"] for f in FIELDS}, cfg["epoch"], s[-1]["num_samples"], "summary"
+    steps = [r["metrics"] for r in rows if r.get("phase") == "infer_step"]
+    return {f: sum(m[f"{f}_l2"] for m in steps) / len(steps) for f in FIELDS}, cfg["epoch"], len(steps), "per-case mean"
 
 
 def main():
@@ -50,8 +56,8 @@ def main():
                 if not p.exists():
                     res["missing"].append(str(p))
                     continue
-                m, epoch, n = summary_of(p)
-                seeds[seed] = {"fields": m, "epoch": epoch, "n_cases": n}
+                m, epoch, n, source = summary_of(p)
+                seeds[seed] = {"fields": m, "epoch": epoch, "n_cases": n, "source": source}
                 pj = task / "eval" / "probe" / f"{run}.json"
                 if pj.exists():
                     res["probe"][run] = json.load(open(pj))["summary"]
