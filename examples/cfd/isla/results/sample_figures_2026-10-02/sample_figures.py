@@ -9,7 +9,7 @@ span the parameter ranges rather than showing six arbitrary neighbours:
 
   drivaer    six of the 48 validation cars at evenly spaced positions of the manifest's val list; the first and the
              last also carry a symmetry-plane band of the volume mesh (the Volume task's query domain)
-  hilift     three geometries (min / median / max flap area share among the 180, read from the element-label files)
+  hilift     three geometries (min / median / max flap area share among the geometries that carry an element-label file; 15 do)
              at the lowest and the highest angle of attack (4 and 22 degrees)
   airfrans   six full_test cases: the four corners of the (Re, angle of attack) rectangle, nearest in normalized
              distance, and the two cases nearest the centre, one four-digit and one five-digit NACA section
@@ -188,22 +188,28 @@ if want("hilift"):
             gt = glob_td(path)
             U_inf = g(gt, "U_inf"); rho = float(g(gt, "rho_inf")); p_inf = float(g(gt, "p_inf"))
             q_inf = 0.5 * rho * float(np.linalg.norm(U_inf)) ** 2
-            veh = Mesh.load(f"{path}/_tensordict/boundaries/vehicle")
-            cen = centroids(veh.points, veh.cells) * 0.0254   # inch -> m
-            P = npf(veh.cell_data["PROJ(AVG(P))"]).reshape(-1)
-            n_cells = cen.shape[0]
+            # the surface has ~280 million cells (20 GB); read only the sampled rows through raw memmaps of the tensordict files
+            vd = f"{path}/_tensordict/boundaries/vehicle/_tensordict"
+            vm = json.load(open(f"{vd}/meta.json")); cm = json.load(open(f"{vd}/cell_data/meta.json"))
+            tdt = lambda s: dict(**{"torch.float32": np.float32, "torch.float64": np.float64, "torch.int64": np.int64, "torch.int32": np.int32})[s]
+            cells = np.memmap(f"{vd}/cells.memmap", dtype=tdt(vm["cells"]["dtype"]), mode="r", shape=tuple(vm["cells"]["shape"]))
+            points = np.memmap(f"{vd}/points.memmap", dtype=tdt(vm["points"]["dtype"]), mode="r", shape=tuple(vm["points"]["shape"]))
+            Pm = np.memmap(f"{vd}/cell_data/PROJ(AVG(P)).memmap", dtype=tdt(cm["PROJ(AVG(P))"]["dtype"]), mode="r", shape=tuple(cm["PROJ(AVG(P))"]["shape"]))
+            n_cells = cells.shape[0]
             idx = sub(n_cells, 60_000)
-            per.append(dict(points=cen[idx].astype(np.float32), cp=((P[idx] - p_inf) / q_inf).astype(np.float32), U=U_inf.astype(np.float32)))
+            tri = np.asarray(cells[idx]); cen = np.asarray(points[tri.reshape(-1)]).reshape(-1, 3, 3).mean(axis=1) * 0.0254   # inch -> m
+            P = np.asarray(Pm[idx]).reshape(-1)
+            per.append(dict(points=cen.astype(np.float32), cp=((P - p_inf) / q_inf).astype(np.float32), U=U_inf.astype(np.float32)))
             meta_cases.append(dict(case=case, geometry=geo, aoa_deg=float(aoa), split=split_of.get(case, "?"), n_surface_cells=int(n_cells),
                                    n_surface_stored=int(idx.size), U_inf=U_inf.tolist(), rho_inf=rho, p_inf=p_inf,
                                    flap_area_share=shares[geo]["flap"], slat_area_share=shares[geo]["slat"],
                                    bbox=np.stack([cen.min(0), cen.max(0)]).tolist()))
-            del veh
+            del cells, points, Pm
             print("hilift", case, time.time() - t0, flush=True)
     arrays = dict(surf_points=stack(per, "points"), surf_cp=stack(per, "cp"), surf_offsets=offsets(per, "points"),
                   U_inf=np.stack([it["U"] for it in per]))
     write("hilift", arrays, dict(dataset="HiLiftAeroML", cases=meta_cases, geometries=chosen_geos, aoas_deg=aoas,
-                                 selection="three geometries at the minimum, median and maximum flap area share among the 180 (element-label files), "
+                                 selection=f"three geometries at the minimum, median and maximum flap area share among the {flap.size} geometries with an element-label file, "
                                            "each at the lowest and the highest angle of attack of the grid",
                                  flap_area_share_all=dict(min=float(flap.min()), median=float(np.median(flap)), max=float(flap.max()), n=int(flap.size)),
                                  units="m (converted from inch)", ranges=ranges(surf_cp=arrays["surf_cp"])))

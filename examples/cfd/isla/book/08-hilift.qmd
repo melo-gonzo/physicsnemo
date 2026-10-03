@@ -80,6 +80,18 @@ def load_problem(name):
     z = np.load(PF / f"{name}.npz"); meta = json.load(open(PF / f"{name}.json"))
     return {k: z[k] for k in z.files}, meta
 
+SF = RES / "sample_figures_2026-10-02"
+
+def load_samples(name):
+    """Several samples of a dataset, reduced for plotting (results/sample_figures_2026-10-02/); per-sample arrays are
+    concatenated and cut with the matching ``*_offsets`` array via ``part``."""
+    z = np.load(SF / f"{name}.npz"); meta = json.load(open(SF / f"{name}.json"))
+    return {k: z[k] for k in z.files}, meta
+
+def part(a, off, i):
+    """Rows of the concatenated array ``a`` that belong to sample ``i``."""
+    return a[off[i]:off[i + 1]]
+
 def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
     """Draw line cells colored by boundary-condition kind (keys of palette.BC)."""
     segs = pts[cells][:, :, :2]
@@ -165,6 +177,60 @@ x0 = bb[0, 0] + 0.02 * (bb[1, 0] - bb[0, 0]); z0 = bb[1, 2] - 0.35 * (bb[1, 2] -
 ax.annotate("", xy=(x0 + Lc * u[0], z0 + Lc * u[2]), xytext=(x0, z0), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0))
 ax.text(x0 + 0.5 * Lc, z0 + 0.5 * Lc * u[2] + 0.12 * Lc, f"far field: uniform flow along $\\hat g_1$ at {Hm['aoa_deg']:.0f}°\n(Mach and Reynolds number fixed)", ha="left", va="bottom", fontsize=8.5, color=INK2)
 ax.set_ylabel("z [m]"); ax.set_xlabel("x [m]"); ax.set_title("side view: $C_p$, the slat and the flap deflected below the wing", fontsize=9.5)
+cb = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.01, extend="min"); cb.set_label("$C_p$ [–]"); cb.outline.set_visible(False)
+plt.show()
+```
+
+```{python}
+#| label: para-hilift-samples
+#| output: asis
+Hs_, Hsm = load_samples("hilift")
+fa = Hsm["flap_area_share_all"]; cs = Hsm["cases"]; spd = [0.0254 * float(np.linalg.norm(c["U_inf"])) for c in cs]   # the file stores U_inf in inch/s
+speed = (f"the far-field speed is {spd[0]:.0f} m/s in every case" if max(spd) - min(spd) < 0.05
+         else f"the far-field speed runs from {min(spd):.0f} to {max(spd):.0f} m/s")
+print(f"@fig-hilift-samples shows three geometries at two of the ten angles. The geometries are the ones with the smallest, the "
+      f"median and the largest share of the wetted area on the flap ({100 * fa['min']:.1f}%, {100 * fa['median']:.1f}% and {100 * fa['max']:.1f}% of the "
+      f"surface) among the {fa['n']} geometries that carry an element-label file (a proxy for the flap setting), each at {Hsm['aoas_deg'][0]:.0f}° and "
+      f"{Hsm['aoas_deg'][1]:.0f}°, the two ends of the grid; {speed}, so the angle enters the model only through the direction $\\hat g_1$.")
+```
+
+```{python}
+#| label: fig-hilift-samples
+#| fig-cap: >
+#|   Six HiLiftAeroML cases on a three-geometries-by-two-angles grid: the
+#|   aircraft with the smallest, the median and the largest flap share of the
+#|   wetted area among the geometries that carry an element-label file (rows)
+#|   at 4° and 22° angle of attack (columns), seen from
+#|   above and colored by the pressure coefficient $C_p$ on one shared scale
+#|   (60,000 cells per case at their centroids). The black arrow in each panel
+#|   is the far-field direction $\hat g_1$ as stored in the file, drawn in the
+#|   $x$–$z$ plane (the vertical axis of the glyph is $z$, not the panel's
+#|   $y$), the one global vector and the only input that differs between the
+#|   two columns. How to read this: a row shows the effect of the
+#|   angle on one geometry, a column the effect of the geometry at one angle;
+#|   the suction peaks on the slat and the leading edge run below the scale's
+#|   bottom, which is clipped; coordinates are converted from inches to metres;
+#|   colors are the reference CFD field, not predictions. Data:
+#|   results/sample_figures_2026-10-02/hilift.npz.
+#| code-fold: true
+Hs_, Hsm = load_samples("hilift")
+cs = Hsm["cases"]; so = Hs_["surf_offsets"]
+norm = TwoSlopeNorm(vcenter=0.0, vmin=-4.0, vmax=1.0)
+xlim = (min(c["bbox"][0][0] for c in cs) - 0.3, max(c["bbox"][1][0] for c in cs) + 0.3)
+ylim = (min(c["bbox"][0][1] for c in cs) - 0.3, max(c["bbox"][1][1] for c in cs) + 0.3)
+fig, axes = plt.subplots(3, 2, figsize=(8, 8.6), sharex=True, sharey=True, gridspec_kw=dict(hspace=0.22, wspace=0.04))
+for i, c in enumerate(cs):
+    ax = axes[i // 2, i % 2]
+    sp = part(Hs_["surf_points"], so, i); cp = part(Hs_["surf_cp"], so, i)
+    sc = depth_scatter(ax, sp[:, [0, 1]], sp[:, 2], cp, s=1.4, cmap=DIVERGING, norm=norm); map_axes(ax)
+    ax.set_xlim(*xlim); ax.set_ylim(*ylim)
+    ax.set_title(f"{c['geometry'].replace('geo_', '')}, flap {100 * c['flap_area_share']:.1f}% of the area; $\\alpha$ = {c['aoa_deg']:.0f}°", fontsize=8.5)
+    u = Hs_["U_inf"][i] / np.linalg.norm(Hs_["U_inf"][i])   # the stored far-field direction, drawn in the x–z plane
+    Lc = 0.16 * (xlim[1] - xlim[0]); x0 = xlim[0] + 0.05 * (xlim[1] - xlim[0]); y0 = ylim[0] + 0.3 * (ylim[1] - ylim[0])
+    ax.annotate("", xy=(x0 + Lc * u[0], y0 + Lc * u[2]), xytext=(x0, y0), arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.8))
+    ax.text(x0, y0 + 0.16 * (ylim[1] - ylim[0]), f"$\\hat g_1$ at {c['aoa_deg']:.0f}° ($x$–$z$ plane)", ha="left", va="bottom", fontsize=7.8, color=INK2, path_effects=halo())
+    if i % 2 == 0: ax.set_ylabel("y [m]")
+    if i // 2 == 2: ax.set_xlabel("x [m]")
 cb = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.01, extend="min"); cb.set_label("$C_p$ [–]"); cb.outline.set_visible(False)
 plt.show()
 ```
