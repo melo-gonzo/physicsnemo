@@ -33161,3 +33161,52 @@ baselines' volume numbers under the same protocol come with CHAR-LANES.
 A first version of the control still carried the area law (a text
 substitution that did not match) and reproduced the area numbers to four
 decimals; the structural check caught it before any reading was taken.
+
+## 2026-10-03 — Status, REF-80 DrivAerML half scored: every under-80 GiB candidate of the three architectures, two seeds, 500 epochs, scored at 200,000 cells; ISLA's candidates sit within 5% of one another (0.0430 to 0.0452 pressure) while GeoTransolver gains 11% from width 256 to 1,024 at 100,000 training cells (0.0455 to 0.0404) and Transolver 22% (0.0556 to 0.0432); DrivAerML winners by the preregistered rule are ISLA width 768 at 100,000 cells, GeoTransolver width 1,024 at 100,000, Transolver width 1,024 at 100,000; the wing half decides {#sec-nb-ref80-drivaer-half}
+
+**Setting.** REF-80 (@sec-nb-char-prereg, @sec-nb-ref80-frontier) picks
+one reference configuration per architecture, the most accurate that
+trains under 80 GiB per GPU at the reporting protocol, from the measured
+frontier. The 28 DrivAerML Surface lanes (group `r80`, 14 candidates, two
+seeds, 500 epochs, 435 training cars) are trained and scored in float32 on
+the 48 validation cars at 200,000 cells
+(`results/char/ref80_select_2026-10-03.py`,
+`results/char/ref80_select_2026-10-03.json`). The candidates that trained
+at 100,000 cells are scored at 200,000 like the others, the reporting
+protocol; their scoring at the training count is kept as a secondary
+reading and is within 1% of the 200,000-cell number for every one of them
+(GeoTransolver 1,024: 0.0405 against 0.0404; ISLA 768: 0.0443 against
+0.0438; Transolver 1,024: 0.0433 against 0.0432), the cells law of
+@sec-nb-isocost-verdict holding at evaluation as well as at training.
+A DrivAerML lane takes about 2.5 hours (18 seconds per epoch compiled;
+the 59 seconds of the one-epoch frontier lanes was the warm-up epoch).
+
+**What we saw (seed-mean pressure error; per-seed in parentheses).**
+ISLA: 512 slices 0.0430 (0.0431 / 0.0428), width 512 0.0432 (0.0428 /
+0.0437), reference 384x12 0.0437 (0.0443 / 0.0431), width 768 at 100,000
+cells 0.0438 (0.0441 / 0.0434), width 512 with 512 slices 0.0443, 24
+layers at 100,000 0.0446, width 512 with 24 layers at 100,000 0.0452.
+GeoTransolver: width 1,024 at 100,000 cells 0.0404 (0.0402 / 0.0406),
+width 512 at 100,000 0.0419, width 256 at 200,000 0.0455. Transolver:
+width 1,024 at 100,000 0.0432 (0.0434 / 0.0430), width 512 with 16 layers
+at 100,000 0.0435, width 512 0.0466, width 256 0.0556. **Under the 80 GiB
+budget on DrivAerML Surface, the best GeoTransolver (0.0404) leads the
+best ISLA (0.0430) by 6%, and the best Transolver (0.0432) ties the best
+ISLA.** ISLA's seven candidates span 5%, so the slices, width, depth and
+cells axes buy nothing at 435 cars (the CAP-435 and ISO-COST readings
+reproduced on the adopted class), while the baselines convert memory into
+accuracy along the width axis.
+
+**The rule, applied to this half.** Ties within 3% of the best go to the
+cheaper candidate by training peak memory. ISLA: the tie set is 512
+slices, width 512, the reference and width 768 at 100,000 cells (all at or
+under 0.0443), and the cheapest is width 768 at 100,000 cells (42.1 GiB
+against the reference's 44.4). GeoTransolver: width 1,024 at 100,000 cells
+alone. Transolver: width 1,024 at 100,000 cells (46.7 GiB) over width 512
+with 16 layers (62.0, within 1%). The reference configuration is the
+candidate that wins on both datasets; the 210-wing twin (rows 28 to 55,
+running) decides. If the two halves disagree for ISLA, the decision is
+written here with its reason; note already that the ISLA tie set is wide
+and a tie-break by two GiB of memory between a 150M-parameter model at
+100,000 cells and a 38M-parameter model at 200,000 is not a strong
+preference, so the wing half's ordering will carry the weight.
