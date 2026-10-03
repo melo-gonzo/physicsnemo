@@ -33113,7 +33113,11 @@ are unchanged by construction; verified bit-identical in float32 on native
 AirfRANS samples and a DrivAerML Volume sample under the same checkpoints,
 with regression tests (23 of 23 on GB300 against the patched snapshot;
 8 of the new tests fail against code_v18, as they should). The snapshot
-with the fix is code_v19. Observed on the way and left as is under the
+with the fix is code_v19 (verify job 997426: 827 passed, 1 failed; the
+failure is the fused-kernel fullgraph gradient check at 2.3e-5 against
+its 1e-5 bar on one projection weight, and the same test fails
+identically on an untouched code_v18 in the same job, so it is a
+run-to-run tolerance of the fused kernel's atomics, not the fix). Observed on the way and left as is under the
 freeze: the same float32 expansion returns a wrong in-range nearest
 boundary cell for 0.3% to 1.4% of near-wall queries on native data too
 (near-ties within its resolution); an exact search would change outputs
