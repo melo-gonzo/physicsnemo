@@ -322,6 +322,11 @@ print(f"**Every mesh node is an interacting query token, and the readout is the 
       "nodes; on the uniform-point-cloud variant, which is the identity here because the boundary polyline is kept whole and the interior is "
       "a point cloud without cell measures; and with every specimen rigidly rotated in its plane and translated by one RMS point radius, "
       "the stress components rotated as a tensor and the displacement as a vector (@sec-invariances).")
+COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]["Tensile2D"]
+print()
+print("**Cost.** Training on this task, one epoch at the reference configurations on four GB300 ranks in bfloat16 (peak device memory, "
+      "maximum over ranks): " + "; ".join(f"{a} {v['peak_gib']:.1f} GiB and {v['epoch_seconds']:.0f} s per epoch at {v['n_parameters'] / 1e6:.0f}M parameters"
+      for a, v in COST.items()) + ". Data: results/char/char_lanes_cost_2026-10-04.json.")
 ```
 
 ## The standing {#sec-interior-tensile2d}

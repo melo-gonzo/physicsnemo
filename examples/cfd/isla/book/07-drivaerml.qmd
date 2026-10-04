@@ -560,10 +560,20 @@ print(f"Two of the three columns read as on every other dataset and one does not
       "where the same model class on the Surface task is unchanged by the same draw (@tbl-drivaerml-surface-protocols). The column "
       "therefore measures one thing: the trained volume model's sensitivity to the law that places its boundary tokens. That sensitivity is "
       "an open weakness of the volume model. Its mechanism is not measured; the candidate is that the queries' attention over the boundary "
-      "tokens weights by measure, and the area law moves the tokens from the finely meshed curved features to the flat panels. The "
-      "reference configurations were selected under 80 GiB of training memory per GPU on the Surface task; on this task every step "
-      "carries 100,000 boundary and 100,000 interior tokens, and the per-task training peak is a cost of the configuration as "
-      "shipped, not a selection criterion.")
+      "tokens weights by measure, and the area law moves the tokens from the finely meshed curved features to the flat panels.")
+```
+
+```{python}
+#| label: para-interior-cost
+#| output: asis
+COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]["DrivAerML Volume"]
+over = [a for a, v in COST.items() if v["peak_gib"] > 80]
+cells = "; ".join(f"{a} {v['peak_gib']:.1f} GiB and {v['epoch_seconds']:.0f} s per epoch at {v['n_parameters'] / 1e6:.0f}M parameters" for a, v in COST.items())
+print(f"**Cost.** Training on this task, one epoch at the reference configurations on four GB300 ranks in bfloat16 (peak device memory, "
+      f"maximum over ranks): {cells}. The reference configurations were selected as the most accurate under 80 GiB per GPU on the Surface "
+      f"task; on the Volume task every step carries 100,000 boundary and 100,000 interior tokens, and {' and '.join(over)} exceed that "
+      f"line here while {', '.join(a for a in COST if a not in over)} does not. The per-task peak is a measured cost of the configuration "
+      "as shipped, not a selection criterion. Data: results/char/char_lanes_cost_2026-10-04.json.")
 ```
 
 Two ingredient orderings sit behind ISLA's row. Both were measured at the
