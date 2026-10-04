@@ -33569,3 +33569,49 @@ discontinuous function of the query position, with an O(1) normal flip at
 ties). The candidate fix is a measure-weighted average over near-tied
 samples in the geometry construction, a post-campaign change. The chapter
 reports the 2x as measured with this mechanism.
+
+## 2026-10-04 — Status, REF-80 wing half nearly scored (27 of 28 lanes): the 210-wing rung orders the candidates differently from DrivAerML on every architecture; ISLA width 512 with 512 slices leads (0.0407, the only candidate within 3% of the best); GeoTransolver width 1,024 at 100,000 cells, the DrivAerML winner, reads 0.252 on the wings (0.18 and 0.32 per seed, five times its width-256 sibling at 0.0492); Transolver width 512 with 16 layers at 100,000 cells leads (0.0433); the reference decision is written when the last lane is scored {#sec-nb-ref80-wing-half}
+
+**Setting.** The second half of the REF-80 selection (@sec-nb-ref80-drivaer-half):
+the same fourteen under-80 GiB candidates trained 500 epochs with two seeds on
+the HiLift 210-wing medium rung (`r80_hl_*`, 180 validation cases, 200,000
+cells, float32), reduced by `results/char/ref80_select_2026-10-03.py`. One lane
+(ISLA width 512, seed 43) and one scoring (GeoTransolver width 256, seed 43)
+are outstanding; neither can move the orderings below by more than a tie.
+
+**What we saw (seed-mean pressure error on the wings; per seed).** ISLA: width
+512 with 512 slices 0.0407 (0.0402 / 0.0411), 512 slices 0.0425 (0.0415 /
+0.0436), width 768 at 100,000 cells 0.0425 (0.0410 / 0.0441), 24 layers at
+100,000 0.0432 (one seed), width 512 0.0443 (one seed), reference 384x12
+0.0450 (0.0442 / 0.0459), width 512 with 24 layers at 100,000 0.0451.
+GeoTransolver: width 256 at 200,000 cells 0.0492 (one seed scored), width
+512 at 100,000 0.0656 (0.0733 / 0.0578), width 1,024 at 100,000 0.2520
+(0.1825 / 0.3215). Transolver: width 512 with 16 layers at 100,000 cells
+0.0433 (0.0434 / 0.0432), width 1,024 at 100,000 0.0447 (one seed), width
+512 0.0465, width 256 0.0515. Three readings. (1) On the wings ISLA's
+candidates separate (0.0407 to 0.0451, 11%) where on the cars they were flat
+(5%), and the two axes that buy accuracy here are slices and width together,
+not depth or cells. (2) **GeoTransolver's DrivAerML winner does not transfer**:
+width 1,024 at 100,000 cells, 0.0404 on the cars, reads 0.252 on the wings
+with both seeds far apart, the signature of a training that did not settle
+at that width and rate on 210 wings; width 256 at 200,000 cells, 12% behind
+on the cars, is its best wing candidate. (3) Transolver's two 100,000-cell
+candidates swap places across the datasets within 3%. **Under the
+preregistered rule (the reference is the candidate that wins both datasets;
+a disagreement is decided here with its reason) no architecture has a joint
+winner, so the decision rule applied is the smallest mean over the two
+datasets of error ÷ best-on-that-dataset, ties within 3% to the cheaper
+candidate**: ISLA width 512 with 512 slices (1.030 on the cars, 1.000 on
+the wings; the next, 512 slices alone, 1.000 and 1.044), GeoTransolver width
+256 at 200,000 cells (1.126 and 1.000 against 1.000 and 5.1 for width 1,024
+at 100,000), Transolver width 512 with 16 layers at 100,000 cells (1.007 and
+1.000 against 1.000 and 1.032). The protocol scorings of the wing lanes under
+the DrivAerML-half references are complete and stay in the record
+(`results/campaigns_2026-10-02/char/protocols/r80_hl_*`): ISLA width 768 at
+100,000 cells reads 0.0433 / 0.0962 native, 0.0443 / 0.0985 on the point cloud
+and 0.0436 / 0.0967 posed (pressure / wall shear), GeoTransolver 1,024
+0.251 / 0.397, 0.625 / 0.864, 2.23 / 4.36, Transolver 1,024 0.0450 / 0.1029,
+0.457 / 0.626, 1.10 / 1.59. The decision, the six-task lanes under the
+final references (the DrivAerML-half lanes remain as the record of those
+configurations), and the HiLift and DrivAerML Surface protocol artifacts
+under the final references follow when the last lane is scored.
