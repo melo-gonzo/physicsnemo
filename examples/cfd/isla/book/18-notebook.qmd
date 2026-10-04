@@ -33514,3 +33514,29 @@ scalars; ISLA's 5% posed shift is the generic-angle residual
 (@sec-nb-char-shift-suv), real but two orders of magnitude below the
 baselines' failure. The chapter's protocol table shows these three columns;
 the per-component numbers stay in the artifact for the native column.
+
+## 2026-10-04 — Status, CHAR on the GINOT lug scored: ISLA 768 leads on the native mesh (von Mises 0.0021 against GeoTransolver 0.0026 and Transolver 0.0027, ratios 1.24 and 1.29), the uniform point cloud is the identity (boundary kept whole), and under the 3-D rigid pose ISLA reads 0.0041, twice its native error, where the baselines read 0.98 and 1.02; the 2x shift is under attribution {#sec-nb-char-lug-interim}
+
+**Setting.** The six lug lanes of CHAR-LANES (@sec-nb-char-lanes-launched; 2,400
+training lugs, 600 test, 500 epochs, every node, 20,000-cell cap; ISLA width 768
+with the boundary labels and pressure as boundary scalars and the four design
+parameters as global scalars; GeoTransolver and Transolver width 1,024 reading the
+labels on the interior nodes) finished and were scored natively and under the
+three protocols (`results/char/lug.json`).
+
+**What we saw (von Mises relative L2, seed means over 600 test lugs).** Native:
+ISLA 0.0021, GeoTransolver 0.0026, Transolver 0.0027 (GeoTransolver ÷ ISLA
+1.24, Transolver ÷ ISLA 1.29), ISLA's only native lead on a solid in the
+campaign. Uniform point cloud = native for every architecture (the lug surface
+is a few thousand triangles, kept whole; the interior is a point cloud). Rotated
+and translated (uniform SO(3) plus one RMS radius, no centering step in this
+pipeline): ISLA 0.0041, GeoTransolver 0.98, Transolver 1.02. The baselines'
+numbers are the expected lab-frame failure; **ISLA's output, a scalar that a
+rigid motion cannot change, moved by 2x**, far above the 5% residual of
+Tensile2D (@sec-nb-char-interior-tensile2d) and the exact result on AirfRANS
+and the DrivAerML tasks. Rotation-only and translation-only scorings and a
+model-level check on one lug (90-degree rotation, one-radius translation,
+field-by-field bisection of what the pose transforms) are being run to
+attribute the shift to the model, to a pipeline field left untransformed, or
+to float32 coordinate sensitivity; the chapter's table shows the column as
+measured and its prose waits for the attribution.
