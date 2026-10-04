@@ -58,11 +58,11 @@ pipeline:
     - _target_: ${dp:NormalizeMeshFields}
       association: point_data
       fields:                                    # pooled over all nodes of train_400 (manifest _stats; 2026-09-22)
-        displacement: {type: vector, mean: [-3.38e-4, 1.054e-3, 0.0], std: 8.22e-4}   # per-component std 2.89e-4 / 1.126e-3; std here is the isotropic (Frobenius/sqrt(2)) value
+        displacement: {type: vector, mean: [0.0, 0.0, 0.0], std: 8.22e-4}   # EQ-NORM (2026-10-03): zero mean, one isotropic std; a non-zero vector mean breaks the posed protocol for every equivariant model
         q: {type: scalar, mean: 1.73e-7, std: 8.18e-6}       # heavy-tailed: 400-case max_q ranges 1.9e-7 .. 1.6e-3; consider a log1p transform
-        sig11: {type: scalar, mean: -0.127, std: 28.4}
-        sig22: {type: scalar, mean: 57.7, std: 32.0}
-        sig12: {type: scalar, mean: 8.1e-4, std: 16.9}
+        sig11: {type: scalar, mean: 0.0, std: 37.837}   # EQ-NORM (2026-10-03): zero mean, one shared isotropic std for the stress tensor = sqrt(mean(sig11^2 + sig22^2 + 2 sig12^2)/4) over train_400
+        sig22: {type: scalar, mean: 0.0, std: 37.837}
+        sig12: {type: scalar, mean: 0.0, std: 37.837}
 
 targets:
   q: scalar

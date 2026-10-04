@@ -285,3 +285,20 @@ def test_isla_end_to_end_through_collate_and_loss():
         "loss/stress",
         "loss/displacement",
     }
+
+
+def test_select_tensor_components_accepts_a_planar_2x2_tensor():
+    """A planar problem restricted to its plane (ISLA dim=2) predicts a (N, 2, 2) tensor; the in-plane
+    labels read off it, out-of-plane labels are refused (2026-10-03)."""
+    import pytest
+    import torch
+    from utils import select_tensor_components
+
+    t = torch.randn(5, 2, 2)
+    out = select_tensor_components(t, STRESS)
+    assert out.shape == (5, 3)
+    assert torch.equal(out[:, 0], t[:, 0, 0]) and torch.equal(out[:, 1], t[:, 1, 1]) and torch.equal(out[:, 2], t[:, 0, 1])
+    with pytest.raises(ValueError, match="does not have"):
+        select_tensor_components(t, {"type": "symmetric_tensor", "components": {"s33": "zz"}})
+    with pytest.raises(ValueError, match="d in"):
+        select_tensor_components(torch.randn(5, 4, 4), STRESS)

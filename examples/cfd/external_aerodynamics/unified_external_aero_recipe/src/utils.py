@@ -150,14 +150,24 @@ def tensor_components(field_type: FieldType) -> dict[str, str]:
 def select_tensor_components(
     tensor: torch.Tensor, field_type: FieldType
 ) -> torch.Tensor:
-    """The listed laboratory components of a ``(..., 3, 3)`` tensor, in YAML order, as ``(..., n_listed)``."""
-    if tensor.shape[-2:] != (3, 3):
+    """The listed laboratory components of a ``(..., d, d)`` tensor, in YAML order, as ``(..., n_listed)``.
+
+    ``d`` is 3, or 2 for a planar problem restricted to its plane (``RestrictToPlane`` + ``ISLA(dim=2)``,
+    2026-10-03): then only the in-plane labels ``xx``, ``yy``, ``xy`` can be listed.
+    """
+    d = tensor.shape[-1]
+    if tensor.dim() < 2 or tensor.shape[-2] != d or d not in (2, 3):
         raise ValueError(
-            f"a symmetric_tensor prediction must have shape (..., 3, 3), got {tuple(tensor.shape)}"
+            f"a symmetric_tensor prediction must have shape (..., d, d) with d in (2, 3), got {tuple(tensor.shape)}"
         )
     pairs = [
         SYMMETRIC_TENSOR_COMPONENTS[c] for c in tensor_components(field_type).values()
     ]
+    out_of_plane = [c for c, (i, j) in zip(tensor_components(field_type).values(), pairs) if max(i, j) >= d]
+    if out_of_plane:
+        raise ValueError(
+            f"symmetric_tensor components {out_of_plane!r} index a coordinate the {d}-dimensional prediction does not have"
+        )
     return torch.stack([tensor[..., i, j] for i, j in pairs], dim=-1)
 
 

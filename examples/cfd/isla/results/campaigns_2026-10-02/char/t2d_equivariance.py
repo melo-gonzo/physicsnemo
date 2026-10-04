@@ -23,7 +23,18 @@ T = "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/ag
 RECIPE = T + "/recipe_v8"
 DistributedManager.initialize()
 dev = torch.device("cuda")
-X = ["train_split=train_400", "val_split=val_100", "+training.val_interval=10", "sampling_resolution=200000", "dataloader.num_workers=1", "run_id=cl_t2d_isla_seed42"]
+import os
+if os.environ.get("EXACT_NN"):
+    ### force ISLA's nearest-boundary search to the exact difference-form torch backend (see infer_exact_nn.py)
+    import functools
+    import physicsnemo.experimental.models.isla.geometry as geometry
+    from physicsnemo.nn.functional.neighbors.knn.knn import knn
+    geometry.knn = functools.partial(knn, implementation="torch")
+    print("nearest-boundary search: EXACT (torch difference form)")
+else:
+    print("nearest-boundary search: default (cuML)")
+RUN = sys.argv[1] if len(sys.argv) > 1 else "cl_t2d_isla_seed42"
+X = ["train_split=train_400", "val_split=val_100", "+training.val_interval=10", "sampling_resolution=200000", "dataloader.num_workers=1", f"run_id={RUN}"]
 
 def build(ds, model, extra=()):
     with initialize_config_dir(config_dir=RECIPE + "/conf", version_base=None):
@@ -51,7 +62,7 @@ def rotate_domain(dm, R2, t=None):
     return DomainMesh(interior=interior, boundaries=bnds, global_data=dm.global_data)
 
 print("######## Part A: pipeline field check (posed sample vs my rotation of the native sample)")
-for ds2d, model in (("plaid_tensile2d_2d", "isla_tensile2d"), ("plaid_tensile2d", "geotransolver_tensile2d")):
+for ds2d, model in ([] if len(sys.argv) > 1 else (("plaid_tensile2d_2d", "isla_tensile2d"), ("plaid_tensile2d", "geotransolver_tensile2d"))):
     _, vl_n, _ = build(ds2d, model); _, vl_p, _ = build(ds2d + "_posed", model)
     idx = next(iter(vl_n.sampler)); assert idx == next(iter(vl_p.sampler))
     (dn, _), (dp, _) = vl_n.dataset[idx], vl_p.dataset[idx]
@@ -92,11 +103,11 @@ for ds2d, model in (("plaid_tensile2d_2d", "isla_tensile2d"), ("plaid_tensile2d"
         if name in dp.global_data.keys() and dn.global_data[name].dtype.is_floating_point:
             print(f"   global.{name:13s} rel diff posed vs native = {rel(dp.global_data[name].double(), dn.global_data[name].double()):.2e}")
 
-print("######## Part B: model-level check (cl_t2d_isla_seed42, native 2-D pipeline)")
+print(f"######## Part B: model-level check ({RUN}, native 2-D pipeline)")
 cfg, vl, info = build("plaid_tensile2d_2d", "isla_tensile2d", ["model.hidden=768"])
 target_config = info["targets"]; output_type = require_output_type(cfg)
 model = hydra.utils.instantiate(cfg.model, _convert_="partial").to(dev)
-ep = load_checkpoint(path=f"{T}/runs/cl_t2d_isla_seed42/checkpoints", models=model, device=dev); print("checkpoint epoch", ep)
+ep = load_checkpoint(path=f"{T}/runs/{RUN}/checkpoints", models=model, device=dev); print("checkpoint epoch", ep)
 model.eval(); collate = vl.collate_fn
 def predict(dm):
     batch = recursive_to_device(collate([(dm, {})]), dev)
@@ -118,13 +129,19 @@ def back_rotate(p, R2):
         s = torch.stack([torch.stack([q["sig11"].reshape(-1), q["sig12"].reshape(-1)], -1), torch.stack([q["sig12"].reshape(-1), q["sig22"].reshape(-1)], -1)], -2)
         s = torch.einsum("ij,njk,lk->nil", Rt, s, Rt)
         q["sig11"], q["sig22"], q["sig12"] = s[:, 0, 0], s[:, 1, 1], s[:, 0, 1]
+    if "stress" in q and q["stress"].shape[-1] == 3:
+        ### the tensor target: the recipe returns the listed components [xx, yy, xy] as one (N, 3) field
+        v = q["stress"]
+        s = torch.stack([torch.stack([v[:, 0], v[:, 2]], -1), torch.stack([v[:, 2], v[:, 1]], -1)], -2)
+        s = torch.einsum("ij,njk,lk->nil", Rt, s, Rt)
+        q["stress"] = torch.stack([s[:, 0, 0], s[:, 1, 1], s[:, 0, 1]], -1)
     return q
 for label, theta, t in (("rotate 90 deg", math.pi / 2, None), ("rotate 37 deg", 37 * math.pi / 180, None), ("translate (1 RMS radius)", 0.0, None), ("rotate 90 deg + translate", math.pi / 2, None)):
     R2 = rot2(theta)
     tt = None
     if "translate" in label:
         p = dm.interior.points.double(); rms = (p - p.mean(0)).norm(dim=-1).square().mean().sqrt()
-        tt = torch.tensor([0.6, -0.8], dtype=torch.float64) * rms
+        tt = torch.tensor([0.6, -0.8], dtype=torch.float64) * float(rms)
     dmr = rotate_domain(dm, R2, tt)
     p1, y1 = predict(dmr)
     back = back_rotate(p1, R2)

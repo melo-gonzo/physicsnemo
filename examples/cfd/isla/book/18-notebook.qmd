@@ -33376,6 +33376,24 @@ Tensile2D violated this), ISLA's Tensile2D configuration predicts the stress
 as the symmetric tensor, the baselines keep their three scalar components
 over the same normalized numbers, and the six Tensile2D lanes are re-run as
 `cl_t2dz_*`; the first six lanes stay in the record as the mis-specified
-configuration.** A residual 1.4% displacement and 17% plastic-strain shift
-at a 37-degree rotation (exact in float32 at 90 degrees) is checked again
-under code_v20's exact nearest search with the corrected configuration.
+configuration.** Applied the same evening: the isotropic stress scale over the 400
+training specimens (3.74 million nodes) is 37.8 MPa (root mean of
+(σ11² + σ22² + 2σ12²)/4; raw per-component means −0.1 / 57.7 / 0.0 and
+standard deviations 28.5 / 32.0 / 16.9), displacement keeps its isotropic
+8.22e-4 with the mean set to zero; the nine Tensile2D yamls carry the new
+normalization (backups `.pre_eq`), the five 2-D ones declare the stress as
+one symmetric tensor target, `isla_tensile2d.yaml` predicts
+`stress: {rank: 2, symmetric: true}`, and the recipe's component selector
+accepts 2x2 tensors (it hard-coded 3x3; 339 recipe tests). Three one-epoch
+smoke lanes passed and the six lanes `cl_t2dz_*` run (jobs 1003874 to
+1003882). The model-level check on the corrected configuration (one-epoch
+checkpoint): a 90-degree rotation reproduces every field, the stress tensor
+included, to roundoff. A 37-degree rotation or a one-radius translation
+changes this one-epoch checkpoint's outputs by 5% to 30% (identical under
+the exact and the library search, so not the nearest search); the trained
+first-configuration checkpoint moved 1.4% at 37 degrees and not at all under
+translation at protocol level, so the sensitivity shrinks with training.
+The candidate mechanism is the nearest-boundary normal's discontinuity at
+the specimen's corners (a 1e-7 coordinate perturbation can swap the nearest
+segment for near-equidistant queries); it is a hypothesis for the trained
+`cl_t2dz` lanes' posed column to confirm or refute.
