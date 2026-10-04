@@ -311,6 +311,10 @@ protocol_table("lug.json", "tbl-lug-protocols", "The GINOT bracket lug at 2,400 
 V, VAR = char_arms("drivaerml_volume.json")
 dr_native = VAR["ISLA"]["native"]["pressure_l2"]["mean"]; dr_posed_shift = VAR["ISLA"]["posed"]["pressure_l2"]["mean"] / dr_native
 T, TAR = char_arms("tensile2d.json")
+TIE = json.load(open(RES / "char" / "lug_ties_2026-10-04.json")); T32 = TIE["fp32"]; T64 = TIE["fp64"]
+tied = TIE["two_nearest_tie_fraction_by_rel_gap"]["1e-04"]["fraction"]; flipped = TIE["nearest_index_changes_under_translation"]["fraction"]
+jit = [T32[f"jitter_{g}_rel_change"] for g in ("1e-7", "1e-6", "1e-5")]
+same_jit = max(jit) - min(jit) < 1e-4
 t2_shift = TAR["ISLA"]["posed"]["stress_l2"]["mean"] / TAR["ISLA"]["native"]["stress_l2"]["mean"]
 lug_native = AR["ISLA"]["native"][F]["mean"]; lug_delta = AR["ISLA"]["posed"][F]["mean"] - lug_native
 per_seed = [p / n for p, n in zip(seeds_of(AR["ISLA"]["posed"][F]), seeds_of(AR["ISLA"]["native"][F]))]
@@ -324,19 +328,28 @@ print(f"Three readings. First, the native column: ISLA's error is {100 * lug_nat
       f"its von Mises error reads {shift('ISLA', 'posed'):.2f} times its native value (per seed {' and '.join(f'{v:.2f}' for v in per_seed)}), "
       f"where the DrivAerML Volume task reads {dr_posed_shift:.3f} and Tensile2d {t2_shift:.2f} (@tbl-drivaerml-volume-protocols, "
       "@tbl-tensile2d-protocols). **The cause is a discontinuity in the geometry construction, not a frame-dependent input or a pipeline "
-      "defect.** Every input the lug configuration reads is transformed consistently, and an exact rigid motion in float32 (a quarter turn "
-      "about an axis, a coordinate permutation) leaves the trained prediction invariant to roundoff; any float-inexact motion, and a "
-      "coordinate jitter far below float32 resolution with no motion at all, change it by the same order as the posed shift. The reason "
-      "is that each query reads its nearest boundary sample, and the nearest sample is a discontinuous function of position: on this "
-      "structured finite-element mesh most interior nodes are equidistant from two boundary centroids to within roundoff, so which sample "
-      "is nearest is decided by sub-roundoff noise, and where the two candidates sit on faces at a large angle the direction feature "
+      "defect.** Every input the lug configuration reads is transformed consistently. A model-level check on one test lug with one "
+      f"trained ISLA checkpoint (native error {100 * T32['native_rel_err']:.2f}% of the field) settles it: an exact rigid motion in float32, "
+      f"a quarter turn about an axis, changes the prediction by {100 * T32['rot90_rel_change']:.2f}% of the field, while a 37-degree rotation "
+      f"changes it by {100 * T32['rot37_rel_change']:.2f}%, a translation of one RMS radius by {100 * T32['translate_rel_change']:.2f}% and "
+      f"the two together by {100 * T32['rot90_translate_rel_change']:.2f}%, and a random coordinate jitter of 1e-7 relative with no motion at "
+      f"all changes it by {100 * jit[0]:.2f}%{', the same at 1e-6 and 1e-5' if same_jit else ''}: a discontinuity, not smooth "
+      "roundoff amplification. The reason is that each query reads its nearest boundary sample, and the nearest sample is a "
+      f"discontinuous function of position: on this structured finite-element mesh {100 * tied:.0f}% of the interior nodes are equidistant "
+      f"from two boundary centroids to within 1e-4 relative, so which sample is nearest is decided by sub-roundoff noise; under the "
+      f"translation {100 * flipped:.0f}% of the nearest indices change, and {TIE['flipped_normal_over_30deg_nodes']} nodes jump to a face more "
+      "than 30 degrees away, an order-one change of the direction feature that the attention spreads over the field. A float64 forward "
+      f"with float64 transforms reduces the posed change to {100 * T64['rot90_translate_rel_change']:.2f}% but moves the native prediction "
+      f"itself to {100 * T64['native_rel_err']:.2f}% error against {100 * T32['native_rel_err']:.2f}% in float32: the trained model's output "
+      "depends on arithmetic precision at the percent level through the same tie-breaking. Where the two candidates sit on faces at a "
+      "large angle the direction feature "
       "changes by order one, a change the attention spreads over the field. The effect is visible here because the native error is so "
       f"small: the posed-minus-native difference is {100 * lug_delta:.2f}% of the field, which doubles an error of {100 * lug_native:.2f}% and "
       f"would move the DrivAerML Volume pressure error of {100 * dr_native:.1f}% by about {100 * lug_delta / dr_native:.0f}% of itself, below "
       "its seed spread; the same construction runs on every dataset and is exact there to the fourth decimal because ties are rare on "
       "unstructured meshes. The remedy that follows is a measure-weighted average over near-tied boundary samples in the geometry "
       "construction, which makes the feature continuous; it is a change to the class after this campaign, not one its lanes carry, so "
-      "the column reports the factor as measured.")
+      "the column reports the factor as measured. Data: results/char/lug_ties_2026-10-04.json.")
 ```
 
 ## Ladders and controls {#sec-lug-ladders}

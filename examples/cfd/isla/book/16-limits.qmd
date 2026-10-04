@@ -230,19 +230,27 @@ print(f"**ISLA's interior prediction on the DrivAerML Volume task depends on the
 lug_shift = shift(LUG, "ISLA", "von_mises_l2", "posed"); t2_shift = shift(T2D, "ISLA", "stress_l2", "posed")
 exact = max(abs(shift(arms, "ISLA", f, "posed") - 1) for arms in (VOL, SURF, AIR, SUV) for f in arms["ISLA"]["native"])
 lug_native = LUG["ISLA"]["native"]["von_mises_l2"]["mean"]; lug_delta = LUG["ISLA"]["posed"]["von_mises_l2"]["mean"] - lug_native
+TIE = json.load(open(RES / "char" / "lug_ties_2026-10-04.json")); T32 = TIE["fp32"]; T64 = TIE["fp64"]
+tied = TIE["two_nearest_tie_fraction_by_rel_gap"]["1e-04"]["fraction"]; flipped = TIE["nearest_index_changes_under_translation"]["fraction"]
+jit = [T32[f"jitter_{g}_rel_change"] for g in ("1e-7", "1e-6", "1e-5")]
+same_jit = max(jit) - min(jit) < 1e-4
 print(f"**ISLA's error is within {100 * exact:.2f}% of its native error under a generic rotation and translation on the DrivAerML "
       f"Surface and Volume tasks, AirfRANS and Shift-SUV, and it is not on the two structured finite-element meshes: "
       f"{lug_shift:.2f} times its native error on the lug and {t2_shift:.2f} times on Tensile2d "
       "(@tbl-lug-protocols, @tbl-tensile2d-protocols).** The cause is a discontinuity in the geometry construction, not a frame-dependent "
-      "input: every input is transformed consistently, and an exact rigid motion in float32 (a quarter turn about an axis) leaves the "
-      "trained prediction invariant to roundoff, while a float-inexact motion, or a coordinate jitter far below float32 resolution with "
-      "no motion at all, changes it by the order of the posed shift. Each query reads its nearest boundary sample, and on a structured "
-      "mesh most interior nodes are equidistant from two boundary centroids to within roundoff, so the choice is decided by sub-roundoff "
-      "noise and the direction feature changes by order one where the two candidates sit on faces at a large angle. The factor is large "
+      "input: every input is transformed consistently, and on one test lug with one trained checkpoint an exact rigid motion in float32 (a "
+      f"quarter turn about an axis) changes the prediction by {100 * T32['rot90_rel_change']:.2f}% of the field, while a 37-degree rotation "
+      f"changes it by {100 * T32['rot37_rel_change']:.2f}%, a one-radius translation by {100 * T32['translate_rel_change']:.2f}%, and a "
+      f"coordinate jitter of 1e-7 relative with no motion at all by {100 * jit[0]:.2f}%{', the same at 1e-6 and 1e-5' if same_jit else ''} "
+      f"(native error {100 * T32['native_rel_err']:.2f}%; in float64 the native error itself moves to {100 * T64['native_rel_err']:.2f}%). Each "
+      f"query reads its nearest boundary sample, and on that structured mesh {100 * tied:.0f}% of the interior nodes are equidistant from "
+      f"two boundary centroids to within 1e-4 relative, so the choice is decided by sub-roundoff noise ({100 * flipped:.0f}% of the nearest "
+      "indices change under the translation) and the direction feature changes by order one where the two candidates sit on faces at a "
+      "large angle. The factor is large "
       f"on the lug because its native error is {100 * lug_native:.2f}% of the field: the posed-minus-native difference is "
       f"{100 * lug_delta:.2f}%, invisible against the several-percent errors of the aerodynamic tasks (@sec-interior-lug). The remedy is a "
       "measure-weighted average over near-tied boundary samples in the geometry construction, which makes the feature continuous; it is "
-      "future work on the class, and every pose number in the book is measured without it.")
+      "future work on the class, and every pose number in the book is measured without it. Data: results/char/lug_ties_2026-10-04.json.")
 ```
 
 ### The prediction depends on the query set {#sec-limits-query-independence}
