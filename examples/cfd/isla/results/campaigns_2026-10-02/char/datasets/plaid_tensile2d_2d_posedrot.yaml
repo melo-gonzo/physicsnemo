@@ -71,7 +71,5 @@ pipeline:
 
 targets:
   q: scalar
-  sig11: scalar
-  sig22: scalar
-  sig12: scalar
   displacement: vector
+  stress: {type: symmetric_tensor, components: {sig11: xx, sig22: yy, sig12: xy}}   # EQ-TENSOR (2026-10-03): ISLA predicts the in-plane stress as one symmetric rank-2 tensor; metric names sig11_l2 etc. unchanged
