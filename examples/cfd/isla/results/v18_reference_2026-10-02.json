@@ -132,7 +132,56 @@
    "interim": false
   },
   "hilift_210": {
-   "status": "not scored"
+   "fields": [
+    "density_l2",
+    "pressure_l2",
+    "tau_wall_l2",
+    "temperature_l2",
+    "velocity_l2"
+   ],
+   "v18": {
+    "density_l2": 0.059219331071815554,
+    "pressure_l2": 0.044230989661688605,
+    "tau_wall_l2": 0.09673744359364111,
+    "temperature_l2": 0.04991190535430279,
+    "velocity_l2": 0.06206471544379989
+   },
+   "per_seed": {
+    "v18": {
+     "42": {
+      "pressure_l2": 0.04400330885416932,
+      "temperature_l2": 0.04959799009892676,
+      "density_l2": 0.05896457341603107,
+      "velocity_x_l2": 0.05019091692649656,
+      "velocity_y_l2": 0.15354279486669434,
+      "velocity_z_l2": 0.09401427259047826,
+      "velocity_l2": 0.06237544378058778,
+      "tau_wall_x_l2": 0.08216719828132125,
+      "tau_wall_y_l2": 0.16873625045021376,
+      "tau_wall_z_l2": 0.10806087934308582,
+      "tau_wall_l2": 0.09691794489820799,
+      "n_cases": 180
+     },
+     "43": {
+      "pressure_l2": 0.044458670469207894,
+      "temperature_l2": 0.050225820609678826,
+      "density_l2": 0.059474088727600044,
+      "velocity_x_l2": 0.04984266538586882,
+      "velocity_y_l2": 0.15133366270197762,
+      "velocity_z_l2": 0.0927599339435498,
+      "velocity_l2": 0.06175398710701201,
+      "tau_wall_x_l2": 0.0821616012810005,
+      "tau_wall_y_l2": 0.16644957384301556,
+      "tau_wall_z_l2": 0.10746176615357399,
+      "tau_wall_l2": 0.09655694228907426,
+      "n_cases": 180
+     }
+    }
+   },
+   "n_seeds": {
+    "v18": 2
+   },
+   "interim": false
   },
   "airfrans": {
    "fields": [

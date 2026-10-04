@@ -173,6 +173,31 @@ def resolve_metrics(cfg: DictConfig) -> list[MetricName]:
 
 VECTOR_COMPONENTS = ("x", "y", "z", "w")
 
+### Symmetric tensors stored component by component (CHAR-PROTOCOLS, 2026-10-04).
+### A dataset that declares the laboratory components of a symmetric rank-2
+### tensor as separate SCALAR targets (the baselines' Tensile2D path:
+### sig11 / sig22 / sig12) gets the same aggregate metric a ``symmetric_tensor``
+### target yields (``stress_l2``), assembled from the listed components, so the
+### two paths read one formula. Per-component relative errors are NOT
+### rotation-invariant (a rotation redistributes the tensor among its
+### components); the Frobenius relative L2 of the assembled tensor is.
+DERIVED_SYMMETRIC_TENSORS: dict[str, dict[str, str]] = {
+    "stress": {"sig11": "xx", "sig22": "yy", "sig12": "xy"},
+}
+_DIAGONAL_LABELS = ("xx", "yy", "zz")
+
+
+def _frobenius_weights(components: dict[str, str], like: torch.Tensor) -> torch.Tensor:
+    """Per-listed-component weights that make the flattened relative L2 the Frobenius one.
+
+    A symmetric tensor lists each off-diagonal component once; the Frobenius norm
+    counts it twice (``T_xy`` and ``T_yx``), so off-diagonal columns are scaled by
+    ``sqrt(2)`` in pred and target alike (a common scaling leaves the relative
+    error of each column unchanged, only its weight in the sum).
+    """
+    w = [1.0 if label in _DIAGONAL_LABELS else 2.0**0.5 for label in components.values()]
+    return torch.tensor(w, dtype=like.dtype, device=like.device)
+
 
 class MetricCalculator:
     """Per-field metric aggregator over `TensorDict` predictions.
@@ -248,7 +273,21 @@ class MetricCalculator:
                 for field in tensor_components(field_type):
                     keys.extend(self._make_key(field, m) for m in self.metric_names)
             keys.extend(self._make_key(name, m) for m in self.metric_names)
+        for name, components in self._derived_tensors().items():
+            keys.extend(self._make_key(name, m) for m in self.metric_names)
         return keys
+
+    def _derived_tensors(self) -> dict[str, dict[str, str]]:
+        """The :data:`DERIVED_SYMMETRIC_TENSORS` whose components are all scalar targets here."""
+        return {
+            name: comps
+            for name, comps in DERIVED_SYMMETRIC_TENSORS.items()
+            if name not in self.target_config
+            and all(
+                f in self.target_config and field_kind(self.target_config[f]) == "scalar"
+                for f in comps
+            )
+        }
 
     def _metrics_for_tensor(
         self,
@@ -340,6 +379,10 @@ class MetricCalculator:
                         if measure is None
                         else measure.unsqueeze(-1).expand_as(p).flatten(-2)
                     )
+                    if kind == "symmetric_tensor":
+                        ### Frobenius: the listed off-diagonal components count twice.
+                        w = _frobenius_weights(tensor_components(field_type), p)
+                        p, t = p * w, t * w
                     out.update(
                         self._metrics_for_tensor(
                             p.flatten(-2),
@@ -348,6 +391,29 @@ class MetricCalculator:
                             aggregate_measure,
                         )
                     )
+            ### Derived tensor aggregates from component-wise scalar targets:
+            ### the same assembled-and-weighted Frobenius relative L2 as above.
+            for name, components in self._derived_tensors().items():
+                cols_p, cols_t = [], []
+                for f in components:
+                    key = as_nested_key(f)
+                    cp, ct = align_scalar_shapes(pred[key], target[key])
+                    cols_p.append(cp)
+                    cols_t.append(ct)
+                p = torch.stack(cols_p, dim=-1)
+                t = torch.stack(cols_t, dim=-1)
+                w = _frobenius_weights(components, p)
+                measure = align_target_measure(target_measure, cols_p[0], "scalar")
+                aggregate_measure = (
+                    None
+                    if measure is None
+                    else measure.unsqueeze(-1).expand_as(p).flatten(-2)
+                )
+                out.update(
+                    self._metrics_for_tensor(
+                        (p * w).flatten(-2), (t * w).flatten(-2), (name,), aggregate_measure
+                    )
+                )
 
         return TensorDict(out)
 

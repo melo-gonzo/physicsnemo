@@ -33466,3 +33466,51 @@ and the corner-normal hypothesis stands as the candidate mechanism (the
 specimen's polyline has sharp corners; the nearest-boundary normal is
 discontinuous there). On plastic strain ISLA (0.415) trails GeoTransolver
 (0.142) by 2.9x natively.
+
+## 2026-10-04 — Verdict, CHAR on DrivAerML Volume, AirfRANS and Tensile2D complete: on the interior tasks ISLA leads on velocity (1.22x on the cars, 3.1x on the airfoils) and ties or trails on pressure and eddy viscosity; ISLA is exact under rotation and translation on both while the baselines read 0.9x to 4.8x (worse than the mean field); on Tensile2D with the invariant stress readout the baselines lead ISLA 1.7x to 2.2x natively and ISLA shifts 5% under a generic pose while the baselines lose two orders of magnitude {#sec-nb-char-interior-tensile2d}
+
+**DrivAerML Volume (complete; `results/char/drivaerml_volume.json`; pressure /
+velocity / eddy viscosity, 48 validation cars, 200,000 boundary cells and
+200,000 queries).** Native: ISLA 768 0.0453 / 0.0754 / 0.0980, GeoTransolver
+1,024 0.0459 / 0.0918 / 0.0832, Transolver 1,024 0.0500 / 0.1149 / 0.0878;
+GeoTransolver ÷ ISLA 1.01 / 1.22 / 0.85, Transolver ÷ ISLA 1.10 / 1.52 /
+0.90. Rotated and translated: ISLA 0.0455 / 0.0756 / 0.0982 (1.00x),
+GeoTransolver 0.87 / 1.22 / 1.17, Transolver 0.81 / 1.22 / 1.09. Uniform
+point cloud: ISLA 0.316 / 0.409 / 0.451 (7.0x / 5.4x / 4.6x), the baselines
+identical to native because the variant redraws only the boundary surface,
+which they do not consume; the column measures ISLA's boundary-token-law
+sensitivity alone (@sec-nb-char-protocols-instruments) and the chapter says
+so. The 80 GiB line: GeoTransolver's reference peaks at 94.8 GiB and ISLA's at
+81.6 on this task (@sec-nb-char-lanes-launched).
+
+**AirfRANS (complete; `results/char/airfrans.json`; 200 test airfoils,
+100,000 queries).** Native: ISLA 768 0.0371 / 0.0172 / 0.0439, GeoTransolver
+1,024 0.0292 / 0.0534 / 0.0461, Transolver 1,024 0.0531 / 0.1192 / 0.0923;
+GeoTransolver ÷ ISLA 0.79 / 3.10 / 1.05, Transolver ÷ ISLA 1.43 / 6.93 / 2.10.
+Posed: ISLA identical to native to four decimals (0.0371 / 0.0172 / 0.0439),
+GeoTransolver 4.80 / 1.39 / 4.70, Transolver 2.01 / 1.15 / 5.91. Point cloud =
+native for all (boundary kept whole). The 384-wide code_v18 reference read
+0.0351 / 0.0168 / 0.0305 on the same split (@sec-nb-proto-cond-2-adopted), so
+the campaign's width-768 reference is 44% worse on eddy viscosity than the
+narrower ISLA on this 800-airfoil set; the campaign reports the reference.
+
+**Tensile2D (complete with the invariant readout; `results/char/tensile2d.json`;
+stress Frobenius / displacement / plastic strain, 100 validation specimens).**
+The Frobenius relative L2 of the assembled in-plane stress tensor is now
+emitted for every arm by one formula (`stress_l2`; off-diagonal counted
+twice; the earlier symmetric-tensor aggregate counted it once and was not
+rotation-invariant, so ISLA's number changed definition and was rescored;
+340 recipe tests, verified equal on identical arrays and invariant under
+rotation while the per-component errors move). Native: ISLA 768 0.0111 /
+0.0091 / 0.415, GeoTransolver 1,024 0.0057 / 0.0042 / 0.142, Transolver
+1,024 0.0065 / 0.0041 / 0.134; GeoTransolver ÷ ISLA 0.51 / 0.46 / 0.34,
+Transolver ÷ ISLA 0.59 / 0.45 / 0.32. Point cloud = native for all. Posed:
+ISLA 0.0116 / 0.0096 / 0.416 (1.05x / 1.05x / 1.00x; per seed 1.06 and 1.02
+on stress), GeoTransolver 1.14 / 1.26 / 3.38 (200x / 300x / 24x), Transolver
+0.98 / 1.17 / 2.47. **Readings.** The baselines lead ISLA by 1.7x to 2.2x on
+stress and displacement and by 3x on plastic strain on this set, where the
+boundary is a few hundred segments and the parameters enter as six global
+scalars; ISLA's 5% posed shift is the generic-angle residual
+(@sec-nb-char-shift-suv), real but two orders of magnitude below the
+baselines' failure. The chapter's protocol table shows these three columns;
+the per-component numbers stay in the artifact for the native column.

@@ -101,6 +101,86 @@
     }
    }
   },
+  "GeoTransolver 1,024 at 100k cells": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.045930723349253334,
+     "per_seed": {
+      "42": 0.045930723349253334
+     },
+     "n_cases": 48,
+     "n_seeds": 1
+    },
+    "velocity_l2": {
+     "mean": 0.09177437424659729,
+     "per_seed": {
+      "42": 0.09177437424659729
+     },
+     "n_cases": 48,
+     "n_seeds": 1
+    },
+    "nut_l2": {
+     "mean": 0.08321236570676167,
+     "per_seed": {
+      "42": 0.08321236570676167
+     },
+     "n_cases": 48,
+     "n_seeds": 1
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.045930723349253334,
+     "per_seed": {
+      "42": 0.045930723349253334
+     },
+     "n_cases": 48,
+     "n_seeds": 1
+    },
+    "velocity_l2": {
+     "mean": 0.09177437424659729,
+     "per_seed": {
+      "42": 0.09177437424659729
+     },
+     "n_cases": 48,
+     "n_seeds": 1
+    },
+    "nut_l2": {
+     "mean": 0.08321236570676167,
+     "per_seed": {
+      "42": 0.08321236570676167
+     },
+     "n_cases": 48,
+     "n_seeds": 1
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.8669659296671549,
+     "per_seed": {
+      "42": 0.8669659296671549
+     },
+     "n_cases": 48,
+     "n_seeds": 1
+    },
+    "velocity_l2": {
+     "mean": 1.2227588494618733,
+     "per_seed": {
+      "42": 1.2227588494618733
+     },
+     "n_cases": 48,
+     "n_seeds": 1
+    },
+    "nut_l2": {
+     "mean": 1.1666855812072754,
+     "per_seed": {
+      "42": 1.1666855812072754
+     },
+     "n_cases": 48,
+     "n_seeds": 1
+    }
+   }
+  },
   "Transolver 1,024 at 100k cells": {
    "native": {
     "pressure_l2": {
@@ -191,5 +271,5 @@
    }
   }
  },
- "complete": false
+ "complete": true
 }
