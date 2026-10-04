@@ -1,0 +1,54 @@
+{
+ "protocol": "Lug pose diagnostic (2026-10-04, #sec-nb-char-lug-interim): cl_lug_isla_seed42 (hidden 768, code_v20) on one test lug (lug_0004). ties.log: for every interior node the relative gap between its two nearest boundary-cell centroids; the share of nodes whose nearest index changes under a one-RMS-radius translation applied in float32; equivariance*.log: relative change of the von Mises prediction (vs the native prediction) under exact and inexact rigid motions, a pure coordinate jitter, under float32 (library and exact nearest search identical) and float64 arithmetic. Raw logs in results/campaigns_2026-10-02/char/lug_diag/.",
+ "case": "lug_0004",
+ "n_interior_nodes": 10483,
+ "n_boundary_cells": 6728,
+ "two_nearest_tie_fraction_by_rel_gap": {
+  "1e-07": {
+   "nodes": 3658,
+   "fraction": 0.3489
+  },
+  "1e-06": {
+   "nodes": 6054,
+   "fraction": 0.5775
+  },
+  "1e-05": {
+   "nodes": 7892,
+   "fraction": 0.7528
+  },
+  "1e-04": {
+   "nodes": 7981,
+   "fraction": 0.7613
+  },
+  "1e-03": {
+   "nodes": 8293,
+   "fraction": 0.7911
+  }
+ },
+ "nearest_index_changes_under_translation": {
+  "nodes": 2413,
+  "fraction": 0.23018
+ },
+ "flipped_normal_over_30deg_nodes": 62,
+ "flipped_normal_over_30deg_median_gap": 1e-07,
+ "prediction_change_share_on_flipped_nodes": 0.154,
+ "fp32": {
+  "native_rel_err": 0.0014,
+  "rot90_rel_change": 0.0001,
+  "translate_rel_change": 0.0017,
+  "rot90_translate_rel_change": 0.0128,
+  "rot37_rel_change": 0.0075,
+  "jitter_1e-7_rel_change": 0.0111,
+  "jitter_1e-6_rel_change": 0.0111,
+  "jitter_1e-5_rel_change": 0.0111,
+  "bisect_interior_only_rot90": 1.4122,
+  "bisect_boundary_only_rot90": 1.6299
+ },
+ "fp64": {
+  "native_rel_err": 0.0122,
+  "rot90_rel_change": 0.0,
+  "translate_rel_change": 0.0012,
+  "rot90_translate_rel_change": 0.0036,
+  "rot37_rel_change": 0.0024
+ }
+}
