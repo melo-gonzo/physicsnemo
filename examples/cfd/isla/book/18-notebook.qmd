@@ -33351,10 +33351,31 @@ is a point cloud without cell measures, so the area draw is the identity on this
 dataset. **Posed (in-plane rotation plus translation): ISLA 0.81 / 0.74 / 1.14 /
 0.79, GeoTransolver 1.09 / 1.23 / 1.04 / 0.98, Transolver 0.97 / 0.91 / 0.98 /
 0.91.** The baselines' numbers are the expected failure of lab-frame inputs
-trained without augmentation. ISLA's are not expected: its stress head is an
-equivariant symmetric tensor and its displacement head an equivariant vector,
-and on DrivAerML Surface the posed column equals the native one. Rotation-only
-and translation-only scorings and a direct model-level equivariance check on
-one specimen (rotate the DomainMesh, run, rotate back) are being run to
-attribute this to the model or to the posed pipeline; the chapter table shows
-the column as measured until then.
+trained without augmentation. ISLA's are not expected, and the diagnosis
+found two recipe defects, neither in the model. Rotation alone reproduces the
+posed numbers (0.81 / 0.74 / 1.15 / 0.79) and translation alone reproduces the
+native ones, so the pose pipeline's translation and ISLA's translation
+invariance are both fine. A direct model-level check (one validation
+specimen rotated by 90 degrees after the native pipeline, predictions rotated
+back) shows the displacement head equivariant to roundoff, so its posed error
+of 0.79 is the pipeline: the recipe normalizes displacement with a nonzero
+lab-frame mean (−3.4e-4, 1.05e-3; 1.3 standard deviations), and a vector
+normalized about a lab-frame mean is not equivariant (the posed normalized
+target is R u_n + (R m − m)/s, an offset no equivariant model can emit;
+DrivAerML and DeepJEB++ vector means are zero, which is why their posed
+columns match). The stress components fail for a second reason: the
+campaign's ISLA Tensile2D configuration declared sig11 / sig22 / sig12 as
+three rank-0 heads ("laboratory frame, as the dataset stores them"), i.e.
+scalars, which are invariant under rotation and cannot follow a rotated
+tensor target; the symmetric rank-2 head of @sec-nb-rank-io exists for this
+and was not used, and the stress normalization is per component (sig22 mean
+57.7 MPa, three different standard deviations), which is not equivariant
+either. **Decision (2026-10-03): every rank>=1 target in the campaign is
+normalized with zero mean and one isotropic standard deviation (only
+Tensile2D violated this), ISLA's Tensile2D configuration predicts the stress
+as the symmetric tensor, the baselines keep their three scalar components
+over the same normalized numbers, and the six Tensile2D lanes are re-run as
+`cl_t2dz_*`; the first six lanes stay in the record as the mis-specified
+configuration.** A residual 1.4% displacement and 17% plastic-strain shift
+at a 37-degree rotation (exact in float32 at 90 degrees) is checked again
+under code_v20's exact nearest search with the corrected configuration.
