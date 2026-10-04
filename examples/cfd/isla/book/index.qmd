@@ -24,12 +24,18 @@ pays nothing in accuracy for either.** The two invariances are defined in
 @sec-invariances. It is measured against GeoTransolver, the strongest
 published slice-attention surrogate, and Transolver, with every model
 given the same inputs and scored on the same instrument at the reporting
-protocol of @sec-protocol. Where the evaluation departs from the training
-conventions, in pose or in how the surface was sampled, ISLA's error
-barely moves and the baselines' error grows by factors; in distribution it
-leads GeoTransolver at the recipe width on the cars, ties the parameter
-match at lower cost, and trails on the wings and on tensor targets.
-@tbl-thesis is the standing, one row per dataset and task.
+protocol of @sec-protocol. Each architecture runs at one reference configuration, the most
+accurate of its architecture that trains under 80 GiB per GPU on the two
+selection datasets, and every checkpoint is scored three ways: on the native
+validation mesh, on a uniform point cloud of the surface, and with every
+validation case rotated and translated. Where the evaluation departs from
+the training conventions, in pose or in how the surface was sampled, ISLA's
+error barely moves and the baselines' error grows by factors, except on two
+structured solid meshes where ISLA's own error moves too; in distribution
+the three are within seed noise on the cars, ISLA leads on the wings, on
+interior velocity and on the lug, and trails on tensor targets and on the
+sport-utility bodies. @tbl-thesis is the standing, one row per dataset and
+task.
 
 ```{python}
 #| label: setup-index
@@ -42,113 +48,92 @@ RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
 mean = statistics.mean
 
-# ISLA is the reference configuration (384 x 12, cosine routing, fused kernel, 5e-4): results/ref_surface_2026-09-23.json
-REF = J("ref_surface_2026-09-23.json")["summary"]
-refm = lambda k, f="pressure_l2": REF[k]["fields"][f]["mean"]
-# DrivAerML Surface task, 435 cars, the reporting protocol: GeoTransolver-256 and Transolver at their better learning rate
-P2 = J("p200k_trio_reduction_2026-09-19.json")["arms"]
-isla200 = refm("isla_r1|dr435"); t200 = P2["transolver_unit_lr3e3"]["pressure_mean"]; gt512 = refm("gt_w512|dr435")
-_gts = {k: P2[k]["pressure_mean"] for k in ("gt_unit_lr1e3", "gt_unit_lr3e3") if P2[k]["pressure_mean"]}
-gt200_key = min(_gts, key=_gts.get); gt200 = _gts[gt200_key]; gt200_lab = "3e-3" if gt200_key.endswith("3e3") else "1e-3"
-CSW = {r["arm"]: r for r in J("cost_sweep_ref_gb300_bf16_2026-09-22.json")["runs"] if r["tokens"] == 200000 and r["status"] == "ok"}
-memx = lambda a: CSW[a]["peak_allocated_gib"] / CSW["isla_ref_r1_384x12_cos_fused"]["peak_allocated_gib"]
-stepx = lambda a: statistics.median(CSW[a]["step_ms"]) / statistics.median(CSW["isla_ref_r1_384x12_cos_fused"]["step_ms"])
-# DrivAerML Surface task, the training-car ladder at the reporting protocol
-RBS = J("refboard_ladder_2026-09-23.json")["summary"]
-lad200 = {n: min(RBS[f"gt256|n{n}"]["mean"], RBS[f"gt256_lr3e3|n{n}"]["mean"]) / RBS[f"isla_r1|n{n}"]["mean"] for n in (27, 54, 109, 218)}
-# HiLiftAeroML case rungs against the parameter-matched GeoTransolver-512
-import glob as _glob
-def ref_lane_seeds(stem, f="pressure_l2"):
-    out = []
-    for sd in (42, 43):
-        fs = sorted(_glob.glob(str(RES / "campaigns_2026-09-22" / "ref" / "metrics" / f"{stem}_seed{sd}" / "**" / "metrics.jsonl"), recursive=True))
-        rows = [json.loads(l) for l in open(fs[0]) if '"infer_step"' in l]
-        out.append(mean(r["metrics"][f] for r in rows))
-    return out
-SLW = J("scalelaw_2026-09-27.json")["configurations"]
-wing = {35: refm("gt_w512|hl35") / refm("isla_r1|hl35"),
-        210: mean(ref_lane_seeds("ref_gt_w512_hl210")) / mean(ref_lane_seeds("ref_isla_r1_hl210")),
-        510: mean(SLW["hilift|gt|w512|n510"]["pressure_l2_seeds"]) / mean(ref_lane_seeds("ref_isla_r1_hl510"))}
-# the solids, GeoTransolver-512 (the parameter match) ÷ ISLA
-LUGR = J("solids_lug_2026-09-22.json")["gt512_over_isla"]
-lug = {300: LUGR["isla_r1_lr25e4|n300"], 600: LUGR["isla_r1|n600"], 1200: LUGR["isla_r1|n1200"], 2400: LUGR["isla_r1|n2400"]}
-_LM = J("lane_means_2026-09-23.json"); _SFG = J("solids_frame_2026-09-22.json")["summary"]["gt512|gt|n400"]["fields"]
-T2 = {f: _SFG[f]["mean"] / mean(_LM[f"v2_t2d_isla_r1_tensor_axis_n400_seed{s}"]["fields"][f] for s in (42, 43)) for f in ("sig11", "sig22", "sig12", "displacement")}
+# Every standing row reads the dataset's three-protocol artifact (results/char/<dataset>.json): the three architectures at
+# their reference configurations, scored on the native validation mesh, on a uniform point cloud at the same budget, and with
+# every validation case rotated and translated. Arms are keyed by architecture (the arm label's first word).
+def char_arms(artifact):
+    C = json.load(open(RES / "char" / artifact))
+    return C, {arm.split()[0]: d for arm, d in C["arms"].items()}
+def fmt_ratio(r):
+    """A ratio as the book writes it: two decimals near one, one decimal to ten, none above."""
+    return f"{r:.0f}x" if r >= 10 else f"{r:.1f}x" if r >= 2 else f"{r:.2f}"
+BASELINES = ("GeoTransolver", "Transolver")
+ART = {name: char_arms(f) for name, f in (("surface", "drivaerml_surface.json"), ("hilift", "hilift_surface.json"),
+                                          ("volume", "drivaerml_volume.json"), ("airfrans", "airfrans.json"),
+                                          ("suv", "shift_suv_surface.json"), ("tensile2d", "tensile2d.json"), ("lug", "lug.json"))}
+rat = lambda name, arch, f, pk="native": ART[name][1][arch][pk][f]["mean"] / ART[name][1]["ISLA"][pk][f]["mean"]
+shift = lambda name, arch, f, pk: ART[name][1][arch][pk][f]["mean"] / ART[name][1][arch]["native"][f]["mean"]
+pair = lambda name, f, pk="native": " / ".join(fmt_ratio(rat(name, a, f, pk)) for a in BASELINES)
+three = lambda name, f: "; ".join(f"{lab} {pair(name, f, pk)}" for pk, lab in (("native", "native"), ("area", "point cloud"), ("posed", "posed")))
+tri = lambda name, fields, arch: " / ".join(f"{rat(name, arch, f):.2f}" for f in fields)
+def word(name, arch, f):
+    """One native baseline ÷ ISLA ratio in words: a lead or a deficit only when every baseline seed sits on one side of every ISLA seed."""
+    r = rat(name, arch, f); b = list(ART[name][1][arch]["native"][f]["per_seed"].values()); i = list(ART[name][1]["ISLA"]["native"][f]["per_seed"].values())
+    if r > 1.02 and min(b) > max(i): return "leads"
+    if r < 0.98 and max(b) < min(i): return "trails"
+    return "is level"
+# DeepJEB++ keeps its earlier artifact: ISLA 384 wide against GeoTransolver-256 at equal optimizer steps on the full split
 JBS = J("deepjeb_2026-09-22.json")["summary"]
 jb_full = {f: JBS["gt256|full"]["fields"][f]["mean"] / JBS["isla_r1|full"]["fields"][f]["mean"] for f in ("von_mises", "displacement")}
-JBR = J("deepjeb_2026-09-22.json")["gt512_over_isla"]
-# every case in a random pose, DrivAerML Surface task at the reporting protocol
-PP = J("p200k_pose_r1_2026-09-23.json")
-pose = {"isla": PP["arms"]["isla"]["posed_over_native"], "gt": PP["arms"]["gt_unit"]["posed_over_native"], "t": PP["arms"]["transolver_unit"]["posed_over_native"]}
-pose_lead = {"gt": PP["verdict"]["gt_aug_posed_over_isla_posed"], "t": PP["verdict"]["t_aug_posed_over_isla_posed"]}
-# the 10:1 biased inference draw on the 35-wing rung, every model at 200,000 cells
-CR = J("consistency_r1_2026-09-23.json")["arms"]; WB = J("wingbench_200k_reduction_2026-09-19.json")["arms"]
-bias = {"isla": CR["isla_r1_hl35_200k"], "gt": WB["gt_unit_lr3e3"], "t": WB["transolver_unit"]}
-bfac = lambda a: a["mean"]["biased"] / a["mean"]["unif"]
-# the two interior tasks against GeoTransolver-volume
-FIELDS = ("pressure_l2", "velocity_l2", "nut_l2")
-VG = J("ratevol_reduction_2026-09-20.json")["arms"]["gt_vol_unit"]
-vol_ratio = {f: VG[f]["mean"] / refm("isla_r1|drvol", f) for f in FIELDS}
-AF = J("airfrans_reduction_2026-09-22.json")["arms"]["gt_volume_1e-3"]
-af_ratio = {f: AF[f]["mean"] / refm("isla_r1|af", f) for f in FIELDS}
-
-def standing(r, names=("pressure", "velocity", "eddy viscosity")):
-    """Word a triple of baseline ÷ ISLA ratios: above 1.02 ISLA leads, below 0.98 it trails, else level."""
-    lead = [n for n, f in zip(names, FIELDS) if r[f] > 1.02]; trail = [n for n, f in zip(names, FIELDS) if r[f] < 0.98]
-    level = [n for n, f in zip(names, FIELDS) if 0.98 <= r[f] <= 1.02]
-    parts = []
-    if lead: parts.append("ISLA leads on " + " and ".join(lead))
-    if trail: parts.append("trails on " + " and ".join(trail))
-    if level: parts.append("level on " + " and ".join(level))
-    return "; ".join(parts)
 ```
 
 ```{python}
 #| label: tbl-thesis
 #| output: asis
-tri = lambda d: " / ".join(f"{d[f]:.2f}" for f in FIELDS)
+F3 = ("pressure_l2", "velocity_l2", "nut_l2")
+S, H, V, A, U, T, L = (ART[k][1] for k in ("surface", "hilift", "volume", "airfrans", "suv", "tensile2d", "lug"))
+area_b = lambda name, f: " and ".join(fmt_ratio(shift(name, a, f, "area")) for a in BASELINES)
+posed_b = lambda name, f: " and ".join(fmt_ratio(shift(name, a, f, "posed")) for a in BASELINES)
 rows = [
-    ("**DrivAerML Surface task**, 435 cars (GeoTransolver-256 at its recipe width and its better rate, " + gt200_lab + "; GeoTransolver-512, the parameter match; Transolver-256)",
-     f"{gt200/isla200:.2f} / {gt512/isla200:.2f} / {t200/isla200:.2f}",
-     f"ISLA leads the recipe width by {(gt200/isla200-1)*100:.0f}% at {memx('geotransolver_256'):.2f}x its memory, and ties the parameter match, which costs {memx('geotransolver_512'):.2f}x ISLA's memory and {stepx('geotransolver_512'):.2f}x its step time",
+    ("**DrivAerML Surface task**, 435 cars, final reference configurations: surface pressure, native mesh / uniform point cloud / rotated and translated (GeoTransolver width 256 ÷ ISLA; Transolver width 512 with 16 layers ÷ ISLA)",
+     three("surface", "pressure_l2"),
+     f"a tie within seed noise on the native mesh; on the point cloud ISLA's own error moves {shift('surface', 'ISLA', 'pressure_l2', 'area'):.2f}x and the baselines' {area_b('surface', 'pressure_l2')}; rotated and translated ISLA's moves {shift('surface', 'ISLA', 'pressure_l2', 'posed'):.3f}x and the baselines' read at the mean-field level",
      "@sec-scoreboard-200k"),
-    ("**DrivAerML Surface task**, the training-car ladder, 27 / 54 / 109 / 218 cars (GeoTransolver-256 at its better rate)",
-     " / ".join(f"{lad200[n]:.2f}" for n in (27, 54, 109, 218)),
-     f"GeoTransolver leads by {(1-lad200[27])*100:.0f}% at 27 cars and {(1-lad200[54])*100:.0f}% at 54; the crossover is between 54 and 109",
-     "@sec-car-ladder"),
-    ("**HiLiftAeroML**, the 35- / 210- / 510-wing rungs (GeoTransolver-512, the parameter match)",
-     " / ".join(f"{wing[n]:.2f}" for n in (35, 210, 510)),
-     "the baselines lead on every rung; the deficit closes with training cases and moves with nothing else",
-     "@sec-hilift"),
-    ("**DrivAerML Volume task**, 200,000 boundary cells and 200,000 interior queries (GeoTransolver-volume): pressure / velocity / eddy viscosity",
-     tri(vol_ratio), standing(vol_ratio), "@sec-interior-results"),
-    ("**AirfRANS interior task**, 800 training airfoils, 100,000 queries per case (GeoTransolver-volume): pressure / velocity / eddy viscosity",
-     tri(af_ratio), standing(af_ratio) + "; outside the training Reynolds and angle ranges it leads on every field", "@sec-interior-airfrans"),
-    ("**Loaded brackets and lugs**: GINOT lug at 300 / 600 / 1,200 / 2,400 training lugs (GeoTransolver-512); DeepJEB++ at 12,451 brackets, equal optimizer steps (the best GeoTransolver arm): von Mises / displacement",
-     " / ".join(f"{lug[n]:.2f}" for n in (300, 600, 1200, 2400)) + f"; {jb_full['von_mises']:.2f} / {jb_full['displacement']:.2f}",
-     f"ISLA leads where the target is a frame-free scalar, at the two small lug rungs ({lug[300]:.2f} and {lug[600]:.2f}) and at every DeepJEB++ rung",
-     "@sec-interior-lug, @sec-surface-deepjeb"),
-    ("**Tensor targets on a solid**: PLAID Tensile2d at 400 cases (GeoTransolver-512): σ11 / σ22 / σ12 / displacement",
-     " / ".join(f"{T2[f]:.2f}" for f in ("sig11", "sig22", "sig12", "displacement")),
-     "GeoTransolver-512 leads on every component; the open standing of the book",
+    ("**HiLiftAeroML**, the 210-wing rung, final reference configurations: surface pressure, native / point cloud / posed (the same two ratios)",
+     three("hilift", "pressure_l2"),
+     f"ISLA leads both baselines natively (GeoTransolver width 256 by {(rat('hilift', 'GeoTransolver', 'pressure_l2') - 1) * 100:.0f}%); its own error moves {shift('hilift', 'ISLA', 'pressure_l2', 'area'):.2f}x on the point cloud and {shift('hilift', 'ISLA', 'pressure_l2', 'posed'):.2f}x posed, the baselines' {area_b('hilift', 'pressure_l2')} and {posed_b('hilift', 'pressure_l2')}",
+     "@sec-de-result"),
+    ("**DrivAerML Volume task**, 200,000 boundary cells and 200,000 interior queries, first-pass reference configurations: pressure / velocity / eddy viscosity, native mesh (GeoTransolver; Transolver)",
+     tri("volume", F3, "GeoTransolver") + "; " + tri("volume", F3, "Transolver"),
+     f"ISLA {word('volume', 'GeoTransolver', 'velocity_l2')} GeoTransolver on velocity, {word('volume', 'GeoTransolver', 'pressure_l2')} on pressure and {word('volume', 'GeoTransolver', 'nut_l2')} on eddy viscosity; posed, ISLA's error moves {shift('volume', 'ISLA', 'pressure_l2', 'posed'):.3f}x; the point-cloud variant redraws only the boundary, which the baselines do not read, and ISLA's error there is {fmt_ratio(min(shift('volume', 'ISLA', f, 'area') for f in F3))} to {fmt_ratio(max(shift('volume', 'ISLA', f, 'area') for f in F3))} its native error, an open weakness",
+     "@sec-interior-results"),
+    ("**AirfRANS interior task**, 800 training airfoils, 100,000 queries per case, first-pass reference configurations: pressure / velocity / eddy viscosity, native (GeoTransolver; Transolver)",
+     tri("airfrans", F3, "GeoTransolver") + "; " + tri("airfrans", F3, "Transolver"),
+     f"ISLA {word('airfrans', 'GeoTransolver', 'velocity_l2')} GeoTransolver on velocity by {fmt_ratio(rat('airfrans', 'GeoTransolver', 'velocity_l2'))}, {word('airfrans', 'GeoTransolver', 'nut_l2')} on eddy viscosity and {word('airfrans', 'GeoTransolver', 'pressure_l2')} on pressure; posed, ISLA's error moves {shift('airfrans', 'ISLA', 'pressure_l2', 'posed'):.3f}x and the baselines' read above the mean field; outside the training Reynolds and angle ranges it leads on every field",
+     "@sec-interior-airfrans"),
+    ("**Shift-SUV**, 794 estate bodies, first-pass reference configurations: surface pressure, native / point cloud / posed (GeoTransolver; Transolver)",
+     three("suv", "pressure_l2"),
+     f"the baselines lead natively by {(1 - rat('suv', 'GeoTransolver', 'pressure_l2')) * 100:.0f}% and {(1 - rat('suv', 'Transolver', 'pressure_l2')) * 100:.0f}%; on the point cloud ISLA's error moves {shift('suv', 'ISLA', 'pressure_l2', 'area'):.2f}x and theirs {area_b('suv', 'pressure_l2')}; posed, theirs read above the mean field",
+     "@sec-shift-suv-standing"),
+    ("**Tensor targets on a solid**: PLAID Tensile2d at 400 specimens, first-pass reference configurations: stress (Frobenius) / displacement / plastic strain, native (GeoTransolver; Transolver)",
+     tri("tensile2d", ("stress_l2", "displacement_l2", "q_l2"), "GeoTransolver") + "; " + tri("tensile2d", ("stress_l2", "displacement_l2", "q_l2"), "Transolver"),
+     f"both baselines lead on every field, the open standing of the book; under a generic in-plane pose ISLA's stress error moves {shift('tensile2d', 'ISLA', 'stress_l2', 'posed'):.2f}x where the baselines' read above the mean field",
      "@sec-interior-tensile2d"),
-    ("**Pose and sampling draw** at 200,000 cells: every case in its own random pose (DrivAerML Surface, baselines rotation-augmented, ISLA not); error under a 10:1 front/back biased draw ÷ under the uniform draw (HiLiftAeroML, 35 wings)",
-     f"{pose_lead['gt']:.2f} / {pose_lead['t']:.2f}; ISLA {bfac(bias['isla']):.2f}x against {bfac(bias['gt']):.1f}x and {bfac(bias['t']):.1f}x",
-     f"ISLA's own error moves {pose['isla']:.3f}x between native and posed evaluation where the baselines' moves {pose['gt']:.2f}x and {pose['t']:.2f}x, and it is unchanged under the biased draw",
-     "@sec-pose-contract, @sec-robustness-density"),
+    ("**GINOT bracket lug** at 2,400 training lugs, first-pass reference configurations: von Mises stress, native / point cloud / posed (GeoTransolver; Transolver)",
+     three("lug", "von_mises_l2"),
+     f"ISLA leads both baselines natively, its one native lead on a solid; rotated and translated its error moves {shift('lug', 'ISLA', 'von_mises_l2', 'posed'):.2f}x, the tie-breaking of the nearest boundary sample on a structured mesh, where the baselines' read at the mean field",
+     "@sec-interior-lug"),
+    ("**DeepJEB++** at 12,451 brackets, equal optimizer steps, ISLA 384 wide against GeoTransolver-256: von Mises / displacement, native",
+     f"{jb_full['von_mises']:.2f} / {jb_full['displacement']:.2f}",
+     "ISLA leads on both fields; this row's configurations are neither set of reference configurations",
+     "@sec-surface-deepjeb"),
 ]
 out = "| Dataset, task and setting | baseline ÷ ISLA | Reading | Chapter |\n|---|---:|---|---|\n"
 for r in rows: out += "| " + " | ".join(r) + " |\n"
 print(out)
 print(f": The thesis in {len(rows)} rows, one dataset and task per row. "
       "How to read this: each row is one setting and one instrument, so rows are not comparable with one another, and a ratio is the named "
-      "baseline's error divided by ISLA's, so a value above one favors ISLA. "
-      "ISLA is the reference configuration throughout (384 wide, 12 layers, cosine routing, the fused geometry kernel, learning rate 5e-4, "
-      "@sec-using-config), and the setting is the reporting protocol of @sec-protocol unless the row says otherwise. "
-      "Errors are the area-weighted relative L2 (@sec-metrics) in float32, seed means over two seeds, of surface pressure on the surface "
-      "tasks and of the named fields elsewhere. "
-      "The seeds, the paired counts and the controls behind each row, and the `results/` artifact each number is computed from, are in the "
-      "chapter the row cites. {#tbl-thesis}")
+      "baseline's error divided by ISLA's, so a value above one favors ISLA; where a row lists three ratios they are the native mesh, the "
+      "uniform point cloud and the rotated-and-translated scoring of one checkpoint, each as GeoTransolver ÷ ISLA / Transolver ÷ ISLA. "
+      "The DrivAerML Surface and HiLiftAeroML rows hold the final reference configurations, one per architecture, each the most accurate "
+      "under 80 GiB per GPU on those two datasets (ISLA width 512 with 512 slices at 200,000 cells, learning rate 3.75e-4; GeoTransolver "
+      "width 256 at 200,000 cells; Transolver width 512 with 16 layers at 100,000 cells); the Volume, AirfRANS, Shift-SUV, Tensile2d and "
+      "lug rows hold the first-pass lanes under the configurations the DrivAerML half of that selection named (ISLA width 768 at 100,000 "
+      "cells, learning rate 2.5e-4; GeoTransolver and Transolver width 1,024 at 100,000 cells); the DeepJEB++ row holds earlier "
+      "configurations named in its cell. Baselines train without augmentation; interior tasks give all three architectures the stored "
+      "signed distance and its gradient. Errors are the area-weighted relative L2 (@sec-metrics) in float32, seed means over two seeds, "
+      "of surface pressure on the surface tasks and of the named fields elsewhere. The seeds and the controls behind each row, and the "
+      "`results/char/` artifact each number is computed from, are in the chapter the row cites. {#tbl-thesis}")
 ```
 
 ## How to read this book {#sec-how-to-read}

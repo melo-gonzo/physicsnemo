@@ -24800,7 +24800,7 @@ finding (@sec-nb-solids-frame-interim) the ISLA arm is the frame
 configuration (the laboratory frame as two global vectors); the frameless
 lanes are the ablation record.
 
-**What we saw** (`results/solids_frame_2026-09-22.json`; @tbl-tensile2d-ladder
+**What we saw** (`results/solids_frame_2026-09-22.json`; the Tensile2d ladder table of that date, since removed from the Tensile2D chapter
 in the interior chapter). At 400 cases: $\sigma_{11}$ 0.0118 against
 0.0087 (GeoTransolver ÷ ISLA 0.73), $\sigma_{22}$ 0.0086 against 0.0076
 (0.89), $\sigma_{12}$ 0.0112 against 0.0112 (1.00), displacement 0.0082
