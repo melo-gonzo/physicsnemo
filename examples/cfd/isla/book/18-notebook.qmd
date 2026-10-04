@@ -33456,6 +33456,13 @@ Frobenius relative L2 of the assembled tensor**, which the symmetric-tensor
 path emits as `stress_l2` and which the baselines' component datasets now
 receive as a derived metric so the three arms are compared on the same
 formula; the chapter's protocol table uses stress (Frobenius), displacement
-and plastic strain. Displacement, which is a vector and invariant as a norm,
-reads 0.0091 native against 0.0096 posed (5%), the generic-angle sensitivity
-noted in @sec-nb-char-tensile2d-interim, now measured on a trained model.
+and plastic strain. On the invariant readouts ISLA reads native / posed stress
+(Frobenius) 0.0098 / 0.0113, displacement 0.0091 / 0.0096 and plastic
+strain 0.4151 / 0.4157: a 15% stress shift and a 5% displacement shift
+under a generic in-plane rotation plus translation on a trained model,
+where DrivAerML and AirfRANS read 1.000; this is the generic-angle
+sensitivity of @sec-nb-char-tensile2d-interim measured at protocol level,
+and the corner-normal hypothesis stands as the candidate mechanism (the
+specimen's polyline has sharp corners; the nearest-boundary normal is
+discontinuous there). On plastic strain ISLA (0.415) trails GeoTransolver
+(0.142) by 2.9x natively.
