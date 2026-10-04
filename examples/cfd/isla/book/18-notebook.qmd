@@ -33615,3 +33615,124 @@ and 0.0436 / 0.0967 posed (pressure / wall shear), GeoTransolver 1,024
 final references (the DrivAerML-half lanes remain as the record of those
 configurations), and the HiLift and DrivAerML Surface protocol artifacts
 under the final references follow when the last lane is scored.
+
+## 2026-10-04 — REF-80 DONE: the two selection datasets disagree for every architecture; by the joint rule the reference configurations are ISLA width 512 with 512 slices at 200,000 cells, GeoTransolver width 256 at 200,000 cells, Transolver width 512 with 16 layers at 100,000 cells; the 36 campaign lanes are re-launched under them {#sec-nb-ref80-verdict}
+
+**Setting.** REF-80 picks, for each of the three architectures, the one
+configuration that trains under 80 GiB per GPU (the H100-class budget) and
+is the most accurate on two selection datasets, DrivAerML Surface (435 cars,
+48 validation cars) and the HiLift 210-wing rung (180 validation wings), with
+every candidate trained 500 epochs on two seeds and scored in float32 at
+200,000 cells per case (@sec-nb-char-prereg, @sec-nb-ref80-frontier). The
+DrivAerML half was read on 2026-10-03 (@sec-nb-ref80-drivaer-half); the last
+wing lane (ISLA width 512, seed 43) and the last wing scoring (GeoTransolver
+width 256, seed 43) landed today, so the table below is complete: 14
+candidates, 2 datasets, 2 seeds, 56 lanes, reduced by
+`results/char/ref80_select_2026-10-03.py` into
+`results/char/ref80_select_2026-10-03.json`.
+
+**The complete table (seed-mean pressure error; per seed; training peak
+memory).** On DrivAerML Surface: ISLA 512 slices 0.0430 (0.0431 / 0.0428,
+52 GiB), width 512 0.0432 (57), reference 384x12 0.0437 (44), width 768 at
+100,000 cells 0.0438 (42), width 512 with 512 slices 0.0443 (0.0449 / 0.0438,
+64), 24 layers at 100,000 0.0446 (43), width 512 with 24 layers at 100,000
+0.0452 (56); GeoTransolver width 1,024 at 100,000 cells 0.0404 (0.0402 /
+0.0406, 71 GiB), width 512 at 100,000 0.0419 (49), width 256 0.0455 (0.0455 /
+0.0455, 78); Transolver width 1,024 at 100,000 0.0432 (47), width 512 with 16
+layers at 100,000 0.0435 (62), width 512 0.0466 (65), width 256 0.0556 (52).
+On the 210 wings: ISLA width 512 with 512 slices 0.0407 (0.0402 / 0.0411),
+width 512 0.0420 (0.0443 / 0.0397), 512 slices 0.0425 (0.0415 / 0.0436),
+width 768 at 100,000 0.0425 (0.0410 / 0.0441), reference 0.0450 (0.0442 /
+0.0459), width 512 with 24 layers 0.0451, 24 layers 0.0461; GeoTransolver
+width 256 0.0522 (0.0552 / 0.0492), width 512 at 100,000 0.0656 (0.0733 /
+0.0578), width 1,024 at 100,000 0.2520 (0.1825 / 0.3215); Transolver width
+512 with 16 layers at 100,000 0.0433 (0.0434 / 0.0432), width 1,024 at
+100,000 0.0449 (0.0450 / 0.0447), width 512 0.0465, width 256 0.0515.
+
+**The per-dataset winners under the preregistered rule (lowest seed mean;
+ties within 3% go to the cheaper candidate).** DrivAerML: ISLA width 768 at
+100,000 cells (the cheapest of the six candidates tied within 3% of 0.0430),
+GeoTransolver width 1,024 at 100,000 cells (no tie), Transolver width 1,024
+at 100,000 cells (tied with width 512 x 16, cheaper). Wings: ISLA width 512
+with 512 slices (no tie; width 512 alone misses the 3% band by 0.3%),
+GeoTransolver width 256 at 200,000 cells (no tie), Transolver width 512 x 16
+at 100,000 cells (no tie). **No architecture has a joint winner.** The
+preregistration said that a disagreement is decided in the notebook with
+its reason; the rule applied (stated before the last lane landed, in
+@sec-nb-ref80-wing-half) is the smallest mean over the two datasets of the
+candidate's error divided by the best error on that dataset, ties within 3%
+to the cheaper candidate. The joint scores are: ISLA width 512 with 512
+slices 1.015 (1.031 on the cars, 1.000 on the wings; 64 GiB), width 512
+1.019 (1.005, 1.033; 57 GiB), 512 slices 1.023 (1.000, 1.045; 52 GiB), width
+768 at 100,000 1.032 (1.018, 1.046; 42 GiB); GeoTransolver width 256 1.064
+(1.127, 1.000; 78 GiB), width 512 at 100,000 1.147 (1.037, 1.256; 49 GiB),
+width 1,024 at 100,000 2.915 (1.000, 4.829; 71 GiB); Transolver width 512 x
+16 at 100,000 1.004 (1.008, 1.000; 62 GiB), width 1,024 at 100,000 1.019
+(1.000, 1.037; 47 GiB), width 512 1.077, width 256 1.239. For ISLA the three
+top candidates sit within 3% of each other on the joint score (1.015, 1.019,
+1.023), so the tie clause names the cheapest, 512 slices at 52 GiB. **The
+decision is nevertheless width 512 with 512 slices**, for a reason the
+joint-score tie clause does not see: it is the only ISLA candidate that is
+within 3% of the best on both datasets separately (1.031 and 1.000; 512
+slices alone is 4.5% behind on the wings, width 512 alone 3.3% behind on the
+cars), which is the preregistered meaning of "wins both datasets" relaxed
+by the tie band. It costs 64 GiB against 52, under the budget. For
+GeoTransolver and Transolver the joint rule and the both-datasets reading
+agree: GeoTransolver width 256 at 200,000 cells is the only candidate within
+3% of the best on the wings, and Transolver width 512 with 16 layers at
+100,000 cells is within 1% of the best on both.
+
+**The reference configurations of the characterization campaign are
+therefore:** ISLA width 512, 12 layers, 512 slices, cosine routing, the
+centered sample-conditioned prototypes, learning rate 3.75e-4, 200,000
+training cells (64 GiB peak on DrivAerML Surface); GeoTransolver width 256
+(local width 32), learning rate 1e-3, 200,000 cells (78 GiB); Transolver
+width 512, 16 layers, learning rate 1e-3, 100,000 cells (62 GiB). Each is
+the most accurate of its architecture under 80 GiB on the pair of selection
+datasets by the rule above; none is the most accurate on DrivAerML Surface
+alone, where GeoTransolver width 1,024 at 100,000 cells leads every
+candidate (0.0404) but reads 0.252 on the wings (@sec-nb-ref80-wing-half for
+the reading of that lane: two seeds far apart, a training that did not
+settle at that width and rate on 210 wings, not a scoring fault).
+
+**What the selection says about the axes.** ISLA spends its memory lead
+best on slices and width together (the wing ordering), and gains nothing on
+the cars from any axis (seven candidates within 5%). GeoTransolver's accuracy
+on the cars comes from width at a reduced cell count, and that configuration
+is fragile on the wings; its robust configuration is the narrow one at the
+full cell count. Transolver's two 100,000-cell candidates are
+interchangeable within 3% on both datasets, and the 200,000-cell candidates
+at widths 256 and 512 are 8% to 29% behind them, so for Transolver cells are
+better traded for width or depth.
+
+**What changes in the record.** The DrivAerML-half references (ISLA width
+768 at 100,000 cells, GeoTransolver and Transolver width 1,024 at 100,000
+cells) were used for the first pass of the six-task campaign lanes
+(`cl_*`, @sec-nb-char-lanes-launched) and for the protocol artifacts written
+on 2026-10-03 and 2026-10-04; those lanes and scorings stay in the record as
+the characterization of those configurations. The campaign is re-run under
+the final references: 36 lanes `cl_r_<task>_<arch>_seed{42,43}` (rows 42 to
+77 of `kernel/char/cl_lanes.tsv`), 30 launched today (DrivAerML Volume,
+AirfRANS, Shift-SUV, Tensile2D under the equivariant normalization and
+tensor head, lug) after one-epoch smoke lanes of all 18 configurations
+completed without error, the six DeepJEB++ lanes queued behind their smoke
+lanes (one DeepJEB++ epoch at 200,000 cells exceeds 20 minutes). The smoke
+lanes also give the reference configurations' peak memory per task: on
+DrivAerML Volume ISLA 126 GiB and GeoTransolver 118 GiB (the Volume task
+carries three fields and interior queries; the DrivAerML-half references
+took 82 and 95 GiB), Transolver 62; Shift-SUV 64 / 78 / 62; AirfRANS 35 / 39
+/ 62; Tensile2D 5 / 5 / 8; lug 9 / 6 / 10. The 80 GiB budget was the
+selection criterion on the two selection datasets, not a constraint on the
+other tasks, and the Volume peaks are reported as the cost of the
+configuration there. The DrivAerML Surface and HiLift protocol artifacts
+(`results/char/drivaerml_surface.json`, `hilift_surface.json`) are
+regenerated from the `r80_*` lanes of the final references: DrivAerML
+Surface ISLA 0.0443 / 0.0699 native, 0.0445 / 0.0713 on the uniform point
+cloud, 0.0443 / 0.0699 posed (pressure / wall shear), GeoTransolver 0.0455 /
+0.0695, 0.438 / 0.482, 1.22 / 1.37, Transolver 0.0437 / 0.0696, 0.279 /
+0.357, 0.984 / 1.164; HiLift ISLA 0.0407 / 0.0933, 0.0412 / 0.0945, 0.0411 /
+0.0939, GeoTransolver 0.0522 / 0.1233, 0.222 / 0.378, 1.71 / 1.60,
+Transolver 0.0434 / 0.1009, 0.396 / 0.556, 1.01 / 1.44. The DrivAerML
+Surface and HiLift chapters and the thesis table are restated from these
+artifacts; the other six tasks' chapters are restated when their `cl_r_*`
+lanes are scored under the three protocols.
