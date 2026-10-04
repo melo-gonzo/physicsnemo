@@ -1,0 +1,195 @@
+{
+ "protocol": "CHAR-PROTOCOLS artifacts (2026-10-03, #sec-nb-char-prereg, #sec-nb-char-protocols-instruments): for every campaign dataset, the\nthree reference configurations (ISLA, GeoTransolver, Transolver) under the three scorings of one checkpoint: the native validation\nmesh, a uniform point cloud at the same budget (area-proportional Poisson draw with exact Horvitz-Thompson weights), and every\nvalidation case rotated and translated (keyed SO(3) or in-plane rotation plus one RMS radius). Float32, seed means over the two\nseeds, per-case relative L2 averaged over the validation cases. Reads campaigns_2026-10-02/char/protocols/<run>/<protocol>/metrics.jsonl\n(fetched from $T/evals_char/<run>/<protocol>/<run>/metrics.jsonl) and writes results/char/<dataset>.json in the schema the dataset\nchapters' protocol_table() reads: protocols, fields, arms[arm][protocol][field] = {mean, per_seed, n_cases}, isla_arm.\nusage: python protocol_artifacts_2026-10-03.py",
+ "protocols": {
+  "native": "native mesh",
+  "area": "uniform point cloud",
+  "posed": "rotated + translated"
+ },
+ "fields": {
+  "pressure_l2": "pressure",
+  "velocity_l2": "velocity",
+  "nut_l2": "eddy viscosity"
+ },
+ "isla_arm": "ISLA 768 at 100k cells",
+ "arms": {
+  "ISLA 768 at 100k cells": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.0453385462363561,
+     "per_seed": {
+      "42": 0.04679896434148153,
+      "43": 0.043878128131230675
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.07535608112812042,
+     "per_seed": {
+      "42": 0.07905786732832591,
+      "43": 0.07165429492791493
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.09800676008065543,
+     "per_seed": {
+      "42": 0.10254904627799988,
+      "43": 0.09346447388331096
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.3157053391138712,
+     "per_seed": {
+      "42": 0.3228707512219747,
+      "43": 0.3085399270057678
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.40917694568634033,
+     "per_seed": {
+      "42": 0.4139282703399658,
+      "43": 0.40442562103271484
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.4509524703025818,
+     "per_seed": {
+      "42": 0.43435196081797284,
+      "43": 0.46755297978719074
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.04546806464592616,
+     "per_seed": {
+      "42": 0.046938419342041016,
+      "43": 0.0439977099498113
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.07562080522378285,
+     "per_seed": {
+      "42": 0.07935397823651631,
+      "43": 0.0718876322110494
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.09816077848275503,
+     "per_seed": {
+      "42": 0.10272301236788432,
+      "43": 0.09359854459762573
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   }
+  },
+  "Transolver 1,024 at 100k cells": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.04999518642822902,
+     "per_seed": {
+      "42": 0.050025170048077904,
+      "43": 0.04996520280838013
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.11487524211406708,
+     "per_seed": {
+      "42": 0.11558254559834798,
+      "43": 0.11416793862978618
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.08780193825562795,
+     "per_seed": {
+      "42": 0.08738609155019124,
+      "43": 0.08821778496106465
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.04999518642822902,
+     "per_seed": {
+      "42": 0.050025170048077904,
+      "43": 0.04996520280838013
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.11487524211406708,
+     "per_seed": {
+      "42": 0.11558254559834798,
+      "43": 0.11416793862978618
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.08780193825562795,
+     "per_seed": {
+      "42": 0.08738609155019124,
+      "43": 0.08821778496106465
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.8087996641794841,
+     "per_seed": {
+      "42": 0.8192365169525146,
+      "43": 0.7983628114064535
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 1.2190190553665161,
+     "per_seed": {
+      "42": 1.241606632868449,
+      "43": 1.1964314778645833
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 1.0882235765457153,
+     "per_seed": {
+      "42": 1.0929837226867676,
+      "43": 1.083463430404663
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   }
+  }
+ },
+ "complete": false
+}

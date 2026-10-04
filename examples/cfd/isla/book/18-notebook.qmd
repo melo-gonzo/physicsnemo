@@ -33397,3 +33397,65 @@ The candidate mechanism is the nearest-boundary normal's discontinuity at
 the specimen's corners (a 1e-7 coordinate perturbation can swap the nearest
 segment for near-equidistant queries); it is a hypothesis for the trained
 `cl_t2dz` lanes' posed column to confirm or refute.
+
+## 2026-10-04 — Verdict, CHAR-PROTOCOLS on Shift-SUV: at the reference configurations GeoTransolver leads ISLA by 13% and Transolver by 8% on the native mesh (0.0403 / 0.0425 / 0.0462 pressure), ISLA is unchanged on the uniform point cloud (1.00) where the baselines lose 1.5x and 1.8x, and ISLA is exact under rotation and translation where the baselines read 25x to 29x worse; interim readings for DrivAerML Volume, AirfRANS and the Tensile2D re-run {#sec-nb-char-shift-suv}
+
+**Shift-SUV (complete; six lanes, 794 training estate bodies, 99 validation,
+500 epochs, 100,000 training cells, scored at 200,000; `results/char/
+shift_suv_surface.json`).** Native pressure / wall shear: ISLA 768 0.0462 /
+0.0691, GeoTransolver 1,024 0.0403 / 0.0630, Transolver 1,024 0.0425 /
+0.0642, so the baselines lead by 13% and 8% on pressure (ratios 0.87 and
+0.92), a wider native gap than on DrivAerML (0.91 / 0.98). Uniform point
+cloud: ISLA 0.0463 / 0.0693 (1.00x), GeoTransolver 0.0601 / 0.0827 (1.49x /
+1.31x), Transolver 0.0765 / 0.1065 (1.80x / 1.66x); the baselines' penalty is
+far smaller here than on DrivAerML (6x to 10x), consistent with the SUV
+meshes being more uniform (the native and area-proportional draws differ
+less). Rotated and translated: ISLA 0.0462 / 0.0691 (1.000x), GeoTransolver
+1.17 / 1.21, Transolver 1.16 / 1.23. Reading as on DrivAerML: a native lead
+of the baselines that holds on one mesh family in one pose.
+
+**DrivAerML Volume (interim; GeoTransolver lanes still training).** ISLA 768
+native pressure / velocity / eddy viscosity 0.0453 / 0.0754 / 0.0980,
+Transolver 1,024 0.0500 / 0.1149 / 0.0878 (ISLA leads on pressure and
+velocity, trails 12% on eddy viscosity). Posed: ISLA 1.00x on every field,
+Transolver 16x / 11x / 12x. Uniform point cloud: ISLA 0.316 / 0.409 / 0.451
+(7.0x / 5.4x / 4.6x), Transolver identical to native to four decimals. **The
+point-cloud column is not a comparison on the volume task**: the variant
+redraws the boundary surface, which only ISLA consumes (the baselines read
+interior points with the stored signed distance and its gradient), so the
+column measures ISLA's sensitivity to the boundary token law
+(@sec-nb-char-protocols-instruments) and nothing about the baselines; the
+chapter says so under the table.
+
+**AirfRANS (interim; GeoTransolver lanes still training).** ISLA 768 native
+0.0371 / 0.0172 / 0.0439 against Transolver 1,024 0.0531 / 0.1192 / 0.0923
+(ISLA leads 1.4x / 6.9x / 2.1x). Posed: ISLA 0.0371 / 0.0172 / 0.0439,
+identical to native to four decimals under the exact nearest search, so the
+AirfRANS pose question of @sec-nb-char-protocols-instruments is closed;
+Transolver 2.0 / 1.15 / 5.9. Point cloud = native for everyone (boundary
+kept whole). Note that ISLA 768 reads 0.0439 on eddy viscosity where the
+384-wide code_v18 reference read 0.0305 (@sec-nb-proto-cond-2-adopted): the
+reference configuration selected on DrivAerML is not the best ISLA width on
+800 airfoils; the campaign reports the reference, as its rule says.
+
+**Tensile2D re-run (equivariant setup, `cl_t2dz_*`; six lanes scored).**
+Native per-component: ISLA σ11 / σ22 / σ12 / displacement 0.0219 / 0.0067 /
+0.0368 / 0.0091, GeoTransolver 0.0107 / 0.0038 / 0.0156 / 0.0042, Transolver
+0.0131 / 0.0044 / 0.0174 / 0.0041. Under the zero-mean isotropic
+normalization the baselines improve on every component (GeoTransolver σ22
+0.0038 against 0.0078 before, where the old per-component normalization
+weighted the 57.7 MPa mean out of the loss), while ISLA's tensor head is
+worse than its scalar heads were on σ11 (0.0219 against 0.0086) and σ12
+(0.0368 against 0.0108) and the same on σ22 and displacement; GeoTransolver
+now leads ISLA 2x on every stress component. The posed per-component numbers
+(ISLA 0.0142 / 0.0145 / 0.0168 / 0.0096) are not comparable with the native
+ones even for an exactly equivariant model, because a rotation redistributes
+a tensor among its lab-frame components and the per-component relative
+error changes with it; **the invariant readout for a tensor target is the
+Frobenius relative L2 of the assembled tensor**, which the symmetric-tensor
+path emits as `stress_l2` and which the baselines' component datasets now
+receive as a derived metric so the three arms are compared on the same
+formula; the chapter's protocol table uses stress (Frobenius), displacement
+and plastic strain. Displacement, which is a vector and invariant as a norm,
+reads 0.0091 native against 0.0096 posed (5%), the generic-angle sensitivity
+noted in @sec-nb-char-tensile2d-interim, now measured on a trained model.

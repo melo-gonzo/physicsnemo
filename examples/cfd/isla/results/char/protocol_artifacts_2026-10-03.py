@@ -31,7 +31,7 @@ DATASETS = {
     "shift_suv_surface.json": ({"pressure_l2": "pressure", "wss_l2": "wall shear"},
                                {"ISLA 768 at 100k cells": "cl_suv_isla", "GeoTransolver 1,024 at 100k cells": "cl_suv_gt",
                                 "Transolver 1,024 at 100k cells": "cl_suv_t"}, "ISLA 768 at 100k cells"),
-    "tensile2d.json": ({"sig11_l2": "σ11", "sig22_l2": "σ22", "sig12_l2": "σ12", "displacement_l2": "displacement"},
+    "tensile2d.json": ({"stress_l2": "stress (Frobenius)", "displacement_l2": "displacement", "q_l2": "plastic strain"},
                        {"ISLA 768": "cl_t2dz_isla", "GeoTransolver 1,024": "cl_t2dz_gt", "Transolver 1,024": "cl_t2dz_t"}, "ISLA 768"),
     "lug.json": ({"von_mises_l2": "von Mises"},
                  {"ISLA 768": "cl_lug_isla", "GeoTransolver 1,024": "cl_lug_gt", "Transolver 1,024": "cl_lug_t"}, "ISLA 768"),
