@@ -32,7 +32,7 @@ DATASETS = {
                                {"ISLA 768 at 100k cells": "cl_suv_isla", "GeoTransolver 1,024 at 100k cells": "cl_suv_gt",
                                 "Transolver 1,024 at 100k cells": "cl_suv_t"}, "ISLA 768 at 100k cells"),
     "tensile2d.json": ({"sig11_l2": "σ11", "sig22_l2": "σ22", "sig12_l2": "σ12", "displacement_l2": "displacement"},
-                       {"ISLA 768": "cl_t2d_isla", "GeoTransolver 1,024": "cl_t2d_gt", "Transolver 1,024": "cl_t2d_t"}, "ISLA 768"),
+                       {"ISLA 768": "cl_t2dz_isla", "GeoTransolver 1,024": "cl_t2dz_gt", "Transolver 1,024": "cl_t2dz_t"}, "ISLA 768"),
     "lug.json": ({"von_mises_l2": "von Mises"},
                  {"ISLA 768": "cl_lug_isla", "GeoTransolver 1,024": "cl_lug_gt", "Transolver 1,024": "cl_lug_t"}, "ISLA 768"),
     "deepjeb_surface.json": ({"von_mises_l2": "von Mises", "displacement_l2": "displacement"},
