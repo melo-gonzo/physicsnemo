@@ -28,7 +28,7 @@ output_type: mesh
 
 training:
   optimizer:
-    lr: 5.0e-4                    # the reference configuration's rate (REF verdict, 2026-09-23; see isla_surface.yaml)
+    lr: 3.75e-4                   # the reference configuration's rate (REF-80 verdict, 2026-10-04; see isla_surface.yaml)
 
 forward_kwargs:
   boundary_meshes:
@@ -62,9 +62,9 @@ model:
     p5_std: {rank: 0}
   dim: 2                          # the problem is planar
   interior: true                  # predict at prediction_points, which join the encoder as tokens
-  hidden: 384                     # the reference configuration (REF verdict, 2026-09-23); also the class defaults
+  hidden: 512                     # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; the class defaults are 384 / 256
   n_layers: 12
-  n_slices: 256
+  n_slices: 512
   mlp_ratio: 4
   geo_checkpoint: true
   geo_kernel: null                # auto: eager here (two dimensions and no global direction)

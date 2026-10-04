@@ -143,7 +143,7 @@ def test_isla_configs_declare_the_mesh_contract(model, dataset):
     assert cfg.forward_kwargs.boundary_meshes == {"vehicle": "boundaries.vehicle"}
     assert cfg.forward_kwargs.global_data == "global_data"
     assert OmegaConf.to_container(m.global_schema) == {"U_inf_dir": {"rank": 1}}
-    assert m.hidden == 384 and m.n_layers == 12 and m.n_slices == 256 and m.mlp_ratio == 4
+    assert m.hidden == 512 and m.n_layers == 12 and m.n_slices == 512 and m.mlp_ratio == 4  # REF-80 reference (2026-10-04)
     assert m.geo_checkpoint is True and m.geo_kernel is None
     ### Removed options never come back through a config.
     for gone in (
@@ -264,13 +264,13 @@ def test_isla_global_vector_is_produced_by_the_dataset_pipeline(model, dataset):
 @pytest.mark.parametrize("model, dataset", CONFIGS)
 def test_isla_configs_pin_the_protocol_learning_rate(model, dataset):
     """The recipe's default rate (3e-3, GeoTransolver's) drives ISLA to a mean-field
-    plateau within five epochs, so every ISLA config carries its own rate: 5e-4, the
-    reference configuration's (REF, 2026-09-23)."""
+    plateau within five epochs, so every ISLA config carries its own rate: 3.75e-4, the
+    reference configuration's (REF-80, 2026-10-04; the width rule 1e-3 x 192 / 512)."""
     cfg = _compose(model, dataset)
-    assert cfg.training.optimizer.lr == pytest.approx(5.0e-4)
+    assert cfg.training.optimizer.lr == pytest.approx(3.75e-4)
 
 
 def test_cli_override_still_wins_over_the_pinned_rate():
     """Explicit learning-rate overrides take precedence over model defaults."""
-    cfg = _compose("isla_surface", "drivaer_ml_surface", "training.optimizer.lr=3.75e-4")
-    assert cfg.training.optimizer.lr == pytest.approx(3.75e-4)
+    cfg = _compose("isla_surface", "drivaer_ml_surface", "training.optimizer.lr=5e-4")
+    assert cfg.training.optimizer.lr == pytest.approx(5e-4)
