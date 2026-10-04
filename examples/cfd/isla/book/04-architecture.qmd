@@ -8,8 +8,9 @@ does, and the other chapters and the code are held to it. Read it with
 equation names the identifier that computes it in
 `physicsnemo/experimental/models/isla/model.py`. The description uses a
 width $d$, a stack of 12 slice layers and $M = 256$ slices, the class's
-layer and slice counts. Nothing in it depends on those numbers. The width
-the recipe runs is stated with the commands in @sec-using-config.
+default layer and slice counts. Nothing in it depends on those numbers;
+the reference configuration runs 512 slices at width 512, stated with the
+commands in @sec-using-config.
 
 ```{python}
 #| label: setup-arch
@@ -386,7 +387,8 @@ Z_s \leftarrow Z_s + \mathrm{MLP}_{\mathrm{slice}}(\mathrm{LN}(Z_s)) .
 $$
 
 In the surface configuration, this is the only place tokens exchange
-information: through $M = 256$ slice states, never pairwise.
+information: through $M$ slice states (256 by default, 512 in the
+reference configuration), never pairwise.
 
 **h. Read-back.** Each token reads the slice states with its read-back
 weights, and reads the invariants pooled with the same weights, projected
@@ -629,7 +631,7 @@ for (name, code, c192, n), (_, _, c384, _) in zip(R[192], R[384]):
             f"| {c384 * n:,} | {100 * c384 * n / totals[384]:.1f}% |\n")
 out += f"| **total** | | | **{totals[192]:,}** | 100% | **{totals[384]:,}** | 100% |\n"
 out += ("\n: Parameter count of ISLA at 12 layers, 256 slices, one scalar and one vector output and one global vector input, at width 192 "
-        "and at the reference width 384 (the class default), computed from the class as the page renders. How to read this: the shares barely move with width because every large component is "
+        "and at width 384 (the class default; the reference configuration is 512 wide with 512 slices), computed from the class as the page renders. How to read this: the shares barely move with width because every large component is "
         "quadratic in it; the routing maps and the geometry are the exceptions. {#tbl-isla-params}\n")
 print(out)
 ```
@@ -803,7 +805,7 @@ above.
 
 | argument (default) | stage | what it sets |
 |---|---|---|
-| `hidden` (384), `n_layers` (12), `n_slices` (256), `mlp_ratio` (4); the defaults are the reference configuration, @sec-using-config | all | $d$, the number of slice layers, $M$, and the MLP expansion |
+| `hidden` (384), `n_layers` (12), `n_slices` (256), `mlp_ratio` (4); the class defaults, of which the reference configuration changes two, `hidden=512` and `n_slices=512` (@sec-using-config) | all | $d$, the number of slice layers, $M$, and the MLP expansion |
 | `output_schema` (required) | 5 | the output fields by name and rank spec (`{pressure: {rank: 0}, wss: {rank: 1}, stress: {rank: 2, symmetric: true}}`; `parity: odd` for a pseudotensor); each field costs the coefficient count of @sec-arch-head and is returned as a leaf of the output Mesh's `point_data` under its name. A dotted name (`surface.pressure`) is a nested leaf of the output and, in any input mapping, of the input; every declared value is a `{rank: ...}` spec or a nested group (a mapping of mappings), and several independent scalars are several rank-0 names |
 | `global_schema` (none) | 1, 2, 3d, 5 | the per-case fields by name and rank, read from `global_data`: each rank-1 field is a global direction $\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed |
 | `boundary_schema` (none) | 2, 3d | per-cell fields by name and rank 0 to 2, read from every boundary mesh's `cell_data`: their invariants $\beta_i$ join the seed (prediction-point tokens carry zeros), and rank-1 and rank-2 fields add their contractions with $\hat\rho_{is}$ to the relational invariants (@sec-isla-inputs-rank) |

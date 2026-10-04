@@ -30,6 +30,8 @@ def fmt_ratio(r):
     return f"{r:.0f}x" if r >= 10 else f"{r:.1f}x" if r >= 2 else f"{r:.2f}"
 VC, VOL = char_arms("drivaerml_volume.json"); SC, SURF = char_arms("drivaerml_surface.json")
 LC, LUG = char_arms("lug.json"); TC, T2D = char_arms("tensile2d.json"); AC, AIR = char_arms("airfrans.json"); UC, SUV = char_arms("shift_suv_surface.json")
+HC, HIL = char_arms("hilift_surface.json")
+rat = lambda arms, arch, f, pk="native": arms[arch][pk][f]["mean"] / arms["ISLA"][pk][f]["mean"]
 BASELINES = ("GeoTransolver", "Transolver")
 ```
 
@@ -65,7 +67,7 @@ outside it; the sections above state each one with its instrument.**
 - **Not that the HiLiftAeroML numbers are test-set numbers**
   (@sec-limits-validation).
 - **Not that ISLA's learning curve is always the steeper one.** It is on
-  Tensile2d, on the lug and on AirfRANS pressure. On the DrivAerML Surface
+  the lug and on AirfRANS pressure. On the DrivAerML Surface
   task the two architectures' exponents are the same within the fit
   (@sec-compute-allocation).
 
@@ -73,23 +75,27 @@ outside it; the sections above state each one with its instrument.**
 
 ### Surface accuracy, in distribution {#sec-limits-in-distribution}
 
-**The in-distribution lead is against GeoTransolver at its recipe width,
-on one dataset, from 109 cars up, and no mechanism for it is claimed.** At
-matched parameters (GeoTransolver-512) the two are at parity at 435 cars,
-so what ISLA buys at full data is cost rather than accuracy: the same
-error with GeoTransolver-512 at 1.17x ISLA's step time and 1.90x its
-memory (@tbl-scoreboard-435). Below 109 cars GeoTransolver-256 leads. On
-the wings both baselines lead on every rung, and ISLA's width, depth and
-learning rate, the cell count and GeoTransolver's width all leave that
-ordering where it is (@tbl-wing-controls). What ISLA buys elsewhere is
-stated with its scope where it is measured: pose covariance, exact on
-meshes without tied boundary samples (@sec-pose-contract,
-@sec-limits-ties), weak dependence on the law the training sample is
-drawn by (@sec-training-law), slice territories that stay put under a
-change of draw (@sec-territories), the interior leads on two datasets
-(@sec-interior) and the memory frontier (@sec-review-frontier). What would
-move this: a mechanism for the wing deficit, located and removed by a
-principled configuration (@sec-open-questions).
+```{python}
+#| label: para-limits-in-distribution
+#| output: asis
+print(f"**In distribution, under the reference configurations, ISLA's standing on the surface is a tie within seed noise on the DrivAerML "
+      f"Surface task (GeoTransolver width 256 ÷ ISLA {rat(SURF, 'GeoTransolver', 'pressure_l2'):.2f}, Transolver width 512 with 16 layers "
+      f"÷ ISLA {rat(SURF, 'Transolver', 'pressure_l2'):.2f} on pressure) and a lead on the 210-wing HiLiftAeroML rung "
+      f"({rat(HIL, 'GeoTransolver', 'pressure_l2'):.2f} and {rat(HIL, 'Transolver', 'pressure_l2'):.2f}), and no mechanism for either is "
+      "claimed.** The three configurations are matched on the 80 GiB memory budget they were selected under and on nothing else: "
+      "GeoTransolver's reference has a tenth of ISLA's parameters, Transolver's trains at half the cells (@sec-protocol), so the surface "
+      "standing is a statement about what one budget buys each architecture, not a matched-capacity comparison. The ladders, which hold "
+      "ISLA at 384 wide, 12 layers, 256 slices, 5e-4 against GeoTransolver-256 at its better rate and the parameter-matched "
+      "GeoTransolver-512, read the other way on the wings and at small car counts: GeoTransolver-512 leads at 35, 210 and 510 wings "
+      "and GeoTransolver-256 below 109 cars, and ISLA's width to 384, depth and learning rate, the cell count and GeoTransolver's width all "
+      "leave that ordering where it is (@tbl-wing-controls, @sec-car-ladder). What ISLA buys elsewhere is stated with its scope where it "
+      "is measured: pose covariance, exact on meshes without tied boundary samples (@sec-pose-contract, @sec-limits-ties), its error "
+      "unchanged on a uniform point cloud where the baselines' grow by factors (@sec-scoreboard-200k, @sec-de-result), weak dependence on "
+      "the law the training sample is drawn by (@sec-training-law), slice territories that stay put under a change of draw "
+      "(@sec-territories), and the interior velocity lead on two datasets (@sec-interior). What would move this: a mechanism for the "
+      "ladders' wing deficit against GeoTransolver-512, located and removed by a principled configuration (@sec-open-questions), and a "
+      "second seed pair on the 210-wing rung.")
+```
 
 ### The data-efficiency ladders {#sec-limits-data-efficiency}
 
@@ -133,8 +139,8 @@ the protocol is @sec-equal-budget; the limits on the mechanism are these.
 
 - **No single ingredient of ISLA is load-bearing for its own accuracy,
   as far as it is measured.** The single-factor ablations on the 35-wing
-  rung each move the error by a fraction of the
-  deficit to the baselines, and the exactness of the covariance contract
+  rung each move the error by a fraction of the ladder deficit to
+  GeoTransolver-512 at that rung, and the exactness of the covariance contract
   neither costs nor buys anything measurable in distribution at that rung;
   the decomposition is unmeasured at the reporting protocol. What would
   move this: an ablation at the reporting protocol that moves the error by
@@ -294,7 +300,7 @@ baseline ÷ ISLA, so above one favors ISLA.
 
 | question | what would settle it | bar |
 |---|---|---|
-| What is the mechanism of the wing deficit? Its location is known: against GeoTransolver-512 the ratio is 0.77 up to 14 degrees and 0.67 from 16 degrees, where the flow separates and both errors double, and the two models rank the cases alike (@sec-de-strata) | the mesher-pattern hypothesis (validation geometries recur in training with a different mesh) tested by a split that holds geometries out entirely at matched case count, at the reporting protocol; the positional hypothesis (GeoTransolver reads absolute position) is quantified by the pose-prior diagnostic (@sec-pose-prior): giving ISLA the dataset's axes, a rejected input, recovers about half of the low-angle gap and a quarter of the high-angle widening, so position in the fixed pose is part of the deficit and the separated regime keeps the rest | the ratio moves toward parity when recurrence is removed, or does not |
+| What is the mechanism of the ladders' wing deficit against GeoTransolver-512 (ISLA at 384 wide, 5e-4)? Its location is known: at 35 wings the ratio is 0.77 up to 14 degrees and 0.67 from 16 degrees, where the flow separates and both errors double, and the two models rank the cases alike (@sec-de-strata) | the mesher-pattern hypothesis (validation geometries recur in training with a different mesh) tested by a split that holds geometries out entirely at matched case count, at the reporting protocol; the positional hypothesis (GeoTransolver reads absolute position) is quantified by the pose-prior diagnostic (@sec-pose-prior): giving ISLA the dataset's axes, a rejected input, recovers about half of the low-angle gap and a quarter of the high-angle widening, so position in the fixed pose is part of the deficit and the separated regime keeps the rest | the ratio moves toward parity when recurrence is removed, or does not |
 | What is ISLA's ratio on the two largest HiLiftAeroML rungs (510 and 1,260 cases)? | ISLA trained there at the reporting protocol | reported as measured |
 | Do the 35-case ratios hold on cases no decision has read? | the 35-case ISLA and unit-direction baseline checkpoints scored once on the 360-case sealed test | the validation ratios reproduced within their seed spread |
 | Do the capacity floor and the memory frontier reproduce on the wings? On the 510-wing rung the cells and width-independence readings reproduce and the width turnover and the memory frontier do not (@tbl-scalehl) | the width and depth ladders of @sec-shared-floor on a second wing rung at the scaling budget | both ladders flatten at one floor, and the best ISLA at or under each memory budget is at least as accurate as the best GeoTransolver, or not |
@@ -331,21 +337,21 @@ starting point and a stated remainder.**
 | direction | what is in place | what remains |
 |---|---|---|
 | Problems outside external aerodynamics | the interface accepts zero or more global vector inputs and zero or more global scalar inputs, and per-cell boundary data through the boundary-scalar channel (@sec-isla-inputs); the contract tests cover zero and two global directions; a screened-Poisson acceptance case trains with no global vector and one global scalar, and the scalar is decisive where the boundary data cannot substitute for it | a production dataset outside external aerodynamics with a baseline trained on it under the protocol (@sec-limits-datasets) |
-| Cost at scale | with the exact fused geometry kernel, the default on CUDA, ISLA's step tracks GeoTransolver's at every token count while GeoTransolver-512 costs 1.90x its memory, and ISLA holds the accuracy-against-memory frontier below about 70 GB at 435 cars (@sec-cost-sweep, @sec-review-frontier) | cost logs for the depth ladder, which reaches the floor at half GeoTransolver's parameters but is absent from the cost frontier; the gap below GeoTransolver's footprint is headroom for a wider or deeper model, since on DrivAerML cells past 100,000 buy nothing |
+| Cost at scale | with the exact fused geometry kernel, the default on CUDA, ISLA's step tracks GeoTransolver's at every token count (@sec-cost-sweep); the three reference configurations all train under 80 GiB per GPU on the selection task (@sec-using-cost), and on the 100,000-cell lanes ISLA holds the accuracy-against-memory frontier below about 70 GB at 435 cars (@sec-review-frontier) | cost logs for the depth ladder, which reaches the floor at half GeoTransolver's parameters but is absent from the cost frontier; the gap below GeoTransolver's footprint is headroom for a wider or deeper model, since on DrivAerML cells past 100,000 buy nothing |
 | Sampling conventions | ISLA's convention-swap penalty converges under refinement, and so does that of GeoTransolver and Transolver + ISLA's measure-weighted pooling + Horvitz–Thompson-centered datapipe (ablation); GeoTransolver's and Transolver's as released does not (@sec-consistency-bench) | at 10,000 cells no architecture is consistent across conventions; the fine-mesh limit is within a few percent of reached at 40,000 |
 | Query-count consistency of the interior decode | the total query mass is a learned fraction of the total source measure divided by the query count, so neither refining the source nor changing the request size moves the balance between surface and queries (@sec-isla-contracts); count augmentation reduces the interacting decode's dependence without removing it | a decode whose prediction at a point is independent of the request at the interacting configuration's accuracy (@sec-interior-open) |
 
 ## What would change the recommendation {#sec-review-roads}
 
-**ISLA is the choice wherever the deployment sampling may differ from the
-training sampling, wherever the training sampling law is not the
-deployment one, where geometries arrive in arbitrary poses, and where
-memory at scale binds, and on the DrivAerML Surface task from about 100
-training cars up, where it leads GeoTransolver at its recipe width by up
-to 7% in less memory and ties the parameter-matched GeoTransolver-512 in
-half of it; GeoTransolver is the choice for matched-mesher, known-pose
-surface prediction from few training cases on the wings and below about
-100 cars (@sec-surface).** The recommendation splits on consistency, and
+**ISLA is the choice wherever the deployment mesh may differ from the
+training mesh, wherever the training sampling law is not the deployment
+one, where geometries arrive in arbitrary poses, and where memory at scale
+binds; under the 80 GiB reference configurations it ties the baselines on
+the DrivAerML Surface task and leads them on the 210-wing rung, and a wider
+GeoTransolver above that budget is the more accurate model for
+matched-mesher, known-pose surface prediction from few training cases on
+the wings and below about 100 cars (@sec-scoreboard-200k, @sec-de-result,
+@sec-hilift-ladders).** The recommendation splits on consistency, and
 consistency is a property of the frame, not of the architecture. Every
 configuration that centers its coordinates on a statistic of the sampled
 points degrades several-fold under a sampling-density bias when the frame
@@ -358,13 +364,13 @@ published, and are not modified, so measure weighting and a sample-free
 frame reach users through ISLA (@sec-principled-ledger). Two
 outcomes would change the recommendation.
 
-**ISLA gains an in-distribution accuracy claim below full data and on the
-wings** if the mechanism of the wing deficit is located and removed by a
-principled configuration: the geometry-holdout test of
-@sec-open-questions is the one such candidate. If the wing deficit
+**ISLA gains an in-distribution accuracy claim at small training sets**
+if the mechanism of the ladders' deficit against GeoTransolver-512 is
+located and removed by a principled configuration: the geometry-holdout
+test of @sec-open-questions is the one such candidate. If that deficit
 closes, the recommendation on matched-mesher, known-pose surface
 prediction from few training cases becomes a trade of a few percent of
-accuracy against the contracts rather than a preference for
+accuracy against the contracts rather than a preference for a wider
 GeoTransolver.
 
 **The interior recommendation becomes unconditional for ISLA** only if
@@ -382,6 +388,7 @@ covariance that is exact on meshes without tied boundary samples
 change of inference draw and weak dependence on the training sampling law,
 both properties of the origin-free frame and the measure weights; the
 interior velocity lead; the cost figures of @sec-capacity; and, on
-in-distribution surface accuracy, a lead over GeoTransolver at its recipe
-width from about 100 cars up on the DrivAerML Surface task, parity with
-the parameter match, and a deficit below 100 cars and on the wings.
+in-distribution surface accuracy under the reference configurations, a tie
+on the DrivAerML Surface task and a lead on the 210-wing rung, with a
+deficit against a wider GeoTransolver at small training sets on the
+ladders, on tensor targets and on the sport-utility bodies.

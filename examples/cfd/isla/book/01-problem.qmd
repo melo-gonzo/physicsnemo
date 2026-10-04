@@ -321,8 +321,8 @@ book is labeled as such (@sec-protocol).
 integrated load.** Every model is scored on the same cells, so the field
 comparison is fair; the integral of a signed field over a sample is not,
 because drag and lift are integrals with heavy cancellation. On the
-DrivAerML Surface task, with the reference checkpoints scored at the
-reporting protocol:
+DrivAerML Surface task, with ISLA at 384 wide, 12 layers, 256 slices,
+5e-4 and GeoTransolver-512 scored at the reporting protocol:
 
 ```{python}
 #| label: para-force-limit

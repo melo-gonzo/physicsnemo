@@ -349,7 +349,7 @@ $$
 its mean position and its mean normal direction: the slice's **anchor**.
 Both are weighted sums of vectors that rotate with the body, with weights
 that do not, so the anchors rotate with the body. They give each layer $M$
-data-adaptive reference points ($M = 256$ in the class). Idea 4 describes a
+data-adaptive reference points ($M = 256$ by default in the class, 512 in the reference configuration). Idea 4 describes a
 token's position by its relation to this constellation instead of by
 coordinates. @sec-arch-routing-trained shows the learned routing of a
 trained model on a car and on a solid specimen.
@@ -490,8 +490,10 @@ tokens, summing to one. The **effective number of slices** is
 $M_{\mathrm{eff}} \equiv \exp(-\sum_s q_s \log q_s)$, which is 256 when
 every slice carries the same mass and 1 when one slice carries all of it.
 The anchors are the $z_s$ of idea 3, drawn in the dataset's coordinates. Each
-checkpoint is the final one of a completed reference-configuration run
-(384 wide, 12 layers, 256 slices, cosine routing), run in float32 on the
+checkpoint is the final one of a completed run of ISLA at 384 wide, 12
+layers, 256 slices, cosine routing and learning rate 5e-4 (the
+configuration the ladders hold, not the reference configuration of
+@sec-using-config, whose routing has 512 slices), run in float32 on the
 first case of its validation loader with the geometry kernel it trained
 with. The numbers in this section are computed from the stored weights as
 the page renders.

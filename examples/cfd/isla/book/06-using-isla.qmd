@@ -26,33 +26,42 @@ RES = Path("..") / "results"
 
 ## Which configuration {#sec-using-config}
 
-**Run ISLA as the class ships it. The constructor takes the field
-declarations and the task; everything else is a default.** A surface model
-that predicts pressure and wall shear stress under one far-field direction
-is
+**Run ISLA in the reference configuration: width 512 with 512 slices, and
+the class defaults for everything else. The constructor takes the field
+declarations, the task and those two sizes.** A surface model that predicts
+pressure and wall shear stress under one far-field direction is
 
 ```python
 from physicsnemo.experimental.models import ISLA
-model = ISLA(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, global_schema={"freestream": {"rank": 1}})
+model = ISLA(
+    output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}},
+    global_schema={"freestream": {"rank": 1}},
+    hidden=512, n_slices=512,          # the reference configuration; the class defaults are 384 and 256
+)
 ```
 
-and an interior model adds `interior=True`. The defaults are the reference
-configuration: 384 wide with 12 layers and 256 slices, cosine routing at a
-fixed temperature, the RMS-pairwise-distance length unit, the fused
-geometry kernel where it can run, and prediction points that carry a
-learned share of the total boundary measure. The recipe's ISLA
-configurations (`isla_surface`, `isla_volume`) state the same dimensions and
-train at learning rate 5e-4.
-This is the one place the book states them, and the width and depth ladders
-of @sec-review-frontier are deviations from it. A table row measured at
-another width, rate or cell budget says so in the row.
+and an interior model adds `interior=True`. The rest of the reference
+configuration is the class as it ships: 12 layers, cosine routing at a
+fixed temperature over centered sample-conditioned prototypes, the
+RMS-pairwise-distance length unit, the fused geometry kernel where it can
+run, and prediction points that carry a learned share of the total boundary
+measure. It trains at learning rate 3.75e-4 and 200,000 sampled cells per
+case. The configuration is the most accurate of ISLA's under 80 GiB per GPU
+on the two selection datasets; the rule and the baselines' reference
+configurations are in @sec-protocol. The recipe's ISLA configurations
+(`isla_surface`, `isla_volume`) carry the class defaults (384 wide, 256
+slices, learning rate 5e-4), so the reference configuration is reached by
+the three overrides in the commands below. This is the one place the book
+states it, and the width and depth ladders of @sec-review-frontier are
+deviations from it (at 256 slices). A table row measured at another width,
+slice count, rate or cell budget says so in the row.
 
 **The option policy.** An option is a scaffold under a universalization
 test, run always-on across the datasets its rule was not fitted on; it
-becomes part of the reference configuration
+becomes part of the class
 for every dataset or it is deleted, and no option is set per dataset. Every
 ratio the book labels "GeoTransolver ÷ ISLA" is the reference
-configuration; an option's number is labelled by arm. What remains on the
+configurations unless the row names another; an option's number is labelled by arm. What remains on the
 class is short:
 
 - **the sizes** `hidden`, `n_layers`, `n_slices`, `mlp_ratio`, which set
@@ -240,26 +249,26 @@ limits are in @sec-isla-inputs-rank and the switch in @sec-using-cost.
 
 ## Training {#sec-using-train}
 
-**Train at the recipe defaults, 200,000 sampled cells per case for 500
-epochs at learning rate 5e-4, with no augmentation. The only setting that
-needs thought is the learning rate when you leave width 384.** From the
-recipe root:
+**Train the reference configuration: 200,000 sampled cells per case for
+500 epochs at learning rate 3.75e-4, width 512 with 512 slices, no
+augmentation. The only setting that needs thought is the learning rate when
+you leave width 512.** From the recipe root:
 
 ```bash
 # DrivAerML Surface task (sampling_resolution defaults to 200,000 cells per case).
-# compile=false is the configuration of the evidence lanes; the compiled path computes the same function faster.
-# The ISLA configs pin training.optimizer.lr=5e-4; it is stated here so the protocol is explicit.
+# The ISLA configs carry the class defaults (hidden 384, 256 slices, lr 5e-4); the three overrides
+# make the reference configuration. compile=false leaves the per-block compile of the model in charge.
 python src/train.py model=isla_surface dataset=drivaer_ml_surface \
-    training.optimizer.lr=5e-4 compile=false
+    model.hidden=512 model.n_slices=512 training.optimizer.lr=3.75e-4 compile=false
 
-# DrivAerML Volume task: boundary -> interior, the prediction points as interacting tokens; their direction and
-# wall distance are computed inside the model from the boundary sample.
+# DrivAerML Volume task: boundary -> interior, the prediction points as interacting tokens, with the
+# stored signed distance and its gradient as query inputs.
 python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference \
-    training.optimizer.lr=5e-4 compile=false
+    model.hidden=512 model.n_slices=512 training.optimizer.lr=3.75e-4 compile=false
 
 # HiLiftAeroML surface (the 200,000-cell default again; 500 epochs, as on the cars)
 python src/train.py model=isla_surface dataset=highlift_surface \
-    training.optimizer.lr=5e-4 compile=false training.num_epochs=500
+    model.hidden=512 model.n_slices=512 training.optimizer.lr=3.75e-4 compile=false training.num_epochs=500
 ```
 
 These commands are the reporting protocol of @sec-protocol. ISLA needs no
@@ -268,21 +277,22 @@ the dataset's native frame predicts a body in any pose (@sec-pose).
 
 ### The learning rate {#sec-using-lr}
 
-**Use 5e-4 at the reference width 384 and 12 layers. For a wider or deeper
-model, start from $10^{-3} \times 192 / \mathrm{hidden} \times 12 /
+**Use 3.75e-4 at the reference width 512 and 12 layers. For another width
+or depth, start from $10^{-3} \times 192 / \mathrm{hidden} \times 12 /
 \mathrm{layers}$ and treat it as a starting rate, not a limit.** The
 expression gives $10^{-3}$ at width 192, $5 \times 10^{-4}$ at 384,
-$2.5 \times 10^{-4}$ at 768, and $2.5 \times 10^{-4}$ at 384 wide and 24
-layers. Every width and depth in the capacity ladders trains cleanly at
+$3.75 \times 10^{-4}$ at 512, $2.5 \times 10^{-4}$ at 768, and
+$2.5 \times 10^{-4}$ at 384 wide and 24 layers. Every width and depth in the capacity ladders trains cleanly at
 this rate, and the ladders of @sec-review-frontier run at it. A model
 trained at the rule rate is therefore comparable with the book's lanes.
 Under ISLA's cosine routing the logits are bounded, so the routing-collapse
 failure that would otherwise set a hard ceiling on the rate is unreachable
 (@sec-isla-routing-forms). A higher rate is an experiment, not a hazard.
-The recipe's ISLA configurations pin 5e-4 rather than inheriting the
-recipe-wide default. The interior standings of @sec-interior are the
-reference configuration's at 5e-4. GeoTransolver-volume trains at 1e-3,
-its best rate there.
+The recipe's ISLA configurations pin 5e-4, the rule's rate at their
+default width 384, rather than inheriting the recipe-wide default of 3e-3,
+which drives ISLA to a mean-field plateau; the reference configuration
+overrides it to 3.75e-4. GeoTransolver and Transolver train at 1e-3 in
+their reference configurations, the recipe default.
 
 ## Evaluation and the inference sampler {#sec-using-sampler}
 
@@ -373,14 +383,21 @@ prediction at a point depends on the joint request
 ```{python}
 #| label: para-using-cost-lede
 #| output: asis
+FRONT = json.load(open(RES / "char" / "ref80_frontier_2026-10-02.json"))["candidates"]
+REFC = {"ISLA width 512 with 512 slices": FRONT["isla_w512_s512"], "GeoTransolver width 256": FRONT["gt_h256"], "Transolver width 512 with 16 layers at 100,000 cells": FRONT["t_h512_l16_c100k"]}
+print("**The reference configurations train under the 80 GiB budget they were selected under.** One training epoch on the DrivAerML Surface task, "
+      "four GB300 ranks, bfloat16, peak device memory as the maximum over ranks: "
+      + "; ".join(f"{a} {v['train_peak_gib']:.1f} GiB, {v['epoch_seconds']:.0f} s per epoch, {v['n_parameters'] / 1e6:.0f}M parameters" for a, v in REFC.items())
+      + ". Data: results/char/ref80_frontier_2026-10-02.json.")
 CSW = {r["arm"]: r for r in json.load(open(RES / "cost_sweep_ref_gb300_bf16_2026-09-22.json"))["runs"] if r["tokens"] == 200000 and r["status"] == "ok"}
 _med = lambda v: sorted(v)[len(v) // 2]
 _isla, _gt, _gt512 = CSW["isla_ref_r1_384x12_cos_fused"], CSW["geotransolver_256"], CSW["geotransolver_512"]
-print(f"**At the reporting protocol of 200,000 cells per case GeoTransolver-256 costs {_gt['peak_allocated_gib'] / _isla['peak_allocated_gib']:.2f}x "
-      f"ISLA's peak memory at {_med(_gt['step_ms']) / _med(_isla['step_ms']):.2f}x its step time, and the parameter-matched "
-      f"GeoTransolver-512 costs {_gt512['peak_allocated_gib'] / _isla['peak_allocated_gib']:.2f}x ISLA's memory at "
-      f"{_med(_gt512['step_ms']) / _med(_isla['step_ms']):.2f}x its step time.** @tbl-isla-cost reads every footprint from one cost sweep "
-      "on one GB300, and @fig-cost-sweep sweeps the same instrument over the token count.")
+print()
+print(f"**Per step, on one GPU, the cost sweep of @tbl-isla-cost compares ISLA at 384 wide, 12 layers, 256 slices with the 256- and 512-wide "
+      f"baselines at 200,000 cells per case: GeoTransolver-256 costs {_gt['peak_allocated_gib'] / _isla['peak_allocated_gib']:.2f}x that ISLA's peak "
+      f"memory at {_med(_gt['step_ms']) / _med(_isla['step_ms']):.2f}x its step time, and GeoTransolver-512 {_gt512['peak_allocated_gib'] / _isla['peak_allocated_gib']:.2f}x "
+      f"its memory at {_med(_gt512['step_ms']) / _med(_isla['step_ms']):.2f}x its step time.** The sweep is the book's one per-step instrument; "
+      "@fig-cost-sweep sweeps it over the token count. The reference ISLA, 512 wide with 512 slices, is not among its arms.")
 ```
 
 The step is memory-bound at every stage
@@ -399,11 +416,11 @@ at less than a third of the memory (@sec-shared-floor).
 ```{python}
 #| label: tbl-isla-cost
 #| output: asis
-rows = [("**ISLA** (reference configuration, 384 x 12, fused kernel)", "isla_ref_r1_384x12_cos_fused"),
+rows = [("**ISLA**, 384 x 12, 256 slices, fused kernel (the ladders' configuration)", "isla_ref_r1_384x12_cos_fused"),
         ("ISLA, 24 layers (384 x 24, the depth variant)", "isla_ref_r2_384x24_cos_fused"),
-        ("ISLA, 192 wide (384 x 12 at half the width)", "isla_192x12_cos_fused"),
-        ("GeoTransolver-256 (the recipe width)", "geotransolver_256"),
-        ("GeoTransolver-512 (the parameter match)", "geotransolver_512"),
+        ("ISLA, 192 wide (192 x 12)", "isla_192x12_cos_fused"),
+        ("GeoTransolver-256", "geotransolver_256"),
+        ("GeoTransolver-512", "geotransolver_512"),
         ("Transolver-256", "transolver_256")]
 out = "| configuration | parameters | peak memory per device [GiB] | median step [ms] | ÷ ISLA: parameters | ÷ ISLA: memory | ÷ ISLA: step |\n|---|--:|--:|--:|--:|--:|--:|\n"
 i = CSW[rows[0][1]]
@@ -416,8 +433,8 @@ print(": Training cost at the reporting protocol: one case of 200,000 sampled ce
       "one GB300, forward plus backward, each configuration as the recipe trains it (ISLA on the fused geometry kernel, GeoTransolver and "
       "Transolver compiled). Memory "
       "is the peak allocated by the step; the step is the median over the timed steps. This is the book's one cost-per-step table, and "
-      "every cost ratio elsewhere is read from it. How to read this: the table states cost, not accuracy (the "
-      "standing of these configurations is in @sec-surface); the ratio columns are each configuration ÷ ISLA, above one meaning the "
+      "every per-step cost ratio elsewhere is read from it. How to read this: the table states cost, not accuracy (these are the "
+      "ladders' configurations, @sec-car-ladder, not the reference configurations, whose training footprints are stated above); the ratio columns are each configuration ÷ the 384-wide ISLA, above one meaning the "
       "configuration costs more. It does not show the eager geometry region, which computes the same function "
       "at about three times the memory, nor how the step scales with the token count, which is @fig-cost-sweep. "
       "Data: results/cost_sweep_ref_gb300_bf16_2026-09-22.json. {#tbl-isla-cost}")
