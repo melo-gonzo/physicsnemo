@@ -663,7 +663,7 @@ print(f"**Across the datasets with a training-case ladder, ISLA's error falls fa
       f"Steeper: {lst(steeper)}. Same rate (within 5%): {lst(same)}. Slower: {lst(flatter)}. "
       "On the DrivAerML Surface task both architectures approach one floor, so the total-error exponents there understate the "
       "reducible-error law of @tbl-scaling-fit. Tensile2d has two rungs under the reference configuration and no ladder, so it is absent "
-      "here and its two-point slopes are in @tbl-tensile2d-ladder. A steeper curve is what a model with the right inductive bias shows "
+      "here. A steeper curve is what a model with the right inductive bias shows "
       "while the data are scarce for the problem's variation, which is why the ladders, and not one full-data row, are the evidence "
       "for or against the architecture.")
 ```
