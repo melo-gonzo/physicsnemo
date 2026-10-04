@@ -33534,9 +33534,38 @@ pipeline): ISLA 0.0041, GeoTransolver 0.98, Transolver 1.02. The baselines'
 numbers are the expected lab-frame failure; **ISLA's output, a scalar that a
 rigid motion cannot change, moved by 2x**, far above the 5% residual of
 Tensile2D (@sec-nb-char-interior-tensile2d) and the exact result on AirfRANS
-and the DrivAerML tasks. Rotation-only and translation-only scorings and a
-model-level check on one lug (90-degree rotation, one-radius translation,
-field-by-field bisection of what the pose transforms) are being run to
-attribute the shift to the model, to a pipeline field left untransformed, or
-to float32 coordinate sensitivity; the chapter's table shows the column as
-measured and its prose waits for the attribution.
+and the DrivAerML tasks. **Attribution (same day).** Rotation alone and translation alone each
+produce the shift (seed 42: rotation-only 1.65x, translation-only 1.92x, both
+2.08x; seed 43: 1.48x / 1.72x / 1.89x), so it is not additive and not a
+frame-dependent input: every input the lug configuration reads (boundary
+labels and pressure as scalars, boundary geometry, the stored signed distance
+and its rotated gradient, four scalar globals) is transformed consistently,
+and rotating any one part alone breaks the problem by O(1), as it must for a
+relative-geometry model. A model-level check on one lug (native error 0.14%)
+settles it: an exact rigid motion (90 degrees about an axis, a coordinate
+permutation in float32) changes the prediction by 1e-4, every float-inexact
+motion changes it at the 1e-3 to 1e-2 level (37 degrees 0.0075, one-radius
+translation 0.0017, both 0.0128), and **a random coordinate jitter of 1e-7
+relative with no motion at all changes it by 0.011, the same at 1e-6 and
+1e-5**: a discontinuity, not smooth roundoff amplification. The
+discontinuity is the nearest-boundary-sample construction: on this
+structured finite-element mesh 76% of the interior nodes are equidistant
+from two boundary centroids to 1e-4 relative (35% to 1e-7), so which sample
+is nearest is decided by sub-roundoff noise; under the translation 23% of
+the nearest indices change and 62 nodes per lug jump to a face more than 30
+degrees away, an O(1) change of the direction feature, which attention
+spreads over the field. The library and the exact search give identical
+numbers, compilation has no effect, and a float64 forward with float64
+transforms reduces the posed change to 3e-3 but moves the native prediction
+itself by 1% (0.0122 against 0.0014): the trained lug model's output depends
+on arithmetic precision at the percent level through the same tie-breaking.
+The lug's native error is 0.14%, so a 0.1% to 1% perturbation response reads
+as 1.5x to 2x; on DrivAerML (native 4%) the same effect is invisible, which
+is why posed = native there, and the 5% shift of Tensile2D
+(@sec-nb-char-interior-tensile2d) is the same mechanism's likely footprint
+on another structured mesh. **Nothing in the pipeline changes; this is a
+numerical property of the frozen class** (the nearest boundary sample is a
+discontinuous function of the query position, with an O(1) normal flip at
+ties). The candidate fix is a measure-weighted average over near-tied
+samples in the geometry construction, a post-campaign change. The chapter
+reports the 2x as measured with this mechanism.
