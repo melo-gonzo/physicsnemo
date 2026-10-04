@@ -13,6 +13,26 @@ and ends with the two outcomes that would change the recommendation. Ratios thro
 baseline ÷ ISLA, above one favoring ISLA; the metric is the area-weighted
 relative L2 in float32 (@sec-metrics); protocol: @sec-protocol.
 
+```{python}
+#| label: setup-limits
+#| include: false
+import json
+from pathlib import Path
+RES = Path("..") / "results"
+def char_arms(artifact):
+    """The three-protocol artifact of one dataset, arms keyed by architecture (the arm label's first word)."""
+    C = json.load(open(RES / "char" / artifact))
+    return C, {arm.split()[0]: d for arm, d in C["arms"].items()}
+def shift(arms, arch, field, protocol):
+    """A protocol's error over the native error of the same arm."""
+    return arms[arch][protocol][field]["mean"] / arms[arch]["native"][field]["mean"]
+def fmt_ratio(r):
+    return f"{r:.0f}x" if r >= 10 else f"{r:.1f}x" if r >= 2 else f"{r:.2f}"
+VC, VOL = char_arms("drivaerml_volume.json"); SC, SURF = char_arms("drivaerml_surface.json")
+LC, LUG = char_arms("lug.json"); TC, T2D = char_arms("tensile2d.json"); AC, AIR = char_arms("airfrans.json"); UC, SUV = char_arms("shift_suv_surface.json")
+BASELINES = ("GeoTransolver", "Transolver")
+```
+
 ## What this book does not claim {#sec-not-claimed}
 
 **Each claim in this book has a scope, and the list below names what sits
@@ -22,12 +42,18 @@ outside it; the sections above state each one with its instrument.**
   (@sec-limits-in-distribution).
 - **Not that equivariance is an accuracy edge in general.** A baseline
   trained in a canonical frame is exactly pose-invariant. ISLA's pose lead
-  is against baselines that learn pose from augmentation, in random poses
-  (@sec-pose, @sec-pose-contract).
+  is against GeoTransolver and Transolver trained in the laboratory frame
+  without augmentation, scored in random poses (@sec-pose,
+  @sec-pose-contract).
+- **Not that ISLA's pose invariance is exact on every mesh.** It holds
+  within a fraction of a percent on meshes without equidistant boundary samples
+  and is not where a query's nearest boundary sample is tied
+  (@sec-limits-ties).
 - **Not that discretization consistency is an exact invariance.** It is a
   fine-mesh-limit property: ISLA's residual under a biased draw is
   quadrature variance that shrinks with cell count (@sec-principle,
-  @sec-robustness-density).
+  @sec-robustness-density); and on the Volume task the interior readout
+  depends on the law that places the boundary tokens (@sec-limits-boundary-law).
 - **Not that ISLA is indifferent to the training sampling law.** Its
   dependence is weak beside GeoTransolver and Transolver, whose errors
   change by factors. Why the cars show the larger dependence is an open
@@ -56,8 +82,9 @@ memory (@tbl-scoreboard-435). Below 109 cars GeoTransolver-256 leads. On
 the wings both baselines lead on every rung, and ISLA's width, depth and
 learning rate, the cell count and GeoTransolver's width all leave that
 ordering where it is (@tbl-wing-controls). What ISLA buys elsewhere is
-stated with its scope where it is measured: exact pose covariance
-(@sec-pose-contract), weak dependence on the law the training sample is
+stated with its scope where it is measured: pose covariance, exact on
+meshes without tied boundary samples (@sec-pose-contract,
+@sec-limits-ties), weak dependence on the law the training sample is
 drawn by (@sec-training-law), slice territories that stay put under a
 change of draw (@sec-territories), the interior leads on two datasets
 (@sec-interior) and the memory frontier (@sec-review-frontier). What would
@@ -117,13 +144,15 @@ the protocol is @sec-equal-budget; the limits on the mechanism are these.
   that prices the measure semantics, never a configuration
   (@sec-principle); the instrument that separates the two parts is the
   training-law test (@sec-training-law), on two datasets.
-- **The contracts are exact in float32 and not in bf16.** On the trained
-  GPU path the rotation and translation residual is at the level of
-  float32 rounding, and at the level of a few percent of the field under
-  the bf16 autocast the recipe trains with, mostly ordinary rounding. A
-  bf16 deployment does not exercise the contracts at the level the book
-  claims for them; float32 inference does (@sec-isla-contracts,
-  @sec-using-sampler).
+- **The contracts are exact in float32 and not in bf16, on meshes without
+  tied boundary samples.** On the trained GPU path the rotation and
+  translation residual is at the level of float32 rounding, and at the
+  level of a few percent of the field under the bf16 autocast the recipe
+  trains with, mostly ordinary rounding. A bf16 deployment does not
+  exercise the contracts at the level the book claims for them; float32
+  inference does (@sec-isla-contracts, @sec-using-sampler). Where a
+  query's nearest boundary sample is tied, float32 inference does not
+  either (@sec-limits-ties).
 
 ### Regime extrapolation {#sec-limits-regime}
 
@@ -152,23 +181,69 @@ datasets provides one.
 
 ### Interior accuracy {#sec-limits-interior}
 
-**The interior standing of @sec-interior holds at the training query
-count on two datasets (DrivAerML Volume task, AirfRANS interior task). ISLA
-leads GeoTransolver-volume on velocity on both, leads on pressure on the
-cars and trails on pressure and eddy viscosity on the airfoils, every
-paired seed ratio on the same side.** Four limits bound it. The comparison is not
-resource-matched and the two models do not receive the same inputs.
-GeoTransolver-volume fed the physical velocity changes by under 2% on
-every field, so the ratios are not an input-scale artifact. The interacting
-decode's prediction depends on the joint query set, and training over a
-range of counts reduces the dependence without removing it, so the
-interacting configuration is deployed at its training count
-(@sec-interior-companion). And the
-eddy-viscosity metric is on a standardized field, so its ratios are
-orderings under that centering, not physical percentages. What would move
-this: a third seed of the interior configuration on both datasets, and
-GeoTransolver-volume on the 54- and 109-car interior rungs, where only ISLA
-is measured (@sec-interior-results).
+```{python}
+#| label: para-limits-interior
+#| output: asis
+r = lambda arms, arch, f: arms[arch]["native"][f]["mean"] / arms["ISLA"]["native"][f]["mean"]
+print(f"**The interior standing holds at the scoring query count on two datasets (DrivAerML Volume task, AirfRANS interior task). ISLA leads "
+      f"GeoTransolver on velocity on both (GeoTransolver ÷ ISLA {r(VOL, 'GeoTransolver', 'velocity_l2'):.2f} on the cars, "
+      f"{fmt_ratio(r(AIR, 'GeoTransolver', 'velocity_l2'))} on the airfoils), is level with it on pressure on the cars "
+      f"({r(VOL, 'GeoTransolver', 'pressure_l2'):.2f}) and trails on pressure on the airfoils ({r(AIR, 'GeoTransolver', 'pressure_l2'):.2f}), "
+      f"trails on eddy viscosity on the cars ({r(VOL, 'GeoTransolver', 'nut_l2'):.2f}) and is level on the airfoils "
+      f"({r(AIR, 'GeoTransolver', 'nut_l2'):.2f}); Transolver trails ISLA on pressure and velocity on both (@tbl-drivaerml-volume-protocols, "
+      "@tbl-airfrans-protocols).** Three limits bound it. The comparison is not resource-matched and the architectures do not receive the "
+      "same inputs: the baselines read interior points with the stored signed distance and its gradient and never see the boundary sample. "
+      "The interacting decode's prediction depends on the joint query set, and training over a range of counts reduces the dependence "
+      "without removing it, so the interacting configuration is deployed at its training count (@sec-interior-companion). The "
+      "eddy-viscosity metric is on a standardized field, so its ratios are orderings under that centering, not physical percentages. And "
+      "the seed means are over two seeds per arm. What would move this: the "
+      "baselines on the 54- and 109-car interior rungs, where only ISLA is measured (@sec-interior-results).")
+```
+
+### The volume model and the boundary token law {#sec-limits-boundary-law}
+
+```{python}
+#| label: para-limits-boundary-law
+#| output: asis
+F3 = [("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity")]
+vol_area = [shift(VOL, "ISLA", f, "area") for f, _ in F3]
+surf_area = max(abs(shift(SURF, "ISLA", f, "area") - 1) for f in SURF["ISLA"]["native"])
+base_area = max(abs(shift(VOL, a, f, "area") - 1) for a in BASELINES for f, _ in F3)
+print(f"**ISLA's interior prediction on the DrivAerML Volume task depends on the law that places its boundary tokens: under an "
+      f"area-proportional uniform redraw of the boundary surface its errors are {fmt_ratio(min(vol_area))} to {fmt_ratio(max(vol_area))} "
+      f"its native errors ({' / '.join(f'{fmt_ratio(v)} on {lab}' for v, (_, lab) in zip(vol_area, F3))}), while the Surface model's errors "
+      f"under the same redraw are within {100 * surf_area:.0f}% of native (@tbl-drivaerml-volume-protocols, "
+      "@tbl-drivaerml-surface-protocols).** GeoTransolver and Transolver are untouched by that variant (largest change "
+      f"{100 * base_area:.2f}%) because they never read the boundary sample, so the column compares nothing across architectures; it "
+      "measures a property of the trained volume model alone, and it is an open weakness of that model. The mechanism is not measured. "
+      "The candidate is that the queries' attention over the boundary tokens weights by measure, and the area law moves the tokens from "
+      "the finely meshed curved features of the car to its flat panels, which changes what each query reads. What would move this: the "
+      "volume model trained under the area law, or scored under a biased draw whose penalty shrinks with cell count as the Surface model's "
+      "does (@sec-robustness-density); until then the interior standing is a native-mesh standing.")
+```
+
+### Pose invariance where boundary samples tie {#sec-limits-ties}
+
+```{python}
+#| label: para-limits-ties
+#| output: asis
+lug_shift = shift(LUG, "ISLA", "von_mises_l2", "posed"); t2_shift = shift(T2D, "ISLA", "stress_l2", "posed")
+exact = max(abs(shift(arms, "ISLA", f, "posed") - 1) for arms in (VOL, SURF, AIR, SUV) for f in arms["ISLA"]["native"])
+lug_native = LUG["ISLA"]["native"]["von_mises_l2"]["mean"]; lug_delta = LUG["ISLA"]["posed"]["von_mises_l2"]["mean"] - lug_native
+print(f"**ISLA's error is within {100 * exact:.2f}% of its native error under a generic rotation and translation on the DrivAerML "
+      f"Surface and Volume tasks, AirfRANS and Shift-SUV, and it is not on the two structured finite-element meshes: "
+      f"{lug_shift:.2f} times its native error on the lug and {t2_shift:.2f} times on Tensile2d "
+      "(@tbl-lug-protocols, @tbl-tensile2d-protocols).** The cause is a discontinuity in the geometry construction, not a frame-dependent "
+      "input: every input is transformed consistently, and an exact rigid motion in float32 (a quarter turn about an axis) leaves the "
+      "trained prediction invariant to roundoff, while a float-inexact motion, or a coordinate jitter far below float32 resolution with "
+      "no motion at all, changes it by the order of the posed shift. Each query reads its nearest boundary sample, and on a structured "
+      "mesh most interior nodes are equidistant from two boundary centroids to within roundoff, so the choice is decided by sub-roundoff "
+      "noise and the direction feature changes by order one where the two candidates sit on faces at a large angle. The factor is large "
+      f"on the lug because its native error is {100 * lug_native:.2f}% of the field: the posed-minus-native difference is "
+      f"{100 * lug_delta:.2f}%, invisible against the several-percent errors of the aerodynamic tasks (@sec-interior-lug). The remedy is a "
+      "measure-weighted average over near-tied boundary samples in the geometry construction, which makes the feature continuous; it is "
+      "future work on the class, and every pose number in the book is measured without it.")
+```
 
 ### The prediction depends on the query set {#sec-limits-query-independence}
 
@@ -232,9 +307,10 @@ further steady boundary-driven PDEs is still the open axis.** These sets
 were chosen for varying boundary conditions and loads, not only varying
 geometry, so that the global-scalar, global-vector and boundary-input
 channels are exercised; each is drawn on sample cases in its own chapter
-(@sec-tensile2d, @sec-lug, @sec-deepjeb). On Tensile2d GeoTransolver-512
-leads at 400 cases on every stress component: that is the standing that
-most needs a located mechanism. AeroZoo, a diversity-stress aerodynamics
+(@sec-tensile2d, @sec-lug, @sec-deepjeb). On Tensile2d GeoTransolver and
+Transolver lead ISLA on stress, displacement and plastic strain, and on
+the lug ISLA leads both: the Tensile2d standing is the one that most needs
+a located mechanism. AeroZoo, a diversity-stress aerodynamics
 benchmark in generation, is the coming out-of-distribution instance within
 external aerodynamics; it carries no number yet, and the status of each
 conversion is in @sec-program-status.
@@ -284,15 +360,17 @@ accuracy against the contracts rather than a preference for
 GeoTransolver.
 
 **The interior recommendation becomes unconditional for ISLA** only if
-the AirfRANS pressure and eddy-viscosity deficits close without moving
-velocity. Until then the recommendation on the interior is ISLA on
-velocity on both datasets and on every DrivAerML Volume field, and
-GeoTransolver-volume on AirfRANS pressure and eddy viscosity
-(@sec-interior).
+the AirfRANS pressure deficit and the DrivAerML eddy-viscosity deficit
+close without moving velocity, and the volume model's dependence on the
+boundary token law is removed (@sec-limits-boundary-law). Until then the
+recommendation on the interior is ISLA on velocity on both datasets and on
+DrivAerML Volume pressure, and GeoTransolver on AirfRANS pressure and
+DrivAerML Volume eddy viscosity (@sec-interior).
 
 If neither fires, the recommendation stands as written, with the bounds
 of this chapter attached. The program's ISLA-specific claims are these:
-exact covariance and its lead in arbitrary poses; consistency under a
+covariance that is exact on meshes without tied boundary samples
+(@sec-limits-ties) and its lead in arbitrary poses; consistency under a
 change of inference draw and weak dependence on the training sampling law,
 both properties of the origin-free frame and the measure weights; the
 interior velocity lead; the cost figures of @sec-capacity; and, on
