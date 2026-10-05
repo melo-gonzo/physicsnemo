@@ -5,19 +5,25 @@ Lane `isla-qi-kernel`, branch `psharpe/isla-qi-kernel` (base `psharpe/isla-indep
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-03-isla-qi-kernel/`
 (job prefix `isla.kernel.`). Brief: `BRIEF.md` (this folder).
 
-## Status (2026-10-05 04:35 PDT)
+## Status (2026-10-05 06:50 PDT)
 
-- Implementation and float64 contract tests done (32 kernel-read tests; 202 ISLA tests
-  pass, CUDA included). Commits a7be6350c, be04b6584, 9c564e99a.
-- Pilots (DrivAerML Volume, 100 epochs, seed 42) running since 01:55; design chosen at
-  pilot epochs 14-30 (below): `kernel_read="sum"`, `R = 0.01 L`, last 4 blocks.
-- Full lanes (that design, both datasets, seeds 42 and 43, 500 epochs) running since
-  02:33-02:52; expected completion about 11:30-12:00 PDT (DrivAerML ~63 s/epoch,
-  AirfRANS ~60 s/epoch).
-- Pilot result (epoch 100, scored): the read cuts the read-only twin's pressure and
-  velocity error by 11% and 8% (11% and 10% within 0.01 L of the wall) and raises eddy
-  viscosity by 5%. Contracts hold on the trained checkpoint (float64 independence
-  1e-13).
+- **Verdict: pending** (full lanes at epochs 210-247 of 500). Expected completion
+  about 11:00 (DrivAerML) and 12:00 PDT (AirfRANS); the scoring, probes and the
+  reduction against the bars are submitted automatically when all four finish
+  (watcher job 1043128; see Open issues).
+- **Pilot (DrivAerML, 100 epochs, scored):** the read cuts the read-only twin's
+  pressure and velocity error by 11% and 8% (10-11% within 0.01 L of the wall) and
+  raises eddy viscosity by 5% (the wake, where no point reads); the mean read and the
+  every-block placement cut velocity more (14%) but raise eddy viscosity by 25%.
+- **Full lanes so far (training-log validation, epoch ~200-240):** kernel /
+  interacting = 1.01-1.09 pressure, 0.93-0.99 velocity, 1.3-1.5 eddy viscosity on
+  DrivAerML; 0.85-0.89 / 0.98-0.99 / 1.13-1.19 on AirfRANS. If that holds, pressure
+  and velocity reach the interacting model and eddy viscosity misses the 1.10 bar on
+  both datasets: **falsified on eddy viscosity alone** would be the outcome.
+- Contracts hold on trained checkpoints of both datasets (float64 independence
+  1e-14 to 4e-13 of the RMS target; posed residual at the class's known level).
+- Commits: a7be6350c (the read), be04b6584 (Triton segment kernels, shared basis),
+  9c564e99a (stored pair tensors; the full lanes' code), report commits after.
 
 ## Question
 
@@ -224,16 +230,16 @@ Float32: sentinels 4e-5 / 6e-5 / 7e-4, chunked 1e-4 / 1.3e-3 / 8e-4 of the RMS t
 Task dir `agents/2026-10-03-isla-qi-kernel`, `kernel/lanes.tsv`, chained 3h59 links
 (`kernel/lanes.sbatch`), first job ids in `kernel/submitted.tsv`.
 
-| idx | run | dataset | design | epochs | code | first job | state (02:45) |
+| idx | run | dataset | design | epochs | code | first job | state (06:50) |
 |---|---|---|---|---|---|---|---|
-| 0 | kp_drvol_ro_seed42 | DrivAerML | read-only twin | 100 | kq2 | 1041303 | running |
-| 1 | kp_drvol_sum4_seed42 | DrivAerML | sum, last 4 | 100 | kq2 | 1041304 | running |
-| 2 | kp_drvol_mean4_seed42 | DrivAerML | mean, last 4 | 100 | kq2 | 1041305 | running |
-| 3 | kp_drvol_sum12_seed42 | DrivAerML | sum, every block | 100 | kq2 | 1041306 | running |
-| 4 | kq_drvol_sum4_seed42 | DrivAerML | sum, R=0.01, last 4 | 500 | kq3 | 1041666 | running |
-| 5 | kq_drvol_sum4_seed43 | DrivAerML | same | 500 | kq3 | 1041667 | queued |
-| 6 | kq_af_sum4_seed42 | AirfRANS | same | 500 | kq3 | 1041668 | queued |
-| 7 | kq_af_sum4_seed43 | AirfRANS | same | 500 | kq3 | 1041669 | queued |
+| 0 | kp_drvol_ro_seed42 | DrivAerML | read-only twin | 100 | kq2 | 1041303 | done (epoch 100) |
+| 1 | kp_drvol_sum4_seed42 | DrivAerML | sum, last 4 | 100 | kq2 | 1041304 | done (epoch 100) |
+| 2 | kp_drvol_mean4_seed42 | DrivAerML | mean, last 4 | 100 | kq2 | 1041305 | done (epoch 100) |
+| 3 | kp_drvol_sum12_seed42 | DrivAerML | sum, every block | 100 | kq2 | 1041306 | done (epoch 100) |
+| 4 | kq_drvol_sum4_seed42 | DrivAerML | sum, R=0.01, last 4 | 500 | kq3 | 1041666 | link 2 (1041676), epoch 247 |
+| 5 | kq_drvol_sum4_seed43 | DrivAerML | same | 500 | kq3 | 1041667 | link 1, epoch 232 |
+| 6 | kq_af_sum4_seed42 | AirfRANS | same | 500 | kq3 | 1041668 | link 1, epoch 210 |
+| 7 | kq_af_sum4_seed43 | AirfRANS | same | 500 | kq3 | 1041669 | link 1, epoch 210 |
 
 `code_kq3` (9c564e99a) differs from `code_kq2` only in storing the pair tensors
 instead of recomputing them in backward (identical outputs and gradients, tested).
@@ -257,9 +263,13 @@ noisy single-epoch values, not the scorer's numbers.
 | lane | epoch | kernel / interacting | kernel / read-only |
 |---|---|---|---|
 | DrivAerML s42 | 140 | 1.00 / 0.97 / 1.60 | 0.92 / 0.81 / 0.97 |
+| DrivAerML s42 | 240 | 1.02 / 0.93 / 1.29 | 0.94 / 0.79 / 0.95 |
 | DrivAerML s43 | 120 | 1.08 / 1.03 / 1.85 | 0.92 / 0.82 / 1.10 |
+| DrivAerML s43 | 230 | 1.09 / 0.99 / 1.50 | 0.95 / 0.80 / 0.98 |
 | AirfRANS s42 | 110 | 0.79 / 0.97 / 1.08 | 0.80 / 0.95 / 1.00 |
+| AirfRANS s42 | 200 | 0.89 / 0.98 / 1.13 | 0.94 / 0.99 / 1.04 |
 | AirfRANS s43 | 110 | 0.84 / 0.99 / 1.21 | 0.85 / 0.98 / 1.10 |
+| AirfRANS s43 | 200 | 0.85 / 0.99 / 1.19 | 0.91 / 0.96 / 1.01 |
 
 So far the read brings pressure and velocity to the interacting level (DrivAerML) or
 below it (AirfRANS pressure), and leaves eddy viscosity at the read-only level. The
