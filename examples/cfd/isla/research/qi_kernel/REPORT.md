@@ -70,6 +70,29 @@ How each requirement is met:
 | measure scale | only measure fractions enter (and the null is a fraction of the total) |
 | cost | exact radius search (Warp hash grid on CUDA in float32, exact chunked cdist otherwise) once per forward; pair sums in Triton segment kernels without atomics; per-block pair tensors recomputed in backward |
 
+## Tests (float64 unless noted; `test/experimental/models/isla/test_isla_kernel_read.py`)
+
+32 tests, both modes; the 170 ISLA tests of the base pass unchanged (202 in all, CUDA
+included). With `kernel_read=None` the model owns no new parameter and every existing
+golden passes.
+
+- exact query independence: alone, prefix, permuted, chunked (1e-12);
+- rotation and reflection covariance with translation, 3-D and 2-D (1e-10);
+- similarity gauge (x -> 2.7 x + shift, areas x 2.7^2, the sdf input x 2.7), boundary
+  refinement (every cell as two coincident half-measure copies: the pair count doubles
+  exactly, nothing is dropped, outputs equal), measure scale (x 137);
+- locality: a point with no cell within R gets exactly the plain read-only value; the
+  falloff vanishes smoothly at R (difference < 1e-8 just inside it);
+- every parameter receives a gradient (every block, last block only; DDP);
+- bf16 autocast finite (values and gradients); a rank-1 boundary input enters the
+  pair invariants covariantly;
+- CUDA: the hash-grid radius search returns the exact set (3-D and 2-D, rim pairs
+  aside); the Triton segment sum and pair dot equal the eager reference in float64 and
+  float32 (forward and both gradients); the protocol's training path (fused geometry
+  kernel, compiled blocks, bf16) is finite, matches the eager path to bf16 roundoff
+  and stays query-independent; checkpointed and stored pair tensors give identical
+  gradients.
+
 ## Boundary statistics that fixed R (held-out cases, protocol sample size)
 
 `boundary_stats.py`; AGA `stats/drvol.json`, `stats/af.json`; three cases each.
