@@ -33875,3 +33875,72 @@ trains at the same cost as the baselines here.
 **What it changes.** Chapter 10 is restated from the artifact: the three
 are within 9% natively (Transolver leads), and the scoring-protocol columns
 carry the dataset's reading.
+
+## 2026-10-05 — CHAR lug under the final references: GeoTransolver width 256 leads ISLA width 512 with 512 slices by 1.9x on von Mises stress (0.0021 against 0.0040) under the float32 protocol; LUG-PREC shows the gap is a precision sensitivity of the final ISLA model (bfloat16 0.0035 for both ISLA configurations and 0.0038 to 0.0044 for the baselines; float32 lowers every lane to 0.0021 to 0.0025 except the 512-slice ISLA, which reads worse in float32 on 20% and 42% of the cases) {#sec-nb-char-lug-final}
+
+**Setting.** The lug interior task (GINOT plastic lug, 600 test cases,
+5,000 to 15,000 nodes per case, scored whole) re-run under the final
+reference configurations (@sec-nb-ref80-verdict): `cl_r_lug_isla` (ISLA width
+512 with 512 slices, 3.75e-4), `cl_r_lug_gt` (GeoTransolver width 256),
+`cl_r_lug_t` (Transolver width 512 with 16 layers), 500 epochs, two seeds,
+float32 under the three protocols (`results/char/lug.json`). First pass
+(ISLA width 768, baselines width 1,024): @sec-nb-char-lug-interim.
+
+**What we saw (seed means; per seed; von Mises relative L2).** Native:
+ISLA 0.0040 (0.0035 / 0.0046), GeoTransolver 0.0021 (0.0023 / 0.0019),
+Transolver 0.0022 (0.0023 / 0.0020). Point cloud = native (whole mesh).
+Rotated and translated: ISLA 0.0065 (0.0070 / 0.0060), 1.6x its native
+error; GeoTransolver 0.94, Transolver 1.02. **Against the first pass the
+standing reverses**: ISLA width 768 read 0.0021 (both seeds 0.0021) and led
+GeoTransolver width 1,024 (0.0026) by 1.24x; ISLA width 512 with 512 slices
+reads 0.0040 and trails GeoTransolver width 256 (0.0021) by 1.9x, with the
+two ISLA seeds 30% apart.
+
+**The anomaly and the instrument.** The training-time validation error
+(bfloat16, the training precision, every tenth epoch) of the two ISLA
+configurations is identical: 0.0035 for the width-768 lanes and 0.0035 /
+0.0036 for the width-512 lanes, flat from epoch 240 to 499 on all four
+(`runs/cl*_lug_isla_*/metrics.jsonl`, val_summary rows). A 2x difference in
+the float32 scorer between two models with the same bfloat16 validation
+error says the scorer's precision, not the training, separates them. LUG-PREC
+(`kernel/char/lug_prec.sbatch`, `results/char/lug_prec_2026-10-05.py` /
+`.json`) scores eight lug lanes with the same scorer in bfloat16 and
+compares per case with the float32 record. **Result.** In bfloat16 every
+lane reads 0.0035 to 0.0044: ISLA 768 0.0035 / 0.0035, ISLA 512 with 512
+slices 0.0035 / 0.0035, GeoTransolver 0.0038 (1,024) and 0.0041 (256),
+Transolver 0.0044 (1,024) and 0.0043 (512 x 16); the bfloat16 output
+resolution sets an error floor near 0.0035 on this task, whose exact
+errors are below it. In float32 the baselines and the width-768 ISLA drop to
+0.0021 to 0.0025 (float32 lowers the per-case error by more than 1.5x on 63%
+to 91% of the 600 cases and raises it by more than 1.5x on 0% to 1.5%). **The
+width-512, 512-slice ISLA does not**: float32 reads 0.0035 and 0.0046, it
+lowers the per-case error by more than 1.5x on 41% and 49% of the cases and
+raises it by more than 1.5x on 20% and 42%, with worst cases at 0.0081
+against 0.0029 and 0.0131 against 0.0031. The two ISLA configurations
+compute the same bfloat16 function to the resolution of the validation
+metric and different float32 functions.
+
+**Mechanism (measured in @sec-nb-char-lug-interim, applied here).** The lug
+is the dataset where the nearest-boundary-sample distance is tied within
+1e-4 for 76% of the nodes and a 1e-7 coordinate jitter changes 1.1% of the
+output; which boundary sample a node selects depends on rounding, and the
+precision of the forward pass is one more rounding. The 512-slice model is
+the one whose outputs move most when the selection changes; why it is more
+sensitive than the 256-slice width-768 model is not measured here (a
+hypothesis: twice the prototypes, twice the slice boundaries a changed
+selection can cross). The posed 1.6x shift of the same model is the same
+mechanism under a different perturbation.
+
+**Standing under the protocol.** The reporting protocol is float32, and
+under it GeoTransolver width 256 ÷ ISLA = 0.53 and Transolver 0.55, both
+leading on both seeds; the chapter states this standing. It also states
+what LUG-PREC measured: the deficit is a numerical sensitivity of the trained
+model's nearest-sample geometry on a tied mesh, not a capacity or training
+difference, and it is the clearest measured instance of the limit named in
+@sec-nb-char-lug-interim. The fix candidates (a soft or k-nearest boundary
+sample, a tie-breaking rule that is a continuous function of the
+coordinates) are post-campaign architecture changes and wait for Peter.
+
+**Cost (one epoch, four GB300 ranks, bfloat16; `cs_r_lug_*`).** ISLA 8.9
+GiB, 184 s; GeoTransolver 6.1 GiB, 85 s; Transolver 10.0 GiB, 79 s. ISLA's
+epoch is 2.2x the baselines' mean on this 5,000 to 15,000-node task.

@@ -1,0 +1,117 @@
+{
+ "protocol": "LUG-PREC (2026-10-05, #sec-nb-char-lug-final): the lug campaign lanes scored by the same scorer in bfloat16 (the training\nprecision) and float32 (the reporting protocol), per validation case, to separate a precision sensitivity of the\nnearest-boundary-sample geometry from a configuration effect. Reads campaigns_2026-10-02/char/lug_prec/bfloat16/<run>/<run>/metrics.jsonl\nand campaigns_2026-10-02/char/cl/metrics/<run>/<run>/metrics.jsonl (float32). Writes results/char/lug_prec_2026-10-05.json:\nlanes[run] = {bf16, fp32, n_cases, median_abs_diff, frac_fp32_worse_1p5x, frac_fp32_better_1p5x, worst_case}.\nusage: python lug_prec_2026-10-05.py",
+ "lanes": {
+  "cl_lug_isla_seed42": {
+   "label": "ISLA 768 (first pass)",
+   "bf16": 0.0034503694375356037,
+   "fp32": 0.0020810653765996295,
+   "n_cases": 600,
+   "median_abs_diff": 0.0016111921286210418,
+   "frac_fp32_worse_1p5x": 0.015,
+   "frac_fp32_better_1p5x": 0.85,
+   "worst_case": {
+    "id": "02038_lug_2038_lug_2038",
+    "fp32": 0.020210513845086098,
+    "bf16": 0.0032260341104120016
+   }
+  },
+  "cl_lug_isla_seed43": {
+   "label": "ISLA 768 (first pass)",
+   "bf16": 0.0035091082255045572,
+   "fp32": 0.0020971635977427164,
+   "n_cases": 600,
+   "median_abs_diff": 0.0015511128585785627,
+   "frac_fp32_worse_1p5x": 0.015,
+   "frac_fp32_better_1p5x": 0.8316666666666667,
+   "worst_case": {
+    "id": "02003_lug_2003_lug_2003",
+    "fp32": 0.00866621732711792,
+    "bf16": 0.0033982116729021072
+   }
+  },
+  "cl_r_lug_isla_seed42": {
+   "label": "ISLA 512 with 512 slices",
+   "bf16": 0.00347275972366333,
+   "fp32": 0.0034681336085001626,
+   "n_cases": 600,
+   "median_abs_diff": 0.0014745188527740538,
+   "frac_fp32_worse_1p5x": 0.19666666666666666,
+   "frac_fp32_better_1p5x": 0.4066666666666667,
+   "worst_case": {
+    "id": "02578_lug_2578_lug_2578",
+    "fp32": 0.0080686891451478,
+    "bf16": 0.0029270900413393974
+   }
+  },
+  "cl_r_lug_isla_seed43": {
+   "label": "ISLA 512 with 512 slices",
+   "bf16": 0.0034823131561279295,
+   "fp32": 0.004625074863433838,
+   "n_cases": 600,
+   "median_abs_diff": 0.0018550094100646675,
+   "frac_fp32_worse_1p5x": 0.4216666666666667,
+   "frac_fp32_better_1p5x": 0.48833333333333334,
+   "worst_case": {
+    "id": "00313_lug_0313_lug_0313",
+    "fp32": 0.013132517226040363,
+    "bf16": 0.0030898251570761204
+   }
+  },
+  "cl_lug_gt_seed42": {
+   "label": "GeoTransolver 1,024 (first pass)",
+   "bf16": 0.003822786808013916,
+   "fp32": 0.0024966396888097125,
+   "n_cases": 600,
+   "median_abs_diff": 0.0013472487917169929,
+   "frac_fp32_worse_1p5x": 0.0,
+   "frac_fp32_better_1p5x": 0.63,
+   "worst_case": {
+    "id": "01575_lug_1575_lug_1575",
+    "fp32": 0.003986359108239412,
+    "bf16": 0.003993799444288015
+   }
+  },
+  "cl_r_lug_gt_seed42": {
+   "label": "GeoTransolver 256",
+   "bf16": 0.004050753116607666,
+   "fp32": 0.0022914167245229084,
+   "n_cases": 600,
+   "median_abs_diff": 0.0017797757172957063,
+   "frac_fp32_worse_1p5x": 0.0,
+   "frac_fp32_better_1p5x": 0.8783333333333333,
+   "worst_case": {
+    "id": "01645_lug_1645_lug_1645",
+    "fp32": 0.008725306950509548,
+    "bf16": 0.0084303580224514
+   }
+  },
+  "cl_lug_t_seed42": {
+   "label": "Transolver 1,024 (first pass)",
+   "bf16": 0.004427657922108968,
+   "fp32": 0.002510107755661011,
+   "n_cases": 600,
+   "median_abs_diff": 0.001950903213582933,
+   "frac_fp32_worse_1p5x": 0.0,
+   "frac_fp32_better_1p5x": 0.8433333333333334,
+   "worst_case": {
+    "id": "01626_lug_1626_lug_1626",
+    "fp32": 0.008339649997651577,
+    "bf16": 0.007331006228923798
+   }
+  },
+  "cl_r_lug_t_seed42": {
+   "label": "Transolver 512 x 16",
+   "bf16": 0.0042919135093688965,
+   "fp32": 0.0023111812273661297,
+   "n_cases": 600,
+   "median_abs_diff": 0.0020251813111826777,
+   "frac_fp32_worse_1p5x": 0.0,
+   "frac_fp32_better_1p5x": 0.9066666666666666,
+   "worst_case": {
+    "id": "01626_lug_1626_lug_1626",
+    "fp32": 0.007698449771851301,
+    "bf16": 0.007637576200067997
+   }
+  }
+ }
+}
