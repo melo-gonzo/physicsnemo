@@ -5,7 +5,7 @@ Lane `isla-qi-kernel`, branch `psharpe/isla-qi-kernel` (base `psharpe/isla-indep
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-03-isla-qi-kernel/`
 (job prefix `isla.kernel.`). Brief: `BRIEF.md` (this folder).
 
-## Status (2026-10-05 15:00 PDT): complete
+## Status (2026-10-05 16:05 PDT): complete
 
 - **Verdict: falsified** by the preregistered bars. Kernel / interacting-256 at
   epoch 500 (`infer.py`, float32, seed means): DrivAerML Volume 1.162 / 1.317 / 1.202
@@ -19,7 +19,7 @@ Lane `isla-qi-kernel`, branch `psharpe/isla-qi-kernel` (base `psharpe/isla-indep
 - **Caveat on DrivAerML pressure and velocity: arithmetic dependence.** The
   bf16-trained DrivAerML kernel models score much better in bf16 than in the
   protocol's float32 (velocity 0.0635 against 0.0888 on seed 42); the references do
-  not (they get 4-10% worse in bf16). Scored in bf16 throughout, kernel /
+  not (they get 1-18% worse in bf16). Scored in bf16 throughout, kernel /
   interacting is DrivAerML 1.051 / 0.954 / 1.301 and AirfRANS 0.844 / 0.980 / 1.221:
   still falsified (eddy viscosity). The read's own arithmetic is not the cause: the
   dependence sits in the token embeddings (rounding only their inputs to bf16
@@ -378,7 +378,7 @@ the 100-epoch pilot shows the same pattern at a smaller size, 0.1130 / 0.1067.)
 Rounding the embeddings' inputs to bf16 alone recovers the bf16 score in an
 otherwise float32 model. The trained kernel models have learned to depend on the
 bf16 rounding of the token input features; the AirfRANS kernel models do not (bf16
-makes them worse), and on DrivAerML the references get 4-10% worse in bf16.
+makes them worse), and on DrivAerML the references get 1-18% worse in bf16.
 
 ### Band anatomy (DrivAerML, protocol arithmetic)
 
@@ -482,7 +482,7 @@ velocity gap but cannot by itself close the eddy-viscosity gap.
   already matches the interacting model on every field. Not launched.
 - **Arithmetic dependence of the DrivAerML kernel models.** They score 11-39% worse in
   float32 than in their bf16 training arithmetic on velocity; the references move
-  4-10% the other way. The read's own operations are not the cause; the token
+  1-18% the other way. The read's own operations are not the cause; the token
   embeddings are (`prec_probe.py`, Results). Any follow-up should score in both
   arithmetics; a fix (the embeddings, or the whole point-token input path, in
   float32 under autocast) would need retrained lanes to test, and would change only
