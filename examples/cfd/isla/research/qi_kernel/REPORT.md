@@ -5,13 +5,19 @@ Lane `isla-qi-kernel`, branch `psharpe/isla-qi-kernel` (base `psharpe/isla-indep
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-03-isla-qi-kernel/`
 (job prefix `isla.kernel.`). Brief: `BRIEF.md` (this folder).
 
-## Status (2026-10-05 02:45 PDT)
+## Status (2026-10-05 04:35 PDT)
 
 - Implementation and float64 contract tests done (32 kernel-read tests; 202 ISLA tests
   pass, CUDA included). Commits a7be6350c, be04b6584, 9c564e99a.
 - Pilots (DrivAerML Volume, 100 epochs, seed 42) running since 01:55; design chosen at
   pilot epochs 14-30 (below): `kernel_read="sum"`, `R = 0.01 L`, last 4 blocks.
-- Full lanes (that design, both datasets, seeds 42 and 43, 500 epochs) submitted 02:32.
+- Full lanes (that design, both datasets, seeds 42 and 43, 500 epochs) running since
+  02:33-02:52; expected completion about 11:30-12:00 PDT (DrivAerML ~63 s/epoch,
+  AirfRANS ~60 s/epoch).
+- Pilot result (epoch 100, scored): the read cuts the read-only twin's pressure and
+  velocity error by 11% and 8% (14% and 10% within 0.01 L of the wall) and raises eddy
+  viscosity by 5%. Contracts hold on the trained checkpoint (float64 independence
+  1e-13).
 
 ## Question
 
@@ -145,13 +151,46 @@ context. Step = training step on 4 ranks (s).
 | 30 | 0.00226 | 0.00616 | 0.00536 | 0.00466 | - | - |
 | step (s) | 0.30 | 0.30 | 0.29 | 0.48 | 0.76 | 0.80 |
 
-All three read variants cut the twin's val loss by 13-20% at matched epochs; they are
-within the val noise of each other; `"mean"` costs 1.6x `"sum"` at the same
+All three read variants cut the twin's val loss by 13-20% at matched epochs up to 30;
+they are within the val noise of each other; `"mean"` costs 1.6x `"sum"` at the same
 placement and every-block placement 1.7x last-4. Chosen (2026-10-05 02:30, at pilot
-epochs 14-30): **`"sum"`, R = 0.01 L, last 4 blocks** (equal accuracy, cheapest). The
-pilots continue to epoch 100 and are scored with `infer.py`; the table above is
-updated as they finish. The interacting reference is still 2.4x lower in val loss at
-epoch 30 (it was 1.7x at epoch 100 and 1.1x-1.25x in relative L2 at epoch 500).
+epochs 14-30): **`"sum"`, R = 0.01 L, last 4 blocks** (equal accuracy, cheapest).
+Later the val-loss advantage shrank (sum, last 4: -13% at epochs 30-50, -7% at 70,
+-8% at 99). The val loss is dominated by eddy viscosity, which the read does not help
+(below).
+
+Pilot scores at epoch 100 (`infer.py`, float32, 48 held-out cars, relative L2):
+
+| pilot | pressure | velocity | eddy viscosity |
+|---|---|---|---|
+| read-only twin | 0.0676 | 0.1158 | 0.2510 |
+| sum, R=0.01 L, last 4 | 0.0601 (0.889) | 0.1061 (0.916) | 0.2638 (1.051) |
+| mean, R=0.01 L, last 4 | pending | pending | pending |
+| sum, R=0.01 L, every block | pending | pending | pending |
+
+Band anatomy of the same two (pooled relative L2 by \|stored sdf\|/L band; share of
+points in parentheses):
+
+| band | pressure twin / sum4 | velocity twin / sum4 | eddy viscosity twin / sum4 |
+|---|---|---|---|
+| < 0.01 (72%) | 0.0682 / 0.0604 | 0.1416 / 0.1271 | 0.1208 / 0.1193 |
+| 0.01-0.1 (17%) | 0.0605 / 0.0589 | 0.0625 / 0.0629 | 0.1187 / 0.1227 |
+| 0.1-1 (9%) | 0.1106 / 0.0894 | 0.0721 / 0.0740 | 0.1321 / 0.1470 |
+| > 1 (2%) | 0.3571 / 0.2991 | 0.0863 / 0.0906 | 0.4081 / 0.4301 |
+
+The read helps where it reads (velocity -10% and pressure -11% within 0.01 L of the
+wall) and pressure everywhere; eddy viscosity is unchanged near the wall and 3-11%
+worse away from it.
+
+Contracts on the trained pilot checkpoint (sum, last 4, epoch 100; `qi_probe.py`,
+first held-out car in float64 with the exact search): 2,000 sentinels alone against the
+native request, max difference / RMS target 7e-15 / 4e-14 / 6e-14 (p / U / nut);
+the native request in 5 chunks against one call 2e-14 / 2e-13 / 3e-13: exactly
+query-independent. Posed residual (random rotation and translation, float64)
+5.9e-4 / 1.7e-4 / 1.6e-4 relative L2, below the twin's 1.0e-3 / 3.8e-4 / 2.0e-4 (the
+class's on-wall sign flips of the built-in distance, QI amendment 1; not the read).
+Float32: sentinels 4e-5 / 6e-5 / 7e-4, chunked 1e-4 / 1.3e-3 / 8e-4 of the RMS target
+(float32 floor; the twin's 8e-5 / 7e-5 / 2e-4 and 6e-4 / 2.7e-3 / 8e-4).
 
 ## Lanes
 
