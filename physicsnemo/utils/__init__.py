@@ -24,5 +24,6 @@ from .checkpoint import (
     load_model_weights,
     save_checkpoint,
 )
+from .checkpoint_manager import CheckpointManager
 from .logging import LaunchLogger, PythonLogger, RankZeroLoggingWrapper
 from .profiling import Profiler

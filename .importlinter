@@ -57,6 +57,7 @@ containers=
 layers = 
    insolation | zenith_angle
    profiling
+   checkpoint_manager
    checkpoint
    capture
    logging | memory | _index_tuple_ops

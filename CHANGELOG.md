@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Adds `physicsnemo.utils.CheckpointManager`, a bounded checkpoint retention
+  policy over `save_checkpoint`: keeps the latest checkpoint (rotated each
+  epoch), the top-k by a validation metric under `best/`, a copy of the best
+  so far under `top_model/`, and optionally every N-th epoch.
 - Adds standalone FLARE++ attention and model APIs, with input-conditioned
   dynamic routing, plus a ``GALE_FPP`` backend for using the same mixer inside
   GeoTransolver.
