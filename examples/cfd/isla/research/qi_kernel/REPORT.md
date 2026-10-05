@@ -223,6 +223,34 @@ Expected duration: DrivAerML ~8.5 h (step 1.6x read-only), AirfRANS ~8.5 h (1.08
 The first job ids 1041649-1041652 were cancelled while pending (their job names
 clashed with the pilot chains' singleton names); `submit.sh` now prefixes the group.
 
+## Full lanes: progress (training-log validation; no verdict rests on it)
+
+The trainer's per-epoch validation relative L2 (DrivAerML: the validation cars of the
+training split; AirfRANS: the 200 test airfoils every 10 epochs, chunk-shaped
+requests) against the QI references' logs at the same epoch and seed. Ratios kernel /
+interacting and kernel / read-only, pressure / velocity / eddy viscosity. These are
+noisy single-epoch values, not the scorer's numbers.
+
+| lane | epoch | kernel / interacting | kernel / read-only |
+|---|---|---|---|
+| DrivAerML s42 | 140 | 1.00 / 0.97 / 1.60 | 0.92 / 0.81 / 0.97 |
+| DrivAerML s43 | 120 | 1.08 / 1.03 / 1.85 | 0.92 / 0.82 / 1.10 |
+| AirfRANS s42 | 110 | 0.79 / 0.97 / 1.08 | 0.80 / 0.95 / 1.00 |
+| AirfRANS s43 | 110 | 0.84 / 0.99 / 1.21 | 0.85 / 0.98 / 1.10 |
+
+So far the read brings pressure and velocity to the interacting level (DrivAerML) or
+below it (AirfRANS pressure), and leaves eddy viscosity at the read-only level. The
+reference's interacting / read-only eddy-viscosity ratio closed from about 2x during
+training to 1.17x (DrivAerML) and 1.42x (AirfRANS) at epoch 500; whether the kernel
+lanes follow decides the verdict.
+
+AirfRANS contracts on a trained checkpoint (`kq_af_sum4_seed42` at epoch 91,
+`qi_probe.py`, all 200 test airfoils; first one in float64 with the exact search):
+sentinels alone 5e-15 / 4e-15 / 5e-14 and 5 chunks 7e-15 / 4e-15 / 5e-14 of the RMS
+target (exactly query-independent); posed residual 8.5e-4 / 4.7e-4 / 2.1e-4 relative L2
+in float64 (the 2-D class's known on-wall sign effect; the QI read-only reference
+measured 1e-4 to 9.5e-4); float32 sentinels and chunks at 2e-6 to 4e-5.
+
 ## Open issues
 
 - The read's cost grows with the number of boundary cells near the points (a
