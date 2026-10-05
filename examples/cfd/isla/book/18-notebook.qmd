@@ -33932,7 +33932,7 @@ selection can cross). The posed 1.6x shift of the same model is the same
 mechanism under a different perturbation.
 
 **Standing under the protocol.** The reporting protocol is float32, and
-under it GeoTransolver width 256 ÷ ISLA = 0.53 and Transolver 0.55, both
+under it GeoTransolver width 256 ÷ ISLA = 0.52 and Transolver 0.54, both
 leading on both seeds; the chapter states this standing. It also states
 what LUG-PREC measured: the deficit is a numerical sensitivity of the trained
 model's nearest-sample geometry on a tied mesh, not a capacity or training

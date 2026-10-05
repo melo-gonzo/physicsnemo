@@ -240,6 +240,8 @@ TIE = json.load(open(RES / "char" / "lug_ties_2026-10-04.json")); T32 = TIE["fp3
 tied = TIE["two_nearest_tie_fraction_by_rel_gap"]["1e-04"]["fraction"]; flipped = TIE["nearest_index_changes_under_translation"]["fraction"]
 jit = [T32[f"jitter_{g}_rel_change"] for g in ("1e-7", "1e-6", "1e-5")]
 same_jit = max(jit) - min(jit) < 1e-4
+PREC = json.load(open(RES / "char" / "lug_prec_2026-10-05.json"))["lanes"]
+prec_worse = " and ".join(f"{100 * v['frac_fp32_worse_1p5x']:.0f}%" for r, v in PREC.items() if r.startswith("cl_r_lug_isla"))
 print(f"**ISLA's error is within {100 * exact:.2f}% of its native error under a generic rotation and translation on the DrivAerML "
       f"Surface and Volume tasks, AirfRANS and Shift-SUV, and it is not on the two structured finite-element meshes: "
       f"{lug_shift:.2f} times its native error on the lug and {t2_shift:.2f} times on Tensile2d "
@@ -256,7 +258,15 @@ print(f"**ISLA's error is within {100 * exact:.2f}% of its native error under a 
       f"on the lug because its native error is {100 * lug_native:.2f}% of the field: the posed-minus-native difference is "
       f"{100 * lug_delta:.2f}%, invisible against the several-percent errors of the aerodynamic tasks (@sec-interior-lug). The remedy is a "
       "measure-weighted average over near-tied boundary samples in the geometry construction, which makes the feature continuous; it is "
-      "future work on the class, and every pose number in the book is measured without it. Data: results/char/lug_ties_2026-10-04.json.")
+      "future work on the class, and every pose number in the book is measured without it. The same selection also depends on the "
+      "precision of the forward pass: on the lug the same checkpoints scored in bfloat16, the training precision, put ISLA width 512 with "
+      f"512 slices and both baselines within one band ({min(v['bf16'] for v in PREC.values()):.4f} to {max(v['bf16'] for v in PREC.values()):.4f}), "
+      f"while float32 scoring lowers the baselines to {min(v['fp32'] for r, v in PREC.items() if 'isla' not in r):.4f} to "
+      f"{max(v['fp32'] for r, v in PREC.items() if 'isla' not in r):.4f} and raises that ISLA's per-case error by more than 1.5x on "
+      f"{prec_worse} of the 600 cases, "
+      f"so the float32 standing on that dataset (GeoTransolver ÷ ISLA {rat(LUG, 'GeoTransolver', 'von_mises_l2'):.2f}) is a precision "
+      "sensitivity of one trained model and reverses across the scoring precision (@sec-interior-lug). Data: "
+      "results/char/lug_ties_2026-10-04.json; results/char/lug_prec_2026-10-05.json.")
 ```
 
 ### The prediction depends on the query set {#sec-limits-query-independence}

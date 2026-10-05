@@ -1,6 +1,6 @@
 # GINOT Bracket Lug {#sec-lug}
 
-**The bracket lug is a three-dimensional elastoplastic solid whose target is a true scalar, the von Mises stress, and whose load has no direction of its own; at 2,400 training lugs ISLA leads GeoTransolver and Transolver on the native mesh, the one solid in the book on which it does, and under a generic rigid motion its error doubles while the baselines' rise to the mean-field level.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the three scorings, the controls that belong to this dataset, and what the dataset does not say. The pose contract is exercised here with no global vector at all ($K = 0$), the setting where canonicalization has nothing to align to (@sec-pose), and this is the dataset on which a numerical property of the class, the tie-breaking of the nearest boundary sample, is visible; the uniform-point-cloud scoring is the identity here because the surface is kept whole and the interior is a point cloud. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
+**The bracket lug is a three-dimensional elastoplastic solid whose target is a true scalar, the von Mises stress, and whose load has no direction of its own; under the float32 protocol GeoTransolver and Transolver lead ISLA on it by about two to one, and the same scorer in bfloat16 puts all three within a tenth of one another, so the deficit is a precision sensitivity of the trained ISLA's nearest-boundary-sample selection on a mesh where most nodes are tied, not a capacity or training difference; under a generic rigid motion ISLA's error rises by half while the baselines' rise to the mean-field level.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the three scorings, the precision diagnostic and the pose attribution that belong to this dataset, and what the dataset does not say. The pose contract is exercised here with no global vector at all ($K = 0$), the setting where canonicalization has nothing to align to (@sec-pose); the uniform-point-cloud scoring is the identity here because the surface is kept whole and the interior is a point cloud. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
 ```{python}
 #| label: setup-lug
@@ -267,9 +267,9 @@ semicircular nose around the hole whose axis is parallel to $z$; the lug is
 #| output: asis
 print(f"**Every node is a query token, and the readout is the float32 relative L2 of von Mises stress over the {N_TEST} test lugs at 2,400 "
       f"training lugs, 500 epochs and {AR['ISLA']['native'][F]['n_seeds']} seeds.** The three architectures run at their reference "
-      "configurations, one per architecture for every dataset in the book: ISLA at width 768, 12 layers, 256 slices and cosine routing, "
-      f"learning rate 2.5e-4 ({PARAMS['ISLA']:.0f}M parameters); GeoTransolver at width 1,024 ({PARAMS['GeoTransolver']:.0f}M) and Transolver "
-      f"at width 1,024 ({PARAMS['Transolver']:.0f}M) at the recipe's rate of 1e-3; no lane trains with rotation or translation augmentation. "
+      "configurations, one per architecture for every dataset in the book (@sec-protocol): ISLA width 512 with 512 slices, 12 layers, cosine "
+      f"routing, learning rate 3.75e-4 ({PARAMS['ISLA']:.0f}M parameters); GeoTransolver width 256 ({PARAMS['GeoTransolver']:.0f}M) and Transolver "
+      f"width 512 with 16 layers ({PARAMS['Transolver']:.0f}M) at the recipe's rate of 1e-3; no lane trains with rotation or translation augmentation. "
       "ISLA reads the boundary triangles with the clamped, hole, loaded and pressure labels as boundary scalars, the four design parameters "
       "as global scalars, and every node as a query with the stored signed distance and its gradient (no global vector, so the eager "
       "geometry kernel); GeoTransolver and Transolver read every node with the nodal tags, the same stored distance and gradient, and the "
@@ -277,10 +277,12 @@ print(f"**Every node is a query token, and the readout is the float32 relative L
       "nodes; on the uniform-point-cloud variant, which is the identity here because the surface triangles are kept whole and the interior "
       "is a point cloud without cell measures; and with every lug rigidly rotated by a keyed SO(3) rotation and translated by one RMS "
       "point radius, with no centering step in this pipeline, so the translation reaches the model (@sec-invariances).")
+epoch_ratio = COST["ISLA"]["epoch_seconds"] / statistics.mean(COST[a]["epoch_seconds"] for a in BASELINES)
 print()
 print("**Cost.** Training on this task, one epoch at the reference configurations on four GB300 ranks in bfloat16 (peak device memory, "
       "maximum over ranks): " + "; ".join(f"{a} {v['peak_gib']:.1f} GiB and {v['epoch_seconds']:.0f} s per epoch at {v['n_parameters'] / 1e6:.0f}M parameters"
-      for a, v in COST.items()) + ". Data: results/char/char_lanes_cost_2026-10-04.json.")
+      for a, v in COST.items()) + f". ISLA's epoch is {epoch_ratio:.1f}x the baselines' mean on this task of 5,000 to 15,000 nodes per case. "
+      "Data: results/char/char_lanes_cost_2026-10-04.json.")
 ```
 
 ## The standing {#sec-interior-lug}
@@ -289,12 +291,23 @@ print("**Cost.** Training on this task, one epoch at the reference configuration
 #| label: lug-lede
 #| output: asis
 isla_s = seeds_of(AR["ISLA"]["native"][F]); b_s = {a: seeds_of(AR[a]["native"][F]) for a in BASELINES}
-sep = all(min(b_s[a]) > max(isla_s) for a in BASELINES)
-print(f"**On the GINOT bracket lug ISLA leads on the native mesh: GeoTransolver ÷ ISLA {rat('GeoTransolver'):.2f} and Transolver ÷ ISLA "
-      f"{rat('Transolver'):.2f} on von Mises stress at 2,400 training lugs{', every baseline seed above every ISLA seed' if sep else ''}, "
-      "its one native lead on a solid in the book. Rotated and translated, the baselines' errors rise to the mean-field level "
-      f"({min(AR[a]['posed'][F]['mean'] for a in BASELINES):.2f} to {max(AR[a]['posed'][F]['mean'] for a in BASELINES):.2f}) and ISLA's "
-      f"to {shift('ISLA', 'posed'):.2f} times its native value, a measured numerical property of the class and not of the pipeline.** "
+sep = all(max(b_s[a]) < min(isla_s) for a in BASELINES)
+PREC = json.load(open(RES / "char" / "lug_prec_2026-10-05.json"))["lanes"]
+PREC_LABEL = {"cl_lug_isla": "ISLA 768 wide,\n256 slices", "cl_r_lug_isla": "ISLA 512 wide,\n512 slices", "cl_lug_gt": "GeoTransolver\n1,024",
+              "cl_r_lug_gt": "GeoTransolver\n256", "cl_lug_t": "Transolver\n1,024", "cl_r_lug_t": "Transolver\n512 x 16"}
+lane_key = lambda run: run.rsplit("_seed", 1)[0]
+bf = [v["bf16"] for v in PREC.values()]
+ref_isla = [v for r, v in PREC.items() if lane_key(r) == "cl_r_lug_isla"]
+worse_ref = " and ".join(f"{100 * v['frac_fp32_worse_1p5x']:.0f}%" for v in ref_isla)
+print(f"**On the GINOT bracket lug under the float32 protocol GeoTransolver width 256 and Transolver width 512 with 16 layers lead ISLA on the "
+      f"native mesh: baseline ÷ ISLA {rat('GeoTransolver'):.2f} and {rat('Transolver'):.2f} on von Mises stress at 2,400 training lugs"
+      f"{', every baseline seed below every ISLA seed' if sep else ''}. Scored by the same scorer in bfloat16, the training precision, every "
+      f"lane reads {min(bf):.4f} to {max(bf):.4f}, and float32 lowers the baselines' errors while it raises ISLA's on "
+      f"{worse_ref} of the cases: the deficit is a precision "
+      "sensitivity of the trained model's nearest-boundary-sample selection on a tied mesh, not a capacity or training difference. Rotated and "
+      f"translated, the baselines' errors rise to the mean-field level ({min(AR[a]['posed'][F]['mean'] for a in BASELINES):.2f} to "
+      f"{max(AR[a]['posed'][F]['mean'] for a in BASELINES):.2f}) and ISLA's to {shift('ISLA', 'posed'):.2f} times its native value, the same "
+      "selection under a different perturbation.** "
       "The lug (@sec-data-lug) is clamped at one end and pressed on the lower half of its hole; three geometry parameters and the pressure "
       "vary, and the target is the nodal von Mises stress, a true scalar that no rigid motion can change. @tbl-lug-protocols is the "
       "standing; every number below is read from it.")
@@ -319,10 +332,11 @@ same_jit = max(jit) - min(jit) < 1e-4
 t2_shift = TAR["ISLA"]["posed"]["stress_l2"]["mean"] / TAR["ISLA"]["native"]["stress_l2"]["mean"]
 lug_native = AR["ISLA"]["native"][F]["mean"]; lug_delta = AR["ISLA"]["posed"][F]["mean"] - lug_native
 per_seed = [p / n for p, n in zip(seeds_of(AR["ISLA"]["posed"][F]), seeds_of(AR["ISLA"]["native"][F]))]
-print(f"Three readings. First, the native column: ISLA's error is {100 * lug_native:.2f}% of the field against "
-      f"{100 * AR['GeoTransolver']['native'][F]['mean']:.2f}% for GeoTransolver and {100 * AR['Transolver']['native'][F]['mean']:.2f}% for "
-      "Transolver, on a problem whose target is a frame-free scalar, whose loading has no direction of its own and whose parameters enter "
-      "as four global scalars; Tensile2d, the other solid, goes the other way (@sec-interior-tensile2d). Second, the uniform-point-cloud "
+print(f"Three readings. First, the native column: ISLA's error is {100 * lug_native:.2f}% of the field (seeds "
+      f"{' and '.join(f'{100 * v:.2f}%' for v in isla_s)}) against {100 * AR['GeoTransolver']['native'][F]['mean']:.2f}% for GeoTransolver and "
+      f"{100 * AR['Transolver']['native'][F]['mean']:.2f}% for Transolver, on a problem whose target is a frame-free scalar, whose loading has "
+      "no direction of its own and whose parameters enter as four global scalars; what that column measures is read below, with the "
+      "precision diagnostic (@fig-lug-precision). Second, the uniform-point-cloud "
       "column equals the native column for every architecture, as it must here (the surface is kept whole, the interior has no cell "
       "measure), so discretization independence is not measured on this dataset. Third, the rotated and translated column. The baselines' "
       "numbers are the expected failure of laboratory-frame inputs trained without augmentation. ISLA's is not expected from the contract: "
@@ -345,18 +359,88 @@ print(f"Three readings. First, the native column: ISLA's error is {100 * lug_nat
       "depends on arithmetic precision at the percent level through the same tie-breaking. Where the two candidates sit on faces at a "
       "large angle the direction feature "
       "changes by order one, a change the attention spreads over the field. The effect is visible here because the native error is so "
-      f"small: the posed-minus-native difference is {100 * lug_delta:.2f}% of the field, which doubles an error of {100 * lug_native:.2f}% and "
-      f"would move the DrivAerML Volume pressure error of {100 * dr_native:.1f}% by about {100 * lug_delta / dr_native:.0f}% of itself, below "
+      f"small: the posed-minus-native difference is {100 * lug_delta:.2f}% of the field, which raises an error of {100 * lug_native:.2f}% by "
+      f"{100 * (shift('ISLA', 'posed') - 1):.0f}% and would move the DrivAerML Volume pressure error of {100 * dr_native:.1f}% by about "
+      f"{100 * lug_delta / dr_native:.0f}% of itself, below "
       "its seed spread; the same construction runs on every dataset and is exact there to the fourth decimal because ties are rare on "
       "unstructured meshes. The remedy that follows is a measure-weighted average over near-tied boundary samples in the geometry "
       "construction, which makes the feature continuous; it is a change to the class after this campaign, not one its lanes carry, so "
       "the column reports the factor as measured. Data: results/char/lug_ties_2026-10-04.json.")
 ```
 
+```{python}
+#| label: fig-lug-precision
+#| fig-cap: >
+#|   The same trained lug checkpoints scored by the same scorer in bfloat16
+#|   (the training precision; hatched bars) and in float32 (the reporting
+#|   protocol; filled bars): von Mises relative L2 over the 600 test lugs,
+#|   one pair of bars per lane, lanes named by configuration and seed, ISLA
+#|   blue, GeoTransolver red, Transolver amber. The number above each pair is
+#|   the share of the 600 cases whose float32 error is more than 1.5 times
+#|   its bfloat16 error. How to read this: in bfloat16 every lane sits in one
+#|   band; float32 lowers every baseline lane and the 768-wide ISLA and does
+#|   not lower the 512-slice ISLA, so the float32 standing on this dataset
+#|   is a precision effect of one trained model, not a property of its
+#|   training; the ISLA 768-wide lanes are a configuration used in this
+#|   diagnostic, not a standing. Bars start at zero. Data:
+#|   results/char/lug_prec_2026-10-05.json.
+#| fig-alt: "Grouped bar chart of von Mises relative L2 for eight lug lanes, hatched bfloat16 bars beside filled float32 bars, colored by architecture, with the fraction of cases made worse by float32 printed above each pair."
+#| code-fold: true
+order = ["cl_lug_isla", "cl_r_lug_isla", "cl_lug_gt", "cl_r_lug_gt", "cl_lug_t", "cl_r_lug_t"]
+lanes = sorted(PREC, key=lambda r: (order.index(lane_key(r)), r))
+key_of = lambda r: "isla_ref" if "isla" in r else "gt" if "_gt_" in r else "t"
+fig, ax = plt.subplots(figsize=(9.0, 4.6))
+x = np.arange(len(lanes)); w = 0.38
+top = max(max(v["bf16"], v["fp32"]) for v in PREC.values())
+for i, r in enumerate(lanes):
+    v = PREC[r]; kw = bar_kwargs(key_of(r))
+    ax.bar(i - w / 2, v["bf16"], w, color=kw["color"], hatch="///", edgecolor="white", linewidth=0.8, alpha=0.55, zorder=2)
+    ax.bar(i + w / 2, v["fp32"], w, color=kw["color"], edgecolor="white", linewidth=0.8, zorder=2)
+    ax.text(i, max(v["bf16"], v["fp32"]) + 0.00012, f"{100 * v['frac_fp32_worse_1p5x']:.0f}%", ha="center", va="bottom", fontsize=8.5, color=INK2)
+ax.set_xticks(x); ax.set_xticklabels([f"{PREC_LABEL[lane_key(r)]}\nseed {r.rsplit('_seed', 1)[1]}" for r in lanes], fontsize=7.8)
+ax.set_ylabel("von Mises relative L2 error [–]"); ax.set_ylim(0, 1.45 * top); ax.grid(axis="x", visible=False)
+from matplotlib.patches import Patch
+ax.legend(handles=[Patch(facecolor=MUTED, hatch="///", edgecolor="white", alpha=0.55, label="bfloat16 scoring (the training precision)"),
+                   Patch(facecolor=MUTED, edgecolor="white", label="float32 scoring (the reporting protocol)")], loc="upper left", ncol=2, fontsize=8.5)
+ax.set_title("above each pair: share of the 600 test cases whose float32 error exceeds 1.5x its bfloat16 error", fontsize=9)
+plt.tight_layout(); plt.show()
+```
+
+```{python}
+#| label: para-lug-precision
+#| output: asis
+by = lambda k: [PREC[r] for r in lanes if lane_key(r) == k]
+fmt_bf = lambda vs: " and ".join(f"{v['bf16']:.4f}" for v in vs)
+fmt_fp = lambda vs: " and ".join(f"{v['fp32']:.4f}" for v in vs)
+fmt_pct = lambda vs, k: " and ".join(f"{100 * v[k]:.0f}%" for v in vs)
+others = [v for r, v in PREC.items() if lane_key(r) != "cl_r_lug_isla"]
+fp_others = [v["fp32"] for v in others]; better_others = [v["frac_fp32_better_1p5x"] for v in others]; worse_others = [v["frac_fp32_worse_1p5x"] for v in others]
+ref = by("cl_r_lug_isla")
+worst = " and ".join(f"{v['worst_case']['fp32']:.4f} against {v['worst_case']['bf16']:.4f}" for v in ref)
+print(f"**The float32 deficit is a precision sensitivity of one trained model, not a capacity or training difference.** In bfloat16, the "
+      f"precision the lanes train at, the eight lanes of @fig-lug-precision read {min(bf):.4f} to {max(bf):.4f}: both ISLA configurations "
+      f"{fmt_bf(by('cl_r_lug_isla'))} (512 with 512 slices) and {fmt_bf(by('cl_lug_isla'))} (768 wide, 256 slices), GeoTransolver "
+      f"{fmt_bf(by('cl_r_lug_gt') + by('cl_lug_gt'))}, Transolver {fmt_bf(by('cl_r_lug_t') + by('cl_lug_t'))}; the bfloat16 output "
+      "resolution sets an error floor near that band on a task whose float32 errors fall below it. Scored in float32, the baselines and the "
+      f"768-wide ISLA drop to {min(fp_others):.4f} to {max(fp_others):.4f}: float32 lowers the per-case error by more than 1.5x on "
+      f"{100 * min(better_others):.0f}% to {100 * max(better_others):.0f}% of the 600 cases and raises it by more than 1.5x on "
+      f"{100 * min(worse_others):.0f}% to {100 * max(worse_others):.1f}%. ISLA width 512 with 512 slices does not: in float32 it reads "
+      f"{fmt_fp(ref)}, float32 lowers its per-case error by more than 1.5x on {fmt_pct(ref, 'frac_fp32_better_1p5x')} of the cases and raises "
+      f"it on {fmt_pct(ref, 'frac_fp32_worse_1p5x')}, with worst cases at {worst} (float32 against bfloat16). The two ISLA configurations "
+      "compute the same bfloat16 function to the resolution of the metric and different float32 functions. The reason is the one measured "
+      "above: each query reads its nearest boundary sample, which boundary sample a node selects depends on rounding on a mesh where "
+      f"{100 * tied:.0f}% of the nodes are tied within 1e-4 relative, and the precision of the forward pass is one more rounding. Why the "
+      "512-slice model's output moves more than the 256-slice model's when the selection changes is not measured; a hypothesis is that "
+      "twice the prototypes give a changed selection twice the slice boundaries to cross. The standing of @tbl-lug-protocols is the float32 "
+      "protocol's and stands as measured; what it measures on this dataset is this sensitivity. The remedy candidates, a soft or k-nearest "
+      "boundary sample or a tie-breaking rule that is a continuous function of the coordinates, are changes to the class after this "
+      "campaign, not ones its lanes carry. Data: results/char/lug_prec_2026-10-05.json.")
+```
+
 ## Ladders and controls {#sec-lug-ladders}
 
-**No training-case ladder and no width or depth control exist on this dataset under the reference configurations.** The one control that belongs here is the pose column itself, read with the model-level check that attributes it: an exact rigid motion leaves the prediction invariant and an inexact one does not, which separates the class's tie-breaking from any frame-dependent input (@sec-interior-lug).
+**No training-case ladder and no width or depth control exist on this dataset under the reference configurations; the two controls that belong here are the precision diagnostic and the pose attribution.** The precision diagnostic (@fig-lug-precision) scores the same checkpoints in bfloat16 and float32 and separates a scorer-precision effect from a configuration effect; the pose attribution (@sec-interior-lug) shows that an exact rigid motion leaves the prediction invariant and an inexact one does not, which separates the class's tie-breaking from any frame-dependent input.
 
 ## What this dataset does not say {#sec-lug-limits}
 
-**The lug standing is a native lead on one scalar field of one bracket family, with three parameters of one shape, and a pose reading that measures the class's nearest-sample tie-breaking rather than its frame.** It says nothing about tensor targets, which Tensile2d measures the other way (@sec-interior-tensile2d), nor about geometry beyond the family, nor about discretization independence, which the identity point-cloud column cannot test here. The three configurations are the reference configurations as shipped (parameter counts in @sec-lug-measured) and are not matched in step time or memory. The published GINOT, Transolver and GNOT numbers are on the authors' split and are comparable in kind, not in value.
+**The lug standing is a float32 reading on one scalar field of one bracket family, with three parameters of one shape, and both its native deficit and its pose shift measure the class's nearest-sample tie-breaking under rounding rather than its capacity or its frame.** It says nothing about tensor targets, which Tensile2d measures (@sec-interior-tensile2d), nor about geometry beyond the family, nor about discretization independence, which the identity point-cloud column cannot test here. The three configurations are the reference configurations as shipped (parameter counts in @sec-lug-measured) and are not matched in step time or memory. The published GINOT, Transolver and GNOT numbers are on the authors' split and are comparable in kind, not in value.

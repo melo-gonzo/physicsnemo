@@ -120,7 +120,7 @@ rows = [
      "@sec-interior-tensile2d"),
     (f"**GINOT bracket lug** at 2,400 training lugs, {label('lug')}: von Mises stress, native / point cloud / posed (GeoTransolver; Transolver)",
      three("lug", "von_mises_l2"),
-     f"ISLA leads both baselines natively, its one native lead on a solid; rotated and translated its error moves {shift('lug', 'ISLA', 'von_mises_l2', 'posed'):.2f}x, the tie-breaking of the nearest boundary sample on a structured mesh, where the baselines' read at the mean field",
+     f"under the float32 protocol both baselines lead (ISLA {word('lug', 'GeoTransolver', 'von_mises_l2')} GeoTransolver and {word('lug', 'Transolver', 'von_mises_l2')} Transolver), a precision sensitivity of the trained model's nearest-boundary-sample selection on a tied mesh, not a capacity difference; rotated and translated ISLA's error moves {shift('lug', 'ISLA', 'von_mises_l2', 'posed'):.2f}x by the same mechanism, where the baselines' read at the mean field",
      "@sec-interior-lug"),
     ("**DeepJEB++** at 12,451 brackets, equal optimizer steps, ISLA 384 wide against GeoTransolver-256: von Mises / displacement, native",
      f"{jb_full['von_mises']:.2f} / {jb_full['displacement']:.2f}",
