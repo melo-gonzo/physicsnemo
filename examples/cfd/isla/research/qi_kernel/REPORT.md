@@ -5,13 +5,13 @@ Lane `isla-qi-kernel`, branch `psharpe/isla-qi-kernel` (base `psharpe/isla-indep
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-03-isla-qi-kernel/`
 (job prefix `isla.kernel.`). Brief: `BRIEF.md` (this folder).
 
-## Status (2026-10-04 23:20 PDT)
+## Status (2026-10-05 02:45 PDT)
 
-- Implementation and float64 contract tests done (commit a7be6350c and the next).
-- Cost measured on one GB300 at the protocol request; the first version was 6x to 15x
-  the read-only step, so the pair sums were moved into Triton segment kernels and the
-  kernel MLP was made one shared basis per forward pass (see Cost).
-- Next: pilots on DrivAerML Volume (100 epochs, one seed), then full lanes.
+- Implementation and float64 contract tests done (32 kernel-read tests; 202 ISLA tests
+  pass, CUDA included). Commits a7be6350c, be04b6584, 9c564e99a.
+- Pilots (DrivAerML Volume, 100 epochs, seed 42) running since 01:55; design chosen at
+  pilot epochs 14-30 (below): `kernel_read="sum"`, `R = 0.01 L`, last 4 blocks.
+- Full lanes (that design, both datasets, seeds 42 and 43, 500 epochs) submitted 02:32.
 
 ## Question
 
@@ -98,9 +98,24 @@ therefore takes the exact radius set (ragged pairs), with no k at all.
 | v2: sum R=0.01 | 28.4M | 823 | 97 |
 | v2: mean R=0.01, last 4 blocks | 28.4M | 683 | 95 |
 | AirfRANS read-only | 0 | 237 | 23 |
-| v2: AirfRANS mean R=0.02 / sum R=0.02 / mean R=0.05 | 4.3-5.0M / same / 8.4-9.7M | 461 / 347 / 636 | 24-26 |
+| v2: AirfRANS mean R=0.02 | 4.3-5.0M | 461 | 24 |
+| v2: AirfRANS sum R=0.02 | 4.3-5.0M | 347 | 24 |
+| v2: AirfRANS mean R=0.05 | 8.4-9.7M | 636 | 26 |
 
-v3 (shared kernel basis): pending.
+| v3 (shared kernel basis, `code_kq2`): mean R=0.005 | 7.4M | 608 | 95 |
+| v3: mean R=0.01 | 28.4M | 1354 | 108 |
+| v3: sum R=0.01 | 28.4M | 692 | 107 |
+| v3: sum R=0.01, last 4 blocks | 28.4M | 437 | |
+| v4 (pair tensors stored, `code_kq3`): sum R=0.01 | 28.4M | 630 | 140 |
+| v4: mean R=0.01, last 4 blocks | 28.4M | 561 | 112 |
+| v4: mean R=0.01 | 28.4M | 1070 | 127 |
+| v4: AirfRANS sum R=0.01 | 2.4-2.8M | 285 | 28 |
+| v4: AirfRANS mean R=0.01, last 4 | 2.4-2.8M | 274 | 26 |
+| v4: AirfRANS sum R=0.01, last 4 | 2.4-2.8M | 255 | 26 |
+
+The cost is per-pair work (about 1.3 ns per pair and block for `"sum"`, 3 ns for
+`"mean"`, forward and backward) plus a fixed ~7 ms per block for the dense maps of the
+200,000 cell and point states.
 
 ## Preregistered bars (from the brief; written before any full lane)
 
@@ -111,9 +126,59 @@ v3 (shared kernel basis): pending.
 - Also reported: against read-only-256, and the DrivAerML band anatomy (error by
   \|sdf\|/L band).
 
+## Pilot (label: pilot; no claim rests on it)
+
+DrivAerML Volume, reporting protocol except 100 epochs (the full schedule's first 100
+epochs: StepLR steps at 100, so the learning rate is 5e-4 throughout), seed 42, one
+4xGB300 node each, code `code_kq2` (be04b6584). Twin: read-only-256 at the same budget.
+Val loss (normalized MSE, 48 validation cars) by epoch; the QI campaign's seed-42
+references (interacting `qi_drvol_int`, read-only `qi_drvol_pas`, 500-epoch runs) for
+context. Step = training step on 4 ranks (s).
+
+| epoch | interacting (ref) | read-only (ref) | read-only twin | sum, last 4 | mean, last 4 | sum, every block |
+|---|---|---|---|---|---|---|
+| 4 | 0.01376 | 0.02276 | 0.02267 | 0.02041 | 0.01835 | 0.01849 |
+| 8 | 0.00635 | 0.01352 | 0.01373 | 0.01121 | 0.01093 | 0.01095 |
+| 12 | 0.00429 | 0.01001 | 0.01014 | 0.00829 | 0.00868 | 0.00810 |
+| 16 | 0.00330 | 0.00835 | 0.00793 | 0.00689 | 0.00705 | 0.00699 |
+| 20 | 0.00293 | 0.00739 | 0.00719 | 0.00599 | 0.00622 | 0.00607 |
+| 30 | 0.00226 | 0.00616 | 0.00536 | 0.00466 | - | - |
+| step (s) | 0.30 | 0.30 | 0.29 | 0.48 | 0.76 | 0.80 |
+
+All three read variants cut the twin's val loss by 13-20% at matched epochs; they are
+within the val noise of each other; `"mean"` costs 1.6x `"sum"` at the same
+placement and every-block placement 1.7x last-4. Chosen (2026-10-05 02:30, at pilot
+epochs 14-30): **`"sum"`, R = 0.01 L, last 4 blocks** (equal accuracy, cheapest). The
+pilots continue to epoch 100 and are scored with `infer.py`; the table above is
+updated as they finish. The interacting reference is still 2.4x lower in val loss at
+epoch 30 (it was 1.7x at epoch 100 and 1.1x-1.25x in relative L2 at epoch 500).
+
 ## Lanes
 
-Pending (pilots first).
+Task dir `agents/2026-10-03-isla-qi-kernel`, `kernel/lanes.tsv`, chained 3h59 links
+(`kernel/lanes.sbatch`), first job ids in `kernel/submitted.tsv`.
+
+| idx | run | dataset | design | epochs | code | first job | state (02:45) |
+|---|---|---|---|---|---|---|---|
+| 0 | kp_drvol_ro_seed42 | DrivAerML | read-only twin | 100 | kq2 | 1041303 | running |
+| 1 | kp_drvol_sum4_seed42 | DrivAerML | sum, last 4 | 100 | kq2 | 1041304 | running |
+| 2 | kp_drvol_mean4_seed42 | DrivAerML | mean, last 4 | 100 | kq2 | 1041305 | running |
+| 3 | kp_drvol_sum12_seed42 | DrivAerML | sum, every block | 100 | kq2 | 1041306 | running |
+| 4 | kq_drvol_sum4_seed42 | DrivAerML | sum, R=0.01, last 4 | 500 | kq3 | 1041666 | running |
+| 5 | kq_drvol_sum4_seed43 | DrivAerML | same | 500 | kq3 | 1041667 | queued |
+| 6 | kq_af_sum4_seed42 | AirfRANS | same | 500 | kq3 | 1041668 | queued |
+| 7 | kq_af_sum4_seed43 | AirfRANS | same | 500 | kq3 | 1041669 | queued |
+
+`code_kq3` (9c564e99a) differs from `code_kq2` only in storing the pair tensors
+instead of recomputing them in backward (identical outputs and gradients, tested).
+Full lanes: DrivAerML Volume = `drivaer_ml_volume_reference_sdf` / `isla_volume_sdf`,
+200,000 cells; AirfRANS = `airfrans_volume_2d` / `isla_volume_airfrans`, 100,000,
+`train_split=full_train val_split=full_test +training.val_interval=10`; lr 5e-4, bf16,
+no augmentation, compiled blocks, seeds 42 and 43; extra `++model.query_independent=true
+++model.kernel_read=sum ++model.kernel_read_radius=0.01 ++model.kernel_read_blocks=4`.
+Expected duration: DrivAerML ~8.5 h (step 1.6x read-only), AirfRANS ~8.5 h (1.08x).
+The first job ids 1041649-1041652 were cancelled while pending (their job names
+clashed with the pilot chains' singleton names); `submit.sh` now prefixes the group.
 
 ## Open issues
 
