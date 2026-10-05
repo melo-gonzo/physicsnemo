@@ -36,7 +36,7 @@ from physicsnemo.experimental.models import ISLA
 model = ISLA(
     output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}},
     global_schema={"freestream": {"rank": 1}},
-    hidden=512, n_slices=512,          # the reference configuration; the class defaults are 384 and 256
+    hidden=512, n_slices=512,          # the reference configuration, also the class defaults
 )
 ```
 
@@ -48,10 +48,9 @@ run, and prediction points that carry a learned share of the total boundary
 measure. It trains at learning rate 3.75e-4 and 200,000 sampled cells per
 case. The configuration is the most accurate of ISLA's under 80 GiB per GPU
 on the two selection datasets; the rule and the baselines' reference
-configurations are in @sec-protocol. The recipe's ISLA configurations
-(`isla_surface`, `isla_volume`) carry the class defaults (384 wide, 256
-slices, learning rate 5e-4), so the reference configuration is reached by
-the three overrides in the commands below. This is the one place the book
+configurations are in @sec-protocol. The class defaults and the recipe's
+ISLA configurations (`isla_surface`, `isla_volume`) are this configuration,
+so the commands below need no model overrides. This is the one place the book
 states it, and the width and depth ladders of @sec-review-frontier are
 deviations from it (at 256 slices). A table row measured at another width,
 slice count, rate or cell budget says so in the row.
@@ -256,19 +255,16 @@ you leave width 512.** From the recipe root:
 
 ```bash
 # DrivAerML Surface task (sampling_resolution defaults to 200,000 cells per case).
-# The ISLA configs carry the class defaults (hidden 384, 256 slices, lr 5e-4); the three overrides
-# make the reference configuration. compile=false leaves the per-block compile of the model in charge.
-python src/train.py model=isla_surface dataset=drivaer_ml_surface \
-    model.hidden=512 model.n_slices=512 training.optimizer.lr=3.75e-4 compile=false
+# The ISLA configs carry the reference configuration (hidden 512, 512 slices, lr 3.75e-4), which is also the class
+# default. compile=false leaves the per-block compile of the model in charge.
+python src/train.py model=isla_surface dataset=drivaer_ml_surface compile=false
 
 # DrivAerML Volume task: boundary -> interior, the prediction points as interacting tokens, with the
 # stored signed distance and its gradient as query inputs.
-python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference \
-    model.hidden=512 model.n_slices=512 training.optimizer.lr=3.75e-4 compile=false
+python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference compile=false
 
 # HiLiftAeroML surface (the 200,000-cell default again; 500 epochs, as on the cars)
-python src/train.py model=isla_surface dataset=highlift_surface \
-    model.hidden=512 model.n_slices=512 training.optimizer.lr=3.75e-4 compile=false training.num_epochs=500
+python src/train.py model=isla_surface dataset=highlift_surface compile=false training.num_epochs=500
 ```
 
 These commands are the reporting protocol of @sec-protocol. ISLA needs no
@@ -288,11 +284,10 @@ trained at the rule rate is therefore comparable with the book's lanes.
 Under ISLA's cosine routing the logits are bounded, so the routing-collapse
 failure that would otherwise set a hard ceiling on the rate is unreachable
 (@sec-isla-routing-forms). A higher rate is an experiment, not a hazard.
-The recipe's ISLA configurations pin 5e-4, the rule's rate at their
-default width 384, rather than inheriting the recipe-wide default of 3e-3,
-which drives ISLA to a mean-field plateau; the reference configuration
-overrides it to 3.75e-4. GeoTransolver and Transolver train at 1e-3 in
-their reference configurations, the recipe default.
+The recipe's ISLA configurations pin 3.75e-4, the rule's rate at the
+reference width 512, rather than inheriting the recipe-wide default of 3e-3,
+which drives ISLA to a mean-field plateau. GeoTransolver and Transolver
+train at 1e-3 in their reference configurations, the recipe default.
 
 ## Evaluation and the inference sampler {#sec-using-sampler}
 

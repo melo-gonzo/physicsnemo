@@ -306,9 +306,11 @@ class ISLA(Module):
             encoder as interacting tokens; ``forward`` requires them. The two
             are different parameter sets (a parameter without a gradient stops
             DDP), so the choice is made at construction.
-        hidden: Token width of the slice blocks. The defaults ``hidden=384``,
-            ``n_layers=12`` and ``n_slices=256`` are the reference
-            configuration; the reference training rate is 5e-4.
+        hidden: Token width of the slice blocks. The defaults ``hidden=512``,
+            ``n_layers=12`` and ``n_slices=512`` are the reference
+            configuration (the most accurate under 80 GiB per GPU on DrivAerML
+            Surface and the HiLift 210-wing rung at 200,000 cells); the
+            reference training rate is 3.75e-4 (the width rule 1e-3 x 192 / hidden).
         n_layers: Number of slice-attention blocks.
         n_slices: Number of soft slices (data-adaptive anchors) per block.
         mlp_ratio: Expansion ratio of the per-token and per-slice MLPs.
@@ -397,9 +399,9 @@ class ISLA(Module):
         query_schema: FieldSchemaLike | None = None,
         global_schema: FieldSchemaLike | None = None,
         interior: bool = False,
-        hidden: int = 384,
+        hidden: int = 512,
         n_layers: int = 12,
-        n_slices: int = 256,
+        n_slices: int = 512,
         mlp_ratio: int = 4,
         geo_checkpoint: bool = False,
         geo_kernel: GeoKernel | None = None,

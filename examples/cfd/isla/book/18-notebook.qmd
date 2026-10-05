@@ -33719,8 +33719,8 @@ completed without error, the six DeepJEB++ lanes the same afternoon once
 their smoke lanes finished (one DeepJEB++ epoch at 200,000 cells takes 31 to
 38 minutes at these configurations, so the 40-epoch lanes run 21 to 25 hours
 each). The recipe's ISLA configurations now carry the reference values
-(hidden 512, 512 slices, learning rate 3.75e-4); the ISLA class defaults
-stay at 384 and 256. The smoke
+(hidden 512, 512 slices, learning rate 3.75e-4), and the ISLA class defaults
+move to hidden 512 and 512 slices (Peter, 2026-10-04 night). The smoke
 lanes also give the reference configurations' peak memory per task: on
 DrivAerML Volume ISLA 126 GiB and GeoTransolver 118 GiB (the Volume task
 carries three fields and interior queries; the DrivAerML-half references
