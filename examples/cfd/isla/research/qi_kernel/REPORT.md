@@ -15,7 +15,7 @@ Lane `isla-qi-kernel`, branch `psharpe/isla-qi-kernel` (base `psharpe/isla-indep
   02:33-02:52; expected completion about 11:30-12:00 PDT (DrivAerML ~63 s/epoch,
   AirfRANS ~60 s/epoch).
 - Pilot result (epoch 100, scored): the read cuts the read-only twin's pressure and
-  velocity error by 11% and 8% (14% and 10% within 0.01 L of the wall) and raises eddy
+  velocity error by 11% and 8% (11% and 10% within 0.01 L of the wall) and raises eddy
   viscosity by 5%. Contracts hold on the trained checkpoint (float64 independence
   1e-13).
 
