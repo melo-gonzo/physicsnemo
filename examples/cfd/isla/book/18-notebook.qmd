@@ -33991,3 +33991,70 @@ sensitivity of ISLA's interior predictions (7x to 8x under an
 area-proportional boundary draw) stays the section's named limit. With this
 entry seven of the eight tasks are scored under the final references; the
 DeepJEB++ lanes remain.
+
+## 2026-10-05 — CHAR DeepJEB++: every ISLA campaign lane sits at the mean-field plateau (von Mises 0.94, displacement 0.82 against 0.46 / 0.20 for the baselines); the training loss rises from 0.024 to 0.085 within the first 4 to 12 epochs on all four lanes, both configurations, both seeds; the September R1 lane at 5e-4 reached 0.44 / 0.19; four diagnostic lanes launched (JEB-PLATEAU) {#sec-nb-char-deepjeb-plateau}
+
+**Setting.** DeepJEB++ (12,451 training brackets, 5,540 clean test files,
+50,040 surface cells per case scored whole, 40 epochs) is the eighth
+campaign task. The first-pass lanes (`cl_jeb_*`, DrivAerML-half references:
+ISLA width 768 at 3.75e-4, GeoTransolver and Transolver width 1,024) are
+trained and scored under the three protocols
+(`results/char/deepjeb_surface.json`, written from them because the
+final-reference lanes `cl_r_jeb_*` are at epoch 21 to 33 of 40).
+
+**What we saw.** Native (seed means; von Mises / displacement):
+GeoTransolver 0.457 (0.4565 / 0.4571) / 0.202; Transolver 0.475 / 0.219;
+**ISLA 0.945 (0.903 / 0.986) / 0.824 (0.734 / 0.913)**, the level of a model
+that predicts the mean field. Rotated and translated: ISLA unchanged to four
+digits, GeoTransolver 1.13 / 1.46, Transolver 1.26 / 1.70. The scoring is
+not the cause: the training-time validation (bfloat16, every second epoch,
+`runs/cl*_jeb_isla_*/metrics.jsonl`) shows the same thing with its history.
+Width 768, seed 42: 0.60 / 0.37 at epoch 0, 0.60 at epoch 6, 0.96 / 1.20 at
+epoch 12, 0.90 / 0.85 at epoch 39; seed 43: 0.59 at epoch 0, 0.89 / 1.06 at
+epoch 6, 0.99 / 1.20 at epoch 39. The final-reference lanes (width 512 with
+512 slices, 3.75e-4), in flight: seed 42 0.60 at epoch 0, 0.90 / 1.04 at
+epoch 4, 1.02 / 1.17 at epoch 30; seed 43 0.60, 0.93 / 1.18 at epoch 4, 0.99
+/ 1.09 at epoch 32. The training loss follows: 0.024 at epoch 0 on every
+ISLA lane, then 0.067 to 0.085 from epoch 4 to 12 onward and flat (seed 42
+of the width-768 lane recovers to 0.041 by epoch 37 and its validation to
+0.90 / 0.85, a partial return). GeoTransolver and Transolver on the same
+data descend monotonically (train loss 0.025 to 0.004 and 0.006;
+validation 0.61 to 0.46 and 0.46).
+
+**This is the mean-field plateau measured before, on this dataset.** The
+September DeepJEB++ lanes (@sec-nb-deepjeb-e40-verdict's `jb_*` group, code_ref,
+static prototypes) put ISLA R1 (width 384, 12 layers, 256 slices, 5e-4) at
+0.441 / 0.187 after 40 epochs, ahead of GeoTransolver width 512 (0.464 /
+0.201), and ISLA R2 (24 layers at 5e-4) at 1.01 / 1.16, the plateau, which a
+re-run at 2.5e-4 left (@sec-nb-deepjeb-r2-rate-verdict). The signature then and now is the one named in
+@sec-nb-routingsat-verdict: the training loss rises to a flat value several times
+its epoch-0 value within a few epochs and the model outputs the mean field.
+Every ISLA lane of the campaign on this dataset runs a configuration wider
+than R1 at the width rule's rate (3.75e-4 at 512 and at 768), and all four
+plateau; the one configuration measured to train on DeepJEB++ is R1 at
+5e-4 on the static-prototype class.
+
+**Hypotheses and the deciding lanes (preregistered; four one-GPU-node
+smoke lanes of 5 epochs with validation every epoch, `cs_jd_*`, launched
+15:05 UTC).** H-rate: the rate ceiling on this dataset lies below the width
+rule's value for the wider configurations; prediction: `cs_jd_rate` (width
+512 with 512 slices at 1.875e-4, code_v20) does not plateau (validation von
+Mises below 0.55 at epoch 4, train loss falling). H-config: R1 trains and the
+wider configuration does not, on the current class; prediction: `cs_jd_r1`
+(384 / 256 at 5e-4, code_v20) does not plateau. H-proto: the centered
+sample-conditioned prototypes adopted on 2026-10-02 (@sec-nb-proto-cond-2-adopted),
+which the September lanes did not have, move the ceiling on this dataset;
+prediction: `cs_jd_v17` (width 512 with 512 slices at 3.75e-4 on code_v17,
+the static-prototype snapshot) does not plateau while the code_v20 lanes
+at the same rate did, and `cs_jd_v17r1` (384 / 256 at 5e-4 on code_v17)
+reproduces the September training. If `cs_jd_v17` plateaus too, the
+prototypes are exonerated and the ceiling is a property of the
+configuration on this dataset. The four outcomes are independent; the
+plateau appears by epoch 4 to 6 on every lane above, so five epochs decide.
+
+**What is not done.** Chapter 13 is not restated from the plateaued lanes;
+a mean-field model has no standing to report. The final-reference lanes
+run to completion so the record is whole, and the campaign's DeepJEB++
+verdict waits for the diagnosis. If the rate is the cause, the fix is a
+rule change (the reference rate is a class default, not a dataset
+variant), and it must be decided with Peter.

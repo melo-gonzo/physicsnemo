@@ -38,6 +38,11 @@ DATASETS = {
     "deepjeb_surface.json": ({"von_mises_l2": "von Mises", "displacement_l2": "displacement"},
                              {"ISLA 512 with 512 slices": "cl_r_jeb_isla", "GeoTransolver 256": "cl_r_jeb_gt", "Transolver 512 x 16": "cl_r_jeb_t"}, "ISLA 512 with 512 slices"),
 }
+# First-pass lanes (DrivAerML-half references, 2026-10-03) used while a dataset's final-reference lanes are not yet scored.
+FIRST_PASS = {
+    "deepjeb_surface.json": ({"ISLA 768 at 100k cells": "cl_jeb_isla", "GeoTransolver 1,024 at 100k cells": "cl_jeb_gt",
+                              "Transolver 1,024 at 100k cells": "cl_jeb_t"}, "ISLA 768 at 100k cells"),
+}
 
 
 def summary(path):
@@ -60,8 +65,15 @@ def summary(path):
     return {"metrics": {k: st.mean(m[k] for m in steps if k in m) for k in keys}, "n_cases": len(steps)}
 
 
+def scored(arms):
+    return all(os.path.exists(f"{SRC}/{stem}_seed{s}/{pk}/metrics.jsonl") for stem in arms.values() for s in SEEDS for pk in PROTOCOLS)
+
+
 written = []
 for art, (fields, arms, isla_arm) in DATASETS.items():
+    if art in FIRST_PASS and not scored(arms) and scored(FIRST_PASS[art][0]):
+        arms, isla_arm = FIRST_PASS[art]
+        print(f"== {art}: final-reference lanes not scored; using the first-pass lanes {list(arms.values())}")
     out = {"protocol": __doc__, "protocols": PROTOCOLS, "fields": fields, "isla_arm": isla_arm, "arms": {}}
     complete = True
     for label, stem in arms.items():
