@@ -553,3 +553,23 @@ def test_pair_kernels_match_the_eager_reference(dtype):
         gr = torch.autograd.grad(out_r, ins, go)
         assert all(torch.allclose(u, v, **tol) for u, v in zip(gf, gr))
     assert pair_weighted_sum(w, x, plan)[::7].abs().max() == 0
+
+
+@pytest.mark.parametrize("mode", MODES)
+def test_kernel_read_checkpoint_changes_nothing(mode):
+    """Rebuilding the pair tensors in backward (checkpoint) or storing them gives the
+    same outputs and gradients."""
+    mesh, drv, q, sdf, sn = _case()
+    grads = []
+    for ck in (False, True):
+        m = _model(mode).double()
+        for r in m.kernel_reads:
+            r.checkpoint = ck
+        out = m(
+            boundary_meshes={"wall": mesh},
+            prediction_points=points_mesh(q, {"sdf": sdf, "sdf_normals": sn}),
+            global_data={"g": drv},
+        )
+        sum(o.square().sum() for o in outputs(out).values()).backward()
+        grads.append([p.grad.clone() for p in m.parameters()])
+    assert all(torch.allclose(a, b, atol=1e-12, rtol=1e-10) for a, b in zip(*grads))

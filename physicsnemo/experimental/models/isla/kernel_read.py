@@ -256,6 +256,10 @@ class _BoundaryKernelRead(nn.Module):
         if mode not in ("mean", "sum"):
             raise ValueError(f"kernel_read must be 'mean' or 'sum', got {mode!r}")
         self.mode = mode
+        #: Rebuild the (P, .) pair tensors in backward instead of storing them (about
+        #: 100 to 200 bytes per pair and block stored otherwise; recomputing costs about
+        #: a fifth of the read's time).
+        self.checkpoint = False
         h, w = KERNEL_READ_HEADS, KERNEL_READ_WIDTH
         self.norm_b = nn.LayerNorm(hidden)
         self.value = nn.Linear(hidden, w)
@@ -306,7 +310,11 @@ class _BoundaryKernelRead(nn.Module):
 
     def forward(self, h_b, h_q, pairs):
         plan, basis, log_m = pairs
-        if torch.is_grad_enabled() and (h_b.requires_grad or h_q.requires_grad):
+        if (
+            self.checkpoint
+            and torch.is_grad_enabled()
+            and (h_b.requires_grad or h_q.requires_grad)
+        ):
             ### The (P, .) pair tensors are rebuilt in backward, not stored.
             return checkpoint(
                 self._read, h_b, h_q, basis, log_m, plan, use_reentrant=False
