@@ -34143,3 +34143,58 @@ at 3.75e-4) complete as the diagnostic of the prototype conditioning's
 rate cost. Chapter 13 is restated from `results/char/deepjeb_surface.json`
 when the half-rate lanes are scored (about one day); the chapter states
 the exception and its measurement.
+
+## 2026-10-05 — VOL-GEO preregistered: is the volume model's 7x sensitivity to the boundary sampling law the built-in nearest-boundary-token geometry (a bias no quadrature weight can correct) or the slice states formed from the redrawn tokens (a resolution requirement)? Geometry-swap scoring of the Volume reference checkpoints, launched {#sec-nb-char-vol-geo-prereg}
+
+**Setting.** On DrivAerML Volume the final ISLA reference reads 0.0394 /
+0.0635 / 0.0876 natively and 0.311 / 0.417 / 0.583 when the boundary tokens
+are redrawn area-proportionally with exact Horvitz-Thompson measures, 7.9x
+/ 6.6x / 6.6x (@sec-nb-char-volume-final), while the same class on the
+Surface task is unchanged by the same draw and a uniform-over-cells redraw
+of the Volume boundary leaves the interior error at native
+(@sec-nb-char-protocols-instruments). Peter's reading, 2026-10-05: this is a
+serious flaw, the discretization invariance prized on the surface breaks
+down in the volume. The query-independence program (branch
+`psharpe/isla-independent`, RESULTS.md and the pi transcript of 2026-10-02)
+reached the same suspect from another side: "a volume point's built-in wall
+distance is the distance to the nearest sampled boundary cell. That is a
+nearest-sample measure, not a quadrature", and listed a continuous wall
+distance as a class fix it did not run.
+
+**Mechanism.** Each interior query carries a built-in geometry computed in
+the forward from the boundary tokens (`nearest_boundary_geometry`): the
+signed distance to the nearest token and the direction to it, which also
+seeds the query's local frame. It is an argmin, not a quadrature; under
+the area law the nearest token to a near-wall query moves by the local cell
+spacing, exactly where the native mesh is dense, so the query's inputs
+change by order one near the wall. Everything else the queries read (slice
+states, anchors, prototypes, the query routing mass tied to the total
+boundary measure) is a measure-weighted sum, unbiased under the
+Horvitz-Thompson weights but of higher variance where the area law thins
+the finely meshed features. A bias from the first is a flaw of the class; a
+variance from the second is a resolution requirement on the boundary
+sample.
+
+**Instrument (`kernel/char/vol_geo/geo_swap.py`, scoring only, no model
+change).** The Volume reference checkpoint (`cl_r_vol_isla_seed42`, seed 43
+if time allows) scored in float32 on the 48 validation cars under four
+conditions: (1) native (control; must reproduce the record per case), (2)
+area draw (control), (3) area-draw tokens with the built-in geometry
+computed from the native draw's boundary of the same case (the swap), (4)
+area-draw tokens with the built-in geometry taken from the stored signed
+distance field and its gradient. Also the fraction of queries whose nearest
+token changes between the draws and the RMS shift of the built-in distance
+within 0.01 L of the wall.
+
+**Predictions (written before the runs).** If the built-in geometry is the
+whole mechanism, condition (3) returns to within 10% of native on every
+field and (4) does the same or better. If the slice states also carry it,
+(3) stays well above native, and the remaining log-ratio is the resolution
+component. I expect the first: the lug tie discontinuity and the on-wall
+sign flips measured on this class are the same argmin, and the Surface
+task, which has no such query input, is invariant under the identical
+draw. The fix the first outcome points to is a measure-weighted softmin
+geometry (continuous in the sample, exactly refinement-invariant,
+converging to the exact distance as its scale shrinks) or dropping the
+built-in channel where a stored field is provided; both are architecture
+changes and wait for Peter.
