@@ -34058,3 +34058,63 @@ run to completion so the record is whole, and the campaign's DeepJEB++
 verdict waits for the diagnosis. If the rate is the cause, the fix is a
 rule change (the reference rate is a class default, not a dataset
 variant), and it must be decided with Peter.
+
+## 2026-10-05 — JEB-PLATEAU interim (one seed, 5 epochs): the plateau follows the sample-conditioned prototypes, not the configuration; ISLA 384 / 256 at 5e-4 plateaus at epoch 2 on the current class and trains on the static-prototype snapshot; the final reference trains on the static-prototype snapshot at 3.75e-4 and on the current class at half that rate {#sec-nb-char-deepjeb-plateau-interim}
+
+**Setting.** The four diagnostic lanes preregistered in
+@sec-nb-char-deepjeb-plateau finished (5 epochs, validation every epoch,
+seed 42, one GB300 node each; `results/char/jd_plateau_2026-10-05.py` /
+`.json`, trajectories copied under
+`campaigns_2026-10-02/char/jd/`).
+
+**What we saw (validation von Mises at epochs 0 to 4; training loss epoch
+0 to epoch 4).** `cs_jd_r1` (width 384, 256 slices, 5e-4, code_v20 with the
+centered sample-conditioned prototypes): 0.59, 0.58, **0.96, 0.97, 0.98**;
+loss 0.025, 0.017, 0.040, 0.083, 0.090. The plateau, at epoch 2.
+`cs_jd_v17r1` (the same configuration and rate on code_v17, static
+prototypes): 0.60, 0.57, 0.55, 0.53, 0.52; loss 0.025 to 0.012, descending.
+`cs_jd_v17` (width 512, 512 slices, 3.75e-4, code_v17): 0.60, 0.56, 0.53, 0.55,
+0.52; loss 0.024 to 0.011. `cs_jd_rate` (width 512, 512 slices, 1.875e-4,
+code_v20): 0.59, 0.55, 0.53, 0.51, 0.51; loss 0.023 to 0.010. For scale, the
+campaign lanes at 3.75e-4 on code_v20 read 0.90 and 0.93 at epoch 4 (final
+reference) and 0.52 and 0.58 at epoch 4 then 0.96 and 0.92 at epoch 12
+(width 768), and the baselines read 0.54 to 0.56 at epoch 4.
+
+**Reading against the preregistered predictions.** H-config is refuted: the
+configuration that trained in September (384 / 256 at 5e-4) plateaus on the
+current class, faster than any campaign lane. H-proto is supported on both
+of its predictions: the same configuration trains on the static-prototype
+snapshot, and the final reference configuration at the rate that plateaued
+on the current class trains on the static-prototype snapshot. H-rate is
+supported: halving the rate on the current class trains through epoch 4.
+**The centered sample-conditioned prototypes adopted on 2026-10-02 lower
+the rate ceiling on DeepJEB++** to below 3.75e-4 at width 512 and below 5e-4
+at width 384; they did not do so on DrivAerML Surface, DrivAerML Volume or
+AirfRANS, where the code_v18 reference lanes trained at the same rates
+(@sec-nb-proto-cond-2-adopted). What is particular to DeepJEB++ is not
+measured here: 12,451 cases per epoch (28x DrivAerML's 435, so 28x the
+optimizer steps per epoch at the same rate), a load-case one-hot in the
+global inputs, and a mesh of 50,040 triangles with the degenerate cells
+dropped are the candidates.
+
+**Limits of this reading.** One seed per lane; five epochs. The width-768
+campaign lane trained to epoch 4 (0.52) and plateaued between epochs 6 and
+12, so a lane that trains for five epochs is not shown to train for forty.
+Launched to close both gaps: second seeds of the three discriminating lanes
+and a 5-epoch code_v20 control at 3.75e-4 (`cs_jd_*_s43`, `cs_jd_v20ref_s43`),
+and four 40-epoch lanes (`cl_jd_rate_e40_seed42/43`: width 512 with 512
+slices at 1.875e-4 on code_v20; `cl_jd_v17_e40_seed42/43`: the same at
+3.75e-4 on code_v17), scored under the campaign protocols when they finish
+(about one day). A routing-activity probe of the plateaued `cs_jd_r1`
+checkpoint against the healthy `cs_jd_rate` checkpoint (effective slices
+per block, routing entropy) is being written for the current class to test
+whether the plateau is the routing collapse of @sec-nb-routingsat-verdict.
+
+**What this means for the campaign.** Under the frozen architecture and the
+reference rate, ISLA does not train on DeepJEB++; the campaign's DeepJEB++
+row is that fact, with the baselines' numbers beside it. Whether the
+reference rate changes (a class default, so for every dataset), or the
+prototype conditioning is revisited (an architecture change), is Peter's
+decision; the 40-epoch lanes supply the numbers either decision needs
+(what the final reference reaches on DeepJEB++ at half rate, and what it
+reaches with static prototypes at the reference rate).
