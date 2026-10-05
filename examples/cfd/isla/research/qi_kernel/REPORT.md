@@ -21,9 +21,9 @@ Lane `isla-qi-kernel`, branch `psharpe/isla-qi-kernel` (base `psharpe/isla-indep
   protocol's float32 (velocity 0.0635 against 0.0888 on seed 42); the references do
   not (they get 4-10% worse in bf16). Scored in bf16 throughout, kernel /
   interacting is DrivAerML 1.051 / 0.954 / 1.301 and AirfRANS 0.844 / 0.980 / 1.221:
-  still falsified (eddy viscosity). The read's own arithmetic is not the cause
-  (switching the kernel basis and reads between the two changes nothing); see
-  Results.
+  still falsified (eddy viscosity). The read's own arithmetic is not the cause: the
+  dependence sits in the token embeddings (rounding only their inputs to bf16
+  recovers the bf16 score in an otherwise float32 model); see Results.
 - Contracts hold on all four final checkpoints (float64 independence 3e-15 to 3e-12
   of the RMS target; posed residual at or below the read-only class's level).
 - Nothing is running. Commits: a7be6350c (the read), be04b6584 (Triton segment
@@ -362,8 +362,23 @@ verdict is the same either way: eddy viscosity is at or above 1.22 on both datas
 of the model between the two arithmetics: running the kernel basis MLP or the four
 kernel reads in the other arithmetic changes nothing (velocity 0.0945 float32 and
 0.0730 bf16 on seed 42 whichever way those two parts run; the reads' updates differ
-by 3-15% between arithmetics). The dependence therefore sits in the rest of the
-network, i.e. in what the trained blocks do with the point states the read produces.
+by 3-15% between arithmetics). Switching larger groups (`--groups 1`, job 1055182,
+`eval_prec/probe_groups/`) locates it in the token embeddings (`embed` and the point
+tokens' `qt`, which take the points' built-in distance features and stored inputs):
+
+| seed 42, first 6 cars, velocity | float32 | bf16 |
+|---|---|---|
+| whole model | 0.0945 | 0.0730 |
+| embeddings switched to the other arithmetic | 0.0720 | 0.0956 |
+| early blocks (0-7) switched | 0.0952 | 0.0720 |
+| late blocks (8-11), output head, kernel basis or reads switched | 0.0944-0.0951 | 0.0730-0.0733 |
+
+(seed 43: 0.0803 / 0.0738 whole model, 0.0723 / 0.0817 with the embeddings switched;
+the 100-epoch pilot shows the same pattern at a smaller size, 0.1130 / 0.1067.)
+Rounding the embeddings' inputs to bf16 alone recovers the bf16 score in an
+otherwise float32 model. The trained kernel models have learned to depend on the
+bf16 rounding of the token input features; the AirfRANS kernel models do not (bf16
+makes them worse), and on DrivAerML the references get 4-10% worse in bf16.
 
 ### Band anatomy (DrivAerML, protocol arithmetic)
 
@@ -467,10 +482,11 @@ velocity gap but cannot by itself close the eddy-viscosity gap.
   already matches the interacting model on every field. Not launched.
 - **Arithmetic dependence of the DrivAerML kernel models.** They score 11-39% worse in
   float32 than in their bf16 training arithmetic on velocity; the references move
-  4-10% the other way. The read's own operations are not the cause (`prec_probe.py`);
-  where in the network it sits is in Results. Any follow-up should score in both
-  arithmetics, and a fix (for example float32 for the point tokens' path in the late
-  blocks) would need a retrained lane to test.
+  4-10% the other way. The read's own operations are not the cause; the token
+  embeddings are (`prec_probe.py`, Results). Any follow-up should score in both
+  arithmetics; a fix (the embeddings, or the whole point-token input path, in
+  float32 under autocast) would need retrained lanes to test, and would change only
+  the pressure and velocity story, not the eddy-viscosity verdict.
 - **Cost.** 1.6x the read-only step on DrivAerML (sum, last 4 blocks), 1.08x on
   AirfRANS; the remaining per-pair work is torch elementwise ops around the Triton
   segment sums (a fused per-pair kernel would remove most of it).
