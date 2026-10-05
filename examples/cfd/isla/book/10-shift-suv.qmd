@@ -229,26 +229,28 @@ cells.
 #| output: asis
 C, A = char_arms("shift_suv_surface.json")
 n_val = A["ISLA"]["native"]["pressure_l2"]["n_cases"]; n_seeds = A["ISLA"]["native"]["pressure_l2"]["n_seeds"]
-lane_params = lambda lane: json.loads(open(RES / f"campaigns_2026-10-02/char/cl/metrics/{lane}/{lane}/metrics.jsonl").readline())["num_parameters"] / 1e6
-PARAMS = {"ISLA": lane_params("cl_suv_isla_seed42"), "GeoTransolver": lane_params("cl_suv_gt_seed42"), "Transolver": lane_params("cl_suv_t_seed42")}
+# the cost record of the configurations this chapter's protocol artifact holds (final references, or the first-pass lanes); parameter counts come from it
+COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost" if "512 with 512 slices" in C["isla_arm"] else "cost_first_pass"]["Shift-SUV"]
+PARAMS = {a: v["n_parameters"] / 1e6 for a, v in COST.items()}
 print(f"**The Surface task of @sec-surface within the estate family: 794 training bodies, {n_val} validation bodies, 500 epochs, "
-      f"{n_seeds} seeds, every architecture trained at 100,000 sampled cells per case and scored at 200,000, float32; the readout is the "
+      f"{n_seeds} seeds, every architecture scored at 200,000 sampled cells per case in float32; the readout is the "
       "area-weighted relative L2 of surface pressure and of wall shear (@sec-metrics).** The three architectures run at their reference "
-      "configurations, one per architecture for every dataset in the book: ISLA at width 768, 12 layers, 256 slices and cosine routing, "
-      f"learning rate 2.5e-4 ({PARAMS['ISLA']:.0f}M parameters); GeoTransolver at width 1,024 ({PARAMS['GeoTransolver']:.0f}M); Transolver "
-      f"at width 1,024 ({PARAMS['Transolver']:.0f}M), both at the recipe's rate; no lane trains with "
+      "configurations, one per architecture for every dataset in the book (@sec-protocol): ISLA width 512 with 512 slices, 12 layers, cosine "
+      f"routing, learning rate 3.75e-4, trained at 200,000 cells ({PARAMS['ISLA']:.0f}M parameters); GeoTransolver width 256, trained at "
+      f"200,000 cells ({PARAMS['GeoTransolver']:.0f}M); Transolver width 512 with 16 layers at 100,000 cells ({PARAMS['Transolver']:.0f}M), "
+      "both at the recipe's rate of 1e-3; no lane trains with "
       "rotation or translation augmentation. Every model receives what it receives on DrivAerML: the sampled surface cells with "
       "positions, outward normals and areas, and the far-field direction as the one global vector. Each trained checkpoint is scored "
       "three ways on the same validation bodies: on the native validation mesh; on a uniform point cloud at the same cell budget, an "
       "area-proportional Poisson draw with exact Horvitz-Thompson weights, which is what an STL gives without a volume mesh; and with "
       "every validation body rigidly rotated and translated by a keyed rotation and a translation of one RMS point radius "
       "(@sec-invariances).")
-# the cost record of the configurations this chapter's protocol artifact holds (final references, or the first-pass lanes)
-COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost" if "512 with 512 slices" in C["isla_arm"] else "cost_first_pass"]["Shift-SUV"]
+epoch_ratio = COST["ISLA"]["epoch_seconds"] / statistics.mean(COST[a]["epoch_seconds"] for a in ("GeoTransolver", "Transolver"))
 print()
 print("**Cost.** Training on this task, one epoch at the reference configurations on four GB300 ranks in bfloat16 (peak device memory, "
       "maximum over ranks): " + "; ".join(f"{a} {v['peak_gib']:.1f} GiB and {v['epoch_seconds']:.0f} s per epoch at {v['n_parameters'] / 1e6:.0f}M parameters"
-      for a, v in COST.items()) + ". Data: results/char/char_lanes_cost_2026-10-04.json.")
+      for a, v in COST.items()) + f". ISLA's epoch is {epoch_ratio:.1f}x the baselines' mean on this task. "
+      "Data: results/char/char_lanes_cost_2026-10-04.json.")
 ```
 
 ## The standing {#sec-shift-suv-standing}
@@ -292,12 +294,15 @@ print(f"Three readings. First, the native column is a lead for both baselines on
       f"changes only the baselines: ISLA reads {shift('ISLA', 'pressure_l2', 'area'):.3f} / {shift('ISLA', 'wss_l2', 'area'):.3f} of its "
       f"native error, GeoTransolver {fmt_ratio(suv_area['GeoTransolver'])} / {fmt_ratio(shift('GeoTransolver', 'wss_l2', 'area'))} and "
       f"Transolver {fmt_ratio(suv_area['Transolver'])} / {fmt_ratio(shift('Transolver', 'wss_l2', 'area'))}, so the native ordering on "
-      f"pressure becomes GeoTransolver ÷ ISLA {rat('GeoTransolver', 'pressure_l2', 'area'):.2f} and Transolver ÷ ISLA "
-      f"{rat('Transolver', 'pressure_l2', 'area'):.2f} on the point cloud. The baselines' penalty is smaller here than on the DrivAerML "
+      f"pressure becomes GeoTransolver ÷ ISLA {fmt_ratio(rat('GeoTransolver', 'pressure_l2', 'area'))} and Transolver ÷ ISLA "
+      f"{fmt_ratio(rat('Transolver', 'pressure_l2', 'area'))} on the point cloud; GeoTransolver's two seeds read "
+      f"{' and '.join(f'{v:.3f}' for v in seeds_of(A['GeoTransolver']['area']['pressure_l2']))} there against a native "
+      f"{' and '.join(f'{v:.4f}' for v in seeds_of(A['GeoTransolver']['native']['pressure_l2']))}, so how much a trained GeoTransolver depends "
+      "on the draw is itself seed-dependent. The baselines' penalty is smaller here than on the DrivAerML "
       f"Surface task, where the same draw costs GeoTransolver {fmt_ratio(dr_area['GeoTransolver'])} and Transolver "
       f"{fmt_ratio(dr_area['Transolver'])} of their native pressure error (@tbl-drivaerml-surface-protocols): the SUV meshes are "
       "more uniform, so the native and the area-proportional draws differ less, and a model whose answer depends on the draw moves "
-      "less. Third, the rotated and translated column is the native column for ISLA to the fourth decimal on both fields, while "
+      f"less. Third, the rotated and translated column is the native column for ISLA within {100 * max(abs(shift('ISLA', f, 'posed') - 1) for f in C['fields']):.2f}% on both fields, while "
       f"every baseline error exceeds {posed_floor:.2f}, worse than predicting the mean field: a model that reads laboratory "
       "coordinates and never trained on a rotated body has no answer for one. The native lead of the baselines is therefore a lead "
       "on one mesh family in one pose (@sec-invariances).")
