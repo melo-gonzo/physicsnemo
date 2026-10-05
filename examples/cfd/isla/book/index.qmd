@@ -73,10 +73,10 @@ lst = lambda flag: ", ".join(NAMES[n] for n in ART if FINAL[n] == flag)
 three = lambda name, f: "; ".join(f"{lab} {pair(name, f, pk)}" for pk, lab in (("native", "native"), ("area", "point cloud"), ("posed", "posed")))
 tri = lambda name, fields, arch: " / ".join(f"{rat(name, arch, f):.2f}" for f in fields)
 def word(name, arch, f):
-    """One native baseline ÷ ISLA ratio in words: a lead or a deficit only when every baseline seed sits on one side of every ISLA seed."""
-    r = rat(name, arch, f); b = list(ART[name][1][arch]["native"][f]["per_seed"].values()); i = list(ART[name][1]["ISLA"]["native"][f]["per_seed"].values())
-    if r > 1.02 and min(b) > max(i): return "leads"
-    if r < 0.98 and max(b) < min(i): return "trails"
+    """One native baseline ÷ ISLA ratio in words: a lead or a deficit when every baseline seed sits on one side of every ISLA seed, level when the seeds interleave."""
+    b = list(ART[name][1][arch]["native"][f]["per_seed"].values()); i = list(ART[name][1]["ISLA"]["native"][f]["per_seed"].values())
+    if min(b) > max(i): return "leads"
+    if max(b) < min(i): return "trails"
     return "is level"
 # DeepJEB++ keeps its earlier artifact: ISLA 384 wide against GeoTransolver-256 at equal optimizer steps on the full split
 JBS = J("deepjeb_2026-09-22.json")["summary"]
@@ -134,11 +134,13 @@ print(f": The thesis in {len(rows)} rows, one dataset and task per row. "
       "How to read this: each row is one setting and one instrument, so rows are not comparable with one another, and a ratio is the named "
       "baseline's error divided by ISLA's, so a value above one favors ISLA; where a row lists three ratios they are the native mesh, the "
       "uniform point cloud and the rotated-and-translated scoring of one checkpoint, each as GeoTransolver ÷ ISLA / Transolver ÷ ISLA. "
-      f"The {lst(True)} rows hold the final reference configurations, one per architecture, each the most accurate "
-      "under 80 GiB per GPU on the two selection datasets (ISLA width 512 with 512 slices at 200,000 cells, learning rate 3.75e-4; GeoTransolver "
-      f"width 256 at 200,000 cells; Transolver width 512 with 16 layers at 100,000 cells); the {lst(False)} rows hold the first-pass lanes "
-      "under the configurations the DrivAerML half of that selection named (ISLA width 768 at 100,000 "
-      "cells, learning rate 2.5e-4; GeoTransolver and Transolver width 1,024 at 100,000 cells); the DeepJEB++ row holds earlier "
+      + (f"The {lst(True)} rows hold the final reference configurations, one per architecture, each the most accurate "
+         if lst(False) else "Every row but the last holds the final reference configurations, one per architecture, each the most accurate ")
+      + "under 80 GiB per GPU on the two selection datasets (ISLA width 512 with 512 slices at 200,000 cells, learning rate 3.75e-4; GeoTransolver "
+      "width 256 at 200,000 cells; Transolver width 512 with 16 layers at 100,000 cells)"
+      + (f"; the {lst(False)} rows hold the first-pass lanes under the configurations the DrivAerML half of that selection named (ISLA width 768 "
+         "at 100,000 cells, learning rate 2.5e-4; GeoTransolver and Transolver width 1,024 at 100,000 cells)" if lst(False) else "")
+      + "; the DeepJEB++ row holds earlier "
       "configurations named in its cell. Baselines train without augmentation; interior tasks give all three architectures the stored "
       "signed distance and its gradient. Errors are the area-weighted relative L2 (@sec-metrics) in float32, seed means over two seeds, "
       "of surface pressure on the surface tasks and of the named fields elsewhere. The seeds and the controls behind each row, and the "

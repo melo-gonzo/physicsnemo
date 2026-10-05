@@ -105,10 +105,10 @@ shift = lambda arch, f, pk: AR[arch][pk][f]["mean"] / AR[arch]["native"][f]["mea
 N_VAL = AR["ISLA"]["native"]["stress_l2"]["n_cases"]
 PARAMS = {"ISLA": lane_params("cl_r_t2dz_isla_seed42"), "GeoTransolver": lane_params("cl_r_t2dz_gt_seed42"), "Transolver": lane_params("cl_r_t2dz_t_seed42")}
 def standing(arch, f):
-    """A baseline ÷ ISLA ratio in words: a lead or a deficit only when every baseline seed sits on one side of every ISLA seed."""
-    r = rat(arch, f); b = seeds_of(AR[arch]["native"][f]); i = seeds_of(AR["ISLA"]["native"][f])
-    if r > 1.02 and min(b) > max(i): return "leads"
-    if r < 0.98 and max(b) < min(i): return "trails"
+    """A baseline ÷ ISLA ratio in words: a lead or a deficit when every baseline seed sits on one side of every ISLA seed, level when the seeds interleave."""
+    b = seeds_of(AR[arch]["native"][f]); i = seeds_of(AR["ISLA"]["native"][f])
+    if min(b) > max(i): return "leads"
+    if max(b) < min(i): return "trails"
     return "is level with"
 ```
 

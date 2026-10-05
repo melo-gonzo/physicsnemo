@@ -95,9 +95,9 @@ def fmt_ratio(r):
     return f"{r:.0f}x" if r >= 10 else f"{r:.1f}x" if r >= 2 else f"{r:.2f}"
 seeds_of = lambda cell: list(cell["per_seed"].values())
 def standing(r, b_seeds, i_seeds):
-    """Word a baseline ÷ ISLA ratio: a lead or a deficit only when every baseline seed sits on one side of every ISLA seed."""
-    if r > 1.02 and min(b_seeds) > max(i_seeds): return f"leads by {r:.2f}x" if r >= 1.5 else f"leads by {lead(r)}"
-    if r < 0.98 and max(b_seeds) < min(i_seeds): return f"trails by {trail(r)}"
+    """Word a baseline ÷ ISLA ratio: a lead or a deficit when every baseline seed sits on one side of every ISLA seed, level when the seeds interleave."""
+    if min(b_seeds) > max(i_seeds): return f"leads by {r:.2f}x" if r >= 1.5 else f"leads by {lead(r)}"
+    if max(b_seeds) < min(i_seeds): return f"trails by {trail(r)}"
     return f"is level (ratio {r:.2f})"
 CH, AR = char_arms("airfrans.json")
 BASELINES = ("GeoTransolver", "Transolver")
