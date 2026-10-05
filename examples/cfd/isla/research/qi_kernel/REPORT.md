@@ -159,28 +159,32 @@ Later the val-loss advantage shrank (sum, last 4: -13% at epochs 30-50, -7% at 7
 -8% at 99). The val loss is dominated by eddy viscosity, which the read does not help
 (below).
 
-Pilot scores at epoch 100 (`infer.py`, float32, 48 held-out cars, relative L2):
+Pilot scores at epoch 100 (`infer.py`, float32, 48 held-out cars, relative L2; ratio
+to the twin in parentheses):
 
 | pilot | pressure | velocity | eddy viscosity |
 |---|---|---|---|
 | read-only twin | 0.0676 | 0.1158 | 0.2510 |
-| sum, R=0.01 L, last 4 | 0.0601 (0.889) | 0.1061 (0.916) | 0.2638 (1.051) |
-| mean, R=0.01 L, last 4 | pending | pending | pending |
-| sum, R=0.01 L, every block | pending | pending | pending |
+| sum, R=0.01 L, last 4 (chosen) | 0.0601 (0.889) | 0.1061 (0.916) | 0.2638 (1.051) |
+| mean, R=0.01 L, last 4 | 0.0605 (0.895) | 0.1003 (0.866) | 0.3140 (1.251) |
+| sum, R=0.01 L, every block | 0.0619 (0.916) | 0.0991 (0.856) | 0.3149 (1.255) |
 
-Band anatomy of the same two (pooled relative L2 by \|stored sdf\|/L band; share of
-points in parentheses):
+Band anatomy (pooled relative L2 by \|stored sdf\|/L band; share of points in
+parentheses):
 
-| band | pressure twin / sum4 | velocity twin / sum4 | eddy viscosity twin / sum4 |
+| band | pressure: twin, sum4, mean4, sum12 | velocity: same order | eddy viscosity: same order |
 |---|---|---|---|
-| < 0.01 (72%) | 0.0682 / 0.0604 | 0.1416 / 0.1271 | 0.1208 / 0.1193 |
-| 0.01-0.1 (17%) | 0.0605 / 0.0589 | 0.0625 / 0.0629 | 0.1187 / 0.1227 |
-| 0.1-1 (9%) | 0.1106 / 0.0894 | 0.0721 / 0.0740 | 0.1321 / 0.1470 |
-| > 1 (2%) | 0.3571 / 0.2991 | 0.0863 / 0.0906 | 0.4081 / 0.4301 |
+| < 0.01 (72%) | 0.068, 0.060, 0.060, 0.062 | 0.142, 0.127, 0.118, 0.118 | 0.121, 0.119, 0.117, 0.116 |
+| 0.01-0.1 (17%) | 0.061, 0.059, 0.065, 0.063 | 0.063, 0.063, 0.062, 0.060 | 0.119, 0.123, 0.114, 0.117 |
+| 0.1-1 (9%) | 0.111, 0.089, 0.107, 0.096 | 0.072, 0.074, 0.077, 0.073 | 0.132, 0.147, 0.140, 0.148 |
+| > 1 (2%) | 0.357, 0.299, 0.305, 0.274 | 0.086, 0.091, 0.099, 0.096 | 0.408, 0.430, 0.531, 0.533 |
 
-The read helps where it reads (velocity -10% and pressure -11% within 0.01 L of the
-wall) and pressure everywhere; eddy viscosity is unchanged near the wall and 3-11%
-worse away from it.
+The read helps where it reads: within 0.01 L of the wall velocity drops 10-17% and
+pressure 9-12%; it also lowers pressure further out. Eddy viscosity is a little better
+near the wall but 5% to 30% worse beyond 1 L, in the wake, where no point reads
+anything (R = 0.01 L), and the per-car eddy-viscosity error is dominated by the wake:
+the more reading (every block, or the mean read), the larger that loss. Sum / last 4
+is the best compromise of the three and remains the full-lane design.
 
 Contracts on the trained pilot checkpoint (sum, last 4, epoch 100; `qi_probe.py`,
 first held-out car in float64 with the exact search): 2,000 sentinels alone against the
