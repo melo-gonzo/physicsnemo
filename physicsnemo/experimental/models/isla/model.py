@@ -229,10 +229,12 @@ from physicsnemo.experimental.models.isla.heads import (
 from physicsnemo.experimental.models.isla.inputs import _declare, _InputSet, _leaf
 from physicsnemo.experimental.models.isla.kernel_read import (
     _BoundaryKernelRead,
+    _KernelBasis,
     boundary_pairs,
     kernel_geo_width,
     pair_invariants,
 )
+from physicsnemo.experimental.models.isla.pair_kernels import PairPlan
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import cell_measures
 from physicsnemo.mesh.fields import FieldSchema, FieldSchemaLike
@@ -669,6 +671,7 @@ class ISLA(Module):
         self.kernel_read = kernel_read
         self.kernel_read_radius = float(kernel_read_radius)
         self.kernel_read_blocks = None
+        self.kernel_basis = None
         self.kernel_reads = None
         if kernel_read is not None:
             if not (self.interior and self.query_independent):
@@ -690,8 +693,9 @@ class ISLA(Module):
                 )
             self.kernel_read_blocks = m
             n_geo = kernel_geo_width(K, self.qin.n_block_vecs, self.bin.n_block_vecs)
+            self.kernel_basis = _KernelBasis(n_geo)
             self.kernel_reads = nn.ModuleList(
-                _BoundaryKernelRead(hidden, n_geo, kernel_read, self.kernel_read_radius, self.dim)
+                _BoundaryKernelRead(hidden, kernel_read, self.kernel_read_radius, self.dim)
                 for _ in range(m)
             )
         #: Pairs of the last forward pass's kernel read (diagnostic; 0 without one).
@@ -1141,6 +1145,9 @@ class ISLA(Module):
         nq = q_r.shape[1]
         nb_vecs, nq_vecs = self.bin.n_block_vecs, self.qin.n_block_vecs
         qi, bj = boundary_pairs(q_r, r, self.kernel_read_radius)
+        ### Grouped by point (stable, so a search that already groups them is kept).
+        order = torch.argsort(qi, stable=True)
+        qi, bj = qi[order], bj[order]
         qi, bj, inv, log_b = pair_invariants(
             qi,
             bj,
@@ -1158,7 +1165,8 @@ class ISLA(Module):
         ### measures and to splitting a cell into copies that share its measure.
         log_frac = (log_w - torch.logsumexp(log_w, dim=1, keepdim=True)).reshape(b * n)
         self.kernel_read_pairs = int(qi.shape[0])
-        return qi, bj, inv, log_frac[bj].to(log_b.dtype) + log_b
+        plan = PairPlan.build(qi, bj, b * nq, b * n)
+        return plan, self.kernel_basis(inv), log_frac[bj].to(log_b.dtype) + log_b
 
     def _forward_tensors(
         self,

@@ -52,6 +52,11 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
+from physicsnemo.experimental.models.isla.pair_kernels import (
+    pair_scores,
+    pair_weighted_sum,
+)
+
 #: Heads of the kernel read; each head owns ``KERNEL_READ_WIDTH // KERNEL_READ_HEADS``
 #: value channels.
 KERNEL_READ_HEADS = 8
@@ -59,8 +64,11 @@ KERNEL_READ_HEADS = 8
 KERNEL_READ_WIDTH = 64
 #: Query/key channels per head of the ``"mean"`` read.
 KERNEL_READ_KEY = 4
-#: Hidden width of the per-block kernel MLP on the pair invariants.
-KERNEL_READ_HIDDEN = 32
+#: Hidden width of the shared kernel MLP on the pair invariants.
+KERNEL_READ_HIDDEN = 64
+#: Kernel basis functions of the pair invariants, shared by every block; each block's
+#: kernel is a learned linear combination of them per head.
+KERNEL_READ_BASIS = 16
 #: Query rows per chunk of the exact (torch) radius search.
 _EXACT_SEARCH_CHUNK = 4096
 
@@ -214,18 +222,36 @@ def reference_log_fraction(radius: float, dim: int) -> float:
     return math.log(near / total)
 
 
+class _KernelBasis(nn.Module):
+    """The kernel basis ``phi(iota)`` ``(P, KERNEL_READ_BASIS)``: one MLP of the pair
+    invariants, evaluated once per forward pass and shared by every block's read (the
+    per-pair work of a block is then a small linear map, not an MLP)."""
+
+    def __init__(self, n_geo: int) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(n_geo, KERNEL_READ_HIDDEN),
+            nn.GELU(),
+            nn.Linear(KERNEL_READ_HIDDEN, KERNEL_READ_HIDDEN),
+            nn.GELU(),
+            nn.Linear(KERNEL_READ_HIDDEN, KERNEL_READ_BASIS),
+        )
+
+    def forward(self, inv: torch.Tensor) -> torch.Tensor:
+        return self.net(inv)
+
+
 class _BoundaryKernelRead(nn.Module):
     """One block's kernel read for the passive prediction-point tokens.
 
-    ``forward(h_b, h_q, pairs)`` with the boundary token states ``h_b`` ``(B*N, H)`` and
-    the point states ``h_q`` ``(B*Q, H)`` at the block's depth returns the residual
+    ``forward(h_b, h_q, pairs)`` with the boundary token states ``h_b`` ``(B*N, H)``,
+    the point states ``h_q`` ``(B*Q, H)`` at the block's depth and ``pairs`` =
+    ``(PairPlan, kernel basis (P, KERNEL_READ_BASIS), log weight (P,))`` returns the residual
     update ``(B*Q, H)`` of the points. The output projection starts at zero, so the
     model starts as the plain read-only model.
     """
 
-    def __init__(
-        self, hidden: int, n_geo: int, mode: str, radius: float, dim: int
-    ) -> None:
+    def __init__(self, hidden: int, mode: str, radius: float, dim: int) -> None:
         super().__init__()
         if mode not in ("mean", "sum"):
             raise ValueError(f"kernel_read must be 'mean' or 'sum', got {mode!r}")
@@ -233,11 +259,7 @@ class _BoundaryKernelRead(nn.Module):
         h, w = KERNEL_READ_HEADS, KERNEL_READ_WIDTH
         self.norm_b = nn.LayerNorm(hidden)
         self.value = nn.Linear(hidden, w)
-        self.kernel = nn.Sequential(
-            nn.Linear(n_geo, KERNEL_READ_HIDDEN),
-            nn.GELU(),
-            nn.Linear(KERNEL_READ_HIDDEN, h),
-        )
+        self.kernel = nn.Linear(KERNEL_READ_BASIS, h)
         log_f = reference_log_fraction(radius, dim)
         if mode == "mean":
             self.norm_q = nn.LayerNorm(hidden)
@@ -250,41 +272,43 @@ class _BoundaryKernelRead(nn.Module):
         self.out = nn.Linear(w, hidden, bias=False)
         nn.init.zeros_(self.out.weight)
 
-    def _read(self, h_b, h_q, inv, log_m, qi, bj):
+    def _read(self, h_b, h_q, basis, log_m, plan):
         nh, c = KERNEL_READ_HEADS, KERNEL_READ_WIDTH // KERNEL_READ_HEADS
         ### Weights and sums in at least float32 (float64 stays float64).
         acc = torch.promote_types(h_q.dtype, torch.float32)
         hb = self.norm_b(h_b)
         v = self.value(hb).view(-1, nh, c)
-        ker = self.kernel(inv.to(hb.dtype)).to(acc)  # (P, heads)
+        ker = self.kernel(basis).to(acc)  # (P, heads)
         if self.mode == "mean":
             k = self.key(hb).view(-1, nh, KERNEL_READ_KEY)
             q = self.query(self.norm_q(h_q)).view(-1, nh, KERNEL_READ_KEY)
-            logit = (
-                ker
-                + (q[qi] * k[bj]).to(acc).sum(-1) / math.sqrt(KERNEL_READ_KEY)
-                + log_m.to(acc)[:, None]
-            )
-            null = self.null_logw.to(acc)[None].expand(h_q.shape[0], nh)
+            score = pair_scores(q, k, plan, acc) / math.sqrt(KERNEL_READ_KEY)
+            logit = ker + score + log_m.to(acc)[:, None]
+            null = self.null_logw.to(acc)[None].expand(plan.n_q, nh)
             ### A softmax over each point's pairs and the null: the shift is the
-            ### running maximum (detached; the softmax does not depend on it).
-            m = null.scatter_reduce(
-                0, qi[:, None].expand(-1, nh), logit, "amax", include_self=True
-            ).detach()
-            e = torch.exp(logit - m[qi])
-            den = torch.exp(null - m).index_add(0, qi, e)
-            wgt = e / den[qi]
+            ### larger of the null and the point's largest logit (detached; the
+            ### softmax does not depend on it).
+            counts = plan.q_offsets[1:] - plan.q_offsets[:-1]
+            seg_max = torch.segment_reduce(
+                logit.detach(), "max", lengths=counts, axis=0, unsafe=True
+            )
+            m = torch.maximum(null.detach(), seg_max)
+            e = torch.exp(logit - m[plan.qi])
+            ones = e.new_ones(plan.n_b, nh, 1)
+            den = torch.exp(null - m) + pair_weighted_sum(e, ones, plan)[..., 0]
+            read = (
+                pair_weighted_sum(e, v, plan) / den[..., None]
+            )  # (n_q, heads, c) in acc
         else:
             wgt = ker * torch.exp(self.log_scale.to(acc)[None] + log_m.to(acc)[:, None])
-        read = h_q.new_zeros(h_q.shape[0], nh, c, dtype=acc)
-        read = read.index_add(0, qi, wgt[..., None] * v[bj].to(acc))
+            read = pair_weighted_sum(wgt, v, plan)
         return self.out(read.view(-1, nh * c).to(h_q.dtype))
 
     def forward(self, h_b, h_q, pairs):
-        qi, bj, inv, log_m = pairs
+        plan, basis, log_m = pairs
         if torch.is_grad_enabled() and (h_b.requires_grad or h_q.requires_grad):
             ### The (P, .) pair tensors are rebuilt in backward, not stored.
             return checkpoint(
-                self._read, h_b, h_q, inv, log_m, qi, bj, use_reentrant=False
+                self._read, h_b, h_q, basis, log_m, plan, use_reentrant=False
             )
-        return self._read(h_b, h_q, inv, log_m, qi, bj)
+        return self._read(h_b, h_q, basis, log_m, plan)

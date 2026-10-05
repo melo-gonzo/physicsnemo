@@ -70,7 +70,7 @@ def _model(mode, dim=3, radius=0.3, **kw):
         **kw,
     )
     with torch.no_grad():
-        for p in m.kernel_reads.parameters():
+        for p in [*m.kernel_reads.parameters(), *m.kernel_basis.parameters()]:
             p.normal_(0.0, 0.3)
     return m
 
@@ -208,7 +208,11 @@ def test_kernel_read_is_live_and_local(mode):
         .eval()
     )
     plain.load_state_dict(
-        {k: v for k, v in m.state_dict().items() if not k.startswith("kernel_reads")}
+        {
+            k: v
+            for k, v in m.state_dict().items()
+            if not k.startswith(("kernel_reads", "kernel_basis"))
+        }
     )
     mesh, drv, q, sdf, sn = _case()
     a, b = _run(m, mesh, drv, q, sdf, sn), _run(plain, mesh, drv, q, sdf, sn)
@@ -238,7 +242,11 @@ def test_kernel_read_falloff_vanishes_smoothly_at_the_radius():
         .eval()
     )
     plain.load_state_dict(
-        {k: v for k, v in m.state_dict().items() if not k.startswith("kernel_reads")}
+        {
+            k: v
+            for k, v in m.state_dict().items()
+            if not k.startswith(("kernel_reads", "kernel_basis"))
+        }
     )
     pts, nrm, w, drv = cloud(50, seed=4)
     mesh = soup(pts * 30.0, nrm, w)  # cells far apart against the radius
@@ -343,9 +351,9 @@ def test_kernel_read_boundary_vector_inputs_enter_the_pair_invariants():
         .eval()
     )
     with torch.no_grad():
-        for p in m.kernel_reads.parameters():
+        for p in [*m.kernel_reads.parameters(), *m.kernel_basis.parameters()]:
             p.normal_(0.0, 0.3)
-    assert m.kernel_reads[0].kernel[0].in_features == 5 + 2 + 2 + 2
+    assert m.kernel_basis.net[0].in_features == 5 + 2 + 2 + 2
     mesh, drv, q, sdf, sn = _case()
     tr = torch.randn(
         mesh.n_cells, 3, generator=torch.Generator().manual_seed(5), dtype=D
@@ -501,3 +509,47 @@ def test_kernel_read_cuda_fused_and_compiled_training_path(mode):
     assert all(
         torch.allclose(part[k], full[k][:50], atol=1e-4, rtol=1e-4) for k in part
     )
+
+
+@cuda_only
+@pytest.mark.parametrize("dtype", [torch.float64, torch.float32])
+def test_pair_kernels_match_the_eager_reference(dtype):
+    """The Triton segment sum and pair dot (forward and both gradients) equal the
+    eager gather / index_add reference; points without pairs read zero and a cell
+    read by thousands of pairs (a thousand-cell boundary) is summed without atomics."""
+    from physicsnemo.experimental.models.isla.pair_kernels import (
+        PairPlan,
+        _eager_scores,
+        _eager_weighted_sum,
+        pair_scores,
+        pair_weighted_sum,
+    )
+
+    g = torch.Generator().manual_seed(0)
+    nq, nb = 500, 40
+    counts = torch.randint(0, 120, (nq,), generator=g)
+    counts[::7] = 0
+    qi = torch.repeat_interleave(torch.arange(nq), counts).cuda()
+    bj = torch.randint(0, nb, (qi.shape[0],), generator=g).cuda()
+    plan = PairPlan.build(qi, bj, nq, nb)
+    p = qi.shape[0]
+    mk = lambda *s: torch.randn(*s, generator=g, dtype=dtype).cuda().requires_grad_()  # noqa: E731
+    w, x, a, b = mk(p, 8), mk(nb, 8, 8), mk(nq, 8, 4), mk(nb, 8, 4)
+    tol = (
+        {"atol": 1e-10, "rtol": 1e-10}
+        if dtype == torch.float64
+        else {"atol": 1e-4, "rtol": 1e-4}
+    )
+    for fast, ref, args in (
+        (pair_weighted_sum, _eager_weighted_sum, (w, x, plan)),
+        (pair_scores, _eager_scores, (a, b, plan, dtype)),
+    ):
+        out_f = fast(*args)
+        out_r = ref(*args)
+        assert torch.allclose(out_f, out_r, **tol)
+        go = torch.randn(out_r.shape, generator=g, dtype=dtype).cuda()
+        ins = [t for t in args if isinstance(t, torch.Tensor)]
+        gf = torch.autograd.grad(out_f, ins, go)
+        gr = torch.autograd.grad(out_r, ins, go)
+        assert all(torch.allclose(u, v, **tol) for u, v in zip(gf, gr))
+    assert pair_weighted_sum(w, x, plan)[::7].abs().max() == 0
