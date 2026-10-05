@@ -88,6 +88,10 @@ for art, (fields, arms, isla_arm) in DATASETS.items():
             complete = False
     if isla_arm in out["arms"] and len(out["arms"]) >= 1:
         out["complete"] = complete
+        prev = json.load(open(f"{R}/{art}")) if os.path.exists(f"{R}/{art}") else None
+        if not complete and prev and prev.get("complete"):
+            print(f"== {art}: partial ({len(out['arms'])} arms); the complete artifact on disk (arms {list(prev['arms'])}) is kept")
+            continue
         json.dump(out, open(f"{R}/{art}", "w"), indent=1); written.append(art)
         print(f"== {art} ({'complete' if complete else 'partial'})")
         for label, d in out["arms"].items():
