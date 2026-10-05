@@ -35,6 +35,10 @@ Checkpointing
     :members:
     :show-inheritance:
 
+.. automodule:: physicsnemo.utils.checkpoint_manager
+    :members:
+    :show-inheritance:
+
 
 Profiling Utils
 ---------------
