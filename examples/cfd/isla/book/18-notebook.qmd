@@ -33944,3 +33944,50 @@ coordinates) are post-campaign architecture changes and wait for Peter.
 **Cost (one epoch, four GB300 ranks, bfloat16; `cs_r_lug_*`).** ISLA 8.9
 GiB, 184 s; GeoTransolver 6.1 GiB, 85 s; Transolver 10.0 GiB, 79 s. ISLA's
 epoch is 2.2x the baselines' mean on this 5,000 to 15,000-node task.
+
+## 2026-10-05 — CHAR DrivAerML Volume under the final references: ISLA leads GeoTransolver width 256 by 1.24x on pressure and 1.58x on velocity (Transolver 1.33x and 1.97x), trails GeoTransolver by 4% on eddy viscosity; posed = native to four digits for ISLA; ISLA's point-cloud column stays its boundary-law sensitivity (7.9x / 6.6x / 6.7x) {#sec-nb-char-volume-final}
+
+**Setting.** The DrivAerML Volume task (435 cars, 48 validation cars,
+200,000 interior points per case plus the boundary sample, pressure,
+velocity and eddy viscosity in the flow) re-run under the final reference
+configurations (@sec-nb-ref80-verdict): `cl_r_vol_isla` (ISLA width 512 with
+512 slices, 3.75e-4, 200,000 cells, 126 GiB peak), `cl_r_vol_gt`
+(GeoTransolver width 256, 200,000 cells, 118 GiB), `cl_r_vol_t` (Transolver
+width 512 with 16 layers, 100,000 cells, 62 GiB), 500 epochs, two seeds,
+float32 under the three protocols (`results/char/drivaerml_volume.json`).
+First pass: @sec-nb-char-protocols-instruments and the 07 Volume section of
+2026-10-04.
+
+**What we saw (seed means; per seed; pressure / velocity / eddy
+viscosity).** Native: ISLA 0.0394 (0.0387 / 0.0400), 0.0635 (0.0619 / 0.0651),
+0.0876 (0.0868 / 0.0884); GeoTransolver 0.0487 (0.0490 / 0.0484), 0.1002
+(0.0999 / 0.1006), 0.0838 (0.0844 / 0.0831); Transolver 0.0525 (0.0523 /
+0.0526), 0.1250 (0.1246 / 0.1254), 0.0893 (0.0891 / 0.0896). Rotated and
+translated: ISLA identical to native to four digits on every field and
+seed; GeoTransolver 0.80 / 1.30 / 1.37; Transolver 0.81 / 1.25 / 1.09.
+Uniform (area-proportional) boundary point cloud: ISLA 0.311 / 0.417 / 0.583
+(7.9x, 6.6x, 6.7x its native error; seeds 0.351 / 0.272 on pressure), the
+baselines unchanged (they never see the boundary sample). Against the first
+pass: ISLA improved on every field (0.0453 / 0.0754 / 0.0980 before, 13% to
+16%); GeoTransolver width 256 is 6% to 10% behind width 1,024 (0.0459 /
+0.0913 / 0.0833 before); Transolver 5% to 9% behind width 1,024.
+
+**Standing (baseline ÷ ISLA, seed means).** Pressure: GeoTransolver 1.24,
+Transolver 1.33, ISLA leading on both seeds against both. Velocity: 1.58 and
+1.97, both seeds. Eddy viscosity: GeoTransolver 0.96 (leads on both seeds, by
+4%), Transolver 1.02 (ISLA leads on both seeds, by 2%).
+
+**Cost (one epoch, four GB300 ranks, bfloat16; `cs_r_vol_*`).** ISLA 126.2
+GiB, 117 s; GeoTransolver 117.9 GiB, 144 s; Transolver 62.0 GiB, 68 s. The
+two 200,000-cell references exceed the 80 GiB selection budget on this task
+(the budget was the selection criterion on DrivAerML Surface and the wings);
+ISLA's epoch is 1.1x the baselines' mean.
+
+**What it changes.** The 07 Volume section is restated from the artifact:
+the interior finding of the campaign is a velocity lead of 1.6x to 2.0x and
+a pressure lead of 1.2x to 1.3x against both released baselines at matched
+training cells, with pose invariance to four digits, and the boundary-law
+sensitivity of ISLA's interior predictions (7x to 8x under an
+area-proportional boundary draw) stays the section's named limit. With this
+entry seven of the eight tasks are scored under the final references; the
+DeepJEB++ lanes remain.
