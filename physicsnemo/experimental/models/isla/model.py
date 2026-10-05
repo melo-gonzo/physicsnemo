@@ -227,6 +227,12 @@ from physicsnemo.experimental.models.isla.heads import (
     _pseudovectors,
 )
 from physicsnemo.experimental.models.isla.inputs import _declare, _InputSet, _leaf
+from physicsnemo.experimental.models.isla.kernel_read import (
+    _BoundaryKernelRead,
+    boundary_pairs,
+    kernel_geo_width,
+    pair_invariants,
+)
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import cell_measures
 from physicsnemo.mesh.fields import FieldSchema, FieldSchemaLike
@@ -348,6 +354,25 @@ class ISLA(Module):
             that changes every case, leave it off. On four GB300 ranks at
             200,000 cells it cut the training step by 19 to 35% and peak memory
             by 27% at bfloat16-roundoff differences (PERF-3, 2026-10-01).
+        kernel_read: Read-only interior task only (``interior=True,
+            query_independent=True``). ``None`` (default): the prediction points
+            read the slices only. ``"mean"`` or ``"sum"``: after each of the last
+            ``kernel_read_blocks`` blocks the prediction points also read the
+            individual boundary cells within ``kernel_read_radius``, a learned
+            kernel of the pair's relative-geometry invariants weighted by the
+            cell's share of the boundary measure and a smooth compact falloff:
+            an area-weighted softmax with a null (``"mean"``, which also
+            matches the point's state against the cell's) or an unnormalized
+            quadrature (``"sum"``, GLOBE-like); see
+            :mod:`~physicsnemo.experimental.models.isla.kernel_read`. The
+            boundary tokens and the slices are unchanged, so every prediction
+            still depends on its own point and the boundary only.
+        kernel_read_radius: The kernel read's radius in units of the length
+            unit ``L`` (default 0.01). The neighbourhood is the exact radius set
+            (no neighbour count), so its cost grows with the number of
+            boundary cells near the points.
+        kernel_read_blocks: Number of final blocks followed by a kernel read
+            (default ``None``: every block).
         dim: Spatial dimension of the domain (default 3). Every boundary mesh
             is a ``Mesh[dim - 1, dim]`` and every prediction point has ``dim``
             coordinates. Every geometric quantity is built for ``dim``
@@ -421,6 +446,9 @@ class ISLA(Module):
         geo_checkpoint: bool = False,
         geo_kernel: GeoKernel | None = None,
         compile_blocks: bool = False,
+        kernel_read: str | None = None,
+        kernel_read_radius: float = 0.01,
+        kernel_read_blocks: int | None = None,
         dim: int = 3,
         eps: float = 1e-12,
     ) -> None:
@@ -633,6 +661,41 @@ class ISLA(Module):
             if self.interior
             else None
         )
+        ### The boundary kernel read (kernel_read.py): passive prediction points also
+        ### read the individual boundary cells within kernel_read_radius (units of L)
+        ### at the last kernel_read_blocks blocks. Registered after everything else,
+        ### and only when asked for, so every other model owns exactly the parameters
+        ### it had before.
+        self.kernel_read = kernel_read
+        self.kernel_read_radius = float(kernel_read_radius)
+        self.kernel_read_blocks = None
+        self.kernel_reads = None
+        if kernel_read is not None:
+            if not (self.interior and self.query_independent):
+                raise ValueError(
+                    "kernel_read is a read for passive prediction points; build with "
+                    "interior=True and query_independent=True"
+                )
+            if self.n_block_tens:
+                raise NotImplementedError(
+                    "kernel_read with rank-2 boundary or query inputs (their pair "
+                    "contractions are not implemented)"
+                )
+            if not self.kernel_read_radius > 0:
+                raise ValueError(f"kernel_read_radius must be positive, got {kernel_read_radius!r}")
+            m = n_layers if kernel_read_blocks is None else int(kernel_read_blocks)
+            if not 1 <= m <= n_layers:
+                raise ValueError(
+                    f"kernel_read_blocks must lie in [1, n_layers={n_layers}], got {kernel_read_blocks!r}"
+                )
+            self.kernel_read_blocks = m
+            n_geo = kernel_geo_width(K, self.qin.n_block_vecs, self.bin.n_block_vecs)
+            self.kernel_reads = nn.ModuleList(
+                _BoundaryKernelRead(hidden, n_geo, kernel_read, self.kernel_read_radius, self.dim)
+                for _ in range(m)
+            )
+        #: Pairs of the last forward pass's kernel read (diagnostic; 0 without one).
+        self.kernel_read_pairs = 0
 
     @staticmethod
     def _dots(x, g_hat):
@@ -1069,6 +1132,34 @@ class ISLA(Module):
             point_data.set(FieldSchema.key(name), value[0])
         return Mesh(points=out_points, point_data=point_data, global_data=global_td)
 
+    def _kernel_read_pairs(self, r, n_hat, vecs, log_w, q_r, q_nhat, q_vecs, g_unit):
+        """The kernel read's pairs: every (point, boundary cell) closer than
+        ``kernel_read_radius`` (frame units), their invariants and log weights
+        ``log(mu_j / sum mu) + log b``; the token tensors are the boundary's
+        (``r``, ``n_hat``, ``vecs``, ``log_w``) and the points' (``q_*``)."""
+        b, n, d = r.shape
+        nq = q_r.shape[1]
+        nb_vecs, nq_vecs = self.bin.n_block_vecs, self.qin.n_block_vecs
+        qi, bj = boundary_pairs(q_r, r, self.kernel_read_radius)
+        qi, bj, inv, log_b = pair_invariants(
+            qi,
+            bj,
+            query_r=q_r.reshape(b * nq, d),
+            query_n=q_nhat.reshape(b * nq, d),
+            query_vecs=None if q_vecs is None else q_vecs[:, :, nb_vecs:].reshape(b * nq, nq_vecs, d),
+            boundary_r=r.reshape(b * n, d),
+            boundary_n=n_hat.reshape(b * n, d),
+            boundary_vecs=None if vecs is None else vecs[:, :, :nb_vecs].reshape(b * n, nb_vecs, d),
+            g_unit=g_unit,
+            radius=self.kernel_read_radius,
+            eps=self.eps,
+        )
+        ### The cell's share of the boundary measure: invariant to a rescale of the
+        ### measures and to splitting a cell into copies that share its measure.
+        log_frac = (log_w - torch.logsumexp(log_w, dim=1, keepdim=True)).reshape(b * n)
+        self.kernel_read_pairs = int(qi.shape[0])
+        return qi, bj, inv, log_frac[bj].to(log_b.dtype) + log_b
+
     def _forward_tensors(
         self,
         *,
@@ -1189,6 +1280,8 @@ class ISLA(Module):
                     - math.log(nq)
                 )
             q_vecs, q_tens = self._block_extras(None, None, q_vecs, q_tens, bq, nq, points)
+            if self.kernel_reads is not None:
+                kernel_pairs = self._kernel_read_pairs(r, n_hat, vecs, log_w, q_r, q_nhat, q_vecs, g_unit)
             h = torch.cat([h, h_q], dim=1)
             r = torch.cat([r, q_r], dim=1)
             n_hat = torch.cat([n_hat, q_nhat], dim=1)
@@ -1199,8 +1292,17 @@ class ISLA(Module):
                 tens = torch.cat([tens, q_tens], dim=1)
             n = n + nq
 
-        for block in self._block_callables():
+        first_read = len(self.blocks) - (self.kernel_read_blocks or 0)
+        for i, block in enumerate(self._block_callables()):
             h = block(h, log_w, r, n_hat, g_hat, self.eps, vecs, tens)
+            if self.kernel_reads is not None and i >= first_read:
+                ### The points' residual update from the boundary cells' states at this
+                ### depth; the boundary tokens (and so the slices) are untouched.
+                h_b, h_p = h[:, :n_boundary], h[:, n_boundary:]
+                delta = self.kernel_reads[i - first_read](
+                    h_b.reshape(-1, h.shape[-1]), h_p.reshape(-1, h.shape[-1]), kernel_pairs
+                )
+                h = torch.cat([h_b, h_p + delta.view_as(h_p)], dim=1)
 
         ### The head frame builds its slice anchors from ALL tokens (src_r, src_logw
         ### and h); in the interior mode the head reads the query tokens only, so

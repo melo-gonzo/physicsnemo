@@ -1,0 +1,290 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+r"""ISLA's boundary kernel read: passive prediction points read individual boundary cells.
+
+A GLOBE-style read for the read-only interior task (``query_independent=True``). At a
+slice block, each prediction point :math:`q` sums a learned kernel over every boundary
+cell :math:`j` within a radius :math:`R` (in units of the length unit :math:`L`),
+weighted by the cell's share of the boundary measure and a smooth compact falloff:
+
+.. math::
+
+    \omega_j = \mu_j / \textstyle\sum_i \mu_i, \qquad
+    b_{qj} = (1 - s_{qj}^2)^3_+, \quad s_{qj} = |x_q - y_j| / (R L).
+
+``"sum"`` (GLOBE-like, an unnormalized quadrature):
+:math:`\text{read}_{qh} = e^{\gamma_h} \sum_j \omega_j b_{qj} K_h(\iota_{qj}) v_{jh}`.
+``"mean"`` (ISLA-like, a softmax with the log measure as bias and a null of learned
+mass :math:`e^{\beta_h}`, a fraction of the whole boundary measure, carrying value zero):
+:math:`\text{read}_{qh} = \sum_j a_{qjh} v_{jh}`,
+:math:`a_{qjh} \propto \omega_j b_{qj} \exp(K_h(\iota_{qj}) + \langle q_h, k_{jh}\rangle / \sqrt{c})`
+normalized against :math:`e^{\beta_h} + \sum_j (\cdot)`. Either way the read vanishes
+smoothly as a point leaves the boundary's neighbourhood, and a point with no cell
+within :math:`R` reads exactly zero (the slices carry the far field).
+
+The kernel inputs :math:`\iota_{qj}` are invariants of the pair's relative geometry
+(:func:`pair_invariants`); the values :math:`v_j`, keys :math:`k_j` and queries
+:math:`q` are linear maps of invariant token states (the boundary cell's and the point's
+own), so the read is invariant and the equivariant heads assemble every output. The
+neighbourhood is the exact radius set, found by :func:`boundary_pairs` (never a fixed
+neighbour count), so splitting a cell into coincident copies of half the measure, a
+uniform rescale of the measures and a similarity of the geometry change nothing, and a
+prediction depends on its own point and the boundary only.
+"""
+
+import math
+
+import torch
+import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
+
+#: Heads of the kernel read; each head owns ``KERNEL_READ_WIDTH // KERNEL_READ_HEADS``
+#: value channels.
+KERNEL_READ_HEADS = 8
+#: Value channels of the kernel read (all heads together).
+KERNEL_READ_WIDTH = 64
+#: Query/key channels per head of the ``"mean"`` read.
+KERNEL_READ_KEY = 4
+#: Hidden width of the per-block kernel MLP on the pair invariants.
+KERNEL_READ_HIDDEN = 32
+#: Query rows per chunk of the exact (torch) radius search.
+_EXACT_SEARCH_CHUNK = 4096
+
+
+def kernel_geo_width(
+    n_global_vectors: int, n_query_vecs: int, n_boundary_vecs: int
+) -> int:
+    """Width of :func:`pair_invariants`: s, log s, rho.n_j, rho.n_q, n_q.n_j, then
+    rho.g_k and n_j.g_k (2K), rho.v and n_j.v per query vector (2P_q), rho.u and n_q.u
+    per boundary vector (2P_b)."""
+    return (
+        5 + 2 * int(n_global_vectors) + 2 * int(n_query_vecs) + 2 * int(n_boundary_vecs)
+    )
+
+
+def _exact_radius_pairs(q: torch.Tensor, y: torch.Tensor, radius: float):
+    """All (query, cell) pairs with distance below ``radius``: a chunked cdist in the
+    input precision, any dimension. Pairs come grouped by query."""
+    qi, bj = [], []
+    for start in range(0, q.shape[0], _EXACT_SEARCH_CHUNK):
+        d = torch.cdist(
+            q[start : start + _EXACT_SEARCH_CHUNK],
+            y,
+            compute_mode="donot_use_mm_for_euclid_dist",
+        )
+        i, j = (d < radius).nonzero(as_tuple=True)
+        qi.append(i + start)
+        bj.append(j)
+    return torch.cat(qi), torch.cat(bj)
+
+
+def boundary_pairs(
+    query_r: torch.Tensor, boundary_r: torch.Tensor, radius: float
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Every (prediction point, boundary cell) pair closer than ``radius``.
+
+    ``query_r`` ``(B, Q, d)`` and ``boundary_r`` ``(B, N, d)`` in the frame's unit;
+    returns flat int64 indices ``(qi, bj)`` into the ``B * Q`` points and the ``B * N``
+    cells, grouped by point. The set is exact up to the search's precision: on CUDA in
+    float32 or lower the library's hash-grid radius search
+    (:func:`physicsnemo.nn.functional.neighbors.radius_search.radius_search`, Warp;
+    a planar problem is padded with a zero coordinate), else an exact chunked cdist in
+    the input precision. Membership can differ between the two only at the rim, where
+    the falloff weight is of order ``(1 - s^2)^3 ~ 1e-20``; :func:`pair_invariants`
+    drops every pair at or beyond the radius in the model's precision. Runs without
+    gradient.
+    """
+    b, nq, d = query_r.shape
+    n = boundary_r.shape[1]
+    qis, bjs = [], []
+    with torch.no_grad():
+        for i in range(b):
+            q, y = query_r[i].contiguous(), boundary_r[i].contiguous()
+            if q.is_cuda and q.dtype != torch.float64 and d <= 3:
+                from physicsnemo.nn.functional.neighbors.radius_search.radius_search import (
+                    radius_search,
+                )
+
+                if d < 3:
+                    q = torch.nn.functional.pad(q.float(), (0, 3 - d))
+                    y = torch.nn.functional.pad(y.float(), (0, 3 - d))
+                idx = radius_search(
+                    y.float(), q.float(), float(radius), implementation="warp"
+                )
+                qi, bj = idx[0].long(), idx[1].long()
+            else:
+                qi, bj = _exact_radius_pairs(q, y, float(radius))
+            qis.append(qi + i * nq)
+            bjs.append(bj + i * n)
+    return torch.cat(qis), torch.cat(bjs)
+
+
+def pair_invariants(
+    qi: torch.Tensor,
+    bj: torch.Tensor,
+    *,
+    query_r: torch.Tensor,
+    query_n: torch.Tensor,
+    query_vecs: torch.Tensor | None,
+    boundary_r: torch.Tensor,
+    boundary_n: torch.Tensor,
+    boundary_vecs: torch.Tensor | None,
+    g_unit: torch.Tensor,
+    radius: float,
+    eps: float,
+):
+    r"""The kernel inputs of every pair and its log falloff weight.
+
+    Token tensors are flattened over the batch: ``query_r``, ``query_n`` ``(B*Q, d)``,
+    ``query_vecs`` ``(B*Q, P_q, d)`` (the point's own rank-1 inputs) or ``None``;
+    ``boundary_r``, ``boundary_n`` ``(B*N, d)``, ``boundary_vecs`` ``(B*N, P_b, d)`` or
+    ``None``; ``g_unit`` ``(B, K, d)``. With :math:`\rho = (x_q - y_j) / L`,
+    :math:`s = |\rho| / R` and :math:`\hat\rho = \rho / |\rho|` the invariants are
+    :math:`[s, \log s, \hat\rho\cdot n_j, \hat\rho\cdot n_q, n_q\cdot n_j,
+    \hat\rho\cdot g_k, n_j\cdot g_k, \hat\rho\cdot v, n_j\cdot v, \hat\rho\cdot u,
+    n_q\cdot u]` (``v`` the point's vectors, ``u`` the cell's), all functions of
+    relative geometry, so rotations, reflections, translations and similarities leave
+    them unchanged. Pairs at or beyond the radius in this precision are dropped.
+
+    Returns ``(qi, bj, inv (P, G), log_b (P,))`` with ``log_b = 3 log(1 - s^2)``.
+    """
+    with torch.autocast(query_r.device.type, enabled=False):
+        rel = query_r[qi] - boundary_r[bj]
+        dist = rel.norm(dim=-1)
+        s = dist / radius
+        keep = s < 1.0
+        if not bool(keep.all()):
+            qi, bj, rel, dist, s = qi[keep], bj[keep], rel[keep], dist[keep], s[keep]
+        rho = rel / dist.clamp_min(eps)[:, None]
+        n_q, n_j = query_n[qi], boundary_n[bj]
+        nq_ = query_r.shape[0] // g_unit.shape[0]
+        g = g_unit[qi // nq_]  # (P, K, d)
+        feats = [
+            s,
+            torch.log(s.clamp_min(1e-6)),
+            (rho * n_j).sum(-1),
+            (rho * n_q).sum(-1),
+            (n_q * n_j).sum(-1),
+        ]
+        cols = [
+            torch.stack(feats, -1),
+            (rho[:, None] * g).sum(-1),
+            (n_j[:, None] * g).sum(-1),
+        ]
+        if query_vecs is not None and query_vecs.shape[1]:
+            v = query_vecs[qi]
+            cols += [(rho[:, None] * v).sum(-1), (n_j[:, None] * v).sum(-1)]
+        if boundary_vecs is not None and boundary_vecs.shape[1]:
+            u = boundary_vecs[bj]
+            cols += [(rho[:, None] * u).sum(-1), (n_q[:, None] * u).sum(-1)]
+        inv = torch.cat(cols, -1)
+        log_b = 3.0 * torch.log1p(-s.square())
+    return qi, bj, inv, log_b
+
+
+def reference_log_fraction(radius: float, dim: int) -> float:
+    r"""Log of the falloff-weighted boundary fraction near a flat wall, for initialization.
+
+    A point on a flat wall sees :math:`\int b\,dA = V_R / 4` of measure (3-D;
+    :math:`V_R = \pi R^2`) or :math:`\int b\,dl = 16 R / 35` (2-D; ``V_R = 2R``) in
+    units of :math:`L^{d-1}`, out of a whole boundary of reference measure
+    :math:`A_0`: the sphere's (circle's), :math:`2\pi` (3-D) or :math:`\sqrt 2 \pi`
+    (2-D) in units of its own :math:`L^{d-1}`. The ``"sum"`` read starts with
+    :math:`\gamma = -\log` of this fraction and the ``"mean"`` read's null with
+    :math:`\beta = \log` of it, so both start at order one at the wall.
+    """
+    if dim == 2:
+        near, total = 16.0 * radius / 35.0, math.sqrt(2.0) * math.pi
+    else:
+        near, total = math.pi * radius**2 / 4.0, 2.0 * math.pi
+    return math.log(near / total)
+
+
+class _BoundaryKernelRead(nn.Module):
+    """One block's kernel read for the passive prediction-point tokens.
+
+    ``forward(h_b, h_q, pairs)`` with the boundary token states ``h_b`` ``(B*N, H)`` and
+    the point states ``h_q`` ``(B*Q, H)`` at the block's depth returns the residual
+    update ``(B*Q, H)`` of the points. The output projection starts at zero, so the
+    model starts as the plain read-only model.
+    """
+
+    def __init__(
+        self, hidden: int, n_geo: int, mode: str, radius: float, dim: int
+    ) -> None:
+        super().__init__()
+        if mode not in ("mean", "sum"):
+            raise ValueError(f"kernel_read must be 'mean' or 'sum', got {mode!r}")
+        self.mode = mode
+        h, w = KERNEL_READ_HEADS, KERNEL_READ_WIDTH
+        self.norm_b = nn.LayerNorm(hidden)
+        self.value = nn.Linear(hidden, w)
+        self.kernel = nn.Sequential(
+            nn.Linear(n_geo, KERNEL_READ_HIDDEN),
+            nn.GELU(),
+            nn.Linear(KERNEL_READ_HIDDEN, h),
+        )
+        log_f = reference_log_fraction(radius, dim)
+        if mode == "mean":
+            self.norm_q = nn.LayerNorm(hidden)
+            self.key = nn.Linear(hidden, h * KERNEL_READ_KEY, bias=False)
+            self.query = nn.Linear(hidden, h * KERNEL_READ_KEY, bias=False)
+            self.null_logw = nn.Parameter(torch.full((h,), log_f))
+        else:
+            self.log_scale = nn.Parameter(torch.full((h,), -log_f))
+        ### No bias: a point with no cell within the radius reads exactly zero.
+        self.out = nn.Linear(w, hidden, bias=False)
+        nn.init.zeros_(self.out.weight)
+
+    def _read(self, h_b, h_q, inv, log_m, qi, bj):
+        nh, c = KERNEL_READ_HEADS, KERNEL_READ_WIDTH // KERNEL_READ_HEADS
+        ### Weights and sums in at least float32 (float64 stays float64).
+        acc = torch.promote_types(h_q.dtype, torch.float32)
+        hb = self.norm_b(h_b)
+        v = self.value(hb).view(-1, nh, c)
+        ker = self.kernel(inv.to(hb.dtype)).to(acc)  # (P, heads)
+        if self.mode == "mean":
+            k = self.key(hb).view(-1, nh, KERNEL_READ_KEY)
+            q = self.query(self.norm_q(h_q)).view(-1, nh, KERNEL_READ_KEY)
+            logit = (
+                ker
+                + (q[qi] * k[bj]).to(acc).sum(-1) / math.sqrt(KERNEL_READ_KEY)
+                + log_m.to(acc)[:, None]
+            )
+            null = self.null_logw.to(acc)[None].expand(h_q.shape[0], nh)
+            ### A softmax over each point's pairs and the null: the shift is the
+            ### running maximum (detached; the softmax does not depend on it).
+            m = null.scatter_reduce(
+                0, qi[:, None].expand(-1, nh), logit, "amax", include_self=True
+            ).detach()
+            e = torch.exp(logit - m[qi])
+            den = torch.exp(null - m).index_add(0, qi, e)
+            wgt = e / den[qi]
+        else:
+            wgt = ker * torch.exp(self.log_scale.to(acc)[None] + log_m.to(acc)[:, None])
+        read = h_q.new_zeros(h_q.shape[0], nh, c, dtype=acc)
+        read = read.index_add(0, qi, wgt[..., None] * v[bj].to(acc))
+        return self.out(read.view(-1, nh * c).to(h_q.dtype))
+
+    def forward(self, h_b, h_q, pairs):
+        qi, bj, inv, log_m = pairs
+        if torch.is_grad_enabled() and (h_b.requires_grad or h_q.requires_grad):
+            ### The (P, .) pair tensors are rebuilt in backward, not stored.
+            return checkpoint(
+                self._read, h_b, h_q, inv, log_m, qi, bj, use_reentrant=False
+            )
+        return self._read(h_b, h_q, inv, log_m, qi, bj)
