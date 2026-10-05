@@ -251,8 +251,28 @@ target (exactly query-independent); posed residual 8.5e-4 / 4.7e-4 / 2.1e-4 rela
 in float64 (the 2-D class's known on-wall sign effect; the QI read-only reference
 measured 1e-4 to 9.5e-4); float32 sentinels and chunks at 2e-6 to 4e-5.
 
-## Open issues
+## Open issues and next steps
 
-- The read's cost grows with the number of boundary cells near the points (a
-  quadrature at full boundary resolution); on DrivAerML's finely meshed regions that is
-  hundreds of cells per point at R = 0.01 L.
+- **Verdict pending** the epoch-500 scores (`infer.py` exactly as the QI scorer). A CPU
+  watcher (`eval/after_lanes.sbatch`, job 1043128) submits the scoring and probes
+  (`eval/eval.sbatch --array=1`, lanes 4-7, `EVAL_DIR=eval`) when all four lanes say
+  "Training completed", then `eval/reduce.sbatch` writes `eval/kq_reduction.{json,txt}`
+  (bars, ratios to interacting-256 and read-only-256, DrivAerML band anatomy) and
+  appends it to the task dir's `STATUS.md`. By hand:
+  `python examples/cfd/isla/research/qi_kernel/kq_reduce.py --kernel-scores <task>/eval/score
+  --ref-scores <qi task>/eval/score --kernel-probes <task>/eval/probe --ref-probes
+  <qi task>/eval/probe --out kq_reduction.json`.
+- **Eddy viscosity in the wake.** The read changes nothing for points with no cell
+  within R = 0.01 L (the wake beyond about 0.1 L), yet their eddy-viscosity error grew
+  in every pilot variant, most with the most reading. A wider radius is unaffordable at
+  full boundary resolution on DrivAerML (1,900 cells per point at 0.05 L). Candidates:
+  a second read at a larger radius over a measure-preserving coarsening of the boundary
+  (an HT-weighted subsample is a quadrature, but not exactly refinement-invariant), or
+  the support-at-inference route (QI arm C), which already matches the interacting
+  model on every field.
+- **Cost.** 1.6x the read-only step on DrivAerML (sum, last 4 blocks), 1.08x on AirfRANS;
+  the remaining per-pair work is torch elementwise ops around the Triton segment sums
+  (a fused per-pair kernel would remove most of it).
+- The read's cost and the pair count grow with the boundary sample near the points
+  (a quadrature at full boundary resolution): hundreds of cells per point at
+  R = 0.01 L in DrivAerML's finely meshed regions.
