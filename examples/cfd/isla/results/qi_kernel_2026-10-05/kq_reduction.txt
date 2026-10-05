@@ -1,0 +1,34 @@
+== DrivAerML Volume  missing: 0
+  kernel pressure 0.0470 (0.0480/0.0460)  velocity 0.0804 (0.0888/0.0720)  nut 0.1044 (0.1094/0.0994)
+  int    pressure 0.0404 (0.0413/0.0396)  velocity 0.0611 (0.0625/0.0596)  nut 0.0868 (0.0887/0.0849)
+  ro     pressure 0.0448 (0.0449/0.0447)  velocity 0.0748 (0.0750/0.0747)  nut 0.1020 (0.1046/0.0993)
+  kernel / int: pressure 1.162 (1.161 / 1.164)  velocity 1.317 (1.422 / 1.207)  nut 1.202 (1.233 / 1.170)
+  kernel / ro: pressure 1.049 (1.069 / 1.030)  velocity 1.075 (1.185 / 0.965)  nut 1.024 (1.045 / 1.001)
+  verdict: falsified
+== AirfRANS  missing: 0
+  kernel pressure 0.0264 (0.0258/0.0270)  velocity 0.0163 (0.0164/0.0163)  nut 0.0368 (0.0346/0.0391)
+  int    pressure 0.0332 (0.0334/0.0331)  velocity 0.0164 (0.0165/0.0163)  nut 0.0297 (0.0303/0.0292)
+  ro     pressure 0.0345 (0.0357/0.0332)  velocity 0.0179 (0.0179/0.0178)  nut 0.0422 (0.0450/0.0393)
+  kernel / int: pressure 0.795 (0.774 / 0.816)  velocity 0.995 (0.992 / 0.999)  nut 1.239 (1.143 / 1.337)
+  kernel / ro: pressure 0.766 (0.723 / 0.813)  velocity 0.915 (0.916 / 0.915)  nut 0.874 (0.770 / 0.993)
+  verdict: falsified
+kq_af_sum4_seed42.json epoch 500 cases 200
+  native {'pressure': 0.0259, 'velocity': 0.0158, 'nut': 0.0305}
+  bands {'0.0-0.01': {'n': 8143061, 'pressure': 0.0169, 'velocity': 0.0232, 'nut': 0.036}, '0.01-0.1': {'n': 4009883, 'pressure': 0.0225, 'velocity': 0.0165, 'nut': 0.0356}, '0.1-1.0': {'n': 4521122, 'pressure': 0.0286, 'velocity': 0.0124, 'nut': 0.0449}, '1.0-inf': {'n': 3325934, 'pressure': 0.0624, 'velocity': 0.0085, 'nut': 0.1112}}
+  fp64 {'sentinel_alone_maxdiff': {'pressure': 6.2619946884285e-15, 'velocity': 3.3788857679742915e-15, 'nut': 9.188604138619237e-14}, 'chunked5_maxdiff': {'pressure': 7.472098570630105e-15, 'velocity': 4.766486648253496e-15, 'nut': 9.344381812386652e-14}, 'posed_rel': {'pressure': 0.00012599369352205543, 'velocity': 0.00018094153109470652, 'nut': 7.231910219407498e-05}}
+  fp32 sentinel max {'pressure': 4.28201065005851e-06, 'velocity': 4.431341039889958e-06, 'nut': 2.9636807084898464e-05} chunked {'pressure': 5.3391554502013605e-06, 'velocity': 2.616974597913213e-05, 'nut': 9.635845344746485e-05} posed {'pressure': 0.0007975553162395954, 'velocity': 0.0011731770355254412, 'nut': 0.0005117286927998066}
+kq_af_sum4_seed43.json epoch 500 cases 200
+  native {'pressure': 0.0258, 'velocity': 0.016, 'nut': 0.0377}
+  bands {'0.0-0.01': {'n': 8143061, 'pressure': 0.0158, 'velocity': 0.0235, 'nut': 0.0397}, '0.01-0.1': {'n': 4009883, 'pressure': 0.0207, 'velocity': 0.0164, 'nut': 0.0414}, '0.1-1.0': {'n': 4521122, 'pressure': 0.0291, 'velocity': 0.013, 'nut': 0.0472}, '1.0-inf': {'n': 3325934, 'pressure': 0.0765, 'velocity': 0.0091, 'nut': 0.1187}}
+  fp64 {'sentinel_alone_maxdiff': {'pressure': 5.857995031110532e-15, 'velocity': 3.3540606627179376e-15, 'nut': 3.77516294067302e-14}, 'chunked5_maxdiff': {'pressure': 7.214439999229067e-15, 'velocity': 4.114400885043528e-15, 'nut': 7.241033876757184e-14}, 'posed_rel': {'pressure': 0.000288093125884541, 'velocity': 0.00024028422384133222, 'nut': 0.00016375327271315394}}
+  fp32 sentinel max {'pressure': 3.6129463296674658e-06, 'velocity': 2.6984673695551464e-06, 'nut': 5.430227975011803e-05} chunked {'pressure': 6.0812608353444375e-06, 'velocity': 4.409234861668665e-06, 'nut': 7.312203524634242e-05} posed {'pressure': 0.000872932025231421, 'velocity': 0.0013986827107146382, 'nut': 0.0008172434754669666}
+kq_drvol_sum4_seed42.json epoch 500 cases 48
+  native {'pressure': 0.048, 'velocity': 0.0888, 'nut': 0.1094}
+  bands {'0.0-0.01': {'n': 6890314, 'pressure': 0.049, 'velocity': 0.1136, 'nut': 0.1013}, '0.01-0.1': {'n': 1671630, 'pressure': 0.0389, 'velocity': 0.0363, 'nut': 0.071}, '0.1-1.0': {'n': 838038, 'pressure': 0.0599, 'velocity': 0.0338, 'nut': 0.0475}, '1.0-inf': {'n': 200018, 'pressure': 0.2464, 'velocity': 0.0316, 'nut': 0.1563}}
+  fp64 {'sentinel_alone_maxdiff': {'pressure': 7.191683091248545e-15, 'velocity': 4.8681617492217814e-14, 'nut': 2.971100964260772e-14}, 'chunked5_maxdiff': {'pressure': 1.517230509857497e-13, 'velocity': 9.336322969155179e-13, 'nut': 2.971803309814606e-12}, 'posed_rel': {'pressure': 0.00042050438941068836, 'velocity': 0.00010945009801082028, 'nut': 8.577265351289569e-05}}
+  fp32 sentinel max {'pressure': 3.307982478872873e-05, 'velocity': 0.00017820652283262461, 'nut': 0.0001603713899385184} chunked {'pressure': 0.0005148791242390871, 'velocity': 0.0019438068848103285, 'nut': 0.004826762247830629} posed {'pressure': 0.0014610587386414409, 'velocity': 0.0029251528903841972, 'nut': 0.0011152431834489107}
+kq_drvol_sum4_seed43.json epoch 500 cases 48
+  native {'pressure': 0.046, 'velocity': 0.072, 'nut': 0.0994}
+  bands {'0.0-0.01': {'n': 6890314, 'pressure': 0.047, 'velocity': 0.0906, 'nut': 0.0976}, '0.01-0.1': {'n': 1671630, 'pressure': 0.0393, 'velocity': 0.0371, 'nut': 0.0709}, '0.1-1.0': {'n': 838038, 'pressure': 0.0623, 'velocity': 0.0346, 'nut': 0.0494}, '1.0-inf': {'n': 200018, 'pressure': 0.254, 'velocity': 0.0279, 'nut': 0.1353}}
+  fp64 {'sentinel_alone_maxdiff': {'pressure': 8.630019709498253e-15, 'velocity': 1.239698088947917e-13, 'nut': 6.303395209808101e-14}, 'chunked5_maxdiff': {'pressure': 7.920250973909513e-14, 'velocity': 4.2550439010003956e-13, 'nut': 3.3840037688985215e-13}, 'posed_rel': {'pressure': 0.0005681002904205964, 'velocity': 0.00014037107816857914, 'nut': 9.156919535766354e-05}}
+  fp32 sentinel max {'pressure': 4.152037945459597e-05, 'velocity': 0.00023887284623924643, 'nut': 0.0008498781244270504} chunked {'pressure': 0.0010007579112425447, 'velocity': 0.005856037139892578, 'nut': 0.0030401728581637144} posed {'pressure': 0.001555899390950799, 'velocity': 0.003529900684952736, 'nut': 0.0005560172139666975}

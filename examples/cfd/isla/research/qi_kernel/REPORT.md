@@ -5,31 +5,30 @@ Lane `isla-qi-kernel`, branch `psharpe/isla-qi-kernel` (base `psharpe/isla-indep
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-03-isla-qi-kernel/`
 (job prefix `isla.kernel.`). Brief: `BRIEF.md` (this folder).
 
-## Status (2026-10-05 09:30 PDT)
+## Status (2026-10-05 15:00 PDT): complete
 
-- **Verdict: pending** (full lanes at epochs 350-397 of 500; lane taken over at
-  09:10 PDT after the previous worker stopped, jobs unaffected). Expected completion
-  about 11:00 (DrivAerML) and 11:45 PDT (AirfRANS); the scoring, probes and the
-  reduction against the bars are submitted automatically when all four finish
-  (watcher job 1043128, polling; see Open issues).
-- **Pilot (DrivAerML, 100 epochs, scored):** the read cuts the read-only twin's
-  pressure and velocity error by 11% and 8% (10-11% within 0.01 L of the wall) and
-  raises eddy viscosity by 5% (the wake, where no point reads); the mean read and the
-  every-block placement cut velocity more (14%) but raise eddy viscosity by 25%.
-- **Full lanes so far (training-log validation, epoch 350-390):** kernel /
-  interacting = 1.01-1.09 pressure, 0.93-0.99 velocity, 1.27-1.42 eddy viscosity on
-  DrivAerML; 0.84-0.90 / 0.96-1.01 / 1.07-1.28 on AirfRANS. If that holds, pressure
-  and velocity reach the interacting model and eddy viscosity misses the 1.10 bar:
-  **falsified on eddy viscosity alone** would be the outcome.
-- **Band swap (no training):** read-only's pressure and velocity excess over
-  interacting lies entirely within 0.01 L of the wall (swapping that band's error
-  for the interacting model's leaves 1.004-1.009 on DrivAerML); its eddy-viscosity
-  excess lies mostly beyond 1 L (2% of DrivAerML points carry 58% of the squared
-  error; swapping that band leaves 1.03), out of an R = 0.01 L read's reach.
-- Contracts hold on trained checkpoints of both datasets (float64 independence
-  1e-14 to 4e-13 of the RMS target; posed residual at the class's known level).
-- Commits: a7be6350c (the read), be04b6584 (Triton segment kernels, shared basis),
-  9c564e99a (stored pair tensors; the full lanes' code), report commits after.
+- **Verdict: falsified** by the preregistered bars. Kernel / interacting-256 at
+  epoch 500 (`infer.py`, float32, seed means): DrivAerML Volume 1.162 / 1.317 / 1.202
+  (pressure / velocity / eddy viscosity), AirfRANS 0.795 / 0.995 / 1.239. Against
+  read-only-256: DrivAerML 1.049 / 1.075 / 1.024, AirfRANS 0.766 / 0.915 / 0.874.
+- **Eddy viscosity fails on both datasets for a structural reason:** its excess sits
+  in the wake beyond 1 L (2% of DrivAerML points, 61% of the squared error; swapping
+  that band for the interacting model's leaves 1.02-1.03), where a read of radius
+  0.01 L reads nothing. Pressure and velocity are helped where the read reaches: on
+  AirfRANS pressure ends 20% below interacting.
+- **Caveat on DrivAerML pressure and velocity: arithmetic dependence.** The
+  bf16-trained DrivAerML kernel models score much better in bf16 than in the
+  protocol's float32 (velocity 0.0635 against 0.0888 on seed 42); the references do
+  not (they get 4-10% worse in bf16). Scored in bf16 throughout, kernel /
+  interacting is DrivAerML 1.051 / 0.954 / 1.301 and AirfRANS 0.844 / 0.980 / 1.221:
+  still falsified (eddy viscosity). The read's own arithmetic is not the cause
+  (switching the kernel basis and reads between the two changes nothing); see
+  Results.
+- Contracts hold on all four final checkpoints (float64 independence 3e-15 to 3e-12
+  of the RMS target; posed residual at or below the read-only class's level).
+- Nothing is running. Commits: a7be6350c (the read), be04b6584 (Triton segment
+  kernels, shared basis), 9c564e99a (stored pair tensors; the full lanes' code),
+  report and diagnostic commits after.
 
 ## Question
 
@@ -236,16 +235,16 @@ Float32: sentinels 4e-5 / 6e-5 / 7e-4, chunked 1e-4 / 1.3e-3 / 8e-4 of the RMS t
 Task dir `agents/2026-10-03-isla-qi-kernel`, `kernel/lanes.tsv`, chained 3h59 links
 (`kernel/lanes.sbatch`), first job ids in `kernel/submitted.tsv`.
 
-| idx | run | dataset | design | epochs | code | first job | state (06:50) |
+| idx | run | dataset | design | epochs | code | first job | state (final) |
 |---|---|---|---|---|---|---|---|
 | 0 | kp_drvol_ro_seed42 | DrivAerML | read-only twin | 100 | kq2 | 1041303 | done (epoch 100) |
 | 1 | kp_drvol_sum4_seed42 | DrivAerML | sum, last 4 | 100 | kq2 | 1041304 | done (epoch 100) |
 | 2 | kp_drvol_mean4_seed42 | DrivAerML | mean, last 4 | 100 | kq2 | 1041305 | done (epoch 100) |
 | 3 | kp_drvol_sum12_seed42 | DrivAerML | sum, every block | 100 | kq2 | 1041306 | done (epoch 100) |
-| 4 | kq_drvol_sum4_seed42 | DrivAerML | sum, R=0.01, last 4 | 500 | kq3 | 1041666 | link 2 (1041676), epoch 247 |
-| 5 | kq_drvol_sum4_seed43 | DrivAerML | same | 500 | kq3 | 1041667 | link 1, epoch 232 |
-| 6 | kq_af_sum4_seed42 | AirfRANS | same | 500 | kq3 | 1041668 | link 1, epoch 210 |
-| 7 | kq_af_sum4_seed43 | AirfRANS | same | 500 | kq3 | 1041669 | link 1, epoch 210 |
+| 4 | kq_drvol_sum4_seed42 | DrivAerML | sum, R=0.01, last 4 | 500 | kq3 | 1041666 | done (links 1041666, 1041676, 1045413) |
+| 5 | kq_drvol_sum4_seed43 | DrivAerML | same | 500 | kq3 | 1041667 | done (1041667, 1041837, 1045731) |
+| 6 | kq_af_sum4_seed42 | AirfRANS | same | 500 | kq3 | 1041668 | done (1041668, 1041860, 1045835) |
+| 7 | kq_af_sum4_seed43 | AirfRANS | same | 500 | kq3 | 1041669 | done (1041669, 1041861, 1045834) |
 
 `code_kq3` (9c564e99a) differs from `code_kq2` only in storing the pair tensors
 instead of recomputing them in backward (identical outputs and gradients, tested).
@@ -257,6 +256,11 @@ no augmentation, compiled blocks, seeds 42 and 43; extra `++model.query_independ
 Expected duration: DrivAerML ~8.5 h (step 1.6x read-only), AirfRANS ~8.5 h (1.08x).
 The first job ids 1041649-1041652 were cancelled while pending (their job names
 clashed with the pilot chains' singleton names); `submit.sh` now prefixes the group.
+The third links (a few to 50 epochs each) were moved to QoS `short` with 1.5-2 h
+limits while pending (they sat at the bottom of a 1,000-job queue under `normal`);
+their no-op successors 1050222-1050227 were cancelled once each lane said "Training
+completed". Scoring: watcher 1043128 submitted eval 1051777 (moved to `short`) and
+reduction 1051778 at 12:26 PDT.
 
 ## Full lanes: progress (training-log validation; no verdict rests on it)
 
@@ -280,6 +284,10 @@ noisy single-epoch values, not the scorer's numbers.
 | DrivAerML s43 | 370 | 1.09 / 0.99 / 1.38 | 0.95 / 0.80 / 1.03 |
 | AirfRANS s42 | 350 | 0.84 / 0.96 / 1.07 | 0.91 / 0.97 / 1.00 |
 | AirfRANS s43 | 350 | 0.90 / 1.01 / 1.28 | 0.92 / 0.97 / 1.06 |
+| DrivAerML s42 | 499 | 1.02 / 0.93 / 1.32 | 0.94 / 0.79 / 0.97 |
+| DrivAerML s43 | 499 | 1.08 / 0.99 / 1.36 | 0.95 / 0.80 / 0.98 |
+| AirfRANS s42 | 499 | 0.82 / 0.95 / 1.13 | 0.89 / 0.98 / 1.04 |
+| AirfRANS s43 | 499 | 0.88 / 1.01 / 1.28 | 0.94 / 0.97 / 1.06 |
 
 So far the read brings pressure and velocity to the interacting level (DrivAerML) or
 below it (AirfRANS pressure), and leaves eddy viscosity at the read-only level. The
@@ -293,6 +301,118 @@ sentinels alone 5e-15 / 4e-15 / 5e-14 and 5 chunks 7e-15 / 4e-15 / 5e-14 of the 
 target (exactly query-independent); posed residual 8.5e-4 / 4.7e-4 / 2.1e-4 relative L2
 in float64 (the 2-D class's known on-wall sign effect; the QI read-only reference
 measured 1e-4 to 9.5e-4); float32 sentinels and chunks at 2e-6 to 4e-5.
+
+## Results (epoch 500, reporting protocol)
+
+`infer.py` exactly as the QI scorer (float32, held-out split, the training request;
+48 DrivAerML cars, 200 AirfRANS airfoils), eval job 1051777, reduction 1051778
+(`eval/kq_reduction.{json,txt}`; copied with the scorer rows and probes to
+`examples/cfd/isla/results/qi_kernel_2026-10-05/`). Relative L2, seed mean
+(seed 42 / seed 43); the references are the QI campaign's rows.
+
+| DrivAerML Volume | pressure | velocity | eddy viscosity |
+|---|---|---|---|
+| read-only + kernel | 0.0470 (0.0480/0.0460) | 0.0804 (0.0888/0.0720) | 0.1044 (0.1094/0.0994) |
+| interacting-256 | 0.0404 (0.0413/0.0396) | 0.0611 (0.0625/0.0596) | 0.0868 (0.0887/0.0849) |
+| read-only-256 | 0.0448 (0.0449/0.0447) | 0.0748 (0.0750/0.0747) | 0.1020 (0.1046/0.0993) |
+| kernel / interacting | **1.162** (1.161/1.164) | **1.317** (1.422/1.207) | **1.202** (1.233/1.170) |
+| kernel / read-only | 1.049 (1.069/1.030) | 1.075 (1.185/0.965) | 1.024 (1.045/1.001) |
+
+| AirfRANS | pressure | velocity | eddy viscosity |
+|---|---|---|---|
+| read-only + kernel | 0.0264 (0.0258/0.0270) | 0.0163 (0.0164/0.0163) | 0.0368 (0.0346/0.0391) |
+| interacting-256 | 0.0332 (0.0334/0.0331) | 0.0164 (0.0165/0.0163) | 0.0297 (0.0303/0.0292) |
+| read-only-256 | 0.0345 (0.0357/0.0332) | 0.0179 (0.0179/0.0178) | 0.0422 (0.0450/0.0393) |
+| kernel / interacting | 0.795 (0.774/0.816) | 0.995 (0.992/0.999) | **1.239** (1.143/1.337) |
+| kernel / read-only | 0.766 (0.723/0.813) | 0.915 (0.916/0.915) | 0.874 (0.770/0.993) |
+
+**Bars: falsified.** DrivAerML is at or above 1.10 on every field; AirfRANS passes
+pressure (0.80) and velocity (0.995, no paired seed above 1.06) and fails eddy
+viscosity (1.24).
+
+### The DrivAerML scores depend on the arithmetic (not the protocol; diagnostic)
+
+The DrivAerML kernel lanes score far worse in float32 than their own bf16
+training-log validation said (velocity 0.0888 against 0.0640 on seed 42; the
+references' velocity scores sit 8-9% below their training-log values, the kernel
+lanes' 11% and 39% above). Re-scoring every arm with `infer.py` at `precision=bfloat16`
+(`eval/prec2.sbatch`, jobs 1054254 and 1054693; nothing else changed) gives:
+
+| arm, bf16 / float32 score | DrivAerML p / U / nut | AirfRANS p / U / nut |
+|---|---|---|
+| kernel seed 42 | 0.915 / **0.715** / 1.043 | 1.067 / 1.000 / 1.048 |
+| kernel seed 43 | 0.972 / **0.897** / 1.177 | 1.063 / 1.015 / 1.140 |
+| interacting seed 42 / 43 | 1.044 / 1.097 / 1.012; 1.042 / 1.100 / 1.034 | 1.015 / 1.030 / 1.093; 0.991 / 1.016 / 1.132 |
+| read-only seed 42 / 43 | 1.043 / 1.077 / 1.121; 1.049 / 1.083 / 1.176 | 0.895 / 0.946 / 0.828; 0.967 / 0.970 / 1.082 |
+
+Every arm moves by several percent with the arithmetic (bf16 inference is worse for
+the references on DrivAerML), but only the DrivAerML kernel lanes get much *better*
+in bf16, which is the arithmetic they were trained in. Scored in bf16 throughout
+(every arm alike):
+
+| bf16 scoring | kernel / interacting p / U / nut | kernel / read-only p / U / nut |
+|---|---|---|
+| DrivAerML | 1.051 / 0.954 / **1.301** | 0.946 / 0.792 / 0.987 |
+| AirfRANS | 0.844 / 0.980 / **1.221** | 0.877 / 0.963 / 1.013 |
+
+So in its training arithmetic the read does what the pilot and the training logs
+showed (DrivAerML velocity 21% below read-only and 5% below interacting), and the
+verdict is the same either way: eddy viscosity is at or above 1.22 on both datasets.
+`prec_probe.py` (first 6 held-out cars, eager, AGA `eval_prec/probe/`) switches parts
+of the model between the two arithmetics: running the kernel basis MLP or the four
+kernel reads in the other arithmetic changes nothing (velocity 0.0945 float32 and
+0.0730 bf16 on seed 42 whichever way those two parts run; the reads' updates differ
+by 3-15% between arithmetics). The dependence therefore sits in the rest of the
+network, i.e. in what the trained blocks do with the point states the read produces.
+
+### Band anatomy (DrivAerML, protocol arithmetic)
+
+Pooled relative L2 by \|stored sdf\|/L band from the probes (same 48 cars and points
+for every arm), kernel / interacting / read-only; the last column is the case-mean
+ratio kernel / interacting after swapping that band's error for the interacting
+model's on the same points (`band_swap.py`):
+
+| band (points) | pressure | velocity | eddy viscosity | swap: p / U / nut |
+|---|---|---|---|---|
+| < 0.01 (72%) | 0.0480 / 0.0410 / 0.0459 | 0.1027 / 0.0760 / 0.0947 | 0.0995 / 0.0955 / 0.0999 | 1.006 / 1.009 / 1.183 |
+| 0.01-0.1 (17%) | 0.0391 / 0.0367 / 0.0384 | 0.0367 / 0.0341 / 0.0362 | 0.0709 / 0.0751 / 0.0764 | 1.159 / 1.312 / 1.205 |
+| 0.1-1 (9%) | 0.0611 / 0.0573 / 0.0616 | 0.0342 / 0.0331 / 0.0345 | 0.0484 / 0.0459 / 0.0478 | 1.162 / 1.316 / 1.199 |
+| > 1 (2%) | 0.2502 / 0.1990 / 0.2392 | 0.0298 / 0.0219 / 0.0312 | 0.1462 / 0.1066 / 0.1386 | 1.162 / 1.316 / **1.024** |
+
+All of the pressure and velocity excess over interacting is within 0.01 L of the wall
+(where the read reaches, and where float32 undoes its gain); 61% of the kernel model's
+squared eddy-viscosity error and nearly all of its eddy-viscosity excess is in the
+wake beyond 1 L, 2% of the points, which an R = 0.01 L read never reaches. Against
+read-only the kernel model is a little better in the 0.01-1 L band on eddy viscosity
+and worse beyond 1 L (as in the pilot). AirfRANS (probe request, not the scorer's
+chunk): the pressure gain is near the wall (0.0163 against interacting 0.0233
+within 0.01 L) and the eddy-viscosity excess is in the wake (> 1 L: 0.1150 against
+0.0638; swapping that band leaves 1.03).
+
+### Contracts on the final checkpoints (epoch 500, `qi_probe.py`)
+
+Max \|difference\| / RMS target, pressure / velocity / eddy viscosity; float64 on the
+first held-out case with the exact search; posed = relative L2 under a random
+rotation and translation.
+
+| run | float64: sentinels alone | float64: 5 chunks | float64: posed | float32: 2,000 sentinels, chunks |
+|---|---|---|---|---|
+| DrivAerML s42 | 7e-15 / 5e-14 / 3e-14 | 2e-13 / 9e-13 / 3e-12 | 4.2e-4 / 1.1e-4 / 8.6e-5 | 3e-5 / 2e-4 / 2e-4; 5e-4 / 2e-3 / 5e-3 |
+| DrivAerML s43 | 9e-15 / 1e-13 / 6e-14 | 8e-14 / 4e-13 / 3e-13 | 5.7e-4 / 1.4e-4 / 9.2e-5 | 4e-5 / 2e-4 / 8e-4; 1e-3 / 6e-3 / 3e-3 |
+| AirfRANS s42 | 6e-15 / 3e-15 / 9e-14 | 7e-15 / 5e-15 / 9e-14 | 1.3e-4 / 1.8e-4 / 7.2e-5 | 4e-6 / 4e-6 / 3e-5; 5e-6 / 3e-5 / 1e-4 |
+| AirfRANS s43 | 6e-15 / 3e-15 / 4e-14 | 7e-15 / 4e-15 / 7e-14 | 2.9e-4 / 2.4e-4 / 1.6e-4 | 4e-6 / 3e-6 / 5e-5; 6e-6 / 4e-6 / 7e-5 |
+| read-only ref s42 (QI) | 3e-14 / 7e-14 / 3e-14 | 1e-13 / 4e-13 / 2e-12 | 8.8e-4 / 1.4e-4 / 8.7e-5 | 8e-5 / 6e-4 / 3e-4; 6e-4 / 3e-3 / 1e-2 |
+
+Exactly query-independent in float64 (roundoff), the posed residual at or below the
+read-only class's known level (on-wall sign flips of the built-in distance), and the
+float32 floors those of the reference.
+
+### Cost of the full lanes
+
+Training wall time including three link start-ups: DrivAerML 8 h 17 min and
+8 h 28 min, AirfRANS 8 h 47 min and 8 h 43 min (one 4xGB300 node each; the
+read-only references took about 5.2 h and 7.5-8 h). Step 1.6x read-only on DrivAerML,
+1.08x on AirfRANS (Cost table above).
 
 ## Diagnostic: where the excess error lives (band swap, no training)
 
@@ -337,26 +457,29 @@ velocity gap but cannot by itself close the eddy-viscosity gap.
 
 ## Open issues and next steps
 
-- **Verdict pending** the epoch-500 scores (`infer.py` exactly as the QI scorer). A CPU
-  watcher (`eval/after_lanes.sbatch`, job 1043128) submits the scoring and probes
-  (`eval/eval.sbatch --array=1`, lanes 4-7, `EVAL_DIR=eval`) when all four lanes say
-  "Training completed", then `eval/reduce.sbatch` writes `eval/kq_reduction.{json,txt}`
-  (bars, ratios to interacting-256 and read-only-256, DrivAerML band anatomy) and
-  appends it to the task dir's `STATUS.md`. By hand:
-  `python examples/cfd/isla/research/qi_kernel/kq_reduce.py --kernel-scores <task>/eval/score
-  --ref-scores <qi task>/eval/score --kernel-probes <task>/eval/probe --ref-probes
-  <qi task>/eval/probe --out kq_reduction.json`.
-- **Eddy viscosity in the wake.** The read changes nothing for points with no cell
-  within R = 0.01 L (the wake beyond about 0.1 L), yet their eddy-viscosity error grew
-  in every pilot variant, most with the most reading. A wider radius is unaffordable at
-  full boundary resolution on DrivAerML (1,900 cells per point at 0.05 L). Candidates:
-  a second read at a larger radius over a measure-preserving coarsening of the boundary
-  (an HT-weighted subsample is a quadrature, but not exactly refinement-invariant), or
-  the support-at-inference route (QI arm C), which already matches the interacting
-  model on every field.
-- **Cost.** 1.6x the read-only step on DrivAerML (sum, last 4 blocks), 1.08x on AirfRANS;
-  the remaining per-pair work is torch elementwise ops around the Triton segment sums
-  (a fused per-pair kernel would remove most of it).
+- **Eddy viscosity in the wake** (the reason for the verdict). Read-only's and the
+  kernel model's eddy-viscosity excess lives beyond 1 L, out of an R = 0.01 L read's
+  reach, and every read variant made it slightly worse there. A wider radius is
+  unaffordable at full boundary resolution on DrivAerML (1,900 cells per point at
+  0.05 L). Candidates: a second read at a larger radius over a measure-preserving
+  coarsening of the boundary (an HT-weighted subsample is a quadrature, but not
+  exactly refinement-invariant), or the support-at-inference route (QI arm C), which
+  already matches the interacting model on every field. Not launched.
+- **Arithmetic dependence of the DrivAerML kernel models.** They score 11-39% worse in
+  float32 than in their bf16 training arithmetic on velocity; the references move
+  4-10% the other way. The read's own operations are not the cause (`prec_probe.py`);
+  where in the network it sits is in Results. Any follow-up should score in both
+  arithmetics, and a fix (for example float32 for the point tokens' path in the late
+  blocks) would need a retrained lane to test.
+- **Cost.** 1.6x the read-only step on DrivAerML (sum, last 4 blocks), 1.08x on
+  AirfRANS; the remaining per-pair work is torch elementwise ops around the Triton
+  segment sums (a fused per-pair kernel would remove most of it).
 - The read's cost and the pair count grow with the boundary sample near the points
   (a quadrature at full boundary resolution): hundreds of cells per point at
   R = 0.01 L in DrivAerML's finely meshed regions.
+- Re-running the reduction by hand: `python
+  examples/cfd/isla/research/qi_kernel/kq_reduce.py --kernel-scores <task>/eval/score
+  --ref-scores <qi task>/eval/score --kernel-probes <task>/eval/probe --ref-probes
+  <qi task>/eval/probe --out kq_reduction.json`; the bf16 table with
+  `--kernel-scores` and `--ref-scores` both at
+  `results/qi_kernel_2026-10-05/score_bf16`.
