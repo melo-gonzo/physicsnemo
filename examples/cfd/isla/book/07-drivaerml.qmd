@@ -589,7 +589,8 @@ print(f"Two of the three columns read as on every other dataset and one does not
 ```{python}
 #| label: para-interior-cost
 #| output: asis
-COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]["DrivAerML Volume"]
+# the cost record of the configurations the Volume artifact holds (final references, or the first-pass lanes)
+COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost" if "512 with 512 slices" in VCH["isla_arm"] else "cost_first_pass"]["DrivAerML Volume"]
 over = [a for a, v in COST.items() if v["peak_gib"] > 80]
 cells = "; ".join(f"{a} {v['peak_gib']:.1f} GiB and {v['epoch_seconds']:.0f} s per epoch at {v['n_parameters'] / 1e6:.0f}M parameters" for a, v in COST.items())
 print(f"**Cost.** Training on this task, one epoch at the reference configurations on four GB300 ranks in bfloat16 (peak device memory, "

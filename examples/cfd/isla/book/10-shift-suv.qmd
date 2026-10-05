@@ -243,7 +243,8 @@ print(f"**The Surface task of @sec-surface within the estate family: 794 trainin
       "area-proportional Poisson draw with exact Horvitz-Thompson weights, which is what an STL gives without a volume mesh; and with "
       "every validation body rigidly rotated and translated by a keyed rotation and a translation of one RMS point radius "
       "(@sec-invariances).")
-COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]["Shift-SUV"]
+# the cost record of the configurations this chapter's protocol artifact holds (final references, or the first-pass lanes)
+COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost" if "512 with 512 slices" in C["isla_arm"] else "cost_first_pass"]["Shift-SUV"]
 print()
 print("**Cost.** Training on this task, one epoch at the reference configurations on four GB300 ranks in bfloat16 (peak device memory, "
       "maximum over ranks): " + "; ".join(f"{a} {v['peak_gib']:.1f} GiB and {v['epoch_seconds']:.0f} s per epoch at {v['n_parameters'] / 1e6:.0f}M parameters"

@@ -273,7 +273,8 @@ print(f"**The interior task of @sec-interior-task on the published `full` split:
       "uniform-point-cloud variant, which redraws the boundary area-proportionally and is the identity here because the airfoil "
       "polyline is kept whole and the interior is a point cloud without cell measures; and with every case rigidly rotated in its "
       "plane and translated by one RMS point radius, the inlet direction rotated with it (@sec-invariances).")
-COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]["AirfRANS"]
+# the cost record of the configurations this chapter's protocol artifact holds (final references, or the first-pass lanes)
+COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost" if "512 with 512 slices" in CH["isla_arm"] else "cost_first_pass"]["AirfRANS"]
 print()
 print("**Cost.** Training on this task, one epoch at the reference configurations on four GB300 ranks in bfloat16 (peak device memory, "
       "maximum over ranks): " + "; ".join(f"{a} {v['peak_gib']:.1f} GiB and {v['epoch_seconds']:.0f} s per epoch at {v['n_parameters'] / 1e6:.0f}M parameters"

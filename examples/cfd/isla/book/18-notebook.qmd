@@ -33787,7 +33787,7 @@ displacement.
 
 **Cost (one epoch, four GB300 ranks, bfloat16).** ISLA 5.1 GiB peak, 103 s;
 GeoTransolver 4.8 GiB, 39 s; Transolver 7.9 GiB, 38 s (`cs_r_t2dz_*` smoke
-lanes). ISLA's epoch is 2.6x the baselines' on this 20,000-cell task: the
+lanes). ISLA's epoch is 2.7x the baselines' mean on this 20,000-cell task: the
 per-block nearest-boundary search and the 512-slice routing are fixed costs
 that the small mesh does not amortize.
 

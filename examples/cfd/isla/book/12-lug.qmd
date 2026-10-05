@@ -97,7 +97,8 @@ F = "von_mises_l2"
 rat = lambda arch, pk="native": AR[arch][pk][F]["mean"] / AR["ISLA"][pk][F]["mean"]
 shift = lambda arch, pk: AR[arch][pk][F]["mean"] / AR[arch]["native"][F]["mean"]
 N_TEST = AR["ISLA"]["native"][F]["n_cases"]
-COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]["lug"]
+# the cost record of the configurations this chapter's protocol artifact holds (final references, or the first-pass lanes)
+COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost" if "512 with 512 slices" in CH["isla_arm"] else "cost_first_pass"]["lug"]
 PARAMS = {a: v["n_parameters"] / 1e6 for a, v in COST.items()}
 ```
 

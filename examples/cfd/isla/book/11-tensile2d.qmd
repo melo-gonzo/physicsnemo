@@ -330,6 +330,19 @@ print(f"**Every mesh node is an interacting query token, and the readout is the 
       "the stress components rotated as a tensor and the displacement as a vector (@sec-invariances).")
 ```
 
+```{python}
+#| label: para-tensile2d-cost
+#| output: asis
+# the cost record of the configurations this chapter's protocol artifact holds (final references, or the first-pass lanes)
+COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost" if "512 with 512 slices" in CH["isla_arm"] else "cost_first_pass"]["Tensile2D"]
+isla_over_baselines = COST["ISLA"]["epoch_seconds"] / statistics.mean(COST[a]["epoch_seconds"] for a in BASELINES)
+print("**Cost.** Training on this task, one epoch at the reference configurations on four GB300 ranks in bfloat16 (peak device memory, "
+      "maximum over ranks): " + "; ".join(f"{a} {v['peak_gib']:.1f} GiB and {v['epoch_seconds']:.0f} s per epoch at {v['n_parameters'] / 1e6:.0f}M parameters"
+      for a, v in COST.items()) + f". ISLA's epoch is {isla_over_baselines:.1f}x the baselines' on this 20,000-cell task: the per-block "
+      "nearest-boundary search and the 512-slice routing are fixed costs that a small mesh does not amortize. "
+      "Data: results/char/char_lanes_cost_2026-10-04.json.")
+```
+
 ## The standing {#sec-interior-tensile2d}
 
 ```{python}
