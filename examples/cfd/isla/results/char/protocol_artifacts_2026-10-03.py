@@ -35,8 +35,12 @@ DATASETS = {
                        {"ISLA 512 with 512 slices": "cl_r_t2dz_isla", "GeoTransolver 256": "cl_r_t2dz_gt", "Transolver 512 x 16": "cl_r_t2dz_t"}, "ISLA 512 with 512 slices"),
     "lug.json": ({"von_mises_l2": "von Mises"},
                  {"ISLA 512 with 512 slices": "cl_r_lug_isla", "GeoTransolver 256": "cl_r_lug_gt", "Transolver 512 x 16": "cl_r_lug_t"}, "ISLA 512 with 512 slices"),
+    # DeepJEB++ exception to the one-reference rule (Peter, 2026-10-05): ISLA at half the reference rate (1.875e-4), every other
+    # hyperparameter the reference configuration; at 3.75e-4 every ISLA lane on this dataset reaches the mean-field plateau
+    # (cl_r_jeb_isla_*, kept as the record; #sec-nb-char-deepjeb-plateau-interim).
     "deepjeb_surface.json": ({"von_mises_l2": "von Mises", "displacement_l2": "displacement"},
-                             {"ISLA 512 with 512 slices": "cl_r_jeb_isla", "GeoTransolver 256": "cl_r_jeb_gt", "Transolver 512 x 16": "cl_r_jeb_t"}, "ISLA 512 with 512 slices"),
+                             {"ISLA 512 with 512 slices at 1.875e-4": "cl_jd_rate_e40", "GeoTransolver 256": "cl_r_jeb_gt",
+                              "Transolver 512 x 16": "cl_r_jeb_t"}, "ISLA 512 with 512 slices at 1.875e-4"),
 }
 # First-pass lanes (DrivAerML-half references, 2026-10-03) used while a dataset's final-reference lanes are not yet scored.
 FIRST_PASS = {

@@ -34118,3 +34118,28 @@ prototype conditioning is revisited (an architecture change), is Peter's
 decision; the 40-epoch lanes supply the numbers either decision needs
 (what the final reference reaches on DeepJEB++ at half rate, and what it
 reaches with static prototypes at the reference rate).
+
+## 2026-10-05 — Ruling: DeepJEB++ is an explicit exception to the one-reference rule, in the learning rate only; ISLA trains there at 1.875e-4 with every other hyperparameter the reference configuration; the two 40-epoch half-rate lanes become the campaign's DeepJEB++ ISLA arms {#sec-nb-char-deepjeb-rate-ruling}
+
+Peter, on the interim verdict of @sec-nb-char-deepjeb-plateau-interim:
+lowering the learning rate alone on one dataset is acceptable as a
+per-dataset exception to the one-reference goal. The exception is the
+rate and nothing else: width 512, 12 layers, 512 slices, cosine routing,
+the centered sample-conditioned prototypes and 200,000 cells stay as on
+every dataset; the rate is 1.875e-4, half the width rule's value, because
+every ISLA lane at 3.75e-4 on this dataset reached the mean-field plateau
+within 4 to 12 epochs and the half-rate lane trained through its
+five-epoch test. The recipe's `isla_surface_deepjebpp.yaml` pins 1.875e-4
+with this reason; the other ISLA configurations keep 3.75e-4.
+
+The campaign's DeepJEB++ ISLA arms are therefore `cl_jd_rate_e40_seed42`
+and `cl_jd_rate_e40_seed43` (launched 2026-10-05, 40 epochs, code_v20), scored
+under the three protocols when they finish, against `cl_r_jeb_gt` and
+`cl_r_jeb_t` (the final baseline references; GeoTransolver 256 is at epoch
+29 to 31 of 40, Transolver 512 x 16 at epoch 21). The reference-rate lanes
+`cl_r_jeb_isla_*` complete and are scored as the record of what the
+reference rate does on this dataset; `cl_jd_v17_e40_*` (static prototypes
+at 3.75e-4) complete as the diagnostic of the prototype conditioning's
+rate cost. Chapter 13 is restated from `results/char/deepjeb_surface.json`
+when the half-rate lanes are scored (about one day); the chapter states
+the exception and its measurement.
