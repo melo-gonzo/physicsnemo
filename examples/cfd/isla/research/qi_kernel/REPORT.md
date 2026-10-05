@@ -5,21 +5,27 @@ Lane `isla-qi-kernel`, branch `psharpe/isla-qi-kernel` (base `psharpe/isla-indep
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-03-isla-qi-kernel/`
 (job prefix `isla.kernel.`). Brief: `BRIEF.md` (this folder).
 
-## Status (2026-10-05 06:50 PDT)
+## Status (2026-10-05 09:30 PDT)
 
-- **Verdict: pending** (full lanes at epochs 210-247 of 500). Expected completion
-  about 11:00 (DrivAerML) and 12:00 PDT (AirfRANS); the scoring, probes and the
+- **Verdict: pending** (full lanes at epochs 350-397 of 500; lane taken over at
+  09:10 PDT after the previous worker stopped, jobs unaffected). Expected completion
+  about 11:00 (DrivAerML) and 11:45 PDT (AirfRANS); the scoring, probes and the
   reduction against the bars are submitted automatically when all four finish
-  (watcher job 1043128; see Open issues).
+  (watcher job 1043128, polling; see Open issues).
 - **Pilot (DrivAerML, 100 epochs, scored):** the read cuts the read-only twin's
   pressure and velocity error by 11% and 8% (10-11% within 0.01 L of the wall) and
   raises eddy viscosity by 5% (the wake, where no point reads); the mean read and the
   every-block placement cut velocity more (14%) but raise eddy viscosity by 25%.
-- **Full lanes so far (training-log validation, epoch ~200-240):** kernel /
-  interacting = 1.01-1.09 pressure, 0.93-0.99 velocity, 1.3-1.5 eddy viscosity on
-  DrivAerML; 0.85-0.89 / 0.98-0.99 / 1.13-1.19 on AirfRANS. If that holds, pressure
-  and velocity reach the interacting model and eddy viscosity misses the 1.10 bar on
-  both datasets: **falsified on eddy viscosity alone** would be the outcome.
+- **Full lanes so far (training-log validation, epoch 350-390):** kernel /
+  interacting = 1.01-1.09 pressure, 0.93-0.99 velocity, 1.27-1.42 eddy viscosity on
+  DrivAerML; 0.84-0.90 / 0.96-1.01 / 1.07-1.28 on AirfRANS. If that holds, pressure
+  and velocity reach the interacting model and eddy viscosity misses the 1.10 bar:
+  **falsified on eddy viscosity alone** would be the outcome.
+- **Band swap (no training):** read-only's pressure and velocity excess over
+  interacting lies entirely within 0.01 L of the wall (swapping that band's error
+  for the interacting model's leaves 1.004-1.009 on DrivAerML); its eddy-viscosity
+  excess lies mostly beyond 1 L (2% of DrivAerML points carry 58% of the squared
+  error; swapping that band leaves 1.03), out of an R = 0.01 L read's reach.
 - Contracts hold on trained checkpoints of both datasets (float64 independence
   1e-14 to 4e-13 of the RMS target; posed residual at the class's known level).
 - Commits: a7be6350c (the read), be04b6584 (Triton segment kernels, shared basis),
@@ -270,6 +276,10 @@ noisy single-epoch values, not the scorer's numbers.
 | AirfRANS s42 | 200 | 0.89 / 0.98 / 1.13 | 0.94 / 0.99 / 1.04 |
 | AirfRANS s43 | 110 | 0.84 / 0.99 / 1.21 | 0.85 / 0.98 / 1.10 |
 | AirfRANS s43 | 200 | 0.85 / 0.99 / 1.19 | 0.91 / 0.96 / 1.01 |
+| DrivAerML s42 | 390 | 1.02 / 0.93 / 1.29 | 0.94 / 0.79 / 0.99 |
+| DrivAerML s43 | 370 | 1.09 / 0.99 / 1.38 | 0.95 / 0.80 / 1.03 |
+| AirfRANS s42 | 350 | 0.84 / 0.96 / 1.07 | 0.91 / 0.97 / 1.00 |
+| AirfRANS s43 | 350 | 0.90 / 1.01 / 1.28 | 0.92 / 0.97 / 1.06 |
 
 So far the read brings pressure and velocity to the interacting level (DrivAerML) or
 below it (AirfRANS pressure), and leaves eddy viscosity at the read-only level. The
@@ -283,6 +293,47 @@ sentinels alone 5e-15 / 4e-15 / 5e-14 and 5 chunks 7e-15 / 4e-15 / 5e-14 of the 
 target (exactly query-independent); posed residual 8.5e-4 / 4.7e-4 / 2.1e-4 relative L2
 in float64 (the 2-D class's known on-wall sign effect; the QI read-only reference
 measured 1e-4 to 9.5e-4); float32 sentinels and chunks at 2e-6 to 4e-5.
+
+## Diagnostic: where the excess error lives (band swap, no training)
+
+`band_swap.py` reads the probes' per-case, per-band sums of squared error and squared
+target. Every arm is probed on the same points (checked: same cases, same counts per
+band), so swapping one \|sdf\|/L band's error for the reference's error on the same
+points is an exact counterfactual. "Swap" is the seed-mean ratio arm / reference of
+the case-mean relative L2 (the scorer's statistic) after that swap; "share" is the
+arm's share of the summed squared error.
+
+QI references at epoch 500 (`results/qi_2026-10-03/probe`), read-only / interacting,
+seeds 42 and 43; ratio before any swap, then share and swap for the near-wall band
+(< 0.01 L) and the wake band (> 1 L):
+
+| dataset, field | ratio | < 0.01 L: share, swap | > 1 L: share, swap |
+|---|---|---|---|
+| DrivAerML pressure | 1.108 | 93%, 1.004 | 0.3%, 1.107 |
+| DrivAerML velocity | 1.225 | 91%, 1.009 | 0.6%, 1.223 |
+| DrivAerML eddy viscosity | 1.174 | 29%, 1.155 | 58%, 1.029 |
+| AirfRANS pressure | 1.017 | 90%, 0.982 | 0.9%, 1.026 |
+| AirfRANS velocity | 1.039 | 68%, 1.004 | 4.5%, 1.040 |
+| AirfRANS eddy viscosity | 1.250 | 2%, 1.234 | 62%, 1.078 |
+
+(The AirfRANS probe's native request is not the scorer's chunk, so its ratios are
+smaller than the scorer's 1.037 / 1.088 / 1.417; the anatomy is what matters here.)
+
+Pilots against the read-only twin (seed 42, epoch 100):
+
+| pilot, field | ratio | < 0.01 L: share, swap | > 1 L: share, swap |
+|---|---|---|---|
+| sum4 pressure / velocity | 0.889 / 0.917 | 91%, 0.995 / 82%, 1.003 | 0.3%, 0.889 / 2.5%, 0.916 |
+| sum4 eddy viscosity | 1.051 | 6%, 1.052 | 84%, 1.007 |
+| mean4 eddy viscosity | 1.251 | 4%, 1.252 | 90%, 1.000 |
+| sum12 eddy viscosity | 1.255 | 4%, 1.257 | 90%, 1.003 |
+
+So read-only's pressure and velocity excess sits entirely within 0.01 L of the wall
+(where the read reaches: the pilots' gain is entirely there), and its eddy-viscosity
+excess sits mostly in the wake beyond 1 L (2% of DrivAerML points, 58% of the
+squared error), where an R = 0.01 L read reads nothing. Every pilot's eddy-viscosity
+loss is entirely in that wake band. A read of radius 0.01 L can close the pressure and
+velocity gap but cannot by itself close the eddy-viscosity gap.
 
 ## Open issues and next steps
 
