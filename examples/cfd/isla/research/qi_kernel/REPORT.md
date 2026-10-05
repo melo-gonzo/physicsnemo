@@ -1,9 +1,23 @@
-# QI-KERNEL: a GLOBE-style boundary read for read-only ISLA
+# QI-KERNEL: a truncated (near-field) GLOBE-style boundary read for read-only ISLA
 
 Lane `isla-qi-kernel`, branch `psharpe/isla-qi-kernel` (base `psharpe/isla-independent`
 @ 84b0a4190). AGA task dir:
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-03-isla-qi-kernel/`
 (job prefix `isla.kernel.`). Brief: `BRIEF.md` (this folder).
+
+## How to read this lane (added 2026-10-05, after review)
+
+This lane is a near-field diagnostic, not a proposed architecture. The read is
+truncated at R = 0.01 L, and that value was not derived. It was chosen from the
+wall-distance distribution of the CFD node sample (about two thirds of the points
+lie within it) and from the pair budget, so it encodes where the mesher puts
+points. The truncation also drops what defines GLOBE: every point reads the whole
+boundary. What the lane does establish is this: direct access to individual
+boundary cells removes read-only's near-wall pressure and velocity deficit where
+the read reaches, and the eddy-viscosity deficit sits in the wake, which a
+truncated read cannot reach. The principled follow-up is an untruncated read with
+no length scale, evaluated exactly (no tree code). It runs as lane
+`isla-qi-global` (branch `psharpe/isla-qi-global`), on AirfRANS first.
 
 ## Status (2026-10-05 16:05 PDT): complete
 
