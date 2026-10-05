@@ -33740,3 +33740,61 @@ Transolver 0.0434 / 0.1009, 0.396 / 0.556, 1.01 / 1.44. The DrivAerML
 Surface and HiLift chapters and the thesis table are restated from these
 artifacts; the other six tasks' chapters are restated when their `cl_r_*`
 lanes are scored under the three protocols.
+
+## 2026-10-04 — CHAR Tensile2D under the final references: ISLA width 512 with 512 slices trails GeoTransolver width 256 by 2.6x on Frobenius stress and 3.3x on displacement (0.0138 / 0.0133 against 0.0053 / 0.0040), leads on plastic strain (0.33 against 0.46); posed = native for ISLA within 1%, baselines at the mean-field level {#sec-nb-char-tensile2d-final}
+
+**Setting.** The first Tensile2D campaign lanes (@sec-nb-char-tensile2d-interim)
+ran under the DrivAerML-half references (ISLA width 768, GeoTransolver and
+Transolver width 1,024). The reference decision (@sec-nb-ref80-verdict)
+replaced them, and the six Tensile2D lanes were re-run under the final
+configurations on code_v20 with the equivariant normalization and the
+symmetric rank-2 stress head: `cl_r_t2dz_isla` (width 512, 512 slices, lr
+3.75e-4), `cl_r_t2dz_gt` (GeoTransolver width 256, lr 1e-3), `cl_r_t2dz_t`
+(Transolver width 512, 16 layers, lr 1e-3), 400 training cases, 100
+validation cases, 20,000 training cells, 500 epochs, two seeds, scored in
+float32 under the three protocols (`results/char/tensile2d.json`,
+`protocol_artifacts_2026-10-03.py`). The first-pass lanes stay in the record
+(`cl_t2dz_*`).
+
+**What we saw (seed means; per seed; Frobenius relative L2 of stress /
+relative L2 of displacement / relative L2 of plastic strain).** Native mesh:
+ISLA 0.0138 (0.0134 / 0.0141), 0.0133 (0.0147 / 0.0118), 0.328 (0.348 /
+0.308); GeoTransolver 0.0053 (0.0055 / 0.0051), 0.0040 (0.0038 / 0.0043),
+0.460 (0.568 / 0.353); Transolver 0.0069 (0.0072 / 0.0066), 0.0055 (0.0061 /
+0.0049), 0.230 (0.211 / 0.250). The uniform point-cloud scoring equals the
+native one to four digits for all three (the Tensile2D validation mesh is
+scored whole, 20,000 cells is the full mesh at this resolution). Rotated and
+translated: ISLA 0.0139 / 0.0132 / 0.328 (within 1% of native on every field
+and seed); GeoTransolver 1.08 / 1.26 / 3.18; Transolver 1.01 / 1.24 / 4.63.
+**Against the first pass**: ISLA's stress error rose from 0.0111 to 0.0138
+(the width-768 configuration was 20% better on this task), GeoTransolver's
+fell from 0.0057 to 0.0053 (width 256 beats width 1,024 here as on the
+wings), Transolver's 0.0065 to 0.0069; on plastic strain, the near-zero
+field whose relative error is dominated by the few yielded cells, the
+baselines moved by factors of 1.7 to 3.2 (GeoTransolver 0.142 to 0.460,
+Transolver 0.134 to 0.230) and ISLA improved 0.415 to 0.328. **ISLA's posed
+shift**, 4.5% on the first-pass configuration (attributed in
+@sec-nb-char-lug-interim to the nearest-boundary-sample tie discontinuity),
+is 0.7% here; the mechanism is unchanged and the smaller shift is a property
+of this trained model, not a fix.
+
+**Standing (baseline ÷ ISLA, seed means).** Stress: GeoTransolver 0.38,
+Transolver 0.50. Displacement: 0.30, 0.41. Plastic strain: 1.40, 0.70. Both
+baselines lead ISLA on the two load-bearing fields on both seeds; ISLA leads
+GeoTransolver on plastic strain on both seeds and trails Transolver there.
+The seed ranges of ISLA and either baseline do not overlap on stress or
+displacement.
+
+**Cost (one epoch, four GB300 ranks, bfloat16).** ISLA 5.1 GiB peak, 103 s;
+GeoTransolver 4.8 GiB, 39 s; Transolver 7.9 GiB, 38 s (`cs_r_t2dz_*` smoke
+lanes). ISLA's epoch is 2.6x the baselines' on this 20,000-cell task: the
+per-block nearest-boundary search and the 512-slice routing are fixed costs
+that the small mesh does not amortize.
+
+**What it changes.** Chapter 11 is restated from the regenerated artifact.
+The standing on Tensile2D is the clearest case against ISLA in the campaign:
+on a two-dimensional, 20,000-cell, geometry-varying solid with a rank-2
+target, both released baselines are 2x to 3x more accurate on the stress and
+displacement fields at a third of the training time, and the only field
+where ISLA leads is the near-zero plastic strain. The pose invariance holds
+to within 1% while the baselines read at the mean-field level.
