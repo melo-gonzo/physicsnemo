@@ -37,7 +37,9 @@ smoothly as a point leaves the boundary's neighbourhood, and a point with no cel
 within :math:`R` reads exactly zero (the slices carry the far field).
 
 The kernel inputs :math:`\iota_{qj}` are invariants of the pair's relative geometry
-(:func:`pair_invariants`); the values :math:`v_j`, keys :math:`k_j` and queries
+(:func:`pair_invariants`); one MLP maps them to a basis of ``KERNEL_READ_BASIS``
+functions per pair once per forward pass (:class:`_KernelBasis`), and each block's
+kernel :math:`K_h` is a learned linear combination of that basis per head. The values :math:`v_j`, keys :math:`k_j` and queries
 :math:`q` are linear maps of invariant token states (the boundary cell's and the point's
 own), so the read is invariant and the equivariant heads assemble every output. The
 neighbourhood is the exact radius set, found by :func:`boundary_pairs` (never a fixed
