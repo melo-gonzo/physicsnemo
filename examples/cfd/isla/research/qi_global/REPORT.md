@@ -5,29 +5,36 @@ Lane `isla-qi-global`, branch `psharpe/isla-qi-global` (base
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-05-isla-qi-global/`
 (job prefix `isla.global.`). Brief: `BRIEF.md` (this folder).
 
-## Status (2026-10-06 07:15 PDT): references done and scored, G at epoch ~325
+## Status (2026-10-06 14:00 PDT): complete
 
-- Global read implemented and tested (commits b10170371 eager, c5d7408e9 fused
-  Triton; 224 ISLA tests pass). Cost: G (every block) 508 ms per step, 2.1x
-  read-only, peak 34.6 GiB.
-- **The lanes run on LHR, not AGA** (AGA's queue had about 1,260 higher-priority
-  jobs ahead; LHR has the same GB300 hardware, venv and AirfRANS store; details
-  under Lanes). LHR jobs: lanes 99985-99994 (started 2026-10-05 20:45 PDT),
-  watcher 100013.
-- I, P, T (seeds 44, 45) finished at 04:20-06:35 and are scored (float32 and
-  bf16, probes). T seed 45 lost 55 min to a hung link (all four
-  ranks in uninterruptible I/O wait on node nvl72d019-T18 right after resuming;
-  cancelled at 05:40, its successor excludes that node and resumed from epoch
-  451).
-- G (seeds 42-45) at epoch ~325 at 07:10; at 111 s per epoch it finishes about
-  12:50 PDT; the watcher then scores and probes it and runs the reduction
-  (`eval/qg_reduction*.txt` in the LHR task dir).
-- References over four seeds (float32): the new seeds move the read-only
-  baseline: P / I = 0.958 / 1.050 / 1.251 (two QI seeds: 1.037 / 1.088 / 1.417);
-  see Results.
-- Training log (no verdict rests on it): at epochs 200-300 G's validation error is
-  0.65-0.73x the interacting model's on pressure, 0.78-0.83x on velocity and
-  0.70-0.80x on eddy viscosity, every seed (Training-log progress).
+- **Verdict: closes the gap** by the preregistered bars (float32 protocol scores,
+  four-seed means). G / I = **0.721 / 0.825 / 0.888** (pressure / velocity / eddy
+  viscosity; bars <= 1.03 / 1.03 / 1.05); wake band (\|sdf\| > 1 L) eddy viscosity
+  G / I = **0.968** (bar <= 1.10). It also "helps the wake": G's eddy-viscosity
+  ratio to I is 0.888 against T's 1.178, and its wake-band error is 0.58x T's.
+  G is 3.5 standard errors below T on eddy viscosity ("no wake effect" does not
+  hold). Read-only ISLA with the global read is more accurate than interacting ISLA
+  on every field, exactly query-independent.
+- Against read-only P: 0.753 / 0.785 / 0.710; against the truncated read T: 0.956 /
+  0.837 / 0.754. Scored in bf16 throughout (like with like): G / I 0.711 / 0.819 /
+  0.798, the same story; G does not depend on the arithmetic.
+- **Caveats.** (1) One seed of four (44) is above I on eddy viscosity (paired 1.048;
+  the others 0.72-0.90). (2) In the far field G is *worse* than I on pressure and
+  velocity: the > 1 L band (17% of points) has pooled pressure error 0.113 against
+  0.095 and velocity 0.0106 against 0.0097; under volume weighting (the L2 norm over
+  the CFD domain, dominated by the far field) G / I is 1.28 / 1.10 / 0.89 (count
+  0.70 / 0.81 / 0.87, decade 0.77 / 0.81 / 0.89; see the added readout). The global
+  read moves error from the near wall to the far field for pressure. (3) The
+  four-seed references move the read-only baseline: P / I is 0.958 / 1.050 / 1.251
+  (the QI campaign's two seeds: 1.037 / 1.088 / 1.417).
+- Contracts on all four final G checkpoints: float64 sentinels alone and 5 chunks
+  3e-15 to 1.2e-14 of the RMS target (exactly query-independent); posed residual
+  1.3e-4 to 3.0e-4 relative L2 in float64 (at or below the read-only class's level).
+- Cost: G step 508 ms, 2.1x read-only (every block); a G lane took 16.2-16.7 h on
+  one 4xGB300 node (five links), the references 7.5-9 h.
+- Lanes ran on LHR (same GB300 hardware, venv and AirfRANS store; AGA's queue had
+  ~1,260 jobs ahead). Nothing is running. Results:
+  `examples/cfd/isla/results/qi_global_2026-10-06/`.
 
 ## Question
 
@@ -177,16 +184,16 @@ kernel lane's launcher with this task dir), protocol: `airfrans_volume_2d` /
 
 | idx | run | arm | seed | code | first job (LHR) | state |
 |---|---|---|---|---|---|---|
-| 0 | gl_af_int_seed44 | I | 44 | g1 | 99985 | training |
-| 1 | gl_af_int_seed45 | I | 45 | g1 | 99986 | training |
-| 2 | gl_af_ro_seed44 | P | 44 | g1 | 99987 | training |
-| 3 | gl_af_ro_seed45 | P | 45 | g1 | 99988 | training |
-| 4 | gl_af_trunc_seed44 | T | 44 | g1 | 99989 | training |
-| 5 | gl_af_trunc_seed45 | T | 45 | g1 | 99990 | training |
-| 6 | gl_af_global_seed42 | G | 42 | g2 | 99991 | training |
-| 7 | gl_af_global_seed43 | G | 43 | g2 | 99992 | training |
-| 8 | gl_af_global_seed44 | G | 44 | g2 | 99993 | training |
-| 9 | gl_af_global_seed45 | G | 45 | g2 | 99994 | training |
+| 0 | gl_af_int_seed44 | I | 44 | g1 | 99985 | done |
+| 1 | gl_af_int_seed45 | I | 45 | g1 | 99986 | done |
+| 2 | gl_af_ro_seed44 | P | 44 | g1 | 99987 | done |
+| 3 | gl_af_ro_seed45 | P | 45 | g1 | 99988 | done |
+| 4 | gl_af_trunc_seed44 | T | 44 | g1 | 99989 | done |
+| 5 | gl_af_trunc_seed45 | T | 45 | g1 | 99990 | done |
+| 6 | gl_af_global_seed42 | G | 42 | g2 | 99991 | done |
+| 7 | gl_af_global_seed43 | G | 43 | g2 | 99992 | done |
+| 8 | gl_af_global_seed44 | G | 44 | g2 | 99993 | done |
+| 9 | gl_af_global_seed45 | G | 45 | g2 | 99994 | done |
 | - | qi_af_int_seed42/43 | I | 42, 43 | qi2 | QI campaign | done |
 | - | qi_af_pas_seed42/43 | P | 42, 43 | qi2 | QI campaign | done |
 | - | kq_af_sum4_seed42/43 | T | 42, 43 | kq3 | kernel lane | done |
@@ -200,30 +207,99 @@ of the base passes. The truncated path is identical to `code_kq3` (9c564e99a)
 apart from added lines. `recipe_g` is the kernel lane's `recipe_kq` (its `src/*.py`
 md5s equal this worktree's).
 
-## Results (reporting protocol; G pending)
+## Results (epoch 500, reporting protocol)
 
 `infer.py` exactly as the QI scorer (float32, the 200 held-out airfoils, the
-training request, case mean of the per-case relative L2), `eval/qg_reduce.py`.
-Seed values 42 / 43 / 44 / 45; mean +- standard error over seeds.
+training request, case mean of the per-case relative L2), `eval/qg_reduce.py`
+(`results/qi_global_2026-10-06/qg_reduction.{json,txt}`). Seed values 42 / 43 / 44
+/ 45; mean +- standard error over seeds.
 
 | arm | pressure | velocity | eddy viscosity |
 |---|---|---|---|
+| **G** | **0.0245** +- 0.0017 (0.0212 / 0.0246 / 0.0292 / 0.0228) | **0.0138** +- 0.0004 (0.0128 / 0.0136 / 0.0147 / 0.0141) | **0.0270** +- 0.0023 (0.0217 / 0.0263 / 0.0327 / 0.0274) |
 | I | 0.0339 +- 0.0004 (0.0334 / 0.0331 / 0.0349 / 0.0343) | 0.0167 +- 0.0003 (0.0165 / 0.0163 / 0.0176 / 0.0166) | 0.0304 +- 0.0004 (0.0303 / 0.0292 / 0.0312 / 0.0310) |
 | P | 0.0325 +- 0.0015 (0.0357 / 0.0332 / 0.0326 / 0.0283) | 0.0176 +- 0.0004 (0.0179 / 0.0178 / 0.0182 / 0.0164) | 0.0381 +- 0.0028 (0.0450 / 0.0393 / 0.0363 / 0.0316) |
 | T | 0.0256 +- 0.0006 (0.0258 / 0.0270 / 0.0249 / 0.0246) | 0.0165 +- 0.0003 (0.0164 / 0.0163 / 0.0173 / 0.0160) | 0.0358 +- 0.0011 (0.0346 / 0.0391 / 0.0350 / 0.0347) |
-| G | pending | pending | pending |
 
-Ratios of the seed means (paired seed ratios in parentheses): P / I 0.958
-(1.070 / 1.004 / 0.936 / 0.826), 1.050 (1.083 / 1.092 / 1.037 / 0.990), 1.251
-(1.486 / 1.346 / 1.165 / 1.018); T / I 0.754 (0.774 / 0.816 / 0.713 / 0.717),
-0.986 (0.992 / 0.999 / 0.988 / 0.964), 1.178 (1.143 / 1.337 / 1.121 / 1.118). The
-read-only model's eddy-viscosity excess is smaller over four seeds (1.25) than
-over the QI campaign's two (1.42): seed 45 of the read-only model is within 2% of
-the interacting model.
+| ratio of seed means (paired seeds) | pressure | velocity | eddy viscosity |
+|---|---|---|---|
+| **G / I** | **0.721** (0.64 / 0.74 / 0.84 / 0.67) | **0.825** (0.78 / 0.83 / 0.84 / 0.85) | **0.888** (0.72 / 0.90 / 1.05 / 0.88) |
+| G / P | 0.753 (0.60 / 0.74 / 0.89 / 0.81) | 0.785 (0.72 / 0.76 / 0.81 / 0.86) | 0.710 (0.48 / 0.67 / 0.90 / 0.87) |
+| G / T | 0.956 (0.82 / 0.91 / 1.17 / 0.93) | 0.837 (0.79 / 0.84 / 0.85 / 0.88) | 0.754 (0.63 / 0.67 / 0.94 / 0.79) |
+| T / I | 0.754 (0.77 / 0.82 / 0.71 / 0.72) | 0.986 (0.99 / 1.00 / 0.99 / 0.96) | 1.178 (1.14 / 1.34 / 1.12 / 1.12) |
+| P / I | 0.958 (1.07 / 1.00 / 0.94 / 0.83) | 1.050 (1.08 / 1.09 / 1.04 / 0.99) | 1.251 (1.49 / 1.35 / 1.17 / 1.02) |
 
-bf16 scoring (like with like; `eval_prec/bfloat16`): I 0.0343 / 0.0172 / 0.0341,
-P 0.0317 / 0.0173 / 0.0381, T 0.0273 / 0.0163 / 0.0392 (seed means); P / I
-0.923 / 1.010 / 1.116.
+### Bars (float32, as preregistered)
+
+| bar | measured | holds |
+|---|---|---|
+| closes: G / I <= 1.03 pressure, velocity | 0.721, 0.825 | yes |
+| closes: G / I <= 1.05 eddy viscosity | 0.888 | yes |
+| closes: wake band (> 1 L) eddy viscosity G / I <= 1.10 | 0.968 | yes |
+| helps the wake: (G / I - 1) <= (T / I - 1) / 2 | -0.112 <= 0.089 | yes |
+| helps the wake: wake-band eddy viscosity G < T | 0.0633 < 0.1083 (0.58x) | yes |
+| no wake effect: \|G - T\| <= one SE (eddy viscosity) | 3.5 SE apart | no |
+
+**Verdict: closes the gap** (all three "closes" bars hold; "helps the wake" holds
+too, "no wake effect" does not).
+
+### bf16 scoring (like with like; `eval_prec/bfloat16`, `qg_reduction_bf16.txt`)
+
+| arm | pressure | velocity | eddy viscosity |
+|---|---|---|---|
+| G | 0.0244 | 0.0141 | 0.0272 |
+| I | 0.0343 | 0.0172 | 0.0341 |
+| P | 0.0317 | 0.0173 | 0.0381 |
+| T | 0.0273 | 0.0163 | 0.0392 |
+| G / I | 0.711 (0.67 / 0.77 / 0.73 / 0.67) | 0.819 (0.80 / 0.83 / 0.81 / 0.85) | 0.798 (0.73 / 0.84 / 0.85 / 0.77) |
+| G / T | 0.894 | 0.860 | 0.694 |
+
+G scores the same in both arithmetics (bf16 / float32: 0.99 / 1.02 / 1.01); the
+interacting reference is 12% worse on eddy viscosity in bf16, so the bf16 ratios
+favour G slightly more. No arithmetic dependence of the kind the kernel lane found
+on DrivAerML.
+
+### Band anatomy
+
+Probe request, every held-out airfoil; pooled relative L2 by \|stored sdf\|/L,
+seed means.
+
+| band (points) | pressure G / I / P / T | velocity G / I / P / T | eddy viscosity G / I / P / T |
+|---|---|---|---|
+| < 0.01 (41%) | 0.0160 / 0.0253 / 0.0230 / 0.0162 | 0.0195 / 0.0245 / 0.0266 / 0.0236 | 0.0334 / 0.0383 / 0.0420 / 0.0376 |
+| 0.01-0.1 (20%) | 0.0158 / 0.0220 / 0.0210 / 0.0209 | 0.0130 / 0.0162 / 0.0165 / 0.0163 | 0.0309 / 0.0368 / 0.0377 / 0.0355 |
+| 0.1-1 (23%) | 0.0319 / 0.0363 / 0.0324 / 0.0283 | 0.0121 / 0.0129 / 0.0139 / 0.0134 | 0.0367 / 0.0416 / 0.0395 / 0.0575 |
+| > 1 (17%) | **0.1127** / 0.0947 / 0.0840 / 0.0679 | 0.0106 / 0.0097 / 0.0097 / 0.0095 | **0.0633** / 0.0654 / 0.0865 / 0.1083 |
+
+Band swap (`band_swap.py`, G against I, exact counterfactual on the same points):
+swapping G's near-wall band (< 0.01 L) for I's error takes pressure from 0.716 to
+0.969 and velocity from 0.814 to 0.959: most of G's pressure and velocity gain is
+within 0.01 L of the wall, as with the truncated read. Eddy viscosity gains in every
+band (0.88-0.93 after any one swap). The wake band (> 1 L), where T is 1.66x I on
+eddy viscosity, is at 0.97x I for G: the untruncated read reaches the wake. Against
+T, G's eddy-viscosity gain is in 0.1-1 L (0.0367 against 0.0575) and beyond 1 L
+(0.0633 against 0.1083). The cost is far-field pressure: beyond 1 L G is 1.19x I
+and 1.66x T on pressure (4% of G's squared pressure error, so the count-weighted
+score barely sees it).
+
+### Contracts on the final G checkpoints (epoch 500, `qi_probe.py`)
+
+Max \|difference\| / RMS target, pressure / velocity / eddy viscosity, first held-out
+airfoil; float64 with the exact search; posed = relative L2 under a random rotation
+and translation.
+
+| run | float64: sentinels alone | float64: 5 chunks | float64: posed | float32: sentinels; chunks |
+|---|---|---|---|---|
+| G s42 | 4e-15 / 3e-15 / 6e-15 | 5e-15 / 5e-15 / 6e-15 | 1.3e-4 / 1.8e-4 / 3.3e-5 | 2e-6 / 2e-6 / 3e-6; 3e-6 / 3e-6 / 4e-6 |
+| G s43 | 4e-15 / 3e-15 / 1e-14 | 5e-15 / 3e-15 / 9e-15 | 1.4e-4 / 9.7e-5 / 2.8e-5 | 3e-6 / 2e-6 / 4e-6; 3e-6 / 2e-6 / 6e-6 |
+| G s44 | 6e-15 / 3e-15 / 6e-15 | 7e-15 / 4e-15 / 9e-15 | 2.8e-4 / 1.4e-4 / 1.1e-4 | 3e-6 / 2e-6 / 3e-6; 4e-6 / 2e-6 / 5e-6 |
+| G s45 | 4e-15 / 3e-15 / 7e-15 | 5e-15 / 4e-15 / 1e-14 | 3.0e-4 / 1.9e-4 / 8.2e-5 | 2e-6 / 2e-6 / 5e-6; 3e-6 / 2e-6 / 7e-6 |
+| P s44 | 9e-15 / 3e-15 / 4e-14 | 9e-15 / 4e-15 / 6e-14 | 2.1e-4 / 1.6e-4 / 7.7e-5 | 4e-6 / 2e-6 / 2e-5; 6e-6 / 2e-6 / 2e-5 |
+| I s44 (interacting) | 8.5e-2 / 3.9e-2 / 1.1 | 0.36 / 0.15 / 1.1 | 2.7e-4 / 2.3e-4 / 8.1e-5 | 8.5e-2 / 3.9e-2 / 1.1; 0.51 / 0.54 / 4.9 |
+
+G is exactly query-independent (float64 roundoff) and as covariant as the read-only
+class; the interacting reference changes its predictions by up to 1.1x the RMS
+target when the request changes.
 
 ## Added readout: principled error weighting (requested 2026-10-06; not a bar)
 
@@ -244,6 +320,40 @@ copied to LHR `we/probe_refs/`); seeds 44, 45 and G run here on LHR (`we/we.sbat
 `we/we_runs.tsv`, the lane's recipe copy as `recipe_we`, its dual-area store
 `airfrans_pdmsh_dual` copied to LHR `data/`, file list and sizes identical).
 The verdict stays on the protocol scores.
+
+Results (`qg_we_reduce.py`, `results/qi_global_2026-10-06/we_reduction.{json,txt}`;
+relative L2 in training space, case means then four-seed means; paired seeds in
+brackets):
+
+| arm | count p / U / nut | decade p / U / nut | volume p / U / nut |
+|---|---|---|---|
+| G | 0.0205 / 0.0138 / 0.0248 | 0.0279 / 0.0130 / 0.0309 | 0.1453 / 0.0104 / 0.0279 |
+| I (tiles) | 0.0292 / 0.0171 / 0.0287 | 0.0364 / 0.0161 / 0.0348 | 0.1136 / 0.0095 / 0.0313 |
+| P | 0.0277 / 0.0172 / 0.0351 | 0.0363 / 0.0155 / 0.0404 | 0.1219 / 0.0097 / 0.0432 |
+| T | 0.0221 / 0.0162 / 0.0351 | 0.0340 / 0.0154 / 0.0399 | 0.0957 / 0.0091 / 0.0440 |
+
+| ratio | protocol (float32) | count | decade | volume |
+|---|---|---|---|---|
+| G / I | 0.721 / 0.825 / 0.888 | 0.702 / 0.808 / 0.865 | 0.766 / 0.808 / 0.890 | **1.279 / 1.100** / 0.893 |
+| G / P | 0.753 / 0.785 / 0.710 | 0.738 / 0.800 / 0.707 | 0.768 / 0.838 / 0.766 | 1.192 / 1.070 / 0.646 |
+| G / T | 0.956 / 0.837 / 0.754 | 0.927 / 0.852 / 0.706 | 0.819 / 0.844 / 0.776 | 1.518 / 1.140 / 0.635 |
+| T / I | 0.754 / 0.986 / 1.178 | 0.757 / 0.947 / 1.225 | 0.935 / 0.957 / 1.146 | 0.842 / 0.964 / 1.407 |
+| P / I | 0.958 / 1.050 / 1.251 | 0.951 / 1.009 / 1.224 | 0.997 / 0.964 / 1.162 | 1.073 / 1.028 / 1.382 |
+
+Paired G / I: count [0.61/0.78/0.81, 0.78/0.81/0.95, 0.75/0.80/0.87,
+0.67/0.84/0.83]; decade [0.64/0.76/0.78, 0.82/0.79/0.92, 0.85/0.83/0.93,
+0.75/0.85/0.92]; volume [0.91/1.07/0.81, 1.36/0.95/0.92, 1.53/1.17/0.94,
+1.28/1.20/0.89]. Per-band volume-weighted RMS, G / I: < 0.001 L 0.62 / 0.77 / 1.10;
+0.001-0.01 0.68 / 0.74 / 0.80; 0.01-0.1 0.75 / 0.76 / 0.84; 0.1-1 0.99 / 0.88 /
+1.01; > 1 L **1.30 / 1.13** / 0.88.
+
+Reading: on the full mesh the count and decade weightings agree with the protocol
+(G better than I on every field, by 11-30%). Under volume weighting, which is the
+far-field L2 norm (93% of the AirfRANS volume lies beyond 1 L), G keeps its
+eddy-viscosity gain (0.89 against I, 0.64 against T) but is 28% worse than I on
+pressure and 10% worse on velocity, and 1.5x T on pressure. The global read trades
+far-field pressure for near-wall pressure; the truncated read, which reads nothing
+in the far field, does not (T / I volume pressure 0.84).
 
 ## Training-log progress (no verdict rests on it)
 
@@ -305,3 +415,37 @@ four-seed means; standard error over seeds; paired ratios per seed.
 Also reported: G / P, G / T, the band anatomy (error by \|sdf\|/L band, probe
 request), cost per step and peak memory, and every arm scored in bf16 beside the
 float32 verdict (like with like).
+
+## Open issues and next steps
+
+- **Far-field pressure.** G is 1.19x I on pressure beyond 1 L (count-weighted) and
+  1.28x under volume weighting, where T is better than I. A softmax over every cell
+  is a convex average of the cell values; far from the body it tends to a smooth
+  average whose pressure update the output map must cancel. Candidates (not run):
+  a learned null (a fraction of the whole boundary measure, as in the truncated
+  read) so far points can read nothing; or the `"sum"` form (a signed quadrature,
+  which can decay as a power law) beside the mean; either needs new lanes.
+- **Seed spread.** One G seed (44) is 1.05x I on eddy viscosity; the four-seed
+  standard error of G's eddy viscosity (0.0023) is 5x I's. Two more seeds would
+  tighten it (about 17 h per lane on one node).
+- **DrivAerML (out of scope, not launched): exact all-pairs is not affordable at
+  the protocol size.** 200,000 points x 200,000 cells = 4e10 pairs per block, 400x
+  AirfRANS. At the measured rates (kernel basis 85 ms forward + backward per 1e8
+  pairs, the softmax read about 12 ms per block per 1e8 pairs) one step would take
+  about 34 s (basis) + 12 x 4.8 s (reads), about 90 s on one GB300 against 0.26 s
+  for read-only: a 500-epoch lane would take about two months on one node. Even one
+  read at the last block is about 40 s per step. Kernel work (fusing the per-block
+  projection, a faster basis backward) is worth 2-4x, not 350x. An exact read on
+  DrivAerML therefore needs a smaller boundary set for the read: for example a
+  Horvitz-Thompson subsample of the cells (a quadrature of the same surface
+  integral, refinement-consistent in expectation but not exactly) at about 2,000
+  cells (4e8 pairs, about 1 s per step, 4x read-only at every block). That is a
+  design decision for Peter.
+- **Cost on AirfRANS.** 2.1x the read-only step. The basis backward (65 ms per
+  step) and cuBLAS projection glue (about 7 ms per block) are the largest items;
+  a fused projection and a tuned basis backward would bring it to about 1.6-1.8x.
+- Re-running the reductions by hand (LHR task dir): `cd eval && python
+  qg_reduce.py --scores score ../refs/qi_score ../refs/kq_score --probes probe
+  ../refs/qi_probe ../refs/kq_probe --out qg_reduction.json`; bf16 with `--scores
+  ../eval_prec/bfloat16/score ../refs/kq_score_bf16`; weighted: `cd we && python
+  qg_we_reduce.py --probes probe probe_refs --we-reduce . --out we_reduction.json`.
