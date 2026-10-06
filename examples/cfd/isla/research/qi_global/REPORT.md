@@ -318,7 +318,12 @@ Provenance: seeds 42, 43 of I, P, T reuse that lane's rows (AGA
 `agents/2026-10-06-isla-weighted-error/probe/`, the same checkpoints and probe,
 copied to LHR `we/probe_refs/`); seeds 44, 45 and G run here on LHR (`we/we.sbatch`,
 `we/we_runs.tsv`, the lane's recipe copy as `recipe_we`, its dual-area store
-`airfrans_pdmsh_dual` copied to LHR `data/`, file list and sizes identical).
+`airfrans_pdmsh_dual` copied to LHR `data/`, file list and sizes identical). The
+model code is the frozen `code_g1` / `code_g2` (logged per row). `recipe_we` is
+`recipe_g` plus the probe pool's dataset configs and one added transform class
+(`EstimatePointVolumes`, 55 added lines in `domain_transforms.py`, nothing else
+changed); the model configs are identical, so the checkpoints are read exactly as
+the scorer reads them.
 The verdict stays on the protocol scores.
 
 Results (`qg_we_reduce.py`, `results/qi_global_2026-10-06/we_reduction.{json,txt}`;
@@ -443,12 +448,15 @@ float32 verdict (like with like).
 - **Cost on AirfRANS.** 2.1x the read-only step. The basis backward (65 ms per
   step) and cuBLAS projection glue (about 7 ms per block) are the largest items;
   a fused projection and a tuned basis backward would bring it to about 1.6-1.8x.
-- **Branch state.** Peter merged `psharpe/isla` into this branch at 13:41 EDT
-  (101fdba6d: SOFT-GEO, the exact nearest-boundary search, new class defaults).
-  Every result here comes from the snapshots `code_g1` (b10170371) and `code_g2`
-  (c5d7408e9), before the merge. The global-read tests were not re-run on the
-  merged branch: at 14:00 PDT the shared local venv failed on `import torch`
-  (an `ld.so` assertion), so that check is still to do.
+- **Branch state.** The supervisor merged `psharpe/isla` into this branch at
+  Peter's request (101fdba6d, a fast-forward from aec13f3a4): SOFT-GEO
+  (`query_geometry`, default `nearest`), an exact nearest-boundary search in place
+  of cuML, and the REF-80 defaults (class hidden 512 and 512 slices; recipe configs
+  512 / 512 / 3.75e-4). The ISLA suite passed on the merged code on a GB300 (262
+  passed, 1 skipped; the supervisor's run). **Every readout of this lane uses the
+  frozen pre-merge snapshots** `code_g1` (b10170371), `code_g2` (c5d7408e9) and
+  `recipe_g`; nothing is re-snapshotted from the merged worktree, whose defaults
+  differ from these checkpoints'.
 - Re-running the reductions by hand (LHR task dir): `cd eval && python
   qg_reduce.py --scores score ../refs/qi_score ../refs/kq_score --probes probe
   ../refs/qi_probe ../refs/kq_probe --out qg_reduction.json`; bf16 with `--scores
