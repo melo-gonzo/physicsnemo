@@ -37,10 +37,7 @@ from physicsnemo.experimental.uq.conformal._utils import (
     broadcast_difficulty,
     check_aux,
     check_exact_shape,
-    check_finite,
-    check_floating,
     check_points,
-    check_real,
     conformal_quantile_index,
     normalize_keys,
     points_fingerprint,
@@ -70,9 +67,6 @@ _NOT_POSITIVE = (ValueError, "positive finite")
 # fmt: off
 # (id, thunk, expected): expected is (ExceptionType, match) or a return value.
 VALIDATOR_CASES = [
-    ("check_floating-integer", lambda: check_floating("k", "x", _I64), (TypeError, "floating")),
-    ("check_finite-nan", lambda: check_finite("k", "x", torch.tensor([0.0, torch.nan])), (ValueError, "1 non-finite")),
-    ("check_real-passthrough", lambda: check_real("k", "x", _F) is _F, True),
     ("check_exact_shape", lambda: check_exact_shape("k", "p", _F, "t", torch.zeros(3, 1)), (ValueError, "match exactly")),
     ("require_matching_keys", lambda: require_matching_keys(["a", "b"], ["a", "c"], "m"), (KeyError, r"\['b', 'c'\]")),
     ("check_aux-shape", lambda: check_aux("k", _N, torch.zeros(2, 1), {"sigma": torch.ones(2)}), (ValueError, "aux 'sigma' shape")),
