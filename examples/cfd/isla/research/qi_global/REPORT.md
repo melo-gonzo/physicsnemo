@@ -152,6 +152,42 @@ cost dominates, so reading at every block (matched depth) costs only 18% more th
 the last 4 blocks: **G reads at every block**. The G step is 2.1x the read-only
 step, so a G lane takes about 16-17 h (five 3h59 links) against 7.5-8 h.
 
+## Lanes
+
+AGA task dir `agents/2026-10-05-isla-qi-global`, `kernel/lanes.tsv`, chained 3h59
+singleton links (`kernel/lanes.sbatch`, the kernel lane's launcher with this task
+dir), protocol: `airfrans_volume_2d` / `isla_volume_airfrans`, 100,000 cells,
+`train_split=full_train val_split=full_test +training.val_interval=10`, lr 5e-4,
+500 epochs, bf16, no augmentation, compiled blocks. Model overrides: P and G
+`++model.query_independent=true`; T adds `++model.kernel_read=sum
+++model.kernel_read_radius=0.01 ++model.kernel_read_blocks=4`; G adds
+`++model.kernel_read=mean ++model.kernel_read_radius=null` (every block).
+
+| idx | run | arm | seed | code | first job | state |
+|---|---|---|---|---|---|---|
+| 0 | gl_af_int_seed44 | I | 44 | g1 | 1061607 | pending |
+| 1 | gl_af_int_seed45 | I | 45 | g1 | 1061608 | pending |
+| 2 | gl_af_ro_seed44 | P | 44 | g1 | 1061609 | pending |
+| 3 | gl_af_ro_seed45 | P | 45 | g1 | 1061610 | pending |
+| 4 | gl_af_trunc_seed44 | T | 44 | g1 | 1061611 | pending |
+| 5 | gl_af_trunc_seed45 | T | 45 | g1 | 1061612 | pending |
+| 6 | gl_af_global_seed42 | G | 42 | g2 | 1063219 | pending |
+| 7 | gl_af_global_seed43 | G | 43 | g2 | 1063220 | pending |
+| 8 | gl_af_global_seed44 | G | 44 | g2 | 1063221 | pending |
+| 9 | gl_af_global_seed45 | G | 45 | g2 | 1063222 | pending |
+| - | qi_af_int_seed42/43 | I | 42, 43 | qi2 | QI campaign | done |
+| - | qi_af_pas_seed42/43 | P | 42, 43 | qi2 | QI campaign | done |
+| - | kq_af_sum4_seed42/43 | T | 42, 43 | kq3 | kernel lane | done |
+
+Snapshots: `code_g1` = b10170371, `code_g2` = c5d7408e9 (fused kernels; the G
+lanes). The default (interacting, read-only) paths of `code_g1`/`code_g2` are
+identical to `code_qi2` (2082d37f5), the QI references' snapshot: `diff` shows
+only added lines in `model.py` (the kernel-read options, off by default) and the
+added `kernel_read.py`, `pair_kernels.py`, `global_read_kernels.py`; every golden
+of the base passes. The truncated path is identical to `code_kq3` (9c564e99a)
+apart from added lines. `recipe_g` is the kernel lane's `recipe_kq` (its `src/*.py`
+md5s equal this worktree's).
+
 ## Preregistered bars (written 2026-10-05 17:30 PDT, before any full lane)
 
 AirfRANS only. Arms: **G** read-only + global read (seeds 42-45); **I** interacting-256
