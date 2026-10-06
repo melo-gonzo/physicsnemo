@@ -42,9 +42,11 @@ Amended 2026-10-06 evening, before any TG lane ran. E2 failed at every theta (RE
 kernel's first-order cluster aggregates of keys and values leave a 2% to 5% deviation at theta 0.25 to 0.5 even
 with orientation-coherent clusters, so "the theta E2 selects" does not exist. TG is therefore trained with the
 tree read at a fixed theta, chosen by cost under the bar below (step within 6x the read-only floor): theta 1 and
-theta 0.5, two seeds each, scored at their training theta (and at theta 0 as a diagnostic of how far the trained
-model is from its own dense limit). The bars against I and P are unchanged. The orientation-aware tree
-(`boundary_tree.py`, RMS normal spread) is the tree of every lane.
+theta 0.5, two seeds each, scored at their training theta. The bars against I and P are unchanged. The
+orientation-aware tree (`boundary_tree.py`, RMS normal spread) is the tree of every lane. Second amendment, the
+same evening, before any TG lane ran: theta 0.5 (6.6e8 pairs per block) does not fit one GB300 and would be about
+three times the time of theta 1, outside the bar, so only theta 1 runs (two seeds); and the "theta 0 diagnostic" is
+withdrawn at car scale, where theta 0 is the 4e10-pair dense read this program exists to avoid.
 
 Bars (the pi lane's, unchanged): closes the gap if TG / I <= 1.03 on pressure and on velocity and <= 1.05 on eddy
 viscosity, seed means; beats it if TG / I < 1 - seed separation on a field. Also reported: TG / P (what the read
