@@ -225,6 +225,26 @@ bf16 scoring (like with like; `eval_prec/bfloat16`): I 0.0343 / 0.0172 / 0.0341,
 P 0.0317 / 0.0173 / 0.0381, T 0.0273 / 0.0163 / 0.0392 (seed means); P / I
 0.923 / 1.010 / 1.116.
 
+## Added readout: principled error weighting (requested 2026-10-06; not a bar)
+
+Peter asked for every accuracy comparison also under principled error weighting,
+not only the protocol's count weighting (every mesh node weighted equally). The
+weighted-error lane's probe (`we_probe.py`, `we_reduce.py`, branch
+`psharpe/isla-volume-quadrature`, `examples/cfd/isla/research/volume_quadrature/weighted_error/`)
+predicts at **every mesh point** of the 200 held-out airfoils and scores the same
+predictions three ways: **count** (every point equal), **decade** (every \|sdf\|/L
+decade band equal, volume-weighted inside), **volume** (exact dual-area weighting:
+the L2 norm over the CFD domain). The chunk-trained interacting model I is read on
+its own tiles (law `tiles`, its training law); the read-only arms need no writers.
+`qg_we_reduce.py` (this folder) reduces G, I, P, T over the four seeds.
+
+Provenance: seeds 42, 43 of I, P, T reuse that lane's rows (AGA
+`agents/2026-10-06-isla-weighted-error/probe/`, the same checkpoints and probe,
+copied to LHR `we/probe_refs/`); seeds 44, 45 and G run here on LHR (`we/we.sbatch`,
+`we/we_runs.tsv`, the lane's recipe copy as `recipe_we`, its dual-area store
+`airfrans_pdmsh_dual` copied to LHR `data/`, file list and sizes identical).
+The verdict stays on the protocol scores.
+
 ## Training-log progress (no verdict rests on it)
 
 The trainer's validation relative L2 every 10 epochs (the 200 test airfoils,
