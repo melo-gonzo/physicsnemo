@@ -161,10 +161,29 @@ Moving the kernel term out of the Triton kernels and chunking the by-source back
 runs out of memory on one GB300 (the plan, basis, per-block kernel term and its gradient, and the walk's sort
 exceed the 150 GiB left over the floor); it waits for memory work and is not launched.
 
+### E3 setup
+
+The interacting reference I (`cl_r_vol_isla_seed42/43`, AGA `evals_char`, the campaign's protocol scorer, 48 cars,
+200,000 cells and points, float32), pressure / velocity / eddy viscosity relative L2:
+
+| protocol | seed 42 | seed 43 | seed mean |
+|---|---|---|---|
+| native (the training draw) | 0.0387 / 0.0619 / 0.0868 | 0.0400 / 0.0651 / 0.0884 | 0.0394 / 0.0635 / 0.0876 |
+| area (uniform-on-the-surface draw) | 0.351 / 0.436 / 0.670 | 0.272 / 0.398 / 0.495 | 0.311 / 0.417 / 0.583 |
+| posed (rotated and translated cases) | 0.0387 / 0.0619 / 0.0868 | 0.0400 / 0.0651 / 0.0884 | same as native |
+
+The bars: TG / I <= 1.03 / 1.03 / 1.05 on the native protocol, seed means, so TG must reach about 0.0406 / 0.0654 /
+0.0920. The same scorer, adapted to this task dir (`scoring/dtt_protocol.sbatch`, rows in
+`scoring/protocol_rows.tsv`), scores P and TG under the three protocols when their lanes finish. Note on the
+preregistration's "scored at theta 0 as a diagnostic": at DrivAerML scale theta 0 is the dense read of 4e10 pairs
+per block, the very cost this program exists to avoid, so that diagnostic is not run on the car; the trained TG's
+distance from its own dense limit is measured on AirfRANS-sized cases only if it becomes relevant.
+
 ### In flight
 
 - Lanes `dtt_vol_tg1_seed42/43` (E3's TG arms: read-only + tree read at theta 1, leaf 4, RMS orientation tree,
-  snapshot `code_dtt11`, 512 / 512, lr 3.75e-4, 200,000, 500 epochs) submitted 2026-10-06 16:45 PDT; about 200 s
+  snapshot `code_dtt11`, 512 / 512, lr 3.75e-4, 200,000, 500 epochs) submitted 2026-10-06 16:42 PDT; accepted at
+  16:48 (steps of 1.86 s, 215 to 219 GB per rank, loss 0.062 at epoch 0 like the P lanes', no errors); about 200 s
   per epoch on four GB300 ranks, so roughly 28 hours each.
 - Lanes `dtt_vol_p_seed42/43` (E3's P arms, read-only without a read): past epoch 50 at 0.48 s per step, about 7
   hours in all.
