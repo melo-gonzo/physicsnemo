@@ -5,7 +5,7 @@ Lane `isla-qi-global`, branch `psharpe/isla-qi-global` (base
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-05-isla-qi-global/`
 (job prefix `isla.global.`). Brief: `BRIEF.md` (this folder).
 
-## Status (2026-10-06 06:10 PDT): references done and scored, G at epoch ~280
+## Status (2026-10-06 07:15 PDT): references done and scored, G at epoch ~325
 
 - Global read implemented and tested (commits b10170371 eager, c5d7408e9 fused
   Triton; 224 ISLA tests pass). Cost: G (every block) 508 ms per step, 2.1x
@@ -14,20 +14,20 @@ Lane `isla-qi-global`, branch `psharpe/isla-qi-global` (base
   jobs ahead; LHR has the same GB300 hardware, venv and AirfRANS store; details
   under Lanes). LHR jobs: lanes 99985-99994 (started 2026-10-05 20:45 PDT),
   watcher 100013.
-- I, P (seeds 44, 45) and T seed 44 finished at 04:20-05:30 and are scored
-  (float32 and bf16, probes). T seed 45 lost 55 min to a hung link (all four
+- I, P, T (seeds 44, 45) finished at 04:20-06:35 and are scored (float32 and
+  bf16, probes). T seed 45 lost 55 min to a hung link (all four
   ranks in uninterruptible I/O wait on node nvl72d019-T18 right after resuming;
   cancelled at 05:40, its successor excludes that node and resumed from epoch
-  451); it finishes about 06:30.
-- G (seeds 42-45) at epoch ~280 at 06:00; at 111 s per epoch it finishes about
-  13:00 PDT; the watcher then scores and probes it and runs the reduction
+  451).
+- G (seeds 42-45) at epoch ~325 at 07:10; at 111 s per epoch it finishes about
+  12:50 PDT; the watcher then scores and probes it and runs the reduction
   (`eval/qg_reduction*.txt` in the LHR task dir).
 - References over four seeds (float32): the new seeds move the read-only
   baseline: P / I = 0.958 / 1.050 / 1.251 (two QI seeds: 1.037 / 1.088 / 1.417);
   see Results.
-- Training log (no verdict rests on it): through epoch 160 G's validation error is
-  0.6-0.8x the interacting model's on pressure and velocity and 0.76-0.99x on eddy
-  viscosity (Training-log progress).
+- Training log (no verdict rests on it): at epochs 200-300 G's validation error is
+  0.65-0.73x the interacting model's on pressure, 0.78-0.83x on velocity and
+  0.70-0.80x on eddy viscosity, every seed (Training-log progress).
 
 ## Question
 
@@ -210,18 +210,20 @@ Seed values 42 / 43 / 44 / 45; mean +- standard error over seeds.
 |---|---|---|---|
 | I | 0.0339 +- 0.0004 (0.0334 / 0.0331 / 0.0349 / 0.0343) | 0.0167 +- 0.0003 (0.0165 / 0.0163 / 0.0176 / 0.0166) | 0.0304 +- 0.0004 (0.0303 / 0.0292 / 0.0312 / 0.0310) |
 | P | 0.0325 +- 0.0015 (0.0357 / 0.0332 / 0.0326 / 0.0283) | 0.0176 +- 0.0004 (0.0179 / 0.0178 / 0.0182 / 0.0164) | 0.0381 +- 0.0028 (0.0450 / 0.0393 / 0.0363 / 0.0316) |
-| T | 0.0259 (0.0258 / 0.0270 / 0.0249 / -) | 0.0167 (0.0164 / 0.0163 / 0.0173 / -) | 0.0362 (0.0346 / 0.0391 / 0.0350 / -) |
+| T | 0.0256 +- 0.0006 (0.0258 / 0.0270 / 0.0249 / 0.0246) | 0.0165 +- 0.0003 (0.0164 / 0.0163 / 0.0173 / 0.0160) | 0.0358 +- 0.0011 (0.0346 / 0.0391 / 0.0350 / 0.0347) |
 | G | pending | pending | pending |
 
 Ratios of the seed means (paired seed ratios in parentheses): P / I 0.958
 (1.070 / 1.004 / 0.936 / 0.826), 1.050 (1.083 / 1.092 / 1.037 / 0.990), 1.251
-(1.486 / 1.346 / 1.165 / 1.018); T / I (three seeds) 0.764, 0.995, 1.190. The
+(1.486 / 1.346 / 1.165 / 1.018); T / I 0.754 (0.774 / 0.816 / 0.713 / 0.717),
+0.986 (0.992 / 0.999 / 0.988 / 0.964), 1.178 (1.143 / 1.337 / 1.121 / 1.118). The
 read-only model's eddy-viscosity excess is smaller over four seeds (1.25) than
 over the QI campaign's two (1.42): seed 45 of the read-only model is within 2% of
 the interacting model.
 
 bf16 scoring (like with like; `eval_prec/bfloat16`): I 0.0343 / 0.0172 / 0.0341,
-P 0.0317 / 0.0173 / 0.0381, T (three seeds) 0.0275 / 0.0163 / 0.0397.
+P 0.0317 / 0.0173 / 0.0381, T 0.0273 / 0.0163 / 0.0392 (seed means); P / I
+0.923 / 1.010 / 1.116.
 
 ## Training-log progress (no verdict rests on it)
 
@@ -240,9 +242,12 @@ velocity / eddy viscosity; seeds 42, 43 against the QI and kernel lanes' logs,
 | 100 | 0.73 / 0.78 / 0.91 / 0.77 | 0.66 / 0.59 / 0.74 / 0.63 | 1.14 / 1.56 / 0.97 / 1.42 |
 | 150 | 0.98 / 0.86 / 0.79 / 0.77 | 0.68 / 0.59 / 0.75 / 0.72 | - |
 | 160 | 0.82 / 0.99 / 0.80 / 0.76 | 0.66 / 0.78 / 0.77 / 0.74 | 1.06 / 1.38 / 1.11 / 1.20 |
+| 200 | 0.70 / 0.76 / 0.73 / 0.76 | 0.64 / 0.64 / 0.73 / 0.75 | |
+| 250 | 0.78 / 0.80 / 0.80 / 0.70 | 0.74 / 0.65 / 0.79 / 0.73 | |
+| 300 | 0.73 / 0.76 / 0.75 / 0.73 | 0.70 / 0.65 / 0.82 / 0.70 | |
 
-G / I pressure at epoch 160: 0.59 / 0.76 / 0.76 / 0.75; velocity 0.77 / 0.81 /
-0.77 / 0.81 (epoch 100 was the first learning-rate step).
+G / I pressure at epoch 300: 0.65 / 0.72 / 0.66 / 0.65; velocity 0.78 / 0.83 /
+0.79 / 0.82. From epoch 200 on the four seeds agree to a few percent.
 
 ## Contracts on a trained G checkpoint (early; `qi_probe.py`, LHR job 100135)
 
