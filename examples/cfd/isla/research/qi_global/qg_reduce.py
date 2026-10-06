@@ -73,6 +73,7 @@ def summary_of(path):
 
 
 def find(dirs, rel):
+    """The first of dirs that holds rel."""
     for d in dirs:
         p = Path(d) / rel
         if p.exists():
@@ -99,6 +100,7 @@ def bands_of(path):
 
 
 def stats(values):
+    """Mean and standard error of the non-missing values."""
     v = [x for x in values if x is not None]
     if not v:
         return None, None
@@ -112,6 +114,7 @@ def stats(values):
 
 
 def main():
+    """Run the reduction described in the module docstring."""
     p = argparse.ArgumentParser()
     p.add_argument("--scores", nargs="+", required=True)
     p.add_argument("--probes", nargs="*", default=[])

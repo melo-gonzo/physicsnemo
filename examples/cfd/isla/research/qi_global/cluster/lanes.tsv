@@ -1,0 +1,11 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code	epochs
+0	gl	gl_af_int_seed44	airfrans_volume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	44	100000	code_g1	500
+1	gl	gl_af_int_seed45	airfrans_volume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10	5e-4	45	100000	code_g1	500
+2	gl	gl_af_ro_seed44	airfrans_volume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 ++model.query_independent=true	5e-4	44	100000	code_g1	500
+3	gl	gl_af_ro_seed45	airfrans_volume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 ++model.query_independent=true	5e-4	45	100000	code_g1	500
+4	gl	gl_af_trunc_seed44	airfrans_volume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 ++model.query_independent=true ++model.kernel_read=sum ++model.kernel_read_radius=0.01 ++model.kernel_read_blocks=4	5e-4	44	100000	code_g1	500
+5	gl	gl_af_trunc_seed45	airfrans_volume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 ++model.query_independent=true ++model.kernel_read=sum ++model.kernel_read_radius=0.01 ++model.kernel_read_blocks=4	5e-4	45	100000	code_g1	500
+6	gl	gl_af_global_seed42	airfrans_volume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 ++model.query_independent=true ++model.kernel_read=mean ++model.kernel_read_radius=null	5e-4	42	100000	code_g2	500
+7	gl	gl_af_global_seed43	airfrans_volume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 ++model.query_independent=true ++model.kernel_read=mean ++model.kernel_read_radius=null	5e-4	43	100000	code_g2	500
+8	gl	gl_af_global_seed44	airfrans_volume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 ++model.query_independent=true ++model.kernel_read=mean ++model.kernel_read_radius=null	5e-4	44	100000	code_g2	500
+9	gl	gl_af_global_seed45	airfrans_volume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 ++model.query_independent=true ++model.kernel_read=mean ++model.kernel_read_radius=null	5e-4	45	100000	code_g2	500

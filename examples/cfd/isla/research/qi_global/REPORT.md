@@ -198,6 +198,19 @@ of the base passes. The truncated path is identical to `code_kq3` (9c564e99a)
 apart from added lines. `recipe_g` is the kernel lane's `recipe_kq` (its `src/*.py`
 md5s equal this worktree's).
 
+## Contracts on a trained G checkpoint (early; `qi_probe.py`, LHR job 100135)
+
+`gl_af_global_seed42` at epoch 5 (scoring smoke, `eval_mid/`), first held-out
+airfoil in float64 with the exact search; max \|difference\| / RMS target,
+pressure / velocity / eddy viscosity: 2,000 sentinels alone against the native
+request 1.7e-14 / 6.7e-15 / 9.7e-14; the native request in 5 chunks 7.6e-15 /
+4.8e-15 / 4.4e-14: exactly query-independent. Posed residual (random rotation and
+translation, float64) 2.1e-3 / 1.5e-3 / 1.0e-3 relative L2, against the read-only
+twin's 4.9e-3 / 1.1e-3 at its epoch 5 (the class's on-wall sign effect, QI
+amendment 1; it shrinks with training); float32 against float64 9.4e-4 / 6.0e-4 /
+4.7e-4. The scorer (`infer.py`) wrote all 200 per-case rows (its 2-D summary
+check fails as known; the reducer averages the rows).
+
 ## Preregistered bars (written 2026-10-05 17:30 PDT, before any full lane)
 
 AirfRANS only. Arms: **G** read-only + global read (seeds 42-45); **I** interacting-256
