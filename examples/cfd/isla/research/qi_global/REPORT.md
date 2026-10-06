@@ -5,14 +5,18 @@ Lane `isla-qi-global`, branch `psharpe/isla-qi-global` (base
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-05-isla-qi-global/`
 (job prefix `isla.global.`). Brief: `BRIEF.md` (this folder).
 
-## Status (2026-10-05 18:00 PDT): references launched, G cost probe pending
+## Status (2026-10-05 19:00 PDT): all ten lanes submitted, pending
 
-- Global read implemented and tested (commits b10170371, c5d7408e9; 224 ISLA tests
-  pass). Fused Triton path for the lanes (`code_g2`).
-- Reference lanes I, P, T (seeds 44, 45; `code_g1`, default paths identical to the
-  QI and kernel snapshots) submitted 17:35 (jobs 1061607-1061612), pending.
-- G lanes (seeds 42-45) wait for the GB300 cost probe of the fused path (job
-  1062212); the eager path cost 1390 ms per step at every block (5.8x read-only).
+- Global read implemented and tested (commits b10170371 eager, c5d7408e9 fused
+  Triton; 224 ISLA tests pass).
+- Cost probe on GB300 (job 1062212): G (every block, fused) 508 ms per step,
+  2.1x read-only, peak 34.6 GiB; smoke loss finite and falling. G reads at every
+  block.
+- Lanes (AGA `kernel/lanes.tsv`, first jobs in `kernel/submitted.tsv`): I, P, T
+  seeds 44, 45 (`code_g1`, jobs 1061607-1061612, 17:35); G seeds 42-45 (`code_g2`,
+  jobs 1063219-1063222, submitted 18:02, held until the probe passed, released
+  18:45). All pending in a ~1,500-job normal queue. Expected: references about 8 h
+  after start, G about 16-17 h after start.
 
 ## Question
 
@@ -122,6 +126,31 @@ With the option off a model owns no new parameter and every golden passes.
   gradient 1e-4); CUDA against CPU in float64; the protocol's training path
   (fused geometry kernel, compiled blocks, bf16) finite, matching eager to bf16
   roundoff and query-independent.
+
+## Cost (one GB300, protocol request: 100,000 points, about 1,000 cells; bf16, compiled blocks)
+
+`bench_step.py` (the kernel lane's, real held-out cases, forward + backward + AdamW,
+median of steps 4-11; AGA `stats/bench_code_g*.jsonl`) and a kernel profile on a
+synthetic case of the same size (`stats/prof_global.py`, `stats/model_bench.py`).
+
+| configuration | pairs per block | step (ms) | peak (GiB) |
+|---|---|---|---|
+| read-only (P) | 0 | 238 | 23.1 |
+| interacting (I) | 0 | 238 | 23.1 |
+| truncated read, sum, R = 0.01 L, last 4 (T) | 2.4-2.8M | 258 | 25.6 |
+| global, eager tiles (`code_g1`), every block | 96-101M | 1390 | 35.6 |
+| global, eager tiles, last 4 | 96-101M | 731 | 33.5 |
+| global, fused (`code_g2`), every block (**G**) | 96-101M | 508 | 34.6 |
+| global, fused, last 8 | 96-101M | 445 | 33.6 |
+| global, fused, last 4 | 96-101M | 431 | 32.5 |
+
+Profile of the fused G step (synthetic, 495 ms against 220 ms read-only): the kernel
+basis once per step (invariants and MLP fused) 19 ms forward and 65 ms backward;
+per block the softmax read 1.3 ms forward and 6.7 ms backward (Triton), plus about
+7 ms of cuBLAS projections and gradient accumulation of the basis. The fixed basis
+cost dominates, so reading at every block (matched depth) costs only 18% more than
+the last 4 blocks: **G reads at every block**. The G step is 2.1x the read-only
+step, so a G lane takes about 16-17 h (five 3h59 links) against 7.5-8 h.
 
 ## Preregistered bars (written 2026-10-05 17:30 PDT, before any full lane)
 
