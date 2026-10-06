@@ -5,18 +5,27 @@ Lane `isla-qi-global`, branch `psharpe/isla-qi-global` (base
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-05-isla-qi-global/`
 (job prefix `isla.global.`). Brief: `BRIEF.md` (this folder).
 
-## Status (2026-10-05 19:00 PDT): all ten lanes submitted, pending
+## Status (2026-10-05 21:05 PDT): all ten lanes training on LHR
 
 - Global read implemented and tested (commits b10170371 eager, c5d7408e9 fused
   Triton; 224 ISLA tests pass).
-- Cost probe on GB300 (job 1062212): G (every block, fused) 508 ms per step,
-  2.1x read-only, peak 34.6 GiB; smoke loss finite and falling. G reads at every
-  block.
-- Lanes (AGA `kernel/lanes.tsv`, first jobs in `kernel/submitted.tsv`): I, P, T
-  seeds 44, 45 (`code_g1`, jobs 1061607-1061612, 17:35); G seeds 42-45 (`code_g2`,
-  jobs 1063219-1063222, submitted 18:02, held until the probe passed, released
-  18:45). All pending in a ~1,500-job normal queue. Expected: references about 8 h
-  after start, G about 16-17 h after start.
+- Cost probe on GB300 (AGA job 1062212, repeated on LHR job 99937 with identical
+  numbers): G (every block, fused) 508-510 ms per step, 2.1x read-only, peak
+  34.6 GiB; smoke loss finite and falling. G reads at every block.
+- **The lanes run on LHR, not AGA.** On AGA they sat pending for 2.5-3 h behind
+  about 1,260 higher-priority jobs (fairshare); LHR is the same GB300 hardware
+  with the same venv (torch 2.12.0+cu130, Triton 3.7.0) and the same AirfRANS
+  store at the same `/scratch/fsw` path (file list and sizes identical, md5 of a
+  sample identical), and had about 100 idle nodes. The LHR task dir has the same
+  path as the AGA one and holds copies of `code_g1`, `code_g2`, `recipe_g`, the
+  launchers, and the AirfRANS score and probe rows of the QI and kernel lanes
+  (`refs/`). The AGA copies (1061607-1061612, 1063219-1063222, watcher 1065921)
+  were cancelled while pending (never ran).
+- LHR jobs: lanes 99985-99994 (started 20:45 PDT), chain-ahead successors
+  99999-100008, watcher 100013 (`eval/after_lanes.sbatch`, cpu-free: scores,
+  probes and bf16 re-scores each lane when it completes, then runs
+  `eval/qg_reduce.py`). Step: G 0.545 s, P 0.235 s (4 ranks). Expected: I, P, T
+  done about 04:00 PDT, G about 12:30 PDT on 2026-10-06.
 
 ## Question
 
@@ -154,7 +163,7 @@ step, so a G lane takes about 16-17 h (five 3h59 links) against 7.5-8 h.
 
 ## Lanes
 
-AGA task dir `agents/2026-10-05-isla-qi-global`, `kernel/lanes.tsv`, chained 3h59
+LHR task dir `agents/2026-10-05-isla-qi-global` (same path as on AGA), `kernel/lanes.tsv`, chained 3h59
 singleton links (`kernel/lanes.sbatch`, the kernel lane's launcher with this task
 dir), protocol: `airfrans_volume_2d` / `isla_volume_airfrans`, 100,000 cells,
 `train_split=full_train val_split=full_test +training.val_interval=10`, lr 5e-4,
@@ -163,18 +172,18 @@ dir), protocol: `airfrans_volume_2d` / `isla_volume_airfrans`, 100,000 cells,
 ++model.kernel_read_radius=0.01 ++model.kernel_read_blocks=4`; G adds
 `++model.kernel_read=mean ++model.kernel_read_radius=null` (every block).
 
-| idx | run | arm | seed | code | first job | state |
+| idx | run | arm | seed | code | first job (LHR) | state |
 |---|---|---|---|---|---|---|
-| 0 | gl_af_int_seed44 | I | 44 | g1 | 1061607 | pending |
-| 1 | gl_af_int_seed45 | I | 45 | g1 | 1061608 | pending |
-| 2 | gl_af_ro_seed44 | P | 44 | g1 | 1061609 | pending |
-| 3 | gl_af_ro_seed45 | P | 45 | g1 | 1061610 | pending |
-| 4 | gl_af_trunc_seed44 | T | 44 | g1 | 1061611 | pending |
-| 5 | gl_af_trunc_seed45 | T | 45 | g1 | 1061612 | pending |
-| 6 | gl_af_global_seed42 | G | 42 | g2 | 1063219 | pending |
-| 7 | gl_af_global_seed43 | G | 43 | g2 | 1063220 | pending |
-| 8 | gl_af_global_seed44 | G | 44 | g2 | 1063221 | pending |
-| 9 | gl_af_global_seed45 | G | 45 | g2 | 1063222 | pending |
+| 0 | gl_af_int_seed44 | I | 44 | g1 | 99985 | training |
+| 1 | gl_af_int_seed45 | I | 45 | g1 | 99986 | training |
+| 2 | gl_af_ro_seed44 | P | 44 | g1 | 99987 | training |
+| 3 | gl_af_ro_seed45 | P | 45 | g1 | 99988 | training |
+| 4 | gl_af_trunc_seed44 | T | 44 | g1 | 99989 | training |
+| 5 | gl_af_trunc_seed45 | T | 45 | g1 | 99990 | training |
+| 6 | gl_af_global_seed42 | G | 42 | g2 | 99991 | training |
+| 7 | gl_af_global_seed43 | G | 43 | g2 | 99992 | training |
+| 8 | gl_af_global_seed44 | G | 44 | g2 | 99993 | training |
+| 9 | gl_af_global_seed45 | G | 45 | g2 | 99994 | training |
 | - | qi_af_int_seed42/43 | I | 42, 43 | qi2 | QI campaign | done |
 | - | qi_af_pas_seed42/43 | P | 42, 43 | qi2 | QI campaign | done |
 | - | kq_af_sum4_seed42/43 | T | 42, 43 | kq3 | kernel lane | done |
