@@ -149,10 +149,12 @@ class ConformalPredictor:
     difficulty : AuxDifficulty, optional
         Per-point scale applied to the threshold at prediction time
         (functional and risk-control tiers only). Default is ``None``.
-    mesh_fingerprint : str, optional
-        Calibration mesh digest, required for the cellwise tier and rejected
-        otherwise. Take it from ``CellwiseCalibrator.mesh_fingerprint``.
-        Default is ``None``.
+    points : torch.Tensor, optional
+        Calibration mesh coordinates of shape
+        :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`, required for
+        the cellwise tier and rejected otherwise. The predictor keeps only a
+        digest of them, and :meth:`predict_interval` accepts only the same
+        coordinates, dtype, and point order. Default is ``None``.
     provenance : Mapping, optional
         Strict-JSON metadata saved with the artifact, for example
         ``{"dataset": "holdout-v1"}``. Default is ``None``.
@@ -162,9 +164,9 @@ class ConformalPredictor:
     ValueError
         If ``tier`` is unknown; if ``alpha`` is infeasible for ``n_cal``
         (collect more calibration samples or raise ``alpha``); if a cellwise
-        predictor lacks ``mesh_fingerprint`` or has a difficulty field; if a
-        non-cellwise predictor has ``mesh_fingerprint``; if a threshold has
-        the wrong shape for the tier, is empty, non-finite, or negative for a
+        predictor lacks ``points`` or has a difficulty field; if a
+        non-cellwise predictor has ``points``; if ``points`` is empty, not
+        2-D, or non-finite; if a threshold has the wrong shape for the tier, is empty, non-finite, or negative for a
         nonnegative score; or if ``difficulty`` reads the same aux key the
         score already divides by.
 
@@ -193,6 +195,36 @@ class ConformalPredictor:
         n_cal: int,
         thresholds: Float[Tensor, "*dims"] | Float[Tensor, ""] | TensorDict,
         difficulty: AuxDifficulty | None = None,
+        points: Float[Tensor, "n_points n_spatial_dims"] | None = None,
+        provenance: Mapping | None = None,
+    ) -> None:
+        self._init(
+            tier=tier,
+            score=score,
+            alpha=alpha,
+            n_cal=n_cal,
+            thresholds=thresholds,
+            difficulty=difficulty,
+            mesh_fingerprint=None if points is None else points_fingerprint(points),
+            provenance=provenance,
+        )
+
+    @classmethod
+    def _from_state(cls, **state) -> "ConformalPredictor":
+        """Build a predictor from a stored mesh digest instead of coordinates."""
+        predictor = cls.__new__(cls)
+        predictor._init(**state)
+        return predictor
+
+    def _init(
+        self,
+        *,
+        tier: Tier,
+        score: _Score,
+        alpha: float,
+        n_cal: int,
+        thresholds: Tensor | TensorDict,
+        difficulty: AuxDifficulty | None = None,
         mesh_fingerprint: str | None = None,
         provenance: Mapping | None = None,
     ) -> None:
@@ -210,16 +242,16 @@ class ConformalPredictor:
                 )
             if mesh_fingerprint is None:
                 raise ValueError(
-                    "A cellwise predictor requires mesh_fingerprint from the "
-                    "calibration coordinates."
+                    "A cellwise predictor requires points=, the calibration "
+                    "mesh coordinates."
                 )
             difficulty_snapshot = None
             mesh_snapshot = _validate_mesh_fingerprint(mesh_fingerprint)
         else:
             if mesh_fingerprint is not None:
                 raise ValueError(
-                    f"A {tier} predictor must not carry mesh_fingerprint; its "
-                    "calibration statistic permits varying point sets."
+                    f"A {tier} predictor does not take points=; its "
+                    "calibration permits varying point sets."
                 )
             difficulty_snapshot = (
                 None
@@ -262,11 +294,6 @@ class ConformalPredictor:
     def difficulty(self) -> AuxDifficulty | None:
         r"""A copy of the difficulty field, or ``None`` if intervals are not scaled."""
         return copy.deepcopy(self._difficulty)
-
-    @property
-    def mesh_fingerprint(self) -> str | None:
-        r"""Calibration mesh digest for a cellwise predictor, else ``None``."""
-        return self._mesh_fingerprint
 
     @property
     def provenance(self) -> dict:

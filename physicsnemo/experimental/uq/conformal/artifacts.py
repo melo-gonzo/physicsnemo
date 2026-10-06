@@ -156,7 +156,7 @@ def _parse_artifact(payload: object) -> ConformalPredictor:
             "difficulty",
         )
     )
-    return ConformalPredictor(
+    return ConformalPredictor._from_state(
         tier=payload["tier"],
         score=score,
         alpha=payload["alpha"],
@@ -192,7 +192,7 @@ def _artifact_payload(
                 difficulty, _DIFFICULTY_REGISTRY, _DIFFICULTY_KWARG_TYPES
             )
         ),
-        "mesh_fingerprint": predictor.mesh_fingerprint,
+        "mesh_fingerprint": predictor._mesh_fingerprint,
         "provenance": validate_provenance(chosen_provenance),
     }
 

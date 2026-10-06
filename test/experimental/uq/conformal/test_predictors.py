@@ -32,8 +32,6 @@ from physicsnemo.experimental.uq.conformal import (
 from physicsnemo.experimental.uq.conformal._utils import points_fingerprint
 from test.experimental.uq.conformal._helpers import fit, make_predictor
 
-_MESH = "0" * 64
-
 
 def test_nonfinite_deployment_difficulty_is_rejected():
     predictor, _ = fit(
@@ -80,7 +78,7 @@ def test_prediction_container_contract():
 
 def test_exact_cellwise_mesh_identity_and_point_alignment():
     predictor, points = fit("cellwise", n_samples=10, shape=(4, 2))
-    assert predictor.mesh_fingerprint == points_fingerprint(points)
+    assert predictor._mesh_fingerprint == points_fingerprint(points)
     with pytest.raises(ValueError, match="requires points"):
         predictor.predict_interval(torch.zeros(4, 2))
     changed = points.clone()
@@ -121,15 +119,15 @@ class _CustomDifficulty(AuxDifficulty):
     pass
 
 
-_CELL = {"tier": "cellwise", "thresholds": torch.ones(2), "mesh_fingerprint": _MESH}
+_CELL = {"tier": "cellwise", "thresholds": torch.ones(2), "points": torch.ones(2, 1)}
 # fmt: off
 CONSTRUCTOR_REJECTIONS = [  # (id, make_predictor overrides, error, match)
     ("custom-score", {**_CELL, "score": _CustomScore()}, TypeError, "shipped strategies"),
     ("cellwise-with-difficulty", {**_CELL, "difficulty": AuxDifficulty()}, ValueError, "must not have a difficulty"),
-    ("cellwise-without-mesh", {"tier": "cellwise", "thresholds": torch.ones(2)}, ValueError, "requires mesh_fingerprint"),
+    ("cellwise-without-mesh", {"tier": "cellwise", "thresholds": torch.ones(2)}, ValueError, "requires points="),
     ("cellwise-scalar-threshold", {**_CELL, "thresholds": torch.tensor(1.0)}, ValueError, "at least one dimension"),
     ("custom-difficulty", {"tier": "functional", "difficulty": _CustomDifficulty()}, TypeError, "shipped strategies"),
-    ("risk-with-mesh", {"mesh_fingerprint": _MESH}, ValueError, "must not carry mesh_fingerprint"),
+    ("risk-with-points", {"points": torch.ones(2, 1)}, ValueError, "does not take points="),
     ("dict-thresholds", {"thresholds": {"pressure": torch.tensor(1.0)}}, TypeError, "Tensor or TensorDict"),
     ("empty-tensordict-thresholds", {"thresholds": TensorDict({})}, ValueError, "at least one"),
     ("integer-thresholds", {"thresholds": torch.ones((), dtype=torch.int32)}, TypeError, "floating"),
@@ -171,7 +169,7 @@ def test_cellwise_predict_rejects_output_shape_drift_on_the_same_mesh():
     predictor = make_predictor(
         tier="cellwise",
         thresholds=torch.ones(6, 3),
-        mesh_fingerprint=points_fingerprint(points),
+        points=points,
     )
     with pytest.raises(ValueError, match="calibrated shape"):
         predictor.predict_interval(torch.zeros(6, 2), points=points)
@@ -188,9 +186,9 @@ def test_to_moves_thresholds_in_place_and_preserves_predictions_and_provenance(
 
     def state():
         p = predictor
-        return (p.tier, p.alpha, p.n_cal, p.mesh_fingerprint, p.provenance)
+        return (p.tier, p.alpha, p.n_cal, p._mesh_fingerprint, p.provenance)
 
-    expected = ("cellwise", 0.2, 10, fitted.mesh_fingerprint, {"dataset": "drivaer"})
+    expected = ("cellwise", 0.2, 10, fitted._mesh_fingerprint, {"dataset": "drivaer"})
     assert state() == expected
     moved = predictor.to(device)
     assert moved is predictor  # nn.Module convention: in place, returns self

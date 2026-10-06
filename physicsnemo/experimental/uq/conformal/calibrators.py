@@ -243,7 +243,7 @@ class _SplitCalibratorBase:
     def _build_predictor(
         self, tier: str, thresholds: Tensor | TensorDict, **state
     ) -> ConformalPredictor:
-        return ConformalPredictor(
+        return ConformalPredictor._from_state(
             tier=tier,
             score=self._score,
             alpha=self._alpha,
@@ -330,11 +330,6 @@ class CellwiseCalibrator(_SplitCalibratorBase):
     ) -> None:
         super().__init__(score, alpha, keys=keys)
         self._mesh_fingerprint: str | None = None
-
-    @property
-    def mesh_fingerprint(self) -> str | None:
-        r"""Identifier of the calibration mesh, or ``None`` before the first sample."""
-        return self._mesh_fingerprint
 
     def update(
         self,

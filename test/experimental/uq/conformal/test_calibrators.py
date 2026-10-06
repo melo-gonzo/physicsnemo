@@ -55,7 +55,7 @@ def test_cellwise_uses_exact_conformal_rank_and_returns_one_predictor():
     assert predictor.n_cal == 4
     # k = ceil(5 * 0.6) = 3: the third-smallest per cell.
     assert torch.equal(predictor.thresholds, torch.tensor([3.0, 3.0]))
-    assert predictor.mesh_fingerprint == points_fingerprint(points)
+    assert predictor._mesh_fingerprint == points_fingerprint(points)
 
 
 def test_plain_tensor_errors_do_not_leak_internal_key():
@@ -91,19 +91,19 @@ def test_cellwise_requires_and_fingerprints_points_transactionally():
     with pytest.raises(ValueError, match="requires points"):
         calibrator.update(torch.zeros(3), torch.zeros(3))
     assert calibrator.n_cal == 0
-    assert calibrator.mesh_fingerprint is None
+    assert calibrator._mesh_fingerprint is None
 
     points = torch.arange(3.0).reshape(3, 1)
     with pytest.raises(ValueError, match="leading entry per point"):
         calibrator.update(torch.zeros(2), torch.zeros(2), points=points)
     assert calibrator.n_cal == 0
-    assert calibrator.mesh_fingerprint is None
+    assert calibrator._mesh_fingerprint is None
 
     calibrator.update(torch.zeros(3), torch.zeros(3), points=points)
-    fingerprint = calibrator.mesh_fingerprint
+    fingerprint = calibrator._mesh_fingerprint
     calibrator.update(torch.zeros(3), torch.ones(3), points=points.clone())
     assert calibrator.n_cal == 2
-    assert calibrator.mesh_fingerprint == fingerprint
+    assert calibrator._mesh_fingerprint == fingerprint
 
     for changed in (points.flip(0), points.to(torch.float64)):
         with pytest.raises(ValueError, match="same mesh"):
@@ -244,7 +244,6 @@ def test_difficulty_adaptation_and_strategy_snapshot_are_fixed():
         ("n_cal", 1),
         ("score", AbsoluteErrorScore()),
         ("difficulty", AuxDifficulty()),
-        ("mesh_fingerprint", "0" * 64),
     ]:
         with pytest.raises(AttributeError, match="no setter"):
             setattr(predictor, name, value)

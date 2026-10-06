@@ -55,7 +55,7 @@ def test_save_load_round_trip(tier, tmp_path):
     assert loaded.tier == tier
     assert loaded.alpha == predictor.alpha
     assert loaded.n_cal == predictor.n_cal
-    assert loaded.mesh_fingerprint == predictor.mesh_fingerprint
+    assert loaded._mesh_fingerprint == predictor._mesh_fingerprint
     lo, hi = loaded.predict_interval(prediction, points=points)
     torch.testing.assert_close(lo, lo_ref)
     torch.testing.assert_close(hi, hi_ref)
@@ -65,7 +65,7 @@ def test_artifact_has_one_exact_schema_and_cellwise_load_requires_the_mesh(tmp_p
     provenance = {"dataset": "drivaer", "epoch": 300}
     path = tmp_path / "artifact.pt"
     make_predictor(
-        tier="cellwise", thresholds=torch.ones(6, 3), mesh_fingerprint=_MESH
+        tier="cellwise", thresholds=torch.ones(6, 3), points=_MESH_POINTS
     ).save(path, provenance=provenance)
     payload = torch.load(path, weights_only=True)
 
@@ -104,7 +104,7 @@ def test_artifact_has_one_exact_schema_and_cellwise_load_requires_the_mesh(tmp_p
 def test_constructor_and_threshold_access_snapshot_storage(tmp_path):
     thresholds = torch.ones(6, 3)
     predictor = make_predictor(
-        tier="cellwise", thresholds=thresholds, mesh_fingerprint=_MESH
+        tier="cellwise", thresholds=thresholds, points=_MESH_POINTS
     )
     path = tmp_path / "artifact.pt"
     predictor.save(path)
@@ -196,7 +196,7 @@ BASES = {
     ),
     "aux": lambda: make_predictor(difficulty=AuxDifficulty(key="spread", eps=1e-4)),
     "cellwise": lambda: make_predictor(
-        tier="cellwise", thresholds=torch.ones(6, 3), mesh_fingerprint=_MESH
+        tier="cellwise", thresholds=torch.ones(6, 3), points=_MESH_POINTS
     ),
 }
 
