@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-r"""Save and load conformal predictors as ``weights_only``-safe files."""
+r"""Encode and decode conformal predictor state as ``weights_only``-safe files."""
 
 import os
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import torch
@@ -26,7 +26,6 @@ from tensordict import TensorDict
 from torch import Tensor
 
 from ._utils import pack_fields, validate_provenance
-from .predictors import ConformalPredictor
 from .scores import _DIFFICULTY_REGISTRY, _SCORE_REGISTRY, _strategy_kind
 
 _ARTIFACT_FORMAT = "physicsnemo.uq.conformal"
@@ -128,8 +127,8 @@ def _wire_thresholds(value: object) -> Tensor | TensorDict:
     return pack_fields(dict(value))
 
 
-def _parse_artifact(payload: object) -> ConformalPredictor:
-    """Check a loaded payload against the artifact schema and build the predictor."""
+def _parse_artifact(payload: object) -> dict:
+    """Check a loaded payload against the artifact schema; return predictor state."""
     marker = payload.get("format") if isinstance(payload, Mapping) else type(payload)
     if type(marker) is not str or marker != _ARTIFACT_FORMAT:
         raise ValueError(
@@ -157,34 +156,30 @@ def _parse_artifact(payload: object) -> ConformalPredictor:
             "difficulty",
         )
     )
-    return ConformalPredictor._from_state(
-        tier=payload["tier"],
-        score=score,
-        alpha=payload["alpha"],
-        n_cal=payload["n_cal"],
-        thresholds=_wire_thresholds(payload["thresholds"]),
-        difficulty=difficulty,
-        mesh_fingerprint=payload["mesh_fingerprint"],
-        provenance=payload["provenance"],
-    )
+    return {
+        "tier": payload["tier"],
+        "score": score,
+        "alpha": payload["alpha"],
+        "n_cal": payload["n_cal"],
+        "thresholds": _wire_thresholds(payload["thresholds"]),
+        "difficulty": difficulty,
+        "mesh_fingerprint": payload["mesh_fingerprint"],
+        "provenance": payload["provenance"],
+    }
 
 
-def _artifact_payload(
-    predictor: ConformalPredictor, provenance: Mapping | None
-) -> dict:
-    """Encode a predictor as a ``torch.save`` payload."""
-    chosen_provenance = predictor.provenance if provenance is None else provenance
-    difficulty = predictor.difficulty
+def _artifact_payload(state: Mapping) -> dict:
+    """Encode predictor state, thresholds keyed by field, for ``torch.save``."""
+    difficulty = state["difficulty"]
     return {
         "format": _ARTIFACT_FORMAT,
         "version": _ARTIFACT_VERSION,
-        "tier": predictor.tier,
-        "score": _strategy_spec(predictor.score, _SCORE_REGISTRY, _SCORE_KWARG_TYPES),
-        "alpha": predictor.alpha,
-        "n_cal": predictor.n_cal,
+        "tier": state["tier"],
+        "score": _strategy_spec(state["score"], _SCORE_REGISTRY, _SCORE_KWARG_TYPES),
+        "alpha": state["alpha"],
+        "n_cal": state["n_cal"],
         "thresholds": {
-            key: value.detach().cpu()
-            for key, value in predictor._thresholds_by_key.items()
+            key: value.detach().cpu() for key, value in state["thresholds"].items()
         },
         "difficulty": (
             None
@@ -193,19 +188,16 @@ def _artifact_payload(
                 difficulty, _DIFFICULTY_REGISTRY, _DIFFICULTY_KWARG_TYPES
             )
         ),
-        "mesh_fingerprint": predictor._mesh_fingerprint,
-        "provenance": validate_provenance(chosen_provenance),
+        "mesh_fingerprint": state["mesh_fingerprint"],
+        "provenance": validate_provenance(state["provenance"]),
     }
 
 
-def _save_predictor(
-    predictor: ConformalPredictor,
-    path: Path | str,
-    *,
-    provenance: Mapping | None = None,
+def _save_artifact(
+    state: Mapping, path: Path | str, verify: Callable[[str], object]
 ) -> None:
-    """Write the artifact atomically after checking that it loads."""
-    payload = _artifact_payload(predictor, provenance)
+    """Write the artifact atomically after ``verify`` accepts the written file."""
+    payload = _artifact_payload(state)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
@@ -214,7 +206,7 @@ def _save_predictor(
             torch.save(payload, handle)
         # Free the payload first so saving keeps at most one extra threshold copy.
         del payload
-        _load_predictor(temporary, map_location="cpu")
+        verify(temporary)
         os.replace(temporary, path)
     except BaseException:
         try:
@@ -222,14 +214,3 @@ def _save_predictor(
         except OSError:
             pass
         raise
-
-
-def _load_predictor(
-    path: Path | str, map_location: str | torch.device = "cpu"
-) -> ConformalPredictor:
-    """Load and validate an artifact for :meth:`ConformalPredictor.load`."""
-    payload = torch.load(path, map_location=map_location, weights_only=True)
-    try:
-        return _parse_artifact(payload)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"Invalid conformal artifact at {path}: {exc}") from exc

@@ -17,6 +17,7 @@
 """Tests for portable fitted-predictor artifacts."""
 
 import pickle
+import re
 
 import pytest
 import torch
@@ -300,7 +301,7 @@ def test_atomic_save_semantically_validates_before_replace(tmp_path):
 
     invalid = fitted_risk(torch.Generator().manual_seed(19))
     invalid._thresholds_by_key["__tensor__"].fill_(float("inf"))
-    with pytest.raises(ValueError, match="non-finite"):
+    with pytest.raises(ValueError, match=f"at {re.escape(str(path))}: .*non-finite"):
         invalid.save(path, provenance={"epoch": 2})
     assert path.read_bytes() == original_bytes
     assert ConformalPredictor.load(path).provenance == {"epoch": 1}

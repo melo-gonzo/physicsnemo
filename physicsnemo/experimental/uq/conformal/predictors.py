@@ -46,6 +46,7 @@ from ._utils import (
     slice_aux,
     validate_provenance,
 )
+from .artifacts import _parse_artifact, _save_artifact
 from .diagnostics import CoverageAccumulator
 from .scores import (
     _DIFFICULTY_REGISTRY,
@@ -529,9 +530,17 @@ class ConformalPredictor:
         None
             The artifact is written to ``path``.
         """
-        from .artifacts import _save_predictor  # avoids a circular import
-
-        _save_predictor(self, path, provenance=provenance)
+        state = {
+            "tier": self._tier,
+            "score": self._score,
+            "alpha": self._alpha,
+            "n_cal": self._n_cal,
+            "thresholds": self._thresholds_by_key,
+            "difficulty": self._difficulty,
+            "mesh_fingerprint": self._mesh_fingerprint,
+            "provenance": self._provenance if provenance is None else provenance,
+        }
+        _save_artifact(state, path, lambda written: self._read(written, path))
 
     @classmethod
     def load(
@@ -558,6 +567,18 @@ class ConformalPredictor:
             an incompatible version (recalibrate and save again), or holds
             invalid predictor state.
         """
-        from .artifacts import _load_predictor  # avoids a circular import
+        return cls._read(path, path, map_location)
 
-        return _load_predictor(path, map_location=map_location)
+    @classmethod
+    def _read(
+        cls,
+        source: Path | str,
+        path: Path | str,
+        map_location: str | torch.device = "cpu",
+    ) -> "ConformalPredictor":
+        """Load ``source``; name ``path`` (the user's file) in validation errors."""
+        payload = torch.load(source, map_location=map_location, weights_only=True)
+        try:
+            return cls._from_state(**_parse_artifact(payload))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid conformal artifact at {path}: {exc}") from exc
