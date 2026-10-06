@@ -25,10 +25,11 @@ pressure / velocity / eddy viscosity, exactly independent, but costs Q x N pairs
 the step) and 4e10 on DrivAerML Volume (minutes per step, a 1.3 TB pair basis; months per lane).
 
 **3. What is new, and why will it work?** The same read, evaluated through a cluster tree over the boundary cells
-(`physicsnemo.mesh.spatial.cluster_tree`, GLOBE's Barnes-Hut layer, reused for the tree and its aggregates) that
-every prediction point walks on its own, as a body walks the tree in an N-body code: the point reads nearby cells
-one by one and distant clusters through their measure-weighted aggregates (centroid, mean normal, total measure,
-mean key and value), a cluster admitted when its box diagonal is below theta times its gap to the point. The read
+(`boundary_tree.py`: balanced, each cluster split at its median along its own principal axis, bounding spheres;
+GLOBE's Morton tree was the first choice and its loose boxes retired it, see the report) that every prediction
+point walks on its own, as a body walks the tree in an N-body code: the point reads nearby cells one by one and
+distant clusters through their measure-weighted aggregates (centroid, mean normal, total measure, mean key and
+value), a cluster admitted when its sphere diameter is below theta times its gap to the point. The read
 is a measure-weighted softmax over the boundary, so a cluster's aggregate is the monopole of the same quadrature,
 and the error vanishes as theta goes to zero: theta is a numerical tolerance with a convergence guarantee, not a
 model constant; the model is defined as the exact dense read and the tree is how it is computed, as in an N-body
