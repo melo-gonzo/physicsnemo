@@ -414,3 +414,28 @@ def test_attach_and_save_preserves_physical_point_measures(tmp_path):
         torch.ones(domain.interior.n_points) * domain.global_data["L_ref"] ** 2,
     )
     assert int(reloaded.interior.global_data[POINT_MEASURE_DIMENSION_KEY]) == 2
+
+
+### _spatial_dims_of_first_sample
+
+
+def test_spatial_dims_of_first_sample_follows_the_data():
+    """The metric key set follows the data's dimension: a 2-D dataset has no `_z` component
+    keys, so `_check_summary_in_range` no longer sees an expected key no sample produces."""
+    import torch
+    from metrics import MetricCalculator
+
+    from physicsnemo.mesh import DomainMesh, Mesh
+
+    class _DS:
+        def __init__(self, d):
+            self.d = d
+
+        def __getitem__(self, idx):
+            return DomainMesh(interior=Mesh(points=torch.zeros(4, self.d))), {}
+
+    assert infer._spatial_dims_of_first_sample(_DS(2), [7, 8]) == 2
+    assert infer._spatial_dims_of_first_sample(_DS(3), [0]) == 3
+    assert infer._spatial_dims_of_first_sample(_DS(3), []) is None
+    keys = MetricCalculator({"velocity": "vector"}, n_spatial_dims=2, metrics=["l2"]).expected_keys()
+    assert keys == ["velocity_x_l2", "velocity_y_l2", "velocity_l2"]

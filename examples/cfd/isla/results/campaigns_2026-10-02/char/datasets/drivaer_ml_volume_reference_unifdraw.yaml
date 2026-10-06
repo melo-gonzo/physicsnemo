@@ -1,0 +1,135 @@
+# CONTROL variant (CHAR-PROTOCOLS, 2026-10-03): drivaer_ml_volume_reference_area.yaml with weight_mode: uniform. Same 1,000,000-cell pool, same
+# PoissonBiasedSubsampleMesh placement, same expected count; only the inclusion law differs (uniform instead of area).
+# Reproduces the native error if the Poisson/HT path is sound; a shift here would indict the path, not the area law.
+# Reference interior dataset (2026-09-14): drivaer_ml_volume.yaml plus, after the
+# boundary is reduced to {vehicle}, ComposeQuadratureMeasure, which writes the
+# Horvitz-Thompson-corrected cell
+# effective measure (including all sampling corrections) to
+# boundaries.vehicle.cell_data._effective_measure for conf/model/isla_volume.yaml.
+# The reader subsamples boundaries by cells (boundary_subsample: cells), which is
+# what records the inclusion probabilities the correction needs.
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# CHAR-PROTOCOLS area variant (2026-10-02): identical to drivaer_ml_volume_reference.yaml except that the
+# drawn surface
+# cells follow an area-proportional (uniform-on-the-surface) inclusion law with exact Horvitz-Thompson
+# measure weights, "what an STL without a volume mesh would give", instead of the native uniform-over-cells
+# draw that reads the mesher's refinement pattern. The reader's uniform in-file boundary draw
+# (boundary_subsample: cells) becomes a 1,000,000-cell pool and PoissonBiasedSubsampleMesh(weight_mode=area)
+# takes ${sampling_resolution} of each in-file boundary after the SDF has been computed from the full-
+# resolution STL (which is then dropped). The interior is a point cloud (drop_interior_cells) drawn uniformly
+# over points with no cell measures: no volume-proportional draw exists for it, so it stays the native uniform
+# point draw; the walls (< 3,000 cells) are kept whole either way.
+# Evaluation-only protocol: train natively, score the native checkpoint on this variant.
+
+# DrivaerML volume dataset (DomainMesh)
+# Loads domain_*.pdmsh files containing interior volume mesh + vehicle boundary + global_data.
+# Interior: tetrahedral volume mesh with fields in point_data.
+# Boundary: triangulated car-body surface mesh keyed `vehicle` (curated layout).
+# global_data: freestream conditions (U_inf, rho_inf, p_inf, nu, L_ref) are
+# embedded directly in the .pdmsh files and read straight out of each sample's
+# global_data by NonDimensionalizeByMetadata.
+# Splits are controlled by manifest.json + train_split/val_split in the training config.
+
+train_datadir: ${dataset_paths.drivaer_ml}
+
+pipeline:
+  reader:
+    _target_: ${dp:DomainMeshReader}
+    path: ${train_datadir}
+    pattern: "run_*/domain_*.pdmsh"
+    subsample_n_points: ${sampling_resolution}
+    subsample_n_cells: 1000000   # CHAR-PROTOCOLS area: a large uniform pool; the area-proportional draw below takes ${sampling_resolution}
+    # Boundaries get only the cell subsample. Applying both to the triangulated
+    # vehicle surface keeps only cells whose three vertices all survive the
+    # point cut (~N/27 cells instead of N); the interior is a point cloud and
+    # is unaffected by this setting.
+    boundary_subsample: cells
+    # The volume model consumes the interior as a point cloud (interior.points +
+    # interior.point_data); dropping interior tet topology makes the point
+    # subsample a cheap contiguous block read instead of a full slice_points
+    # remap (the dominant per-sample IO cost otherwise).
+    drop_interior_cells: true
+    # Preserve in-file boundaries as the lossless default. Point-based model
+    # templates that consume only the interior explicitly opt into dropping
+    # them to skip per-sample subsampling (expensive, GIL-held) and pinning.
+    drop_in_file_boundaries: false
+    extra_boundaries:
+      stl_geometry:
+        pattern: "*_single_solid.stl.pmsh"
+  augmentations:
+    - _target_: ${dp:RandomRotateMesh}
+      axes: ["z"]
+      transform_point_data: true
+      transform_global_data: true
+    - _target_: ${dp:RandomTranslateMesh}
+      distribution:
+        _target_: torch.distributions.Uniform
+        low: [-1.0, -1.0, 0.0]
+        high: [1.0, 1.0, 0.0]
+  transforms:
+    - _target_: ${dp:DropMeshFields}
+      global_data: [TimeValue]
+    - _target_: ${dp:CenterMesh}
+      use_area_weighting: false
+    # The unit freestream direction is ISLA's global vector input
+    # (isla_volume.yaml reads global_data.U_inf_dir); U_inf itself stays
+    # physical for re-dimensionalization.
+    - _target_: ${dp:ComputeFreestreamDirection}
+      velocity_field: U_inf
+      output_field: U_inf_dir
+    - _target_: ${dp:NonDimensionalizeByMetadata}
+      fields:
+        UMeanTrim: velocity
+        pMeanTrim: pressure
+        nutMeanTrim: identity
+      association: point_data
+    - _target_: ${dp:ComputeSDFFromBoundary}
+      boundary_name: stl_geometry
+      sdf_field: sdf
+      normals_field: sdf_normals
+      # Pseudo-normal sign (fed by the fast nearest-triangle kernel). The
+      # _single_solid STL is watertight, so this is exact and avoids the
+      # O(n_points * n_faces) winding-number sign pass.
+      use_winding_number: false
+    - _target_: ${dp:DropBoundary}
+      names: [stl_geometry]
+    - _target_: ${dp:PoissonBiasedSubsampleMesh}   # CHAR-PROTOCOLS area: inclusion probability proportional to cell area, exact HT weights
+      n_cells_expected: ${sampling_resolution}
+      weight_mode: uniform   # CONTROL (2026-10-03): equal weights, the uniform-over-cells law through the identical Poisson/HT path
+    - _target_: ${dp:RenameMeshFields}
+      point_data:
+        UMeanTrim: velocity
+        pMeanTrim: pressure
+        nutMeanTrim: nut
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:
+        nut: {type: scalar, mean: 4.8e-4, std: 9.4e-4}
+    # No terminal MeshToTensorDict / RestructureTensorDict: the volume YAML
+    # already produces a DomainMesh natively (interior = volume mesh with
+    # target fields in point_data; boundaries = {"vehicle": car body}).
+    # The recipe's collate consumes the DomainMesh directly using each
+    # model YAML's `forward_kwargs:` spec. Targets are extracted from
+    # interior.point_data.<name> by the `targets:` block below.
+
+    # Last in the chain: the corrected measure on the cells the model will see.
+    - _target_: ${dp:ComposeQuadratureMeasure}
+targets:
+  velocity: vector
+  pressure: scalar
+  nut: scalar

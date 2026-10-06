@@ -1,0 +1,37 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code	epochs
+0	cl	cl_vol_isla_seed42	drivaer_ml_volume_reference	isla_volume	model.hidden=768	2.5e-4	42	100000	code_v20	500
+1	cl	cl_vol_isla_seed43	drivaer_ml_volume_reference	isla_volume	model.hidden=768	2.5e-4	43	100000	code_v20	500
+2	cl	cl_vol_gt_seed42	drivaer_ml_volume_reference	geotransolver_volume	model.n_hidden=1024	1e-3	42	100000	code_v20	500
+3	cl	cl_vol_gt_seed43	drivaer_ml_volume_reference	geotransolver_volume	model.n_hidden=1024	1e-3	43	100000	code_v20	500
+4	cl	cl_vol_t_seed42	drivaer_ml_volume_reference	transolver_volume	model.n_hidden=1024	1e-3	42	100000	code_v20	500
+5	cl	cl_vol_t_seed43	drivaer_ml_volume_reference	transolver_volume	model.n_hidden=1024	1e-3	43	100000	code_v20	500
+6	cl	cl_af_isla_seed42	airfrans_volume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 model.hidden=768	2.5e-4	42	100000	code_v20	500
+7	cl	cl_af_isla_seed43	airfrans_volume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 model.hidden=768	2.5e-4	43	100000	code_v20	500
+8	cl	cl_af_gt_seed42	airfrans_volume	geotransolver_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 model.n_hidden=1024	1e-3	42	100000	code_v20	500
+9	cl	cl_af_gt_seed43	airfrans_volume	geotransolver_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 model.n_hidden=1024	1e-3	43	100000	code_v20	500
+10	cl	cl_af_t_seed42	airfrans_volume	transolver_volume	train_split=full_train val_split=full_test +training.val_interval=10 model.n_hidden=1024	1e-3	42	100000	code_v20	500
+11	cl	cl_af_t_seed43	airfrans_volume	transolver_volume	train_split=full_train val_split=full_test +training.val_interval=10 model.n_hidden=1024	1e-3	43	100000	code_v20	500
+12	cl	cl_suv_isla_seed42	shift_suv_surface	isla_surface	model.hidden=768	2.5e-4	42	100000	code_v20	500
+13	cl	cl_suv_isla_seed43	shift_suv_surface	isla_surface	model.hidden=768	2.5e-4	43	100000	code_v20	500
+14	cl	cl_suv_gt_seed42	shift_suv_surface	geotransolver_surface	model.n_hidden=1024	1e-3	42	100000	code_v20	500
+15	cl	cl_suv_gt_seed43	shift_suv_surface	geotransolver_surface	model.n_hidden=1024	1e-3	43	100000	code_v20	500
+16	cl	cl_suv_t_seed42	shift_suv_surface	transolver_surface	model.n_hidden=1024	1e-3	42	100000	code_v20	500
+17	cl	cl_suv_t_seed43	shift_suv_surface	transolver_surface	model.n_hidden=1024	1e-3	43	100000	code_v20	500
+18	cl	cl_t2d_isla_seed42	plaid_tensile2d_2d	isla_tensile2d	train_split=train_400 val_split=val_100 +training.val_interval=10 model.hidden=768	2.5e-4	42	20000	code_v20	500
+19	cl	cl_t2d_isla_seed43	plaid_tensile2d_2d	isla_tensile2d	train_split=train_400 val_split=val_100 +training.val_interval=10 model.hidden=768	2.5e-4	43	20000	code_v20	500
+20	cl	cl_t2d_gt_seed42	plaid_tensile2d	geotransolver_tensile2d	train_split=train_400 val_split=val_100 +training.val_interval=10 model.n_hidden=1024	1e-3	42	20000	code_v20	500
+21	cl	cl_t2d_gt_seed43	plaid_tensile2d	geotransolver_tensile2d	train_split=train_400 val_split=val_100 +training.val_interval=10 model.n_hidden=1024	1e-3	43	20000	code_v20	500
+22	cl	cl_t2d_t_seed42	plaid_tensile2d	transolver_tensile2d	train_split=train_400 val_split=val_100 +training.val_interval=10 model.n_hidden=1024	1e-3	42	20000	code_v20	500
+23	cl	cl_t2d_t_seed43	plaid_tensile2d	transolver_tensile2d	train_split=train_400 val_split=val_100 +training.val_interval=10 model.n_hidden=1024	1e-3	43	20000	code_v20	500
+24	cl	cl_lug_isla_seed42	ginot_lug_volume	isla_lug	train_split=train val_split=test +training.val_interval=10 model.hidden=768	2.5e-4	42	20000	code_v20	500
+25	cl	cl_lug_isla_seed43	ginot_lug_volume	isla_lug	train_split=train val_split=test +training.val_interval=10 model.hidden=768	2.5e-4	43	20000	code_v20	500
+26	cl	cl_lug_gt_seed42	ginot_lug_volume	geotransolver_lug	train_split=train val_split=test +training.val_interval=10 model.n_hidden=1024	1e-3	42	20000	code_v20	500
+27	cl	cl_lug_gt_seed43	ginot_lug_volume	geotransolver_lug	train_split=train val_split=test +training.val_interval=10 model.n_hidden=1024	1e-3	43	20000	code_v20	500
+28	cl	cl_lug_t_seed42	ginot_lug_volume	transolver_lug	train_split=train val_split=test +training.val_interval=10 model.n_hidden=1024	1e-3	42	20000	code_v20	500
+29	cl	cl_lug_t_seed43	ginot_lug_volume	transolver_lug	train_split=train val_split=test +training.val_interval=10 model.n_hidden=1024	1e-3	43	20000	code_v20	500
+30	cl	cl_jeb_isla_seed42	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 model.hidden=768	2.5e-4	42	200000	code_v20	40
+31	cl	cl_jeb_isla_seed43	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 model.hidden=768	2.5e-4	43	200000	code_v20	40
+32	cl	cl_jeb_gt_seed42	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 model.n_hidden=1024	1e-3	42	200000	code_v20	40
+33	cl	cl_jeb_gt_seed43	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 model.n_hidden=1024	1e-3	43	200000	code_v20	40
+34	cl	cl_jeb_t_seed42	deepjebpp_surface	transolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 model.n_hidden=1024	1e-3	42	200000	code_v20	40
+35	cl	cl_jeb_t_seed43	deepjebpp_surface	transolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 model.n_hidden=1024	1e-3	43	200000	code_v20	40

@@ -4,10 +4,10 @@
 with the strongest record on industrial aerodynamics, GeoTransolver and
 Transolver, on seven datasets, under one protocol that fixes everything
 except the architecture.** The baselines are strong, not straw.
-GeoTransolver runs at its recipe width and, where named, at the width that
-matches ISLA's parameter count, and it receives raw coordinates that ISLA
-never sees. Both run at their own best learning rate,
-and neither is ever modified. This chapter says what each baseline computes
+Each architecture runs at one reference configuration, the most accurate
+of its architecture under one memory budget, and GeoTransolver receives raw
+coordinates that ISLA never sees. Both baselines run at their own best
+learning rate, and neither is ever modified. This chapter says what each baseline computes
 and sees. It states one rule about how a problem's global conditions enter
 any model, lists the protocol as twelve rules, and holds what is common to
 every dataset: the roster, the file conventions and the split rule (each
@@ -102,11 +102,28 @@ are in @tbl-isla-cost. On the interior tasks the baseline is
 GeoTransolver-volume, the recipe's volume configuration of the same class,
 described with those tasks in @sec-interior.
 
+**The reference configurations.** Every standing in the book holds one
+configuration per architecture, selected by one rule: the most accurate
+configuration of that architecture that trains under 80 GiB of peak device
+memory per GPU on the two selection datasets, the DrivAerML Surface task and
+the 210-wing HiLiftAeroML rung, each candidate trained for 500 epochs on two
+seeds and scored at 200,000 cells, ties within 3% of the best resolved
+toward the cheaper candidate, and a disagreement between the two datasets
+resolved by the smallest mean of error divided by the best error on each.
+The configurations are: ISLA width 512, 12 layers, 512 slices, cosine
+routing, the centered sample-conditioned prototypes, learning rate 3.75e-4,
+trained at 200,000 cells; GeoTransolver width 256 (local width 32),
+learning rate 1e-3, trained at 200,000 cells; Transolver width 512 with 16
+layers at 100,000 cells, learning rate 1e-3. The selection itself is read in
+@sec-scoreboard-200k and @sec-de-result. Lanes that hold other
+configurations, the ladders and the capacity and scaling studies, name
+theirs in every row and caption.
+
 | architecture | per-point inputs | global input | layers | hidden | slices |
 |---|---|---|--:|--:|--:|
 | GeoTransolver | centered coordinates, unit normal; coordinates again through the geometry encoder | the far-field vector through the global-context projector: a unit direction under the protocol | 12 | 256 | 256 |
-| Transolver | centered coordinates, unit normal | the far-field vector, broadcast per point: a unit direction under the protocol | 8 | 256 | 256 |
-| ISLA | position, unit normal, measure weight, through invariants and anchors only | unit direction(s) and global scalars | 12 | 384 | 256 |
+| Transolver | centered coordinates, unit normal | the far-field vector, broadcast per point: a unit direction under the protocol | 16 | 512 | 256 |
+| ISLA | position, unit normal, measure weight, through invariants and anchors only | unit direction(s) and global scalars | 12 | 512 | 512 |
 
 : The three architectures compared on the aerodynamic datasets. *Per-point
 inputs*: channels attached to each of the 200,000 sampled surface cells per
@@ -283,13 +300,12 @@ small validation set and two seeds a thin noise estimate (@sec-limits).
 **Every cross-architecture comparison states, on both sides, the parameter
 count, the cells per case and the training memory, or says in the same
 sentence where they differ and whether the difference could buy accuracy.**
-The 435-car row of the DrivAerML Surface task is stated twice for this
-reason: against GeoTransolver at its recipe width, which ISLA leads by 7%
-and which costs 1.41x ISLA's memory at 0.80x its parameters, and against
-the parameter-matched GeoTransolver-512, which is at parity and costs
-1.90x ISLA's memory, both at the same cells per case. The footprints of
-both sides are read from the cost table of @sec-using-cost. Memory is not a controlled
-variable in any comparison and no accuracy result depends on it. The
+The reference configurations are matched on one thing only, the 80 GiB
+memory budget they were selected under, and differ in parameters, cells per
+case and step time; each dataset chapter states those beside its standing,
+and the training footprints on the selection task are in @sec-using-cost.
+Memory is therefore the one controlled variable of the selection and no
+accuracy result depends on it otherwise. The
 checkpoints in this book are trained by implementations of the same
 function that differ only in footprint. Where the two architectures are
 compared at unequal parameters or memory, the section that does so says
@@ -298,11 +314,12 @@ which side has more and whether it bought accuracy (@sec-equal-budget).
 ## Learning rate {#sec-lr-protocol}
 
 **Each architecture trains at its own best learning rate, and the rate is
-part of the protocol, not a tuning afterthought.** GeoTransolver's best rate
-at the reporting protocol is 3e-3 on every DrivAerML rung and on the wings,
-found by the two-rate control of rule 3. Transolver runs at 3e-3. ISLA runs
-at 5e-4 in the reference configuration, and its 192-wide
-lanes run at 1e-3 (@sec-using-lr). Why ISLA's rate does not follow the
+part of the protocol, not a tuning afterthought.** In the reference
+configurations GeoTransolver and Transolver run at 1e-3 and ISLA at 3.75e-4,
+the width rule's rate at width 512 (@sec-using-lr). On the ladders, which
+hold the 256-wide baselines and ISLA at 384 or 192 wide, GeoTransolver runs
+at the better of 1e-3 and 3e-3 per rung, found by the two-rate control of
+rule 3, Transolver at 3e-3, and ISLA at 5e-4 (384 wide) or 1e-3 (192 wide). Why ISLA's rate does not follow the
 baselines' is a property of the routing form, explained once in
 @sec-isla-routing-forms.
 

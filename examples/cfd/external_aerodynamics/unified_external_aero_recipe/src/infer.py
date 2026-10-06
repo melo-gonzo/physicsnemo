@@ -118,6 +118,14 @@ from physicsnemo.utils.logging import PythonLogger, RankZeroLoggingWrapper
 ### ---------------------------------------------------------------------------
 
 
+def _spatial_dims_of_first_sample(dataset: Any, sampler: Any) -> int | None:
+    """Spatial dimension of the interior points of the shard's first sample, ``None`` for an empty shard."""
+    for idx in sampler:
+        domain, _ = dataset[idx]
+        return int(domain.interior.n_spatial_dims)
+    return None
+
+
 def resolve_checkpoint_path(cfg: DictConfig) -> str:
     """Resolve the directory `load_checkpoint` should scan.
 
@@ -593,8 +601,19 @@ def main(cfg: DictConfig) -> None:
         )
 
     # -- Metrics ----------------------------------------------------------------
+    ### The per-component metric keys follow the DATA's spatial dimension: a
+    ### two-dimensional dataset (RestrictToPlane) has no `<vector>_z_l2`, and
+    ### an expected key no sample produces made `_check_summary_in_range`
+    ### refuse every 2-D summary (CHAR-PROTOCOLS, 2026-10-03). Read it from
+    ### the first sample of this rank's shard; an empty shard keeps the
+    ### default and contributes zeros to keys it cannot derive.
+    dataset: Any = val_loader.dataset
+    sampler: Any = val_loader.sampler
+    n_spatial_dims = _spatial_dims_of_first_sample(dataset, sampler)
     metric_calculator = MetricCalculator(
-        target_config=target_config, metrics=resolve_metrics(cfg)
+        target_config=target_config,
+        metrics=resolve_metrics(cfg),
+        **({} if n_spatial_dims is None else {"n_spatial_dims": n_spatial_dims}),
     )
 
     if is_rank0:
@@ -610,9 +629,6 @@ def main(cfg: DictConfig) -> None:
                 "num_parameters": num_params,
             }
         )
-
-    dataset: Any = val_loader.dataset
-    sampler: Any = val_loader.sampler
 
     force_acc = ForceAccumulator()
 

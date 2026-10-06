@@ -1,0 +1,329 @@
+{
+  "dataset": "DeepJEB++",
+  "cases": [
+    {
+      "case": "511-142-IS07_ver",
+      "bracket": "511-142-IS07",
+      "load": "ver",
+      "load_case": {
+        "type": "force",
+        "direction": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "magnitude": 35600.0,
+        "unit": "N"
+      },
+      "load_dir": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "load_type_onehot": [
+        1.0,
+        0.0
+      ],
+      "load_type": "force",
+      "load_magnitude": 35600.0,
+      "mass_g": 111.3174819946289,
+      "vol_mm3": 25128.099609375,
+      "lug_radius_mm": 10.019265174865723,
+      "n_cells": 49984,
+      "n_points": 24956,
+      "bbox_mm": [
+        [
+          -37.62367248535156,
+          -159.5767364501953,
+          -1.7934579849243164
+        ],
+        [
+          65.62030029296875,
+          15.21753215789795,
+          62.02476501464844
+        ]
+      ],
+      "split": "test_clean"
+    },
+    {
+      "case": "611-142-IS11_hor",
+      "bracket": "611-142-IS11",
+      "load": "hor",
+      "load_case": {
+        "type": "force",
+        "direction": [
+          -1.0,
+          0.0,
+          0.0
+        ],
+        "magnitude": 37800.0,
+        "unit": "N"
+      },
+      "load_dir": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "load_type_onehot": [
+        1.0,
+        0.0
+      ],
+      "load_type": "force",
+      "load_magnitude": 37800.0,
+      "mass_g": 196.45831298828125,
+      "vol_mm3": 44347.25,
+      "lug_radius_mm": 10.289721488952637,
+      "n_cells": 50008,
+      "n_points": 24976,
+      "bbox_mm": [
+        [
+          -38.045387268066406,
+          -160.81707763671875,
+          -1.2426700592041016
+        ],
+        [
+          66.92549896240234,
+          15.996724128723145,
+          61.770687103271484
+        ]
+      ],
+      "split": "test_clean"
+    },
+    {
+      "case": "271-123-IS14_dia",
+      "bracket": "271-123-IS14",
+      "load": "dia",
+      "load_case": {
+        "type": "force",
+        "direction": [
+          -0.669,
+          0.0,
+          0.743
+        ],
+        "magnitude": 42300.0,
+        "unit": "N"
+      },
+      "load_dir": [
+        -0.6691305041313171,
+        0.0,
+        0.7431449294090271
+      ],
+      "load_type_onehot": [
+        1.0,
+        0.0
+      ],
+      "load_type": "force",
+      "load_magnitude": 42300.0,
+      "mass_g": 226.92185974121094,
+      "vol_mm3": 51223.89453125,
+      "lug_radius_mm": 9.297685623168945,
+      "n_cells": 50002,
+      "n_points": 24981,
+      "bbox_mm": [
+        [
+          -34.08108139038086,
+          -161.79672241210938,
+          -8.977614402770996
+        ],
+        [
+          69.192138671875,
+          16.91553497314453,
+          61.9350471496582
+        ]
+      ],
+      "split": "test_clean"
+    },
+    {
+      "case": "415-206-IS11_tor",
+      "bracket": "415-206-IS11",
+      "load": "tor",
+      "load_case": {
+        "type": "torque",
+        "direction": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "magnitude": 565000.0,
+        "unit": "N*mm"
+      },
+      "load_dir": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "load_type_onehot": [
+        0.0,
+        1.0
+      ],
+      "load_type": "torque",
+      "load_magnitude": 565000.0,
+      "mass_g": 254.8008270263672,
+      "vol_mm3": 57517.1171875,
+      "lug_radius_mm": 10.316383361816406,
+      "n_cells": 50020,
+      "n_points": 24984,
+      "bbox_mm": [
+        [
+          -38.12736892700195,
+          -160.7145233154297,
+          -1.3347994089126587
+        ],
+        [
+          66.78423309326172,
+          16.118227005004883,
+          61.720069885253906
+        ]
+      ],
+      "split": "test_clean"
+    },
+    {
+      "case": "249-140-IS13_dia",
+      "bracket": "249-140-IS13",
+      "load": "dia",
+      "load_case": {
+        "type": "force",
+        "direction": [
+          -0.669,
+          0.0,
+          0.743
+        ],
+        "magnitude": 42300.0,
+        "unit": "N"
+      },
+      "load_dir": [
+        -0.6691305041313171,
+        0.0,
+        0.7431449294090271
+      ],
+      "load_type_onehot": [
+        1.0,
+        0.0
+      ],
+      "load_type": "force",
+      "load_magnitude": 42300.0,
+      "mass_g": 286.2571716308594,
+      "vol_mm3": 64617.87109375,
+      "lug_radius_mm": 10.281858444213867,
+      "n_cells": 50018,
+      "n_points": 24967,
+      "bbox_mm": [
+        [
+          -38.326622009277344,
+          -161.2161407470703,
+          -1.5361703634262085
+        ],
+        [
+          66.14730072021484,
+          16.203536987304688,
+          62.23191833496094
+        ]
+      ],
+      "split": "test_clean"
+    },
+    {
+      "case": "208-114-IS04_tor",
+      "bracket": "208-114-IS04",
+      "load": "tor",
+      "load_case": {
+        "type": "torque",
+        "direction": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "magnitude": 565000.0,
+        "unit": "N*mm"
+      },
+      "load_dir": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "load_type_onehot": [
+        0.0,
+        1.0
+      ],
+      "load_type": "torque",
+      "load_magnitude": 565000.0,
+      "mass_g": 1092.755859375,
+      "vol_mm3": 246671.765625,
+      "lug_radius_mm": 10.217355728149414,
+      "n_cells": 25318,
+      "n_points": 12649,
+      "bbox_mm": [
+        [
+          -38.140506744384766,
+          -160.8102569580078,
+          -1.330448031425476
+        ],
+        [
+          66.71637725830078,
+          16.11006736755371,
+          62.053985595703125
+        ]
+      ],
+      "split": "test_clean"
+    }
+  ],
+  "split": "test_clean",
+  "n_test_brackets": 1385,
+  "selection": "six clean test brackets at the 0, 20, 40, 60, 80 and 100% quantiles of bracket mass, each under one load case in turn (vertical, horizontal, diagonal force, torsion, diagonal, torsion)",
+  "test_mass_range_g": [
+    111.3174819946289,
+    1092.755859375
+  ],
+  "load_cases": {
+    "ver": {
+      "type": "force",
+      "direction": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "magnitude": 35600.0,
+      "unit": "N"
+    },
+    "hor": {
+      "type": "force",
+      "direction": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "magnitude": 37800.0,
+      "unit": "N"
+    },
+    "dia": {
+      "type": "force",
+      "direction": [
+        -0.669,
+        0.0,
+        0.743
+      ],
+      "magnitude": 42300.0,
+      "unit": "N"
+    },
+    "tor": {
+      "type": "torque",
+      "direction": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "magnitude": 565000.0,
+      "unit": "N*mm"
+    }
+  },
+  "units": "mm (lengths), MPa (stress), mm (displacement)",
+  "ranges": {
+    "von_mises": [
+      0.7194241285324097,
+      6956.6826171875
+    ],
+    "disp_mag": [
+      0.0,
+      9.144477844238281
+    ]
+  }
+}

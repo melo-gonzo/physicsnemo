@@ -28,7 +28,7 @@ output_type: mesh
 
 training:
   optimizer:
-    lr: 5.0e-4                    # the reference configuration's rate (REF verdict, 2026-09-23; see isla_surface.yaml)
+    lr: 3.75e-4                   # the reference configuration's rate (REF-80 verdict, 2026-10-04; see isla_surface.yaml)
 
 forward_kwargs:
   boundary_meshes:
@@ -40,10 +40,11 @@ model:
   _target_: physicsnemo.experimental.models.ISLA
   output_schema:                  # the dataset's targets, by name and tensor rank
     q: {rank: 0}                  # cumulated plastic strain
-    sig11: {rank: 0}              # stress components in the laboratory frame, as the dataset stores them
-    sig22: {rank: 0}
-    sig12: {rank: 0}
     displacement: {rank: 1}       # in-plane displacement (two components after RestrictToPlane)
+    stress: {rank: 2, symmetric: true}   # EQ-TENSOR (2026-10-03): the in-plane stress as ONE symmetric rank-2 tensor (2 x 2 after
+                                  # RestrictToPlane); the recipe reads sig11 / sig22 / sig12 off it (dataset targets: stress: {type:
+                                  # symmetric_tensor, components: {sig11: xx, sig22: yy, sig12: xy}}). Replaces the three rank-0 heads,
+                                  # which were invariant where the components rotate as a tensor (posed protocol, 2026-10-03).
   boundary_schema:                # per-boundary-cell inputs, all rank 0 (0/1 labels and the scaled pressure)
     bc_loaded: {rank: 0}          # 1 on the top edge (pressure P)
     bc_fixed: {rank: 0}           # 1 on the bottom edge (U2 = 0)
@@ -61,9 +62,9 @@ model:
     p5_std: {rank: 0}
   dim: 2                          # the problem is planar
   interior: true                  # predict at prediction_points, which join the encoder as tokens
-  hidden: 384                     # the reference configuration (REF verdict, 2026-09-23); also the class defaults
+  hidden: 512                     # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; the class defaults are 384 / 256
   n_layers: 12
-  n_slices: 256
+  n_slices: 512
   mlp_ratio: 4
   geo_checkpoint: true
   geo_kernel: null                # auto: eager here (two dimensions and no global direction)

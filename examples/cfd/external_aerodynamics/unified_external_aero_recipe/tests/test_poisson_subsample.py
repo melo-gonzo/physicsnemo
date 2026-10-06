@@ -155,3 +155,29 @@ def test_invalid_weight_mode_rejected():
     """Reject unsupported sampling-weight modes."""
     with pytest.raises(ValueError, match="weight_mode"):
         PoissonBiasedSubsampleMesh(n_cells_expected=10, weight_mode="volume")
+
+
+def test_uniform_mode_is_the_uniform_over_cells_law_through_the_poisson_path():
+    """CHAR-PROTOCOLS control (2026-10-03): equal weights give pi_i = n / N for every cell and
+    the HT weight N / n, i.e. SubsampleMesh's law with a Poisson count; large and small cells
+    are kept in the same proportion."""
+    mesh = _graded_plate()
+    n_expected = 1000
+    tf = PoissonBiasedSubsampleMesh(n_cells_expected=n_expected, weight_mode="uniform")
+    tf.set_generator(torch.Generator().manual_seed(2))
+    sub = tf(mesh)
+    assert 0 < sub.n_cells < mesh.n_cells
+    ratio = cell_measures(sub) / sub.cell_areas
+    torch.testing.assert_close(
+        ratio, torch.full_like(ratio, mesh.n_cells / n_expected), rtol=1e-4, atol=0.0
+    )
+    areas = mesh.cell_areas
+    kept_small = (sub.cell_areas < areas.median()).float().mean().item()
+    assert kept_small == pytest.approx(0.5, abs=0.06)
+    counts = []
+    for seed in range(50):
+        tf.set_generator(torch.Generator().manual_seed(seed))
+        counts.append(tf(mesh).n_cells)
+    assert abs(sum(counts) / len(counts) / n_expected - 1.0) < 0.05
+    with pytest.raises(ValueError):
+        PoissonBiasedSubsampleMesh(n_cells_expected=10, weight_mode="volume")

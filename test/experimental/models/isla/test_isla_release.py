@@ -129,9 +129,9 @@ def test_isla_constructor_attributes(config):
         assert list(m.output_schema) == ["p", "v"]
         assert (m.output_schema["p"].rank, m.output_schema["v"].rank) == (0, 1)
         assert m.n_head_coeffs == 1 + 5  # a scalar and a true vector over m = 5
-        assert m.n_slices == 256
+        assert m.n_slices == 512  # the reference configuration (REF-80, 2026-10-04)
         assert len(m.blocks) == 12
-        assert m.norm_out.normalized_shape == (384,)  # the reference width
+        assert m.norm_out.normalized_shape == (512,)  # the reference width
         assert m.geo_kernel == "auto"
         assert m.interior is False and m.qt is None
         assert m.n_global_vectors == 1 and m.n_global_scalars == 0

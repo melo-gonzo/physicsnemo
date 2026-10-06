@@ -285,3 +285,62 @@ def test_isla_end_to_end_through_collate_and_loss():
         "loss/stress",
         "loss/displacement",
     }
+
+
+def test_select_tensor_components_accepts_a_planar_2x2_tensor():
+    """A planar problem restricted to its plane (ISLA dim=2) predicts a (N, 2, 2) tensor; the in-plane
+    labels read off it, out-of-plane labels are refused (2026-10-03)."""
+    import pytest
+    import torch
+    from utils import select_tensor_components
+
+    t = torch.randn(5, 2, 2)
+    out = select_tensor_components(t, STRESS)
+    assert out.shape == (5, 3)
+    assert torch.equal(out[:, 0], t[:, 0, 0]) and torch.equal(out[:, 1], t[:, 1, 1]) and torch.equal(out[:, 2], t[:, 0, 1])
+    with pytest.raises(ValueError, match="does not have"):
+        select_tensor_components(t, {"type": "symmetric_tensor", "components": {"s33": "zz"}})
+    with pytest.raises(ValueError, match="d in"):
+        select_tensor_components(torch.randn(5, 4, 4), STRESS)
+
+
+def test_stress_l2_is_one_frobenius_formula_for_both_target_paths_and_rotation_invariant():
+    """CHAR-PROTOCOLS (2026-10-04): a dataset declaring sig11/sig22/sig12 as scalars gets a derived
+    ``stress_l2`` equal (to roundoff) to the ``symmetric_tensor`` path's on the same arrays; the
+    aggregate is the Frobenius relative L2 (off-diagonal counted twice), invariant under an in-plane
+    rotation of pred and target, while the per-component relative errors move."""
+    import math
+
+    import torch
+    from metrics import MetricCalculator
+    from tensordict import TensorDict
+
+    g = torch.Generator().manual_seed(5)
+    n = 64
+    t = torch.randn(n, 3, generator=g)  # xx, yy, xy
+    p = t + 0.3 * torch.randn(n, 3, generator=g)
+    scalars = {"q": "scalar", "sig11": "scalar", "sig22": "scalar", "sig12": "scalar"}
+    tensor = {"q": "scalar", "stress": STRESS}
+    q_p, q_t = torch.randn(n, generator=g), torch.randn(n, generator=g)
+    m_s = MetricCalculator(scalars, metrics=["l2"])(
+        TensorDict({"q": q_p, "sig11": p[:, 0], "sig22": p[:, 1], "sig12": p[:, 2]}),
+        TensorDict({"q": q_t, "sig11": t[:, 0], "sig22": t[:, 1], "sig12": t[:, 2]}),
+    )
+    m_t = MetricCalculator(tensor, metrics=["l2"])(
+        TensorDict({"q": q_p, "stress": p}), TensorDict({"q": q_t, "stress": t})
+    )
+    assert "stress_l2" in m_s.keys() and "stress_l2" in MetricCalculator(scalars, metrics=["l2"]).expected_keys()
+    torch.testing.assert_close(m_s["stress_l2"], m_t["stress_l2"])
+    for k in ("sig11_l2", "sig22_l2", "sig12_l2"):
+        torch.testing.assert_close(m_s[k], m_t[k])
+    ### Frobenius by hand: off-diagonal twice.
+    fro = lambda a, b: math.sqrt(float(((a - b)[:, :2] ** 2).sum() + 2 * ((a - b)[:, 2] ** 2).sum())) / math.sqrt(float((b[:, :2] ** 2).sum() + 2 * (b[:, 2] ** 2).sum()))
+    assert abs(float(m_t["stress_l2"]) - fro(p, t)) < 1e-5
+    ### Rotation invariance of the aggregate; per-component errors change.
+    c, s_ = math.cos(0.7), math.sin(0.7)
+    def rot(v):
+        xx, yy, xy = v[:, 0], v[:, 1], v[:, 2]
+        return torch.stack([c * c * xx + s_ * s_ * yy - 2 * c * s_ * xy, s_ * s_ * xx + c * c * yy + 2 * c * s_ * xy, c * s_ * (xx - yy) + (c * c - s_ * s_) * xy], -1)
+    m_r = MetricCalculator(tensor, metrics=["l2"])(TensorDict({"q": q_p, "stress": rot(p)}), TensorDict({"q": q_t, "stress": rot(t)}))
+    torch.testing.assert_close(m_r["stress_l2"], m_t["stress_l2"], rtol=1e-5, atol=1e-6)
+    assert not torch.allclose(m_r["sig11_l2"], m_t["sig11_l2"])

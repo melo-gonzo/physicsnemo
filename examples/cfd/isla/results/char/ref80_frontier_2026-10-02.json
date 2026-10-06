@@ -1,0 +1,320 @@
+{
+ "protocol": "REF-80 memory frontier (CHAR, 2026-10-02, #sec-nb-char-prereg): one real epoch of every candidate configuration of ISLA,\nGeoTransolver and Transolver on DrivAerML Surface at the reporting protocol (lanes rf1_*, code_v18 + recipe_v8, four GB300 ranks,\nbatch one, bfloat16), reading the recipe's epoch summary: peak device memory of the training epoch (maximum over ranks, GiB), the\nepoch's wall time, the parameter count. A candidate is on the frontier when its training peak is at most 80 GiB. The `_nc` lanes\nrun with the recipe's whole-model torch.compile off (`compile=false`) so that ISLA's per-block compile engages; the others carry\nthe recipe default. Reads campaigns_2026-10-02/char/rf1/<lane>/metrics.jsonl. usage: python ref80_frontier_reduce_2026-10-02.py",
+ "budget_gib": 80.0,
+ "candidates": {
+  "gt_h1024_c100k": {
+   "architecture": "GeoTransolver",
+   "lane": "rf1_gt_h1024_c100k",
+   "n_parameters": 142734464,
+   "train_peak_gib": 71.3555908203125,
+   "epoch_seconds": 62.66816976899281,
+   "val_peak_gib": 5.955745697021484,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "gt_h256": {
+   "architecture": "GeoTransolver",
+   "lane": "rf1_gt_h256",
+   "n_parameters": 9046016,
+   "train_peak_gib": 77.75142669677734,
+   "epoch_seconds": 74.46485114999814,
+   "val_peak_gib": 5.565468788146973,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "gt_h512": {
+   "architecture": "GeoTransolver",
+   "lane": "rf1_gt_h512",
+   "n_parameters": 35848576,
+   "train_peak_gib": 98.2420883178711,
+   "epoch_seconds": 76.77118539391086,
+   "val_peak_gib": 6.4887471199035645,
+   "compile_whole_model": true,
+   "on_frontier": false
+  },
+  "gt_h512_c100k": {
+   "architecture": "GeoTransolver",
+   "lane": "rf1_gt_h512_c100k",
+   "n_parameters": 35848576,
+   "train_peak_gib": 49.466373443603516,
+   "epoch_seconds": 52.3602092161309,
+   "val_peak_gib": 3.6995205879211426,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "gt_h512_l24_c100k": {
+   "architecture": "GeoTransolver",
+   "lane": "rf1_gt_h512_l24_c100k",
+   "n_parameters": 71120620,
+   "train_peak_gib": 93.46446228027344,
+   "epoch_seconds": 77.30829123198055,
+   "val_peak_gib": 4.29115629196167,
+   "compile_whole_model": true,
+   "on_frontier": false
+  },
+  "isla_c400k": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_c400k",
+   "n_parameters": 38093287,
+   "train_peak_gib": 88.09410858154297,
+   "epoch_seconds": 71.50285398100095,
+   "val_peak_gib": 3.053049087524414,
+   "compile_whole_model": true,
+   "on_frontier": false
+  },
+  "isla_c400k_nc": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_c400k_nc",
+   "n_parameters": 38093287,
+   "train_peak_gib": 88.09410858154297,
+   "epoch_seconds": 77.32153623599152,
+   "val_peak_gib": 3.053049087524414,
+   "compile_whole_model": false,
+   "on_frontier": false
+  },
+  "isla_d24": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_d24",
+   "n_parameters": 75641671,
+   "train_peak_gib": 85.36224365234375,
+   "epoch_seconds": 73.64377435299684,
+   "val_peak_gib": 2.559048652648926,
+   "compile_whole_model": true,
+   "on_frontier": false
+  },
+  "isla_d24_c100k": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_d24_c100k",
+   "n_parameters": 75641671,
+   "train_peak_gib": 43.299110412597656,
+   "epoch_seconds": 71.24113945593126,
+   "val_peak_gib": 2.1033568382263184,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "isla_d24_nc": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_d24_nc",
+   "n_parameters": 75641671,
+   "train_peak_gib": 85.36224365234375,
+   "epoch_seconds": 79.29917402938008,
+   "val_peak_gib": 2.559048652648926,
+   "compile_whole_model": false,
+   "on_frontier": false
+  },
+  "isla_ref": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_ref",
+   "n_parameters": 38093287,
+   "train_peak_gib": 44.4049072265625,
+   "epoch_seconds": 59.201770815998316,
+   "val_peak_gib": 1.9991583824157715,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "isla_ref_nc": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_ref_nc",
+   "n_parameters": 38093287,
+   "train_peak_gib": 44.413848876953125,
+   "epoch_seconds": 67.0117307677865,
+   "val_peak_gib": 1.9991583824157715,
+   "compile_whole_model": false,
+   "on_frontier": true
+  },
+  "isla_s512": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_s512",
+   "n_parameters": 39371239,
+   "train_peak_gib": 52.04242706298828,
+   "epoch_seconds": 71.2350601919461,
+   "val_peak_gib": 2.61720609664917,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "isla_w512": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w512",
+   "n_parameters": 67109479,
+   "train_peak_gib": 56.857391357421875,
+   "epoch_seconds": 61.87540041003376,
+   "val_peak_gib": 2.7656259536743164,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "isla_w512_d24": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w512_d24",
+   "n_parameters": 133295815,
+   "train_peak_gib": 109.35567474365234,
+   "epoch_seconds": 89.16550095300045,
+   "val_peak_gib": 3.7523460388183594,
+   "compile_whole_model": true,
+   "on_frontier": false
+  },
+  "isla_w512_d24_c100k": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w512_d24_c100k",
+   "n_parameters": 133295815,
+   "train_peak_gib": 55.681556701660156,
+   "epoch_seconds": 68.969367615995,
+   "val_peak_gib": 3.1536030769348145,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "isla_w512_d24_nc": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w512_d24_nc",
+   "n_parameters": 133295815,
+   "train_peak_gib": 109.35567474365234,
+   "epoch_seconds": 83.57323450199328,
+   "val_peak_gib": 3.7523460388183594,
+   "compile_whole_model": false,
+   "on_frontier": false
+  },
+  "isla_w512_s512": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w512_s512",
+   "n_parameters": 68813415,
+   "train_peak_gib": 64.27252960205078,
+   "epoch_seconds": 68.97333311988041,
+   "val_peak_gib": 3.0803375244140625,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "isla_w512_s512_nc": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w512_s512_nc",
+   "n_parameters": 68813415,
+   "train_peak_gib": 64.27253723144531,
+   "epoch_seconds": 74.76276022009552,
+   "val_peak_gib": 3.0803375244140625,
+   "compile_whole_model": false,
+   "on_frontier": true
+  },
+  "isla_w768": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w768",
+   "n_parameters": 149619559,
+   "train_peak_gib": 82.08153533935547,
+   "epoch_seconds": 72.04286007996416,
+   "val_peak_gib": 4.798287868499756,
+   "compile_whole_model": true,
+   "on_frontier": false
+  },
+  "isla_w768_c100k": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w768_c100k",
+   "n_parameters": 149619559,
+   "train_peak_gib": 42.14573287963867,
+   "epoch_seconds": 65.3089801389724,
+   "val_peak_gib": 3.6738929748535156,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "isla_w768_d24_c100k": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w768_d24_c100k",
+   "n_parameters": 297264583,
+   "train_peak_gib": 81.23770141601562,
+   "epoch_seconds": 75.01221405999968,
+   "val_peak_gib": 5.874645233154297,
+   "compile_whole_model": true,
+   "on_frontier": false
+  },
+  "isla_w768_nc": {
+   "architecture": "ISLA",
+   "lane": "rf1_isla_w768_nc",
+   "n_parameters": 149619559,
+   "train_peak_gib": 82.08153533935547,
+   "epoch_seconds": 74.62696972803678,
+   "val_peak_gib": 4.798287868499756,
+   "compile_whole_model": false,
+   "on_frontier": false
+  },
+  "t_h1024": {
+   "architecture": "Transolver",
+   "lane": "rf1_t_h1024",
+   "n_parameters": 95155268,
+   "train_peak_gib": 91.9447021484375,
+   "epoch_seconds": 71.47207757690921,
+   "val_peak_gib": 8.42265510559082,
+   "compile_whole_model": true,
+   "on_frontier": false
+  },
+  "t_h1024_c100k": {
+   "architecture": "Transolver",
+   "lane": "rf1_t_h1024_c100k",
+   "n_parameters": 95155268,
+   "train_peak_gib": 46.7041015625,
+   "epoch_seconds": 51.66231625480577,
+   "val_peak_gib": 5.156591892242432,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "t_h1024_l16_c100k": {
+   "architecture": "Transolver",
+   "lane": "rf1_t_h1024_l16_c100k",
+   "n_parameters": 188185732,
+   "train_peak_gib": 90.98033142089844,
+   "epoch_seconds": 71.86647988800541,
+   "val_peak_gib": 6.716467380523682,
+   "compile_whole_model": true,
+   "on_frontier": false
+  },
+  "t_h256": {
+   "architecture": "Transolver",
+   "lane": "rf1_t_h256",
+   "n_parameters": 6021956,
+   "train_peak_gib": 51.556983947753906,
+   "epoch_seconds": 55.767313134994765,
+   "val_peak_gib": 5.514266490936279,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "t_h512": {
+   "architecture": "Transolver",
+   "lane": "rf1_t_h512",
+   "n_parameters": 23887428,
+   "train_peak_gib": 64.86289978027344,
+   "epoch_seconds": 59.625578825995035,
+   "val_peak_gib": 6.287360668182373,
+   "compile_whole_model": true,
+   "on_frontier": true
+  },
+  "t_h512_l16_c100k": {
+   "architecture": "Transolver",
+   "lane": "rf1_t_h512_l16_c100k",
+   "n_parameters": 47236740,
+   "train_peak_gib": 62.005714416503906,
+   "epoch_seconds": 60.64747920096852,
+   "val_peak_gib": 3.88973331451416,
+   "compile_whole_model": true,
+   "on_frontier": true
+  }
+ },
+ "frontier": {
+  "ISLA": [
+   "isla_w512_s512_nc",
+   "isla_w512_s512",
+   "isla_w512",
+   "isla_w512_d24_c100k",
+   "isla_s512",
+   "isla_ref_nc",
+   "isla_ref",
+   "isla_d24_c100k",
+   "isla_w768_c100k"
+  ],
+  "GeoTransolver": [
+   "gt_h256",
+   "gt_h1024_c100k",
+   "gt_h512_c100k"
+  ],
+  "Transolver": [
+   "t_h512",
+   "t_h512_l16_c100k",
+   "t_h256",
+   "t_h1024_c100k"
+  ]
+ }
+}

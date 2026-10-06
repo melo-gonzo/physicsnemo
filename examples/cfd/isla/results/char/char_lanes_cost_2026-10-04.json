@@ -1,0 +1,267 @@
+{
+ "protocol": "CHAR-LANES cost (2026-10-04, #sec-nb-char-lanes-launched): per dataset task and architecture at the reference configurations, the\ntraining peak device memory (GiB, maximum over the four GB300 ranks), the epoch wall time (s) and the parameter count, read from the\none-epoch smoke lanes of the final reference configurations (group cs, runs/cs_r_<task>_<arch>/metrics.jsonl, REF-80 verdict\n2026-10-04: ISLA width 512 with 512 slices, GeoTransolver width 256, Transolver width 512 x 16 at 100k; the recipe's train_summary /\nconfig rows) and, for DrivAerML Surface, from the one-epoch frontier lanes of results/char/ref80_frontier_2026-10-02.json. The\nfirst-pass smoke lanes (cs_<task>_<arch>, DrivAerML-half references) are kept under cost_first_pass. Writes\nresults/char/char_lanes_cost_2026-10-04.json: cost[task][arch] = {peak_gib, epoch_seconds, n_parameters, source}.\nusage: python char_lanes_cost_2026-10-04.py",
+ "cost": {
+  "DrivAerML Volume": {
+   "ISLA": {
+    "peak_gib": 126.20667266845703,
+    "epoch_seconds": 116.53719016601099,
+    "n_parameters": 69078633,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_vol_isla/metrics.jsonl"
+   },
+   "GeoTransolver": {
+    "peak_gib": 117.87905883789062,
+    "epoch_seconds": 144.0340391038917,
+    "n_parameters": 27574449,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_vol_gt/metrics.jsonl"
+   },
+   "Transolver": {
+    "peak_gib": 61.994449615478516,
+    "epoch_seconds": 67.93214601599902,
+    "n_parameters": 47238277,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_vol_t/metrics.jsonl"
+   }
+  },
+  "AirfRANS": {
+   "ISLA": {
+    "peak_gib": 35.35639190673828,
+    "epoch_seconds": 169.1245859200135,
+    "n_parameters": 69084789,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_af_isla/metrics.jsonl"
+   },
+   "GeoTransolver": {
+    "peak_gib": 38.89996337890625,
+    "epoch_seconds": 68.08435537014157,
+    "n_parameters": 9046785,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_af_gt/metrics.jsonl"
+   },
+   "Transolver": {
+    "peak_gib": 61.868709564208984,
+    "epoch_seconds": 83.90773121500388,
+    "n_parameters": 47238277,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_af_t/metrics.jsonl"
+   }
+  },
+  "Shift-SUV": {
+   "ISLA": {
+    "peak_gib": 64.25971984863281,
+    "epoch_seconds": 89.97003173688427,
+    "n_parameters": 68813415,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_suv_isla/metrics.jsonl"
+   },
+   "GeoTransolver": {
+    "peak_gib": 77.74754333496094,
+    "epoch_seconds": 111.55251437984407,
+    "n_parameters": 9046016,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_suv_gt/metrics.jsonl"
+   },
+   "Transolver": {
+    "peak_gib": 62.00398635864258,
+    "epoch_seconds": 88.2585732670268,
+    "n_parameters": 47236740,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_suv_t/metrics.jsonl"
+   }
+  },
+  "Tensile2D": {
+   "ISLA": {
+    "peak_gib": 5.141017913818359,
+    "epoch_seconds": 102.65549743990414,
+    "n_parameters": 69087341,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_t2dz_isla/metrics.jsonl"
+   },
+   "GeoTransolver": {
+    "peak_gib": 4.765137672424316,
+    "epoch_seconds": 39.38633446395397,
+    "n_parameters": 9050371,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_t2dz_gt/metrics.jsonl"
+   },
+   "Transolver": {
+    "peak_gib": 7.920585632324219,
+    "epoch_seconds": 37.798604991985485,
+    "n_parameters": 47245447,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_t2dz_t/metrics.jsonl"
+   }
+  },
+  "lug": {
+   "ISLA": {
+    "peak_gib": 8.910104751586914,
+    "epoch_seconds": 184.26239142095437,
+    "n_parameters": 68294754,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_lug_isla/metrics.jsonl"
+   },
+   "GeoTransolver": {
+    "peak_gib": 6.083390712738037,
+    "epoch_seconds": 85.34853066387586,
+    "n_parameters": 9046269,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_lug_gt/metrics.jsonl"
+   },
+   "Transolver": {
+    "peak_gib": 10.004556655883789,
+    "epoch_seconds": 78.59108182787895,
+    "n_parameters": 47237249,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_lug_t/metrics.jsonl"
+   }
+  },
+  "DeepJEB++": {
+   "ISLA": {
+    "peak_gib": 17.07378578186035,
+    "epoch_seconds": 2007.4181940038688,
+    "n_parameters": 68820083,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_jeb_isla/metrics.jsonl"
+   },
+   "GeoTransolver": {
+    "peak_gib": 19.739818572998047,
+    "epoch_seconds": 1850.861233717762,
+    "n_parameters": 9049600,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_jeb_gt/metrics.jsonl"
+   },
+   "Transolver": {
+    "peak_gib": 31.511154174804688,
+    "epoch_seconds": 2285.541963250842,
+    "n_parameters": 47243908,
+    "source": "campaigns_2026-10-02/char/cs/cs_r_jeb_t/metrics.jsonl"
+   }
+  },
+  "DrivAerML Surface": {
+   "ISLA": {
+    "peak_gib": 64.27252960205078,
+    "epoch_seconds": 68.97333311988041,
+    "n_parameters": 68813415,
+    "source": "results/char/ref80_frontier_2026-10-02.json"
+   },
+   "GeoTransolver": {
+    "peak_gib": 77.75142669677734,
+    "epoch_seconds": 74.46485114999814,
+    "n_parameters": 9046016,
+    "source": "results/char/ref80_frontier_2026-10-02.json"
+   },
+   "Transolver": {
+    "peak_gib": 62.005714416503906,
+    "epoch_seconds": 60.64747920096852,
+    "n_parameters": 47236740,
+    "source": "results/char/ref80_frontier_2026-10-02.json"
+   }
+  }
+ },
+ "cost_first_pass": {
+  "DrivAerML Volume": {
+   "ISLA": {
+    "peak_gib": 81.59683990478516,
+    "epoch_seconds": 118.76179868984036,
+    "n_parameters": 150213993,
+    "source": "campaigns_2026-10-02/char/cs/cs_vol_isla/metrics.jsonl"
+   },
+   "GeoTransolver": {
+    "peak_gib": 94.7573013305664,
+    "epoch_seconds": 105.27101191901602,
+    "n_parameters": 203520561,
+    "source": "campaigns_2026-10-02/char/cs/cs_vol_gt/metrics.jsonl"
+   },
+   "Transolver": {
+    "peak_gib": 68.81124877929688,
+    "epoch_seconds": 81.65356057402096,
+    "n_parameters": 141673573,
+    "source": "campaigns_2026-10-02/char/cs/cs_vol_t/metrics.jsonl"
+   }
+  },
+  "AirfRANS": {
+   "ISLA": {
+    "peak_gib": 43.33946228027344,
+    "epoch_seconds": 145.9253563839011,
+    "n_parameters": 150223221,
+    "source": "campaigns_2026-10-02/char/cs/cs_af_isla/metrics.jsonl"
+   },
+   "GeoTransolver": {
+    "peak_gib": 71.21861267089844,
+    "epoch_seconds": 91.05149887298467,
+    "n_parameters": 142737537,
+    "source": "campaigns_2026-10-02/char/cs/cs_af_gt/metrics.jsonl"
+   },
+   "Transolver": {
+    "peak_gib": 68.68550872802734,
+    "epoch_seconds": 89.72269171301741,
+    "n_parameters": 141673573,
+    "source": "campaigns_2026-10-02/char/cs/cs_af_t/metrics.jsonl"
+   }
+  },
+  "Shift-SUV": {
+   "ISLA": {
+    "peak_gib": 42.13954162597656,
+    "epoch_seconds": 103.7589237630018,
+    "n_parameters": 149619559,
+    "source": "campaigns_2026-10-02/char/cs/cs_suv_isla/metrics.jsonl"
+   },
+   "GeoTransolver": {
+    "peak_gib": 71.3538589477539,
+    "epoch_seconds": 103.07623019300809,
+    "n_parameters": 142734464,
+    "source": "campaigns_2026-10-02/char/cs/cs_suv_gt/metrics.jsonl"
+   },
+   "Transolver": {
+    "peak_gib": 46.70237731933594,
+    "epoch_seconds": 80.41113240388222,
+    "n_parameters": 95155268,
+    "source": "campaigns_2026-10-02/char/cs/cs_suv_t/metrics.jsonl"
+   }
+  },
+  "Tensile2D": {
+   "ISLA": {
+    "peak_gib": 7.526446342468262,
+    "epoch_seconds": 116.39217596000526,
+    "n_parameters": 150227053,
+    "source": "campaigns_2026-10-02/char/cs/cs_t2dz_isla/metrics.jsonl"
+   },
+   "GeoTransolver": {
+    "peak_gib": 10.629746437072754,
+    "epoch_seconds": 40.15009891986847,
+    "n_parameters": 142751875,
+    "source": "campaigns_2026-10-02/char/cs/cs_t2dz_gt/metrics.jsonl"
+   },
+   "Transolver": {
+    "peak_gib": 10.282709121704102,
+    "epoch_seconds": 33.93002281700001,
+    "n_parameters": 141687911,
+    "source": "campaigns_2026-10-02/char/cs/cs_t2dz_t/metrics.jsonl"
+   }
+  },
+  "lug": {
+   "ISLA": {
+    "peak_gib": 11.781953811645508,
+    "epoch_seconds": 214.44507332495414,
+    "n_parameters": 148841570,
+    "source": "campaigns_2026-10-02/char/cs/cs_lug_isla/metrics.jsonl"
+   },
+   "GeoTransolver": {
+    "peak_gib": 12.970276832580566,
+    "epoch_seconds": 95.20946444803849,
+    "n_parameters": 142735485,
+    "source": "campaigns_2026-10-02/char/cs/cs_lug_gt/metrics.jsonl"
+   },
+   "Transolver": {
+    "peak_gib": 12.538543701171875,
+    "epoch_seconds": 80.69444075017236,
+    "n_parameters": 141671521,
+    "source": "campaigns_2026-10-02/char/cs/cs_lug_t/metrics.jsonl"
+   }
+  },
+  "DeepJEB++": {
+   "ISLA": {
+    "peak_gib": 22.331096649169922,
+    "epoch_seconds": 2080.474890003,
+    "n_parameters": 149629555,
+    "source": "campaigns_2026-10-02/char/cs/cs_jeb_isla/metrics.jsonl"
+   },
+   "GeoTransolver": {
+    "peak_gib": 37.10791778564453,
+    "epoch_seconds": 2397.586739862978,
+    "n_parameters": 142748800,
+    "source": "campaigns_2026-10-02/char/cs/cs_jeb_gt/metrics.jsonl"
+   },
+   "Transolver": {
+    "peak_gib": 24.303491592407227,
+    "epoch_seconds": 1594.581870582886,
+    "n_parameters": 95169604,
+    "source": "campaigns_2026-10-02/char/cs/cs_jeb_t/metrics.jsonl"
+   }
+  }
+ }
+}

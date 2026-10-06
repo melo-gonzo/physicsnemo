@@ -24800,7 +24800,7 @@ finding (@sec-nb-solids-frame-interim) the ISLA arm is the frame
 configuration (the laboratory frame as two global vectors); the frameless
 lanes are the ablation record.
 
-**What we saw** (`results/solids_frame_2026-09-22.json`; @tbl-tensile2d-ladder
+**What we saw** (`results/solids_frame_2026-09-22.json`; the Tensile2d ladder table of that date, since removed from the Tensile2D chapter
 in the interior chapter). At 400 cases: $\sigma_{11}$ 0.0118 against
 0.0087 (GeoTransolver ÷ ISLA 0.73), $\sigma_{22}$ 0.0086 against 0.0076
 (0.89), $\sigma_{12}$ 0.0112 against 0.0112 (1.00), displacement 0.0082
@@ -32731,6 +32731,24 @@ starting with the DrivAerML Surface and the 510-wing rungs that the thesis
 table quotes. Until then the thesis table's values are the static-prototype
 ones, labeled by their artifacts.
 
+**The code_v18 reference lanes, DrivAerML half (later the same day).** The
+reference configuration trained on the adopted snapshot (lanes `v18_dr_ref`
+and `v18_vol_ref`, two seeds, recipe_v8) against the last static-prototype
+lanes on the same recipe and the same per-block compile (the PERF-3 pairs
+`pf_dr_cb` and `pf_vol_cb`, code_v16): Surface pressure 0.0435 against
+0.0438 (ratio 0.994; seeds 1.000 and 0.988), wall shear 0.0683 against
+0.0690 (0.991); Volume pressure 0.0408 against 0.0409 (0.996), velocity
+0.0651 against 0.0654 (0.996), eddy viscosity 0.0871 against 0.0882
+(0.988), with per-seed ratios between 0.979 and 1.013. The adopted class
+is neutral to one percent better on both DrivAerML tasks, inside the
+adoption bar on every field, so the thesis-table values for these two rows
+can be restated from the v18 lanes without a change in reading
+(`results/v18_reference_reduce_2026-10-02.py`,
+`results/v18_reference_2026-10-02.json`). The wing and AirfRANS halves
+are scored when their lanes finish; under the characterization campaign
+(@sec-nb-char-prereg) every row is in any case replaced by the
+reference-configuration lanes of REF-80.
+
 ## 2026-10-02 — Verdict, WING-ELEMENT-ANATOMY: on the 210-wing rung no element class carries ISLA's excess (largest both-seed excess +0.06 / −0.01 on the slat core, bar +0.15), so the deficit is uniform over the elements as over curvature (H3); on the fixed-angle rung the slat alone clears the bar (+0.16 / +0.26; its core +0.28 / +0.38, 3% of the area, 17% of the error) while the flap and the gap band of the five-wing pilot do not {#sec-nb-wing-element-anatomy-verdict}
 
 **Setting.** WING-MECH asks where on the wing ISLA's excess pressure error
@@ -32966,3 +32984,1652 @@ and the specimen waist width (normalized half-domain) runs from 0.41 to
 1.37. A job over every case writes the distribution
 (`results/tensile2d_geometry_2026-10-02.json`); the chapter sentence is
 replaced from it. Tensile2D stays in the campaign.
+
+## 2026-10-02 — Status, REF-80 frontier measured from one-epoch lanes: under 80 GiB per GPU on DrivAerML Surface are ISLA to width 512 with 512 slices (64 GiB at 200,000 cells), GeoTransolver width 256 at 200,000 cells (78) or widths 512 and 1,024 at 100,000 (50, 71), Transolver widths 256 and 512 at 200,000 (52, 65) or 1,024 at 100,000 (47); the whole-model compile moves no peak; 22 frontier lanes launched {#sec-nb-ref80-frontier}
+
+**Instrument.** Every candidate of the REF-80 preregistration ran one real
+epoch on DrivAerML Surface as a lane (group `rf1`, code_v18 + recipe_v8,
+four GB300 ranks, batch one, bfloat16), and the recipe's epoch summary now
+records the epoch's peak device memory (maximum over ranks) and wall time
+(`results/char/ref80_frontier_reduce_2026-10-02.py`,
+`results/char/ref80_frontier_2026-10-02.json`). The peak is the training
+epoch's; validation peaks are 2 to 8 GiB.
+
+**What we saw.** Peak memory per candidate (GiB; 200,000 cells unless
+marked): ISLA reference 44.4, 512 slices 52.0, width 512 56.9, width 512
+with 512 slices 64.3, width 768 82.1, 24 layers 85.4, 400,000 cells 88.1,
+width 512 with 24 layers 109.4. GeoTransolver width 256 77.8; width 512
+98.2 at 200,000 and 49.5 at 100,000; width 1,024 71.4 at 100,000; width
+512 with 24 layers 93.5 at 100,000. Transolver width 256 51.6, width 512
+64.9, width 1,024 91.9 at 200,000 and 46.7 at 100,000; width 512 with 16
+layers 62.0 and width 1,024 with 16 layers 91.0 at 100,000. Six ISLA
+candidates re-run with the recipe's whole-model `torch.compile` off read
+the same peak to the decimal and 5 to 10 seconds more per epoch, so
+compilation does not move the memory frontier in a lane; the 27% saving
+the profiler measured under its own per-block compile
+(@sec-nb-perf-3-verdict) does not appear in lanes, which is a cost-line
+fact for the book and nothing more under the frozen architecture. The
+profiler's eager probes matched the lane peaks to the decimal, so both
+instruments agree.
+
+**Frontier and lanes.** Under 80 GiB: ISLA reference, 512 slices, width
+512, width 512 with 512 slices; GeoTransolver width 256 at 200,000 cells,
+widths 512 and 1,024 at 100,000; Transolver widths 256 and 512 at 200,000,
+width 1,024 and width 512 with 16 layers at 100,000. Training cells are a
+free axis for every architecture because the reporting protocol fixes
+evaluation at 200,000 cells, not training (the cells law of
+@sec-nb-isocost-verdict). Eleven candidates train for 500 epochs with two
+seeds on DrivAerML Surface (group `r80`, jobs 976553 to 976582); four
+ISLA probes at 100,000 cells (width 768, 24 layers, both, width 512 with
+24 layers) decide whether ISLA's frontier extends along the cells axis
+too, and the 210-wing twin follows.
+
+**The cells axis, later the same day.** The four ISLA probes at 100,000
+cells recorded: width 768 42.1 GiB, 24 layers 43.3, width 512 with 24
+layers 55.7, and width 768 with 24 layers 81.2. So three of the four
+over-budget ISLA shapes fit under 80 GiB at half the training cells, and
+only the largest (297M parameters) misses by 1.2 GiB. The frontier set
+of ISLA therefore has fourteen members in all: the four at 200,000 cells
+and these three at 100,000. They joined the DrivAerML Surface lanes (rows
+22 to 27 of `kernel/char/r80_lanes.tsv`), and the whole frontier of the
+three architectures, fourteen candidates with two seeds, launched as the
+210-wing twin on `highlift_surface_medium` (rows 28 to 55, validation
+every 25 epochs as in the other wing lanes). Every candidate is scored at
+the reporting protocol, 200,000 cells, including the `*_c100k_*` lanes
+that trained at 100,000 (their 100,000-cell scoring is kept as a secondary
+reading; the first version of this entry had the scorer evaluate them at
+the training count, which would have compared the architectures at
+different evaluation resolutions, and was corrected on 2026-10-03 before
+any selection). The reference configurations are chosen when both
+datasets are scored: lowest seed-mean headline error, ties within 3% to
+the cheaper candidate.
+
+## 2026-10-03 — Status, CHAR-PROTOCOLS instruments built: `_area` (uniform-on-measure Poisson draw with exact Horvitz-Thompson weights) and `_posed` (keyed rotation plus one-RMS-radius translation, in-plane for planar sets, stress components rotated as a tensor) variants for every campaign dataset, a per-lane protocol scorer, and smoke tests on finished checkpoints: ISLA's posed error equals its native error to three decimals on every centered pipeline, the baselines move 1.1x to 22x; two anomalies opened (a translation crash on AirfRANS, a 6x to 12x area-draw shift of the DrivAerML Volume model) {#sec-nb-char-protocols-instruments}
+
+**Setting.** The characterization campaign (@sec-nb-char-prereg) scores
+every lane under three protocols: the native mesh draw, a uniform-on-the-
+surface point-cloud draw ("what an STL gives without a volume mesh"), and
+the validation cases in a random rigid pose. The instruments existed only
+for DrivAerML Surface (POSE-BENCH and TRAIN-AREA-DR). A fresh agent built
+them for every campaign dataset; the brief and the full report are in the
+session record.
+
+**What was built.** In `recipe_v8/datasets/`, `<base>_area.yaml` and
+`<base>_posed.yaml` beside every campaign base yaml (DrivAerML Surface and
+Volume, HiLift medium, AirfRANS 2-D and 3-D, Shift-SUV, Tensile2D 2-D and
+3-D, lug, DeepJEB++), identical to the base except the protocol transform.
+The area variant draws from a one-million-cell pool with
+`PoissonBiasedSubsampleMesh(weight_mode=area)` in place of the native
+subsampling, on whatever the pipeline subsamples (the boundary surface; the
+interior point clouds carry no cell measure and are untouched; where the
+boundary is kept whole, as on AirfRANS, Tensile2D and the lug, the area
+variant is the identity by construction). The posed variant applies
+`FixedRandomPose(salt=0, translate=1.0)` as the first transform: the
+POSE-BENCH keyed SO(3) rotation (its stream unchanged, verified by digest
+over 503 keys) plus a translation of one RMS point radius in a keyed
+direction; planar problems rotate in their plane only (`axis: 2` for the
+3-D-stored Tensile2D and AirfRANS, placed before `RestrictToPlane` so the
+2-D and 3-D variants of one dataset receive the identical angle), and
+Tensile2D's component-stored stresses rotate as a tensor
+(`symmetric_tensor_fields`). The recipe's `CenterMesh` removes the
+translation on the external-aero and DeepJEB++ pipelines; AirfRANS,
+Tensile2D and the lug have no centering step, so there the translation
+reaches the model. The scorer `kernel/char/protocol_eval.sbatch` evaluates
+a finished lane under the three protocols from the fleet manifest
+(`protocol_launch.sh <run_id>`; reducer `protocol_table.py`), writing to
+`evals_char/<run>/<protocol>/`. Local source change: 335 recipe tests pass
+(d32aee9b4).
+
+**Smoke results (finished or interim checkpoints; ratios against the
+native protocol).** ISLA reference on DrivAerML Surface (`v18_dr_ref`):
+area 0.999 / 1.019 (pressure / wall shear), posed 1.000 / 1.000. ISLA on
+DrivAerML Volume (two seeds): posed 1.000; area 5.9 to 11.9 on every field.
+ISLA on HiLift medium (epoch 97): area 1.003 / 1.006, posed 1.003 / 1.002.
+ISLA on AirfRANS: area identity; rotation-only 1.000; the full posed run
+crashes at validation sample 52 (below). The one-epoch smoke checkpoints of
+Shift-SUV and DeepJEB++ read posed 1.000 for ISLA against 2.86 / 1.61
+(GeoTransolver / Transolver) on Shift-SUV and 1.23 / 1.14 on DeepJEB++;
+interim DrivAerML Surface baselines (epochs 79 and 125) read area 6.5 / 5.5
+and posed 17 / 22. The lug and Tensile2D smoke checkpoints move under
+rotation for every architecture (ISLA 1.15 and 1.45), the frame-component
+territory of @sec-nb-solids-frame; one-epoch checkpoints carry no accuracy
+reading, so these rows wait for the campaign lanes.
+
+**Two anomalies.** (1) ISLA's geometry path raised a CUDA
+index-out-of-bounds on AirfRANS when the case is translated by one RMS
+radius (rotation alone and the native frame complete all 200 cases).
+Localized and fixed as a bug (a57f72227): the nearest-boundary search's
+CUDA backend (cuML brute force) evaluates the squared distance in its
+expanded float32 form, and for an interior query within about 1e-4 of the
+wall at unit scale that form has no resolution left, the candidate is
+dropped and the query keeps the library's sentinel (index -1), which the
+following gather read out of bounds. Six of the 200 posed validation cases
+carry 1 to 150 such queries; none of the native cases does, and the pose
+only changes which near-wall values cancel (the posed interior RMS radius
+is 0.85 to 1.75, so this is not a large-coordinate effect). The fix
+re-searches exactly the sentinel queries by the difference form and
+leaves every resolved index as returned, so inputs the backend resolves
+are unchanged by construction; verified bit-identical in float32 on native
+AirfRANS samples and a DrivAerML Volume sample under the same checkpoints,
+with regression tests (23 of 23 on GB300 against the patched snapshot;
+8 of the new tests fail against code_v18, as they should). The snapshot
+with the fix is code_v19 (verify job 997426: 827 passed, 1 failed; the
+failure is the fused-kernel fullgraph gradient check at 2.3e-5 against
+its 1e-5 bar on one projection weight, and the same test fails
+identically on an untouched code_v18 in the same job, so it is a
+run-to-run tolerance of the fused kernel's atomics, not the fix). Observed on the way: the same float32 expansion returns a
+wrong in-range nearest boundary cell for 0.45% of the near-wall queries on
+native AirfRANS data and 0.70% on translated data, and which queries are
+wrong depends on absolute position. That is the whole of ISLA's apparent
+translation dependence: under code_v19 the posed AirfRANS row reads
+1.001 / 1.063 / 1.040 (eddy viscosity / pressure / velocity) and the
+translation-only variant 1.001 / 1.071 / 1.046, while rotation alone
+reads 1.000; with the exact difference-form search in place of the
+library's, native and translated agree to the fourth decimal
+(0.03164 / 0.03315 / 0.01717 against 0.03164 / 0.03316 / 0.01717) and
+the native error itself moves by 0.1% (`results/campaigns_2026-10-02/
+char/infer_exact_nn.py`, `evals_char_smoke/_tr/`). So the trained
+function is translation-invariant and the library search is not. **The
+search is replaced by an exact one (0b43b42b2, snapshot code_v20)**: the
+class specifies the nearest boundary cell, the library returned a wrong
+one for 0.45% of near-wall queries, and no option of the installed
+library reaches an unexpanded distance. The replacement is a Triton
+streaming-minimum kernel (any dimension, O(1) memory, ties to the
+smallest index like `argmin`; a chunked exact torch path without Triton),
+measured against a float64 brute force with zero wrong indices on every
+case: 0.20 ms against the library's 4.2 ms on AirfRANS (100,000 queries x
+858 segments), 68.6 against 36.3 ms at 200,000 x 200,000 in 3-D (+32 ms
+on the ~180 ms training step of the volume task, the price of
+correctness; the chunked difference form costs 834 ms and `cdist` 46 s at
+that size). On the trained checkpoints the native errors move by at most
+0.01% (AirfRANS 0.033151 / 0.017170 / 0.031641; DrivAerML Volume
+0.040675 / 0.064772 / 0.087934) and the translation gap on AirfRANS falls
+from 7.2% / 4.6% to 0.015% / 0.006% (pressure / velocity). The a57f72227
+sentinel repair is removed with the library call. Tests tightened to zero
+mismatches (190 passed locally and on GB300). Lanes trained before this
+entry used the library search; the campaign scores every lane with the
+exact one (protocol and `cl_` scorers map to code_v20), which changes
+their native numbers by the 0.01% above.
+(2) The DrivAerML Volume model's error grows 6x to
+12x when the boundary tokens are drawn area-proportionally with exact
+Horvitz-Thompson weights, while the Surface model is unchanged under the
+same construction. The control (same Poisson path, uniform inclusion,
+`drivaer_ml_volume_reference_unifdraw.yaml`) reproduces the native error
+to the third decimal on both tasks (Volume 0.0882 / 0.0408 / 0.0649
+against native 0.0879 / 0.0407 / 0.0648 for eddy viscosity / pressure /
+velocity; Surface 0.0433 / 0.0682 against 0.0433 / 0.0679), and the
+structural check through the recipe's own loader shows the control draws
+what the reader draws (200,296 cells, raw-area sum 0.0163, measure spread
+11,849x against the native 200,000, 0.0162, 18,222x) while the area
+variant changes only the inclusion law (198,620 cells, raw-area sum
+0.0606, spread 6.4x). **So the instrument is clean and the shift is a
+property of the trained volume model**: under the area-proportional
+boundary law its interior error is 0.519 / 0.403 / 0.480 (5.9x / 9.9x /
+7.4x, both seeds within 20% of each other), where the surface model reads
+1.02x on wall shear and 1.00x on pressure. The interior readout therefore
+depends on the boundary token law in a way the surface readout does not;
+the mechanism is not measured here (candidates: the interior queries'
+attention over boundary tokens weights by measure, and the area law moves
+the tokens from the fine-meshed curved features to the flat panels). The
+campaign records it as the volume model's uniform-draw column; the
+baselines' volume numbers under the same protocol come with CHAR-LANES.
+A first version of the control still carried the area law (a text
+substitution that did not match) and reproduced the area numbers to four
+decimals; the structural check caught it before any reading was taken.
+
+## 2026-10-03 — Status, REF-80 DrivAerML half scored: every under-80 GiB candidate of the three architectures, two seeds, 500 epochs, scored at 200,000 cells; ISLA's candidates sit within 5% of one another (0.0430 to 0.0452 pressure) while GeoTransolver gains 11% from width 256 to 1,024 at 100,000 training cells (0.0455 to 0.0404) and Transolver 22% (0.0556 to 0.0432); DrivAerML winners by the preregistered rule are ISLA width 768 at 100,000 cells, GeoTransolver width 1,024 at 100,000, Transolver width 1,024 at 100,000; the wing half decides {#sec-nb-ref80-drivaer-half}
+
+**Setting.** REF-80 (@sec-nb-char-prereg, @sec-nb-ref80-frontier) picks
+one reference configuration per architecture, the most accurate that
+trains under 80 GiB per GPU at the reporting protocol, from the measured
+frontier. The 28 DrivAerML Surface lanes (group `r80`, 14 candidates, two
+seeds, 500 epochs, 435 training cars) are trained and scored in float32 on
+the 48 validation cars at 200,000 cells
+(`results/char/ref80_select_2026-10-03.py`,
+`results/char/ref80_select_2026-10-03.json`). The candidates that trained
+at 100,000 cells are scored at 200,000 like the others, the reporting
+protocol; their scoring at the training count is kept as a secondary
+reading and is within 1% of the 200,000-cell number for every one of them
+(GeoTransolver 1,024: 0.0405 against 0.0404; ISLA 768: 0.0443 against
+0.0438; Transolver 1,024: 0.0433 against 0.0432), the cells law of
+@sec-nb-isocost-verdict holding at evaluation as well as at training.
+A DrivAerML lane takes about 2.5 hours (18 seconds per epoch compiled;
+the 59 seconds of the one-epoch frontier lanes was the warm-up epoch).
+
+**What we saw (seed-mean pressure error; per-seed in parentheses).**
+ISLA: 512 slices 0.0430 (0.0431 / 0.0428), width 512 0.0432 (0.0428 /
+0.0437), reference 384x12 0.0437 (0.0443 / 0.0431), width 768 at 100,000
+cells 0.0438 (0.0441 / 0.0434), width 512 with 512 slices 0.0443, 24
+layers at 100,000 0.0446, width 512 with 24 layers at 100,000 0.0452.
+GeoTransolver: width 1,024 at 100,000 cells 0.0404 (0.0402 / 0.0406),
+width 512 at 100,000 0.0419, width 256 at 200,000 0.0455. Transolver:
+width 1,024 at 100,000 0.0432 (0.0434 / 0.0430), width 512 with 16 layers
+at 100,000 0.0435, width 512 0.0466, width 256 0.0556. **Under the 80 GiB
+budget on DrivAerML Surface, the best GeoTransolver (0.0404) leads the
+best ISLA (0.0430) by 6%, and the best Transolver (0.0432) ties the best
+ISLA.** ISLA's seven candidates span 5%, so the slices, width, depth and
+cells axes buy nothing at 435 cars (the CAP-435 and ISO-COST readings
+reproduced on the adopted class), while the baselines convert memory into
+accuracy along the width axis.
+
+**The rule, applied to this half.** Ties within 3% of the best go to the
+cheaper candidate by training peak memory. ISLA: the tie set is 512
+slices, width 512, the reference and width 768 at 100,000 cells (all at or
+under 0.0443), and the cheapest is width 768 at 100,000 cells (42.1 GiB
+against the reference's 44.4). GeoTransolver: width 1,024 at 100,000 cells
+alone. Transolver: width 1,024 at 100,000 cells (46.7 GiB) over width 512
+with 16 layers (62.0, within 1%). The reference configuration is the
+candidate that wins on both datasets; the 210-wing twin (rows 28 to 55,
+running) decides. If the two halves disagree for ISLA, the decision is
+written here with its reason; note already that the ISLA tie set is wide
+and a tie-break by two GiB of memory between a 150M-parameter model at
+100,000 cells and a 38M-parameter model at 200,000 is not a strong
+preference, so the wing half's ordering will carry the weight.
+
+## 2026-10-03 — Status, CHAR-LANES launched: 36 lanes (DrivAerML Volume, AirfRANS, Shift-SUV, Tensile2D, lug, DeepJEB++; ISLA / GeoTransolver / Transolver; two seeds) under the DrivAerML-half reference configurations on code_v20, after 18 one-epoch smoke lanes all reached a metric; DeepJEB++ needed the degenerate-cell guard; the DrivAerML Volume task exceeds the 80 GiB line at two of the three references (GeoTransolver 94.8, ISLA 81.6 GiB) and runs as specified {#sec-nb-char-lanes-launched}
+
+**Setting.** CHAR-LANES (@sec-nb-char-prereg) trains every dataset x
+task x architecture x two seeds under one reference configuration per
+architecture. The DrivAerML Surface and HiLift 210-wing lanes of the
+REF-80 frontier are already those lanes; the remaining six tasks launched
+today (group `cl`, `kernel/char/cl_lanes.{tsv,sbatch}`, copies in
+`results/campaigns_2026-10-02/char/kernel/cl/`) under the DrivAerML-half
+winners (@sec-nb-ref80-drivaer-half): ISLA width 768 at 100,000 training
+cells (lr 2.5e-4), GeoTransolver width 1,024 at 100,000 (1e-3),
+Transolver width 1,024 at 100,000 (1e-3), baselines with augmentation
+off, the stored signed distance and its gradient to all three on the
+interior tasks. If the wing half changes a winner, that configuration is
+added as extra lanes. Snapshot code_v20 (exact nearest-boundary search).
+
+**Per-task protocol (split, epochs, validation interval, training
+cells), taken from the earlier campaign tables.** DrivAerML Volume: the
+recipe's train / val split, 500 epochs, every epoch, 100,000. AirfRANS:
+800 / 200 (full_train / full_test), 500, every 10, 100,000. Shift-SUV: the
+dataset manifest's train / val (794 / 99 estate bodies), 500, every epoch,
+100,000; no earlier campaign trained on Shift-SUV, so this split is set
+here. Tensile2D: train_400 / val_100, 500, every 10, 20,000 (every node).
+Lug: train / test (2,400 / 600), 500, every 10, 20,000 (every node).
+DeepJEB++: train_clean / test_clean (12,451 / 1,385 brackets), 40 epochs,
+every 2, the whole 50,040-cell surface; about 2,300 s per epoch, the
+longest arm at roughly a day per lane.
+
+**Smoke (18 one-epoch lanes, group `cs`, all to a metric).** Peak device
+memory per lane (GiB): DrivAerML Volume ISLA 81.6, GeoTransolver 94.8,
+Transolver 68.8; AirfRANS 43.3 / 71.2 / 68.7; Shift-SUV 42.1 / 71.4 /
+46.7; Tensile2D 7.5 / 10.6 / 10.3; lug 11.8 / 13.0 / 12.5; DeepJEB++ 22.3
+/ 37.1 / 24.3. Two decisions follow. (1) **DeepJEB++ degenerate
+triangles**: every architecture stopped at training step 2,266 with the
+recipe's measure check ("target_measure must contain one finite positive
+integration weight per target query"): some brackets carry exactly
+zero-area triangles, and the mesh-native target measure recomputed from
+the surface is zero there (the earlier DeepJEB++ lanes ran on a snapshot
+whose loss had no such check). The same guard the wings received on
+2026-10-02, `DropDegenerateCells` before the terminal transform, is now in
+`deepjebpp_surface.yaml` and its `_area` and `_posed` variants (backups
+`.pre_dropdeg`); the smoke reruns passed. (2) **The 80 GiB line on the
+volume task**: at the reference configurations the DrivAerML Volume task
+peaks at 94.8 GiB for GeoTransolver (its volume recipe's local-feature
+path over six radii; the surface task at the same width read 71.4) and
+81.6 GiB for ISLA (100,000 boundary plus 100,000 interior tokens); only
+Transolver fits (68.8). The reference configuration is one per
+architecture by the campaign's rule and was selected on the surface task,
+so the lanes run as specified and the per-task peak memory is reported
+beside the error in the book's cost line; the alternative, lowering the
+volume training cells or dropping the baseline's local features, would
+have made the configuration task-dependent or changed a released
+baseline's recipe. Scorer: `cl_af_*` scores at 100,000 cells (the
+AirfRANS protocol), `cl_jeb_*`, `cl_t2d_*`, `cl_lug_*` at the 200,000-cell
+default, which passes their whole surfaces and node sets through, as
+their earlier lanes were scored; `cl_*` lanes map to code_v20.
+
+## 2026-10-03 — Verdict, CHAR-PROTOCOLS on DrivAerML Surface: every ISLA frontier candidate reads within 1% of its native error on the uniform point cloud and exactly its native error rotated and translated, while every GeoTransolver and Transolver candidate reads 5.8x to 9.6x worse on the point cloud and 23x to 30x worse rotated; at the reference configurations the baselines' native 2% to 9% lead becomes a 4.5x to 7.8x deficit on the point cloud and 17x to 27x in a random pose {#sec-nb-char-protocols-drivaer-surface}
+
+**Setting.** The three scorings of one checkpoint (@sec-nb-char-protocols-instruments)
+applied to the 28 finished DrivAerML Surface frontier lanes (every under-80 GiB
+candidate of the three architectures, two seeds, 500 epochs, baselines without
+augmentation as the campaign's fairness rule requires): the native validation mesh
+at 200,000 cells, a uniform point cloud at the same budget (area-proportional
+Poisson draw with exact Horvitz-Thompson weights, what an STL gives without a
+volume mesh), and every validation car in its own random rotation and
+translation. Float32, 48 cars, seed means
+(`kernel/char/protocol_eval.sbatch`, 84 evaluations; reduced by
+`results/char/protocol_artifacts_2026-10-03.py` into
+`results/char/drivaerml_surface.json`, the table the DrivAerML chapter prints;
+all 14 candidates in `results/campaigns_2026-10-02/char/protocols/`).
+
+**What we saw (pressure, seed means; native / point cloud / posed).** ISLA:
+reference 0.0437 / 0.0438 / 0.0437, 512 slices 0.0430 / 0.0432 / 0.0430, width
+512 0.0432 / 0.0434 / 0.0432, width 768 at 100,000 cells 0.0443 / 0.0450 /
+0.0444, and the same to the third decimal for the other three candidates; the
+largest point-cloud shift of any ISLA candidate is 1.6% (width 768, 100,000
+cells) and the largest posed shift 0.2%. GeoTransolver: width 1,024 at 100,000
+cells 0.0405 / 0.2496 / 1.1533 (6.2x / 28x), width 512 0.0420 / 0.3728 / 1.2671,
+width 256 0.0455 / 0.4377 / 1.2228. Transolver: width 1,024 at 100,000 cells
+0.0433 / 0.3509 / 1.1951 (8.1x / 28x), the other three candidates 5.8x to 7.1x
+and 23x. Wall shear follows pressure on every row. **At the reference
+configurations, GeoTransolver ÷ ISLA is 0.91 / 0.93 (pressure / wall shear) on
+the native mesh, 5.55 / 4.45 on the point cloud and 26 / 17 rotated and
+translated; Transolver ÷ ISLA 0.98 / 0.98, 7.80 / 5.66 and 27 / 19.** The
+baselines' point-cloud and posed errors exceed one, i.e. the prediction is
+worse than predicting the mean field; capacity does not help them (the
+widest candidates are the ones quoted), and the posed numbers are what the
+fairness rule's unaugmented training implies: a model that reads absolute
+coordinates has never seen a rotated car.
+
+**Reading.** On this dataset the three columns measure exactly what the two
+invariances of @sec-invariances promise: the discretization-consistent readout
+makes ISLA's error a property of the surface, not of the mesh that samples it
+(the 1% point-cloud shift is the sampling noise of a 200,000-cell draw), and
+rigid-motion equivariance makes the posed column the native column. The
+baselines' native lead on DrivAerML (2% to 9%, @sec-nb-ref80-drivaer-half) is
+a lead on one mesh family in one pose. The protocol scorer's native numbers
+differ from the fleet scorer's by about 1% (ISLA width 768: 0.0443 against
+0.0438), a different validation draw of the same checkpoint; the chapter
+table uses the protocol scorer so its three columns share one draw.
+
+## 2026-10-03 — Status, CHAR-LANES Tensile2D scored (first campaign task): at the reference configurations ISLA ties GeoTransolver on the stress components (σ11 0.0086 against 0.0086, σ22 0.0072 against 0.0078, σ12 0.0108 against 0.0111) and trails on displacement (0.0093 against 0.0056) and plastic strain (0.279 against 0.145); the uniform point cloud is the identity here; under the in-plane pose every architecture, ISLA included, falls to the mean-field level, an anomaly under diagnosis {#sec-nb-char-tensile2d-interim}
+
+**Setting.** The six Tensile2D lanes of CHAR-LANES (@sec-nb-char-lanes-launched;
+400 training specimens, 100 validation, 500 epochs, every node; ISLA width 768
+with the symmetric-tensor stress head, GeoTransolver and Transolver width 1,024
+reading the boundary-condition tags on the interior nodes, two seeds each)
+finished first, in under three hours, and were scored natively and under the
+three protocols (`results/char/tensile2d.json`,
+`results/campaigns_2026-10-02/char/cl/metrics/cl_t2d_*`).
+
+**What we saw (seed means over 100 validation specimens, float32).** Native:
+ISLA σ11 / σ22 / σ12 / displacement / plastic strain 0.0086 / 0.0072 / 0.0108 /
+0.0093 / 0.279; GeoTransolver 0.0086 / 0.0078 / 0.0111 / 0.0056 / 0.145;
+Transolver 0.0106 / 0.0088 / 0.0123 / 0.0053 / 0.227. So the frozen class at
+its reference width closes the stress gap this dataset used to show
+(@sec-nb-solids-frame recorded GeoTransolver-512 ahead on every component by
+about 2x under the earlier class): ISLA now ties or leads on all three stress
+components and trails by 1.7x on displacement and 1.9x on the cumulated plastic
+strain. The uniform point-cloud column equals the native one for every
+architecture, as it must: the boundary polyline is kept whole and the interior
+is a point cloud without cell measures, so the area draw is the identity on this
+dataset. **Posed (in-plane rotation plus translation): ISLA 0.81 / 0.74 / 1.14 /
+0.79, GeoTransolver 1.09 / 1.23 / 1.04 / 0.98, Transolver 0.97 / 0.91 / 0.98 /
+0.91.** The baselines' numbers are the expected failure of lab-frame inputs
+trained without augmentation. ISLA's are not expected, and the diagnosis
+found two recipe defects, neither in the model. Rotation alone reproduces the
+posed numbers (0.81 / 0.74 / 1.15 / 0.79) and translation alone reproduces the
+native ones, so the pose pipeline's translation and ISLA's translation
+invariance are both fine. A direct model-level check (one validation
+specimen rotated by 90 degrees after the native pipeline, predictions rotated
+back) shows the displacement head equivariant to roundoff, so its posed error
+of 0.79 is the pipeline: the recipe normalizes displacement with a nonzero
+lab-frame mean (−3.4e-4, 1.05e-3; 1.3 standard deviations), and a vector
+normalized about a lab-frame mean is not equivariant (the posed normalized
+target is R u_n + (R m − m)/s, an offset no equivariant model can emit;
+DrivAerML and DeepJEB++ vector means are zero, which is why their posed
+columns match). The stress components fail for a second reason: the
+campaign's ISLA Tensile2D configuration declared sig11 / sig22 / sig12 as
+three rank-0 heads ("laboratory frame, as the dataset stores them"), i.e.
+scalars, which are invariant under rotation and cannot follow a rotated
+tensor target; the symmetric rank-2 head of @sec-nb-rank-io exists for this
+and was not used, and the stress normalization is per component (sig22 mean
+57.7 MPa, three different standard deviations), which is not equivariant
+either. **Decision (2026-10-03): every rank>=1 target in the campaign is
+normalized with zero mean and one isotropic standard deviation (only
+Tensile2D violated this), ISLA's Tensile2D configuration predicts the stress
+as the symmetric tensor, the baselines keep their three scalar components
+over the same normalized numbers, and the six Tensile2D lanes are re-run as
+`cl_t2dz_*`; the first six lanes stay in the record as the mis-specified
+configuration.** Applied the same evening: the isotropic stress scale over the 400
+training specimens (3.74 million nodes) is 37.8 MPa (root mean of
+(σ11² + σ22² + 2σ12²)/4; raw per-component means −0.1 / 57.7 / 0.0 and
+standard deviations 28.5 / 32.0 / 16.9), displacement keeps its isotropic
+8.22e-4 with the mean set to zero; the nine Tensile2D yamls carry the new
+normalization (backups `.pre_eq`), the five 2-D ones declare the stress as
+one symmetric tensor target, `isla_tensile2d.yaml` predicts
+`stress: {rank: 2, symmetric: true}`, and the recipe's component selector
+accepts 2x2 tensors (it hard-coded 3x3; 339 recipe tests). Three one-epoch
+smoke lanes passed and the six lanes `cl_t2dz_*` run (jobs 1003874 to
+1003882). The model-level check on the corrected configuration (one-epoch
+checkpoint): a 90-degree rotation reproduces every field, the stress tensor
+included, to roundoff. A 37-degree rotation or a one-radius translation
+changes this one-epoch checkpoint's outputs by 5% to 30% (identical under
+the exact and the library search, so not the nearest search); the trained
+first-configuration checkpoint moved 1.4% at 37 degrees and not at all under
+translation at protocol level, so the sensitivity shrinks with training.
+The candidate mechanism is the nearest-boundary normal's discontinuity at
+the specimen's corners (a 1e-7 coordinate perturbation can swap the nearest
+segment for near-equidistant queries); it is a hypothesis for the trained
+`cl_t2dz` lanes' posed column to confirm or refute.
+
+## 2026-10-04 — Verdict, CHAR-PROTOCOLS on Shift-SUV: at the reference configurations GeoTransolver leads ISLA by 13% and Transolver by 8% on the native mesh (0.0403 / 0.0425 / 0.0462 pressure), ISLA is unchanged on the uniform point cloud (1.00) where the baselines lose 1.5x and 1.8x, and ISLA is exact under rotation and translation where the baselines read 25x to 29x worse; interim readings for DrivAerML Volume, AirfRANS and the Tensile2D re-run {#sec-nb-char-shift-suv}
+
+**Shift-SUV (complete; six lanes, 794 training estate bodies, 99 validation,
+500 epochs, 100,000 training cells, scored at 200,000; `results/char/
+shift_suv_surface.json`).** Native pressure / wall shear: ISLA 768 0.0462 /
+0.0691, GeoTransolver 1,024 0.0403 / 0.0630, Transolver 1,024 0.0425 /
+0.0642, so the baselines lead by 13% and 8% on pressure (ratios 0.87 and
+0.92), a wider native gap than on DrivAerML (0.91 / 0.98). Uniform point
+cloud: ISLA 0.0463 / 0.0693 (1.00x), GeoTransolver 0.0601 / 0.0827 (1.49x /
+1.31x), Transolver 0.0765 / 0.1065 (1.80x / 1.66x); the baselines' penalty is
+far smaller here than on DrivAerML (6x to 10x), consistent with the SUV
+meshes being more uniform (the native and area-proportional draws differ
+less). Rotated and translated: ISLA 0.0462 / 0.0691 (1.000x), GeoTransolver
+1.17 / 1.21, Transolver 1.16 / 1.23. Reading as on DrivAerML: a native lead
+of the baselines that holds on one mesh family in one pose.
+
+**DrivAerML Volume (interim; GeoTransolver lanes still training).** ISLA 768
+native pressure / velocity / eddy viscosity 0.0453 / 0.0754 / 0.0980,
+Transolver 1,024 0.0500 / 0.1149 / 0.0878 (ISLA leads on pressure and
+velocity, trails 12% on eddy viscosity). Posed: ISLA 1.00x on every field,
+Transolver 16x / 11x / 12x. Uniform point cloud: ISLA 0.316 / 0.409 / 0.451
+(7.0x / 5.4x / 4.6x), Transolver identical to native to four decimals. **The
+point-cloud column is not a comparison on the volume task**: the variant
+redraws the boundary surface, which only ISLA consumes (the baselines read
+interior points with the stored signed distance and its gradient), so the
+column measures ISLA's sensitivity to the boundary token law
+(@sec-nb-char-protocols-instruments) and nothing about the baselines; the
+chapter says so under the table.
+
+**AirfRANS (interim; GeoTransolver lanes still training).** ISLA 768 native
+0.0371 / 0.0172 / 0.0439 against Transolver 1,024 0.0531 / 0.1192 / 0.0923
+(ISLA leads 1.4x / 6.9x / 2.1x). Posed: ISLA 0.0371 / 0.0172 / 0.0439,
+identical to native to four decimals under the exact nearest search, so the
+AirfRANS pose question of @sec-nb-char-protocols-instruments is closed;
+Transolver 2.0 / 1.15 / 5.9. Point cloud = native for everyone (boundary
+kept whole). Note that ISLA 768 reads 0.0439 on eddy viscosity where the
+384-wide code_v18 reference read 0.0305 (@sec-nb-proto-cond-2-adopted): the
+reference configuration selected on DrivAerML is not the best ISLA width on
+800 airfoils; the campaign reports the reference, as its rule says.
+
+**Tensile2D re-run (equivariant setup, `cl_t2dz_*`; six lanes scored).**
+Native per-component: ISLA σ11 / σ22 / σ12 / displacement 0.0219 / 0.0067 /
+0.0368 / 0.0091, GeoTransolver 0.0107 / 0.0038 / 0.0156 / 0.0042, Transolver
+0.0131 / 0.0044 / 0.0174 / 0.0041. Under the zero-mean isotropic
+normalization the baselines improve on every component (GeoTransolver σ22
+0.0038 against 0.0078 before, where the old per-component normalization
+weighted the 57.7 MPa mean out of the loss), while ISLA's tensor head is
+worse than its scalar heads were on σ11 (0.0219 against 0.0086) and σ12
+(0.0368 against 0.0108) and the same on σ22 and displacement; GeoTransolver
+now leads ISLA 2x on every stress component. The posed per-component numbers
+(ISLA 0.0142 / 0.0145 / 0.0168 / 0.0096) are not comparable with the native
+ones even for an exactly equivariant model, because a rotation redistributes
+a tensor among its lab-frame components and the per-component relative
+error changes with it; **the invariant readout for a tensor target is the
+Frobenius relative L2 of the assembled tensor**, which the symmetric-tensor
+path emits as `stress_l2` and which the baselines' component datasets now
+receive as a derived metric so the three arms are compared on the same
+formula; the chapter's protocol table uses stress (Frobenius), displacement
+and plastic strain. On the invariant readouts ISLA reads native / posed stress
+(Frobenius) 0.0098 / 0.0113, displacement 0.0091 / 0.0096 and plastic
+strain 0.4151 / 0.4157: a 15% stress shift and a 5% displacement shift
+under a generic in-plane rotation plus translation on a trained model,
+where DrivAerML and AirfRANS read 1.000; this is the generic-angle
+sensitivity of @sec-nb-char-tensile2d-interim measured at protocol level,
+and the corner-normal hypothesis stands as the candidate mechanism (the
+specimen's polyline has sharp corners; the nearest-boundary normal is
+discontinuous there). On plastic strain ISLA (0.415) trails GeoTransolver
+(0.142) by 2.9x natively.
+
+## 2026-10-04 — Verdict, CHAR on DrivAerML Volume, AirfRANS and Tensile2D complete: on the interior tasks ISLA leads on velocity (1.22x on the cars, 3.1x on the airfoils) and ties or trails on pressure and eddy viscosity; ISLA is exact under rotation and translation on both while the baselines read 0.9x to 4.8x (worse than the mean field); on Tensile2D with the invariant stress readout the baselines lead ISLA 1.7x to 2.2x natively and ISLA shifts 5% under a generic pose while the baselines lose two orders of magnitude {#sec-nb-char-interior-tensile2d}
+
+**DrivAerML Volume (complete; `results/char/drivaerml_volume.json`; pressure /
+velocity / eddy viscosity, 48 validation cars, 200,000 boundary cells and
+200,000 queries).** Native: ISLA 768 0.0453 / 0.0754 / 0.0980, GeoTransolver
+1,024 0.0459 / 0.0918 / 0.0832, Transolver 1,024 0.0500 / 0.1149 / 0.0878;
+GeoTransolver ÷ ISLA 1.01 / 1.22 / 0.85, Transolver ÷ ISLA 1.10 / 1.52 /
+0.90. Rotated and translated: ISLA 0.0455 / 0.0756 / 0.0982 (1.00x),
+GeoTransolver 0.87 / 1.22 / 1.17, Transolver 0.81 / 1.22 / 1.09. Uniform
+point cloud: ISLA 0.316 / 0.409 / 0.451 (7.0x / 5.4x / 4.6x), the baselines
+identical to native because the variant redraws only the boundary surface,
+which they do not consume; the column measures ISLA's boundary-token-law
+sensitivity alone (@sec-nb-char-protocols-instruments) and the chapter says
+so. The 80 GiB line: GeoTransolver's reference peaks at 94.8 GiB and ISLA's at
+81.6 on this task (@sec-nb-char-lanes-launched).
+
+**AirfRANS (complete; `results/char/airfrans.json`; 200 test airfoils,
+100,000 queries).** Native: ISLA 768 0.0371 / 0.0172 / 0.0439, GeoTransolver
+1,024 0.0292 / 0.0534 / 0.0461, Transolver 1,024 0.0531 / 0.1192 / 0.0923;
+GeoTransolver ÷ ISLA 0.79 / 3.10 / 1.05, Transolver ÷ ISLA 1.43 / 6.93 / 2.10.
+Posed: ISLA identical to native to four decimals (0.0371 / 0.0172 / 0.0439),
+GeoTransolver 4.80 / 1.39 / 4.70, Transolver 2.01 / 1.15 / 5.91. Point cloud =
+native for all (boundary kept whole). The 384-wide code_v18 reference read
+0.0351 / 0.0168 / 0.0305 on the same split (@sec-nb-proto-cond-2-adopted), so
+the campaign's width-768 reference is 44% worse on eddy viscosity than the
+narrower ISLA on this 800-airfoil set; the campaign reports the reference.
+
+**Tensile2D (complete with the invariant readout; `results/char/tensile2d.json`;
+stress Frobenius / displacement / plastic strain, 100 validation specimens).**
+The Frobenius relative L2 of the assembled in-plane stress tensor is now
+emitted for every arm by one formula (`stress_l2`; off-diagonal counted
+twice; the earlier symmetric-tensor aggregate counted it once and was not
+rotation-invariant, so ISLA's number changed definition and was rescored;
+340 recipe tests, verified equal on identical arrays and invariant under
+rotation while the per-component errors move). Native: ISLA 768 0.0111 /
+0.0091 / 0.415, GeoTransolver 1,024 0.0057 / 0.0042 / 0.142, Transolver
+1,024 0.0065 / 0.0041 / 0.134; GeoTransolver ÷ ISLA 0.51 / 0.46 / 0.34,
+Transolver ÷ ISLA 0.59 / 0.45 / 0.32. Point cloud = native for all. Posed:
+ISLA 0.0116 / 0.0096 / 0.416 (1.05x / 1.05x / 1.00x; per seed 1.06 and 1.02
+on stress), GeoTransolver 1.14 / 1.26 / 3.38 (200x / 300x / 24x), Transolver
+0.98 / 1.17 / 2.47. **Readings.** The baselines lead ISLA by 1.7x to 2.2x on
+stress and displacement and by 3x on plastic strain on this set, where the
+boundary is a few hundred segments and the parameters enter as six global
+scalars; ISLA's 5% posed shift is the generic-angle residual
+(@sec-nb-char-shift-suv), real but two orders of magnitude below the
+baselines' failure. The chapter's protocol table shows these three columns;
+the per-component numbers stay in the artifact for the native column.
+
+## 2026-10-04 — Status, CHAR on the GINOT lug scored: ISLA 768 leads on the native mesh (von Mises 0.0021 against GeoTransolver 0.0026 and Transolver 0.0027, ratios 1.24 and 1.29), the uniform point cloud is the identity (boundary kept whole), and under the 3-D rigid pose ISLA reads 0.0041, twice its native error, where the baselines read 0.98 and 1.02; the 2x shift is under attribution {#sec-nb-char-lug-interim}
+
+**Setting.** The six lug lanes of CHAR-LANES (@sec-nb-char-lanes-launched; 2,400
+training lugs, 600 test, 500 epochs, every node, 20,000-cell cap; ISLA width 768
+with the boundary labels and pressure as boundary scalars and the four design
+parameters as global scalars; GeoTransolver and Transolver width 1,024 reading the
+labels on the interior nodes) finished and were scored natively and under the
+three protocols (`results/char/lug.json`).
+
+**What we saw (von Mises relative L2, seed means over 600 test lugs).** Native:
+ISLA 0.0021, GeoTransolver 0.0026, Transolver 0.0027 (GeoTransolver ÷ ISLA
+1.24, Transolver ÷ ISLA 1.29), ISLA's only native lead on a solid in the
+campaign. Uniform point cloud = native for every architecture (the lug surface
+is a few thousand triangles, kept whole; the interior is a point cloud). Rotated
+and translated (uniform SO(3) plus one RMS radius, no centering step in this
+pipeline): ISLA 0.0041, GeoTransolver 0.98, Transolver 1.02. The baselines'
+numbers are the expected lab-frame failure; **ISLA's output, a scalar that a
+rigid motion cannot change, moved by 2x**, far above the 5% residual of
+Tensile2D (@sec-nb-char-interior-tensile2d) and the exact result on AirfRANS
+and the DrivAerML tasks. **Attribution (same day).** Rotation alone and translation alone each
+produce the shift (seed 42: rotation-only 1.65x, translation-only 1.92x, both
+2.08x; seed 43: 1.48x / 1.72x / 1.89x), so it is not additive and not a
+frame-dependent input: every input the lug configuration reads (boundary
+labels and pressure as scalars, boundary geometry, the stored signed distance
+and its rotated gradient, four scalar globals) is transformed consistently,
+and rotating any one part alone breaks the problem by O(1), as it must for a
+relative-geometry model. A model-level check on one lug (native error 0.14%)
+settles it: an exact rigid motion (90 degrees about an axis, a coordinate
+permutation in float32) changes the prediction by 1e-4, every float-inexact
+motion changes it at the 1e-3 to 1e-2 level (37 degrees 0.0075, one-radius
+translation 0.0017, both 0.0128), and **a random coordinate jitter of 1e-7
+relative with no motion at all changes it by 0.011, the same at 1e-6 and
+1e-5**: a discontinuity, not smooth roundoff amplification. The
+discontinuity is the nearest-boundary-sample construction: on this
+structured finite-element mesh 76% of the interior nodes are equidistant
+from two boundary centroids to 1e-4 relative (35% to 1e-7), so which sample
+is nearest is decided by sub-roundoff noise; under the translation 23% of
+the nearest indices change and 62 nodes per lug jump to a face more than 30
+degrees away, an O(1) change of the direction feature, which attention
+spreads over the field. The library and the exact search give identical
+numbers, compilation has no effect, and a float64 forward with float64
+transforms reduces the posed change to 3e-3 but moves the native prediction
+itself by 1% (0.0122 against 0.0014): the trained lug model's output depends
+on arithmetic precision at the percent level through the same tie-breaking.
+The lug's native error is 0.14%, so a 0.1% to 1% perturbation response reads
+as 1.5x to 2x; on DrivAerML (native 4%) the same effect is invisible, which
+is why posed = native there, and the 5% shift of Tensile2D
+(@sec-nb-char-interior-tensile2d) is the same mechanism's likely footprint
+on another structured mesh. **Nothing in the pipeline changes; this is a
+numerical property of the frozen class** (the nearest boundary sample is a
+discontinuous function of the query position, with an O(1) normal flip at
+ties). The candidate fix is a measure-weighted average over near-tied
+samples in the geometry construction, a post-campaign change. The chapter
+reports the 2x as measured with this mechanism.
+
+## 2026-10-04 — Status, REF-80 wing half nearly scored (27 of 28 lanes): the 210-wing rung orders the candidates differently from DrivAerML on every architecture; ISLA width 512 with 512 slices leads (0.0407, the only candidate within 3% of the best); GeoTransolver width 1,024 at 100,000 cells, the DrivAerML winner, reads 0.252 on the wings (0.18 and 0.32 per seed, five times its width-256 sibling at 0.0492); Transolver width 512 with 16 layers at 100,000 cells leads (0.0433); the reference decision is written when the last lane is scored {#sec-nb-ref80-wing-half}
+
+**Setting.** The second half of the REF-80 selection (@sec-nb-ref80-drivaer-half):
+the same fourteen under-80 GiB candidates trained 500 epochs with two seeds on
+the HiLift 210-wing medium rung (`r80_hl_*`, 180 validation cases, 200,000
+cells, float32), reduced by `results/char/ref80_select_2026-10-03.py`. One lane
+(ISLA width 512, seed 43) and one scoring (GeoTransolver width 256, seed 43)
+are outstanding; neither can move the orderings below by more than a tie.
+
+**What we saw (seed-mean pressure error on the wings; per seed).** ISLA: width
+512 with 512 slices 0.0407 (0.0402 / 0.0411), 512 slices 0.0425 (0.0415 /
+0.0436), width 768 at 100,000 cells 0.0425 (0.0410 / 0.0441), 24 layers at
+100,000 0.0432 (one seed), width 512 0.0443 (one seed), reference 384x12
+0.0450 (0.0442 / 0.0459), width 512 with 24 layers at 100,000 0.0451.
+GeoTransolver: width 256 at 200,000 cells 0.0492 (one seed scored), width
+512 at 100,000 0.0656 (0.0733 / 0.0578), width 1,024 at 100,000 0.2520
+(0.1825 / 0.3215). Transolver: width 512 with 16 layers at 100,000 cells
+0.0433 (0.0434 / 0.0432), width 1,024 at 100,000 0.0447 (one seed), width
+512 0.0465, width 256 0.0515. Three readings. (1) On the wings ISLA's
+candidates separate (0.0407 to 0.0451, 11%) where on the cars they were flat
+(5%), and the two axes that buy accuracy here are slices and width together,
+not depth or cells. (2) **GeoTransolver's DrivAerML winner does not transfer**:
+width 1,024 at 100,000 cells, 0.0404 on the cars, reads 0.252 on the wings
+with both seeds far apart, the signature of a training that did not settle
+at that width and rate on 210 wings; width 256 at 200,000 cells, 12% behind
+on the cars, is its best wing candidate. (3) Transolver's two 100,000-cell
+candidates swap places across the datasets within 3%. **Under the
+preregistered rule (the reference is the candidate that wins both datasets;
+a disagreement is decided here with its reason) no architecture has a joint
+winner, so the decision rule applied is the smallest mean over the two
+datasets of error ÷ best-on-that-dataset, ties within 3% to the cheaper
+candidate**: ISLA width 512 with 512 slices (1.030 on the cars, 1.000 on
+the wings; the next, 512 slices alone, 1.000 and 1.044), GeoTransolver width
+256 at 200,000 cells (1.126 and 1.000 against 1.000 and 5.1 for width 1,024
+at 100,000), Transolver width 512 with 16 layers at 100,000 cells (1.007 and
+1.000 against 1.000 and 1.032). The protocol scorings of the wing lanes under
+the DrivAerML-half references are complete and stay in the record
+(`results/campaigns_2026-10-02/char/protocols/r80_hl_*`): ISLA width 768 at
+100,000 cells reads 0.0433 / 0.0962 native, 0.0443 / 0.0985 on the point cloud
+and 0.0436 / 0.0967 posed (pressure / wall shear), GeoTransolver 1,024
+0.251 / 0.397, 0.625 / 0.864, 2.23 / 4.36, Transolver 1,024 0.0450 / 0.1029,
+0.457 / 0.626, 1.10 / 1.59. The decision, the six-task lanes under the
+final references (the DrivAerML-half lanes remain as the record of those
+configurations), and the HiLift and DrivAerML Surface protocol artifacts
+under the final references follow when the last lane is scored.
+
+## 2026-10-04 — REF-80 DONE: the two selection datasets disagree for every architecture; by the joint rule the reference configurations are ISLA width 512 with 512 slices at 200,000 cells, GeoTransolver width 256 at 200,000 cells, Transolver width 512 with 16 layers at 100,000 cells; the 36 campaign lanes are re-launched under them {#sec-nb-ref80-verdict}
+
+**Setting.** REF-80 picks, for each of the three architectures, the one
+configuration that trains under 80 GiB per GPU (the H100-class budget) and
+is the most accurate on two selection datasets, DrivAerML Surface (435 cars,
+48 validation cars) and the HiLift 210-wing rung (180 validation wings), with
+every candidate trained 500 epochs on two seeds and scored in float32 at
+200,000 cells per case (@sec-nb-char-prereg, @sec-nb-ref80-frontier). The
+DrivAerML half was read on 2026-10-03 (@sec-nb-ref80-drivaer-half); the last
+wing lane (ISLA width 512, seed 43) and the last wing scoring (GeoTransolver
+width 256, seed 43) landed today, so the table below is complete: 14
+candidates, 2 datasets, 2 seeds, 56 lanes, reduced by
+`results/char/ref80_select_2026-10-03.py` into
+`results/char/ref80_select_2026-10-03.json`.
+
+**The complete table (seed-mean pressure error; per seed; training peak
+memory).** On DrivAerML Surface: ISLA 512 slices 0.0430 (0.0431 / 0.0428,
+52 GiB), width 512 0.0432 (57), reference 384x12 0.0437 (44), width 768 at
+100,000 cells 0.0438 (42), width 512 with 512 slices 0.0443 (0.0449 / 0.0438,
+64), 24 layers at 100,000 0.0446 (43), width 512 with 24 layers at 100,000
+0.0452 (56); GeoTransolver width 1,024 at 100,000 cells 0.0404 (0.0402 /
+0.0406, 71 GiB), width 512 at 100,000 0.0419 (49), width 256 0.0455 (0.0455 /
+0.0455, 78); Transolver width 1,024 at 100,000 0.0432 (47), width 512 with 16
+layers at 100,000 0.0435 (62), width 512 0.0466 (65), width 256 0.0556 (52).
+On the 210 wings: ISLA width 512 with 512 slices 0.0407 (0.0402 / 0.0411),
+width 512 0.0420 (0.0443 / 0.0397), 512 slices 0.0425 (0.0415 / 0.0436),
+width 768 at 100,000 0.0425 (0.0410 / 0.0441), reference 0.0450 (0.0442 /
+0.0459), width 512 with 24 layers 0.0451, 24 layers 0.0461; GeoTransolver
+width 256 0.0522 (0.0552 / 0.0492), width 512 at 100,000 0.0656 (0.0733 /
+0.0578), width 1,024 at 100,000 0.2520 (0.1825 / 0.3215); Transolver width
+512 with 16 layers at 100,000 0.0433 (0.0434 / 0.0432), width 1,024 at
+100,000 0.0449 (0.0450 / 0.0447), width 512 0.0465, width 256 0.0515.
+
+**The per-dataset winners under the preregistered rule (lowest seed mean;
+ties within 3% go to the cheaper candidate).** DrivAerML: ISLA width 768 at
+100,000 cells (the cheapest of the six candidates tied within 3% of 0.0430),
+GeoTransolver width 1,024 at 100,000 cells (no tie), Transolver width 1,024
+at 100,000 cells (tied with width 512 x 16, cheaper). Wings: ISLA width 512
+with 512 slices (no tie; width 512 alone misses the 3% band by 0.3%),
+GeoTransolver width 256 at 200,000 cells (no tie), Transolver width 512 x 16
+at 100,000 cells (no tie). **No architecture has a joint winner.** The
+preregistration said that a disagreement is decided in the notebook with
+its reason; the rule applied (stated before the last lane landed, in
+@sec-nb-ref80-wing-half) is the smallest mean over the two datasets of the
+candidate's error divided by the best error on that dataset, ties within 3%
+to the cheaper candidate. The joint scores are: ISLA width 512 with 512
+slices 1.015 (1.031 on the cars, 1.000 on the wings; 64 GiB), width 512
+1.019 (1.005, 1.033; 57 GiB), 512 slices 1.023 (1.000, 1.045; 52 GiB), width
+768 at 100,000 1.032 (1.018, 1.046; 42 GiB); GeoTransolver width 256 1.064
+(1.127, 1.000; 78 GiB), width 512 at 100,000 1.147 (1.037, 1.256; 49 GiB),
+width 1,024 at 100,000 2.915 (1.000, 4.829; 71 GiB); Transolver width 512 x
+16 at 100,000 1.004 (1.008, 1.000; 62 GiB), width 1,024 at 100,000 1.019
+(1.000, 1.037; 47 GiB), width 512 1.077, width 256 1.239. For ISLA the three
+top candidates sit within 3% of each other on the joint score (1.015, 1.019,
+1.023), so the tie clause names the cheapest, 512 slices at 52 GiB. **The
+decision is nevertheless width 512 with 512 slices**, for a reason the
+joint-score tie clause does not see: it is the only ISLA candidate that is
+within 3% of the best on both datasets separately (1.031 and 1.000; 512
+slices alone is 4.5% behind on the wings, width 512 alone 3.3% behind on the
+cars), which is the preregistered meaning of "wins both datasets" relaxed
+by the tie band. It costs 64 GiB against 52, under the budget. For
+GeoTransolver and Transolver the joint rule and the both-datasets reading
+agree: GeoTransolver width 256 at 200,000 cells is the only candidate within
+3% of the best on the wings, and Transolver width 512 with 16 layers at
+100,000 cells is within 1% of the best on both.
+
+**The reference configurations of the characterization campaign are
+therefore:** ISLA width 512, 12 layers, 512 slices, cosine routing, the
+centered sample-conditioned prototypes, learning rate 3.75e-4, 200,000
+training cells (64 GiB peak on DrivAerML Surface); GeoTransolver width 256
+(local width 32), learning rate 1e-3, 200,000 cells (78 GiB); Transolver
+width 512, 16 layers, learning rate 1e-3, 100,000 cells (62 GiB). Each is
+the most accurate of its architecture under 80 GiB on the pair of selection
+datasets by the rule above; none is the most accurate on DrivAerML Surface
+alone, where GeoTransolver width 1,024 at 100,000 cells leads every
+candidate (0.0404) but reads 0.252 on the wings (@sec-nb-ref80-wing-half for
+the reading of that lane: two seeds far apart, a training that did not
+settle at that width and rate on 210 wings, not a scoring fault).
+
+**What the selection says about the axes.** ISLA spends its memory lead
+best on slices and width together (the wing ordering), and gains nothing on
+the cars from any axis (seven candidates within 5%). GeoTransolver's accuracy
+on the cars comes from width at a reduced cell count, and that configuration
+is fragile on the wings; its robust configuration is the narrow one at the
+full cell count. Transolver's two 100,000-cell candidates are
+interchangeable within 3% on both datasets, and the 200,000-cell candidates
+at widths 256 and 512 are 8% to 29% behind them, so for Transolver cells are
+better traded for width or depth.
+
+**What changes in the record.** The DrivAerML-half references (ISLA width
+768 at 100,000 cells, GeoTransolver and Transolver width 1,024 at 100,000
+cells) were used for the first pass of the six-task campaign lanes
+(`cl_*`, @sec-nb-char-lanes-launched) and for the protocol artifacts written
+on 2026-10-03 and 2026-10-04; those lanes and scorings stay in the record as
+the characterization of those configurations. The campaign is re-run under
+the final references: 36 lanes `cl_r_<task>_<arch>_seed{42,43}` (rows 42 to
+77 of `kernel/char/cl_lanes.tsv`), 30 launched today (DrivAerML Volume,
+AirfRANS, Shift-SUV, Tensile2D under the equivariant normalization and
+tensor head, lug) after one-epoch smoke lanes of all 18 configurations
+completed without error, the six DeepJEB++ lanes the same afternoon once
+their smoke lanes finished (one DeepJEB++ epoch at 200,000 cells takes 31 to
+38 minutes at these configurations, so the 40-epoch lanes run 21 to 25 hours
+each). The recipe's ISLA configurations now carry the reference values
+(hidden 512, 512 slices, learning rate 3.75e-4), and the ISLA class defaults
+move to hidden 512 and 512 slices (Peter, 2026-10-04 night). The smoke
+lanes also give the reference configurations' peak memory per task: on
+DrivAerML Volume ISLA 126 GiB and GeoTransolver 118 GiB (the Volume task
+carries three fields and interior queries; the DrivAerML-half references
+took 82 and 95 GiB), Transolver 62; Shift-SUV 64 / 78 / 62; AirfRANS 35 / 39
+/ 62; Tensile2D 5 / 5 / 8; lug 9 / 6 / 10. The 80 GiB budget was the
+selection criterion on the two selection datasets, not a constraint on the
+other tasks, and the Volume peaks are reported as the cost of the
+configuration there. The DrivAerML Surface and HiLift protocol artifacts
+(`results/char/drivaerml_surface.json`, `hilift_surface.json`) are
+regenerated from the `r80_*` lanes of the final references: DrivAerML
+Surface ISLA 0.0443 / 0.0699 native, 0.0445 / 0.0713 on the uniform point
+cloud, 0.0443 / 0.0699 posed (pressure / wall shear), GeoTransolver 0.0455 /
+0.0695, 0.438 / 0.482, 1.22 / 1.37, Transolver 0.0437 / 0.0696, 0.279 /
+0.357, 0.984 / 1.164; HiLift ISLA 0.0407 / 0.0933, 0.0412 / 0.0945, 0.0411 /
+0.0939, GeoTransolver 0.0522 / 0.1233, 0.222 / 0.378, 1.71 / 1.60,
+Transolver 0.0434 / 0.1009, 0.396 / 0.556, 1.01 / 1.44. The DrivAerML
+Surface and HiLift chapters and the thesis table are restated from these
+artifacts; the other six tasks' chapters are restated when their `cl_r_*`
+lanes are scored under the three protocols.
+
+## 2026-10-04 — CHAR Tensile2D under the final references: ISLA width 512 with 512 slices trails GeoTransolver width 256 by 2.6x on Frobenius stress and 3.3x on displacement (0.0138 / 0.0133 against 0.0053 / 0.0040), leads on plastic strain (0.33 against 0.46); posed = native for ISLA within 1%, baselines at the mean-field level {#sec-nb-char-tensile2d-final}
+
+**Setting.** The first Tensile2D campaign lanes (@sec-nb-char-tensile2d-interim)
+ran under the DrivAerML-half references (ISLA width 768, GeoTransolver and
+Transolver width 1,024). The reference decision (@sec-nb-ref80-verdict)
+replaced them, and the six Tensile2D lanes were re-run under the final
+configurations on code_v20 with the equivariant normalization and the
+symmetric rank-2 stress head: `cl_r_t2dz_isla` (width 512, 512 slices, lr
+3.75e-4), `cl_r_t2dz_gt` (GeoTransolver width 256, lr 1e-3), `cl_r_t2dz_t`
+(Transolver width 512, 16 layers, lr 1e-3), 400 training cases, 100
+validation cases, 20,000 training cells, 500 epochs, two seeds, scored in
+float32 under the three protocols (`results/char/tensile2d.json`,
+`protocol_artifacts_2026-10-03.py`). The first-pass lanes stay in the record
+(`cl_t2dz_*`).
+
+**What we saw (seed means; per seed; Frobenius relative L2 of stress /
+relative L2 of displacement / relative L2 of plastic strain).** Native mesh:
+ISLA 0.0138 (0.0134 / 0.0141), 0.0133 (0.0147 / 0.0118), 0.328 (0.348 /
+0.308); GeoTransolver 0.0053 (0.0055 / 0.0051), 0.0040 (0.0038 / 0.0043),
+0.460 (0.568 / 0.353); Transolver 0.0069 (0.0072 / 0.0066), 0.0055 (0.0061 /
+0.0049), 0.230 (0.211 / 0.250). The uniform point-cloud scoring equals the
+native one to four digits for all three (the Tensile2D validation mesh is
+scored whole, 20,000 cells is the full mesh at this resolution). Rotated and
+translated: ISLA 0.0139 / 0.0132 / 0.328 (within 1% of native on every field
+and seed); GeoTransolver 1.08 / 1.26 / 3.18; Transolver 1.01 / 1.24 / 4.63.
+**Against the first pass**: ISLA's stress error rose from 0.0111 to 0.0138
+(the width-768 configuration was 20% better on this task), GeoTransolver's
+fell from 0.0057 to 0.0053 (width 256 beats width 1,024 here as on the
+wings), Transolver's 0.0065 to 0.0069; on plastic strain, the near-zero
+field whose relative error is dominated by the few yielded cells, the
+baselines moved by factors of 1.7 to 3.2 (GeoTransolver 0.142 to 0.460,
+Transolver 0.134 to 0.230) and ISLA improved 0.415 to 0.328. **ISLA's posed
+shift**, 4.5% on the first-pass configuration (attributed in
+@sec-nb-char-lug-interim to the nearest-boundary-sample tie discontinuity),
+is 0.7% here; the mechanism is unchanged and the smaller shift is a property
+of this trained model, not a fix.
+
+**Standing (baseline ÷ ISLA, seed means).** Stress: GeoTransolver 0.38,
+Transolver 0.50. Displacement: 0.30, 0.41. Plastic strain: 1.40, 0.70. Both
+baselines lead ISLA on the two load-bearing fields on both seeds; ISLA leads
+GeoTransolver on plastic strain on both seeds and trails Transolver there.
+The seed ranges of ISLA and either baseline do not overlap on stress or
+displacement.
+
+**Cost (one epoch, four GB300 ranks, bfloat16).** ISLA 5.1 GiB peak, 103 s;
+GeoTransolver 4.8 GiB, 39 s; Transolver 7.9 GiB, 38 s (`cs_r_t2dz_*` smoke
+lanes). ISLA's epoch is 2.7x the baselines' mean on this 20,000-cell task: the
+per-block nearest-boundary search and the 512-slice routing are fixed costs
+that the small mesh does not amortize.
+
+**What it changes.** Chapter 11 is restated from the regenerated artifact.
+The standing on Tensile2D is the clearest case against ISLA in the campaign:
+on a two-dimensional, 20,000-cell, geometry-varying solid with a rank-2
+target, both released baselines are 2x to 3x more accurate on the stress and
+displacement fields at a third of the training time, and the only field
+where ISLA leads is the near-zero plastic strain. The pose invariance holds
+to within 1% while the baselines read at the mean-field level.
+
+## 2026-10-05 — CHAR AirfRANS under the final references: ISLA leads on interior velocity by 2.2x (GeoTransolver) and 4.1x (Transolver), trails on pressure by 1.3x to 1.4x, level to slightly behind on eddy viscosity; posed = native to four digits for ISLA, baselines at the mean-field level {#sec-nb-char-airfrans-final}
+
+**Setting.** The AirfRANS interior task (800 training airfoils, 200 test
+airfoils of the full split, 100,000 interior points per case, 2-D) re-run
+under the final reference configurations (@sec-nb-ref80-verdict): ISLA width
+512 with 512 slices at 3.75e-4 (`cl_r_af_isla`), GeoTransolver width 256
+(`cl_r_af_gt`), Transolver width 512 with 16 layers (`cl_r_af_t`), 500 epochs,
+two seeds, code_v20 with the exact nearest-boundary search, scored in float32
+under the three protocols (`results/char/airfrans.json`). The first-pass lanes
+(`cl_af_*`, DrivAerML-half references) stay in the record.
+
+**What we saw (seed means; per seed; pressure / velocity / eddy
+viscosity).** Native: ISLA 0.0352 (0.0369 / 0.0335), 0.0172 (0.0167 /
+0.0177), 0.0315 (0.0317 / 0.0312); GeoTransolver 0.0266 (0.0260 / 0.0271),
+0.0378 (0.0370 / 0.0387), 0.0293 (0.0295 / 0.0291); Transolver 0.0259 (0.0260 /
+0.0257), 0.0707 (0.0713 / 0.0701), 0.0311 (0.0313 / 0.0308). The uniform
+point-cloud scoring equals the native one (the 100,000-point draw is the
+protocol's own). Rotated and translated: ISLA 0.0352 / 0.0172 / 0.0314
+(identical to native to four digits on every field and seed); GeoTransolver
+4.18 / 1.12 / 3.75; Transolver 1.73 / 0.99 / 2.38. Against the first pass:
+ISLA's pressure improved 0.0371 to 0.0352 and eddy viscosity 0.0439 to
+0.0315 (velocity unchanged at 0.0172); GeoTransolver width 256 beats width
+1,024 on every field (0.0292 / 0.0534 / 0.0461 before); Transolver width 512
+with 16 layers beats width 1,024 by 2x on every field (0.0531 / 0.1192 /
+0.0923 before), the largest configuration effect in the campaign.
+
+**Standing (baseline ÷ ISLA, seed means).** Pressure: GeoTransolver 0.76,
+Transolver 0.74, both leading on both seeds. Velocity: 2.20 and 4.11, ISLA
+leading on both seeds against both. Eddy viscosity: GeoTransolver 0.93
+(leads on both seeds, by 7%), Transolver 0.99 (level: its seeds 0.0313 /
+0.0308 interleave ISLA's 0.0317 / 0.0312).
+
+**Cost (one epoch, four GB300 ranks, bfloat16; `cs_r_af_*`).** ISLA 35.4
+GiB, 169 s; GeoTransolver 38.9 GiB, 68 s; Transolver 61.9 GiB, 84 s. ISLA's
+epoch is 2.2x the baselines' mean on this 100,000-point, 2-D task.
+
+**What it changes.** Chapter 09 is restated from the artifact: the velocity
+lead is the interior finding that survives every configuration change
+(2.2x to 4.1x here, 3.1x and 6.9x on the first pass), the pressure deficit
+is 24% to 26%, and the pose invariance holds to four digits.
+
+## 2026-10-05 — CHAR Shift-SUV under the final references: Transolver width 512 x 16 leads ISLA by 9% on pressure and 8% on wall shear, GeoTransolver width 256 by 2% and 4%; ISLA alone holds under the point cloud (1.00x against 3.3x and 2.8x) and under pose (1.00x against the mean-field level) {#sec-nb-char-shift-suv-final}
+
+**Setting.** The Shift-SUV surface task (one SUV family, 99 validation
+cases, 200,000 cells per case) re-run under the final reference
+configurations (@sec-nb-ref80-verdict): `cl_r_suv_isla` (ISLA width 512 with
+512 slices, 3.75e-4, 200,000 cells), `cl_r_suv_gt` (GeoTransolver width 256,
+200,000 cells), `cl_r_suv_t` (Transolver width 512 with 16 layers, 100,000
+cells), 500 epochs, two seeds, scored in float32 under the three protocols
+(`results/char/shift_suv_surface.json`). First pass: @sec-nb-char-shift-suv.
+
+**What we saw (seed means; per seed; pressure / wall shear).** Native: ISLA
+0.0468 (0.0471 / 0.0465), 0.0701 (0.0702 / 0.0699); GeoTransolver 0.0460
+(0.0462 / 0.0458), 0.0671 (0.0673 / 0.0668); Transolver 0.0424 (0.0423 /
+0.0426), 0.0647 (0.0646 / 0.0649). Uniform point cloud: ISLA 0.0468 / 0.0702
+(1.00x native), GeoTransolver 0.152 / 0.202 (3.3x; the two seeds 0.108 and
+0.196 are far apart, so the width-256 model's dependence on the training
+draw is itself seed-dependent), Transolver 0.120 / 0.145 (2.8x). Rotated and
+translated: ISLA 0.0468 / 0.0700 (1.00x), GeoTransolver 1.10 / 1.16,
+Transolver 0.98 / 1.10. Against the first pass: ISLA 0.0462 to 0.0468 (1%,
+within the seed range); GeoTransolver width 256 is 14% behind its width-1,024
+first pass (0.0403) on this task, the one task where the narrow width costs
+it; Transolver 0.0425 to 0.0424.
+
+**Standing (baseline ÷ ISLA, seed means).** Pressure: GeoTransolver 0.98
+(leads on both seeds, by 2%), Transolver 0.91 (leads on both seeds).
+Wall shear: 0.96 and 0.92, both leading on both seeds. Under the point-cloud
+and posed scorings ISLA leads both baselines by 2.6x to 24x.
+
+**Cost (one epoch, four GB300 ranks, bfloat16; `cs_r_suv_*`).** ISLA 64.3
+GiB, 90 s; GeoTransolver 77.7 GiB, 112 s; Transolver 62.0 GiB, 88 s. ISLA
+trains at the same cost as the baselines here.
+
+**What it changes.** Chapter 10 is restated from the artifact: the three
+are within 9% natively (Transolver leads), and the scoring-protocol columns
+carry the dataset's reading.
+
+## 2026-10-05 — CHAR lug under the final references: GeoTransolver width 256 leads ISLA width 512 with 512 slices by 1.9x on von Mises stress (0.0021 against 0.0040) under the float32 protocol; LUG-PREC shows the gap is a precision sensitivity of the final ISLA model (bfloat16 0.0035 for both ISLA configurations and 0.0038 to 0.0044 for the baselines; float32 lowers every lane to 0.0021 to 0.0025 except the 512-slice ISLA, which reads worse in float32 on 20% and 42% of the cases) {#sec-nb-char-lug-final}
+
+**Setting.** The lug interior task (GINOT plastic lug, 600 test cases,
+5,000 to 15,000 nodes per case, scored whole) re-run under the final
+reference configurations (@sec-nb-ref80-verdict): `cl_r_lug_isla` (ISLA width
+512 with 512 slices, 3.75e-4), `cl_r_lug_gt` (GeoTransolver width 256),
+`cl_r_lug_t` (Transolver width 512 with 16 layers), 500 epochs, two seeds,
+float32 under the three protocols (`results/char/lug.json`). First pass
+(ISLA width 768, baselines width 1,024): @sec-nb-char-lug-interim.
+
+**What we saw (seed means; per seed; von Mises relative L2).** Native:
+ISLA 0.0040 (0.0035 / 0.0046), GeoTransolver 0.0021 (0.0023 / 0.0019),
+Transolver 0.0022 (0.0023 / 0.0020). Point cloud = native (whole mesh).
+Rotated and translated: ISLA 0.0065 (0.0070 / 0.0060), 1.6x its native
+error; GeoTransolver 0.94, Transolver 1.02. **Against the first pass the
+standing reverses**: ISLA width 768 read 0.0021 (both seeds 0.0021) and led
+GeoTransolver width 1,024 (0.0026) by 1.24x; ISLA width 512 with 512 slices
+reads 0.0040 and trails GeoTransolver width 256 (0.0021) by 1.9x, with the
+two ISLA seeds 30% apart.
+
+**The anomaly and the instrument.** The training-time validation error
+(bfloat16, the training precision, every tenth epoch) of the two ISLA
+configurations is identical: 0.0035 for the width-768 lanes and 0.0035 /
+0.0036 for the width-512 lanes, flat from epoch 240 to 499 on all four
+(`runs/cl*_lug_isla_*/metrics.jsonl`, val_summary rows). A 2x difference in
+the float32 scorer between two models with the same bfloat16 validation
+error says the scorer's precision, not the training, separates them. LUG-PREC
+(`kernel/char/lug_prec.sbatch`, `results/char/lug_prec_2026-10-05.py` /
+`.json`) scores eight lug lanes with the same scorer in bfloat16 and
+compares per case with the float32 record. **Result.** In bfloat16 every
+lane reads 0.0035 to 0.0044: ISLA 768 0.0035 / 0.0035, ISLA 512 with 512
+slices 0.0035 / 0.0035, GeoTransolver 0.0038 (1,024) and 0.0041 (256),
+Transolver 0.0044 (1,024) and 0.0043 (512 x 16); the bfloat16 output
+resolution sets an error floor near 0.0035 on this task, whose exact
+errors are below it. In float32 the baselines and the width-768 ISLA drop to
+0.0021 to 0.0025 (float32 lowers the per-case error by more than 1.5x on 63%
+to 91% of the 600 cases and raises it by more than 1.5x on 0% to 1.5%). **The
+width-512, 512-slice ISLA does not**: float32 reads 0.0035 and 0.0046, it
+lowers the per-case error by more than 1.5x on 41% and 49% of the cases and
+raises it by more than 1.5x on 20% and 42%, with worst cases at 0.0081
+against 0.0029 and 0.0131 against 0.0031. The two ISLA configurations
+compute the same bfloat16 function to the resolution of the validation
+metric and different float32 functions.
+
+**Mechanism (measured in @sec-nb-char-lug-interim, applied here).** The lug
+is the dataset where the nearest-boundary-sample distance is tied within
+1e-4 for 76% of the nodes and a 1e-7 coordinate jitter changes 1.1% of the
+output; which boundary sample a node selects depends on rounding, and the
+precision of the forward pass is one more rounding. The 512-slice model is
+the one whose outputs move most when the selection changes; why it is more
+sensitive than the 256-slice width-768 model is not measured here (a
+hypothesis: twice the prototypes, twice the slice boundaries a changed
+selection can cross). The posed 1.6x shift of the same model is the same
+mechanism under a different perturbation.
+
+**Standing under the protocol.** The reporting protocol is float32, and
+under it GeoTransolver width 256 ÷ ISLA = 0.52 and Transolver 0.54, both
+leading on both seeds; the chapter states this standing. It also states
+what LUG-PREC measured: the deficit is a numerical sensitivity of the trained
+model's nearest-sample geometry on a tied mesh, not a capacity or training
+difference, and it is the clearest measured instance of the limit named in
+@sec-nb-char-lug-interim. The fix candidates (a soft or k-nearest boundary
+sample, a tie-breaking rule that is a continuous function of the
+coordinates) are post-campaign architecture changes and wait for Peter.
+
+**Cost (one epoch, four GB300 ranks, bfloat16; `cs_r_lug_*`).** ISLA 8.9
+GiB, 184 s; GeoTransolver 6.1 GiB, 85 s; Transolver 10.0 GiB, 79 s. ISLA's
+epoch is 2.2x the baselines' mean on this 5,000 to 15,000-node task.
+
+## 2026-10-05 — CHAR DrivAerML Volume under the final references: ISLA leads GeoTransolver width 256 by 1.24x on pressure and 1.58x on velocity (Transolver 1.33x and 1.97x), trails GeoTransolver by 4% on eddy viscosity; posed = native to four digits for ISLA; ISLA's point-cloud column stays its boundary-law sensitivity (7.9x / 6.6x / 6.7x) {#sec-nb-char-volume-final}
+
+**Setting.** The DrivAerML Volume task (435 cars, 48 validation cars,
+200,000 interior points per case plus the boundary sample, pressure,
+velocity and eddy viscosity in the flow) re-run under the final reference
+configurations (@sec-nb-ref80-verdict): `cl_r_vol_isla` (ISLA width 512 with
+512 slices, 3.75e-4, 200,000 cells, 126 GiB peak), `cl_r_vol_gt`
+(GeoTransolver width 256, 200,000 cells, 118 GiB), `cl_r_vol_t` (Transolver
+width 512 with 16 layers, 100,000 cells, 62 GiB), 500 epochs, two seeds,
+float32 under the three protocols (`results/char/drivaerml_volume.json`).
+First pass: @sec-nb-char-protocols-instruments and the 07 Volume section of
+2026-10-04.
+
+**What we saw (seed means; per seed; pressure / velocity / eddy
+viscosity).** Native: ISLA 0.0394 (0.0387 / 0.0400), 0.0635 (0.0619 / 0.0651),
+0.0876 (0.0868 / 0.0884); GeoTransolver 0.0487 (0.0490 / 0.0484), 0.1002
+(0.0999 / 0.1006), 0.0838 (0.0844 / 0.0831); Transolver 0.0525 (0.0523 /
+0.0526), 0.1250 (0.1246 / 0.1254), 0.0893 (0.0891 / 0.0896). Rotated and
+translated: ISLA identical to native to four digits on every field and
+seed; GeoTransolver 0.80 / 1.30 / 1.37; Transolver 0.81 / 1.25 / 1.09.
+Uniform (area-proportional) boundary point cloud: ISLA 0.311 / 0.417 / 0.583
+(7.9x, 6.6x, 6.7x its native error; seeds 0.351 / 0.272 on pressure), the
+baselines unchanged (they never see the boundary sample). Against the first
+pass: ISLA improved on every field (0.0453 / 0.0754 / 0.0980 before, 13% to
+16%); GeoTransolver width 256 is 6% to 10% behind width 1,024 (0.0459 /
+0.0913 / 0.0833 before); Transolver 5% to 9% behind width 1,024.
+
+**Standing (baseline ÷ ISLA, seed means).** Pressure: GeoTransolver 1.24,
+Transolver 1.33, ISLA leading on both seeds against both. Velocity: 1.58 and
+1.97, both seeds. Eddy viscosity: GeoTransolver 0.96 (leads on both seeds, by
+4%), Transolver 1.02 (ISLA leads on both seeds, by 2%).
+
+**Cost (one epoch, four GB300 ranks, bfloat16; `cs_r_vol_*`).** ISLA 126.2
+GiB, 117 s; GeoTransolver 117.9 GiB, 144 s; Transolver 62.0 GiB, 68 s. The
+two 200,000-cell references exceed the 80 GiB selection budget on this task
+(the budget was the selection criterion on DrivAerML Surface and the wings);
+ISLA's epoch is 1.1x the baselines' mean.
+
+**What it changes.** The 07 Volume section is restated from the artifact:
+the interior finding of the campaign is a velocity lead of 1.6x to 2.0x and
+a pressure lead of 1.2x to 1.3x against both released baselines at matched
+training cells, with pose invariance to four digits, and the boundary-law
+sensitivity of ISLA's interior predictions (7x to 8x under an
+area-proportional boundary draw) stays the section's named limit. With this
+entry seven of the eight tasks are scored under the final references; the
+DeepJEB++ lanes remain.
+
+## 2026-10-05 — CHAR DeepJEB++: every ISLA campaign lane sits at the mean-field plateau (von Mises 0.94, displacement 0.82 against 0.46 / 0.20 for the baselines); the training loss rises from 0.024 to 0.085 within the first 4 to 12 epochs on all four lanes, both configurations, both seeds; the September R1 lane at 5e-4 reached 0.44 / 0.19; four diagnostic lanes launched (JEB-PLATEAU) {#sec-nb-char-deepjeb-plateau}
+
+**Setting.** DeepJEB++ (12,451 training brackets, 5,540 clean test files,
+50,040 surface cells per case scored whole, 40 epochs) is the eighth
+campaign task. The first-pass lanes (`cl_jeb_*`, DrivAerML-half references:
+ISLA width 768 at 3.75e-4, GeoTransolver and Transolver width 1,024) are
+trained and scored under the three protocols
+(`results/char/deepjeb_surface.json`, written from them because the
+final-reference lanes `cl_r_jeb_*` are at epoch 21 to 33 of 40).
+
+**What we saw.** Native (seed means; von Mises / displacement):
+GeoTransolver 0.457 (0.4565 / 0.4571) / 0.202; Transolver 0.475 / 0.219;
+**ISLA 0.945 (0.903 / 0.986) / 0.824 (0.734 / 0.913)**, the level of a model
+that predicts the mean field. Rotated and translated: ISLA unchanged to four
+digits, GeoTransolver 1.13 / 1.46, Transolver 1.26 / 1.70. The scoring is
+not the cause: the training-time validation (bfloat16, every second epoch,
+`runs/cl*_jeb_isla_*/metrics.jsonl`) shows the same thing with its history.
+Width 768, seed 42: 0.60 / 0.37 at epoch 0, 0.60 at epoch 6, 0.96 / 1.20 at
+epoch 12, 0.90 / 0.85 at epoch 39; seed 43: 0.59 at epoch 0, 0.89 / 1.06 at
+epoch 6, 0.99 / 1.20 at epoch 39. The final-reference lanes (width 512 with
+512 slices, 3.75e-4), in flight: seed 42 0.60 at epoch 0, 0.90 / 1.04 at
+epoch 4, 1.02 / 1.17 at epoch 30; seed 43 0.60, 0.93 / 1.18 at epoch 4, 0.99
+/ 1.09 at epoch 32. The training loss follows: 0.024 at epoch 0 on every
+ISLA lane, then 0.067 to 0.085 from epoch 4 to 12 onward and flat (seed 42
+of the width-768 lane recovers to 0.041 by epoch 37 and its validation to
+0.90 / 0.85, a partial return). GeoTransolver and Transolver on the same
+data descend monotonically (train loss 0.025 to 0.004 and 0.006;
+validation 0.61 to 0.46 and 0.46).
+
+**This is the mean-field plateau measured before, on this dataset.** The
+September DeepJEB++ lanes (@sec-nb-deepjeb-e40-verdict's `jb_*` group, code_ref,
+static prototypes) put ISLA R1 (width 384, 12 layers, 256 slices, 5e-4) at
+0.441 / 0.187 after 40 epochs, ahead of GeoTransolver width 512 (0.464 /
+0.201), and ISLA R2 (24 layers at 5e-4) at 1.01 / 1.16, the plateau, which a
+re-run at 2.5e-4 left (@sec-nb-deepjeb-r2-rate-verdict). The signature then and now is the one named in
+@sec-nb-routingsat-verdict: the training loss rises to a flat value several times
+its epoch-0 value within a few epochs and the model outputs the mean field.
+Every ISLA lane of the campaign on this dataset runs a configuration wider
+than R1 at the width rule's rate (3.75e-4 at 512 and at 768), and all four
+plateau; the one configuration measured to train on DeepJEB++ is R1 at
+5e-4 on the static-prototype class.
+
+**Hypotheses and the deciding lanes (preregistered; four one-GPU-node
+smoke lanes of 5 epochs with validation every epoch, `cs_jd_*`, launched
+15:05 UTC).** H-rate: the rate ceiling on this dataset lies below the width
+rule's value for the wider configurations; prediction: `cs_jd_rate` (width
+512 with 512 slices at 1.875e-4, code_v20) does not plateau (validation von
+Mises below 0.55 at epoch 4, train loss falling). H-config: R1 trains and the
+wider configuration does not, on the current class; prediction: `cs_jd_r1`
+(384 / 256 at 5e-4, code_v20) does not plateau. H-proto: the centered
+sample-conditioned prototypes adopted on 2026-10-02 (@sec-nb-proto-cond-2-adopted),
+which the September lanes did not have, move the ceiling on this dataset;
+prediction: `cs_jd_v17` (width 512 with 512 slices at 3.75e-4 on code_v17,
+the static-prototype snapshot) does not plateau while the code_v20 lanes
+at the same rate did, and `cs_jd_v17r1` (384 / 256 at 5e-4 on code_v17)
+reproduces the September training. If `cs_jd_v17` plateaus too, the
+prototypes are exonerated and the ceiling is a property of the
+configuration on this dataset. The four outcomes are independent; the
+plateau appears by epoch 4 to 6 on every lane above, so five epochs decide.
+
+**What is not done.** Chapter 13 is not restated from the plateaued lanes;
+a mean-field model has no standing to report. The final-reference lanes
+run to completion so the record is whole, and the campaign's DeepJEB++
+verdict waits for the diagnosis. If the rate is the cause, the fix is a
+rule change (the reference rate is a class default, not a dataset
+variant), and it must be decided with Peter.
+
+## 2026-10-05 — JEB-PLATEAU interim (one seed, 5 epochs): the plateau follows the sample-conditioned prototypes, not the configuration; ISLA 384 / 256 at 5e-4 plateaus at epoch 2 on the current class and trains on the static-prototype snapshot; the final reference trains on the static-prototype snapshot at 3.75e-4 and on the current class at half that rate {#sec-nb-char-deepjeb-plateau-interim}
+
+**Setting.** The four diagnostic lanes preregistered in
+@sec-nb-char-deepjeb-plateau finished (5 epochs, validation every epoch,
+seed 42, one GB300 node each; `results/char/jd_plateau_2026-10-05.py` /
+`.json`, trajectories copied under
+`campaigns_2026-10-02/char/jd/`).
+
+**What we saw (validation von Mises at epochs 0 to 4; training loss epoch
+0 to epoch 4).** `cs_jd_r1` (width 384, 256 slices, 5e-4, code_v20 with the
+centered sample-conditioned prototypes): 0.59, 0.58, **0.96, 0.97, 0.98**;
+loss 0.025, 0.017, 0.040, 0.083, 0.090. The plateau, at epoch 2.
+`cs_jd_v17r1` (the same configuration and rate on code_v17, static
+prototypes): 0.60, 0.57, 0.55, 0.53, 0.52; loss 0.025 to 0.012, descending.
+`cs_jd_v17` (width 512, 512 slices, 3.75e-4, code_v17): 0.60, 0.56, 0.53, 0.55,
+0.52; loss 0.024 to 0.011. `cs_jd_rate` (width 512, 512 slices, 1.875e-4,
+code_v20): 0.59, 0.55, 0.53, 0.51, 0.51; loss 0.023 to 0.010. For scale, the
+campaign lanes at 3.75e-4 on code_v20 read 0.90 and 0.93 at epoch 4 (final
+reference) and 0.52 and 0.58 at epoch 4 then 0.96 and 0.92 at epoch 12
+(width 768), and the baselines read 0.54 to 0.56 at epoch 4.
+
+**Reading against the preregistered predictions.** H-config is refuted: the
+configuration that trained in September (384 / 256 at 5e-4) plateaus on the
+current class, faster than any campaign lane. H-proto is supported on both
+of its predictions: the same configuration trains on the static-prototype
+snapshot, and the final reference configuration at the rate that plateaued
+on the current class trains on the static-prototype snapshot. H-rate is
+supported: halving the rate on the current class trains through epoch 4.
+**The centered sample-conditioned prototypes adopted on 2026-10-02 lower
+the rate ceiling on DeepJEB++** to below 3.75e-4 at width 512 and below 5e-4
+at width 384; they did not do so on DrivAerML Surface, DrivAerML Volume or
+AirfRANS, where the code_v18 reference lanes trained at the same rates
+(@sec-nb-proto-cond-2-adopted). What is particular to DeepJEB++ is not
+measured here: 12,451 cases per epoch (28x DrivAerML's 435, so 28x the
+optimizer steps per epoch at the same rate), a load-case one-hot in the
+global inputs, and a mesh of 50,040 triangles with the degenerate cells
+dropped are the candidates.
+
+**Limits of this reading.** One seed per lane; five epochs. The width-768
+campaign lane trained to epoch 4 (0.52) and plateaued between epochs 6 and
+12, so a lane that trains for five epochs is not shown to train for forty.
+Launched to close both gaps: second seeds of the three discriminating lanes
+and a 5-epoch code_v20 control at 3.75e-4 (`cs_jd_*_s43`, `cs_jd_v20ref_s43`),
+and four 40-epoch lanes (`cl_jd_rate_e40_seed42/43`: width 512 with 512
+slices at 1.875e-4 on code_v20; `cl_jd_v17_e40_seed42/43`: the same at
+3.75e-4 on code_v17), scored under the campaign protocols when they finish
+(about one day). A routing-activity probe of the plateaued `cs_jd_r1`
+checkpoint against the healthy `cs_jd_rate` checkpoint (effective slices
+per block, routing entropy) is being written for the current class to test
+whether the plateau is the routing collapse of @sec-nb-routingsat-verdict.
+
+**What this means for the campaign.** Under the frozen architecture and the
+reference rate, ISLA does not train on DeepJEB++; the campaign's DeepJEB++
+row is that fact, with the baselines' numbers beside it. Whether the
+reference rate changes (a class default, so for every dataset), or the
+prototype conditioning is revisited (an architecture change), is Peter's
+decision; the 40-epoch lanes supply the numbers either decision needs
+(what the final reference reaches on DeepJEB++ at half rate, and what it
+reaches with static prototypes at the reference rate).
+
+## 2026-10-05 — Ruling: DeepJEB++ is an explicit exception to the one-reference rule, in the learning rate only; ISLA trains there at 1.875e-4 with every other hyperparameter the reference configuration; the two 40-epoch half-rate lanes become the campaign's DeepJEB++ ISLA arms {#sec-nb-char-deepjeb-rate-ruling}
+
+Peter, on the interim verdict of @sec-nb-char-deepjeb-plateau-interim:
+lowering the learning rate alone on one dataset is acceptable as a
+per-dataset exception to the one-reference goal. The exception is the
+rate and nothing else: width 512, 12 layers, 512 slices, cosine routing,
+the centered sample-conditioned prototypes and 200,000 cells stay as on
+every dataset; the rate is 1.875e-4, half the width rule's value, because
+every ISLA lane at 3.75e-4 on this dataset reached the mean-field plateau
+within 4 to 12 epochs and the half-rate lane trained through its
+five-epoch test. The recipe's `isla_surface_deepjebpp.yaml` pins 1.875e-4
+with this reason; the other ISLA configurations keep 3.75e-4.
+
+The campaign's DeepJEB++ ISLA arms are therefore `cl_jd_rate_e40_seed42`
+and `cl_jd_rate_e40_seed43` (launched 2026-10-05, 40 epochs, code_v20), scored
+under the three protocols when they finish, against `cl_r_jeb_gt` and
+`cl_r_jeb_t` (the final baseline references; GeoTransolver 256 is at epoch
+29 to 31 of 40, Transolver 512 x 16 at epoch 21). The reference-rate lanes
+`cl_r_jeb_isla_*` complete and are scored as the record of what the
+reference rate does on this dataset; `cl_jd_v17_e40_*` (static prototypes
+at 3.75e-4) complete as the diagnostic of the prototype conditioning's
+rate cost. Chapter 13 is restated from `results/char/deepjeb_surface.json`
+when the half-rate lanes are scored (about one day); the chapter states
+the exception and its measurement.
+
+## 2026-10-05 — VOL-GEO preregistered: is the volume model's 7x sensitivity to the boundary sampling law the built-in nearest-boundary-token geometry (a bias no quadrature weight can correct) or the slice states formed from the redrawn tokens (a resolution requirement)? Geometry-swap scoring of the Volume reference checkpoints, launched {#sec-nb-char-vol-geo-prereg}
+
+**Setting.** On DrivAerML Volume the final ISLA reference reads 0.0394 /
+0.0635 / 0.0876 natively and 0.311 / 0.417 / 0.583 when the boundary tokens
+are redrawn area-proportionally with exact Horvitz-Thompson measures, 7.9x
+/ 6.6x / 6.6x (@sec-nb-char-volume-final), while the same class on the
+Surface task is unchanged by the same draw and a uniform-over-cells redraw
+of the Volume boundary leaves the interior error at native
+(@sec-nb-char-protocols-instruments). Peter's reading, 2026-10-05: this is a
+serious flaw, the discretization invariance prized on the surface breaks
+down in the volume. The query-independence program (branch
+`psharpe/isla-independent`, RESULTS.md and the pi transcript of 2026-10-02)
+reached the same suspect from another side: "a volume point's built-in wall
+distance is the distance to the nearest sampled boundary cell. That is a
+nearest-sample measure, not a quadrature", and listed a continuous wall
+distance as a class fix it did not run.
+
+**Mechanism.** Each interior query carries a built-in geometry computed in
+the forward from the boundary tokens (`nearest_boundary_geometry`): the
+signed distance to the nearest token and the direction to it, which also
+seeds the query's local frame. It is an argmin, not a quadrature; under
+the area law the nearest token to a near-wall query moves by the local cell
+spacing, exactly where the native mesh is dense, so the query's inputs
+change by order one near the wall. Everything else the queries read (slice
+states, anchors, prototypes, the query routing mass tied to the total
+boundary measure) is a measure-weighted sum, unbiased under the
+Horvitz-Thompson weights but of higher variance where the area law thins
+the finely meshed features. A bias from the first is a flaw of the class; a
+variance from the second is a resolution requirement on the boundary
+sample.
+
+**Instrument (`kernel/char/vol_geo/geo_swap.py`, scoring only, no model
+change).** The Volume reference checkpoint (`cl_r_vol_isla_seed42`, seed 43
+if time allows) scored in float32 on the 48 validation cars under four
+conditions: (1) native (control; must reproduce the record per case), (2)
+area draw (control), (3) area-draw tokens with the built-in geometry
+computed from the native draw's boundary of the same case (the swap), (4)
+area-draw tokens with the built-in geometry taken from the stored signed
+distance field and its gradient. Also the fraction of queries whose nearest
+token changes between the draws and the RMS shift of the built-in distance
+within 0.01 L of the wall.
+
+**Predictions (written before the runs).** If the built-in geometry is the
+whole mechanism, condition (3) returns to within 10% of native on every
+field and (4) does the same or better. If the slice states also carry it,
+(3) stays well above native, and the remaining log-ratio is the resolution
+component. I expect the first: the lug tie discontinuity and the on-wall
+sign flips measured on this class are the same argmin, and the Surface
+task, which has no such query input, is invariant under the identical
+draw. The fix the first outcome points to is a measure-weighted softmin
+geometry (continuous in the sample, exactly refinement-invariant,
+converging to the exact distance as its scale shrinks) or dropping the
+built-in channel where a stored field is provided; both are architecture
+changes and wait for Peter.
+
+## 2026-10-05 — VOL-GEO verdict: the volume model's 7.9x / 6.6x / 6.6x sensitivity to the boundary sampling law is entirely the queries' built-in nearest-boundary-token geometry; with that one input computed from the native draw and every other token redrawn, the error returns to native within 0.4% on every field and both seeds; the slice states carry none of it; the exact stored signed-distance field does not substitute (15x) because the model is calibrated to the sampled distance {#sec-nb-char-vol-geo-verdict}
+
+**Setting and instrument.** @sec-nb-char-vol-geo-prereg. The two Volume
+reference checkpoints (`cl_r_vol_isla_seed42/43`) scored in float32 on the 48
+validation cars under five conditions by a scoring-time swap of
+`nearest_boundary_geometry` alone (`kernel/char/vol_geo/geo_swap.py`,
+`results/char/vol_geo_2026-10-05.py` / `.json`; artifacts under
+`campaigns_2026-10-02/char/vol_geo/`). The two protocol conditions
+reproduce the campaign's per-case scorings to 1e-6 on every case and both
+seeds. The native and area datasets drew byte-identical interior point sets
+on all 48 cases, so the interior queries, the targets and the stored field
+are shared and only the boundary tokens differ.
+
+**What we saw (seed means; pressure / velocity / eddy viscosity; both seeds
+in the artifact agree to 0.2%).** Native 0.0394 / 0.0635 / 0.0876. Area draw
+0.311 / 0.417 / 0.583, 7.9x / 6.6x / 6.6x. **Area-draw tokens with the
+built-in geometry computed from the native draw's boundary: 0.0393 /
+0.0634 / 0.0875**, 0.997 / 0.998 / 0.999 of native; the fraction of the
+area-draw log-excess removed is 1.001 / 1.001 / 1.000 on the seed means and
+1.0005 to 1.0019 per seed. Area-draw tokens with the built-in geometry
+replaced by the exact stored signed-distance field and its gradient (sign
+matched to the checkpoint's convention): 0.593 / 0.602 / 0.755, 15.1x /
+9.5x / 8.6x; native tokens with the stored field: 0.593 / 0.602 / 0.754,
+the same to three digits.
+
+**The input shift behind it.** Under the area draw the nearest boundary
+centroid changes for 91% of the queries (92% of the 179,000 near-wall
+queries, those within 0.01 L of the wall). The built-in distance of a
+near-wall query moves by 3e-4 L in RMS, small in length units, but in the
+channel the model reads, log of the distance, the RMS shift between the
+two draws is 0.85. Against the exact field the sampled distance is biased
+and broad: near-wall medians 2.5e-4 L for the native draw, 3.4e-4 L for the
+area draw, 1.6e-4 L for the stored field; RMS log ratio of the native
+built-in distance to the exact distance 1.5. The direction to the nearest
+token has mean cosine 0.72 with the exact gradient, and 0.51 between the
+two draws.
+
+**Reading.** The prediction depends on the boundary sample through one
+channel, the argmin over tokens that gives each query its distance and
+direction to the wall. Everything else the queries read, the slice states,
+anchors, prototypes and the routing mass, is a Horvitz-Thompson quadrature
+and is invariant to the draw to 0.1%, as the Surface task already showed.
+The 7x is a bias of that one input, not a resolution requirement on the
+boundary sample. And it is not fixable at scoring time by substituting the
+exact distance: the trained model is calibrated to the sampled distance,
+whose near-wall statistics (median 1.6x the exact value, 1.5 RMS in log) are
+a property of the 200,000-token draw it trained on, so the exact field is as
+far out of its training distribution as the area draw is. This is the same
+object as the lug tie discontinuity (@sec-nb-char-lug-final) and the on-wall
+sign flips of the query-independence program: a nearest-sample selection is
+a discontinuous, law-dependent function of the sample.
+
+**What follows.** The fix is a sample-independent query geometry, which is
+an architecture change and waits for Peter's decision, with the training
+rerun it implies. The two candidates, both quadratures: (a) a
+measure-weighted softmin over the boundary tokens for the distance and the
+softmin-weighted mean separation for the direction, continuous in the
+sample, exactly refinement-invariant and converging to the exact distance
+as its scale shrinks; (b) where a stored signed-distance field exists, use
+it as the built-in channel and skip the search. Either must be trained in;
+the 09-25 INTERNAL-GEOMETRY study measured the built-in channel alone at 14%
+to 27% worse on velocity than the stored field alone, so (b) is expected to
+gain accuracy as well as invariance where a field exists, and (a) is the
+general case. The Volume chapter's limit paragraph and the limits chapter
+are restated from this artifact.
+
+## 2026-10-05 — JEB-PLATEAU mechanism: the plateaued lane is a routing collapse; under the sample-conditioned prototypes at 5e-4 half of the blocks route to 1 to 5 effective slices of 256 with coincident anchors, while the half-rate lane keeps 34 to 490 effective slices of 512 in every block {#sec-nb-char-deepjeb-plateau-mechanism}
+
+**Instrument.** `kernel/char/jd_probe/routing_probe_v20.py` (copied under
+`campaigns_2026-10-02/char/jd_probe/`): the current class's routing weights
+over slices captured per block on the first four test brackets (49,990
+tokens each, float32) for the plateaued `cs_jd_r1` (width 384, 256 slices,
+5e-4) and the healthy `cs_jd_rate` (width 512, 512 slices, 1.875e-4), at
+epochs 4 and 5 (the smoke lanes' earlier checkpoints were pruned, so the
+onset epoch is not measured). Statistics as in @sec-nb-routingsat-verdict:
+effective number of slices carrying mass (exp of the entropy of the slice
+mass distribution), the mean normalized routing entropy per token, the
+fraction of slices above 1/(4S) of the mass, and the RMS anchor spread.
+
+**What we saw.** Plateaued lane, epoch 5, per block: effective slices 20,
+38, 1.4, 4.9, 12, 4.2, 21, 1.1, 1.4, 13, 3.3, 1.6; routing entropy 0.02 to
+0.55; anchor spread 0.005 to 0.04 (anchors nearly coincident) in every block.
+Seven of twelve blocks route to one to five slices of 256. Healthy lane,
+epoch 5: effective slices 490, 331, 348, 336, 374, 357, 277, 272, 178, 118,
+234, 34 of 512; entropy 0.53 to 0.99; anchor spread 0.09 to 0.22 in blocks 1
+to 11. The geometric routing bias changes no entropy by more than 0.03 in
+either lane. The two lanes differ in width, slice count and rate as well as
+in outcome, so this is the signature test, not a matched pair; the
+collapse signature is the one measured on DrivAerML in September
+(@sec-nb-routingsat-verdict), which cosine routing had removed there.
+
+**Reading.** The DeepJEB++ plateau is the routing collapse: with the
+centered sample-conditioned prototypes, cosine routing's bounded logits no
+longer prevent the anchors from coinciding and the mass from concentrating
+on a few slices at the width rule's rate on this dataset. Why the bound
+holds on DrivAerML, HiLift and AirfRANS at the same rates and fails here
+(28x the optimizer steps per epoch, a load-case one-hot in the global
+inputs, 50,040-cell surfaces) is not measured. The half-rate exception
+(@sec-nb-char-deepjeb-rate-ruling) keeps the routing spread; the
+static-prototype 40-epoch lanes in flight say whether the prototype
+conditioning is the necessary ingredient at 40 epochs as it was at 5.
+
+## 2026-10-06 — JEB-PLATEAU second seed: the 384 / 256 configuration at 5e-4 on the current class begins its plateau at epoch 2 on seed 43 as on seed 42 (validation 0.58 to 0.80, training loss 0.0165 to 0.0220); the 40-epoch half-rate and static-prototype lanes are descending at epoch 6 (0.48 to 0.50) {#sec-nb-char-deepjeb-plateau-seed2}
+
+Seed-43 twins of the JEB-PLATEAU diagnostic (`cs_jd_r1_s43`, three epochs
+under the short queue; `results/char/jd_plateau_2026-10-05.json`): validation
+von Mises 0.599, 0.577, 0.799 at epochs 0 to 2 with the training loss turning
+up from 0.0165 to 0.0220 at epoch 2, the signature of @sec-nb-char-deepjeb-plateau-interim
+on a second seed, so H-config stays refuted at two seeds. The seed-43
+reference-rate control (`cs_jd_v20ref_s43`, 0.636, 0.549, 0.566) had not
+plateaued by epoch 2; the campaign's own seed-43 lane of that configuration
+reached 0.93 at epoch 4, so the control adds nothing beyond the record.
+The 40-epoch lanes at epoch 6: half rate on the current class 0.498 / 0.481
+(seeds 42 / 43, training loss 0.0086 / 0.0084 and falling), static
+prototypes at the reference rate 0.500 (seed 43; seed 42 at epoch 2, 0.542).
+Their 40-epoch scorings decide the DeepJEB++ row (@sec-nb-char-deepjeb-rate-ruling).
+
+## 2026-10-06 — SOFT-GEO preregistered: a sample-independent built-in query geometry (the kernel-mean tangent-plane distance and normal of the boundary tokens on the nearest token's side) implemented as `query_geometry="soft"`; AirfRANS first by Peter's decision tree, under a boundary-resampling protocol because the campaign's area protocol is the identity on AirfRANS {#sec-nb-soft-geo-prereg}
+
+**Setting.** VOL-GEO (@sec-nb-char-vol-geo-verdict) measured that the
+Volume model's 7.9x / 6.6x / 6.6x sensitivity to the boundary sampling law
+is entirely the queries' built-in nearest-boundary-token geometry: with the
+area-law tokens but the native draw's geometry the error is 0.997 / 0.998 /
+0.999 of native on both seeds. Peter, 2026-10-06, on the proposed
+sample-independent replacement: "this seems so-far like a free upgrade.
+Essentially no accuracy cost, and it's a more principled formulation. Can
+you try this on AirfRANS too?", then the decision tree: "first run AirfRANS
+to test that this discretization-independence-in-the-volume holds up on
+AirfRANS, and if and only if this does hold up", unfreeze the architecture,
+baseline the new form as the canonical ISLA and retrain every volume
+benchmark. One correction to the premise, stated to Peter: the 0.997 is the
+diagnostic (the native geometry fed to area tokens), not the new form; the
+new form's native accuracy is exactly what this study measures.
+
+**The form (words first).** Each boundary token is a point, a unit normal
+and a measure. For a query, every token gets a kernel weight, its measure
+times $\exp(-r_i/\tau)$ with $r_i$ the distance to the query and $\tau$ a
+fixed fraction of the length unit, and a signed distance $s_i$ from the
+query to the token's tangent plane. The nearest token decides the side (in
+front of or behind the tangent planes). Over the tokens on that side, the
+distance channel is the kernel-weighted mean of the $s_i$ and the direction
+is the kernel-weighted mean normal, signed so that both keep the nearest
+form's conventions (positive outside for outward normals; the direction
+points from the boundary to the query). In symbols, with
+$a_i = w_i\,e^{-|x_q-y_i|/\tau}$ and $s_i = (x_q-y_i)\cdot\hat n_i$,
+$$d_q = \frac{\sum_{i\in\text{side}} a_i s_i}{\sum_{i\in\text{side}} a_i},
+\qquad u_q = \pm\,\frac{\sum_{i\in\text{side}} a_i \hat n_i}{\big|\sum_{i\in\text{side}} a_i \hat n_i\big|}.$$
+The sums are quadrature estimates of boundary integrals with the tokens'
+measures as weights, so they converge under refinement of the boundary
+sample for any sampling law whose normalized measure converges, the
+property every other quantity the queries read already has. Implementation
+(uncommitted at launch, committed with this entry): `soft_boundary_geometry`
+in `physicsnemo/experimental/models/isla/geometry.py`, a streaming Triton
+kernel in two or three dimensions (one online-rescaled pass over the
+tokens, no (Q, N) block) with a chunked PyTorch form for CPU and gradients;
+`ISLA(query_geometry="soft", query_geometry_width=0.03)`; `"nearest"`
+stays the default until the verdict. Cluster snapshot `code_v21` = `code_v20`
++ the two module files + the geometry tests; verification jobs on AGA and
+LHR.
+
+**What the analysis says to expect, written before any run.** Four facts
+shaped the form and bound what it can deliver. (1) At a flat wall every
+token's tangent-plane distance equals the wall distance, so $d_q$ is exact
+there for any sample and any width (the nearest form's Euclidean distance
+reads $\sqrt{d^2+\rho^2}$ with $\rho$ the tangential offset to the nearest
+token, of order half the spacing, which is why it changes with the law).
+(2) Law-robustness needs several tokens inside the kernel under the
+coarsest law considered: the area law at 200,000 tokens on a DrivAerML car
+has a spacing of about 0.006 of the length unit, so $\tau$ must be at least
+about 0.03 of it; the ladder below brackets this. (3) Near a convex wall,
+tokens whose tangent plane the query lies behind fall on the other side
+and are excluded, so the reading stays the sign of the nearest token's and
+keeps a slope of order one in the wall distance over the decade of
+distances where the nearest form reads only its own spacing noise; the
+exact distance below the sample's geometric resolution (about $h^2\kappa/2$,
+of order $2\times10^{-4}$ of the length unit on a car) is unknowable from
+any 200,000-token sample, which is where a stored full-mesh field keeps its
+advantage (INTERNAL-GEOMETRY, @sec-nb-internal-geometry-verdict). (4) Thin
+features and convex edges are handled by the side rule, not the kernel: the
+far face of a plate and the face beyond an edge have the opposite sign and
+never blend in; the nearest token picks the side exactly where the true
+distance field's gradient is discontinuous. The residual risks are the
+near-wall accuracy on a curved wall at the law-robust width (a smooth,
+deterministic curvature offset in the channel) and the two-dimensional
+AirfRANS airfoil's token count (about 1,000 segments, a dozen per kernel at
+width 0.03), both measured below.
+
+**Why AirfRANS needs its own protocol.** The campaign's uniform
+point-cloud protocol redraws the boundary area-proportionally at the
+campaign cell budget; on AirfRANS the airfoil has about 1,000 segments,
+fewer than the 100,000-cell budget, so the reader keeps it whole and the
+area draw is the identity (results/char/airfrans.json: area equals native
+to nine digits). AF-GEO therefore RESAMPLES the airfoil at evaluation to an
+expected 400 of its segments under two laws, uniform-over-cells (the
+mesher's refinement pattern) and length-proportional (uniform along the
+curve), with exact Horvitz-Thompson measures
+(`recipe_v8/datasets/airfrans_volume_2d_sub400{u,a}.yaml`), interior points
+native. Step one is evaluation-only on the AirfRANS references
+`cl_r_af_isla_seed42/43` (nearest geometry plus the stored sdf and its
+gradient as query inputs) with the VOL-GEO swap control
+(`kernel/char/af_geo/af_geo_swap.py`, job 1087177): native, two resampled
+conditions, and the two resampled conditions with the native geometry fed
+to the queries.
+
+**Arms (group `sq`, LHR, code_v21, the AirfRANS reference recipe: 512 /
+512 slices, 3.75e-4, 500 epochs, 100,000 points, full_train / full_test).**
+`sq_af_soft03_seed42/43` (width 0.03, the candidate canonical form),
+`sq_af_soft01_seed42` and `sq_af_soft10_seed42` (width ladder), all with the
+stored sdf inputs as the reference has; and the built-in-only pair
+`sq_af_soft03_nosdf_seed42` / `sq_af_nearest_nosdf_seed42` (query_schema
+removed), which measures the form's own accuracy without the stored field
+masking it. Every arm is then scored natively and under the resampling
+protocol by the same probe (`RUNS=... CODE=code_v21`).
+
+**Predictions and bars.** The seed separation of the AirfRANS reference is
+the unit: natively 0.0369 / 0.0335 pressure, 0.0167 / 0.0177 velocity,
+0.0317 / 0.0312 eddy viscosity (log gaps 0.10 / 0.06 / 0.01; the eddy
+viscosity gap is too small to be a bar and pressure's is used for it).
+(P1, step one) The reference's error under either resampled law exceeds
+native by more than the seed separation on velocity, and the swap returns
+it to native within 10%: the built-in channel carries the AirfRANS
+sensitivity as it does the Volume's. If the excess at 400 tokens is below
+the seed separation, the probe steps to 200 tokens before any verdict.
+(P2, invariance) `sq_af_soft03`'s resampled-to-native ratio is within the
+seed separation on every field under both laws, on both seeds. (P3, native
+accuracy) `sq_af_soft03`'s native error is within the seed separation of
+the reference pair on every field (two seeds). (P4, the form's own cost)
+`sq_af_soft03_nosdf` is within the seed separation of
+`sq_af_nearest_nosdf` natively, or better; the pair's resampled ratios
+separate as P2 says. Width: 0.01 is expected to lose P2 under the
+length-proportional law (fewer tokens per kernel), 0.1 to lose P3 on
+velocity near the wall. **Decision rule, Peter's:** P2 and P3 holding is
+"holds up on AirfRANS": the architecture is unfrozen, `query_geometry="soft"`
+with the surviving width becomes the class default and the recipe's, the
+Volume references are retrained under it and every interior protocol
+re-scored, the book restated. P2 or P3 failing keeps `"nearest"` and the
+record states what was measured. Nothing on the Volume launches before this
+verdict.
+
+## 2026-10-06 — AF-GEO step one: on AirfRANS, resampling the airfoil to 400 of its 1,007 segments raises the reference's error 10x to 21x; the built-in nearest-token geometry carries 62% to 84% of the log excess and the coarsened slice states the rest (a confound the Volume protocol did not have); the soft form's side rule amended before any lane trained {#sec-nb-af-geo-step-one}
+
+**Setting.** Step one of SOFT-GEO (@sec-nb-soft-geo-prereg): the AirfRANS
+ISLA references (`cl_r_af_isla_seed42/43`, nearest built-in geometry plus
+the stored signed distance and its gradient as query inputs, trained on the
+whole airfoil) scored on the 200 full_test cases in float32 at 100,000
+native interior points with the airfoil resampled at evaluation to an
+expected 400 of its 1,007 segments under the uniform-over-cells law and the
+length-proportional law, exact Horvitz-Thompson measures (the resampled
+boundary's total measure is 2.05 chord lengths under both laws, the whole
+airfoil's), and the VOL-GEO swap control (resampled tokens, the whole
+airfoil's built-in geometry fed to the queries). Job 1087177, seven minutes;
+native reproduces the record per case to 2e-6 on both seeds; artifact
+`results/char/af_geo_2026-10-06.json`, per-case rows and shift statistics
+under `results/campaigns_2026-10-02/char/af_geo/`.
+
+**What we saw.** Error relative to native, mean of the two seeds (pressure
+/ velocity / eddy viscosity): uniform-over-cells 400 segments 9.6x / 15.8x
+/ 11.5x; length-proportional 400 segments 16.4x / 20.7x / 12.9x. With the
+whole airfoil's built-in geometry restored to the queries the same resampled
+tokens read 2.27x / 1.57x / 1.95x and 2.90x / 2.35x / 1.93x. The share of
+the log excess removed by restoring the geometry is 0.63 / 0.84 / 0.72 under
+the uniform law and 0.62 / 0.72 / 0.74 under the length law, consistent
+across the seeds (0.59 to 0.85). The input shift behind it: the nearest
+token changes for 60% (uniform) and 64% (length) of the queries; over the
+near-wall queries (within 0.01 chord, 48,000 of 100,000) the built-in
+distance moves by an RMS log ratio of 0.62 (uniform) and 1.27 (length) and
+the built-in direction's cosine to the native one is 0.59 and 0.60. The
+native built-in distance itself is far from the stored field near the wall
+(median 1.5e-3 chord against 5.4e-4, RMS log ratio 2.8), so the model's
+query channel reads the mesher's panel spacing even before resampling; the
+stored field is present as an input and does not protect the model.
+
+**Reading.** The first clause of P1 holds with room: AirfRANS has the
+sensitivity, and larger than the Volume's 7x. The second clause fails: the
+swap returns the error to 1.6x to 2.9x of native, not to within 10%. The
+difference from the Volume is the protocol, not the mechanism. The Volume's
+area draw kept 200,000 tokens and changed only the law; the AirfRANS
+resampling removes 60% of the tokens, and the slice attention over 400
+instead of 1,007 segments loses information no quadrature weight restores.
+That resolution component is 16% to 38% of the log excess here; the
+built-in geometry is the rest, and it is what the soft form addresses.
+
+**Protocol consequence (before any soft arm is scored).** The AirfRANS
+verdict needs a redraw that changes the law without removing information.
+Added to the AF-GEO protocol, to be built while the lanes train:
+`airfrans_volume_2d_refine*` variants that split every airfoil segment into
+collinear pieces under two refinement patterns (uniform, and front-loaded:
+three pieces ahead of mid-chord, one behind), each piece carrying its own
+length as measure, so the boundary measure and the geometry are unchanged
+and only the panelization pattern differs. The class's own statement is
+that splitting a boundary cell changes nothing; the nearest form moves with
+the spacing. Under refinement P2 reads: the soft arm within the seed
+separation of native under both patterns; the reference is expected to
+move. Under the 400-segment coarsening P2 reads: the soft arm's geometry
+share of the log excess (the swap control applied to it) below 0.1, with
+its total excess at most the resolution component measured here (1.6x to
+2.9x), reported as the token-count requirement of the slice attention and
+not held against the form. P3 and P4 are unchanged.
+
+**Amendment to the form (before any lane trained; the LHR verification of
+the first snapshot, job 103941, failed its own thin-plate test).** The first
+form grouped tokens by the sign of their tangent-plane distance alone and
+let the nearest token pick the group. Inside a body thinner than the kernel
+width both faces lie behind the query, fall in the same group and blend:
+the distance read the mean of the two face distances and the direction
+cancelled. The amended form keeps the nearest token's side and adds its
+normal as a facing factor, $\max(0, \hat n_i \cdot \hat n_{i^*})$, on every
+token's weight: the far face of a thin body and the far wall of a concave
+corner, whose normals point the other way, drop out; at a convex edge the
+nearest face's normal is selected as the nearest form already does; a flat
+wall is unchanged (the factor is one); on a curved wall it is a smooth
+reweighting that converges with the sample. The exact nearest search runs
+first (the existing Triton kernel), the accumulation kernel second, with the
+width read in the inputs' precision (the first kernel took it as a float32
+scalar, which the float64 kernel-vs-PyTorch test caught). Tests added for
+the thin plate inside and the concave corner; the two-laws test now samples
+at a few spacings per kernel width, the regime the form is specified for.
+`code_v21` rebuilt with the amended files; verification resubmitted on both
+clusters; the six AirfRANS lanes launch on the pass.
+
+## 2026-10-06 — AF-GEO refinement: re-panelizing the airfoil without losing information moves the AirfRANS reference 2.0x to 3.8x, and the native built-in geometry restores it to within 3% of native on every field and both seeds; the AirfRANS mechanism is the Volume's {#sec-nb-af-geo-refine}
+
+**Setting and instrument.** The count-preserving protocol promised in
+@sec-nb-af-geo-step-one: `SplitLineCells` (recipe `domain_transforms.py`)
+splits every segment of the airfoil into collinear equal pieces, each
+carrying its own length, so the geometry and the boundary measure are
+exactly the native airfoil's and only the panel pattern changes: uniform
+(every segment in two, 2,014 tokens from 1,007) and front-loaded (three
+pieces ahead of mid-chord, one behind, 2,206 tokens). Datasets
+`airfrans_volume_2d_refu` / `_reff`; the same probe and swap control as step
+one on the two AirfRANS references, 200 full_test cases, float32, 100,000
+native interior points (job 1087739, seven minutes; artifact
+`results/char/af_geo_refine_2026-10-06.json`).
+
+**What we saw.** Error relative to native, mean of the two seeds (pressure
+/ velocity / eddy viscosity): uniform re-panelization 2.02x / 2.86x / 2.41x;
+front-loaded 2.72x / 3.77x / 1.91x. With the whole airfoil's built-in
+geometry restored to the queries, the same tokens read 0.97x / 0.99x / 0.99x
+and 1.00x / 1.00x / 1.02x: the fraction of the log excess removed is 1.04 /
+1.01 / 1.01 and 1.00 / 1.00 / 0.98, both seeds within 0.96 to 1.09. The
+input shift behind it: the nearest token changes for every query under the
+uniform split (every midpoint moves) and for 45% under the front-loaded one;
+over the near-wall queries the built-in distance moves by an RMS log ratio
+of 0.42 and 0.46 and the direction's cosine to the native one is 0.95.
+
+**Reading.** With the information held fixed, the entire re-panelization
+sensitivity of the AirfRANS model is the built-in nearest-token geometry,
+exactly as VOL-GEO found for the Volume's area draw: the slice attention
+over re-panelized tokens is invariant to within seed noise, and the
+coarsening residual of step one (1.6x to 2.9x) was the information lost to
+dropping 60% of the tokens, not a second mechanism. The mechanism is now
+reproduced on two datasets and two kinds of discretization change (a law
+change at fixed count; a pattern change at fixed geometry). This is the
+protocol P2 is judged on: the soft arms' re-panelized error within the seed
+separation of native under both patterns, where the nearest form moves 2x to
+4x.
+
+## 2026-10-06 — QUERY-POP: the Volume model's error on fixed scored points rises 15x to 24x when 200,000 far-field companions join the query set and 3.5x to 4.3x with wall-heavy companions; the learned query routing mass is 1.15 to 1.18 of the whole boundary measure; a second, larger discretization sensitivity that the built-in geometry does not touch {#sec-nb-query-pop}
+
+**Setting.** Peter's question (2026-10-06): after the soft geometry, can a
+volume model trained on CFD-mesh queries (count-uniform over the mesh's
+points, wall-heavy) be inferred on a volume-uniform point cloud with the
+surface task's robustness? In ISLA's interior task the prediction points are
+interacting tokens: their total routing mass is a learned fraction of the
+boundary measure split equally over them, with no per-query measure, so the
+slice states see the query population. The campaign never varied the query
+law (the Volume's uniform point-cloud protocol redraws the boundary only).
+The query-independence program of 2026-10-03 (branch `psharpe/isla-independent`,
+`research/query_independence/RESULTS.md`) measured the dependence from the
+request side (a rear region requested alone 13.6x / 13.7x / 10.8x against
+inside the native request; a near-body uniform-like set alone 17x / 14x /
+16x) and found exact independence at equal accuracy only through a fixed
+support cloud of the training law; a model trained without interior
+writers was 4% to 42% less accurate, and the volume-quadrature program
+(branch `psharpe/isla-volquad`) found volume-weighted queries cost 15% to
+24% on DrivAerML.
+
+**Instrument (`kernel/char/qpop/qpop_swap.py`, scoring only).** The two
+Volume references on the 48 validation cars, float32, 200,000 native points,
+every metric on the SAME scored set (the first 100,000 native points) so
+that only the query population differs: the native 200,000 tokens
+(control); the 100,000 alone; the native 200,000 plus 200,000 companions
+uniform in the interior's bounding box (far-field heavy, Peter's scenario's
+direction); the native 200,000 plus 200,000 companions resampled from the
+native points with probability 1/|sdf| (wall-heavy). Every scored point
+keeps its own built-in geometry by construction (companions do not change a
+scored point's nearest boundary token). Job 1087747; the full-set control
+reproduces the record to 7e-7; artifact `results/char/qpop_2026-10-06.json`.
+
+**What we saw.** Relative to the control, mean of the two seeds (pressure /
+velocity / eddy viscosity): the half count alone 1.02x / 1.02x / 1.02x;
+far-field companions 23.7x / 15.0x / 12.3x (seeds 22.1 / 25.4 on pressure);
+wall-heavy companions 4.34x / 4.34x / 3.55x. The learned query routing mass
+is exp(logw) = 1.18 (seed 42) and 1.15 (seed 43) of the total boundary
+measure: the queries carry more mass in the slice states than the whole
+boundary.
+
+**Reading.** A count change at the training law is benign (the equal split
+keeps the population's distribution); a change of the population's
+distribution is not, and in the direction of a volume-uniform cloud it is
+twice the Volume's boundary-law sensitivity in log terms. This is a property
+of the interacting design, separate from the built-in geometry, and the
+soft form leaves it untouched. After SOFT-GEO the volume task gets the
+surface task's robustness to the boundary sampling law; robustness to the
+query sampling law needs a change on the query side, and the three forms
+already measured by Peter's programs each pay for it: a training-law
+support cloud (exact, equal accuracy, but needs a wall-heavy volume sample at
+inference), passive queries (exact, 4% to 42% less accurate), volume-measure
+queries (15% to 24% less accurate on DrivAerML). Reported to Peter with the
+numbers; no query-side lane launched without his word.
+
+## 2026-10-06 — SOFT-GEO first launch invalid: the five soft lanes read a NaN loss from their first step (the streaming kernel's online rescale before a query's first kept sample); the nearest control trained; kernel guarded, regression test added, lanes relaunched after re-verification {#sec-nb-soft-geo-nan-relaunch}
+
+The six `sq_af` lanes launched on LHR at 09:20 PDT (jobs 104168-104173).
+Within minutes every soft arm (`sq_af_soft03_seed42/43`, `soft01`, `soft10`,
+`soft03_nosdf`) logged `Loss: nan` from its first training step, while the
+nearest-geometry control `sq_af_nearest_nosdf_seed42` trained normally
+(0.100 at the first step, 0.033 at epoch 3). The cause is in the amended
+kernel's accumulation pass: the side and facing rules exclude tokens, and
+for a query whose first token tiles hold no kept sample the running maximum
+and the tile maximum are both minus infinity, so the streamed-softmax
+rescale evaluates exp(-inf - (-inf)) = NaN and poisons the accumulators.
+The PyTorch form takes its maximum over the whole row and never meets the
+case, and the kernel-vs-PyTorch test on random clouds met a kept token in
+the first tile of every query by chance. On the AirfRANS airfoil the tokens
+are ordered along the curve, so a query above the upper surface whose first
+128 tokens lie on the lower surface hits the case at once. Fix: the rescale
+and the exponentials are gated on a live maximum (zero until the first kept
+sample); regression test with the far face of a plate listed first, CUDA
+only. The five soft lanes were cancelled, their first-step run directories
+set aside (`runs_invalid_nan_2026-10-06/`), the snapshot `code_v21` rebuilt
+with the guard, verification resubmitted on both clusters, and the lanes
+relaunch on the pass. The control lane keeps running. Nothing in the
+preregistration changes; no result was read from the invalid lanes.
