@@ -165,7 +165,8 @@ step, so a G lane takes about 16-17 h (five 3h59 links) against 7.5-8 h.
 
 LHR task dir `agents/2026-10-05-isla-qi-global` (same path as on AGA),
 `kernel/lanes.tsv`, chained 3h59 singleton links (`kernel/lanes.sbatch`, the
-kernel lane's launcher with this task dir), protocol: `airfrans_volume_2d` / `isla_volume_airfrans`, 100,000 cells,
+kernel lane's launcher with this task dir), protocol: `airfrans_volume_2d` /
+`isla_volume_airfrans`, 100,000 cells,
 `train_split=full_train val_split=full_test +training.val_interval=10`, lr 5e-4,
 500 epochs, bf16, no augmentation, compiled blocks. Model overrides: P and G
 `++model.query_independent=true`; T adds `++model.kernel_read=sum
