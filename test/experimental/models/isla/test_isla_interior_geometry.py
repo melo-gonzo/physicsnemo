@@ -666,3 +666,27 @@ def test_soft_geometry_model_contracts_and_checkpoint(tmp_path):
         _model(query_geometry="plane")
     with pytest.raises(ValueError, match="query_geometry_width"):
         _model(query_geometry="soft", query_geometry_width=0.0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available() or not geometry.HAS_TRITON, reason="CUDA + Triton")
+def test_soft_geometry_kernel_is_finite_when_the_first_tiles_hold_no_kept_sample():
+    """The streaming kernel's online rescale must stay finite for a query whose first
+    token tiles are all excluded by the side and facing rules (the far face of a plate
+    listed first): the first soft lanes trained on AirfRANS went NaN at epoch 3 through
+    exp(-inf - (-inf)) in exactly this case (2026-10-06)."""
+    dev = torch.device("cuda")
+    g = torch.Generator().manual_seed(0)
+    n = 3000
+    xy = (torch.rand(n, 2, dtype=torch.float32, generator=g) * 2 - 1) * 10.0
+    lo = torch.cat([xy, torch.full((n, 1), -0.01)], -1)  # far face first in the token order
+    up = torch.cat([xy, torch.zeros(n, 1)], -1)
+    pts = torch.cat([lo, up])[None].to(dev)
+    nrm = torch.cat([torch.tensor([[0.0, 0.0, -1.0]]).expand(n, 3), torch.tensor([[0.0, 0.0, 1.0]]).expand(n, 3)])[None].to(dev)
+    q = torch.tensor([[[0.2, 0.1, 0.3], [-3.0, 4.0, 0.05], [0.1, -0.2, 0.001]]], device=dev)
+    d, u = soft_boundary_geometry(q, pts, nrm, None, width=0.5)
+    assert torch.isfinite(d).all() and torch.isfinite(u).all()
+    assert torch.allclose(d[0], q[0, :, 2], atol=1e-5)
+    assert torch.allclose(u[0], torch.tensor([[0.0, 0.0, 1.0]], device=dev).expand(3, 3), atol=1e-5)
+    with torch.enable_grad():
+        d_ref, u_ref = soft_boundary_geometry(q.clone().requires_grad_(True), pts, nrm, None, width=0.5)
+    assert torch.allclose(d, d_ref.detach(), atol=1e-5) and torch.allclose(u, u_ref.detach(), atol=1e-5)

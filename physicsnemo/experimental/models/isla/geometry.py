@@ -297,8 +297,12 @@ if HAS_TRITON:
             l = lw[None, :] - r * inv_width + tl.log(f)
             l = tl.where(keep, l, -inf)
             m_new = tl.maximum(m, tl.max(l, axis=1))
-            scale = tl.exp(m - m_new)
-            e = tl.exp(l - m_new[:, None])
+            ### Until a query's stream has met its first kept sample, m and m_new are
+            ### both -inf and exp(m - m_new) would be NaN; the accumulators are zero
+            ### there, so the rescale is 0. Likewise e is 0 for every excluded sample.
+            live = m_new > -inf
+            scale = tl.where(live, tl.exp(m - tl.where(live, m_new, 0.0)), 0.0)
+            e = tl.where(keep, tl.exp(l - tl.where(live, m_new, 0.0)[:, None]), 0.0)
             w = w * scale + tl.sum(e, axis=1)
             sacc = sacc * scale + tl.sum(e * s, axis=1)
             a0 = a0 * scale + tl.sum(e * nn0[None, :], axis=1)
