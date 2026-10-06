@@ -97,7 +97,7 @@ def test_mesh_storage_mutations_are_rejected(mutation):
     prediction = torch.zeros(4, 2)
     calibrator = CellwiseCalibrator(AbsoluteErrorScore(), alpha=0.5)
     for _ in range(3):
-        calibrator.update_sample(prediction, prediction + 1, points=points)
+        calibrator.update(prediction, prediction + 1, points=points)
     predictor = calibrator.finalize()
     predictor.predict_interval(prediction, points=points)
     version = points._version
@@ -107,7 +107,7 @@ def test_mesh_storage_mutations_are_rejected(mutation):
         points.numpy()[0, 0] += 1
     assert points._version == version
     with pytest.raises(ValueError, match="same mesh"):
-        calibrator.update_sample(prediction, prediction + 1, points=points)
+        calibrator.update(prediction, prediction + 1, points=points)
     assert calibrator.n_cal == 3
     with pytest.raises(ValueError, match="exact calibration mesh"):
         predictor.predict_interval(prediction, points=points)
@@ -210,6 +210,6 @@ def test_aux_and_points_are_keyword_only():
     with pytest.raises(TypeError, match="positional"):
         predictor.predict_interval(torch.zeros(4, 2), points)
     with pytest.raises(TypeError, match="positional"):
-        CellwiseCalibrator(AbsoluteErrorScore(), alpha=0.2).update_sample(
+        CellwiseCalibrator(AbsoluteErrorScore(), alpha=0.2).update(
             torch.zeros(4, 2), torch.zeros(4, 2), points
         )

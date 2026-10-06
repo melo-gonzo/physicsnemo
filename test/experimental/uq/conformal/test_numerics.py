@@ -228,7 +228,7 @@ def test_normalization_underflow_handled_exactly(cls):
     aux = {"s": torch.full((4,), 1e38)}
     calibrator = cls(AbsoluteErrorScore(), alpha=0.5, difficulty=AuxDifficulty("s"))
     for _ in range(3):
-        calibrator.update_sample(torch.zeros(4), target, aux=aux)
+        calibrator.update(torch.zeros(4), target, aux=aux)
     predictor = calibrator.finalize()
     assert float(predictor.thresholds) > 0.0
     assert_predictor_covers_admitted(predictor, torch.zeros(4), target, aux=aux)
@@ -250,7 +250,7 @@ def test_normalization_rejects_subnormal_and_underflowed_scores(cls, score, magn
     aux = {"s": torch.full_like(prediction, 1e308), "lo": prediction, "hi": 2 * target}
     calibrator = cls(score, alpha=0.5, difficulty=AuxDifficulty("s"))
     with pytest.raises(ValueError, match="float64.*Rescale"):
-        calibrator.update_sample(prediction, target, aux=aux)
+        calibrator.update(prediction, target, aux=aux)
     assert calibrator.n_cal == 0
 
 
@@ -269,10 +269,10 @@ def test_normalization_normal_boundary_and_true_zero(cls, signed):
         calibrator = cls(score, alpha=0.5, difficulty=AuxDifficulty("s"))
         if magnitude == below:
             with pytest.raises(ValueError, match="float64.*Rescale"):
-                calibrator.update_sample(prediction, target, aux=aux)
+                calibrator.update(prediction, target, aux=aux)
             assert calibrator.n_cal == 0
             continue
-        calibrator.update_sample(prediction, target, aux=aux)
+        calibrator.update(prediction, target, aux=aux)
         predictor = calibrator.finalize()
         expected = score.score(prediction, target, aux) / scale
         assert float(predictor.thresholds) == float(expected)
@@ -286,7 +286,7 @@ def test_normalization_overflow_rejected():
         AbsoluteErrorScore(), alpha=0.5, difficulty=AuxDifficulty("s")
     )
     with pytest.raises(ValueError, match="non-finite"):
-        calibrator.update_sample(
+        calibrator.update(
             torch.zeros(4, dtype=_F64),
             torch.full((4,), 1e308, dtype=_F64),
             aux={"s": torch.full((4,), 1e-30, dtype=_F64)},
@@ -308,7 +308,7 @@ def test_aux_difficulty_is_stable_across_default_dtype_changes(
     target = torch.ones(1, dtype=_F64)
     aux = {"s": torch.full((1,), 0.1, dtype=_F64)}
     for _ in range(3):
-        calibrator.update_sample(prediction, target, aux=aux)
+        calibrator.update(prediction, target, aux=aux)
     predictor = calibrator.finalize()
     if persist:
         predictor.save(tmp_path / "aux.pt")
@@ -503,7 +503,7 @@ def test_empty_samples_rejected_uniformly(cls):
     calibrator = cls(AbsoluteErrorScore(), alpha=0.25)
     kwargs = {"points": torch.zeros(1, 1)} if cls.__name__.startswith("Cell") else {}
     with pytest.raises(ValueError, match="empty sample"):
-        calibrator.update_sample(torch.zeros(0), torch.zeros(0), **kwargs)
+        calibrator.update(torch.zeros(0), torch.zeros(0), **kwargs)
     assert calibrator.n_cal == 0
 
 

@@ -110,7 +110,7 @@ def fit(
                 if aux_factory
                 else None
             )
-        calibrator.update_sample(pred, target, aux=aux, points=points)
+        calibrator.update(pred, target, aux=aux, points=points)
     return calibrator.finalize(), points
 
 
@@ -119,7 +119,7 @@ def fitted_risk(generator: torch.Generator | None = None) -> ConformalPredictor:
     generator = generator or torch.Generator().manual_seed(13)
     calibrator = RiskControlCalibrator(AbsoluteErrorScore(), alpha=0.25)
     for _ in range(8):
-        calibrator.update_sample(torch.zeros(12), torch.randn(12, generator=generator))
+        calibrator.update(torch.zeros(12), torch.randn(12, generator=generator))
     return calibrator.finalize()
 
 

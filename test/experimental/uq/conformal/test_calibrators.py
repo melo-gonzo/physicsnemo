@@ -47,7 +47,7 @@ def test_cellwise_uses_exact_conformal_rank_and_returns_one_predictor():
     calibrator = CellwiseCalibrator(AbsoluteErrorScore(), alpha=0.4)
     points = torch.arange(2.0).reshape(2, 1)
     for target in ([1.0, 4.0], [2.0, 3.0], [3.0, 2.0], [4.0, 1.0]):
-        calibrator.update_sample(torch.zeros(2), torch.tensor(target), points=points)
+        calibrator.update(torch.zeros(2), torch.tensor(target), points=points)
 
     predictor = calibrator.finalize()
     assert type(predictor) is ConformalPredictor
@@ -61,7 +61,7 @@ def test_cellwise_uses_exact_conformal_rank_and_returns_one_predictor():
 def test_plain_tensor_errors_do_not_leak_internal_key():
     calibrator = FunctionalBandCalibrator(AbsoluteErrorScore(), alpha=0.2)
     with pytest.raises(ValueError, match="^Plain tensor: empty sample") as excinfo:
-        calibrator.update_sample(torch.empty(0), torch.empty(0))
+        calibrator.update(torch.empty(0), torch.empty(0))
     assert TENSOR_KEY not in str(excinfo.value)
 
 
@@ -76,7 +76,7 @@ def test_cellwise_retains_contiguous_scores_without_changing_bits(dtype):
         prediction = torch.zeros_like(target, requires_grad=True)
         assert not target.is_contiguous()
         reference.append(target.abs())
-        calibrator.update_sample(prediction, target, points=points)
+        calibrator.update(prediction, target, points=points)
 
     for stored in calibrator._scores[TENSOR_KEY]:
         assert (
@@ -89,34 +89,34 @@ def test_cellwise_retains_contiguous_scores_without_changing_bits(dtype):
 def test_cellwise_requires_and_fingerprints_points_transactionally():
     calibrator = CellwiseCalibrator(AbsoluteErrorScore(), alpha=0.5)
     with pytest.raises(ValueError, match="requires points"):
-        calibrator.update_sample(torch.zeros(3), torch.zeros(3))
+        calibrator.update(torch.zeros(3), torch.zeros(3))
     assert calibrator.n_cal == 0
     assert calibrator.mesh_fingerprint is None
 
     points = torch.arange(3.0).reshape(3, 1)
     with pytest.raises(ValueError, match="leading entry per point"):
-        calibrator.update_sample(torch.zeros(2), torch.zeros(2), points=points)
+        calibrator.update(torch.zeros(2), torch.zeros(2), points=points)
     assert calibrator.n_cal == 0
     assert calibrator.mesh_fingerprint is None
 
-    calibrator.update_sample(torch.zeros(3), torch.zeros(3), points=points)
+    calibrator.update(torch.zeros(3), torch.zeros(3), points=points)
     fingerprint = calibrator.mesh_fingerprint
-    calibrator.update_sample(torch.zeros(3), torch.ones(3), points=points.clone())
+    calibrator.update(torch.zeros(3), torch.ones(3), points=points.clone())
     assert calibrator.n_cal == 2
     assert calibrator.mesh_fingerprint == fingerprint
 
     for changed in (points.flip(0), points.to(torch.float64)):
         with pytest.raises(ValueError, match="same mesh"):
-            calibrator.update_sample(torch.zeros(3), torch.zeros(3), points=changed)
+            calibrator.update(torch.zeros(3), torch.zeros(3), points=changed)
     assert calibrator.n_cal == 2
 
 
 def test_cellwise_rejects_output_layout_drift_on_the_same_mesh():
     points = torch.arange(4.0).reshape(4, 1)
     calibrator = CellwiseCalibrator(AbsoluteErrorScore(), alpha=0.5)
-    calibrator.update_sample(torch.zeros(4, 1), torch.zeros(4, 1), points=points)
+    calibrator.update(torch.zeros(4, 1), torch.zeros(4, 1), points=points)
     with pytest.raises(ValueError, match="score shape"):
-        calibrator.update_sample(torch.zeros(4, 2), torch.zeros(4, 2), points=points)
+        calibrator.update(torch.zeros(4, 2), torch.zeros(4, 2), points=points)
     assert calibrator.n_cal == 1
 
 
@@ -157,10 +157,10 @@ def test_schema_drift_is_rejected_transactionally(
 ):
     calibrator = RiskControlCalibrator(AbsoluteErrorScore(), alpha=0.5)
     if first is not None:
-        calibrator.update_sample(first, first.clone())
+        calibrator.update(first, first.clone())
     expected_n_cal = calibrator.n_cal
     with pytest.raises(error, match=match):
-        calibrator.update_sample(prediction, target)
+        calibrator.update(prediction, target)
     assert calibrator.n_cal == expected_n_cal
 
 
@@ -173,11 +173,11 @@ def test_late_field_rejection_preserves_finalized_thresholds_transactionally(cls
     kwargs = {"points": torch.arange(3.0).reshape(3, 1)}
     for value in (1.0, 2.0, 3.0, 4.0):
         target = _td(a=torch.full((3,), value), b=torch.full((3,), value + 1))
-        calibrator.update_sample(prediction, target, aux=aux, **kwargs)
+        calibrator.update(prediction, target, aux=aux, **kwargs)
     before = calibrator.finalize().thresholds
 
     with pytest.raises(ValueError, match="missing.*sigma"):
-        calibrator.update_sample(
+        calibrator.update(
             prediction, prediction, aux={"a": aux["a"], "b": {}}, **kwargs
         )
 
@@ -192,7 +192,7 @@ def test_functional_band_uses_scalar_rank_across_varying_meshes():
     for index, maximum in enumerate([1.0, 4.0, 2.0, 3.0], start=2):
         target = torch.linspace(0.0, maximum, index)
         points = torch.arange(float(index)).reshape(index, 1)
-        calibrator.update_sample(torch.zeros_like(target), target, points=points)
+        calibrator.update(torch.zeros_like(target), target, points=points)
     predictor = calibrator.finalize()
     assert predictor.tier == "functional"
     assert predictor.thresholds.ndim == 0
@@ -215,14 +215,14 @@ def test_difficulty_adaptation_and_strategy_snapshot_are_fixed():
     aux = {"scale": torch.full((4,), 2.0, dtype=torch.float64), "sigma": zeros}
     bad_scale = torch.tensor([2.0, torch.inf, 2.0, 2.0], dtype=torch.float64)
     with pytest.raises(ValueError, match="non-finite"):
-        calibrator.update_sample(zeros, target, aux={**aux, "scale": bad_scale})
+        calibrator.update(zeros, target, aux={**aux, "scale": bad_scale})
     assert calibrator.n_cal == 0
 
-    calibrator.update_sample(zeros, target, aux=aux)
+    calibrator.update(zeros, target, aux=aux)
     shared.key = "other"  # the calibrator holds a snapshot, not the caller's object
     score.eps = 0.01
     for _ in range(2):
-        calibrator.update_sample(zeros, target, aux=aux)
+        calibrator.update(zeros, target, aux=aux)
     predictor = calibrator.finalize()
     # sigma=0 clamps to eps=1: score |1 - 0| / 1 = 1, normalized by scale 2.
     assert float(predictor.thresholds) == 0.5
@@ -254,7 +254,7 @@ def test_crc_uses_point_events_over_all_trailing_components():
     calibrator = RiskControlCalibrator(AbsoluteErrorScore(), alpha=0.5)
     for score in (1.0, 2.0, 3.0):
         target = torch.tensor([[score, 0.0], [0.0, 0.0]])
-        calibrator.update_sample(torch.zeros_like(target), target)
+        calibrator.update(torch.zeros_like(target), target)
     # Point reduction yields vectors [score, 0] and selects 1. Component
     # counting would select 0 for this construction.
     predictor = calibrator.finalize()
@@ -265,20 +265,20 @@ def test_crc_uses_point_events_over_all_trailing_components():
 def test_crc_exact_rational_feasibility_floor():
     below = RiskControlCalibrator(AbsoluteErrorScore(), alpha=1.0 / 3.0)
     for _ in range(2):
-        below.update_sample(torch.zeros(4), torch.zeros(4))
+        below.update(torch.zeros(4), torch.zeros(4))
     with pytest.raises(ValueError, match="infeasible"):
         below.finalize()
 
     exact = RiskControlCalibrator(AbsoluteErrorScore(), alpha=0.25)
     for _ in range(3):
-        exact.update_sample(torch.zeros(4), torch.zeros(4))
+        exact.update(torch.zeros(4), torch.zeros(4))
     assert float(exact.finalize().thresholds) == 0.0
 
 
 def test_crc_accepts_varying_mesh_sizes_and_tensordict():
     calibrator = RiskControlCalibrator(AbsoluteErrorScore(), alpha=0.25)
     for n in (2, 7, 3, 11):
-        calibrator.update_sample(_td(v=torch.zeros(n, 3)), _td(v=torch.ones(n, 3)))
+        calibrator.update(_td(v=torch.zeros(n, 3)), _td(v=torch.ones(n, 3)))
     predictor = calibrator.finalize()
     assert isinstance(predictor.thresholds, TensorDict)
     assert predictor.thresholds["v"].ndim == 0
@@ -295,11 +295,11 @@ def test_scaled_tiers_reject_points_that_contradict_the_point_axis(calibrator_cl
     calibrator = calibrator_cls(AbsoluteErrorScore(), alpha=0.5)
     field = torch.zeros(2, 2, 1)
     with pytest.raises(ValueError, match="leading entry per point"):
-        calibrator.update_sample(field, field.clone(), points=torch.zeros(4, 3))
+        calibrator.update(field, field.clone(), points=torch.zeros(4, 3))
     assert calibrator.n_cal == 0
 
     for _ in range(3):
-        calibrator.update_sample(field, torch.ones(2, 2, 1), points=torch.zeros(2, 3))
+        calibrator.update(field, torch.ones(2, 2, 1), points=torch.zeros(2, 3))
     predictor = calibrator.finalize()
     with pytest.raises(ValueError, match="leading entry per point"):
         predictor.predict_interval(field, points=torch.zeros(4, 3))
@@ -337,7 +337,7 @@ def test_keys_subset_round_trips_through_predict_save_and_diagnostics(tmp_path):
             pressure=torch.randn(12, generator=generator),
             velocity=torch.randn(12, 3, generator=generator),
         )
-        calibrator.update_sample(full, target)
+        calibrator.update(full, target)
     predictor = calibrator.finalize()
     assert predictor.keys == ["pressure"]
 

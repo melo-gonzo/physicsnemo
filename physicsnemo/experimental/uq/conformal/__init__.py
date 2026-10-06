@@ -60,7 +60,7 @@ Typical usage::
 
     calibrator = RiskControlCalibrator(AbsoluteErrorScore(), alpha=0.1)
     for pred, target in calibration_set:
-        calibrator.update_sample(pred, target)
+        calibrator.update(pred, target)
     predictor = calibrator.finalize()
 
     lo, hi = predictor.predict_interval(model_output)

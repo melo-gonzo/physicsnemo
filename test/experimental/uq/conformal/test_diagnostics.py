@@ -146,7 +146,7 @@ def test_empty_quantile_regression_set_has_zero_width():
     prediction = torch.zeros(1)
     target = torch.zeros(1)
     for _ in range(3):
-        calibrator.update_sample(
+        calibrator.update(
             prediction, target, aux={"lo": -torch.ones(1), "hi": torch.ones(1)}
         )
 
@@ -321,7 +321,7 @@ def test_report_metadata_is_private():
 def _calibrator_finalizer():
     calibrator = RiskControlCalibrator(AbsoluteErrorScore(), alpha=0.5)
     for _ in range(3):
-        calibrator.update_sample(torch.zeros(2), torch.zeros(2))
+        calibrator.update(torch.zeros(2), torch.zeros(2))
     return calibrator.finalize
 
 

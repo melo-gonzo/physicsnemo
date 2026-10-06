@@ -149,9 +149,9 @@ def _calibrator_entry(tier):
     def build():
         calibrator = CALIBRATORS[tier](AbsoluteErrorScore(), alpha=0.5)
         points = _POINTS if tier == "cellwise" else None
-        calibrator.update_sample(_F, _F, points=points)
+        calibrator.update(_F, _F, points=points)
         return (
-            lambda bad: calibrator.update_sample(_F, bad, points=points),
+            lambda bad: calibrator.update(_F, bad, points=points),
             lambda: calibrator.n_cal,
         )
 
@@ -172,9 +172,7 @@ def _accumulator_entry():
     )
 
 
-ENTRY_POINTS = {
-    f"calibrator[{tier}].update_sample": _calibrator_entry(tier) for tier in TIERS
-}
+ENTRY_POINTS = {f"calibrator[{tier}].update": _calibrator_entry(tier) for tier in TIERS}
 ENTRY_POINTS["predictor.predict_interval"] = _predictor_entry
 ENTRY_POINTS["accumulator.update"] = _accumulator_entry
 
@@ -199,5 +197,5 @@ def test_tensordict_inputs_take_the_same_validation_path():
     calibrator = CALIBRATORS["risk_control"](AbsoluteErrorScore(), alpha=0.5)
     bad = TensorDict({"bad": torch.full((3,), torch.nan)}, batch_size=[])
     with pytest.raises(ValueError, match="Field 'bad': 3 non-finite"):
-        calibrator.update_sample(bad, bad)
+        calibrator.update(bad, bad)
     assert calibrator.n_cal == 0

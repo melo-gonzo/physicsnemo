@@ -151,7 +151,7 @@ def test_unused_aux_can_be_omitted(tier):
     pred, target = torch.zeros(1), torch.ones(1)
     points = torch.zeros(1, 1) if tier == "cellwise" else None
     for aux in (None, {}, {"spread": None}):
-        calibrator.update_sample(pred, target, aux=aux, points=points)
+        calibrator.update(pred, target, aux=aux, points=points)
     predictor = calibrator.finalize()
     assert predictor.difficulty is None
     for aux in (None, {}, {"spread": None}):
@@ -169,7 +169,7 @@ def test_normalized_low_precision_sigma_keeps_fitted_intervals_tight(tier):
     aux = {"sigma": torch.full((1,), 60000.0, dtype=torch.float16)}
     points = torch.zeros(1, 1) if tier == "cellwise" else None
     for _ in range(3):
-        calibrator.update_sample(pred, target, aux=aux, points=points)
+        calibrator.update(pred, target, aux=aux, points=points)
     predictor = calibrator.finalize()
     assert (score.score(pred, target, aux) <= predictor.thresholds).all()
     lo, hi = assert_predictor_covers_admitted(

@@ -26,7 +26,7 @@ Choose a calibrator by the guarantee you need:
   tighter band that bounds the expected fraction of points it misses;
   meshes may vary.
 
-Pass each calibration sample to ``update_sample``, then call ``finalize``
+Pass each calibration sample to ``update``, then call ``finalize``
 to get a :class:`~physicsnemo.experimental.uq.conformal.ConformalPredictor`.
 Samples are plain tensors or ``TensorDict`` field containers. The first
 sample fixes which of the two you use and which fields it has; later
@@ -314,7 +314,7 @@ class CellwiseCalibrator(_SplitCalibratorBase):
     >>> for _ in range(20):
     ...     prediction = torch.randn(50, 2)
     ...     target = prediction + 0.1 * torch.randn(50, 2)
-    ...     calibrator.update_sample(prediction, target, points=points)
+    ...     calibrator.update(prediction, target, points=points)
     >>> predictor = calibrator.finalize()
     >>> lo, hi = predictor.predict_interval(torch.randn(50, 2), points=points)
     >>> lo.shape
@@ -336,7 +336,7 @@ class CellwiseCalibrator(_SplitCalibratorBase):
         r"""Identifier of the calibration mesh, or ``None`` before the first sample."""
         return self._mesh_fingerprint
 
-    def update_sample(
+    def update(
         self,
         prediction: Float[Tensor, "*dims"] | TensorDict,
         target: Float[Tensor, "*dims"] | TensorDict,
@@ -441,7 +441,7 @@ class CellwiseCalibrator(_SplitCalibratorBase):
 
 
 class _ScaledCalibratorBase(_SplitCalibratorBase):
-    """Shared ``update_sample`` for calibrators with an optional difficulty field."""
+    """Shared ``update`` for calibrators with an optional difficulty field."""
 
     _reduce: Callable[[Tensor], Tensor]
 
@@ -466,7 +466,7 @@ class _ScaledCalibratorBase(_SplitCalibratorBase):
         r"""Copy of the difficulty field set at construction, or ``None``."""
         return copy.deepcopy(self._difficulty)
 
-    def update_sample(
+    def update(
         self,
         prediction: Float[Tensor, "*dims"] | TensorDict,
         target: Float[Tensor, "*dims"] | TensorDict,
@@ -595,7 +595,7 @@ class FunctionalBandCalibrator(_ScaledCalibratorBase):
     >>> for n_points in range(40, 60):
     ...     prediction = torch.randn(n_points, 2)
     ...     target = prediction + 0.1 * torch.randn(n_points, 2)
-    ...     calibrator.update_sample(prediction, target)
+    ...     calibrator.update(prediction, target)
     >>> predictor = calibrator.finalize()
     >>> lo, hi = predictor.predict_interval(torch.randn(80, 2))
     >>> hi.shape
@@ -742,7 +742,7 @@ class RiskControlCalibrator(_ScaledCalibratorBase):
     ...     prediction = torch.randn(n_points, 2)
     ...     sigma = torch.rand(n_points, 2) + 0.5
     ...     target = prediction + sigma * torch.randn(n_points, 2)
-    ...     calibrator.update_sample(prediction, target, aux={"sigma": sigma})
+    ...     calibrator.update(prediction, target, aux={"sigma": sigma})
     >>> predictor = calibrator.finalize()
     >>> sigma = torch.rand(30, 2) + 0.5
     >>> lo, hi = predictor.predict_interval(torch.randn(30, 2), aux={"sigma": sigma})
