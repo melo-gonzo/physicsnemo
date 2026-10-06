@@ -25,6 +25,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PHYSICSNEMO_DIST_TIMEOUT_S`; unset or empty configuration keeps PyTorch's
   backend default. Invalid timeouts are rejected before initialization state
   changes, allowing corrected configuration to be retried.
+- Adds `physicsnemo.experimental.models.ISLA` (Invariant Slice Attention), an
+  O(3)/SE(3)-equivariant, measure-aware slice-attention surrogate for steady
+  boundary-value problems. Inputs (global, per-boundary-cell, per-query) and
+  outputs are named fields of declared tensor rank, declared by
+  `global_schema`, `boundary_schema`, `query_schema` and `output_schema`
+  (`output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}, "stress":
+  {"rank": 2, "symmetric": True}}`, see `FieldSchema` under Changed); every
+  input enters through O(3)-invariants
+  and every output leaves through an exactly equivariant basis (ranks up to 4,
+  even or odd parity). `forward` is mesh-native, as GLOBE's: it takes the
+  boundary as named `Mesh` objects, the case's `global_data`, and for an
+  interior task (`interior=True`) the prediction points as a point-cloud
+  `Mesh`, and returns a point-cloud `Mesh` carrying the outputs in its
+  `point_data`. Constructor and `forward` are keyword-only. An exact fused
+  Triton kernel for the per-layer geometry region is selected automatically
+  on CUDA. The unified external-aerodynamics recipe gains ISLA model configs
+  (`isla_surface`, `isla_volume`, `isla_volume_sdf`).
+- `MeshDataset(cache_host=True, cache_host_views=k)` keeps each sample's
+  first `k` reads in host memory and serves later requests for the same
+  index from that cache (single- or few-sample fitting; `k > 1` keeps `k`
+  stochastic subsample views per index).
+- `DomainMeshReader` gains `boundary_subsample` (`"both"`, `"cells"`,
+  `"points"`), choosing which of the two subsamples apply to the in-file
+  boundary meshes, and `interior_n_points_range`, which draws the interior
+  point count per sample from a closed integer range (query-count
+  augmentation), reproducibly under `set_epoch`.
+- Mesh readers load saved meshes with `tensordict` memory maps opened
+  read-only (`physicsnemo.datapipes.readers.mesh.read_only_memory_maps`), so
+  page faults on a networked file system no longer take write extent locks
+  (observed as a training hang on a Lustre-hosted dataset).
+- `CenterMesh` gains `store_center_as` (records the subtracted center in
+  `global_data`) and `use_measure_weighting` (centers by effective cell
+  measure rather than raw cell area, so a subsampled mesh is centered where
+  the full mesh would be).
 - `MeshToDomainMesh` in `cell_centroids` mode records each source cell's
   complete effective measure on the interior under the mesh-owned
   `_effective_measure` point-data key, so
@@ -53,6 +87,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `physicsnemo.experimental.models.ISLA` routes every slice block (and its head
+  frame) on sample-conditioned prototypes: learned seeds plus a centered,
+  scale-bounded, measure-weighted summary of the sample's own token states.
+  The `slice_prototypes` constructor argument and the static form are removed;
+  checkpoints of the static form no longer load.
+- `physicsnemo.mesh.fields` is rebuilt around two types. `RankSpec` (`rank`,
+  `symmetric`, `parity`; `shape(n_spatial_dims)`, `numel(n_spatial_dims)`) is
+  one field's transformation law; `FieldSchema` is an insertion-ordered
+  mapping from dotted field names to `RankSpec`, parsed once at a model's
+  boundary with `FieldSchema.parse` (nested groups and dotted names flatten
+  alike) and queried with `.ranks`, `.count(rank)`, `FieldSchema.key(name)`
+  and `.check(tensordict, label=...)`. Both are read-only `dict`s, so a
+  declaration serializes to JSON as written and model checkpoints can record
+  them directly. Validation is construction, so an invalid schema cannot
+  exist. A field is declared as a `RankSpec` or a mapping of values,
+  `{"rank": n}` (YAML: `pressure: {rank: 0}`); a mapping of mappings is a
+  nested group. Integer leaves are no longer accepted;
+  ISLA uses the same grammar.
+- GLOBE's field declarations are renamed after the schemas they hold:
+  `output_field_ranks`, `boundary_source_data_ranks` and `global_data_ranks`
+  become `output_schema`, `boundary_source_schemas` and `global_schema`
+  (kernels: `output_schema`, `source_schema`, `global_schema`), each also the
+  attribute holding the parsed `FieldSchema`. GLOBE raises
+  `NotImplementedError` for fields it does not implement (rank 2 and above,
+  pseudotensors) instead of silently dropping or misreading them. The GLOBE
+  examples and the unified external-aerodynamics recipe configs are updated.
 - Refresh core, optional, development, and container dependency versions.
   Require PyTorch 2.13 or newer and TensorDict 0.14.2 or newer;
   use PyTorch 2.13's CUDA 12.9 wheels for the CUDA 12 backend. NATTEN
@@ -152,6 +212,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `RandomRotateMesh` stores its `axes` as a tuple. Hydra instantiates
+  transforms with OmegaConf containers, and a `ListConfig` rejected the
+  one-element index tensor drawn for the axis, so every augmented sample
+  raised `KeyValidationError`; a plain sequence indexes by tensor through
+  `__index__`.
+- Unified external aerodynamics recipe: synchronizes data-loading failures
+  before DDP forward and forward/loss failures before backward; failures
+  inside model collectives or backward still rely on the process-group
+  timeout. An optional `training.divergence_loss_threshold` aborts on
+  non-finite or exploding losses. Epoch schedulers advance before saving
+  (checkpoints written by earlier recipe versions, which saved before the
+  step, are advanced once on resume), fp16 `GradScaler` state is persisted,
+  and the final epoch is always checkpointed. Resume metadata reports
+  scheduler/scaler restoration; exact trajectory continuation is unverified
+  because RNG and stochastic data state are not restored.
+- Checkpoint loading resolves model weights at the selected training
+  checkpoint's filename index, preventing resumes that mix epochs. Missing
+  required weights raise before any model or training state is restored.
+  Distributed loads validate on every rank using rank 0's file lookup.
+- Unified external aero recipe: near-wall SDF normals ignore subresolution
+  sign noise without reversing resolved interior normals, including on
+  translated geometry. Stored signed distances are unchanged.
 - Mesh slicing reuses integer indices across connectivity, fields, and caches
   to avoid repeated CUDA synchronization for the same boolean mask.
   Point slicing skips mask processing when the output has no cells because
