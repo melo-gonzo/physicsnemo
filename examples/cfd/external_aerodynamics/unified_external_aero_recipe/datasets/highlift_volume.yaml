@@ -35,7 +35,7 @@ pipeline:
     subsample_n_points: ${sampling_resolution}
     subsample_n_cells: ${sampling_resolution}
     # Interior consumed as a point cloud; drop tet topology so the point
-    # subsample is a cheap contiguous block read (see drivaer_ml_volume.yaml).
+    # subsample is a cheap row gather (see drivaer_ml_volume.yaml).
     drop_interior_cells: true
     # Preserve in-file boundaries as the lossless default. Point-based model
     # templates that consume only the interior explicitly opt into dropping

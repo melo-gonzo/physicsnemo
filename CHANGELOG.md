@@ -53,6 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `MeshReader` and `DomainMeshReader` subsample with a uniformly random,
+  sorted subset by default (`subsample_mode="uniform"`). The previous single
+  contiguous block, now `subsample_mode="block"`, made every sample a spatial
+  slab on meshes stored in solver or patch order.
 - Refresh core, optional, development, and container dependency versions.
   Require PyTorch 2.13 or newer and TensorDict 0.14.2 or newer;
   use PyTorch 2.13's CUDA 12.9 wheels for the CUDA 12 backend. NATTEN

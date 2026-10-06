@@ -32,9 +32,14 @@ pipeline:
     pattern: "run_*/domain_*.pdmsh"
     subsample_n_points: ${sampling_resolution}
     subsample_n_cells: ${sampling_resolution}
+    # Curated DrivAerML stores interior points and surface cells in shuffled
+    # order (row index vs xyz correlation ~0), so a contiguous block is as
+    # spatially representative as a uniform draw and much cheaper to read.
+    # Use the default (uniform) for data stored in solver or patch order.
+    subsample_mode: block
     # The volume model consumes the interior as a point cloud (interior.points +
     # interior.point_data); dropping interior tet topology makes the point
-    # subsample a cheap contiguous block read instead of a full slice_points
+    # subsample a cheap row gather instead of a full slice_points
     # remap (the dominant per-sample IO cost otherwise).
     drop_interior_cells: true
     # Preserve in-file boundaries as the lossless default. Point-based model

@@ -91,11 +91,28 @@ class TestMeshReader:
             mesh,
             4,
             generator=torch.Generator().manual_seed(2),
+            mode="block",
         )
         torch.testing.assert_close(
             sampled.points.squeeze(-1),
             torch.tensor([8.0, 9.0, 0.0, 1.0]),
         )
+
+    @pytest.mark.parametrize("mode", ["uniform", "block"])
+    def test_subsample_mode_on_ordered_storage(self, tmp_path, mode):
+        # Points stored sorted along x: a block is a slab, uniform spans x.
+        x = torch.linspace(0, 1, 10_000)
+        Mesh(points=torch.stack([x, x, x], dim=-1)).save(tmp_path / "m.pt")
+        reader = MeshReader(
+            tmp_path, pattern="*.pt", subsample_n_points=1_000, subsample_mode=mode
+        )
+        reader.set_generator(torch.Generator().manual_seed(0))
+        loaded, _ = reader[0]
+        span = float(loaded.points[:, 0].max() - loaded.points[:, 0].min())
+        assert loaded.n_points == 1_000
+        assert (span > 0.95) if mode == "uniform" else (span < 0.15 or span > 0.85)
+        if mode == "uniform":
+            assert (loaded.points[1:, 0] > loaded.points[:-1, 0]).all()
 
 
 class TestDomainMeshReader:

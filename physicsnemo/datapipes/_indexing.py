@@ -18,6 +18,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 import torch
 
 
@@ -101,3 +103,86 @@ def _cyclic_block_indices(
         start_index = start
 
     return (torch.arange(k, device=output_device) + start_index) % total
+
+
+SubsampleMode = Literal["uniform", "block"]
+
+
+def _uniform_indices(
+    total: int,
+    k: int,
+    device: torch.device | str | None = None,
+    *,
+    generator: torch.Generator | None = None,
+) -> torch.Tensor:
+    """Return ``k`` distinct indices drawn uniformly from ``[0, total)``, sorted.
+
+    Every ``k``-subset is equally likely, so the selection is spatially
+    representative regardless of storage order. Sorting keeps memory-mapped and
+    chunked reads moving forward through the file.
+
+    For ``k`` much smaller than ``total`` this avoids an ``O(total)``
+    permutation: it draws with replacement until ``k`` distinct values exist,
+    then keeps a uniformly random ``k``-subset of them, which is again a
+    uniform ``k``-subset of the range by symmetry.
+
+    Parameters
+    ----------
+    total : int
+        Number of available elements.
+    k : int
+        Number of indices to select, ``0 <= k <= total``.
+    device : torch.device or str, optional
+        Device on which to create the returned indices.
+    generator : torch.Generator, optional
+        Random generator. ``None`` uses PyTorch's global default generator.
+
+    Returns
+    -------
+    torch.Tensor
+        Ascending integer indices with shape ``(k,)``.
+    """
+    if total < 0 or k < 0 or k > total:
+        raise ValueError(f"Need 0 <= k <= total, got {total=} and {k=}.")
+    if k == total:
+        return torch.arange(k, device=device)
+    random_device = generator.device if generator is not None else "cpu"
+    if 4 * k >= total:
+        idx = torch.randperm(total, generator=generator, device=random_device)[:k]
+    else:
+        idx = torch.unique(
+            torch.randint(
+                total, (k + k // 8,), generator=generator, device=random_device
+            )
+        )
+        while idx.numel() < k:
+            extra = torch.randint(
+                total, (k,), generator=generator, device=random_device
+            )
+            idx = torch.unique(torch.cat([idx, extra]))
+        idx = idx[
+            torch.randperm(idx.numel(), generator=generator, device=random_device)[:k]
+        ]
+    return torch.sort(idx).values.to(device)
+
+
+def _subsample_indices(
+    total: int,
+    k: int,
+    mode: SubsampleMode = "uniform",
+    device: torch.device | str | None = None,
+    *,
+    generator: torch.Generator | None = None,
+) -> torch.Tensor:
+    """Select ``k`` of ``total`` indices with :func:`_uniform_indices` or
+    :func:`_cyclic_block_indices`, depending on ``mode``.
+
+    ``"block"`` reads one contiguous run in storage order. It is only spatially
+    representative when storage order is shuffled; on solver- or patch-ordered
+    meshes every sample is a spatial slab. ``"uniform"`` is order-independent.
+    """
+    if mode == "uniform":
+        return _uniform_indices(total, k, device, generator=generator)
+    if mode == "block":
+        return _cyclic_block_indices(total, k, device=device, generator=generator)
+    raise ValueError(f"subsample mode must be 'uniform' or 'block', got {mode!r}.")

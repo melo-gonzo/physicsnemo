@@ -19,7 +19,11 @@
 import pytest
 import torch
 
-from physicsnemo.datapipes._indexing import _cyclic_block_indices
+from physicsnemo.datapipes._indexing import (
+    _cyclic_block_indices,
+    _subsample_indices,
+    _uniform_indices,
+)
 
 
 class TestCyclicBlockIndices:
@@ -86,3 +90,46 @@ class TestCyclicBlockIndices:
                 start=3,
                 generator=torch.Generator().manual_seed(0),
             )
+
+
+class TestUniformIndices:
+    @pytest.mark.parametrize(("total", "k"), [(100, 10), (100, 60), (7, 7), (5, 0)])
+    def test_sorted_distinct_in_range(self, total, k):
+        idx = _uniform_indices(total, k, generator=torch.Generator().manual_seed(0))
+        assert idx.shape == (k,)
+        assert (idx[1:] > idx[:-1]).all()
+        assert ((idx >= 0) & (idx < total)).all()
+
+    def test_deterministic_with_generator(self):
+        a = _uniform_indices(1000, 50, generator=torch.Generator().manual_seed(3))
+        b = _uniform_indices(1000, 50, generator=torch.Generator().manual_seed(3))
+        assert torch.equal(a, b)
+
+    @pytest.mark.parametrize("k", [3, 9])
+    def test_inclusion_probability_is_uniform(self, k):
+        # k=3 exercises the rejection path (4k < total), k=9 the randperm path.
+        total, trials = 12, 6000
+        generator = torch.Generator().manual_seed(0)
+        counts = torch.zeros(total)
+        for _ in range(trials):
+            counts[_uniform_indices(total, k, generator=generator)] += 1
+        torch.testing.assert_close(
+            counts / trials, torch.full((total,), k / total), atol=0.03, rtol=0
+        )
+
+    def test_invalid_sizes_raise(self):
+        with pytest.raises(ValueError):
+            _uniform_indices(5, 6)
+
+
+class TestSubsampleIndices:
+    def test_block_matches_cyclic(self):
+        a = _subsample_indices(
+            64, 8, "block", generator=torch.Generator().manual_seed(1)
+        )
+        b = _cyclic_block_indices(64, 8, generator=torch.Generator().manual_seed(1))
+        assert torch.equal(a, b)
+
+    def test_invalid_mode_raises(self):
+        with pytest.raises(ValueError, match="subsample mode"):
+            _subsample_indices(10, 2, "random")
