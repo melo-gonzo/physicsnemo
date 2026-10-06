@@ -36,13 +36,13 @@ import torch
 import physicsnemo.experimental.models.isla.tree_read as tree_read
 from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla.kernel_read import _KernelBasis, global_geo_width
+from physicsnemo.experimental.models.isla.boundary_tree import BoundaryTree
 from physicsnemo.experimental.models.isla.tree_read import (
     _TreeKernelRead,
     point_tree_pairs,
     tree_read_pairs,
 )
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
-from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 from test.experimental.models.isla._meshes import (
     cloud,
     orthogonal,
@@ -191,14 +191,56 @@ def test_tree_read_pairs_cover_the_boundary_measure_once(theta):
         assert pairs.n_pairs_node > 0 and pairs.n_pairs < 150 * 500
 
 
+@pytest.mark.parametrize("dim", [3, 2])
+def test_boundary_tree_is_balanced_tight_and_frame_free(dim):
+    """Every leaf sits at the same depth with at most the leaf size of cells; every
+    node's cells lie inside its bounding sphere and sum to its measure; the leaves
+    partition the cells; a rotated, reflected, translated and rescaled copy of the cells
+    gives the same clusters (as sets of cells)."""
+    pts, nrm, w, _ = cloud(1000, d=dim, seed=8)
+    vecs = torch.nn.functional.normalize(torch.randn(1000, 2, dim, dtype=D), dim=-1)
+    tree = BoundaryTree.build(pts, w, nrm, vecs, leaf_size=8, eps=1e-12)
+    n, m = tree.n_cells, tree.n_nodes
+    assert tree.depth == 7 and m == 2**8 - 1 and n == 1000
+    leaves = torch.arange(tree.first_leaf, m)
+    assert int(tree.node_count[leaves].max()) <= 8 and int(tree.node_count[leaves].min()) >= 4
+    assert int(tree.node_count[leaves].sum()) == n
+    assert torch.equal(torch.sort(tree.order).values, torch.arange(n))
+    for i in range(m):
+        cells = tree.order[tree.node_start[i] : tree.node_start[i] + tree.node_count[i]]
+        d2 = (pts[cells] - tree.center[i]).norm(dim=-1)
+        assert float(d2.max()) <= float(tree.radius[i]) * (1 + 1e-12) + 1e-12
+        assert torch.allclose(tree.measure[i], w[cells].sum())
+        c = (pts[cells] * w[cells, None]).sum(0) / w[cells].sum()
+        assert torch.allclose(tree.center[i], c)
+        if i < tree.first_leaf:
+            left, right = 2 * i + 1, 2 * i + 2
+            assert int(tree.node_start[left]) == int(tree.node_start[i])
+            assert int(tree.node_count[left] + tree.node_count[right]) == int(tree.node_count[i])
+    assert torch.allclose(tree.normal.norm(dim=-1), torch.ones(m, dtype=D))
+    assert tree.vecs.shape == (m, 2, dim)
+    R = orthogonal(dim, 3, True)
+    t = torch.arange(1.0, dim + 1.0, dtype=D)
+    k = 3.0
+    moved = BoundaryTree.build(k * pts @ R.T + t, 2.0 * w, nrm @ R.T, vecs @ R.T, leaf_size=8, eps=1e-12)
+    for i in range(m):
+        a = set(tree.order[tree.node_start[i] : tree.node_start[i] + tree.node_count[i]].tolist())
+        b = set(moved.order[moved.node_start[i] : moved.node_start[i] + moved.node_count[i]].tolist())
+        assert a == b, i
+    assert torch.allclose(moved.radius, k * tree.radius, rtol=1e-9, atol=1e-12)
+    assert torch.allclose(moved.center, k * tree.center @ R.T + t, atol=1e-9)
+    assert torch.allclose(moved.normal, tree.normal @ R.T, atol=1e-9)
+    assert torch.allclose(moved.measure, 2.0 * tree.measure)
+
+
 @pytest.mark.parametrize("theta", [0.0, 0.5, 1.0])
 def test_point_tree_pairs_admit_only_separated_clusters_and_cover_every_cell(theta):
-    """Each point's walk admits a node only when the node's box diagonal is below theta
-    times the gap between the point and the box, and its cells and nodes together hold
-    every cell exactly once."""
-    pts, _, w, _ = cloud(700, d=3, seed=6)
+    """Each point's walk admits a node only when the node's sphere diameter is below
+    theta times the gap between the point and the sphere, and its cells and nodes
+    together hold every cell exactly once."""
+    pts, nrm, w, _ = cloud(700, d=3, seed=6)
     q, _, _, _ = cloud(90, d=3, seed=7, scale=(3.0, 3.0, 3.0))
-    tree = ClusterTree.from_points(pts, leaf_size=tree_read.TREE_READ_LEAF_SIZE, areas=w)
+    tree = BoundaryTree.build(pts, w, nrm, None, leaf_size=tree_read.TREE_READ_LEAF_SIZE, eps=1e-12)
     qi, si, n_node = point_tree_pairs(tree, q, theta)
     n = pts.shape[0]
     assert torch.equal(qi, qi.sort().values)
@@ -206,16 +248,14 @@ def test_point_tree_pairs_admit_only_separated_clusters_and_cover_every_cell(the
     assert int(is_node.sum()) == n_node
     node = si[is_node] - n
     p = q[qi[is_node]]
-    gap = (tree.node_aabb_min[node] - p).clamp_min(0) + (p - tree.node_aabb_max[node]).clamp_min(0)
-    assert bool((tree.node_diameter_sq[node] < theta**2 * gap.square().sum(-1)).all())
+    gap = (p - tree.center[node]).norm(dim=-1) - tree.radius[node]
+    assert bool((2 * tree.radius[node] < theta * gap).all())
     ### Coverage: a cell is counted through itself or through exactly one node.
     counts = torch.zeros(q.shape[0], n, dtype=torch.long)
     counts.index_put_((qi[~is_node], si[~is_node]), torch.ones_like(qi[~is_node]), accumulate=True)
-    starts, cnts = tree.node_range_start[node], tree.node_range_count[node]
+    starts, cnts = tree.node_start[node], tree.node_count[node]
     pos, pid = tree_read._ragged_arange(starts, cnts)
-    counts.index_put_(
-        (qi[is_node][pid], tree.sorted_source_order[pos]), torch.ones_like(pos), accumulate=True
-    )
+    counts.index_put_((qi[is_node][pid], tree.order[pos]), torch.ones_like(pos), accumulate=True)
     assert torch.equal(counts, torch.ones_like(counts))
     if theta == 0.0:
         assert n_node == 0

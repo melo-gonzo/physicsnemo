@@ -127,7 +127,9 @@ if HAS_TRITON:
         H: tl.constexpr, C: tl.constexpr, BLOCK: tl.constexpr, F64: tl.constexpr,
     ):  # fmt: skip
         """out[p, h] = sum_c a[ia[p], h, c] * b[ib[p], h, c]."""
-        p = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+        ### 64-bit pair offsets: ``p * H`` passes 2**31 above 2.7e8 pairs (the tree
+        ### read at DrivAerML scale), where 32-bit offsets wrapped and read garbage.
+        p = tl.program_id(0).to(tl.int64) * BLOCK + tl.arange(0, BLOCK)
         m = p < P
         ia = tl.load(ia_ptr + p, mask=m, other=0)
         ib = tl.load(ib_ptr + p, mask=m, other=0)
