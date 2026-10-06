@@ -120,18 +120,36 @@ profile is repeated on the sixth snapshot (job 106467).
   epochs): training at 0.474 s per step and 130 GB per rank, about 51 s per epoch, so roughly 7 hours. The TG
   lanes wait for a usable form.
 
-### Decision pending
+### Decomposition with orientation-coherent clusters (job 106436, largest-chord tree, same 12 cases)
 
-The dense-trained kernel cannot be evaluated through first-order cluster aggregates at any usable theta: three
-independent smears (normal, key, value) each break it. Two routes remain. (A) Higher-order aggregates: the
-orientation-coherent clusters remove the normal smear; the key and value smears need the cluster's second moments
-(the softmax weight averaged over a cluster is e^{mean logit} times a variance term, and the value correlates with
-the logit), a Gaussian-cumulant treecode for attention, whose residual is also unmeasured. (B) Train with the tree
-at a fixed theta: the clusters become part of the model (as in multipole attention), the kernel and the states are
-learned under the aggregation, theta is a structural constant like a kernel radius, exactness at theta = 0 and
-exact query independence at every theta stand, and the verdict is E3 against the interacting reference. The
-decomposition with the orientation-aware tree decides whether (A) is worth building; (B) needs the per-pair cost
-down first.
+| replaced by the cluster mean | seed 42, theta 0.25 | seed 42, theta 0.5 | seed 43, theta 0.5 | seed 42, theta 1.0 |
+|---|---|---|---|---|
+| position (centroid) | 0.004 / 0.001 / 0.019 | 0.014 / 0.004 / 0.081 | 0.010 / 0.005 / 0.10 | 0.023 / 0.010 / 0.14 |
+| normal | 0.008 / 0.002 / 0.014 | 0.022 / 0.006 / 0.078 | 0.009 / 0.005 / 0.055 | 0.041 / 0.014 / 0.11 |
+| key (per block) | 0.018 / 0.005 / 0.042 | 0.054 / 0.011 / 0.16 | 0.051 / 0.015 / 0.082 | 0.088 / 0.017 / 0.25 |
+| value (per block) | 0.019 / 0.005 / 0.043 | 0.048 / 0.010 / 0.13 | 0.047 / 0.014 / 0.11 | 0.071 / 0.016 / 0.19 |
+| all four (the tree read) | 0.018 / 0.005 / 0.041 | 0.054 / 0.012 / 0.18 | 0.053 / 0.017 / 0.13 | 0.091 / 0.020 / 0.28 |
+| error ratio to dense, p / v / nut | 1.30 / 1.04 / 1.37 | 2.49 / 1.21 / 3.94 | 2.29 / 1.48 / 2.64 | 3.90 / 1.56 / 6.21 |
+
+Orientation coherence removes the normal smear (0.24 to 0.008 on pressure at theta 0.25) and with it most of the
+damage: the tree read's deviation falls from 0.24 to 0.018 at theta 0.25 and the pressure error ratio from 9.8 to
+1.30, at the same pair count (9.6e6 against 9.8e6 per block). What remains is the key and value smears, each the
+whole residual (0.018 and 0.019 against 0.018 together) and first order in theta (0.018, 0.054, 0.091 at 0.25,
+0.5, 1). The preregistered bar needs a deviation near 0.0025, about theta 0.03, at a pair count the Volume task
+cannot afford (the ladder is 2.8e8 pairs per block at theta 0.5 already).
+
+### Decision (2026-10-06 evening): train with the tree
+
+Route A, approximating the dense-trained read, is closed: with the right clusters the first-order aggregate of the
+keys and values is a 2% to 5% deviation at theta 0.25 to 0.5, and second-order corrections would buy a factor,
+not the thirty needed. Route B is taken: the read-only model is trained with the tree read at a fixed theta, so
+the kernel, keys and values are learned under the aggregation (the clusters become part of the model, as in
+multipole attention). What stands: exactness at theta = 0 (the dense read), exact query independence at every
+theta (a point's walk sees the tree and the point alone), the tree frame-free up to ties, theta the one structural
+constant. What changes: theta is no longer a tolerance on a defined model but a model constant like a kernel
+radius, chosen by cost under the preregistered bar (step within 6x the read-only floor), and the verdict is E3
+alone (TG against I, with P as the floor). Lanes at theta 1 and 0.5, two seeds each, launch when the profile on
+the sixth snapshot shows the step within the bar; theta 0.25 only if the cost allows.
 
 ## Implementation notes
 

@@ -38,6 +38,14 @@ the theta E2 selects, seeds 42 and 43; P = read-only, no read, seeds 42 and 43 (
 older 384 / 256 configuration); I = the existing interacting references `cl_r_vol_isla_seed42/43`. Scoring: the
 protocol (float32, 48 cars).
 
+Amended 2026-10-06 evening, before any TG lane ran. E2 failed at every theta (REPORT.md): the dense-trained
+kernel's first-order cluster aggregates of keys and values leave a 2% to 5% deviation at theta 0.25 to 0.5 even
+with orientation-coherent clusters, so "the theta E2 selects" does not exist. TG is therefore trained with the
+tree read at a fixed theta, chosen by cost under the bar below (step within 6x the read-only floor): theta 1 and
+theta 0.5, two seeds each, scored at their training theta (and at theta 0 as a diagnostic of how far the trained
+model is from its own dense limit). The bars against I and P are unchanged. The orientation-aware tree
+(`boundary_tree.py`, RMS normal spread) is the tree of every lane.
+
 Bars (the pi lane's, unchanged): closes the gap if TG / I <= 1.03 on pressure and on velocity and <= 1.05 on eddy
 viscosity, seed means; beats it if TG / I < 1 - seed separation on a field. Also reported: TG / P (what the read
 buys), step time and peak memory against I (forecast: 3x to 4x the step, memory within 80 GiB), pairs per block.
