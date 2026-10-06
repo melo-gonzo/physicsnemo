@@ -155,9 +155,6 @@ class ConformalPredictor:
         the cellwise tier and rejected otherwise. The predictor keeps only a
         digest of them, and :meth:`predict_interval` accepts only the same
         coordinates, dtype, and point order. Default is ``None``.
-    provenance : Mapping, optional
-        Strict-JSON metadata saved with the artifact, for example
-        ``{"dataset": "holdout-v1"}``. Default is ``None``.
 
     Raises
     ------
@@ -196,7 +193,6 @@ class ConformalPredictor:
         thresholds: Float[Tensor, "*dims"] | Float[Tensor, ""] | TensorDict,
         difficulty: AuxDifficulty | None = None,
         points: Float[Tensor, "n_points n_spatial_dims"] | None = None,
-        provenance: Mapping | None = None,
     ) -> None:
         self._init(
             tier=tier,
@@ -206,12 +202,11 @@ class ConformalPredictor:
             thresholds=thresholds,
             difficulty=difficulty,
             mesh_fingerprint=None if points is None else points_fingerprint(points),
-            provenance=provenance,
         )
 
     @classmethod
     def _from_state(cls, **state) -> "ConformalPredictor":
-        """Build a predictor from a stored mesh digest instead of coordinates."""
+        """Build a predictor from a stored mesh digest and provenance."""
         predictor = cls.__new__(cls)
         predictor._init(**state)
         return predictor
@@ -297,7 +292,7 @@ class ConformalPredictor:
 
     @property
     def provenance(self) -> dict:
-        r"""A copy of the metadata saved with this predictor."""
+        r"""A copy of the metadata restored by :meth:`load`, or ``{}``."""
         return copy.deepcopy(self._provenance)
 
     @property
@@ -516,8 +511,9 @@ class ConformalPredictor:
         path : Path | str
             Destination file. Missing parent directories are created.
         provenance : Mapping, optional
-            Strict-JSON metadata to save instead of :attr:`provenance`.
-            Default is ``None``, which saves :attr:`provenance`.
+            Strict-JSON metadata to save with the predictor, for example
+            ``{"dataset": "holdout-v1"}``. Default is ``None``, which saves
+            the current :attr:`provenance`.
 
         Returns
         -------
