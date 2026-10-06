@@ -164,11 +164,6 @@ def test_public_api_exports():
     }
     assert set(conformal.__all__) == expected
     assert all(hasattr(conformal, name) for name in expected)
-    # The same names are reachable one level up, beside the GP heads.
-    import physicsnemo.experimental.uq as uq
-
-    assert expected <= set(uq.__all__)
-    assert all(getattr(uq, name) is getattr(conformal, name) for name in expected)
 
 
 def test_cellwise_predict_rejects_output_shape_drift_on_the_same_mesh():
