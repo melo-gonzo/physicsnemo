@@ -337,7 +337,7 @@ class CellwiseCalibrator(_SplitCalibratorBase):
         target: Float[Tensor, "*dims"] | TensorDict,
         *,
         aux: Mapping[str, Float[Tensor, "*dims"]] | Mapping[str, Mapping] | None = None,
-        points: Float[Tensor, "n_points n_spatial_dims"] | None = None,
+        points: Float[Tensor, "n_points n_spatial_dims"],
     ) -> None:
         r"""Add one calibration sample.
 
@@ -354,10 +354,10 @@ class CellwiseCalibrator(_SplitCalibratorBase):
             ``{"lo": ..., "hi": ...}`` for ``QuantileRegressionScore``. For
             ``TensorDict`` inputs, nest by field name, as in
             ``{"pressure": {"sigma": ...}}``. Default is ``None``.
-        points : torch.Tensor, optional
+        points : torch.Tensor
             Mesh coordinates of shape
-            :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`. Required,
-            and must be identical on every call. Default is ``None``.
+            :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`, identical
+            on every call.
 
         Returns
         -------
@@ -366,11 +366,12 @@ class CellwiseCalibrator(_SplitCalibratorBase):
         Raises
         ------
         ValueError
-            If ``points`` is missing or differs from the first sample's
-            mesh, if ``prediction`` and ``target`` shapes differ, or if any
-            value is non-finite.
+            If ``points`` differs from the first sample's mesh, if
+            ``prediction`` and ``target`` shapes differ, or if any value is
+            non-finite.
         TypeError
-            If plain tensors and ``TensorDict`` inputs are mixed.
+            If ``points`` is not passed, or if plain tensors and
+            ``TensorDict`` inputs are mixed.
         KeyError
             If the set of fields differs from the first sample.
 
@@ -378,11 +379,6 @@ class CellwiseCalibrator(_SplitCalibratorBase):
         -----
         A sample that raises is not stored, so the calibrator stays usable.
         """
-        if points is None:
-            raise ValueError(
-                "CellwiseCalibrator requires points= on every calibration "
-                "sample to verify exact mesh identity."
-            )
         fingerprint = points_fingerprint(points)
         if self._mesh_fingerprint is not None and fingerprint != self._mesh_fingerprint:
             raise ValueError(

@@ -88,7 +88,7 @@ def test_cellwise_retains_contiguous_scores_without_changing_bits(dtype):
 
 def test_cellwise_requires_and_fingerprints_points_transactionally():
     calibrator = CellwiseCalibrator(AbsoluteErrorScore(), alpha=0.5)
-    with pytest.raises(ValueError, match="requires points"):
+    with pytest.raises(TypeError, match="points"):
         calibrator.update(torch.zeros(3), torch.zeros(3))
     assert calibrator.n_cal == 0
     assert calibrator._mesh_fingerprint is None
