@@ -16,19 +16,31 @@
 
 r"""A balanced cluster tree over the boundary cells for ISLA's tree-accelerated read.
 
-Every node is a contiguous range of the cells in the tree's order. A node is split at
-its median along the principal axis of its cells' positions (the eigenvector of the
-largest eigenvalue of their covariance), so the clusters are tight whatever the frame
+Every node is a contiguous range of the cells in the tree's order and is split at its
+median along a principal axis: of its cells' normals while the cluster's normals are
+spread wider than the read's tolerance ``theta`` (so a thin body's two faces, or a
+closed body's sides, part before anything else), of its cells' positions otherwise.
+The clusters are therefore coherent in orientation first and tight in space second,
 and the tree follows the geometry, not the coordinate axes: a rotation or reflection
 of the case rotates the splits with it, up to ties (equal projections on the axis, or
 a cluster whose two largest spreads are equal, where the chosen axis is a numerical
 accident). All leaves are at the same depth and hold at most ``leaf_size`` cells.
 
 Every node carries a bounding sphere, its measure-weighted centroid and the largest
-distance of one of its cells from it, and the read's virtual cell: that centroid, the
-renormalized measure-weighted mean normal, the measure-weighted mean rank-1 inputs
-and the total measure. The node means of any per-cell quantity are prefix sums over
-the tree's order (:func:`~physicsnemo.experimental.models.isla.tree_read.node_means`).
+distance of one of its cells from it; its normal spread, the largest chord between one
+of its cells' normals and the node's mean normal; and the read's virtual cell: that
+centroid, the renormalized measure-weighted mean normal, the measure-weighted mean
+rank-1 inputs and the total measure. The read admits a node when both its angular
+size seen from the point and its normal spread are below ``theta``. The node means of
+any per-cell quantity are prefix sums over the tree's order
+(:func:`~physicsnemo.experimental.models.isla.tree_read.node_means`).
+
+Why normals: the kernel reads a cell's normal through three cosines, and the mean
+normal of a cluster that spans both faces of a thin airfoil is the renormalization of
+a near-zero vector. On the dense-trained AirfRANS checkpoints, replacing the normals
+of the cells inside admitted clusters by the cluster mean reproduced the whole
+deviation of the position-only tree read from the dense read (12% on pressure at
+``theta = 0.5``), while replacing the positions by the centroid cost 1% to 2%.
 
 GLOBE's :class:`~physicsnemo.mesh.spatial.cluster_tree.ClusterTree` (a Morton LBVH whose
 nodes are count-midpoint ranges of the Morton order, with axis-aligned boxes) was the
@@ -63,8 +75,10 @@ class BoundaryTree:
     radius: torch.Tensor  # (M,) largest distance of a cell from the centroid
     measure: torch.Tensor  # (M,) total measure
     normal: torch.Tensor  # (M, d) renormalized measure-weighted mean normal
+    spread: torch.Tensor  # (M,) largest chord between a cell's normal and ``normal``
     vecs: torch.Tensor | None  # (M, P, d) measure-weighted mean rank-1 inputs
     depth: int  # the leaves' level (the root is level 0)
+    theta: float  # the tolerance the splits were chosen for
 
     @property
     def n_cells(self) -> int:
@@ -87,11 +101,13 @@ class BoundaryTree:
         vecs: torch.Tensor | None,
         *,
         leaf_size: int,
+        theta: float,
         eps: float,
     ) -> "BoundaryTree":
         """Build the tree over ``points`` ``(N, d)`` with the cells' ``measure`` ``(N,)``,
-        ``normals`` ``(N, d)`` and rank-1 inputs ``vecs`` ``(N, P, d)`` or ``None``.
-        Runs without gradient (the tree is a numerical device)."""
+        ``normals`` ``(N, d)`` and rank-1 inputs ``vecs`` ``(N, P, d)`` or ``None``, for
+        the read's tolerance ``theta`` (a cluster whose normals are spread wider than it
+        is split by normals). Runs without gradient (the tree is a numerical device)."""
         if leaf_size < 1:
             raise ValueError(f"leaf_size must be >= 1, got {leaf_size!r}")
         with torch.no_grad():
@@ -101,25 +117,39 @@ class BoundaryTree:
             while math.ceil(n / 2**depth) > leaf_size:
                 depth += 1
             x_all = points.detach().double()
+            n_all = normals.detach().double()
             order = torch.arange(n, device=device)
             starts = [torch.zeros(1, dtype=torch.long, device=device)]
             counts = [torch.full((1,), n, dtype=torch.long, device=device)]
+
+            def principal(y, seg, k):
+                """Per node: the centered rows, and the principal axis of their covariance."""
+                mean = torch.zeros(k, d, dtype=y.dtype, device=device).index_add_(0, seg, y)
+                mean = mean / counts[-1][:, None].to(y.dtype)
+                yc = y - mean[seg]
+                cov = torch.zeros(k, d, d, dtype=y.dtype, device=device).index_add_(
+                    0, seg, yc[:, :, None] * yc[:, None, :]
+                )
+                return yc, mean, torch.linalg.eigh(cov)[1][..., -1]
+
             for level in range(depth):
                 s, c = starts[-1], counts[-1]
                 k = s.shape[0]
                 seg = torch.repeat_interleave(torch.arange(k, device=device), c, output_size=n)
-                x = x_all[order]
-                mean = torch.zeros(k, d, dtype=x.dtype, device=device).index_add_(0, seg, x)
-                mean = mean / c[:, None].to(x.dtype)
-                xc = x - mean[seg]
-                cov = torch.zeros(k, d, d, dtype=x.dtype, device=device).index_add_(
-                    0, seg, xc[:, :, None] * xc[:, None, :]
+                xc, _, axis_x = principal(x_all[order], seg, k)
+                nc, n_mean, axis_n = principal(n_all[order], seg, k)
+                ### A cluster's normal spread: the largest chord from a cell's normal to the
+                ### mean normal's direction; wider than theta, the cluster splits by normals.
+                unit = n_mean / n_mean.norm(dim=-1, keepdim=True).clamp_min(eps)
+                chord = (n_all[order] - unit[seg]).norm(dim=-1)
+                spread = torch.zeros(k, dtype=chord.dtype, device=device).scatter_reduce_(
+                    0, seg, chord, reduce="amax", include_self=True
                 )
-                axis = torch.linalg.eigh(cov)[1][..., -1]  # (k, d) the principal axis
-                t = (xc * axis[seg]).sum(-1)
+                by_normals = (spread >= theta)[seg]
+                t = torch.where(by_normals, (nc * axis_n[seg]).sum(-1), (xc * axis_x[seg]).sum(-1))
                 ### The axis's sign is a numerical accident; point it along the cells'
                 ### third moment, so the children's order is the geometry's own too.
-                skew = torch.zeros(k, dtype=x.dtype, device=device).index_add_(0, seg, t**3)
+                skew = torch.zeros(k, dtype=t.dtype, device=device).index_add_(0, seg, t**3)
                 t = torch.where(skew[seg] < 0, -t, t)
                 ### Sort the cells of every node by their projection (a stable sort by
                 ### projection, then a stable sort by node keeps the nodes contiguous).
@@ -146,16 +176,22 @@ class BoundaryTree:
             nrm = mean_of(normals.double())
             nrm = nrm / nrm.norm(dim=-1, keepdim=True).clamp_min(eps)
             vmean = None if vecs is None or not vecs.shape[1] else mean_of(vecs.double())
-            ### The bounding radius: level by level, every cell against its node's centroid.
+            ### The bounding radius and the normal spread: level by level, every cell
+            ### against its node's centroid and mean normal.
             radius = torch.zeros(node_start.shape[0], dtype=torch.float64, device=device)
-            xs = x_all[order]
+            spread = torch.zeros_like(radius)
+            xs, ns = x_all[order], n_all[order]
             for level in range(depth + 1):
                 lo, hi = 2**level - 1, 2 ** (level + 1) - 1
                 seg = lo + torch.repeat_interleave(
                     torch.arange(hi - lo, device=device), node_count[lo:hi], output_size=n
                 )
-                dist = (xs - center[seg]).norm(dim=-1)
-                radius.scatter_reduce_(0, seg, dist, reduce="amax", include_self=True)
+                radius.scatter_reduce_(
+                    0, seg, (xs - center[seg]).norm(dim=-1), reduce="amax", include_self=True
+                )
+                spread.scatter_reduce_(
+                    0, seg, (ns - nrm[seg]).norm(dim=-1), reduce="amax", include_self=True
+                )
             dt = points.dtype
             return cls(
                 order=order,
@@ -165,6 +201,8 @@ class BoundaryTree:
                 radius=radius.to(dt),
                 measure=m.to(measure.dtype),
                 normal=nrm.to(normals.dtype),
+                spread=spread.to(dt),
                 vecs=None if vmean is None else vmean.to(vecs.dtype),
                 depth=depth,
+                theta=float(theta),
             )

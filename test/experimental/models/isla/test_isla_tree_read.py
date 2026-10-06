@@ -199,7 +199,7 @@ def test_boundary_tree_is_balanced_tight_and_frame_free(dim):
     gives the same clusters (as sets of cells)."""
     pts, nrm, w, _ = cloud(1000, d=dim, seed=8)
     vecs = torch.nn.functional.normalize(torch.randn(1000, 2, dim, dtype=D), dim=-1)
-    tree = BoundaryTree.build(pts, w, nrm, vecs, leaf_size=8, eps=1e-12)
+    tree = BoundaryTree.build(pts, w, nrm, vecs, leaf_size=8, theta=0.5, eps=1e-12)
     n, m = tree.n_cells, tree.n_nodes
     assert tree.depth == 7 and m == 2**8 - 1 and n == 1000
     leaves = torch.arange(tree.first_leaf, m)
@@ -213,6 +213,8 @@ def test_boundary_tree_is_balanced_tight_and_frame_free(dim):
         assert torch.allclose(tree.measure[i], w[cells].sum())
         c = (pts[cells] * w[cells, None]).sum(0) / w[cells].sum()
         assert torch.allclose(tree.center[i], c)
+        chord = (nrm[cells] - tree.normal[i]).norm(dim=-1).max()
+        assert float(chord) <= float(tree.spread[i]) * (1 + 1e-12) + 1e-12
         if i < tree.first_leaf:
             left, right = 2 * i + 1, 2 * i + 2
             assert int(tree.node_start[left]) == int(tree.node_start[i])
@@ -222,7 +224,9 @@ def test_boundary_tree_is_balanced_tight_and_frame_free(dim):
     R = orthogonal(dim, 3, True)
     t = torch.arange(1.0, dim + 1.0, dtype=D)
     k = 3.0
-    moved = BoundaryTree.build(k * pts @ R.T + t, 2.0 * w, nrm @ R.T, vecs @ R.T, leaf_size=8, eps=1e-12)
+    moved = BoundaryTree.build(
+        k * pts @ R.T + t, 2.0 * w, nrm @ R.T, vecs @ R.T, leaf_size=8, theta=0.5, eps=1e-12
+    )
     for i in range(m):
         a = set(tree.order[tree.node_start[i] : tree.node_start[i] + tree.node_count[i]].tolist())
         b = set(moved.order[moved.node_start[i] : moved.node_start[i] + moved.node_count[i]].tolist())
@@ -230,17 +234,40 @@ def test_boundary_tree_is_balanced_tight_and_frame_free(dim):
     assert torch.allclose(moved.radius, k * tree.radius, rtol=1e-9, atol=1e-12)
     assert torch.allclose(moved.center, k * tree.center @ R.T + t, atol=1e-9)
     assert torch.allclose(moved.normal, tree.normal @ R.T, atol=1e-9)
+    assert torch.allclose(moved.spread, tree.spread, atol=1e-9)
     assert torch.allclose(moved.measure, 2.0 * tree.measure)
 
 
+def test_boundary_tree_parts_the_faces_of_a_thin_body_before_positions():
+    """A thin plate (two faces a hair apart, opposite normals): the root splits by
+    normals, so both children are one-sided (spread 0) and no node below the root mixes
+    the faces, whatever its position."""
+    g = torch.Generator().manual_seed(11)
+    xy = torch.rand(400, 2, generator=g, dtype=D)
+    up = torch.cat([xy, torch.full((400, 1), 1e-3, dtype=D)], -1)
+    down = torch.cat([xy, torch.full((400, 1), -1e-3, dtype=D)], -1)
+    pts = torch.cat([up, down])
+    nrm = torch.cat([torch.tensor([[0.0, 0.0, 1.0]] * 400, dtype=D), torch.tensor([[0.0, 0.0, -1.0]] * 400, dtype=D)])
+    w = torch.ones(800, dtype=D)
+    tree = BoundaryTree.build(pts, w, nrm, None, leaf_size=8, theta=0.5, eps=1e-12)
+    ### The root's mean normal is the zero vector, so every chord to it is 1.
+    assert float(tree.spread[0]) >= 1.0 - 1e-9
+    assert torch.allclose(tree.spread[1:], torch.zeros_like(tree.spread[1:]), atol=1e-12)
+    for i in (1, 2):
+        cells = tree.order[tree.node_start[i] : tree.node_start[i] + tree.node_count[i]]
+        assert len(set((cells >= 400).tolist())) == 1
+
+
 @pytest.mark.parametrize("theta", [0.0, 0.5, 1.0])
-def test_point_tree_pairs_admit_only_separated_clusters_and_cover_every_cell(theta):
+def test_point_tree_pairs_admit_only_separated_coherent_clusters_and_cover_every_cell(theta):
     """Each point's walk admits a node only when the node's sphere diameter is below
-    theta times the gap between the point and the sphere, and its cells and nodes
-    together hold every cell exactly once."""
+    theta times the gap between the point and the sphere and its normal spread is below
+    theta, and its cells and nodes together hold every cell exactly once."""
     pts, nrm, w, _ = cloud(700, d=3, seed=6)
     q, _, _, _ = cloud(90, d=3, seed=7, scale=(3.0, 3.0, 3.0))
-    tree = BoundaryTree.build(pts, w, nrm, None, leaf_size=tree_read.TREE_READ_LEAF_SIZE, eps=1e-12)
+    tree = BoundaryTree.build(
+        pts, w, nrm, None, leaf_size=tree_read.TREE_READ_LEAF_SIZE, theta=theta, eps=1e-12
+    )
     qi, si, n_node = point_tree_pairs(tree, q, theta)
     n = pts.shape[0]
     assert torch.equal(qi, qi.sort().values)
@@ -250,6 +277,7 @@ def test_point_tree_pairs_admit_only_separated_clusters_and_cover_every_cell(the
     p = q[qi[is_node]]
     gap = (p - tree.center[node]).norm(dim=-1) - tree.radius[node]
     assert bool((2 * tree.radius[node] < theta * gap).all())
+    assert bool((tree.spread[node] < theta).all())
     ### Coverage: a cell is counted through itself or through exactly one node.
     counts = torch.zeros(q.shape[0], n, dtype=torch.long)
     counts.index_put_((qi[~is_node], si[~is_node]), torch.ones_like(qi[~is_node]), accumulate=True)
