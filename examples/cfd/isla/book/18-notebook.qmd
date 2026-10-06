@@ -34633,3 +34633,29 @@ set aside (`runs_invalid_nan_2026-10-06/`), the snapshot `code_v21` rebuilt
 with the guard, verification resubmitted on both clusters, and the lanes
 relaunch on the pass. The control lane keeps running. Nothing in the
 preregistration changes; no result was read from the invalid lanes.
+
+## 2026-10-06 — Pi lane QI-GLOBAL scored (AirfRANS, four seeds, float32 protocol): the read-only model with an exact global boundary read beats the interacting model, 0.72 / 0.83 / 0.89 of its error on pressure / velocity / eddy viscosity; exactly query-independent by construction; the bars "closes the gap" and "helps the wake" pass {#sec-nb-qi-global-verdict}
+
+Status entry, not this program's measurement: the result is the pi lane's
+(branch `psharpe/isla-qi-global`, LHR task dir
+`agents/2026-10-05-isla-qi-global`, reduction `eval/qg_reduction.txt`,
+2026-10-06 13:40 PDT). Arm G is read-only ISLA (prediction points carry
+log-weight minus infinity, never write) plus an exact softmax read of every
+boundary cell in every block. Four-seed means with standard errors, 200
+held-out cases, 100,000 points: G 0.0245 +- 0.0017 / 0.0138 +- 0.0004 /
+0.0270 +- 0.0023; interacting I 0.0339 +- 0.0004 / 0.0167 +- 0.0003 /
+0.0304 +- 0.0004; read-only P 0.0325 / 0.0176 / 0.0381; truncated read T
+0.0256 / 0.0165 / 0.0358. G / I = 0.721 (0.64 to 0.84 by seed) / 0.825
+(0.78 to 0.85) / 0.888 (0.72 to 1.05; seed 44 the one above one). Wake band
+(|sdf| > 1 chord) eddy viscosity G / I 0.97; near-wall band (|sdf| < 0.01)
+pressure 0.0160 against 0.0253; the far-band pressure is the one place G
+is worse (0.113 against 0.095). Its bars: closes the gap true, helps the
+wake true. Why it matters here: QUERY-POP (@sec-nb-query-pop) measured
+the interacting Volume model's 15x to 24x dependence on the query
+population; a read-only model has none by construction, and this is the
+first read-only form that costs no accuracy on AirfRANS. Its cost is the
+dense query-by-cell read, 2.1x the step on a 1,000-cell boundary and about
+400x on a 200,000-cell one (the scaling forecast given to Peter, 2026-10-06);
+the scalable form is a tree-accelerated read built on the GLOBE cluster
+tree with a per-point traversal, scoped at about two weeks. Decision with
+Peter.
