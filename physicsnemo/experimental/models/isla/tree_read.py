@@ -430,8 +430,10 @@ class _TreeKernelRead(_GlobalKernelRead):
             k_parts += [k_c[sl], node_means(k_c[sl], case, om)]
         v_src = torch.cat(v_parts).view(-1, nh, c)
         k_src = torch.cat(k_parts).view(-1, nh, kc)
+        ### The pairs' kernel terms at this block: the shared basis through the block's
+        ### kernel weights (a matmul; its gradient to the basis accumulates over blocks).
+        ker = pairs.basis @ self.kernel.weight.t().to(pairs.basis.dtype)
         read = segment_softmax_read(
-            pairs.basis, self.kernel.weight.t(), pairs.log_m, q, k_src, v_src, pairs.plan,
-            scale=1.0 / math.sqrt(kc),
-        )  # fmt: skip
+            ker, pairs.log_m, q, k_src, v_src, pairs.plan, scale=1.0 / math.sqrt(kc)
+        )
         return self.out(read.reshape(-1, nh * c).to(h_q.dtype))

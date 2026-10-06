@@ -21,23 +21,24 @@ For every prediction point :math:`q` with pairs :math:`p` (a cell or a virtual c
 
 .. math::
 
-    z_{ph} = \langle \beta_p, W_h \rangle + \langle q_{qh}, k_{j_p h} \rangle / \sqrt{c}
-             + \log m_p,
+    z_{ph} = \kappa_{ph} + \langle q_{qh}, k_{j_p h} \rangle / \sqrt{c} + \log m_p,
     \qquad
     \mathrm{read}_{qh} = \frac{\sum_p e^{z_{ph}} v_{j_p h}}{\sum_p e^{z_{ph}}},
 
-with :math:`\beta_p` the pair's kernel basis, :math:`W` the block's kernel weights,
-:math:`\log m_p` the source's log measure. Materialized pair by pair this is several
-``(pairs, heads)`` tensors per block, and at 2e8 pairs on a car those tensors (and the
-gathers that build them) were most of a training step. The Triton path here is the
-attention kernel over variable-length segments: one program per point in forward
-(online softmax over tiles of its pairs, the keys and values read in place), and in
-backward one program per point for the query and kernel-weight gradients and the
-basis gradient, one program per source for the key and value gradients (the pairs
-regrouped by source through the plan's permutation; deterministic, no atomics). Only
-the per-point output and log-sum-exp are kept between forward and backward; every
-per-pair quantity is recomputed from the basis, the logits' inputs and the plan.
-:func:`segment_softmax_read` dispatches; the eager form serves CPU and float64.
+with :math:`\kappa_{ph}` the pair's kernel term (its basis through the block's kernel
+weights, a matmul outside this module) and :math:`\log m_p` the source's log measure.
+Materialized pair by pair this is several ``(pairs, heads)`` tensors per block, and at
+2e8 pairs on a car those tensors (and the gathers that build them) were most of a
+training step. The Triton path here is the attention kernel over variable-length
+segments: one program per point in forward (online softmax over tiles of its pairs,
+the keys and values read in place), and in backward one program per point for the
+query gradient and the kernel term's gradient, and one program per chunk of a source's
+pairs (the pairs regrouped by source through the plan's permutation; a source read by
+many points is split over several programs that add their parts atomically) for the
+key and value gradients. Only the per-point output and log-sum-exp are kept between
+forward and backward; every per-pair quantity is recomputed from the kernel term, the
+logits' inputs and the plan. :func:`segment_softmax_read` dispatches; the eager form
+serves CPU and float64.
 """
 
 from __future__ import annotations
@@ -51,10 +52,13 @@ from physicsnemo.experimental.models.isla.pair_kernels import (
     PairPlan,
     supported,
 )
+from physicsnemo.mesh.spatial._ragged import _ragged_arange
 
-#: Pairs per tile of a program's loop, and warps per program (launch constants).
-BLOCK_PAIRS = 64
+#: Pairs per tile of a program's loop, warps per program, and pairs per program of
+#: the by-source backward (launch constants).
+BLOCK_PAIRS = 128
 NUM_WARPS = 4
+SOURCE_CHUNK = 2048
 
 if HAS_TRITON:
     import triton
@@ -62,15 +66,14 @@ if HAS_TRITON:
 
     @triton.jit
     def _ssr_fwd_kernel(
-        off_ptr, bj_ptr, basis_ptr, logm_ptr, w_ptr, q_ptr, k_ptr, v_ptr, out_ptr, lse_ptr,
-        scale, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, G: tl.constexpr, BLOCK: tl.constexpr,
+        off_ptr, bj_ptr, ker_ptr, logm_ptr, q_ptr, k_ptr, v_ptr, out_ptr, lse_ptr,
+        scale, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, BLOCK: tl.constexpr,
     ):  # fmt: skip
         """One point: online softmax over its pairs; out[s] (H, C), lse[s] (H)."""
         s = tl.program_id(0).to(tl.int64)
         start = tl.load(off_ptr + s)
         end = tl.load(off_ptr + s + 1)
         hh = tl.arange(0, H)
-        w = tl.reshape(tl.load(w_ptr + tl.arange(0, G * H)).to(tl.float32), [G, H])
         q = tl.reshape(tl.load(q_ptr + s * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
         m_run = tl.full([H], float("-inf"), tl.float32)
         den = tl.zeros([H], tl.float32)
@@ -79,10 +82,7 @@ if HAS_TRITON:
             p = p0 + tl.arange(0, BLOCK)
             msk = p < end
             bj = tl.load(bj_ptr + p, mask=msk, other=0).to(tl.int64)
-            basis = tl.load(
-                basis_ptr + p[:, None] * G + tl.arange(0, G)[None, :], mask=msk[:, None], other=0.0
-            ).to(tl.float32)
-            ker = tl.sum(basis[:, :, None] * w[None, :, :], axis=1)  # (BLOCK, H)
+            ker = tl.load(ker_ptr + p[:, None] * H + hh[None, :], mask=msk[:, None], other=0.0).to(tl.float32)
             k = tl.reshape(
                 tl.load(
                     k_ptr + bj[:, None] * (H * KC) + tl.arange(0, H * KC)[None, :],
@@ -114,29 +114,24 @@ if HAS_TRITON:
 
     @triton.jit
     def _ssr_bwd_point_kernel(
-        off_ptr, bj_ptr, basis_ptr, logm_ptr, w_ptr, q_ptr, k_ptr, v_ptr, lse_ptr, dsum_ptr, dout_ptr,
-        dq_ptr, dw_ptr, dbasis_ptr,
-        scale, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, G: tl.constexpr, BLOCK: tl.constexpr,
+        off_ptr, bj_ptr, ker_ptr, logm_ptr, q_ptr, k_ptr, v_ptr, lse_ptr, dsum_ptr, dout_ptr, dq_ptr, dker_ptr,
+        scale, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, BLOCK: tl.constexpr,
     ):  # fmt: skip
-        """One point: dq[s], its partial dW, and dbasis of its pairs."""
+        """One point: dq[s] and the kernel-term gradient of its pairs."""
         s = tl.program_id(0).to(tl.int64)
         start = tl.load(off_ptr + s)
         end = tl.load(off_ptr + s + 1)
-        w = tl.reshape(tl.load(w_ptr + tl.arange(0, G * H)).to(tl.float32), [G, H])
+        hh = tl.arange(0, H)
         q = tl.reshape(tl.load(q_ptr + s * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
-        lse = tl.load(lse_ptr + s * H + tl.arange(0, H))
-        dsum = tl.load(dsum_ptr + s * H + tl.arange(0, H))
+        lse = tl.load(lse_ptr + s * H + hh)
+        dsum = tl.load(dsum_ptr + s * H + hh)
         dout = tl.reshape(tl.load(dout_ptr + s * (H * C) + tl.arange(0, H * C)).to(tl.float32), [H, C])
         dq = tl.zeros([H, KC], tl.float32)
-        dw = tl.zeros([G, H], tl.float32)
         for p0 in range(start, end, BLOCK):
             p = p0 + tl.arange(0, BLOCK)
             msk = p < end
             bj = tl.load(bj_ptr + p, mask=msk, other=0).to(tl.int64)
-            basis = tl.load(
-                basis_ptr + p[:, None] * G + tl.arange(0, G)[None, :], mask=msk[:, None], other=0.0
-            ).to(tl.float32)
-            ker = tl.sum(basis[:, :, None] * w[None, :, :], axis=1)
+            ker = tl.load(ker_ptr + p[:, None] * H + hh[None, :], mask=msk[:, None], other=0.0).to(tl.float32)
             k = tl.reshape(
                 tl.load(
                     k_ptr + bj[:, None] * (H * KC) + tl.arange(0, H * KC)[None, :],
@@ -159,27 +154,25 @@ if HAS_TRITON:
             dp = tl.sum(v * dout[None, :, :], axis=2)  # (BLOCK, H)
             dz = pr * (dp - dsum[None, :])  # (BLOCK, H)
             dq += tl.sum(dz[:, :, None] * k, axis=0) * scale
-            dw += tl.sum(basis[:, :, None] * dz[:, None, :], axis=0)
-            dbasis = tl.sum(dz[:, None, :] * w[None, :, :], axis=2)  # (BLOCK, G)
             tl.store(
-                dbasis_ptr + p[:, None] * G + tl.arange(0, G)[None, :],
-                dbasis.to(dbasis_ptr.dtype.element_ty),
-                mask=msk[:, None],
+                dker_ptr + p[:, None] * H + hh[None, :], dz.to(dker_ptr.dtype.element_ty), mask=msk[:, None]
             )
         tl.store(dq_ptr + s * (H * KC) + tl.arange(0, H * KC), tl.reshape(dq, [H * KC]))
-        tl.store(dw_ptr + s * (G * H) + tl.arange(0, G * H), tl.reshape(dw, [G * H]))
 
     @triton.jit
     def _ssr_bwd_source_kernel(
-        boff_ptr, perm_ptr, qib_ptr, basis_ptr, logm_ptr, w_ptr, q_ptr, k_ptr, v_ptr, lse_ptr, dsum_ptr,
-        dout_ptr, dk_ptr, dv_ptr,
-        scale, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, G: tl.constexpr, BLOCK: tl.constexpr,
+        boff_ptr, item_src_ptr, item_chunk_ptr, perm_ptr, qib_ptr, ker_ptr, logm_ptr, q_ptr, k_ptr, v_ptr,
+        lse_ptr, dsum_ptr, dout_ptr, dk_ptr, dv_ptr,
+        scale, CHUNK, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, BLOCK: tl.constexpr,
     ):  # fmt: skip
-        """One source: dk[j] and dv[j] over its pairs (the plan's by-source order)."""
-        j = tl.program_id(0).to(tl.int64)
-        start = tl.load(boff_ptr + j)
-        end = tl.load(boff_ptr + j + 1)
-        w = tl.reshape(tl.load(w_ptr + tl.arange(0, G * H)).to(tl.float32), [G, H])
+        """One chunk of one source's pairs (the plan's by-source order): its part of
+        dk[j] and dv[j], added atomically."""
+        item = tl.program_id(0).to(tl.int64)
+        j = tl.load(item_src_ptr + item).to(tl.int64)
+        chunk = tl.load(item_chunk_ptr + item).to(tl.int64)
+        start = tl.load(boff_ptr + j) + chunk * CHUNK
+        end = tl.minimum(tl.load(boff_ptr + j + 1), start + CHUNK)
+        hh = tl.arange(0, H)
         kj = tl.reshape(tl.load(k_ptr + j * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
         vj = tl.reshape(tl.load(v_ptr + j * (H * C) + tl.arange(0, H * C)).to(tl.float32), [H, C])
         dk = tl.zeros([H, KC], tl.float32)
@@ -189,10 +182,7 @@ if HAS_TRITON:
             msk = i < end
             p = tl.load(perm_ptr + i, mask=msk, other=0).to(tl.int64)
             qi = tl.load(qib_ptr + i, mask=msk, other=0).to(tl.int64)
-            basis = tl.load(
-                basis_ptr + p[:, None] * G + tl.arange(0, G)[None, :], mask=msk[:, None], other=0.0
-            ).to(tl.float32)
-            ker = tl.sum(basis[:, :, None] * w[None, :, :], axis=1)
+            ker = tl.load(ker_ptr + p[:, None] * H + hh[None, :], mask=msk[:, None], other=0.0).to(tl.float32)
             q = tl.reshape(
                 tl.load(
                     q_ptr + qi[:, None] * (H * KC) + tl.arange(0, H * KC)[None, :],
@@ -203,8 +193,8 @@ if HAS_TRITON:
             score = tl.sum(q * kj[None, :, :], axis=2)
             logm = tl.load(logm_ptr + p, mask=msk, other=0.0).to(tl.float32)
             z = ker + score * scale + logm[:, None]
-            lse = tl.load(lse_ptr + qi[:, None] * H + tl.arange(0, H)[None, :], mask=msk[:, None], other=0.0)
-            dsum = tl.load(dsum_ptr + qi[:, None] * H + tl.arange(0, H)[None, :], mask=msk[:, None], other=0.0)
+            lse = tl.load(lse_ptr + qi[:, None] * H + hh[None, :], mask=msk[:, None], other=0.0)
+            dsum = tl.load(dsum_ptr + qi[:, None] * H + hh[None, :], mask=msk[:, None], other=0.0)
             pr = tl.exp(z - lse)
             pr = tl.where(msk[:, None], pr, 0.0)
             dout = tl.reshape(
@@ -218,63 +208,70 @@ if HAS_TRITON:
             dz = pr * (dp - dsum)
             dv += tl.sum(pr[:, :, None] * dout, axis=0)
             dk += tl.sum(dz[:, :, None] * q, axis=0) * scale
-        tl.store(dk_ptr + j * (H * KC) + tl.arange(0, H * KC), tl.reshape(dk, [H * KC]))
-        tl.store(dv_ptr + j * (H * C) + tl.arange(0, H * C), tl.reshape(dv, [H * C]))
+        tl.atomic_add(dk_ptr + j * (H * KC) + tl.arange(0, H * KC), tl.reshape(dk, [H * KC]))
+        tl.atomic_add(dv_ptr + j * (H * C) + tl.arange(0, H * C), tl.reshape(dv, [H * C]))
+
+
+def _source_items(plan: PairPlan, chunk: int):
+    """The by-source work items: (source, chunk index) for every chunk of ``chunk``
+    pairs of every source's segment."""
+    counts = plan.b_offsets[1:] - plan.b_offsets[:-1]
+    n_chunks = (counts + (chunk - 1)) // chunk
+    chunk_idx, src = _ragged_arange(torch.zeros_like(n_chunks), n_chunks)
+    return src, chunk_idx
 
 
 class _SegmentSoftmaxRead(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, basis, w, logm, q, k, v, plan: PairPlan, scale: float):
+    def forward(ctx, ker, logm, q, k, v, plan: PairPlan, scale: float):
         n_q, h, kc = q.shape
         c = v.shape[2]
-        g = basis.shape[1]
-        basis, w, logm, q, k, v = (t.contiguous() for t in (basis, w, logm, q, k, v))
+        ker, logm, q, k, v = (t.contiguous() for t in (ker, logm, q, k, v))
         out = torch.empty(n_q, h, c, device=q.device, dtype=torch.float32)
         lse = torch.empty(n_q, h, device=q.device, dtype=torch.float32)
         if n_q:
             _ssr_fwd_kernel[(n_q,)](
-                plan.q_offsets, plan.bj, basis, logm, w, q, k, v, out, lse, scale,
-                H=h, C=c, KC=kc, G=g, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
+                plan.q_offsets, plan.bj, ker, logm, q, k, v, out, lse, scale,
+                H=h, C=c, KC=kc, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
             )  # fmt: skip
-        ctx.save_for_backward(basis, w, logm, q, k, v, out, lse)
+        ctx.save_for_backward(ker, logm, q, k, v, out, lse)
         ctx.plan, ctx.scale = plan, scale
         return out
 
     @staticmethod
     def backward(ctx, dout):
-        basis, w, logm, q, k, v, out, lse = ctx.saved_tensors
+        ker, logm, q, k, v, out, lse = ctx.saved_tensors
         plan, scale = ctx.plan, ctx.scale
         n_q, h, kc = q.shape
         c = v.shape[2]
-        g = basis.shape[1]
         dout = dout.contiguous().float()
         dsum = (dout * out).sum(-1)  # (n_q, H)
         dq = torch.empty(n_q, h, kc, device=q.device, dtype=torch.float32)
-        dw_part = torch.empty(n_q, g, h, device=q.device, dtype=torch.float32)
-        dbasis = torch.empty_like(basis)
-        dk = torch.empty(plan.n_b, h, kc, device=q.device, dtype=torch.float32)
-        dv = torch.empty(plan.n_b, h, c, device=q.device, dtype=torch.float32)
+        dker = torch.empty_like(ker)
+        dk = torch.zeros(plan.n_b, h, kc, device=q.device, dtype=torch.float32)
+        dv = torch.zeros(plan.n_b, h, c, device=q.device, dtype=torch.float32)
         if n_q:
             _ssr_bwd_point_kernel[(n_q,)](
-                plan.q_offsets, plan.bj, basis, logm, w, q, k, v, lse, dsum, dout, dq, dw_part, dbasis, scale,
-                H=h, C=c, KC=kc, G=g, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
+                plan.q_offsets, plan.bj, ker, logm, q, k, v, lse, dsum, dout, dq, dker, scale,
+                H=h, C=c, KC=kc, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
             )  # fmt: skip
         if plan.n_b:
-            _ssr_bwd_source_kernel[(plan.n_b,)](
-                plan.b_offsets, plan.perm, plan.qi_by_b, basis, logm, w, q, k, v, lse, dsum, dout, dk, dv, scale,
-                H=h, C=c, KC=kc, G=g, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
-            )  # fmt: skip
-        dw = dw_part.sum(0).to(w.dtype)
-        return dbasis, dw, None, dq.to(q.dtype), dk.to(k.dtype), dv.to(v.dtype), None, None
+            src, chunk_idx = _source_items(plan, SOURCE_CHUNK)
+            if src.shape[0]:
+                _ssr_bwd_source_kernel[(src.shape[0],)](
+                    plan.b_offsets, src, chunk_idx, plan.perm, plan.qi_by_b, ker, logm, q, k, v, lse, dsum, dout,
+                    dk, dv, scale, SOURCE_CHUNK,
+                    H=h, C=c, KC=kc, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
+                )  # fmt: skip
+        return dker, None, dq.to(q.dtype), dk.to(k.dtype), dv.to(v.dtype), None, None
 
 
-def _eager_segment_softmax_read(basis, w, logm, q, k, v, plan: PairPlan, scale: float):
+def _eager_segment_softmax_read(ker, logm, q, k, v, plan: PairPlan, scale: float):
     """The same read pair by pair (CPU, float64, the reference of the Triton path)."""
     acc = torch.promote_types(q.dtype, torch.float32)
     qi, bj = plan.qi.long(), plan.bj.long()
-    ker = basis.to(acc) @ w.to(acc)  # (P, H)
     score = (q[qi].to(acc) * k[bj].to(acc)).sum(-1)
-    logit = ker + score * scale + logm.to(acc)[:, None]
+    logit = ker.to(acc) + score * scale + logm.to(acc)[:, None]
     counts = plan.q_offsets[1:] - plan.q_offsets[:-1]
     seg_max = torch.segment_reduce(logit.detach(), "max", lengths=counts, axis=0, unsafe=True)
     e = torch.exp(logit - seg_max[qi])
@@ -284,8 +281,7 @@ def _eager_segment_softmax_read(basis, w, logm, q, k, v, plan: PairPlan, scale: 
 
 
 def segment_softmax_read(
-    basis: torch.Tensor,
-    w: torch.Tensor,
+    ker: torch.Tensor,
     logm: torch.Tensor,
     q: torch.Tensor,
     k: torch.Tensor,
@@ -294,14 +290,14 @@ def segment_softmax_read(
     scale: float | None = None,
 ) -> torch.Tensor:
     """Each point's softmax-weighted read of its pairs' values, ``(n_q, H, C)`` in float32
-    (float64 if the inputs are): ``basis`` ``(P, G)``, ``w`` ``(G, H)`` the block's kernel
-    weights, ``logm`` ``(P,)``, ``q`` ``(n_q, H, KC)``, ``k`` ``(n_b, H, KC)``, ``v``
-    ``(n_b, H, C)``; ``scale`` defaults to ``1 / sqrt(KC)``. Differentiable in ``basis``,
-    ``w``, ``q``, ``k`` and ``v``."""
+    (float64 if the inputs are): ``ker`` ``(P, H)`` the pairs' kernel terms, ``logm``
+    ``(P,)``, ``q`` ``(n_q, H, KC)``, ``k`` ``(n_b, H, KC)``, ``v`` ``(n_b, H, C)``;
+    ``scale`` defaults to ``1 / sqrt(KC)``. Differentiable in ``ker``, ``q``, ``k`` and
+    ``v``."""
     if scale is None:
         scale = 1.0 / math.sqrt(q.shape[2])
-    h, kc, c, g = q.shape[1], q.shape[2], v.shape[2], basis.shape[1]
-    pow2 = all(n & (n - 1) == 0 for n in (h, kc, c, g, h * kc, h * c, g * h))
-    if supported(basis, q, k, v) and pow2 and q.dtype != torch.float64:
-        return _SegmentSoftmaxRead.apply(basis, w, logm, q, k, v, plan, float(scale))
-    return _eager_segment_softmax_read(basis, w, logm, q, k, v, plan, float(scale))
+    h, kc, c = q.shape[1], q.shape[2], v.shape[2]
+    pow2 = all(n & (n - 1) == 0 for n in (h, kc, c, h * kc, h * c))
+    if supported(ker, q, k, v) and pow2 and q.dtype != torch.float64:
+        return _SegmentSoftmaxRead.apply(ker, logm, q, k, v, plan, float(scale))
+    return _eager_segment_softmax_read(ker, logm, q, k, v, plan, float(scale))

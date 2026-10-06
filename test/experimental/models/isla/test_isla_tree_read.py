@@ -409,29 +409,29 @@ def test_fused_segment_softmax_read_matches_eager(dtype):
 
     dev = torch.device("cuda")
     g = torch.Generator().manual_seed(3)
-    n_q, n_b, h, kc, c, gb = 37, 50, 8, 4, 8, 16
-    counts = torch.randint(0, 200, (n_q,), generator=g)
+    n_q, n_b, h, kc, c = 37, 50, 8, 4, 8
+    counts = torch.randint(0, 5000, (n_q,), generator=g)  # segments longer than a source chunk too
     qi = torch.repeat_interleave(torch.arange(n_q), counts)
     bj = torch.randint(0, n_b - 5, (int(counts.sum()),), generator=g)  # sources 45..49 get no pairs
+    bj[: int(counts.sum()) // 2] = 0  # one source read by half of all pairs (many chunks)
     plan = PairPlan.build(qi.to(dev), bj.to(dev), n_q, n_b)
-    basis = torch.randn(int(counts.sum()), gb, generator=g, dtype=D)
-    w = torch.randn(gb, h, generator=g, dtype=D) * 0.5
+    ker = torch.randn(int(counts.sum()), h, generator=g, dtype=D)
     logm = -torch.rand(int(counts.sum()), generator=g, dtype=D) * 8
     q = torch.randn(n_q, h, kc, generator=g, dtype=D)
     k = torch.randn(n_b, h, kc, generator=g, dtype=D)
     v = torch.randn(n_b, h, c, generator=g, dtype=D)
     plan_cpu = PairPlan.build(qi, bj, n_q, n_b)
-    ref_in = [t.clone().requires_grad_(True) for t in (basis, w, q, k, v)]
-    ref = _eager_segment_softmax_read(ref_in[0], ref_in[1], logm, ref_in[2], ref_in[3], ref_in[4], plan_cpu, 0.5)
+    ref_in = [t.clone().requires_grad_(True) for t in (ker, q, k, v)]
+    ref = _eager_segment_softmax_read(ref_in[0], logm, ref_in[1], ref_in[2], ref_in[3], plan_cpu, 0.5)
     seed = torch.randn_like(ref)
     (ref * seed).sum().backward()
-    dev_in = [t.to(dev, dtype).requires_grad_(True) for t in (basis, w, q, k, v)]
-    out = segment_softmax_read(dev_in[0], dev_in[1], logm.to(dev, torch.float32), dev_in[2], dev_in[3], dev_in[4], plan, 0.5)
+    dev_in = [t.to(dev, dtype).requires_grad_(True) for t in (ker, q, k, v)]
+    out = segment_softmax_read(dev_in[0], logm.to(dev, torch.float32), dev_in[1], dev_in[2], dev_in[3], plan, 0.5)
     (out * seed.to(dev, out.dtype)).sum().backward()
     tol = 1e-4 if dtype == torch.float32 else 5e-2
     rows = counts > 0
     assert torch.allclose(out.cpu().double()[rows], ref[rows], atol=tol, rtol=tol)
-    for a, b, name in zip(dev_in, ref_in, ("basis", "w", "q", "k", "v")):
+    for a, b, name in zip(dev_in, ref_in, ("ker", "q", "k", "v")):
         ga, gb_ = a.grad.cpu().double(), b.grad
         assert torch.allclose(ga, gb_, atol=tol * gb_.abs().max(), rtol=tol), name
 
