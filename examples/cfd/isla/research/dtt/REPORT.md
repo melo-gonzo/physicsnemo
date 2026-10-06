@@ -111,14 +111,35 @@ the Triton segment kernels 0.6 s. Fixed in `code_dtt5`: node means by one leaf s
 tree in float32; pair invariants computed once without gradient and kept, only the basis MLP checkpointed. The
 profile is repeated on the sixth snapshot (job 106467).
 
+### E2 with the orientation-aware trees (200 cases, four seeds, job 106435; RMS decomposition, job 106466)
+
+Largest-chord tree, error ratio to dense p / v / nut: theta 0.25: 1.34 to 1.47 / 1.07 to 1.14 / 1.7 to 2.3;
+theta 0.5: 2.0 to 2.8 / 1.27 to 1.54 / 3.6 to 7.1; theta 1: 2.9 to 4.2 / 1.6 to 2.1 / 5.9 to 12 (pairs per block
+8.7e6, 4.8e6, 3.1e6, against 1.0e8 dense). The RMS-spread tree admits less coherent clusters at the same theta and
+pays for it: on the 12-case probe at theta 0.25 the deviation is 0.042 / 0.010 / 0.063 (ratio 2.10 / 1.19 / 1.59)
+against 0.018 with the largest chord, the normal smear back to 0.028 and the key smear 0.042. Same conclusion for
+route A at either statistic; the RMS statistic is the one the DrivAerML cost allows.
+
+### Cost at DrivAerML scale, sixth snapshot (RMS orientation tree, scatter node means, kept invariants; job 106464)
+
+theta 1: 2.3e8 pairs per block (1,170 sources per point, 2.1x the position-only tree: orientation coherence
+doubles the far-field count), step 9.4 s, forward 2.7 s, peak 201 GiB. theta 0.5: out of memory (about 6.6e8
+pairs). The step per pair and block fell from 8 ns to 3.4 ns; the profile (job 106526) now puts 60% of the step in
+two `aten::index` gathers per block (24 calls of 118 ms: the ``(pairs, heads)`` softmax intermediates), 10% in
+the Triton segment sums, the rest spread thin. Hence the fused read of the seventh snapshot
+(`segment_softmax.py`): the softmax over each point's pairs as one Triton program per point (online softmax,
+keys and values read in place), backward as one program per point (dq, dW, dbasis) and one per source (dk, dv)
+over the plan's by-source order, nothing kept per pair between forward and backward. Its first CUDA test, profile
+and cost ladder are jobs 106544 to 106546.
+
 ### In flight
 
-- Job 106465: E2 with the orientation-aware (RMS) tree. Job 106466: the decomposition with it. Job 106464: the
-  DrivAerML cost ladder with it. Job 106467: the profile. Jobs 106435 / 106436: the same E2 and decomposition with
-  the largest-chord tree (accuracy only; its cost is known to be unusable).
+- Jobs 106544 / 106545 / 106546: verification, profile and cost ladder of the fused read (snapshot `code_dtt7`).
+  Job 106465: E2 with the RMS tree on all 200 cases.
 - Lanes `dtt_vol_p_seed42/43` (E3's P arms, read-only without a read, 512 / 512, lr 3.75e-4, 200,000, 500
   epochs): training at 0.474 s per step and 130 GB per rank, about 51 s per epoch, so roughly 7 hours. The TG
-  lanes wait for a usable form.
+  lanes (theta 1 and 0.5, two seeds each, rows 2 to 7 of `kernel/lanes.tsv`) launch when the fused read's step is
+  within the cost bar.
 
 ### Decomposition with orientation-coherent clusters (job 106436, largest-chord tree, same 12 cases)
 
