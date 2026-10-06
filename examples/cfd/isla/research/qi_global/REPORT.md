@@ -5,7 +5,7 @@ Lane `isla-qi-global`, branch `psharpe/isla-qi-global` (base
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-05-isla-qi-global/`
 (job prefix `isla.global.`). Brief: `BRIEF.md` (this folder).
 
-## Status (2026-10-05 21:05 PDT): all ten lanes training on LHR
+## Status (2026-10-05 23:30 PDT): all ten lanes training on LHR
 
 - Global read implemented and tested (commits b10170371 eager, c5d7408e9 fused
   Triton; 224 ISLA tests pass).
@@ -24,8 +24,12 @@ Lane `isla-qi-global`, branch `psharpe/isla-qi-global` (base
 - LHR jobs: lanes 99985-99994 (started 20:45 PDT), chain-ahead successors
   99999-100008, watcher 100013 (`eval/after_lanes.sbatch`, cpu-free: scores,
   probes and bf16 re-scores each lane when it completes, then runs
-  `eval/qg_reduce.py`). Step: G 0.545 s, P 0.235 s (4 ranks). Expected: I, P, T
-  done about 04:00 PDT, G about 12:30 PDT on 2026-10-06.
+  `eval/qg_reduce.py`). Step: G 0.545 s, P 0.235 s (4 ranks); G 111 s per
+  epoch. At 23:25 G is at epoch 80, the references at 130-150. Expected: I, P, T
+  done about 04:00 PDT, G about 13:00 PDT on 2026-10-06.
+- Early training log (epochs 30-60): G's eddy-viscosity validation error is
+  0.6-1.0x the interacting model's and 0.45-0.9x read-only's (see Training-log
+  progress); no verdict rests on it.
 
 ## Question
 
@@ -197,6 +201,22 @@ added `kernel_read.py`, `pair_kernels.py`, `global_read_kernels.py`; every golde
 of the base passes. The truncated path is identical to `code_kq3` (9c564e99a)
 apart from added lines. `recipe_g` is the kernel lane's `recipe_kq` (its `src/*.py`
 md5s equal this worktree's).
+
+## Training-log progress (no verdict rests on it)
+
+The trainer's validation relative L2 every 10 epochs (the 200 test airfoils,
+chunk-shaped requests, bf16), ratios at matched epoch and seed, pressure /
+velocity / eddy viscosity; seeds 42, 43 against the QI and kernel lanes' logs,
+44, 45 against this lane's. Single-epoch values are noisy (10-30%).
+
+| epoch | G / I, seeds 42 / 43 / 44 / 45 (nut) | G / P (nut) | T / I (nut) |
+|---|---|---|---|
+| 30 | 0.86 / 0.61 / 0.87 / 0.90 | 0.51 / 0.56 / 0.68 / 0.89 | 1.57 / 1.06 / 1.30 / 1.01 |
+| 50 | 0.71 / 1.02 / 0.87 / 0.77 | 0.60 / 0.67 / 0.75 / 0.45 | 0.86 / 1.31 / 0.94 / 1.18 |
+| 60 | 0.91 / 0.78 / 0.73 / 0.87 | 0.62 / 0.54 / 0.63 / 0.57 | 1.23 / 1.17 / 1.00 / 1.12 |
+
+G / I pressure at epoch 60: 0.65 / 0.72 / 0.66 / 1.24; velocity 1.02 / 0.81 /
+0.86 / 1.01.
 
 ## Contracts on a trained G checkpoint (early; `qi_probe.py`, LHR job 100135)
 
