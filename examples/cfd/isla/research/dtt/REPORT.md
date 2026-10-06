@@ -132,14 +132,28 @@ keys and values read in place), backward as one program per point (dq, dW, dbasi
 over the plan's by-source order, nothing kept per pair between forward and backward. Its first CUDA test, profile
 and cost ladder are jobs 106544 to 106546.
 
+### The fused read (snapshots 7 to 10, 2026-10-06 night)
+
+The Triton read passes its CUDA tests (values and every gradient against the eager float64 form, float32 to 1e-4
+and bfloat16 to 5e-2; the whole read float32 against float64 to 1e-3; the ISLA suite 290 passed). At theta 1 on
+the car the step fell from 9.4 s to 5.1 s (forward 1.65 s; the three kernels 1.05 / 1.30 / 1.60 s of it, job
+106545). Tiles and warps hardly matter (128 x 4 best at 4.8 s; 8 warps worse); leaf size 4 gives 4.5 s at 2.0e8
+pairs (the cells of opened leaves were 40% of the pairs at leaf size 8, and smaller leaves trade them for a few more
+clusters). Memory at theta 0.5 (6.6e8 pairs) overflowed with the float32 basis and its gradient; the pair plan is
+now 32-bit and the basis stays in the MLP's dtype (bfloat16 under autocast, as the dense read's own basis).
+cuSOLVER's batched eigensolve failed beyond about 65,000 nodes (leaf sizes 1 and 2); it runs in slices now. The
+tenth snapshot moves the kernel term (basis through the block's weights) out of the Triton kernels into a matmul
+and splits the by-source backward into chunks of 2,048 pairs with atomic accumulation (a cluster read by a hundred
+thousand points no longer serializes one program); its cost sweep is job 106643.
+
 ### In flight
 
-- Jobs 106544 / 106545 / 106546: verification, profile and cost ladder of the fused read (snapshot `code_dtt7`).
-  Job 106465: E2 with the RMS tree on all 200 cases.
+- Job 106641: leaf sizes 1 and 2 at theta 1 and leaf sizes 2 and 4 at theta 0.5 (snapshot 9). Jobs 106642 /
+  106643: verification and cost sweep of the tenth snapshot.
 - Lanes `dtt_vol_p_seed42/43` (E3's P arms, read-only without a read, 512 / 512, lr 3.75e-4, 200,000, 500
   epochs): training at 0.474 s per step and 130 GB per rank, about 51 s per epoch, so roughly 7 hours. The TG
-  lanes (theta 1 and 0.5, two seeds each, rows 2 to 7 of `kernel/lanes.tsv`) launch when the fused read's step is
-  within the cost bar.
+  lanes (theta 1 and 0.5, two seeds each, rows 2 to 7 of `kernel/lanes.tsv`) launch on the best configuration
+  of these sweeps.
 
 ### Decomposition with orientation-coherent clusters (job 106436, largest-chord tree, same 12 cases)
 
