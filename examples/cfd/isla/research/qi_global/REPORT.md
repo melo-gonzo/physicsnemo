@@ -444,6 +444,12 @@ float32 verdict (like with like).
 - **Cost on AirfRANS.** 2.1x the read-only step. The basis backward (65 ms per
   step) and cuBLAS projection glue (about 7 ms per block) are the largest items;
   a fused projection and a tuned basis backward would bring it to about 1.6-1.8x.
+- **Branch state.** Peter merged `psharpe/isla` into this branch at 13:41 EDT
+  (101fdba6d: SOFT-GEO, the exact nearest-boundary search, new class defaults).
+  Every result here comes from the snapshots `code_g1` (b10170371) and `code_g2`
+  (c5d7408e9), before the merge. The global-read tests were not re-run on the
+  merged branch: at 14:00 PDT the shared local venv failed on `import torch`
+  (an `ld.so` assertion), so that check is still to do.
 - Re-running the reductions by hand (LHR task dir): `cd eval && python
   qg_reduce.py --scores score ../refs/qi_score ../refs/kq_score --probes probe
   ../refs/qi_probe ../refs/kq_probe --out qg_reduction.json`; bf16 with `--scores
