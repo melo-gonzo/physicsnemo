@@ -166,9 +166,9 @@ class ConformalPredictor:
         (collect more calibration samples or raise ``alpha``); if a cellwise
         predictor lacks ``points`` or has a difficulty field; if a
         non-cellwise predictor has ``points``; if ``points`` is empty, not
-        2-D, or non-finite; if a threshold has the wrong shape for the tier, is empty, non-finite, or negative for a
-        nonnegative score; or if ``difficulty`` reads the same aux key the
-        score already divides by.
+        2-D, or non-finite; if a threshold has the wrong shape for the tier,
+        is empty, non-finite, or negative for a nonnegative score; or if
+        ``difficulty`` reads the same aux key the score already divides by.
 
     Examples
     --------
@@ -347,7 +347,6 @@ class ConformalPredictor:
         key: str,
         prediction: Tensor,
         aux: Mapping[str, Tensor] | None,
-        points: Tensor | None,
     ) -> Tensor:
         threshold = self._thresholds_by_key[key]
         if self._tier == "cellwise":
@@ -361,7 +360,7 @@ class ConformalPredictor:
         scalar = threshold.to(device=prediction.device)
         if self._difficulty is None:
             return scalar
-        difficulty = self._difficulty(points, aux).to(
+        difficulty = self._difficulty(aux).to(
             device=prediction.device, dtype=torch.float64
         )
         return scalar * broadcast_difficulty(difficulty, prediction, key)
@@ -468,7 +467,7 @@ class ConformalPredictor:
             aux_field = slice_aux(aux, key)
             check_real(key, "prediction", prediction_field)
             check_aux(key, self._score, prediction_field, aux_field)
-            threshold = self._threshold_for(key, prediction_field, aux_field, points)
+            threshold = self._threshold_for(key, prediction_field, aux_field)
             lo_out[key], hi_out[key] = self._score.interval(
                 prediction_field,
                 threshold.to(device=prediction_field.device),

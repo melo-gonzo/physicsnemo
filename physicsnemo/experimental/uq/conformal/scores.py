@@ -448,11 +448,7 @@ class AuxDifficulty:
         self.key = key
         self.eps = positive_finite_float(eps, "eps")
 
-    def __call__(
-        self,
-        points: Float[Tensor, "n_points n_spatial_dims"] | None = None,
-        aux: Mapping[str, Tensor] | None = None,
-    ) -> Float[Tensor, " n_points"]:
+    def __call__(self, aux: Mapping[str, Tensor]) -> Float[Tensor, " n_points"]:
         r"""Return one positive scale per point from ``aux[key]``.
 
         Calibrators and predictors call this for you; call it directly to
@@ -460,14 +456,9 @@ class AuxDifficulty:
 
         Parameters
         ----------
-        points : torch.Tensor, optional
-            Mesh coordinates of shape
-            :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`. Ignored.
-            Default is ``None``.
-        aux : Mapping[str, torch.Tensor], optional
+        aux : Mapping[str, torch.Tensor]
             Must contain ``key``, a finite real floating-point tensor of
-            shape :math:`(n_{\text{points}}, *\text{dims})`. Default is
-            ``None``.
+            shape :math:`(n_{\text{points}}, *\text{dims})`.
 
         Returns
         -------

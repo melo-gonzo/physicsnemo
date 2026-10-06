@@ -513,9 +513,7 @@ class _ScaledCalibratorBase(_SplitCalibratorBase):
 
         def stage(key, prediction_field, target_field, aux_field):
             difficulty = (
-                None
-                if self._difficulty is None
-                else self._difficulty(points, aux_field)
+                None if self._difficulty is None else self._difficulty(aux_field)
             )
             raw = check_finite(
                 key,

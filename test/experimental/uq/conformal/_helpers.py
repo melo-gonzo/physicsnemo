@@ -159,7 +159,7 @@ def assert_predictor_covers_admitted(
     score = predictor.score.score(prediction, target, aux).double()
     threshold = predictor.thresholds.double()
     if predictor.difficulty is not None:
-        difficulty = predictor.difficulty(points, aux).double()
+        difficulty = predictor.difficulty(aux).double()
         threshold = threshold * broadcast_difficulty(difficulty, prediction, "field")
     lo, hi = predictor.predict_interval(prediction, aux=aux, points=points)
     inside = (target.double() >= lo.double()) & (target.double() <= hi.double())

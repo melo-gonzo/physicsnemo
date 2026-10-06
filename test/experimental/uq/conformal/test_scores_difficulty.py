@@ -101,7 +101,7 @@ def test_aux_difficulty_channel_max_clamp_and_trailing_reduction():
         difficulty(aux={"sigma": sigma}), torch.tensor([1.5, 1e-2])
     )
     # A (points, time, channels) aux reduces to one scale per point.
-    assert difficulty(None, {"sigma": torch.rand(2, 3, 4) + 0.5}).shape == (2,)
+    assert difficulty({"sigma": torch.rand(2, 3, 4) + 0.5}).shape == (2,)
 
 
 @pytest.mark.parametrize("dtype", [torch.float16, torch.float64], ids=str)
