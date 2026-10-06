@@ -123,7 +123,8 @@ def _run(m, mesh, drv, q, sdf, sn):
 
 
 def _rows(out, idx):
-    return {k: v[idx] for k, v in outputs(out).items()}
+    """Rows ``idx`` of an outputs mapping."""
+    return {k: v[idx] for k, v in out.items()}
 
 
 def _rel(a, b):
