@@ -251,6 +251,10 @@ from physicsnemo.experimental.models.isla.kernel_read import (
     pair_invariants,
 )
 from physicsnemo.experimental.models.isla.pair_kernels import PairPlan
+from physicsnemo.experimental.models.isla.tree_read import (
+    _TreeKernelRead,
+    tree_read_pairs,
+)
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import cell_measures
 from physicsnemo.mesh.fields import FieldSchema, FieldSchemaLike
@@ -413,6 +417,18 @@ class ISLA(Module):
             its cost is ``Q * N`` per block.
         kernel_read_blocks: Number of final blocks followed by a kernel read
             (default ``None``: every block).
+        kernel_read_theta: Global read only (``kernel_read="mean"``,
+            ``kernel_read_radius=None``). ``None`` (default): the dense read,
+            every pair in tiles. A number: the same read evaluated through a
+            Barnes-Hut cluster tree over the boundary cells
+            (:mod:`~physicsnemo.experimental.models.isla.tree_read`) with this
+            opening angle: each point reads nearby cells one by one and a
+            well-separated cluster through its measure-weighted aggregate (a
+            virtual cell). A numerical tolerance, not a model constant: ``0``
+            is the dense read pair for pair, and the error vanishes as it
+            falls; at a finite value equivariance and query independence hold
+            to the approximation's order. The dense and tree forms share
+            their parameters, so a checkpoint of one loads into the other.
         dim: Spatial dimension of the domain (default 3). Every boundary mesh
             is a ``Mesh[dim - 1, dim]`` and every prediction point has ``dim``
             coordinates. Every geometric quantity is built for ``dim``
@@ -491,6 +507,7 @@ class ISLA(Module):
         kernel_read: str | None = None,
         kernel_read_radius: float | None = 0.01,
         kernel_read_blocks: int | None = None,
+        kernel_read_theta: float | None = None,
         dim: int = 3,
         eps: float = 1e-12,
     ) -> None:
@@ -730,6 +747,18 @@ class ISLA(Module):
         ### it had before.
         self.kernel_read = kernel_read
         self.kernel_read_radius = None if kernel_read_radius is None else float(kernel_read_radius)
+        ### kernel_read_theta selects the tree-accelerated evaluation of the global
+        ### read (tree_read.py): the Barnes-Hut opening angle, a numerical tolerance
+        ### (0 = the dense read pair for pair); None = the dense read itself.
+        self.kernel_read_theta = None if kernel_read_theta is None else float(kernel_read_theta)
+        if self.kernel_read_theta is not None:
+            if kernel_read is None or self.kernel_read_radius is not None:
+                raise ValueError(
+                    "kernel_read_theta is the tree-accelerated global read: build with "
+                    "kernel_read='mean' and kernel_read_radius=None"
+                )
+            if not self.kernel_read_theta >= 0:
+                raise ValueError(f"kernel_read_theta must be non-negative, got {kernel_read_theta!r}")
         self.kernel_read_blocks = None
         self.kernel_basis = None
         self.kernel_reads = None
@@ -760,7 +789,8 @@ class ISLA(Module):
             if self.kernel_read_radius is None:
                 n_geo = global_geo_width(K, self.qin.n_block_vecs, self.bin.n_block_vecs)
                 self.kernel_basis = _KernelBasis(n_geo)
-                self.kernel_reads = nn.ModuleList(_GlobalKernelRead(hidden) for _ in range(m))
+                read_cls = _GlobalKernelRead if self.kernel_read_theta is None else _TreeKernelRead
+                self.kernel_reads = nn.ModuleList(read_cls(hidden) for _ in range(m))
             else:
                 n_geo = kernel_geo_width(K, self.qin.n_block_vecs, self.bin.n_block_vecs)
                 self.kernel_basis = _KernelBasis(n_geo)
@@ -1238,6 +1268,30 @@ class ISLA(Module):
         plan = PairPlan.build(qi, bj, b * nq, b * n)
         return plan, self.kernel_basis(inv), log_frac[bj].to(log_b.dtype) + log_b
 
+    def _tree_read_pairs(self, r, n_hat, vecs, log_w, q_r, q_nhat, q_wall, q_vecs, g_unit):
+        """The tree-accelerated global read's pairs (:mod:`tree_read`): each point's
+        near cells and admitted clusters at ``kernel_read_theta``, their kernel basis
+        and log measures; ``q_wall`` ``(B, Q)`` is the points' built-in wall distance
+        (frame units)."""
+        nb_vecs = self.bin.n_block_vecs
+        log_frac = log_w[..., 0] - torch.logsumexp(log_w[..., 0], dim=1, keepdim=True)
+        pairs = tree_read_pairs(
+            self.kernel_basis,
+            query_r=q_r,
+            query_n=q_nhat,
+            query_wall=q_wall,
+            query_vecs=None if q_vecs is None else q_vecs[:, :, nb_vecs:],
+            boundary_r=r,
+            boundary_n=n_hat,
+            boundary_vecs=None if vecs is None else vecs[:, :, :nb_vecs],
+            log_frac=log_frac,
+            g_unit=g_unit,
+            theta=self.kernel_read_theta,
+            eps=self.eps,
+        )
+        self.kernel_read_pairs = pairs.n_pairs
+        return pairs
+
     def _global_read_pairs(self, r, n_hat, vecs, log_w, q_r, q_nhat, q_wall, q_vecs, g_unit):
         """The global read's inputs: the kernel basis of every (point, cell) pair of
         each case ``(BASIS, Q * N)`` and the cells' log measure fractions ``(B, N)``;
@@ -1399,7 +1453,12 @@ class ISLA(Module):
                 )
             q_vecs, q_tens = self._block_extras(None, None, q_vecs, q_tens, bq, nq, points)
             if self.kernel_reads is not None and self.kernel_read_radius is None:
-                kernel_pairs = self._global_read_pairs(
+                read_pairs = (
+                    self._global_read_pairs
+                    if self.kernel_read_theta is None
+                    else self._tree_read_pairs
+                )
+                kernel_pairs = read_pairs(
                     r, n_hat, vecs, log_w, q_r, q_nhat, s[..., 0].abs(), q_vecs, g_unit
                 )
             elif self.kernel_reads is not None:
