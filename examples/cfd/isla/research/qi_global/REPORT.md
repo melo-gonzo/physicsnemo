@@ -15,7 +15,7 @@ An untruncated boundary read has every prediction point read every boundary cell
 with no length scale anywhere. Does it close read-only ISLA's wake eddy-viscosity
 gap on AirfRANS, while keeping exact query independence and every ISLA invariant?
 
-## Preregistered bars (written 2026-10-05 18:15 PDT, before any full lane)
+## Preregistered bars (written 2026-10-05 17:30 PDT, before any full lane)
 
 AirfRANS only. Arms: **G** read-only + global read (seeds 42-45); **I** interacting-256
 (42, 43 from the QI campaign, 44, 45 new); **P** read-only-256 (same seeds split);

@@ -420,3 +420,130 @@ def test_global_read_cuda_fused_and_compiled_training_path():
     assert all(
         torch.allclose(part[k], full[k][:50], atol=1e-4, rtol=1e-4) for k in part
     )
+
+
+@cuda_only
+@pytest.mark.parametrize("shape", [(37, 53, 2, 1, 1, 0), (100, 301, 3, 1, 1, 1)])
+def test_fused_kernel_basis_matches_the_eager_basis(shape):
+    """The fused Triton basis (invariants and MLP per tile, never stored) equals the
+    eager float64 basis in float32, forward and every parameter gradient; in bf16
+    autocast to bf16 roundoff."""
+    from physicsnemo.experimental.models.isla import global_read_kernels as grk
+    from physicsnemo.experimental.models.isla.kernel_read import (
+        _KernelBasis,
+        global_geo_width,
+    )
+
+    nq, n, d, k, pq, pb = shape
+    dev = "cuda"
+    g = torch.Generator(device=dev).manual_seed(0)
+
+    def mk(*s):
+        return torch.randn(*s, generator=g, device=dev)
+
+    def unit(*s):
+        return torch.nn.functional.normalize(mk(*s), dim=-1)
+
+    geo = {
+        "query_r": mk(nq, d),
+        "query_n": unit(nq, d),
+        "query_wall": mk(nq).abs() + 0.01,
+        "query_vecs": unit(nq, pq, d) if pq else None,
+        "boundary_r": mk(n, d),
+        "boundary_n": unit(n, d),
+        "boundary_vecs": unit(n, pb, d) if pb else None,
+        "g_unit": unit(k, d),
+        "eps": 1e-12,
+    }
+    torch.manual_seed(0)
+    basis = _KernelBasis(global_geo_width(k, pq, pb)).to(dev)
+    ref = _KernelBasis(global_geo_width(k, pq, pb)).to(dev).double()
+    ref.load_state_dict(basis.state_dict())
+    assert grk.fused_basis_supported(basis, geo)
+    geo64 = {
+        key: v.double() if isinstance(v, torch.Tensor) else v for key, v in geo.items()
+    }
+    phi_r = ref(global_pair_invariants(**geo64)).reshape(-1, 16).t()
+    go = torch.randn(phi_r.shape, generator=g, device=dev, dtype=D)
+    g_r = torch.autograd.grad(phi_r, list(ref.parameters()), go)
+    for lowp, tol in ((False, 1e-5), (True, 2e-2)):
+        with torch.autocast("cuda", dtype=torch.bfloat16, enabled=lowp):
+            phi = grk.fused_kernel_basis(basis, geo)
+        assert phi.dtype == (torch.bfloat16 if lowp else torch.float32)
+        g_f = torch.autograd.grad(phi, list(basis.parameters()), go.to(phi.dtype))
+        scale = phi_r.abs().max()
+        assert (phi.double() - phi_r).abs().max() <= tol * scale
+        for a, b in zip(g_f, g_r):
+            assert (a.double() - b).abs().max() <= tol * b.abs().max()
+
+
+@cuda_only
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_fused_global_softmax_read_matches_the_dense_reference(dtype):
+    """The fused Triton read (online softmax over cell tiles; backward by recompute,
+    no atomics) equals the dense float64 reference, forward and every gradient,
+    with ragged tiles (Q, N not multiples of the tile)."""
+    from physicsnemo.experimental.models.isla.global_read_kernels import (
+        global_softmax_read,
+    )
+
+    g = torch.Generator(device="cuda").manual_seed(0)
+    tol = 1e-5 if dtype == torch.float32 else 3e-2
+    for nh, nq, n, c, cv in ((8, 203, 77, 4, 8), (3, 64, 130, 2, 4)):
+
+        def mk(*s, dt=dtype):
+            return torch.randn(*s, generator=g, device="cuda", dtype=dt)
+
+        args = [
+            mk(16, nq * n),
+            mk(nh, 16, dt=torch.float32) * 0.5,
+            mk(nh, nq, c),
+            mk(nh, n, c),
+            mk(nh, n, cv),
+            mk(n, dt=torch.float32),
+        ]
+        args = [a.requires_grad_() for a in args]
+        ref = [a.detach().double().requires_grad_() for a in args]
+        out = global_softmax_read(*args, 0.7)
+        want = global_softmax_read_reference(*ref, 0.7)
+        assert (out.double() - want).abs().max() <= tol * want.abs().max()
+        go = torch.randn(out.shape, generator=g, device="cuda")
+        g_f = torch.autograd.grad(out, args, go)
+        g_r = torch.autograd.grad(want, ref, go.double())
+        for a, b in zip(g_f, g_r):
+            assert (a.double() - b).abs().max() <= tol * b.abs().max()
+
+
+@cuda_only
+def test_global_read_fused_model_matches_the_eager_model(monkeypatch):
+    """The whole model on CUDA in float32: the fused basis and read against the
+    eager tiles, outputs and every parameter gradient."""
+    from physicsnemo.experimental.models.isla import global_read_kernels as grk
+
+    mesh, drv, q, sdf, sn = _case(dim=2, n=200, nq=150)
+    dev = "cuda"
+    f = lambda t: t.float().to(dev)  # noqa: E731
+    bm = {
+        "wall": soup(
+            mesh.cell_centroids.float(),
+            mesh.cell_normals.float(),
+            mesh.cell_data[EFFECTIVE_MEASURE_KEY].float(),
+        ).to(dev)
+    }
+    pp = points_mesh(f(q), {"sdf": f(sdf), "sdf_normals": f(sn)})
+    res = []
+    for fused in (True, False):
+        monkeypatch.setattr(grk, "HAS_TRITON", fused and grk.HAS_TRITON)
+        m = _model(dim=2).to(dev)
+        out = outputs(
+            m(boundary_meshes=bm, prediction_points=pp, global_data={"g": f(drv)})
+        )
+        sum(o.square().sum() for o in out.values()).backward()
+        res.append((out, [p.grad.clone() for p in m.parameters()]))
+    (oa, ga), (ob, gb) = res
+    for k in oa:
+        assert (oa[k] - ob[k]).norm() <= 1e-4 * ob[k].norm(), k
+    ### Every gradient, against the scale of the whole gradient (some parameters'
+    ### gradients cancel to float32 noise).
+    ga, gb = torch.cat([a.flatten() for a in ga]), torch.cat([b.flatten() for b in gb])
+    assert (ga - gb).norm() <= 1e-4 * gb.norm()

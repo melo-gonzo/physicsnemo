@@ -54,6 +54,7 @@ import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
+from physicsnemo.experimental.models.isla import global_read_kernels
 from physicsnemo.experimental.models.isla.pair_kernels import (
     pair_scores,
     pair_weighted_sum,
@@ -414,9 +415,13 @@ def global_kernel_basis(basis: "_KernelBasis", geometry: dict) -> torch.Tensor:
 
     Evaluated tile by tile over the query rows; with gradient enabled each tile is
     checkpointed (its invariants and the MLP's activations are rebuilt in backward),
-    so only the basis itself, ``KERNEL_READ_BASIS`` numbers per pair, is stored.
-    ``geometry`` holds :func:`global_pair_invariants`' arguments.
+    so only the basis itself, ``KERNEL_READ_BASIS`` numbers per pair, is stored. On
+    CUDA below float64 one fused Triton kernel computes the invariants and the MLP
+    per tile (:func:`~physicsnemo.experimental.models.isla.global_read_kernels.
+    fused_kernel_basis`). ``geometry`` holds :func:`global_pair_invariants`' arguments.
     """
+    if global_read_kernels.fused_basis_supported(basis, geometry):
+        return global_read_kernels.fused_kernel_basis(basis, geometry)
     q_keys = ("query_r", "query_n", "query_wall", "query_vecs")
     nq, nb = geometry["query_r"].shape[0], geometry["boundary_r"].shape[0]
     rows = global_tile_rows(nb)
@@ -566,6 +571,8 @@ class _GlobalKernelRead(nn.Module):
         self.kernel = nn.Linear(KERNEL_READ_BASIS, h, bias=False)
         self.out = nn.Linear(w, hidden, bias=False)
         nn.init.zeros_(self.out.weight)
+        #: Use the fused Triton read where it applies (CUDA, float32 or lower).
+        self.fused = True
 
     def forward(self, h_b, h_q, pairs):
         basis, log_frac = pairs
@@ -579,8 +586,15 @@ class _GlobalKernelRead(nn.Module):
         v = self.value(hb).view(b, n, nh, c).permute(0, 2, 1, 3)
         k = self.key(hb).view(b, n, nh, kc).permute(0, 2, 1, 3)
         q = self.query(self.norm_q(h_q)).view(b, -1, nh, kc).permute(0, 2, 1, 3)
+        ### The fused Triton read on CUDA below float64; the eager tiles otherwise.
+        fused = self.fused and global_read_kernels.supported(basis[0], q)
+        read_fn = (
+            global_read_kernels.global_softmax_read
+            if fused
+            else _GlobalSoftmaxRead.apply
+        )
         reads = [
-            _GlobalSoftmaxRead.apply(
+            read_fn(
                 basis[i],
                 self.kernel.weight,
                 q[i],
