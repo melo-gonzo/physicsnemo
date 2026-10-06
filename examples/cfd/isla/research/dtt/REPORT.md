@@ -69,23 +69,69 @@ pair: 1.1e8 pairs through 12 block reads in 10 s is about 8 ns per pair and bloc
 roughly 0.1 ns for the bytes each pair moves, so the eager per-pair tensors and the Triton segment kernels, not the
 pair count, set the step. A profile is queued (`scoring/dtt_profile.sbatch`).
 
+### Decomposition of the monopole error (job 106424, position-only BoundaryTree)
+
+The dense pair list grouped by the admitted clusters, with one input of the pairs inside admitted clusters
+replaced by its cluster mean; mean relative L2 deviation from the dense read over 12 held-out airfoils, pressure /
+velocity / eddy viscosity. "none" reproduces the dense read and "all" the tree read to 1e-6 (harness checks).
+
+| replaced by the cluster mean | seed 42, theta 0.25 | seed 42, theta 0.5 | seed 43, theta 0.5 | seed 42, theta 1.0 |
+|---|---|---|---|---|
+| nothing (dense) | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
+| position (centroid) | 0.010 / 0.005 / 0.048 | 0.026 / 0.011 / 0.14 | 0.013 / 0.011 / 0.19 | 0.040 / 0.018 / 0.24 |
+| normal | 0.20 / 0.10 / 0.88 | 0.24 / 0.12 / 0.90 | 0.23 / 0.10 / 0.90 | 0.32 / 0.16 / 0.85 |
+| key (per block) | 0.16 / 0.035 / 0.15 | 0.24 / 0.042 / 0.26 | 0.23 / 0.059 / 0.18 | 0.30 / 0.048 / 0.35 |
+| value (per block) | 0.22 / 0.070 / 0.50 | 0.30 / 0.096 / 0.68 | 0.30 / 0.094 / 0.64 | 0.37 / 0.11 / 0.80 |
+| all four (the tree read) | 0.24 / 0.095 / 0.81 | 0.31 / 0.12 / 0.92 | 0.40 / 0.11 / 1.05 | 0.37 / 0.14 / 0.98 |
+
+The position smear is small (1% to 4% on pressure). The normal, key and value smears are each of the order of the
+whole deviation, and they do not add: any one of them alone breaks the read. The normal result was expected (the
+mean normal of a two-faced cluster is a random direction). The key and value results mean the dense-trained kernel
+weights vary across an admitted cluster by far more than the first-order monopole can carry, and the cells' states
+(keys and values) vary with them, so the mean of the products is not the product of the means. These clusters are
+two-faced, so one-sided clusters may fare better; the probe is repeated with the orientation-aware tree (job
+106466). Whatever it shows, the dense-trained kernel is not approximable at a usable theta by first-order
+aggregates alone; see the decision below.
+
+### Two more forms of the tree (2026-10-06 evening)
+
+- Position-only BoundaryTree, E2 repeated (job 106423): worse than the Morton tree (pressure ratio 6.8 to 16 at
+  every theta, 5.5e6 pairs at theta 0.5): its clusters are chordwise strips of a thin airfoil, two-faced at every
+  level, and it admits fewer of them.
+- Orientation-aware BoundaryTree with the largest chord as the normal spread (04b598294): on DrivAerML Volume one
+  stray normal condemned every cluster above it, the walk read 4,000 sources per point and ran out of memory at
+  theta 1 (job 106437). Replaced by the measure-weighted RMS chord, sqrt(2 (1 - |mean normal|)), the statistic
+  the monopole error depends on, at no cost (2783a7e09, snapshot `code_dtt6`).
+
+### Where the step's time goes (profile, job 106425, theta 1, position-only tree, 10.3 s step)
+
+float64 prefix scans of the node means (`aten::cumsum`, 74 ms each, 74 per step with the recompute and the
+backward) 7.2 s of 10.3 s; gathers (`aten::index`) 2.7 s; the basis MLP's matmuls and their backward about 1.5 s;
+the Triton segment kernels 0.6 s. Fixed in `code_dtt5`: node means by one leaf scatter and pairwise sums up the
+tree in float32; pair invariants computed once without gradient and kept, only the basis MLP checkpointed. The
+profile is repeated on the sixth snapshot (job 106467).
+
 ### In flight
 
-- Job 106421: ISLA suite on the third snapshot. Job 106423: E2 repeated with the BoundaryTree. Job 106424: the
-  decomposition probe (seeds 42 and 43 at theta 0.5, seed 42 at 0.25 and 1.0, 12 cases each).
+- Job 106465: E2 with the orientation-aware (RMS) tree. Job 106466: the decomposition with it. Job 106464: the
+  DrivAerML cost ladder with it. Job 106467: the profile. Jobs 106435 / 106436: the same E2 and decomposition with
+  the largest-chord tree (accuracy only; its cost is known to be unusable).
 - Lanes `dtt_vol_p_seed42/43` (E3's P arms, read-only without a read, 512 / 512, lr 3.75e-4, 200,000, 500
   epochs): training at 0.474 s per step and 130 GB per rank, about 51 s per epoch, so roughly 7 hours. The TG
   lanes wait for a usable form.
 
 ### Decision pending
 
-If the decomposition shows the normal smear dominates, the next form clusters by orientation as well as position
-(split a cluster along the principal axis of its normals while its normal spread exceeds theta, then by position;
-admit only clusters whose normal spread is below theta), which keeps a thin body's two faces apart at every scale.
-If the key or value smear dominates, the dense read cannot be approximated at usable cost by any geometric
-clustering, and the honest alternative is to train with the tree at a fixed theta (the clusters become part of the
-model, as in multipole attention) and judge it on E3 alone. Either way the per-pair cost must drop by an order of
-magnitude first.
+The dense-trained kernel cannot be evaluated through first-order cluster aggregates at any usable theta: three
+independent smears (normal, key, value) each break it. Two routes remain. (A) Higher-order aggregates: the
+orientation-coherent clusters remove the normal smear; the key and value smears need the cluster's second moments
+(the softmax weight averaged over a cluster is e^{mean logit} times a variance term, and the value correlates with
+the logit), a Gaussian-cumulant treecode for attention, whose residual is also unmeasured. (B) Train with the tree
+at a fixed theta: the clusters become part of the model (as in multipole attention), the kernel and the states are
+learned under the aggregation, theta is a structural constant like a kernel radius, exactness at theta = 0 and
+exact query independence at every theta stand, and the verdict is E3 against the interacting reference. The
+decomposition with the orientation-aware tree decides whether (A) is worth building; (B) needs the per-pair cost
+down first.
 
 ## Implementation notes
 
