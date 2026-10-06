@@ -146,14 +146,29 @@ tenth snapshot moves the kernel term (basis through the block's weights) out of 
 and splits the by-source backward into chunks of 2,048 pairs with atomic accumulation (a cluster read by a hundred
 thousand points no longer serializes one program); its cost sweep is job 106643.
 
+### Cost bar met at theta 1 (tenth snapshot, job 106643)
+
+| configuration | pairs per block | step | forward | peak memory | step / floor |
+|---|---|---|---|---|---|
+| read-only floor, no read | - | 0.48 s | 0.18 s | 126 GiB | 1.0 |
+| fused read, leaf 8 | 2.4e8 | 2.02 s | 0.77 s | 218 GiB | 4.2 |
+| fused read, leaf 4 (adopted) | 2.0e8 | 1.84 s | 0.71 s | 206 GiB | 3.8 |
+| fused read, leaf 1 (ninth snapshot's kernels) | 1.9e8 | 4.5 s | 1.38 s | 171 GiB | - |
+
+Moving the kernel term out of the Triton kernels and chunking the by-source backward took the step from 4.5 s to
+1.84 s at theta 1 (the three kernels now carry 16 bytes of kernel term per pair instead of a 16-wide basis and a
+16 x 8 product each). 3.8x the read-only floor is inside the preregistered bar of 6x. theta 0.5 (6.6e8 pairs) still
+runs out of memory on one GB300 (the plan, basis, per-block kernel term and its gradient, and the walk's sort
+exceed the 150 GiB left over the floor); it waits for memory work and is not launched.
+
 ### In flight
 
-- Job 106641: leaf sizes 1 and 2 at theta 1 and leaf sizes 2 and 4 at theta 0.5 (snapshot 9). Jobs 106642 /
-  106643: verification and cost sweep of the tenth snapshot.
-- Lanes `dtt_vol_p_seed42/43` (E3's P arms, read-only without a read, 512 / 512, lr 3.75e-4, 200,000, 500
-  epochs): training at 0.474 s per step and 130 GB per rank, about 51 s per epoch, so roughly 7 hours. The TG
-  lanes (theta 1 and 0.5, two seeds each, rows 2 to 7 of `kernel/lanes.tsv`) launch on the best configuration
-  of these sweeps.
+- Lanes `dtt_vol_tg1_seed42/43` (E3's TG arms: read-only + tree read at theta 1, leaf 4, RMS orientation tree,
+  snapshot `code_dtt11`, 512 / 512, lr 3.75e-4, 200,000, 500 epochs) submitted 2026-10-06 16:45 PDT; about 200 s
+  per epoch on four GB300 ranks, so roughly 28 hours each.
+- Lanes `dtt_vol_p_seed42/43` (E3's P arms, read-only without a read): past epoch 50 at 0.48 s per step, about 7
+  hours in all.
+- Job 106642 / verify11: verification of the tenth and eleventh snapshots (the tenth's tree tests pass).
 
 ### Decomposition with orientation-coherent clusters (job 106436, largest-chord tree, same 12 cases)
 
