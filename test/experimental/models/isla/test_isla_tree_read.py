@@ -17,13 +17,15 @@
 """Contract tests for ISLA's tree-accelerated global read (``kernel_read_theta``).
 
 The tree read is the dense global read evaluated through a Barnes-Hut cluster tree
-over the boundary cells. At ``theta = 0`` it is the dense read pair for pair, so every
-contract of the dense read must hold exactly there: equality with the dense form,
-query independence, Euclidean covariance, the similarity gauge, refinement and
-measure-scale invariance, a gradient for every parameter, CUDA against CPU. At a
-finite ``theta`` the read is an approximation whose error falls with ``theta``; the
-tests measure that on a smooth boundary and check that the pair list still covers
-the whole boundary measure exactly once per point.
+over the boundary cells, walked once per prediction point. At ``theta = 0`` it is the
+dense read pair for pair, so every contract of the dense read must hold exactly there:
+equality with the dense form, Euclidean covariance, the similarity gauge, refinement
+and measure-scale invariance, a gradient for every parameter, CUDA against CPU. Query
+independence holds exactly at every ``theta`` (a point's walk depends on the tree and
+the point alone). At a finite ``theta`` the read is an approximation whose error falls
+with ``theta``; the tests measure that on a smooth boundary and check that the pair
+list still covers the whole boundary measure exactly once per point and admits only
+well-separated clusters.
 """
 
 import math
@@ -36,9 +38,11 @@ from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla.kernel_read import _KernelBasis, global_geo_width
 from physicsnemo.experimental.models.isla.tree_read import (
     _TreeKernelRead,
+    point_tree_pairs,
     tree_read_pairs,
 )
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
+from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 from test.experimental.models.isla._meshes import (
     cloud,
     orthogonal,
@@ -187,6 +191,36 @@ def test_tree_read_pairs_cover_the_boundary_measure_once(theta):
         assert pairs.n_pairs_node > 0 and pairs.n_pairs < 150 * 500
 
 
+@pytest.mark.parametrize("theta", [0.0, 0.5, 1.0])
+def test_point_tree_pairs_admit_only_separated_clusters_and_cover_every_cell(theta):
+    """Each point's walk admits a node only when the node's box diagonal is below theta
+    times the gap between the point and the box, and its cells and nodes together hold
+    every cell exactly once."""
+    pts, _, w, _ = cloud(700, d=3, seed=6)
+    q, _, _, _ = cloud(90, d=3, seed=7, scale=(3.0, 3.0, 3.0))
+    tree = ClusterTree.from_points(pts, leaf_size=tree_read.TREE_READ_LEAF_SIZE, areas=w)
+    qi, si, n_node = point_tree_pairs(tree, q, theta)
+    n = pts.shape[0]
+    assert torch.equal(qi, qi.sort().values)
+    is_node = si >= n
+    assert int(is_node.sum()) == n_node
+    node = si[is_node] - n
+    p = q[qi[is_node]]
+    gap = (tree.node_aabb_min[node] - p).clamp_min(0) + (p - tree.node_aabb_max[node]).clamp_min(0)
+    assert bool((tree.node_diameter_sq[node] < theta**2 * gap.square().sum(-1)).all())
+    ### Coverage: a cell is counted through itself or through exactly one node.
+    counts = torch.zeros(q.shape[0], n, dtype=torch.long)
+    counts.index_put_((qi[~is_node], si[~is_node]), torch.ones_like(qi[~is_node]), accumulate=True)
+    starts, cnts = tree.node_range_start[node], tree.node_range_count[node]
+    pos, pid = tree_read._ragged_arange(starts, cnts)
+    counts.index_put_(
+        (qi[is_node][pid], tree.sorted_source_order[pos]), torch.ones_like(pos), accumulate=True
+    )
+    assert torch.equal(counts, torch.ones_like(counts))
+    if theta == 0.0:
+        assert n_node == 0
+
+
 def test_tree_read_error_falls_with_theta_on_a_smooth_boundary():
     """Against the dense read, the tree read's deviation at theta = 0.25 is below the
     deviation at theta = 1 and both are small on a sphere (smooth normals, so the
@@ -204,10 +238,12 @@ def test_tree_read_error_falls_with_theta_on_a_smooth_boundary():
     assert devs[1.0] < 0.1, devs
 
 
-def test_tree_read_is_exactly_query_independent_at_theta_zero():
-    """A prediction depends on its own point and the boundary only: alone, a prefix,
-    permuted, in chunks, the same rows to 1e-11 at theta = 0."""
-    _, tree = _pair(3, 0.0)
+@pytest.mark.parametrize("theta", [0.0, 0.5, 1.0])
+def test_tree_read_is_exactly_query_independent_at_every_theta(theta):
+    """A prediction depends on its own point and the boundary only, whatever theta (a
+    point's walk of the tree does not see the other points): alone, a prefix, permuted,
+    the same rows to 1e-11."""
+    _, tree = _pair(3, theta)
     mesh, drv, q, sdf, sn = _case()
     full = outputs(_run(tree, mesh, drv, q, sdf, sn))
     idx = torch.tensor([3, 50, 117])
@@ -219,21 +255,6 @@ def test_tree_read_is_exactly_query_independent_at_theta_zero():
     half = q.shape[0] // 2
     prefix = outputs(_run(tree, mesh, drv, q[:half], sdf[:half], sn[:half]))
     assert same(prefix, _rows(full, torch.arange(half)), atol=1e-11)
-
-
-def test_tree_read_query_dependence_at_finite_theta_is_of_the_approximations_order():
-    """At theta = 0.5 the admission is decided per target node, so a different query
-    set can move a point's far-field list: the rows change by less than the read's own
-    deviation from the dense read, never by more than a few percent on a sphere."""
-    dense, tree = _pair(3, 0.5, seed=1)
-    mesh, drv, q, sdf, sn = _sphere_case()
-    full = outputs(_run(tree, mesh, drv, q, sdf, sn))
-    ref = outputs(_run(dense, mesh, drv, q, sdf, sn))
-    idx = torch.arange(0, q.shape[0], 7)
-    alone = outputs(_run(tree, mesh, drv, q[idx], sdf[idx], sn[idx]))
-    dev_alone = _rel(alone, _rows(full, idx))
-    dev_dense = _rel(_rows(full, idx), _rows(ref, idx))
-    assert dev_alone < 0.05 and dev_alone <= 2.0 * dev_dense + 1e-12, (dev_alone, dev_dense)
 
 
 @pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])

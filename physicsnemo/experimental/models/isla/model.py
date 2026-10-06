@@ -422,13 +422,15 @@ class ISLA(Module):
             every pair in tiles. A number: the same read evaluated through a
             Barnes-Hut cluster tree over the boundary cells
             (:mod:`~physicsnemo.experimental.models.isla.tree_read`) with this
-            opening angle: each point reads nearby cells one by one and a
-            well-separated cluster through its measure-weighted aggregate (a
-            virtual cell). A numerical tolerance, not a model constant: ``0``
-            is the dense read pair for pair, and the error vanishes as it
-            falls; at a finite value equivariance and query independence hold
-            to the approximation's order. The dense and tree forms share
-            their parameters, so a checkpoint of one loads into the other.
+            opening angle: each point walks the tree, reads nearby cells one
+            by one and a well-separated cluster through its measure-weighted
+            aggregate (a virtual cell). A numerical tolerance, not a model
+            constant: ``0`` is the dense read pair for pair, and the error
+            vanishes as it falls. Query independence is exact at every value
+            (a point's walk sees the tree and the point alone); at a finite
+            value equivariance holds to the approximation's order. The dense
+            and tree forms share their parameters, so a checkpoint of one
+            loads into the other.
         dim: Spatial dimension of the domain (default 3). Every boundary mesh
             is a ``Mesh[dim - 1, dim]`` and every prediction point has ``dim``
             coordinates. Every geometric quantity is built for ``dim``

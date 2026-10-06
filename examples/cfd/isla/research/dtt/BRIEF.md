@@ -25,9 +25,10 @@ pressure / velocity / eddy viscosity, exactly independent, but costs Q x N pairs
 the step) and 4e10 on DrivAerML Volume (minutes per step, a 1.3 TB pair basis; months per lane).
 
 **3. What is new, and why will it work?** The same read, evaluated through a cluster tree over the boundary cells
-(`physicsnemo.mesh.spatial.cluster_tree`, GLOBE's dual-tree Barnes-Hut layer, reused as it stands): a prediction
-point reads nearby cells one by one and distant clusters through their measure-weighted aggregates (centroid, mean
-normal, total measure, mean key and value), admitted by the standard opening criterion with angle theta. The read
+(`physicsnemo.mesh.spatial.cluster_tree`, GLOBE's Barnes-Hut layer, reused for the tree and its aggregates) that
+every prediction point walks on its own, as a body walks the tree in an N-body code: the point reads nearby cells
+one by one and distant clusters through their measure-weighted aggregates (centroid, mean normal, total measure,
+mean key and value), a cluster admitted when its box diagonal is below theta times its gap to the point. The read
 is a measure-weighted softmax over the boundary, so a cluster's aggregate is the monopole of the same quadrature,
 and the error vanishes as theta goes to zero: theta is a numerical tolerance with a convergence guarantee, not a
 model constant; the model is defined as the exact dense read and the tree is how it is computed, as in an N-body
@@ -43,15 +44,18 @@ can be queried on any point cloud, one point or a million, in any order, and inf
 kernel's dependence on the cell normal and the key spread inside a cluster do not shrink with distance, so the
 accuracy at a usable theta may fall short of the exact read's (mitigations: orientation-binned aggregates, second
 moments of the keys, smaller theta at higher cost). (b) The pair count at the theta the accuracy needs may be
-larger than forecast at 200,000 by 200,000. (c) Equivariance and query independence are exact at theta = 0 and
-approximate otherwise (Morton boxes are axis-aligned; admission is decided per target node): accepted by Peter as
-the N-body standard, measured and reported, not a bar. (d) The far-field pressure, where the dense read is already
+larger than forecast at 200,000 by 200,000 (the first, dual-tree implementation was: 1.6e9 pairs at theta = 0.5,
+out of memory, because a leaf of points spanning a large box in a sparse region is never well separated from the
+boundary leaves near it; the per-point walk replaced it on 2026-10-06). (c) Query independence is exact at every
+theta (a point's walk sees the tree and the point alone); equivariance is exact at theta = 0 and approximate
+otherwise (Morton boxes are axis-aligned): accepted by Peter as the N-body standard, measured and reported, not a
+bar. (d) The far-field pressure, where the dense read is already
 1.19x the interacting model on AirfRANS, may not improve. (e) Training throughput of the first PyTorch
 implementation may be several times the fused dense read's per pair; Triton segment kernels for the sparse read
 already exist (`pair_kernels.py`) and carry the per-block cost; the pair basis is the item to fuse later.
 
-**6. Cost.** About two weeks to a verified snapshot (tree read with the existing dual plan, sparse basis, per-block
-aggregates, contract and convergence tests), then lanes: AirfRANS evaluation-only on the four G checkpoints
+**6. Cost.** About two weeks to a verified snapshot (tree read with a per-point walk of GLOBE's tree, sparse basis,
+per-block aggregates, contract and convergence tests), then lanes: AirfRANS evaluation-only on the four G checkpoints
 (minutes), DrivAerML Volume four lanes of one to two days each on LHR (two seeds of the tree read, two of
 read-only), with the two existing interacting references as the comparison.
 

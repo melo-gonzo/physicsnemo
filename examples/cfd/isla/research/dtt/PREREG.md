@@ -47,9 +47,12 @@ A step above 6x the reference or memory above 80 GiB is a cost failure even if t
 
 Instrument: the QUERY-POP probe (`qpop_swap.py`, copied) on the TG checkpoints: the same 100,000 scored points
 under the native 200,000 tokens, the 100,000 alone, plus 200,000 far-field companions, plus 200,000 wall-heavy
-companions. Prediction: every ratio to the control is 1.000 exactly at theta = 0 and within 0.5% at the training
-theta (the admission is per target node, so companions can move a point's far-field list; this is the N-body
-standard Peter set, measured here). The interacting reference's 15x to 24x is the comparison.
+companions. Prediction (as first written, 2026-10-06 morning, for the dual-tree form): every ratio to the control
+is 1.000 exactly at theta = 0 and within 0.5% at the training theta (the admission was per target node, so
+companions could move a point's far-field list). Amended 2026-10-06 evening, before any E3 or E4 run, when the
+dual-tree form was replaced by the per-point walk: a point's pair list now depends on the boundary tree and the
+point alone, so the prediction is 1.000 at every theta to float32 roundoff (ratios within 1e-4). The interacting
+reference's 15x to 24x is the comparison.
 
 ## Decision
 
