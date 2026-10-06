@@ -34264,3 +34264,39 @@ to 27% worse on velocity than the stored field alone, so (b) is expected to
 gain accuracy as well as invariance where a field exists, and (a) is the
 general case. The Volume chapter's limit paragraph and the limits chapter
 are restated from this artifact.
+
+## 2026-10-05 — JEB-PLATEAU mechanism: the plateaued lane is a routing collapse; under the sample-conditioned prototypes at 5e-4 half of the blocks route to 1 to 5 effective slices of 256 with coincident anchors, while the half-rate lane keeps 34 to 490 effective slices of 512 in every block {#sec-nb-char-deepjeb-plateau-mechanism}
+
+**Instrument.** `kernel/char/jd_probe/routing_probe_v20.py` (copied under
+`campaigns_2026-10-02/char/jd_probe/`): the current class's routing weights
+over slices captured per block on the first four test brackets (49,990
+tokens each, float32) for the plateaued `cs_jd_r1` (width 384, 256 slices,
+5e-4) and the healthy `cs_jd_rate` (width 512, 512 slices, 1.875e-4), at
+epochs 4 and 5 (the smoke lanes' earlier checkpoints were pruned, so the
+onset epoch is not measured). Statistics as in @sec-nb-routingsat-verdict:
+effective number of slices carrying mass (exp of the entropy of the slice
+mass distribution), the mean normalized routing entropy per token, the
+fraction of slices above 1/(4S) of the mass, and the RMS anchor spread.
+
+**What we saw.** Plateaued lane, epoch 5, per block: effective slices 20,
+38, 1.4, 4.9, 12, 4.2, 21, 1.1, 1.4, 13, 3.3, 1.6; routing entropy 0.02 to
+0.55; anchor spread 0.005 to 0.04 (anchors nearly coincident) in every block.
+Seven of twelve blocks route to one to five slices of 256. Healthy lane,
+epoch 5: effective slices 490, 331, 348, 336, 374, 357, 277, 272, 178, 118,
+234, 34 of 512; entropy 0.53 to 0.99; anchor spread 0.09 to 0.22 in blocks 1
+to 11. The geometric routing bias changes no entropy by more than 0.03 in
+either lane. The two lanes differ in width, slice count and rate as well as
+in outcome, so this is the signature test, not a matched pair; the
+collapse signature is the one measured on DrivAerML in September
+(@sec-nb-routingsat-verdict), which cosine routing had removed there.
+
+**Reading.** The DeepJEB++ plateau is the routing collapse: with the
+centered sample-conditioned prototypes, cosine routing's bounded logits no
+longer prevent the anchors from coinciding and the mass from concentrating
+on a few slices at the width rule's rate on this dataset. Why the bound
+holds on DrivAerML, HiLift and AirfRANS at the same rates and fails here
+(28x the optimizer steps per epoch, a load-case one-hot in the global
+inputs, 50,040-cell surfaces) is not measured. The half-rate exception
+(@sec-nb-char-deepjeb-rate-ruling) keeps the routing spread; the
+static-prototype 40-epoch lanes in flight say whether the prototype
+conditioning is the necessary ingredient at 40 epochs as it was at 5.
