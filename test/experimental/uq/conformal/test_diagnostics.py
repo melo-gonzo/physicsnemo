@@ -289,21 +289,9 @@ def test_coverage_map_availability_errors():
         _accumulator("functional").empirical_coverage_map()
 
 
-# fmt: off
-ACCUMULATOR_CONSTRUCTOR_REJECTIONS = [
-    pytest.param({"tier": "celwise"}, ValueError, "tier must be one of", id="tier"),
-    pytest.param({"alpha": 1.5}, ValueError, "alpha", id="alpha"),
-    pytest.param({"n_cal": 0}, ValueError, "n_cal", id="n_cal"),
-    pytest.param({"keys": "p"}, TypeError, "bare string", id="keys"),
-]
-# fmt: on
-
-
-@pytest.mark.parametrize("kwargs,error,match", ACCUMULATOR_CONSTRUCTOR_REJECTIONS)
-def test_public_accumulator_constructor_validates_its_inputs(kwargs, error, match):
-    valid = {"tier": "functional", "alpha": 0.5, "n_cal": 3, "keys": None}
-    with pytest.raises(error, match=match):
-        CoverageAccumulator(**{**valid, **kwargs})
+def test_accumulator_constructor_rejects_bare_string_keys():
+    with pytest.raises(TypeError, match="bare string"):
+        CoverageAccumulator(tier="functional", alpha=0.5, n_cal=3, keys="p")
 
 
 def test_report_metadata_is_private():

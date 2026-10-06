@@ -27,7 +27,6 @@ from torch import Tensor
 
 from ._utils import (
     TENSOR_KEY,
-    TIERS,
     Tier,
     _field_label,
     alpha_as_fraction,
@@ -37,8 +36,6 @@ from ._utils import (
     normalize_keys,
     pack_fields,
     require_container_kind,
-    validate_alpha,
-    validate_n_cal,
 )
 
 __all__ = ["CoverageAccumulator"]
@@ -65,9 +62,10 @@ class CoverageAccumulator:
     Use it to check that a
     :class:`~physicsnemo.experimental.uq.conformal.ConformalPredictor` reaches
     its target on data not used for calibration, and to compare interval
-    widths across scores or tiers. Get one from
-    ``predictor.coverage_accumulator()`` instead of constructing it, so the
-    report measures the event that the predictor's tier guarantees:
+    widths across scores or tiers. Create one with
+    ``predictor.coverage_accumulator()``, which sets the parameters below
+    from the predictor, so the report measures the event that the
+    predictor's tier guarantees:
 
     - ``"cellwise"``: how often each element lies inside its interval.
     - ``"functional"``: how often a whole sample lies inside its band.
@@ -82,9 +80,9 @@ class CoverageAccumulator:
     tier : {"cellwise", "functional", "risk_control"}
         Tier of the predictor; selects the reported statistic.
     alpha : float
-        The predictor's target miscoverage (or risk) level in :math:`(0, 1)`.
-        Reported in the metadata and used to count cellwise elements at or
-        above target coverage.
+        The predictor's target miscoverage (or risk) level. Reported in the
+        metadata and used to count cellwise elements at or above target
+        coverage.
     n_cal : int
         Number of calibration samples of the predictor; reported only.
     keys : Sequence[str], optional
@@ -128,11 +126,9 @@ class CoverageAccumulator:
         n_cal: int,
         keys: Sequence[str] | None = None,
     ) -> None:
-        if tier not in TIERS:
-            raise ValueError(f"tier must be one of {TIERS}, got {tier!r}.")
         self._tier = tier
-        self._alpha = validate_alpha(alpha)
-        self._n_cal = validate_n_cal(n_cal)
+        self._alpha = alpha
+        self._n_cal = n_cal
         self._keys = normalize_keys(keys)
         field_keys = (TENSOR_KEY,) if self._keys is None else self._keys
         self._counters = {key: _FieldCounters() for key in field_keys}
