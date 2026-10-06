@@ -58,6 +58,7 @@ from dataclasses import dataclass
 import torch
 
 _PAD = (0, 0, 1, 0)
+_EIGH_BATCH = 32768
 
 
 def _prefix(x: torch.Tensor) -> torch.Tensor:
@@ -138,7 +139,10 @@ class BoundaryTree:
                 cov = torch.zeros(k, d, d, dtype=y.dtype, device=device).index_add_(
                     0, seg, yc[:, :, None] * yc[:, None, :]
                 )
-                return yc, torch.linalg.eigh(cov)[1][..., -1]
+                ### Batched in slices: cuSOLVER's batched eigensolver fails beyond
+                ### about 65,000 matrices (a tree of 200,000 cells with small leaves).
+                axes = [torch.linalg.eigh(cov[a : a + _EIGH_BATCH])[1][..., -1] for a in range(0, k, _EIGH_BATCH)]
+                return yc, torch.cat(axes)
 
             for level in range(depth):
                 s, c = starts[-1], counts[-1]
