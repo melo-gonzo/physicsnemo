@@ -56,12 +56,9 @@ from .scores import (
     _NonconformityScore,
     _Score,
     _snapshot_strategy,
-    _strategy_kind,
 )
 
 __all__ = ["ConformalPredictor"]
-
-_SIGNED_THRESHOLD_KINDS = ("quantile_regression",)
 
 
 def _validate_mesh_fingerprint(value: object) -> str:
@@ -80,7 +77,7 @@ def _validate_mesh_fingerprint(value: object) -> str:
 def _validate_thresholds(
     tier: str,
     thresholds: Tensor | TensorDict,
-    score_kind: str,
+    score_type: type[_NonconformityScore],
 ) -> dict[str, Tensor]:
     """Check thresholds against the tier and score, and return detached copies."""
     out: dict[str, Tensor] = {}
@@ -104,10 +101,10 @@ def _validate_thresholds(
                 )
             # float64 so a low-precision prediction cannot round the threshold down.
             threshold = value.to(torch.float64)
-        if score_kind not in _SIGNED_THRESHOLD_KINDS and bool((threshold < 0).any()):
+        if not score_type._signed_threshold and bool((threshold < 0).any()):
             raise ValueError(
                 f"{_field_label(key)}: negative threshold, but "
-                f"{_SCORE_REGISTRY[score_kind].__name__} scores are never "
+                f"{score_type.__name__} scores are never "
                 "negative. Only QuantileRegressionScore allows negative thresholds."
             )
         out[key] = threshold.detach().clone()
@@ -241,7 +238,6 @@ class ConformalPredictor:
         require_feasible_alpha(n_cal, alpha)
         alpha = float(alpha)
         score_snapshot = _snapshot_strategy(score, _SCORE_REGISTRY, "score")
-        score_kind = _strategy_kind(score_snapshot, _SCORE_REGISTRY)
 
         if tier == "cellwise":
             if difficulty is not None:
@@ -274,7 +270,9 @@ class ConformalPredictor:
         self._score = score_snapshot
         self._alpha = alpha
         self._n_cal = n_cal
-        self._thresholds_by_key = _validate_thresholds(tier, thresholds, score_kind)
+        self._thresholds_by_key = _validate_thresholds(
+            tier, thresholds, type(score_snapshot)
+        )
         self._difficulty = difficulty_snapshot
         self._mesh_fingerprint = mesh_snapshot
         self._provenance = {} if provenance is None else validate_provenance(provenance)

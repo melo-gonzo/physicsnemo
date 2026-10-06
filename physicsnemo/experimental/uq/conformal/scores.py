@@ -100,11 +100,16 @@ class _NonconformityScore:
     """Base class for the built-in scores.
 
     ``aux_keys`` lists the aux entries a score reads; ``_scale_aux_keys`` lists
-    the ones it divides by.
+    the ones it divides by. ``_kind`` is the saved name, ``_saved_kwargs`` maps
+    each saved constructor argument to its exact type, and ``_signed_threshold``
+    allows negative thresholds.
     """
 
     aux_keys: tuple[str, ...] = ()
     _scale_aux_keys: tuple[str, ...] = ()
+    _kind: str
+    _saved_kwargs: dict[str, type] = {}
+    _signed_threshold: bool = False
 
     def score(
         self,
@@ -202,6 +207,8 @@ class AbsoluteErrorScore(_NonconformityScore):
     (torch.Size([50, 2]), True)
     """
 
+    _kind = "absolute_error"
+
     def score(
         self,
         prediction: Float[Tensor, "*dims"],
@@ -270,6 +277,8 @@ class NormalizedErrorScore(_NonconformityScore):
 
     aux_keys = ("sigma",)
     _scale_aux_keys = ("sigma",)  # the residual is divided by sigma
+    _kind = "normalized_error"
+    _saved_kwargs = {"eps": float}
 
     def __init__(self, eps: float = 1e-8) -> None:
         self.eps = positive_finite_float(eps, "eps")
@@ -342,6 +351,8 @@ class QuantileRegressionScore(_NonconformityScore):
     """
 
     aux_keys = ("lo", "hi")
+    _kind = "quantile_regression"
+    _signed_threshold = True
 
     def score(
         self,
@@ -371,9 +382,8 @@ _Score = AbsoluteErrorScore | NormalizedErrorScore | QuantileRegressionScore
 """Built-in score types accepted by calibrators and predictors."""
 
 _SCORE_REGISTRY: dict[str, type[_NonconformityScore]] = {
-    "absolute_error": AbsoluteErrorScore,
-    "normalized_error": NormalizedErrorScore,
-    "quantile_regression": QuantileRegressionScore,
+    cls._kind: cls
+    for cls in (AbsoluteErrorScore, NormalizedErrorScore, QuantileRegressionScore)
 }
 """Serialization names of the built-in score types."""
 
@@ -429,6 +439,9 @@ class AuxDifficulty:
     >>> difficulty(aux={"sigma": sigma}).shape
     torch.Size([50])
     """
+
+    _kind = "aux"
+    _saved_kwargs = {"key": str, "eps": float}
 
     def __init__(self, key: str = "sigma", eps: float = 1e-8) -> None:
         if not isinstance(key, str):
@@ -499,14 +512,15 @@ def _check_no_double_scale(
 
 
 _DIFFICULTY_REGISTRY: dict[str, type[AuxDifficulty]] = {
-    "aux": AuxDifficulty,
+    AuxDifficulty._kind: AuxDifficulty
 }
 """Serialization names of the built-in difficulty types."""
 
 
 def _strategy_kind(strategy: object, registry: Mapping[str, type]) -> str | None:
     """Serialization name of a built-in strategy, or ``None`` for any other type."""
-    return {cls: kind for kind, cls in registry.items()}.get(type(strategy))
+    kind = getattr(type(strategy), "_kind", None)
+    return kind if registry.get(kind) is type(strategy) else None
 
 
 def _snapshot_strategy(strategy: object, registry: Mapping[str, type], what: str):

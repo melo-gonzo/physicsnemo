@@ -42,15 +42,6 @@ _SCHEMA_KEYS = {
     "mesh_fingerprint",
     "provenance",
 }
-# Saved constructor kwargs and their exact types, per strategy kind.
-_SCORE_KWARG_TYPES = {
-    "absolute_error": {},
-    "normalized_error": {"eps": float},
-    "quantile_regression": {},
-}
-_DIFFICULTY_KWARG_TYPES = {
-    "aux": {"key": str, "eps": float},
-}
 
 
 def _check_exact_keys(value: object, expected: set[str], where: str) -> Mapping:
@@ -70,21 +61,15 @@ def _check_exact_keys(value: object, expected: set[str], where: str) -> Mapping:
     return value
 
 
-def _strategy_spec(strategy: object, registry: Mapping, kwarg_types: Mapping) -> dict:
+def _strategy_spec(strategy: object, registry: Mapping) -> dict:
     """Encode a built-in score or difficulty as ``{"kind", "kwargs"}``."""
-    kind = _strategy_kind(strategy, registry)
     return {
-        "kind": kind,
-        "kwargs": {name: getattr(strategy, name) for name in kwarg_types[kind]},
+        "kind": _strategy_kind(strategy, registry),
+        "kwargs": {name: getattr(strategy, name) for name in strategy._saved_kwargs},
     }
 
 
-def _resolve_strategy(
-    spec: object,
-    registry: Mapping,
-    kwarg_types: Mapping[str, Mapping[str, type]],
-    what: str,
-):
+def _resolve_strategy(spec: object, registry: Mapping, what: str):
     """Rebuild a built-in score or difficulty from its saved spec."""
     spec = _check_exact_keys(spec, {"kind", "kwargs"}, f"Artifact {what} spec")
     kind = spec["kind"]
@@ -93,7 +78,7 @@ def _resolve_strategy(
             f"Unknown built-in {what} kind {kind!r}; expected one of "
             f"{sorted(registry)!r}."
         )
-    expected_types = kwarg_types[kind]
+    expected_types = registry[kind]._saved_kwargs
     kwargs = _check_exact_keys(
         spec["kwargs"], set(expected_types), f"Artifact {what} {kind!r} kwargs"
     )
@@ -143,17 +128,12 @@ def _parse_artifact(payload: object) -> dict:
             "Recalibrate and save again."
         )
     payload = _check_exact_keys(payload, _SCHEMA_KEYS, "Conformal artifact")
-    score = _resolve_strategy(
-        payload["score"], _SCORE_REGISTRY, _SCORE_KWARG_TYPES, "score"
-    )
+    score = _resolve_strategy(payload["score"], _SCORE_REGISTRY, "score")
     difficulty = (
         None
         if payload["difficulty"] is None
         else _resolve_strategy(
-            payload["difficulty"],
-            _DIFFICULTY_REGISTRY,
-            _DIFFICULTY_KWARG_TYPES,
-            "difficulty",
+            payload["difficulty"], _DIFFICULTY_REGISTRY, "difficulty"
         )
     )
     return {
@@ -175,7 +155,7 @@ def _artifact_payload(state: Mapping) -> dict:
         "format": _ARTIFACT_FORMAT,
         "version": _ARTIFACT_VERSION,
         "tier": state["tier"],
-        "score": _strategy_spec(state["score"], _SCORE_REGISTRY, _SCORE_KWARG_TYPES),
+        "score": _strategy_spec(state["score"], _SCORE_REGISTRY),
         "alpha": state["alpha"],
         "n_cal": state["n_cal"],
         "thresholds": {
@@ -184,9 +164,7 @@ def _artifact_payload(state: Mapping) -> dict:
         "difficulty": (
             None
             if difficulty is None
-            else _strategy_spec(
-                difficulty, _DIFFICULTY_REGISTRY, _DIFFICULTY_KWARG_TYPES
-            )
+            else _strategy_spec(difficulty, _DIFFICULTY_REGISTRY)
         ),
         "mesh_fingerprint": state["mesh_fingerprint"],
         "provenance": validate_provenance(state["provenance"]),
