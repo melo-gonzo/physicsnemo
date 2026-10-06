@@ -5,7 +5,7 @@ Lane `isla-qi-global`, branch `psharpe/isla-qi-global` (base
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-05-isla-qi-global/`
 (job prefix `isla.global.`). Brief: `BRIEF.md` (this folder).
 
-## Status (2026-10-05 23:30 PDT): all ten lanes training on LHR
+## Status (2026-10-06 02:15 PDT): all ten lanes training on LHR (second links)
 
 - Global read implemented and tested (commits b10170371 eager, c5d7408e9 fused
   Triton; 224 ISLA tests pass).
@@ -217,9 +217,11 @@ velocity / eddy viscosity; seeds 42, 43 against the QI and kernel lanes' logs,
 | 80 | 0.93 / 1.07 / 0.52 / 1.23 | 0.83 / 1.08 / 0.49 / 0.96 | 1.29 / 0.93 / 1.14 / 1.56 |
 | 90 | 1.12 / 0.90 / 0.65 / 1.26 | 0.78 / 0.61 / 0.61 / 0.88 | 1.14 / 1.47 / 1.05 / 1.32 |
 | 100 | 0.73 / 0.78 / 0.91 / 0.77 | 0.66 / 0.59 / 0.74 / 0.63 | 1.14 / 1.56 / 0.97 / 1.42 |
+| 150 | 0.98 / 0.86 / 0.79 / 0.77 | 0.68 / 0.59 / 0.75 / 0.72 | - |
+| 160 | 0.82 / 0.99 / 0.80 / 0.76 | 0.66 / 0.78 / 0.77 / 0.74 | 1.06 / 1.38 / 1.11 / 1.20 |
 
-G / I pressure at epoch 100: 0.56 / 0.64 / 0.67 / 0.70; velocity 0.73 / 0.86 /
-0.82 / 0.86 (epoch 100 is the first learning-rate step).
+G / I pressure at epoch 160: 0.59 / 0.76 / 0.76 / 0.75; velocity 0.77 / 0.81 /
+0.77 / 0.81 (epoch 100 was the first learning-rate step).
 
 ## Contracts on a trained G checkpoint (early; `qi_probe.py`, LHR job 100135)
 
