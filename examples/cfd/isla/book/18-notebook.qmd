@@ -34518,3 +34518,94 @@ the thin plate inside and the concave corner; the two-laws test now samples
 at a few spacings per kernel width, the regime the form is specified for.
 `code_v21` rebuilt with the amended files; verification resubmitted on both
 clusters; the six AirfRANS lanes launch on the pass.
+
+## 2026-10-06 — AF-GEO refinement: re-panelizing the airfoil without losing information moves the AirfRANS reference 2.0x to 3.8x, and the native built-in geometry restores it to within 3% of native on every field and both seeds; the AirfRANS mechanism is the Volume's {#sec-nb-af-geo-refine}
+
+**Setting and instrument.** The count-preserving protocol promised in
+@sec-nb-af-geo-step-one: `SplitLineCells` (recipe `domain_transforms.py`)
+splits every segment of the airfoil into collinear equal pieces, each
+carrying its own length, so the geometry and the boundary measure are
+exactly the native airfoil's and only the panel pattern changes: uniform
+(every segment in two, 2,014 tokens from 1,007) and front-loaded (three
+pieces ahead of mid-chord, one behind, 2,206 tokens). Datasets
+`airfrans_volume_2d_refu` / `_reff`; the same probe and swap control as step
+one on the two AirfRANS references, 200 full_test cases, float32, 100,000
+native interior points (job 1087739, seven minutes; artifact
+`results/char/af_geo_refine_2026-10-06.json`).
+
+**What we saw.** Error relative to native, mean of the two seeds (pressure
+/ velocity / eddy viscosity): uniform re-panelization 2.02x / 2.86x / 2.41x;
+front-loaded 2.72x / 3.77x / 1.91x. With the whole airfoil's built-in
+geometry restored to the queries, the same tokens read 0.97x / 0.99x / 0.99x
+and 1.00x / 1.00x / 1.02x: the fraction of the log excess removed is 1.04 /
+1.01 / 1.01 and 1.00 / 1.00 / 0.98, both seeds within 0.96 to 1.09. The
+input shift behind it: the nearest token changes for every query under the
+uniform split (every midpoint moves) and for 45% under the front-loaded one;
+over the near-wall queries the built-in distance moves by an RMS log ratio
+of 0.42 and 0.46 and the direction's cosine to the native one is 0.95.
+
+**Reading.** With the information held fixed, the entire re-panelization
+sensitivity of the AirfRANS model is the built-in nearest-token geometry,
+exactly as VOL-GEO found for the Volume's area draw: the slice attention
+over re-panelized tokens is invariant to within seed noise, and the
+coarsening residual of step one (1.6x to 2.9x) was the information lost to
+dropping 60% of the tokens, not a second mechanism. The mechanism is now
+reproduced on two datasets and two kinds of discretization change (a law
+change at fixed count; a pattern change at fixed geometry). This is the
+protocol P2 is judged on: the soft arms' re-panelized error within the seed
+separation of native under both patterns, where the nearest form moves 2x to
+4x.
+
+## 2026-10-06 — QUERY-POP: the Volume model's error on fixed scored points rises 15x to 24x when 200,000 far-field companions join the query set and 3.5x to 4.3x with wall-heavy companions; the learned query routing mass is 1.15 to 1.18 of the whole boundary measure; a second, larger discretization sensitivity that the built-in geometry does not touch {#sec-nb-query-pop}
+
+**Setting.** Peter's question (2026-10-06): after the soft geometry, can a
+volume model trained on CFD-mesh queries (count-uniform over the mesh's
+points, wall-heavy) be inferred on a volume-uniform point cloud with the
+surface task's robustness? In ISLA's interior task the prediction points are
+interacting tokens: their total routing mass is a learned fraction of the
+boundary measure split equally over them, with no per-query measure, so the
+slice states see the query population. The campaign never varied the query
+law (the Volume's uniform point-cloud protocol redraws the boundary only).
+The query-independence program of 2026-10-03 (branch `psharpe/isla-independent`,
+`research/query_independence/RESULTS.md`) measured the dependence from the
+request side (a rear region requested alone 13.6x / 13.7x / 10.8x against
+inside the native request; a near-body uniform-like set alone 17x / 14x /
+16x) and found exact independence at equal accuracy only through a fixed
+support cloud of the training law; a model trained without interior
+writers was 4% to 42% less accurate, and the volume-quadrature program
+(branch `psharpe/isla-volquad`) found volume-weighted queries cost 15% to
+24% on DrivAerML.
+
+**Instrument (`kernel/char/qpop/qpop_swap.py`, scoring only).** The two
+Volume references on the 48 validation cars, float32, 200,000 native points,
+every metric on the SAME scored set (the first 100,000 native points) so
+that only the query population differs: the native 200,000 tokens
+(control); the 100,000 alone; the native 200,000 plus 200,000 companions
+uniform in the interior's bounding box (far-field heavy, Peter's scenario's
+direction); the native 200,000 plus 200,000 companions resampled from the
+native points with probability 1/|sdf| (wall-heavy). Every scored point
+keeps its own built-in geometry by construction (companions do not change a
+scored point's nearest boundary token). Job 1087747; the full-set control
+reproduces the record to 7e-7; artifact `results/char/qpop_2026-10-06.json`.
+
+**What we saw.** Relative to the control, mean of the two seeds (pressure /
+velocity / eddy viscosity): the half count alone 1.02x / 1.02x / 1.02x;
+far-field companions 23.7x / 15.0x / 12.3x (seeds 22.1 / 25.4 on pressure);
+wall-heavy companions 4.34x / 4.34x / 3.55x. The learned query routing mass
+is exp(logw) = 1.18 (seed 42) and 1.15 (seed 43) of the total boundary
+measure: the queries carry more mass in the slice states than the whole
+boundary.
+
+**Reading.** A count change at the training law is benign (the equal split
+keeps the population's distribution); a change of the population's
+distribution is not, and in the direction of a volume-uniform cloud it is
+twice the Volume's boundary-law sensitivity in log terms. This is a property
+of the interacting design, separate from the built-in geometry, and the
+soft form leaves it untouched. After SOFT-GEO the volume task gets the
+surface task's robustness to the boundary sampling law; robustness to the
+query sampling law needs a change on the query side, and the three forms
+already measured by Peter's programs each pay for it: a training-law
+support cloud (exact, equal accuracy, but needs a wall-heavy volume sample at
+inference), passive queries (exact, 4% to 42% less accurate), volume-measure
+queries (15% to 24% less accurate on DrivAerML). Reported to Peter with the
+numbers; no query-side lane launched without his word.
