@@ -34315,3 +34315,125 @@ The 40-epoch lanes at epoch 6: half rate on the current class 0.498 / 0.481
 (seeds 42 / 43, training loss 0.0086 / 0.0084 and falling), static
 prototypes at the reference rate 0.500 (seed 43; seed 42 at epoch 2, 0.542).
 Their 40-epoch scorings decide the DeepJEB++ row (@sec-nb-char-deepjeb-rate-ruling).
+
+## 2026-10-06 — SOFT-GEO preregistered: a sample-independent built-in query geometry (the kernel-mean tangent-plane distance and normal of the boundary tokens on the nearest token's side) implemented as `query_geometry="soft"`; AirfRANS first by Peter's decision tree, under a boundary-resampling protocol because the campaign's area protocol is the identity on AirfRANS {#sec-nb-soft-geo-prereg}
+
+**Setting.** VOL-GEO (@sec-nb-char-vol-geo-verdict) measured that the
+Volume model's 7.9x / 6.6x / 6.6x sensitivity to the boundary sampling law
+is entirely the queries' built-in nearest-boundary-token geometry: with the
+area-law tokens but the native draw's geometry the error is 0.997 / 0.998 /
+0.999 of native on both seeds. Peter, 2026-10-06, on the proposed
+sample-independent replacement: "this seems so-far like a free upgrade.
+Essentially no accuracy cost, and it's a more principled formulation. Can
+you try this on AirfRANS too?", then the decision tree: "first run AirfRANS
+to test that this discretization-independence-in-the-volume holds up on
+AirfRANS, and if and only if this does hold up", unfreeze the architecture,
+baseline the new form as the canonical ISLA and retrain every volume
+benchmark. One correction to the premise, stated to Peter: the 0.997 is the
+diagnostic (the native geometry fed to area tokens), not the new form; the
+new form's native accuracy is exactly what this study measures.
+
+**The form (words first).** Each boundary token is a point, a unit normal
+and a measure. For a query, every token gets a kernel weight, its measure
+times $\exp(-r_i/\tau)$ with $r_i$ the distance to the query and $\tau$ a
+fixed fraction of the length unit, and a signed distance $s_i$ from the
+query to the token's tangent plane. The nearest token decides the side (in
+front of or behind the tangent planes). Over the tokens on that side, the
+distance channel is the kernel-weighted mean of the $s_i$ and the direction
+is the kernel-weighted mean normal, signed so that both keep the nearest
+form's conventions (positive outside for outward normals; the direction
+points from the boundary to the query). In symbols, with
+$a_i = w_i\,e^{-|x_q-y_i|/\tau}$ and $s_i = (x_q-y_i)\cdot\hat n_i$,
+$$d_q = \frac{\sum_{i\in\text{side}} a_i s_i}{\sum_{i\in\text{side}} a_i},
+\qquad u_q = \pm\,\frac{\sum_{i\in\text{side}} a_i \hat n_i}{\big|\sum_{i\in\text{side}} a_i \hat n_i\big|}.$$
+The sums are quadrature estimates of boundary integrals with the tokens'
+measures as weights, so they converge under refinement of the boundary
+sample for any sampling law whose normalized measure converges, the
+property every other quantity the queries read already has. Implementation
+(uncommitted at launch, committed with this entry): `soft_boundary_geometry`
+in `physicsnemo/experimental/models/isla/geometry.py`, a streaming Triton
+kernel in two or three dimensions (one online-rescaled pass over the
+tokens, no (Q, N) block) with a chunked PyTorch form for CPU and gradients;
+`ISLA(query_geometry="soft", query_geometry_width=0.03)`; `"nearest"`
+stays the default until the verdict. Cluster snapshot `code_v21` = `code_v20`
++ the two module files + the geometry tests; verification jobs on AGA and
+LHR.
+
+**What the analysis says to expect, written before any run.** Four facts
+shaped the form and bound what it can deliver. (1) At a flat wall every
+token's tangent-plane distance equals the wall distance, so $d_q$ is exact
+there for any sample and any width (the nearest form's Euclidean distance
+reads $\sqrt{d^2+\rho^2}$ with $\rho$ the tangential offset to the nearest
+token, of order half the spacing, which is why it changes with the law).
+(2) Law-robustness needs several tokens inside the kernel under the
+coarsest law considered: the area law at 200,000 tokens on a DrivAerML car
+has a spacing of about 0.006 of the length unit, so $\tau$ must be at least
+about 0.03 of it; the ladder below brackets this. (3) Near a convex wall,
+tokens whose tangent plane the query lies behind fall on the other side
+and are excluded, so the reading stays the sign of the nearest token's and
+keeps a slope of order one in the wall distance over the decade of
+distances where the nearest form reads only its own spacing noise; the
+exact distance below the sample's geometric resolution (about $h^2\kappa/2$,
+of order $2\times10^{-4}$ of the length unit on a car) is unknowable from
+any 200,000-token sample, which is where a stored full-mesh field keeps its
+advantage (INTERNAL-GEOMETRY, @sec-nb-internal-geometry-verdict). (4) Thin
+features and convex edges are handled by the side rule, not the kernel: the
+far face of a plate and the face beyond an edge have the opposite sign and
+never blend in; the nearest token picks the side exactly where the true
+distance field's gradient is discontinuous. The residual risks are the
+near-wall accuracy on a curved wall at the law-robust width (a smooth,
+deterministic curvature offset in the channel) and the two-dimensional
+AirfRANS airfoil's token count (about 1,000 segments, a dozen per kernel at
+width 0.03), both measured below.
+
+**Why AirfRANS needs its own protocol.** The campaign's uniform
+point-cloud protocol redraws the boundary area-proportionally at the
+campaign cell budget; on AirfRANS the airfoil has about 1,000 segments,
+fewer than the 100,000-cell budget, so the reader keeps it whole and the
+area draw is the identity (results/char/airfrans.json: area equals native
+to nine digits). AF-GEO therefore RESAMPLES the airfoil at evaluation to an
+expected 400 of its segments under two laws, uniform-over-cells (the
+mesher's refinement pattern) and length-proportional (uniform along the
+curve), with exact Horvitz-Thompson measures
+(`recipe_v8/datasets/airfrans_volume_2d_sub400{u,a}.yaml`), interior points
+native. Step one is evaluation-only on the AirfRANS references
+`cl_r_af_isla_seed42/43` (nearest geometry plus the stored sdf and its
+gradient as query inputs) with the VOL-GEO swap control
+(`kernel/char/af_geo/af_geo_swap.py`, job 1087177): native, two resampled
+conditions, and the two resampled conditions with the native geometry fed
+to the queries.
+
+**Arms (group `sq`, LHR, code_v21, the AirfRANS reference recipe: 512 /
+512 slices, 3.75e-4, 500 epochs, 100,000 points, full_train / full_test).**
+`sq_af_soft03_seed42/43` (width 0.03, the candidate canonical form),
+`sq_af_soft01_seed42` and `sq_af_soft10_seed42` (width ladder), all with the
+stored sdf inputs as the reference has; and the built-in-only pair
+`sq_af_soft03_nosdf_seed42` / `sq_af_nearest_nosdf_seed42` (query_schema
+removed), which measures the form's own accuracy without the stored field
+masking it. Every arm is then scored natively and under the resampling
+protocol by the same probe (`RUNS=... CODE=code_v21`).
+
+**Predictions and bars.** The seed separation of the AirfRANS reference is
+the unit: natively 0.0369 / 0.0335 pressure, 0.0167 / 0.0177 velocity,
+0.0317 / 0.0312 eddy viscosity (log gaps 0.10 / 0.06 / 0.01; the eddy
+viscosity gap is too small to be a bar and pressure's is used for it).
+(P1, step one) The reference's error under either resampled law exceeds
+native by more than the seed separation on velocity, and the swap returns
+it to native within 10%: the built-in channel carries the AirfRANS
+sensitivity as it does the Volume's. If the excess at 400 tokens is below
+the seed separation, the probe steps to 200 tokens before any verdict.
+(P2, invariance) `sq_af_soft03`'s resampled-to-native ratio is within the
+seed separation on every field under both laws, on both seeds. (P3, native
+accuracy) `sq_af_soft03`'s native error is within the seed separation of
+the reference pair on every field (two seeds). (P4, the form's own cost)
+`sq_af_soft03_nosdf` is within the seed separation of
+`sq_af_nearest_nosdf` natively, or better; the pair's resampled ratios
+separate as P2 says. Width: 0.01 is expected to lose P2 under the
+length-proportional law (fewer tokens per kernel), 0.1 to lose P3 on
+velocity near the wall. **Decision rule, Peter's:** P2 and P3 holding is
+"holds up on AirfRANS": the architecture is unfrozen, `query_geometry="soft"`
+with the surviving width becomes the class default and the recipe's, the
+Volume references are retrained under it and every interior protocol
+re-scored, the book restated. P2 or P3 failing keeps `"nearest"` and the
+record states what was measured. Nothing on the Volume launches before this
+verdict.
