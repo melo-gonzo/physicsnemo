@@ -223,7 +223,7 @@ TRANSACTIONAL_REJECTIONS = [  # (id, tier, fields, warm-up update, rejected upda
     ("missing-fitted-field", "risk_control", ["a", "b"], (_LO4, _HI4, _T4), (_LO4, _HI4, _td(a=0 * _ONES4)), KeyError, "not present"),
     ("width-overflow", "risk_control", None, _PLAIN, tuple(torch.tensor([v], dtype=_F64) for v in (-1e308, 1e308, 0.0)), ValueError, "width overflows"),
     ("empty-target", "risk_control", None, _PLAIN, (torch.empty(0),) * 3, ValueError, "Plain tensor: empty"),
-    ("container-mode-mismatch", "risk_control", None, _PLAIN, (_td(value=0 * _ONES3),) * 3, TypeError, "plain tensors"),
+    ("container-mode-mismatch", "risk_control", None, _PLAIN, (_td(value=0 * _ONES3),) * 3, TypeError, "calibrated on a plain tensor; pass lo as a tensor"),
     ("cellwise-second-field-fails", "cellwise", ["a", "b"], (_LO3, _HI3, _T3), (_LO3, _HI3, _td(a=0 * _ONES3, b=0 * _ONES4)), ValueError, "shape"),
     ("width-sum-within-sample", "cellwise", ["a", "b"], (_LO3, _HI3, _T3), (_WIDE[0], _td(a=_Z64 + 2, b=_BIG.roll(1) + _BIG), _WIDE[2]), ValueError, "Field 'b'.*width sum.*[Rr]escale"),
     ("width-sum-cross-call", "cellwise", ["a", "b"], _WIDE, _WIDER, ValueError, "Field 'b'.*width sum.*[Rr]escale"),

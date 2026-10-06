@@ -40,8 +40,8 @@ from ._utils import (
     field_items,
     pack_fields,
     points_fingerprint,
+    require_container_kind,
     require_feasible_alpha,
-    require_matching_keys,
     slice_aux,
     validate_provenance,
 )
@@ -407,6 +407,9 @@ class ConformalPredictor:
 
         Raises
         ------
+        TypeError
+            If ``prediction`` is a plain tensor for a predictor calibrated on
+            ``TensorDict`` fields, or the reverse.
         ValueError
             If a shape differs from calibration, values are not finite, or
             (cellwise) ``points`` is missing or describes a different mesh.
@@ -416,7 +419,7 @@ class ConformalPredictor:
             :class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator`
             instead.
         KeyError
-            If the prediction fields do not match the calibrated fields.
+            If a ``TensorDict`` prediction lacks a calibrated field.
 
         Notes
         -----
@@ -430,13 +433,9 @@ class ConformalPredictor:
         GPU, and the cellwise tier also hashes ``points`` on the CPU. This
         method is not intended for use inside ``torch.compile`` regions.
         """
-        selection = None if self._tensor_mode else list(self._thresholds_by_key)
+        selection = self.keys
+        require_container_kind(prediction, selection, "This predictor", "prediction")
         items = field_items(prediction, selection)
-        require_matching_keys(
-            (key for key, _ in items),
-            self._thresholds_by_key,
-            "Prediction fields must exactly match the fitted predictor",
-        )
         if self._tier == "cellwise":
             if points is None:
                 raise ValueError(

@@ -93,6 +93,25 @@ def field_items(
     return items
 
 
+def require_container_kind(
+    x: object, keys: Sequence[str] | None, owner: str, name: str
+) -> None:
+    """Raise ``TypeError`` if ``x`` is the other container kind than calibration used.
+
+    ``keys`` is ``None`` when calibration used a plain tensor.
+    """
+    if keys is None and isinstance(x, TensorDict):
+        raise TypeError(
+            f"{owner} was calibrated on a plain tensor; pass {name} as a tensor, "
+            "not a TensorDict."
+        )
+    if keys is not None and isinstance(x, Tensor):
+        raise TypeError(
+            f"{owner} was calibrated on TensorDict fields {list(keys)}; pass "
+            f"{name} as a TensorDict."
+        )
+
+
 def pack_fields(
     items: Mapping[str, Tensor],
 ) -> Tensor | TensorDict:

@@ -50,7 +50,12 @@ from physicsnemo.experimental.uq.conformal._utils import (
     validate_n_cal,
     validate_provenance,
 )
-from test.experimental.uq.conformal._helpers import CALIBRATORS, TIERS, fitted_risk
+from test.experimental.uq.conformal._helpers import (
+    CALIBRATORS,
+    TIERS,
+    fit,
+    fitted_risk,
+)
 
 _F = torch.zeros(3)
 _I64 = torch.zeros(3, dtype=torch.int64)
@@ -141,6 +146,11 @@ BAD_INPUTS = {
     "nonfinite": (torch.tensor([0.0, torch.inf, 1.0]), ValueError, "non-finite"),
     "integer_dtype": (_I64, TypeError, "floating"),
     "non_container": ("oops", TypeError, "torch.Tensor or TensorDict"),
+    "tensordict_for_tensor": (
+        TensorDict({"p": _F}, batch_size=[]),
+        TypeError,
+        "TensorDict",
+    ),
 }
 _POINTS = torch.arange(3.0).reshape(3, 1)
 
@@ -183,13 +193,24 @@ def test_entry_points_reject_bad_inputs_transactionally(entry_point, bad_kind):
     call, state = ENTRY_POINTS[entry_point]()
     bad, error, match = BAD_INPUTS[bad_kind]
     before = state()
-    with pytest.raises(error, match=match):
+    with pytest.raises(error, match=match) as excinfo:
         call(bad)
+    assert TENSOR_KEY not in str(excinfo.value)
     after = state()
     if isinstance(before, torch.Tensor):
         assert torch.equal(before, after)
     else:
         assert before == after
+
+
+def test_field_mode_entry_points_reject_plain_tensors():
+    predictor, _ = fit("risk_control", n_samples=10, shape=(3,), fields=["p"])
+    accumulator = predictor.coverage_accumulator()
+    message = r"calibrated on TensorDict fields \['p'\]; pass {} as a TensorDict"
+    with pytest.raises(TypeError, match=message.format("prediction")):
+        predictor.predict_interval(_F)
+    with pytest.raises(TypeError, match=message.format("lo")):
+        accumulator.update(_F, _F, _F)
 
 
 def test_tensordict_inputs_take_the_same_validation_path():

@@ -70,7 +70,7 @@ def test_prediction_container_contract():
     tensor_predictor, points = fit("cellwise", n_samples=10, shape=(4, 2))
     lo, hi = tensor_predictor.predict_interval(zeros, points=points)
     assert isinstance(lo, torch.Tensor) and isinstance(hi, torch.Tensor)
-    with pytest.raises(KeyError, match="exactly match"):
+    with pytest.raises(TypeError, match="calibrated on a plain tensor"):
         tensor_predictor.predict_interval(
             TensorDict({"other": zeros}, batch_size=[]), points=points
         )

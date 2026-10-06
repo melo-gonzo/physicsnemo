@@ -36,6 +36,7 @@ from ._utils import (
     field_items,
     normalize_keys,
     pack_fields,
+    require_container_kind,
     validate_alpha,
     validate_n_cal,
 )
@@ -133,8 +134,7 @@ class CoverageAccumulator:
         self._alpha = validate_alpha(alpha)
         self._n_cal = validate_n_cal(n_cal)
         self._keys = normalize_keys(keys)
-        self._tensor_mode = keys is None
-        field_keys = (TENSOR_KEY,) if self._tensor_mode else self._keys
+        field_keys = (TENSOR_KEY,) if self._keys is None else self._keys
         self._counters = {key: _FieldCounters() for key in field_keys}
         self._element_hits: dict[str, Tensor] = {}
 
@@ -192,13 +192,13 @@ class CoverageAccumulator:
         """
         # field_items with self._keys returns the same keys as self._counters.
         inputs = (("lo", lo), ("hi", hi), ("target", target))
+        for name, value in inputs:
+            require_container_kind(
+                value, self._keys, "This accumulator's predictor", name
+            )
         containers = {
             name: dict(field_items(value, self._keys)) for name, value in inputs
         }
-        for name, value in inputs:
-            if isinstance(value, Tensor) != self._tensor_mode:
-                expected = "plain tensors" if self._tensor_mode else "TensorDicts"
-                raise TypeError(f"This accumulator expects {expected}; got {name}.")
 
         staged: list[tuple[str, float | Tensor, float, int]] = []
         for key in self._counters:
