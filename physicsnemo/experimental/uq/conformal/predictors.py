@@ -104,8 +104,9 @@ def _validate_thresholds(
             threshold = value.to(torch.float64)
         if score_kind not in _SIGNED_THRESHOLD_KINDS and bool((threshold < 0).any()):
             raise ValueError(
-                f"{_field_label(key)}: negative threshold for nonnegative score "
-                f"kind {score_kind!r}."
+                f"{_field_label(key)}: negative threshold, but "
+                f"{_SCORE_REGISTRY[score_kind].__name__} scores are never "
+                "negative. Only QuantileRegressionScore allows negative thresholds."
             )
         out[key] = threshold.detach().clone()
     return out
@@ -233,7 +234,8 @@ class ConformalPredictor:
         if tier == "cellwise":
             if difficulty is not None:
                 raise ValueError(
-                    "A cellwise predictor must not have a difficulty field."
+                    "A cellwise predictor does not take difficulty=; only "
+                    "functional and risk_control predictors use AuxDifficulty."
                 )
             if mesh_fingerprint is None:
                 raise ValueError(
@@ -245,8 +247,8 @@ class ConformalPredictor:
         else:
             if mesh_fingerprint is not None:
                 raise ValueError(
-                    f"A {tier} predictor does not take points=; its "
-                    "calibration permits varying point sets."
+                    f"A {tier} predictor does not take points=; only cellwise "
+                    "predictors use points."
                 )
             difficulty_snapshot = (
                 None
@@ -439,16 +441,16 @@ class ConformalPredictor:
         if self._tier == "cellwise":
             if points is None:
                 raise ValueError(
-                    "Cellwise conformal prediction requires points= to verify "
-                    "the calibration mesh."
+                    "This cellwise predictor requires points=, the calibration "
+                    "mesh coordinates."
                 )
             fingerprint = points_fingerprint(points)
             if fingerprint != self._mesh_fingerprint:
                 raise ValueError(
-                    "Cellwise conformal prediction requires the exact calibration "
-                    "mesh coordinates, dtype, and ordering; this mesh differs. "
-                    "Calibrate with FunctionalBandCalibrator or "
-                    "RiskControlCalibrator when point sets vary."
+                    "points does not match the exact calibration mesh "
+                    "(coordinates, dtype, and point order). If meshes vary, "
+                    "calibrate with FunctionalBandCalibrator or "
+                    "RiskControlCalibrator."
                 )
         elif points is not None:
             check_points(points)

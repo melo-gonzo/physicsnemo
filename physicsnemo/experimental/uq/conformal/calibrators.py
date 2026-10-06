@@ -107,14 +107,13 @@ def _normalized_scores(raw: Tensor, difficulty: Tensor | None, key: str) -> Tens
         return raw64
     difficulty64 = broadcast_difficulty(difficulty, raw, key).to(torch.float64)
     normalized = raw64 / difficulty64
-    check_finite(key, "the normalized scores (score / difficulty)", normalized)
+    check_finite(key, "the scores divided by the AuxDifficulty scale", normalized)
     underflow = (raw64 != 0) & (normalized.abs() < torch.finfo(torch.float64).tiny)
     if bool(underflow.any()):
         raise ValueError(
-            f"{_field_label(key)}: {int(underflow.sum())} normalized score(s) "
-            "fell below the float64 normal range; subnormal or zero quotients "
-            "lose relative precision needed for interval inversion. Rescale "
-            "the difficulty field or score before calibration."
+            f"{_field_label(key)}: {int(underflow.sum())} score(s) divided by "
+            "the AuxDifficulty scale are too small for float64. Rescale the "
+            "data or the difficulty aux entry."
         )
     return normalized
 
@@ -182,8 +181,8 @@ class _SplitCalibratorBase:
         )
         if self._schema is not None and prediction_keys != self._schema:
             raise KeyError(
-                "Field schema changed across updates: first update had "
-                f"{list(self._schema)}, this update has {list(prediction_keys)}."
+                f"Fields changed: the first sample had {list(self._schema)}, "
+                f"this one has {list(prediction_keys)}."
             )
 
         fields = []
@@ -191,8 +190,8 @@ class _SplitCalibratorBase:
             target_field = target_items[key]
             if prediction_field.numel() == 0:
                 raise ValueError(
-                    f"{_field_label(key)}: empty sample; every calibration sample "
-                    "must contain at least one value."
+                    f"{_field_label(key)}: empty sample; each sample must hold at "
+                    "least one value."
                 )
             check_exact_shape(
                 key, "prediction", prediction_field, "target", target_field
@@ -382,9 +381,9 @@ class CellwiseCalibrator(_SplitCalibratorBase):
         fingerprint = points_fingerprint(points)
         if self._mesh_fingerprint is not None and fingerprint != self._mesh_fingerprint:
             raise ValueError(
-                "Cellwise calibration requires the same mesh coordinates, "
-                "dtype, and ordering for every sample; this sample differs "
-                "from the first accepted calibration mesh."
+                "This sample's points do not match the first sample's. "
+                "CellwiseCalibrator needs the same mesh (coordinates, dtype, "
+                "and point order) on every call."
             )
 
         def stage(key, prediction_field, target_field, aux_field):
@@ -396,8 +395,8 @@ class CellwiseCalibrator(_SplitCalibratorBase):
             if key in self._scores and score.shape != self._scores[key][0].shape:
                 raise ValueError(
                     f"{_field_label(key)}: score shape {tuple(score.shape)} differs "
-                    f"from the first sample's {tuple(self._scores[key][0].shape)}. "
-                    "Cellwise calibration requires an identical output layout."
+                    f"from the first sample's {tuple(self._scores[key][0].shape)}; "
+                    "CellwiseCalibrator needs the same shape on every call."
                 )
             return score.detach().cpu().contiguous()
 

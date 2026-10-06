@@ -283,14 +283,14 @@ def test_infinite_prediction_bounds_require_recomputing_in_wider_dtype():
 
 
 def test_coverage_map_availability_errors():
-    with pytest.raises(RuntimeError, match="No diagnostic samples"):
+    with pytest.raises(RuntimeError, match="No samples collected"):
         _accumulator("cellwise").empirical_coverage_map()
     with pytest.raises(RuntimeError, match="only for cellwise"):
         _accumulator("functional").empirical_coverage_map()
 
 
 def test_accumulator_constructor_rejects_bare_string_keys():
-    with pytest.raises(TypeError, match="bare string"):
+    with pytest.raises(TypeError, match="not the string"):
         CoverageAccumulator(tier="functional", alpha=0.5, n_cal=3, keys="p")
 
 

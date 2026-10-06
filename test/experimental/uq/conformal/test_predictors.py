@@ -122,11 +122,11 @@ class _CustomDifficulty(AuxDifficulty):
 _CELL = {"tier": "cellwise", "thresholds": torch.ones(2), "points": torch.ones(2, 1)}
 # fmt: off
 CONSTRUCTOR_REJECTIONS = [  # (id, make_predictor overrides, error, match)
-    ("custom-score", {**_CELL, "score": _CustomScore()}, TypeError, "shipped strategies"),
-    ("cellwise-with-difficulty", {**_CELL, "difficulty": AuxDifficulty()}, ValueError, "must not have a difficulty"),
+    ("custom-score", {**_CELL, "score": _CustomScore()}, TypeError, "Subclasses are not supported"),
+    ("cellwise-with-difficulty", {**_CELL, "difficulty": AuxDifficulty()}, ValueError, "does not take difficulty="),
     ("cellwise-without-mesh", {"tier": "cellwise", "thresholds": torch.ones(2)}, ValueError, "requires points="),
     ("cellwise-scalar-threshold", {**_CELL, "thresholds": torch.tensor(1.0)}, ValueError, "at least one dimension"),
-    ("custom-difficulty", {"tier": "functional", "difficulty": _CustomDifficulty()}, TypeError, "shipped strategies"),
+    ("custom-difficulty", {"tier": "functional", "difficulty": _CustomDifficulty()}, TypeError, "Subclasses are not supported"),
     ("risk-with-points", {"points": torch.ones(2, 1)}, ValueError, "does not take points="),
     ("dict-thresholds", {"thresholds": {"pressure": torch.tensor(1.0)}}, TypeError, "Tensor or TensorDict"),
     ("empty-tensordict-thresholds", {"thresholds": TensorDict({})}, ValueError, "at least one"),

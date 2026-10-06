@@ -141,7 +141,7 @@ _AC = _td(a=_Z3, c=_Z3)
 SCHEMA_REJECTIONS = [  # (id, first accepted sample or None, prediction, target, error, match)
     ("within-update-key-mismatch", None, _AB, _AC, KeyError, "field mismatch"),
     ("within-update-container-mixing", None, _Z3, _td(a=_Z3), TypeError, "both"),
-    ("cross-update-schema-drift", _AB, _AC, _AC, KeyError, "schema changed"),
+    ("cross-update-schema-drift", _AB, _AC, _AC, KeyError, "Fields changed"),
     ("cross-update-container-mixing", _Z3, _td(field=_Z3), _td(field=_Z3), TypeError, "mix"),
     ("prediction-target-shape-mismatch", _Z3, _Z3, torch.zeros(3, 1), ValueError, "match exactly"),
 ]
@@ -265,7 +265,7 @@ def test_crc_exact_rational_feasibility_floor():
     below = RiskControlCalibrator(AbsoluteErrorScore(), alpha=1.0 / 3.0)
     for _ in range(2):
         below.update(torch.zeros(4), torch.zeros(4))
-    with pytest.raises(ValueError, match="infeasible"):
+    with pytest.raises(ValueError, match="calibration samples"):
         below.finalize()
 
     exact = RiskControlCalibrator(AbsoluteErrorScore(), alpha=0.25)
@@ -318,7 +318,7 @@ def test_double_scaling_pairing_is_rejected_everywhere(build):
     """NormalizedErrorScore already divides by sigma; an AuxDifficulty('sigma')
     would scale intervals by ~sigma**2. Every construction boundary must
     reject it, and must keep allowing additive-aux pairings."""
-    with pytest.raises(ValueError, match="Double-scaling"):
+    with pytest.raises(ValueError, match="twice"):
         build(NormalizedErrorScore(), AuxDifficulty("sigma"))
     # Positive controls: reading a key is not dividing by it.
     build(AbsoluteErrorScore(), AuxDifficulty("spread"))
@@ -370,9 +370,9 @@ class _CustomDifficulty(AuxDifficulty):
 
 
 def test_only_shipped_exact_strategy_types_are_accepted():
-    with pytest.raises(TypeError, match="shipped strategies"):
+    with pytest.raises(TypeError, match="Subclasses are not supported"):
         RiskControlCalibrator(_CustomScore(), alpha=0.5)
-    with pytest.raises(TypeError, match="shipped strategies"):
+    with pytest.raises(TypeError, match="Subclasses are not supported"):
         RiskControlCalibrator(
             AbsoluteErrorScore(), alpha=0.5, difficulty=_CustomDifficulty()
         )

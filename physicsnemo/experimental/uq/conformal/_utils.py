@@ -53,23 +53,20 @@ def field_items(
     if isinstance(x, Tensor):
         if keys is not None:
             raise TypeError(
-                "Named-field access requires a field container: keys="
-                f"{list(keys)} were requested but the input is a plain tensor. "
-                "Pass a TensorDict keyed by field name, or drop keys."
+                f"keys={list(keys)} selects TensorDict fields, but the input is a "
+                "plain tensor. Pass a TensorDict or drop keys."
             )
         return [(TENSOR_KEY, x)]
     if not isinstance(x, TensorDict):
         raise TypeError(
-            "Conformal tensor containers must be a torch.Tensor or TensorDict, "
-            f"got {type(x).__name__}."
+            f"Inputs must be a torch.Tensor or TensorDict, got {type(x).__name__}."
         )
     available = sorted(x.keys())
     if not available:
-        raise ValueError("TensorDict conformal inputs must contain at least one field.")
+        raise ValueError("TensorDict inputs must contain at least one field.")
     if TENSOR_KEY in available:
         raise ValueError(
-            f"{TENSOR_KEY!r} is reserved for internal plain-tensor bookkeeping "
-            "and cannot be used as a field-container key. Rename the field."
+            f"{TENSOR_KEY!r} is a reserved field name; rename this TensorDict field."
         )
     if keys is not None:
         missing = sorted(set(keys) - set(available))
@@ -148,10 +145,8 @@ def validate_alpha(alpha: object) -> float:
     as_float = float(alpha)
     if not isinstance(alpha, float) and alpha != as_float:
         raise TypeError(
-            f"alpha={alpha!r} is not exactly representable as a float; the "
-            "conformal rank arithmetic is exact on the declared value, so a "
-            "silent float conversion would change the requested level. Pass "
-            "a float."
+            f"alpha={alpha!r} is not exactly representable as a float; pass a "
+            "float such as 0.1."
         )
     if not math.isfinite(as_float) or not 0.0 < as_float < 1.0:
         raise ValueError(f"alpha must be a finite value in (0, 1), got {as_float}.")
@@ -187,11 +182,8 @@ def require_feasible_alpha(n_cal: int, alpha: float) -> None:
     if alpha_exact < Fraction(1, n_cal + 1):
         min_n = math.ceil((1 - alpha_exact) / alpha_exact)
         raise ValueError(
-            f"Insufficient calibration samples for alpha={alpha}: the "
-            f"conformal guarantee requires alpha >= 1/(n_cal + 1), i.e. "
-            f"n_cal >= {min_n} (got {n_cal}); this level is infeasible with "
-            "the collected samples. Collect more calibration data or "
-            "increase alpha."
+            f"alpha={alpha} needs at least {min_n} calibration samples (got "
+            f"{n_cal}); collect more or raise alpha."
         )
 
 
@@ -295,9 +287,8 @@ def check_point_alignment(
     """Require one leading entry of ``tensor`` per mesh point."""
     if tensor.ndim == 0 or tensor.shape[0] != points.shape[0]:
         raise ValueError(
-            f"{_field_label(key)} ({name}): when points= is supplied it must have one "
-            f"leading entry per point: got shape {tuple(tensor.shape)} for "
-            f"points.shape={tuple(points.shape)}."
+            f"{_field_label(key)} ({name}): shape {tuple(tensor.shape)} must have "
+            f"one leading entry per point (points has {points.shape[0]})."
         )
     return tensor
 
@@ -327,9 +318,8 @@ def broadcast_difficulty(t: Tensor, ref: Tensor, key: str) -> Tensor:
         return t
     if ref.shape[0] != t.shape[0]:
         raise ValueError(
-            f"{_field_label(key)}: difficulty has {t.shape[0]} points but the "
-            f"leading dimension is {ref.shape[0]}; per-point difficulty "
-            "must align with the leading (point) dimension."
+            f"{_field_label(key)}: AuxDifficulty gave {t.shape[0]} scales, but "
+            f"the field has {ref.shape[0]} points (leading dimension)."
         )
     return t.reshape(t.shape[0], *([1] * (ref.ndim - 1)))
 
@@ -340,9 +330,8 @@ def normalize_keys(keys: Sequence[str] | None) -> tuple[str, ...] | None:
         return None
     if isinstance(keys, str):
         raise TypeError(
-            f"keys must be a sequence of field names, not a bare string "
-            f"{keys!r} (which would iterate into single characters). Pass "
-            f"[{keys!r}]."
+            f"keys must be a list of field names, not the string {keys!r}; "
+            f"pass [{keys!r}]."
         )
     return tuple(dict.fromkeys(keys))
 
@@ -379,8 +368,7 @@ def check_exact_shape(
         raise ValueError(
             f"{_field_label(key)}: {name} shape {tuple(tensor.shape)} != "
             f"{reference_name} shape {tuple(reference.shape)}. Shapes must "
-            "match exactly (silent broadcasting would produce a different "
-            "statistic than the calibrated one)."
+            "match exactly; broadcasting is not allowed."
         )
     return tensor
 
@@ -416,8 +404,7 @@ def check_floating(key: str, name: str, tensor: Tensor) -> Tensor:
     if not tensor.is_floating_point():
         raise TypeError(
             f"{_field_label(key)}: {name} must use a floating-point dtype, got "
-            f"{tensor.dtype}. Integer/bool conformal data would truncate "
-            "scores or interval endpoints."
+            f"{tensor.dtype}; cast it with .float()."
         )
     return tensor
 
@@ -427,9 +414,8 @@ def check_finite(key: str, name: str, tensor: Tensor) -> Tensor:
     if not torch.isfinite(tensor).all():
         n_bad = int((~torch.isfinite(tensor)).sum())
         raise ValueError(
-            f"{_field_label(key)}: {n_bad} non-finite value(s) (NaN/inf) in {name}. "
-            "Non-finite inputs would silently corrupt the calibrated "
-            "threshold or the reported statistic; clean or mask them first."
+            f"{_field_label(key)}: {n_bad} non-finite value(s) (NaN/inf) in {name}; "
+            "remove or mask them first."
         )
     return tensor
 
@@ -473,7 +459,7 @@ def validate_provenance(value: object) -> dict:
     snapshot = _strict_json_snapshot(value, "provenance")
     if "mesh_fingerprint" in snapshot:
         raise ValueError(
-            "provenance must not contain 'mesh_fingerprint'; it is fitted "
-            "predictor state."
+            "provenance must not contain 'mesh_fingerprint'; that name is "
+            "reserved for the predictor's mesh check."
         )
     return snapshot

@@ -158,7 +158,7 @@ def test_crc_equal_lengths_exact_rank_boundaries(alpha):
         for values in ([-4.0, -2.0, -2.0], [-3.0, -2.0, 0.0], [-2.0, 1.0, 2.0])
     ]
     if alpha < 0.25:
-        with pytest.raises(ValueError, match="infeasible"):
+        with pytest.raises(ValueError, match="calibration samples"):
             _crc_threshold(samples, alpha)
         return
     expected, corrected = _crc_oracle(samples, alpha)
@@ -192,7 +192,7 @@ def test_conformal_rank_exact_decimal(n_cal, alpha):
     tolerance snapping in either direction; infeasible levels refuse."""
     expected = _rank_oracle(n_cal, alpha)
     if expected > n_cal:
-        with pytest.raises(ValueError, match="Insufficient"):
+        with pytest.raises(ValueError, match="calibration samples"):
             conformal_quantile_index(n_cal, alpha)
         return
     k = conformal_quantile_index(n_cal, alpha)
@@ -212,7 +212,7 @@ def test_conformal_rank_nextafter_boundaries(base_alpha, n_cal):
     ):
         expected = _rank_oracle(n_cal, alpha)
         if expected > n_cal:
-            with pytest.raises(ValueError, match="Insufficient"):
+            with pytest.raises(ValueError, match="calibration samples"):
                 conformal_quantile_index(n_cal, alpha)
         else:
             assert conformal_quantile_index(n_cal, alpha) == expected, (

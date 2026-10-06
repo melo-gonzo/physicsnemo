@@ -139,8 +139,9 @@ def _parse_artifact(payload: object) -> ConformalPredictor:
     version = payload.get("version")
     if type(version) is not int or version != _ARTIFACT_VERSION:
         raise ValueError(
-            f"Unsupported conformal artifact version {version!r}. Re-run calibration "
-            "with this build."
+            f"Artifact version {version!r} was written by an incompatible "
+            f"physicsnemo version (this one reads version {_ARTIFACT_VERSION}). "
+            "Recalibrate and save again."
         )
     payload = _check_exact_keys(payload, _SCHEMA_KEYS, "Conformal artifact")
     score = _resolve_strategy(

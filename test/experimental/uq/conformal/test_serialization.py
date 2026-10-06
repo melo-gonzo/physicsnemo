@@ -220,11 +220,11 @@ _CTOR = "Invalid constructor arguments"
 CORRUPTIONS = {
     "not_an_artifact": (lambda p: {"weights": torch.ones(3)}, "[Nn]ot a conformal predictor artifact"),
     "unknown_version": (_set("version", 999), "version 999"),
-    "infeasible_alpha": (_set("alpha", 0.01), "Insufficient"),
+    "infeasible_alpha": (_set("alpha", 0.01), "calibration samples"),
     "boolean_n_cal": (_set("n_cal", True), "n_cal must be an integer"),
     "negative_radius": (_set_in("thresholds", "__tensor__", torch.tensor(-1.0, dtype=torch.float64)), "negative threshold"),
     "empty_thresholds": (_set("thresholds", {}), "at least one field"),
-    "named_key_beside_sentinel": (_set_in("thresholds", "pressure", torch.tensor(1.0)), "reserved for internal"),
+    "named_key_beside_sentinel": (_set_in("thresholds", "pressure", torch.tensor(1.0)), "reserved field name"),
     "non_string_threshold_key": (_set_in("thresholds", 7, torch.tensor(1.0)), "keys must be strings"),
     "missing_difficulty": (_delete("difficulty"), "schema is invalid: missing"),
     "extra_top_level_key": (_set("duplicate_state", {}), "schema is invalid: unexpected"),

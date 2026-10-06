@@ -487,7 +487,7 @@ class AuxDifficulty:
         if not isinstance(aux, Mapping) or self.key not in aux:
             raise ValueError(
                 f"AuxDifficulty requires aux entry '{self.key}' at every call; "
-                "pass aux={key: tensor}."
+                f"pass aux={{'{self.key}': tensor}}."
             )
         s = aux[self.key]
         if not isinstance(s, Tensor):
@@ -495,7 +495,7 @@ class AuxDifficulty:
                 f"AuxDifficulty aux '{self.key}' must be a torch.Tensor, got "
                 f"{type(s).__name__}."
             )
-        check_real(self.key, "difficulty aux", s)
+        check_real(self.key, "AuxDifficulty input", s)
         if s.ndim >= 2:
             # One scale per point, the unit in which risk control counts misses.
             s = s.amax(dim=tuple(range(1, s.ndim)))
@@ -509,12 +509,10 @@ def _check_no_double_scale(
     if isinstance(difficulty, AuxDifficulty):
         if difficulty.key in score._scale_aux_keys:
             raise ValueError(
-                f"Double-scaling: score {type(score).__name__} already divides the "
-                f"residual by aux '{difficulty.key}', and AuxDifficulty(key="
-                f"'{difficulty.key}') would divide by it again. Pair AuxDifficulty("
-                f"'{difficulty.key}') with a score that does not scale by it (e.g. "
-                "AbsoluteErrorScore), or use the scaling score with no difficulty "
-                "field."
+                f"{type(score).__name__} already divides by aux "
+                f"'{difficulty.key}', so AuxDifficulty('{difficulty.key}') would "
+                "scale by it twice. Use AbsoluteErrorScore with AuxDifficulty, or "
+                "drop difficulty."
             )
 
 
@@ -534,7 +532,7 @@ def _snapshot_strategy(strategy: object, registry: Mapping[str, type], what: str
     if _strategy_kind(strategy, registry) is None:
         names = ", ".join(sorted(cls.__name__ for cls in registry.values()))
         raise TypeError(
-            f"{what} must be one of the shipped strategies ({names}); got "
-            f"{type(strategy).__name__}."
+            f"{what} must be one of: {names}; got {type(strategy).__name__}. "
+            "Subclasses are not supported."
         )
     return copy.deepcopy(strategy)

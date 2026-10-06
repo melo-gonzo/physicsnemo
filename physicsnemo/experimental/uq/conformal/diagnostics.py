@@ -213,9 +213,9 @@ class CoverageAccumulator:
             widths = hi_field.to(torch.float64) - lo_field.to(torch.float64)
             if not bool(torch.isfinite(widths).all()):
                 raise ValueError(
-                    f"{_field_label(key)}: interval width overflows even though both "
-                    "endpoints are finite. Rescale interval bounds and targets "
-                    "consistently, and restart diagnostics."
+                    f"{_field_label(key)}: interval width overflows float64. "
+                    "Rescale lo, hi, and target by the same factor and start a "
+                    "new accumulator with predictor.coverage_accumulator()."
                 )
             # A negative quantile-regression threshold can give hi < lo: width 0.
             widths = widths.clamp_min(0.0)
@@ -223,9 +223,9 @@ class CoverageAccumulator:
             width_total = self._counters[key].width_sum + float(widths.sum())
             if not math.isfinite(width_total):
                 raise ValueError(
-                    f"{_field_label(key)}: interval width sum overflows float64 within "
-                    "this sample or across updates. Rescale interval bounds and "
-                    "targets consistently, and restart diagnostics."
+                    f"{_field_label(key)}: interval width sum overflows float64. "
+                    "Rescale lo, hi, and target by the same factor and start a "
+                    "new accumulator with predictor.coverage_accumulator()."
                 )
 
             match self._tier:
@@ -235,8 +235,9 @@ class CoverageAccumulator:
                     previous = self._element_hits.get(key)
                     if previous is not None and previous.shape != coverage.shape:
                         raise ValueError(
-                            f"{_field_label(key)}: elementwise coverage requires a fixed "
-                            "sample shape across updates."
+                            f"{_field_label(key)}: a cellwise accumulator needs a "
+                            f"fixed sample shape; got {tuple(coverage.shape)} after "
+                            f"{tuple(previous.shape)}."
                         )
                 case "functional":
                     coverage = float(element_covered.all())
@@ -283,7 +284,7 @@ class CoverageAccumulator:
                 "empirical_coverage_map() is available only for cellwise predictors."
             )
         if not self._element_hits:
-            raise RuntimeError("No diagnostic samples collected.")
+            raise RuntimeError("No samples collected; call update() first.")
         return pack_fields(
             {
                 key: hits.to(torch.float64) / self._counters[key].n_samples
