@@ -32,8 +32,6 @@ from ._utils import (
     _field_label,
     broadcast_difficulty,
     check_aux,
-    check_finite,
-    check_floating,
     check_point_alignment,
     check_points,
     check_real,
@@ -82,10 +80,9 @@ def _validate_thresholds(
     """Check thresholds against the tier and score, and return detached copies."""
     out: dict[str, Tensor] = {}
     for key, value in field_items(thresholds):
-        check_floating(key, "threshold", value)
+        check_real(key, "threshold", value)
         if value.numel() == 0:
             raise ValueError(f"{_field_label(key)}: empty threshold tensor.")
-        check_finite(key, "threshold", value)
         if tier == "cellwise":
             if value.ndim == 0:
                 raise ValueError(
@@ -369,13 +366,12 @@ class ConformalPredictor:
                 )
             return threshold
 
-        scalar = threshold.to(device=prediction.device)
         if self._difficulty is None:
-            return scalar
+            return threshold
         difficulty = self._difficulty(aux).to(
             device=prediction.device, dtype=torch.float64
         )
-        return scalar * broadcast_difficulty(difficulty, prediction, key)
+        return threshold * broadcast_difficulty(difficulty, prediction, key)
 
     def predict_interval(
         self,

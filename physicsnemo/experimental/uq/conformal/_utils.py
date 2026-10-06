@@ -171,8 +171,8 @@ def alpha_as_fraction(alpha: float) -> Fraction:
     return Fraction(str(validate_alpha(alpha)))
 
 
-def require_feasible_alpha(n_cal: int, alpha: float) -> None:
-    """Require ``alpha >= 1 / (n_cal + 1)``.
+def require_feasible_alpha(n_cal: int, alpha: float) -> Fraction:
+    """Require ``alpha >= 1 / (n_cal + 1)``; return ``alpha`` as an exact fraction.
 
     Below that, the quantile rank exceeds ``n_cal`` and the CRC bound cannot be
     met even at zero risk.
@@ -185,12 +185,12 @@ def require_feasible_alpha(n_cal: int, alpha: float) -> None:
             f"alpha={alpha} needs at least {min_n} calibration samples (got "
             f"{n_cal}); collect more or raise alpha."
         )
+    return alpha_exact
 
 
 def conformal_quantile_index(n_cal: int, alpha: float) -> int:
     """Return ``k = ceil((n_cal + 1)(1 - alpha))`` exactly; ``1 <= k <= n_cal``."""
-    require_feasible_alpha(n_cal, alpha)
-    return math.ceil((n_cal + 1) * (1 - alpha_as_fraction(alpha)))
+    return math.ceil((n_cal + 1) * (1 - require_feasible_alpha(n_cal, alpha)))
 
 
 def kth_smallest_of_samples(
@@ -212,7 +212,7 @@ def kth_smallest_of_samples(
         dtype = torch.promote_types(dtype, t.dtype)
     flats = [t.reshape(-1) for t in per_sample]
     n_cells = flats[0].numel()
-    cells_per_chunk = max(1, chunk_numel // max(n, 1))
+    cells_per_chunk = max(1, chunk_numel // n)
     out = torch.empty(n_cells, dtype=dtype, device=first.device)
     for start in range(0, n_cells, cells_per_chunk):
         stop = min(start + cells_per_chunk, n_cells)
@@ -401,18 +401,15 @@ def check_aux(
     """
     if aux is None:
         return
-    present = [aux_key for aux_key in score.aux_keys if aux_key in aux]
-    for aux_key in present:
-        if not isinstance(aux[aux_key], Tensor):
+    for aux_key in [k for k in score.aux_keys if k in aux]:
+        value = aux[aux_key]
+        if not isinstance(value, Tensor):
             raise TypeError(
                 f"{_field_label(key)}: aux '{aux_key}' must be a torch.Tensor, got "
-                f"{type(aux[aux_key]).__name__}."
+                f"{type(value).__name__}."
             )
-        check_exact_shape(
-            key, f"aux '{aux_key}'", aux[aux_key], "prediction", prediction
-        )
-    for aux_key in present:
-        check_real(key, f"aux '{aux_key}'", aux[aux_key])
+        check_exact_shape(key, f"aux '{aux_key}'", value, "prediction", prediction)
+        check_real(key, f"aux '{aux_key}'", value)
 
 
 def check_floating(key: str, name: str, tensor: Tensor) -> Tensor:

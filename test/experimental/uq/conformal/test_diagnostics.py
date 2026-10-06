@@ -294,6 +294,12 @@ def test_accumulator_constructor_rejects_bare_string_keys():
         CoverageAccumulator(tier="functional", alpha=0.5, n_cal=3, keys="p")
 
 
+def test_accumulator_update_rejects_unknown_tier():
+    accumulator = CoverageAccumulator(tier="bogus", alpha=0.5, n_cal=3)
+    with pytest.raises(ValueError, match="tier must be one of"):
+        accumulator.update(torch.zeros(2), torch.ones(2), torch.zeros(2))
+
+
 def test_report_metadata_is_private():
     accumulator = _accumulator()
     for name, value in (("tier", "functional"), ("alpha", 0.1), ("n_cal", 99)):

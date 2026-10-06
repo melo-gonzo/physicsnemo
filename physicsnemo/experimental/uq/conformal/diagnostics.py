@@ -27,6 +27,7 @@ from torch import Tensor
 
 from ._utils import (
     TENSOR_KEY,
+    TIERS,
     Tier,
     _field_label,
     alpha_as_fraction,
@@ -245,6 +246,10 @@ class CoverageAccumulator:
                     points = torch.atleast_1d(element_covered)
                     point_covered = points.reshape(points.shape[0], -1).all(dim=1)
                     coverage = float(point_covered.to(torch.float64).mean())
+                case _:
+                    raise ValueError(
+                        f"tier must be one of {TIERS}, got {self._tier!r}."
+                    )
 
             staged.append((key, coverage, width_total, widths.numel()))
 

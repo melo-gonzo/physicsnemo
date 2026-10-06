@@ -54,19 +54,12 @@ __all__ = [
 ]
 
 
-def _coarsest_finfo(*tensors: Tensor | None) -> torch.finfo:
+def _coarsest_finfo(*tensors: Tensor) -> torch.finfo:
     """``finfo`` of the least precise floating dtype among the inputs."""
-    infos = [
-        torch.finfo(t.dtype)
-        for t in tensors
-        if t is not None and torch.is_tensor(t) and t.is_floating_point()
-    ]
-    if not infos:
-        return torch.finfo(torch.float64)
-    return max(infos, key=lambda fi: fi.eps)
+    return max((torch.finfo(t.dtype) for t in tensors), key=lambda fi: fi.eps)
 
 
-def _slack_threshold(threshold: Tensor, *dtype_sources: Tensor | None) -> Tensor:
+def _slack_threshold(threshold: Tensor, *dtype_sources: Tensor) -> Tensor:
     """Float64 threshold, inflated so rounding cannot exclude an admitted target."""
     t = threshold.to(torch.float64)
     fi = _coarsest_finfo(*dtype_sources)
@@ -501,14 +494,13 @@ def _check_no_double_scale(
     score: _NonconformityScore, difficulty: AuxDifficulty | None
 ) -> None:
     """Raise ``ValueError`` if ``difficulty`` reads a key the score divides by."""
-    if isinstance(difficulty, AuxDifficulty):
-        if difficulty.key in score._scale_aux_keys:
-            raise ValueError(
-                f"{type(score).__name__} already divides by aux "
-                f"'{difficulty.key}', so AuxDifficulty('{difficulty.key}') would "
-                "scale by it twice. Use AbsoluteErrorScore with AuxDifficulty, or "
-                "drop difficulty."
-            )
+    if difficulty is not None and difficulty.key in score._scale_aux_keys:
+        raise ValueError(
+            f"{type(score).__name__} already divides by aux "
+            f"'{difficulty.key}', so AuxDifficulty('{difficulty.key}') would "
+            "scale by it twice. Use AbsoluteErrorScore with AuxDifficulty, or "
+            "drop difficulty."
+        )
 
 
 _DIFFICULTY_REGISTRY: dict[str, type[AuxDifficulty]] = {

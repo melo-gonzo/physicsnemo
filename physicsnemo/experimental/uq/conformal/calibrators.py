@@ -60,7 +60,6 @@ from torch import Tensor
 
 from ._utils import (
     _field_label,
-    alpha_as_fraction,
     broadcast_difficulty,
     check_aux,
     check_exact_shape,
@@ -606,9 +605,7 @@ class FunctionalBandCalibrator(_ScaledCalibratorBase):
 def _crc_threshold(sorted_scores: list[Tensor], alpha: float) -> float:
     """Smallest observed ``lambda`` with ``(R(lambda) + 1) / (n + 1) <= alpha``."""
     n = len(sorted_scores)
-
-    alpha_exact = alpha_as_fraction(alpha)
-    require_feasible_alpha(n, alpha)
+    alpha_exact = require_feasible_alpha(n, alpha)
 
     scores64 = [scores.to(torch.float64) for scores in sorted_scores]
     m = scores64[0].numel()
