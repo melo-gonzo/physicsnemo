@@ -322,3 +322,274 @@ class _BoundaryKernelRead(nn.Module):
                 self._read, h_b, h_q, basis, log_m, plan, use_reentrant=False
             )
         return self._read(h_b, h_q, basis, log_m, plan)
+
+
+# ---------------------------------------------------------------------------
+# The global read (``kernel_read_radius=None``): every point reads every cell.
+# ---------------------------------------------------------------------------
+
+#: Pairs per dense tile of the global read: the tile's query rows are
+#: ``max(1, GLOBAL_READ_TILE_PAIRS // N)`` for ``N`` boundary cells. A memory knob
+#: only: every query row is computed alone (the softmax is over the row's cells), so
+#: the tiling changes nothing but roundoff.
+GLOBAL_READ_TILE_PAIRS = 1 << 24
+
+
+def global_geo_width(
+    n_global_vectors: int, n_query_vecs: int, n_boundary_vecs: int
+) -> int:
+    """Width of :func:`global_pair_invariants`: :func:`kernel_geo_width`'s invariants
+    with ``s = r / L`` and ``log s`` and the near-wall invariant ``log(r / |d_q|)``."""
+    return 1 + kernel_geo_width(n_global_vectors, n_query_vecs, n_boundary_vecs)
+
+
+def global_pair_invariants(
+    query_r: torch.Tensor,
+    query_n: torch.Tensor,
+    query_wall: torch.Tensor,
+    query_vecs: torch.Tensor | None,
+    boundary_r: torch.Tensor,
+    boundary_n: torch.Tensor,
+    boundary_vecs: torch.Tensor | None,
+    g_unit: torch.Tensor,
+    eps: float,
+) -> torch.Tensor:
+    r"""The kernel inputs of every (point, cell) pair of a tile, ``(Q, N, G)``.
+
+    One case: ``query_r``, ``query_n`` ``(Q, d)``, ``query_wall`` ``(Q,)`` the point's
+    built-in wall distance :math:`|d_q|` (frame units), ``query_vecs`` ``(Q, P_q, d)``
+    or ``None``; ``boundary_r``, ``boundary_n`` ``(N, d)``, ``boundary_vecs``
+    ``(N, P_b, d)`` or ``None``; ``g_unit`` ``(K, d)``. With
+    :math:`\rho = (x_q - y_j) / L`, :math:`r = |\rho|` and :math:`\hat\rho = \rho / r`
+    the invariants are :math:`[r, \log r, \log(r / |d_q|), \hat\rho\cdot n_j,
+    \hat\rho\cdot n_q, n_q\cdot n_j, \hat\rho\cdot g_k, n_j\cdot g_k, \hat\rho\cdot v,
+    n_j\cdot v, \hat\rho\cdot u, n_q\cdot u]`: lengths in units of :math:`L` or of
+    the point's own wall distance, and cosines, so no length scale is chosen. The
+    only constant is ``eps``, a floor on the lengths inside the logarithms and the
+    normalization (a numerical guard: :math:`r \ge |d_q| > 0` for every point off
+    the boundary sample, since :math:`|d_q|` is the distance to the nearest cell).
+    """
+    with torch.autocast(query_r.device.type, enabled=False):
+        rel = query_r[:, None] - boundary_r[None]  # (Q, N, d)
+        dist = rel.norm(dim=-1)
+        dist_g = dist.clamp_min(eps)
+        rho = rel / dist_g[..., None]
+        nq, nb = query_r.shape[0], boundary_r.shape[0]
+        n_q = query_n[:, None].expand(nq, nb, -1)
+        n_j = boundary_n[None].expand(nq, nb, -1)
+        log_r = torch.log(dist_g)
+        feats = [
+            dist,
+            log_r,
+            log_r - torch.log(query_wall.clamp_min(eps))[:, None],
+            (rho * n_j).sum(-1),
+            (rho * n_q).sum(-1),
+            (n_q * n_j).sum(-1),
+        ]
+        cols = [
+            torch.stack(feats, -1),
+            torch.einsum("qnd,kd->qnk", rho, g_unit),
+            torch.einsum("nd,kd->nk", boundary_n, g_unit)[None].expand(nq, nb, -1),
+        ]
+        if query_vecs is not None and query_vecs.shape[1]:
+            cols += [
+                torch.einsum("qnd,qpd->qnp", rho, query_vecs),
+                torch.einsum("nd,qpd->qnp", boundary_n, query_vecs),
+            ]
+        if boundary_vecs is not None and boundary_vecs.shape[1]:
+            cols += [
+                torch.einsum("qnd,npd->qnp", rho, boundary_vecs),
+                torch.einsum("qd,npd->qnp", query_n, boundary_vecs),
+            ]
+        return torch.cat(cols, -1)
+
+
+def global_tile_rows(n_cells: int) -> int:
+    """Query rows per dense tile for a boundary of ``n_cells`` cells."""
+    return max(1, GLOBAL_READ_TILE_PAIRS // max(1, int(n_cells)))
+
+
+def global_kernel_basis(basis: "_KernelBasis", geometry: dict) -> torch.Tensor:
+    """The kernel basis of every (point, cell) pair of one case, ``(BASIS, Q * N)``.
+
+    Evaluated tile by tile over the query rows; with gradient enabled each tile is
+    checkpointed (its invariants and the MLP's activations are rebuilt in backward),
+    so only the basis itself, ``KERNEL_READ_BASIS`` numbers per pair, is stored.
+    ``geometry`` holds :func:`global_pair_invariants`' arguments.
+    """
+    q_keys = ("query_r", "query_n", "query_wall", "query_vecs")
+    nq, nb = geometry["query_r"].shape[0], geometry["boundary_r"].shape[0]
+    rows = global_tile_rows(nb)
+
+    def tile(*q_parts):
+        inv = global_pair_invariants(
+            **dict(zip(q_keys, q_parts)),
+            **{k: v for k, v in geometry.items() if k not in q_keys},
+        )
+        return basis(inv).reshape(-1, KERNEL_READ_BASIS).t()
+
+    grad = torch.is_grad_enabled() and any(p.requires_grad for p in basis.parameters())
+    tiles = []
+    for a in range(0, nq, rows):
+        q_parts = [
+            None if geometry[k] is None else geometry[k][a : a + rows] for k in q_keys
+        ]
+        if grad:
+            tiles.append(checkpoint(tile, *q_parts, use_reentrant=False))
+        else:
+            tiles.append(tile(*q_parts))
+    return torch.cat(tiles, dim=1)
+
+
+class _GlobalSoftmaxRead(torch.autograd.Function):
+    r"""The global read of one case, ``(H, Q, C)``: for every point, a softmax over
+    every boundary cell of ``w_h . phi_qj + <q_qh, k_jh> * scale + log omega_j``
+    weighting the cells' values.
+
+    ``phi`` ``(BASIS, Q * N)`` the kernel basis; ``w`` ``(H, BASIS)``; ``q``
+    ``(H, Q, c)``; ``k`` ``(H, N, c)``; ``v`` ``(H, N, C)``; ``log_frac`` ``(N,)``.
+    Dense tiles of query rows, computed in at least float32 with autocast off; no
+    ``(pairs, heads)`` tensor is stored: backward recomputes each tile's softmax
+    (as flash attention does) and accumulates the gradients tile by tile.
+    """
+
+    @staticmethod
+    def _tile(phi, w, q, k_t, log_frac, a, b, n, scale, acc):
+        ph = phi[:, a * n : b * n].to(acc)
+        z = (w @ ph).view(w.shape[0], b - a, n) + log_frac
+        logit = torch.baddbmm(z, q[:, a:b], k_t, alpha=scale)
+        return ph, torch.softmax(logit, dim=-1)
+
+    @staticmethod
+    def forward(ctx, phi, w, q, k, v, log_frac, scale):
+        dev = q.device.type
+        with torch.autocast(dev, enabled=False):
+            acc = torch.promote_types(q.dtype, torch.float32)
+            w_, q_, k_, v_ = (t.to(acc) for t in (w, q, k, v))
+            lf = log_frac.to(acc)
+            nh, nq, n = q.shape[0], q.shape[1], k.shape[1]
+            k_t = k_.transpose(1, 2)
+            out = q_.new_empty(nh, nq, v.shape[-1])
+            rows = global_tile_rows(n)
+            for a in range(0, nq, rows):
+                b = min(nq, a + rows)
+                _, att = _GlobalSoftmaxRead._tile(
+                    phi, w_, q_, k_t, lf, a, b, n, scale, acc
+                )
+                out[:, a:b] = torch.bmm(att, v_)
+        ctx.save_for_backward(phi, w, q, k, v, log_frac, out)
+        ctx.scale = scale
+        return out
+
+    @staticmethod
+    def backward(ctx, d_out):
+        phi, w, q, k, v, log_frac, out = ctx.saved_tensors
+        scale = ctx.scale
+        need = ctx.needs_input_grad
+        with torch.autocast(q.device.type, enabled=False):
+            acc = out.dtype
+            w_, q_, k_, v_ = (t.to(acc) for t in (w, q, k, v))
+            lf = log_frac.to(acc)
+            d_out = d_out.to(acc)
+            nh, nq, n = q.shape[0], q.shape[1], k.shape[1]
+            k_t, v_t = k_.transpose(1, 2), v_.transpose(1, 2)
+            d_phi = torch.empty_like(phi) if need[0] else None
+            d_w = torch.zeros_like(w_)
+            d_q = torch.empty_like(q_)
+            d_k = torch.zeros_like(k_)
+            d_v = torch.zeros_like(v_)
+            d_lf = torch.zeros_like(lf)
+            ### D = sum_c dO * O, the softmax's row correction.
+            dd = (d_out * out).sum(-1, keepdim=True)
+            rows = global_tile_rows(n)
+            for a in range(0, nq, rows):
+                b = min(nq, a + rows)
+                ph, att = _GlobalSoftmaxRead._tile(
+                    phi, w_, q_, k_t, lf, a, b, n, scale, acc
+                )
+                do = d_out[:, a:b]
+                d_v += torch.bmm(att.transpose(1, 2), do)
+                ### dlogit = A * (dO V^T - D), in place over the tile.
+                dl = torch.bmm(do, v_t).sub_(dd[:, a:b]).mul_(att)
+                del att
+                d_q[:, a:b] = torch.bmm(dl, k_) * scale
+                d_k += torch.bmm(dl.transpose(1, 2), q_[:, a:b]) * scale
+                if need[5]:
+                    d_lf += dl.sum((0, 1))
+                dl2 = dl.view(nh, (b - a) * n)
+                d_w += dl2 @ ph.t()
+                if d_phi is not None:
+                    d_phi[:, a * n : b * n] = (w_.t() @ dl2).to(phi.dtype)
+        return (
+            d_phi,
+            d_w.to(w.dtype) if need[1] else None,
+            d_q.to(q.dtype) if need[2] else None,
+            d_k.to(k.dtype) if need[3] else None,
+            d_v.to(v.dtype) if need[4] else None,
+            d_lf.to(log_frac.dtype) if need[5] else None,
+            None,
+        )
+
+
+def global_softmax_read_reference(phi, w, q, k, v, log_frac, scale):
+    """Dense eager reference of :class:`_GlobalSoftmaxRead` (tests)."""
+    nh, nq, n = q.shape[0], q.shape[1], k.shape[1]
+    z = (w @ phi).view(nh, nq, n) + log_frac
+    att = torch.softmax(z + scale * q @ k.transpose(1, 2), dim=-1)
+    return att @ v
+
+
+class _GlobalKernelRead(nn.Module):
+    """One block's global read: every prediction point reads every boundary cell.
+
+    A softmax over the boundary cells with the logits ``K_h(iota_qj) + <q_h, k_jh> /
+    sqrt(c) + log omega_j`` (ISLA's quadrature form: the log measure fraction as
+    bias, so it is a measure-weighted mean over the boundary), with ``K_h`` a linear
+    combination of the shared kernel basis. Logits linear in ``log r`` or
+    ``log(r / |d_q|)`` are power laws, so the read can learn any locality; there is no
+    radius, falloff or neighbour count. ``forward(h_b, h_q, pairs)`` with the
+    boundary and point states flattened over the batch and ``pairs = (basis per case
+    (BASIS, Q*N), log fraction (B, N))`` returns the points' residual update; the
+    output projection starts at zero (the model starts as the plain read-only
+    model).
+    """
+
+    def __init__(self, hidden: int) -> None:
+        super().__init__()
+        h, w = KERNEL_READ_HEADS, KERNEL_READ_WIDTH
+        self.norm_b = nn.LayerNorm(hidden)
+        self.norm_q = nn.LayerNorm(hidden)
+        self.value = nn.Linear(hidden, w)
+        self.key = nn.Linear(hidden, h * KERNEL_READ_KEY, bias=False)
+        self.query = nn.Linear(hidden, h * KERNEL_READ_KEY, bias=False)
+        ### No bias: a per-head constant cancels in the softmax.
+        self.kernel = nn.Linear(KERNEL_READ_BASIS, h, bias=False)
+        self.out = nn.Linear(w, hidden, bias=False)
+        nn.init.zeros_(self.out.weight)
+
+    def forward(self, h_b, h_q, pairs):
+        basis, log_frac = pairs
+        b, n = log_frac.shape
+        nh, c, kc = (
+            KERNEL_READ_HEADS,
+            KERNEL_READ_WIDTH // KERNEL_READ_HEADS,
+            KERNEL_READ_KEY,
+        )
+        hb = self.norm_b(h_b)
+        v = self.value(hb).view(b, n, nh, c).permute(0, 2, 1, 3)
+        k = self.key(hb).view(b, n, nh, kc).permute(0, 2, 1, 3)
+        q = self.query(self.norm_q(h_q)).view(b, -1, nh, kc).permute(0, 2, 1, 3)
+        reads = [
+            _GlobalSoftmaxRead.apply(
+                basis[i],
+                self.kernel.weight,
+                q[i],
+                k[i],
+                v[i],
+                log_frac[i],
+                1.0 / math.sqrt(kc),
+            )
+            for i in range(b)
+        ]
+        read = torch.stack(reads).permute(0, 2, 1, 3).reshape(-1, nh * c)
+        return self.out(read.to(h_q.dtype))

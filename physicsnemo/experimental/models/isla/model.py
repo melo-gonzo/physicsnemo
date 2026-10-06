@@ -229,8 +229,11 @@ from physicsnemo.experimental.models.isla.heads import (
 from physicsnemo.experimental.models.isla.inputs import _declare, _InputSet, _leaf
 from physicsnemo.experimental.models.isla.kernel_read import (
     _BoundaryKernelRead,
+    _GlobalKernelRead,
     _KernelBasis,
     boundary_pairs,
+    global_geo_width,
+    global_kernel_basis,
     kernel_geo_width,
     pair_invariants,
 )
@@ -372,7 +375,13 @@ class ISLA(Module):
         kernel_read_radius: The kernel read's radius in units of the length
             unit ``L`` (default 0.01). The neighbourhood is the exact radius set
             (no neighbour count), so its cost grows with the number of
-            boundary cells near the points.
+            boundary cells near the points. ``None``: the global read
+            (``kernel_read="mean"`` only): every prediction point reads every
+            boundary cell, a softmax over all cells with the log measure
+            fraction as bias and no radius, falloff or neighbour count; its
+            kernel also sees ``log(r / |d_q|)``, the pair distance in units of
+            the point's own wall distance. Exact all pairs in dense tiles, so
+            its cost is ``Q * N`` per block.
         kernel_read_blocks: Number of final blocks followed by a kernel read
             (default ``None``: every block).
         dim: Spatial dimension of the domain (default 3). Every boundary mesh
@@ -449,7 +458,7 @@ class ISLA(Module):
         geo_kernel: GeoKernel | None = None,
         compile_blocks: bool = False,
         kernel_read: str | None = None,
-        kernel_read_radius: float = 0.01,
+        kernel_read_radius: float | None = 0.01,
         kernel_read_blocks: int | None = None,
         dim: int = 3,
         eps: float = 1e-12,
@@ -669,7 +678,7 @@ class ISLA(Module):
         ### and only when asked for, so every other model owns exactly the parameters
         ### it had before.
         self.kernel_read = kernel_read
-        self.kernel_read_radius = float(kernel_read_radius)
+        self.kernel_read_radius = None if kernel_read_radius is None else float(kernel_read_radius)
         self.kernel_read_blocks = None
         self.kernel_basis = None
         self.kernel_reads = None
@@ -684,20 +693,30 @@ class ISLA(Module):
                     "kernel_read with rank-2 boundary or query inputs (their pair "
                     "contractions are not implemented)"
                 )
-            if not self.kernel_read_radius > 0:
-                raise ValueError(f"kernel_read_radius must be positive, got {kernel_read_radius!r}")
+            if self.kernel_read_radius is None:
+                if kernel_read != "mean":
+                    raise ValueError(
+                        f"the global read (kernel_read_radius=None) is kernel_read='mean' only, got {kernel_read!r}"
+                    )
+            elif not self.kernel_read_radius > 0:
+                raise ValueError(f"kernel_read_radius must be positive or None, got {kernel_read_radius!r}")
             m = n_layers if kernel_read_blocks is None else int(kernel_read_blocks)
             if not 1 <= m <= n_layers:
                 raise ValueError(
                     f"kernel_read_blocks must lie in [1, n_layers={n_layers}], got {kernel_read_blocks!r}"
                 )
             self.kernel_read_blocks = m
-            n_geo = kernel_geo_width(K, self.qin.n_block_vecs, self.bin.n_block_vecs)
-            self.kernel_basis = _KernelBasis(n_geo)
-            self.kernel_reads = nn.ModuleList(
-                _BoundaryKernelRead(hidden, kernel_read, self.kernel_read_radius, self.dim)
-                for _ in range(m)
-            )
+            if self.kernel_read_radius is None:
+                n_geo = global_geo_width(K, self.qin.n_block_vecs, self.bin.n_block_vecs)
+                self.kernel_basis = _KernelBasis(n_geo)
+                self.kernel_reads = nn.ModuleList(_GlobalKernelRead(hidden) for _ in range(m))
+            else:
+                n_geo = kernel_geo_width(K, self.qin.n_block_vecs, self.bin.n_block_vecs)
+                self.kernel_basis = _KernelBasis(n_geo)
+                self.kernel_reads = nn.ModuleList(
+                    _BoundaryKernelRead(hidden, kernel_read, self.kernel_read_radius, self.dim)
+                    for _ in range(m)
+                )
         #: Pairs of the last forward pass's kernel read (diagnostic; 0 without one).
         self.kernel_read_pairs = 0
 
@@ -1168,6 +1187,35 @@ class ISLA(Module):
         plan = PairPlan.build(qi, bj, b * nq, b * n)
         return plan, self.kernel_basis(inv), log_frac[bj].to(log_b.dtype) + log_b
 
+    def _global_read_pairs(self, r, n_hat, vecs, log_w, q_r, q_nhat, q_wall, q_vecs, g_unit):
+        """The global read's inputs: the kernel basis of every (point, cell) pair of
+        each case ``(BASIS, Q * N)`` and the cells' log measure fractions ``(B, N)``;
+        ``q_wall`` ``(B, Q)`` is the points' built-in wall distance (frame units)."""
+        b, n, d = r.shape
+        nq = q_r.shape[1]
+        nb_vecs = self.bin.n_block_vecs
+        basis = [
+            global_kernel_basis(
+                self.kernel_basis,
+                {
+                    "query_r": q_r[i],
+                    "query_n": q_nhat[i],
+                    "query_wall": q_wall[i],
+                    "query_vecs": None if q_vecs is None else q_vecs[i, :, nb_vecs:],
+                    "boundary_r": r[i],
+                    "boundary_n": n_hat[i],
+                    "boundary_vecs": None if vecs is None else vecs[i, :, :nb_vecs],
+                    "g_unit": g_unit[i],
+                    "eps": self.eps,
+                },
+            )
+            for i in range(b)
+        ]
+        ### The cell's share of the boundary measure (the quadrature weight).
+        log_frac = (log_w - torch.logsumexp(log_w, dim=1, keepdim=True))[..., 0]
+        self.kernel_read_pairs = b * nq * n
+        return basis, log_frac
+
     def _forward_tensors(
         self,
         *,
@@ -1288,7 +1336,11 @@ class ISLA(Module):
                     - math.log(nq)
                 )
             q_vecs, q_tens = self._block_extras(None, None, q_vecs, q_tens, bq, nq, points)
-            if self.kernel_reads is not None:
+            if self.kernel_reads is not None and self.kernel_read_radius is None:
+                kernel_pairs = self._global_read_pairs(
+                    r, n_hat, vecs, log_w, q_r, q_nhat, s[..., 0].abs(), q_vecs, g_unit
+                )
+            elif self.kernel_reads is not None:
                 kernel_pairs = self._kernel_read_pairs(r, n_hat, vecs, log_w, q_r, q_nhat, q_vecs, g_unit)
             h = torch.cat([h, h_q], dim=1)
             r = torch.cat([r, q_r], dim=1)
