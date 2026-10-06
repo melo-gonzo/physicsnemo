@@ -83,6 +83,7 @@ are loose for a surface (1,700 sources per point at :math:`\theta = 1` on the sa
 car, 3.4e8 pairs per block).
 """
 
+import dataclasses
 import math
 from dataclasses import dataclass
 
@@ -293,10 +294,10 @@ def _chunked_basis(basis: _KernelBasis, qi, si, geometry: dict) -> torch.Tensor:
             inv = tree_pair_invariants(
                 qi[a : a + TREE_READ_PAIR_CHUNK], si[a : a + TREE_READ_PAIR_CHUNK], **geometry
             )
-        out = checkpoint(basis, inv, use_reentrant=False) if grad else basis(inv)
-        ### Kept in at least float32: the fused read consumes it as it stands in every
-        ### block (no per-block copy) and its gradient accumulates over the blocks.
-        parts.append(out.to(torch.promote_types(out.dtype, torch.float32)))
+        ### Kept in the MLP's own dtype (bfloat16 under autocast, as the dense read's
+        ### basis is): the fused read consumes it in every block and its gradient
+        ### accumulates over the blocks in that dtype; 2e8 to 7e8 rows at DrivAerML scale.
+        parts.append(checkpoint(basis, inv, use_reentrant=False) if grad else basis(inv))
     if not parts:
         return geometry["query_r"].new_zeros(0, KERNEL_READ_BASIS)
     return torch.cat(parts)
@@ -384,6 +385,15 @@ def tree_read_pairs(
         offsets.append(src_off)
         src_off += n + m
     plan_all = PairPlan.build(torch.cat(qis), torch.cat(sis), b * nq, src_off)
+    if plan_all.qi.shape[0] < 2**31:
+        ### 32-bit pair indices (the fused read widens them on load): half the plan's memory.
+        plan_all = dataclasses.replace(
+            plan_all,
+            qi=plan_all.qi.int(),
+            bj=plan_all.bj.int(),
+            perm=plan_all.perm.int(),
+            qi_by_b=plan_all.qi_by_b.int(),
+        )
     return TreeReadPairs(
         plan=plan_all,
         basis=torch.cat(bases),

@@ -78,7 +78,7 @@ if HAS_TRITON:
         for p0 in range(start, end, BLOCK):
             p = p0 + tl.arange(0, BLOCK)
             msk = p < end
-            bj = tl.load(bj_ptr + p, mask=msk, other=0)
+            bj = tl.load(bj_ptr + p, mask=msk, other=0).to(tl.int64)
             basis = tl.load(
                 basis_ptr + p[:, None] * G + tl.arange(0, G)[None, :], mask=msk[:, None], other=0.0
             ).to(tl.float32)
@@ -132,7 +132,7 @@ if HAS_TRITON:
         for p0 in range(start, end, BLOCK):
             p = p0 + tl.arange(0, BLOCK)
             msk = p < end
-            bj = tl.load(bj_ptr + p, mask=msk, other=0)
+            bj = tl.load(bj_ptr + p, mask=msk, other=0).to(tl.int64)
             basis = tl.load(
                 basis_ptr + p[:, None] * G + tl.arange(0, G)[None, :], mask=msk[:, None], other=0.0
             ).to(tl.float32)
@@ -187,8 +187,8 @@ if HAS_TRITON:
         for i0 in range(start, end, BLOCK):
             i = i0 + tl.arange(0, BLOCK)
             msk = i < end
-            p = tl.load(perm_ptr + i, mask=msk, other=0)
-            qi = tl.load(qib_ptr + i, mask=msk, other=0)
+            p = tl.load(perm_ptr + i, mask=msk, other=0).to(tl.int64)
+            qi = tl.load(qib_ptr + i, mask=msk, other=0).to(tl.int64)
             basis = tl.load(
                 basis_ptr + p[:, None] * G + tl.arange(0, G)[None, :], mask=msk[:, None], other=0.0
             ).to(tl.float32)
@@ -271,14 +271,15 @@ class _SegmentSoftmaxRead(torch.autograd.Function):
 def _eager_segment_softmax_read(basis, w, logm, q, k, v, plan: PairPlan, scale: float):
     """The same read pair by pair (CPU, float64, the reference of the Triton path)."""
     acc = torch.promote_types(q.dtype, torch.float32)
+    qi, bj = plan.qi.long(), plan.bj.long()
     ker = basis.to(acc) @ w.to(acc)  # (P, H)
-    score = (q[plan.qi].to(acc) * k[plan.bj].to(acc)).sum(-1)
+    score = (q[qi].to(acc) * k[bj].to(acc)).sum(-1)
     logit = ker + score * scale + logm.to(acc)[:, None]
     counts = plan.q_offsets[1:] - plan.q_offsets[:-1]
     seg_max = torch.segment_reduce(logit.detach(), "max", lengths=counts, axis=0, unsafe=True)
-    e = torch.exp(logit - seg_max[plan.qi])
-    den = e.new_zeros(plan.n_q, e.shape[1]).index_add(0, plan.qi, e)
-    num = e.new_zeros(plan.n_q, e.shape[1], v.shape[2]).index_add(0, plan.qi, e[..., None] * v[plan.bj].to(acc))
+    e = torch.exp(logit - seg_max[qi])
+    den = e.new_zeros(plan.n_q, e.shape[1]).index_add(0, qi, e)
+    num = e.new_zeros(plan.n_q, e.shape[1], v.shape[2]).index_add(0, qi, e[..., None] * v[bj].to(acc))
     return num / den.clamp_min(torch.finfo(acc).tiny)[..., None]
 
 
