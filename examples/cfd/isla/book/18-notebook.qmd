@@ -34609,3 +34609,27 @@ support cloud (exact, equal accuracy, but needs a wall-heavy volume sample at
 inference), passive queries (exact, 4% to 42% less accurate), volume-measure
 queries (15% to 24% less accurate on DrivAerML). Reported to Peter with the
 numbers; no query-side lane launched without his word.
+
+## 2026-10-06 — SOFT-GEO first launch invalid: the five soft lanes read a NaN loss from their first step (the streaming kernel's online rescale before a query's first kept sample); the nearest control trained; kernel guarded, regression test added, lanes relaunched after re-verification {#sec-nb-soft-geo-nan-relaunch}
+
+The six `sq_af` lanes launched on LHR at 09:20 PDT (jobs 104168-104173).
+Within minutes every soft arm (`sq_af_soft03_seed42/43`, `soft01`, `soft10`,
+`soft03_nosdf`) logged `Loss: nan` from its first training step, while the
+nearest-geometry control `sq_af_nearest_nosdf_seed42` trained normally
+(0.100 at the first step, 0.033 at epoch 3). The cause is in the amended
+kernel's accumulation pass: the side and facing rules exclude tokens, and
+for a query whose first token tiles hold no kept sample the running maximum
+and the tile maximum are both minus infinity, so the streamed-softmax
+rescale evaluates exp(-inf - (-inf)) = NaN and poisons the accumulators.
+The PyTorch form takes its maximum over the whole row and never meets the
+case, and the kernel-vs-PyTorch test on random clouds met a kept token in
+the first tile of every query by chance. On the AirfRANS airfoil the tokens
+are ordered along the curve, so a query above the upper surface whose first
+128 tokens lie on the lower surface hits the case at once. Fix: the rescale
+and the exponentials are gated on a live maximum (zero until the first kept
+sample); regression test with the far face of a plate listed first, CUDA
+only. The five soft lanes were cancelled, their first-step run directories
+set aside (`runs_invalid_nan_2026-10-06/`), the snapshot `code_v21` rebuilt
+with the guard, verification resubmitted on both clusters, and the lanes
+relaunch on the pass. The control lane keeps running. Nothing in the
+preregistration changes; no result was read from the invalid lanes.
