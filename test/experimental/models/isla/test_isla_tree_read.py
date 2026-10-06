@@ -213,8 +213,10 @@ def test_boundary_tree_is_balanced_tight_and_frame_free(dim):
         assert torch.allclose(tree.measure[i], w[cells].sum())
         c = (pts[cells] * w[cells, None]).sum(0) / w[cells].sum()
         assert torch.allclose(tree.center[i], c)
-        chord = (nrm[cells] - tree.normal[i]).norm(dim=-1).max()
-        assert float(chord) <= float(tree.spread[i]) * (1 + 1e-12) + 1e-12
+        mean_n = (nrm[cells] * w[cells, None]).sum(0) / w[cells].sum()
+        rms = torch.sqrt(((nrm[cells] - tree.normal[i]).square().sum(-1) * w[cells]).sum() / w[cells].sum())
+        assert float(tree.spread[i]) == pytest.approx(math.sqrt(2 * (1 - float(mean_n.norm()))), abs=1e-9)
+        assert float(tree.spread[i]) == pytest.approx(float(rms), abs=1e-9)
         if i < tree.first_leaf:
             left, right = 2 * i + 1, 2 * i + 2
             assert int(tree.node_start[left]) == int(tree.node_start[i])
@@ -250,9 +252,9 @@ def test_boundary_tree_parts_the_faces_of_a_thin_body_before_positions():
     nrm = torch.cat([torch.tensor([[0.0, 0.0, 1.0]] * 400, dtype=D), torch.tensor([[0.0, 0.0, -1.0]] * 400, dtype=D)])
     w = torch.ones(800, dtype=D)
     tree = BoundaryTree.build(pts, w, nrm, None, leaf_size=8, theta=0.5, eps=1e-12)
-    ### The root's mean normal is the zero vector, so every chord to it is 1.
-    assert float(tree.spread[0]) >= 1.0 - 1e-9
-    assert torch.allclose(tree.spread[1:], torch.zeros_like(tree.spread[1:]), atol=1e-12)
+    ### The root's mean normal is the zero vector: spread sqrt(2); its children are one-sided.
+    assert float(tree.spread[0]) == pytest.approx(math.sqrt(2.0), abs=1e-9)
+    assert torch.allclose(tree.spread[1:], torch.zeros_like(tree.spread[1:]), atol=1e-7)
     for i in (1, 2):
         cells = tree.order[tree.node_start[i] : tree.node_start[i] + tree.node_count[i]]
         assert len(set((cells >= 400).tolist())) == 1

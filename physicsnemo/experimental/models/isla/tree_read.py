@@ -40,10 +40,10 @@ normal (renormalized), its total measure :math:`\Omega_C = \sum_{j \in C} \omega
 and the measure-weighted means of its cells' keys and values at the block's depth. A
 cluster is admitted when its angular size and its normal spread are both below
 :math:`\theta`: :math:`2 R_C < \theta\, r` (the diameter of its bounding sphere
-against the gap between the point and that sphere) and the largest chord between one
-of its normals and its mean normal below :math:`\theta`; a leaf that is not admitted
-contributes its cells; any other node hands the point to its two children. Because
-the read is a quadrature, the virtual
+against the gap between the point and that sphere) and the measure-weighted RMS chord
+of its normals about their mean, :math:`\sqrt{2 (1 - |\bar n|)}`, below :math:`\theta`;
+a leaf that is not admitted contributes its cells; any other node hands the point to
+its two children. Because the read is a quadrature, the virtual
 cell is the cluster's monopole: were the pair logit constant over the cluster,
 :math:`\sum_{j \in C} \omega_j e^{z_{qj}} v_j` would equal
 :math:`\Omega_C e^{z_{qC}} v_C` exactly, and the error at finite :math:`\theta` is the
