@@ -104,8 +104,10 @@ from physicsnemo.experimental.models.isla.segment_softmax import segment_softmax
 from physicsnemo.mesh.spatial._ragged import _ragged_arange
 
 #: Boundary cells per tree leaf. Implementation: at a fixed ``theta`` it sets how many
-#: cells an opened leaf contributes; at ``theta = 0`` it changes nothing.
-TREE_READ_LEAF_SIZE = 8
+#: cells an opened leaf contributes; at ``theta = 0`` it changes nothing. On DrivAerML
+#: Volume at ``theta = 1``, 4 gives 2.0e8 pairs per block against 2.4e8 for 8 (the cells
+#: of opened leaves were 40% of the pairs) and 1.9e8 for 1, and the fastest step.
+TREE_READ_LEAF_SIZE = 4
 #: Pairs per chunk of the kernel-basis evaluation (memory only; each chunk's
 #: invariants and MLP activations are rebuilt in backward).
 TREE_READ_PAIR_CHUNK = 1 << 22
