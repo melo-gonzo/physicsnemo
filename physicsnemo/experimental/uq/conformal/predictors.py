@@ -42,6 +42,7 @@ from ._utils import (
     points_fingerprint,
     require_container_kind,
     require_feasible_alpha,
+    require_mesh,
     slice_aux,
     validate_provenance,
 )
@@ -453,19 +454,12 @@ class ConformalPredictor:
         require_container_kind(prediction, selection, "This predictor", "prediction")
         items = field_items(prediction, selection)
         if self._tier == "cellwise":
-            if points is None:
-                raise ValueError(
-                    "This cellwise predictor requires points=, the calibration "
-                    "mesh coordinates."
-                )
-            fingerprint = points_fingerprint(points)
-            if fingerprint != self._mesh_fingerprint:
-                raise ValueError(
-                    "points does not match the exact calibration mesh "
-                    "(coordinates, dtype, and point order). If meshes vary, "
-                    "calibrate with FunctionalBandCalibrator or "
-                    "RiskControlCalibrator."
-                )
+            require_mesh(
+                points,
+                self._mesh_fingerprint,
+                " If meshes vary, calibrate with FunctionalBandCalibrator or "
+                "RiskControlCalibrator.",
+            )
         elif points is not None:
             check_points(points)
 

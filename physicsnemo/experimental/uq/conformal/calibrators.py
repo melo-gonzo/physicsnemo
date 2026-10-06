@@ -73,9 +73,9 @@ from ._utils import (
     kth_smallest_of_samples,
     normalize_keys,
     pack_fields,
-    points_fingerprint,
     require_feasible_alpha,
     require_matching_keys,
+    require_mesh,
     slice_aux,
     validate_alpha,
 )
@@ -374,13 +374,7 @@ class CellwiseCalibrator(_SplitCalibratorBase):
         -----
         A sample that raises is not stored.
         """
-        fingerprint = points_fingerprint(points)
-        if self._mesh_fingerprint is not None and fingerprint != self._mesh_fingerprint:
-            raise ValueError(
-                "This sample's points do not match the first sample's. "
-                "CellwiseCalibrator needs the same mesh (coordinates, dtype, "
-                "and point order) on every call."
-            )
+        fingerprint = require_mesh(points, self._mesh_fingerprint)
 
         def stage(key, prediction_field, target_field, aux_field):
             score = check_finite(

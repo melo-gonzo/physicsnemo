@@ -281,6 +281,22 @@ def points_fingerprint(
     return digest.hexdigest()
 
 
+def require_mesh(points: Tensor | None, expected: str | None, hint: str = "") -> str:
+    """Fingerprint ``points`` and require it to equal ``expected`` unless ``None``."""
+    if points is None:
+        raise ValueError(
+            "Cellwise conformal requires points=, the calibration mesh coordinates."
+        )
+    fingerprint = points_fingerprint(points)
+    if expected is not None and fingerprint != expected:
+        raise ValueError(
+            "points does not match the exact calibration mesh; cellwise "
+            "conformal needs the same mesh (coordinates, dtype, and point "
+            f"order) on every call.{hint}"
+        )
+    return fingerprint
+
+
 def check_point_alignment(
     key: str, tensor: Tensor, points: Tensor, name: str = "prediction"
 ) -> Tensor:
