@@ -574,7 +574,6 @@ CONTAINER_REJECTIONS = [  # (id, thunk, error, match)
     ("missing-key", lambda: field_items(_td(a=torch.ones(2)), ["c"]), KeyError, "not present"),
     ("empty-tensordict", lambda: field_items(TensorDict({}, batch_size=[])), ValueError, "at least one field"),
     ("reserved-sentinel", lambda: field_items(_td(**{TENSOR_KEY: torch.ones(2)})), ValueError, "reserved"),
-    ("reserved-meta", lambda: field_items(_td(_meta=torch.ones(2))), ValueError, "reserved"),
     ("keys-with-plain-tensor", lambda: field_items(torch.zeros(3), keys=["pressure"]), TypeError, "plain tensor"),
     ("aux-entry-not-mapping", lambda: slice_aux({"pressure": torch.ones(3)}, "pressure"), TypeError, "mapping"),
     ("flat-aux-for-fields", lambda: slice_aux({"sigma": torch.ones(3)}, "pressure"), TypeError, "nested by field"),

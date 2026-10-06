@@ -71,11 +71,6 @@ def field_items(
             f"{TENSOR_KEY!r} is reserved for internal plain-tensor bookkeeping "
             "and cannot be used as a field-container key. Rename the field."
         )
-    if "_meta" in available:
-        raise ValueError(
-            "'_meta' is reserved for conformal report metadata and cannot be "
-            "used as a field-container key. Rename the field."
-        )
     if keys is not None:
         missing = sorted(set(keys) - set(available))
         if missing:

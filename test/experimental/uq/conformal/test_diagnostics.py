@@ -58,18 +58,19 @@ def test_risk_report_averages_each_sample_point_event_equally():
     accumulator.update(*_interval_sample(99, 99))
     report = accumulator.finalize()
 
-    assert report["_meta"] == {
+    assert report["meta"] == {
         "tier": "risk_control",
         "alpha": 0.5,
         "n_cal": 3,
         "target_risk": 0.5,
     }
-    assert report["value"] == {
+    assert report["fields"]["tensor"] == {
         "n_samples": 2,
-        "element_weighted_mean_interval_width": pytest.approx(2.0),
+        "mean_interval_width": pytest.approx(2.0),
         "empirical_mean_risk": pytest.approx(0.5),
     }
-    assert set(report) == {"_meta", "value"}
+    assert set(report) == {"meta", "fields"}
+    assert set(report["fields"]) == {"tensor"}
     json.dumps(report, allow_nan=False)
 
 
@@ -80,7 +81,7 @@ def test_risk_coverage_reduces_trailing_components_to_point_events():
     target = torch.zeros(2, 2, 3)
     target[1, 1, 2] = 5.0
     accumulator.update(lo, hi, target)
-    report = accumulator.finalize()["value"]
+    report = accumulator.finalize()["fields"]["tensor"]
     assert report["empirical_mean_risk"] == pytest.approx(0.5)
 
 
@@ -89,15 +90,15 @@ def test_functional_report_counts_whole_field_containment():
     accumulator.update(*_interval_sample(100, 99))
     accumulator.update(*_interval_sample(5, 5))
     report = accumulator.finalize()
-    assert report["_meta"] == {
+    assert report["meta"] == {
         "tier": "functional",
         "alpha": 0.5,
         "n_cal": 3,
         "target_coverage": 0.5,
     }
-    assert report["value"] == {
+    assert report["fields"]["tensor"] == {
         "n_samples": 2,
-        "element_weighted_mean_interval_width": pytest.approx(2.0),
+        "mean_interval_width": pytest.approx(2.0),
         "whole_field_coverage": pytest.approx(0.5),
     }
 
@@ -110,12 +111,12 @@ def test_cellwise_map_and_summary_are_elementwise():
 
     expected = torch.tensor([1.0, 2.0 / 3.0, 1.0 / 3.0], dtype=torch.float64)
     torch.testing.assert_close(accumulator.empirical_coverage_map, expected)
-    assert accumulator.finalize()["value"] == {
+    assert accumulator.finalize()["fields"]["tensor"] == {
         "n_samples": 3,
-        "element_weighted_mean_interval_width": pytest.approx(2.0),
+        "mean_interval_width": pytest.approx(2.0),
         "mean_element_coverage": pytest.approx(2.0 / 3.0),
         "minimum_element_coverage": pytest.approx(1.0 / 3.0),
-        "fraction_elements_at_or_above_target": pytest.approx(2.0 / 3.0),
+        "fraction_at_target": pytest.approx(2.0 / 3.0),
     }
 
 
@@ -128,16 +129,16 @@ def test_cellwise_target_fraction_uses_exact_declared_alpha():
         )
 
     report = accumulator.finalize()
-    assert report["_meta"]["target_coverage"] == pytest.approx(0.42)
-    assert report["value"]["fraction_elements_at_or_above_target"] == 0.5
+    assert report["meta"]["target_coverage"] == pytest.approx(0.42)
+    assert report["fields"]["tensor"]["fraction_at_target"] == 0.5
 
 
-def test_element_weighted_mean_interval_width_uses_all_reported_elements():
+def test_mean_interval_width_uses_all_reported_elements():
     accumulator = _accumulator("functional")
     accumulator.update(*_interval_sample(1, 1, half_width=1.0))
     accumulator.update(*_interval_sample(3, 3, half_width=2.0))
     # (one width-2 element + three width-4 elements) / four elements.
-    width = accumulator.finalize()["value"]["element_weighted_mean_interval_width"]
+    width = accumulator.finalize()["fields"]["tensor"]["mean_interval_width"]
     assert width == pytest.approx(3.5)
 
 
@@ -158,7 +159,7 @@ def test_empty_quantile_regression_set_has_zero_width():
 
     accumulator = predictor.coverage_accumulator()
     accumulator.update(lo, hi, target)
-    width = accumulator.finalize()["value"]["element_weighted_mean_interval_width"]
+    width = accumulator.finalize()["fields"]["tensor"]["mean_interval_width"]
     assert width == 0.0
 
 
@@ -171,10 +172,10 @@ def test_tensordict_fields_report_per_field_and_select_fitted_keys():
     # predict_interval), so the model's natural full output works directly.
     accumulator.update(lo, hi, _td(p=torch.zeros(3), v=torch.zeros(3), w=torch.ones(3)))
     report = accumulator.finalize()
-    assert set(report) == {"_meta", "p", "v"}
-    assert report["p"]["empirical_mean_risk"] == 0.0
-    assert report["v"]["empirical_mean_risk"] == 0.5
-    assert report["p"]["n_samples"] == report["v"]["n_samples"] == 2
+    assert set(report["fields"]) == {"p", "v"}
+    assert report["fields"]["p"]["empirical_mean_risk"] == 0.0
+    assert report["fields"]["v"]["empirical_mean_risk"] == 0.5
+    assert report["fields"]["p"]["n_samples"] == report["fields"]["v"]["n_samples"] == 2
     json.dumps(report, allow_nan=False)
 
 
@@ -182,7 +183,7 @@ EMPTY_ENTRIES = {
     "cellwise": {
         "mean_element_coverage": None,
         "minimum_element_coverage": None,
-        "fraction_elements_at_or_above_target": None,
+        "fraction_at_target": None,
     },
     "functional": {"whole_field_coverage": None},
     "risk_control": {"empirical_mean_risk": None},
@@ -192,9 +193,9 @@ EMPTY_ENTRIES = {
 @pytest.mark.parametrize("tier", TIERS)
 def test_empty_report_has_exact_none_schema(tier):
     report = _accumulator(tier).finalize()
-    assert report["value"] == {
+    assert report["fields"]["tensor"] == {
         "n_samples": 0,
-        "element_weighted_mean_interval_width": None,
+        "mean_interval_width": None,
         **EMPTY_ENTRIES[tier],
     }
     json.dumps(report, allow_nan=False)
@@ -278,7 +279,7 @@ def test_infinite_prediction_bounds_require_recomputing_in_wider_dtype():
     assert ((lo <= prediction) & (prediction <= hi)).all()
     accumulator = predictor.coverage_accumulator()
     accumulator.update(lo, hi, prediction)
-    assert accumulator.finalize()["value"]["n_samples"] == 1
+    assert accumulator.finalize()["fields"]["tensor"]["n_samples"] == 1
 
 
 def test_coverage_map_availability_errors():
@@ -310,7 +311,7 @@ def test_report_metadata_is_private():
     for name, value in (("tier", "functional"), ("alpha", 0.1), ("n_cal", 99)):
         setattr(accumulator, name, value)
     accumulator.keys = ("other",)
-    assert accumulator.finalize()["_meta"] == {
+    assert accumulator.finalize()["meta"] == {
         "tier": "risk_control",
         "alpha": 0.5,
         "n_cal": 3,

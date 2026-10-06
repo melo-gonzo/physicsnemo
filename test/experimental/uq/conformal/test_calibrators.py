@@ -357,8 +357,8 @@ def test_keys_subset_round_trips_through_predict_save_and_diagnostics(tmp_path):
     accumulator = loaded.coverage_accumulator()
     accumulator.update(lo_loaded, hi_loaded, full)
     report = accumulator.finalize()
-    assert set(report) == {"_meta", "pressure"}
-    assert report["pressure"]["n_samples"] == 1
+    assert set(report["fields"]) == {"pressure"}
+    assert report["fields"]["pressure"]["n_samples"] == 1
 
 
 class _CustomScore(AbsoluteErrorScore):

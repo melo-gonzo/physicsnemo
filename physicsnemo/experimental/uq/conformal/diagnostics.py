@@ -115,8 +115,8 @@ class CoverageAccumulator:
     ...     accumulator.update(lo, hi, prediction + 0.1 * torch.randn(50, 2))
     >>> report = accumulator.finalize()
     >>> sorted(report)
-    ['_meta', 'value']
-    >>> report["value"]["n_samples"]
+    ['fields', 'meta']
+    >>> report["fields"]["tensor"]["n_samples"]
     5
     """
 
@@ -302,16 +302,17 @@ class CoverageAccumulator:
         Returns
         -------
         dict
-            ``{"_meta": {...}, <field>: {...}}``. ``_meta`` holds ``tier``,
-            ``alpha``, ``n_cal``, and ``target_coverage`` (``1 - alpha``), or
-            ``target_risk`` (``alpha``) for risk control. Each field entry
-            (key ``"value"`` for plain tensors) holds ``n_samples``,
-            ``element_weighted_mean_interval_width`` (mean width over every
-            element of every sample), and the tier's statistic:
+            ``{"meta": {...}, "fields": {<field>: {...}}}``. ``meta`` holds
+            ``tier``, ``alpha``, ``n_cal``, and ``target_coverage``
+            (``1 - alpha``), or ``target_risk`` (``alpha``) for risk control.
+            ``fields`` has one entry per calibrated field (key ``"tensor"``
+            for plain tensors) with ``n_samples``, ``mean_interval_width``
+            (mean width over every element of every sample), and the tier's
+            statistic:
 
             - cellwise: ``mean_element_coverage``,
-              ``minimum_element_coverage``, and
-              ``fraction_elements_at_or_above_target``.
+              ``minimum_element_coverage``, and ``fraction_at_target`` (the
+              fraction of elements whose coverage is at least the target).
             - functional: ``whole_field_coverage``, the fraction of samples
               inside the band everywhere.
             - risk control: ``empirical_mean_risk``, the mean fraction of
@@ -328,12 +329,12 @@ class CoverageAccumulator:
             metadata["target_risk"] = self._alpha
         else:
             metadata["target_coverage"] = 1.0 - self._alpha
-        report: dict = {"_meta": metadata}
+        fields: dict = {}
         for key, counters in self._counters.items():
             n = counters.n_samples
             entry: dict = {
                 "n_samples": n,
-                "element_weighted_mean_interval_width": (
+                "mean_interval_width": (
                     counters.width_sum / counters.width_count
                     if counters.width_count
                     else None
@@ -346,15 +347,13 @@ class CoverageAccumulator:
                     entry.update(
                         mean_element_coverage=float(hits.to(torch.float64).mean()) / n,
                         minimum_element_coverage=float(hits.min()) / n,
-                        fraction_elements_at_or_above_target=float(
-                            at_target.to(torch.float64).mean()
-                        ),
+                        fraction_at_target=float(at_target.to(torch.float64).mean()),
                     )
                 case "cellwise":
                     entry.update(
                         mean_element_coverage=None,
                         minimum_element_coverage=None,
-                        fraction_elements_at_or_above_target=None,
+                        fraction_at_target=None,
                     )
                 case "functional":
                     entry["whole_field_coverage"] = (
@@ -364,5 +363,5 @@ class CoverageAccumulator:
                     entry["empirical_mean_risk"] = (
                         1.0 - counters.coverage_sum / n if n else None
                     )
-            report["value" if key == TENSOR_KEY else key] = entry
-        return report
+            fields["tensor" if key == TENSOR_KEY else key] = entry
+        return {"meta": metadata, "fields": fields}
