@@ -5,31 +5,29 @@ Lane `isla-qi-global`, branch `psharpe/isla-qi-global` (base
 `/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-05-isla-qi-global/`
 (job prefix `isla.global.`). Brief: `BRIEF.md` (this folder).
 
-## Status (2026-10-06 02:15 PDT): all ten lanes training on LHR (second links)
+## Status (2026-10-06 06:10 PDT): references done and scored, G at epoch ~280
 
 - Global read implemented and tested (commits b10170371 eager, c5d7408e9 fused
-  Triton; 224 ISLA tests pass).
-- Cost probe on GB300 (AGA job 1062212, repeated on LHR job 99937 with identical
-  numbers): G (every block, fused) 508-510 ms per step, 2.1x read-only, peak
-  34.6 GiB; smoke loss finite and falling. G reads at every block.
-- **The lanes run on LHR, not AGA.** On AGA they sat pending for 2.5-3 h behind
-  about 1,260 higher-priority jobs (fairshare); LHR is the same GB300 hardware
-  with the same venv (torch 2.12.0+cu130, Triton 3.7.0) and the same AirfRANS
-  store at the same `/scratch/fsw` path (file list and sizes identical, md5 of a
-  sample identical), and had about 100 idle nodes. The LHR task dir has the same
-  path as the AGA one and holds copies of `code_g1`, `code_g2`, `recipe_g`, the
-  launchers, and the AirfRANS score and probe rows of the QI and kernel lanes
-  (`refs/`). The AGA copies (1061607-1061612, 1063219-1063222, watcher 1065921)
-  were cancelled while pending (never ran).
-- LHR jobs: lanes 99985-99994 (started 20:45 PDT), chain-ahead successors
-  99999-100008, watcher 100013 (`eval/after_lanes.sbatch`, cpu-free: scores,
-  probes and bf16 re-scores each lane when it completes, then runs
-  `eval/qg_reduce.py`). Step: G 0.545 s, P 0.235 s (4 ranks); G 111 s per
-  epoch. At 23:25 G is at epoch 80, the references at 130-150. Expected: I, P, T
-  done about 04:00 PDT, G about 13:00 PDT on 2026-10-06.
-- Early training log (epochs 30-60): G's eddy-viscosity validation error is
-  0.6-1.0x the interacting model's and 0.45-0.9x read-only's (see Training-log
-  progress); no verdict rests on it.
+  Triton; 224 ISLA tests pass). Cost: G (every block) 508 ms per step, 2.1x
+  read-only, peak 34.6 GiB.
+- **The lanes run on LHR, not AGA** (AGA's queue had about 1,260 higher-priority
+  jobs ahead; LHR has the same GB300 hardware, venv and AirfRANS store; details
+  under Lanes). LHR jobs: lanes 99985-99994 (started 2026-10-05 20:45 PDT),
+  watcher 100013.
+- I, P (seeds 44, 45) and T seed 44 finished at 04:20-05:30 and are scored
+  (float32 and bf16, probes). T seed 45 lost 55 min to a hung link (all four
+  ranks in uninterruptible I/O wait on node nvl72d019-T18 right after resuming;
+  cancelled at 05:40, its successor excludes that node and resumed from epoch
+  451); it finishes about 06:30.
+- G (seeds 42-45) at epoch ~280 at 06:00; at 111 s per epoch it finishes about
+  13:00 PDT; the watcher then scores and probes it and runs the reduction
+  (`eval/qg_reduction*.txt` in the LHR task dir).
+- References over four seeds (float32): the new seeds move the read-only
+  baseline: P / I = 0.958 / 1.050 / 1.251 (two QI seeds: 1.037 / 1.088 / 1.417);
+  see Results.
+- Training log (no verdict rests on it): through epoch 160 G's validation error is
+  0.6-0.8x the interacting model's on pressure and velocity and 0.76-0.99x on eddy
+  viscosity (Training-log progress).
 
 ## Question
 
@@ -201,6 +199,29 @@ added `kernel_read.py`, `pair_kernels.py`, `global_read_kernels.py`; every golde
 of the base passes. The truncated path is identical to `code_kq3` (9c564e99a)
 apart from added lines. `recipe_g` is the kernel lane's `recipe_kq` (its `src/*.py`
 md5s equal this worktree's).
+
+## Results (reporting protocol; G pending)
+
+`infer.py` exactly as the QI scorer (float32, the 200 held-out airfoils, the
+training request, case mean of the per-case relative L2), `eval/qg_reduce.py`.
+Seed values 42 / 43 / 44 / 45; mean +- standard error over seeds.
+
+| arm | pressure | velocity | eddy viscosity |
+|---|---|---|---|
+| I | 0.0339 +- 0.0004 (0.0334 / 0.0331 / 0.0349 / 0.0343) | 0.0167 +- 0.0003 (0.0165 / 0.0163 / 0.0176 / 0.0166) | 0.0304 +- 0.0004 (0.0303 / 0.0292 / 0.0312 / 0.0310) |
+| P | 0.0325 +- 0.0015 (0.0357 / 0.0332 / 0.0326 / 0.0283) | 0.0176 +- 0.0004 (0.0179 / 0.0178 / 0.0182 / 0.0164) | 0.0381 +- 0.0028 (0.0450 / 0.0393 / 0.0363 / 0.0316) |
+| T | 0.0259 (0.0258 / 0.0270 / 0.0249 / -) | 0.0167 (0.0164 / 0.0163 / 0.0173 / -) | 0.0362 (0.0346 / 0.0391 / 0.0350 / -) |
+| G | pending | pending | pending |
+
+Ratios of the seed means (paired seed ratios in parentheses): P / I 0.958
+(1.070 / 1.004 / 0.936 / 0.826), 1.050 (1.083 / 1.092 / 1.037 / 0.990), 1.251
+(1.486 / 1.346 / 1.165 / 1.018); T / I (three seeds) 0.764, 0.995, 1.190. The
+read-only model's eddy-viscosity excess is smaller over four seeds (1.25) than
+over the QI campaign's two (1.42): seed 45 of the read-only model is within 2% of
+the interacting model.
+
+bf16 scoring (like with like; `eval_prec/bfloat16`): I 0.0343 / 0.0172 / 0.0341,
+P 0.0317 / 0.0173 / 0.0381, T (three seeds) 0.0275 / 0.0163 / 0.0397.
 
 ## Training-log progress (no verdict rests on it)
 
