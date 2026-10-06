@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""QI-GLOBAL weighted-error readout: G, I, P, T on AirfRANS under count, decade and
-volume weighting of the same predictions (an added readout; the verdict stays on the
+"""QI-GLOBAL weighted-error readout: G, I, P, T on AirfRANS under count and volume
+(exact dual-area) weighting of the same predictions (an added readout; the verdict stays on the
 protocol scores).
 
 Reads ``we_probe.py`` JSONs (the weighted-error lane's probe: every mesh point of the
 200 held-out airfoils, exact dual areas) from the ``--probes`` directories, uses
-``we_reduce.case_errors`` for the three weightings (case means, then seed means) and
+``we_reduce.case_errors`` for the two weightings (case means, then seed means) and
 prints per arm the errors and the ratios G/I, G/P, G/T, P/I, T/I of the seed means
 with the paired seed ratios, and per |sdf|/L band the volume-weighted RMS error ratio.
 The interacting model I (chunk-trained) is read on its own tiles (law ``tiles``);
@@ -35,7 +35,7 @@ import sys
 from pathlib import Path
 
 FIELDS = ("pressure", "velocity", "nut")
-WEIGHTINGS = ("count", "decade", "volume")
+WEIGHTINGS = ("count", "volume")
 SEEDS = (42, 43, 44, 45)
 ARMS = {
     "G": ({s: f"gl_af_global_seed{s}" for s in SEEDS}, "none"),

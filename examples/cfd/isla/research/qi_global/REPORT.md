@@ -23,7 +23,7 @@ Lane `isla-qi-global`, branch `psharpe/isla-qi-global` (base
   velocity: the > 1 L band (17% of points) has pooled pressure error 0.113 against
   0.095 and velocity 0.0106 against 0.0097; under volume weighting (the L2 norm over
   the CFD domain, dominated by the far field) G / I is 1.28 / 1.10 / 0.89 (count
-  0.70 / 0.81 / 0.87, decade 0.77 / 0.81 / 0.89; see the added readout). The global
+  0.70 / 0.81 / 0.87; see the added readout). The global
   read moves error from the near wall to the far field for pressure. (3) The
   four-seed references move the read-only baseline: P / I is 0.958 / 1.050 / 1.251
   (the QI campaign's two seeds: 1.037 / 1.088 / 1.417).
@@ -308,9 +308,8 @@ not only the protocol's count weighting (every mesh node weighted equally). The
 weighted-error lane's probe (`we_probe.py`, `we_reduce.py`, branch
 `psharpe/isla-volume-quadrature`, `examples/cfd/isla/research/volume_quadrature/weighted_error/`)
 predicts at **every mesh point** of the 200 held-out airfoils and scores the same
-predictions three ways: **count** (every point equal), **decade** (every \|sdf\|/L
-decade band equal, volume-weighted inside), **volume** (exact dual-area weighting:
-the L2 norm over the CFD domain). The chunk-trained interacting model I is read on
+predictions two ways: **count** (every point equal, the protocol's weighting) and
+**volume** (exact dual-area weighting: the L2 norm over the CFD domain). The chunk-trained interacting model I is read on
 its own tiles (law `tiles`, its training law); the read-only arms need no writers.
 `qg_we_reduce.py` (this folder) reduces G, I, P, T over the four seeds.
 
@@ -325,30 +324,29 @@ Results (`qg_we_reduce.py`, `results/qi_global_2026-10-06/we_reduction.{json,txt
 relative L2 in training space, case means then four-seed means; paired seeds in
 brackets):
 
-| arm | count p / U / nut | decade p / U / nut | volume p / U / nut |
-|---|---|---|---|
-| G | 0.0205 / 0.0138 / 0.0248 | 0.0279 / 0.0130 / 0.0309 | 0.1453 / 0.0104 / 0.0279 |
-| I (tiles) | 0.0292 / 0.0171 / 0.0287 | 0.0364 / 0.0161 / 0.0348 | 0.1136 / 0.0095 / 0.0313 |
-| P | 0.0277 / 0.0172 / 0.0351 | 0.0363 / 0.0155 / 0.0404 | 0.1219 / 0.0097 / 0.0432 |
-| T | 0.0221 / 0.0162 / 0.0351 | 0.0340 / 0.0154 / 0.0399 | 0.0957 / 0.0091 / 0.0440 |
+| arm | count p / U / nut | volume p / U / nut |
+|---|---|---|
+| G | 0.0205 / 0.0138 / 0.0248 | 0.1453 / 0.0104 / 0.0279 |
+| I (tiles) | 0.0292 / 0.0171 / 0.0287 | 0.1136 / 0.0095 / 0.0313 |
+| P | 0.0277 / 0.0172 / 0.0351 | 0.1219 / 0.0097 / 0.0432 |
+| T | 0.0221 / 0.0162 / 0.0351 | 0.0957 / 0.0091 / 0.0440 |
 
-| ratio | protocol (float32) | count | decade | volume |
-|---|---|---|---|---|
-| G / I | 0.721 / 0.825 / 0.888 | 0.702 / 0.808 / 0.865 | 0.766 / 0.808 / 0.890 | **1.279 / 1.100** / 0.893 |
-| G / P | 0.753 / 0.785 / 0.710 | 0.738 / 0.800 / 0.707 | 0.768 / 0.838 / 0.766 | 1.192 / 1.070 / 0.646 |
-| G / T | 0.956 / 0.837 / 0.754 | 0.927 / 0.852 / 0.706 | 0.819 / 0.844 / 0.776 | 1.518 / 1.140 / 0.635 |
-| T / I | 0.754 / 0.986 / 1.178 | 0.757 / 0.947 / 1.225 | 0.935 / 0.957 / 1.146 | 0.842 / 0.964 / 1.407 |
-| P / I | 0.958 / 1.050 / 1.251 | 0.951 / 1.009 / 1.224 | 0.997 / 0.964 / 1.162 | 1.073 / 1.028 / 1.382 |
+| ratio | protocol (float32) | count | volume |
+|---|---|---|---|
+| G / I | 0.721 / 0.825 / 0.888 | 0.702 / 0.808 / 0.865 | **1.279 / 1.100** / 0.893 |
+| G / P | 0.753 / 0.785 / 0.710 | 0.738 / 0.800 / 0.707 | 1.192 / 1.070 / 0.646 |
+| G / T | 0.956 / 0.837 / 0.754 | 0.927 / 0.852 / 0.706 | 1.518 / 1.140 / 0.635 |
+| T / I | 0.754 / 0.986 / 1.178 | 0.757 / 0.947 / 1.225 | 0.842 / 0.964 / 1.407 |
+| P / I | 0.958 / 1.050 / 1.251 | 0.951 / 1.009 / 1.224 | 1.073 / 1.028 / 1.382 |
 
 Paired G / I: count [0.61/0.78/0.81, 0.78/0.81/0.95, 0.75/0.80/0.87,
-0.67/0.84/0.83]; decade [0.64/0.76/0.78, 0.82/0.79/0.92, 0.85/0.83/0.93,
-0.75/0.85/0.92]; volume [0.91/1.07/0.81, 1.36/0.95/0.92, 1.53/1.17/0.94,
+0.67/0.84/0.83]; volume [0.91/1.07/0.81, 1.36/0.95/0.92, 1.53/1.17/0.94,
 1.28/1.20/0.89]. Per-band volume-weighted RMS, G / I: < 0.001 L 0.62 / 0.77 / 1.10;
 0.001-0.01 0.68 / 0.74 / 0.80; 0.01-0.1 0.75 / 0.76 / 0.84; 0.1-1 0.99 / 0.88 /
 1.01; > 1 L **1.30 / 1.13** / 0.88.
 
-Reading: on the full mesh the count and decade weightings agree with the protocol
-(G better than I on every field, by 11-30%). Under volume weighting, which is the
+Reading: on the full mesh the count weighting agrees with the protocol (G better
+than I on every field, by 13-30%). Under volume weighting, which is the
 far-field L2 norm (93% of the AirfRANS volume lies beyond 1 L), G keeps its
 eddy-viscosity gain (0.89 against I, 0.64 against T) but is 28% worse than I on
 pressure and 10% worse on velocity, and 1.5x T on pressure. The global read trades
