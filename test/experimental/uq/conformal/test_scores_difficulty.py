@@ -52,9 +52,9 @@ def test_normalized_error_values_and_eps(device):
     aux = {"sigma": torch.tensor([0.5, 0.0], device=device)}
     # Second sigma clamps to eps.
     torch.testing.assert_close(
-        score.score(pred, target, aux), torch.tensor([2.0, 2000.0], device=device)
+        score.score(pred, target, aux=aux), torch.tensor([2.0, 2000.0], device=device)
     )
-    lo, hi = score.interval(pred, torch.tensor(1.0, device=device), aux)
+    lo, hi = score.interval(pred, torch.tensor(1.0, device=device), aux=aux)
     torch.testing.assert_close(hi, torch.tensor([0.5, 1e-3], device=device))
     torch.testing.assert_close(lo, -hi)
 
@@ -66,9 +66,10 @@ def test_quantile_regression_asymmetry(device):
     # Below lo, inside, above hi.
     target = torch.tensor([-0.5, 0.5, 1.75], device=device)
     torch.testing.assert_close(
-        score.score(pred, target, aux), torch.tensor([0.5, -0.5, 0.75], device=device)
+        score.score(pred, target, aux=aux),
+        torch.tensor([0.5, -0.5, 0.75], device=device),
     )
-    lo, hi = score.interval(pred, torch.tensor(0.1, device=device), aux)
+    lo, hi = score.interval(pred, torch.tensor(0.1, device=device), aux=aux)
     torch.testing.assert_close(lo, aux["lo"] - 0.1)
     torch.testing.assert_close(hi, aux["hi"] + 0.1)
 
@@ -85,10 +86,13 @@ def test_interval_endpoints_invert_score(score, aux):
     """At this scale, endpoint scores stay close to the threshold."""
     pred = torch.randn(5)
     threshold = torch.tensor(0.42)
-    lo, hi = score.interval(pred, threshold, aux)
+    lo, hi = score.interval(pred, threshold, aux=aux)
     for endpoint in (lo, hi):
         torch.testing.assert_close(
-            score.score(pred, endpoint, aux), threshold.expand(5), atol=1e-6, rtol=1e-5
+            score.score(pred, endpoint, aux=aux),
+            threshold.expand(5),
+            atol=1e-6,
+            rtol=1e-5,
         )
 
 
@@ -171,7 +175,7 @@ def test_normalized_low_precision_sigma_keeps_fitted_intervals_tight(tier):
     for _ in range(3):
         calibrator.update(pred, target, aux=aux, points=points)
     predictor = calibrator.finalize()
-    assert (score.score(pred, target, aux) <= predictor.thresholds).all()
+    assert (score.score(pred, target, aux=aux) <= predictor.thresholds).all()
     lo, hi = assert_predictor_covers_admitted(
         predictor, pred, target, aux=aux, points=points
     )
@@ -205,7 +209,7 @@ def test_normalized_mixed_dtype_score_boundary_is_contained(
     pred = torch.tensor([0.0, 1000.0, -1000.0, 1.0, 0.0], dtype=pred_dtype)
     target = torch.tensor([1.0, 1000.5, -999.5, -1.0, 0.0], dtype=target_dtype)
     aux = {"sigma": torch.tensor([60000.0, 0.0, -1.0, 0.3, 60000.0], dtype=sigma_dtype)}
-    threshold = score.score(pred, target, aux)
+    threshold = score.score(pred, target, aux=aux)
     assert threshold.dtype == torch.result_type(pred, target)
     assert torch.isfinite(threshold).all()
     assert_admitted_covered(score, pred, target, threshold, aux)

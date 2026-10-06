@@ -274,7 +274,7 @@ def test_normalization_normal_boundary_and_true_zero(cls, signed):
             continue
         calibrator.update(prediction, target, aux=aux)
         predictor = calibrator.finalize()
-        expected = score.score(prediction, target, aux) / scale
+        expected = score.score(prediction, target, aux=aux) / scale
         assert float(predictor.thresholds) == float(expected)
         lo, hi = predictor.predict_interval(prediction, aux=aux)
         assert bool(((lo <= target) & (target <= hi)).all())
@@ -404,7 +404,7 @@ def test_score_boundary_inversion(score, aux_factory, dtype):
     generator = torch.Generator().manual_seed(11)
     pred, target = _adversarial_pairs(dtype, generator)
     aux = aux_factory(pred, generator) if aux_factory else None
-    radius = score.score(pred, target, aux)
+    radius = score.score(pred, target, aux=aux)
     assert_admitted_covered(score, pred, target, radius, aux)
     finite = radius[torch.isfinite(radius)]
     assert_admitted_covered(score, pred, target, finite.median(), aux)
@@ -433,11 +433,11 @@ KNOWN_COUNTEREXAMPLES = {
 @pytest.mark.parametrize("case", sorted(KNOWN_COUNTEREXAMPLES))
 def test_known_counterexamples_are_contained(case):
     score, pred, interval_pred, target, aux, threshold = KNOWN_COUNTEREXAMPLES[case]
-    s = score.score(pred, target, aux)
+    s = score.score(pred, target, aux=aux)
     assert bool(torch.isfinite(s).all())
     threshold = s.amax() if threshold is None else threshold
     assert bool((s <= threshold).all())
-    lo, hi = score.interval(interval_pred, threshold, aux)
+    lo, hi = score.interval(interval_pred, threshold, aux=aux)
     inside = (target.double() >= lo.double()) & (target.double() <= hi.double())
     assert bool(inside.all())
 

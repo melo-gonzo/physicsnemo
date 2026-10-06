@@ -391,7 +391,7 @@ class CellwiseCalibrator(_SplitCalibratorBase):
             score = check_finite(
                 key,
                 "the nonconformity scores",
-                self._score.score(prediction_field, target_field, aux_field),
+                self._score.score(prediction_field, target_field, aux=aux_field),
             )
             if key in self._scores and score.shape != self._scores[key][0].shape:
                 raise ValueError(
@@ -514,7 +514,7 @@ class _ScaledCalibratorBase(_SplitCalibratorBase):
             raw = check_finite(
                 key,
                 "the nonconformity scores",
-                self._score.score(prediction_field, target_field, aux_field),
+                self._score.score(prediction_field, target_field, aux=aux_field),
             )
             return self._reduce(_normalized_scores(raw, difficulty, key))
 

@@ -110,7 +110,7 @@ def test_cellwise_map_and_summary_are_elementwise():
         accumulator.update(-torch.ones(3), torch.ones(3), target)
 
     expected = torch.tensor([1.0, 2.0 / 3.0, 1.0 / 3.0], dtype=torch.float64)
-    torch.testing.assert_close(accumulator.empirical_coverage_map, expected)
+    torch.testing.assert_close(accumulator.empirical_coverage_map(), expected)
     assert accumulator.finalize()["fields"]["tensor"] == {
         "n_samples": 3,
         "mean_interval_width": pytest.approx(2.0),
@@ -246,7 +246,7 @@ def test_update_rejections_are_transactional(
     accumulator = _accumulator(tier, fields=fields)
     accumulator.update(*warmup)
     before = accumulator.finalize()
-    before_map = accumulator.empirical_coverage_map if tier == "cellwise" else None
+    before_map = accumulator.empirical_coverage_map() if tier == "cellwise" else None
     with pytest.raises(error, match=match) as excinfo:
         accumulator.update(*rejected)
     assert "__tensor__" not in str(excinfo.value)
@@ -254,7 +254,7 @@ def test_update_rejections_are_transactional(
     assert after == before
     json.dumps(after, allow_nan=False)
     if before_map is not None:
-        after_map = accumulator.empirical_coverage_map
+        after_map = accumulator.empirical_coverage_map()
         for key in fields or [None]:
             torch.testing.assert_close(
                 after_map if key is None else after_map[key],
@@ -284,9 +284,9 @@ def test_infinite_prediction_bounds_require_recomputing_in_wider_dtype():
 
 def test_coverage_map_availability_errors():
     with pytest.raises(RuntimeError, match="No diagnostic samples"):
-        _ = _accumulator("cellwise").empirical_coverage_map
+        _accumulator("cellwise").empirical_coverage_map()
     with pytest.raises(RuntimeError, match="only for cellwise"):
-        _ = _accumulator("functional").empirical_coverage_map
+        _accumulator("functional").empirical_coverage_map()
 
 
 # fmt: off
@@ -335,7 +335,7 @@ def _accumulator_finalizer():
 def _coverage_map_finalizer():
     accumulator = _accumulator("cellwise")
     accumulator.update(*_PLAIN)
-    return lambda: accumulator.empirical_coverage_map
+    return accumulator.empirical_coverage_map
 
 
 FINALIZERS = {

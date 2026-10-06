@@ -138,9 +138,9 @@ def make_predictor(**overrides) -> ConformalPredictor:
 
 def assert_admitted_covered(score, pred, target, threshold, aux) -> None:
     """Score-level property: ``score <= threshold`` implies ``lo <= target <= hi``."""
-    s = score.score(pred, target, aux)
+    s = score.score(pred, target, aux=aux)
     admitted = torch.isfinite(s) & (s <= threshold) & torch.isfinite(target)
-    lo, hi = score.interval(pred, threshold, aux)
+    lo, hi = score.interval(pred, threshold, aux=aux)
     assert lo.dtype == pred.dtype and hi.dtype == pred.dtype
     bad = admitted & ~((target >= lo) & (target <= hi))
     assert not bad.any(), (
@@ -156,7 +156,7 @@ def assert_predictor_covers_admitted(
 
     Returns the interval so callers can make further assertions.
     """
-    score = predictor.score.score(prediction, target, aux).double()
+    score = predictor.score.score(prediction, target, aux=aux).double()
     threshold = predictor.thresholds.double()
     if predictor.difficulty is not None:
         difficulty = predictor.difficulty(aux).double()

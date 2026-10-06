@@ -465,7 +465,7 @@ class ConformalPredictor:
             lo_out[key], hi_out[key] = self._score.interval(
                 prediction_field,
                 threshold.to(device=prediction_field.device),
-                aux_field,
+                aux=aux_field,
             )
 
         if isinstance(prediction, TensorDict):

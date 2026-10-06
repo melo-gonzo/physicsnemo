@@ -212,3 +212,7 @@ def test_aux_and_points_are_keyword_only():
         CellwiseCalibrator(AbsoluteErrorScore(), alpha=0.2).update(
             torch.zeros(4, 2), torch.zeros(4, 2), points
         )
+    score = predictor.score
+    for method in (score.score, score.interval):
+        with pytest.raises(TypeError, match="positional"):
+            method(torch.zeros(2), torch.zeros(2), {})

@@ -115,17 +115,18 @@ def _require_aux(
 class _NonconformityScore:
     """Base class for the built-in scores.
 
-    ``aux_keys`` lists the aux entries a score reads; ``scale_aux_keys`` lists
+    ``aux_keys`` lists the aux entries a score reads; ``_scale_aux_keys`` lists
     the ones it divides by.
     """
 
     aux_keys: tuple[str, ...] = ()
-    scale_aux_keys: tuple[str, ...] = ()
+    _scale_aux_keys: tuple[str, ...] = ()
 
     def score(
         self,
         prediction: Float[Tensor, "*dims"],
         target: Float[Tensor, "*dims"],
+        *,
         aux: Mapping[str, Tensor] | None = None,
     ) -> Float[Tensor, "*dims"]:
         r"""Per-element nonconformity of ``target`` given ``prediction``.
@@ -161,6 +162,7 @@ class _NonconformityScore:
         self,
         prediction: Float[Tensor, "*dims"],
         threshold: Float[Tensor, "*dims"] | Float[Tensor, ""],
+        *,
         aux: Mapping[str, Tensor] | None = None,
     ) -> tuple[Float[Tensor, "*dims"], Float[Tensor, "*dims"]]:
         r"""Turn a calibrated ``threshold`` into an interval ``(lo, hi)``.
@@ -223,6 +225,7 @@ class AbsoluteErrorScore(_NonconformityScore):
         self,
         prediction: Float[Tensor, "*dims"],
         target: Float[Tensor, "*dims"],
+        *,
         aux: Mapping[str, Tensor] | None = None,
     ) -> Float[Tensor, "*dims"]:
         return (target - prediction).abs()
@@ -231,6 +234,7 @@ class AbsoluteErrorScore(_NonconformityScore):
         self,
         prediction: Float[Tensor, "*dims"],
         threshold: Float[Tensor, "*dims"] | Float[Tensor, ""],
+        *,
         aux: Mapping[str, Tensor] | None = None,
     ) -> tuple[Float[Tensor, "*dims"], Float[Tensor, "*dims"]]:
         p = prediction.to(torch.float64)
@@ -278,16 +282,16 @@ class NormalizedErrorScore(_NonconformityScore):
     >>> score = NormalizedErrorScore()
     >>> prediction, target = torch.randn(50, 2), torch.randn(50, 2)
     >>> aux = {"sigma": torch.rand(50, 2) + 0.1}
-    >>> score.score(prediction, target, aux).shape
+    >>> score.score(prediction, target, aux=aux).shape
     torch.Size([50, 2])
     >>> threshold = torch.tensor(2.0, dtype=torch.float64)
-    >>> lo, hi = score.interval(prediction, threshold, aux)
+    >>> lo, hi = score.interval(prediction, threshold, aux=aux)
     >>> hi.shape
     torch.Size([50, 2])
     """
 
     aux_keys = ("sigma",)
-    scale_aux_keys = ("sigma",)  # the residual is divided by sigma
+    _scale_aux_keys = ("sigma",)  # the residual is divided by sigma
 
     def __init__(self, eps: float = 1e-8) -> None:
         self.eps = positive_finite_float(eps, "eps")
@@ -296,6 +300,7 @@ class NormalizedErrorScore(_NonconformityScore):
         self,
         prediction: Float[Tensor, "*dims"],
         target: Float[Tensor, "*dims"],
+        *,
         aux: Mapping[str, Tensor] | None = None,
     ) -> Float[Tensor, "*dims"]:
         _require_aux(aux, self.aux_keys, type(self).__name__)
@@ -310,6 +315,7 @@ class NormalizedErrorScore(_NonconformityScore):
         self,
         prediction: Float[Tensor, "*dims"],
         threshold: Float[Tensor, "*dims"] | Float[Tensor, ""],
+        *,
         aux: Mapping[str, Tensor] | None = None,
     ) -> tuple[Float[Tensor, "*dims"], Float[Tensor, "*dims"]]:
         _require_aux(aux, self.aux_keys, type(self).__name__)
@@ -349,10 +355,10 @@ class QuantileRegressionScore(_NonconformityScore):
     >>> score = QuantileRegressionScore()
     >>> prediction, target = torch.randn(50, 2), torch.randn(50, 2)
     >>> aux = {"lo": prediction - 1.0, "hi": prediction + 1.0}
-    >>> score.score(prediction, target, aux).shape
+    >>> score.score(prediction, target, aux=aux).shape
     torch.Size([50, 2])
     >>> threshold = torch.tensor(0.25, dtype=torch.float64)
-    >>> lo, hi = score.interval(prediction, threshold, aux)
+    >>> lo, hi = score.interval(prediction, threshold, aux=aux)
     >>> lo.shape
     torch.Size([50, 2])
     """
@@ -363,6 +369,7 @@ class QuantileRegressionScore(_NonconformityScore):
         self,
         prediction: Float[Tensor, "*dims"],
         target: Float[Tensor, "*dims"],
+        *,
         aux: Mapping[str, Tensor] | None = None,
     ) -> Float[Tensor, "*dims"]:
         _require_aux(aux, self.aux_keys, type(self).__name__)
@@ -372,6 +379,7 @@ class QuantileRegressionScore(_NonconformityScore):
         self,
         prediction: Float[Tensor, "*dims"],
         threshold: Float[Tensor, "*dims"] | Float[Tensor, ""],
+        *,
         aux: Mapping[str, Tensor] | None = None,
     ) -> tuple[Float[Tensor, "*dims"], Float[Tensor, "*dims"]]:
         _require_aux(aux, self.aux_keys, type(self).__name__)
@@ -499,7 +507,7 @@ def _check_no_double_scale(
 ) -> None:
     """Raise ``ValueError`` if ``difficulty`` reads a key the score divides by."""
     if isinstance(difficulty, AuxDifficulty):
-        if difficulty.key in score.scale_aux_keys:
+        if difficulty.key in score._scale_aux_keys:
             raise ValueError(
                 f"Double-scaling: score {type(score).__name__} already divides the "
                 f"residual by aux '{difficulty.key}', and AuxDifficulty(key="

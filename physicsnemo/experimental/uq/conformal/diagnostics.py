@@ -264,7 +264,6 @@ class CoverageAccumulator:
             else:
                 self._element_hits[key] = coverage
 
-    @property
     def empirical_coverage_map(self) -> Float[Tensor, "*dims"] | TensorDict:
         r"""Fraction of samples in which each element was covered (cellwise only).
 
@@ -285,7 +284,7 @@ class CoverageAccumulator:
         """
         if self._tier != "cellwise":
             raise RuntimeError(
-                "empirical_coverage_map is available only for cellwise predictors."
+                "empirical_coverage_map() is available only for cellwise predictors."
             )
         if not self._element_hits:
             raise RuntimeError("No diagnostic samples collected.")
