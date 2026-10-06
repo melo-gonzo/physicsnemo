@@ -34198,3 +34198,69 @@ geometry (continuous in the sample, exactly refinement-invariant,
 converging to the exact distance as its scale shrinks) or dropping the
 built-in channel where a stored field is provided; both are architecture
 changes and wait for Peter.
+
+## 2026-10-05 — VOL-GEO verdict: the volume model's 7.9x / 6.6x / 6.6x sensitivity to the boundary sampling law is entirely the queries' built-in nearest-boundary-token geometry; with that one input computed from the native draw and every other token redrawn, the error returns to native within 0.4% on every field and both seeds; the slice states carry none of it; the exact stored signed-distance field does not substitute (15x) because the model is calibrated to the sampled distance {#sec-nb-char-vol-geo-verdict}
+
+**Setting and instrument.** @sec-nb-char-vol-geo-prereg. The two Volume
+reference checkpoints (`cl_r_vol_isla_seed42/43`) scored in float32 on the 48
+validation cars under five conditions by a scoring-time swap of
+`nearest_boundary_geometry` alone (`kernel/char/vol_geo/geo_swap.py`,
+`results/char/vol_geo_2026-10-05.py` / `.json`; artifacts under
+`campaigns_2026-10-02/char/vol_geo/`). The two protocol conditions
+reproduce the campaign's per-case scorings to 1e-6 on every case and both
+seeds. The native and area datasets drew byte-identical interior point sets
+on all 48 cases, so the interior queries, the targets and the stored field
+are shared and only the boundary tokens differ.
+
+**What we saw (seed means; pressure / velocity / eddy viscosity; both seeds
+in the artifact agree to 0.2%).** Native 0.0394 / 0.0635 / 0.0876. Area draw
+0.311 / 0.417 / 0.583, 7.9x / 6.6x / 6.6x. **Area-draw tokens with the
+built-in geometry computed from the native draw's boundary: 0.0393 /
+0.0634 / 0.0875**, 0.997 / 0.998 / 0.999 of native; the fraction of the
+area-draw log-excess removed is 1.001 / 1.001 / 1.000 on the seed means and
+1.0005 to 1.0019 per seed. Area-draw tokens with the built-in geometry
+replaced by the exact stored signed-distance field and its gradient (sign
+matched to the checkpoint's convention): 0.593 / 0.602 / 0.755, 15.1x /
+9.5x / 8.6x; native tokens with the stored field: 0.593 / 0.602 / 0.754,
+the same to three digits.
+
+**The input shift behind it.** Under the area draw the nearest boundary
+centroid changes for 91% of the queries (92% of the 179,000 near-wall
+queries, those within 0.01 L of the wall). The built-in distance of a
+near-wall query moves by 3e-4 L in RMS, small in length units, but in the
+channel the model reads, log of the distance, the RMS shift between the
+two draws is 0.85. Against the exact field the sampled distance is biased
+and broad: near-wall medians 2.5e-4 L for the native draw, 3.4e-4 L for the
+area draw, 1.6e-4 L for the stored field; RMS log ratio of the native
+built-in distance to the exact distance 1.5. The direction to the nearest
+token has mean cosine 0.72 with the exact gradient, and 0.51 between the
+two draws.
+
+**Reading.** The prediction depends on the boundary sample through one
+channel, the argmin over tokens that gives each query its distance and
+direction to the wall. Everything else the queries read, the slice states,
+anchors, prototypes and the routing mass, is a Horvitz-Thompson quadrature
+and is invariant to the draw to 0.1%, as the Surface task already showed.
+The 7x is a bias of that one input, not a resolution requirement on the
+boundary sample. And it is not fixable at scoring time by substituting the
+exact distance: the trained model is calibrated to the sampled distance,
+whose near-wall statistics (median 1.6x the exact value, 1.5 RMS in log) are
+a property of the 200,000-token draw it trained on, so the exact field is as
+far out of its training distribution as the area draw is. This is the same
+object as the lug tie discontinuity (@sec-nb-char-lug-final) and the on-wall
+sign flips of the query-independence program: a nearest-sample selection is
+a discontinuous, law-dependent function of the sample.
+
+**What follows.** The fix is a sample-independent query geometry, which is
+an architecture change and waits for Peter's decision, with the training
+rerun it implies. The two candidates, both quadratures: (a) a
+measure-weighted softmin over the boundary tokens for the distance and the
+softmin-weighted mean separation for the direction, continuous in the
+sample, exactly refinement-invariant and converging to the exact distance
+as its scale shrinks; (b) where a stored signed-distance field exists, use
+it as the built-in channel and skip the search. Either must be trained in;
+the 09-25 INTERNAL-GEOMETRY study measured the built-in channel alone at 14%
+to 27% worse on velocity than the stored field alone, so (b) is expected to
+gain accuracy as well as invariance where a field exists, and (a) is the
+general case. The Volume chapter's limit paragraph and the limits chapter
+are restated from this artifact.

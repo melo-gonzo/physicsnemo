@@ -1,0 +1,358 @@
+{
+ "protocol": "VOL-GEO (2026-10-05, #sec-nb-char-vol-geo-prereg / #sec-nb-char-vol-geo-verdict): the DrivAerML Volume reference checkpoints\n(cl_r_vol_isla_seed42/43, ISLA width 512 with 512 slices) scored in float32 on the 48 validation cars under: native draw; the\narea-proportional boundary draw with exact Horvitz-Thompson measures (the campaign's point-cloud protocol); the area-draw tokens with\nthe queries' built-in nearest-boundary geometry (signed distance and direction) computed from the NATIVE draw's boundary; the area-draw\ntokens with the built-in geometry replaced by the stored signed-distance field and its gradient; and the native tokens with the stored\nfield. Scoring-time swap of `nearest_boundary_geometry` only (kernel/char/vol_geo/geo_swap.py, copied under\ncampaigns_2026-10-02/char/vol_geo/). Writes results/char/vol_geo_2026-10-05.json: per seed and seed mean of pressure / velocity / eddy\nviscosity relative L2 per condition, ratios to native, the fraction of the area-draw log-excess removed by each swap, and the input\nshift statistics (fraction of queries whose nearest token changes, RMS log ratio of the built-in distance between draws and against\nthe stored field, near-wall medians). usage: python vol_geo_2026-10-05.py",
+ "conditions": {
+  "native": "native draw",
+  "area": "area draw (campaign point-cloud protocol)",
+  "area_natgeo": "area tokens, built-in geometry from the native draw",
+  "area_sdfgeo": "area tokens, built-in geometry from the stored signed-distance field",
+  "native_sdfgeo": "native tokens, built-in geometry from the stored signed-distance field"
+ },
+ "seeds": {
+  "42": {
+   "means": {
+    "native": {
+     "velocity_x_l2": 0.047793073734889426,
+     "velocity_y_l2": 0.09637011370311181,
+     "velocity_z_l2": 0.12431451554099719,
+     "velocity_l2": 0.0618886094695578,
+     "pressure_l2": 0.03872720796304444,
+     "nut_l2": 0.08682661449226241
+    },
+    "area": {
+     "velocity_x_l2": 0.3681829522053401,
+     "velocity_y_l2": 0.7196410906811556,
+     "velocity_z_l2": 0.5962318616608778,
+     "velocity_l2": 0.4361788934717576,
+     "pressure_l2": 0.35089052841067314,
+     "nut_l2": 0.6700983407596747
+    },
+    "area_natgeo": {
+     "velocity_x_l2": 0.04768790863454342,
+     "velocity_y_l2": 0.09629191582401593,
+     "velocity_z_l2": 0.12422767390186588,
+     "velocity_l2": 0.061796108881632485,
+     "pressure_l2": 0.0386565903124089,
+     "nut_l2": 0.08674642901557188
+    },
+    "area_sdfgeo": {
+     "velocity_x_l2": 0.4962606548021237,
+     "velocity_y_l2": 0.9193898439407349,
+     "velocity_z_l2": 0.977443673958381,
+     "velocity_l2": 0.5952246710658073,
+     "pressure_l2": 0.643322384605805,
+     "nut_l2": 0.7739241607487202
+    },
+    "native_sdfgeo": {
+     "velocity_x_l2": 0.4963559980193774,
+     "velocity_y_l2": 0.9189462500313917,
+     "velocity_z_l2": 0.9777852495511373,
+     "velocity_l2": 0.5952419700721899,
+     "pressure_l2": 0.6432662407557169,
+     "nut_l2": 0.7736890266338984
+    }
+   },
+   "ratio_to_native": {
+    "native": {
+     "pressure_l2": 1.0,
+     "velocity_l2": 1.0,
+     "nut_l2": 1.0
+    },
+    "area": {
+     "pressure_l2": 9.060568702642119,
+     "velocity_l2": 7.047805682018245,
+     "nut_l2": 7.717660589189399
+    },
+    "area_natgeo": {
+     "pressure_l2": 0.9981765364881732,
+     "velocity_l2": 0.9985053697486802,
+     "nut_l2": 0.9990764873517247
+    },
+    "area_sdfgeo": {
+     "pressure_l2": 16.611638650007958,
+     "velocity_l2": 9.617677245739229,
+     "nut_l2": 8.913443939676915
+    },
+    "native_sdfgeo": {
+     "pressure_l2": 16.610188923754993,
+     "velocity_l2": 9.617956764159997,
+     "nut_l2": 8.910735851653481
+    }
+   },
+   "fraction_of_log_excess_removed": {
+    "area_natq": {
+     "pressure_l2": 0.0,
+     "velocity_l2": 0.0,
+     "nut_l2": 0.0
+    },
+    "area_natgeo": {
+     "pressure_l2": 1.0008281236160155,
+     "velocity_l2": 1.0007659834210656,
+     "nut_l2": 1.0004521332254488
+    },
+    "area_sdfgeo": {
+     "pressure_l2": -0.2750410243938736,
+     "velocity_l2": -0.15920718466737793,
+     "nut_l2": -0.07049112349221996
+    }
+   },
+   "sanity": {
+    "native": {
+     "n_found": 48,
+     "max_abs_diff": {
+      "pressure_l2": 3.762543201446533e-07,
+      "velocity_l2": 5.103647708892822e-07,
+      "nut_l2": 1.0356307029724121e-06
+     }
+    },
+    "area": {
+     "n_found": 48,
+     "max_abs_diff": {
+      "pressure_l2": 3.5762786865234375e-07,
+      "velocity_l2": 4.172325134277344e-07,
+      "nut_l2": 1.7881393432617188e-07
+     }
+    }
+   }
+  },
+  "43": {
+   "means": {
+    "native": {
+     "velocity_x_l2": 0.050580452739571534,
+     "velocity_y_l2": 0.10144858264053862,
+     "velocity_z_l2": 0.12864936344946423,
+     "velocity_l2": 0.065064060036093,
+     "pressure_l2": 0.040029364017148815,
+     "nut_l2": 0.08840751741081476
+    },
+    "area": {
+     "velocity_x_l2": 0.32718269030253094,
+     "velocity_y_l2": 0.6920268156876167,
+     "velocity_z_l2": 0.5371973452468713,
+     "velocity_l2": 0.39778460810581845,
+     "pressure_l2": 0.27184373543908197,
+     "nut_l2": 0.49517071309189004
+    },
+    "area_natgeo": {
+     "velocity_x_l2": 0.05044570495374501,
+     "velocity_y_l2": 0.10127112874761224,
+     "velocity_z_l2": 0.12829555695255598,
+     "velocity_l2": 0.0649055161823829,
+     "pressure_l2": 0.03988160802206645,
+     "nut_l2": 0.08833639308189352
+    },
+    "area_sdfgeo": {
+     "velocity_x_l2": 0.4811754810313384,
+     "velocity_y_l2": 1.0490263166526954,
+     "velocity_z_l2": 0.985203430056572,
+     "velocity_l2": 0.608777162929376,
+     "pressure_l2": 0.5425881706178188,
+     "nut_l2": 0.735073409974575
+    },
+    "native_sdfgeo": {
+     "velocity_x_l2": 0.48112736518184346,
+     "velocity_y_l2": 1.0484401546418667,
+     "velocity_z_l2": 0.9852909433345,
+     "velocity_l2": 0.608646256228288,
+     "pressure_l2": 0.5425885375589132,
+     "nut_l2": 0.7351281605660915
+    }
+   },
+   "ratio_to_native": {
+    "native": {
+     "pressure_l2": 1.0,
+     "velocity_l2": 1.0,
+     "nut_l2": 1.0
+    },
+    "area": {
+     "pressure_l2": 6.791108030660255,
+     "velocity_l2": 6.113737874414159,
+     "nut_l2": 5.601002353577192
+    },
+    "area_natgeo": {
+     "pressure_l2": 0.9963088098272292,
+     "velocity_l2": 0.9975632652862094,
+     "nut_l2": 0.9991954945574284
+    },
+    "area_sdfgeo": {
+     "pressure_l2": 13.55475371493214,
+     "velocity_l2": 9.35658123073889,
+     "nut_l2": 8.314603005520599
+    },
+    "native_sdfgeo": {
+     "pressure_l2": 13.55476288173015,
+     "velocity_l2": 9.354569264362746,
+     "nut_l2": 8.315222303439146
+    }
+   },
+   "fraction_of_log_excess_removed": {
+    "area_natq": {
+     "pressure_l2": 0.0,
+     "velocity_l2": 0.0,
+     "nut_l2": 0.0
+    },
+    "area_natgeo": {
+     "pressure_l2": 1.0019304615678606,
+     "velocity_l2": 1.0013475043951003,
+     "nut_l2": 1.0004671240015681
+    },
+    "area_sdfgeo": {
+     "pressure_l2": -0.3607841446386067,
+     "velocity_l2": -0.23503596110589856,
+     "nut_l2": -0.22929789529466651
+    }
+   },
+   "sanity": {
+    "native": {
+     "n_found": 48,
+     "max_abs_diff": {
+      "pressure_l2": 8.940696716308594e-08,
+      "velocity_l2": 1.7136335372924805e-07,
+      "nut_l2": 1.0132789611816406e-06
+     }
+    },
+    "area": {
+     "n_found": 48,
+     "max_abs_diff": {
+      "pressure_l2": 2.384185791015625e-07,
+      "velocity_l2": 2.086162567138672e-07,
+      "nut_l2": 7.450580596923828e-07
+     }
+    }
+   }
+  }
+ },
+ "mean": {
+  "native": {
+   "pressure_l2": 0.03937828599009663,
+   "velocity_l2": 0.0634763347528254,
+   "nut_l2": 0.08761706595153859
+  },
+  "area": {
+   "pressure_l2": 0.3113671319248775,
+   "velocity_l2": 0.416981750788788,
+   "nut_l2": 0.5826345269257823
+  },
+  "area_natgeo": {
+   "pressure_l2": 0.03926909916723768,
+   "velocity_l2": 0.0633508125320077,
+   "nut_l2": 0.0875414110487327
+  },
+  "area_sdfgeo": {
+   "pressure_l2": 0.5929552776118119,
+   "velocity_l2": 0.6020009169975917,
+   "nut_l2": 0.7544987853616476
+  },
+  "native_sdfgeo": {
+   "pressure_l2": 0.592927389157315,
+   "velocity_l2": 0.601944113150239,
+   "nut_l2": 0.7544085935999949
+  }
+ },
+ "shift": {
+  "42": {
+   "L_ref": 5.0,
+   "n_queries": 200000.0,
+   "n_tokens_native": 200000.0,
+   "n_tokens_area": 198716.0625,
+   "frac_nearest_token_changed": 0.9117391432325045,
+   "frac_nearest_token_changed_nearwall": 0.920079500724872,
+   "n_nearwall_sdf": 179934.375,
+   "n_nearwall_dnat": 179908.27083333334,
+   "rms_dArea_minus_dNat_over_L_nearwall_sdf": 0.0002950526814959859,
+   "rms_dArea_minus_dNat_over_L_nearwall_dnat": 0.000294832182142138,
+   "rms_dNat_minus_sdf_over_L_nearwall_sdf": 0.0038228203153915607,
+   "rms_dArea_minus_sdf_over_L_nearwall_sdf": 0.003809988101677894,
+   "rms_dArea_minus_dNat_over_L_all": 0.017675294283756946,
+   "rms_log_absdArea_over_absdNat_nearwall_sdf": 0.8514813463667945,
+   "rms_log_absdNat_over_abssdf_nearwall_sdf": 1.5283731988322027,
+   "rms_log_absdArea_over_abssdf_nearwall_sdf": 1.852820403639744,
+   "median_abs_dNat_over_L_nearwall_sdf": 0.0002524160308894352,
+   "median_abs_dArea_over_L_nearwall_sdf": 0.0003427965081452082,
+   "median_abs_sdf_over_L_nearwall_sdf": 0.00015798647048844336,
+   "p10_abs_sdf_over_L_nearwall_sdf": 2.0479352504783794e-05,
+   "p10_abs_dNat_over_L_nearwall_sdf": 5.36343390346398e-05,
+   "mean_abs_dNat_over_L_nearwall_sdf": 0.0009298346049035899,
+   "mean_abs_dArea_over_L_nearwall_sdf": 0.0009672504723615324,
+   "mean_abs_sdf_over_L_nearwall_sdf": 0.0008417633180215489,
+   "sign_agree_dNat_sdf": 0.054005102875332035,
+   "sign_agree_dNat_minus_sdf": 0.9457691398759683,
+   "frac_sdf_positive": 0.9839324740072092,
+   "frac_dNat_positive": 0.051674061454832554,
+   "cos_uNat_gradSdf_nearwall_sdf": 0.7181932106614113,
+   "cos_uNat_uSdf_nearwall_sdf": 0.7176605773468813,
+   "cos_uArea_uNat_nearwall_sdf": 0.505588307355841
+  },
+  "43": {
+   "L_ref": 5.0,
+   "n_queries": 200000.0,
+   "n_tokens_native": 200000.0,
+   "n_tokens_area": 198716.0625,
+   "frac_nearest_token_changed": 0.9117391432325045,
+   "frac_nearest_token_changed_nearwall": 0.920079500724872,
+   "n_nearwall_sdf": 179934.375,
+   "n_nearwall_dnat": 179908.27083333334,
+   "rms_dArea_minus_dNat_over_L_nearwall_sdf": 0.0002950526814959859,
+   "rms_dArea_minus_dNat_over_L_nearwall_dnat": 0.000294832182142138,
+   "rms_dNat_minus_sdf_over_L_nearwall_sdf": 0.0038228203153915607,
+   "rms_dArea_minus_sdf_over_L_nearwall_sdf": 0.003809988101677894,
+   "rms_dArea_minus_dNat_over_L_all": 0.017675294283756946,
+   "rms_log_absdArea_over_absdNat_nearwall_sdf": 0.8514813463667945,
+   "rms_log_absdNat_over_abssdf_nearwall_sdf": 1.5283731988322027,
+   "rms_log_absdArea_over_abssdf_nearwall_sdf": 1.852820403639744,
+   "median_abs_dNat_over_L_nearwall_sdf": 0.0002524160308894352,
+   "median_abs_dArea_over_L_nearwall_sdf": 0.0003427965081452082,
+   "median_abs_sdf_over_L_nearwall_sdf": 0.00015798647048844336,
+   "p10_abs_sdf_over_L_nearwall_sdf": 2.0479352504783794e-05,
+   "p10_abs_dNat_over_L_nearwall_sdf": 5.36343390346398e-05,
+   "mean_abs_dNat_over_L_nearwall_sdf": 0.0009298346049035899,
+   "mean_abs_dArea_over_L_nearwall_sdf": 0.0009672504723615324,
+   "mean_abs_sdf_over_L_nearwall_sdf": 0.0008417633180215489,
+   "sign_agree_dNat_sdf": 0.054005102875332035,
+   "sign_agree_dNat_minus_sdf": 0.9457691398759683,
+   "frac_sdf_positive": 0.9839324740072092,
+   "frac_dNat_positive": 0.051674061454832554,
+   "cos_uNat_gradSdf_nearwall_sdf": 0.7181932106614113,
+   "cos_uNat_uSdf_nearwall_sdf": 0.7176605773468813,
+   "cos_uArea_uNat_nearwall_sdf": 0.505588307355841
+  }
+ },
+ "mean_ratio_to_native": {
+  "native": {
+   "pressure_l2": 1.0,
+   "velocity_l2": 1.0,
+   "nut_l2": 1.0
+  },
+  "area": {
+   "pressure_l2": 7.907076808858167,
+   "velocity_l2": 6.569089920085969,
+   "nut_l2": 6.649783584947254
+  },
+  "area_natgeo": {
+   "pressure_l2": 0.9972272327219521,
+   "velocity_l2": 0.9980225351494146,
+   "nut_l2": 0.9991365277759046
+  },
+  "area_sdfgeo": {
+   "pressure_l2": 15.057925013824525,
+   "velocity_l2": 9.483863857952134,
+   "nut_l2": 8.611322202674128
+  },
+  "native_sdfgeo": {
+   "pressure_l2": 15.057216794718597,
+   "velocity_l2": 9.48296897566925,
+   "nut_l2": 8.610292816895534
+  }
+ },
+ "mean_fraction_of_log_excess_removed": {
+  "area_natgeo": {
+   "pressure_l2": 1.0013428158938442,
+   "velocity_l2": 1.0010515557726882,
+   "nut_l2": 1.0004559550219936
+  },
+  "area_sdfgeo": {
+   "pressure_l2": -0.31151915532970964,
+   "velocity_l2": -0.19508145392314558,
+   "nut_l2": -0.1364381414037894
+  }
+ }
+}
