@@ -139,7 +139,7 @@ def slice_aux(
 
 
 def validate_alpha(alpha: object) -> float:
-    """Return ``alpha`` as a float in ``(0, 1)``; reject values that are not exact floats."""
+    """Return ``alpha`` as a float in ``(0, 1)``; reject inexact non-floats."""
     if isinstance(alpha, bool) or not isinstance(alpha, Real):
         raise TypeError(f"alpha must be a real number, got {alpha!r}.")
     as_float = float(alpha)
@@ -313,7 +313,7 @@ def clamp_min_floor(t: Tensor, eps: float) -> Tensor:
 
 
 def broadcast_difficulty(t: Tensor, ref: Tensor, key: str) -> Tensor:
-    """Reshape per-point difficulty to ``(n_points, 1, ...)`` to broadcast on ``ref``."""
+    """Reshape per-point scales to ``(n_points, 1, ...)`` to broadcast on ``ref``."""
     if t.ndim == 0:
         return t
     if ref.shape[0] != t.shape[0]:

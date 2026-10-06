@@ -17,8 +17,8 @@
 r"""Nonconformity scores for conformal prediction.
 
 A score measures, per element, how far a target falls from a prediction,
-and turns a calibrated threshold back into an interval ``(lo, hi)``. Pass a
-score to a calibrator; you rarely need to call its methods yourself.
+and turns a calibrated threshold into an interval ``(lo, hi)``. Pass a score
+to a calibrator; you rarely need to call its methods yourself.
 
 Choose the score by what your model outputs:
 
@@ -30,27 +30,11 @@ Choose the score by what your model outputs:
 - :class:`QuantileRegressionScore`: lower and upper quantile heads, passed
   as ``aux["lo"]`` and ``aux["hi"]``. Intervals follow the heads.
 
-Scores are not error metrics: a metric such as MAE or RMSE reduces to one
-number, while a score returns one value per element and can be inverted
-into an interval. Do not use them in place of ``physicsnemo`` metrics.
-
 For tensor inputs, ``aux`` maps each key to a tensor; for ``TensorDict``
 inputs, it maps each field name to such a mapping.
 
-:class:`AuxDifficulty` is an optional per-point scale :math:`s(x)` for the
-functional-band and conformal risk control (CRC) calibrators. The fitted
-threshold is multiplied by :math:`s(x)`, so the band widens where
-:math:`s` is large. Because :math:`s` is evaluated at each query point,
-calibration and deployment samples may have different point sets. Without
-a difficulty field (:math:`s = 1`) coverage still holds, but bands can be
-wider than needed.
-
-.. warning::
-    Whatever produces the difficulty values must not see the calibration
-    samples: fit it on training data or on a split separate from
-    calibration. If :math:`s` is fit on the calibration set, the coverage
-    guarantee no longer holds, because calibration scores are no longer
-    exchangeable with test scores.
+:class:`AuxDifficulty` is an optional per-point scale for the functional
+band and risk-control calibrators.
 """
 
 import copy
@@ -129,9 +113,7 @@ class _NonconformityScore:
         *,
         aux: Mapping[str, Tensor] | None = None,
     ) -> Float[Tensor, "*dims"]:
-        r"""Per-element nonconformity of ``target`` given ``prediction``.
-
-        Larger values mean the target fits the prediction worse.
+        r"""Score how far target falls from prediction, per element; larger is worse.
 
         Parameters
         ----------
@@ -144,7 +126,7 @@ class _NonconformityScore:
             floating-point tensor of the same shape as ``prediction``:
             ``{"sigma": ...}`` for ``NormalizedErrorScore`` and
             ``{"lo": ..., "hi": ...}`` for ``QuantileRegressionScore``.
-            ``AbsoluteErrorScore`` needs none. Default is ``None``.
+            ``AbsoluteErrorScore`` needs none.
 
         Returns
         -------
@@ -174,12 +156,11 @@ class _NonconformityScore:
         threshold : torch.Tensor
             Fitted threshold, broadcastable against ``prediction``: one value
             per element of shape :math:`(*\text{dims})` for the cellwise
-            calibrator, or a scalar (already multiplied by the difficulty
-            field, when one is set) for the functional-band and risk-control
-            calibrators.
+            calibrator, or a scalar (already multiplied by the
+            ``AuxDifficulty`` scale, if any) for the functional band and
+            risk-control calibrators.
         aux : Mapping[str, torch.Tensor], optional
-            The same ``aux`` entries that :meth:`score` needs. Default is
-            ``None``.
+            The same ``aux`` entries that :meth:`score` needs.
 
         Returns
         -------
@@ -200,7 +181,7 @@ class _NonconformityScore:
 class AbsoluteErrorScore(_NonconformityScore):
     r"""Absolute error :math:`|y - \hat y|`, for models that output a point prediction.
 
-    The default choice: it needs no ``aux`` inputs and no change to the
+    The simplest choice: it needs no ``aux`` inputs and no change to the
     model. A threshold :math:`t` gives the interval
     :math:`[\hat y - t, \hat y + t]`. This is the split conformal score of
     `Distribution-Free Predictive Inference for Regression
@@ -254,25 +235,22 @@ class NormalizedErrorScore(_NonconformityScore):
 
     Parameters
     ----------
-    eps : float, optional
+    eps : float, optional, default=1e-8
         Smallest :math:`\sigma` used, in the units of ``sigma``, so zero or
         near-zero spread does not blow up the score. Pick it for your output
-        scale (for example a small fraction of a typical ``sigma``). Default
-        is ``1e-8``.
+        scale, for example a small fraction of a typical ``sigma``.
 
     Notes
     -----
-    Pass the raw predictive standard deviation, for example
-    ``variance.sqrt()`` from an ensemble or a GP head; do not clamp it
-    yourself. ``sigma`` must be finite; values below the floor, including
-    ensemble members that agree exactly, are raised to the floor. The floor
-    is the larger of ``eps`` and the smallest positive normal value of the
-    ``sigma`` dtype, so it still takes effect in low-precision dtypes; an
-    ``eps`` too large for that dtype raises ``ValueError``. Use the same
-    ``sigma`` construction at calibration and prediction. Calling :meth:`score` or :meth:`interval` without
-    ``aux["sigma"]`` raises ``ValueError``. Do not combine this score with
-    ``AuxDifficulty("sigma")``: that scales by sigma twice, and calibrators
-    raise ``ValueError``.
+    Rules for ``aux["sigma"]``:
+
+    - Pass the raw predictive standard deviation, for example
+      ``variance.sqrt()`` from an ensemble; do not clamp it yourself.
+    - Compute it the same way at calibration and at prediction.
+    - Values below ``eps`` are raised to ``eps`` (or to the dtype's smallest
+      positive normal value, if larger). An ``eps`` too large for the dtype
+      raises ``ValueError``.
+    - It must be finite. A missing ``aux["sigma"]`` raises ``ValueError``.
 
     Examples
     --------
@@ -401,15 +379,17 @@ _SCORE_REGISTRY: dict[str, type[_NonconformityScore]] = {
 
 
 class AuxDifficulty:
-    r"""Per-point difficulty :math:`s(x)` read from an ``aux`` entry.
+    r"""Per-point scale read from ``aux`` that widens the band where it is large.
 
     Use it with
     :class:`~physicsnemo.experimental.uq.conformal.FunctionalBandCalibrator` or
     :class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator` when
     the model outputs a per-point uncertainty estimate (a predicted sigma,
-    MC-dropout or ensemble spread). The fitted threshold is multiplied by
-    :math:`s(x)`, so the band widens where the model is less confident. Pass
-    the same ``aux`` entry at calibration and at prediction.
+    MC-dropout or ensemble spread). The fitted threshold is multiplied by the
+    scale :math:`s(x)`, which is read at each point, so point sets may differ
+    between samples. Pass the same ``aux`` entry at calibration and at
+    prediction. Without an ``AuxDifficulty`` (:math:`s = 1`), coverage still
+    holds, but bands can be wider than needed.
 
     For an entry of shape :math:`(n_{\text{points}}, C)` or with more
     trailing dimensions, :math:`s` is the maximum over the trailing
@@ -417,11 +397,11 @@ class AuxDifficulty:
 
     Parameters
     ----------
-    key : str, optional
-        Name of the ``aux`` entry to read. Default is ``"sigma"``.
-    eps : float, optional
-        Smallest allowed :math:`s`; zero or negative values are replaced by
-        it. Default is ``1e-8``.
+    key : str, optional, default="sigma"
+        Name of the ``aux`` entry to read.
+    eps : float, optional, default=1e-8
+        Smallest allowed :math:`s`; smaller values, including zero and
+        negatives, are raised to it.
 
     Notes
     -----
@@ -429,13 +409,15 @@ class AuxDifficulty:
     :class:`~physicsnemo.experimental.uq.conformal.NormalizedErrorScore`: the
     score already divides by sigma, so intervals would scale by sigma twice.
     Calibrators and predictors raise ``ValueError`` on that pair; use
-    ``AbsoluteErrorScore`` with this field, or ``NormalizedErrorScore``
-    without one.
+    ``AbsoluteErrorScore`` with ``AuxDifficulty``, or ``NormalizedErrorScore``
+    without it.
+
+    Whatever produces the scale must not see the calibration samples: fit it
+    on training data or a separate split, or the coverage guarantee no
+    longer holds.
 
     The entry must be present on every calibration and prediction call and
-    must be a finite real floating-point tensor; NaN or infinity raises an
-    error rather than being hidden by the maximum or the floor.
-    ``difficulty=None`` on a calibrator or predictor means :math:`s = 1`.
+    must be a finite floating-point tensor; NaN or infinity raises an error.
 
     Examples
     --------

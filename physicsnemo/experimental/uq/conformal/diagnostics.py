@@ -62,15 +62,17 @@ class CoverageAccumulator:
     Use it to check that a
     :class:`~physicsnemo.experimental.uq.conformal.ConformalPredictor` reaches
     its target on data not used for calibration, and to compare interval
-    widths across scores or tiers. Create one with
+    widths across scores or calibrators. Create one with
     ``predictor.coverage_accumulator()``, which sets the parameters below
-    from the predictor, so the report measures the event that the
-    predictor's tier guarantees:
+    from the predictor, so the report measures what the predictor's
+    calibrator guarantees:
 
-    - ``"cellwise"``: how often each element lies inside its interval.
-    - ``"functional"``: how often a whole sample lies inside its band.
-    - ``"risk_control"``: the mean fraction of points per sample that fall
-      outside the interval.
+    - ``"cellwise"`` (``CellwiseCalibrator``): how often each element lies
+      inside its interval.
+    - ``"functional"`` (``FunctionalBandCalibrator``): how often a sample
+      lies inside its band at every point.
+    - ``"risk_control"`` (``RiskControlCalibrator``): the mean fraction of
+      points per sample that fall outside the band.
 
     Call :meth:`update` once per held-out sample, then :meth:`finalize` for
     the report.
@@ -78,7 +80,8 @@ class CoverageAccumulator:
     Parameters
     ----------
     tier : {"cellwise", "functional", "risk_control"}
-        Tier of the predictor; selects the reported statistic.
+        The predictor's ``tier``, naming the calibrator that produced it;
+        selects the reported statistic.
     alpha : float
         The predictor's target miscoverage (or risk) level. Reported in the
         metadata and used to count cellwise elements at or above target
@@ -87,7 +90,7 @@ class CoverageAccumulator:
         Number of calibration samples of the predictor; reported only.
     keys : Sequence[str], optional
         Calibrated field names for ``TensorDict`` inputs, or ``None`` for
-        plain tensors. Default is ``None``.
+        plain tensors.
 
     Notes
     -----
@@ -178,13 +181,10 @@ class CoverageAccumulator:
         -----
         A rejected sample is not counted, even in fields that passed.
 
-        Prediction bounds are rounded outward, so they can overflow to
-        infinity in the prediction's dtype and be rejected here. Cast the
-        prediction to a wider dtype (for example float32) before calling
-        ``predict_interval`` and recompute the bounds; casting infinite
-        bounds afterward does not fix them. If widths overflow float64,
-        rescale bounds and targets by the same factor and start a new
-        accumulator.
+        Infinite bounds are rejected: recompute them from an upcast prediction
+        (casting the bounds afterward does not fix them), and if widths
+        overflow float64, rescale ``lo``, ``hi``, and ``target`` by the same
+        factor and start a new accumulator.
         """
         # field_items with self._keys returns the same keys as self._counters.
         inputs = (("lo", lo), ("hi", hi), ("target", target))
@@ -310,7 +310,7 @@ class CoverageAccumulator:
               ``minimum_element_coverage``, and ``fraction_at_target`` (the
               fraction of elements whose coverage is at least the target).
             - functional: ``whole_field_coverage``, the fraction of samples
-              inside the band everywhere.
+              inside the band at every point.
             - risk control: ``empirical_mean_risk``, the mean fraction of
               points per sample with any value outside the interval.
 

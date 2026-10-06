@@ -121,26 +121,27 @@ class ConformalPredictor:
     data and :meth:`save` to reuse the predictor later. Build one directly
     only to restore thresholds you computed elsewhere.
 
-    The predictor inherits the guarantee of the calibrator that produced it,
-    which assumes new samples are exchangeable with the calibration samples.
-    A cellwise predictor works only on the calibration mesh (same
-    coordinates, dtype, and point order). Functional and risk-control
-    predictors accept any mesh and may widen intervals per point through a
-    difficulty field :math:`s(x)`.
+    The predictor has the guarantee of the calibrator that produced it. A
+    cellwise predictor works only on the calibration mesh (same coordinates,
+    dtype, and point order). Functional and risk-control predictors accept
+    any mesh and may widen intervals per point with an ``AuxDifficulty``.
 
     Parameters
     ----------
     tier : {"cellwise", "functional", "risk_control"}
-        Guarantee tier of the calibrator that produced ``thresholds``.
+        Calibrator that produced ``thresholds``: ``"cellwise"`` for
+        :class:`~physicsnemo.experimental.uq.conformal.CellwiseCalibrator`,
+        ``"functional"`` for
+        :class:`~physicsnemo.experimental.uq.conformal.FunctionalBandCalibrator`,
+        ``"risk_control"`` for
+        :class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator`.
     score : AbsoluteErrorScore | NormalizedErrorScore | QuantileRegressionScore
         Score used during calibration. The predictor keeps its own copy, so
         later changes to ``score`` have no effect.
     alpha : float
         Target miscoverage (or risk) level in :math:`(0, 1)`.
     n_cal : int
-        Number of calibration samples. Must satisfy
-        :math:`\alpha \ge 1 / (n_{cal} + 1)` so the conformal rank
-        :math:`k = \lceil (n_{cal} + 1)(1 - \alpha) \rceil` exists.
+        Number of calibration samples.
     thresholds : torch.Tensor | TensorDict
         A tensor for one field, or a ``TensorDict`` keyed by field name.
         Cellwise: one tensor of shape :math:`(*\text{dims})` per field.
@@ -149,24 +150,33 @@ class ConformalPredictor:
         :class:`~physicsnemo.experimental.uq.conformal.QuantileRegressionScore`.
     difficulty : AuxDifficulty, optional
         Per-point scale applied to the threshold at prediction time
-        (functional and risk-control tiers only). Default is ``None``.
+        (functional and risk-control tiers only).
     points : torch.Tensor, optional
         Calibration mesh coordinates of shape
         :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`, required for
         the cellwise tier and rejected otherwise. The predictor keeps only a
         digest of them, and :meth:`predict_interval` accepts only the same
-        coordinates, dtype, and point order. Default is ``None``.
+        coordinates, dtype, and point order.
 
     Raises
     ------
     ValueError
-        If ``tier`` is unknown; if ``alpha`` is infeasible for ``n_cal``
-        (collect more calibration samples or raise ``alpha``); if a cellwise
-        predictor lacks ``points`` or has a difficulty field; if a
-        non-cellwise predictor has ``points``; if ``points`` is empty, not
-        2-D, or non-finite; if a threshold has the wrong shape for the tier,
-        is empty, non-finite, or negative for a nonnegative score; or if
-        ``difficulty`` reads the same aux key the score already divides by.
+        If any of these hold:
+
+        - ``tier`` is not one of the three names above.
+        - :math:`n_{cal} < (1 - \alpha) / \alpha`: collect more samples or
+          raise ``alpha``.
+        - ``tier="cellwise"`` without ``points`` or with ``difficulty``.
+        - Another tier with ``points``.
+        - ``points`` is empty, not 2-D, or not finite.
+        - A threshold is empty, not finite, or has the wrong shape for
+          ``tier``.
+        - A threshold is negative and ``score`` is not
+          ``QuantileRegressionScore``.
+        - ``difficulty`` reads the aux key that ``score`` divides by.
+    TypeError
+        If ``score`` or ``difficulty`` is not a built-in class, or a
+        threshold is not floating point.
 
     Examples
     --------
@@ -269,7 +279,12 @@ class ConformalPredictor:
 
     @property
     def tier(self) -> Tier:
-        r"""Guarantee tier: ``"cellwise"``, ``"functional"``, or ``"risk_control"``."""
+        r"""Calibrator that produced this predictor.
+
+        ``"cellwise"`` for ``CellwiseCalibrator``, ``"functional"`` for
+        ``FunctionalBandCalibrator``, or ``"risk_control"`` for
+        ``RiskControlCalibrator``.
+        """
         return self._tier
 
     @property
@@ -289,7 +304,7 @@ class ConformalPredictor:
 
     @property
     def difficulty(self) -> AuxDifficulty | None:
-        r"""A copy of the difficulty field, or ``None`` if intervals are not scaled."""
+        r"""A copy of the ``AuxDifficulty``, or ``None`` if intervals are not scaled."""
         return copy.deepcopy(self._difficulty)
 
     @property
@@ -385,21 +400,20 @@ class ConformalPredictor:
             must equal the calibration shape. When ``points`` is given, the
             leading dimension must be :math:`n_{\text{points}}`.
         aux : Mapping[str, torch.Tensor] | Mapping[str, Mapping], optional
-            Extra tensors the score or difficulty field reads, each with the
+            Extra tensors the score or ``AuxDifficulty`` reads, each with the
             shape of the prediction: ``"sigma"`` for
             :class:`~physicsnemo.experimental.uq.conformal.NormalizedErrorScore`,
             ``"lo"`` and ``"hi"`` for
             :class:`~physicsnemo.experimental.uq.conformal.QuantileRegressionScore`,
             and the ``key`` of an ``AuxDifficulty``. For ``TensorDict``
             inputs, nest by field name, for example
-            ``aux={"pressure": {"sigma": s}}``. Default is ``None``.
+            ``aux={"pressure": {"sigma": s}}``.
         points : torch.Tensor, optional
             Mesh coordinates of shape
             :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`. Required
             for the cellwise tier, where they must match the calibration
             coordinates, dtype, and point order. Other tiers use them only to
-            check that each field has one leading entry per point. Default is
-            ``None``.
+            check that each field has one leading entry per point.
 
         Returns
         -------
@@ -505,7 +519,7 @@ class ConformalPredictor:
         The file holds only tensors and plain metadata, so it loads with
         ``torch.load(..., weights_only=True)``. The saved file is checked
         before it replaces ``path``, so a failed save leaves any existing
-        file untouched.
+        file unchanged.
 
         Parameters
         ----------
@@ -513,8 +527,8 @@ class ConformalPredictor:
             Destination file. Missing parent directories are created.
         provenance : Mapping, optional
             Strict-JSON metadata to save with the predictor, for example
-            ``{"dataset": "holdout-v1"}``. Default is ``None``, which saves
-            the current :attr:`provenance`.
+            ``{"dataset": "holdout-v1"}``. ``None`` saves the current
+            :attr:`provenance`.
 
         Returns
         -------
@@ -535,8 +549,8 @@ class ConformalPredictor:
         ----------
         path : Path | str
             Artifact written by :meth:`save`.
-        map_location : str | torch.device, optional
-            Device for the loaded thresholds. Default is ``"cpu"``.
+        map_location : str | torch.device, optional, default="cpu"
+            Device for the loaded thresholds.
 
         Returns
         -------
@@ -547,7 +561,7 @@ class ConformalPredictor:
         ------
         ValueError
             If the file is not a conformal predictor artifact, was written by
-            an unsupported format version (re-run calibration), or holds
+            an incompatible version (recalibrate and save again), or holds
             invalid predictor state.
         """
         from .artifacts import _load_predictor  # avoids a circular import
