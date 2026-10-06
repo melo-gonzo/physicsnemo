@@ -397,6 +397,61 @@ def test_tree_read_every_parameter_receives_a_gradient():
 
 
 @cuda_only
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
+def test_fused_segment_softmax_read_matches_eager(dtype):
+    """The Triton read (values and every gradient) against the eager float64 form on a
+    random pair list with ragged segments, including empty sources."""
+    from physicsnemo.experimental.models.isla.pair_kernels import PairPlan
+    from physicsnemo.experimental.models.isla.segment_softmax import (
+        _eager_segment_softmax_read,
+        segment_softmax_read,
+    )
+
+    dev = torch.device("cuda")
+    g = torch.Generator().manual_seed(3)
+    n_q, n_b, h, kc, c, gb = 37, 50, 8, 4, 8, 16
+    counts = torch.randint(0, 200, (n_q,), generator=g)
+    qi = torch.repeat_interleave(torch.arange(n_q), counts)
+    bj = torch.randint(0, n_b - 5, (int(counts.sum()),), generator=g)  # sources 45..49 get no pairs
+    plan = PairPlan.build(qi.to(dev), bj.to(dev), n_q, n_b)
+    basis = torch.randn(int(counts.sum()), gb, generator=g, dtype=D)
+    w = torch.randn(gb, h, generator=g, dtype=D) * 0.5
+    logm = -torch.rand(int(counts.sum()), generator=g, dtype=D) * 8
+    q = torch.randn(n_q, h, kc, generator=g, dtype=D)
+    k = torch.randn(n_b, h, kc, generator=g, dtype=D)
+    v = torch.randn(n_b, h, c, generator=g, dtype=D)
+    plan_cpu = PairPlan.build(qi, bj, n_q, n_b)
+    ref_in = [t.clone().requires_grad_(True) for t in (basis, w, q, k, v)]
+    ref = _eager_segment_softmax_read(ref_in[0], ref_in[1], logm, ref_in[2], ref_in[3], ref_in[4], plan_cpu, 0.5)
+    seed = torch.randn_like(ref)
+    (ref * seed).sum().backward()
+    dev_in = [t.to(dev, dtype).requires_grad_(True) for t in (basis, w, q, k, v)]
+    out = segment_softmax_read(dev_in[0], dev_in[1], logm.to(dev, torch.float32), dev_in[2], dev_in[3], dev_in[4], plan, 0.5)
+    (out * seed.to(dev, out.dtype)).sum().backward()
+    tol = 1e-4 if dtype == torch.float32 else 5e-2
+    rows = counts > 0
+    assert torch.allclose(out.cpu().double()[rows], ref[rows], atol=tol, rtol=tol)
+    for a, b, name in zip(dev_in, ref_in, ("basis", "w", "q", "k", "v")):
+        ga, gb_ = a.grad.cpu().double(), b.grad
+        assert torch.allclose(ga, gb_, atol=tol * gb_.abs().max(), rtol=tol), name
+
+
+@cuda_only
+def test_tree_read_cuda_float32_matches_cpu_float64():
+    """The whole tree read on CUDA in float32 (the fused kernel) against the CPU float64
+    eager form, at a finite theta."""
+    _, tree = _pair(3, 0.5)
+    mesh, drv, q, sdf, sn = _sphere_case(n=1500, nq=120)
+    cpu = outputs(_run(tree, mesh, drv, q, sdf, sn))
+    dev = torch.device("cuda")
+    tree_c = tree.to(dev).float()
+    gpu = outputs(
+        _run(tree_c, mesh.to(dev).float(), drv.to(dev).float(), q.to(dev).float(), sdf.to(dev).float(), sn.to(dev).float())
+    )
+    assert _rel({k: v.cpu().double() for k, v in gpu.items()}, cpu) < 1e-3
+
+
+@cuda_only
 @pytest.mark.parametrize("theta", [0.0, 0.5])
 def test_tree_read_cuda_matches_cpu_float64(theta):
     _, tree = _pair(3, theta)

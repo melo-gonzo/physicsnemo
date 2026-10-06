@@ -98,11 +98,8 @@ from physicsnemo.experimental.models.isla.kernel_read import (
     _GlobalKernelRead,
     _KernelBasis,
 )
-from physicsnemo.experimental.models.isla.pair_kernels import (
-    PairPlan,
-    pair_scores,
-    pair_weighted_sum,
-)
+from physicsnemo.experimental.models.isla.pair_kernels import PairPlan
+from physicsnemo.experimental.models.isla.segment_softmax import segment_softmax_read
 from physicsnemo.mesh.spatial._ragged import _ragged_arange
 
 #: Boundary cells per tree leaf. Implementation: at a fixed ``theta`` it sets how many
@@ -296,7 +293,10 @@ def _chunked_basis(basis: _KernelBasis, qi, si, geometry: dict) -> torch.Tensor:
             inv = tree_pair_invariants(
                 qi[a : a + TREE_READ_PAIR_CHUNK], si[a : a + TREE_READ_PAIR_CHUNK], **geometry
             )
-        parts.append(checkpoint(basis, inv, use_reentrant=False) if grad else basis(inv))
+        out = checkpoint(basis, inv, use_reentrant=False) if grad else basis(inv)
+        ### Kept in at least float32: the fused read consumes it as it stands in every
+        ### block (no per-block copy) and its gradient accumulates over the blocks.
+        parts.append(out.to(torch.promote_types(out.dtype, torch.float32)))
     if not parts:
         return geometry["query_r"].new_zeros(0, KERNEL_READ_BASIS)
     return torch.cat(parts)
@@ -401,17 +401,12 @@ class _TreeKernelRead(_GlobalKernelRead):
     parameters (a dense checkpoint loads as it stands) applied to the pair list of
     :class:`TreeReadPairs`. The cells' keys and values are those of the dense read;
     a node's are the measure-weighted means of its cells' at this depth; the softmax
-    runs over each point's cells and nodes with the log measure of each as bias. The
-    ``(P, .)`` pair tensors are rebuilt in backward, not stored."""
+    runs over each point's cells and nodes with the log measure of each as bias
+    (:func:`~physicsnemo.experimental.models.isla.segment_softmax.segment_softmax_read`,
+    which keeps nothing per pair between forward and backward)."""
 
-    def forward(self, h_b, h_q, pairs):
-        if torch.is_grad_enabled() and (h_b.requires_grad or h_q.requires_grad):
-            return checkpoint(self._read, h_b, h_q, pairs, use_reentrant=False)
-        return self._read(h_b, h_q, pairs)
-
-    def _read(self, h_b, h_q, pairs: TreeReadPairs):
+    def forward(self, h_b, h_q, pairs: TreeReadPairs):
         nh, c, kc = KERNEL_READ_HEADS, KERNEL_READ_WIDTH // KERNEL_READ_HEADS, KERNEL_READ_KEY
-        acc = torch.promote_types(h_q.dtype, torch.float32)
         hb = self.norm_b(h_b)
         v_c, k_c = self.value(hb), self.key(hb)
         q = self.query(self.norm_q(h_q)).view(-1, nh, kc)
@@ -423,18 +418,10 @@ class _TreeKernelRead(_GlobalKernelRead):
             om = pairs.omega[sl]
             v_parts += [v_c[sl], node_means(v_c[sl], case, om)]
             k_parts += [k_c[sl], node_means(k_c[sl], case, om)]
-        v_src = torch.cat(v_parts).view(-1, nh, c).to(acc)
+        v_src = torch.cat(v_parts).view(-1, nh, c)
         k_src = torch.cat(k_parts).view(-1, nh, kc)
-        plan = pairs.plan
-        ker = pairs.basis.to(acc) @ self.kernel.weight.to(acc).t()  # (P, heads)
-        score = pair_scores(q, k_src, plan, acc) / math.sqrt(kc)
-        logit = ker + score + pairs.log_m.to(acc)[:, None]
-        ### A softmax over each point's pairs; the shift is the point's largest logit
-        ### (detached: the softmax does not depend on it).
-        counts = plan.q_offsets[1:] - plan.q_offsets[:-1]
-        seg_max = torch.segment_reduce(logit.detach(), "max", lengths=counts, axis=0, unsafe=True)
-        e = torch.exp(logit - seg_max[plan.qi])
-        ones = e.new_ones(plan.n_b, nh, 1)
-        den = pair_weighted_sum(e, ones, plan)[..., 0]
-        read = pair_weighted_sum(e, v_src, plan) / den[..., None]
+        read = segment_softmax_read(
+            pairs.basis, self.kernel.weight.t(), pairs.log_m, q, k_src, v_src, pairs.plan,
+            scale=1.0 / math.sqrt(kc),
+        )  # fmt: skip
         return self.out(read.reshape(-1, nh * c).to(h_q.dtype))
