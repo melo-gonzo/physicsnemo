@@ -445,8 +445,9 @@ def test_tree_read_cuda_float32_matches_cpu_float64():
     cpu = outputs(_run(tree, mesh, drv, q, sdf, sn))
     dev = torch.device("cuda")
     tree_c = tree.to(dev).float()
+    mesh_c = mesh.to(dev).apply(lambda t: t.float() if t.is_floating_point() else t)
     gpu = outputs(
-        _run(tree_c, mesh.to(dev).float(), drv.to(dev).float(), q.to(dev).float(), sdf.to(dev).float(), sn.to(dev).float())
+        _run(tree_c, mesh_c, drv.to(dev).float(), q.to(dev).float(), sdf.to(dev).float(), sn.to(dev).float())
     )
     assert _rel({k: v.cpu().double() for k, v in gpu.items()}, cpu) < 1e-3
 

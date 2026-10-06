@@ -52,11 +52,13 @@ from physicsnemo.experimental.models.isla.pair_kernels import (
     supported,
 )
 
+#: Pairs per tile of a program's loop, and warps per program (launch constants).
+BLOCK_PAIRS = 64
+NUM_WARPS = 4
+
 if HAS_TRITON:
     import triton
     import triton.language as tl
-
-    BLOCK_PAIRS = 64
 
     @triton.jit
     def _ssr_fwd_kernel(
@@ -232,7 +234,7 @@ class _SegmentSoftmaxRead(torch.autograd.Function):
         if n_q:
             _ssr_fwd_kernel[(n_q,)](
                 plan.q_offsets, plan.bj, basis, logm, w, q, k, v, out, lse, scale,
-                H=h, C=c, KC=kc, G=g, BLOCK=BLOCK_PAIRS,
+                H=h, C=c, KC=kc, G=g, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
             )  # fmt: skip
         ctx.save_for_backward(basis, w, logm, q, k, v, out, lse)
         ctx.plan, ctx.scale = plan, scale
@@ -255,12 +257,12 @@ class _SegmentSoftmaxRead(torch.autograd.Function):
         if n_q:
             _ssr_bwd_point_kernel[(n_q,)](
                 plan.q_offsets, plan.bj, basis, logm, w, q, k, v, lse, dsum, dout, dq, dw_part, dbasis, scale,
-                H=h, C=c, KC=kc, G=g, BLOCK=BLOCK_PAIRS,
+                H=h, C=c, KC=kc, G=g, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
             )  # fmt: skip
         if plan.n_b:
             _ssr_bwd_source_kernel[(plan.n_b,)](
                 plan.b_offsets, plan.perm, plan.qi_by_b, basis, logm, w, q, k, v, lse, dsum, dout, dk, dv, scale,
-                H=h, C=c, KC=kc, G=g, BLOCK=BLOCK_PAIRS,
+                H=h, C=c, KC=kc, G=g, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
             )  # fmt: skip
         dw = dw_part.sum(0).to(w.dtype)
         return dbasis, dw, None, dq.to(q.dtype), dk.to(k.dtype), dv.to(v.dtype), None, None
