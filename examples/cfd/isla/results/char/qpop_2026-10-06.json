@@ -1,0 +1,149 @@
+{
+ "protocol": "QUERY-POP (2026-10-06, #sec-nb-query-pop): the DrivAerML Volume ISLA references scored on the first 100,000 of their 200,000 native interior points under four query populations (evaluation-only; the built-in geometry of every scored point is unchanged by construction), plus the learned query routing mass.",
+ "conditions": {
+  "native_h": "the native 200,000 tokens; metric on the first 100,000 (control)",
+  "half": "tokens = the first 100,000 only",
+  "box": "tokens = native 200,000 + 200,000 companions uniform in the interior's bounding box",
+  "wall": "tokens = native 200,000 + 200,000 companions resampled from the native points with probability 1/|sdf|",
+  "full": "native 200,000 tokens, metric on all (reproduces evals_char native)"
+ },
+ "seeds": {
+  "42": {
+   "run": "cl_r_vol_isla_seed42",
+   "epoch": 500,
+   "query_routing_mass_fraction_of_boundary": 1.1829346418380737,
+   "n_companions": 200000,
+   "means": {
+    "native_h": {
+     "pressure_l2": 0.038700296465928354,
+     "velocity_l2": 0.06193990640652677,
+     "nut_l2": 0.08825289908175667
+    },
+    "half": {
+     "pressure_l2": 0.039445483358576894,
+     "velocity_l2": 0.06305500213056803,
+     "nut_l2": 0.09025244096604486
+    },
+    "box": {
+     "pressure_l2": 0.8558896780014038,
+     "velocity_l2": 0.9152961758275827,
+     "nut_l2": 1.0077963471412659
+    },
+    "wall": {
+     "pressure_l2": 0.1500008098470668,
+     "velocity_l2": 0.2515437801678975,
+     "nut_l2": 0.3071802568932374
+    },
+    "full": {
+     "pressure_l2": 0.0387272311684986,
+     "velocity_l2": 0.061888618084291615,
+     "nut_l2": 0.08682666687915723
+    }
+   },
+   "ratio_to_native_h": {
+    "half": {
+     "pressure_l2": 1.01925532775452,
+     "velocity_l2": 1.018002864207166,
+     "nut_l2": 1.022656954106809
+    },
+    "box": {
+     "pressure_l2": 22.115842930426307,
+     "velocity_l2": 14.777164334415843,
+     "nut_l2": 11.41941349946649
+    },
+    "wall": {
+     "pressure_l2": 3.875960226277004,
+     "velocity_l2": 4.061093966092782,
+     "nut_l2": 3.4806817689769995
+    }
+   },
+   "sanity_full": {
+    "n_found": 48,
+    "max_abs_diff": {
+     "pressure_l2": 1.2665987014770508e-07,
+     "velocity_l2": 5.252659320831299e-07,
+     "nut_l2": 7.227063179016113e-07
+    }
+   }
+  },
+  "43": {
+   "run": "cl_r_vol_isla_seed43",
+   "epoch": 500,
+   "query_routing_mass_fraction_of_boundary": 1.15179443359375,
+   "n_companions": 200000,
+   "means": {
+    "native_h": {
+     "pressure_l2": 0.04001948043393592,
+     "velocity_l2": 0.06514628805841009,
+     "nut_l2": 0.08966626017354429
+    },
+    "half": {
+     "pressure_l2": 0.04101519379764795,
+     "velocity_l2": 0.06675876048393548,
+     "nut_l2": 0.09109310192676882
+    },
+    "box": {
+     "pressure_l2": 1.0146698815127213,
+     "velocity_l2": 0.9862167127430439,
+     "nut_l2": 1.185925617814064
+    },
+    "wall": {
+     "pressure_l2": 0.1920531444872419,
+     "velocity_l2": 0.3006472351650397,
+     "nut_l2": 0.32371185688922804
+    },
+    "full": {
+     "pressure_l2": 0.04002936176645259,
+     "velocity_l2": 0.06506406771950424,
+     "nut_l2": 0.08840754798923929
+    }
+   },
+   "ratio_to_native_h": {
+    "half": {
+     "pressure_l2": 1.024880716913748,
+     "velocity_l2": 1.0247515625768215,
+     "nut_l2": 1.0159128054461395
+    },
+    "box": {
+     "pressure_l2": 25.35439917036745,
+     "velocity_l2": 15.138494335376453,
+     "nut_l2": 13.225996216623376
+    },
+    "wall": {
+     "pressure_l2": 4.7989914512829035,
+     "velocity_l2": 4.614955726955306,
+     "nut_l2": 3.610185774032517
+    }
+   },
+   "sanity_full": {
+    "n_found": 48,
+    "max_abs_diff": {
+     "pressure_l2": 7.078051567077637e-08,
+     "velocity_l2": 1.564621925354004e-07,
+     "nut_l2": 2.7567148208618164e-07
+    }
+   }
+  }
+ },
+ "mean_ratio_to_native_h": {
+  "half": {
+   "pressure_l2": 1.022068022334134,
+   "velocity_l2": 1.0213772133919936,
+   "nut_l2": 1.0192848797764742
+  },
+  "box": {
+   "pressure_l2": 23.735121050396877,
+   "velocity_l2": 14.957829334896148,
+   "nut_l2": 12.322704858044933
+  },
+  "wall": {
+   "pressure_l2": 4.3374758387799535,
+   "velocity_l2": 4.3380248465240445,
+   "nut_l2": 3.5454337715047584
+  }
+ },
+ "query_routing_mass_fraction_of_boundary": {
+  "cl_r_vol_isla_seed42": 1.1829346418380737,
+  "cl_r_vol_isla_seed43": 1.15179443359375
+ }
+}

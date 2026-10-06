@@ -12,8 +12,11 @@ them) plus summary.json:
                expected 400 of its segments under the uniform-over-cells law (the mesher's refinement pattern), with
                exact Horvitz-Thompson measures; the same native interior points
   suba         airfrans_volume_2d_sub400a: the same count under the length-proportional law (uniform along the curve)
-  subu_natgeo  subu tokens, built-in (d, u) of the queries taken from the NATIVE (whole) boundary: the swap control
-  suba_natgeo  suba tokens, native built-in geometry
+  refu / reff  airfrans_volume_2d_refu / _reff: the airfoil re-panelized by SplitLineCells (every segment split into
+               collinear equal pieces: 2 / 2 uniform, 3 ahead of mid-chord / 1 behind), geometry and measure unchanged,
+               only the panel pattern (count-raising: no information is lost; added after step one, 2026-10-06)
+  <k>_natgeo   the variant's tokens, built-in (d, u) of the queries taken from the NATIVE (whole) boundary: the swap control
+  AFGEO_VARIANTS (env, default "subu suba refu reff") selects the variants.
 
 The two swap conditions attribute a resampling excess to the built-in channel (if they return to native) or to the
 slice attention over the resampled tokens (if they do not). The reference arm's stored sdf / sdf_normals query inputs
@@ -65,8 +68,18 @@ from physicsnemo.mesh import DomainMesh  # noqa: E402
 from physicsnemo.utils import load_checkpoint  # noqa: E402
 
 FIELDS = ("pressure_l2", "velocity_l2", "nut_l2")
-VARIANTS = {"subu": "airfrans_volume_2d_sub400u", "suba": "airfrans_volume_2d_sub400a"}
-CONDITIONS = ("native", "subu", "suba", "subu_natgeo", "suba_natgeo")
+import os  # noqa: E402
+
+### Resampled variants: coarsening to an expected 400 segments under two laws (information lost), and the count-raising
+### refinement under two panel patterns (SplitLineCells: uniform 2 / 2, front-loaded 3 / 1; geometry and measure unchanged).
+ALL_VARIANTS = {
+    "subu": "airfrans_volume_2d_sub400u",
+    "suba": "airfrans_volume_2d_sub400a",
+    "refu": "airfrans_volume_2d_refu",
+    "reff": "airfrans_volume_2d_reff",
+}
+VARIANTS = {k: ALL_VARIANTS[k] for k in os.environ.get("AFGEO_VARIANTS", "subu suba refu reff").split()}
+CONDITIONS = ("native",) + tuple(VARIANTS) + tuple(f"{k}_natgeo" for k in VARIANTS)
 NEAR_WALL = 0.01  # |sdf| < NEAR_WALL * chord
 CHORD = 1.0
 
@@ -260,9 +273,9 @@ def main(run_id: str, out_dir: Path) -> None:
         sanity.append({"sample_id": sid, "found": r is not None, "abs_diff": diffs})
         line = "  ".join(f"{c}: p={res[c]['pressure_l2']:.4f} v={res[c]['velocity_l2']:.4f} nut={res[c]['nut_l2']:.4f}" for c in CONDITIONS)
         print(
-            f"[{run_id}] [{i + 1}/{len(idx_list)}] {sid} tokens={shift['n_tokens_native']}/{shift['subu_n_tokens']}/{shift['suba_n_tokens']} "
-            f"chg={shift['subu_frac_nearest_token_changed']:.3f}/{shift['suba_frac_nearest_token_changed']:.3f}  {line}  "
-            f"dnative={max(diffs.values()):.1e}" if diffs else f"[{run_id}] [{i + 1}/{len(idx_list)}] {sid} {line} dnative=NA",
+            f"[{run_id}] [{i + 1}/{len(idx_list)}] {sid} tokens={shift['n_tokens_native']}/" + "/".join(str(shift[f"{k}_n_tokens"]) for k in VARIANTS)
+            + " chg=" + "/".join(f"{shift[f'{k}_frac_nearest_token_changed']:.3f}" for k in VARIANTS) + f"  {line}  "
+            + (f"dnative={max(diffs.values()):.1e}" if diffs else "dnative=NA"),
             flush=True,
         )
 
@@ -285,7 +298,7 @@ def main(run_id: str, out_dir: Path) -> None:
         "run_id": run_id,
         "epoch": epoch,
         "num_samples": len(idx_list),
-        "same_interior_points_all_cases": all(s["subu_same_interior_points"] and s["suba_same_interior_points"] for s in shifts),
+        "same_interior_points_all_cases": all(all(s[f"{k}_same_interior_points"] for k in VARIANTS) for s in shifts),
         "shift_means_all": shift_means(shifts),
         "means": means,
         "ratio_to_native": {c: {f: means[c][f] / means["native"][f] for f in FIELDS} for c in CONDITIONS},
