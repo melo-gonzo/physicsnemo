@@ -584,8 +584,55 @@ print(f"Two of the three columns read as on every other dataset and one does not
       f"{' and '.join(f'{v:.4f}' for v in seeds_of(VAR['ISLA']['native']['pressure_l2']))}), where the same model class on the Surface task "
       "is unchanged by the same draw (@tbl-drivaerml-surface-protocols). The column "
       "therefore measures one thing: the trained volume model's sensitivity to the law that places its boundary tokens. That sensitivity is "
-      "an open weakness of the volume model. Its mechanism is not measured; the candidate is that the queries' attention over the boundary "
-      "tokens weights by measure, and the area law moves the tokens from the finely meshed curved features to the flat panels.")
+      "an open weakness of the volume model, and its cause is measured (@tbl-vol-geo).")
+```
+
+```{python}
+#| label: tbl-vol-geo
+#| output: asis
+VG = json.load(open(RES / "char" / "vol_geo_2026-10-05.json"))
+VGR = VG["mean_ratio_to_native"]; VGM = VG["mean"]; VGF = VG["mean_fraction_of_log_excess_removed"]
+VGS = {k: statistics.mean(s[k] for s in VG["shift"].values()) for k in VG["shift"]["42"] if isinstance(VG["shift"]["42"][k], (int, float))}
+cond_rows = [("native", "native boundary draw (the protocol's native column)"),
+             ("area", "area-proportional boundary draw (the point-cloud column)"),
+             ("area_natgeo", "area-draw tokens; the queries' built-in nearest-boundary distance and direction computed from the native draw"),
+             ("area_sdfgeo", "area-draw tokens; the built-in geometry replaced by the stored exact signed-distance field and its gradient"),
+             ("native_sdfgeo", "native tokens; the built-in geometry replaced by the stored exact field")]
+out = "| boundary tokens and query geometry | pressure | velocity | eddy viscosity | ÷ native: pressure / velocity / eddy viscosity |\n|---|--:|--:|--:|---|\n"
+for k, lab in cond_rows:
+    out += f"| {lab} | " + " | ".join(f"{VGM[k][f]:.4f}" for f, _ in FIELDS) + " | " + " / ".join(f"{VGR[k][f]:.3f}" if VGR[k][f] < 1.5 else fmt_ratio(VGR[k][f]) for f, _ in FIELDS) + " |\n"
+print(out)
+print(": The DrivAerML Volume task's point-cloud sensitivity taken apart at scoring time on the two ISLA reference checkpoints (width 512 "
+      "with 512 slices), 48 validation cars, float32, seed means: the same trained model scored with the boundary tokens and the queries' "
+      "built-in nearest-boundary geometry taken from different sources, everything else unchanged. The interior queries, the targets and "
+      "the stored field are identical across rows; only the boundary tokens and the geometry channel differ. How to read this: the first "
+      "two rows are the protocol table's native and point-cloud columns; the third keeps every area-draw token and changes only the "
+      "queries' built-in distance and direction, and returns to the native error; the last two show that the exact stored field is not a "
+      "substitute for the built-in channel this model was trained with. Data: results/char/vol_geo_2026-10-05.json. {#tbl-vol-geo}")
+```
+
+```{python}
+#| label: para-vol-geo
+#| output: asis
+natgeo = [VGR["area_natgeo"][f] for f, _ in FIELDS]; frac = [VGF["area_natgeo"][f] for f, _ in FIELDS]
+sdfgeo = [VGR["area_sdfgeo"][f] for f, _ in FIELDS]
+print(f"**The whole of the sensitivity is one input: the queries' built-in nearest-boundary geometry, the signed distance and direction to "
+      f"the nearest boundary token.** Keep every area-draw token and compute only that geometry from the native draw, and the error is "
+      f"{' / '.join(f'{v:.3f}' for v in natgeo)} of native (pressure / velocity / eddy viscosity), the fraction of the point-cloud log-excess "
+      f"removed {' / '.join(f'{v:.2f}' for v in frac)}, on both seeds. The slice states, anchors, prototypes and routing mass, which the "
+      "queries also read, are Horvitz-Thompson quadratures and carry none of it, as the Surface task's point-cloud column already showed. "
+      f"The input shift is large in the channel the model reads: under the area draw {100 * VGS['frac_nearest_token_changed']:.0f}% of the "
+      f"queries change nearest token, and the near-wall RMS shift of the log of the built-in distance between the two draws is "
+      f"{VGS['rms_log_absdArea_over_absdNat_nearwall_sdf']:.2f}. The exact stored signed-distance field does not substitute at scoring time: "
+      f"with the built-in geometry replaced by it the error is {' / '.join(fmt_ratio(v) for v in sdfgeo)} native on either token set, because "
+      f"the trained model is calibrated to the sampled distance, whose near-wall median is {VGS['median_abs_dNat_over_L_nearwall_sdf'] * 1e4:.1f}e-4 L "
+      f"against {VGS['median_abs_sdf_over_L_nearwall_sdf'] * 1e4:.1f}e-4 L for the exact field, with an RMS log ratio of "
+      f"{VGS['rms_log_absdNat_over_abssdf_nearwall_sdf']:.1f} between them; the exact field is as far outside the training distribution as "
+      "the area draw is. The sensitivity is therefore a bias of one discretization-dependent input, not a resolution requirement on the "
+      "boundary sample; it is the same object as the tied nearest sample on the lug (@sec-interior-lug): a nearest-sample selection is a "
+      "discontinuous, law-dependent function of the sample. The remedy is a sample-independent query geometry, a measure-weighted softmin "
+      "over the boundary tokens or the stored field where one exists, trained in; it is a change to the class not yet made, so the column "
+      "reports the factor as measured.")
 ```
 
 ```{python}

@@ -212,6 +212,8 @@ print(f"**The interior standing holds at the scoring query count on two datasets
 #| label: para-limits-boundary-law
 #| output: asis
 F3 = [("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity")]
+VG = json.load(open(RES / "char" / "vol_geo_2026-10-05.json")); VGR = VG["mean_ratio_to_native"]
+VGS = {k: sum(s[k] for s in VG["shift"].values()) / len(VG["shift"]) for k in VG["shift"]["42"] if isinstance(VG["shift"]["42"][k], (int, float))}
 vol_area = [shift(VOL, "ISLA", f, "area") for f, _ in F3]
 surf_area = max(abs(shift(SURF, "ISLA", f, "area") - 1) for f in SURF["ISLA"]["native"])
 base_area = max(abs(shift(VOL, a, f, "area") - 1) for a in BASELINES for f, _ in F3)
@@ -221,11 +223,14 @@ print(f"**ISLA's interior prediction on the DrivAerML Volume task depends on the
       f"under the same redraw are within {100 * surf_area:.0f}% of native (@tbl-drivaerml-volume-protocols, "
       "@tbl-drivaerml-surface-protocols).** GeoTransolver and Transolver are untouched by that variant (largest change "
       f"{100 * base_area:.2f}%) because they never read the boundary sample, so the column compares nothing across architectures; it "
-      "measures a property of the trained volume model alone, and it is an open weakness of that model. The mechanism is not measured. "
-      "The candidate is that the queries' attention over the boundary tokens weights by measure, and the area law moves the tokens from "
-      "the finely meshed curved features of the car to its flat panels, which changes what each query reads. What would move this: the "
-      "volume model trained under the area law, or scored under a biased draw whose penalty shrinks with cell count as the Surface model's "
-      "does (@sec-robustness-density); until then the interior standing is a native-mesh standing.")
+      "measures a property of the trained volume model alone, and it is an open weakness of that model. The cause is measured: with every "
+      "area-draw token kept and only the queries' built-in nearest-boundary distance and direction computed from the native draw, the error "
+      f"returns to {' / '.join(f'{VGR['area_natgeo'][f]:.3f}' for f, _ in F3)} of native, so the slice states, anchors and routing mass carry none of it and "
+      f"the sensitivity is a bias of that one discretization-dependent input ({100 * VGS['frac_nearest_token_changed']:.0f}% of the queries "
+      f"change nearest token under the redraw); the exact stored signed-distance field does not substitute at scoring time "
+      f"({' / '.join(fmt_ratio(VGR['area_sdfgeo'][f]) for f, _ in F3)} native) because the trained model is calibrated to the sampled distance "
+      "(@tbl-vol-geo). What would move this: a sample-independent query geometry, a measure-weighted softmin over the boundary tokens or the "
+      "stored field where one exists, trained in; until then the interior standing is a native-mesh standing.")
 ```
 
 ### Pose invariance where boundary samples tie {#sec-limits-ties}
@@ -265,8 +270,11 @@ print(f"**ISLA's error is within {100 * exact:.2f}% of its native error under a 
       f"{max(v['fp32'] for r, v in PREC.items() if 'isla' not in r):.4f} and raises that ISLA's per-case error by more than 1.5x on "
       f"{prec_worse} of the 600 cases, "
       f"so the float32 standing on that dataset (GeoTransolver ÷ ISLA {rat(LUG, 'GeoTransolver', 'von_mises_l2'):.2f}) is a precision "
-      "sensitivity of one trained model and reverses across the scoring precision (@sec-interior-lug). Data: "
-      "results/char/lug_ties_2026-10-04.json; results/char/lug_prec_2026-10-05.json.")
+      "sensitivity of one trained model and reverses across the scoring precision (@sec-interior-lug). The same object, the argmin over "
+      "boundary tokens that gives a query its nearest sample, is behind the volume model's sensitivity to the boundary sampling law "
+      "(@sec-limits-boundary-law) and behind the sign flips of on-wall queries: a nearest-sample selection is a discontinuous, "
+      "law-dependent function of the sample, and every one of these readings is that one function measured under a different perturbation. "
+      "Data: results/char/lug_ties_2026-10-04.json; results/char/lug_prec_2026-10-05.json; results/char/vol_geo_2026-10-05.json.")
 ```
 
 ### The prediction depends on the query set {#sec-limits-query-independence}
