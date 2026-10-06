@@ -120,12 +120,31 @@ class TreeReadCase:
 
     n_cells: int
     n_nodes: int
+    first_leaf: int  # the leaves are the nodes from this index on (heap layout)
     order: torch.Tensor  # (N,) the cells in tree order
-    node_start: torch.Tensor  # (M,) each node's first cell in that order
-    node_count: torch.Tensor  # (M,) each node's cell count
+    cell_leaf: torch.Tensor  # (N,) the leaf (counted from the first) of each position in that order
     node_measure: torch.Tensor  # (M,) each node's total measure fraction
     n_pairs_cell: int  # (point, cell) pairs
     n_pairs_node: int  # (point, node) pairs
+
+    @classmethod
+    def from_tree(cls, tree: BoundaryTree, node_measure, n_pairs_cell: int, n_pairs_node: int):
+        n_leaves = tree.n_nodes - tree.first_leaf
+        cell_leaf = torch.repeat_interleave(
+            torch.arange(n_leaves, device=tree.order.device),
+            tree.node_count[tree.first_leaf :],
+            output_size=tree.n_cells,
+        )
+        return cls(
+            n_cells=tree.n_cells,
+            n_nodes=tree.n_nodes,
+            first_leaf=tree.first_leaf,
+            order=tree.order,
+            cell_leaf=cell_leaf,
+            node_measure=node_measure,
+            n_pairs_cell=n_pairs_cell,
+            n_pairs_node=n_pairs_node,
+        )
 
 
 @dataclass
@@ -204,13 +223,19 @@ def point_tree_pairs(
 
 def node_means(x: torch.Tensor, case: TreeReadCase, omega: torch.Tensor) -> torch.Tensor:
     """The measure-weighted mean of the cells' rows ``x`` ``(N, ...)`` over every node's
-    subtree, ``(M, ...)``: prefix sums over the tree order in float64 (float32 cancels
-    at a few hundred thousand cells), differentiable in ``x``, O(N) per feature."""
-    flat = x.reshape(case.n_cells, -1)
-    weighted = (flat[case.order] * omega[case.order, None]).double()
-    prefix = torch.nn.functional.pad(torch.cumsum(weighted, dim=0), (0, 0, 1, 0))
-    sums = prefix[case.node_start + case.node_count] - prefix[case.node_start]
-    measure = case.node_measure.double().clamp_min(torch.finfo(torch.float64).tiny)
+    subtree, ``(M, ...)``, differentiable in ``x``: the leaves' sums by one scatter over
+    the tree order, then every node as the sum of its two children, level by level up
+    to the root, in float32 (a tree of pairwise sums, no cancellation; the float64
+    prefix sums this replaces were half of a DrivAerML training step)."""
+    flat = x.reshape(case.n_cells, -1).float()
+    weighted = flat[case.order] * omega[case.order, None].float()
+    n_leaves = case.n_nodes - case.first_leaf
+    leaf = weighted.new_zeros(n_leaves, weighted.shape[1]).index_add(0, case.cell_leaf, weighted)
+    levels = [leaf]
+    while levels[-1].shape[0] > 1:
+        levels.append(levels[-1].view(-1, 2, weighted.shape[1]).sum(1))
+    sums = torch.cat(levels[::-1])
+    measure = case.node_measure.float().clamp_min(torch.finfo(torch.float32).tiny)
     return (sums / measure[:, None]).to(x.dtype).reshape(case.n_nodes, *x.shape[1:])
 
 
@@ -260,16 +285,18 @@ def tree_pair_invariants(
 
 def _chunked_basis(basis: _KernelBasis, qi, si, geometry: dict) -> torch.Tensor:
     """The kernel basis of every pair ``(P, KERNEL_READ_BASIS)`` in chunks of
-    ``TREE_READ_PAIR_CHUNK`` pairs; under gradient each chunk is checkpointed."""
+    ``TREE_READ_PAIR_CHUNK`` pairs. The pair invariants are geometry of the inputs (no
+    gradient reaches them), so they are computed once and kept; under gradient only
+    the basis MLP of each chunk is checkpointed (its hidden activations are rebuilt in
+    backward, the gathers of the invariants are not)."""
     grad = torch.is_grad_enabled() and any(p.requires_grad for p in basis.parameters())
-
-    def chunk(q_idx, s_idx):
-        return basis(tree_pair_invariants(q_idx, s_idx, **geometry))
-
     parts = []
     for a in range(0, int(qi.shape[0]), TREE_READ_PAIR_CHUNK):
-        args = (qi[a : a + TREE_READ_PAIR_CHUNK], si[a : a + TREE_READ_PAIR_CHUNK])
-        parts.append(checkpoint(chunk, *args, use_reentrant=False) if grad else chunk(*args))
+        with torch.no_grad():
+            inv = tree_pair_invariants(
+                qi[a : a + TREE_READ_PAIR_CHUNK], si[a : a + TREE_READ_PAIR_CHUNK], **geometry
+            )
+        parts.append(checkpoint(basis, inv, use_reentrant=False) if grad else basis(inv))
     if not parts:
         return geometry["query_r"].new_zeros(0, KERNEL_READ_BASIS)
     return torch.cat(parts)
@@ -352,16 +379,7 @@ def tree_read_pairs(
         qis.append(qi + i * nq)
         sis.append(si + src_off)
         cases.append(
-            TreeReadCase(
-                n_cells=n,
-                n_nodes=m,
-                order=tree_b.order,
-                node_start=tree_b.node_start,
-                node_count=tree_b.node_count,
-                node_measure=node_measure,
-                n_pairs_cell=int(qi.shape[0]) - n_pairs_node,
-                n_pairs_node=n_pairs_node,
-            )
+            TreeReadCase.from_tree(tree_b, node_measure, int(qi.shape[0]) - n_pairs_node, n_pairs_node)
         )
         offsets.append(src_off)
         src_off += n + m

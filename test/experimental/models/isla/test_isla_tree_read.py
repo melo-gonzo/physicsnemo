@@ -258,6 +258,28 @@ def test_boundary_tree_parts_the_faces_of_a_thin_body_before_positions():
         assert len(set((cells >= 400).tolist())) == 1
 
 
+def test_node_means_are_the_measure_weighted_means_of_every_subtree():
+    """The scatter-and-sum-up node means equal the explicit weighted mean of each node's
+    cells, and carry a gradient to the cells' rows."""
+    pts, nrm, w, _ = cloud(300, d=3, seed=9)
+    tree = BoundaryTree.build(pts, w, nrm, None, leaf_size=8, theta=0.5, eps=1e-12)
+    case = tree_read.TreeReadCase.from_tree(tree, tree.measure, 0, 0)
+    x = torch.randn(300, 4, 5, dtype=D, requires_grad=True)
+    means = tree_read.node_means(x, case, w)
+    assert means.shape == (tree.n_nodes, 4, 5)
+    for i in range(tree.n_nodes):
+        cells = tree.order[tree.node_start[i] : tree.node_start[i] + tree.node_count[i]]
+        ref = (x[cells] * w[cells, None, None]).sum(0) / w[cells].sum()
+        assert torch.allclose(means[i], ref, atol=1e-5), i
+    means.sum().backward()
+    ### d(sum of all node means)/dx_j = w_j * sum over the nodes holding j of 1 / measure.
+    ref = torch.zeros(300, dtype=D)
+    for i in range(tree.n_nodes):
+        cells = tree.order[tree.node_start[i] : tree.node_start[i] + tree.node_count[i]]
+        ref[cells] += w[cells] / w[cells].sum()
+    assert torch.allclose(x.grad, ref[:, None, None].expand_as(x), atol=1e-5)
+
+
 @pytest.mark.parametrize("theta", [0.0, 0.5, 1.0])
 def test_point_tree_pairs_admit_only_separated_coherent_clusters_and_cover_every_cell(theta):
     """Each point's walk admits a node only when the node's sphere diameter is below
