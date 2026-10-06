@@ -156,14 +156,16 @@ the sample spacing, and the internal direction deviates from the true SDF
 gradient by the same order; far from the wall both agree with the full-mesh
 field. Both read the sample spacing, so they change with the boundary
 sampling law (``query_geometry="nearest"``). The alternative
-``query_geometry="soft"`` (:func:`soft_boundary_geometry`) replaces the
-nearest token by a measure-weighted kernel average over the tokens on the
-nearest token's side: the kernel-mean signed distance to the tokens' tangent
-planes and the kernel-mean normal, with the kernel width
-``query_geometry_width`` times the length unit. These are quadrature
-estimates of boundary integrals, so they converge under refinement of the
-boundary sample for any sampling law whose normalized measure converges,
-the property the slice attention has. Either geometry is built from pairwise
+``query_geometry="soft"`` (:func:`soft_boundary_geometry`) keeps the
+nearest token only for the side of the boundary the query is on and the
+local orientation, and replaces its distance and direction by a
+measure-weighted kernel average over the tokens on that side that face the
+same way: the kernel-mean signed distance to the tokens' tangent planes and
+the kernel-mean normal, with the kernel width ``query_geometry_width`` times
+the length unit. These are quadrature estimates of boundary integrals, so
+they converge under refinement of the boundary sample for any sampling law
+whose normalized measure converges, uniformly in the wall distance, the
+property the slice attention has. Either geometry is built from pairwise
 differences, so every covariance contract holds.
 
 **Global inputs.** Rank-1 global inputs are the :math:`K` global directions:
@@ -321,13 +323,14 @@ class ISLA(Module):
             built-in signed distance and direction to the boundary from the
             boundary tokens. ``"nearest"`` (default): the exact nearest token's
             Euclidean distance, signed by its normal, and the direction to it
-            (:func:`nearest_boundary_geometry`). ``"soft"``: the
-            measure-weighted kernel average over the tokens on the nearest
-            token's side of their tangent planes, kernel width
-            ``query_geometry_width`` times the length unit
-            (:func:`soft_boundary_geometry`); a quadrature estimate that
-            converges under refinement of the boundary sample for any
-            sampling law. Ignored by a surface model.
+            (:func:`nearest_boundary_geometry`). ``"soft"``: the nearest
+            token fixes the side and the local orientation; the distance and
+            direction are the measure-weighted kernel average, over the tokens
+            on that side facing the same way, of the tangent-plane distances
+            and the normals, kernel width ``query_geometry_width`` times the
+            length unit (:func:`soft_boundary_geometry`); a quadrature
+            estimate that converges under refinement of the boundary sample
+            for any sampling law. Ignored by a surface model.
         query_geometry_width: The kernel width of ``query_geometry="soft"`` as
             a fraction of the length unit (default 0.03).
         hidden: Token width of the slice blocks. The defaults ``hidden=512``,

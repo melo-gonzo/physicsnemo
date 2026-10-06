@@ -34437,3 +34437,84 @@ Volume references are retrained under it and every interior protocol
 re-scored, the book restated. P2 or P3 failing keeps `"nearest"` and the
 record states what was measured. Nothing on the Volume launches before this
 verdict.
+
+## 2026-10-06 — AF-GEO step one: on AirfRANS, resampling the airfoil to 400 of its 1,007 segments raises the reference's error 10x to 21x; the built-in nearest-token geometry carries 62% to 84% of the log excess and the coarsened slice states the rest (a confound the Volume protocol did not have); the soft form's side rule amended before any lane trained {#sec-nb-af-geo-step-one}
+
+**Setting.** Step one of SOFT-GEO (@sec-nb-soft-geo-prereg): the AirfRANS
+ISLA references (`cl_r_af_isla_seed42/43`, nearest built-in geometry plus
+the stored signed distance and its gradient as query inputs, trained on the
+whole airfoil) scored on the 200 full_test cases in float32 at 100,000
+native interior points with the airfoil resampled at evaluation to an
+expected 400 of its 1,007 segments under the uniform-over-cells law and the
+length-proportional law, exact Horvitz-Thompson measures (the resampled
+boundary's total measure is 2.05 chord lengths under both laws, the whole
+airfoil's), and the VOL-GEO swap control (resampled tokens, the whole
+airfoil's built-in geometry fed to the queries). Job 1087177, seven minutes;
+native reproduces the record per case to 2e-6 on both seeds; artifact
+`results/char/af_geo_2026-10-06.json`, per-case rows and shift statistics
+under `results/campaigns_2026-10-02/char/af_geo/`.
+
+**What we saw.** Error relative to native, mean of the two seeds (pressure
+/ velocity / eddy viscosity): uniform-over-cells 400 segments 9.6x / 15.8x
+/ 11.5x; length-proportional 400 segments 16.4x / 20.7x / 12.9x. With the
+whole airfoil's built-in geometry restored to the queries the same resampled
+tokens read 2.27x / 1.57x / 1.95x and 2.90x / 2.35x / 1.93x. The share of
+the log excess removed by restoring the geometry is 0.63 / 0.84 / 0.72 under
+the uniform law and 0.62 / 0.72 / 0.74 under the length law, consistent
+across the seeds (0.59 to 0.85). The input shift behind it: the nearest
+token changes for 60% (uniform) and 64% (length) of the queries; over the
+near-wall queries (within 0.01 chord, 48,000 of 100,000) the built-in
+distance moves by an RMS log ratio of 0.62 (uniform) and 1.27 (length) and
+the built-in direction's cosine to the native one is 0.59 and 0.60. The
+native built-in distance itself is far from the stored field near the wall
+(median 1.5e-3 chord against 5.4e-4, RMS log ratio 2.8), so the model's
+query channel reads the mesher's panel spacing even before resampling; the
+stored field is present as an input and does not protect the model.
+
+**Reading.** The first clause of P1 holds with room: AirfRANS has the
+sensitivity, and larger than the Volume's 7x. The second clause fails: the
+swap returns the error to 1.6x to 2.9x of native, not to within 10%. The
+difference from the Volume is the protocol, not the mechanism. The Volume's
+area draw kept 200,000 tokens and changed only the law; the AirfRANS
+resampling removes 60% of the tokens, and the slice attention over 400
+instead of 1,007 segments loses information no quadrature weight restores.
+That resolution component is 16% to 38% of the log excess here; the
+built-in geometry is the rest, and it is what the soft form addresses.
+
+**Protocol consequence (before any soft arm is scored).** The AirfRANS
+verdict needs a redraw that changes the law without removing information.
+Added to the AF-GEO protocol, to be built while the lanes train:
+`airfrans_volume_2d_refine*` variants that split every airfoil segment into
+collinear pieces under two refinement patterns (uniform, and front-loaded:
+three pieces ahead of mid-chord, one behind), each piece carrying its own
+length as measure, so the boundary measure and the geometry are unchanged
+and only the panelization pattern differs. The class's own statement is
+that splitting a boundary cell changes nothing; the nearest form moves with
+the spacing. Under refinement P2 reads: the soft arm within the seed
+separation of native under both patterns; the reference is expected to
+move. Under the 400-segment coarsening P2 reads: the soft arm's geometry
+share of the log excess (the swap control applied to it) below 0.1, with
+its total excess at most the resolution component measured here (1.6x to
+2.9x), reported as the token-count requirement of the slice attention and
+not held against the form. P3 and P4 are unchanged.
+
+**Amendment to the form (before any lane trained; the LHR verification of
+the first snapshot, job 103941, failed its own thin-plate test).** The first
+form grouped tokens by the sign of their tangent-plane distance alone and
+let the nearest token pick the group. Inside a body thinner than the kernel
+width both faces lie behind the query, fall in the same group and blend:
+the distance read the mean of the two face distances and the direction
+cancelled. The amended form keeps the nearest token's side and adds its
+normal as a facing factor, $\max(0, \hat n_i \cdot \hat n_{i^*})$, on every
+token's weight: the far face of a thin body and the far wall of a concave
+corner, whose normals point the other way, drop out; at a convex edge the
+nearest face's normal is selected as the nearest form already does; a flat
+wall is unchanged (the factor is one); on a curved wall it is a smooth
+reweighting that converges with the sample. The exact nearest search runs
+first (the existing Triton kernel), the accumulation kernel second, with the
+width read in the inputs' precision (the first kernel took it as a float32
+scalar, which the float64 kernel-vs-PyTorch test caught). Tests added for
+the thin plate inside and the concave corner; the two-laws test now samples
+at a few spacings per kernel width, the regime the form is specified for.
+`code_v21` rebuilt with the amended files; verification resubmitted on both
+clusters; the six AirfRANS lanes launch on the pass.

@@ -232,40 +232,44 @@ if HAS_TRITON:
         y_ptr,
         n_ptr,
         lw_ptr,
+        nstar_ptr,
+        side_ptr,
+        iw_ptr,
         out_ptr,
         Q,
         N,
-        inv_width,
         DIM: tl.constexpr,
         BLOCK_Q: tl.constexpr,
         BLOCK_N: tl.constexpr,
     ):
-        """One program owns ``BLOCK_Q`` queries and streams the ``N`` boundary
-        samples in ``BLOCK_N`` tiles. For each side of the samples' tangent planes
-        it keeps the running kernel mass, plane-distance mass, normal mass and
-        nearest sample distance, rescaled online as a streamed softmax, so no
-        (Q, N) block is ever written. ``DIM`` is 2 or 3."""
+        """The accumulation pass of :func:`soft_boundary_geometry`: one program owns
+        ``BLOCK_Q`` queries, each with its nearest sample's normal (``nstar``) and
+        side (``side``, +1 or -1), and streams the ``N`` boundary samples in
+        ``BLOCK_N`` tiles, keeping the running kernel mass, plane-distance mass and
+        normal mass of the samples on that side that face the nearest sample's way,
+        rescaled online as a streamed softmax; no (Q, N) block is ever written.
+        ``DIM`` is 2 or 3; the inverse width is read from ``iw_ptr`` in the inputs'
+        precision."""
         offs_q = tl.program_id(0) * BLOCK_Q + tl.arange(0, BLOCK_Q)
         mask_q = offs_q < Q
         dt = q_ptr.dtype.element_ty
         inf = float("inf")
+        inv_width = tl.load(iw_ptr)
         q0 = tl.load(q_ptr + offs_q * DIM + 0, mask=mask_q, other=0.0)
         q1 = tl.load(q_ptr + offs_q * DIM + 1, mask=mask_q, other=0.0)
+        ns0 = tl.load(nstar_ptr + offs_q * DIM + 0, mask=mask_q, other=0.0)
+        ns1 = tl.load(nstar_ptr + offs_q * DIM + 1, mask=mask_q, other=0.0)
         if DIM == 3:
             q2 = tl.load(q_ptr + offs_q * DIM + 2, mask=mask_q, other=0.0)
+            ns2 = tl.load(nstar_ptr + offs_q * DIM + 2, mask=mask_q, other=0.0)
+        side = tl.load(side_ptr + offs_q, mask=mask_q, other=1.0)
+        want_pos = side > 0
         m = tl.full((BLOCK_Q,), -inf, dt)
-        w_pos = tl.zeros((BLOCK_Q,), dt)
-        w_neg = tl.zeros((BLOCK_Q,), dt)
-        s_pos = tl.zeros((BLOCK_Q,), dt)
-        s_neg = tl.zeros((BLOCK_Q,), dt)
-        n0_pos = tl.zeros((BLOCK_Q,), dt)
-        n1_pos = tl.zeros((BLOCK_Q,), dt)
-        n2_pos = tl.zeros((BLOCK_Q,), dt)
-        n0_neg = tl.zeros((BLOCK_Q,), dt)
-        n1_neg = tl.zeros((BLOCK_Q,), dt)
-        n2_neg = tl.zeros((BLOCK_Q,), dt)
-        r_pos = tl.full((BLOCK_Q,), inf, dt)
-        r_neg = tl.full((BLOCK_Q,), inf, dt)
+        w = tl.zeros((BLOCK_Q,), dt)
+        sacc = tl.zeros((BLOCK_Q,), dt)
+        a0 = tl.zeros((BLOCK_Q,), dt)
+        a1 = tl.zeros((BLOCK_Q,), dt)
+        a2 = tl.zeros((BLOCK_Q,), dt)
         for n0 in range(0, N, BLOCK_N):
             offs_n = n0 + tl.arange(0, BLOCK_N)
             mask_n = offs_n < N
@@ -277,52 +281,39 @@ if HAS_TRITON:
             diff1 = q1[:, None] - y1[None, :]
             d2 = diff0 * diff0 + diff1 * diff1
             s = diff0 * nn0[None, :] + diff1 * nn1[None, :]
+            f = ns0[:, None] * nn0[None, :] + ns1[:, None] * nn1[None, :]
             if DIM == 3:
                 y2 = tl.load(y_ptr + offs_n * DIM + 2, mask=mask_n, other=0.0)
                 nn2 = tl.load(n_ptr + offs_n * DIM + 2, mask=mask_n, other=0.0)
                 diff2 = q2[:, None] - y2[None, :]
                 d2 += diff2 * diff2
                 s += diff2 * nn2[None, :]
+                f += ns2[:, None] * nn2[None, :]
             r = tl.sqrt(d2)
             lw = tl.load(lw_ptr + offs_n, mask=mask_n, other=-inf)
-            l = lw[None, :] - r * inv_width
-            l = tl.where(mask_n[None, :], l, -inf)
+            pos = s >= 0
+            keep = mask_n[None, :] & (f > 0) & ((pos & want_pos[:, None]) | ((~pos) & (~want_pos[:, None])))
+            f = tl.where(keep, f, 1.0)
+            l = lw[None, :] - r * inv_width + tl.log(f)
+            l = tl.where(keep, l, -inf)
             m_new = tl.maximum(m, tl.max(l, axis=1))
             scale = tl.exp(m - m_new)
             e = tl.exp(l - m_new[:, None])
-            pos = s >= 0
-            e_pos = tl.where(pos, e, 0.0)
-            e_neg = tl.where(pos, 0.0, e)
-            w_pos = w_pos * scale + tl.sum(e_pos, axis=1)
-            w_neg = w_neg * scale + tl.sum(e_neg, axis=1)
-            s_pos = s_pos * scale + tl.sum(e_pos * s, axis=1)
-            s_neg = s_neg * scale + tl.sum(e_neg * s, axis=1)
-            n0_pos = n0_pos * scale + tl.sum(e_pos * nn0[None, :], axis=1)
-            n1_pos = n1_pos * scale + tl.sum(e_pos * nn1[None, :], axis=1)
-            n0_neg = n0_neg * scale + tl.sum(e_neg * nn0[None, :], axis=1)
-            n1_neg = n1_neg * scale + tl.sum(e_neg * nn1[None, :], axis=1)
+            w = w * scale + tl.sum(e, axis=1)
+            sacc = sacc * scale + tl.sum(e * s, axis=1)
+            a0 = a0 * scale + tl.sum(e * nn0[None, :], axis=1)
+            a1 = a1 * scale + tl.sum(e * nn1[None, :], axis=1)
             if DIM == 3:
-                n2_pos = n2_pos * scale + tl.sum(e_pos * nn2[None, :], axis=1)
-                n2_neg = n2_neg * scale + tl.sum(e_neg * nn2[None, :], axis=1)
-            valid = mask_n[None, :]
-            r_pos = tl.minimum(r_pos, tl.min(tl.where(pos & valid, r, inf), axis=1))
-            r_neg = tl.minimum(r_neg, tl.min(tl.where((~pos) & valid, r, inf), axis=1))
+                a2 = a2 * scale + tl.sum(e * nn2[None, :], axis=1)
             m = m_new
-        pick = r_pos <= r_neg
-        w = tl.where(pick, w_pos, w_neg)
-        sacc = tl.where(pick, s_pos, s_neg)
         d = tl.where(w > 0, sacc / tl.where(w > 0, w, 1.0), 0.0)
-        sign = tl.where(pick, 1.0, -1.0).to(dt)
-        u0 = tl.where(pick, n0_pos, n0_neg)
-        u1 = tl.where(pick, n1_pos, n1_neg)
-        u2 = tl.where(pick, n2_pos, n2_neg)
-        norm = tl.sqrt(u0 * u0 + u1 * u1 + u2 * u2)
+        norm = tl.sqrt(a0 * a0 + a1 * a1 + a2 * a2)
         inv = tl.where(norm > 0, 1.0 / tl.where(norm > 0, norm, 1.0), 0.0)
         tl.store(out_ptr + offs_q * (DIM + 1) + 0, d, mask=mask_q)
-        tl.store(out_ptr + offs_q * (DIM + 1) + 1, sign * u0 * inv, mask=mask_q)
-        tl.store(out_ptr + offs_q * (DIM + 1) + 2, sign * u1 * inv, mask=mask_q)
+        tl.store(out_ptr + offs_q * (DIM + 1) + 1, side * a0 * inv, mask=mask_q)
+        tl.store(out_ptr + offs_q * (DIM + 1) + 2, side * a1 * inv, mask=mask_q)
         if DIM == 3:
-            tl.store(out_ptr + offs_q * (DIM + 1) + 3, sign * u2 * inv, mask=mask_q)
+            tl.store(out_ptr + offs_q * (DIM + 1) + 3, side * a2 * inv, mask=mask_q)
 
 
 ### Queries per chunk of the torch soft geometry; bounds its (chunk, N, dim) blocks.
@@ -334,30 +325,31 @@ def _soft_geometry_torch(
     y: torch.Tensor,
     n: torch.Tensor,
     lw: torch.Tensor,
+    n_star: torch.Tensor,
+    side: torch.Tensor,
     width: torch.Tensor,
     eps: float,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """The chunked PyTorch form of :func:`soft_boundary_geometry` for one case:
-    ``q`` (Q, d), ``y``/``n`` (N, d), ``lw`` (N,), ``width`` a scalar tensor."""
+    """The chunked PyTorch form of the accumulation pass of
+    :func:`soft_boundary_geometry` for one case: ``q`` (Q, d), ``y``/``n`` (N, d),
+    ``lw`` (N,), ``n_star`` (Q, d) and ``side`` (Q,) from the nearest sample,
+    ``width`` a scalar tensor."""
     inf = float("inf")
     ds, us = [], []
     for s0 in range(0, q.shape[0], _TORCH_SOFT_CHUNK):
-        qc = q[s0 : s0 + _TORCH_SOFT_CHUNK]
+        qc, nsc, sdc = q[s0 : s0 + _TORCH_SOFT_CHUNK], n_star[s0 : s0 + _TORCH_SOFT_CHUNK], side[s0 : s0 + _TORCH_SOFT_CHUNK]
         diff = qc[:, None, :] - y[None, :, :]  # (c, N, d)
         r = diff.norm(dim=-1)  # (c, N)
         s = (diff * n[None]).sum(-1)  # signed distance to each sample's tangent plane
-        l = lw[None, :] - r / width
+        f = (nsc[:, None, :] * n[None]).sum(-1)  # the sample's normal on the nearest sample's normal
+        keep = (f > 0) & ((s >= 0) == (sdc[:, None] > 0))
+        l = lw[None, :] - r / width + torch.log(torch.where(keep, f, torch.ones_like(f)))
+        l = torch.where(keep, l, torch.full_like(l, -inf))
         e = torch.exp(l - l.max(dim=1, keepdim=True).values)
-        pos = s >= 0
-        r_pos = torch.where(pos, r, inf).amin(dim=1)
-        r_neg = torch.where(pos, inf, r).amin(dim=1)
-        pick = (r_pos <= r_neg)[:, None]  # the side of the nearest sample
-        e_side = torch.where(pick == pos, e, torch.zeros_like(e))
-        w = e_side.sum(dim=1)
-        d = (e_side * s).sum(dim=1) / w
-        nbar = (e_side[:, :, None] * n[None]).sum(dim=1)  # (c, d)
-        sign = torch.where(pick[:, 0], 1.0, -1.0).to(q.dtype)
-        u = sign[:, None] * nbar / nbar.norm(dim=-1, keepdim=True).clamp_min(eps)
+        w = e.sum(dim=1)
+        d = (e * s).sum(dim=1) / w
+        nbar = (e[:, :, None] * n[None]).sum(dim=1)  # (c, d)
+        u = sdc[:, None] * nbar / nbar.norm(dim=-1, keepdim=True).clamp_min(eps)
         ds.append(d)
         us.append(u)
     return torch.cat(ds), torch.cat(us)
@@ -378,34 +370,46 @@ def soft_boundary_geometry(
     average over the boundary samples, the sample-independent form of
     :func:`nearest_boundary_geometry`.
 
-    For every query :math:`x_q`, each boundary sample :math:`(y_i, \hat n_i, w_i)`
-    gets the kernel weight :math:`a_i = w_i \exp(-|x_q - y_i| / \tau)` with
-    :math:`w_i` its measure and :math:`\tau` the ``width``, and the signed
-    distance :math:`s_i = (x_q - y_i) \cdot \hat n_i` to its tangent plane.
-    The nearest sample decides the side (:math:`s_i \ge 0`, the side its
-    normal points to, or :math:`s_i < 0`); over the samples on that side
+    For every query :math:`x_q` the exact nearest sample :math:`i^*` is found
+    first (:func:`_nearest_index`); it fixes the side of the boundary the query
+    is on, :math:`\sigma^* = \operatorname{sign}((x_q - y_{i^*}) \cdot \hat n_{i^*})`
+    (positive on the side the normals point to; a tangent or coincident query
+    counts as positive), and the local orientation :math:`\hat n_{i^*}`. Every
+    sample :math:`(y_i, \hat n_i, w_i)` with :math:`w_i` its measure then gets
+    the weight
+
+    .. math::
+
+        a_i = w_i\, e^{-|x_q - y_i| / \tau}\, \max(0, \hat n_i \cdot \hat n_{i^*})
+        \,[\operatorname{sign}(s_i) = \sigma^*], \qquad s_i = (x_q - y_i) \cdot \hat n_i,
+
+    with :math:`\tau` the ``width`` and :math:`s_i` the signed distance from the
+    query to the sample's tangent plane, and
 
     .. math::
 
         d_q = \frac{\sum_i a_i s_i}{\sum_i a_i}, \qquad
-        u_q = \pm \frac{\sum_i a_i \hat n_i}{\lvert \sum_i a_i \hat n_i \rvert},
+        u_q = \sigma^* \frac{\sum_i a_i \hat n_i}{\lvert \sum_i a_i \hat n_i \rvert}.
 
-    with the sign of :math:`u_q` positive on the normals' side, so that both
-    quantities keep the conventions of :func:`nearest_boundary_geometry`:
+    Both keep the conventions of :func:`nearest_boundary_geometry`:
     :math:`d_q > 0` outside for outward normals (the stored signed-distance
     fields' convention) and :math:`u_q` points from the boundary towards the
     query. The sums are Monte Carlo estimates of integrals over the boundary
     with the samples' measures as quadrature weights, so under refinement of
     the boundary sample they converge for any sampling law whose normalized
-    measure converges, the same property the model's slice attention has; the
-    nearest sample's Euclidean distance and direction do not (they read the
-    sample spacing). Next to a flat wall every :math:`s_i` equals the wall
-    distance, so :math:`d_q` is exact there whatever the sample; on a curved
-    wall the samples whose tangent plane the query lies behind fall on the
-    other side and are excluded, which keeps :math:`d_q` the sign of the
-    nearest sample's, and the direction is the kernel-mean normal of the
-    side. Restricting to the nearest sample's side also keeps thin features
-    apart: the far face of a plate has its own sign.
+    measure converges, uniformly in the wall distance, the property the
+    model's slice attention has; the nearest sample's Euclidean distance and
+    direction do not (they read the sample spacing, by an amount that grows
+    as the query approaches the wall). The nearest sample enters only through
+    its side and its normal, both of which converge with the sample and enter
+    smoothly. Next to a flat wall every :math:`s_i` equals the wall distance,
+    so :math:`d_q` is exact there whatever the sample; on a curved wall the
+    samples whose tangent plane the query lies behind fall on the other side
+    and are excluded, which keeps :math:`d_q` the sign of the nearest
+    sample's; the facing factor keeps the far face of a thin body and the far
+    wall of a concave corner out of the average (their normals point the
+    other way), and at a convex edge selects the nearest face, as the nearest
+    form does.
 
     All quantities are functions of pairwise differences, so :math:`d_q` is
     invariant and :math:`u_q` covariant under every rigid motion and
@@ -414,11 +418,12 @@ def soft_boundary_geometry(
     measures); ``width`` is a length in the coordinates' units, a scalar or
     one value per batch element. ``normals`` are renormalized.
 
-    On CUDA with Triton available and no input requiring a gradient, a
-    streaming kernel (two or three spatial dimensions) computes the result
-    without materializing the (Q, N) block; otherwise a chunked PyTorch form,
-    differentiable in every input, is used. Half types are computed in
-    float32.
+    On CUDA with Triton available and no input requiring a gradient, the
+    exact nearest search and a streaming accumulation kernel (two or three
+    spatial dimensions) compute the result without materializing the (Q, N)
+    block; otherwise a chunked PyTorch form, differentiable in every input
+    (the side and the nearest index are discrete), is used. Half types are
+    computed in float32.
     """
     b, nq, dim = query_points.shape
     width_t = torch.as_tensor(width, dtype=torch.float64, device=query_points.device)
@@ -449,18 +454,26 @@ def soft_boundary_geometry(
             else log_measures[i].reshape(-1).to(work).contiguous()
         )
         tau = width_t[i].to(work)
+        with torch.no_grad():
+            idx = _nearest_index(q.detach(), y.detach())
+        n_star = nrm[idx]  # (Q, d)
+        s_star = ((q - y[idx]) * n_star).sum(-1)
+        side = torch.where(s_star >= 0, 1.0, -1.0).to(work)
         if q.is_cuda and HAS_TRITON and not needs_grad and dim in (2, 3):
             out = torch.empty(nq, dim + 1, dtype=work, device=q.device)
+            inv_width = (1.0 / tau).reshape(1).contiguous()
             block_q, block_n = 32, 128
             _soft_geometry_kernel[(triton.cdiv(nq, block_q),)](
                 q,
                 y,
                 nrm,
                 lw,
+                n_star.contiguous(),
+                side.contiguous(),
+                inv_width,
                 out,
                 nq,
                 y.shape[0],
-                1.0 / float(tau),
                 DIM=dim,
                 BLOCK_Q=block_q,
                 BLOCK_N=block_n,
@@ -468,7 +481,7 @@ def soft_boundary_geometry(
             )
             d, u = out[:, 0], out[:, 1:]
         else:
-            d, u = _soft_geometry_torch(q, y, nrm, lw, tau, eps)
+            d, u = _soft_geometry_torch(q, y, nrm, lw, n_star, side, tau, eps)
         ds.append(d.to(query_points.dtype))
         us.append(u.to(query_points.dtype))
     return torch.stack(ds), torch.stack(us)
