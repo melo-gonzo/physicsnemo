@@ -309,8 +309,9 @@ weighted-error lane's probe (`we_probe.py`, `we_reduce.py`, branch
 `psharpe/isla-volume-quadrature`, `examples/cfd/isla/research/volume_quadrature/weighted_error/`)
 predicts at **every mesh point** of the 200 held-out airfoils and scores the same
 predictions two ways: **count** (every point equal, the protocol's weighting) and
-**volume** (exact dual-area weighting: the L2 norm over the CFD domain). The chunk-trained interacting model I is read on
-its own tiles (law `tiles`, its training law); the read-only arms need no writers.
+**volume** (exact dual-area weighting: the L2 norm over the CFD domain). The
+chunk-trained interacting model I is read on its own tiles (law `tiles`, its
+training law); the read-only arms need no writers.
 `qg_we_reduce.py` (this folder) reduces G, I, P, T over the four seeds.
 
 Provenance: seeds 42, 43 of I, P, T reuse that lane's rows (AGA
