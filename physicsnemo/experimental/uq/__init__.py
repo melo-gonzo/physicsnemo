@@ -47,8 +47,9 @@ Conformal prediction
   coverage or risk statement depends on the selected guarantee tier and
   assumes exchangeable calibration and prediction samples. The public
   names (:class:`CellwiseCalibrator`, :class:`FunctionalBandCalibrator`,
-  :class:`RiskControlCalibrator`, the score strategies, and
-  :class:`ConformalPredictor`) are re-exported here.
+  :class:`RiskControlCalibrator`, the score strategies,
+  :class:`AuxDifficulty`, :class:`ConformalPredictor`, and
+  :class:`CoverageAccumulator`) are re-exported here.
 """
 
 from physicsnemo.core.version_check import check_version_spec
