@@ -1643,5 +1643,142 @@
    "iv_smooth_without_stored_field_at_least_as_good_as_nearest": "FAIL (velocity 0.0278 vs 0.0196); the one-sided form passes (0.0281/0.0170/0.0280 vs 0.0305/0.0196/0.0276)",
    "refinement_invariance": "PASS for every kernel lane (refu/reff ratios 0.965-1.021)"
   }
+ },
+ "baselines_under_resampling": {
+  "note": "GeoTransolver-256 and Transolver 512x16 AirfRANS references (cl_r_af_gt/t_seed42/43, AGA) scored under airfrans_volume_{sub400u,sub400a,refu,reff} (the three-dimensional pipeline's resampling variants, 2026-10-07): bitwise identical to native on every field. Both baseline interior models drop the boundary mesh at the reader (drop_in_file_boundaries: true) and read the geometry only through the stored sdf and sdf_normals, so boundary resampling is the identity for them by construction.",
+  "lanes": {
+   "cl_r_af_gt_seed42": {
+    "native": {
+     "pressure_l2": 0.02603642463684082,
+     "velocity_l2": 0.036965091228485104,
+     "nut_l2": 0.029508113861083984
+    },
+    "ratio_to_native": {
+     "sub400u": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "sub400a": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "refu": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "reff": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     }
+    }
+   },
+   "cl_r_af_gt_seed43": {
+    "native": {
+     "pressure_l2": 0.027147746086120604,
+     "velocity_l2": 0.03868067502975464,
+     "nut_l2": 0.029109127521514892
+    },
+    "ratio_to_native": {
+     "sub400u": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "sub400a": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "refu": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "reff": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     }
+    }
+   },
+   "cl_r_af_t_seed42": {
+    "native": {
+     "pressure_l2": 0.026032676696777345,
+     "velocity_l2": 0.0713199281692505,
+     "nut_l2": 0.03130501270294189
+    },
+    "ratio_to_native": {
+     "sub400u": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "sub400a": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "refu": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "reff": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     }
+    }
+   },
+   "cl_r_af_t_seed43": {
+    "native": {
+     "pressure_l2": 0.025683109760284425,
+     "velocity_l2": 0.07005567073822022,
+     "nut_l2": 0.030820071697235107
+    },
+    "ratio_to_native": {
+     "sub400u": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "sub400a": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "refu": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "reff": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     }
+    }
+   },
+   "cl_r_af_isla_seed42": {
+    "native": {
+     "pressure_l2": 0.03691647291183472,
+     "velocity_l2": 0.016736240386962892,
+     "nut_l2": 0.03167710065841675
+    },
+    "ratio_to_native": {}
+   },
+   "cl_r_af_isla_seed43": {
+    "native": {
+     "pressure_l2": 0.03350761651992798,
+     "velocity_l2": 0.017710347175598145,
+     "nut_l2": 0.031226158142089844
+    },
+    "ratio_to_native": {}
+   }
+  }
  }
 }

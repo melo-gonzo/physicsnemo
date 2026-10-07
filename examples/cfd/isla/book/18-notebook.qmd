@@ -34914,3 +34914,24 @@ the built-in channel (best accuracy, re-panelization invariant, pose
 dependence of 1 to 5 percent from the wall-node jump), and a continuous
 orientation reference at sharp edges as the next mechanism to fix, which is a
 design change for Peter.
+
+**The baselines under the same resamplings** (GeoTransolver-256 and
+Transolver 512 x 16 AirfRANS references, both seeds, scored on AGA under
+`airfrans_volume_{sub400u,sub400a,refu,reff}`, the three-dimensional
+pipeline's variants built today): every score is bitwise identical to the
+native one, 1.00 on every field under all four resamplings. That is not
+robustness but blindness: the two baseline interior models drop the boundary
+mesh at the reader (`drop_in_file_boundaries: true`) and read the geometry
+only through the stored signed distance and its gradient, which are
+precomputed from the full CFD mesh and untouched by any resampling of the
+airfoil tokens. ISLA's interior model is the only one of the three that reads
+the boundary sample itself, so it is the only one that can pay for a coarser
+boundary, and it pays twice: once through the slice states (2.7 to 4.5x, the
+information the 600 dropped segments carried) and about as much again through
+the built-in channel. The comparison that would separate an
+architecture-wide information loss from ISLA's own sensitivity therefore does
+not exist on AirfRANS at this budget; the baselines' invariance is the
+invariance of a model that never looks. It also restates what the
+re-panelization result means: ISLA's kernel forms are invariant to a change
+of boundary sampling that the baselines cannot even see, while remaining the
+only models that would notice a geometry the stored field does not encode.
