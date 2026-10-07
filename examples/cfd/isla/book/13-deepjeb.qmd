@@ -1,6 +1,6 @@
 # DeepJEB++ {#sec-deepjeb}
 
-**DeepJEB++ is a surface task on generated jet-engine brackets whose global vector is a load direction rather than a freestream; on an equal-step ladder ISLA leads or ties the best GeoTransolver arm at every rung on both fields.** The chapter follows the shared layout. The pose contract holds with the load direction as the one global vector; the discretization instruments of @sec-invariances are not run on this dataset. Protocol: @sec-protocol with one stated deviation, a fixed optimizer-step budget across the ladder; float32, two seeds; every ratio is GeoTransolver ÷ ISLA, above one favoring ISLA.
+**DeepJEB++ is a surface task on generated jet-engine brackets whose global vector is a load direction rather than a freestream, and it is the one campaign dataset the ISLA reference configuration does not finish: at the reference rate and at half of it the lanes reach the baselines' accuracy and then fall to the mean-field plateau, so the scored checkpoints trail GeoTransolver and Transolver by about four times on displacement; under the earlier form of the class, on an equal-step ladder, ISLA led or tied the best GeoTransolver arm at every rung.** The chapter follows the shared layout. The pose contract holds with the load direction as the one global vector; the area protocol is the identity here (every bracket's surface mesh is under the cell budget) and the resampling instruments of @sec-invariances are not run on this dataset. Protocol: @sec-protocol, with the dataset's two stated deviations, a per-dataset training rate of half the reference for ISLA and, on the ladder, a fixed optimizer-step budget; float32, two seeds; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
 ```{python}
 #| label: setup-deepjeb
@@ -209,19 +209,73 @@ vertex index sets.
 ```{python}
 #| label: para-deepjeb-lede
 #| output: asis
-vm = [jb_ratio[(r, "von_mises")] for r, _, _ in JB_RUNGS]; dp = [jb_ratio[(r, "displacement")] for r, _, _ in JB_RUNGS]
-print(f"**On DeepJEB++, a surface task whose global vector is a load direction rather than a freestream, ISLA leads or ties the best "
-      f"GeoTransolver arm at every rung of an equal-step ladder on both fields: GeoTransolver ÷ ISLA {min(vm):.2f} to {max(vm):.2f} on von "
-      f"Mises stress and {min(dp):.2f} to {max(dp):.2f} on displacement over 256 to 12,451 training brackets.** DeepJEB++ "
+C = json.load(open(RES / "char" / "deepjeb_surface.json")); isla_c = C["arms"][C["isla_arm"]]["native"]
+gt_c = C["arms"]["GeoTransolver 256"]["native"]; t_c = C["arms"]["Transolver 512 x 16"]["native"]
+TR = json.load(open(RES / "char" / "deepjeb_trajectories_2026-10-07.json"))["lanes"]
+half = [TR[r]["epochs"] for r in ("cl_jd_rate_e40_seed42", "cl_jd_rate_e40_seed43")]
+full = [TR[r]["epochs"] for r in ("cl_r_jeb_isla_seed42", "cl_r_jeb_isla_seed43")]
+best_ep = [min(e, key=lambda k: e[k]["val_loss"]) for e in half]
+pre_dp = mean(e[k]["displacement_l2_val"] for e, k in zip(half, best_ep)); pre_vm = mean(e[k]["von_mises_l2_val"] for e, k in zip(half, best_ep))
+def collapse_epoch(e):
+    """First validation epoch whose loss is more than twice the running minimum before it."""
+    lo = float("inf")
+    for k in sorted(e, key=int):
+        if e[k]["val_loss"] > 2 * lo:
+            return int(k)
+        lo = min(lo, e[k]["val_loss"])
+    return None
+c_half = [collapse_epoch(e) for e in half]; c_full = [collapse_epoch(e) for e in full]
+when = lambda c: f"at epoch {c[0]}" if min(c) == max(c) else f"between epochs {min(c)} and {max(c)}"
+print(f"**Under the campaign protocol the ISLA reference configuration does not finish DeepJEB++: trained at half the reference rate "
+      f"(the dataset's exception), both seeds descend to a validation displacement error of {pre_dp:.2f} and von Mises error of {pre_vm:.2f} "
+      f"by epoch {max(int(k) for k in best_ep)}, level with GeoTransolver-256 ({gt_c['displacement_l2']['mean']:.2f} / {gt_c['von_mises_l2']['mean']:.2f}) "
+      f"and Transolver ({t_c['displacement_l2']['mean']:.2f} / {t_c['von_mises_l2']['mean']:.2f}), and then fall to the mean-field plateau "
+      f"{when(c_half)} (the first validation after it doubles its running minimum), so the 40-epoch checkpoints the protocol scores read "
+      f"{isla_c['displacement_l2']['mean']:.2f} on displacement and {isla_c['von_mises_l2']['mean']:.2f} on von Mises stress, "
+      f"{isla_c['displacement_l2']['mean'] / gt_c['displacement_l2']['mean']:.1f} times GeoTransolver's.** At the reference rate the same "
+      f"configuration reaches the plateau {when(c_full)} on both seeds and scores about 1.0 on both fields. The plateau is the routing "
+      f"collapse of the trained routing (@sec-arch-routing-trained): in half of the blocks the sample-conditioned prototypes route to one "
+      f"to five effective slices of 512 with coincident anchors, and the model's output degenerates to the field mean. Halving the rate "
+      f"delays the collapse from epoch {max(c_full)} to epoch {min(c_half)} and does not prevent it, so the standing on this dataset is a "
+      f"failure of training stability, not of capacity: eighteen epochs in, the same lanes match the baselines. DeepJEB++ "
       "(@sec-datasets-beyond-aero) is a family of generated jet-engine brackets. Each is solved by linear static finite elements under four "
       "load cases applied at the lug bore with the bolt holes clamped: three force directions and a torque about the lug axis. The "
       "surface mesh carries the fixed and loaded labels and the traction as boundary scalars. The load direction enters ISLA as the one "
       "global vector, and a force/torque one-hot enters as two global scalars (a moment axis is a pseudovector, so the model is told when the "
       "vector is an axis). The targets are von Mises stress and displacement at the surface cells. The test set is 1,385 held-out "
-      "brackets under all four loads (5,540 files), scored in float32 over every surface cell. The ladder holds the optimizer-step "
-      "budget fixed at about 130,000 steps while the training set grows (500, 125, 32 and 10 epochs at 256, 1,024, 4,096 and 12,451 "
-      "brackets). It is therefore an equal-compute comparison at each rung and not a learning curve. Both architectures are flat above 1,024 "
-      "brackets at this budget, which says the models are step-limited there, so the data exponent is not readable from it.")
+      "brackets under all four loads (5,540 files), scored in float32 over every surface cell.")
+```
+
+```{python}
+#| label: tbl-deepjeb-protocols
+#| output: asis
+protocol_table("deepjeb_surface.json", "tbl-deepjeb-protocols", "DeepJEB++ at 12,451 training brackets, 40 epochs")
+```
+
+```{python}
+#| label: para-deepjeb-trajectory
+#| output: asis
+print(f"The two protocols beside the native one add nothing here: the area protocol is the identity on DeepJEB++ (every bracket's surface "
+      f"mesh is below the cell budget, so the uniform draw is the mesh itself) and the posed protocol reproduces ISLA's native numbers to "
+      f"four digits while the baselines read {C['arms']['GeoTransolver 256']['posed']['displacement_l2']['mean']:.2f} and "
+      f"{C['arms']['Transolver 512 x 16']['posed']['displacement_l2']['mean']:.2f} on displacement, the pose dependence that every dataset "
+      f"chapter measures (@sec-pose). Data: results/char/deepjeb_trajectories_2026-10-07.json for the trajectories (trainer validation per "
+      f"epoch; the training loss rises from {min(e['18']['train_loss'] for e in half):.4f} at epoch 18 to {max(e['36']['train_loss'] for e in half):.3f} "
+      f"at epoch 36 on both seeds).")
+```
+
+```{python}
+#| label: para-deepjeb-ladder-lede
+#| output: asis
+vm = [jb_ratio[(r, "von_mises")] for r, _, _ in JB_RUNGS]; dp = [jb_ratio[(r, "displacement")] for r, _, _ in JB_RUNGS]
+print(f"**Under the earlier form of the class (384 wide, 12 layers, static prototypes, trained at 5e-4) ISLA led or tied the best "
+      f"GeoTransolver arm at every rung of an equal-step ladder on both fields: GeoTransolver ÷ ISLA {min(vm):.2f} to {max(vm):.2f} on von "
+      f"Mises stress and {min(dp):.2f} to {max(dp):.2f} on displacement over 256 to 12,451 training brackets.** That ladder is kept as the "
+      "record of what the form achieved before the sample-conditioned prototypes entered the class; it has not been re-run under the "
+      "current reference, which does not finish the dataset. The ladder holds the optimizer-step budget fixed at about 130,000 steps while "
+      "the training set grows (500, 125, 32 and 10 epochs at 256, 1,024, 4,096 and 12,451 brackets). It is therefore an equal-compute "
+      "comparison at each rung and not a learning curve. Both architectures are flat above 1,024 brackets at this budget, which says the "
+      "models are step-limited there, so the data exponent is not readable from it.")
 ```
 
 ```{python}
@@ -239,8 +293,8 @@ for rung, n, ep in JB_RUNGS:
             f"{jbcell(g_dp, 'displacement')} | {jb_ratio[(rung, 'von_mises')]:.2f} / {jb_ratio[(rung, 'displacement')]:.2f} |\n")
 print(out)
 print(": DeepJEB++ at equal optimizer steps (about 130,000; epochs in parentheses): relative L2 of von Mises stress and displacement over "
-      "every surface cell, mean over the 5,540 clean test files, float32, two seeds unless marked. ISLA is the reference configuration "
-      "(384 x 12, 5e-4, the load direction as the global vector); the GeoTransolver column is the arm with the lowest mean on that rung "
+      "every surface cell, mean over the 5,540 clean test files, float32, two seeds unless marked. ISLA is the earlier form of the class "
+      "(384 wide, 12 layers, static prototypes, 5e-4, the load direction as the global vector); the GeoTransolver column is the arm with the lowest mean on that rung "
       "and field, as preregistered, among GeoTransolver-512 at 1e-3 and 3e-3 and GeoTransolver-256 at 1e-3 where they were run. How to read "
       "this: the ratio is GeoTransolver ÷ ISLA, above one favoring ISLA. The rows are equal-compute standings, not a learning curve, and the "
       "flatness above 1,024 brackets is the step budget. Data: results/deepjeb_2026-09-22.json. {#tbl-deepjeb-surface}")
@@ -259,16 +313,10 @@ print(f"**Two things qualify every row of @tbl-deepjeb-surface.** Absolute error
       f"{(g3 / g1 - 1) * 100:.0f}% worse than 1e-3 here. Every row is an equal-compute standing, never a learning curve.")
 ```
 
-```{python}
-#| label: tbl-deepjeb-protocols
-#| output: asis
-protocol_table("deepjeb_surface.json", "tbl-deepjeb-protocols", "DeepJEB++ at 12,451 training brackets")
-```
-
 ## Ladders and controls {#sec-deepjeb-ladders}
 
-**The equal-step ladder is the standing table (@tbl-deepjeb-surface); its near-zero slopes are a compute statement and are drawn as such in @fig-exponents-datasets.** Both architectures are flat above 1,024 brackets at this budget, which says the models are step-limited there, so the data exponent is not readable from it; no width or depth control of ISLA was run on this dataset.
+**The campaign standing (@tbl-deepjeb-protocols) is a 40-epoch protocol at the full clean training set under the current reference configuration; the equal-step ladder (@tbl-deepjeb-surface) is the earlier form's record, and its near-zero slopes are a compute statement, drawn as such in @fig-exponents-datasets.** The one control run under the current reference is the training rate: at 3.75e-4 the routing collapses by the fourth epoch, at half that rate by the twenty-second, on both seeds each time, which places the instability in the sample-conditioned routing at this width rather than in the rate. Both architectures are flat above 1,024 brackets on the ladder at its step budget, which says the models were step-limited there, so the data exponent is not readable from it; no width or depth control of ISLA was run on this dataset.
 
 ## What this dataset does not say {#sec-deepjeb-limits}
 
-**Every DeepJEB++ row is an equal-compute standing and never a learning curve, on labels a tenth of which were removed as unphysical.** Absolute errors near 0.5 on von Mises stress are a property of the dataset, not of any architecture. The lead says nothing about tensor targets, which Tensile2d measures (@sec-interior-tensile2d), and the published Transolver, GNOT and GI-FNO errors are on another split.
+**The DeepJEB++ standing is a failure of training stability, measured on labels a tenth of which were removed as unphysical, and it says nothing about the capacity of the architecture on brackets: eighteen epochs in, the same lanes match the baselines.** Absolute errors near 0.5 on von Mises stress are a property of the dataset, not of any architecture. The ladder rows are equal-compute standings and never a learning curve. The earlier form's lead says nothing about tensor targets, which Tensile2d measures (@sec-interior-tensile2d), and the published Transolver, GNOT and GI-FNO errors are on another split.

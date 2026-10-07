@@ -1069,5 +1069,579 @@
    ]
   },
   "preregistration": "book #sec-nb-soft-geo-lanes"
+ },
+ "relaunch_code_v23": {
+  "native_posed": {
+   "sr_af_soft03_seed42": {
+    "native": {
+     "pressure_l2": 0.03137195587158203,
+     "velocity_l2": 0.016824952363967895,
+     "nut_l2": 0.02836233615875244
+    },
+    "posed": {
+     "pressure_l2": 0.031681563854217526,
+     "velocity_l2": 0.017315288782119753,
+     "nut_l2": 0.028562805652618407
+    },
+    "posed_over_native": {
+     "pressure_l2": 1.0098689410345612,
+     "velocity_l2": 1.029143406028415,
+     "nut_l2": 1.007068158727965
+    }
+   },
+   "sr_af_soft03_seed43": {
+    "native": {
+     "pressure_l2": 0.030612270832061767,
+     "velocity_l2": 0.015212872028350831,
+     "nut_l2": 0.028810524940490724
+    },
+    "posed": {
+     "pressure_l2": 0.03122191667556763,
+     "velocity_l2": 0.01602612257003784,
+     "nut_l2": 0.029043948650360106
+    },
+    "posed_over_native": {
+     "pressure_l2": 1.0199150806828532,
+     "velocity_l2": 1.0534580544798793,
+     "nut_l2": 1.008102029044994
+    }
+   },
+   "sr_af_smooth03_seed42": {
+    "native": {
+     "pressure_l2": 0.030019288063049317,
+     "velocity_l2": 0.015998293161392212,
+     "nut_l2": 0.029483728408813477
+    },
+    "posed": {
+     "pressure_l2": 0.030021400451660157,
+     "velocity_l2": 0.016001982688903807,
+     "nut_l2": 0.029473540782928468
+    },
+    "posed_over_native": {
+     "pressure_l2": 1.0000703677117992,
+     "velocity_l2": 1.0002306200714273,
+     "nut_l2": 0.9996544661603258
+    }
+   },
+   "sr_af_smooth03_seed43": {
+    "native": {
+     "pressure_l2": 0.03308711290359497,
+     "velocity_l2": 0.015006556510925292,
+     "nut_l2": 0.030691912174224855
+    },
+    "posed": {
+     "pressure_l2": 0.033075079917907715,
+     "velocity_l2": 0.015006437301635742,
+     "nut_l2": 0.030683815479278564
+    },
+    "posed_over_native": {
+     "pressure_l2": 0.9996363240962632,
+     "velocity_l2": 0.9999920561862767,
+     "nut_l2": 0.9997361945094744
+    }
+   },
+   "sr_af_soft03_nosdf_seed42": {
+    "native": {
+     "pressure_l2": 0.02810408353805542,
+     "velocity_l2": 0.017029948234558105,
+     "nut_l2": 0.028007638454437257
+    },
+    "posed": {
+     "pressure_l2": 0.02844412088394165,
+     "velocity_l2": 0.017167267799377443,
+     "nut_l2": 0.02804252624511719
+    },
+    "posed_over_native": {
+     "pressure_l2": 1.0120992148854733,
+     "velocity_l2": 1.0080634164548241,
+     "nut_l2": 1.0012456527078029
+    }
+   },
+   "sr_af_smooth03_nosdf_seed42": {
+    "native": {
+     "pressure_l2": 0.03035749912261963,
+     "velocity_l2": 0.02782318115234375,
+     "nut_l2": 0.029474754333496094
+    },
+    "posed": {
+     "pressure_l2": 0.030350058078765868,
+     "velocity_l2": 0.027841506004333497,
+     "nut_l2": 0.029464423656463623
+    },
+    "posed_over_native": {
+     "pressure_l2": 0.9997548861378961,
+     "velocity_l2": 1.000658618146121,
+     "nut_l2": 0.999649507611986
+    }
+   }
+  },
+  "af_geo": {
+   "sr_af_smooth03_nosdf_seed42": {
+    "native_means": {
+     "pressure_l2": 0.03035749923903495,
+     "velocity_l2": 0.02782317847479135,
+     "nut_l2": 0.029474750976078212
+    },
+    "ratio_to_native": {
+     "native": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "subu": {
+      "pressure_l2": 7.631905073681092,
+      "velocity_l2": 8.243068724610623,
+      "nut_l2": 13.073784234110438
+     },
+     "suba": {
+      "pressure_l2": 10.186888448210592,
+      "velocity_l2": 10.407659928177113,
+      "nut_l2": 14.088302218608824
+     },
+     "refu": {
+      "pressure_l2": 0.9649381561659806,
+      "velocity_l2": 1.007176366961225,
+      "nut_l2": 1.0083091836018556
+     },
+     "reff": {
+      "pressure_l2": 0.9871510733141826,
+      "velocity_l2": 1.0120257625924083,
+      "nut_l2": 1.0063353253364542
+     },
+     "subu_natgeo": {
+      "pressure_l2": 2.7040882281504524,
+      "velocity_l2": 1.3698410058880308,
+      "nut_l2": 1.965638005451506
+     },
+     "suba_natgeo": {
+      "pressure_l2": 3.5913520536382926,
+      "velocity_l2": 1.738930340567828,
+      "nut_l2": 1.879424543163163
+     },
+     "refu_natgeo": {
+      "pressure_l2": 0.9648246444846708,
+      "velocity_l2": 1.0023567419632566,
+      "nut_l2": 1.005605877315983
+     },
+     "reff_natgeo": {
+      "pressure_l2": 0.9874242392899919,
+      "velocity_l2": 1.0044051037548207,
+      "nut_l2": 1.0063117046162033
+     }
+    },
+    "geometry_share_of_log_excess": {
+     "subu": {
+      "pressure_l2": 0.5105316964851182,
+      "velocity_l2": 0.8508112482403011,
+      "nut_l2": 0.7370985351539102
+     },
+     "suba": {
+      "pressure_l2": 0.4491715345812389,
+      "velocity_l2": 0.7638163321455803,
+      "nut_l2": 0.761480760315975
+     },
+     "refu": {
+      "pressure_l2": -0.0032961325057157026,
+      "velocity_l2": 0.6708075796188644,
+      "nut_l2": 0.3244323154356463
+     },
+     "reff": {
+      "pressure_l2": 0.02139493082452859,
+      "velocity_l2": 0.6323055446791471,
+      "nut_l2": 0.003716709979649057
+     }
+    }
+   },
+   "sr_af_smooth03_seed42": {
+    "native_means": {
+     "pressure_l2": 0.03001928254030645,
+     "velocity_l2": 0.015998295047320425,
+     "nut_l2": 0.029483726155012845
+    },
+    "ratio_to_native": {
+     "native": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "subu": {
+      "pressure_l2": 6.179154192016957,
+      "velocity_l2": 5.263607536080559,
+      "nut_l2": 11.602116272053703
+     },
+     "suba": {
+      "pressure_l2": 8.519099455354722,
+      "velocity_l2": 7.746826195625646,
+      "nut_l2": 12.384587129676556
+     },
+     "refu": {
+      "pressure_l2": 1.0053349027461724,
+      "velocity_l2": 0.9923760509698544,
+      "nut_l2": 1.0087464566004087
+     },
+     "reff": {
+      "pressure_l2": 1.0004958550316707,
+      "velocity_l2": 0.999803701685788,
+      "nut_l2": 1.0114409724503006
+     },
+     "subu_natgeo": {
+      "pressure_l2": 3.212170471680481,
+      "velocity_l2": 1.7866523113839068,
+      "nut_l2": 2.092557493506544
+     },
+     "suba_natgeo": {
+      "pressure_l2": 3.902410136424089,
+      "velocity_l2": 2.3085739412830595,
+      "nut_l2": 1.804976355056213
+     },
+     "refu_natgeo": {
+      "pressure_l2": 1.005029602744333,
+      "velocity_l2": 0.9927983340493742,
+      "nut_l2": 1.0072531144894061
+     },
+     "reff_natgeo": {
+      "pressure_l2": 1.0003750952535488,
+      "velocity_l2": 1.0000540230480757,
+      "nut_l2": 1.0114554914125902
+     }
+    },
+    "geometry_share_of_log_excess": {
+     "subu": {
+      "pressure_l2": 0.3592363352324892,
+      "velocity_l2": 0.6505672935414694,
+      "nut_l2": 0.6987635611906156
+     },
+     "suba": {
+      "pressure_l2": 0.36442721139037154,
+      "velocity_l2": 0.5913462399278511,
+      "nut_l2": 0.7653254178430409
+     },
+     "refu": {
+      "pressure_l2": 0.057083603884427965,
+      "velocity_l2": 0.05558968749175306,
+      "nut_l2": 0.17012149462585144
+     },
+     "reff": {
+      "pressure_l2": 0.24349281490144645,
+      "velocity_l2": 1.2751744799937366,
+      "nut_l2": -0.0012618321569456941
+     }
+    }
+   },
+   "sr_af_smooth03_seed43": {
+    "native_means": {
+     "pressure_l2": 0.033087121588177976,
+     "velocity_l2": 0.015006556084845215,
+     "nut_l2": 0.030691900993697344
+    },
+    "ratio_to_native": {
+     "native": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "subu": {
+      "pressure_l2": 5.573049532817098,
+      "velocity_l2": 5.3265792292316885,
+      "nut_l2": 13.583606121562552
+     },
+     "suba": {
+      "pressure_l2": 7.685277086511436,
+      "velocity_l2": 8.351059065807997,
+      "nut_l2": 14.483335199658674
+     },
+     "refu": {
+      "pressure_l2": 0.9950246054628381,
+      "velocity_l2": 1.001560718644086,
+      "nut_l2": 0.9936820720085964
+     },
+     "reff": {
+      "pressure_l2": 1.0106689357268281,
+      "velocity_l2": 1.008141824682499,
+      "nut_l2": 0.99861717162205
+     },
+     "subu_natgeo": {
+      "pressure_l2": 3.135309279939077,
+      "velocity_l2": 1.891587140158713,
+      "nut_l2": 2.1359768402195956
+     },
+     "suba_natgeo": {
+      "pressure_l2": 3.7219569959005936,
+      "velocity_l2": 2.921248932306217,
+      "nut_l2": 1.8570255131066582
+     },
+     "refu_natgeo": {
+      "pressure_l2": 0.995269421337103,
+      "velocity_l2": 1.0017260360839237,
+      "nut_l2": 0.9910943259908385
+     },
+     "reff_natgeo": {
+      "pressure_l2": 1.0107379676092134,
+      "velocity_l2": 1.0082516682353344,
+      "nut_l2": 0.9985963274012996
+     }
+    },
+    "geometry_share_of_log_excess": {
+     "subu": {
+      "pressure_l2": 0.3348276255338733,
+      "velocity_l2": 0.6189318385629203,
+      "nut_l2": 0.7090978352669541
+     },
+     "suba": {
+      "pressure_l2": 0.35554089194054483,
+      "velocity_l2": 0.4949033555626947,
+      "nut_l2": 0.7684338480843377
+     },
+     "refu": {
+      "pressure_l2": 0.049322169160057126,
+      "velocity_l2": -0.10583263646424201,
+      "nut_l2": -0.411424439499176
+     },
+     "reff": {
+      "pressure_l2": -0.0064359307897430265,
+      "velocity_l2": -0.0134359859181606,
+      "nut_l2": -0.015084205239505244
+     }
+    }
+   },
+   "sr_af_soft03_nosdf_seed42": {
+    "native_means": {
+     "pressure_l2": 0.028104077379684896,
+     "velocity_l2": 0.017029949948191642,
+     "nut_l2": 0.02800766732543707
+    },
+    "ratio_to_native": {
+     "native": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "subu": {
+      "pressure_l2": 5.707610765326067,
+      "velocity_l2": 12.057821441358733,
+      "nut_l2": 13.023748051400172
+     },
+     "suba": {
+      "pressure_l2": 8.616724270399121,
+      "velocity_l2": 16.726608764562403,
+      "nut_l2": 14.072000012183684
+     },
+     "refu": {
+      "pressure_l2": 1.0212467190460157,
+      "velocity_l2": 0.9995064744204432,
+      "nut_l2": 1.0085659915023186
+     },
+     "reff": {
+      "pressure_l2": 1.0135128086441505,
+      "velocity_l2": 1.0046510016932555,
+      "nut_l2": 1.0141939898268493
+     },
+     "subu_natgeo": {
+      "pressure_l2": 2.808520281524151,
+      "velocity_l2": 1.6597598915268403,
+      "nut_l2": 2.1063429385460988
+     },
+     "suba_natgeo": {
+      "pressure_l2": 3.9101620904974754,
+      "velocity_l2": 2.5135680417894712,
+      "nut_l2": 1.901803821140075
+     },
+     "refu_natgeo": {
+      "pressure_l2": 1.0210053280008722,
+      "velocity_l2": 0.9979810969967864,
+      "nut_l2": 1.0050934858725353
+     },
+     "reff_natgeo": {
+      "pressure_l2": 1.014202256274946,
+      "velocity_l2": 1.0040530183823513,
+      "nut_l2": 1.0144969986337047
+     }
+    },
+    "geometry_share_of_log_excess": {
+     "subu": {
+      "pressure_l2": 0.4071320161172872,
+      "velocity_l2": 0.7964934753303161,
+      "nut_l2": 0.7097706675507777
+     },
+     "suba": {
+      "pressure_l2": 0.36686833612597797,
+      "velocity_l2": 0.6728068812069072,
+      "nut_l2": 0.7568996393499867
+     },
+     "refu": {
+      "pressure_l2": 0.011244063078012291,
+      "velocity_l2": -3.0939012768240715,
+      "nut_l2": 0.40435534793080646
+     },
+     "reff": {
+      "pressure_l2": -0.050663667210634075,
+      "velocity_l2": 0.12831121754307961,
+      "nut_l2": -0.021194782852595406
+     }
+    }
+   },
+   "sr_af_soft03_seed42": {
+    "native_means": {
+     "pressure_l2": 0.031371953734196725,
+     "velocity_l2": 0.016824951539747418,
+     "nut_l2": 0.028362335269339383
+    },
+    "ratio_to_native": {
+     "native": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "subu": {
+      "pressure_l2": 6.837653033281568,
+      "velocity_l2": 5.916728527121524,
+      "nut_l2": 11.787897542536019
+     },
+     "suba": {
+      "pressure_l2": 12.807889785101741,
+      "velocity_l2": 11.8656850829103,
+      "nut_l2": 15.106451135139743
+     },
+     "refu": {
+      "pressure_l2": 1.0072936061896878,
+      "velocity_l2": 1.0019192601442777,
+      "nut_l2": 1.0045994807620164
+     },
+     "reff": {
+      "pressure_l2": 1.0002646643829156,
+      "velocity_l2": 0.9986517363395192,
+      "nut_l2": 1.006972756814012
+     },
+     "subu_natgeo": {
+      "pressure_l2": 2.8847820336187056,
+      "velocity_l2": 1.6959546851792369,
+      "nut_l2": 2.0976550947514365
+     },
+     "suba_natgeo": {
+      "pressure_l2": 3.6998000493764667,
+      "velocity_l2": 2.293108077879065,
+      "nut_l2": 1.7759895036346451
+     },
+     "refu_natgeo": {
+      "pressure_l2": 1.0074367884891968,
+      "velocity_l2": 1.000973629011664,
+      "nut_l2": 0.9999085083747395
+     },
+     "reff_natgeo": {
+      "pressure_l2": 1.0006898048444315,
+      "velocity_l2": 0.9990167303188917,
+      "nut_l2": 1.0069113541835428
+     }
+    },
+    "geometry_share_of_log_excess": {
+     "subu": {
+      "pressure_l2": 0.44890512130968835,
+      "velocity_l2": 0.7028627140791833,
+      "nut_l2": 0.6997170382709742
+     },
+     "suba": {
+      "pressure_l2": 0.4869618462452752,
+      "velocity_l2": 0.6645006666698026,
+      "nut_l2": 0.7884596862294787
+     },
+     "refu": {
+      "pressure_l2": -0.019558658997362834,
+      "velocity_l2": 0.4924664506975465,
+      "nut_l2": 1.019938352022584
+     },
+     "reff": {
+      "pressure_l2": -1.605784271833427,
+      "velocity_l2": 0.2708473067528765,
+      "nut_l2": 0.008775820111545143
+     }
+    }
+   },
+   "sr_af_soft03_seed43": {
+    "native_means": {
+     "pressure_l2": 0.030612259893678127,
+     "velocity_l2": 0.015212873197160661,
+     "nut_l2": 0.02881052260287106
+    },
+    "ratio_to_native": {
+     "native": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "subu": {
+      "pressure_l2": 6.337932150630889,
+      "velocity_l2": 5.993400840432974,
+      "nut_l2": 12.13099027043232
+     },
+     "suba": {
+      "pressure_l2": 12.266550694280719,
+      "velocity_l2": 13.045389933455835,
+      "nut_l2": 15.605419101151089
+     },
+     "refu": {
+      "pressure_l2": 0.9806966873971318,
+      "velocity_l2": 1.0072674758625775,
+      "nut_l2": 1.0140488005062607
+     },
+     "reff": {
+      "pressure_l2": 0.9982514190624696,
+      "velocity_l2": 1.003876341280787,
+      "nut_l2": 1.0108682315928
+     },
+     "subu_natgeo": {
+      "pressure_l2": 2.9761936767787947,
+      "velocity_l2": 1.853920418755652,
+      "nut_l2": 2.195144434082355
+     },
+     "suba_natgeo": {
+      "pressure_l2": 4.1995289061942955,
+      "velocity_l2": 2.872412833554146,
+      "nut_l2": 1.8712909400437883
+     },
+     "refu_natgeo": {
+      "pressure_l2": 0.9803221196776601,
+      "velocity_l2": 1.006472777372949,
+      "nut_l2": 1.0099468614014067
+     },
+     "reff_natgeo": {
+      "pressure_l2": 0.9986076927098109,
+      "velocity_l2": 1.0046563731388778,
+      "nut_l2": 1.0109332867373182
+     }
+    },
+    "geometry_share_of_log_excess": {
+     "subu": {
+      "pressure_l2": 0.4093614119739605,
+      "velocity_l2": 0.6552651617310438,
+      "nut_l2": 0.6849669888268496
+     },
+     "suba": {
+      "pressure_l2": 0.4275854508517345,
+      "velocity_l2": 0.5891846734030356,
+      "nut_l2": 0.7719375539102142
+     },
+     "refu": {
+      "pressure_l2": -0.019598416123214925,
+      "velocity_l2": 0.10899804557914741,
+      "nut_l2": 0.29053865785291655
+     },
+     "reff": {
+      "pressure_l2": 0.20389217552786693,
+      "velocity_l2": -0.20076214282763907,
+      "nut_l2": -0.005953380322828275
+     }
+    }
+   }
+  },
+  "bars": {
+   "i_pose_invariance_within_0.5pct": {
+    "smooth": "PASS (posed/native 0.9996-1.0007 on every field, both seeds and the no-stored-field lane)",
+    "soft_fixed_direction": "FAIL (+1.0/+2.9/+0.7% and +2.0/+5.4/+0.8% on p/v/nut; the distance jump at the wall nodes)"
+   },
+   "ii_smooth_coarsening_geometry_share_below_0.1": "FAIL (0.33-0.85; soft 0.37-0.80; nearest 0.52-0.82): the one-sided truncation is refuted as the dominant coarsening mechanism",
+   "iii_smooth_native_within_soft_seed_range": "PASS on pressure and velocity; eddy viscosity 2-7% worse",
+   "iv_smooth_without_stored_field_at_least_as_good_as_nearest": "FAIL (velocity 0.0278 vs 0.0196); the one-sided form passes (0.0281/0.0170/0.0280 vs 0.0305/0.0196/0.0276)",
+   "refinement_invariance": "PASS for every kernel lane (refu/reff ratios 0.965-1.021)"
+  }
  }
 }

@@ -34775,3 +34775,142 @@ and the decision tree's AirfRANS gate is passed on refinement AND
 coarsening; the wall jump and the LE resolution limit (tau = 0.015 chord
 is the leading-edge radius of a 12 percent airfoil) go to Peter as the
 known properties of the form.
+
+## 2026-10-07 — DeepJEB++ under the campaign protocol: the half-rate ISLA lanes reach the baselines' accuracy by epoch 18 (displacement 0.23, von Mises 0.46) and then collapse to the mean-field plateau between epochs 20 and 24 on both seeds; the scored 40-epoch checkpoints read 0.84 / 0.90 on displacement against GeoTransolver's 0.23 and Transolver's 0.19 {#sec-nb-char-deepjeb-halfrate-verdict}
+
+**Setting.** DeepJEB++ is the campaign's one dataset on which the ISLA
+reference configuration (512 wide, 512 slices, the sample-conditioned
+prototypes of the current class) at the reference rate 3.75e-4 reaches the
+mean-field plateau: both `cl_r_jeb_isla` lanes sit at a validation loss of
+0.08 from epoch 6 to the end and score 1.18 / 0.98 on displacement and 1.02 /
+1.00 on von Mises stress (@sec-nb-char-deepjeb-plateau-mechanism named the
+mechanism, a routing collapse to one to five effective slices in half of the
+blocks). Peter ruled a per-dataset exception (2026-10-05): the campaign arm
+for DeepJEB++ trains at half the rate, 1.875e-4, every other hyperparameter
+the reference's. The pair `cl_jd_rate_e40_seed42/43` (40 epochs on the
+12,451 clean training brackets, AGA) finished today and was scored under the
+three protocols.
+
+**What we saw.** Both seeds descend normally for half the run: validation
+loss 0.0146 at epoch 0, 0.0079 at epoch 6, 0.0065 at epoch 18, where the
+trainer's validation metrics read **displacement 0.225 and von Mises 0.458
+(seed 42; seed 43 within 0.01)**, level with GeoTransolver-256 (0.231 /
+0.497) and Transolver 512 x 16 (0.194 / 0.436) under the campaign protocol.
+Between epochs 20 and 24 the training loss jumps from 0.006 to 0.016 and then
+0.06 on seed 42 (0.034 then 0.057 on seed 43) and the validation loss to
+0.067 on both, the plateau value of the reference-rate lanes; the final
+checkpoints, which the protocol scores, read **displacement 0.840 / 0.903 and
+von Mises 0.931 / 0.931** (natively; the area protocol is the identity on this
+dataset and the posed protocol reproduces the native numbers, as for every
+ISLA lane). The regenerated dataset artifact (`results/char/deepjeb_surface.json`,
+final-reference arms) therefore shows ISLA at 0.871 / 0.931 against
+GeoTransolver-256 at 0.231 / 0.497 and Transolver at 0.194 / 0.436, with both
+baselines at 1.2 to 1.5 under the posed protocol.
+
+**Why it matters.** The half rate delays the collapse (epoch 4 at 3.75e-4,
+epoch 22 at 1.875e-4) and does not prevent it, so the rate exception does not
+rescue the dataset: under the frozen class the DeepJEB++ standing is a
+failure by training instability, not by capacity, since the same lanes match
+the baselines eighteen epochs in. This is the first campaign dataset on which
+the current class does not finish its protocol, and the only one where ISLA
+trails the baselines by more than a factor of two. Chapter 13 states this as
+the current standing; the earlier equal-step ladder, run under the previous
+class (384 wide, 12 layers, static prototypes, 5e-4), is kept as the record of
+what that form achieved and is labeled as such.
+
+**What's next.** The routing collapse on this dataset is a property of the
+sample-conditioned prototypes at the reference width that the class now
+carries everywhere (@sec-nb-char-deepjeb-plateau-mechanism measured 1 to 5
+effective slices of 256 in the collapsed blocks). A collapse-resistant
+routing is an architecture change, which the campaign freeze forbids; the
+candidates (a floor on the routing temperature, a slice-usage regularizer,
+or an epoch-18 early stop as a protocol rule, which would be a tuning
+shortcut) go to Peter with this verdict. Nothing is launched on it.
+
+## 2026-10-07 — SOFT-GEO verdict on the relaunched lanes: the two-sided kernel form is pose-invariant to four digits and both kernel forms are re-panelization invariant, but under 2.5x coarsening the built-in channel still carries 0.3 to 0.85 of the log excess for every form, and that residual sits at the trailing edge and wake; the one-sided form is the better built-in channel; neither arm passes the pre-registered coarsening bar {#sec-nb-soft-geo-verdict}
+
+**Setting.** The six relaunched lanes (`sr_af_*`, snapshot code_v23, 500
+epochs, 100,000 interior points, lr 3.75e-4, LHR) carry the fix of
+@sec-nb-soft-geo-lanes: the direction is the kernel-mean outward normal on
+both sides of the wall and the nearest token is always kept; `soft` keeps the
+one-sided rule, `smooth` averages every facing token. Two seeds each with the
+stored signed-distance inputs, one seed each without them. All six trained
+without a NaN; they were scored natively and under the posed protocol and run
+through the AirfRANS resampling probe (coarsening to 400 segments under the
+uniform-over-cells and length laws, re-panelization under two patterns, each
+with the native-geometry swap). Artifact:
+`results/char/soft_geo_lanes_2026-10-07.json` (key `relaunch_code_v23`).
+
+**Native and posed** (pressure / velocity / eddy-viscosity relative L2).
+soft 0.0314 / 0.0168 / 0.0284 and 0.0306 / 0.0152 / 0.0288; smooth 0.0300 /
+0.0160 / 0.0295 and 0.0331 / 0.0150 / 0.0307; the nearest reference 0.0369 /
+0.0167 / 0.0317 and 0.0335 / 0.0177 / 0.0312. Without the stored field: soft
+0.0281 / 0.0170 / 0.0280, smooth 0.0304 / 0.0278 / 0.0295, nearest 0.0305 /
+0.0196 / 0.0276. **Posed over native: smooth 0.9996 to 1.0007 on every field,
+both seeds and the no-stored-field lane (bar (i) passes); soft 1.010 / 1.029 /
+1.007 and 1.020 / 1.054 / 1.008 (bar (i) fails):** with the direction
+continuous, the one-sided form's remaining pose dependence is its distance
+jump of about kappa tau^2 at the wall nodes, and the trained model reads it as
+strongly as it read the reversed direction.
+
+**Resampling.** Re-panelization (count-raising, information-preserving):
+every kernel lane 0.965 to 1.021 on every field (the nearest control without
+the stored field 1.43 to 3.39). Coarsening: soft 5.7 to 12.8x (uniform law)
+and 8.6 to 16.7x (length law), smooth 5.6 to 7.6x and 7.7 to 10.4x, against
+the nearest reference's 9.6 to 15.8x and 16.4 to 20.7x; the native-geometry
+swap returns all of them to 2.7 to 4.5x, the coarsened slice states' share,
+so **the built-in channel's share of the log excess is 0.33 to 0.85 for smooth
+and 0.37 to 0.80 for soft, where the nearest form's is 0.52 to 0.85 (bar (ii)
+fails).** The one-sided truncation I named as the mechanism of that share
+(@sec-nb-soft-geo-lanes) is refuted: removing the side rule did not move it.
+The geometry itself does move less than the nearest form's under coarsening
+(near-wall direction cosine 0.98 against 0.59, RMS log distance ratio 0.49
+for smooth against 0.62), and the model amplifies what remains.
+
+**Where the residual lives.** Restoring the native geometry on a chordwise
+band of the queries (`kernel/char/af_geo_sr_le`, 4 lanes, both coarsening
+laws): ahead of x = 0.1 chord (42 percent of the queries, the whole upstream
+field including the leading edge) recovers almost nothing (smooth without the
+stored field, uniform law: 7.63 / 8.24 / 13.07 to 7.43 / 7.10 / 13.00); between
+0.1 and 0.9 recovers nothing (7.54 / 8.06 / 13.02); **behind x = 0.9 chord (29
+percent, the trailing edge and the wake) recovers most of it, 3.19 / 4.12 /
+2.18 against the full swap's 2.70 / 1.37 / 1.97, and all of the eddy-viscosity
+excess**; the same on every lane (soft without the stored field: 5.71 / 12.06
+/ 13.02 to 2.95 / 2.68 / 2.16 with the full swap at 2.81 / 1.66 / 2.11). So the
+kernel forms' coarsening sensitivity is not the leading edge, where the width
+is about the leading-edge radius, but the sharp trailing edge and the wake
+behind it. The mechanism consistent with every measurement is the orientation
+reference: the facing factor and the one-sided rule take their reference
+normal from the exact nearest token, and behind a sharp trailing edge the
+nearest token is on the upper or the lower face by a hair, so when coarsening
+moves the nearest token (it changes for 60 percent of all queries) the
+reference flips between two normals that differ by nearly 180 degrees and the
+kernel-mean normal and distance of the wake queries flip with it (the same
+discontinuity the pose probe met at the medial axis, @sec-nb-soft-geo-lanes).
+The nearest form has the same reference and the same flips.
+
+**Bars (iii) and (iv).** smooth's native error is within soft's seed range on
+pressure and velocity and 2 to 7 percent worse on eddy viscosity (passes).
+Without the stored field smooth is 42 percent worse than nearest on velocity
+(0.0278 against 0.0196; fails) while soft is better on every field (0.92 /
+0.87 / 1.01): the two-sided form's curvature bias (its zero level set sits
+about kappa tau^2 outside a convex wall; its sign disagrees with the stored
+distance at 20 percent of the near-wall queries) makes it a poor wall-distance
+estimate on its own, and the one-sided form with the continuous direction is
+the best built-in channel measured.
+
+**Verdict against the decision tree.** Peter's gate was that the
+discretization independence in the volume "holds up on AirfRANS". It holds
+up under the change of sampling law at preserved information (re-panelization:
+both kernel forms invariant to 2 percent, the nearest form not) and under the
+posed protocol for the two-sided form; it does not hold up under 2.5x
+coarsening, where every form, nearest included, pays once through the slice
+states (an architecture-wide information loss the baselines are being scored
+for) and about as much again through the built-in channel, with the channel's
+part concentrated at the trailing edge. Neither arm therefore passes the gate
+as pre-registered, and the architecture stays frozen. What the data recommend,
+if the gate is reopened: the one-sided form with the continuous direction as
+the built-in channel (best accuracy, re-panelization invariant, pose
+dependence of 1 to 5 percent from the wall-node jump), and a continuous
+orientation reference at sharp edges as the next mechanism to fix, which is a
+design change for Peter.
