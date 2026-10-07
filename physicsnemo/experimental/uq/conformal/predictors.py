@@ -17,6 +17,7 @@
 r"""Fitted conformal predictors that turn model outputs into intervals."""
 
 import copy
+import re
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -60,14 +61,13 @@ __all__ = ["ConformalPredictor"]
 
 
 def _validate_mesh_fingerprint(value: object) -> str:
-    """Check that a mesh fingerprint is a lowercase SHA-256 hex digest."""
-    if (
-        type(value) is not str
-        or len(value) != 64
-        or any(character not in "0123456789abcdef" for character in value)
+    """Check the ``<dtype>-<n_points>x<n_dims>-<32 hex digits>`` mesh checksum."""
+    if type(value) is not str or not re.fullmatch(
+        r"[a-z0-9_]+-[1-9][0-9]*x[1-9][0-9]*-[0-9a-f]{32}", value
     ):
         raise ValueError(
-            "mesh_fingerprint must be a 64-character lowercase SHA-256 hex digest."
+            "mesh_fingerprint must be '<dtype>-<n_points>x<n_dims>-<checksum>' "
+            "with a 32-digit lowercase hex checksum."
         )
     return value
 
@@ -151,7 +151,7 @@ class ConformalPredictor:
         Calibration mesh coordinates of shape
         :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`, required for
         the cellwise tier and rejected otherwise. The predictor keeps only a
-        digest of them, and :meth:`predict_interval` accepts only the same
+        checksum of them, and :meth:`predict_interval` accepts only the same
         coordinates, dtype, and point order.
 
     Raises
@@ -213,7 +213,7 @@ class ConformalPredictor:
 
     @classmethod
     def _from_state(cls, **state) -> "ConformalPredictor":
-        """Build a predictor from a stored mesh digest and provenance."""
+        """Build a predictor from a stored mesh checksum and provenance."""
         predictor = cls.__new__(cls)
         predictor._init(**state)
         return predictor
@@ -442,7 +442,7 @@ class ConformalPredictor:
         inward: that can remove coverage.
 
         Each call checks its inputs on the host, which synchronizes with the
-        GPU, and the cellwise tier also hashes ``points`` on the CPU. This
+        GPU. The cellwise tier checksums ``points`` on their own device. This
         method is not intended for use inside ``torch.compile`` regions.
         """
         selection = self.keys

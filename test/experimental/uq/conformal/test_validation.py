@@ -59,6 +59,10 @@ _I64 = torch.zeros(3, dtype=torch.int64)
 _INF3 = torch.tensor([1.0, torch.inf, 1.0])
 _N = NormalizedErrorScore()
 _P64 = torch.tensor([[0.0, 1.0], [2.0, 3.0]], dtype=torch.float64)
+_P64_ULP = _P64.clone()
+_P64_ULP[1, 0] = torch.nextafter(
+    _P64_ULP[1, 0], torch.tensor(torch.inf, dtype=torch.float64)
+)
 _NOT_REAL = (TypeError, "real number")
 _NOT_EXACT = (TypeError, "exactly representable")
 _NOT_INT = (TypeError, "integer")
@@ -108,6 +112,11 @@ VALIDATOR_CASES = [
     ("fingerprint-dtype-sensitive", lambda: points_fingerprint(_P64) != points_fingerprint(_P64.float()), True),
     ("fingerprint-order-sensitive", lambda: points_fingerprint(_P64) != points_fingerprint(_P64.flip(0)), True),
     ("fingerprint-value-identity", lambda: points_fingerprint(_P64) == points_fingerprint(_P64.clone()), True),
+    ("fingerprint-shape-sensitive", lambda: points_fingerprint(_P64) != points_fingerprint(_P64.reshape(-1, 1)), True),
+    ("fingerprint-mesh-sensitive", lambda: points_fingerprint(_P64) != points_fingerprint(_P64 + 1), True),
+    ("fingerprint-one-ulp", lambda: points_fingerprint(_P64) != points_fingerprint(_P64_ULP), True),
+    ("fingerprint-format", lambda: points_fingerprint(_P64).startswith("float64-2x2-"), True),
+    ("fingerprint-nan", lambda: points_fingerprint(torch.tensor([[0.0], [torch.nan]])), (ValueError, "non-finite")),
     ("provenance-not-mapping", lambda: validate_provenance([1, 2, 3]), (TypeError, "mapping")),
     ("provenance-path", lambda: validate_provenance({"checkpoint": Path("/ckpt.pt")}), (TypeError, "strict-JSON")),
     ("provenance-tensor", lambda: validate_provenance({"value": torch.tensor(1.0)}), (TypeError, "strict-JSON")),
@@ -129,6 +138,18 @@ def test_shared_validators(thunk, expected):
             thunk()
     else:
         assert thunk() == expected
+
+
+@pytest.mark.parametrize(
+    "dtype", [torch.float16, torch.bfloat16, torch.float32, torch.float64]
+)
+def test_points_fingerprint_is_device_and_layout_independent(device, dtype):
+    points = torch.randn(3, 1000, dtype=torch.float64).to(dtype).T
+    expected = points_fingerprint(points.contiguous())
+    assert not points.is_contiguous()
+    assert points_fingerprint(points) == expected
+    assert points_fingerprint(points.to(device)) == expected
+    assert points_fingerprint(points.to(device).contiguous()) == expected
 
 
 # -------------------------------------------------------------------------

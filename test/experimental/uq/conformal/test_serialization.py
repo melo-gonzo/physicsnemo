@@ -243,7 +243,8 @@ CORRUPTIONS = {
     "aux_negative_eps": (_set_in("difficulty", "kwargs", {"key": "spread", "eps": -1.0}), _CTOR, "aux"),
     # Cellwise artifacts need a well-formed mesh fingerprint.
     "cellwise_malformed_mesh": (_set("mesh_fingerprint", "not-a-digest"), "mesh_fingerprint must be", "cellwise"),
-    "cellwise_uppercase_mesh": (_set("mesh_fingerprint", "A" * 64), "mesh_fingerprint must be", "cellwise"),
+    "cellwise_uppercase_mesh": (_set("mesh_fingerprint", "float32-3x1-" + "A" * 32), "mesh_fingerprint must be", "cellwise"),
+    "cellwise_sha256_mesh": (_set("mesh_fingerprint", "a" * 64), "mesh_fingerprint must be", "cellwise"),
 }
 # fmt: on
 

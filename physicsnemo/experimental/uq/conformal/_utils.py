@@ -26,7 +26,6 @@ promoted dtype, and :func:`cast_directed` rounds outward whenever a cast
 loses precision.
 """
 
-import hashlib
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from fractions import Fraction
@@ -248,8 +247,11 @@ def _field_label(key: str) -> str:
     return "Plain tensor" if key == TENSOR_KEY else f"Field '{key}'"
 
 
-def check_points(points: Tensor) -> Tensor:
-    """Require finite floating ``points`` of shape ``(n_points, n_spatial_dims)``."""
+def check_points(points: Tensor, pending: list[Tensor] | None = None) -> Tensor:
+    """Require finite floating ``points`` of shape ``(n_points, n_spatial_dims)``.
+
+    With ``pending``, append the finiteness flag there instead of syncing.
+    """
     if not isinstance(points, Tensor):
         raise TypeError(f"points must be a torch.Tensor, got {type(points).__name__}.")
     if points.ndim != 2 or points.shape[0] == 0 or points.shape[1] == 0:
@@ -259,26 +261,77 @@ def check_points(points: Tensor) -> Tensor:
         )
     if not points.is_floating_point():
         raise TypeError(f"points must have a floating dtype, got {points.dtype}.")
-    if not bool(torch.isfinite(points).all()):
+    finite = torch.isfinite(points).all()
+    if pending is not None:
+        pending.append(finite)
+    elif not finite:
         raise ValueError("points contains non-finite coordinate value(s).")
     return points
+
+
+def fetch_ints(values: Sequence[Tensor]) -> list[int]:
+    """Copy 0-d integer or bool tensors to the host in one transfer (one sync)."""
+    device = values[0].device
+    stacked = torch.stack([v.to(device=device, dtype=torch.int64) for v in values])
+    return stacked.tolist()
+
+
+def _signed64(value: int) -> int:
+    """Reinterpret an unsigned 64-bit constant as a signed ``int64``."""
+    return value - (1 << 64)
+
+
+_GOLDEN = _signed64(0x9E3779B97F4A7C15)
+_MIX = ((30, _signed64(0xBF58476D1CE4E5B9)), (27, _signed64(0x94D049BB133111EB)))
+_INT_VIEW = {1: torch.int8, 2: torch.int16, 4: torch.int32, 8: torch.int64}
+
+
+def _shift_right(x: Tensor, shift: int) -> Tensor:
+    """Logical right shift of ``int64`` values."""
+    return x.bitwise_right_shift(shift).bitwise_and_((1 << (64 - shift)) - 1)
+
+
+def _mix_(x: Tensor) -> Tensor:
+    """SplitMix64 finalizer in place: a bijection that scrambles every bit."""
+    for shift, multiplier in _MIX:
+        x.bitwise_xor_(_shift_right(x, shift)).mul_(multiplier)
+    return x.bitwise_xor_(_shift_right(x, 31))
+
+
+def _points_checksum(points: Tensor) -> list[Tensor]:
+    """Two ``int64`` checksums of the raw coordinate bits, computed on device.
+
+    Each element's bits are hashed together with its flat index, and the
+    hashes are summed twice: once plainly and once weighted by ``2 * i + 1``.
+    The hash is a bijection of the bits, so changing one value always changes
+    the first sum. Integer sums wrap and do not depend on reduction order, so
+    the result is the same on every device and memory layout.
+    """
+    bits = points.detach().view(_INT_VIEW[points.element_size()])
+    bits = bits.to(torch.int64).reshape(-1)
+    index = torch.arange(bits.numel(), dtype=torch.int64, device=bits.device)
+    hashed = _mix_(index.mul(_GOLDEN).bitwise_xor_(bits))
+    return [hashed.sum(), hashed.mul_(index.mul_(2).add_(1)).sum()]
 
 
 def points_fingerprint(
     points: Tensor,
 ) -> str:
-    """Return a SHA-256 hash of point coordinates, dtype, and shape; order matters.
+    """Return a checksum of point coordinates, dtype, and shape; order matters.
 
-    Not cached: in-place writes through ``.data`` or ``.numpy()`` do not bump
-    the version counter.
+    The checksum runs on the points' device and syncs once. Not cached:
+    in-place writes through ``.data`` or ``.numpy()`` do not bump the
+    version counter.
     """
-    check_points(points)
-    tensor = points.detach().cpu().contiguous()
-    digest = hashlib.sha256()
-    digest.update(str(tensor.dtype).encode())
-    digest.update(str(tuple(tensor.shape)).encode())
-    digest.update(tensor.view(torch.uint8).numpy().tobytes())
-    return digest.hexdigest()
+    pending: list[Tensor] = []
+    check_points(points, pending)
+    finite, *sums = fetch_ints([*pending, *_points_checksum(points)])
+    if not finite:
+        check_points(points)
+    dtype = str(points.dtype).removeprefix("torch.")
+    n_points, n_dims = points.shape
+    digest = "".join(f"{value & ((1 << 64) - 1):016x}" for value in sums)
+    return f"{dtype}-{n_points}x{n_dims}-{digest}"
 
 
 def require_mesh(points: Tensor | None, expected: str | None, hint: str = "") -> str:
