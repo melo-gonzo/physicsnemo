@@ -33,6 +33,7 @@ from ._utils import (
     alpha_as_fraction,
     check_exact_shape,
     check_real,
+    fetch_ints,
     field_items,
     normalize_keys,
     pack_fields,
@@ -44,12 +45,28 @@ __all__ = ["CoverageAccumulator"]
 
 @dataclass
 class _FieldCounters:
-    """Running totals for one field."""
+    """Running totals for one field; the sums are float64 device tensors."""
 
-    coverage_sum: float = 0.0
-    width_sum: float = 0.0
+    coverage_sum: Tensor | None = None
+    width_sum: Tensor | None = None
     width_count: int = 0
     n_samples: int = 0
+
+
+def _add(total: Tensor | None, value: Tensor) -> Tensor:
+    """``total + value`` on the device of ``total``; ``value`` alone if no total."""
+    return value if total is None else total + value.to(device=total.device)
+
+
+def _require(ok: Tensor, pending: list[Tensor] | None, problem: str) -> None:
+    """Defer ``ok`` to ``pending``, or raise the width overflow error if false."""
+    if pending is not None:
+        pending.append(ok)
+    elif not ok:
+        raise ValueError(
+            f"{problem} Rescale lo, hi, and target by the same factor and start "
+            "a new accumulator with predictor.coverage_accumulator()."
+        )
 
 
 def _minimum_hits_at_target(n_samples: int, alpha: float) -> int:
@@ -182,6 +199,10 @@ class CoverageAccumulator:
         -----
         A rejected sample is not counted, even in fields that passed.
 
+        Running totals stay on the device of the first sample, so each call
+        synchronizes with the GPU only once. Samples on another device are
+        copied there.
+
         Infinite bounds are rejected: recompute them from an upcast prediction
         (casting the bounds afterward does not fix them), and if widths
         overflow float64, rescale ``lo``, ``hi``, and ``target`` by the same
@@ -196,8 +217,33 @@ class CoverageAccumulator:
         containers = {
             name: dict(field_items(value, self._keys)) for name, value in inputs
         }
+        pending: list[Tensor] = []
+        staged = self._stage(containers, pending)
+        if not all(fetch_ints(pending)):
+            # Repeat with one sync per check to raise the first error.
+            staged = self._stage(containers, None)
 
-        staged: list[tuple[str, float | Tensor, float, int]] = []
+        for key, coverage, width_total, width_count in staged:
+            counters = self._counters[key]
+            counters.width_sum = width_total
+            counters.width_count += width_count
+            counters.n_samples += 1
+            if self._tier != "cellwise":
+                counters.coverage_sum = _add(counters.coverage_sum, coverage)
+            elif key in self._element_hits:
+                previous = self._element_hits[key]
+                previous += coverage.to(device=previous.device)
+            else:
+                self._element_hits[key] = coverage
+
+    def _stage(
+        self, containers: dict[str, dict[str, Tensor]], pending: list[Tensor] | None
+    ) -> list[tuple[str, Tensor, Tensor, int]]:
+        """Check one sample and compute its updates without committing them.
+
+        ``pending`` works as in ``check_finite``.
+        """
+        staged = []
         for key in self._counters:
             lo_field = containers["lo"][key]
             hi_field = containers["hi"][key]
@@ -206,28 +252,26 @@ class CoverageAccumulator:
                 raise ValueError(f"{_field_label(key)}: empty target tensor.")
             check_exact_shape(key, "lo", lo_field, "target", target_field)
             check_exact_shape(key, "hi", hi_field, "target", target_field)
-            check_real(key, "lo", lo_field)
-            check_real(key, "hi", hi_field)
-            check_real(key, "target", target_field)
+            check_real(key, "lo", lo_field, pending)
+            check_real(key, "hi", hi_field, pending)
+            check_real(key, "target", target_field, pending)
 
             element_covered = (target_field >= lo_field) & (target_field <= hi_field)
             widths = hi_field.to(torch.float64) - lo_field.to(torch.float64)
-            if not bool(torch.isfinite(widths).all()):
-                raise ValueError(
-                    f"{_field_label(key)}: interval width overflows float64. "
-                    "Rescale lo, hi, and target by the same factor and start a "
-                    "new accumulator with predictor.coverage_accumulator()."
-                )
+            _require(
+                torch.isfinite(widths).all(),
+                pending,
+                f"{_field_label(key)}: interval width overflows float64.",
+            )
             # A negative quantile-regression threshold can give hi < lo: width 0.
             widths = widths.clamp_min(0.0)
             # Nonnegative widths make this catch both sample and total overflow.
-            width_total = self._counters[key].width_sum + float(widths.sum())
-            if not math.isfinite(width_total):
-                raise ValueError(
-                    f"{_field_label(key)}: interval width sum overflows float64. "
-                    "Rescale lo, hi, and target by the same factor and start a "
-                    "new accumulator with predictor.coverage_accumulator()."
-                )
+            width_total = _add(self._counters[key].width_sum, widths.sum())
+            _require(
+                torch.isfinite(width_total),
+                pending,
+                f"{_field_label(key)}: interval width sum overflows float64.",
+            )
 
             match self._tier:
                 case "cellwise":
@@ -241,30 +285,18 @@ class CoverageAccumulator:
                             f"{tuple(previous.shape)}."
                         )
                 case "functional":
-                    coverage = float(element_covered.all())
+                    coverage = element_covered.all().to(torch.float64)
                 case "risk_control":
                     points = torch.atleast_1d(element_covered)
                     point_covered = points.reshape(points.shape[0], -1).all(dim=1)
-                    coverage = float(point_covered.to(torch.float64).mean())
+                    coverage = point_covered.to(torch.float64).mean()
                 case _:
                     raise ValueError(
                         f"tier must be one of {TIERS}, got {self._tier!r}."
                     )
 
             staged.append((key, coverage, width_total, widths.numel()))
-
-        for key, coverage, width_total, width_count in staged:
-            counters = self._counters[key]
-            counters.width_sum = width_total
-            counters.width_count += width_count
-            counters.n_samples += 1
-            if isinstance(coverage, float):
-                counters.coverage_sum += coverage
-            elif key in self._element_hits:
-                previous = self._element_hits[key]
-                previous += coverage.to(device=previous.device)
-            else:
-                self._element_hits[key] = coverage
+        return staged
 
     def empirical_coverage_map(self) -> Float[Tensor, "*dims"] | TensorDict:
         r"""Fraction of samples in which each element was covered (cellwise only).
@@ -336,7 +368,7 @@ class CoverageAccumulator:
             entry: dict = {
                 "n_samples": n,
                 "mean_interval_width": (
-                    counters.width_sum / counters.width_count
+                    float(counters.width_sum) / counters.width_count
                     if counters.width_count
                     else None
                 ),
@@ -358,11 +390,11 @@ class CoverageAccumulator:
                     )
                 case "functional":
                     entry["whole_field_coverage"] = (
-                        counters.coverage_sum / n if n else None
+                        float(counters.coverage_sum) / n if n else None
                     )
                 case "risk_control":
                     entry["empirical_mean_risk"] = (
-                        1.0 - counters.coverage_sum / n if n else None
+                        1.0 - float(counters.coverage_sum) / n if n else None
                     )
             fields["tensor" if key == TENSOR_KEY else key] = entry
         return {"meta": metadata, "fields": fields}

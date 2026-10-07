@@ -29,7 +29,12 @@ from physicsnemo.experimental.uq.conformal import (
     QuantileRegressionScore,
     RiskControlCalibrator,
 )
-from test.experimental.uq.conformal._helpers import TIERS, fit, fitted_risk
+from test.experimental.uq.conformal._helpers import (
+    TIERS,
+    count_syncs,
+    fit,
+    fitted_risk,
+)
 
 
 def _accumulator(tier="risk_control", **fit_kwargs):
@@ -287,6 +292,25 @@ def test_coverage_map_availability_errors():
         _accumulator("cellwise").empirical_coverage_map()
     with pytest.raises(RuntimeError, match="only for cellwise"):
         _accumulator("functional").empirical_coverage_map()
+
+
+@pytest.mark.parametrize("tier", TIERS)
+def test_update_syncs_once_and_accepts_a_second_device(monkeypatch, device, tier):
+    """One host sync per update; samples on another device join the totals."""
+    accumulator = _accumulator(tier, fields=["a", "b"])
+    reference = _accumulator(tier, fields=["a", "b"])
+    samples = [
+        tuple(_td(a=t, b=2 * t) for t in _interval_sample(3, n_covered))
+        for n_covered in (3, 1)
+    ]
+    calls = count_syncs(monkeypatch)
+    accumulator.update(*(t.to(device) for t in samples[0]))
+    assert calls == ["tolist"]
+    accumulator.update(*samples[1])
+    monkeypatch.undo()
+    for sample in samples:
+        reference.update(*sample)
+    assert accumulator.finalize() == reference.finalize()
 
 
 def test_accumulator_constructor_rejects_bare_string_keys():
