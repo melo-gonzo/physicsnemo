@@ -136,15 +136,3 @@ layers =
 name = Prevent Non-listed external imports in physicsnemo
 type = forbidden_import
 container = physicsnemo
-
-[importlinter:contract:physicsnemo-experimental-uq-conformal]
-name = Control Dependencies in PhysicsNeMo experimental.uq.conformal
-type = layers
-containers=
-   physicsnemo.experimental.uq.conformal
-layers =
-   calibrators
-   predictors
-   artifacts | diagnostics
-   scores
-   _utils
