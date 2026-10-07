@@ -24,6 +24,7 @@ from tensordict import TensorDict
 
 from physicsnemo.experimental.uq.conformal import (
     AbsoluteErrorScore,
+    CellwiseCalibrator,
     CoverageAccumulator,
     FunctionalBandCalibrator,
     QuantileRegressionScore,
@@ -339,6 +340,16 @@ def test_accumulator_constructor_rejects_bare_string_keys():
 def test_empty_key_selection_is_rejected_up_front(make):
     with pytest.raises(ValueError, match="at least one field"):
         make()
+
+
+@pytest.mark.parametrize(
+    "alpha,n_cal,error",
+    [(float("nan"), 3, ValueError), (0.5, -1, ValueError), (0.5, 2.0, TypeError)],
+    ids=["nan-alpha", "negative-n_cal", "float-n_cal"],
+)
+def test_accumulator_constructor_validates_alpha_and_n_cal(alpha, n_cal, error):
+    with pytest.raises(error):
+        CoverageAccumulator(tier="cellwise", alpha=alpha, n_cal=n_cal)
 
 
 def test_accumulator_update_rejects_unknown_tier():
