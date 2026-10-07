@@ -449,17 +449,20 @@ def test_soft_geometry_is_exact_at_a_flat_wall_for_any_sample():
         pts, nrm, lw = _wall_samples(4000, 0 if not clustered else 1, clustered)
         d, u = soft_boundary_geometry(q, pts, nrm, lw, width=0.5)
         assert torch.allclose(d[0], expect, atol=1e-12, rtol=0), (clustered, d[0], expect)
-        sign = torch.sign(expect)[:, None]
-        assert torch.allclose(u[0], sign * torch.tensor([0.0, 0.0, 1.0], dtype=D), atol=1e-12)
+        ### the direction is the wall's outward normal on both sides (the side is in d's sign)
+        assert torch.allclose(u[0], torch.tensor([0.0, 0.0, 1.0], dtype=D).expand(5, 3), atol=1e-12)
         d_near, _ = nearest_boundary_geometry(q, pts, nrm)
         ### the nearest-sample distance carries the sample spacing (~0.4 here)
         assert (d_near[0, :3].abs() - expect[:3].abs()).max() > 0.05
 
 
-def test_soft_geometry_sphere_sign_direction_and_distance():
-    """A sphere with outward normals: outside queries have d > 0 and u radial outward,
-    inside queries d < 0 and u radial inward; |d| is within the kernel's curvature
-    bias of the exact distance and u within a milliradian of radial."""
+@pytest.mark.parametrize("one_sided", [True, False])
+def test_soft_geometry_sphere_sign_direction_and_distance(one_sided):
+    """A sphere with outward normals: outside queries have d > 0, inside queries
+    d < 0, and u is the outward radial on BOTH sides (the kernel-mean normal is the
+    gradient of the signed distance, which points outward everywhere); |d| is within
+    the kernel's curvature bias of the exact distance and u within a milliradian of
+    radial, for the one-sided and the two-sided average alike."""
     g = torch.Generator().manual_seed(0)
     n = 20000
     dirs = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=D, generator=g), dim=-1)
@@ -468,20 +471,57 @@ def test_soft_geometry_sphere_sign_direction_and_distance():
     q_dirs = torch.nn.functional.normalize(torch.randn(1, 30, 3, dtype=D, generator=g), dim=-1)
     radii = torch.cat([torch.full((15,), 3.0, dtype=D), torch.full((15,), 1.0, dtype=D)])
     q = q_dirs * radii[None, :, None]
-    d, u = soft_boundary_geometry(q, pts, nrm, lw, width=0.1)
+    d, u = soft_boundary_geometry(q, pts, nrm, lw, width=0.1, one_sided=one_sided)
     assert (d[0, :15] > 0).all() and (d[0, 15:] < 0).all()
     assert torch.allclose(d[0, :15], torch.ones(15, dtype=D), atol=0.1)
     assert torch.allclose(d[0, 15:], -torch.ones(15, dtype=D), atol=0.1)
-    assert ((u[0, :15] * q_dirs[0, :15]).sum(-1) > 0.999).all()
-    assert ((u[0, 15:] * q_dirs[0, 15:]).sum(-1) < -0.999).all()
+    assert ((u[0] * q_dirs[0]).sum(-1) > 0.999).all()
+    ### the nearest form's direction points from the boundary to the query instead:
+    ### it agrees outside and is opposite inside
+    _, u_near = nearest_boundary_geometry(q, pts, nrm)
+    assert ((u[0, :15] * u_near[0, :15]).sum(-1) > 0.99).all()
+    assert ((u[0, 15:] * u_near[0, 15:]).sum(-1) < -0.99).all()
+
+
+def test_soft_geometry_two_sided_form_is_continuous_across_a_curved_wall():
+    """On a curved wall the one-sided average jumps across the wall by about the
+    curvature times the mean squared tangential offset of the kernel (the inside
+    branch averages tangent planes the query lies behind, the outside branch only
+    those it lies in front of); the two-sided average is continuous there, with unit
+    slope. Queries at +-delta of a sphere of radius 2 (curvature 0.5) sampled at a
+    spacing h = 0.018 and read at width 0.2: delta = 2e-4 is above the sampling
+    offset kappa h^2 / 8 = 2e-5 (below it even an outside query sits behind its
+    nearest sample's plane and both forms call it inside) and far below the
+    kernel's curvature bias, about 0.06 here."""
+    g = torch.Generator().manual_seed(1)
+    n = 160000
+    dirs = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=D, generator=g), dim=-1)
+    pts, nrm = 2.0 * dirs, dirs
+    lw = torch.full((1, n), math.log(4 * math.pi * 4.0 / n), dtype=D)
+    q_dirs = torch.nn.functional.normalize(torch.randn(1, 12, 3, dtype=D, generator=g), dim=-1)
+    delta = 2e-4
+    q_out, q_in = q_dirs * (2.0 + delta), q_dirs * (2.0 - delta)
+    for one_sided in (True, False):
+        d_out, u_out = soft_boundary_geometry(q_out, pts, nrm, lw, width=0.2, one_sided=one_sided)
+        d_in, u_in = soft_boundary_geometry(q_in, pts, nrm, lw, width=0.2, one_sided=one_sided)
+        step = d_out - d_in
+        ### the direction is continuous in both forms (outward radial on both sides)
+        assert ((u_out[0] * u_in[0]).sum(-1) > 0.9999).all(), one_sided
+        if one_sided:
+            assert (d_out > 0).all() and (d_in < 0).all()
+            assert step.min() > 20 * 2 * delta, step  # a jump of order kappa tau^2, not a 2 delta displacement
+        else:
+            assert ((step - 2 * delta).abs() < 0.2 * 2 * delta).all(), step  # continuous with unit slope
+            assert (d_in < 0).all() and (d_out < 0).all()  # both within the bias of the wall: the zero set sits outside
 
 
 def test_soft_geometry_thin_plate_reads_the_near_face_only():
     """Two faces of a plate (thickness 0.01, far below the kernel width 0.5). A query
     above reads the upper face (d = 0.3, u = +z), a query below the lower face
-    (d = 0.3, u = -z); a query inside reads the nearer face (d = -0.004, u = -z): the
-    facing factor keeps the far face, whose normal points the other way, out of the
-    average, even though the query lies behind both faces' planes."""
+    (d = 0.3, u = -z); a query inside reads the nearer face (d = -0.004, u = +z, the
+    upper face's outward normal): the facing factor keeps the far face, whose normal
+    points the other way, out of the average, even though the query lies behind both
+    faces' planes. Both kernel forms agree here (flat faces carry no curvature)."""
     g = torch.Generator().manual_seed(0)
     n = 3000
     xy = (torch.rand(n, 2, dtype=D, generator=g) * 2 - 1) * 10.0
@@ -491,11 +531,12 @@ def test_soft_geometry_thin_plate_reads_the_near_face_only():
     nrm = torch.cat([torch.tensor([[0.0, 0.0, 1.0]]).to(D).expand(n, 3), torch.tensor([[0.0, 0.0, -1.0]]).to(D).expand(n, 3)])[None]
     lw = torch.full((1, 2 * n), math.log(400.0 / n), dtype=D)
     q = torch.tensor([[[0.2, 0.1, 0.3], [-0.3, 0.4, -0.31], [0.1, -0.2, -0.004]]], dtype=D)
-    d, u = soft_boundary_geometry(q, pts, nrm, lw, width=0.5)
-    assert torch.allclose(d[0], torch.tensor([0.3, 0.3, -0.004], dtype=D), atol=1e-12)
-    assert torch.allclose(u[0, 0], torch.tensor([0.0, 0.0, 1.0], dtype=D), atol=1e-12)
-    assert torch.allclose(u[0, 1], torch.tensor([0.0, 0.0, -1.0], dtype=D), atol=1e-12)
-    assert torch.allclose(u[0, 2], torch.tensor([0.0, 0.0, -1.0], dtype=D), atol=1e-12)
+    for one_sided in (True, False):
+        d, u = soft_boundary_geometry(q, pts, nrm, lw, width=0.5, one_sided=one_sided)
+        assert torch.allclose(d[0], torch.tensor([0.3, 0.3, -0.004], dtype=D), atol=1e-12), one_sided
+        assert torch.allclose(u[0, 0], torch.tensor([0.0, 0.0, 1.0], dtype=D), atol=1e-12)
+        assert torch.allclose(u[0, 1], torch.tensor([0.0, 0.0, -1.0], dtype=D), atol=1e-12)
+        assert torch.allclose(u[0, 2], torch.tensor([0.0, 0.0, 1.0], dtype=D), atol=1e-12)
 
 
 def test_soft_geometry_concave_corner_reads_the_nearest_wall():
@@ -536,10 +577,12 @@ def test_soft_geometry_is_covariant_and_scales():
     d5, _ = soft_boundary_geometry(q, pts, nrm, None, width=0.7)
     d6, _ = soft_boundary_geometry(q, pts, nrm, torch.zeros_like(lw), width=0.7)
     assert torch.equal(d5, d6)
-    ### the sign and the direction's sense agree with the nearest form's
+    ### the sign agrees with the nearest form's; the direction is the outward normal,
+    ### so it agrees with the nearest form's boundary-to-query direction outside and
+    ### opposes it inside
     d_near, u_near = nearest_boundary_geometry(q, pts, nrm)
     assert torch.equal(torch.sign(d), torch.sign(d_near))
-    assert ((u * u_near).sum(-1) > 0).all()
+    assert (torch.sign(d) * (u * u_near).sum(-1) > 0).all()
 
 
 def test_soft_geometry_width_is_a_length_per_batch_element():
@@ -657,11 +700,23 @@ def test_soft_geometry_model_contracts_and_checkpoint(tmp_path):
         assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-11), improper
     near = call(_model())
     assert not torch.allclose(near["p"], base["p"], atol=1e-6)
+    ### the two-sided form is a third, distinct geometry with the same contracts
+    torch.manual_seed(0)
+    smooth = _model(query_geometry="smooth", query_geometry_width=0.05)
+    smooth.load_state_dict(m.state_dict())
+    base_s = call(smooth)
+    assert not torch.allclose(base_s["p"], base["p"], atol=1e-6)
+    R = orthogonal(3, 5, True)
+    out_s = call(smooth, R, torch.tensor([1.0, 2.0, -3.0], dtype=D), k=0.5)
+    assert torch.allclose(out_s["p"], base_s["p"], atol=1e-11)
+    assert torch.allclose(out_s["v"], base_s["v"] @ R.T, atol=1e-11)
 
     m.save(str(tmp_path / "soft.mdlus"))
     loaded = Module.from_checkpoint(str(tmp_path / "soft.mdlus")).double().eval()
     assert loaded.query_geometry == "soft" and loaded.query_geometry_width == 0.05
     assert torch.allclose(call(loaded)["p"], base["p"], atol=1e-12)
+    smooth.save(str(tmp_path / "smooth.mdlus"))
+    assert Module.from_checkpoint(str(tmp_path / "smooth.mdlus")).query_geometry == "smooth"
     with pytest.raises(ValueError, match="query_geometry must be"):
         _model(query_geometry="plane")
     with pytest.raises(ValueError, match="query_geometry_width"):
@@ -690,3 +745,47 @@ def test_soft_geometry_kernel_is_finite_when_the_first_tiles_hold_no_kept_sample
     with torch.enable_grad():
         d_ref, u_ref = soft_boundary_geometry(q.clone().requires_grad_(True), pts, nrm, None, width=0.5)
     assert torch.allclose(d, d_ref.detach(), atol=1e-5) and torch.allclose(u, u_ref.detach(), atol=1e-5)
+
+
+def _circle_with_wall_nodes(n: int, dtype):
+    """A closed polygon of n equal segments on the unit circle (tokens at the segment
+    centroids, outward normals, equal lengths) and queries AT its vertices: points
+    exactly on the sampled boundary, as the volume meshes of the program's datasets
+    carry the wall nodes among their interior points."""
+    t = torch.linspace(0, 2 * math.pi, n + 1, dtype=torch.float64)[:-1]
+    verts = torch.stack([torch.cos(t), torch.sin(t)], -1)
+    cent = 0.5 * (verts + verts.roll(-1, 0))
+    nrm = cent / cent.norm(dim=-1, keepdim=True)
+    length = (verts.roll(-1, 0) - verts).norm(dim=-1)
+    return cent.to(dtype)[None], nrm.to(dtype)[None], torch.log(length).to(dtype)[None], verts.to(dtype)[None]
+
+
+@pytest.mark.parametrize("one_sided", [True, False])
+@pytest.mark.parametrize("device", ["cpu"] + (["cuda"] if torch.cuda.is_available() else []))
+def test_soft_geometry_wall_nodes_keep_a_unit_direction_that_survives_a_pose_in_float32(device, one_sided):
+    """For a query on the wall the plane distance to its nearest sample is a
+    roundoff-level number, so its side is decided by rounding and may differ between
+    the host and the kernel, and may change under a rigid motion in float32. Measured
+    on AirfRANS (2026-10-07): the first soft form returned a zero direction at ~3% of
+    the wall nodes (the nearest sample dropped from an otherwise empty kept set) and
+    reversed the direction at ~45% of them under the posed protocol, which moved the
+    trained model's error by 1 to 6 percent. Now the nearest sample is always kept and
+    the direction is the kernel-mean outward normal, independent of the side: unit
+    length everywhere, within a degree of the exact radial, and the same (mapped back)
+    after a rigid motion; the two-sided form's distance also survives the motion."""
+    dev = torch.device(device)
+    pts, nrm, lw, q = (t.to(dev) for t in _circle_with_wall_nodes(720, torch.float32))
+    d, u = soft_boundary_geometry(q, pts, nrm, lw, width=0.05, one_sided=one_sided)
+    assert torch.isfinite(d).all()
+    assert torch.allclose(u.norm(dim=-1), torch.ones_like(d), atol=1e-5)
+    radial = q / q.norm(dim=-1, keepdim=True)
+    assert ((u * radial).sum(-1) > math.cos(math.radians(1.0))).all()
+    ### |d| at a wall node is at most the curvature bias kappa tau^2 (0.0025 here)
+    assert (d.abs() < 0.01).all()
+    theta = 0.7
+    R = torch.tensor([[math.cos(theta), -math.sin(theta)], [math.sin(theta), math.cos(theta)]], dtype=torch.float32, device=dev)
+    t = torch.tensor([3.0, -1.5], dtype=torch.float32, device=dev)
+    d2, u2 = soft_boundary_geometry(q @ R.T + t, pts @ R.T + t, nrm @ R.T, lw, width=0.05, one_sided=one_sided)
+    assert ((u2 @ R) * u).sum(-1).min() > math.cos(math.radians(1.0))
+    if not one_sided:
+        assert torch.allclose(d2, d, atol=1e-4)

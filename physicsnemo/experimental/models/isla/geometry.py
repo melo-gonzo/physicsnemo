@@ -221,7 +221,11 @@ def nearest_boundary_geometry(
     return d.squeeze(-1), u
 
 
-QueryGeometry = Literal["nearest", "soft"]
+### "nearest": the exact nearest sample; "soft": the one-sided kernel average
+### (soft_boundary_geometry, one_sided=True); "smooth": the two-sided kernel
+### average (one_sided=False). The two kernel forms are research arms of one
+### candidate (2026-10-07); one of them replaces the other after the verdict.
+QueryGeometry = Literal["nearest", "soft", "smooth"]
 
 
 if HAS_TRITON:
@@ -234,22 +238,27 @@ if HAS_TRITON:
         lw_ptr,
         nstar_ptr,
         side_ptr,
+        idx_ptr,
         iw_ptr,
         out_ptr,
         Q,
         N,
         DIM: tl.constexpr,
+        ONE_SIDED: tl.constexpr,
         BLOCK_Q: tl.constexpr,
         BLOCK_N: tl.constexpr,
     ):
         """The accumulation pass of :func:`soft_boundary_geometry`: one program owns
-        ``BLOCK_Q`` queries, each with its nearest sample's normal (``nstar``) and
-        side (``side``, +1 or -1), and streams the ``N`` boundary samples in
-        ``BLOCK_N`` tiles, keeping the running kernel mass, plane-distance mass and
-        normal mass of the samples on that side that face the nearest sample's way,
-        rescaled online as a streamed softmax; no (Q, N) block is ever written.
-        ``DIM`` is 2 or 3; the inverse width is read from ``iw_ptr`` in the inputs'
-        precision."""
+        ``BLOCK_Q`` queries, each with its nearest sample's index (``idx``), normal
+        (``nstar``) and side (``side``, +1 or -1), and streams the ``N`` boundary
+        samples in ``BLOCK_N`` tiles, keeping the running kernel mass, plane-distance
+        mass and normal mass of the samples that face the nearest sample's way (and,
+        when ``ONE_SIDED``, lie on its side of their tangent planes), rescaled online
+        as a streamed softmax; no (Q, N) block is ever written. The nearest sample is
+        always kept: the host decided the side from its plane distance in its own
+        rounding, and a query on the wall must not lose its own sample to the
+        kernel's. ``DIM`` is 2 or 3; the inverse width is read from ``iw_ptr`` in the
+        inputs' precision."""
         offs_q = tl.program_id(0) * BLOCK_Q + tl.arange(0, BLOCK_Q)
         mask_q = offs_q < Q
         dt = q_ptr.dtype.element_ty
@@ -264,6 +273,7 @@ if HAS_TRITON:
             ns2 = tl.load(nstar_ptr + offs_q * DIM + 2, mask=mask_q, other=0.0)
         side = tl.load(side_ptr + offs_q, mask=mask_q, other=1.0)
         want_pos = side > 0
+        idx_q = tl.load(idx_ptr + offs_q, mask=mask_q, other=-1)
         m = tl.full((BLOCK_Q,), -inf, dt)
         w = tl.zeros((BLOCK_Q,), dt)
         sacc = tl.zeros((BLOCK_Q,), dt)
@@ -291,8 +301,11 @@ if HAS_TRITON:
                 f += ns2[:, None] * nn2[None, :]
             r = tl.sqrt(d2)
             lw = tl.load(lw_ptr + offs_n, mask=mask_n, other=-inf)
-            pos = s >= 0
-            keep = mask_n[None, :] & (f > 0) & ((pos & want_pos[:, None]) | ((~pos) & (~want_pos[:, None])))
+            keep = mask_n[None, :] & (f > 0)
+            if ONE_SIDED:
+                pos = s >= 0
+                keep = keep & ((pos & want_pos[:, None]) | ((~pos) & (~want_pos[:, None])))
+            keep = keep | (mask_n[None, :] & (offs_n[None, :] == idx_q[:, None]))
             f = tl.where(keep, f, 1.0)
             l = lw[None, :] - r * inv_width + tl.log(f)
             l = tl.where(keep, l, -inf)
@@ -314,10 +327,10 @@ if HAS_TRITON:
         norm = tl.sqrt(a0 * a0 + a1 * a1 + a2 * a2)
         inv = tl.where(norm > 0, 1.0 / tl.where(norm > 0, norm, 1.0), 0.0)
         tl.store(out_ptr + offs_q * (DIM + 1) + 0, d, mask=mask_q)
-        tl.store(out_ptr + offs_q * (DIM + 1) + 1, side * a0 * inv, mask=mask_q)
-        tl.store(out_ptr + offs_q * (DIM + 1) + 2, side * a1 * inv, mask=mask_q)
+        tl.store(out_ptr + offs_q * (DIM + 1) + 1, a0 * inv, mask=mask_q)
+        tl.store(out_ptr + offs_q * (DIM + 1) + 2, a1 * inv, mask=mask_q)
         if DIM == 3:
-            tl.store(out_ptr + offs_q * (DIM + 1) + 3, side * a2 * inv, mask=mask_q)
+            tl.store(out_ptr + offs_q * (DIM + 1) + 3, a2 * inv, mask=mask_q)
 
 
 ### Queries per chunk of the torch soft geometry; bounds its (chunk, N, dim) blocks.
@@ -329,31 +342,38 @@ def _soft_geometry_torch(
     y: torch.Tensor,
     n: torch.Tensor,
     lw: torch.Tensor,
+    idx: torch.Tensor,
     n_star: torch.Tensor,
     side: torch.Tensor,
     width: torch.Tensor,
     eps: float,
+    one_sided: bool,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """The chunked PyTorch form of the accumulation pass of
     :func:`soft_boundary_geometry` for one case: ``q`` (Q, d), ``y``/``n`` (N, d),
-    ``lw`` (N,), ``n_star`` (Q, d) and ``side`` (Q,) from the nearest sample,
-    ``width`` a scalar tensor."""
+    ``lw`` (N,), ``idx`` (Q,), ``n_star`` (Q, d) and ``side`` (Q,) from the nearest
+    sample, ``width`` a scalar tensor."""
     inf = float("inf")
     ds, us = [], []
+    ar = torch.arange(y.shape[0], device=y.device)
     for s0 in range(0, q.shape[0], _TORCH_SOFT_CHUNK):
-        qc, nsc, sdc = q[s0 : s0 + _TORCH_SOFT_CHUNK], n_star[s0 : s0 + _TORCH_SOFT_CHUNK], side[s0 : s0 + _TORCH_SOFT_CHUNK]
+        sl = slice(s0, s0 + _TORCH_SOFT_CHUNK)
+        qc, nsc, sdc, ic = q[sl], n_star[sl], side[sl], idx[sl]
         diff = qc[:, None, :] - y[None, :, :]  # (c, N, d)
         r = diff.norm(dim=-1)  # (c, N)
         s = (diff * n[None]).sum(-1)  # signed distance to each sample's tangent plane
         f = (nsc[:, None, :] * n[None]).sum(-1)  # the sample's normal on the nearest sample's normal
-        keep = (f > 0) & ((s >= 0) == (sdc[:, None] > 0))
+        keep = f > 0
+        if one_sided:
+            keep = keep & ((s >= 0) == (sdc[:, None] > 0))
+        keep = keep | (ar[None, :] == ic[:, None])  # the nearest sample is always kept
         l = lw[None, :] - r / width + torch.log(torch.where(keep, f, torch.ones_like(f)))
         l = torch.where(keep, l, torch.full_like(l, -inf))
         e = torch.exp(l - l.max(dim=1, keepdim=True).values)
         w = e.sum(dim=1)
         d = (e * s).sum(dim=1) / w
         nbar = (e[:, :, None] * n[None]).sum(dim=1)  # (c, d)
-        u = sdc[:, None] * nbar / nbar.norm(dim=-1, keepdim=True).clamp_min(eps)
+        u = nbar / nbar.norm(dim=-1, keepdim=True).clamp_min(eps)
         ds.append(d)
         us.append(u)
     return torch.cat(ds), torch.cat(us)
@@ -367,6 +387,7 @@ def soft_boundary_geometry(
     *,
     width: float | torch.Tensor,
     eps: float = 1e-12,
+    one_sided: bool = True,
 ) -> tuple[
     Float[torch.Tensor, "batch queries"], Float[torch.Tensor, "batch queries dim"]
 ]:
@@ -375,45 +396,64 @@ def soft_boundary_geometry(
     :func:`nearest_boundary_geometry`.
 
     For every query :math:`x_q` the exact nearest sample :math:`i^*` is found
-    first (:func:`_nearest_index`); it fixes the side of the boundary the query
-    is on, :math:`\sigma^* = \operatorname{sign}((x_q - y_{i^*}) \cdot \hat n_{i^*})`
-    (positive on the side the normals point to; a tangent or coincident query
-    counts as positive), and the local orientation :math:`\hat n_{i^*}`. Every
-    sample :math:`(y_i, \hat n_i, w_i)` with :math:`w_i` its measure then gets
-    the weight
+    first (:func:`_nearest_index`); it fixes the local orientation
+    :math:`\hat n_{i^*}` and, for the one-sided form, the side of the boundary
+    the query is on, :math:`\sigma^* = \operatorname{sign}((x_q - y_{i^*})
+    \cdot \hat n_{i^*})` (positive on the side the normals point to; a tangent
+    or coincident query counts as positive). Every sample
+    :math:`(y_i, \hat n_i, w_i)` with :math:`w_i` its measure then gets the
+    weight
 
     .. math::
 
         a_i = w_i\, e^{-|x_q - y_i| / \tau}\, \max(0, \hat n_i \cdot \hat n_{i^*})
-        \,[\operatorname{sign}(s_i) = \sigma^*], \qquad s_i = (x_q - y_i) \cdot \hat n_i,
+        \,[\operatorname{sign}(s_i) = \sigma^*]^{\text{one-sided}},
+        \qquad s_i = (x_q - y_i) \cdot \hat n_i,
 
     with :math:`\tau` the ``width`` and :math:`s_i` the signed distance from the
-    query to the sample's tangent plane, and
+    query to the sample's tangent plane (the nearest sample is always kept), and
 
     .. math::
 
         d_q = \frac{\sum_i a_i s_i}{\sum_i a_i}, \qquad
-        u_q = \sigma^* \frac{\sum_i a_i \hat n_i}{\lvert \sum_i a_i \hat n_i \rvert}.
+        u_q = \frac{\sum_i a_i \hat n_i}{\lvert \sum_i a_i \hat n_i \rvert}.
 
-    Both keep the conventions of :func:`nearest_boundary_geometry`:
-    :math:`d_q > 0` outside for outward normals (the stored signed-distance
-    fields' convention) and :math:`u_q` points from the boundary towards the
-    query. The sums are Monte Carlo estimates of integrals over the boundary
-    with the samples' measures as quadrature weights, so under refinement of
-    the boundary sample they converge for any sampling law whose normalized
-    measure converges, uniformly in the wall distance, the property the
-    model's slice attention has; the nearest sample's Euclidean distance and
-    direction do not (they read the sample spacing, by an amount that grows
-    as the query approaches the wall). The nearest sample enters only through
-    its side and its normal, both of which converge with the sample and enter
-    smoothly. Next to a flat wall every :math:`s_i` equals the wall distance,
-    so :math:`d_q` is exact there whatever the sample; on a curved wall the
-    samples whose tangent plane the query lies behind fall on the other side
-    and are excluded, which keeps :math:`d_q` the sign of the nearest
-    sample's; the facing factor keeps the far face of a thin body and the far
-    wall of a concave corner out of the average (their normals point the
-    other way), and at a convex edge selects the nearest face, as the nearest
-    form does.
+    :math:`d_q > 0` outside for outward normals, the stored signed-distance
+    fields' convention and the nearest form's. :math:`u_q` is the kernel-mean
+    normal, which is the gradient of a signed distance: it points outward on
+    both sides of the wall and is continuous across it (the nearest form's
+    direction points from the boundary to the query, so inside a body the two
+    forms' directions are opposite). The side enters :math:`u_q` nowhere: a
+    query on the wall itself (the volume meshes of the program's datasets
+    carry the wall nodes among their interior points) has a side decided by
+    rounding, and a direction that flipped with it made the trained model's
+    error move by 1 to 6 percent under a rigid motion in float32 (measured
+    2026-10-07; the nearest form's direction never flips there).
+
+    The sums are Monte Carlo estimates of integrals over the boundary with the
+    samples' measures as quadrature weights, so under refinement of the
+    boundary sample they converge for any sampling law whose normalized measure
+    converges, uniformly in the wall distance, the property the model's slice
+    attention has; the nearest sample's Euclidean distance and direction do not
+    (they read the sample spacing, by an amount that grows as the query
+    approaches the wall). Next to a flat wall every :math:`s_i` equals the wall
+    distance, so :math:`d_q` is exact there whatever the sample. The facing
+    factor keeps the far face of a thin body and the far wall of a concave
+    corner out of the average (their normals point the other way) and at a
+    convex edge selects the nearest face, as the nearest form does.
+
+    On a curved wall the tangent-plane distances of the neighbouring samples
+    differ from the wall distance by the curvature times half the squared
+    tangential offset, so the kernel average carries a curvature bias of order
+    :math:`\kappa \tau^2`. ``one_sided=True`` (the form the 2026-10-06 AirfRANS
+    lanes trained with) excludes the samples whose tangent plane the query lies
+    behind, which keeps :math:`d_q` the sign of the nearest sample's and removes
+    the bias on the convex side of the wall where the kept set shrinks towards
+    the query's foot, but leaves the bias on the concave side, so :math:`d_q`
+    jumps by about :math:`\kappa \tau^2` across the wall. ``one_sided=False``
+    averages every facing sample: :math:`d_q` is then continuous and smooth
+    across the wall and carries the bias on both sides (its zero level set
+    sits about :math:`\kappa \tau^2` outside a convex wall).
 
     All quantities are functions of pairwise differences, so :math:`d_q` is
     invariant and :math:`u_q` covariant under every rigid motion and
@@ -474,18 +514,22 @@ def soft_boundary_geometry(
                 lw,
                 n_star.contiguous(),
                 side.contiguous(),
+                idx.contiguous(),
                 inv_width,
                 out,
                 nq,
                 y.shape[0],
                 DIM=dim,
+                ONE_SIDED=one_sided,
                 BLOCK_Q=block_q,
                 BLOCK_N=block_n,
                 num_warps=4,
             )
             d, u = out[:, 0], out[:, 1:]
         else:
-            d, u = _soft_geometry_torch(q, y, nrm, lw, n_star, side, tau, eps)
+            d, u = _soft_geometry_torch(
+                q, y, nrm, lw, idx, n_star, side, tau, eps, one_sided
+            )
         ds.append(d.to(query_points.dtype))
         us.append(u.to(query_points.dtype))
     return torch.stack(ds), torch.stack(us)
