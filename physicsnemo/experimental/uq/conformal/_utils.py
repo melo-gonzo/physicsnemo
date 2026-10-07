@@ -277,8 +277,8 @@ def fetch_ints(values: Sequence[Tensor]) -> list[int]:
 
 
 def _signed64(value: int) -> int:
-    """Reinterpret an unsigned 64-bit constant as a signed ``int64``."""
-    return value - (1 << 64)
+    """Reinterpret an unsigned 64-bit value as a signed ``int64``."""
+    return value - (1 << 64) if value >= 1 << 63 else value
 
 
 _GOLDEN = _signed64(0x9E3779B97F4A7C15)
@@ -328,18 +328,46 @@ def points_fingerprint(
     finite, *sums = fetch_ints([*pending, *_points_checksum(points)])
     if not finite:
         check_points(points)
-    dtype = str(points.dtype).removeprefix("torch.")
-    n_points, n_dims = points.shape
     digest = "".join(f"{value & ((1 << 64) - 1):016x}" for value in sums)
-    return f"{dtype}-{n_points}x{n_dims}-{digest}"
+    return f"{_mesh_label(points)}-{digest}"
 
 
-def require_mesh(points: Tensor | None, expected: str | None, hint: str = "") -> str:
-    """Fingerprint ``points`` and require it to equal ``expected`` unless ``None``."""
+def _mesh_label(points: Tensor) -> str:
+    """The ``<dtype>-<n_points>x<n_dims>`` prefix of a mesh fingerprint."""
+    n_points, n_dims = points.shape
+    return f"{str(points.dtype).removeprefix('torch.')}-{n_points}x{n_dims}"
+
+
+def _same_mesh(points: Tensor, expected: str) -> Tensor:
+    """Whether ``points`` has fingerprint ``expected``, as a 0-d device bool."""
+    label, digest = expected.rsplit("-", 1)
+    sums = _points_checksum(points)
+    same = torch.full((), label == _mesh_label(points), device=points.device)
+    for index, value in enumerate(sums):
+        stored = _signed64(int(digest[16 * index : 16 * (index + 1)], 16))
+        same &= value == stored
+    return same
+
+
+def require_mesh(
+    points: Tensor | None,
+    expected: str | None,
+    hint: str = "",
+    pending: list[Tensor] | None = None,
+) -> str:
+    """Fingerprint ``points`` and require it to equal ``expected`` unless ``None``.
+
+    With ``pending`` (and ``expected`` set), append the finiteness and match
+    flags there instead of syncing; the caller must check them.
+    """
     if points is None:
         raise ValueError(
             "Cellwise conformal requires points=, the calibration mesh coordinates."
         )
+    if pending is not None:
+        check_points(points, pending)
+        pending.append(_same_mesh(points, expected))
+        return expected
     fingerprint = points_fingerprint(points)
     if expected is not None and fingerprint != expected:
         raise ValueError(
@@ -447,10 +475,12 @@ def check_aux(
     score: "_NonconformityScore",
     prediction: Tensor,
     aux: Mapping[str, Tensor] | None,
+    pending: list[Tensor] | None = None,
 ) -> None:
     """Require the score's aux entries to be finite and match the prediction shape.
 
-    An infinite sigma would otherwise make the score zero.
+    An infinite sigma would otherwise make the score zero. ``pending`` works
+    as in :func:`check_finite`.
     """
     if aux is None:
         return
@@ -462,7 +492,7 @@ def check_aux(
                 f"{type(value).__name__}."
             )
         check_exact_shape(key, f"aux '{aux_key}'", value, "prediction", prediction)
-        check_real(key, f"aux '{aux_key}'", value)
+        check_real(key, f"aux '{aux_key}'", value, pending)
 
 
 def check_floating(key: str, name: str, tensor: Tensor) -> Tensor:
@@ -475,9 +505,18 @@ def check_floating(key: str, name: str, tensor: Tensor) -> Tensor:
     return tensor
 
 
-def check_finite(key: str, name: str, tensor: Tensor) -> Tensor:
-    """Reject NaN and inf values with a per-field message."""
-    if not torch.isfinite(tensor).all():
+def check_finite(
+    key: str, name: str, tensor: Tensor, pending: list[Tensor] | None = None
+) -> Tensor:
+    """Reject NaN and inf values with a per-field message.
+
+    With ``pending``, append the finiteness flag there instead of syncing; the
+    caller fetches all flags at once and repeats the checks if one fails.
+    """
+    finite = torch.isfinite(tensor).all()
+    if pending is not None:
+        pending.append(finite)
+    elif not finite:
         n_bad = int((~torch.isfinite(tensor)).sum())
         raise ValueError(
             f"{_field_label(key)}: {n_bad} non-finite value(s) (NaN/inf) in {name}; "
@@ -486,9 +525,11 @@ def check_finite(key: str, name: str, tensor: Tensor) -> Tensor:
     return tensor
 
 
-def check_real(key: str, name: str, tensor: Tensor) -> Tensor:
-    """Require finite floating-point data."""
-    return check_finite(key, name, check_floating(key, name, tensor))
+def check_real(
+    key: str, name: str, tensor: Tensor, pending: list[Tensor] | None = None
+) -> Tensor:
+    """Require finite floating-point data; ``pending`` as in :func:`check_finite`."""
+    return check_finite(key, name, check_floating(key, name, tensor), pending)
 
 
 def _strict_json_snapshot(value: Any, name: str) -> Any:

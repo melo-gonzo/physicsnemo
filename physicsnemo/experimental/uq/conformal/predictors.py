@@ -36,6 +36,7 @@ from ._utils import (
     check_point_alignment,
     check_points,
     check_real,
+    fetch_ints,
     field_items,
     pack_fields,
     points_fingerprint,
@@ -356,6 +357,7 @@ class ConformalPredictor:
         key: str,
         prediction: Tensor,
         aux: Mapping[str, Tensor] | None,
+        pending: list[Tensor] | None,
     ) -> Tensor:
         threshold = self._thresholds_by_key[key]
         if self._tier == "cellwise":
@@ -368,10 +370,45 @@ class ConformalPredictor:
 
         if self._difficulty is None:
             return threshold
-        difficulty = self._difficulty(aux).to(
+        difficulty = self._difficulty._scales(aux, pending).to(
             device=prediction.device, dtype=torch.float64
         )
         return threshold * broadcast_difficulty(difficulty, prediction, key)
+
+    def _bounds(
+        self,
+        items: list[tuple[str, Tensor]],
+        aux: Mapping | None,
+        points: Tensor | None,
+        pending: list[Tensor] | None,
+    ) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
+        """Validate the inputs and compute bounds; ``pending`` as in ``check_finite``."""
+        if self._tier == "cellwise":
+            require_mesh(
+                points,
+                self._mesh_fingerprint,
+                " If meshes vary, calibrate with FunctionalBandCalibrator or "
+                "RiskControlCalibrator.",
+                pending,
+            )
+        elif points is not None:
+            check_points(points, pending)
+
+        lo_out: dict[str, Tensor] = {}
+        hi_out: dict[str, Tensor] = {}
+        for key, prediction_field in items:
+            if points is not None:
+                check_point_alignment(key, prediction_field, points, "prediction")
+            aux_field = slice_aux(aux, key)
+            check_real(key, "prediction", prediction_field, pending)
+            check_aux(key, self._score, prediction_field, aux_field, pending)
+            threshold = self._threshold_for(key, prediction_field, aux_field, pending)
+            lo_out[key], hi_out[key] = self._score.interval(
+                prediction_field,
+                threshold.to(device=prediction_field.device),
+                aux=aux_field,
+            )
+        return lo_out, hi_out
 
     def predict_interval(
         self,
@@ -441,37 +478,19 @@ class ConformalPredictor:
         rescale the model outputs and recalibrate. Do not clip bounds
         inward: that can remove coverage.
 
-        Each call checks its inputs on the host, which synchronizes with the
-        GPU. The cellwise tier checksums ``points`` on their own device. This
-        method is not intended for use inside ``torch.compile`` regions.
+        Each call checks every input value, and for the cellwise tier the
+        ``points`` checksum, on the inputs' device, then synchronizes with the
+        GPU once to read the results. This method is not intended for use
+        inside ``torch.compile`` regions.
         """
         selection = self.keys
         require_container_kind(prediction, selection, "This predictor", "prediction")
         items = field_items(prediction, selection)
-        if self._tier == "cellwise":
-            require_mesh(
-                points,
-                self._mesh_fingerprint,
-                " If meshes vary, calibrate with FunctionalBandCalibrator or "
-                "RiskControlCalibrator.",
-            )
-        elif points is not None:
-            check_points(points)
-
-        lo_out: dict[str, Tensor] = {}
-        hi_out: dict[str, Tensor] = {}
-        for key, prediction_field in items:
-            if points is not None:
-                check_point_alignment(key, prediction_field, points, "prediction")
-            aux_field = slice_aux(aux, key)
-            check_real(key, "prediction", prediction_field)
-            check_aux(key, self._score, prediction_field, aux_field)
-            threshold = self._threshold_for(key, prediction_field, aux_field)
-            lo_out[key], hi_out[key] = self._score.interval(
-                prediction_field,
-                threshold.to(device=prediction_field.device),
-                aux=aux_field,
-            )
+        pending: list[Tensor] = []
+        lo_out, hi_out = self._bounds(items, aux, points, pending)
+        if not all(fetch_ints(pending)):
+            # Repeat with one sync per check to raise the first error.
+            lo_out, hi_out = self._bounds(items, aux, points, None)
 
         if isinstance(prediction, TensorDict):
             lo = prediction.empty()

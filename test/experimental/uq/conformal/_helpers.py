@@ -45,6 +45,7 @@ __all__ = [
     "TIERS",
     "assert_admitted_covered",
     "assert_predictor_covers_admitted",
+    "count_syncs",
     "fit",
     "fitted_risk",
     "make_predictor",
@@ -166,3 +167,23 @@ def assert_predictor_covers_admitted(
     bad = (score <= threshold) & ~inside
     assert not bad.any(), f"{int(bad.sum())} admitted target(s) excluded"
     return lo, hi
+
+
+_SYNC_METHODS = ("__bool__", "__int__", "__float__", "__index__", "item", "tolist")
+
+
+def count_syncs(monkeypatch) -> list[str]:
+    """Record every tensor-to-Python conversion (a device sync on GPU).
+
+    Returns the list that collects the name of each conversion method called.
+    """
+    calls: list[str] = []
+    for name in _SYNC_METHODS:
+        original = getattr(torch.Tensor, name)
+
+        def counted(self, *args, _name=name, _original=original, **kwargs):
+            calls.append(_name)
+            return _original(self, *args, **kwargs)
+
+        monkeypatch.setattr(torch.Tensor, name, counted)
+    return calls

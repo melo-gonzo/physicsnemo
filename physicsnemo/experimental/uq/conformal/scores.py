@@ -472,6 +472,12 @@ class AuxDifficulty:
             If the entry is not a floating-point tensor (for example
             ``None``).
         """
+        return self._scales(aux)
+
+    def _scales(
+        self, aux: Mapping[str, Tensor], pending: list[Tensor] | None = None
+    ) -> Tensor:
+        """``__call__`` that appends the finiteness flag to ``pending`` if given."""
         if not isinstance(aux, Mapping) or self.key not in aux:
             raise ValueError(
                 f"AuxDifficulty requires aux entry '{self.key}' at every call; "
@@ -483,7 +489,7 @@ class AuxDifficulty:
                 f"AuxDifficulty aux '{self.key}' must be a torch.Tensor, got "
                 f"{type(s).__name__}."
             )
-        check_real(self.key, "AuxDifficulty input", s)
+        check_real(self.key, "AuxDifficulty input", s, pending)
         if s.ndim >= 2:
             # One scale per point, the unit in which risk control counts misses.
             s = s.amax(dim=tuple(range(1, s.ndim)))
