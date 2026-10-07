@@ -34659,3 +34659,119 @@ dense query-by-cell read, 2.1x the step on a 1,000-cell boundary and about
 the scalable form is a tree-accelerated read built on the GLOBE cluster
 tree with a per-point traversal, scoped at about two weeks. Decision with
 Peter.
+
+## 2026-10-07 — SOFT-GEO lanes scored: the soft form is invariant to re-panelization (0.96 to 1.01) and beats the nearest reference natively, but under coarsening its built-in channel still carries half the excess and the posed error moves 1 to 6 percent; both traced to the one-sided rule and the direction's sign, fixed and relaunched {#sec-nb-soft-geo-lanes}
+
+**Setting.** The soft built-in query geometry (@sec-nb-soft-geo-prereg)
+replaces the nearest boundary token's Euclidean distance and direction by
+a measure-weighted kernel average over the tokens on the nearest token's
+side of their tangent planes: the kernel-mean plane distance d and the
+kernel-mean normal u, width 0.03 of the length unit. Six AirfRANS lanes
+trained it under the campaign protocol (code_v21, 500 epochs, 100,000
+interior points, lr 3.75e-4): soft03 seeds 42 and 43, soft01 and soft10
+(widths 0.01 and 0.10), soft03 without the stored signed-distance inputs,
+and a nearest-form control without them. All six completed without a NaN.
+
+**Native and posed scores** (pressure / velocity / eddy-viscosity relative
+L2, 200 held-out cases, float32). soft03: 0.0292 / 0.0147 / 0.0278 (seed 42)
+and 0.0311 / 0.0154 / 0.0301 (seed 43), against the nearest reference's
+0.0369 / 0.0167 / 0.0317 and 0.0335 / 0.0177 / 0.0312: 10 to 21 percent
+better on every field and both seeds, so bar P3 (native within the seed
+separation of the reference) passes with room. soft01 0.0317 / 0.0160 /
+0.0278 and soft10 0.0322 / 0.0156 / 0.0284: the width barely matters
+natively. Built-in channel alone (no stored field): soft 0.0308 / 0.0185 /
+0.0297 against nearest 0.0305 / 0.0196 / 0.0276, one seed each, so bar P4
+(soft at least as good as nearest without the stored field) is mixed:
+velocity 6 percent better, eddy viscosity 8 percent worse, pressure equal.
+Under the posed protocol (an in-plane rotation and a translation of one RMS
+radius per case) the nearest lanes reproduce their native numbers to five
+digits; every soft lane moves: velocity +3.7 percent (seed 42), +6.2
+percent (seed 43), +2.8 percent (soft01), +1.9 percent (soft10), +0.6
+percent (no stored field); pressure +0.7 to +1.8 percent.
+
+**AF-GEO** (`kernel/char/af_geo_sq/<run>/summary.json`, LHR). Under the
+count-raising re-panelizations refu and reff (@sec-nb-af-geo-refine) the
+soft lanes' error ratios to native are 0.955 to 1.012 on every field, both
+seeds and all three widths, where the nearest control without the stored
+field moves 1.43 / 2.51 / 2.79 (refu) and 1.73 / 3.39 / 2.00 (reff) and
+its native geometry restores it to 0.98 to 1.01: **the soft form is
+re-panelization invariant and the nearest form's sensitivity is entirely
+its built-in channel.** Under the 400-segment coarsening the soft lanes
+still lose 7.7 to 17.7x (uniform law) and 12.2 to 18.4x (length law), and
+swapping in the native geometry returns them to 2.7 to 4.5x (the
+coarsened slice states' share, as for the reference): the built-in
+channel's share of the log excess is 0.46 to 0.77, the same as the nearest
+form's 0.52 to 0.82, and independent of the width. **Bar P2's coarsening
+clause (geometry share below 0.1) fails for the form as trained.** The
+wall-node split (`af_geo_sq_wall`: native geometry restored at the wall
+nodes only, or everywhere but the wall nodes) puts the whole coarsening
+excess outside the wall nodes (wall-only swap 10.64 / 9.85 / 11.08 against
+10.69 / 9.89 / 11.09 for soft03 seed 42; rest-only swap 2.88 / 1.84 / 1.97
+against the full swap's 2.84 / 1.84 / 1.97).
+
+**Mechanism of the posed shift** (probes `kernel/char/pose_probe/run1,
+run2`: the geometry functions alone on 12 cases, four rigid motions each,
+float32 and float64). In float64 both forms are invariant to 1e-12. The
+AirfRANS interior sample contains the airfoil's own wall nodes (stored
+distance exactly zero; 273 to 726 of 100,000 queries per case). There the
+plane distance to the nearest token, s* = (x - y*) . n*, is a
+roundoff-level number, so in float32 about half of the wall nodes change
+side under a pose, in both forms alike (47 and 48 percent). The nearest
+form's d flips sign (|d| is half a panel, median 6e-4 chord) and its
+direction (x - y*)/|x - y*| never reverses; the trained nearest model does
+not react. The soft form's d sits at 1e-9 chord on the outside branch and
+at about kappa tau^2 (median 3e-6, up to 3e-2 at the leading edge) on the
+inside branch, so its log channel changed by more than one unit at 71
+percent of the wall nodes, and its direction u = sigma* nbar REVERSED at 45
+percent of them; every other band of the interior changed by roundoff
+only. Re-orienting u at evaluation on the trained checkpoints
+(`kernel/char/f3_eval`) doubled their error (an input combination never
+seen in training): the model is extremely sensitive to u at the wall nodes,
+and the fix has to be trained in. A second defect found by the identity
+pose: the host decided the side from s* in torch while the kernel
+recomputed s with other rounding, so at |s*| ~ roundoff the nearest token
+itself could drop out of an otherwise empty kept set and the kernel
+returned d = 0 and a zero direction at about 3 percent of the wall nodes.
+
+**Mechanism of the coarsening sensitivity.** The one-sided rule keeps, on
+the convex side of a curved wall, only the tokens whose tangent plane the
+query lies in front of: at wall distance delta those within a tangential
+offset sqrt(2 delta / kappa) of the query's foot. That window is 4.5e-3
+chord at delta = 1e-5 on the mid-chord of a unit airfoil: the native
+sample puts about four tokens in it and the 400-segment sample one, and the
+kernel-mean plane distance goes from about two thirds of delta (a window
+full of tokens, whose plane distances are delta minus kappa l^2 / 2) to
+delta (the nearest token alone). The truncation makes the near-wall d
+depend on the token density at first order, whatever the width, which is
+why the coarsening share did not move between widths 0.01 and 0.10 while
+refinement, which only adds tokens to an already-resolved window, left the
+form alone. The two-sided average over every facing token has no such
+window: it is continuous and smooth across the wall and depends on the
+sample only through the quadrature error of a kernel wider than the
+spacing, at the price of a curvature bias of about kappa tau^2 on both
+sides (its zero level set sits that far outside a convex wall).
+
+**Fix** (commit f7e4377a3, snapshot code_v23, verified on LHR: 210 passed
+in the first run, two test expectations corrected, re-run pending): the
+direction is the kernel-mean outward normal on both sides, u = nbar/|nbar|,
+the gradient of a signed distance (continuous across the wall; the side
+stays in the sign of d); the nearest token is always kept (its index goes
+to the kernel); and the two-sided average is a second research arm,
+`query_geometry="smooth"`, beside the one-sided `"soft"`. One of the two
+replaces the other after the verdict.
+
+**Relaunch** (LHR, group sr, rows 88 to 93, jobs 112161 to 112166, code_v23,
+same protocol): soft03 seeds 42 and 43 with the direction fix, smooth03
+seeds 42 and 43, and the two no-stored-field pairs (soft03, smooth03, seed
+42). Pre-registered: (i) both forms pose-invariant to within 0.5 percent on
+every field (the direction no longer flips; for soft the remaining d jump
+at the wall nodes is the residual); (ii) smooth's coarsening geometry share
+below 0.1 with the coarsened ratio at the slice-state level, soft's share
+unchanged near 0.5; (iii) smooth native within the seed separation of
+soft (the curvature bias costs nothing the model cannot learn); (iv)
+smooth without the stored field at least as good as nearest without it on
+every field. If (i) to (iii) hold, smooth is the sample-independent form
+and the decision tree's AirfRANS gate is passed on refinement AND
+coarsening; the wall jump and the LE resolution limit (tau = 0.015 chord
+is the leading-edge radius of a 12 percent airfoil) go to Peter as the
+known properties of the form.
