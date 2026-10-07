@@ -196,6 +196,16 @@ preregistration's "scored at theta 0 as a diagnostic": at DrivAerML scale theta 
 per block, the very cost this program exists to avoid, so that diagnostic is not run on the car; the trained TG's
 distance from its own dense limit is measured on AirfRANS-sized cases only if it becomes relevant.
 
+### E4 on the read-only reference (job 113456)
+
+The query-population probe on P (the same 100,000 scored points under the native 200,000 tokens, the 100,000
+alone, plus 200,000 box companions, plus 200,000 wall-heavy companions; 48 cars, float32): every error ratio to
+the control is 1.0000 on pressure and velocity and 1.0000 / 0.9999 on eddy viscosity, and the largest change of
+any prediction over all cars and conditions is 1.2e-4 relative L2 (float32 roundoff through the slice blocks). The
+read-only model is query independent to roundoff, as its construction says; the interacting reference moved 15x to
+24x under the same companions (QUERY-POP, 2026-10-06). TG inherits this exactly: its read sees the boundary tree
+and the point alone.
+
 ### In flight
 
 - Lanes `dtt_vol_tg1_seed42/43` (E3's TG arms: read-only + tree read at theta 1, leaf 4, RMS orientation tree,
