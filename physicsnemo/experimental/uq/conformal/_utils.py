@@ -26,11 +26,12 @@ promoted dtype, and :func:`cast_directed` rounds outward whenever a cast
 loses precision.
 """
 
+import json
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from fractions import Fraction
 from numbers import Real
-from typing import TYPE_CHECKING, Any, Literal, get_args
+from typing import TYPE_CHECKING, Literal, get_args
 
 import torch
 from jaxtyping import Float
@@ -213,10 +214,15 @@ def kth_smallest_of_samples(
     n_cells = flats[0].numel()
     cells_per_chunk = max(1, chunk_numel // n)
     out = torch.empty(n_cells, dtype=dtype, device=first.device)
+    block = torch.empty(
+        (n, min(cells_per_chunk, n_cells)), dtype=dtype, device=first.device
+    )
     for start in range(0, n_cells, cells_per_chunk):
         stop = min(start + cells_per_chunk, n_cells)
-        block = torch.stack([flat[start:stop] for flat in flats], dim=0)
-        out[start:stop] = torch.kthvalue(block, k, dim=0).values
+        view = block[:, : stop - start]
+        for row, flat in zip(view, flats):
+            row.copy_(flat[start:stop])
+        out[start:stop] = torch.kthvalue(view, k, dim=0).values
     return out.reshape(cell_shape)
 
 
@@ -532,38 +538,23 @@ def check_real(
     return check_finite(key, name, check_floating(key, name, tensor), pending)
 
 
-def _strict_json_snapshot(value: Any, name: str) -> Any:
-    """Return a copy of a strict-JSON value; reject other types without coercion."""
-    if value is None or type(value) in (str, int, bool):
-        return value
-    if type(value) is float:
-        if not math.isfinite(value):
-            raise ValueError(f"{name} must contain only finite JSON numbers.")
-        return value
-    if isinstance(value, Mapping):
-        out = {}
-        for key, item in value.items():
-            if type(key) is not str:
-                raise TypeError(
-                    f"{name} keys must be strings, got {type(key).__name__} ({key!r})."
-                )
-            out[key] = _strict_json_snapshot(item, f"{name}.{key}")
-        return out
-    if type(value) is list:
-        return [
-            _strict_json_snapshot(item, f"{name}[{index}]")
-            for index, item in enumerate(value)
-        ]
-    raise TypeError(
-        f"{name} must contain only strict-JSON values; got {type(value).__name__}."
-    )
-
-
 def validate_provenance(value: object) -> dict:
     """Validate and copy a predictor's strict-JSON provenance mapping."""
     if not isinstance(value, Mapping):
         raise TypeError(f"provenance must be a mapping, got {type(value).__name__}.")
-    snapshot = _strict_json_snapshot(value, "provenance")
+    try:
+        snapshot = json.loads(json.dumps(value, allow_nan=False))
+    except ValueError as exc:
+        raise ValueError(f"provenance must contain only finite numbers: {exc}") from exc
+    except TypeError:
+        snapshot = None
+    # The round trip silently turns tuples into lists and non-string keys into
+    # strings; comparing with the input rejects both.
+    if snapshot != value:
+        raise TypeError(
+            "provenance must contain only strict-JSON values: string keys, lists "
+            "(not tuples), and str, int, float, bool, or None leaves."
+        )
     if "mesh_fingerprint" in snapshot:
         raise ValueError(
             "provenance must not contain 'mesh_fingerprint'; that name is "
