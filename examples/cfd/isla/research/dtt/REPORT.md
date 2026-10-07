@@ -174,7 +174,24 @@ The interacting reference I (`cl_r_vol_isla_seed42/43`, AGA `evals_char`, the ca
 
 The bars: TG / I <= 1.03 / 1.03 / 1.05 on the native protocol, seed means, so TG must reach about 0.0406 / 0.0654 /
 0.0920. The same scorer, adapted to this task dir (`scoring/dtt_protocol.sbatch`, rows in
-`scoring/protocol_rows.tsv`), scores P and TG under the three protocols when their lanes finish. Note on the
+`scoring/protocol_rows.tsv`), scores P and TG under the three protocols when their lanes finish.
+
+P, the read-only model without a read (lanes `dtt_vol_p_seed42/43`, 500 epochs, finished 2026-10-07 00:50 PDT,
+scored by job 113455):
+
+| protocol | seed 42 | seed 43 | seed mean | P / I |
+|---|---|---|---|---|
+| native | 0.0454 / 0.0847 / 0.175 | 0.0443 / 0.0822 / 0.119 | 0.0449 / 0.0834 / 0.147 | 1.14 / 1.31 / 1.68 |
+| area | 0.0879 / 0.207 / 0.185 | 0.0842 / 0.201 / 0.138 | 0.0860 / 0.204 / 0.161 | 0.28 / 0.49 / 0.28 |
+| posed | 0.0454 / 0.0847 / 0.175 | 0.0443 / 0.0822 / 0.119 | same as native | |
+
+The read-only penalty on the car is 14% / 31% / 68% (pressure / velocity / eddy viscosity), larger than on
+AirfRANS (4% to 42%): the interacting queries carry more of the volume prediction here, which is what the tree
+read has to recover. A side finding worth its own line: under the area protocol (a uniform-on-the-surface boundary
+draw at inference) the read-only model's error rises 1.9x / 2.5x / 1.1x where the interacting reference's rises
+7.9x / 6.9x / 7.7x, so most of the interacting model's boundary-law sensitivity on the Volume task sits in the
+query tokens' participation in the slices, not in the built-in query geometry both models share. Posed equals
+native to four digits for P, as the symmetry contracts require. Note on the
 preregistration's "scored at theta 0 as a diagnostic": at DrivAerML scale theta 0 is the dense read of 4e10 pairs
 per block, the very cost this program exists to avoid, so that diagnostic is not run on the car; the trained TG's
 distance from its own dense limit is measured on AirfRANS-sized cases only if it becomes relevant.
