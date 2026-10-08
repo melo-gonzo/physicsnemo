@@ -34935,3 +34935,127 @@ invariance of a model that never looks. It also restates what the
 re-panelization result means: ISLA's kernel forms are invariant to a change
 of boundary sampling that the baselines cannot even see, while remaining the
 only models that would notice a geometry the stored field does not encode.
+
+## 2026-10-08 — PATCH-SDF pre-registration: the built-in query geometry as the exact signed distance to the finite patches the tokens' measures define, with the side from the winding number behind an edge; on 12 AirfRANS cases it equals the stored field natively and flips 0.03 percent of the wake distances under coarsening where the nearest and kernel forms flip 10 percent; two AirfRANS lanes launched {#sec-nb-patch-sdf-prereg}
+
+**Setting.** The SOFT-GEO verdict (@sec-nb-soft-geo-verdict) left the
+built-in query geometry with one named residual: under the 400-segment
+coarsening every form, the nearest token's distance and the kernel averages
+alike, carried 0.3 to 0.85 of the log excess through its built-in channel, and
+the chordwise split put that share behind x = 0.9 chord, the sharp trailing
+edge and the wake. Peter asked whether a different facing factor (an even
+function of the cosine, max(cos, 0) |cos| or cos^2) would remove it, and then
+approved running "the form you think is most promising". This entry records
+the mechanism probes that chose the form, the form itself, its measured
+geometry, and the lanes that test it. Artifact:
+`results/char/patch_sdf_probes_2026-10-08.json` (every probe's per-band
+aggregates; per-case records in `kernel/char/pose_probe/run5..run9` on LHR).
+
+**The symptom, measured on the geometry functions alone.** The probe
+instrument of @sec-nb-soft-geo-lanes was extended to coarsening: the geometry
+functions (no model) on the first 12 full_test cases, native airfoil (about
+1,000 segments) against the 400-segment uniform-law coarsening with the same
+100,000 queries, per band of chord position and of wall distance. Behind the
+trailing edge (x > 0.9) the one-sided kernel form's distance changes by 0.25
+chord RMS and the nearest form's by 0.38, and both flip the sign of 10 percent
+of the wake distances above 1e-3 chord; restricted to the queries whose sign
+survives, the kernel form still moves 0.032 chord where the nearest form moves
+0.0006. Two mechanisms, then: **the side** (inside or outside) of a wake query
+is decided by the nearest token's tangent plane, and when coarsening moves the
+nearest token to the other face of the trailing edge a query above the lower
+face's extended plane is declared inside, d = -L for a distance L; and **the
+magnitude** of the kernel form reads the tangent planes extrapolated past the
+edge, about L sin(face angle), which moves with the surviving tokens' face
+angles. Neither depends on the facing factor: the squared cosine left the wake
+change at 0.24 chord (run 3), so Peter's proposal, taken literally, was
+refuted before anything was trained.
+
+**What was tested for the side.** (a) A vote: the sign of the two-sided
+kernel mean of the plane offsets over every facing token (even facing, so both
+faces of an edge vote). It removed the wake flips (0.25 to 0.053 chord) but
+read 56 percent of the near-wall fluid points as inside: with an even facing
+factor the far sheet of a thin section votes with the larger plane offset, the
+thickness. (b) Tie-votes among the patches nearest to the query, with the
+window one patch radius, the second-neighbour spacing, or the distance between
+the patches' nearest points: on a Poisson subsample the two faces' surviving
+patches sit at random distances from the edge, so a window of one spacing
+misses the second face a third of the time, and a window wide enough to catch
+it lets the far sheet vote (12 to 15 percent flips mid-chord). (c) A relative
+window (patches within a factor of the nearest distance): behind the body it
+sums the plane offsets of a closed surface, which the divergence theorem makes
+negative, and reads 94 percent of the far field as inside. **No local rule
+separates an edge from a thin section on a sample with gaps**; the side behind
+an edge is a topological question.
+
+**The form** (`query_geometry="patch"`, `geometry.patch_boundary_geometry`,
+commit c8414e583). A boundary token with measure w_i represents the flat patch
+of that measure around its centroid: in two dimensions the segment of
+half-length R_i = w_i / 2 in its tangent line. Under a subsample whose measures
+carry the inverse inclusion probabilities (every draw of the program), the
+patches tile the surface in expectation. For a query x: |d| is the exact
+Euclidean distance to the set of patches (plane offset over a patch, distance
+to the rim beyond it), so no tangent plane is extrapolated past its patch and a
+wake query reads L. The side is the nearest patch's plane sign where the
+nearest point lies inside that patch (the exact side of a closest point on a
+face) or the query is within one radius of it (a gap of the subsample), and
+otherwise, behind an edge, in a wake, far away, the exact winding number of
+the patch set, the sum of the signed angles the oriented segments subtend over
+2 pi, which is 0 outside and 1 inside a closed boundary whatever cells the
+subsample kept and does not care how thin the body is. The direction is the
+patch normal in the local regime (so a wall node, whose nearest patch is
+decided by rounding, has a direction no rounding can turn) and the gradient of
+the distance from the rim point beyond it. One constant, the reach of one
+radius; two radii changed nothing measurable. Two dimensions only: a flat
+disk's solid angle has no closed form, and the three-dimensional form waits
+for the verdict. The cost is one chunked (Q, N) pass with an arctangent per
+pair; no Triton kernel yet.
+
+**What the probes saw** (run 9, the library form, 12 cases; the plane kernel
+and the nearest form in the same probe). Natively the form reproduces the
+stored signed-distance field: RMS log ratio 0.000, median ratio 1.000, sign
+agreement 0.9999 (the plane kernel 0.43 / 0.91, the nearest form 0.55 /
+1.00), so the stored field the baselines read is now computable inside the
+model from the boundary tokens. Under coarsening, behind the trailing edge:
+RMS change 5.2e-4 chord (plane 0.25, nearest 0.38), flips of distances above
+1e-3 chord 0.03 percent (10 percent), direction reversals 0.5 percent (17 and
+3.5 percent); in the far field no flip (4.5 percent); over the whole query set
+RMS change 1.3e-3 chord against 0.14 and 0.22. Near the wall the form pays
+for the gaps of the Poisson subsample: RMS change 1.8e-3 chord against the
+plane kernel's 4.5e-4 and the nearest form's 3.3e-3 (over a gap the nearest
+point is a rim, and the distance reads the gap), with the sign flipping only
+in the convexity sliver below about 1e-5 chord and within one radius of the
+trailing edge. Under a rigid motion in float32 the distance moves by 1e-5
+chord RMS and the wall nodes' direction by 0.036 RMS (1 - cos) with 0.1 percent
+reversals (the one-sided kernel's wall nodes turned half the time before its
+fix). Pre-registered probe bars P-a (wake and far flips <= 1 percent), P-b
+(wake RMS change <= 0.01 chord), P-c (native accuracy), P-d (wake reversals
+<= 2 percent) and P-e (posed invariance) all pass; the vote's necessity (P-f)
+was settled synthetically (the nearest patch's own plane sign fails behind
+the edge for 29 percent of wake points on a closed NACA 0012 polygon) and the
+reach's insensitivity (P-g) by run 7's c = 2 arm.
+
+**Tests** (`test_isla_interior_geometry.py`, six): exactness of distance,
+sign and gradient on a closed polygon; the winding-number side behind a sharp
+edge against the plane-sign control; the wake side under a 40 percent Poisson
+subsample with inverse-inclusion measures; covariance under rotation,
+reflection, translation and scale; the three-dimensional and reach guards; the
+interior model's contracts and checkpoint round trip in two dimensions.
+
+**Lanes and bars.** `sp_af_patch_seed42` and `_seed43` (`cl_lanes.tsv` rows
+94 and 95, snapshot code_v25 = code_v24 + this form, verified on LHR before
+launch): AirfRANS 2-D, the campaign configuration (512 wide, 512 slices,
+100,000 interior points, lr 3.75e-4, 500 epochs), with the stored
+signed-distance inputs as every reference lane has. Controls: the nearest
+reference lanes and the kernel lanes of @sec-nb-soft-geo-verdict. Bars, the
+SOFT-GEO gate's as pre-registered: (i) posed over native within 1.005 on every
+field; (ii) under the 400-segment coarsening (both laws) the built-in channel's
+share of the log excess below 0.1 (the native-geometry swap of the AirfRANS
+resampling probe), against 0.3 to 0.85 for every form so far; (iii) native
+error within the nearest reference's seed range or better; re-panelization
+(refu, reff) within 2 percent as the kernel forms are. If (ii) passes with (i)
+and (iii), Peter's decision tree reopens: the form becomes the canonical
+built-in channel, its three-dimensional form (disk patches with a closed-form
+solid-angle approximation, a streaming kernel) is written, and the volume
+benchmarks retrain. If (ii) fails while the probes say the channel is stable,
+what remains of the coarsening share is the model's reading of the slice
+states, and the frozen architecture stands.
