@@ -438,67 +438,86 @@ print(": Every cost-logged configuration of the cell-count ladder and the width 
 
 **On the DrivAerML Surface task, below about 200 training cases every unit
 of compute belongs to more cases. Past 200 cars the data term of the
-fitted law falls below the parameter term and compute goes to width.
-Epochs buy nothing measurable. On AirfRANS (interior task) the error is a
-floorless power law in cases, and cases stay the better purchase across
-the range measured.** That is the answer, per dataset, to the question a
-language-model practitioner asks of a surrogate: what is the
-compute-optimal mix of training set, model size and training length? The
-instrument on DrivAerML is a scaling study: ISLA at three widths and
-GeoTransolver at three widths, each trained for 500 epochs at 100,000
-cells per case on 27, 54, 109, 218 and 435 cars, two seeds, scored in
-float32 (thirty configurations, sixty lanes). @fig-scaling-cases shows
-the picture with the fitted law drawn where it is accepted.
+fitted law falls below the parameter term and compute goes to width. On
+the HiLiftAeroML wings the data term stays above the parameter term over
+the whole measured range, 35 to 1,260 wings, so cases remain the better
+purchase there, and the same law with the same data exponent for both
+architectures is accepted on both datasets. Epochs buy nothing
+measurable. On AirfRANS (interior task) the error is a floorless power law
+in cases, and cases stay the better purchase across the range measured.**
+That is the answer, per dataset, to the question a language-model
+practitioner asks of a surrogate: what is the compute-optimal mix of
+training set, model size and training length? The instrument is a scaling
+study on two surface datasets: ISLA at three widths and GeoTransolver at
+three widths, each trained for 500 epochs at 100,000 cells per case, on
+27, 54, 109, 218 and 435 DrivAerML cars and on 35, 210, 510 and 1,260
+HiLiftAeroML wings, two seeds, scored in float32 (54 configurations).
+@fig-scaling-cases shows both pictures with the fitted law drawn where it
+is accepted.
 
 ```{python}
 #| label: fig-scaling-cases
 #| fig-cap: >
-#|   Surface-pressure error against training cases on the DrivAerML Surface
-#|   task for three widths of each model (ISLA at 192, 384 and 768 wide;
-#|   GeoTransolver at 256, 512 and 1,024), 500 epochs at 100,000 cells per
-#|   case, two-seed means with the seeds as short bars, float32 on the 48
-#|   validation cars. Lighter shades are narrower models. Dotted curves are
-#|   the fitted law $\varepsilon = \varepsilon_\infty + a n^{-\alpha} + b
-#|   P^{-\beta}$ evaluated at each width, drawn for ISLA, whose fit meets
-#|   the 3% acceptance bar; the gray dashed line is its fitted floor.
-#|   GeoTransolver's fit misses the bar (@tbl-scaling-fit), so its points
-#|   are drawn without a curve. How to read this: the vertical spread
-#|   between shades is what parameters buy at a given training-set size;
-#|   the slope is what cases buy, steep below 109 cars and bending into the
-#|   floor above it. Both axes are logarithmic and span the measured range.
-#|   Data: results/scalelaw_drivaerml_2026-09-22.json.
-#| fig-alt: "Log-log scatter of pressure error against training cases from 27 to 435, three blue shades for ISLA widths with dotted fitted curves bending toward a floor, three red shades for GeoTransolver widths as points only."
+#|   Surface-pressure error against training cases for three widths of each
+#|   model (ISLA at 192, 384 and 768 wide; GeoTransolver at 256, 512 and
+#|   1,024), on the DrivAerML Surface task (top; 27 to 435 cars, scored on
+#|   the 48 validation cars) and on HiLiftAeroML (bottom; 35 to 1,260 wings,
+#|   scored on the 180 validation wings), 500 epochs at 100,000 cells per
+#|   case, two-seed means with the seeds as short bars, float32. Lighter
+#|   shades are narrower models. Dotted curves are the fitted law
+#|   $\varepsilon = \varepsilon_\infty + a n^{-\alpha} + b P^{-\beta}$
+#|   evaluated at each width, drawn where the fit meets the 3% acceptance
+#|   bar (@tbl-scaling-fit: ISLA on both datasets, GeoTransolver on the
+#|   wings only); a gray dashed line is a fitted floor where the fit
+#|   identifies one (GeoTransolver's wing fit puts its floor at zero and
+#|   carries the floor in a flat parameter term, so none is drawn for it).
+#|   How to read this: the vertical spread between shades is what
+#|   parameters buy at a given training-set size; the slope is what cases
+#|   buy, steep at the small rungs and bending towards a floor at the large
+#|   ones on both datasets. Both axes are logarithmic and span each
+#|   dataset's measured range. Data: results/scalelaw_2026-10-08.json.
+#| fig-alt: "Two stacked log-log scatters of pressure error against training cases, DrivAerML from 27 to 435 cars above and HiLiftAeroML from 35 to 1,260 wings below; three blue shades for ISLA widths and three red shades for GeoTransolver widths, dotted fitted curves bending toward a floor where the fit is accepted."
 #| code-fold: true
-SLD = J("scalelaw_drivaerml_2026-09-22.json")
+SLD = J("scalelaw_2026-10-08.json")
 SL = SLD["configurations"]; SLF = SLD["fits"]
-pts = {"isla": {}, "gt": {}}; params = {"isla": {}, "gt": {}}
-for c in SL.values():
-    if c["dataset"] == "drivaerml" and c["pressure_l2_mean"]:
-        pts[c["model"]].setdefault(c["width"], []).append((c["n"], c["pressure_l2_mean"], c["pressure_l2_seeds"])); params[c["model"]][c["width"]] = c["params"]
+def grid(ds):
+    """Per model and width, the (n, two-seed mean, seeds) points of one dataset, and the parameter counts."""
+    pts = {"isla": {}, "gt": {}}; params = {"isla": {}, "gt": {}}
+    for c in SL.values():
+        if c["dataset"] == ds and c["pressure_l2_mean"] and c["status"] == "complete":
+            pts[c["model"]].setdefault(c["width"], []).append((c["n"], c["pressure_l2_mean"], c["pressure_l2_seeds"])); params[c["model"]][c["width"]] = c["params"]
+    return pts, params
 def mid(a, b):
     return mpl.colors.to_hex((np.array(mpl.colors.to_rgb(a)) + np.array(mpl.colors.to_rgb(b))) / 2)
 shades = {"isla": [BLUE_PALE, BLUE_LIGHT, BLUE], "gt": [RED_LIGHT, mid(RED_LIGHT, RED), RED]}
-fig, ax = plt.subplots(figsize=(8.0, 4.8))
-nn = np.geomspace(24, 500, 100)
-for m, key in (("isla", "isla_ref"), ("gt", "gt")):
-    kw = series_kwargs(key); F = SLF[f"drivaerml|{m}"]; f = F["fit"]; accepted = F["law_accepted_rms_below_3pct"]
-    for shade, (w, rows) in zip(shades[m], sorted(pts[m].items())):
-        rows = sorted(rows); x = [r[0] for r in rows]; y = [r[1] for r in rows]
-        ax.plot(x, y, marker=kw["marker"], color=shade, ls="none", ms=6, label=f"{STYLE[key]['label']}, {w} wide")
-        for r in rows:
-            ax.plot([r[0]] * len(r[2]), r[2], ls="none", marker="_", color=shade, ms=7, mew=1.1)
-        if accepted:
-            ax.plot(nn, f["eps_inf"] + f["a"] * nn ** (-f["alpha"]) + f["b"] * params[m][w] ** (-f["beta"]), color=shade, ls=":", lw=1.1, zorder=0)
-    if accepted:
-        ax.axhline(f["eps_inf"], color=BASELINE, ls="--", lw=0.8, zorder=0)
-        ax.text(500, f["eps_inf"], f"fitted floor {f['eps_inf']:.4f} ({STYLE[key]['label']})", fontsize=7.5, color=INK2, va="bottom", ha="right")
-ax.plot([], [], color=INK2, ls=":", lw=1.1, label="dotted: fitted law (ISLA; accepted at 2.3% RMS)")
-ax.plot([], [], ls="none", label="GeoTransolver: points only (fit misses the 3% bar)")
-ax.set_xscale("log"); ax.set_yscale("log"); ax.set_xticks([27, 54, 109, 218, 435]); ax.set_xticklabels(["27", "54", "109", "218", "435"])
-ax.set_yticks([0.04, 0.05, 0.07, 0.1, 0.15]); ax.set_yticklabels(["0.04", "0.05", "0.07", "0.10", "0.15"]); ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
-ax.set_xlim(22, 520); ax.set_ylim(0.030, 0.165)
-ax.set_xlabel("training cases [count]"); ax.set_ylabel("surface-pressure relative L2 error [–]")
-ax.legend(fontsize=7.8, ncol=2, loc="lower left")
+PANELS = (("drivaerml", "DrivAerML Surface task (48 validation cars)", [27, 54, 109, 218, 435], (22, 520), (0.030, 0.165), [0.04, 0.05, 0.07, 0.1, 0.15]),
+          ("hilift", "HiLiftAeroML (180 validation wings)", [35, 210, 510, 1260], (28, 1560), (0.024, 0.17), [0.03, 0.04, 0.05, 0.07, 0.1, 0.15]))
+fig, axes = plt.subplots(2, 1, figsize=(8.0, 9.0))
+for ax, (ds, title, ticks, xlim, ylim, yticks) in zip(axes, PANELS):
+    pts, params = grid(ds)
+    nn = np.geomspace(xlim[0] * 1.08, xlim[1] * 0.95, 120)
+    notes = []
+    for m, key in (("isla", "isla_ref"), ("gt", "gt")):
+        kw = series_kwargs(key); F = SLF[f"{ds}|{m}"]; f = F["fit"]; accepted = F["law_accepted_rms_below_3pct"]
+        for shade, (w, rows) in zip(shades[m], sorted(pts[m].items())):
+            rows = sorted(rows); x = [r[0] for r in rows]; y = [r[1] for r in rows]
+            ax.plot(x, y, marker=kw["marker"], color=shade, ls="none", ms=6, label=f"{STYLE[key]['label']}, {w} wide")
+            for r in rows:
+                ax.plot([r[0]] * len(r[2]), r[2], ls="none", marker="_", color=shade, ms=7, mew=1.1)
+            if accepted:
+                ax.plot(nn, f["eps_inf"] + f["a"] * nn ** (-f["alpha"]) + f["b"] * params[m][w] ** (-f["beta"]), color=shade, ls=":", lw=1.1, zorder=0)
+        if accepted and f["eps_inf"] > 1e-6:
+            ax.axhline(f["eps_inf"], color=BASELINE, ls="--", lw=0.8, zorder=0)
+            ax.text(xlim[0] * 1.15, f["eps_inf"], f"fitted floor {f['eps_inf']:.4f} ({STYLE[key]['label']})", fontsize=7.5, color=INK2, va="bottom", ha="left")
+        notes.append(STYLE[key]["label"] if accepted else None)
+    ax.plot([], [], color=INK2, ls=":", lw=1.1, label="dotted: fitted law (" + ", ".join(n for n in notes if n) + ")")
+    ax.set_xscale("log"); ax.set_yscale("log"); ax.set_xticks(ticks); ax.set_xticklabels([f"{t:,}" for t in ticks])
+    ax.set_yticks(yticks); ax.set_yticklabels([f"{t:.2f}" for t in yticks]); ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+    ax.set_xlim(*xlim); ax.set_ylim(*ylim)
+    ax.set_title(title, fontsize=9.5, loc="left")
+    ax.set_xlabel("training cases [count]"); ax.set_ylabel("surface-pressure relative L2 error [–]")
+    ax.legend(fontsize=7.4, ncol=2, loc="upper right")
+plt.tight_layout()
 plt.show()
 ```
 
@@ -508,44 +527,70 @@ plt.show()
 def slope(rows, lo, hi):
     d = {r[0]: r[1] for r in rows}
     return -np.log(d[hi] / d[lo]) / np.log(hi / lo) if lo in d and hi in d else None
-out = "| model | width | 27 to 54 cars | 54 to 109 | 109 to 218 | 218 to 435 | parameters, 15x: at 27 / 54 / 109 / 218 / 435 cars |\n|---|--:|--:|--:|--:|--:|---|\n"
-for m, name in (("isla", "ISLA"), ("gt", "GeoTransolver")):
-    ws = sorted(pts[m])
-    for w in ws:
-        rows = pts[m][w]; ss = [slope(rows, a, b) for a, b in ((27, 54), (54, 109), (109, 218), (218, 435))]
-        f = lambda s: f"{s:.2f}" if s is not None else "—"
-        gains = []
-        for n in (27, 54, 109, 218, 435):
-            lo = {r[0]: r[1] for r in pts[m][ws[0]]}.get(n); hi = {r[0]: r[1] for r in pts[m][ws[-1]]}.get(n)
-            gains.append(f"{100 * (1 - hi / lo):.0f}%" if lo and hi else "—")
-        out += f"| {name} | {w} | {' | '.join(f(s) for s in ss)} | {' / '.join(gains) if w == ws[0] else ''} |\n"
-out += "\n: Local exponents of the error against training cases on the DrivAerML Surface task (the negative log-log slope between adjacent rungs, at each width) and the gain from a 15x parameter increase (narrowest to widest lane) at each rung. How to read this: a falling local exponent is the signature of an approach to a floor, not of a scale-free law. Data: results/scalelaw_drivaerml_2026-09-22.json. {#tbl-scaling-exponents}\n"
+DS_NAME = {"drivaerml": "DrivAerML Surface", "hilift": "HiLiftAeroML"}
+out = "| dataset | model | width | local exponent of the error against cases, rung to rung | gain of the widest over the narrowest width, by rung |\n|---|---|--:|---|---|\n"
+ratios = {}
+for ds in ("drivaerml", "hilift"):
+    pts, params = grid(ds)
+    for m, name in (("isla", "ISLA"), ("gt", "GeoTransolver")):
+        ws = sorted(pts[m]); rungs = sorted({r[0] for w in ws for r in pts[m][w]})
+        ratios[(ds, m)] = params[m][ws[-1]] / params[m][ws[0]]
+        for w in ws:
+            rows = pts[m][w]
+            cells = "; ".join(f"{a:,} to {b:,}: {s:.2f}" for a, b in zip(rungs, rungs[1:]) for s in [slope(rows, a, b)] if s is not None)
+            gains = []
+            for n in rungs:
+                lo = {r[0]: r[1] for r in pts[m][ws[0]]}.get(n); hi = {r[0]: r[1] for r in pts[m][ws[-1]]}.get(n)
+                gains.append(f"{n:,}: {100 * (1 - hi / lo):.0f}%" if lo and hi else f"{n:,}: —")
+            out += f"| {DS_NAME[ds]} | {name} | {w} | {cells} | {'; '.join(gains) if w == ws[0] else ''} |\n"
+out += (f"\n: Local exponents of the error against training cases on both datasets (the negative log-log slope between adjacent rungs, at each width) and the gain at each rung from the widest over the narrowest lane "
+        f"(a {ratios[('drivaerml', 'isla')]:.0f}x parameter increase for ISLA and {ratios[('drivaerml', 'gt')]:.0f}x for GeoTransolver). How to read this: a falling local exponent is the signature of an approach to a floor, not of a scale-free law; "
+        "the wings fall from about 0.5 to about 0.1 to 0.2 over 35 to 1,260 cases where the cars fall from about 0.7 to 0.1 over 27 to 435. A negative gain is a rung where the widest lane is not the best. "
+        "Data: results/scalelaw_2026-10-08.json. {#tbl-scaling-exponents}\n")
 print(out)
 ```
 
 ```{python}
 #| label: tbl-scaling-fit
 #| output: asis
-out = "| model | $\\varepsilon_\\infty$ | $a$ | $\\alpha$ | $b$ | $\\beta$ | RMS residual | accepted (below 3%) | $n^\\ast$ at the scaling study's base width (192 for ISLA, 256 for GeoTransolver) |\n|---|--:|--:|--:|--:|--:|--:|:--:|--:|\n"
-for m, name in (("isla", "ISLA"), ("gt", "GeoTransolver")):
-    F = SLF[f"drivaerml|{m}"]; f = F["fit"]; b = F["bootstrap_p16_p50_p84"]
-    rng_ = lambda k: f"{f[k]:.2f} ({b[k][0]:.2f} to {b[k][2]:.2f})"
-    floor = f"{f['eps_inf']:.4f} ({b['eps_inf'][0]:.4f} to {b['eps_inf'][2]:.4f})" + (" (on its bound)" if f["eps_inf_on_bound"] else "")
-    out += f"| {name} | {floor} | {f['a']:.1f} | {rng_('alpha')} | {f['b']:.0f} | {rng_('beta')} | {100 * f['rms_rel_residual']:.1f}% | {'yes' if F['law_accepted_rms_below_3pct'] else 'no'} | {F['n_star_recipe_width']:.0f} cars |\n"
-out += "\n: The fitted law $\\varepsilon = \\varepsilon_\\infty + a\\,n^{-\\alpha} + b\\,P^{-\\beta}$ per architecture on the DrivAerML Surface task (least squares on the relative residual of the seed means; $\\varepsilon_\\infty$ bounded to at most 0.9 times the best measured error; 16th to 84th percentiles of a 400-draw two-seed bootstrap in parentheses). A fit is accepted when its RMS relative residual is below 3%. $n^\\ast$ is the case count at which the data and parameter terms are equal at the scaling study's base width (ISLA 192, GeoTransolver 256). How to read this: GeoTransolver's row is reported but not accepted, so its exponents are indicative and its curve is not drawn in @fig-scaling-cases. Data: results/scalelaw_drivaerml_2026-09-22.json. {#tbl-scaling-fit}\n"
+out = "| dataset | model | $\\varepsilon_\\infty$ | $a$ | $\\alpha$ | $b$ | $\\beta$ | RMS residual | accepted (below 3%) | $n^\\ast$ at the scaling study's base width (192 for ISLA, 256 for GeoTransolver) |\n|---|---|--:|--:|--:|--:|--:|--:|:--:|--:|\n"
+UNIT = {"drivaerml": "cars", "hilift": "wings"}
+for ds in ("drivaerml", "hilift"):
+    for m, name in (("isla", "ISLA"), ("gt", "GeoTransolver")):
+        F = SLF[f"{ds}|{m}"]; f = F["fit"]; b = F["bootstrap_p16_p50_p84"]
+        rng_ = lambda k: f"{f[k]:.2f} ({b[k][0]:.2f} to {b[k][2]:.2f})"
+        floor = f"{f['eps_inf']:.4f} ({b['eps_inf'][0]:.4f} to {b['eps_inf'][2]:.4f})" + (" (on its upper bound)" if f["eps_inf_on_bound"] else (" (at zero: the floor sits in the flat parameter term)" if f["eps_inf"] < 1e-6 else ""))
+        bval = f"{f['b']:.0f}" if f["b"] >= 10 else f"{f['b']:.2f}"
+        out += f"| {DS_NAME[ds]} | {name} | {floor} | {f['a']:.1f} | {rng_('alpha')} | {bval} | {rng_('beta')} | {100 * f['rms_rel_residual']:.1f}% | {'yes' if F['law_accepted_rms_below_3pct'] else 'no'} | {F['n_star_recipe_width']:,.0f} {UNIT[ds]} |\n"
+out += ("\n: The fitted law $\\varepsilon = \\varepsilon_\\infty + a\\,n^{-\\alpha} + b\\,P^{-\\beta}$ per architecture and dataset (least squares on the relative residual of the seed means; $\\varepsilon_\\infty$ bounded to at most 0.9 times the best measured error; 16th to 84th percentiles of a 400-draw two-seed bootstrap in parentheses). "
+        "A fit is accepted when its RMS relative residual is below 3%. $n^\\ast$ is the case count at which the data and parameter terms are equal at the scaling study's base width (ISLA 192, GeoTransolver 256). "
+        "How to read this: GeoTransolver's DrivAerML row is reported but not accepted, so its exponents are indicative and its curve is not drawn in @fig-scaling-cases. With three widths per model $\\beta$ is weakly identified on every row (its bootstrap range says so), and GeoTransolver's wing fit uses that freedom to put the floor into the parameter term: $\\beta$ near zero makes $b\\,P^{-\\beta}$ a constant of about 0.03 at these widths and $\\varepsilon_\\infty$ falls to zero, so its wing $n^\\ast$ is the case count at which the data term drops below that constant, not a crossover between cases and parameters. "
+        "Data: results/scalelaw_2026-10-08.json. {#tbl-scaling-fit}\n")
 print(out)
 ```
 
-**Reading the exponents.** The error is not a single power law in the
-training-set size. The local exponent falls from about 0.7 to 0.9 between
-27 and 54 cars to 0.1 to 0.2 between 218 and 435, for both models
-(@tbl-scaling-exponents). That is the signature of an approach to a
-floor, and the floor is the one @sec-shared-floor measures directly.
-Parameters are cheap by comparison at every rung. A 15x increase buys
-each model about a tenth of its error from 54 cars up (@tbl-scaling-exponents),
-and the capacity ladders show that a further doubling at 435 cars buys a
-few percent before turning over. Epochs are the third axis, and they are
-converged (@sec-equal-budget).
+```{python}
+#| label: para-scaling-reading
+#| output: asis
+H = {m: SLF[f"hilift|{m}"] for m in ("isla", "gt")}; Dd = {m: SLF[f"drivaerml|{m}"] for m in ("isla", "gt")}
+hp, _ = grid("hilift")
+best1260 = {m: min(((w, {r[0]: r[1] for r in rows}[1260]) for w, rows in hp[m].items()), key=lambda t: t[1]) for m in ("isla", "gt")}
+gain_h = {m: H[m]["gain_widest_over_narrowest_by_n"] for m in ("isla", "gt")}
+print(f"**Reading the exponents.** The error is not a single power law in the "
+      f"training-set size on either dataset. On the cars the local exponent falls from about 0.7 to 0.9 between 27 and 54 cars to 0.1 to 0.2 between 218 and 435, "
+      f"and on the wings from about 0.5 between 35 and 210 wings to {min(v['510-1260'] for m in ('isla', 'gt') for v in H[m]['alpha_local_by_width'].values()):.1f} to "
+      f"{max(v['510-1260'] for m in ('isla', 'gt') for v in H[m]['alpha_local_by_width'].values()):.1f} between 510 and 1,260, for both models (@tbl-scaling-exponents). "
+      f"That is the signature of an approach to a floor, and on the cars the floor is the one @sec-shared-floor measures directly. "
+      f"The fitted data exponent is {Dd['isla']['fit']['alpha']:.2f} to {Dd['gt']['fit']['alpha']:.2f} on the cars and {H['isla']['fit']['alpha']:.2f} to {H['gt']['fit']['alpha']:.2f} on the wings, "
+      f"the two architectures within {max(abs(Dd['isla']['fit']['alpha'] - Dd['gt']['fit']['alpha']), abs(H['isla']['fit']['alpha'] - H['gt']['fit']['alpha'])):.2f} of each other on both (@tbl-scaling-fit): "
+      f"the wing error approaches its floor more slowly in the case count, and how fast it approaches is a property of the dataset, not of the architecture. "
+      f"ISLA's fitted floors are {Dd['isla']['fit']['eps_inf']:.4f} on the cars and {H['isla']['fit']['eps_inf']:.4f} on the wings. "
+      f"Parameters are cheap by comparison at every rung. On the cars a 15x increase buys each model about a tenth of its error from 54 cars up, and the capacity ladders show that a further doubling at 435 cars buys a few percent before turning over; "
+      f"on the wings the same increase buys ISLA {100 * min(gain_h['isla'].values()):.0f} to {100 * max(gain_h['isla'].values()):.0f}% by rung and GeoTransolver nothing at 35 and 210 wings and {100 * min(gain_h['gt']['510'], gain_h['gt']['1260']):.0f} to {100 * max(gain_h['gt']['510'], gain_h['gt']['1260']):.0f}% above. "
+      f"At 1,260 wings the best ISLA lane is the {best1260['isla'][0]}-wide one at {best1260['isla'][1]:.4f}, the first rung at which its widest lane is not its best, and GeoTransolver's {best1260['gt'][0]}-wide lane leads the grid at {best1260['gt'][1]:.4f}. "
+      f"The compute-optimal crossover at the base width, where the fitted data and parameter terms are equal, is {Dd['isla']['n_star_recipe_width']:.0f} cars for ISLA and {H['isla']['n_star_recipe_width']:,.0f} wings, beyond the measured range, so on the wings every unit of compute belongs to cases throughout the range measured. "
+      f"Epochs are the third axis, and they are converged (@sec-equal-budget).")
+```
 
 **The fitted law.** With five rungs and three widths the Chinchilla form
 $\varepsilon = \varepsilon_\infty + a\,n^{-\alpha} + b\,P^{-\beta}$ is
