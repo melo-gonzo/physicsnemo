@@ -425,5 +425,3 @@ def test_compiled_model_checkpointing(
     new_output = uncompiled_model(sample_input).detach().cpu()
 
     assert torch.allclose(original_output, new_output, rtol=rtol, atol=atol)
-
-

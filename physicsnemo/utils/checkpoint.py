@@ -1364,7 +1364,7 @@ def _load_checkpoint_distributed(
     # Distribute model state dicts via DCP
     for name, model in named_models.items():
         if model_file_info.get(name) is None:
-            checkpoint_logging.warning(
+            checkpoint_logging.error(
                 f"Could not find valid model file for {name}, skipping load"
             )
             continue
