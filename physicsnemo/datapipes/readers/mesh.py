@@ -37,6 +37,7 @@ from physicsnemo.datapipes._indexing import _cyclic_block_indices
 from physicsnemo.datapipes._rng import spawn_generator
 from physicsnemo.datapipes.registry import register
 from physicsnemo.mesh import DomainMesh, Mesh
+from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, scale_measures
 
 _RO_LOCK = threading.Lock()
 _RO_DEPTH = 0
@@ -77,7 +78,7 @@ def read_only_memory_maps():
             if _RO_DEPTH == 0:
                 _tdm._is_writable = _RO_ORIGINAL
                 _RO_ORIGINAL = None
-from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, scale_measures
+
 
 logger = logging.getLogger(__name__)
 
