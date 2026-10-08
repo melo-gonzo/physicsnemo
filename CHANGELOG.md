@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `MeshDataset` gains `cache_host` / `cache_host_views` to serve repeated
+  indices from a host-memory cache; `DomainMeshReader` gains
+  `interior_n_points_range` to draw the interior point count per sample;
+  `CenterMesh` gains `store_center_as` to record the subtracted center in
+  `global_data` and `use_measure_weighting` to center by effective cell measure,
+  so a weighted subsample is centered where the full mesh would be.
 - Adds standalone FLARE++ attention and model APIs, with input-conditioned
   dynamic routing, plus a ``GALE_FPP`` backend for using the same mixer inside
   GeoTransolver.
@@ -67,21 +73,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Triton kernel for the per-layer geometry region is selected automatically
   on CUDA. The unified external-aerodynamics recipe gains ISLA model configs
   (`isla_surface`, `isla_volume`, `isla_volume_sdf`).
-- `MeshDataset(cache_host=True, cache_host_views=k)` keeps each sample's
-  first `k` reads in host memory and serves later requests for the same
-  index from that cache (single- or few-sample fitting; `k > 1` keeps `k`
-  stochastic subsample views per index).
-- `DomainMeshReader` gains `interior_n_points_range`, which draws the interior
-  point count per sample from a closed integer range (query-count
-  augmentation), reproducibly under `set_epoch`.
 - Mesh readers load saved meshes with `tensordict` memory maps opened
   read-only (`physicsnemo.datapipes.readers.mesh.read_only_memory_maps`), so
   page faults on a networked file system no longer take write extent locks
   (observed as a training hang on a Lustre-hosted dataset).
-- `CenterMesh` gains `store_center_as` (records the subtracted center in
-  `global_data`) and `use_measure_weighting` (centers by effective cell
-  measure rather than raw cell area, so a subsampled mesh is centered where
-  the full mesh would be).
 
 ### Changed
 

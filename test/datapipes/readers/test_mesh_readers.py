@@ -186,8 +186,6 @@ class TestDomainMeshReader:
             tmp_path,
             pattern="*.pdmsh",
             subsample_n_cells=500,
-            subsample_n_points=500,
-            boundary_subsample="cells",
             interior_n_points_range=(lo, hi),
         )
         reader.set_generator(torch.Generator().manual_seed(0))
@@ -196,7 +194,6 @@ class TestDomainMeshReader:
             pattern="*.pdmsh",
             subsample_n_cells=500,
             subsample_n_points=500,
-            boundary_subsample="cells",
         )
         fixed.set_generator(torch.Generator().manual_seed(0))
         counts = []
@@ -205,10 +202,9 @@ class TestDomainMeshReader:
             dm = reader[0][0]
             counts.append(dm.interior.n_points)
             assert lo <= dm.interior.n_points <= hi
-            # Boundaries are not touched by the range.
-            assert (
-                dm.boundaries["wall"].n_cells == fixed[0][0].boundaries["wall"].n_cells
-            )
+            # Boundaries are not touched by the range: the cell subsample
+            # alone keeps exactly ``subsample_n_cells`` wall cells.
+            assert dm.boundaries["wall"].n_cells == 500
         assert len(set(counts)) > 1, counts
         # Reproducible: same epoch, same draw.
         reader.set_epoch(3)

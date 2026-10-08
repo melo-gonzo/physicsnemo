@@ -619,6 +619,19 @@ class DomainMeshReader:
         )
         return n_cells, n_points
 
+    def _interior_n_points(self, generator: torch.Generator | None) -> int | None:
+        """Interior point budget for one sample.
+
+        The fixed ``subsample_n_points`` unless ``interior_n_points_range`` is
+        set, in which case one count is drawn from ``generator`` before the
+        subsample consumes it, so ``(epoch, index)`` fixes both the count and
+        the draw.
+        """
+        if self.interior_n_points_range is None:
+            return self.subsample_n_points
+        lo, hi = self.interior_n_points_range
+        return int(torch.randint(lo, hi + 1, (1,), generator=generator).item())
+
     def _load_sample(self, index: int) -> DomainMesh:
         """Load a single DomainMesh from disk."""
         path = self._paths[index]
@@ -628,6 +641,7 @@ class DomainMeshReader:
             if (
                 self.subsample_n_cells is not None
                 or self.subsample_n_points is not None
+                or self.interior_n_points_range is not None
             ):
                 # Push the subsample into the read (window reads per
                 # sub-mesh); drop flags are honored at read time so skipped
@@ -638,6 +652,7 @@ class DomainMeshReader:
                     if self._seed_base is None
                     else spawn_generator(self._seed_base, self._epoch, index)
                 )
+                interior_n_points = self._interior_n_points(generator)
                 cache = getattr(self, "_zarr_groups", None)
                 if cache is None:
                     cache = self._zarr_groups = {}
@@ -647,7 +662,7 @@ class DomainMeshReader:
                 interior = _zarr_mesh_subsampled(
                     root["interior"],
                     self.subsample_n_cells,
-                    self.subsample_n_points,
+                    interior_n_points,
                     generator,
                 )
                 boundaries = {}
@@ -737,19 +752,10 @@ class DomainMeshReader:
                 if self._seed_base is None
                 else spawn_generator(self._seed_base, self._epoch, index)
             )
-            interior_n_points = self.subsample_n_points
-            if self.interior_n_points_range is not None:
-                ### Query-count augmentation: one draw per sample from the
-                ### same generator as the subsample itself, before the
-                ### subsample consumes it, so (epoch, index) fixes both.
-                lo, hi = self.interior_n_points_range
-                interior_n_points = int(
-                    torch.randint(lo, hi + 1, (1,), generator=generator).item()
-                )
             interior = _subsample_mesh(
                 dm.interior,
                 n_cells=self.subsample_n_cells,
-                n_points=interior_n_points,
+                n_points=self._interior_n_points(generator),
                 generator=generator,
             )
             bnd_n_cells, bnd_n_points = self._boundary_subsample_sizes()
