@@ -74,8 +74,12 @@ pipeline:
     - _target_: ${dp:RandomTranslateMesh}
       distribution:
         _target_: torch.distributions.Uniform
-        low: [-1.0, -1.0, 0.0]
-        high: [1.0, 1.0, 0.0]
+        low:
+          _target_: torch.tensor
+          data: [-1.0, -1.0, 0.0]
+        high:
+          _target_: torch.tensor
+          data: [1.0, 1.0, 0.0]
   transforms:
     - _target_: ${dp:FixedRandomPose}   # CHAR-PROTOCOLS posed: deterministic per-case pose, first so everything downstream sees it
       salt: 0
