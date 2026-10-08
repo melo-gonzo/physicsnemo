@@ -52,7 +52,7 @@ def ref_lane_seeds(stem, f="pressure_l2"):
         rows = [json.loads(l) for l in open(fs[0]) if '"infer_step"' in l]
         out.append(mean(r["metrics"][f] for r in rows))
     return out
-SL_W = J("scalelaw_2026-09-27.json")["configurations"]  # the wing scaling grid at 100,000 cells (GeoTransolver-512 at 510 wings)
+SL_W = J("scalelaw_2026-10-08.json")["configurations"]  # the wing scaling grid at 100,000 cells (GeoTransolver-512 at 510 wings)
 WINGS = {
  "35 training cases": wing_rung(F19["highlift_surface_super_scarce"], isla=ref_seeds("isla_r1|hl35")),
  "210 training cases": dict(wing_rung(F22["highlift_surface_scarce"], isla=ref_lane_seeds("ref_isla_r1_hl210")),
@@ -528,7 +528,7 @@ print(f"**The ladders below hold {EARLIER_REF} and the baselines at other widths
 #|   results/p200k_fleet_interim_2026-09-20.json (4 geometries, fixed angle);
 #|   results/p200k_fleet_reduction_2026-09-22.json (21 geometries, Transolver
 #|   at 210 cases); results/campaigns_2026-09-22/ref/metrics (the 210- and
-#|   510-wing reference pairs); results/scalelaw_2026-09-27.json
+#|   510-wing reference pairs); results/scalelaw_2026-10-08.json
 #|   (GeoTransolver-512 at 510 wings).
 #| code-fold: true
 ROWS = [("35 training cases", "35 random training cases\n(geometries recur)"),

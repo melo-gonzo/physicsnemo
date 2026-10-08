@@ -35059,3 +35059,83 @@ solid-angle approximation, a streaming kernel) is written, and the volume
 benchmarks retrain. If (ii) fails while the probes say the channel is stable,
 what remains of the coarsening share is the model's reading of the slice
 states, and the frozen architecture stands.
+
+## 2026-10-08 — Verdict, SCALE-LAW on HiLiftAeroML (four rungs, 35 to 1,260 wings, three widths, both architectures): the bounded-floor law is accepted for both (ISLA 2.3 percent RMS, GeoTransolver 1.7), the data exponent is 0.84 to 0.85 for both and lower than the cars' 1.3, ISLA's floor is 0.027 while GeoTransolver's fit cannot separate a floor from its flat parameter term; cases remain the better purchase across the measured range {#sec-nb-scalelaw-wing-verdict}
+
+**Setting.** SCALE-LAW (@sec-nb-campaigns-2026-09-21-prereg) fits the
+separable law $\varepsilon(n, P) = \varepsilon_\infty + a\,n^{-\alpha} +
+b\,P^{-\beta}$ to the float32 surface-pressure error against training
+cases $n$ and parameters $P$, for cosine ISLA at 192 / 384 / 768 wide and
+GeoTransolver at 256 / 512 / 1,024, 500 epochs at 100,000 cells per case,
+two seeds. The DrivAerML half (five rungs, 27 to 435 cars) accepted the
+law for ISLA and not for GeoTransolver (@sec-nb-scalelaw-drivaerml-verdict).
+The wing half needed a fourth training-set size for the reducer's fit gate
+(@sec-nb-scalelaw-wing-rung4); the 1,260-wing lanes (campaign sl rows 80
+to 91, the whole HiLiftAeroML training split) finished on 2026-10-08
+after eleven days of four-hour chains, and the twelfth was scored today
+(the fleet scorer had left `sl_hl_gt_w1024_full_c100k_seed42` with a
+27-step partial file and no completion marker; its evaluation was rerun,
+180 of 180 wings). All four rungs validate on the same 180 held-out
+wings. Reducer: `results/scalelaw_reduce_2026-10-08.py`, the 2026-09-27
+reducer with one repair, the fit's fixed starting floors (0.02, 0.03)
+clipped to the floor bound 0.9 x best, which the wing floor near 0.032
+had put out of bounds for some bootstrap draws (the DrivAerML fit is
+reproduced to every digit). Lane list
+`results/campaigns_2026-09-21/sl/lanes_plus_shl_2026-10-08.tsv`; artifact
+`results/scalelaw_2026-10-08.json` (both datasets).
+
+**The 1,260-wing rung** (two-seed means, seeds in parentheses). ISLA
+0.0362 (0.0358 / 0.0366), 0.0340 (0.0333 / 0.0348), 0.0345 (0.0346 /
+0.0345) at 192 / 384 / 768; GeoTransolver 0.0342 (0.0344 / 0.0340), 0.0348
+(0.0333 / 0.0363), 0.0329 (0.0333 / 0.0325) at 256 / 512 / 1,024. The
+widest ISLA is not the best at this rung (384 wide leads its grid by 1.5
+percent over 768), the first rung where that happens for ISLA; the widest
+GeoTransolver, not the best at 35 and 210 wings, leads at 510 and 1,260.
+Across the grid at 1,260 wings GeoTransolver-1024 leads ISLA-384 by 3
+percent and GeoTransolver-256 leads ISLA-192 by 6 percent.
+
+**The fits.** ISLA: $\varepsilon_\infty$ 0.0269 (bootstrap 16th to 84th
+percentiles 0.000 to 0.028; upper bound 0.0306 not reached), $a$ 2.19,
+$\alpha$ 0.840 (0.817 to 0.863), $b$ 2.21, $\beta$ 0.39 (0.03 to 1.27), RMS
+relative residual 2.3 percent, **accepted**. GeoTransolver: $\varepsilon_\infty$
+0.000 (0.000 to 0.028), $a$ 1.60, $\alpha$ 0.847 (0.811 to 0.882), $b$
+0.041, $\beta$ 0.018 (0.015 to 1.43), RMS 1.7 percent, **accepted**. The
+two data exponents differ by 0.006 against a bootstrap spread of 0.07
+(the same). The two parameter exponents differ by 0.38 against a spread
+of 1.4, which is not a statement about $\beta$: with three widths and a
+sixteen-fold parameter range on each, $\beta$ is unidentified on both
+fits, and GeoTransolver's fit has used that freedom to put the floor into
+the parameter term ($\beta$ near zero makes $b\,P^{-\beta}$ a constant of
+about 0.030 at these widths, and $\varepsilon_\infty$ then sits at its lower
+bound of zero). Read as a floor, both architectures approach about 0.027
+to 0.030 on the wings. The local exponents between adjacent rungs fall
+for every width and both models: ISLA 0.50 / 0.57 / 0.52 (35 to 210), 0.31
+/ 0.28 / 0.35 (210 to 510), 0.18 / 0.22 / 0.13 (510 to 1,260);
+GeoTransolver 0.45 / 0.46 / 0.47, 0.25 / 0.23 / 0.30, 0.14 / 0.10 / 0.11,
+the signature of an approach to a floor on the wings as on the cars. The
+gain from the widest over the narrowest width by rung: ISLA 2 / 6 / 8 / 5
+percent, GeoTransolver -3 / 2 / 6 / 4 percent.
+
+**Against the DrivAerML half.** The data exponent is 0.84 to 0.85 on the
+wings against 1.28 to 1.30 on the cars: the wing error approaches its
+floor more slowly in the case count, and the two architectures share the
+exponent on both datasets. ISLA's floors are 0.0356 (cars) and 0.0269
+(wings); GeoTransolver's are 0.0365 on the cars (on its bound) and
+unseparated on the wings. The compute-optimal crossover $n^\ast$ at the
+scaling study's base width, where the fitted data and parameter terms are
+equal, is 200 cars for ISLA at 192 wide and **1,819 wings**, beyond the
+measured range: on the wings every unit of compute belongs to cases
+throughout the range measured. GeoTransolver's wing $n^\ast$ of 106 is not
+a crossover but the case count at which its data term falls below the
+constant its parameter term has become.
+
+**Bars.** Law accepted (RMS below 3 percent) on both datasets for ISLA
+and on the wings for GeoTransolver (its DrivAerML fit stays at 3.3
+percent); exponents the same within the bootstrap on both datasets for
+$\alpha$, vacuous for $\beta$; the compute-optimal split reported per
+dataset. The two-dataset rule is met for the law and the data exponent.
+Chapter 15's compute-allocation section (@sec-compute-allocation) now
+carries both datasets in one figure and two tables; the ISLA reference
+twins at 1,260 wings (`rb_hl_isla_full_seed42/43`, at epoch 463 of 500
+today) will add the 1,260-wing row to the HiLiftAeroML chapter's ladder
+when they finish and score.
