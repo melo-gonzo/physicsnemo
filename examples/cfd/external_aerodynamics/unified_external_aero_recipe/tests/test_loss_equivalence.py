@@ -180,6 +180,7 @@ class TestTargetQuadratureMeasure:
     def test_scalar_loss_matches_analytic_refinement_invariant_value(
         self, loss_type, expected
     ):
+        """Refining one region into smaller cells does not change the measure-weighted loss."""
         ### Two equal-area regions, then refine only the zero-error region
         ### into three cells. Its three 1/3 measures must not triple-count it.
         coarse_target = _make_td({"pressure": torch.ones(2)})
@@ -198,6 +199,7 @@ class TestTargetQuadratureMeasure:
         assert torch.allclose(refined, coarse)
 
     def test_vector_component_reductions_normalize_by_measure(self):
+        """Vector components are reduced by measure-weighted means, invariant to refinement."""
         coarse_target = TensorDict({"velocity": torch.ones(2, 2)}, batch_size=[])
         coarse_pred = TensorDict(
             {"velocity": torch.tensor([[1.0, 1.0], [3.0, 5.0]])},
@@ -229,6 +231,7 @@ class TestTargetQuadratureMeasure:
         assert torch.allclose(refined, coarse)
 
     def test_explicit_none_is_bitwise_identical_to_legacy_call(self):
+        """target_measure=None reproduces the unweighted loss bit for bit."""
         torch.manual_seed(7)
         pred = _make_td({"pressure": torch.randn(1, 17), "wss": torch.randn(1, 17, 3)})
         target = _make_td(
@@ -246,6 +249,7 @@ class TestTargetQuadratureMeasure:
             assert torch.equal(none_fields[key], legacy_fields[key])
 
     def test_misaligned_measure_raises(self):
+        """A measure with the wrong number of queries raises."""
         pred = _make_td({"pressure": torch.ones(3)})
         calculator = LossCalculator({"pressure": "scalar"}, loss_type="mse")
         with pytest.raises(ValueError, match="one value per target query"):
@@ -254,17 +258,48 @@ class TestTargetQuadratureMeasure:
     @pytest.mark.parametrize(
         "measure",
         [
-            torch.tensor([1.0, 0.0]),
+            torch.tensor([0.0, 0.0]),
             torch.tensor([1.0, -2.0]),
             torch.tensor([1.0, float("nan")]),
             torch.tensor([1.0, float("inf")]),
         ],
     )
-    def test_nonpositive_or_nonfinite_measure_raises(self, measure):
+    def test_negative_nonfinite_or_zero_total_measure_raises(self, measure):
+        """A measure must be finite and nonnegative, with a positive total."""
         pred = _make_td({"pressure": torch.ones(2)})
         calculator = LossCalculator({"pressure": "scalar"}, loss_type="mse")
-        with pytest.raises(ValueError, match="finite positive"):
+        with pytest.raises(ValueError, match="finite, nonnegative"):
             calculator(pred, pred, measure)
+
+    @pytest.mark.parametrize(
+        "loss_type", ["huber", "mse", "relative_mse", "relative_l2"]
+    )
+    def test_zero_weight_query_contributes_nothing(self, loss_type):
+        """A zero-measure query (a zero-area cell) is left out of the reduction,
+        exactly as if it were not sampled."""
+        pred = _make_td(
+            {
+                "pressure": torch.tensor([1.0, 50.0, -2.0]),
+                "wss": torch.tensor([[1.0, 0.0], [9.0, 9.0], [0.0, 2.0]]),
+            }
+        )
+        target = _make_td(
+            {
+                "pressure": torch.tensor([0.5, 0.0, 1.0]),
+                "wss": torch.tensor([[0.0, 1.0], [0.0, 0.0], [1.0, 1.0]]),
+            }
+        )
+        kept = torch.tensor([0, 2])
+        calculator = LossCalculator(
+            {"pressure": "scalar", "wss": "vector"}, loss_type=loss_type
+        )
+        total, fields = calculator(pred, target, torch.tensor([1.0, 0.0, 3.0]))
+        kept_total, kept_fields = calculator(
+            pred[kept], target[kept], torch.tensor([1.0, 3.0])
+        )
+        torch.testing.assert_close(total, kept_total)
+        for key in kept_fields.keys():
+            torch.testing.assert_close(fields[key], kept_fields[key])
 
     @pytest.mark.parametrize("loss_type", ["relative_mse", "relative_l2"])
     @pytest.mark.parametrize(

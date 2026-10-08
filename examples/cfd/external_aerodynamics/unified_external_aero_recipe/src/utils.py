@@ -373,6 +373,9 @@ def align_target_measure(
     ``(..., N, D)``; in both cases the quadrature measure must have exactly
     one value per query, shape ``(..., N)``. Requiring an exact shape prevents
     a stale or reordered measure from silently broadcasting across a field.
+    The weights must be finite and nonnegative, with a positive total per
+    sample: a zero weight (a degenerate, zero-area cell) is a valid quadrature
+    weight that leaves its query out of every weighted reduction.
     """
     if target_measure is None:
         return None
@@ -387,12 +390,15 @@ def align_target_measure(
     aligned = target_measure.to(device=reference.device, dtype=reference.dtype)
     if not torch.compiler.is_compiling():
         is_valid = aligned.numel() > 0 and bool(
-            (torch.isfinite(aligned) & (aligned > 0)).all().item()
+            (
+                (torch.isfinite(aligned) & (aligned >= 0)).all()
+                & (aligned.sum(dim=-1) > 0).all()
+            ).item()
         )
         if not is_valid:
             raise ValueError(
-                "target_measure must contain one finite positive integration "
-                "weight per target query"
+                "target_measure must contain finite, nonnegative integration "
+                "weights, one per target query, with a positive total per sample"
             )
     return aligned
 
