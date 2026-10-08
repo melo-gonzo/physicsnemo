@@ -696,10 +696,10 @@ def main(cfg: DictConfig) -> None:
             )
             if sample_forces is not None:
                 force_acc.update(*sample_forces)
-                ### A vehicle cell count sitting exactly at the cap means
-                ### this is almost certainly a Horvitz--Thompson estimate
-                ### from a sparse uniform sample, not an exact full-surface
-                ### quadrature (see forces.py).
+                ### A vehicle cell count sitting exactly at the subsample
+                ### cap means the surface was almost certainly subsampled.
+                ### Effective measures compensate for retained-area shrinkage;
+                ### sampling and moment-frame caveats remain (see forces.py).
                 if (
                     not subsampling_warned
                     and sampling_cap is not None
@@ -708,11 +708,11 @@ def main(cfg: DictConfig) -> None:
                     logger.warning(
                         f"Vehicle surface has exactly sampling_resolution="
                         f"{sampling_cap} cells, so it was likely subsampled; "
-                        f"integrated force/moment coefficients use the retained "
-                        f"measure weights as an unbiased but noisy full-surface "
-                        f"estimate, not an exact full-surface quadrature. "
-                        f"Report sampling uncertainty or raise "
-                        f"`sampling_resolution` for absolute CD/CL/CM."
+                        f"integrated force/moment coefficients are estimates "
+                        f"from weighted kept cells and may have sampling "
+                        f"noise or bias, including from a sample-dependent "
+                        f"moment origin. Check convergence by increasing "
+                        f"`sampling_resolution`; see forces.py for assumptions."
                     )
                     subsampling_warned = True
 
@@ -740,7 +740,9 @@ def main(cfg: DictConfig) -> None:
         ### docstring's torchrun caveat). attach_and_save self-creates
         ### parent dirs.
         sample_id = _sample_id(metadata, idx)
-        if bool(cfg.get("save_predictions", True)):  # file-count quota (2026-09-23): the fleet scorer passes +save_predictions=false
+        if bool(
+            cfg.get("save_predictions", True)
+        ):  # file-count quota (2026-09-23): the fleet scorer passes +save_predictions=false
             attach_and_save(
                 domain,
                 pred_phys,
