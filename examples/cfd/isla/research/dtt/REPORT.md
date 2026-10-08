@@ -257,10 +257,11 @@ this hardware, and the theta 0.6 to 0.8 rung on the car (cost probe in flight) s
 ### The car's affordable rung (cost probe, job 126618, merged snapshot)
 
 theta 0.8: 3.6e8 pairs per block, step 2.72 s (5.7x the floor, inside the 6x bar), peak 259 GiB of 277. theta 0.7
-and 0.6: out of memory. theta 0.8 is therefore the finest rung the car allows on a GB300 and is launched as the
-car's point of E5 (lanes `dtt_vol_tg08_seed42/43`, snapshot `code_dtt12`, otherwise as the theta 1 lanes); the
-training lanes carry a few more GiB than the probe, so they may not fit, in which case the chain blocks itself and
-that is the record.
+and 0.6: out of memory. theta 0.8 was launched as the car's point of E5 (lanes `dtt_vol_tg08_seed42/43`, snapshot
+`code_dtt12`) and did not fit in training: the ranks ran at 272 to 274 GB and seed 43's first link died after 20
+minutes with warp's device allocation (the data pipeline's mesh work) out of memory; both lanes were cancelled at
+00:40 PDT and that is the record. On a GB300 the car's only affordable rung is theta 1; the convergence question
+is answered on AirfRANS.
 
 ### In flight
 
