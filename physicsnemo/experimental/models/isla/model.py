@@ -163,18 +163,20 @@ distance overestimates the true wall distance near the wall by up to about
 the sample spacing, and the internal direction deviates from the true SDF
 gradient by the same order; far from the wall both agree with the full-mesh
 field. Both read the sample spacing, so they change with the boundary
-sampling law (``query_geometry="nearest"``). The alternative
-``query_geometry="soft"`` (:func:`soft_boundary_geometry`) keeps the
-nearest token only for the side of the boundary the query is on and the
-local orientation, and replaces its distance and direction by a
-measure-weighted kernel average over the tokens on that side that face the
+sampling law (``query_geometry="nearest"``). The alternatives
+``query_geometry="soft"`` and ``"smooth"`` (:func:`soft_boundary_geometry`)
+keep the nearest token only for the local orientation (and, for ``"soft"``,
+the side of the boundary the query is on) and replace its distance and
+direction by a measure-weighted kernel average over the tokens that face the
 same way: the kernel-mean signed distance to the tokens' tangent planes and
-the kernel-mean normal, with the kernel width ``query_geometry_width`` times
-the length unit. These are quadrature estimates of boundary integrals, so
-they converge under refinement of the boundary sample for any sampling law
-whose normalized measure converges, uniformly in the wall distance, the
-property the slice attention has. Either geometry is built from pairwise
-differences, so every covariance contract holds.
+the kernel-mean normal (the gradient of a signed distance, outward on both
+sides of the wall), with the kernel width ``query_geometry_width`` times the
+length unit; ``"soft"`` averages the tokens on the query's side of their
+tangent planes only, ``"smooth"`` all of them. These are quadrature estimates
+of boundary integrals, so they converge under refinement of the boundary
+sample for any sampling law whose normalized measure converges, uniformly in
+the wall distance, the property the slice attention has. Any of the three is
+built from pairwise differences, so every covariance contract holds.
 
 **Global inputs.** Rank-1 global inputs are the :math:`K` global directions:
 each is normalized to a unit direction inside the model (a direction is what
@@ -358,12 +360,15 @@ class ISLA(Module):
             token fixes the side and the local orientation; the distance and
             direction are the measure-weighted kernel average, over the tokens
             on that side facing the same way, of the tangent-plane distances
-            and the normals, kernel width ``query_geometry_width`` times the
+            and the normals (the direction is the kernel-mean normal, outward
+            on both sides), kernel width ``query_geometry_width`` times the
             length unit (:func:`soft_boundary_geometry`); a quadrature
             estimate that converges under refinement of the boundary sample
-            for any sampling law. Ignored by a surface model.
-        query_geometry_width: The kernel width of ``query_geometry="soft"`` as
-            a fraction of the length unit (default 0.03).
+            for any sampling law. ``"smooth"``: the same average over every
+            facing token regardless of side, continuous across the wall
+            (``one_sided=False``). Ignored by a surface model.
+        query_geometry_width: The kernel width of ``query_geometry="soft"``
+            and ``"smooth"`` as a fraction of the length unit (default 0.03).
         hidden: Token width of the slice blocks. The defaults ``hidden=512``,
             ``n_layers=12`` and ``n_slices=512`` are the reference
             configuration (the most accurate under 80 GiB per GPU on DrivAerML
@@ -576,9 +581,10 @@ class ISLA(Module):
         ### samples ("soft", kernel width query_geometry_width x the length unit),
         ### which converges under refinement of the boundary sample for any
         ### sampling law (geometry.soft_boundary_geometry).
-        if query_geometry not in ("nearest", "soft"):
+        if query_geometry not in ("nearest", "soft", "smooth"):
             raise ValueError(
-                f"query_geometry must be 'nearest' or 'soft', got {query_geometry!r}"
+                "query_geometry must be 'nearest', 'soft' or 'smooth', "
+                f"got {query_geometry!r}"
             )
         if (
             isinstance(query_geometry_width, bool)
@@ -1402,7 +1408,7 @@ class ISLA(Module):
             ### token's "normal" in every invariant), from the exact nearest token
             ### or from the measure-weighted kernel average over the tokens.
             with torch.autocast(points.device.type, enabled=False):
-                if self.query_geometry == "soft":
+                if self.query_geometry in ("soft", "smooth"):
                     d, q_nhat = soft_boundary_geometry(
                         query_points,
                         points,
@@ -1410,6 +1416,7 @@ class ISLA(Module):
                         log_w[..., 0],
                         width=self.query_geometry_width * gauge.reshape(-1),
                         eps=self.eps,
+                        one_sided=self.query_geometry == "soft",
                     )
                 else:
                     d, q_nhat = nearest_boundary_geometry(

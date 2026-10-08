@@ -84,15 +84,37 @@ NEAR_WALL = 0.01  # |sdf| < NEAR_WALL * chord
 CHORD = 1.0
 
 
+LANES_TSV = T / "kernel" / "char" / "cl_lanes.tsv"
+REFERENCE_OVERRIDES = [
+    "model=isla_volume_airfrans",
+    "train_split=full_train",
+    "val_split=full_test",
+    "+training.val_interval=10",
+    "model.hidden=512",
+    "model.n_slices=512",
+]
+
+
+def lane_overrides(run_id: str) -> list[str]:
+    """The run's own model and extra overrides from kernel/char/cl_lanes.tsv (as the protocol scorer uses them), so a
+    checkpoint trained with e.g. +model.query_geometry=soft or ~model.query_schema is rebuilt the same way; the
+    training-only num_epochs override is dropped. Falls back to the AirfRANS reference overrides for runs not in the
+    table."""
+    if LANES_TSV.exists():
+        with open(LANES_TSV) as f:
+            header = f.readline().rstrip("\n").split("\t")
+            for line in f:
+                row = dict(zip(header, line.rstrip("\n").split("\t")))
+                if row.get("run_id") == run_id:
+                    extra = [tok for tok in row.get("extra", "").split() if tok != "-" and not tok.startswith("training.num_epochs=")]
+                    return [f"model={row['model']}", *extra]
+    return list(REFERENCE_OVERRIDES)
+
+
 def compose_cfg(dataset: str, run_id: str, out_dir: Path):
-    """The protocol_eval.sbatch command line for cl_r_af_isla_seed4x, as infer.py would compose it."""
+    """The protocol_eval.sbatch command line for the run, as infer.py would compose it."""
     overrides = [
-        "model=isla_volume_airfrans",
-        "train_split=full_train",
-        "val_split=full_test",
-        "+training.val_interval=10",
-        "model.hidden=512",
-        "model.n_slices=512",
+        *lane_overrides(run_id),
         f"dataset={dataset}",
         f"run_id={run_id}",
         "infer_split=val",

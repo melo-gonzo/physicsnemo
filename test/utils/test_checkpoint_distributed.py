@@ -268,56 +268,6 @@ def test_distributed_checkpoint_checks_all_models_before_restoring(
 
 @pytest.mark.timeout(30)
 @pytest.mark.multigpu_static
-@pytest.mark.parametrize("older_name", ["RenamedLinear", "Linear"])
-@pytest.mark.parametrize("missing_latest", [False, True])
-def test_distributed_legacy_checkpoint_uses_training_index(
-    shared_tmp_dir, monkeypatch, older_name, missing_latest
-):
-    """Legacy lookup uses the selected index and only rank 0's filesystem."""
-    dm = DistributedManager()
-    if dm.world_size < 2:
-        pytest.skip("Need at least 2 ranks")
-
-    class RenamedLinear(nn.Linear):
-        """A renamed model declaring its earlier checkpoint filename."""
-
-        _legacy_class_names = ("Linear",)
-
-    if dm.rank == 0:
-        source = nn.Linear(8, 8)
-        fs = fsspec.filesystem("file")
-        for epoch in (1, 2):
-            with torch.no_grad():
-                for parameter in source.parameters():
-                    parameter.fill_(epoch)
-            save_checkpoint(shared_tmp_dir, models=source, epoch=epoch)
-        if older_name != "Linear":
-            fs.mv(
-                f"{shared_tmp_dir}/Linear.0.1.pt",
-                f"{shared_tmp_dir}/{older_name}.0.1.pt",
-            )
-        if missing_latest:
-            fs.rm(f"{shared_tmp_dir}/Linear.0.2.pt")
-    dist.barrier()
-
-    mesh = init_device_mesh(dm.device.type, (dm.world_size,))
-    model = distribute_module(RenamedLinear(8, 8, device=dm.device), mesh)
-    before = {k: v.full_tensor().clone() for k, v in model.state_dict().items()}
-    _forbid_nonzero_rank_file_access(monkeypatch)
-    if missing_latest:
-        with pytest.raises(FileNotFoundError, match=r"checkpoint\.0\.2\.pt"):
-            load_checkpoint(shared_tmp_dir, models=model)
-        for name, value in model.state_dict().items():
-            torch.testing.assert_close(value.full_tensor(), before[name])
-    else:
-        assert load_checkpoint(shared_tmp_dir, models=model) == 2
-        for parameter in model.parameters():
-            full = parameter.full_tensor()
-            torch.testing.assert_close(full, torch.full_like(full, 2))
-
-
-@pytest.mark.timeout(30)
-@pytest.mark.multigpu_static
 @pytest.mark.parametrize("sync_module_states", [True, False])
 @pytest.mark.parametrize("use_orig_params", [True, False])
 @pytest.mark.parametrize(

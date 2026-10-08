@@ -25,6 +25,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PHYSICSNEMO_DIST_TIMEOUT_S`; unset or empty configuration keeps PyTorch's
   backend default. Invalid timeouts are rejected before initialization state
   changes, allowing corrected configuration to be retried.
+- `MeshToDomainMesh` in `cell_centroids` mode records each source cell's
+  complete effective measure on the interior under the mesh-owned
+  `_effective_measure` point-data key, so
+  integrals and weighted losses over the query points remain possible after
+  the cells are gone.
+- Unified external aero recipe: `NonDimensionalizeByMetadata` gains
+  `scale_geometry` so chained instances scale the geometry once; inference
+  re-dimensionalizes with the field maps of every instance.
+- Extends the diffusion module to support flow matching. The new API
+  surface covers three pieces:
+  - New losses in `physicsnemo.diffusion.metrics.losses` train against a
+    flow/velocity target: `FlowMatchingLoss`, plus `WeightedFlowMatchingLoss`
+    for an element-wise weight such as a binary mask. Their
+    `MultiDiffusionFlowMatchingLoss` and
+    `MultiDiffusionWeightedFlowMatchingLoss` counterparts provide patch-based
+    flow-matching training on large spatial domains. `MultiDiffusionModel2D`
+    and `MultiDiffusionPredictor` support both patch-based diffusion and flow
+    matching during training and inference.
+  - A dedicated `RectifiedFlowNoiseScheduler` in
+    `physicsnemo.diffusion.noise_schedulers` provides a rectified-flow
+    schedule.
+  - Module-wide support for flow predictors, enabled by new conversion
+    functions in `LinearGaussianNoiseScheduler` (`x0_to_flow` / `flow_to_x0`
+    / `score_to_flow` / `flow_to_score`) and the corresponding conversion
+    callbacks everywhere conversions between prediction types are necessary.
 - Adds `physicsnemo.experimental.models.ISLA` (Invariant Slice Attention), an
   O(3)/SE(3)-equivariant, measure-aware slice-attention surrogate for steady
   boundary-value problems. Inputs (global, per-boundary-cell, per-query) and
@@ -59,60 +84,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `global_data`) and `use_measure_weighting` (centers by effective cell
   measure rather than raw cell area, so a subsampled mesh is centered where
   the full mesh would be).
-- `MeshToDomainMesh` in `cell_centroids` mode records each source cell's
-  complete effective measure on the interior under the mesh-owned
-  `_effective_measure` point-data key, so
-  integrals and weighted losses over the query points remain possible after
-  the cells are gone.
-- Unified external aero recipe: `NonDimensionalizeByMetadata` gains
-  `scale_geometry` so chained instances scale the geometry once; inference
-  re-dimensionalizes with the field maps of every instance.
-- Extends the diffusion module to support flow matching. The new API
-  surface covers three pieces:
-  - New losses in `physicsnemo.diffusion.metrics.losses` train against a
-    flow/velocity target: `FlowMatchingLoss`, plus `WeightedFlowMatchingLoss`
-    for an element-wise weight such as a binary mask. Their
-    `MultiDiffusionFlowMatchingLoss` and
-    `MultiDiffusionWeightedFlowMatchingLoss` counterparts provide patch-based
-    flow-matching training on large spatial domains. `MultiDiffusionModel2D`
-    and `MultiDiffusionPredictor` support both patch-based diffusion and flow
-    matching during training and inference.
-  - A dedicated `RectifiedFlowNoiseScheduler` in
-    `physicsnemo.diffusion.noise_schedulers` provides a rectified-flow
-    schedule.
-  - Module-wide support for flow predictors, enabled by new conversion
-    functions in `LinearGaussianNoiseScheduler` (`x0_to_flow` / `flow_to_x0`
-    / `score_to_flow` / `flow_to_score`) and the corresponding conversion
-    callbacks everywhere conversions between prediction types are necessary.
 
 ### Changed
 
-- `physicsnemo.experimental.models.ISLA` routes every slice block (and its head
-  frame) on sample-conditioned prototypes: learned seeds plus a centered,
-  scale-bounded, measure-weighted summary of the sample's own token states.
-  The `slice_prototypes` constructor argument and the static form are removed;
-  checkpoints of the static form no longer load.
-- `physicsnemo.mesh.fields` is rebuilt around two types. `RankSpec` (`rank`,
-  `symmetric`, `parity`; `shape(n_spatial_dims)`, `numel(n_spatial_dims)`) is
-  one field's transformation law; `FieldSchema` is an insertion-ordered
-  mapping from dotted field names to `RankSpec`, parsed once at a model's
-  boundary with `FieldSchema.parse` (nested groups and dotted names flatten
-  alike) and queried with `.ranks`, `.count(rank)`, `FieldSchema.key(name)`
-  and `.check(tensordict, label=...)`. Both are read-only `dict`s, so a
-  declaration serializes to JSON as written and model checkpoints can record
-  them directly. Validation is construction, so an invalid schema cannot
-  exist. A field is declared as a `RankSpec` or a mapping of values,
-  `{"rank": n}` (YAML: `pressure: {rank: 0}`); a mapping of mappings is a
-  nested group. Integer leaves are no longer accepted;
-  ISLA uses the same grammar.
-- GLOBE's field declarations are renamed after the schemas they hold:
-  `output_field_ranks`, `boundary_source_data_ranks` and `global_data_ranks`
-  become `output_schema`, `boundary_source_schemas` and `global_schema`
-  (kernels: `output_schema`, `source_schema`, `global_schema`), each also the
-  attribute holding the parsed `FieldSchema`. GLOBE raises
-  `NotImplementedError` for fields it does not implement (rank 2 and above,
-  pseudotensors) instead of silently dropping or misreading them. The GLOBE
-  examples and the unified external-aerodynamics recipe configs are updated.
 - Refresh core, optional, development, and container dependency versions.
   Require PyTorch 2.13 or newer and TensorDict 0.14.2 or newer;
   use PyTorch 2.13's CUDA 12.9 wheels for the CUDA 12 backend. NATTEN
@@ -153,6 +127,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Sampling, centroid conversion, geometric transformations, subdivision and
   GLOBE use the mesh-owned measure API. Point measures carry their represented
   dimension so geometric scaling preserves their physical units.
+- Promotes the volumetric `DiffusionUNet3D` and its reusable `Conv3D`,
+  `GroupNorm3D`, `UNetAttention3D`, and `UNetBlock3D` layers from experimental
+  to stable production APIs in `physicsnemo.models.diffusion_unets` and
+  `physicsnemo.nn`. The promoted APIs now carry backward-compatibility
+  guarantees and output/checkpoint non-regression coverage. Existing
+  experimental import paths remain as deprecated compatibility shims.
 
   **Migration from 2.2.x:** meshes saved with `cell_data["_measure_weights"]`
   must be regenerated or converted once before integration:
@@ -177,6 +157,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cells out of a mesh with hundreds of millions of vertices). Index
   normalization avoids allocating a full-mesh range and preserves empty slices,
   integer indices, and boolean masks. Point fields use ordinary indexed gathers.
+
+- The `tolerance` of `sample_data_at_points`, `find_containing_cells` and
+  `find_all_containing_cells` is now relative. Barycentric coordinates must
+  still be `>= -tolerance`, but the distance from a point to a cell's affine
+  hull and the BVH box padding are now limited to `tolerance` times the
+  largest absolute coordinate of the mesh, instead of `tolerance` in mesh
+  units. Results no longer depend on the mesh's length unit and are identical
+  when the mesh and query points are scaled by a power of two.
+- `physicsnemo.experimental.models.ISLA` routes every slice block (and its head
+  frame) on sample-conditioned prototypes: learned seeds plus a centered,
+  scale-bounded, measure-weighted summary of the sample's own token states.
+  The `slice_prototypes` constructor argument and the static form are removed;
+  checkpoints of the static form no longer load.
+- `physicsnemo.mesh.fields` is rebuilt around two types. `RankSpec` (`rank`,
+  `symmetric`, `parity`; `shape(n_spatial_dims)`, `numel(n_spatial_dims)`) is
+  one field's transformation law; `FieldSchema` is an insertion-ordered
+  mapping from dotted field names to `RankSpec`, parsed once at a model's
+  boundary with `FieldSchema.parse` (nested groups and dotted names flatten
+  alike) and queried with `.ranks`, `.count(rank)`, `FieldSchema.key(name)`
+  and `.check(tensordict, label=...)`. Both are read-only `dict`s, so a
+  declaration serializes to JSON as written and model checkpoints can record
+  them directly. Validation is construction, so an invalid schema cannot
+  exist. A field is declared as a `RankSpec` or a mapping of values,
+  `{"rank": n}` (YAML: `pressure: {rank: 0}`); a mapping of mappings is a
+  nested group. Integer leaves are no longer accepted;
+  ISLA uses the same grammar.
+- GLOBE's field declarations are renamed after the schemas they hold:
+  `output_field_ranks`, `boundary_source_data_ranks` and `global_data_ranks`
+  become `output_schema`, `boundary_source_schemas` and `global_schema`
+  (kernels: `output_schema`, `source_schema`, `global_schema`), each also the
+  attribute holding the parsed `FieldSchema`. GLOBE raises
+  `NotImplementedError` for fields it does not implement (rank 2 and above,
+  pseudotensors) instead of silently dropping or misreading them. The GLOBE
+  examples and the unified external-aerodynamics recipe configs are updated.
 
 ### Deprecated
 
@@ -212,37 +226,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `RandomRotateMesh` stores its `axes` as a tuple. Hydra instantiates
-  transforms with OmegaConf containers, and a `ListConfig` rejected the
-  one-element index tensor drawn for the axis, so every augmented sample
-  raised `KeyValidationError`; a plain sequence indexes by tensor through
-  `__index__`.
-- Unified external aerodynamics recipe: synchronizes data-loading failures
-  before DDP forward and forward/loss failures before backward; failures
-  inside model collectives or backward still rely on the process-group
-  timeout. An optional `training.divergence_loss_threshold` aborts on
-  non-finite or exploding losses. Epoch schedulers advance before saving
-  (checkpoints written by earlier recipe versions, which saved before the
-  step, are advanced once on resume), fp16 `GradScaler` state is persisted,
-  and the final epoch is always checkpointed. Resume metadata reports
-  scheduler/scaler restoration; exact trajectory continuation is unverified
-  because RNG and stochastic data state are not restored.
-- Checkpoint loading resolves model weights at the selected training
-  checkpoint's filename index, preventing resumes that mix epochs. Missing
-  required weights raise before any model or training state is restored.
-  Distributed loads validate on every rank using rank 0's file lookup.
-- Unified external aero recipe: near-wall SDF normals ignore subresolution
-  sign noise without reversing resolved interior normals, including on
-  translated geometry. Stored signed distances are unchanged.
+- Checkpoint loading resolves model weights at the selected training checkpoint's
+  filename index, preventing resumes that mix epochs. Missing required weights
+  raise before any model or training state is restored. Distributed loads validate
+  on every rank using rank 0's file lookup.
 - Mesh slicing reuses integer indices across connectivity, fields, and caches
   to avoid repeated CUDA synchronization for the same boolean mask.
   Point slicing skips mask processing when the output has no cells because
   the input has no cells or the point selection is empty.
-
 - Triangle areas use direct area components and a rescaled norm, preserving
   thin faces and their quadrature measures without Gram cancellation or
   overflow/underflow in the norm.
-
 - Unified external aero recipe: near-wall SDF normals no longer flip inward
   from float32 roundoff. Stored signed distances are unchanged.
 - Fixes mesh dtype handling: preserves integer-coordinate precision, normalizes
@@ -275,6 +269,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `torch.distributions.Uniform` instantiates.
 - `RenameMeshFields` and `DropMeshFields` also apply to a `DomainMesh`'s
   domain-level `global_data`.
+- `sample_data_at_points` and `find_containing_cells` find on-surface points
+  of float32 surface meshes in large length units. A torus scaled to
+  `|x| ~ 1300` (millimetres) previously found 0.4% of its on-surface points
+  and returned NaN for the rest, because float32 rounding (about
+  `1.2e-7 * |x|`) exceeded the absolute `1e-6` distance tolerance.
+- `BVH.from_mesh` and `ClusterTree.from_points` compute Morton codes for 1-3
+  spatial dimensions by spreading each coordinate's bits with a few
+  shift-and-mask steps. CUDA no longer materializes every bit as int64 (about
+  1 kB per point, 55 GB at 50M cells); temporaries are about 72 B per point in
+  3D, and the step is about 4x faster on large inputs. Codes are unchanged.
+- `sample_data_at_points`, `find_containing_cells`, and
+  `find_all_containing_cells` no longer miss the containing cell when a query
+  point has more than 32 BVH candidate cells (for example, near a vertex shared
+  by many triangles, or with a prebuilt BVH with `leaf_size > 1`). The BVH
+  candidate search used by these functions no longer caps candidates per point.
+- `RandomRotateMesh` stores its `axes` as a tuple. Hydra instantiates
+  transforms with OmegaConf containers, and a `ListConfig` rejected the
+  one-element index tensor drawn for the axis, so every augmented sample
+  raised `KeyValidationError`; a plain sequence indexes by tensor through
+  `__index__`.
+- Unified external aerodynamics recipe: synchronizes data-loading failures
+  before DDP forward and forward/loss failures before backward; failures
+  inside model collectives or backward still rely on the process-group
+  timeout. An optional `training.divergence_loss_threshold` aborts on
+  non-finite or exploding losses. Epoch schedulers advance before saving
+  (checkpoints written by earlier recipe versions, which saved before the
+  step, are advanced once on resume), fp16 `GradScaler` state is persisted,
+  and the final epoch is always checkpointed. Resume metadata reports
+  scheduler/scaler restoration; exact trajectory continuation is unverified
+  because RNG and stochastic data state are not restored.
+- Unified external aero recipe: near-wall SDF normals ignore subresolution
+  sign noise without reversing resolved interior normals, including on
+  translated geometry. Stored signed distances are unchanged.
 
 ### Security
 
@@ -1044,11 +1071,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   end-to-end training and sampling of epsilon-parameterized models.
   Losses gain an `epsilon_to_x0_fn` kwarg used for the epsilon-to-x0
   conversion required during DSM training.
-- Adds `DiffusionUNet3D` 3D U-Net diffusion backbone for volumetric data at
-  `physicsnemo.experimental.models.diffusion_unets`. Implements the
-  `DiffusionModel` protocol. Exposes reusable 3D building blocks
-  (`Conv3D`, `GroupNorm3D`, `UNetAttention3D`, `UNetBlock3D`) at
-  `physicsnemo.experimental.nn`.
 - Added support for Batched radius search, which enables Domino
   and GeoTransolver with local features and batch size > 1.
 - Added the underfill recipe.

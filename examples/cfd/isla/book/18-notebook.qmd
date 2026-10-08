@@ -34659,3 +34659,279 @@ dense query-by-cell read, 2.1x the step on a 1,000-cell boundary and about
 the scalable form is a tree-accelerated read built on the GLOBE cluster
 tree with a per-point traversal, scoped at about two weeks. Decision with
 Peter.
+
+## 2026-10-07 — SOFT-GEO lanes scored: the soft form is invariant to re-panelization (0.96 to 1.01) and beats the nearest reference natively, but under coarsening its built-in channel still carries half the excess and the posed error moves 1 to 6 percent; both traced to the one-sided rule and the direction's sign, fixed and relaunched {#sec-nb-soft-geo-lanes}
+
+**Setting.** The soft built-in query geometry (@sec-nb-soft-geo-prereg)
+replaces the nearest boundary token's Euclidean distance and direction by
+a measure-weighted kernel average over the tokens on the nearest token's
+side of their tangent planes: the kernel-mean plane distance d and the
+kernel-mean normal u, width 0.03 of the length unit. Six AirfRANS lanes
+trained it under the campaign protocol (code_v21, 500 epochs, 100,000
+interior points, lr 3.75e-4): soft03 seeds 42 and 43, soft01 and soft10
+(widths 0.01 and 0.10), soft03 without the stored signed-distance inputs,
+and a nearest-form control without them. All six completed without a NaN.
+
+**Native and posed scores** (pressure / velocity / eddy-viscosity relative
+L2, 200 held-out cases, float32). soft03: 0.0292 / 0.0147 / 0.0278 (seed 42)
+and 0.0311 / 0.0154 / 0.0301 (seed 43), against the nearest reference's
+0.0369 / 0.0167 / 0.0317 and 0.0335 / 0.0177 / 0.0312: 10 to 21 percent
+better on every field and both seeds, so bar P3 (native within the seed
+separation of the reference) passes with room. soft01 0.0317 / 0.0160 /
+0.0278 and soft10 0.0322 / 0.0156 / 0.0284: the width barely matters
+natively. Built-in channel alone (no stored field): soft 0.0308 / 0.0185 /
+0.0297 against nearest 0.0305 / 0.0196 / 0.0276, one seed each, so bar P4
+(soft at least as good as nearest without the stored field) is mixed:
+velocity 6 percent better, eddy viscosity 8 percent worse, pressure equal.
+Under the posed protocol (an in-plane rotation and a translation of one RMS
+radius per case) the nearest lanes reproduce their native numbers to five
+digits; every soft lane moves: velocity +3.7 percent (seed 42), +6.2
+percent (seed 43), +2.8 percent (soft01), +1.9 percent (soft10), +0.6
+percent (no stored field); pressure +0.7 to +1.8 percent.
+
+**AF-GEO** (`kernel/char/af_geo_sq/<run>/summary.json`, LHR). Under the
+count-raising re-panelizations refu and reff (@sec-nb-af-geo-refine) the
+soft lanes' error ratios to native are 0.955 to 1.012 on every field, both
+seeds and all three widths, where the nearest control without the stored
+field moves 1.43 / 2.51 / 2.79 (refu) and 1.73 / 3.39 / 2.00 (reff) and
+its native geometry restores it to 0.98 to 1.01: **the soft form is
+re-panelization invariant and the nearest form's sensitivity is entirely
+its built-in channel.** Under the 400-segment coarsening the soft lanes
+still lose 7.7 to 17.7x (uniform law) and 12.2 to 18.4x (length law), and
+swapping in the native geometry returns them to 2.7 to 4.5x (the
+coarsened slice states' share, as for the reference): the built-in
+channel's share of the log excess is 0.46 to 0.77, the same as the nearest
+form's 0.52 to 0.82, and independent of the width. **Bar P2's coarsening
+clause (geometry share below 0.1) fails for the form as trained.** The
+wall-node split (`af_geo_sq_wall`: native geometry restored at the wall
+nodes only, or everywhere but the wall nodes) puts the whole coarsening
+excess outside the wall nodes (wall-only swap 10.64 / 9.85 / 11.08 against
+10.69 / 9.89 / 11.09 for soft03 seed 42; rest-only swap 2.88 / 1.84 / 1.97
+against the full swap's 2.84 / 1.84 / 1.97).
+
+**Mechanism of the posed shift** (probes `kernel/char/pose_probe/run1,
+run2`: the geometry functions alone on 12 cases, four rigid motions each,
+float32 and float64). In float64 both forms are invariant to 1e-12. The
+AirfRANS interior sample contains the airfoil's own wall nodes (stored
+distance exactly zero; 273 to 726 of 100,000 queries per case). There the
+plane distance to the nearest token, s* = (x - y*) . n*, is a
+roundoff-level number, so in float32 about half of the wall nodes change
+side under a pose, in both forms alike (47 and 48 percent). The nearest
+form's d flips sign (|d| is half a panel, median 6e-4 chord) and its
+direction (x - y*)/|x - y*| never reverses; the trained nearest model does
+not react. The soft form's d sits at 1e-9 chord on the outside branch and
+at about kappa tau^2 (median 3e-6, up to 3e-2 at the leading edge) on the
+inside branch, so its log channel changed by more than one unit at 71
+percent of the wall nodes, and its direction u = sigma* nbar REVERSED at 45
+percent of them; every other band of the interior changed by roundoff
+only. Re-orienting u at evaluation on the trained checkpoints
+(`kernel/char/f3_eval`) doubled their error (an input combination never
+seen in training): the model is extremely sensitive to u at the wall nodes,
+and the fix has to be trained in. A second defect found by the identity
+pose: the host decided the side from s* in torch while the kernel
+recomputed s with other rounding, so at |s*| ~ roundoff the nearest token
+itself could drop out of an otherwise empty kept set and the kernel
+returned d = 0 and a zero direction at about 3 percent of the wall nodes.
+
+**Mechanism of the coarsening sensitivity.** The one-sided rule keeps, on
+the convex side of a curved wall, only the tokens whose tangent plane the
+query lies in front of: at wall distance delta those within a tangential
+offset sqrt(2 delta / kappa) of the query's foot. That window is 4.5e-3
+chord at delta = 1e-5 on the mid-chord of a unit airfoil: the native
+sample puts about four tokens in it and the 400-segment sample one, and the
+kernel-mean plane distance goes from about two thirds of delta (a window
+full of tokens, whose plane distances are delta minus kappa l^2 / 2) to
+delta (the nearest token alone). The truncation makes the near-wall d
+depend on the token density at first order, whatever the width, which is
+why the coarsening share did not move between widths 0.01 and 0.10 while
+refinement, which only adds tokens to an already-resolved window, left the
+form alone. The two-sided average over every facing token has no such
+window: it is continuous and smooth across the wall and depends on the
+sample only through the quadrature error of a kernel wider than the
+spacing, at the price of a curvature bias of about kappa tau^2 on both
+sides (its zero level set sits that far outside a convex wall).
+
+**Fix** (commit f7e4377a3, snapshot code_v23, verified on LHR: 210 passed
+in the first run, two test expectations corrected, re-run pending): the
+direction is the kernel-mean outward normal on both sides, u = nbar/|nbar|,
+the gradient of a signed distance (continuous across the wall; the side
+stays in the sign of d); the nearest token is always kept (its index goes
+to the kernel); and the two-sided average is a second research arm,
+`query_geometry="smooth"`, beside the one-sided `"soft"`. One of the two
+replaces the other after the verdict.
+
+**Relaunch** (LHR, group sr, rows 88 to 93, jobs 112161 to 112166, code_v23,
+same protocol): soft03 seeds 42 and 43 with the direction fix, smooth03
+seeds 42 and 43, and the two no-stored-field pairs (soft03, smooth03, seed
+42). Pre-registered: (i) both forms pose-invariant to within 0.5 percent on
+every field (the direction no longer flips; for soft the remaining d jump
+at the wall nodes is the residual); (ii) smooth's coarsening geometry share
+below 0.1 with the coarsened ratio at the slice-state level, soft's share
+unchanged near 0.5; (iii) smooth native within the seed separation of
+soft (the curvature bias costs nothing the model cannot learn); (iv)
+smooth without the stored field at least as good as nearest without it on
+every field. If (i) to (iii) hold, smooth is the sample-independent form
+and the decision tree's AirfRANS gate is passed on refinement AND
+coarsening; the wall jump and the LE resolution limit (tau = 0.015 chord
+is the leading-edge radius of a 12 percent airfoil) go to Peter as the
+known properties of the form.
+
+## 2026-10-07 — DeepJEB++ under the campaign protocol: the half-rate ISLA lanes reach the baselines' accuracy by epoch 18 (displacement 0.23, von Mises 0.46) and then collapse to the mean-field plateau between epochs 20 and 24 on both seeds; the scored 40-epoch checkpoints read 0.84 / 0.90 on displacement against GeoTransolver's 0.23 and Transolver's 0.19 {#sec-nb-char-deepjeb-halfrate-verdict}
+
+**Setting.** DeepJEB++ is the campaign's one dataset on which the ISLA
+reference configuration (512 wide, 512 slices, the sample-conditioned
+prototypes of the current class) at the reference rate 3.75e-4 reaches the
+mean-field plateau: both `cl_r_jeb_isla` lanes sit at a validation loss of
+0.08 from epoch 6 to the end and score 1.18 / 0.98 on displacement and 1.02 /
+1.00 on von Mises stress (@sec-nb-char-deepjeb-plateau-mechanism named the
+mechanism, a routing collapse to one to five effective slices in half of the
+blocks). Peter ruled a per-dataset exception (2026-10-05): the campaign arm
+for DeepJEB++ trains at half the rate, 1.875e-4, every other hyperparameter
+the reference's. The pair `cl_jd_rate_e40_seed42/43` (40 epochs on the
+12,451 clean training brackets, AGA) finished today and was scored under the
+three protocols.
+
+**What we saw.** Both seeds descend normally for half the run: validation
+loss 0.0146 at epoch 0, 0.0079 at epoch 6, 0.0065 at epoch 18, where the
+trainer's validation metrics read **displacement 0.225 and von Mises 0.458
+(seed 42; seed 43 within 0.01)**, level with GeoTransolver-256 (0.231 /
+0.497) and Transolver 512 x 16 (0.194 / 0.436) under the campaign protocol.
+Between epochs 20 and 24 the training loss jumps from 0.006 to 0.016 and then
+0.06 on seed 42 (0.034 then 0.057 on seed 43) and the validation loss to
+0.067 on both, the plateau value of the reference-rate lanes; the final
+checkpoints, which the protocol scores, read **displacement 0.840 / 0.903 and
+von Mises 0.931 / 0.931** (natively; the area protocol is the identity on this
+dataset and the posed protocol reproduces the native numbers, as for every
+ISLA lane). The regenerated dataset artifact (`results/char/deepjeb_surface.json`,
+final-reference arms) therefore shows ISLA at 0.871 / 0.931 against
+GeoTransolver-256 at 0.231 / 0.497 and Transolver at 0.194 / 0.436, with both
+baselines at 1.2 to 1.5 under the posed protocol.
+
+**Why it matters.** The half rate delays the collapse (epoch 4 at 3.75e-4,
+epoch 22 at 1.875e-4) and does not prevent it, so the rate exception does not
+rescue the dataset: under the frozen class the DeepJEB++ standing is a
+failure by training instability, not by capacity, since the same lanes match
+the baselines eighteen epochs in. This is the first campaign dataset on which
+the current class does not finish its protocol, and the only one where ISLA
+trails the baselines by more than a factor of two. Chapter 13 states this as
+the current standing; the earlier equal-step ladder, run under the previous
+class (384 wide, 12 layers, static prototypes, 5e-4), is kept as the record of
+what that form achieved and is labeled as such.
+
+**What's next.** The routing collapse on this dataset is a property of the
+sample-conditioned prototypes at the reference width that the class now
+carries everywhere (@sec-nb-char-deepjeb-plateau-mechanism measured 1 to 5
+effective slices of 256 in the collapsed blocks). A collapse-resistant
+routing is an architecture change, which the campaign freeze forbids; the
+candidates (a floor on the routing temperature, a slice-usage regularizer,
+or an epoch-18 early stop as a protocol rule, which would be a tuning
+shortcut) go to Peter with this verdict. Nothing is launched on it.
+
+## 2026-10-07 — SOFT-GEO verdict on the relaunched lanes: the two-sided kernel form is pose-invariant to four digits and both kernel forms are re-panelization invariant, but under 2.5x coarsening the built-in channel still carries 0.3 to 0.85 of the log excess for every form, and that residual sits at the trailing edge and wake; the one-sided form is the better built-in channel; neither arm passes the pre-registered coarsening bar {#sec-nb-soft-geo-verdict}
+
+**Setting.** The six relaunched lanes (`sr_af_*`, snapshot code_v23, 500
+epochs, 100,000 interior points, lr 3.75e-4, LHR) carry the fix of
+@sec-nb-soft-geo-lanes: the direction is the kernel-mean outward normal on
+both sides of the wall and the nearest token is always kept; `soft` keeps the
+one-sided rule, `smooth` averages every facing token. Two seeds each with the
+stored signed-distance inputs, one seed each without them. All six trained
+without a NaN; they were scored natively and under the posed protocol and run
+through the AirfRANS resampling probe (coarsening to 400 segments under the
+uniform-over-cells and length laws, re-panelization under two patterns, each
+with the native-geometry swap). Artifact:
+`results/char/soft_geo_lanes_2026-10-07.json` (key `relaunch_code_v23`).
+
+**Native and posed** (pressure / velocity / eddy-viscosity relative L2).
+soft 0.0314 / 0.0168 / 0.0284 and 0.0306 / 0.0152 / 0.0288; smooth 0.0300 /
+0.0160 / 0.0295 and 0.0331 / 0.0150 / 0.0307; the nearest reference 0.0369 /
+0.0167 / 0.0317 and 0.0335 / 0.0177 / 0.0312. Without the stored field: soft
+0.0281 / 0.0170 / 0.0280, smooth 0.0304 / 0.0278 / 0.0295, nearest 0.0305 /
+0.0196 / 0.0276. **Posed over native: smooth 0.9996 to 1.0007 on every field,
+both seeds and the no-stored-field lane (bar (i) passes); soft 1.010 / 1.029 /
+1.007 and 1.020 / 1.054 / 1.008 (bar (i) fails):** with the direction
+continuous, the one-sided form's remaining pose dependence is its distance
+jump of about kappa tau^2 at the wall nodes, and the trained model reads it as
+strongly as it read the reversed direction.
+
+**Resampling.** Re-panelization (count-raising, information-preserving):
+every kernel lane 0.965 to 1.021 on every field (the nearest control without
+the stored field 1.43 to 3.39). Coarsening: soft 5.7 to 12.8x (uniform law)
+and 8.6 to 16.7x (length law), smooth 5.6 to 7.6x and 7.7 to 10.4x, against
+the nearest reference's 9.6 to 15.8x and 16.4 to 20.7x; the native-geometry
+swap returns all of them to 2.7 to 4.5x, the coarsened slice states' share,
+so **the built-in channel's share of the log excess is 0.33 to 0.85 for smooth
+and 0.37 to 0.80 for soft, where the nearest form's is 0.52 to 0.85 (bar (ii)
+fails).** The one-sided truncation I named as the mechanism of that share
+(@sec-nb-soft-geo-lanes) is refuted: removing the side rule did not move it.
+The geometry itself does move less than the nearest form's under coarsening
+(near-wall direction cosine 0.98 against 0.59, RMS log distance ratio 0.49
+for smooth against 0.62), and the model amplifies what remains.
+
+**Where the residual lives.** Restoring the native geometry on a chordwise
+band of the queries (`kernel/char/af_geo_sr_le`, 4 lanes, both coarsening
+laws): ahead of x = 0.1 chord (42 percent of the queries, the whole upstream
+field including the leading edge) recovers almost nothing (smooth without the
+stored field, uniform law: 7.63 / 8.24 / 13.07 to 7.43 / 7.10 / 13.00); between
+0.1 and 0.9 recovers nothing (7.54 / 8.06 / 13.02); **behind x = 0.9 chord (29
+percent, the trailing edge and the wake) recovers most of it, 3.19 / 4.12 /
+2.18 against the full swap's 2.70 / 1.37 / 1.97, and all of the eddy-viscosity
+excess**; the same on every lane (soft without the stored field: 5.71 / 12.06
+/ 13.02 to 2.95 / 2.68 / 2.16 with the full swap at 2.81 / 1.66 / 2.11). So the
+kernel forms' coarsening sensitivity is not the leading edge, where the width
+is about the leading-edge radius, but the sharp trailing edge and the wake
+behind it. The mechanism consistent with every measurement is the orientation
+reference: the facing factor and the one-sided rule take their reference
+normal from the exact nearest token, and behind a sharp trailing edge the
+nearest token is on the upper or the lower face by a hair, so when coarsening
+moves the nearest token (it changes for 60 percent of all queries) the
+reference flips between two normals that differ by nearly 180 degrees and the
+kernel-mean normal and distance of the wake queries flip with it (the same
+discontinuity the pose probe met at the medial axis, @sec-nb-soft-geo-lanes).
+The nearest form has the same reference and the same flips.
+
+**Bars (iii) and (iv).** smooth's native error is within soft's seed range on
+pressure and velocity and 2 to 7 percent worse on eddy viscosity (passes).
+Without the stored field smooth is 42 percent worse than nearest on velocity
+(0.0278 against 0.0196; fails) while soft is better on every field (0.92 /
+0.87 / 1.01): the two-sided form's curvature bias (its zero level set sits
+about kappa tau^2 outside a convex wall; its sign disagrees with the stored
+distance at 20 percent of the near-wall queries) makes it a poor wall-distance
+estimate on its own, and the one-sided form with the continuous direction is
+the best built-in channel measured.
+
+**Verdict against the decision tree.** Peter's gate was that the
+discretization independence in the volume "holds up on AirfRANS". It holds
+up under the change of sampling law at preserved information (re-panelization:
+both kernel forms invariant to 2 percent, the nearest form not) and under the
+posed protocol for the two-sided form; it does not hold up under 2.5x
+coarsening, where every form, nearest included, pays once through the slice
+states (an architecture-wide information loss the baselines are being scored
+for) and about as much again through the built-in channel, with the channel's
+part concentrated at the trailing edge. Neither arm therefore passes the gate
+as pre-registered, and the architecture stays frozen. What the data recommend,
+if the gate is reopened: the one-sided form with the continuous direction as
+the built-in channel (best accuracy, re-panelization invariant, pose
+dependence of 1 to 5 percent from the wall-node jump), and a continuous
+orientation reference at sharp edges as the next mechanism to fix, which is a
+design change for Peter.
+
+**The baselines under the same resamplings** (GeoTransolver-256 and
+Transolver 512 x 16 AirfRANS references, both seeds, scored on AGA under
+`airfrans_volume_{sub400u,sub400a,refu,reff}`, the three-dimensional
+pipeline's variants built today): every score is bitwise identical to the
+native one, 1.00 on every field under all four resamplings. That is not
+robustness but blindness: the two baseline interior models drop the boundary
+mesh at the reader (`drop_in_file_boundaries: true`) and read the geometry
+only through the stored signed distance and its gradient, which are
+precomputed from the full CFD mesh and untouched by any resampling of the
+airfoil tokens. ISLA's interior model is the only one of the three that reads
+the boundary sample itself, so it is the only one that can pay for a coarser
+boundary, and it pays twice: once through the slice states (2.7 to 4.5x, the
+information the 600 dropped segments carried) and about as much again through
+the built-in channel. The comparison that would separate an
+architecture-wide information loss from ISLA's own sensitivity therefore does
+not exist on AirfRANS at this budget; the baselines' invariance is the
+invariance of a model that never looks. It also restates what the
+re-panelization result means: ISLA's kernel forms are invariant to a change
+of boundary sampling that the baselines cannot even see, while remaining the
+only models that would notice a geometry the stored field does not encode.
