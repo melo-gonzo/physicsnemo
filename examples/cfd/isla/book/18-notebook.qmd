@@ -21760,7 +21760,7 @@ interior task has no wing twin yet, so the two-dataset rule
 single-dataset.
 
 **What's next.** The chapter 3 interior section carries the 200,000-query
-row beside the 10,000-query one (@tbl-interior-200k). The
+row beside the 10,000-query one (@sec-interior-results). The
 routing probe extends to the four interior checkpoints when the ROUTE-NORM
 verdict lands (bar: the 1e-3 pair at one active slice per block, the 5e-4
 pair with 4 or more). An interior pair under cosine routing at 1e-3 is the
@@ -23509,7 +23509,7 @@ the mechanism behind it is the open question the cars left open
 (@sec-interior-open).
 
 **Reading.** The interior standing is now a two-dataset result and is
-written as one in @sec-interior, @tbl-interior-200k and
+written as one in @sec-interior, @sec-interior-results and
 @sec-verdict: ISLA leads on interior velocity by 42 to 114%, trails on
 interior pressure by 5 to 20%, and is level to 17% behind on eddy
 viscosity, against GeoTransolver-volume at a third of its parameters, on
@@ -33092,7 +33092,7 @@ Shift-SUV and DeepJEB++ read posed 1.000 for ISLA against 2.86 / 1.61
 interim DrivAerML Surface baselines (epochs 79 and 125) read area 6.5 / 5.5
 and posed 17 / 22. The lug and Tensile2D smoke checkpoints move under
 rotation for every architecture (ISLA 1.15 and 1.45), the frame-component
-territory of @sec-nb-solids-frame; one-epoch checkpoints carry no accuracy
+territory of @sec-nb-solids-frame-interim; one-epoch checkpoints carry no accuracy
 reading, so these rows wait for the campaign lanes.
 
 **Two anomalies.** (1) ISLA's geometry path raised a CUDA
@@ -33342,7 +33342,7 @@ ISLA σ11 / σ22 / σ12 / displacement / plastic strain 0.0086 / 0.0072 / 0.0108
 0.0093 / 0.279; GeoTransolver 0.0086 / 0.0078 / 0.0111 / 0.0056 / 0.145;
 Transolver 0.0106 / 0.0088 / 0.0123 / 0.0053 / 0.227. So the frozen class at
 its reference width closes the stress gap this dataset used to show
-(@sec-nb-solids-frame recorded GeoTransolver-512 ahead on every component by
+(@sec-nb-solids-frame-interim recorded GeoTransolver-512 ahead on every component by
 about 2x under the earlier class): ISLA now ties or leads on all three stress
 components and trails by 1.7x on displacement and 1.9x on the cumulated plastic
 strain. The uniform point-cloud column equals the native one for every
@@ -33367,7 +33367,7 @@ columns match). The stress components fail for a second reason: the
 campaign's ISLA Tensile2D configuration declared sig11 / sig22 / sig12 as
 three rank-0 heads ("laboratory frame, as the dataset stores them"), i.e.
 scalars, which are invariant under rotation and cannot follow a rotated
-tensor target; the symmetric rank-2 head of @sec-nb-rank-io exists for this
+tensor target; the symmetric rank-2 head of @sec-nb-rankio-prereg exists for this
 and was not used, and the stress normalization is per component (sig22 mean
 57.7 MPa, three different standard deviations), which is not equivariant
 either. **Decision (2026-10-03): every rank>=1 target in the campaign is
