@@ -206,6 +206,54 @@ read-only model is query independent to roundoff, as its construction says; the 
 24x under the same companions (QUERY-POP, 2026-10-06). TG inherits this exactly: its read sees the boundary tree
 and the point alone.
 
+### E3 verdict (2026-10-08 00:00 PDT): the bars fail; the read recovers part of the read-only penalty
+
+TG, the read-only model with the tree read at theta 1 (lanes `dtt_vol_tg1_seed42/43`, 500 epochs, finished
+2026-10-07 23:45 PDT, scored by job 125331; the same scorer and protocols as I and P):
+
+| protocol | seed 42 | seed 43 | seed mean | TG / I | TG / P |
+|---|---|---|---|---|---|
+| native | 0.0442 / 0.0720 / 0.125 | 0.0434 / 0.0694 / 0.132 | 0.0438 / 0.0707 / 0.129 | 1.11 / 1.11 / 1.47 | 0.98 / 0.85 / 0.88 |
+| area | 0.106 / 0.221 / 0.156 | 0.104 / 0.212 / 0.157 | 0.105 / 0.217 / 0.157 | 0.34 / 0.52 / 0.27 | 1.22 / 1.06 / 0.97 |
+| posed | 0.0442 / 0.0721 / 0.125 | 0.0434 / 0.0694 / 0.133 | same as native to 1e-4 | | |
+
+Per seed, TG / I is 1.14 / 1.16 / 1.44 (seed 42) and 1.09 / 1.07 / 1.50 (seed 43). The preregistered bars (TG / I
+<= 1.03 / 1.03 / 1.05, seed means) fail on every field, pressure and velocity by 8 points and eddy viscosity by
+42. What the read buys over the read-only model without it: 2% on pressure, 15% on velocity, 12% on eddy
+viscosity; in terms of the read-only penalty against the interacting reference (14% / 31% / 68%), the tree read
+closes two thirds of the velocity gap, a fifth of the pressure gap and a third of the eddy-viscosity gap. The
+trainer's bfloat16 validation had overstated the pressure and velocity gains (0.90x and 0.75x of P at matched
+epochs); under the float32 protocol P improves more than TG does.
+
+Posed equals native to four digits at theta 1: the tree built from each cluster's own principal axes and spheres is
+frame-free in practice, not only up to ties on paper. Under the area protocol TG rises 2.4x / 3.1x / 1.2x against
+P's 1.9x / 2.5x / 1.1x and I's 7.9x / 6.9x / 7.7x: the read sees the boundary draw through the opened leaves and
+the cluster means, a sensitivity above P's but far below the interacting model's.
+
+### E4 verdict: exact query independence, confirmed on the trained tree-read model (job 125332)
+
+On both TG checkpoints every ratio to the control is 1.0000 on pressure and velocity and 1.0000 / 0.9999 on eddy
+viscosity under the half, box and wall populations, and the largest change of any prediction over 48 cars is 1e-4
+relative L2 (float32 roundoff). The property this program exists for holds exactly, where the interacting
+reference moves 15x to 24x.
+
+### Decision under the preregistration
+
+E3 fails and E4 passes; the preregistration says either bar failing is reported with the measured mechanism and
+the program does not tune towards the bars, so ISLA-DTT is not proposed as the canonical volume form on this
+evidence. What is established: a read-only ISLA whose global read is exact at theta 0, exactly query independent
+at every theta and frame-free in practice, trained and scored at car scale within 3.8x of the read-only step, that
+lands 11% / 11% / 47% behind the interacting reference instead of the read-only model's 14% / 31% / 68%. The
+residual's mechanism is the open question, with two candidates that the next measurement separates: the theta 1
+aggregation itself (each point reads about 470 virtual cells for the 200,000 boundary cells; the trained kernel may
+want a finer far field than the car's cost allows), or the absence of any query-to-query interaction, which the
+property forbids and which the wake's eddy viscosity may need. The discriminating instrument is a theta ladder on
+AirfRANS under this snapshot, where the dense read is affordable: read-only + tree read at theta 1, 0.5 and 0.25
+against the exact dense read, the read-only model and the interacting model, two seeds each. If the trained tree
+read at theta 1 matches the dense read there, the aggregation is not the limiter and the car's residual is
+structural; if it falls short and converges towards the dense read as theta falls, the avenue is cost-limited on
+this hardware, and the theta 0.6 to 0.8 rung on the car (cost probe in flight) says how much of it can be bought.
+
 ### In flight
 
 - Lanes `dtt_vol_tg1_seed42/43` (E3's TG arms: read-only + tree read at theta 1, leaf 4, RMS orientation tree,
