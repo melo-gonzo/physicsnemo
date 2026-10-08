@@ -71,9 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   first `k` reads in host memory and serves later requests for the same
   index from that cache (single- or few-sample fitting; `k > 1` keeps `k`
   stochastic subsample views per index).
-- `DomainMeshReader` gains `boundary_subsample` (`"both"`, `"cells"`,
-  `"points"`), choosing which of the two subsamples apply to the in-file
-  boundary meshes, and `interior_n_points_range`, which draws the interior
+- `DomainMeshReader` gains `interior_n_points_range`, which draws the interior
   point count per sample from a closed integer range (query-count
   augmentation), reproducibly under `set_epoch`.
 - Mesh readers load saved meshes with `tensordict` memory maps opened
@@ -234,6 +232,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to avoid repeated CUDA synchronization for the same boolean mask.
   Point slicing skips mask processing when the output has no cells because
   the input has no cells or the point selection is empty.
+- `DomainMeshReader` gains `boundary_subsample` (`"both"`, `"cells"`,
+  `"points"`) to choose which subsample applies to the in-file boundaries.
+  Composing the cell and point subsamples on a triangulated boundary kept only
+  the cells whose three vertices all survived the point cut, about `N / 27` of
+  the `N` requested. The default keeps the composed behaviour.
 - Triangle areas use direct area components and a rescaled norm, preserving
   thin faces and their quadrature measures without Gram cancellation or
   overflow/underflow in the norm.
