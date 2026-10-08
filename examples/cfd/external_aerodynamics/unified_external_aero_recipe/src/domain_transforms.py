@@ -939,17 +939,18 @@ class ComposeQuadratureMeasure(MeshTransform):
 
 @register()
 class DropDegenerateCells(MeshTransform):
-    r"""Drop cells whose geometric measure is zero or non-finite (2026-10-02).
+    r"""Drop cells whose measure is zero or non-finite (2026-10-02).
 
     The HiLift wing surfaces carry a few exactly degenerate triangles per case (53 to 137 of
     200,000 sampled cells, zero area to the bit, from repeated vertices): they have no usable
     quadrature weight and no normal, the mesh collate refuses a zero target measure, and a
-    model that reads the boundary as tokens would carry them as garbage. This transform
-    recomputes every cell's measure from the current coordinates (any manifold dimension:
-    segment length, triangle area, tetrahedron volume) and slices away the cells whose measure
-    is not finite and positive, together with their cell data; vertices are kept. Meshes
-    without such cells pass through unchanged. Place it before the terminal conversion so it
-    sees the coordinates the model will see.
+    model that reads the boundary as tokens would carry them as garbage. This transform reads
+    every cell's measure through :func:`~physicsnemo.mesh.calculus.measure.cell_measures` (the
+    stored effective measure when a sampler wrote one, else the geometric measure of the
+    current coordinates in any manifold dimension: segment length, triangle area, tetrahedron
+    volume) and slices away the cells whose measure is not finite and positive, together with
+    their cell data; vertices are kept. Meshes without such cells pass through unchanged.
+    Place it before the terminal conversion so it sees the coordinates the model will see.
     """
 
     def __call__(self, mesh: Mesh) -> Mesh:

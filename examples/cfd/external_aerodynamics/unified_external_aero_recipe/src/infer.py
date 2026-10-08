@@ -740,9 +740,9 @@ def main(cfg: DictConfig) -> None:
         ### docstring's torchrun caveat). attach_and_save self-creates
         ### parent dirs.
         sample_id = _sample_id(metadata, idx)
-        if bool(
-            cfg.get("save_predictions", True)
-        ):  # file-count quota (2026-09-23): the fleet scorer passes +save_predictions=false
+        ### `+save_predictions=false` skips writing one mesh per sample, for
+        ### runs that only need the metric summary.
+        if bool(cfg.get("save_predictions", True)):
             attach_and_save(
                 domain,
                 pred_phys,

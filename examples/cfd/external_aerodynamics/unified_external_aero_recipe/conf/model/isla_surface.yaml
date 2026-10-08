@@ -76,7 +76,7 @@ model:
     wss: {rank: 1}
   global_schema:
     U_inf_dir: {rank: 1}         # a rank-1 global input, read from global_data.U_inf_dir; normalized to a unit direction inside the model
-  hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; the class defaults are 384 / 256
+  hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
   n_slices: 512
   mlp_ratio: 4

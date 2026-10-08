@@ -361,25 +361,31 @@ so a call reads exactly as the `forward_kwargs:` mapping does.
 **Reference configuration** (`conf/model/isla_surface.yaml`): the
 origin-free frame (positions enter only as point-to-anchor differences, no
 centroid anywhere) with the measure-weighted RMS-pairwise-distance length
-unit, so no per-dataset reference length is needed; `hidden: 384`,
-`n_layers: 12`, `n_slices: 256`, `mlp_ratio: 4`; `geo_checkpoint: true`
-(rebuilds the per-slice geometric invariants in backward instead of storing
-them: same forward and gradients bitwise, lower peak memory; set `false` to
-trade memory for speed); `geo_kernel: null` selects the exact fused Triton
-geometry kernel wherever it can run (CUDA) and the eager PyTorch region
-otherwise.
+unit, so no per-dataset reference length is needed; `hidden: 512`,
+`n_layers: 12`, `n_slices: 512`, `mlp_ratio: 4` (the class defaults);
+`geo_checkpoint: true` (rebuilds the per-slice geometric invariants in
+backward instead of storing them: same forward and gradients bitwise, lower
+peak memory; set `false` to trade memory for speed); `geo_kernel: null`
+selects the exact fused Triton geometry kernel wherever it can run (CUDA)
+and the eager PyTorch region otherwise; `compile_blocks: true` compiles each
+slice block (leave the recipe's whole-model `compile` off, since the mesh
+size changes every case).
 
-**Learning rate.** 5e-4 at `hidden: 384`, pinned in every ISLA config (the
-recipe default of 3e-3 drives ISLA to a mean-field plateau within five
-epochs). For other widths start from the width rule `lr = 1e-3 × 192 /
-hidden` (3.75e-4 at 512); a CLI override still wins.
+**Learning rate.** 3.75e-4 at `hidden: 512`, pinned in every ISLA config
+(the recipe default of 3e-3 drives ISLA to a mean-field plateau within five
+epochs; the DeepJEB++ config pins 1.875e-4). For other widths start from the
+width rule `lr = 1e-3 × 192 / hidden` (5e-4 at 384); a CLI override still
+wins.
 
 **Inference sampler.** For inference at a fixed cell budget, replace the
 dataset's `SubsampleMesh` stage with the recipe's `StratifiedSubsampleMesh`
 (`src/domain_transforms.py`): a systematic draw along the Morton order of
 the cell centroids with the same uniform-over-cells inclusion law and
 weights, so nothing about the trained model or its estimand changes, only
-the variance of the draw. On DrivAerML at 10,000 cells it lowers every
+the variance of the draw. The stage must see more cells than the budget:
+raise or remove the reader's `subsample_n_cells`, which in
+`drivaer_ml_surface.yaml` already cuts each surface to `sampling_resolution`
+cells and would leave the stage nothing to draw. On DrivAerML at 10,000 cells it lowers every
 model's float32 pressure error (GeoTransolver and Transolver by 2%, ISLA
 by 4%); on HiLiftAeroML at 35 training cases it lowers ISLA's by 1 to 2%
 and leaves the baselines within 0.4%. It is never worse than the
@@ -421,20 +427,12 @@ their dataset's leaf names.
 `_effective_measure` is the Horvitz-Thompson cell measure that
 `SubsampleMesh` writes on a subsampled surface and `MeshToDomainMesh` keeps
 on `boundaries.vehicle.cell_data` (and records for the interior points as
-the target measure); the volume reference dataset materializes the
-equivalent boundary field with `ComposeQuadratureMeasure`
-(`datasets/drivaer_ml_volume_reference.yaml`). Both store complete
+the target measure); on a volume dataset the reader's boundary cell
+subsample writes it (`boundary_subsample: cells`). Both store complete
 measures, including all sampling corrections; do not multiply them by cell
 area again. Explicit point measures carry their represented dimension and
 follow geometric scaling, including physical-coordinate inference exports.
 Native volume query points have no implied volume measure.
-
-For cached meshes or saved configuration overrides from before this
-unification, convert `_measure_weights` to `cell_areas * weights` and
-remove the old key; rename centroid `_target_quadrature_measure` to
-`_effective_measure` using `set_point_measures(..., dimension=2)`. The
-[mesh calculus documentation](../../../../docs/api/mesh/calculus.rst)
-provides conversion examples.
 
 **Fields of declared rank.** The model YAML declares `output_schema:` (the
 dataset's target names with their ranks: `pressure: {rank: 0}`, `wss: {rank: 1}`,
@@ -458,14 +456,15 @@ per-case parameter vector and splits it into named rank-0 global fields
 (one per `global_schema` entry), keeping the standardized vector for the
 tensor-input baselines' global embedding.
 
-**Measured standing.** At the reporting protocol of 200,000 sampled cells
-and 435 DrivAerML training cases, float32 pressure relative L2 is 0.0444
-for ISLA with the default RMS-distance scale, 0.0445 for GeoTransolver,
-and 0.0473 for Transolver. These are two-seed means at each model's
-protocol learning rate: ISLA matches GeoTransolver and leads Transolver
-by about 6%. The earlier total-measure ISLA variant scores 0.0446 under
-the same protocol. See the
-[recorded results](../../isla/results/p200k_trio_reduction_2026-09-19.json).
+**Measured standing (2026-09-19).** At the reporting protocol of 200,000
+sampled cells and 435 DrivAerML training cases, float32 pressure relative L2
+was 0.0444 for ISLA, 0.0445 for GeoTransolver, and 0.0473 for Transolver.
+These are two-seed means at each model's protocol learning rate: ISLA
+matched GeoTransolver and led Transolver by about 6%. The ISLA of that date
+predates the sample-conditioned routing (2026-10-02) and the 512-wide
+reference configuration (2026-10-04); see the
+[recorded results](../../isla/results/p200k_trio_reduction_2026-09-19.json)
+and the book for the current ones.
 GeoTransolver remains more data-efficient below the full DrivAerML training
 set, and the baselines lead on the 35-case HiLiftAeroML benchmark. Pose,
 sampling, interior-field and resource comparisons have their own protocols;
@@ -722,13 +721,13 @@ python src/train.py model=flare_volume dataset=drivaer_ml_volume \
     training.optimizer.lr=1e-3 training.scheduler.gamma=0.5
 
 # ISLA (Invariant Slice Attention), surface reference configuration (mesh in,
-# mesh out; lr 5e-4 pinned in the config). geo_kernel: null picks the exact
+# mesh out; lr 3.75e-4 pinned in the config). geo_kernel: null picks the exact
 # fused Triton geometry kernel on CUDA; force with model.geo_kernel=eager|fused.
 python src/train.py model=isla_surface dataset=drivaer_ml_surface compile=false
 
 # ISLA interior reference: boundary -> interior prediction points as tokens.
-# Pair with drivaer_ml_volume_reference, which writes the Horvitz-Thompson
-# corrected boundary measure the model reads from the boundary Mesh.
+# Pair with drivaer_ml_volume_reference, which adds the unit freestream
+# direction U_inf_dir that the model reads from global_data.
 python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference compile=false
 
 # GLOBE (mesh-native)

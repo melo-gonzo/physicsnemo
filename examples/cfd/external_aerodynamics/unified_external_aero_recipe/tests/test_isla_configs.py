@@ -302,10 +302,7 @@ def test_isla_configs_pin_the_protocol_learning_rate(model, dataset):
     plateau within five epochs, so every ISLA config carries its own rate: 3.75e-4, the
     reference configuration's (REF-80, 2026-10-04; the width rule 1e-3 x 192 / 512)."""
     cfg = _compose(model, dataset)
-    expected = (
-        1.875e-4 if model == "isla_surface_deepjebpp" else 3.75e-4
-    )  # DeepJEB++ exception (2026-10-05)
-    assert cfg.training.optimizer.lr == pytest.approx(expected)
+    assert cfg.training.optimizer.lr == pytest.approx(3.75e-4)
 
 
 def test_cli_override_still_wins_over_the_pinned_rate():
