@@ -17,11 +17,9 @@
 # SHIFT-SUV surface dataset -- CROSS-FAMILY ZERO-SHOT TRANSFER EVAL ONLY
 # (pre-registered @sec-nb-crossfamily-prereg, 2026-07-19).
 # Derived from drivaer_ml_surface.yaml with the transform pipeline FROZEN
-# (same nondim, same wss normalization std, same gauge, same subsampling);
+# (same nondim, same wss normalization std, same subsampling);
 # only the raw field names and the dataset root differ. Physics-semantics
 # audit for fairness:
-#   - L_ref = 5.0 m in both datasets -> the reference_length: 8.0 gauge
-#     (40 m physical) carries over exactly.
 #   - Pressure conventions are self-consistent per dataset: DrivAerML
 #     stores gauge pressure with p_inf=0; SHIFT stores absolute pressure
 #     with p_inf=101325 Pa. The shared (p - p_inf)/q_inf transform yields
@@ -89,23 +87,6 @@ pipeline:
       field_name: normals
     - _target_: ${dp:SubsampleMesh}
       n_cells: ${sampling_resolution}
-    # Constant scale gauge for models that declare an explicit reference
-    # length read from global_data (the constant-gauge ISLA variants'
-    # `reference_length_key: reference_length`). The value is in the
-    # already-L_ref-nondimensionalized coordinate space (positions were
-    # divided by the per-case `L_ref`=5 m above), so 8.0 means a physical
-    # gauge of 40 m -- the tunnel scale, approximately the measure-weighted
-    # RMS radius of the FULL DrivAerML boundary set (vehicle + ground +
-    # walls + inlet/outlet), which is the source-normalization operating
-    # point the constant gauge was designed around; a vehicle-scale
-    # gauge (1.0 here) overflowed the retired all-boundary arm's norm-free
-    # stream to NaN at initialization (measured dose-response: NaN at 1,
-    # ~1e24 at 2, healthy for >= 6). Inert for every model that does not
-    # declare it (the raw `L_ref` in global_data is untouched, so
-    # inference-side re-dimensionalization is unaffected).
-    - _target_: ${dp:SetGlobalField}
-      fields:
-        reference_length: 8.0
     # Terminal transform: convert the surface Mesh into a DomainMesh per the
     # recipe's prediction-vs-input contract. `interior` becomes a Mesh[0, 3]
     # point cloud at the cell centroids (where the model predicts), with the
