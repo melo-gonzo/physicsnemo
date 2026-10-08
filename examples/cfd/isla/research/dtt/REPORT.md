@@ -263,11 +263,34 @@ minutes with warp's device allocation (the data pipeline's mesh work) out of mem
 00:40 PDT and that is the record. On a GB300 the car's only affordable rung is theta 1; the convergence question
 is answered on AirfRANS.
 
+### E5 interim (2026-10-08 13:40 PDT): the AirfRANS ladder, ten of twelve arms scored
+
+The campaign's protocol scorer (float32, 200 held-out airfoils, 100,000 points, the full 1,000-panel boundary),
+pressure / velocity / eddy viscosity relative L2, one snapshot (`code_dtt12`), 500 epochs:
+
+| arm | seed 42 | seed 43 | seed mean | mean / I |
+|---|---|---|---|---|
+| I, interacting | 0.0332 / 0.0169 / 0.0326 | 0.0368 / 0.0170 / 0.0301 | 0.0350 / 0.0170 / 0.0314 | 1 |
+| P, read-only, no read | 0.0299 / 0.0178 / 0.0325 | 0.0357 / 0.0181 / 0.0366 | 0.0328 / 0.0180 / 0.0346 | 0.94 / 1.06 / 1.10 |
+| TG, tree read, theta 1 | 0.0261 / 0.0138 / 0.0325 | 0.0255 / 0.0143 / 0.0288 | 0.0258 / 0.0141 / 0.0307 | 0.74 / 0.83 / 0.98 |
+| TG, theta 0.5 | 0.0223 / 0.0131 / 0.0307 | 0.0266 / 0.0146 / 0.0309 | 0.0245 / 0.0139 / 0.0308 | 0.70 / 0.82 / 0.98 |
+| TG, theta 0.25 | 0.0228 / 0.0135 / 0.0248 | 0.0266 / 0.0141 / 0.0284 | 0.0247 / 0.0138 / 0.0266 | 0.71 / 0.81 / 0.85 |
+| G, dense exact read | (lanes at epoch 415 of 500) | | | |
+
+On AirfRANS the three protocols coincide to four digits for every arm: the boundary is the full panel set, so
+the area draw is the native draw, and the posed cases reproduce the native numbers because every arm, the tree
+reads at finite theta included, is pose-equivariant in practice. The tree read at theta 1 beats the interacting
+model by 26% on pressure and 17% on velocity and matches it on eddy viscosity, both seeds; the ladder from theta
+1 to 0.25 is nearly flat on pressure and velocity (0.0258, 0.0245, 0.0247 and 0.0141, 0.0139, 0.0138; the
+seed spread is 0.001 to 0.004) and gains 13% on eddy viscosity at theta 0.25. The read-only model without a
+read is itself level with the interacting model here (0.94 / 1.06 / 1.10), unlike on the car (1.14 / 1.31 /
+1.68): the airfoil's volume field is recoverable from the boundary alone, the car's is not. The dense exact read
+G decides E5's prediction (a) against (b) when its lanes finish.
+
 ### In flight
 
-- E5: twelve AirfRANS lanes (`af_int`, `af_ro`, `af_dense`, `af_tg1`, `af_tg05`, `af_tg025`, seeds 42 and 43;
-  384 / 256, lr 5e-4, 100,000 points, 500 epochs, snapshot `code_dtt12`) submitted 2026-10-08 00:04 PDT, about
-  17 hours each; the car's theta 0.8 lanes submitted 00:20 PDT.
+- E5: the two dense AirfRANS lanes (`af_dense_seed42/43`) at epoch 415 of 500, about an hour from completion
+  and scoring; the other ten arms are scored above. The car's theta 0.8 lanes were cancelled (above).
 - Lanes `dtt_vol_tg1_seed42/43` (E3's TG arms: read-only + tree read at theta 1, leaf 4, RMS orientation tree,
   snapshot `code_dtt11`, 512 / 512, lr 3.75e-4, 200,000, 500 epochs) submitted 2026-10-06 16:42 PDT; accepted at
   16:48 (steps of 1.86 s, 215 to 219 GB per rank, loss 0.062 at epoch 0 like the P lanes', no errors); about 200 s
