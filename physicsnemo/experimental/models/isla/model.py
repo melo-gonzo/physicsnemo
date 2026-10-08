@@ -224,6 +224,7 @@ from physicsnemo.experimental.models.isla.blocks import (
 from physicsnemo.experimental.models.isla.geometry import (
     QueryGeometry,
     nearest_boundary_geometry,
+    patch_boundary_geometry,
     rms_pairwise_distance,
     soft_boundary_geometry,
 )
@@ -335,7 +336,16 @@ class ISLA(Module):
             estimate that converges under refinement of the boundary sample
             for any sampling law. ``"smooth"``: the same average over every
             facing token regardless of side, continuous across the wall
-            (``one_sided=False``). Ignored by a surface model.
+            (``one_sided=False``). ``"patch"``: the exact signed distance to
+            the flat patches the tokens' measures define (a segment of the
+            token's measure around its centroid; the patches tile the surface
+            in expectation under a measure-weighted subsample), its gradient
+            as the direction, and the side from the nearest patch's plane over
+            the patch and from the exact winding number of the patch set
+            beyond it, so behind a sharp edge the side does not depend on which
+            tokens the sample kept (:func:`patch_boundary_geometry`; two
+            spatial dimensions; it equals the stored signed-distance field on
+            the native mesh). Ignored by a surface model.
         query_geometry_width: The kernel width of ``query_geometry="soft"``
             and ``"smooth"`` as a fraction of the length unit (default 0.03).
         hidden: Token width of the slice blocks. The defaults ``hidden=512``,
@@ -496,13 +506,15 @@ class ISLA(Module):
                 "point fields of the interior task; declare them with interior=True"
             )
         ### The prediction points' built-in geometry: the exact nearest boundary
-        ### sample ("nearest") or the measure-weighted kernel average over the
-        ### samples ("soft", kernel width query_geometry_width x the length unit),
-        ### which converges under refinement of the boundary sample for any
-        ### sampling law (geometry.soft_boundary_geometry).
-        if query_geometry not in ("nearest", "soft", "smooth"):
+        ### sample ("nearest"), the measure-weighted kernel average over the
+        ### samples ("soft" / "smooth", kernel width query_geometry_width x the
+        ### length unit; geometry.soft_boundary_geometry), or the exact signed
+        ### distance to the finite patches the samples' measures define, with
+        ### the winding-number side ("patch"; geometry.patch_boundary_geometry,
+        ### two dimensions).
+        if query_geometry not in ("nearest", "soft", "smooth", "patch"):
             raise ValueError(
-                "query_geometry must be 'nearest', 'soft' or 'smooth', "
+                "query_geometry must be 'nearest', 'soft', 'smooth' or 'patch', "
                 f"got {query_geometry!r}"
             )
         if (
@@ -1159,6 +1171,10 @@ class ISLA(Module):
                         width=self.query_geometry_width * gauge.reshape(-1),
                         eps=self.eps,
                         one_sided=self.query_geometry == "soft",
+                    )
+                elif self.query_geometry == "patch":
+                    d, q_nhat = patch_boundary_geometry(
+                        query_points, points, n_hat, log_w[..., 0], eps=self.eps
                     )
                 else:
                     d, q_nhat = nearest_boundary_geometry(

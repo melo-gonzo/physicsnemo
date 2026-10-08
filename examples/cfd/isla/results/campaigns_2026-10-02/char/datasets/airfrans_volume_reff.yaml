@@ -1,0 +1,41 @@
+# AF-GEO resampling protocol for the three-dimensional AirfRANS pipeline (2026-10-07): airfrans_volume.yaml with the airfoil re-panelized at evaluation by SplitLineCells (3 pieces ahead of mid-chord / 1 behind), geometry and measure unchanged;
+# the interior points are the native draw. Evaluation-only: train natively, score the native checkpoint here. Mirrors
+# airfrans_volume_2d_reff.yaml for the GeoTransolver and Transolver references, which train on this pipeline.
+# AirfRANS (Bonnet et al., 2022) as a boundary-to-interior dataset, converted to native DomainMesh files by
+# kernel/airfrans_convert.py (AIRFRANS-INT, 2026-09-21). Two-dimensional incompressible k-omega SST RANS around
+# NACA airfoils at z = 0: interior = point cloud with velocity, pressure (kinematic), nut, sdf (positive outside)
+# and sdf_normals; boundary "airfoil" = line cells with precomputed in-plane normals and segment lengths as the
+# quadrature measure; global_data: U_inf, U_inf_dir, U_inf_mag, aoa_deg, Re, rho_inf = 1, p_inf = 0.
+# Splits come from the dataset's manifest (full_train/full_test, scarce_train, reynolds_*, aoa_*); select with
+# train_split=full_train val_split=full_test.
+train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh
+manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh/manifest.json
+
+pipeline:
+  reader:
+    _target_: ${dp:DomainMeshReader}
+    path: ${train_datadir}
+    pattern: "airFoil2D_SST_*/*.pdmsh"
+    subsample_n_points: ${sampling_resolution}   # interior queries (each case has ~177k points)
+    subsample_n_cells: ${sampling_resolution}    # larger than any airfoil's ~1,000 segments: the boundary is kept whole
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    - _target_: ${dp:NonDimensionalizeByMetadata}
+      fields:
+        velocity: velocity          # U / |U_inf|
+        pressure: pressure          # (p - p_inf) / (0.5 rho_inf |U_inf|^2) with rho_inf = 1, p_inf = 0 (kinematic p)
+        nut: identity
+      association: point_data
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:
+        nut: {type: scalar, mean: 7.9e-4, std: 2.4e-3}   # raw nut [m^2/s], mean and std over the converter per-case statistics (2026-09-21)
+    - _target_: ${dp:SplitLineCells}   # AF-GEO refinement (2026-10-07): every airfoil segment split into 3 / 1 collinear pieces; geometry and measure unchanged
+      pieces_front: 3
+      pieces_back: 1
+
+targets:
+  pressure: scalar
+  nut: scalar
+  velocity: vector
