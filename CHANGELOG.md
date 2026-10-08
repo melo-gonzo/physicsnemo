@@ -58,23 +58,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     functions in `LinearGaussianNoiseScheduler` (`x0_to_flow` / `flow_to_x0`
     / `score_to_flow` / `flow_to_score`) and the corresponding conversion
     callbacks everywhere conversions between prediction types are necessary.
-- Adds `physicsnemo.experimental.models.ISLA` (Invariant Slice Attention), an
-  O(3)/SE(3)-equivariant, measure-aware slice-attention surrogate for steady
-  boundary-value problems. Inputs (global, per-boundary-cell, per-query) and
-  outputs are named fields of declared tensor rank, declared by
-  `global_schema`, `boundary_schema`, `query_schema` and `output_schema`
-  (`output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}, "stress":
-  {"rank": 2, "symmetric": True}}`, see `FieldSchema` under Changed); every
-  input enters through O(3)-invariants
-  and every output leaves through an exactly equivariant basis (ranks up to 4,
-  even or odd parity). `forward` is mesh-native, as GLOBE's: it takes the
-  boundary as named `Mesh` objects, the case's `global_data`, and for an
-  interior task (`interior=True`) the prediction points as a point-cloud
-  `Mesh`, and returns a point-cloud `Mesh` carrying the outputs in its
-  `point_data`. Constructor and `forward` are keyword-only. An exact fused
-  Triton kernel for the per-layer geometry region is selected automatically
-  on CUDA. The unified external-aerodynamics recipe gains ISLA model configs
-  (`isla_surface`, `isla_volume`, `isla_volume_sdf`).
+- Adds `physicsnemo.experimental.models.isla.ISLA` (Invariant Slice
+  Attention), an O(d)/SE(d)-equivariant (any spatial dimension d >= 2),
+  measure-aware slice-attention surrogate for steady boundary-value problems.
+  Inputs (global, per-boundary-cell, per-query) and outputs are named fields of
+  declared tensor rank, declared by `global_schema`, `boundary_schema`,
+  `query_schema` and `output_schema` (`output_schema={"pressure": {"rank": 0},
+  "wss": {"rank": 1}, "stress": {"rank": 2, "symmetric": True}}`, see
+  `FieldSchema` under Changed); every input enters through O(d)-invariants and
+  every output leaves through an exactly equivariant basis (ranks up to 4, even
+  or odd parity). `forward` is mesh-native, as GLOBE's: it takes the boundary as
+  named `Mesh` objects, the case's `global_data`, and for an interior task
+  (`interior=True`) the prediction points as a point-cloud `Mesh`, and returns a
+  point-cloud `Mesh` carrying the outputs in its `point_data`. Constructor and
+  `forward` are keyword-only. An exact fused Triton kernel for the per-layer
+  geometry region is selected automatically on CUDA. The unified
+  external-aerodynamics recipe gains ISLA model configs (`isla_surface`,
+  `isla_volume`, `isla_volume_sdf`).
 - Mesh readers load saved meshes with `tensordict` memory maps opened
   read-only (`physicsnemo.datapipes.readers.mesh.read_only_memory_maps`), so
   page faults on a networked file system no longer take write extent locks
@@ -160,32 +160,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   largest absolute coordinate of the mesh, instead of `tolerance` in mesh
   units. Results no longer depend on the mesh's length unit and are identical
   when the mesh and query points are scaled by a power of two.
-- `physicsnemo.experimental.models.ISLA` routes every slice block (and its head
-  frame) on sample-conditioned prototypes: learned seeds plus a centered,
-  scale-bounded, measure-weighted summary of the sample's own token states.
-  The `slice_prototypes` constructor argument and the static form are removed;
-  checkpoints of the static form no longer load.
-- `physicsnemo.mesh.fields` is rebuilt around two types. `RankSpec` (`rank`,
-  `symmetric`, `parity`; `shape(n_spatial_dims)`, `numel(n_spatial_dims)`) is
-  one field's transformation law; `FieldSchema` is an insertion-ordered
-  mapping from dotted field names to `RankSpec`, parsed once at a model's
-  boundary with `FieldSchema.parse` (nested groups and dotted names flatten
-  alike) and queried with `.ranks`, `.count(rank)`, `FieldSchema.key(name)`
-  and `.check(tensordict, label=...)`. Both are read-only `dict`s, so a
-  declaration serializes to JSON as written and model checkpoints can record
-  them directly. Validation is construction, so an invalid schema cannot
-  exist. A field is declared as a `RankSpec` or a mapping of values,
-  `{"rank": n}` (YAML: `pressure: {rank: 0}`); a mapping of mappings is a
-  nested group. Integer leaves are no longer accepted;
-  ISLA uses the same grammar.
-- GLOBE's field declarations are renamed after the schemas they hold:
-  `output_field_ranks`, `boundary_source_data_ranks` and `global_data_ranks`
-  become `output_schema`, `boundary_source_schemas` and `global_schema`
-  (kernels: `output_schema`, `source_schema`, `global_schema`), each also the
-  attribute holding the parsed `FieldSchema`. GLOBE raises
-  `NotImplementedError` for fields it does not implement (rank 2 and above,
-  pseudotensors) instead of silently dropping or misreading them. The GLOBE
-  examples and the unified external-aerodynamics recipe configs are updated.
 
 ### Deprecated
 
@@ -298,14 +272,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   point has more than 32 BVH candidate cells (for example, near a vertex shared
   by many triangles, or with a prebuilt BVH with `leaf_size > 1`). The BVH
   candidate search used by these functions no longer caps candidates per point.
-- `RandomRotateMesh` stores its `axes` as a tuple. Hydra instantiates
-  transforms with OmegaConf containers, and a `ListConfig` rejected the
-  one-element index tensor drawn for the axis, so every augmented sample
-  raised `KeyValidationError`; a plain sequence indexes by tensor through
-  `__index__`.
-- Unified external aero recipe: near-wall SDF normals ignore subresolution
-  sign noise without reversing resolved interior normals, including on
-  translated geometry. Stored signed distances are unchanged.
 
 ### Security
 

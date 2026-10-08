@@ -53,42 +53,20 @@ from utils import (
     validate_field_coverage,
 )
 
-from physicsnemo.metrics.general.relative_error import relative_l2, relative_mse
-
 from physicsnemo.datapipes.keys import as_nested_key
-from physicsnemo.metrics.general.relative_error import relative_mse
+from physicsnemo.metrics.general.relative_error import relative_l2, relative_mse
 
 _LOGGER = logging.getLogger("training.loss")
 
 DEFAULT_HUBER_DELTA = 1.0
 
+### ``"rmse"`` is a deprecated alias for ``"relative_mse"``: the quantity it
+### always computed is the target-normalized relative MSE (no square root
+### anywhere), so the old name misled anyone comparing against reported RMSE
+### numbers. ``LossCalculator`` rewrites it on construction with a warning.
+### ``"relative_l2"`` is the square root of ``"relative_mse"``.
 LossType = Literal["huber", "mse", "relative_mse", "relative_l2", "rmse"]
-
-### "rmse" is a DEPRECATED alias for "relative_mse" (external-review audit,
-### 2026-07-20): the quantity this branch always computed is target-normalized
-### relative MSE -- there is no square root anywhere -- so the old name was
-### wrong. New configs use "relative_mse" (or "relative_l2" for its root);
-### both delegate to the canonical upstream implementations from #1746.
-_RMSE_ALIAS_WARNED = False
-
-
-def _normalize_loss_type(loss_type: LossType) -> LossType:
-    """Rewrite the deprecated "rmse" alias to "relative_mse", warning once."""
-    if loss_type == "rmse":
-        global _RMSE_ALIAS_WARNED
-        if not _RMSE_ALIAS_WARNED:
-            _RMSE_ALIAS_WARNED = True
-            warnings.warn(
-                'loss_type="rmse" is a deprecated misnomer: the computed '
-                "quantity is target-normalized relative MSE (no square "
-                'root). Use "relative_mse" (identical quantity) or '
-                '"relative_l2" (its square root). The alias routes to '
-                "relative_mse and will be removed.",
-                FutureWarning,
-                stacklevel=3,
-            )
-        return "relative_mse"
-    return loss_type
+_VALID_LOSS_TYPES = ("huber", "mse", "relative_mse", "relative_l2", "rmse")
 
 
 ### ---------------------------------------------------------------------------
@@ -141,7 +119,6 @@ def _scalar_loss(
         if target_measure is None:
             return torch.mean(squared_error)
         return _weighted_query_mean(squared_error, target_measure)
-    loss_type = _normalize_loss_type(loss_type)
     if loss_type == "relative_mse":
         if target_measure is None:
             return relative_mse(pred, target, eps=eps)
@@ -182,11 +159,9 @@ def _vector_loss(
         )
     n_components = pred.shape[-1]
 
-    loss_type = _normalize_loss_type(loss_type)
+    ### Relative MSE / L2: each component normalized by its own target energy
+    ### (reduce over every axis but the last), then summed across components.
     if loss_type == "relative_mse":
-        ### Per-component relative MSE (each component normalized by its own
-        ### target energy), summed across components -- delegating to the
-        ### canonical upstream implementation (#1746).
         if target_measure is None:
             per_component = relative_mse(
                 pred, target, dim=tuple(range(pred.ndim - 1)), eps=eps
@@ -279,11 +254,10 @@ class LossCalculator:
         normalize_by_channels: bool = True,
         delta: float = DEFAULT_HUBER_DELTA,
     ) -> None:
-        valid_loss_types = ("huber", "mse", "relative_mse", "relative_l2", "rmse")
-        if loss_type not in valid_loss_types:
+        if loss_type not in _VALID_LOSS_TYPES:
             raise ValueError(
                 f"Unknown loss_type {loss_type!r}; expected one of "
-                f"{valid_loss_types!r}."
+                f"{_VALID_LOSS_TYPES!r}."
             )
         if loss_type == "rmse":
             ### FutureWarning rather than DeprecationWarning: this is a
