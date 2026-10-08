@@ -35139,3 +35139,105 @@ carries both datasets in one figure and two tables; the ISLA reference
 twins at 1,260 wings (`rb_hl_isla_full_seed42/43`, at epoch 463 of 500
 today) will add the 1,260-wing row to the HiLiftAeroML chapter's ladder
 when they finish and score.
+
+## 2026-10-08 — PATCH-SDF verdict: the exact finite-patch geometry is the best built-in channel natively (16 / 13 / 7 percent better than the nearest reference, better than the kernel forms on pressure and velocity) and its channel is exactly re-panelization invariant, but the trained model moves 0.6 to 0.9 percent posed and degrades 21 to 35x under the 400-segment coarsening with the channel's share at 0.55 to 0.80; the gate stays closed, and the mechanism is the gaps of a sparse boundary draw, not the edge {#sec-nb-patch-sdf-verdict}
+
+**Setting.** The two `sp_af_patch_*` lanes of @sec-nb-patch-sdf-prereg
+(query_geometry="patch", snapshot code_v25, the campaign configuration on
+AirfRANS 2-D with the stored signed-distance inputs, 500 epochs, lr
+3.75e-4, LHR) trained without a trace of trouble and were scored today
+under the native and posed protocols (float32, 200 held-out cases) and
+through the AirfRANS resampling probe with the native-geometry swap
+(`kernel/char/af_geo_sp`, both coarsening laws and both re-panelizations)
+and its chordwise split (`af_geo_sp_le`). The probe's form-agnostic
+recorder had to learn the new geometry function first (it patched the
+nearest form and asserted on zero calls, the same fault the two-sided
+kernel form met on 2026-10-07). Artifact
+`results/char/patch_sdf_lanes_2026-10-08.json` (generator
+`patch_sdf_lanes_2026-10-08.py`; bars computed there).
+
+**Native and posed** (pressure / velocity / eddy viscosity). Patch 0.0306
+/ 0.0148 / 0.0295 (seed 42) and 0.0287 / 0.0150 / 0.0289 (seed 43), two-seed
+means 0.0296 / 0.0149 / 0.0292, against the nearest reference's 0.0352 /
+0.0172 / 0.0315 (seeds 0.0369 / 0.0335, 0.0167 / 0.0177, 0.0317 / 0.0312):
+**both seeds beat the reference's seed range on every field**, by 16, 13
+and 7 percent on the means (bar (iii) passes with room), and the form beats
+the relaunched one-sided kernel lanes (0.0314 / 0.0168 / 0.0284 and 0.0306
+/ 0.0152 / 0.0288) on pressure and velocity and ties them on eddy
+viscosity. Against the baselines this is the smallest pressure gap an
+ISLA built-in channel has shown on AirfRANS (GeoTransolver-256 0.0266,
+11 percent ahead, where the nearest reference trailed by 32 percent),
+velocity 2.5x ahead of GeoTransolver's 0.0378 and eddy viscosity level
+with its 0.0293. **Posed over native: 1.006 / 1.003 / 0.999 and 1.009 /
+1.004 / 1.000 (bar (i), within 1.005, fails on pressure for both seeds).**
+The geometry probes predicted this: the distance is pose-invariant to
+1e-5 chord in float32, but within one radius of a vertex two patches tie
+exactly and rounding picks one patch's normal as the direction (posed RMS
+(1 - cos u) 0.04 to 0.05 in the near and wake bands against the nearest
+form's 0.002 to 0.01), and the trained model reads that as two thirds of a
+percent on pressure. The nearest form reproduces its native numbers to
+five digits; the two-sided kernel form to four.
+
+**Coarsening and refinement.** Under the 400-segment coarsening the patch
+lanes degrade **21.1 / 18.2 / 9.7x (uniform law) and 22.4 / 16.7 / 10.5x
+(length law)** on seed 42 and 35.0 / 17.4 / 5.9x and 33.6 / 17.2 / 4.9x on
+seed 43, more than any form before them (one-sided kernel 5.7 to 12.8x,
+two-sided 5.6 to 7.6x, nearest 9.6 to 15.8x). Restoring the native
+geometry returns them to 2.7 / 1.8 / 1.9x and 4.0 / 2.6 / 2.0x (seed 42),
+3.1 / 1.8 / 2.1x and 4.0 / 2.6 / 1.9x (seed 43), the slice states' share
+that every form pays, so **the built-in channel's share of the log excess
+is 0.55 to 0.80 (bar (ii), below 0.1, fails)**, the same band as the
+kernel forms' 0.33 to 0.85 and the nearest form's 0.52 to 0.85. Under the
+two re-panelizations the lanes read 0.953 to 1.013 of native, with the
+native-geometry swap changing nothing (0.954 / 1.003 / 0.990 against 0.953
+/ 1.002 / 0.990; shares 0.00 to 0.03 where the excess is measurable):
+**the channel itself is exactly invariant to re-panelization**, as the
+exact distance to an unchanged polyline must be, and the 5 percent
+improvement of one seed's pressure under the uniform split is the slice
+states' response to twice the tokens.
+
+**Where the coarsening sensitivity lives, and why.** The chordwise split
+restores the native geometry on one band of the queries at a time. For the
+kernel forms (@sec-nb-soft-geo-verdict) the band behind x = 0.9 recovered
+most of the excess and the other two recovered nothing: the sign and
+direction flips at the sharp trailing edge. For the patch form the order
+reverses: the trailing-edge band recovers little (21.1 to 18.3x on
+pressure, 18.2 to 17.3x on velocity under the uniform law, seed 42), the
+mid-chord band recovers the most (21.1 to 14.1x, 18.2 to 8.6x) and the
+leading-edge band recovers the length law's velocity excess almost
+entirely (16.7 to 5.2x). **The trailing-edge mechanism is fixed, and a
+larger one has taken its place along the whole wall.** The geometry
+probes name it: a Poisson subsample of the cells leaves gaps between the
+measure-stretched patches (at a 40 percent keep rate about one near-wall
+query in seven sits over a gap), and over a gap the exact distance to the
+patch set is the distance to the nearest rim, 10 to 300 times the wall
+distance for the queries that matter most (near-wall RMS change 1.8e-3
+chord against the plane kernel's 4.5e-4, which extrapolates the
+neighbours' tangent planes across the gap). A model trained on the exact
+distance keys its boundary-layer prediction to that distance sharply and
+is unforgiving when the sample lies about it; the kernel forms trained
+on a smoothed distance and the nearest form on a biased one, and both
+degrade less. Exactness on the native mesh and robustness to a sparse
+draw pull in opposite directions for this channel.
+
+**Verdict.** Bars (i) and (ii) fail, (iii) passes, re-panelization passes
+for the channel and nearly for the lane. The SOFT-GEO gate stays closed
+and the architecture frozen. What the result adds to the program's
+picture: (1) the exact signed distance to the measure-defined patches is
+the most accurate built-in channel measured, and it reproduces the stored
+field on the native mesh, so a dataset's stored signed-distance input can
+in principle be replaced by it where the boundary is kept whole; (2) a
+built-in channel for a *sampled* boundary needs the gap-bridging that the
+tangent-plane kernel has, and the kernel needs the edge handling the patch
+form has (rim-clamped distances, the topological side), so the next
+candidate, if the gate is reopened, is a composite: the plane offset of
+the nearest patch across gaps of up to one token spacing and the patch
+distance beyond, with the winding-number side; (3) alternatively, the
+sampler can be made hole-free: a systematic (Morton-ordered) subsample
+has gaps bounded by one spacing, where a Poisson draw's are not, and the
+class already has that sampler (@sec-nb-quadvar-prereg); whether the
+protocol should test coarsening under it as well is Peter's call, since
+the protocol's Poisson law was chosen for its exact inclusion
+probabilities. The `patch` form stays in the library as a research arm
+beside `soft` and `smooth` until Peter rules on the three; the three-
+dimensional form is not written.

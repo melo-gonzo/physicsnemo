@@ -636,6 +636,22 @@ print(f"**The whole of the sensitivity is one input: the queries' built-in neare
 ```
 
 ```{python}
+#| label: para-vol-geo-alternatives
+#| output: asis
+PS = json.load(open(RES / "char" / "patch_sdf_lanes_2026-10-08.json")); SG = json.load(open(RES / "char" / "soft_geo_lanes_2026-10-07.json"))["relaunch_code_v23"]
+patch_share = [v for r in PS["af_geo"].values() for law in ("subu", "suba") for v in r["geometry_share_of_log_excess"][law].values()]
+kern_share = [v for r in SG["af_geo"].values() for law in ("subu", "suba") for v in r["geometry_share_of_log_excess"][law].values()]
+patch_nat = PS["bars"]["iii_native_within_nearest_reference_seed_range"]["per_field"]
+print(f"Two sample-independent replacements for that input were trained and tested on the AirfRANS interior task under a boundary coarsened to 400 of about 1,000 segments: "
+      f"a measure-weighted kernel average of the tokens' tangent-plane distances and normals, and the exact signed distance to the finite patches the tokens' measures define with the side "
+      f"taken from the winding number of the patch set. The second is the most accurate built-in channel measured natively ("
+      f"{', '.join(f'{100 * (1 - patch_nat[f]['ratio_to_nearest_mean']):.0f}%' for f in ('pressure_l2', 'velocity_l2', 'nut_l2'))} better than the nearest-token form on pressure, velocity and eddy viscosity) "
+      f"and reproduces the stored signed-distance field on the native mesh, yet under the coarsening the built-in channel still carries {min(kern_share + patch_share):.2f} to {max(kern_share + patch_share):.2f} "
+      f"of the log excess for every form, the kernel forms through the orientation flips at the sharp trailing edge and the exact form through the gaps of the subsample, over which the exact distance to the "
+      f"patch set is the distance to a rim. A built-in geometry for a sampled boundary needs both the kernel's gap bridging and the patch form's edge handling; neither alone passes, and the nearest-token form stays the reference.")
+```
+
+```{python}
 #| label: para-interior-cost
 #| output: asis
 COST = VOL_COST
