@@ -53,9 +53,16 @@ def initialize_from_checkpoint(
     """
     path = Path(init_from)
     if path.is_dir():
-        files = sorted(path.glob("*.mdlus"), key=lambda p: int(p.stem.split(".")[-1]))
+        ### Only the epoch-suffixed checkpoints save_checkpoint writes; any other
+        ### .mdlus in the directory would break an int() sort key.
+        files = sorted(
+            (p for p in path.glob("*.mdlus") if p.stem.split(".")[-1].isdigit()),
+            key=lambda p: int(p.stem.split(".")[-1]),
+        )
         if not files:
-            raise FileNotFoundError(f"init_from={init_from!r}: no .mdlus files found")
+            raise FileNotFoundError(
+                f"init_from={init_from!r}: no <ModelClass>.<rank>.<epoch>.mdlus files found"
+            )
         path = files[-1]
     if not path.exists():
         raise FileNotFoundError(f"init_from={init_from!r} does not exist")
@@ -163,7 +170,11 @@ def select_tensor_components(
     pairs = [
         SYMMETRIC_TENSOR_COMPONENTS[c] for c in tensor_components(field_type).values()
     ]
-    out_of_plane = [c for c, (i, j) in zip(tensor_components(field_type).values(), pairs) if max(i, j) >= d]
+    out_of_plane = [
+        c
+        for c, (i, j) in zip(tensor_components(field_type).values(), pairs)
+        if max(i, j) >= d
+    ]
     if out_of_plane:
         raise ValueError(
             f"symmetric_tensor components {out_of_plane!r} index a coordinate the {d}-dimensional prediction does not have"
