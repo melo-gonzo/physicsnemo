@@ -64,6 +64,25 @@ dual-tree form was replaced by the per-point walk: a point's pair list now depen
 point alone, so the prediction is 1.000 at every theta to float32 roundoff (ratios within 1e-4). The interacting
 reference's 15x to 24x is the comparison.
 
+## E5. The residual's mechanism: a theta ladder where the dense read is affordable (added 2026-10-08 00:10 PDT, after E3)
+
+E3 failed (TG / I = 1.11 / 1.11 / 1.47 at theta 1 on the car) and E4 passed. Two mechanisms can carry the
+residual: the theta 1 aggregation (the trained kernel wants a finer far field than the car can pay for) or the
+absence of query-to-query interaction (structural to the property). Instrument: AirfRANS (100,000 points, 1,000
+cells), one snapshot (`code_dtt12`), the reference AirfRANS configuration (384 / 256, lr 5e-4, 500 epochs, full
+splits), two seeds (42, 43) of six arms: I interacting; P read-only; G read-only + dense exact global read; TG at
+theta 1, 0.5, 0.25. Scored by the float32 protocol on the 200 held-out airfoils (native, area, posed).
+
+Predictions, written before any lane ran. (a) If the aggregation is not the limiter: TG(theta 1) / G within 1.02
+on every field, and the ladder flat in theta; then the car's residual is structural and ISLA-DTT's accuracy is what
+a read-only model can reach. (b) If the aggregation is the limiter: TG(theta 1) / G above 1.05 on at least one
+field and the ratio falling monotonically towards 1 as theta falls from 1 to 0.25 (convergence of the trained
+model towards its dense limit); then the avenue is cost-limited on GB300 hardware, and the car rung at theta 0.6 to
+0.8 (if the cost probe allows it, step within 6x the floor) measures how much the affordable refinement buys. A
+mixed outcome (short of G, not converging) means the trained tree model is a different optimum, to be reported as
+such. Also recorded: G / I and P / I on this snapshot (the pi lane's 0.72 / 0.83 / 0.89 and 1.04 to 1.42 were on
+its own snapshot; same-snapshot pairs only).
+
 ## Decision
 
 E1 and E2 gate the lanes. E3 and E4 together decide whether ISLA-DTT is proposed as the canonical volume form:
