@@ -36,7 +36,7 @@ forward_kwargs:
   global_data: global_data        # the case's TensorDict; the model selects its declared leaves
 
 model:
-  _target_: physicsnemo.experimental.models.ISLA
+  _target_: physicsnemo.experimental.models.isla.ISLA
   output_schema:
     von_mises: {rank: 0}          # MPa, standardized by the dataset config
   boundary_schema:                # per-boundary-cell inputs, all rank 0 (0/1 labels and the scaled pressure)

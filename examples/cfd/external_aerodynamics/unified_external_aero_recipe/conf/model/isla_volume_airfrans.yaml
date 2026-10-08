@@ -63,7 +63,7 @@ forward_kwargs:
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
 model:
-  _target_: physicsnemo.experimental.models.ISLA
+  _target_: physicsnemo.experimental.models.isla.ISLA
   output_schema:                 # the dataset's targets, by name and tensor rank
     velocity: {rank: 1}
     pressure: {rank: 0}

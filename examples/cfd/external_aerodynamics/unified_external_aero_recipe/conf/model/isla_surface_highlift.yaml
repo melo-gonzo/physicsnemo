@@ -73,7 +73,7 @@ forward_kwargs:
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
 model:
-  _target_: physicsnemo.experimental.models.ISLA
+  _target_: physicsnemo.experimental.models.isla.ISLA
   output_schema:                 # the HiLift wing targets, by name and tensor rank (0 scalar, 1 vector)
     pressure: {rank: 0}
     temperature: {rank: 0}

@@ -337,7 +337,7 @@ to set it above 1.
 
 ### ISLA (Invariant Slice Attention)
 
-`physicsnemo.experimental.models.ISLA` is an equivariant slice-attention
+`physicsnemo.experimental.models.isla.ISLA` is an equivariant slice-attention
 surrogate for steady boundary-value problems. It is mesh-native, on the
 same contract as GLOBE (`input_type: mesh`, `output_type: mesh`): `forward()`
 takes the boundary as named `Mesh` objects (`boundary_meshes`), the case's

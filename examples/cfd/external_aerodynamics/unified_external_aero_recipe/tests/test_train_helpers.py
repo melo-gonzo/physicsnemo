@@ -122,7 +122,7 @@ def test_isla_training_on_thin_triangles(device):
     from collate import build_collate_fn
 
     from physicsnemo.datapipes.transforms.mesh import MeshToDomainMesh
-    from physicsnemo.experimental.models import ISLA
+    from physicsnemo.experimental.models.isla import ISLA
     from physicsnemo.mesh.calculus import cell_measures, scale_measures
 
     mesh = Mesh(

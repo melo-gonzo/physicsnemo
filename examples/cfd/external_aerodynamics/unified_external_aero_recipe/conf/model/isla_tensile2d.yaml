@@ -37,7 +37,7 @@ forward_kwargs:
   global_data: global_data        # the case's TensorDict; the model selects its declared leaves
 
 model:
-  _target_: physicsnemo.experimental.models.ISLA
+  _target_: physicsnemo.experimental.models.isla.ISLA
   output_schema:                  # the dataset's targets, by name and tensor rank
     q: {rank: 0}                  # cumulated plastic strain
     displacement: {rank: 1}       # in-plane displacement (two components after RestrictToPlane)
