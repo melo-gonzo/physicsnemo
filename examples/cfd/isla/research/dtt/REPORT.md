@@ -254,8 +254,19 @@ read at theta 1 matches the dense read there, the aggregation is not the limiter
 structural; if it falls short and converges towards the dense read as theta falls, the avenue is cost-limited on
 this hardware, and the theta 0.6 to 0.8 rung on the car (cost probe in flight) says how much of it can be bought.
 
+### The car's affordable rung (cost probe, job 126618, merged snapshot)
+
+theta 0.8: 3.6e8 pairs per block, step 2.72 s (5.7x the floor, inside the 6x bar), peak 259 GiB of 277. theta 0.7
+and 0.6: out of memory. theta 0.8 is therefore the finest rung the car allows on a GB300 and is launched as the
+car's point of E5 (lanes `dtt_vol_tg08_seed42/43`, snapshot `code_dtt12`, otherwise as the theta 1 lanes); the
+training lanes carry a few more GiB than the probe, so they may not fit, in which case the chain blocks itself and
+that is the record.
+
 ### In flight
 
+- E5: twelve AirfRANS lanes (`af_int`, `af_ro`, `af_dense`, `af_tg1`, `af_tg05`, `af_tg025`, seeds 42 and 43;
+  384 / 256, lr 5e-4, 100,000 points, 500 epochs, snapshot `code_dtt12`) submitted 2026-10-08 00:04 PDT, about
+  17 hours each; the car's theta 0.8 lanes submitted 00:20 PDT.
 - Lanes `dtt_vol_tg1_seed42/43` (E3's TG arms: read-only + tree read at theta 1, leaf 4, RMS orientation tree,
   snapshot `code_dtt11`, 512 / 512, lr 3.75e-4, 200,000, 500 epochs) submitted 2026-10-06 16:42 PDT; accepted at
   16:48 (steps of 1.86 s, 215 to 219 GB per rank, loss 0.062 at epoch 0 like the P lanes', no errors); about 200 s
