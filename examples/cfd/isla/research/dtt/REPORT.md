@@ -1,13 +1,28 @@
 # ISLA-DTT report
 
-## Status (2026-10-06 night PDT)
+## Status (2026-10-08 17:00 PDT): E1 to E5 closed
 
-Where the program stands after one day: the tree read is implemented, exact at theta = 0 and exactly query
-independent at every theta, and verified at unit and checkpoint level; it is not yet usable, for two measured
+The program's result in three sentences. A read-only ISLA whose global boundary read runs through a tree
+(exact at theta 0, exactly query independent at every theta, frame-free in practice) trains and scores at car scale
+within 3.8x of the read-only step; on AirfRANS it beats the interacting reference by 26% on pressure and 17% on
+velocity and reproduces the dense exact read within seed noise, and on DrivAerML Volume it trails the interacting
+reference by 11% / 11% / 47% (pressure / velocity / eddy viscosity) while recovering part of the read-only
+model's 14% / 31% / 68% gap. The car's residual is structural: it is what a boundary-only read can supply to a
+point in a three-dimensional wake, the regime where the interacting model's query tokens inform one another, and
+not the tree's aggregation, which the AirfRANS ladder shows costs nothing resolvable at theta 1. Under the
+preregistration the E3 bars fail, so ISLA-DTT is not proposed as the canonical volume form; it is the volume form
+to choose when query-population independence is required, at a known accuracy price on the car and none on the
+airfoil.
+
+Sections below are the dated record, oldest first.
+
+### Status as of 2026-10-06 night PDT
+
+Where the program stood after one day: the tree read was implemented, exact at theta = 0 and exactly query
+independent at every theta, and verified at unit and checkpoint level; it was not yet usable, for two measured
 reasons. (1) **Accuracy**: with the dense-trained kernel, the cluster monopole is far too crude at every theta
-(E2 below). (2) **Cost**: at DrivAerML Volume scale the per-point lists are 550 to 1,400 sources and the first
-implementation spends 20 to 35 times the read-only step on them. Both are being worked: a decomposition probe of
-the monopole error is running, and a profile of the step is queued.
+(E2 below). (2) **Cost**: at DrivAerML Volume scale the per-point lists were 550 to 1,400 sources and the first
+implementation spent 20 to 35 times the read-only step on them. Both were worked through the night (below).
 
 ### Done
 
@@ -275,7 +290,30 @@ pressure / velocity / eddy viscosity relative L2, one snapshot (`code_dtt12`), 5
 | TG, tree read, theta 1 | 0.0261 / 0.0138 / 0.0325 | 0.0255 / 0.0143 / 0.0288 | 0.0258 / 0.0141 / 0.0307 | 0.74 / 0.83 / 0.98 |
 | TG, theta 0.5 | 0.0223 / 0.0131 / 0.0307 | 0.0266 / 0.0146 / 0.0309 | 0.0245 / 0.0139 / 0.0308 | 0.70 / 0.82 / 0.98 |
 | TG, theta 0.25 | 0.0228 / 0.0135 / 0.0248 | 0.0266 / 0.0141 / 0.0284 | 0.0247 / 0.0138 / 0.0266 | 0.71 / 0.81 / 0.85 |
-| G, dense exact read | (lanes at epoch 415 of 500) | | | |
+| G, dense exact read | 0.0274 / 0.0137 / 0.0325 | 0.0245 / 0.0133 / 0.0250 | 0.0260 / 0.0135 / 0.0288 | 0.74 / 0.79 / 0.92 |
+
+### E5 verdict (2026-10-08 17:00 PDT)
+
+Tree read over dense read, seed means, pressure / velocity / eddy viscosity: 0.99 / 1.04 / 1.07 at theta 1,
+0.94 / 1.03 / 1.07 at theta 0.5, 0.95 / 1.02 / 0.92 at theta 0.25. The dense read's own two seeds differ by 11%
+on pressure and 26% on eddy viscosity, so differences of this size between arms are below what two seeds resolve.
+Against the preregistered predictions: (a) asked for the tree read within 1.02 of the dense read on every field;
+pressure passes (the tree read is level or better), velocity is at 1.04 falling to 1.02, eddy viscosity at 1.07
+twice then 0.92, all inside the seed spread. (b) asked for a ratio above 1.05 that falls monotonically with theta;
+the one field above 1.05, eddy viscosity, does not fall monotonically. The honest reading is prediction (a) in
+substance: on the airfoil, aggregating the boundary into about 70 virtual cells per point at theta 1 costs at most
+a few percent and nothing resolvable on pressure, and the trained tree read reproduces the dense read's 26% / 21% /
+8% advantage over the interacting model.
+
+What this says about the car. The same architecture that beats the interacting model on the airfoil trails it by
+11% / 11% / 47% on the car, and the read-only model without any read is level with the interacting model on the
+airfoil but 14% / 31% / 68% behind it on the car. The car's residual therefore sits in what a boundary-only read
+can supply to a point in a three-dimensional wake, not in how finely the tree aggregates that boundary; the
+property this program bought, exact query independence, is paid for in exactly the regime where query tokens
+inform one another. Two caveats stand: the car's far field at theta 1 is 470 virtual cells for 200,000 boundary
+cells where the airfoil's is 70 for 1,000, a coarser relative coverage that this ladder does not probe (the car
+cannot afford a finer rung); and these are two-seed results on two datasets, so the ratios carry the spreads
+quoted above.
 
 On AirfRANS the three protocols coincide to four digits for every arm: the boundary is the full panel set, so
 the area draw is the native draw, and the posed cases reproduce the native numbers because every arm, the tree
@@ -289,8 +327,8 @@ G decides E5's prediction (a) against (b) when its lanes finish.
 
 ### In flight
 
-- E5: the two dense AirfRANS lanes (`af_dense_seed42/43`) at epoch 415 of 500, about an hour from completion
-  and scoring; the other ten arms are scored above. The car's theta 0.8 lanes were cancelled (above).
+- Nothing training. Remaining: the second dense lane's area and posed protocol rows (a formality on AirfRANS,
+  where the protocols coincide), job 133121.
 - Lanes `dtt_vol_tg1_seed42/43` (E3's TG arms: read-only + tree read at theta 1, leaf 4, RMS orientation tree,
   snapshot `code_dtt11`, 512 / 512, lr 3.75e-4, 200,000, 500 epochs) submitted 2026-10-06 16:42 PDT; accepted at
   16:48 (steps of 1.86 s, 215 to 219 GB per rank, loss 0.062 at epoch 0 like the P lanes', no errors); about 200 s
