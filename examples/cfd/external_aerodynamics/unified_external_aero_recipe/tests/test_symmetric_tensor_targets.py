@@ -50,7 +50,7 @@ from utils import (
     target_field_names,
 )
 
-from physicsnemo.experimental.models import ISLA
+from physicsnemo.experimental.models.isla import ISLA
 from physicsnemo.mesh import DomainMesh, Mesh
 from physicsnemo.mesh.calculus.measure import set_cell_measures
 
@@ -111,6 +111,7 @@ def _as_scalar_output(out: Mesh) -> Mesh:
 
 
 def test_type_helpers():
+    """field_kind, field_loss_channels, field_dim and target_field_names on a symmetric-tensor target."""
     assert field_kind(STRESS) == "symmetric_tensor"
     assert field_loss_channels(STRESS) == 3
     with pytest.raises(ValueError, match="no flat channel layout"):
@@ -137,6 +138,7 @@ def test_type_helpers():
 
 
 def test_extract_and_select_agree_on_layout():
+    """Targets and predictions lay a symmetric tensor out as its listed components, in target order."""
     domain = _domain()
     targets = extract_targets(domain, TENSOR_TARGETS)
     pd = domain.interior.point_data
@@ -166,7 +168,10 @@ def test_extract_and_select_agree_on_layout():
     with pytest.raises(ValueError, match="must have 3 dims"):
         bad = Mesh(
             points=out.points,
-            point_data={**dict(out.point_data.items()), "stress": out.point_data["displacement"]},
+            point_data={
+                **dict(out.point_data.items()),
+                "stress": out.point_data["displacement"],
+            },
         )
         select_mesh_fields_by_target(bad, TENSOR_TARGETS)
     with pytest.raises(TypeError):
@@ -194,6 +199,7 @@ def test_loss_equals_the_same_components_as_scalars(loss_type):
 
 
 def test_metrics_keep_the_component_names():
+    """Tensor-target metrics carry the component names the same fields have as scalar targets."""
     domain = _domain()
     out = _mesh_output()
     t_pred = select_mesh_fields_by_target(out, TENSOR_TARGETS)
@@ -220,6 +226,7 @@ def test_metrics_keep_the_component_names():
 
 
 def test_explode_tensor_targets_round_trips_to_component_fields():
+    """Exploding a tensor target recovers its component fields; scalar-only targets pass through."""
     domain = _domain()
     t_true = extract_targets(domain, TENSOR_TARGETS)
     s_true = extract_targets(domain, SCALAR_TARGETS)
@@ -261,7 +268,11 @@ def test_isla_end_to_end_through_collate_and_loss():
     fk = batch["forward_kwargs"]
     assert fk["boundary_meshes"]["outer"] is surface
     model = ISLA(
-        output_schema={"q": {"rank": 0}, "stress": {"rank": 2, "symmetric": True}, "displacement": {"rank": 1}},
+        output_schema={
+            "q": {"rank": 0},
+            "stress": {"rank": 2, "symmetric": True},
+            "displacement": {"rank": 1},
+        },
         global_schema={"load_dir": {"rank": 1}},
         boundary_schema={"traction": {"rank": 1}, "fixed": {"rank": 0}},
         hidden=16,
@@ -297,9 +308,15 @@ def test_select_tensor_components_accepts_a_planar_2x2_tensor():
     t = torch.randn(5, 2, 2)
     out = select_tensor_components(t, STRESS)
     assert out.shape == (5, 3)
-    assert torch.equal(out[:, 0], t[:, 0, 0]) and torch.equal(out[:, 1], t[:, 1, 1]) and torch.equal(out[:, 2], t[:, 0, 1])
+    assert (
+        torch.equal(out[:, 0], t[:, 0, 0])
+        and torch.equal(out[:, 1], t[:, 1, 1])
+        and torch.equal(out[:, 2], t[:, 0, 1])
+    )
     with pytest.raises(ValueError, match="does not have"):
-        select_tensor_components(t, {"type": "symmetric_tensor", "components": {"s33": "zz"}})
+        select_tensor_components(
+            t, {"type": "symmetric_tensor", "components": {"s33": "zz"}}
+        )
     with pytest.raises(ValueError, match="d in"):
         select_tensor_components(torch.randn(5, 4, 4), STRESS)
 
@@ -329,18 +346,35 @@ def test_stress_l2_is_one_frobenius_formula_for_both_target_paths_and_rotation_i
     m_t = MetricCalculator(tensor, metrics=["l2"])(
         TensorDict({"q": q_p, "stress": p}), TensorDict({"q": q_t, "stress": t})
     )
-    assert "stress_l2" in m_s.keys() and "stress_l2" in MetricCalculator(scalars, metrics=["l2"]).expected_keys()
+    assert (
+        "stress_l2" in m_s.keys()
+        and "stress_l2" in MetricCalculator(scalars, metrics=["l2"]).expected_keys()
+    )
     torch.testing.assert_close(m_s["stress_l2"], m_t["stress_l2"])
     for k in ("sig11_l2", "sig22_l2", "sig12_l2"):
         torch.testing.assert_close(m_s[k], m_t[k])
     ### Frobenius by hand: off-diagonal twice.
-    fro = lambda a, b: math.sqrt(float(((a - b)[:, :2] ** 2).sum() + 2 * ((a - b)[:, 2] ** 2).sum())) / math.sqrt(float((b[:, :2] ** 2).sum() + 2 * (b[:, 2] ** 2).sum()))
+    fro = lambda a, b: math.sqrt(
+        float(((a - b)[:, :2] ** 2).sum() + 2 * ((a - b)[:, 2] ** 2).sum())
+    ) / math.sqrt(float((b[:, :2] ** 2).sum() + 2 * (b[:, 2] ** 2).sum()))
     assert abs(float(m_t["stress_l2"]) - fro(p, t)) < 1e-5
     ### Rotation invariance of the aggregate; per-component errors change.
     c, s_ = math.cos(0.7), math.sin(0.7)
+
     def rot(v):
         xx, yy, xy = v[:, 0], v[:, 1], v[:, 2]
-        return torch.stack([c * c * xx + s_ * s_ * yy - 2 * c * s_ * xy, s_ * s_ * xx + c * c * yy + 2 * c * s_ * xy, c * s_ * (xx - yy) + (c * c - s_ * s_) * xy], -1)
-    m_r = MetricCalculator(tensor, metrics=["l2"])(TensorDict({"q": q_p, "stress": rot(p)}), TensorDict({"q": q_t, "stress": rot(t)}))
+        return torch.stack(
+            [
+                c * c * xx + s_ * s_ * yy - 2 * c * s_ * xy,
+                s_ * s_ * xx + c * c * yy + 2 * c * s_ * xy,
+                c * s_ * (xx - yy) + (c * c - s_ * s_) * xy,
+            ],
+            -1,
+        )
+
+    m_r = MetricCalculator(tensor, metrics=["l2"])(
+        TensorDict({"q": q_p, "stress": rot(p)}),
+        TensorDict({"q": q_t, "stress": rot(t)}),
+    )
     torch.testing.assert_close(m_r["stress_l2"], m_t["stress_l2"], rtol=1e-5, atol=1e-6)
     assert not torch.allclose(m_r["sig11_l2"], m_t["sig11_l2"])

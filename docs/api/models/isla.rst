@@ -1,8 +1,9 @@
 ISLA
 ====
 
-ISLA (Invariant Slice Attention) is an O(3)/SE(3)-equivariant, measure-aware
-slice-attention surrogate for steady boundary-value problems. A boundary sample
+ISLA (Invariant Slice Attention) is an O(d)/SE(d)-equivariant (any spatial
+dimension d >= 2), measure-aware slice-attention surrogate for steady
+boundary-value problems. A boundary sample
 (positions, unit normals, quadrature measures) goes in together with the
 problem's data as *named fields of declared tensor rank*: global inputs (a
 direction, a PDE parameter), per-boundary-cell inputs (a condition tag, a
@@ -14,7 +15,7 @@ only on invariants of the per-point vector set, and the frame is re-attached
 at the heads, so rotation, reflection and translation covariance hold by
 construction.
 
-ISLA lives in ``physicsnemo.experimental.models`` and may change between
+ISLA lives in ``physicsnemo.experimental.models.isla`` and may change between
 releases.
 
 Rank specs
@@ -58,19 +59,17 @@ a ``TensorDict`` or mapping; for an interior task (``interior=True``) the
 prediction points are a point-cloud ``Mesh`` (or a bare ``(N, dim)`` tensor
 when ``query_schema`` declares no fields). The result is a point-cloud ``Mesh``
 whose ``point_data`` holds the declared outputs. Every constructor argument
-and every ``forward`` input is keyword-only. The reference configuration (the
-class defaults) on a surface task:
+and every ``forward`` input is keyword-only. The reference configuration on a
+surface task is the class defaults (``hidden=512``, ``n_layers=12``,
+``n_slices=512``, ``mlp_ratio=4``) with ``geo_checkpoint=True``, as the recipe
+configures it:
 
 .. code-block:: python
 
     model = ISLA(
         output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}},  # a scalar and a vector field
         global_schema={"U_inf_dir": {"rank": 1}},  # one global direction
-        hidden=384,
-        n_layers=12,
-        n_slices=256,
-        mlp_ratio=4,
-        geo_checkpoint=True,
+        geo_checkpoint=True,  # rebuild geometric invariants in backward: less memory
     )
     out = model(
         boundary_meshes={"vehicle": surface},       # Mesh[2, 3], cells with normals
@@ -80,7 +79,8 @@ class defaults) on a surface task:
     out.point_data["wss"]                           # (N, 3)
 
 A tensor-valued target is declared with its rank
-(``output_schema={"stress": {"rank": 2, "symmetric": True}}`` gives ``(N, 3, 3)``);
+(``output_schema={"stress": {"rank": 2, "symmetric": True}}`` gives ``(N, 3, 3)``
+in three dimensions);
 a prescribed boundary vector is a rank-1 boundary input
 (``boundary_schema={"traction": {"rank": 1}}``, read from each boundary mesh's
 ``cell_data["traction"]``). An interior task is built with ``interior=True``

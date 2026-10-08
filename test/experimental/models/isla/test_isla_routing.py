@@ -40,10 +40,17 @@ def test_cosine_routing_logits_are_bounded_and_bias_free():
     r = _RoutingLogits(64, 32)
     assert r.weight.shape == (32, 64)
     # the seeds, the key and value maps of the prototype synthesis and its gain; no bias anywhere
-    assert set(dict(r.named_parameters())) == {"weight", "k_proj.weight", "v_proj.weight", "gain"}
+    assert set(dict(r.named_parameters())) == {
+        "weight",
+        "k_proj.weight",
+        "v_proj.weight",
+        "gain",
+    }
     with torch.no_grad():
         r.weight.mul_(1000.0)  # however large the seeds grow ...
-        r.k_proj.weight.mul_(1000.0); r.v_proj.weight.mul_(1000.0); r.gain.fill_(1000.0)  # ... or the synthesis maps ...
+        r.k_proj.weight.mul_(1000.0)
+        r.v_proj.weight.mul_(1000.0)
+        r.gain.fill_(1000.0)  # ... or the synthesis maps ...
         x = torch.randn(2, 50, 64) * 100.0  # ... or the state
         out = r(x)
     assert ROUTING_TEMPERATURE == 10.0
@@ -52,7 +59,18 @@ def test_cosine_routing_logits_are_bounded_and_bias_free():
 
 def test_cosine_routing_keeps_the_contracts_and_all_parameters_train():
     torch.manual_seed(0)
-    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True).double().eval()
+    m = (
+        ISLA(
+            output_schema=PV,
+            global_schema={"g": {"rank": 1}},
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
+            interior=True,
+        )
+        .double()
+        .eval()
+    )
     pts, nrm, w, drv = cloud(300)
     mesh = soup(pts, nrm, w)
     q = orthogonal(3, 0)
@@ -61,7 +79,13 @@ def test_cosine_routing_keeps_the_contracts_and_all_parameters_train():
 
     def run(mesh, g, q):
         with torch.no_grad():
-            return outputs(m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": g}))
+            return outputs(
+                m(
+                    boundary_meshes={"wall": mesh},
+                    prediction_points=q,
+                    global_data={"g": g},
+                )
+            )
 
     base = run(mesh, drv, probe)
     moved = run(transform(mesh, q, shift), drv @ q.T, probe @ q.T + shift)
@@ -70,7 +94,13 @@ def test_cosine_routing_keeps_the_contracts_and_all_parameters_train():
     assert torch.allclose(moved["v"], base["v"] @ q.T, atol=1e-10)
     assert all(torch.allclose(rescaled[k], base[k], atol=1e-9) for k in base)
     m.train()
-    out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=probe, global_data={"g": drv}))
+    out = outputs(
+        m(
+            boundary_meshes={"wall": mesh},
+            prediction_points=probe,
+            global_data={"g": drv},
+        )
+    )
     sum(o.square().mean() for o in out.values()).backward()
     missing = [n for n, p in m.named_parameters() if p.grad is None]
     assert not missing, missing

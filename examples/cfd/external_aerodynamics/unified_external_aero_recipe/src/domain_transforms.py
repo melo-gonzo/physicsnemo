@@ -15,34 +15,23 @@
 # limitations under the License.
 
 """
-Recipe-local DomainMesh-aware datapipe components for boundary-typed
-surface tasks.
+Recipe-local datapipe components that the library does not provide.
 
-The recipe's stock surface pipeline reads a *single* boundary Mesh out of
-each ``.pdmsh`` (``pattern: .../boundaries/vehicle``) and terminates in
-``MeshToDomainMesh``, so every other typed boundary in the file (the
-curated DrivAerML layout carries ``vehicle``, ``no_slip``, ``slip``,
-``inlet``, ``outlet``) is dropped before the model ever sees it.  Models
-that consume the full boundary-value problem instead read the whole
-``DomainMesh`` -- which leaves these gaps this module fills:
-
-- The stock ``DomainMeshReader`` applies its cell AND point subsample caps
-  uniformly to every mesh; the point cap destroys most of a cell-carrying
-  boundary's cells after the cell cap has already compacted it (the
-  measured 378-cell vehicle starvation).
-  :class:`TopologyAwareDomainMeshReader` applies the cell cap to
-  cell-carrying meshes and the point cap to point clouds only.
-- No stock transform converts a loaded ``DomainMesh`` (volume interior +
-  many boundaries) into the recipe's *surface-task* contract (interior =
-  one boundary's cell centroids carrying the targets) while keeping every
-  boundary: ``MeshToDomainMesh.apply_to_domain`` is an identity
-  passthrough.  :class:`BoundaryMeshToDomainMesh` adds exactly that
-  domain-aware path.
-- ``NonDimensionalizeByMetadata`` never touches ``global_data``, so a
-  declared freestream drive would be the RAW physical vector.
-  :class:`ComputeFreestreamDirection` derives the unit direction as a new
-  global leaf (leaving ``U_inf`` intact for inference-side
-  re-dimensionalization).
+- :class:`ComputeFreestreamDirection` writes the unit freestream direction
+  as a new ``global_data`` leaf (``U_inf`` stays physical for inference-side
+  re-dimensionalization); ISLA reads it as its global direction.
+- Samplers with exact per-cell Horvitz-Thompson weights beyond the library's
+  uniform ``SubsampleMesh``: :class:`PrefixPlusRandomSubsampleMesh`,
+  :class:`PoissonBiasedSubsampleMesh`, :class:`StratifiedSubsampleMesh` and
+  :class:`SdfBiasedSubsampleInteriorPoints`.
+- Evaluation protocols: :class:`FixedRandomPose` (a deterministic per-case
+  rigid pose) with :class:`CaseKeyDomainMeshReader`, and
+  :class:`FixedDrawDomainMeshReader` (an epoch-independent subsample).
+- Field and geometry adapters for datasets outside external aerodynamics:
+  :class:`SetConstantCellField`, :class:`StackScalarFields`,
+  :class:`SqueezeScalarFields`, :class:`SplitGlobalVector`,
+  :class:`RestrictToPlane`, :class:`SplitLineCells`,
+  :class:`DropDegenerateCells` and :class:`ComposeQuadratureMeasure`.
 
 Recipe-local module registered into the global datapipe component registry
 so the classes can be referenced via ``${dp:...}`` short names in Hydra
@@ -60,11 +49,9 @@ from typing import Literal
 import torch
 from tensordict import TensorDict
 
-from physicsnemo.datapipes._rng import spawn_generator
-from physicsnemo.datapipes.readers.mesh import DomainMeshReader, _subsample_mesh
+from physicsnemo.datapipes.readers.mesh import DomainMeshReader
 from physicsnemo.datapipes.registry import register
 from physicsnemo.datapipes.transforms.mesh import (
-    MeshToDomainMesh,
     RandomRotateMesh,
     SubsampleMesh,
 )
@@ -73,79 +60,13 @@ from physicsnemo.datapipes.transforms.mesh.transforms import (
     _compact_points,
 )
 from physicsnemo.mesh import DomainMesh, Mesh
-from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, cell_measures, scale_measures
+from physicsnemo.mesh.calculus.measure import (
+    EFFECTIVE_MEASURE_KEY,
+    cell_measures,
+    scale_measures,
+)
 from physicsnemo.mesh.projections import project
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
-
-
-@register()
-class TopologyAwareDomainMeshReader(DomainMeshReader):
-    r"""``DomainMeshReader`` whose subsample caps respect mesh topology.
-
-    The stock reader applies BOTH ``subsample_n_cells`` and
-    ``subsample_n_points`` to EVERY mesh.  For a cell-carrying boundary
-    that combination is destructive: the cell cap keeps ``n_cells`` cells
-    and compacts unreferenced points (~3 unique points per cell when the
-    on-disk cell order is shuffled, as in the curated DrivAerML files),
-    and the subsequent point cap slices a contiguous point block that
-    keeps only cells with ALL vertices inside it -- roughly
-    ``fraction**3`` of the cells.  Measured on BC-labeled DrivAerML run_1
-    at ``sampling_resolution=10000``: the 17.7M-cell vehicle boundary
-    collapsed to 378 cells (~``(1/3)**3 * 10k``), silently starving the
-    all-boundary arm's source set while the vehicle-only arm (cell cap
-    only) fed the full 10k cells.
-
-    This reader instead applies the CELL cap to meshes that have cells
-    (the boundaries) and the POINT cap only to point clouds (the volume
-    interior) -- the only combination that both bounds the 165.8M-point
-    interior at read time and leaves boundary cell counts at the requested
-    resolution.  Meshes below their cap pass through complete.
-    """
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        ### Take ownership of the caps: the parent's uniform subsample pass
-        ### in __getitem__ is disabled (both attributes None) and the split
-        ### rule below runs inside _load_sample instead.
-        self._cell_mesh_n_cells = self.subsample_n_cells
-        self._point_cloud_n_points = self.subsample_n_points
-        self.subsample_n_cells = None
-        self.subsample_n_points = None
-
-    def _cap(self, mesh: Mesh, generator: torch.Generator | None) -> Mesh:
-        if mesh.n_cells > 0:
-            return _subsample_mesh(
-                mesh,
-                n_cells=self._cell_mesh_n_cells,
-                n_points=None,
-                generator=generator,
-            )
-        return _subsample_mesh(
-            mesh,
-            n_cells=None,
-            n_points=self._point_cloud_n_points,
-            generator=generator,
-        )
-
-    def _load_sample(self, index: int) -> DomainMesh:
-        dm = super()._load_sample(index)
-        ### Per-(seed, epoch, index) generator, matching the parent reader's
-        ### post-#1742 derivation (the shared mutable `_subsample_generator`
-        ### is gone; per-index spawning is what makes subsampling reproducible
-        ### independent of read order and epoch -- the set_epoch drift fix).
-        generator = (
-            None
-            if self._seed_base is None
-            else spawn_generator(self._seed_base, self._epoch, index)
-        )
-        return DomainMesh(
-            interior=self._cap(dm.interior, generator),
-            boundaries={
-                name: self._cap(dm.boundaries[name], generator)
-                for name in dm.boundary_names
-            },
-            global_data=dm.global_data,
-        )
 
 
 @register()
@@ -231,56 +152,6 @@ class ComputeFreestreamDirection(MeshTransform):
 
 
 @register()
-class BoundaryMeshToDomainMesh(MeshToDomainMesh):
-    r"""``MeshToDomainMesh`` whose ``DomainMesh`` path re-targets one boundary.
-
-    On a bare ``Mesh`` this behaves exactly like the base transform.  On a
-    ``DomainMesh`` (where the base class is an identity passthrough) it
-    rebuilds the recipe's surface-task contract *without dropping the other
-    boundaries*:
-
-    - ``interior`` becomes a point cloud at ``boundaries[boundary_name]``'s
-      cell centroids (or vertices, per ``interior_points``), with the
-      declared target fields moved into ``interior.point_data``;
-    - ``boundaries[boundary_name]`` is kept with its target fields stripped
-      (so consumers cannot read targets through the boundary);
-    - every *other* boundary passes through unchanged -- this is what
-      exposes the full typed-boundary set (``vehicle``, ``no_slip``,
-      ``slip``, ``inlet``, ``outlet``) to boundary-typed models;
-    - the previous (volume) interior is discarded;
-    - domain-level ``global_data`` passes through unchanged.
-
-    The class name deliberately ends in ``MeshToDomainMesh`` so the dataset
-    builder's target auto-injection (``datasets._maybe_inject_targets``)
-    fills ``cell_data_targets`` / ``point_data_targets`` from the dataset
-    YAML's ``targets:`` block exactly as for the base transform.
-    """
-
-    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:  # type: ignore[override]
-        """Convert the selected boundary into a surface prediction domain."""
-        available = list(domain.boundary_names)
-        if self._boundary_name not in available:
-            raise KeyError(
-                f"BoundaryMeshToDomainMesh: boundary {self._boundary_name!r} "
-                f"not found in DomainMesh (available: {available!r})."
-            )
-        ### Reuse the base single-Mesh conversion (including its diagonal
-        ### validation and error messages) to split the named boundary into
-        ### (interior-with-targets, boundary-without-targets)...
-        converted = super().__call__(domain.boundaries[self._boundary_name])
-        ### ...then keep every other boundary and the domain-level
-        ### global_data (the converted DomainMesh's global_data is the
-        ### boundary's own, which is not the case-level record).
-        new_boundaries = {name: domain.boundaries[name] for name in available}
-        new_boundaries[self._boundary_name] = converted.boundaries[self._boundary_name]
-        return DomainMesh(
-            interior=converted.interior,
-            boundaries=new_boundaries,
-            global_data=domain.global_data,
-        )
-
-
-@register()
 class PrefixPlusRandomSubsampleMesh(SubsampleMesh):
     r"""Deterministic-prefix + random-complement subsampling (probe P4).
 
@@ -333,76 +204,6 @@ class PrefixPlusRandomSubsampleMesh(SubsampleMesh):
 ### Contract-axis probe transforms (prereg: contract_axis_probes_2026-08-09)
 ### Job-local additions for the 2026-08-06-defect4-incumbent task dir.
 ### ---------------------------------------------------------------------
-
-
-@register()
-class ScaleGlobalField(MeshTransform):
-    r"""Multiply one global_data field by a constant factor (probe P2).
-
-    Applied to the global direction input only: ``U_inf_dir`` for ISLA (the
-    recipe's unit direction, scaled to amplitude ``factor``) or ``U_inf`` for
-    GeoTransolver (its physical-velocity global embedding).
-    """
-
-    def __init__(self, field_name: str, factor: float) -> None:
-        super().__init__()
-        self.field_name = field_name
-        self.factor = float(factor)
-
-    def __call__(self, mesh: Mesh) -> Mesh:
-        new_gd = mesh.global_data.clone()
-        new_gd[self.field_name] = new_gd[self.field_name] * self.factor
-        return Mesh(
-            points=mesh.points,
-            cells=mesh.cells,
-            point_data=mesh.point_data,
-            cell_data=mesh.cell_data,
-            global_data=new_gd,
-        )
-
-    def extra_repr(self) -> str:
-        return f"field_name={self.field_name!r}, factor={self.factor}"
-
-
-@register()
-class BiasedSubsampleMesh(SubsampleMesh):
-    r"""Spatially biased cell subsampling with per-cell HT weights (probe P3).
-
-    Cells with centroid x below the per-sample median draw with
-    ``bias``:1 relative probability. Inclusion probabilities are composed
-    into the measure weights per cell (pi_i ~= k * w_i / sum(w), the
-    with-replacement approximation, adequate at k << N and recorded as an
-    approximation in the preregistration), so a measure-consistent
-    consumer sees an asymptotically unbiased quadrature while a
-    measure-blind consumer sees a front-loaded point cloud.
-    """
-
-    def __init__(self, n_cells: int, bias: float = 10.0, compact: bool = True):
-        super().__init__(n_cells=n_cells, compact=compact)
-        self.bias = float(bias)
-
-    def __call__(self, mesh: Mesh) -> Mesh:
-        n_before = mesh.n_cells
-        if n_before <= self.n_cells:
-            return mesh
-        x = mesh.cell_centroids[:, 0]
-        w = torch.where(
-            x < x.median(),
-            torch.full_like(x, self.bias),
-            torch.ones_like(x),
-        )
-        generator = self._generator
-        if generator is not None and generator.device != w.device:
-            generator = None
-        indices = torch.multinomial(
-            w, self.n_cells, replacement=False, generator=generator
-        )
-        pi = (self.n_cells * w[indices] / w.sum()).clamp(max=1.0)
-        mesh = mesh.slice_cells(indices)
-        if self.compact:
-            mesh = _compact_points(mesh)
-        scale_measures(mesh, 1.0 / pi)
-        return mesh
 
 
 @register()
@@ -459,7 +260,9 @@ class PoissonBiasedSubsampleMesh(MeshTransform):
                 torch.isfinite(areas), areas, torch.zeros_like(areas)
             ).clamp_min(0.0)
         if self.weight_mode == "uniform":
-            return torch.ones(mesh.n_cells, device=mesh.points.device, dtype=mesh.points.dtype)
+            return torch.ones(
+                mesh.n_cells, device=mesh.points.device, dtype=mesh.points.dtype
+            )
         x = mesh.cell_centroids[:, 0]
         return torch.where(
             x < x.median(), torch.full_like(x, self.bias), torch.ones_like(x)
@@ -556,7 +359,9 @@ class StratifiedSubsampleMesh(MeshTransform):
 
 def _pose_generator(key: int, salt: int) -> torch.Generator:
     """The keyed CPU generator every per-case pose draw comes from."""
-    return torch.Generator().manual_seed((int(key) * 1_000_003 + int(salt)) % (2**63 - 1))
+    return torch.Generator().manual_seed(
+        (int(key) * 1_000_003 + int(salt)) % (2**63 - 1)
+    )
 
 
 def _pose_rotation_for_key(
@@ -591,9 +396,13 @@ def _pose_rotation_for_key(
         q = q / q.norm()
         return RandomRotateMesh._quaternion_to_rotation_matrix(q)
     if n_spatial_dims not in (2, 3):
-        raise ValueError(f"FixedRandomPose supports 2-D and 3-D points, got {n_spatial_dims}-D")
+        raise ValueError(
+            f"FixedRandomPose supports 2-D and 3-D points, got {n_spatial_dims}-D"
+        )
     if n_spatial_dims == 2 and axis is not None:
-        raise ValueError("FixedRandomPose: `axis` names the plane normal of 3-D points; 2-D points have none")
+        raise ValueError(
+            "FixedRandomPose: `axis` names the plane normal of 3-D points; 2-D points have none"
+        )
     angle = torch.rand((), generator=g, dtype=torch.float64) * (2 * torch.pi)
     c, s = torch.cos(angle), torch.sin(angle)
     if n_spatial_dims == 2:
@@ -702,7 +511,9 @@ class FixedRandomPose(MeshTransform):
         if self.translate < 0:
             raise ValueError(f"translate must be >= 0, got {translate}")
         self.axis = None if axis is None else int(axis)
-        self.symmetric_tensor_fields = [tuple(str(n) for n in t) for t in symmetric_tensor_fields]
+        self.symmetric_tensor_fields = [
+            tuple(str(n) for n in t) for t in symmetric_tensor_fields
+        ]
         for t in self.symmetric_tensor_fields:
             if len(t) != 3:
                 raise ValueError(
@@ -725,7 +536,9 @@ class FixedRandomPose(MeshTransform):
         g = _pose_generator(key, self.salt)
         R = _pose_rotation_for_key(key, self.salt, d, self.axis, generator=g)
         if not self.rotate:
-            R = torch.eye(d, dtype=R.dtype)  # the draw above was still consumed: same translation as the posed variant
+            R = torch.eye(
+                d, dtype=R.dtype
+            )  # the draw above was still consumed: same translation as the posed variant
         R = R.to(device=points.device, dtype=points.dtype)
         if self.translate == 0.0:
             return R, None
@@ -753,7 +566,11 @@ class FixedRandomPose(MeshTransform):
         new = {}
         for association in ("point_data", "cell_data"):
             data = getattr(mesh, association)
-            hit = [t for t in self.symmetric_tensor_fields if all(n in data.keys() for n in t)]
+            hit = [
+                t
+                for t in self.symmetric_tensor_fields
+                if all(n in data.keys() for n in t)
+            ]
             if not hit:
                 continue
             data = data.clone()
@@ -765,7 +582,9 @@ class FixedRandomPose(MeshTransform):
             new[association] = data
         return mesh.with_data(**new) if new else mesh
 
-    def _transform_mesh(self, mesh: Mesh, R: torch.Tensor, t: torch.Tensor | None) -> Mesh:
+    def _transform_mesh(
+        self, mesh: Mesh, R: torch.Tensor, t: torch.Tensor | None
+    ) -> Mesh:
         d = mesh.n_spatial_dims
         out = mesh.transform(
             R,
@@ -805,7 +624,10 @@ class FixedRandomPose(MeshTransform):
         )
         return DomainMesh(
             interior=self._transform_mesh(domain.interior, R, t),
-            boundaries={name: self._transform_mesh(b, R, t) for name, b in domain.boundaries.items()},
+            boundaries={
+                name: self._transform_mesh(b, R, t)
+                for name, b in domain.boundaries.items()
+            },
             global_data=global_data,
         )
 
@@ -844,7 +666,9 @@ class CaseKeyDomainMeshReader(DomainMeshReader):
             raise ValueError("global_data already has a 'case_key' field")
         gd = dm.global_data.clone()
         gd["case_key"] = self._case_key(index)
-        return DomainMesh(interior=dm.interior, boundaries=dm.boundaries, global_data=gd)
+        return DomainMesh(
+            interior=dm.interior, boundaries=dm.boundaries, global_data=gd
+        )
 
 
 @register()
@@ -963,7 +787,9 @@ class StackScalarFields(MeshTransform):
             raise KeyError(
                 f"StackScalarFields: no sub-mesh carries {self._association} fields {self._fields!r}"
             )
-        return DomainMesh(interior=interior, boundaries=boundaries, global_data=domain.global_data)
+        return DomainMesh(
+            interior=interior, boundaries=boundaries, global_data=domain.global_data
+        )
 
     def extra_repr(self) -> str:
         return (
@@ -1113,17 +939,18 @@ class ComposeQuadratureMeasure(MeshTransform):
 
 @register()
 class DropDegenerateCells(MeshTransform):
-    r"""Drop cells whose geometric measure is zero or non-finite (2026-10-02).
+    r"""Drop cells whose measure is zero or non-finite (2026-10-02).
 
     The HiLift wing surfaces carry a few exactly degenerate triangles per case (53 to 137 of
     200,000 sampled cells, zero area to the bit, from repeated vertices): they have no usable
     quadrature weight and no normal, the mesh collate refuses a zero target measure, and a
-    model that reads the boundary as tokens would carry them as garbage. This transform
-    recomputes every cell's measure from the current coordinates (any manifold dimension:
-    segment length, triangle area, tetrahedron volume) and slices away the cells whose measure
-    is not finite and positive, together with their cell data; vertices are kept. Meshes
-    without such cells pass through unchanged. Place it before the terminal conversion so it
-    sees the coordinates the model will see.
+    model that reads the boundary as tokens would carry them as garbage. This transform reads
+    every cell's measure through :func:`~physicsnemo.mesh.calculus.measure.cell_measures` (the
+    stored effective measure when a sampler wrote one, else the geometric measure of the
+    current coordinates in any manifold dimension: segment length, triangle area, tetrahedron
+    volume) and slices away the cells whose measure is not finite and positive, together with
+    their cell data; vertices are kept. Meshes without such cells pass through unchanged.
+    Place it before the terminal conversion so it sees the coordinates the model will see.
     """
 
     def __call__(self, mesh: Mesh) -> Mesh:
@@ -1136,8 +963,11 @@ class DropDegenerateCells(MeshTransform):
         return mesh.slice_cells(keep)
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Drop the degenerate cells of every cell-carrying mesh of the domain."""
         return DomainMesh(
-            interior=self(domain.interior) if domain.interior.n_cells else domain.interior,
+            interior=self(domain.interior)
+            if domain.interior.n_cells
+            else domain.interior,
             boundaries={name: self(b) for name, b in domain.boundaries.items()},
             global_data=domain.global_data,
         )
@@ -1187,9 +1017,17 @@ class SqueezeScalarFields(MeshTransform):
         boundaries: dict[str, list] = {}
         for full in self.fields:
             parts = full.split(".")
-            if len(parts) == 3 and parts[0] == "interior" and parts[1] in ("point_data", "cell_data"):
+            if (
+                len(parts) == 3
+                and parts[0] == "interior"
+                and parts[1] in ("point_data", "cell_data")
+            ):
                 interior.append((parts[1], parts[2], full))
-            elif len(parts) == 4 and parts[0] == "boundaries" and parts[2] in ("point_data", "cell_data"):
+            elif (
+                len(parts) == 4
+                and parts[0] == "boundaries"
+                and parts[2] in ("point_data", "cell_data")
+            ):
                 boundaries.setdefault(parts[1], []).append((parts[2], parts[3], full))
             else:
                 raise ValueError(
@@ -1204,13 +1042,20 @@ class SqueezeScalarFields(MeshTransform):
         return self._apply(mesh, interior)
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Squeeze the named interior and per-boundary fields."""
         interior_specs, boundary_specs = self._split()
         interior = self._apply(domain.interior, interior_specs)
         boundaries = {
-            name: (self._apply(bnd, boundary_specs[name]) if name in boundary_specs else bnd)
+            name: (
+                self._apply(bnd, boundary_specs[name])
+                if name in boundary_specs
+                else bnd
+            )
             for name, bnd in domain.boundaries.items()
         }
-        return DomainMesh(interior=interior, boundaries=boundaries, global_data=domain.global_data)
+        return DomainMesh(
+            interior=interior, boundaries=boundaries, global_data=domain.global_data
+        )
 
     def extra_repr(self) -> str:
         return f"fields={self.fields}"
@@ -1255,11 +1100,17 @@ class SplitGlobalVector(MeshTransform):
         self.field = str(field)
         self.names = [str(n) for n in names]
         if not self.names or len(set(self.names)) != len(self.names):
-            raise ValueError(f"SplitGlobalVector: names must be non-empty and distinct, got {self.names!r}")
+            raise ValueError(
+                f"SplitGlobalVector: names must be non-empty and distinct, got {self.names!r}"
+            )
         self.output_field = None if output_field is None else str(output_field)
         n = len(self.names)
-        self._mean = torch.as_tensor(0.0 if mean is None else mean, dtype=torch.float32).reshape(-1)
-        self._std = torch.as_tensor(1.0 if std is None else std, dtype=torch.float32).reshape(-1)
+        self._mean = torch.as_tensor(
+            0.0 if mean is None else mean, dtype=torch.float32
+        ).reshape(-1)
+        self._std = torch.as_tensor(
+            1.0 if std is None else std, dtype=torch.float32
+        ).reshape(-1)
         for label, t in (("mean", self._mean), ("std", self._std)):
             if t.numel() not in (1, n):
                 raise ValueError(
@@ -1273,19 +1124,27 @@ class SplitGlobalVector(MeshTransform):
     def _split(self, gd: TensorDict | None) -> TensorDict:
         if gd is None or self.field not in gd.keys():
             available = [] if gd is None else sorted(str(k) for k in gd.keys())
-            raise KeyError(f"SplitGlobalVector needs global_data[{self.field!r}]; available: {available!r}")
+            raise KeyError(
+                f"SplitGlobalVector needs global_data[{self.field!r}]; available: {available!r}"
+            )
         x = gd[self.field]
         if x.numel() != len(self.names):
             raise ValueError(
                 f"SplitGlobalVector: global_data[{self.field!r}] has {x.numel()} entries "
                 f"for {len(self.names)} names {self.names!r}"
             )
-        taken = [n for n in (*self.names, *([self.output_field] if self.output_field else [])) if n in gd.keys()]
+        taken = [
+            n
+            for n in (*self.names, *([self.output_field] if self.output_field else []))
+            if n in gd.keys()
+        ]
         if taken:
             raise ValueError(
                 f"SplitGlobalVector: global_data already has {taken!r}; choose names that do not overwrite a leaf"
             )
-        z = (x.reshape(-1).to(torch.float32) - self._mean.to(x.device)) / self._std.to(x.device)
+        z = (x.reshape(-1).to(torch.float32) - self._mean.to(x.device)) / self._std.to(
+            x.device
+        )
         z = z.to(x.dtype if x.is_floating_point() else torch.float32)
         new_gd = gd.clone()
         for i, name in enumerate(self.names):
@@ -1298,6 +1157,7 @@ class SplitGlobalVector(MeshTransform):
         return mesh.with_data(global_data=self._split(mesh.global_data))
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Split the vector in the domain-level ``global_data``."""
         return DomainMesh(
             interior=domain.interior,
             boundaries=domain.boundaries,
@@ -1342,7 +1202,9 @@ class RestrictToPlane(MeshTransform):
         super().__init__()
         self.axis = int(axis)
         self.vector_fields = [str(f) for f in vector_fields]
-        self.global_fields = [str(f).removeprefix("global_data.") for f in global_fields]
+        self.global_fields = [
+            str(f).removeprefix("global_data.") for f in global_fields
+        ]
         self.atol = None if atol is None else float(atol)
 
     def _project_global(self, global_data):
@@ -1358,7 +1220,9 @@ class RestrictToPlane(MeshTransform):
 
     def _keep(self, n: int) -> list[int]:
         if not 0 <= self.axis < n:
-            raise ValueError(f"RestrictToPlane: axis {self.axis} is not a coordinate of {n}-dimensional points.")
+            raise ValueError(
+                f"RestrictToPlane: axis {self.axis} is not a coordinate of {n}-dimensional points."
+            )
         return [i for i in range(n) if i != self.axis]
 
     def _check_planar(self, points: torch.Tensor, what: str) -> None:
@@ -1388,7 +1252,9 @@ class RestrictToPlane(MeshTransform):
                 cd[name] = cd[name][..., keep]
         return project(mesh.with_data(point_data=pd, cell_data=cd), keep_dims=keep)
 
-    def _split_fields(self) -> tuple[dict[str, set[str]], dict[str, dict[str, set[str]]]]:
+    def _split_fields(
+        self,
+    ) -> tuple[dict[str, set[str]], dict[str, dict[str, set[str]]]]:
         interior: dict[str, set[str]] = {}
         boundaries: dict[str, dict[str, set[str]]] = {}
         for f in self.vector_fields:
@@ -1396,7 +1262,9 @@ class RestrictToPlane(MeshTransform):
             if parts[0] == "interior" and len(parts) == 3:
                 interior.setdefault(parts[1], set()).add(parts[2])
             elif parts[0] == "boundaries" and len(parts) == 4:
-                boundaries.setdefault(parts[1], {}).setdefault(parts[2], set()).add(parts[3])
+                boundaries.setdefault(parts[1], {}).setdefault(parts[2], set()).add(
+                    parts[3]
+                )
             else:
                 raise ValueError(
                     f"RestrictToPlane: vector field {f!r} must be 'interior.<point_data|cell_data>.<name>' or "
@@ -1409,13 +1277,18 @@ class RestrictToPlane(MeshTransform):
         return self._project_mesh(mesh, "the mesh points", interior)
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Drop the constant axis from every mesh, the named vector fields and global vectors."""
         interior, boundaries = self._split_fields()
         ### Not ``domain.apply_to_meshes``: the per-boundary vector-field lists
         ### are keyed by boundary name, which that callback does not receive.
         return DomainMesh(
-            interior=self._project_mesh(domain.interior, "the interior points", interior),
+            interior=self._project_mesh(
+                domain.interior, "the interior points", interior
+            ),
             boundaries={
-                name: self._project_mesh(b, f"boundary {name!r}", boundaries.get(name, {}))
+                name: self._project_mesh(
+                    b, f"boundary {name!r}", boundaries.get(name, {})
+                )
                 for name, b in domain.boundaries.items()
             },
             global_data=self._project_global(domain.global_data),
@@ -1441,7 +1314,8 @@ class FixedDrawDomainMeshReader(DomainMeshReader):
     own generator).
     """
 
-    def set_epoch(self, epoch: int) -> None:  # noqa: D401 - deliberately a no-op
+    def set_epoch(self, epoch: int) -> None:
+        """Ignore the epoch, so every epoch reads the same subsample."""
         self._epoch = 0
 
 
@@ -1474,7 +1348,11 @@ class SplitLineCells(MeshTransform):
         device = pts.device
         cx = mesh.cell_centroids[:, 0]
         xmid = 0.5 * (pts[:, 0].min() + pts[:, 0].max())
-        k = torch.where(cx < xmid, torch.full_like(cells[:, 0], self.pieces_front), torch.full_like(cells[:, 0], self.pieces_back))
+        k = torch.where(
+            cx < xmid,
+            torch.full_like(cells[:, 0], self.pieces_front),
+            torch.full_like(cells[:, 0], self.pieces_back),
+        )
         new_pts = [pts]
         new_cells = []
         parent = []
@@ -1488,14 +1366,20 @@ class SplitLineCells(MeshTransform):
                 parent.append(sel)
                 continue
             fr = torch.arange(1, kk, dtype=pts.dtype, device=device) / kk  # (kk-1,)
-            interior = pts[a][:, None, :] + (pts[b] - pts[a])[:, None, :] * fr[None, :, None]  # (M, kk-1, d)
+            interior = (
+                pts[a][:, None, :] + (pts[b] - pts[a])[:, None, :] * fr[None, :, None]
+            )  # (M, kk-1, d)
             m = sel.numel()
             idx = n_pts + torch.arange(m * (kk - 1), device=device).reshape(m, kk - 1)
             n_pts += m * (kk - 1)
             new_pts.append(interior.reshape(-1, pts.shape[1]))
-            interp.append((a.repeat_interleave(kk - 1), b.repeat_interleave(kk - 1), fr.repeat(m)))
+            interp.append(
+                (a.repeat_interleave(kk - 1), b.repeat_interleave(kk - 1), fr.repeat(m))
+            )
             chain = torch.cat([a[:, None], idx, b[:, None]], 1)  # (M, kk+1)
-            new_cells.append(torch.stack([chain[:, :-1], chain[:, 1:]], -1).reshape(-1, 2))
+            new_cells.append(
+                torch.stack([chain[:, :-1], chain[:, 1:]], -1).reshape(-1, 2)
+            )
             parent.append(sel.repeat_interleave(kk))
         points = torch.cat(new_pts)
         cells_out = torch.cat(new_cells)
@@ -1514,7 +1398,15 @@ class SplitLineCells(MeshTransform):
             for key, value in mesh.point_data.items():
                 shape = (-1,) + (1,) * (value.dim() - 1)
                 fv = f.reshape(shape).to(value.dtype)
-                point_data[key] = torch.cat([value, value[ia] * (1 - fv) + value[ib] * fv])
+                point_data[key] = torch.cat(
+                    [value, value[ia] * (1 - fv) + value[ib] * fv]
+                )
         elif len(mesh.point_data.keys()):
             point_data = {key: value for key, value in mesh.point_data.items()}
-        return Mesh(points=points, cells=cells_out, point_data=point_data or None, cell_data=cell_data or None, global_data=mesh.global_data)
+        return Mesh(
+            points=points,
+            cells=cells_out,
+            point_data=point_data or None,
+            cell_data=cell_data or None,
+            global_data=mesh.global_data,
+        )

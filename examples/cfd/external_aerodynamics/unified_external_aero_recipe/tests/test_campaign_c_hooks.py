@@ -22,7 +22,7 @@ from domain_transforms import SetConstantCellField
 from tensordict import TensorDict
 from utils import initialize_from_checkpoint
 
-from physicsnemo.experimental.models import ISLA
+from physicsnemo.experimental.models.isla import ISLA
 from physicsnemo.mesh import Mesh
 from physicsnemo.utils.checkpoint import save_checkpoint
 
@@ -34,6 +34,7 @@ def _patch() -> Mesh:
 
 
 def test_constant_cell_field_shape_value_and_dtype():
+    """SetConstantCellField writes an (n_cells, 1) field of the given value in the points' dtype."""
     m = SetConstantCellField(field_name="cond", value=1.0)(_patch())
     f = m.cell_data["cond"]
     assert f.shape == (2, 1) and f.dtype == m.points.dtype
@@ -43,6 +44,7 @@ def test_constant_cell_field_shape_value_and_dtype():
 
 
 def test_constant_cell_field_survives_cell_slicing():
+    """The constant field is ordinary cell data, so cell slicing keeps it."""
     m = SetConstantCellField(field_name="cond", value=1.0)(_patch()).slice_cells(
         torch.tensor([1])
     )
@@ -50,6 +52,7 @@ def test_constant_cell_field_survives_cell_slicing():
 
 
 def test_initialize_from_checkpoint_loads_weights_only(tmp_path):
+    """init_from copies a checkpoint's weights into a freshly built model of the same architecture."""
     torch.manual_seed(0)
     src = ISLA(
         output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
@@ -78,6 +81,7 @@ def test_initialize_from_checkpoint_loads_weights_only(tmp_path):
 
 
 def test_initialize_from_checkpoint_rejects_architecture_mismatch(tmp_path):
+    """init_from refuses a checkpoint whose architecture differs from the model's."""
     src = ISLA(
         output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
         global_schema={"g": {"rank": 1}},

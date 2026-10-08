@@ -205,6 +205,7 @@ prediction_points=..., global_data=...)`` returns a point-cloud ``Mesh``; see
 import logging
 import math
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 import torch
@@ -396,6 +397,7 @@ class ISLA(Module):
     ``det R``. Components in any frame are only ever a view of such a field.
     """
 
+    @dataclass
     class MetaData(ModelMetaData):
         jit: bool = False
         amp: bool = True

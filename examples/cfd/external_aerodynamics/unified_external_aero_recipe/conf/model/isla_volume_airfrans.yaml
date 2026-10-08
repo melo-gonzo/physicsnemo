@@ -19,32 +19,8 @@
 # dimensions, with the airfoil boundary, the inlet direction and speed as global inputs and the stored signed
 # distance and its gradient as per-query inputs.
 
-# ---------------------------------------------------------------------------
-# ISLA -- INTERIOR (volume) task (reference configuration).
-# ---------------------------------------------------------------------------
-# Boundary -> interior on DrivAerML volume data. Interior task
-# (`interior: true`): the outputs are predicted at `prediction_points`, the
-# dataset's interior point cloud passed as a Mesh; the prediction points join
-# the encoder as interacting tokens. The same mesh contract as
-# isla_surface.yaml otherwise: the boundary as named Mesh objects (centroids,
-# normals and measures read from the Mesh), the case's global data as a
-# TensorDict, one case per call; the output is a point-cloud Mesh at the
-# prediction points with the output_schema fields in its point_data.
-#
-# Each prediction point's built-in geometry, its signed distance to the
-# nearest boundary token and the direction to it, is computed inside the
-# model from the boundary sample and is never an input; this configuration
-# declares no `query_schema`, so the dataset's stored sdf / sdf_normals are
-# not read. isla_volume_sdf.yaml declares them as query inputs (the stored
-# field is computed on the full mesh, the internal one on the 200,000-cell
-# sample; the INTERNAL-GEOMETRY measurement).
-#
-# The boundary measure must sum to the surface area: a subsampled boundary's
-# raw cell areas sum to the kept fraction of it, so the model reads the
-# Horvitz-Thompson corrected `cell_data._effective_measure` that the reader's
-# cell subsample writes and `ComposeQuadratureMeasure` materializes in
-# datasets/drivaer_ml_volume_reference.yaml. Pair this model config with
-# that dataset config.
+# The mesh contract is that of isla_volume.yaml; unlike it, this config also
+# reads the dataset's stored sdf and sdf_normals as query inputs.
 input_type: mesh
 output_type: mesh
 
@@ -63,7 +39,7 @@ forward_kwargs:
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
 model:
-  _target_: physicsnemo.experimental.models.ISLA
+  _target_: physicsnemo.experimental.models.isla.ISLA
   output_schema:                 # the dataset's targets, by name and tensor rank
     velocity: {rank: 1}
     pressure: {rank: 0}
@@ -76,7 +52,7 @@ model:
     sdf_normals: {rank: 1}       # the stored SDF gradient, in the plane after RestrictToPlane
   dim: 2                         # the problem is planar: pair with datasets/airfrans_volume_2d.yaml (RestrictToPlane first in its pipeline)
   interior: true                 # predict at prediction_points, which join the encoder as tokens
-  hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; the class defaults are 384 / 256
+  hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
   n_slices: 512
   mlp_ratio: 4
