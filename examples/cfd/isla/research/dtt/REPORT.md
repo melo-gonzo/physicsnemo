@@ -426,6 +426,9 @@ penalty above 30% says depth-matched reading is load-bearing in ISLA as in SMART
 
 ### In flight
 
+- E6 lanes 26 to 45 on `code_dtt14` (jobs 136085 to 136104, submitted 11:18 PDT 2026-10-09; verify14 job 136084
+  runs the latent-arm tests, the tree tests and the ISLA suite on a GB300): car `dtt_vol_{k256,k1024,ps1024,
+  is1024,final}_seed42/43` and AirfRANS `af_{k256,k1024,ps512,is512,final}_seed42/43`.
 - Parity lanes on `code_dtt13`, theta 1, two seeds each, same recipes as the E3 and E5 arms, submitted 07:37 PDT
   2026-10-09 and all started at once: `dtt_vol_tg1ct_seed42/43` (car, 512 / 512, lr 3.75e-4, 200,000, 500
   epochs) and `af_tg1ct_seed42/43` (AirfRANS, 100,000 cells, lr 5e-4, 500 epochs). Accepted at 07:44: the car
