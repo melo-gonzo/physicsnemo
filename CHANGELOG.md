@@ -50,7 +50,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     functions in `LinearGaussianNoiseScheduler` (`x0_to_flow` / `flow_to_x0`
     / `score_to_flow` / `flow_to_score`) and the corresponding conversion
     callbacks everywhere conversions between prediction types are necessary.
-<<<<<<< HEAD
 - Adds `physicsnemo.experimental.models.ISLA` (Invariant Slice Attention), an
   O(3)/SE(3)-equivariant, measure-aware slice-attention surrogate for steady
   boundary-value problems. Inputs (global, per-boundary-cell, per-query) and
