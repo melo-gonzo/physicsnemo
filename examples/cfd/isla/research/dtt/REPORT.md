@@ -325,10 +325,41 @@ read is itself level with the interacting model here (0.94 / 1.06 / 1.10), unlik
 1.68): the airfoil's volume field is recoverable from the boundary alone, the car's is not. The dense exact read
 G decides E5's prediction (a) against (b) when its lanes finish.
 
+### Can the read run on `ClusterTree`? (2026-10-09, job 135231, PR #2078's tree)
+
+Peter asked for one tree implementation. The per-point walk was run on three real cars (200,000 cells, 200,000
+points, the read's own frame coordinates and measure fractions) over the DTT tree and over PR #2078's
+`ClusterTree` (Morton-cell splits), leaf size 4, sources per point (cells + nodes), three-case means:
+
+| tree and admission | theta 1 | theta 0.5 | build | walk at theta 1 |
+|---|---|---|---|---|
+| DTT tree, position-only splits, sphere | 485 (69 + 416) | 1,180 (213 + 965) | 116 ms | 40 ms |
+| DTT tree as adopted (normal-first splits, sphere + RMS coherence) | 980 (203 + 777) | 5,455 (1,874 + 3,581) | 116 ms | 67 ms |
+| `ClusterTree` #2078, box diagonal (GLOBE's rule), position only | 286 (13 + 273) | 765 (50 + 715) | 22 ms | 29 ms |
+| `ClusterTree` #2078, sphere, position only | 354 (24 + 329) | 892 (86 + 806) | 22 ms | 28 ms |
+| `ClusterTree` #2078, sphere + RMS coherence as a mask only | 2,609 (677 + 1,932) | 33,717 (17,401 + 16,316) | 22 ms | 104 ms |
+| forest of 8 `ClusterTree`s by normal octant, sphere + RMS | 1,084 (81 + 1,003) | 6,941 (1,836 + 5,104) | 131 ms | 143 ms |
+| forest of 26 `ClusterTree`s by cube direction, sphere + RMS | 1,868 (157 + 1,710) | 3,400 (400 + 3,000) | 370 ms | 380 ms |
+
+Position only, #2078's Morton-cell tree beats the DTT tree by 1.7x at theta 1 and 1.5x at theta 0.5 with the
+same sphere rule, and by more with GLOBE's box-diagonal rule (a flat patch's box is tighter than its sphere); it
+also builds five times faster. With orientation coherence, a forest of eight octant trees lands within 10% of the
+adopted DTT tree at theta 1 (1,084 against 980), the car's only affordable rung; the 26-direction forest is worse
+there and better at theta 0.5. Coherence as a mask alone, without splitting by normals, is 2.7x worse at theta 1
+and 6x worse at theta 0.5, which is the day-one blow-up again: an incoherent node's whole ancestry is opened.
+
+Verdict: the read can run on `ClusterTree` at no pair-count cost, and the DTT tree can be deleted, once two
+small pieces exist upstream: a per-point plan (the single-tree walk; the dual-tree plan is structurally wrong for
+point targets in sparse regions, which also concerns GLOBE's volume-target plans at scale) and an orientation
+split (the forest, or a normal-octant root split, with coherence tested on the mean normal's length from
+`compute_source_aggregates`). Bounding spheres are not needed; the box rule is tighter. What the Morton tree gives
+up is the principal-axis tree's frame-freeness at finite theta (posed equalled native to 1e-4 at theta 1); within
+the standard set for this program. The switch needs a two-lane retrain at theta 1 on the car to confirm accuracy
+parity, since the clusters differ.
+
 ### In flight
 
-- Nothing training. Remaining: the second dense lane's area and posed protocol rows (a formality on AirfRANS,
-  where the protocols coincide), job 133121.
+- Nothing training.
 - Lanes `dtt_vol_tg1_seed42/43` (E3's TG arms: read-only + tree read at theta 1, leaf 4, RMS orientation tree,
   snapshot `code_dtt11`, 512 / 512, lr 3.75e-4, 200,000, 500 epochs) submitted 2026-10-06 16:42 PDT; accepted at
   16:48 (steps of 1.86 s, 215 to 219 GB per rank, loss 0.062 at epoch 0 like the P lanes', no errors); about 200 s
