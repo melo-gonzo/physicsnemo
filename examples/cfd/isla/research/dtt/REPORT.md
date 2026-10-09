@@ -384,14 +384,37 @@ What changes for the model: at theta 1 the forest's pair count is within 10% of 
 retired tree's frame-freeness at finite theta is given up (Morton boxes and octants are the frame's; at theta 0
 nothing changes).
 
+### Verification and cost of the forest (job 135330, verify13, one GB300)
+
+Tests under `code_dtt13` and `.venv-recipe-td14`: the tree file 28 passed (the five CUDA tests included),
+`test_cluster_tree.py` 262 passed, the ISLA suite 295 passed and 1 failed, the failure being the known flake
+`test_isla_kernels.py::test_torch_compile_fullgraph_matches_eager` (a compiled-vs-eager gradient of a slice
+projection off by 2.3e-5 against a 1e-5 tolerance; the same assertion failed in verify1 and verify3 on the
+retired tree, and the test does not touch the tree read).
+
+Cost on three real cars (200,000 cells and points, 512 / 512, bf16, compiled blocks; `stats/bench13`):
+
+| model | step | forward | peak memory | pairs per block |
+|---|---|---|---|---|
+| read-only, no read (floor) | 0.475 s | 0.18 s | 126 GiB | - |
+| forest, theta 1 (`code_dtt13`) | 1.76 s | 0.75 s | 194.5 GiB | 1.6e8 (800 per point, 95% nodes) |
+| retired tree, theta 1 (`code_dtt11`, for reference) | 1.84 s | 0.71 s | 206 GiB | 2.0e8 (980 per point) |
+
+The forest is 4% faster per step with 11 GiB less memory and 20% fewer pairs than the retired tree: GLOBE's
+box-diagonal rule on Morton-cell boxes is tighter than the sphere rule, and the real cars' normals are coherent
+enough that the octant split costs less than the comparison run's sphere-based estimate (1,084 per point)
+suggested. The step is 3.7x the floor (bar 6x).
+
 ### In flight
 
-- Job verify13 (GB300): the tree file, the ISLA suite and `test/mesh/spatial` under `code_dtt13`, then the cost
-  probe (`dtt_bench.py`, read-only floor and theta 1) on three real cars.
-- Parity lanes on `code_dtt13`, theta 1, two seeds each, same recipes as the E3 and E5 arms:
-  `dtt_vol_tg1ct_seed42/43` (car, 512 / 512, lr 3.75e-4, 200,000, 500 epochs) and `af_tg1ct_seed42/43` (AirfRANS,
-  100,000 cells, lr 5e-4, 500 epochs). Prediction (PREREG third amendment): parity with `dtt_vol_tg1_*` and
-  `af_tg1_*` within the seed separation on every field. Scored under the same protocols when they finish.
+- Parity lanes on `code_dtt13`, theta 1, two seeds each, same recipes as the E3 and E5 arms, submitted 07:37 PDT
+  2026-10-09 and all started at once: `dtt_vol_tg1ct_seed42/43` (car, 512 / 512, lr 3.75e-4, 200,000, 500
+  epochs) and `af_tg1ct_seed42/43` (AirfRANS, 100,000 cells, lr 5e-4, 500 epochs). Accepted at 07:44: the car
+  lanes step at 1.79 to 1.83 s with 197 GB per rank (the retired tree's lanes: 1.86 s, 215 to 219 GB), epoch-0
+  validation loss 0.0619 and 0.0618 against the retired tree's 0.0618; the AirfRANS lanes step at 0.43 s with
+  28 GB, epoch-0 validation 0.102 and 0.105 against 0.102. About 27 hours for the car, 17 for AirfRANS.
+  Prediction (PREREG third amendment): parity with `dtt_vol_tg1_*` and `af_tg1_*` within the seed separation
+  on every field. Scored under the same protocols when they finish.
 
 ### Decomposition with orientation-coherent clusters (job 106436, largest-chord tree, same 12 cases)
 
