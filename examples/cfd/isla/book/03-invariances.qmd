@@ -32,6 +32,22 @@ ARMS = (("ISLA", "isla", "isla_ref"), ("GeoTransolver", "gt_unit", "gt"), ("Tran
 # checkpoints of the training-law study (cars) and the 200k fleet (wings), probed under the same draws.
 TC = J("trainarea_dr_reduction_2026-09-20.json"); TW = J("trainarea_reduction_2026-09-20.json")
 TAR1 = J("trainarea_dr_r1_2026-09-23.json")["arms"]  # the 384-wide ISLA's area-law twin at 200,000 cells
+def _ref_wing_area_twin():
+    """The 384-wide ISLA's area-law twin on the 35-wing rung at 200,000 cells: rb_hl_isla_super_scarce_area (trained under the
+    area-proportional law; results/campaigns_2026-09-22/ref/metrics, seed means of the fleet scorer's per-case rows, last row per case)
+    against the uniform-trained reference pair of results/ref_surface_2026-09-23.json."""
+    import glob as _glob
+    def seed_mean(stem, sd):
+        fs = sorted(_glob.glob(str(RES / "campaigns_2026-09-22" / "ref" / "metrics" / f"{stem}_seed{sd}" / "**" / "metrics.jsonl"), recursive=True))
+        last = {}
+        for l in open(fs[0]):
+            if '"infer_step"' in l:
+                r = json.loads(l); last[r["sample_id"]] = r["metrics"]["pressure_l2"]
+        return mean(last.values())
+    area = [seed_mean("rb_hl_isla_super_scarce_area", sd) for sd in (42, 43)]
+    unif = J("ref_surface_2026-09-23.json")["summary"]["isla_r1|hl35"]["fields"]["pressure_l2"]["seeds"]
+    return area, unif
+WAR1_AREA, WAR1_UNIF = _ref_wing_area_twin()
 WB = J("wingbench_200k_reduction_2026-09-19.json")["arms"]
 CR = J("consistency_r1_2026-09-23.json")["arms"]
 DENS = {"DrivAerML Surface task, 435 training cars, 100,000 cells": {"isla": CR["isla_r1_dr435_100k"], "gt_unit": TC["arms"]["gt_unit_uniform"], "transolver_unit": TC["arms"]["transolver_unit_uniform"]},
@@ -737,13 +753,18 @@ absorbs the point pattern it was fitted on and is wrong on any other.
 ISLA's aggregates are measure-weighted integrals, the same under any draw
 that carries its weights. @sec-territories looks at this directly in the
 two trained networks. Two qualifications travel with the figure. First,
-ISLA is not indifferent: at the reporting protocol on the cars the
+ISLA is not indifferent everywhere: at the reporting protocol on the cars the
 384-wide ISLA's area-trained ÷ uniform-trained factor is
 `{python} f"{TAR1['isla_r1_area']['mean']['unif'] / TAR1['isla_r1_uniform']['mean']['unif']:.2f}"`
 (seeds
 `{python} " and ".join(f"{a / u:.2f}" for a, u in zip(TAR1['isla_r1_area']['seeds']['unif'], TAR1['isla_r1_uniform']['seeds']['unif']))`;
 results/trainarea_dr_r1_2026-09-23.json), at the 5% bar the DrivAerML
-study preregistered, so the statement is "weakly dependent" beside
+study preregistered, while on the wings the same configuration's factor is
+`{python} f"{mean(WAR1_AREA) / mean(WAR1_UNIF):.2f}"`
+(seed-paired
+`{python} " and ".join(f"{a / u:.2f}" for a, u in zip(WAR1_AREA, WAR1_UNIF))`;
+results/campaigns_2026-09-22/ref/metrics), so the statement is "weakly
+dependent" beside
 baselines that are dependent by factors of 2.4 to 9.6. Part of the few
 percent is the quadrature noise of
 an area-proportional draw whose weights span four decades on these meshes

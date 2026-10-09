@@ -35241,3 +35241,103 @@ the protocol's Poisson law was chosen for its exact inclusion
 probabilities. The `patch` form stays in the library as a research arm
 beside `soft` and `smooth` until Peter rules on the three; the three-
 dimensional form is not written.
+
+## 2026-10-09 — Verdict, REF-BOARD wing twins complete: the reference configuration scores 0.0350 at 1,260 wings (parity with the parameter-matched GeoTransolver-512 at 0.99, 4 percent ahead of Transolver-256, 8 percent behind GeoTransolver-256 at its better rate), 0.0234 at the fixed angle (GeoTransolver-256 0.89, Transolver 1.02), 0.270 and 0.0891 on the geometry rungs (0.67 and 0.98), and its training-law factor on the wings is 1.00 {#sec-nb-refboard-wings-verdict}
+
+**Setting.** REF-BOARD re-runs every evidence lane under the reference
+configuration of 2026-09-23 (384 wide, 12 layers, 256 slices, cosine
+routing, learning rate 5e-4, the book's "earlier ISLA reference") at the
+reporting protocol: 200,000 sampled cells per case, float32, two seeds
+(@sec-nb-refboard-prereg). Its DrivAerML half, the pose and area-law twins
+on the cars and the 35-, 210- and 510-wing rungs were recorded earlier
+(@sec-nb-refboard-ladder-verdict, @sec-nb-ref-hl510-verdict). Six
+HiLiftAeroML twins remained: the 1,260-wing rung (`rb_hl_isla_full`,
+launched 2026-09-27 because the earlier-protocol lanes at 192 wide fell to
+the mean-field plateau on both seeds, @sec-nb-p200k-hl-ladder-verdict), the
+geometry ladder (`rb_hl_isla_geometry_super_scarce`, 4 training
+geometries at all their angles, and `rb_hl_isla_geometry_scarce`, 21),
+the fixed-angle rung (`rb_hl_isla_single_aoa_12`, 126 geometries at 12
+degrees, validated on 18 held-out geometries) and the training-law twin on
+the 35-wing rung (`rb_hl_isla_super_scarce_area`, trained under the
+area-proportional Poisson law). All are trained and scored today; the
+fleet's `rb` group reports 28 of 28 lanes.
+
+**Instrument.** Training: the recipe's curated HiLiftAeroML manifests,
+chained four-hour links on AGA. The 1,260-wing seed 42 completed at 22:25
+PDT on 2026-10-08 after eight links and seed 43 at 01:05 PDT on 2026-10-09
+after nine (its last three epochs ran in a short-queue link after the
+normal queue stalled behind 617 pending jobs). Scoring: the fleet scorer at
+200,000 cells, float32, on each rung's validation set (180 wings, 18 on
+the fixed-angle rung). The per-case rows are mirrored to
+`results/campaigns_2026-09-22/ref/metrics/<run>/<run>/metrics.jsonl`. The
+training-law twin's files hold a three-case block from an interrupted
+scoring job before the complete one, and the book's reader keeps the last
+row written for each case. Baselines: the parameter-matched
+GeoTransolver-512 of the SCALE-LAW grid at 1,260 wings (100,000 cells,
+3e-3, `results/scalelaw_2026-10-08.json`) and the 200,000-cell fleet pairs
+of GeoTransolver-256 (1e-3 and 3e-3) and Transolver-256 (3e-3) from
+`results/p200k_hl_ladder_2026-09-30.json`.
+
+**What we saw.** Surface pressure, area-weighted relative L2, seed means
+with the seeds in parentheses; the ratio is baseline ÷ ISLA, below one
+where the baseline is more accurate:
+
+| rung | ISLA reference | GeoTransolver (arm) | ÷ ISLA | Transolver-256, 3e-3 | ÷ ISLA | 192-wide ISLA lane |
+|---|--:|--:|--:|--:|--:|--:|
+| 1,260 wings | 0.0350 (0.0340 / 0.0359) | 0.0348 (0.0333 / 0.0363; GeoTransolver-512, 100,000 cells, 3e-3) | 0.99 | 0.0363 (0.0358 / 0.0368) | 1.04 | plateaued |
+| 1,260 wings, GeoTransolver's best pair | | 0.0323 (0.0315 / 0.0331; GeoTransolver-256, 1e-3) | 0.92 | | | |
+| 4 training geometries | 0.270 (0.279 / 0.261) | 0.180 (0.180 / 0.179; GeoTransolver-256, 3e-3) | 0.67 | 0.193 (0.188 / 0.198) | 0.71 | 0.266 |
+| 21 training geometries | 0.0891 (0.0931 / 0.0852) | 0.0875 (0.0899 / 0.0851; GeoTransolver-256, 3e-3) | 0.98 | 0.0876 (0.0845 / 0.0907) | 0.98 | 0.0917 |
+| 126 geometries at 12 degrees | 0.0234 (0.0238 / 0.0229) | 0.0207 (0.0206 / 0.0208; GeoTransolver-256, 3e-3) | 0.89 | 0.0238 (0.0235 / 0.0240) | 1.02 | 0.0300 |
+
+: The REF-BOARD wing twins at the reporting protocol. Data: results/campaigns_2026-09-22/ref/metrics; results/scalelaw_2026-10-08.json; results/p200k_hl_ladder_2026-09-30.json. {#tbl-nb-refboard-wings}
+
+Velocity and wall shear follow pressure on every rung: at 1,260 wings
+against GeoTransolver-256 at 1e-3 the ratios are 0.97 and 0.99 and against
+Transolver 1.04 and 1.08; at the fixed angle 0.92 and 0.92 against
+GeoTransolver and 0.98 and 0.98 against Transolver; at 4 geometries 0.73
+and 0.78 against GeoTransolver; at 21 geometries 0.98 and 0.97. From 510 to
+1,260 wings the reference's pressure error falls from 0.0404 to 0.0350 (a
+factor 1.15) and GeoTransolver-512's from 0.0382 to 0.0348 (1.10). The
+scaling grid's ISLA lane of the same width at 100,000 cells scores 0.0340
+(0.0333 / 0.0348) at 1,260 wings, so the 200,000-cell pair is within its
+seed spread (1.03), consistent with SCALE-HL's cells-flat reading. The
+training-law twin: the reference trained under the area-proportional law
+scores 0.1459 (0.1483 / 0.1436) on the uniform draw against 0.1460 (0.1456
+/ 0.1465) for the uniform-trained reference, a factor 1.00 (seed-paired
+1.02 and 0.98), where the 192-wide lanes read 1.01 and the DrivAerML
+reference twin 1.05 (@sec-nb-refboard-area-twin).
+
+**Why it matters.** Four readings change. (1) The GeoTransolver-512 ÷ ISLA
+case ladder reads 0.71 / 0.90 / 0.95 / 0.99 at 35 / 210 / 510 / 1,260
+wings: the deficit against the parameter match closes to parity at the
+full pool. It does not close against GeoTransolver's best lane there,
+GeoTransolver-256 at 1e-3 with a tenth of ISLA's parameters, which leads by
+8 percent on the one rung where its better rate flips to 1e-3. (2) The
+fixed-angle rung moves most: the reference is 22 percent better than the
+192-wide lane (0.0234 against 0.0300), so GeoTransolver's lead shrinks from
+0.69 to 0.89 and Transolver reaches parity (1.02 on pressure, 0.98 on
+velocity and wall shear). (3) The geometry ladder barely moves (0.67 and
+0.98 against 0.68 and 0.95 for the 192-wide lanes): held-out geometry is
+where the reference configuration buys nothing over 192 wide, and the
+4-geometry deficit stands as the largest on the dataset. (4) The
+reference's training-law factor on the wings is 1.00, so the "weakly
+dependent" qualification rests on the DrivAerML twin's 1.05 alone. The
+preregistered bar for an ISLA advantage (baseline ÷ ISLA of at least 1.10
+with ISLA lower on two thirds of the cases) is reached on no rung. Every
+row of the chapter 8 wing ladder now holds the earlier ISLA reference, and
+no "192 wide" row remains.
+
+**Chapters.** Chapter 8: the case ladder gains the 1,260 row, the geometry
+and fixed-angle rows read the reference twins, the lede, the reading
+paragraph and both captions are restated, and the GeoTransolver-256
+best-pair ratio at 1,260 wings stands beside the parameter-matched one.
+Chapter 3: the training-law qualification quotes the wing twin's factor
+beside the cars'. Chapter 16: the wing sentence says parity at 1,260.
+Ledger: REF-BOARD DONE, P200KFLEET DONE (its 1,260-wing ISLA point is this
+twin), MAINLINE's reference-configuration gate met.
+
+**What is next.** Nothing on this node. The remaining wing question, why
+the baselines gain more than ISLA from a recurring geometry at small
+training sets, stays with the WING-MECH record and the open questions of
+chapter 16.
