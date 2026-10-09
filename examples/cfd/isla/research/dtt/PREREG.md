@@ -55,6 +55,37 @@ The clusters differ, so the theta 1 arms are retrained on the car and on AirfRAN
 pair count is within 10% of the retired tree's at theta 1 and the read is the same quadrature. The bars against I
 and P are unchanged.
 
+## E6: latent capacity against query consensus (added 2026-10-09, before any arm ran)
+
+Question. On the car the read-only class trails the interacting model (P / I = 1.14 / 1.31 / 1.68; the exact
+global read TG / I = 1.11 / 1.11 / 1.47) while on the airfoil it does not. SMART (Hagnberger and Niepert, arXiv
+2601.18707) is a read-only model by construction (queries cross-attend into a latent of 2,048 to 4,096 boundary
+points refined block by block, no attention among queries) and its error falls monotonically with the latent
+size; its decoder reads the encoder's latent at matched depth, and reading the final latent instead raises its
+error by 140%. Two explanations of the car gap remain: the capacity of what a passive point can read (the
+latent), or the consensus that interacting query tokens reach among themselves and a passive point cannot.
+Arms, every one read-only (``query_independent=True``), two seeds each, the Volume recipe on the car (512 / 512,
+lr 3.75e-4, 200,000 cells and points, 500 epochs) and the AirfRANS recipe (384 / 256, lr 5e-4, 100,000 cells,
+500 epochs), scored under the protocols of E3 and E5:
+
+- K-ladder: the exact global read over a Morton-strided subsample of ``kernel_read_cells`` boundary cells
+  (measure fractions renormalized over the subsample; the stride offset random in training, zero in
+  evaluation; ``kernel_read_theta=0`` so the read is exact over the subsample). K = 256 and K = 1,024 on the car
+  and on the airfoil. The ends of the ladder exist: P (K = 0) and TG (every cell, theta 1).
+- S-arm: the slice latent doubled, read-only P at ``n_slices`` 1,024 (car) and 512 (airfoil), and the interacting
+  model I at the same slice counts as the matched control (the fused geometry kernel caps slices at 1,024).
+- FINAL control: read-only P with ``read_final_boundary=True``: the boundary tokens run through every block
+  first, then every query block reads the slices of the final boundary state instead of the state at its own
+  depth (the same parameters; SMART's depth-matched ablation).
+
+Predictions, stated before any arm ran. (a) Capacity: the K-ladder error falls monotonically from P through
+K = 256 and 1,024 to TG, and P gains more than I from the doubled slices (P-S / P below I-S / I by more than the
+seed separation). (b) Consensus: the ladder is flat within the seed separation above K = 256 (K = 256 within 3% of
+TG on every field), the doubled slices move P and I alike, and TG / I stays the read-only ceiling. (c) FINAL:
+if the control's error exceeds P's by more than 30% on any field, depth-matched reading is load-bearing in ISLA
+as in SMART and the architecture chapter states it; within the seed separation, it is not. Cost is reported but is
+not a bar: these are diagnostic arms, never candidates for the reference.
+
 Bars (the pi lane's, unchanged): closes the gap if TG / I <= 1.03 on pressure and on velocity and <= 1.05 on eddy
 viscosity, seed means; beats it if TG / I < 1 - seed separation on a field. Also reported: TG / P (what the read
 buys), step time and peak memory against I (forecast: 3x to 4x the step, memory within 80 GiB), pairs per block.

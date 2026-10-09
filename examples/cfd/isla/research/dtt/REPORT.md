@@ -405,6 +405,25 @@ box-diagonal rule on Morton-cell boxes is tighter than the sphere rule, and the 
 enough that the octant split costs less than the comparison run's sphere-based estimate (1,084 per point)
 suggested. The step is 3.7x the floor (bar 6x).
 
+### E6: latent capacity against query consensus (2026-10-09, snapshot `code_dtt14`)
+
+Peter's question on SMART (Hagnberger and Niepert, arXiv 2601.18707) led to this exam (PREREG E6). SMART is a
+read-only model by construction (queries cross-attend into a latent of 2,048 to 4,096 boundary points refined
+block by block; no attention among queries) and so has the independence we measured in E4; its own tables put it
+a few percent ahead of Transolver on SHIFT-SUV and AhmedML volumes, where our read-only arm P trails the
+interacting model by 14 to 68% on the car and is level with it on the airfoil. Two of its mechanisms are now
+diagnostic options of ISLA (never reference forms): `kernel_read_cells=K`, the exact global read over a
+Morton-strided subsample of K cells (measure fractions renormalized; the stride offset random in training, zero
+at evaluation; `kernel_read_theta=0`), and `read_final_boundary=True`, the control in which the boundary runs
+through every block first and each query block then reads the final boundary state's slices. Both keep exact
+query independence (tests `test_isla_latent_arms.py`: the subsample read over every cell equals the dense read to
+1e-10; alone, permuted and prefix predictions agree to 1e-11; the training offset moves; every parameter has a
+gradient). Arms (two seeds each, car and AirfRANS, lanes 26 to 45, `code_dtt14`): the K-ladder K = 256 and
+1,024 (P and TG are its ends), the slice latent doubled for P and for I (car 1,024, airfoil 512; the fused
+geometry kernel caps slices at 1,024), and the FINAL control. Predictions are in PREREG E6: a monotone ladder
+and a P-only gain from the doubled slices say capacity; a flat ladder and an equal gain say consensus; a FINAL
+penalty above 30% says depth-matched reading is load-bearing in ISLA as in SMART.
+
 ### In flight
 
 - Parity lanes on `code_dtt13`, theta 1, two seeds each, same recipes as the E3 and E5 arms, submitted 07:37 PDT
