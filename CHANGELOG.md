@@ -227,6 +227,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resume one epoch behind), and fp16 runs save `GradScaler` state. A
   data-loading or forward failure on one rank now stops every rank instead of
   leaving the others waiting for the process-group timeout.
+- `DomainMeshReader` gains `boundary_subsample` (`"both"`, `"cells"`,
+  `"points"`) to choose which subsample applies to the in-file boundaries.
+  Composing the cell and point subsamples on a triangulated boundary kept only
+  the cells whose three vertices all survived the point cut, about `N / 27` of
+  the `N` requested. The default keeps the composed behaviour.
+- Seeded `DomainMeshReader` subsamples select the same rows from zarr stores
+  as from memmap files. Before, boundaries read in full, and interiors read
+  with `drop_interior_cells`, could differ between the two formats.
 - GLOBE DrivAerML postprocessing reports correct Cd, Cl, and Cs on subsampled
   surfaces. Before, they shrank with the fraction of cells kept.
 - The unified external aero recipe documents how surface subsampling affects
@@ -239,11 +247,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to avoid repeated CUDA synchronization for the same boolean mask.
   Point slicing skips mask processing when the output has no cells because
   the input has no cells or the point selection is empty.
-- `DomainMeshReader` gains `boundary_subsample` (`"both"`, `"cells"`,
-  `"points"`) to choose which subsample applies to the in-file boundaries.
-  Composing the cell and point subsamples on a triangulated boundary kept only
-  the cells whose three vertices all survived the point cut, about `N / 27` of
-  the `N` requested. The default keeps the composed behaviour.
 - Triangle areas use direct area components and a rescaled norm, preserving
   thin faces and their quadrature measures without Gram cancellation or
   overflow/underflow in the norm.
