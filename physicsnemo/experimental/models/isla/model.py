@@ -444,8 +444,9 @@ class ISLA(Module):
             that depends on the boundary alone), with the measure fractions
             renormalized over the subsample, so the read is a quadrature of
             the same integral on fewer nodes; the stride offset is drawn at
-            random in training and is zero in evaluation. A diagnostic of the
-            read's capacity (the E6 ladder of the tree-read program), not a
+            random in training and is zero in evaluation; a boundary of at
+            most ``K`` cells is read in full. A diagnostic of the read's
+            capacity (the E6 ladder of the tree-read program), not a
             reference form; query independence holds exactly.
         read_final_boundary: Read-only interior task only. ``False``
             (default): the prediction points read each block's slices at
@@ -1294,8 +1295,10 @@ class ISLA(Module):
         if k is None:
             return None
         b, n, _ = r.shape
-        if k > n:
-            raise ValueError(f"kernel_read_cells={k} exceeds the {n} boundary cells of the case")
+        if k >= n:
+            ### A boundary with no more cells than the budget is read in full (the top
+            ### of the ladder): an airfoil of a thousand cells under a budget of 1,024.
+            return None
         stride = n // k
         with torch.no_grad():
             rows = []

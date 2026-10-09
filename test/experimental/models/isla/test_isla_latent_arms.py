@@ -141,11 +141,17 @@ def test_subsample_read_moves_its_offset_in_training_and_is_fixed_in_evaluation(
     assert same(outputs(_run(m, mesh, drv, q, sdf, sn)), e1, atol=0.0)
 
 
-def test_subsample_read_refuses_more_cells_than_the_boundary_has():
-    m = _model(theta=0.0, cells=301)
+def test_subsample_read_reads_a_smaller_boundary_in_full():
+    """A boundary with no more cells than the budget is read in full: the same
+    predictions as the dense global read, every pair."""
+    dense = _model(read=True)
+    sub = _model(theta=0.0, cells=1024)
+    sub.load_state_dict(dense.state_dict())
     mesh, drv, q, sdf, sn = _case()
-    with pytest.raises(ValueError, match="kernel_read_cells"):
-        _run(m, mesh, drv, q, sdf, sn)
+    a = outputs(_run(dense, mesh, drv, q, sdf, sn))
+    b = outputs(_run(sub, mesh, drv, q, sdf, sn))
+    assert same(b, a, atol=1e-10)
+    assert sub.kernel_read_pairs == 120 * 300
 
 
 def test_read_final_boundary_is_exactly_query_independent_and_differs_from_depth_matched():

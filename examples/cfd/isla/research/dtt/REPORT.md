@@ -426,9 +426,15 @@ penalty above 30% says depth-matched reading is load-bearing in ISLA as in SMART
 
 ### In flight
 
-- E6 lanes 26 to 45 on `code_dtt14` (jobs 136085 to 136104, submitted 11:18 PDT 2026-10-09; verify14 job 136084
-  runs the latent-arm tests, the tree tests and the ISLA suite on a GB300): car `dtt_vol_{k256,k1024,ps1024,
-  is1024,final}_seed42/43` and AirfRANS `af_{k256,k1024,ps512,is512,final}_seed42/43`.
+- E6 lanes 26 to 45 on `code_dtt14` (jobs 136085 to 136104, submitted 11:18 PDT 2026-10-09): car
+  `dtt_vol_{k256,k1024,ps1024,is1024,final}_seed42/43` and AirfRANS `af_{k256,k1024,ps512,is512,final}_seed42/43`.
+  verify14 (job 136084, GB300): the latent-arm and tree tests 38 passed, the ISLA suite 305 passed with the one
+  known compile-versus-eager flake. Eighteen lanes accepted within eight minutes (car k1024 at 1.69 s per step
+  and 204 GB per rank; airfoil k256 at 0.47 s and 36 GB). The two `af_k1024` lanes stopped at their first step:
+  the airfoils have 958 to 1,018 boundary cells, so a budget of 1,024 is the whole boundary and the first form of
+  `kernel_read_cells` refused it (BLOCKED markers kept as the record). `code_dtt15` (the same code with a budget
+  of at least the cell count reading the boundary in full) carries the replacement rung `af_k512_seed42/43`
+  (rows 46 and 47): the airfoil ladder is K = 256, 512 and the whole boundary (arm G of E5).
 - Parity lanes on `code_dtt13`, theta 1, two seeds each, same recipes as the E3 and E5 arms, submitted 07:37 PDT
   2026-10-09 and all started at once: `dtt_vol_tg1ct_seed42/43` (car, 512 / 512, lr 3.75e-4, 200,000, 500
   epochs) and `af_tg1ct_seed42/43` (AirfRANS, 100,000 cells, lr 5e-4, 500 epochs). Accepted at 07:44: the car
