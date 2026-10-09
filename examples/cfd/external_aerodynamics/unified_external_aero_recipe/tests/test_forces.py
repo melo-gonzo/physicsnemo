@@ -96,25 +96,30 @@ def test_uniform_shear_gives_drag_equal_to_c_times_area():
     assert abs(res["CL"]) < 1e-4 and abs(res["CS"]) < 1e-4
 
 
-def test_measure_weighted_subsample_force_is_not_area_fraction_shrunk():
-    """HT cell measures recover a constant full-surface traction integral."""
+@pytest.mark.parametrize("length_scale", [1.0, 3.0])
+def test_subsampled_surface_with_effective_measures_recovers_full_surface_drag(
+    length_scale,
+):
+    """Effective measures make the integral over kept cells estimate the full one."""
     full = _closed_tetrahedron()
-    retained = full.slice_cells(torch.tensor([0, 1]))
-    scale_measures(retained, full.n_cells / retained.n_cells)
+    kept = torch.tensor([0, 1])
+    unweighted = full.slice_cells(kept)
+    weighted = full.slice_cells(kept)
+    scale_measures(weighted, full.n_cells / weighted.n_cells)
 
     c = 2.0
-    cf = torch.tensor([[c, 0.0, 0.0]]).repeat(retained.n_cells, 1)
-    result = forces.force_moment_coefficients(
-        retained,
-        torch.zeros(retained.n_cells),
-        cf,
-        **_COMMON,
-    )
+    cp = torch.zeros(len(kept))
+    cf = torch.tensor([[c, 0.0, 0.0]]).repeat(len(kept), 1)
+    common = {**_COMMON, "length_scale": length_scale}
+    res = forces.force_moment_coefficients(weighted, cp, cf, **common)
+    res_unweighted = forces.force_moment_coefficients(unweighted, cp, cf, **common)
 
-    expected = c * float(full.cell_areas.sum())
-    assert result["CD"] == pytest.approx(expected, abs=1e-3)
-    bare_retained = c * float(retained.cell_areas.sum())
-    assert bare_retained == pytest.approx(expected / 2.0, abs=1e-3)
+    ### A regular tetrahedron's faces have equal area, so two of four cells
+    ### weighted by 4/2 reproduce the full-surface value exactly; without
+    ### the weights the integral covers only the kept half.
+    expected = c * float(full.cell_areas.sum()) * length_scale**2
+    assert res["CD"] == pytest.approx(expected, abs=1e-3)
+    assert res_unweighted["CD"] == pytest.approx(expected / 2, abs=1e-3)
 
 
 def test_uniform_shear_moment_about_offset_center():

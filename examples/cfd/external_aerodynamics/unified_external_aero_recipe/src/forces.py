@@ -38,8 +38,8 @@ moment coefficient vectors are
 
 The surface integral is evaluated with the mesh quadrature utility
 :meth:`physicsnemo.mesh.Mesh.integrate` (cell-data / P0 rule:
-:math:`\\int_S f\\,dA = \\sum_c f_c\\,A_c w_c`, where :math:`w_c`
-is the represented-to-geometric measure weight and defaults to one).
+:math:`\\int_S f\\,dA = \\sum_c f_c\\,\\mu_c`, where :math:`\\mu_c` is the
+complete effective measure returned by ``cell_measures(mesh)``).
 
 The coefficient vectors are then projected onto an orthonormal
 (drag, lift, side) triad built from the per-sample freestream direction
@@ -68,15 +68,28 @@ Conventions and assumptions:
   arms are handled in the centered frame, so restoring the ``CenterMesh``
   translation in saved inference geometry does not affect forces (and
   would only shift the reference point used to express moments).
-- **Subsampled surfaces.** Cell subsampling records the inverse inclusion
-  probability in the mesh's effective measure. The resulting force and
-  moment coefficients are Horvitz--Thompson estimates of the full-surface
-  integrals: unbiased under the production uniform sampler, but stochastic
-  and potentially noisy rather than deterministically shrunk by the kept-area
-  fraction. ``ForceContext.coefficients``'s 1:1 points/cells contract cannot
-  distinguish an exact full-surface integral from this estimate;
-  ``infer.py`` warns when a vehicle's cell count sits at the
-  ``sampling_resolution`` cap.
+- **Subsampled surfaces.** Cell subsampling, by the reader's
+  ``subsample_n_cells`` or by ``SubsampleMesh``, multiplies each retained
+  cell's effective measure by ``n_before / n_kept``. ``Mesh.integrate`` uses
+  that complete measure to compensate for the retained-area shrinkage. This
+  gives an unbiased Horvitz--Thompson estimate when every cell has inclusion
+  probability ``n_kept / n_before`` and its field value and physical moment
+  reference are fixed independently of the sample.
+  The large-population ``poisson_gap`` sampler is approximate, so this
+  guarantee does not apply to every ``SubsampleMesh`` path. Predictions
+  that depend on the sampled geometry can introduce additional bias.
+  Likewise, centering after reader-level subsampling changes the physical
+  moment origin between samples; reweighting cannot correct that frame change.
+  The reader keeps one contiguous (cyclic) block of cells in storage order.
+  Storage order is often spatially coherent, so reader-subsampled estimates
+  can be much noisier than those from ``SubsampleMesh``'s uniform random
+  subset.
+  Subsampled coefficients can have both sampling noise and bias and should be
+  checked for convergence with surface resolution.
+  ``ForceContext.coefficients``'s 1:1 points/cells contract check cannot
+  tell an exact full-surface integral from such an estimate; ``infer.py``
+  warns when a vehicle's cell count sits at the ``sampling_resolution``
+  cap.
 """
 
 from dataclasses import dataclass
@@ -154,7 +167,8 @@ def force_moment_coefficients(
     Args:
         vehicle: Triangulated surface mesh (codimension-1) carrying the
             body. Its cells define the quadrature; ``cell_normals`` and
-            effective cell measures are taken from this mesh.
+            the complete effective cell measures (including sampling corrections)
+            are taken from this mesh.
         pressure_coeff: Per-cell pressure coefficient :math:`C_p`, shape
             ``(n_cells,)`` (a trailing singleton dim, e.g. ``(n_cells, 1)``,
             is flattened internally). Must align 1:1 with ``vehicle`` cells.
@@ -190,7 +204,7 @@ def force_moment_coefficients(
     ### Surface traction coefficient t = -Cp n + Cf (force per area / q_inf).
     traction = -cp.unsqueeze(-1) * normals + cf  # (C, 3)
 
-    ### Quadrature: Mesh.integrate sums field_c * area_c over the surface.
+    ### Quadrature: Mesh.integrate sums field_c * effective_measure_c.
     force = mesh.integrate(traction, data_source="cells")  # (3,)
     arm = centroids - moment_center.to(device=device, dtype=dtype)  # (C, 3)
     moment = mesh.integrate(

@@ -29,6 +29,7 @@ import os
 from pathlib import Path
 
 import infer
+import pytest
 import torch
 from conftest import make_surface_domain_mesh, make_volume_domain_mesh
 from nondim import NonDimensionalizeByMetadata, freestream_scales
@@ -36,11 +37,7 @@ from omegaconf import OmegaConf
 from tensordict import TensorDict
 
 from physicsnemo.mesh import DomainMesh
-from physicsnemo.mesh.calculus.measure import (
-    EFFECTIVE_MEASURE_KEY,
-    POINT_MEASURE_DIMENSION_KEY,
-    set_point_measures,
-)
+from physicsnemo.mesh.calculus.measure import point_measures, set_point_measures
 
 _RECIPE = Path(__file__).resolve().parent.parent
 _DATASETS = _RECIPE / "datasets"
@@ -389,31 +386,30 @@ def test_attach_and_save_restores_center_after_geometry_scale(tmp_path):
     torch.testing.assert_close(reloaded.global_data["center"], center)
 
 
-def test_attach_and_save_preserves_physical_point_measures(tmp_path):
-    """Exported quadrature remains usable after restoring physical geometry."""
+@pytest.mark.parametrize("rescale_geometry", [False, True])
+def test_attach_and_save_preserves_physical_point_measures(tmp_path, rescale_geometry):
+    """Saved measures remain integrable and follow geometry through a round trip."""
     targets = {"pressure": "scalar", "wss": "vector"}
     domain = make_surface_domain_mesh(targets, n_cells=16)
-    set_point_measures(
-        domain.interior, torch.ones(domain.interior.n_points), dimension=2
-    )
+    measures = torch.linspace(0.5, 2.0, domain.interior.n_points)
+    set_point_measures(domain.interior, measures, dimension=2)
     phys = domain.interior.point_data.select("pressure", "wss")
-    out_path = tmp_path / "measure_free.pdmsh"
-
+    out_path = tmp_path / "m.pdmsh"
     infer.attach_and_save(
-        domain,
-        phys,
-        phys,
-        targets,
-        out_path,
-        rescale_geometry=True,
+        domain, phys, phys, targets, out_path, rescale_geometry=rescale_geometry
     )
 
     reloaded = DomainMesh.load(str(out_path))
+    factor = domain.global_data["L_ref"] ** 2 if rescale_geometry else 1.0
+    torch.testing.assert_close(point_measures(reloaded.interior), measures * factor)
     torch.testing.assert_close(
-        reloaded.interior.point_data[EFFECTIVE_MEASURE_KEY],
-        torch.ones(domain.interior.n_points) * domain.global_data["L_ref"] ** 2,
+        reloaded.interior.integrate_samples("pred_pressure"),
+        (phys["pressure"] * measures * factor).sum(),
     )
-    assert int(reloaded.interior.global_data[POINT_MEASURE_DIMENSION_KEY]) == 2
+    torch.testing.assert_close(
+        point_measures(reloaded.interior.scale(2.0)), measures * factor * 4
+    )
+    torch.testing.assert_close(point_measures(domain.interior), measures)
 
 
 ### _spatial_dims_of_first_sample
@@ -437,5 +433,7 @@ def test_spatial_dims_of_first_sample_follows_the_data():
     assert infer._spatial_dims_of_first_sample(_DS(2), [7, 8]) == 2
     assert infer._spatial_dims_of_first_sample(_DS(3), [0]) == 3
     assert infer._spatial_dims_of_first_sample(_DS(3), []) is None
-    keys = MetricCalculator({"velocity": "vector"}, n_spatial_dims=2, metrics=["l2"]).expected_keys()
+    keys = MetricCalculator(
+        {"velocity": "vector"}, n_spatial_dims=2, metrics=["l2"]
+    ).expected_keys()
     assert keys == ["velocity_x_l2", "velocity_y_l2", "velocity_l2"]
