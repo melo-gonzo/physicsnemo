@@ -357,16 +357,41 @@ up is the principal-axis tree's frame-freeness at finite theta (posed equalled n
 the standard set for this program. The switch needs a two-lane retrain at theta 1 on the car to confirm accuracy
 parity, since the clusters differ.
 
+### The read on `ClusterTree` (2026-10-09, snapshot `code_dtt13`)
+
+Done as Peter asked, on the assumption that PRs #2077, #2078 and #2079 merge. Upstream, PR #2079 (draft, on top
+of #2078) adds `ClusterTree.find_point_interaction_pairs`: the single-tree walk for individual target points with
+`source_admissible`, the dual walk's machinery (feature-major node tables, deferred compaction, one sync per
+level), `theta = 0` as the dense plan, NaN boxes opened to the exact stream. Measured on three real cars (job
+135286, one GB300): 286 sources per point at theta 1 (13 exact), 765 at theta 0.5, walk 48 and 88 to 158 ms, tree
+build 22 ms; the dual plan with expanded far targets evaluates 800 per point at theta 1 on the same inputs;
+`test/mesh/spatial` 493 passed on the GB300. On this branch `tree_read.py` now holds `BoundaryForest`: the cells
+split by the sign octant of their normal (opposite normals never share a tree), one `ClusterTree.from_points`
+(leaf 4, measure fractions as areas) and one `compute_source_aggregates` (centroid, mean normal, mean rank-1
+inputs) per octant, the trees' nodes in one table with `node_total_area` as the measure and the coherence mask
+`|mean n| > 1 - theta^2 / 2` (the RMS-chord test) as `source_admissible`; a point walks every tree and the lists
+are concatenated and sorted by point. The per-block key and value means are one scatter to the leaves and one
+pairwise sweep up the forest (float32), as before. `boundary_tree.py` is deleted. The tests that described the
+dedicated tree (balance, spheres, frame-freeness) are replaced by forest tests: octant partition and node
+tightness (box, centroid, normal, rank-1 means, measure, coherence, child ranges, leaf tiling), a randomly
+oriented thin plate never mixing its faces, node means, admission and single coverage with the list of a point
+alone equal to its list among the others; the model-level contracts (dense at theta 0, covariance, gauge,
+refinement, measure scale, query independence at every theta, gradients, error falling with theta) are
+unchanged. CPU float64: 23 passed in the tree file, 200 passed in the rest of the ISLA suite.
+
+What changes for the model: at theta 1 the forest's pair count is within 10% of the retired tree's (1,084 against
+980 per point on the car); at theta 0.5 it is 6,900 per point, so theta 0.5 stays infeasible on one GB300. The
+retired tree's frame-freeness at finite theta is given up (Morton boxes and octants are the frame's; at theta 0
+nothing changes).
+
 ### In flight
 
-- Nothing training.
-- Lanes `dtt_vol_tg1_seed42/43` (E3's TG arms: read-only + tree read at theta 1, leaf 4, RMS orientation tree,
-  snapshot `code_dtt11`, 512 / 512, lr 3.75e-4, 200,000, 500 epochs) submitted 2026-10-06 16:42 PDT; accepted at
-  16:48 (steps of 1.86 s, 215 to 219 GB per rank, loss 0.062 at epoch 0 like the P lanes', no errors); about 200 s
-  per epoch on four GB300 ranks, so roughly 28 hours each.
-- Lanes `dtt_vol_p_seed42/43` (E3's P arms, read-only without a read): past epoch 50 at 0.48 s per step, about 7
-  hours in all.
-- Job 106642 / verify11: verification of the tenth and eleventh snapshots (the tenth's tree tests pass).
+- Job verify13 (GB300): the tree file, the ISLA suite and `test/mesh/spatial` under `code_dtt13`, then the cost
+  probe (`dtt_bench.py`, read-only floor and theta 1) on three real cars.
+- Parity lanes on `code_dtt13`, theta 1, two seeds each, same recipes as the E3 and E5 arms:
+  `dtt_vol_tg1ct_seed42/43` (car, 512 / 512, lr 3.75e-4, 200,000, 500 epochs) and `af_tg1ct_seed42/43` (AirfRANS,
+  100,000 cells, lr 5e-4, 500 epochs). Prediction (PREREG third amendment): parity with `dtt_vol_tg1_*` and
+  `af_tg1_*` within the seed separation on every field. Scored under the same protocols when they finish.
 
 ### Decomposition with orientation-coherent clusters (job 106436, largest-chord tree, same 12 cases)
 
@@ -401,16 +426,20 @@ the sixth snapshot shows the step within the bar; theta 0.25 only if the cost al
 
 ## Implementation notes
 
-`BoundaryTree.build` is level synchronous: per level the nodes' means and covariances by `index_add_` in float64,
-`torch.linalg.eigh` for the principal axis, the sign from the third moment, two stable sorts to reorder the cells
-within their nodes, a median split; then measure-weighted aggregates of every node by prefix sums, and the
-bounding radius level by level. `point_tree_pairs` is a level-synchronous walk: a frontier of (point, node) pairs
-from every point's root entry, three boolean splits per level (admitted, opened leaf, descend), the leaves
-expanded with `_ragged_arange`, the output sorted by point. Per block the node's key and value are the
-measure-weighted means of its cells' through float64 prefix sums over the tree order (`node_means`),
-differentiable in the cells' states. The per-block read reuses the truncated read's sparse machinery (`PairPlan`,
-`pair_scores`, `pair_weighted_sum`, Triton on CUDA) with a segment max for the softmax shift and no null; the
-dense read's parameters are shared, so the two forms are one model.
+Since 2026-10-09 (`code_dtt13`) the tree is GLOBE's. `BoundaryForest.build` splits the cells by the sign octant
+of their normal and builds one `ClusterTree.from_points` per octant (Morton-cell splits of PR #2078, leaf 4, the
+measure fractions as areas), takes each node's centroid, mean normal and mean rank-1 inputs from
+`compute_source_aggregates` and its measure from `node_total_area`, and marks a node coherent when its mean
+normal's length exceeds `1 - theta^2 / 2` (the RMS chord of its normals below theta). `BoundaryForest.point_pairs`
+walks every tree once per point with `ClusterTree.find_point_interaction_pairs` (PR #2079: box-diagonal
+admission, `source_admissible` = coherent, a leaf that is not admitted contributes its cells), concatenates the
+trees' near and far streams and sorts by point. Per block the node's key and value are the measure-weighted means
+of its cells' by one scatter to the leaves and a pairwise sweep up the forest in float32 (`node_means`),
+differentiable in the cells' states. The per-block read is the fused Triton segment softmax
+(`segment_softmax_read`: online softmax per point in forward, per point for the query and kernel gradients and per
+source chunk with atomics for the key and value gradients, nothing kept per pair); the dense read's parameters
+are shared, so the two forms are one model. Until 2026-10-09 the tree was a dedicated balanced principal-axis
+tree with bounding spheres and normal-first splits (`boundary_tree.py`, deleted; history in the sections above).
 
 ## Environment notes
 

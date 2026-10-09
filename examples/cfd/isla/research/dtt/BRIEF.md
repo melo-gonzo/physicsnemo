@@ -24,12 +24,13 @@ of QI-GLOBAL, four seeds, float32 protocol) is 0.72 / 0.83 / 0.89 of the interac
 pressure / velocity / eddy viscosity, exactly independent, but costs Q x N pairs per block: 1e8 on AirfRANS (2.1x
 the step) and 4e10 on DrivAerML Volume (minutes per step, a 1.3 TB pair basis; months per lane).
 
-**3. What is new, and why will it work?** The same read, evaluated through a cluster tree over the boundary cells
-(`boundary_tree.py`: balanced, each cluster split at its median along its own principal axis, bounding spheres;
-GLOBE's Morton tree was the first choice and its loose boxes retired it, see the report) that every prediction
-point walks on its own, as a body walks the tree in an N-body code: the point reads nearby cells one by one and
-distant clusters through their measure-weighted aggregates (centroid, mean normal, total measure, mean key and
-value), a cluster admitted when its sphere diameter is below theta times its gap to the point. The read
+**3. What is new, and why will it work?** The same read, evaluated through a forest of cluster trees over the
+boundary cells (`tree_read.py`: GLOBE's `ClusterTree` with Morton-cell splits, one tree per normal octant so that
+opposite faces never share a cluster; a dedicated principal-axis tree with bounding spheres was used until
+2026-10-09 and retired at parity, see the report) that every prediction point walks on its own, as a body walks
+the tree in an N-body code: the point reads nearby cells one by one and distant clusters through their
+measure-weighted aggregates (centroid, mean normal, total measure, mean key and value), a cluster admitted when its
+box diagonal is below theta times its distance to the point and its normals are coherent (RMS chord below theta). The read
 is a measure-weighted softmax over the boundary, so a cluster's aggregate is the monopole of the same quadrature,
 and the error vanishes as theta goes to zero: theta is a numerical tolerance with a convergence guarantee, not a
 model constant; the model is defined as the exact dense read and the tree is how it is computed, as in an N-body

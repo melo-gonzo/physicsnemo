@@ -16,16 +16,17 @@
 
 """Contract tests for ISLA's tree-accelerated global read (``kernel_read_theta``).
 
-The tree read is the dense global read evaluated through a Barnes-Hut cluster tree
-over the boundary cells, walked once per prediction point. At ``theta = 0`` it is the
-dense read pair for pair, so every contract of the dense read must hold exactly there:
-equality with the dense form, Euclidean covariance, the similarity gauge, refinement
-and measure-scale invariance, a gradient for every parameter, CUDA against CPU. Query
-independence holds exactly at every ``theta`` (a point's walk depends on the tree and
-the point alone). At a finite ``theta`` the read is an approximation whose error falls
-with ``theta``; the tests measure that on a smooth boundary and check that the pair
-list still covers the whole boundary measure exactly once per point and admits only
-well-separated clusters.
+The tree read is the dense global read evaluated through a forest of Barnes-Hut
+cluster trees over the boundary cells (GLOBE's ``ClusterTree``, one tree per normal
+octant), walked once per prediction point. At ``theta = 0`` it is the dense read pair
+for pair, so every contract of the dense read must hold exactly there: equality with
+the dense form, Euclidean covariance, the similarity gauge, refinement and
+measure-scale invariance, a gradient for every parameter, CUDA against CPU. Query
+independence holds exactly at every ``theta`` (a point's walk depends on the forest
+and the point alone). At a finite ``theta`` the read is an approximation whose error
+falls with ``theta``; the tests measure that on a smooth boundary and check that the
+pair list still covers the whole boundary measure exactly once per point and admits
+only well-separated, orientation-coherent clusters.
 """
 
 import math
@@ -36,10 +37,10 @@ import torch
 import physicsnemo.experimental.models.isla.tree_read as tree_read
 from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla.kernel_read import _KernelBasis, global_geo_width
-from physicsnemo.experimental.models.isla.boundary_tree import BoundaryTree
 from physicsnemo.experimental.models.isla.tree_read import (
+    BoundaryForest,
     _TreeKernelRead,
-    point_tree_pairs,
+    normal_octants,
     tree_read_pairs,
 )
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
@@ -191,126 +192,131 @@ def test_tree_read_pairs_cover_the_boundary_measure_once(theta):
         assert pairs.n_pairs_node > 0 and pairs.n_pairs < 150 * 500
 
 
+def _node_cells(f, i):
+    cells, _ = f.node_cells(torch.tensor([i]))
+    return cells
+
+
 @pytest.mark.parametrize("dim", [3, 2])
-def test_boundary_tree_is_balanced_tight_and_frame_free(dim):
-    """Every leaf sits at the same depth with at most the leaf size of cells; every
-    node's cells lie inside its bounding sphere and sum to its measure; the leaves
-    partition the cells; a rotated, reflected, translated and rescaled copy of the cells
-    gives the same clusters (as sets of cells)."""
+def test_boundary_forest_splits_by_normal_octant_and_its_nodes_are_tight(dim):
+    """One cluster tree per normal octant: the trees' cells partition the cells and
+    each tree's cells share an octant; every node's box holds its cells; its virtual
+    cell is their measure-weighted centroid, renormalized mean normal, mean rank-1
+    input and total measure; its coherence is the RMS-chord test; the children split
+    their parent's range; the leaves tile the cells with at most the leaf size each."""
     pts, nrm, w, _ = cloud(1000, d=dim, seed=8)
     vecs = torch.nn.functional.normalize(torch.randn(1000, 2, dim, dtype=D), dim=-1)
-    tree = BoundaryTree.build(pts, w, nrm, vecs, leaf_size=8, theta=0.5, eps=1e-12)
-    n, m = tree.n_cells, tree.n_nodes
-    assert tree.depth == 7 and m == 2**8 - 1 and n == 1000
-    leaves = torch.arange(tree.first_leaf, m)
-    assert int(tree.node_count[leaves].max()) <= 8 and int(tree.node_count[leaves].min()) >= 4
-    assert int(tree.node_count[leaves].sum()) == n
-    assert torch.equal(torch.sort(tree.order).values, torch.arange(n))
+    theta = 0.5
+    f = BoundaryForest.build(pts, w, nrm, vecs, theta=theta, leaf_size=8, eps=1e-12)
+    n, m = f.n_cells, f.n_nodes
+    assert n == 1000 and len(f.trees) == len(f.tree_cells) == int(f.node_offset.shape[0]) - 1
+    assert len(f.trees) == 2**dim
+    assert sum(t.n_nodes for t in f.trees) == m
+    assert torch.equal(torch.sort(torch.cat(f.tree_cells)).values, torch.arange(n))
+    assert torch.equal(torch.sort(f.cells).values, torch.arange(n))
+    octant = normal_octants(nrm)
+    for sel in f.tree_cells:
+        assert len(set(octant[sel].tolist())) == 1
     for i in range(m):
-        cells = tree.order[tree.node_start[i] : tree.node_start[i] + tree.node_count[i]]
-        d2 = (pts[cells] - tree.center[i]).norm(dim=-1)
-        assert float(d2.max()) <= float(tree.radius[i]) * (1 + 1e-12) + 1e-12
-        assert torch.allclose(tree.measure[i], w[cells].sum())
-        c = (pts[cells] * w[cells, None]).sum(0) / w[cells].sum()
-        assert torch.allclose(tree.center[i], c)
+        cells = _node_cells(f, i)
+        assert bool((pts[cells] >= f.aabb_min[i] - 1e-9).all())
+        assert bool((pts[cells] <= f.aabb_max[i] + 1e-9).all())
+        assert torch.allclose(f.measure[i], w[cells].sum())
+        assert torch.allclose(f.center[i], (pts[cells] * w[cells, None]).sum(0) / w[cells].sum())
         mean_n = (nrm[cells] * w[cells, None]).sum(0) / w[cells].sum()
-        rms = torch.sqrt(((nrm[cells] - tree.normal[i]).square().sum(-1) * w[cells]).sum() / w[cells].sum())
-        assert float(tree.spread[i]) == pytest.approx(math.sqrt(2 * (1 - float(mean_n.norm()))), abs=1e-9)
-        assert float(tree.spread[i]) == pytest.approx(float(rms), abs=1e-9)
-        if i < tree.first_leaf:
-            left, right = 2 * i + 1, 2 * i + 2
-            assert int(tree.node_start[left]) == int(tree.node_start[i])
-            assert int(tree.node_count[left] + tree.node_count[right]) == int(tree.node_count[i])
-    assert torch.allclose(tree.normal.norm(dim=-1), torch.ones(m, dtype=D))
-    assert tree.vecs.shape == (m, 2, dim)
-    R = orthogonal(dim, 3, True)
-    t = torch.arange(1.0, dim + 1.0, dtype=D)
-    k = 3.0
-    moved = BoundaryTree.build(
-        k * pts @ R.T + t, 2.0 * w, nrm @ R.T, vecs @ R.T, leaf_size=8, theta=0.5, eps=1e-12
-    )
-    for i in range(m):
-        a = set(tree.order[tree.node_start[i] : tree.node_start[i] + tree.node_count[i]].tolist())
-        b = set(moved.order[moved.node_start[i] : moved.node_start[i] + moved.node_count[i]].tolist())
-        assert a == b, i
-    assert torch.allclose(moved.radius, k * tree.radius, rtol=1e-9, atol=1e-12)
-    assert torch.allclose(moved.center, k * tree.center @ R.T + t, atol=1e-9)
-    assert torch.allclose(moved.normal, tree.normal @ R.T, atol=1e-9)
-    assert torch.allclose(moved.spread, tree.spread, atol=1e-9)
-    assert torch.allclose(moved.measure, 2.0 * tree.measure)
+        assert torch.allclose(f.normal[i], mean_n / mean_n.norm(), atol=1e-9)
+        mean_u = (vecs[cells] * w[cells, None, None]).sum(0) / w[cells].sum()
+        assert torch.allclose(f.vecs[i], mean_u, atol=1e-9)
+        rms_chord = math.sqrt(2 * (1 - float(mean_n.norm())))
+        assert bool(f.coherent[i]) == (rms_chord < theta)
+        left, right = int(f.left[i]), int(f.right[i])
+        if left >= 0:
+            a, b = sorted(
+                [(int(f.range_start[c]), int(f.range_count[c])) for c in (left, right)]
+            )
+            assert a[0] == int(f.range_start[i]) and a[0] + a[1] == b[0]
+            assert b[0] + b[1] == int(f.range_start[i] + f.range_count[i])
+        else:
+            assert 1 <= int(f.range_count[i]) <= 8
+    leaves = f.leaf_ids
+    ends = torch.cumsum(f.range_count[leaves], 0)
+    assert torch.equal(f.range_start[leaves][1:], ends[:-1]) and int(ends[-1]) == n
+    assert torch.allclose(f.normal.norm(dim=-1), torch.ones(m, dtype=D))
+    assert f.vecs.shape == (m, 2, dim)
 
 
-def test_boundary_tree_parts_the_faces_of_a_thin_body_before_positions():
-    """A thin plate (two faces a hair apart, opposite normals): the root splits by
-    normals, so both children are one-sided (spread 0) and no node below the root mixes
-    the faces, whatever its position."""
+def test_boundary_forest_never_mixes_opposite_normals():
+    """A thin plate in a random orientation (two faces a hair apart, opposite normals)
+    lands in two trees, one per face, so no node holds cells of both faces whatever
+    its position, and every node is coherent with its face's normal."""
     g = torch.Generator().manual_seed(11)
     xy = torch.rand(400, 2, generator=g, dtype=D)
     up = torch.cat([xy, torch.full((400, 1), 1e-3, dtype=D)], -1)
     down = torch.cat([xy, torch.full((400, 1), -1e-3, dtype=D)], -1)
-    pts = torch.cat([up, down])
-    nrm = torch.cat([torch.tensor([[0.0, 0.0, 1.0]] * 400, dtype=D), torch.tensor([[0.0, 0.0, -1.0]] * 400, dtype=D)])
+    R = orthogonal(3, 5, False)
+    pts = torch.cat([up, down]) @ R.T
+    nrm = torch.cat([torch.tensor([[0.0, 0.0, 1.0]] * 400, dtype=D), torch.tensor([[0.0, 0.0, -1.0]] * 400, dtype=D)]) @ R.T
     w = torch.ones(800, dtype=D)
-    tree = BoundaryTree.build(pts, w, nrm, None, leaf_size=8, theta=0.5, eps=1e-12)
-    ### The root's mean normal is the zero vector: spread sqrt(2); its children are one-sided.
-    assert float(tree.spread[0]) == pytest.approx(math.sqrt(2.0), abs=1e-9)
-    assert torch.allclose(tree.spread[1:], torch.zeros_like(tree.spread[1:]), atol=1e-7)
-    for i in (1, 2):
-        cells = tree.order[tree.node_start[i] : tree.node_start[i] + tree.node_count[i]]
-        assert len(set((cells >= 400).tolist())) == 1
+    f = BoundaryForest.build(pts, w, nrm, None, theta=0.5, leaf_size=8, eps=1e-12)
+    assert len(f.trees) == 2
+    for sel in f.tree_cells:
+        assert len(set((sel >= 400).tolist())) == 1
+    assert bool(f.coherent.all())
+    assert torch.allclose(f.normal, nrm[f.cells[f.range_start]], atol=1e-9)
 
 
-def test_node_means_are_the_measure_weighted_means_of_every_subtree():
+def test_node_means_are_the_measure_weighted_means_of_every_node():
     """The scatter-and-sum-up node means equal the explicit weighted mean of each node's
     cells, and carry a gradient to the cells' rows."""
     pts, nrm, w, _ = cloud(300, d=3, seed=9)
-    tree = BoundaryTree.build(pts, w, nrm, None, leaf_size=8, theta=0.5, eps=1e-12)
-    case = tree_read.TreeReadCase.from_tree(tree, tree.measure, 0, 0)
+    f = BoundaryForest.build(pts, w, nrm, None, theta=0.5, leaf_size=8, eps=1e-12)
     x = torch.randn(300, 4, 5, dtype=D, requires_grad=True)
-    means = tree_read.node_means(x, case, w)
-    assert means.shape == (tree.n_nodes, 4, 5)
-    for i in range(tree.n_nodes):
-        cells = tree.order[tree.node_start[i] : tree.node_start[i] + tree.node_count[i]]
+    means = tree_read.node_means(x, f, w)
+    assert means.shape == (f.n_nodes, 4, 5)
+    for i in range(f.n_nodes):
+        cells = _node_cells(f, i)
         ref = (x[cells] * w[cells, None, None]).sum(0) / w[cells].sum()
         assert torch.allclose(means[i], ref, atol=1e-5), i
     means.sum().backward()
     ### d(sum of all node means)/dx_j = w_j * sum over the nodes holding j of 1 / measure.
     ref = torch.zeros(300, dtype=D)
-    for i in range(tree.n_nodes):
-        cells = tree.order[tree.node_start[i] : tree.node_start[i] + tree.node_count[i]]
+    for i in range(f.n_nodes):
+        cells = _node_cells(f, i)
         ref[cells] += w[cells] / w[cells].sum()
     assert torch.allclose(x.grad, ref[:, None, None].expand_as(x), atol=1e-5)
 
 
 @pytest.mark.parametrize("theta", [0.0, 0.5, 1.0])
-def test_point_tree_pairs_admit_only_separated_coherent_clusters_and_cover_every_cell(theta):
-    """Each point's walk admits a node only when the node's sphere diameter is below
-    theta times the gap between the point and the sphere and its normal spread is below
-    theta, and its cells and nodes together hold every cell exactly once."""
+def test_point_pairs_admit_only_separated_coherent_nodes_and_cover_every_cell(theta):
+    """Each point's walk admits a node only when the node's box diagonal is below theta
+    times the distance from the point to the box and the node is coherent (RMS normal
+    chord below theta), and its cells and nodes together hold every cell exactly once;
+    a point's list is the same whether it walks alone or with the others."""
     pts, nrm, w, _ = cloud(700, d=3, seed=6)
     q, _, _, _ = cloud(90, d=3, seed=7, scale=(3.0, 3.0, 3.0))
-    tree = BoundaryTree.build(
-        pts, w, nrm, None, leaf_size=tree_read.TREE_READ_LEAF_SIZE, theta=theta, eps=1e-12
-    )
-    qi, si, n_node = point_tree_pairs(tree, q, theta)
-    n = pts.shape[0]
+    f = BoundaryForest.build(pts, w, nrm, None, theta=theta)
+    qi, si, n_node = f.point_pairs(q)
+    n = f.n_cells
     assert torch.equal(qi, qi.sort().values)
     is_node = si >= n
     assert int(is_node.sum()) == n_node
     node = si[is_node] - n
     p = q[qi[is_node]]
-    gap = (p - tree.center[node]).norm(dim=-1) - tree.radius[node]
-    assert bool((2 * tree.radius[node] < theta * gap).all())
-    assert bool((tree.spread[node] < theta).all())
+    gap = torch.clamp(torch.maximum(p - f.aabb_max[node], f.aabb_min[node] - p), min=0)
+    assert bool((gap.square().sum(-1) * theta**2 > f.diameter_sq[node]).all())
+    assert bool(f.coherent[node].all())
     ### Coverage: a cell is counted through itself or through exactly one node.
     counts = torch.zeros(q.shape[0], n, dtype=torch.long)
     counts.index_put_((qi[~is_node], si[~is_node]), torch.ones_like(qi[~is_node]), accumulate=True)
-    starts, cnts = tree.node_start[node], tree.node_count[node]
-    pos, pid = tree_read._ragged_arange(starts, cnts)
-    counts.index_put_((qi[is_node][pid], tree.order[pos]), torch.ones_like(pos), accumulate=True)
+    cells, which = f.node_cells(node)
+    counts.index_put_((qi[is_node][which], cells), torch.ones_like(cells), accumulate=True)
     assert torch.equal(counts, torch.ones_like(counts))
     if theta == 0.0:
         assert n_node == 0
+    ### Query independence of the list itself.
+    qi_one, si_one, _ = f.point_pairs(q[17:18])
+    assert torch.equal(torch.sort(si_one).values, torch.sort(si[qi == 17]).values)
+    assert bool((qi_one == 0).all())
 
 
 def test_tree_read_error_falls_with_theta_on_a_smooth_boundary():

@@ -46,7 +46,14 @@ theta 0.5, two seeds each, scored at their training theta. The bars against I an
 orientation-aware tree (`boundary_tree.py`, RMS normal spread) is the tree of every lane. Second amendment, the
 same evening, before any TG lane ran: theta 0.5 (6.6e8 pairs per block) does not fit one GB300 and would be about
 three times the time of theta 1, outside the bar, so only theta 1 runs (two seeds); and the "theta 0 diagnostic" is
-withdrawn at car scale, where theta 0 is the 4e10-pair dense read this program exists to avoid.
+withdrawn at car scale, where theta 0 is the 4e10-pair dense read this program exists to avoid. Third amendment,
+2026-10-09, after E3 and E5 closed: the dedicated tree is replaced by a forest of GLOBE `ClusterTree`s (one per
+normal octant, box-diagonal admission plus the same RMS coherence test; PR #2079 adds the per-point walk upstream).
+The clusters differ, so the theta 1 arms are retrained on the car and on AirfRANS (`dtt_vol_tg1ct_seed42/43`,
+`af_tg1ct_seed42/43`, snapshot `code_dtt13`) and scored under the same protocol; the prediction is parity with the
+`code_dtt11`/`code_dtt12` theta 1 arms (seed means within the seed separation on every field), since the forest's
+pair count is within 10% of the retired tree's at theta 1 and the read is the same quadrature. The bars against I
+and P are unchanged.
 
 Bars (the pi lane's, unchanged): closes the gap if TG / I <= 1.03 on pressure and on velocity and <= 1.05 on eddy
 viscosity, seed means; beats it if TG / I < 1 - seed separation on a field. Also reported: TG / P (what the read

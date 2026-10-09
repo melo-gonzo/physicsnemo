@@ -29,58 +29,54 @@ the boundary measure, so the read is a measure-weighted mean over the boundary (
 quadrature). Its cost is the number of (point, cell) pairs, :math:`Q N` per block:
 1e8 on an airfoil of a thousand cells, 4e10 on a car of 200,000.
 
-This module evaluates the same read through a cluster tree over the boundary cells
-(:class:`~physicsnemo.experimental.models.isla.boundary_tree.BoundaryTree`, balanced,
-split along each cluster's principal axis of normals while its normals are spread
-wider than :math:`\theta` and of positions otherwise, with bounding spheres), walked
-once per prediction point as an N-body code walks its tree once per body. A point
-reads the cells of nearby leaves one by one, and a distant cluster :math:`C` through
-one *virtual cell*: the cluster's measure-weighted centroid, its measure-weighted mean
-normal (renormalized), its total measure :math:`\Omega_C = \sum_{j \in C} \omega_j`,
-and the measure-weighted means of its cells' keys and values at the block's depth. A
-cluster is admitted when its angular size and its normal spread are both below
-:math:`\theta`: :math:`2 R_C < \theta\, r` (the diameter of its bounding sphere
-against the gap between the point and that sphere) and the measure-weighted RMS chord
-of its normals about their mean, :math:`\sqrt{2 (1 - |\bar n|)}`, below :math:`\theta`;
-a leaf that is not admitted contributes its cells; any other node hands the point to
-its two children. Because the read is a quadrature, the virtual
-cell is the cluster's monopole: were the pair logit constant over the cluster,
-:math:`\sum_{j \in C} \omega_j e^{z_{qj}} v_j` would equal
-:math:`\Omega_C e^{z_{qC}} v_C` exactly, and the error at finite :math:`\theta` is the
-variation of the pair invariants, keys and values over the admitted clusters. At
-:math:`\theta = 0` no cluster is admitted and the read is the dense read, pair for
-pair. :math:`\theta` is therefore a numerical tolerance with a convergence guarantee,
-not a model constant: the model is *defined* as the dense read and the tree is how it
-is computed.
+This module evaluates the same read through GLOBE's cluster tree
+(:class:`~physicsnemo.mesh.spatial.cluster_tree.ClusterTree`), walked once per
+prediction point
+(:meth:`~physicsnemo.mesh.spatial.cluster_tree.ClusterTree.find_point_interaction_pairs`)
+as an N-body code walks its tree once per body. A point reads the cells of nearby
+leaves one by one, and a distant cluster :math:`C` through one *virtual cell*: the
+cluster's measure-weighted centroid, its measure-weighted mean normal (renormalized),
+its total measure :math:`\Omega_C = \sum_{j \in C} \omega_j`, and the measure-weighted
+means of its cells' keys and values at the block's depth. Because the read is a
+quadrature, the virtual cell is the cluster's monopole: were the pair logit constant
+over the cluster, :math:`\sum_{j \in C} \omega_j e^{z_{qj}} v_j` would equal
+:math:`\Omega_C e^{z_{qC}} v_C` exactly.
 
-Symmetries. A point's list depends on the boundary tree and the point alone, so the
-read is exactly query independent at every :math:`\theta` (a point's prediction
-depends on the boundary and the point, never on the other prediction points). At
+The kernel reads a cell's normal through three cosines, so a cluster is a usable
+virtual cell only when its normals agree: the mean normal of a cluster spanning both
+faces of a thin body is a random direction. The boundary is therefore held as a
+*forest*: the cells are split by the octant of their normal (the orientation split;
+opposite normals never share a tree) and one cluster tree is built per octant
+(:class:`BoundaryForest`). A point walks every tree. A cluster is admitted when its
+box diagonal is below :math:`\theta` times its distance to the point (the tree's
+criterion) and its normals are coherent: the measure-weighted RMS chord of the
+normals about their mean, :math:`\sqrt{2 (1 - |\bar n|)}`, is below :math:`\theta`
+(the tree's ``source_admissible`` mask). A leaf that is not admitted contributes its
+cells; any other node hands the point to its two children. At :math:`\theta = 0` no
+cluster is admitted and the read is the dense read, pair for pair.
+
+Symmetries. A point's list depends on the forest and the point alone, so the read is
+exactly query independent at every :math:`\theta` (a point's prediction depends on
+the boundary and the point, never on the other prediction points). At
 :math:`\theta = 0` every contract of the dense read holds exactly: Euclidean
 equivariance, the similarity gauge, boundary-refinement and measure-scale invariance.
-At finite :math:`\theta` the tree is built from the clusters' own principal axes and
-bounding spheres, so a rotation, reflection, translation or rescale of the case
-reproduces the same clusters and the same lists up to ties (a cluster whose two
-largest spreads are equal, or cells with equal projections); where a tie breaks
-differently the differences are of the approximation's order and vanish with
-:math:`\theta`.
+At finite :math:`\theta` the Morton boxes are axis-aligned and the octants are the
+frame's, so a rotation of the case can move a point's far-field list; the resulting
+differences are of the approximation's order and vanish with :math:`\theta`.
 
-Constants. ``TREE_READ_LEAF_SIZE`` (cells per leaf) and ``TREE_READ_PAIR_CHUNK``
-(pairs per chunk of the basis evaluation) are implementation constants: at a fixed
-:math:`\theta` they change the cost and the grouping of the exact pairs, and at
-:math:`\theta = 0` nothing at all.
+Constants. ``TREE_READ_LEAF_SIZE`` (cells per leaf), the orientation split into the
+:math:`2^d` sign octants and ``TREE_READ_PAIR_CHUNK`` (pairs per chunk of the basis
+evaluation) are implementation constants: at a fixed :math:`\theta` they change the
+cost and the grouping of the exact pairs, and at :math:`\theta = 0` nothing at all.
 
-Two earlier forms are not used. The dual-tree form (GLOBE's
-:meth:`~physicsnemo.mesh.spatial.cluster_tree.ClusterTree.find_dual_interaction_pairs`
-with a tree over the points as well, the symmetric criterion
-:math:`(D_T + D_S) / r < \theta`, far-field entries expanded to their points): a leaf
-of points that spans a large box in a sparse region of the volume is never well
-separated from the boundary leaves near it, and reads the whole boundary cell by cell
-(1.6e9 pairs at :math:`\theta = 0.5` on a 200,000-cell car with 200,000 points, out of
-memory on a 277 GiB device). The per-point walk of GLOBE's Morton tree with its
-axis-aligned boxes: its count-midpoint nodes straddle Morton boundaries and their boxes
-are loose for a surface (1,700 sources per point at :math:`\theta = 1` on the same
-car, 3.4e8 pairs per block).
+Earlier forms, measured and retired on DrivAerML Volume (200,000 cells, 200,000
+points): the dual-tree plan with a tree over the points (a leaf of points in a
+sparse region is never well separated from the boundary near it: 1.6e9 pairs per
+block at theta 0.5); the per-point walk of the count-midpoint Morton tree (loose
+boxes on a surface: 1,700 sources per point at theta 1); a dedicated principal-axis
+tree with normal-first splits and bounding spheres (980 sources per point at theta 1,
+within 10% of this forest, which builds five times faster and shares its tree with
+GLOBE).
 """
 
 import dataclasses
@@ -88,9 +84,9 @@ import math
 from dataclasses import dataclass
 
 import torch
+from tensordict import TensorDict
 from torch.utils.checkpoint import checkpoint
 
-from physicsnemo.experimental.models.isla.boundary_tree import BoundaryTree
 from physicsnemo.experimental.models.isla.kernel_read import (
     KERNEL_READ_BASIS,
     KERNEL_READ_HEADS,
@@ -102,141 +98,242 @@ from physicsnemo.experimental.models.isla.kernel_read import (
 from physicsnemo.experimental.models.isla.pair_kernels import PairPlan
 from physicsnemo.experimental.models.isla.segment_softmax import segment_softmax_read
 from physicsnemo.mesh.spatial._ragged import _ragged_arange
+from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 
 #: Boundary cells per tree leaf. Implementation: at a fixed ``theta`` it sets how many
-#: cells an opened leaf contributes; at ``theta = 0`` it changes nothing. On DrivAerML
-#: Volume at ``theta = 1``, 4 gives 2.0e8 pairs per block against 2.4e8 for 8 (the cells
-#: of opened leaves were 40% of the pairs) and 1.9e8 for 1, and the fastest step.
+#: cells an opened leaf contributes; at ``theta = 0`` it changes nothing.
 TREE_READ_LEAF_SIZE = 4
 #: Pairs per chunk of the kernel-basis evaluation (memory only; each chunk's
-#: invariants and MLP activations are rebuilt in backward).
+#: invariants are built once, its MLP activations are rebuilt in backward).
 TREE_READ_PAIR_CHUNK = 1 << 22
 
 
+def normal_octants(normals: torch.Tensor) -> torch.Tensor:
+    """The sign octant of each normal, ``0`` to ``2**d - 1`` (bit ``k`` set when
+    component ``k`` is positive). Opposite normals never share an octant."""
+    code = torch.zeros(normals.shape[0], dtype=torch.long, device=normals.device)
+    for k in range(normals.shape[1]):
+        code = code * 2 + (normals[:, k] > 0).long()
+    return code
+
+
 @dataclass
-class TreeReadCase:
-    """One case's tree: what the per-block aggregation of the cells' keys and values
-    over every node needs, plus the pair counts for diagnostics."""
+class BoundaryForest:
+    """One case's boundary as a forest of cluster trees, one per normal octant, with
+    the trees' nodes in one table (tree by tree, each tree's nodes in its own order)
+    and the cells in one order (tree by tree, each tree's cells in its sorted order).
+
+    Node ``m`` holds the cells ``cells[range_start[m] : range_start[m] +
+    range_count[m]]``; its virtual cell is ``center[m]``, ``normal[m]``,
+    ``vecs[m]`` and ``measure[m]``; ``coherent[m]`` says whether a point may read it
+    as one (RMS chord of its normals below ``theta``). ``levels`` groups the internal
+    nodes by depth, deepest first, with their children, for the bottom-up sums of
+    :func:`node_means`.
+    """
 
     n_cells: int
-    n_nodes: int
-    first_leaf: int  # the leaves are the nodes from this index on (heap layout)
-    order: torch.Tensor  # (N,) the cells in tree order
-    cell_leaf: torch.Tensor  # (N,) the leaf (counted from the first) of each position in that order
-    node_measure: torch.Tensor  # (M,) each node's total measure fraction
-    n_pairs_cell: int  # (point, cell) pairs
-    n_pairs_node: int  # (point, node) pairs
+    theta: float
+    trees: list[ClusterTree]
+    tree_cells: list[torch.Tensor]  # per tree, the cells it holds (its sources, in its input order)
+    node_offset: torch.Tensor  # (T + 1,) each tree's first node in the table
+    cells: torch.Tensor  # (N,) every cell once, in forest order
+    range_start: torch.Tensor  # (M,) each node's first position in ``cells``
+    range_count: torch.Tensor  # (M,)
+    left: torch.Tensor  # (M,) child in the table, -1 at a leaf
+    right: torch.Tensor  # (M,)
+    leaf_ids: torch.Tensor  # (L,) the leaves, in position order
+    position_leaf: torch.Tensor  # (N,) the leaf (counted in ``leaf_ids``) of each position
+    levels: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]
+    aabb_min: torch.Tensor  # (M, d)
+    aabb_max: torch.Tensor  # (M, d)
+    diameter_sq: torch.Tensor  # (M,)
+    center: torch.Tensor  # (M, d) measure-weighted centroid
+    normal: torch.Tensor  # (M, d) renormalized measure-weighted mean normal
+    vecs: torch.Tensor | None  # (M, P, d) measure-weighted mean rank-1 inputs
+    measure: torch.Tensor  # (M,) total measure
+    coherent: torch.Tensor  # (M,) bool
+
+    @property
+    def n_nodes(self) -> int:
+        return int(self.range_start.shape[0])
 
     @classmethod
-    def from_tree(cls, tree: BoundaryTree, node_measure, n_pairs_cell: int, n_pairs_node: int):
-        n_leaves = tree.n_nodes - tree.first_leaf
-        cell_leaf = torch.repeat_interleave(
-            torch.arange(n_leaves, device=tree.order.device),
-            tree.node_count[tree.first_leaf :],
-            output_size=tree.n_cells,
+    def build(
+        cls,
+        points: torch.Tensor,
+        measure: torch.Tensor,
+        normals: torch.Tensor,
+        vecs: torch.Tensor | None,
+        *,
+        theta: float,
+        leaf_size: int = TREE_READ_LEAF_SIZE,
+        eps: float = 1e-12,
+    ) -> "BoundaryForest":
+        """The forest over cells at ``points`` ``(N, d)`` with ``measure`` ``(N,)``,
+        unit ``normals`` ``(N, d)`` and rank-1 inputs ``vecs`` ``(N, P, d)`` or
+        ``None``. No gradient flows into it (a numerical device)."""
+        points, measure, normals = points.detach(), measure.detach(), normals.detach()
+        vecs = None if vecs is None else vecs.detach()
+        n, d = points.shape
+        device = points.device
+        coherent_length = 1.0 - 0.5 * float(theta) ** 2
+        octant = normal_octants(normals)
+        trees, tree_cells, cells, offsets = [], [], [], [0]
+        starts, counts, lefts, rights, boxes = [], [], [], [], []
+        centers, nrm, vec, meas = [], [], [], []
+        c_off = m_off = 0
+        for k in range(2**d):
+            sel = (octant == k).nonzero().squeeze(-1)
+            if sel.numel() == 0:
+                continue
+            tree = ClusterTree.from_points(points[sel], leaf_size=leaf_size, areas=measure[sel])
+            data = {"n": normals[sel]}
+            if vecs is not None:
+                data["u"] = vecs[sel]
+            agg = tree.compute_source_aggregates(
+                points[sel], measure[sel], TensorDict(data, batch_size=[int(sel.numel())])
+            )
+            m = tree.n_nodes
+            trees.append(tree)
+            tree_cells.append(sel)
+            cells.append(sel[tree.sorted_source_order])
+            starts.append(tree.node_range_start + c_off)
+            counts.append(tree.node_range_count)
+            lefts.append(torch.where(tree.node_left_child >= 0, tree.node_left_child + m_off, -1))
+            rights.append(torch.where(tree.node_right_child >= 0, tree.node_right_child + m_off, -1))
+            boxes.append((tree.node_aabb_min, tree.node_aabb_max, tree.node_diameter_sq))
+            centers.append(agg.node_centroid)
+            nrm.append(agg.node_source_data["n"])
+            if vecs is not None:
+                vec.append(agg.node_source_data["u"])
+            meas.append(tree.node_total_area)
+            c_off += int(sel.numel())
+            m_off += m
+            offsets.append(m_off)
+        left = torch.cat(lefts)
+        right = torch.cat(rights)
+        range_start = torch.cat(starts)
+        range_count = torch.cat(counts)
+        ### The leaves tile the cells: sorted by their first position, their counts
+        ### concatenate to the forest order.
+        leaf_ids = (left < 0).nonzero().squeeze(-1)
+        leaf_ids = leaf_ids[torch.argsort(range_start[leaf_ids])]
+        position_leaf = torch.repeat_interleave(
+            torch.arange(leaf_ids.shape[0], device=device), range_count[leaf_ids], output_size=n
         )
+        ### Internal nodes by depth from the roots; a node's children are one level deeper.
+        node_offset = torch.tensor(offsets, device=device)
+        frontier = node_offset[:-1]
+        by_depth = []
+        while frontier.numel():
+            internal = frontier[left[frontier] >= 0]
+            if internal.numel() == 0:
+                break
+            by_depth.append(internal)
+            frontier = torch.cat([left[internal], right[internal]])
+        levels = [(nodes, left[nodes], right[nodes]) for nodes in reversed(by_depth)]
+        mean_n = torch.cat(nrm)
+        length = mean_n.norm(dim=-1)
         return cls(
-            n_cells=tree.n_cells,
-            n_nodes=tree.n_nodes,
-            first_leaf=tree.first_leaf,
-            order=tree.order,
-            cell_leaf=cell_leaf,
-            node_measure=node_measure,
-            n_pairs_cell=n_pairs_cell,
-            n_pairs_node=n_pairs_node,
+            n_cells=n,
+            theta=float(theta),
+            trees=trees,
+            tree_cells=tree_cells,
+            node_offset=node_offset,
+            cells=torch.cat(cells),
+            range_start=range_start,
+            range_count=range_count,
+            left=left,
+            right=right,
+            leaf_ids=leaf_ids,
+            position_leaf=position_leaf,
+            levels=levels,
+            aabb_min=torch.cat([b[0] for b in boxes]),
+            aabb_max=torch.cat([b[1] for b in boxes]),
+            diameter_sq=torch.cat([b[2] for b in boxes]),
+            center=torch.cat(centers),
+            normal=mean_n / length[:, None].clamp_min(eps),
+            vecs=torch.cat(vec) if vecs is not None else None,
+            measure=torch.cat(meas),
+            coherent=length > coherent_length,
         )
+
+    def node_cells(self, nodes: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """The cells of the listed nodes: ``(cell, which)`` with ``which`` the index into
+        ``nodes`` each cell belongs to."""
+        pos, which = _ragged_arange(self.range_start[nodes], self.range_count[nodes])
+        return self.cells[pos], which
+
+    def point_pairs(
+        self, points: torch.Tensor, theta: float | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor, int]:
+        """Every point's list: ``(qi, si, n_node)`` sorted by point, where ``si`` below
+        ``n_cells`` names a cell and ``n_cells + m`` names node ``m``; ``n_node`` is the
+        number of node entries. Each tree is walked once per point at ``theta``
+        (the forest's own by default); a node is admitted only when its box is well
+        separated from the point and its normals are coherent, so each point's list
+        holds every cell exactly once, as itself or inside one node."""
+        theta = self.theta if theta is None else float(theta)
+        qs, ss, n_node = [], [], 0
+        for t, tree in enumerate(self.trees):
+            a, b = int(self.node_offset[t]), int(self.node_offset[t + 1])
+            plan = tree.find_point_interaction_pairs(
+                points.detach(), theta=theta, validate=False, source_admissible=self.coherent[a:b]
+            )
+            qs += [plan.near_target_ids, plan.far_target_ids]
+            ss += [self.tree_cells[t][plan.near_source_ids], self.n_cells + a + plan.far_source_node_ids]
+            n_node += plan.n_far
+        qi, si = torch.cat(qs), torch.cat(ss)
+        order = torch.argsort(qi, stable=True)
+        return qi[order], si[order], n_node
 
 
 @dataclass
 class TreeReadPairs:
     """The tree read's pairs of one forward pass, every case flattened: ``plan`` over
     the ``B * Q`` points and the virtual sources (each case's ``N`` cells followed by
-    its ``M`` nodes), the kernel basis and log measure of every pair, the cells' measure
-    fractions, and each case's tree."""
+    its forest's nodes), the kernel basis and log measure of every pair, the cells'
+    measure fractions, and each case's forest."""
 
     plan: PairPlan
     basis: torch.Tensor  # (P, KERNEL_READ_BASIS)
     log_m: torch.Tensor  # (P,)
     omega: torch.Tensor  # (B * N,) the cells' measure fractions
-    cases: list[TreeReadCase]
+    forests: list[BoundaryForest]
     src_offsets: list[int]
     n_cells: int
     n_queries: int
+    n_pairs_node: int  # (point, node) pairs over every case
 
     @property
     def n_pairs(self) -> int:
         return int(self.plan.qi.shape[0])
 
     @property
-    def n_pairs_node(self) -> int:
-        return sum(c.n_pairs_node for c in self.cases)
+    def n_pairs_cell(self) -> int:
+        return self.n_pairs - self.n_pairs_node
 
 
-def point_tree_pairs(
-    tree: BoundaryTree, points: torch.Tensor, theta: float
-) -> tuple[torch.Tensor, torch.Tensor, int]:
-    r"""Each point's Barnes-Hut list over the boundary tree.
-
-    Returns ``(qi, si, n_node_pairs)``: the pairs sorted by point, ``si`` a cell index
-    (below the cell count) or the cell count plus a node index. The walk is level
-    synchronous from the root: a node whose bounding sphere (radius :math:`R`)
-    satisfies :math:`2 R < \theta r`, with :math:`r` the gap between the point and the
-    sphere, and whose normal spread is below :math:`\theta`, is admitted as one virtual
-    cell; a leaf that is not admitted contributes its cells; any other node hands the
-    point to its two children. ``theta = 0`` admits nothing, so the list is every cell.
-    A point's list depends on the tree and the point alone.
-    """
-    n = tree.n_cells
-    device = points.device
-    theta = float(theta)
-    first_leaf = tree.first_leaf
-    coherent = tree.spread < theta  # (M,) clusters whose normals are within the tolerance
-    pq = torch.arange(points.shape[0], device=device)
-    pn = torch.zeros_like(pq)
-    out_q, out_s = [], []
-    n_node_pairs = 0
-    while pq.numel():
-        radius = tree.radius[pn]
-        gap = ((points[pq] - tree.center[pn]).norm(dim=-1) - radius).clamp_min(0)
-        if theta > 0:
-            admit = (2 * radius < theta * gap) & coherent[pn]
-        else:
-            admit = torch.zeros_like(gap, dtype=torch.bool)
-        leaf = pn >= first_leaf
-        q_adm, n_adm = pq[admit], pn[admit]
-        out_q.append(q_adm)
-        out_s.append(n_adm + n)
-        n_node_pairs += int(q_adm.shape[0])
-        opened = leaf & ~admit
-        q_leaf, n_leaf = pq[opened], pn[opened]
-        pos, pid = _ragged_arange(tree.node_start[n_leaf], tree.node_count[n_leaf])
-        out_q.append(q_leaf[pid])
-        out_s.append(tree.order[pos])
-        down = ~leaf & ~admit
-        q_down, n_down = pq[down], pn[down]
-        pq = torch.cat([q_down, q_down])
-        pn = torch.cat([2 * n_down + 1, 2 * n_down + 2])
-    qi, si = torch.cat(out_q), torch.cat(out_s)
-    order = torch.argsort(qi, stable=True)
-    return qi[order], si[order], n_node_pairs
-
-
-def node_means(x: torch.Tensor, case: TreeReadCase, omega: torch.Tensor) -> torch.Tensor:
-    """The measure-weighted mean of the cells' rows ``x`` ``(N, ...)`` over every node's
-    subtree, ``(M, ...)``, differentiable in ``x``: the leaves' sums by one scatter over
-    the tree order, then every node as the sum of its two children, level by level up
-    to the root, in float32 (a tree of pairwise sums, no cancellation; the float64
-    prefix sums this replaces were half of a DrivAerML training step)."""
-    flat = x.reshape(case.n_cells, -1).float()
-    weighted = flat[case.order] * omega[case.order, None].float()
-    n_leaves = case.n_nodes - case.first_leaf
-    leaf = weighted.new_zeros(n_leaves, weighted.shape[1]).index_add(0, case.cell_leaf, weighted)
-    levels = [leaf]
-    while levels[-1].shape[0] > 1:
-        levels.append(levels[-1].view(-1, 2, weighted.shape[1]).sum(1))
-    sums = torch.cat(levels[::-1])
-    measure = case.node_measure.float().clamp_min(torch.finfo(torch.float32).tiny)
-    return (sums / measure[:, None]).to(x.dtype).reshape(case.n_nodes, *x.shape[1:])
+def node_means(x: torch.Tensor, forest: BoundaryForest, omega: torch.Tensor) -> torch.Tensor:
+    """The measure-weighted mean of the cells' rows ``x`` ``(N, ...)`` over every node
+    of the forest, ``(M, ...)``, differentiable in ``x``: the leaves' sums by one
+    scatter over the forest order, then every internal node as the sum of its two
+    children, depth by depth up to the roots, in float32 (a tree of pairwise sums,
+    no cancellation)."""
+    cells = forest.cells
+    flat = x.reshape(x.shape[0], -1).float()[cells]
+    weighted = flat * omega[cells, None].float()
+    n_leaves = forest.leaf_ids.shape[0]
+    leaf_sums = weighted.new_zeros(n_leaves, weighted.shape[1]).index_add(
+        0, forest.position_leaf, weighted
+    )
+    sums = weighted.new_zeros(forest.n_nodes, weighted.shape[1]).index_put(
+        (forest.leaf_ids,), leaf_sums
+    )
+    for nodes, left, right in forest.levels:
+        sums = sums.index_put((nodes,), sums[left] + sums[right])
+    measure = forest.measure.float().clamp_min(torch.finfo(torch.float32).tiny)
+    return (sums / measure[:, None]).to(x.dtype).reshape(forest.n_nodes, *x.shape[1:])
 
 
 def tree_pair_invariants(
@@ -328,40 +425,40 @@ def tree_read_pairs(
     ``(B, N, d)``, ``boundary_vecs`` ``(B, N, P_b, d)`` or ``None``; ``log_frac``
     ``(B, N)`` the cells' log measure fractions; ``g_unit`` ``(B, K, d)``.
 
-    Per case: a cluster tree over the cells (:class:`BoundaryTree`, with the measure
+    Per case: the forest over the cells (:class:`BoundaryForest`, with the measure
     fractions as the measure), each point's walk of it at ``theta``
-    (:func:`point_tree_pairs`), so each point's list is a set of cells and a set of
-    nodes that together cover every cell exactly once; the nodes' virtual cells
-    (centroid, renormalized mean normal, mean rank-1 inputs, total measure) come with
-    the tree; the kernel basis of every pair in chunks. The tree and the walk run
-    without gradient (a numerical device); the invariants and the basis carry
-    gradients to the kernel MLP.
+    (:meth:`BoundaryForest.point_pairs`), so each point's list is a set of cells and
+    a set of nodes that together cover every cell exactly once; the nodes' virtual
+    cells (centroid, renormalized mean normal, mean rank-1 inputs, total measure)
+    come with the forest; the kernel basis of every pair in chunks. The forest and
+    the walk run without gradient (a numerical device); the invariants and the basis
+    carry gradients to the kernel MLP.
     """
     b, nq, d = query_r.shape
     n = boundary_r.shape[1]
     tiny = torch.finfo(torch.float32).tiny
-    qis, sis, bases, logms, cases, offsets = [], [], [], [], [], []
+    has_vecs = boundary_vecs is not None and bool(boundary_vecs.shape[2])
+    qis, sis, bases, logms, forests, offsets = [], [], [], [], [], []
     src_off = 0
+    n_pairs_node = 0
     for i in range(b):
         with torch.no_grad():
             omega = torch.exp(log_frac[i])
-            has_vecs = boundary_vecs is not None and bool(boundary_vecs.shape[2])
-            tree_b = BoundaryTree.build(
+            forest = BoundaryForest.build(
                 boundary_r[i],
                 omega,
                 boundary_n[i],
                 boundary_vecs[i] if has_vecs else None,
-                leaf_size=TREE_READ_LEAF_SIZE,
                 theta=theta,
+                leaf_size=TREE_READ_LEAF_SIZE,
                 eps=eps,
             )
-            qi, si, n_pairs_node = point_tree_pairs(tree_b, query_r[i].detach(), theta)
-            m = tree_b.n_nodes
-            node_measure = tree_b.measure.to(log_frac.dtype)
-        src_r = torch.cat([boundary_r[i], tree_b.center.to(boundary_r.dtype)])
-        src_n = torch.cat([boundary_n[i], tree_b.normal.to(boundary_n.dtype)])
+            qi, si, n_node = forest.point_pairs(query_r[i])
+            node_measure = forest.measure.to(log_frac.dtype)
+        src_r = torch.cat([boundary_r[i], forest.center.to(boundary_r.dtype)])
+        src_n = torch.cat([boundary_n[i], forest.normal.to(boundary_n.dtype)])
         src_vecs = (
-            torch.cat([boundary_vecs[i], tree_b.vecs.to(boundary_vecs.dtype)])
+            torch.cat([boundary_vecs[i], forest.vecs.to(boundary_vecs.dtype)])
             if has_vecs
             else None
         )
@@ -381,11 +478,10 @@ def tree_read_pairs(
         logms.append(src_logm[si])
         qis.append(qi + i * nq)
         sis.append(si + src_off)
-        cases.append(
-            TreeReadCase.from_tree(tree_b, node_measure, int(qi.shape[0]) - n_pairs_node, n_pairs_node)
-        )
+        forests.append(forest)
         offsets.append(src_off)
-        src_off += n + m
+        src_off += n + forest.n_nodes
+        n_pairs_node += n_node
     plan_all = PairPlan.build(torch.cat(qis), torch.cat(sis), b * nq, src_off)
     if plan_all.qi.shape[0] < 2**31:
         ### 32-bit pair indices (the fused read widens them on load): half the plan's memory.
@@ -401,15 +497,16 @@ def tree_read_pairs(
         basis=torch.cat(bases),
         log_m=torch.cat(logms),
         omega=torch.exp(log_frac).reshape(-1),
-        cases=cases,
+        forests=forests,
         src_offsets=offsets,
         n_cells=n,
         n_queries=nq,
+        n_pairs_node=n_pairs_node,
     )
 
 
 class _TreeKernelRead(_GlobalKernelRead):
-    """One block's global read evaluated through the tree: the dense read's
+    """One block's global read evaluated through the forest: the dense read's
     parameters (a dense checkpoint loads as it stands) applied to the pair list of
     :class:`TreeReadPairs`. The cells' keys and values are those of the dense read;
     a node's are the measure-weighted means of its cells' at this depth; the softmax
@@ -422,16 +519,17 @@ class _TreeKernelRead(_GlobalKernelRead):
         hb = self.norm_b(h_b)
         v_c, k_c = self.value(hb), self.key(hb)
         q = self.query(self.norm_q(h_q)).view(-1, nh, kc)
-        ### The virtual sources, case by case: the cells, then the nodes' means.
+        ### The virtual sources, case by case: the cells, then the forest's node means
+        ### of the keys and values together (one scatter and one sweep per case).
         n = pairs.n_cells
-        v_parts, k_parts = [], []
-        for i, case in enumerate(pairs.cases):
+        kv_parts = []
+        for i, forest in enumerate(pairs.forests):
             sl = slice(i * n, (i + 1) * n)
-            om = pairs.omega[sl]
-            v_parts += [v_c[sl], node_means(v_c[sl], case, om)]
-            k_parts += [k_c[sl], node_means(k_c[sl], case, om)]
-        v_src = torch.cat(v_parts).view(-1, nh, c)
-        k_src = torch.cat(k_parts).view(-1, nh, kc)
+            kv_c = torch.cat([k_c[sl], v_c[sl]], dim=-1)
+            kv_parts += [kv_c, node_means(kv_c, forest, pairs.omega[sl])]
+        kv_src = torch.cat(kv_parts)
+        k_src = kv_src[:, : nh * kc].reshape(-1, nh, kc)
+        v_src = kv_src[:, nh * kc :].reshape(-1, nh, c)
         ### The pairs' kernel terms at this block: the shared basis through the block's
         ### kernel weights (a matmul; its gradient to the basis accumulates over blocks).
         ker = pairs.basis @ self.kernel.weight.t().to(pairs.basis.dtype)
