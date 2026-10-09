@@ -163,20 +163,8 @@ distance overestimates the true wall distance near the wall by up to about
 the sample spacing, and the internal direction deviates from the true SDF
 gradient by the same order; far from the wall both agree with the full-mesh
 field. Both read the sample spacing, so they change with the boundary
-sampling law (``query_geometry="nearest"``). The alternatives
-``query_geometry="soft"`` and ``"smooth"`` (:func:`soft_boundary_geometry`)
-keep the nearest token only for the local orientation (and, for ``"soft"``,
-the side of the boundary the query is on) and replace its distance and
-direction by a measure-weighted kernel average over the tokens that face the
-same way: the kernel-mean signed distance to the tokens' tangent planes and
-the kernel-mean normal (the gradient of a signed distance, outward on both
-sides of the wall), with the kernel width ``query_geometry_width`` times the
-length unit; ``"soft"`` averages the tokens on the query's side of their
-tangent planes only, ``"smooth"`` all of them. These are quadrature estimates
-of boundary integrals, so they converge under refinement of the boundary
-sample for any sampling law whose normalized measure converges, uniformly in
-the wall distance, the property the slice attention has. Any of the three is
-built from pairwise differences, so every covariance contract holds.
+sampling law. Both are built from pairwise differences, so every covariance
+contract holds.
 
 **Global inputs.** Rank-1 global inputs are the :math:`K` global directions:
 each is normalized to a unit direction inside the model (a direction is what
@@ -231,11 +219,8 @@ from physicsnemo.experimental.models.isla.blocks import (
     _softmax_over_points,
 )
 from physicsnemo.experimental.models.isla.geometry import (
-    QueryGeometry,
     nearest_boundary_geometry,
-    patch_boundary_geometry,
     rms_pairwise_distance,
-    soft_boundary_geometry,
 )
 from physicsnemo.experimental.models.isla.heads import (
     _assemble_output,
@@ -355,32 +340,6 @@ class ISLA(Module):
             every block with the same weights and read its slices at matched
             depth, so each prediction depends on its own point and the boundary
             only.
-        query_geometry: How an interior model computes each prediction point's
-            built-in signed distance and direction to the boundary from the
-            boundary tokens. ``"nearest"`` (default): the exact nearest token's
-            Euclidean distance, signed by its normal, and the direction to it
-            (:func:`nearest_boundary_geometry`). ``"soft"``: the nearest
-            token fixes the side and the local orientation; the distance and
-            direction are the measure-weighted kernel average, over the tokens
-            on that side facing the same way, of the tangent-plane distances
-            and the normals (the direction is the kernel-mean normal, outward
-            on both sides), kernel width ``query_geometry_width`` times the
-            length unit (:func:`soft_boundary_geometry`); a quadrature
-            estimate that converges under refinement of the boundary sample
-            for any sampling law. ``"smooth"``: the same average over every
-            facing token regardless of side, continuous across the wall
-            (``one_sided=False``). ``"patch"``: the exact signed distance to
-            the flat patches the tokens' measures define (a segment of the
-            token's measure around its centroid; the patches tile the surface
-            in expectation under a measure-weighted subsample), its gradient
-            as the direction, and the side from the nearest patch's plane over
-            the patch and from the exact winding number of the patch set
-            beyond it, so behind a sharp edge the side does not depend on which
-            tokens the sample kept (:func:`patch_boundary_geometry`; two
-            spatial dimensions; it equals the stored signed-distance field on
-            the native mesh). Ignored by a surface model.
-        query_geometry_width: The kernel width of ``query_geometry="soft"``
-            and ``"smooth"`` as a fraction of the length unit (default 0.03).
         hidden: Token width of the slice blocks. The defaults ``hidden=512``,
             ``n_layers=12`` and ``n_slices=512`` are the reference
             configuration (the most accurate under 80 GiB per GPU on DrivAerML
@@ -534,8 +493,6 @@ class ISLA(Module):
         global_schema: FieldSchemaLike | None = None,
         interior: bool = False,
         query_independent: bool = False,
-        query_geometry: QueryGeometry = "nearest",
-        query_geometry_width: float = 0.03,
         hidden: int = 512,
         n_layers: int = 12,
         n_slices: int = 512,
@@ -610,29 +567,6 @@ class ISLA(Module):
                 "query_independent=True concerns the prediction points of the interior "
                 "task; build with interior=True (a surface task predicts at its input cells)"
             )
-        ### The prediction points' built-in geometry: the exact nearest boundary
-        ### sample ("nearest"), the measure-weighted kernel average over the
-        ### samples ("soft" / "smooth", kernel width query_geometry_width x the
-        ### length unit; geometry.soft_boundary_geometry), or the exact signed
-        ### distance to the finite patches the samples' measures define, with
-        ### the winding-number side ("patch"; geometry.patch_boundary_geometry,
-        ### two dimensions).
-        if query_geometry not in ("nearest", "soft", "smooth", "patch"):
-            raise ValueError(
-                "query_geometry must be 'nearest', 'soft', 'smooth' or 'patch', "
-                f"got {query_geometry!r}"
-            )
-        if (
-            isinstance(query_geometry_width, bool)
-            or not isinstance(query_geometry_width, (int, float))
-            or not query_geometry_width > 0
-        ):
-            raise ValueError(
-                "query_geometry_width must be a positive fraction of the length unit, "
-                f"got {query_geometry_width!r}"
-            )
-        self.query_geometry = query_geometry
-        self.query_geometry_width = float(query_geometry_width)
         ### Checkpoints store the constructor arguments as JSON. A FieldSchema
         ### is a dict and serializes as it stands; recording the parsed schemas
         ### keeps the metadata JSON-safe whatever container the caller passed
@@ -1483,27 +1417,11 @@ class ISLA(Module):
             q_r = query_points / gauge
             ### The query's geometry from the boundary sample: the signed distance
             ### to the boundary (the built-in channel) and the direction to it (the
-            ### token's "normal" in every invariant), from the exact nearest token
-            ### or from the measure-weighted kernel average over the tokens.
+            ### token's "normal" in every invariant), from the exact nearest token.
             with torch.autocast(points.device.type, enabled=False):
-                if self.query_geometry in ("soft", "smooth"):
-                    d, q_nhat = soft_boundary_geometry(
-                        query_points,
-                        points,
-                        n_hat,
-                        log_w[..., 0],
-                        width=self.query_geometry_width * gauge.reshape(-1),
-                        eps=self.eps,
-                        one_sided=self.query_geometry == "soft",
-                    )
-                elif self.query_geometry == "patch":
-                    d, q_nhat = patch_boundary_geometry(
-                        query_points, points, n_hat, log_w[..., 0], eps=self.eps
-                    )
-                else:
-                    d, q_nhat = nearest_boundary_geometry(
-                        query_points, points, n_hat, eps=self.eps
-                    )
+                d, q_nhat = nearest_boundary_geometry(
+                    query_points, points, n_hat, eps=self.eps
+                )
                 s =(d / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
                 builtin = torch.cat([s, torch.sign(s) * torch.log(s.abs() + self.eps)], -1)
             q_g = g_unit[:, None].expand(bq, nq, K, self.dim)

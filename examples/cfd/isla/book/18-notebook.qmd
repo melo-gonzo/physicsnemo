@@ -35341,3 +35341,41 @@ twin), MAINLINE's reference-configuration gate met.
 the baselines gain more than ISLA from a recurring geometry at small
 training sets, stays with the WING-MECH record and the open questions of
 chapter 16.
+
+## 2026-10-09 — Ruling: the soft, smooth and patch query-geometry forms are deleted from the ISLA library; the nearest form is the only built-in geometry and is no longer an option {#sec-nb-geometry-forms-deleted}
+
+**Setting.** An interior ISLA model computes each prediction point's
+built-in signed distance and direction to the boundary from the boundary
+tokens. The class form is the exact nearest token's distance signed by its
+normal (`nearest_boundary_geometry`). SOFT-GEO added two kernel-average
+forms (`soft`, `smooth`; @sec-nb-soft-geo-verdict) and PATCH-SDF an exact
+finite-patch form with the winding-number side (`patch`;
+@sec-nb-patch-sdf-verdict). Both studies refuted their forms against the
+pre-registered discretization gate, and both verdicts left the forms in
+the library as research arms pending Peter's ruling.
+
+**The ruling and what changed.** Peter ruled today that the unused forms
+are deleted. The library now holds the nearest form only, and the
+`query_geometry` and `query_geometry_width` constructor parameters are
+gone rather than fixed, by the rule that settled options are hard-coded
+and nothing is shimmed. Removed: `soft_boundary_geometry` with its Triton
+accumulation kernel and chunked fallback, `patch_boundary_geometry` with
+its chunked form, the `QueryGeometry` type, the forward branches and
+validation in the model, the docstring passages, and every test of the
+deleted forms (1,137 lines across `geometry.py`, `model.py` and
+`test_isla_interior_geometry.py`; the nearest-form and search tests are
+kept unchanged). A repository grep outside the book and the results tree
+finds no remaining reference; the recipe never exposed the option. The
+ISLA suite on CPU passes (143 passed, 42 CUDA-gated skips).
+
+**Consequences.** A checkpoint saved with `query_geometry` in its
+arguments no longer loads (an unexpected-keyword error at construction),
+as intended; the lanes that trained those forms (`sq_af_*`, `sr_af_*`,
+`sp_af_*`) stay reproducible from the cluster snapshots code_v21 to
+code_v25, which carry the forms, and their evidence stays in the
+artifacts (`results/char/soft_geo_lanes_2026-10-07.json`,
+`results/char/patch_sdf_lanes_2026-10-08.json`,
+`results/char/patch_sdf_probes_2026-10-08.json`) and in the two verdict
+entries. Chapter 7's paragraph on the two tested replacements is
+unchanged, since it reports what was measured. Future lanes need a new
+snapshot of the library, which the AeroZoo benchmark will produce.
