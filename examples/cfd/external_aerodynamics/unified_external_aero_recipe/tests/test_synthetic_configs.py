@@ -327,10 +327,12 @@ def test_tensor_input_config_synthetic_e2e(
     ### The chosen model template must declare a tensor-input contract
     ### for the test driver below to work (it builds tensor batches via
     ### the collate's `input_type='tensors'` branch).
-    assert OmegaConf.select(train_cfg, "input_type") == "tensors", (
+    input_type = OmegaConf.select(train_cfg, "input_type")
+    output_type = OmegaConf.select(train_cfg, "output_type")
+    assert input_type == "tensors", (
         f"{recipe_id}: {model=} has {input_type=}, not 'tensors'"
     )
-    assert OmegaConf.select(train_cfg, "output_type") == "tensors", (
+    assert output_type == "tensors", (
         f"{recipe_id}: {model=} has {output_type=}, not 'tensors'"
     )
 

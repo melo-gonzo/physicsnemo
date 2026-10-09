@@ -226,6 +226,36 @@ def test_weighted_vector_metrics_are_refinement_invariant_and_analytic():
         assert coarse[key].item() == pytest.approx(value)
 
 
+def test_zero_weight_query_is_left_out_of_every_metric():
+    """A zero-measure query (a zero-area cell) contributes to no metric."""
+    pred = TensorDict(
+        {
+            "pressure": torch.tensor([1.0, 50.0, -2.0]),
+            "wss": torch.tensor([[1.0, 0.0], [9.0, 9.0], [0.0, 2.0]]),
+        },
+        batch_size=[],
+    )
+    target = TensorDict(
+        {
+            "pressure": torch.tensor([0.5, 0.0, 1.0]),
+            "wss": torch.tensor([[0.0, 1.0], [0.0, 0.0], [1.0, 1.0]]),
+        },
+        batch_size=[],
+    )
+    kept = torch.tensor([0, 2])
+    calculator = MetricCalculator(
+        {"pressure": "scalar", "wss": "vector"}, n_spatial_dims=2
+    )
+    with_zero = calculator(pred, target, torch.tensor([1.0, 0.0, 3.0]))
+    without = calculator(
+        TensorDict({k: v[kept] for k, v in pred.items()}, batch_size=[]),
+        TensorDict({k: v[kept] for k, v in target.items()}, batch_size=[]),
+        torch.tensor([1.0, 3.0]),
+    )
+    for key in without.keys():
+        torch.testing.assert_close(with_zero[key], without[key])
+
+
 def test_relative_metrics_are_invariant_to_uniform_measure_scale_near_zero():
     """Metric epsilons must not make measure units change the answer."""
     pred = TensorDict(
@@ -247,6 +277,7 @@ def test_relative_metrics_are_invariant_to_uniform_measure_scale_near_zero():
 
 
 def test_metric_explicit_none_is_bitwise_identical_to_legacy_call():
+    """target_measure=None reproduces the unweighted metrics bit for bit."""
     torch.manual_seed(11)
     pred = TensorDict(
         {"pressure": torch.randn(19), "wss": torch.randn(19, 3)},

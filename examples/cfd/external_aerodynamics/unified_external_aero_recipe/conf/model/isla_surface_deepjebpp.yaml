@@ -38,7 +38,7 @@ forward_kwargs:
   global_data: global_data        # the case's TensorDict; the model selects its declared leaves
 
 model:
-  _target_: physicsnemo.experimental.models.ISLA
+  _target_: physicsnemo.experimental.models.isla.ISLA
   output_schema:                  # the dataset's targets, by name and tensor rank
     von_mises: {rank: 0}
     displacement: {rank: 1}
@@ -50,7 +50,7 @@ model:
     load_dir: {rank: 1}           # the load direction (force) or moment axis (torsion); normalized to a unit direction inside the model
     is_force: {rank: 0}           # the load-type one-hot, one rank-0 field per component (SplitGlobalVector)
     is_torque: {rank: 0}
-  hidden: 512                     # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; the class defaults are 384 / 256
+  hidden: 512                     # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
   n_slices: 512
   mlp_ratio: 4

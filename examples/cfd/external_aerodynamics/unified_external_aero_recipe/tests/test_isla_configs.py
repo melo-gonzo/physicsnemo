@@ -49,8 +49,13 @@ from physicsnemo.mesh.calculus.measure import (  # noqa: E402
     scale_measures,
 )
 
-ISLA_TARGET = "physicsnemo.experimental.models.ISLA"
-SMALL = ["model.hidden=16", "model.n_layers=1", "model.n_slices=4", "model.geo_kernel=eager"]
+ISLA_TARGET = "physicsnemo.experimental.models.isla.ISLA"
+SMALL = [
+    "model.hidden=16",
+    "model.n_layers=1",
+    "model.n_slices=4",
+    "model.geo_kernel=eager",
+]
 CONFIGS = [
     ("isla_surface", "drivaer_ml_surface"),
     ("isla_volume", "drivaer_ml_volume_reference"),
@@ -104,7 +109,9 @@ def _volume_domain() -> DomainMesh:
     vehicle = ComposeQuadratureMeasure()(vehicle)
     gd = domain.global_data.clone()
     gd["U_inf_dir"] = torch.tensor([1.0, 0.0, 0.0])
-    return DomainMesh(interior=domain.interior, boundaries={"vehicle": vehicle}, global_data=gd)
+    return DomainMesh(
+        interior=domain.interior, boundaries={"vehicle": vehicle}, global_data=gd
+    )
 
 
 def _targets(dataset: str) -> dict:
@@ -143,15 +150,31 @@ def test_isla_configs_declare_the_mesh_contract(model, dataset):
     assert cfg.forward_kwargs.boundary_meshes == {"vehicle": "boundaries.vehicle"}
     assert cfg.forward_kwargs.global_data == "global_data"
     assert OmegaConf.to_container(m.global_schema) == {"U_inf_dir": {"rank": 1}}
-    assert m.hidden == 512 and m.n_layers == 12 and m.n_slices == 512 and m.mlp_ratio == 4  # REF-80 reference (2026-10-04)
+    assert (
+        m.hidden == 512 and m.n_layers == 12 and m.n_slices == 512 and m.mlp_ratio == 4
+    )  # REF-80 reference (2026-10-04)
     assert m.geo_checkpoint is True and m.geo_kernel is None
     ### Removed options never come back through a config.
     for gone in (
-        "scale_mode", "query_tokens", "query_mass", "query_independent",
-        "support_tokens", "n_decoder_layers", "interior_geometry", "use_measure_weights",
+        "scale_mode",
+        "query_tokens",
+        "query_mass",
+        "query_independent",
+        "support_tokens",
+        "n_decoder_layers",
+        "interior_geometry",
+        "use_measure_weights",
     ):
         assert gone not in m, gone
-    for gone in ("points", "normals", "measure_weights", "global_inputs", "query_points", "query_normals", "query_inputs"):
+    for gone in (
+        "points",
+        "normals",
+        "measure_weights",
+        "global_inputs",
+        "query_points",
+        "query_normals",
+        "query_inputs",
+    ):
         assert gone not in cfg.forward_kwargs, gone
     ### Every output name is a dataset target.
     targets = _targets(dataset)
@@ -165,7 +188,10 @@ def test_isla_surface_composes_and_runs():
     cfg = _compose("isla_surface", "drivaer_ml_surface", *SMALL)
     assert "prediction_points" not in cfg.forward_kwargs
     assert not cfg.model.get("interior", False)
-    assert OmegaConf.to_container(cfg.model.output_schema) == {"pressure": {"rank": 0}, "wss": {"rank": 1}}
+    assert OmegaConf.to_container(cfg.model.output_schema) == {
+        "pressure": {"rank": 0},
+        "wss": {"rank": 1},
+    }
     domain = _surface_domain()
     batch, out, pred = _run(cfg, domain, _targets("drivaer_ml_surface"))
     torch.testing.assert_close(out.points, domain.interior.points)
@@ -185,7 +211,11 @@ def test_isla_volume_composes_and_runs():
     assert cfg.model.interior is True
     assert cfg.forward_kwargs.prediction_points == "interior"
     assert cfg.model.get("query_schema") is None
-    assert OmegaConf.to_container(cfg.model.output_schema) == {"velocity": {"rank": 1}, "pressure": {"rank": 0}, "nut": {"rank": 0}}
+    assert OmegaConf.to_container(cfg.model.output_schema) == {
+        "velocity": {"rank": 1},
+        "pressure": {"rank": 0},
+        "nut": {"rank": 0},
+    }
     domain = _volume_domain()
     batch, out, pred = _run(cfg, domain, _targets("drivaer_ml_volume_reference"))
     assert batch["forward_kwargs"]["prediction_points"] is domain.interior
@@ -198,8 +228,13 @@ def test_isla_volume_sdf_declares_the_stored_sdf_as_query_inputs():
     from the prediction Mesh's point_data; everything else is isla_volume."""
     cfg = _compose("isla_volume_sdf", "drivaer_ml_volume_reference", *SMALL)
     base = _compose("isla_volume", "drivaer_ml_volume_reference", *SMALL)
-    assert OmegaConf.to_container(cfg.model.query_schema) == {"sdf": {"rank": 0}, "sdf_normals": {"rank": 1}}
-    assert OmegaConf.to_container(cfg.forward_kwargs) == OmegaConf.to_container(base.forward_kwargs)
+    assert OmegaConf.to_container(cfg.model.query_schema) == {
+        "sdf": {"rank": 0},
+        "sdf_normals": {"rank": 1},
+    }
+    assert OmegaConf.to_container(cfg.forward_kwargs) == OmegaConf.to_container(
+        base.forward_kwargs
+    )
     domain = _volume_domain()
     _, out, _ = _run(cfg, domain, _targets("drivaer_ml_volume_reference"))
     torch.testing.assert_close(out.points, domain.interior.points)
@@ -267,8 +302,7 @@ def test_isla_configs_pin_the_protocol_learning_rate(model, dataset):
     plateau within five epochs, so every ISLA config carries its own rate: 3.75e-4, the
     reference configuration's (REF-80, 2026-10-04; the width rule 1e-3 x 192 / 512)."""
     cfg = _compose(model, dataset)
-    expected = 1.875e-4 if model == "isla_surface_deepjebpp" else 3.75e-4  # DeepJEB++ exception (2026-10-05)
-    assert cfg.training.optimizer.lr == pytest.approx(expected)
+    assert cfg.training.optimizer.lr == pytest.approx(3.75e-4)
 
 
 def test_cli_override_still_wins_over_the_pinned_rate():

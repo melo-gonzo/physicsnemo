@@ -35,6 +35,7 @@ from physicsnemo.experimental.models.isla.geometry import (
     _nearest_index,
     _soft_geometry_torch,
     nearest_boundary_geometry,
+    patch_boundary_geometry,
     soft_boundary_geometry,
 )
 from test.experimental.models.isla._meshes import (
@@ -789,3 +790,182 @@ def test_soft_geometry_wall_nodes_keep_a_unit_direction_that_survives_a_pose_in_
     assert ((u2 @ R) * u).sum(-1).min() > math.cos(math.radians(1.0))
     if not one_sided:
         assert torch.allclose(d2, d, atol=1e-4)
+
+
+### ---------------------------------------------------------------------------
+### The patch form: the exact signed distance to the finite patches the tokens'
+### measures define, with the winding-number side (two dimensions).
+
+
+def _polygon(vertices):
+    """Segment tokens of a closed counter-clockwise polygon: centroids, outward
+    unit normals, lengths, and the vertex pairs."""
+    a, b = vertices, torch.roll(vertices, -1, 0)
+    tangent = b - a
+    length = tangent.norm(dim=-1)
+    normal = torch.stack([tangent[:, 1], -tangent[:, 0]], -1) / length[:, None]
+    return 0.5 * (a + b), normal, length, a, b
+
+
+def _polyline_distance(q, a, b):
+    """Exact distance from each query to a closed polyline, and the foot."""
+    ab = b - a
+    t = (((q[:, None, :] - a[None]) * ab[None]).sum(-1) / (ab * ab).sum(-1)[None]).clamp(0, 1)
+    p = a[None] + t[..., None] * ab[None]
+    dist, i = (q[:, None, :] - p).norm(dim=-1).min(dim=1)
+    return dist, p[torch.arange(q.shape[0]), i]
+
+
+def _naca_polygon(n_per_side=400):
+    """A closed symmetric airfoil with a sharp trailing edge (NACA 0012 ordinates),
+    counter-clockwise."""
+    xs = torch.linspace(0, 1, n_per_side + 1, dtype=D)
+    th = 0.12 / 0.2 * (0.2969 * xs.sqrt() - 0.1260 * xs - 0.3516 * xs**2 + 0.2843 * xs**3 - 0.1036 * xs**4)
+    upper = torch.stack([xs, th], -1)
+    lower = torch.stack([xs.flip(0), -th.flip(0)], -1)
+    v = torch.cat([upper[1:], lower[1:-1]])
+    if (v[:, 0] * torch.roll(v, -1, 0)[:, 1] - torch.roll(v, -1, 0)[:, 0] * v[:, 1]).sum() < 0:
+        v = v.flip(0)
+    return v
+
+
+def test_patch_geometry_is_the_exact_signed_distance_of_a_closed_polygon():
+    """On its own cells the patch form is the polygon's exact signed distance:
+    distance to rounding, sign by inside/outside, direction the gradient."""
+    th = torch.linspace(0, 2 * math.pi, 301, dtype=D)[:-1]
+    v = torch.stack([1.5 * torch.cos(th), torch.sin(th)], -1)  # an ellipse
+    y, n, length, a, b = _polygon(v)
+    g = torch.Generator().manual_seed(3)
+    q = torch.randn(4000, 2, dtype=D, generator=g) * 1.6
+    d, u = patch_boundary_geometry(q[None], y[None], n[None], torch.log(length)[None])
+    exact, foot = _polyline_distance(q, a, b)
+    inside = (q[:, 0] / 1.5) ** 2 + q[:, 1] ** 2 < 1.0
+    away = (exact > 1e-3)  # off the facets' own thickness
+    assert torch.allclose(d[0].abs(), exact, atol=1e-10)
+    assert bool(((d[0] < 0) == inside)[away].all())
+    grad = torch.nn.functional.normalize(q - foot, dim=-1) * torch.where(inside, -1.0, 1.0)[:, None]
+    assert float((1 - (u[0] * grad).sum(-1))[away & (exact > 0.05)].max()) < 1e-3
+
+
+def test_patch_geometry_side_behind_a_sharp_edge_is_the_winding_number():
+    """Behind the trailing edge of a thin closed body the nearest patch's plane
+    puts a third of the wake points inside; the winding number puts them all
+    outside, and the distance is the distance to the edge."""
+    v = _naca_polygon()
+    y, n, length, a, b = _polygon(v)
+    g = torch.Generator().manual_seed(4)
+    L = torch.rand(3000, dtype=D, generator=g) * 0.5 + 2e-3
+    ang = (torch.rand(3000, dtype=D, generator=g) - 0.5) * math.radians(40)
+    q = torch.stack([1.0 + L * torch.cos(ang), L * torch.sin(ang)], -1)
+    d, u = patch_boundary_geometry(q[None], y[None], n[None], torch.log(length)[None])
+    exact, _ = _polyline_distance(q, a, b)
+    assert bool((d[0] > 0).all())
+    assert torch.allclose(d[0], exact, atol=1e-10)
+    ### the discriminating control: the nearest patch's plane alone reads a side
+    diff = q[:, None, :] - y[None]
+    s = (diff * n[None]).sum(-1)
+    tang = (diff - s[..., None] * n[None]).norm(dim=-1)
+    dist = torch.sqrt(s * s + (tang - 0.5 * length[None]).clamp_min(0) ** 2)
+    s_star = s.gather(1, dist.argmin(1, keepdim=True))[:, 0]
+    assert float((s_star < 0).double().mean()) > 0.2
+    ### the direction is radial from the edge
+    radial = torch.nn.functional.normalize(q - torch.tensor([1.0, 0.0], dtype=D), dim=-1)
+    assert float((1 - (u[0] * radial).sum(-1)).max()) < 1e-3
+
+
+def test_patch_geometry_keeps_the_wake_side_under_a_measure_weighted_subsample():
+    """A Poisson subsample of the cells with inverse-inclusion measures (the
+    patches tile the surface in expectation) keeps the side of every wake point
+    and of the near-wall points farther than the facet thickness outside the
+    band the sample cannot resolve; the nearest form flips wake points."""
+    v = _naca_polygon(1000)
+    y, n, length, a, b = _polygon(v)
+    g = torch.Generator().manual_seed(5)
+    keep = torch.rand(y.shape[0], generator=g) < 0.4
+    ys, ns, ls = y[keep], n[keep], length[keep] / 0.4
+    L = torch.rand(2000, dtype=D, generator=g) * 0.5 + 2e-3
+    ang = (torch.rand(2000, dtype=D, generator=g) - 0.5) * math.radians(40)
+    wake = torch.stack([1.0 + L * torch.cos(ang), L * torch.sin(ang)], -1)
+    xs = torch.rand(4000, dtype=D, generator=g) * 0.96 + 0.02
+    th = 0.12 / 0.2 * (0.2969 * xs.sqrt() - 0.1260 * xs - 0.3516 * xs**2 + 0.2843 * xs**3 - 0.1036 * xs**4)
+    h = 10 ** (torch.rand(4000, dtype=D, generator=g) * 3 - 5)
+    side = torch.where(torch.rand(4000, generator=g) < 0.5, 1.0, -1.0).to(D)
+    near = torch.stack([xs, side * (th + h)], -1)
+    d_w, _ = patch_boundary_geometry(wake[None], ys[None], ns[None], torch.log(ls)[None])
+    d_n, u_n = patch_boundary_geometry(near[None], ys[None], ns[None], torch.log(ls)[None])
+    assert bool((d_w[0] > 0).all())
+    exact, _ = _polyline_distance(near, a, b)
+    ### the resolution limit: within a kept-cell spacing of the trailing edge the
+    ### body is thinner than the sample resolves, a band of a few points in a thousand
+    assert float((d_n[0][exact > 1e-3] < 0).double().mean()) < 5e-3
+    ### the subsample's wall normal, not a tilt towards a gap's rim
+    assert float((u_n[0][:, 1] * side).median()) > 0.95
+    d_near_form, _ = nearest_boundary_geometry(wake[None], ys[None], ns[None])
+    assert float((d_near_form[0] < 0).double().mean()) > 0.05
+
+
+def test_patch_geometry_covariance_and_scale():
+    """Invariance of the distance and covariance of the direction under a rotation,
+    a reflection and a translation; the distance scales with the geometry."""
+    v = _naca_polygon(200)
+    y, n, length, _, _ = _polygon(v)
+    g = torch.Generator().manual_seed(6)
+    q = torch.randn(500, 2, dtype=D, generator=g) * 0.6 + torch.tensor([0.5, 0.0], dtype=D)
+    d, u = patch_boundary_geometry(q[None], y[None], n[None], torch.log(length)[None])
+    ### within one cell of a vertex two patches tie exactly and rounding picks the
+    ### normal of one or the other; everywhere else the direction is single-valued
+    clear = d[0].abs() > 2 * length.max()
+    for improper in (False, True):
+        R = orthogonal(2, 7 + int(improper), improper)
+        t = torch.tensor([3.0, -2.0], dtype=D)
+        k = 2.5
+        d2, u2 = patch_boundary_geometry(
+            (k * q @ R.T + t)[None], (k * y @ R.T + t)[None], (n @ R.T)[None], torch.log(k * length)[None]
+        )
+        assert torch.allclose(d2, k * d, atol=1e-10), improper
+        assert torch.allclose(u2[0][clear], (u @ R.T)[0][clear], atol=1e-9), improper
+
+
+def test_patch_geometry_rejects_three_dimensions_and_a_negative_reach():
+    pts, nrm, w, _ = cloud(50)
+    with pytest.raises(NotImplementedError, match="two spatial dimensions"):
+        patch_boundary_geometry(pts[None], pts[None], nrm[None], torch.log(w)[None])
+    pts2, nrm2, w2, _ = cloud(50, d=2)
+    with pytest.raises(ValueError, match="reach"):
+        patch_boundary_geometry(pts2[None], pts2[None], nrm2[None], torch.log(w2)[None], reach=-1.0)
+
+
+def test_patch_geometry_model_contracts_and_checkpoint(tmp_path):
+    """The two-dimensional interior model with query_geometry='patch' keeps every
+    covariance contract, records the option in the checkpoint, and differs from
+    the nearest form (the channel is live)."""
+    from physicsnemo.core.module import Module
+
+    pts, nrm, w, _ = cloud(120, d=2)
+    mesh = soup(pts, nrm, w)
+    drv = torch.tensor([0.3, 1.0], dtype=D)
+    q, _, _, _ = cloud(30, d=2, seed=1, scale=(3.0, 3.0))
+    torch.manual_seed(0)
+    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, dim=2, hidden=32, n_layers=2, n_slices=8, interior=True, query_geometry="patch").double().eval()
+    assert m.query_geometry == "patch"
+
+    def call(model, R=None, t=None, k=1.0):
+        R = torch.eye(2, dtype=D) if R is None else R
+        t = torch.zeros(2, dtype=D) if t is None else t
+        with torch.no_grad():
+            return outputs(model(boundary_meshes={"wall": transform(mesh, R, t, scale=k)}, prediction_points=k * q @ R.T + t, global_data={"g": drv @ R.T}))
+
+    base = call(m)
+    for improper in (False, True):
+        R = orthogonal(2, 4, improper)
+        out = call(m, R, torch.tensor([2.0, -5.0], dtype=D), k=2.5)
+        assert torch.allclose(out["p"], base["p"], atol=1e-11), improper
+        assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-11), improper
+    torch.manual_seed(0)
+    near = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, dim=2, hidden=32, n_layers=2, n_slices=8, interior=True).double().eval()
+    near.load_state_dict(m.state_dict())
+    assert not torch.allclose(call(near)["p"], base["p"], atol=1e-6)
+    m.save(str(tmp_path / "patch.mdlus"))
+    loaded = Module.from_checkpoint(str(tmp_path / "patch.mdlus")).double().eval()
+    assert loaded.query_geometry == "patch"
+    assert torch.allclose(call(loaded)["p"], base["p"], atol=1e-12)

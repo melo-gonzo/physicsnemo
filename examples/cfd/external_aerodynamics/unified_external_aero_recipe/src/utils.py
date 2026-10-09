@@ -53,9 +53,16 @@ def initialize_from_checkpoint(
     """
     path = Path(init_from)
     if path.is_dir():
-        files = sorted(path.glob("*.mdlus"), key=lambda p: int(p.stem.split(".")[-1]))
+        ### Only the epoch-suffixed checkpoints save_checkpoint writes; any other
+        ### .mdlus in the directory would break an int() sort key.
+        files = sorted(
+            (p for p in path.glob("*.mdlus") if p.stem.split(".")[-1].isdigit()),
+            key=lambda p: int(p.stem.split(".")[-1]),
+        )
         if not files:
-            raise FileNotFoundError(f"init_from={init_from!r}: no .mdlus files found")
+            raise FileNotFoundError(
+                f"init_from={init_from!r}: no <ModelClass>.<rank>.<epoch>.mdlus files found"
+            )
         path = files[-1]
     if not path.exists():
         raise FileNotFoundError(f"init_from={init_from!r} does not exist")
@@ -163,7 +170,11 @@ def select_tensor_components(
     pairs = [
         SYMMETRIC_TENSOR_COMPONENTS[c] for c in tensor_components(field_type).values()
     ]
-    out_of_plane = [c for c, (i, j) in zip(tensor_components(field_type).values(), pairs) if max(i, j) >= d]
+    out_of_plane = [
+        c
+        for c, (i, j) in zip(tensor_components(field_type).values(), pairs)
+        if max(i, j) >= d
+    ]
     if out_of_plane:
         raise ValueError(
             f"symmetric_tensor components {out_of_plane!r} index a coordinate the {d}-dimensional prediction does not have"
@@ -362,6 +373,9 @@ def align_target_measure(
     ``(..., N, D)``; in both cases the quadrature measure must have exactly
     one value per query, shape ``(..., N)``. Requiring an exact shape prevents
     a stale or reordered measure from silently broadcasting across a field.
+    The weights must be finite and nonnegative, with a positive total per
+    sample: a zero weight (a degenerate, zero-area cell) is a valid quadrature
+    weight that leaves its query out of every weighted reduction.
     """
     if target_measure is None:
         return None
@@ -376,12 +390,15 @@ def align_target_measure(
     aligned = target_measure.to(device=reference.device, dtype=reference.dtype)
     if not torch.compiler.is_compiling():
         is_valid = aligned.numel() > 0 and bool(
-            (torch.isfinite(aligned) & (aligned > 0)).all().item()
+            (
+                (torch.isfinite(aligned) & (aligned >= 0)).all()
+                & (aligned.sum(dim=-1) > 0).all()
+            ).item()
         )
         if not is_valid:
             raise ValueError(
-                "target_measure must contain one finite positive integration "
-                "weight per target query"
+                "target_measure must contain finite, nonnegative integration "
+                "weights, one per target query, with a positive total per sample"
             )
     return aligned
 

@@ -37,37 +37,45 @@ def gt_best(d):
     else:
         lab = "3e-3" if k.endswith("lr3e3") else "rate not recorded"
     return cands[k]["pressure_l2_seeds"], lab
-def wing_rung(d, isla=None):
-    """One HiLiftAeroML rung. `isla` given: the earlier ISLA reference's seeds (384 wide, 5e-4); absent: the rung's ISLA lane is
-    192 wide at 1e-3 and the table cell says so."""
+def wing_rung(d, isla):
+    """One HiLiftAeroML rung: the baselines from the fleet artifact `d` (GeoTransolver-256 at the better of its rates, Transolver-256
+    at 3e-3) and ISLA from the seeds of its reference-configuration lane pair (384 wide, 5e-4)."""
     g, lab = gt_best(d)
-    return dict(gt=g, gt_rate=lab, t=d["arms"]["transolver_unit"]["pressure_l2_seeds"],
-                isla=isla if isla is not None else d["arms"]["isla"]["pressure_l2_seeds"], isla_ref=isla is not None)
+    return dict(gt=g, gt_rate=lab, t=d["arms"]["transolver_unit"]["pressure_l2_seeds"], isla=isla)
 def ref_lane_seeds(stem, f="pressure_l2"):
     """Seed means of a reference-configuration lane pair from the fleet scorer's per-case rows
-    (results/campaigns_2026-09-22/ref/metrics/<run>/<run>/metrics.jsonl), seeds 42 and 43."""
+    (results/campaigns_2026-09-22/ref/metrics/<run>/<run>/metrics.jsonl), seeds 42 and 43. Where a scoring job was restarted the
+    file holds two blocks, and the last row written for each validation case is the one kept."""
     out = []
     for sd in (42, 43):
         fs = sorted(_glob.glob(str(RES / "campaigns_2026-09-22" / "ref" / "metrics" / f"{stem}_seed{sd}" / "**" / "metrics.jsonl"), recursive=True))
-        rows = [json.loads(l) for l in open(fs[0]) if '"infer_step"' in l]
-        out.append(mean(r["metrics"][f] for r in rows))
+        last = {}
+        for l in open(fs[0]):
+            if '"infer_step"' in l:
+                r = json.loads(l); last[r["sample_id"]] = r["metrics"][f]
+        out.append(mean(last.values()))
     return out
-SL_W = J("scalelaw_2026-09-27.json")["configurations"]  # the wing scaling grid at 100,000 cells (GeoTransolver-512 at 510 wings)
+SL_W = J("scalelaw_2026-10-08.json")["configurations"]  # the wing scaling grid at 100,000 cells (GeoTransolver-512 at 510 and 1,260 wings)
+HL200K = J("p200k_hl_ladder_2026-09-30.json")["rungs"]  # the 200,000-cell wing ladder of the baselines (Transolver-256 and GeoTransolver-256 at 1,260 wings)
 WINGS = {
  "35 training cases": wing_rung(F19["highlift_surface_super_scarce"], isla=ref_seeds("isla_r1|hl35")),
  "210 training cases": dict(wing_rung(F22["highlift_surface_scarce"], isla=ref_lane_seeds("ref_isla_r1_hl210")),
                             gt=ref_lane_seeds("ref_gt_w512_hl210"), gt_rate="GeoTransolver-512, 3e-3"),
  "510 training cases": dict(gt=SL_W["hilift|gt|w512|n510"]["pressure_l2_seeds"], gt_rate="GeoTransolver-512 at 100,000 cells, 3e-3",
-                            t=None, isla=ref_lane_seeds("ref_isla_r1_hl510"), isla_ref=True),
- "4 training geometries": wing_rung(F20["highlift_surface_geometry_super_scarce"]),
- "21 training geometries": wing_rung(F22["highlift_surface_geometry_scarce"]),
- "126 geometries at 12°": wing_rung(F20["highlift_surface_single_aoa_12"]),
+                            t=None, isla=ref_lane_seeds("ref_isla_r1_hl510")),
+ "1,260 training cases": dict(gt=SL_W["hilift|gt|w512|n1260"]["pressure_l2_seeds"], gt_rate="GeoTransolver-512 at 100,000 cells, 3e-3",
+                              t=HL200K["full"]["arms"]["transolver_unit"]["pressure_l2_seeds"], isla=ref_lane_seeds("rb_hl_isla_full")),
+ "4 training geometries": wing_rung(F20["highlift_surface_geometry_super_scarce"], isla=ref_lane_seeds("rb_hl_isla_geometry_super_scarce")),
+ "21 training geometries": wing_rung(F22["highlift_surface_geometry_scarce"], isla=ref_lane_seeds("rb_hl_isla_geometry_scarce")),
+ "126 geometries at 12°": wing_rung(F20["highlift_surface_single_aoa_12"], isla=ref_lane_seeds("rb_hl_isla_single_aoa_12")),
 }
 wing_ratio = {k: (mean(r["gt"]) / mean(r["isla"]), (mean(r["t"]) / mean(r["isla"])) if r["t"] else None) for k, r in WINGS.items()}
 GT512_LADDER = {"35": mean(ref_seeds("gt_w512|hl35")) / mean(WINGS["35 training cases"]["isla"]),
-                "210": wing_ratio["210 training cases"][0], "510": wing_ratio["510 training cases"][0]}
+                "210": wing_ratio["210 training cases"][0], "510": wing_ratio["510 training cases"][0],
+                "1260": wing_ratio["1,260 training cases"][0]}
+GT256_1260 = HL200K["full"]["arms"]["gt_unit"]["pressure_l2_seeds"]  # GeoTransolver-256 at 1e-3, 200,000 cells: the best GeoTransolver pair at 1,260 wings
+GT256_1260_RATIO = mean(GT256_1260) / mean(WINGS["1,260 training cases"]["isla"])
 HP210 = J("hl210_percase_2026-09-27.json"); S210 = HP210["summary"]
-EARLIER = "192 wide, 1e-3"
 EARLIER_REF = "the earlier ISLA reference (384 wide, 12 layers, 256 slices, 5e-4)"
 GT512_W = ref_seeds("gt_w512|hl35"); R2_W = ref_seeds("isla_r2|hl35"); R1_LR_W = ref_seeds("isla_r1_lr1e3|hl35")
 ISLA192_W = F19["highlift_surface_super_scarce"]["arms"]["isla"]["pressure_l2_seeds"]
@@ -314,10 +322,10 @@ configurations than the reference ones, named per row, and all of them
 score on 180 validation cases with the same instrument.
 
 - **The case ladder.** Nested random draws of 35, 210 and 510 training
-  cases from a 1,260-case pool, sharing one 180-case validation set
-  (@sec-data-hilift-splits). The validation geometries recur in training at other
-  angles. The 35-case draw contains 33 distinct geometries and no case at
-  18°.
+  cases from a 1,260-case pool, and the whole pool, sharing one 180-case
+  validation set (@sec-data-hilift-splits). The validation geometries recur
+  in training at other angles. The 35-case draw contains 33 distinct
+  geometries and no case at 18°.
 - **The geometry ladder.** 40 cases on 4 geometries and 210 cases on 21
   geometries, each at all ten angles, validated on 180 cases of 18
   geometries that appear in no training set.
@@ -326,12 +334,12 @@ score on 180 validation cases with the same instrument.
 
 On the ladders GeoTransolver's better rate on the wings is 3e-3 wherever
 both of its pairs exist and Transolver runs at 3e-3. ISLA is the earlier
-ISLA reference (384 wide, 12 layers, 256 slices, 5e-4) on the case rungs,
-where the baseline is the parameter-matched GeoTransolver-512; at 510 wings
-its pair is the wing scaling lane at 100,000 cells, a count at which
-GeoTransolver's error is flat to 1% (@sec-equal-budget). On the geometry
-ladder and the fixed-angle split the ISLA lane is 192 wide at 1e-3, and
-the table cell says so.
+ISLA reference (384 wide, 12 layers, 256 slices, 5e-4) on every rung. On
+the case rungs the baseline is the parameter-matched GeoTransolver-512; at
+510 and 1,260 wings its pair is the wing scaling lane at 100,000 cells, a
+count at which GeoTransolver's error is flat to 1% (@sec-equal-budget). On
+the geometry ladder and the fixed-angle split the baselines are the
+256-wide fleet lanes.
 
 ### Splits {#sec-data-hilift-splits}
 
@@ -494,8 +502,10 @@ print("**Cost.** The reference configurations' training cost was measured on the
 #| output: asis
 print(f"**The ladders below hold {EARLIER_REF} and the baselines at other widths, and are read for how the ordering moves with the "
       f"training set, not for the level of the reference configurations.** Against the parameter-matched GeoTransolver-512 the ratio runs "
-      f"{GT512_LADDER['35']:.2f} / {GT512_LADDER['210']:.2f} / {GT512_LADDER['510']:.2f} at 35 / 210 / 510 training wings, so on this pair "
-      "the baseline leads and the deficit closes as the training set grows; GeoTransolver-512 at 200,000 cells trains above the 80 GiB "
+      f"{GT512_LADDER['35']:.2f} / {GT512_LADDER['210']:.2f} / {GT512_LADDER['510']:.2f} / {GT512_LADDER['1260']:.2f} at 35 / 210 / 510 / 1,260 "
+      "training wings, so on this pair the baseline leads where the training set is small and the deficit closes as it grows; "
+      f"GeoTransolver's best pair at 1,260 wings, GeoTransolver-256 at 1e-3 and 200,000 cells, reads {GT256_1260_RATIO:.2f}. "
+      "GeoTransolver-512 at 200,000 cells trains above the 80 GiB "
       "line and is not a reference configuration. @fig-hilift-data-efficiency and @tbl-hilift-ladder are the ladders, @tbl-wing-controls "
       "lists what does not move that deficit, and @tbl-hilift-protocols is the standing of the reference configurations at 210 wings.")
 ```
@@ -505,18 +515,20 @@ print(f"**The ladders below hold {EARLIER_REF} and the baselines at other widths
 #| fig-cap: >
 #|   The HiLiftAeroML rungs at the reporting protocol (200,000 cells per
 #|   case). Surface-pressure error (area-weighted relative L2, float32, 180
-#|   validation cases) on a logarithmic axis for the six rungs: 35, 210 and
-#|   510 random training cases (validation geometries recur in training at
+#|   validation cases) on a logarithmic axis for the seven rungs: 35, 210, 510
+#|   and 1,260 random training cases (validation geometries recur in training at
 #|   other angles); 4 and 21 training geometries at all their angles (validation
 #|   geometries never seen); 126 geometries at a fixed 12° (18 held-out
 #|   geometries). ISLA blue squares, GeoTransolver red circles, Transolver
 #|   amber triangles; the large marker is the seed mean, the small dots the
 #|   seeds; the label at the right of each row is GeoTransolver ÷ ISLA and
 #|   Transolver ÷ ISLA. Where two baselines coincide their markers overlap.
-#|   ISLA is the earlier ISLA reference (384 wide, 5e-4) on the case rungs (filled squares),
-#|   against GeoTransolver-512 at 210 and 510 wings (the 510-wing pair is at
-#|   100,000 cells; no Transolver lane exists there); on the three rows marked
-#|   "192 wide" the ISLA lane is 192 wide at 1e-3 (open square). How to read
+#|   ISLA is the earlier ISLA reference (384 wide, 5e-4) on every rung,
+#|   against GeoTransolver-512 on the case rungs from 210 wings (the 510- and
+#|   1,260-wing pairs are at 100,000 cells; no Transolver lane exists at 510
+#|   wings, and at 1,260 wings Transolver-256 is the 200,000-cell fleet pair)
+#|   and against the 256-wide fleet lanes on the geometry and fixed-angle
+#|   rungs. How to read
 #|   this: the baselines' lead is largest where the training set is small and
 #|   its geometries recur in validation, closes with cases, and is within
 #|   seed noise where the validation geometries are never seen at 21 training
@@ -527,18 +539,20 @@ print(f"**The ladders below hold {EARLIER_REF} and the baselines at other widths
 #|   cases); results/p200k_fleet_reduction_2026-09-19.json (baselines, 35 cases);
 #|   results/p200k_fleet_interim_2026-09-20.json (4 geometries, fixed angle);
 #|   results/p200k_fleet_reduction_2026-09-22.json (21 geometries, Transolver
-#|   at 210 cases); results/campaigns_2026-09-22/ref/metrics (the 210- and
-#|   510-wing reference pairs); results/scalelaw_2026-09-27.json
-#|   (GeoTransolver-512 at 510 wings).
+#|   at 210 cases); results/campaigns_2026-09-22/ref/metrics (the 210-,
+#|   510- and 1,260-wing reference pairs and the geometry-ladder and
+#|   fixed-angle reference pairs); results/scalelaw_2026-10-08.json
+#|   (GeoTransolver-512 at 510 and 1,260 wings);
+#|   results/p200k_hl_ladder_2026-09-30.json (Transolver at 1,260 wings).
 #| code-fold: true
 ROWS = [("35 training cases", "35 random training cases\n(geometries recur)"),
         ("210 training cases", "210 random training cases\n(geometries recur)"),
         ("510 training cases", "510 random training cases\n(geometries recur)"),
+        ("1,260 training cases", "1,260 random training cases\n(the whole pool; geometries recur)"),
         ("4 training geometries", "4 training geometries, 40 cases\n(never-seen geometries)"),
         ("21 training geometries", "21 training geometries, 210 cases\n(never-seen geometries)"),
         ("126 geometries at 12°", "126 geometries at a fixed 12°\n(18 held-out geometries)")]
-row_label = lambda name, label: label if WINGS[name]["isla_ref"] else label + f"\nISLA: {EARLIER}"
-fig, ax = plt.subplots(figsize=(9.6, 5.9))
+fig, ax = plt.subplots(figsize=(9.6, 6.6))
 ys = list(range(len(ROWS)))[::-1]
 for y, (name, label) in zip(ys, ROWS):
     r = WINGS[name]
@@ -547,14 +561,12 @@ for y, (name, label) in zip(ys, ROWS):
         if r[arm] is None:
             continue
         kw = series_kwargs(key, ls="none", ms=9)
-        if arm == "isla" and not r["isla_ref"]:
-            kw["mfc"] = "white"
         ax.plot([mean(r[arm])], [y], **kw, zorder=4)
         ax.plot(r[arm], [y] * len(r[arm]), ls="none", marker="o", ms=3.4, color=STYLE[key]["color"], zorder=5)
     tl = f"\nTransolver ÷ ISLA {wing_ratio[name][1]:.2f}" if wing_ratio[name][1] is not None else "\n(no Transolver lane)"
     ax.text(1.02, y, f"GeoTransolver ÷ ISLA {wing_ratio[name][0]:.2f}" + tl, va="center", ha="left", fontsize=8.5, color=INK2,
             transform=ax.get_yaxis_transform())
-ax.set_yticks(ys); ax.set_yticklabels([row_label(n, lab) for n, lab in ROWS], fontsize=8.5); ax.set_ylim(-0.6, len(ROWS) - 0.4)
+ax.set_yticks(ys); ax.set_yticklabels([lab for _, lab in ROWS], fontsize=8.5); ax.set_ylim(-0.6, len(ROWS) - 0.4)
 ax.set_xscale("log"); ax.set_xlim(0.015, 0.35)
 ax.set_xticks([0.02, 0.03, 0.05, 0.1, 0.15, 0.2, 0.3]); ax.set_xticklabels(["0.02", "0.03", "0.05", "0.1", "0.15", "0.2", "0.3"])
 ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax.grid(axis="y", visible=False)
@@ -571,28 +583,32 @@ plt.show()
 #| output: asis
 def cell(v):
     return f"{mean(v):.4f} ({min(v):.4f}–{max(v):.4f})" if len(v) > 1 else f"{v[0]:.4f} (one seed)"
-print("| HiLiftAeroML rung | ISLA configuration | ISLA | GeoTransolver (rate) | Transolver (3e-3) | GeoTransolver ÷ ISLA | Transolver ÷ ISLA |")
-print("|---|---|---|---|---|---:|---:|")
+print("| HiLiftAeroML rung | ISLA (384 wide, 5e-4) | GeoTransolver (rate) | Transolver (3e-3) | GeoTransolver ÷ ISLA | Transolver ÷ ISLA |")
+print("|---|---|---|---|---:|---:|")
 for name, _ in ROWS:
     r = WINGS[name]
     tcell = cell(r["t"]) if r["t"] else "—"; tratio = f"{wing_ratio[name][1]:.2f}" if wing_ratio[name][1] is not None else "—"
-    print(f"| {name} | {'384 wide, 5e-4' if r['isla_ref'] else EARLIER} | **{cell(r['isla'])}** | {cell(r['gt'])} ({r['gt_rate']}) | "
+    print(f"| {name} | **{cell(r['isla'])}** | {cell(r['gt'])} ({r['gt_rate']}) | "
           f"{tcell} | {wing_ratio[name][0]:.2f} | {tratio} |")
 r35 = WINGS["35 training cases"]
-print(f"| 35 training cases, the parameter match | 384 wide, 5e-4 | {cell(r35['isla'])} | GeoTransolver-512: {cell(GT512_W)} (3e-3) | — | "
+print(f"| 35 training cases, the parameter match | {cell(r35['isla'])} | GeoTransolver-512: {cell(GT512_W)} (3e-3) | — | "
       f"{mean(GT512_W) / mean(r35['isla']):.2f} | — |")
 print()
 print(": The HiLiftAeroML ladders at the reporting protocol (200,000 cells per case, float32): seed mean (seed range) of surface-pressure "
-      "error on the 180 shared validation cases, and each baseline's mean divided by ISLA's (below one means the baseline is more "
-      "accurate). The second column says which ISLA lane the row holds, the earlier ISLA reference at 384 wide and 5e-4 or a 192-wide lane at 1e-3; "
+      "error on the 180 shared validation cases (18 on the fixed-angle rung), and each baseline's mean divided by ISLA's (below one means the baseline is more "
+      "accurate). Every row holds the earlier ISLA reference at 384 wide and 5e-4; "
       "no row holds the reference configurations of @tbl-hilift-protocols. "
       "GeoTransolver is at the better of its 1e-3 and 3e-3 pairs "
-      "where both exist, with the rate named per row; on the 210- and 510-case rungs the GeoTransolver entry is the parameter-matched "
-      "GeoTransolver-512 (at 510 wings the pair is at 100,000 cells, where GeoTransolver's error is flat in the cell count). Where the "
-      "artifact holds a single GeoTransolver arm without a recorded rate, the row says so. No Transolver lane exists at 510 wings. The last row "
+      "where both exist, with the rate named per row; on the 210-, 510- and 1,260-case rungs the GeoTransolver entry is the parameter-matched "
+      "GeoTransolver-512 (at 510 and 1,260 wings the pair is at 100,000 cells, where GeoTransolver's error is flat in the cell count). Where the "
+      "artifact holds a single GeoTransolver arm without a recorded rate, the row says so. No Transolver lane exists at 510 wings; at 1,260 "
+      "wings the Transolver entry is the 200,000-cell fleet pair. "
+      f"At 1,260 wings GeoTransolver-256 at 1e-3 and 200,000 cells scores {cell(GT256_1260)}, {(1 - mean(GT256_1260) / mean(WINGS['1,260 training cases']['gt'])) * 100:.0f}% "
+      f"below the parameter-matched pair, so against GeoTransolver's best pair on that rung the ratio is {GT256_1260_RATIO:.2f}. The last row "
       "adds the parameter-matched GeoTransolver-512 on the 35-case rung (two seeds). How to read this: the "
       "ordering, not the absolute level, is the result. Rows differ in validation population as well as training set, so absolute errors "
-      "compare within a row only. Same sources as @fig-hilift-data-efficiency; results/ref_surface_2026-09-23.json (GeoTransolver-512). "
+      "compare within a row only. Same sources as @fig-hilift-data-efficiency; results/ref_surface_2026-09-23.json (GeoTransolver-512); "
+      "results/p200k_hl_ladder_2026-09-30.json (GeoTransolver-256 at 1,260 wings). "
       "{#tbl-hilift-ladder}")
 ```
 
@@ -631,12 +647,13 @@ print(": What does not move the wing deficit. Each row changes one thing and lea
 #| output: asis
 w = wing_ratio
 print(f"**The deficit is a small-data, recurring-geometry effect.** Against the parameter-matched GeoTransolver-512 it closes with "
-      f"training cases, {GT512_LADDER['35']:.2f} to {GT512_LADDER['510']:.2f} between 35 and 510 wings, and where the validation "
+      f"training cases, {GT512_LADDER['35']:.2f} to {GT512_LADDER['1260']:.2f} between 35 and 1,260 wings, and where the validation "
       f"geometries are held out of training it is {pct(w['21 training geometries'][0])} at 21 training geometries against "
       f"{pct(w['4 training geometries'][0])} at 4, within seed noise once the training set holds a few tens of geometries. Where a "
       "validation wing's geometry recurs in the training set, the baselines gain more than ISLA does from having seen it; the "
       "preregistered bar for an ISLA advantage, baseline ÷ ISLA of at least 1.10 with ISLA lower on two thirds of the cases, is reached "
-      "on no rung, and the orderings on velocity and wall shear follow pressure on every one. What the deficit is not is "
+      "on no rung, and the orderings on velocity and wall shear follow pressure on every one (on the fixed-angle rung the Transolver "
+      "pair is at parity on all three fields). What the deficit is not is "
       "@tbl-wing-controls: neither ISLA's width, depth or learning rate, nor the number of sampled cells, nor GeoTransolver's width "
       "moves it.")
 ```

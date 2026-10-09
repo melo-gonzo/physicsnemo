@@ -254,11 +254,11 @@ def _norm_stats_match(a: dict[str, dict], b: dict[str, dict]) -> bool:
 def _to_pointwise(td: TensorDict, output_type: IOType) -> TensorDict:
     """Drop the leading batch dim so a TD aligns with the interior points.
 
-    Tensor-output models produce ``(1, N)`` / ``(1, N, C)`` leaves (batch_size
-    ``[1, N]``); mesh-output models produce per-point leaves already
-    (batch_size ``[N]``).
+    Tensor-output models produce ``(1, N)`` / ``(1, N, C)`` leaves
+    (batch_size ``[1, N]``); mesh-output models produce per-point leaves
+    already (batch_size ``[N]``).
     """
-    return td if output_type == "mesh" else td[0]
+    return td[0] if output_type == "tensors" else td
 
 
 def _sample_id(metadata: dict[str, Any], idx: int) -> str:
@@ -329,8 +329,7 @@ def attach_and_save(
     ### the component fields are the ones to drop and re-write.
     target_keys = [as_nested_key(n) for n in target_field_names(target_config)]
     present_targets = [k for k in target_keys if k in interior.point_data]
-    drop_keys = list(present_targets)
-    new_pd = interior.point_data.exclude(*drop_keys).clone()
+    new_pd = interior.point_data.exclude(*present_targets).clone()
     for key, val in pred_phys.items(include_nested=True, leaves_only=True):
         new_pd[with_leaf_name(key, lambda n: f"pred_{n}")] = val
     for key, val in true_phys.items(include_nested=True, leaves_only=True):
@@ -740,9 +739,9 @@ def main(cfg: DictConfig) -> None:
         ### docstring's torchrun caveat). attach_and_save self-creates
         ### parent dirs.
         sample_id = _sample_id(metadata, idx)
-        if bool(
-            cfg.get("save_predictions", True)
-        ):  # file-count quota (2026-09-23): the fleet scorer passes +save_predictions=false
+        ### `+save_predictions=false` skips writing one mesh per sample, for
+        ### runs that only need the metric summary.
+        if bool(cfg.get("save_predictions", True)):
             attach_and_save(
                 domain,
                 pred_phys,

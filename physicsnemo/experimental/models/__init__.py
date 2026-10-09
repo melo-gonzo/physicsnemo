@@ -17,9 +17,11 @@
 """Experimental models for PhysicsNeMo.
 
 Models in this subpackage are under active development and may have breaking API
-changes between releases. Subpackages (``geotransolver``, ``globe``, ...) are
-imported by their own paths; the classes re-exported here are the ones whose
-package lives only in this namespace.
+changes between releases. Subpackages (``geotransolver``, ``globe``, ``isla``, ...)
+are imported by their own paths, e.g. ``physicsnemo.experimental.models.isla.ISLA``.
+The ``ISLA`` re-export below only keeps the research records' older
+``physicsnemo.experimental.models.ISLA`` target working (``examples/cfd/isla/``);
+main has no ``__init__`` here, so this file goes when ISLA is upstreamed.
 """
 
 from .isla import ISLA

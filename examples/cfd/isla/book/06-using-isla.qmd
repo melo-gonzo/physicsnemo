@@ -320,6 +320,11 @@ sampler.** Replace the dataset's `SubsampleMesh` stage with the recipe's
       n_cells: ${sampling_resolution}
 ```
 
+The stage needs more cells than the budget to draw from, so raise or remove
+the reader's `subsample_n_cells` too: in `drivaer_ml_surface.yaml` the reader
+already cuts each surface to `sampling_resolution` cells, and the stage then
+keeps them all.
+
 It keeps the same inclusion law (every cell kept with probability $n/N$,
 weight $N/n$), so nothing about the trained model or the quantity it
 estimates changes. The kept cells are a *systematic* draw along the Morton

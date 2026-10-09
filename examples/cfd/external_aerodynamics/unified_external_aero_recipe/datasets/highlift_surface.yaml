@@ -29,10 +29,6 @@
 # Splits are controlled by manifest.json + train_split/val_split in the training config.
 
 train_datadir: ${dataset_paths.highlift_aero_ml}
-# High-lift wave (prereg 2026-08-17): job-local manifest built by
-# $T/highlift/build_manifest.py from the dataset-root manifest's
-# full_train/full_val, filtered to fully-copied cases. Keys: train / val
-# (the recipe's default train_split/val_split selectors).
 # manifest: <path to a {train, val} manifest JSON built from the dataset-root
 #           manifest's curated split lists (e.g. full_train / full_val)>
 
@@ -63,11 +59,10 @@ pipeline:
           data: [1.0, 1.0, 0.0]
   transforms:
     # Unit freestream direction as a NEW global leaf U_inf_dir (U_inf stays
-    # physical). Consumed as the nondimensional rank-1 drive by the
-    # ISLA template (drive: global_data.U_inf_dir); inert for
-    # models that do not declare it. Mirrors drivaer_ml_surface.yaml;
-    # placed before CenterMesh so the rotation augmentation would rotate it
-    # together with U_inf and the geometry.
+    # physical). Consumed as the unit global vector input by ISLA
+    # (global_schema: U_inf_dir); inert for models that do not declare it.
+    # Mirrors drivaer_ml_surface.yaml; placed before CenterMesh so the
+    # rotation augmentation rotates it together with U_inf and the geometry.
     - _target_: ${dp:ComputeFreestreamDirection}
       velocity_field: U_inf
       output_field: U_inf_dir
