@@ -456,6 +456,31 @@ uses the same frame, so it too becomes pose-invariant (the running E6 lanes are 
 their posed protocol will show the same effect; native and area, the ones the ladder's question needs, are
 unaffected). The theta 1 parity lanes are relaunched on `code_dtt16` (`*_tg1pf_*`).
 
+### E6 interim on AirfRANS (2026-10-10 06:30 UTC, job 141408): slices do nothing, depth-matched reading is load-bearing
+
+The six airfoil slice and control arms scored under the E5 protocol (200 airfoils, 100,000 cells, float32; native,
+area and posed coincide on the airfoil, as for every arm there). Seed means of p / v / nut, with the E5 references:
+
+| arm | seed 42 | seed 43 | seed mean | ratio |
+|---|---|---|---|---|
+| I, 256 slices (E5) | 0.0332 / 0.0169 / 0.0326 | 0.0368 / 0.0170 / 0.0301 | 0.0350 / 0.0170 / 0.0314 | - |
+| I, 512 slices | 0.0356 / 0.0175 / 0.0329 | 0.0345 / 0.0166 / 0.0297 | 0.0351 / 0.0171 / 0.0313 | I-S / I = 1.00 / 1.00 / 1.00 |
+| P, 256 slices (E5) | 0.0299 / 0.0178 / 0.0325 | 0.0357 / 0.0181 / 0.0366 | 0.0328 / 0.0180 / 0.0346 | - |
+| P, 512 slices | 0.0392 / 0.0189 / 0.0378 | 0.0347 / 0.0173 / 0.0323 | 0.0370 / 0.0181 / 0.0351 | P-S / P = 1.13 / 1.01 / 1.01 |
+| FINAL control (P reading the final boundary state) | 0.0510 / 0.0252 / 0.0540 | 0.0533 / 0.0310 / 0.0652 | 0.0522 / 0.0281 / 0.0596 | FINAL / P = 1.59 / 1.56 / 1.72 |
+
+Doubling the slice latent moves neither model on the airfoil: the interacting model is unchanged to the third
+decimal on every field and the read-only model is unchanged on velocity and viscosity and 13% worse on pressure
+through one seed (its two seeds, 0.0392 and 0.0347, straddle P's own 0.0299 and 0.0357), so the slice count is not
+what limits either class there, prediction (b) for the slice arm. The airfoil cannot speak to the car gap by
+itself, since P is level with I on it; the car's slice arms (running) are the ones that can. The FINAL control
+is unambiguous: reading the final boundary state's slices at every query block instead of the state at matched
+depth costs 56 to 72% on every field, well over the 30% bar of prediction (c), the same direction and size as
+SMART's own ablation (140% on SHIFT-Wing). Depth-matched reading is load-bearing for ISLA's passive points and
+the architecture chapter should say so. The control's trainer validation had caught up with the other airfoil
+arms by epoch 100, which the protocol contradicts: trainer validation is not the protocol score and is not to be
+read as one.
+
 ### In flight
 
 - Parity relaunch on `code_dtt16` (the forest in the boundary's own frame), theta 1, two seeds each:
