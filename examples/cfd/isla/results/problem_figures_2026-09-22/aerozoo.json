@@ -1,0 +1,90 @@
+{
+  "dataset": "AeroZoo v1.2",
+  "case": "case-0000000000000000331-e85c971eaefd",
+  "split": "full.val",
+  "n_val": 386,
+  "bank": "procedural-cars",
+  "enclosure": "external_opposed_hemisphere",
+  "profile": "opposed_hemisphere_symmetry",
+  "body_layout": "mixed_bands_2",
+  "source_geometry": "0436_square-rounded_300522.stl",
+  "n_surface_cells": 1555138,
+  "units": "m",
+  "selection": "the procedural car in an opposed-hemisphere enclosure whose log10 Re is nearest the full.val median (5.40); 4 candidates",
+  "description": "steady transition-SST RANS (time-averaged) around one body in its own enclosure; inlet velocity and turbulence, outlet gauge pressure 0, no-slip and slip walls; the body is split into a no-slip and a slip band; density, viscosity, scale and pose vary per case",
+  "n_boundary_cells": 1555138,
+  "n_boundary_cells_by_role": {
+    "inlet": 441001,
+    "outlet": 452245,
+    "no_slip": 3002,
+    "slip": 658890
+  },
+  "n_body_cells": 5260,
+  "n_body_stored": 5260,
+  "n_bodies": 1,
+  "n_interior_points": 3151638,
+  "n_slice_cut": 13480,
+  "n_slice_stored": 13480,
+  "n_band_stored": 2831,
+  "U_inf": [
+    0.09651803970336914,
+    1.8825104236602783,
+    0.6758904457092285
+  ],
+  "U_ref": 2.002495765686035,
+  "L_ref": 0.10255640745162964,
+  "q_ref": 2.45611834526062,
+  "rho": 1.225000023841858,
+  "nu": 5.317721161191002e-07,
+  "Re": 386196.95437333523,
+  "body_acceleration": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "closure_model_id": 1,
+  "secondary_inlet_velocities": [],
+  "inlet": {
+    "turbulent_kinetic_energy": 0.0005492408527061343,
+    "specific_dissipation_rate": 1.3669517040252686,
+    "intermittency": 1.0,
+    "momentum_thickness_reynolds_number": 610.5086059570312
+  },
+  "body_centroid": [
+    -0.027229019378099368,
+    -0.017996791087070186,
+    0.07636553287495983
+  ],
+  "frame": [
+    [
+      0.04819887432517792,
+      0.9400821194120452,
+      0.33752403955206345
+    ],
+    [
+      0.0699439594658072,
+      0.3339106630278589,
+      -0.9400061231984297
+    ],
+    [
+      -0.9963858243913506,
+      0.06891500473810386,
+      -0.04965894757156961
+    ]
+  ],
+  "slice_rule": "cells whose centre lies within half their size (volume^(1/3); area^(1/2) for faces) of the plane through the bodies' area-weighted centroid that contains the inlet direction and is normal to the bodies' longest cross-flow axis",
+  "ranges": {
+    "body_cp": [
+      -2.587078809738159,
+      1.3226163387298584
+    ],
+    "slice_cp": [
+      -1.6177905797958374,
+      1.033031940460205
+    ],
+    "slice_umag": [
+      0.025535205379128456,
+      1.2212756872177124
+    ]
+  }
+}
