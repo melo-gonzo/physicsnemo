@@ -1,0 +1,5 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code	epochs
+0	az	az_full_isla_seed42	aerozoo_volume	isla_volume_aerozoo	train_split=full.train val_split=full.val +training.val_interval=10	3.75e-4	42	200000	code_v26	250
+1	az	az_full_isla_seed43	aerozoo_volume	isla_volume_aerozoo	train_split=full.train val_split=full.val +training.val_interval=10	3.75e-4	43	200000	code_v26	250
+2	az	az_full_gt_seed42	aerozoo_volume	geotransolver_volume_aerozoo	train_split=full.train val_split=full.val +training.val_interval=10	1e-3	42	200000	code_v26	250
+3	az	az_full_gt_seed43	aerozoo_volume	geotransolver_volume_aerozoo	train_split=full.train val_split=full.val +training.val_interval=10	1e-3	43	200000	code_v26	250
