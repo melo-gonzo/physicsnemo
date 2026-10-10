@@ -521,6 +521,25 @@ protocol of these two lanes is 3x worse than native (0.0908 / 0.0448 / 0.0470 an
 are `code_dtt14` lanes whose Morton-strided subsample is taken in the lab frame, the same defect the forest had
 before `canonical_frame`, and the posed column of the K ladder is void for that reason.
 
+First rung on the car (2026-10-10 12:30 UTC, job 143308): the exact read over 256 of the car's 200,000 cells,
+native seed mean p / v / nut 0.0454 / 0.0839 / 0.105 (seeds 0.0458 / 0.0849 / 0.1042 and 0.0450 / 0.0829 / 0.1061),
+against P 0.0449 / 0.0834 / 0.147 and the tree read 0.0438 / 0.0707 / 0.129: K / P = 1.01 / 1.01 / 0.71 where
+TG / P = 0.98 / 0.85 / 0.88. On the car, 256 cells do nothing for pressure and velocity, the fields where the
+tree read's whole gain lies on velocity, and improve eddy viscosity past the tree read (P's viscosity seeds are
+0.17 and 0.12 and the 256-cell pair's 0.104 and 0.106, so part of that is P's own seed noise). The ladder on the
+car is therefore flat from K = 0 to 256 on velocity and reaches 0.85 at every cell: the 1,024-cell rung decides
+whether the velocity gain needs the far field in full (capacity of the read, a gain that appears only above
+some cell count) or arrives in one step. The area protocol of the 256-cell read is P's (0.089 / 0.209 / 0.13),
+and posed equals native for these two lanes to the fourth digit, unlike the airfoil's 256-cell lanes. Both posed
+protocols rotate every case (uniformly on SO(3) for the car, in the plane for the airfoil; the car pipeline's
+centering removes the translation, the airfoil's does not), and both lanes take their subsample in the lab
+frame, so the subsample changes under the pose in both. The difference is the stride: on the car the stride is
+781 and training drew a different one of 781 subsamples at every step, so the model learned a read that does
+not depend on which 256 cells it is given, and a rotated case's subsample is one more of them; on the airfoil
+the stride is 4, training saw only four subsamples, and the rotated case's is unlike any of them. The 3x posed
+loss on the airfoil is therefore an artefact of the lab-frame subsample at a small stride, not a property of the
+read; `code_dtt16` takes the subsample in the boundary's own frame in any case.
+
 ### In flight
 
 - Parity relaunch on `code_dtt16` (the forest in the boundary's own frame), theta 1, two seeds each:
