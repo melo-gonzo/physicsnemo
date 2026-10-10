@@ -22,6 +22,12 @@ case "${1:-}" in
       sbatch -J "isla.az.${slug}" --array="$i" --qos="${LANE_QOS}" --time="${LANE_TIME}" \
         --export=ALL,LANES_TSV="${TSV}",LANE_QOS="${LANE_QOS}",LANE_TIME="${LANE_TIME}" kernel/aerozoo/lanes.sbatch
     done ;;
-  *) echo "usage: submit.sh smoke | lanes <first> <last>" >&2; exit 2 ;;
+  test)
+    ### The test side, scored once and deliberately (eval_test.sbatch): four lanes per array task over the rows of lanes.tsv;
+    ### unfinished lanes are skipped and picked up by a later submission, scored lanes are no-ops (.done).
+    TSV="${TASK}/kernel/aerozoo/lanes.tsv"
+    n=$(($(wc -l < "${TSV}") - 1))
+    sbatch --array="0-$(( (n - 1) / 4 ))" --qos="${LANE_QOS}" --time="${LANE_TIME}" --export=ALL,LANES_TSV="${TSV}" kernel/aerozoo/eval_test.sbatch ;;
+  *) echo "usage: submit.sh smoke | lanes <first> <last> | test" >&2; exit 2 ;;
 esac
 squeue -u "$USER" -h -o '%i %j %T %q %M' | grep -E 'isla\.az'
