@@ -35684,3 +35684,68 @@ stand; if the pose-free forest fails parity on the cars, the lanes are
 cancelled and the arm waits for the fork's next form. Otherwise they are
 scored like the other lanes, and the P4 verdict (ISLA-DTT within 5
 percent of ISLA on every field of the `full` test side) is written here.
+
+## 2026-10-10 — AEROZOO amendment: the query-population shift becomes a scoring protocol of the benchmark for all three arms, with its predictions written before any AeroZoo score exists {#sec-nb-aerozoo-qpop-amendment}
+
+**Setting.** The AEROZOO pre-registration (@sec-nb-aerozoo-prereg)
+scores every arm natively: the training draw of 200,000 interior points
+per case. The DrivAerML query-population instrument (@sec-nb-query-pop)
+showed that the interacting ISLA's error on a fixed set of scored points
+moves 3.5x to 24x when the rest of the query population changes
+(wall-heavy or far-field companions), because the prediction points are
+tokens whose learned routing mass enters the slice states, while the
+Barnes-Hut fork's read-only tree read does not move at all (ratios
+1.0000). The fork proposes, and this entry adopts, the same instrument
+on AeroZoo, where the enclosures, scales and Reynolds numbers vary from
+case to case and the query cloud is the solver's cell-centroid
+distribution. Peter's steer, in his reply to the fork's status report
+of 2026-10-10 as that session relayed it: "I think AeroZoo is the one
+that I really want to do well on, and I anticipate query-independence
+paying a lot more dividends there than it does on DrivAerML (where the
+variation is really quite small)." Before any AeroZoo lane is scored,
+the protocol and its predictions are fixed here.
+
+**Protocol.** Scoring only, on the native checkpoints of the `full`
+split's six lanes (ISLA, GeoTransolver and ISLA-DTT, two seeds each),
+on the validation side (386 cases; the test side keeps its single
+scoring), float32. Every metric is computed on the SAME scored set per
+case, the first 100,000 native points, so that only the query population
+around them differs: the native 200,000 points (the control); the
+100,000 alone (half count at the training law); the native 200,000 plus
+200,000 companions drawn uniformly in the interior's bounding box
+(far-field heavy); the native 200,000 plus 200,000 companions resampled
+from the native points with probability inversely proportional to the
+distance to the no-slip walls (wall-heavy). The GeoTransolver arm's
+three stored distances are recomputed for every swapped-in point from
+the same sampled boundary, so it sees each condition through its own
+inputs. The readout per arm, condition and field is the relative L2 on
+the scored set divided by the control's, seed means with both seeds
+reported, and the mean deviation of the predictions on the scored
+points from the control's predictions. The fork adapts its DrivAerML
+script to the AeroZoo recipe; the script and its run line enter
+`kernel/aerozoo/` when it lands.
+
+**Predictions and bars.** (Q1) ISLA-DTT is query-independent by
+construction: every ratio is 1.000 to the roundoff of float32, on every
+condition and field, both seeds; a ratio outside 1 ± 0.001 on any
+condition falsifies the construction on this dataset. (Q2) ISLA moves
+under the far-field and wall-heavy companions on every field, with the
+far-field companions the larger move, as on DrivAerML; the half count
+stays within 1 ± 0.05; no magnitude is predicted, since AeroZoo's cases
+differ from the cars in enclosure and scale, and the two seeds are
+expected to agree in direction. (Q3) GeoTransolver moves too: it forms
+its slices over the point cloud it is given, and the authors of SMART
+report the same failure of Transolver and AB-UPT under query shifts on
+SHIFT-SUV; the magnitude relative to ISLA's is not predicted. A move
+counts when both seeds order the same way and the seed-mean ratio is
+outside 1 ± 0.05. These are measurements of a contract (query
+independence), reported beside the native accuracy and never in place
+of it; the pre-registered P1 to P4 verdicts are unchanged.
+
+**Why it matters.** If Q1 holds and Q2 and Q3 fire, ISLA-DTT is the
+only arm whose answer at a point does not depend on which other points
+were asked, which is the operational property a solver-replacement
+needs (a user queries a probe line, a plane, a region, not the training
+draw), and the AeroZoo chapter states it as the tree read's case. If Q1
+fails, the construction has a leak on this dataset and the fork is told
+first.
