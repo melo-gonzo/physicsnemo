@@ -242,6 +242,7 @@ from physicsnemo.experimental.models.isla.kernel_read import (
 from physicsnemo.experimental.models.isla.pair_kernels import PairPlan
 from physicsnemo.experimental.models.isla.tree_read import (
     _TreeKernelRead,
+    canonical_frame,
     tree_read_pairs,
 )
 from physicsnemo.mesh import Mesh
@@ -404,9 +405,11 @@ class ISLA(Module):
             constant: ``0`` is the dense read pair for pair, and the error
             vanishes as it falls. Query independence is exact at every value
             (a point's walk sees the tree and the point alone); at a finite
-            value equivariance holds to the approximation's order. The dense
-            and tree forms share their parameters, so a checkpoint of one
-            loads into the other.
+            value the trees are built in the boundary's own frame, so a rigid
+            motion of the case gives the same clusters and the same
+            approximation (up to ties of that frame: equal variances or a
+            symmetric axis). The dense and tree forms share their parameters,
+            so a checkpoint of one loads into the other.
         kernel_read_cells: Global read only. ``None`` (default): the read is
             over every boundary cell. An integer ``K``: the same read over a
             subsample of ``K`` cells per case, every ``N // K``-th cell of the
@@ -1233,12 +1236,13 @@ class ISLA(Module):
             point_data.set(FieldSchema.key(name), value[0])
         return Mesh(points=out_points, point_data=point_data, global_data=global_td)
 
-    def _read_subsample(self, r):
+    def _read_subsample(self, r, log_w):
         """The Morton-strided subsample of the boundary cells that the global read uses
         (``kernel_read_cells``), ``(B, K)`` cell indices, or ``None`` for every cell:
-        every ``N // K``-th cell of the boundary's Morton order, the offset drawn at
-        random in training and zero in evaluation. A function of the boundary alone,
-        so the read stays exactly query independent."""
+        every ``N // K``-th cell of the boundary's Morton order in the boundary's own
+        frame, the offset drawn at random in training and zero in evaluation. A
+        function of the boundary alone, so the read stays exactly query independent
+        and, up to ties of the frame, the same in every pose of the case."""
         k = self.kernel_read_cells
         if k is None:
             return None
@@ -1251,7 +1255,11 @@ class ISLA(Module):
         with torch.no_grad():
             rows = []
             for i in range(b):
-                order = ClusterTree.from_points(r[i].detach(), leaf_size=64).sorted_source_order
+                ### Morton order in the boundary's own frame (canonical_frame), so the
+                ### subsample is the same in every pose of the case, up to ties.
+                pts = r[i].detach()
+                pts = pts @ canonical_frame(pts, torch.exp(log_w[i, :, 0].detach()))
+                order = ClusterTree.from_points(pts, leaf_size=64).sorted_source_order
                 offset = int(torch.randint(stride, (1,))) if self.training else 0
                 rows.append(order[offset::stride][:k])
             return torch.stack(rows)
@@ -1471,7 +1479,7 @@ class ISLA(Module):
                 ### kernel_read_cells (E6 diagnostic): the read's cells are a Morton-strided
                 ### subsample; the pair builders renormalize the measure fractions over the
                 ### cells they are given, so the read is the same quadrature on fewer nodes.
-                read_sel = self._read_subsample(r)
+                read_sel = self._read_subsample(r, log_w)
                 if read_sel is None:
                     r_s, n_s, w_s, v_s = r, n_hat, log_w, vecs
                 else:

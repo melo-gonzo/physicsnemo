@@ -60,9 +60,14 @@ exactly query independent at every :math:`\theta` (a point's prediction depends 
 the boundary and the point, never on the other prediction points). At
 :math:`\theta = 0` every contract of the dense read holds exactly: Euclidean
 equivariance, the similarity gauge, boundary-refinement and measure-scale invariance.
-At finite :math:`\theta` the Morton boxes are axis-aligned and the octants are the
-frame's, so a rotation of the case can move a point's far-field list; the resulting
-differences are of the approximation's order and vanish with :math:`\theta`.
+At finite :math:`\theta` the forest is built in a frame the boundary carries with it
+(:func:`canonical_frame`: the principal axes of the cells' measure-weighted
+covariance, signed by their third moments), so a rotation, reflection, translation
+or rescale of the case gives the same clusters and the same far-field list for every
+point, up to ties of that frame (equal variances, a symmetric axis); the read is then
+the same approximation in every pose, and the posed protocol equals the native one.
+Trees built on lab coordinates were not: on AirfRANS at theta 1 their error rose
+1.9x / 1.25x / 3.3x on pressure / velocity / viscosity under a rigid motion.
 
 Constants. ``TREE_READ_LEAF_SIZE`` (cells per leaf), the orientation split into the
 :math:`2^d` sign octants and ``TREE_READ_PAIR_CHUNK`` (pairs per chunk of the basis
@@ -108,6 +113,43 @@ TREE_READ_LEAF_SIZE = 4
 TREE_READ_PAIR_CHUNK = 1 << 22
 
 
+#: Below this measure-weighted normalized third moment along a principal axis, the
+#: axis's sign is a tie (a symmetric body) and is fixed by the lab axis it most
+#: overlaps instead. Computed in float64, so a body's skewness is reproduced under a
+#: rigid motion to 1e-12 and only a genuinely symmetric axis falls back.
+CANONICAL_SKEW_TIE = 1e-9
+
+
+def canonical_frame(points: torch.Tensor, measure: torch.Tensor) -> torch.Tensor:
+    r"""A frame the boundary carries with it, ``(d, d)`` with the axes as columns: the
+    principal axes of the measure-weighted covariance of the cell positions, in
+    ascending variance, each signed so that the measure-weighted third moment of the
+    positions along it is positive. Under a rotation, reflection, translation or
+    rescale of the boundary the frame moves with it (up to ties: equal variances, or a
+    symmetric axis whose third moment vanishes, where the sign follows the lab axis
+    of largest overlap), so coordinates ``points @ frame`` are invariant. The Morton
+    trees and the normal octants are built in these coordinates, which makes the
+    forest, and so every point's far-field list at finite ``theta``, the same in
+    every pose of the case; a tree built on lab coordinates changes its clusters with
+    the pose (on AirfRANS at theta 1, errors 1.9x / 1.25x / 3.3x on pressure /
+    velocity / viscosity under the posed protocol against the native one)."""
+    d = points.shape[1]
+    x = points.detach().double()
+    w = measure.detach().double().clamp_min(0)
+    w = w / w.sum().clamp_min(torch.finfo(torch.float64).tiny)
+    x = x - (w[:, None] * x).sum(0)
+    cov = (w[:, None] * x).t() @ x
+    _, axes = torch.linalg.eigh(cov)
+    proj = x @ axes
+    m2 = (w[:, None] * proj.square()).sum(0)
+    m3 = (w[:, None] * proj.pow(3)).sum(0)
+    skew = m3 / m2.clamp_min(torch.finfo(torch.float64).tiny).pow(1.5)
+    lab = axes[axes.abs().argmax(dim=0), torch.arange(d, device=points.device)]
+    sign = torch.where(skew.abs() > CANONICAL_SKEW_TIE, torch.sign(skew), torch.sign(lab))
+    sign = torch.where(sign == 0, torch.ones_like(sign), sign)
+    return (axes * sign[None, :]).to(points.dtype)
+
+
 def normal_octants(normals: torch.Tensor) -> torch.Tensor:
     """The sign octant of each normal, ``0`` to ``2**d - 1`` (bit ``k`` set when
     component ``k`` is positive). Opposite normals never share an octant."""
@@ -133,6 +175,7 @@ class BoundaryForest:
 
     n_cells: int
     theta: float
+    frame: torch.Tensor  # (d, d) the boundary's own frame (canonical_frame); trees and boxes live in points @ frame
     trees: list[ClusterTree]
     tree_cells: list[torch.Tensor]  # per tree, the cells it holds (its sources, in its input order)
     node_offset: torch.Tensor  # (T + 1,) each tree's first node in the table
@@ -177,7 +220,12 @@ class BoundaryForest:
         n, d = points.shape
         device = points.device
         coherent_length = 1.0 - 0.5 * float(theta) ** 2
-        octant = normal_octants(normals)
+        ### The trees and the octants live in the boundary's own frame, so the forest
+        ### is the same in every pose of the case (up to ties); the virtual cells
+        ### (centroids, normals, rank-1 means) stay in the frame the read works in.
+        frame = canonical_frame(points, measure)
+        points_f, normals_f = points @ frame, normals @ frame
+        octant = normal_octants(normals_f)
         trees, tree_cells, cells, offsets = [], [], [], [0]
         starts, counts, lefts, rights, boxes = [], [], [], [], []
         centers, nrm, vec, meas = [], [], [], []
@@ -186,7 +234,7 @@ class BoundaryForest:
             sel = (octant == k).nonzero().squeeze(-1)
             if sel.numel() == 0:
                 continue
-            tree = ClusterTree.from_points(points[sel], leaf_size=leaf_size, areas=measure[sel])
+            tree = ClusterTree.from_points(points_f[sel], leaf_size=leaf_size, areas=measure[sel])
             data = {"n": normals[sel]}
             if vecs is not None:
                 data["u"] = vecs[sel]
@@ -237,6 +285,7 @@ class BoundaryForest:
         return cls(
             n_cells=n,
             theta=float(theta),
+            frame=frame,
             trees=trees,
             tree_cells=tree_cells,
             node_offset=node_offset,
@@ -274,11 +323,12 @@ class BoundaryForest:
         separated from the point and its normals are coherent, so each point's list
         holds every cell exactly once, as itself or inside one node."""
         theta = self.theta if theta is None else float(theta)
+        points_f = points.detach() @ self.frame  # the trees' coordinates
         qs, ss, n_node = [], [], 0
         for t, tree in enumerate(self.trees):
             a, b = int(self.node_offset[t]), int(self.node_offset[t + 1])
             plan = tree.find_point_interaction_pairs(
-                points.detach(), theta=theta, validate=False, source_admissible=self.coherent[a:b]
+                points_f, theta=theta, validate=False, source_admissible=self.coherent[a:b]
             )
             qs += [plan.near_target_ids, plan.far_target_ids]
             ss += [self.tree_cells[t][plan.near_source_ids], self.n_cells + a + plan.far_source_node_ids]

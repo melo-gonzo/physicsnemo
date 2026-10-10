@@ -424,6 +424,38 @@ geometry kernel caps slices at 1,024), and the FINAL control. Predictions are in
 and a P-only gain from the doubled slices say capacity; a flat ladder and an equal gain say consensus; a FINAL
 penalty above 30% says depth-matched reading is load-bearing in ISLA as in SMART.
 
+### Parity on AirfRANS (2026-10-10 04:20 UTC, job 140437): native and area at parity, the posed protocol lost
+
+The forest's two airfoil lanes (`af_tg1ct_seed42/43`, theta 1, `code_dtt13`), scored under the E5 protocol (200
+held-out airfoils, 100,000 cells, float32), against the retired tree's (`af_tg1_seed42/43`), p / v / nut:
+
+| arm | seed 42 native | seed 43 native | seed mean | posed (seed 42, 43) |
+|---|---|---|---|---|
+| retired tree, theta 1 | 0.0261 / 0.0138 / 0.0325 | 0.0255 / 0.0143 / 0.0288 | 0.0258 / 0.0141 / 0.0307 | = native, = native |
+| forest, theta 1 | 0.0248 / 0.0134 / 0.0318 | 0.0311 / 0.0148 / 0.0297 | 0.0280 / 0.0141 / 0.0308 | 0.0473 / 0.0168 / 0.1048, 0.0476 / 0.0185 / 0.1187 |
+| dense exact read (G, E5) | 0.0274 / 0.0137 / 0.0325 | 0.0245 / 0.0133 / 0.0250 | 0.0260 / 0.0135 / 0.0288 | = native |
+
+Native and area (identical on the airfoil, the full boundary is read) are at parity: velocity and viscosity
+agree to 0.3%, pressure's seed mean is 8% higher through one seed (0.0311) while the other is the best pressure
+of any tree arm (0.0248); the dense read's own seeds differ by 12% on pressure, so pressure is within the class's
+seed noise. The posed protocol is not at parity: every case rigidly rotated and translated, the forest's error
+rises 1.9x / 1.25x / 3.3x on pressure / velocity / viscosity, where the retired tree and the dense read reproduce
+their native scores exactly. The cause is the one named when the forest was adopted: Morton boxes and normal
+octants are the lab frame's, so a rotated case is clustered differently relative to its body than the training
+cases were, and the kernel, trained at theta 1 on body-aligned clusters, reads misaligned ones; the retired
+principal-axis tree clustered the same way in every pose. At theta 1 this is not a small finite-theta effect but a
+3x loss on a campaign protocol.
+
+Fix (`code_dtt16`): the trees and the octants are built in a frame the boundary carries with it, the principal
+axes of the measure-weighted covariance of the cells signed by their third moments (`canonical_frame`; ties, a
+symmetric axis, fall back to the lab axis of largest overlap), computed in float64 so a rigid motion reproduces it
+to 1e-12. Coordinates in that frame are invariant, so the forest and every far-field list are the same in every
+pose up to ties, as the retired tree's were; the aggregates (centroids, normals) stay in the original frame and
+the read's invariants are unchanged; at theta 0 nothing changes. The Morton-strided subsample of the E6 K-ladder
+uses the same frame, so it too becomes pose-invariant (the running E6 lanes are on lab-frame Morton order and
+their posed protocol will show the same effect; native and area, the ones the ladder's question needs, are
+unaffected). The theta 1 parity lanes are relaunched on `code_dtt16` (`*_tg1pf_*`).
+
 ### In flight
 
 - E6 lanes 26 to 45 on `code_dtt14` (jobs 136085 to 136104, submitted 11:18 PDT 2026-10-09): car

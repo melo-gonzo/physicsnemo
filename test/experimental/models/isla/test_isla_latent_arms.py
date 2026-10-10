@@ -141,6 +141,23 @@ def test_subsample_read_moves_its_offset_in_training_and_is_fixed_in_evaluation(
     assert same(outputs(_run(m, mesh, drv, q, sdf, sn)), e1, atol=0.0)
 
 
+@pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])
+def test_subsample_read_is_covariant_in_every_pose(improper):
+    """The Morton-strided subsample is taken in the boundary's own frame, so a rotated,
+    reflected and translated copy reads the same cells and the exact read over them
+    (theta 0) is covariant to roundoff."""
+    from test.experimental.models.isla._meshes import orthogonal, transform
+
+    m = _model(theta=0.0, cells=64)
+    mesh, drv, q, sdf, sn = _case()
+    base = outputs(_run(m, mesh, drv, q, sdf, sn))
+    R = orthogonal(3, 4, improper)
+    t = torch.arange(1.0, 4.0, dtype=D)
+    out = outputs(_run(m, transform(mesh, R, t), drv @ R.T, q @ R.T + t, sdf, sn @ R.T))
+    assert torch.allclose(out["p"], base["p"], atol=1e-9)
+    assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-9)
+
+
 def test_subsample_read_reads_a_smaller_boundary_in_full():
     """A boundary with no more cells than the budget is read in full: the same
     predictions as the dense global read, every pair."""

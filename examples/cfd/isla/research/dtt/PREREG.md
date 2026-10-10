@@ -53,7 +53,14 @@ The clusters differ, so the theta 1 arms are retrained on the car and on AirfRAN
 `af_tg1ct_seed42/43`, snapshot `code_dtt13`) and scored under the same protocol; the prediction is parity with the
 `code_dtt11`/`code_dtt12` theta 1 arms (seed means within the seed separation on every field), since the forest's
 pair count is within 10% of the retired tree's at theta 1 and the read is the same quadrature. The bars against I
-and P are unchanged.
+and P are unchanged. Fourth amendment, 2026-10-10, after the AirfRANS parity pair scored: native and area were at
+parity but the posed protocol was not (1.9x / 1.25x / 3.3x on p / v / nut; REPORT.md), because trees on lab
+coordinates cluster a rotated case differently from the training cases. The forest is now built in the
+boundary's own frame (principal axes signed by third moments, `canonical_frame`), which is exact in every pose
+up to ties, and the theta 1 parity arms are relaunched once more (`dtt_vol_tg1pf_seed42/43`, `af_tg1pf_seed42/43`,
+snapshot `code_dtt16`). Predictions: native and area at parity with the retired tree's arms within the seed
+separation on every field, and posed within 1% of native on every field (the retired tree reproduced native to
+1e-4; the frame's ties can move a few clusters). The `code_dtt13` arms stand as the record of the lab-frame form.
 
 ## E6: latent capacity against query consensus (added 2026-10-09, before any arm ran)
 

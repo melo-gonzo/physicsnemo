@@ -214,13 +214,16 @@ def test_boundary_forest_splits_by_normal_octant_and_its_nodes_are_tight(dim):
     assert sum(t.n_nodes for t in f.trees) == m
     assert torch.equal(torch.sort(torch.cat(f.tree_cells)).values, torch.arange(n))
     assert torch.equal(torch.sort(f.cells).values, torch.arange(n))
-    octant = normal_octants(nrm)
+    ### Octants and boxes live in the boundary's own frame.
+    assert torch.allclose(f.frame.t() @ f.frame, torch.eye(dim, dtype=D), atol=1e-12)
+    pts_f = pts @ f.frame
+    octant = normal_octants(nrm @ f.frame)
     for sel in f.tree_cells:
         assert len(set(octant[sel].tolist())) == 1
     for i in range(m):
         cells = _node_cells(f, i)
-        assert bool((pts[cells] >= f.aabb_min[i] - 1e-9).all())
-        assert bool((pts[cells] <= f.aabb_max[i] + 1e-9).all())
+        assert bool((pts_f[cells] >= f.aabb_min[i] - 1e-9).all())
+        assert bool((pts_f[cells] <= f.aabb_max[i] + 1e-9).all())
         assert torch.allclose(f.measure[i], w[cells].sum())
         assert torch.allclose(f.center[i], (pts[cells] * w[cells, None]).sum(0) / w[cells].sum())
         mean_n = (nrm[cells] * w[cells, None]).sum(0) / w[cells].sum()
@@ -301,7 +304,7 @@ def test_point_pairs_admit_only_separated_coherent_nodes_and_cover_every_cell(th
     is_node = si >= n
     assert int(is_node.sum()) == n_node
     node = si[is_node] - n
-    p = q[qi[is_node]]
+    p = (q @ f.frame)[qi[is_node]]  # the boxes live in the boundary's own frame
     gap = torch.clamp(torch.maximum(p - f.aabb_max[node], f.aabb_min[node] - p), min=0)
     assert bool((gap.square().sum(-1) * theta**2 > f.diameter_sq[node]).all())
     assert bool(f.coherent[node].all())
@@ -317,6 +320,45 @@ def test_point_pairs_admit_only_separated_coherent_nodes_and_cover_every_cell(th
     qi_one, si_one, _ = f.point_pairs(q[17:18])
     assert torch.equal(torch.sort(si_one).values, torch.sort(si[qi == 17]).values)
     assert bool((qi_one == 0).all())
+
+
+@pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])
+def test_forest_and_every_list_are_the_same_in_every_pose_at_finite_theta(improper):
+    """The trees live in the boundary's own frame (principal axes signed by the third
+    moments), so a rotated, reflected, translated and rescaled copy of a generic case
+    gives the same frame (moved with the case), the same cells in the same order, the
+    same nodes and, for every point, the same far-field list at theta 1."""
+    pts, nrm, w, _ = cloud(700, d=3, seed=6)
+    q, _, _, _ = cloud(90, d=3, seed=7, scale=(3.0, 3.0, 3.0))
+    R = orthogonal(3, 4, improper)
+    t = torch.arange(1.0, 4.0, dtype=D)
+    k = 2.5
+    f0 = BoundaryForest.build(pts, w, nrm, None, theta=1.0)
+    f1 = BoundaryForest.build(k * pts @ R.T + t, 3.0 * w, nrm @ R.T, None, theta=1.0)
+    assert torch.allclose(f1.frame, R @ f0.frame, atol=1e-9)
+    assert torch.equal(f1.cells, f0.cells)
+    assert torch.equal(f1.range_start, f0.range_start) and torch.equal(f1.range_count, f0.range_count)
+    assert torch.equal(f1.coherent, f0.coherent)
+    assert torch.allclose(f1.center, k * f0.center @ R.T + t, atol=1e-9)
+    assert torch.allclose(f1.normal, f0.normal @ R.T, atol=1e-9)
+    qi0, si0, n0 = f0.point_pairs(q)
+    qi1, si1, n1 = f1.point_pairs(k * q @ R.T + t)
+    assert n0 == n1 and torch.equal(qi0, qi1) and torch.equal(si0, si1)
+
+
+@pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])
+def test_tree_read_is_covariant_in_every_pose_at_finite_theta(improper):
+    """At theta 1 the read is an approximation, but the same approximation in every
+    pose of the case, so a rotated, reflected and translated copy gives the same
+    predictions to roundoff (the posed protocol equals the native one)."""
+    _, tree = _pair(3, 1.0)
+    mesh, drv, q, sdf, sn = _case(3)
+    base = outputs(_run(tree, mesh, drv, q, sdf, sn))
+    R = orthogonal(3, 4, improper)
+    t = torch.arange(1.0, 4.0, dtype=D)
+    out = outputs(_run(tree, transform(mesh, R, t), drv @ R.T, q @ R.T + t, sdf, sn @ R.T))
+    assert torch.allclose(out["p"], base["p"], atol=1e-9)
+    assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-9)
 
 
 def test_tree_read_error_falls_with_theta_on_a_smooth_boundary():
