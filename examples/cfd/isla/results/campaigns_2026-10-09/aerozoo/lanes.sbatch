@@ -48,6 +48,10 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export PYTHONUNBUFFERED=1
 export PHYSICSNEMO_DIST_TIMEOUT_S=3600
 export PYTHONPATH="${CODEDIR}:${RECIPE}/src"
+### Kernel caches on Lustre, not in the 10 GB home: the ISLA smoke lane died compiling its fused Triton kernel into
+### ~/.triton/cache with "OSError: [Errno 122] Disk quota exceeded" (2026-10-09).
+export TRITON_CACHE_DIR="${TASK}/.triton_cache" TORCHINDUCTOR_CACHE_DIR="${TASK}/.inductor_cache"
+mkdir -p "${TRITON_CACHE_DIR}" "${TORCHINDUCTOR_CACHE_DIR}"
 trap 'rc=$?; printf "rc=%s\n" "$rc" > "${TASK}/STATUS_${TAG}"' EXIT
 RUN_DIR="${TASK}/runs/${RUN_ID}"
 mkdir -p "${RUN_DIR}"
