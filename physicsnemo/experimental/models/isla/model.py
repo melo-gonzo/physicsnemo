@@ -242,7 +242,6 @@ from physicsnemo.experimental.models.isla.kernel_read import (
 from physicsnemo.experimental.models.isla.pair_kernels import PairPlan
 from physicsnemo.experimental.models.isla.tree_read import (
     _TreeKernelRead,
-    canonical_frame,
     tree_read_pairs,
 )
 from physicsnemo.mesh import Mesh
@@ -410,25 +409,6 @@ class ISLA(Module):
             approximation (up to ties of that frame: equal variances or a
             symmetric axis). The dense and tree forms share their parameters,
             so a checkpoint of one loads into the other.
-        kernel_read_cells: Global read only. ``None`` (default): the read is
-            over every boundary cell. An integer ``K``: the same read over a
-            subsample of ``K`` cells per case, every ``N // K``-th cell of the
-            Morton order of the boundary (a spatially stratified subsample
-            that depends on the boundary alone), with the measure fractions
-            renormalized over the subsample, so the read is a quadrature of
-            the same integral on fewer nodes; the stride offset is drawn at
-            random in training and is zero in evaluation; a boundary of at
-            most ``K`` cells is read in full. A diagnostic of the read's
-            capacity (the E6 ladder of the tree-read program), not a
-            reference form; query independence holds exactly.
-        read_final_boundary: Read-only interior task only. ``False``
-            (default): the prediction points read each block's slices at
-            matched depth. ``True``: the boundary tokens run through every
-            block first, then the prediction points run through the blocks
-            with the boundary tokens held at their final state, so every
-            query block reads the slices (and any kernel read) of the final
-            boundary state. The same parameters; a diagnostic control (the
-            depth-matched reading of the E6 program), not a reference form.
         dim: Spatial dimension of the domain (default 3). Every boundary mesh
             is a ``Mesh[dim - 1, dim]`` and every prediction point has ``dim``
             coordinates. Every geometric quantity is built for ``dim``
@@ -507,8 +487,6 @@ class ISLA(Module):
         kernel_read_radius: float | None = 0.01,
         kernel_read_blocks: int | None = None,
         kernel_read_theta: float | None = None,
-        kernel_read_cells: int | None = None,
-        read_final_boundary: bool = False,
         dim: int = 3,
         eps: float = 1e-12,
     ) -> None:
@@ -740,25 +718,6 @@ class ISLA(Module):
                 )
             if not self.kernel_read_theta >= 0:
                 raise ValueError(f"kernel_read_theta must be non-negative, got {kernel_read_theta!r}")
-        ### kernel_read_cells restricts the global read to a Morton-strided subsample
-        ### of the cells (a diagnostic of the read's capacity, E6); None = every cell.
-        self.kernel_read_cells = None if kernel_read_cells is None else int(kernel_read_cells)
-        if self.kernel_read_cells is not None:
-            if kernel_read is None or self.kernel_read_radius is not None:
-                raise ValueError(
-                    "kernel_read_cells subsamples the global read: build with "
-                    "kernel_read='mean' and kernel_read_radius=None"
-                )
-            if self.kernel_read_cells < 1:
-                raise ValueError(f"kernel_read_cells must be positive, got {kernel_read_cells!r}")
-        ### read_final_boundary: the prediction points read the final boundary state at
-        ### every block instead of the state at matched depth (a diagnostic control, E6).
-        self.read_final_boundary = bool(read_final_boundary)
-        if self.read_final_boundary and not self.query_independent:
-            raise ValueError(
-                "read_final_boundary concerns passive prediction points; build with "
-                "interior=True and query_independent=True"
-            )
         self.kernel_read_blocks = None
         self.kernel_basis = None
         self.kernel_reads = None
@@ -1236,34 +1195,6 @@ class ISLA(Module):
             point_data.set(FieldSchema.key(name), value[0])
         return Mesh(points=out_points, point_data=point_data, global_data=global_td)
 
-    def _read_subsample(self, r, log_w):
-        """The Morton-strided subsample of the boundary cells that the global read uses
-        (``kernel_read_cells``), ``(B, K)`` cell indices, or ``None`` for every cell:
-        every ``N // K``-th cell of the boundary's Morton order in the boundary's own
-        frame, the offset drawn at random in training and zero in evaluation. A
-        function of the boundary alone, so the read stays exactly query independent
-        and, up to ties of the frame, the same in every pose of the case."""
-        k = self.kernel_read_cells
-        if k is None:
-            return None
-        b, n, _ = r.shape
-        if k >= n:
-            ### A boundary with no more cells than the budget is read in full (the top
-            ### of the ladder): an airfoil of a thousand cells under a budget of 1,024.
-            return None
-        stride = n // k
-        with torch.no_grad():
-            rows = []
-            for i in range(b):
-                ### Morton order in the boundary's own frame (canonical_frame), so the
-                ### subsample is the same in every pose of the case, up to ties.
-                pts = r[i].detach()
-                pts = pts @ canonical_frame(pts, torch.exp(log_w[i, :, 0].detach()))
-                order = ClusterTree.from_points(pts, leaf_size=64).sorted_source_order
-                offset = int(torch.randint(stride, (1,))) if self.training else 0
-                rows.append(order[offset::stride][:k])
-            return torch.stack(rows)
-
     def _kernel_read_pairs(self, r, n_hat, vecs, log_w, q_r, q_nhat, q_vecs, g_unit):
         """The kernel read's pairs: every (point, boundary cell) closer than
         ``kernel_read_radius`` (frame units), their invariants and log weights
@@ -1469,25 +1400,14 @@ class ISLA(Module):
                     - math.log(nq)
                 )
             q_vecs, q_tens = self._block_extras(None, None, q_vecs, q_tens, bq, nq, points)
-            read_sel = None
             if self.kernel_reads is not None and self.kernel_read_radius is None:
                 read_pairs = (
                     self._global_read_pairs
                     if self.kernel_read_theta is None
                     else self._tree_read_pairs
                 )
-                ### kernel_read_cells (E6 diagnostic): the read's cells are a Morton-strided
-                ### subsample; the pair builders renormalize the measure fractions over the
-                ### cells they are given, so the read is the same quadrature on fewer nodes.
-                read_sel = self._read_subsample(r, log_w)
-                if read_sel is None:
-                    r_s, n_s, w_s, v_s = r, n_hat, log_w, vecs
-                else:
-                    rows = torch.arange(b, device=r.device)[:, None]
-                    r_s, n_s, w_s = r[rows, read_sel], n_hat[rows, read_sel], log_w[rows, read_sel]
-                    v_s = None if vecs is None else vecs[rows, read_sel]
                 kernel_pairs = read_pairs(
-                    r_s, n_s, v_s, w_s, q_r, q_nhat, s[..., 0].abs(), q_vecs, g_unit
+                    r, n_hat, vecs, log_w, q_r, q_nhat, s[..., 0].abs(), q_vecs, g_unit
                 )
             elif self.kernel_reads is not None:
                 kernel_pairs = self._kernel_read_pairs(r, n_hat, vecs, log_w, q_r, q_nhat, q_vecs, g_unit)
@@ -1502,36 +1422,14 @@ class ISLA(Module):
             n = n + nq
 
         first_read = len(self.blocks) - (self.kernel_read_blocks or 0)
-        h_b_final = None
-        if interior and self.read_final_boundary:
-            ### E6 control: the boundary tokens alone through every block first; below,
-            ### the boundary rows are held at this final state after every block, so
-            ### each query block reads the final boundary state's slices (and read).
-            nb = n_boundary
-            h_b_final = h[:, :nb]
-            for block in self._block_callables():
-                h_b_final = block(
-                    h_b_final,
-                    log_w[:, :nb],
-                    r[:, :nb],
-                    n_hat[:, :nb],
-                    g_hat[:, :nb],
-                    self.eps,
-                    None if vecs is None else vecs[:, :nb],
-                    None if tens is None else tens[:, :nb],
-                )
-            h = torch.cat([h_b_final, h[:, nb:]], dim=1)
         for i, block in enumerate(self._block_callables()):
             h = block(h, log_w, r, n_hat, g_hat, self.eps, vecs, tens)
-            if h_b_final is not None:
-                h = torch.cat([h_b_final, h[:, n_boundary:]], dim=1)
             if self.kernel_reads is not None and i >= first_read:
                 ### The points' residual update from the boundary cells' states at this
                 ### depth; the boundary tokens (and so the slices) are untouched.
                 h_b, h_p = h[:, :n_boundary], h[:, n_boundary:]
-                h_src = h_b if read_sel is None else h_b[torch.arange(b, device=h.device)[:, None], read_sel]
                 delta = self.kernel_reads[i - first_read](
-                    h_src.reshape(-1, h.shape[-1]), h_p.reshape(-1, h.shape[-1]), kernel_pairs
+                    h_b.reshape(-1, h.shape[-1]), h_p.reshape(-1, h.shape[-1]), kernel_pairs
                 )
                 h = torch.cat([h_b, h_p + delta.view_as(h_p)], dim=1)
 
