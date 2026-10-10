@@ -510,6 +510,17 @@ What remains of E6 is the K ladder: whether the exact read over 256 and 1,024 ce
 toward the tree read's TG / P = 0.98 / 0.85 / 0.88 monotonically (capacity of the read) or sits at the tree read's
 level from its first rung (the read's content, not its size).
 
+First rung on the airfoil (2026-10-10 11:00 UTC, job 143086): the exact read over 256 of the airfoil's 958 to
+1,018 cells, native seed mean p / v / nut 0.0295 / 0.0153 / 0.0277 (seeds 0.0255 / 0.0147 / 0.0270 and 0.0334 /
+0.0158 / 0.0283), against P 0.0328 / 0.0180 / 0.0346 (K = 0), the tree read 0.0258 / 0.0141 / 0.0307 and the dense
+read 0.0260 / 0.0135 / 0.0288 (every cell): K / P = 0.90 / 0.85 / 0.80 where G / P = 0.79 / 0.75 / 0.83. A quarter
+of the cells recovers about half of the read's gain on pressure, two thirds on velocity, and all of it on
+viscosity (where the quarter read is the best arm of all). So the ladder is not flat from its first rung on
+pressure and velocity; whether it is monotone or saturates by 512 is the next rung's question. The posed
+protocol of these two lanes is 3x worse than native (0.0908 / 0.0448 / 0.0470 and 0.0931 / 0.0361 / 0.0549): they
+are `code_dtt14` lanes whose Morton-strided subsample is taken in the lab frame, the same defect the forest had
+before `canonical_frame`, and the posed column of the K ladder is void for that reason.
+
 ### In flight
 
 - Parity relaunch on `code_dtt16` (the forest in the boundary's own frame), theta 1, two seeds each:
