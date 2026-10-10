@@ -458,6 +458,10 @@ unaffected). The theta 1 parity lanes are relaunched on `code_dtt16` (`*_tg1pf_*
 
 ### In flight
 
+- Parity relaunch on `code_dtt16` (the forest in the boundary's own frame), theta 1, two seeds each:
+  `dtt_vol_tg1pf_seed42/43` and `af_tg1pf_seed42/43` (lanes 48 to 51, jobs 140854 to 140857, submitted 21:30 PDT
+  2026-10-09); verify16 (job 140853) runs the tree-read and latent-arm tests and the ISLA suite on a GB300.
+  Scoring rows 120 to 131.
 - E6 lanes 26 to 45 on `code_dtt14` (jobs 136085 to 136104, submitted 11:18 PDT 2026-10-09): car
   `dtt_vol_{k256,k1024,ps1024,is1024,final}_seed42/43` and AirfRANS `af_{k256,k1024,ps512,is512,final}_seed42/43`.
   verify14 (job 136084, GB300): the latent-arm and tree tests 38 passed, the ISLA suite 305 passed with the one
