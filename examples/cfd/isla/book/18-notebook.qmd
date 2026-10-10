@@ -35379,3 +35379,136 @@ artifacts (`results/char/soft_geo_lanes_2026-10-07.json`,
 entries. Chapter 7's paragraph on the two tested replacements is
 unchanged, since it reports what was measured. Future lanes need a new
 snapshot of the library, which the AeroZoo benchmark will produce.
+
+## 2026-10-09 — AEROZOO pre-registration: ISLA, ISLA-DTT and GeoTransolver on AeroZoo v1.2's interior task (the boundaries with their prescribed values in, the interior fields out), in distribution and with a geometry bank, an enclosure family or a Reynolds range held out; a new chapter {#sec-nb-aerozoo-prereg}
+
+**Setting.** Peter's instruction of 2026-10-09: take the ISLA architecture
+as it is and the ISLA-DTT variant, test them on the AeroZoo v1.2 dataset
+on the interior prediction task (given a well-posed PDE problem from the
+boundaries with only their prescribed values, predict the interior
+fields), optionally on the surface task (the same inputs, every solution
+field on the boundaries), compare against GeoTransolver, and put the
+results into a new chapter. AeroZoo (Peter's dataset, generator
+`~/gh/aerozoo`, release v1.2 of 2026-10-08) is a corpus of 3,816
+time-averaged transition-SST RANS solutions, each around a different body
+in its own enclosure at its own scale and Reynolds number, built to stress
+geometric and physical diversity: eight geometry banks (procedural blobs,
+cars, streamlined bodies, airframes, two Blender banks, a CAD bank and two
+mascots), four enclosure families (external boxes with five
+boundary-condition profiles, two opposed-hemisphere and opposed-sphere
+enclosures, internal ducts), five Reynolds decades from $10^3$ to $10^8$,
+and bodies whose surface is partly no-slip and partly slip. Every sample is
+a PhysicsNeMo `DomainMesh` that carries the boundary-value problem which
+produced it: four boundary meshes keyed by boundary-condition type
+(`inlet`, `outlet`, `no_slip`, `slip`) with the prescribed values as
+per-face data, an interior point cloud of 0.6 to 24 million cell centroids
+(median 5.0 million) with cell volumes and seven mean-flow fields, and
+dimensional global data (density, viscosity, the inlet velocity, a
+reference speed, length and dynamic pressure). The release's 22 frozen
+splits place cases by a hash of the geometry, so no geometry crosses
+train, validation and test. The in-distribution split `full` holds 2,713 /
+386 / 716 complete cases; the held-out splits train on everything but one
+family and test on it (seven geometry banks, four enclosure families, two
+Reynolds splits, five box profiles, the body layout). This is the first
+dataset in the program whose cases differ in enclosure, scale and Reynolds
+number at once, and the first on which a whole family is held out by
+construction.
+
+**Question.** On a dataset built for diversity, how do the three
+architectures rank on the interior task in distribution, and how much does
+each one's error grow when a geometry bank, an enclosure family or a
+Reynolds range it never saw is held out?
+
+**Task definition (the inputs are PDE data only).** Inputs: the four
+boundary meshes (positions, normals and areas computed from the
+triangles), a one-hot of the boundary-condition type per face, the
+prescribed values per face (the inlet velocity and its four turbulence
+scalars, the outlet gauge pressure and its reverse-flow fallback values,
+the wall velocity), and the global data that pose the problem (the inlet
+velocity direction, the Reynolds number as $\log_{10}(U_\mathrm{ref}
+L_\mathrm{ref}/\nu)$ standardized by $(\cdot - 5.5)/1.5$, and the inlet
+turbulence values as globals). Not inputs: `body_id` (a label of which
+wall is the body; the no-slip operator is the same on the enclosure and on
+the body), the solution and derived fields, the diagnostics and identity
+blocks. Targets: velocity (rank 1), gauge pressure, turbulent kinematic
+viscosity, turbulent kinetic energy and specific dissipation rate (rank 0),
+nondimensionalized per case by the reference speed $U_\mathrm{ref}$, the
+dynamic pressure $q_\mathrm{ref}$, $U_\mathrm{ref} L_\mathrm{ref}$,
+$U_\mathrm{ref}^2$ and $U_\mathrm{ref}/L_\mathrm{ref}$; the intermittency
+and the momentum-thickness Reynolds number are the transition model's
+internal variables and are not targets. Coordinates are divided by
+$L_\mathrm{ref}$ and centered for every model. The surface task is
+pre-registered as the optional second phase with the same inputs and the
+boundary solution fields plus the wall shear on `no_slip` as targets; it
+needs a target-extraction change in the recipe and runs only after the
+interior task is scored.
+
+**Protocol.** The reporting protocol of the book, adapted to the four
+boundaries: 200,000 interior prediction points per case drawn uniformly at
+random, and 50,000 boundary faces per boundary-condition type drawn
+uniformly within the type (at most 200,000 boundary tokens; a type with
+fewer faces is kept whole), with Horvitz-Thompson measures. The release
+stores interior points in OpenFOAM cell order, which is spatially coherent
+(on case `case-0000000000000000000-a48a547f8d4c` a contiguous block of
+200,000 of 5.87 million rows covers 8 to 42 percent of the domain's
+bounding box against 98 percent for a random draw), and the recipe's reader
+draws the interior subsample as one contiguous block, so training reads a
+row-permuted copy of every interior (`kernel/aerozoo/aerozoo_shuffle.py`:
+one random permutation per case, seeded by the case id; boundaries, global
+data and sidecars are symlinks into the release; after the permutation a
+block covers 97 to 99 percent of the box). Models at the reference
+configurations the characterization campaign fixed for the DrivAerML
+Volume task: ISLA (512 wide, 12 layers, 512 slices, cosine routing,
+learning rate 3.75e-4, per-block compile, the built-in nearest geometry and
+no stored distance field), GeoTransolver's volume configuration (256 wide,
+12 layers, 256 slices) with its local embedding of coordinates, the signed
+distance and its gradient to the no-slip walls and the signed distance to
+the slip walls, all computed from the sampled boundary, and a global vector
+of the inlet direction, the standardized log Reynolds number and the four
+inlet turbulence globals; ISLA-DTT in the form the Barnes-Hut fork
+confirms after its parity lanes (provisionally the forest tree read at
+theta 1, exactly query independent). Target statistics for the loss are
+pooled over the training side of the split in use. Two seeds (42, 43).
+Epochs: 250 for every model and split, chosen so that the `full` split's
+2,713 training cases give 678,000 steps, within 8 percent of the 1,260-wing
+rung's 630,000 at the protocol's 500 epochs; the held-out splits train on
+2,100 to 3,100 cases and keep the same epoch count. Scoring: float32, the
+training draw law, every field's relative L2 per case averaged over the
+cases, exactly as the DrivAerML Volume task is scored; model selection on
+the validation side only; the test side scored once. Both stability
+populations (`mean_stable`, `mean_unstable`) stay in and are reported
+separately.
+
+**Lanes.** Phase 1: `full` for ISLA and GeoTransolver, two seeds each
+(four lanes), ISLA-DTT added when its form is confirmed. Phase 2a, the
+held-out families with the clearest mechanism: `family_non_box` (train on
+external boxes, test on the three other enclosures), `reynolds` (train
+below $10^6$, test above) and `bank_blobs` (the largest bank held out),
+each trained from its own training side, three models, two seeds. Phase 2b,
+the remaining held-out splits, only if Phase 2a shows the models' penalties
+differing by more than seed noise. AGA, short-queue chains with
+checkpoint resume; LHR with a dataset copy if AGA cannot schedule.
+
+**Predictions and falsifiers.** (P1, in distribution, the `full` test
+side) GeoTransolver ÷ ISLA is at least 1.2 on velocity and at most 0.9 on
+pressure, the pattern of both existing interior datasets (velocity 1.4 and
+2.2, pressure 0.76 and 0.87); falsified if the velocity ratio is below 1.1
+or the pressure ratio above 1.0. (P2, the enclosure held out) ISLA's
+penalty, its `family_non_box` test error divided by its `full` test error
+on the same fields, is at least 20 percent smaller than GeoTransolver's;
+the mechanism is that ISLA reads the enclosure as boundary tokens with
+their condition types where GeoTransolver sees it only through the
+distance fields and the extent of the point cloud; falsified if ISLA's
+penalty is not smaller than GeoTransolver's. (P3, the Reynolds range and
+the held-out bank) no directional prediction; both are recorded. (P4)
+ISLA-DTT's `full` test error is within 5 percent of ISLA's on every field,
+the fork's parity claim carried to a new dataset; falsified beyond that.
+A difference between models counts only if both seeds order the same way
+and the seed-mean ratio is outside 1 ± 0.05.
+
+**What is next.** The recipe work (dataset yaml, the boundary
+harmonization and nondimensional types, the manifest and statistics
+scripts), a cluster snapshot of the library and recipe after the
+query-geometry deletion, the shuffled copy (AGA job 1171835), then the
+Phase 1 lanes. The chapter is written when Phase 1 is scored and extended
+with Phase 2.
