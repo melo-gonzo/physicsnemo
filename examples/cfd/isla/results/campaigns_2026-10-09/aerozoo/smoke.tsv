@@ -1,3 +1,3 @@
 idx	group	run_id	dataset	model	extra	lr	seed	cells	code	epochs
-0	az	az_smoke_isla	aerozoo_volume	isla_volume_aerozoo	train_split=super_scarce.train val_split=super_scarce.val +training.val_interval=1000 dataset_paths.aerozoo=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/wip_datasets/aerozoo-v1.2	3.75e-4	42	200000	code_v26	1
-1	az	az_smoke_gt	aerozoo_volume	geotransolver_volume_aerozoo	train_split=super_scarce.train val_split=super_scarce.val +training.val_interval=1000 dataset_paths.aerozoo=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/wip_datasets/aerozoo-v1.2	1e-3	42	200000	code_v26	1
+0	az	az_smoke_isla	aerozoo_volume	isla_volume_aerozoo	train_split=super_scarce.train val_split=super_scarce.val +training.val_interval=1000	3.75e-4	42	200000	code_v26	1
+1	az	az_smoke_gt	aerozoo_volume	geotransolver_volume_aerozoo	train_split=super_scarce.train val_split=super_scarce.val +training.val_interval=1000	1e-3	42	200000	code_v26	1
