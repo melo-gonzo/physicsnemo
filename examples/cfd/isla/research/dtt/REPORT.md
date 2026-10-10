@@ -540,6 +540,18 @@ the stride is 4, training saw only four subsamples, and the rotated case's is un
 loss on the airfoil is therefore an artefact of the lab-frame subsample at a small stride, not a property of the
 read; `code_dtt16` takes the subsample in the boundary's own frame in any case.
 
+Second rung on the airfoil (2026-10-10 15:40 UTC, job 144141): the exact read over 512 of the airfoil's cells,
+native seed mean p / v / nut 0.0325 / 0.0153 / 0.0277 (seeds 0.0354 / 0.0150 / 0.0293 and 0.0296 / 0.0155 /
+0.0261). The airfoil ladder, seed means of velocity (the field with the cleanest signal; pressure's seeds differ
+by 15 to 25% in every arm of this class): K = 0 (P) 0.0180, K = 256 0.0153, K = 512 0.0153, every cell 0.0135
+(dense) and 0.0141 (tree, theta 1). Viscosity: 0.0346, 0.0277, 0.0277, 0.0288 / 0.0307. A quarter of the cells
+takes two thirds of the velocity gain and all of the viscosity gain; half the cells add nothing to a quarter; the
+whole boundary adds the last third on velocity. The ladder is monotone but not smooth, and the two partial rungs
+share a confound the full read does not have: at strides 4 and 2 the training saw only four or two distinct
+subsamples, so these models are also the ones whose posed scores blow up (3x at stride 4, 9x at stride 2:
+0.27 / 0.13 / 0.21 for the 512-cell pair), which is the stride effect of the previous paragraph in its purest
+form. The car's 1,024-cell rung has a stride of 195 and no such confound, and it decides the ladder's reading.
+
 ### In flight
 
 - Parity relaunch on `code_dtt16` (the forest in the boundary's own frame), theta 1, two seeds each:
