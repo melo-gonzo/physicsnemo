@@ -58,8 +58,11 @@ mkdir -p "${RUN_DIR}"
 echo "=== link start $(date -Is) job=${SLURM_JOB_ID} name=${SLURM_JOB_NAME} node=$(hostname) lane=${SLURM_ARRAY_TASK_ID} run=${RUN_ID} code=${CODEDIR} recipe=${RECIPE} dataset=${DATASET} model=${MODEL} extra='${EXTRA}' lr=${LR} seed=${SEED} cells=${CELLS} epochs=${EPOCHS}" >> "${RUN_DIR}/train.log"
 if [ -f "${TASK}/BLOCKED_${RUN_ID}" ]; then echo "lane ${RUN_ID} BLOCKED; no-op"; exit 0; fi
 if grep -q "Training completed" "${RUN_DIR}/train.log" 2>/dev/null; then printf "DONE\n" > "${TASK}/RUN_${TAG}"; exit 0; fi
+### The chain-ahead link inherits the QOS and wall of this one (LANE_QOS / LANE_TIME, exported by submit.sh): Phase 1 runs in
+### `short` (1h59, 20 submitted jobs per user), the held-out-split lanes in `normal` (3h59) so the two never compete for the cap.
 if [ -z "${NO_CHAIN:-}" ]; then
-  cd "${TASK}" && sbatch -J "${SLURM_JOB_NAME}" --array="${SLURM_ARRAY_TASK_ID}" --dependency=singleton --export=ALL,LANES_TSV="${LANES}" "${SELF}" >> "${TASK}/sbatch_logs/rd_resubmit.log" 2>&1 || true
+  cd "${TASK}" && sbatch -J "${SLURM_JOB_NAME}" --array="${SLURM_ARRAY_TASK_ID}" --dependency=singleton --qos="${LANE_QOS:-short}" --time="${LANE_TIME:-01:59:00}" \
+    --export=ALL,LANES_TSV="${LANES}",LANE_QOS="${LANE_QOS:-short}",LANE_TIME="${LANE_TIME:-01:59:00}" "${SELF}" >> "${TASK}/sbatch_logs/rd_resubmit.log" 2>&1 || true
 fi
 (
   while true; do

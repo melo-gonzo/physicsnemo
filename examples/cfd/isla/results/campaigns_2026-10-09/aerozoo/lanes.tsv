@@ -3,3 +3,15 @@ idx	group	run_id	dataset	model	extra	lr	seed	cells	code	epochs
 1	az	az_full_isla_seed43	aerozoo_volume	isla_volume_aerozoo	train_split=full.train val_split=full.val +training.val_interval=10	3.75e-4	43	200000	code_v26	250
 2	az	az_full_gt_seed42	aerozoo_volume	geotransolver_volume_aerozoo	train_split=full.train val_split=full.val +training.val_interval=10	1e-3	42	200000	code_v26	250
 3	az	az_full_gt_seed43	aerozoo_volume	geotransolver_volume_aerozoo	train_split=full.train val_split=full.val +training.val_interval=10	1e-3	43	200000	code_v26	250
+4	az	az_nonbox_isla_seed42	aerozoo_volume_nonbox	isla_volume_aerozoo	train_split=family_non_box.train val_split=family_non_box.val +training.val_interval=10	3.75e-4	42	200000	code_v26	250
+5	az	az_nonbox_isla_seed43	aerozoo_volume_nonbox	isla_volume_aerozoo	train_split=family_non_box.train val_split=family_non_box.val +training.val_interval=10	3.75e-4	43	200000	code_v26	250
+6	az	az_nonbox_gt_seed42	aerozoo_volume_nonbox	geotransolver_volume_aerozoo	train_split=family_non_box.train val_split=family_non_box.val +training.val_interval=10	1e-3	42	200000	code_v26	250
+7	az	az_nonbox_gt_seed43	aerozoo_volume_nonbox	geotransolver_volume_aerozoo	train_split=family_non_box.train val_split=family_non_box.val +training.val_interval=10	1e-3	43	200000	code_v26	250
+8	az	az_reynolds_isla_seed42	aerozoo_volume_reynolds	isla_volume_aerozoo	train_split=reynolds.train val_split=reynolds.val +training.val_interval=10	3.75e-4	42	200000	code_v26	250
+9	az	az_reynolds_isla_seed43	aerozoo_volume_reynolds	isla_volume_aerozoo	train_split=reynolds.train val_split=reynolds.val +training.val_interval=10	3.75e-4	43	200000	code_v26	250
+10	az	az_reynolds_gt_seed42	aerozoo_volume_reynolds	geotransolver_volume_aerozoo	train_split=reynolds.train val_split=reynolds.val +training.val_interval=10	1e-3	42	200000	code_v26	250
+11	az	az_reynolds_gt_seed43	aerozoo_volume_reynolds	geotransolver_volume_aerozoo	train_split=reynolds.train val_split=reynolds.val +training.val_interval=10	1e-3	43	200000	code_v26	250
+12	az	az_blobs_isla_seed42	aerozoo_volume_blobs	isla_volume_aerozoo	train_split=bank_blobs.train val_split=bank_blobs.val +training.val_interval=10	3.75e-4	42	200000	code_v26	250
+13	az	az_blobs_isla_seed43	aerozoo_volume_blobs	isla_volume_aerozoo	train_split=bank_blobs.train val_split=bank_blobs.val +training.val_interval=10	3.75e-4	43	200000	code_v26	250
+14	az	az_blobs_gt_seed42	aerozoo_volume_blobs	geotransolver_volume_aerozoo	train_split=bank_blobs.train val_split=bank_blobs.val +training.val_interval=10	1e-3	42	200000	code_v26	250
+15	az	az_blobs_gt_seed43	aerozoo_volume_blobs	geotransolver_volume_aerozoo	train_split=bank_blobs.train val_split=bank_blobs.val +training.val_interval=10	1e-3	43	200000	code_v26	250
