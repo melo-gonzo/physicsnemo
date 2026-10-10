@@ -588,6 +588,38 @@ subsamples, so these models are also the ones whose posed scores blow up (3x at 
 0.27 / 0.13 / 0.21 for the 512-cell pair), which is the stride effect of the previous paragraph in its purest
 form. The car's 1,024-cell rung has a stride of 195 and no such confound, and it decides the ladder's reading.
 
+Last rung, the car at 1,024 cells (2026-10-11 02:30 UTC, job 148783): native seed mean p / v / nut 0.0456 / 0.0790 /
+0.1010 (seeds 0.0463 / 0.0807 / 0.1023 and 0.0449 / 0.0772 / 0.0997); posed equals native (stride 195, as
+predicted). The car ladder, seed means:
+
+| cells read per point | p | v | nut | v / P |
+|---|---|---|---|---|
+| 0 (P, E3) | 0.0449 | 0.0834 | 0.147 | 1.00 |
+| 256 | 0.0454 | 0.0839 | 0.105 | 1.01 |
+| 1,024 | 0.0456 | 0.0790 | 0.101 | 0.95 |
+| 200,000, tree at theta 1 (retired tree, E3 / forest) | 0.0438 / 0.0443 | 0.0707 / 0.0725 | 0.129 / 0.103 | 0.85 / 0.87 |
+| interacting reference I | 0.0394 | 0.0635 | 0.0876 | 0.76 |
+
+E6 verdict. The three fields answer differently, and the preregistered dichotomy was too coarse. Velocity: the
+ladder is monotone and far from saturated, nothing at 256 cells, a third of the full read's gain at 1,024, all of
+it at every cell; the velocity gain of the read is a matter of how much of the boundary a point reads, prediction
+(a) for this field, and the full read then closes two thirds of the read-only deficit against I (1.31 to 1.14).
+Pressure: no read of any size moves it (every rung within 3% of P, the tree read within 2%), so the 11 to 14%
+pressure gap to I is what the interacting query tokens supply to one another, prediction (b). Viscosity: a 256-cell
+read takes the whole gain and more cells add nothing (the forest's full read lands at the same 0.103), a
+quadrature-coarse quantity. On the airfoil the same pattern held with the rungs compressed (a quarter of the
+cells took two thirds of the velocity gain). With the slice arms (no gain from doubled slices for either class)
+and the control (depth-matched reading worth 40 to 70%), the picture of the read-only class is: what a passive
+point can read is limited by the resolution of its read of the boundary for velocity and not at all for the
+other two fields, and what it cannot read, pressure's last 12% and velocity's last 14% against I, is consensus.
+The 1,024-cell read costs the same as the forest at theta 1 (1.69 s per step and 204 GB per rank against 1.72 s
+and 194 GB: 2.0e8 against 1.6e8 pairs per block), so the subsample read is dominated by the tree read at every
+rung and has no use beyond this ladder; a side observation is that its area-protocol velocity (0.25 to 0.28) is
+20 to 35% worse than P's and the tree read's (0.21), a sparse quadrature's sensitivity to the boundary sampling
+law. Both E6 options (`kernel_read_cells`, `read_final_boundary`) are scaffolds whose verdicts are in; they are
+deleted from the branch (the lanes that used them, rows 26 to 47, stand on snapshots `code_dtt14` and
+`code_dtt15`, which keep them).
+
 ### In flight
 
 - Parity relaunch on `code_dtt16` (the forest in the boundary's own frame), theta 1, two seeds each:
