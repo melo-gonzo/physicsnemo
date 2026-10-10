@@ -473,6 +473,25 @@ its two seeds also agree with each other more closely than either earlier pair's
 fourth digit on pressure and velocity and to 0.3% on viscosity, where the prediction was within 1%. The fourth
 amendment's predictions hold on the airfoil. The car pair reports in about a day.
 
+### Parity on the car (2026-10-10 23:00 UTC, job 147373): native and area at parity, viscosity better, posed as on the airfoil
+
+The lab-frame forest's car pair (`dtt_vol_tg1ct_seed42/43`, theta 1, `code_dtt13`) under the E3 protocol (48 cars,
+200,000 cells and points, float32), p / v / nut:
+
+| arm | seed 42 native | seed 43 native | seed mean | area (seed mean) | posed (seed 42, 43) |
+|---|---|---|---|---|---|
+| retired tree, theta 1 (E3) | 0.0442 / 0.0720 / 0.1247 | 0.0434 / 0.0694 / 0.1324 | 0.0438 / 0.0707 / 0.129 | 0.105 / 0.217 / 0.157 | = native, = native |
+| forest, lab frame (`code_dtt13`) | 0.0443 / 0.0721 / 0.1027 | 0.0443 / 0.0729 / 0.1036 | 0.0443 / 0.0725 / 0.1032 | 0.103 / 0.213 / 0.122 | 0.0481 / 0.0828 / 0.2058, 0.0470 / 0.0840 / 0.2704 |
+
+Native: the forest is within 1% of the retired tree on pressure and 3% on velocity, and 20% better on eddy
+viscosity with the two seeds agreeing to 1% where the retired tree's differed by 6%. Area: the same on pressure
+and velocity, viscosity again better. Against the references, forest / I = 1.12 / 1.14 / 1.18 (the retired tree's
+1.11 / 1.11 / 1.47) and forest / P = 0.99 / 0.87 / 0.70. The posed protocol shows the lab-frame defect on the car as
+on the airfoil, 1.09x / 1.15x / 2.0 to 2.6x native, smaller on pressure and velocity than the airfoil's 1.9x / 1.25x
+and larger on viscosity; the pose-free pair on `code_dtt16`, due 2026-10-11, is the one that counts for the posed
+column. Verdict on the third amendment's prediction: parity on native and area on both datasets, with the
+forest ahead on viscosity on the car.
+
 ### E6 interim on AirfRANS (2026-10-10 06:30 UTC, job 141408): slices do nothing, depth-matched reading is load-bearing
 
 The six airfoil slice and control arms scored under the E5 protocol (200 airfoils, 100,000 cells, float32; native,
