@@ -82,6 +82,7 @@ def slice_colors(n_slices: int, seed: int = 0):
 # same in every chapter. Labels are the book's canonical names.
 STYLE = {
     "isla_ref": dict(label="ISLA", color=BLUE, marker="s", ls="-", mfc="full", hatch=""),
+    "isla_dtt": dict(label="ISLA-DTT", color=BLUE_LIGHT, marker="s", ls="-.", mfc="none", hatch=""),
     "isla_cg": dict(label="ISLA, constant-gauge variant", color=BLUE_LIGHT, marker="s", ls=":", mfc="none", hatch=""),
     "isla_sg": dict(label="ISLA, similarity-gauge variant (diagnostic)", color=BLUE_LIGHT, marker="D", ls="--", mfc="none", hatch=""),
     "isla_abl": dict(label="ISLA ablation (not adopted)", color=BLUE_PALE, marker="s", ls=":", mfc="none", hatch="///"),
