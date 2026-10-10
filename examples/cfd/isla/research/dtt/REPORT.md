@@ -456,6 +456,23 @@ uses the same frame, so it too becomes pose-invariant (the running E6 lanes are 
 their posed protocol will show the same effect; native and area, the ones the ladder's question needs, are
 unaffected). The theta 1 parity lanes are relaunched on `code_dtt16` (`*_tg1pf_*`).
 
+### Pose-free parity on AirfRANS (2026-10-10 18:30 UTC, job 146316): parity on every protocol, posed equals native
+
+The relaunched airfoil pair on `code_dtt16` (`af_tg1pf_seed42/43`, the forest in the boundary's own frame, theta
+1), under the E5 protocol, p / v / nut:
+
+| arm | seed 42 native | seed 43 native | seed mean | posed (seed 42, 43) |
+|---|---|---|---|---|
+| retired tree, theta 1 | 0.0261 / 0.0138 / 0.0325 | 0.0255 / 0.0143 / 0.0288 | 0.0258 / 0.0141 / 0.0307 | = native, = native |
+| forest, lab frame (`code_dtt13`) | 0.0248 / 0.0134 / 0.0318 | 0.0311 / 0.0148 / 0.0297 | 0.0280 / 0.0141 / 0.0308 | 1.9x / 1.25x / 3.3x native |
+| forest, own frame (`code_dtt16`) | 0.0255 / 0.0135 / 0.0314 | 0.0263 / 0.0146 / 0.0335 | 0.0259 / 0.0141 / 0.0325 | 0.0255 / 0.0135 / 0.0313, = native |
+
+Native and area: the pose-free forest's seed means are within 0.4% of the retired tree's on pressure and
+velocity and 6% higher on viscosity, inside the retired tree's own 13% viscosity seed spread (0.0325 and 0.0288);
+its two seeds also agree with each other more closely than either earlier pair's. Posed: equal to native to the
+fourth digit on pressure and velocity and to 0.3% on viscosity, where the prediction was within 1%. The fourth
+amendment's predictions hold on the airfoil. The car pair reports in about a day.
+
 ### E6 interim on AirfRANS (2026-10-10 06:30 UTC, job 141408): slices do nothing, depth-matched reading is load-bearing
 
 The six airfoil slice and control arms scored under the E5 protocol (200 airfoils, 100,000 cells, float32; native,
