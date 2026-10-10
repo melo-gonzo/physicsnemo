@@ -73,6 +73,14 @@ class ComputeSDFFromBoundary(MeshTransform):
     use_winding_number : bool
         Whether to use winding-number sign computation.  Required for
         non-watertight meshes; slightly slower.
+    allow_empty_boundary : bool
+        A boundary without cells is an error by default (a broken surface
+        load must not pass silently).  ``True`` accepts it as a boundary
+        this case does not have (AeroZoo's ``slip`` walls, absent on some
+        cases) and writes the distance every point would have to a wall
+        beyond the domain: the diagonal of the interior points' bounding
+        box, positive like the outside of a wall, with zero normals (no
+        direction).
     """
 
     def __init__(
@@ -82,6 +90,7 @@ class ComputeSDFFromBoundary(MeshTransform):
         normals_field: str | None = "sdf_normals",
         *,
         use_winding_number: bool = True,
+        allow_empty_boundary: bool = False,
     ) -> None:
         super().__init__()
         self.boundary_name = boundary_name
@@ -91,6 +100,21 @@ class ComputeSDFFromBoundary(MeshTransform):
             as_nested_key(normals_field) if normals_field is not None else None
         )
         self.use_winding_number = use_winding_number
+        self.allow_empty_boundary = allow_empty_boundary
+
+    def _far_from_absent_boundary(self, domain: DomainMesh) -> DomainMesh:
+        """Fill the fields for a boundary the case does not have."""
+        points = domain.interior.points.float()
+        diagonal = (points.amax(dim=0) - points.amin(dim=0)).norm()
+        new_pd = domain.interior.point_data.clone()
+        new_pd[self.sdf_field] = diagonal.expand(points.shape[0], 1).clone()
+        if self.normals_field is not None:
+            new_pd[self.normals_field] = torch.zeros_like(points)
+        return DomainMesh(
+            interior=domain.interior.with_data(point_data=new_pd),
+            boundaries=domain.boundaries,
+            global_data=domain.global_data,
+        )
 
     def __call__(self, mesh: Mesh) -> Mesh:
         # Single-mesh path is not meaningful for SDF (we need a separate
@@ -121,6 +145,8 @@ class ComputeSDFFromBoundary(MeshTransform):
         surface = domain.boundaries[self.boundary_name]
 
         if surface.n_cells == 0:
+            if self.allow_empty_boundary:
+                return self._far_from_absent_boundary(domain)
             raise ValueError(
                 f"Boundary {self.boundary_name!r} has no cell connectivity "
                 f"(required for SDF computation)"
@@ -190,6 +216,8 @@ class ComputeSDFFromBoundary(MeshTransform):
         if self.normals_field:
             parts.append(f"normals_field={self.normals_field!r}")
         parts.append(f"winding_number={self.use_winding_number}")
+        if self.allow_empty_boundary:
+            parts.append("allow_empty_boundary=True")
         return ", ".join(parts)
 
 

@@ -46,7 +46,15 @@ from physicsnemo.mesh import (
 ### algebraic transform applied to the matching field; see the
 ### `NonDimensionalizeByMetadata` docstring for the formulas.
 NondimFieldType: TypeAlias = Literal[
-    "pressure", "stress", "velocity", "temperature", "density", "identity"
+    "pressure",
+    "stress",
+    "velocity",
+    "temperature",
+    "density",
+    "kinematic_viscosity",
+    "turbulent_kinetic_energy",
+    "specific_dissipation_rate",
+    "identity",
 ]
 
 
@@ -77,8 +85,28 @@ def freestream_scales(
 
 
 _FIELD_TYPES: frozenset[NondimFieldType] = frozenset(
-    {"pressure", "stress", "velocity", "temperature", "density", "identity"}
+    {
+        "pressure",
+        "stress",
+        "velocity",
+        "temperature",
+        "density",
+        "kinematic_viscosity",
+        "turbulent_kinetic_energy",
+        "specific_dissipation_rate",
+        "identity",
+    }
 )
+
+
+def _require_L_ref(
+    L_ref: Float[torch.Tensor, ""] | None, ftype: str
+) -> Float[torch.Tensor, ""]:
+    if L_ref is None:
+        raise ValueError(
+            f"L_ref required in global_data for {ftype} non-dimensionalization"
+        )
+    return L_ref
 
 
 def _nondim_field(
@@ -90,6 +118,7 @@ def _nondim_field(
     *,
     rho_inf: Float[torch.Tensor, ""] | None = None,
     T_inf: Float[torch.Tensor, ""] | None = None,
+    L_ref: Float[torch.Tensor, ""] | None = None,
 ) -> torch.Tensor:
     """Apply forward non-dimensionalization to a single field."""
     if ftype == "identity":
@@ -108,6 +137,12 @@ def _nondim_field(
         if rho_inf is None:
             raise ValueError("rho_inf required for density non-dimensionalization")
         return val / rho_inf
+    if ftype == "kinematic_viscosity":
+        return val / (U_inf_mag * _require_L_ref(L_ref, ftype))
+    if ftype == "turbulent_kinetic_energy":
+        return val / (U_inf_mag * U_inf_mag)
+    if ftype == "specific_dissipation_rate":
+        return val * _require_L_ref(L_ref, ftype) / U_inf_mag
     raise ValueError(f"Unknown field type: {ftype!r}")
 
 
@@ -120,6 +155,7 @@ def _redim_field(
     *,
     rho_inf: Float[torch.Tensor, ""] | None = None,
     T_inf: Float[torch.Tensor, ""] | None = None,
+    L_ref: Float[torch.Tensor, ""] | None = None,
 ) -> torch.Tensor:
     """Reverse non-dimensionalization for a single field."""
     if ftype == "identity":
@@ -138,6 +174,12 @@ def _redim_field(
         if rho_inf is None:
             raise ValueError("rho_inf required for density re-dimensionalization")
         return val * rho_inf
+    if ftype == "kinematic_viscosity":
+        return val * (U_inf_mag * _require_L_ref(L_ref, ftype))
+    if ftype == "turbulent_kinetic_energy":
+        return val * (U_inf_mag * U_inf_mag)
+    if ftype == "specific_dissipation_rate":
+        return val * U_inf_mag / _require_L_ref(L_ref, ftype)
     raise ValueError(f"Unknown field type: {ftype!r}")
 
 
@@ -155,6 +197,11 @@ class NonDimensionalizeByMetadata(MeshTransform):
     - **velocity**: ``U / |U_inf|``
     - **temperature**: ``T / T_inf`` (requires ``T_inf`` in ``global_data``)
     - **density**: ``rho / rho_inf``
+    - **kinematic_viscosity**: ``nu_t / (|U_inf| L_ref)`` (an eddy viscosity;
+      requires ``L_ref``)
+    - **turbulent_kinetic_energy**: ``k / |U_inf|^2``
+    - **specific_dissipation_rate**: ``omega L_ref / |U_inf|`` (requires
+      ``L_ref``)
     - **identity**: pass-through (no scaling applied)
 
     If ``L_ref`` is present in ``global_data`` and ``scale_geometry`` is
@@ -168,8 +215,10 @@ class NonDimensionalizeByMetadata(MeshTransform):
 
     Args:
         fields: Mapping of ``{field_name: field_type}`` where *field_type*
-            is one of ``"pressure"``, ``"stress"``, ``"velocity"``,
-            ``"temperature"``, ``"density"``, or ``"identity"``. A ``"."``
+            is one of the recipes listed above (``"pressure"``, ``"stress"``,
+            ``"velocity"``, ``"temperature"``, ``"density"``,
+            ``"kinematic_viscosity"``, ``"turbulent_kinetic_energy"``,
+            ``"specific_dissipation_rate"`` or ``"identity"``). A ``"."``
             in a field name addresses a nested leaf (``"solution.p"``).
         association: Mesh field association containing the fields
             (``"point_data"`` or ``"cell_data"``).
@@ -260,6 +309,7 @@ class NonDimensionalizeByMetadata(MeshTransform):
                 U_inf_mag,
                 rho_inf=rho_inf,
                 T_inf=T_inf,
+                L_ref=L_ref,
             )
 
         # Shallow copy shares everything except the swapped association.
@@ -328,6 +378,7 @@ class NonDimensionalizeByMetadata(MeshTransform):
         *,
         rho_inf: Float[torch.Tensor, ""] | None = None,
         T_inf: Float[torch.Tensor, ""] | None = None,
+        L_ref: Float[torch.Tensor, ""] | None = None,
     ) -> TensorDict:
         """Re-dimensionalize a per-field :class:`~tensordict.TensorDict`.
 
@@ -341,9 +392,8 @@ class NonDimensionalizeByMetadata(MeshTransform):
             td: Per-field TensorDict whose leaves are non-dimensional
                 predictions keyed by field name.
             field_types: Ordered mapping of ``{field_name: nondim_type}``
-                where *nondim_type* is one of ``"pressure"``, ``"stress"``,
-                ``"velocity"``, ``"temperature"``, ``"density"``, or
-                ``"identity"``. Names absent from *td* are silently skipped.
+                where *nondim_type* is one of the recipes the class
+                docstring lists. Names absent from *td* are silently skipped.
             q_inf: Reference dynamic pressure (scalar or broadcastable).
             p_inf: Reference static pressure (scalar or broadcastable).
             U_inf_mag: Reference freestream-velocity magnitude.
@@ -351,6 +401,8 @@ class NonDimensionalizeByMetadata(MeshTransform):
                 contains ``"density"``.
             T_inf: Freestream temperature. Required when *field_types*
                 contains ``"temperature"``.
+            L_ref: Reference length. Required when *field_types* contains
+                ``"kinematic_viscosity"`` or ``"specific_dissipation_rate"``.
 
         Returns:
             New TensorDict (same keys, batch_size, and device as *td*)
@@ -375,6 +427,7 @@ class NonDimensionalizeByMetadata(MeshTransform):
                 U_inf_mag,
                 rho_inf=rho_inf,
                 T_inf=T_inf,
+                L_ref=L_ref,
             )
 
         ### ``named_apply`` is typed ``TensorDict | None`` for its

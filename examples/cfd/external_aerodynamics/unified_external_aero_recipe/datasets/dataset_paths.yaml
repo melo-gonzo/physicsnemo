@@ -23,3 +23,9 @@
 drivaer_ml: ???
 highlift_aero_ml: ???
 shift_suv: ???
+# AeroZoo v1.2: the row-shuffled derived copy of the release (same tree; interior memmaps row-permuted by
+# kernel/aerozoo/aerozoo_shuffle.py so the reader's contiguous block draw is a spatial sample, see
+# aerozoo_volume.yaml); the same path on AGA and LHR. The manifest is written by
+# results/campaigns_2026-10-09/aerozoo/build_manifest.py from the release's splits.json and index.json.
+aerozoo: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/aerozoo_v1.2_shuf_pdmsh
+aerozoo_manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/aerozoo_v1.2_shuf_pdmsh/manifest.json
