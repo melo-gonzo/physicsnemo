@@ -35512,3 +35512,49 @@ scripts), a cluster snapshot of the library and recipe after the
 query-geometry deletion, the shuffled copy (AGA job 1171835), then the
 Phase 1 lanes. The chapter is written when Phase 1 is scored and extended
 with Phase 2.
+
+## 2026-10-09 — AEROZOO launched: the shuffled copy, the statistics, the snapshot pair code_v26 / recipe_v9 and both smoke lanes are done; the four Phase 1 lanes and the twelve Phase 2a lanes (held-out enclosures, Reynolds range and blob bank) are in the AGA queues {#sec-nb-aerozoo-launch}
+
+**What was built.** The row-permuted copy of every interior
+(`kernel/aerozoo/aerozoo_shuffle.py`, two 48-worker CPU tasks, 3,816
+cases, 1.2 TB; on six random cases a contiguous 200,000-row block covers
+0.96 to 0.997 of the domain box and every array matches its source in
+size). The manifest of the 66 split parts restricted to released cases
+(`build_manifest.py`; effective counts equal the release manifest's). The
+target and inlet-global statistics per training side
+(`aerozoo_stats.py`, a seeded 20,000-point sample of every released case,
+two minutes on 48 cores once the first attempt's node with a dead Lustre
+client was excluded; `results/campaigns_2026-10-09/aerozoo/stats/`), filled
+into `datasets/aerozoo_volume.yaml` and three split copies by
+`fill_stats.py`. The recipe support (commit 73fd89e5f: the dataset yaml,
+`HarmonizeBoundaryFields`, `BoundaryFieldToGlobal`, `ConcatGlobalFields`,
+`ComputeLogReynolds`, the nondimensional types for the turbulent viscosity,
+$k$ and $\omega$, the model yamls `isla_volume_aerozoo` and
+`geotransolver_volume_aerozoo`; 355 recipe tests). The snapshot pair
+code_v26 / recipe_v9 of 73fd89e5f, verified on a GB300 node (ISLA suite
+190 passed, recipe 355 passed). The fleet scorer maps `az_*` lanes to the
+pair and the td14 environment.
+
+**Smoke.** One epoch on the 74-case `super_scarce` training side at the
+protocol's draw: GeoTransolver validation loss 0.30 (0.9 s per step, 121
+GB per GPU), ISLA 0.16 (0.7 s per step, 129 GB) on GB300. Two operational
+faults on the way, both outside the models: the copied td14 environment's
+entry points on AGA were not executable (the launcher now runs the
+distributed launcher as a module), and the fused Triton kernel's compile
+cache sat in the 10 GB home directory, which was full (the caches now live
+on Lustre; the home uv cache is relocated with a symlink).
+
+**Lanes.** Phase 1, `full`: `az_full_isla_seed42/43`,
+`az_full_gt_seed42/43`, short-queue chains of 1h59 links with checkpoint
+resume, started 20:55 PDT. Phase 2a: `az_nonbox_*` (train on external
+boxes, test on the other enclosures) in the short queue, `az_reynolds_*`
+(train below $10^6$) and `az_blobs_*` (the blob bank held out) in the normal
+queue with 3h59 links, since the short queue admits twenty submitted jobs
+per user and a chain holds two. Each lane: 250 epochs, two seeds, its
+split's own training-side statistics. At the smoke's step times a Phase 1
+lane needs 33 (ISLA) to 42 (GeoTransolver) GPU-hours on four GPUs, about
+17 to 21 short links. All sixteen lanes are in the fleet manifest (group
+`az`), so the hourly watcher reports them and the pump scores the
+validation side as each finishes; the test side is scored once, deliberately,
+when Phase 1 is complete. ISLA-DTT lanes follow the Barnes-Hut fork's
+confirmation of its form.
