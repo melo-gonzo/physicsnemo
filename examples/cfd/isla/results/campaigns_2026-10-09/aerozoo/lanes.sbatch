@@ -67,7 +67,9 @@ sampler_pid=$!
 "${VENV}/bin/python" "${TASK}/kernel/ckpt_preflight.py" "${RUN_DIR}/checkpoints" >> "${RUN_DIR}/train.log" 2>&1 || true
 LOG_START=$(( $(wc -l < "${RUN_DIR}/train.log" 2>/dev/null || echo 0) + 1 ))
 set +e
-srun --overlap "${VENV}/bin/torchrun" \
+### `python -m torch.distributed.run`, not the venv's `torchrun` entry point: on AGA the copied td14 venv's entry points
+### are not executable (execve: Permission denied, smoke lanes 1172280/1172281, 2026-10-09), and the module form is immune.
+srun --overlap "${VENV}/bin/python" -m torch.distributed.run \
   --standalone --nproc-per-node 4 \
   "${RECIPE}/src/train.py" \
   model="${MODEL}" ${EXTRA} \
