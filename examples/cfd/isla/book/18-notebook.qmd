@@ -35629,3 +35629,58 @@ with `submit.sh test`; the reduction runs; the chapter's figures are
 spliced, the chapter enters the book order after the DeepJEB++ chapter,
 and the P1 verdict is written here. The held-out lanes follow at their
 own pace and extend the chapter with the penalties.
+
+## 2026-10-10 — AEROZOO ISLA-DTT lanes launched on the fork's pose-free forest read (snapshot code_dtt16, theta 1); both in-distribution lanes stepping at 1.17 s and 159 GB {#sec-nb-aerozoo-dtt-launch}
+
+**Setting.** The AEROZOO benchmark (@sec-nb-aerozoo-prereg) names
+ISLA-DTT, the tree-accelerated query-independent read of the Barnes-Hut
+fork, as its third arm, in the form the fork confirms after its parity
+lanes. The fork's first forest read failed pose invariance
+(@sec-nb-aerozoo-machinery); its fix builds the trees and octants in a
+frame the boundary carries with it.
+
+**What the fork reported (2026-10-10, 13:55 EDT).** On AirfRANS, two
+seeds, the pose-free forest at theta 1 (snapshot code_dtt16, branch
+psharpe/isla-dtt at 6094c4e9d) reads pressure, velocity and eddy
+viscosity seed means of 0.0259 / 0.0141 / 0.0325 against the retired
+tree's 0.0258 / 0.0141 / 0.0307, the viscosity inside the retired tree's
+own 13 percent seed spread, and the posed protocol equals the native one
+to the fourth digit on pressure and velocity and to 0.3 percent on
+viscosity. The car pair reports on 2026-10-11 in the afternoon. The
+configuration the fork specifies is the reference ISLA with the interior
+task, the query-independent read, the mean kernel read with no radius
+and theta 1; the two remaining diagnostic options of its E6 ladder are
+scaffolds it expects to delete and are not used. Its cost on the cars at
+200,000 boundary cells and 200,000 queries per GB300 rank is 1.72 s per
+step and 193.5 GB peak, about 800 sources per query at theta 1.
+
+**What was launched.** Eight lanes, rows 16 to 23 of the lane table
+(`az_<split>_dtt_seed<NN>`): the `full`, `family_non_box`, `reynolds` and
+`bank_blobs` splits, seeds 42 and 43, 250 epochs, the ISLA volume model
+yaml of the recipe with the four read options appended as
+add-or-override Hydra terms (a plain add fails when the yaml already
+carries the key), the library imported from the fork's extracted
+snapshot through a link `code_dtt16` in the task directory (the snapshot
+carries this branch merged through the query-geometry deletion, and no
+library commit on this branch postdates it, so the AeroZoo recipe needs
+nothing it lacks), the same recipe snapshot and environment as the other
+lanes. The fleet scorer and the test-side scorer import the lane's own
+snapshot for any run with `dtt` in its name. The in-distribution pair
+runs in the short queue (which now holds eighteen of its twenty jobs,
+so nothing else may use it), the six held-out lanes in the normal queue
+on four-hour links.
+
+**Acceptance.** Both in-distribution lanes stepped within twenty
+minutes of starting: at step 77 of 678 in epoch 0 the lanes read 1.17 s
+per step and 158 to 159 GB per rank, with training losses of 0.11 and
+0.14, against the dense ISLA lanes' 0.6 s and 129 GB on the same task.
+The AeroZoo pair count is therefore below the cars' (159 against 194
+GB) and the forest read fits with margin. At 1.17 s per step the 250
+epochs take about 55 hours of stepping, roughly three days with link
+restarts and validations.
+
+**What is next.** The car pair's verdict decides whether these lanes
+stand; if the pose-free forest fails parity on the cars, the lanes are
+cancelled and the arm waits for the fork's next form. Otherwise they are
+scored like the other lanes, and the P4 verdict (ISLA-DTT within 5
+percent of ISLA on every field of the `full` test side) is written here.
