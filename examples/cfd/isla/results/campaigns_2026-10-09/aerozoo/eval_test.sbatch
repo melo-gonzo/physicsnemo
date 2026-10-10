@@ -44,6 +44,9 @@ unit() {
   if [ "$(grep -c START "${OUT}.log" 2>/dev/null)" -ge 3 ]; then
     mkdir -p "${OUT}"; echo "gave up after 3 failed scoring attempts; see ${OUT}.log" > "${OUT}/.done"; return 0
   fi
+  ### The lane's own snapshot (the tsv's code column): code_v26 for ISLA and GeoTransolver, code_dtt16 (a symlink to the Barnes-Hut
+  ### fork's extracted snapshot, psharpe/isla-dtt 6094c4e9d) for the ISLA-DTT lanes; the recipe is recipe_v9 for all.
+  local CODE="${TASK}/${CODEV}"; export PYTHONPATH="${CODE}:${RECIPE}/src"
   mkdir -p "${OUT}"; printf "%s\n" "${CODE}" > "${OUT}/SNAPSHOT_USED"
   ### training-only overrides out; the validation part becomes the test part of the same split.
   EXTRA=$(sed -E "s/(^| )training\.num_epochs=[^ ]+//g; s/(^| )\+training\.[^ ]+//g" <<<"${EXTRA}")

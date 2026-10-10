@@ -39,8 +39,9 @@ if [ "${1:-}" = "--manifest" ]; then
 fi
 lane "${SLURM_ARRAY_TASK_ID}"
 CODEDIR="${TASK}/${CODE}"
-### Snapshots from code_v22 on carry the upstream merge of 2026-10-06 (Mesh as a TensorClass) and need tensordict 0.14.2: the td14 venv.
-case "${CODE}" in code_v2[2-9]|code_v[3-9]*) VENV="${VENV}-td14" ;; esac
+### Snapshots from code_v22 on carry the upstream merge of 2026-10-06 (Mesh as a TensorClass) and need tensordict 0.14.2: the td14 venv;
+### the ISLA-DTT snapshots (code_dtt*, the Barnes-Hut fork's branch psharpe/isla-dtt, which carries the same merge) likewise.
+case "${CODE}" in code_v2[2-9]|code_v[3-9]*|code_dtt*) VENV="${VENV}-td14" ;; esac
 TAG="az${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 export PATH="/usr/bin:/bin:/cm/local/apps/slurm/current/bin"
 export OMP_NUM_THREADS=8
