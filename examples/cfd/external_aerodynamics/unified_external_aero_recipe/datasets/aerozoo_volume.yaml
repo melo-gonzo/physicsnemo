@@ -1,3 +1,4 @@
+# Statistics filled by fill_stats.py from stats_full.train.json: split part full.train, 2713 cases, 54,260,000 interior points (log10 Re mean 5.362, std 1.402).
 # AeroZoo v1.2 (2026-10-09), interior task: boundary conditions on four grouped boundaries -> the RANS
 # fields at the interior cell centroids. Native DomainMesh files (`shard-NNN/<case_id>/domain.pdmsh`,
 # 3,816 released cases, dimensional SI, applied pose):
@@ -163,8 +164,8 @@ pipeline:
       # PLACEHOLDERS: per-case mean / std over the train split, from
       # results/campaigns_2026-10-09/aerozoo/aerozoo_stats.py --reduce (`inlet_globals` block).
       # A quantity that is constant over the split (intermittency = 1) gets std 1.0.
-      mean: ???
-      std: ???
+      mean: [0.00259746, 1.50682, 1, 340.756]
+      std: [0.00367144, 2.58834, 1, 258.038]
       output_field: inlet_turbulence_std
     - _target_: ${dp:ConcatGlobalFields}
       fields: [U_inf_dir, log_re_std, inlet_turbulence_std]
@@ -215,11 +216,11 @@ pipeline:
     - _target_: ${dp:NormalizeMeshFields}
       association: point_data
       fields:
-        velocity: {type: vector, mean: "???", std: "???"}
-        pressure: {type: scalar, mean: "???", std: "???"}
-        nut: {type: scalar, mean: "???", std: "???"}
-        tke: {type: scalar, mean: "???", std: "???"}
-        omega: {type: scalar, mean: "???", std: "???"}
+        velocity: {type: vector, mean: [0.00150522, 0.00509557, -0.000555886], std: 0.754428}
+        pressure: {type: scalar, mean: 1.4261, std: 4.02901}
+        nut: {type: scalar, mean: 0.00292528, std: 0.00759139}
+        tke: {type: scalar, mean: 0.0102567, std: 0.0363151}
+        omega: {type: scalar, mean: 99.7205, std: 1509.14}
     # (j) Last in the chain: the corrected measure on the boundary cells the model will see. The
     # interior is a point cloud without `_effective_measure` (its `_target_quadrature_measure`, the cell
     # volumes, is not the recipe's measure key and stays an inert leaf), so extract_target_measure
