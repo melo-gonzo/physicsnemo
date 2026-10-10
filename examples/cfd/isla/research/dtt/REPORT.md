@@ -481,6 +481,35 @@ the architecture chapter should say so. The control's trainer validation had cau
 arms by epoch 100, which the protocol contradicts: trainer validation is not the protocol score and is not to be
 read as one.
 
+### E6 interim on the car (2026-10-10 09:10 UTC, job 142093): doubled slices move neither class; the control costs 40%
+
+The six car slice and control arms under the E3 protocol (48 held-out cars, 200,000 cells and points, float32).
+Native seed means of p / v / nut, with the references (P and TG from E3; I is the AGA reference pair of the
+characterization campaign, so I-S / I is a cross-snapshot ratio, read with that caveat):
+
+| arm | seed 42 | seed 43 | seed mean | ratio |
+|---|---|---|---|---|
+| I, 512 slices (AGA reference) | 0.0387 / 0.0619 / 0.0868 | 0.0400 / 0.0651 / 0.0884 | 0.0394 / 0.0635 / 0.0876 | - |
+| I, 1,024 slices | 0.0392 / 0.0621 / 0.0862 | 0.0390 / 0.0630 / 0.0865 | 0.0391 / 0.0626 / 0.0864 | I-S / I = 0.99 / 0.99 / 0.99 |
+| P, 512 slices (E3) | 0.0454 / 0.0847 / 0.1745 | 0.0443 / 0.0822 / 0.1188 | 0.0449 / 0.0834 / 0.147 | - |
+| P, 1,024 slices | 0.0441 / 0.0832 / 0.2015 | 0.0456 / 0.0825 / 0.1028 | 0.0449 / 0.0829 / 0.152 | P-S / P = 1.00 / 0.99 / 1.04 |
+| FINAL control | 0.0646 / 0.1194 / 0.1460 | 0.0584 / 0.1100 / 0.2652 | 0.0615 / 0.1147 / 0.206 | FINAL / P = 1.37 / 1.38 / 1.40 |
+| TG, tree read theta 1 (E3, retired tree) | 0.0442 / 0.0720 / 0.1247 | 0.0434 / 0.0694 / 0.1324 | 0.0438 / 0.0707 / 0.129 | TG / P = 0.98 / 0.85 / 0.88 |
+
+Doubling the slice latent moves neither class on the car: the interacting model is within 1.5% of its reference
+on every field and the read-only model is unchanged on pressure and velocity (viscosity's seeds, 0.20 and 0.10,
+straddle P's own 0.17 and 0.12). The gain from more slices is the same for both classes, namely none, so the
+slice latent's size is not what separates P from I on the car; together with the airfoil result this is
+prediction (b) for the slice arm on both datasets. The read-only model's area-protocol sensitivity stays at
+2x where the interacting model's stays at 7 to 9x (I-S area 0.34 to 0.38 / 0.42 to 0.46 / 0.52 to 0.65), as in
+E3. The FINAL control costs 37 to 40% on every field on the car (56 to 72% on the airfoil), over the 30% bar in
+both: depth-matched reading is load-bearing in ISLA's passive points on both datasets. Posed equals native for
+every arm here, as none of them has a tree.
+
+What remains of E6 is the K ladder: whether the exact read over 256 and 1,024 cells (512 on the airfoil) climbs
+toward the tree read's TG / P = 0.98 / 0.85 / 0.88 monotonically (capacity of the read) or sits at the tree read's
+level from its first rung (the read's content, not its size).
+
 ### In flight
 
 - Parity relaunch on `code_dtt16` (the forest in the boundary's own frame), theta 1, two seeds each:
