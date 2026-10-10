@@ -35558,3 +35558,74 @@ lane needs 33 (ISLA) to 42 (GeoTransolver) GPU-hours on four GPUs, about
 validation side as each finishes; the test side is scored once, deliberately,
 when Phase 1 is complete. ISLA-DTT lanes follow the Barnes-Hut fork's
 confirmation of its form.
+
+## 2026-10-10 — AEROZOO scoring machinery and the chapter draft staged while the sixteen lanes train; ISLA-DTT waits for the fork's pose-invariant forest read {#sec-nb-aerozoo-machinery}
+
+**Setting.** The sixteen AEROZOO lanes (@sec-nb-aerozoo-launch) train on
+AGA: at 00:05 EDT the four `full` lanes and the four held-out-enclosure
+lanes were in their first epochs (ISLA 0.6 s per step, GeoTransolver
+0.9 s), the eight Reynolds and blob-bank lanes waited in the normal
+queue. The chapter cannot be written before the scores exist, so the
+hours were spent on everything that does not depend on them.
+
+**What was built.** (i) The test-side scorer
+(`kernel/aerozoo/eval_test.sbatch`, `submit.sh test`): for every lane whose
+training finished and whose test score is absent, float32 inference at
+the training draw on the test part of the lane's own split (the
+`val_split=<split>.val` override becomes `<split>.test`, which for a
+held-out split is the held-out family), four lanes per node, idempotent;
+it is submitted once and by hand, as the pre-registration requires, while
+the fleet pump scores the validation sides as lanes finish. (ii) The
+fetcher (`fetch_scores.sh`) and the reduction (`aerozoo_reduce.py` ->
+`aerozoo_reduction.json`): per arm, split and side the seed means per
+field, the two stability populations apart, strata by enclosure, bank,
+Reynolds decade and body layout, the ratios baseline ÷ ISLA with the
+counts rule, the penalties (a split's held-out test error over the same
+arm's `full` test error), the P1, P2 and P4 verdicts against the
+pre-registered bars, the training cost from the final epoch's step lines
+and the validation trajectories every ten epochs. (iii) Per-case labels
+(`case_labels.py` -> `case_labels.json`, 3,816 cases): the release's
+convergence label (2,817 `mean_stable`, 999 `mean_unstable`, 26 percent),
+the enclosure (2,741 external boxes, 391 opposed hemispheres, 381 opposed
+spheres, 303 internal ducts), the body layout (1,233 all no-slip, 2,422
+with slip bands), the Reynolds decade (about 800 cases per decade from
+$10^3$ to $10^6$, 582 at $10^7$) and the geometry bank, which the case
+manifests do not name; it is read off the release's held-out-bank splits
+(blobs 1,367, Blender streamlined 459, Blender bluff 439, streamlined 434,
+cars 416, airframes 367, CAD 333). (iv) The chapter draft
+`book/20-aerozoo.qmd`, outside the book order until Phase 1 is scored:
+every number is a cell over the reduction (the lede, the headline table
+with validation and test columns, the stability-population table, the
+per-family strata figure, the held-out table and penalty figure, the
+trajectory figure with the mean-field-plateau detector of the DeepJEB++
+chapter, the ISLA-DTT control, the limits), rendered once against a
+throwaway mock artifact to shake out the cells and the layout, the mock
+deleted. The problem and sample figures (one validation case with its
+four boundaries and a midplane slice; six cases across enclosures and
+banks) are being produced from the release by a helper session into the
+two figure-artifact directories and are spliced in when they land.
+
+**ISLA-DTT.** The Barnes-Hut fork reports (00:30 EDT) that its first
+forest tree read matched the retired tree on the native and area
+protocols on AirfRANS (pressure, velocity and eddy viscosity seed means
+0.0280 / 0.0141 / 0.0308 against 0.0258 / 0.0141 / 0.0307) but lost pose
+invariance: under the posed protocol its error rose 1.9x, 1.25x and 3.3x,
+because Morton boxes and normal octants were built on laboratory
+coordinates. The fix (psharpe/isla-dtt 6094c4e9d) builds the trees and
+octants in a frame the boundary carries with it (principal axes of the
+cells' measure-weighted covariance, signed by third moments), with tests
+that hold the forest and the predictions identical under rotation,
+reflection, translation and rescale; the theta-1 parity lanes are
+relaunched on snapshot code_dtt16 (AirfRANS pair in about 17 hours, car
+pair in about 30). The AEROZOO ISLA-DTT arm is therefore the theta-1
+forest read on code_dtt16 or later, pending those scores; the first
+forest read is not benchmarked.
+
+**What is next.** The hourly health watcher wakes on a broken chain, a
+BLOCKED marker, a traceback or a flat step counter. When the four `full`
+lanes finish (ISLA about 28 hours after launch, GeoTransolver about 42)
+the pump scores their validation sides; the test sides are scored once
+with `submit.sh test`; the reduction runs; the chapter's figures are
+spliced, the chapter enters the book order after the DeepJEB++ chapter,
+and the P1 verdict is written here. The held-out lanes follow at their
+own pace and extend the chapter with the penalties.
