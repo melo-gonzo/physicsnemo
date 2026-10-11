@@ -1,0 +1,197 @@
+epoch 29: 306 tensors; total norm 338.956; scalars {"assign.gain": 0.2637, "geo_logit.bias": -0.2592}
+epoch 31: 306 tensors; total norm 348.187; scalars {"assign.gain": 0.272, "geo_logit.bias": -0.2567}
+epoch 33: 306 tensors; total norm 357.512; scalars {"assign.gain": 0.2618, "geo_logit.bias": -0.2625}
+epoch 35: 306 tensors; total norm 366.566; scalars {"assign.gain": 0.2745, "geo_logit.bias": -0.2579}
+epoch 37: 306 tensors; total norm 375.514; scalars {"assign.gain": 0.2853, "geo_logit.bias": -0.2634}
+epoch 39: 306 tensors; total norm 384.625; scalars {"assign.gain": 0.2912, "geo_logit.bias": -0.2575}
+epoch 41: 306 tensors; total norm 393.703; scalars {"assign.gain": 0.2767, "geo_logit.bias": -0.2448}
+epoch 43: 306 tensors; total norm 402.137; scalars {"assign.gain": 0.2882, "geo_logit.bias": -0.237}
+epoch 45: 306 tensors; total norm 409.675; scalars {"assign.gain": 0.3002, "geo_logit.bias": -0.2558}
+epoch 47: 306 tensors; total norm 413.500; scalars {"assign.gain": 0.2982, "geo_logit.bias": -0.2312}
+epoch 49: 306 tensors; total norm 418.038; scalars {"assign.gain": 0.2945, "geo_logit.bias": -0.222}
+epoch 51: 306 tensors; total norm 422.633; scalars {"assign.gain": 0.2911, "geo_logit.bias": -0.2203}
+epoch 53: 306 tensors; total norm 427.510; scalars {"assign.gain": 0.2653, "geo_logit.bias": -0.2455}
+epoch 55: 306 tensors; total norm 433.245; scalars {"assign.gain": 0.2525, "geo_logit.bias": -0.2426}
+epoch 57: 306 tensors; total norm 436.657; scalars {"assign.gain": 0.2523, "geo_logit.bias": -0.2419}
+epoch 59: 306 tensors; total norm 438.617; scalars {"assign.gain": 0.2453, "geo_logit.bias": -0.2331}
+epoch 61: 306 tensors; total norm 440.312; scalars {"assign.gain": 0.2445, "geo_logit.bias": -0.2444}
+
+=== relative weight change per consecutive pair (total over all tensors, and the top movers)
+29->31: norm-vector change 0.0315; median tensor rel-change 0.1136
+    0.9650  blocks.11.geo_logit.bias  |w|: 0.023 -> 0.001  max|w|: 0.023 -> 0.001
+    0.3438  blocks.8.slice_mlp.0.bias  |w|: 0.583 -> 0.639  max|w|: 0.105 -> 0.120
+    0.3395  blocks.8.slice_mlp.3.bias  |w|: 0.502 -> 0.538  max|w|: 0.076 -> 0.085
+    0.3338  blocks.8.broadcast.bias  |w|: 0.527 -> 0.598  max|w|: 0.067 -> 0.080
+    0.3326  blocks.8.mlp.2.bias  |w|: 0.526 -> 0.599  max|w|: 0.066 -> 0.077
+    0.3263  blocks.5.slice_mlp.3.bias  |w|: 0.488 -> 0.536  max|w|: 0.068 -> 0.072
+    0.3108  blocks.6.mlp.2.bias  |w|: 0.549 -> 0.641  max|w|: 0.078 -> 0.089
+    0.3032  blocks.7.slice_mlp.3.bias  |w|: 0.559 -> 0.637  max|w|: 0.058 -> 0.071
+31->33: norm-vector change 0.0306; median tensor rel-change 0.1348
+    20.9138  blocks.11.geo_logit.bias  |w|: 0.001 -> 0.018  max|w|: 0.001 -> 0.018
+    0.4802  blocks.6.slice_mlp.3.bias  |w|: 0.508 -> 0.575  max|w|: 0.079 -> 0.093
+    0.4657  blocks.5.slice_mlp.3.bias  |w|: 0.536 -> 0.646  max|w|: 0.072 -> 0.087
+    0.4473  blocks.6.slice_mlp.0.bias  |w|: 0.543 -> 0.545  max|w|: 0.090 -> 0.106
+    0.4426  blocks.3.slice_mlp.3.bias  |w|: 0.588 -> 0.667  max|w|: 0.084 -> 0.095
+    0.4307  blocks.3.mlp.2.bias  |w|: 0.585 -> 0.656  max|w|: 0.069 -> 0.079
+    0.4179  blocks.8.slice_mlp.3.bias  |w|: 0.538 -> 0.567  max|w|: 0.085 -> 0.077
+    0.4093  blocks.10.mlp.2.bias  |w|: 0.475 -> 0.556  max|w|: 0.062 -> 0.074
+33->35: norm-vector change 0.0293; median tensor rel-change 0.0442
+    0.9551  blocks.11.geo_logit.bias  |w|: 0.018 -> 0.035  max|w|: 0.018 -> 0.035
+    0.2845  frame_assign.weight  |w|: 5.576 -> 5.684  max|w|: 0.336 -> 0.337
+    0.2723  blocks.1.assign.weight  |w|: 13.548 -> 13.478  max|w|: 0.158 -> 0.155
+    0.2384  blocks.0.slice_mlp.3.weight  |w|: 19.031 -> 19.320  max|w|: 0.230 -> 0.192
+    0.2252  blocks.1.slice_mlp.3.weight  |w|: 29.096 -> 29.990  max|w|: 0.255 -> 0.250
+    0.2174  blocks.3.assign.weight  |w|: 17.763 -> 18.113  max|w|: 0.232 -> 0.202
+    0.2144  blocks.2.assign.weight  |w|: 17.464 -> 17.319  max|w|: 0.177 -> 0.174
+    0.2115  blocks.5.assign.weight  |w|: 17.142 -> 17.719  max|w|: 0.222 -> 0.208
+35->37: norm-vector change 0.0279; median tensor rel-change 0.0740
+    0.3255  frame_assign.weight  |w|: 5.684 -> 5.865  max|w|: 0.337 -> 0.332
+    0.3124  blocks.11.geo_logit.bias  |w|: 0.035 -> 0.046  max|w|: 0.035 -> 0.046
+    0.2856  blocks.1.assign.weight  |w|: 13.478 -> 13.808  max|w|: 0.155 -> 0.169
+    0.2374  blocks.0.slice_mlp.3.weight  |w|: 19.320 -> 19.637  max|w|: 0.192 -> 0.208
+    0.2233  blocks.2.assign.weight  |w|: 17.319 -> 17.819  max|w|: 0.174 -> 0.185
+    0.2200  blocks.3.assign.weight  |w|: 18.113 -> 18.045  max|w|: 0.202 -> 0.227
+    0.2172  blocks.1.slice_mlp.3.weight  |w|: 29.990 -> 30.869  max|w|: 0.250 -> 0.259
+    0.2094  blocks.5.assign.weight  |w|: 17.719 -> 17.955  max|w|: 0.208 -> 0.217
+37->39: norm-vector change 0.0275; median tensor rel-change 0.0811
+    0.3969  blocks.11.geo_logit.bias  |w|: 0.046 -> 0.064  max|w|: 0.046 -> 0.064
+    0.3206  frame_assign.weight  |w|: 5.865 -> 6.015  max|w|: 0.332 -> 0.332
+    0.2896  blocks.1.assign.weight  |w|: 13.808 -> 13.998  max|w|: 0.169 -> 0.174
+    0.2320  blocks.3.assign.weight  |w|: 18.045 -> 19.409  max|w|: 0.227 -> 0.245
+    0.2310  blocks.0.slice_mlp.3.weight  |w|: 19.637 -> 19.934  max|w|: 0.208 -> 0.221
+    0.2155  blocks.1.slice_mlp.3.weight  |w|: 30.869 -> 31.736  max|w|: 0.259 -> 0.278
+    0.2092  blocks.2.assign.weight  |w|: 17.819 -> 17.978  max|w|: 0.185 -> 0.194
+    0.2022  blocks.5.assign.weight  |w|: 17.955 -> 17.813  max|w|: 0.217 -> 0.205
+39->41: norm-vector change 0.0266; median tensor rel-change 0.1059
+    0.5074  blocks.8.norm_assign.bias  |w|: 0.839 -> 0.979  max|w|: 0.104 -> 0.137
+    0.4076  blocks.7.norm_assign.bias  |w|: 1.007 -> 1.228  max|w|: 0.145 -> 0.169
+    0.4035  blocks.4.slice_mlp.0.bias  |w|: 0.715 -> 0.695  max|w|: 0.122 -> 0.120
+    0.3300  blocks.2.slice_mlp.0.bias  |w|: 0.925 -> 0.958  max|w|: 0.130 -> 0.134
+    0.3104  blocks.5.norm_assign.bias  |w|: 1.114 -> 1.266  max|w|: 0.136 -> 0.156
+    0.3046  blocks.4.slice_mlp.3.bias  |w|: 0.733 -> 0.724  max|w|: 0.091 -> 0.087
+    0.3009  frame_assign.weight  |w|: 6.015 -> 6.251  max|w|: 0.332 -> 0.342
+    0.2963  blocks.1.assign.weight  |w|: 13.998 -> 14.576  max|w|: 0.174 -> 0.165
+41->43: norm-vector change 0.0243; median tensor rel-change 0.1344
+    1.2341  blocks.6.slice_mlp.0.bias  |w|: 0.587 -> 0.912  max|w|: 0.110 -> 0.105
+    0.9505  blocks.11.assign.gain  |w|: 0.044 -> 0.087  max|w|: 0.044 -> 0.087
+    0.8403  blocks.8.slice_mlp.0.bias  |w|: 0.736 -> 0.979  max|w|: 0.143 -> 0.135
+    0.7117  blocks.6.slice_mlp.3.bias  |w|: 0.628 -> 0.831  max|w|: 0.099 -> 0.117
+    0.6753  blocks.8.slice_mlp.3.bias  |w|: 0.653 -> 0.727  max|w|: 0.092 -> 0.090
+    0.6408  blocks.11.norm_assign.bias  |w|: 1.149 -> 1.143  max|w|: 0.135 -> 0.156
+    0.6231  blocks.6.slice_mlp.1.bias  |w|: 1.715 -> 2.069  max|w|: 0.122 -> 0.169
+    0.6191  blocks.3.mlp.2.bias  |w|: 0.695 -> 0.686  max|w|: 0.084 -> 0.120
+43->45: norm-vector change 0.0233; median tensor rel-change 0.1305
+    0.8529  blocks.6.slice_mlp.0.bias  |w|: 0.912 -> 1.482  max|w|: 0.105 -> 0.141
+    0.6650  blocks.6.slice_mlp.3.bias  |w|: 0.831 -> 1.160  max|w|: 0.117 -> 0.154
+    0.5562  blocks.8.slice_mlp.3.bias  |w|: 0.727 -> 0.948  max|w|: 0.090 -> 0.116
+    0.5541  blocks.4.norm_assign.bias  |w|: 0.977 -> 1.165  max|w|: 0.133 -> 0.165
+    0.5452  blocks.3.slice_mlp.3.bias  |w|: 0.720 -> 0.802  max|w|: 0.107 -> 0.108
+    0.5435  blocks.3.mlp.2.bias  |w|: 0.686 -> 0.796  max|w|: 0.120 -> 0.125
+    0.5427  blocks.9.norm_assign.bias  |w|: 1.085 -> 1.072  max|w|: 0.169 -> 0.160
+    0.5427  blocks.6.slice_mlp.1.bias  |w|: 2.069 -> 2.674  max|w|: 0.169 -> 0.215
+45->47: norm-vector change 0.0121; median tensor rel-change 0.1183
+    0.5835  blocks.11.geo_logit.bias  |w|: 0.058 -> 0.091  max|w|: 0.058 -> 0.091
+    0.5633  head.weight  |w|: 1.490 -> 1.471  max|w|: 0.131 -> 0.114
+    0.4180  blocks.3.slice_mlp.3.bias  |w|: 0.802 -> 0.926  max|w|: 0.108 -> 0.115
+    0.4126  blocks.7.norm_assign.bias  |w|: 1.551 -> 1.551  max|w|: 0.222 -> 0.206
+    0.4093  blocks.1.broadcast.bias  |w|: 0.856 -> 0.889  max|w|: 0.120 -> 0.111
+    0.3841  blocks.8.geo_logit.bias  |w|: 0.070 -> 0.097  max|w|: 0.070 -> 0.097
+    0.3779  blocks.1.assign.weight  |w|: 14.689 -> 15.255  max|w|: 0.182 -> 0.199
+    0.3525  blocks.4.norm_assign.bias  |w|: 1.165 -> 1.241  max|w|: 0.165 -> 0.170
+47->49: norm-vector change 0.0137; median tensor rel-change 0.1032
+    0.5101  head.weight  |w|: 1.471 -> 1.357  max|w|: 0.114 -> 0.094
+    0.2850  blocks.1.assign.weight  |w|: 15.255 -> 16.335  max|w|: 0.199 -> 0.220
+    0.2822  blocks.5.slice_mlp.3.bias  |w|: 0.957 -> 1.005  max|w|: 0.112 -> 0.127
+    0.2759  blocks.5.slice_mlp.0.bias  |w|: 1.008 -> 1.013  max|w|: 0.142 -> 0.153
+    0.2545  blocks.5.mlp.2.bias  |w|: 1.008 -> 0.990  max|w|: 0.129 -> 0.132
+    0.2524  blocks.5.broadcast.bias  |w|: 1.018 -> 0.994  max|w|: 0.132 -> 0.131
+    0.2293  frame_assign.weight  |w|: 6.676 -> 6.723  max|w|: 0.347 -> 0.348
+    0.2238  blocks.3.norm_assign.bias  |w|: 1.296 -> 1.431  max|w|: 0.192 -> 0.197
+49->51: norm-vector change 0.0133; median tensor rel-change 0.0933
+    0.4272  head.weight  |w|: 1.357 -> 1.440  max|w|: 0.094 -> 0.087
+    0.2910  blocks.1.assign.weight  |w|: 16.335 -> 16.769  max|w|: 0.220 -> 0.222
+    0.2470  frame_assign.weight  |w|: 6.723 -> 6.772  max|w|: 0.348 -> 0.350
+    0.2432  blocks.6.slice_mlp.0.bias  |w|: 1.400 -> 1.211  max|w|: 0.147 -> 0.137
+    0.2268  blocks.5.slice_mlp.0.bias  |w|: 1.013 -> 1.071  max|w|: 0.153 -> 0.142
+    0.2217  blocks.5.slice_mlp.3.bias  |w|: 1.005 -> 0.952  max|w|: 0.127 -> 0.117
+    0.2190  blocks.0.slice_mlp.3.weight  |w|: 21.520 -> 21.707  max|w|: 0.187 -> 0.199
+    0.2163  blocks.2.broadcast.bias  |w|: 0.818 -> 0.869  max|w|: 0.133 -> 0.147
+51->53: norm-vector change 0.0140; median tensor rel-change 0.0943
+    0.4219  head.weight  |w|: 1.440 -> 1.635  max|w|: 0.087 -> 0.104
+    0.2994  blocks.4.slice_mlp.3.bias  |w|: 1.010 -> 1.026  max|w|: 0.127 -> 0.129
+    0.2956  blocks.4.mlp.2.bias  |w|: 0.894 -> 0.980  max|w|: 0.148 -> 0.163
+    0.2889  frame_assign.weight  |w|: 6.772 -> 6.891  max|w|: 0.350 -> 0.352
+    0.2887  blocks.1.broadcast.bias  |w|: 0.932 -> 0.914  max|w|: 0.134 -> 0.136
+    0.2809  blocks.4.slice_mlp.0.bias  |w|: 1.076 -> 1.085  max|w|: 0.139 -> 0.133
+    0.2787  blocks.0.mlp.2.bias  |w|: 1.021 -> 1.026  max|w|: 0.143 -> 0.143
+    0.2697  frame_assign.gain  |w|: 0.300 -> 0.381  max|w|: 0.300 -> 0.381
+53->55: norm-vector change 0.0162; median tensor rel-change 0.1033
+    0.3782  frame_assign.weight  |w|: 6.891 -> 7.300  max|w|: 0.352 -> 0.354
+    0.3388  head.weight  |w|: 1.635 -> 1.671  max|w|: 0.104 -> 0.112
+    0.3054  blocks.3.mlp.2.bias  |w|: 0.835 -> 0.879  max|w|: 0.145 -> 0.132
+    0.3039  blocks.1.assign.weight  |w|: 16.648 -> 16.741  max|w|: 0.209 -> 0.271
+    0.2938  blocks.5.slice_mlp.3.bias  |w|: 0.888 -> 0.946  max|w|: 0.105 -> 0.117
+    0.2814  blocks.3.broadcast.bias  |w|: 0.903 -> 0.936  max|w|: 0.135 -> 0.122
+    0.2812  blocks.2.broadcast.bias  |w|: 0.873 -> 0.917  max|w|: 0.152 -> 0.140
+    0.2809  blocks.1.broadcast.bias  |w|: 0.914 -> 0.987  max|w|: 0.136 -> 0.149
+55->57: norm-vector change 0.0107; median tensor rel-change 0.0904
+    0.4801  head.weight  |w|: 1.671 -> 1.628  max|w|: 0.112 -> 0.123
+    0.3814  frame_assign.weight  |w|: 7.300 -> 7.721  max|w|: 0.354 -> 0.355
+    0.3400  blocks.4.norm_assign.bias  |w|: 1.282 -> 1.347  max|w|: 0.172 -> 0.179
+    0.3342  blocks.3.norm_assign.bias  |w|: 1.547 -> 1.564  max|w|: 0.214 -> 0.218
+    0.3285  blocks.3.geo_logit.bias  |w|: 0.085 -> 0.113  max|w|: 0.085 -> 0.113
+    0.2997  blocks.1.assign.weight  |w|: 16.741 -> 17.013  max|w|: 0.271 -> 0.280
+    0.2964  blocks.2.mlp.2.bias  |w|: 1.017 -> 1.025  max|w|: 0.135 -> 0.137
+    0.2844  blocks.2.broadcast.bias  |w|: 0.917 -> 0.976  max|w|: 0.140 -> 0.149
+57->59: norm-vector change 0.0068; median tensor rel-change 0.0900
+    0.5621  head.weight  |w|: 1.628 -> 1.680  max|w|: 0.123 -> 0.133
+    0.3978  blocks.8.slice_mlp.3.bias  |w|: 0.813 -> 0.781  max|w|: 0.107 -> 0.102
+    0.3932  blocks.11.norm_assign.bias  |w|: 1.068 -> 1.036  max|w|: 0.155 -> 0.157
+    0.3566  blocks.5.slice_mlp.3.bias  |w|: 0.939 -> 1.077  max|w|: 0.118 -> 0.130
+    0.3265  blocks.6.mlp.2.bias  |w|: 1.178 -> 1.301  max|w|: 0.158 -> 0.165
+    0.3252  blocks.6.broadcast.bias  |w|: 1.182 -> 1.309  max|w|: 0.173 -> 0.191
+    0.3247  blocks.6.slice_mlp.3.bias  |w|: 1.168 -> 1.208  max|w|: 0.136 -> 0.141
+    0.3125  blocks.5.slice_mlp.0.bias  |w|: 1.087 -> 1.190  max|w|: 0.142 -> 0.158
+59->61: norm-vector change 0.0073; median tensor rel-change 0.0892
+    0.6049  head.weight  |w|: 1.680 -> 1.727  max|w|: 0.133 -> 0.136
+    0.4412  blocks.2.slice_mlp.0.bias  |w|: 1.238 -> 1.223  max|w|: 0.190 -> 0.163
+    0.4256  blocks.2.slice_mlp.3.bias  |w|: 0.994 -> 1.131  max|w|: 0.128 -> 0.147
+    0.3999  blocks.2.broadcast.bias  |w|: 1.003 -> 1.033  max|w|: 0.155 -> 0.135
+    0.3955  blocks.2.mlp.2.bias  |w|: 1.050 -> 1.050  max|w|: 0.144 -> 0.149
+    0.3845  blocks.8.slice_mlp.3.bias  |w|: 0.781 -> 0.810  max|w|: 0.102 -> 0.101
+    0.3759  frame_assign.weight  |w|: 7.913 -> 8.251  max|w|: 0.357 -> 0.342
+    0.3739  blocks.3.mlp.2.bias  |w|: 0.972 -> 1.016  max|w|: 0.138 -> 0.153
+
+=== scalar parameters
+blocks.0.assign.gain: e29=0.1962 e31=0.1989 e33=0.2074 e35=0.2040 e37=0.2148 e39=0.2063 e41=0.2049 e43=0.2318 e45=0.2081 e47=0.2218 e49=0.2192 e51=0.2121 e53=0.2311 e55=0.2160 e57=0.2043 e59=0.1959 e61=0.2205
+blocks.0.geo_logit.bias: e29=-0.2807 e31=-0.2830 e33=-0.2771 e35=-0.2813 e37=-0.2829 e39=-0.2902 e41=-0.2948 e43=-0.2994 e45=-0.3106 e47=-0.3435 e49=-0.3288 e51=-0.3313 e53=-0.3080 e55=-0.3228 e57=-0.3310 e59=-0.3538 e61=-0.3745
+blocks.1.assign.gain: e29=0.2921 e31=0.2931 e33=0.3070 e35=0.3068 e37=0.3054 e39=0.3106 e41=0.3188 e43=0.3135 e45=0.3211 e47=0.3231 e49=0.3089 e51=0.3065 e53=0.2917 e55=0.2894 e57=0.2735 e59=0.2882 e61=0.2885
+blocks.1.geo_logit.bias: e29=0.2454 e31=0.2445 e33=0.2449 e35=0.2397 e37=0.2395 e39=0.2413 e41=0.2380 e43=0.2403 e45=0.2194 e47=0.2000 e49=0.2016 e51=0.2053 e53=0.2069 e55=0.2027 e57=0.2271 e59=0.2176 e61=0.2172
+blocks.10.assign.gain: e29=0.0966 e31=0.0987 e33=0.0905 e35=0.0923 e37=0.0875 e39=0.0999 e41=0.0952 e43=0.1022 e45=0.1309 e47=0.1566 e49=0.1573 e51=0.1556 e53=0.1529 e55=0.1650 e57=0.2024 e59=0.2161 e61=0.2263
+blocks.10.geo_logit.bias: e29=0.3456 e31=0.3483 e33=0.3368 e35=0.3406 e37=0.3451 e39=0.3474 e41=0.3255 e43=0.3554 e45=0.3800 e47=0.3954 e49=0.4065 e51=0.4059 e53=0.4051 e55=0.3931 e57=0.3792 e59=0.3660 e61=0.3417
+blocks.11.assign.gain: e29=0.0636 e31=0.0556 e33=0.0452 e35=0.0454 e37=0.0433 e39=0.0460 e41=0.0444 e43=0.0865 e45=0.0529 e47=0.0552 e49=0.0633 e51=0.0640 e53=0.0632 e55=0.0546 e57=0.0561 e59=0.0495 e61=0.0461
+blocks.11.geo_logit.bias: e29=0.0232 e31=0.0008 e33=0.0178 e35=0.0348 e37=0.0456 e39=0.0637 e41=0.0716 e43=0.0520 e45=0.0576 e47=0.0912 e49=0.0905 e51=0.0905 e53=0.0905 e55=0.0948 e57=0.1039 e59=0.0956 e61=0.0952
+blocks.2.assign.gain: e29=0.2637 e31=0.2720 e33=0.2618 e35=0.2745 e37=0.2853 e39=0.2912 e41=0.2767 e43=0.2882 e45=0.3002 e47=0.2982 e49=0.2945 e51=0.2911 e53=0.2653 e55=0.2525 e57=0.2523 e59=0.2453 e61=0.2445
+blocks.2.geo_logit.bias: e29=-0.2592 e31=-0.2567 e33=-0.2625 e35=-0.2579 e37=-0.2634 e39=-0.2575 e41=-0.2448 e43=-0.2370 e45=-0.2558 e47=-0.2312 e49=-0.2220 e51=-0.2203 e53=-0.2455 e55=-0.2426 e57=-0.2419 e59=-0.2331 e61=-0.2444
+blocks.3.assign.gain: e29=0.1856 e31=0.1866 e33=0.1797 e35=0.1794 e37=0.1746 e39=0.1751 e41=0.1634 e43=0.1562 e45=0.1756 e47=0.1790 e49=0.1810 e51=0.1958 e53=0.1885 e55=0.1786 e57=0.1864 e59=0.1980 e61=0.2002
+blocks.3.geo_logit.bias: e29=0.1083 e31=0.1135 e33=0.1264 e35=0.1212 e37=0.1242 e39=0.1201 e41=0.1270 e43=0.1160 e45=0.0995 e47=0.0978 e49=0.0874 e51=0.1003 e53=0.0955 e55=0.0847 e57=0.1125 e59=0.1132 e61=0.1132
+blocks.4.assign.gain: e29=0.1761 e31=0.1763 e33=0.1995 e35=0.2020 e37=0.2056 e39=0.2064 e41=0.2086 e43=0.2139 e45=0.2247 e47=0.2231 e49=0.2289 e51=0.2266 e53=0.2231 e55=0.2320 e57=0.2651 e59=0.2548 e61=0.2748
+blocks.4.geo_logit.bias: e29=0.2553 e31=0.2720 e33=0.2864 e35=0.2849 e37=0.2845 e39=0.2810 e41=0.2976 e43=0.2429 e45=0.2189 e47=0.1921 e49=0.2057 e51=0.2067 e53=0.2174 e55=0.2038 e57=0.1979 e59=0.2150 e61=0.1986
+blocks.5.assign.gain: e29=0.1662 e31=0.1650 e33=0.1472 e35=0.1501 e37=0.1530 e39=0.1544 e41=0.1601 e43=0.1390 e45=0.1807 e47=0.1772 e49=0.1804 e51=0.1793 e53=0.1968 e55=0.2058 e57=0.2283 e59=0.2556 e61=0.2516
+blocks.5.geo_logit.bias: e29=0.3681 e31=0.3636 e33=0.3642 e35=0.3734 e37=0.3956 e39=0.4166 e41=0.4185 e43=0.4328 e45=0.4368 e47=0.4442 e49=0.4359 e51=0.4398 e53=0.4398 e55=0.4281 e57=0.4429 e59=0.4562 e61=0.4635
+blocks.6.assign.gain: e29=0.1325 e31=0.1379 e33=0.1499 e35=0.1491 e37=0.1527 e39=0.1541 e41=0.1702 e43=0.2008 e45=0.2059 e47=0.1871 e49=0.2192 e51=0.2187 e53=0.2052 e55=0.2152 e57=0.2153 e59=0.2092 e61=0.1968
+blocks.6.geo_logit.bias: e29=-0.1791 e31=-0.1741 e33=-0.1631 e35=-0.1678 e37=-0.1740 e39=-0.1577 e41=-0.1911 e43=-0.1587 e45=-0.1797 e47=-0.2004 e49=-0.2100 e51=-0.2096 e53=-0.2183 e55=-0.2312 e57=-0.2309 e59=-0.2309 e61=-0.2285
+blocks.7.assign.gain: e29=0.1334 e31=0.1332 e33=0.1476 e35=0.1468 e37=0.1455 e39=0.1481 e41=0.1569 e43=0.1679 e45=0.1825 e47=0.1775 e49=0.1791 e51=0.1858 e53=0.1739 e55=0.1847 e57=0.1808 e59=0.1878 e61=0.1847
+blocks.7.geo_logit.bias: e29=-0.3110 e31=-0.3110 e33=-0.3128 e35=-0.3083 e37=-0.3088 e39=-0.3086 e41=-0.2901 e43=-0.3125 e45=-0.3431 e47=-0.3331 e49=-0.3299 e51=-0.3284 e53=-0.3393 e55=-0.3403 e57=-0.3291 e59=-0.3282 e61=-0.3237
+blocks.8.assign.gain: e29=0.1359 e31=0.1341 e33=0.1207 e35=0.1260 e37=0.1394 e39=0.1439 e41=0.1575 e43=0.1559 e45=0.1466 e47=0.1219 e49=0.1226 e51=0.1226 e53=0.1221 e55=0.1213 e57=0.1196 e59=0.1095 e61=0.1200
+blocks.8.geo_logit.bias: e29=-0.0346 e31=-0.0312 e33=-0.0399 e35=-0.0344 e37=-0.0364 e39=-0.0320 e41=-0.0359 e43=-0.0545 e45=-0.0698 e47=-0.0966 e49=-0.0996 e51=-0.1005 e53=-0.0967 e55=-0.1065 e57=-0.1110 e59=-0.1065 e61=-0.1037
+blocks.9.assign.gain: e29=0.1401 e31=0.1475 e33=0.1560 e35=0.1568 e37=0.1568 e39=0.1581 e41=0.1459 e43=0.1885 e45=0.2154 e47=0.1972 e49=0.1954 e51=0.1932 e53=0.1999 e55=0.1883 e57=0.1958 e59=0.1992 e61=0.2085
+blocks.9.geo_logit.bias: e29=0.1127 e31=0.1026 e33=0.0804 e35=0.0798 e37=0.0826 e39=0.0871 e41=0.1057 e43=0.1231 e45=0.1294 e47=0.1255 e49=0.1184 e51=0.1259 e53=0.1269 e55=0.1393 e57=0.1352 e59=0.1154 e61=0.1186
+frame_assign.gain: e29=0.1926 e31=0.1814 e33=0.1822 e35=0.1886 e37=0.1884 e39=0.1963 e41=0.1844 e43=0.2052 e45=0.2051 e47=0.2477 e49=0.2663 e51=0.3001 e53=0.3811 e55=0.4436 e57=0.4377 e59=0.4737 e61=0.4791
+qt.logw: e29=0.1081 e31=0.1125 e33=0.1343 e35=0.1348 e37=0.1354 e39=0.1418 e41=0.1591 e43=0.1445 e45=0.1145 e47=0.1262 e49=0.1243 e51=0.1294 e53=0.1291 e55=0.1400 e57=0.1616 e59=0.1691 e61=0.1693
+
+=== Adam effective relative step (top tensors at each checkpoint)
+
+=== largest-norm tensors at the first and last epoch
+e29: blocks.2.mlp.0.weight=48.81(max 0.44); blocks.3.mlp.0.weight=48.71(max 0.40); blocks.4.mlp.0.weight=48.39(max 0.40); blocks.5.mlp.0.weight=48.12(max 0.46); blocks.8.mlp.0.weight=46.62(max 0.74); blocks.10.mlp.0.weight=46.60(max 0.68); blocks.9.mlp.0.weight=46.58(max 0.78); blocks.6.mlp.0.weight=46.55(max 0.40)
+e61: blocks.11.mlp.2.weight=72.28(max 2.14); blocks.10.mlp.2.weight=72.03(max 1.69); blocks.8.mlp.2.weight=70.37(max 2.11); blocks.9.mlp.2.weight=70.37(max 1.80); blocks.3.mlp.0.weight=67.96(max 0.62); blocks.7.mlp.2.weight=67.46(max 1.04); blocks.4.mlp.0.weight=67.37(max 0.79); blocks.5.mlp.0.weight=66.95(max 0.75)

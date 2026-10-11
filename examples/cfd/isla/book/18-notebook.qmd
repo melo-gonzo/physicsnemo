@@ -35839,10 +35839,40 @@ minimum and median of 147 and 299 effective slices across its twelve
 blocks at epoch 31 to 36 and 194 at epoch 249, with the narrowing
 concentrated in three blocks; the `family_non_box` lane goes from 133
 and 271 to 87 and 202. Routing narrows partially after the event; it
-does not collapse, and the mechanism is unmeasured. A checkpoint-drift
-probe (`probe/ckpt_drift.py`, job 1199719) that ranks every weight
-tensor by its relative change across the transition, with a
-GeoTransolver lane as control, is running.
+does not collapse.
+
+**The drift probe: the weights stall, no single tensor jumps.** The
+checkpoint-drift probe (`probe/ckpt_drift.py`, job 1199719, artifacts
+`probe/drift_*.json`) ranks every weight tensor by its relative change
+between consecutive kept checkpoints, with a GeoTransolver lane as the
+control. Across the transition no tensor jumps; what changes is the
+motion of all of them. Before the event the total parameter norm of
+ISLA `full` seed 43 grows by 9.1 per two epochs (336.8 at epoch 29 to
+407.3 at epoch 45, mostly the block MLPs); from the transition pair on
+the growth drops to 5.6, then 2.8, then 1 to 2 per two epochs, and the
+relative change of the vector of per-tensor norms falls from 0.03 to
+0.01. GeoTransolver's total norm grows by 20 per two epochs throughout
+(402 at epoch 29 to 797 at epoch 69) with no event. The same stall
+follows the transition in the other three probed ISLA lanes (seed 42
+from epoch 47, `family_non_box` from epochs 57-61, ISLA-DTT from epoch
+73). The one parameter that moves with the event in all four lanes is
+the gain of the head-frame prototype module, the scalar that bounds how
+far the output-frame prototypes may move from their seeds per sample:
+0.19 to 0.26, 0.34 and 0.38 across epochs 43-49 on seed 43, 0.21 to
+0.30 and 0.38 across 45-53 on seed 42, 0.21 to 0.28 across 39-43 on
+`family_non_box`, 0.22 to 0.29 across 63-65 on ISLA-DTT. On seed 43 it
+returns to 0.20 at epochs 57-61 while the loss stays at 0.15, so it is
+a correlate and not the cause by itself. The tenfold rate step at
+epoch 100 does not bring the loss back (median step loss 0.130 at
+epoch 98, 0.123 at 102, 0.109 at 249), so the iterate sits in a worse
+basin rather than oscillating about the old one. The degradation is
+global over cases: 99 percent of the 386 validation cases are worse on
+velocity at the final checkpoint than at the best (median ratio 1.9,
+tenth to ninetieth percentile 1.24 to 3.18), in every bank (1.7 to
+2.3) and every enclosure family (1.2 to 2.6), with the mean-unstable
+cases degrading more than the stable ones (2.55 against 1.71). **The
+mechanism is a loss of plasticity after 23,000 to 30,000 steps at the
+constant rate, uniform over the data; what saturates is unmeasured.**
 
 **The spike cases are a dataset finding, not the trigger.** The
 per-step training loss has isolated spikes whose values are identical
