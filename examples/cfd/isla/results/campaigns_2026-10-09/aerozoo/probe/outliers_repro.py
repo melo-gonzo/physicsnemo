@@ -141,19 +141,32 @@ def main(argv: list[str] | None = None) -> None:
         }
         print(f"{lane}: seed {seed}, {train_split}, {len(hits)} spikes >= {args.threshold}", file=sys.stderr)
 
-    # The consensus per (split, class): the case present in every spike of that class, pooled over lanes.
+    # The consensus per (split, class): the case present in every spike of that class, pooled over lanes. A
+    # class with few spikes can have several such cases (4 candidates per spike); the big classes are decided
+    # first and a small class takes a case already identified when it is among the unanimous candidates.
     consensus = {}
-    for key, votes in sorted(class_votes.items()):
-        n = class_hits[key]
-        best, count = votes.most_common(1)[0]
+    identified: set[str] = set()
+    for key in sorted(class_votes, key=lambda k: -class_hits[k]):
+        votes, n = class_votes[key], class_hits[key]
+        unanimous = [c for c, k in votes.most_common() if k == n]
+        if len(unanimous) == 1:
+            case = unanimous[0]
+        elif len(unanimous) > 1:
+            known = [c for c in unanimous if c in identified]
+            case = known[0] if len(known) == 1 else None
+        else:
+            case = None
+        if case is not None:
+            identified.add(case)
         consensus[f"{key[0]} {key[1]}"] = {
             "train_split": key[0],
             "loss_class": key[1],
             "n_spikes": n,
-            "case": best if count == n else None,
-            "case_votes": count,
-            "runners_up": [[c, k] for c, k in votes.most_common(4)[1:]],
+            "case": case,
+            "unanimous_candidates": unanimous,
+            "runners_up": [[c, k] for c, k in votes.most_common(5) if k < n][:3],
         }
+    consensus = dict(sorted(consensus.items()))
     out["consensus"] = consensus
     for hit_lane in out["lanes"].values():
         for hit in hit_lane["hits"]:
@@ -162,7 +175,7 @@ def main(argv: list[str] | None = None) -> None:
             hit["rank"] = next((r for r, cc in hit["candidates"].items() if cc == c), None)
     Path(args.out).write_text(json.dumps(out, indent=1) + "\n")
     for k, v in consensus.items():
-        print(f"{k}: {v['n_spikes']} spikes, case {v['case']} ({v['case_votes']} votes; runners-up {v['runners_up'][:2]})")
+        print(f"{k}: {v['n_spikes']} spikes, case {v['case']} (unanimous {v['unanimous_candidates']}; runners-up {v['runners_up'][:2]})")
 
 
 if __name__ == "__main__":

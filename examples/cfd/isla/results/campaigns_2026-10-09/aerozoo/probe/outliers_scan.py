@@ -58,6 +58,29 @@ def leaf(td_dir: Path, name: str) -> np.ndarray:
     return np.memmap(td_dir / f"{name}.memmap", dtype=dtype, mode="r", shape=shape)
 
 
+class SequentialLeaf:
+    """Row-chunked sequential reads of one memmap leaf (``np.fromfile`` with an offset).
+
+    A memmap over Lustre faults pages one at a time (the login-node probe read 0.5 GB in two minutes); one
+    sequential read per chunk streams it instead.
+    """
+
+    def __init__(self, td_dir: Path, name: str) -> None:
+        meta = json.loads((td_dir / "meta.json").read_text())[name]
+        self.shape = tuple(meta["shape"])
+        self.dtype = DTYPES[meta["dtype"]]
+        self.path = td_dir / f"{name}.memmap"
+        self.ncomp = self.shape[1] if len(self.shape) == 2 else 1
+        self.ndim = len(self.shape)
+
+    def rows(self, start: int, stop: int) -> np.ndarray:
+        stop = min(stop, self.shape[0])
+        n = stop - start
+        itemsize = np.dtype(self.dtype).itemsize
+        x = np.fromfile(self.path, dtype=self.dtype, count=n * self.ncomp, offset=start * self.ncomp * itemsize)
+        return x.reshape(n, self.ncomp) if self.ndim == 2 else x
+
+
 def scales(pdmsh: Path) -> dict[str, float]:
     reference = pdmsh / TD / "global_data" / "reference"
     physics = pdmsh / TD / "global_data" / "physics"
@@ -111,8 +134,8 @@ def scan_case(job: tuple[str, str, dict]) -> dict:
     for name, (field, rule) in TARGETS.items():
         mean = np.asarray(stats[name]["mean"], dtype=np.float64)
         std = float(stats[name]["std"])
-        raw = leaf(solution, field)
-        ncomp = raw.shape[1] if raw.ndim == 2 else 1
+        raw = SequentialLeaf(solution, field)
+        ncomp = raw.ncomp
         abs_sum = np.zeros(ncomp)
         sq_sum = np.zeros(ncomp)
         z_sum = np.zeros(ncomp)
@@ -122,7 +145,7 @@ def scan_case(job: tuple[str, str, dict]) -> dict:
         nonfinite = 0
         hub = np.zeros(ncomp)
         for start in range(0, n_total, CHUNK):
-            x = nondim(raw[start : start + CHUNK], rule, s)
+            x = nondim(raw.rows(start, start + CHUNK), rule, s)
             if x.ndim == 1:
                 x = x[:, None]
             z = (x - mean) / std  # NormalizeMeshFields (eps is negligible against these stds)

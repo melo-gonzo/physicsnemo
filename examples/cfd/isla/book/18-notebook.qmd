@@ -35885,9 +35885,44 @@ a handful of training cases carry pathological fields. GeoTransolver
 survives every one of them; ISLA survives the 1,712 case at epoch 24 in
 the `family_non_box` seed-43 lane and transitions at epoch 44-45 on
 `full` with no step loss above 1.5 in the preceding ten epochs. The
-spikes therefore do not explain the event; their identification (which
-cases, which bank and quality label) is running and goes into the
-chapter's data section.
+spikes therefore do not explain the event. Their identification
+(subagent, `probe/outliers_*.py`, CPU job 1200497, artifacts
+`probe/outliers.{json,txt}` and `probe/outliers_scan.jsonl`) reproduces
+the sampler (seed plus epoch into `randperm`, drop-last truncation, the
+rank-0 shard, a 1-based step counter, the logged loss being the
+four-rank mean) and names one case per loss class, unanimous over every
+spike, seed, arm and epoch. The 1,712 and 2,086 spikes are
+`case-0000000000000001731-793b575a97a8` (cars bank, rectangular prism,
+mean-unstable, Reynolds 3.1e7): one interior row carries a specific
+dissipation of 5.4e11 per second, 1.2e10 standard deviations in the
+`full` constants, while the case's other fields are ordinary (mean |z|
+0.14 to 0.61). The 24 spike is case 2407 (blobs, mean-stable, one row
+at 1.6e8 standard deviations) and the 4.3 to 5.7 spikes are case 2344
+(blobs, mean-unstable, one row at 2.9e7). The loss formula checks to
+the digit: the logged value is the four-rank mean of the seven-channel
+mean of the unweighted Huber loss (delta 1) over the 200,000 sampled
+rows, so a block that holds the worst row of case 1731 gives 6,850 / 4
+= 1,712.6 in the held-out-box constants and 2,086 in the blob
+constants. Case 1731 sits in the `full` validation split and the
+`reynolds` test split, so the `full` lanes never trained on it; cases
+2407 and 2344 are in the `full` test and training splits. **The
+dataset's specific-dissipation field has a pervasive heavy tail, and
+the three spike cases are its extreme:** across the 3,815 cases, 238
+have a row above 1,000 standard deviations in omega, 110 above 10,000,
+6 above a million; 571 of the 2,713 `full` training cases exceed either
+a mean |z| of 3 or a max |z| of 100 on some field, and 24 percent of
+those are labeled mean-unstable against a 26 percent base rate, so the
+flags are not a stability marker. Beyond omega, 46 cases have a mean
+|z| above 3 on pressure (the pressure-coefficient scale of fast cases)
+and 36 on eddy viscosity (low-Reynolds cases in the opposed-hemisphere
+and opposed-sphere enclosures). One consequence for the metric: the
+per-case relative L2 of omega saturates at 1.0 when a single row
+dominates the target norm (case 1731 scores exactly 1.00 on omega at
+every checkpoint), so the omega column of every table is partly a count
+of such cases rather than a measure of the field. A log transform or a
+per-case clip of omega before standardization is the usual remedy;
+that is a protocol change for every arm and waits for Peter with the
+others.
 
 **The best-checkpoint diagnostic (labeled, never the standing).** The
 checkpoint at each lane's validation minimum (epoch 31 for `full` seed

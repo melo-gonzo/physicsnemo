@@ -390,6 +390,24 @@ recipe's mesh format.
   L2 is computed on the standardized field: its ratios between models are
   orderings under that centering, not physical percentages, as for eddy
   viscosity on AirfRANS (@sec-airfrans-measured).
+- **The specific-dissipation tail.** The standardized specific
+  dissipation rate has a heavy tail that the other fields do not: of the
+  3,815 cases, 238 carry at least one interior point above 1,000 standard
+  deviations, 110 above 10,000 and three above ten million, each a single
+  point whose rate is ten to twelve orders of magnitude above the field's
+  mean while the case's other fields are ordinary. Two consequences
+  follow. In training, a sampled block that holds one of those points
+  gives a step loss of 24 to 2,086 against a typical 0.04, identical for
+  every architecture because the Huber loss is linear there; these steps
+  are isolated and neither model's trajectory turns on them. In scoring,
+  the per-case relative L2 of the specific dissipation saturates at 1.0
+  whenever one point dominates the target norm, so that column is partly
+  a count of such cases rather than a measure of the field, for every
+  arm alike. The pressure coefficient of the fastest cases (46 training
+  cases with a mean above three standard deviations) and the eddy
+  viscosity of the slowest (36, mostly the opposed-hemisphere and
+  opposed-sphere enclosures) are the other wide fields. No field is
+  clipped or transformed beyond the normalization above.
 - **What each model receives.** ISLA: the four boundary meshes with the
   faces' positions, normals and areas, a one-hot of the condition type
   per face and the prescribed values (zero where a type prescribes
