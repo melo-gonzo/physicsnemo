@@ -35777,3 +35777,116 @@ so P4 is at risk and is measured as written. The query-population
 protocol (@sec-nb-aerozoo-qpop-amendment) is where the read's case is
 made if the accuracy bar fails; its AeroZoo script is in the fork's
 smoke test.
+
+## 2026-10-11 — AEROZOO first scores: every ISLA lane reaches a validation loss two to three times below GeoTransolver's by epoch 30-60, then an optimization event at epoch 43-50 raises its training and validation loss three- to four-fold for the rest of the run; the final checkpoints lose P1, the best checkpoints would win its velocity clause {#sec-nb-aerozoo-instability}
+
+**The setting.** The AeroZoo benchmark (@sec-nb-aerozoo-prereg) trains
+the reference ISLA, the read-only ISLA-DTT and GeoTransolver on the
+interior task of AeroZoo v1.2 (the four boundary types with their
+prescribed values in, the five interior fields velocity, pressure, eddy
+viscosity, turbulence kinetic energy and specific dissipation out), 250
+epochs at the architectures' reference rates (ISLA 3.75e-4, a tenfold
+step at epoch 100), and scores the final checkpoint in float32 on the
+training draw of 200,000 points. The first lanes finished on 2026-10-11:
+ISLA on the `full` split (seed 43; seed 42 hours behind) and the ISLA
+pair on the held-out-box split `family_non_box`. GeoTransolver's lanes
+were at epoch 205-218 when this was written, so its float32 scores do
+not exist yet; its training-time validation (bf16, every ten epochs)
+stands in below, labeled as such.
+
+**What the final checkpoints score (validation side, float32, relative
+L2 in training units).** ISLA `full` seed 43 reads velocity 0.450,
+pressure 0.760, eddy viscosity 0.799, turbulence kinetic energy 0.787
+and specific dissipation 0.775 over the 386 validation cases; the
+`family_non_box` pair reads 0.428 / 0.589 / 0.864 / 0.893 / 0.848 and
+0.402 / 0.595 / 0.850 / 0.825 / 0.836 over 351. GeoTransolver's
+training-time validation at epoch 200 reads velocity 0.34-0.35 and
+pressure 0.46-0.49 on `full`, 0.33-0.34 and 0.42-0.45 on
+`family_non_box`. **Under the pre-registered rule (the final checkpoint
+of each lane) GeoTransolver ÷ ISLA is about 0.76 on velocity and 0.63
+on pressure on `full`, and P1 is falsified as written** (its
+falsification bar was a velocity ratio below 1.1 or a pressure ratio
+above 1.0). The test-side scoring that the standing is defined on waits
+for GeoTransolver's lanes; nothing above changes the order.
+
+**The trajectory is the finding.** Every ISLA lane, on every split,
+reaches its validation-loss minimum of 0.036-0.048 between epoch 30 and
+60 (velocity 0.20-0.23, pressure 0.18-0.54 in the trainer's bf16
+validation), then its loss rises more than twofold within ten to twenty
+epochs and stays at 0.11-0.15 to epoch 250; GeoTransolver's validation
+loss never goes below 0.09. **The training loss rises with the
+validation loss, so this is an optimization event and not overfitting:**
+the per-epoch mean step loss of ISLA `full` seed 43 is 0.0426 at epoch
+40, 0.0757 at 45, 0.119 at 50 and 0.15 from epoch 60 on, and the
+tenfold rate step at epoch 100 does not bring it back. The first epoch
+whose mean step loss exceeds 1.5 times its running minimum is 44 and 45
+on `full`, 43 on `family_non_box` (seed 42; seed 43's detector is
+confounded by the spike cases below), 43 and 47 on `reynolds`, 50 on
+`bank_blobs`, and 54 and 65 for the ISLA-DTT `full` pair: 23,000 to
+30,000 optimizer steps at the constant rate. GeoTransolver has no such
+event on any split: its per-epoch mean step loss falls from 0.077 at
+epoch 30 to 0.047 at epoch 100 and 0.014-0.019 at the end, while its
+validation loss drifts up from 0.09 to 0.11, which is ordinary
+overfitting.
+
+**It is not the DeepJEB++ signature.** On DeepJEB++ the instability was a
+total routing collapse (one to five active slices per block,
+@sec-nb-char-deepjeb-plateau-mechanism). The
+routing probe on two checkpoints per lane (job 1199576; artifacts in
+`results/campaigns_2026-10-09/aerozoo/probe/routing_*.json`) finds no
+block below 32 effective slices: ISLA `full` seed 43 goes from a
+minimum and median of 147 and 299 effective slices across its twelve
+blocks at epoch 31 to 36 and 194 at epoch 249, with the narrowing
+concentrated in three blocks; the `family_non_box` lane goes from 133
+and 271 to 87 and 202. Routing narrows partially after the event; it
+does not collapse, and the mechanism is unmeasured. A checkpoint-drift
+probe (`probe/ckpt_drift.py`, job 1199719) that ranks every weight
+tensor by its relative change across the transition, with a
+GeoTransolver lane as control, is running.
+
+**The spike cases are a dataset finding, not the trigger.** The
+per-step training loss has isolated spikes whose values are identical
+across ISLA, ISLA-DTT and GeoTransolver for the same seed (the sampler's
+order is seed-determined): about 5.2 on `full`, 4.3, 24 and 1,712.6 on
+`family_non_box`, 2,086 on `bank_blobs`. The loss is a Huber loss on
+standardized targets, so a step loss of 1,712 means the case's targets
+sit about 1,700 standard deviations from the training mean on average:
+a handful of training cases carry pathological fields. GeoTransolver
+survives every one of them; ISLA survives the 1,712 case at epoch 24 in
+the `family_non_box` seed-43 lane and transitions at epoch 44-45 on
+`full` with no step loss above 1.5 in the preceding ten epochs. The
+spikes therefore do not explain the event; their identification (which
+cases, which bank and quality label) is running and goes into the
+chapter's data section.
+
+**The best-checkpoint diagnostic (labeled, never the standing).** The
+checkpoint at each lane's validation minimum (epoch 31 for `full` seed
+43, 41 and 61 for the `family_non_box` pair), scored exactly like the
+protocol on the validation side (`eval_bestval.sbatch`, job 1199537),
+reads velocity 0.223, pressure 0.534, eddy viscosity 0.523, turbulence
+kinetic energy 0.611 and specific dissipation 0.717 on `full`, and
+0.203 / 0.195 / 0.515 / 0.649 / 0.744 and 0.201 / 0.184 / 0.533 /
+0.674 / 0.728 on `family_non_box`: half the final checkpoint's velocity
+error on every lane and a third of its pressure error on the held-out-box
+split. **Against GeoTransolver's end-of-training validation, ISLA at its
+best checkpoint leads velocity by 1.5x on `full` and 1.65x on
+`family_non_box`, trails pressure by 0.88x on `full` (the box enclosures,
+which are the hard pressure cases) and leads it by 2.2-2.4x on
+`family_non_box`.** The turbulence fields stay at 0.5-0.75 for ISLA even
+at its best; GeoTransolver's are not yet scored in float32.
+
+**What is asked of Peter.** The pre-registered standing is the final
+checkpoint, and the chapter reports it as such. Two remedies are on the
+table and both need his word: ISLA and ISLA-DTT lanes at half the
+reference rate (1.875e-4, the DeepJEB++ exception made for this dataset
+too; two seeds, `full` and `family_non_box` first), and a labeled
+second table scored at the validation-loss minimum of every arm,
+GeoTransolver included. The recommendation is both, with one caution
+written down before the result: on DeepJEB++ the half rate moved the
+collapse from epoch 4 to epochs 20-24 and did not remove it
+(@sec-nb-char-deepjeb-halfrate-verdict), so a half-rate lane here that
+transitions at epoch 90 instead of 45 confirms a rate-bound event
+without curing it, and the drift probe's answer (which tensors move)
+decides whether the cure is in the rate at all. No training arm
+launches before his answer; the drift probe and the spike-case
+identification proceed.

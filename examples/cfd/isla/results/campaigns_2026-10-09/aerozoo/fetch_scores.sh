@@ -6,6 +6,9 @@
 #                                     train_summary: the validation trajectory every ten epochs)
 #   scores/<run>/train_tail.log       the last 700 step lines of train.log (step time and memory of the final epoch) and
 #                                     the completion line
+#   scores/<run>/bestval/metrics.jsonl the labeled DIAGNOSTIC record of a chosen (best-validation) checkpoint on the
+#                                     validation side (p200k_fp32_bestval/<run>/<run>/metrics.jsonl, eval_bestval.sbatch),
+#                                     with the checkpoint file it scored in bestval/CHECKPOINT_USED
 # usage: bash fetch_scores.sh        (from anywhere; idempotent, overwrites)
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -18,6 +21,7 @@ ssh -o ConnectTimeout=30 aga2 "cd ${T}; for r in ${RUNS}; do
   d=/tmp/az_fetch_\$USER/\$r; mkdir -p \$d/val \$d/test
   [ -f p200k_fp32/\$r/\$r/metrics.jsonl ] && cp p200k_fp32/\$r/\$r/metrics.jsonl \$d/val/ || true
   [ -f p200k_fp32_test/\$r/\$r/metrics.jsonl ] && cp p200k_fp32_test/\$r/\$r/metrics.jsonl \$d/test/ || true
+  if [ -f p200k_fp32_bestval/\$r/.done ]; then mkdir -p \$d/bestval; cp p200k_fp32_bestval/\$r/\$r/metrics.jsonl p200k_fp32_bestval/\$r/CHECKPOINT_USED \$d/bestval/; fi
   [ -f runs/\$r/metrics.jsonl ] && grep -v '\"phase\": \"train_step\"' runs/\$r/metrics.jsonl > \$d/train_metrics.jsonl || true
   if [ -f runs/\$r/train.log ]; then { grep -E 'Epoch [0-9]+ \[[0-9]+/' runs/\$r/train.log | tail -700; grep -E 'Training completed|=== link start' runs/\$r/train.log | tail -3; } > \$d/train_tail.log; fi
 done; tar -C /tmp/az_fetch_\$USER -czf - . ; rm -rf /tmp/az_fetch_\$USER" | tar -C "${HERE}/scores" -xzf -
