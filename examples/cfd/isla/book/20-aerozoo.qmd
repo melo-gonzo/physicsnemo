@@ -23,7 +23,7 @@ ARMS = [a for a in ("ISLA", "ISLA-DTT", "GeoTransolver") if a in R["arms"]]
 BASELINES = [a for a in ARMS if a != "ISLA"]
 KEY = {"ISLA": "isla_ref", "ISLA-DTT": "isla_dtt", "GeoTransolver": "gt"}
 CONFIG = {"ISLA": "ISLA width 512 with 512 slices, 12 layers, cosine routing, learning rate 3.75e-4",
-          "ISLA-DTT": "ISLA-DTT, the same configuration with the tree-accelerated query-independent read",
+          "ISLA-DTT": "ISLA-DTT, the same configuration with the read-only tree read (a Barnes-Hut forest at theta 1, built in a frame the boundary carries) in place of the interacting prediction points",
           "GeoTransolver": "GeoTransolver width 256 with 256 slices, 12 layers, learning rate 1e-3"}
 have = lambda arm, split, side: side in R["arms"].get(arm, {}).get(split, {})
 blk = lambda arm, split, side: R["arms"][arm][split][side]
