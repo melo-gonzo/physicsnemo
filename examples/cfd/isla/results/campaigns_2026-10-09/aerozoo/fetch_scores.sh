@@ -10,7 +10,7 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 T=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0
-RUNS=$(awk -F'\t' 'NR>1{print $3}' "${HERE}/lanes.tsv")
+RUNS=$(awk -F'\t' 'NR>1{print $3}' "${HERE}/lanes.tsv" | tr '\n' ' ')
 for r in ${RUNS}; do
   mkdir -p "${HERE}/scores/${r}/val" "${HERE}/scores/${r}/test"
 done
