@@ -1,18 +1,24 @@
 # ISLA-DTT report
 
-## Status (2026-10-08 17:00 PDT): E1 to E5 closed
+## Status (2026-10-11 02:30 PDT): E1 to E6 closed, final form fixed
 
-The program's result in three sentences. A read-only ISLA whose global boundary read runs through a tree
-(exact at theta 0, exactly query independent at every theta, frame-free in practice) trains and scores at car scale
-within 3.8x of the read-only step; on AirfRANS it beats the interacting reference by 26% on pressure and 17% on
-velocity and reproduces the dense exact read within seed noise, and on DrivAerML Volume it trails the interacting
-reference by 11% / 11% / 47% (pressure / velocity / eddy viscosity) while recovering part of the read-only
-model's 14% / 31% / 68% gap. The car's residual is structural: it is what a boundary-only read can supply to a
-point in a three-dimensional wake, the regime where the interacting model's query tokens inform one another, and
-not the tree's aggregation, which the AirfRANS ladder shows costs nothing resolvable at theta 1. Under the
-preregistration the E3 bars fail, so ISLA-DTT is not proposed as the canonical volume form; it is the volume form
-to choose when query-population independence is required, at a known accuracy price on the car and none on the
-airfoil.
+The program's result. A read-only ISLA whose global boundary read runs through a forest of GLOBE's cluster
+trees (`ClusterTree`, one tree per normal octant, built in the boundary's own frame; the single-tree point walk
+is upstream in PR #2079) is exact at theta 0, exactly query independent at every theta (E4: ratios 1.0000 under
+query-population swaps where the interacting model moves 3.5x to 24x), exactly pose invariant up to ties of
+that frame (posed equals native to the fourth digit on both datasets), and three times less sensitive than the
+interacting model to the boundary sampling law. At theta 1 it costs 1.72 s per step and 194 GB per rank on a
+GB300 at 200,000 cells and points, 3.7x the read-only floor. On AirfRANS it beats the interacting reference by
+26% / 17% / 0% (pressure / velocity / eddy viscosity) and matches the dense exact read; on DrivAerML Volume it
+trails the interacting reference by 12% / 11% / 12% while recovering most of the read-only model's 14% / 31% /
+68% deficit. E6 located what remains: velocity's gap closes with how much of the boundary a point reads (the
+full read closes two thirds of it), pressure's does not move for any read of any size, and reading at matched
+depth is worth 40 to 70%; the rest is what interacting query tokens supply to one another. Under the E3
+preregistration the accuracy bars on the car fail, so ISLA-DTT is not the canonical volume form on accuracy; it
+is the volume form to choose when query independence, arbitrary probe sets, pose invariance or robustness to
+the boundary sampling law matter, and it is the arm now benchmarked on AeroZoo (ISLA Main's chapter), where
+Peter expects those properties to decide. Final snapshot `code_dtt16` (branch commit 6094c4e9d and later);
+the E6 scaffolds are deleted.
 
 Sections below are the dated record, oldest first.
 
@@ -492,6 +498,27 @@ and larger on viscosity; the pose-free pair on `code_dtt16`, due 2026-10-11, is 
 column. Verdict on the third amendment's prediction: parity on native and area on both datasets, with the
 forest ahead on viscosity on the car.
 
+### Pose-free parity on the car (2026-10-11 09:10 UTC, job 152583): parity on every protocol, posed equals native
+
+The relaunched car pair on `code_dtt16` (`dtt_vol_tg1pf_seed42/43`, the forest in the boundary's own frame, theta
+1) under the E3 protocol (48 cars), p / v / nut:
+
+| arm | seed 42 native | seed 43 native | seed mean | area (seed mean) | posed (seed 42, 43) |
+|---|---|---|---|---|---|
+| retired tree, theta 1 (E3) | 0.0442 / 0.0720 / 0.1247 | 0.0434 / 0.0694 / 0.1324 | 0.0438 / 0.0707 / 0.129 | 0.105 / 0.217 / 0.157 | = native |
+| forest, lab frame (`code_dtt13`) | 0.0443 / 0.0721 / 0.1027 | 0.0443 / 0.0729 / 0.1036 | 0.0443 / 0.0725 / 0.1032 | 0.103 / 0.213 / 0.122 | 1.09x / 1.15x / 2.0 to 2.6x |
+| forest, own frame (`code_dtt16`) | 0.0446 / 0.0728 / 0.0997 | 0.0439 / 0.0685 / 0.0967 | 0.0443 / 0.0707 / 0.0982 | 0.101 / 0.218 / 0.130 | 0.0446 / 0.0728 / 0.0997, 0.0439 / 0.0685 / 0.0968 |
+
+Native: pressure within 1% of the retired tree, velocity equal to it (0.0707 against 0.0707), eddy viscosity 24%
+better. Area: the same on pressure and velocity, viscosity better. Posed: equal to native to the fourth digit on
+every field for both seeds, where the lab-frame forest lost 1.09x / 1.15x / 2 to 2.6x. The fourth amendment's
+predictions hold on both datasets, and the pose-free forest at theta 1 is the program's final form. Against the
+references on the car: forest / I = 1.12 / 1.11 / 1.12 (the retired tree's 1.11 / 1.11 / 1.47) and forest / P =
+0.99 / 0.85 / 0.67; on the airfoil the forest beats I by 26% / 17% / 0% and matches the dense exact read. Cost on a
+GB300 at 200,000 cells and points: 1.72 s per step and 194 GB per rank, 3.7x the read-only floor. Exactly query
+independent at every theta (E4), exactly pose invariant up to ties of the boundary's frame, 3x less sensitive
+than I to the boundary sampling law (area protocol 2.3x / 3.1x / 1.3x against I's 7.9x / 6.9x / 7.7x).
+
 ### E6 interim on AirfRANS (2026-10-10 06:30 UTC, job 141408): slices do nothing, depth-matched reading is load-bearing
 
 The six airfoil slice and control arms scored under the E5 protocol (200 airfoils, 100,000 cells, float32; native,
@@ -620,12 +647,12 @@ law. Both E6 options (`kernel_read_cells`, `read_final_boundary`) are scaffolds 
 deleted from the branch (the lanes that used them, rows 26 to 47, stand on snapshots `code_dtt14` and
 `code_dtt15`, which keep them).
 
-### In flight
+### Lanes of the last two days (all finished and scored by 2026-10-11 02:30 PDT; nothing of this program is training)
 
 - Parity relaunch on `code_dtt16` (the forest in the boundary's own frame), theta 1, two seeds each:
   `dtt_vol_tg1pf_seed42/43` and `af_tg1pf_seed42/43` (lanes 48 to 51, jobs 140854 to 140857, submitted 21:30 PDT
-  2026-10-09); verify16 (job 140853) runs the tree-read and latent-arm tests and the ISLA suite on a GB300.
-  Scoring rows 120 to 131.
+  2026-10-09); verify16 (job 140853) ran the tree-read and latent-arm tests and the ISLA suite on a GB300.
+  Scoring rows 120 to 131; verdicts in the two "Pose-free parity" sections above.
 - E6 lanes 26 to 45 on `code_dtt14` (jobs 136085 to 136104, submitted 11:18 PDT 2026-10-09): car
   `dtt_vol_{k256,k1024,ps1024,is1024,final}_seed42/43` and AirfRANS `af_{k256,k1024,ps512,is512,final}_seed42/43`.
   verify14 (job 136084, GB300): the latent-arm and tree tests 38 passed, the ISLA suite 305 passed with the one
