@@ -400,9 +400,13 @@ class ISLA(Module):
             (:mod:`~physicsnemo.experimental.models.isla.tree_read`) with this
             opening angle: each point walks the tree, reads nearby cells one
             by one and a well-separated cluster through its measure-weighted
-            aggregate (a virtual cell). A numerical tolerance, not a model
-            constant: ``0`` is the dense read pair for pair, and the error
-            vanishes as it falls. Query independence is exact at every value
+            aggregate (a virtual cell). ``0`` is the dense read pair for pair.
+            A model is trained and evaluated at one value: at a finite value
+            the clusters' aggregates are what the kernel learns to read, and a
+            model trained dense does not evaluate well through the tree (nor
+            the reverse); the error of evaluating a model at a value other
+            than its training value falls as that value falls toward ``0``.
+            Query independence is exact at every value
             (a point's walk sees the tree and the point alone); at a finite
             value the trees are built in the boundary's own frame, so a rigid
             motion of the case gives the same clusters and the same

@@ -5,11 +5,11 @@
 The program's result. A read-only ISLA whose global boundary read runs through a forest of GLOBE's cluster
 trees (`ClusterTree`, one tree per normal octant, built in the boundary's own frame; the single-tree point walk
 is upstream in PR #2079) is exact at theta 0, exactly query independent at every theta (E4: ratios 1.0000 under
-query-population swaps where the interacting model moves 3.5x to 24x), exactly pose invariant up to ties of
+query-population swaps where the interacting model moves 3.5x to 24x depending on the field and the shift), exactly pose invariant up to ties of
 that frame (posed equals native to the fourth digit on both datasets), and three times less sensitive than the
 interacting model to the boundary sampling law. At theta 1 it costs 1.72 s per step and 194 GB per rank on a
 GB300 at 200,000 cells and points, 3.7x the read-only floor. On AirfRANS it beats the interacting reference by
-26% / 17% / 0% (pressure / velocity / eddy viscosity) and matches the dense exact read; on DrivAerML Volume it
+26% / 17% on pressure / velocity, trails it by 3% on eddy viscosity, and matches the dense exact read; on DrivAerML Volume it
 trails the interacting reference by 12% / 11% / 12% while recovering most of the read-only model's 14% / 31% /
 68% deficit. E6 located what remains: velocity's gap closes with how much of the boundary a point reads (the
 full read closes two thirds of it), pressure's does not move for any read of any size, and reading at matched
@@ -210,7 +210,7 @@ The read-only penalty on the car is 14% / 31% / 68% (pressure / velocity / eddy 
 AirfRANS (4% to 42%): the interacting queries carry more of the volume prediction here, which is what the tree
 read has to recover. A side finding worth its own line: under the area protocol (a uniform-on-the-surface boundary
 draw at inference) the read-only model's error rises 1.9x / 2.5x / 1.1x where the interacting reference's rises
-7.9x / 6.9x / 7.7x, so most of the interacting model's boundary-law sensitivity on the Volume task sits in the
+7.9x / 6.6x / 6.7x, so most of the interacting model's boundary-law sensitivity on the Volume task sits in the
 query tokens' participation in the slices, not in the built-in query geometry both models share. Posed equals
 native to four digits for P, as the symmetry contracts require. Note on the
 preregistration's "scored at theta 0 as a diagnostic": at DrivAerML scale theta 0 is the dense read of 4e10 pairs
@@ -248,7 +248,7 @@ epochs); under the float32 protocol P improves more than TG does.
 
 Posed equals native to four digits at theta 1: the tree built from each cluster's own principal axes and spheres is
 frame-free in practice, not only up to ties on paper. Under the area protocol TG rises 2.4x / 3.1x / 1.2x against
-P's 1.9x / 2.5x / 1.1x and I's 7.9x / 6.9x / 7.7x: the read sees the boundary draw through the opened leaves and
+P's 1.9x / 2.5x / 1.1x and I's 7.9x / 6.6x / 6.7x: the read sees the boundary draw through the opened leaves and
 the cluster means, a sensitivity above P's but far below the interacting model's.
 
 ### E4 verdict: exact query independence, confirmed on the trained tree-read model (job 125332)
@@ -256,7 +256,7 @@ the cluster means, a sensitivity above P's but far below the interacting model's
 On both TG checkpoints every ratio to the control is 1.0000 on pressure and velocity and 1.0000 / 0.9999 on eddy
 viscosity under the half, box and wall populations, and the largest change of any prediction over 48 cars is 1e-4
 relative L2 (float32 roundoff). The property this program exists for holds exactly, where the interacting
-reference moves 15x to 24x.
+reference moves 12x to 24x (24x / 15x / 12x on pressure / velocity / eddy viscosity).
 
 ### Decision under the preregistration
 
@@ -514,10 +514,10 @@ better. Area: the same on pressure and velocity, viscosity better. Posed: equal 
 every field for both seeds, where the lab-frame forest lost 1.09x / 1.15x / 2 to 2.6x. The fourth amendment's
 predictions hold on both datasets, and the pose-free forest at theta 1 is the program's final form. Against the
 references on the car: forest / I = 1.12 / 1.11 / 1.12 (the retired tree's 1.11 / 1.11 / 1.47) and forest / P =
-0.99 / 0.85 / 0.67; on the airfoil the forest beats I by 26% / 17% / 0% and matches the dense exact read. Cost on a
+0.99 / 0.85 / 0.67; on the airfoil the forest beats I by 26% / 17% on pressure / velocity, trails by 3% on eddy viscosity, and matches the dense exact read. Cost on a
 GB300 at 200,000 cells and points: 1.72 s per step and 194 GB per rank, 3.7x the read-only floor. Exactly query
 independent at every theta (E4), exactly pose invariant up to ties of the boundary's frame, 3x less sensitive
-than I to the boundary sampling law (area protocol 2.3x / 3.1x / 1.3x against I's 7.9x / 6.9x / 7.7x).
+than I to the boundary sampling law (area protocol 2.3x / 3.1x / 1.3x against I's 7.9x / 6.6x / 6.7x).
 
 ### E6 interim on AirfRANS (2026-10-10 06:30 UTC, job 141408): slices do nothing, depth-matched reading is load-bearing
 
