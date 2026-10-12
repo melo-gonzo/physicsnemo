@@ -36098,3 +36098,72 @@ ISLA's does not, and that the architecture's accuracy before the event
 is the better of the two.** Phase 2 (the `reynolds` and `bank_blobs`
 splits, both architectures, and the eight ISLA-DTT lanes) and the
 query-population protocol follow as their lanes finish.
+
+## 2026-10-12 — AEROZOO remedy pre-registered and launched: half-rate ISLA and ISLA-DTT lanes on the `full` and held-out-box splits, and a labeled best-checkpoint table for every arm {#sec-nb-aerozoo-remedy-prereg}
+
+**Peter's ruling.** On the instability record of
+@sec-nb-aerozoo-instability and the Phase 1 verdict of
+@sec-nb-aerozoo-phase1-verdict, Peter confirmed two remedies: ISLA and
+ISLA-DTT lanes at half the reference rate, 1.875e-4, the same
+per-dataset exception the program made for DeepJEB++
+(@sec-nb-char-deepjeb-rate-ruling), and a best-checkpoint table for
+every arm beside the pre-registered final-checkpoint standing. The
+specific-dissipation transform discussed in
+@sec-nb-aerozoo-instability is not part of the relaunch: it would
+change the training signal of the relaunched lanes while GeoTransolver's
+keep the old one, so the rate stays the only variable that moves. It
+remains a protocol change for every arm if wanted later.
+
+**The half-rate lanes.** Eight lanes, rows 24-31 of the campaign's lane
+table: `az_full_islahr_seed42/43`, `az_nonbox_islahr_seed42/43` on the
+reference ISLA (snapshot code_v26) and `az_full_dtthr_seed42/43`,
+`az_nonbox_dtthr_seed42/43` on the pose-free forest read (snapshot
+code_dtt16, the overrides of the reference-rate DTT lanes), every other
+setting identical to rows 0-5 and 16-19: 250 epochs, 200,000 points, the
+StepLR tenfold step at epoch 100, no augmentation. They run in AGA's
+normal queue (jobs 1219056-1219063) because the short queue is at its
+cap, so their first links wait hours and their trained state is two to
+four days off.
+
+**Predictions, written before any of them has taken a step.** The
+reference-rate event is a loss of the validation minimum at 23,000 to
+30,000 optimizer steps (epochs 43-50) with the training loss rising
+alongside, no routing collapse and a stall of the weights. (R1) If the
+event is rate-bound in the way DeepJEB++'s was, the half-rate lanes lose
+their minimum later, at roughly twice the step count (the validation
+loss doubles its running minimum at an epoch above 60), and their final
+checkpoints still trail their best. (R2) If the half rate cures it, no
+half-rate lane doubles its running minimum through epoch 250 and the
+final `full` checkpoints read velocity at or below 0.25 on the
+validation side, the band the reference-rate lanes reached at their
+best; under this outcome the pre-registered P1 re-read on the half-rate
+arms would be GeoTransolver ÷ ISLA at or above 1.4 on velocity. (R3) If
+the event recurs at the same epoch (doubling at or below epoch 60), the
+cause is not the step count at this rate and the rate exception does
+not help this dataset. The detector is the one of
+@sec-nb-aerozoo-instability (first validation epoch whose loss exceeds
+twice the running minimum, validation every ten epochs). ISLA-DTT's
+reference-rate pair transitioned later (epochs 54 and 65), so its
+half-rate pair is read against its own pair, not ISLA's.
+
+**The best-checkpoint table.** Protocol, fixed before the scores exist:
+for every Phase 1 and held-out-box lane of both architectures, the
+checkpoint is the kept one after the trainer's validation-loss minimum
+(validation every ten epochs in bfloat16; checkpoints at odd epochs, so
+epoch E's minimum selects checkpoint E+1), scored exactly like the
+final-checkpoint protocol on the test side, float32, the training draw;
+the validation side is scored as well for the lanes that lack it. The
+chosen epochs are 31 and 31 for ISLA `full`, 41 and 61 for ISLA
+`family_non_box`, 81 and 121 for GeoTransolver `full`, 151 and 61 for
+GeoTransolver `family_non_box` (seeds 42 and 43). GeoTransolver's
+minima sit at epochs 60-150 and its validation loss drifts up by 5-10
+percent afterwards, so its best checkpoints will read a few percent
+better than its finals; ISLA's read about half the velocity error of
+its finals on the validation side (@sec-nb-aerozoo-nonbox-scored). The
+table is labeled as what it is: a selection by validation, not the
+pre-registered standing, and it answers one question only, what each
+architecture had learned on this dataset under the reference protocol
+before its training protocol failed it, if it failed. Jobs
+1219118-1219121 (`eval_bestval.sbatch`, `BESTVAL_SIDE=val|test`,
+`runs_bestval/<run>/checkpoints` symlinks); records land in
+`scores/<run>/bestval/` and `scores/<run>/bestval_test/`.
