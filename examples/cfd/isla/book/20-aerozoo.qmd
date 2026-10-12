@@ -755,11 +755,11 @@ if isla_hits:
           "mean-field plateau of the DeepJEB++ lanes (@sec-deepjeb): the routing narrows but keeps more than thirty effective slices in every block, "
           "no weight tensor moves out of line with the others, the weights' motion slows to a third of its earlier rate, the tenfold rate step at "
           "epoch 100 does not bring the loss back, and the degradation is uniform over the validation cases, every bank and enclosure alike "
-          "(results/campaigns_2026-10-09/aerozoo/probe/routing_*.json and drift_*.json). The same event ends every ISLA lane of the campaign, on "
-          "every split, between epochs 43 and 50 for the dense read and 54 and 65 for the tree read. ")
+          "(`results/campaigns_2026-10-09/aerozoo/probe/routing_*.json` and `drift_*.json`). The same event ends every ISLA lane of the "
+          "campaign, on every split, between epochs 43 and 50 for the dense read and 54 and 65 for the tree read. ")
     if BV and FV:
-        ep = ", ".join(f"{e}" for e in BV["epochs"].values())
-        print(f"Scored exactly like the protocol on the validation side, ISLA's best-validation checkpoints (epochs {ep}) read "
+        ep = ", ".join(f"epoch {e} for seed {s}" for s, e in BV["epochs"].items())
+        print(f"Scored exactly like the protocol on the validation side, ISLA's best-validation checkpoint ({ep}) reads "
               + " / ".join(f"{BV['fields'][f]['mean']:.3f}" for f in FKEYS) + f" on {flab}, against the final checkpoints' "
               + " / ".join(f"{FV['fields'][f]['mean']:.3f}" for f in FKEYS) + "; the standing of @tbl-aerozoo-full is the final checkpoint by the "
               "protocol, and the best-checkpoint numbers are a labeled diagnostic of what the architecture had learned before the event. ")
