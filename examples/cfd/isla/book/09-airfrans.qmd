@@ -422,6 +422,45 @@ axes[1].legend(fontsize=8, loc="upper right")
 plt.tight_layout(); plt.show()
 ```
 
+### The read-only interior model {#sec-airfrans-read-only}
+
+**On the AirfRANS interior task the read-only ISLA gives up nothing for
+its query independence: ISLA-DTT is 26% more accurate than ISLA on
+pressure and 17% on velocity, level on eddy viscosity, and as accurate as
+the exact read of every boundary cell.** ISLA-DTT is ISLA with passive
+prediction points, which read the boundary's slices at every layer and
+never write into them, so that a prediction depends on its own point and
+the boundary alone (@sec-arch-passive-decoder), and with a global read of
+every boundary cell evaluated through a cluster forest at $\theta = 1$
+(@sec-arch-tree-read). The four rows below share one configuration and
+protocol and differ only in the prediction points' role and the boundary
+read. The dense read evaluates the same global read pair by pair, $10^8$
+pairs per layer.
+
+| configuration | p (seeds) | v (seeds) | nut (seeds) | ÷ ISLA: p / v / nut |
+|---|---|---|---|---|
+| ISLA (interacting prediction points) | 0.0350 (0.0332, 0.0368) | 0.0170 (0.0169, 0.0170) | 0.0314 (0.0326, 0.0301) | 1 |
+| ISLA, passive points, no boundary read | 0.0328 (0.0299, 0.0357) | 0.0180 (0.0178, 0.0181) | 0.0346 (0.0325, 0.0366) | 0.94 / 1.06 / 1.10 |
+| ISLA, passive points, dense global read | 0.0260 (0.0274, 0.0245) | 0.0135 (0.0137, 0.0133) | 0.0288 (0.0325, 0.0250) | 0.74 / 0.79 / 0.92 |
+| ISLA-DTT (forest read at $\theta = 1$) | 0.0259 (0.0255, 0.0263) | 0.0141 (0.0135, 0.0146) | 0.0325 (0.0314, 0.0335) | 0.74 / 0.83 / 1.03 |
+
+: The AirfRANS interior task, read-only controls: relative L2 of interior pressure / velocity / eddy viscosity (p / v / nut) on the 200 test airfoils of the full split, float32, seed mean with seeds 42 and 43 in brackets. Every row is ISLA at 384 wide, 12 layers, 256 slices, 5e-4 (the earlier ISLA reference), trained on the 800 training airfoils for 500 epochs with 100,000 interior points and the whole airfoil polyline (958 to 1,018 segments) as the boundary. Rotated and translated, every row's error is its native error (ISLA-DTT to the fourth digit on pressure and velocity and within 0.3% on eddy viscosity), and the uniform point cloud is the identity on this dataset (@sec-airfrans-measured). How to read this: ÷ ISLA above one means less accurate than ISLA; these rows are a within-configuration control, and the standing of the reference configurations is @tbl-airfrans-protocols. Data: research/dtt/REPORT.md, "E5 interim" (first three rows) and "Pose-free parity on AirfRANS" (ISLA-DTT). {#tbl-airfrans-read-only}
+
+The passive model without a boundary read is already level with ISLA
+here (0.94 / 1.06 / 1.10), where on the cars it trails by 14% to 68%
+(@tbl-interior-read-only): the airfoil's interior field is recoverable
+from the boundary's slices alone. The global read then removes a sixth to
+a quarter of the remaining error on every field, and the forest keeps
+that gain: ISLA-DTT ÷ the dense read is 1.00 on pressure and 1.04 on
+velocity, and its eddy viscosity lies inside the dense read's own seed
+range (0.0250 to 0.0325). The order of the cars' partial reads
+(@sec-interior-read-only-mechanism) holds here with the rungs compressed.
+An exact read of 256 of the airfoil's cells, taken at an even stride
+along a Morton curve, takes three fifths of the full read's velocity gain
+and all of its eddy-viscosity gain (velocity 0.0153 against 0.0180
+without a read and 0.0135 with every cell; eddy viscosity 0.0277), though
+at that stride the model trains on only four distinct subsamples.
+
 ### Outside the training range: the AirfRANS extrapolation splits {#sec-interior-extrapolation}
 
 **When the global condition leaves its training range, ISLA's interior

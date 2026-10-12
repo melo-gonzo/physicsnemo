@@ -68,6 +68,11 @@ class is short:
 - **the three cost knobs** `geo_kernel`, `geo_checkpoint` and
   `compile_blocks`, which change how the arithmetic is executed and never
   what is computed (@sec-using-cost);
+- **the read-only interior task** `query_independent` and its boundary
+  read (`kernel_read`, `kernel_read_radius`, `kernel_read_blocks`,
+  `kernel_read_theta`), which together select ISLA-DTT
+  (@sec-arch-passive-decoder), the one configuration of the class besides
+  the reference that the book scores;
 - **the spatial dimension** `dim`, 3 by default and 2 for a planar
   problem, which is not an option in the policy's sense but a statement
   about the data (@sec-arch-switches).
@@ -75,12 +80,19 @@ class is short:
 Every checkpoint stores its constructor arguments, so a saved model loads
 in the configuration that trained it (@sec-using-checkpoint).
 
-::: {.callout-note title="The prediction at a point depends on the request"}
-An interior prediction is a function of the whole set of prediction points,
-because those points are interacting tokens (@sec-arch-modes). Deploy an
-interior model at its training point count and state that count with every
-interior number (@sec-using-checkpoint, @sec-interior-companion). The class offers no decode whose answer at a point is independent of the
-request; what one would cost is in @sec-principled-decisions.
+::: {.callout-note title="The prediction at a point depends on the request, unless the points are passive"}
+An interior prediction of ISLA is a function of the whole set of
+prediction points, because those points are interacting tokens
+(@sec-arch-modes). Deploy an interior model at its training point count
+and state that count with every interior number (@sec-using-checkpoint,
+@sec-interior-companion). A model that must answer at arbitrary point
+sets, alone or in chunks, is built with `query_independent=True` and the
+global boundary read through the cluster forest (ISLA-DTT,
+@sec-arch-passive-decoder): its prediction at a point depends on that
+point and the boundary alone, at 1.12 / 1.11 / 1.12 times ISLA's error on
+pressure / velocity / eddy viscosity on the DrivAerML Volume task and
+0.74 / 0.83 / 1.03 on the AirfRANS interior task
+(@sec-interior-read-only, @sec-airfrans-read-only).
 :::
 
 ## What the model needs from your data {#sec-using-inputs}
@@ -373,9 +385,12 @@ point's direction and signed wall distance from the boundary sample; a
 checkpoint that declared a stored signed-distance field in its
 `query_schema` expects it in the prediction mesh's `point_data`, as its
 constructor arguments record. Deploy at the training point count (200,000
-at the reporting protocol on DrivAerML), because the interacting decode's
-prediction at a point depends on the joint request
-(@sec-interior-companion).
+at the reporting protocol on DrivAerML), because the interacting
+prediction points' answer at a point depends on the joint request
+(@sec-interior-companion). A model built with `query_independent=True`
+(ISLA-DTT) has no such rule: its prediction at a point depends on that
+point and the boundary alone, so it is queried at any count, alone or in
+chunks.
 
 ## Cost {#sec-using-cost}
 

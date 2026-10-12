@@ -202,6 +202,7 @@ flowchart TB
     MOM2["MOM2: second-moment channel benchmark<br/>DONE"]:::done
     MOM2T["MOM2T: second-moment channel trained<br/>DONE"]:::done
     RELINT["RELINT: interior configuration on the reference frame<br/>DONE"]:::done
+    DTT["DTT: the read-only interior model with the forest read (ISLA-DTT)<br/>DONE (an option; the interacting form stays the default)"]:::done
     V0 --> LVT
     V0 --> QT
     LVT --> QT
@@ -225,6 +226,8 @@ flowchart TB
     UDRVINT --> QCOUNT
     QCOUNT --> FARWAKE
     MOM2 --> MOM2T
+    PASSIVE2 --> DTT
+    QCOUNT --> DTT
 ```
 
 ### The measure, the frame and the contracts
@@ -554,6 +557,7 @@ their numbers as measurements of that protocol only.
 | MOM2 | DONE | Does a second-moment channel separate the first-moment collision family? | M3 | Separates at least 95% of pairs while the base is at chance. Ridge R² 0.996 to 1.000; base blind. | @sec-nb-mom2-prereg; @sec-nb-mom2-verdict |
 | MOM2T | DONE | Is the second-moment channel free where ISLA is trained? | MOM2 | Free if pressure at most 0.0594. Measured 0.0583 (+0.9%). | @sec-nb-mom2t-prereg; @sec-nb-mom2t-verdict |
 | RELINT | DONE | Does the interior configuration keep its standing on the frame-free reference frame? | FRAMEFULL, RFLADDER | Within 3% of the similarity-gauge interior reference on every field. 1.000x / 0.990x / 0.880x; first attempt void. | @sec-nb-relint-prereg; @sec-nb-relint-amend; @sec-nb-relint-void; @sec-nb-relint-verdict |
+| DTT | DONE 2026-10-11 (ISLA-DTT, the read-only interior model with the global boundary read through a Barnes-Hut forest of cluster trees in the boundary's own frame at theta 1: exactly query independent (every ratio 1.0000 under the query-population swaps where ISLA moves 3.5x to 24x), posed = native to the fourth digit on both interior datasets, 1.12 / 1.11 / 1.12 times ISLA's error on the DrivAerML Volume task and 0.74 / 0.83 / 1.03 on the AirfRANS interior task, 3.7x the read-only step on a GB300; the E3 accuracy bars fail on the car, so the interacting form stays the class default and ISLA-DTT is an option; library merged into psharpe/isla; AeroZoo's P4 and its query-population protocol decide the default) | Can a read-only ISLA, whose prediction at a point depends on that point and the boundary alone, match the interacting model when its passive points read the boundary cells through a tree at a cost within 6x of the read-only step? Peter's decision of 2026-10-06, after QUERY-POP. | PASSIVE2, QMASS, QUERY-POP (@sec-nb-query-pop), CHAR (the reference configurations) | Preregistered in research/dtt/PREREG.md: E1 exact at theta 0 (met); E2 within 1% of the dense read at theta <= 0.5 on the dense-trained checkpoints (failed by 2x to 20x, so the model is trained at its theta); E3 ISLA-DTT ÷ ISLA at most 1.03 / 1.03 / 1.05 on the car (failed: 1.12 / 1.11 / 1.12); E4 query-population ratios 1.000 (met); E5 the tree read within 1.02 of the dense read on AirfRANS (0.99 / 1.04 / 1.07, inside the dense read's seed spread); E6 the velocity gain follows how much of the boundary is read, pressure does not move for any read, doubled slices move neither class, reading the final boundary state costs 37 to 72% | @sec-nb-dtt-merged; @sec-arch-passive-decoder, @sec-interior-read-only, @sec-airfrans-read-only; research/dtt/{BRIEF,PREREG,REPORT}.md |
 | MEASMET | DONE (falsified) | Is the weights-off gain a measure-metric mismatch? | A35 | Supported at a ratio of at least 0.97 under the area-weighted metric; falsified at or below 0.91. Measured 0.896. | @sec-nb-measure-metric-verdict |
 | NOWL | DONE (ablation only) | Does the weights-off gain persist at 210 cases and on DrivAerML? | MEASMET | Persists at 5% better at both; fades within 3%. DrivAerML 2.8%; the rule that would have adopted it was retired by PRINCIPLE. | @sec-nb-noweights-prereg; @sec-nb-noweights-drivaer-verdict |
 | PRINCIPLE | DONE | Accuracy by physically principled means; discretization consistency as acceptance criterion. | — | The criterion in @sec-principle; weights-off reworded as ablation everywhere. | @sec-nb-principle-redirect; @sec-nb-principle-audit |

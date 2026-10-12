@@ -35955,3 +35955,52 @@ without curing it, and the drift probe's answer (which tensors move)
 decides whether the cure is in the rate at all. No training arm
 launches before his answer; the drift probe and the spike-case
 identification proceed.
+
+## 2026-10-11 — ISLA-DTT merged into psharpe/isla as an option: the read-only interior model and its forest read enter the book {#sec-nb-dtt-merged}
+
+**The setting.** ISLA's interior task admits the prediction points as
+interacting tokens, so a prediction at a point depends on the other
+points requested with it (QUERY-POP, @sec-nb-query-pop: the error on
+fixed scored points rises 15x to 24x when 200,000 far-field companions
+join the request). The ISLA-DTT program (branch `psharpe/isla-dtt`,
+2026-10-06 to 2026-10-11) built the alternative: passive prediction
+points that read every layer's slices at matched depth and never write
+into them (`query_independent=True`), a global read of every boundary
+cell after each slice layer (`kernel_read="mean"`,
+`kernel_read_radius=None`), and that read evaluated through a Barnes-Hut
+forest of `ClusterTree`s built in the boundary's own frame at opening
+angle theta = 1 (`kernel_read_theta=1`). Its brief, preregistration and
+dated record live in `examples/cfd/isla/research/dtt/{BRIEF,PREREG,REPORT}.md`.
+
+**What merged.** The library changes (`model.py`, `kernel_read.py`,
+`tree_read.py` and their tests; the E6 scaffolds `kernel_read_cells` and
+`read_final_boundary` deleted) are on `psharpe/isla` from commit
+986aec3dc. ISLA-DTT is an option of the class. The interacting form stays
+the class default and the configuration of every interior standing in
+the book until two measurements decide otherwise: AeroZoo's P4 (ISLA-DTT
+within 5 percent of ISLA, @sec-nb-aerozoo-prereg) and the
+query-population protocol on that dataset
+(@sec-nb-aerozoo-qpop-amendment).
+
+**What the chapters now carry.** The architecture chapter describes the
+read-only task, the global boundary read and the forest, with the
+matched-depth control and the slice-doubling table
+(@sec-arch-passive-decoder, @sec-arch-global-read, @sec-arch-tree-read,
+@tbl-arch-read-depth) and the new constructor arguments in its switches
+table. The DrivAerML chapter carries the read-only controls on the
+Volume task (ISLA-DTT at 1.12 / 1.11 / 1.12 times ISLA's error on
+pressure / velocity / eddy viscosity, passive points without a read at
+1.14 / 1.31 / 1.68), the ladder of how much boundary a point reads
+(@sec-interior-read-only, @tbl-interior-read-only,
+@tbl-interior-read-ladder) and the query-population table with the
+ISLA-DTT ratios of 1.0000 beside ISLA's 24x / 15x / 12x
+(@tbl-interior-query-population; the pose-free forest's own car
+checkpoints, LHR job 157560: every ratio 1.000000 on both seeds under the
+half, far-field and near-wall requests, largest departure 8e-6, largest
+prediction change on the shared points 4.7e-5). The AirfRANS chapter
+carries the airfoil controls, where ISLA-DTT is 0.74 / 0.83 / 1.03 of
+ISLA and matches the dense exact read (@sec-airfrans-read-only). The
+using, limits, ideas and literature chapters no longer say that the class
+has no query-independent decode. One number rests on a single
+instrument: the read's car-scale cost comes from one GB300 bench (job
+135330) and the AeroZoo training lanes.
