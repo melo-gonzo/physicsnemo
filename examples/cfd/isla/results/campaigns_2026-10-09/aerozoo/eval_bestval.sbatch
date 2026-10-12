@@ -25,7 +25,11 @@ TASK=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/ag
 VENV=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/physicsnemo-mesh-transformer/.venv-recipe-td14
 RECIPE="${TASK}/recipe_v9"
 LANES="${LANES_TSV:-${TASK}/kernel/aerozoo/lanes.tsv}"
-CKPT_ROOT="${CKPT_ROOT:-${TASK}/runs_bestval}"; OUT_ROOT="${OUT_ROOT:-${TASK}/p200k_fp32_bestval}"; mkdir -p "${OUT_ROOT}"
+### BESTVAL_SIDE=val (default) scores the validation side into p200k_fp32_bestval; BESTVAL_SIDE=test scores the test side into
+### p200k_fp32_bestval_test (the best-checkpoint table's protocol: the epoch is chosen by the trainer's validation loss, the score is
+### read on the test side, for every arm alike).
+SIDE="${BESTVAL_SIDE:-val}"
+CKPT_ROOT="${CKPT_ROOT:-${TASK}/runs_bestval}"; OUT_ROOT="${OUT_ROOT:-${TASK}/p200k_fp32_bestval$([ "${SIDE}" = test ] && echo _test)}"; mkdir -p "${OUT_ROOT}"
 export PATH="/usr/bin:/bin:/cm/local/apps/slurm/current/bin"
 export OMP_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True PYTHONUNBUFFERED=1 PHYSICSNEMO_DIST_TIMEOUT_S=900
 export TRITON_CACHE_DIR="${TASK}/.triton_cache" TORCHINDUCTOR_CACHE_DIR="${TASK}/.inductor_cache"
