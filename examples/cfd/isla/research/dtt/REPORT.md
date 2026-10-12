@@ -519,6 +519,12 @@ GB300 at 200,000 cells and points: 1.72 s per step and 194 GB per rank, 3.7x the
 independent at every theta (E4), exactly pose invariant up to ties of the boundary's frame, 3x less sensitive
 than I to the boundary sampling law (area protocol 2.3x / 3.1x / 1.3x against I's 7.9x / 6.6x / 6.7x).
 
+E4 on this form's own checkpoints (job 157560, the QUERY-POP probe on `dtt_vol_tg1pf_seed42/43`: 48 cars, a fixed
+100,000 scored points per case, conditions half / box / wall against the native population, float32): error
+ratios 1.000000 on every field for both seeds under every condition (largest departure 8e-6), largest
+prediction change on the shared points 4.7e-5. The retired tree's checkpoints had given 1.0000 and 1e-4; the
+exactness is the mechanism's, not a tree's.
+
 ### E6 interim on AirfRANS (2026-10-10 06:30 UTC, job 141408): slices do nothing, depth-matched reading is load-bearing
 
 The six airfoil slice and control arms scored under the E5 protocol (200 airfoils, 100,000 cells, float32; native,
