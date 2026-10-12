@@ -1091,12 +1091,15 @@ weights.
 ::: {.callout-warning collapse="true" title="What is not a contract"}
 - **Reflection covariance of vectors** (see idea 6).
 - **The magnitude of a global vector input**: discarded by design.
-- **Query independence in ISLA.** Every surface point is an interacting
-  token, and so is every interior query in the reported configuration, so
-  the prediction at a point depends on which other points are in the
-  request. The interacting interior configuration is deployed at its
-  training query count (@sec-interior-companion). A request-independent
-  decode was built, priced and removed (@sec-arch-passive-decoder).
+- **Query independence in the interacting configuration.** Every surface
+  point is an interacting token, and so is every interior query in the
+  reported configuration, so the prediction at a point depends on which
+  other points are in the request, and that configuration is deployed at
+  its training query count (@sec-interior-companion). The read-only
+  interior model, ISLA-DTT, has query independence as a contract by
+  construction: its prediction points read the slices and never write
+  into them (@sec-arch-passive-decoder,
+  `test_query_independent_interior_contracts`).
 - **Completeness of the representation.** The anchors are first moments,
   so two non-congruent arrangements with the same first moments are
   indistinguishable to every layer

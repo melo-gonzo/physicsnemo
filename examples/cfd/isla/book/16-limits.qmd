@@ -292,12 +292,21 @@ a learned fraction of the total boundary measure split over the request,
 removes the count scaling of the routing weight by construction, while the
 dependence through the shared slices remains (@sec-interior-companion). The
 interacting configuration is therefore deployed at its training request
-count, and every interior number in the book states that count. The class
-has no evaluate-anywhere decode: the request-independent decoder that was
-built was several times less accurate on every interior field and was
-removed (@sec-arch-passive-decoder). What would move this: a
-query-independent decode within seed noise of the interacting one on either
-interior dataset.
+count, and every interior number in the book states that count. The
+read-only interior model, ISLA-DTT, removes the dependence by
+construction: its prediction points read the slices and the boundary
+cells and never write into the slices, so its prediction at a point is a
+function of that point and the boundary alone, and it moves by float32
+roundoff under every change of the request (@sec-arch-passive-decoder,
+@sec-interior-companion). Its price is measured on both interior
+datasets: 1.12 / 1.11 / 1.12 times ISLA's error on pressure / velocity /
+eddy viscosity on the DrivAerML Volume task, and 0.74 / 0.83 / 1.03 on
+the AirfRANS interior task (@sec-interior-read-only,
+@sec-airfrans-read-only). What remains open is the cars: no read of the
+boundary of any size recovers the 12% on pressure, which is what
+interacting prediction points supply to one another
+(@sec-interior-read-only-mechanism), so the interior standings of the
+book stay with the interacting configuration and its request-count rule.
 
 ### Cross-family transfer {#sec-limits-transfer}
 

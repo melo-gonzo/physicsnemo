@@ -181,6 +181,23 @@ def main(out_path):
                     c = cost(run, cfg, ds)
                     if c:
                         out["cost"][arm].setdefault(split, {})[str(s)] = c
+    # best-validation checkpoints (a labeled diagnostic, never the standing): eval_bestval.sbatch scores one chosen checkpoint per
+    # lane on the validation side exactly like the protocol; fetch_scores.sh keeps the record under scores/<run>/bestval/ with the
+    # checkpoint file it scored in CHECKPOINT_USED. Same block shape as the arms, plus the chosen epoch per seed.
+    for arm in ARMS:
+        for split in SPLITS:
+            cases, epochs = {}, {}
+            for s in SEEDS:
+                run = run_id(split, arm, s)
+                c = per_case(f"{SCORES}/{run}/bestval/metrics.jsonl")
+                if not c:
+                    continue
+                cases[s] = c
+                ck = f"{SCORES}/{run}/bestval/CHECKPOINT_USED"
+                m = re.search(r"checkpoint\.0\.(\d+)\.pt", open(ck).read()) if os.path.exists(ck) else None
+                epochs[str(s)] = int(m.group(1)) if m else None
+            if cases:
+                out.setdefault("bestval", {}).setdefault(arm, {})[split] = {**block(cases, with_labels=False), "epochs": epochs}
     # ratios arm ÷ ISLA
     for split in SPLITS:
         for side in SIDES:

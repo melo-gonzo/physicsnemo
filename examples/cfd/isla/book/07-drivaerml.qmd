@@ -443,6 +443,7 @@ configurations as shipped, not as a matched-capacity comparison.
 | GeoTransolver | an interacting token, routed to slices with the other interior points of the request | its signed distance to the wall and the nearest wall normal; ball-query features over neighboring interior points at six radii; no surface tokens | yes |
 | Transolver | an interacting token, routed to slices with the other interior points of the request | its signed distance to the wall and the nearest wall normal; no local features; no surface tokens | yes |
 | ISLA with query tokens | an interacting token in the encoder alongside the surface tokens, with a learned type embedding and routing weight | the relational invariants of its position against the surface anchors, plus the wall normal and the signed distance as query inputs | yes |
+| ISLA-DTT (a control, @sec-interior-read-only) | a passive reader: it reads the boundary's slices at every layer without writing into them, and reads the boundary cells directly through the forest of @sec-arch-tree-read | as ISLA with query tokens, plus the relative geometry of every boundary cell or cluster it reads | no |
 
 #### ISLA with query tokens {#sec-interior-query-tokens}
 
@@ -669,9 +670,12 @@ print(f"**Cost.** Training on this task, one epoch at the reference configuratio
 Two ingredient orderings sit behind ISLA's row. Both were measured at the
 exploration budget of 10,000 cells and queries and are stated as orderings
 only. First, admitting the queries as interacting tokens, rather than
-decoding them read-only from the encoder's final states, closes most of
-ISLA's gap to GeoTransolver-volume on pressure, without the signed distance
-and without extra parameters. Second, the signed distance closes most of
+having passive points read the slices of the encoder's final state,
+closes most of ISLA's gap to GeoTransolver-volume on pressure, without
+the signed distance and without extra parameters. Reading the final
+state rather than at matched depth is itself the larger part of that
+difference (@tbl-arch-read-depth), and the read-only model of
+@sec-interior-read-only reads at matched depth. Second, the signed distance closes most of
 the rest, most on velocity, and that is what turns the velocity standing
 into a lead. A true wall normal at the query (the signed-distance gradient)
 is better information than a covariant blend of anchor normals, on pressure
@@ -776,28 +780,124 @@ print(f": ISLA's interior error against training cars on the DrivAerML Volume ta
       "ratio exists on the rungs. Data: results/ref_surface_2026-09-23.json. {#tbl-interior-rungs}")
 ```
 
+### The read-only interior model {#sec-interior-read-only}
+
+**On the DrivAerML Volume task ISLA-DTT, the query-independent ISLA, has
+1.12 / 1.11 / 1.12 times ISLA's error on pressure / velocity / eddy
+viscosity at the same configuration, and its error rises 1.3 to 3.1 times
+under the uniform point cloud where ISLA's rises 6.6 to 7.9 times.**
+ISLA-DTT is ISLA with passive prediction points, which read the
+boundary's slices at every layer and never write into them, so that a
+prediction depends on its own point and the boundary alone
+(@sec-arch-passive-decoder), and with a global read of every boundary
+cell evaluated through a cluster forest at $\theta = 1$
+(@sec-arch-tree-read). Everything else is held equal: the reference
+configuration (width 512, 12 layers, 512 slices, learning rate 3.75e-4),
+the recipe and inputs of @sec-interior-query-tokens, 435 training cars,
+200,000 boundary cells and 200,000 interior points per car in training
+and scoring, 500 epochs, two seeds, float32 on the 48 validation cars.
+ISLA-DTT carries the read's 1.2 million parameters on top of ISLA's 69
+million. The middle row keeps the passive points and removes the boundary
+read.
+
+| configuration | native mesh: p / v / nut | ÷ ISLA | uniform point cloud (÷ own native) | rotated and translated |
+|---|---|---|---|---|
+| ISLA (interacting prediction points) | 0.0394 / 0.0635 / 0.0876 | 1 | 0.311 / 0.417 / 0.583 (7.9x / 6.6x / 6.6x) | equal to native |
+| ISLA, passive points, no boundary read | 0.0449 / 0.0834 / 0.147 | 1.14 / 1.31 / 1.68 | 0.0860 / 0.204 / 0.161 (1.9x / 2.5x / 1.10) | equal to native |
+| ISLA-DTT | 0.0443 / 0.0707 / 0.0982 | 1.12 / 1.11 / 1.12 | 0.101 / 0.218 / 0.130 (2.3x / 3.1x / 1.32) | equal to native to the fourth digit |
+
+: The DrivAerML Volume task, read-only controls at the reference configuration: interior pressure / velocity / eddy viscosity (p / v / nut) relative L2, float32, 48 validation cars, seed means. Seeds 42 and 43: ISLA 0.0387 / 0.0619 / 0.0868 and 0.0400 / 0.0651 / 0.0884; passive points without a read 0.0454 / 0.0847 / 0.1745 and 0.0443 / 0.0822 / 0.1188; ISLA-DTT 0.0446 / 0.0728 / 0.0997 and 0.0439 / 0.0685 / 0.0967, every ISLA-DTT seed above every ISLA seed on every field. How to read this: ÷ ISLA above one means less accurate than ISLA; the uniform point cloud redraws the boundary sample area-proportionally at inference (@sec-interior-results) and its factor is each row's own. Data: results/char/drivaerml_volume.json (ISLA); research/dtt/REPORT.md, "E3 setup" (passive points) and "Pose-free parity on the car" (ISLA-DTT). {#tbl-interior-read-only}
+
+Without a boundary read the passive model trails ISLA by 14% on pressure,
+31% on velocity and 68% on eddy viscosity. The forest read takes back
+almost none of the pressure deficit and most of the other two: ISLA-DTT's
+error is 0.99 / 0.85 / 0.67 of that model's.
+
+```{python}
+#| label: para-interior-read-only-gt
+#| output: asis
+_gt = {f: VAR["GeoTransolver"]["native"][f]["mean"] for f, _ in FIELDS}
+_dtt = {"pressure_l2": 0.0443, "velocity_l2": 0.0707, "nut_l2": 0.0982}
+_gt_txt = " / ".join(f"{_gt[f]:.4f}" for f, _ in FIELDS)
+_ratio_txt = " / ".join(f"{_gt[f] / _dtt[f]:.2f}" for f, _ in FIELDS)
+print(f"On the same {n_cars} cars GeoTransolver width 256 reads {_gt_txt} (@tbl-drivaerml-volume-protocols), so GeoTransolver ÷ ISLA-DTT "
+      f"is {_ratio_txt}, at {VOL_COST['GeoTransolver']['n_parameters'] / 1e6:.0f} million parameters against 70 million and with the "
+      "inputs of @sec-interior-task. Data: results/char/drivaerml_volume.json; results/char/char_lanes_cost_2026-10-04.json.")
+```
+
+#### What the boundary read supplies {#sec-interior-read-only-mechanism}
+
+**Velocity improves with how much of the boundary a point reads, eddy
+viscosity mostly with the first few hundred cells, and pressure with no
+read at all.** The instrument reads the boundary exactly but only part of
+it: each point reads $K$ cells taken at an even stride along a Morton
+space-filling curve over the boundary, their measure fractions
+renormalized over the subsample and the stride's offset random in
+training. It is a diagnostic form of the read, not an option of the
+class. Everything else is the protocol of @tbl-interior-read-only.
+
+| boundary cells read per point | p | v | nut | v ÷ no read |
+|---|---|---|---|---|
+| none (passive points, no boundary read) | 0.0449 | 0.0834 | 0.147 | 1.00 |
+| 256, exact | 0.0454 | 0.0839 | 0.105 | 1.01 |
+| 1,024, exact | 0.0456 | 0.0790 | 0.101 | 0.95 |
+| all 200,000, forest at $\theta = 1$ (ISLA-DTT) | 0.0443 | 0.0707 | 0.0982 | 0.85 |
+| ISLA (interacting prediction points), for scale | 0.0394 | 0.0635 | 0.0876 | 0.76 |
+
+: How much of the boundary a passive point reads, on the DrivAerML Volume task: interior pressure / velocity / eddy viscosity (p / v / nut) relative L2, float32, 48 validation cars, reference configuration, two seeds (256 cells: 0.0458 / 0.0849 / 0.1042 and 0.0450 / 0.0829 / 0.1061; 1,024 cells: 0.0463 / 0.0807 / 0.1023 and 0.0449 / 0.0772 / 0.0997). How to read this: the first four rows change only how many cells each point reads; the last row is the interacting model, not a rung. Data: research/dtt/REPORT.md, "First rung on the car", "Last rung, the car at 1,024 cells" and "Pose-free parity on the car". {#tbl-interior-read-ladder}
+
+Velocity does not move at 256 cells, falls 5% at 1,024 and 15% with
+every cell. Pressure stays within 2% of the no-read model at every rung.
+Eddy viscosity falls from 0.147 to 0.105 with 256 cells and to 0.098 with
+every cell. More slices do not substitute for the read: doubling them
+moves neither the passive nor the interacting model (@tbl-arch-read-depth).
+The 12% that separates ISLA-DTT from ISLA on pressure is therefore what
+interacting prediction points supply to one another through the slices,
+which a query-independent model gives up by construction. The 11% on
+velocity is that or a finer read than the car affords: at $\theta = 0.5$ a
+point's list grows to about 6,900 sources, more than one GB300 holds at
+this size (@sec-arch-tree-read). On the airfoils, where the exact read of
+every cell is affordable, the read-only model does not trail ISLA at all
+(@sec-airfrans-read-only).
+
 ### Dependence on the query cloud {#sec-interior-companion}
 
-**The interacting configuration's answer at a point depends on how many
-other points are asked for with it, so a surrogate built from it is
-queried in batches of at least the training count** (@sec-using-checkpoint).
-Because the queries route through the same slices as the surface, a
-prediction at one point is a function of the whole request. Two instruments establish the
-rule at the exploration budget. A checkpoint trained at a fixed query count
-and scored at a fifth of it loses more on every field than either margin
-against GeoTransolver-volume, while twice the count gains a little. And
-fixed sentinel points predicted alone and with growing companion sets move
-with the request size, most for eddy viscosity and least for pressure
-(results/qcount_reduction_2026-09-11.json,
-results/isla_qt_companion_dependence_2026-09-08.json). Training over a
-range of counts reduces the dependence and does not remove it, so
-query-count consistency is an architectural question. The queries' routing
-mass, a learned fraction of the total boundary measure split over the
-request, removes the count-scaling of the query weight by construction
-(@sec-isla-contracts). The dependence through the shared slices remains. A
-read-only decoder whose predictions are exactly query-independent is
-several times less accurate on every interior field, which is why the class
-offers none (@sec-arch-passive-decoder, @sec-principled-decisions).
+**ISLA's answer at a point depends on the population of points requested
+with it. The read-only ISLA's does not, to float32 roundoff.** The
+instrument holds the scored points fixed and changes the request around
+them. On each of the 48 validation cars of the DrivAerML Volume task, the
+first 100,000 of the 200,000 native interior points are scored in float32
+under four requests: the native 200,000 (the control); the 100,000 alone;
+the native 200,000 plus 200,000 companions drawn uniformly in the
+interior's bounding box, a far-field-heavy population; and the native
+200,000 plus 200,000 companions resampled from the native points with
+probability proportional to the inverse wall distance, a wall-heavy one.
+The boundary sample is the same in every request, so every scored point
+keeps its own built-in geometry, and only the other prediction points
+change.
+
+| request around the same 100,000 scored points | ISLA: error ÷ control, p / v / nut | ISLA-DTT: error ÷ control, p / v / nut |
+|---|---|---|
+| the 100,000 alone | 1.02 / 1.02 / 1.02 | 1.0000 / 1.0000 / 1.0000 |
+| native + 200,000 far-field companions | 24x / 15x / 12x | 1.0000 / 1.0000 / 1.0000 |
+| native + 200,000 wall-heavy companions | 4.3x / 4.3x / 3.5x | 1.0000 / 1.0000 / 1.0000 |
+
+: Query-population dependence on the DrivAerML Volume task: the error on fixed scored points under each request divided by the same points' error in the native request, pressure / velocity / eddy viscosity (p / v / nut), 48 validation cars, float32, seed means of the two ISLA reference lanes (width 512, 512 slices) and of the two ISLA-DTT lanes at the same configuration (passive prediction points, the pose-free forest read at $\theta = 1$). Every ISLA-DTT ratio is 1.000000 on both seeds under all three requests (largest departure 8e-6), and the largest change of any ISLA-DTT prediction on the shared points over every car and request is 4.7e-5 relative L2, float32 roundoff. How to read this: a ratio of one means the other points of the request do not matter; it says nothing about accuracy, which is @tbl-interior-read-only. Data: results/char/qpop_2026-10-06.json (ISLA); LHR agents/2026-10-06-isla-dtt/scoring/qpop/dtt_vol_tg1pf_seed4{2,3}/summary.json, job 157560 (ISLA-DTT). {#tbl-interior-query-population}
+
+ISLA's 200,000 interacting points carry a learned share of the routing
+weight equal to 1.18 and 1.15 times the whole boundary's measure (the two
+seeds), so the request weighs more than the boundary in the slice states,
+and a population drawn by another law moves them. Halving the request at
+the training law costs 2%. ISLA is therefore deployed at its training
+count and draw, and every interior number of the book states them
+(@sec-using-checkpoint). Training over a range of request sizes reduces
+the count dependence without removing it (at the exploration budget of
+10,000 cells, results/qcount_reduction_2026-09-11.json). The read-only
+ISLA moves by float32 roundoff through the slice layers, as its
+construction requires (@sec-arch-passive-decoder), and the forest's lists
+depend on the boundary and the point alone (@sec-arch-tree-read), so
+ISLA-DTT can be queried at any set of points, alone or in chunks. Its
+accuracy on this task is @tbl-interior-read-only.
 
 ### What does not work on the interior {#sec-interior-negatives}
 

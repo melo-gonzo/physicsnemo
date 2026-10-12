@@ -133,9 +133,12 @@ if "family_non_box" in HELD:
 print(f"**AeroZoo is the interior task on a dataset built for diversity rather than for one body: 3,816 steady RANS solutions around bodies "
       f"from seven geometry banks, each in one of four enclosures at its own scale and Reynolds number, posed to the model by its four "
       f"boundaries and their prescribed values alone. In distribution, on {SIDE_WORD} of the `full` split, ISLA {clauses[0]}, "
-      f"{clauses[1]}, {clauses[2]}, {clauses[3]}{dtt}{held}.** The chapter follows the shared layout: the problem and its diversity, what "
-      "is measured, the architectures under their reference configurations in distribution, the held-out families, the training "
-      "trajectories, and what the dataset does not say. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.")
+      f"{clauses[1]}, {clauses[2]}, {clauses[3]}{dtt}{held}. Every ISLA standing on this dataset is the checkpoint after an optimization "
+      "event at epoch 43 to 50 that raised its training and validation loss three- to fourfold for the rest of the run "
+      "(@sec-aerozoo-trajectories); the checkpoints before it lead GeoTransolver's final ones on every field.** The chapter follows the shared "
+      "layout: the problem and its diversity, what is measured, the architectures under their reference configurations in distribution, the "
+      "held-out families, the training trajectories, and what the dataset does not say. Protocol: @sec-protocol; every ratio is baseline ÷ "
+      "ISLA, above one favoring ISLA.")
 ```
 
 ## The problem: bodies from seven banks in four enclosures across five Reynolds decades {#sec-dataset-aerozoo}
@@ -725,26 +728,48 @@ if HELD:
 #| label: para-aerozoo-trajectories
 #| output: asis
 TR = R["trajectories"]; RUNS = R["runs"]
-def collapse_epoch(rows):
-    """First validation epoch whose loss is more than twice the running minimum before it (the mean-field plateau signature of @sec-arch-routing-trained)."""
+def event_epoch(rows):
+    """First validation epoch whose loss is more than twice the running minimum before it."""
     lo = float("inf")
     for r in sorted(rows, key=lambda r: r["epoch"]):
         if r["loss"] is not None and r["loss"] > 2 * lo:
             return r["epoch"]
         lo = min(lo, r["loss"] if r["loss"] is not None else lo)
     return None
-coll = {run: collapse_epoch(rows) for run, rows in TR.items() if RUNS[run]["split"] == "full"}
-fell = [run for run, e in coll.items() if e is not None]
-last = {run: max(r["epoch"] for r in rows) for run, rows in TR.items() if rows and RUNS[run]["split"] == "full"}
-if fell:
-    print(f"**{len(fell)} of the {len(coll)} `full`-split lanes show the mean-field plateau (a validation loss that doubles its running minimum): "
-          + ", ".join(f"{RUNS[r]['arm']} seed {RUNS[r]['seed']} at epoch {coll[r]}" for r in fell) + ".** ")
+def best_epoch(rows):
+    good = [r for r in rows if r["loss"] is not None]
+    return min(good, key=lambda r: r["loss"])["epoch"] if good else None
+ev = {run: event_epoch(rows) for run, rows in TR.items() if RUNS[run]["split"] == "full" and rows}
+by_arm = {}
+for run, e in ev.items():
+    by_arm.setdefault(RUNS[run]["arm"], []).append((RUNS[run]["seed"], e, best_epoch(TR[run])))
+hit = {a: [x for x in v if x[1] is not None] for a, v in by_arm.items()}
+isla_hits = sorted(hit.get("ISLA", [])); gt_hits = hit.get("GeoTransolver", [])
+BV = R.get("bestval", {}).get("ISLA", {}).get("full"); FV = blk("ISLA", "full", "val") if have("ISLA", "full", "val") else None
+if isla_hits:
+    print(f"**Every ISLA lane on this split reaches its validation-loss minimum early (epochs {', '.join(str(x[2]) for x in isla_hits)} for "
+          f"seeds {', '.join(str(x[0]) for x in isla_hits)}) and then loses it: at epochs {', '.join(str(x[1]) for x in isla_hits)} the validation "
+          f"loss doubles its running minimum and stays two- to four-fold above it to epoch 250"
+          + (", while no GeoTransolver lane shows the event" if not gt_hits else f", and GeoTransolver seeds {', '.join(str(x[0]) for x in gt_hits)} show it at epochs {', '.join(str(x[1]) for x in gt_hits)}")
+          + ".** The training loss rises with the validation loss, so the event sits in the optimization and not in the fit. It is not the "
+          "mean-field plateau of the DeepJEB++ lanes (@sec-deepjeb): the routing narrows but keeps more than thirty effective slices in every block, "
+          "no weight tensor moves out of line with the others, the weights' motion slows to a third of its earlier rate, the tenfold rate step at "
+          "epoch 100 does not bring the loss back, and the degradation is uniform over the validation cases, every bank and enclosure alike "
+          "(`results/campaigns_2026-10-09/aerozoo/probe/routing_*.json` and `drift_*.json`). The same event ends every ISLA lane of the "
+          "campaign, on every split, between epochs 43 and 50 for the dense read and 54 and 65 for the tree read. ")
+    if BV and FV:
+        ep = ", ".join(f"epoch {e} for seed {s}" for s, e in BV["epochs"].items())
+        print(f"Scored exactly like the protocol on the validation side, ISLA's best-validation checkpoint ({ep}) reads "
+              + " / ".join(f"{BV['fields'][f]['mean']:.3f}" for f in FKEYS) + f" on {flab}, against the final checkpoints' "
+              + " / ".join(f"{FV['fields'][f]['mean']:.3f}" for f in FKEYS) + "; the standing of @tbl-aerozoo-full is the final checkpoint by the "
+              "protocol, and the best-checkpoint numbers are a labeled diagnostic of what the architecture had learned before the event. ")
 else:
-    print(f"**None of the {len(coll)} `full`-split lanes shows the mean-field plateau that ended the DeepJEB++ lanes (@sec-deepjeb): every validation "
-          f"loss keeps falling or holds to its last validation (epochs {min(last.values())} to {max(last.values())}).** ")
+    last = {run: max(r["epoch"] for r in rows) for run, rows in TR.items() if rows and RUNS[run]["split"] == "full"}
+    print(f"**No `full`-split lane shows a validation loss that doubles its running minimum: every validation loss keeps falling or holds to its "
+          f"last validation (epochs {min(last.values())} to {max(last.values())}).** ")
 print("@fig-aerozoo-trajectories draws the validation loss and the interior velocity error of every `full`-split lane against the epoch, the trainer's "
       "own validation every ten epochs in bfloat16 on the 386 validation cases at the training draw; the float32 standings of @tbl-aerozoo-full are "
-      "scored from the final checkpoints. Data: results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json (trajectories).")
+      "scored from the final checkpoints. Data: results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json (trajectories, bestval).")
 ```
 
 ```{python}
@@ -755,11 +780,13 @@ print("@fig-aerozoo-trajectories draws the validation loss and the interior velo
 #|   the interior velocity relative L2 (bottom) every ten epochs, bfloat16, on
 #|   the 386 validation cases at the training draw. The line is the two seeds'
 #|   mean and the band spans the seeds; ISLA in blue, GeoTransolver in red,
-#|   ISLA-DTT in light blue where it ran. How to read this: a plateau that
-#|   jumps to about one on velocity would be the routing collapse the DeepJEB++
-#|   chapter describes; the final standings of @tbl-aerozoo-full are float32
-#|   scorings of the last checkpoints and sit a few percent below these
-#|   bfloat16 validations; the axis is logarithmic. Data:
+#|   ISLA-DTT in light blue where it ran. How to read this: the step in the
+#|   ISLA curves between epochs 40 and 60 is the optimization event of
+#|   @sec-aerozoo-trajectories, a three- to fourfold rise that the rest of the
+#|   run never recovers, and not the routing collapse of the DeepJEB++ chapter,
+#|   which would send velocity to about one; the final standings of
+#|   @tbl-aerozoo-full are float32 scorings of the last checkpoints and sit a
+#|   few percent below these bfloat16 validations; the axis is logarithmic. Data:
 #|   results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json (trajectories).
 #| code-fold: true
 fig, axes = plt.subplots(2, 1, figsize=(8, 6.4), sharex=True, gridspec_kw=dict(hspace=0.12))
@@ -814,7 +841,10 @@ print(f"**The AeroZoo standing is one dataset and one task, the interior fields 
       f"velocity ratio of {fmt_ratio(rat('GeoTransolver', 'full', SIDE, 'velocity_l2')['mean_ratio'])}, a pressure ratio of "
       f"{rat('GeoTransolver', 'full', SIDE, 'pressure_l2')['mean_ratio']:.2f}, three turbulence fields, {'the held-out penalties of @tbl-aerozoo-heldout' if HELD else 'and the held-out splits still to be scored'}.** "
       "The two configurations are not resource-matched and do not receive the same inputs (@sec-aerozoo-measured), so the ratios are standings of the "
-      "configurations as shipped. The surface task on this dataset, the boundary solution fields and the wall shear from the same inputs, is not "
+      "configurations as shipped, and every ISLA number is the checkpoint after the optimization event of @sec-aerozoo-trajectories under the "
+      "reference training protocol, which the protocol scores as it stands; what the architecture reaches under a protocol that survives this "
+      "dataset is measured only as the labeled best-checkpoint diagnostic there, on the validation side, and not on the held-out families. "
+      "The surface task on this dataset, the boundary solution fields and the wall shear from the same inputs, is not "
       "measured. The uniform-point-cloud and rotated-and-translated scorings of the other chapters were not run here: the interior is already a point "
       "cloud, and the pose contract is measured on the surface datasets (@sec-invariances). The held-out penalties mix generalization with data size "
       "(every held-out split trains on fewer cases than `full`), which is why only their ratio across architectures is read, and the mechanism behind "

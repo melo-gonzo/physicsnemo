@@ -26,6 +26,7 @@ book:
         - 11-tensile2d.qmd
         - 12-lug.qmd
         - 13-deepjeb.qmd
+        - 20-aerozoo.qmd
         - 15-capacity-scaling-cost.qmd
     - part: "IV. Limits and status"
       chapters:

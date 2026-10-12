@@ -419,9 +419,16 @@ other.
 
 Two ideas were considered and not entered. Query-independent decoding by
 cross attention from the queries to a reduced anchor set (AB-UPT, UPT,
-Perceiver IO) is the passive decoder the program already priced at
-several-fold on every interior field. The interacting-support variant
-that mirrors AB-UPT's anchors was measured too (@sec-arch-passive-decoder).
+Perceiver IO) is the read-only interior task of ISLA: passive prediction
+points read each layer's slices at matched depth and, in ISLA-DTT, the
+boundary cells through a cluster forest, and it is measured on both
+interior datasets (@sec-arch-passive-decoder, @sec-interior-read-only,
+@sec-airfrans-read-only), so it is a configuration of the class rather
+than a candidate. The interacting-support variant that mirrors AB-UPT's
+anchors, in which a declared subset of the prediction points writes into
+the slices with the routing mass and the rest only read, is the
+`n_support` argument of the forward pass, and no configuration the book
+scores uses it.
 Canonicalization or frame averaging as an alternative to equivariance was
 measured on GeoTransolver in @sec-pose and is the comparison the pose
 contract is stated against.
