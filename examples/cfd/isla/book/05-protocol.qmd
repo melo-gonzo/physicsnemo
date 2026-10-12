@@ -443,6 +443,7 @@ rows = [
     ("AirfRANS", "airfrans", "boundary segments", "n_boundary_cells", "interior points", "n_interior_points"),
     ("PLAID Tensile2d", "tensile2d", "boundary segments", "n_boundary_cells", "nodes", "n_nodes"),
     ("GINOT Bracket Lug", "lug", "boundary triangles", "n_boundary_cells", "nodes", "n_nodes"),
+    ("AeroZoo", "aerozoo", "boundary triangles (four condition types)", "n_boundary_cells", "volume points", "n_interior_points"),
 ]
 out = "| dataset | sample case (split) | boundary | interior |\n|---|---|---:|---:|\n"
 for name, key, blab, bkey, ilab, ikey in rows:

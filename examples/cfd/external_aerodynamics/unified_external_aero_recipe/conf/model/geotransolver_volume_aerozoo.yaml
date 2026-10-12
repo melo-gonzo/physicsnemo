@@ -1,0 +1,81 @@
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ---------------------------------------------------------------------------
+# GeoTransolver template -- VOLUME recipe for AeroZoo v1.2.
+# ---------------------------------------------------------------------------
+# geotransolver_volume.yaml (the reference GeoTransolver volume configuration:
+# width 256, 12 layers, 256 slices, the DrivAerML radii) on
+# datasets/aerozoo_volume.yaml. The local embedding is the point's coordinates
+# plus the dataset's two signed distances: to the no_slip body with its
+# gradient (sdf_wall, sdf_wall_normals) and to the slip walls (sdf_slip; the
+# bounding-box diagonal on a case without them). The global embedding is the
+# dataset's `global_vector` = [U_inf_dir (3), log_re_std (1), the inlet's four
+# standardized turbulence quantities], the same global information ISLA
+# declares leaf by leaf in isla_volume_aerozoo.yaml.
+dataset_reader_overrides:
+  # Unlike the DrivAerML template, the boundaries stay: the pipeline's SDF
+  # transforms read no_slip and slip, and the inlet's prescribed turbulence is
+  # reduced to globals from its faces.
+  drop_in_file_boundaries: false
+
+input_type: tensors
+output_type: tensors
+
+# The CHAR campaign's GeoTransolver rate on DrivAerML Volume, 1e-3
+# (results/campaigns_2026-10-02/char/kernel/cl/cl_lanes.tsv, lanes cl_vol_gt_seed42/43,
+# column lr = 1e-3; the final-reference smoke lane
+# results/campaigns_2026-10-02/char/cs/cs_r_vol_gt/metrics.jsonl records
+# training.optimizer.lr = 0.001 at n_hidden 256 and 200,000 cells); the recipe
+# default 3e-3 was never used for GeoTransolver in that campaign.
+training:
+  optimizer:
+    lr: 1.0e-3
+
+forward_kwargs:
+  geometry: interior.points
+  local_embedding:
+    - interior.points
+    - interior.point_data.sdf_wall
+    - interior.point_data.sdf_wall_normals
+    - interior.point_data.sdf_slip
+  local_positions: interior.points
+  global_embedding: global_data.global_vector
+
+model:
+  _target_: physicsnemo.models.geotransolver.GeoTransolver
+  out_dim: ${out_dim}     # auto-set from the chosen dataset's `targets:` block
+  functional_dim: 8       # local_embedding = coords (3) + sdf_wall (1) + sdf_wall_normals (3) + sdf_slip (1)
+  geometry_dim: 3         # point coordinates
+  global_dim: 8           # global_vector: U_inf_dir (3) + log_re_std (1) + inlet turbulence (4)
+  n_layers: 12
+  n_hidden: 256
+  dropout: 0.0
+  n_head: 8
+  act: "gelu"
+  mlp_ratio: 4
+  slice_num: 256
+  use_te: false
+  plus: false
+  include_local_features: true
+  radii: [0.01, 0.05, 0.25, 1.0, 2.5, 5.0]
+  neighbors_in_radius: [8, 16, 32, 32, 64, 128]
+  n_hidden_local: 32
+  state_mixing_mode: "weighted"  # "weighted" (default) or "concat_project"
+  activation_checkpointing: false
+  checkpointing_ratio: 1.0
+  activation_checkpointing_components: [blocks]

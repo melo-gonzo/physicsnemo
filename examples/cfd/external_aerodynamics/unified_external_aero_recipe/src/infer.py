@@ -222,6 +222,7 @@ def redimensionalize(
             U_inf_mag,
             rho_inf=rho_inf,
             T_inf=T_inf,
+            L_ref=global_data["L_ref"].float() if "L_ref" in global_data else None,
         )
     return out
 

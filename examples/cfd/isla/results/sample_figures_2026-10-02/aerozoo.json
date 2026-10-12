@@ -1,0 +1,566 @@
+{
+  "dataset": "AeroZoo v1.2",
+  "split": "full.val",
+  "n_val": 386,
+  "cases": [
+    {
+      "case": "case-0000000000000000529-81418bdfb970",
+      "bank": "airframe-foundry",
+      "enclosure": "external_box",
+      "profile": "confined_opposed",
+      "body_layout": "mixed_bands_3",
+      "source_geometry": "0343_narrow_body_airliner_v2_bold.stl",
+      "target_log10_Re": 3.038806030312418,
+      "split": "full.val",
+      "n_boundary_cells": 423884,
+      "n_boundary_cells_by_role": {
+        "inlet": 23380,
+        "outlet": 54853,
+        "no_slip": 291030,
+        "slip": 54621
+      },
+      "n_body_cells": 82242,
+      "n_body_stored": 30000,
+      "n_bodies": 1,
+      "n_interior_points": 10995732,
+      "n_slice_cut": 47445,
+      "n_slice_stored": 47445,
+      "n_band_stored": 1063,
+      "U_inf": [
+        0.8240715861320496,
+        0.3804948329925537,
+        -0.20656491816043854
+      ],
+      "U_ref": 0.9308809638023376,
+      "L_ref": 0.17569923400878906,
+      "q_ref": 0.530755341053009,
+      "rho": 1.225000023841858,
+      "nu": 0.00012540892930701375,
+      "Re": 1304.1740583960704,
+      "body_acceleration": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "closure_model_id": 1,
+      "secondary_inlet_velocities": [],
+      "inlet": {
+        "turbulent_kinetic_energy": 0.007743150927126408,
+        "specific_dissipation_rate": 13.348609924316406,
+        "intermittency": 1.0,
+        "momentum_thickness_reynolds_number": 88.54094696044922
+      },
+      "body_centroid": [
+        -0.05744762717594122,
+        0.07003409143594029,
+        -0.04982946255258688
+      ],
+      "frame": [
+        [
+          0.8852599002408766,
+          0.40874703553142805,
+          -0.22190261370651423
+        ],
+        [
+          -0.28542822303371307,
+          0.1007598074131308,
+          -0.953088763288019
+        ],
+        [
+          -0.36721334197075406,
+          0.9070685322258392,
+          0.20586655708087162
+        ]
+      ],
+      "slice_rule": "cells whose centre lies within half their size (volume^(1/3); area^(1/2) for faces) of the plane through the bodies' area-weighted centroid that contains the inlet direction and is normal to the bodies' longest cross-flow axis",
+      "ranges": {
+        "body_cp": [
+          -3.3322885036468506,
+          2.140820264816284
+        ],
+        "slice_cp": [
+          -0.7751572132110596,
+          1.476951003074646
+        ],
+        "slice_umag": [
+          0.0035528428852558136,
+          1.2890011072158813
+        ]
+      }
+    },
+    {
+      "case": "case-0000000000000001120-0c6d1f32da1b",
+      "bank": "blender-bluff-500",
+      "enclosure": "external_opposed_hemisphere",
+      "profile": "opposed_hemisphere_symmetry",
+      "body_layout": "all_no_slip",
+      "source_geometry": "swan_duct_0008.stl",
+      "target_log10_Re": 4.030959104267367,
+      "split": "full.val",
+      "n_boundary_cells": 1592474,
+      "n_boundary_cells_by_role": {
+        "inlet": 471601,
+        "outlet": 464970,
+        "no_slip": 8834,
+        "slip": 647069
+      },
+      "n_body_cells": 8834,
+      "n_body_stored": 8834,
+      "n_bodies": 1,
+      "n_interior_points": 3426744,
+      "n_slice_cut": 19430,
+      "n_slice_stored": 19430,
+      "n_band_stored": 3721,
+      "U_inf": [
+        1.1543484926223755,
+        -1.4287108182907104,
+        -0.13219420611858368
+      ],
+      "U_ref": 1.8415238857269287,
+      "L_ref": 13.212225914001465,
+      "q_ref": 2.0771162509918213,
+      "rho": 1.225000023841858,
+      "nu": 0.012067229487001896,
+      "Re": 2016.2564763073008,
+      "body_acceleration": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "closure_model_id": 1,
+      "secondary_inlet_velocities": [],
+      "inlet": {
+        "turbulent_kinetic_energy": 0.04391159862279892,
+        "specific_dissipation_rate": 0.196549654006958,
+        "intermittency": 1.0,
+        "momentum_thickness_reynolds_number": 77.48546600341797
+      },
+      "body_centroid": [
+        8.278633417061167,
+        7.781613700309192,
+        -6.107617942991501
+      ],
+      "frame": [
+        [
+          0.6268441475281357,
+          -0.7758307137571134,
+          -0.07178522341577666
+        ],
+        [
+          0.5093838880632829,
+          0.3383543683633445,
+          0.791229660712347
+        ],
+        [
+          -0.5895714284895921,
+          -0.5325439183772267,
+          0.6072911210516517
+        ]
+      ],
+      "slice_rule": "cells whose centre lies within half their size (volume^(1/3); area^(1/2) for faces) of the plane through the bodies' area-weighted centroid that contains the inlet direction and is normal to the bodies' longest cross-flow axis",
+      "ranges": {
+        "body_cp": [
+          -1.5223313570022583,
+          1.4529625177383423
+        ],
+        "slice_cp": [
+          -0.969022810459137,
+          1.2633934020996094
+        ],
+        "slice_umag": [
+          0.0038808572571724653,
+          1.4376657009124756
+        ]
+      }
+    },
+    {
+      "case": "case-0000000000000003643-5741908096fa",
+      "bank": "blender-streamlined-500",
+      "enclosure": "external_opposed_sphere",
+      "profile": "opposed_hemispheres",
+      "body_layout": "mixed_bands_3",
+      "source_geometry": "aero_flattened_fairing_0013.stl",
+      "target_log10_Re": 5.023112178222316,
+      "split": "full.val",
+      "n_boundary_cells": 1490492,
+      "n_boundary_cells_by_role": {
+        "inlet": 742553,
+        "outlet": 745761,
+        "no_slip": 785,
+        "slip": 1393
+      },
+      "n_body_cells": 2178,
+      "n_body_stored": 2178,
+      "n_bodies": 1,
+      "n_interior_points": 3782645,
+      "n_slice_cut": 18653,
+      "n_slice_stored": 18653,
+      "n_band_stored": 2638,
+      "U_inf": [
+        0.5201975703239441,
+        -0.4494255781173706,
+        0.22079195082187653
+      ],
+      "U_ref": 0.7220373749732971,
+      "L_ref": 0.7987980246543884,
+      "q_ref": 0.319319486618042,
+      "rho": 1.225000023841858,
+      "nu": 0.0001631337363505736,
+      "Re": 3535.5165752830603,
+      "body_acceleration": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "closure_model_id": 1,
+      "secondary_inlet_velocities": [],
+      "inlet": {
+        "turbulent_kinetic_energy": 0.00022156894556246698,
+        "specific_dissipation_rate": 0.4595591723918915,
+        "intermittency": 1.0,
+        "momentum_thickness_reynolds_number": 307.6960754394531
+      },
+      "body_centroid": [
+        -0.9672211450225011,
+        -0.3698346460233003,
+        0.19128680705997417
+      ],
+      "frame": [
+        [
+          0.7204579704131403,
+          -0.6224408923335744,
+          0.3057902032753212
+        ],
+        [
+          0.6929948910466794,
+          0.6629710912165455,
+          -0.2832444407121593
+        ],
+        [
+          -0.02642714232336832,
+          0.41597676348821055,
+          0.9089911651861606
+        ]
+      ],
+      "slice_rule": "cells whose centre lies within half their size (volume^(1/3); area^(1/2) for faces) of the plane through the bodies' area-weighted centroid that contains the inlet direction and is normal to the bodies' longest cross-flow axis",
+      "ranges": {
+        "body_cp": [
+          -0.6531022191047668,
+          1.0549589395523071
+        ],
+        "slice_cp": [
+          -0.5791508555412292,
+          0.25474226474761963
+        ],
+        "slice_umag": [
+          0.3928140103816986,
+          1.1062337160110474
+        ]
+      }
+    },
+    {
+      "case": "case-0000000000000003470-45eec0f58df4",
+      "bank": "blobs",
+      "enclosure": "internal_duct",
+      "profile": "nozzle",
+      "body_layout": "all_no_slip",
+      "source_geometry": "blob_1475.stl",
+      "target_log10_Re": 6.015265252177265,
+      "split": "full.val",
+      "n_boundary_cells": 1353041,
+      "n_boundary_cells_by_role": {
+        "inlet": 43937,
+        "outlet": 17390,
+        "no_slip": 1291714,
+        "slip": 0
+      },
+      "n_body_cells": 14976,
+      "n_body_stored": 14976,
+      "n_bodies": 2,
+      "n_interior_points": 7271467,
+      "n_slice_cut": 45029,
+      "n_slice_stored": 45029,
+      "n_band_stored": 5509,
+      "U_inf": [
+        -2.633807420730591,
+        0.6711108088493347,
+        0.08577711135149002
+      ],
+      "U_ref": 2.719317674636841,
+      "L_ref": 0.06461809575557709,
+      "q_ref": 4.529246807098389,
+      "rho": 1.225000023841858,
+      "nu": 3.392811152025388e-07,
+      "Re": 517910.1400460197,
+      "body_acceleration": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "closure_model_id": 1,
+      "secondary_inlet_velocities": [],
+      "inlet": {
+        "turbulent_kinetic_energy": 0.000734973989892751,
+        "specific_dissipation_rate": 13.14614486694336,
+        "intermittency": 1.0,
+        "momentum_thickness_reynolds_number": 694.0404052734375
+      },
+      "body_centroid": [
+        0.000811208735920562,
+        0.037907525539948674,
+        0.016888790546874925
+      ],
+      "frame": [
+        [
+          -0.968554495837995,
+          0.24679381871290768,
+          0.0315436148389454
+        ],
+        [
+          -0.0889284476451658,
+          -0.4618014104076967,
+          0.8825141293740758
+        ],
+        [
+          0.23236591787830735,
+          0.8519579029450707,
+          0.46922682342126304
+        ]
+      ],
+      "slice_rule": "cells whose centre lies within half their size (volume^(1/3); area^(1/2) for faces) of the plane through the bodies' area-weighted centroid that contains the inlet direction and is normal to the bodies' longest cross-flow axis",
+      "ranges": {
+        "body_cp": [
+          6.068619728088379,
+          9.724912643432617
+        ],
+        "slice_cp": [
+          -4.278079032897949,
+          8.85726547241211
+        ],
+        "slice_umag": [
+          0.011484206654131413,
+          3.7351300716400146
+        ]
+      }
+    },
+    {
+      "case": "case-0000000000000002267-a0543eb5ab33",
+      "bank": "streamlined",
+      "enclosure": "external_box",
+      "profile": "dual_inlet",
+      "body_layout": "mixed_bands_2",
+      "source_geometry": "0430_fusiform-segmented_200470.stl",
+      "target_log10_Re": 7.007418326132214,
+      "split": "full.val",
+      "n_boundary_cells": 343995,
+      "n_boundary_cells_by_role": {
+        "inlet": 84090,
+        "outlet": 47163,
+        "no_slip": 187476,
+        "slip": 25266
+      },
+      "n_body_cells": 68242,
+      "n_body_stored": 30000,
+      "n_bodies": 1,
+      "n_interior_points": 7572782,
+      "n_slice_cut": 51134,
+      "n_slice_stored": 51134,
+      "n_band_stored": 1457,
+      "U_inf": [
+        -3.6132214069366455,
+        3.188194751739502,
+        -0.8519157767295837
+      ],
+      "U_ref": 4.893435955047607,
+      "L_ref": 0.028048202395439148,
+      "q_ref": 14.666749954223633,
+      "rho": 1.225000023841858,
+      "nu": 1.3139348276069995e-08,
+      "Re": 10445882.032540713,
+      "body_acceleration": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "closure_model_id": 1,
+      "secondary_inlet_velocities": [
+        [
+          -1.8029612302780151,
+          -1.62175452709198,
+          1.577654480934143
+        ]
+      ],
+      "inlet": {
+        "turbulent_kinetic_energy": 0.00031840818701311946,
+        "specific_dissipation_rate": 94.62870788574219,
+        "intermittency": 1.0,
+        "momentum_thickness_reynolds_number": 877.536865234375
+      },
+      "body_centroid": [
+        -0.010027384394422916,
+        0.019177993648836676,
+        -0.038673378264437244
+      ],
+      "frame": [
+        [
+          -0.7383812639235444,
+          0.6515247767281651,
+          -0.17409357942205608
+        ],
+        [
+          0.44145454192616407,
+          0.2718086567758432,
+          -0.8551245181343315
+        ],
+        [
+          -0.5098146687762425,
+          -0.7082623238680896,
+          -0.4883169913995864
+        ]
+      ],
+      "slice_rule": "cells whose centre lies within half their size (volume^(1/3); area^(1/2) for faces) of the plane through the bodies' area-weighted centroid that contains the inlet direction and is normal to the bodies' longest cross-flow axis",
+      "ranges": {
+        "body_cp": [
+          -16.956998825073242,
+          16.47789192199707
+        ],
+        "slice_cp": [
+          -5.560887813568115,
+          22.647232055664062
+        ],
+        "slice_umag": [
+          0.19271236658096313,
+          4.7075982093811035
+        ]
+      }
+    },
+    {
+      "case": "case-0000000000000000298-9a4dfef4502c",
+      "bank": "zero-to-cad-diverse-500",
+      "enclosure": "external_box",
+      "profile": "open_opposed",
+      "body_layout": "all_no_slip",
+      "source_geometry": "0053_0c460abc.stl",
+      "target_log10_Re": 7.999571400087162,
+      "split": "full.val",
+      "n_boundary_cells": 259915,
+      "n_boundary_cells_by_role": {
+        "inlet": 26316,
+        "outlet": 34675,
+        "no_slip": 44616,
+        "slip": 154308
+      },
+      "n_body_cells": 44616,
+      "n_body_stored": 30000,
+      "n_bodies": 1,
+      "n_interior_points": 3879600,
+      "n_slice_cut": 39370,
+      "n_slice_stored": 39370,
+      "n_band_stored": 1164,
+      "U_inf": [
+        -0.3130846917629242,
+        -0.6492881774902344,
+        1.7784515619277954
+      ],
+      "U_ref": 1.9189807176589966,
+      "L_ref": 0.03712140768766403,
+      "q_ref": 2.255523204803467,
+      "rho": 1.225000023841858,
+      "nu": 2.556871603331956e-09,
+      "Re": 27860321.758885488,
+      "body_acceleration": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "closure_model_id": 1,
+      "secondary_inlet_velocities": [],
+      "inlet": {
+        "turbulent_kinetic_energy": 0.024393649771809578,
+        "specific_dissipation_rate": 8.90727424621582,
+        "intermittency": 1.0,
+        "momentum_thickness_reynolds_number": 98.7421646118164
+      },
+      "body_centroid": [
+        -0.009584336610079139,
+        -0.00957689146341511,
+        -0.004372258128457608
+      ],
+      "frame": [
+        [
+          -0.16315155413870713,
+          -0.3383505422923558,
+          0.9267688389844542
+        ],
+        [
+          -0.5397703280923546,
+          0.8169144031764664,
+          0.203221186872604
+        ],
+        [
+          -0.8258508117651738,
+          -0.4670864678122315,
+          -0.31591243769990585
+        ]
+      ],
+      "slice_rule": "cells whose centre lies within half their size (volume^(1/3); area^(1/2) for faces) of the plane through the bodies' area-weighted centroid that contains the inlet direction and is normal to the bodies' longest cross-flow axis",
+      "ranges": {
+        "body_cp": [
+          -3.858408212661743,
+          1.1895544528961182
+        ],
+        "slice_cp": [
+          -2.4656596183776855,
+          1.1663130521774292
+        ],
+        "slice_umag": [
+          0.013930452056229115,
+          1.7536622285842896
+        ]
+      }
+    }
+  ],
+  "selection": "one case per geometry bank for the six banks the problem figure does not show, the four enclosure families cycled over them (box, hemisphere, sphere, duct, box, box), and within each (bank, enclosure) group the full.val case whose log10 Re is nearest an even six-step ladder from the split's minimum to its maximum",
+  "val_ranges": {
+    "log10_Re": [
+      3.038806030312418,
+      7.999571400087162
+    ],
+    "L_ref": [
+      0.02099718322887818,
+      19.902059871216554
+    ]
+  },
+  "val_counts": {
+    "banks": {
+      "airframe-foundry": 40,
+      "blender-bluff-500": 36,
+      "blender-streamlined-500": 51,
+      "blobs": 156,
+      "procedural-cars": 39,
+      "streamlined": 34,
+      "zero-to-cad-diverse-500": 30
+    },
+    "enclosures": {
+      "external_box": 269,
+      "external_opposed_hemisphere": 49,
+      "external_opposed_sphere": 41,
+      "internal_duct": 27
+    }
+  },
+  "units": "m",
+  "ranges": {
+    "body_cp": [
+      -16.956998825073242,
+      16.47789192199707
+    ],
+    "slice_cp": [
+      -5.560887813568115,
+      22.647232055664062
+    ],
+    "slice_umag": [
+      0.0035528428852558136,
+      4.7075982093811035
+    ]
+  }
+}

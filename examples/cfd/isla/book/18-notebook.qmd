@@ -35379,3 +35379,579 @@ artifacts (`results/char/soft_geo_lanes_2026-10-07.json`,
 entries. Chapter 7's paragraph on the two tested replacements is
 unchanged, since it reports what was measured. Future lanes need a new
 snapshot of the library, which the AeroZoo benchmark will produce.
+
+## 2026-10-09 — AEROZOO pre-registration: ISLA, ISLA-DTT and GeoTransolver on AeroZoo v1.2's interior task (the boundaries with their prescribed values in, the interior fields out), in distribution and with a geometry bank, an enclosure family or a Reynolds range held out; a new chapter {#sec-nb-aerozoo-prereg}
+
+**Setting.** Peter's instruction of 2026-10-09: take the ISLA architecture
+as it is and the ISLA-DTT variant, test them on the AeroZoo v1.2 dataset
+on the interior prediction task (given a well-posed PDE problem from the
+boundaries with only their prescribed values, predict the interior
+fields), optionally on the surface task (the same inputs, every solution
+field on the boundaries), compare against GeoTransolver, and put the
+results into a new chapter. AeroZoo (Peter's dataset, generator
+`~/gh/aerozoo`, release v1.2 of 2026-10-08) is a corpus of 3,816
+time-averaged transition-SST RANS solutions, each around a different body
+in its own enclosure at its own scale and Reynolds number, built to stress
+geometric and physical diversity: eight geometry banks (procedural blobs,
+cars, streamlined bodies, airframes, two Blender banks, a CAD bank and two
+mascots), four enclosure families (external boxes with five
+boundary-condition profiles, two opposed-hemisphere and opposed-sphere
+enclosures, internal ducts), five Reynolds decades from $10^3$ to $10^8$,
+and bodies whose surface is partly no-slip and partly slip. Every sample is
+a PhysicsNeMo `DomainMesh` that carries the boundary-value problem which
+produced it: four boundary meshes keyed by boundary-condition type
+(`inlet`, `outlet`, `no_slip`, `slip`) with the prescribed values as
+per-face data, an interior point cloud of 0.6 to 24 million cell centroids
+(median 5.0 million) with cell volumes and seven mean-flow fields, and
+dimensional global data (density, viscosity, the inlet velocity, a
+reference speed, length and dynamic pressure). The release's 22 frozen
+splits place cases by a hash of the geometry, so no geometry crosses
+train, validation and test. The in-distribution split `full` holds 2,713 /
+386 / 716 complete cases; the held-out splits train on everything but one
+family and test on it (seven geometry banks, four enclosure families, two
+Reynolds splits, five box profiles, the body layout). This is the first
+dataset in the program whose cases differ in enclosure, scale and Reynolds
+number at once, and the first on which a whole family is held out by
+construction.
+
+**Question.** On a dataset built for diversity, how do the three
+architectures rank on the interior task in distribution, and how much does
+each one's error grow when a geometry bank, an enclosure family or a
+Reynolds range it never saw is held out?
+
+**Task definition (the inputs are PDE data only).** Inputs: the four
+boundary meshes (positions, normals and areas computed from the
+triangles), a one-hot of the boundary-condition type per face, the
+prescribed values per face (the inlet velocity and its four turbulence
+scalars, the outlet gauge pressure and its reverse-flow fallback values,
+the wall velocity), and the global data that pose the problem (the inlet
+velocity direction, the Reynolds number as $\log_{10}(U_\mathrm{ref}
+L_\mathrm{ref}/\nu)$ standardized by $(\cdot - 5.5)/1.5$, and the inlet
+turbulence values as globals). Not inputs: `body_id` (a label of which
+wall is the body; the no-slip operator is the same on the enclosure and on
+the body), the solution and derived fields, the diagnostics and identity
+blocks. Targets: velocity (rank 1), gauge pressure, turbulent kinematic
+viscosity, turbulent kinetic energy and specific dissipation rate (rank 0),
+nondimensionalized per case by the reference speed $U_\mathrm{ref}$, the
+dynamic pressure $q_\mathrm{ref}$, $U_\mathrm{ref} L_\mathrm{ref}$,
+$U_\mathrm{ref}^2$ and $U_\mathrm{ref}/L_\mathrm{ref}$; the intermittency
+and the momentum-thickness Reynolds number are the transition model's
+internal variables and are not targets. Coordinates are divided by
+$L_\mathrm{ref}$ and centered for every model. The surface task is
+pre-registered as the optional second phase with the same inputs and the
+boundary solution fields plus the wall shear on `no_slip` as targets; it
+needs a target-extraction change in the recipe and runs only after the
+interior task is scored.
+
+**Protocol.** The reporting protocol of the book, adapted to the four
+boundaries: 200,000 interior prediction points per case drawn uniformly at
+random, and 50,000 boundary faces per boundary-condition type drawn
+uniformly within the type (at most 200,000 boundary tokens; a type with
+fewer faces is kept whole), with Horvitz-Thompson measures. The release
+stores interior points in OpenFOAM cell order, which is spatially coherent
+(on case `case-0000000000000000000-a48a547f8d4c` a contiguous block of
+200,000 of 5.87 million rows covers 8 to 42 percent of the domain's
+bounding box against 98 percent for a random draw), and the recipe's reader
+draws the interior subsample as one contiguous block, so training reads a
+row-permuted copy of every interior (`kernel/aerozoo/aerozoo_shuffle.py`:
+one random permutation per case, seeded by the case id; boundaries, global
+data and sidecars are symlinks into the release; after the permutation a
+block covers 97 to 99 percent of the box). Models at the reference
+configurations the characterization campaign fixed for the DrivAerML
+Volume task: ISLA (512 wide, 12 layers, 512 slices, cosine routing,
+learning rate 3.75e-4, per-block compile, the built-in nearest geometry and
+no stored distance field), GeoTransolver's volume configuration (256 wide,
+12 layers, 256 slices) with its local embedding of coordinates, the signed
+distance and its gradient to the no-slip walls and the signed distance to
+the slip walls, all computed from the sampled boundary, and a global vector
+of the inlet direction, the standardized log Reynolds number and the four
+inlet turbulence globals; ISLA-DTT in the form the Barnes-Hut fork
+confirms after its parity lanes (provisionally the forest tree read at
+theta 1, exactly query independent). Target statistics for the loss are
+pooled over the training side of the split in use. Two seeds (42, 43).
+Epochs: 250 for every model and split, chosen so that the `full` split's
+2,713 training cases give 678,000 steps, within 8 percent of the 1,260-wing
+rung's 630,000 at the protocol's 500 epochs; the held-out splits train on
+2,100 to 3,100 cases and keep the same epoch count. Scoring: float32, the
+training draw law, every field's relative L2 per case averaged over the
+cases, exactly as the DrivAerML Volume task is scored; model selection on
+the validation side only; the test side scored once. Both stability
+populations (`mean_stable`, `mean_unstable`) stay in and are reported
+separately.
+
+**Lanes.** Phase 1: `full` for ISLA and GeoTransolver, two seeds each
+(four lanes), ISLA-DTT added when its form is confirmed. Phase 2a, the
+held-out families with the clearest mechanism: `family_non_box` (train on
+external boxes, test on the three other enclosures), `reynolds` (train
+below $10^6$, test above) and `bank_blobs` (the largest bank held out),
+each trained from its own training side, three models, two seeds. Phase 2b,
+the remaining held-out splits, only if Phase 2a shows the models' penalties
+differing by more than seed noise. AGA, short-queue chains with
+checkpoint resume; LHR with a dataset copy if AGA cannot schedule.
+
+**Predictions and falsifiers.** (P1, in distribution, the `full` test
+side) GeoTransolver ÷ ISLA is at least 1.2 on velocity and at most 0.9 on
+pressure, the pattern of both existing interior datasets (velocity 1.4 and
+2.2, pressure 0.76 and 0.87); falsified if the velocity ratio is below 1.1
+or the pressure ratio above 1.0. (P2, the enclosure held out) ISLA's
+penalty, its `family_non_box` test error divided by its `full` test error
+on the same fields, is at least 20 percent smaller than GeoTransolver's;
+the mechanism is that ISLA reads the enclosure as boundary tokens with
+their condition types where GeoTransolver sees it only through the
+distance fields and the extent of the point cloud; falsified if ISLA's
+penalty is not smaller than GeoTransolver's. (P3, the Reynolds range and
+the held-out bank) no directional prediction; both are recorded. (P4)
+ISLA-DTT's `full` test error is within 5 percent of ISLA's on every field,
+the fork's parity claim carried to a new dataset; falsified beyond that.
+A difference between models counts only if both seeds order the same way
+and the seed-mean ratio is outside 1 ± 0.05.
+
+**What is next.** The recipe work (dataset yaml, the boundary
+harmonization and nondimensional types, the manifest and statistics
+scripts), a cluster snapshot of the library and recipe after the
+query-geometry deletion, the shuffled copy (AGA job 1171835), then the
+Phase 1 lanes. The chapter is written when Phase 1 is scored and extended
+with Phase 2.
+
+## 2026-10-09 — AEROZOO launched: the shuffled copy, the statistics, the snapshot pair code_v26 / recipe_v9 and both smoke lanes are done; the four Phase 1 lanes and the twelve Phase 2a lanes (held-out enclosures, Reynolds range and blob bank) are in the AGA queues {#sec-nb-aerozoo-launch}
+
+**What was built.** The row-permuted copy of every interior
+(`kernel/aerozoo/aerozoo_shuffle.py`, two 48-worker CPU tasks, 3,816
+cases, 1.2 TB; on six random cases a contiguous 200,000-row block covers
+0.96 to 0.997 of the domain box and every array matches its source in
+size). The manifest of the 66 split parts restricted to released cases
+(`build_manifest.py`; effective counts equal the release manifest's). The
+target and inlet-global statistics per training side
+(`aerozoo_stats.py`, a seeded 20,000-point sample of every released case,
+two minutes on 48 cores once the first attempt's node with a dead Lustre
+client was excluded; `results/campaigns_2026-10-09/aerozoo/stats/`), filled
+into `datasets/aerozoo_volume.yaml` and three split copies by
+`fill_stats.py`. The recipe support (commit 73fd89e5f: the dataset yaml,
+`HarmonizeBoundaryFields`, `BoundaryFieldToGlobal`, `ConcatGlobalFields`,
+`ComputeLogReynolds`, the nondimensional types for the turbulent viscosity,
+$k$ and $\omega$, the model yamls `isla_volume_aerozoo` and
+`geotransolver_volume_aerozoo`; 355 recipe tests). The snapshot pair
+code_v26 / recipe_v9 of 73fd89e5f, verified on a GB300 node (ISLA suite
+190 passed, recipe 355 passed). The fleet scorer maps `az_*` lanes to the
+pair and the td14 environment.
+
+**Smoke.** One epoch on the 74-case `super_scarce` training side at the
+protocol's draw: GeoTransolver validation loss 0.30 (0.9 s per step, 121
+GB per GPU), ISLA 0.16 (0.7 s per step, 129 GB) on GB300. Two operational
+faults on the way, both outside the models: the copied td14 environment's
+entry points on AGA were not executable (the launcher now runs the
+distributed launcher as a module), and the fused Triton kernel's compile
+cache sat in the 10 GB home directory, which was full (the caches now live
+on Lustre; the home uv cache is relocated with a symlink).
+
+**Lanes.** Phase 1, `full`: `az_full_isla_seed42/43`,
+`az_full_gt_seed42/43`, short-queue chains of 1h59 links with checkpoint
+resume, started 20:55 PDT. Phase 2a: `az_nonbox_*` (train on external
+boxes, test on the other enclosures) in the short queue, `az_reynolds_*`
+(train below $10^6$) and `az_blobs_*` (the blob bank held out) in the normal
+queue with 3h59 links, since the short queue admits twenty submitted jobs
+per user and a chain holds two. Each lane: 250 epochs, two seeds, its
+split's own training-side statistics. At the smoke's step times a Phase 1
+lane needs 33 (ISLA) to 42 (GeoTransolver) GPU-hours on four GPUs, about
+17 to 21 short links. All sixteen lanes are in the fleet manifest (group
+`az`), so the hourly watcher reports them and the pump scores the
+validation side as each finishes; the test side is scored once, deliberately,
+when Phase 1 is complete. ISLA-DTT lanes follow the Barnes-Hut fork's
+confirmation of its form.
+
+## 2026-10-10 — AEROZOO scoring machinery and the chapter draft staged while the sixteen lanes train; ISLA-DTT waits for the fork's pose-invariant forest read {#sec-nb-aerozoo-machinery}
+
+**Setting.** The sixteen AEROZOO lanes (@sec-nb-aerozoo-launch) train on
+AGA: at 00:05 EDT the four `full` lanes and the four held-out-enclosure
+lanes were in their first epochs (ISLA 0.6 s per step, GeoTransolver
+0.9 s), the eight Reynolds and blob-bank lanes waited in the normal
+queue. The chapter cannot be written before the scores exist, so the
+hours were spent on everything that does not depend on them.
+
+**What was built.** (i) The test-side scorer
+(`kernel/aerozoo/eval_test.sbatch`, `submit.sh test`): for every lane whose
+training finished and whose test score is absent, float32 inference at
+the training draw on the test part of the lane's own split (the
+`val_split=<split>.val` override becomes `<split>.test`, which for a
+held-out split is the held-out family), four lanes per node, idempotent;
+it is submitted once and by hand, as the pre-registration requires, while
+the fleet pump scores the validation sides as lanes finish. (ii) The
+fetcher (`fetch_scores.sh`) and the reduction (`aerozoo_reduce.py` ->
+`aerozoo_reduction.json`): per arm, split and side the seed means per
+field, the two stability populations apart, strata by enclosure, bank,
+Reynolds decade and body layout, the ratios baseline ÷ ISLA with the
+counts rule, the penalties (a split's held-out test error over the same
+arm's `full` test error), the P1, P2 and P4 verdicts against the
+pre-registered bars, the training cost from the final epoch's step lines
+and the validation trajectories every ten epochs. (iii) Per-case labels
+(`case_labels.py` -> `case_labels.json`, 3,816 cases): the release's
+convergence label (2,817 `mean_stable`, 999 `mean_unstable`, 26 percent),
+the enclosure (2,741 external boxes, 391 opposed hemispheres, 381 opposed
+spheres, 303 internal ducts), the body layout (1,233 all no-slip, 2,422
+with slip bands), the Reynolds decade (about 800 cases per decade from
+$10^3$ to $10^6$, 582 at $10^7$) and the geometry bank, which the case
+manifests do not name; it is read off the release's held-out-bank splits
+(blobs 1,367, Blender streamlined 459, Blender bluff 439, streamlined 434,
+cars 416, airframes 367, CAD 333). (iv) The chapter draft
+`book/20-aerozoo.qmd`, outside the book order until Phase 1 is scored:
+every number is a cell over the reduction (the lede, the headline table
+with validation and test columns, the stability-population table, the
+per-family strata figure, the held-out table and penalty figure, the
+trajectory figure with the mean-field-plateau detector of the DeepJEB++
+chapter, the ISLA-DTT control, the limits), rendered once against a
+throwaway mock artifact to shake out the cells and the layout, the mock
+deleted. The problem and sample figures (one validation case with its
+four boundaries and a midplane slice; six cases across enclosures and
+banks) are being produced from the release by a helper session into the
+two figure-artifact directories and are spliced in when they land.
+
+**ISLA-DTT.** The Barnes-Hut fork reports (00:30 EDT) that its first
+forest tree read matched the retired tree on the native and area
+protocols on AirfRANS (pressure, velocity and eddy viscosity seed means
+0.0280 / 0.0141 / 0.0308 against 0.0258 / 0.0141 / 0.0307) but lost pose
+invariance: under the posed protocol its error rose 1.9x, 1.25x and 3.3x,
+because Morton boxes and normal octants were built on laboratory
+coordinates. The fix (psharpe/isla-dtt 6094c4e9d) builds the trees and
+octants in a frame the boundary carries with it (principal axes of the
+cells' measure-weighted covariance, signed by third moments), with tests
+that hold the forest and the predictions identical under rotation,
+reflection, translation and rescale; the theta-1 parity lanes are
+relaunched on snapshot code_dtt16 (AirfRANS pair in about 17 hours, car
+pair in about 30). The AEROZOO ISLA-DTT arm is therefore the theta-1
+forest read on code_dtt16 or later, pending those scores; the first
+forest read is not benchmarked.
+
+**What is next.** The hourly health watcher wakes on a broken chain, a
+BLOCKED marker, a traceback or a flat step counter. When the four `full`
+lanes finish (ISLA about 28 hours after launch, GeoTransolver about 42)
+the pump scores their validation sides; the test sides are scored once
+with `submit.sh test`; the reduction runs; the chapter's figures are
+spliced, the chapter enters the book order after the DeepJEB++ chapter,
+and the P1 verdict is written here. The held-out lanes follow at their
+own pace and extend the chapter with the penalties.
+
+## 2026-10-10 — AEROZOO ISLA-DTT lanes launched on the fork's pose-free forest read (snapshot code_dtt16, theta 1); both in-distribution lanes stepping at 1.17 s and 159 GB {#sec-nb-aerozoo-dtt-launch}
+
+**Setting.** The AEROZOO benchmark (@sec-nb-aerozoo-prereg) names
+ISLA-DTT, the tree-accelerated query-independent read of the Barnes-Hut
+fork, as its third arm, in the form the fork confirms after its parity
+lanes. The fork's first forest read failed pose invariance
+(@sec-nb-aerozoo-machinery); its fix builds the trees and octants in a
+frame the boundary carries with it.
+
+**What the fork reported (2026-10-10, 13:55 EDT).** On AirfRANS, two
+seeds, the pose-free forest at theta 1 (snapshot code_dtt16, branch
+psharpe/isla-dtt at 6094c4e9d) reads pressure, velocity and eddy
+viscosity seed means of 0.0259 / 0.0141 / 0.0325 against the retired
+tree's 0.0258 / 0.0141 / 0.0307, the viscosity inside the retired tree's
+own 13 percent seed spread, and the posed protocol equals the native one
+to the fourth digit on pressure and velocity and to 0.3 percent on
+viscosity. The car pair reports on 2026-10-11 in the afternoon. The
+configuration the fork specifies is the reference ISLA with the interior
+task, the query-independent read, the mean kernel read with no radius
+and theta 1; the two remaining diagnostic options of its E6 ladder are
+scaffolds it expects to delete and are not used. Its cost on the cars at
+200,000 boundary cells and 200,000 queries per GB300 rank is 1.72 s per
+step and 193.5 GB peak, about 800 sources per query at theta 1.
+
+**What was launched.** Eight lanes, rows 16 to 23 of the lane table
+(`az_<split>_dtt_seed<NN>`): the `full`, `family_non_box`, `reynolds` and
+`bank_blobs` splits, seeds 42 and 43, 250 epochs, the ISLA volume model
+yaml of the recipe with the four read options appended as
+add-or-override Hydra terms (a plain add fails when the yaml already
+carries the key), the library imported from the fork's extracted
+snapshot through a link `code_dtt16` in the task directory (the snapshot
+carries this branch merged through the query-geometry deletion, and no
+library commit on this branch postdates it, so the AeroZoo recipe needs
+nothing it lacks), the same recipe snapshot and environment as the other
+lanes. The fleet scorer and the test-side scorer import the lane's own
+snapshot for any run with `dtt` in its name. The in-distribution pair
+runs in the short queue (which now holds eighteen of its twenty jobs,
+so nothing else may use it), the six held-out lanes in the normal queue
+on four-hour links.
+
+**Acceptance.** Both in-distribution lanes stepped within twenty
+minutes of starting: at step 77 of 678 in epoch 0 the lanes read 1.17 s
+per step and 158 to 159 GB per rank, with training losses of 0.11 and
+0.14, against the dense ISLA lanes' 0.6 s and 129 GB on the same task.
+The AeroZoo pair count is therefore below the cars' (159 against 194
+GB) and the forest read fits with margin. At 1.17 s per step the 250
+epochs take about 55 hours of stepping, roughly three days with link
+restarts and validations.
+
+**What is next.** The car pair's verdict decides whether these lanes
+stand; if the pose-free forest fails parity on the cars, the lanes are
+cancelled and the arm waits for the fork's next form. Otherwise they are
+scored like the other lanes, and the P4 verdict (ISLA-DTT within 5
+percent of ISLA on every field of the `full` test side) is written here.
+
+## 2026-10-10 — AEROZOO amendment: the query-population shift becomes a scoring protocol of the benchmark for all three arms, with its predictions written before any AeroZoo score exists {#sec-nb-aerozoo-qpop-amendment}
+
+**Setting.** The AEROZOO pre-registration (@sec-nb-aerozoo-prereg)
+scores every arm natively: the training draw of 200,000 interior points
+per case. The DrivAerML query-population instrument (@sec-nb-query-pop)
+showed that the interacting ISLA's error on a fixed set of scored points
+moves 3.5x to 24x when the rest of the query population changes
+(wall-heavy or far-field companions), because the prediction points are
+tokens whose learned routing mass enters the slice states, while the
+Barnes-Hut fork's read-only tree read does not move at all (ratios
+1.0000). The fork proposes, and this entry adopts, the same instrument
+on AeroZoo, where the enclosures, scales and Reynolds numbers vary from
+case to case and the query cloud is the solver's cell-centroid
+distribution. Peter's steer, in his reply to the fork's status report
+of 2026-10-10 as that session relayed it: "I think AeroZoo is the one
+that I really want to do well on, and I anticipate query-independence
+paying a lot more dividends there than it does on DrivAerML (where the
+variation is really quite small)." Before any AeroZoo lane is scored,
+the protocol and its predictions are fixed here.
+
+**Protocol.** Scoring only, on the native checkpoints of the `full`
+split's six lanes (ISLA, GeoTransolver and ISLA-DTT, two seeds each),
+on the validation side (386 cases; the test side keeps its single
+scoring), float32. Every metric is computed on the SAME scored set per
+case, the first 100,000 native points, so that only the query population
+around them differs: the native 200,000 points (the control); the
+100,000 alone (half count at the training law); the native 200,000 plus
+200,000 companions drawn uniformly in the interior's bounding box
+(far-field heavy); the native 200,000 plus 200,000 companions resampled
+from the native points with probability inversely proportional to the
+distance to the no-slip walls (wall-heavy). The GeoTransolver arm's
+three stored distances are recomputed for every swapped-in point from
+the same sampled boundary, so it sees each condition through its own
+inputs. The readout per arm, condition and field is the relative L2 on
+the scored set divided by the control's, seed means with both seeds
+reported, and the mean deviation of the predictions on the scored
+points from the control's predictions. The fork adapts its DrivAerML
+script to the AeroZoo recipe; the script and its run line enter
+`kernel/aerozoo/` when it lands.
+
+**Predictions and bars.** (Q1) ISLA-DTT is query-independent by
+construction: every ratio is 1.000 to the roundoff of float32, on every
+condition and field, both seeds; a ratio outside 1 ± 0.001 on any
+condition falsifies the construction on this dataset. (Q2) ISLA moves
+under the far-field and wall-heavy companions on every field, with the
+far-field companions the larger move, as on DrivAerML; the half count
+stays within 1 ± 0.05; no magnitude is predicted, since AeroZoo's cases
+differ from the cars in enclosure and scale, and the two seeds are
+expected to agree in direction. (Q3) GeoTransolver moves too: it forms
+its slices over the point cloud it is given, and the authors of SMART
+report the same failure of Transolver and AB-UPT under query shifts on
+SHIFT-SUV; the magnitude relative to ISLA's is not predicted. A move
+counts when both seeds order the same way and the seed-mean ratio is
+outside 1 ± 0.05. These are measurements of a contract (query
+independence), reported beside the native accuracy and never in place
+of it; the pre-registered P1 to P4 verdicts are unchanged.
+
+**Why it matters.** If Q1 holds and Q2 and Q3 fire, ISLA-DTT is the
+only arm whose answer at a point does not depend on which other points
+were asked, which is the operational property a solver-replacement
+needs (a user queries a probe line, a plane, a region, not the training
+draw), and the AeroZoo chapter states it as the tree read's case. If Q1
+fails, the construction has a leak on this dataset and the fork is told
+first.
+
+## 2026-10-11 — ISLA-DTT configuration confirmed for AEROZOO: the pose-free forest read at theta 1 (snapshot code_dtt16) passes parity on the cars and reproduces native under the pose on every field; the eight lanes stand {#sec-nb-aerozoo-dtt-confirmed}
+
+**What the fork reported (2026-10-11, early morning).** The Barnes-Hut
+fork's car pair on the snapshot the AeroZoo lanes run (code_dtt16, the
+pose-free forest at theta 1, two seeds, 48 validation cars, float32):
+native pressure, velocity and eddy viscosity seed means of 0.0443 /
+0.0707 / 0.0982 against the retired tree's 0.0438 / 0.0707 / 0.129, so
+pressure within 1 percent, velocity equal and viscosity 24 percent
+better; the uniform point-cloud protocol tells the same story; and the
+posed protocol equals the native one to the fourth digit on every field
+for both seeds, where the lab-frame forest had lost 1.09x, 1.15x and 2
+to 2.6x. Against the interacting reference ISLA the forest reads 1.12 /
+1.11 / 1.12. With the AirfRANS pair (@sec-nb-aerozoo-dtt-launch) the
+fork's parity pre-registration holds on both datasets.
+
+**Consequence.** The eight AeroZoo ISLA-DTT lanes
+(@sec-nb-aerozoo-dtt-launch) stand, and the configuration the chapter
+names for the arm is fixed: the reference ISLA with the interior task,
+the query-independent read, the mean kernel read with no radius and
+theta 1, on psharpe/isla-dtt at 6094c4e9d (snapshot code_dtt16). The
+car numbers also set the expectation for the pre-registered P4 (ISLA-DTT
+within 5 percent of ISLA on every field of the `full` test side): on the
+cars the read-only form trails the interacting one by 11 to 12 percent,
+so P4 is at risk and is measured as written. The query-population
+protocol (@sec-nb-aerozoo-qpop-amendment) is where the read's case is
+made if the accuracy bar fails; its AeroZoo script is in the fork's
+smoke test.
+
+## 2026-10-11 — AEROZOO first scores: every ISLA lane reaches a validation loss two to three times below GeoTransolver's by epoch 30-60, then an optimization event at epoch 43-50 raises its training and validation loss three- to four-fold for the rest of the run; the final checkpoints lose P1, the best checkpoints would win its velocity clause {#sec-nb-aerozoo-instability}
+
+**The setting.** The AeroZoo benchmark (@sec-nb-aerozoo-prereg) trains
+the reference ISLA, the read-only ISLA-DTT and GeoTransolver on the
+interior task of AeroZoo v1.2 (the four boundary types with their
+prescribed values in, the five interior fields velocity, pressure, eddy
+viscosity, turbulence kinetic energy and specific dissipation out), 250
+epochs at the architectures' reference rates (ISLA 3.75e-4, a tenfold
+step at epoch 100), and scores the final checkpoint in float32 on the
+training draw of 200,000 points. The first lanes finished on 2026-10-11:
+ISLA on the `full` split (seed 43; seed 42 hours behind) and the ISLA
+pair on the held-out-box split `family_non_box`. GeoTransolver's lanes
+were at epoch 205-218 when this was written, so its float32 scores do
+not exist yet; its training-time validation (bf16, every ten epochs)
+stands in below, labeled as such.
+
+**What the final checkpoints score (validation side, float32, relative
+L2 in training units).** ISLA `full` seed 43 reads velocity 0.450,
+pressure 0.760, eddy viscosity 0.799, turbulence kinetic energy 0.787
+and specific dissipation 0.775 over the 386 validation cases; the
+`family_non_box` pair reads 0.428 / 0.589 / 0.864 / 0.893 / 0.848 and
+0.402 / 0.595 / 0.850 / 0.825 / 0.836 over 351. GeoTransolver's
+training-time validation at epoch 200 reads velocity 0.34-0.35 and
+pressure 0.46-0.49 on `full`, 0.33-0.34 and 0.42-0.45 on
+`family_non_box`. **Under the pre-registered rule (the final checkpoint
+of each lane) GeoTransolver ÷ ISLA is about 0.76 on velocity and 0.63
+on pressure on `full`, and P1 is falsified as written** (its
+falsification bar was a velocity ratio below 1.1 or a pressure ratio
+above 1.0). The test-side scoring that the standing is defined on waits
+for GeoTransolver's lanes; nothing above changes the order.
+
+**The trajectory is the finding.** Every ISLA lane, on every split,
+reaches its validation-loss minimum of 0.036-0.048 between epoch 30 and
+60 (velocity 0.20-0.23, pressure 0.18-0.54 in the trainer's bf16
+validation), then its loss rises more than twofold within ten to twenty
+epochs and stays at 0.11-0.15 to epoch 250; GeoTransolver's validation
+loss never goes below 0.09. **The training loss rises with the
+validation loss, so this is an optimization event and not overfitting:**
+the per-epoch mean step loss of ISLA `full` seed 43 is 0.0426 at epoch
+40, 0.0757 at 45, 0.119 at 50 and 0.15 from epoch 60 on, and the
+tenfold rate step at epoch 100 does not bring it back. The first epoch
+whose mean step loss exceeds 1.5 times its running minimum is 44 and 45
+on `full`, 43 on `family_non_box` (seed 42; seed 43's detector is
+confounded by the spike cases below), 43 and 47 on `reynolds`, 50 on
+`bank_blobs`, and 54 and 65 for the ISLA-DTT `full` pair: 23,000 to
+30,000 optimizer steps at the constant rate. GeoTransolver has no such
+event on any split: its per-epoch mean step loss falls from 0.077 at
+epoch 30 to 0.047 at epoch 100 and 0.014-0.019 at the end, while its
+validation loss drifts up from 0.09 to 0.11, which is ordinary
+overfitting.
+
+**It is not the DeepJEB++ signature.** On DeepJEB++ the instability was a
+total routing collapse (one to five active slices per block,
+@sec-nb-char-deepjeb-plateau-mechanism). The
+routing probe on two checkpoints per lane (job 1199576; artifacts in
+`results/campaigns_2026-10-09/aerozoo/probe/routing_*.json`) finds no
+block below 32 effective slices: ISLA `full` seed 43 goes from a
+minimum and median of 147 and 299 effective slices across its twelve
+blocks at epoch 31 to 36 and 194 at epoch 249, with the narrowing
+concentrated in three blocks; the `family_non_box` lane goes from 133
+and 271 to 87 and 202. Routing narrows partially after the event; it
+does not collapse.
+
+**The drift probe: the weights stall, no single tensor jumps.** The
+checkpoint-drift probe (`probe/ckpt_drift.py`, job 1199719, artifacts
+`probe/drift_*.json`) ranks every weight tensor by its relative change
+between consecutive kept checkpoints, with a GeoTransolver lane as the
+control. Across the transition no tensor jumps; what changes is the
+motion of all of them. Before the event the total parameter norm of
+ISLA `full` seed 43 grows by 9.1 per two epochs (336.8 at epoch 29 to
+407.3 at epoch 45, mostly the block MLPs); from the transition pair on
+the growth drops to 5.6, then 2.8, then 1 to 2 per two epochs, and the
+relative change of the vector of per-tensor norms falls from 0.03 to
+0.01. GeoTransolver's total norm grows by 20 per two epochs throughout
+(402 at epoch 29 to 797 at epoch 69) with no event. The same stall
+follows the transition in the other three probed ISLA lanes (seed 42
+from epoch 47, `family_non_box` from epochs 57-61, ISLA-DTT from epoch
+73). The one parameter that moves with the event in all four lanes is
+the gain of the head-frame prototype module, the scalar that bounds how
+far the output-frame prototypes may move from their seeds per sample:
+0.19 to 0.26, 0.34 and 0.38 across epochs 43-49 on seed 43, 0.21 to
+0.30 and 0.38 across 45-53 on seed 42, 0.21 to 0.28 across 39-43 on
+`family_non_box`, 0.22 to 0.29 across 63-65 on ISLA-DTT. On seed 43 it
+returns to 0.20 at epochs 57-61 while the loss stays at 0.15, so it is
+a correlate and not the cause by itself. The tenfold rate step at
+epoch 100 does not bring the loss back (median step loss 0.130 at
+epoch 98, 0.123 at 102, 0.109 at 249), so the iterate sits in a worse
+basin rather than oscillating about the old one. The degradation is
+global over cases: 99 percent of the 386 validation cases are worse on
+velocity at the final checkpoint than at the best (median ratio 1.9,
+tenth to ninetieth percentile 1.24 to 3.18), in every bank (1.7 to
+2.3) and every enclosure family (1.2 to 2.6), with the mean-unstable
+cases degrading more than the stable ones (2.55 against 1.71). **The
+mechanism is a loss of plasticity after 23,000 to 30,000 steps at the
+constant rate, uniform over the data; what saturates is unmeasured.**
+
+**The spike cases are a dataset finding, not the trigger.** The
+per-step training loss has isolated spikes whose values are identical
+across ISLA, ISLA-DTT and GeoTransolver for the same seed (the sampler's
+order is seed-determined): about 5.2 on `full`, 4.3, 24 and 1,712.6 on
+`family_non_box`, 2,086 on `bank_blobs`. The loss is a Huber loss on
+standardized targets, so a step loss of 1,712 means the case's targets
+sit about 1,700 standard deviations from the training mean on average:
+a handful of training cases carry pathological fields. GeoTransolver
+survives every one of them; ISLA survives the 1,712 case at epoch 24 in
+the `family_non_box` seed-43 lane and transitions at epoch 44-45 on
+`full` with no step loss above 1.5 in the preceding ten epochs. The
+spikes therefore do not explain the event. Their identification
+(subagent, `probe/outliers_*.py`, CPU job 1200497, artifacts
+`probe/outliers.{json,txt}` and `probe/outliers_scan.jsonl`) reproduces
+the sampler (seed plus epoch into `randperm`, drop-last truncation, the
+rank-0 shard, a 1-based step counter, the logged loss being the
+four-rank mean) and names one case per loss class, unanimous over every
+spike, seed, arm and epoch. The 1,712 and 2,086 spikes are
+`case-0000000000000001731-793b575a97a8` (cars bank, rectangular prism,
+mean-unstable, Reynolds 3.1e7): one interior row carries a specific
+dissipation of 5.4e11 per second, 1.2e10 standard deviations in the
+`full` constants, while the case's other fields are ordinary (mean |z|
+0.14 to 0.61). The 24 spike is case 2407 (blobs, mean-stable, one row
+at 1.6e8 standard deviations) and the 4.3 to 5.7 spikes are case 2344
+(blobs, mean-unstable, one row at 2.9e7). The loss formula checks to
+the digit: the logged value is the four-rank mean of the seven-channel
+mean of the unweighted Huber loss (delta 1) over the 200,000 sampled
+rows, so a block that holds the worst row of case 1731 gives 6,850 / 4
+= 1,712.6 in the held-out-box constants and 2,086 in the blob
+constants. Case 1731 sits in the `full` validation split and the
+`reynolds` test split, so the `full` lanes never trained on it; cases
+2407 and 2344 are in the `full` test and training splits. **The
+dataset's specific-dissipation field has a pervasive heavy tail, and
+the three spike cases are its extreme:** across the 3,815 cases, 238
+have a row above 1,000 standard deviations in omega, 110 above 10,000,
+6 above a million; 571 of the 2,713 `full` training cases exceed either
+a mean |z| of 3 or a max |z| of 100 on some field, and 24 percent of
+those are labeled mean-unstable against a 26 percent base rate, so the
+flags are not a stability marker. Beyond omega, 46 cases have a mean
+|z| above 3 on pressure (the pressure-coefficient scale of fast cases)
+and 36 on eddy viscosity (low-Reynolds cases in the opposed-hemisphere
+and opposed-sphere enclosures). One consequence for the metric: the
+per-case relative L2 of omega saturates at 1.0 when a single row
+dominates the target norm (case 1731 scores exactly 1.00 on omega at
+every checkpoint), so the omega column of every table is partly a count
+of such cases rather than a measure of the field. A log transform or a
+per-case clip of omega before standardization is the usual remedy;
+that is a protocol change for every arm and waits for Peter with the
+others.
+
+**The best-checkpoint diagnostic (labeled, never the standing).** The
+checkpoint at each lane's validation minimum (epoch 31 for `full` seed
+43, 41 and 61 for the `family_non_box` pair), scored exactly like the
+protocol on the validation side (`eval_bestval.sbatch`, job 1199537),
+reads velocity 0.223, pressure 0.534, eddy viscosity 0.523, turbulence
+kinetic energy 0.611 and specific dissipation 0.717 on `full`, and
+0.203 / 0.195 / 0.515 / 0.649 / 0.744 and 0.201 / 0.184 / 0.533 /
+0.674 / 0.728 on `family_non_box`: half the final checkpoint's velocity
+error on every lane and a third of its pressure error on the held-out-box
+split. **Against GeoTransolver's end-of-training validation, ISLA at its
+best checkpoint leads velocity by 1.5x on `full` and 1.65x on
+`family_non_box`, trails pressure by 0.88x on `full` (the box enclosures,
+which are the hard pressure cases) and leads it by 2.2-2.4x on
+`family_non_box`.** The turbulence fields stay at 0.5-0.75 for ISLA even
+at its best; GeoTransolver's are not yet scored in float32.
+
+**What is asked of Peter.** The pre-registered standing is the final
+checkpoint, and the chapter reports it as such. Two remedies are on the
+table and both need his word: ISLA and ISLA-DTT lanes at half the
+reference rate (1.875e-4, the DeepJEB++ exception made for this dataset
+too; two seeds, `full` and `family_non_box` first), and a labeled
+second table scored at the validation-loss minimum of every arm,
+GeoTransolver included. The recommendation is both, with one caution
+written down before the result: on DeepJEB++ the half rate moved the
+collapse from epoch 4 to epochs 20-24 and did not remove it
+(@sec-nb-char-deepjeb-halfrate-verdict), so a half-rate lane here that
+transitions at epoch 90 instead of 45 confirms a rate-bound event
+without curing it, and the drift probe's answer (which tensors move)
+decides whether the cure is in the rate at all. No training arm
+launches before his answer; the drift probe and the spike-case
+identification proceed.

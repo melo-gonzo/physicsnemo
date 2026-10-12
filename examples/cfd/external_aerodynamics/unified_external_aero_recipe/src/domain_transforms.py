@@ -32,6 +32,9 @@ Recipe-local datapipe components that the library does not provide.
   :class:`SqueezeScalarFields`, :class:`SplitGlobalVector`,
   :class:`RestrictToPlane`, :class:`SplitLineCells`,
   :class:`DropDegenerateCells` and :class:`ComposeQuadratureMeasure`.
+- Adapters for a multi-boundary case with per-face boundary conditions
+  (AeroZoo): :class:`ComputeLogReynolds`, :class:`HarmonizeBoundaryFields`,
+  :class:`BoundaryFieldToGlobal` and :class:`ConcatGlobalFields`.
 
 Recipe-local module registered into the global datapipe component registry
 so the classes can be referenced via ``${dp:...}`` short names in Hydra
@@ -49,6 +52,7 @@ from typing import Literal
 import torch
 from tensordict import TensorDict
 
+from physicsnemo.datapipes.keys import as_nested_key, key_to_str
 from physicsnemo.datapipes.readers.mesh import DomainMeshReader
 from physicsnemo.datapipes.registry import register
 from physicsnemo.datapipes.transforms.mesh import (
@@ -1410,3 +1414,291 @@ class SplitLineCells(MeshTransform):
             cell_data=cell_data or None,
             global_data=mesh.global_data,
         )
+
+
+def _global_leaf(global_data: TensorDict | None, name: str, who: str) -> torch.Tensor:
+    """The named (possibly nested, ``"a.b"``) leaf of ``global_data``, or a KeyError naming the available leaves."""
+    key = as_nested_key(name)
+    if global_data is None or key not in global_data:
+        available = (
+            []
+            if global_data is None
+            else sorted(
+                key_to_str(k)
+                for k in global_data.keys(include_nested=True, leaves_only=True)
+            )
+        )
+        raise KeyError(f"{who} needs global_data[{name!r}]; available: {available!r}")
+    return global_data[key]
+
+
+def _refuse_existing_globals(global_data: TensorDict, names: Sequence[str], who: str):
+    taken = [n for n in names if as_nested_key(n) in global_data]
+    if taken:
+        raise ValueError(
+            f"{who}: global_data already has {taken!r}; choose names that do not overwrite a leaf"
+        )
+
+
+@register()
+class ComputeLogReynolds(MeshTransform):
+    r"""Write the case's Reynolds number, as ``log10`` and standardized, into ``global_data`` (AeroZoo, 2026-10-09).
+
+    ``global_data[output_field] = log10(U L / nu)`` from the reference speed, the reference length and the
+    kinematic viscosity, and ``global_data[standardized_field] = (log10 Re - mean) / std``, the O(1) rank-0
+    global input a model declares (the raw value stays for provenance and re-dimensionalization). The three
+    source leaves are read by name; a ``"."`` addresses a nested leaf (``physics.kinematic_viscosity``). A
+    dataset whose cases span decades of Reynolds number carries the information this way, as a scalar
+    invariant next to the unit freestream direction of :class:`ComputeFreestreamDirection`, so nothing
+    dimensional reaches the model. Domain-aware like that transform: on a ``DomainMesh`` the leaves are read
+    from and written to the domain-level ``global_data``.
+    """
+
+    def __init__(
+        self,
+        speed_field: str,
+        length_field: str,
+        viscosity_field: str,
+        mean: float,
+        std: float,
+        output_field: str = "log_re",
+        standardized_field: str = "log_re_std",
+    ) -> None:
+        super().__init__()
+        self.speed_field = str(speed_field)
+        self.length_field = str(length_field)
+        self.viscosity_field = str(viscosity_field)
+        self.mean = float(mean)
+        self.std = float(std)
+        if self.std <= 0:
+            raise ValueError(f"ComputeLogReynolds: std must be positive, got {std!r}")
+        self.output_field = str(output_field)
+        self.standardized_field = str(standardized_field)
+
+    def _write(self, global_data: TensorDict) -> TensorDict:
+        who = "ComputeLogReynolds"
+        speed = _global_leaf(global_data, self.speed_field, who).float()
+        length = _global_leaf(global_data, self.length_field, who).float()
+        nu = _global_leaf(global_data, self.viscosity_field, who).float()
+        reynolds = speed * length / nu
+        if reynolds.numel() != 1 or not torch.isfinite(reynolds).all() or reynolds <= 0:
+            raise ValueError(
+                f"{who}: U L / nu must be one finite positive number, got {reynolds!r}"
+            )
+        log_re = torch.log10(reynolds.reshape(()))
+        new_gd = global_data.clone()
+        new_gd[self.output_field] = log_re
+        new_gd[self.standardized_field] = (log_re - self.mean) / self.std
+        return new_gd
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        return mesh.with_data(global_data=self._write(mesh.global_data))
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Derive the Reynolds number from the domain-level ``global_data``."""
+        return DomainMesh(
+            interior=domain.interior,
+            boundaries=domain.boundaries,
+            global_data=self._write(domain.global_data),
+        )
+
+    def extra_repr(self) -> str:
+        return (
+            f"{self.output_field} = log10({self.speed_field} * {self.length_field} / "
+            f"{self.viscosity_field}), {self.standardized_field} = ({self.output_field} - "
+            f"{self.mean}) / {self.std}"
+        )
+
+
+@register()
+class HarmonizeBoundaryFields(MeshTransform):
+    r"""Give every boundary of a ``DomainMesh`` the same ``cell_data`` fields (AeroZoo, 2026-10-09).
+
+    A case whose boundaries are grouped by condition type stores on each only the values that type
+    prescribes (the inlet its velocity and turbulence, the outlet its pressure and reverse-flow values, the
+    wall nothing but zero velocity, a slip wall nothing). A model with one declared boundary grammar reads
+    the same fields from every boundary mesh it is handed (ISLA's ``boundary_schema`` applies to all of
+    ``boundary_meshes``), so this transform writes, on every boundary:
+
+    * a one-hot label per listed boundary, ``cell_data[field] = 1`` on the boundary of that name and ``0``
+      on every other, shape ``(F,)``; and
+    * every listed prescribed field a boundary lacks, as zeros of the field's rank (``(F,)`` for rank 0,
+      ``(F, d)`` for rank 1, ``(F, d, d)`` for rank 2). A boundary that carries the field keeps its values,
+      and their shape must match the declared rank (a ``(F, 1)`` column is not a rank-0 field).
+
+    A boundary without faces (a case without a slip wall) receives the same fields with zero rows. Every
+    boundary named in ``one_hot`` must exist; ``fields`` names may be nested (``prescribed.dirichlet.velocity``).
+    Bare ``Mesh`` inputs pass through unchanged (there is no boundary name to label).
+
+    Args:
+        one_hot: ``{boundary_name: label_field}``, e.g. ``{inlet: bc_inlet, outlet: bc_outlet}``.
+        fields: ``{cell_data field: rank}`` of the prescribed fields to equalize across the boundaries.
+    """
+
+    def __init__(self, one_hot: dict[str, str], fields: dict[str, int]) -> None:
+        super().__init__()
+        self.one_hot = {str(b): str(f) for b, f in one_hot.items()}
+        self.fields = {str(name): int(rank) for name, rank in fields.items()}
+        if len(set(self.one_hot.values())) != len(self.one_hot):
+            raise ValueError(
+                f"HarmonizeBoundaryFields: label fields must be distinct, got {self.one_hot!r}"
+            )
+        for name, rank in self.fields.items():
+            if rank < 0:
+                raise ValueError(
+                    f"HarmonizeBoundaryFields: rank of {name!r} must be >= 0, got {rank}"
+                )
+
+    def _harmonize(self, name: str, mesh: Mesh) -> Mesh:
+        n, d = mesh.n_cells, mesh.n_spatial_dims
+        dtype, device = mesh.points.dtype, mesh.points.device
+        cd = mesh.cell_data.clone()
+        for boundary, label in self.one_hot.items():
+            cd[label] = torch.full(
+                (n,), float(boundary == name), dtype=dtype, device=device
+            )
+        for field, rank in self.fields.items():
+            key = as_nested_key(field)
+            shape = (n,) + (d,) * rank
+            if key in cd:
+                if tuple(cd[key].shape) != shape:
+                    raise ValueError(
+                        f"HarmonizeBoundaryFields: boundaries[{name!r}].cell_data[{field!r}] has shape "
+                        f"{tuple(cd[key].shape)}; rank {rank} on {n} cells is {shape}"
+                    )
+            else:
+                cd[key] = torch.zeros(shape, dtype=dtype, device=device)
+        return mesh.with_data(cell_data=cd)
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        return mesh
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Label and zero-fill every boundary of the domain."""
+        missing = [b for b in self.one_hot if b not in domain.boundary_names]
+        if missing:
+            raise KeyError(
+                f"HarmonizeBoundaryFields: boundaries {missing!r} not found; available: "
+                f"{domain.boundary_names!r}"
+            )
+        return DomainMesh(
+            interior=domain.interior,
+            boundaries={
+                name: self._harmonize(name, b) for name, b in domain.boundaries.items()
+            },
+            global_data=domain.global_data,
+        )
+
+    def extra_repr(self) -> str:
+        return f"one_hot={self.one_hot}, fields={self.fields}"
+
+
+@register()
+class BoundaryFieldToGlobal(MeshTransform):
+    r"""Reduce ``cell_data`` fields of one boundary to per-case global leaves (AeroZoo, 2026-10-09).
+
+    ``global_data[name] = sum_i m_i f_i / sum_i m_i`` over the cells of ``boundaries[boundary]``, with ``m``
+    the effective cell measure (:func:`~physicsnemo.mesh.calculus.measure.cell_measures`: the cell area
+    times the reader's Horvitz-Thompson subsample weight), so the leaf is the area average of the field over
+    the whole boundary, independent of how the boundary was meshed or subsampled; a value prescribed
+    uniformly over the boundary (an inlet's turbulence quantities) comes back exactly. A scalar ``(F,)``
+    field gives a 0-d leaf (a rank-0 global input), a vector ``(F, d)`` field a ``(d,)`` leaf. Writing over an
+    existing leaf is refused, as in :class:`SplitGlobalVector`. A boundary without cells gives zeros.
+    Bare ``Mesh`` inputs pass through unchanged.
+
+    Args:
+        boundary: the boundary whose fields are reduced.
+        fields: ``{cell_data field: global name}``; a ``"."`` in the field addresses a nested leaf.
+    """
+
+    def __init__(self, boundary: str, fields: dict[str, str]) -> None:
+        super().__init__()
+        self.boundary = str(boundary)
+        self.fields = {str(f): str(g) for f, g in fields.items()}
+        if not self.fields or len(set(self.fields.values())) != len(self.fields):
+            raise ValueError(
+                f"BoundaryFieldToGlobal: global names must be non-empty and distinct, got {self.fields!r}"
+            )
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        return mesh
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Write the measure-weighted means into the domain-level ``global_data``."""
+        if self.boundary not in domain.boundary_names:
+            raise KeyError(
+                f"BoundaryFieldToGlobal: boundary {self.boundary!r} not found; available: "
+                f"{domain.boundary_names!r}"
+            )
+        gd = domain.global_data
+        _refuse_existing_globals(
+            gd, list(self.fields.values()), "BoundaryFieldToGlobal"
+        )
+        mesh = domain.boundaries[self.boundary]
+        measures = cell_measures(mesh).float()
+        weights = measures / measures.sum().clamp_min(torch.finfo(torch.float32).tiny)
+        new_gd = gd.clone()
+        for field, name in self.fields.items():
+            key = as_nested_key(field)
+            if key not in mesh.cell_data:
+                raise KeyError(
+                    f"BoundaryFieldToGlobal: boundaries[{self.boundary!r}].cell_data lacks {field!r}"
+                )
+            values = mesh.cell_data[key].float()
+            if values.shape[0] != mesh.n_cells or values.ndim not in (1, 2):
+                raise ValueError(
+                    f"BoundaryFieldToGlobal: {field!r} has shape {tuple(values.shape)}; a cell field is "
+                    f"(F,) or (F, d) with F = {mesh.n_cells}"
+                )
+            w = weights if values.ndim == 1 else weights[:, None]
+            new_gd[name] = (w * values).sum(dim=0)
+        return DomainMesh(
+            interior=domain.interior, boundaries=domain.boundaries, global_data=new_gd
+        )
+
+    def extra_repr(self) -> str:
+        return f"boundary={self.boundary!r}, fields={self.fields}"
+
+
+@register()
+class ConcatGlobalFields(MeshTransform):
+    r"""Concatenate named ``global_data`` leaves into one vector leaf (AeroZoo, 2026-10-09).
+
+    The reverse direction of :class:`SplitGlobalVector`: the dataset carries, and a model with a declared
+    field grammar reads, named global leaves (ISLA's ``global_schema``), while a tensor-input baseline reads
+    one vector as its global embedding (GeoTransolver's ``global_embedding``). Each listed leaf is flattened
+    and the pieces are concatenated in the listed order into ``global_data[output_field]``; the sources stay,
+    and writing over an existing leaf is refused. Works on a bare ``Mesh`` and on the domain-level
+    ``global_data`` of a ``DomainMesh``.
+    """
+
+    def __init__(self, fields: Sequence[str], output_field: str) -> None:
+        super().__init__()
+        self.fields = [str(f) for f in fields]
+        if not self.fields:
+            raise ValueError("ConcatGlobalFields: fields must not be empty")
+        self.output_field = str(output_field)
+
+    def _concat(self, global_data: TensorDict) -> TensorDict:
+        _refuse_existing_globals(global_data, [self.output_field], "ConcatGlobalFields")
+        pieces = [
+            _global_leaf(global_data, name, "ConcatGlobalFields").float().reshape(-1)
+            for name in self.fields
+        ]
+        new_gd = global_data.clone()
+        new_gd[self.output_field] = torch.cat(pieces)
+        return new_gd
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        return mesh.with_data(global_data=self._concat(mesh.global_data))
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Concatenate in the domain-level ``global_data``."""
+        return DomainMesh(
+            interior=domain.interior,
+            boundaries=domain.boundaries,
+            global_data=self._concat(domain.global_data),
+        )
+
+    def extra_repr(self) -> str:
+        return f"{self.output_field} = cat({self.fields})"

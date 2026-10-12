@@ -1,0 +1,223 @@
+epoch 29: 400 tensors; total norm 401.865; scalars {"Attn.state_mixing": -0.5761}
+epoch 31: 400 tensors; total norm 422.388; scalars {"Attn.state_mixing": -0.6104}
+epoch 33: 400 tensors; total norm 443.243; scalars {"Attn.state_mixing": -0.6279}
+epoch 35: 400 tensors; total norm 463.777; scalars {"Attn.state_mixing": -0.6578}
+epoch 37: 400 tensors; total norm 484.374; scalars {"Attn.state_mixing": -0.6897}
+epoch 39: 400 tensors; total norm 504.798; scalars {"Attn.state_mixing": -0.7355}
+epoch 41: 400 tensors; total norm 525.279; scalars {"Attn.state_mixing": -0.7406}
+epoch 43: 400 tensors; total norm 545.691; scalars {"Attn.state_mixing": -0.7897}
+epoch 45: 400 tensors; total norm 565.834; scalars {"Attn.state_mixing": -0.8063}
+epoch 47: 400 tensors; total norm 586.036; scalars {"Attn.state_mixing": -0.815}
+epoch 49: 400 tensors; total norm 606.085; scalars {"Attn.state_mixing": -0.8459}
+epoch 51: 400 tensors; total norm 625.760; scalars {"Attn.state_mixing": -0.8962}
+epoch 53: 400 tensors; total norm 645.655; scalars {"Attn.state_mixing": -0.918}
+epoch 55: 400 tensors; total norm 664.906; scalars {"Attn.state_mixing": -0.9436}
+epoch 57: 400 tensors; total norm 684.411; scalars {"Attn.state_mixing": -0.9581}
+epoch 59: 400 tensors; total norm 703.800; scalars {"Attn.state_mixing": -0.9901}
+epoch 61: 400 tensors; total norm 722.979; scalars {"Attn.state_mixing": -1.0385}
+epoch 63: 400 tensors; total norm 742.010; scalars {"Attn.state_mixing": -1.0768}
+epoch 65: 400 tensors; total norm 760.540; scalars {"Attn.state_mixing": -1.1055}
+epoch 67: 400 tensors; total norm 778.890; scalars {"Attn.state_mixing": -1.1201}
+epoch 69: 400 tensors; total norm 797.170; scalars {"Attn.state_mixing": -1.1493}
+
+=== relative weight change per consecutive pair (total over all tensors, and the top movers)
+29->31: norm-vector change 0.0552; median tensor rel-change 0.1721
+    0.5546  blocks.8.Attn.cross_k.bias  |w|: 0.597 -> 0.761  max|w|: 0.180 -> 0.240
+    0.5157  blocks.11.Attn.cross_q.weight  |w|: 1.949 -> 2.175  max|w|: 0.203 -> 0.199
+    0.4846  blocks.11.Attn.in_project_fx.bias  |w|: 1.156 -> 1.234  max|w|: 0.176 -> 0.159
+    0.4785  blocks.10.Attn.cross_q.bias  |w|: 0.241 -> 0.262  max|w|: 0.073 -> 0.077
+    0.4713  blocks.9.Attn.cross_q.bias  |w|: 0.242 -> 0.218  max|w|: 0.087 -> 0.064
+    0.4654  blocks.4.Attn.in_project_fx.bias  |w|: 1.204 -> 1.277  max|w|: 0.173 -> 0.180
+    0.4460  blocks.6.Attn.cross_k.bias  |w|: 0.809 -> 0.947  max|w|: 0.237 -> 0.267
+    0.3939  blocks.10.Attn.cross_k.bias  |w|: 0.602 -> 0.514  max|w|: 0.180 -> 0.139
+31->33: norm-vector change 0.0531; median tensor rel-change 0.1695
+    0.4927  blocks.9.Attn.cross_q.bias  |w|: 0.218 -> 0.242  max|w|: 0.064 -> 0.083
+    0.4781  blocks.0.Attn.cross_v.bias  |w|: 0.365 -> 0.399  max|w|: 0.119 -> 0.163
+    0.4731  blocks.11.Attn.cross_q.weight  |w|: 2.175 -> 2.251  max|w|: 0.199 -> 0.204
+    0.4461  blocks.10.Attn.cross_q.bias  |w|: 0.262 -> 0.226  max|w|: 0.077 -> 0.075
+    0.4202  blocks.5.ln_1.bias  |w|: 1.325 -> 1.493  max|w|: 0.244 -> 0.321
+    0.4190  blocks.6.Attn.in_project_fx.bias  |w|: 1.323 -> 1.458  max|w|: 0.241 -> 0.251
+    0.4189  blocks.11.Attn.in_project_fx.bias  |w|: 1.234 -> 1.179  max|w|: 0.159 -> 0.154
+    0.4151  blocks.0.Attn.in_project_fx.bias  |w|: 1.233 -> 1.349  max|w|: 0.188 -> 0.197
+33->35: norm-vector change 0.0495; median tensor rel-change 0.1616
+    0.9580  blocks.10.Attn.cross_q.bias  |w|: 0.226 -> 0.394  max|w|: 0.075 -> 0.116
+    0.6962  blocks.9.Attn.cross_q.bias  |w|: 0.242 -> 0.305  max|w|: 0.083 -> 0.107
+    0.4645  blocks.11.Attn.cross_q.weight  |w|: 2.251 -> 2.231  max|w|: 0.204 -> 0.239
+    0.3955  blocks.4.Attn.in_project_fx.bias  |w|: 1.293 -> 1.381  max|w|: 0.167 -> 0.175
+    0.3729  blocks.10.ln_1.bias  |w|: 1.389 -> 1.440  max|w|: 0.459 -> 0.455
+    0.3688  blocks.5.Attn.cross_q.weight  |w|: 3.110 -> 3.385  max|w|: 0.264 -> 0.280
+    0.3638  blocks.3.Attn.in_project_x.weight  |w|: 30.438 -> 32.037  max|w|: 0.455 -> 0.449
+    0.3589  blocks.10.Attn.in_project_fx.bias  |w|: 1.298 -> 1.346  max|w|: 0.206 -> 0.210
+35->37: norm-vector change 0.0473; median tensor rel-change 0.1614
+    0.7635  blocks.10.Attn.cross_k.bias  |w|: 0.558 -> 0.770  max|w|: 0.204 -> 0.276
+    0.6041  blocks.9.Attn.cross_q.bias  |w|: 0.305 -> 0.375  max|w|: 0.107 -> 0.128
+    0.5569  blocks.4.Attn.cross_k.bias  |w|: 0.706 -> 0.800  max|w|: 0.235 -> 0.283
+    0.5236  blocks.8.Attn.in_project_slice.bias  |w|: 1.309 -> 1.448  max|w|: 0.211 -> 0.250
+    0.4500  blocks.6.Attn.cross_q.bias  |w|: 0.383 -> 0.445  max|w|: 0.115 -> 0.138
+    0.4420  blocks.11.Attn.cross_q.weight  |w|: 2.231 -> 2.379  max|w|: 0.239 -> 0.263
+    0.3891  blocks.6.Attn.in_project_fx.bias  |w|: 1.492 -> 1.529  max|w|: 0.273 -> 0.247
+    0.3618  blocks.8.Attn.cross_q.bias  |w|: 0.618 -> 0.634  max|w|: 0.175 -> 0.184
+37->39: norm-vector change 0.0448; median tensor rel-change 0.1547
+    0.7916  blocks.5.Attn.cross_k.bias  |w|: 0.661 -> 0.502  max|w|: 0.231 -> 0.161
+    0.4526  blocks.9.Attn.cross_q.bias  |w|: 0.375 -> 0.311  max|w|: 0.128 -> 0.118
+    0.4329  blocks.10.Attn.in_project_fx.bias  |w|: 1.392 -> 1.514  max|w|: 0.218 -> 0.246
+    0.4228  blocks.11.Attn.cross_q.weight  |w|: 2.379 -> 2.272  max|w|: 0.263 -> 0.287
+    0.3987  blocks.10.ln_1.bias  |w|: 1.452 -> 1.559  max|w|: 0.501 -> 0.558
+    0.3890  blocks.8.Attn.in_project_fx.bias  |w|: 1.467 -> 1.474  max|w|: 0.191 -> 0.233
+    0.3855  blocks.8.ln_1.bias  |w|: 1.251 -> 1.315  max|w|: 0.438 -> 0.502
+    0.3747  blocks.10.Attn.cross_q.bias  |w|: 0.385 -> 0.388  max|w|: 0.110 -> 0.117
+39->41: norm-vector change 0.0429; median tensor rel-change 0.1484
+    0.6949  blocks.9.Attn.cross_q.bias  |w|: 0.311 -> 0.389  max|w|: 0.118 -> 0.123
+    0.4606  blocks.8.Attn.cross_k.bias  |w|: 0.893 -> 0.815  max|w|: 0.275 -> 0.232
+    0.4379  blocks.11.Attn.cross_q.weight  |w|: 2.272 -> 2.222  max|w|: 0.287 -> 0.281
+    0.4126  blocks.6.Attn.cross_k.bias  |w|: 0.830 -> 0.966  max|w|: 0.259 -> 0.305
+    0.3785  blocks.4.Attn.in_project_fx.bias  |w|: 1.467 -> 1.642  max|w|: 0.219 -> 0.226
+    0.3623  blocks.3.Attn.cross_k.bias  |w|: 0.966 -> 1.186  max|w|: 0.299 -> 0.359
+    0.3616  blocks.7.Attn.in_project_x.bias  |w|: 1.269 -> 1.303  max|w|: 0.184 -> 0.184
+    0.3482  blocks.8.ln_1.bias  |w|: 1.315 -> 1.363  max|w|: 0.502 -> 0.525
+41->43: norm-vector change 0.0410; median tensor rel-change 0.1604
+    0.6392  blocks.4.Attn.cross_k.bias  |w|: 1.012 -> 0.843  max|w|: 0.349 -> 0.276
+    0.5023  blocks.10.Attn.cross_q.bias  |w|: 0.379 -> 0.422  max|w|: 0.120 -> 0.131
+    0.4558  blocks.11.Attn.cross_q.weight  |w|: 2.222 -> 2.314  max|w|: 0.281 -> 0.313
+    0.4519  blocks.9.Attn.cross_q.bias  |w|: 0.389 -> 0.352  max|w|: 0.123 -> 0.116
+    0.4265  blocks.8.Attn.cross_k.bias  |w|: 0.815 -> 0.965  max|w|: 0.232 -> 0.241
+    0.4136  blocks.6.Attn.cross_k.bias  |w|: 0.966 -> 1.200  max|w|: 0.305 -> 0.333
+    0.3907  blocks.6.Attn.cross_q.bias  |w|: 0.492 -> 0.499  max|w|: 0.167 -> 0.174
+    0.3755  blocks.0.Attn.cross_k.bias  |w|: 0.948 -> 1.052  max|w|: 0.287 -> 0.320
+43->45: norm-vector change 0.0389; median tensor rel-change 0.1590
+    0.5844  blocks.10.Attn.cross_k.bias  |w|: 0.887 -> 1.291  max|w|: 0.353 -> 0.447
+    0.5054  blocks.9.Attn.cross_q.bias  |w|: 0.352 -> 0.415  max|w|: 0.116 -> 0.121
+    0.4740  blocks.11.Attn.cross_q.weight  |w|: 2.314 -> 2.453  max|w|: 0.313 -> 0.310
+    0.4616  blocks.5.Attn.cross_k.bias  |w|: 0.543 -> 0.667  max|w|: 0.187 -> 0.236
+    0.4155  blocks.6.Attn.in_project_x.bias  |w|: 2.179 -> 2.273  max|w|: 0.317 -> 0.335
+    0.3903  blocks.11.Attn.cross_q.bias  |w|: 0.559 -> 0.744  max|w|: 0.196 -> 0.251
+    0.3680  blocks.6.ln_1.bias  |w|: 1.777 -> 1.752  max|w|: 0.513 -> 0.513
+    0.3551  blocks.6.Attn.cross_q.bias  |w|: 0.499 -> 0.537  max|w|: 0.174 -> 0.186
+45->47: norm-vector change 0.0376; median tensor rel-change 0.1558
+    0.5770  blocks.10.Attn.cross_q.bias  |w|: 0.401 -> 0.458  max|w|: 0.125 -> 0.150
+    0.5457  blocks.7.Attn.in_project_slice.bias  |w|: 1.563 -> 1.529  max|w|: 0.228 -> 0.271
+    0.5356  blocks.9.Attn.in_project_x.bias  |w|: 1.125 -> 1.221  max|w|: 0.169 -> 0.171
+    0.4511  blocks.11.Attn.cross_q.weight  |w|: 2.453 -> 2.539  max|w|: 0.310 -> 0.313
+    0.4457  blocks.6.Attn.cross_k.bias  |w|: 1.313 -> 1.797  max|w|: 0.363 -> 0.462
+    0.4268  blocks.7.Attn.in_project_x.bias  |w|: 1.278 -> 1.373  max|w|: 0.184 -> 0.190
+    0.3869  blocks.8.Attn.in_project_x.bias  |w|: 1.355 -> 1.546  max|w|: 0.154 -> 0.214
+    0.3508  blocks.9.Attn.cross_q.bias  |w|: 0.415 -> 0.451  max|w|: 0.121 -> 0.133
+47->49: norm-vector change 0.0360; median tensor rel-change 0.1478
+    0.5446  blocks.5.Attn.cross_k.bias  |w|: 0.673 -> 0.597  max|w|: 0.235 -> 0.201
+    0.4653  blocks.7.Attn.in_project_x.bias  |w|: 1.373 -> 1.619  max|w|: 0.190 -> 0.252
+    0.4630  blocks.4.Attn.cross_k.bias  |w|: 0.858 -> 0.788  max|w|: 0.282 -> 0.258
+    0.4399  blocks.11.Attn.cross_q.weight  |w|: 2.539 -> 2.644  max|w|: 0.313 -> 0.378
+    0.4350  blocks.9.Attn.cross_q.bias  |w|: 0.451 -> 0.452  max|w|: 0.133 -> 0.157
+    0.3721  blocks.6.ln_1.bias  |w|: 1.821 -> 1.871  max|w|: 0.528 -> 0.561
+    0.3638  blocks.8.Attn.in_project_fx.bias  |w|: 1.593 -> 1.661  max|w|: 0.264 -> 0.259
+    0.3526  blocks.11.Attn.in_project_x.bias  |w|: 1.287 -> 1.408  max|w|: 0.151 -> 0.165
+49->51: norm-vector change 0.0340; median tensor rel-change 0.1493
+    0.6005  blocks.9.Attn.cross_q.bias  |w|: 0.452 -> 0.564  max|w|: 0.157 -> 0.163
+    0.4042  blocks.11.Attn.cross_q.weight  |w|: 2.644 -> 2.629  max|w|: 0.378 -> 0.359
+    0.4033  blocks.5.Attn.cross_k.bias  |w|: 0.597 -> 0.642  max|w|: 0.201 -> 0.208
+    0.3817  blocks.9.Attn.in_project_x.bias  |w|: 1.158 -> 1.354  max|w|: 0.165 -> 0.234
+    0.3454  blocks.0.Attn.cross_q.weight  |w|: 4.441 -> 4.517  max|w|: 0.296 -> 0.322
+    0.3307  blocks.4.Attn.cross_k.bias  |w|: 0.788 -> 0.887  max|w|: 0.258 -> 0.298
+    0.3293  blocks.11.Attn.in_project_fx.bias  |w|: 1.569 -> 1.585  max|w|: 0.231 -> 0.226
+    0.3266  blocks.8.ln_1.bias  |w|: 1.521 -> 1.685  max|w|: 0.572 -> 0.545
+51->53: norm-vector change 0.0333; median tensor rel-change 0.1580
+    0.4377  blocks.11.Attn.cross_q.weight  |w|: 2.629 -> 2.699  max|w|: 0.359 -> 0.343
+    0.3379  blocks.0.Attn.cross_q.weight  |w|: 4.517 -> 4.488  max|w|: 0.322 -> 0.318
+    0.3297  blocks.5.Attn.cross_q.weight  |w|: 4.042 -> 4.034  max|w|: 0.401 -> 0.364
+    0.3232  blocks.11.Attn.cross_k.weight  |w|: 7.151 -> 7.297  max|w|: 0.476 -> 0.465
+    0.3122  blocks.0.Attn.cross_k.weight  |w|: 10.866 -> 10.930  max|w|: 0.562 -> 0.587
+    0.3100  blocks.0.Attn.cross_v.bias  |w|: 0.457 -> 0.475  max|w|: 0.228 -> 0.228
+    0.3098  blocks.7.Attn.in_project_fx.bias  |w|: 2.016 -> 2.054  max|w|: 0.266 -> 0.293
+    0.3092  blocks.9.Attn.in_project_x.bias  |w|: 1.354 -> 1.398  max|w|: 0.234 -> 0.234
+53->55: norm-vector change 0.0312; median tensor rel-change 0.1644
+    0.4177  blocks.11.Attn.cross_q.weight  |w|: 2.699 -> 2.696  max|w|: 0.343 -> 0.339
+    0.4002  blocks.7.Attn.in_project_x.bias  |w|: 1.566 -> 1.640  max|w|: 0.252 -> 0.252
+    0.3782  blocks.11.Attn.in_project_x.bias  |w|: 1.606 -> 1.762  max|w|: 0.184 -> 0.217
+    0.3780  blocks.8.Attn.in_project_slice.bias  |w|: 1.440 -> 1.530  max|w|: 0.271 -> 0.275
+    0.3521  blocks.0.Attn.cross_q.weight  |w|: 4.488 -> 4.554  max|w|: 0.318 -> 0.322
+    0.3492  blocks.4.ln_1.bias  |w|: 2.143 -> 2.243  max|w|: 0.601 -> 0.582
+    0.3297  blocks.0.Attn.in_project_fx.bias  |w|: 1.650 -> 1.738  max|w|: 0.287 -> 0.262
+    0.3275  blocks.0.Attn.cross_v.bias  |w|: 0.475 -> 0.501  max|w|: 0.228 -> 0.200
+55->57: norm-vector change 0.0306; median tensor rel-change 0.1458
+    0.8404  blocks.11.Attn.in_project_slice.bias  |w|: 1.963 -> 1.557  max|w|: 0.269 -> 0.214
+    0.7926  blocks.11.Attn.in_project_x.bias  |w|: 1.762 -> 1.992  max|w|: 0.217 -> 0.268
+    0.4839  blocks.9.Attn.in_project_x.bias  |w|: 1.405 -> 1.564  max|w|: 0.219 -> 0.264
+    0.4391  blocks.11.Attn.cross_q.weight  |w|: 2.696 -> 2.733  max|w|: 0.339 -> 0.343
+    0.4306  blocks.10.Attn.cross_q.bias  |w|: 0.413 -> 0.487  max|w|: 0.141 -> 0.139
+    0.4203  blocks.5.Attn.cross_k.bias  |w|: 0.615 -> 0.653  max|w|: 0.202 -> 0.220
+    0.3573  blocks.11.ln_1.bias  |w|: 1.988 -> 2.311  max|w|: 0.708 -> 0.832
+    0.3514  blocks.0.Attn.cross_v.bias  |w|: 0.501 -> 0.513  max|w|: 0.200 -> 0.220
+57->59: norm-vector change 0.0296; median tensor rel-change 0.1553
+    0.4461  blocks.10.Attn.cross_q.bias  |w|: 0.487 -> 0.402  max|w|: 0.139 -> 0.147
+    0.4347  blocks.11.Attn.cross_q.weight  |w|: 2.733 -> 2.888  max|w|: 0.343 -> 0.367
+    0.4213  blocks.11.Attn.cross_q.bias  |w|: 0.596 -> 0.725  max|w|: 0.204 -> 0.247
+    0.3953  blocks.8.Attn.in_project_x.bias  |w|: 1.617 -> 1.742  max|w|: 0.196 -> 0.207
+    0.3797  blocks.11.Attn.in_project_x.bias  |w|: 1.992 -> 2.305  max|w|: 0.268 -> 0.311
+    0.3612  blocks.7.Attn.in_project_x.bias  |w|: 1.655 -> 1.799  max|w|: 0.252 -> 0.252
+    0.3510  blocks.11.Attn.in_project_x.weight  |w|: 17.452 -> 18.401  max|w|: 0.602 -> 0.614
+    0.3404  blocks.6.Attn.cross_q.bias  |w|: 0.685 -> 0.607  max|w|: 0.228 -> 0.210
+59->61: norm-vector change 0.0284; median tensor rel-change 0.1440
+    0.5816  blocks.9.Attn.cross_q.bias  |w|: 0.490 -> 0.683  max|w|: 0.131 -> 0.188
+    0.4235  blocks.11.Attn.cross_q.weight  |w|: 2.888 -> 2.900  max|w|: 0.367 -> 0.335
+    0.3750  blocks.10.Attn.cross_q.bias  |w|: 0.402 -> 0.408  max|w|: 0.147 -> 0.142
+    0.3407  blocks.6.Attn.cross_q.bias  |w|: 0.607 -> 0.760  max|w|: 0.210 -> 0.265
+    0.3392  blocks.0.Attn.cross_q.weight  |w|: 4.621 -> 4.575  max|w|: 0.336 -> 0.339
+    0.3356  blocks.4.Attn.cross_k.bias  |w|: 0.814 -> 0.876  max|w|: 0.287 -> 0.304
+    0.3281  blocks.11.Attn.cross_k.weight  |w|: 7.705 -> 7.800  max|w|: 0.516 -> 0.569
+    0.3276  blocks.11.Attn.in_project_x.weight  |w|: 18.401 -> 19.283  max|w|: 0.614 -> 0.617
+61->63: norm-vector change 0.0275; median tensor rel-change 0.1492
+    0.4821  blocks.4.Attn.cross_k.bias  |w|: 0.876 -> 1.151  max|w|: 0.304 -> 0.396
+    0.4338  blocks.11.Attn.cross_q.weight  |w|: 2.900 -> 2.968  max|w|: 0.335 -> 0.336
+    0.3762  blocks.10.Attn.cross_q.bias  |w|: 0.408 -> 0.454  max|w|: 0.142 -> 0.147
+    0.3658  blocks.9.Attn.in_project_x.bias  |w|: 1.674 -> 1.737  max|w|: 0.300 -> 0.285
+    0.3602  blocks.0.Attn.cross_v.bias  |w|: 0.536 -> 0.548  max|w|: 0.221 -> 0.202
+    0.3484  blocks.0.Attn.cross_q.weight  |w|: 4.575 -> 4.522  max|w|: 0.339 -> 0.338
+    0.3467  blocks.5.Attn.cross_k.bias  |w|: 0.664 -> 0.755  max|w|: 0.242 -> 0.253
+    0.3364  context_builder.local_extractors.0.tokenizers.2.in_project_fx.bias  |w|: 1.302 -> 1.278  max|w|: 0.227 -> 0.219
+63->65: norm-vector change 0.0261; median tensor rel-change 0.1450
+    0.5842  blocks.10.Attn.cross_q.bias  |w|: 0.454 -> 0.589  max|w|: 0.147 -> 0.204
+    0.4791  blocks.5.Attn.cross_k.bias  |w|: 0.755 -> 0.972  max|w|: 0.253 -> 0.271
+    0.4238  blocks.11.Attn.cross_q.weight  |w|: 2.968 -> 3.045  max|w|: 0.336 -> 0.322
+    0.3695  blocks.9.Attn.in_project_x.bias  |w|: 1.737 -> 1.803  max|w|: 0.285 -> 0.286
+    0.3400  blocks.0.Attn.cross_q.weight  |w|: 4.522 -> 4.560  max|w|: 0.338 -> 0.331
+    0.3244  blocks.11.Attn.cross_k.weight  |w|: 7.936 -> 8.068  max|w|: 0.525 -> 0.536
+    0.3187  blocks.10.ln_1.bias  |w|: 1.949 -> 2.060  max|w|: 0.615 -> 0.639
+    0.3100  blocks.8.Attn.cross_q.weight  |w|: 4.153 -> 4.194  max|w|: 0.324 -> 0.346
+65->67: norm-vector change 0.0252; median tensor rel-change 0.1386
+    0.4561  blocks.9.Attn.cross_q.bias  |w|: 0.533 -> 0.739  max|w|: 0.179 -> 0.226
+    0.4148  blocks.10.Attn.cross_q.bias  |w|: 0.589 -> 0.671  max|w|: 0.204 -> 0.201
+    0.4007  blocks.11.Attn.cross_q.weight  |w|: 3.045 -> 2.982  max|w|: 0.322 -> 0.336
+    0.3445  blocks.0.Attn.cross_q.weight  |w|: 4.560 -> 4.592  max|w|: 0.331 -> 0.352
+    0.3272  blocks.11.Attn.cross_k.weight  |w|: 8.068 -> 8.145  max|w|: 0.536 -> 0.576
+    0.3145  blocks.8.Attn.cross_q.weight  |w|: 4.194 -> 4.216  max|w|: 0.346 -> 0.352
+    0.3122  blocks.5.Attn.cross_q.weight  |w|: 4.435 -> 4.431  max|w|: 0.309 -> 0.309
+    0.3080  blocks.0.Attn.cross_k.weight  |w|: 11.501 -> 11.609  max|w|: 0.589 -> 0.578
+67->69: norm-vector change 0.0243; median tensor rel-change 0.1502
+    0.4275  blocks.11.Attn.cross_q.weight  |w|: 2.982 -> 2.955  max|w|: 0.336 -> 0.299
+    0.3965  blocks.0.Attn.cross_v.bias  |w|: 0.582 -> 0.672  max|w|: 0.202 -> 0.226
+    0.3770  blocks.10.Attn.cross_q.bias  |w|: 0.671 -> 0.770  max|w|: 0.201 -> 0.227
+    0.3695  blocks.6.Attn.cross_q.bias  |w|: 0.868 -> 0.882  max|w|: 0.314 -> 0.291
+    0.3645  context_builder.local_extractors.0.tokenizers.4.in_project_fx.bias  |w|: 1.370 -> 1.444  max|w|: 0.226 -> 0.215
+    0.3608  context_builder.local_extractors.0.tokenizers.0.in_project_fx.bias  |w|: 1.285 -> 1.453  max|w|: 0.222 -> 0.228
+    0.3587  context_builder.local_extractors.0.tokenizers.3.in_project_fx.bias  |w|: 1.338 -> 1.444  max|w|: 0.221 -> 0.247
+    0.3584  context_builder.local_extractors.0.tokenizers.2.in_project_fx.bias  |w|: 1.234 -> 1.260  max|w|: 0.198 -> 0.205
+
+=== scalar parameters
+blocks.0.Attn.state_mixing: e29=-0.9115 e31=-0.8975 e33=-0.8817 e35=-0.9050 e37=-0.9011 e39=-0.9052 e41=-0.8797 e43=-0.8517 e45=-0.8693 e47=-0.8718 e49=-0.8913 e51=-0.8635 e53=-0.8588 e55=-0.8717 e57=-0.8666 e59=-0.8915 e61=-0.8804 e63=-0.8729 e65=-0.8855 e67=-0.8377 e69=-0.8447
+blocks.1.Attn.state_mixing: e29=-0.5883 e31=-0.6159 e33=-0.6338 e35=-0.6439 e37=-0.6857 e39=-0.7133 e41=-0.7478 e43=-0.7889 e45=-0.8196 e47=-0.8336 e49=-0.8360 e51=-0.8689 e53=-0.8887 e55=-0.9582 e57=-0.9552 e59=-1.0082 e61=-1.0545 e63=-1.0533 e65=-1.0874 e67=-1.0668 e69=-1.0641
+blocks.10.Attn.state_mixing: e29=-0.7786 e31=-0.7887 e33=-0.7808 e35=-0.8114 e37=-0.8413 e39=-0.8896 e41=-0.9232 e43=-0.9409 e45=-0.9453 e47=-0.9608 e49=-0.9536 e51=-0.9634 e53=-0.9655 e55=-0.9613 e57=-0.9548 e59=-1.0215 e61=-0.9931 e63=-0.9767 e65=-1.0092 e67=-0.9830 e69=-0.9809
+blocks.11.Attn.state_mixing: e29=-0.8332 e31=-0.8787 e33=-0.9016 e35=-0.9266 e37=-0.9493 e39=-0.9824 e41=-1.0031 e43=-1.0160 e45=-1.0610 e47=-1.0932 e49=-1.1272 e51=-1.1537 e53=-1.1662 e55=-1.1884 e57=-1.2592 e59=-1.3424 e61=-1.3929 e63=-1.4440 e65=-1.4873 e67=-1.5397 e69=-1.5972
+blocks.2.Attn.state_mixing: e29=-0.4729 e31=-0.4735 e33=-0.4897 e35=-0.4817 e37=-0.5059 e39=-0.4635 e41=-0.4816 e43=-0.5197 e45=-0.5108 e47=-0.5704 e49=-0.5916 e51=-0.5828 e53=-0.6077 e55=-0.6369 e57=-0.6374 e59=-0.6820 e61=-0.6728 e63=-0.6757 e65=-0.7060 e67=-0.6780 e69=-0.6912
+blocks.3.Attn.state_mixing: e29=-0.6529 e31=-0.6429 e33=-0.6049 e35=-0.5895 e37=-0.5863 e39=-0.5794 e41=-0.5833 e43=-0.5679 e45=-0.5652 e47=-0.5714 e49=-0.5877 e51=-0.5840 e53=-0.5995 e55=-0.5848 e57=-0.6216 e59=-0.6179 e61=-0.6505 e63=-0.6342 e65=-0.6474 e67=-0.6394 e69=-0.6600
+blocks.4.Attn.state_mixing: e29=-0.6654 e31=-0.6623 e33=-0.6354 e35=-0.6289 e37=-0.6649 e39=-0.6641 e41=-0.6776 e43=-0.6764 e45=-0.6672 e47=-0.6815 e49=-0.6831 e51=-0.7141 e53=-0.6823 e55=-0.6539 e57=-0.6032 e59=-0.6779 e61=-0.6562 e63=-0.6402 e65=-0.6179 e67=-0.6215 e69=-0.6404
+blocks.5.Attn.state_mixing: e29=-0.5761 e31=-0.6104 e33=-0.6279 e35=-0.6578 e37=-0.6897 e39=-0.7355 e41=-0.7406 e43=-0.7897 e45=-0.8063 e47=-0.8150 e49=-0.8459 e51=-0.8962 e53=-0.9180 e55=-0.9436 e57=-0.9581 e59=-0.9901 e61=-1.0385 e63=-1.0768 e65=-1.1055 e67=-1.1201 e69=-1.1493
+blocks.6.Attn.state_mixing: e29=-0.6468 e31=-0.6555 e33=-0.6724 e35=-0.6989 e37=-0.7260 e39=-0.7552 e41=-0.7618 e43=-0.7820 e45=-0.8156 e47=-0.8511 e49=-0.8679 e51=-0.8916 e53=-0.9174 e55=-0.9437 e57=-0.9539 e59=-0.9980 e61=-1.0403 e63=-1.0733 e65=-1.0866 e67=-1.1139 e69=-1.1363
+blocks.7.Attn.state_mixing: e29=-0.7605 e31=-0.7827 e33=-0.7839 e35=-0.7947 e37=-0.8234 e39=-0.8353 e41=-0.8728 e43=-0.9023 e45=-0.9250 e47=-0.9871 e49=-1.0173 e51=-1.0440 e53=-1.0792 e55=-1.1065 e57=-1.1293 e59=-1.2035 e61=-1.2384 e63=-1.2547 e65=-1.2757 e67=-1.3214 e69=-1.3874
+blocks.8.Attn.state_mixing: e29=-0.6680 e31=-0.6972 e33=-0.7149 e35=-0.7541 e37=-0.7855 e39=-0.8152 e41=-0.8469 e43=-0.8724 e45=-0.9012 e47=-0.9337 e49=-0.9668 e51=-1.0141 e53=-1.0412 e55=-1.0576 e57=-1.0692 e59=-1.1073 e61=-1.1454 e63=-1.1758 e65=-1.1913 e67=-1.2156 e69=-1.2531
+blocks.9.Attn.state_mixing: e29=-0.7505 e31=-0.7702 e33=-0.7824 e35=-0.7910 e37=-0.8171 e39=-0.8393 e41=-0.8710 e43=-0.8912 e45=-0.9044 e47=-0.9317 e49=-0.9685 e51=-0.9811 e53=-0.9810 e55=-1.0027 e57=-1.0127 e59=-1.0553 e61=-1.0767 e63=-1.0927 e65=-1.1033 e67=-1.1108 e69=-1.1342
+
+=== Adam effective relative step (top tensors at each checkpoint)
+
+=== largest-norm tensors at the first and last epoch
+e29: blocks.1.ln_mlp1.1.layers.0.weight=102.14(max 1.24); blocks.0.ln_mlp1.1.layers.2.weight=97.48(max 1.08); blocks.2.ln_mlp1.1.layers.0.weight=92.65(max 1.37); blocks.0.ln_mlp1.1.layers.0.weight=87.69(max 1.12); blocks.1.ln_mlp1.1.layers.2.weight=84.61(max 1.45); blocks.3.ln_mlp1.1.layers.0.weight=78.24(max 1.28); blocks.4.ln_mlp1.1.layers.0.weight=78.08(max 1.93); blocks.5.ln_mlp1.1.layers.0.weight=76.27(max 1.98)
+e69: blocks.0.ln_mlp1.1.layers.2.weight=177.07(max 1.92); blocks.1.ln_mlp1.1.layers.0.weight=175.69(max 1.57); blocks.2.ln_mlp1.1.layers.0.weight=174.28(max 2.05); blocks.5.ln_mlp1.1.layers.0.weight=172.29(max 4.23); blocks.4.ln_mlp1.1.layers.0.weight=170.25(max 3.03); blocks.6.ln_mlp1.1.layers.0.weight=164.88(max 2.31); blocks.1.ln_mlp1.1.layers.2.weight=164.19(max 2.14); blocks.3.ln_mlp1.1.layers.0.weight=162.73(max 3.28)

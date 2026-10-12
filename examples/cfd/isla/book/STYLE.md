@@ -105,6 +105,7 @@ radial basis vector. Definitions use $\equiv$.
 |---|---|---|---|
 | ISLA reference | `BLUE` | filled square, solid | |
 | ISLA variants | `BLUE_LIGHT` | open diamond dashed (similarity-gauge variant) and open square dotted (legacy centered variant); both keys are used only inside collapsed diagnostic notes, never in a main figure | same hue, lighter |
+| ISLA-DTT (the tree-accelerated query-independent read; `isla_dtt`) | `BLUE_LIGHT` | open square, dash-dot | the one ISLA variant that appears in a main table or figure, always labeled ISLA-DTT |
 | ISLA ablations | `BLUE_PALE`, hatched | | never adopted |
 | GeoTransolver | `RED` | filled circle, solid | also GeoTransolver-volume |
 | Transolver | `AMBER` | filled triangle, dashed | |
