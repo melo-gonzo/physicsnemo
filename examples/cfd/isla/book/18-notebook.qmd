@@ -36004,3 +36004,34 @@ using, limits, ideas and literature chapters no longer say that the class
 has no query-independent decode. One number rests on a single
 instrument: the read's car-scale cost comes from one GB300 bench (job
 135330) and the AeroZoo training lanes.
+
+## 2026-10-12 — AEROZOO held-out-box split scored for both architectures: GeoTransolver's final checkpoints lead ISLA's by 1.2 to 1.4x on velocity, pressure and eddy viscosity, while ISLA's best checkpoints lead GeoTransolver's finals on every field {#sec-nb-aerozoo-nonbox-scored}
+
+**What was scored.** The float32 scorer (the protocol of
+@sec-nb-aerozoo-prereg, final checkpoint, validation side, the training
+draw) ran on the GeoTransolver `family_non_box` pair at epoch 249 and on
+the second ISLA `full` seed (job 1204160). The ISLA `full` seeds agree:
+seed 42 reads velocity 0.460, pressure 0.767, eddy viscosity 0.799,
+turbulence kinetic energy 0.807 and specific dissipation 0.787 against
+seed 43's 0.450 / 0.760 / 0.799 / 0.787 / 0.775. GeoTransolver on the
+351 held-out-box validation cases reads 0.331 / 0.413 / 0.611 / 0.922 /
+0.808 and 0.343 / 0.470 / 0.618 / 0.933 / 0.798.
+
+**The ratios.** Under the pre-registered rule, GeoTransolver ÷ ISLA on
+`family_non_box` is 0.81 on velocity, 0.75 on pressure, 0.72 on eddy
+viscosity, 1.08 on turbulence kinetic energy and 0.95 on specific
+dissipation; the first four count (both seeds on the same side of one,
+seed mean outside 1 ± 0.05), the last does not. Against ISLA's
+best-validation checkpoints (epochs 41 and 61, the labeled diagnostic of
+@sec-nb-aerozoo-instability) the same GeoTransolver finals read 1.67 /
+2.34 / 1.17 / 1.40 / 1.09, so **the architecture that ISLA was before
+its epoch 43-50 event leads GeoTransolver on every field of this
+split, and the one the protocol scores trails it on four of five.** The
+turbulence kinetic energy column is the one field where GeoTransolver's
+final checkpoint is worse than ISLA's final (1.08) and much worse than
+ISLA's best (1.40). The `full` split's GeoTransolver pair reaches epoch
+250 within hours; P1 is read on its test side.
+
+**Record.** `results/campaigns_2026-10-09/aerozoo/scores/<run>/val/`
+for the three lanes; the reduction (`aerozoo_reduce.py`) now carries the
+`family_non_box` ratio block.
