@@ -7,8 +7,8 @@ does, and the other chapters and the code are held to it. Read it with
 @fig-isla-pass open. Every stage below is one box of that figure, and every
 equation names the identifier that computes it in
 `physicsnemo/experimental/models/isla/model.py`. The description uses a
-width $d$, a stack of 12 slice layers and $M = 256$ slices, the class's
-default layer and slice counts. Nothing in it depends on those numbers;
+width $d$, a stack of 12 slice layers and $M$ slices; the class defaults
+to 12 layers and 512 slices. Nothing in it depends on those numbers;
 the reference configuration runs 512 slices at width 512, stated with the
 commands in @sec-using-config.
 
