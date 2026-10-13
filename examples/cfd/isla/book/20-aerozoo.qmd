@@ -653,7 +653,15 @@ else:
                "falsified": "ISLA's penalty is not smaller than GeoTransolver's on any field, so the bar written before the lanes ran (at least 20 percent smaller) fails",
                "mixed": f"the bar written before the lanes ran (ISLA's penalty at least 20 percent smaller than GeoTransolver's) holds on {P2.get('n_supported', 0)} of {P2.get('n_fields', 0)} fields and fails on {P2.get('n_falsified', 0)}",
                "between": "ISLA's penalty is smaller than GeoTransolver's but by less than the 20 percent the bar written before the lanes ran asked for"}.get(P2.get("verdict"), "")
-    print("**" + "; ".join(parts) + (f". For the enclosure, {verdict}" if verdict and "family_non_box" in HELD else "") + ".** "
+    heldbv = ""
+    bi = BVR.get("ISLA", {}).get("family_non_box", {}).get("test"); bg = BVR.get("GeoTransolver", {}).get("family_non_box", {}).get("test")
+    if bi and bg and "family_non_box" in HELD:
+        rbb = {f: bg["fields"][f]["mean"] / bi["fields"][f]["mean"] for f in FKEYS}
+        gt_leads = [f for f in FKEYS if rbb[f] < 1]
+        heldbv = ("The enclosure reading is not an artifact of ISLA's post-event checkpoints: at both architectures' best-validation checkpoints "
+                  "(@tbl-aerozoo-bestckpt) GeoTransolver ÷ ISLA on the held-out enclosures is " + " / ".join(f"{rbb[f]:.2f}" for f in FKEYS)
+                  + (", GeoTransolver ahead on every field. " if len(gt_leads) == len(FKEYS) else f", GeoTransolver ahead on {len(gt_leads)} of the five fields. "))
+    print("**" + "; ".join(parts) + (f". For the enclosure, {verdict}" if verdict and "family_non_box" in HELD else "") + ".** " + heldbv +
           "Each held-out split trains the same configurations from its own training side (every case outside the family) and is scored on the "
           "family it holds out; a penalty is that error divided by the same architecture's error on the `full` test side, so it is a "
           "within-configuration readout, and the ratio of the two architectures' penalties is the comparison. @tbl-aerozoo-heldout holds the numbers "
@@ -769,6 +777,13 @@ if isla_hits:
               + " / ".join(f"{FV['fields'][f]['mean']:.3f}" for f in FKEYS) + "; the standing of @tbl-aerozoo-full is the final checkpoint by the "
               "protocol, and the best-checkpoint numbers are a labeled diagnostic of what the architecture had learned before the event "
               "(@tbl-aerozoo-bestckpt gives them for every arm and both sides). ")
+        bit = BVR.get("ISLA", {}).get("full", {}).get("test"); bgt = BVR.get("GeoTransolver", {}).get("full", {}).get("test")
+        if bit and bgt:
+            rr = {f: bgt["fields"][f]["mean"] / bit["fields"][f]["mean"] for f in FKEYS}
+            print("Best checkpoint against best checkpoint on the sealed test side, GeoTransolver ÷ ISLA reads " + " / ".join(f"{rr[f]:.2f}" for f in FKEYS)
+                  + (": before the event ISLA leads on every field, " if all(v > 1 for v in rr.values()) else ", ")
+                  + "so the in-distribution standing of @tbl-aerozoo-full belongs to the training protocol and not to the architecture; the held-out "
+                  "standing does not move the same way (@sec-aerozoo-heldout). ")
 else:
     last = {run: max(r["epoch"] for r in rows) for run, rows in TR.items() if rows and RUNS[run]["split"] == "full"}
     print(f"**No `full`-split lane shows a validation loss that doubles its running minimum: every validation loss keeps falling or holds to its "
@@ -900,7 +915,7 @@ print(f"**The AeroZoo standing is one dataset and one task, the interior fields 
       "The two configurations are not resource-matched and do not receive the same inputs (@sec-aerozoo-measured), so the ratios are standings of the "
       "configurations as shipped, and every ISLA number is the checkpoint after the optimization event of @sec-aerozoo-trajectories under the "
       "reference training protocol, which the protocol scores as it stands; what the architecture reaches under a protocol that survives this "
-      f"dataset is measured only as the labeled best-checkpoint diagnostic of @tbl-aerozoo-bestckpt (the `{'`, `'.join(sorted({sp for a in BVR for sp in BVR[a]}))}` "
+      f"dataset is measured only as the labeled best-checkpoint diagnostic of @tbl-aerozoo-bestckpt (the `{'`, `'.join(sorted({sp for a in BVR for sp in BVR[a]}, key=lambda x: (x != 'full', x)))}` "
       f"split{'s' if len({sp for a in BVR for sp in BVR[a]}) > 1 else ''}, {' and '.join(sorted({ {'test': 'the test', 'val': 'the validation'}[sd] for a in BVR for sp in BVR[a] for sd in BVR[a][sp]}, reverse=True))} side"
       f"{'s' if len({sd for a in BVR for sp in BVR[a] for sd in BVR[a][sp]}) > 1 else ''})"
       + (" and by the half-rate arms where they have trained (@sec-aerozoo-trajectories)" if HR_ARMS else "") + ", not on the Reynolds and blob-bank splits. "

@@ -36208,3 +36208,83 @@ instability detector per lane and the R1-R3 remedy codes; the chapter
 has the labeled best-checkpoint table `tbl-aerozoo-bestckpt` and draws
 the half-rate trajectories where they have trained (commit b2fd220d1 and
 the one after it).
+
+## 2026-10-13 — AEROZOO best-checkpoint table on the test side: ISLA's pre-event checkpoints lead GeoTransolver's best on every field in distribution and trail on every field with the enclosure held out {#sec-nb-aerozoo-bestckpt-verdict}
+
+**The setting.** The pre-registered standing of the AeroZoo chapter
+scores the final checkpoint of every lane
+(@sec-nb-aerozoo-phase1-verdict), and every ISLA final checkpoint sits
+after the optimization event of @sec-nb-aerozoo-instability. The remedy
+entry (@sec-nb-aerozoo-remedy-prereg) fixed a second, labeled reading
+before its scores existed: for every Phase 1 and held-out-box lane of
+both architectures, the kept checkpoint after the trainer's
+validation-loss minimum, scored exactly like the protocol on the sealed
+test side (float32, 200,000 points per case, two seeds). Those scores
+are in (jobs 1230869 and 1230870 with the corrected scorer,
+@sec-nb-aerozoo-bestval-scorer-fix); the chapter's table is
+`tbl-aerozoo-bestckpt` and the reduction's block is `bestval`.
+
+**In distribution (`full`, 716 test cases).** ISLA's checkpoints at
+epoch 31 (both seeds) read 0.226 / 0.450 / 0.519 / 0.651 / 0.712 on
+velocity / pressure / eddy viscosity / turbulent kinetic energy /
+specific dissipation rate, against its finals' 0.458 / 0.792 / 0.792 /
+0.815 / 0.792. GeoTransolver's own best checkpoints (epochs 81 and 121)
+read 0.346 / 0.494 / 0.525 / 0.722 / 0.755, within three percent of its
+finals except on eddy viscosity, where the final (0.482) is better.
+Best against best, GeoTransolver ÷ ISLA is **1.53 / 1.10 / 1.01 / 1.11
+/ 1.06**, with both ISLA seeds (0.224, 0.229) below both GeoTransolver
+seeds (0.351, 0.342) on velocity; against GeoTransolver's finals the
+pre-event ISLA leads on four fields and trails on eddy viscosity (0.519
+against 0.482). The in-distribution direction of the P1 verdict is
+therefore a property of the training protocol and not of what the
+architecture learned. It is also not a vindication of P1 as written:
+P1 predicted GeoTransolver ahead on pressure (ratio at or below 0.9),
+and best against best ISLA leads on pressure too (1.10). This reading
+is the labeled diagnostic the remedy entry promised, not a re-read of
+P1; the pre-registered re-read is on the half-rate arms (R2).
+
+**With the enclosure family held out (`family_non_box`, 1,074 non-box
+test cases).** ISLA's best checkpoints (epochs 41 and 61, chosen on the
+in-distribution validation boxes, where they read 0.202 on velocity)
+read 0.684 / 0.671 / 0.976 / 1.043 / 1.599 on the held-out enclosures;
+GeoTransolver's best (epochs 151 and 61) read 0.526 / 0.640 / 0.873 /
+0.836 / 0.773. GeoTransolver ÷ ISLA, best against best, is **0.77 /
+0.95 / 0.89 / 0.80 / 0.48**: GeoTransolver leads on every field, by
+1.3x on velocity and 2x on the specific dissipation rate, where ISLA's
+value above one is worse than predicting the field mean. Per seed on
+velocity ISLA reads 0.703 and 0.665 against GeoTransolver's 0.476 and
+0.576, both GeoTransolver seeds below both ISLA seeds. From the
+in-distribution validation boxes to the held-out enclosures, at these
+checkpoints, ISLA's velocity error grows 3.4x (0.202 to 0.684) and its
+pressure error 3.5x (0.189 to 0.671); GeoTransolver's grow 1.6x and
+1.6x (0.323 to 0.526, 0.405 to 0.640; its validation value is seed 42,
+seed 43's validation-side scoring is job 1231142). GeoTransolver's
+final checkpoints do better still on the held-out pressure (0.359
+against its best-by-validation 0.640), so for GeoTransolver the
+in-distribution validation minimum does not pick the checkpoint that
+generalizes best; for ISLA the selection helps (0.684 against the
+finals' 0.768 on velocity) but does not close the gap.
+
+**Verdict.** The P2 reading, ISLA's held-out-enclosure penalty larger
+than GeoTransolver's, is not a checkpoint artifact: it holds at both
+architectures' best checkpoints on every field. The P1 reading in
+distribution is one: before the event ISLA leads GeoTransolver's best
+on every field. The two together say the optimization event costs ISLA
+its in-distribution lead, and that even without it ISLA generalizes
+worse than GeoTransolver from box enclosures to the other enclosure
+families on this dataset. The chapter's lede and table compute these
+clauses from the reduction.
+
+**Also in.** GeoTransolver's Reynolds-range and blob-bank test sides
+(job 1230630): penalties against its own `full` test error 1.07 / 1.20
+/ 2.21 / 1.13 / 1.22 with the Reynolds range held out and 1.06 / 1.03 /
+1.07 / 1.10 / 1.02 with the blob bank held out (seed 42; seed 43 is at
+epoch 246). ISLA's lanes on those splits sit at epochs 98-132 in the
+normal queue, which has run none of the campaign's jobs since
+2026-10-12 15:30 PDT; they move to the short queue as its chains
+finish. The half-rate ISLA `full` pair (rows 24 and 25) moved into the
+short queue today (jobs 1231143 and 1231144), with the last
+validation-side best-checkpoint job; the other six half-rate lanes
+follow. The R1-R3 reading needs the detector's window (a doubling of
+the running validation minimum at or below epoch 60 against above it),
+about ten hours of training after the pair starts.
