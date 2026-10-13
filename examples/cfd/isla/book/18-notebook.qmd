@@ -36256,9 +36256,10 @@ velocity ISLA reads 0.703 and 0.665 against GeoTransolver's 0.476 and
 0.576, both GeoTransolver seeds below both ISLA seeds. From the
 in-distribution validation boxes to the held-out enclosures, at these
 checkpoints, ISLA's velocity error grows 3.4x (0.202 to 0.684) and its
-pressure error 3.5x (0.189 to 0.671); GeoTransolver's grow 1.6x and
-1.6x (0.323 to 0.526, 0.405 to 0.640; its validation value is seed 42,
-seed 43's validation-side scoring is job 1231142). GeoTransolver's
+pressure error 3.5x (0.189 to 0.671); GeoTransolver's grow 1.5x and
+1.3x (0.350 to 0.526, 0.495 to 0.640; both seeds, the seed-43
+validation value from job 1231142, in after the first draft of this
+entry). GeoTransolver's
 final checkpoints do better still on the held-out pressure (0.359
 against its best-by-validation 0.640), so for GeoTransolver the
 in-distribution validation minimum does not pick the checkpoint that
