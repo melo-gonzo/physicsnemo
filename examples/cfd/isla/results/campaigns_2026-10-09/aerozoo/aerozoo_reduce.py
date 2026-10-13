@@ -13,6 +13,12 @@ trajectory every ten epochs, step time and memory of the final epoch). Writes ae
   predictions                P1, P2, P4 verdicts against the pre-registered bars
   cost[arm][split]           median step seconds and peak memory of the final epoch, parameters, epochs completed, GPU-hours
   trajectories[run]          [{epoch, loss, <field>_l2 ...}] from val_summary rows
+  events[run]                the instability detector over that trajectory: best_epoch, best_loss, event_epoch (first validation
+                             epoch whose loss exceeds twice the running minimum, None if never), last_epoch, last_loss
+  bestval[arm][split][side]  the labeled best-checkpoint DIAGNOSTIC (never the standing): the kept checkpoint after the trainer's
+                             validation minimum, scored like the protocol on the validation (scores/<run>/bestval/) and test
+                             (scores/<run>/bestval_test/) sides; block shape as arms plus the chosen epoch per seed
+  remedy[arm]                R1-R3 verdicts of the half-rate arms (#sec-nb-aerozoo-remedy-prereg) against their reference-rate twins
 A seed mean is over the seeds present; a block is `complete` only when both seeds are scored.
 usage: python aerozoo_reduce.py [--out aerozoo_reduction.json]"""
 import argparse, json, math, os, re, statistics as st
@@ -31,13 +37,20 @@ SPLITS = {
                  "n_train": 2119, "n_val": 311, "n_test": 1385},
     "bank_blobs": {"label": "blob bank held out", "held_out": "bank", "stem": "blobs", "n_train": 2156, "n_val": 292, "n_test": 1367},
 }
-ARMS = {"ISLA": "isla", "GeoTransolver": "gt", "ISLA-DTT": "dtt"}
+ARMS = {"ISLA": "isla", "GeoTransolver": "gt", "ISLA-DTT": "dtt", "ISLA (half rate)": "islahr", "ISLA-DTT (half rate)": "dtthr"}
+HALF_RATE = {"ISLA (half rate)": "ISLA", "ISLA-DTT (half rate)": "ISLA-DTT"}   # remedy arm (1.875e-4) -> its reference-rate twin
 ISLA = "ISLA"
 BAR_COUNTS = 0.05       # a difference counts only if both seeds order the same way and the seed-mean ratio is outside 1 ± 0.05
 P1_VEL, P1_PRES = 1.2, 0.9          # supported: GT ÷ ISLA >= 1.2 on velocity and <= 0.9 on pressure (full test side)
 P1_VEL_F, P1_PRES_F = 1.1, 1.0      # falsified: velocity ratio < 1.1 or pressure ratio > 1.0
 P2_FRACTION = 0.8                   # supported: ISLA's penalty <= 0.8 x GeoTransolver's; falsified: not smaller
 P4_TOL = 0.05                       # ISLA-DTT within 5% of ISLA on every field (full test side)
+EVENT_FACTOR = 2.0                  # the instability detector: validation loss above EVENT_FACTOR x its running minimum
+R_LATE_EPOCH = 60                   # remedy: R1 (rate-bound) = first doubling above epoch 60; R3 (not rate-bound) = at or below it
+R2_VELOCITY = 0.25                  # remedy: R2 (cured) = no doubling through 250 epochs and full-split validation velocity <= 0.25
+R2_P1_REREAD = 1.4                  # under R2 the P1 re-read is GeoTransolver ÷ half-rate ISLA >= 1.4 on full test velocity
+TRAINED_EPOCH = 240                 # a lane counts as finished for the remedy read when its last validation is at or past this epoch
+BESTVAL_DIRS = {"val": "bestval", "test": "bestval_test"}
 LABELS = json.load(open(f"{R}/case_labels.json")) if os.path.exists(f"{R}/case_labels.json") else {}
 LABELS.pop("_meta", None)
 
@@ -141,6 +154,21 @@ def trajectory(run):
     return rows, cfg, ds
 
 
+def events_of(rows):
+    """The instability detector over a lane's validation trajectory (validation every ten epochs)."""
+    good = sorted((r for r in rows if r.get("loss") is not None), key=lambda r: r["epoch"])
+    if not good:
+        return None
+    lo, event = math.inf, None
+    for r in good:
+        if event is None and r["loss"] > EVENT_FACTOR * lo:
+            event = r["epoch"]
+        lo = min(lo, r["loss"])
+    best = min(good, key=lambda r: r["loss"])
+    return {"best_epoch": best["epoch"], "best_loss": best["loss"], "event_epoch": event, "last_epoch": good[-1]["epoch"],
+            "last_loss": good[-1]["loss"], "n_validations": len(good)}
+
+
 def cost(run, cfg, ds, epochs_target=250):
     p = f"{SCORES}/{run}/train_tail.log"
     if not os.path.exists(p):
@@ -161,7 +189,7 @@ def cost(run, cfg, ds, epochs_target=250):
 
 def main(out_path):
     out = {"protocol": __doc__, "fields": FIELDS, "splits": SPLITS, "seeds": list(SEEDS), "arms": {}, "ratios": {}, "penalties": {},
-           "predictions": {}, "cost": {}, "trajectories": {}, "runs": {}}
+           "predictions": {}, "cost": {}, "trajectories": {}, "events": {}, "runs": {}, "bestval": {}, "remedy": {}}
     for arm in ARMS:
         out["arms"][arm], out["cost"][arm] = {}, {}
         for split in SPLITS:
@@ -177,27 +205,30 @@ def main(out_path):
                 rows, cfg, ds = trajectory(run)
                 if rows is not None:
                     out["trajectories"][run] = rows
+                    out["events"][run] = events_of(rows)
                     out["runs"][run] = {"arm": arm, "split": split, "seed": s}
                     c = cost(run, cfg, ds)
                     if c:
                         out["cost"][arm].setdefault(split, {})[str(s)] = c
     # best-validation checkpoints (a labeled diagnostic, never the standing): eval_bestval.sbatch scores one chosen checkpoint per
-    # lane on the validation side exactly like the protocol; fetch_scores.sh keeps the record under scores/<run>/bestval/ with the
-    # checkpoint file it scored in CHECKPOINT_USED. Same block shape as the arms, plus the chosen epoch per seed.
+    # lane exactly like the protocol, on the validation side (BESTVAL_SIDE=val -> scores/<run>/bestval/) and on the test side
+    # (BESTVAL_SIDE=test -> scores/<run>/bestval_test/), with the checkpoint file it scored in CHECKPOINT_USED. Same block shape as
+    # the arms, plus the chosen epoch per seed.
     for arm in ARMS:
         for split in SPLITS:
-            cases, epochs = {}, {}
-            for s in SEEDS:
-                run = run_id(split, arm, s)
-                c = per_case(f"{SCORES}/{run}/bestval/metrics.jsonl")
-                if not c:
-                    continue
-                cases[s] = c
-                ck = f"{SCORES}/{run}/bestval/CHECKPOINT_USED"
-                m = re.search(r"checkpoint\.0\.(\d+)\.pt", open(ck).read()) if os.path.exists(ck) else None
-                epochs[str(s)] = int(m.group(1)) if m else None
-            if cases:
-                out.setdefault("bestval", {}).setdefault(arm, {})[split] = {**block(cases, with_labels=False), "epochs": epochs}
+            for side, d in BESTVAL_DIRS.items():
+                cases, epochs = {}, {}
+                for s in SEEDS:
+                    run = run_id(split, arm, s)
+                    c = per_case(f"{SCORES}/{run}/{d}/metrics.jsonl")
+                    if not c:
+                        continue
+                    cases[s] = c
+                    ck = f"{SCORES}/{run}/{d}/CHECKPOINT_USED"
+                    m = re.search(r"checkpoint\.0\.(\d+)\.pt", open(ck).read()) if os.path.exists(ck) else None
+                    epochs[str(s)] = int(m.group(1)) if m else None
+                if cases:
+                    out["bestval"].setdefault(arm, {}).setdefault(split, {})[side] = {**block(cases, with_labels=False), "epochs": epochs}
     # ratios arm ÷ ISLA
     for split in SPLITS:
         for side in SIDES:
@@ -258,6 +289,48 @@ def main(out_path):
         P["P4"] = {"statement": f"ISLA-DTT's full test error within {P4_TOL * 100:.0f}% of ISLA's on every field",
                    "ratios": {f: r4[f]["mean_ratio"] for f in r4}, "max_deviation": max(devs.values()),
                    "verdict": "supported" if max(devs.values()) <= P4_TOL else "falsified"}
+    # remedy (pre-registered 2026-10-12, before any half-rate lane took a step): each half-rate arm against its reference-rate twin.
+    # R1 rate-bound: the first doubling of the running validation minimum comes above epoch 60 and the finals trail the best;
+    # R2 cured: no doubling through 250 epochs and the full-split validation velocity of the finals <= 0.25 (then the P1 re-read is
+    # GeoTransolver ÷ half-rate ISLA on full test velocity, bar 1.4); R3 not rate-bound: a doubling at or below epoch 60.
+    for arm, twin in HALF_RATE.items():
+        lanes = {}
+        for split in ("full", "family_non_box"):
+            for s in SEEDS:
+                run = run_id(split, arm, s)
+                e = out["events"].get(run)
+                if e:
+                    lanes[run] = {**e, "split": split, "seed": s, "finished": e["last_epoch"] >= TRAINED_EPOCH,
+                                  "final_trails_best": e["last_loss"] > e["best_loss"] * 1.1}
+        if not lanes:
+            continue
+        twin_ev = {r: out["events"][r] for split in ("full", "family_non_box") for s in SEEDS
+                   if (r := run_id(split, twin, s)) in out["events"] and out["events"][r]}
+        hits = {r: l["event_epoch"] for r, l in lanes.items() if l["event_epoch"] is not None}
+        fv = out["arms"].get(arm, {}).get("full", {}).get("val", {}).get("fields", {}).get("velocity_l2")
+        full_val_velocity = fv["mean"] if fv else None
+        if hits and min(hits.values()) <= R_LATE_EPOCH:
+            verdict, code = "the event recurs at or below epoch 60: not rate-bound", "R3"
+        elif hits:
+            verdict, code = ("the event comes later than at the reference rate (rate-bound)"
+                             + ("; the finals trail the best checkpoints" if all(lanes[r]["final_trails_best"] for r in hits) else ""), "R1")
+        elif all(l["finished"] for l in lanes.values()) and len(lanes) == 4:
+            if full_val_velocity is not None and full_val_velocity <= R2_VELOCITY:
+                verdict, code = "no doubling through 250 epochs and the finals read velocity at or below 0.25 on the validation side: cured", "R2"
+            elif full_val_velocity is None:
+                verdict, code = "no doubling through 250 epochs; the full-split validation scoring is not in yet", "pending"
+            else:
+                verdict, code = f"no doubling through 250 epochs but the finals read velocity {full_val_velocity:.3f} > 0.25: between R1 and R2", "between"
+        else:
+            verdict, code = f"no doubling through epoch {min(l['last_epoch'] for l in lanes.values())} so far; lanes unfinished", "pending"
+        gt = out["arms"].get("GeoTransolver", {}).get("full", {}).get("test"); hr = out["arms"].get(arm, {}).get("full", {}).get("test")
+        reread = ratio(gt, hr, "velocity_l2") if gt and hr else None
+        out["remedy"][arm] = {"twin": twin, "lanes": lanes, "twin_events": twin_ev, "code": code, "verdict": verdict,
+                              "full_val_velocity": full_val_velocity,
+                              "p1_reread": {"statement": f"GeoTransolver ÷ {arm} on full test velocity >= {R2_P1_REREAD} under R2",
+                                            "velocity_ratio": reread["mean_ratio"] if reread else None,
+                                            "met": (reread["mean_ratio"] >= R2_P1_REREAD) if reread else None},
+                              "bars": {"late_epoch": R_LATE_EPOCH, "r2_velocity": R2_VELOCITY, "event_factor": EVENT_FACTOR}}
     json.dump(out, open(out_path, "w"), indent=1, default=lambda o: sorted(o) if isinstance(o, set) else str(o))
     # console
     for split in SPLITS:
@@ -275,6 +348,14 @@ def main(out_path):
         print(f"== penalty {split} (test ÷ full test):  " + "  ".join(f"{arm} " + "/".join(f"{d[arm][f]['mean_ratio']:.2f}" for f in FIELDS if f in d[arm]) for arm in d))
     for k, v in P.items():
         print(f"== {k}: {v.get('verdict', '')}")
+    for arm, d in out["bestval"].items():
+        for split, sides in d.items():
+            for side, b in sides.items():
+                print(f"== bestval {arm:22s} {split:15s} {side:4s} epochs={b['epochs']}  "
+                      + "  ".join(f"{FIELDS[f][:8]:>8s} {b['fields'][f]['mean']:.4f}" for f in FIELDS if f in b["fields"]))
+    for arm, d in out["remedy"].items():
+        print(f"== remedy {arm}: {d['code']} ({d['verdict']}); events "
+              + ", ".join(f"{r.split('_', 1)[1]}={l['event_epoch']}@{l['last_epoch']}" for r, l in d["lanes"].items()))
     print("wrote", out_path)
 
 

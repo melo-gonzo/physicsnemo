@@ -47,9 +47,18 @@ unit() {
   local CODE="${TASK}/${CODEV}"; export PYTHONPATH="${CODE}:${RECIPE}/src"
   mkdir -p "${OUT}"; printf "%s\n" "${CODE}" > "${OUT}/SNAPSHOT_USED"; ls -l "${CKPT_ROOT}/${RUN}/checkpoints" > "${OUT}/CHECKPOINT_USED"
   EXTRA=$(sed -E "s/(^| )training\.num_epochs=[^ ]+//g; s/(^| )\+training\.[^ ]+//g" <<<"${EXTRA}")
+  ### BESTVAL_SIDE=test: the same selection as the test-side scorer eval_test.sbatch: the lane override val_split=<split>.val
+  ### becomes <split>.test and infer.py reads infer_split=test. (Fixed 2026-10-13: before this, SIDE only changed OUT_ROOT and the
+  ### test-side job re-scored the validation split; those outputs were deleted.)
+  local INFER_SPLIT=val
+  if [ "${SIDE}" = test ]; then
+    EXTRA=$(sed -E "s/val_split=([A-Za-z0-9_]+)\.val/val_split=\1.test/" <<<"${EXTRA}")
+    grep -q "val_split=[A-Za-z0-9_]*\.test" <<<"${EXTRA}" || { echo "lane ${idx} ${RUN}: no <split>.val override to turn into .test; refusing" >> "${OUT}.log"; return 0; }
+    INFER_SPLIT=test
+  fi
   echo "=== lane ${idx} START $(date -Is) run=${RUN} ckpt=${CKPT_ROOT}/${RUN} extra='${EXTRA}' gpu=${gpu} code=${CODE}" >> "${OUT}.log"
   timeout 6600 env CUDA_VISIBLE_DEVICES="${gpu}" RANK=0 WORLD_SIZE=1 LOCAL_RANK=0 MASTER_ADDR=127.0.0.1 MASTER_PORT=$((24000 + SLURM_JOB_ID % 20000 + gpu)) \
-    "${VENV}/bin/python" "${RECIPE}/src/infer.py" model="${MODEL}" ${EXTRA} dataset="${DATASET}" run_id="${RUN}" infer_split=val +save_predictions=false \
+    "${VENV}/bin/python" "${RECIPE}/src/infer.py" model="${MODEL}" ${EXTRA} dataset="${DATASET}" run_id="${RUN}" infer_split=${INFER_SPLIT} +save_predictions=false \
     sampling_resolution="${CELLS}" precision=float32 checkpoint_dir="${CKPT_ROOT}" output_dir="${OUT}" >> "${OUT}.log" 2>&1 \
     && touch "${OUT}/.done" || echo "=== ${RUN} FAILED rc=$?" >> "${OUT}.log"
   rm -rf "${OUT}"/*/predictions

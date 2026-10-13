@@ -86,6 +86,8 @@ STYLE = {
     "isla_cg": dict(label="ISLA, constant-gauge variant", color=BLUE_LIGHT, marker="s", ls=":", mfc="none", hatch=""),
     "isla_sg": dict(label="ISLA, similarity-gauge variant (diagnostic)", color=BLUE_LIGHT, marker="D", ls="--", mfc="none", hatch=""),
     "isla_abl": dict(label="ISLA ablation (not adopted)", color=BLUE_PALE, marker="s", ls=":", mfc="none", hatch="///"),
+    "isla_hr": dict(label="ISLA at half the reference rate", color=BLUE, marker="s", ls="--", mfc="none", hatch=""),
+    "isla_dtt_hr": dict(label="ISLA-DTT at half the reference rate", color=BLUE_LIGHT, marker="s", ls=":", mfc="none", hatch=""),
     "gt": dict(label="GeoTransolver", color=RED, marker="o", ls="-", mfc="full", hatch=""),
     "gt_var": dict(label="GeoTransolver + ISLA feature (ablation)", color=RED_LIGHT, marker="o", ls=":", mfc="none", hatch=""),
     "t": dict(label="Transolver", color=AMBER, marker="^", ls="--", mfc="full", hatch=""),

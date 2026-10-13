@@ -21,10 +21,16 @@ FLAB = dict(FIELDS)
 SPLITS = R["splits"]
 ARMS = [a for a in ("ISLA", "ISLA-DTT", "GeoTransolver") if a in R["arms"]]
 BASELINES = [a for a in ARMS if a != "ISLA"]
-KEY = {"ISLA": "isla_ref", "ISLA-DTT": "isla_dtt", "GeoTransolver": "gt"}
+KEY = {"ISLA": "isla_ref", "ISLA-DTT": "isla_dtt", "GeoTransolver": "gt", "ISLA (half rate)": "isla_hr", "ISLA-DTT (half rate)": "isla_dtt_hr"}
 CONFIG = {"ISLA": "ISLA width 512 with 512 slices, 12 layers, cosine routing, learning rate 3.75e-4",
           "ISLA-DTT": "ISLA-DTT, the same configuration with the read-only tree read (a Barnes-Hut forest at theta 1, built in a frame the boundary carries) in place of the interacting prediction points",
-          "GeoTransolver": "GeoTransolver width 256 with 256 slices, 12 layers, learning rate 1e-3"}
+          "GeoTransolver": "GeoTransolver width 256 with 256 slices, 12 layers, learning rate 1e-3",
+          "ISLA (half rate)": "the ISLA reference configuration trained at half the reference rate, 1.875e-4, the per-dataset rate exception the program also makes on DeepJEB++ (@sec-deepjeb)",
+          "ISLA-DTT (half rate)": "ISLA-DTT at the same half rate"}
+# the half-rate arms (the rate exception) appear where they have trained; the standing tables stay with the reference-rate arms
+HR_ARMS = [a for a in ("ISLA (half rate)", "ISLA-DTT (half rate)") if any(m["arm"] == a for m in R["runs"].values())]
+BVR = R.get("bestval", {})           # best-checkpoint diagnostic: BVR[arm][split][side]
+EV = R.get("events", {})             # the instability detector per lane
 have = lambda arm, split, side: side in R["arms"].get(arm, {}).get(split, {})
 blk = lambda arm, split, side: R["arms"][arm][split][side]
 err = lambda arm, split, side, f: blk(arm, split, side)["fields"][f]["mean"]
@@ -728,24 +734,14 @@ if HELD:
 #| label: para-aerozoo-trajectories
 #| output: asis
 TR = R["trajectories"]; RUNS = R["runs"]
-def event_epoch(rows):
-    """First validation epoch whose loss is more than twice the running minimum before it."""
-    lo = float("inf")
-    for r in sorted(rows, key=lambda r: r["epoch"]):
-        if r["loss"] is not None and r["loss"] > 2 * lo:
-            return r["epoch"]
-        lo = min(lo, r["loss"] if r["loss"] is not None else lo)
-    return None
-def best_epoch(rows):
-    good = [r for r in rows if r["loss"] is not None]
-    return min(good, key=lambda r: r["loss"])["epoch"] if good else None
-ev = {run: event_epoch(rows) for run, rows in TR.items() if RUNS[run]["split"] == "full" and rows}
+# the detector is the reduction's: the first validation epoch whose loss exceeds twice the running minimum before it
+ev = {run: EV[run]["event_epoch"] for run in TR if RUNS[run]["split"] == "full" and EV.get(run) and RUNS[run]["arm"] in ARMS}
 by_arm = {}
 for run, e in ev.items():
-    by_arm.setdefault(RUNS[run]["arm"], []).append((RUNS[run]["seed"], e, best_epoch(TR[run])))
+    by_arm.setdefault(RUNS[run]["arm"], []).append((RUNS[run]["seed"], e, EV[run]["best_epoch"]))
 hit = {a: [x for x in v if x[1] is not None] for a, v in by_arm.items()}
 isla_hits = sorted(hit.get("ISLA", [])); gt_hits = hit.get("GeoTransolver", [])
-BV = R.get("bestval", {}).get("ISLA", {}).get("full"); FV = blk("ISLA", "full", "val") if have("ISLA", "full", "val") else None
+BV = BVR.get("ISLA", {}).get("full", {}).get("val"); FV = blk("ISLA", "full", "val") if have("ISLA", "full", "val") else None
 if isla_hits:
     print(f"**Every ISLA lane on this split reaches its validation-loss minimum early (epochs {', '.join(str(x[2]) for x in isla_hits)} for "
           f"seeds {', '.join(str(x[0]) for x in isla_hits)}) and then loses it: at epochs {', '.join(str(x[1]) for x in isla_hits)} the validation "
@@ -762,14 +758,64 @@ if isla_hits:
         print(f"Scored exactly like the protocol on the validation side, ISLA's best-validation checkpoint ({ep}) reads "
               + " / ".join(f"{BV['fields'][f]['mean']:.3f}" for f in FKEYS) + f" on {flab}, against the final checkpoints' "
               + " / ".join(f"{FV['fields'][f]['mean']:.3f}" for f in FKEYS) + "; the standing of @tbl-aerozoo-full is the final checkpoint by the "
-              "protocol, and the best-checkpoint numbers are a labeled diagnostic of what the architecture had learned before the event. ")
+              "protocol, and the best-checkpoint numbers are a labeled diagnostic of what the architecture had learned before the event "
+              "(@tbl-aerozoo-bestckpt gives them for every arm and both sides). ")
 else:
     last = {run: max(r["epoch"] for r in rows) for run, rows in TR.items() if rows and RUNS[run]["split"] == "full"}
     print(f"**No `full`-split lane shows a validation loss that doubles its running minimum: every validation loss keeps falling or holds to its "
           f"last validation (epochs {min(last.values())} to {max(last.values())}).** ")
+# the rate exception: the half-rate arms where they have trained, read against their reference-rate twins (reduction: remedy)
+for a in HR_ARMS:
+    m = R.get("remedy", {}).get(a)
+    if not m:
+        continue
+    lanes = m["lanes"]; twin = m["twin"]
+    far = max(l["last_epoch"] for l in lanes.values())
+    where = ", ".join(f"`{SPLITS[sp]['stem']}` seed {l['seed']}" for sp in ("full", "family_non_box") for l in lanes.values() if l["split"] == sp)
+    hits = {r: l for r, l in lanes.items() if l["event_epoch"] is not None}
+    if hits:
+        print(f"**At half the reference rate ({CONFIG[a]}; lanes {where}) the event {'recurs' if m['code'] == 'R3' else 'comes later'}: the validation "
+              f"loss doubles its running minimum at epochs {', '.join(str(l['event_epoch']) for l in hits.values())} against "
+              f"{', '.join(str(e['event_epoch']) for e in m['twin_events'].values() if e['event_epoch'] is not None)} for {twin} at the reference rate.** "
+              + ("The cause is therefore not the step count at this rate, and the rate exception does not help this dataset. "
+                 if m["code"] == "R3" else "The event is rate-bound in the way the DeepJEB++ one is (@sec-deepjeb). "))
+    else:
+        fv = m.get("full_val_velocity")
+        print(f"**At half the reference rate ({CONFIG[a]}; lanes {where}) no lane doubles its running validation minimum through epoch {far}"
+              + (f", and the final `full` checkpoints read velocity {fv:.3f} on the validation side" if fv is not None else "") + ".** "
+              + ("The half rate cures the event on this dataset" + (f"; GeoTransolver ÷ {a} on test velocity reads {m['p1_reread']['velocity_ratio']:.2f} against the pre-registered 1.4. "
+                 if m["p1_reread"]["velocity_ratio"] is not None else ". ") if m["code"] == "R2" else ""))
 print("@fig-aerozoo-trajectories draws the validation loss and the interior velocity error of every `full`-split lane against the epoch, the trainer's "
       "own validation every ten epochs in bfloat16 on the 386 validation cases at the training draw; the float32 standings of @tbl-aerozoo-full are "
-      "scored from the final checkpoints. Data: results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json (trajectories, bestval).")
+      "scored from the final checkpoints. Data: results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json (trajectories, events, remedy, bestval).")
+```
+
+```{python}
+#| label: tbl-aerozoo-bestckpt
+#| output: asis
+rows = []
+for a in ARMS + HR_ARMS:
+    for sp in ("full", "family_non_box", "reynolds", "bank_blobs"):
+        for sd in ("test", "val"):
+            b = BVR.get(a, {}).get(sp, {}).get(sd)
+            if b:
+                rows.append((a, sp, sd, b, blk(a, sp, sd) if have(a, sp, sd) else None))
+if rows:
+    side_word = {"test": "test", "val": "validation"}
+    print("| Architecture | Split | Side | Checkpoint epoch (seed 42 / 43) | " + " | ".join(FLAB[f] for f in FKEYS) + " |")
+    print("|---|---|---|---|" + "---:|" * len(FKEYS))
+    for a, sp, sd, b, fin in rows:
+        ep = " / ".join(str(b["epochs"][str(s)]) if str(s) in b["epochs"] and b["epochs"][str(s)] is not None else "–" for s in R["seeds"])
+        cells = [f"{b['fields'][f]['mean']:.3f}" + (f" ({fin['fields'][f]['mean']:.3f})" if fin and f in fin["fields"] else "") for f in FKEYS]
+        print(f"| {a} | `{sp}` | {side_word[sd]} | {ep} | " + " | ".join(cells) + " |")
+    print()
+    print(": Best-validation checkpoints, a labeled diagnostic and not the standing. For each lane the checkpoint is the kept one after the trainer's "
+          "validation-loss minimum (validation every ten epochs in bfloat16; checkpoints at odd epochs, so a minimum at epoch E selects E+1), scored "
+          "exactly like @tbl-aerozoo-full: float32, 200,000 points per case, relative L2 of the standardized field, seed mean. Each cell is the best "
+          "checkpoint's error with the final checkpoint's standing on the same side in parentheses; a dash in the epoch column is a seed not scored "
+          "on that side. How to read this: the selection uses the validation side, so the validation rows are optimistic by construction and the test "
+          "rows are the fair reading of what each architecture had learned under the reference protocol before its training protocol failed it, if "
+          "it failed. Data: results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json (bestval). {#tbl-aerozoo-bestckpt}")
 ```
 
 ```{python}
@@ -786,11 +832,13 @@ print("@fig-aerozoo-trajectories draws the validation loss and the interior velo
 #|   run never recovers, and not the routing collapse of the DeepJEB++ chapter,
 #|   which would send velocity to about one; the final standings of
 #|   @tbl-aerozoo-full are float32 scorings of the last checkpoints and sit a
-#|   few percent below these bfloat16 validations; the axis is logarithmic. Data:
+#|   few percent below these bfloat16 validations; the axis is logarithmic.
+#|   Dashed and dotted blue lines are the half-rate lanes (1.875e-4) where they
+#|   have trained. Data:
 #|   results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json (trajectories).
 #| code-fold: true
 fig, axes = plt.subplots(2, 1, figsize=(8, 6.4), sharex=True, gridspec_kw=dict(hspace=0.12))
-for a in ARMS:
+for a in ARMS + HR_ARMS:
     runs = [r for r, m in RUNS.items() if m["arm"] == a and m["split"] == "full" and TR.get(r)]
     if not runs:
         continue
@@ -843,7 +891,10 @@ print(f"**The AeroZoo standing is one dataset and one task, the interior fields 
       "The two configurations are not resource-matched and do not receive the same inputs (@sec-aerozoo-measured), so the ratios are standings of the "
       "configurations as shipped, and every ISLA number is the checkpoint after the optimization event of @sec-aerozoo-trajectories under the "
       "reference training protocol, which the protocol scores as it stands; what the architecture reaches under a protocol that survives this "
-      "dataset is measured only as the labeled best-checkpoint diagnostic there, on the validation side, and not on the held-out families. "
+      f"dataset is measured only as the labeled best-checkpoint diagnostic of @tbl-aerozoo-bestckpt (the `{'`, `'.join(sorted({sp for a in BVR for sp in BVR[a]}))}` "
+      f"split{'s' if len({sp for a in BVR for sp in BVR[a]}) > 1 else ''}, {' and '.join(sorted({ {'test': 'the test', 'val': 'the validation'}[sd] for a in BVR for sp in BVR[a] for sd in BVR[a][sp]}, reverse=True))} side"
+      f"{'s' if len({sd for a in BVR for sp in BVR[a] for sd in BVR[a][sp]}) > 1 else ''})"
+      + (" and by the half-rate arms where they have trained (@sec-aerozoo-trajectories)" if HR_ARMS else "") + ", not on the Reynolds and blob-bank splits. "
       "The surface task on this dataset, the boundary solution fields and the wall shear from the same inputs, is not "
       "measured. The uniform-point-cloud and rotated-and-translated scorings of the other chapters were not run here: the interior is already a point "
       "cloud, and the pose contract is measured on the surface datasets (@sec-invariances). The held-out penalties mix generalization with data size "
