@@ -36278,9 +36278,10 @@ clauses from the reduction.
 
 **Also in.** GeoTransolver's Reynolds-range and blob-bank test sides
 (job 1230630): penalties against its own `full` test error 1.07 / 1.20
-/ 2.21 / 1.13 / 1.22 with the Reynolds range held out and 1.06 / 1.03 /
-1.07 / 1.10 / 1.02 with the blob bank held out (seed 42; seed 43 is at
-epoch 246). ISLA's lanes on those splits sit at epochs 98-132 in the
+/ 2.21 / 1.13 / 1.22 with the Reynolds range held out and 1.05 / 0.99 /
+1.08 / 1.08 / 1.02 with the blob bank held out (both seeds; seed 43
+finished at 10:38 EDT and was scored on both sides within three hours,
+jobs 1231488 and 1231619). ISLA's lanes on those splits sit at epochs 98-132 in the
 normal queue, which has run none of the campaign's jobs since
 2026-10-12 15:30 PDT; they move to the short queue as its chains
 finish. The half-rate ISLA `full` pair (rows 24 and 25) moved into the
