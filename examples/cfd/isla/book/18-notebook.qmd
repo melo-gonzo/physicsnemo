@@ -36167,3 +36167,44 @@ before its training protocol failed it, if it failed. Jobs
 1219118-1219121 (`eval_bestval.sbatch`, `BESTVAL_SIDE=val|test`,
 `runs_bestval/<run>/checkpoints` symlinks); records land in
 `scores/<run>/bestval/` and `scores/<run>/bestval_test/`.
+
+## 2026-10-13 — AEROZOO: the test-side best-checkpoint scorer had re-scored the validation split; fixed and resubmitted; GeoTransolver held-out validation sides in {#sec-nb-aerozoo-bestval-scorer-fix}
+
+The best-checkpoint table of @sec-nb-aerozoo-remedy-prereg is scored by
+`eval_bestval.sbatch`, which takes `BESTVAL_SIDE=val|test`. The first
+test-side job (1230646, lane rows 0 1 4 5) produced records identical to
+the validation-side ones: the script changed only the output root, and
+its inference call still read `infer_split=val`, so it scored the 386
+and 351 validation cases of the `full` and held-out-box splits a second
+time. The check that caught it was the case count and the first sample
+id of the fetched record against the validation record (same count,
+same ids, different file hash). The fix mirrors `eval_test.sbatch`:
+with the test side requested, the lane override `val_split=<split>.val`
+becomes `<split>.test` and the inference reads `infer_split=test`. The
+four wrong outputs were deleted on the cluster and locally and never
+entered the reduction; the test side is resubmitted in the short queue
+(jobs 1230869 for rows 0 1 4 5 and 1230870 for rows 2 3 6 7), and the
+normal-queue copy that would have run the unfixed script was cancelled.
+
+Also in: the validation sides of GeoTransolver's Reynolds pair and
+blob-bank seed 42 (job 1230629; the ISLA lanes of those splits are still
+training), and validation-side best checkpoints for GeoTransolver `full`
+(epochs 81 and 121: 0.343 / 0.514 / 0.517 / 0.721 / 0.748 for velocity /
+pressure / eddy viscosity / turbulent kinetic energy / specific
+dissipation rate), GeoTransolver `family_non_box` seed 42 (epoch 151:
+0.323 / 0.405 / 0.600 / 0.874 / 0.809) and ISLA `full` seed 42 (epoch
+31; the pair now reads 0.220 / 0.455 / 0.506 / 0.617 / 0.707).
+GeoTransolver's selected checkpoints read worse than its finals on
+pressure and eddy viscosity (0.514 against 0.473, 0.517 against 0.462):
+its validation loss is flat after epoch 80 and the bfloat16 minimum does
+not pick the float32 best. Against GeoTransolver's final `full`
+checkpoints on the validation side (0.345 / 0.473 / 0.462 / 0.783 /
+0.739), ISLA's pre-event checkpoints lead on four fields and trail on
+eddy viscosity (0.506 against 0.462); the chapter's lede now computes
+that clause from the reduction instead of asserting "every field", and
+the test-side table decides it. The reduction carries the half-rate arms
+(`islahr`, `dtthr`), the two-sided best-checkpoint block, the
+instability detector per lane and the R1-R3 remedy codes; the chapter
+has the labeled best-checkpoint table `tbl-aerozoo-bestckpt` and draws
+the half-rate trajectories where they have trained (commit b2fd220d1 and
+the one after it).

@@ -136,12 +136,21 @@ if "family_non_box" in HELD:
     held = (f"; with the enclosure family held out, ISLA's velocity error grows {fmt_ratio(pen('ISLA', 'family_non_box', 'velocity_l2'))} "
             f"against GeoTransolver's {fmt_ratio(pen('GeoTransolver', 'family_non_box', 'velocity_l2'))}, and its pressure error "
             f"{fmt_ratio(pen('ISLA', 'family_non_box', 'pressure_l2'))} against {fmt_ratio(pen('GeoTransolver', 'family_non_box', 'pressure_l2'))}")
+# what the checkpoints before the event had learned, against GeoTransolver's finals on the same side (test when scored there, else validation)
+before = ""
+bv_side = "test" if "test" in BVR.get("ISLA", {}).get("full", {}) and have("GeoTransolver", "full", "test") else "val"
+bvf = BVR.get("ISLA", {}).get("full", {}).get(bv_side); gtf = blk("GeoTransolver", "full", bv_side) if have("GeoTransolver", "full", bv_side) else None
+if bvf and gtf:
+    ahead = [f for f in FKEYS if bvf["fields"][f]["mean"] < gtf["fields"][f]["mean"]]
+    behind = [FLAB[f] for f in FKEYS if f not in ahead]
+    before = ("; the checkpoints before it lead GeoTransolver's final ones on " + ("every field" if len(ahead) == len(FKEYS) else
+              f"{len(ahead)} of the five fields (not on {' or '.join(behind)})") + f" on {SIDE_WORD if bv_side == SIDE else {'test': 'the sealed test side', 'val': 'the validation side'}[bv_side]} (@tbl-aerozoo-bestckpt)")
 print(f"**AeroZoo is the interior task on a dataset built for diversity rather than for one body: 3,816 steady RANS solutions around bodies "
       f"from seven geometry banks, each in one of four enclosures at its own scale and Reynolds number, posed to the model by its four "
       f"boundaries and their prescribed values alone. In distribution, on {SIDE_WORD} of the `full` split, ISLA {clauses[0]}, "
       f"{clauses[1]}, {clauses[2]}, {clauses[3]}{dtt}{held}. Every ISLA standing on this dataset is the checkpoint after an optimization "
       "event at epoch 43 to 50 that raised its training and validation loss three- to fourfold for the rest of the run "
-      "(@sec-aerozoo-trajectories); the checkpoints before it lead GeoTransolver's final ones on every field.** The chapter follows the shared "
+      f"(@sec-aerozoo-trajectories){before}.** The chapter follows the shared "
       "layout: the problem and its diversity, what is measured, the architectures under their reference configurations in distribution, the "
       "held-out families, the training trajectories, and what the dataset does not say. Protocol: @sec-protocol; every ratio is baseline ÷ "
       "ISLA, above one favoring ISLA.")
