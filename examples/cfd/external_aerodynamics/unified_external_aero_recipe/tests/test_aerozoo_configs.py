@@ -494,9 +494,10 @@ def test_dataset_yaml_pins_the_reader_and_the_chain():
     ]
     assert "ComposeQuadratureMeasure" in chain[-1]
     assert OmegaConf.to_container(ds.targets) == TARGETS
-    ### The placeholders refuse to run until the stats script fills them.
-    with pytest.raises(Exception, match="Missing mandatory value"):
-        hydra.utils.instantiate(ds.pipeline.transforms[-2], _convert_="all")
+    ### fill_stats.py has filled the normalization statistics (the yaml's first line names the split part and the sample
+    ### counts), so the standardizing transform instantiates with no mandatory value missing.
+    assert "???" not in OmegaConf.to_yaml(ds.pipeline.transforms[-2])
+    hydra.utils.instantiate(ds.pipeline.transforms[-2], _convert_="all")
 
 
 def test_isla_config_declares_the_harmonized_grammar_and_runs(pipeline_output):
