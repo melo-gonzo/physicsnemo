@@ -36314,12 +36314,18 @@ per-case metadata, global-data and boundary directories into the
 release), 794,451 files and 1.481 TB in 62 minutes, verified with zero
 itemized differences; the three lanes that had started on AGA resumed
 from their epoch 25-27 checkpoints and the other five started fresh at
-22:45 EDT. The LHR lanes step 2.7 times slower than on AGA (1.8 s
-against 0.68 s for ISLA, 2.0 against 1.25 for ISLA-DTT) because the
-reader touches essentially the whole case per sample (107-581 MB over
-about 200 files) and the LHR NFS client serves that pattern at roughly
-0.7 GB/s per node; loader workers (4 against 12), pinned memory and the
-four-GPU collective were each measured and ruled out. One link died at
+22:45 EDT. The LHR lanes step slower than on AGA: averaged by hour over
+the first 18 hours there, the half-rate ISLA lanes take 1.0-1.3 s per
+step (mean 1.2 s; 0.8-0.9 s in the quietest hours) against 0.68-0.69 s
+on AGA, and the half-rate ISLA-DTT lanes 1.4-1.7 s (mean 1.55 s)
+against 1.25 s, so 1.75 and 1.25 times slower (an earlier one-hour
+benchmark that read 2.7 times slower sampled a loaded hour and the
+links' warm-up). The cause is per-sample input: the reader touches
+essentially the whole case per sample (107-581 MB over about 200
+files) and the LHR NFS client serves that pattern at under 1 GB/s per
+node, so the pace moves with the filesystem's load; loader workers (4
+against 12), pinned memory and the four-GPU collective were each
+measured and ruled out. One link died at
 its first step on a stale NFS file handle and the chain resumed on
 another node three minutes later. Records of all of this sit in the
 site's `lhr_setup/` directory and in the campaign's status file.
@@ -36343,7 +36349,7 @@ cannot be read yet; their reference-rate twins fired at epoch 80 on the
 has reached epoch 60: the event does not recur at the same step count
 when the rate is halved, so it is rate-bound in the sense the remedy
 assumed. R1 against R2 stays open until a doubling appears or epoch 250
-is reached (about 2026-10-17 at the LHR pace); under R2 the final
+is reached (about 2026-10-16 at the LHR pace); under R2 the final
 checkpoints are scored on both sides by the protocol and the
 pre-registered P1 re-read (GeoTransolver ÷ half-rate ISLA at or above
 1.4 on velocity) is taken. The chapter's half-rate paragraph, figure
@@ -36373,24 +36379,32 @@ checked against the source by file count and total byte size before
 anything was submitted (twelve of twelve match). The lanes were then
 submitted on LHR at 15:59 EDT as singleton chains in the normal queue
 with 3 h 59 min links, because the short queue's cap of twenty
-submitted jobs per user already holds the eight half-rate chains; a
-dry run placed the first link at 19:26 EDT. The lane rows themselves
-are unchanged (same code snapshots, four loader workers, same seeds),
-so each lane resumes from its latest complete checkpoint at or just
-below the epochs above and the per-epoch record continues; only the
-wall-clock pace changes, by the 2.7 (ISLA) and 1.6 (ISLA-DTT) factors
-measured on this site. The AGA run directories stay in place as the
-pre-migration record and must not be resumed there, or the two copies
-diverge.
+submitted jobs per user already holds the eight half-rate chains. A
+dry run had placed the first link at 19:26 EDT; the queue had idle
+nodes and all twelve started between 16:00 and 16:05 EDT. The lane
+rows themselves are unchanged (same code snapshots, four loader
+workers, same seeds), so each lane resumes from its latest complete
+checkpoint and the per-epoch record continues; only the wall-clock pace
+changes, by the 1.75 (ISLA) and 1.25 (ISLA-DTT) factors measured on
+this site (@sec-nb-aerozoo-remedy-first-read). The AGA run directories
+stay in place as the pre-migration record and must not be resumed
+there, or the two copies diverge.
 
-**What follows.** At the LHR pace the ISLA-DTT `full` pair needs about
-15 hours of running time and the held-out-box pair about 11, so both
-finish during 2026-10-15 if the queue starts them this evening; the
-ISLA Reynolds and blob-bank lanes and the ISLA-DTT Reynolds lanes need
-one and a half to two days, and the ISLA-DTT blob-bank pair about four.
-Acceptance for each lane is a first training step on LHR that continues
-from the expected epoch with no traceback; a resume from a lower epoch
-or a failed link is investigated before the lane counts. Every score
+**Acceptance.** Every lane's pre-flight found its newest checkpoint
+intact and the trainer resumed one epoch above it: the ISLA Reynolds
+lanes at epochs 132 and 100, the ISLA blob-bank lanes at 98 and 98,
+ISLA-DTT on `full` at 218 and 218, on the held-out-box split at 226 and
+226, on the Reynolds split at 166 and 174, on the blob-bank split at 38
+and 38; all twelve logged training steps within six minutes of their
+link start with no traceback or error line, and the fused geometry
+kernel resolved on every rank.
+
+**What follows.** At the measured LHR pace (about 17 minutes per
+`full` epoch for ISLA-DTT, 11-15 minutes per epoch for the other lanes)
+the ISLA-DTT held-out-box pair finishes late on 2026-10-14 and the
+`full` pair early on 2026-10-15; the ISLA Reynolds and blob-bank lanes
+and the ISLA-DTT Reynolds lanes need about a day, and the ISLA-DTT
+blob-bank pair about two. Every score
 for these lanes (validation and test sides, the best-checkpoint rows,
 the query-population protocol on the `full` lanes) is produced on LHR,
 since the fleet's scoring pump does not run there; the campaign's
