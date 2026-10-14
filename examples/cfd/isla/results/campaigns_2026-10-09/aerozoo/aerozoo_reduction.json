@@ -8944,21 +8944,21 @@
   "ISLA (half rate)": {
    "full": {
     "42": {
-     "step_seconds_median": 0.9944999999999999,
-     "mem_gb_max": 129.17,
+     "step_seconds_median": 0.832,
+     "mem_gb_max": 129.74,
      "n_parameters": 69098627,
      "steps_per_epoch": 678,
-     "last_epoch_seen": 69,
+     "last_epoch_seen": 74,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
     },
     "43": {
-     "step_seconds_median": 0.7865,
+     "step_seconds_median": 0.7435,
      "mem_gb_max": 129.87,
      "n_parameters": 69098627,
      "steps_per_epoch": 678,
-     "last_epoch_seen": 72,
+     "last_epoch_seen": 79,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
@@ -8966,21 +8966,21 @@
    },
    "family_non_box": {
     "42": {
-     "step_seconds_median": 0.9285000000000001,
+     "step_seconds_median": 0.7845,
      "mem_gb_max": 129.17,
      "n_parameters": 69098627,
      "steps_per_epoch": 597,
-     "last_epoch_seen": 94,
+     "last_epoch_seen": 100,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
     },
     "43": {
-     "step_seconds_median": 0.9245000000000001,
-     "mem_gb_max": 129.08,
+     "step_seconds_median": 0.8015000000000001,
+     "mem_gb_max": 129.65,
      "n_parameters": 69098627,
      "steps_per_epoch": 597,
-     "last_epoch_seen": 60,
+     "last_epoch_seen": 66,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
@@ -8990,21 +8990,21 @@
   "ISLA-DTT (half rate)": {
    "full": {
     "42": {
-     "step_seconds_median": 1.5685,
-     "mem_gb_max": 160.63,
+     "step_seconds_median": 1.4485000000000001,
+     "mem_gb_max": 162.02,
      "n_parameters": 70311186,
      "steps_per_epoch": 678,
-     "last_epoch_seen": 38,
+     "last_epoch_seen": 42,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
     },
     "43": {
-     "step_seconds_median": 1.5605,
+     "step_seconds_median": 1.436,
      "mem_gb_max": 162.29,
      "n_parameters": 70311186,
      "steps_per_epoch": 678,
-     "last_epoch_seen": 37,
+     "last_epoch_seen": 40,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
@@ -9012,21 +9012,21 @@
    },
    "family_non_box": {
     "42": {
-     "step_seconds_median": 1.485,
-     "mem_gb_max": 162.73,
+     "step_seconds_median": 1.406,
+     "mem_gb_max": 162.74,
      "n_parameters": 70311186,
      "steps_per_epoch": 597,
-     "last_epoch_seen": 43,
+     "last_epoch_seen": 47,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
     },
     "43": {
-     "step_seconds_median": 1.515,
+     "step_seconds_median": 1.4085,
      "mem_gb_max": 162.4,
      "n_parameters": 70311186,
      "steps_per_epoch": 597,
-     "last_epoch_seen": 43,
+     "last_epoch_seen": 47,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
@@ -13547,6 +13547,15 @@
     "nut_l2": 0.40636420249938965,
     "tke_l2": 0.565111517906189,
     "omega_l2": 0.6564508676528931
+   },
+   {
+    "epoch": 70,
+    "loss": 0.03660654276609421,
+    "velocity_l2": 0.19616159796714783,
+    "pressure_l2": 0.2636120915412903,
+    "nut_l2": 0.36519187688827515,
+    "tke_l2": 0.5819510817527771,
+    "omega_l2": 0.6553278565406799
    }
   ],
   "az_full_islahr_seed43": [
@@ -13769,6 +13778,15 @@
     "nut_l2": 0.4753212332725525,
     "tke_l2": 0.7038288712501526,
     "omega_l2": 0.7389050126075745
+   },
+   {
+    "epoch": 60,
+    "loss": 0.034030888229608536,
+    "velocity_l2": 0.18771207332611084,
+    "pressure_l2": 0.14603741466999054,
+    "nut_l2": 0.48537665605545044,
+    "tke_l2": 0.6798544526100159,
+    "omega_l2": 0.7051358222961426
    }
   ],
   "az_full_dtthr_seed42": [
@@ -13807,6 +13825,15 @@
     "nut_l2": 0.480141818523407,
     "tke_l2": 0.6055818796157837,
     "omega_l2": 0.7016146779060364
+   },
+   {
+    "epoch": 40,
+    "loss": 0.044758252799510956,
+    "velocity_l2": 0.2148326337337494,
+    "pressure_l2": 0.21508270502090454,
+    "nut_l2": 0.4605189561843872,
+    "tke_l2": 0.5834730267524719,
+    "omega_l2": 0.7110056281089783
    }
   ],
   "az_full_dtthr_seed43": [
@@ -14139,9 +14166,9 @@
    "best_epoch": 50,
    "best_loss": 0.03582312539219856,
    "event_epoch": null,
-   "last_epoch": 60,
-   "last_loss": 0.039208557456731796,
-   "n_validations": 7
+   "last_epoch": 70,
+   "last_loss": 0.03660654276609421,
+   "n_validations": 8
   },
   "az_full_islahr_seed43": {
    "best_epoch": 70,
@@ -14160,20 +14187,20 @@
    "n_validations": 10
   },
   "az_nonbox_islahr_seed43": {
-   "best_epoch": 50,
-   "best_loss": 0.036266177892684937,
+   "best_epoch": 60,
+   "best_loss": 0.034030888229608536,
    "event_epoch": null,
-   "last_epoch": 50,
-   "last_loss": 0.036266177892684937,
-   "n_validations": 6
+   "last_epoch": 60,
+   "last_loss": 0.034030888229608536,
+   "n_validations": 7
   },
   "az_full_dtthr_seed42": {
-   "best_epoch": 30,
-   "best_loss": 0.04501042515039444,
+   "best_epoch": 40,
+   "best_loss": 0.044758252799510956,
    "event_epoch": null,
-   "last_epoch": 30,
-   "last_loss": 0.04501042515039444,
-   "n_validations": 4
+   "last_epoch": 40,
+   "last_loss": 0.044758252799510956,
+   "n_validations": 5
   },
   "az_full_dtthr_seed43": {
    "best_epoch": 20,
@@ -14824,9 +14851,9 @@
      "best_epoch": 50,
      "best_loss": 0.03582312539219856,
      "event_epoch": null,
-     "last_epoch": 60,
-     "last_loss": 0.039208557456731796,
-     "n_validations": 7,
+     "last_epoch": 70,
+     "last_loss": 0.03660654276609421,
+     "n_validations": 8,
      "split": "full",
      "seed": 42,
      "finished": false,
@@ -14857,12 +14884,12 @@
      "final_trails_best": false
     },
     "az_nonbox_islahr_seed43": {
-     "best_epoch": 50,
-     "best_loss": 0.036266177892684937,
+     "best_epoch": 60,
+     "best_loss": 0.034030888229608536,
      "event_epoch": null,
-     "last_epoch": 50,
-     "last_loss": 0.036266177892684937,
-     "n_validations": 6,
+     "last_epoch": 60,
+     "last_loss": 0.034030888229608536,
+     "n_validations": 7,
      "split": "family_non_box",
      "seed": 43,
      "finished": false,
@@ -14904,7 +14931,7 @@
     }
    },
    "code": "pending",
-   "verdict": "no doubling through epoch 50 so far; lanes unfinished",
+   "verdict": "no doubling through epoch 60 so far; lanes unfinished",
    "full_val_velocity": null,
    "p1_reread": {
     "statement": "GeoTransolver \u00f7 ISLA (half rate) on full test velocity >= 1.4 under R2",
@@ -14921,12 +14948,12 @@
    "twin": "ISLA-DTT",
    "lanes": {
     "az_full_dtthr_seed42": {
-     "best_epoch": 30,
-     "best_loss": 0.04501042515039444,
+     "best_epoch": 40,
+     "best_loss": 0.044758252799510956,
      "event_epoch": null,
-     "last_epoch": 30,
-     "last_loss": 0.04501042515039444,
-     "n_validations": 4,
+     "last_epoch": 40,
+     "last_loss": 0.044758252799510956,
+     "n_validations": 5,
      "split": "full",
      "seed": 42,
      "finished": false,
