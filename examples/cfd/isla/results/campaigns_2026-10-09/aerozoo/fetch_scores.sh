@@ -12,6 +12,8 @@
 #   scores/<run>/bestval_test/metrics.jsonl the same chosen checkpoint scored on the TEST side (p200k_fp32_bestval_test/<run>/,
 #                                     eval_bestval.sbatch with BESTVAL_SIDE=test; the best-checkpoint table's protocol), with its
 #                                     CHECKPOINT_USED
+# Hosts (2026-10-13): the half-rate lanes (run ids containing islahr or dtthr) train and score on the LHR site, which mirrors
+#   AGA's absolute paths; they are fetched from lhr2, every other lane from aga2.
 # usage: bash fetch_scores.sh        (from anywhere; idempotent, overwrites)
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -20,7 +22,10 @@ RUNS=$(awk -F'\t' 'NR>1{print $3}' "${HERE}/lanes.tsv" | tr '\n' ' ')
 for r in ${RUNS}; do
   mkdir -p "${HERE}/scores/${r}/val" "${HERE}/scores/${r}/test"
 done
-ssh -o ConnectTimeout=30 aga2 "cd ${T}; for r in ${RUNS}; do
+fetch_from() {
+local HOST=$1; shift; local RUNS="$*"
+[ -z "${RUNS// /}" ] && return 0
+ssh -o ConnectTimeout=30 "${HOST}" "cd ${T}; for r in ${RUNS}; do
   d=/tmp/az_fetch_\$USER/\$r; mkdir -p \$d/val \$d/test
   [ -f p200k_fp32/\$r/\$r/metrics.jsonl ] && cp p200k_fp32/\$r/\$r/metrics.jsonl \$d/val/ || true
   [ -f p200k_fp32_test/\$r/\$r/metrics.jsonl ] && cp p200k_fp32_test/\$r/\$r/metrics.jsonl \$d/test/ || true
@@ -29,6 +34,9 @@ ssh -o ConnectTimeout=30 aga2 "cd ${T}; for r in ${RUNS}; do
   [ -f runs/\$r/metrics.jsonl ] && grep -v '\"phase\": \"train_step\"' runs/\$r/metrics.jsonl > \$d/train_metrics.jsonl || true
   if [ -f runs/\$r/train.log ]; then { grep -E 'Epoch [0-9]+ \[[0-9]+/' runs/\$r/train.log | tail -700; grep -E 'Training completed|=== link start' runs/\$r/train.log | tail -3; } > \$d/train_tail.log; fi
 done; tar -C /tmp/az_fetch_\$USER -czf - . ; rm -rf /tmp/az_fetch_\$USER" | tar -C "${HERE}/scores" -xzf -
+}
+fetch_from aga2 $(for r in ${RUNS}; do case "$r" in *islahr*|*dtthr*) ;; *) printf "%s " "$r";; esac; done)
+fetch_from lhr2 $(for r in ${RUNS}; do case "$r" in *islahr*|*dtthr*) printf "%s " "$r";; esac; done)
 for r in ${RUNS}; do
   v=$([ -s "${HERE}/scores/${r}/val/metrics.jsonl" ] && grep -c infer_step "${HERE}/scores/${r}/val/metrics.jsonl" || echo 0)
   t=$([ -s "${HERE}/scores/${r}/test/metrics.jsonl" ] && grep -c infer_step "${HERE}/scores/${r}/test/metrics.jsonl" || echo 0)
