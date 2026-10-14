@@ -36409,3 +36409,95 @@ for these lanes (validation and test sides, the best-checkpoint rows,
 the query-population protocol on the `full` lanes) is produced on LHR,
 since the fleet's scoring pump does not run there; the campaign's
 fetcher pulls their records from LHR.
+
+## 2026-10-14 — AEROZOO by enclosure family: ISLA's deficit sits in the spherical enclosures; Peter's rulings on the remedies; three tests pre-registered (the ISLA-DTT pressure read, one distance per boundary condition, a doubled training budget) {#sec-nb-aerozoo-family-prereg}
+
+**The family breakdown.** A diagnostic read of the per-case test
+records that already exist: the errors of the `full` and
+`family_non_box` lanes grouped by the enclosure family of
+`case_labels.json` (seed means of case means, float32, the training
+draw). ISLA's deficit against GeoTransolver is not spread over the
+dataset. At the labeled best checkpoints
+(@sec-nb-aerozoo-remedy-prereg), GeoTransolver ÷ ISLA in distribution
+reads 1.68 on velocity and 1.30 on pressure over the 508 box cases and
+1.40 and 1.21 over the 58 ducts, but 1.02 and 0.37 over the 82
+hemispheres and 0.96 and 0.24 over the 68 spheres. With the enclosure
+held out it reads 1.18 and 2.63 over the 303 ducts, 0.68 and 0.33 over
+the 391 hemispheres and 0.35 and 0.30 over the 380 spheres. ISLA's
+pressure error is 0.42 to 0.58 in every family in distribution, while
+GeoTransolver's runs from 0.10 on spheres to 0.71 on ducts. The final
+checkpoints show the same pattern, wider: in distribution,
+GeoTransolver ÷ ISLA on pressure is 0.13 over the hemispheres and 0.08
+over the spheres. Two weaknesses follow. W1 is pressure inside the
+spherical enclosures, even when they are in the training set. W2 is the
+transfer from boxes to the spherical families. ISLA leads on the boxes
+and on the ducts, held out or not.
+
+**Peter's rulings on the remedies.** (1) Rescaling the Reynolds number
+by the ratio of the model's length unit to the dataset's reference
+length is rejected: a per-sample reference length that changes the
+solution is not physical, and a reference length is acceptable only
+when it is not sample-specific, as in GLOBE. (2) One distance per
+boundary condition, built into ISLA, is approved (WALLDIST below).
+(3) The training budget is to be increased on LHR (BUDGET-2X below).
+(4) Experiments beyond the proposal list are welcome.
+
+**D1, the ISLA-DTT pressure read (no new training).** ISLA-DTT's forest
+read gives every interior point a direct read of the boundary tokens
+(@sec-nb-dtt-merged); on AirfRANS it lowered ISLA's pressure error by
+26 percent. If W1 is a reach problem (the pressure inside a sphere is
+set by the outlet dome, which ISLA's points reach only through slice
+averages), the reference-rate ISLA-DTT lanes, scored the same way, read
+sphere and hemisphere pressure at or below 0.6 times ISLA's (final
+against final, best against best), with box pressure within 10 percent
+of ISLA's. D1 is falsified if ISLA-DTT's pressure on spheres and
+hemispheres is above 0.85 times ISLA's. It is read when the `full` and
+`family_non_box` ISLA-DTT pairs are scored.
+
+**WALLDIST.** An interior ISLA built with the names of its boundary
+conditions gives every prediction point, besides the existing signed
+distance to the nearest boundary token, the signed distance to the
+nearest token of each condition, in the model's length unit, as two
+channels that vanish for an absent condition: sign/(1 + |s|) and
+sign log(1 + 1/|s|). Built without names, the model is unchanged. The
+SST closure that produced the labels uses the distance to the nearest
+wall, and GeoTransolver receives the distances to the no-slip and slip
+walls (`sdf_wall`, `sdf_wall_normals`, `sdf_slip`). ISLA's one
+distance is to the nearest boundary of any condition, which inside a
+sphere or a hemisphere is mostly an inlet or outlet dome. Four lanes,
+rows 44-47, `az_{full,nonbox}_islahrwd_seed{42,43}`, run on snapshot
+code_v27, which is code_v26 plus this one change, with
+`model.boundary_conditions=[inlet,no_slip,outlet,slip]` and every other
+setting equal to the half-rate lanes of rows 24-27, which are the
+comparison. Predictions, test side, final checkpoints, means over both
+seeds against the half-rate lanes: (W-a) on `family_non_box`, eddy
+viscosity, turbulent kinetic energy and specific dissipation each
+improve by at least 10 percent; (W-b) on the held-out hemispheres and
+spheres velocity improves by at least 10 percent, and by more than it
+does on the held-out ducts; (W-c) in distribution, every field on the
+box cases is within 5 percent or better. If the held-out hemispheres
+and spheres improve by less than 5 percent on every field, the
+role-blind distance is not the cause of W2. There is no pressure
+prediction: W1 is D1's question.
+
+**BUDGET-2X.** The 250-epoch schedule stretched twofold: 500 epochs,
+with the tenfold rate step every 200 epochs instead of every 100
+(`training.scheduler.step_size=200`). It runs for three arms on the
+`full` and `family_non_box` splits, seeds 42 and 43: half-rate ISLA
+(rows 32-35, as rows 24-27), GeoTransolver at its reference rate (rows
+36-39, as rows 2, 3, 6 and 7) and half-rate ISLA-DTT (rows 40-43, as
+rows 28-31). That is twelve lanes in LHR's normal queue, about five to
+six days. Each arm is compared with its own 250-epoch lanes at the same
+rate, test side, final checkpoints. (B1) ISLA is budget-limited: the
+doubled budget lowers its velocity and pressure errors by at least 10
+percent on both splits. (B2) GeoTransolver is limited by data, not by
+budget (its training loss is six times below its validation loss at
+epoch 200): its errors change by less than 10 percent. (B3) The
+held-out GeoTransolver ÷ ISLA velocity ratio over spheres and
+hemispheres is at least 1.25 times that of the 250-epoch half-rate
+lanes; if it moves by less than 10 percent, the budget does not explain
+W2. (B4) The half-rate ISLA lanes have passed 50,000 to 70,000 steps,
+two to three times the reference-rate event's 23,000 to 30,000, without
+losing their validation minimum. The stretched schedule, which holds
+1.875e-4 for 200 epochs, therefore stays clean: no lane doubles its
+running minimum through epoch 500.
