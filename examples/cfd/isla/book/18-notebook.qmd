@@ -36525,3 +36525,83 @@ linear function of position. If W1 is a failure to carry the
 domain-scale pressure level and gradient, that affine part holds at
 least half of the error energy on spheres and hemispheres and at most
 a quarter on boxes.
+
+## 2026-10-14 — AEROZOO: H-BOUND refuted; four more tests pre-registered (the 18 untested splits, velocity-and-pressure targets, a fixed head-frame gain, WALLDIST on ISLA-DTT) {#sec-nb-aerozoo-matrix-prereg}
+
+**H-BOUND is refuted.** The probe of @sec-nb-aerozoo-family-prereg
+read the four reference-rate Reynolds and blob-bank ISLA lanes and the
+four half-rate lanes at epochs 11 to 153, on eight validation cases per
+lane. At the reference rate the geometric bias's spread across slices
+changed by a factor of 0.81 to 0.98 between epochs 31 and 55, while the
+criterion asked for a doubling. It stayed below the cosine term's
+spread in every block (the largest ratio is 0.62), and afterwards it
+fell by 30 to 60 percent. It decides the top slice of 2 to 13 percent
+of points after the event, against the criterion's 20, and of more
+points at half rate (12 to 18 percent) than at the reference rate. The
+bias does not decide the routing. Two correlates of the event remain,
+both absent at half rate. The head frame's prototype gain grows from
+about 0.2-0.3 to 1.1-1.6, its rise starting with the training-loss
+departure in two lanes and after it in a third. The effective number of
+slices per point falls from 150-200 to 24-48 by the latest epochs,
+through the cosine term itself. The strict detector (validation every
+ten epochs) fires at epochs 60 to 70 in these lanes; their training
+losses depart at epochs 43 to 56. Records:
+`kernel/aerozoo/probe/hbound/` on the LHR site.
+
+**Peter's guidance, 2026-10-14.** Velocity and pressure are the
+volume quantities that matter (wall shear stress and intermittency on
+surfaces); predicting log(1 + ν_t/ν) and the like is a good idea but
+may not be needed. Subagents and the idle LHR capacity are to be used
+freely.
+
+**AZ-SPLITS: the generalization matrix.** Half-rate ISLA and
+GeoTransolver, two seeds each, on the 18 frozen splits not yet run: six
+held-out geometry banks (airframes, Blender bluff and streamlined
+bodies, cars, streamlined bodies, Zero-to-CAD), three held-out
+enclosure families (duct, opposed hemisphere, opposed sphere), five
+held-out flow profiles (confined opposed, crossflow, dual inlet, ground
+effect, open opposed), the layout split, Reynolds-number interpolation,
+and the two scarce-data splits (440 and 74 training cases). Every
+setting equals the half-rate lanes and GeoTransolver's reference lanes;
+each split has its own training-part statistics. The readout is the
+test side at the final checkpoints, plus the labeled best-checkpoint
+table. (M1) Built-in symmetry buys data efficiency: GeoTransolver ÷
+ISLA on velocity rises from `full` to `scarce` to `super_scarce`;
+falsified if `super_scarce`'s ratio is below `full`'s. (M2) ISLA leads
+on velocity on at least five of the six held-out geometry banks, where
+the enclosures stay as trained. (M3) As in the family breakdown, ISLA
+leads on the held-out ducts and trails on pressure on the held-out
+spheres and hemispheres; with the other spherical family still in
+training, the sphere ratio is above the 0.35 of the `family_non_box`
+split. (M4) ISLA's lowest ratios among the 18 fall on the holds that
+move inlets and outlets relative to the body (opposed families and
+profiles), its highest on the geometry banks and Reynolds
+interpolation.
+
+**TARGETS-VP.** The same lanes trained on velocity and pressure only,
+on the `full` split for ISLA at the reference and half rates and for
+GeoTransolver, and on `family_non_box` for half-rate ISLA and
+GeoTransolver. The turbulence fields stay in the data and leave the
+loss. (V1) If the heavy-tailed turbulence targets drive the
+reference-rate event, ISLA at 3.75e-4 on velocity and pressure keeps
+its validation minimum through epoch 250; if it loses it near epochs
+43-70, the event is not target-driven. (V2) Half-rate ISLA's velocity
+and pressure errors fall by at least 5 percent, because the
+specific-dissipation tail acts as gradient noise. (V3) GeoTransolver's
+change by less than 5 percent. (V4) The spherical-enclosure pressure
+ratio moves by less than 10 percent: W1 is not a loss-weighting
+problem.
+
+**H-FRAME.** ISLA at the reference rate on `full`, two seeds, with
+only the head frame's prototype gain fixed at its initial 0.1
+(diagnostic snapshot code_v28, never merged), against the reference
+lanes of rows 0 and 1. (F1) If the gain's growth causes the event, the
+lanes keep their validation minimum through epoch 250. The expectation
+written here is the opposite: the event recurs, because in one probed
+lane the gain rose only after the loss had departed.
+
+**WALLDIST on ISLA-DTT.** The forest-read variant with one distance
+per boundary condition (snapshot code_dtt17 = code_dtt16 plus the
+change), half rate, `full` and `family_non_box`, two seeds, against the
+half-rate ISLA-DTT lanes; predictions W-a to W-c of
+@sec-nb-aerozoo-family-prereg, read for ISLA-DTT.
