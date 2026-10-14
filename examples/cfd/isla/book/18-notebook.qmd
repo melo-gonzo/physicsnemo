@@ -36501,3 +36501,27 @@ two to three times the reference-rate event's 23,000 to 30,000, without
 losing their validation minimum. The stretched schedule, which holds
 1.875e-4 for 200 epochs, therefore stays clean: no lane doubles its
 running minimum through epoch 500.
+
+**Two diagnostics on existing checkpoints, predictions first.**
+H-BOUND concerns the reference-rate event. Each block's routing logit
+is a bounded cosine term, ten times the cosine between token and
+prototype, plus a learned linear map of the point-anchor invariants
+(distance, log-distance and direction cosines), which has no bound
+(`_geo_region` in `blocks.py`). H-BOUND holds that this geometric bias
+grows until it decides the routing. The probe reads, block by block,
+the spread of each term across slices, the share of points whose top
+slice changes when the bias is dropped, and the routing's effective
+slice counts. It uses the reference-rate checkpoints of the Reynolds
+and blob-bank ISLA lanes before, during and after their event, and
+the half-rate lanes at the same epochs. H-BOUND is supported if, in the
+reference-rate lanes, the bias spread at least doubles between epochs
+31 and 55 while the cosine spread does not, and the bias decides the
+top slice of more than 20 percent of points after the event, with
+neither seen at half rate. It is refuted if the bias spread stays
+below the cosine spread and does not change across the event.
+GAUGE concerns W1. On the validation side of the half-rate `full`
+lane, it fits each case's pressure error with a constant plus a
+linear function of position. If W1 is a failure to carry the
+domain-scale pressure level and gradient, that affine part holds at
+least half of the error energy on spheres and hemispheres and at most
+a quarter on boxes.
