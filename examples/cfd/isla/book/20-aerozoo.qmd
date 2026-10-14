@@ -794,7 +794,7 @@ for a in HR_ARMS:
     if not m:
         continue
     lanes = m["lanes"]; twin = m["twin"]
-    far = max(l["last_epoch"] for l in lanes.values())
+    far = min(l["last_epoch"] for l in lanes.values()); furthest = max(l["last_epoch"] for l in lanes.values())
     where = ", ".join(f"`{SPLITS[sp]['stem']}` seed {l['seed']}" for sp in ("full", "family_non_box") for l in lanes.values() if l["split"] == sp)
     hits = {r: l for r, l in lanes.items() if l["event_epoch"] is not None}
     if hits:
@@ -806,6 +806,8 @@ for a in HR_ARMS:
     else:
         fv = m.get("full_val_velocity")
         print(f"**At half the reference rate ({CONFIG[a]}; lanes {where}) no lane doubles its running validation minimum through epoch {far}"
+              + (f" (the furthest lane through epoch {furthest})" if furthest > far else "")
+              + f", where {twin} at the reference rate doubled at epochs {', '.join(str(e['event_epoch']) for e in m['twin_events'].values() if e['event_epoch'] is not None)}"
               + (f", and the final `full` checkpoints read velocity {fv:.3f} on the validation side" if fv is not None else "") + ".** "
               + ("The half rate cures the event on this dataset" + (f"; GeoTransolver ÷ {a} on test velocity reads {m['p1_reread']['velocity_ratio']:.2f} against the pre-registered 1.4. "
                  if m["p1_reread"]["velocity_ratio"] is not None else ". ") if m["code"] == "R2" else ""))

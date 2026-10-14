@@ -36290,3 +36290,62 @@ validation-side best-checkpoint job; the other six half-rate lanes
 follow. The R1-R3 reading needs the detector's window (a doubling of
 the running validation minimum at or below epoch 60 against above it),
 about ten hours of training after the pair starts.
+
+## 2026-10-14 — AEROZOO remedy, first read: no half-rate ISLA lane loses its validation minimum through epochs 50-90, so R3 is excluded; the lanes run on the LHR site {#sec-nb-aerozoo-remedy-first-read}
+
+**The setting.** The remedy of @sec-nb-aerozoo-remedy-prereg trains
+ISLA and ISLA-DTT at half the reference rate, 1.875e-4, on the `full`
+and held-out-box splits (eight lanes), with three outcomes written
+before any step: R1, the event comes later than at the reference rate
+(the validation loss doubles its running minimum above epoch 60); R2,
+no lane doubles through epoch 250 and the `full` finals read velocity
+at or below 0.25; R3, a doubling at or below epoch 60, which would say
+the event is not bound to the step count at this rate. The detector is
+the one of @sec-nb-aerozoo-instability, read on the trainer's
+validation every ten epochs.
+
+**Where the lanes run.** AGA's short queue stalled cluster-wide from
+14:40 EDT on 2026-10-13 (none of our chains ran for the next 20 hours;
+a scheduler dry run put the restart at 08:00 EDT 2026-10-14 and the
+queue missed it), so on Peter's word the eight half-rate lanes moved to
+the LHR site, which mirrors AGA's absolute paths: the AeroZoo shuffled
+copy was transferred there as real files (the AGA copy symlinks its
+per-case metadata, global-data and boundary directories into the
+release), 794,451 files and 1.481 TB in 62 minutes, verified with zero
+itemized differences; the three lanes that had started on AGA resumed
+from their epoch 25-27 checkpoints and the other five started fresh at
+22:45 EDT. The LHR lanes step 2.7 times slower than on AGA (1.8 s
+against 0.68 s for ISLA, 2.0 against 1.25 for ISLA-DTT) because the
+reader touches essentially the whole case per sample (107-581 MB over
+about 200 files) and the LHR NFS client serves that pattern at roughly
+0.7 GB/s per node; loader workers (4 against 12), pinned memory and the
+four-GPU collective were each measured and ruled out. One link died at
+its first step on a stale NFS file handle and the chain resumed on
+another node three minutes later. Records of all of this sit in the
+site's `lhr_setup/` directory and in the campaign's status file.
+
+**What the validation trajectories show.** At the reference rate the
+detector fires at epochs 50-70 on the ISLA lanes (`full` seeds 42 and
+43 at 60 and 50, held-out-box seeds at 60 and 70; by epoch 50 the
+`full` pair read 0.081 and 0.136 against minima of 0.043 and 0.048).
+At half the rate, through 2026-10-14 14:00 EDT, no ISLA lane has
+doubled: the `full` pair reads 0.0392 at epoch 60 (minimum 0.0358 at
+epoch 50) and 0.0359 at epoch 70 (a new minimum), the held-out-box
+seed-42 lane 0.0344 at epoch 90 (minimum 0.0338 at 80), the
+held-out-box seed-43 lane 0.0363 at epoch 50 (its minimum). Every
+half-rate validation minimum so far sits below the corresponding
+reference-rate lane's minimum (0.0427 and 0.0477 for the `full` pair).
+The ISLA-DTT half-rate lanes are at epochs 30-40 (0.045-0.053) and
+cannot be read yet; their reference-rate twins fired at epoch 80 on the
+`full` split and never on the held-out-box split.
+
+**Verdict so far.** R3 is excluded for every half-rate ISLA lane that
+has reached epoch 60: the event does not recur at the same step count
+when the rate is halved, so it is rate-bound in the sense the remedy
+assumed. R1 against R2 stays open until a doubling appears or epoch 250
+is reached (about 2026-10-17 at the LHR pace); under R2 the final
+checkpoints are scored on both sides by the protocol and the
+pre-registered P1 re-read (GeoTransolver ÷ half-rate ISLA at or above
+1.4 on velocity) is taken. The chapter's half-rate paragraph, figure
+curves and remedy codes are computed from the reduction (`remedy`
+block), which now carries these lanes.

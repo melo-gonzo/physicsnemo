@@ -8854,21 +8854,21 @@
   "ISLA-DTT": {
    "full": {
     "42": {
-     "step_seconds_median": 1.2445,
-     "mem_gb_max": 162.43,
+     "step_seconds_median": 1.266,
+     "mem_gb_max": 163.0,
      "n_parameters": 70311186,
      "steps_per_epoch": 678,
-     "last_epoch_seen": 206,
+     "last_epoch_seen": 218,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
     },
     "43": {
-     "step_seconds_median": 1.27,
-     "mem_gb_max": 164.25,
+     "step_seconds_median": 1.275,
+     "mem_gb_max": 161.88,
      "n_parameters": 70311186,
      "steps_per_epoch": 678,
-     "last_epoch_seen": 206,
+     "last_epoch_seen": 218,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
@@ -8876,21 +8876,21 @@
    },
    "family_non_box": {
     "42": {
-     "step_seconds_median": 1.2645,
-     "mem_gb_max": 163.6,
+     "step_seconds_median": 1.262,
+     "mem_gb_max": 165.9,
      "n_parameters": 70311186,
      "steps_per_epoch": 597,
-     "last_epoch_seen": 213,
+     "last_epoch_seen": 225,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
     },
     "43": {
-     "step_seconds_median": 1.269,
-     "mem_gb_max": 162.87,
+     "step_seconds_median": 1.29,
+     "mem_gb_max": 163.15,
      "n_parameters": 70311186,
      "steps_per_epoch": 597,
-     "last_epoch_seen": 213,
+     "last_epoch_seen": 225,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
@@ -8898,21 +8898,21 @@
    },
    "reynolds": {
     "42": {
-     "step_seconds_median": 1.268,
-     "mem_gb_max": 163.39,
+     "step_seconds_median": 1.2595,
+     "mem_gb_max": 162.85,
      "n_parameters": 70311186,
      "steps_per_epoch": 529,
-     "last_epoch_seen": 157,
+     "last_epoch_seen": 166,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
     },
     "43": {
-     "step_seconds_median": 1.263,
-     "mem_gb_max": 163.06,
+     "step_seconds_median": 1.251,
+     "mem_gb_max": 164.54,
      "n_parameters": 70311186,
      "steps_per_epoch": 529,
-     "last_epoch_seen": 158,
+     "last_epoch_seen": 174,
      "trained": false,
      "gpu_hours_est": null,
      "links": 3
@@ -8944,40 +8944,95 @@
   "ISLA (half rate)": {
    "full": {
     "42": {
-     "step_seconds_median": 0.672,
-     "mem_gb_max": 129.98,
+     "step_seconds_median": 0.9944999999999999,
+     "mem_gb_max": 129.17,
      "n_parameters": 69098627,
      "steps_per_epoch": 678,
-     "last_epoch_seen": 7,
+     "last_epoch_seen": 69,
      "trained": false,
      "gpu_hours_est": null,
-     "links": 1
+     "links": 3
     },
     "43": {
-     "step_seconds_median": 0.6805000000000001,
-     "mem_gb_max": 129.78,
+     "step_seconds_median": 0.7865,
+     "mem_gb_max": 129.87,
      "n_parameters": 69098627,
      "steps_per_epoch": 678,
-     "last_epoch_seen": 7,
+     "last_epoch_seen": 72,
      "trained": false,
      "gpu_hours_est": null,
-     "links": 1
+     "links": 3
     }
    },
    "family_non_box": {
     "42": {
-     "step_seconds_median": 0.689,
-     "mem_gb_max": 129.79,
+     "step_seconds_median": 0.9285000000000001,
+     "mem_gb_max": 129.17,
      "n_parameters": 69098627,
      "steps_per_epoch": 597,
-     "last_epoch_seen": 5,
+     "last_epoch_seen": 94,
      "trained": false,
      "gpu_hours_est": null,
-     "links": 1
+     "links": 3
+    },
+    "43": {
+     "step_seconds_median": 0.9245000000000001,
+     "mem_gb_max": 129.08,
+     "n_parameters": 69098627,
+     "steps_per_epoch": 597,
+     "last_epoch_seen": 60,
+     "trained": false,
+     "gpu_hours_est": null,
+     "links": 3
     }
    }
   },
-  "ISLA-DTT (half rate)": {}
+  "ISLA-DTT (half rate)": {
+   "full": {
+    "42": {
+     "step_seconds_median": 1.5685,
+     "mem_gb_max": 160.63,
+     "n_parameters": 70311186,
+     "steps_per_epoch": 678,
+     "last_epoch_seen": 38,
+     "trained": false,
+     "gpu_hours_est": null,
+     "links": 3
+    },
+    "43": {
+     "step_seconds_median": 1.5605,
+     "mem_gb_max": 162.29,
+     "n_parameters": 70311186,
+     "steps_per_epoch": 678,
+     "last_epoch_seen": 37,
+     "trained": false,
+     "gpu_hours_est": null,
+     "links": 3
+    }
+   },
+   "family_non_box": {
+    "42": {
+     "step_seconds_median": 1.485,
+     "mem_gb_max": 162.73,
+     "n_parameters": 70311186,
+     "steps_per_epoch": 597,
+     "last_epoch_seen": 43,
+     "trained": false,
+     "gpu_hours_est": null,
+     "links": 3
+    },
+    "43": {
+     "step_seconds_median": 1.515,
+     "mem_gb_max": 162.4,
+     "n_parameters": 70311186,
+     "steps_per_epoch": 597,
+     "last_epoch_seen": 43,
+     "trained": false,
+     "gpu_hours_est": null,
+     "links": 3
+    }
+   }
+  }
  },
  "trajectories": {
   "az_full_isla_seed42": [
@@ -12405,6 +12460,15 @@
     "nut_l2": 0.8036861419677734,
     "tke_l2": 0.8402107357978821,
     "omega_l2": 0.7786595225334167
+   },
+   {
+    "epoch": 210,
+    "loss": 0.10151632130146027,
+    "velocity_l2": 0.34603872895240784,
+    "pressure_l2": 0.5146734714508057,
+    "nut_l2": 0.7874481678009033,
+    "tke_l2": 0.8401947021484375,
+    "omega_l2": 0.7800114154815674
    }
   ],
   "az_full_dtt_seed43": [
@@ -12596,6 +12660,15 @@
     "nut_l2": 0.6104764938354492,
     "tke_l2": 0.7730415463447571,
     "omega_l2": 0.7939600944519043
+   },
+   {
+    "epoch": 210,
+    "loss": 0.0780019611120224,
+    "velocity_l2": 0.3255420923233032,
+    "pressure_l2": 0.40225523710250854,
+    "nut_l2": 0.6260557770729065,
+    "tke_l2": 0.7638033628463745,
+    "omega_l2": 0.7956510782241821
    }
   ],
   "az_nonbox_dtt_seed42": [
@@ -12796,6 +12869,15 @@
     "nut_l2": 0.5775492787361145,
     "tke_l2": 0.7491189241409302,
     "omega_l2": 0.9076781272888184
+   },
+   {
+    "epoch": 220,
+    "loss": 0.05078214406967163,
+    "velocity_l2": 0.2563973069190979,
+    "pressure_l2": 0.21364516019821167,
+    "nut_l2": 0.5672791004180908,
+    "tke_l2": 0.7441530227661133,
+    "omega_l2": 0.8876215219497681
    }
   ],
   "az_nonbox_dtt_seed43": [
@@ -12996,6 +13078,15 @@
     "nut_l2": 0.574981689453125,
     "tke_l2": 0.7544031739234924,
     "omega_l2": 0.8527083992958069
+   },
+   {
+    "epoch": 220,
+    "loss": 0.05103516951203346,
+    "velocity_l2": 0.2513885498046875,
+    "pressure_l2": 0.24699947237968445,
+    "nut_l2": 0.5841081142425537,
+    "tke_l2": 0.752392053604126,
+    "omega_l2": 0.8530957698822021
    }
   ],
   "az_reynolds_dtt_seed42": [
@@ -13142,6 +13233,15 @@
     "nut_l2": 0.7764238715171814,
     "tke_l2": 0.7898748517036438,
     "omega_l2": 0.8040286302566528
+   },
+   {
+    "epoch": 160,
+    "loss": 0.09772428870201111,
+    "velocity_l2": 0.39436522126197815,
+    "pressure_l2": 0.5750410556793213,
+    "nut_l2": 0.7216172218322754,
+    "tke_l2": 0.8310479521751404,
+    "omega_l2": 0.8207603693008423
    }
   ],
   "az_reynolds_dtt_seed43": [
@@ -13288,6 +13388,24 @@
     "nut_l2": 0.7335818409919739,
     "tke_l2": 0.7647138237953186,
     "omega_l2": 0.7918593287467957
+   },
+   {
+    "epoch": 160,
+    "loss": 0.09544171392917633,
+    "velocity_l2": 0.3566657602787018,
+    "pressure_l2": 0.5099790096282959,
+    "nut_l2": 0.7732287645339966,
+    "tke_l2": 0.800597071647644,
+    "omega_l2": 0.7951096296310425
+   },
+   {
+    "epoch": 170,
+    "loss": 0.09405645728111267,
+    "velocity_l2": 0.35448989272117615,
+    "pressure_l2": 0.4621124565601349,
+    "nut_l2": 0.7516924142837524,
+    "tke_l2": 0.8194810152053833,
+    "omega_l2": 0.8004763126373291
    }
   ],
   "az_blobs_dtt_seed42": [
@@ -13375,6 +13493,60 @@
     "nut_l2": 0.8273220658302307,
     "tke_l2": 0.7862639427185059,
     "omega_l2": 0.9722765684127808
+   },
+   {
+    "epoch": 10,
+    "loss": 0.05421005189418793,
+    "velocity_l2": 0.2330557256937027,
+    "pressure_l2": 0.3465026915073395,
+    "nut_l2": 0.6894091367721558,
+    "tke_l2": 0.6631223559379578,
+    "omega_l2": 0.7659720182418823
+   },
+   {
+    "epoch": 20,
+    "loss": 0.04103676974773407,
+    "velocity_l2": 0.217483252286911,
+    "pressure_l2": 0.2746807932853699,
+    "nut_l2": 0.40064460039138794,
+    "tke_l2": 0.5940192937850952,
+    "omega_l2": 0.7070567607879639
+   },
+   {
+    "epoch": 30,
+    "loss": 0.039545364677906036,
+    "velocity_l2": 0.20632752776145935,
+    "pressure_l2": 0.22896088659763336,
+    "nut_l2": 0.4518665075302124,
+    "tke_l2": 0.6322797536849976,
+    "omega_l2": 0.70604407787323
+   },
+   {
+    "epoch": 40,
+    "loss": 0.039990536868572235,
+    "velocity_l2": 0.20318767428398132,
+    "pressure_l2": 0.19227753579616547,
+    "nut_l2": 0.42166486382484436,
+    "tke_l2": 0.5699798464775085,
+    "omega_l2": 0.6754686832427979
+   },
+   {
+    "epoch": 50,
+    "loss": 0.03582312539219856,
+    "velocity_l2": 0.19304746389389038,
+    "pressure_l2": 0.1981850564479828,
+    "nut_l2": 0.41783779859542847,
+    "tke_l2": 0.5676021575927734,
+    "omega_l2": 0.6951389908790588
+   },
+   {
+    "epoch": 60,
+    "loss": 0.039208557456731796,
+    "velocity_l2": 0.1908988654613495,
+    "pressure_l2": 0.25412556529045105,
+    "nut_l2": 0.40636420249938965,
+    "tke_l2": 0.565111517906189,
+    "omega_l2": 0.6564508676528931
    }
   ],
   "az_full_islahr_seed43": [
@@ -13386,6 +13558,69 @@
     "nut_l2": 0.764149010181427,
     "tke_l2": 0.9091795086860657,
     "omega_l2": 0.8742106556892395
+   },
+   {
+    "epoch": 10,
+    "loss": 0.05516479164361954,
+    "velocity_l2": 0.2464068979024887,
+    "pressure_l2": 0.27670156955718994,
+    "nut_l2": 0.6203073859214783,
+    "tke_l2": 0.6965347528457642,
+    "omega_l2": 0.7608383893966675
+   },
+   {
+    "epoch": 20,
+    "loss": 0.04507695883512497,
+    "velocity_l2": 0.21762889623641968,
+    "pressure_l2": 0.23538491129875183,
+    "nut_l2": 0.5197540521621704,
+    "tke_l2": 0.601567268371582,
+    "omega_l2": 0.7298665642738342
+   },
+   {
+    "epoch": 30,
+    "loss": 0.04184943810105324,
+    "velocity_l2": 0.2124718427658081,
+    "pressure_l2": 0.3098416030406952,
+    "nut_l2": 0.44803082942962646,
+    "tke_l2": 0.5971491932868958,
+    "omega_l2": 0.7012975811958313
+   },
+   {
+    "epoch": 40,
+    "loss": 0.039688318967819214,
+    "velocity_l2": 0.20193907618522644,
+    "pressure_l2": 0.17748671770095825,
+    "nut_l2": 0.4185064435005188,
+    "tke_l2": 0.5613466501235962,
+    "omega_l2": 0.6929879188537598
+   },
+   {
+    "epoch": 50,
+    "loss": 0.03739875182509422,
+    "velocity_l2": 0.19919878244400024,
+    "pressure_l2": 0.21439965069293976,
+    "nut_l2": 0.38137203454971313,
+    "tke_l2": 0.5802045464515686,
+    "omega_l2": 0.6608189940452576
+   },
+   {
+    "epoch": 60,
+    "loss": 0.04039476811885834,
+    "velocity_l2": 0.19651269912719727,
+    "pressure_l2": 0.17522722482681274,
+    "nut_l2": 0.449161171913147,
+    "tke_l2": 0.5822961330413818,
+    "omega_l2": 0.6740190386772156
+   },
+   {
+    "epoch": 70,
+    "loss": 0.03591012582182884,
+    "velocity_l2": 0.19862492382526398,
+    "pressure_l2": 0.17094215750694275,
+    "nut_l2": 0.3760281801223755,
+    "tke_l2": 0.5561559200286865,
+    "omega_l2": 0.6499112844467163
    }
   ],
   "az_nonbox_islahr_seed42": [
@@ -13397,6 +13632,313 @@
     "nut_l2": 0.6665303111076355,
     "tke_l2": 0.8006096482276917,
     "omega_l2": 0.8742584586143494
+   },
+   {
+    "epoch": 10,
+    "loss": 0.047905776649713516,
+    "velocity_l2": 0.22888493537902832,
+    "pressure_l2": 0.2754130959510803,
+    "nut_l2": 0.5773104429244995,
+    "tke_l2": 0.79737389087677,
+    "omega_l2": 0.7952067852020264
+   },
+   {
+    "epoch": 20,
+    "loss": 0.04004798084497452,
+    "velocity_l2": 0.20051071047782898,
+    "pressure_l2": 0.18550050258636475,
+    "nut_l2": 0.4824346899986267,
+    "tke_l2": 0.7171058654785156,
+    "omega_l2": 0.7654393911361694
+   },
+   {
+    "epoch": 30,
+    "loss": 0.03951817378401756,
+    "velocity_l2": 0.19642604887485504,
+    "pressure_l2": 0.15710142254829407,
+    "nut_l2": 0.5007404685020447,
+    "tke_l2": 0.6801584362983704,
+    "omega_l2": 0.7185718417167664
+   },
+   {
+    "epoch": 40,
+    "loss": 0.04132997244596481,
+    "velocity_l2": 0.19334274530410767,
+    "pressure_l2": 0.2128119319677353,
+    "nut_l2": 0.45444950461387634,
+    "tke_l2": 0.6564794182777405,
+    "omega_l2": 0.7222113609313965
+   },
+   {
+    "epoch": 50,
+    "loss": 0.036460280418395996,
+    "velocity_l2": 0.18984992802143097,
+    "pressure_l2": 0.18354474008083344,
+    "nut_l2": 0.47689685225486755,
+    "tke_l2": 0.7040037512779236,
+    "omega_l2": 0.7127737998962402
+   },
+   {
+    "epoch": 60,
+    "loss": 0.035162683576345444,
+    "velocity_l2": 0.18768799304962158,
+    "pressure_l2": 0.13173232972621918,
+    "nut_l2": 0.4682230055332184,
+    "tke_l2": 0.687263548374176,
+    "omega_l2": 0.7133800983428955
+   },
+   {
+    "epoch": 70,
+    "loss": 0.035895708948373795,
+    "velocity_l2": 0.18652120232582092,
+    "pressure_l2": 0.18210841715335846,
+    "nut_l2": 0.4527396559715271,
+    "tke_l2": 0.6796616911888123,
+    "omega_l2": 0.6961361169815063
+   },
+   {
+    "epoch": 80,
+    "loss": 0.03382352367043495,
+    "velocity_l2": 0.1845874786376953,
+    "pressure_l2": 0.13612432777881622,
+    "nut_l2": 0.453352153301239,
+    "tke_l2": 0.6946914792060852,
+    "omega_l2": 0.7296839356422424
+   },
+   {
+    "epoch": 90,
+    "loss": 0.03436725586652756,
+    "velocity_l2": 0.18160893023014069,
+    "pressure_l2": 0.1670396775007248,
+    "nut_l2": 0.43116629123687744,
+    "tke_l2": 0.7033014297485352,
+    "omega_l2": 0.6922755241394043
+   }
+  ],
+  "az_nonbox_islahr_seed43": [
+   {
+    "epoch": 0,
+    "loss": 0.08750435709953308,
+    "velocity_l2": 0.3582422733306885,
+    "pressure_l2": 0.38263237476348877,
+    "nut_l2": 0.7165648341178894,
+    "tke_l2": 0.7883831262588501,
+    "omega_l2": 0.871972918510437
+   },
+   {
+    "epoch": 10,
+    "loss": 0.05451967567205429,
+    "velocity_l2": 0.23105685412883759,
+    "pressure_l2": 0.3064640760421753,
+    "nut_l2": 0.5506276488304138,
+    "tke_l2": 0.7433192729949951,
+    "omega_l2": 0.7779895663261414
+   },
+   {
+    "epoch": 20,
+    "loss": 0.04557133838534355,
+    "velocity_l2": 0.20929284393787384,
+    "pressure_l2": 0.18195541203022003,
+    "nut_l2": 0.5085004568099976,
+    "tke_l2": 0.7850853204727173,
+    "omega_l2": 0.7582194209098816
+   },
+   {
+    "epoch": 30,
+    "loss": 0.045652419328689575,
+    "velocity_l2": 0.20620876550674438,
+    "pressure_l2": 0.2402055859565735,
+    "nut_l2": 0.5192455649375916,
+    "tke_l2": 0.7206212878227234,
+    "omega_l2": 0.7471745610237122
+   },
+   {
+    "epoch": 40,
+    "loss": 0.03643083572387695,
+    "velocity_l2": 0.19926802814006805,
+    "pressure_l2": 0.21373870968818665,
+    "nut_l2": 0.44957512617111206,
+    "tke_l2": 0.6881958246231079,
+    "omega_l2": 0.7695883512496948
+   },
+   {
+    "epoch": 50,
+    "loss": 0.036266177892684937,
+    "velocity_l2": 0.192205011844635,
+    "pressure_l2": 0.19322675466537476,
+    "nut_l2": 0.4753212332725525,
+    "tke_l2": 0.7038288712501526,
+    "omega_l2": 0.7389050126075745
+   }
+  ],
+  "az_full_dtthr_seed42": [
+   {
+    "epoch": 0,
+    "loss": 0.1276169866323471,
+    "velocity_l2": 0.4193864166736603,
+    "pressure_l2": 0.5724982023239136,
+    "nut_l2": 0.8536190986633301,
+    "tke_l2": 0.8158307671546936,
+    "omega_l2": 0.8816969394683838
+   },
+   {
+    "epoch": 10,
+    "loss": 0.05808228254318237,
+    "velocity_l2": 0.2518564462661743,
+    "pressure_l2": 0.32419681549072266,
+    "nut_l2": 0.5211621522903442,
+    "tke_l2": 0.651385486125946,
+    "omega_l2": 0.8039552569389343
+   },
+   {
+    "epoch": 20,
+    "loss": 0.04887907952070236,
+    "velocity_l2": 0.2324831336736679,
+    "pressure_l2": 0.3380067050457001,
+    "nut_l2": 0.4604567587375641,
+    "tke_l2": 0.6409724950790405,
+    "omega_l2": 0.7017302513122559
+   },
+   {
+    "epoch": 30,
+    "loss": 0.04501042515039444,
+    "velocity_l2": 0.21526679396629333,
+    "pressure_l2": 0.2947898507118225,
+    "nut_l2": 0.480141818523407,
+    "tke_l2": 0.6055818796157837,
+    "omega_l2": 0.7016146779060364
+   }
+  ],
+  "az_full_dtthr_seed43": [
+   {
+    "epoch": 0,
+    "loss": 0.12979237735271454,
+    "velocity_l2": 0.39274516701698303,
+    "pressure_l2": 0.6642318367958069,
+    "nut_l2": 0.7272312641143799,
+    "tke_l2": 0.81142657995224,
+    "omega_l2": 0.9101458787918091
+   },
+   {
+    "epoch": 10,
+    "loss": 0.059463419020175934,
+    "velocity_l2": 0.26553964614868164,
+    "pressure_l2": 0.24726954102516174,
+    "nut_l2": 0.6087987422943115,
+    "tke_l2": 0.6595267057418823,
+    "omega_l2": 0.7775704860687256
+   },
+   {
+    "epoch": 20,
+    "loss": 0.05110040679574013,
+    "velocity_l2": 0.23222053050994873,
+    "pressure_l2": 0.23545601963996887,
+    "nut_l2": 0.5016104578971863,
+    "tke_l2": 0.6224428415298462,
+    "omega_l2": 0.7262850403785706
+   },
+   {
+    "epoch": 30,
+    "loss": 0.052947062999010086,
+    "velocity_l2": 0.2246818244457245,
+    "pressure_l2": 0.4518416225910187,
+    "nut_l2": 0.4536413550376892,
+    "tke_l2": 0.6038672924041748,
+    "omega_l2": 0.6973569989204407
+   }
+  ],
+  "az_nonbox_dtthr_seed42": [
+   {
+    "epoch": 0,
+    "loss": 0.09813731163740158,
+    "velocity_l2": 0.3653048276901245,
+    "pressure_l2": 0.5602712035179138,
+    "nut_l2": 0.6528205275535583,
+    "tke_l2": 0.8414558172225952,
+    "omega_l2": 0.9109669327735901
+   },
+   {
+    "epoch": 10,
+    "loss": 0.052113063633441925,
+    "velocity_l2": 0.23657700419425964,
+    "pressure_l2": 0.2261766791343689,
+    "nut_l2": 0.6249865889549255,
+    "tke_l2": 0.7916078567504883,
+    "omega_l2": 0.7911853194236755
+   },
+   {
+    "epoch": 20,
+    "loss": 0.046721115708351135,
+    "velocity_l2": 0.21597135066986084,
+    "pressure_l2": 0.2500050365924835,
+    "nut_l2": 0.556577742099762,
+    "tke_l2": 0.7194528579711914,
+    "omega_l2": 0.7543138265609741
+   },
+   {
+    "epoch": 30,
+    "loss": 0.043190088123083115,
+    "velocity_l2": 0.20928800106048584,
+    "pressure_l2": 0.2052963376045227,
+    "nut_l2": 0.5247970223426819,
+    "tke_l2": 0.6838222742080688,
+    "omega_l2": 0.7080901861190796
+   },
+   {
+    "epoch": 40,
+    "loss": 0.04364602640271187,
+    "velocity_l2": 0.1964566856622696,
+    "pressure_l2": 0.21831338107585907,
+    "nut_l2": 0.6488611698150635,
+    "tke_l2": 0.6792393326759338,
+    "omega_l2": 0.7062446475028992
+   }
+  ],
+  "az_nonbox_dtthr_seed43": [
+   {
+    "epoch": 0,
+    "loss": 0.09646757692098618,
+    "velocity_l2": 0.3702087700366974,
+    "pressure_l2": 0.4966433644294739,
+    "nut_l2": 0.6928534507751465,
+    "tke_l2": 0.8112392425537109,
+    "omega_l2": 0.8638275861740112
+   },
+   {
+    "epoch": 10,
+    "loss": 0.052909284830093384,
+    "velocity_l2": 0.2341061383485794,
+    "pressure_l2": 0.21451911330223083,
+    "nut_l2": 0.5602555871009827,
+    "tke_l2": 0.7378137111663818,
+    "omega_l2": 0.7921196222305298
+   },
+   {
+    "epoch": 20,
+    "loss": 0.047577567398548126,
+    "velocity_l2": 0.21651192009449005,
+    "pressure_l2": 0.24175497889518738,
+    "nut_l2": 0.5183992385864258,
+    "tke_l2": 0.7149693965911865,
+    "omega_l2": 0.7367826104164124
+   },
+   {
+    "epoch": 30,
+    "loss": 0.04467174410820007,
+    "velocity_l2": 0.2140360176563263,
+    "pressure_l2": 0.22703729569911957,
+    "nut_l2": 0.5834041237831116,
+    "tke_l2": 0.734073281288147,
+    "omega_l2": 0.7458988428115845
+   },
+   {
+    "epoch": 40,
+    "loss": 0.04050079360604286,
+    "velocity_l2": 0.20178568363189697,
+    "pressure_l2": 0.14629562199115753,
+    "nut_l2": 0.5685330033302307,
+    "tke_l2": 0.6750646233558655,
+    "omega_l2": 0.6795781850814819
    }
   ]
  },
@@ -13533,49 +14075,49 @@
    "best_epoch": 40,
    "best_loss": 0.0499902106821537,
    "event_epoch": 80,
-   "last_epoch": 200,
-   "last_loss": 0.10087698698043823,
-   "n_validations": 21
+   "last_epoch": 210,
+   "last_loss": 0.10151632130146027,
+   "n_validations": 22
   },
   "az_full_dtt_seed43": {
    "best_epoch": 50,
    "best_loss": 0.041010525077581406,
    "event_epoch": 80,
-   "last_epoch": 200,
-   "last_loss": 0.077659010887146,
-   "n_validations": 21
+   "last_epoch": 210,
+   "last_loss": 0.0780019611120224,
+   "n_validations": 22
   },
   "az_nonbox_dtt_seed42": {
    "best_epoch": 60,
    "best_loss": 0.03864477947354317,
    "event_epoch": null,
-   "last_epoch": 210,
-   "last_loss": 0.052151866257190704,
-   "n_validations": 22
+   "last_epoch": 220,
+   "last_loss": 0.05078214406967163,
+   "n_validations": 23
   },
   "az_nonbox_dtt_seed43": {
    "best_epoch": 50,
    "best_loss": 0.03820281848311424,
    "event_epoch": null,
-   "last_epoch": 210,
-   "last_loss": 0.05135807394981384,
-   "n_validations": 22
+   "last_epoch": 220,
+   "last_loss": 0.05103516951203346,
+   "n_validations": 23
   },
   "az_reynolds_dtt_seed42": {
    "best_epoch": 50,
    "best_loss": 0.03686714544892311,
    "event_epoch": 90,
-   "last_epoch": 150,
-   "last_loss": 0.10129207372665405,
-   "n_validations": 16
+   "last_epoch": 160,
+   "last_loss": 0.09772428870201111,
+   "n_validations": 17
   },
   "az_reynolds_dtt_seed43": {
    "best_epoch": 60,
    "best_loss": 0.0365510992705822,
    "event_epoch": 90,
-   "last_epoch": 150,
-   "last_loss": 0.09610823541879654,
-   "n_validations": 16
+   "last_epoch": 170,
+   "last_loss": 0.09405645728111267,
+   "n_validations": 18
   },
   "az_blobs_dtt_seed42": {
    "best_epoch": 30,
@@ -13594,28 +14136,68 @@
    "n_validations": 4
   },
   "az_full_islahr_seed42": {
-   "best_epoch": 0,
-   "best_loss": 0.12145422399044037,
+   "best_epoch": 50,
+   "best_loss": 0.03582312539219856,
    "event_epoch": null,
-   "last_epoch": 0,
-   "last_loss": 0.12145422399044037,
-   "n_validations": 1
+   "last_epoch": 60,
+   "last_loss": 0.039208557456731796,
+   "n_validations": 7
   },
   "az_full_islahr_seed43": {
-   "best_epoch": 0,
-   "best_loss": 0.12408196926116943,
+   "best_epoch": 70,
+   "best_loss": 0.03591012582182884,
    "event_epoch": null,
-   "last_epoch": 0,
-   "last_loss": 0.12408196926116943,
-   "n_validations": 1
+   "last_epoch": 70,
+   "last_loss": 0.03591012582182884,
+   "n_validations": 8
   },
   "az_nonbox_islahr_seed42": {
-   "best_epoch": 0,
-   "best_loss": 0.0935477614402771,
+   "best_epoch": 80,
+   "best_loss": 0.03382352367043495,
    "event_epoch": null,
-   "last_epoch": 0,
-   "last_loss": 0.0935477614402771,
-   "n_validations": 1
+   "last_epoch": 90,
+   "last_loss": 0.03436725586652756,
+   "n_validations": 10
+  },
+  "az_nonbox_islahr_seed43": {
+   "best_epoch": 50,
+   "best_loss": 0.036266177892684937,
+   "event_epoch": null,
+   "last_epoch": 50,
+   "last_loss": 0.036266177892684937,
+   "n_validations": 6
+  },
+  "az_full_dtthr_seed42": {
+   "best_epoch": 30,
+   "best_loss": 0.04501042515039444,
+   "event_epoch": null,
+   "last_epoch": 30,
+   "last_loss": 0.04501042515039444,
+   "n_validations": 4
+  },
+  "az_full_dtthr_seed43": {
+   "best_epoch": 20,
+   "best_loss": 0.05110040679574013,
+   "event_epoch": null,
+   "last_epoch": 30,
+   "last_loss": 0.052947062999010086,
+   "n_validations": 4
+  },
+  "az_nonbox_dtthr_seed42": {
+   "best_epoch": 30,
+   "best_loss": 0.043190088123083115,
+   "event_epoch": null,
+   "last_epoch": 40,
+   "last_loss": 0.04364602640271187,
+   "n_validations": 5
+  },
+  "az_nonbox_dtthr_seed43": {
+   "best_epoch": 40,
+   "best_loss": 0.04050079360604286,
+   "event_epoch": null,
+   "last_epoch": 40,
+   "last_loss": 0.04050079360604286,
+   "n_validations": 5
   }
  },
  "runs": {
@@ -13753,6 +14335,31 @@
    "arm": "ISLA (half rate)",
    "split": "family_non_box",
    "seed": 42
+  },
+  "az_nonbox_islahr_seed43": {
+   "arm": "ISLA (half rate)",
+   "split": "family_non_box",
+   "seed": 43
+  },
+  "az_full_dtthr_seed42": {
+   "arm": "ISLA-DTT (half rate)",
+   "split": "full",
+   "seed": 42
+  },
+  "az_full_dtthr_seed43": {
+   "arm": "ISLA-DTT (half rate)",
+   "split": "full",
+   "seed": 43
+  },
+  "az_nonbox_dtthr_seed42": {
+   "arm": "ISLA-DTT (half rate)",
+   "split": "family_non_box",
+   "seed": 42
+  },
+  "az_nonbox_dtthr_seed43": {
+   "arm": "ISLA-DTT (half rate)",
+   "split": "family_non_box",
+   "seed": 43
   }
  },
  "bestval": {
@@ -14214,38 +14821,50 @@
    "twin": "ISLA",
    "lanes": {
     "az_full_islahr_seed42": {
-     "best_epoch": 0,
-     "best_loss": 0.12145422399044037,
+     "best_epoch": 50,
+     "best_loss": 0.03582312539219856,
      "event_epoch": null,
-     "last_epoch": 0,
-     "last_loss": 0.12145422399044037,
-     "n_validations": 1,
+     "last_epoch": 60,
+     "last_loss": 0.039208557456731796,
+     "n_validations": 7,
      "split": "full",
      "seed": 42,
      "finished": false,
      "final_trails_best": false
     },
     "az_full_islahr_seed43": {
-     "best_epoch": 0,
-     "best_loss": 0.12408196926116943,
+     "best_epoch": 70,
+     "best_loss": 0.03591012582182884,
      "event_epoch": null,
-     "last_epoch": 0,
-     "last_loss": 0.12408196926116943,
-     "n_validations": 1,
+     "last_epoch": 70,
+     "last_loss": 0.03591012582182884,
+     "n_validations": 8,
      "split": "full",
      "seed": 43,
      "finished": false,
      "final_trails_best": false
     },
     "az_nonbox_islahr_seed42": {
-     "best_epoch": 0,
-     "best_loss": 0.0935477614402771,
+     "best_epoch": 80,
+     "best_loss": 0.03382352367043495,
      "event_epoch": null,
-     "last_epoch": 0,
-     "last_loss": 0.0935477614402771,
-     "n_validations": 1,
+     "last_epoch": 90,
+     "last_loss": 0.03436725586652756,
+     "n_validations": 10,
      "split": "family_non_box",
      "seed": 42,
+     "finished": false,
+     "final_trails_best": false
+    },
+    "az_nonbox_islahr_seed43": {
+     "best_epoch": 50,
+     "best_loss": 0.036266177892684937,
+     "event_epoch": null,
+     "last_epoch": 50,
+     "last_loss": 0.036266177892684937,
+     "n_validations": 6,
+     "split": "family_non_box",
+     "seed": 43,
      "finished": false,
      "final_trails_best": false
     }
@@ -14285,10 +14904,110 @@
     }
    },
    "code": "pending",
-   "verdict": "no doubling through epoch 0 so far; lanes unfinished",
+   "verdict": "no doubling through epoch 50 so far; lanes unfinished",
    "full_val_velocity": null,
    "p1_reread": {
     "statement": "GeoTransolver \u00f7 ISLA (half rate) on full test velocity >= 1.4 under R2",
+    "velocity_ratio": null,
+    "met": null
+   },
+   "bars": {
+    "late_epoch": 60,
+    "r2_velocity": 0.25,
+    "event_factor": 2.0
+   }
+  },
+  "ISLA-DTT (half rate)": {
+   "twin": "ISLA-DTT",
+   "lanes": {
+    "az_full_dtthr_seed42": {
+     "best_epoch": 30,
+     "best_loss": 0.04501042515039444,
+     "event_epoch": null,
+     "last_epoch": 30,
+     "last_loss": 0.04501042515039444,
+     "n_validations": 4,
+     "split": "full",
+     "seed": 42,
+     "finished": false,
+     "final_trails_best": false
+    },
+    "az_full_dtthr_seed43": {
+     "best_epoch": 20,
+     "best_loss": 0.05110040679574013,
+     "event_epoch": null,
+     "last_epoch": 30,
+     "last_loss": 0.052947062999010086,
+     "n_validations": 4,
+     "split": "full",
+     "seed": 43,
+     "finished": false,
+     "final_trails_best": false
+    },
+    "az_nonbox_dtthr_seed42": {
+     "best_epoch": 30,
+     "best_loss": 0.043190088123083115,
+     "event_epoch": null,
+     "last_epoch": 40,
+     "last_loss": 0.04364602640271187,
+     "n_validations": 5,
+     "split": "family_non_box",
+     "seed": 42,
+     "finished": false,
+     "final_trails_best": false
+    },
+    "az_nonbox_dtthr_seed43": {
+     "best_epoch": 40,
+     "best_loss": 0.04050079360604286,
+     "event_epoch": null,
+     "last_epoch": 40,
+     "last_loss": 0.04050079360604286,
+     "n_validations": 5,
+     "split": "family_non_box",
+     "seed": 43,
+     "finished": false,
+     "final_trails_best": false
+    }
+   },
+   "twin_events": {
+    "az_full_dtt_seed42": {
+     "best_epoch": 40,
+     "best_loss": 0.0499902106821537,
+     "event_epoch": 80,
+     "last_epoch": 210,
+     "last_loss": 0.10151632130146027,
+     "n_validations": 22
+    },
+    "az_full_dtt_seed43": {
+     "best_epoch": 50,
+     "best_loss": 0.041010525077581406,
+     "event_epoch": 80,
+     "last_epoch": 210,
+     "last_loss": 0.0780019611120224,
+     "n_validations": 22
+    },
+    "az_nonbox_dtt_seed42": {
+     "best_epoch": 60,
+     "best_loss": 0.03864477947354317,
+     "event_epoch": null,
+     "last_epoch": 220,
+     "last_loss": 0.05078214406967163,
+     "n_validations": 23
+    },
+    "az_nonbox_dtt_seed43": {
+     "best_epoch": 50,
+     "best_loss": 0.03820281848311424,
+     "event_epoch": null,
+     "last_epoch": 220,
+     "last_loss": 0.05103516951203346,
+     "n_validations": 23
+    }
+   },
+   "code": "pending",
+   "verdict": "no doubling through epoch 30 so far; lanes unfinished",
+   "full_val_velocity": null,
+   "p1_reread": {
+    "statement": "GeoTransolver \u00f7 ISLA-DTT (half rate) on full test velocity >= 1.4 under R2",
     "velocity_ratio": null,
     "met": null
    },
