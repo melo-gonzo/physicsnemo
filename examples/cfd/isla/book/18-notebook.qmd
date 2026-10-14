@@ -36349,3 +36349,49 @@ pre-registered P1 re-read (GeoTransolver ÷ half-rate ISLA at or above
 1.4 on velocity) is taken. The chapter's half-rate paragraph, figure
 curves and remedy codes are computed from the reduction (`remedy`
 block), which now carries these lanes.
+
+## 2026-10-14 — AEROZOO: the twelve remaining lanes move from AGA to LHR with every checkpoint and resume in LHR's normal queue {#sec-nb-aerozoo-migration-lhr}
+
+**The setting.** After the half-rate lanes moved to the LHR site
+(@sec-nb-aerozoo-remedy-first-read), twelve AeroZoo lanes still sat in
+AGA's short queue as chain links waiting between runs: the ISLA
+Reynolds-split pair (logged epochs 132 and 100), the ISLA blob-bank
+pair (98 and 98), and the six ISLA-DTT lanes on the `full` split (218
+and 218), the held-out-box split (225 and 225), the Reynolds split (166
+and 174) and the blob-bank split (38 and 38). AGA ran none of them for
+24 hours (a scheduler dry run at 14:58 EDT still put a one-node job of
+ours at 01:30 EDT on 2026-10-15), so on Peter's instruction, "if things
+are stalled on AGA, migrate them over to LHR", the lanes moved.
+
+**What was done.** The twelve AGA chain links were cancelled, so no
+AeroZoo job remains on AGA. Each lane's run directory, with every
+checkpoint (saved every two epochs; the best-checkpoint table needs
+them), its training log and its metrics record, streamed from AGA's
+datamover hosts to LHR's as one tar stream per directory: 0.49 TB in 76
+minutes, about 14 MB/s per stream, zero stream errors. Every copy was
+checked against the source by file count and total byte size before
+anything was submitted (twelve of twelve match). The lanes were then
+submitted on LHR at 15:59 EDT as singleton chains in the normal queue
+with 3 h 59 min links, because the short queue's cap of twenty
+submitted jobs per user already holds the eight half-rate chains; a
+dry run placed the first link at 19:26 EDT. The lane rows themselves
+are unchanged (same code snapshots, four loader workers, same seeds),
+so each lane resumes from its latest complete checkpoint at or just
+below the epochs above and the per-epoch record continues; only the
+wall-clock pace changes, by the 2.7 (ISLA) and 1.6 (ISLA-DTT) factors
+measured on this site. The AGA run directories stay in place as the
+pre-migration record and must not be resumed there, or the two copies
+diverge.
+
+**What follows.** At the LHR pace the ISLA-DTT `full` pair needs about
+15 hours of running time and the held-out-box pair about 11, so both
+finish during 2026-10-15 if the queue starts them this evening; the
+ISLA Reynolds and blob-bank lanes and the ISLA-DTT Reynolds lanes need
+one and a half to two days, and the ISLA-DTT blob-bank pair about four.
+Acceptance for each lane is a first training step on LHR that continues
+from the expected epoch with no traceback; a resume from a lower epoch
+or a failed link is investigated before the lane counts. Every score
+for these lanes (validation and test sides, the best-checkpoint rows,
+the query-population protocol on the `full` lanes) is produced on LHR,
+since the fleet's scoring pump does not run there; the campaign's
+fetcher pulls their records from LHR.
