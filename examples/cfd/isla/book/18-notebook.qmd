@@ -36655,3 +36655,36 @@ measured against the case's own Cp are 1.7 to 2.0 times the signal on
 spheres and 0.84 times on boxes, for the half-rate lanes. The
 pre-registered metric stays as defined. Any per-family pressure
 comparison states which of the two normalizations it uses.
+
+## 2026-10-14 — AEROZOO: the matrix's files, the scarce-split protocol, and launch {#sec-nb-aerozoo-matrix-launch}
+
+**Files.** The 18 new dataset files and the two velocity-and-pressure
+variants (`aerozoo_volume_vp`, `aerozoo_volume_nonbox_vp`) are on
+branch psharpe/isla-azsplits, commit bd947c89c. Each split's file
+holds that split's training-part statistics. They come from the
+procedure that filled the four earlier files, which reproduces
+`family_non_box` and `full` byte for byte. On the LHR site they were
+added to recipe_v9 as new files only, with a note in its
+SNAPSHOT_HEAD. The velocity-and-pressure files differ from their bases
+only in the targets block: the loss, the metrics and the scorer read
+the declared targets only, ISLA takes its three outputs out of
+`model.output_schema`, and GeoTransolver's output width becomes four.
+
+**The scarce-split protocol.** The pre-registration of
+@sec-nb-aerozoo-prereg fixes 250 epochs for every model and split, and
+that stands for `scarce` (440 training cases) and `super_scarce` (74).
+At four cases per step they get about 27,500 and 4,600 optimizer steps,
+against 170,000 for `full`. That is near the step count of `full`'s
+half-rate best checkpoints for `scarce`, and likely too few for both
+architectures on `super_scarce`. If either split's validation loss is
+still falling at epoch 250, a step-matched arm follows, with epochs,
+the rate step, validation and checkpointing all scaled by the ratio of
+training-set sizes. M1 is read on the registered protocol first.
+
+**Launch.** Rows 54 to 125 of the lane table: the 18 splits, half-rate
+ISLA and GeoTransolver, seeds 42 and 43 (`az_<split>_islahr_seed<s>`,
+`az_<split>_gt_seed<s>`). Rows 126 to 135 are TARGETS-VP:
+`az_full_islavp` at the reference rate, and `az_full_islahrvp`,
+`az_full_gtvp`, `az_nonbox_islahrvp` and `az_nonbox_gtvp`, two seeds
+each. Snapshot code_v26 and recipe_v9 throughout, 250 epochs, LHR's
+normal queue.
