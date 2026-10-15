@@ -100,6 +100,19 @@ ISLA_VP_OVERRIDES = {
         "~model.output_schema.omega",
     ),
 }
+### AZ-UNIFORM (2026-10-14): every file's uniform-boundary twin aerozoo_uvolume<suffix>.yaml (the reader reads the
+### boundaries whole, SubsampleMesh draws a uniform 50,000 faces per boundary first), tested like its source.
+UNIFORM_TWINS = {
+    name.replace("aerozoo_volume", "aerozoo_uvolume", 1): name for name in DATASET_FILES
+}
+DATASET_FILES.update({twin: DATASET_FILES[src] for twin, src in UNIFORM_TWINS.items()})
+ISLA_VP_OVERRIDES.update(
+    {
+        twin: ISLA_VP_OVERRIDES[src]
+        for twin, src in UNIFORM_TWINS.items()
+        if src in ISLA_VP_OVERRIDES
+    }
+)
 SOLUTION = (
     "velocity",
     "gauge_pressure",
@@ -342,9 +355,24 @@ def pipeline_output_vp(tmp_path_factory) -> dict[str, DomainMesh]:
     return _read_back(tmp_path_factory, "aerozoo_volume_vp")
 
 
+@pytest.fixture(scope="module")
+def pipeline_output_uniform(tmp_path_factory) -> dict[str, DomainMesh]:
+    return _read_back(tmp_path_factory, "aerozoo_uvolume")
+
+
+@pytest.fixture(scope="module")
+def pipeline_output_uniform_vp(tmp_path_factory) -> dict[str, DomainMesh]:
+    return _read_back(tmp_path_factory, "aerozoo_uvolume_vp")
+
+
 def _outputs(request, dataset: str) -> dict[str, DomainMesh]:
     return request.getfixturevalue(
-        "pipeline_output_vp" if dataset == "aerozoo_volume_vp" else "pipeline_output"
+        {
+            "aerozoo_volume": "pipeline_output",
+            "aerozoo_volume_vp": "pipeline_output_vp",
+            "aerozoo_uvolume": "pipeline_output_uniform",
+            "aerozoo_uvolume_vp": "pipeline_output_uniform_vp",
+        }[dataset]
     )
 
 
@@ -557,6 +585,10 @@ def test_dataset_yaml_pins_the_reader_and_the_chain(dataset):
     )
     ds = OmegaConf.load(path)
     reader = OmegaConf.to_container(ds.pipeline.reader, resolve=False)
+    if dataset in UNIFORM_TWINS:
+        ### The twin: the reader reads the boundaries whole; the cap is the first transform's.
+        assert "subsample_n_cells" not in reader
+        reader["subsample_n_cells"] = ds.pipeline.transforms[0].n_cells
     assert (
         reader["subsample_n_cells"] == 50000
     )  # a literal: 4 x 50,000 boundary tokens at any interior resolution
@@ -577,6 +609,80 @@ def test_dataset_yaml_pins_the_reader_and_the_chain(dataset):
     ### counts), so the standardizing transform instantiates with no mandatory value missing.
     assert "???" not in OmegaConf.to_yaml(ds.pipeline.transforms[-2])
     hydra.utils.instantiate(ds.pipeline.transforms[-2], _convert_="all")
+
+
+@pytest.mark.parametrize("twin", sorted(UNIFORM_TWINS))
+def test_uniform_twin_is_its_source_but_the_boundary_draw(twin):
+    """aerozoo_uvolume<suffix>.yaml is aerozoo_volume<suffix>.yaml with the reader's boundary cap moved to a
+    SubsampleMesh first in the chain (before the SDFs, the measures and the harmonized fields read the boundaries)
+    and a header line after the statistics line; the interior draw, the chain and the statistics are the source's."""
+    src = UNIFORM_TWINS[twin]
+    datasets = _RECIPE_ROOT / "datasets"
+    twin_lines = (datasets / f"{twin}.yaml").read_text().splitlines()
+    src_lines = (datasets / f"{src}.yaml").read_text().splitlines()
+    assert twin_lines[0] == src_lines[0]
+    assert twin_lines[1].startswith(
+        f"# AZ-UNIFORM (2026-10-14): {src}.yaml with uniform"
+    )
+    a = OmegaConf.to_container(OmegaConf.load(datasets / f"{twin}.yaml"), resolve=False)
+    b = OmegaConf.to_container(OmegaConf.load(datasets / f"{src}.yaml"), resolve=False)
+    assert b["pipeline"]["reader"].pop("subsample_n_cells") == 50000
+    first = a["pipeline"]["transforms"].pop(0)
+    assert first == {"_target_": "${dp:SubsampleMesh}", "n_cells": 50000}
+    assert a == b
+
+
+def test_uniform_twin_draws_a_uniform_subset_of_the_whole_boundary(tmp_path):
+    """The twin's reader hands over every boundary face and its SubsampleMesh (capped at 5 faces here) keeps a
+    uniform random subset, not the reader's cyclic contiguous block, with the Horvitz-Thompson measure N/k through
+    the whole chain; the interior's point draw is the source file's for the same seed."""
+    path = tmp_path / "shard-000" / "case-0001" / "domain.pdmsh"
+    path.parent.mkdir(parents=True)
+    make_aerozoo_case(True, seed=1).save(path)
+    cfg = _filled_dataset_yaml(tmp_path, "aerozoo_uvolume")
+    cfg.pipeline.transforms[0].n_cells = 5
+    twin = build_dataset(cfg, device=None, num_workers=1)
+    src = build_dataset(
+        _filled_dataset_yaml(tmp_path, "aerozoo_volume"), device=None, num_workers=1
+    )
+    try:
+        raw = twin.reader[0][0]
+        body = raw.boundaries["no_slip"]
+        assert body.n_cells == 12  # read whole
+        y_plus = body.cell_data["derived", "wall_y_plus"]  # a face's identity
+        blocks = {frozenset((s + i) % 12 for i in range(5)) for s in range(12)}
+        subsample, draws = twin.transforms[0], set()
+        for seed in range(20):
+            subsample.set_generator(torch.Generator().manual_seed(seed))
+            kept = subsample.apply_to_domain(raw).boundaries["no_slip"]
+            index = (
+                kept.cell_data["derived", "wall_y_plus"][:, None] == y_plus
+            ).nonzero()[:, 1]
+            assert kept.n_cells == 5 and index.unique().numel() == 5
+            torch.testing.assert_close(
+                kept.cell_data[EFFECTIVE_MEASURE_KEY], body.cell_areas[index] * 12 / 5
+            )
+            draws.add(frozenset(index.tolist()))
+        assert len(draws) > 12 and not draws <= blocks
+        ### End to end with one seed for both files: the boundaries capped at 5 faces with the N/k measure in
+        ### nondimensional units, the interior sample (points and targets) the source file's.
+        for ds in (twin, src):
+            ds.set_generator(torch.Generator().manual_seed(3))
+        d, s = twin[0][0], src[0][0]
+        for name, n in (("inlet", 4), ("outlet", 4), ("no_slip", 12), ("slip", 4)):
+            bnd = d.boundaries[name]
+            assert bnd.n_cells == min(n, 5), name
+            torch.testing.assert_close(
+                bnd.cell_data[EFFECTIVE_MEASURE_KEY], bnd.cell_areas * max(n / 5, 1.0)
+            )
+        torch.testing.assert_close(d.interior.points, s.interior.points)
+        for name in ("velocity", "pressure", "nut", "tke", "omega"):
+            torch.testing.assert_close(
+                d.interior.point_data[name], s.interior.point_data[name]
+            )
+    finally:
+        DatasetBase.close(twin)
+        DatasetBase.close(src)
 
 
 @pytest.mark.parametrize("dataset", sorted(ISLA_VP_OVERRIDES))
