@@ -12,10 +12,9 @@
 #   scores/<run>/bestval_test/metrics.jsonl the same chosen checkpoint scored on the TEST side (p200k_fp32_bestval_test/<run>/,
 #                                     eval_bestval.sbatch with BESTVAL_SIDE=test; the best-checkpoint table's protocol), with its
 #                                     CHECKPOINT_USED
-# Hosts (2026-10-14): the lanes that train and score on the LHR site, which mirrors AGA's absolute paths, are fetched from lhr2:
-#   the half-rate lanes (islahr, dtthr) and, since AGA's stall, every ISLA-DTT lane (_dtt_) and the ISLA Reynolds and blob-bank
-#   lanes (reynolds_isla, blobs_isla). The lanes that trained and were scored on AGA (ISLA and GeoTransolver full and nonbox,
-#   GeoTransolver reynolds and blobs) are fetched from aga2.
+# Hosts (2026-10-14): the LHR site mirrors AGA's absolute paths. Every lanes.tsv row >= 16 and every row whose run directory
+#   exists on LHR (rows 8, 9, 12 and 13: the ISLA Reynolds and blob-bank lanes) is fetched from lhr2; the rows that trained and
+#   were scored on AGA (0-7, 10, 11, 14 and 15: ISLA and GeoTransolver full and nonbox, GeoTransolver reynolds and blobs) from aga2.
 # usage: bash fetch_scores.sh        (from anywhere; idempotent, overwrites)
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -37,10 +36,12 @@ ssh -o ConnectTimeout=30 "${HOST}" "cd ${T}; for r in ${RUNS}; do
   if [ -f runs/\$r/train.log ]; then { grep -E 'Epoch [0-9]+ \[[0-9]+/' runs/\$r/train.log | tail -700; grep -E 'Training completed|=== link start' runs/\$r/train.log | tail -3; } > \$d/train_tail.log; fi
 done; tar -C /tmp/az_fetch_\$USER -czf - . ; rm -rf /tmp/az_fetch_\$USER" | tar -C "${HERE}/scores" -xzf -
 }
-LHR_PAT='*islahr*|*dtthr*|*_dtt_*|*reynolds_isla*|*blobs_isla*'
-on_lhr() { case "$1" in *islahr*|*dtthr*|*_dtt_*|*reynolds_isla*|*blobs_isla*) return 0;; *) return 1;; esac; }
-fetch_from aga2 $(for r in ${RUNS}; do on_lhr "$r" || printf "%s " "$r"; done)
-fetch_from lhr2 $(for r in ${RUNS}; do on_lhr "$r" && printf "%s " "$r"; done)
+LOW=$(awk -F'\t' 'NR>1 && $1<16 {print $3}' "${HERE}/lanes.tsv" | tr '\n' ' ')
+LOW_ON_LHR=" $(ssh -o ConnectTimeout=30 lhr2 "cd ${T}/runs && for r in ${LOW}; do [ -d \$r ] && printf '%s ' \$r; done; true") "
+LHR_RUNS=$(awk -F'\t' -v low="${LOW_ON_LHR}" 'NR>1 && ($1>=16 || index(low, " " $3 " ")) {printf "%s ", $3}' "${HERE}/lanes.tsv")
+AGA_RUNS=$(awk -F'\t' -v low="${LOW_ON_LHR}" 'NR>1 && !($1>=16 || index(low, " " $3 " ")) {printf "%s ", $3}' "${HERE}/lanes.tsv")
+fetch_from aga2 ${AGA_RUNS}
+fetch_from lhr2 ${LHR_RUNS}
 for r in ${RUNS}; do
   v=$([ -s "${HERE}/scores/${r}/val/metrics.jsonl" ] && grep -c infer_step "${HERE}/scores/${r}/val/metrics.jsonl" || echo 0)
   t=$([ -s "${HERE}/scores/${r}/test/metrics.jsonl" ] && grep -c infer_step "${HERE}/scores/${r}/test/metrics.jsonl" || echo 0)

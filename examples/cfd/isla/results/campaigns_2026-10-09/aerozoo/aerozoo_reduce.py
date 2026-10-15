@@ -7,7 +7,8 @@ labels of case_labels.json (stability population, enclosure, bank, Reynolds numb
 trajectory every ten epochs, step time and memory of the final epoch). Writes aerozoo_reduction.json:
   fields                     metric key -> label
   splits[split]              label, held-out family, the run stem
-  arms[arm][split][side]     fields[f] = {mean, per_seed, n_cases, n_seeds}; by_quality[q][f]; by_label[kind][value][f] (test sides)
+  arms[arm][split][side]     fields[f] = {mean, per_seed, n_cases, n_seeds}; by_quality[q][f]; by_label[kind][value][f] (test sides);
+                             absent_fields: the fields no case reports (the velocity-plus-pressure lanes: nut, tke, omega)
   ratios[split][side][arm]   arm ÷ ISLA per field: seed-mean ratio, per-seed ratios, both_seeds_agree, counts (outside 1 ± 0.05)
   penalties[split][arm]      test error of the split's own model ÷ the same arm's `full` test error, per field (P2, P3)
   predictions                P1, P2, P4 verdicts against the pre-registered bars
@@ -19,7 +20,9 @@ trajectory every ten epochs, step time and memory of the final epoch). Writes ae
                              validation minimum, scored like the protocol on the validation (scores/<run>/bestval/) and test
                              (scores/<run>/bestval_test/) sides; block shape as arms plus the chosen epoch per seed
   remedy[arm]                R1-R3 verdicts of the half-rate arms (#sec-nb-aerozoo-remedy-prereg) against their reference-rate twins
-A seed mean is over the seeds present; a block is `complete` only when both seeds are scored.
+The splits and arms are the pre-registered ones below plus every other split and arm of lanes.tsv (2026-10-14: the matrix's
+eighteen splits; the 500-epoch, WALLDIST, H-FRAME and velocity-plus-pressure arms). A seed mean is over the seeds present; a block
+is `complete` only when both seeds are scored.
 usage: python aerozoo_reduce.py [--out aerozoo_reduction.json]"""
 import argparse, json, math, os, re, statistics as st
 
@@ -37,7 +40,11 @@ SPLITS = {
                  "n_train": 2119, "n_val": 311, "n_test": 1385},
     "bank_blobs": {"label": "blob bank held out", "held_out": "bank", "stem": "blobs", "n_train": 2156, "n_val": 292, "n_test": 1367},
 }
-ARMS = {"ISLA": "isla", "GeoTransolver": "gt", "ISLA-DTT": "dtt", "ISLA (half rate)": "islahr", "ISLA-DTT (half rate)": "dtthr"}
+ARMS = {"ISLA": "isla", "GeoTransolver": "gt", "ISLA-DTT": "dtt", "ISLA (half rate)": "islahr", "ISLA-DTT (half rate)": "dtthr",
+        "ISLA (half rate, 500 epochs)": "islahr2x", "GeoTransolver (500 epochs)": "gt2x", "ISLA-DTT (half rate, 500 epochs)": "dtthr2x",
+        "ISLA (half rate, WALLDIST)": "islahrwd", "ISLA-DTT (half rate, WALLDIST)": "dtthrwd", "ISLA (H-FRAME diagnostic)": "islafg",
+        "ISLA (velocity and pressure)": "islavp", "ISLA (half rate, velocity and pressure)": "islahrvp",
+        "GeoTransolver (velocity and pressure)": "gtvp"}
 HALF_RATE = {"ISLA (half rate)": "ISLA", "ISLA-DTT (half rate)": "ISLA-DTT"}   # remedy arm (1.875e-4) -> its reference-rate twin
 ISLA = "ISLA"
 BAR_COUNTS = 0.05       # a difference counts only if both seeds order the same way and the seed-mean ratio is outside 1 ± 0.05
@@ -53,6 +60,32 @@ TRAINED_EPOCH = 240                 # a lane counts as finished for the remedy r
 BESTVAL_DIRS = {"val": "bestval", "test": "bestval_test"}
 LABELS = json.load(open(f"{R}/case_labels.json")) if os.path.exists(f"{R}/case_labels.json") else {}
 LABELS.pop("_meta", None)
+HELD_OUT_BY_PREFIX = (("bank_", "bank"), ("family_", "enclosure"), ("profile_", "profile"), ("layout", "body_layout"),
+                      ("reynolds", "log10_re_decade"))
+
+
+def extend_from_lanes(path):
+    """Every split (train_split=<split>.train) and arm (az_<stem>_<arm>_seed<s>) of the lane table joins SPLITS and ARMS: a new split
+    labeled by the case label its name holds out (its n_* unknown here), a new arm under its run-id code. The pre-registered entries
+    above are kept as they are."""
+    if not os.path.exists(path):
+        return
+    for line in list(open(path))[1:]:
+        c = line.rstrip("\n").split("\t")
+        m = re.fullmatch(r"az_(.+)_([a-z0-9]+)_seed(\d+)", c[2]) if len(c) > 5 else None
+        sp = re.search(r"(?:^| )train_split=(\S+)\.train(?: |$)", c[5]) if m else None
+        if not sp:
+            continue
+        split = sp.group(1)
+        if split not in SPLITS:
+            held = next((k for prefix, k in HELD_OUT_BY_PREFIX if split.startswith(prefix)), None)
+            SPLITS[split] = {"label": split.replace("_", " ") + (" held out" if held else ""), "held_out": held,
+                             "stem": m.group(1), "n_train": None, "n_val": None, "n_test": None}
+        if m.group(2) not in ARMS.values():
+            ARMS[m.group(2)] = m.group(2)
+
+
+extend_from_lanes(f"{R}/lanes.tsv")
 
 
 def run_id(split, arm, seed):
@@ -95,6 +128,9 @@ def block(per_seed_cases, with_labels):
         if ps:
             out["fields"][f] = {"mean": st.mean(v[0] for v in ps.values()), "per_seed": {s: v[0] for s, v in ps.items()},
                                 "n_cases": min(v[1] for v in ps.values()), "n_seeds": len(ps)}
+    absent = [f for f in FIELDS if f not in out["fields"]]   # e.g. the velocity-plus-pressure lanes carry no nut / tke / omega
+    if absent:
+        out["absent_fields"] = absent
     if not with_labels or not LABELS:
         return out
     def strat(kind):
@@ -340,8 +376,9 @@ def main(out_path):
                 continue
             print(f"== {split} / {side}")
             for arm, b in rows:
-                print(f"   {arm:14s}" + "  ".join(f"{FIELDS[f][:8]:>8s} {b['fields'][f]['mean']:.4f}" for f in FIELDS if f in b["fields"])
-                      + f"   n={min((d['n_cases'] for d in b['fields'].values()), default=0)} seeds={b['n_seeds']}")
+                print(f"   {arm + ' ':14s}" + "  ".join(f"{FIELDS[f][:8]:>8s} {b['fields'][f]['mean']:.4f}" for f in FIELDS if f in b["fields"])
+                      + f"   n={min((d['n_cases'] for d in b['fields'].values()), default=0)} seeds={b['n_seeds']}"
+                      + (f"  absent: {', '.join(b['absent_fields'])}" if b.get("absent_fields") else ""))
             for arm, rs in out["ratios"].get(split, {}).get(side, {}).items():
                 print(f"   {arm + ' ÷ ISLA':14s}" + "  ".join(f"{FIELDS[f][:8]:>8s} {rs[f]['mean_ratio']:.3f}{'*' if rs[f]['counts'] else ' '}" for f in FIELDS if f in rs))
     for split, d in out["penalties"].items():
