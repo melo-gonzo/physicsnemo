@@ -26,6 +26,10 @@
 # Output: ${AFU_SCORE_ROOT:-$T/evals_afu}/<run>/<protocol>/<run>/metrics.jsonl, a .done marker in <run>/<protocol>/,
 # SNAPSHOT_USED and DATASET_USED beside it, and the merged log <run>/<protocol>.log.
 # An unfinished lane (no "Training completed" in runs/<run>/train.log) is a no-op (logged, no .done; a later launch retries).
+# Old checkpoints on the uniform twins (AF-SCORE decomposition, 2026-10-15): the block-window reference lanes cl_r_af_*
+# (final checkpoints copied from AGA into $T/runs_from_aga, code_v20) and ISLA-DTT af_tg1pf_* (agents/2026-10-06-isla-dtt/runs,
+# code_dtt16 on td14) are scored the same way from kernel/airfrans_u/oldckpt_lanes.tsv, whose dataset column is the lane's
+# uniform twin (airfrans_uvolume{,_2d}), into $T/evals_afu_oldckpt; afu_* runs are unaffected.
 # SMOKE TESTS ONLY: AFU_SCORE_CKPT=<checkpoints dir> evaluates that checkpoint copy and skips the completion check;
 # AFU_SCORE_LANES / AFU_SCORE_ROOT redirect a smoke to its own lane table and output tree.
 set -uo pipefail
@@ -35,7 +39,14 @@ AFU="${TASK}/kernel/airfrans_u"
 VENV=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/physicsnemo-mesh-transformer/.venv-recipe
 RECIPE_DIR="${TASK}/recipe_v8"
 RUN="${AFU_SCORE_RUN:?set AFU_SCORE_RUN=<run_id>}"
-LANES="${AFU_SCORE_LANES:-${AFU}/lanes.tsv}"; ROOT="${AFU_SCORE_ROOT:-${TASK}/evals_afu}"; CKPT="${AFU_SCORE_CKPT:-}"
+### Per-run checkpoint tree, lane table and output tree.
+RUNS="${TASK}/runs"; DEF_LANES="${AFU}/lanes.tsv"; DEF_ROOT="${TASK}/evals_afu"
+case "${RUN}" in
+  cl_r_af_*) RUNS="${TASK}/runs_from_aga" ;;
+  af_tg1pf_*) RUNS=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-10-06-isla-dtt/runs ;;
+esac
+case "${RUN}" in cl_r_af_*|af_tg1pf_*) DEF_LANES="${AFU}/oldckpt_lanes.tsv"; DEF_ROOT="${TASK}/evals_afu_oldckpt" ;; esac
+LANES="${AFU_SCORE_LANES:-${DEF_LANES}}"; ROOT="${AFU_SCORE_ROOT:-${DEF_ROOT}}"; CKPT="${AFU_SCORE_CKPT:-}"
 export PATH="/usr/bin:/bin:/cm/local/apps/slurm/current/bin"
 export OMP_NUM_THREADS=8 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True PYTHONUNBUFFERED=1 PHYSICSNEMO_DIST_TIMEOUT_S=900
 mkdir -p "${ROOT}"
@@ -50,8 +61,8 @@ unit() {
     echo "gave up after 3 failed scoring attempts; see ${OUT}.log" > "${OUT}/.done"; return 0
   fi
   ### Native checkpoints only: an unfinished lane is a no-op (no .done, so the next launch retries).
-  if [ -z "${CKPT}" ] && ! grep -q "Training completed" "${TASK}/runs/${RUN}/train.log" 2>/dev/null; then
-    echo "=== ${RUN} NO-OP $(date -Is) protocol=${PROTO}: no 'Training completed' in runs/${RUN}/train.log" >> "${OUT}.log"; return 0
+  if [ -z "${CKPT}" ] && ! grep -q "Training completed" "${RUNS}/${RUN}/train.log" 2>/dev/null; then
+    echo "=== ${RUN} NO-OP $(date -Is) protocol=${PROTO}: no 'Training completed' in ${RUNS}/${RUN}/train.log" >> "${OUT}.log"; return 0
   fi
   local LANE; LANE=$(awk -F"\t" -v r="${RUN}" 'NR>1 && $3==r {print; exit}' "${LANES}")
   if [ -z "${LANE}" ]; then echo "=== ${RUN} FAILED $(date -Is): not in ${LANES}" >> "${OUT}.log"; return 0; fi
@@ -62,9 +73,9 @@ unit() {
   ### 100,000; ISLA-DTT af_tg1pf_*: code_dtt16 on the td14 venv + recipe_v8, 100,000), checked against the lane table.
   local CODE PYV="${VENV}" CELLS=100000
   case "${RUN}" in
-    afu_r_*) CODE="${TASK}/code_v20" ;;
-    afu_dtt_*) CODE="${TASK}/code_dtt16"; PYV="${VENV}-td14" ;;
-    *) echo "=== ${RUN} FAILED $(date -Is): not an afu_r_* / afu_dtt_* run" >> "${OUT}.log"; return 0 ;;
+    afu_r_*|cl_r_af_*) CODE="${TASK}/code_v20" ;;
+    afu_dtt_*|af_tg1pf_*) CODE="${TASK}/code_dtt16"; PYV="${VENV}-td14" ;;
+    *) echo "=== ${RUN} FAILED $(date -Is): not an afu_r_* / afu_dtt_* / cl_r_af_* / af_tg1pf_* run" >> "${OUT}.log"; return 0 ;;
   esac
   if [ "${TASK}/${LCODE}" != "${CODE}" ] || [ "${LCELLS}" != "${CELLS}" ]; then
     echo "=== ${RUN} FAILED $(date -Is): lane table says code=${LCODE} cells=${LCELLS}, scorer maps ${CODE} ${CELLS}" >> "${OUT}.log"; return 0
@@ -75,10 +86,10 @@ unit() {
   EXTRA=$(sed -E "s/(^| )training\.num_epochs=[^ ]+//g" <<<"${EXTRA}")   # training-only override; infer.py has no such key
   EXTRA=$(sed -E "s/(^| )model\.attention_type=/\1+model.attention_type=/g" <<<"${EXTRA}")   # verbatim from the reference scorer
   local CKPT_ARG=""; [ -n "${CKPT}" ] && CKPT_ARG="checkpoint_path=${CKPT}"
-  echo "=== ${RUN} START $(date -Is) job=${SLURM_JOB_ID:-} protocol=${PROTO} dataset=${DS} model=${MODEL} extra='${EXTRA}' cells=${CELLS} gpu=${gpu} code=${CODE} venv=${PYV} ${CKPT_ARG}" >> "${OUT}.log"
+  echo "=== ${RUN} START $(date -Is) job=${SLURM_JOB_ID:-} protocol=${PROTO} dataset=${DS} model=${MODEL} extra='${EXTRA}' cells=${CELLS} gpu=${gpu} code=${CODE} venv=${PYV} checkpoint_dir=${RUNS} ${CKPT_ARG}" >> "${OUT}.log"
   timeout 6600 env PYTHONPATH="${CODE}:${RECIPE_DIR}/src" CUDA_VISIBLE_DEVICES="${gpu}" RANK=0 WORLD_SIZE=1 LOCAL_RANK=0 MASTER_ADDR=127.0.0.1 MASTER_PORT=$(/usr/bin/python3 -c "import socket; s=socket.socket(); s.bind((\"\", 0)); print(s.getsockname()[1])") \
     "${PYV}/bin/python" "${RECIPE_DIR}/src/infer.py" model="${MODEL}" ${EXTRA} dataset="${DS}" run_id="${RUN}" infer_split=val +save_predictions=false \
-    sampling_resolution=${CELLS} precision=float32 checkpoint_dir="${TASK}/runs" ${CKPT_ARG} output_dir="${OUT}" >> "${OUT}.log" 2>&1 \
+    sampling_resolution=${CELLS} precision=float32 checkpoint_dir="${RUNS}" ${CKPT_ARG} output_dir="${OUT}" >> "${OUT}.log" 2>&1 \
     && touch "${OUT}/.done" || echo "=== ${RUN} ${PROTO} FAILED rc=$?" >> "${OUT}.log"
   ### Two-dimensional datasets: an infer.py that refuses its own summary after every per-sample row is on disk (the
   ### reference scorer's rule; code_v20 writes the 2-D summary) leaves the per-sample rows as the measurement. Mark done.

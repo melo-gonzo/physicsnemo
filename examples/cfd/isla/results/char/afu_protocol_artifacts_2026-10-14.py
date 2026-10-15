@@ -7,12 +7,17 @@ means over seeds 42 and 43. Reads campaigns_2026-10-14/afu/protocols/<run>/<prot
 $T/evals_afu/<run>/<protocol>/<run>/metrics.jsonl (kernel/airfrans_u/score.sbatch), e.g.
   for r in afu_r_isla afu_r_gt afu_r_t afu_dtt; do for s in 42 43; do for p in native area posed; do d=campaigns_2026-10-14/afu/protocols/${r}_seed$s/$p
     mkdir -p $d && scp lhr2:$T/evals_afu/${r}_seed$s/$p/${r}_seed$s/metrics.jsonl $d/; done; done; done
+The old checkpoints scored on the same uniform twins (cl_r_af_*_seed42/43 from $T/runs_from_aga, af_tg1pf_seed42/43; LHR
+$T/evals_afu_oldckpt/<run>/<protocol>/<run>/metrics.jsonl, same scorer) are fetched the same way into
+campaigns_2026-10-14/afu/protocols_oldckpt/<run>/<protocol>/metrics.jsonl.
 Writes results/char/airfrans_uniform.json in the schema of airfrans.json (protocols, fields, isla_arm, arms[arm][protocol][field]
 = {mean, per_seed, n_cases, n_seeds}, complete), so the chapter's protocol_table("airfrans_uniform.json", ...) prints it, plus
-two keys protocol_table ignores: "controls" (ISLA-DTT, the read-only control, in the arm schema) and "versus_block" (each arm's
-block-window value from airfrans.json, or for ISLA-DTT from af_tg1pf_seed42/43's records in campaigns_2026-10-14/afu/protocols_block,
-and new / old). Prints the standing as protocol_table does and the old / new comparison.
-usage: python afu_protocol_artifacts_2026-10-14.py [--src DIR] [--out PATH]   (defaults: the campaign records, airfrans_uniform.json)"""
+keys protocol_table ignores: "controls" (ISLA-DTT, the read-only control, in the arm schema), "old_checkpoint_uniform" (the old
+checkpoints on uniform draws, arm schema, ISLA-DTT included) and "decomposition" (per arm, protocol and field: old_block = the old
+checkpoint on block windows, from airfrans.json or for ISLA-DTT af_tg1pf's records in campaigns_2026-10-14/afu/protocols_block;
+old_uniform; new_uniform; scoring_effect = old_uniform / old_block; training_effect = new_uniform / old_uniform; null until scored).
+Prints the standing as protocol_table does, the old checkpoints on uniform draws in the same layout, and the decomposition.
+usage: python afu_protocol_artifacts_2026-10-14.py [--src DIR] [--oldckpt-src DIR] [--block-src DIR] [--out PATH]"""
 import argparse, json, os, statistics as st
 
 R = os.path.dirname(os.path.abspath(__file__))
@@ -20,10 +25,12 @@ RES = os.path.dirname(R)
 PROTOCOLS = {"native": "native mesh", "area": "uniform point cloud", "posed": "rotated + translated"}
 FIELDS = {"pressure_l2": "pressure", "velocity_l2": "velocity", "nut_l2": "eddy viscosity"}
 SEEDS = (42, 43)
-# arm label (airfrans.json's) -> run stem without _seedNN; the reference stem whose block-window value it is compared with
+# arm label (airfrans.json's) -> run stem without _seedNN
 ARMS = {"ISLA 512 with 512 slices": "afu_r_isla", "GeoTransolver 256": "afu_r_gt", "Transolver 512 x 16": "afu_r_t"}
 ISLA_ARM = "ISLA 512 with 512 slices"
 CONTROLS = {"ISLA-DTT (forest read at theta = 1)": ("afu_dtt", "af_tg1pf")}
+# the old (block-window-trained) reference lane of each arm
+OLD_STEMS = {"ISLA 512 with 512 slices": "cl_r_af_isla", "GeoTransolver 256": "cl_r_af_gt", "Transolver 512 x 16": "cl_r_af_t"}
 
 
 def summary(path):
@@ -75,46 +82,76 @@ def table(arms, isla):
     return "\n".join(out)
 
 
+def full(d):
+    return len(d) == len(PROTOCOLS) and all(len(v) == len(FIELDS) for v in d.values())
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--src", default=f"{RES}/campaigns_2026-10-14/afu/protocols")
+    ap.add_argument("--oldckpt-src", default=f"{RES}/campaigns_2026-10-14/afu/protocols_oldckpt")
     ap.add_argument("--block-src", default=f"{RES}/campaigns_2026-10-14/afu/protocols_block")
     ap.add_argument("--out", default=f"{R}/airfrans_uniform.json")
     a = ap.parse_args()
     old = json.load(open(f"{R}/airfrans.json"))
-    out = {"protocol": __doc__, "protocols": PROTOCOLS, "fields": FIELDS, "isla_arm": ISLA_ARM, "arms": {}, "controls": {}, "versus_block": {}}
+    out = {"protocol": __doc__, "protocols": PROTOCOLS, "fields": FIELDS, "isla_arm": ISLA_ARM, "arms": {}, "controls": {},
+           "old_checkpoint_uniform": {}, "decomposition": {}}
     complete = True
+    ### new checkpoint, uniform draws: the standing (arms) and the ISLA-DTT control
     for label, stem in ARMS.items():
         d, ok = arm(a.src, stem); complete &= ok
-        if len(d) == len(PROTOCOLS) and all(len(v) == len(FIELDS) for v in d.values()):
+        if full(d):
             out["arms"][label] = d
-    for label, (stem, block_stem) in CONTROLS.items():
+    for label, (stem, _) in CONTROLS.items():
         d, ok = arm(a.src, stem); complete &= ok
-        if len(d) == len(PROTOCOLS) and all(len(v) == len(FIELDS) for v in d.values()):
+        if full(d):
             out["controls"][label] = d
-    blocks = {label: old["arms"][label] for label in out["arms"] if label in old["arms"]}
+    ### old checkpoint: block windows (the reference records) and uniform draws (the old checkpoints on the uniform twins)
+    old_block, old_stems = {}, {**{label: OLD_STEMS[label] for label in ARMS}, **{label: bs for label, (_, bs) in CONTROLS.items()}}
+    for label in ARMS:
+        old_block[label] = old["arms"][label]
     for label, (_, block_stem) in CONTROLS.items():
         b, _ = arm(a.block_src, block_stem)
-        if label in out["controls"] and len(b) == len(PROTOCOLS):
-            blocks[label] = b
-    for label, b in blocks.items():
-        new = out["arms"].get(label) or out["controls"][label]
-        out["versus_block"][label] = {pk: {f: {"block": b[pk][f]["mean"], "uniform": new[pk][f]["mean"], "uniform_over_block": new[pk][f]["mean"] / b[pk][f]["mean"]}
-                                           for f in FIELDS if f in b[pk] and f in new[pk]} for pk in PROTOCOLS if pk in b and pk in new}
-    if ISLA_ARM not in out["arms"]:
-        print("== airfrans_uniform: the ISLA arm is not scored yet; nothing written"); return
+        if full(b):
+            old_block[label] = b
+    for label, stem in old_stems.items():
+        d, ok = arm(a.oldckpt_src, stem); complete &= ok
+        if full(d):
+            out["old_checkpoint_uniform"][label] = d
+    new_all = {**out["arms"], **out["controls"]}
+    for label in old_stems:
+        cols = {"old_block": old_block.get(label), "old_uniform": out["old_checkpoint_uniform"].get(label), "new_uniform": new_all.get(label)}
+        rec = {}
+        for pk in PROTOCOLS:
+            rec[pk] = {}
+            for f in FIELDS:
+                v = {k: (c[pk][f]["mean"] if c else None) for k, c in cols.items()}
+                v["scoring_effect"] = v["old_uniform"] / v["old_block"] if v["old_uniform"] is not None and v["old_block"] is not None else None
+                v["training_effect"] = v["new_uniform"] / v["old_uniform"] if v["new_uniform"] is not None and v["old_uniform"] is not None else None
+                rec[pk][f] = v
+        out["decomposition"][label] = rec
+    if not out["arms"] and not out["old_checkpoint_uniform"]:
+        print("== airfrans_uniform: nothing scored yet; nothing written"); return
     out["complete"] = complete
     json.dump(out, open(a.out, "w"), indent=1)
-    print(f"== {a.out} ({'complete' if complete else 'partial'}); arms {list(out['arms'])}, controls {list(out['controls'])}")
-    print("\nThe standing, uniform interior (the rows protocol_table prints):\n")
-    print(table(out["arms"], out["arms"][ISLA_ARM]))
-    if out["controls"]:
-        print("\n" + table({ISLA_ARM: out["arms"][ISLA_ARM], **out["controls"]}, out["arms"][ISLA_ARM]))
-    print("\nBlock window (airfrans.json; ISLA-DTT: af_tg1pf records) against uniform interior, seed means, " + " / ".join(FIELDS.values()) + ":\n")
-    print("| configuration | protocol | block | uniform | uniform ÷ block |\n|---|---|---|---|---|")
-    for label, v in out["versus_block"].items():
-        for pk, fv in v.items():
-            print(f"| {label} | {PROTOCOLS[pk]} | " + " | ".join(" / ".join(f"{fv[f][k]:.{p}f}" for f in FIELDS if f in fv) for k, p in (("block", 4), ("uniform", 4), ("uniform_over_block", 2))) + " |")
+    print(f"== {a.out} ({'complete' if complete else 'partial'}); arms {list(out['arms'])}, controls {list(out['controls'])}, "
+          f"old checkpoints on uniform draws {list(out['old_checkpoint_uniform'])}")
+    if ISLA_ARM in out["arms"]:
+        print("\nThe standing, uniform interior (the rows protocol_table prints):\n")
+        print(table(out["arms"], out["arms"][ISLA_ARM]))
+        if out["controls"]:
+            print("\n" + table({ISLA_ARM: out["arms"][ISLA_ARM], **out["controls"]}, out["arms"][ISLA_ARM]))
+    if ISLA_ARM in out["old_checkpoint_uniform"]:
+        print("\nThe old checkpoints (block-window training) on uniform draws, in the standing's layout:\n")
+        print(table(out["old_checkpoint_uniform"], out["old_checkpoint_uniform"][ISLA_ARM]))
+    fmt = lambda x, p: "–" if x is None else f"{x:.{p}f}"
+    print("\nScoring and training effects, seed means, " + " / ".join(FIELDS.values()) + "; scoring effect = old checkpoint uniform ÷ "
+          "block, training effect = new checkpoint uniform ÷ old checkpoint uniform:\n")
+    print("| configuration | protocol | old ckpt, block | old ckpt, uniform | new ckpt, uniform | scoring effect | training effect |\n|---|---|---|---|---|---|---|")
+    for label, rec in out["decomposition"].items():
+        for pk, fv in rec.items():
+            print(f"| {label} | {PROTOCOLS[pk]} | " + " | ".join(" / ".join(fmt(fv[f][k], p) for f in FIELDS) for k, p in
+                  (("old_block", 4), ("old_uniform", 4), ("new_uniform", 4), ("scoring_effect", 2), ("training_effect", 2))) + " |")
 
 
 if __name__ == "__main__":
