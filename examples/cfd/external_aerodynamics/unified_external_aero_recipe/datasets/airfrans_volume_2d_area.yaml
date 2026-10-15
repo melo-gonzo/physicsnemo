@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# CHAR-PROTOCOLS area variant (2026-10-02): identical to airfrans_volume_2d.yaml except that the drawn surface
+# cells follow an area-proportional (uniform-on-the-surface) inclusion law with exact Horvitz-Thompson
+# measure weights, "what an STL without a volume mesh would give", instead of the native uniform-over-cells
+# draw that reads the mesher's refinement pattern. Here the boundary is kept WHOLE by the base reader (fewer
+# cells than ${sampling_resolution}) and the interior is a point cloud drawn uniformly over points with no
+# cell measures, so no volume-proportional draw exists for it. PoissonBiasedSubsampleMesh(weight_mode=area) is
+# applied to the boundary at the same expected count and is the identity whenever the boundary has at most
+# that many cells: at the campaign cell counts this variant equals the native set BY CONSTRUCTION and is
+# scored only as the uniform third protocol column.
+# Evaluation-only protocol: train natively, score the native checkpoint on this variant.
+
+# AirfRANS restricted to its plane (2026-10-02): airfrans_volume.yaml with RestrictToPlane first in the pipeline, so the
+# interior points, the airfoil polyline, the in-plane boundary normals, the SDF normals and the velocity target carry two
+# components and the model runs its native two-dimensional path (pair with conf/model/isla_volume_airfrans.yaml, dim: 2).
+# Everything else (reader, non-dimensionalization, nut normalization, splits, targets) is airfrans_volume.yaml verbatim.
+train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh
+manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh/manifest.json
+pipeline:
+  reader:
+    _target_: ${dp:DomainMeshReader}
+    path: ${train_datadir}
+    pattern: "airFoil2D_SST_*/*.pdmsh"
+    subsample_n_points: ${sampling_resolution}   # interior queries (each case has ~177k points)
+    subsample_n_cells: ${sampling_resolution}    # larger than any airfoil's ~1,000 segments: the boundary is kept whole
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    - _target_: ${dp:RestrictToPlane}                       # first: everything after it is two-dimensional
+      axis: 2
+      vector_fields: [interior.point_data.sdf_normals, interior.point_data.velocity, boundaries.airfoil.cell_data.normals]
+      global_fields: [global_data.U_inf_dir, global_data.U_inf]   # the per-case inlet vectors lose the axis as well
+    - _target_: ${dp:SqueezeScalarFields}                   # the stored (N, 1) scalar columns become the (N,) fields the model's schema reads
+      fields: [interior.point_data.sdf, interior.point_data.pressure, interior.point_data.nut]
+    - _target_: ${dp:NonDimensionalizeByMetadata}
+      fields:
+        velocity: velocity          # U / |U_inf|
+        pressure: pressure          # (p - p_inf) / (0.5 rho_inf |U_inf|^2) with rho_inf = 1, p_inf = 0 (kinematic p)
+        nut: identity
+      association: point_data
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:
+        nut: {type: scalar, mean: 7.9e-4, std: 2.4e-3}   # raw nut [m^2/s], mean and std over the converter per-case statistics (2026-09-21)
+    - _target_: ${dp:PoissonBiasedSubsampleMesh}   # CHAR-PROTOCOLS area: inclusion probability proportional to cell area, exact HT weights
+      n_cells_expected: ${sampling_resolution}
+      weight_mode: area
+
+targets:
+  pressure: scalar
+  nut: scalar
+  velocity: vector

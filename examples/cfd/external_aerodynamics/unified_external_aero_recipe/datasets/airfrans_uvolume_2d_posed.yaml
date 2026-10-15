@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# AF-UNIFORM (2026-10-14): airfrans_volume_2d_posed.yaml with a uniform interior draw. AirfRANS stores the interior points in
+# solver (VTU) order (kernel/airfrans_convert.py keeps it), so the reader's contiguous block draw
+# (subsample_n_points) kept one spatial window per case and draw: 100,000 contiguous rows of 156k to 210k, a
+# largest near-field gap of about half a chord, and 66 to 75% of the airfoil's length with a drawn point within
+# 0.01 chord (SAMPLING-AUDIT, 2026-10-14). Here the reader reads each case whole (no caps; the airfoil's 843 to
+# 1,217 segments were read whole before as well) and SubsampleMesh, the first transform, keeps a uniform random
+# ${sampling_resolution} interior points (a randperm draw). The interior carries no effective measure, so the
+# loss and the metrics stay unweighted means over the drawn points, as before. Everything else is the source
+# file's.
+# CHAR-PROTOCOLS posed variant (2026-10-02): identical to airfrans_volume_2d.yaml except that every case
+# is rigidly posed by a rotation and a translation that are a deterministic function of the case
+# (a rotation uniform on SO(2) about the plane normal z; translation of one RMS point radius in a random
+# direction in the plane),
+# applied as the FIRST transform so geometry, normals, every vector field and the per-case global
+# vectors move together and every architecture is scored on the same posed validation set.
+# This pipeline has NO CenterMesh, so the translation reaches the model: the posed error measures rotation and
+# translation together.
+# Evaluation-only protocol: train natively, score the native checkpoint on this variant.
+
+# AirfRANS restricted to its plane (2026-10-02): airfrans_volume.yaml with RestrictToPlane first in the pipeline, so the
+# interior points, the airfoil polyline, the in-plane boundary normals, the SDF normals and the velocity target carry two
+# components and the model runs its native two-dimensional path (pair with conf/model/isla_volume_airfrans.yaml, dim: 2).
+# Everything else (reader, non-dimensionalization, nut normalization, splits, targets) is airfrans_volume.yaml verbatim.
+train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh
+manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh/manifest.json
+pipeline:
+  reader:
+    _target_: ${dp:CaseKeyDomainMeshReader}   # CHAR-PROTOCOLS posed: DomainMeshReader + the per-case `case_key` FixedRandomPose seeds from
+    path: ${train_datadir}
+    pattern: "airFoil2D_SST_*/*.pdmsh"
+    # No reader caps: the interior (156k to 210k points) and the airfoil polyline are read whole; the
+    # interior draw is the first transform's.
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    - _target_: ${dp:SubsampleMesh}   # AF-UNIFORM: a uniform random ${sampling_resolution} interior points, before anything reads them
+      n_points: ${sampling_resolution}  # n_points reaches every sub-mesh: the airfoil (at most 1,217 points) is below it and kept whole
+    - _target_: ${dp:FixedRandomPose}   # CHAR-PROTOCOLS posed: deterministic per-case pose, first so everything downstream sees it
+      salt: 0
+      translate: 1.0                    # one RMS point radius, drawn from the same keyed stream after the rotation
+      axis: 2                           # planar problem stored at z = 0: rotate IN the plane only (SO(2) about z)
+    - _target_: ${dp:RestrictToPlane}                       # first: everything after it is two-dimensional
+      axis: 2
+      vector_fields: [interior.point_data.sdf_normals, interior.point_data.velocity, boundaries.airfoil.cell_data.normals]
+      global_fields: [global_data.U_inf_dir, global_data.U_inf]   # the per-case inlet vectors lose the axis as well
+    - _target_: ${dp:SqueezeScalarFields}                   # the stored (N, 1) scalar columns become the (N,) fields the model's schema reads
+      fields: [interior.point_data.sdf, interior.point_data.pressure, interior.point_data.nut]
+    - _target_: ${dp:NonDimensionalizeByMetadata}
+      fields:
+        velocity: velocity          # U / |U_inf|
+        pressure: pressure          # (p - p_inf) / (0.5 rho_inf |U_inf|^2) with rho_inf = 1, p_inf = 0 (kinematic p)
+        nut: identity
+      association: point_data
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:
+        nut: {type: scalar, mean: 7.9e-4, std: 2.4e-3}   # raw nut [m^2/s], mean and std over the converter per-case statistics (2026-09-21)
+targets:
+  pressure: scalar
+  nut: scalar
+  velocity: vector
