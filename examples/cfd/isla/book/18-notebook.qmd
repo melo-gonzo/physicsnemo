@@ -36796,3 +36796,42 @@ measure the defect's effect against their uniform-sampling twins. The
 fix reads each boundary whole and draws 50,000 faces uniformly, with
 the same Horvitz-Thompson measure, as new dataset files beside the old
 ones. The relaunch is pre-registered before it starts.
+
+## 2026-10-14 — AEROZOO uniform-boundary relaunch (AZ-UNIFORM): the fix verified, every arm relaunched, predictions {#sec-nb-aerozoo-uniform-prereg}
+
+**The fix.** The `aerozoo_uvolume*` dataset files (branch
+psharpe/isla-azuniform, commit cd4b9490b; 24 files on the LHR site's
+recipe_v9 as new files) equal their `aerozoo_volume*` sources except
+that the reader no longer caps the boundary cells. Instead the recipe's
+`SubsampleMesh` draws 50,000 faces per boundary first in the chain:
+`torch.randperm` without replacement, the measure scaled by N/k.
+Over 30 cases and three epochs per case, the old block left 27 of 90
+draws without a body face, and its body share ranged from 0 to 11.3
+times the expected k/N. The uniform draw left none, with 0.80 to 1.03
+times k/N. Its share of occupied 16³ voxels is 0.93 on the body and
+0.99 on the slip walls, against 0.53 and 0.55 before. Load time per
+sample is unchanged at about 5 s. The scorer's draw follows the same
+rule as training, but its per-case seed depends on the sampler's order.
+
+**Lanes.** Run names start `azu_`, and every setting except the
+dataset file equals its arm's lanes above. The `full` and
+`family_non_box` splits run ISLA at 3.75e-4 and at 1.875e-4,
+GeoTransolver at 1e-3 and ISLA-DTT at 1.875e-4. The `reynolds`, the
+`bank_blobs` and the 18 splits of @sec-nb-aerozoo-matrix-launch run
+half-rate ISLA, GeoTransolver and half-rate ISLA-DTT. WALLDIST runs on
+both variants, BUDGET-2X on three arms and TARGETS-VP on five arms.
+All use two seeds, 166 lanes in total. H-FRAME waits for U2.
+
+**Predictions.** (U1) The defect starved the boundary-only reader most.
+Every arm's `full` test errors at the final checkpoint fall below its
+twin's under the old protocol. ISLA's fall more than GeoTransolver's,
+so GeoTransolver ÷ ISLA on velocity rises by at least 10 percent.
+(U2, H-SAMPLING) Contradictory draws drove the reference-rate event:
+ISLA at 3.75e-4 keeps its validation minimum through epoch 250. U2 is
+falsified if the running minimum doubles by epoch 100. (U3) The
+spherical enclosures' large domes were the most windowed boundaries,
+so held-out GeoTransolver ÷ ISLA on spheres and hemispheres rises by at
+least 25 percent against the old protocol's best-checkpoint values.
+(U4) M1 to M5, D1's question and WALLDIST's, BUDGET-2X's and
+TARGETS-VP's predictions are read on these lanes. The old protocol's
+versions of the matrix were cancelled before any result existed.
