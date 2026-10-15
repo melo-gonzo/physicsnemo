@@ -655,7 +655,9 @@ plt.show()
 #|   Top: AirfRANS interior task, one test airfoil, the 1,007 boundary cells
 #|   and a 60,000-token subset of the 100,000 interior queries, the window
 #|   around the airfoil (the queried domain extends about two chords upstream
-#|   and four downstream). Bottom: GINOT lug, one test bracket, the 6,728
+#|   and four downstream; the queries are one contiguous window of the
+#|   stored interior points, as in every AirfRANS lane,
+#|   @sec-interior-airfrans). Bottom: GINOT lug, one test bracket, the 6,728
 #|   surface triangles and 10,483 nodes projected along the hole's axis, top
 #|   face nearest. How to read this: the first layer of the airfoil model
 #|   splits the domain by the query normal's direction against the inlet
