@@ -150,7 +150,9 @@ print(f"**AeroZoo is the interior task on a dataset built for diversity rather t
       f"boundaries and their prescribed values alone. In distribution, on {SIDE_WORD} of the `full` split, ISLA {clauses[0]}, "
       f"{clauses[1]}, {clauses[2]}, {clauses[3]}{dtt}{held}. Every ISLA standing on this dataset is the checkpoint after an optimization "
       "event at epoch 43 to 50 that raised its training and validation loss three- to fourfold for the rest of the run "
-      f"(@sec-aerozoo-trajectories){before}.** The chapter follows the shared "
+      f"(@sec-aerozoo-trajectories){before}.** Every volume result in this chapter was produced with each boundary mesh above 50,000 faces "
+      "read as one contiguous window of faces in solver order, so that about a quarter of the draws held no face of the body, for both "
+      "architectures alike (@sec-interior-aerozoo). The chapter follows the shared "
       "layout: the problem and its diversity, what is measured, the architectures under their reference configurations in distribution, the "
       "held-out families, the training trajectories, and what the dataset does not say. Protocol: @sec-protocol; every ratio is baseline ÷ "
       "ISLA, above one favoring ISLA.")
@@ -393,7 +395,9 @@ recipe's mesh format.
   so training and scoring read a derived copy in which every interior's
   rows are randomly permuted once (seeded by the case id; after the
   permutation a block covers 97 to 99 percent of the box); boundaries and
-  global data are the release's own files.
+  global data are the release's own files, so the boundary faces keep the
+  solver's order (@sec-interior-aerozoo gives what that does to the
+  results).
 - **Normalization** (`aerozoo_volume.yaml`). Coordinates are divided by
   the reference length and centered on the interior sample's mean.
   Velocity is divided by the reference speed, the gauge pressure by the
@@ -468,7 +472,7 @@ recipe's mesh format.
 #| output: asis
 S = SPLITS["full"]
 print(f"**The interior task of @sec-interior-task on the `full` split: {S['n_train']:,} training cases, {N_HEAD:,} cases on {SIDE_WORD}, 200,000 interior "
-      f"queries and up to 50,000 faces per boundary type per case, 250 epochs, {N_SEEDS} seeds, float32.** "
+      f"queries and up to 50,000 faces per boundary type per case (one contiguous window of the stored faces, @sec-interior-aerozoo), 250 epochs, {N_SEEDS} seeds, float32.** "
       + " ".join(f"{CONFIG[a]} ({PARAMS[a]:.0f}M parameters)" + (";" if i < len(ARMS) - 1 else ".") for i, a in enumerate(ARMS)) + " "
       "The reference configurations are those the characterization campaign fixed for the DrivAerML Volume task (@sec-protocol); no lane trains "
       "with rotation or translation augmentation, and the epoch count is chosen so the `full` split's training steps match the 1,260-wing rung's "
@@ -500,6 +504,26 @@ print(f"**On {SIDE_WORD} of the `full` split GeoTransolver ÷ ISLA reads "
       + ".** @tbl-aerozoo-full is the standing; every number below is read from it.")
 ```
 
+**Every volume result in this chapter was produced with each boundary
+mesh above 50,000 faces read as one contiguous window of faces in solver
+order, not as a uniform sample of the boundary.** The reader caps each
+boundary at 50,000 faces by taking one contiguous block of the stored
+faces at a random offset per draw, with the measure scaled by the
+boundary's face count over 50,000. The interior rows are permuted
+(@sec-data-aerozoo), but the boundary faces keep OpenFOAM's order, which
+runs through space, so each draw of a large boundary is one spatially
+coherent patch. Two thirds of the cases with a body have more than 50,000
+no-slip faces. A draw holds on average 56 percent of the body's faces, and
+about a quarter of the draws hold no face of the body at all. The scorer
+draws once per case, so about a quarter of the scored cases were
+predicted without the body in the input. GeoTransolver's wall distances
+are computed from the same windowed boundaries, so both architectures
+received the same defective input: the comparisons between them are like
+for like, but the task they were compared on was degraded. Lanes that
+read each boundary whole and draw 50,000 of its faces uniformly at random,
+with the same measure scaling, replace every result of this chapter when
+they complete.
+
 ```{python}
 #| label: tbl-aerozoo-full
 #| output: asis
@@ -518,7 +542,7 @@ for a in ARMS:
 print(hdr + "\n".join(rows) + "\n")
 print(f": The AeroZoo interior task at {SPLITS['full']['n_train']:,} training cases: the architectures at their reference configurations, relative L2 per "
       f"field on the standardized fields averaged over the cases of each side, seed means over two seeds unless the row says one, float32, 200,000 "
-      f"queries per case. Fields {flab}. How to read this: a ratio is baseline ÷ ISLA, above one favoring ISLA; the validation side selected "
+      f"queries per case, each boundary above 50,000 faces read as one contiguous window of faces (@sec-interior-aerozoo). Fields {flab}. How to read this: a ratio is baseline ÷ ISLA, above one favoring ISLA; the validation side selected "
       "nothing (the protocol has no early stopping) and the test side was scored once; the two columns share each checkpoint and differ only in "
       "the cases. Data: results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json. {#tbl-aerozoo-full}")
 ```
@@ -665,7 +689,8 @@ else:
           "Each held-out split trains the same configurations from its own training side (every case outside the family) and is scored on the "
           "family it holds out; a penalty is that error divided by the same architecture's error on the `full` test side, so it is a "
           "within-configuration readout, and the ratio of the two architectures' penalties is the comparison. @tbl-aerozoo-heldout holds the numbers "
-          "and @fig-aerozoo-penalties draws them.")
+          "and @fig-aerozoo-penalties draws them. The held-out lanes read each boundary as one contiguous window of faces, as the `full` lanes do "
+          "(@sec-interior-aerozoo).")
 ```
 
 ```{python}
@@ -914,6 +939,9 @@ else:
 print(f"**The AeroZoo standing is one dataset and one task, the interior fields from the boundaries alone, scored on the standardized fields: a "
       f"velocity ratio of {fmt_ratio(rat('GeoTransolver', 'full', SIDE, 'velocity_l2')['mean_ratio'])}, a pressure ratio of "
       f"{rat('GeoTransolver', 'full', SIDE, 'pressure_l2')['mean_ratio']:.2f}, three turbulence fields, {'the held-out penalties of @tbl-aerozoo-heldout' if HELD else 'and the held-out splits still to be scored'}.** "
+      "Every number here was produced with each boundary above 50,000 faces read as one contiguous window of faces, so that about a quarter of the "
+      "draws held no face of the body, for both architectures alike (@sec-interior-aerozoo): the ratios compare like for like on a degraded task, "
+      "and the uniform-sampling lanes replace them when they complete. "
       "The two configurations are not resource-matched and do not receive the same inputs (@sec-aerozoo-measured), so the ratios are standings of the "
       "configurations as shipped, and every ISLA number is the checkpoint after the optimization event of @sec-aerozoo-trajectories under the "
       "reference training protocol, which the protocol scores as it stands; what the architecture reaches under a protocol that survives this "

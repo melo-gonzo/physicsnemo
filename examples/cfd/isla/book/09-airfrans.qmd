@@ -254,7 +254,8 @@ viscosity 1.56e-5 m²/s.
   attack. The training-case axis of the scaling study uses nested rungs of
   50, 100, 200 and 400 airfoils inside `full` (@sec-airfrans-ladder).
   Every case has about 179,000 interior points; the interior task queries
-  100,000 of them per case per step (@sec-protocol).
+  100,000 of them per case per step (@sec-protocol), read as one contiguous
+  window of the stored points (@sec-interior-airfrans).
 - **License.** As for DrivAerML, not restated here.
 
 ## What is measured {#sec-airfrans-measured}
@@ -299,6 +300,23 @@ print(f"**The velocity lead is not a property of car flow: on the AirfRANS inter
       "the interior queries carry the signed distance to the airfoil and its gradient (@sec-dataset-airfrans, @sec-data-airfrans). "
       "@tbl-airfrans-protocols is the standing; every number below is read from it.")
 ```
+
+**Every AirfRANS result in this chapter was produced with the interior
+read as one contiguous window of 52 to 62 percent of each case's stored
+points, not as a uniform sample of the interior.** The reader caps the
+interior at 100,000 points by taking one contiguous block of the stored
+rows at a random offset per draw, and the converter keeps the solver's
+point order, which runs through space. A draw holds about the right share
+of points near the airfoil, but it leaves one gap of about half a chord
+(at most 0.75 chord), against 0.03 chord for a uniform draw of the same
+size, and only 66 to 75 percent of the airfoil's length has a sampled
+point within 0.01 chord. Training and scoring read the interior this way
+for every architecture, and the architectures were scored on the same
+windows per case, so the ratios between architectures compare like with
+like. The absolute errors do not carry over to
+full-domain or uniform draws, and neither does a comparison with
+published full-mesh AirfRANS errors. The reference configurations' lanes
+are rerun with a uniform interior draw.
 
 ```{python}
 #| label: tbl-airfrans-protocols
@@ -521,4 +539,4 @@ ISLA's stay within 4%.
 
 ## What this dataset does not say {#sec-airfrans-limits}
 
-**The AirfRANS standing is one two-dimensional dataset: a velocity lead, a pressure deficit, an eddy viscosity between level and a few percent behind, a pose reading, and an extrapolation reading whose mechanism is not measured.** The three configurations are not resource-matched and do not receive the same inputs (@sec-airfrans-measured), so the native ratios are standings of the configurations as shipped. The uniform-point-cloud column is the identity on this dataset by construction, so discretization independence is not measured here; it is measured on the surface datasets (@sec-invariances). The extrapolation splits are the only regime measurement for ISLA in the book, and their three-dimensional twin on the wings is unmeasured (@sec-limits-regime). Nothing here is a statement about geometry generalization beyond the NACA family.
+**The AirfRANS standing is one two-dimensional dataset: a velocity lead, a pressure deficit, an eddy viscosity between level and a few percent behind, a pose reading, and an extrapolation reading whose mechanism is not measured.** The three configurations are not resource-matched and do not receive the same inputs (@sec-airfrans-measured), so the native ratios are standings of the configurations as shipped. Every number here was produced with the interior read as one contiguous window of the stored points (@sec-interior-airfrans): the ratios between architectures compare like with like, and the absolute errors do not carry over to full-domain or uniform draws. The uniform-point-cloud column is the identity on this dataset by construction, so discretization independence is not measured here; it is measured on the surface datasets (@sec-invariances). The extrapolation splits are the only regime measurement for ISLA in the book, and their three-dimensional twin on the wings is unmeasured (@sec-limits-regime). Nothing here is a statement about geometry generalization beyond the NACA family.
