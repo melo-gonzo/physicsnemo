@@ -36605,3 +36605,53 @@ per boundary condition (snapshot code_dtt17 = code_dtt16 plus the
 change), half rate, `full` and `family_non_box`, two seeds, against the
 half-rate ISLA-DTT lanes; predictions W-a to W-c of
 @sec-nb-aerozoo-family-prereg, read for ISLA-DTT.
+
+## 2026-10-14 — AEROZOO: GAUGE refuted, and W1 is mostly the reference rate's early checkpoints: at half rate ISLA's sphere pressure equals GeoTransolver's {#sec-nb-aerozoo-w1-correction}
+
+**GAUGE.** Both half-rate ISLA `full` lanes were scored at their
+validation minima so far (checkpoints 51 and 71) on all 386 `full`
+validation cases, with the predictions kept. The probe's relative L2
+reproduces the scorer's on every case to 1.3e-7. A constant plus a
+linear function of position holds this share of the pressure error
+energy (medians, seed 42 / 43): 0.73 / 0.49 on spheres, 0.65 / 0.50
+on hemispheres, 0.49 / 0.37 on boxes and 0.58 / 0.71 on ducts. The
+criterion asked for at least half on the spherical families and at
+most a quarter on boxes, so it is refuted. A smooth part, mostly the
+constant, dominates the pressure error in every family, not only the
+spherical ones. For velocity the affine share is at most a fifth.
+
+**The correction.** The same records show that W1 of
+@sec-nb-aerozoo-family-prereg belongs to the reference rate's early
+best checkpoints, not to ISLA. Pressure relative L2, validation side,
+case means, seed 42 / 43:
+
+| Family | ISLA, reference rate, checkpoint 31 | ISLA, half rate, checkpoints 51 / 71 | GeoTransolver, best |
+|---|---|---|---|
+| spheres | 0.377 / 0.495 | 0.101 / 0.089 | 0.141 / 0.061 |
+| hemispheres | 0.366 / 0.496 | 0.216 / 0.174 | 0.187 / 0.110 |
+| boxes | 0.361 / 0.505 | 0.188 / 0.172 | 0.684 / 0.520 |
+| ducts | 0.545 / 0.952 | 0.384 / 0.278 | 0.698 / 1.142 |
+
+The medians tell the same story, so this is not a few outlying cases.
+At half rate, ISLA's sphere pressure equals GeoTransolver's best. Its
+box and duct pressure is about a third of GeoTransolver's. Only the
+hemispheres still trail, by a factor of about 0.76, and the half-rate
+lanes are still training. The reference-rate lanes' best checkpoints
+come from epoch 31, before the event cut their training short
+(@sec-nb-aerozoo-instability), when their pressure error was 0.36 to
+0.95 in every family. In distribution, then, W1 is an effect of the
+event, which is what H-EVENT says. Whether W2, the held-out transfer,
+shrinks as well is read when the half-rate held-out lanes are scored on
+the test side. D1 still compares ISLA-DTT with ISLA at the reference
+rate, as registered, but its premise, a reach deficit specific to the
+spherical enclosures, does not hold in distribution.
+
+**The pressure metric.** The scorer computes pressure's relative L2 on
+the standardized field, (Cp - 1.4261) / 4.029. Its denominator is
+therefore each case's deviation from the dataset's mean pressure
+coefficient, not the case's own variation. Inside the spherical
+enclosures Cp is close to zero (median rms 0.067), so the same errors
+measured against the case's own Cp are 1.7 to 2.0 times the signal on
+spheres and 0.84 times on boxes, for the half-rate lanes. The
+pre-registered metric stays as defined. Any per-family pressure
+comparison states which of the two normalizations it uses.
