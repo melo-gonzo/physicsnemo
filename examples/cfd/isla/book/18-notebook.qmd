@@ -36835,3 +36835,49 @@ least 25 percent against the old protocol's best-checkpoint values.
 (U4) M1 to M5, D1's question and WALLDIST's, BUDGET-2X's and
 TARGETS-VP's predictions are read on these lanes. The old protocol's
 versions of the matrix were cancelled before any result existed.
+
+## 2026-10-15 — SAMPLING-AUDIT: every configuration checked; AirfRANS's interior was also read as one contiguous window; DrivAerML, HiLift and SHIFT-SUV are shuffled and unaffected {#sec-nb-sampling-audit}
+
+**Test.** For each stored array that a reader caps, r is the mean
+distance between consecutive stored rows divided by the mean distance
+between random pairs. Near 1 means the rows are in random order, so a
+contiguous block is a uniform sample. Far below 1 means they run
+through space in order. The probes were read-only, on the cluster
+login nodes, over 400 to 3,000 cases per dataset (3 for the DrivAerML
+and HiLift order tests).
+
+| Dataset | Capped part | k / N | r | Affected |
+|---|---|---|---|---|
+| DrivAerML Surface and Volume | interior points; vehicle cells | 100k-200k / 156M-166M; 100k-600k / ~17M | 0.99-1.01 | no |
+| HiLift | vehicle cells | 100k-200k / 248M-301M | 0.995-0.998 | no |
+| SHIFT-SUV | vehicle cells | 200k / ~5M | 0.99-1.00 | no |
+| AirfRANS | interior points | 100k / 156k-210k | 0.006-0.020 | **yes** |
+| AeroZoo | the four boundaries | 50k / 22k-229k | 0.009-0.022 | **yes** |
+| AeroZoo | interior points | 200k / ~6M | about 1 | no |
+
+The small DrivAerML boundaries, AirfRANS's airfoil, DeepJEB++, the
+lug and Tensile2d are unordered too, but their caps exceed their sizes,
+so they are read whole. No OLBC data was found to check.
+
+**AirfRANS.** Its converter keeps the solver's point order, so each
+lane read one contiguous run of 52 to 62 percent of the stored
+interior points, in training and in scoring. A draw holds the right
+share of points near the airfoil, but leaves one gap of about half a
+chord (at most 0.75), against 0.03 chord for a random draw of the same
+size. Only 66 to 75 percent of the airfoil's length has a sampled point
+within 0.01 chord (30 percent in the worst draw), against all of it for
+a random draw. The models were compared on the same windows per case,
+so the ratios between them probably keep their direction. Their
+absolute errors, and any comparison with published full-mesh AirfRANS
+numbers, do not carry over. The results that depend on these lanes
+are chapter 9's tables, AF-GEO in chapter 7, and the ledger rows
+AIRFRANS-INT, AIRFRANS-SCALE, INTERNAL-GEOMETRY, FRAME-AF*,
+LOCAL-AGG-STENCIL, LOCAL-LPR, PROTO-COND, SOFT-GEO, PATCH-SDF and the
+AirfRANS column of CHAR-PROTOCOLS. Their reference lanes are rerun
+with a uniform interior draw.
+
+**DrivAerML.** The finding that an area-proportional boundary redraw
+raises interior error 6.6 to 7.9 times stands as written: training saw
+uniform draws, and the redraw changes the sampling law, not the
+coverage. The FORCEREF drag and lift errors are ordinary sampling error
+of a uniform 1.2-percent sample.
