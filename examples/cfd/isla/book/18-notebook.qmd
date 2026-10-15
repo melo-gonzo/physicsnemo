@@ -36909,3 +36909,36 @@ errors fall, and pressure, the field set at the airfoil, falls by at
 least 10 percent for each, because the old windows missed a third of
 the airfoil's neighbourhood. (AF3) ISLA-DTT stays below ISLA's error
 on velocity and pressure.
+
+## 2026-10-15 — AIRFRANS: the old checkpoints scored on uniform draws; ISLA, trained on contiguous windows, loses 10 to 66 percent, while ISLA-DTT is unchanged {#sec-nb-airfrans-scoring-effect}
+
+**Why.** Scoring alone moves the numbers. AF2 compares the reruns
+with chapter 9, so the effect of the new draw on a fixed checkpoint has
+to be measured on its own first. The final checkpoints (epoch 500) of
+the six reference lanes were copied from AGA to the LHR site. They, and
+ISLA-DTT's two, were scored with the reference protocol on the uniform
+dataset twins (LHR jobs 202658 to 202665; 200 test cases each; branch
+psharpe/isla-afscore, commit 9cdcc6bcc).
+
+| Arm, native scoring, two-seed means | Pressure: block, uniform, ratio | Velocity: block, uniform, ratio | Eddy viscosity: block, uniform, ratio |
+|---|---|---|---|
+| ISLA | 0.0352, 0.0442, 1.25 | 0.0172, 0.0189, 1.10 | 0.0315, 0.0522, 1.66 |
+| GeoTransolver | 0.0266, 0.0246, 0.92 | 0.0378, 0.0423, 1.12 | 0.0293, 0.0359, 1.23 |
+| Transolver | 0.0259, 0.0292, 1.13 | 0.0707, 0.0842, 1.19 | 0.0311, 0.0425, 1.37 |
+| ISLA-DTT | 0.0259, 0.0229, 0.88 | 0.0140, 0.0141, 1.01 | 0.0324, 0.0318, 0.98 |
+
+**Reading.** A model trained on contiguous windows of the interior
+loses accuracy when the same cases are drawn uniformly. ISLA loses the
+most, and ISLA-DTT nothing. This is the query-population dependence of
+@sec-nb-query-pop seen from the other side. ISLA's interior points are
+interacting tokens, so its predictions depend on which other points
+are queried, and the training windows were the only population it knew.
+ISLA-DTT's queries are exactly independent of each other, so it is
+indifferent to the draw. On uniform scoring of these checkpoints,
+GeoTransolver ÷ ISLA falls from 0.76 to 0.56 on pressure and from 0.93
+to 0.69 on eddy viscosity. ISLA still leads on velocity (GeoTransolver
+÷ ISLA 2.24), so AF1's direction holds for now. Per seed, ISLA's
+shift (pressure 0.0472 and 0.0411 against 0.0369 and 0.0335) is far
+larger than the seed spread. The reruns separate the training effect,
+the new checkpoint against the old one on uniform draws, from this
+scoring effect. AF2 is read on that training effect.
