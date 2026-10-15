@@ -36982,3 +36982,17 @@ large move need not raise an already large error. This readout is
 labeled as added after the fact. It does not change Q2's verdict. The
 protocol is rerun on the uniform-boundary lanes' finals, with the
 deviation recorded from the start.
+
+## 2026-10-15 — AEROZOO remedy, second read: no half-rate lane has lost its validation minimum through epochs 130 to 180, so R1 is unlikely {#sec-nb-aerozoo-remedy-second-read}
+
+The eight half-rate lanes of @sec-nb-aerozoo-remedy-prereg (old
+boundary protocol, the protocol R1 to R3 were registered on), at
+09:25 EDT. Half-rate ISLA `family_non_box` has reached validation epochs
+180 and 150 (best 0.0302 and 0.0307, last within 2 percent). Half-rate
+ISLA `full` has reached 130 and 140 (best 0.0305 and 0.0306, last within
+1 percent). Half-rate ISLA-DTT has reached 80 to 100, also clean. None
+has doubled its running minimum. The reference-rate event came at
+23,000 to 30,000 steps. These lanes are past 80,000 to 110,000 steps,
+with the rate cut tenfold at epoch 100. R1, the event delayed rather
+than cured, is now unlikely. R2 is read at epoch 250, with the final
+`full` checkpoints' validation velocity against the 0.25 bar.
