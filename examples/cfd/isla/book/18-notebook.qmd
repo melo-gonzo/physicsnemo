@@ -36711,3 +36711,37 @@ half-rate ISLA's on at least 14 of the 18 splits, and its velocity is
 within 10 percent of ISLA's on at least 14. If its pressure is not
 lower on at least 10 splits, the read's advantage at the reference rate
 was training time.
+
+## 2026-10-14 — AEROZOO D1 at the best checkpoints: mixed; ISLA-DTT's read lowers pressure in every family and narrows, but does not close, the held-out gap {#sec-nb-aerozoo-d1-best}
+
+**Readout.** The labeled best-checkpoint protocol, test side, float32,
+seed means of case means, at the reference rate: ISLA's checkpoints 31
+and 31 (`full`), 41 and 61 (`family_non_box`); ISLA-DTT's 41 and 51,
+61 and 51; GeoTransolver's 81 and 121, 151 and 61. The
+`family_non_box` test side of ISLA-DTT seed 42 needed a second scoring job after one of four
+units failed in its distributed setup.
+
+| Family | ISLA-DTT ÷ ISLA, velocity | ISLA-DTT ÷ ISLA, pressure | GeoTransolver ÷ ISLA-DTT, velocity | GeoTransolver ÷ ISLA-DTT, pressure |
+|---|---|---|---|---|
+| in distribution: spheres | 0.81 | 0.42 | | |
+| in distribution: hemispheres | 1.01 | 0.61 | | |
+| in distribution: boxes | 1.00 | 0.58 | | |
+| in distribution: ducts | 0.98 | 0.66 | | |
+| held out: ducts | 0.95 | 1.03 | 1.24 | 2.55 |
+| held out: hemispheres | 0.82 | 0.78 | 0.82 | 0.42 |
+| held out: spheres | 0.67 | 0.79 | 0.53 | 0.38 |
+
+**Verdict.** Mixed. D1 predicted sphere and hemisphere pressure at or
+below 0.6 of ISLA's with boxes within 10 percent. In distribution the
+read lowers pressure by 34 to 58 percent in every family, boxes
+included, so the effect is not specific to the spherical enclosures,
+which @sec-nb-aerozoo-w1-correction had already traced to the event.
+With the enclosure held out it lowers the spherical families' velocity
+error by 18 to 33 percent and their pressure error by about 20
+percent. GeoTransolver still leads there, by 1.2 to 1.9 on velocity
+and 2.4 to 2.6 on pressure, and ISLA-DTT leads on the held-out ducts.
+The falsifier (above 0.85 on spheres and hemispheres) is not met.
+Every checkpoint here comes from the reference rate, whose event ends
+ISLA's training early and ISLA-DTT's somewhat later. The final-checkpoint
+half of D1 follows when both ISLA-DTT pairs finish, and the half-rate
+matrix (M5) measures the read without the event.
