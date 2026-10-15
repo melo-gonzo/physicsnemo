@@ -649,7 +649,8 @@ print(f"Two sample-independent replacements for that input were trained and test
       f"{', '.join(f'{100 * (1 - patch_nat[f]['ratio_to_nearest_mean']):.0f}%' for f in ('pressure_l2', 'velocity_l2', 'nut_l2'))} better than the nearest-token form on pressure, velocity and eddy viscosity) "
       f"and reproduces the stored signed-distance field on the native mesh, yet under the coarsening the built-in channel still carries {min(kern_share + patch_share):.2f} to {max(kern_share + patch_share):.2f} "
       f"of the log excess for every form, the kernel forms through the orientation flips at the sharp trailing edge and the exact form through the gaps of the subsample, over which the exact distance to the "
-      f"patch set is the distance to a rim. A built-in geometry for a sampled boundary needs both the kernel's gap bridging and the patch form's edge handling; neither alone passes, and the nearest-token form stays the reference.")
+      f"patch set is the distance to a rim. A built-in geometry for a sampled boundary needs both the kernel's gap bridging and the patch form's edge handling; neither alone passes, and the nearest-token form stays the reference. "
+      "These AirfRANS lanes read the interior as one contiguous window of the stored points (@sec-interior-airfrans), so the ratios between forms compare like with like and the absolute errors do not carry over.")
 ```
 
 ```{python}

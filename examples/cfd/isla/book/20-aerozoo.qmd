@@ -561,7 +561,8 @@ fals = g("velocity_l2") < 1.1 or g("pressure_l2") > 1.0
 pattern = ("holds" if bar_v and bar_p else "fails" if fals else "holds in part")
 print(f"Three readings. First, the pattern of the two existing interior datasets, a velocity lead for ISLA and a pressure lead for GeoTransolver "
       f"(GeoTransolver ÷ ISLA {vrat('velocity_l2'):.2f} and {vrat('pressure_l2'):.2f} on the DrivAerML Volume task, {fmt_ratio(arat('velocity_l2'))} and "
-      f"{arat('pressure_l2'):.2f} on AirfRANS; @tbl-drivaerml-volume-protocols, @tbl-airfrans-protocols), {pattern} here: velocity "
+      f"{arat('pressure_l2'):.2f} on AirfRANS, whose interior was read as one contiguous window of the stored points; @tbl-drivaerml-volume-protocols, "
+      f"@tbl-airfrans-protocols, @sec-interior-airfrans), {pattern} here: velocity "
       f"{fmt_ratio(g('velocity_l2'))} (paired by seed {', '.join(f'{v:.2f}' for v in paired('velocity_l2').values())}) and pressure "
       f"{g('pressure_l2'):.2f} ({', '.join(f'{v:.2f}' for v in paired('pressure_l2').values())}), against the bar written before the lanes ran of at "
       f"least 1.2 on velocity and at most 0.9 on pressure. Second, the three turbulence fields, which no earlier dataset of the book predicts "

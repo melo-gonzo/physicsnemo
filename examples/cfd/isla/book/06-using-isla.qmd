@@ -91,8 +91,9 @@ global boundary read through the cluster forest (ISLA-DTT,
 @sec-arch-passive-decoder): its prediction at a point depends on that
 point and the boundary alone, at 1.12 / 1.11 / 1.12 times ISLA's error on
 pressure / velocity / eddy viscosity on the DrivAerML Volume task and
-0.74 / 0.83 / 1.03 on the AirfRANS interior task
-(@sec-interior-read-only, @sec-airfrans-read-only).
+0.74 / 0.83 / 1.03 on the AirfRANS interior task, whose interior was
+read as one contiguous window of the stored points
+(@sec-interior-read-only, @sec-airfrans-read-only, @sec-interior-airfrans).
 :::
 
 ## What the model needs from your data {#sec-using-inputs}
