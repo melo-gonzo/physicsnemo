@@ -36745,3 +36745,54 @@ Every checkpoint here comes from the reference rate, whose event ends
 ISLA's training early and ISLA-DTT's somewhat later. The final-checkpoint
 half of D1 follows when both ISLA-DTT pairs finish, and the half-rate
 matrix (M5) measures the read without the event.
+
+## 2026-10-14 — AEROZOO protocol defect: every volume lane saw each large boundary as one contiguous window of faces, often without the body; today's 140 lanes cancelled, a uniform-sampling relaunch prepared {#sec-nb-aerozoo-boundary-window}
+
+**How it was found.** Building the surface task, the implementing
+lane found that the reader's cell cap takes one contiguous block. The
+cause is in `physicsnemo/datapipes/readers/mesh.py`:
+`_subsample_mesh_cells` reads "a cyclic contiguous block" of k cells
+at a random offset per draw. Every cell's inclusion probability is
+k/N and the measure is scaled by N/k, so the measure is unbiased on
+average, but a draw is an exchangeable uniform sample only if the
+stored rows are in random order. The AeroZoo copy permuted the
+interior rows for exactly this reason (`aerozoo_shuffle.py`), but its
+boundaries are links to the release and keep OpenFOAM's face order.
+The dataset files cap each boundary at 50,000 faces
+(`subsample_n_cells: 50000`, `boundary_subsample: cells`). Every
+boundary mesh above the cap was therefore seen as one spatially
+coherent window. GeoTransolver's `sdf_wall` and `sdf_slip` are
+computed from the same windowed meshes, so both architectures received
+the same defective boundary, and the comparisons stay fair while the
+task itself was degraded.
+
+**How large.** In 400 random cases, 66 percent of the cases with a
+body have more than 50,000 no-slip faces. A draw holds on average 56
+percent of the body's faces (median 46, tenth percentile 12). On
+average 24 percent of draws hold no body face at all, and in 80 of the
+386 cases more than half of the draws do. The inlet, outlet and slip
+meshes are seen at 79, 73 and 43 percent of their faces on average.
+The scorer draws once per case, so about a quarter of the scored cases
+were predicted without the body in the input.
+
+**What it touches.** Every AeroZoo volume result so far: the Phase 1
+standing, the held-out splits, the best-checkpoint table, the family
+breakdown, D1 and the GAUGE probe. It may also touch the reference-rate
+event. A case appears in one epoch with its body and in another
+without it, under the same targets. Those are contradictory training
+pairs, and they would load the optimizer most at the higher rate
+(H-SAMPLING, to be tested). Other datasets read their geometry the
+same way (the DrivAerML car keeps 200,000 of up to 17 million surface
+cells). An audit of every configuration the program trained is
+running, and its result is recorded when it is in.
+
+**Decisions.** The 140 lanes launched today (rows 32 to 171: BUDGET-2X,
+WALLDIST on both variants, H-FRAME, the matrix and TARGETS-VP) were
+cancelled within hours of their start. Their run directories moved to
+`runs_defective_2026-10-14/` on the LHR site. The 20 lanes that were
+already running continue to their end: they complete the registered
+reads of the protocol as it ran (R1 to R3, D1's final half), and they
+measure the defect's effect against their uniform-sampling twins. The
+fix reads each boundary whole and draws 50,000 faces uniformly, with
+the same Horvitz-Thompson measure, as new dataset files beside the old
+ones. The relaunch is pre-registered before it starts.
