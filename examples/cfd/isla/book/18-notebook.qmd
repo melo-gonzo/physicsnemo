@@ -36942,3 +36942,43 @@ shift (pressure 0.0472 and 0.0411 against 0.0369 and 0.0335) is far
 larger than the seed spread. The reruns separate the training effect,
 the new checkpoint against the old one on uniform draws, from this
 scoring effect. AF2 is read on that training effect.
+
+## 2026-10-15 — AEROZOO QUERY-POP on the reference-rate `full` finals (old boundary protocol): Q1 holds on seed 42, Q2 fails as written, Q3 holds {#sec-nb-aerozoo-qpop}
+
+**Run.** The registered instrument of the 2026-10-10 amendment, in a
+copy on the LHR site (`kernel/aerozoo/qpop_lhr/`): only the checkpoint
+root, paths and an output-only record of the prediction deviation
+changed. It ran on the final checkpoints (epoch 250) of ISLA and
+GeoTransolver (copied from AGA) and of ISLA-DTT seed 42; seed 43's job
+is pending. Every condition of a case reuses that case's single
+boundary draw, which the code guarantees and three checks confirm. All
+of these lanes ran under the windowed boundary protocol of
+@sec-nb-aerozoo-boundary-window, so the numbers describe that
+protocol. Ratios are condition error ÷ control error, seed means
+(pressure, velocity, eddy viscosity); d is the mean relative deviation
+of the predictions from the control's.
+
+| Arm | half count | far-field companions | wall-heavy companions |
+|---|---|---|---|
+| ISLA | 1.000, 1.000, 1.000 (d 0.025) | 1.008, 1.004, 1.035 (d 0.49) | 1.065, 1.032, 0.977 (d 0.61) |
+| GeoTransolver | 1.211, 1.156, 1.064 (d 0.49) | 1.082, 1.165, 1.257 (d 0.53) | 1.432, 1.394, 1.355 (d 0.61) |
+| ISLA-DTT, seed 42 | 1.000 (d below 3e-5) | 1.000 (d below 6e-5) | 1.000 (d below 6e-5) |
+
+**Verdicts.** Q1 holds on seed 42: ISLA-DTT's largest deviation of a
+ratio from 1 over all 15 condition-field pairs is 4.1e-6, against the
+bar of 1e-3. Q2 fails as written: no field of ISLA's moves past the
+bar (both seeds on one side of 1 and the mean outside 1 ± 0.05), and
+wall-heavy pressure's 1.065 comes from seeds that disagree (0.992 and
+1.138). Q3 holds: GeoTransolver's errors move under wall-heavy
+companions on all five fields and under far-field companions on three.
+The half-count condition moves them too, which was not predicted.
+
+**A readout outside the registration.** ISLA's predictions do move. Its
+mean relative deviation from the control is 0.44 to 0.61 on pressure
+and eddy viscosity, as large as GeoTransolver's, while its error ratios
+stay within 5 percent. ISLA's final checkpoints here already sit at
+errors of 0.76, 0.46 and 0.80, after the reference-rate event, so a
+large move need not raise an already large error. This readout is
+labeled as added after the fact. It does not change Q2's verdict. The
+protocol is rerun on the uniform-boundary lanes' finals, with the
+deviation recorded from the start.
