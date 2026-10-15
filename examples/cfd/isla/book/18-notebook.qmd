@@ -36836,7 +36836,7 @@ least 25 percent against the old protocol's best-checkpoint values.
 TARGETS-VP's predictions are read on these lanes. The old protocol's
 versions of the matrix were cancelled before any result existed.
 
-## 2026-10-15 — SAMPLING-AUDIT: every configuration checked; AirfRANS's interior was also read as one contiguous window; DrivAerML, HiLift and SHIFT-SUV are shuffled and unaffected {#sec-nb-sampling-audit}
+## 2026-10-14 — SAMPLING-AUDIT: every configuration checked; AirfRANS's interior was also read as one contiguous window; DrivAerML, HiLift and SHIFT-SUV are shuffled and unaffected {#sec-nb-sampling-audit}
 
 **Test.** For each stored array that a reader caps, r is the mean
 distance between consecutive stored rows divided by the mean distance
@@ -36882,7 +36882,7 @@ uniform draws, and the redraw changes the sampling law, not the
 coverage. The FORCEREF drag and lift errors are ordinary sampling error
 of a uniform 1.2-percent sample.
 
-## 2026-10-15 — AIRFRANS uniform-interior rerun (AF-UNIFORM): the fix verified, the reference lanes relaunched, predictions {#sec-nb-airfrans-uniform-prereg}
+## 2026-10-14 — AIRFRANS uniform-interior rerun (AF-UNIFORM): the fix verified, the reference lanes relaunched, predictions {#sec-nb-airfrans-uniform-prereg}
 
 **The fix.** The six `airfrans_uvolume*` files (branch
 psharpe/isla-afuniform, commit 71ecb6140; on the LHR site in
