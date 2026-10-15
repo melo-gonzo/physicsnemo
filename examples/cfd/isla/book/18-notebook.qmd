@@ -36881,3 +36881,31 @@ raises interior error 6.6 to 7.9 times stands as written: training saw
 uniform draws, and the redraw changes the sampling law, not the
 coverage. The FORCEREF drag and lift errors are ordinary sampling error
 of a uniform 1.2-percent sample.
+
+## 2026-10-15 — AIRFRANS uniform-interior rerun (AF-UNIFORM): the fix verified, the reference lanes relaunched, predictions {#sec-nb-airfrans-uniform-prereg}
+
+**The fix.** The six `airfrans_uvolume*` files (branch
+psharpe/isla-afuniform, commit 71ecb6140; on the LHR site in
+recipe_v8, as new files) drop the reader's interior cap and draw the
+100,000 points first in the chain with `SubsampleMesh`
+(`torch.randperm`). On 8 test cases with 10 draws each, the largest
+gap near the airfoil falls from 0.50 to 0.03 chord. The share of the
+airfoil's length with a drawn point within 0.01 chord rises from 66.5
+to 100 percent. Load time is unchanged.
+
+**Lanes.** The reference lanes of chapter 9's standing, with the
+dataset file as the only change: ISLA (`afu_r_isla`, 512 wide, 512
+slices, 3.75e-4), GeoTransolver (`afu_r_gt`, 1e-3), Transolver
+(`afu_r_t`, 512 by 16, 1e-3), all on recipe_v8 and code_v20 in
+bfloat16, 500 epochs, 100,000 points, seeds 42 and 43. ISLA-DTT
+(`afu_dtt`, its read-only table's configuration on code_dtt16, 5e-4)
+also runs. The scripts are a copy in `kernel/airfrans_u/` on the LHR
+site.
+
+**Predictions.** (AF1) The comparisons were like for like, so the
+standing keeps its direction: ISLA leads GeoTransolver and Transolver
+on velocity and trails them on pressure. (AF2) Every architecture's
+errors fall, and pressure, the field set at the airfoil, falls by at
+least 10 percent for each, because the old windows missed a third of
+the airfoil's neighbourhood. (AF3) ISLA-DTT stays below ISLA's error
+on velocity and pressure.
