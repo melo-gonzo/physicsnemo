@@ -36688,3 +36688,26 @@ ISLA and GeoTransolver, seeds 42 and 43 (`az_<split>_islahr_seed<s>`,
 `az_full_gtvp`, `az_nonbox_islahrvp` and `az_nonbox_gtvp`, two seeds
 each. Snapshot code_v26 and recipe_v9 throughout, 250 epochs, LHR's
 normal queue.
+
+## 2026-10-14 — AEROZOO: half-rate ISLA-DTT joins the matrix {#sec-nb-aerozoo-matrix-dtt}
+
+**Why.** ISLA-DTT is the variant built for AeroZoo's query populations
+(@sec-nb-dtt-merged). At the reference rate's best checkpoints its
+forest read lowers pressure error by 34 to 58 percent in every
+enclosure family of the `full` test side (ISLA-DTT ÷ ISLA 0.42 on
+spheres, 0.61 on hemispheres, 0.58 on boxes, 0.66 on ducts), with
+velocity at parity except on spheres (0.81). Its best checkpoints
+come from later epochs (41 and 51, against ISLA's 31 and 31), so part
+of that gain is training time. The matrix measures it at half rate,
+where neither architecture's training is cut short.
+
+**Lanes.** Rows 136 to 171: the 18 splits of
+@sec-nb-aerozoo-matrix-launch, half-rate ISLA-DTT (snapshot
+code_dtt16, the overrides of rows 28 to 31), seeds 42 and 43
+(`az_<split>_dtthr_seed<s>`).
+
+**Prediction (M5).** Half-rate ISLA-DTT's pressure error is below
+half-rate ISLA's on at least 14 of the 18 splits, and its velocity is
+within 10 percent of ISLA's on at least 14. If its pressure is not
+lower on at least 10 splits, the read's advantage at the reference rate
+was training time.
