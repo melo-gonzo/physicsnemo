@@ -38,8 +38,12 @@ from datasets import (  # noqa: E402
     load_dataset_config,
 )
 from forward_kwargs import extract_target_measure  # noqa: E402
+from infer import build_redim_field_types, redimensionalize  # noqa: E402
 from loss import LossCalculator  # noqa: E402
+from metrics import MetricCalculator  # noqa: E402
+from nondim import NonDimensionalizeByMetadata  # noqa: E402
 from output_normalize import normalize_output_to_tensordict  # noqa: E402
+from utils import field_dim  # noqa: E402
 
 from physicsnemo.datapipes.protocols import DatasetBase  # noqa: E402
 from physicsnemo.mesh import DomainMesh, Mesh  # noqa: E402
@@ -52,6 +56,49 @@ TARGETS = {
     "nut": "scalar",
     "tke": "scalar",
     "omega": "scalar",
+}
+TARGETS_VP = {"velocity": "vector", "pressure": "scalar"}
+### Every AeroZoo dataset file: the split part fill_stats.py filled its statistics from, and its targets. The
+### `_vp` variants keep the pipeline (nut, tke and omega become unused leaves) and declare two targets.
+DATASET_FILES = {
+    "aerozoo_volume": ("full", TARGETS),
+    "aerozoo_volume_nonbox": ("family_non_box", TARGETS),
+    "aerozoo_volume_reynolds": ("reynolds", TARGETS),
+    "aerozoo_volume_blobs": ("bank_blobs", TARGETS),
+    **{
+        f"aerozoo_volume_{split}": (split, TARGETS)
+        for split in (
+            "bank_airframes",
+            "bank_blender_bluff",
+            "bank_blender_streamlined",
+            "bank_cars",
+            "bank_streamlined",
+            "bank_zero_to_cad",
+            "family_duct",
+            "family_opposed_hemisphere",
+            "family_opposed_sphere",
+            "layout",
+            "profile_confined_opposed",
+            "profile_crossflow",
+            "profile_dual_inlet",
+            "profile_ground_effect",
+            "profile_open_opposed",
+            "reynolds_interior",
+            "scarce",
+            "super_scarce",
+        )
+    },
+    "aerozoo_volume_vp": ("full", TARGETS_VP),
+    "aerozoo_volume_nonbox_vp": ("family_non_box", TARGETS_VP),
+}
+### The ISLA lanes on a `_vp` dataset drop the three turbulence outputs from the model's output_schema.
+ISLA_VP_OVERRIDES = {
+    "aerozoo_volume": (),
+    "aerozoo_volume_vp": (
+        "~model.output_schema.nut",
+        "~model.output_schema.tke",
+        "~model.output_schema.omega",
+    ),
 }
 SOLUTION = (
     "velocity",
@@ -248,9 +295,9 @@ def make_aerozoo_case(with_slip: bool, seed: int = 0) -> DomainMesh:
     )
 
 
-def _filled_dataset_yaml(root: Path):
+def _filled_dataset_yaml(root: Path, dataset: str = DATASET):
     """The dataset yaml pointed at ``root`` with the stats placeholders filled."""
-    ds = load_dataset_config(_RECIPE_ROOT / "datasets" / f"{DATASET}.yaml")
+    ds = load_dataset_config(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
     transforms = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
     for t in transforms:
         if "NormalizeMeshFields" in t["_target_"]:
@@ -271,28 +318,54 @@ def _filled_dataset_yaml(root: Path):
     )
 
 
-@pytest.fixture(scope="module")
-def pipeline_output(tmp_path_factory) -> dict[str, DomainMesh]:
+def _read_back(tmp_path_factory, dataset: str) -> dict[str, DomainMesh]:
     """Two cases written in the release tree and read back through the yaml's reader and transforms."""
-    root = tmp_path_factory.mktemp("aerozoo")
+    root = tmp_path_factory.mktemp(dataset)
     for case, with_slip in (("case-0001", True), ("case-0002", False)):
         path = root / "shard-000" / case / "domain.pdmsh"
         path.parent.mkdir(parents=True)
         make_aerozoo_case(with_slip, seed=int(case[-1])).save(path)
-    dataset = build_dataset(_filled_dataset_yaml(root), device=None, num_workers=1)
+    ds = build_dataset(_filled_dataset_yaml(root, dataset), device=None, num_workers=1)
     try:
-        return {"with_slip": dataset[0][0], "no_slip_walls": dataset[1][0]}
+        return {"with_slip": ds[0][0], "no_slip_walls": ds[1][0]}
     finally:
-        DatasetBase.close(dataset)
+        DatasetBase.close(ds)
 
 
-def _compose(model, *extra):
+@pytest.fixture(scope="module")
+def pipeline_output(tmp_path_factory) -> dict[str, DomainMesh]:
+    return _read_back(tmp_path_factory, DATASET)
+
+
+@pytest.fixture(scope="module")
+def pipeline_output_vp(tmp_path_factory) -> dict[str, DomainMesh]:
+    return _read_back(tmp_path_factory, "aerozoo_volume_vp")
+
+
+def _outputs(request, dataset: str) -> dict[str, DomainMesh]:
+    return request.getfixturevalue(
+        "pipeline_output_vp" if dataset == "aerozoo_volume_vp" else "pipeline_output"
+    )
+
+
+def _out_dim(targets: dict[str, str]) -> int:
+    """GeoTransolver's out_dim as build_dataloaders derives it from the dataset's `targets:` block."""
+    return sum(field_dim(t) for t in targets.values())
+
+
+def _compose(model, *extra, dataset: str = DATASET):
+    out_dim = _out_dim(DATASET_FILES[dataset][1])
     with initialize_config_dir(
         config_dir=str(_RECIPE_ROOT / "conf"), version_base=None
     ):
         return compose(
             config_name="train",
-            overrides=[f"model={model}", f"dataset={DATASET}", "+out_dim=7", *extra],
+            overrides=[
+                f"model={model}",
+                f"dataset={dataset}",
+                f"+out_dim={out_dim}",
+                *extra,
+            ],
         )
 
 
@@ -475,8 +548,14 @@ def test_absent_slip_walls_get_the_far_fill(pipeline_output):
 ### ---------------------------------------------------------------------------
 
 
-def test_dataset_yaml_pins_the_reader_and_the_chain():
-    ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / f"{DATASET}.yaml")
+@pytest.mark.parametrize("dataset", sorted(DATASET_FILES))
+def test_dataset_yaml_pins_the_reader_and_the_chain(dataset):
+    split, targets = DATASET_FILES[dataset]
+    path = _RECIPE_ROOT / "datasets" / f"{dataset}.yaml"
+    assert path.read_text().startswith(
+        f"# Statistics filled by fill_stats.py from stats_{split}.train.json: split part {split}.train, "
+    )
+    ds = OmegaConf.load(path)
     reader = OmegaConf.to_container(ds.pipeline.reader, resolve=False)
     assert (
         reader["subsample_n_cells"] == 50000
@@ -493,14 +572,17 @@ def test_dataset_yaml_pins_the_reader_and_the_chain():
         for t in OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
     ]
     assert "ComposeQuadratureMeasure" in chain[-1]
-    assert OmegaConf.to_container(ds.targets) == TARGETS
+    assert OmegaConf.to_container(ds.targets) == targets
     ### fill_stats.py has filled the normalization statistics (the yaml's first line names the split part and the sample
     ### counts), so the standardizing transform instantiates with no mandatory value missing.
     assert "???" not in OmegaConf.to_yaml(ds.pipeline.transforms[-2])
     hydra.utils.instantiate(ds.pipeline.transforms[-2], _convert_="all")
 
 
-def test_isla_config_declares_the_harmonized_grammar_and_runs(pipeline_output):
+@pytest.mark.parametrize("dataset", sorted(ISLA_VP_OVERRIDES))
+def test_isla_config_declares_the_harmonized_grammar_and_runs(request, dataset):
+    pipeline_output = _outputs(request, dataset)
+    targets = DATASET_FILES[dataset][1]
     cfg = _compose(
         "isla_volume_aerozoo",
         "model.hidden=16",
@@ -508,6 +590,8 @@ def test_isla_config_declares_the_harmonized_grammar_and_runs(pipeline_output):
         "model.n_slices=4",
         "model.geo_kernel=eager",
         "model.compile_blocks=false",
+        *ISLA_VP_OVERRIDES[dataset],
+        dataset=dataset,
     )
     m = cfg.model
     assert cfg.input_type == "mesh" and cfg.output_type == "mesh"
@@ -526,34 +610,61 @@ def test_isla_config_declares_the_harmonized_grammar_and_runs(pipeline_output):
         "inlet_intermittency_std": {"rank": 0},
         "inlet_retheta_std": {"rank": 0},
     }
-    assert set(OmegaConf.to_container(m.output_schema)) == set(TARGETS)
+    assert set(OmegaConf.to_container(m.output_schema)) == set(targets)
     assert m.get("query_schema") is None and m.interior is True
     model = hydra.utils.instantiate(m)
     spec = OmegaConf.to_container(cfg.forward_kwargs, resolve=True)
-    collate = build_collate_fn("mesh", spec, TARGETS)
+    collate = build_collate_fn("mesh", spec, targets)
+    ### The scorer's re-dimensionalization (infer.py) from the dataset yaml's own chain.
+    ds = _filled_dataset_yaml(Path("unused"), dataset)
+    normalizer = hydra.utils.instantiate(ds.pipeline.transforms[-2], _convert_="all")
+    field_types = build_redim_field_types(ds)
     for case in (
         "with_slip",
         "no_slip_walls",
     ):  # the second hands ISLA a boundary with zero faces
         domain = pipeline_output[case]
+        ### The pipeline output still carries all five standardized fields; only the declared ones are read.
+        assert {"nut", "tke", "omega"} <= set(domain.interior.point_data.keys())
         batch = collate([(domain, {})])
         assert "target_measure" not in batch
+        assert set(batch["targets"].keys()) == set(targets)
         with torch.no_grad():
             out = model(**batch["forward_kwargs"])
         assert isinstance(out, Mesh)
         torch.testing.assert_close(out.points, domain.interior.points)
-        pred = normalize_output_to_tensordict(out, TARGETS, "mesh")
-        assert pred["velocity"].shape == (SAMPLING, 3) and pred["omega"].shape == (
-            SAMPLING,
-        )
-        total, _ = LossCalculator(TARGETS, loss_type="mse")(
+        pred = normalize_output_to_tensordict(out, targets, "mesh")
+        assert set(pred.keys()) == set(targets)
+        assert pred["velocity"].shape == (SAMPLING, 3)
+        assert pred["pressure"].shape == (SAMPLING,)
+        total, loss_td = LossCalculator(targets, loss_type="mse")(
             pred.float(), batch["targets"].float()
         )
         assert torch.isfinite(total)
+        metrics = MetricCalculator(targets, metrics=["l2"])(
+            pred.float(), batch["targets"].float()
+        )
+        assert {k.split("_")[0] for k in metrics.keys()} == set(targets)
+        assert set(loss_td.keys()) == {f"loss/{n}" for n in (*targets, "total")}
+        phys = redimensionalize(
+            pred,
+            normalizer=normalizer,
+            nondim=NonDimensionalizeByMetadata(fields=field_types),
+            field_types=field_types,
+            global_data=domain.global_data,
+        )
+        assert set(phys.keys()) == set(targets)
+        assert all(torch.isfinite(v).all() for v in phys.values())
 
 
-def test_geotransolver_config_reads_the_sdf_and_global_vector_and_runs(pipeline_output):
-    cfg = _compose("geotransolver_volume_aerozoo")
+@pytest.mark.parametrize("dataset", sorted(ISLA_VP_OVERRIDES))
+def test_geotransolver_config_reads_the_sdf_and_global_vector_and_runs(
+    request, dataset
+):
+    pipeline_output = _outputs(request, dataset)
+    targets = DATASET_FILES[dataset][1]
+    cfg = _compose("geotransolver_volume_aerozoo", dataset=dataset)
+    assert cfg.model.out_dim == (4 if dataset.endswith("_vp") else 7)
     assert cfg.input_type == "tensors" and cfg.output_type == "tensors"
     assert cfg.training.optimizer.lr == pytest.approx(
         1.0e-3
@@ -566,7 +677,7 @@ def test_geotransolver_config_reads_the_sdf_and_global_vector_and_runs(pipeline_
     )
     assert cfg.forward_kwargs.global_embedding == "global_data.global_vector"
     ### The boundaries stay in the reader: the SDF transforms need them.
-    ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / f"{DATASET}.yaml")
+    ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
     assert (
         _apply_dataset_reader_overrides(ds, cfg).pipeline.reader.drop_in_file_boundaries
         is False
@@ -583,7 +694,7 @@ def test_geotransolver_config_reads_the_sdf_and_global_vector_and_runs(pipeline_
     )
     model = hydra.utils.instantiate(small, _convert_="partial")
     spec = OmegaConf.to_container(cfg.forward_kwargs, resolve=True)
-    batch = build_collate_fn("tensors", spec, TARGETS)(
+    batch = build_collate_fn("tensors", spec, targets)(
         [(pipeline_output["no_slip_walls"], {})]
     )
     fk = batch["forward_kwargs"]
@@ -591,8 +702,12 @@ def test_geotransolver_config_reads_the_sdf_and_global_vector_and_runs(pipeline_
     assert fk["global_embedding"].shape == (1, 1, cfg.model.global_dim)
     with torch.no_grad():
         out = model(**fk)
-    pred = normalize_output_to_tensordict(out, TARGETS, "tensors")
-    for name in TARGETS:
+    assert out.shape[-1] == cfg.model.out_dim
+    pred = normalize_output_to_tensordict(out, targets, "tensors")
+    assert set(pred.keys()) == set(batch["targets"].keys()) == set(targets)
+    for name in targets:
         assert pred[name].shape == batch["targets"][name].shape, name
-    total, _ = LossCalculator(TARGETS, loss_type="mse")(pred, batch["targets"])
+    total, _ = LossCalculator(targets, loss_type="mse")(pred, batch["targets"])
     assert torch.isfinite(total)
+    metrics = MetricCalculator(targets, metrics=["l2"])(pred, batch["targets"])
+    assert {k.split("_")[0] for k in metrics.keys()} == set(targets)

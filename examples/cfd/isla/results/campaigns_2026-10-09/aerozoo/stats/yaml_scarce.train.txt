@@ -1,0 +1,11 @@
+# NormalizeMeshFields block for datasets/aerozoo_volume.yaml (8,800,000 points over 440 cases)
+      fields:
+        velocity: {type: vector, mean: [0.0210497, 0.0280997, 0.00617398], std: 0.737931}   # per-component std 0.772921 / 0.748122 / 0.690313; isotropic value
+        pressure: {type: scalar, mean: 1.3681, std: 4.06657}
+        nut: {type: scalar, mean: 0.00291836, std: 0.00752587}
+        tke: {type: scalar, mean: 0.0107341, std: 0.0400504}
+        omega: {type: scalar, mean: 97.8454, std: 1167.47}
+# SplitGlobalVector (inlet_turbulence) block; a std of 0 (constant over the split) is written as 1.0
+      mean: [0.0025242, 1.5513, 1, 336.714]
+      std: [0.00349932, 2.6708, 1, 254.26]
+# log10 Re over the split: mean 5.32645, std 1.40252, range [3.00704, 7.97562] (the yaml standardizes with 5.5 / 1.5)
