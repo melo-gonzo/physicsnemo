@@ -29,6 +29,7 @@ import copy
 
 import pytest
 import torch
+from tensordict import TensorDict
 
 from physicsnemo.experimental.models import ISLA
 from test.experimental.models.isla._meshes import cloud, outputs, points_mesh, soup
@@ -167,3 +168,32 @@ def test_whole_model_compiles_fullgraph_with_dynamic_shapes_and_matches_eager(
         else:  # small gradients carry bf16's relative roundoff: compare them all at once
             flat = lambda g: torch.cat([g[k].flatten() for k in sorted(g)])  # noqa: E731
             _assert_close(flat(grads), flat(ref_grads), device, rel=5e-2)
+
+
+def _reversed_keys(td) -> None:
+    """Re-insert the leaves of ``td`` in reverse key order, in place."""
+    items = {k: td[k] for k in td.keys()}
+    for k in items:
+        del td[k]
+    for k in reversed(list(items)):
+        td[k] = items[k]
+
+
+def test_whole_model_does_not_guard_on_the_key_order_of_its_inputs():
+    """Datasets add fields at different stages, so a field's position among the
+    keys varies by case (AeroZoo's boundaries get the effective measure before or
+    after their other fields): boundary cell_data and global_data with their keys
+    in another order must reuse the graph."""
+    torch._dynamo.reset()
+    compiled = torch.compile(
+        _model("interior"), backend="eager", fullgraph=True, dynamic=True
+    )
+    for i, (sizes, nq) in enumerate(SIZES):
+        case = _case("interior", sizes, nq, "cpu", seed=i)
+        case["global_data"] = TensorDict(case["global_data"])
+        if i > 0:
+            for mesh in case["boundary_meshes"].values():
+                _reversed_keys(mesh.cell_data)
+            _reversed_keys(case["global_data"])
+        with torch._dynamo.config.patch(error_on_recompile=i > 0):
+            compiled(**case)
