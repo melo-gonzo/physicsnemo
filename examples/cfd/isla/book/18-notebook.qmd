@@ -37232,3 +37232,26 @@ bfloat16 resolution. At the reference rate the deep blocks' MLPs and
 geometry therefore add nothing by the event. The rounding of the cast
 at the broadcast's input is negligible (below 0.006 of the message
 terms).
+
+## 2026-10-15 — AEROZOO H-PREC pre-registration: is the event the bfloat16 rounding of the deep blocks' updates? A float32 fork from epoch 39 {#sec-nb-aerozoo-hprec-prereg}
+
+**Hypothesis.** H-PREC: the multiplicative stream harms training
+through the rounding of the bfloat16 stream, which drops the deep
+blocks' MLP and geometry updates. Float32 resolves updates about 65,000
+times smaller relative to the stream, so the same growth would drop
+them many epochs later.
+
+**Instrument.** A fork of `azu_full_isla_seed42`: its epoch-39
+checkpoint (model, optimizer and scheduler state) copied into a new
+run, `azu_forkfp32_full_isla_seed42`, resumed with `precision=float32`
+and nothing else changed, through epoch 70. The original run, which
+resumed from its own checkpoints at every link, is the control: its
+training loss passed twice its running minimum (0.0248 at epoch 40) at
+epoch 52.
+
+**Prediction.** (F1) In float32 the training loss does not pass twice
+the running minimum before epoch 60, and the validation loss at epochs
+50 and 60 stays below 0.063 (twice the control's minimum). If the fork
+loses its minimum at epochs 44 to 56, as in bfloat16, the harm does not
+come through the rounding, and the growth itself is the cause. Either
+way A2 remains the remedy, because it removes the growth.
