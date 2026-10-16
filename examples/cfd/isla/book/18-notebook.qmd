@@ -37023,3 +37023,45 @@ registered text is unchanged, and the expectation is still that the
 event recurs. V1 is read on the reference-rate velocity-and-pressure
 lanes `azu_full_islavp_seed{42,43}`. Both tests now run first among
 this program's jobs on LHR.
+
+## 2026-10-15 — AEROZOO H-LOGIT pre-registration: does an unnormalized query-key logit grow under Muon until the event? {#sec-nb-aerozoo-hlogit-prereg}
+
+**Why.** ISLA trains its weight matrices with Muon (momentum 0.95,
+Nesterov, five Newton-Schulz steps, update RMS matched to AdamW's) and
+its other parameters with AdamW (betas 0.9 and 0.999, eps 1e-8). Both
+run at 3.75e-4 with weight decay 1e-4 and no gradient clipping. A Muon
+update has a fixed size per step, so a matrix's norm grows until weight
+decay balances it, and that balance point rises with the rate. A
+softmax whose logit is the product of two learned maps can then
+sharpen without bound. ISLA has three such sites: the seed attention
+that builds each block's and the head frame's prototypes
+(`seeds · k_proj(x) / sqrt(hidden)`, in `_RoutingLogits.prototypes`),
+the global read's query-key term, and ISLA-DTT's mean kernel read. The
+routing logits are bounded cosines, and H-BOUND refuted their unbounded
+bias as the cause.
+
+**Hypothesis.** H-LOGIT: the reference-rate event follows the growth of
+the logits at one of these sites.
+
+**Instrument.** A checkpoint probe on `azu_full_isla_seed42` (epochs 1
+to 85) and on the half-rate twins `az_full_islahr_seed42` and
+`azu_full_islahr_seed42`, with four fixed validation cases and fixed
+draws. Per site it records the 99.9th percentile and the maximum of the
+logit magnitude, the softmax's effective support (the exponential of
+its entropy), the Frobenius and spectral norms of the matrices that
+form the logit, and the learned gains.
+
+**Predictions.** (L1) At one site, the 99.9th percentile of the logit
+magnitude at the reference rate grows at least twofold between epochs
+9 and 43. The effective support of that site's softmax falls by at
+least half between epochs 39 and 55, no later than the routing's drop
+in effective slices. (L2) At the half rate, the same statistic is at
+most 0.7 times the reference rate's at epoch 43. It stays below the
+reference rate's epoch-43 value through the latest half-rate checkpoint.
+H-LOGIT is refuted if no site's logits grow twofold before epoch 43, or
+if a half-rate twin passes the reference rate's epoch-43 value without
+an event. The expectation written here is that L1 holds at the head
+frame's seed attention, because the head frame's gain also grew in the
+earlier probe. If H-LOGIT holds, the candidate remedy is to normalize
+that site's queries and keys, as the routing already does. It would be
+tested on two datasets before it is adopted.
