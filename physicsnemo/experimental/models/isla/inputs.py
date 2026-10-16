@@ -70,14 +70,11 @@ def _declare(
     return out
 
 
-def _leaf(data: TensorDict, name: str) -> torch.Tensor | None:
-    """The leaf tensor at a dotted name of a TensorDict, ``None`` when absent
-    (including when a prefix of the name is a tensor rather than a group)."""
-    try:
-        value = data.get(FieldSchema.key(name), None)
-    except ValueError:
-        return None
-    return value if isinstance(value, torch.Tensor) else None
+def _missing_fields(specs, data: TensorDict) -> list[str]:
+    """The declared dotted names that are not tensor leaves of ``data``, sorted
+    (a name whose prefix is a tensor rather than a group is missing too)."""
+    leaves = set(data.keys(include_nested=True, leaves_only=True))
+    return sorted(name for name in specs if FieldSchema.key(name) not in leaves)
 
 
 ### ---------------------------------------------------------------------------
@@ -158,65 +155,34 @@ class _InputSet:
     def __bool__(self) -> bool:
         return bool(self.specs)
 
-    def validate(self, kind: str, fields, b: int, n: int) -> None:
-        """Presence and element-count checks for the forward-time mapping."""
-        if not self.specs:
-            if fields:
-                raise ValueError(
-                    f"this model declares no {kind}; got fields {sorted(fields)!r}"
-                )
-            return
-        if fields is None:
-            raise ValueError(
-                f"{kind} declared {sorted(self.specs)!r}; pass {kind}={{name: tensor}}"
-            )
-        if not isinstance(fields, Mapping):
-            raise TypeError(f"{kind} must be a mapping of field name to tensor")
-        missing = [k for k in self.specs if k not in fields]
-        extra = [k for k in fields if k not in self.specs]
-        if missing or extra:
-            raise ValueError(
-                f"{kind} fields do not match the declared set: missing {missing!r}, "
-                f"unexpected {extra!r}"
-            )
-        for name, spec in self.specs.items():
-            t = fields[name]
-            size = spec.numel(self.dim)
-            if not isinstance(t, torch.Tensor) or t.numel() != b * n * size:
-                raise ValueError(
-                    f"{kind}[{name!r}]: expected a tensor of shape "
-                    f"{(b, n, *spec.shape(self.dim))} ({b * n * size} elements), got "
-                    f"{tuple(t.shape) if isinstance(t, torch.Tensor) else type(t).__name__}"
-                )
-
-    def features(self, fields, b: int, n: int, frame, *, gauge=None, eps=0.0):
+    def features(self, fields: TensorDict, frame, *, gauge=None, eps=0.0):
         """Invariants of one token class.
 
-        ``frame`` is ``(B, N, F, d)``: the token's true frame vectors
-        ``[n_hat, g_1..g_K]`` in ``d`` spatial dimensions. Returns ``(seed (B, N,
-        n_features), vecs (B, N, n_block_vecs, d), tens (B, N, n_block_tens, d, d))``; ``gauge``
-        (``(B, 1, 1)``) divides the rank-0 fields when ``scaled_scalars``.
+        ``fields`` holds the declared fields over the ``(B, N)`` tokens; ``frame``
+        is ``(B, N, F, d)``: the token's true frame vectors ``[n_hat, g_1..g_K]``
+        in ``d`` spatial dimensions. Returns ``(seed (B, N, n_features), vecs (B,
+        N, n_block_vecs, d), tens (B, N, n_block_tens, d, d))``; ``gauge`` (``(B,
+        1, 1)``) divides the rank-0 fields when ``scaled_scalars``.
         """
         ### The invariants and the derived vectors are geometry: computed in the
         ### input precision even under autocast (the embedding that consumes the
         ### seed is autocast on its own).
         with torch.autocast(frame.device.type, enabled=False):
-            return self._features(fields, b, n, frame, gauge, eps)
+            return self._features(fields.to(frame.dtype), frame, gauge, eps)
 
-    def _features(self, fields, b, n, frame, gauge, eps):
-        dtype = frame.dtype
-        d = frame.shape[-1]
+    def _features(self, fields, frame, gauge, eps):
+        b, n, _, d = frame.shape
         seed, vecs, tens = [], [], []
         for name, spec in self.specs.items():
             if spec.rank == 0:
-                s = fields[name].reshape(b, n, 1).to(dtype)
+                s = fields.get(FieldSchema.key(name))[..., None]
                 if self.scaled_scalars:
                     s = s / gauge
                     s = torch.cat([s, torch.sign(s) * torch.log(s.abs() + eps)], -1)
                 seed.append(s)
         if self.rank1:
             v = torch.stack(
-                [fields[name].reshape(b, n, d).to(dtype) for name in self.rank1], dim=2
+                [fields.get(FieldSchema.key(name)) for name in self.rank1], dim=2
             )  # (B, N, P, d)
             seed.append(_contract_vectors(v, frame).flatten(2))  # (B, N, P*F)
             seed.append(v.norm(dim=-1))  # (B, N, P)
@@ -226,7 +192,7 @@ class _InputSet:
                 seed.append((v[:, :, iu] * v[:, :, ju]).sum(-1))  # (B, N, P(P-1)/2)
             vecs.append(v)
         for name, symmetric in self.rank2:
-            t = fields[name].reshape(b, n, d, d).to(dtype)
+            t = fields.get(FieldSchema.key(name))
             ### a^T T b over the frame pairs, as (T b) . a with T b a derived vector.
             tb = torch.einsum("bnij,bnfj->bnfi", t, frame)  # (B, N, F, d): T a
             ia, ib = _pair_indices(self.n_frame, symmetric)
