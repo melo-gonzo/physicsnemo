@@ -298,6 +298,7 @@ class _SliceBlock(nn.Module):
         eps: float,
         vecs=None,
         tens=None,
+        geo_kernel: GeoKernel | None = None,
     ) -> Float[torch.Tensor, "batch tokens hidden"]:
         ### Soft assignment of points to slices; measure weights enter as a
         ### log-space bias so slice states are quadrature-weighted means.
@@ -314,7 +315,9 @@ class _SliceBlock(nn.Module):
         ### slices), but the saved activation is (B, N, geo) instead of
         ### (B, N, S, hidden/2) -- ~0.5 GB per layer at 10k tokens, 256 slices,
         ### hidden 192.
-        if self.geo_kernel == "fused":
+        ### geo_kernel overrides self.geo_kernel for this call (the model's
+        ### resolution under torch.compile, which writes no module state).
+        if (self.geo_kernel if geo_kernel is None else geo_kernel) == "fused":
             ### The fused kernel takes the global directions and the token's rank-1
             ### vectors as one per-point vector set (at most four in all, no rank-2
             ### inputs; enforced at construction / resolution).

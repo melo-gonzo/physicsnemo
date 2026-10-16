@@ -196,6 +196,27 @@ call reads as the recipe's ``forward_kwargs`` mapping does and models can be
 swapped without positional bookkeeping. ``forward(boundary_meshes=...,
 prediction_points=..., global_data=...)`` returns a point-cloud ``Mesh``; see
 :meth:`ISLA.forward`.
+
+**Data layout.** Inside ``forward`` the tokens stay TensorDicts: each boundary
+mesh's cells (centroid, normal, measure and the declared ``cell_data`` fields)
+and the prediction points are TensorDicts concatenated into one token state over
+``(batch, token)``, the field inputs enter the invariants and the head's
+coefficients leave as the output fields through cached, schema-ordered
+:class:`~tensordict.PackLayout` objects, and the output ``Mesh`` is built from them.
+Without a kernel read the whole model, ``Mesh`` inputs and output included,
+compiles with ``torch.compile(fullgraph=True, dynamic=True)`` into one graph for
+every boundary, query and support count: surface and interior tasks, support
+points, passive points, boundary inputs up to rank 2 (``test_isla_compile.py``).
+The kernel reads do not: the global read (``kernel_read_radius=None``) compiles
+fullgraph but specializes on the query count (its tiles are a Python loop over
+the queries), so each new count recompiles; the radius read
+(``boundary_pairs``) and the tree read (``kernel_read_theta``) size their pairs
+from the data and break a fullgraph trace. The token axis itself stays dense
+where the arithmetic needs it: every softmax over points spans all tokens at once
+(passive tokens excluded by ``log_w = -inf``), the slice anchors are einsums over
+that axis, the fused geometry kernel reads its ``(B, N, .)`` strides, and the
+kernel and tree reads index the flattened boundary tokens; the slice blocks take
+plain tensors.
 """
 
 import logging
@@ -228,7 +249,13 @@ from physicsnemo.experimental.models.isla.heads import (
     _polar_complement,
     _pseudovectors,
 )
-from physicsnemo.experimental.models.isla.inputs import _declare, _InputSet, _leaf
+from physicsnemo.experimental.models.isla.inputs import (
+    _declare,
+    _InputSet,
+    _missing_fields,
+    _pack,
+    _schema_layout,
+)
 from physicsnemo.experimental.models.isla.kernel_read import (
     _BoundaryKernelRead,
     _GlobalKernelRead,
@@ -250,6 +277,39 @@ from physicsnemo.mesh.fields import FieldSchema, FieldSchemaLike
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 
 logger = logging.getLogger(__name__)
+
+
+def _hint_token_axis(n, widths) -> None:
+    """Tell torch.compile that ``k * n`` is a multiple of the token count ``n``.
+
+    With dynamic shapes a token axis made of several inputs (boundary meshes,
+    boundary and query tokens) has a length that is a sum of sizes, ``a + b``,
+    and Inductor cannot prove that ``k * a + k * b`` divides by ``a + b``: its
+    code generation fails with CantSplit where it tiles a flattened ``(k n,)``
+    loop of a ``(B, n, k)`` tensor as ``(n, k)``. :func:`torch._check` records
+    each (always true) fact as a guard, which those static checks then read
+    (torch 2.12). Skipped in eager mode, where every fact is trivially true;
+    the test is ``is_compiling()`` since dynamo traces a SymInt as an int."""
+    if torch.compiler.is_compiling():
+        for k in widths:
+            torch._check(k * n % n == 0)
+
+
+def _log_count(n: int, like: torch.Tensor) -> float | torch.Tensor:
+    """``log(n)`` of a token count; under torch.compile a 0-d tensor of ``like``'s
+    dtype, since ``math.log`` of a shape would specialize the dynamic shapes on it."""
+    if not torch.compiler.is_compiling():
+        return math.log(n)
+    return torch.full((), n, dtype=torch.float64, device=like.device).log().to(like.dtype)
+
+
+def _tail(tokens: TensorDict, start) -> TensorDict:
+    """The tokens of a ``(B, N)`` TensorDict from ``start`` on. Each leaf is sliced
+    on its own: indexing the TensorDict (``tokens[:, start:]``) sizes the result
+    through ``slice.indices``, which under torch.compile fixes a symbolic token
+    count to its value (a recompile for every count)."""
+    b, n = tokens.batch_size
+    return tokens.apply(lambda t: t[:, start:], batch_size=[b, n - start])
 
 
 class ISLA(Module):
@@ -571,6 +631,9 @@ class ISLA(Module):
         ]
         self.n_global_vectors = K = len(self.global_vector_names)
         self.n_global_scalars = len(self.global_scalar_names)
+        ### Each kind's columns in schema order (cached layouts, see _global_fields).
+        self._global_vector_layout = _schema_layout({k: (self.dim,) for k in self.global_vector_names})
+        self._global_scalar_layout = _schema_layout({k: () for k in self.global_scalar_names})
         ### geo_kernel selects the implementation of the per-layer geometry region,
         ### not its arithmetic. "eager" is the PyTorch region (with geo_checkpoint
         ### deciding whether its (B,N,S,.) intermediates are stored or rebuilt in
@@ -682,6 +745,16 @@ class ISLA(Module):
         self.n_head_coeffs = sum(
             layout.n_coeffs for layout in self.output_layouts.values()
         )
+        ### The head's columns field by field in schema order, unpacked into the
+        ### output fields' coefficients (a rank-0 field is its one coefficient).
+        self._coeff_layout = _schema_layout(
+            {n: (lay.n_coeffs,) if lay.spec.rank else () for n, lay in self.output_layouts.items()}
+        )
+        ### Each layout's coefficient index as a (non-persistent) buffer, so it
+        ### follows the model's device instead of being copied there every pass.
+        for i, layout in enumerate(self.output_layouts.values()):
+            if layout.index is not None:
+                self.register_buffer(f"_output_index_{i}", layout.index, persistent=False)
         self.head = nn.Linear(hidden, self.n_head_coeffs)
         ### Prediction-point tokens (interior=True): the prediction points join the
         ### encoder as INTERACTING tokens, carrying the same {n_q, g_k} invariant
@@ -761,8 +834,20 @@ class ISLA(Module):
                     _BoundaryKernelRead(hidden, kernel_read, self.kernel_read_radius, self.dim)
                     for _ in range(m)
                 )
-        #: Pairs of the last forward pass's kernel read (diagnostic; 0 without one).
+        #: Pairs of the last forward pass's kernel read (diagnostic; 0 without one;
+        #: not updated under torch.compile, where a module write would recompile).
         self.kernel_read_pairs = 0
+        ### The trailing widths k of the per-token tensors: every small width (the
+        ### input features, frames and vector stacks) and every layer's (see
+        ### _hint_token_axis).
+        self._token_widths = tuple(
+            sorted(
+                set(range(1, max(32, self.embed[0].in_features) + 1))
+                | {n_slices}
+                | {f for m in self.modules() if isinstance(m, nn.Linear) for f in (m.in_features, m.out_features)}
+                | {m.normalized_shape[-1] for m in self.modules() if isinstance(m, nn.LayerNorm)}
+            )
+        )
 
     @staticmethod
     def _dots(x, g_hat):
@@ -799,12 +884,13 @@ class ISLA(Module):
             inv = torch.cat([inv, b_feat.to(inv.dtype)], dim=-1)
         return self._with_global_scalars(inv, g_scalars, n_tokens)
 
-    def _block_extras(self, b_vecs, b_tens, q_vecs, q_tens, b: int, n: int, like):
-        """The union block-level stacks of one token class: [boundary-derived vectors,
-        query-derived vectors] (B, N, P', d) and [boundary tensors, query tensors]
-        (B, N, Q, d, d); zeros where the class has no such field."""
+    def _block_extras(self, b_vecs, b_tens, q_vecs, q_tens, b: int, n: int, like) -> dict:
+        """The union block-level stacks of one token class, as its token fields:
+        ``vecs`` [boundary-derived vectors, query-derived vectors] (B, N, P', d) and
+        ``tens`` [boundary tensors, query tensors] (B, N, Q, d, d); zeros where the
+        class has no such field, and neither when no token carries one."""
         if not (self.n_block_vecs or self.n_block_tens):
-            return None, None
+            return {}
         d = self.dim
         if b_vecs is None:
             b_vecs = like.new_zeros(b, n, self.bin.n_block_vecs, d)
@@ -812,7 +898,7 @@ class ISLA(Module):
         if q_vecs is None:
             q_vecs = like.new_zeros(b, n, self.qin.n_block_vecs, d)
             q_tens = like.new_zeros(b, n, self.qin.n_block_tens, d, d)
-        return torch.cat([b_vecs, q_vecs], 2), torch.cat([b_tens, q_tens], 2)
+        return {"vecs": torch.cat([b_vecs, q_vecs], 2), "tens": torch.cat([b_tens, q_tens], 2)}
 
     def resolve_geo_kernel(self, points: torch.Tensor) -> str:
         """The geometry-kernel implementation this forward pass will use.
@@ -845,6 +931,10 @@ class ISLA(Module):
             and not self.n_block_tens
         )
         chosen = "fused" if ok else "eager"
+        if torch.compiler.is_compiling():
+            ### Inside a traced region: no cache write and no logging (a logger
+            ### call breaks fullgraph=True, a module write adds a recompile guard).
+            return chosen
         self._geo_kernel_cache = (key, chosen)
         logger.info(
             "ISLA geo_kernel=auto resolved to %r on %s (cuda=%s, triton=%s, global_vectors=%d, slices=%d, token_vector_inputs=%s)",
@@ -872,26 +962,27 @@ class ISLA(Module):
             self._block_forwards = [torch.compile(block.forward) for block in self.blocks]
         return self._block_forwards
 
-    def _apply_geo_kernel(self, points: torch.Tensor) -> None:
-        """Write the resolved kernel name into the blocks, once per resolution."""
+    def _apply_geo_kernel(self, points: torch.Tensor) -> str | None:
+        """Write the resolved kernel name into the blocks, once per resolution.
+        Under torch.compile the blocks are left untouched: the kernel is returned
+        for the block calls instead (``None`` when the blocks already carry it)."""
         kernel = self.resolve_geo_kernel(points)
         if getattr(self, "_geo_kernel_applied", None) == kernel:
-            return
+            return None
+        if torch.compiler.is_compiling():
+            return kernel
         for block in self.blocks:
             block.geo_kernel = kernel
         self._geo_kernel_applied = kernel
+        return None
 
-    def _validate_inputs(
-        self,
-        points,
-        normals,
-        measure_weights,
-        boundary_inputs,
-        query_points,
-        query_inputs,
-    ) -> None:
+    def _validate_inputs(self, points, normals, measure_weights, query_points) -> None:
         """Shape and presence checks for :meth:`_forward_tensors`."""
         d = self.dim
+        if self.bin or self.qin:
+            raise ValueError(
+                "the batched routine takes no per-token inputs; pass the meshes to forward"
+            )
         if points.ndim != 3 or points.shape[-1] != d:
             raise ValueError(
                 f"Expected points of shape (B, N, {d}) (this model has dim={d}) but got tensor of shape {tuple(points.shape)}"
@@ -905,12 +996,9 @@ class ISLA(Module):
             raise ValueError(
                 f"Expected measure_weights of shape {(b, n)} but got tensor of shape {tuple(measure_weights.shape)}"
             )
-        self.bin.validate("boundary_inputs", boundary_inputs, b, n)
         if query_points is None:
             if self.interior:
                 raise ValueError("an interior model (interior=True) needs query_points")
-            if query_inputs:
-                raise ValueError("query_inputs given without query_points")
             return
         if not self.interior:
             raise ValueError(
@@ -920,53 +1008,40 @@ class ISLA(Module):
             raise ValueError(
                 f"Expected query_points of shape ({b}, Q, {d}) but got tensor of shape {tuple(query_points.shape)}"
             )
-        self.qin.validate("query_inputs", query_inputs, b, query_points.shape[1])
 
-    def _global_fields(self, global_inputs, b: int, points):
-        """Assemble the unit global directions (B, K, d) and the global scalars
-        (B, S) from the named per-case fields (flat dotted names). A single case's
-        values (one row) are shared across the batch."""
-        fields = global_inputs or {}
-        missing = [k for k in self.global_schema if k not in fields]
-        extra = [k for k in fields if k not in self.global_schema]
-        if missing or extra:
-            raise ValueError(
-                f"global_inputs fields do not match the declared set: missing {missing!r}, "
-                f"unexpected {extra!r}"
-            )
+    def _global_rows(self, data: TensorDict, b: int, like) -> TensorDict:
+        """The declared global fields of ``data`` over a batch of ``b`` cases, in
+        ``like``'s dtype at their declared shapes (a single case's values, one row,
+        shared across the batch)."""
+        rows = TensorDict(batch_size=[b])
+        for name, spec in self.global_schema.items():
+            shape, width = spec.shape(self.dim), spec.numel(self.dim)
+            t = data.get(FieldSchema.key(name))
+            if not torch.compiler.is_compiling():
+                if not isinstance(t, torch.Tensor) or t.numel() % width:
+                    raise ValueError(
+                        f"global_inputs[{name!r}]: expected {width} values per case, got "
+                        f"{tuple(t.shape) if isinstance(t, torch.Tensor) else type(t).__name__}"
+                    )
+                if t.numel() // width not in (1, b):
+                    raise ValueError(
+                        f"global_inputs[{name!r}] gives {t.numel() // width} rows for a batch of {b}"
+                    )
+            rows.set(FieldSchema.key(name), t.reshape(-1, *shape).to(like.dtype).expand(b, *shape))
+        return rows
 
-        def _rows(name, t, width):
-            if not isinstance(t, torch.Tensor) or t.numel() % width:
-                raise ValueError(
-                    f"global_inputs[{name!r}]: expected {width} values per case, got "
-                    f"{tuple(t.shape) if isinstance(t, torch.Tensor) else type(t).__name__}"
-                )
-            t = t.reshape(-1, width).to(points.dtype)
-            if t.shape[0] == 1 and b != 1:
-                t = t.expand(b, width)
-            elif t.shape[0] != b:
-                raise ValueError(
-                    f"global_inputs[{name!r}] gives {t.shape[0]} rows for a batch of {b}"
-                )
-            return t
-
-        K = self.n_global_vectors
-
-        if K:
-            gv = torch.stack(
-                [_rows(k, fields[k], self.dim) for k in self.global_vector_names], 1
-            )
+    def _global_fields(self, global_rows: TensorDict, like):
+        """The unit global directions (B, K, d) and the global scalars (B, S)
+        (``None`` when none are declared) from the global fields over the batch
+        (:meth:`_global_rows`), each kind's columns in schema order."""
+        if self.n_global_vectors:
+            gv = _pack(global_rows, self._global_vector_layout).unflatten(-1, (-1, self.dim))
             ### Each direction is normalized; the magnitude, if it means anything,
             ### is a rank-0 global input.
             g_unit = gv / gv.norm(dim=-1, keepdim=True).clamp_min(self.eps)  # (B, K, d)
         else:
-            g_unit = points.new_zeros(b, 0, self.dim)
-        if self.n_global_scalars:
-            g_scalars = torch.cat(
-                [_rows(k, fields[k], 1) for k in self.global_scalar_names], dim=-1
-            )
-        else:
-            g_scalars = None
+            g_unit = like.new_zeros(global_rows.batch_size[0], 0, self.dim)
+        g_scalars = _pack(global_rows, self._global_scalar_layout) if self.n_global_scalars else None
         return g_unit, g_scalars
 
     ### -----------------------------------------------------------------------
@@ -976,11 +1051,11 @@ class ISLA(Module):
     def _check_fields(self, specs, data: TensorDict, n: int, label: str) -> None:
         """Every declared field is a leaf of ``data`` (by dotted name) with the
         shape its rank prescribes over ``n`` entities; extra leaves are ignored."""
-        missing = sorted(name for name in specs if _leaf(data, name) is None)
+        missing = _missing_fields(specs, data)
         if missing:
             raise ValueError(f"{label} is missing the declared fields {missing!r}")
         for name, spec in specs.items():
-            t = _leaf(data, name)
+            t = data.get(FieldSchema.key(name))
             expected = (n, *spec.shape(self.dim))
             if tuple(t.shape) != expected:
                 raise ValueError(
@@ -1081,7 +1156,7 @@ class ISLA(Module):
                 f"global_data must be a TensorDict or a mapping of name to tensor, got "
                 f"{type(global_data).__name__}"
             )
-        missing = sorted(name for name in self.global_schema if _leaf(td, name) is None)
+        missing = _missing_fields(self.global_schema, td)
         if missing:
             raise ValueError(f"global_data is missing the declared fields {missing!r}")
         return td.select(*(FieldSchema.key(name) for name in self.global_schema))
@@ -1154,56 +1229,61 @@ class ISLA(Module):
         ### here with the offending mesh, not inside the network.
         if not torch.compiler.is_compiling():
             self._validate_meshes(boundary_meshes, prediction_points, support_points)
+        ### The boundary tokens: each mesh's cells, concatenated in name order.
         meshes = [boundary_meshes[name] for name in names]
-        points = torch.cat([mesh.cell_centroids for mesh in meshes])
-        normals = torch.cat([mesh.cell_normals for mesh in meshes])
-        measures = torch.cat([cell_measures(mesh) for mesh in meshes])
-        boundary_inputs = {
-            name: torch.cat([_leaf(mesh.cell_data, name) for mesh in meshes])[None]
-            for name in self.boundary_schema
-        } or None
-        global_td = self._select_global_data(global_data, points.device)
-        global_inputs = {name: _leaf(global_td, name) for name in self.global_schema}
-        def _point_set(pts):
-            if isinstance(pts, Mesh):
-                return pts.points, {name: _leaf(pts.point_data, name) for name in self.query_schema}
-            return pts, {}
-
-        n_support = 0
+        boundary = torch.cat([
+            self._token_inputs(
+                m.cell_centroids, m.cell_data, self.boundary_schema,
+                normals=m.cell_normals, measure=cell_measures(m),
+            )
+            for m in meshes
+        ])
+        global_td = self._select_global_data(global_data, boundary["points"].device)
+        n_support, query = 0, None
         if prediction_points is None:
-            out_points, query_points, query_inputs = points, None, None
+            out_points = boundary["points"]
         else:
-            out_points, q_in = _point_set(prediction_points)
-            q_pts = out_points
+            query = self._point_set(prediction_points)
+            out_points = query["points"]
             if support_points is not None:
                 ### The support's tokens lead the interior tokens; the head reads the rest.
-                s_pts, s_in = _point_set(support_points)
-                n_support = s_pts.shape[0]
-                q_pts = torch.cat([s_pts, q_pts])
-                q_in = {name: torch.cat([s_in[name], q_in[name]]) for name in q_in}
-            query_points = q_pts[None]
-            query_inputs = {name: t[None] for name, t in q_in.items()} or None
+                support = self._point_set(support_points)
+                n_support = support.shape[0]
+                query = torch.cat([support, query])
         ### One case: a batch axis of one for the batched machinery below.
-        fields = self._forward_tensors(
-            points=points[None],
-            normals=normals[None],
-            measure_weights=measures[None],
-            global_inputs=global_inputs,
-            boundary_inputs=boundary_inputs,
-            query_points=query_points,
-            query_inputs=query_inputs,
-            n_support=n_support,
+        fields = self._forward_tokens(
+            boundary[None],
+            None if query is None else query[None],
+            self._global_rows(global_td, 1, boundary["points"]),
+            n_support,
         )
-        point_data = TensorDict({}, batch_size=[out_points.shape[0]], device=out_points.device)
-        for name, value in fields.items():
-            point_data.set(FieldSchema.key(name), value[0])
-        return Mesh(points=out_points, point_data=point_data, global_data=global_td)
+        return Mesh(
+            points=out_points,
+            point_data=fields[0].to(out_points.device),
+            global_data=global_td,
+        )
 
-    def _kernel_read_pairs(self, r, n_hat, vecs, log_w, q_r, q_nhat, q_vecs, g_unit):
+    @staticmethod
+    def _token_inputs(points, data: TensorDict, schema, **geometry) -> TensorDict:
+        """One mesh's tokens as network inputs: their ``points`` and ``geometry``
+        and, under ``fields``, the ``schema`` fields of their ``data`` (the cell
+        or point data)."""
+        fields = data.select(*(FieldSchema.key(name) for name in schema))
+        return TensorDict(points=points, fields=fields, **geometry, batch_size=points.shape[:1])
+
+    def _point_set(self, pts) -> TensorDict:
+        """An interior point set's tokens: a point-cloud Mesh or a bare tensor."""
+        if isinstance(pts, Mesh):
+            return self._token_inputs(pts.points, pts.point_data, self.query_schema)
+        return self._token_inputs(pts, TensorDict(batch_size=pts.shape[:1]), {})
+
+    def _kernel_read_pairs(self, bnd: TensorDict, qry: TensorDict, g_unit):
         """The kernel read's pairs: every (point, boundary cell) closer than
         ``kernel_read_radius`` (frame units), their invariants and log weights
-        ``log(mu_j / sum mu) + log b``; the token tensors are the boundary's
-        (``r``, ``n_hat``, ``vecs``, ``log_w``) and the points' (``q_*``)."""
+        ``log(mu_j / sum mu) + log b``; ``bnd`` and ``qry`` are the boundary's and
+        the points' tokens."""
+        r, n_hat, vecs, log_w = bnd["r"], bnd["n_hat"], bnd.get("vecs", None), bnd["log_w"]
+        q_r, q_nhat, q_vecs = qry["r"], qry["n_hat"], qry.get("vecs", None)
         b, n, d = r.shape
         nq = q_r.shape[1]
         nb_vecs, nq_vecs = self.bin.n_block_vecs, self.qin.n_block_vecs
@@ -1227,15 +1307,19 @@ class ISLA(Module):
         ### The cell's share of the boundary measure: invariant to a rescale of the
         ### measures and to splitting a cell into copies that share its measure.
         log_frac = (log_w - torch.logsumexp(log_w, dim=1, keepdim=True)).reshape(b * n)
-        self.kernel_read_pairs = int(qi.shape[0])
+        if not torch.compiler.is_compiling():
+            self.kernel_read_pairs = int(qi.shape[0])
         plan = PairPlan.build(qi, bj, b * nq, b * n)
         return plan, self.kernel_basis(inv), log_frac[bj].to(log_b.dtype) + log_b
 
-    def _tree_read_pairs(self, r, n_hat, vecs, log_w, q_r, q_nhat, q_wall, q_vecs, g_unit):
+    def _tree_read_pairs(self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit):
         """The tree-accelerated global read's pairs (:mod:`tree_read`): each point's
         near cells and admitted clusters at ``kernel_read_theta``, their kernel basis
-        and log measures; ``q_wall`` ``(B, Q)`` is the points' built-in wall distance
-        (frame units)."""
+        and log measures; ``bnd`` and ``qry`` are the boundary's and the points'
+        tokens and ``q_wall`` ``(B, Q)`` the points' built-in wall distance (frame
+        units)."""
+        r, n_hat, vecs, log_w = bnd["r"], bnd["n_hat"], bnd.get("vecs", None), bnd["log_w"]
+        q_r, q_nhat, q_vecs = qry["r"], qry["n_hat"], qry.get("vecs", None)
         nb_vecs = self.bin.n_block_vecs
         log_frac = log_w[..., 0] - torch.logsumexp(log_w[..., 0], dim=1, keepdim=True)
         pairs = tree_read_pairs(
@@ -1252,13 +1336,17 @@ class ISLA(Module):
             theta=self.kernel_read_theta,
             eps=self.eps,
         )
-        self.kernel_read_pairs = pairs.n_pairs
+        if not torch.compiler.is_compiling():
+            self.kernel_read_pairs = pairs.n_pairs
         return pairs
 
-    def _global_read_pairs(self, r, n_hat, vecs, log_w, q_r, q_nhat, q_wall, q_vecs, g_unit):
+    def _global_read_pairs(self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit):
         """The global read's inputs: the kernel basis of every (point, cell) pair of
         each case ``(BASIS, Q * N)`` and the cells' log measure fractions ``(B, N)``;
-        ``q_wall`` ``(B, Q)`` is the points' built-in wall distance (frame units)."""
+        ``bnd`` and ``qry`` are the boundary's and the points' tokens and ``q_wall``
+        ``(B, Q)`` the points' built-in wall distance (frame units)."""
+        r, n_hat, vecs, log_w = bnd["r"], bnd["n_hat"], bnd.get("vecs", None), bnd["log_w"]
+        q_r, q_nhat, q_vecs = qry["r"], qry["n_hat"], qry.get("vecs", None)
         b, n, d = r.shape
         nq = q_r.shape[1]
         nb_vecs = self.bin.n_block_vecs
@@ -1281,7 +1369,8 @@ class ISLA(Module):
         ]
         ### The cell's share of the boundary measure (the quadrature weight).
         log_frac = (log_w - torch.logsumexp(log_w, dim=1, keepdim=True))[..., 0]
-        self.kernel_read_pairs = b * nq * n
+        if not torch.compiler.is_compiling():
+            self.kernel_read_pairs = b * nq * n
         return basis, log_frac
 
     def _forward_tensors(
@@ -1291,37 +1380,69 @@ class ISLA(Module):
         normals: Float[torch.Tensor, "batch tokens dim"],
         measure_weights: Float[torch.Tensor, "batch tokens"] | None = None,
         global_inputs: Mapping[str, torch.Tensor] | None = None,
-        boundary_inputs: Mapping[str, torch.Tensor] | None = None,
         query_points: Float[torch.Tensor, "batch queries dim"] | None = None,
-        query_inputs: Mapping[str, torch.Tensor] | None = None,
-        n_support: int = 0,
-    ) -> dict[str, torch.Tensor]:
-        """The batched network on token tensors; :meth:`forward` is its only
-        caller and the release tests pin it.
+    ) -> TensorDict:
+        """The batched network on bare token tensors, for a model without
+        per-token inputs; the release tests pin it, and it runs the same
+        :meth:`_forward_tokens` as :meth:`forward`.
 
         ``points``, ``normals`` ``(B, N, d)``; ``measure_weights`` ``(B, N)``
-        (``None``: every token the same weight); ``global_inputs``,
-        ``boundary_inputs`` and ``query_inputs`` flat ``{dotted name: tensor}``
-        mappings over the declared fields (per-case values ``(B,)`` / ``(B, d)``,
-        one row shared across the batch; per-token values ``(B, N, ...)``);
-        ``query_points`` ``(B, Q, d)`` for an interior model, of which the first
-        ``n_support`` are a support that writes while the rest read. Returns
-        ``{dotted name: (B, N_out, ...)}`` over the tokens the head read.
+        (``None``: every token the same weight); ``global_inputs`` a flat
+        ``{dotted name: tensor}`` mapping over the declared global fields
+        (per-case values ``(B,)`` / ``(B, d)``, or one row shared across the
+        batch); ``query_points`` ``(B, Q, d)`` for an interior model. Returns the
+        outputs over the ``(B, N_out)`` tokens the head read.
         """
-        b, n, _ = points.shape
         if not torch.compiler.is_compiling():
-            self._validate_inputs(
-                points,
-                normals,
-                measure_weights,
-                boundary_inputs,
-                query_points,
-                query_inputs,
+            self._validate_inputs(points, normals, measure_weights, query_points)
+        fields = global_inputs or {}
+        missing = [k for k in self.global_schema if k not in fields]
+        extra = [k for k in fields if k not in self.global_schema]
+        if missing or extra:
+            raise ValueError(
+                f"global_inputs fields do not match the declared set: missing {missing!r}, "
+                f"unexpected {extra!r}"
             )
-        self._apply_geo_kernel(points)
-        K = self.n_global_vectors
-        g_unit, g_scalars = self._global_fields(global_inputs, b, points)
-        g_hat = g_unit[:, None].expand(b, n, K, self.dim)
+        b, n, _ = points.shape
+        boundary = TensorDict(points=points, normals=normals, batch_size=[b, n])
+        if measure_weights is not None:
+            boundary["measure"] = measure_weights.reshape(b, n)
+        query = None
+        if query_points is not None:
+            query = TensorDict(points=query_points, batch_size=query_points.shape[:2])
+        data = TensorDict({FieldSchema.key(k): v for k, v in fields.items()}, batch_size=[])
+        return self._forward_tokens(boundary, query, self._global_rows(data, b, points))
+
+    def _forward_tokens(
+        self,
+        boundary: TensorDict,
+        query: TensorDict | None,
+        global_rows: TensorDict,
+        n_support: int = 0,
+    ) -> TensorDict:
+        """The batched network on the token inputs.
+
+        ``boundary`` holds the boundary tokens over ``(B, N)``: ``points`` and
+        ``normals`` ``(B, N, d)``, ``measure`` ``(B, N)`` (absent: every token the
+        same weight) and the ``boundary_schema`` fields under ``fields``;
+        ``query`` (interior) the prediction-point tokens over ``(B, Q)``:
+        ``points`` and the ``query_schema`` fields under ``fields``, the first
+        ``n_support`` of them a support that writes while the rest read;
+        ``global_rows`` the global fields over ``(B,)`` (:meth:`_global_rows`).
+        Returns the declared outputs over the ``(B, N_out)`` tokens the head reads.
+
+        The token state is one TensorDict over ``(B, N)``, the boundary tokens
+        then the prediction-point tokens, with fields ``h``, ``r``, ``n_hat``,
+        ``g_hat``, ``log_w`` and the block-level ``vecs`` and ``tens``; the slice
+        blocks take its tensors (module docstring, *Data layout*).
+        """
+        points = boundary["points"]
+        b, n, _ = points.shape
+        _hint_token_axis(n, self._token_widths)
+        geo_kernel = self._apply_geo_kernel(points)
+        K, dim = self.n_global_vectors, self.dim
+        g_unit, g_scalars = self._global_fields(global_rows, points)
+        g_hat = g_unit[:, None].expand(b, n, K, dim)
 
         ### Frame: no origin; the one length unit is the measure-weighted RMS
         ### pairwise distance, computed through the variance identity
@@ -1329,49 +1450,56 @@ class ISLA(Module):
         ### weighted mean (used only inside this scalar; the frame keeps no
         ### centre). Normalized weights make it converge under refinement where
         ### the total measure diverges, and make it invariant to a weight rescale.
-        gauge = rms_pairwise_distance(points, measure_weights, self.eps)
-        r = points / gauge
+        measure = boundary.get("measure", None)
+        gauge = rms_pairwise_distance(points, measure, self.eps)
+        normals = boundary["normals"]
         n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
 
-        if measure_weights is None:
+        if measure is None:
             ### No measures given: every token carries the same measure, i.e. the
             ### count-weighted quadrature.
             log_w = points.new_zeros(b, n, 1)
         else:
-            measure_weights = measure_weights.reshape(b, n).to(points.dtype)
-            log_w = torch.log(measure_weights.clamp_min(self.eps))[..., None]
+            log_w = torch.log(measure.to(points.dtype).clamp_min(self.eps))[..., None]
 
         ### Boundary inputs: invariants against the token's frame {n, g_k}.
         if self.bin:
             frame = torch.cat([n_hat[:, :, None], g_hat], dim=2)  # (B, N, 1+K, d)
-            b_feat, b_vecs, b_tens = self.bin.features(boundary_inputs, b, n, frame)
+            b_feat, b_vecs, b_tens = self.bin.features(boundary["fields"], frame)
         else:
             b_feat, b_vecs, b_tens = None, None, None
-        h = self.embed(self._token_seed(n_hat, g_hat, b_feat, g_scalars, n))
-        vecs, tens = self._block_extras(b_vecs, b_tens, None, None, b, n, points)
+        tokens = TensorDict(
+            h=self.embed(self._token_seed(n_hat, g_hat, b_feat, g_scalars, n)),
+            r=points / gauge,
+            n_hat=n_hat,
+            g_hat=g_hat,
+            log_w=log_w,
+            **self._block_extras(b_vecs, b_tens, None, None, b, n, points),
+            batch_size=[b, n],
+        )
 
-        ### n_boundary counts the boundary tokens only: the boundary measure
-        ### statistic that the query tokens' routing weight refers to must not
-        ### see the tokens appended below.
+        ### n_boundary counts the boundary tokens only: the kernel reads update
+        ### the tokens appended below.
         n_boundary = n
-        interior = query_points is not None
-        if interior:
-            bq, nq, _ = query_points.shape
-            q_r = query_points / gauge
+        if query is not None:
+            query_points = query["points"]
+            nq = query_points.shape[1]
+            if n_support:
+                _hint_token_axis(nq, self._token_widths)
             ### The query's geometry from the boundary sample: the signed distance
             ### to the boundary (the built-in channel) and the direction to it (the
             ### token's "normal" in every invariant), from the exact nearest token.
             with torch.autocast(points.device.type, enabled=False):
-                d, q_nhat = nearest_boundary_geometry(
+                dist, q_nhat = nearest_boundary_geometry(
                     query_points, points, n_hat, eps=self.eps
                 )
-                s =(d / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
+                s = (dist / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
                 builtin = torch.cat([s, torch.sign(s) * torch.log(s.abs() + self.eps)], -1)
-            q_g = g_unit[:, None].expand(bq, nq, K, self.dim)
+            q_g = g_unit[:, None].expand(b, nq, K, dim)
             if self.qin:
                 q_frame = torch.cat([q_nhat[:, :, None], q_g], dim=2)
                 q_feat, q_vecs, q_tens = self.qin.features(
-                    query_inputs, bq, nq, q_frame, gauge=gauge, eps=self.eps
+                    query["fields"], q_frame, gauge=gauge, eps=self.eps
                 )
                 q_feat = torch.cat([builtin, q_feat], -1)
             else:
@@ -1381,17 +1509,17 @@ class ISLA(Module):
                 ### Passive queries: log-weight -inf leaves them out of every softmax
                 ### over points (routing prototypes, anchors, slice states, head-frame
                 ### anchors), so they read every block's slices and never write.
-                q_logw = log_w.new_full((bq, nq, 1), -math.inf)
+                q_logw = log_w.new_full((b, nq, 1), -math.inf)
             elif n_support:
                 ### An explicit support writes with the interacting routing mass, split
                 ### over the support; the prediction points behind it only read.
                 s_logw = (
                     self.qt.logw.to(log_w.dtype)
-                    + torch.logsumexp(log_w[:, :n_boundary], dim=1, keepdim=True)
-                    - math.log(n_support)
+                    + torch.logsumexp(log_w, dim=1, keepdim=True)
+                    - _log_count(n_support, log_w)
                 )
                 q_logw = torch.cat(
-                    [s_logw.expand(bq, n_support, 1), log_w.new_full((bq, nq - n_support, 1), -math.inf)], dim=1
+                    [s_logw.expand(b, n_support, 1), log_w.new_full((b, nq - n_support, 1), -math.inf)], dim=1
                 )
             else:
                 ### The query tokens' total routing weight is a learned fraction of the
@@ -1400,34 +1528,35 @@ class ISLA(Module):
                 ### 2 log k, so the similarity-gauge contract holds exactly.
                 q_logw = (
                     self.qt.logw.to(log_w.dtype)
-                    + torch.logsumexp(log_w[:, :n_boundary], dim=1, keepdim=True)
-                    - math.log(nq)
+                    + torch.logsumexp(log_w, dim=1, keepdim=True)
+                    - _log_count(nq, log_w)
                 )
-            q_vecs, q_tens = self._block_extras(None, None, q_vecs, q_tens, bq, nq, points)
+            q_tokens = TensorDict(
+                h=h_q,
+                r=query_points / gauge,
+                n_hat=q_nhat,
+                g_hat=q_g,
+                log_w=q_logw.expand(b, nq, 1),
+                **self._block_extras(None, None, q_vecs, q_tens, b, nq, points),
+                batch_size=[b, nq],
+            )
             if self.kernel_reads is not None and self.kernel_read_radius is None:
                 read_pairs = (
                     self._global_read_pairs
                     if self.kernel_read_theta is None
                     else self._tree_read_pairs
                 )
-                kernel_pairs = read_pairs(
-                    r, n_hat, vecs, log_w, q_r, q_nhat, s[..., 0].abs(), q_vecs, g_unit
-                )
+                kernel_pairs = read_pairs(tokens, q_tokens, s[..., 0].abs(), g_unit)
             elif self.kernel_reads is not None:
-                kernel_pairs = self._kernel_read_pairs(r, n_hat, vecs, log_w, q_r, q_nhat, q_vecs, g_unit)
-            h = torch.cat([h, h_q], dim=1)
-            r = torch.cat([r, q_r], dim=1)
-            n_hat = torch.cat([n_hat, q_nhat], dim=1)
-            g_hat = torch.cat([g_hat, q_g], dim=1)
-            log_w = torch.cat([log_w, q_logw.expand(b, nq, 1)], dim=1)
-            if vecs is not None:
-                vecs = torch.cat([vecs, q_vecs], dim=1)
-                tens = torch.cat([tens, q_tens], dim=1)
-            n = n + nq
+                kernel_pairs = self._kernel_read_pairs(tokens, q_tokens, g_unit)
+            tokens = torch.cat([tokens, q_tokens], dim=1)
+            _hint_token_axis(n + nq, self._token_widths)
 
+        h, log_w, r = tokens["h"], tokens["log_w"], tokens["r"]
+        vecs, tens = tokens.get("vecs", None), tokens.get("tens", None)
         first_read = len(self.blocks) - (self.kernel_read_blocks or 0)
         for i, block in enumerate(self._block_callables()):
-            h = block(h, log_w, r, n_hat, g_hat, self.eps, vecs, tens)
+            h = block(h, log_w, r, tokens["n_hat"], tokens["g_hat"], self.eps, vecs, tens, geo_kernel=geo_kernel)
             if self.kernel_reads is not None and i >= first_read:
                 ### The points' residual update from the boundary cells' states at this
                 ### depth; the boundary tokens (and so the slices) are untouched.
@@ -1436,33 +1565,27 @@ class ISLA(Module):
                     h_b.reshape(-1, h.shape[-1]), h_p.reshape(-1, h.shape[-1]), kernel_pairs
                 )
                 h = torch.cat([h_b, h_p + delta.view_as(h_p)], dim=1)
+        tokens.set("h", h)
 
-        ### The head frame builds its slice anchors from ALL tokens (src_r, src_logw
-        ### and h); in the interior mode the head reads the query tokens only, so
-        ### the token-side tensors are overwritten with the query-side values.
-        src_r, src_logw = r, log_w
-        r_out = r  # positions of the tokens the head reads (radial basis)
-        g_out = g_hat  # the global directions seen by the tokens the head reads
-        if interior:
-            h_out = h[:, n_boundary + n_support :]
-            n_hat, g_out, b, n = q_nhat[:, n_support:], q_g[:, n_support:], bq, nq - n_support
-            r_out = q_r[:, n_support:]
-        else:
-            h_out = h
-        coeffs = self.head(self.norm_out(h_out))
+        ### The tokens the head reads: the prediction points (after the support) in
+        ### the interior mode, every token otherwise. The head frame builds its
+        ### slice anchors from ALL tokens (r, log_w and h).
+        out = tokens if query is None else _tail(tokens, n_boundary + n_support)
+        coeffs = self._coeff_layout.unpack(self.head(self.norm_out(out["h"])))
         if not self.needs_frame:
-            ### Scalar-only outputs read the coefficients directly; no token basis.
-            return {name: coeffs[..., i] for i, name in enumerate(self.output_schema)}
+            ### Scalar-only outputs are the coefficients themselves; no token basis.
+            return coeffs
         ### Head frame: the radial basis vector is the direction from the token's
         ### soft slice anchor (measure-weighted mean of token positions), not
         ### from a centroid; translation covariant. The frame's prototypes are
         ### synthesized once from ALL tokens with their measures (the same
         ### quadrature that weights the anchors), so the frame is refinement
         ### invariant like the blocks; both routings read those prototypes.
-        protos_f = self.frame_assign.prototypes(h, src_logw)
-        a_f = _softmax_over_points(self.frame_assign.logits(h, protos_f) + src_logw)
-        z_f = torch.einsum("bns,bnc->bsc", a_f, src_r)
-        b_f = torch.softmax(self.frame_assign.logits(h_out, protos_f), dim=-1)
+        protos_f = self.frame_assign.prototypes(h, log_w)
+        a_f = _softmax_over_points(self.frame_assign.logits(h, protos_f) + log_w)
+        z_f = torch.einsum("bns,bnc->bsc", a_f, r)
+        b_f = torch.softmax(self.frame_assign.logits(out["h"], protos_f), dim=-1)
+        r_out = out["r"]
         u = r_out - torch.einsum("bns,bsc->bnc", b_f, z_f).to(r_out.dtype)
         r_hat = u / u.norm(dim=-1, keepdim=True).clamp_min(self.eps)
 
@@ -1475,23 +1598,23 @@ class ISLA(Module):
         ### products (for K = 1: g x n, g x rhat, n x rhat), in two their
         ### perpendiculars; both flip sign under a reflection while their
         ### coefficients do not.
+        n_out, g_out = out["n_hat"], out["g_hat"]
         gs = [g_out[:, :, k] for k in range(K)]
-        true_basis = gs + [n_hat, r_hat, _polar_complement(r_hat, n_hat)]
+        true_basis = gs + [n_out, r_hat, _polar_complement(r_hat, n_out)]
         for g in gs:
             true_basis.append(_polar_complement(r_hat, g))
-        primaries = gs + [n_hat, r_hat]
-        pseudo_basis = _pseudovectors(primaries, self.dim)
+        primaries = gs + [n_out, r_hat]
+        pseudo_basis = _pseudovectors(primaries, dim)
         true_vecs = torch.stack(true_basis, dim=-2)  # (B, N, m, d)
         pseudo_vecs = (
             torch.stack(pseudo_basis, dim=-2)
             if pseudo_basis
-            else true_vecs.new_zeros(b, n, 0, self.dim)
+            else true_vecs.new_zeros(*out.batch_size, 0, dim)
         )
-
-        out: dict[str, torch.Tensor] = {}
-        start = 0
-        for name, layout in self.output_layouts.items():
-            c = coeffs[..., start : start + layout.n_coeffs]
-            out[name] = _assemble_output(c, layout, true_vecs, pseudo_vecs)
-            start += layout.n_coeffs
-        return out
+        ### Each output of rank >= 1 from its coefficients, in place of them.
+        for i, (name, layout) in enumerate(self.output_layouts.items()):
+            if layout.spec.rank:
+                key = FieldSchema.key(name)
+                index = getattr(self, f"_output_index_{i}")
+                coeffs.set(key, _assemble_output(coeffs.get(key), layout, true_vecs, pseudo_vecs, index))
+        return coeffs
