@@ -37610,3 +37610,21 @@ kept, the lug 2,000 of 5,400 to 8,600, DeepJEB++ 20,000 of 50,040; about
 be pre-registered separately. Volume-weighted interior draws need
 lumped nodal volumes the stored interiors do not carry and are not part
 of it.
+
+## 2026-10-16 — AEROZOO lanes: a deeper read-ahead from about 18:05 EDT; samples and warm steps unchanged {#sec-nb-aerozoo-prefetch}
+
+A profile of real AeroZoo training steps on the LHR site (four GPUs,
+the lanes' configuration) found that the step times logged per link
+include a cold first epoch: each link starts on a new node and reads
+every case cold, about 2.0 seconds per step against 0.68 warm for ISLA.
+The loader kept four reads in flight per rank (the recipe's
+`dataloader.prefetch_factor` of 4 at batch size 1), so eight of the
+lanes' twelve workers sat idle. From about 18:05 EDT on 2026-10-16 the
+162 unfinished AeroZoo lanes (rows 172 to 343) run with
+`dataloader.prefetch_factor=12`. The draws are seeded per epoch and case
+and the transforms run in case order, so the samples and their order
+are unchanged; warm steps are unchanged. Over the first 100 steps of a
+link, the step time fell to 0.65 of the previous link's on 13 lanes
+(ISLA 0.39 to 0.70, GeoTransolver 0.54, ISLA-DTT 0.71 to 1.00). Every
+architecture runs with the same setting, so the step-time comparisons
+stay like for like.
