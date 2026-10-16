@@ -37385,13 +37385,16 @@ four architectures and on both seeds for the three reference
 configurations. ISLA-DTT's pressure falls 18 percent on seed 42 and 8
 percent on seed 43, so one of its seeds misses the 10 percent bar. The
 area protocol is not read: on the uniform AirfRANS files it is a no-op.
-`PoissonBiasedSubsampleMesh` returns the mesh unchanged when it holds no
-more cells than its expected count, and `airfrans_uvolume*_area.yaml`
-appends it after the uniform `SubsampleMesh` has already cut the
-interior to that count, so the area scores equal the native ones by
-construction, bitwise, for every architecture (the block-draw files
-of `results/char/airfrans.json` behave the same, native against area
-within 6.5e-8). The area-protocol audit corrects the files and rescores.
+`PoissonBiasedSubsampleMesh` counts cells, not points, and returns a
+sub-mesh unchanged when it holds no more cells than its expected count;
+the airfoil has 843 to 1,217 segments against a budget of 100,000, and
+the interior point cloud has no cells, so the step never acts on either
+and never sees the uniform `SubsampleMesh`'s point cut. The area scores
+therefore equal the native ones by construction, bitwise for the three
+reference configurations and within 2e-6 for ISLA-DTT, whose scorer is
+not deterministic at that level (the block-draw files of
+`results/char/airfrans.json` behave the same, native against area
+within 6.5e-8 in aggregate and 6.4e-7 per case). The area-protocol audit corrects the files and rescores.
 Against chapter 9's numbers
 (the new checkpoint on uniform draws ÷ the old one on block windows)
 the errors fall too: ISLA 0.59 / 0.70 / 0.77, GeoTransolver 0.46 /
@@ -37472,3 +37475,138 @@ comparison. The half-rate ISLA-DTT pair has not doubled through epochs
 160 to 200 and is still training. H-RESID's normalized reads (A2) aim
 to make the rate exception unnecessary; their reads (P3, P5) are
 pending.
+
+## 2026-10-16 — CHAR-PROTOCOLS area-protocol audit: the uniform point cloud resampled the scored set on DrivAerML Surface, HiLift and Shift-SUV only; on DrivAerML Volume it redrew ISLA's boundary alone, and on AirfRANS, Tensile2D, the lug and DeepJEB++ it returned the native mesh {#sec-nb-char-area-audit}
+
+**What was audited.** Whether the area-weighted (uniform-point-cloud)
+column of every CHAR-PROTOCOLS artifact measures what its name says.
+The audit is read-only: it reads the committed per-case records under
+`results/campaigns_2026-10-02/char/protocols/` and
+`results/campaigns_2026-10-14/afu/`, the dataset key of each record's
+config row, the scoring yamls (md5-identical to LHR `recipe_v8`) and
+the stored mesh sizes from `meta.json` on LHR; no job was run. Scripts
+and outputs are in `scratch/isla-char-area-audit-2026-10-16/`. The
+area twin replaces the native subsampling with
+`PoissonBiasedSubsampleMesh(weight_mode=area)`, applied to every
+sub-mesh of the domain (the interior and each boundary). The transform
+counts cells, and returns a sub-mesh unchanged when it holds no more
+cells than `n_cells_expected` (200,000 at scoring; 100,000 on the
+AirfRANS lanes). It changes a sub-mesh only where more cells than the
+budget reach it, and it never changes a point cloud, which has no
+cells.
+
+**Verdict per dataset.** Shifts are area ÷ native per architecture,
+seed means unless stated; "identical" means bitwise-identical per-case
+values.
+
+| Dataset | Cells reaching the area step ÷ budget | Verdict | Evidence |
+|---|---|---|---|
+| DrivAerML Surface | 1,000,000-cell uniform pool (of 16.5M to 17.7M) ÷ 200,000 | resampled for every model | ISLA 1.005 / 1.019 (pressure / wall shear); GeoTransolver 9.6 / 6.9; Transolver 6.4 / 5.1; 0 of 48 cases identical |
+| HiLiftAeroML, 210-wing rung | 1,000,000-cell pool (of about 290M) ÷ 200,000 | resampled for every model | ISLA 1.013 / 1.013; GeoTransolver 4.2 / 3.1; Transolver 9.1 / 5.5 |
+| Shift-SUV | 1,000,000-cell pool (of 5.0M) ÷ 200,000 | resampled for every model | ISLA 0.999 / 1.001; GeoTransolver 3.3 / 3.0; Transolver 2.8 / 2.2 |
+| DrivAerML Volume | ISLA: vehicle pool of 1,000,000 ÷ 200,000; interior 0 cells; the baselines load no boundary | ISLA's boundary only | ISLA 7.9 / 6.6 / 6.6 (pressure / velocity / eddy viscosity; seed 42 pressure 9.1); GeoTransolver and Transolver 288 of 288 per-case values identical |
+| AirfRANS, block and uniform files | airfoil 843 to 1,217 segments ÷ 100,000; interior 0 cells | native mesh | baselines identical (1,200 of 1,200 block, 200 of 200 uniform); ISLA 995 of 1,000 and 200 of 200 identical, the rest within 6.4e-7; ISLA-DTT within 2e-6 |
+| Tensile2D | outer polyline 496 segments ÷ 200,000; interior 0 cells | native mesh | baselines 100 of 100 identical; ISLA 46 to 48 of 100 identical, the rest within 5.8e-4 per case (aggregate within 3.2e-6) |
+| lug | surface 5,448 to 8,600 triangles ÷ 200,000; interior 0 cells | native mesh | 600 of 600 identical for every model |
+| DeepJEB++ | surface 50,040 triangles ÷ 200,000 (the surface is the scored set) | native mesh | baselines 5,540 of 5,540 identical; ISLA all but one (3.4e-7) |
+
+Two probes are live draws: VOL-GEO, on the Volume twin's boundary
+(@sec-nb-char-vol-geo-verdict), and AF-GEO's `sub400a` / `sub400u`,
+whose budget of 400 is below the airfoil's segment count. They are the
+only area-law draws measured on those datasets.
+
+**The ISLA-only differences on the native-mesh datasets are scorer
+nondeterminism.** The inputs are identical: the baselines are bitwise
+identical, the early return consumes no random numbers, ISLA is
+bitwise identical on the lug, and ISLA-DTT differs at 1e-6 between two
+scorings of the same file. The Tensile2D per-case spread (up to 5.8e-4)
+is larger than plain rounding; nearest-sample ties on the structured
+mesh amplifying the order of atomic sums, the LUG-PREC mechanism, would
+explain it, but that is not verified.
+
+**DrivAerML Volume.** The area twin changes one thing for ISLA: the
+vehicle tokens. Natively the reader takes a 200,000-cell uniform block
+with each measure scaled N/k; under the twin it takes a 1,000,000-cell
+block and the Poisson step keeps about 198,000 cells with inclusion
+probability proportional to area, each measure scaled by the inverse
+probability. The measure is exact (effective measure sum 1.4426 against
+1.4405 on run_1 and 1.3812 against 1.3829 on run_112, built through the
+scorer's own dataloaders); the spread of the token measures falls from
+15,000-18,000x to 6-8x and the tokens move off the finely meshed
+features onto the flat panels. The interior queries, the targets, the
+stored signed distance and the global inputs are unchanged.
+GeoTransolver and Transolver set `drop_in_file_boundaries: true`, so they
+never load the vehicle and their whole input is unchanged. ISLA's
+6.6x to 7.9x is therefore real for the trained model and not a
+comparison. The unifdraw control (the same Poisson path with uniform
+inclusion) reproduces native to the third decimal
+(@sec-nb-char-protocols-instruments), and VOL-GEO, which keeps every
+area-draw token and computes only the queries' built-in
+nearest-boundary distance and direction from the native draw, returns
+to native within 0.4% on both seeds: the model reads the nearest drawn
+token under a sampling law it never saw in training. One caveat is
+bounded by the same 0.4%: no generator is attached to the Poisson step
+at inference, so if the reader's interior draw shares the global
+stream, ISLA's interior sample under the twin differs from native after
+the first case.
+
+**The posed protocol.** Posed ÷ native for ISLA, seeds 42 / 43; the
+baselines change on every dataset (no case identical), so the
+instrument is live everywhere. ISLA is invariant to float rounding on
+DrivAerML Surface (1.00002 on pressure and wall shear, per case within
+1.4e-3), DrivAerML Volume (1.0001 to 1.0005, per case within 3.2e-3),
+AirfRANS on both file sets (0.9999 to 1.0003), Shift-SUV (0.9998 to
+1.0000) and DeepJEB++ (1.00000). Three departures: the lug, 2.01 /
+1.30 (1.61 on the seed mean), the LUG-PREC tie mechanism
+(@sec-nb-char-lug-final); Tensile2D within 2% on the seed means
+(stress 1.016 / 1.004, displacement 1.011 / 0.980) with single cases up
+to 64%, attributed to the same structured-mesh ties; HiLift 1.01
+(pressure 1.009 / 1.010, wall shear 1.006) with single cases up to 9%,
+cause not located. The posed instrument has no defect.
+
+**Slips in earlier entries** (the entries stand as written):
+
+- @sec-nb-char-prereg registered (ii) as "area-weighted (surface) or
+  volume-weighted (interior) uniform sampling". The volume-weighted
+  interior draw was never built, so the prediction "ahead on (ii) ...
+  on every dataset" was untestable on AirfRANS, Tensile2D, the lug,
+  DeepJEB++ and the Volume interior. @sec-nb-char-protocols-instruments
+  recorded the identity for AirfRANS, Tensile2D and the lug (not
+  DeepJEB++), and no verdict entry read the prediction back against
+  that gap.
+- @sec-nb-char-tensile2d-final gives the reason for area = native as
+  "20,000 cells is the full mesh". Scoring ran at 200,000 cells; 20,000
+  is the training count. Both exceed the 496-segment boundary, and the
+  interior has no cells.
+- @sec-nb-char-airfrans-final gives the reason as "the 100,000-point
+  draw is the protocol's own". The airfoil has fewer segments than the
+  budget and the interior has no cells.
+- @sec-nb-soft-geo-prereg says "area equals native to nine digits" on
+  AirfRANS. That holds in aggregate (3.4e-8); per case ISLA differs by
+  up to 6.4e-7.
+- @sec-nb-airfrans-uniform-verdict, earlier today, attributed the no-op
+  to the order of the uniform point cut and the Poisson step; the
+  mechanism sentence is corrected in place (cells, not points).
+
+**What changes in the book.** The index lede says the point cloud is
+scored on the three surface datasets whose meshes exceed the budget,
+and states the Volume reading; the lug row of the thesis table drops
+its point-cloud ratio. Chapters 11 to 13 drop the area-weighted column
+as chapter 9 does for AirfRANS and say once that its scoring is
+pending. Chapter 7's limits paragraph names the Volume sensitivity's
+measured mechanism (@tbl-vol-geo). The CHAR-PROTOCOLS ledger row and
+its tech-tree node record that the three protocols ran in name only on
+five of the eight tasks.
+
+**Next.** On AirfRANS, Tensile2D, the lug and DeepJEB++ a draw at the
+stored size cannot change the mesh, so the meaningful area protocol is
+a reduced budget k below the cell count, scored beside a uniform draw
+at the same k: area ÷ uniform isolates the sampling law and uniform ÷
+native the count, as AF-GEO's `sub400a` / `sub400u` already do. A
+boundary-only rescoring of that form (AirfRANS airfoil at 400 of about
+1,000 segments, Tensile2D 200 of 496 with the condition-labelled cells
+kept, the lug 2,000 of 5,400 to 8,600, DeepJEB++ 20,000 of 50,040; about
+52 scoring jobs, 8 GPU-hours, no retraining) is being prepared and will
+be pre-registered separately. Volume-weighted interior draws need
+lumped nodal volumes the stored interiors do not carry and are not part
+of it.
