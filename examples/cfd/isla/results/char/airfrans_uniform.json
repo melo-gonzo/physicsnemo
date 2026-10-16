@@ -1,0 +1,661 @@
+{
+ "protocol": "AF-SCORE reduction (2026-10-14, #sec-nb-airfrans-uniform-prereg): the AF-UNIFORM reruns of chapter 9's AirfRANS reference\nlanes (afu_r_{isla,gt,t}_seed42/43, uniform interior draw, recipe_v8 + code_v20) and of ISLA-DTT (afu_dtt_seed42/43, code_dtt16)\nreduced exactly as protocol_artifacts_2026-10-03.py reduced the block-window lanes cl_r_af_* into results/char/airfrans.json:\nfloat32, the three scorings of one checkpoint (native mesh, uniform point cloud = <dataset>_area, rotated + translated =\n<dataset>_posed), per-case relative L2 averaged over the 200 full_test cases (infer_summary, else the per-sample rows), seed\nmeans over seeds 42 and 43. Reads campaigns_2026-10-14/afu/protocols/<run>/<protocol>/metrics.jsonl, fetched from the LHR site's\n$T/evals_afu/<run>/<protocol>/<run>/metrics.jsonl (kernel/airfrans_u/score.sbatch), e.g.\n  for r in afu_r_isla afu_r_gt afu_r_t afu_dtt; do for s in 42 43; do for p in native area posed; do d=campaigns_2026-10-14/afu/protocols/${r}_seed$s/$p\n    mkdir -p $d && scp lhr2:$T/evals_afu/${r}_seed$s/$p/${r}_seed$s/metrics.jsonl $d/; done; done; done\nThe old checkpoints scored on the same uniform twins (cl_r_af_*_seed42/43 from $T/runs_from_aga, af_tg1pf_seed42/43; LHR\n$T/evals_afu_oldckpt/<run>/<protocol>/<run>/metrics.jsonl, same scorer) are fetched the same way into\ncampaigns_2026-10-14/afu/protocols_oldckpt/<run>/<protocol>/metrics.jsonl.\nWrites results/char/airfrans_uniform.json in the schema of airfrans.json (protocols, fields, isla_arm, arms[arm][protocol][field]\n= {mean, per_seed, n_cases, n_seeds}, complete), so the chapter's protocol_table(\"airfrans_uniform.json\", ...) prints it, plus\nkeys protocol_table ignores: \"controls\" (ISLA-DTT, the read-only control, in the arm schema), \"old_checkpoint_uniform\" (the old\ncheckpoints on uniform draws, arm schema, ISLA-DTT included) and \"decomposition\" (per arm, protocol and field: old_block = the old\ncheckpoint on block windows, from airfrans.json or for ISLA-DTT af_tg1pf's records in campaigns_2026-10-14/afu/protocols_block;\nold_uniform; new_uniform; scoring_effect = old_uniform / old_block; training_effect = new_uniform / old_uniform; null until scored).\nPrints the standing as protocol_table does, the old checkpoints on uniform draws in the same layout, and the decomposition.\nusage: python afu_protocol_artifacts_2026-10-14.py [--src DIR] [--oldckpt-src DIR] [--block-src DIR] [--out PATH]",
+ "protocols": {
+  "native": "native mesh",
+  "area": "uniform point cloud",
+  "posed": "rotated + translated"
+ },
+ "fields": {
+  "pressure_l2": "pressure",
+  "velocity_l2": "velocity",
+  "nut_l2": "eddy viscosity"
+ },
+ "isla_arm": "ISLA 512 with 512 slices",
+ "arms": {},
+ "controls": {},
+ "old_checkpoint_uniform": {
+  "ISLA 512 with 512 slices": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.04415853261947632,
+     "per_seed": {
+      "42": 0.04723929882049561,
+      "43": 0.041077766418457035
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.018936967849731444,
+     "per_seed": {
+      "42": 0.01903656721115112,
+      "43": 0.018837368488311766
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.05218265533447265,
+     "per_seed": {
+      "42": 0.05416895389556885,
+      "43": 0.050196356773376465
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.04415853261947632,
+     "per_seed": {
+      "42": 0.04723929882049561,
+      "43": 0.041077766418457035
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.018936967849731444,
+     "per_seed": {
+      "42": 0.01903656721115112,
+      "43": 0.018837368488311766
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.05218265533447265,
+     "per_seed": {
+      "42": 0.05416895389556885,
+      "43": 0.050196356773376465
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.0441472864151001,
+     "per_seed": {
+      "42": 0.047234320640563966,
+      "43": 0.04106025218963623
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.018937622308731077,
+     "per_seed": {
+      "42": 0.0190371835231781,
+      "43": 0.018838061094284056
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.05218961715698242,
+     "per_seed": {
+      "42": 0.05417022228240967,
+      "43": 0.05020901203155517
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   }
+  },
+  "GeoTransolver 256": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.024592133760452273,
+     "per_seed": {
+      "42": 0.022940993309020996,
+      "43": 0.026243274211883546
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.04227009057998657,
+     "per_seed": {
+      "42": 0.04147661209106445,
+      "43": 0.043063569068908694
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.03590722322463989,
+     "per_seed": {
+      "42": 0.03951740741729736,
+      "43": 0.03229703903198242
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.024592133760452273,
+     "per_seed": {
+      "42": 0.022940993309020996,
+      "43": 0.026243274211883546
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.04227009057998657,
+     "per_seed": {
+      "42": 0.04147661209106445,
+      "43": 0.043063569068908694
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.03590722322463989,
+     "per_seed": {
+      "42": 0.03951740741729736,
+      "43": 0.03229703903198242
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 3.476201324462891,
+     "per_seed": {
+      "42": 3.189202880859375,
+      "43": 3.763199768066406
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 1.1385398864746095,
+     "per_seed": {
+      "42": 1.1889163208007814,
+      "43": 1.0881634521484376
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 2.9072579956054687,
+     "per_seed": {
+      "42": 3.02017822265625,
+      "43": 2.7943377685546875
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   }
+  },
+  "Transolver 512 x 16": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.029222075939178468,
+     "per_seed": {
+      "42": 0.027956318855285645,
+      "43": 0.03048783302307129
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.0842103385925293,
+     "per_seed": {
+      "42": 0.08530412673950195,
+      "43": 0.08311655044555664
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.042516095638275145,
+     "per_seed": {
+      "42": 0.04325329303741455,
+      "43": 0.04177889823913574
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.029222075939178468,
+     "per_seed": {
+      "42": 0.027956318855285645,
+      "43": 0.03048783302307129
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.0842103385925293,
+     "per_seed": {
+      "42": 0.08530412673950195,
+      "43": 0.08311655044555664
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.042516095638275145,
+     "per_seed": {
+      "42": 0.04325329303741455,
+      "43": 0.04177889823913574
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 1.5288743591308593,
+     "per_seed": {
+      "42": 1.5361924743652344,
+      "43": 1.5215562438964845
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.9946809005737305,
+     "per_seed": {
+      "42": 0.9813274383544922,
+      "43": 1.0080343627929687
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 1.914512405395508,
+     "per_seed": {
+      "42": 1.6563070678710938,
+      "43": 2.172717742919922
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   }
+  },
+  "ISLA-DTT (forest read at theta = 1)": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.02287751078605652,
+     "per_seed": {
+      "42": 0.022478396892547606,
+      "43": 0.02327662467956543
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.01414316713809967,
+     "per_seed": {
+      "42": 0.013570427894592285,
+      "43": 0.014715906381607056
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.03178269743919373,
+     "per_seed": {
+      "42": 0.0308053994178772,
+      "43": 0.032759995460510255
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.02287751078605652,
+     "per_seed": {
+      "42": 0.022478396892547606,
+      "43": 0.02327662467956543
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.01414316713809967,
+     "per_seed": {
+      "42": 0.013570427894592285,
+      "43": 0.014715906381607056
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.03178269743919373,
+     "per_seed": {
+      "42": 0.0308053994178772,
+      "43": 0.032759995460510255
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.02287682056427002,
+     "per_seed": {
+      "42": 0.02247823715209961,
+      "43": 0.02327540397644043
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.014143145084381104,
+     "per_seed": {
+      "42": 0.01357070803642273,
+      "43": 0.014715582132339478
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.03178444743156433,
+     "per_seed": {
+      "42": 0.030806095600128175,
+      "43": 0.03276279926300049
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   }
+  }
+ },
+ "decomposition": {
+  "ISLA 512 with 512 slices": {
+   "native": {
+    "pressure_l2": {
+     "old_block": 0.03521204471588135,
+     "old_uniform": 0.04415853261947632,
+     "new_uniform": null,
+     "scoring_effect": 1.254074649052116,
+     "training_effect": null
+    },
+    "velocity_l2": {
+     "old_block": 0.01722329378128052,
+     "old_uniform": 0.018936967849731444,
+     "new_uniform": null,
+     "scoring_effect": 1.0994974648991627,
+     "training_effect": null
+    },
+    "nut_l2": {
+     "old_block": 0.0314516294002533,
+     "old_uniform": 0.05218265533447265,
+     "new_uniform": null,
+     "scoring_effect": 1.6591399660219956,
+     "training_effect": null
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "old_block": 0.03521204590797425,
+     "old_uniform": 0.04415853261947632,
+     "new_uniform": null,
+     "scoring_effect": 1.2540746065958075,
+     "training_effect": null
+    },
+    "velocity_l2": {
+     "old_block": 0.01722329378128052,
+     "old_uniform": 0.018936967849731444,
+     "new_uniform": null,
+     "scoring_effect": 1.0994974648991627,
+     "training_effect": null
+    },
+    "nut_l2": {
+     "old_block": 0.0314516294002533,
+     "old_uniform": 0.05218265533447265,
+     "new_uniform": null,
+     "scoring_effect": 1.6591399660219956,
+     "training_effect": null
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "old_block": 0.0352119517326355,
+     "old_uniform": 0.0441472864151001,
+     "new_uniform": null,
+     "scoring_effect": 1.2537585746541582,
+     "training_effect": null
+    },
+    "velocity_l2": {
+     "old_block": 0.01722234308719635,
+     "old_uniform": 0.018937622308731077,
+     "new_uniform": null,
+     "scoring_effect": 1.0995961590621153,
+     "training_effect": null
+    },
+    "nut_l2": {
+     "old_block": 0.03144981384277344,
+     "old_uniform": 0.05218961715698242,
+     "new_uniform": null,
+     "scoring_effect": 1.6594571089639243,
+     "training_effect": null
+    }
+   }
+  },
+  "GeoTransolver 256": {
+   "native": {
+    "pressure_l2": {
+     "old_block": 0.02659208536148071,
+     "old_uniform": 0.024592133760452273,
+     "new_uniform": null,
+     "scoring_effect": 0.9247914718292302,
+     "training_effect": null
+    },
+    "velocity_l2": {
+     "old_block": 0.03782288312911987,
+     "old_uniform": 0.04227009057998657,
+     "new_uniform": null,
+     "scoring_effect": 1.1175798110282817,
+     "training_effect": null
+    },
+    "nut_l2": {
+     "old_block": 0.02930862069129944,
+     "old_uniform": 0.03590722322463989,
+     "new_uniform": null,
+     "scoring_effect": 1.2251420359505119,
+     "training_effect": null
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "old_block": 0.02659208536148071,
+     "old_uniform": 0.024592133760452273,
+     "new_uniform": null,
+     "scoring_effect": 0.9247914718292302,
+     "training_effect": null
+    },
+    "velocity_l2": {
+     "old_block": 0.03782288312911987,
+     "old_uniform": 0.04227009057998657,
+     "new_uniform": null,
+     "scoring_effect": 1.1175798110282817,
+     "training_effect": null
+    },
+    "nut_l2": {
+     "old_block": 0.02930862069129944,
+     "old_uniform": 0.03590722322463989,
+     "new_uniform": null,
+     "scoring_effect": 1.2251420359505119,
+     "training_effect": null
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "old_block": 4.176097106933594,
+     "old_uniform": 3.476201324462891,
+     "new_uniform": null,
+     "scoring_effect": 0.8324043324307132,
+     "training_effect": null
+    },
+    "velocity_l2": {
+     "old_block": 1.123061981201172,
+     "old_uniform": 1.1385398864746095,
+     "new_uniform": null,
+     "scoring_effect": 1.013781879836127,
+     "training_effect": null
+    },
+    "nut_l2": {
+     "old_block": 3.754583282470703,
+     "old_uniform": 2.9072579956054687,
+     "new_uniform": null,
+     "scoring_effect": 0.7743224152674403,
+     "training_effect": null
+    }
+   }
+  },
+  "Transolver 512 x 16": {
+   "native": {
+    "pressure_l2": {
+     "old_block": 0.025857893228530885,
+     "old_uniform": 0.029222075939178468,
+     "new_uniform": null,
+     "scoring_effect": 1.1301027381045736,
+     "training_effect": null
+    },
+    "velocity_l2": {
+     "old_block": 0.07068779945373535,
+     "old_uniform": 0.0842103385925293,
+     "new_uniform": null,
+     "scoring_effect": 1.191299478032901,
+     "training_effect": null
+    },
+    "nut_l2": {
+     "old_block": 0.0310625422000885,
+     "old_uniform": 0.042516095638275145,
+     "new_uniform": null,
+     "scoring_effect": 1.3687255654868458,
+     "training_effect": null
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "old_block": 0.025857893228530885,
+     "old_uniform": 0.029222075939178468,
+     "new_uniform": null,
+     "scoring_effect": 1.1301027381045736,
+     "training_effect": null
+    },
+    "velocity_l2": {
+     "old_block": 0.07068779945373535,
+     "old_uniform": 0.0842103385925293,
+     "new_uniform": null,
+     "scoring_effect": 1.191299478032901,
+     "training_effect": null
+    },
+    "nut_l2": {
+     "old_block": 0.0310625422000885,
+     "old_uniform": 0.042516095638275145,
+     "new_uniform": null,
+     "scoring_effect": 1.3687255654868458,
+     "training_effect": null
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "old_block": 1.7336174774169921,
+     "old_uniform": 1.5288743591308593,
+     "new_uniform": null,
+     "scoring_effect": 0.8818983305410659,
+     "training_effect": null
+    },
+    "velocity_l2": {
+     "old_block": 0.9930257797241211,
+     "old_uniform": 0.9946809005737305,
+     "new_uniform": null,
+     "scoring_effect": 1.00166674509706,
+     "training_effect": null
+    },
+    "nut_l2": {
+     "old_block": 2.381310119628906,
+     "old_uniform": 1.914512405395508,
+     "new_uniform": null,
+     "scoring_effect": 0.8039744129142903,
+     "training_effect": null
+    }
+   }
+  },
+  "ISLA-DTT (forest read at theta = 1)": {
+   "native": {
+    "pressure_l2": {
+     "old_block": 0.025902628898620605,
+     "old_uniform": 0.02287751078605652,
+     "new_uniform": null,
+     "scoring_effect": 0.8832119270826142,
+     "training_effect": null
+    },
+    "velocity_l2": {
+     "old_block": 0.014037151336669922,
+     "old_uniform": 0.01414316713809967,
+     "new_uniform": null,
+     "scoring_effect": 1.0075525153848557,
+     "training_effect": null
+    },
+    "nut_l2": {
+     "old_block": 0.032402225732803346,
+     "old_uniform": 0.03178269743919373,
+     "new_uniform": null,
+     "scoring_effect": 0.9808800698224128,
+     "training_effect": null
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "old_block": 0.025902628898620605,
+     "old_uniform": 0.02287751078605652,
+     "new_uniform": null,
+     "scoring_effect": 0.8832119270826142,
+     "training_effect": null
+    },
+    "velocity_l2": {
+     "old_block": 0.014037151336669922,
+     "old_uniform": 0.01414316713809967,
+     "new_uniform": null,
+     "scoring_effect": 1.0075525153848557,
+     "training_effect": null
+    },
+    "nut_l2": {
+     "old_block": 0.03240222454071045,
+     "old_uniform": 0.03178269743919373,
+     "new_uniform": null,
+     "scoring_effect": 0.9808801059094464,
+     "training_effect": null
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "old_block": 0.025899093151092532,
+     "old_uniform": 0.02287682056427002,
+     "new_uniform": null,
+     "scoring_effect": 0.8833058528655463,
+     "training_effect": null
+    },
+    "velocity_l2": {
+     "old_block": 0.01403689682483673,
+     "old_uniform": 0.014143145084381104,
+     "new_uniform": null,
+     "scoring_effect": 1.0075692128303158,
+     "training_effect": null
+    },
+    "nut_l2": {
+     "old_block": 0.03240204215049744,
+     "old_uniform": 0.03178444743156433,
+     "new_uniform": null,
+     "scoring_effect": 0.9809396359629257,
+     "training_effect": null
+    }
+   }
+  }
+ },
+ "complete": false
+}
