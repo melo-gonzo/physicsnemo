@@ -165,13 +165,13 @@ always present: a boundary mesh without stored effective measures
 contributes its cells' geometric measures.
 
 ::: {.callout-note collapse="false" title="Stage 1 in the code"}
-The length unit is one function, and the frame is six lines of `_forward_tensors`: no center survives either.
+The length unit is one function, and the frame is a few lines of `_forward_tokens` (the token state then stores `r = points / gauge`): no center survives either.
 
 ```{python}
 #| label: code-stage-1
 #| output: asis
 listing("geometry.py", "rms_pairwise_distance")
-listing("model.py", "ISLA._forward_tensors", start="### Frame:", end="### Boundary inputs")
+listing("model.py", "ISLA._forward_tokens", start="### Frame:", end="### Boundary inputs")
 ```
 :::
 
@@ -510,12 +510,12 @@ is unchanged by a translation. No centroid appears (`a_f`, `z_f`, `b_f`,
 `r_hat`; the construction is @fig-isla-basis).
 
 ::: {.callout-note collapse="false" title="Stage 4 in the code"}
-The head frame is the tail of `_forward_tensors`: one more routing map, read both ways, and a difference of positions.
+The head frame is the tail of `_forward_tokens`: one more routing map, read both ways, and a difference of positions.
 
 ```{python}
 #| label: code-stage-4
 #| output: asis
-listing("model.py", "ISLA._forward_tensors", start="### Head frame:", end="### The token basis.")
+listing("model.py", "ISLA._forward_tokens", start="### Head frame:", end="### The token basis.")
 ```
 :::
 
@@ -586,7 +586,7 @@ The basis is stacked in the order the text gives, and each declared output is co
 ```{python}
 #| label: code-stage-5
 #| output: asis
-listing("model.py", "ISLA._forward_tensors", start="### The token basis.")
+listing("model.py", "ISLA._forward_tokens", start="### The token basis.")
 listing("heads.py", "_polar_complement")
 listing("heads.py", "_pseudovectors")
 listing("heads.py", "_assemble_output")
@@ -759,7 +759,7 @@ The prediction points' geometry is one function on the boundary sample, and the 
 #| label: code-interior
 #| output: asis
 listing("geometry.py", "nearest_boundary_geometry")
-listing("model.py", "ISLA._forward_tensors", start="interior = query_points is not None", end="first_read = len(self.blocks)")
+listing("model.py", "ISLA._forward_tokens", start="if query is not None:", end="first_read = len(self.blocks)")
 ```
 :::
 
@@ -939,8 +939,8 @@ The passive points' measure bias, the read after each layer, and one point's wal
 ```{python}
 #| label: code-read-only
 #| output: asis
-listing("model.py", "ISLA._forward_tensors", start="if self.query_independent:", end="elif n_support")
-listing("model.py", "ISLA._forward_tensors", start="first_read = len(self.blocks)", end="### The head frame builds")
+listing("model.py", "ISLA._forward_tokens", start="if self.query_independent:", end="elif n_support")
+listing("model.py", "ISLA._forward_tokens", start="first_read = len(self.blocks)", end="### The tokens the head reads")
 listing("tree_read.py", "BoundaryForest.point_pairs")
 ```
 :::

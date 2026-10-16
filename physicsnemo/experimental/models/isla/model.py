@@ -202,13 +202,21 @@ mesh's cells (centroid, normal, measure and the declared ``cell_data`` fields)
 and the prediction points are TensorDicts concatenated into one token state over
 ``(batch, token)``, the field inputs enter the invariants and the head's
 coefficients leave as the output fields through cached, schema-ordered
-:class:`~tensordict.PackLayout` objects, and the output ``Mesh`` is built from them;
-all of it compiles with ``torch.compile(fullgraph=True, dynamic=True)``. The
-token axis itself stays dense where the arithmetic needs it: every softmax over
-points spans all tokens at once (passive tokens excluded by ``log_w = -inf``),
-the slice anchors are einsums over that axis, the fused geometry kernel reads
-its ``(B, N, .)`` strides, and the kernel and tree reads index the flattened
-boundary tokens; the slice blocks take plain tensors.
+:class:`~tensordict.PackLayout` objects, and the output ``Mesh`` is built from them.
+Without a kernel read the whole model, ``Mesh`` inputs and output included,
+compiles with ``torch.compile(fullgraph=True, dynamic=True)`` into one graph for
+every boundary, query and support count: surface and interior tasks, support
+points, passive points, boundary inputs up to rank 2 (``test_isla_compile.py``).
+The kernel reads do not: the global read (``kernel_read_radius=None``) compiles
+fullgraph but specializes on the query count (its tiles are a Python loop over
+the queries), so each new count recompiles; the radius read
+(``boundary_pairs``) and the tree read (``kernel_read_theta``) size their pairs
+from the data and break a fullgraph trace. The token axis itself stays dense
+where the arithmetic needs it: every softmax over points spans all tokens at once
+(passive tokens excluded by ``log_w = -inf``), the slice anchors are einsums over
+that axis, the fused geometry kernel reads its ``(B, N, .)`` strides, and the
+kernel and tree reads index the flattened boundary tokens; the slice blocks take
+plain tensors.
 """
 
 import logging
@@ -826,7 +834,8 @@ class ISLA(Module):
                     _BoundaryKernelRead(hidden, kernel_read, self.kernel_read_radius, self.dim)
                     for _ in range(m)
                 )
-        #: Pairs of the last forward pass's kernel read (diagnostic; 0 without one).
+        #: Pairs of the last forward pass's kernel read (diagnostic; 0 without one;
+        #: not updated under torch.compile, where a module write would recompile).
         self.kernel_read_pairs = 0
         ### The trailing widths k of the per-token tensors: every small width (the
         ### input features, frames and vector stacks) and every layer's (see
@@ -1245,7 +1254,7 @@ class ISLA(Module):
         fields = self._forward_tokens(
             boundary[None],
             None if query is None else query[None],
-            self._global_rows(global_td, 1, out_points),
+            self._global_rows(global_td, 1, boundary["points"]),
             n_support,
         )
         return Mesh(
@@ -1298,7 +1307,8 @@ class ISLA(Module):
         ### The cell's share of the boundary measure: invariant to a rescale of the
         ### measures and to splitting a cell into copies that share its measure.
         log_frac = (log_w - torch.logsumexp(log_w, dim=1, keepdim=True)).reshape(b * n)
-        self.kernel_read_pairs = int(qi.shape[0])
+        if not torch.compiler.is_compiling():
+            self.kernel_read_pairs = int(qi.shape[0])
         plan = PairPlan.build(qi, bj, b * nq, b * n)
         return plan, self.kernel_basis(inv), log_frac[bj].to(log_b.dtype) + log_b
 
@@ -1326,7 +1336,8 @@ class ISLA(Module):
             theta=self.kernel_read_theta,
             eps=self.eps,
         )
-        self.kernel_read_pairs = pairs.n_pairs
+        if not torch.compiler.is_compiling():
+            self.kernel_read_pairs = pairs.n_pairs
         return pairs
 
     def _global_read_pairs(self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit):
@@ -1358,7 +1369,8 @@ class ISLA(Module):
         ]
         ### The cell's share of the boundary measure (the quadrature weight).
         log_frac = (log_w - torch.logsumexp(log_w, dim=1, keepdim=True))[..., 0]
-        self.kernel_read_pairs = b * nq * n
+        if not torch.compiler.is_compiling():
+            self.kernel_read_pairs = b * nq * n
         return basis, log_frac
 
     def _forward_tensors(
@@ -1383,6 +1395,14 @@ class ISLA(Module):
         """
         if not torch.compiler.is_compiling():
             self._validate_inputs(points, normals, measure_weights, query_points)
+        fields = global_inputs or {}
+        missing = [k for k in self.global_schema if k not in fields]
+        extra = [k for k in fields if k not in self.global_schema]
+        if missing or extra:
+            raise ValueError(
+                f"global_inputs fields do not match the declared set: missing {missing!r}, "
+                f"unexpected {extra!r}"
+            )
         b, n, _ = points.shape
         boundary = TensorDict(points=points, normals=normals, batch_size=[b, n])
         if measure_weights is not None:
@@ -1390,9 +1410,7 @@ class ISLA(Module):
         query = None
         if query_points is not None:
             query = TensorDict(points=query_points, batch_size=query_points.shape[:2])
-        data = TensorDict(
-            {FieldSchema.key(k): v for k, v in (global_inputs or {}).items()}, batch_size=[]
-        )
+        data = TensorDict({FieldSchema.key(k): v for k, v in fields.items()}, batch_size=[])
         return self._forward_tokens(boundary, query, self._global_rows(data, b, points))
 
     def _forward_tokens(

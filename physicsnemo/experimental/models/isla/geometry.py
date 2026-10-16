@@ -86,6 +86,9 @@ if HAS_TRITON:
 
 
 ### Queries per chunk of the torch search; bounds its (chunk, N) distance block.
+### Not under torch.compile on CPU (or CUDA without Triton): there the search
+### builds one (queries, N) block, whose memory grows as their product (about
+### 160 GB at 200k x 200k in float32), so compiling on CPU suits small inputs only.
 _TORCH_SEARCH_CHUNK = 4096
 
 
