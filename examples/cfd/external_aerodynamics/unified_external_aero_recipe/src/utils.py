@@ -252,11 +252,24 @@ def compile_model(model: torch.nn.Module, cfg: DictConfig) -> torch.nn.Module:
 
     ``compile_options`` holds the keyword arguments of ``torch.compile`` (e.g.
     ``fullgraph``, ``dynamic``, ``mode``); absent or empty means PyTorch's
-    defaults. Model templates may set them (the ISLA templates do).
+    defaults. Model templates may set them (the ISLA templates do). With
+    ``fullgraph``, a DistributedDataParallel model's wrapped module is compiled
+    in place instead, without DDPOptimizer's graph splitting: Dynamo cannot
+    trace DDP's own forward in one graph.
     """
     if not cfg.get("compile", False):
         return model
-    return torch.compile(model, **cfg.get("compile_options", {}))
+    options = cfg.get("compile_options", {})
+    if options.get("fullgraph", False) and isinstance(
+        model, torch.nn.parallel.DistributedDataParallel
+    ):
+        ### Dynamo cannot trace DDP._pre_forward under fullgraph, and DDPOptimizer's
+        ### bucket splitting is itself a graph break: compile the module DDP wraps,
+        ### as one graph.
+        torch._dynamo.config.optimize_ddp = False
+        model.module.compile(**options)
+        return model
+    return torch.compile(model, **options)
 
 
 def build_muon_optimizer(

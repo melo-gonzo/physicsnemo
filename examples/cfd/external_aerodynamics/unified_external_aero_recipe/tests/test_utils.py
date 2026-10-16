@@ -366,3 +366,30 @@ def test_compile_model_passes_the_template_compile_options(
         assert calls == ([expected] if compiled else [])
     if model.startswith("isla"):
         assert cfg.model.compile_blocks is False
+
+
+@pytest.mark.skipif(not torch.distributed.is_gloo_available(), reason="requires Gloo")
+def test_compile_model_compiles_the_ddp_module_in_place_under_fullgraph(
+    tmp_path, monkeypatch
+):
+    """Dynamo cannot trace DDP's forward in one graph: with ``fullgraph`` the wrapped
+    module is compiled in place (the DDP wrapper is returned) and DDPOptimizer does
+    not split it; without it the DDP model itself goes to ``torch.compile`` as before."""
+    calls = []
+    monkeypatch.setattr(torch, "compile", lambda f, **kw: calls.append((f, kw)) or f)
+    monkeypatch.setattr(torch._dynamo.config, "optimize_ddp", True)
+    torch.distributed.init_process_group(
+        "gloo", init_method=f"file://{tmp_path / 'store'}", rank=0, world_size=1
+    )
+    try:
+        ddp = torch.nn.parallel.DistributedDataParallel(torch.nn.Linear(2, 2))
+        cfg = OmegaConf.create({"compile": True, "compile_options": _ISLA_COMPILE})
+        assert compile_model(ddp, cfg) is ddp
+        assert calls == [(ddp.module._call_impl, _ISLA_COMPILE)]
+        assert ddp.module._compiled_call_impl is not None
+        assert torch._dynamo.config.optimize_ddp is False  # one graph, not split
+        calls.clear()
+        cfg = OmegaConf.create({"compile": True, "compile_options": {}})
+        assert compile_model(ddp, cfg) is ddp and calls == [(ddp, {})]
+    finally:
+        torch.distributed.destroy_process_group()
