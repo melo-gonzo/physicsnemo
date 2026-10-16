@@ -32,13 +32,16 @@ if the walker skips the TD branch.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 import torch
+from hydra import compose, initialize_config_dir
 from metrics import DEFAULT_METRICS, MetricCalculator, resolve_metrics
 from omegaconf import OmegaConf
 from tensordict import TensorDict
 from utils import (
+    compile_model,
     get_autocast_context,
     make_jsonl_logger,
     recursive_to_device,
@@ -330,3 +333,36 @@ def test_resolve_dict():
     assert resolve_dict(cfg, "a") == {"b": 1}
     assert resolve_dict(cfg, "empty") is None  # empty -> None
     assert resolve_dict(cfg, "missing") is None
+
+
+_CONF = Path(__file__).resolve().parents[1] / "conf"
+_MODELS = sorted(p.stem for p in (_CONF / "model").glob("*.yaml"))
+#: What every ISLA template sets: one graph, compiled once for every token count.
+_ISLA_COMPILE = {
+    "fullgraph": True,
+    "dynamic": True,
+    "mode": "max-autotune-no-cudagraphs",
+}
+
+
+@pytest.mark.parametrize("entry,compiled_by_default", [("train", True), ("infer", False)])
+@pytest.mark.parametrize("model", _MODELS)
+def test_compile_model_passes_the_template_compile_options(
+    model, entry, compiled_by_default, monkeypatch
+):
+    """The composed ``compile_options`` reach ``torch.compile``: the ISLA templates'
+    whole-model options (with the per-block compile off), PyTorch's defaults for
+    every other model; ``compile=false`` (infer.yaml's default) compiles nothing."""
+    calls = []
+    monkeypatch.setattr(torch, "compile", lambda m, **kw: calls.append(kw) or m)
+    expected = _ISLA_COMPILE if model.startswith("isla") else {}
+    net = torch.nn.Linear(2, 2)
+    for flag, compiled in ((None, compiled_by_default), ("true", True), ("false", False)):
+        overrides = [f"model={model}"] + ([f"compile={flag}"] if flag else [])
+        with initialize_config_dir(config_dir=str(_CONF), version_base=None):
+            cfg = compose(config_name=entry, overrides=overrides)
+        calls.clear()
+        assert compile_model(net, cfg) is net
+        assert calls == ([expected] if compiled else [])
+    if model.startswith("isla"):
+        assert cfg.model.compile_blocks is False

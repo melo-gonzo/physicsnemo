@@ -32,6 +32,13 @@ training:
                                   # (JEB-PLATEAU, book notebook 2026-10-05); half the rate trains. Every other model
                                   # hyperparameter is the reference configuration.
 
+# Whole-model torch.compile: one graph, compiled once for every token count; see isla_volume.yaml.
+compile: true
+compile_options:
+  fullgraph: true
+  dynamic: true
+  mode: max-autotune-no-cudagraphs
+
 forward_kwargs:
   boundary_meshes:
     surface: boundaries.surface   # Mesh[2, 3]; centroids, normals and the subsample's corrected measure are read from it
@@ -56,4 +63,4 @@ model:
   mlp_ratio: 4
   geo_checkpoint: true
   geo_kernel: null                # auto: the fused kernel (one global direction, one rank-1 token input)
-  compile_blocks: true            # per-block torch.compile (PERF-3, 2026-10-01); see isla_surface.yaml
+  compile_blocks: false           # per-block torch.compile: off, the whole model is compiled; see isla_volume.yaml

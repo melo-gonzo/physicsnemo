@@ -52,6 +52,22 @@ training:
   optimizer:
     lr: 3.75e-4
 
+# Whole-model torch.compile, the fastest way to run ISLA: the forward, Mesh in
+# and out, traces to one graph with no breaks (fullgraph) and compiles once with
+# dynamic shapes for every token count, so the case-to-case change in boundary
+# and point counts does not recompile. max-autotune-no-cudagraphs on purpose:
+# plain max-autotune also captures CUDA graphs, which are static-shape and would
+# record a new graph for every token count; at training sizes dynamic shapes are
+# faster than padding the cases to CUDA-graph size buckets. Not with
+# model.kernel_read (ISLA-DTT): its radius and tree reads break the graph and the
+# global read recompiles for every query count; there set compile=false and
+# model.compile_blocks=true.
+compile: true
+compile_options:
+  fullgraph: true
+  dynamic: true
+  mode: max-autotune-no-cudagraphs
+
 forward_kwargs:
   boundary_meshes:
     vehicle: boundaries.vehicle       # Mesh[2, 3] with the corrected cell measure in cell_data
@@ -77,11 +93,7 @@ model:
   # per-token inputs), the eager PyTorch region otherwise. Force with `eager`
   # or `fused`.
   geo_kernel: null
-  # Run every slice block under torch.compile (built at the first step; parameter
-  # names and checkpoints unchanged; the fused kernel stays a custom-op leaf). At
-  # 200,000 cells on four GB300 ranks: step 221 -> 180 ms and peak memory
-  # 44.9 -> 32.9 GiB on DrivAerML Surface, 475 -> 308 ms and 88.5 -> 64.5 GiB on
-  # the Volume, at bfloat16 roundoff (PERF-3, 2026-10-01). The recipe's own
-  # `compile` flag compiles the whole model and recompiles every case (the mesh
-  # vertex count varies); leave it false and use this instead.
-  compile_blocks: true
+  # Per-block torch.compile (PERF-3, 2026-10-01): off, since the recipe compiles
+  # the whole model (compile_options above). The way to compile ISLA-DTT
+  # (model.kernel_read), whose reads break the whole-model graph.
+  compile_blocks: false
