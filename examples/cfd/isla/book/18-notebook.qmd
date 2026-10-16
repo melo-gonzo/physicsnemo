@@ -37255,3 +37255,37 @@ the running minimum before epoch 60, and the validation loss at epochs
 loses its minimum at epochs 44 to 56, as in bfloat16, the harm does not
 come through the rounding, and the growth itself is the cause. Either
 way A2 remains the remedy, because it removes the growth.
+
+## 2026-10-16 — AEROZOO four reads: U2 falsified on both seeds, V1 not target-driven, H-PREC's F1 fails, H-FRAME's event comes ten epochs later {#sec-nb-aerozoo-four-reads}
+
+All on `full` at 3.75e-4 with uniform boundary draws; "departs" means
+a completed epoch's mean training loss above twice its running minimum,
+and "doubles" means the validation loss above twice its running minimum.
+
+**U2, second seed.** `azu_full_isla_seed43` departs at epoch 38, and its
+validation loss doubles by epoch 60 (0.139 against a minimum of 0.037 at
+epoch 20). U2 is falsified on both seeds.
+
+**V1.** Trained on velocity and pressure alone, ISLA loses its minimum as
+before: `azu_full_islavp_seed42` departs at epoch 42 and doubles by
+epoch 50 (0.099 against 0.017); seed 43 departs and doubles at epoch 30
+(0.051 against 0.017). The event is not driven by the heavy-tailed
+turbulence targets.
+
+**H-PREC.** The float32 fork from epoch 39 departs at epoch 51, one epoch
+before its bfloat16 control, and its validation loss at epoch 60 is
+0.150 against the bar of 0.063. F1 fails: the harm does not come through
+the rounding of the bfloat16 stream. The growth itself is the cause.
+
+**H-FRAME, seed 42.** With the head frame's prototype gain fixed at 0.1,
+the lane departs at epoch 62 and doubles by epoch 70 (0.082 against
+0.030), ten epochs later than its reference twin (52 and 60). The event
+recurs, as the registration expected, so F1 fails. Seed 43 is at epoch
+26.
+
+**Where this leaves the mechanism.** Contradictory draws, the turbulence
+targets, bfloat16 rounding and the head frame's gain are each ruled out
+as the cause. The multiplicative residual stream of
+@sec-nb-aerozoo-hresid-probe remains. Its remedy lanes (arms A and A2,
+rows 340 to 343) are at epoch 27 and reach the event's window within a
+day.
