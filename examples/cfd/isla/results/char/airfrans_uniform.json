@@ -11,8 +11,366 @@
   "nut_l2": "eddy viscosity"
  },
  "isla_arm": "ISLA 512 with 512 slices",
- "arms": {},
- "controls": {},
+ "arms": {
+  "ISLA 512 with 512 slices": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.02076295852661133,
+     "per_seed": {
+      "42": 0.019676260948181153,
+      "43": 0.021849656105041505
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.011982760429382323,
+     "per_seed": {
+      "42": 0.011607264280319213,
+      "43": 0.012358256578445435
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.024237345457077026,
+     "per_seed": {
+      "42": 0.023614048957824707,
+      "43": 0.024860641956329345
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.02076295852661133,
+     "per_seed": {
+      "42": 0.019676260948181153,
+      "43": 0.021849656105041505
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.011982760429382323,
+     "per_seed": {
+      "42": 0.011607264280319213,
+      "43": 0.012358256578445435
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.024237345457077026,
+     "per_seed": {
+      "42": 0.023614048957824707,
+      "43": 0.024860641956329345
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.020758404731750488,
+     "per_seed": {
+      "42": 0.01966437339782715,
+      "43": 0.021852436065673827
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.011983746886253357,
+     "per_seed": {
+      "42": 0.011607965230941772,
+      "43": 0.012359528541564942
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.024235676527023315,
+     "per_seed": {
+      "42": 0.023612253665924073,
+      "43": 0.024859099388122557
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   }
+  },
+  "GeoTransolver 256": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.012292659878730773,
+     "per_seed": {
+      "42": 0.011963926553726197,
+      "43": 0.012621393203735351
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.0364966094493866,
+     "per_seed": {
+      "42": 0.03800761222839356,
+      "43": 0.034985606670379636
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.019425700902938842,
+     "per_seed": {
+      "42": 0.01968292713165283,
+      "43": 0.019168474674224854
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.012292659878730773,
+     "per_seed": {
+      "42": 0.011963926553726197,
+      "43": 0.012621393203735351
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.0364966094493866,
+     "per_seed": {
+      "42": 0.03800761222839356,
+      "43": 0.034985606670379636
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.019425700902938842,
+     "per_seed": {
+      "42": 0.01968292713165283,
+      "43": 0.019168474674224854
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 2.508477249145508,
+     "per_seed": {
+      "42": 2.174871368408203,
+      "43": 2.8420831298828126
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 1.0944225311279299,
+     "per_seed": {
+      "42": 1.063691177368164,
+      "43": 1.1251538848876954
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 4.381432647705078,
+     "per_seed": {
+      "42": 5.562013549804687,
+      "43": 3.2008517456054686
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   }
+  },
+  "Transolver 512 x 16": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.013534815311431884,
+     "per_seed": {
+      "42": 0.013534411191940307,
+      "43": 0.013535219430923461
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.06694178581237793,
+     "per_seed": {
+      "42": 0.06517098903656006,
+      "43": 0.0687125825881958
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.021200734376907348,
+     "per_seed": {
+      "42": 0.02093219995498657,
+      "43": 0.021469268798828125
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.013534815311431884,
+     "per_seed": {
+      "42": 0.013534411191940307,
+      "43": 0.013535219430923461
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.06694178581237793,
+     "per_seed": {
+      "42": 0.06517098903656006,
+      "43": 0.0687125825881958
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.021200734376907348,
+     "per_seed": {
+      "42": 0.02093219995498657,
+      "43": 0.021469268798828125
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 1.6969483947753905,
+     "per_seed": {
+      "42": 1.60599853515625,
+      "43": 1.7878982543945312
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 1.1239596176147462,
+     "per_seed": {
+      "42": 1.101867446899414,
+      "43": 1.146051788330078
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 1.8167198181152342,
+     "per_seed": {
+      "42": 1.6974598693847656,
+      "43": 1.935979766845703
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   }
+  }
+ },
+ "controls": {
+  "ISLA-DTT (forest read at theta = 1)": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.019959421753883363,
+     "per_seed": {
+      "42": 0.018552290201187135,
+      "43": 0.02136655330657959
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.01189844250679016,
+     "per_seed": {
+      "42": 0.011790170669555664,
+      "43": 0.012006714344024658
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.027056267261505125,
+     "per_seed": {
+      "42": 0.02778338670730591,
+      "43": 0.026329147815704345
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.019959421753883363,
+     "per_seed": {
+      "42": 0.018552290201187135,
+      "43": 0.02136655330657959
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.01189844250679016,
+     "per_seed": {
+      "42": 0.011790170669555664,
+      "43": 0.012006714344024658
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.027056267261505125,
+     "per_seed": {
+      "42": 0.02778338670730591,
+      "43": 0.026329147815704345
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.01995884656906128,
+     "per_seed": {
+      "42": 0.018551316261291504,
+      "43": 0.021366376876831055
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.011898502707481384,
+     "per_seed": {
+      "42": 0.01179006576538086,
+      "43": 0.012006939649581909
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.0270583438873291,
+     "per_seed": {
+      "42": 0.027785627841949462,
+      "43": 0.02633105993270874
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   }
+  }
+ },
  "old_checkpoint_uniform": {
   "ISLA 512 with 512 slices": {
    "native": {
@@ -377,69 +735,69 @@
     "pressure_l2": {
      "old_block": 0.03521204471588135,
      "old_uniform": 0.04415853261947632,
-     "new_uniform": null,
+     "new_uniform": 0.02076295852661133,
      "scoring_effect": 1.254074649052116,
-     "training_effect": null
+     "training_effect": 0.47019131513110407
     },
     "velocity_l2": {
      "old_block": 0.01722329378128052,
      "old_uniform": 0.018936967849731444,
-     "new_uniform": null,
+     "new_uniform": 0.011982760429382323,
      "scoring_effect": 1.0994974648991627,
-     "training_effect": null
+     "training_effect": 0.6327708070514709
     },
     "nut_l2": {
      "old_block": 0.0314516294002533,
      "old_uniform": 0.05218265533447265,
-     "new_uniform": null,
+     "new_uniform": 0.024237345457077026,
      "scoring_effect": 1.6591399660219956,
-     "training_effect": null
+     "training_effect": 0.46447129418240757
     }
    },
    "area": {
     "pressure_l2": {
      "old_block": 0.03521204590797425,
      "old_uniform": 0.04415853261947632,
-     "new_uniform": null,
+     "new_uniform": 0.02076295852661133,
      "scoring_effect": 1.2540746065958075,
-     "training_effect": null
+     "training_effect": 0.47019131513110407
     },
     "velocity_l2": {
      "old_block": 0.01722329378128052,
      "old_uniform": 0.018936967849731444,
-     "new_uniform": null,
+     "new_uniform": 0.011982760429382323,
      "scoring_effect": 1.0994974648991627,
-     "training_effect": null
+     "training_effect": 0.6327708070514709
     },
     "nut_l2": {
      "old_block": 0.0314516294002533,
      "old_uniform": 0.05218265533447265,
-     "new_uniform": null,
+     "new_uniform": 0.024237345457077026,
      "scoring_effect": 1.6591399660219956,
-     "training_effect": null
+     "training_effect": 0.46447129418240757
     }
    },
    "posed": {
     "pressure_l2": {
      "old_block": 0.0352119517326355,
      "old_uniform": 0.0441472864151001,
-     "new_uniform": null,
+     "new_uniform": 0.020758404731750488,
      "scoring_effect": 1.2537585746541582,
-     "training_effect": null
+     "training_effect": 0.47020794294279206
     },
     "velocity_l2": {
      "old_block": 0.01722234308719635,
      "old_uniform": 0.018937622308731077,
-     "new_uniform": null,
+     "new_uniform": 0.011983746886253357,
      "scoring_effect": 1.0995961590621153,
-     "training_effect": null
+     "training_effect": 0.6328010291306909
     },
     "nut_l2": {
      "old_block": 0.03144981384277344,
      "old_uniform": 0.05218961715698242,
-     "new_uniform": null,
+     "new_uniform": 0.024235676527023315,
      "scoring_effect": 1.6594571089639243,
-     "training_effect": null
+     "training_effect": 0.46437735793547275
     }
    }
   },
@@ -448,69 +806,69 @@
     "pressure_l2": {
      "old_block": 0.02659208536148071,
      "old_uniform": 0.024592133760452273,
-     "new_uniform": null,
+     "new_uniform": 0.012292659878730773,
      "scoring_effect": 0.9247914718292302,
-     "training_effect": null
+     "training_effect": 0.49986145970379997
     },
     "velocity_l2": {
      "old_block": 0.03782288312911987,
      "old_uniform": 0.04227009057998657,
-     "new_uniform": null,
+     "new_uniform": 0.0364966094493866,
      "scoring_effect": 1.1175798110282817,
-     "training_effect": null
+     "training_effect": 0.8634145077197086
     },
     "nut_l2": {
      "old_block": 0.02930862069129944,
      "old_uniform": 0.03590722322463989,
-     "new_uniform": null,
+     "new_uniform": 0.019425700902938842,
      "scoring_effect": 1.2251420359505119,
-     "training_effect": null
+     "training_effect": 0.5409970239527944
     }
    },
    "area": {
     "pressure_l2": {
      "old_block": 0.02659208536148071,
      "old_uniform": 0.024592133760452273,
-     "new_uniform": null,
+     "new_uniform": 0.012292659878730773,
      "scoring_effect": 0.9247914718292302,
-     "training_effect": null
+     "training_effect": 0.49986145970379997
     },
     "velocity_l2": {
      "old_block": 0.03782288312911987,
      "old_uniform": 0.04227009057998657,
-     "new_uniform": null,
+     "new_uniform": 0.0364966094493866,
      "scoring_effect": 1.1175798110282817,
-     "training_effect": null
+     "training_effect": 0.8634145077197086
     },
     "nut_l2": {
      "old_block": 0.02930862069129944,
      "old_uniform": 0.03590722322463989,
-     "new_uniform": null,
+     "new_uniform": 0.019425700902938842,
      "scoring_effect": 1.2251420359505119,
-     "training_effect": null
+     "training_effect": 0.5409970239527944
     }
    },
    "posed": {
     "pressure_l2": {
      "old_block": 4.176097106933594,
      "old_uniform": 3.476201324462891,
-     "new_uniform": null,
+     "new_uniform": 2.508477249145508,
      "scoring_effect": 0.8324043324307132,
-     "training_effect": null
+     "training_effect": 0.7216144909366242
     },
     "velocity_l2": {
      "old_block": 1.123061981201172,
      "old_uniform": 1.1385398864746095,
-     "new_uniform": null,
+     "new_uniform": 1.0944225311279299,
      "scoring_effect": 1.013781879836127,
-     "training_effect": null
+     "training_effect": 0.9612509356318775
     },
     "nut_l2": {
      "old_block": 3.754583282470703,
      "old_uniform": 2.9072579956054687,
-     "new_uniform": null,
+     "new_uniform": 4.381432647705078,
      "scoring_effect": 0.7743224152674403,
-     "training_effect": null
+     "training_effect": 1.5070670213403596
     }
    }
   },
@@ -519,69 +877,69 @@
     "pressure_l2": {
      "old_block": 0.025857893228530885,
      "old_uniform": 0.029222075939178468,
-     "new_uniform": null,
+     "new_uniform": 0.013534815311431884,
      "scoring_effect": 1.1301027381045736,
-     "training_effect": null
+     "training_effect": 0.4631709033814931
     },
     "velocity_l2": {
      "old_block": 0.07068779945373535,
      "old_uniform": 0.0842103385925293,
-     "new_uniform": null,
+     "new_uniform": 0.06694178581237793,
      "scoring_effect": 1.191299478032901,
-     "training_effect": null
+     "training_effect": 0.794935478603059
     },
     "nut_l2": {
      "old_block": 0.0310625422000885,
      "old_uniform": 0.042516095638275145,
-     "new_uniform": null,
+     "new_uniform": 0.021200734376907348,
      "scoring_effect": 1.3687255654868458,
-     "training_effect": null
+     "training_effect": 0.4986519589494331
     }
    },
    "area": {
     "pressure_l2": {
      "old_block": 0.025857893228530885,
      "old_uniform": 0.029222075939178468,
-     "new_uniform": null,
+     "new_uniform": 0.013534815311431884,
      "scoring_effect": 1.1301027381045736,
-     "training_effect": null
+     "training_effect": 0.4631709033814931
     },
     "velocity_l2": {
      "old_block": 0.07068779945373535,
      "old_uniform": 0.0842103385925293,
-     "new_uniform": null,
+     "new_uniform": 0.06694178581237793,
      "scoring_effect": 1.191299478032901,
-     "training_effect": null
+     "training_effect": 0.794935478603059
     },
     "nut_l2": {
      "old_block": 0.0310625422000885,
      "old_uniform": 0.042516095638275145,
-     "new_uniform": null,
+     "new_uniform": 0.021200734376907348,
      "scoring_effect": 1.3687255654868458,
-     "training_effect": null
+     "training_effect": 0.4986519589494331
     }
    },
    "posed": {
     "pressure_l2": {
      "old_block": 1.7336174774169921,
      "old_uniform": 1.5288743591308593,
-     "new_uniform": null,
+     "new_uniform": 1.6969483947753905,
      "scoring_effect": 0.8818983305410659,
-     "training_effect": null
+     "training_effect": 1.1099331901544078
     },
     "velocity_l2": {
      "old_block": 0.9930257797241211,
      "old_uniform": 0.9946809005737305,
-     "new_uniform": null,
+     "new_uniform": 1.1239596176147462,
      "scoring_effect": 1.00166674509706,
-     "training_effect": null
+     "training_effect": 1.1299700406094537
     },
     "nut_l2": {
      "old_block": 2.381310119628906,
      "old_uniform": 1.914512405395508,
-     "new_uniform": null,
+     "new_uniform": 1.8167198181152342,
      "scoring_effect": 0.8039744129142903,
-     "training_effect": null
+     "training_effect": 0.948920368964613
     }
    }
   },
@@ -590,72 +948,72 @@
     "pressure_l2": {
      "old_block": 0.025902628898620605,
      "old_uniform": 0.02287751078605652,
-     "new_uniform": null,
+     "new_uniform": 0.019959421753883363,
      "scoring_effect": 0.8832119270826142,
-     "training_effect": null
+     "training_effect": 0.8724472666863877
     },
     "velocity_l2": {
      "old_block": 0.014037151336669922,
      "old_uniform": 0.01414316713809967,
-     "new_uniform": null,
+     "new_uniform": 0.01189844250679016,
      "scoring_effect": 1.0075525153848557,
-     "training_effect": null
+     "training_effect": 0.8412855756146342
     },
     "nut_l2": {
      "old_block": 0.032402225732803346,
      "old_uniform": 0.03178269743919373,
-     "new_uniform": null,
+     "new_uniform": 0.027056267261505125,
      "scoring_effect": 0.9808800698224128,
-     "training_effect": null
+     "training_effect": 0.851289205809823
     }
    },
    "area": {
     "pressure_l2": {
      "old_block": 0.025902628898620605,
      "old_uniform": 0.02287751078605652,
-     "new_uniform": null,
+     "new_uniform": 0.019959421753883363,
      "scoring_effect": 0.8832119270826142,
-     "training_effect": null
+     "training_effect": 0.8724472666863877
     },
     "velocity_l2": {
      "old_block": 0.014037151336669922,
      "old_uniform": 0.01414316713809967,
-     "new_uniform": null,
+     "new_uniform": 0.01189844250679016,
      "scoring_effect": 1.0075525153848557,
-     "training_effect": null
+     "training_effect": 0.8412855756146342
     },
     "nut_l2": {
      "old_block": 0.03240222454071045,
      "old_uniform": 0.03178269743919373,
-     "new_uniform": null,
+     "new_uniform": 0.027056267261505125,
      "scoring_effect": 0.9808801059094464,
-     "training_effect": null
+     "training_effect": 0.851289205809823
     }
    },
    "posed": {
     "pressure_l2": {
      "old_block": 0.025899093151092532,
      "old_uniform": 0.02287682056427002,
-     "new_uniform": null,
+     "new_uniform": 0.01995884656906128,
      "scoring_effect": 0.8833058528655463,
-     "training_effect": null
+     "training_effect": 0.8724484468018185
     },
     "velocity_l2": {
      "old_block": 0.01403689682483673,
      "old_uniform": 0.014143145084381104,
-     "new_uniform": null,
+     "new_uniform": 0.011898502707481384,
      "scoring_effect": 1.0075692128303158,
-     "training_effect": null
+     "training_effect": 0.8412911439776873
     },
     "nut_l2": {
      "old_block": 0.03240204215049744,
      "old_uniform": 0.03178444743156433,
-     "new_uniform": null,
+     "new_uniform": 0.0270583438873291,
      "scoring_effect": 0.9809396359629257,
-     "training_effect": null
+     "training_effect": 0.8513076700669064
     }
    }
   }
  },
- "complete": false
+ "complete": true
 }
