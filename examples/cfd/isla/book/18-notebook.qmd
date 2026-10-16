@@ -36996,3 +36996,30 @@ has doubled its running minimum. The reference-rate event came at
 with the rate cut tenfold at epoch 100. R1, the event delayed rather
 than cured, is now unlikely. R2 is read at epoch 250, with the final
 `full` checkpoints' validation velocity against the 0.25 bar.
+
+## 2026-10-15 — AEROZOO U2 falsified on seed 42: the reference-rate event recurs under uniform boundary draws; H-FRAME launched {#sec-nb-aerozoo-u2-falsified}
+
+**Result.** `azu_full_isla_seed42`: ISLA at 3.75e-4 on `full`, uniform
+boundary draws (@sec-nb-aerozoo-uniform-prereg). Its mean training
+loss per epoch falls to 0.0248 at epoch 40, rises from epoch 44, and
+passes twice its running minimum at epoch 52 (0.073). It stays near
+0.15 through epochs 74 to 85. The validation loss reaches its minimum
+of 0.0315 at epoch 30 (velocity 0.171, pressure 0.155). It is 0.0463
+at epoch 50, 0.0909 at epoch 60 and 0.162 at epoch 80 (velocity 0.441,
+pressure 0.586). The running minimum doubled by epoch 60, so U2 is
+falsified. The event came where it came under the windowed protocol.
+There, the training losses of rows 0 and 1 departed at epochs 43 to 56
+and the strict detector fired at epochs 60 and 70. Seed 43 is at epoch
+24 and still clean. It is read when it passes epoch 100.
+
+**What it means.** Contradictory boundary draws did not cause the
+reference-rate event, at least on seed 42. The half-rate arms remain
+the operating remedy, and R2 is read at epoch 250. The mechanism is
+still open, and two registered tests are now the critical path.
+H-FRAME (F1 of @sec-nb-aerozoo-matrix-prereg: the head frame's
+prototype gain fixed at 0.1, snapshot code_v28) runs on the uniform
+protocol as rows 338 and 339, against `azu_full_isla_seed{42,43}`. Its
+registered text is unchanged, and the expectation is still that the
+event recurs. V1 is read on the reference-rate velocity-and-pressure
+lanes `azu_full_islavp_seed{42,43}`. Both tests now run first among
+this program's jobs on LHR.
