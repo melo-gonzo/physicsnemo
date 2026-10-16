@@ -37449,3 +37449,26 @@ controls and the extrapolation splits stay on block draws there and
 are labeled so. The other chapters that quote `results/char/airfrans.json`
 (the thesis table of the index, chapter 16 and the AeroZoo chapter's
 comparison) are not changed in this entry.
+
+## 2026-10-16 — AEROZOO remedy R2 holds: the half rate cures the event, and GeoTransolver ÷ half-rate ISLA reads 2.01 on velocity {#sec-nb-aerozoo-remedy-r2}
+
+The second condition of R2 (@sec-nb-aerozoo-remedy-prereg) is read on
+the float32 scores of the final `full` checkpoints of the half-rate ISLA
+pair (windowed boundary protocol, as registered). Validation velocity is
+0.168 (seeds 0.166 and 0.170), against the bar of 0.25; with the first
+condition (@sec-nb-aerozoo-remedy-r2-first), **R2 holds: the half rate
+cures the event on AeroZoo.** The P1 re-read registered under R2 is met:
+on `full` test velocity, GeoTransolver ÷ half-rate ISLA is 2.01 (paired
+by seed 1.99 and 2.02), against the bar of 1.4. Test velocity is 0.174
+(0.172 and 0.176) for half-rate ISLA and 0.350 (0.343 and 0.357) for
+GeoTransolver. The re-read registered velocity only. On pressure,
+GeoTransolver ÷ half-rate ISLA is 4.37 (4.31 and 4.43; test pressure
+0.113 against 0.494), the opposite side of the original P1's pressure
+clause (at or below 0.9). The reference-rate ISLA finals read 0.458 on
+velocity and 0.792 on pressure, after the event. These lanes read each
+boundary through the contiguous window (@sec-nb-aerozoo-boundary-window),
+for both architectures alike; the uniform-protocol relaunch repeats the
+comparison. The half-rate ISLA-DTT pair has not doubled through epochs
+160 to 200 and is still training. H-RESID's normalized reads (A2) aim
+to make the rate exception unnecessary; their reads (P3, P5) are
+pending.

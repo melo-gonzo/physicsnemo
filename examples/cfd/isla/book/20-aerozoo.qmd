@@ -640,7 +640,7 @@ for row, (kind, klab) in enumerate(KINDS):
                 continue
             Sa = strata(a, kind); kw = series_kwargs(KEY[a])
             ys = [Sa[c][f]["mean"] if c in Sa and f in Sa[c] else np.nan for c in cats]
-            ax.plot(xs, ys, marker=kw["marker"], color=kw["color"], mfc=kw["mfc"], mec=kw["mec"], mew=kw["mew"], ms=7, lw=(1.4 if kind == "log10_re_decade" else 0), ls=kw["ls"], label=kw["label"], zorder=5)
+            ax.plot(xs, ys, marker=kw["marker"], color=kw["color"], mfc=kw["mfc"], mec=kw["mec"], mew=kw["mew"], ms=7, lw=(1.4 if kind == "log10_re_decade" else 0), ls=(kw["ls"] if kind == "log10_re_decade" else "none"), label=kw["label"], zorder=5)
             for x, c in zip(xs, cats):
                 if c in Sa and f in Sa[c]:
                     seed_marks(ax, x, Sa[c][f]["per_seed"].values(), kw["color"])
