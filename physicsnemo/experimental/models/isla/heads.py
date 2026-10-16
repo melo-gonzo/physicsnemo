@@ -133,10 +133,11 @@ class _OutputLayout:
         set_(self, "n_coeffs", n_free + len(iso))
 
 
-def _assemble_output(coeffs, layout: _OutputLayout, true_vecs, pseudo_vecs):
+def _assemble_output(coeffs, layout: _OutputLayout, true_vecs, pseudo_vecs, index=None):
     """Contract one output's coefficients ``(B, N, n_coeffs)`` with the token basis.
 
-    ``true_vecs`` is ``(B, N, m, d)``, ``pseudo_vecs`` ``(B, N, p, d)``. Returns
+    ``true_vecs`` is ``(B, N, m, d)``, ``pseudo_vecs`` ``(B, N, p, d)``; ``index``
+    is ``layout.index`` already on the coefficients' device (``None``: copied). Returns
     ``(B, N)`` at rank 0 and ``(B, N, d, ..., d)`` with ``rank`` trailing axes
     otherwise. The full coefficient tensor over ordered multi-indices is
     gathered from the free coefficients and contracted one index at a time,
@@ -153,7 +154,7 @@ def _assemble_output(coeffs, layout: _OutputLayout, true_vecs, pseudo_vecs):
     )
     c_free = coeffs[..., : layout.n_free]
     c_full = torch.cat([c_free, c_free.new_zeros(b, n, 1)], dim=-1)[
-        ..., layout.index.to(coeffs.device)
+        ..., (layout.index if index is None else index).to(coeffs.device)
     ]
     x = c_full  # (B, N, n_vec**r), indices (j1, ..., jr) row-major
     for _ in range(r):

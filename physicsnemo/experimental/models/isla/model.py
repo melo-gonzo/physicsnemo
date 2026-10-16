@@ -706,6 +706,11 @@ class ISLA(Module):
         self.n_head_coeffs = sum(
             layout.n_coeffs for layout in self.output_layouts.values()
         )
+        ### Each layout's coefficient index as a (non-persistent) buffer, so it
+        ### follows the model's device instead of being copied there every pass.
+        for i, layout in enumerate(self.output_layouts.values()):
+            if layout.index is not None:
+                self.register_buffer(f"_output_index_{i}", layout.index, persistent=False)
         self.head = nn.Linear(hidden, self.n_head_coeffs)
         ### Prediction-point tokens (interior=True): the prediction points join the
         ### encoder as INTERACTING tokens, carrying the same {n_q, g_k} invariant
@@ -1538,8 +1543,9 @@ class ISLA(Module):
 
         out: dict[str, torch.Tensor] = {}
         start = 0
-        for name, layout in self.output_layouts.items():
+        for i, (name, layout) in enumerate(self.output_layouts.items()):
             c = coeffs[..., start : start + layout.n_coeffs]
-            out[name] = _assemble_output(c, layout, true_vecs, pseudo_vecs)
+            index = getattr(self, f"_output_index_{i}", None)
+            out[name] = _assemble_output(c, layout, true_vecs, pseudo_vecs, index)
             start += layout.n_coeffs
         return out
