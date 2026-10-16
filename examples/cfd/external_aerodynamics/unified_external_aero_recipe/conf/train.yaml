@@ -75,6 +75,10 @@ run_id: "${hydra:runtime.choices.model}__${dataset}__${now:%Y%m%d_%H%M%S}"
 output_dir: "runs"
 checkpoint_dir: null
 compile: true
+# Keyword arguments of torch.compile(model, ...) when `compile` is true (e.g.
+# fullgraph, dynamic, mode); empty = PyTorch's defaults. A model template may
+# set them (the ISLA templates do; see isla_volume.yaml).
+compile_options: {}
 
 # -- Training schedule ------------------------------------------------------
 # Defaults match the GeoTransolver recipes (the most common case).

@@ -247,6 +247,18 @@ def set_seed(seed: int | None, rank: int = 0) -> None:
     torch.cuda.manual_seed_all(seed)
 
 
+def compile_model(model: torch.nn.Module, cfg: DictConfig) -> torch.nn.Module:
+    """``torch.compile(model, **cfg.compile_options)`` when ``cfg.compile`` is true.
+
+    ``compile_options`` holds the keyword arguments of ``torch.compile`` (e.g.
+    ``fullgraph``, ``dynamic``, ``mode``); absent or empty means PyTorch's
+    defaults. Model templates may set them (the ISLA templates do).
+    """
+    if not cfg.get("compile", False):
+        return model
+    return torch.compile(model, **cfg.get("compile_options", {}))
+
+
 def build_muon_optimizer(
     model: torch.nn.Module, cfg: DictConfig, *, compile_optimizer: bool = False
 ) -> torch.optim.Optimizer:
