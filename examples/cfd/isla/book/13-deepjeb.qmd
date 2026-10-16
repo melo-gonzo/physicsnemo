@@ -68,17 +68,19 @@ def bc_legend(ax, kinds, loc="lower right", extra=()):
     handles = [Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds] + list(extra)
     ax.legend(handles=handles, loc=loc, fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
 
-# ---- the three-protocol headline table ----
-# The three architectures' reference configurations scored on (i) the native validation mesh, (ii) a uniform point cloud of
-# the same budget and (iii) every validation case rotated and translated. Read from results/char/<dataset>.json when that
+# ---- the protocol headline table ----
+# The three architectures' reference configurations scored on the native validation mesh and with every validation case rotated
+# and translated; the artifact's uniform-point-cloud ("area") column is dropped on this task, where its scoring is pending
+# (@sec-surface-deepjeb). Read from results/char/<dataset>.json when that
 # artifact exists; until it does the cell prints nothing and the native-mesh table above is the headline. Expected schema:
 # {"fields": {key: label}, "protocols": {"native": label, "uniform": label, "posed": label}, "isla_arm": name,
 #  "arms": {name: {protocol: {field: {"mean": x, "seeds": [...]}}}}}.
-def protocol_table(artifact, label, setting):
+def protocol_table(artifact, label, setting, drop=("area",)):
     p = RES / "char" / artifact
     if not p.exists():
         return
-    C = json.load(open(p)); protos = C["protocols"]; fields = C["fields"]; isla = C["arms"][C["isla_arm"]]
+    C = json.load(open(p)); fields = C["fields"]; isla = C["arms"][C["isla_arm"]]
+    protos = {pk: pl for pk, pl in C["protocols"].items() if pk not in drop}
     flab = " / ".join(fields.values())
     hdr = "| configuration | " + " | ".join(f"{pl}: {flab}" for pl in protos.values()) + " |\n|---|" + "---|" * len(protos) + "\n"
     rows = []
@@ -87,9 +89,9 @@ def protocol_table(artifact, label, setting):
         if arm != C["isla_arm"]:
             rows.append(f"| {arm} ÷ ISLA | " + " | ".join(" / ".join(f"{d[pk][f]['mean'] / isla[pk][f]['mean']:.2f}" for f in fields) for pk in protos) + " |")
     print(hdr + "\n".join(rows) + "\n")
-    print(f": {setting}: the three architectures at their reference configurations under three scorings of one instrument, the "
-          f"native validation mesh, a uniform point cloud at the same budget, and every validation case rotated and translated; "
-          f"fields {flab}; seed means, float32. How to read this: a ratio is baseline ÷ ISLA, above one favoring ISLA; the three "
+    print(f": {setting}: the three architectures at their reference configurations under two scorings of one instrument, the "
+          f"native validation mesh and every validation case rotated and translated; "
+          f"fields {flab}; seed means, float32. How to read this: a ratio is baseline ÷ ISLA, above one favoring ISLA; the two "
           f"columns share the checkpoint and differ only in how the validation cases are presented. Data: results/char/{artifact}. "
           f"{{#{label}}}")
 
@@ -255,8 +257,8 @@ protocol_table("deepjeb_surface.json", "tbl-deepjeb-protocols", "DeepJEB++ at 12
 ```{python}
 #| label: para-deepjeb-trajectory
 #| output: asis
-print(f"The two protocols beside the native one add nothing here: the area protocol is the identity on DeepJEB++ (every bracket's surface "
-      f"mesh is below the cell budget, so the uniform draw is the mesh itself) and the posed protocol reproduces ISLA's native numbers to "
+print(f"The area-weighted (uniform-point-cloud) scoring is pending for this task: every bracket's surface mesh is below the cell budget, "
+      f"so at that budget the draw returns the mesh itself. The rotated and translated scoring reproduces ISLA's native numbers to "
       f"four digits while the baselines read {C['arms']['GeoTransolver 256']['posed']['displacement_l2']['mean']:.2f} and "
       f"{C['arms']['Transolver 512 x 16']['posed']['displacement_l2']['mean']:.2f} on displacement, the pose dependence that every dataset "
       f"chapter measures (@sec-pose). Data: results/char/deepjeb_trajectories_2026-10-07.json for the trajectories (trainer validation per "

@@ -1,6 +1,6 @@
 # GINOT Bracket Lug {#sec-lug}
 
-**The bracket lug is a three-dimensional elastoplastic solid whose target is a true scalar, the von Mises stress, and whose load has no direction of its own; under the float32 protocol GeoTransolver and Transolver lead ISLA on it by about two to one, and the same scorer in bfloat16 puts all three within a tenth of one another, so the deficit is a precision sensitivity of the trained ISLA's nearest-boundary-sample selection on a mesh where most nodes are tied, not a capacity or training difference; under a generic rigid motion ISLA's error rises by half while the baselines' rise to the mean-field level.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the three scorings, the precision diagnostic and the pose attribution that belong to this dataset, and what the dataset does not say. The pose contract is exercised here with no global vector at all ($K = 0$), the setting where canonicalization has nothing to align to (@sec-pose); the uniform-point-cloud scoring is the identity here because the surface is kept whole and the interior is a point cloud. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
+**The bracket lug is a three-dimensional elastoplastic solid whose target is a true scalar, the von Mises stress, and whose load has no direction of its own; under the float32 protocol GeoTransolver and Transolver lead ISLA on it by about two to one, and the same scorer in bfloat16 puts all three within a tenth of one another, so the deficit is a precision sensitivity of the trained ISLA's nearest-boundary-sample selection on a mesh where most nodes are tied, not a capacity or training difference; under a generic rigid motion ISLA's error rises by half while the baselines' rise to the mean-field level.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the native mesh and rotated and translated, the precision diagnostic and the pose attribution that belong to this dataset, and what the dataset does not say. The pose contract is exercised here with no global vector at all ($K = 0$), the setting where canonicalization has nothing to align to (@sec-pose); the uniform-point-cloud scoring is the identity here because the surface is kept whole and the interior is a point cloud. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
 ```{python}
 #| label: setup-lug
@@ -58,13 +58,15 @@ def bc_legend(ax, kinds, loc="lower right", extra=()):
     handles = [Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds] + list(extra)
     ax.legend(handles=handles, loc=loc, fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
 
-# ---- the three-protocol headline table ----
-# The three architectures' reference configurations scored on (i) the native validation mesh, (ii) a uniform point cloud of
-# the same budget and (iii) every validation case rotated and translated, read from results/char/<dataset>.json. Schema:
+# ---- the protocol headline table ----
+# The three architectures' reference configurations scored on the native validation mesh and with every validation case rotated
+# and translated, read from results/char/<dataset>.json; the artifact's uniform-point-cloud ("area") column is dropped on this
+# task, where its scoring is pending (@sec-lug-measured). Schema:
 # {"protocols": {"native": label, "area": label, "posed": label}, "fields": {key: label}, "isla_arm": name,
 #  "arms": {name: {protocol: {field: {"mean": x, "per_seed": {seed: x}, "n_cases": n, "n_seeds": n}}}}}.
-def protocol_table(artifact, label, setting):
-    C = json.load(open(RES / "char" / artifact)); protos = C["protocols"]; fields = C["fields"]; isla = C["arms"][C["isla_arm"]]
+def protocol_table(artifact, label, setting, drop=("area",)):
+    C = json.load(open(RES / "char" / artifact)); fields = C["fields"]; isla = C["arms"][C["isla_arm"]]
+    protos = {pk: pl for pk, pl in C["protocols"].items() if pk not in drop}
     flab = " / ".join(fields.values())
     hdr = "| configuration | " + " | ".join(f"{pl}: {flab}" for pl in protos.values()) + " |\n|---|" + "---|" * len(protos) + "\n"
     rows = []
@@ -74,10 +76,10 @@ def protocol_table(artifact, label, setting):
         if arm != C["isla_arm"]:
             rows.append(f"| {arm} ÷ ISLA | " + " | ".join(" / ".join(f"{d[pk][f]['mean'] / isla[pk][f]['mean']:.2f}" for f in fields) for pk in protos) + " |")
     print(hdr + "\n".join(rows) + "\n")
-    print(f": {setting}: the three architectures at their reference configurations under three scorings of one checkpoint, the "
-          f"native validation mesh, a uniform point cloud at the same budget, and every validation case rotated and translated; "
+    print(f": {setting}: the three architectures at their reference configurations under two scorings of one checkpoint, the "
+          f"native validation mesh and every validation case rotated and translated; "
           f"fields {flab}; seed means over two seeds unless the row says one, float32. How to read this: a ratio is baseline ÷ ISLA, "
-          f"above one favoring ISLA; the three columns share the checkpoint and differ only in how the validation cases are presented. "
+          f"above one favoring ISLA; the two columns share the checkpoint and differ only in how the validation cases are presented. "
           f"Data: results/char/{artifact}. {{#{label}}}")
 
 # ---- readings from the same artifact ----
@@ -273,10 +275,11 @@ print(f"**Every node is a query token, and the readout is the float32 relative L
       "ISLA reads the boundary triangles with the clamped, hole, loaded and pressure labels as boundary scalars, the four design parameters "
       "as global scalars, and every node as a query with the stored signed distance and its gradient (no global vector, so the eager "
       "geometry kernel); GeoTransolver and Transolver read every node with the nodal tags, the same stored distance and gradient, and the "
-      "parameters in their global embedding (@sec-data-lug). Each trained checkpoint is scored three ways on the same lugs: on the native "
-      "nodes; on the uniform-point-cloud variant, which is the identity here because the surface triangles are kept whole and the interior "
-      "is a point cloud without cell measures; and with every lug rigidly rotated by a keyed SO(3) rotation and translated by one RMS "
-      "point radius, with no centering step in this pipeline, so the translation reaches the model (@sec-invariances).")
+      "parameters in their global embedding (@sec-data-lug). Each trained checkpoint is scored two ways on the same lugs: on the native "
+      "nodes, and with every lug rigidly rotated by a keyed SO(3) rotation and translated by one RMS "
+      "point radius, with no centering step in this pipeline, so the translation reaches the model (@sec-invariances). The area-weighted "
+      "(uniform-point-cloud) scoring is pending for this task: at the scoring budget the surface triangles are kept whole and the interior "
+      "is a point cloud without cells, so that scoring returns the native mesh.")
 epoch_ratio = COST["ISLA"]["epoch_seconds"] / statistics.mean(COST[a]["epoch_seconds"] for a in BASELINES)
 print()
 print("**Cost.** Training on this task, one epoch at the reference configurations on four GB300 ranks in bfloat16 (peak device memory, "
@@ -332,13 +335,11 @@ same_jit = max(jit) - min(jit) < 1e-4
 t2_shift = TAR["ISLA"]["posed"]["stress_l2"]["mean"] / TAR["ISLA"]["native"]["stress_l2"]["mean"]
 lug_native = AR["ISLA"]["native"][F]["mean"]; lug_delta = AR["ISLA"]["posed"][F]["mean"] - lug_native
 per_seed = [p / n for p, n in zip(seeds_of(AR["ISLA"]["posed"][F]), seeds_of(AR["ISLA"]["native"][F]))]
-print(f"Three readings. First, the native column: ISLA's error is {100 * lug_native:.2f}% of the field (seeds "
+print(f"Two readings. First, the native column: ISLA's error is {100 * lug_native:.2f}% of the field (seeds "
       f"{' and '.join(f'{100 * v:.2f}%' for v in isla_s)}) against {100 * AR['GeoTransolver']['native'][F]['mean']:.2f}% for GeoTransolver and "
       f"{100 * AR['Transolver']['native'][F]['mean']:.2f}% for Transolver, on a problem whose target is a frame-free scalar, whose loading has "
       "no direction of its own and whose parameters enter as four global scalars; what that column measures is read below, with the "
-      "precision diagnostic (@fig-lug-precision). Second, the uniform-point-cloud "
-      "column equals the native column for every architecture, as it must here (the surface is kept whole, the interior has no cell "
-      "measure), so discretization independence is not measured on this dataset. Third, the rotated and translated column. The baselines' "
+      "precision diagnostic (@fig-lug-precision). Second, the rotated and translated column. The baselines' "
       "numbers are the expected failure of laboratory-frame inputs trained without augmentation. ISLA's is not expected from the contract: "
       f"its von Mises error reads {shift('ISLA', 'posed'):.2f} times its native value (per seed {' and '.join(f'{v:.2f}' for v in per_seed)}), "
       f"where the DrivAerML Volume task reads {dr_posed_shift:.3f} and Tensile2d {t2_shift:.2f} (@tbl-drivaerml-volume-protocols, "
@@ -443,4 +444,4 @@ print(f"**The float32 deficit is a precision sensitivity of one trained model, n
 
 ## What this dataset does not say {#sec-lug-limits}
 
-**The lug standing is a float32 reading on one scalar field of one bracket family, with three parameters of one shape, and both its native deficit and its pose shift measure the class's nearest-sample tie-breaking under rounding rather than its capacity or its frame.** It says nothing about tensor targets, which Tensile2d measures (@sec-interior-tensile2d), nor about geometry beyond the family, nor about discretization independence, which the identity point-cloud column cannot test here. The three configurations are the reference configurations as shipped (parameter counts in @sec-lug-measured) and are not matched in step time or memory. The published GINOT, Transolver and GNOT numbers are on the authors' split and are comparable in kind, not in value.
+**The lug standing is a float32 reading on one scalar field of one bracket family, with three parameters of one shape, and both its native deficit and its pose shift measure the class's nearest-sample tie-breaking under rounding rather than its capacity or its frame.** It says nothing about tensor targets, which Tensile2d measures (@sec-interior-tensile2d), nor about geometry beyond the family, nor about discretization independence, which this dataset does not test: at the scoring budget the point-cloud draw returns the native mesh. The three configurations are the reference configurations as shipped (parameter counts in @sec-lug-measured) and are not matched in step time or memory. The published GINOT, Transolver and GNOT numbers are on the authors' split and are comparable in kind, not in value.

@@ -1,6 +1,6 @@
 # PLAID Tensile2d {#sec-tensile2d}
 
-**Tensile2d is the first solid in the book and the dataset on which the component clause of the output contract binds: its targets are the components of a stress tensor, which ISLA predicts as a tensor and the recipe reads off. At 400 training specimens GeoTransolver and Transolver lead ISLA on stress, displacement and plastic strain on the native mesh; rotated and translated in the plane, ISLA's error shifts by a few percent while the baselines' rise to the mean-field level.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the three scorings, the controls that belong to this dataset, and what the dataset does not say. The pose contract is exercised here in its tensor form (@sec-pose, @sec-isla-heads); the uniform-point-cloud scoring is the identity on this dataset, because the boundary polyline is kept whole and the interior is a point cloud. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
+**Tensile2d is the first solid in the book and the dataset on which the component clause of the output contract binds: its targets are the components of a stress tensor, which ISLA predicts as a tensor and the recipe reads off. At 400 training specimens GeoTransolver and Transolver lead ISLA on stress, displacement and plastic strain on the native mesh; rotated and translated in the plane, ISLA's error shifts by a few percent while the baselines' rise to the mean-field level.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the native mesh and rotated and translated, the controls that belong to this dataset, and what the dataset does not say. The pose contract is exercised here in its tensor form (@sec-pose, @sec-isla-heads); the uniform-point-cloud scoring is the identity on this dataset, because the boundary polyline is kept whole and the interior is a point cloud. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
 ```{python}
 #| label: setup-tensile2d
@@ -64,13 +64,15 @@ def bc_legend(ax, kinds, loc="lower right", extra=()):
     handles = [Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds] + list(extra)
     ax.legend(handles=handles, loc=loc, fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
 
-# ---- the three-protocol headline table ----
-# The three architectures' reference configurations scored on (i) the native validation mesh, (ii) a uniform point cloud of
-# the same budget and (iii) every validation case rotated and translated, read from results/char/<dataset>.json. Schema:
+# ---- the protocol headline table ----
+# The three architectures' reference configurations scored on the native validation mesh and with every validation case rotated
+# and translated, read from results/char/<dataset>.json; the artifact's uniform-point-cloud ("area") column is dropped on this
+# task, where its scoring is pending (@sec-tensile2d-measured). Schema:
 # {"protocols": {"native": label, "area": label, "posed": label}, "fields": {key: label}, "isla_arm": name,
 #  "arms": {name: {protocol: {field: {"mean": x, "per_seed": {seed: x}, "n_cases": n, "n_seeds": n}}}}}.
-def protocol_table(artifact, label, setting):
-    C = json.load(open(RES / "char" / artifact)); protos = C["protocols"]; fields = C["fields"]; isla = C["arms"][C["isla_arm"]]
+def protocol_table(artifact, label, setting, drop=("area",)):
+    C = json.load(open(RES / "char" / artifact)); fields = C["fields"]; isla = C["arms"][C["isla_arm"]]
+    protos = {pk: pl for pk, pl in C["protocols"].items() if pk not in drop}
     flab = " / ".join(fields.values())
     hdr = "| configuration | " + " | ".join(f"{pl}: {flab}" for pl in protos.values()) + " |\n|---|" + "---|" * len(protos) + "\n"
     rows = []
@@ -80,10 +82,10 @@ def protocol_table(artifact, label, setting):
         if arm != C["isla_arm"]:
             rows.append(f"| {arm} ÷ ISLA | " + " | ".join(" / ".join(f"{d[pk][f]['mean'] / isla[pk][f]['mean']:.2f}" for f in fields) for pk in protos) + " |")
     print(hdr + "\n".join(rows) + "\n")
-    print(f": {setting}: the three architectures at their reference configurations under three scorings of one checkpoint, the "
-          f"native validation mesh, a uniform point cloud at the same budget, and every validation case rotated and translated; "
+    print(f": {setting}: the three architectures at their reference configurations under two scorings of one checkpoint, the "
+          f"native validation mesh and every validation case rotated and translated; "
           f"fields {flab}; seed means over two seeds unless the row says one, float32. How to read this: a ratio is baseline ÷ ISLA, "
-          f"above one favoring ISLA; the three columns share the checkpoint and differ only in how the validation cases are presented. "
+          f"above one favoring ISLA; the two columns share the checkpoint and differ only in how the validation cases are presented. "
           f"Data: results/char/{artifact}. {{#{label}}}")
 
 # ---- readings from the same artifact ----
@@ -324,10 +326,11 @@ print(f"**Every mesh node is an interacting query token, and the readout is the 
       "with the off-diagonal counted twice, computed by one formula for all three arms from their predicted components; the per-component "
       "relative errors are not rotation-invariant, because a rotation redistributes a tensor among its laboratory-frame components, so they "
       "cannot be compared across the native and the posed scorings even for an exactly equivariant model. The plastic strain is standardized "
-      "and heavy-tailed, so its ratios are orderings. Each trained checkpoint is scored three ways on the same specimens: on the native "
-      "nodes; on the uniform-point-cloud variant, which is the identity here because the boundary polyline is kept whole and the interior is "
-      "a point cloud without cell measures; and with every specimen rigidly rotated in its plane and translated by one RMS point radius, "
-      "the stress components rotated as a tensor and the displacement as a vector (@sec-invariances).")
+      "and heavy-tailed, so its ratios are orderings. Each trained checkpoint is scored two ways on the same specimens: on the native "
+      "nodes, and with every specimen rigidly rotated in its plane and translated by one RMS point radius, "
+      "the stress components rotated as a tensor and the displacement as a vector (@sec-invariances). The area-weighted "
+      "(uniform-point-cloud) scoring is pending for this task: at the scoring budget the boundary polyline is kept whole and the interior "
+      "is a point cloud without cells, so that scoring returns the native mesh.")
 ```
 
 ```{python}
@@ -377,15 +380,14 @@ b_posed_over_native = [shift(a, f, "posed") for a in BASELINES for f in ("stress
 gt_native = " / ".join(f"{rat('GeoTransolver', f):.2f}" for f, _ in T2D_FIELDS)
 t_native = " / ".join(f"{rat('Transolver', f):.2f}" for f, _ in T2D_FIELDS)
 field_labels = " / ".join(lab for _, lab in T2D_FIELDS)
-print(f"Three readings. First, the native column: GeoTransolver ÷ ISLA {gt_native} and Transolver ÷ ISLA {t_native} ({field_labels}). "
+print(f"Two readings. First, the native column: GeoTransolver ÷ ISLA {gt_native} and Transolver ÷ ISLA {t_native} ({field_labels}). "
       "Both baselines lead on the two load-bearing fields, stress and displacement, on a problem whose boundary is a few hundred segments "
       "and whose parameters enter as six global scalars, and at a fraction of ISLA's parameters; this is the clearest standing against ISLA "
       "in the book and the one that most needs a located mechanism (@sec-limits-datasets). The plastic strain is a near-zero field whose "
       f"relative error is set by the few yielded nodes, and there ISLA {standing('GeoTransolver', 'q_l2')} GeoTransolver "
       f"(seeds {' and '.join(f'{v:.3f}' for v in seeds_of(AR['GeoTransolver']['native']['q_l2']))} against ISLA's "
       f"{' and '.join(f'{v:.3f}' for v in seeds_of(AR['ISLA']['native']['q_l2']))}) and {standing('Transolver', 'q_l2')} Transolver. "
-      "Second, the uniform-point-cloud column equals the native column for every architecture, as it must on this dataset (the boundary is "
-      "kept whole, the interior has no cell measure), so discretization independence is not measured here. Third, the rotated and "
+      "Second, the rotated and "
       f"translated column: ISLA's stress error is {posed_isla['stress_l2']:.3f} of its native value (per seed "
       f"{' and '.join(f'{v:.3f}' for v in per_seed_shift)}), its displacement error {posed_isla['displacement_l2']:.3f} and its plastic-strain "
       f"error {posed_isla['q_l2']:.3f}: the contract holds to within {100 * max(abs(v - 1) for v in posed_isla.values()):.1f}% on this "
