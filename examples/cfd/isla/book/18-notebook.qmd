@@ -37181,3 +37181,54 @@ apply to A2. A is a diagnostic: if A2 holds P3 and A does not, the
 pooled path carries the growth. Instrument 1 also records the size of
 each term of the block's update, so the growth can be assigned to a
 path.
+
+## 2026-10-15 — AEROZOO H-RESID Instrument 1: P1 fails, P2 holds; every block amplifies the stream, both raw-h paths carry the growth, and the deep blocks' updates are rounded away {#sec-nb-aerozoo-hresid-probe}
+
+**Run.** One LHR job (224693) on the 48 checkpoints of the H-LOGIT
+probe, plus half-rate epoch 189. The hooks leave the outputs bitwise
+unchanged and reproduce the H-LOGIT numbers. The residual stream is
+bfloat16 from the embedding on. Files:
+`scratch/isla-hresid-2026-10-15/` (`checks.md`, `summary_tables.md`).
+
+**P1 fails.** The routing input's share of energy in its top direction
+is already 0.46 to 0.76 at epoch 9 (0.56 to 0.84 at epoch 1) and rises
+at most 1.29-fold by epoch 51 (1.14-fold centered). The half-rate lanes
+exceed the reference rate's epoch-43 value from epoch 1. The mean
+absolute cosine between routing inputs does not rise from epoch 9 to 43.
+It rises at and after the event (0.52 to 0.72 at epoch 55, 0.68 to 0.87
+at epoch 85) and falls at the half rate. So the routing collapse follows
+the event and does not announce it, and H-RESID's proposed pathway is
+wrong.
+
+**P2 holds, but its last clause is nearly true by construction**: the
+sum of the per-block log amplifications cannot fall far below the log
+of the product. The informative facts are these. Every block amplifies
+the stream at every checkpoint of every run (at least 1.48-fold at the
+reference rate, 1.32-fold at the half rate). Every block's
+amplification grows from epoch 9 to 43 (block 8 from 2.11 to 3.51,
+block 11 from 2.20 to 3.85), and the product over the twelve blocks
+grows from 1.4e4 to 1.6e6. The broadcast step carries the gain; the MLP
+step's is 1.000 in blocks 5 to 11. The spectral norm of `I + W_h` grows
+from 2.2-2.9 to 3.7-4.8 at the reference rate and from 1.8-2.2 to
+2.6-3.6 at the half rate.
+
+**Which path.** Both terms that are linear in the raw `h` carry the
+growth, in similar shares. From epoch 9 to 43 the direct term `W_h h`
+grows 1.8- to 2.2-fold relative to the stream, and the pooled term
+`W_b point_mix z` 1.4- to 2.2-fold. The other terms shrink in the deep
+blocks. At the event the jumps come from the pooled term (2.9 to 5.4
+times the stream's norm at epochs 51 to 55), while the direct term rises
+smoothly. Arm A removes only the direct term, so A is expected to fail
+P3. A2 removes both.
+
+**Outside the registration: the deep blocks' updates are rounded away.**
+In a bfloat16 stream an update far smaller than the stream is lost in
+the add. At epoch 43 of the reference rate, the share of the MLP update
+lost to rounding is 0.48 in block 7, 0.79 in block 9 and 0.98 in block
+11, and about 1.0 in blocks 5 to 10 by epoch 85. At the half rate it is
+0.09 and 0.59 in blocks 7 and 11 at epoch 43. The geometry term is
+1e-5 to 1.5e-6 of the stream in blocks 6 to 11 at epoch 43, below
+bfloat16 resolution. At the reference rate the deep blocks' MLPs and
+geometry therefore add nothing by the event. The rounding of the cast
+at the broadcast's input is negligible (below 0.006 of the message
+terms).
