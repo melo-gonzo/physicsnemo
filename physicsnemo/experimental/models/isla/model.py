@@ -252,6 +252,22 @@ from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 logger = logging.getLogger(__name__)
 
 
+def _hint_token_axis(n, widths) -> None:
+    """Tell torch.compile that ``k * n`` is a multiple of the token count ``n``.
+
+    With dynamic shapes a token axis made of several inputs (boundary meshes,
+    boundary and query tokens) has a length that is a sum of sizes, ``a + b``,
+    and Inductor cannot prove that ``k * a + k * b`` divides by ``a + b``: its
+    code generation fails with CantSplit where it tiles a flattened ``(k n,)``
+    loop of a ``(B, n, k)`` tensor as ``(n, k)``. :func:`torch._check` records
+    each (always true) fact as a guard, which those static checks then read
+    (torch 2.12). Skipped in eager mode, where every fact is trivially true;
+    the test is ``is_compiling()`` since dynamo traces a SymInt as an int."""
+    if torch.compiler.is_compiling():
+        for k in widths:
+            torch._check(k * n % n == 0)
+
+
 def _log_count(n: int, like: torch.Tensor) -> float | torch.Tensor:
     """``log(n)`` of a token count; under torch.compile a 0-d tensor of ``like``'s
     dtype, since ``math.log`` of a shape would specialize the dynamic shapes on it."""
@@ -771,6 +787,17 @@ class ISLA(Module):
                 )
         #: Pairs of the last forward pass's kernel read (diagnostic; 0 without one).
         self.kernel_read_pairs = 0
+        ### The trailing widths k of the per-token tensors: every small width (the
+        ### input features, frames and vector stacks) and every layer's (see
+        ### _hint_token_axis).
+        self._token_widths = tuple(
+            sorted(
+                set(range(1, max(32, self.embed[0].in_features) + 1))
+                | {n_slices}
+                | {f for m in self.modules() if isinstance(m, nn.Linear) for f in (m.in_features, m.out_features)}
+                | {m.normalized_shape[-1] for m in self.modules() if isinstance(m, nn.LayerNorm)}
+            )
+        )
 
     @staticmethod
     def _dots(x, g_hat):
@@ -1326,6 +1353,7 @@ class ISLA(Module):
         ``{dotted name: (B, N_out, ...)}`` over the tokens the head read.
         """
         b, n, _ = points.shape
+        _hint_token_axis(n, self._token_widths)
         if not torch.compiler.is_compiling():
             self._validate_inputs(
                 points,
@@ -1374,6 +1402,8 @@ class ISLA(Module):
         interior = query_points is not None
         if interior:
             bq, nq, _ = query_points.shape
+            if n_support:
+                _hint_token_axis(nq, self._token_widths)
             q_r = query_points / gauge
             ### The query's geometry from the boundary sample: the signed distance
             ### to the boundary (the built-in channel) and the direction to it (the
@@ -1441,6 +1471,7 @@ class ISLA(Module):
                 vecs = torch.cat([vecs, q_vecs], dim=1)
                 tens = torch.cat([tens, q_tens], dim=1)
             n = n + nq
+            _hint_token_axis(n, self._token_widths)
 
         first_read = len(self.blocks) - (self.kernel_read_blocks or 0)
         for i, block in enumerate(self._block_callables()):
