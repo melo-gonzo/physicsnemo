@@ -133,29 +133,26 @@ class _OutputLayout:
         set_(self, "n_coeffs", n_free + len(iso))
 
 
-def _assemble_output(coeffs, layout: _OutputLayout, true_vecs, pseudo_vecs, index=None):
-    """Contract one output's coefficients ``(B, N, n_coeffs)`` with the token basis.
+def _assemble_output(coeffs, layout: _OutputLayout, true_vecs, pseudo_vecs, index):
+    """Contract one output's coefficients ``(B, N, n_coeffs)`` with the token basis
+    (rank 1 and above; a rank-0 output is its one coefficient).
 
     ``true_vecs`` is ``(B, N, m, d)``, ``pseudo_vecs`` ``(B, N, p, d)``; ``index``
-    is ``layout.index`` already on the coefficients' device (``None``: copied). Returns
-    ``(B, N)`` at rank 0 and ``(B, N, d, ..., d)`` with ``rank`` trailing axes
-    otherwise. The full coefficient tensor over ordered multi-indices is
-    gathered from the free coefficients and contracted one index at a time,
-    so the basis itself is never materialized (peak ``(B, N, n_vec**(r-1), d)``).
+    is ``layout.index`` on the coefficients' device. Returns ``(B, N, d, ..., d)``
+    with ``rank`` trailing axes. The full coefficient tensor over ordered
+    multi-indices is gathered from the free coefficients and contracted one index
+    at a time, so the basis itself is never materialized (peak ``(B, N,
+    n_vec**(r-1), d)``).
     """
     b, n = coeffs.shape[:2]
     r = layout.spec.rank
-    if r == 0:
-        return coeffs[..., 0]
     u = (
         true_vecs
         if layout.spec.parity == "even"
         else torch.cat([true_vecs, pseudo_vecs], dim=2)
     )
     c_free = coeffs[..., : layout.n_free]
-    c_full = torch.cat([c_free, c_free.new_zeros(b, n, 1)], dim=-1)[
-        ..., (layout.index if index is None else index).to(coeffs.device)
-    ]
+    c_full = torch.cat([c_free, c_free.new_zeros(b, n, 1)], dim=-1)[..., index]
     x = c_full  # (B, N, n_vec**r), indices (j1, ..., jr) row-major
     for _ in range(r):
         x = x.reshape(b, n, layout.n_vec, -1)  # split j1 from the rest

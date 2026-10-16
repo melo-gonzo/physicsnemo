@@ -200,7 +200,9 @@ prediction_points=..., global_data=...)`` returns a point-cloud ``Mesh``; see
 **Data layout.** Inside ``forward`` the tokens stay TensorDicts: each boundary
 mesh's cells (centroid, normal, measure and the declared ``cell_data`` fields)
 and the prediction points are TensorDicts concatenated into one token state over
-``(batch, token)``, and the output ``Mesh`` is built from the output fields;
+``(batch, token)``, the field inputs enter the invariants and the head's
+coefficients leave as the output fields through cached, schema-ordered
+:class:`~tensordict.PackLayout` objects, and the output ``Mesh`` is built from them;
 all of it compiles with ``torch.compile(fullgraph=True, dynamic=True)``. The
 token axis itself stays dense where the arithmetic needs it: every softmax over
 points spans all tokens at once (passive tokens excluded by ``log_w = -inf``),
@@ -243,6 +245,8 @@ from physicsnemo.experimental.models.isla.inputs import (
     _declare,
     _InputSet,
     _missing_fields,
+    _pack,
+    _schema_layout,
 )
 from physicsnemo.experimental.models.isla.kernel_read import (
     _BoundaryKernelRead,
@@ -619,6 +623,9 @@ class ISLA(Module):
         ]
         self.n_global_vectors = K = len(self.global_vector_names)
         self.n_global_scalars = len(self.global_scalar_names)
+        ### Each kind's columns in schema order (cached layouts, see _global_fields).
+        self._global_vector_layout = _schema_layout({k: (self.dim,) for k in self.global_vector_names})
+        self._global_scalar_layout = _schema_layout({k: () for k in self.global_scalar_names})
         ### geo_kernel selects the implementation of the per-layer geometry region,
         ### not its arithmetic. "eager" is the PyTorch region (with geo_checkpoint
         ### deciding whether its (B,N,S,.) intermediates are stored or rebuilt in
@@ -729,6 +736,11 @@ class ISLA(Module):
         }
         self.n_head_coeffs = sum(
             layout.n_coeffs for layout in self.output_layouts.values()
+        )
+        ### The head's columns field by field in schema order, unpacked into the
+        ### output fields' coefficients (a rank-0 field is its one coefficient).
+        self._coeff_layout = _schema_layout(
+            {n: (lay.n_coeffs,) if lay.spec.rank else () for n, lay in self.output_layouts.items()}
         )
         ### Each layout's coefficient index as a (non-persistent) buffer, so it
         ### follows the model's device instead of being copied there every pass.
@@ -1012,21 +1024,15 @@ class ISLA(Module):
     def _global_fields(self, global_rows: TensorDict, like):
         """The unit global directions (B, K, d) and the global scalars (B, S)
         (``None`` when none are declared) from the global fields over the batch
-        (:meth:`_global_rows`), each kind in schema order."""
+        (:meth:`_global_rows`), each kind's columns in schema order."""
         if self.n_global_vectors:
-            gv = torch.stack(
-                [global_rows.get(FieldSchema.key(k)) for k in self.global_vector_names], 1
-            )
+            gv = _pack(global_rows, self._global_vector_layout).unflatten(-1, (-1, self.dim))
             ### Each direction is normalized; the magnitude, if it means anything,
             ### is a rank-0 global input.
             g_unit = gv / gv.norm(dim=-1, keepdim=True).clamp_min(self.eps)  # (B, K, d)
         else:
             g_unit = like.new_zeros(global_rows.batch_size[0], 0, self.dim)
-        g_scalars = None
-        if self.n_global_scalars:
-            g_scalars = torch.stack(
-                [global_rows.get(FieldSchema.key(k)) for k in self.global_scalar_names], -1
-            )
+        g_scalars = _pack(global_rows, self._global_scalar_layout) if self.n_global_scalars else None
         return g_unit, g_scalars
 
     ### -----------------------------------------------------------------------
@@ -1547,13 +1553,10 @@ class ISLA(Module):
         ### the interior mode, every token otherwise. The head frame builds its
         ### slice anchors from ALL tokens (r, log_w and h).
         out = tokens if query is None else _tail(tokens, n_boundary + n_support)
-        coeffs = self.head(self.norm_out(out["h"]))
-        fields = TensorDict(batch_size=out.batch_size)
+        coeffs = self._coeff_layout.unpack(self.head(self.norm_out(out["h"])))
         if not self.needs_frame:
-            ### Scalar-only outputs read the coefficients directly; no token basis.
-            for i, name in enumerate(self.output_schema):
-                fields.set(FieldSchema.key(name), coeffs[..., i])
-            return fields
+            ### Scalar-only outputs are the coefficients themselves; no token basis.
+            return coeffs
         ### Head frame: the radial basis vector is the direction from the token's
         ### soft slice anchor (measure-weighted mean of token positions), not
         ### from a centroid; translation covariant. The frame's prototypes are
@@ -1590,10 +1593,10 @@ class ISLA(Module):
             if pseudo_basis
             else true_vecs.new_zeros(*out.batch_size, 0, dim)
         )
-        start = 0
+        ### Each output of rank >= 1 from its coefficients, in place of them.
         for i, (name, layout) in enumerate(self.output_layouts.items()):
-            c = coeffs[..., start : start + layout.n_coeffs]
-            index = getattr(self, f"_output_index_{i}", None)
-            fields.set(FieldSchema.key(name), _assemble_output(c, layout, true_vecs, pseudo_vecs, index))
-            start += layout.n_coeffs
-        return fields
+            if layout.spec.rank:
+                key = FieldSchema.key(name)
+                index = getattr(self, f"_output_index_{i}")
+                coeffs.set(key, _assemble_output(coeffs.get(key), layout, true_vecs, pseudo_vecs, index))
+        return coeffs

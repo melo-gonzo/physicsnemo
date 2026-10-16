@@ -289,3 +289,34 @@ def test_geo_checkpoint_is_exact_with_tensor_inputs():
     for (n, p), (_, g) in zip(ref.named_parameters(), ckp.named_parameters()):
         assert p.grad is not None and g.grad is not None, n
         assert torch.allclose(p.grad, g.grad, atol=1e-11, rtol=1e-9), n
+
+
+def test_fields_keep_their_declaration_order_as_columns():
+    """The field inputs fill the seed, and the head's coefficients fill the
+    outputs, in declaration order, not in key order: with the embedding reading
+    only its first seed column and the head writing only its first coefficient,
+    the first declared input alone moves the first declared output."""
+    m = ISLA(
+        output_schema={"z": {"rank": 0}, "a": {"rank": 0}},
+        boundary_schema={"y": {"rank": 0}, "b.c": {"rank": 0}},
+        hidden=16,
+        n_layers=1,
+        n_slices=4,
+    ).double().eval()
+    with torch.no_grad():
+        m.embed[0].weight[:, 1:] = 0
+        m.head.weight[1:] = 0
+        m.head.bias[1:] = 0
+    pts, nrm, w, _ = cloud(30, seed=0)
+    y, c = torch.rand(30, dtype=D), torch.rand(30, dtype=D)
+
+    def run(y, c):
+        with torch.no_grad():
+            mesh = soup(pts, nrm, w, cell_data={"y": y, "b": {"c": c}})
+            return outputs(m(boundary_meshes={"wall": mesh}))
+
+    base = run(y, c)
+    assert list(base) == ["z", "a"]
+    assert torch.equal(base["a"], torch.zeros_like(base["a"])) and base["z"].abs().max() > 0
+    assert torch.equal(run(y, c + 1)["z"], base["z"])
+    assert not torch.allclose(run(y + 1, c)["z"], base["z"])
