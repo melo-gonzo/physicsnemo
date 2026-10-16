@@ -26,12 +26,18 @@ published slice-attention surrogate, and Transolver, with every model
 given the same inputs and scored on the same instrument at the reporting
 protocol of @sec-protocol. Each architecture runs at one reference configuration, the most
 accurate of its architecture that trains under 80 GiB per GPU on the two
-selection datasets, and every checkpoint is scored three ways: on the native
-validation mesh, on a uniform point cloud of the surface, and with every
-validation case rotated and translated. Where the evaluation departs from
-the training conventions, in pose or in how the surface was sampled, ISLA's
-error barely moves and the baselines' error grows by factors, except on two
-structured solid meshes where ISLA's own error moves too; in distribution
+selection datasets, and every checkpoint is scored on the native validation
+mesh and with every validation case rotated and translated; on the three
+surface datasets whose meshes exceed the cell budget (the DrivAerML Surface
+task, HiLiftAeroML and Shift-SUV) it is also scored on a uniform point cloud
+of the surface. Rotated and translated, ISLA's error barely moves and the
+baselines' error grows by factors, except on two structured solid meshes
+where ISLA's own error moves too. On the uniform point cloud of those three
+surface datasets, ISLA's error moves by at most 2% and the baselines' grows
+by factors. On the DrivAerML Volume task the same draw changes only the
+boundary sample, which only ISLA reads, and ISLA's interior error rises
+several-fold through the queries' distance to the nearest boundary sample;
+in distribution
 the three are within seed noise on the cars, ISLA leads on the wings, on
 interior velocity and on the lug, and trails on tensor targets and on the
 sport-utility bodies. @tbl-thesis is the standing, one row per dataset and
@@ -71,7 +77,7 @@ FINAL = {name: "512 with 512 slices" in C["isla_arm"] for name, (C, _) in ART.it
 label = lambda name: "final reference configurations" if FINAL[name] else "first-pass reference configurations"
 NAMES = {"surface": "DrivAerML Surface", "hilift": "HiLiftAeroML", "volume": "DrivAerML Volume", "airfrans": "AirfRANS", "suv": "Shift-SUV", "tensile2d": "Tensile2d", "lug": "lug", "deepjeb": "DeepJEB++"}
 lst = lambda flag: ", ".join(NAMES[n] for n in ART if FINAL[n] == flag)
-three = lambda name, f: "; ".join(f"{lab} {pair(name, f, pk)}" for pk, lab in (("native", "native"), ("area", "point cloud"), ("posed", "posed")))
+three = lambda name, f, pks=("native", "area", "posed"): "; ".join(f"{lab} {pair(name, f, pk)}" for pk, lab in (("native", "native"), ("area", "point cloud"), ("posed", "posed")) if pk in pks)
 tri = lambda name, fields, arch: " / ".join(f"{rat(name, arch, f):.2f}" for f in fields)
 def word(name, arch, f):
     """One native baseline ÷ ISLA ratio in words: a lead or a deficit when every baseline seed sits on one side of every ISLA seed, level when the seeds interleave."""
@@ -127,8 +133,8 @@ rows = [
      tri("tensile2d", ("stress_l2", "displacement_l2", "q_l2"), "GeoTransolver") + "; " + tri("tensile2d", ("stress_l2", "displacement_l2", "q_l2"), "Transolver"),
      f"both baselines lead on stress and displacement, the open standing of the book; on plastic strain ISLA {word('tensile2d', 'GeoTransolver', 'q_l2')} GeoTransolver and {word('tensile2d', 'Transolver', 'q_l2')} Transolver; under a generic in-plane pose ISLA's stress error moves {shift('tensile2d', 'ISLA', 'stress_l2', 'posed'):.3f}x where the baselines' read above the mean field",
      "@sec-interior-tensile2d"),
-    (f"**GINOT bracket lug** at 2,400 training lugs, {label('lug')}: von Mises stress, native / point cloud / posed (GeoTransolver; Transolver)",
-     three("lug", "von_mises_l2"),
+    (f"**GINOT bracket lug** at 2,400 training lugs, {label('lug')}: von Mises stress, native / posed (GeoTransolver; Transolver)",
+     three("lug", "von_mises_l2", ("native", "posed")),
      f"under the float32 protocol both baselines lead (ISLA {word('lug', 'GeoTransolver', 'von_mises_l2')} GeoTransolver and {word('lug', 'Transolver', 'von_mises_l2')} Transolver), a precision sensitivity of the trained model's nearest-boundary-sample selection on a tied mesh, not a capacity difference; rotated and translated ISLA's error moves {shift('lug', 'ISLA', 'von_mises_l2', 'posed'):.2f}x by the same mechanism, where the baselines' read at the mean field",
      "@sec-interior-lug"),
     (f"**DeepJEB++** at 12,451 brackets and 40 epochs, {label('deepjeb')} with ISLA at half the reference rate (the dataset's exception): von Mises / displacement, native (GeoTransolver; Transolver)",
@@ -146,7 +152,9 @@ print(out)
 print(f": The thesis in {len(rows)} rows, one dataset and task per row. "
       "How to read this: each row is one setting and one instrument, so rows are not comparable with one another, and a ratio is the named "
       "baseline's error divided by ISLA's, so a value above one favors ISLA; where a row lists three ratios they are the native mesh, the "
-      "uniform point cloud and the rotated-and-translated scoring of one checkpoint, each as GeoTransolver ÷ ISLA / Transolver ÷ ISLA. "
+      "uniform point cloud and the rotated-and-translated scoring of one checkpoint, each as GeoTransolver ÷ ISLA / Transolver ÷ ISLA; the lug "
+      "row lists the native and the rotated-and-translated ratios only, because its surface is below the cell budget and the point cloud "
+      "would be the native mesh itself. "
       + (f"The {lst(True)} rows hold the final reference configurations, one per architecture, each the most accurate "
          if lst(False) else "Every row holds the final reference configurations, one per architecture, each the most accurate ")
       + "under 80 GiB per GPU on the two selection datasets (ISLA width 512 with 512 slices at 200,000 cells, learning rate 3.75e-4, halved on "
