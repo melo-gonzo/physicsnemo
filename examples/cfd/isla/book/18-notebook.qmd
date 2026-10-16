@@ -37332,3 +37332,112 @@ at epoch 249 is 0.167 and 0.171, against the bar of 0.25. The P1 re-read
 with those scores. H-RESID (@sec-nb-aerozoo-hresid-probe) explains why
 the half rate helps: the stream grows multiplicatively in both, more
 slowly at the half rate.
+
+## 2026-10-16 — AIRFRANS uniform-interior rerun (AF-UNIFORM) read: AF1 and AF2 hold, AF3 holds on the seed means only; trained on uniform draws, the three reference configurations' pressure errors halve and ISLA's standing keeps its direction {#sec-nb-airfrans-uniform-verdict}
+
+**Run.** The eight lanes of @sec-nb-airfrans-uniform-prereg finished
+500 epochs on the LHR site: ISLA (`afu_r_isla`, 512 wide, 512 slices,
+3.75e-4), GeoTransolver (`afu_r_gt`, width 256, 1e-3), Transolver
+(`afu_r_t`, width 512 with 16 layers, 1e-3), all on code_v20, and
+ISLA-DTT (`afu_dtt`, 384 wide, 256 slices, 5e-4, code_dtt16), seeds 42
+and 43, on the uniform twins `airfrans_uvolume` and
+`airfrans_uvolume_2d`. Each epoch-500 checkpoint was scored in float32
+on the 200 test cases of the full split under the native, area and
+posed protocols (LHR jobs 234130, 234131, 235699, 235700, 236769,
+237947, 238523 and 238524). The reduction
+`results/char/afu_protocol_artifacts_2026-10-14.py` wrote
+`results/char/airfrans_uniform.json`, now complete. The `afu_bn2_isla`
+lanes in the same table are H-RESID P5 and are not part of this read.
+
+**AF1.** Registered: "The comparisons were like for like, so the
+standing keeps its direction: ISLA leads GeoTransolver and Transolver
+on velocity and trails them on pressure." No threshold was registered,
+so the reading is the side of one of each native ratio, baseline ÷
+ISLA, on the seed means and on both seed pairs. Velocity: GeoTransolver
+÷ ISLA 3.05 (seeds 3.27 and 2.83), Transolver ÷ ISLA 5.59 (5.62 and
+5.56). Pressure: GeoTransolver ÷ ISLA 0.59 (0.61 and 0.58), Transolver
+÷ ISLA 0.65 (0.69 and 0.62). Every baseline seed sits on one side of
+every ISLA seed. **AF1 holds.** The magnitudes moved: on block draws
+the ratios were 2.20 and 4.11 on velocity and 0.76 and 0.73 on
+pressure, so both the lead and the deficit widened. Eddy viscosity,
+which AF1 does not cover, moved from 0.93 and 0.99 to 0.80 and 0.87,
+with both baseline seeds below both ISLA seeds: ISLA now trails both
+there.
+
+**AF2.** Registered: "Every architecture's errors fall, and pressure,
+the field set at the airfoil, falls by at least 10 percent for each,
+because the old windows missed a third of the airfoil's
+neighbourhood." Read, as decided in @sec-nb-airfrans-scoring-effect,
+on the training effect: the new checkpoint scored on uniform draws ÷
+the old checkpoint scored on uniform draws, native protocol. The bar
+is every field below 1 and pressure at or below 0.90.
+
+| Arm | Pressure (seeds 42, 43) | Velocity (seeds) | Eddy viscosity (seeds) |
+|---|---|---|---|
+| ISLA | 0.47 (0.42, 0.53) | 0.63 (0.61, 0.66) | 0.46 (0.44, 0.49) |
+| GeoTransolver | 0.50 (0.52, 0.48) | 0.86 (0.92, 0.81) | 0.54 (0.50, 0.59) |
+| Transolver | 0.46 (0.48, 0.44) | 0.79 (0.76, 0.83) | 0.50 (0.48, 0.51) |
+| ISLA-DTT | 0.87 (0.82, 0.92) | 0.84 (0.87, 0.82) | 0.85 (0.90, 0.80) |
+
+Every ratio is below 1 on both seeds, and every seed-mean pressure
+ratio is at or below 0.90. **AF2 holds** on the seed means for all
+four architectures and on both seeds for the three reference
+configurations. ISLA-DTT's pressure falls 18 percent on seed 42 and 8
+percent on seed 43, so one of its seeds misses the 10 percent bar. The
+area protocol gives the same numbers. Against chapter 9's numbers
+(the new checkpoint on uniform draws ÷ the old one on block windows)
+the errors fall too: ISLA 0.59 / 0.70 / 0.77, GeoTransolver 0.46 /
+0.96 / 0.66, Transolver 0.52 / 0.95 / 0.68, ISLA-DTT 0.77 / 0.85 /
+0.84 (pressure / velocity / eddy viscosity). Posed, the baselines'
+errors stay above 1 (worse than the mean field) before and after, so
+that column carries no training effect to read.
+
+**AF3.** Registered: "ISLA-DTT stays below ISLA's error on velocity and
+pressure." No threshold was registered; the comparison is with ISLA's
+reference configuration, the only ISLA lane rerun. Seed means: pressure
+0.0200 against 0.0208 (ISLA-DTT ÷ ISLA 0.96; paired by seed 0.94 and
+0.98), velocity 0.0119 against 0.0120 (0.99; paired 1.02 and 0.97).
+**AF3 holds on the seed means only.** The seeds interleave on both
+fields (pressure 0.0186 and 0.0214 against 0.0197 and 0.0218; velocity
+0.0118 and 0.0120 against 0.0116 and 0.0124), so by the book's rule
+ISLA-DTT is level with ISLA on pressure and velocity. On eddy viscosity
+ISLA leads it, 1.12 (1.18 and 1.06), every ISLA seed below every
+ISLA-DTT seed. ISLA-DTT's pressure lead over ISLA's reference
+configuration on block draws (0.74) does not survive the uniform draw.
+
+**The standing on uniform draws.** Relative L2, float32, 200 test
+cases, two-seed means; pressure / velocity / eddy viscosity; ratios
+baseline ÷ ISLA.
+
+| Arm | Native | Uniform point cloud (area-weighted) | Rotated + translated | Native ÷ ISLA | Posed ÷ ISLA |
+|---|---|---|---|---|---|
+| ISLA | 0.0208 / 0.0120 / 0.0242 | 0.0208 / 0.0120 / 0.0242 | 0.0208 / 0.0120 / 0.0242 | 1 | 1 |
+| GeoTransolver | 0.0123 / 0.0365 / 0.0194 | 0.0123 / 0.0365 / 0.0194 | 2.5085 / 1.0944 / 4.3814 | 0.59 / 3.05 / 0.80 | 121 / 91 / 181 |
+| Transolver | 0.0135 / 0.0669 / 0.0212 | 0.0135 / 0.0669 / 0.0212 | 1.6969 / 1.1240 / 1.8167 | 0.65 / 5.59 / 0.87 | 82 / 94 / 75 |
+| ISLA-DTT | 0.0200 / 0.0119 / 0.0271 | 0.0200 / 0.0119 / 0.0271 | 0.0200 / 0.0119 / 0.0271 | 0.96 / 0.99 / 1.12 | 0.96 / 0.99 / 1.12 |
+
+Native seeds (42, 43): ISLA 0.0197, 0.0218 / 0.0116, 0.0124 / 0.0236,
+0.0249; GeoTransolver 0.0120, 0.0126 / 0.0380, 0.0350 / 0.0197, 0.0192;
+Transolver 0.0135, 0.0135 / 0.0652, 0.0687 / 0.0209, 0.0215; ISLA-DTT
+0.0186, 0.0214 / 0.0118, 0.0120 / 0.0278, 0.0263. The uniform point
+cloud equals the native column for every arm, as on block draws: the
+airfoil polyline is read whole and the interior has no cell measures.
+ISLA and ISLA-DTT keep their native errors under the pose (largest
+shift of a seed mean 0.02 percent, of one seed 0.06 percent);
+GeoTransolver and Transolver read 1.06 to 5.56 posed per seed, every
+value above 1.
+
+**Reading.** Training on uniform draws halves the three reference
+configurations' pressure and eddy-viscosity errors on uniform draws
+(training effects 0.46 to 0.54). ISLA's
+velocity error falls further than the baselines' (0.63 against 0.86
+and 0.79), so its velocity lead widens, while the baselines' pressure
+and eddy-viscosity errors fall as far as ISLA's or further, so its
+deficits there widen. ISLA-DTT gains least from retraining (0.84 to
+0.87), consistent with its scores having been nearly indifferent to the
+draw in @sec-nb-airfrans-scoring-effect. Chapter 9's standing now
+reads `results/char/airfrans_uniform.json`; the ladder, the read-only
+controls and the extrapolation splits stay on block draws there and
+are labeled so. The other chapters that quote `results/char/airfrans.json`
+(the thesis table of the index, chapter 16 and the AeroZoo chapter's
+comparison) are not changed in this entry.
