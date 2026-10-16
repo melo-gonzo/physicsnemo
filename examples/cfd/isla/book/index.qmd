@@ -38,9 +38,9 @@ by factors. On the DrivAerML Volume task the same draw changes only the
 boundary sample, which only ISLA reads, and ISLA's interior error rises
 several-fold through the queries' distance to the nearest boundary sample;
 in distribution
-the three are within seed noise on the cars, ISLA leads on the wings, on
-interior velocity and on the lug, and trails on tensor targets and on the
-sport-utility bodies. @tbl-thesis is the standing, one row per dataset and
+the three are within seed noise on the cars, ISLA leads on the wings and
+on interior velocity, and trails on tensor targets, on the lug under the
+float32 protocol and on the sport-utility bodies. @tbl-thesis is the standing, one row per dataset and
 task.
 
 ```{python}
