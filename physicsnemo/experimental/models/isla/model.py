@@ -845,6 +845,10 @@ class ISLA(Module):
             and not self.n_block_tens
         )
         chosen = "fused" if ok else "eager"
+        if torch.compiler.is_compiling():
+            ### Inside a traced region: no cache write and no logging (a logger
+            ### call breaks fullgraph=True, a module write adds a recompile guard).
+            return chosen
         self._geo_kernel_cache = (key, chosen)
         logger.info(
             "ISLA geo_kernel=auto resolved to %r on %s (cuda=%s, triton=%s, global_vectors=%d, slices=%d, token_vector_inputs=%s)",
@@ -872,14 +876,19 @@ class ISLA(Module):
             self._block_forwards = [torch.compile(block.forward) for block in self.blocks]
         return self._block_forwards
 
-    def _apply_geo_kernel(self, points: torch.Tensor) -> None:
-        """Write the resolved kernel name into the blocks, once per resolution."""
+    def _apply_geo_kernel(self, points: torch.Tensor) -> str | None:
+        """Write the resolved kernel name into the blocks, once per resolution.
+        Under torch.compile the blocks are left untouched: the kernel is returned
+        for the block calls instead (``None`` when the blocks already carry it)."""
         kernel = self.resolve_geo_kernel(points)
         if getattr(self, "_geo_kernel_applied", None) == kernel:
-            return
+            return None
+        if torch.compiler.is_compiling():
+            return kernel
         for block in self.blocks:
             block.geo_kernel = kernel
         self._geo_kernel_applied = kernel
+        return None
 
     def _validate_inputs(
         self,
@@ -1318,7 +1327,7 @@ class ISLA(Module):
                 query_points,
                 query_inputs,
             )
-        self._apply_geo_kernel(points)
+        geo_kernel = self._apply_geo_kernel(points)
         K = self.n_global_vectors
         g_unit, g_scalars = self._global_fields(global_inputs, b, points)
         g_hat = g_unit[:, None].expand(b, n, K, self.dim)
@@ -1427,7 +1436,7 @@ class ISLA(Module):
 
         first_read = len(self.blocks) - (self.kernel_read_blocks or 0)
         for i, block in enumerate(self._block_callables()):
-            h = block(h, log_w, r, n_hat, g_hat, self.eps, vecs, tens)
+            h = block(h, log_w, r, n_hat, g_hat, self.eps, vecs, tens, geo_kernel=geo_kernel)
             if self.kernel_reads is not None and i >= first_read:
                 ### The points' residual update from the boundary cells' states at this
                 ### depth; the boundary tokens (and so the slices) are untouched.
