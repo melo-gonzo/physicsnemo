@@ -37065,3 +37065,102 @@ frame's seed attention, because the head frame's gain also grew in the
 earlier probe. If H-LOGIT holds, the candidate remedy is to normalize
 that site's queries and keys, as the routing already does. It would be
 tested on two datasets before it is adopted.
+
+## 2026-10-15 — AEROZOO H-LOGIT verdict: L1 fails as written, L2 holds; the head frame's seed attention is an argmax from epoch 29 at either rate, and the residual stream grows 190-fold from epoch 9 to 43 at the reference rate {#sec-nb-aerozoo-hlogit-verdict}
+
+**Run.** One LHR job (223072) on 48 checkpoints: `azu_full_isla_seed42`
+at 28 epochs from 1 to 85, `azu_full_islahr_seed42` at 4 and
+`az_full_islahr_seed42` at 16 from 1 to 185. Four fixed validation cases
+with cached draws, the uniform-draw configuration for every run, and the
+bfloat16 forward of training. The probe's wrappers leave the outputs
+bitwise unchanged, and the float32 recomputations of the statistics
+agree with bfloat16 to 0.3 percent. Code_v26 has no global read, so two
+sites remain: the seed attention of the twelve blocks and of the head
+frame. Files: `scratch/isla-hlogit-2026-10-15/`.
+
+**The head frame.** The 99.9th percentile of the logit magnitude grows
+749-fold from epoch 9 to 43 (3.1e3 to 2.35e6). The effective support of
+its softmax falls from 6.3e4 points at epoch 1 to 1.08 at epoch 29 and
+stays at 1. At the half rate the logit is 3.3e-4 of the reference value
+at epoch 43 and never exceeds it (largest 1.97e4). Yet the half-rate
+windowed lane's support also falls to 2 to 19 points from epoch 89 on,
+with no event.
+
+**The blocks.** Seed attention grows 2.8- to 5.4-fold from epoch 9 to 43
+but stays small (0.6 to 1.3 at epoch 43), and its support does not move
+(ratio 1.00 to 1.01 from epoch 39 to 55). The bounded routing logits grow
+at most 1.35-fold. The routing's effective support falls from epoch 47
+to 53 on (ratio 0.40 to 0.57 from epoch 39 to 55 in blocks 5, 9 and 11).
+
+**Verdicts.** L1 fails as written: the one site that grows twofold has
+an argmax softmax from epoch 29, so its support cannot halve between
+epochs 39 and 55. L2 holds at that site. Neither refutation clause
+fires. The head frame's saturation is not sufficient for the event,
+because the half-rate lane saturates too and trains on.
+
+**Outside the registration.** The head frame reads the raw residual
+stream `h`, which no LayerNorm bounds, and its logit tracks the growth
+of `h`, not of its own matrices (the spectral norm of `seeds · k_proj`
+goes from 2.1 at epoch 9 to 6.1 at epoch 43). The mean token norm of
+`h` is 9.1e3 at epoch 1, 3.0e5 at epoch 9, 5.7e7 at epoch 43, 2.2e8 at
+epoch 51 and 5.6e11 at epoch 85. It roughly triples between epochs 49
+and 51, at the event. The half-rate windowed lane's is 8.2e4 at epoch 43
+and at most 6.7e5. The code gives the reason: each block's update
+`h + broadcast(cat(h, back, geo_pool))` reads the raw `h` (blocks.py),
+so the block multiplies the stream by `I + W_h`, where `W_h` is the
+slice of the broadcast weight that reads `h`. The MLP and the routing
+read LayerNorm'd states. The raw read dates from the first ISLA block
+(September 2026), and no note gives a reason for it.
+
+## 2026-10-15 — AEROZOO H-RESID pre-registration: a multiplicative residual stream collapses the routing; the broadcast reads the normalized state {#sec-nb-aerozoo-hresid-prereg}
+
+**Hypothesis.** H-RESID: the raw read of `h` in the broadcast makes each
+block's update multiplicative, and Muon's fixed-size updates at the
+reference rate grow the product of the twelve blocks' gains. One
+direction then dominates every token state, so the LayerNorm'd states
+that the cosine routing reads become nearly collinear. The routing loses
+its contrast and collapses. This would explain, with one mechanism, the
+AeroZoo event at 23,000 to 30,000 steps, the DeepJEB++ plateau at about
+12,000 to 37,000 steps (epochs 4 to 12 at 3,113 steps per epoch; a
+routing collapse to 1 to 5 effective slices, @sec-nb-char-deepjeb-plateau-mechanism),
+and the cure by half the rate on both datasets.
+
+**Instrument 1, a checkpoint probe** on the same checkpoints as H-LOGIT.
+Per block: the mean token norm of `h`, the block's amplification (the
+ratio of the norms after and before it), the spectral norm of `I + W_h`,
+the share of the routing input's energy in its top principal direction
+across tokens, and the mean absolute cosine between token states.
+(P1) At the reference rate, the top-direction share of the routing input
+rises from epoch 9 to 51 in at least one block, to at least twice its
+epoch-9 value and to at least 0.5. At the half rate it stays below the
+reference rate's epoch-43 value through the last checkpoint. (P2) Most
+blocks amplify the stream (ratio above 1), their amplification grows
+from epoch 9 to 43, and the product of the per-block ratios accounts for
+at least half of the logarithm of the stream's growth.
+
+**Instrument 2, the remedy.** One change: the broadcast reads the
+block's normalized state `norm_assign(h)`, the state the routing already
+reads, in place of `h`. No parameter, constant or other read changes
+(the head frame's raw read stays, because the half-rate lane shows its
+saturation is harmless). Two snapshots carry it: code_v26 plus the
+change for AeroZoo, and code_v20 plus the change for DeepJEB++ and
+AirfRANS, so that each comparison is against existing reference lanes
+with one variable changed. (P3) On AeroZoo `full` at 3.75e-4, both
+seeds keep their validation minimum through epoch 250, and the mean
+token norm of `h` at epoch 43 is at least 100 times below the
+reference rate's 5.7e7. (P4) On DeepJEB++ at 3.75e-4 (the final
+reference configuration, width 512 and 512 slices, 40 epochs), neither
+seed's training loss passes twice its running minimum within the first
+12 epochs, and validation von Mises at epoch 12 is below 0.6. The
+reference-rate lanes were at 0.90 to 1.02 from epoch 4 on, the
+half-rate lanes at 0.48 to 0.50 at epoch 6. (P5) On AirfRANS with
+uniform draws at the reference configuration, the remedy's pressure and
+velocity test errors are within 5 percent of the reference ISLA lanes'
+or better.
+
+**What follows.** If P3 and P4 hold and P5 shows no loss, the remedy is
+proposed as the reference configuration, and both rate exceptions
+(DeepJEB++ and AeroZoo) are retired. The head frame's raw read is then
+normalized as a separate, tested change. If P1 or P2 fails and P3 holds,
+the remedy works for a reason other than H-RESID's, and the notebook
+says so.
