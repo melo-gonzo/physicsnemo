@@ -269,15 +269,15 @@ you leave width 512.** From the recipe root:
 ```bash
 # DrivAerML Surface task (sampling_resolution defaults to 200,000 cells per case).
 # The ISLA configs carry the reference configuration (hidden 512, 512 slices, lr 3.75e-4), which is also the class
-# default. compile=false leaves the per-block compile of the model in charge.
-python src/train.py model=isla_surface dataset=drivaer_ml_surface compile=false
+# default. They compile the whole model: one graph for every mesh size.
+python src/train.py model=isla_surface dataset=drivaer_ml_surface
 
 # DrivAerML Volume task: boundary -> interior, the prediction points as interacting tokens, with the
 # stored signed distance and its gradient as query inputs.
-python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference compile=false
+python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference
 
 # HiLiftAeroML surface (the 200,000-cell default again; 500 epochs, as on the cars)
-python src/train.py model=isla_surface dataset=highlift_surface compile=false training.num_epochs=500
+python src/train.py model=isla_surface dataset=highlift_surface training.num_epochs=500
 ```
 
 These commands are the reporting protocol of @sec-protocol. ISLA needs no
@@ -469,16 +469,36 @@ Three practical consequences:
   of time and long on memory.** It is bitwise identical in outputs and
   gradients. Under the fused kernel the recompute is built in and the flag
   has no effect.
-- **Set `compile_blocks: true`.** Each slice block's forward then runs
-  under `torch.compile`, built lazily at the first call, with parameter
-  names, the state dict and the eager path unchanged. On four GB300 ranks
-  at 200,000 cells it takes the DrivAerML Surface step from 221 to 180 ms
-  and its peak memory from 44.9 to 32.9 GiB, and the Volume step from 475
-  to 308 ms and 88.5 to 64.5 GiB. Models trained with it score the same
-  as models trained eagerly on both DrivAerML tasks, every field within
-  seed noise (`results/perf3_neutrality_2026-10-01.json`), and a 500-epoch
-  run finishes in about two thirds of the eager wall-clock. The recipe's
-  ISLA configurations set it.
+- **Compile the whole model.** The recipe's ISLA configurations do:
+  `compile: true` with `compile_options` `fullgraph: true`, `dynamic: true`
+  and `mode: max-autotune-no-cudagraphs`. The forward, Mesh in and out,
+  traces to one graph and compiles once with dynamic shapes, so the
+  case-to-case change in mesh size does not recompile. Validation, in
+  eval mode, compiles a second graph, and boundaries with equal cell counts
+  in the first case (common at a subsample cap) are tied by Dynamo's duck
+  sizing, so the first case where they differ compiles once more. On one GB300 at 200,000 cells
+  DrivAerML Surface trains at 207 ms a step against 236 ms with
+  `compile_blocks`, at 69.9 against 64.4 GiB of peak memory and the same
+  losses to bfloat16 roundoff. The price is the first compile: max-autotune
+  takes about 11 minutes for the training graph and 3 for the validation
+  graph on a cold cache, and about a minute from a warm one, so keep
+  `TORCHINDUCTOR_CACHE_DIR` and `TRITON_CACHE_DIR` across the links of a
+  chained run. The mode leaves out CUDA
+  graphs on purpose: they are static-shape and would record a graph for
+  every case size, and at training sizes dynamic shapes are faster than
+  padding the cases to size buckets.
+- **Compile the slice blocks for ISLA-DTT.** `compile_blocks: true` runs
+  each slice block's forward under `torch.compile` instead, built lazily at
+  the first call, with parameter names, the state dict and the eager path
+  unchanged. On four GB300 ranks at 200,000 cells it takes the DrivAerML
+  Surface step from 221 to 180 ms of eager and its peak memory from 44.9 to
+  32.9 GiB, and the Volume step from 475 to 308 ms and 88.5 to 64.5 GiB.
+  Models trained with it score the same as models trained eagerly on both
+  DrivAerML tasks, every field within seed noise
+  (`results/perf3_neutrality_2026-10-01.json`). It is the way to compile a
+  configuration with a kernel read (`kernel_read`, ISLA-DTT), whose radius
+  and tree reads break the whole-model graph: `compile=false
+  model.compile_blocks=true`.
 
 ## Contracts you can check on your own data {#sec-using-contracts}
 

@@ -55,10 +55,16 @@ training:
 # Whole-model torch.compile, the fastest way to run ISLA: the forward, Mesh in
 # and out, traces to one graph with no breaks (fullgraph) and compiles once with
 # dynamic shapes for every token count, so the case-to-case change in boundary
-# and point counts does not recompile. max-autotune-no-cudagraphs on purpose:
+# and point counts does not recompile (one exception: boundaries with equal cell
+# counts in the first case, common at a subsample cap, are tied by Dynamo's duck
+# sizing, and the first case where they differ compiles once more; validation
+# compiles its own graph). max-autotune-no-cudagraphs on purpose:
 # plain max-autotune also captures CUDA graphs, which are static-shape and would
 # record a new graph for every token count; at training sizes dynamic shapes are
-# faster than padding the cases to CUDA-graph size buckets. Not with
+# faster than padding the cases to CUDA-graph size buckets. The first compile
+# is long (about 11 minutes on a cold cache for DrivAerML Surface on a GB300,
+# a minute from a warm one): keep TORCHINDUCTOR_CACHE_DIR and TRITON_CACHE_DIR
+# across the links of a chained run. Not with
 # model.kernel_read (ISLA-DTT): its radius and tree reads break the graph and the
 # global read recompiles for every query count; there set compile=false and
 # model.compile_blocks=true.
