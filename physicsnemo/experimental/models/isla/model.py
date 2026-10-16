@@ -274,7 +274,6 @@ from physicsnemo.experimental.models.isla.tree_read import (
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import cell_measures
 from physicsnemo.mesh.fields import FieldSchema, FieldSchemaLike
-from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 
 logger = logging.getLogger(__name__)
 
@@ -287,9 +286,18 @@ def _hint_token_axis(n, widths) -> None:
     and Inductor cannot prove that ``k * a + k * b`` divides by ``a + b``: its
     code generation fails with CantSplit where it tiles a flattened ``(k n,)``
     loop of a ``(B, n, k)`` tensor as ``(n, k)``. :func:`torch._check` records
-    each (always true) fact as a guard, which those static checks then read
-    (torch 2.12). Skipped in eager mode, where every fact is trivially true;
-    the test is ``is_compiling()`` since dynamo traces a SymInt as an int."""
+    each (always true) fact as a guard, which those static checks then read.
+    Skipped in eager mode, where every fact is trivially true; the test is
+    ``is_compiling()`` since dynamo traces a SymInt as an int.
+
+    The CantSplit failure is an Inductor bug in torch 2.12 and 2.13, fixed
+    from torch 2.14.0 on. Its trigger in ISLA is an affine LayerNorm over a
+    concatenated token axis whose output feeds both a dtype cast and a
+    reduction over the hidden dimension (``norm_assign(h)`` into ``k_proj``
+    and ``F.normalize``). Remove this function once the minimum torch is
+    2.14.0, after checking that compiles across token counts still produce
+    one graph: without these hints, torch 2.14 compiled a second graph when
+    the token count doubled."""
     if torch.compiler.is_compiling():
         for k in widths:
             torch._check(k * n % n == 0)
