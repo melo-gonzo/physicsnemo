@@ -53,9 +53,10 @@ def read_only_memory_maps():
     through such a mapping take write extent locks on a networked file system,
     and two readers on different nodes faulting the same case then wait on each
     other indefinitely (observed as a training hang on a Lustre-hosted dataset).
-    Datasets are immutable artifacts, so the readers below load them under this
-    context, which makes ``tensordict`` map every file read-only regardless of
-    the file permissions.  Re-entrant and thread-safe: the original behaviour is
+    Datasets are immutable artifacts, so this context makes ``tensordict`` map
+    every file read-only regardless of the file permissions.  (The readers below
+    load with ``mode="r"``, which does the same since TensorDict 0.15; the
+    context remains for code that calls ``Mesh.load`` directly.)  Re-entrant and thread-safe: the original behaviour is
     restored when the outermost context exits.
     """
     global _RO_DEPTH, _RO_ORIGINAL
@@ -389,8 +390,9 @@ class MeshReader:
                     generator,
                 )
             return from_zarr(mesh_path)
-        with read_only_memory_maps():
-            return Mesh.load(mesh_path)
+        # mode="r": copy-on-write maps, so in-place edits of a sample never
+        # reach the dataset files, and readers on Lustre take no write locks.
+        return Mesh.load(mesh_path, mode="r")
 
     def _get_sample_metadata(self, index: int) -> dict[str, Any]:
         """Return metadata for the sample (e.g. source path)."""
@@ -697,8 +699,7 @@ class DomainMeshReader:
                     global_data=io_zarr._read_tree(root, "global_data"),
                 )
             return from_zarr(path)
-        with read_only_memory_maps():
-            return DomainMesh.load(path)
+        return DomainMesh.load(path, mode="r")  # see MeshReader._load_sample
 
     def __len__(self) -> int:
         return len(self._paths)
@@ -834,8 +835,7 @@ class DomainMeshReader:
 
                 new_boundaries[bnd_name] = from_zarr(matches[0])
             else:
-                with read_only_memory_maps():
-                    new_boundaries[bnd_name] = Mesh.load(matches[0])
+                new_boundaries[bnd_name] = Mesh.load(matches[0], mode="r")
 
         return DomainMesh(
             interior=dm.interior,
