@@ -367,7 +367,8 @@ unit, so no per-dataset reference length is needed; `hidden: 512`,
 backward instead of storing them: same forward and gradients bitwise, lower
 peak memory; set `false` to trade memory for speed); `geo_kernel: null`
 selects the exact fused Triton geometry kernel wherever it can run (CUDA)
-and the eager PyTorch region otherwise. The configs compile the whole model
+and the eager PyTorch region otherwise. The configs (all but
+`isla_volume_aerozoo`, see its comment) compile the whole model
 (`compile: true` with `compile_options` `fullgraph: true`, `dynamic: true`
 and `mode: max-autotune-no-cudagraphs`): one graph with dynamic shapes, so a
 new mesh size does not recompile it (see `isla_volume.yaml` for the first

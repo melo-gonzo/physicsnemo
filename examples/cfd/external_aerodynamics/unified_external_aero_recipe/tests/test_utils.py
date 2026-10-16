@@ -343,6 +343,9 @@ _ISLA_COMPILE = {
     "dynamic": True,
     "mode": "max-autotune-no-cudagraphs",
 }
+#: ISLA templates that keep the per-block compile by default (whole-model
+#: recompiles open on AeroZoo; see the template).
+_ISLA_PER_BLOCK = {"isla_volume_aerozoo"}
 
 
 @pytest.mark.parametrize("entry,compiled_by_default", [("train", True), ("infer", False)])
@@ -351,11 +354,14 @@ def test_compile_model_passes_the_template_compile_options(
     model, entry, compiled_by_default, monkeypatch
 ):
     """The composed ``compile_options`` reach ``torch.compile``: the ISLA templates'
-    whole-model options (with the per-block compile off), PyTorch's defaults for
-    every other model; ``compile=false`` (infer.yaml's default) compiles nothing."""
+    whole-model options (with the per-block compile off, except where a template
+    keeps it and compile=false), PyTorch's defaults for every other model;
+    ``compile=false`` (infer.yaml's default) compiles nothing."""
     calls = []
     monkeypatch.setattr(torch, "compile", lambda m, **kw: calls.append(kw) or m)
     expected = _ISLA_COMPILE if model.startswith("isla") else {}
+    per_block = model in _ISLA_PER_BLOCK
+    compiled_by_default = compiled_by_default and not per_block
     net = torch.nn.Linear(2, 2)
     for flag, compiled in ((None, compiled_by_default), ("true", True), ("false", False)):
         overrides = [f"model={model}"] + ([f"compile={flag}"] if flag else [])
@@ -365,7 +371,7 @@ def test_compile_model_passes_the_template_compile_options(
         assert compile_model(net, cfg) is net
         assert calls == ([expected] if compiled else [])
     if model.startswith("isla"):
-        assert cfg.model.compile_blocks is False
+        assert cfg.model.compile_blocks is per_block
 
 
 @pytest.mark.skipif(not torch.distributed.is_gloo_available(), reason="requires Gloo")

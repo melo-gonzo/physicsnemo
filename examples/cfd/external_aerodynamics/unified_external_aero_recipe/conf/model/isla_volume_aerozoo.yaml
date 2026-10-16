@@ -39,8 +39,12 @@ training:
   optimizer:
     lr: 3.75e-4
 
-# Whole-model torch.compile: one graph, compiled once for every token count; see isla_volume.yaml.
-compile: true
+# Per-block compile here (compile_blocks below), not the whole-model compile of isla_volume.yaml: on
+# AeroZoo's four boundaries the whole-model graph still recompiles (2026-10-16): Dynamo's duck sizing ties
+# boundaries with equal cell counts in the first case (the 50,000-face cap), and the input meshes' caches,
+# whose contents differ by case with what the pipeline computed, are guarded by their size. With
+# compile=true model.compile_blocks=false the whole model compiles with these options.
+compile: false
 compile_options:
   fullgraph: true
   dynamic: true
@@ -97,7 +101,7 @@ model:
   # per-token inputs), the eager PyTorch region otherwise. Force with `eager`
   # or `fused`.
   geo_kernel: null
-  # Per-block torch.compile (PERF-3, 2026-10-01): off, since the recipe compiles
-  # the whole model (compile_options above). The way to compile ISLA-DTT
-  # (model.kernel_read), whose reads break the whole-model graph.
-  compile_blocks: false
+  # Run every slice block under torch.compile (PERF-3, 2026-10-01; built at the
+  # first step, parameter names and checkpoints unchanged); see the comment on
+  # `compile` above.
+  compile_blocks: true
