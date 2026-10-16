@@ -37289,3 +37289,28 @@ as the cause. The multiplicative residual stream of
 @sec-nb-aerozoo-hresid-probe remains. Its remedy lanes (arms A and A2,
 rows 340 to 343) are at epoch 27 and reach the event's window within a
 day.
+
+## 2026-10-16 — H-RESID P4 holds: with the normalized reads (A2), ISLA trains on DeepJEB++ at the reference rate without the plateau {#sec-nb-deepjeb-hresid-p4}
+
+**Run.** `jbn2_isla_seed42` and `jbn2_isla_seed43` on LHR: the final
+reference configuration (width 512, 512 slices, 40 epochs, recipe_v8) at
+3.75e-4, with arm A2 (snapshot code_v20a2: code_v20 with the pooling and
+the broadcast reading `norm_assign(h)`) as the only change from the
+reference-rate lanes `cl_r_jeb_isla_*` of
+@sec-nb-char-deepjeb-plateau. Training-time validation (bfloat16, every
+second epoch), as in that entry.
+
+**Result.** Neither lane departs: the mean training loss falls in every
+epoch, from 0.023 at epoch 0 to 0.0055 and 0.0051 at epochs 12 and 13.
+Validation von Mises at epoch 12 is 0.447 and 0.439 (displacement 0.213
+and 0.222), below the bar of 0.6. At epoch 6 it is 0.468 and 0.472,
+where the half-rate lanes stood at epoch 6 (0.48 to 0.50) and the
+reference-rate lanes had been at the plateau (0.90 to 1.02) since epoch
+4. P4 holds on both seeds.
+
+**What it means.** On DeepJEB++ the plateau came from the raw reads of
+the residual stream: with them removed, the reference rate trains. This
+is one of the two datasets the adoption rule asks for. P3 (AeroZoo) is
+read when its four lanes pass the event's window, and P5 (AirfRANS, no
+loss) when its lanes finish. The lanes run on to epoch 40, and the
+comparison with the baselines waits for their scored finals.
