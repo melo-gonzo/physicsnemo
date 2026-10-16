@@ -37314,3 +37314,21 @@ is one of the two datasets the adoption rule asks for. P3 (AeroZoo) is
 read when its four lanes pass the event's window, and P5 (AirfRANS, no
 loss) when its lanes finish. The lanes run on to epoch 40, and the
 comparison with the baselines waits for their scored finals.
+
+## 2026-10-16 — AEROZOO remedy R2, first condition holds: no half-rate lane doubles its running minimum through epoch 250 {#sec-nb-aerozoo-remedy-r2-first}
+
+The four half-rate ISLA lanes of @sec-nb-aerozoo-remedy-prereg (rows 24
+to 27, windowed boundary protocol) finished epoch 249. With the
+registered detector (validation every ten epochs), none doubles its
+running minimum: the largest ratio of a validation loss to the running
+minimum before it is 1.09 and 1.08 on `full` and 1.42 and 1.03 on
+`family_non_box`. The final validation losses are 0.0302 and 0.0311
+(`full`) and 0.0301 and 0.0315 (`family_non_box`), at or within 4
+percent of each lane's best. R1 and R3 are excluded. R2's second
+condition is read on the float32 scores of the final `full` checkpoints,
+which the scoring pump has queued. The training-time validation velocity
+at epoch 249 is 0.167 and 0.171, against the bar of 0.25. The P1 re-read
+(GeoTransolver ÷ ISLA on velocity, at or above 1.4 under R2) follows
+with those scores. H-RESID (@sec-nb-aerozoo-hresid-probe) explains why
+the half rate helps: the stream grows multiplicatively in both, more
+slowly at the half rate.
