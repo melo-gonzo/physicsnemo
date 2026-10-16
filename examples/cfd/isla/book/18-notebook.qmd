@@ -37164,3 +37164,20 @@ proposed as the reference configuration, and both rate exceptions
 normalized as a separate, tested change. If P1 or P2 fails and P3 holds,
 the remedy works for a reason other than H-RESID's, and the notebook
 says so.
+
+**Amendment, 2026-10-15 22:52 EDT, before any remedy lane started.**
+The broadcast is not the block's only raw read of `h`. The slice states
+are pooled from it (`z = einsum(a, h)`), and `back = point_mix (z +
+slice_mlp(z))` keeps that raw `z`, so the broadcast's `W_b back` is
+also linear in `h`. Removing only the direct `W_h h` term leaves a
+multiplicative path through the averaged stream. Two arms therefore
+run. Arm A, as registered above: the broadcast reads `norm_assign(h)`
+(snapshot code_v29, AeroZoo rows 340 and 341). Arm A2, the candidate
+remedy: the pooling and the broadcast both read `norm_assign(h)`, so the
+slice sublayer reads the normalized state as a pre-LN sublayer does, and
+the raw `h` enters only the residual identity and the MLP's LayerNorm.
+P3 is read on both arms. P4 and P5, and the proposal in "What follows",
+apply to A2. A is a diagnostic: if A2 holds P3 and A does not, the
+pooled path carries the growth. Instrument 1 also records the size of
+each term of the block's update, so the growth can be assigned to a
+path.
