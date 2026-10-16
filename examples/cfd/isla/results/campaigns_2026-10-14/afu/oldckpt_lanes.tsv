@@ -1,0 +1,9 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code	epochs
+0	oldckpt	cl_r_af_isla_seed42	airfrans_uvolume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 model.hidden=512 model.n_slices=512 training.num_epochs=500	3.75e-4	42	100000	code_v20	500
+1	oldckpt	cl_r_af_isla_seed43	airfrans_uvolume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 model.hidden=512 model.n_slices=512 training.num_epochs=500	3.75e-4	43	100000	code_v20	500
+2	oldckpt	cl_r_af_gt_seed42	airfrans_uvolume	geotransolver_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 training.num_epochs=500	1e-3	42	100000	code_v20	500
+3	oldckpt	cl_r_af_gt_seed43	airfrans_uvolume	geotransolver_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 training.num_epochs=500	1e-3	43	100000	code_v20	500
+4	oldckpt	cl_r_af_t_seed42	airfrans_uvolume	transolver_volume	train_split=full_train val_split=full_test +training.val_interval=10 model.n_hidden=512 model.n_layers=16 training.num_epochs=500	1e-3	42	100000	code_v20	500
+5	oldckpt	cl_r_af_t_seed43	airfrans_uvolume	transolver_volume	train_split=full_train val_split=full_test +training.val_interval=10 model.n_hidden=512 model.n_layers=16 training.num_epochs=500	1e-3	43	100000	code_v20	500
+6	oldckpt	af_tg1pf_seed42	airfrans_uvolume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 ++model.query_independent=true ++model.kernel_read=mean ++model.kernel_read_radius=null ++model.kernel_read_theta=1.0	5e-4	42	100000	code_dtt16	500
+7	oldckpt	af_tg1pf_seed43	airfrans_uvolume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 ++model.query_independent=true ++model.kernel_read=mean ++model.kernel_read_radius=null ++model.kernel_read_theta=1.0	5e-4	43	100000	code_dtt16	500
