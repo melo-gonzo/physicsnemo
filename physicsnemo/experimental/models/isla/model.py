@@ -252,6 +252,14 @@ from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 logger = logging.getLogger(__name__)
 
 
+def _log_count(n: int, like: torch.Tensor) -> float | torch.Tensor:
+    """``log(n)`` of a token count; under torch.compile a 0-d tensor of ``like``'s
+    dtype, since ``math.log`` of a shape would specialize the dynamic shapes on it."""
+    if not torch.compiler.is_compiling():
+        return math.log(n)
+    return torch.full((), n, dtype=torch.float64, device=like.device).log().to(like.dtype)
+
+
 class ISLA(Module):
     r"""ISLA (Invariant Slice Attention): invariant backbone, equivariant edges.
 
@@ -1397,7 +1405,7 @@ class ISLA(Module):
                 s_logw = (
                     self.qt.logw.to(log_w.dtype)
                     + torch.logsumexp(log_w[:, :n_boundary], dim=1, keepdim=True)
-                    - math.log(n_support)
+                    - _log_count(n_support, log_w)
                 )
                 q_logw = torch.cat(
                     [s_logw.expand(bq, n_support, 1), log_w.new_full((bq, nq - n_support, 1), -math.inf)], dim=1
@@ -1410,7 +1418,7 @@ class ISLA(Module):
                 q_logw = (
                     self.qt.logw.to(log_w.dtype)
                     + torch.logsumexp(log_w[:, :n_boundary], dim=1, keepdim=True)
-                    - math.log(nq)
+                    - _log_count(nq, log_w)
                 )
             q_vecs, q_tens = self._block_extras(None, None, q_vecs, q_tens, bq, nq, points)
             if self.kernel_reads is not None and self.kernel_read_radius is None:

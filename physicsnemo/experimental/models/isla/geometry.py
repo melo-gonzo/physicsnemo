@@ -119,6 +119,10 @@ def _nearest_index(
             num_warps=4,
         )
         return idx
+    if torch.compiler.is_compiling():
+        ### One block: a loop over query chunks would specialize torch.compile's
+        ### dynamic query count (each row's argmin is the same either way).
+        return torch.cdist(q, y, compute_mode="donot_use_mm_for_euclid_dist").argmin(-1)
     return torch.cat(
         [
             torch.cdist(
