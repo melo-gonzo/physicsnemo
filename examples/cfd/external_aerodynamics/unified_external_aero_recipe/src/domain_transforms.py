@@ -937,7 +937,10 @@ class ComposeQuadratureMeasure(MeshTransform):
             return mesh
         from physicsnemo.mesh.calculus.measure import cell_measures, set_cell_measures
 
-        set_cell_measures(mesh, cell_measures(mesh).to(mesh.points.dtype))
+        ### A copy: without a stored measure cell_measures returns the cached
+        ### cell areas, and a field aliasing the cache recompiles a compiled model
+        ### whenever the aliasing differs between cases.
+        set_cell_measures(mesh, cell_measures(mesh).to(mesh.points.dtype, copy=True))
         return mesh
 
 
