@@ -1,6 +1,6 @@
 # AirfRANS {#sec-airfrans}
 
-**AirfRANS is the interior task on a second dataset and a second PDE regime, two-dimensional incompressible flow, and the first instance in the book of a global scalar input; on it ISLA leads both baselines on interior velocity by a wide margin, trails both on pressure and on eddy viscosity, and alone keeps its error when the validation cases are rotated and translated; outside the training range of Reynolds number or angle of attack the pressure ordering inverts.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the three scorings, the ladders and controls that belong to this dataset, and what the dataset does not say. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
+**AirfRANS is the interior task on a second dataset and a second PDE regime, two-dimensional incompressible flow, and the first instance in the book of a global scalar input; on it ISLA leads both baselines on interior velocity by a wide margin, trails both on pressure and on eddy viscosity, and alone keeps its error when the validation cases are rotated and translated; outside the training range of Reynolds number or angle of attack the pressure ordering inverts.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the native mesh and rotated and translated, the ladders and controls that belong to this dataset, and what the dataset does not say. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
 ```{python}
 #| label: setup-airfrans
@@ -61,13 +61,15 @@ def bc_legend(ax, kinds, loc="lower right", extra=()):
     handles = [Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds] + list(extra)
     ax.legend(handles=handles, loc=loc, fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
 
-# ---- the three-protocol headline table ----
-# The three architectures' reference configurations scored on (i) the native validation mesh, (ii) a uniform point cloud of
-# the same budget and (iii) every validation case rotated and translated, read from results/char/<dataset>.json. Schema:
+# ---- the protocol headline table ----
+# The three architectures' reference configurations scored on the native validation mesh and with every validation case rotated
+# and translated, read from results/char/<dataset>.json; the artifact's uniform-point-cloud ("area") column is dropped on this
+# task, where its scoring is pending (@sec-airfrans-measured). Schema:
 # {"protocols": {"native": label, "area": label, "posed": label}, "fields": {key: label}, "isla_arm": name,
 #  "arms": {name: {protocol: {field: {"mean": x, "per_seed": {seed: x}, "n_cases": n, "n_seeds": n}}}}}.
-def protocol_table(artifact, label, setting):
-    C = json.load(open(RES / "char" / artifact)); protos = C["protocols"]; fields = C["fields"]; isla = C["arms"][C["isla_arm"]]
+def protocol_table(artifact, label, setting, drop=("area",)):
+    C = json.load(open(RES / "char" / artifact)); fields = C["fields"]; isla = C["arms"][C["isla_arm"]]
+    protos = {pk: pl for pk, pl in C["protocols"].items() if pk not in drop}
     flab = " / ".join(fields.values())
     hdr = "| configuration | " + " | ".join(f"{pl}: {flab}" for pl in protos.values()) + " |\n|---|" + "---|" * len(protos) + "\n"
     rows = []
@@ -77,10 +79,10 @@ def protocol_table(artifact, label, setting):
         if arm != C["isla_arm"]:
             rows.append(f"| {arm} ÷ ISLA | " + " | ".join(" / ".join(f"{d[pk][f]['mean'] / isla[pk][f]['mean']:.2f}" for f in fields) for pk in protos) + " |")
     print(hdr + "\n".join(rows) + "\n")
-    print(f": {setting}: the three architectures at their reference configurations under three scorings of one checkpoint, the "
-          f"native validation mesh, a uniform point cloud at the same budget, and every validation case rotated and translated; "
+    print(f": {setting}: the three architectures at their reference configurations under two scorings of one checkpoint, the "
+          f"native validation mesh and every validation case rotated and translated; "
           f"fields {flab}; seed means over two seeds unless the row says one, float32. How to read this: a ratio is baseline ÷ ISLA, "
-          f"above one favoring ISLA; the three columns share the checkpoint and differ only in how the validation cases are presented. "
+          f"above one favoring ISLA; the two columns share the checkpoint and differ only in how the validation cases are presented. "
           f"Data: results/char/{artifact}. {{#{label}}}")
 
 # ---- readings from the same artifact ----
@@ -273,10 +275,9 @@ print(f"**The interior task of @sec-interior-task on the published `full` split:
       "orderings and not physical percentages (@sec-interior-task). The architectures do not receive the same inputs: GeoTransolver "
       "and Transolver read every interior point with its coordinates and the stored signed distance and distance gradient and never "
       "see the airfoil polyline; ISLA reads the polyline, the inlet direction and speed, and the queries with the same stored distance "
-      "and gradient. Each trained checkpoint is scored three ways on the same test cases: on the native validation points; on the "
-      "uniform-point-cloud variant, which redraws the boundary area-proportionally and is the identity here because the airfoil "
-      "polyline is kept whole and the interior is a point cloud without cell measures; and with every case rigidly rotated in its "
-      "plane and translated by one RMS point radius, the inlet direction rotated with it (@sec-invariances).")
+      "and gradient. Each trained checkpoint is scored two ways on the same test cases: on the native validation points, and with "
+      "every case rigidly rotated in its plane and translated by one RMS point radius, the inlet direction rotated with it "
+      "(@sec-invariances). The area-weighted (uniform-point-cloud) scoring is pending for this task.")
 epoch_ratio = COST["ISLA"]["epoch_seconds"] / statistics.mean(COST[a]["epoch_seconds"] for a in BASELINES)
 print()
 print("**Cost.** Training on this task, one epoch at the reference configurations on four GB300 ranks in bfloat16 (peak device memory, "
@@ -327,7 +328,7 @@ vrat = lambda arch, f: VAR[arch]["native"][f]["mean"] / VAR["ISLA"]["native"][f]
 isla_posed = max(abs(shift("ISLA", f, "posed") - 1) for f, _ in FIELDS)
 b_posed = [rat(a, f, "posed") for a in BASELINES for f, _ in FIELDS]
 b_posed_err = [AR[a]["posed"][f]["mean"] for a in BASELINES for f, _ in FIELDS]
-print(f"Three readings. First, the native column: the velocity lead carries across the two interior datasets and widens, GeoTransolver ÷ ISLA "
+print(f"Two readings. First, the native column: the velocity lead carries across the two interior datasets and widens, GeoTransolver ÷ ISLA "
       f"{fmt_ratio(rat('GeoTransolver', 'velocity_l2'))} here against {vrat('GeoTransolver', 'velocity_l2'):.2f} on the DrivAerML Volume task "
       f"(@tbl-drivaerml-volume-protocols), while the pressure standing does not carry: GeoTransolver ÷ ISLA is {vrat('GeoTransolver', 'pressure_l2'):.2f} "
       f"on the cars and {rat('GeoTransolver', 'pressure_l2'):.2f} here (both GeoTransolver seeds, {', '.join(f'{v:.4f}' for v in seeds_of(AR['GeoTransolver']['native']['pressure_l2']))}, "
@@ -340,9 +341,7 @@ print(f"Three readings. First, the native column: the velocity lead carries acro
       f"{word('Transolver', 'velocity_l2')} on velocity, {word('Transolver', 'pressure_l2')} on pressure and {word('Transolver', 'nut_l2')} on "
       f"eddy viscosity (its seeds {', '.join(f'{v:.4f}' for v in seeds_of(AR['Transolver']['native']['nut_l2']))} "
       f"{'below' if max(seeds_of(AR['Transolver']['native']['nut_l2'])) < min(seeds_of(AR['ISLA']['native']['nut_l2'])) else 'interleave'} ISLA's "
-      f"{', '.join(f'{v:.4f}' for v in seeds_of(AR['ISLA']['native']['nut_l2']))}). Second, the uniform-point-cloud column equals "
-      "the native column for every architecture, as it must: the airfoil polyline is kept whole and the interior is a point cloud without "
-      "cell measures, so the area-proportional redraw has nothing to redraw; this dataset does not test discretization independence. Third, "
+      f"{', '.join(f'{v:.4f}' for v in seeds_of(AR['ISLA']['native']['nut_l2']))}). Second, "
       f"the rotated and translated column is the native column for ISLA (largest shift on any field {isla_posed * 100:.2f}%), while "
       f"GeoTransolver and Transolver read {fmt_ratio(min(b_posed))} to {fmt_ratio(max(b_posed))} ISLA's error, every one of their six "
       f"posed errors above {min(b_posed_err):.2f}, worse than predicting the mean field: a model that reads laboratory coordinates and "
@@ -462,7 +461,7 @@ pairs per layer.
 | ISLA, passive points, dense global read | 0.0260 (0.0274, 0.0245) | 0.0135 (0.0137, 0.0133) | 0.0288 (0.0325, 0.0250) | 0.74 / 0.79 / 0.92 |
 | ISLA-DTT (forest read at $\theta = 1$) | 0.0259 (0.0255, 0.0263) | 0.0141 (0.0135, 0.0146) | 0.0325 (0.0314, 0.0335) | 0.74 / 0.83 / 1.03 |
 
-: The AirfRANS interior task, read-only controls: relative L2 of interior pressure / velocity / eddy viscosity (p / v / nut) on the 200 test airfoils of the full split, float32, seed mean with seeds 42 and 43 in brackets. Every row is ISLA at 384 wide, 12 layers, 256 slices, 5e-4 (the earlier ISLA reference), trained on the 800 training airfoils for 500 epochs with 100,000 interior points, read as contiguous blocks of the stored points in training and scoring (@sec-interior-airfrans), and the whole airfoil polyline (958 to 1,018 segments) as the boundary. Rotated and translated, every row's error is its native error (ISLA-DTT to the fourth digit on pressure and velocity and within 0.3% on eddy viscosity), and the uniform point cloud is the identity on this dataset (@sec-airfrans-measured). How to read this: ÷ ISLA above one means less accurate than ISLA; these rows are a within-configuration control, and the standing of the reference configurations is @tbl-airfrans-protocols. Data: research/dtt/REPORT.md, "E5 interim" (first three rows) and "Pose-free parity on AirfRANS" (ISLA-DTT). {#tbl-airfrans-read-only}
+: The AirfRANS interior task, read-only controls: relative L2 of interior pressure / velocity / eddy viscosity (p / v / nut) on the 200 test airfoils of the full split, float32, seed mean with seeds 42 and 43 in brackets. Every row is ISLA at 384 wide, 12 layers, 256 slices, 5e-4 (the earlier ISLA reference), trained on the 800 training airfoils for 500 epochs with 100,000 interior points, read as contiguous blocks of the stored points in training and scoring (@sec-interior-airfrans), and the whole airfoil polyline (958 to 1,018 segments) as the boundary. Rotated and translated, every row's error is its native error (ISLA-DTT to the fourth digit on pressure and velocity and within 0.3% on eddy viscosity). How to read this: ÷ ISLA above one means less accurate than ISLA; these rows are a within-configuration control, and the standing of the reference configurations is @tbl-airfrans-protocols. Data: research/dtt/REPORT.md, "E5 interim" (first three rows) and "Pose-free parity on AirfRANS" (ISLA-DTT). {#tbl-airfrans-read-only}
 
 The passive model without a boundary read is already level with ISLA
 here (0.94 / 1.06 / 1.10), where on the cars it trails by 14% to 68%
@@ -557,4 +556,4 @@ ISLA's stay within 4%.
 
 ## What this dataset does not say {#sec-airfrans-limits}
 
-**The AirfRANS standing is one two-dimensional dataset: a velocity lead, a pressure deficit, an eddy-viscosity deficit, a pose reading, and an extrapolation reading whose mechanism is not measured.** The three configurations are not resource-matched and do not receive the same inputs (@sec-airfrans-measured), so the native ratios are standings of the configurations as shipped. The standing is read on uniform draws of the interior; the ladder, the read-only controls and the extrapolation splits were read on contiguous blocks of the stored points and are within-configuration readings (@sec-interior-airfrans). The uniform-point-cloud column is the identity on this dataset by construction, so discretization independence is not measured here; it is measured on the surface datasets (@sec-invariances). The extrapolation splits are the only regime measurement for ISLA in the book, and their three-dimensional twin on the wings is unmeasured (@sec-limits-regime). Nothing here is a statement about geometry generalization beyond the NACA family.
+**The AirfRANS standing is one two-dimensional dataset: a velocity lead, a pressure deficit, an eddy-viscosity deficit, a pose reading, and an extrapolation reading whose mechanism is not measured.** The three configurations are not resource-matched and do not receive the same inputs (@sec-airfrans-measured), so the native ratios are standings of the configurations as shipped. The standing is read on uniform draws of the interior; the ladder, the read-only controls and the extrapolation splits were read on contiguous blocks of the stored points and are within-configuration readings (@sec-interior-airfrans). Discretization independence is not measured here; it is measured on the surface datasets (@sec-invariances). The extrapolation splits are the only regime measurement for ISLA in the book, and their three-dimensional twin on the wings is unmeasured (@sec-limits-regime). Nothing here is a statement about geometry generalization beyond the NACA family.
