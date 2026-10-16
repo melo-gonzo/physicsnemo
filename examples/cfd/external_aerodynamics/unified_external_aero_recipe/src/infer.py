@@ -99,6 +99,7 @@ from tabulate import tabulate
 from tensordict import TensorDict
 from utils import (
     FieldType,
+    compile_model,
     get_autocast_context,
     make_jsonl_logger,
     recursive_to_device,
@@ -552,8 +553,7 @@ def main(cfg: DictConfig) -> None:
                 ### statistics (re-keying dotted names to nested keys).
                 live.stats = saved_stats
 
-    if cfg.get("compile", False):
-        model = torch.compile(model)
+    model = compile_model(model, cfg)
     model.eval()
 
     # -- Collate ----------------------------------------------------------------

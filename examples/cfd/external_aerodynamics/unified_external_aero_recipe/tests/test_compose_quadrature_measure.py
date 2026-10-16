@@ -61,3 +61,15 @@ def test_identity_without_subsampling_and_point_cloud_passthrough():
     assert torch.allclose(out.cell_data["_effective_measure"], mesh.cell_areas)
     cloud = Mesh(points=torch.rand(50, 3))
     assert ComposeQuadratureMeasure()(cloud) is cloud
+
+
+def test_materialized_measure_does_not_alias_the_cached_areas():
+    """Without a stored measure the materialized field is a copy of the cell areas,
+    not the cached tensor: an input aliasing another recompiles a compiled model
+    whenever the aliasing differs between cases (AeroZoo boundaries below the
+    subsample cap)."""
+    mesh = _surface()
+    areas = mesh.cell_areas  # cached, as after any transform that reads it
+    measure = ComposeQuadratureMeasure()(mesh).cell_data["_effective_measure"]
+    assert torch.equal(measure, areas)
+    assert measure.untyped_storage().data_ptr() != areas.untyped_storage().data_ptr()

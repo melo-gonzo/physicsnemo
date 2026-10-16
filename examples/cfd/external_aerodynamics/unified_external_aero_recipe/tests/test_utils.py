@@ -32,13 +32,16 @@ if the walker skips the TD branch.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 import torch
+from hydra import compose, initialize_config_dir
 from metrics import DEFAULT_METRICS, MetricCalculator, resolve_metrics
 from omegaconf import OmegaConf
 from tensordict import TensorDict
 from utils import (
+    compile_model,
     get_autocast_context,
     make_jsonl_logger,
     recursive_to_device,
@@ -330,3 +333,69 @@ def test_resolve_dict():
     assert resolve_dict(cfg, "a") == {"b": 1}
     assert resolve_dict(cfg, "empty") is None  # empty -> None
     assert resolve_dict(cfg, "missing") is None
+
+
+_CONF = Path(__file__).resolve().parents[1] / "conf"
+_MODELS = sorted(p.stem for p in (_CONF / "model").glob("*.yaml"))
+#: What every ISLA template sets: one graph, compiled once for every token count.
+_ISLA_COMPILE = {
+    "fullgraph": True,
+    "dynamic": True,
+    "mode": "max-autotune-no-cudagraphs",
+}
+#: ISLA templates that keep the per-block compile by default (whole-model
+#: recompiles open on AeroZoo; see the template).
+_ISLA_PER_BLOCK = {"isla_volume_aerozoo"}
+
+
+@pytest.mark.parametrize("entry,compiled_by_default", [("train", True), ("infer", False)])
+@pytest.mark.parametrize("model", _MODELS)
+def test_compile_model_passes_the_template_compile_options(
+    model, entry, compiled_by_default, monkeypatch
+):
+    """The composed ``compile_options`` reach ``torch.compile``: the ISLA templates'
+    whole-model options (with the per-block compile off, except where a template
+    keeps it and compile=false), PyTorch's defaults for every other model;
+    ``compile=false`` (infer.yaml's default) compiles nothing."""
+    calls = []
+    monkeypatch.setattr(torch, "compile", lambda m, **kw: calls.append(kw) or m)
+    expected = _ISLA_COMPILE if model.startswith("isla") else {}
+    per_block = model in _ISLA_PER_BLOCK
+    compiled_by_default = compiled_by_default and not per_block
+    net = torch.nn.Linear(2, 2)
+    for flag, compiled in ((None, compiled_by_default), ("true", True), ("false", False)):
+        overrides = [f"model={model}"] + ([f"compile={flag}"] if flag else [])
+        with initialize_config_dir(config_dir=str(_CONF), version_base=None):
+            cfg = compose(config_name=entry, overrides=overrides)
+        calls.clear()
+        assert compile_model(net, cfg) is net
+        assert calls == ([expected] if compiled else [])
+    if model.startswith("isla"):
+        assert cfg.model.compile_blocks is per_block
+
+
+@pytest.mark.skipif(not torch.distributed.is_gloo_available(), reason="requires Gloo")
+def test_compile_model_compiles_the_ddp_module_in_place_under_fullgraph(
+    tmp_path, monkeypatch
+):
+    """Dynamo cannot trace DDP's forward in one graph: with ``fullgraph`` the wrapped
+    module is compiled in place (the DDP wrapper is returned) and DDPOptimizer does
+    not split it; without it the DDP model itself goes to ``torch.compile`` as before."""
+    calls = []
+    monkeypatch.setattr(torch, "compile", lambda f, **kw: calls.append((f, kw)) or f)
+    monkeypatch.setattr(torch._dynamo.config, "optimize_ddp", True)
+    torch.distributed.init_process_group(
+        "gloo", init_method=f"file://{tmp_path / 'store'}", rank=0, world_size=1
+    )
+    try:
+        ddp = torch.nn.parallel.DistributedDataParallel(torch.nn.Linear(2, 2))
+        cfg = OmegaConf.create({"compile": True, "compile_options": _ISLA_COMPILE})
+        assert compile_model(ddp, cfg) is ddp
+        assert calls == [(ddp.module._call_impl, _ISLA_COMPILE)]
+        assert ddp.module._compiled_call_impl is not None
+        assert torch._dynamo.config.optimize_ddp is False  # one graph, not split
+        calls.clear()
+        cfg = OmegaConf.create({"compile": True, "compile_options": {}})
+        assert compile_model(ddp, cfg) is ddp and calls == [(ddp, {})]
+    finally:
+        torch.distributed.destroy_process_group()

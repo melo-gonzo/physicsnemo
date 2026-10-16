@@ -1164,9 +1164,12 @@ class ISLA(Module):
                 f"global_data must be a TensorDict or a mapping of name to tensor, got "
                 f"{type(global_data).__name__}"
             )
-        missing = _missing_fields(self.global_schema, td)
-        if missing:
-            raise ValueError(f"global_data is missing the declared fields {missing!r}")
+        ### Skipped under torch.compile, where listing the leaves would guard on
+        ### their order (the strict select below still fails on a missing leaf).
+        if not torch.compiler.is_compiling():
+            missing = _missing_fields(self.global_schema, td)
+            if missing:
+                raise ValueError(f"global_data is missing the declared fields {missing!r}")
         return td.select(*(FieldSchema.key(name) for name in self.global_schema))
 
     def forward(

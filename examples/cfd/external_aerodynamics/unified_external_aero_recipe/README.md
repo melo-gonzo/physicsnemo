@@ -367,9 +367,14 @@ unit, so no per-dataset reference length is needed; `hidden: 512`,
 backward instead of storing them: same forward and gradients bitwise, lower
 peak memory; set `false` to trade memory for speed); `geo_kernel: null`
 selects the exact fused Triton geometry kernel wherever it can run (CUDA)
-and the eager PyTorch region otherwise; `compile_blocks: true` compiles each
-slice block (leave the recipe's whole-model `compile` off, since the mesh
-size changes every case).
+and the eager PyTorch region otherwise. The configs (all but
+`isla_volume_aerozoo`, see its comment) compile the whole model
+(`compile: true` with `compile_options` `fullgraph: true`, `dynamic: true`
+and `mode: max-autotune-no-cudagraphs`): one graph with dynamic shapes, so a
+new mesh size does not recompile it (see `isla_volume.yaml` for the first
+compile's cost and the one exception); the per-block `compile_blocks` is off. For
+ISLA-DTT (`model.kernel_read`), whose boundary reads break the graph, set
+`compile=false model.compile_blocks=true` instead.
 
 **Learning rate.** 3.75e-4 at `hidden: 512`, pinned in every ISLA config
 (the recipe default of 3e-3 drives ISLA to a mean-field plateau within five
@@ -723,12 +728,12 @@ python src/train.py model=flare_volume dataset=drivaer_ml_volume \
 # ISLA (Invariant Slice Attention), surface reference configuration (mesh in,
 # mesh out; lr 3.75e-4 pinned in the config). geo_kernel: null picks the exact
 # fused Triton geometry kernel on CUDA; force with model.geo_kernel=eager|fused.
-python src/train.py model=isla_surface dataset=drivaer_ml_surface compile=false
+python src/train.py model=isla_surface dataset=drivaer_ml_surface
 
 # ISLA interior reference: boundary -> interior prediction points as tokens.
 # Pair with drivaer_ml_volume_reference, which adds the unit freestream
 # direction U_inf_dir that the model reads from global_data.
-python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference compile=false
+python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference
 
 # GLOBE (mesh-native)
 # ~143 GB/GPU at sampling_resolution=50000 in bf16; 200000 does not fit
@@ -745,7 +750,7 @@ python src/train.py model=geotransolver_surface dataset=highlift_surface \
 
 # HiLift surface (ISLA reference configuration)
 python src/train.py model=isla_surface dataset=highlift_surface \
-    compile=false training.num_epochs=200 sampling_resolution=100000
+    training.num_epochs=200 sampling_resolution=100000
 
 # HiLift volume
 python src/train.py model=geotransolver_volume_highlift dataset=highlift_volume \

@@ -58,6 +58,7 @@ from utils import (
     Phase,
     Precision,
     build_muon_optimizer,
+    compile_model,
     get_autocast_context,
     initialize_from_checkpoint,
     make_jsonl_logger,
@@ -994,8 +995,7 @@ def main(cfg: DictConfig) -> None:
     }
     loaded_epoch = load_checkpoint(device=device, **ckpt_args)
 
-    if cfg.compile:
-        model = torch.compile(model)
+    model = compile_model(model, cfg)
 
     num_epochs = cfg.training.num_epochs
     logger.info(f"Starting training for {num_epochs} epochs...")
