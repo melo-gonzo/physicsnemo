@@ -230,7 +230,7 @@ print(f"**ISLA's interior prediction on the DrivAerML Volume task depends on the
       f"the sensitivity is a bias of that one discretization-dependent input ({100 * VGS['frac_nearest_token_changed']:.0f}% of the queries "
       f"change nearest token under the redraw); the exact stored signed-distance field does not substitute at scoring time "
       f"({' / '.join(fmt_ratio(VGR['area_sdfgeo'][f]) for f, _ in F3)} native) because the trained model is calibrated to the sampled distance "
-      "(@tbl-vol-geo). What would move this: a sample-independent query geometry, a measure-weighted softmin over the boundary tokens or the "
+      "(@tbl-vol-geo). The AirfRANS interior task shows the same dependence on how the airfoil is sampled, by law and by count (@sec-airfrans-boundary-law). What would move this: a sample-independent query geometry, a measure-weighted softmin over the boundary tokens or the "
       "stored field where one exists, trained in; until then the interior standing is a native-mesh standing.")
 ```
 
