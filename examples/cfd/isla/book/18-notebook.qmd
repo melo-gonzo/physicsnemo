@@ -38000,3 +38000,44 @@ nearest boundary sample, mostly at the junction of two collinear
 segments, where the direction feature flips sign under the pose, the class
 that exact point-to-face geometry (@sec-nb-geo0) removes. Peter kept A2 on
 these results (2026-10-17).
+
+## 2026-10-17 — GEO1 on AirfRANS: exact full-resolution query geometry lowers ISLA's errors by 13 percent on pressure and removes most of its dependence on how the airfoil is sampled; the count bar fails as registered {#sec-nb-geo1-airfrans}
+
+GEO1 trains the change proposed after @sec-nb-geo0: each query's distance
+and direction come from the exact closest point on the full-resolution
+boundary surface instead of the nearest boundary token (branch
+psharpe/isla-geo-exact; snapshot code_geo1). It is compared with the same
+model without the change (A2, the reference configuration; snapshot
+code_a2s), both on recipe_v11 at the reference configuration, 500 epochs,
+uniform-interior AirfRANS files, two seeds each (rows 10 to 13 of the
+AirfRANS lanes). The predictions were registered before submission
+(scratch/isla-geo1-airfrans-2026-10-17/PREREG.md).
+
+**G1-N holds.** Native test errors, geo1 ÷ A2: 0.869 on pressure (seeds
+0.818 and 0.924), 0.938 on velocity (0.894 and 0.985) and 0.936 on eddy
+viscosity (0.880 and 0.996); both geo1 seeds lie below both A2 seeds on
+every field, and rotated and translated scoring gives the same ratios.
+A2 on this snapshot reproduces A2 on the earlier one (0.995 to 1.005 on
+pressure and velocity), so the code moved nothing.
+
+At 400 airfoil segments (the protocol of @sec-nb-char-area2-verdict,
+LHR job 253816; per seed 42 and 43; noise floor at most 0.055):
+
+| Readout | A2 | geo1 |
+|---|---|---|
+| area ÷ uniform, pressure | 2.57, 2.36 | 0.52, 0.46 |
+| area ÷ uniform, velocity | 2.19, 2.15 | 0.60, 0.63 |
+| uniform ÷ native, pressure | 18.8, 16.7 | 7.6, 6.7 |
+| uniform ÷ native, velocity | 11.9, 12.3 | 4.9, 4.0 |
+
+**G1-P holds**: geo1's pressure law effect is below 1, the area-weighted
+draw now scoring better than the uniform one, as the measure-weighted
+slice states would predict once the geometry no longer depends on the
+sample. **G1-C fails as registered** (bar: at most 4 on pressure and
+velocity, each seed): geo1's count effect is 7.6 and 6.7 on pressure and
+4.9 on velocity for seed 42, about 2.5 times smaller than A2's. The rest
+is the dependence of the slice states on the number of boundary tokens,
+larger than the design study's estimate of 1.8 to 4. Velocity's law
+effect, recorded rather than predicted after @sec-nb-geo0, also falls
+below 1. Under the area-weighted draw at 400 segments geo1's errors are
+about 3 to 4 times its native errors where A2's are about 26 to 48 times.
