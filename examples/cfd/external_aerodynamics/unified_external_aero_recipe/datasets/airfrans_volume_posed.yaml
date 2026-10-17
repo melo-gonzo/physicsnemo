@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# CHAR-PROTOCOLS posed variant (2026-10-02): identical to airfrans_volume.yaml except that every case
+# is rigidly posed by a rotation and a translation that are a deterministic function of the case
+# (a rotation uniform on SO(2) about the plane normal z; translation of one RMS point radius in a random
+# direction in the plane),
+# applied as the FIRST transform so geometry, normals, every vector field and the per-case global
+# vectors move together and every architecture is scored on the same posed validation set.
+# This pipeline has NO CenterMesh, so the translation reaches the model: the posed error measures rotation and
+# translation together.
+# Evaluation-only protocol: train natively, score the native checkpoint on this variant.
+
+# AirfRANS (Bonnet et al., 2022) as a boundary-to-interior dataset, converted to native DomainMesh files by
+# kernel/airfrans_convert.py (AIRFRANS-INT, 2026-09-21). Two-dimensional incompressible k-omega SST RANS around
+# NACA airfoils at z = 0: interior = point cloud with velocity, pressure (kinematic), nut, sdf (positive outside)
+# and sdf_normals; boundary "airfoil" = line cells with precomputed in-plane normals and segment lengths as the
+# quadrature measure; global_data: U_inf, U_inf_dir, U_inf_mag, aoa_deg, Re, rho_inf = 1, p_inf = 0.
+# Splits come from the dataset's manifest (full_train/full_test, scarce_train, reynolds_*, aoa_*); select with
+# train_split=full_train val_split=full_test.
+train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh
+manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh/manifest.json
+
+pipeline:
+  reader:
+    _target_: ${dp:CaseKeyDomainMeshReader}   # CHAR-PROTOCOLS posed: DomainMeshReader + the per-case `case_key` FixedRandomPose seeds from
+    path: ${train_datadir}
+    pattern: "airFoil2D_SST_*/*.pdmsh"
+    subsample_n_points: ${sampling_resolution}   # interior queries (each case has ~177k points)
+    subsample_n_cells: ${sampling_resolution}    # larger than any airfoil's ~1,000 segments: the boundary is kept whole
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    - _target_: ${dp:FixedRandomPose}   # CHAR-PROTOCOLS posed: deterministic per-case pose, first so everything downstream sees it
+      salt: 0
+      translate: 1.0                    # one RMS point radius, drawn from the same keyed stream after the rotation
+      axis: 2                           # planar problem stored at z = 0: rotate IN the plane only (SO(2) about z)
+    - _target_: ${dp:NonDimensionalizeByMetadata}
+      fields:
+        velocity: velocity          # U / |U_inf|
+        pressure: pressure          # (p - p_inf) / (0.5 rho_inf |U_inf|^2) with rho_inf = 1, p_inf = 0 (kinematic p)
+        nut: identity
+      association: point_data
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:
+        nut: {type: scalar, mean: 7.9e-4, std: 2.4e-3}   # raw nut [m^2/s], mean and std over the converter per-case statistics (2026-09-21)
+
+targets:
+  pressure: scalar
+  nut: scalar
+  velocity: vector
