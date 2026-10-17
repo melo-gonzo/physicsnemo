@@ -187,7 +187,9 @@ slices, no rank-2 inputs). At the first forward pass the model picks the
 fused kernel when the inputs are on CUDA, Triton is importable and the
 constraints hold, and the eager region otherwise, logging the choice once
 (:meth:`ISLA.resolve_geo_kernel`; the ``geo_kernel`` attribute, ``"auto"``,
-can be set to ``"eager"`` or ``"fused"`` to force one); at 200,000 cells the
+can be set to ``"eager"`` or ``"fused"`` to force one: an execution choice,
+not a constructor argument, so a checkpoint does not store it and a loaded
+model starts at ``"auto"``); at 200,000 cells the
 fused kernel runs the training step in about a third of the eager time and
 memory. The per-token
 rank-2 contractions (rho^T T rho) are the standing kernel follow-up; until
@@ -343,6 +345,12 @@ class ISLA(Module):
     points as a point-cloud ``Mesh`` (or a bare ``(N, dim)`` tensor when
     ``query_schema`` declares no fields). It returns a point-cloud ``Mesh`` whose
     ``point_data`` holds the declared outputs. Details under ``forward``.
+
+    **Execution.** The ``geo_kernel`` attribute (``"auto"``; set ``"eager"`` or
+    ``"fused"`` to force one) selects how the per-layer geometry region is
+    executed, not what it computes (:meth:`resolve_geo_kernel`). It is an
+    execution choice, not a constructor argument: checkpoints do not store it,
+    and a loaded model starts at ``"auto"``.
 
     Args:
         output_schema: Output fields, a rank spec per name. Each field is a leaf of

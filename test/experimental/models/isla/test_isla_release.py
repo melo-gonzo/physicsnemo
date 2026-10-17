@@ -209,7 +209,12 @@ def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
     expected_points = mesh.cell_centroids if q is None else q
     assert torch.equal(via_mesh.points, expected_points) and via_mesh.n_cells == 0
     for k, v in direct.items():
-        assert torch.equal(via_mesh.point_data[k], v[0]), k
+        if config == "dtt" and via_mesh.point_data[k].is_cuda:
+            ### The boundary read's node means are float32 sums by CUDA's index_add, in no
+            ### fixed order, so the two calls agree to float32 roundoff there, not bitwise.
+            torch.testing.assert_close(via_mesh.point_data[k], v[0], rtol=1e-6, atol=1e-8)
+        else:
+            assert torch.equal(via_mesh.point_data[k], v[0]), k
     assert torch.equal(via_mesh.global_data["g"], inputs["global_data"]["g"])
 
 
@@ -245,6 +250,10 @@ def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
     model.save(path)
     loaded = Module.from_checkpoint(str(path)).to(device).eval()
     assert isinstance(loaded, ISLA)
+    ### geo_kernel is an execution choice the checkpoint does not store: the loaded model
+    ### starts at "auto" (fused on CUDA), so it takes the saved model's choice.
+    assert loaded.geo_kernel == "auto"
+    loaded.geo_kernel = model.geo_kernel
     for name in ("n_slices", "interior", "n_global_vectors", "output_schema", "global_schema"):
         assert getattr(loaded, name) == getattr(model, name), name
     with torch.no_grad():
