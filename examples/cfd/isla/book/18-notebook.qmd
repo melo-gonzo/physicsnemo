@@ -37961,3 +37961,42 @@ normalized reads on every dataset (A2-RERUN). The head frame's raw read
 of `h`, which A2 leaves in place, is normalized only as a separate,
 tested change (@sec-nb-aerozoo-hresid-prereg). If P3 fails at epoch
 250, this notebook records it and the AeroZoo rate question reopens.
+
+## 2026-10-17 — A2-RERUN, first two datasets: on DeepJEB++ ISLA now leads both baselines; on Tensile2d R-A2 holds on stress and displacement and fails on plastic strain as registered, a metric dominated by fields that never yield {#sec-nb-a2-rerun-jeb-t2d}
+
+The reference reruns with the normalized reads (@sec-nb-a2-adopted;
+pre-registration scratch/isla-a2-rerun-2026-10-17/PREREG.md, approved
+before any lane: R-A2, A2 ÷ old reference at or below 1.05 on every
+headline field, seed means, both seeds) have their first finals.
+
+**DeepJEB++** (40 epochs at 3.75e-4, final checkpoints, the CHAR scorer;
+LHR jobs 249818 and 250770; seed means with seeds 42 and 43): von Mises
+0.3919 (0.3942, 0.3895) and displacement 0.1653 (0.1688, 0.1619), against
+0.9311 and 0.8713 for the old reference at 1.875e-4 (on the mean-field
+plateau), 0.4974 and 0.2307 for GeoTransolver and 0.4364 and 0.1944 for
+Transolver. Both A2 seeds lie below every seed of every arm;
+GeoTransolver ÷ ISLA is 1.27 and 1.40, Transolver ÷ ISLA 1.11 and 1.18.
+Rotated and translated scoring equals native. R-A2 holds.
+
+**Tensile2d** (LHR job 251668): A2 ÷ old is 0.568 on stress and 0.519 on
+displacement, and 1.265 on plastic strain q (seeds 1.125 and 1.404, both
+above the old two-seed range). **R-A2 holds on stress and displacement
+and fails on q as registered.** A reading after the fact
+(scratch/isla-t2d-q-2026-10-17/REPORT.md) finds the q metric dominated by
+fields that never yield: 69 of the 100 test cases have q identically zero,
+so after the dataset's normalization their relative error measures a
+constant offset (the model's absolute error divided by 0.0211), and those
+cases carry 104 percent of the difference (absolute errors 6.2e-8 against
+3.9e-8 in strain units). On the 31 cases with any plastic strain the
+ratio is 0.978; weighted by plastic-strain energy it is 1.24 with a 95
+percent case-bootstrap interval of 0.76 to 1.89, from five yielding
+cases. The change is not linked to the pose deviation or to tied nearest
+samples. The verdict stands as registered; pre-registrations on this
+dataset do not gate on q with this metric again, since five informative
+cases cannot support a 5 percent bar. Rotated and translated scoring
+deviates from native by 6 to 12 percent on stress and displacement (0.98
+to 1.02 before; recorded, not predicted); 2.2 percent of nodes have a tied
+nearest boundary sample, mostly at the junction of two collinear
+segments, where the direction feature flips sign under the pose, the class
+that exact point-to-face geometry (@sec-nb-geo0) removes. Peter kept A2 on
+these results (2026-10-17).
