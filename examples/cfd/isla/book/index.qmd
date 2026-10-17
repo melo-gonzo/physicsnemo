@@ -36,8 +36,10 @@ where ISLA's own error moves too. On the uniform point cloud of those three
 surface datasets, ISLA's error moves by at most 2% and the baselines' grows
 by factors. On the DrivAerML Volume task the same draw changes only the
 boundary sample, which only ISLA reads, and ISLA's interior error rises
-several-fold through the queries' distance to the nearest boundary sample;
-in distribution
+several-fold through the queries' distance to the nearest boundary sample,
+and on the AirfRANS interior task, with the airfoil thinned to 400
+segments, a length-proportional draw about doubles ISLA's pressure and
+velocity errors against a uniform draw of the same count; in distribution
 the three are within seed noise on the cars, ISLA leads on the wings and
 on interior velocity, and trails on tensor targets, on the lug under the
 float32 protocol and on the sport-utility bodies. @tbl-thesis is the standing, one row per dataset and

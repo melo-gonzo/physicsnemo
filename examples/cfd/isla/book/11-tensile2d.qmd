@@ -1,6 +1,6 @@
 # PLAID Tensile2d {#sec-tensile2d}
 
-**Tensile2d is the first solid in the book and the dataset on which the component clause of the output contract binds: its targets are the components of a stress tensor, which ISLA predicts as a tensor and the recipe reads off. At 400 training specimens GeoTransolver and Transolver lead ISLA on stress, displacement and plastic strain on the native mesh; rotated and translated in the plane, ISLA's error shifts by a few percent while the baselines' rise to the mean-field level.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the native mesh and rotated and translated, the controls that belong to this dataset, and what the dataset does not say. The pose contract is exercised here in its tensor form (@sec-pose, @sec-isla-heads); the uniform-point-cloud scoring is the identity on this dataset, because the boundary polyline is kept whole and the interior is a point cloud. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
+**Tensile2d is the first solid in the book and the dataset on which the component clause of the output contract binds: its targets are the components of a stress tensor, which ISLA predicts as a tensor and the recipe reads off. At 400 training specimens GeoTransolver and Transolver lead ISLA on stress, displacement and plastic strain on the native mesh; rotated and translated in the plane, ISLA's error shifts by a few percent while the baselines' rise to the mean-field level.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the native mesh and rotated and translated, the controls that belong to this dataset, and what the dataset does not say. The pose contract is exercised here in its tensor form (@sec-pose, @sec-isla-heads); the boundary sampling law cannot be separated on this dataset, because the polyline's segments are nearly equal in length, while thinning the polyline multiplies ISLA's stress and displacement errors (@sec-tensile2d-boundary-law). Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
 ```{python}
 #| label: setup-tensile2d
@@ -67,7 +67,7 @@ def bc_legend(ax, kinds, loc="lower right", extra=()):
 # ---- the protocol headline table ----
 # The three architectures' reference configurations scored on the native validation mesh and with every validation case rotated
 # and translated, read from results/char/<dataset>.json; the artifact's uniform-point-cloud ("area") column is dropped on this
-# task, where its scoring is pending (@sec-tensile2d-measured). Schema:
+# task, where at the scoring budget it is the native mesh; the boundary draw at a reduced budget is @tbl-tensile2d-area2. Schema:
 # {"protocols": {"native": label, "area": label, "posed": label}, "fields": {key: label}, "isla_arm": name,
 #  "arms": {name: {protocol: {field: {"mean": x, "per_seed": {seed: x}, "n_cases": n, "n_seeds": n}}}}}.
 def protocol_table(artifact, label, setting, drop=("area",)):
@@ -328,9 +328,9 @@ print(f"**Every mesh node is an interacting query token, and the readout is the 
       "cannot be compared across the native and the posed scorings even for an exactly equivariant model. The plastic strain is standardized "
       "and heavy-tailed, so its ratios are orderings. Each trained checkpoint is scored two ways on the same specimens: on the native "
       "nodes, and with every specimen rigidly rotated in its plane and translated by one RMS point radius, "
-      "the stress components rotated as a tensor and the displacement as a vector (@sec-invariances). The area-weighted "
-      "(uniform-point-cloud) scoring is pending for this task: at the scoring budget the boundary polyline is kept whole and the interior "
-      "is a point cloud without cells, so that scoring returns the native mesh.")
+      "the stress components rotated as a tensor and the displacement as a vector (@sec-invariances). A uniform point cloud "
+      "at the scoring budget is the native mesh here, because the boundary polyline is kept whole and the interior is a point cloud "
+      "without cells, so the boundary draw is measured at a reduced budget instead, for ISLA alone (@sec-tensile2d-boundary-law).")
 ```
 
 ```{python}
@@ -404,8 +404,71 @@ print(f"Two readings. First, the native column: GeoTransolver ÷ ISLA {gt_native
 
 ## Ladders and controls {#sec-tensile2d-ladders}
 
-**No training-case ladder exists on this dataset under the reference configurations; the one control that belongs here is the pose-prior diagnostic.** The diagnostic that gives ISLA the dataset's axes as global vectors, an input the book rejects because a laboratory frame is not PDE data, is priced in @sec-pose-prior; the finding that a scalar head cannot produce the components of a rotating tensor, which this dataset established, is @sec-isla-heads.
+**No training-case ladder exists on this dataset under the reference configurations; the two controls that belong here are the pose-prior diagnostic and the boundary draw at a reduced budget.** The diagnostic that gives ISLA the dataset's axes as global vectors, an input the book rejects because a laboratory frame is not PDE data, is priced in @sec-pose-prior; the finding that a scalar head cannot produce the components of a rotating tensor, which this dataset established, is @sec-isla-heads.
+
+### The boundary draw at a reduced budget {#sec-tensile2d-boundary-law}
+
+```{python}
+#| label: para-tensile2d-area2-lede
+#| output: asis
+# results/char/area2_2026-10-16.json: per run (architecture and seed) and field, the mean over cases of the per-case relative L2
+# under three draws of the boundary at one budget below its cell count: "ca2a" (inclusion in proportion to the cell measure),
+# "ca2u" (uniform inclusion) and "ca2v" (uniform inclusion with an independent boundary seed), and "native" from the protocol
+# record; r = ca2a / ca2u, d = |ca2v / ca2u - 1| (the noise floor), count_effect = ca2u / native.
+A2 = {}
+for v in sorted(json.load(open(RES / "char" / "area2_2026-10-16.json"))["runs"].values(), key=lambda v: v["seed"]):
+    for f, x in v["fields"].items(): A2.setdefault((v["dataset"], v["arch"]), {}).setdefault(f, []).append(x)
+def area2_table(dataset, fields, label, setting):
+    cnt = lambda c: f"{c:.1f}x" if c >= 2 else f"{c:.2f}"
+    out = ("| architecture | field | native | uniform draw | area-proportional draw | area ÷ uniform, per seed | noise floor, per seed | "
+           "uniform ÷ native, per seed |\n|---|---|--:|--:|--:|---|---|---|\n")
+    for (ds, arch), F in A2.items():
+        if ds != dataset: continue
+        for f, lab in fields:
+            xs = F[f]; m = lambda p: mean(x["mean"][p] for x in xs)
+            out += (f"| {arch} | {lab} | {m('native'):.4f} | {m('ca2u'):.4f} | {m('ca2a'):.4f} | " + " / ".join(f"{x['r']:.3f}" for x in xs)
+                    + " | " + " / ".join(f"{x['d']:.3f}" for x in xs) + " | " + " / ".join(cnt(x["count_effect"]) for x in xs) + " |\n")
+    print(out)
+    print(f": {setting} Three draws of the boundary at that budget: in proportion to the cell measure (area-proportional), uniform, and a "
+          "second uniform draw with an independent seed; each kept cell's measure is divided by its inclusion probability. Errors are the "
+          "relative L2 per field, seed means over two seeds, float32; the native column is the protocol scoring of the same checkpoints. "
+          "How to read this: area ÷ uniform isolates the sampling law and uniform ÷ native the count; the noise floor is the change a "
+          "second uniform draw makes, the absolute value of second ÷ first − 1, so an area ÷ uniform within about that of one is no law "
+          f"effect. Per-seed entries are seeds 42 / 43. Data: results/char/area2_2026-10-16.json. {{#{label}}}")
+x_of = lambda f, k: [x[k] for x in A2[("tensile2d", "ISLA")][f]]
+sd_c = [v for f in ("stress_l2", "displacement_l2") for v in x_of(f, "count_effect")]
+sd_r = [v for f in ("stress_l2", "displacement_l2") for v in x_of(f, "r")]
+print(f"**Thinning the Tensile2d boundary multiplies ISLA's errors and the law of the draw does not, because on this polyline the two laws "
+      f"are nearly the same draw: with every condition-labelled segment kept and about 100 of the others drawn, ISLA's stress and "
+      f"displacement errors are {min(sd_c):.0f} to {max(sd_c):.0f} times native, and drawing the others in proportion to length instead of "
+      f"uniformly changes them by a factor of {min(sd_r):.2f} to {max(sd_r):.2f}.** The ISLA checkpoints of @tbl-tensile2d-protocols were "
+      f"scored on the {N_VAL} validation specimens with the polyline replaced by all 201 of its condition-labelled segments "
+      "and an expected 100 of the other 241 to 295, drawn three ways; the nodes, the targets and the global scalars are the same in every "
+      "draw (@tbl-tensile2d-area2). The segments are nearly equal in length (@sec-nb-char-area2-verdict), so the length-proportional and "
+      "uniform draws keep almost the same segments, and the law is not separable here. GeoTransolver and Transolver were not scored, "
+      "because they read no boundary sample; the reading is ISLA's alone.")
+```
+
+```{python}
+#| label: tbl-tensile2d-area2
+#| output: asis
+area2_table("tensile2d", T2D_FIELDS, "tbl-tensile2d-area2", f"PLAID Tensile2d, ISLA width 512 with 512 slices, {N_VAL} validation specimens, "
+            "the boundary polyline drawn as its 201 condition-labelled segments plus an expected 100 of the others; the nodes are the same "
+            "in every draw.")
+```
+
+```{python}
+#| label: para-tensile2d-area2-reading
+#| output: asis
+q_r = x_of("q_l2", "r"); q_d = x_of("q_l2", "d"); q_c = x_of("q_l2", "count_effect")
+print(f"The plastic strain is the one field whose area ÷ uniform leaves 1.05 ({' and '.join(f'{v:.3f}' for v in q_r)}), and it sits far "
+      f"inside that field's noise floor ({' and '.join(f'{v:.2f}' for v in q_d)}): its error is set by the few yielded nodes, so any redraw "
+      f"moves it. Its count effect is the smallest ({' and '.join(f'{v:.1f}x' for v in q_c)}), from a native error of "
+      f"{mean(x['mean']['native'] for x in A2[('tensile2d', 'ISLA')]['q_l2']):.2f}. The checkpoints trained on the whole polyline, so "
+      "the count effect is a property of these trained models on a boundary thinner than any they saw, not a measured resolution "
+      "requirement of the class.")
+```
 
 ## What this dataset does not say {#sec-tensile2d-limits}
 
-**Tensile2d measures the general interface on a planar solid with six global scalars and a tensor target, and the pose contract in its tensor form; it does not measure discretization independence, and its geometry family is one tension specimen.** The uniform-point-cloud scoring is the identity here, so that axis stays with the surface datasets (@sec-invariances); the notch moves and widens but the outline stays a tension specimen, so a lead or a deficit here says nothing about a change of geometry class. The baselines' lead on stress and displacement is the open standing on the solids and the one that most needs a located mechanism (@sec-limits-datasets); the three configurations are the reference configurations as shipped, with the parameter counts of @sec-tensile2d-measured, and are not matched in step time or memory. ISLA's residual shift under a generic in-plane pose is within 2 percent on every field and seed here (seed means 0.997 to 1.010; single cases up to 64 percent) and has the nearest-sample mechanism measured on the lug, not on this dataset.
+**Tensile2d measures the general interface on a planar solid with six global scalars and a tensor target, and the pose contract in its tensor form; it does not measure the boundary sampling law, and its geometry family is one tension specimen.** The two laws are nearly the same draw on this polyline and only ISLA reads it, so the one discretization reading here is ISLA's count effect (@sec-tensile2d-boundary-law), and independence of the sampling law stays with the surface datasets (@sec-invariances); the notch moves and widens but the outline stays a tension specimen, so a lead or a deficit here says nothing about a change of geometry class. The baselines' lead on stress and displacement is the open standing on the solids and the one that most needs a located mechanism (@sec-limits-datasets); the three configurations are the reference configurations as shipped, with the parameter counts of @sec-tensile2d-measured, and are not matched in step time or memory. ISLA's residual shift under a generic in-plane pose is within 2 percent on every field and seed here (seed means 0.997 to 1.010; single cases up to 64 percent) and has the nearest-sample mechanism measured on the lug, not on this dataset.

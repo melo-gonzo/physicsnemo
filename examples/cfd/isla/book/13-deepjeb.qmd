@@ -1,6 +1,6 @@
 # DeepJEB++ {#sec-deepjeb}
 
-**DeepJEB++ is a surface task on generated jet-engine brackets whose global vector is a load direction rather than a freestream, and it is the one campaign dataset the ISLA reference configuration does not finish: at the reference rate and at half of it the lanes reach the baselines' accuracy and then fall to the mean-field plateau, so the scored checkpoints trail GeoTransolver and Transolver by about four times on displacement; under the earlier form of the class, on an equal-step ladder, ISLA led or tied the best GeoTransolver arm at every rung.** The chapter follows the shared layout. The pose contract holds with the load direction as the one global vector; the area protocol is the identity here (every bracket's surface mesh is under the cell budget) and the resampling instruments of @sec-invariances are not run on this dataset. Protocol: @sec-protocol, with the dataset's two stated deviations, a per-dataset training rate of half the reference for ISLA and, on the ladder, a fixed optimizer-step budget; float32, two seeds; every ratio is baseline ÷ ISLA, above one favoring ISLA.
+**DeepJEB++ is a surface task on generated jet-engine brackets whose global vector is a load direction rather than a freestream, and it is the one campaign dataset the ISLA reference configuration does not finish: at the reference rate and at half of it the lanes reach the baselines' accuracy and then fall to the mean-field plateau, so the scored checkpoints trail GeoTransolver and Transolver by about four times on displacement; under the earlier form of the class, on an equal-step ladder, ISLA led or tied the best GeoTransolver arm at every rung.** The chapter follows the shared layout. The pose contract holds with the load direction as the one global vector; at a reduced budget of 20,000 surface cells an area-proportional draw raises GeoTransolver's and Transolver's errors over a uniform draw of the same count and leaves ISLA's unchanged, which does not test ISLA, because its scored checkpoints sit at the mean-field plateau (@sec-deepjeb-boundary-law); the resampling instruments of @sec-invariances are not run on this dataset. Protocol: @sec-protocol, with the dataset's two stated deviations, a per-dataset training rate of half the reference for ISLA and, on the ladder, a fixed optimizer-step budget; float32, two seeds; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
 ```{python}
 #| label: setup-deepjeb
@@ -70,8 +70,8 @@ def bc_legend(ax, kinds, loc="lower right", extra=()):
 
 # ---- the protocol headline table ----
 # The three architectures' reference configurations scored on the native validation mesh and with every validation case rotated
-# and translated; the artifact's uniform-point-cloud ("area") column is dropped on this task, where its scoring is pending
-# (@sec-surface-deepjeb). Read from results/char/<dataset>.json when that
+# and translated; the artifact's uniform-point-cloud ("area") column is dropped on this task, where at the scoring budget it is
+# the native mesh; the surface draw at a reduced budget is @tbl-deepjeb-area2 (@sec-deepjeb-boundary-law). Read from results/char/<dataset>.json when that
 # artifact exists; until it does the cell prints nothing and the native-mesh table above is the headline. Expected schema:
 # {"fields": {key: label}, "protocols": {"native": label, "uniform": label, "posed": label}, "isla_arm": name,
 #  "arms": {name: {protocol: {field: {"mean": x, "seeds": [...]}}}}}.
@@ -257,8 +257,8 @@ protocol_table("deepjeb_surface.json", "tbl-deepjeb-protocols", "DeepJEB++ at 12
 ```{python}
 #| label: para-deepjeb-trajectory
 #| output: asis
-print(f"The area-weighted (uniform-point-cloud) scoring is pending for this task: every bracket's surface mesh is below the cell budget, "
-      f"so at that budget the draw returns the mesh itself. The rotated and translated scoring reproduces ISLA's native numbers to "
+print(f"A uniform point cloud at the scoring budget is the mesh itself on this task, because every bracket's surface mesh is below the "
+      f"cell budget; the surface draw at a reduced budget is measured in @sec-deepjeb-boundary-law. The rotated and translated scoring reproduces ISLA's native numbers to "
       f"four digits while the baselines read {C['arms']['GeoTransolver 256']['posed']['displacement_l2']['mean']:.2f} and "
       f"{C['arms']['Transolver 512 x 16']['posed']['displacement_l2']['mean']:.2f} on displacement, the pose dependence that every dataset "
       f"chapter measures (@sec-pose). Data: results/char/deepjeb_trajectories_2026-10-07.json for the trajectories (trainer validation per "
@@ -317,8 +317,71 @@ print(f"**Two things qualify every row of @tbl-deepjeb-surface.** Absolute error
 
 ## Ladders and controls {#sec-deepjeb-ladders}
 
-**The campaign standing (@tbl-deepjeb-protocols) is a 40-epoch protocol at the full clean training set under the current reference configuration; the equal-step ladder (@tbl-deepjeb-surface) is the earlier form's record, and its near-zero slopes are a compute statement, drawn as such in @fig-exponents-datasets.** The one control run under the current reference is the training rate: at 3.75e-4 the routing collapses by the fourth epoch, at half that rate by the twenty-second, on both seeds each time, which places the instability in the sample-conditioned routing at this width rather than in the rate. Both architectures are flat above 1,024 brackets on the ladder at its step budget, which says the models were step-limited there, so the data exponent is not readable from it; no width or depth control of ISLA was run on this dataset.
+**The campaign standing (@tbl-deepjeb-protocols) is a 40-epoch protocol at the full clean training set under the current reference configuration; the equal-step ladder (@tbl-deepjeb-surface) is the earlier form's record, and its near-zero slopes are a compute statement, drawn as such in @fig-exponents-datasets.** Two controls were run under the current reference. One is the surface draw at a reduced budget (@sec-deepjeb-boundary-law). The other is the training rate: at 3.75e-4 the routing collapses by the fourth epoch, at half that rate by the twenty-second, on both seeds each time, which places the instability in the sample-conditioned routing at this width rather than in the rate. Both architectures are flat above 1,024 brackets on the ladder at its step budget, which says the models were step-limited there, so the data exponent is not readable from it; no width or depth control of ISLA was run on this dataset.
+
+### The surface draw at a reduced budget {#sec-deepjeb-boundary-law}
+
+```{python}
+#| label: para-deepjeb-area2-lede
+#| output: asis
+# results/char/area2_2026-10-16.json: per run (architecture and seed) and field, the mean over cases of the per-case relative L2
+# under three draws of the boundary at one budget below its cell count: "ca2a" (inclusion in proportion to the cell measure),
+# "ca2u" (uniform inclusion) and "ca2v" (uniform inclusion with an independent boundary seed), and "native" from the protocol
+# record; r = ca2a / ca2u, d = |ca2v / ca2u - 1| (the noise floor), count_effect = ca2u / native.
+A2 = {}
+for v in sorted(json.load(open(RES / "char" / "area2_2026-10-16.json"))["runs"].values(), key=lambda v: v["seed"]):
+    for f, x in v["fields"].items(): A2.setdefault((v["dataset"], v["arch"]), {}).setdefault(f, []).append(x)
+def area2_table(dataset, fields, label, setting):
+    cnt = lambda c: f"{c:.1f}x" if c >= 2 else f"{c:.2f}"
+    out = ("| architecture | field | native | uniform draw | area-proportional draw | area ÷ uniform, per seed | noise floor, per seed | "
+           "uniform ÷ native, per seed |\n|---|---|--:|--:|--:|---|---|---|\n")
+    for (ds, arch), F in A2.items():
+        if ds != dataset: continue
+        for f, lab in fields:
+            xs = F[f]; m = lambda p: mean(x["mean"][p] for x in xs)
+            out += (f"| {arch} | {lab} | {m('native'):.4f} | {m('ca2u'):.4f} | {m('ca2a'):.4f} | " + " / ".join(f"{x['r']:.3f}" for x in xs)
+                    + " | " + " / ".join(f"{x['d']:.3f}" for x in xs) + " | " + " / ".join(cnt(x["count_effect"]) for x in xs) + " |\n")
+    print(out)
+    print(f": {setting} Three draws of the boundary at that budget: in proportion to the cell measure (area-proportional), uniform, and a "
+          "second uniform draw with an independent seed; each kept cell's measure is divided by its inclusion probability. Errors are the "
+          "relative L2 per field, seed means over two seeds, float32; the native column is the protocol scoring of the same checkpoints. "
+          "How to read this: area ÷ uniform isolates the sampling law and uniform ÷ native the count; the noise floor is the change a "
+          "second uniform draw makes, the absolute value of second ÷ first − 1, so an area ÷ uniform within about that of one is no law "
+          f"effect. Per-seed entries are seeds 42 / 43. Data: results/char/area2_2026-10-16.json. {{#{label}}}")
+JF = [("von_mises_l2", "von Mises"), ("displacement_l2", "displacement")]
+jr = lambda arch: [x["r"] for f, _ in JF for x in A2[("deepjeb", arch)][f]]
+jd = [x["d"] for (ds, _), F in A2.items() if ds == "deepjeb" for xs in F.values() for x in xs]
+jc = [x["count_effect"] for (ds, _), F in A2.items() if ds == "deepjeb" for xs in F.values() for x in xs]
+jm = lambda arch, f, p: mean(x["mean"][p] for x in A2[("deepjeb", arch)][f])
+area_rat = lambda arch: " / ".join(f"{jm(arch, f, 'ca2a') / jm('ISLA', f, 'ca2a'):.2f}" for f, _ in JF)
+print(f"**At a reduced budget of 20,000 surface cells, drawing them in proportion to area instead of uniformly makes GeoTransolver's "
+      f"errors {min(jr('GeoTransolver')):.2f} to {max(jr('GeoTransolver')):.2f} times and Transolver's {min(jr('Transolver')):.2f} to "
+      f"{max(jr('Transolver')):.2f} times those of the uniform draw, against a spread between two uniform draws of at most {max(jd):.3f}, "
+      f"and leaves ISLA's within {100 * max(abs(v - 1) for v in jr('ISLA')):.0f}%. The ISLA reading does not test ISLA: its scored "
+      "checkpoints sit at the mean-field plateau, where any draw of the surface gives nearly the same error.** The three architectures' "
+      "checkpoints of @tbl-deepjeb-protocols were scored on the 5,540 test files with each bracket's surface drawn at 20,000 cells three "
+      "ways (@tbl-deepjeb-area2). On this surface task the draw is also the scored set, and the error is the measure-weighted estimate "
+      f"over it, so thinning alone changes every architecture's error by a factor of {min(jc):.2f} to {max(jc):.2f}. ISLA's errors are "
+      f"{jm('ISLA', 'von_mises_l2', 'native'):.2f} on von Mises stress and {jm('ISLA', 'displacement_l2', 'native'):.2f} on displacement, the "
+      "field-mean level of @sec-surface-deepjeb, against "
+      f"{min(jm(a, 'von_mises_l2', 'native') for a in ('GeoTransolver', 'Transolver')):.2f} to {max(jm(a, 'von_mises_l2', 'native') for a in ('GeoTransolver', 'Transolver')):.2f} "
+      f"and {min(jm(a, 'displacement_l2', 'native') for a in ('GeoTransolver', 'Transolver')):.2f} to {max(jm(a, 'displacement_l2', 'native') for a in ('GeoTransolver', 'Transolver')):.2f} "
+      "for the baselines; a predictor that returns close to the field mean is nearly indifferent to which cells are drawn, so its area ÷ "
+      "uniform near one says nothing about the measure consistency of the class on brackets. On the area-proportional draw GeoTransolver ÷ "
+      f"ISLA is {area_rat('GeoTransolver')} and Transolver ÷ ISLA "
+      f"{area_rat('Transolver')} (von Mises / displacement), the "
+      "native standing's direction. The baselines' shifts have the direction measured for them on the three surface datasets whose meshes "
+      "exceed the cell budget (@sec-invariances).")
+```
+
+```{python}
+#| label: tbl-deepjeb-area2
+#| output: asis
+area2_table("deepjeb", JF, "tbl-deepjeb-area2", "DeepJEB++ at 12,451 training brackets and 40 epochs, the three architectures at their reference "
+            "configurations (ISLA at half the reference rate), 5,540 test files, each bracket's surface drawn at 20,000 cells; the drawn "
+            "cells are the scored set, and ISLA's checkpoints sit at the mean-field plateau.")
+```
 
 ## What this dataset does not say {#sec-deepjeb-limits}
 
-**The DeepJEB++ standing is a failure of training stability, measured on labels a tenth of which were removed as unphysical, and it says nothing about the capacity of the architecture on brackets: eighteen epochs in, the same lanes match the baselines.** Absolute errors near 0.5 on von Mises stress are a property of the dataset, not of any architecture. The ladder rows are equal-compute standings and never a learning curve. The earlier form's lead says nothing about tensor targets, which Tensile2d measures (@sec-interior-tensile2d), and the published Transolver, GNOT and GI-FNO errors are on another split.
+**The DeepJEB++ standing is a failure of training stability, measured on labels a tenth of which were removed as unphysical, and it says nothing about the capacity of the architecture on brackets: eighteen epochs in, the same lanes match the baselines.** With ISLA's checkpoints at the plateau it says nothing either about ISLA's consistency under a change of surface draw, where only the baselines' shifts are informative (@sec-deepjeb-boundary-law). Absolute errors near 0.5 on von Mises stress are a property of the dataset, not of any architecture. The ladder rows are equal-compute standings and never a learning curve. The earlier form's lead says nothing about tensor targets, which Tensile2d measures (@sec-interior-tensile2d), and the published Transolver, GNOT and GI-FNO errors are on another split.

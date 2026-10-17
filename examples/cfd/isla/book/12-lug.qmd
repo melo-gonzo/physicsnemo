@@ -1,6 +1,6 @@
 # GINOT Bracket Lug {#sec-lug}
 
-**The bracket lug is a three-dimensional elastoplastic solid whose target is a true scalar, the von Mises stress, and whose load has no direction of its own; under the float32 protocol GeoTransolver and Transolver lead ISLA on it by about two to one, and the same scorer in bfloat16 puts all three within a tenth of one another, so the deficit is a precision sensitivity of the trained ISLA's nearest-boundary-sample selection on a mesh where most nodes are tied, not a capacity or training difference; under a generic rigid motion ISLA's error rises by half while the baselines' rise to the mean-field level.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the native mesh and rotated and translated, the precision diagnostic and the pose attribution that belong to this dataset, and what the dataset does not say. The pose contract is exercised here with no global vector at all ($K = 0$), the setting where canonicalization has nothing to align to (@sec-pose); the uniform-point-cloud scoring is the identity here because the surface is kept whole and the interior is a point cloud. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
+**The bracket lug is a three-dimensional elastoplastic solid whose target is a true scalar, the von Mises stress, and whose load has no direction of its own; under the float32 protocol GeoTransolver and Transolver lead ISLA on it by about two to one, and the same scorer in bfloat16 puts all three within a tenth of one another, so the deficit is a precision sensitivity of the trained ISLA's nearest-boundary-sample selection on a mesh where most nodes are tied, not a capacity or training difference; under a generic rigid motion ISLA's error rises by half while the baselines' rise to the mean-field level.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the native mesh and rotated and translated, the precision diagnostic, the pose attribution and the reduced-budget surface draw that belong to this dataset, and what the dataset does not say. The pose contract is exercised here with no global vector at all ($K = 0$), the setting where canonicalization has nothing to align to (@sec-pose); at a reduced surface budget the law of the draw moves ISLA's error by a few percent and the count multiplies it (@sec-lug-boundary-law). Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
 ```{python}
 #| label: setup-lug
@@ -61,7 +61,7 @@ def bc_legend(ax, kinds, loc="lower right", extra=()):
 # ---- the protocol headline table ----
 # The three architectures' reference configurations scored on the native validation mesh and with every validation case rotated
 # and translated, read from results/char/<dataset>.json; the artifact's uniform-point-cloud ("area") column is dropped on this
-# task, where its scoring is pending (@sec-lug-measured). Schema:
+# task, where at the scoring budget it is the native mesh; the boundary draw at a reduced budget is @tbl-lug-area2. Schema:
 # {"protocols": {"native": label, "area": label, "posed": label}, "fields": {key: label}, "isla_arm": name,
 #  "arms": {name: {protocol: {field: {"mean": x, "per_seed": {seed: x}, "n_cases": n, "n_seeds": n}}}}}.
 def protocol_table(artifact, label, setting, drop=("area",)):
@@ -277,9 +277,9 @@ print(f"**Every node is a query token, and the readout is the float32 relative L
       "geometry kernel); GeoTransolver and Transolver read every node with the nodal tags, the same stored distance and gradient, and the "
       "parameters in their global embedding (@sec-data-lug). Each trained checkpoint is scored two ways on the same lugs: on the native "
       "nodes, and with every lug rigidly rotated by a keyed SO(3) rotation and translated by one RMS "
-      "point radius, with no centering step in this pipeline, so the translation reaches the model (@sec-invariances). The area-weighted "
-      "(uniform-point-cloud) scoring is pending for this task: at the scoring budget the surface triangles are kept whole and the interior "
-      "is a point cloud without cells, so that scoring returns the native mesh.")
+      "point radius, with no centering step in this pipeline, so the translation reaches the model (@sec-invariances). A uniform point cloud "
+      "at the scoring budget is the native mesh here, because the surface triangles are kept whole and the interior is a point cloud "
+      "without cells, so the surface draw is measured at a reduced budget instead, for ISLA alone (@sec-lug-boundary-law).")
 epoch_ratio = COST["ISLA"]["epoch_seconds"] / statistics.mean(COST[a]["epoch_seconds"] for a in BASELINES)
 print()
 print("**Cost.** Training on this task, one epoch at the reference configurations on four GB300 ranks in bfloat16 (peak device memory, "
@@ -440,8 +440,58 @@ print(f"**The float32 deficit is a precision sensitivity of one trained model, n
 
 ## Ladders and controls {#sec-lug-ladders}
 
-**No training-case ladder and no width or depth control exist on this dataset under the reference configurations; the two controls that belong here are the precision diagnostic and the pose attribution.** The precision diagnostic (@fig-lug-precision) scores the same checkpoints in bfloat16 and float32 and separates a scorer-precision effect from a configuration effect; the pose attribution (@sec-interior-lug) shows that an exact rigid motion leaves the prediction invariant and an inexact one does not, which separates the class's tie-breaking from any frame-dependent input.
+**No training-case ladder and no width or depth control exist on this dataset under the reference configurations; the three controls that belong here are the precision diagnostic, the pose attribution and the surface draw at a reduced budget.** The precision diagnostic (@fig-lug-precision) scores the same checkpoints in bfloat16 and float32 and separates a scorer-precision effect from a configuration effect; the pose attribution (@sec-interior-lug) shows that an exact rigid motion leaves the prediction invariant and an inexact one does not, which separates the class's tie-breaking from any frame-dependent input.
+
+### The surface draw at a reduced budget {#sec-lug-boundary-law}
+
+```{python}
+#| label: para-lug-area2-lede
+#| output: asis
+# results/char/area2_2026-10-16.json: per run (architecture and seed) and field, the mean over cases of the per-case relative L2
+# under three draws of the boundary at one budget below its cell count: "ca2a" (inclusion in proportion to the cell measure),
+# "ca2u" (uniform inclusion) and "ca2v" (uniform inclusion with an independent boundary seed), and "native" from the protocol
+# record; r = ca2a / ca2u, d = |ca2v / ca2u - 1| (the noise floor), count_effect = ca2u / native.
+A2 = {}
+for v in sorted(json.load(open(RES / "char" / "area2_2026-10-16.json"))["runs"].values(), key=lambda v: v["seed"]):
+    for f, x in v["fields"].items(): A2.setdefault((v["dataset"], v["arch"]), {}).setdefault(f, []).append(x)
+def area2_table(dataset, fields, label, setting):
+    cnt = lambda c: f"{c:.1f}x" if c >= 2 else f"{c:.2f}"
+    out = ("| architecture | field | native | uniform draw | area-proportional draw | area ÷ uniform, per seed | noise floor, per seed | "
+           "uniform ÷ native, per seed |\n|---|---|--:|--:|--:|---|---|---|\n")
+    for (ds, arch), F in A2.items():
+        if ds != dataset: continue
+        for f, lab in fields:
+            xs = F[f]; m = lambda p: mean(x["mean"][p] for x in xs)
+            out += (f"| {arch} | {lab} | {m('native'):.4f} | {m('ca2u'):.4f} | {m('ca2a'):.4f} | " + " / ".join(f"{x['r']:.3f}" for x in xs)
+                    + " | " + " / ".join(f"{x['d']:.3f}" for x in xs) + " | " + " / ".join(cnt(x["count_effect"]) for x in xs) + " |\n")
+    print(out)
+    print(f": {setting} Three draws of the boundary at that budget: in proportion to the cell measure (area-proportional), uniform, and a "
+          "second uniform draw with an independent seed; each kept cell's measure is divided by its inclusion probability. Errors are the "
+          "relative L2 per field, seed means over two seeds, float32; the native column is the protocol scoring of the same checkpoints. "
+          "How to read this: area ÷ uniform isolates the sampling law and uniform ÷ native the count; the noise floor is the change a "
+          "second uniform draw makes, the absolute value of second ÷ first − 1, so an area ÷ uniform within about that of one is no law "
+          f"effect. Per-seed entries are seeds 42 / 43. Data: results/char/area2_2026-10-16.json. {{#{label}}}")
+LA = A2[("lug", "ISLA")][F]
+lr = [x["r"] for x in LA]; ld = [x["d"] for x in LA]; lc = [x["count_effect"] for x in LA]
+print(f"**Thinning the lug's surface to 2,000 triangles multiplies ISLA's von Mises error ({' and '.join(f'{v:.0f}x' for v in lc)} native "
+      f"on the two seeds), and drawing them in proportion to area instead of uniformly moves it by a factor of "
+      f"{' and '.join(f'{v:.3f}' for v in lr)}, opposite in direction on the two seeds and no larger than the {100 * max(ld):.0f}% by which two "
+      f"uniform draws differ on one of them.** The ISLA checkpoints of @tbl-lug-protocols were scored on the {N_TEST} test lugs with the "
+      "surface replaced by 2,000 of its triangles, drawn three ways; the nodes, the targets and the global scalars are the same in every "
+      f"draw (@tbl-lug-area2). The two uniform draws differ by {' and '.join(f'{v:.3f}' for v in ld)} on the two seeds: on this tied mesh "
+      "a redraw can move the nearest boundary sample of many nodes, the sensitivity of @sec-limits-ties. GeoTransolver and Transolver were "
+      "not scored, because they read no surface sample; the reading is ISLA's alone. The checkpoints trained on the whole surface, so the "
+      "count effect is a property of these trained models on a surface thinner than any they saw, not a measured resolution requirement "
+      "of the class.")
+```
+
+```{python}
+#| label: tbl-lug-area2
+#| output: asis
+area2_table("lug", [(F, "von Mises")], "tbl-lug-area2", f"The GINOT bracket lug, ISLA width 512 with 512 slices, {N_TEST} test lugs, the surface "
+            "drawn at 2,000 triangles; the nodes are the same in every draw.")
+```
 
 ## What this dataset does not say {#sec-lug-limits}
 
-**The lug standing is a float32 reading on one scalar field of one bracket family, with three parameters of one shape, and both its native deficit and its pose shift measure the class's nearest-sample tie-breaking under rounding rather than its capacity or its frame.** It says nothing about tensor targets, which Tensile2d measures (@sec-interior-tensile2d), nor about geometry beyond the family, nor about discretization independence, which this dataset does not test: at the scoring budget the point-cloud draw returns the native mesh. The three configurations are the reference configurations as shipped (parameter counts in @sec-lug-measured) and are not matched in step time or memory. The published GINOT, Transolver and GNOT numbers are on the authors' split and are comparable in kind, not in value.
+**The lug standing is a float32 reading on one scalar field of one bracket family, with three parameters of one shape, and both its native deficit and its pose shift measure the class's nearest-sample tie-breaking under rounding rather than its capacity or its frame.** It says nothing about tensor targets, which Tensile2d measures (@sec-interior-tensile2d), nor about geometry beyond the family, and its one discretization reading is ISLA's alone, at a reduced surface budget: the count of the draw multiplies the error, and its law moves it by a few percent, no more than two uniform draws differ on this tied mesh (@sec-lug-boundary-law). The three configurations are the reference configurations as shipped (parameter counts in @sec-lug-measured) and are not matched in step time or memory. The published GINOT, Transolver and GNOT numbers are on the authors' split and are comparable in kind, not in value.

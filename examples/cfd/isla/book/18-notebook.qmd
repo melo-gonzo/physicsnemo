@@ -37663,3 +37663,177 @@ A2 stays the candidate: it normalizes every read of the slice sublayer,
 as a pre-LN sublayer does, and its norms and validation losses are
 slightly lower than A's. P4 holds (@sec-nb-deepjeb-hresid-p4); P5
 (AirfRANS, no loss) waits for its lanes.
+
+## 2026-10-16 — CHAR-AREA2 verdict: at reduced boundary budgets the area law raises ISLA's AirfRANS interior errors 1.2x to 2.2x over a uniform draw of the same count, against a noise floor of 0.02 to 0.10; the lug null holds, the Tensile2D null fails on plastic strain inside its own noise floor, and on DeepJEB++ the baselines move 1.07x to 1.57x while ISLA's plateaued checkpoint does not {#sec-nb-char-area2-verdict}
+
+**Question.** The area-protocol audit (@sec-nb-char-area-audit) found
+that on AirfRANS, Tensile2D, the lug and DeepJEB++ the area-weighted
+draw returned the native mesh, because every boundary has fewer cells
+than the scoring budget and the scored interiors carry no cells. It
+named the meaningful form: a boundary draw at a budget k below the cell
+count, area law against uniform law at the same k, so that area ÷
+uniform isolates the law and uniform ÷ native the count. CHAR-AREA2 ran
+that form on the final checkpoints of the records the CHAR and AF-SCORE
+tables use, evaluation only.
+
+**Design.** Per unit, float32 `infer.py` on the validation split with
+the original scorer's overrides and cell count, on a recipe copy whose
+only change is an appended `GuardedPoissonSubsampleMesh`. The guard
+fails if a cell-carrying mesh reaching the step has no more cells than
+the budget, and it logs the cells before and kept, the measure sums and
+an index CRC per call. Three draws per unit at one budget: `ca2a`
+(inclusion probability proportional to the cell measure), `ca2u`
+(uniform inclusion) and `ca2v` (uniform inclusion with an independent
+boundary seed; the interior and every later random step stay in
+lockstep with the other two). Measures are scaled by the inverse
+inclusion probability. Ratios: r = ca2a ÷ ca2u and the noise floor
+d = |ca2v ÷ ca2u − 1|, each the mean over cases of the per-case
+relative L2, per field and seed; the count effect is ca2u ÷ native, with
+native from the committed CHAR and AF-SCORE records. Budgets: the
+AirfRANS airfoil at an expected 400 segments (of about 1,000); Tensile2D
+all 201 condition-labelled segments kept plus an expected 100 of the
+other 241 to 295 (about 301 kept), because 200 segments keeping the
+labelled ones is infeasible; the lug surface at 2,000 triangles; the
+DeepJEB++ surface, which is the scored set, at 20,000 cells. Only ISLA
+was scored on AirfRANS (with ISLA-DTT), Tensile2D and the lug:
+GeoTransolver and Transolver set `drop_in_file_boundaries: true` there,
+so a boundary-only redraw leaves their inputs bitwise unchanged (the
+audit's identical cases). DeepJEB++ is the one cross-architecture test.
+Pre-registration, jobs, logs, md5s and the reducer are in
+`scratch/isla-char-area2-2026-10-16/`; the reduced numbers are
+committed as `results/char/area2_2026-10-16.json` (reducer
+`results/char/area2_2026-10-16.py`).
+
+**Registered predictions** (`PREREG.md`). A draft was approved with
+four design changes, then amended. The amendment was written at
+2026-10-16T19:05-04:00, before any scoring job was submitted, and
+supersedes the draft's predictions. It added the `ca2v` control and
+reads, verbatim:
+
+> * (S) DeepJEB++ (von_mises, displacement): ISLA r within [0.95, 1.05]
+>   on every field and seed; each of GeoTransolver and Transolver has, on
+>   at least one field, |r - 1| larger than ISLA's and larger than its own
+>   d, on both seeds.
+> * (B-AF) AirfRANS afu ISLA: r > 1.05 AND r > 1 + d on pressure,
+>   velocity and nut, both seeds.
+> * (B-lug) null against the noise floor: ISLA |r - 1| on von_mises <=
+>   max(2d, 0.05), both seeds. Reason: the laws keep nearly the same
+>   cells (Jaccard 0.897) and the LUG-PREC ties make any resample move
+>   the error, so the law should not move it beyond resampling noise.
+> * (N-T2D) Tensile2d ISLA: r within [0.95, 1.05] on stress,
+>   displacement and q, both seeds; d reported.
+> * Recorded, not predicted: ISLA-DTT ratios; the count effect ca2u /
+>   native (native from the committed CHAR / AF-SCORE records); d for
+>   every unit.
+
+(N-T2D) replaced the brief's prediction of a law effect on Tensile2D by
+a null before any job, because the two laws are nearly the same draw
+there (segment-length CV at most 0.03, case-0 kept-cell Jaccard 0.991
+between the area and uniform draws). The amendment also records that
+`ca2a` and `ca2u` share their inclusion uniforms and `ca2v` does not
+(case-0 Jaccard area/uniform against uniform/uniform-B: Tensile2D 0.991
+/ 0.603, lug 0.897 / 0.226, AirfRANS 0.429 / 0.225, DeepJEB++ 0.513 /
+0.249), so d measures a full independent redraw. That makes the
+(B-lug) bar easier to meet and the (B-AF) and (S) bars harder.
+
+**Jobs.** All on LHR, short QOS: 240320 (AirfRANS, 12 units), 240574
+(Tensile2D and the lug, 12 units) and 240592_[0-4] (DeepJEB++, 18
+units). The AGA jobs 1287521 and 1287522 were cancelled while pending
+(queue rank about 1,079, below the 500 jobs the backfill tests) and
+never ran; the AGA-trained checkpoints were copied to LHR instead (50
+files, md5-identical). All 42 units completed, each with 1 + N guard
+lines and N inference rows (N = 200, 100, 600 and 5,540 cases), and no
+guard tripped.
+
+**Results** (seeds 42 / 43; errors are seed means).
+
+| Set, budget | Architecture | Field | native | uniform at k | area at k | r = area ÷ uniform | d | uniform ÷ native |
+|---|---|---|--:|--:|--:|---|---|---|
+| AirfRANS, 400 segments | ISLA | pressure | 0.0208 | 0.349 | 0.739 | 2.24 / 2.01 | 0.029 / 0.020 | 16.8 / 16.7 |
+| | | velocity | 0.0120 | 0.164 | 0.310 | 1.91 / 1.85 | 0.040 / 0.034 | 14.5 / 13.0 |
+| | | eddy viscosity | 0.0242 | 0.427 | 0.521 | 1.21 / 1.23 | 0.098 / 0.105 | 18.1 / 17.1 |
+| | ISLA-DTT | pressure | 0.0200 | 0.240 | 0.386 | 1.50 / 1.76 | 0.004 / 0.012 | 14.7 / 9.7 |
+| | | velocity | 0.0119 | 0.127 | 0.228 | 1.73 / 1.88 | 0.046 / 0.015 | 12.4 / 9.0 |
+| | | eddy viscosity | 0.0271 | 0.234 | 0.224 | 0.99 / 0.92 | 0.095 / 0.079 | 7.9 / 9.5 |
+| Tensile2D, 201 labelled + about 100 | ISLA | stress | 0.0138 | 0.112 | 0.112 | 1.002 / 1.004 | 0.015 / 0.004 | 9.4 / 6.9 |
+| | | displacement | 0.0133 | 0.169 | 0.166 | 1.000 / 0.971 | 0.029 / 0.253 | 9.4 / 16.8 |
+| | | plastic strain | 0.328 | 0.562 | 0.603 | 1.069 / 1.079 | 0.377 / 0.353 | 1.8 / 1.6 |
+| lug, 2,000 triangles | ISLA | von Mises | 0.0040 | 0.102 | 0.102 | 1.043 / 0.979 | 0.001 / 0.051 | 20.4 / 28.8 |
+| DeepJEB++, 20,000 cells | ISLA | von Mises | 0.931 | 0.931 | 0.931 | 1.000 / 1.000 | 0.0002 / 0.0006 | 1.00 / 1.00 |
+| | | displacement | 0.871 | 0.885 | 0.872 | 0.973 / 0.999 | 0.0000 / 0.0005 | 1.03 / 1.00 |
+| | GeoTransolver | von Mises | 0.497 | 0.508 | 0.553 | 1.065 / 1.109 | 0.002 / 0.001 | 1.01 / 1.04 |
+| | | displacement | 0.231 | 0.240 | 0.297 | 1.205 / 1.264 | 0.003 / 0.003 | 1.03 / 1.05 |
+| | Transolver | von Mises | 0.436 | 0.452 | 0.530 | 1.216 / 1.128 | 0.001 / 0.000 | 1.04 / 1.04 |
+| | | displacement | 0.194 | 0.212 | 0.313 | 1.574 / 1.366 | 0.000 / 0.002 | 1.09 / 1.09 |
+
+**Verdicts against the amendment.**
+
+- **(S) DeepJEB++ holds, and it is weak evidence.** ISLA's r is
+  1.000 on von Mises stress on both seeds and 0.973 / 0.999 on
+  displacement; both baselines exceed ISLA's |r − 1| and their own d on
+  both fields and both seeds. But ISLA's scored checkpoints sit at the
+  mean-field plateau (@sec-nb-char-deepjeb-plateau-interim): native
+  errors 0.93 on von Mises and 0.84 / 0.90 on displacement, against
+  0.43 to 0.50 and 0.19 to 0.24 for the baseline seeds. A predictor near the
+  field mean is unchanged by any draw almost by construction, so this is
+  not evidence that ISLA's measure consistency holds on DeepJEB++.
+- **(B-AF) AirfRANS holds.** r exceeds 1.05 and 1 + d on pressure,
+  velocity and eddy viscosity on both seeds (r 1.21 to 2.24, d 0.02 to
+  0.10). It reproduces AF-GEO's block-lane result
+  (@sec-nb-af-geo-step-one) on the uniform-draw lanes: the area law
+  hurts.
+- **(B-lug) the null holds.** |r − 1| is 0.043 and 0.021, within
+  max(2d, 0.05) = 0.05 and 0.10.
+- **(N-T2D) the null fails as written, on plastic strain only.** r is
+  1.069 / 1.079 on q, outside [0.95, 1.05]; stress and displacement are
+  inside. q's own d is 0.35 to 0.38, so the move is well inside
+  resampling noise on the heavy-tailed field. The two laws cannot be
+  separated on this polyline (CV at most 0.03; the area and uniform
+  draws keep 99% of the same segments on case 0).
+- **Recorded.** ISLA-DTT is law-sensitive on pressure and velocity (r
+  1.50 to 1.88) and not on eddy viscosity (0.92 / 0.99, within d).
+
+**The count effect.** Thinning the boundary is itself far outside the
+training distribution of every model that reads it: ISLA's interior
+errors rise 7x to 29x at the reduced budgets (13x to 18x on AirfRANS,
+7x to 17x on Tensile2D stress and displacement, 20x / 29x on the lug;
+1.6x / 1.8x on Tensile2D plastic strain, whose native error is already
+0.31 to 0.35). These checkpoints trained on the whole boundary, so the
+law comparison at a reduced budget is a comparison between two degraded
+states, and r is read as a property of the trained model at that
+budget, not of the class. On DeepJEB++, where the reduced draw is also
+the scored set and the metric is the measure-weighted estimate over it,
+the count effect is 1.00 to 1.09 for every architecture.
+
+**What it means.** On the AirfRANS interior task, as on the DrivAerML
+Volume task (@sec-nb-char-vol-geo-verdict), ISLA's interior error
+depends on how its boundary is sampled, in law and in count. The law
+effect (1.2x to 2.2x) is far above the noise floor, and AF-GEO showed
+on the block-draw lanes that the queries' built-in nearest-boundary
+geometry carries 62% to 84% of the excess under the same coarsening;
+CHAR-AREA2 did not repeat that swap on the uniform-draw lanes, so the
+attribution on them is by that earlier measurement. This is a second
+dataset for the volume model's open weakness, not a new mechanism. The
+lug and Tensile2D give no law effect past the registered bars: on the
+lug the law moves the error by at most 4%, inside max(2d, 0.05), with
+seed 43's two uniform draws 5% apart (the LUG-PREC tie sensitivity,
+@sec-nb-char-lug-final); on Tensile2D the two laws are nearly the same
+draw. The one
+cross-architecture surface test, DeepJEB++, shows the surface pattern
+(baselines 1.07x to 1.57x under the area law, ISLA flat) on an ISLA
+checkpoint that cannot show anything else, so it does not support the
+thesis sentence. Confidence: high on the numbers (lockstep design;
+wherever both seeds' r differ from one by more than 1% they agree in
+direction, except on the lug, 1.043 / 0.979, a null whose second seed
+has d = 0.051); moderate on reading the count effects.
+
+**What changes in the book.** Chapters 9 and 11 to 13 replace the
+pending area-weighted statements with these readings, each from
+`results/char/area2_2026-10-16.json`: chapter 9 states the AirfRANS
+law and count effects for ISLA and ISLA-DTT, chapters 11 and 12 the
+Tensile2D and lug nulls and count effects for ISLA, chapter 13 the
+three-architecture DeepJEB++ reading with the plateau caveat. The
+index lede adds AirfRANS to the Volume sentence. The protocol tables
+keep their native and posed columns; the reduced-budget draws have
+their own table in each chapter. The CHAR-PROTOCOLS ledger row and
+tech-tree node record the measurement.

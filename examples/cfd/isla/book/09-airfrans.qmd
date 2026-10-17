@@ -1,6 +1,6 @@
 # AirfRANS {#sec-airfrans}
 
-**AirfRANS is the interior task on a second dataset and a second PDE regime, two-dimensional incompressible flow, and the first instance in the book of a global scalar input; on it ISLA leads both baselines on interior velocity by a wide margin, trails both on pressure and on eddy viscosity, and alone keeps its error when the validation cases are rotated and translated; outside the training range of Reynolds number or angle of attack the pressure ordering inverts.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the native mesh and rotated and translated, the ladders and controls that belong to this dataset, and what the dataset does not say. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
+**AirfRANS is the interior task on a second dataset and a second PDE regime, two-dimensional incompressible flow, and the first instance in the book of a global scalar input; on it ISLA leads both baselines on interior velocity by a wide margin, trails both on pressure and on eddy viscosity, and alone keeps its error when the validation cases are rotated and translated, while its interior error depends on how the airfoil is sampled; outside the training range of Reynolds number or angle of attack the pressure ordering inverts.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the native mesh and rotated and translated, the ladders and controls that belong to this dataset, and what the dataset does not say. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
 ```{python}
 #| label: setup-airfrans
@@ -64,7 +64,7 @@ def bc_legend(ax, kinds, loc="lower right", extra=()):
 # ---- the protocol headline table ----
 # The three architectures' reference configurations scored on the native validation mesh and with every validation case rotated
 # and translated, read from results/char/<dataset>.json; the artifact's uniform-point-cloud ("area") column is dropped on this
-# task, where its scoring is pending (@sec-airfrans-measured). Schema:
+# task, where at the scoring budget it is the native mesh; the boundary draw at a reduced budget is @tbl-airfrans-area2. Schema:
 # {"protocols": {"native": label, "area": label, "posed": label}, "fields": {key: label}, "isla_arm": name,
 #  "arms": {name: {protocol: {field: {"mean": x, "per_seed": {seed: x}, "n_cases": n, "n_seeds": n}}}}}.
 def protocol_table(artifact, label, setting, drop=("area",)):
@@ -277,7 +277,9 @@ print(f"**The interior task of @sec-interior-task on the published `full` split:
       "see the airfoil polyline; ISLA reads the polyline, the inlet direction and speed, and the queries with the same stored distance "
       "and gradient. Each trained checkpoint is scored two ways on the same test cases: on the native validation points, and with "
       "every case rigidly rotated in its plane and translated by one RMS point radius, the inlet direction rotated with it "
-      "(@sec-invariances). The area-weighted (uniform-point-cloud) scoring is pending for this task.")
+      "(@sec-invariances). A uniform point cloud at the scoring budget is the native mesh here, because the airfoil has fewer segments "
+      "than the budget and the interior points carry no cells, so the boundary sampling law is measured at a reduced budget instead, for "
+      "ISLA alone (@sec-airfrans-boundary-law).")
 epoch_ratio = COST["ISLA"]["epoch_seconds"] / statistics.mean(COST[a]["epoch_seconds"] for a in BASELINES)
 print()
 print("**Cost.** Training on this task, one epoch at the reference configurations on four GB300 ranks in bfloat16 (peak device memory, "
@@ -554,6 +556,78 @@ these lanes. GeoTransolver-volume's two seeds also separate under
 extrapolation (its angle-of-attack pressure seeds differ by 16%) where
 ISLA's stay within 4%.
 
+### The boundary sampling law at a reduced budget {#sec-airfrans-boundary-law}
+
+```{python}
+#| label: para-airfrans-area2-lede
+#| output: asis
+# results/char/area2_2026-10-16.json: per run (architecture and seed) and field, the mean over cases of the per-case relative L2
+# under three draws of the boundary at one budget below its cell count: "ca2a" (inclusion in proportion to the cell measure),
+# "ca2u" (uniform inclusion) and "ca2v" (uniform inclusion with an independent boundary seed), and "native" from the protocol
+# record; r = ca2a / ca2u, d = |ca2v / ca2u - 1| (the noise floor), count_effect = ca2u / native.
+A2 = {}
+for v in sorted(json.load(open(RES / "char" / "area2_2026-10-16.json"))["runs"].values(), key=lambda v: v["seed"]):
+    for f, x in v["fields"].items(): A2.setdefault((v["dataset"], v["arch"]), {}).setdefault(f, []).append(x)
+def area2_table(dataset, fields, label, setting):
+    cnt = lambda c: f"{c:.1f}x" if c >= 2 else f"{c:.2f}"
+    out = ("| architecture | field | native | uniform draw | area-proportional draw | area ÷ uniform, per seed | noise floor, per seed | "
+           "uniform ÷ native, per seed |\n|---|---|--:|--:|--:|---|---|---|\n")
+    for (ds, arch), F in A2.items():
+        if ds != dataset: continue
+        for f, lab in fields:
+            xs = F[f]; m = lambda p: mean(x["mean"][p] for x in xs)
+            out += (f"| {arch} | {lab} | {m('native'):.4f} | {m('ca2u'):.4f} | {m('ca2a'):.4f} | " + " / ".join(f"{x['r']:.3f}" for x in xs)
+                    + " | " + " / ".join(f"{x['d']:.3f}" for x in xs) + " | " + " / ".join(cnt(x["count_effect"]) for x in xs) + " |\n")
+    print(out)
+    print(f": {setting} Three draws of the boundary at that budget: in proportion to the cell measure (area-proportional), uniform, and a "
+          "second uniform draw with an independent seed; each kept cell's measure is divided by its inclusion probability. Errors are the "
+          "relative L2 per field, seed means over two seeds, float32; the native column is the protocol scoring of the same checkpoints. "
+          "How to read this: area ÷ uniform isolates the sampling law and uniform ÷ native the count; the noise floor is the change a "
+          "second uniform draw makes, the absolute value of second ÷ first − 1, so an area ÷ uniform within about that of one is no law "
+          f"effect. Per-seed entries are seeds 42 / 43. Data: results/char/area2_2026-10-16.json. {{#{label}}}")
+r_of = lambda arch, f: [x["r"] for x in A2[("airfrans", arch)][f]]
+d_of = lambda arch, f: [x["d"] for x in A2[("airfrans", arch)][f]]
+c_of = lambda arch, f: [x["count_effect"] for x in A2[("airfrans", arch)][f]]
+r_isla = [v for f, _ in FIELDS for v in r_of("ISLA", f)]; d_isla = [v for f, _ in FIELDS for v in d_of("ISLA", f)]
+c_isla = [v for f, _ in FIELDS for v in c_of("ISLA", f)]
+print(f"**ISLA's interior error on AirfRANS depends on the law that samples its airfoil: with the polyline thinned to 400 segments, drawing "
+      f"them in proportion to segment length makes ISLA's errors {min(r_isla):.1f} to {max(r_isla):.1f} times those of a uniform draw of the "
+      f"same 400 (pressure {' and '.join(f'{v:.2f}' for v in r_of('ISLA', 'pressure_l2'))} on the two seeds), where two independent uniform "
+      f"draws differ by {min(d_isla):.2f} to {max(d_isla):.2f}; thinning alone makes them {min(c_isla):.0f} to {max(c_isla):.0f} times the "
+      "native errors.** The ISLA checkpoints of @tbl-airfrans-protocols and the ISLA-DTT pair trained on the same uniform interior draws "
+      "were scored on the test airfoils with the airfoil replaced by an expected 400 of its about 1,000 segments, drawn three ways at that "
+      "count; the interior queries, the targets and the global inputs are the same in all three draws (@tbl-airfrans-area2). GeoTransolver "
+      "and Transolver were not scored, because they never read the airfoil and a boundary draw leaves their inputs unchanged; the reading "
+      "is ISLA's alone and is not a comparison.")
+```
+
+```{python}
+#| label: tbl-airfrans-area2
+#| output: asis
+area2_table("airfrans", FIELDS, "tbl-airfrans-area2", "The AirfRANS interior task, ISLA width 512 with 512 slices and ISLA-DTT, 200 test airfoils, "
+            "the airfoil polyline drawn at an expected 400 of its about 1,000 segments; the interior queries are the same in every draw.")
+```
+
+```{python}
+#| label: para-airfrans-area2-reading
+#| output: asis
+r_dtt = {f: r_of("ISLA-DTT", f) for f, _ in FIELDS}; d_dtt = {f: d_of("ISLA-DTT", f) for f, _ in FIELDS}
+c_all = c_isla + [v for f, _ in FIELDS for v in c_of("ISLA-DTT", f)]
+print(f"Three readings. First, the law: a length-proportional draw thins the finely meshed parts of the polyline, and every ISLA field "
+      f"moves well past its noise floor, pressure and velocity most ({' and '.join(f'{v:.2f}' for v in r_of('ISLA', 'velocity_l2'))} on "
+      f"velocity) and eddy viscosity least ({' and '.join(f'{v:.2f}' for v in r_of('ISLA', 'nut_l2'))}). ISLA-DTT also moves on pressure "
+      f"and velocity ({min(r_dtt['pressure_l2'] + r_dtt['velocity_l2']):.2f} to {max(r_dtt['pressure_l2'] + r_dtt['velocity_l2']):.2f}) and "
+      f"not on eddy viscosity ({' and '.join(f'{v:.2f}' for v in r_dtt['nut_l2'])}, inside its noise floor of "
+      f"{' and '.join(f'{v:.2f}' for v in d_dtt['nut_l2'])}). Second, the mechanism: it is the one measured on the DrivAerML Volume task "
+      "(@tbl-vol-geo), the queries' built-in distance and direction to the nearest boundary sample, which moves with any change of the "
+      "sample; on lanes trained on contiguous blocks of the interior, restoring the whole airfoil's built-in geometry under the same "
+      "coarsening removed most of the excess (@sec-nb-af-geo-step-one), and that swap was not repeated on these lanes. Third, the count: "
+      f"thinning the airfoil to 400 segments makes every error {min(c_all):.0f} to {max(c_all):.0f} times native for both ISLA variants, "
+      "because the checkpoints trained on the whole airfoil and a 400-segment airfoil is far outside their training distribution. The law "
+      "comparison is therefore between two degraded states, and it is a property of these trained models at this budget, not a prediction "
+      "for a model trained on thinned boundaries.")
+```
+
 ## What this dataset does not say {#sec-airfrans-limits}
 
-**The AirfRANS standing is one two-dimensional dataset: a velocity lead, a pressure deficit, an eddy-viscosity deficit, a pose reading, and an extrapolation reading whose mechanism is not measured.** The three configurations are not resource-matched and do not receive the same inputs (@sec-airfrans-measured), so the native ratios are standings of the configurations as shipped. The standing is read on uniform draws of the interior; the ladder, the read-only controls and the extrapolation splits were read on contiguous blocks of the stored points and are within-configuration readings (@sec-interior-airfrans). Discretization independence is not measured here; it is measured on the surface datasets (@sec-invariances). The extrapolation splits are the only regime measurement for ISLA in the book, and their three-dimensional twin on the wings is unmeasured (@sec-limits-regime). Nothing here is a statement about geometry generalization beyond the NACA family.
+**The AirfRANS standing is one two-dimensional dataset: a velocity lead, a pressure deficit, an eddy-viscosity deficit, a pose reading, and an extrapolation reading whose mechanism is not measured.** The three configurations are not resource-matched and do not receive the same inputs (@sec-airfrans-measured), so the native ratios are standings of the configurations as shipped. The standing is read on uniform draws of the interior; the ladder, the read-only controls and the extrapolation splits were read on contiguous blocks of the stored points and are within-configuration readings (@sec-interior-airfrans). Discretization is measured here for ISLA alone, at a reduced boundary budget: its interior error depends on both the law and the count of the airfoil draw (@sec-airfrans-boundary-law), and GeoTransolver and Transolver never read the airfoil, so no cross-architecture discretization reading exists on this dataset; discretization independence across architectures is measured on the surface datasets (@sec-invariances). The extrapolation splits are the only regime measurement for ISLA in the book, and their three-dimensional twin on the wings is unmeasured (@sec-limits-regime). Nothing here is a statement about geometry generalization beyond the NACA family.

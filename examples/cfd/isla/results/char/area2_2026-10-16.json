@@ -1,0 +1,669 @@
+{
+ "runs": {
+  "afu_r_isla_seed42": {
+   "dataset": "airfrans",
+   "arch": "ISLA",
+   "seed": 42,
+   "n_cases": 200,
+   "n_cases_by_protocol": {
+    "ca2a": 200,
+    "ca2u": 200,
+    "ca2v": 200,
+    "native": 200
+   },
+   "datasets_used": {
+    "ca2a": "airfrans_uvolume_2d_ca2a",
+    "ca2u": "airfrans_uvolume_2d_ca2u",
+    "ca2v": "airfrans_uvolume_2d_ca2v",
+    "native": "airfrans_uvolume_2d"
+   },
+   "fields": {
+    "pressure_l2": {
+     "mean": {
+      "ca2a": 0.7431743513047695,
+      "ca2u": 0.3315395725145936,
+      "ca2v": 0.322067294344306,
+      "native": 0.01967626146739349,
+      "native_on_ca2u_cases": 0.3315395725145936
+     },
+     "r": 2.241585659497877,
+     "d": 0.028570580876497553,
+     "count_effect": 16.849723869750576
+    },
+    "velocity_l2": {
+     "mean": {
+      "ca2a": 0.3213312640786171,
+      "ca2u": 0.1678844565525651,
+      "ca2v": 0.17465255729854107,
+      "native": 0.01160726428264752,
+      "native_on_ca2u_cases": 0.1678844565525651
+     },
+     "r": 1.9140024673934446,
+     "d": 0.040314040292686926,
+     "count_effect": 14.463740332297494
+    },
+    "nut_l2": {
+     "mean": {
+      "ca2a": 0.5185260233283043,
+      "ca2u": 0.4280160875990987,
+      "ca2v": 0.46997742701321843,
+      "native": 0.023614049470052124,
+      "native_on_ca2u_cases": 0.4280160875990987
+     },
+     "r": 1.211463863979762,
+     "d": 0.09803682765640076,
+     "count_effect": 18.125484497774025
+    }
+   }
+  },
+  "afu_r_isla_seed43": {
+   "dataset": "airfrans",
+   "arch": "ISLA",
+   "seed": 43,
+   "n_cases": 200,
+   "n_cases_by_protocol": {
+    "ca2a": 200,
+    "ca2u": 200,
+    "ca2v": 200,
+    "native": 200
+   },
+   "datasets_used": {
+    "ca2a": "airfrans_uvolume_2d_ca2a",
+    "ca2u": "airfrans_uvolume_2d_ca2u",
+    "ca2v": "airfrans_uvolume_2d_ca2v",
+    "native": "airfrans_uvolume_2d"
+   },
+   "fields": {
+    "pressure_l2": {
+     "mean": {
+      "ca2a": 0.7344896078109742,
+      "ca2u": 0.3654945235699415,
+      "ca2v": 0.3580411015078425,
+      "native": 0.021849657092243433,
+      "native_on_ca2u_cases": 0.3654945235699415
+     },
+     "r": 2.009577600881402,
+     "d": 0.02039270517461711,
+     "count_effect": 16.727700669485152
+    },
+    "velocity_l2": {
+     "mean": {
+      "ca2a": 0.2976896660029888,
+      "ca2u": 0.1608501435443759,
+      "ca2v": 0.16631540954113005,
+      "native": 0.012358256529551,
+      "native_on_ca2u_cases": 0.1608501435443759
+     },
+     "r": 1.8507267661894322,
+     "d": 0.033977377180558044,
+     "count_effect": 13.01560160688944
+    },
+    "nut_l2": {
+     "mean": {
+      "ca2a": 0.5233629326149821,
+      "ca2u": 0.42595881134271624,
+      "ca2v": 0.4706225194782019,
+      "native": 0.02486064233351499,
+      "native_on_ca2u_cases": 0.42595881134271624
+     },
+     "r": 1.2286702814415942,
+     "d": 0.10485452336270673,
+     "count_effect": 17.133861853942328
+    }
+   }
+  },
+  "afu_dtt_seed42": {
+   "dataset": "airfrans",
+   "arch": "ISLA-DTT",
+   "seed": 42,
+   "n_cases": 200,
+   "n_cases_by_protocol": {
+    "ca2a": 200,
+    "ca2u": 200,
+    "ca2v": 200,
+    "native": 200
+   },
+   "datasets_used": {
+    "ca2a": "airfrans_uvolume_2d_ca2a",
+    "ca2u": "airfrans_uvolume_2d_ca2u",
+    "ca2v": "airfrans_uvolume_2d_ca2v",
+    "native": "airfrans_uvolume_2d"
+   },
+   "fields": {
+    "pressure_l2": {
+     "mean": {
+      "ca2a": 0.4087994237244129,
+      "ca2u": 0.273410570807755,
+      "ca2v": 0.27463730935007336,
+      "native": 0.01855228978674859,
+      "native_on_ca2u_cases": 0.273410570807755
+     },
+     "r": 1.495185144146657,
+     "d": 0.004486799975195188,
+     "count_effect": 14.737295177603626
+    },
+    "velocity_l2": {
+     "mean": {
+      "ca2a": 0.2513122706487775,
+      "ca2u": 0.14565200308337808,
+      "ca2v": 0.1523923596739769,
+      "native": 0.011790170334279537,
+      "native_on_ca2u_cases": 0.14565200308337808
+     },
+     "r": 1.7254295535154052,
+     "d": 0.04627712937624562,
+     "count_effect": 12.353680986261887
+    },
+    "nut_l2": {
+     "mean": {
+      "ca2a": 0.21679826321080328,
+      "ca2u": 0.2188845480233431,
+      "ca2v": 0.23968534933403135,
+      "native": 0.02778338695410639,
+      "native_on_ca2u_cases": 0.2188845480233431
+     },
+     "r": 0.990468560565923,
+     "d": 0.09503092611393438,
+     "count_effect": 7.878252870497918
+    }
+   }
+  },
+  "afu_dtt_seed43": {
+   "dataset": "airfrans",
+   "arch": "ISLA-DTT",
+   "seed": 43,
+   "n_cases": 200,
+   "n_cases_by_protocol": {
+    "ca2a": 200,
+    "ca2u": 200,
+    "ca2v": 200,
+    "native": 200
+   },
+   "datasets_used": {
+    "ca2a": "airfrans_uvolume_2d_ca2a",
+    "ca2u": "airfrans_uvolume_2d_ca2u",
+    "ca2v": "airfrans_uvolume_2d_ca2v",
+    "native": "airfrans_uvolume_2d"
+   },
+   "fields": {
+    "pressure_l2": {
+     "mean": {
+      "ca2a": 0.3631320169568062,
+      "ca2u": 0.2062767961062491,
+      "ca2v": 0.20866386780515314,
+      "native": 0.02136655359296128,
+      "native_on_ca2u_cases": 0.2062767961062491
+     },
+     "r": 1.7604113686629304,
+     "d": 0.011572177501120828,
+     "count_effect": 9.654191313951644
+    },
+    "velocity_l2": {
+     "mean": {
+      "ca2a": 0.20388982500880956,
+      "ca2u": 0.10857276670634747,
+      "ca2v": 0.11025506928563118,
+      "native": 0.012006714553572238,
+      "native_on_ca2u_cases": 0.10857276670634747
+     },
+     "r": 1.877909453668639,
+     "d": 0.015494701206553607,
+     "count_effect": 9.042670767420292
+    },
+    "nut_l2": {
+     "mean": {
+      "ca2a": 0.23069385951384902,
+      "ca2u": 0.24998712988570332,
+      "ca2v": 0.26986030479893086,
+      "native": 0.026329147489741446,
+      "native_on_ca2u_cases": 0.24998712988570332
+     },
+     "r": 0.9228229454025278,
+     "d": 0.07949679218411676,
+     "count_effect": 9.494691386536731
+    }
+   }
+  },
+  "cl_r_t2dz_isla_seed42": {
+   "dataset": "tensile2d",
+   "arch": "ISLA",
+   "seed": 42,
+   "n_cases": 100,
+   "n_cases_by_protocol": {
+    "ca2a": 100,
+    "ca2u": 100,
+    "ca2v": 100,
+    "native": 100
+   },
+   "datasets_used": {
+    "ca2a": "plaid_tensile2d_2d_ca2a",
+    "ca2u": "plaid_tensile2d_2d_ca2u",
+    "ca2v": "plaid_tensile2d_2d_ca2v",
+    "native": "plaid_tensile2d_2d"
+   },
+   "fields": {
+    "stress_l2": {
+     "mean": {
+      "ca2a": 0.125823985747993,
+      "ca2u": 0.12556174114346505,
+      "ca2v": 0.12371549483388662,
+      "native": 0.013421872979961336,
+      "native_on_ca2u_cases": 0.12556174114346505
+     },
+     "r": 1.0020885709463707,
+     "d": 0.014703892226764603,
+     "count_effect": 9.35500889711346
+    },
+    "displacement_l2": {
+     "mean": {
+      "ca2a": 0.13867967765778302,
+      "ca2u": 0.13867231473326683,
+      "ca2v": 0.1427030823379755,
+      "native": 0.014674532953649759,
+      "native_on_ca2u_cases": 0.13867231473326683
+     },
+     "r": 1.0000530958506777,
+     "d": 0.029066851681691208,
+     "count_effect": 9.449862232158953
+    },
+    "q_l2": {
+     "mean": {
+      "ca2a": 0.6676295547187329,
+      "ca2u": 0.6247779738903045,
+      "ca2v": 0.8602254655957222,
+      "native": 0.3476751175522804,
+      "native_on_ca2u_cases": 0.6247779738903045
+     },
+     "r": 1.0685868942555776,
+     "d": 0.37684985954187367,
+     "count_effect": 1.797016646715754
+    }
+   }
+  },
+  "cl_r_t2dz_isla_seed43": {
+   "dataset": "tensile2d",
+   "arch": "ISLA",
+   "seed": 43,
+   "n_cases": 100,
+   "n_cases_by_protocol": {
+    "ca2a": 100,
+    "ca2u": 100,
+    "ca2v": 100,
+    "native": 100
+   },
+   "datasets_used": {
+    "ca2a": "plaid_tensile2d_2d_ca2a",
+    "ca2u": "plaid_tensile2d_2d_ca2u",
+    "ca2v": "plaid_tensile2d_2d_ca2v",
+    "native": "plaid_tensile2d_2d"
+   },
+   "fields": {
+    "stress_l2": {
+     "mean": {
+      "ca2a": 0.09819918338209391,
+      "ca2u": 0.09783015582710504,
+      "ca2v": 0.09818971291184425,
+      "native": 0.014088618587702512,
+      "native_on_ca2u_cases": 0.09783015582710504
+     },
+     "r": 1.0037721247796134,
+     "d": 0.0036753195545824457,
+     "count_effect": 6.9439139982466225
+    },
+    "displacement_l2": {
+     "mean": {
+      "ca2a": 0.1936429611966014,
+      "ca2u": 0.19940793599933385,
+      "ca2v": 0.24984097067266703,
+      "native": 0.011835555862635374,
+      "native_on_ca2u_cases": 0.19940793599933385
+     },
+     "r": 0.9710895417785594,
+     "d": 0.2529138793829231,
+     "count_effect": 16.8482104527816
+    },
+    "q_l2": {
+     "mean": {
+      "ca2a": 0.5377852633595467,
+      "ca2u": 0.498602374792099,
+      "ca2v": 0.6747460314631462,
+      "native": 0.30791754931211474,
+      "native_on_ca2u_cases": 0.498602374792099
+     },
+     "r": 1.0785854431274733,
+     "d": 0.35327480488734797,
+     "count_effect": 1.619272353608856
+    }
+   }
+  },
+  "cl_r_lug_isla_seed42": {
+   "dataset": "lug",
+   "arch": "ISLA",
+   "seed": 42,
+   "n_cases": 600,
+   "n_cases_by_protocol": {
+    "ca2a": 600,
+    "ca2u": 600,
+    "ca2v": 600,
+    "native": 600
+   },
+   "datasets_used": {
+    "ca2a": "ginot_lug_volume_ca2a",
+    "ca2u": "ginot_lug_volume_ca2u",
+    "ca2v": "ginot_lug_volume_ca2v",
+    "native": "ginot_lug_volume"
+   },
+   "fields": {
+    "von_mises_l2": {
+     "mean": {
+      "ca2a": 0.07391208295399944,
+      "ca2u": 0.0708708575554192,
+      "ca2v": 0.07092969098438819,
+      "native": 0.003468133548546272,
+      "native_on_ca2u_cases": 0.0708708575554192
+     },
+     "r": 1.0429122138983866,
+     "d": 0.0008301498104912319,
+     "count_effect": 20.434869812071092
+    }
+   }
+  },
+  "cl_r_lug_isla_seed43": {
+   "dataset": "lug",
+   "arch": "ISLA",
+   "seed": 43,
+   "n_cases": 600,
+   "n_cases_by_protocol": {
+    "ca2a": 600,
+    "ca2u": 600,
+    "ca2v": 600,
+    "native": 600
+   },
+   "datasets_used": {
+    "ca2a": "ginot_lug_volume_ca2a",
+    "ca2u": "ginot_lug_volume_ca2u",
+    "ca2v": "ginot_lug_volume_ca2v",
+    "native": "ginot_lug_volume"
+   },
+   "fields": {
+    "von_mises_l2": {
+     "mean": {
+      "ca2a": 0.13019355322544773,
+      "ca2u": 0.13305195493623614,
+      "ca2v": 0.1262382703460753,
+      "native": 0.0046250746750350425,
+      "native_on_ca2u_cases": 0.13305195493623614
+     },
+     "r": 0.9785166500397663,
+     "d": 0.051210706324655186,
+     "count_effect": 28.767525777349327
+    }
+   }
+  },
+  "cl_jd_rate_e40_seed42": {
+   "dataset": "deepjeb",
+   "arch": "ISLA",
+   "seed": 42,
+   "n_cases": 5540,
+   "n_cases_by_protocol": {
+    "ca2a": 5540,
+    "ca2u": 5540,
+    "ca2v": 5540,
+    "native": 5540
+   },
+   "datasets_used": {
+    "ca2a": "deepjebpp_surface_ca2a",
+    "ca2u": "deepjebpp_surface_ca2u",
+    "ca2v": "deepjebpp_surface_ca2v",
+    "native": "deepjebpp_surface"
+   },
+   "fields": {
+    "von_mises_l2": {
+     "mean": {
+      "ca2a": 0.9307822305803265,
+      "ca2u": 0.9305807466272412,
+      "ca2v": 0.9307877760878108,
+      "native": 0.931098642557967,
+      "native_on_ca2u_cases": 0.9305807466272412
+     },
+     "r": 1.0002165142077306,
+     "d": 0.00022247339773562302,
+     "count_effect": 0.9994437797381993
+    },
+    "displacement_l2": {
+     "mean": {
+      "ca2a": 0.8427483422069774,
+      "ca2u": 0.8664958636414273,
+      "ca2v": 0.8664830888328999,
+      "native": 0.8400315822246703,
+      "native_on_ca2u_cases": 0.8664958636414273
+     },
+     "r": 0.9725936124672868,
+     "d": 1.4743069255640506e-05,
+     "count_effect": 1.0315039124441858
+    }
+   }
+  },
+  "cl_jd_rate_e40_seed43": {
+   "dataset": "deepjeb",
+   "arch": "ISLA",
+   "seed": 43,
+   "n_cases": 5540,
+   "n_cases_by_protocol": {
+    "ca2a": 5540,
+    "ca2u": 5540,
+    "ca2v": 5540,
+    "native": 5540
+   },
+   "datasets_used": {
+    "ca2a": "deepjebpp_surface_ca2a",
+    "ca2u": "deepjebpp_surface_ca2u",
+    "ca2v": "deepjebpp_surface_ca2v",
+    "native": "deepjebpp_surface"
+   },
+   "fields": {
+    "von_mises_l2": {
+     "mean": {
+      "ca2a": 0.9312131568466713,
+      "ca2u": 0.9312181324627425,
+      "ca2v": 0.9317541639028043,
+      "native": 0.9310794525036743,
+      "native_on_ca2u_cases": 0.9312181324627425
+     },
+     "r": 0.999994656873725,
+     "d": 0.000575623928889879,
+     "count_effect": 1.0001489453544434
+    },
+    "displacement_l2": {
+     "mean": {
+      "ca2a": 0.9018659361433036,
+      "ca2u": 0.9028486382552433,
+      "ca2v": 0.9033259492596134,
+      "native": 0.9024879953652513,
+      "native_on_ca2u_cases": 0.9028486382552433
+     },
+     "r": 0.9989115538637364,
+     "d": 0.0005286722315851478,
+     "count_effect": 1.0003996096256615
+    }
+   }
+  },
+  "cl_r_jeb_gt_seed42": {
+   "dataset": "deepjeb",
+   "arch": "GeoTransolver",
+   "seed": 42,
+   "n_cases": 5540,
+   "n_cases_by_protocol": {
+    "ca2a": 5540,
+    "ca2u": 5540,
+    "ca2v": 5540,
+    "native": 5540
+   },
+   "datasets_used": {
+    "ca2a": "deepjebpp_surface_ca2a",
+    "ca2u": "deepjebpp_surface_ca2u",
+    "ca2v": "deepjebpp_surface_ca2v",
+    "native": "deepjebpp_surface"
+   },
+   "fields": {
+    "von_mises_l2": {
+     "mean": {
+      "ca2a": 0.5272979184904468,
+      "ca2u": 0.4949243457577719,
+      "ca2v": 0.4957436828514299,
+      "native": 0.49186883634527884,
+      "native_on_ca2u_cases": 0.4949243457577719
+     },
+     "r": 1.065411154270676,
+     "d": 0.001655479470106691,
+     "count_effect": 1.0062120410701283
+    },
+    "displacement_l2": {
+     "mean": {
+      "ca2a": 0.27447297857933095,
+      "ca2u": 0.22771836615265062,
+      "ca2v": 0.22833243449712812,
+      "native": 0.22162063248011718,
+      "native_on_ca2u_cases": 0.22771836615265062
+     },
+     "r": 1.2053177054473438,
+     "d": 0.00269661316674763,
+     "count_effect": 1.027514286933914
+    }
+   }
+  },
+  "cl_r_jeb_gt_seed43": {
+   "dataset": "deepjeb",
+   "arch": "GeoTransolver",
+   "seed": 43,
+   "n_cases": 5540,
+   "n_cases_by_protocol": {
+    "ca2a": 5540,
+    "ca2u": 5540,
+    "ca2v": 5540,
+    "native": 5540
+   },
+   "datasets_used": {
+    "ca2a": "deepjebpp_surface_ca2a",
+    "ca2u": "deepjebpp_surface_ca2u",
+    "ca2v": "deepjebpp_surface_ca2v",
+    "native": "deepjebpp_surface"
+   },
+   "fields": {
+    "von_mises_l2": {
+     "mean": {
+      "ca2a": 0.5788006451075043,
+      "ca2u": 0.5218319010070193,
+      "ca2v": 0.5211918089525364,
+      "native": 0.5029840544390657,
+      "native_on_ca2u_cases": 0.5218319010070193
+     },
+     "r": 1.1091706811916788,
+     "d": 0.0012266249979114852,
+     "count_effect": 1.037472055826845
+    },
+    "displacement_l2": {
+     "mean": {
+      "ca2a": 0.3194138884611616,
+      "ca2u": 0.2526972350197094,
+      "ca2v": 0.2520049597301423,
+      "native": 0.2396847091998488,
+      "native_on_ca2u_cases": 0.2526972350197094
+     },
+     "r": 1.264018137896319,
+     "d": 0.0027395443781295103,
+     "count_effect": 1.0542901792246195
+    }
+   }
+  },
+  "cl_r_jeb_t_seed42": {
+   "dataset": "deepjeb",
+   "arch": "Transolver",
+   "seed": 42,
+   "n_cases": 5540,
+   "n_cases_by_protocol": {
+    "ca2a": 5540,
+    "ca2u": 5540,
+    "ca2v": 5540,
+    "native": 5540
+   },
+   "datasets_used": {
+    "ca2a": "deepjebpp_surface_ca2a",
+    "ca2u": "deepjebpp_surface_ca2u",
+    "ca2v": "deepjebpp_surface_ca2v",
+    "native": "deepjebpp_surface"
+   },
+   "fields": {
+    "von_mises_l2": {
+     "mean": {
+      "ca2a": 0.5563342061458619,
+      "ca2u": 0.45759368380430804,
+      "ca2v": 0.457958460786121,
+      "native": 0.4413745963199582,
+      "native_on_ca2u_cases": 0.45759368380430804
+     },
+     "r": 1.215782091921926,
+     "d": 0.0007971634983690024,
+     "count_effect": 1.0367467625449662
+    },
+    "displacement_l2": {
+     "mean": {
+      "ca2a": 0.3475616841405523,
+      "ca2u": 0.2208071333130936,
+      "ca2v": 0.22071300792349804,
+      "native": 0.2022265616703496,
+      "native_on_ca2u_cases": 0.2208071333130936
+     },
+     "r": 1.5740509779986456,
+     "d": 0.00042627875369449786,
+     "count_effect": 1.0918799760490032
+    }
+   }
+  },
+  "cl_r_jeb_t_seed43": {
+   "dataset": "deepjeb",
+   "arch": "Transolver",
+   "seed": 43,
+   "n_cases": 5540,
+   "n_cases_by_protocol": {
+    "ca2a": 5540,
+    "ca2u": 5540,
+    "ca2v": 5540,
+    "native": 5540
+   },
+   "datasets_used": {
+    "ca2a": "deepjebpp_surface_ca2a",
+    "ca2u": "deepjebpp_surface_ca2u",
+    "ca2v": "deepjebpp_surface_ca2v",
+    "native": "deepjebpp_surface"
+   },
+   "fields": {
+    "von_mises_l2": {
+     "mean": {
+      "ca2a": 0.5040961139630324,
+      "ca2u": 0.44678916477393155,
+      "ca2v": 0.44691394492983816,
+      "native": 0.43139846099318685,
+      "native_on_ca2u_cases": 0.44678916477393155
+     },
+     "r": 1.128263963648486,
+     "d": 0.00027928196506232794,
+     "count_effect": 1.0356763066453956
+    },
+    "displacement_l2": {
+     "mean": {
+      "ca2a": 0.2775532250827185,
+      "ca2u": 0.20315720101596538,
+      "ca2v": 0.20267165872244844,
+      "native": 0.18654305092882809,
+      "native_on_ca2u_cases": 0.20315720101596538
+     },
+     "r": 1.3661992963808682,
+     "d": 0.0023899831809495176,
+     "count_effect": 1.0890633556404956
+    }
+   }
+  }
+ },
+ "missing": []
+}
