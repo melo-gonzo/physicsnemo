@@ -37628,3 +37628,38 @@ link, the step time fell to 0.65 of the previous link's on 13 lanes
 (ISLA 0.39 to 0.70, GeoTransolver 0.54, ISLA-DTT 0.71 to 1.00). Every
 architecture runs with the same setting, so the step-time comparisons
 stay like for like.
+
+## 2026-10-16 — AEROZOO H-RESID P3 interim: both arms keep the validation minimum through epoch 70 and hold the stream four orders below the reference; arm A holds too, so the direct read carries the growth {#sec-nb-aerozoo-hresid-p3-interim}
+
+The four remedy lanes of @sec-nb-aerozoo-hresid-prereg (AeroZoo `full`
+at 3.75e-4, uniform protocol; arm A rows 340 and 341, arm A2 rows 342
+and 343) passed the window in which their reference-rate twins lost
+their minimum (epochs 38 to 52). Neither arm departs through epoch 70:
+validation loss at epoch 70 is 0.0252 and 0.0261 for A and 0.0248 and
+0.0236 for A2, each at or within 0.4 percent of its running minimum,
+against the twins' minima of 0.0315 and 0.0374 and their 0.120 and
+0.143 at epoch 70. Validation velocity and pressure at epoch 70 are
+0.140 and 0.129, 0.146 and 0.113 (A) and 0.139 and 0.116, 0.136 and
+0.105 (A2); the twins read 0.441 and 0.586, 0.469 and 0.528 at epoch 80.
+The first part of P3 is read again at epoch 250.
+
+The second part of P3 is read now, with Instrument 1 on each arm's own
+code snapshot (code_v29 and code_v30; LHR jobs 240803 and 240804):
+the mean token norm of `h` after the last block at epoch 43 is 2.5e3
+and 2.7e3 for A and 1.7e3 and 1.8e3 for A2, against the bar of 5.7e5
+and the reference rate's 5.7e7. **P3's second part holds on both arms,
+with two orders to spare.** The stream grows slowly and steadily: from
+9.0e2 and 8.1e2 at epoch 1 to 3.6e3 and 3.9e3 at epoch 69 for A, and
+from 2.7e2 and 3.0e2 to 2.6e3 and 2.7e3 for A2, where the reference
+grew from 9.1e3 to 5.7e7 by epoch 43 and 1.3e9 by epoch 59.
+
+**Arm A holds as well**, which was not expected. A normalizes only the
+broadcast's read and leaves the pooled read of the raw stream in place.
+By the registered diagnostic, the pooled path does not carry the growth:
+the direct read of the raw stream into the broadcast (`W_h h`) does.
+This refines @sec-nb-aerozoo-hresid-probe, where both raw paths grew
+with the stream and the jumps at the event came from the pooled term.
+A2 stays the candidate: it normalizes every read of the slice sublayer,
+as a pre-LN sublayer does, and its norms and validation losses are
+slightly lower than A's. P4 holds (@sec-nb-deepjeb-hresid-p4); P5
+(AirfRANS, no loss) waits for its lanes.
