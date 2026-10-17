@@ -1262,14 +1262,16 @@ class ISLA(Module):
             query["wall_distance"], query["wall_direction"] = dist, direction
             ### The boundary tokens: the sample of the cells (sample_boundary_cells),
             ### each kept cell with its Horvitz-Thompson measure. A uniform start
-            ### from the global torch RNG in training, a fixed one in evaluation.
+            ### from the global torch RNG in training, a fixed one in evaluation; in
+            ### the measures' precision (float64 inside), whatever the autocast.
             if self.training:
                 start = torch.rand((), dtype=torch.float64, device=q_points.device)
             else:
                 start = torch.full((), EVAL_START, dtype=torch.float64, device=q_points.device)
-            kept, weights = sample_boundary_cells(
-                measures, [m.cell_centroids for m in meshes], self.boundary_tokens, start
-            )
+            with torch.autocast(q_points.device.type, enabled=False):
+                kept, weights = sample_boundary_cells(
+                    measures, [m.cell_centroids for m in meshes], self.boundary_tokens, start
+                )
             boundary = boundary[kept]
             boundary["measure"] = weights
         ### One case: a batch axis of one for the batched machinery below.
