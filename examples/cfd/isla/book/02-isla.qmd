@@ -844,10 +844,11 @@ to the slices it belongs to.
 **A slice layer sends information up from tokens to slices, transforms it
 there, and sends it back down together with the geometry.** With the
 refined routing weights, the slice state is the measure-weighted mean of the
-token states, passed through a per-slice MLP:
+normalized token states $\tilde h_i \equiv \mathrm{LN}(h_i)$, the same
+normalized state the routing reads, passed through a per-slice MLP:
 
 $$
-Z_s = \sum_i a'_{is}\, h_i, \qquad Z_s \leftarrow Z_s + \mathrm{MLP}_{\mathrm{slice}}(\mathrm{LN}(Z_s)).
+Z_s = \sum_i a'_{is}\, \tilde h_i, \qquad Z_s \leftarrow Z_s + \mathrm{MLP}_{\mathrm{slice}}(\mathrm{LN}(Z_s)).
 $$
 
 Reading back uses a softmax *over slices* for each token, without the
@@ -861,14 +862,19 @@ b_i = \sum_s \pi_{is}\, Z_s, \qquad
 $$
 
 $$
-h_i \leftarrow h_i + W_b\,[\,h_i;\ b_i;\ \gamma_i\,], \qquad
+h_i \leftarrow h_i + W_b\,[\,\tilde h_i;\ b_i;\ \gamma_i\,], \qquad
 h_i \leftarrow h_i + \mathrm{MLP}(\mathrm{LN}(h_i)).
 $$
 
 The token ends the layer knowing which slices it belongs to, what those
 slices contain, and where it sits relative to their anchors. A stack of such
-layers, pre-LayerNorm with residual connections, is the encoder. ISLA runs
-one routing per layer.
+layers, pre-LayerNorm with residual connections, is the encoder. Both
+sublayers are pre-LayerNorm in the full sense: the slice sublayer routes,
+pools and broadcasts from $\tilde h_i$ alone, so the raw state $h_i$
+enters a layer only through the residual identity and the token MLP's
+LayerNorm. The update each sublayer adds is then a function of the
+normalized state and the geometry, unchanged when a token's state is
+rescaled. ISLA runs one routing per layer.
 
 The pooled invariants are projected *after* pooling. This is exact because
 the projection is affine and $\pi_{is}$ sums to one. The identity and the
