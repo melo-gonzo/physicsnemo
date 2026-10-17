@@ -118,11 +118,13 @@ def _sphere_case(n=4000, nq=200, seed=0):
     return soup(pts, nrm, w), drv, q, sdf, q_dirs
 
 
-def _run(m, mesh, drv, q, sdf, sn):
+def _run(m, mesh, drv, q, sdf, sn, surface=None):
+    """``surface``: the boundary_geometry, when the cells' measures exceed their own."""
     with torch.no_grad():
         return m(
             boundary_meshes={"wall": mesh},
             prediction_points=points_mesh(q, {"sdf": sdf, "sdf_normals": sn}),
+            boundary_geometry=None if surface is None else {"wall": surface},
             global_data={"g": drv},
         )
 
@@ -421,7 +423,7 @@ def test_tree_read_similarity_refinement_and_measure_scale_at_theta_zero():
     assert same(refined, base, atol=1e-10)
     data = dict(mesh.cell_data.items())
     data[EFFECTIVE_MEASURE_KEY] = data[EFFECTIVE_MEASURE_KEY] * 3.0
-    rescaled = outputs(_run(tree, mesh.with_data(cell_data=data), drv, q, sdf, sn))
+    rescaled = outputs(_run(tree, mesh.with_data(cell_data=data), drv, q, sdf, sn, surface=mesh))
     assert same(rescaled, base, atol=1e-10)
 
 

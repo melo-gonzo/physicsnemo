@@ -368,7 +368,8 @@ def global_pair_invariants(
     the point's own wall distance, and cosines, so no length scale is chosen. The
     only constant is ``eps``, a floor on the lengths inside the logarithms and the
     normalization (a numerical guard: :math:`r \ge |d_q| > 0` for every point off
-    the boundary sample, since :math:`|d_q|` is the distance to the nearest cell).
+    the boundary, since :math:`|d_q|` is the distance to the boundary surface, on
+    which the cell centroids lie).
     """
     with torch.autocast(query_r.device.type, enabled=False):
         rel = query_r[:, None] - boundary_r[None]  # (Q, N, d)

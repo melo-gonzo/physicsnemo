@@ -90,11 +90,13 @@ def _case(dim=3, n=300, nq=120, seed=0):
     return soup(pts, nrm, w), drv, q, sdf, sn
 
 
-def _run(m, mesh, drv, q, sdf, sn):
+def _run(m, mesh, drv, q, sdf, sn, surface=None):
+    """``surface``: the boundary_geometry, when the cells' measures exceed their own."""
     with torch.no_grad():
         return m(
             boundary_meshes={"wall": mesh},
             prediction_points=points_mesh(q, {"sdf": sdf, "sdf_normals": sn}),
+            boundary_geometry=None if surface is None else {"wall": surface},
             global_data={"g": drv},
         )
 
@@ -179,6 +181,7 @@ def test_kernel_read_similarity_refinement_and_measure_scale(mode):
             q,
             sdf,
             sn,
+            surface=mesh,
         ),
         base,
         atol=1e-10,

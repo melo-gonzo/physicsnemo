@@ -14,133 +14,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ISLA's geometric statistics of a sampled boundary.
+"""ISLA's geometric statistics of the boundary.
 
-:func:`rms_pairwise_distance` is the model's one length unit;
-:func:`exact_boundary_geometry` gives the prediction points' built-in signed
-distance and direction to the boundary surface from the exact closest point on
-its cells. Both are built from differences of positions only, so they refer to
-no frame origin."""
-
-import importlib
+:func:`rms_pairwise_distance` is the model's one length unit, a quadrature over
+the boundary tokens; :func:`exact_boundary_geometry` gives the prediction
+points' built-in signed distance and direction to the boundary *surface*, from
+the exact closest point on its cells. Both are built from differences of
+positions only, so they refer to no frame origin."""
 
 import torch
 from jaxtyping import Float, Int
 
-from physicsnemo.core.version_check import is_package_available
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.spatial import signed_distance_field
 from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
 
-### The exact nearest-boundary search below forms the squared distance from the
-### *difference* x_q - y_i, whose rounding error is set by the coordinates' own
-### precision. The library's CUDA search (cuML) expands it as
-### |x|^2 + |y|^2 - 2 x.y in float32, whose error scales with |x|^2: measured
-### on native AirfRANS cases (2026-10-03) it returned a wrong in-range nearest
-### cell for 0.45% of the near-wall queries (0.70% once the case was rigidly
-### translated) and, within ~1e-4 of the wall at |x| ~ 1, its untouched
-### sentinel (index -1), so the trained model's error moved by 5-7% under a
-### translation that the class specifies as a symmetry. No unexpanded L2 is
-### exposed through cuML's NearestNeighbors (its "euclidean"/"l2"/"sqeuclidean"
-### all map to the expanded forms), hence the kernels here.
-HAS_TRITON = is_package_available("triton")
-if HAS_TRITON:
-    try:
-        triton = importlib.import_module("triton")
-        tl = importlib.import_module("triton.language")
-    except Exception:  # pragma: no cover - a broken triton install is treated as absent
-        HAS_TRITON = False
-
-if HAS_TRITON:
-
-    @triton.jit
-    def _nearest_index_kernel(
-        q_ptr,
-        y_ptr,
-        idx_ptr,
-        Q,
-        N,
-        DIM: tl.constexpr,
-        BLOCK_Q: tl.constexpr,
-        BLOCK_N: tl.constexpr,
-    ):
-        """One program owns ``BLOCK_Q`` queries and streams the ``N`` boundary
-        samples in ``BLOCK_N`` tiles with a running minimum, so no (Q, N) block is
-        ever written; ties go to the smallest index, as ``torch.argmin``."""
-        offs_q = tl.program_id(0) * BLOCK_Q + tl.arange(0, BLOCK_Q)
-        mask_q = offs_q < Q
-        best = tl.full((BLOCK_Q,), float("inf"), q_ptr.dtype.element_ty)
-        best_i = tl.zeros((BLOCK_Q,), tl.int32)
-        for n0 in range(0, N, BLOCK_N):
-            offs_n = n0 + tl.arange(0, BLOCK_N)
-            mask_n = offs_n < N
-            d2 = tl.zeros((BLOCK_Q, BLOCK_N), q_ptr.dtype.element_ty)
-            for k in tl.static_range(DIM):
-                qk = tl.load(q_ptr + offs_q * DIM + k, mask=mask_q, other=0.0)
-                ### padded samples sit at infinity
-                yk = tl.load(y_ptr + offs_n * DIM + k, mask=mask_n, other=float("inf"))
-                diff = qk[:, None] - yk[None, :]
-                d2 += diff * diff
-            tile_min = tl.min(d2, axis=1)
-            tile_arg = tl.argmin(d2, axis=1)
-            take = tile_min < best  # strict: the earliest tile keeps a tie
-            best = tl.where(take, tile_min, best)
-            best_i = tl.where(take, (n0 + tile_arg).to(tl.int32), best_i)
-        tl.store(idx_ptr + offs_q, best_i.to(tl.int64), mask=mask_q)
-
-
-### Queries per chunk of the torch search; bounds its (chunk, N) distance block.
-### Not under torch.compile on CPU (or CUDA without Triton): there the search
-### builds one (queries, N) block, whose memory grows as their product (about
-### 160 GB at 200k x 200k in float32), so compiling on CPU suits small inputs only.
+### Queries per chunk of the two-dimensional search; bounds its (chunk, cells)
+### blocks. Not under torch.compile, where the search is one (queries, cells)
+### block (a loop over query chunks would specialize the dynamic query count).
 _TORCH_SEARCH_CHUNK = 4096
-
-
-def _nearest_index(
-    query_points: Float[torch.Tensor, "queries dim"],
-    points: Float[torch.Tensor, "tokens dim"],
-) -> torch.Tensor:
-    """Index ``(Q,)`` of the nearest of ``points`` to each query, by the exact
-    (difference-form) squared distance in the inputs' precision; ties to the
-    smallest index. Triton on CUDA when available, a chunked
-    :func:`torch.cdist` argmin otherwise (CPU included); half types are
-    searched in float32."""
-    q, y = query_points.contiguous(), points.contiguous()
-    if q.dtype in (torch.float16, torch.bfloat16):
-        q, y = q.float(), y.float()
-    nq, dim = q.shape
-    if q.is_cuda and HAS_TRITON:
-        idx = torch.empty(nq, dtype=torch.int64, device=q.device)
-        ### fastest of the tilings measured on a GB300 at 200k x 200k (2026-10-03):
-        ### 69 ms against 118 ms for 64 x 128 and 36 ms for cuML's expanded form
-        block_q, block_n = 64, 256
-        _nearest_index_kernel[(triton.cdiv(nq, block_q),)](
-            q,
-            y,
-            idx,
-            nq,
-            y.shape[0],
-            DIM=dim,
-            BLOCK_Q=block_q,
-            BLOCK_N=block_n,
-            num_warps=4,
-        )
-        return idx
-    if torch.compiler.is_compiling():
-        ### One block: a loop over query chunks would specialize torch.compile's
-        ### dynamic query count (each row's argmin is the same either way).
-        return torch.cdist(q, y, compute_mode="donot_use_mm_for_euclid_dist").argmin(-1)
-    return torch.cat(
-        [
-            torch.cdist(
-                q[s : s + _TORCH_SEARCH_CHUNK],
-                y,
-                compute_mode="donot_use_mm_for_euclid_dist",
-            ).argmin(-1)
-            for s in range(0, nq, _TORCH_SEARCH_CHUNK)
-        ]
-    )
 
 
 def rms_pairwise_distance(
@@ -166,68 +59,6 @@ def rms_pairwise_distance(
     c = (w_n * points).sum(dim=1, keepdim=True)
     var = (w_n * (points - c).square().sum(-1, keepdim=True)).sum(dim=1, keepdim=True)
     return (2.0 * var).sqrt().clamp_min(eps)
-
-
-def nearest_boundary_geometry(
-    query_points: Float[torch.Tensor, "batch queries dim"],
-    points: Float[torch.Tensor, "batch tokens dim"],
-    normals: Float[torch.Tensor, "batch tokens dim"],
-    *,
-    eps: float = 1e-12,
-) -> tuple[
-    Float[torch.Tensor, "batch queries"], Float[torch.Tensor, "batch queries dim"]
-]:
-    r"""Signed distance and direction from the nearest boundary sample to each query.
-
-    For every query :math:`x_q` the nearest boundary point :math:`y_{i^*}` is
-    found by an exact brute-force search on the difference-form squared
-    distance (:func:`_nearest_index`: a Triton streaming-minimum kernel on
-    CUDA, a chunked :func:`torch.cdist` argmin otherwise; any spatial
-    dimension; ties to the smallest index); then
-
-    .. math::
-
-        u_q = \frac{x_q - y_{i^*}}{\lvert x_q - y_{i^*} \rvert}, \qquad
-        d_q = \operatorname{sign}(u_q \cdot \hat n_{i^*})\,\lvert x_q - y_{i^*} \rvert ,
-
-    the direction from the boundary to the query and the distance signed by
-    the nearest sample's normal: **positive on the side the normal points to**
-    (outside, for outward normals), which is the convention of the stored
-    signed-distance fields of the program's datasets. A query that coincides
-    with its nearest sample takes that sample's normal as :math:`u_q` and
-    :math:`d_q = 0`. Both quantities are functions of pairwise differences,
-    so :math:`d_q` is invariant and :math:`u_q` covariant under every rigid
-    motion and reflection, and :math:`d_q` scales with the geometry.
-
-    The search runs without gradient (an argmin); :math:`d_q, u_q` are then
-    rebuilt from the gathered sample, so they are differentiable in the
-    positions. ``normals`` are renormalized.
-
-    Because the boundary is a *sample* (200,000 of up to 17 million cells on
-    a DrivAerML car), :math:`\lvert d_q \rvert` overestimates the true wall
-    distance by up to about the sample spacing near the wall and :math:`u_q`
-    deviates from the true SDF gradient by the same order; far from the wall
-    both agree with the full-mesh field.
-    """
-    b, nq, _ = query_points.shape
-    with torch.autocast(query_points.device.type, enabled=False), torch.no_grad():
-        ### the search is unbatched; the batch axis is one in practice.
-        idx = torch.stack(
-            [_nearest_index(query_points[i], points[i]) for i in range(b)]
-        )  # (B, Q)
-    gather = idx[..., None].expand(b, nq, points.shape[-1])
-    y = torch.gather(points, 1, gather)
-    n_star = torch.gather(normals, 1, gather)
-    n_star = n_star / n_star.norm(dim=-1, keepdim=True).clamp_min(eps)
-    diff = query_points - y
-    dist = diff.norm(dim=-1, keepdim=True)
-    on_wall = dist <= eps
-    u = torch.where(on_wall, n_star, diff / dist.clamp_min(eps))
-    ### The tangent case (u . n = 0) counts as the positive side, so d never
-    ### vanishes off the wall.
-    sign = torch.where((u * n_star).sum(-1, keepdim=True) >= 0, 1.0, -1.0).to(dist)
-    d = torch.where(on_wall, torch.zeros_like(dist), sign * dist)
-    return d.squeeze(-1), u
 
 
 def _weld(
@@ -445,3 +276,32 @@ def exact_boundary_geometry(
         on_wall, torch.zeros_like(dist), torch.where(on_cell, plane, sign * dist)
     )
     return d, u
+
+
+def orient_surface(
+    points: Float[torch.Tensor, "vertices dim"],
+    cells: Int[torch.Tensor, "cells dim"],
+    token_points: Float[torch.Tensor, "tokens dim"],
+    token_normals: Float[torch.Tensor, "tokens dim"],
+    token_measures: Float[torch.Tensor, " tokens"] | None = None,
+) -> Int[torch.Tensor, "cells dim"]:
+    r"""The cells of a boundary surface oriented as a sample of it (its tokens).
+
+    :math:`\sigma = \operatorname{sign} \sum_i w_i\, \hat n_i \cdot \hat N(c_i)`,
+    the measure-weighted agreement of the tokens' normals :math:`\hat n_i` with
+    the surface's pseudo-normals :math:`\hat N` at the tokens' closest features
+    (uniform weights when ``token_measures`` is ``None``; :math:`\sigma = +1`
+    at a tie); with :math:`\sigma = -1` every cell's last two vertices are
+    swapped, which reverses its normal. :func:`exact_boundary_geometry` on the
+    result is then positive on the side the *tokens'* normals point to,
+    whichever way the surface was stored. Without gradient (the orientation is
+    discrete) and without a host synchronization (one ``torch.where``)."""
+    with torch.no_grad():
+        feature_n = _closest_features(token_points, points, cells)[1]
+        cos = (feature_n * token_normals.to(feature_n.dtype)).sum(-1)
+        if token_measures is not None:
+            cos = cos * token_measures.to(cos.dtype)
+        flip = cos.sum() < 0
+    d = cells.shape[-1]
+    swapped = cells[:, [*range(d - 2), d - 1, d - 2]]
+    return torch.where(flip, swapped, cells)

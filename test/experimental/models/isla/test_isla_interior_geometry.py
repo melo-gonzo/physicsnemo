@@ -16,11 +16,13 @@
 
 """The interior geometry of the prediction-point tokens.
 
-For every prediction point the model derives its signed distance from the boundary
-tokens itself (the nearest boundary token gives the distance, that token's normal
-the sign, positive on the side the normal points to) and its direction from the same
-search; neither is an input. These tests pin the geometry against a brute-force
-computation, its sign convention, and the contracts of the interior task.
+For every prediction point the model derives its signed distance and direction
+from the boundary surface itself (the exact closest point on the surface's cells,
+signed by the closest feature's pseudo-normal, positive on the side the normals
+point to); neither is an input, and neither depends on how the boundary tokens
+were sampled from the surface. These tests pin the geometry against brute-force
+and exact references, its sign convention and convergence, and the contracts of
+the interior task.
 """
 
 import os
@@ -30,12 +32,9 @@ import torch
 
 from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla import geometry
-from physicsnemo.experimental.models.isla.geometry import (
-    _nearest_index,
-    exact_boundary_geometry,
-    nearest_boundary_geometry,
-)
+from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.mesh import Mesh
+from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from physicsnemo.mesh.primitives.curves import circle_2d
 from physicsnemo.mesh.primitives.surfaces import cube_surface, sphere_icosahedral, torus
 from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
@@ -50,86 +49,6 @@ from test.experimental.models.isla._meshes import (
 
 D = torch.float64
 PV = {"p": {"rank": 0}, "v": {"rank": 1}}
-
-
-def _cloud(n, seed, batch=1, scale=(3.0, 2.0, 1.0)):
-    """Batched tensors for the tensor-level geometry function."""
-    g = torch.Generator().manual_seed(seed)
-    pts = torch.randn(batch, n, 3, dtype=D, generator=g) * torch.tensor(scale, dtype=D)
-    nrm = torch.nn.functional.normalize(torch.randn(batch, n, 3, dtype=D, generator=g), dim=-1)
-    w = torch.rand(batch, n, dtype=D, generator=g) + 0.5
-    return pts, nrm, w
-
-
-def _brute_force(q, pts, nrm):
-    """The full (B, Q, N) distance matrix, for a small case."""
-    diff = q[:, :, None, :] - pts[:, None, :, :]
-    dist = diff.norm(dim=-1)
-    idx = dist.argmin(-1)
-    d = dist.gather(-1, idx[..., None])[..., 0]
-    y = pts.gather(1, idx[..., None].expand(*idx.shape, 3))
-    n_star = nrm.gather(1, idx[..., None].expand(*idx.shape, 3))
-    u = torch.nn.functional.normalize(q - y, dim=-1)
-    sign = torch.where((u * n_star).sum(-1) >= 0, 1.0, -1.0).to(D)
-    return sign * d, u
-
-
-def test_nearest_boundary_geometry_matches_brute_force():
-    pts, nrm, _ = _cloud(150, 0, batch=2)
-    q, _, _ = _cloud(45, 1, batch=2, scale=(4.0, 4.0, 4.0))
-    d, u = nearest_boundary_geometry(q, pts, nrm)
-    d_ref, u_ref = _brute_force(q, pts, nrm)
-    assert d.shape == (2, 45) and u.shape == (2, 45, 3)
-    assert torch.equal(d, d_ref) or torch.allclose(d, d_ref, atol=1e-14, rtol=0)
-    assert torch.allclose(u, u_ref, atol=1e-14, rtol=0)
-    assert torch.allclose(u.norm(dim=-1), torch.ones(2, 45, dtype=D), atol=1e-14)
-
-
-def test_sign_convention_is_positive_on_the_normal_side():
-    """A sphere with outward normals: queries outside have d > 0 and u radial outward,
-    queries inside d < 0 and u radial inward, and |d| is within the sample spacing
-    of the exact distance to the sphere."""
-    g = torch.Generator().manual_seed(0)
-    n = 20000
-    dirs = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=D, generator=g), dim=-1)
-    pts, nrm = 2.0 * dirs, dirs  # radius 2, outward normals
-    q_dirs = torch.nn.functional.normalize(torch.randn(1, 30, 3, dtype=D, generator=g), dim=-1)
-    radii = torch.cat([torch.full((15,), 3.0, dtype=D), torch.full((15,), 1.0, dtype=D)])
-    q = q_dirs * radii[None, :, None]
-    d, u = nearest_boundary_geometry(q, pts, nrm)
-    assert (d[0, :15] > 0).all() and (d[0, 15:] < 0).all()
-    ### the sample spacing on the sphere is about sqrt(4 pi r^2 / n) ~ 0.05
-    assert torch.allclose(d[0, :15], torch.ones(15, dtype=D), atol=0.03)
-    assert torch.allclose(d[0, 15:], -torch.ones(15, dtype=D), atol=0.03)
-    assert ((u[0, :15] * q_dirs[0, :15]).sum(-1) > 0.99).all()
-    assert ((u[0, 15:] * q_dirs[0, 15:]).sum(-1) < -0.99).all()
-
-
-def test_on_wall_queries_take_the_sample_normal():
-    pts, nrm, _ = _cloud(60, 0)
-    d, u = nearest_boundary_geometry(pts[:, :10], pts, nrm)
-    assert torch.equal(d, torch.zeros(1, 10, dtype=D))
-    assert torch.allclose(u, nrm[:, :10], atol=1e-15)
-
-
-def test_nearest_boundary_geometry_is_covariant_and_scales():
-    pts, nrm, _ = _cloud(100, 0)
-    q, _, _ = _cloud(20, 1, scale=(4.0, 4.0, 4.0))
-    R = orthogonal(3, 0, improper=True)
-    t = torch.tensor([1.0, -2.0, 0.5], dtype=D)
-    d, u = nearest_boundary_geometry(q, pts, nrm)
-    d2, u2 = nearest_boundary_geometry(q @ R.T + t, pts @ R.T + t, nrm @ R.T)
-    assert torch.allclose(d2, d, atol=1e-12) and torch.allclose(u2, u @ R.T, atol=1e-12)
-    d3, u3 = nearest_boundary_geometry(3.0 * q, 3.0 * pts, nrm)
-    assert torch.allclose(d3, 3.0 * d, atol=1e-12) and torch.allclose(u3, u, atol=1e-12)
-
-
-def test_geometry_is_differentiable_in_the_positions():
-    pts, nrm, _ = _cloud(50, 0)
-    q = _cloud(9, 1, scale=(4.0, 4.0, 4.0))[0].requires_grad_(True)
-    d, u = nearest_boundary_geometry(q, pts, nrm)
-    (d.sum() + u.sum()).backward()
-    assert q.grad is not None and torch.isfinite(q.grad).all()
 
 
 def _model(**kw):
@@ -174,7 +93,7 @@ def test_stored_distance_is_an_ordinary_query_input():
     mesh = soup(pts, nrm, w)
     drv = torch.tensor([0.3, 1.0, 0.2], dtype=D)
     q, _, _, _ = cloud(25, seed=1, scale=(4.0, 4.0, 4.0))
-    d, grad = nearest_boundary_geometry(q[None], pts[None], nrm[None])
+    d, grad = exact_boundary_geometry(q, mesh.points, mesh.cells)
     m = _model(query_schema={"geometry.sdf": {"rank": 0}, "geometry.grad": {"rank": 1}})
     assert m.qt.embed[0].in_features == 2 + (2 + (2 + 1))  # built-in pair, scaled scalar pair, vector cosines and norm
 
@@ -188,10 +107,10 @@ def test_stored_distance_is_an_ordinary_query_input():
                 )
             )
 
-    base = call(d[0], grad[0])
+    base = call(d, grad)
     assert base["p"].shape == (25,)
-    assert not torch.allclose(call(2 * d[0], grad[0])["p"], base["p"], atol=1e-6)
-    assert not torch.allclose(call(d[0], -grad[0])["p"], base["p"], atol=1e-6)
+    assert not torch.allclose(call(2 * d, grad)["p"], base["p"], atol=1e-6)
+    assert not torch.allclose(call(d, -grad)["p"], base["p"], atol=1e-6)
 
 
 def test_no_query_normals_argument():
@@ -227,168 +146,7 @@ def test_checkpoint_round_trip_keeps_the_task(tmp_path):
     assert all(torch.equal(a[k], b[k]) for k in a)
 
 
-def _assert_indices_exact(idx, q, pts):
-    """``idx`` equals the float64 brute-force argmin on the same inputs, except
-    where the two candidates are a tie at the inputs' own precision (their
-    float64 distances agree to within four float32 ulp); returns the tie count."""
-    dist = torch.cdist(q.double(), pts.double())
-    ref = dist.argmin(-1)
-    diff = idx != ref
-    d_idx = dist.gather(-1, idx[..., None])[..., 0]
-    d_ref = dist.gather(-1, ref[..., None])[..., 0]
-    tie = (d_idx - d_ref).abs() <= 4 * torch.finfo(torch.float32).eps * d_ref
-    assert not (diff & ~tie).any(), int((diff & ~tie).sum())
-    return int(diff.sum())
-
-
-def test_nearest_boundary_geometry_near_wall_dense_cluster_matches_brute_force():
-    """Queries a hair off a dense cluster of boundary samples far from the cloud's
-    centre (large |x|^2 relative to the separations), in float32 inputs, against a
-    float64 brute force on the same inputs: the exact difference-form search
-    returns the true nearest sample on CPU and CUDA alike (the expanded form of
-    the library's CUDA search resolved these only to the cluster's spacing)."""
-    g = torch.Generator().manual_seed(3)
-    n, q_n = 5000, 400
-    pts64, nrm64, _ = _cloud(n, 0)
-    ### a dense cluster of 1,000 samples within 1e-3 of a point 4 radii out
-    centre = torch.tensor([[[4.0, 0.0, 0.0]]], dtype=D)
-    cluster = centre + 1e-3 * torch.randn(1, 1000, 3, dtype=D, generator=g)
-    pts64 = torch.cat([pts64, cluster], dim=1)
-    nrm64 = torch.cat(
-        [nrm64, torch.nn.functional.normalize(torch.randn(1, 1000, 3, dtype=D, generator=g), dim=-1)], dim=1
-    )
-    q64 = centre + 2e-3 * torch.randn(1, q_n, 3, dtype=D, generator=g)
-    pts, nrm, q = pts64.float(), nrm64.float(), q64.float()
-    d_ref, u_ref = _brute_force(q.double(), pts.double(), nrm.double())
-    devices = ["cpu"] + (["cuda"] if torch.cuda.is_available() else [])
-    for dev in devices:
-        d, u = nearest_boundary_geometry(q.to(dev), pts.to(dev), nrm.to(dev))
-        assert torch.allclose(d.cpu().double(), d_ref, atol=1e-9, rtol=1e-6), dev
-        assert torch.allclose(u.cpu().double(), u_ref, atol=1e-5, rtol=0), dev
-        assert _assert_indices_exact(_nearest_index(q[0].to(dev), pts[0].to(dev)).cpu(), q[0], pts[0]) == 0
-
-
-def _check_against_cdist_argmin(device, dim):
-    """d and u from ``nearest_boundary_geometry`` against ``torch.cdist(...).argmin``
-    on a random ``dim``-dimensional cloud, on ``device``."""
-    g = torch.Generator().manual_seed(dim)
-    pts = torch.randn(1, 3000, dim, dtype=D, generator=g).to(device)
-    nrm = torch.nn.functional.normalize(torch.randn(1, 3000, dim, dtype=D, generator=g), dim=-1).to(device)
-    q = 1.5 * torch.randn(1, 500, dim, dtype=D, generator=g).to(device)
-    d, u = nearest_boundary_geometry(q, pts, nrm)
-    dist = torch.cdist(q, pts)
-    idx = dist.argmin(-1)
-    y = pts.gather(1, idx[..., None].expand(1, 500, dim))
-    n_star = nrm.gather(1, idx[..., None].expand(1, 500, dim))
-    u_ref = torch.nn.functional.normalize(q - y, dim=-1)
-    d_ref = torch.where((u_ref * n_star).sum(-1) >= 0, 1.0, -1.0).to(D) * dist.gather(-1, idx[..., None])[..., 0]
-    assert d.shape == (1, 500) and u.shape == (1, 500, dim)
-    assert torch.allclose(d, d_ref, atol=1e-12, rtol=0)
-    assert torch.allclose(u, u_ref, atol=1e-12, rtol=0)
-
-
-@pytest.mark.parametrize("dim", [2, 3])
-def test_nearest_boundary_geometry_matches_cdist_argmin_on_cpu(dim):
-    _check_against_cdist_argmin("cpu", dim)
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA search")
-@pytest.mark.parametrize("dim", [2, 3])
-def test_nearest_boundary_geometry_matches_cdist_argmin_on_cuda(dim):
-    _check_against_cdist_argmin("cuda", dim)
-
-
-def _wall_problem(dim: int, seed: int = 5, n: int = 4000, n_q: int = 2000, offsets=(1e-5, 1e-4, 1e-3)):
-    """A unit circle (polyline) or sphere sampled at ``n`` points with outward normals
-    and ``n_q`` queries a sample of ``offsets`` off the wall on both sides, in
-    float32: the near-wall picture of a unit-chord airfoil."""
-    g = torch.Generator().manual_seed(seed)
-    dirs = torch.nn.functional.normalize(torch.randn(n, dim, dtype=D, generator=g), dim=-1)
-    q_dirs = torch.nn.functional.normalize(torch.randn(n_q, dim, dtype=D, generator=g), dim=-1)
-    side = torch.where(torch.rand(n_q, dtype=D, generator=g) < 0.5, 1.0, -1.0)
-    off = torch.tensor(offsets, dtype=D)[torch.randint(len(offsets), (n_q,), generator=g)]
-    q = q_dirs * (1.0 + side * off)[:, None]
-    return dirs.float(), dirs.float(), q.float()
-
-
-DEVICES = ["cpu", pytest.param("cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA"))]
-
-
-@pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("dim", [2, 3])
-@pytest.mark.parametrize("shift", [0.0, 1.0, 100.0])
-def test_search_is_exact_near_a_translated_wall(device, dim, shift):
-    """Regression (AirfRANS posed inference, 2026-10-03): the library's CUDA search
-    (cuML, float32 expanded distance) returned a wrong in-range nearest cell for
-    0.45% of the near-wall queries of native AirfRANS cases, 0.70% of translated
-    ones, and the sentinel -1 within ~1e-4 of the wall at |x| ~ 1, so the trained
-    model's error moved by 5-7% under a rigid translation. Near-wall float32 queries
-    on a unit circle / sphere translated by 0, 1 and 100 radii: the index equals the
-    float64 brute force on the same float32 inputs (up to ties at float32
-    resolution) and |d| equals the exact distance, on every device."""
-    pts, nrm, q = _wall_problem(dim)
-    t = torch.full((dim,), shift)
-    pts, q, nrm = (pts + t).to(device), (q + t).to(device), nrm.to(device)
-    idx = _nearest_index(q, pts)
-    ties = _assert_indices_exact(idx.cpu(), q.cpu(), pts.cpu())
-    assert ties <= 2, ties
-    d, u = nearest_boundary_geometry(q[None], pts[None], nrm[None])
-    d_ref = torch.cdist(q[None].double(), pts[None].double()).min(-1).values
-    assert torch.allclose(d.double().abs(), d_ref, atol=1e-10, rtol=1e-6)
-    assert torch.allclose(u.norm(dim=-1), torch.ones_like(d), atol=1e-5)
-
-
-@pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("dim", [2, 3])
-def test_search_indices_are_translation_invariant(device, dim):
-    """The same near-wall problem natively and translated by (100, ..., 100) in
-    float32: the returned indices agree except where the float64 brute force on the
-    two (differently rounded) float32 inputs itself disagrees."""
-    pts, _, q = _wall_problem(dim, n=3000, n_q=5000)
-    t = torch.full((dim,), 100.0)
-    native = _nearest_index(q.to(device), pts.to(device)).cpu()
-    moved = _nearest_index((q + t).to(device), (pts + t).to(device)).cpu()
-    ref_native = torch.cdist(q.double(), pts.double()).argmin(-1)
-    ref_moved = torch.cdist((q + t).double(), (pts + t).double()).argmin(-1)
-    changed = native != moved
-    assert not (changed & (ref_native == ref_moved)).any(), int((changed & (ref_native == ref_moved)).sum())
-
-
-@pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("dim", [2, 3])
-def test_search_is_exact_on_random_clouds(device, dim):
-    """Float32 random clouds (queries both inside and well outside the boundary
-    cloud) against the float64 brute force on the same inputs, in 2-D and 3-D."""
-    g = torch.Generator().manual_seed(dim)
-    pts = (torch.randn(6000, dim, dtype=D, generator=g) * torch.arange(dim, 0, -1, dtype=D)).float()
-    q = (torch.randn(3000, dim, dtype=D, generator=g) * 2.0).float()
-    idx = _nearest_index(q.to(device), pts.to(device)).cpu()
-    assert _assert_indices_exact(idx, q, pts) == 0
-
-
-@pytest.mark.parametrize("device", DEVICES)
-def test_torch_search_path_chunks_and_matches_the_kernel(device, monkeypatch):
-    """The chunked torch path (CPU; CUDA without Triton) returns the exact indices
-    across chunk boundaries, in float32 and float64, and agrees with the Triton
-    kernel where both run."""
-    pts, _, q = _wall_problem(3, n=1500, n_q=2 * geometry._TORCH_SEARCH_CHUNK + 17)
-    pts, q = pts.to(device), q.to(device)
-    kernel = _nearest_index(q, pts) if device == "cuda" and geometry.HAS_TRITON else None
-    monkeypatch.setattr(geometry, "HAS_TRITON", False)
-    for dtype in (torch.float32, torch.float64):
-        idx = _nearest_index(q.to(dtype), pts.to(dtype))
-        assert idx.shape == (q.shape[0],) and idx.dtype == torch.int64
-        assert _assert_indices_exact(idx.cpu(), q.cpu().to(dtype), pts.cpu().to(dtype)) <= 2
-    if kernel is not None:
-        ### the two float32 sums may round differently on a tie at float32 resolution
-        torch_idx = _nearest_index(q, pts)
-        dist = torch.cdist(q.double(), pts.double())
-        d_a = dist.gather(-1, torch_idx[:, None])[:, 0]
-        d_b = dist.gather(-1, kernel[:, None])[:, 0]
-        assert ((torch_idx == kernel) | ((d_a - d_b).abs() <= 4 * torch.finfo(torch.float32).eps * d_a)).all()
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="the saved case runs on the CUDA search")
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="the saved case runs on CUDA")
 @pytest.mark.skipif("ISLA_AF_POSED_SAMPLE" not in os.environ, reason="set ISLA_AF_POSED_SAMPLE to a forward-kwargs .pt saved by the posed-inference reproduction")
 def test_saved_posed_airfrans_case_runs():
     """The AirfRANS posed validation case that crashed the 2026-10-03 inference, as
@@ -713,3 +471,195 @@ def test_exact_geometry_refuses_other_dimensions():
     mesh = soup(pts, nrm)
     with pytest.raises(NotImplementedError, match="two and three dimensions"):
         exact_boundary_geometry(pts, mesh.points, mesh.cells)
+
+
+# ---------------------------------------------------------------------------
+# The model's geometry comes from the surface, not from the token sample
+# ---------------------------------------------------------------------------
+
+
+def _with_measures(mesh: Mesh, keep, weights) -> Mesh:
+    """The cells ``keep`` of ``mesh`` with effective measures ``weights`` (their
+    Horvitz-Thompson weights), unreferenced vertices compacted out."""
+    sub = mesh.slice_cells(keep)
+    sub = sub.slice_points(torch.unique(sub.cells))
+    return Mesh(points=sub.points, cells=sub.cells, cell_data={EFFECTIVE_MEASURE_KEY: weights})
+
+
+def _draws(mesh: Mesh, k: int, seed: int = 0):
+    """The token meshes of five sampling laws at about ``k`` of the ``N`` cells, and
+    the surface with every cell split: uniform without replacement, area-
+    proportional Poisson, systematic, one contiguous window, all with HT weights."""
+    g = torch.Generator().manual_seed(seed)
+    n, a = mesh.n_cells, mesh.cell_areas
+    uniform = torch.randperm(n, generator=g)[:k].sort().values
+    pi = (k * a / a.sum()).clamp(max=1.0)
+    poisson = torch.nonzero(torch.rand(n, generator=g, dtype=a.dtype) < pi)[:, 0]
+    step = n // k
+    systematic = torch.arange(int(torch.randint(step, (1,), generator=g)), n, step)
+    start = int(torch.randint(n, (1,), generator=g))
+    window = (start + torch.arange(k)) % n
+    return {
+        "uniform": _with_measures(mesh, uniform, a[uniform] * n / k),
+        "area": _with_measures(mesh, poisson, a[poisson] / pi[poisson]),
+        "systematic": _with_measures(mesh, systematic, a[systematic] * step),
+        "window": _with_measures(mesh, window.sort().values, a[window.sort().values] * n / k),
+        "split": mesh.subdivide(levels=1, filter="linear"),
+    }
+
+
+def _captured_geometry(m, **kw):
+    """The built-in geometry the model's batched routine receives, and the outputs."""
+    seen = {}
+    inner = m._forward_tokens
+
+    def spy(boundary, query, *args):
+        seen["d"], seen["u"] = query["wall_distance"].clone(), query["wall_direction"].clone()
+        return inner(boundary, query, *args)
+
+    m._forward_tokens = spy
+    try:
+        with torch.no_grad():
+            out = outputs(m(**kw))
+    finally:
+        del m._forward_tokens
+    return seen["d"], seen["u"], out
+
+
+def test_builtin_geometry_is_the_same_for_every_draw_of_the_tokens():
+    """A 798-segment NACA 0012 as boundary_geometry and its tokens drawn under five
+    laws at 200 cells (and as the surface with every cell split): the distance and
+    direction the model computes are bitwise identical for every draw, and equal to
+    the exact geometry of the surface; only the quadratures (and so the outputs)
+    change with the draw."""
+    torch.manual_seed(0)
+    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True, dim=2).double().eval()
+    surface = _polygon(_naca(400))
+    g = torch.Generator().manual_seed(1)
+    q = torch.tensor([0.5, 0.0], dtype=D) + torch.randn(300, 2, dtype=D, generator=g) * torch.tensor([0.6, 0.1], dtype=D)
+    drv = torch.tensor([1.0, 0.1], dtype=D)
+    ref = exact_boundary_geometry(q, surface.points, surface.cells)
+    seen = {}
+    for law, tokens in _draws(surface, 200).items():
+        d, u, out = _captured_geometry(
+            m, boundary_meshes={"airfoil": tokens}, boundary_geometry={"airfoil": surface}, prediction_points=q, global_data={"g": drv}
+        )
+        assert torch.equal(d[0], ref[0]) and torch.equal(u[0], ref[1]), law
+        assert all(torch.isfinite(v).all() for v in out.values())
+        seen[law] = out["p"]
+    assert not torch.allclose(seen["uniform"], seen["window"])
+
+
+def test_a_sampled_boundary_without_its_surface_is_refused():
+    """Without boundary_geometry the tokens' cells are the surface, so an interior
+    model refuses tokens whose effective measures exceed their cells' measures (a
+    subsample's HT weights) and accepts the whole boundary, with or without stored
+    effective measures; given the surface, the sample runs."""
+    torch.manual_seed(0)
+    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True, dim=2).double().eval()
+    surface = _polygon(_naca(100))
+    kw = dict(prediction_points=torch.randn(20, 2, dtype=D), global_data={"g": torch.tensor([1.0, 0.0], dtype=D)})
+    sample = _draws(surface, 50)["uniform"]
+    with torch.no_grad():
+        with pytest.raises(ValueError, match="is a sample of its boundary"):
+            m(boundary_meshes={"airfoil": sample}, **kw)
+        m(boundary_meshes={"airfoil": sample}, boundary_geometry={"airfoil": surface}, **kw)
+        m(boundary_meshes={"airfoil": surface}, **kw)
+        whole = Mesh(points=surface.points, cells=surface.cells, cell_data={EFFECTIVE_MEASURE_KEY: surface.cell_areas})
+        m(boundary_meshes={"airfoil": whole}, **kw)
+
+
+def test_boundary_geometry_is_validated():
+    """The surface names the same boundaries as the tokens, each a non-empty Mesh of
+    the boundary's dimensions; a surface model takes none; the interior task is
+    refused outside two and three dimensions."""
+    torch.manual_seed(0)
+    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True, dim=2).double().eval()
+    surface = _polygon(_naca(60))
+    kw = dict(boundary_meshes={"airfoil": surface}, prediction_points=torch.randn(10, 2, dtype=D), global_data={"g": torch.tensor([1.0, 0.0], dtype=D)})
+    with torch.no_grad():
+        with pytest.raises(ValueError, match="must name the same boundaries"):
+            m(boundary_geometry={"wing": surface}, **kw)
+        with pytest.raises(ValueError, match=r"must be a Mesh\[1, 2\]"):
+            m(boundary_geometry={"airfoil": _sphere(1)}, **kw)
+        with pytest.raises(ValueError, match="boundary_geometry has no cells"):
+            m(boundary_geometry={"airfoil": Mesh(points=surface.points, cells=surface.cells[:0])}, **kw)
+        m(boundary_geometry={"airfoil": surface}, **kw)
+    surface_model = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, dim=2)
+    with pytest.raises(ValueError, match="interior=False"):
+        surface_model(boundary_meshes={"airfoil": surface}, boundary_geometry={"airfoil": surface}, global_data=kw["global_data"])
+    with pytest.raises(NotImplementedError, match="two and three dimensions"):
+        ISLA(output_schema=PV, interior=True, dim=4)
+
+
+def _flipped(mesh: Mesh) -> Mesh:
+    """``mesh`` with every cell's last two vertices swapped (each normal reversed)."""
+    d = mesh.cells.shape[-1]
+    return Mesh(points=mesh.points, cells=mesh.cells[:, [*range(d - 2), d - 1, d - 2]])
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_the_surface_is_oriented_by_its_tokens(dim):
+    """Each surface is oriented as its own tokens, so reversing every cell of
+    boundary_geometry leaves every output bitwise identical (the model swaps them
+    back), and reversing the tokens instead reverses the sign of the distance and
+    leaves the direction (from the surface to the point) as it is."""
+    torch.manual_seed(0)
+    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True, dim=dim).double().eval()
+    surface = _polygon(_naca(200)) if dim == 2 else _sphere(3)
+    tokens = _draws(surface, 100)["uniform"]
+    g = torch.Generator().manual_seed(3)
+    q = torch.randn(80, dim, dtype=D, generator=g) * 0.7
+    kw = dict(boundary_meshes={"wall": tokens}, prediction_points=q, global_data={"g": torch.ones(dim, dtype=D)})
+    d, u, out = _captured_geometry(m, boundary_geometry={"wall": surface}, **kw)
+    d2, u2, out2 = _captured_geometry(m, boundary_geometry={"wall": _flipped(surface)}, **kw)
+    assert torch.equal(d, d2) and torch.equal(u, u2)
+    assert all(torch.equal(out[k], out2[k]) for k in out)
+    reversed_tokens = dict(kw, boundary_meshes={"wall": _flipped(tokens)})
+    d3, u3, _ = _captured_geometry(m, boundary_geometry={"wall": surface}, **reversed_tokens)
+    ### (to rounding: the model's swap of the cells rebuilds each closest point from
+    ### its vertices in the other order)
+    assert torch.allclose(d3, -d, atol=1e-14, rtol=0) and torch.allclose(u3, u, atol=1e-14, rtol=0)
+
+
+def test_the_sign_is_the_nearest_token_convention():
+    """On a consistently oriented case (outward tokens and surface) the distance has
+    the sign of the former built-in, the nearest boundary token's sign((x - y) . n),
+    at every query farther from the wall than the token spacing."""
+    torch.manual_seed(0)
+    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True).double().eval()
+    surface = _sphere(4)
+    tokens = _draws(surface, 600)["uniform"]
+    q = _near_wall(3, 500, 4, band=0.5)
+    d, _, _ = _captured_geometry(
+        m, boundary_meshes={"wall": tokens}, boundary_geometry={"wall": surface}, prediction_points=q, global_data={"g": torch.ones(3, dtype=D)}
+    )
+    y, n = tokens.cell_centroids, tokens.cell_normals
+    nearest = torch.cdist(q, y).argmin(-1)
+    old_sign = torch.sign(((q - y[nearest]) * n[nearest]).sum(-1))
+    far = (q.norm(dim=-1) - 1).abs() > 0.15  # beyond the 600-token sample's spacing
+    assert far.sum() > 100 and torch.equal(torch.sign(d[0])[far], old_sign[far])
+
+
+def test_eager_and_compiled_agree_on_an_oppositely_oriented_surface():
+    """A 2-D case whose boundary_geometry is oriented against its tokens: the
+    fullgraph, dynamic-shape compiled model gives the eager outputs (the orientation
+    is a torch.where, not a Python branch), at two query counts."""
+    torch.manual_seed(0)
+    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True, dim=2, geo_kernel="eager").eval()
+    surface = _polygon(_naca(100))
+    surface = Mesh(points=surface.points.float(), cells=surface.cells)
+    tokens = _draws(surface, 60)["uniform"]
+    compiled = torch.compile(m, fullgraph=True, dynamic=True)
+    g = torch.Generator().manual_seed(5)
+    for nq in (50, 71):
+        kw = dict(
+            boundary_meshes={"wall": tokens},
+            boundary_geometry={"wall": _flipped(surface)},
+            prediction_points=torch.randn(nq, 2, generator=g) * 0.6,
+            global_data={"g": torch.tensor([1.0, 0.2])},
+        )
+        with torch.no_grad():
+            eager, comp = outputs(m(**kw)), outputs(compiled(**kw))
+        for k in eager:
+            torch.testing.assert_close(comp[k], eager[k], atol=1e-4, rtol=1e-4)

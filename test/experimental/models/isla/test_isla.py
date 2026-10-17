@@ -144,10 +144,11 @@ def test_several_boundary_meshes_are_one_token_set(setup):
 
 def test_no_effective_measures_is_the_geometric_quadrature(setup):
     """Without ``_effective_measure`` the cells' geometric measures are the weights;
-    the soup's cells are congruent, so this is the uniform quadrature: the same
-    output as any constant measure vector."""
+    a soup without prescribed measures has congruent cells, so this is the uniform
+    quadrature: the same output as any constant measure vector."""
     m, mesh, drv, base = setup
-    none = _run(m, mesh.with_data(cell_data={}), drv)
+    mesh = soup(mesh.cell_centroids, mesh.cell_normals)
+    none = _run(m, mesh, drv)
     const = _run(
         m,
         mesh.with_data(cell_data={EFFECTIVE_MEASURE_KEY: torch.full((mesh.n_cells,), 0.37, dtype=D)}),

@@ -17,22 +17,28 @@
 """Boundary meshes for the ISLA tests.
 
 The model reads a boundary ``Mesh[d-1, d]`` through its cell centroids, cell
-normals and effective cell measures. :func:`soup` builds such a mesh from a
-prescribed cloud of centroids, unit normals and measures: one small regular
-simplex per cell, centred on its point in the plane orthogonal to its normal
-and oriented so that the cell normal is that normal (to roundoff), with the
-measures stored as the effective cell measures. It works in any spatial
-dimension (segments in two, triangles in three, tetrahedra in four).
+normals and effective cell measures, and an interior model measures its
+prediction points' distance to the surface its cells make up. :func:`soup`
+builds such a mesh from a prescribed cloud of centroids, unit normals and
+measures: one right-angled simplex per cell, centred on its point in the plane
+orthogonal to its normal, oriented so that the cell normal is that normal (to
+roundoff) and sized so that its geometric measure is the prescribed measure, so
+the soup is a whole boundary (its cells cover all the surface their measures
+stand for) and the measures are stored as the effective cell measures as well.
+It works in any spatial dimension (segments in two, triangles in three,
+tetrahedra in four).
 """
+
+import math
 
 import torch
 
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 
-#: Edge length of the simplices of :func:`soup` (small against the clouds of the
-#: tests, large enough that the normals recomputed from the vertices carry no
-#: appreciable roundoff).
+#: Leg length of the simplices of :func:`soup` when no measures are prescribed
+#: (small against the clouds of the tests, large enough that the normals
+#: recomputed from the vertices carry no appreciable roundoff).
 CELL_SIZE = 0.2
 
 
@@ -53,9 +59,13 @@ def cloud(n: int, d: int = 3, seed: int = 0, *, dtype=torch.float64, scale=None)
 
 def soup(points, normals, measures=None, cell_data=None, size: float = CELL_SIZE) -> Mesh:
     """A ``Mesh[d-1, d]`` whose cell centroids are ``points``, cell normals
-    ``normals`` and effective cell measures ``measures`` (``None``: the cells'
-    geometric measures, all equal here). ``cell_data`` adds per-cell fields."""
+    ``normals`` and cell measures ``measures`` (geometric and effective; ``None``:
+    every cell a simplex of legs ``size``). ``cell_data`` adds per-cell fields."""
     n, d = points.shape
+    if measures is not None:
+        ### a right-angled simplex of legs s has measure s^(d-1) / (d-1)!
+        size = (math.factorial(d - 1) * measures.to(points.dtype)) ** (1.0 / (d - 1))
+        size = size[:, None, None]
     nrm = torch.nn.functional.normalize(normals, dim=-1)
     g = torch.Generator().manual_seed(0)
     ### An orthonormal tangent basis per cell: QR of [n | random], columns 1..d-1.
