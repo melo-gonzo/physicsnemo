@@ -176,13 +176,6 @@ def test_one_vector_layout():
     assert m.n_true_basis == 5 and m.n_pseudo_basis == 3
 
 
-def test_fused_kernel_refuses_other_vector_counts():
-    """The fused Triton region is unrolled for one to four global directions."""
-    for spec in ({}, {"g1": {"rank": 1}, "g2": {"rank": 1}, "g3": {"rank": 1}, "g4": {"rank": 1}, "g5": {"rank": 1}}):
-        with pytest.raises(ValueError, match="one to four per-point vectors"):
-            ISLA(output_schema=PV, global_schema=spec, hidden=32, n_layers=1, n_slices=8, geo_kernel="fused")
-
-
 def test_bad_global_specs_rejected():
     with pytest.raises(ValueError, match="non-negative"):
         ISLA(output_schema=PV, global_schema={"g": {"rank": -1}}, hidden=32, n_layers=1, n_slices=8)

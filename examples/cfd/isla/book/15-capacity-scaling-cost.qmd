@@ -14,6 +14,10 @@ configuration (width 512 with 512 slices, @sec-using-config), which sits on
 these axes as one more point, so every "ISLA" in this chapter is the lane
 its row or caption names.
 
+::: {.callout-warning title="Trained with the raw slice reads"}
+The trained checkpoints behind this chapter's numbers and pictures use the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm, not the normalized reads of ISLA's reference configuration (@sec-isla-layer).
+:::
+
 ```{python}
 #| label: setup-capacity
 #| include: false
@@ -776,7 +780,7 @@ print(f"**On the DrivAerML Surface task at the reporting protocol the cost sweep
       f"footprints are in @sec-using-cost).** The per-configuration footprints are @tbl-isla-cost; what the token budget does to them is @fig-cost-sweep. Every arm "
       "is linear in tokens above 100,000, because the slice attention is linear in points and no quadratic term appears up to 600,000, and "
       "every arm is launch-bound below about 40,000, where the GPU is not saturated. ISLA's step is with the fused geometry kernel "
-      "(`geo_kernel=None` resolves to it on CUDA, @sec-using-cost); on the fallback eager geometry region, whose per-slice invariants are "
+      "(the model selects it on CUDA, @sec-using-cost); on the fallback eager geometry region, whose per-slice invariants are "
       "recomputed in the backward pass, the step grows linearly from 20,000 tokens on and is several times GeoTransolver's at 200,000. At "
       f"the recipe default of 200,000 cells every model fits one GB300, and the narrowest ISLA at 192 wide ({c_i192[2] / 1e6:.1f}M, "
       f"{c_i192[0]:.0f} ms, {c_i192[1]:.1f} GiB) is the cheapest model per token after Transolver: at 600,000 cells its training-log peak is "

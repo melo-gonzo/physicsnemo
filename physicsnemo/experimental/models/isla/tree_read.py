@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-r"""ISLA's tree-accelerated global boundary read (Barnes-Hut over the boundary cells).
+r"""ISLA-DTT's boundary read: passive prediction points read every boundary cell.
 
-The dense global read (:mod:`~physicsnemo.experimental.models.isla.kernel_read`,
-``kernel_read_radius=None``) has every passive prediction point :math:`q` read every
-boundary cell :math:`j`: a softmax over the cells of
+With ``query_independent=True`` (ISLA-DTT) every passive prediction point :math:`q`
+gets one more residual update after every slice block: a read of every boundary cell
+:math:`j`, a softmax over the cells of
 
 .. math::
 
@@ -26,10 +26,17 @@ boundary cell :math:`j`: a softmax over the cells of
 
 weighting the cells' values :math:`v_{jh}`, with :math:`\omega_j` the cell's share of
 the boundary measure, so the read is a measure-weighted mean over the boundary (a
-quadrature). Its cost is the number of (point, cell) pairs, :math:`Q N` per block:
-1e8 on an airfoil of a thousand cells, 4e10 on a car of 200,000.
+quadrature). The kernel inputs :math:`\iota_{qj}` are invariants of the pair's relative
+geometry (:func:`tree_pair_invariants`); one MLP maps them to a basis of
+``KERNEL_READ_BASIS`` functions per pair once per forward pass (:class:`_KernelBasis`),
+and each block's kernel :math:`K_h` is a learned linear combination of that basis per
+head. The values, keys and queries are linear maps of invariant token states (the
+cell's and the point's own), so the read is invariant and the equivariant heads
+assemble every output. Read pair by pair, its cost is the number of (point, cell)
+pairs, :math:`Q N` per block: 1e8 on an airfoil of a thousand cells, 4e10 on a car of
+200,000.
 
-This module evaluates the same read through GLOBE's cluster tree
+The read is evaluated through GLOBE's cluster tree
 (:class:`~physicsnemo.mesh.spatial.cluster_tree.ClusterTree`), walked once per
 prediction point
 (:meth:`~physicsnemo.mesh.spatial.cluster_tree.ClusterTree.find_point_interaction_pairs`)
@@ -53,12 +60,13 @@ criterion) and its normals are coherent: the measure-weighted RMS chord of the
 normals about their mean, :math:`\sqrt{2 (1 - |\bar n|)}`, is below :math:`\theta`
 (the tree's ``source_admissible`` mask). A leaf that is not admitted contributes its
 cells; any other node hands the point to its two children. At :math:`\theta = 0` no
-cluster is admitted and the read is the dense read, pair for pair.
+cluster is admitted and the read is exact, pair for pair. The model reads at
+``TREE_READ_THETA``.
 
 Symmetries. A point's list depends on the forest and the point alone, so the read is
 exactly query independent at every :math:`\theta` (a point's prediction depends on
 the boundary and the point, never on the other prediction points). At
-:math:`\theta = 0` every contract of the dense read holds exactly: Euclidean
+:math:`\theta = 0` every contract of the exact read holds exactly: Euclidean
 equivariance, the similarity gauge, boundary-refinement and measure-scale invariance.
 At finite :math:`\theta` the forest is built in a frame the boundary carries with it
 (:func:`canonical_frame`: the principal axes of the cells' measure-weighted
@@ -89,21 +97,33 @@ import math
 from dataclasses import dataclass
 
 import torch
+import torch.nn as nn
 from tensordict import TensorDict
 from torch.utils.checkpoint import checkpoint
 
-from physicsnemo.experimental.models.isla.kernel_read import (
-    KERNEL_READ_BASIS,
-    KERNEL_READ_HEADS,
-    KERNEL_READ_KEY,
-    KERNEL_READ_WIDTH,
-    _GlobalKernelRead,
-    _KernelBasis,
+from physicsnemo.experimental.models.isla.segment_softmax import (
+    PairPlan,
+    segment_softmax_read,
 )
-from physicsnemo.experimental.models.isla.pair_kernels import PairPlan
-from physicsnemo.experimental.models.isla.segment_softmax import segment_softmax_read
 from physicsnemo.mesh.spatial._ragged import _ragged_arange
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
+
+#: Heads of the read; each head owns ``KERNEL_READ_WIDTH // KERNEL_READ_HEADS`` value
+#: channels.
+KERNEL_READ_HEADS = 8
+#: Value channels of the read (all heads together).
+KERNEL_READ_WIDTH = 64
+#: Query/key channels per head.
+KERNEL_READ_KEY = 4
+#: Hidden width of the shared kernel MLP on the pair invariants.
+KERNEL_READ_HIDDEN = 64
+#: Kernel basis functions of the pair invariants, shared by every block; each block's
+#: kernel is a learned linear combination of them per head.
+KERNEL_READ_BASIS = 16
+#: The Barnes-Hut opening angle of the model's read. Every ISLA-DTT result was trained
+#: and evaluated at 1; a model is read at the angle it was trained at (a cluster's
+#: aggregate is what the kernel learns to read).
+TREE_READ_THETA = 1.0
 
 #: Boundary cells per tree leaf. Implementation: at a fixed ``theta`` it sets how many
 #: cells an opened leaf contributes; at ``theta = 0`` it changes nothing.
@@ -400,11 +420,22 @@ def tree_pair_invariants(
     g_unit: torch.Tensor,
     eps: float,
 ) -> torch.Tensor:
-    r"""The kernel inputs of the listed (point, source) pairs, ``(P, G)``: the dense
-    read's :func:`~physicsnemo.experimental.models.isla.kernel_read.global_pair_invariants`
-    column for column (``r``, ``log r``, ``log(r / |d_q|)``, the cosines with the
-    normals, the global directions and the rank-1 inputs), for one case, with the
-    sources either cells or virtual cells."""
+    r"""The kernel inputs of the listed (point, source) pairs of one case, ``(P, G)``,
+    the sources either cells or virtual cells.
+
+    ``query_r``, ``query_n`` ``(Q, d)``, ``query_wall`` ``(Q,)`` the point's built-in
+    wall distance :math:`|d_q|` (frame units), ``query_vecs`` ``(Q, P_q, d)`` or
+    ``None``; ``src_r``, ``src_n`` ``(S, d)``, ``src_vecs`` ``(S, P_b, d)`` or ``None``;
+    ``g_unit`` ``(K, d)``. With :math:`\rho = (x_q - y_j) / L`, :math:`r = |\rho|` and
+    :math:`\hat\rho = \rho / r` the invariants are :math:`[r, \log r, \log(r / |d_q|),
+    \hat\rho\cdot n_j, \hat\rho\cdot n_q, n_q\cdot n_j, \hat\rho\cdot g_k, n_j\cdot g_k,
+    \hat\rho\cdot v, n_j\cdot v, \hat\rho\cdot u, n_q\cdot u]` (``v`` the point's
+    rank-1 inputs, ``u`` the source's): lengths in units of :math:`L` or of the point's
+    own wall distance, and cosines, so no length scale is chosen. The only constant is
+    ``eps``, a floor on the lengths inside the logarithms and the normalization (a
+    numerical guard: :math:`r \ge |d_q| > 0` for every point off the boundary and every
+    cell centroid source, since :math:`|d_q|` is the distance to the boundary surface,
+    on which the cell centroids lie)."""
     with torch.autocast(query_r.device.type, enabled=False):
         rel = query_r[qi] - src_r[si]
         dist = rel.norm(dim=-1)
@@ -430,6 +461,32 @@ def tree_pair_invariants(
         return torch.cat(cols, -1)
 
 
+def kernel_geo_width(n_global_vectors: int, n_query_vecs: int, n_boundary_vecs: int) -> int:
+    """Width of :func:`tree_pair_invariants`: r, log r, log(r / |d_q|), rho.n_j, rho.n_q,
+    n_q.n_j, then rho.g_k and n_j.g_k (2K), rho.v and n_j.v per query vector (2P_q),
+    rho.u and n_q.u per boundary vector (2P_b)."""
+    return 6 + 2 * int(n_global_vectors) + 2 * int(n_query_vecs) + 2 * int(n_boundary_vecs)
+
+
+class _KernelBasis(nn.Module):
+    """The kernel basis ``phi(iota)`` ``(P, KERNEL_READ_BASIS)``: one MLP of the pair
+    invariants, evaluated once per forward pass and shared by every block's read (the
+    per-pair work of a block is then a small linear map, not an MLP)."""
+
+    def __init__(self, n_geo: int) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(n_geo, KERNEL_READ_HIDDEN),
+            nn.GELU(),
+            nn.Linear(KERNEL_READ_HIDDEN, KERNEL_READ_HIDDEN),
+            nn.GELU(),
+            nn.Linear(KERNEL_READ_HIDDEN, KERNEL_READ_BASIS),
+        )
+
+    def forward(self, inv: torch.Tensor) -> torch.Tensor:
+        return self.net(inv)
+
+
 def _chunked_basis(basis: _KernelBasis, qi, si, geometry: dict) -> torch.Tensor:
     """The kernel basis of every pair ``(P, KERNEL_READ_BASIS)`` in chunks of
     ``TREE_READ_PAIR_CHUNK`` pairs. The pair invariants are geometry of the inputs (no
@@ -443,8 +500,7 @@ def _chunked_basis(basis: _KernelBasis, qi, si, geometry: dict) -> torch.Tensor:
             inv = tree_pair_invariants(
                 qi[a : a + TREE_READ_PAIR_CHUNK], si[a : a + TREE_READ_PAIR_CHUNK], **geometry
             )
-        ### Kept in the MLP's own dtype (bfloat16 under autocast, as the dense read's
-        ### basis is): the fused read consumes it in every block and its gradient
+        ### Kept in the MLP's own dtype (bfloat16 under autocast): the fused read consumes it in every block and its gradient
         ### accumulates over the blocks in that dtype; 2e8 to 7e8 rows at DrivAerML scale.
         parts.append(checkpoint(basis, inv, use_reentrant=False) if grad else basis(inv))
     if not parts:
@@ -555,14 +611,36 @@ def tree_read_pairs(
     )
 
 
-class _TreeKernelRead(_GlobalKernelRead):
-    """One block's global read evaluated through the forest: the dense read's
-    parameters (a dense checkpoint loads as it stands) applied to the pair list of
-    :class:`TreeReadPairs`. The cells' keys and values are those of the dense read;
-    a node's are the measure-weighted means of its cells' at this depth; the softmax
-    runs over each point's cells and nodes with the log measure of each as bias
+class _TreeKernelRead(nn.Module):
+    """One block's read for the passive prediction points, through the forest.
+
+    A softmax over each point's cells and nodes (:class:`TreeReadPairs`) with the
+    logits ``K_h(iota_qj) + <q_h, k_jh> / sqrt(c) + log omega_j`` (ISLA's quadrature
+    form: the log measure as bias, so it is a measure-weighted mean over the
+    boundary), with ``K_h`` a linear combination of the shared kernel basis. Logits
+    linear in ``log r`` or ``log(r / |d_q|)`` are power laws, so the read can learn any
+    locality; there is no radius, falloff or neighbour count. The cells' keys and
+    values are linear maps of their states; a node's are the measure-weighted means of
+    its cells' at this depth
     (:func:`~physicsnemo.experimental.models.isla.segment_softmax.segment_softmax_read`,
-    which keeps nothing per pair between forward and backward)."""
+    which keeps nothing per pair between forward and backward). ``forward(h_b, h_q,
+    pairs)`` with the boundary and point states flattened over the batch returns the
+    points' residual update; the output projection starts at zero, so the read starts
+    as no update.
+    """
+
+    def __init__(self, hidden: int) -> None:
+        super().__init__()
+        h, w = KERNEL_READ_HEADS, KERNEL_READ_WIDTH
+        self.norm_b = nn.LayerNorm(hidden)
+        self.norm_q = nn.LayerNorm(hidden)
+        self.value = nn.Linear(hidden, w)
+        self.key = nn.Linear(hidden, h * KERNEL_READ_KEY, bias=False)
+        self.query = nn.Linear(hidden, h * KERNEL_READ_KEY, bias=False)
+        ### No bias: a per-head constant cancels in the softmax.
+        self.kernel = nn.Linear(KERNEL_READ_BASIS, h, bias=False)
+        self.out = nn.Linear(w, hidden, bias=False)
+        nn.init.zeros_(self.out.weight)
 
     def forward(self, h_b, h_q, pairs: TreeReadPairs):
         nh, c, kc = KERNEL_READ_HEADS, KERNEL_READ_WIDTH // KERNEL_READ_HEADS, KERNEL_READ_KEY

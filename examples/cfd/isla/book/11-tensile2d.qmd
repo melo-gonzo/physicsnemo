@@ -2,6 +2,10 @@
 
 **Tensile2d is the first solid in the book and the dataset on which the component clause of the output contract binds: its targets are the components of a stress tensor, which ISLA predicts as a tensor and the recipe reads off. At 400 training specimens GeoTransolver and Transolver lead ISLA on stress, displacement and plastic strain on the native mesh; rotated and translated in the plane, ISLA's error shifts by a few percent while the baselines' rise to the mean-field level.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the native mesh and rotated and translated, the controls that belong to this dataset, and what the dataset does not say. The pose contract is exercised here in its tensor form (@sec-pose, @sec-isla-heads); the boundary sampling law cannot be separated on this dataset, because the polyline's segments are nearly equal in length, while thinning the polyline multiplies ISLA's stress and displacement errors (@sec-tensile2d-boundary-law). Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
+::: {.callout-warning title="Trained with the raw slice reads"}
+The trained checkpoints behind this chapter's numbers and pictures use the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm, not the normalized reads of ISLA's reference configuration (@sec-isla-layer).
+:::
+
 ```{python}
 #| label: setup-tensile2d
 #| include: false

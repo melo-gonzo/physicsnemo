@@ -54,7 +54,6 @@ SMALL = [
     "model.hidden=16",
     "model.n_layers=1",
     "model.n_slices=4",
-    "model.geo_kernel=eager",
 ]
 CONFIGS = [
     ("isla_surface", "drivaer_ml_surface"),
@@ -155,16 +154,22 @@ def test_isla_configs_declare_the_mesh_contract(model, dataset):
     assert cfg.forward_kwargs.global_data == "global_data"
     assert OmegaConf.to_container(m.global_schema) == {"U_inf_dir": {"rank": 1}}
     assert (
-        m.hidden == 512 and m.n_layers == 12 and m.n_slices == 512 and m.mlp_ratio == 4
+        m.hidden == 512 and m.n_layers == 12 and m.n_slices == 512
     )  # REF-80 reference (2026-10-04)
-    assert m.geo_checkpoint is True and m.geo_kernel is None
     ### Removed options never come back through a config.
     for gone in (
         "scale_mode",
         "query_tokens",
         "query_mass",
-        "query_independent",
         "support_tokens",
+        "kernel_read",
+        "kernel_read_radius",
+        "kernel_read_blocks",
+        "kernel_read_theta",
+        "mlp_ratio",
+        "geo_checkpoint",
+        "geo_kernel",
+        "eps",
         "n_decoder_layers",
         "interior_geometry",
         "use_measure_weights",
@@ -331,6 +336,17 @@ def test_isla_configs_pin_the_protocol_learning_rate(model, dataset):
     plateau within five epochs, so every ISLA config carries its own rate: 3.75e-4, the
     reference configuration's (REF-80, 2026-10-04; the width rule 1e-3 x 192 / 512)."""
     cfg = _compose(model, dataset)
+    assert cfg.training.optimizer.lr == pytest.approx(3.75e-4)
+
+
+@pytest.mark.parametrize(
+    "model", sorted(p.stem for p in (_RECIPE_ROOT / "conf" / "model").glob("isla_*.yaml"))
+)
+def test_every_isla_model_config_pins_the_reference_rate(model):
+    """Every ISLA model config, whatever its dataset, trains at the reference rate
+    3.75e-4: with the normalized slice reads no dataset keeps a rate exception. The
+    dataset key is train.yaml's default; it does not enter the rate."""
+    cfg = _compose(model, "drivaer_ml_volume")
     assert cfg.training.optimizer.lr == pytest.approx(3.75e-4)
 
 

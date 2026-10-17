@@ -58,18 +58,7 @@ model:
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
   n_slices: 512
-  mlp_ratio: 4
-  # Rebuild the per-slice geometric invariants inside backward instead of
-  # storing them: forward and gradients bitwise identical, lower peak training
-  # memory for a modest step-time cost. Set false to trade memory for speed.
-  geo_checkpoint: true
-  # Geometry kernel: null = automatic: the exact fused Triton kernel wherever
-  # it can run (CUDA, one to four per-point vectors, <= 1024 slices, no rank-2
-  # per-token inputs; about a third of the eager step time and memory at
-  # 200,000 cells), the eager PyTorch region otherwise. Force with `eager` or
-  # `fused`.
-  geo_kernel: null
   # Per-block torch.compile (PERF-3, 2026-10-01): off, since the recipe compiles
   # the whole model (compile_options above). The way to compile ISLA-DTT
-  # (model.kernel_read), whose reads break the whole-model graph.
+  # (model.query_independent=true), whose boundary read breaks the whole-model graph.
   compile_blocks: false

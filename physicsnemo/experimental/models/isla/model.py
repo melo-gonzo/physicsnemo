@@ -128,15 +128,16 @@ prediction-point tokens. The prediction-point
 tokens' total routing weight is a learned fraction of the total boundary
 measure, split equally over them, so it is invariant to re-representing the
 same measure (splitting a boundary cell in two changes nothing) and scales
-like an area. With ``query_independent=True`` the prediction-point tokens are
-passive instead: they carry no routing weight, so at every depth they read the
-slices, anchors and prototypes the boundary formed and never write into them,
-and the prediction at a point is a function of that point and the boundary
-alone (any request can be split into chunks with the same result). An
-interacting model can instead be given ``support_points``: they write as the
-prediction points otherwise would and the prediction points only read, so a
-prediction depends on its point, the boundary and the support, never on the
-rest of the request. The two tasks own different parameter sets (the interior task
+like an area. With ``query_independent=True`` (ISLA-DTT) the prediction-point
+tokens are passive instead: they carry no routing weight, so at every depth they
+read the slices, anchors and prototypes the boundary formed and never write into
+them, and after every block each one also reads every boundary cell
+(:mod:`~physicsnemo.experimental.models.isla.tree_read`: a learned kernel of the
+pair's relative geometry and an attention over the cells' states at that depth,
+weighted by each cell's share of the boundary measure and evaluated through a
+Barnes-Hut forest over the cells). The prediction at a point is then a function of
+that point and the boundary alone (any request can be split into chunks with the
+same result). The two tasks own different parameter sets (the interior task
 adds the prediction-point embedding, type offset and routing mass), which is
 why the choice is a constructor argument: a parameter that takes no part in
 a forward pass stops DDP.
@@ -186,17 +187,20 @@ inputs of rank 2 are refused (broadcast the tensor to the boundary cells and
 declare it as a boundary input instead).
 
 **Kernels.** The per-layer geometry region has two exact implementations
-of the same arithmetic: ``geo_kernel="eager"`` (PyTorch; ``geo_checkpoint``
-rebuilds its intermediates in backward instead of storing them) and
-``geo_kernel="fused"`` (one Triton kernel per direction that never
-materializes the (B, N, S, .) tensor; CUDA, float32/float64 geometry, one
-to four per-point vectors counting the global directions and the token's
-rank-1 inputs together, at most 1024 slices, no rank-2 inputs). The default
-``geo_kernel=None`` means *auto*: at the first forward
-pass the model picks the fused kernel when the inputs are on CUDA, Triton
-is importable and the constraints hold, and the eager region otherwise,
-logging the choice once; at 200,000 cells the fused kernel runs the
-training step in about a third of the eager time and memory. The per-token
+of the same arithmetic: the eager PyTorch region, which rebuilds its
+intermediates in backward instead of storing them, and the fused one (one
+Triton kernel per direction that never materializes the (B, N, S, .) tensor;
+CUDA, float32/float64 geometry, one to four per-point vectors counting the
+global directions and the token's rank-1 inputs together, at most 1024
+slices, no rank-2 inputs). At the first forward pass the model picks the
+fused kernel when the inputs are on CUDA, Triton is importable and the
+constraints hold, and the eager region otherwise, logging the choice once
+(:meth:`ISLA.resolve_geo_kernel`; the ``geo_kernel`` attribute, ``"auto"``,
+can be set to ``"eager"`` or ``"fused"`` to force one: an execution choice,
+not a constructor argument, so a checkpoint does not store it and a loaded
+model starts at ``"auto"``); at 200,000 cells the
+fused kernel runs the training step in about a third of the eager time and
+memory. The per-token
 rank-2 contractions (rho^T T rho) are the standing kernel follow-up; until
 then a model with rank-2 boundary or query inputs runs the eager region.
 
@@ -212,20 +216,16 @@ and the prediction points are TensorDicts concatenated into one token state over
 ``(batch, token)``, the field inputs enter the invariants and the head's
 coefficients leave as the output fields through cached, schema-ordered
 :class:`~tensordict.PackLayout` objects, and the output ``Mesh`` is built from them.
-Without a kernel read the whole model, ``Mesh`` inputs and output included,
-compiles with ``torch.compile(fullgraph=True, dynamic=True)`` into one graph for
-every boundary, query and support count: surface and interior tasks, support
-points, passive points, boundary inputs up to rank 2 (``test_isla_compile.py``).
-The kernel reads do not: the global read (``kernel_read_radius=None``) compiles
-fullgraph but specializes on the query count (its tiles are a Python loop over
-the queries), so each new count recompiles; the radius read
-(``boundary_pairs``) and the tree read (``kernel_read_theta``) size their pairs
-from the data and break a fullgraph trace. The token axis itself stays dense
-where the arithmetic needs it: every softmax over points spans all tokens at once
-(passive tokens excluded by ``log_w = -inf``), the slice anchors are einsums over
-that axis, the fused geometry kernel reads its ``(B, N, .)`` strides, and the
-kernel and tree reads index the flattened boundary tokens; the slice blocks take
-plain tensors.
+With ``query_independent=False`` the whole model, ``Mesh`` inputs and output
+included, compiles with ``torch.compile(fullgraph=True, dynamic=True)`` into one
+graph for every boundary and query count: surface and interior tasks, boundary
+inputs up to rank 2 (``test_isla_compile.py``). ISLA-DTT does not: its boundary
+read sizes its pairs from the data and breaks a fullgraph trace, so it compiles
+with ``compile_blocks``. The token axis itself stays dense where the arithmetic
+needs it: every softmax over points spans all tokens at once (passive tokens
+excluded by ``log_w = -inf``), the slice anchors are einsums over that axis, the
+fused geometry kernel reads its ``(B, N, .)`` strides, and the boundary read
+indexes the flattened boundary tokens; the slice blocks take plain tensors.
 """
 
 import logging
@@ -242,7 +242,6 @@ from tensordict import TensorDict
 from physicsnemo.core.meta import ModelMetaData
 from physicsnemo.core.module import Module
 from physicsnemo.experimental.models.isla.blocks import (
-    GeoKernel,
     _QueryTokens,
     _RoutingLogits,
     _SliceBlock,
@@ -266,19 +265,11 @@ from physicsnemo.experimental.models.isla.inputs import (
     _pack,
     _schema_layout,
 )
-from physicsnemo.experimental.models.isla.kernel_read import (
-    _BoundaryKernelRead,
-    _GlobalKernelRead,
-    _KernelBasis,
-    boundary_pairs,
-    global_geo_width,
-    global_kernel_basis,
-    kernel_geo_width,
-    pair_invariants,
-)
-from physicsnemo.experimental.models.isla.pair_kernels import PairPlan
 from physicsnemo.experimental.models.isla.tree_read import (
+    TREE_READ_THETA,
+    _KernelBasis,
     _TreeKernelRead,
+    kernel_geo_width,
     tree_read_pairs,
 )
 from physicsnemo.mesh import Mesh
@@ -286,6 +277,9 @@ from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, cell_measur
 from physicsnemo.mesh.fields import FieldSchema, FieldSchemaLike
 
 logger = logging.getLogger(__name__)
+
+#: Numerical floor for norms and logarithms.
+EPS = 1e-12
 
 
 def _hint_token_axis(n, widths) -> None:
@@ -362,6 +356,12 @@ class ISLA(Module):
     ``query_schema`` declares no fields). It returns a point-cloud ``Mesh`` whose
     ``point_data`` holds the declared outputs. Details under ``forward``.
 
+    **Execution.** The ``geo_kernel`` attribute (``"auto"``; set ``"eager"`` or
+    ``"fused"`` to force one) selects how the per-layer geometry region is
+    executed, not what it computes (:meth:`resolve_geo_kernel`). It is an
+    execution choice, not a constructor argument: checkpoints do not store it,
+    and a loaded model starts at ``"auto"``.
+
     Args:
         output_schema: Output fields, a rank spec per name. Each field is a leaf of
             the returned Mesh's ``point_data`` (nested per the dotted name): a
@@ -410,14 +410,19 @@ class ISLA(Module):
             encoder as interacting tokens; ``forward`` requires them. The two
             are different parameter sets (a parameter without a gradient stops
             DDP), so the choice is made at construction.
-        query_independent: Interior task only. ``False`` (default): the
-            prediction points interact, their total routing weight a learned
-            fraction of the boundary measure, and a prediction depends on the
-            other points of the request. ``True``: passive prediction points
-            (zero routing weight, no routing-mass parameter); they pass through
-            every block with the same weights and read its slices at matched
-            depth, so each prediction depends on its own point and the boundary
-            only.
+        query_independent: Interior task only; the choice between ISLA and
+            ISLA-DTT. ``False`` (default, ISLA): the prediction points interact,
+            their total routing weight a learned fraction of the boundary
+            measure, and a prediction depends on the other points of the
+            request. ``True`` (ISLA-DTT): passive prediction points (zero
+            routing weight, no routing-mass parameter); they pass through every
+            block with the same weights and read its slices at matched depth,
+            and after every block they also read every boundary cell (module
+            docstring), so each prediction depends on its own point and the
+            boundary only. The boundary read costs about two to four times the
+            training step of ISLA and breaks the whole-model fullgraph compile
+            (use ``compile_blocks``); rank-2 boundary or query inputs are not
+            supported with it.
         hidden: Token width of the slice blocks. The defaults ``hidden=512``,
             ``n_layers=12`` and ``n_slices=512`` are the reference
             configuration (the most accurate under 80 GiB per GPU on DrivAerML
@@ -425,18 +430,6 @@ class ISLA(Module):
             reference training rate is 3.75e-4 (the width rule 1e-3 x 192 / hidden).
         n_layers: Number of slice-attention blocks.
         n_slices: Number of soft slices (data-adaptive anchors) per block.
-        mlp_ratio: Expansion ratio of the per-token and per-slice MLPs.
-        geo_checkpoint: Rebuild the per-slice geometric invariants in the
-            backward pass instead of storing them (bitwise-identical forward and
-            gradients, lower peak memory).
-        geo_kernel: ``None`` (default) selects automatically at the first
-            forward pass: ``"fused"`` (exact Triton kernel for the per-layer
-            geometry region) when the inputs are on CUDA, Triton is available,
-            there are one to four per-point vectors (global directions plus rank-1
-            boundary or query inputs), at most 1024 slices and no rank-2 inputs,
-            else ``"eager"`` (the PyTorch reference region). Pass ``"eager"`` or
-            ``"fused"`` to force one; ``"fused"`` raises when its constraints
-            cannot be met.
         compile_blocks: Run every slice block through :func:`torch.compile`
             (default ``False``). The compiled function is the block's forward,
             built at the first forward pass, so parameter names, checkpoints and
@@ -446,51 +439,6 @@ class ISLA(Module):
             that changes every case, leave it off. On four GB300 ranks at
             200,000 cells it cut the training step by 19 to 35% and peak memory
             by 27% at bfloat16-roundoff differences (PERF-3, 2026-10-01).
-        kernel_read: Read-only interior task only (``interior=True,
-            query_independent=True``). ``None`` (default): the prediction points
-            read the slices only. ``"mean"`` or ``"sum"``: after each of the last
-            ``kernel_read_blocks`` blocks the prediction points also read the
-            individual boundary cells within ``kernel_read_radius``, a learned
-            kernel of the pair's relative-geometry invariants weighted by the
-            cell's share of the boundary measure and a smooth compact falloff:
-            an area-weighted softmax with a null (``"mean"``, which also
-            matches the point's state against the cell's) or an unnormalized
-            quadrature (``"sum"``, GLOBE-like); see
-            :mod:`~physicsnemo.experimental.models.isla.kernel_read`. The
-            boundary tokens and the slices are unchanged, so every prediction
-            still depends on its own point and the boundary only.
-        kernel_read_radius: The kernel read's radius in units of the length
-            unit ``L`` (default 0.01). The neighbourhood is the exact radius set
-            (no neighbour count), so its cost grows with the number of
-            boundary cells near the points. ``None``: the global read
-            (``kernel_read="mean"`` only): every prediction point reads every
-            boundary cell, a softmax over all cells with the log measure
-            fraction as bias and no radius, falloff or neighbour count; its
-            kernel also sees ``log(r / |d_q|)``, the pair distance in units of
-            the point's own wall distance. Exact all pairs in dense tiles, so
-            its cost is ``Q * N`` per block.
-        kernel_read_blocks: Number of final blocks followed by a kernel read
-            (default ``None``: every block).
-        kernel_read_theta: Global read only (``kernel_read="mean"``,
-            ``kernel_read_radius=None``). ``None`` (default): the dense read,
-            every pair in tiles. A number: the same read evaluated through a
-            Barnes-Hut cluster tree over the boundary cells
-            (:mod:`~physicsnemo.experimental.models.isla.tree_read`) with this
-            opening angle: each point walks the tree, reads nearby cells one
-            by one and a well-separated cluster through its measure-weighted
-            aggregate (a virtual cell). ``0`` is the dense read pair for pair.
-            A model is trained and evaluated at one value: at a finite value
-            the clusters' aggregates are what the kernel learns to read, and a
-            model trained dense does not evaluate well through the tree (nor
-            the reverse); the error of evaluating a model at a value other
-            than its training value falls as that value falls toward ``0``.
-            Query independence is exact at every value
-            (a point's walk sees the tree and the point alone); at a finite
-            value the trees are built in the boundary's own frame, so a rigid
-            motion of the case gives the same clusters and the same
-            approximation (up to ties of that frame: equal variances or a
-            symmetric axis). The dense and tree forms share their parameters,
-            so a checkpoint of one loads into the other.
         dim: Spatial dimension of the domain (default 3). Every boundary mesh
             is a ``Mesh[dim - 1, dim]`` and every prediction point has ``dim``
             coordinates. Every geometric quantity is built for ``dim``
@@ -503,7 +451,6 @@ class ISLA(Module):
             and three dimensions. A
             two-dimensional problem is passed with ``dim=2`` (polyline
             boundaries) rather than embedded with a zero third coordinate.
-        eps: Numerical floor for norms and logarithms.
 
     Output contract: a field declared with rank ``r`` and even parity
     transforms as a true rank-``r`` tensor under every orthogonal map of the
@@ -524,13 +471,21 @@ class ISLA(Module):
 
     ### 0.2.0 renamed the field declarations after the schemas they hold; 0.3.0 made
     ### the slice sublayer read the normalized state (same parameters, new forward);
-    ### 0.4.0 gave the prediction points the exact geometry of the boundary surface
-    ### in place of the nearest boundary token's (same parameters, new forward).
-    __model_checkpoint_version__ = "0.4.0"
+    ### 0.4.0 removed the constructor arguments that only ever took one value or
+    ### served ended experiments (same parameters and forward for every
+    ### configuration it still builds); 0.5.0 gave the prediction points the exact
+    ### geometry of the boundary surface in place of the nearest boundary token's
+    ### (same parameters, new forward).
+    __model_checkpoint_version__ = "0.5.0"
     _RAW_READS = (
         " Its slice blocks were trained to pool and broadcast the raw residual stream; "
         "this version reads the normalized state there, so its outputs differ from "
         "the ones it was trained to give."
+    )
+    _REMOVED = (
+        " Its removed constructor arguments (mlp_ratio, geo_checkpoint, geo_kernel, eps "
+        "and the kernel_read options) are dropped; ISLA-DTT's kernel_read='mean' is "
+        "query_independent=True."
     )
     _NEAREST_GEOMETRY = (
         " An interior model's prediction points were trained on the distance and "
@@ -544,10 +499,12 @@ class ISLA(Module):
             "outputs, boundary_inputs, query_inputs and global_inputs to "
             "output_schema, boundary_schema, query_schema and global_schema."
             + _RAW_READS
+            + _REMOVED
             + _NEAREST_GEOMETRY
         ),
-        "0.2.0": "Loading a 0.2.0 ISLA checkpoint." + _RAW_READS + _NEAREST_GEOMETRY,
-        "0.3.0": "Loading a 0.3.0 ISLA checkpoint." + _NEAREST_GEOMETRY,
+        "0.2.0": "Loading a 0.2.0 ISLA checkpoint." + _RAW_READS + _REMOVED + _NEAREST_GEOMETRY,
+        "0.3.0": "Loading a 0.3.0 ISLA checkpoint." + _REMOVED + _NEAREST_GEOMETRY,
+        "0.4.0": "Loading a 0.4.0 ISLA checkpoint." + _NEAREST_GEOMETRY,
     }
     _RENAMED_ARGS = {
         "outputs": "output_schema",
@@ -560,12 +517,50 @@ class ISLA(Module):
     def _backward_compat_arg_mapper(
         cls, version: str, args: dict[str, Any]
     ) -> dict[str, Any]:
-        """Rename the field declarations of a 0.1.0 checkpoint's arguments."""
+        """Rename the field declarations of a 0.1.0 checkpoint's arguments, and drop
+        the arguments 0.4.0 removed where the checkpoint used the one value this
+        version builds; any other value of a removed argument is an error naming it.
+        """
         args = super()._backward_compat_arg_mapper(version, args)
         if version == "0.1.0":
             for old, new in cls._RENAMED_ARGS.items():
                 if old in args:
                     args[new] = args.pop(old)
+
+        def refuse(setting: str, reason: str):
+            raise ValueError(
+                f"this {version} ISLA checkpoint was built with {setting}, which ISLA "
+                f"{cls.__model_checkpoint_version__} no longer has ({reason})"
+            )
+
+        ### Implementation choices with the same arithmetic.
+        args.pop("geo_checkpoint", None)
+        args.pop("geo_kernel", None)
+        for name, value in (("mlp_ratio", 4), ("eps", EPS)):
+            stored = args.pop(name, value)
+            if stored != value:
+                refuse(f"{name}={stored!r}", f"it is fixed at {value!r}")
+        ### The boundary read: ISLA-DTT's form ("mean", no radius, the forest at
+        ### theta 1 after every block) is query_independent=True; every other form ended.
+        read = args.pop("kernel_read", None)
+        radius = args.pop("kernel_read_radius", None)
+        blocks = args.pop("kernel_read_blocks", None)
+        theta = args.pop("kernel_read_theta", None)
+        if read is None:
+            if args.get("query_independent", False):
+                refuse(
+                    "query_independent=True and kernel_read=None",
+                    "query_independent=True is ISLA-DTT, whose points also read the boundary cells",
+                )
+            return args
+        if read != "mean":
+            refuse(f"kernel_read={read!r}", "the boundary read is ISLA-DTT's 'mean' form")
+        if radius is not None:
+            refuse(f"kernel_read_radius={radius!r}", "the boundary read has no radius")
+        if theta != TREE_READ_THETA:
+            refuse(f"kernel_read_theta={theta!r}", f"the read runs through the forest at theta {TREE_READ_THETA}")
+        if blocks not in (None, args.get("n_layers", 12)):
+            refuse(f"kernel_read_blocks={blocks!r}", "the read follows every block")
         return args
 
     def __init__(
@@ -580,16 +575,8 @@ class ISLA(Module):
         hidden: int = 512,
         n_layers: int = 12,
         n_slices: int = 512,
-        mlp_ratio: int = 4,
-        geo_checkpoint: bool = False,
-        geo_kernel: GeoKernel | None = None,
         compile_blocks: bool = False,
-        kernel_read: str | None = None,
-        kernel_read_radius: float | None = 0.01,
-        kernel_read_blocks: int | None = None,
-        kernel_read_theta: float | None = None,
         dim: int = 3,
-        eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
         ### compile_blocks: run each slice block through torch.compile (built lazily at
@@ -676,24 +663,16 @@ class ISLA(Module):
         ### Each kind's columns in schema order (cached layouts, see _global_fields).
         self._global_vector_layout = _schema_layout({k: (self.dim,) for k in self.global_vector_names})
         self._global_scalar_layout = _schema_layout({k: () for k in self.global_scalar_names})
-        ### geo_kernel selects the implementation of the per-layer geometry region,
-        ### not its arithmetic. "eager" is the PyTorch region (with geo_checkpoint
-        ### deciding whether its (B,N,S,.) intermediates are stored or rebuilt in
-        ### backward); "fused" is the Triton kernel of geo_kernel.py, which reads
-        ### the pre-logits once and writes the bias and mix once per direction,
-        ### with the recompute built in (CUDA only). geo_kernel=None resolves at
-        ### the first forward pass to "fused" wherever the fused kernel can run and
-        ### to "eager" otherwise; the blocks read the resolved name. An explicit
-        ### "eager" or "fused" is honored.
-        if geo_kernel is None:
-            geo_kernel = "auto"
-        if geo_kernel not in ("auto", "eager", "fused"):
-            raise ValueError(
-                f"geo_kernel must be None (auto), 'eager' or 'fused', got {geo_kernel!r}"
-            )
-        self.geo_kernel = geo_kernel
+        ### geo_kernel names the implementation of the per-layer geometry region,
+        ### not its arithmetic. "eager" is the PyTorch region (its (B,N,S,.)
+        ### intermediates rebuilt in backward); "fused" is the Triton kernel of
+        ### geo_kernel.py, which reads the pre-logits once and writes the bias and
+        ### mix once per direction, with the recompute built in (CUDA only). "auto"
+        ### resolves at the first forward pass to "fused" wherever the fused kernel
+        ### can run and to "eager" otherwise; the blocks read the resolved name.
+        ### Writable: tests and debugging set "eager" or "fused" to force one.
+        self.geo_kernel = "auto"
         self.n_slices = int(n_slices)
-        self.eps = eps
         ### The boundary cells' fields and the interior queries' fields, each set
         ### with its own invariant layout (_InputSet). Every token carries the
         ### UNION of the two block-level vector/tensor stacks (zeros where a class
@@ -704,23 +683,6 @@ class ISLA(Module):
         self.qin = _InputSet(self.query_schema, n_frame, scaled_scalars=True, dim=self.dim)
         self.n_block_vecs = self.bin.n_block_vecs + self.qin.n_block_vecs
         self.n_block_tens = self.bin.n_block_tens + self.qin.n_block_tens
-        if geo_kernel == "fused":
-            if self.dim != 3:
-                raise ValueError(
-                    f"geo_kernel='fused' is written for three spatial dimensions; got dim={self.dim} "
-                    "(use geo_kernel='eager' or None, which resolves to the eager region)"
-                )
-            if self.n_block_tens:
-                raise ValueError(
-                    "geo_kernel='fused' does not support rank-2 boundary or query inputs "
-                    "(kernel follow-up); use geo_kernel='eager' or None"
-                )
-            if not 1 <= K + self.n_block_vecs <= 4 or K < 1:
-                raise ValueError(
-                    f"geo_kernel='fused' is written for one to four per-point vectors "
-                    f"(global directions plus rank-1 token inputs); got {K} global "
-                    f"direction(s) and {self.n_block_vecs} token vector(s)"
-                )
         ### Seed width: the K invariants n.g_k (the only origin-free scalars of
         ### {n, g_k}; positions enter through the anchors), the boundary inputs'
         ### invariants and the global scalars.
@@ -738,9 +700,6 @@ class ISLA(Module):
             _SliceBlock(
                 hidden,
                 n_slices,
-                mlp_ratio,
-                geo_checkpoint=geo_checkpoint,
-                geo_kernel=geo_kernel,
                 n_global_vectors=K,
                 n_block_vecs=self.n_block_vecs,
                 n_block_tens=self.n_block_tens,
@@ -818,67 +777,23 @@ class ISLA(Module):
             if self.interior
             else None
         )
-        ### The boundary kernel read (kernel_read.py): passive prediction points also
-        ### read the individual boundary cells within kernel_read_radius (units of L)
-        ### at the last kernel_read_blocks blocks. Registered after everything else,
-        ### and only when asked for, so every other model owns exactly the parameters
-        ### it had before.
-        self.kernel_read = kernel_read
-        self.kernel_read_radius = None if kernel_read_radius is None else float(kernel_read_radius)
-        ### kernel_read_theta selects the tree-accelerated evaluation of the global
-        ### read (tree_read.py): the Barnes-Hut opening angle, a numerical tolerance
-        ### (0 = the dense read pair for pair); None = the dense read itself.
-        self.kernel_read_theta = None if kernel_read_theta is None else float(kernel_read_theta)
-        if self.kernel_read_theta is not None:
-            if kernel_read is None or self.kernel_read_radius is not None:
-                raise ValueError(
-                    "kernel_read_theta is the tree-accelerated global read: build with "
-                    "kernel_read='mean' and kernel_read_radius=None"
-                )
-            if not self.kernel_read_theta >= 0:
-                raise ValueError(f"kernel_read_theta must be non-negative, got {kernel_read_theta!r}")
-        self.kernel_read_blocks = None
+        ### ISLA-DTT's boundary read (tree_read.py): with query_independent the passive
+        ### prediction points also read every boundary cell after every block, through
+        ### a Barnes-Hut forest at TREE_READ_THETA (the private _tree_read_theta, which
+        ### tests set to 0 for the exact read). Registered after everything else, so
+        ### every other model owns exactly the parameters it has without the read.
+        self._tree_read_theta = TREE_READ_THETA
         self.kernel_basis = None
         self.kernel_reads = None
-        if kernel_read is not None:
-            if not (self.interior and self.query_independent):
-                raise ValueError(
-                    "kernel_read is a read for passive prediction points; build with "
-                    "interior=True and query_independent=True"
-                )
+        if self.query_independent:
             if self.n_block_tens:
                 raise NotImplementedError(
-                    "kernel_read with rank-2 boundary or query inputs (their pair "
-                    "contractions are not implemented)"
+                    "query_independent=True with rank-2 boundary or query inputs (the "
+                    "boundary read's pair contractions are not implemented)"
                 )
-            if self.kernel_read_radius is None:
-                if kernel_read != "mean":
-                    raise ValueError(
-                        f"the global read (kernel_read_radius=None) is kernel_read='mean' only, got {kernel_read!r}"
-                    )
-            elif not self.kernel_read_radius > 0:
-                raise ValueError(f"kernel_read_radius must be positive or None, got {kernel_read_radius!r}")
-            m = n_layers if kernel_read_blocks is None else int(kernel_read_blocks)
-            if not 1 <= m <= n_layers:
-                raise ValueError(
-                    f"kernel_read_blocks must lie in [1, n_layers={n_layers}], got {kernel_read_blocks!r}"
-                )
-            self.kernel_read_blocks = m
-            if self.kernel_read_radius is None:
-                n_geo = global_geo_width(K, self.qin.n_block_vecs, self.bin.n_block_vecs)
-                self.kernel_basis = _KernelBasis(n_geo)
-                read_cls = _GlobalKernelRead if self.kernel_read_theta is None else _TreeKernelRead
-                self.kernel_reads = nn.ModuleList(read_cls(hidden) for _ in range(m))
-            else:
-                n_geo = kernel_geo_width(K, self.qin.n_block_vecs, self.bin.n_block_vecs)
-                self.kernel_basis = _KernelBasis(n_geo)
-                self.kernel_reads = nn.ModuleList(
-                    _BoundaryKernelRead(hidden, kernel_read, self.kernel_read_radius, self.dim)
-                    for _ in range(m)
-                )
-        #: Pairs of the last forward pass's kernel read (diagnostic; 0 without one;
-        #: not updated under torch.compile, where a module write would recompile).
-        self.kernel_read_pairs = 0
+            n_geo = kernel_geo_width(K, self.qin.n_block_vecs, self.bin.n_block_vecs)
+            self.kernel_basis = _KernelBasis(n_geo)
+            self.kernel_reads = nn.ModuleList(_TreeKernelRead(hidden) for _ in range(n_layers))
         ### The trailing widths k of the per-token tensors: every small width (the
         ### input features, frames and vector stacks) and every layer's (see
         ### _hint_token_axis).
@@ -945,8 +860,8 @@ class ISLA(Module):
     def resolve_geo_kernel(self, points: torch.Tensor) -> str:
         """The geometry-kernel implementation this forward pass will use.
 
-        ``"eager"`` or ``"fused"`` when the constructor fixed it; under the
-        default (auto) the fused kernel when ``points`` is on CUDA, Triton is
+        ``"eager"`` or ``"fused"`` when the ``geo_kernel`` attribute forces it;
+        under the default (``"auto"``) the fused kernel when ``points`` is on CUDA, Triton is
         importable, the model has one to four per-point vectors (global directions
         plus rank-1 token inputs), at most 1024 slices and no rank-2 inputs, else the
         eager region. The
@@ -1084,7 +999,7 @@ class ISLA(Module):
             gv = _pack(global_rows, self._global_vector_layout).unflatten(-1, (-1, self.dim))
             ### Each direction is normalized; the magnitude, if it means anything,
             ### is a rank-0 global input.
-            g_unit = gv / gv.norm(dim=-1, keepdim=True).clamp_min(self.eps)  # (B, K, d)
+            g_unit = gv / gv.norm(dim=-1, keepdim=True).clamp_min(EPS)  # (B, K, d)
         else:
             g_unit = like.new_zeros(global_rows.batch_size[0], 0, self.dim)
         g_scalars = _pack(global_rows, self._global_scalar_layout) if self.n_global_scalars else None
@@ -1109,9 +1024,7 @@ class ISLA(Module):
                     f"got {tuple(t.shape)}"
                 )
 
-    def _validate_meshes(
-        self, boundary_meshes, prediction_points, support_points=None, boundary_geometry=None
-    ) -> None:
+    def _validate_meshes(self, boundary_meshes, prediction_points, boundary_geometry=None) -> None:
         """Mesh-level checks for :meth:`forward`: dimensions, declared fields,
         the task structure (``interior``, ``query_independent``) and the surface
         the prediction points' geometry is computed from."""
@@ -1162,13 +1075,6 @@ class ISLA(Module):
             )
         self._validate_point_set(prediction_points, "prediction_points")
         self._validate_geometry(boundary_meshes, boundary_geometry)
-        if support_points is not None:
-            if self.query_independent:
-                raise ValueError(
-                    "support_points write into the slices with the routing mass of interacting "
-                    "tokens; this model was built with query_independent=True and has none"
-                )
-            self._validate_point_set(support_points, "support_points")
 
     def _validate_geometry(self, boundary_meshes, boundary_geometry) -> None:
         """The surface of the prediction points' geometry: ``boundary_geometry``
@@ -1265,7 +1171,6 @@ class ISLA(Module):
         *,
         boundary_meshes: Mapping[str, Mesh],
         prediction_points: Mesh | Float[torch.Tensor, "n_points dim"] | None = None,
-        support_points: Mesh | Float[torch.Tensor, "n_support dim"] | None = None,
         boundary_geometry: Mapping[str, Mesh] | None = None,
         global_data: TensorDict | Mapping[str, torch.Tensor] | None = None,
     ) -> Mesh:
@@ -1299,17 +1204,6 @@ class ISLA(Module):
                 like any other PDE data. ``None`` for a surface task
                 (``interior=False``): the outputs are predicted at the boundary
                 tokens.
-            support_points: Interior points that write instead of the request
-                (interior task, ``query_independent=False``): given as
-                ``prediction_points`` are, they join the encoder as interacting
-                tokens with the learned routing mass split over them, the
-                prediction points become passive readers, and the outputs are
-                returned for the prediction points only. A prediction then
-                depends on its own point, the boundary and the support, never on
-                the rest of the request; with the request as its own support it
-                is the interacting prediction. ``None`` (default): the
-                prediction points write themselves (or, with
-                ``query_independent``, nothing in the interior writes).
             boundary_geometry: The boundary surface of the interior task's
                 geometry: the same named boundaries as ``boundary_meshes``, as
                 ``Mesh[dim - 1, dim]`` objects at full resolution (only their
@@ -1344,7 +1238,7 @@ class ISLA(Module):
         ### Validation at the API boundary (skipped under torch.compile): fail
         ### here with the offending mesh, not inside the network.
         if not torch.compiler.is_compiling():
-            self._validate_meshes(boundary_meshes, prediction_points, support_points, boundary_geometry)
+            self._validate_meshes(boundary_meshes, prediction_points, boundary_geometry)
         ### The boundary tokens: each mesh's cells, concatenated in name order.
         meshes = [boundary_meshes[name] for name in names]
         boundary = torch.cat([
@@ -1355,17 +1249,12 @@ class ISLA(Module):
             for m in meshes
         ])
         global_td = self._select_global_data(global_data, boundary["points"].device)
-        n_support, query = 0, None
+        query = None
         if prediction_points is None:
             out_points = boundary["points"]
         else:
             query = self._point_set(prediction_points)
             out_points = query["points"]
-            if support_points is not None:
-                ### The support's tokens lead the interior tokens; the head reads the rest.
-                support = self._point_set(support_points)
-                n_support = support.shape[0]
-                query = torch.cat([support, query])
             ### The points' geometry from the boundary surface (the union of its
             ### named meshes' cells, each oriented as its own tokens), at the
             ### points' precision.
@@ -1392,14 +1281,13 @@ class ISLA(Module):
                     offsets.append(offsets[-1] + pts.shape[0])
                 points = torch.cat([pts.to(q_points.device, q_points.dtype) for pts, _ in surfaces])
                 cells = torch.cat([c.to(q_points.device) + o for (_, c), o in zip(surfaces, offsets)])
-                dist, direction = exact_boundary_geometry(q_points, points, cells, eps=self.eps)
+                dist, direction = exact_boundary_geometry(q_points, points, cells, eps=EPS)
             query["wall_distance"], query["wall_direction"] = dist, direction
         ### One case: a batch axis of one for the batched machinery below.
         fields = self._forward_tokens(
             boundary[None],
             None if query is None else query[None],
             self._global_rows(global_td, 1, boundary["points"]),
-            n_support,
         )
         return Mesh(
             points=out_points,
@@ -1421,44 +1309,9 @@ class ISLA(Module):
             return self._token_inputs(pts.points, pts.point_data, self.query_schema)
         return self._token_inputs(pts, TensorDict(batch_size=pts.shape[:1]), {})
 
-    def _kernel_read_pairs(self, bnd: TensorDict, qry: TensorDict, g_unit):
-        """The kernel read's pairs: every (point, boundary cell) closer than
-        ``kernel_read_radius`` (frame units), their invariants and log weights
-        ``log(mu_j / sum mu) + log b``; ``bnd`` and ``qry`` are the boundary's and
-        the points' tokens."""
-        r, n_hat, vecs, log_w = bnd["r"], bnd["n_hat"], bnd.get("vecs", None), bnd["log_w"]
-        q_r, q_nhat, q_vecs = qry["r"], qry["n_hat"], qry.get("vecs", None)
-        b, n, d = r.shape
-        nq = q_r.shape[1]
-        nb_vecs, nq_vecs = self.bin.n_block_vecs, self.qin.n_block_vecs
-        qi, bj = boundary_pairs(q_r, r, self.kernel_read_radius)
-        ### Grouped by point (stable, so a search that already groups them is kept).
-        order = torch.argsort(qi, stable=True)
-        qi, bj = qi[order], bj[order]
-        qi, bj, inv, log_b = pair_invariants(
-            qi,
-            bj,
-            query_r=q_r.reshape(b * nq, d),
-            query_n=q_nhat.reshape(b * nq, d),
-            query_vecs=None if q_vecs is None else q_vecs[:, :, nb_vecs:].reshape(b * nq, nq_vecs, d),
-            boundary_r=r.reshape(b * n, d),
-            boundary_n=n_hat.reshape(b * n, d),
-            boundary_vecs=None if vecs is None else vecs[:, :, :nb_vecs].reshape(b * n, nb_vecs, d),
-            g_unit=g_unit,
-            radius=self.kernel_read_radius,
-            eps=self.eps,
-        )
-        ### The cell's share of the boundary measure: invariant to a rescale of the
-        ### measures and to splitting a cell into copies that share its measure.
-        log_frac = (log_w - torch.logsumexp(log_w, dim=1, keepdim=True)).reshape(b * n)
-        if not torch.compiler.is_compiling():
-            self.kernel_read_pairs = int(qi.shape[0])
-        plan = PairPlan.build(qi, bj, b * nq, b * n)
-        return plan, self.kernel_basis(inv), log_frac[bj].to(log_b.dtype) + log_b
-
     def _tree_read_pairs(self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit):
-        """The tree-accelerated global read's pairs (:mod:`tree_read`): each point's
-        near cells and admitted clusters at ``kernel_read_theta``, their kernel basis
+        """The boundary read's pairs (:mod:`tree_read`): each point's near cells and
+        admitted clusters at the forest's opening angle, their kernel basis
         and log measures; ``bnd`` and ``qry`` are the boundary's and the points'
         tokens and ``q_wall`` ``(B, Q)`` the points' built-in wall distance (frame
         units)."""
@@ -1466,7 +1319,7 @@ class ISLA(Module):
         q_r, q_nhat, q_vecs = qry["r"], qry["n_hat"], qry.get("vecs", None)
         nb_vecs = self.bin.n_block_vecs
         log_frac = log_w[..., 0] - torch.logsumexp(log_w[..., 0], dim=1, keepdim=True)
-        pairs = tree_read_pairs(
+        return tree_read_pairs(
             self.kernel_basis,
             query_r=q_r,
             query_n=q_nhat,
@@ -1477,45 +1330,9 @@ class ISLA(Module):
             boundary_vecs=None if vecs is None else vecs[:, :, :nb_vecs],
             log_frac=log_frac,
             g_unit=g_unit,
-            theta=self.kernel_read_theta,
-            eps=self.eps,
+            theta=self._tree_read_theta,
+            eps=EPS,
         )
-        if not torch.compiler.is_compiling():
-            self.kernel_read_pairs = pairs.n_pairs
-        return pairs
-
-    def _global_read_pairs(self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit):
-        """The global read's inputs: the kernel basis of every (point, cell) pair of
-        each case ``(BASIS, Q * N)`` and the cells' log measure fractions ``(B, N)``;
-        ``bnd`` and ``qry`` are the boundary's and the points' tokens and ``q_wall``
-        ``(B, Q)`` the points' built-in wall distance (frame units)."""
-        r, n_hat, vecs, log_w = bnd["r"], bnd["n_hat"], bnd.get("vecs", None), bnd["log_w"]
-        q_r, q_nhat, q_vecs = qry["r"], qry["n_hat"], qry.get("vecs", None)
-        b, n, d = r.shape
-        nq = q_r.shape[1]
-        nb_vecs = self.bin.n_block_vecs
-        basis = [
-            global_kernel_basis(
-                self.kernel_basis,
-                {
-                    "query_r": q_r[i],
-                    "query_n": q_nhat[i],
-                    "query_wall": q_wall[i],
-                    "query_vecs": None if q_vecs is None else q_vecs[i, :, nb_vecs:],
-                    "boundary_r": r[i],
-                    "boundary_n": n_hat[i],
-                    "boundary_vecs": None if vecs is None else vecs[i, :, :nb_vecs],
-                    "g_unit": g_unit[i],
-                    "eps": self.eps,
-                },
-            )
-            for i in range(b)
-        ]
-        ### The cell's share of the boundary measure (the quadrature weight).
-        log_frac = (log_w - torch.logsumexp(log_w, dim=1, keepdim=True))[..., 0]
-        if not torch.compiler.is_compiling():
-            self.kernel_read_pairs = b * nq * n
-        return basis, log_frac
 
     def _forward_tensors(
         self,
@@ -1565,7 +1382,7 @@ class ISLA(Module):
                     surface_points[i], surface_cells[i], points[i], normals[i],
                     None if measure_weights is None else measure_weights.reshape(b, n)[i],
                 )
-                geometry.append(exact_boundary_geometry(query_points[i], surface_points[i], cells, eps=self.eps))
+                geometry.append(exact_boundary_geometry(query_points[i], surface_points[i], cells, eps=EPS))
             query = TensorDict(
                 points=query_points,
                 wall_distance=torch.stack([g[0] for g in geometry]),
@@ -1580,7 +1397,6 @@ class ISLA(Module):
         boundary: TensorDict,
         query: TensorDict | None,
         global_rows: TensorDict,
-        n_support: int = 0,
     ) -> TensorDict:
         """The batched network on the token inputs.
 
@@ -1590,8 +1406,7 @@ class ISLA(Module):
         ``query`` (interior) the prediction-point tokens over ``(B, Q)``:
         ``points``, the ``query_schema`` fields under ``fields`` and the built-in
         geometry ``wall_distance`` ``(B, Q)`` and ``wall_direction`` ``(B, Q, d)``
-        (:func:`exact_boundary_geometry`), the first
-        ``n_support`` of them a support that writes while the rest read;
+        (:func:`exact_boundary_geometry`);
         ``global_rows`` the global fields over ``(B,)`` (:meth:`_global_rows`).
         Returns the declared outputs over the ``(B, N_out)`` tokens the head reads.
 
@@ -1615,16 +1430,16 @@ class ISLA(Module):
         ### centre). Normalized weights make it converge under refinement where
         ### the total measure diverges, and make it invariant to a weight rescale.
         measure = boundary.get("measure", None)
-        gauge = rms_pairwise_distance(points, measure, self.eps)
+        gauge = rms_pairwise_distance(points, measure, EPS)
         normals = boundary["normals"]
-        n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+        n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(EPS)
 
         if measure is None:
             ### No measures given: every token carries the same measure, i.e. the
             ### count-weighted quadrature.
             log_w = points.new_zeros(b, n, 1)
         else:
-            log_w = torch.log(measure.to(points.dtype).clamp_min(self.eps))[..., None]
+            log_w = torch.log(measure.to(points.dtype).clamp_min(EPS))[..., None]
 
         ### Boundary inputs: invariants against the token's frame {n, g_k}.
         if self.bin:
@@ -1648,20 +1463,18 @@ class ISLA(Module):
         if query is not None:
             query_points = query["points"]
             nq = query_points.shape[1]
-            if n_support:
-                _hint_token_axis(nq, self._token_widths)
             ### The query's geometry from the boundary surface: the signed distance
             ### to it (the built-in channel) and the direction from it (the token's
             ### "normal" in every invariant), from the exact closest point.
             with torch.autocast(points.device.type, enabled=False):
                 dist, q_nhat = query["wall_distance"], query["wall_direction"].to(points.dtype)
                 s = (dist.to(points.dtype) / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
-                builtin = torch.cat([s, torch.sign(s) * torch.log(s.abs() + self.eps)], -1)
+                builtin = torch.cat([s, torch.sign(s) * torch.log(s.abs() + EPS)], -1)
             q_g = g_unit[:, None].expand(b, nq, K, dim)
             if self.qin:
                 q_frame = torch.cat([q_nhat[:, :, None], q_g], dim=2)
                 q_feat, q_vecs, q_tens = self.qin.features(
-                    query["fields"], q_frame, gauge=gauge, eps=self.eps
+                    query["fields"], q_frame, gauge=gauge, eps=EPS
                 )
                 q_feat = torch.cat([builtin, q_feat], -1)
             else:
@@ -1672,17 +1485,6 @@ class ISLA(Module):
                 ### over points (routing prototypes, anchors, slice states, head-frame
                 ### anchors), so they read every block's slices and never write.
                 q_logw = log_w.new_full((b, nq, 1), -math.inf)
-            elif n_support:
-                ### An explicit support writes with the interacting routing mass, split
-                ### over the support; the prediction points behind it only read.
-                s_logw = (
-                    self.qt.logw.to(log_w.dtype)
-                    + torch.logsumexp(log_w, dim=1, keepdim=True)
-                    - _log_count(n_support, log_w)
-                )
-                q_logw = torch.cat(
-                    [s_logw.expand(b, n_support, 1), log_w.new_full((b, nq - n_support, 1), -math.inf)], dim=1
-                )
             else:
                 ### The query tokens' total routing weight is a learned fraction of the
                 ### total boundary measure, split equally (see __init__): rescaling the
@@ -1702,37 +1504,29 @@ class ISLA(Module):
                 **self._block_extras(None, None, q_vecs, q_tens, b, nq, points),
                 batch_size=[b, nq],
             )
-            if self.kernel_reads is not None and self.kernel_read_radius is None:
-                read_pairs = (
-                    self._global_read_pairs
-                    if self.kernel_read_theta is None
-                    else self._tree_read_pairs
-                )
-                kernel_pairs = read_pairs(tokens, q_tokens, s[..., 0].abs(), g_unit)
-            elif self.kernel_reads is not None:
-                kernel_pairs = self._kernel_read_pairs(tokens, q_tokens, g_unit)
+            if self.kernel_reads is not None:
+                kernel_pairs = self._tree_read_pairs(tokens, q_tokens, s[..., 0].abs(), g_unit)
             tokens = torch.cat([tokens, q_tokens], dim=1)
             _hint_token_axis(n + nq, self._token_widths)
 
         h, log_w, r = tokens["h"], tokens["log_w"], tokens["r"]
         vecs, tens = tokens.get("vecs", None), tokens.get("tens", None)
-        first_read = len(self.blocks) - (self.kernel_read_blocks or 0)
         for i, block in enumerate(self._block_callables()):
-            h = block(h, log_w, r, tokens["n_hat"], tokens["g_hat"], self.eps, vecs, tens, geo_kernel=geo_kernel)
-            if self.kernel_reads is not None and i >= first_read:
+            h = block(h, log_w, r, tokens["n_hat"], tokens["g_hat"], EPS, vecs, tens, geo_kernel=geo_kernel)
+            if self.kernel_reads is not None:
                 ### The points' residual update from the boundary cells' states at this
                 ### depth; the boundary tokens (and so the slices) are untouched.
                 h_b, h_p = h[:, :n_boundary], h[:, n_boundary:]
-                delta = self.kernel_reads[i - first_read](
+                delta = self.kernel_reads[i](
                     h_b.reshape(-1, h.shape[-1]), h_p.reshape(-1, h.shape[-1]), kernel_pairs
                 )
                 h = torch.cat([h_b, h_p + delta.view_as(h_p)], dim=1)
         tokens.set("h", h)
 
-        ### The tokens the head reads: the prediction points (after the support) in
-        ### the interior mode, every token otherwise. The head frame builds its
-        ### slice anchors from ALL tokens (r, log_w and h).
-        out = tokens if query is None else _tail(tokens, n_boundary + n_support)
+        ### The tokens the head reads: the prediction points in the interior mode,
+        ### every token otherwise. The head frame builds its slice anchors from ALL
+        ### tokens (r, log_w and h).
+        out = tokens if query is None else _tail(tokens, n_boundary)
         coeffs = self._coeff_layout.unpack(self.head(self.norm_out(out["h"])))
         if not self.needs_frame:
             ### Scalar-only outputs are the coefficients themselves; no token basis.
@@ -1749,7 +1543,7 @@ class ISLA(Module):
         b_f = torch.softmax(self.frame_assign.logits(out["h"], protos_f), dim=-1)
         r_out = out["r"]
         u = r_out - torch.einsum("bns,bsc->bnc", b_f, z_f).to(r_out.dtype)
-        r_hat = u / u.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+        r_hat = u / u.norm(dim=-1, keepdim=True).clamp_min(EPS)
 
         ### The token basis. True vectors: the global directions, the normal, the
         ### radial direction and the polar complements of (rhat, n) and each

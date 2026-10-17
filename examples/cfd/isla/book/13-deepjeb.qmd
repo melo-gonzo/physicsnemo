@@ -1,6 +1,10 @@
 # DeepJEB++ {#sec-deepjeb}
 
-**DeepJEB++ is a surface task on generated jet-engine brackets whose global vector is a load direction rather than a freestream, and it is the one campaign dataset the ISLA reference configuration does not finish: at the reference rate and at half of it the lanes reach the baselines' accuracy and then fall to the mean-field plateau, so the scored checkpoints trail GeoTransolver and Transolver by about four times on displacement; under the earlier form of the class, on an equal-step ladder, ISLA led or tied the best GeoTransolver arm at every rung.** The chapter follows the shared layout. The pose contract holds with the load direction as the one global vector; at a reduced budget of 20,000 surface cells an area-proportional draw raises GeoTransolver's and Transolver's errors over a uniform draw of the same count and leaves ISLA's unchanged, which does not test ISLA, because its scored checkpoints sit at the mean-field plateau (@sec-deepjeb-boundary-law); the resampling instruments of @sec-invariances are not run on this dataset. Protocol: @sec-protocol, with the dataset's two stated deviations, a per-dataset training rate of half the reference for ISLA and, on the ladder, a fixed optimizer-step budget; float32, two seeds; every ratio is baseline ÷ ISLA, above one favoring ISLA.
+**DeepJEB++ is a surface task on generated jet-engine brackets whose global vector is a load direction rather than a freestream, and it is the one campaign dataset the ISLA lanes trained with the raw slice reads do not finish: at the reference rate and at half of it they reach the baselines' accuracy and then fall to the mean-field plateau, so the scored checkpoints, from the half-rate lanes, trail GeoTransolver and Transolver by about four times on displacement; under the earlier form of the class, on an equal-step ladder, ISLA led or tied the best GeoTransolver arm at every rung.** The chapter follows the shared layout. The pose contract holds with the load direction as the one global vector; at a reduced budget of 20,000 surface cells an area-proportional draw raises GeoTransolver's and Transolver's errors over a uniform draw of the same count and leaves ISLA's unchanged, which does not test ISLA, because its scored checkpoints sit at the mean-field plateau (@sec-deepjeb-boundary-law); the resampling instruments of @sec-invariances are not run on this dataset. Protocol: @sec-protocol, under which ISLA's reference configuration trains at 3.75e-4 here as on every dataset; the standing's ISLA checkpoints come from lanes at half that rate, 1.875e-4, labeled as such, and the ladder holds a fixed optimizer-step budget; float32, two seeds; every ratio is baseline ÷ ISLA, above one favoring ISLA.
+
+::: {.callout-warning title="Trained with the raw slice reads"}
+The trained checkpoints behind this chapter's numbers and pictures use the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm, not the normalized reads of ISLA's reference configuration (@sec-isla-layer).
+:::
 
 ```{python}
 #| label: setup-deepjeb
@@ -228,8 +232,8 @@ def collapse_epoch(e):
     return None
 c_half = [collapse_epoch(e) for e in half]; c_full = [collapse_epoch(e) for e in full]
 when = lambda c: f"at epoch {c[0]}" if min(c) == max(c) else f"between epochs {min(c)} and {max(c)}"
-print(f"**Under the campaign protocol the ISLA reference configuration does not finish DeepJEB++: trained at half the reference rate "
-      f"(the dataset's exception), both seeds descend to a validation displacement error of {pre_dp:.2f} and von Mises error of {pre_vm:.2f} "
+print(f"**Trained with the raw slice reads, ISLA does not finish DeepJEB++ under the campaign protocol: in the scored lanes, trained at half "
+      f"the reference rate (1.875e-4), both seeds descend to a validation displacement error of {pre_dp:.2f} and von Mises error of {pre_vm:.2f} "
       f"by epoch {max(int(k) for k in best_ep)}, level with GeoTransolver-256 ({gt_c['displacement_l2']['mean']:.2f} / {gt_c['von_mises_l2']['mean']:.2f}) "
       f"and Transolver ({t_c['displacement_l2']['mean']:.2f} / {t_c['von_mises_l2']['mean']:.2f}), and then fall to the mean-field plateau "
       f"{when(c_half)} (the first validation after it doubles its running minimum), so the 40-epoch checkpoints the protocol scores read "
@@ -251,7 +255,8 @@ print(f"**Under the campaign protocol the ISLA reference configuration does not 
 ```{python}
 #| label: tbl-deepjeb-protocols
 #| output: asis
-protocol_table("deepjeb_surface.json", "tbl-deepjeb-protocols", "DeepJEB++ at 12,451 training brackets, 40 epochs")
+protocol_table("deepjeb_surface.json", "tbl-deepjeb-protocols", "DeepJEB++ at 12,451 training brackets, 40 epochs, ISLA's row from the "
+               "half-rate lanes (1.875e-4)")
 ```
 
 ```{python}
@@ -274,7 +279,7 @@ print(f"**Under the earlier form of the class (384 wide, 12 layers, static proto
       f"GeoTransolver arm at every rung of an equal-step ladder on both fields: GeoTransolver ÷ ISLA {min(vm):.2f} to {max(vm):.2f} on von "
       f"Mises stress and {min(dp):.2f} to {max(dp):.2f} on displacement over 256 to 12,451 training brackets.** That ladder is kept as the "
       "record of what the form achieved before the sample-conditioned prototypes entered the class; it has not been re-run under the "
-      "current reference, which does not finish the dataset. The ladder holds the optimizer-step budget fixed at about 130,000 steps while "
+      "reference configuration. The ladder holds the optimizer-step budget fixed at about 130,000 steps while "
       "the training set grows (500, 125, 32 and 10 epochs at 256, 1,024, 4,096 and 12,451 brackets). It is therefore an equal-compute "
       "comparison at each rung and not a learning curve. Both architectures are flat above 1,024 brackets at this budget, which says the "
       "models are step-limited there, so the data exponent is not readable from it.")
@@ -317,7 +322,7 @@ print(f"**Two things qualify every row of @tbl-deepjeb-surface.** Absolute error
 
 ## Ladders and controls {#sec-deepjeb-ladders}
 
-**The campaign standing (@tbl-deepjeb-protocols) is a 40-epoch protocol at the full clean training set under the current reference configuration; the equal-step ladder (@tbl-deepjeb-surface) is the earlier form's record, and its near-zero slopes are a compute statement, drawn as such in @fig-exponents-datasets.** Two controls were run under the current reference. One is the surface draw at a reduced budget (@sec-deepjeb-boundary-law). The other is the training rate: at 3.75e-4 the routing collapses by the fourth epoch, at half that rate by the twenty-second, on both seeds each time, which places the instability in the sample-conditioned routing at this width rather than in the rate. Both architectures are flat above 1,024 brackets on the ladder at its step budget, which says the models were step-limited there, so the data exponent is not readable from it; no width or depth control of ISLA was run on this dataset.
+**The campaign standing (@tbl-deepjeb-protocols) is a 40-epoch protocol at the full clean training set under the reference configurations, ISLA's from the half-rate lanes; the equal-step ladder (@tbl-deepjeb-surface) is the earlier form's record, and its near-zero slopes are a compute statement, drawn as such in @fig-exponents-datasets.** Two controls were run with the raw slice reads. One is the surface draw at a reduced budget (@sec-deepjeb-boundary-law). The other is the training rate: at 3.75e-4 the routing collapses by the fourth epoch, at half that rate by the twenty-second, on both seeds each time, so lowering the rate delays the instability and does not remove it. Both architectures are flat above 1,024 brackets on the ladder at its step budget, which says the models were step-limited there, so the data exponent is not readable from it; no width or depth control of ISLA was run on this dataset.
 
 ### The surface draw at a reduced budget {#sec-deepjeb-boundary-law}
 
@@ -378,10 +383,10 @@ print(f"**At a reduced budget of 20,000 surface cells, drawing them in proportio
 #| label: tbl-deepjeb-area2
 #| output: asis
 area2_table("deepjeb", JF, "tbl-deepjeb-area2", "DeepJEB++ at 12,451 training brackets and 40 epochs, the three architectures at their reference "
-            "configurations (ISLA at half the reference rate), 5,540 test files, each bracket's surface drawn at 20,000 cells; the drawn "
+            "configurations (ISLA from the half-rate lanes, 1.875e-4), 5,540 test files, each bracket's surface drawn at 20,000 cells; the drawn "
             "cells are the scored set, and ISLA's checkpoints sit at the mean-field plateau.")
 ```
 
 ## What this dataset does not say {#sec-deepjeb-limits}
 
-**The DeepJEB++ standing is a failure of training stability, measured on labels a tenth of which were removed as unphysical, and it says nothing about the capacity of the architecture on brackets: eighteen epochs in, the same lanes match the baselines.** With ISLA's checkpoints at the plateau it says nothing either about ISLA's consistency under a change of surface draw, where only the baselines' shifts are informative (@sec-deepjeb-boundary-law). Absolute errors near 0.5 on von Mises stress are a property of the dataset, not of any architecture. The ladder rows are equal-compute standings and never a learning curve. The earlier form's lead says nothing about tensor targets, which Tensile2d measures (@sec-interior-tensile2d), and the published Transolver, GNOT and GI-FNO errors are on another split.
+**The DeepJEB++ standing is a failure of training stability of the lanes trained with the raw slice reads, measured on labels a tenth of which were removed as unphysical, and it says nothing about the capacity of the architecture on brackets: eighteen epochs in, the same lanes match the baselines.** With ISLA's checkpoints at the plateau it says nothing either about ISLA's consistency under a change of surface draw, where only the baselines' shifts are informative (@sec-deepjeb-boundary-law). Absolute errors near 0.5 on von Mises stress are a property of the dataset, not of any architecture. The ladder rows are equal-compute standings and never a learning curve. The earlier form's lead says nothing about tensor targets, which Tensile2d measures (@sec-interior-tensile2d), and the published Transolver, GNOT and GI-FNO errors are on another split.

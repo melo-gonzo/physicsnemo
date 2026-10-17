@@ -61,15 +61,13 @@ when ``query_schema`` declares no fields). The result is a point-cloud ``Mesh``
 whose ``point_data`` holds the declared outputs. Every constructor argument
 and every ``forward`` input is keyword-only. The reference configuration on a
 surface task is the class defaults (``hidden=512``, ``n_layers=12``,
-``n_slices=512``, ``mlp_ratio=4``) with ``geo_checkpoint=True``, as the recipe
-configures it:
+``n_slices=512``), as the recipe configures it:
 
 .. code-block:: python
 
     model = ISLA(
         output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}},  # a scalar and a vector field
         global_schema={"U_inf_dir": {"rank": 1}},  # one global direction
-        geo_checkpoint=True,  # rebuild geometric invariants in backward: less memory
     )
     out = model(
         boundary_meshes={"vehicle": surface},       # Mesh[2, 3], cells with normals
@@ -91,7 +89,11 @@ input. The surface is ``boundary_geometry=``, the same named boundaries as
 ``boundary_meshes`` at full resolution (the tokens are a sample of it); without
 it the tokens' own cells are the surface, accepted when they are the whole
 boundary. A dataset's stored signed distance enters, if wanted, as an ordinary
-``query_schema`` field.
+``query_schema`` field. With
+``query_independent=True`` (ISLA-DTT) the prediction points are passive
+readers of the slices and of the boundary cells, so each prediction depends
+on its own point and the boundary alone and any request can be answered in
+chunks.
 
 The unified external-aerodynamics recipe
 (``examples/cfd/external_aerodynamics/unified_external_aero_recipe``) documents

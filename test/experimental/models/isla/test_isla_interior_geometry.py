@@ -126,7 +126,7 @@ def test_no_query_normals_argument():
 def test_fused_kernel_stays_available_with_the_built_in_distance():
     """The built-in distance enters the embedding, not the geometry region, so a model
     without rank-1 or rank-2 per-token inputs keeps the fused kernel."""
-    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True, geo_kernel="fused")
+    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True)
     assert m.n_query_builtin == 2 and m.qt.embed[0].in_features == 2
     assert not (m.n_block_vecs or m.n_block_tens)
 
@@ -646,7 +646,7 @@ def test_eager_and_compiled_agree_on_an_oppositely_oriented_surface():
     fullgraph, dynamic-shape compiled model gives the eager outputs (the orientation
     is a torch.where, not a Python branch), at two query counts."""
     torch.manual_seed(0)
-    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True, dim=2, geo_kernel="eager").eval()
+    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True, dim=2).eval()
     surface = _polygon(_naca(100))
     surface = Mesh(points=surface.points.float(), cells=surface.cells)
     tokens = _draws(surface, 60)["uniform"]

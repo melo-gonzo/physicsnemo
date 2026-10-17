@@ -87,7 +87,7 @@ leading batch dimension on every tensor.
 | $c_i$, $T_i$ | $N{\times}n_c$, $N{\times}3^r$ per output | `coeffs`, `out[name]` | the head's invariant coefficients and the assembled output fields, one per declared name and rank ($m = 2K + 3$ true basis vectors; a vector costs $m$ coefficients, a symmetric rank-2 tensor $m(m+1)/2 + 1$) |
 
 $\mathrm{LN}$ is LayerNorm over the width; $\mathrm{MLP}$ is Linear–GELU–Linear
-with a hidden width of $4d$ (`mlp_ratio`); $W$ with a subscript is a learned
+with a hidden width of $4d$; $W$ with a subscript is a learned
 affine map. Definitions use $\equiv$.
 
 ## The pass in one picture {#sec-arch-picture}
@@ -472,13 +472,13 @@ identity is tested at $10^{-12}$ (@sec-isla-contracts).
 **Rebuild the geometry in the backward pass.** Steps c to e and the pooling
 of step h are one *geometry region* per layer (`_geo_region`): a function
 of $(\lambda, r, \hat n, \hat g, z, m)$ with no parameters but $w_g, b_g$.
-On the eager path, `geo_checkpoint=True` recomputes its $N{\times}M{\times}\cdot$
-intermediates in the backward pass instead of storing them, with
-bitwise-identical outputs and gradients. The fused Triton kernel
-(`geo_kernel="fused"`, the automatic choice on CUDA with one to four
-per-point vectors, at most 1,024 slices and no rank-2 per-token input)
-evaluates the same region without ever materializing them, with the
-recompute built in (@sec-using-cost).
+On the eager path the region recomputes its $N{\times}M{\times}\cdot$
+intermediates in the backward pass instead of storing them, with outputs
+and gradients bitwise equal to storing them. The fused Triton
+kernel, which the model selects on CUDA with one to four per-point
+vectors, at most 1,024 slices and no rank-2 per-token input, evaluates the
+same region without ever materializing them, with the recompute built in
+(@sec-using-cost).
 :::
 
 ::: {.callout-note collapse="true" title="Stage 3 in the code"}
@@ -800,16 +800,17 @@ The prediction points' geometry is one function on the boundary surface, compute
 #| label: code-interior
 #| output: asis
 listing("geometry.py", "exact_boundary_geometry")
-listing("model.py", "ISLA._forward_tokens", start="if query is not None:", end="first_read = len(self.blocks)")
+listing("model.py", "ISLA._forward_tokens", start="if query is not None:", end="h, log_w, r = tokens")
 ```
 :::
 
 ### The read-only interior task {#sec-arch-passive-decoder}
 
-**With `query_independent=True` the prediction points are passive: at
-every slice layer they read the slices the boundary formed at that layer
-and never write into them, so the prediction at a point is a function of
-that point and the boundary alone.** A passive point is seeded and
+**With `query_independent=True` (ISLA-DTT) the prediction points are
+passive: at every slice layer they read the slices the boundary formed at
+that layer and never write into them, and after it they read the boundary
+cells (@sec-arch-global-read), so the prediction at a point is a function
+of that point and the boundary alone.** A passive point is seeded and
 embedded as an interacting one is (the built-in direction and signed
 distance, the declared query inputs, the type offset) and runs through
 the same twelve slice layers with the same parameters as the boundary
@@ -831,7 +832,8 @@ Its dependence on the request is measured in @sec-interior-companion.
 A passive point reads at matched depth: at layer $\ell$ it reads the
 slices formed from the boundary states at layer $\ell$, the depth its own
 state has reached. That alignment carries much of the read-only model's
-accuracy. A control with the same parameters, in which the boundary first
+accuracy. Measured on passive points without the boundary read (an
+ablation outside the class), a control with the same parameters, in which the boundary first
 runs through all twelve layers and every layer's points then read slices
 formed from that final boundary state, has 1.37 to 1.40 times the
 matched-depth model's error on the DrivAerML Volume task and 1.56 to 1.72
@@ -853,10 +855,9 @@ neither the read-only nor the interacting model beyond seed noise
 
 #### The global boundary read {#sec-arch-global-read}
 
-**A passive point can also read the boundary cells themselves: with
-`kernel_read="mean"` and `kernel_read_radius=None`, after every slice
-layer each prediction point adds a measure-weighted average of the cells'
-states over the whole boundary, weighted by a learned kernel of where
+**A passive point also reads the boundary cells themselves: after every
+slice layer each prediction point adds a measure-weighted average of the
+cells' states over the whole boundary, weighted by a learned kernel of where
 each cell sits relative to the point and by how well their states
 match.** For a point $q$ and a cell $j$, with $\rho_{qj} \equiv r_q -
 r_j$, the kernel sees the pair's invariants $\iota_{qj}$: the distance
@@ -890,22 +891,23 @@ coincident halves or rescaling every measure changes nothing
 Every input is an invariant, so the read keeps the contracts of
 @sec-isla-contracts, and it leaves the boundary tokens and the slices
 untouched, so it keeps query independence
-(`test_global_read_is_exactly_query_independent`). Evaluated pair by pair
+(`test_tree_read_is_exactly_query_independent_at_every_theta`). Evaluated pair by pair
 it costs $Q \times N$ pairs per layer: $10^8$ for 100,000 points around a
 1,000-segment airfoil, $4 \times 10^{10}$ for 200,000 points around a
 200,000-cell car.
 
 #### The read through a cluster forest {#sec-arch-tree-read}
 
-**With `kernel_read_theta` set to a number $\theta$, the same read runs
-through a Barnes-Hut forest: a point reads nearby cells one by one and
+**The read runs through a Barnes-Hut forest at the opening angle
+$\theta = 1$: a point reads nearby cells one by one and
 each distant cluster of similarly oriented cells as one virtual cell,
 which takes a 200,000-cell car from $4 \times 10^{10}$ pairs per layer to
 $1.6 \times 10^8$ at $\theta = 1$, keeps the prediction exactly query
 independent and keeps it pose invariant up to ties of the boundary's own
 frame.** ISLA-DTT is ISLA with passive prediction points, the global read
-after every layer and the forest at $\theta = 1$. It is the one read-only
-configuration the book scores (@sec-interior-read-only,
+after every layer and the forest at $\theta = 1$, all set by
+`query_independent=True`. It is the one read-only configuration the class
+builds and the book scores (@sec-interior-read-only,
 @sec-airfrans-read-only). The forest is built once per case, without
 gradient:
 
@@ -940,9 +942,13 @@ its cells one by one. The softmax of each point runs in a fused Triton
 kernel that keeps nothing per pair between the forward and backward
 passes.
 
-Three properties hold by construction. At $\theta = 0$ no cluster is
-admitted and the read is the dense read pair for pair, with the same
-parameters (`test_tree_read_at_theta_zero_is_the_dense_read`). At every
+::: {.callout-warning title="Trained with the raw slice reads"}
+The trained checkpoints behind this chapter's numbers and pictures use the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm, not the normalized reads of ISLA's reference configuration (@sec-isla-layer).
+:::
+
+Three properties hold by construction. At $\theta = 0$, a setting of the
+tests, no cluster is admitted and the read is the read of every cell
+pair by pair (`test_tree_read_at_theta_zero_is_the_exact_read`). At every
 $\theta$ a point's list depends on the forest and the point alone, so the
 prediction is query independent
 (`test_tree_read_is_exactly_query_independent_at_every_theta`). And a
@@ -954,7 +960,7 @@ axis without a third moment, whose sign then follows the laboratory axis
 it overlaps most. On both interior datasets ISLA-DTT's error on rotated
 and translated cases is its native error to the fourth digit on pressure
 and velocity and within 0.3% on eddy viscosity. $\theta$ is a constant of
-the trained model, like a kernel radius: ISLA-DTT trains and is scored at
+the class, not an argument: ISLA-DTT trains and is scored at
 $\theta = 1$, so its kernel, keys and values are learned as the forest
 groups the cells.
 
@@ -962,7 +968,7 @@ On one GB300 at 200,000 boundary cells and 200,000 prediction points
 (width 512, 512 slices, bfloat16, compiled slice layers, one forward and
 backward pass), a point at $\theta = 1$ reads about 800 sources, 95% of
 them virtual cells: $1.6 \times 10^8$ pairs per layer, 250 times fewer
-than the dense read. The step takes 1.76 s and 194.5 GiB against 0.475 s
+than reading every cell. The step takes 1.76 s and 194.5 GiB against 0.475 s
 and 126 GiB for the same model without the boundary read, 3.7 times the
 step. At $\theta = 0.5$ a point's list grows to about 6,900 sources, more
 than one GB300 holds at this size. The read adds about 1.2 million
@@ -980,8 +986,8 @@ The passive points' measure bias, the read after each layer, and one point's wal
 ```{python}
 #| label: code-read-only
 #| output: asis
-listing("model.py", "ISLA._forward_tokens", start="if self.query_independent:", end="elif n_support")
-listing("model.py", "ISLA._forward_tokens", start="first_read = len(self.blocks)", end="### The tokens the head reads")
+listing("model.py", "ISLA._forward_tokens", start="if self.query_independent:", end="else:")
+listing("model.py", "ISLA._forward_tokens", start="for i, block in enumerate(self._block_callables()):", end="### The tokens the head reads")
 listing("tree_read.py", "BoundaryForest.point_pairs")
 ```
 :::
@@ -1010,25 +1016,20 @@ read off the stages directly.**
 
 **The class has one frame, one routing form, one length unit, and a small
 set of arguments: the sizes, the declarations, the task and the role of
-its prediction points, the read-only task's boundary read, three cost
-knobs, the routing-prototype choice and the spatial dimension. Each row below
-names the stage an argument touches.** Every argument is keyword-only. Anything else
+its prediction points (which selects ISLA-DTT), one compile knob and the
+spatial dimension. Each row below names the stage an argument touches.** Every argument is keyword-only. Anything else
 that was once configurable has been fixed or deleted (the option policy is
 stated in @sec-using-config); the fixed behaviour is described in the stages
 above.
 
 | argument (default) | stage | what it sets |
 |---|---|---|
-| `hidden` (512), `n_layers` (12), `n_slices` (512), `mlp_ratio` (4); the class defaults, which are the reference configuration (@sec-using-config) | all | $d$, the number of slice layers, $M$, and the MLP expansion |
+| `hidden` (512), `n_layers` (12), `n_slices` (512); the class defaults, which are the reference configuration (@sec-using-config) | all | $d$, the number of slice layers and $M$ |
 | `output_schema` (required) | 5 | the output fields by name and rank spec (`{pressure: {rank: 0}, wss: {rank: 1}, stress: {rank: 2, symmetric: true}}`; `parity: odd` for a pseudotensor); each field costs the coefficient count of @sec-arch-head and is returned as a leaf of the output Mesh's `point_data` under its name. A dotted name (`surface.pressure`) is a nested leaf of the output and, in any input mapping, of the input; every declared value is a `{rank: ...}` spec or a nested group (a mapping of mappings), and several independent scalars are several rank-0 names |
 | `global_schema` (none) | 1, 2, 3d, 5 | the per-case fields by name and rank, read from `global_data`: each rank-1 field is a global direction $\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed |
 | `boundary_schema` (none) | 2, 3d | per-cell fields by name and rank 0 to 2, read from every boundary mesh's `cell_data`: their invariants $\beta_i$ join the seed (prediction-point tokens carry zeros), and rank-1 and rank-2 fields add their contractions with $\hat\rho_{is}$ to the relational invariants (@sec-isla-inputs-rank) |
 | `query_schema` (none) | interior | per-prediction-point fields by name and rank 0 to 2 (a material label, a source term, a stored signed distance and its gradient), read from the prediction Mesh's `point_data` and carried by the prediction-point tokens through their own embedding after the built-in distance channel; rank-0 fields are divided by $L$ and paired with a signed log |
 | `interior` (`False`) | modes | the task: `False` predicts at the boundary cells and takes no prediction points; `True` predicts at the prediction points, which join the encoder as interacting tokens with the built-in direction and signed distance to the boundary surface (`boundary_geometry`, @sec-arch-modes) |
-| `query_independent` (`False`) | modes | interior task only: `True` makes the prediction points passive (@sec-arch-passive-decoder), with no routing weight and no routing-mass parameter, so each prediction depends on its own point and the boundary alone |
-| `kernel_read` (`None`), `kernel_read_radius` (0.01), `kernel_read_blocks` (`None`) | after each slice layer | read-only interior task only: `kernel_read="mean"` with `kernel_read_radius=None` adds the global boundary read after each of the last `kernel_read_blocks` layers, every layer when `None` (@sec-arch-global-read). A finite radius limits the read to the cells within that distance in units of $L$, and `"sum"` replaces the softmax by an unnormalized quadrature; neither is part of any configuration the book scores |
-| `kernel_read_theta` (`None`) | after each slice layer | global read only: `None` evaluates it pair by pair, $Q \times N$ pairs per layer; a number $\theta$ evaluates it through the cluster forest at that opening angle (@sec-arch-tree-read), the dense read at 0. ISLA-DTT sets 1 and is trained at it |
-| `geo_kernel` (`None`, automatic), `geo_checkpoint` (off) | 3c–3e, 3h | how the geometry region is executed: `None` resolves at the first forward pass to `"fused"` (the Triton kernel) when the inputs are on CUDA, Triton is importable, the global directions and rank-1 per-token inputs together number one to four, there are at most 1,024 slices and no rank-2 per-token input, and to `"eager"` (the PyTorch region) otherwise; either name forces that path, and `"fused"` raises where its constraints fail. `geo_checkpoint` rebuilds the eager region in backward instead of storing it. Neither changes the function computed beyond roundoff |
-| `compile_blocks` (`False`) | 3 | each slice block's forward is wrapped in `torch.compile`, built lazily at the first call. Parameter names, the state dict and the eager path are unchanged, and the fused geometry kernel stays a custom-op leaf. Measured on four GB300 ranks at 200,000 cells per case: the DrivAerML Surface step falls from 221 to 180 ms and peak memory from 44.9 to 32.9 GiB, the Volume step from 475 to 308 ms and 88.5 to 64.5 GiB, with losses at bfloat16 roundoff. The recipe's ISLA configurations leave it off and compile the whole model instead (`fullgraph=True`, dynamic shapes: one graph for every mesh size); it remains the way to compile ISLA-DTT, whose kernel reads break that graph |
+| `query_independent` (`False`) | modes, after each slice layer | interior task only: `True` is ISLA-DTT. The prediction points are passive (@sec-arch-passive-decoder), with no routing weight and no routing-mass parameter, and after every slice layer they read the boundary cells through the cluster forest at $\theta = 1$ (@sec-arch-global-read, @sec-arch-tree-read), so each prediction depends on its own point and the boundary alone; rank-2 per-token inputs are refused with it |
+| `compile_blocks` (`False`) | 3 | each slice block's forward is wrapped in `torch.compile`, built lazily at the first call. Parameter names, the state dict and the eager path are unchanged, and the fused geometry kernel stays a custom-op leaf. Measured on four GB300 ranks at 200,000 cells per case: the DrivAerML Surface step falls from 221 to 180 ms and peak memory from 44.9 to 32.9 GiB, the Volume step from 475 to 308 ms and 88.5 to 64.5 GiB, with losses at bfloat16 roundoff. The recipe's ISLA configurations leave it off and compile the whole model instead (`fullgraph=True`, dynamic shapes: one graph for every mesh size); it remains the way to compile ISLA-DTT, whose boundary read breaks that graph |
 | `dim` (3) | all | the spatial dimension: every boundary mesh is a `Mesh[dim - 1, dim]` (a polyline in two dimensions), every prediction point has `dim` coordinates, and the head's basis follows it (perpendiculars instead of cross products in two dimensions; odd-parity outputs refused for `dim >= 4`). The fused kernels are written for three dimensions; other dimensions run the eager region. The interior task's exact boundary geometry is implemented in two and three dimensions. A planar problem is passed with `dim=2`, never embedded with a zero third coordinate |
-| `eps` ($10^{-12}$) | 1, 3c, 3d, 4 | the floor under every norm and logarithm |

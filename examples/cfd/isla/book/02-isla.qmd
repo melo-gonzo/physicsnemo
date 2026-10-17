@@ -408,8 +408,9 @@ geometric rescale (@sec-isla-contracts).
 ### The two forms of the routing logit {#sec-isla-routing-forms}
 
 
-**ISLA routes on a bounded cosine, so no block can route every point into
-one slice.** The routing logit is a learned function of the
+**ISLA routes on a bounded cosine, which bounds each logit's scale and
+removes the learning-rate ceiling of an unbounded logit, but does not by
+itself prevent a routing collapse.** The routing logit is a learned function of the
 normalized token state $\tilde h_i \equiv \mathrm{LN}(h_i)$: a fixed
 temperature $T$ times the cosine between $\tilde h_i$ and a prototype $p_s$
 per slice, so every logit lies in $[-T, T]$ whatever the weights do. The
@@ -437,11 +438,21 @@ plateau**, the loss of predicting each case's field mean. The checkpoint in
 that state routes every point of every block to a single slice with all
 anchors coincident. The relational invariants then carry no information,
 and the network can emit only a per-case constant. The plateau is total
-routing collapse, not a poorly conditioned optimum, and bounding the logits
-makes it unreachable, which is what makes wide and deep ISLA trainable. The
-temperature is the class constant `ROUTING_TEMPERATURE`, 10. The frame and
+routing collapse, not a poorly conditioned optimum. Bounding the logits
+removes the ceiling, which is what makes wide and deep ISLA trainable, but
+the routing can still collapse when the token states it reads lose their
+contrast. In lanes trained with the raw slice reads, on DeepJEB++ half of
+the blocks route to one to five effective slices of 512 with coincident
+anchors (@sec-surface-deepjeb), and on AeroZoo the routing's effective
+support fell to 0.40 to 0.57 of its epoch-39 value by epoch 55 in blocks 5,
+9 and 11 while the residual stream grew (@sec-using-lr,
+@sec-nb-aerozoo-hlogit-verdict). The temperature is the class constant `ROUTING_TEMPERATURE`, 10. The frame and
 head contracts do not depend on the routing form. The collapsed note below
 is the one place in the book where the linear form appears with numbers.
+
+::: {.callout-warning title="Trained with the raw slice reads"}
+The trained checkpoints behind this chapter's numbers and pictures use the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm, not the normalized reads of ISLA's reference configuration (@sec-isla-layer).
+:::
 
 ::: {.callout-note collapse="true" title="The learning-rate ceiling of the linear form, measured"}
 ```{python}
@@ -1096,7 +1107,7 @@ weights.
 | prediction points off the surface keep every contract | `test_interior_contracts`, `test_interior_task_contracts` | $10^{-11}$ / $10^{-6}$ |
 | several boundary meshes are one token set; a mesh without stored measures uses its geometric quadrature | `test_several_boundary_meshes_are_one_token_set`, `test_no_effective_measures_is_the_geometric_quadrature` | $10^{-10}$ |
 | zero and several global vectors; global scalars; magnitude invariance | `test_isla_global_inputs.py` | $10^{-10}$ |
-| pool-then-project equals project-then-pool; the geometry recompute reproduces outputs and gradients | `test_geo_pool_then_project_is_exact`, `test_geo_checkpoint_is_exact` | $10^{-12}$ / exact (outputs), $10^{-11}$ (gradients) |
+| pool-then-project equals project-then-pool | `test_geo_pool_then_project_is_exact` | $10^{-12}$ |
 | every parameter receives a gradient; heads run under bf16 autocast | `test_all_parameters_receive_gradients`, `test_head_runs_under_bf16_autocast` | exact / finite |
 | the same contracts in two dimensions, reflection included | `test_two_dimensional_contracts_rotation_translation_magnitude_and_reflection` | $10^{-4}$ |
 

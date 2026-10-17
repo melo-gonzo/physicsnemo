@@ -171,8 +171,6 @@ def test_four_dimensional_even_parity_smoke_and_odd_refused():
         _model(d, {"w": {"rank": 1, "parity": "odd"}})
     with pytest.raises(ValueError):
         ISLA(output_schema={"p": {"rank": 0}}, dim=1)
-    with pytest.raises(ValueError):
-        ISLA(output_schema={"p": {"rank": 0}}, global_schema={"g": {"rank": 1}}, dim=2, geo_kernel="fused")
 
 
 def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():

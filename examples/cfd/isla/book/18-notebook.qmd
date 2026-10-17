@@ -37906,3 +37906,139 @@ estimator variance, which no change of query geometry removes. Exact
 full-mesh geometry is therefore worth building and training; a
 pre-registration of the retrained test keeps velocity's law effect at 400
 segments outside its bars.
+
+## 2026-10-17 — H-RESID A2 adopted: ISLA's slice sublayer pools and broadcasts the normalized state, and the DeepJEB++ and AeroZoo rate exceptions are retired {#sec-nb-a2-adopted}
+
+**Ruling.** Peter, 2026-10-17: "make this the ISLA default... no need
+for parallel old implementations." Arm A2 of H-RESID
+(@sec-nb-aerozoo-hresid-prereg, amendment) becomes ISLA's slice-sublayer
+reads: the slice states pool `norm_assign(h)` and the broadcast reads
+`norm_assign(h)`, so the raw `h` enters a block only through the
+residual identity and the token MLP's LayerNorm. The class keeps no
+switch back to the raw reads. Its checkpoint version is 0.3.0; 0.1.0
+and 0.2.0 checkpoints still load and warn that their slice blocks were
+trained on the raw residual stream. The ruling comes before P3's final
+read, on the evidence below.
+
+**Evidence.**
+
+- P4 holds (@sec-nb-deepjeb-hresid-p4). On DeepJEB++ at 3.75e-4,
+  neither `jbn2_isla_*` lane departs. Validation von Mises at epoch 12
+  is 0.447 and 0.439 (displacement 0.213 and 0.222), against the bar of
+  0.6; the raw-read lanes at this rate sat at the plateau (0.90 to 1.02)
+  from epoch 4.
+- P5 holds (@sec-nb-airfrans-hresid-p5). On AirfRANS with uniform
+  draws, A2 ÷ the reference ISLA lanes is 0.862 on pressure, 0.790 on
+  velocity and 0.877 on eddy viscosity (seed means), against a bar of at
+  most 5 percent loss. Both A2 seeds lie below both reference seeds on
+  every field, and rotated and translated scoring gives the same ratios
+  to three decimals.
+- P3 interim (@sec-nb-aerozoo-hresid-p3-interim). On AeroZoo `full` at
+  3.75e-4 (uniform protocol), both A2 seeds keep their validation
+  minimum through epoch 70: 0.0248 and 0.0236 at epoch 70, where their
+  raw-read twins read 0.120 and 0.143. The mean token norm of `h` after
+  the last block at epoch 43 is 1.7e3 and 1.8e3, against the bar of
+  5.7e5 and the raw reads' 5.7e7, so P3's second part holds.
+
+**What changes.** ISLA trains at the reference rate 3.75e-4 on every
+dataset. The two per-dataset rate exceptions are retired: DeepJEB++ at
+1.875e-4 (@sec-nb-char-deepjeb-rate-ruling) and the AeroZoo half-rate
+arms (@sec-nb-aerozoo-remedy-prereg, with R2 holding in
+@sec-nb-aerozoo-remedy-r2). `isla_surface_deepjebpp.yaml` pins 3.75e-4
+like every other ISLA config, and a recipe test checks the rate in
+every ISLA model config. The AeroZoo half-rate lanes stay in their
+chapter as a labeled rate control. Every standing in the results
+chapters (7 to 13, 15 and 20) and in the thesis table comes from
+checkpoints trained with the raw reads. Each of those chapters carries
+one label that says so, and the ledger row A2-RERUN tracks the reruns
+that replace them.
+
+**Still to read.** P3 at epoch 250 on the four AeroZoo remedy lanes
+(rows 340 to 343, with arm A as the diagnostic). The DeepJEB++ A2 finals
+at epoch 40 (`jbn2_isla_*`), scored against GeoTransolver and
+Transolver under the campaign protocol. The reference reruns with the
+normalized reads on every dataset (A2-RERUN). The head frame's raw read
+of `h`, which A2 leaves in place, is normalized only as a separate,
+tested change (@sec-nb-aerozoo-hresid-prereg). If P3 fails at epoch
+250, this notebook records it and the AeroZoo rate question reopens.
+
+## 2026-10-17 — A2-RERUN, first two datasets: on DeepJEB++ ISLA now leads both baselines; on Tensile2d R-A2 holds on stress and displacement and fails on plastic strain as registered, a metric dominated by fields that never yield {#sec-nb-a2-rerun-jeb-t2d}
+
+The reference reruns with the normalized reads (@sec-nb-a2-adopted;
+pre-registration scratch/isla-a2-rerun-2026-10-17/PREREG.md, approved
+before any lane: R-A2, A2 ÷ old reference at or below 1.05 on every
+headline field, seed means, both seeds) have their first finals.
+
+**DeepJEB++** (40 epochs at 3.75e-4, final checkpoints, the CHAR scorer;
+LHR jobs 249818 and 250770; seed means with seeds 42 and 43): von Mises
+0.3919 (0.3942, 0.3895) and displacement 0.1653 (0.1688, 0.1619), against
+0.9311 and 0.8713 for the old reference at 1.875e-4 (on the mean-field
+plateau), 0.4974 and 0.2307 for GeoTransolver and 0.4364 and 0.1944 for
+Transolver. Both A2 seeds lie below every seed of every arm;
+GeoTransolver ÷ ISLA is 1.27 and 1.40, Transolver ÷ ISLA 1.11 and 1.18.
+Rotated and translated scoring equals native. R-A2 holds.
+
+**Tensile2d** (LHR job 251668): A2 ÷ old is 0.568 on stress and 0.519 on
+displacement, and 1.265 on plastic strain q (seeds 1.125 and 1.404, both
+above the old two-seed range). **R-A2 holds on stress and displacement
+and fails on q as registered.** A reading after the fact
+(scratch/isla-t2d-q-2026-10-17/REPORT.md) finds the q metric dominated by
+fields that never yield: 69 of the 100 test cases have q identically zero,
+so after the dataset's normalization their relative error measures a
+constant offset (the model's absolute error divided by 0.0211), and those
+cases carry 104 percent of the difference (absolute errors 6.2e-8 against
+3.9e-8 in strain units). On the 31 cases with any plastic strain the
+ratio is 0.978; weighted by plastic-strain energy it is 1.24 with a 95
+percent case-bootstrap interval of 0.76 to 1.89, from five yielding
+cases. The change is not linked to the pose deviation or to tied nearest
+samples. The verdict stands as registered; pre-registrations on this
+dataset do not gate on q with this metric again, since five informative
+cases cannot support a 5 percent bar. Rotated and translated scoring
+deviates from native by 6 to 12 percent on stress and displacement (0.98
+to 1.02 before; recorded, not predicted); 2.2 percent of nodes have a tied
+nearest boundary sample, mostly at the junction of two collinear
+segments, where the direction feature flips sign under the pose, the class
+that exact point-to-face geometry (@sec-nb-geo0) removes. Peter kept A2 on
+these results (2026-10-17).
+
+## 2026-10-17 — GEO1 on AirfRANS: exact full-resolution query geometry lowers ISLA's errors by 13 percent on pressure and removes most of its dependence on how the airfoil is sampled; the count bar fails as registered {#sec-nb-geo1-airfrans}
+
+GEO1 trains the change proposed after @sec-nb-geo0: each query's distance
+and direction come from the exact closest point on the full-resolution
+boundary surface instead of the nearest boundary token (branch
+psharpe/isla-geo-exact; snapshot code_geo1). It is compared with the same
+model without the change (A2, the reference configuration; snapshot
+code_a2s), both on recipe_v11 at the reference configuration, 500 epochs,
+uniform-interior AirfRANS files, two seeds each (rows 10 to 13 of the
+AirfRANS lanes). The predictions were registered before submission
+(scratch/isla-geo1-airfrans-2026-10-17/PREREG.md).
+
+**G1-N holds.** Native test errors, geo1 ÷ A2: 0.869 on pressure (seeds
+0.818 and 0.924), 0.938 on velocity (0.894 and 0.985) and 0.936 on eddy
+viscosity (0.880 and 0.996); both geo1 seeds lie below both A2 seeds on
+every field, and rotated and translated scoring gives the same ratios.
+A2 on this snapshot reproduces A2 on the earlier one (seed-mean ratios
+1.005 on pressure and 1.000 on velocity; per seed 0.977 to 1.022), so the
+code changes between the snapshots moved nothing measurable.
+
+At 400 airfoil segments (the protocol of @sec-nb-char-area2-verdict,
+LHR job 253816; per seed 42 and 43; noise floor at most 0.055):
+
+| Readout | A2 | geo1 |
+|---|---|---|
+| area ÷ uniform, pressure | 2.57, 2.36 | 0.52, 0.46 |
+| area ÷ uniform, velocity | 2.19, 2.15 | 0.60, 0.63 |
+| uniform ÷ native, pressure | 18.8, 16.7 | 7.6, 6.7 |
+| uniform ÷ native, velocity | 11.9, 12.3 | 4.9, 4.0 |
+
+**G1-P holds**: geo1's pressure law effect is below 1, the area-weighted
+draw now scoring better than the uniform one, as the measure-weighted
+slice states would predict once the geometry no longer depends on the
+sample. **G1-C fails as registered** (bar: at most 4 on pressure and
+velocity, each seed): geo1's count effect is 7.6 and 6.7 on pressure and
+4.9 on velocity for seed 42, about 2.5 times smaller than A2's. The rest
+is the dependence of the slice states on the number of boundary tokens,
+larger than the design study's estimate of 1.8 to 4. Velocity's law
+effect, recorded rather than predicted after @sec-nb-geo0, also falls
+below 1. Under the area-weighted draw at 400 segments geo1's errors are
+about 3 to 4 times its native errors where A2's are about 26 to 48 times.

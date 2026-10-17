@@ -2,6 +2,10 @@
 
 **AirfRANS is the interior task on a second dataset and a second PDE regime, two-dimensional incompressible flow, and the first instance in the book of a global scalar input; on it ISLA leads both baselines on interior velocity by a wide margin, trails both on pressure and on eddy viscosity, and alone keeps its error when the validation cases are rotated and translated, while its interior error depends on how the airfoil is sampled; outside the training range of Reynolds number or angle of attack the pressure ordering inverts.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the native mesh and rotated and translated, the ladders and controls that belong to this dataset, and what the dataset does not say. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
+::: {.callout-warning title="Trained with the raw slice reads"}
+The trained checkpoints behind this chapter's numbers and pictures use the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm, not the normalized reads of ISLA's reference configuration (@sec-isla-layer).
+:::
+
 ```{python}
 #| label: setup-airfrans
 #| include: false

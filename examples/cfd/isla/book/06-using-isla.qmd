@@ -45,8 +45,8 @@ configuration is the class as it ships: 12 layers, cosine routing at a
 fixed temperature over centered sample-conditioned prototypes, the
 RMS-pairwise-distance length unit, the fused geometry kernel where it can
 run, and prediction points that carry a learned share of the total boundary
-measure. It trains at learning rate 3.75e-4 and 200,000 sampled cells per
-case. The configuration is the most accurate of ISLA's under 80 GiB per GPU
+measure. It trains at learning rate 3.75e-4 on every dataset and 200,000
+sampled cells per case. The configuration is the most accurate of ISLA's under 80 GiB per GPU
 on the two selection datasets; the rule and the baselines' reference
 configurations are in @sec-protocol. The class defaults and the recipe's
 ISLA configurations (`isla_surface`, `isla_volume`) are this configuration,
@@ -63,22 +63,21 @@ ratio the book labels "GeoTransolver ÷ ISLA" is the reference
 configurations unless the row names another; an option's number is labelled by arm. What remains on the
 class is short:
 
-- **the sizes** `hidden`, `n_layers`, `n_slices`, `mlp_ratio`, which set
-  capacity and are the axes of the ladders in @sec-capacity;
-- **the three cost knobs** `geo_kernel`, `geo_checkpoint` and
-  `compile_blocks`, which change how the arithmetic is executed and never
-  what is computed (@sec-using-cost);
-- **the read-only interior task** `query_independent` and its boundary
-  read (`kernel_read`, `kernel_read_radius`, `kernel_read_blocks`,
-  `kernel_read_theta`), which together select ISLA-DTT
-  (@sec-arch-passive-decoder), the one configuration of the class besides
-  the reference that the book scores;
+- **the sizes** `hidden`, `n_layers`, `n_slices`, which set capacity and
+  are the axes of the ladders in @sec-capacity;
+- **the one cost knob** `compile_blocks`, which changes how the
+  arithmetic is executed and never what is computed (@sec-using-cost);
+- **the read-only interior task** `query_independent`, which selects
+  ISLA-DTT (@sec-arch-passive-decoder), the one configuration of the class
+  besides the reference that the book scores;
 - **the spatial dimension** `dim`, 3 by default and 2 for a planar
   problem, which is not an option in the policy's sense but a statement
   about the data (@sec-arch-switches).
 
 Every checkpoint stores its constructor arguments, so a saved model loads
-in the configuration that trained it (@sec-using-checkpoint).
+in the configuration that trained it (@sec-using-checkpoint). An argument
+the class no longer has is dropped on loading where it held the value the
+class now fixes, and refused, by name, otherwise.
 
 ::: {.callout-note title="The prediction at a point depends on the request, unless the points are passive"}
 An interior prediction of ISLA is a function of the whole set of
@@ -86,14 +85,23 @@ prediction points, because those points are interacting tokens
 (@sec-arch-modes). Deploy an interior model at its training point count
 and state that count with every interior number (@sec-using-checkpoint,
 @sec-interior-companion). A model that must answer at arbitrary point
-sets, alone or in chunks, is built with `query_independent=True` and the
-global boundary read through the cluster forest (ISLA-DTT,
-@sec-arch-passive-decoder): its prediction at a point depends on that
-point and the boundary alone, at 1.12 / 1.11 / 1.12 times ISLA's error on
-pressure / velocity / eddy viscosity on the DrivAerML Volume task and
-0.74 / 0.83 / 1.03 on the AirfRANS interior task, whose interior was
-read as one contiguous window of the stored points
-(@sec-interior-read-only, @sec-airfrans-read-only, @sec-interior-airfrans).
+sets, alone or in chunks, is built with `query_independent=True`
+(ISLA-DTT: passive prediction points that also read the boundary cells
+through the cluster forest, @sec-arch-passive-decoder): its prediction at
+a point depends on that point and the boundary alone.
+
+```{python}
+#| label: para-using-dtt
+#| output: asis
+_au = json.load(open(RES / "char" / "airfrans_uniform.json"))
+_dtt = _au["controls"]["ISLA-DTT (forest read at theta = 1)"]["native"]
+_isla = _au["arms"][_au["isla_arm"]]["native"]
+_r = " / ".join(f"{_dtt[f]['mean'] / _isla[f]['mean']:.2f}" for f in ("pressure_l2", "velocity_l2", "nut_l2"))
+print("Its error is 1.12 / 1.11 / 1.12 times ISLA's on pressure / velocity / eddy viscosity on the DrivAerML Volume "
+      f"task at the same size, and {_r} times on the AirfRANS interior task with the interior drawn uniformly, where "
+      "ISLA-DTT is 384 wide with 256 slices against ISLA's 512 and 512 "
+      "(@sec-interior-read-only, @sec-airfrans-read-only; results/char/airfrans_uniform.json).")
+```
 :::
 
 ## What the model needs from your data {#sec-using-inputs}
@@ -294,11 +302,21 @@ $3.75 \times 10^{-4}$ at 512, $2.5 \times 10^{-4}$ at 768, and
 $2.5 \times 10^{-4}$ at 384 wide and 24 layers. Every width and depth in the capacity ladders trains cleanly at
 this rate, and the ladders of @sec-review-frontier run at it. A model
 trained at the rule rate is therefore comparable with the book's lanes.
-Under ISLA's cosine routing the logits are bounded, so the routing-collapse
-failure that would otherwise set a hard ceiling on the rate is unreachable
-(@sec-isla-routing-forms). A higher rate is an experiment, not a hazard.
-The recipe's ISLA configurations pin 3.75e-4, the rule's rate at the
-reference width 512, rather than inheriting the recipe-wide default of 3e-3,
+ISLA's cosine routing bounds each logit's scale (@sec-isla-routing-forms),
+which removes the linear form's rate ceiling but does not by itself prevent
+a routing collapse: the routing can still narrow when the token states it
+reads lose their contrast. On AeroZoo, in a lane trained with the raw slice
+reads at this rate, the routing logits grew at most 1.35-fold while the
+mean norm of the residual stream grew 190-fold from epoch 9 to epoch 43,
+every block amplifying it; from epochs 47 to 53 on, the routing's effective
+support fell, to 0.40 to 0.57 of its epoch-39 value by epoch 55 in blocks
+5, 9 and 11 (@sec-nb-aerozoo-hlogit-verdict, @sec-nb-aerozoo-hresid-probe).
+With the normalized slice reads of the reference configuration, the stream
+at epoch 43 is four orders of magnitude smaller, and both lanes keep their
+validation minimum through epoch 70 (@sec-nb-aerozoo-hresid-p3-interim).
+A higher rate is an experiment.
+The recipe's ISLA configurations, one per dataset, all pin 3.75e-4, the
+rule's rate at the reference width 512, rather than inheriting the recipe-wide default of 3e-3,
 which drives ISLA to a mean-field plateau. GeoTransolver and Transolver
 train at 1e-3 in their reference configurations, the recipe default.
 
@@ -396,6 +414,10 @@ chunks.
 ## Cost {#sec-using-cost}
 
 
+::: {.callout-warning title="Trained with the raw slice reads"}
+The trained checkpoints behind this chapter's numbers and pictures use the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm, not the normalized reads of ISLA's reference configuration (@sec-isla-layer).
+:::
+
 ```{python}
 #| label: para-using-cost-lede
 #| output: asis
@@ -419,12 +441,11 @@ print(f"**Per step, on one GPU, the cost sweep of @tbl-isla-cost compares ISLA a
 The step is memory-bound at every stage
 but the MLP. The per-slice geometry (separations, invariants, routing
 softmaxes) is most of the stored activations. That is why the eager path
-rebuilds it in the backward pass instead of storing it (`geo_checkpoint`,
-bitwise identical outputs and gradients), and why a fused Triton kernel
-exists for the geometry region. `geo_kernel: null` resolves to the kernel
-at the first forward pass wherever it can run, and to the eager recompute
-region elsewhere (@sec-arch-switches; the conditions are in the list
-below). Every path computes the same function (output relative L2 against
+rebuilds it in the backward pass instead of storing it (bitwise identical
+outputs and gradients), and why a fused Triton kernel exists for the
+geometry region. The model selects the kernel at the first forward pass
+wherever it can run, and the eager recompute region elsewhere (the
+conditions are in the list below). Every path computes the same function (output relative L2 against
 the eager reference at most $5.5 \times 10^{-7}$ in bf16). That footprint is what buys accuracy at scale. On
 the DrivAerML Surface task at 435 cars, ISLA reaches GeoTransolver's floor
 at less than a third of the memory (@sec-shared-floor).
@@ -458,17 +479,14 @@ print(": Training cost at the reporting protocol: one case of 200,000 sampled ce
 
 Three practical consequences:
 
-- **Leave `geo_kernel` at its default (`null`).** On CUDA in three
-  dimensions with one to four per-point vectors, the model selects the
-  fused kernel at the first forward pass and logs the choice. Off CUDA, in
-  two dimensions, with rank-2 per-token inputs, or with more than four
-  vectors in all, it falls back to the eager recompute region. Force
-  `eager` only to reproduce the exact arithmetic path of a checkpoint
-  trained on the eager region.
-- **On the eager path, leave `geo_checkpoint: true` unless you are short
-  of time and long on memory.** It is bitwise identical in outputs and
-  gradients. Under the fused kernel the recompute is built in and the flag
-  has no effect.
+- **The geometry kernel is chosen for you.** On CUDA in three dimensions
+  with one to four per-point vectors, the model selects the fused kernel
+  at the first forward pass and logs the choice. Off CUDA, in two
+  dimensions, with rank-2 per-token inputs, or with more than four vectors
+  in all, it falls back to the eager recompute region. To reproduce the
+  exact arithmetic path of a checkpoint trained on the eager region, set
+  the model's `geo_kernel` attribute to `"eager"` before the first forward
+  pass.
 - **Compile the whole model.** The recipe's ISLA configurations do:
   `compile: true` with `compile_options` `fullgraph: true`, `dynamic: true`
   and `mode: max-autotune-no-cudagraphs`. The forward, Mesh in and out,
@@ -495,10 +513,9 @@ Three practical consequences:
   32.9 GiB, and the Volume step from 475 to 308 ms and 88.5 to 64.5 GiB.
   Models trained with it score the same as models trained eagerly on both
   DrivAerML tasks, every field within seed noise
-  (`results/perf3_neutrality_2026-10-01.json`). It is the way to compile a
-  configuration with a kernel read (`kernel_read`, ISLA-DTT), whose radius
-  and tree reads break the whole-model graph: `compile=false
-  model.compile_blocks=true`.
+  (`results/perf3_neutrality_2026-10-01.json`). It is the way to compile
+  ISLA-DTT (`query_independent=True`), whose boundary read breaks the
+  whole-model graph: `compile=false model.compile_blocks=true`.
 
 ## Contracts you can check on your own data {#sec-using-contracts}
 

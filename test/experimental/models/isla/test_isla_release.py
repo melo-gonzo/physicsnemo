@@ -23,7 +23,7 @@ Mesh wrapper over the internal batched routine; checkpoint save and
 backbone golden.
 
 **Regenerating the goldens**: delete ``data/isla_default_v1.pth``,
-``data/isla_interior_v1.pth``, ``data/isla_default_v1.mdlus`` and
+``data/isla_interior_v1.pth``, ``data/isla_dtt_v1.pth``, ``data/isla_default_v1.mdlus`` and
 ``data/isla_default_checkpoint_output_v1.pth`` and run
 
     uv run --no-sync python -m pytest test/experimental/models/isla/test_isla_release.py
@@ -36,6 +36,7 @@ sublayer came to pool and broadcast the normalized state, H-RESID arm A2) and pi
 the backbone bitwise through the internal batched routine.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -51,17 +52,20 @@ DATA_DIR = Path(__file__).parent / "data"
 #: Every configuration declares one scalar and one vector output and one global direction.
 IO = dict(output_schema={"p": {"rank": 0}, "v": {"rank": 1}}, global_schema={"g": {"rank": 1}})
 
-#: One small configuration in its two task structures (a surface task and an interior
-#: task; the constructor's ``interior`` flag).
+#: One small configuration in its three forms: a surface task, an interior task (the
+#: constructor's ``interior`` flag) and ISLA-DTT (``query_independent``).
 CONFIGS = {
-    "default": dict(hidden=32, n_layers=2, n_slices=8, geo_kernel="eager", **IO),
-    "interior": dict(hidden=32, n_layers=2, n_slices=8, geo_kernel="eager", interior=True, **IO),
+    "default": dict(hidden=32, n_layers=2, n_slices=8, **IO),
+    "interior": dict(hidden=32, n_layers=2, n_slices=8, interior=True, **IO),
+    "dtt": dict(hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=True, **IO),
 }
 
 
 def _instantiate_model(seed: int = 0, **kwargs) -> ISLA:
-    """Build an ISLA with reproducible random parameters (MOD-008b pattern)."""
+    """Build an ISLA with reproducible random parameters (MOD-008b pattern), forced to
+    the eager geometry region (the one the goldens were recorded with)."""
     model = ISLA(**kwargs)
+    model.geo_kernel = "eager"
     gen = torch.Generator(device="cpu").manual_seed(seed)
     with torch.no_grad():
         for p in model.parameters():
@@ -136,7 +140,6 @@ def test_isla_constructor_attributes(config):
         assert m.interior is False and m.qt is None
         assert m.n_global_vectors == 1 and m.n_global_scalars == 0
         assert m.boundary_schema == {} and m.query_schema == {}
-        assert m.eps == 1e-12
     else:
         m = ISLA(
             output_schema={
@@ -154,19 +157,15 @@ def test_isla_constructor_attributes(config):
             hidden=64,
             n_layers=3,
             n_slices=16,
-            geo_kernel="eager",
-            geo_checkpoint=True,
-            eps=1e-8,
         )
         assert len(m.output_schema) == 6 and m.output_schema["stress"].symmetric
         assert m.n_slices == 16
-        assert len(m.blocks) == 3 and all(b.geo_checkpoint for b in m.blocks)
-        assert m.geo_kernel == "eager"
+        assert len(m.blocks) == 3
+        assert m.geo_kernel == "auto"
         assert m.n_global_vectors == 2 and m.n_global_scalars == 1
         assert list(m.boundary_schema) == ["trace", "traction"]
         assert list(m.query_schema) == ["sdf"]
         assert m.interior is True and m.qt is not None
-        assert m.eps == 1e-8
     assert isinstance(m, Module)
 
 
@@ -178,10 +177,10 @@ def test_isla_constructor_attributes(config):
 @pytest.mark.parametrize("config", list(CONFIGS))
 def test_isla_forward_non_regression(device, config):
     model = _instantiate_model(**CONFIGS[config]).to(device)
-    inputs = _make_inputs(device, query=(config == "interior"))
+    inputs = _make_inputs(device, query=(config != "default"))
     with torch.no_grad():
         out = outputs(model(**inputs))
-    n_out = 40 if config == "interior" else 64
+    n_out = 64 if config == "default" else 40
     assert out["p"].shape == (n_out,) and out["v"].shape == (n_out, 3)
     ref = _load_or_create_reference(f"isla_{config}_v1.pth", out)
     tol = 1e-5 if device == "cpu" else 1e-4
@@ -196,7 +195,7 @@ def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
     surface of the interior geometry, a batch axis of one) give bitwise-identical
     outputs."""
     model = _instantiate_model(**CONFIGS[config]).to(device)
-    inputs = _make_inputs(device, query=(config == "interior"))
+    inputs = _make_inputs(device, query=(config != "default"))
     mesh = inputs["boundary_meshes"]["wall"]
     q = inputs.get("prediction_points")
     with torch.no_grad():
@@ -213,14 +212,20 @@ def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
     expected_points = mesh.cell_centroids if q is None else q
     assert torch.equal(via_mesh.points, expected_points) and via_mesh.n_cells == 0
     for k, v in direct.items():
-        assert torch.equal(via_mesh.point_data[k], v[0]), k
+        if config == "dtt" and via_mesh.point_data[k].is_cuda:
+            ### The boundary read's node means are float32 sums by CUDA's index_add, in no
+            ### fixed order, so the two calls agree to float32 roundoff there, not bitwise.
+            torch.testing.assert_close(via_mesh.point_data[k], v[0], rtol=1e-6, atol=1e-8)
+        else:
+            assert torch.equal(via_mesh.point_data[k], v[0]), k
     assert torch.equal(via_mesh.global_data["g"], inputs["global_data"]["g"])
 
 
-def test_isla_backbone_is_the_pre_refactor_backbone():
+def test_isla_backbone_matches_the_recorded_backbone():
     """With no per-token inputs, the pre-head token state (``norm_out`` output) of
     the surface model is the one recorded when the backbone was last changed by
-    decision, for the same parameters and token tensors. ``data/isla_backbone_v1.pth``
+    decision (the slice sublayer's normalized reads, H-RESID arm A2), for the same
+    parameters and token tensors. ``data/isla_backbone_v1.pth``
     was recorded with a forward hook on ``norm_out`` (seed 0 parameters, seed 1234
     inputs, as here) on an x86 CPU; the tensors enter through the internal batched
     routine, which the Mesh wrapper calls. Compared at float32 tolerance: the same
@@ -248,22 +253,30 @@ def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
     model.save(path)
     loaded = Module.from_checkpoint(str(path)).to(device).eval()
     assert isinstance(loaded, ISLA)
-    for name in ("n_slices", "geo_kernel", "interior", "n_global_vectors", "output_schema", "global_schema"):
+    ### geo_kernel is an execution choice the checkpoint does not store: the loaded model
+    ### starts at "auto" (fused on CUDA), so it takes the saved model's choice.
+    assert loaded.geo_kernel == "auto"
+    loaded.geo_kernel = model.geo_kernel
+    for name in ("n_slices", "interior", "n_global_vectors", "output_schema", "global_schema"):
         assert getattr(loaded, name) == getattr(model, name), name
     with torch.no_grad():
         _assert_dict_close(outputs(loaded(**inputs)), outputs(model(**inputs)), atol=0.0, rtol=0.0)
 
 
 def test_isla_reference_checkpoint_matches_golden(device):
-    """The committed reference checkpoint keeps loading and keeps its outputs."""
+    """The committed reference checkpoint keeps loading and keeps its outputs. It was
+    written at checkpoint version 0.3.0, with the constructor arguments 0.4.0 removed
+    (``mlp_ratio``, ``geo_checkpoint``, ``geo_kernel="eager"``, ``eps``, the
+    ``kernel_read`` options), so it loads through the argument mapper."""
     DATA_DIR.mkdir(exist_ok=True)
     ckpt = DATA_DIR / "isla_default_v1.mdlus"
     if not ckpt.exists():
         _instantiate_model(seed=7, **CONFIGS["default"]).save(ckpt)
         raise IOError(f"Reference checkpoint {ckpt} was missing and has been created; commit it and re-run.")
-    model = Module.from_checkpoint(str(ckpt)).to(device).eval()
+    with pytest.warns(UserWarning, match="0.3.0 ISLA checkpoint"):
+        model = Module.from_checkpoint(str(ckpt)).to(device).eval()
     assert isinstance(model, ISLA)
-    assert model.n_slices == 8 and model.geo_kernel == "eager" and list(model.output_schema) == ["p", "v"]
+    assert model.n_slices == 8 and model.geo_kernel == "auto" and list(model.output_schema) == ["p", "v"]
     assert model.interior is False
     inputs = _make_inputs(device)
     with torch.no_grad():
@@ -273,13 +286,13 @@ def test_isla_reference_checkpoint_matches_golden(device):
     _assert_dict_close(out, ref, atol=tol, rtol=tol)
 
 
-@pytest.mark.parametrize("version", ["0.1.0", "0.2.0", "0.3.0"])
+@pytest.mark.parametrize("version", ["0.1.0", "0.2.0", "0.3.0", "0.4.0"])
 def test_isla_older_checkpoints_load_with_a_warning(tmp_path, version):
     """A 0.1.0 checkpoint (``outputs``, ``global_inputs``, ...) loads through the
     backward-compatibility mapper, which renames the field declarations to
-    ``output_schema``, ``global_schema`` and so on; a 0.2.0 or 0.3.0 checkpoint loads
-    as it is. 0.1.0 and 0.2.0 warn that their slice blocks were trained on the raw
-    reads, and all three that an interior model's prediction points were trained on
+    ``output_schema``, ``global_schema`` and so on; a 0.2.0, 0.3.0 or 0.4.0 checkpoint
+    loads as it is. 0.1.0 and 0.2.0 warn that their slice blocks were trained on the raw
+    reads, and all four that an interior model's prediction points were trained on
     the nearest boundary token's geometry. The fixture
     is the committed reference checkpoint rewritten to that version's declarations
     and file version, so the mapper is exercised against the current architecture's
@@ -302,12 +315,96 @@ def test_isla_older_checkpoints_load_with_a_warning(tmp_path, version):
                 meta["mdlus_file_version"] = version
                 data = json.dumps(meta).encode()
             zout.writestr(item, data)
-    raw = ".*raw residual stream" if version != "0.3.0" else ""
+    raw = ".*raw residual stream" if version in ("0.1.0", "0.2.0") else ""
     with pytest.warns(UserWarning, match=f"{version} ISLA checkpoint{raw}.*nearest boundary token"):
         model = Module.from_checkpoint(str(old))
     assert list(model.output_schema) == ["p", "v"] and list(model.global_schema) == ["g"]
     assert model.boundary_schema == {} and model.query_schema == {}
-    assert ISLA.__model_checkpoint_version__ == "0.4.0"
+    assert ISLA.__model_checkpoint_version__ == "0.5.0"
+
+
+def _rewrite_checkpoint(src, dst, version: str, extra_args: dict) -> None:
+    """Copy the checkpoint ``src`` to ``dst`` as checkpoint ``version`` with
+    ``extra_args`` added to its constructor arguments."""
+    import json
+    import zipfile
+
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_STORED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "args.json":
+                args = json.loads(data)
+                args["__args__"].update(extra_args)
+                data = json.dumps(args).encode()
+            elif item.filename == "metadata.json":
+                meta = json.loads(data)
+                meta["mdlus_file_version"] = version
+                data = json.dumps(meta).encode()
+            zout.writestr(item, data)
+
+
+#: The constructor arguments of a 0.3.0 ISLA-DTT checkpoint that 0.4.0 removed:
+#: the read-only interior task with the "mean" read, no radius, the forest at theta 1
+#: after every block, and the other removed arguments at the values every run used.
+DTT_0_3_0 = dict(
+    kernel_read="mean",
+    kernel_read_radius=None,
+    kernel_read_blocks=None,
+    kernel_read_theta=1.0,
+    mlp_ratio=4,
+    geo_checkpoint=True,
+    geo_kernel=None,
+    eps=1e-12,
+)
+
+
+def test_isla_dtt_checkpoint_of_0_3_0_loads_as_query_independent(tmp_path):
+    """A 0.3.0 ISLA-DTT checkpoint (``kernel_read="mean"``, ``kernel_read_radius=None``,
+    ``kernel_read_theta=1.0``) loads as ``query_independent=True`` with the same
+    parameters and the same outputs, bitwise."""
+    model = _instantiate_model(seed=3, **CONFIGS["dtt"])
+    model.save(tmp_path / "dtt.mdlus")
+    _rewrite_checkpoint(tmp_path / "dtt.mdlus", tmp_path / "dtt_0.3.0.mdlus", "0.3.0", DTT_0_3_0)
+    with pytest.warns(UserWarning, match="0.3.0 ISLA checkpoint.*query_independent=True"):
+        loaded = Module.from_checkpoint(str(tmp_path / "dtt_0.3.0.mdlus")).eval()
+    assert loaded.query_independent and len(loaded.kernel_reads) == 2
+    loaded.geo_kernel = "eager"
+    inputs = _make_inputs("cpu", query=True)
+    with torch.no_grad():
+        _assert_dict_close(outputs(loaded(**inputs)), outputs(model(**inputs)), atol=0.0, rtol=0.0)
+
+
+@pytest.mark.parametrize(
+    "removed, named",
+    [
+        ({"kernel_read": "sum", "kernel_read_radius": 0.01, "kernel_read_theta": None}, "kernel_read='sum'"),
+        ({"kernel_read_radius": 0.01, "kernel_read_theta": None}, "kernel_read_radius=0.01"),
+        ({"kernel_read_theta": None}, "kernel_read_theta=None"),
+        ({"kernel_read_theta": 0.5}, "kernel_read_theta=0.5"),
+        ({"kernel_read_blocks": 1}, "kernel_read_blocks=1"),
+        ({"kernel_read": None}, "query_independent=True and kernel_read=None"),
+        ({"mlp_ratio": 8}, "mlp_ratio=8"),
+        ({"eps": 1e-8}, "eps=1e-08"),
+    ],
+)
+def test_isla_older_checkpoint_with_a_removed_setting_is_refused(removed, named):
+    """A removed argument at any value other than the one 0.4.0 builds is an error
+    that names the setting."""
+    args = {**CONFIGS["dtt"], **DTT_0_3_0, **removed}
+    with pytest.raises(ValueError, match=re.escape(named)):
+        ISLA._backward_compat_arg_mapper("0.3.0", args)
+
+
+def test_isla_older_checkpoint_drops_the_removed_arguments():
+    """The values every run used, and the defaults of a model without the read (a
+    stored ``kernel_read_radius=0.01`` included), map to no argument at all."""
+    surface = dict(
+        CONFIGS["default"], mlp_ratio=4, geo_checkpoint=False, geo_kernel="fused", eps=1e-12,
+        kernel_read=None, kernel_read_radius=0.01, kernel_read_blocks=None, kernel_read_theta=None,
+    )
+    assert ISLA._backward_compat_arg_mapper("0.3.0", dict(surface)) == CONFIGS["default"]
+    dtt = {**CONFIGS["dtt"], **DTT_0_3_0, "kernel_read_blocks": 2}
+    assert ISLA._backward_compat_arg_mapper("0.3.0", dtt) == CONFIGS["dtt"]
 
 
 def test_isla_unknown_constructor_argument_is_a_type_error():

@@ -43,16 +43,59 @@ serves CPU and float64.
 
 from __future__ import annotations
 
+import importlib
 import math
+from dataclasses import dataclass
 
 import torch
 
-from physicsnemo.experimental.models.isla.pair_kernels import (
-    HAS_TRITON,
-    PairPlan,
-    supported,
-)
+from physicsnemo.core.version_check import is_package_available
 from physicsnemo.mesh.spatial._ragged import _ragged_arange
+
+HAS_TRITON = is_package_available("triton")
+if HAS_TRITON:
+    try:
+        importlib.import_module("triton")
+    except Exception:  # pragma: no cover - a broken triton install is treated as absent
+        HAS_TRITON = False
+
+
+@dataclass
+class PairPlan:
+    """A pair list ``(qi, bj)`` grouped by point, with its regrouping by source.
+
+    ``q_offsets`` ``(n_q + 1,)`` delimit each point's pairs; ``perm`` orders the pairs
+    by source (stable) and ``b_offsets`` ``(n_b + 1,)`` delimit each source's pairs in
+    that order; ``qi_by_b = qi[perm]``.
+    """
+
+    qi: torch.Tensor
+    bj: torch.Tensor
+    n_q: int
+    n_b: int
+    q_offsets: torch.Tensor
+    perm: torch.Tensor
+    b_offsets: torch.Tensor
+    qi_by_b: torch.Tensor
+
+    @classmethod
+    def build(
+        cls, qi: torch.Tensor, bj: torch.Tensor, n_q: int, n_b: int
+    ) -> "PairPlan":
+        """Index the pair list (``qi`` non-decreasing) by point and by source."""
+
+        def offsets(idx, n):
+            o = idx.new_zeros(n + 1)
+            o[1:] = torch.cumsum(torch.bincount(idx, minlength=n), 0)
+            return o
+
+        perm = torch.argsort(bj, stable=True)
+        return cls(qi, bj, n_q, n_b, offsets(qi, n_q), perm, offsets(bj, n_b), qi[perm])
+
+
+def supported(*tensors: torch.Tensor) -> bool:
+    """The Triton kernels apply: CUDA tensors and Triton importable."""
+    return HAS_TRITON and all(t.is_cuda for t in tensors)
 
 #: Pairs per tile of a program's loop, warps per program, and pairs per program of
 #: the by-source backward (launch constants).

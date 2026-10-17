@@ -281,7 +281,8 @@ def test_fused_kernel_does_not_touch_the_heads():
     outputs_ = {"p": {"rank": 0}, "v": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}}
     outs = []
     for kernel in ("eager", "fused"):
-        m = _model(1, output_schema=outputs_, geo_kernel=kernel).cuda()
+        m = _model(1, output_schema=outputs_).cuda()
+        m.geo_kernel = kernel
         outs.append({k: v.cpu() for k, v in _forward(m, mesh.to("cuda"), drv.cuda(), 1).items()})
     for k in outs[0]:
         assert torch.allclose(outs[0][k], outs[1][k], atol=1e-10), k

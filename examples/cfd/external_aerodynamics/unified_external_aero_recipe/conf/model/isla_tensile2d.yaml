@@ -72,7 +72,4 @@ model:
   hidden: 512                     # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
   n_slices: 512
-  mlp_ratio: 4
-  geo_checkpoint: true
-  geo_kernel: null                # auto: eager here (two dimensions and no global direction)
   compile_blocks: false           # per-block torch.compile: off, the whole model is compiled; see isla_volume.yaml

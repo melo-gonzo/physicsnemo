@@ -2,6 +2,10 @@
 
 **At the 210-wing rung, under the reference configurations, ISLA is the most accurate of the three architectures on the native validation mesh, and it alone keeps its error on a uniform point cloud of the wing and under rotation and translation; on the data-efficiency ladders, measured against a wider GeoTransolver, the baseline leads and the deficit closes as the training set grows.** HiLiftAeroML is the one dataset in the book whose cases form a full grid of geometry by far-field direction, so it can hold out either axis alone; it is where the data-efficiency ladders, the geometry-holdout rungs and the fixed-angle split are read. The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the three scorings, the ladders and controls, and what the dataset does not say. The pose and discretization probes on the 35-wing rung are read with their DrivAerML twins in @sec-invariances (@sec-robustness-density, @sec-training-law, @sec-territories). Protocol: @sec-protocol, 200,000 sampled cells per case at scoring, 500 epochs, two seeds; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
+::: {.callout-warning title="Trained with the raw slice reads"}
+The trained checkpoints behind this chapter's numbers and pictures use the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm, not the normalized reads of ISLA's reference configuration (@sec-isla-layer).
+:::
+
 ```{python}
 #| label: setup-hilift
 #| include: false
