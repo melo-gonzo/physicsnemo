@@ -36,6 +36,7 @@ sublayer came to pool and broadcast the normalized state, H-RESID arm A2) and pi
 the backbone bitwise through the internal batched routine.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -251,15 +252,19 @@ def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
 
 
 def test_isla_reference_checkpoint_matches_golden(device):
-    """The committed reference checkpoint keeps loading and keeps its outputs."""
+    """The committed reference checkpoint keeps loading and keeps its outputs. It was
+    written at checkpoint version 0.3.0, with the constructor arguments 0.4.0 removed
+    (``mlp_ratio``, ``geo_checkpoint``, ``geo_kernel="eager"``, ``eps``, the
+    ``kernel_read`` options), so it loads through the argument mapper."""
     DATA_DIR.mkdir(exist_ok=True)
     ckpt = DATA_DIR / "isla_default_v1.mdlus"
     if not ckpt.exists():
         _instantiate_model(seed=7, **CONFIGS["default"]).save(ckpt)
         raise IOError(f"Reference checkpoint {ckpt} was missing and has been created; commit it and re-run.")
-    model = Module.from_checkpoint(str(ckpt)).to(device).eval()
+    with pytest.warns(UserWarning, match="0.3.0 ISLA checkpoint"):
+        model = Module.from_checkpoint(str(ckpt)).to(device).eval()
     assert isinstance(model, ISLA)
-    assert model.n_slices == 8 and model.geo_kernel == "eager" and list(model.output_schema) == ["p", "v"]
+    assert model.n_slices == 8 and model.geo_kernel == "auto" and list(model.output_schema) == ["p", "v"]
     assert model.interior is False
     inputs = _make_inputs(device)
     with torch.no_grad():
@@ -300,7 +305,91 @@ def test_isla_older_checkpoints_load_with_a_warning(tmp_path, version):
         model = Module.from_checkpoint(str(old))
     assert list(model.output_schema) == ["p", "v"] and list(model.global_schema) == ["g"]
     assert model.boundary_schema == {} and model.query_schema == {}
-    assert ISLA.__model_checkpoint_version__ == "0.3.0"
+    assert ISLA.__model_checkpoint_version__ == "0.4.0"
+
+
+def _rewrite_checkpoint(src, dst, version: str, extra_args: dict) -> None:
+    """Copy the checkpoint ``src`` to ``dst`` as checkpoint ``version`` with
+    ``extra_args`` added to its constructor arguments."""
+    import json
+    import zipfile
+
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_STORED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "args.json":
+                args = json.loads(data)
+                args["__args__"].update(extra_args)
+                data = json.dumps(args).encode()
+            elif item.filename == "metadata.json":
+                meta = json.loads(data)
+                meta["mdlus_file_version"] = version
+                data = json.dumps(meta).encode()
+            zout.writestr(item, data)
+
+
+#: The constructor arguments of a 0.3.0 ISLA-DTT checkpoint that 0.4.0 removed:
+#: the read-only interior task with the "mean" read, no radius, the forest at theta 1
+#: after every block, and the other removed arguments at the values every run used.
+DTT_0_3_0 = dict(
+    kernel_read="mean",
+    kernel_read_radius=None,
+    kernel_read_blocks=None,
+    kernel_read_theta=1.0,
+    mlp_ratio=4,
+    geo_checkpoint=True,
+    geo_kernel=None,
+    eps=1e-12,
+)
+
+
+def test_isla_dtt_checkpoint_of_0_3_0_loads_as_query_independent(tmp_path):
+    """A 0.3.0 ISLA-DTT checkpoint (``kernel_read="mean"``, ``kernel_read_radius=None``,
+    ``kernel_read_theta=1.0``) loads as ``query_independent=True`` with the same
+    parameters and the same outputs, bitwise."""
+    model = _instantiate_model(seed=3, **CONFIGS["dtt"])
+    model.save(tmp_path / "dtt.mdlus")
+    _rewrite_checkpoint(tmp_path / "dtt.mdlus", tmp_path / "dtt_0.3.0.mdlus", "0.3.0", DTT_0_3_0)
+    with pytest.warns(UserWarning, match="0.3.0 ISLA checkpoint.*query_independent=True"):
+        loaded = Module.from_checkpoint(str(tmp_path / "dtt_0.3.0.mdlus")).eval()
+    assert loaded.query_independent and len(loaded.kernel_reads) == 2
+    loaded.geo_kernel = "eager"
+    inputs = _make_inputs("cpu", query=True)
+    with torch.no_grad():
+        _assert_dict_close(outputs(loaded(**inputs)), outputs(model(**inputs)), atol=0.0, rtol=0.0)
+
+
+@pytest.mark.parametrize(
+    "removed, named",
+    [
+        ({"kernel_read": "sum", "kernel_read_radius": 0.01, "kernel_read_theta": None}, "kernel_read='sum'"),
+        ({"kernel_read_radius": 0.01, "kernel_read_theta": None}, "kernel_read_radius=0.01"),
+        ({"kernel_read_theta": None}, "kernel_read_theta=None"),
+        ({"kernel_read_theta": 0.5}, "kernel_read_theta=0.5"),
+        ({"kernel_read_blocks": 1}, "kernel_read_blocks=1"),
+        ({"kernel_read": None}, "query_independent=True and kernel_read=None"),
+        ({"mlp_ratio": 8}, "mlp_ratio=8"),
+        ({"eps": 1e-8}, "eps=1e-08"),
+    ],
+)
+def test_isla_older_checkpoint_with_a_removed_setting_is_refused(removed, named):
+    """A removed argument at any value other than the one 0.4.0 builds is an error
+    that names the setting."""
+    args = {**CONFIGS["dtt"], **DTT_0_3_0, **removed}
+    with pytest.raises(ValueError, match=re.escape(named)):
+        ISLA._backward_compat_arg_mapper("0.3.0", args)
+
+
+def test_isla_older_checkpoint_drops_the_removed_arguments():
+    """The values every run used, and the defaults of a model without the read (a
+    stored ``kernel_read_radius=0.01`` included), map to no argument at all."""
+    surface = dict(
+        CONFIGS["default"], mlp_ratio=4, geo_checkpoint=False, geo_kernel="fused", eps=1e-12,
+        kernel_read=None, kernel_read_radius=0.01, kernel_read_blocks=None, kernel_read_theta=None,
+    )
+    assert ISLA._backward_compat_arg_mapper("0.3.0", dict(surface)) == CONFIGS["default"]
+    dtt = {**CONFIGS["dtt"], **DTT_0_3_0, "kernel_read_blocks": 2}
+    assert ISLA._backward_compat_arg_mapper("0.3.0", dtt) == CONFIGS["dtt"]
 
 
 def test_isla_unknown_constructor_argument_is_a_type_error():

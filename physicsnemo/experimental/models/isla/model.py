@@ -451,20 +451,31 @@ class ISLA(Module):
     MAX_INPUT_RANK = 2
 
     ### 0.2.0 renamed the field declarations after the schemas they hold; 0.3.0 made
-    ### the slice sublayer read the normalized state (same parameters, new forward).
-    __model_checkpoint_version__ = "0.3.0"
+    ### the slice sublayer read the normalized state (same parameters, new forward);
+    ### 0.4.0 removed the constructor arguments that only ever took one value or
+    ### served ended experiments (same parameters and forward for every
+    ### configuration it still builds).
+    __model_checkpoint_version__ = "0.4.0"
     _RAW_READS = (
         " Its slice blocks were trained to pool and broadcast the raw residual stream; "
         "this version reads the normalized state there, so its outputs differ from "
         "the ones it was trained to give."
     )
+    _REMOVED = (
+        " Its removed constructor arguments (mlp_ratio, geo_checkpoint, geo_kernel, eps "
+        "and the kernel_read options) are dropped; ISLA-DTT's kernel_read='mean' is "
+        "query_independent=True."
+    )
     __supported_model_checkpoint_version__ = {
         "0.1.0": (
             "Loading a 0.1.0 ISLA checkpoint: renaming its field declarations "
             "outputs, boundary_inputs, query_inputs and global_inputs to "
-            "output_schema, boundary_schema, query_schema and global_schema." + _RAW_READS
+            "output_schema, boundary_schema, query_schema and global_schema."
+            + _RAW_READS
+            + _REMOVED
         ),
-        "0.2.0": "Loading a 0.2.0 ISLA checkpoint." + _RAW_READS,
+        "0.2.0": "Loading a 0.2.0 ISLA checkpoint." + _RAW_READS + _REMOVED,
+        "0.3.0": "Loading a 0.3.0 ISLA checkpoint." + _REMOVED,
     }
     _RENAMED_ARGS = {
         "outputs": "output_schema",
@@ -477,12 +488,50 @@ class ISLA(Module):
     def _backward_compat_arg_mapper(
         cls, version: str, args: dict[str, Any]
     ) -> dict[str, Any]:
-        """Rename the field declarations of a 0.1.0 checkpoint's arguments."""
+        """Rename the field declarations of a 0.1.0 checkpoint's arguments, and drop
+        the arguments 0.4.0 removed where the checkpoint used the one value this
+        version builds; any other value of a removed argument is an error naming it.
+        """
         args = super()._backward_compat_arg_mapper(version, args)
         if version == "0.1.0":
             for old, new in cls._RENAMED_ARGS.items():
                 if old in args:
                     args[new] = args.pop(old)
+
+        def refuse(setting: str, reason: str):
+            raise ValueError(
+                f"this {version} ISLA checkpoint was built with {setting}, which ISLA "
+                f"{cls.__model_checkpoint_version__} no longer has ({reason})"
+            )
+
+        ### Implementation choices with the same arithmetic.
+        args.pop("geo_checkpoint", None)
+        args.pop("geo_kernel", None)
+        for name, value in (("mlp_ratio", 4), ("eps", EPS)):
+            stored = args.pop(name, value)
+            if stored != value:
+                refuse(f"{name}={stored!r}", f"it is fixed at {value!r}")
+        ### The boundary read: ISLA-DTT's form ("mean", no radius, the forest at
+        ### theta 1 after every block) is query_independent=True; every other form ended.
+        read = args.pop("kernel_read", None)
+        radius = args.pop("kernel_read_radius", None)
+        blocks = args.pop("kernel_read_blocks", None)
+        theta = args.pop("kernel_read_theta", None)
+        if read is None:
+            if args.get("query_independent", False):
+                refuse(
+                    "query_independent=True and kernel_read=None",
+                    "query_independent=True is ISLA-DTT, whose points also read the boundary cells",
+                )
+            return args
+        if read != "mean":
+            refuse(f"kernel_read={read!r}", "the boundary read is ISLA-DTT's 'mean' form")
+        if radius is not None:
+            refuse(f"kernel_read_radius={radius!r}", "the boundary read has no radius")
+        if theta != TREE_READ_THETA:
+            refuse(f"kernel_read_theta={theta!r}", f"the read runs through the forest at theta {TREE_READ_THETA}")
+        if blocks not in (None, args.get("n_layers", 12)):
+            refuse(f"kernel_read_blocks={blocks!r}", "the read follows every block")
         return args
 
     def __init__(
