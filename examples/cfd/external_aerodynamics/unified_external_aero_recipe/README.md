@@ -415,9 +415,15 @@ cells themselves and passes no prediction points: the surface dataset's
 order, which is the order of the output Mesh's points. The interior task
 (`isla_volume.yaml`, `interior: true`) adds `prediction_points: interior`,
 the dataset's interior point-cloud Mesh; the prediction points join the
-encoder as interacting tokens and each one's signed distance to the nearest
-boundary token and direction to it are computed inside the model, never
-read from the dataset. `isla_volume_sdf.yaml` declares the dataset's stored
+encoder as interacting tokens and each one's signed distance to the boundary
+surface and direction from it are computed inside the model from the exact
+closest point on the surface's cells, never read from the dataset. The surface
+is `forward_kwargs.boundary_geometry`: on DrivAerML the full-resolution vehicle
+STL (`boundaries.stl_geometry`, which the reference volume dataset files load
+for their stored SDF and keep), while `boundary_meshes` stay the 200,000-cell
+token sample, so the geometry does not depend on how the sample was drawn; on
+AirfRANS the airfoil is read whole and is its own surface (no
+`boundary_geometry`). `isla_volume_sdf.yaml` declares the dataset's stored
 `sdf` (rank 0) and `sdf_normals` (rank 1) as `query_schema` fields, read from
 `interior.point_data`, for the internal-versus-stored geometry measurement.
 

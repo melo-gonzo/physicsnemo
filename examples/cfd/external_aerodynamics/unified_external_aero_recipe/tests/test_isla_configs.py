@@ -102,15 +102,19 @@ def _surface_domain(n_cells: int = 12) -> DomainMesh:
 def _volume_domain() -> DomainMesh:
     """What drivaer_ml_volume_reference.yaml hands the collate: an interior point cloud
     with sdf / sdf_normals and the targets, a vehicle boundary with the corrected measure
-    materialized by ComposeQuadratureMeasure, and U_inf_dir in global_data."""
+    materialized by ComposeQuadratureMeasure, the full-resolution vehicle surface the
+    sample was drawn from (stl_geometry), and U_inf_dir in global_data."""
     domain = make_volume_domain_mesh(n_pts=64)
     vehicle = domain.boundaries["vehicle"]
+    stl = Mesh(points=vehicle.points.clone(), cells=vehicle.cells.clone())
     scale_measures(vehicle, 4.0)
     vehicle = ComposeQuadratureMeasure()(vehicle)
     gd = domain.global_data.clone()
     gd["U_inf_dir"] = torch.tensor([1.0, 0.0, 0.0])
     return DomainMesh(
-        interior=domain.interior, boundaries={"vehicle": vehicle}, global_data=gd
+        interior=domain.interior,
+        boundaries={"vehicle": vehicle, "stl_geometry": stl},
+        global_data=gd,
     )
 
 
@@ -216,9 +220,17 @@ def test_isla_volume_composes_and_runs():
         "pressure": {"rank": 0},
         "nut": {"rank": 0},
     }
+    ### The prediction points' geometry is computed from the full-resolution STL.
+    assert OmegaConf.to_container(cfg.forward_kwargs.boundary_geometry) == {
+        "vehicle": "boundaries.stl_geometry"
+    }
     domain = _volume_domain()
     batch, out, pred = _run(cfg, domain, _targets("drivaer_ml_volume_reference"))
     assert batch["forward_kwargs"]["prediction_points"] is domain.interior
+    assert (
+        batch["forward_kwargs"]["boundary_geometry"]["vehicle"].n_cells
+        == domain.boundaries["stl_geometry"].n_cells
+    )
     torch.testing.assert_close(out.points, domain.interior.points)
     assert pred["velocity"].shape == (64, 3) and pred["nut"].shape == (64,)
 
@@ -258,6 +270,23 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
     targets = [t["_target_"] for t in raw]
     assert "ComposeQuadratureMeasure" in targets[-1], targets
     assert ds.pipeline.reader.boundary_subsample == "cells"
+
+
+@pytest.mark.parametrize("suffix", ["", "_area", "_posed", "_sdf"])
+def test_reference_volume_datasets_keep_the_full_stl(suffix):
+    """ISLA's boundary_geometry is the STL the stored SDF is computed from: every
+    reference volume dataset file loads it and no longer drops it."""
+    ds = OmegaConf.load(
+        _RECIPE_ROOT / "datasets" / f"drivaer_ml_volume_reference{suffix}.yaml"
+    )
+    assert "stl_geometry" in ds.pipeline.reader.extra_boundaries
+    raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
+    dropped = [
+        t.get("names", [])
+        for t in raw
+        if isinstance(t, dict) and "DropBoundary" in str(t.get("_target_"))
+    ]
+    assert not any("stl_geometry" in names for names in dropped), dropped
 
 
 def test_corrected_measure_sees_the_surface_area():

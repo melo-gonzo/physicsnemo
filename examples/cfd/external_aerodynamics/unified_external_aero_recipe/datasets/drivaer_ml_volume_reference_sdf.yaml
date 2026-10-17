@@ -98,8 +98,9 @@ pipeline:
       use_winding_number: false
     - _target_: ${dp:SqueezeScalarFields}   # the (N, 1) sdf column becomes the (N,) field a rank-0 schema reads
       fields: [interior.point_data.sdf]
-    - _target_: ${dp:DropBoundary}
-      names: [stl_geometry]
+    # The full-resolution STL stays: ISLA (isla_volume.yaml) reads it as
+    # boundary_geometry, the surface its prediction points' built-in distance
+    # and direction are computed from (the vehicle boundary is the token sample).
     - _target_: ${dp:RenameMeshFields}
       point_data:
         UMeanTrim: velocity

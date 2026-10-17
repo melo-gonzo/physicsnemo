@@ -20,8 +20,8 @@
 # `sdf_normals` (rank 1), both computed on the full mesh by the dataset's
 # ComputeSDFFromBoundary stage and read from the prediction Mesh's
 # point_data (`prediction_points: interior`, inherited). They enter like any
-# other per-point PDE data; the model's own nearest-boundary geometry is
-# still computed from the boundary sample. Everything else is
+# other per-point PDE data; the model's own built-in geometry is still
+# computed, from the same STL (boundary_geometry, inherited). Everything else is
 # isla_volume.yaml. This variant exists for the INTERNAL-GEOMETRY
 # measurement (book notebook #sec-nb-internal-geometry-prereg).
 defaults:

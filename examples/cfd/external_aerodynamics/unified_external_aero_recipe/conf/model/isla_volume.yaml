@@ -28,12 +28,16 @@
 # prediction points with the output_schema fields in its point_data.
 #
 # Each prediction point's built-in geometry, its signed distance to the
-# nearest boundary token and the direction to it, is computed inside the
-# model from the boundary sample and is never an input; this configuration
-# declares no `query_schema`, so the dataset's stored sdf / sdf_normals are
-# not read. isla_volume_sdf.yaml declares them as query inputs (the stored
-# field is computed on the full mesh, the internal one on the 200,000-cell
-# sample; the INTERNAL-GEOMETRY measurement).
+# boundary surface and the direction from it, is computed inside the model
+# from the exact closest point on the full-resolution vehicle STL
+# (`boundary_geometry: boundaries.stl_geometry`, the surface the dataset's
+# stored SDF is computed from; the reference dataset files keep it) and is
+# never an input. The vehicle boundary stays the token sample, so the
+# geometry does not depend on how its 200,000 cells were drawn. The STL is
+# oriented as the vehicle tokens inside the model (the sign is positive on the
+# side the tokens' normals point to). This configuration declares no
+# `query_schema`, so the dataset's stored sdf / sdf_normals are not read;
+# isla_volume_sdf.yaml declares them as query inputs.
 #
 # The boundary measure must sum to the surface area: a subsampled boundary's
 # raw cell areas sum to the kept fraction of it, so the model reads the
@@ -77,6 +81,8 @@ compile_options:
 forward_kwargs:
   boundary_meshes:
     vehicle: boundaries.vehicle       # Mesh[2, 3] with the corrected cell measure in cell_data
+  boundary_geometry:
+    vehicle: boundaries.stl_geometry  # the full-resolution vehicle surface (points and cells only)
   prediction_points: interior         # the interior point-cloud Mesh (its point_data carries any query_schema fields)
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 

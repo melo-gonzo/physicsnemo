@@ -20,7 +20,14 @@
 # distance and its gradient as per-query inputs.
 
 # The mesh contract is that of isla_volume.yaml; unlike it, this config also
-# reads the dataset's stored sdf and sdf_normals as query inputs.
+# reads the dataset's stored sdf and sdf_normals as query inputs, and passes no
+# boundary_geometry: the AirfRANS files read the airfoil whole (its 843 to 1,217
+# segments; airfrans_volume_local.yaml's cell cap exceeds them, the uniform-interior
+# airfrans_uvolume_2d files read it uncapped), so the token mesh is the full-resolution
+# surface and the model computes the prediction points' exact geometry from its own
+# cells. A dataset file that subsamples the airfoil must keep a whole copy and pass it
+# as `boundary_geometry: {airfoil: <its path>}`; without it the model refuses tokens
+# whose effective measures exceed their cells' measures (in eager validation).
 input_type: mesh
 output_type: mesh
 

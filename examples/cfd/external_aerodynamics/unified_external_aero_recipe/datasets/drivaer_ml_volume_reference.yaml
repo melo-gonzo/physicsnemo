@@ -95,8 +95,9 @@ pipeline:
       # _single_solid STL is watertight, so this is exact and avoids the
       # O(n_points * n_faces) winding-number sign pass.
       use_winding_number: false
-    - _target_: ${dp:DropBoundary}
-      names: [stl_geometry]
+    # The full-resolution STL stays: ISLA (isla_volume.yaml) reads it as
+    # boundary_geometry, the surface its prediction points' built-in distance
+    # and direction are computed from (the vehicle boundary is the token sample).
     - _target_: ${dp:RenameMeshFields}
       point_data:
         UMeanTrim: velocity
