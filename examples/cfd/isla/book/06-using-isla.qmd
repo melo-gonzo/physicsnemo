@@ -63,22 +63,21 @@ ratio the book labels "GeoTransolver ÷ ISLA" is the reference
 configurations unless the row names another; an option's number is labelled by arm. What remains on the
 class is short:
 
-- **the sizes** `hidden`, `n_layers`, `n_slices`, `mlp_ratio`, which set
-  capacity and are the axes of the ladders in @sec-capacity;
-- **the three cost knobs** `geo_kernel`, `geo_checkpoint` and
-  `compile_blocks`, which change how the arithmetic is executed and never
-  what is computed (@sec-using-cost);
-- **the read-only interior task** `query_independent` and its boundary
-  read (`kernel_read`, `kernel_read_radius`, `kernel_read_blocks`,
-  `kernel_read_theta`), which together select ISLA-DTT
-  (@sec-arch-passive-decoder), the one configuration of the class besides
-  the reference that the book scores;
+- **the sizes** `hidden`, `n_layers`, `n_slices`, which set capacity and
+  are the axes of the ladders in @sec-capacity;
+- **the one cost knob** `compile_blocks`, which changes how the
+  arithmetic is executed and never what is computed (@sec-using-cost);
+- **the read-only interior task** `query_independent`, which selects
+  ISLA-DTT (@sec-arch-passive-decoder), the one configuration of the class
+  besides the reference that the book scores;
 - **the spatial dimension** `dim`, 3 by default and 2 for a planar
   problem, which is not an option in the policy's sense but a statement
   about the data (@sec-arch-switches).
 
 Every checkpoint stores its constructor arguments, so a saved model loads
-in the configuration that trained it (@sec-using-checkpoint).
+in the configuration that trained it (@sec-using-checkpoint). An argument
+the class no longer has is dropped on loading where it held the value the
+class now fixes, and refused, by name, otherwise.
 
 ::: {.callout-note title="The prediction at a point depends on the request, unless the points are passive"}
 An interior prediction of ISLA is a function of the whole set of
@@ -86,14 +85,23 @@ prediction points, because those points are interacting tokens
 (@sec-arch-modes). Deploy an interior model at its training point count
 and state that count with every interior number (@sec-using-checkpoint,
 @sec-interior-companion). A model that must answer at arbitrary point
-sets, alone or in chunks, is built with `query_independent=True` and the
-global boundary read through the cluster forest (ISLA-DTT,
-@sec-arch-passive-decoder): its prediction at a point depends on that
-point and the boundary alone, at 1.12 / 1.11 / 1.12 times ISLA's error on
-pressure / velocity / eddy viscosity on the DrivAerML Volume task and
-0.74 / 0.83 / 1.03 on the AirfRANS interior task, whose interior was
-read as one contiguous window of the stored points
-(@sec-interior-read-only, @sec-airfrans-read-only, @sec-interior-airfrans).
+sets, alone or in chunks, is built with `query_independent=True`
+(ISLA-DTT: passive prediction points that also read the boundary cells
+through the cluster forest, @sec-arch-passive-decoder): its prediction at
+a point depends on that point and the boundary alone.
+
+```{python}
+#| label: para-using-dtt
+#| output: asis
+_au = json.load(open(RES / "char" / "airfrans_uniform.json"))
+_dtt = _au["controls"]["ISLA-DTT (forest read at theta = 1)"]["native"]
+_isla = _au["arms"][_au["isla_arm"]]["native"]
+_r = " / ".join(f"{_dtt[f]['mean'] / _isla[f]['mean']:.2f}" for f in ("pressure_l2", "velocity_l2", "nut_l2"))
+print("Its error is 1.12 / 1.11 / 1.12 times ISLA's on pressure / velocity / eddy viscosity on the DrivAerML Volume "
+      f"task at the same size, and {_r} times on the AirfRANS interior task with the interior drawn uniformly, where "
+      "ISLA-DTT is 384 wide with 256 slices against ISLA's 512 and 512 "
+      "(@sec-interior-read-only, @sec-airfrans-read-only; results/char/airfrans_uniform.json).")
+```
 :::
 
 ## What the model needs from your data {#sec-using-inputs}
@@ -433,12 +441,11 @@ print(f"**Per step, on one GPU, the cost sweep of @tbl-isla-cost compares ISLA a
 The step is memory-bound at every stage
 but the MLP. The per-slice geometry (separations, invariants, routing
 softmaxes) is most of the stored activations. That is why the eager path
-rebuilds it in the backward pass instead of storing it (`geo_checkpoint`,
-bitwise identical outputs and gradients), and why a fused Triton kernel
-exists for the geometry region. `geo_kernel: null` resolves to the kernel
-at the first forward pass wherever it can run, and to the eager recompute
-region elsewhere (@sec-arch-switches; the conditions are in the list
-below). Every path computes the same function (output relative L2 against
+rebuilds it in the backward pass instead of storing it (bitwise identical
+outputs and gradients), and why a fused Triton kernel exists for the
+geometry region. The model selects the kernel at the first forward pass
+wherever it can run, and the eager recompute region elsewhere (the
+conditions are in the list below). Every path computes the same function (output relative L2 against
 the eager reference at most $5.5 \times 10^{-7}$ in bf16). That footprint is what buys accuracy at scale. On
 the DrivAerML Surface task at 435 cars, ISLA reaches GeoTransolver's floor
 at less than a third of the memory (@sec-shared-floor).
@@ -472,17 +479,14 @@ print(": Training cost at the reporting protocol: one case of 200,000 sampled ce
 
 Three practical consequences:
 
-- **Leave `geo_kernel` at its default (`null`).** On CUDA in three
-  dimensions with one to four per-point vectors, the model selects the
-  fused kernel at the first forward pass and logs the choice. Off CUDA, in
-  two dimensions, with rank-2 per-token inputs, or with more than four
-  vectors in all, it falls back to the eager recompute region. Force
-  `eager` only to reproduce the exact arithmetic path of a checkpoint
-  trained on the eager region.
-- **On the eager path, leave `geo_checkpoint: true` unless you are short
-  of time and long on memory.** It is bitwise identical in outputs and
-  gradients. Under the fused kernel the recompute is built in and the flag
-  has no effect.
+- **The geometry kernel is chosen for you.** On CUDA in three dimensions
+  with one to four per-point vectors, the model selects the fused kernel
+  at the first forward pass and logs the choice. Off CUDA, in two
+  dimensions, with rank-2 per-token inputs, or with more than four vectors
+  in all, it falls back to the eager recompute region. To reproduce the
+  exact arithmetic path of a checkpoint trained on the eager region, set
+  the model's `geo_kernel` attribute to `"eager"` before the first forward
+  pass.
 - **Compile the whole model.** The recipe's ISLA configurations do:
   `compile: true` with `compile_options` `fullgraph: true`, `dynamic: true`
   and `mode: max-autotune-no-cudagraphs`. The forward, Mesh in and out,
@@ -509,10 +513,9 @@ Three practical consequences:
   32.9 GiB, and the Volume step from 475 to 308 ms and 88.5 to 64.5 GiB.
   Models trained with it score the same as models trained eagerly on both
   DrivAerML tasks, every field within seed noise
-  (`results/perf3_neutrality_2026-10-01.json`). It is the way to compile a
-  configuration with a kernel read (`kernel_read`, ISLA-DTT), whose radius
-  and tree reads break the whole-model graph: `compile=false
-  model.compile_blocks=true`.
+  (`results/perf3_neutrality_2026-10-01.json`). It is the way to compile
+  ISLA-DTT (`query_independent=True`), whose boundary read breaks the
+  whole-model graph: `compile=false model.compile_blocks=true`.
 
 ## Contracts you can check on your own data {#sec-using-contracts}
 

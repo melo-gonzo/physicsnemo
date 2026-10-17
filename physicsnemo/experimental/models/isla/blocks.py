@@ -39,6 +39,10 @@ GeoKernel = Literal["eager", "fused"]
 #: times the cosine between the token state and a slice prototype.
 ROUTING_TEMPERATURE = 10.0
 
+#: Expansion ratio of the per-token and per-slice MLPs (a ratio of 8 was within the
+#: noise band of the capacity study).
+MLP_RATIO = 4
+
 
 def _softmax_over_points(x: Float[torch.Tensor, "batch tokens slices"]):
     """Softmax over the point dimension (dim 1) of a (B, N, S) tensor.
@@ -244,8 +248,6 @@ class _SliceBlock(nn.Module):
         self,
         hidden: int,
         n_slices: int,
-        mlp_ratio: int = 4,
-        geo_checkpoint: bool = False,
         geo_kernel: GeoKernel = "eager",
         n_global_vectors: int = 1,
         n_block_vecs: int = 0,
@@ -255,17 +257,15 @@ class _SliceBlock(nn.Module):
         ### "fused" evaluates the dense geometry region (invariants -> routing bias
         ### -> point->slice mix -> pooled invariants) in one Triton kernel per
         ### direction that never materializes a (B,N,S,.) tensor (see
-        ### geo_kernel.py); same arithmetic as _geo_region, recompute built in, so
-        ### geo_checkpoint is moot on that path.
+        ### geo_kernel.py); same arithmetic as _geo_region, recompute built in.
         self.geo_kernel = geo_kernel
         self.n_geo = _geo_width(n_global_vectors, n_block_vecs, n_block_tens)
         ### Activation recompute: the per-slice geometry tensors -- rel (B,N,S,3),
         ### rel_hat, dist and two bf16 copies of the (B,N,S,geo) invariants -- are
-        ### 76% of ISLA's saved activations at 10k tokens. With geo_checkpoint the
-        ### invariants are rebuilt from (r, n_hat, g_hat, z_pos, m_s) inside
-        ### backward instead of stored; the forward is bitwise unchanged (same
-        ### ops, same order).
-        self.geo_checkpoint = bool(geo_checkpoint)
+        ### 76% of ISLA's saved activations at 10k tokens. The eager region is
+        ### checkpointed: the invariants are rebuilt from (r, n_hat, g_hat, z_pos,
+        ### m_s) inside backward instead of stored; the forward is bitwise the
+        ### stored-activation forward (same ops, same order).
         self.norm_assign = nn.LayerNorm(hidden)
         self.assign = _RoutingLogits(hidden, n_slices)
         ### Relational geometry: per-slice equivariant anchors and point-anchor
@@ -276,16 +276,16 @@ class _SliceBlock(nn.Module):
         self.geo_feat = nn.Linear(self.n_geo, self.geo_width)
         self.slice_mlp = nn.Sequential(
             nn.LayerNorm(hidden),
-            nn.Linear(hidden, mlp_ratio * hidden),
+            nn.Linear(hidden, MLP_RATIO * hidden),
             nn.GELU(),
-            nn.Linear(mlp_ratio * hidden, hidden),
+            nn.Linear(MLP_RATIO * hidden, hidden),
         )
         self.broadcast = nn.Linear(2 * hidden + hidden // 2, hidden)
         self.norm_mlp = nn.LayerNorm(hidden)
         self.mlp = nn.Sequential(
-            nn.Linear(hidden, mlp_ratio * hidden),
+            nn.Linear(hidden, MLP_RATIO * hidden),
             nn.GELU(),
-            nn.Linear(mlp_ratio * hidden, hidden),
+            nn.Linear(MLP_RATIO * hidden, hidden),
         )
 
     def forward(
@@ -321,7 +321,7 @@ class _SliceBlock(nn.Module):
         if (self.geo_kernel if geo_kernel is None else geo_kernel) == "fused":
             ### The fused kernel takes the global directions and the token's rank-1
             ### vectors as one per-point vector set (at most four in all, no rank-2
-            ### inputs; enforced at construction / resolution).
+            ### inputs; the model's resolution checks it).
             bias, point_mix, pooled = _fused_geo_region()(
                 self.geo_logit,
                 logits,
@@ -333,7 +333,7 @@ class _SliceBlock(nn.Module):
                 eps,
                 n_global=g_hat.shape[2],
             )
-        elif self.geo_checkpoint:
+        else:
             bias, point_mix, pooled = checkpoint(
                 _geo_region,
                 self.geo_logit,
@@ -347,19 +347,6 @@ class _SliceBlock(nn.Module):
                 vecs,
                 tens,
                 use_reentrant=False,
-            )
-        else:
-            bias, point_mix, pooled = _geo_region(
-                self.geo_logit,
-                logits,
-                r,
-                n_hat,
-                g_hat,
-                z_pos,
-                m_s,
-                eps,
-                vecs,
-                tens,
             )
         logits = logits + bias
         a = _softmax_over_points(logits + log_w)

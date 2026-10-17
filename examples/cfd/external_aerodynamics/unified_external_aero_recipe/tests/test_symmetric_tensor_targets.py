@@ -278,7 +278,6 @@ def test_isla_end_to_end_through_collate_and_loss():
         hidden=16,
         n_layers=1,
         n_slices=4,
-        geo_kernel="eager",
     )
     with torch.no_grad():
         out = model(**fk)

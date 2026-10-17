@@ -62,10 +62,11 @@ def _model(**kw):
         hidden=32,
         n_layers=1,
         n_slices=8,
-        geo_kernel="eager",
     )
     base.update(kw)
-    return ISLA(**base).double().eval()
+    m = ISLA(**base).double().eval()
+    m.geo_kernel = "eager"
+    return m
 
 
 def test_outputs_are_nested_point_data():

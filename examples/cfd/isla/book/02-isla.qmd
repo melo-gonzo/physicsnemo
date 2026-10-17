@@ -1103,7 +1103,7 @@ weights.
 | prediction points off the surface keep every contract | `test_interior_contracts`, `test_interior_task_contracts` | $10^{-11}$ / $10^{-6}$ |
 | several boundary meshes are one token set; a mesh without stored measures uses its geometric quadrature | `test_several_boundary_meshes_are_one_token_set`, `test_no_effective_measures_is_the_geometric_quadrature` | $10^{-10}$ |
 | zero and several global vectors; global scalars; magnitude invariance | `test_isla_global_inputs.py` | $10^{-10}$ |
-| pool-then-project equals project-then-pool; the geometry recompute reproduces outputs and gradients | `test_geo_pool_then_project_is_exact`, `test_geo_checkpoint_is_exact` | $10^{-12}$ / exact (outputs), $10^{-11}$ (gradients) |
+| pool-then-project equals project-then-pool | `test_geo_pool_then_project_is_exact` | $10^{-12}$ |
 | every parameter receives a gradient; heads run under bf16 autocast | `test_all_parameters_receive_gradients`, `test_head_runs_under_bf16_autocast` | exact / finite |
 | the same contracts in two dimensions, reflection included | `test_two_dimensional_contracts_rotation_translation_magnitude_and_reflection` | $10^{-4}$ |
 

@@ -184,14 +184,13 @@ def test_head_runs_under_bf16_autocast():
     assert all(torch.isfinite(o.float()).all() for o in out.values())
 
 
-@pytest.mark.parametrize("kw", [{}, {"geo_checkpoint": True}])
 @pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
-def test_every_parameter_receives_a_gradient(kw, interior):
+def test_every_parameter_receives_a_gradient(interior):
     """DDP requires every parameter to take part in the loss. A surface model owns
     no prediction-point parameters and an interior model uses all of its own, so
     in both tasks every parameter receives a gradient."""
     torch.manual_seed(0)
-    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=interior, **kw)
+    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=interior)
     pts, nrm, w, drv = cloud(128, dtype=torch.float32)
     q = torch.randn(20, 3) if interior else None
     out = outputs(m(boundary_meshes={"wall": soup(pts, nrm, w)}, prediction_points=q, global_data={"g": drv}))
@@ -217,31 +216,6 @@ def test_geo_pool_then_project_is_exact():
     old = torch.einsum("bns,bnsg->bng", mix, blk.geo_feat(geo))
     new = blk.geo_feat(torch.einsum("bns,bnsg->bng", mix, geo))
     assert torch.allclose(old, new, atol=1e-12, rtol=0.0)
-
-
-@pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
-def test_geo_checkpoint_is_exact(interior):
-    """Recomputing the per-slice invariants in backward (geo_checkpoint=True)
-    changes what autograd stores, not what it computes: identical forward
-    output and gradients (to roundoff) against the stored-activation path."""
-    torch.manual_seed(0)
-    kw = dict(hidden=32, n_layers=2, n_slices=8, interior=interior)
-    ref = _isla(**kw).double()
-    ckp = _isla(geo_checkpoint=True, **kw).double()
-    ckp.load_state_dict(ref.state_dict())
-    pts, nrm, w, _ = cloud(40)
-    mesh = soup(pts, nrm, w)
-    drive = torch.tensor([1.0, 0.2, 0.0], dtype=D)
-    q = torch.randn(17, 3, dtype=D) if interior else None
-    outs = []
-    for m in (ref, ckp):
-        out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drive}))
-        sum(o.square().sum() for o in out.values()).backward()
-        outs.append(out)
-    assert all(torch.equal(outs[0][k], outs[1][k]) for k in outs[0])
-    for (n, p), (_, g) in zip(ref.named_parameters(), ckp.named_parameters()):
-        assert p.grad is not None and g.grad is not None, n
-        assert torch.allclose(p.grad, g.grad, atol=1e-11, rtol=1e-9), n
 
 
 def test_query_scalars_contracts():
@@ -313,9 +287,11 @@ def test_interior_task_contracts():
 
 
 def test_query_independent_interior_contracts():
-    """query_independent=True: the prediction points read every block's slices and
-    never write into them, so a prediction is exactly independent of the other
-    points of the request (alone, a prefix, any order, any chunking), while
+    """query_independent=True (ISLA-DTT, here with its boundary read at its zero
+    initialization; test_isla_tree_read.py exercises the read): the prediction points
+    read every block's slices and never write into them, so a prediction is exactly
+    independent of the other points of the request (alone, a prefix, any order, any
+    chunking), while
     rotation/translation covariance, the similarity gauge and boundary-refinement
     invariance hold as for interacting tokens; there is no routing-mass parameter,
     every parameter receives a gradient, and bf16 autocast stays finite."""
@@ -353,51 +329,6 @@ def test_query_independent_interior_contracts():
     assert all(torch.isfinite(p.grad).all() for p in m32.parameters() if p.grad is not None)
     with pytest.raises(ValueError, match="interior=True"):
         _isla(hidden=32, n_layers=1, n_slices=8, query_independent=True)
-
-
-def test_support_points_make_an_interacting_model_query_independent():
-    """support_points write with the interacting routing mass and the prediction points
-    only read: a prediction depends on its own point, the boundary and the support
-    (alone, a prefix, any order, any chunking: exact); with the request as its own
-    support it is the interacting prediction; covariance and the similarity gauge
-    hold with the support moved along; every parameter receives a gradient; misuse
-    raises."""
-    torch.manual_seed(0)
-    pts, nrm, w, drv = cloud(400)
-    mesh = soup(pts, nrm, w)
-    sup = torch.randn(120, 3, dtype=D) * 4.0
-    qpts = torch.randn(150, 3, dtype=D) * 4.0
-    m = _isla(hidden=64, n_layers=2, n_slices=16, interior=True).double().eval()
-    with torch.no_grad():
-        m.qt.logw.fill_(0.3)
-
-    def run(q, s=sup, msh=mesh, g=drv):
-        return _run(m, msh, g, q, support_points=s)
-
-    base = run(qpts)
-    assert base.point_data["p"].shape == (150,) and torch.equal(base.points, qpts)
-    perm = torch.randperm(150, generator=torch.Generator().manual_seed(1))
-    assert same(run(qpts[:50]), _rows(base, slice(0, 50)), atol=1e-12)
-    assert same(run(qpts[perm]), _rows(base, perm), atol=1e-12)
-    chunks = [outputs(run(c)) for c in qpts.split(40)]
-    assert same({k: torch.cat([c[k] for c in chunks]) for k in chunks[0]}, base, atol=1e-12)
-    assert same(_run(m, mesh, drv, qpts, support_points=qpts), _run(m, mesh, drv, qpts), atol=1e-10)
-    assert not same(run(qpts, s=sup * 0.5), base, atol=1e-6)
-    q = _rotation()
-    shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
-    _assert_rotated(run(qpts @ q.T + shift, s=sup @ q.T + shift, msh=transform(mesh, q, shift), g=drv @ q.T), base, q)
-    k = 2.7
-    assert same(run(k * qpts + shift, s=k * sup + shift, msh=transform(mesh, shift=shift, scale=k)), base, atol=1e-10, rtol=0.0)
-    m.train()
-    out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=qpts, support_points=sup, global_data={"g": drv}))
-    sum(o.square().mean() for o in out.values()).backward()
-    missing = [n for n, p in m.named_parameters() if p.grad is None]
-    assert not missing, missing
-    passive = _isla(hidden=32, n_layers=1, n_slices=8, interior=True, query_independent=True).double()
-    with pytest.raises(ValueError, match="query_independent=True"):
-        passive(boundary_meshes={"wall": mesh}, prediction_points=qpts, support_points=sup, global_data={"g": drv})
-    with pytest.raises(ValueError, match="support_points must be a point-cloud Mesh"):
-        m(boundary_meshes={"wall": mesh}, prediction_points=qpts, support_points=sup[:, :2], global_data={"g": drv})
 
 
 @pytest.mark.parametrize("extra", [{}, {"query_schema": {"sdf": {"rank": 0}}}])
@@ -570,6 +501,14 @@ def test_constructor_and_forward_are_keyword_only():
         "query_tokens",
         "support_tokens",
         "interior_geometry",
+        "kernel_read",
+        "kernel_read_radius",
+        "kernel_read_blocks",
+        "kernel_read_theta",
+        "mlp_ratio",
+        "geo_checkpoint",
+        "geo_kernel",
+        "eps",
     ],
 )
 def test_unknown_constructor_argument_raises_type_error(name):
@@ -689,32 +628,28 @@ def test_rms_distance_converges_on_koch_curve_where_total_measure_diverges():
 
 
 def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices():
-    """geo_kernel=None (auto) picks the fused Triton region only where it can run: on
-    CUDA with one to four global directions and at most 1024 slices. On CPU it must
+    """geo_kernel "auto" picks the fused Triton region only where it can run: on CUDA
+    with one to four global directions and at most 1024 slices. On CPU it must
     resolve to eager at the first forward pass, cache the decision, and leave the
-    outputs identical to an explicit eager model with the same weights."""
+    outputs identical to a model forced to eager with the same weights."""
     torch.manual_seed(0)
     pts, nrm, w, _ = cloud(64)
     mesh = soup(pts, nrm, w)
     drv = torch.tensor([1.0, 0.0, 0.0], dtype=D)
     auto = _isla(hidden=32, n_layers=2, n_slices=8).double().eval()
     assert auto.geo_kernel == "auto" and auto.resolve_geo_kernel(pts) == "eager"
-    eager = _isla(hidden=32, n_layers=2, n_slices=8, geo_kernel="eager").double().eval()
+    eager = _isla(hidden=32, n_layers=2, n_slices=8).double().eval()
+    eager.geo_kernel = "eager"
     eager.load_state_dict(auto.state_dict())
     ya, ye = outputs(_run(auto, mesh, drv)), outputs(_run(eager, mesh, drv))
     assert all(torch.equal(ya[k], ye[k]) for k in ya)
     assert all(b.geo_kernel == "eager" for b in auto.blocks)
     assert auto._geo_kernel_cache[1] == "eager"
-    # five global directions: auto silently stays eager (off CUDA it does anyway); an
-    # explicit fused request is refused at construction (the kernel is unrolled for
-    # one to four)
+    # five global directions: auto stays eager (off CUDA it does anyway; the kernel is
+    # unrolled for one to four)
     five = {"g1": {"rank": 1}, "g2": {"rank": 1}, "g3": {"rank": 1}, "g4": {"rank": 1}, "g5": {"rank": 1}}
     two = ISLA(output_schema=PV, global_schema=five, hidden=32, n_layers=2, n_slices=8).double().eval()
     assert two.resolve_geo_kernel(pts) == "eager"
-    with pytest.raises(ValueError, match="one to four per-point vectors"):
-        ISLA(output_schema=PV, global_schema=five, hidden=32, n_layers=2, n_slices=8, geo_kernel="fused")
-    with pytest.raises(ValueError, match="geo_kernel must be"):
-        _isla(hidden=32, n_layers=2, n_slices=8, geo_kernel="turbo")
 
 
 def test_scalar_only_model_has_no_frame_routing_and_every_parameter_gets_a_gradient():
