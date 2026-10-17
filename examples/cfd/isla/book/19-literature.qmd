@@ -258,8 +258,12 @@ paper, stated with that bound.
 
 *The idea.* The routing logit is a temperature times the cosine between
 the normalized token state and a learned prototype per slice, so every
-logit is bounded and no block can route every point to one slice
-(@sec-isla-routing-forms).
+logit's scale is bounded (@sec-isla-routing-forms). The bound removes the
+learning-rate ceiling of the linear form but does not by itself prevent a
+routing collapse: in lanes trained with the raw slice reads, half of the
+DeepJEB++ blocks route to one to five effective slices
+(@sec-surface-deepjeb), and on AeroZoo the routing's effective support
+fell to 0.40 to 0.57 of its epoch-39 value in three blocks (@sec-using-lr).
 
 *Closest prior work.* Scaled cosine attention in Swin Transformer V2
 replaces the dot product because in large models the attention maps of
@@ -276,8 +280,8 @@ losses in sparse expert routing exist for the same family of failure
 linear-routed ISLA was measured to be total routing collapse (one active
 slice per block, all anchors coincident), with a learning-rate ceiling
 that falls like one over the width and at least one over the depth.
-Bounding the logits removes it at neutral or better accuracy on two
-datasets (@sec-principled-ledger).
+Bounding the logits removes that ceiling at neutral or better accuracy on
+two datasets (@sec-principled-ledger), not every route to a collapse.
 Whether the released Transolver family shares the ceiling is untested
 (GeoTransolver degrades several-fold at a rate of 1e-2 on the cars, from
 an earlier exploration-budget grid, mechanism unmeasured).
@@ -391,7 +395,8 @@ Ranked by how much of it is new and how much evidence stands behind it:
    three datasets and the extrapolation crossover, stated with the
    DrivAerML tie beside them; the paper that a practitioner with a fixed
    budget would read.
-4. **Routing collapse in slice attention and its removal** (idea e): a
+4. **Routing collapse in slice attention and the rate ceiling bounded
+   logits remove** (idea e): a
    short, useful note, larger if GeoTransolver is shown to share the
    ceiling.
 5. The general interface and the fused kernel (f, h): sections of the

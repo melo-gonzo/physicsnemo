@@ -903,6 +903,10 @@ its cells one by one. The softmax of each point runs in a fused Triton
 kernel that keeps nothing per pair between the forward and backward
 passes.
 
+::: {.callout-warning title="Trained with the raw slice reads"}
+The trained checkpoints behind this chapter's numbers and pictures use the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm, not the normalized reads of ISLA's reference configuration (@sec-isla-layer).
+:::
+
 Three properties hold by construction. At $\theta = 0$ no cluster is
 admitted and the read is the dense read pair for pair, with the same
 parameters (`test_tree_read_at_theta_zero_is_the_dense_read`). At every

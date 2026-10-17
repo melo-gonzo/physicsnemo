@@ -37906,3 +37906,58 @@ estimator variance, which no change of query geometry removes. Exact
 full-mesh geometry is therefore worth building and training; a
 pre-registration of the retrained test keeps velocity's law effect at 400
 segments outside its bars.
+
+## 2026-10-17 — H-RESID A2 adopted: ISLA's slice sublayer pools and broadcasts the normalized state, and the DeepJEB++ and AeroZoo rate exceptions are retired {#sec-nb-a2-adopted}
+
+**Ruling.** Peter, 2026-10-17: "make this the ISLA default... no need
+for parallel old implementations." Arm A2 of H-RESID
+(@sec-nb-aerozoo-hresid-prereg, amendment) becomes ISLA's slice-sublayer
+reads: the slice states pool `norm_assign(h)` and the broadcast reads
+`norm_assign(h)`, so the raw `h` enters a block only through the
+residual identity and the token MLP's LayerNorm. The class keeps no
+switch back to the raw reads. Its checkpoint version is 0.3.0; 0.1.0
+and 0.2.0 checkpoints still load and warn that their slice blocks were
+trained on the raw residual stream. The ruling comes before P3's final
+read, on the evidence below.
+
+**Evidence.**
+
+- P4 holds (@sec-nb-deepjeb-hresid-p4). On DeepJEB++ at 3.75e-4,
+  neither `jbn2_isla_*` lane departs. Validation von Mises at epoch 12
+  is 0.447 and 0.439 (displacement 0.213 and 0.222), against the bar of
+  0.6; the raw-read lanes at this rate sat at the plateau (0.90 to 1.02)
+  from epoch 4.
+- P5 holds (@sec-nb-airfrans-hresid-p5). On AirfRANS with uniform
+  draws, A2 ÷ the reference ISLA lanes is 0.862 on pressure, 0.790 on
+  velocity and 0.877 on eddy viscosity (seed means), against a bar of at
+  most 5 percent loss. Both A2 seeds lie below both reference seeds on
+  every field, and rotated and translated scoring gives the same ratios
+  to three decimals.
+- P3 interim (@sec-nb-aerozoo-hresid-p3-interim). On AeroZoo `full` at
+  3.75e-4 (uniform protocol), both A2 seeds keep their validation
+  minimum through epoch 70: 0.0248 and 0.0236 at epoch 70, where their
+  raw-read twins read 0.120 and 0.143. The mean token norm of `h` after
+  the last block at epoch 43 is 1.7e3 and 1.8e3, against the bar of
+  5.7e5 and the raw reads' 5.7e7, so P3's second part holds.
+
+**What changes.** ISLA trains at the reference rate 3.75e-4 on every
+dataset. The two per-dataset rate exceptions are retired: DeepJEB++ at
+1.875e-4 (@sec-nb-char-deepjeb-rate-ruling) and the AeroZoo half-rate
+arms (@sec-nb-aerozoo-remedy-prereg, with R2 holding in
+@sec-nb-aerozoo-remedy-r2). `isla_surface_deepjebpp.yaml` pins 3.75e-4
+like every other ISLA config, and a recipe test checks the rate in
+every ISLA model config. The AeroZoo half-rate lanes stay in their
+chapter as a labeled rate control. Every standing in the results
+chapters (7 to 13, 15 and 20) and in the thesis table comes from
+checkpoints trained with the raw reads. Each of those chapters carries
+one label that says so, and the ledger row A2-RERUN tracks the reruns
+that replace them.
+
+**Still to read.** P3 at epoch 250 on the four AeroZoo remedy lanes
+(rows 340 to 343, with arm A as the diagnostic). The DeepJEB++ A2 finals
+at epoch 40 (`jbn2_isla_*`), scored against GeoTransolver and
+Transolver under the campaign protocol. The reference reruns with the
+normalized reads on every dataset (A2-RERUN). The head frame's raw read
+of `h`, which A2 leaves in place, is normalized only as a separate,
+tested change (@sec-nb-aerozoo-hresid-prereg). If P3 fails at epoch
+250, this notebook records it and the AeroZoo rate question reopens.

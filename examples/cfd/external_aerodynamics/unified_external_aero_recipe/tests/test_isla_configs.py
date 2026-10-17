@@ -305,6 +305,17 @@ def test_isla_configs_pin_the_protocol_learning_rate(model, dataset):
     assert cfg.training.optimizer.lr == pytest.approx(3.75e-4)
 
 
+@pytest.mark.parametrize(
+    "model", sorted(p.stem for p in (_RECIPE_ROOT / "conf" / "model").glob("isla_*.yaml"))
+)
+def test_every_isla_model_config_pins_the_reference_rate(model):
+    """Every ISLA model config, whatever its dataset, trains at the reference rate
+    3.75e-4: with the normalized slice reads no dataset keeps a rate exception. The
+    dataset key is train.yaml's default; it does not enter the rate."""
+    cfg = _compose(model, "drivaer_ml_volume")
+    assert cfg.training.optimizer.lr == pytest.approx(3.75e-4)
+
+
 def test_cli_override_still_wins_over_the_pinned_rate():
     """Explicit learning-rate overrides take precedence over model defaults."""
     cfg = _compose("isla_surface", "drivaer_ml_surface", "training.optimizer.lr=5e-4")

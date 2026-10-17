@@ -315,8 +315,8 @@ which side has more and whether it bought accuracy (@sec-equal-budget).
 
 **Each architecture trains at its own best learning rate, and the rate is
 part of the protocol, not a tuning afterthought.** In the reference
-configurations GeoTransolver and Transolver run at 1e-3 and ISLA at 3.75e-4,
-the width rule's rate at width 512 (@sec-using-lr). On the ladders, which
+configurations GeoTransolver and Transolver run at 1e-3 and ISLA at 3.75e-4
+on every dataset, the width rule's rate at width 512 (@sec-using-lr). On the ladders, which
 hold the 256-wide baselines and ISLA at 384 or 192 wide, GeoTransolver runs
 at the better of 1e-3 and 3e-3 per rung, found by the two-rate control of
 rule 3, Transolver at 3e-3, and ISLA at 5e-4 (384 wide) or 1e-3 (192 wide). Why ISLA's rate does not follow the

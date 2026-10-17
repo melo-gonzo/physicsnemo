@@ -407,6 +407,10 @@ two effects and are reported with the density evidence in
 
 **The two contracts above are read by five instruments on two datasets, the DrivAerML Surface task and the 35-wing HiLiftAeroML rung, and this half of the chapter holds every one of their tables, so that no dataset chapter carries a pose or discretization number of its own.** The instruments are the inference draw, convergence under refinement, the training law, the slice territories and the posed evaluation; each section names its budget and its artifact.
 
+::: {.callout-warning title="Trained with the raw slice reads"}
+The trained checkpoints behind this chapter's numbers and pictures use the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm, not the normalized reads of ISLA's reference configuration (@sec-isla-layer).
+:::
+
 ```{python}
 #| label: para-disc-lede
 #| output: asis
