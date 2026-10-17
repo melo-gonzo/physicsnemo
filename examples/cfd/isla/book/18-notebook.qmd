@@ -37864,3 +37864,45 @@ velocity (3.86). With P4 (@sec-nb-deepjeb-hresid-p4) and the P3 interim
 (@sec-nb-aerozoo-hresid-p3-interim), every registered prediction of
 H-RESID holds so far; P3 is read at epoch 250, and then the adoption of
 A2 as the reference configuration is proposed.
+
+## 2026-10-16 — GEO0: with full-mesh query geometry ISLA no longer depends on the boundary draw on DrivAerML Volume; on AirfRANS the count and pressure effects mostly vanish, a velocity law effect remains {#sec-nb-geo0}
+
+ISLA's interior error depends on how the boundary is sampled
+(@sec-nb-char-area-audit, @sec-nb-char-area2-verdict), through the
+queries' distance and direction to the nearest boundary sample. A design
+study (scratch/isla-geo-exact-design-2026-10-16/REPORT.md) proposes exact
+point-to-face geometry against the full-resolution boundary instead.
+GEO0 tests the idea without training, on existing matched pairs that
+differ only in the query geometry: `sg_*_provided` (the stored full-mesh
+signed distance and normals) against `sg_*_internal` (the nearest boundary
+token), ISLA R1 (384 wide, 256 slices, code_v3), two seeds each, on
+AirfRANS (the volume set with the windowed interior) and DrivAerML Volume.
+The predictions were registered before any redraw result
+(scratch/isla-geo0-2026-10-16/PREREG.md); the protocol is that of
+@sec-nb-char-area2-verdict, with a second uniform draw as noise floor
+(LHR jobs 241664, 241665, 241802). The rescored native errors match the
+committed records exactly.
+
+| Set | Geometry | area ÷ uniform (p, v) | uniform ÷ native | area ÷ native |
+|---|---|---|---|---|
+| AirfRANS, 400 segments | full mesh | 1.45 / 1.38, 1.98 / 1.81 | 1.6 to 2.4 | 3.0 to 3.2 |
+| AirfRANS, 400 segments | nearest token | 2.65 / 2.89, 1.74 / 1.78 | 4.0 to 7.5 | 11.4 to 13.0 |
+| DrivAerML Volume | full mesh | about 1.00 | about 1.00 | 0.9975 to 1.0004 |
+| DrivAerML Volume | nearest token | 8.1 to 11.2 | about 1.00 | 8.1 to 11.2 |
+
+Noise floors are at most 0.04 (AirfRANS) and 0.003 (DrivAerML).
+**On DrivAerML Volume the nearest-token geometry carries the whole
+sensitivity, and full-mesh geometry removes it** (the registered bar,
+within 5 percent of native, holds on every field and seed). On AirfRANS
+the count bar (at most 4) holds and the law bar (area ÷ uniform at most
+1.5) holds on pressure and fails on velocity (1.98 and 1.81); the
+nearest-token twin is more law-sensitive on pressure but not on velocity.
+The velocity effect is broad (per-case median 1.33 to 1.48, above 1 in 74
+to 77 percent of cases). A reading not yet tested: the area law almost
+never keeps the refined leading- and trailing-edge segments (smallest
+inclusion probability about 1.3e-3), so the few it keeps carry weights
+up to about 800 and the slice states' quadratures become noisy; that is
+estimator variance, which no change of query geometry removes. Exact
+full-mesh geometry is therefore worth building and training; a
+pre-registration of the retrained test keeps velocity's law effect at 400
+segments outside its bars.
