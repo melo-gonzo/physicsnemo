@@ -45,8 +45,8 @@ configuration is the class as it ships: 12 layers, cosine routing at a
 fixed temperature over centered sample-conditioned prototypes, the
 RMS-pairwise-distance length unit, the fused geometry kernel where it can
 run, and prediction points that carry a learned share of the total boundary
-measure. It trains at learning rate 3.75e-4 and 200,000 sampled cells per
-case. The configuration is the most accurate of ISLA's under 80 GiB per GPU
+measure. It trains at learning rate 3.75e-4 on every dataset and 200,000
+sampled cells per case. The configuration is the most accurate of ISLA's under 80 GiB per GPU
 on the two selection datasets; the rule and the baselines' reference
 configurations are in @sec-protocol. The class defaults and the recipe's
 ISLA configurations (`isla_surface`, `isla_volume`) are this configuration,
@@ -297,8 +297,8 @@ trained at the rule rate is therefore comparable with the book's lanes.
 Under ISLA's cosine routing the logits are bounded, so the routing-collapse
 failure that would otherwise set a hard ceiling on the rate is unreachable
 (@sec-isla-routing-forms). A higher rate is an experiment, not a hazard.
-The recipe's ISLA configurations pin 3.75e-4, the rule's rate at the
-reference width 512, rather than inheriting the recipe-wide default of 3e-3,
+The recipe's ISLA configurations, one per dataset, all pin 3.75e-4, the
+rule's rate at the reference width 512, rather than inheriting the recipe-wide default of 3e-3,
 which drives ISLA to a mean-field plateau. GeoTransolver and Transolver
 train at 1e-3 in their reference configurations, the recipe default.
 
