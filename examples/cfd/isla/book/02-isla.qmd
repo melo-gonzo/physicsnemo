@@ -439,6 +439,10 @@ temperature is the class constant `ROUTING_TEMPERATURE`, 10. The frame and
 head contracts do not depend on the routing form. The collapsed note below
 is the one place in the book where the linear form appears with numbers.
 
+::: {.callout-warning title="Trained with the raw slice reads"}
+The trained checkpoints behind this chapter's numbers and pictures use the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm, not the normalized reads of ISLA's reference configuration (@sec-isla-layer).
+:::
+
 ::: {.callout-note collapse="true" title="The learning-rate ceiling of the linear form, measured"}
 ```{python}
 #| label: tbl-using-rate-ceiling
