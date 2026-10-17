@@ -32,8 +32,13 @@ from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla import geometry
 from physicsnemo.experimental.models.isla.geometry import (
     _nearest_index,
+    exact_boundary_geometry,
     nearest_boundary_geometry,
 )
+from physicsnemo.mesh import Mesh
+from physicsnemo.mesh.primitives.curves import circle_2d
+from physicsnemo.mesh.primitives.surfaces import cube_surface, sphere_icosahedral, torus
+from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
 from test.experimental.models.isla._meshes import (
     cloud,
     orthogonal,
@@ -406,3 +411,305 @@ def test_saved_posed_airfrans_case_runs():
     with torch.no_grad():
         out = outputs(m(**kw))
     assert all(torch.isfinite(v).all() for v in out.values())
+
+
+# ---------------------------------------------------------------------------
+# The exact geometry against the boundary surface (exact_boundary_geometry)
+# ---------------------------------------------------------------------------
+
+
+def _oriented(mesh: Mesh, outward) -> Mesh:
+    """``mesh`` with every cell re-oriented so its normal has a non-negative dot with
+    ``outward(centroid)``."""
+    cells = mesh.cells.clone()
+    flip = (mesh.cell_normals * outward(mesh.cell_centroids)).sum(-1) < 0
+    cells[flip, -2:] = cells[flip, -2:].flip(-1)
+    return Mesh(points=mesh.points, cells=cells)
+
+
+def _polygon(verts) -> Mesh:
+    """A closed polyline through ``verts`` (n, 2), oriented with outward normals."""
+    n = verts.shape[0]
+    cells = torch.stack([torch.arange(n), torch.arange(1, n + 1) % n], -1)
+    mesh = Mesh(points=verts, cells=cells)
+    ### the shoelace area is positive for a counterclockwise polygon, whose rotated
+    ### edges (the cell normals) point inward
+    x, y = verts[:, 0], verts[:, 1]
+    if (x * y.roll(-1) - x.roll(-1) * y).sum() > 0:
+        mesh = Mesh(points=verts, cells=cells.flip(-1))
+    return mesh
+
+
+def _polygon_sdf(q, verts):
+    """The exact signed distance to a closed polygon (positive outside): the brute
+    force over its segments in float64, signed by the crossing-number test."""
+    a, b = verts, verts.roll(-1, 0)
+    ab = b - a
+    t = (((q[:, None] - a) * ab).sum(-1) / (ab * ab).sum(-1)).clamp(0, 1)
+    dist = (q[:, None] - a - t[..., None] * ab).norm(dim=-1).min(-1).values
+    ya, yb = a[:, 1], b[:, 1]
+    crosses = (ya > q[:, None, 1]) != (yb > q[:, None, 1])
+    x_at = a[:, 0] + (q[:, None, 1] - ya) / (yb - ya) * ab[:, 0]
+    inside = (crosses & (q[:, None, 0] < x_at)).sum(-1) % 2 == 1
+    return torch.where(inside, -dist, dist)
+
+
+def _naca(n: int, thickness: float = 0.12):
+    """A NACA 00xx section of unit chord with a sharp trailing edge, 2n - 2 cosine-
+    clustered vertices (the open-trailing-edge coefficient replaced by -0.1036)."""
+    beta = torch.linspace(0, torch.pi, n, dtype=D)
+    x = 0.5 * (1 - torch.cos(beta))
+    yt = 5 * thickness * (0.2969 * x.sqrt() - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1036 * x**4)
+    upper = torch.stack([x, yt], -1)
+    lower = torch.stack([x, -yt], -1).flip(0)[1:-1]
+    return torch.cat([upper, lower])
+
+
+def _brute_force_surface(q, points, cells):
+    """The unsigned distance to the closest point of any cell, float64, over every
+    (query, cell) pair: segments in two dimensions, triangles in three."""
+    q, simplex = q.double(), points.double()[cells]
+    if q.shape[-1] == 2:
+        a, b = simplex[None, :, 0], simplex[None, :, 1]
+        ab = b - a
+        t = (((q[:, None] - a) * ab).sum(-1) / (ab * ab).sum(-1)).clamp(0, 1)
+        return (q[:, None] - a - t[..., None] * ab).norm(dim=-1).min(-1)
+    nq, nf = q.shape[0], simplex.shape[0]
+    qq = q[:, None].expand(nq, nf, 3).reshape(-1, 3)
+    tri = simplex[None].expand(nq, nf, 3, 3).reshape(-1, 3, 3)
+    p = (_closest_point_weights(qq, tri)[..., None] * tri).sum(1)
+    return (qq - p).norm(dim=-1).reshape(nq, nf).min(-1)
+
+
+def _sphere(subdivisions: int, radius: float = 1.0) -> Mesh:
+    m = sphere_icosahedral.load(radius=radius, subdivisions=subdivisions)
+    return _oriented(Mesh(points=m.points.double(), cells=m.cells), lambda c: c)
+
+
+def _circle(n: int) -> Mesh:
+    m = circle_2d.load(n_points=n)
+    return _oriented(Mesh(points=m.points.double(), cells=m.cells), lambda c: c)
+
+
+def _torus(n_major: int = 48, n_minor: int = 24) -> Mesh:
+    m = torus.load(n_major=n_major, n_minor=n_minor)
+
+    def outward(c):
+        ring = torch.nn.functional.normalize(c * torch.tensor([1.0, 1.0, 0.0], dtype=c.dtype), dim=-1)
+        return c - ring
+
+    return _oriented(Mesh(points=m.points.double(), cells=m.cells), outward)
+
+
+def _near_wall(dim: int, n: int, seed: int, band: float, radius: float = 1.0):
+    g = torch.Generator().manual_seed(seed)
+    dirs = torch.nn.functional.normalize(torch.randn(n, dim, dtype=D, generator=g), dim=-1)
+    return dirs * (radius + band * (2 * torch.rand(n, 1, dtype=D, generator=g) - 1))
+
+
+def _geometry(q, mesh):
+    return exact_boundary_geometry(q, mesh.points, mesh.cells)
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_exact_geometry_matches_the_brute_force(dim):
+    """|d| is the distance to the closest point of any cell (float64 brute force over
+    every pair): exact in two dimensions, to float32 resolution in three, where the
+    BVH searches in float32 (the closest cell differs only at a float32 tie); u is
+    a unit vector and q - |d| u lies on the closest cell."""
+    g = torch.Generator().manual_seed(dim)
+    pts, nrm, _, _ = cloud(150, dim, seed=dim)
+    mesh = soup(pts, nrm)
+    q = torch.randn(400, dim, dtype=D, generator=g) * 3.0
+    d, u = _geometry(q, mesh)
+    ref = _brute_force_surface(q, mesh.points, mesh.cells).values
+    assert d.shape == (400,) and u.shape == (400, dim) and d.dtype == D
+    tol = 0.0 if dim == 2 else 8 * torch.finfo(torch.float32).eps * 3.0
+    assert (d.abs() - ref).abs().max() <= tol + 1e-14
+    assert torch.allclose(u.norm(dim=-1), torch.ones(400, dtype=D), atol=1e-12)
+    foot = q - d.abs()[:, None] * u
+    assert _brute_force_surface(foot, mesh.points, mesh.cells).values.max() <= tol + 1e-12
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_sign_and_direction_on_a_closed_surface(dim):
+    """A circle / sphere with outward normals: d > 0 outside and d < 0 inside beyond
+    the mesh's own deviation from the curved surface, u radial (outward outside,
+    inward inside)."""
+    mesh = _circle(256) if dim == 2 else _sphere(4)
+    q = _near_wall(dim, 3000, 0, band=0.2)
+    d, u = _geometry(q, mesh)
+    r = q.norm(dim=-1)
+    off = (r - 1).abs() > 2e-3  # beyond the inscribed polygon's sagitta
+    assert (torch.sign(d[off]) == torch.sign(r - 1)[off]).all()
+    radial = (u * q / r[:, None]).sum(-1)
+    assert (radial[off] * torch.sign(r - 1)[off] > 0.99).all()
+
+
+def test_convergence_is_second_order_under_refinement():
+    """The circle at 64, 128, 256 segments and the sphere at icosahedral
+    subdivisions 2, 3, 4 (h halving each step): the largest |d - d_exact| over a
+    near-wall band falls by at least 3.5x per halving, and the largest deviation of
+    the direction (on the side the mesh puts the query) from the radial one by at
+    least 1.7x (O(h), the cells' normals against the surface's)."""
+    for dim, meshes in ((2, [_circle(n) for n in (64, 128, 256)]), (3, [_sphere(s) for s in (2, 3, 4)])):
+        q = _near_wall(dim, 4000, 1, band=0.05)
+        r = q.norm(dim=-1)
+        errs, dir_errs = [], []
+        for mesh in meshes:
+            d, u = _geometry(q, mesh)
+            errs.append((d - (r - 1)).abs().max())
+            dir_errs.append((torch.sign(d)[:, None] * u - q / r[:, None]).norm(dim=-1).max())
+        for coarse, fine in zip(errs, errs[1:]):
+            assert coarse / fine >= 3.5, (dim, errs)
+        for coarse, fine in zip(dir_errs, dir_errs[1:]):
+            assert coarse / fine >= 1.7, (dim, dir_errs)
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_exact_geometry_is_covariant_and_scales(dim):
+    """Under a rotation, a reflection (cells re-oriented so the normals follow it), a
+    translation and a rescale: d is invariant (scales with the geometry) and u
+    covariant, to float rounding."""
+    mesh = _polygon(_naca(80)) if dim == 2 else _torus()
+    g = torch.Generator().manual_seed(2)
+    q = torch.randn(600, dim, dtype=D, generator=g) * 0.6 + (0.5 if dim == 2 else 0.0)
+    d, u = _geometry(q, mesh)
+    for improper in (False, True):
+        R = orthogonal(dim, 3, improper)
+        t = torch.arange(1, dim + 1, dtype=D)
+        moved = transform(mesh, R, t, scale=2.5)
+        d2, u2 = _geometry(2.5 * q @ R.T + t, moved)
+        tol = 1e-12 if dim == 2 else 1e-5  # the float32 search's ties in three dimensions
+        assert torch.allclose(d2, 2.5 * d, atol=tol), improper
+        assert torch.allclose(u2, u @ R.T, atol=tol), improper
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_exact_geometry_is_invariant_to_splitting_the_surface(dim):
+    """The same surface split into two named pieces (each with its own copy of the
+    seam's vertices), and with every cell split (segments in two, triangles in four
+    by their midpoints), gives the same d and u to rounding: the geometry is a
+    function of the surface, not of its cells or of how it is stored."""
+    mesh = _polygon(_naca(60)) if dim == 2 else _torus(24, 12)
+    g = torch.Generator().manual_seed(4)
+    q = torch.randn(800, dim, dtype=D, generator=g) * 0.5 + (0.5 if dim == 2 else 0.0)
+    d, u = _geometry(q, mesh)
+    ### two pieces, re-indexed separately, concatenated as the model concatenates them
+    half = mesh.n_cells // 2
+    pieces = [mesh.slice_cells(torch.arange(half)), mesh.slice_cells(torch.arange(half, mesh.n_cells))]
+    pieces = [p.slice_points(torch.unique(p.cells)) for p in pieces]
+    pts = torch.cat([p.points for p in pieces])
+    cells = torch.cat([pieces[0].cells, pieces[1].cells + pieces[0].n_points])
+    d2, u2 = exact_boundary_geometry(q, pts, cells)
+    assert torch.allclose(d2, d, atol=1e-12, rtol=0) and torch.allclose(u2, u, atol=1e-12, rtol=0)
+    ### every cell split
+    d3, u3 = _geometry(q, mesh.subdivide(levels=1, filter="linear"))
+    tol = 1e-12 if dim == 2 else 1e-5
+    assert torch.allclose(d3, d, atol=tol, rtol=0) and torch.allclose(u3, u, atol=tol, rtol=0)
+
+
+def test_sharp_trailing_edge_thin_plate_and_concave_corner():
+    """Polygons where a single cell's normal gives the wrong sign: the wake behind a
+    sharp trailing edge (NACA 0012), a thin plate (a 1e-3-thick rectangle) and the
+    concave corner of an L; d equals the exact polygon SDF everywhere."""
+    plate = torch.tensor([[0.0, 0.0], [1.0, 0.0], [1.0, 1e-3], [0.0, 1e-3]], dtype=D)
+    ell = torch.tensor([[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [1.0, 1.0], [1.0, 2.0], [0.0, 2.0]], dtype=D)
+    g = torch.Generator().manual_seed(5)
+    for verts, centre in ((_naca(100), (1.0, 0.0)), (plate, (1.0, 5e-4)), (ell, (1.0, 1.0))):
+        mesh = _polygon(verts)
+        c = torch.tensor(centre, dtype=D)
+        q = torch.cat([c + 0.05 * torch.randn(2000, 2, dtype=D, generator=g), c + torch.randn(2000, 2, dtype=D, generator=g)])
+        d, _ = _geometry(q, mesh)
+        assert torch.allclose(d, _polygon_sdf(q, verts), atol=1e-12, rtol=0)
+
+
+def test_cube_edges_and_corners_and_torus_saddles():
+    """The exact box SDF at a cube's edges and corners (the vertex and edge pseudo-
+    normals), and the sign around a torus, whose inner vertices are saddles."""
+    cube = cube_surface.load()
+    g = torch.Generator().manual_seed(6)
+    q = torch.randn(5000, 3, dtype=D, generator=g) * 0.8
+    d, _ = _geometry(q, Mesh(points=cube.points.double(), cells=cube.cells))
+    qq = q.abs() - 0.5
+    exact = qq.clamp_min(0).norm(dim=-1) + qq.amax(-1).clamp_max(0)
+    assert torch.allclose(d, exact, atol=8 * torch.finfo(torch.float32).eps, rtol=0)
+    tor = _torus()
+    q = torch.randn(5000, 3, dtype=D, generator=g) * torch.tensor([1.2, 1.2, 0.4], dtype=D)
+    d, _ = _geometry(q, tor)
+    exact = ((q[:, :2].norm(dim=-1) - 1.0) ** 2 + q[:, 2] ** 2).sqrt() - 0.3
+    off = exact.abs() > 5e-3  # beyond the polyhedral torus's deviation
+    assert (torch.sign(d[off]) == torch.sign(exact[off])).all()
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_on_wall_queries_take_the_feature_pseudo_normal(dim):
+    """Queries exactly at the vertices (and at cell centroids) of a circle / sphere:
+    d = 0 and u is the feature's unit pseudo-normal, radial outward to O(h^2)."""
+    mesh = _circle(64) if dim == 2 else _sphere(3)
+    for q in (mesh.points, mesh.cell_centroids):
+        d, u = _geometry(q, mesh)
+        assert (d.abs() <= 1e-15).all()
+        radial = (u * torch.nn.functional.normalize(q, dim=-1)).sum(-1)
+        assert (radial > 0.99).all() and torch.allclose(u.norm(dim=-1), torch.ones_like(d))
+    d, u = _geometry(mesh.points, mesh)
+    assert torch.equal(d, torch.zeros_like(d))
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+@pytest.mark.parametrize("shift", [0.0, 1.0, 100.0])
+def test_exact_near_a_translated_wall_in_float32(dim, shift):
+    """Regression (AirfRANS posed inference, 2026-10-03): near-wall float32 queries
+    1e-5 to 1e-3 off a unit circle / sphere translated by 0, 1 and 100 radii: |d|
+    equals the float64 brute-force distance to the same float32 surface to within
+    a few float32 ulp of the coordinates, and the sign is right wherever the offset
+    exceeds that resolution (the exact sign of the convex polygon / polyhedron)."""
+    mesh = _circle(2000) if dim == 2 else _sphere(4)
+    g = torch.Generator().manual_seed(7)
+    dirs = torch.nn.functional.normalize(torch.randn(1000, dim, dtype=D, generator=g), dim=-1)
+    side = torch.where(torch.rand(1000, dtype=D, generator=g) < 0.5, 1.0, -1.0)
+    off = torch.tensor([1e-5, 1e-4, 1e-3], dtype=D)[torch.randint(3, (1000,), generator=g)]
+    t = torch.full((dim,), shift, dtype=D)
+    pts = (mesh.points + t).float()
+    q = (dirs * (1 + side * off)[:, None] + t).float()
+    d, u = exact_boundary_geometry(q, pts, mesh.cells)
+    assert d.dtype == torch.float32
+    ref = _brute_force_surface(q, pts, mesh.cells).values
+    ulp = torch.finfo(torch.float32).eps * (1.0 + shift)
+    assert (d.double().abs() - ref).abs().max() <= 4 * ulp
+    ### the mesh is convex: a query is outside iff it is above some cell's plane
+    simplex = pts.double()[mesh.cells]
+    planes = ((q.double()[:, None] - simplex[None, :, 0]) * mesh.cell_normals.double()[None]).sum(-1)
+    outside = planes.amax(-1) > 0
+    resolved = ref > 8 * ulp
+    assert (torch.where(outside, 1.0, -1.0)[resolved] == torch.sign(d.double())[resolved]).all()
+    assert torch.allclose(u.norm(dim=-1), torch.ones_like(d), atol=1e-6)
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_exact_geometry_is_differentiable(dim):
+    """The gradient of d in the query is sign(d) u (the envelope theorem), and the
+    vertex positions receive a finite gradient."""
+    mesh = _circle(64) if dim == 2 else _sphere(2)
+    q = _near_wall(dim, 200, 8, band=0.3).requires_grad_(True)
+    pts = mesh.points.clone().requires_grad_(True)
+    d, u = exact_boundary_geometry(q, pts, mesh.cells)
+    d.sum().backward()
+    assert torch.allclose(q.grad, torch.sign(d.detach())[:, None] * u.detach(), atol=1e-12)
+    assert pts.grad is not None and torch.isfinite(pts.grad).all() and pts.grad.abs().sum() > 0
+
+
+def test_two_dimensional_search_chunks_over_the_queries():
+    """More queries than one chunk of the 2-D search: the same answer as one block."""
+    verts = _naca(50)
+    g = torch.Generator().manual_seed(9)
+    q = torch.randn(2 * geometry._TORCH_SEARCH_CHUNK + 17, 2, dtype=D, generator=g)
+    d, _ = _geometry(q, _polygon(verts))
+    assert torch.allclose(d, _polygon_sdf(q, verts), atol=1e-12, rtol=0)
+
+
+def test_exact_geometry_refuses_other_dimensions():
+    pts, nrm, _, _ = cloud(10, 4)
+    mesh = soup(pts, nrm)
+    with pytest.raises(NotImplementedError, match="two and three dimensions"):
+        exact_boundary_geometry(pts, mesh.points, mesh.cells)
