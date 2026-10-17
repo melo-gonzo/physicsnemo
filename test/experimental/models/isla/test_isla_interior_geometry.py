@@ -25,6 +25,7 @@ and exact references, its sign convention and convergence, and the contracts of
 the interior task.
 """
 
+import math
 import os
 
 import pytest
@@ -34,7 +35,6 @@ from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla import geometry
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.mesh import Mesh
-from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from physicsnemo.mesh.primitives.curves import circle_2d
 from physicsnemo.mesh.primitives.surfaces import cube_surface, sphere_icosahedral, torus
 from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
@@ -474,47 +474,24 @@ def test_exact_geometry_refuses_other_dimensions():
 
 
 # ---------------------------------------------------------------------------
-# The model's geometry comes from the surface, not from the token sample
+# The model reads the full-resolution surface and draws its tokens from it
 # ---------------------------------------------------------------------------
 
 
-def _with_measures(mesh: Mesh, keep, weights) -> Mesh:
-    """The cells ``keep`` of ``mesh`` with effective measures ``weights`` (their
-    Horvitz-Thompson weights), unreferenced vertices compacted out."""
-    sub = mesh.slice_cells(keep)
-    sub = sub.slice_points(torch.unique(sub.cells))
-    return Mesh(points=sub.points, cells=sub.cells, cell_data={EFFECTIVE_MEASURE_KEY: weights})
+def _interior(dim: int, **kw) -> ISLA:
+    torch.manual_seed(0)
+    return ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True, dim=dim, **kw).double().eval()
 
 
-def _draws(mesh: Mesh, k: int, seed: int = 0):
-    """The token meshes of five sampling laws at about ``k`` of the ``N`` cells, and
-    the surface with every cell split: uniform without replacement, area-
-    proportional Poisson, systematic, one contiguous window, all with HT weights."""
-    g = torch.Generator().manual_seed(seed)
-    n, a = mesh.n_cells, mesh.cell_areas
-    uniform = torch.randperm(n, generator=g)[:k].sort().values
-    pi = (k * a / a.sum()).clamp(max=1.0)
-    poisson = torch.nonzero(torch.rand(n, generator=g, dtype=a.dtype) < pi)[:, 0]
-    step = n // k
-    systematic = torch.arange(int(torch.randint(step, (1,), generator=g)), n, step)
-    start = int(torch.randint(n, (1,), generator=g))
-    window = (start + torch.arange(k)) % n
-    return {
-        "uniform": _with_measures(mesh, uniform, a[uniform] * n / k),
-        "area": _with_measures(mesh, poisson, a[poisson] / pi[poisson]),
-        "systematic": _with_measures(mesh, systematic, a[systematic] * step),
-        "window": _with_measures(mesh, window.sort().values, a[window.sort().values] * n / k),
-        "split": mesh.subdivide(levels=1, filter="linear"),
-    }
-
-
-def _captured_geometry(m, **kw):
-    """The built-in geometry the model's batched routine receives, and the outputs."""
+def _captured(m, **kw):
+    """The boundary tokens and the built-in geometry the model's batched routine
+    receives, and the outputs."""
     seen = {}
     inner = m._forward_tokens
 
     def spy(boundary, query, *args):
-        seen["d"], seen["u"] = query["wall_distance"].clone(), query["wall_direction"].clone()
+        seen["tokens"] = boundary[0].clone()
+        seen["d"], seen["u"] = query["wall_distance"][0].clone(), query["wall_direction"][0].clone()
         return inner(boundary, query, *args)
 
     m._forward_tokens = spy
@@ -523,71 +500,128 @@ def _captured_geometry(m, **kw):
             out = outputs(m(**kw))
     finally:
         del m._forward_tokens
-    return seen["d"], seen["u"], out
+    return seen["tokens"], seen["d"], seen["u"], out
 
 
-def test_builtin_geometry_is_the_same_for_every_draw_of_the_tokens():
-    """A 798-segment NACA 0012 as boundary_geometry and its tokens drawn under five
-    laws at 200 cells (and as the surface with every cell split): the distance and
-    direction the model computes are bitwise identical for every draw, and equal to
-    the exact geometry of the surface; only the quadratures (and so the outputs)
-    change with the draw."""
-    torch.manual_seed(0)
-    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True, dim=2).double().eval()
-    surface = _polygon(_naca(400))
+def _airfoil_case(n: int = 400, nq: int = 300):
+    surface = _polygon(_naca(n))
     g = torch.Generator().manual_seed(1)
-    q = torch.tensor([0.5, 0.0], dtype=D) + torch.randn(300, 2, dtype=D, generator=g) * torch.tensor([0.6, 0.1], dtype=D)
-    drv = torch.tensor([1.0, 0.1], dtype=D)
+    q = torch.tensor([0.5, 0.0], dtype=D) + torch.randn(nq, 2, dtype=D, generator=g) * torch.tensor([0.6, 0.1], dtype=D)
+    return surface, q, {"g": torch.tensor([1.0, 0.1], dtype=D)}
+
+
+def _rel(a, b) -> float:
+    return max(float((a[k] - b[k]).norm() / b[k].norm()) for k in b)
+
+
+def test_builtin_geometry_is_the_surface_s_for_every_draw_of_the_tokens():
+    """A 798-segment NACA 0012: whatever the token budget, and in training as in
+    evaluation, the distance and direction the model computes are bitwise the exact
+    geometry of the full surface; only the tokens (and so the outputs) change."""
+    surface, q, gd = _airfoil_case()
     ref = exact_boundary_geometry(q, surface.points, surface.cells)
     seen = {}
-    for law, tokens in _draws(surface, 200).items():
-        d, u, out = _captured_geometry(
-            m, boundary_meshes={"airfoil": tokens}, boundary_geometry={"airfoil": surface}, prediction_points=q, global_data={"g": drv}
-        )
-        assert torch.equal(d[0], ref[0]) and torch.equal(u[0], ref[1]), law
-        assert all(torch.isfinite(v).all() for v in out.values())
-        seen[law] = out["p"]
-    assert not torch.allclose(seen["uniform"], seen["window"])
+    for budget in (50, 200, 10**6):
+        m = _interior(2, boundary_tokens=budget)
+        for train in (False, True):
+            m.train(train)
+            tokens, d, u, out = _captured(m, boundary_meshes={"airfoil": surface}, prediction_points=q, global_data=gd)
+            assert torch.equal(d, ref[0]) and torch.equal(u, ref[1]), (budget, train)
+            assert tokens.shape[0] == min(budget, surface.n_cells)
+            assert all(torch.isfinite(v).all() for v in out.values())
+            seen[budget, train] = out["p"]
+    assert not torch.allclose(seen[50, False], seen[200, False])
 
 
-def test_a_sampled_boundary_without_its_surface_is_refused():
-    """Without boundary_geometry the tokens' cells are the surface, so an interior
-    model refuses tokens whose effective measures exceed their cells' measures (a
-    subsample's HT weights) and accepts the whole boundary, with or without stored
-    effective measures; given the surface, the sample runs."""
-    torch.manual_seed(0)
-    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True, dim=2).double().eval()
-    surface = _polygon(_naca(100))
-    kw = dict(prediction_points=torch.randn(20, 2, dtype=D), global_data={"g": torch.tensor([1.0, 0.0], dtype=D)})
-    sample = _draws(surface, 50)["uniform"]
-    with torch.no_grad():
-        with pytest.raises(ValueError, match="is a sample of its boundary"):
-            m(boundary_meshes={"airfoil": sample}, **kw)
-        m(boundary_meshes={"airfoil": sample}, boundary_geometry={"airfoil": surface}, **kw)
-        m(boundary_meshes={"airfoil": surface}, **kw)
-        whole = Mesh(points=surface.points, cells=surface.cells, cell_data={EFFECTIVE_MEASURE_KEY: surface.cell_areas})
-        m(boundary_meshes={"airfoil": whole}, **kw)
+def test_outputs_are_invariant_to_the_resolution_of_the_input_mesh():
+    """The same geometry at two and four times the resolution (every cell split
+    into equal pieces) at a budget of 400 tokens: the outputs move by at most 2.5
+    percent (relative L2; measured 0.3 to 0.6 percent), no more than three times
+    the largest change between two training-mode draws on the native mesh (0.1 to
+    1 percent), so a change of resolution reads as another draw of the same
+    quadrature. Kept whole (the default budget exceeds every cell count) the
+    outputs move by under 1e-3."""
+    for dim in (2, 3):
+        if dim == 2:
+            surface, q, gd = _airfoil_case()
+        else:
+            surface = _sphere(3)
+            q = torch.randn(300, 3, dtype=D, generator=torch.Generator().manual_seed(1)) * 0.8
+            gd = {"g": torch.ones(3, dtype=D)}
+        fine = surface.subdivide(levels=1, filter="linear")
+        finer = fine.subdivide(levels=1, filter="linear")
+        m = _interior(dim, boundary_tokens=400)
+        run = lambda s: outputs(m(boundary_meshes={"wall": s}, prediction_points=q, global_data=gd))  # noqa: E731
+        with torch.no_grad():
+            base, a, b = run(surface), run(fine), run(finer)
+            m.train()
+            torch.manual_seed(7)
+            spread = max(_rel(run(surface), base) for _ in range(8))
+            whole = _interior(dim)
+            w0 = outputs(whole(boundary_meshes={"wall": surface}, prediction_points=q, global_data=gd))
+            w1 = outputs(whole(boundary_meshes={"wall": fine}, prediction_points=q, global_data=gd))
+        for refined in (a, b):
+            assert _rel(refined, base) < min(2.5e-2, 3 * spread), (dim, _rel(refined, base), spread)
+        assert _rel(w1, w0) < 1e-3, dim
 
 
-def test_boundary_geometry_is_validated():
-    """The surface names the same boundaries as the tokens, each a non-empty Mesh of
-    the boundary's dimensions; a surface model takes none; the interior task is
-    refused outside two and three dimensions."""
-    torch.manual_seed(0)
-    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True, dim=2).double().eval()
-    surface = _polygon(_naca(60))
-    kw = dict(boundary_meshes={"airfoil": surface}, prediction_points=torch.randn(10, 2, dtype=D), global_data={"g": torch.tensor([1.0, 0.0], dtype=D)})
-    with torch.no_grad():
-        with pytest.raises(ValueError, match="must name the same boundaries"):
-            m(boundary_geometry={"wing": surface}, **kw)
-        with pytest.raises(ValueError, match=r"must be a Mesh\[1, 2\]"):
-            m(boundary_geometry={"airfoil": _sphere(1)}, **kw)
-        with pytest.raises(ValueError, match="boundary_geometry has no cells"):
-            m(boundary_geometry={"airfoil": Mesh(points=surface.points, cells=surface.cells[:0])}, **kw)
-        m(boundary_geometry={"airfoil": surface}, **kw)
-    surface_model = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, dim=2)
-    with pytest.raises(ValueError, match="interior=False"):
-        surface_model(boundary_meshes={"airfoil": surface}, boundary_geometry={"airfoil": surface}, global_data=kw["global_data"])
+def test_evaluation_is_deterministic_and_training_draws_from_the_global_rng():
+    """In evaluation the draw starts at a fixed point: two calls agree bitwise. In
+    training each call draws its start from the global torch RNG: two calls differ,
+    and torch.manual_seed reproduces a call bitwise."""
+    surface, q, gd = _airfoil_case()
+    m = _interior(2, boundary_tokens=100)
+    kw = dict(boundary_meshes={"airfoil": surface}, prediction_points=q, global_data=gd)
+    t1, _, _, e1 = _captured(m, **kw)
+    t2, _, _, e2 = _captured(m, **kw)
+    assert torch.equal(t1["points"], t2["points"]) and all(torch.equal(e1[k], e2[k]) for k in e1)
+    m.train()
+    torch.manual_seed(3)
+    r1 = _captured(m, **kw)
+    r2 = _captured(m, **kw)
+    torch.manual_seed(3)
+    r3 = _captured(m, **kw)
+    assert not torch.equal(r1[0]["points"], r2[0]["points"])
+    assert torch.equal(r1[0]["points"], r3[0]["points"]) and all(torch.equal(r1[3][k], r3[3][k]) for k in r1[3])
+
+
+def test_the_tokens_are_an_exact_count_with_small_conditions_kept_whole():
+    """Two conditions, a 798-segment airfoil and a 12-segment far-field polygon, at
+    a total budget of 100: exactly 100 tokens, the 12 far-field cells all kept with
+    their own measures (a condition below its share is whole), the airfoil's 88
+    tokens carrying Horvitz-Thompson measures at least the cells' own; with a budget
+    above the 810 cells every cell is a token with its own measure, in mesh order."""
+    surface, q, gd = _airfoil_case()
+    t = torch.linspace(0, 2 * math.pi, 13, dtype=D)[:-1]
+    far = _polygon(torch.stack([torch.cos(t), torch.sin(t)], -1) * 5)
+    kw = dict(boundary_meshes={"airfoil": surface, "far": far}, prediction_points=q, global_data=gd)
+    tokens, _, _, _ = _captured(_interior(2, boundary_tokens=100), **kw)
+    assert tokens.shape[0] == 100
+    on_far = tokens["points"].norm(dim=-1) > 2
+    assert int(on_far.sum()) == 12
+    assert torch.allclose(tokens["measure"][on_far].sort().values, far.cell_areas.sort().values, rtol=1e-12, atol=0)
+    airfoil = tokens["measure"][~on_far]
+    assert float(airfoil.sum()) == pytest.approx(float(surface.cell_areas.sum()), rel=0.05)
+    assert bool((airfoil >= surface.cell_areas.min()).all())
+    tokens, _, _, _ = _captured(_interior(2), **kw)
+    assert torch.equal(tokens["points"], torch.cat([surface.cell_centroids, far.cell_centroids]))
+    assert torch.equal(tokens["measure"], torch.cat([surface.cell_areas, far.cell_areas]))
+
+
+def test_boundary_tokens_is_validated():
+    """A positive integer; a surface model, which samples nothing, takes only the
+    default; an interior model needs boundary cells; the interior task is refused
+    outside two and three dimensions."""
+    for bad in (0, -3, 2.5, True):
+        with pytest.raises(ValueError, match="positive integer"):
+            ISLA(output_schema=PV, interior=True, boundary_tokens=bad)
+    with pytest.raises(ValueError, match="surface task"):
+        ISLA(output_schema=PV, boundary_tokens=1000)
+    ISLA(output_schema=PV, boundary_tokens=200_000)
+    surface, q, gd = _airfoil_case(60, 10)
+    empty = Mesh(points=surface.points, cells=surface.cells[:0])
+    with torch.no_grad(), pytest.raises(ValueError, match="have no cells"):
+        _interior(2)(boundary_meshes={"airfoil": empty}, prediction_points=q, global_data=gd)
     with pytest.raises(NotImplementedError, match="two and three dimensions"):
         ISLA(output_schema=PV, interior=True, dim=4)
 
@@ -599,67 +633,16 @@ def _flipped(mesh: Mesh) -> Mesh:
 
 
 @pytest.mark.parametrize("dim", [2, 3])
-def test_the_surface_is_oriented_by_its_tokens(dim):
-    """Each surface is oriented as its own tokens, so reversing every cell of
-    boundary_geometry leaves every output bitwise identical (the model swaps them
-    back), and reversing the tokens instead reverses the sign of the distance and
-    leaves the direction (from the surface to the point) as it is."""
-    torch.manual_seed(0)
-    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True, dim=dim).double().eval()
+def test_the_sign_follows_the_surface_s_orientation(dim):
+    """The distance is positive on the side the surface's normals point to:
+    reversing every cell reverses the sign of the distance and leaves the direction
+    (from the surface to the point) as it is, to rounding."""
+    m = _interior(dim)
     surface = _polygon(_naca(200)) if dim == 2 else _sphere(3)
-    tokens = _draws(surface, 100)["uniform"]
-    g = torch.Generator().manual_seed(3)
-    q = torch.randn(80, dim, dtype=D, generator=g) * 0.7
-    kw = dict(boundary_meshes={"wall": tokens}, prediction_points=q, global_data={"g": torch.ones(dim, dtype=D)})
-    d, u, out = _captured_geometry(m, boundary_geometry={"wall": surface}, **kw)
-    d2, u2, out2 = _captured_geometry(m, boundary_geometry={"wall": _flipped(surface)}, **kw)
-    assert torch.equal(d, d2) and torch.equal(u, u2)
-    assert all(torch.equal(out[k], out2[k]) for k in out)
-    reversed_tokens = dict(kw, boundary_meshes={"wall": _flipped(tokens)})
-    d3, u3, _ = _captured_geometry(m, boundary_geometry={"wall": surface}, **reversed_tokens)
-    ### (to rounding: the model's swap of the cells rebuilds each closest point from
-    ### its vertices in the other order)
-    assert torch.allclose(d3, -d, atol=1e-14, rtol=0) and torch.allclose(u3, u, atol=1e-14, rtol=0)
-
-
-def test_the_sign_is_the_nearest_token_convention():
-    """On a consistently oriented case (outward tokens and surface) the distance has
-    the sign of the former built-in, the nearest boundary token's sign((x - y) . n),
-    at every query farther from the wall than the token spacing."""
-    torch.manual_seed(0)
-    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True).double().eval()
-    surface = _sphere(4)
-    tokens = _draws(surface, 600)["uniform"]
-    q = _near_wall(3, 500, 4, band=0.5)
-    d, _, _ = _captured_geometry(
-        m, boundary_meshes={"wall": tokens}, boundary_geometry={"wall": surface}, prediction_points=q, global_data={"g": torch.ones(3, dtype=D)}
-    )
-    y, n = tokens.cell_centroids, tokens.cell_normals
-    nearest = torch.cdist(q, y).argmin(-1)
-    old_sign = torch.sign(((q - y[nearest]) * n[nearest]).sum(-1))
-    far = (q.norm(dim=-1) - 1).abs() > 0.15  # beyond the 600-token sample's spacing
-    assert far.sum() > 100 and torch.equal(torch.sign(d[0])[far], old_sign[far])
-
-
-def test_eager_and_compiled_agree_on_an_oppositely_oriented_surface():
-    """A 2-D case whose boundary_geometry is oriented against its tokens: the
-    fullgraph, dynamic-shape compiled model gives the eager outputs (the orientation
-    is a torch.where, not a Python branch), at two query counts."""
-    torch.manual_seed(0)
-    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True, dim=2).eval()
-    surface = _polygon(_naca(100))
-    surface = Mesh(points=surface.points.float(), cells=surface.cells)
-    tokens = _draws(surface, 60)["uniform"]
-    compiled = torch.compile(m, fullgraph=True, dynamic=True)
-    g = torch.Generator().manual_seed(5)
-    for nq in (50, 71):
-        kw = dict(
-            boundary_meshes={"wall": tokens},
-            boundary_geometry={"wall": _flipped(surface)},
-            prediction_points=torch.randn(nq, 2, generator=g) * 0.6,
-            global_data={"g": torch.tensor([1.0, 0.2])},
-        )
-        with torch.no_grad():
-            eager, comp = outputs(m(**kw)), outputs(compiled(**kw))
-        for k in eager:
-            torch.testing.assert_close(comp[k], eager[k], atol=1e-4, rtol=1e-4)
+    q = torch.randn(80, dim, dtype=D, generator=torch.Generator().manual_seed(3)) * 0.7
+    kw = dict(prediction_points=q, global_data={"g": torch.ones(dim, dtype=D)})
+    _, d, u, _ = _captured(m, boundary_meshes={"wall": surface}, **kw)
+    _, d2, u2, _ = _captured(m, boundary_meshes={"wall": _flipped(surface)}, **kw)
+    ### (to rounding: each closest point is rebuilt from its cell's vertices in the
+    ### other order)
+    assert torch.allclose(d2, -d, atol=1e-14, rtol=0) and torch.allclose(u2, u, atol=1e-14, rtol=0)

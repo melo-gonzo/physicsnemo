@@ -21,7 +21,9 @@ the program's datasets are two- and three-dimensional) for steady boundary-value
 surrogates on the mesh-native API of the mesh models (GLOBE's): one case at a
 time, the boundary goes in as a mapping of named
 :class:`~physicsnemo.mesh.Mesh` objects (each a ``Mesh[d-1, d]``; its cells
-are the tokens, with their centroids, normals and effective measures), the
+are the tokens, with their centroids, normals and effective measures: every
+cell for a surface task, a sample of the full-resolution cells drawn inside the
+model for an interior task), the
 problem's data as *named fields of declared tensor rank*: global inputs in a
 TensorDict (a direction, a diffusivity, a Reynolds number), per-cell boundary
 inputs in the meshes' ``cell_data`` (a prescribed traction, a Dirichlet
@@ -144,37 +146,46 @@ a forward pass stops DDP.
 
 **Interior geometry.** A prediction-point token needs a direction (its
 "normal" in every invariant) and a distance to the wall. Both are computed
-inside the model from the boundary *surface*, never taken as inputs: for each
+inside the model from the boundary *surface*, the union of the cells of
+``boundary_meshes`` at full resolution, never taken as inputs: for each
 prediction point :math:`x_q` the exact closest point :math:`p_q` on the
 surface's cells (point to face, never point to centroid) gives the distance
 :math:`d_q = \pm |x_q - p_q|`, signed by the pseudo-normal of the closest
-feature, and the direction :math:`u_q`: the cell's normal, oriented toward
-the query, when :math:`p_q` is interior to a cell, else :math:`(x_q - p_q) /
-|x_q - p_q|` (:func:`exact_boundary_geometry`). :math:`d_q / L` with its
-signed logarithm enters the token's embedding as a built-in rank-0 channel
-ahead of the fields declared in ``query_schema``. The surface is
-``forward``'s ``boundary_geometry``, the boundary at full resolution, while
-``boundary_meshes`` stay the tokens, a measure-weighted quadrature sample of
-it, each named surface oriented as its own tokens (by the sign of the
-tokens' measure-weighted agreement with its normals, :func:`orient_surface`),
-so :math:`d_q` is positive on the side the tokens' normals point to (outside,
-for outward normals, the convention of the stored signed-distance fields of the
-program's datasets) whichever way the surface was stored; without
-``boundary_geometry`` the tokens' own cells are the surface,
-which an interior model accepts only when they are the whole boundary (no
-cell's effective measure exceeds its geometric measure, i.e. every
-inclusion probability is one). So :math:`(d_q, u_q)` are functions of the
-surface alone (and of its orientation, which the tokens fix): the same for every sampling law, count and window of the
-tokens, invariant to splitting a cell and converging as :math:`O(h^2)` under
-refinement of the surface, like the stored signed-distance field computed
-from the same surface. A dataset's stored signed-distance field or its
-gradient enter, if wanted, as ordinary ``query_schema`` fields (rank 0 /
-rank 1) like any other PDE data. The search is a Warp BVH in three
-dimensions (a torch custom op) and an exact brute force over the segments in
-two (the interior task is implemented in two and three dimensions); the
-closest point is rebuilt from its cell's vertices, so both quantities are
-differentiable, and both are built from differences of positions, so every
-covariance contract holds.
+feature, so positive on the side the cells' normals point to, and the
+direction :math:`u_q`: the cell's normal, oriented toward the query, when
+:math:`p_q` is interior to a cell, else :math:`(x_q - p_q) / |x_q - p_q|`
+(:func:`exact_boundary_geometry`). :math:`d_q / L` with its signed logarithm
+enters the token's embedding as a built-in rank-0 channel ahead of the fields
+declared in ``query_schema``. :math:`(d_q, u_q)` are functions of the surface
+and its orientation alone: the same for every draw of the boundary tokens,
+invariant to splitting a cell and converging as :math:`O(h^2)` under refinement
+of the surface, like a stored signed-distance field computed from the same
+surface. A dataset's stored signed-distance field or its gradient enter, if
+wanted, as ordinary ``query_schema`` fields (rank 0 / rank 1) like any other
+PDE data. The search is a Warp BVH in three dimensions (a torch custom op) and
+an exact brute force over the segments in two (the interior task is
+implemented in two and three dimensions); the closest point is rebuilt from its
+cell's vertices, so both quantities are differentiable, and both are built from
+differences of positions, so every covariance contract holds.
+
+**Boundary tokens of the interior task.** The boundary tokens are a sample of
+the same cells, drawn inside the forward pass
+(:func:`~physicsnemo.experimental.models.isla.sampling.sample_boundary_cells`):
+``boundary_tokens`` (default 200,000) tokens per case, shared over the named
+boundaries by water filling (a boundary with fewer cells than its share is kept
+whole and its unused share goes to the others), each cell drawn with
+probability :math:`\pi_i` proportional to its measure (capped at one) by
+systematic sampling along the Morton order of the cell centroids. The count is
+exactly :math:`\min(\text{cells}, \text{boundary\_tokens})`, a function of the
+cell counts only, so the draw keeps static shapes and traces into the one
+whole-model graph; each kept cell's measure is its Horvitz-Thompson weight
+:math:`a_i / \pi_i`, so every measure-weighted read is an unbiased quadrature
+of the full surface, exact on a boundary kept whole; and the sample is spread
+along the space-filling curve, so every part of the surface is represented. In
+training the draw's start is uniform from the global torch RNG
+(``torch.manual_seed`` reproduces it), in evaluation it is fixed, so inference
+is deterministic. A surface task reads every cell it is given (its outputs are
+predicted there) and samples none.
 
 **Global inputs.** Rank-1 global inputs are the :math:`K` global directions:
 each is normalized to a unit direction inside the model (a direction is what
@@ -249,7 +260,6 @@ from physicsnemo.experimental.models.isla.blocks import (
 )
 from physicsnemo.experimental.models.isla.geometry import (
     exact_boundary_geometry,
-    orient_surface,
     rms_pairwise_distance,
 )
 from physicsnemo.experimental.models.isla.heads import (
@@ -265,6 +275,7 @@ from physicsnemo.experimental.models.isla.inputs import (
     _pack,
     _schema_layout,
 )
+from physicsnemo.experimental.models.isla.sampling import sample_boundary_cells
 from physicsnemo.experimental.models.isla.tree_read import (
     TREE_READ_THETA,
     _KernelBasis,
@@ -273,13 +284,19 @@ from physicsnemo.experimental.models.isla.tree_read import (
     tree_read_pairs,
 )
 from physicsnemo.mesh import Mesh
-from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, cell_measures
+from physicsnemo.mesh.calculus.measure import cell_measures
 from physicsnemo.mesh.fields import FieldSchema, FieldSchemaLike
 
 logger = logging.getLogger(__name__)
 
 #: Numerical floor for norms and logarithms.
 EPS = 1e-12
+#: The interior task's default boundary-token budget per case (the reference
+#: configuration's, DrivAerML Volume's 200,000 vehicle cells).
+BOUNDARY_TOKENS = 200_000
+#: The systematic draw's start in evaluation mode (the middle of its range), so
+#: that inference is deterministic.
+EVAL_START = 0.5
 
 
 def _hint_token_axis(n, widths) -> None:
@@ -410,6 +427,24 @@ class ISLA(Module):
             encoder as interacting tokens; ``forward`` requires them. The two
             are different parameter sets (a parameter without a gradient stops
             DDP), so the choice is made at construction.
+        boundary_tokens: Interior task only: the number of boundary tokens per
+            case (default 200,000, the reference configuration's). ``forward``
+            takes each named boundary at full resolution and draws its tokens
+            from the cells inside the model
+            (:func:`~physicsnemo.experimental.models.isla.sampling.sample_boundary_cells`):
+            the budget is shared over the named boundaries by water filling
+            (equal shares, a boundary with fewer cells than its share kept
+            whole and its unused share given to the others), the cells are
+            drawn with probability proportional to their measure (capped at
+            one) by systematic sampling along the Morton order of their
+            centroids, and each kept cell carries its Horvitz-Thompson measure
+            (its measure over its inclusion probability). The token count is
+            exactly ``min(total cells, boundary_tokens)``; a boundary with all
+            its cells kept is read as given. In training the draw's start is
+            uniform from the global torch RNG (``torch.manual_seed`` reproduces
+            it), in evaluation (``model.eval()``) it is fixed, so inference is
+            deterministic. A surface task predicts at every cell it is given
+            and samples none: it takes only the default.
         query_independent: Interior task only; the choice between ISLA and
             ISLA-DTT. ``False`` (default, ISLA): the prediction points interact,
             their total routing weight a learned fraction of the boundary
@@ -475,7 +510,8 @@ class ISLA(Module):
     ### served ended experiments (same parameters and forward for every
     ### configuration it still builds); 0.5.0 gave the prediction points the exact
     ### geometry of the boundary surface in place of the nearest boundary token's
-    ### (same parameters, new forward).
+    ### and drew the interior task's boundary tokens inside the model from the
+    ### full-resolution surface (boundary_tokens; same parameters, new forward).
     __model_checkpoint_version__ = "0.5.0"
     _RAW_READS = (
         " Its slice blocks were trained to pool and broadcast the raw residual stream; "
@@ -489,9 +525,11 @@ class ISLA(Module):
     )
     _NEAREST_GEOMETRY = (
         " An interior model's prediction points were trained on the distance and "
-        "direction to the nearest boundary token; this version gives them the exact "
-        "distance and direction to the boundary surface, so its interior outputs "
-        "differ from the ones it was trained to give."
+        "direction to the nearest boundary token, with the boundary tokens drawn "
+        "before the model; this version gives them the exact distance and direction "
+        "to the full-resolution boundary surface and draws its boundary tokens from "
+        "it (boundary_tokens), so its interior outputs differ from the ones it was "
+        "trained to give."
     )
     __supported_model_checkpoint_version__ = {
         "0.1.0": (
@@ -572,6 +610,7 @@ class ISLA(Module):
         global_schema: FieldSchemaLike | None = None,
         interior: bool = False,
         query_independent: bool = False,
+        boundary_tokens: int = BOUNDARY_TOKENS,
         hidden: int = 512,
         n_layers: int = 12,
         n_slices: int = 512,
@@ -641,6 +680,15 @@ class ISLA(Module):
                 "query_independent=True concerns the prediction points of the interior "
                 "task; build with interior=True (a surface task predicts at its input cells)"
             )
+        if isinstance(boundary_tokens, bool) or int(boundary_tokens) != boundary_tokens or boundary_tokens < 1:
+            raise ValueError(f"boundary_tokens must be a positive integer; got {boundary_tokens!r}")
+        if not self.interior and boundary_tokens != BOUNDARY_TOKENS:
+            raise ValueError(
+                "boundary_tokens is the interior task's budget of boundary tokens; a surface "
+                "task (interior=False) predicts at every boundary cell it is given and samples "
+                f"none, so it takes the default ({BOUNDARY_TOKENS}); got {boundary_tokens!r}"
+            )
+        self.boundary_tokens = int(boundary_tokens)
         ### Checkpoints store the constructor arguments as JSON. A FieldSchema
         ### is a dict and serializes as it stands; recording the parsed schemas
         ### keeps the metadata JSON-safe whatever container the caller passed
@@ -1024,10 +1072,9 @@ class ISLA(Module):
                     f"got {tuple(t.shape)}"
                 )
 
-    def _validate_meshes(self, boundary_meshes, prediction_points, boundary_geometry=None) -> None:
-        """Mesh-level checks for :meth:`forward`: dimensions, declared fields,
-        the task structure (``interior``, ``query_independent``) and the surface
-        the prediction points' geometry is computed from."""
+    def _validate_meshes(self, boundary_meshes, prediction_points) -> None:
+        """Mesh-level checks for :meth:`forward`: dimensions, declared fields
+        and the task structure (``interior``, ``query_independent``)."""
         d = self.dim
         if not isinstance(boundary_meshes, Mapping) or not boundary_meshes:
             raise ValueError("boundary_meshes must be a non-empty mapping of name to Mesh")
@@ -1054,11 +1101,6 @@ class ISLA(Module):
                 mesh.n_cells,
                 f"boundary_meshes[{name!r}].cell_data",
             )
-        if boundary_geometry is not None and not self.interior:
-            raise ValueError(
-                "boundary_geometry is the surface the interior task's prediction points "
-                "measure their distance to; this model was built with interior=False"
-            )
         if prediction_points is None:
             if self.interior:
                 raise ValueError(
@@ -1074,48 +1116,11 @@ class ISLA(Module):
                 "interior=True for an interior task"
             )
         self._validate_point_set(prediction_points, "prediction_points")
-        self._validate_geometry(boundary_meshes, boundary_geometry)
-
-    def _validate_geometry(self, boundary_meshes, boundary_geometry) -> None:
-        """The surface of the prediction points' geometry: ``boundary_geometry``
-        names the same boundaries as ``boundary_meshes``, each a non-empty
-        ``Mesh[dim - 1, dim]``; without it the tokens' own cells are the surface,
-        which requires them to be the whole boundary."""
-        d = self.dim
-        if boundary_geometry is None:
-            ### A sampling stage scales each kept cell's measure by its inverse
-            ### inclusion probability (a Horvitz-Thompson weight, >= the cell's own
-            ### measure, equal only where the cell is kept for sure), so a cell whose
-            ### effective measure exceeds its geometric measure stands for surface
-            ### that is not there; the slack is half the significand, for measures
-            ### computed by another routine or in another precision.
-            for name, mesh in boundary_meshes.items():
-                if EFFECTIVE_MEASURE_KEY not in mesh.cell_data:
-                    continue
-                own = mesh.cell_areas
-                slack = torch.finfo(own.dtype).eps ** 0.5
-                if bool((cell_measures(mesh).to(own.dtype) > own * (1 + slack)).any()):
-                    raise ValueError(
-                        f"boundary_meshes[{name!r}] is a sample of its boundary (effective cell "
-                        "measures exceed the cells' own measures), so its cells cannot stand "
-                        "for the surface the prediction points measure their distance to; "
-                        "pass the whole boundary as boundary_geometry"
-                    )
-            return
-        if not isinstance(boundary_geometry, Mapping) or set(boundary_geometry) != set(boundary_meshes):
+        if not any(mesh.n_cells for mesh in boundary_meshes.values()):
             raise ValueError(
-                "boundary_geometry must name the same boundaries as boundary_meshes "
-                f"({sorted(boundary_meshes)!r}); got "
-                f"{sorted(boundary_geometry) if isinstance(boundary_geometry, Mapping) else type(boundary_geometry).__name__!r}"
+                "boundary_meshes have no cells: the interior task's prediction points "
+                "measure their distance to the boundary surface"
             )
-        for name, surface in boundary_geometry.items():
-            if not isinstance(surface, Mesh) or surface.n_spatial_dims != d or surface.n_manifold_dims != d - 1:
-                raise ValueError(
-                    f"boundary_geometry[{name!r}] must be a Mesh[{d - 1}, {d}] (the boundary's "
-                    "cells at full resolution)"
-                )
-        if not any(surface.n_cells for surface in boundary_geometry.values()):
-            raise ValueError("boundary_geometry has no cells")
 
     def _validate_point_set(self, pts, label: str) -> None:
         """An interior point set: a point-cloud Mesh carrying the ``query_schema``
@@ -1171,7 +1176,6 @@ class ISLA(Module):
         *,
         boundary_meshes: Mapping[str, Mesh],
         prediction_points: Mesh | Float[torch.Tensor, "n_points dim"] | None = None,
-        boundary_geometry: Mapping[str, Mesh] | None = None,
         global_data: TensorDict | Mapping[str, torch.Tensor] | None = None,
     ) -> Mesh:
         r"""Predict the declared output fields for one case.
@@ -1183,11 +1187,15 @@ class ISLA(Module):
                 tokens, concatenated in sorted key order: a token's position is
                 the cell centroid, its normal the cell normal, its quadrature
                 measure the cell's effective measure
-                (``cell_data["_effective_measure"]``, the Horvitz-Thompson
-                corrected measure of a subsampled boundary) when present, else
-                the cell's geometric measure. Every ``boundary_schema`` field
-                is read from each mesh's ``cell_data`` by its (possibly
-                dotted) name; other cell data are ignored.
+                (``cell_data["_effective_measure"]``) when present, else the
+                cell's geometric measure. Every ``boundary_schema`` field is
+                read from each mesh's ``cell_data`` by its (possibly dotted)
+                name; other cell data are ignored. A surface task's tokens are
+                every cell. An interior task takes the boundaries at full
+                resolution: their cells are the surface of the prediction
+                points' geometry, and its tokens are ``boundary_tokens`` of
+                them drawn inside the model (module docstring), each kept cell
+                with its Horvitz-Thompson measure.
             prediction_points: The interior task's prediction points
                 (``interior=True``): a point-cloud ``Mesh`` whose ``points`` are
                 the prediction points and whose ``point_data`` carries the
@@ -1195,30 +1203,15 @@ class ISLA(Module):
                 none are declared. The points join the encoder as interacting
                 tokens (passive readers with ``query_independent``); each
                 one's built-in geometry, its signed distance to the boundary
-                surface and the direction from it, is computed inside the
-                model from the exact closest point on the surface's cells
-                (``boundary_geometry``; :func:`exact_boundary_geometry`) and is
-                never an input. A
+                surface (the cells of ``boundary_meshes``) and the direction
+                from it, is computed inside the model from the exact closest
+                point on the surface's cells (:func:`exact_boundary_geometry`)
+                and is never an input. A
                 dataset's stored signed-distance field or its gradient enter, if
                 wanted, as ordinary ``query_schema`` fields (rank 0 / rank 1)
                 like any other PDE data. ``None`` for a surface task
                 (``interior=False``): the outputs are predicted at the boundary
                 tokens.
-            boundary_geometry: The boundary surface of the interior task's
-                geometry: the same named boundaries as ``boundary_meshes``, as
-                ``Mesh[dim - 1, dim]`` objects at full resolution (only their
-                points and cells are read; their union is the surface). Each is
-                oriented as its own tokens (:func:`orient_surface`: by the sign
-                of the tokens' measure-weighted agreement with its normals), so
-                the distance is positive on the side the tokens' normals point
-                to whichever way the surface was stored. ``boundary_meshes``
-                stay the tokens, a measure-weighted sample of the same boundary;
-                this is the surface the sample was drawn from, so the prediction
-                points' geometry does not depend on how it was drawn. ``None``
-                (default): the tokens' own cells are the surface, accepted only
-                when they are the whole boundary: a mesh whose effective cell
-                measures exceed the cells' geometric measures (the
-                Horvitz-Thompson weights of a subsample) is refused.
             global_data: The case's per-case fields, a TensorDict (or mapping)
                 with the ``global_schema`` fields as leaves (a rank-0 field a
                 scalar, a rank-1 field a ``(dim,)`` vector); extra leaves are
@@ -1238,15 +1231,16 @@ class ISLA(Module):
         ### Validation at the API boundary (skipped under torch.compile): fail
         ### here with the offending mesh, not inside the network.
         if not torch.compiler.is_compiling():
-            self._validate_meshes(boundary_meshes, prediction_points, boundary_geometry)
-        ### The boundary tokens: each mesh's cells, concatenated in name order.
+            self._validate_meshes(boundary_meshes, prediction_points)
+        ### The boundary cells: each mesh's, concatenated in name order.
         meshes = [boundary_meshes[name] for name in names]
+        measures = [cell_measures(m) for m in meshes]
         boundary = torch.cat([
             self._token_inputs(
                 m.cell_centroids, m.cell_data, self.boundary_schema,
-                normals=m.cell_normals, measure=cell_measures(m),
+                normals=m.cell_normals, measure=w,
             )
-            for m in meshes
+            for m, w in zip(meshes, measures)
         ])
         global_td = self._select_global_data(global_data, boundary["points"].device)
         query = None
@@ -1255,34 +1249,29 @@ class ISLA(Module):
         else:
             query = self._point_set(prediction_points)
             out_points = query["points"]
-            ### The points' geometry from the boundary surface (the union of its
-            ### named meshes' cells, each oriented as its own tokens), at the
-            ### points' precision.
+            ### The points' geometry from the boundary surface, the union of the
+            ### named meshes' cells at full resolution, at the points' precision.
             q_points = query["points"]
             with torch.autocast(q_points.device.type, enabled=False):
-                if boundary_geometry is None:
-                    surfaces = [(m.points, m.cells) for m in meshes]
-                else:
-                    surfaces = []
-                    for name, tokens in zip(names, meshes):
-                        surface = boundary_geometry[name]
-                        pts = surface.points.to(q_points.device, q_points.dtype)
-                        cells = surface.cells.to(q_points.device)
-                        ### (an empty boundary, a case without that condition, has
-                        ### nothing to orient; a count of zero is specialized anyway)
-                        if surface.n_cells and tokens.n_cells:
-                            cells = orient_surface(
-                                pts, cells, tokens.cell_centroids.to(pts.dtype),
-                                tokens.cell_normals, cell_measures(tokens),
-                            )
-                        surfaces.append((pts, cells))
                 offsets = [0]
-                for pts, _ in surfaces[:-1]:
-                    offsets.append(offsets[-1] + pts.shape[0])
-                points = torch.cat([pts.to(q_points.device, q_points.dtype) for pts, _ in surfaces])
-                cells = torch.cat([c.to(q_points.device) + o for (_, c), o in zip(surfaces, offsets)])
+                for m in meshes[:-1]:
+                    offsets.append(offsets[-1] + m.n_points)
+                points = torch.cat([m.points.to(q_points.device, q_points.dtype) for m in meshes])
+                cells = torch.cat([m.cells.to(q_points.device) + o for m, o in zip(meshes, offsets)])
                 dist, direction = exact_boundary_geometry(q_points, points, cells, eps=EPS)
             query["wall_distance"], query["wall_direction"] = dist, direction
+            ### The boundary tokens: the sample of the cells (sample_boundary_cells),
+            ### each kept cell with its Horvitz-Thompson measure. A uniform start
+            ### from the global torch RNG in training, a fixed one in evaluation.
+            if self.training:
+                start = torch.rand((), dtype=torch.float64, device=q_points.device)
+            else:
+                start = torch.full((), EVAL_START, dtype=torch.float64, device=q_points.device)
+            kept, weights = sample_boundary_cells(
+                measures, [m.cell_centroids for m in meshes], self.boundary_tokens, start
+            )
+            boundary = boundary[kept]
+            boundary["measure"] = weights
         ### One case: a batch axis of one for the batched machinery below.
         fields = self._forward_tokens(
             boundary[None],
@@ -1356,8 +1345,8 @@ class ISLA(Module):
         batch); ``query_points`` ``(B, Q, d)`` for an interior model, with the
         boundary surface each case's geometry is computed from as
         ``surface_points`` ``(B, V, d)`` and ``surface_cells`` ``(B, F, d)``
-        (vertex indices, oriented as each case's tokens by :func:`orient_surface`;
-        :func:`exact_boundary_geometry`). Returns the outputs
+        (vertex indices; :func:`exact_boundary_geometry`). The tokens are used as
+        given: nothing is sampled here. Returns the outputs
         over the ``(B, N_out)`` tokens the head read.
         """
         if not torch.compiler.is_compiling():
@@ -1376,13 +1365,10 @@ class ISLA(Module):
             boundary["measure"] = measure_weights.reshape(b, n)
         query = None
         if query_points is not None:
-            geometry = []
-            for i in range(b):
-                cells = orient_surface(
-                    surface_points[i], surface_cells[i], points[i], normals[i],
-                    None if measure_weights is None else measure_weights.reshape(b, n)[i],
-                )
-                geometry.append(exact_boundary_geometry(query_points[i], surface_points[i], cells, eps=EPS))
+            geometry = [
+                exact_boundary_geometry(query_points[i], surface_points[i], surface_cells[i], eps=EPS)
+                for i in range(b)
+            ]
             query = TensorDict(
                 points=query_points,
                 wall_distance=torch.stack([g[0] for g in geometry]),

@@ -58,10 +58,9 @@ def _rotate_globals(m, gd, R):
     return {k: (v @ R.T if m.global_schema[k].rank == 1 else v) for k, v in gd.items()}
 
 
-def _run(m, mesh, gd, q=None, surface=None):
-    geometry = None if surface is None else {"wall": surface}
+def _run(m, mesh, gd, q=None):
     with torch.no_grad():
-        return m(boundary_meshes={"wall": mesh}, prediction_points=q, boundary_geometry=geometry, global_data=gd)
+        return m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data=gd)
 
 
 def _assert_se3(m, mesh, gd, q=None, atol=1e-10):
@@ -73,9 +72,7 @@ def _assert_se3(m, mesh, gd, q=None, atol=1e-10):
     assert torch.allclose(moved.point_data["v"], base.point_data["v"] @ R.T, atol=atol)
     ### Measure-scale invariance: the RMS-distance unit uses normalized weights and
     ### the routing bias is a log-weight, so a uniform rescale changes nothing.
-    ### (The rescaled measures exceed the cells' own: an interior model reads the
-    ### same cells as the surface they sample.)
-    rescaled = _run(m, rescale_measures(mesh, 137.0), gd, q, surface=None if q is None else mesh)
+    rescaled = _run(m, rescale_measures(mesh, 137.0), gd, q)
     assert same(rescaled, base, atol=1e-9)
     return base
 

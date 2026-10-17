@@ -180,3 +180,46 @@ def test_whole_model_does_not_guard_on_the_key_order_of_its_inputs():
             _reversed_keys(case["global_data"])
         with torch._dynamo.config.patch(error_on_recompile=i > 0):
             compiled(**case)
+
+
+def test_the_in_model_boundary_draw_compiles_once_across_the_budget():
+    """An interior model whose boundary_tokens (60) lies between the cases' cell
+    counts (64, 111 and 50 cells over two conditions): the compiled model, in
+    evaluation (the fixed start), gives the eager outputs with one graph, whether
+    the cells are sampled down to the budget or all kept. In training (a start from
+    the global RNG inside the graph) it compiles once more and then reuses that
+    graph.
+
+    The token count is ``Min(budget, cells)``. Inductor's FX-graph cache, replaying
+    a cached graph whose guards hold that ``Min`` (here the CPU code generator's
+    accumulator test, token count at most 4,096), splits it into a guard on one side
+    of the budget, so the test compiles without that cache."""
+    torch._dynamo.reset()
+    model = ISLA(
+        output_schema=PV,
+        boundary_schema={"bc": {"rank": 0}, "u_bc": {"rank": 1}},
+        global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
+        interior=True,
+        boundary_tokens=60,
+        hidden=32,
+        n_layers=2,
+        n_slices=8,
+    ).eval()
+    eager = copy.deepcopy(model)  # never called under compile: no shared module state
+    compiled = torch.compile(model, fullgraph=True, dynamic=True)
+    sizes = [({"inlet": 23, "wall": 41}, 57), ({"inlet": 31, "wall": 80}, 45), ({"inlet": 20, "wall": 30}, 40)]
+    no_cache = torch._inductor.config.patch(fx_graph_cache=False)
+    for i, (s, nq) in enumerate(sizes):
+        case = _case("interior", s, nq, "cpu", seed=i)
+        with torch.no_grad(), no_cache, torch._dynamo.config.patch(error_on_recompile=i > 0):
+            out = outputs(compiled(**case))
+        with torch.no_grad():
+            ref = outputs(eager(**case))
+        for k in ref:
+            _assert_close(out[k], ref[k], "cpu")
+    model.train()
+    for i, (s, nq) in enumerate(sizes):
+        case = _case("interior", s, nq, "cpu", seed=i)
+        with no_cache, torch._dynamo.config.patch(error_on_recompile=i > 0):
+            out = outputs(compiled(**case))
+        assert all(torch.isfinite(v).all() for v in out.values())

@@ -77,20 +77,19 @@ def test_cosine_routing_keeps_the_contracts_and_all_parameters_train():
     shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
     probe = pts[:20] * 1.5
 
-    def run(mesh, g, q, surface=None):
+    def run(mesh, g, q):
         with torch.no_grad():
             return outputs(
                 m(
                     boundary_meshes={"wall": mesh},
                     prediction_points=q,
-                    boundary_geometry=None if surface is None else {"wall": surface},
                     global_data={"g": g},
                 )
             )
 
     base = run(mesh, drv, probe)
     moved = run(transform(mesh, q, shift), drv @ q.T, probe @ q.T + shift)
-    rescaled = run(rescale_measures(mesh, 137.0), drv, probe, surface=mesh)
+    rescaled = run(rescale_measures(mesh, 137.0), drv, probe)
     assert torch.allclose(moved["p"], base["p"], atol=1e-10)
     assert torch.allclose(moved["v"], base["v"] @ q.T, atol=1e-10)
     assert all(torch.allclose(rescaled[k], base[k], atol=1e-9) for k in base)

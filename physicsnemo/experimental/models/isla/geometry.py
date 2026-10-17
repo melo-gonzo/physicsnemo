@@ -277,31 +277,3 @@ def exact_boundary_geometry(
     )
     return d, u
 
-
-def orient_surface(
-    points: Float[torch.Tensor, "vertices dim"],
-    cells: Int[torch.Tensor, "cells dim"],
-    token_points: Float[torch.Tensor, "tokens dim"],
-    token_normals: Float[torch.Tensor, "tokens dim"],
-    token_measures: Float[torch.Tensor, " tokens"] | None = None,
-) -> Int[torch.Tensor, "cells dim"]:
-    r"""The cells of a boundary surface oriented as a sample of it (its tokens).
-
-    :math:`\sigma = \operatorname{sign} \sum_i w_i\, \hat n_i \cdot \hat N(c_i)`,
-    the measure-weighted agreement of the tokens' normals :math:`\hat n_i` with
-    the surface's pseudo-normals :math:`\hat N` at the tokens' closest features
-    (uniform weights when ``token_measures`` is ``None``; :math:`\sigma = +1`
-    at a tie); with :math:`\sigma = -1` every cell's last two vertices are
-    swapped, which reverses its normal. :func:`exact_boundary_geometry` on the
-    result is then positive on the side the *tokens'* normals point to,
-    whichever way the surface was stored. Without gradient (the orientation is
-    discrete) and without a host synchronization (one ``torch.where``)."""
-    with torch.no_grad():
-        feature_n = _closest_features(token_points, points, cells)[1]
-        cos = (feature_n * token_normals.to(feature_n.dtype)).sum(-1)
-        if token_measures is not None:
-            cos = cos * token_measures.to(cos.dtype)
-        flip = cos.sum() < 0
-    d = cells.shape[-1]
-    swapped = cells[:, [*range(d - 2), d - 1, d - 2]]
-    return torch.where(flip, swapped, cells)
