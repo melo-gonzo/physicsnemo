@@ -139,12 +139,12 @@ rows = [
      three("lug", "von_mises_l2", ("native", "posed")),
      f"under the float32 protocol both baselines lead (ISLA {word('lug', 'GeoTransolver', 'von_mises_l2')} GeoTransolver and {word('lug', 'Transolver', 'von_mises_l2')} Transolver), a precision sensitivity of the trained model's nearest-boundary-sample selection on a tied mesh, not a capacity difference; rotated and translated ISLA's error moves {shift('lug', 'ISLA', 'von_mises_l2', 'posed'):.2f}x by the same mechanism, where the baselines' read at the mean field",
      "@sec-interior-lug"),
-    (f"**DeepJEB++** at 12,451 brackets and 40 epochs, {label('deepjeb')} with ISLA at half the reference rate (the dataset's exception): von Mises / displacement, native (GeoTransolver; Transolver)",
+    (f"**DeepJEB++** at 12,451 brackets and 40 epochs, {label('deepjeb')}, ISLA's row from half-rate lanes (1.875e-4): von Mises / displacement, native (GeoTransolver; Transolver)",
      tri("deepjeb", ("von_mises_l2", "displacement_l2"), "GeoTransolver") + "; " + tri("deepjeb", ("von_mises_l2", "displacement_l2"), "Transolver"),
-     f"ISLA does not finish this dataset: both seeds reach the baselines' accuracy by epoch {jb_parity_epoch} and then fall to the mean-field plateau "
+     f"trained with the raw slice reads, ISLA does not finish this dataset: both seeds reach the baselines' accuracy by epoch {jb_parity_epoch} and then fall to the mean-field plateau "
      + (f"at epoch {jb_collapse_epochs[0]}" if min(jb_collapse_epochs) == max(jb_collapse_epochs) else f"between epochs {min(jb_collapse_epochs)} and {max(jb_collapse_epochs)}")
      + f" (the routing collapse), so the 40-epoch checkpoints read {ART['deepjeb'][1]['ISLA']['native']['displacement_l2']['mean']:.2f} on displacement, "
-     f"{1 / rat('deepjeb', 'GeoTransolver', 'displacement_l2'):.1f} times GeoTransolver's: a failure of training stability, the open problem of the book; "
+     f"{1 / rat('deepjeb', 'GeoTransolver', 'displacement_l2'):.1f} times GeoTransolver's: a failure of training stability, not of capacity; "
      f"posed, ISLA's error is unchanged and the baselines' read above the mean field",
      "@sec-surface-deepjeb"),
 ]
@@ -159,11 +159,12 @@ print(f": The thesis in {len(rows)} rows, one dataset and task per row. "
       "would be the native mesh itself. "
       + (f"The {lst(True)} rows hold the final reference configurations, one per architecture, each the most accurate "
          if lst(False) else "Every row holds the final reference configurations, one per architecture, each the most accurate ")
-      + "under 80 GiB per GPU on the two selection datasets (ISLA width 512 with 512 slices at 200,000 cells, learning rate 3.75e-4, halved on "
-      "DeepJEB++; GeoTransolver width 256 at 200,000 cells; Transolver width 512 with 16 layers at 100,000 cells)"
+      + "under 80 GiB per GPU on the two selection datasets (ISLA width 512 with 512 slices at 200,000 cells, learning rate 3.75e-4 on every dataset, "
+      "the DeepJEB++ row's ISLA lanes at half that rate; GeoTransolver width 256 at 200,000 cells; Transolver width 512 with 16 layers at 100,000 cells)"
       + (f"; the {lst(False)} rows hold the first-pass lanes under the configurations the DrivAerML half of that selection named (ISLA width 768 "
          "at 100,000 cells, learning rate 2.5e-4; GeoTransolver and Transolver width 1,024 at 100,000 cells)" if lst(False) else "")
-      + ". Baselines train without augmentation; interior tasks give all three architectures the stored "
+      + ". Every ISLA row was trained with the raw slice reads, before the normalized reads (@sec-arch-layer) became the "
+      "reference configuration; the reruns with the normalized reads replace these numbers. Baselines train without augmentation; interior tasks give all three architectures the stored "
       "signed distance and its gradient. Errors are the area-weighted relative L2 (@sec-metrics) in float32, seed means over two seeds, "
       "of surface pressure on the surface tasks and of the named fields elsewhere. The seeds and the controls behind each row, and the "
       "`results/char/` artifact each number is computed from, are in the chapter the row cites. {#tbl-thesis}")
