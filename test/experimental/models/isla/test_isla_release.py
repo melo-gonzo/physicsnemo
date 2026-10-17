@@ -214,10 +214,11 @@ def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
     assert torch.equal(via_mesh.global_data["g"], inputs["global_data"]["g"])
 
 
-def test_isla_backbone_is_the_pre_refactor_backbone():
+def test_isla_backbone_matches_the_recorded_backbone():
     """With no per-token inputs, the pre-head token state (``norm_out`` output) of
     the surface model is the one recorded when the backbone was last changed by
-    decision, for the same parameters and token tensors. ``data/isla_backbone_v1.pth``
+    decision (the slice sublayer's normalized reads, H-RESID arm A2), for the same
+    parameters and token tensors. ``data/isla_backbone_v1.pth``
     was recorded with a forward hook on ``norm_out`` (seed 0 parameters, seed 1234
     inputs, as here) on an x86 CPU; the tensors enter through the internal batched
     routine, which the Mesh wrapper calls. Compared at float32 tolerance: the same
