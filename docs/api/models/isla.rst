@@ -85,9 +85,13 @@ a prescribed boundary vector is a rank-1 boundary input
 (``boundary_schema={"traction": {"rank": 1}}``, read from each boundary mesh's
 ``cell_data["traction"]``). An interior task is built with ``interior=True``
 and called with ``prediction_points=``; each prediction point's signed
-distance to the nearest boundary token and the direction to it are computed
-inside the model and are never an input, so a dataset's stored signed
-distance enters, if wanted, as an ordinary ``query_schema`` field.
+distance to the boundary surface and the direction from it are computed inside
+the model from the exact closest point on the surface's cells and are never an
+input. The surface is ``boundary_geometry=``, the same named boundaries as
+``boundary_meshes`` at full resolution (the tokens are a sample of it); without
+it the tokens' own cells are the surface, accepted when they are the whole
+boundary. A dataset's stored signed distance enters, if wanted, as an ordinary
+``query_schema`` field.
 
 The unified external-aerodynamics recipe
 (``examples/cfd/external_aerodynamics/unified_external_aero_recipe``) documents

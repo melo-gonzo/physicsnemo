@@ -685,7 +685,7 @@ flowchart LR
     subgraph Q["interior task (interior=True): prediction points as tokens"]
         direction TB
         Q1["boundary tokens (N)"]:::data
-        Q2["prediction-point tokens (Q): position and declared query inputs; direction and signed distance<br/>to the nearest boundary sample computed inside; learned routing mass"]:::aqua
+        Q2["prediction-point tokens (Q): position and declared query inputs; direction and signed distance<br/>to the boundary surface computed inside; learned routing mass"]:::aqua
         Q3["slice layers × 12 on all N + Q tokens"]:::learned
         Q4["head frame + head on the Q query tokens"]:::learned
         Q1 --> Q3
@@ -699,25 +699,66 @@ position $x_q$ (the `points` of the prediction `Mesh`, or a bare
 $Q{\times}3$ tensor) and whatever per-point fields were declared in
 `query_schema` (from its `point_data`). Its invariants need two more
 quantities: a direction to stand in for the normal, and a distance to the
-wall. Both are functions of the boundary sample and of $x_q$, and the model
-always computes them itself; they are never inputs. With $i^* \equiv
-\arg\min_i \lvert x_q - x_i \rvert$ the nearest boundary sample,
+wall. **Both are functions of the boundary surface and of $x_q$, never of
+how the boundary tokens were sampled from it.** The model always computes
+them itself; they are never inputs. The surface is `forward`'s
+`boundary_geometry`: the same named boundaries as `boundary_meshes`, at full
+resolution (on DrivAerML the vehicle's watertight STL, the surface the
+dataset's stored signed-distance field is computed from), while
+`boundary_meshes` stay the tokens, a measure-weighted sample of it. Picture
+a query a hair off an airfoil whose sample kept every fifth panel: the
+nearest *kept* panel is up to two panels away, but the nearest point of the
+*airfoil* is directly below the query. With $p_q$ the exact closest point
+of the surface's cells to $x_q$ (point to face, never point to centroid)
+and $\hat N$ the pseudo-normal of the feature it lies on (the cell's normal
+on a cell's interior; on an edge or a vertex the sum of the normals of the
+cells that share it, angle-weighted at a vertex in three dimensions),
 
 $$
-\hat n_q \equiv \frac{x_q - x_{i^*}}{\lvert x_q - x_{i^*} \rvert}, \qquad
-\delta_q \equiv \operatorname{sign}\big(\hat n_q \cdot \hat n_{i^*}\big)\, \lvert x_q - x_{i^*} \rvert ,
+\delta_q \equiv \operatorname{sign}\big((x_q - p_q) \cdot \hat N\big)\, \lvert x_q - p_q \rvert ,
+\qquad
+\hat n_q \equiv \begin{cases}
+  \operatorname{sign}(\delta_q)\, \hat n_f & p_q \text{ interior to the cell } f, \\
+  (x_q - p_q) / \lvert x_q - p_q \rvert & \text{otherwise,}
+\end{cases}
 $$
 
-are the direction from the boundary to the query and the distance signed by
-the nearest sample's normal. The distance is positive on the side the
-normal points to (outside, for outward normals). A query on a sample takes
-that sample's normal and $\delta_q = 0$. Both are differences of positions,
-so the distance is invariant and the direction covariant under every rigid
-motion and reflection, and the distance scales with the geometry. The
-search is exact and goes through the project's shared nearest-neighbour
-routine (`physicsnemo.nn.functional.neighbors.knn.knn`, cuML on CUDA and a
-SciPy KD-tree on the host), so the $Q \times N$ distance matrix is never
-held at once (`nearest_boundary_geometry`). The point is then placed in
+are the signed distance to the surface and the direction from the surface
+to the query. The pseudo-normal makes the sign right behind a sharp
+trailing edge and at a concave corner, where the normal of the one closest
+cell would flip it. Each named surface is first oriented as its own tokens:
+if the tokens' normals, weighted by their measures, disagree on average
+with the surface's pseudo-normals at the tokens' closest points, the
+surface's cells are reversed. So the distance is positive on the side the
+*tokens'* normals point to (outside, for outward normals), whichever way
+the surface file was stored. A query on the surface takes $\delta_q = 0$
+and $\hat N$ as its direction. Both quantities are differences of
+positions, so the distance is invariant and the direction covariant under
+every rigid motion and reflection, and the distance scales with the
+geometry. They converge as $O(h^2)$ under refinement of the surface, like
+the stored field, and are bitwise the same for every sampling law, count
+and window of the tokens. The search is a Warp BVH over the triangles in
+three dimensions (a compiled custom operator) and an exact brute force over
+the segments in two; the closest point is then rebuilt from its cell's
+vertices, so both quantities carry gradients (`exact_boundary_geometry`).
+
+Without `boundary_geometry` the tokens' own cells are the surface. That is
+exact when the boundary is whole, as the AirfRANS airfoil is, and the model
+refuses it otherwise: a cell whose effective measure exceeds its geometric
+measure stands for surface that a sampling stage dropped (its
+Horvitz-Thompson weight is its measure over its inclusion probability), so
+it cannot stand for the surface. The interior task is implemented in two
+and three dimensions.
+
+::: {.callout-note collapse="true" title="Why the kept cells are not enough"}
+The exact distance to the cells the sample kept still depends on the
+sample: a sample of 200,000 of 17 million cells covers about 1.2% of the
+car's area, so almost every near-wall query sits over a gap and reads the
+distance to the nearest kept cell's rim, about the nearest-centroid
+distance. Only the full surface removes the dependence.
+:::
+
+The point is then placed in
 the same frame and seeded like a boundary cell, with zeros in the
 boundary-input channels. It receives a learned type offset and an
 embedding of the distance in frame units followed by the declared query
@@ -730,14 +771,10 @@ h_q = \mathrm{MLP}_{\mathrm{embed}}(s_q) + t_{\mathrm{q}}
       + \mathrm{MLP}_{\mathrm{qs}}\!\big(\,[\, \delta_q / L,\ \operatorname{sign}(\delta_q) \log(\lvert \delta_q \rvert / L + \epsilon),\ \text{declared query inputs} \,]\big) .
 $$
 
-The distance is to the *sampled* boundary, 200,000 of up to 17 million
-cells on a DrivAerML car. Near the wall it therefore overestimates the true
-wall distance by up to about the sample spacing, and the direction deviates
-from the true gradient of the signed-distance field by the same order. Far
-from the wall both agree with the full-resolution field. A dataset that
-stores a full-mesh signed-distance field and its gradient passes them as
-ordinary `query_schema` fields (a rank-0 and a rank-1 field, like any
-other PDE datum); the model's own geometry is computed regardless. Every
+A dataset that stores a full-mesh signed-distance field and its gradient
+may still pass them as ordinary `query_schema` fields (a rank-0 and a
+rank-1 field, like any other PDE datum); the model's own geometry is
+computed regardless. Every
 interior lane of this book passes the stored field as well
 (@sec-interior-query-tokens).
 
@@ -757,12 +794,12 @@ tokens only. The arrangement is exactly covariant and not
 query-independent (@sec-isla-contracts).
 
 ::: {.callout-note collapse="true" title="The interior task in the code"}
-The prediction points' geometry is one function on the boundary sample, and the tokens are appended before the slice layers run.
+The prediction points' geometry is one function on the boundary surface, computed in `forward` where the meshes are, and the tokens are appended before the slice layers run.
 
 ```{python}
 #| label: code-interior
 #| output: asis
-listing("geometry.py", "nearest_boundary_geometry")
+listing("geometry.py", "exact_boundary_geometry")
 listing("model.py", "ISLA._forward_tokens", start="if query is not None:", end="first_read = len(self.blocks)")
 ```
 :::
@@ -987,11 +1024,11 @@ above.
 | `global_schema` (none) | 1, 2, 3d, 5 | the per-case fields by name and rank, read from `global_data`: each rank-1 field is a global direction $\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed |
 | `boundary_schema` (none) | 2, 3d | per-cell fields by name and rank 0 to 2, read from every boundary mesh's `cell_data`: their invariants $\beta_i$ join the seed (prediction-point tokens carry zeros), and rank-1 and rank-2 fields add their contractions with $\hat\rho_{is}$ to the relational invariants (@sec-isla-inputs-rank) |
 | `query_schema` (none) | interior | per-prediction-point fields by name and rank 0 to 2 (a material label, a source term, a stored signed distance and its gradient), read from the prediction Mesh's `point_data` and carried by the prediction-point tokens through their own embedding after the built-in distance channel; rank-0 fields are divided by $L$ and paired with a signed log |
-| `interior` (`False`) | modes | the task: `False` predicts at the boundary cells and takes no prediction points; `True` predicts at the prediction points, which join the encoder as interacting tokens with the built-in nearest-boundary direction and signed distance (@sec-arch-modes) |
+| `interior` (`False`) | modes | the task: `False` predicts at the boundary cells and takes no prediction points; `True` predicts at the prediction points, which join the encoder as interacting tokens with the built-in direction and signed distance to the boundary surface (`boundary_geometry`, @sec-arch-modes) |
 | `query_independent` (`False`) | modes | interior task only: `True` makes the prediction points passive (@sec-arch-passive-decoder), with no routing weight and no routing-mass parameter, so each prediction depends on its own point and the boundary alone |
 | `kernel_read` (`None`), `kernel_read_radius` (0.01), `kernel_read_blocks` (`None`) | after each slice layer | read-only interior task only: `kernel_read="mean"` with `kernel_read_radius=None` adds the global boundary read after each of the last `kernel_read_blocks` layers, every layer when `None` (@sec-arch-global-read). A finite radius limits the read to the cells within that distance in units of $L$, and `"sum"` replaces the softmax by an unnormalized quadrature; neither is part of any configuration the book scores |
 | `kernel_read_theta` (`None`) | after each slice layer | global read only: `None` evaluates it pair by pair, $Q \times N$ pairs per layer; a number $\theta$ evaluates it through the cluster forest at that opening angle (@sec-arch-tree-read), the dense read at 0. ISLA-DTT sets 1 and is trained at it |
 | `geo_kernel` (`None`, automatic), `geo_checkpoint` (off) | 3c–3e, 3h | how the geometry region is executed: `None` resolves at the first forward pass to `"fused"` (the Triton kernel) when the inputs are on CUDA, Triton is importable, the global directions and rank-1 per-token inputs together number one to four, there are at most 1,024 slices and no rank-2 per-token input, and to `"eager"` (the PyTorch region) otherwise; either name forces that path, and `"fused"` raises where its constraints fail. `geo_checkpoint` rebuilds the eager region in backward instead of storing it. Neither changes the function computed beyond roundoff |
 | `compile_blocks` (`False`) | 3 | each slice block's forward is wrapped in `torch.compile`, built lazily at the first call. Parameter names, the state dict and the eager path are unchanged, and the fused geometry kernel stays a custom-op leaf. Measured on four GB300 ranks at 200,000 cells per case: the DrivAerML Surface step falls from 221 to 180 ms and peak memory from 44.9 to 32.9 GiB, the Volume step from 475 to 308 ms and 88.5 to 64.5 GiB, with losses at bfloat16 roundoff. The recipe's ISLA configurations leave it off and compile the whole model instead (`fullgraph=True`, dynamic shapes: one graph for every mesh size); it remains the way to compile ISLA-DTT, whose kernel reads break that graph |
-| `dim` (3) | all | the spatial dimension: every boundary mesh is a `Mesh[dim - 1, dim]` (a polyline in two dimensions), every prediction point has `dim` coordinates, and the head's basis follows it (perpendiculars instead of cross products in two dimensions; odd-parity outputs refused for `dim >= 4`). The fused kernels are written for three dimensions; other dimensions run the eager region and the host nearest-neighbour search. A planar problem is passed with `dim=2`, never embedded with a zero third coordinate |
+| `dim` (3) | all | the spatial dimension: every boundary mesh is a `Mesh[dim - 1, dim]` (a polyline in two dimensions), every prediction point has `dim` coordinates, and the head's basis follows it (perpendiculars instead of cross products in two dimensions; odd-parity outputs refused for `dim >= 4`). The fused kernels are written for three dimensions; other dimensions run the eager region. The interior task's exact boundary geometry is implemented in two and three dimensions. A planar problem is passed with `dim=2`, never embedded with a zero third coordinate |
 | `eps` ($10^{-12}$) | 1, 3c, 3d, 4 | the floor under every norm and logarithm |

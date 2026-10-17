@@ -79,10 +79,12 @@ fields at query points.** Per case, the inputs are:
   A field of rank 1 or 2 enters only through its invariants against the
   token's own directions (@sec-isla-inputs-rank).
 - For prediction off the surface, the interior query positions $x_q$ and
-  nothing else. The direction and the signed distance an interior token
-  needs are functions of the boundary sample and the query position, so the
-  model computes them itself from the nearest boundary sample
-  (@sec-arch-modes). No stored signed-distance field is read.
+  the boundary surface at full resolution (`boundary_geometry`; the tokens
+  are a sample of it). The direction and the signed distance an interior
+  token needs are functions of that surface and the query position, so the
+  model computes them itself from the exact closest point of the surface
+  (@sec-arch-modes), the same for every way the tokens were sampled. No
+  stored signed-distance field is read.
 
 The outputs are named fields of declared rank at the query points: scalar
 fields (surface pressure, in every surface result of the book), vector
@@ -152,7 +154,9 @@ a `(3,)` vector and a rank-0 field a scalar; and, on the interior task,
 `point_data`. It returns a point-cloud `Mesh` with the outputs in its
 `point_data`, `(N,)`, `(N, 3)` or `(N, 3, 3)` by rank. A prediction point's
 direction and signed wall distance are computed inside the model from the
-boundary sample; a dataset's stored signed-distance field enters, if
+boundary surface (`boundary_geometry`, the same named boundaries at full
+resolution; without it the tokens' own cells, when they are the whole
+boundary); a dataset's stored signed-distance field enters, if
 wanted, as a declared query input like any other datum (@sec-arch-modes).
 Each named mapping can be given flat with dotted names, nested, or as a
 TensorDict. The output is a TensorDict of batch size (batch, tokens) whose
