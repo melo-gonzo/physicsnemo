@@ -511,14 +511,21 @@ class ISLA(Module):
     #: Largest per-token input rank; see the module docstring.
     MAX_INPUT_RANK = 2
 
-    ### 0.2.0 renamed the field declarations after the schemas they hold.
-    __model_checkpoint_version__ = "0.2.0"
+    ### 0.2.0 renamed the field declarations after the schemas they hold; 0.3.0 made
+    ### the slice sublayer read the normalized state (same parameters, new forward).
+    __model_checkpoint_version__ = "0.3.0"
+    _RAW_READS = (
+        " Its slice blocks were trained to pool and broadcast the raw residual stream; "
+        "this version reads the normalized state there, so its outputs differ from "
+        "the ones it was trained to give."
+    )
     __supported_model_checkpoint_version__ = {
         "0.1.0": (
             "Loading a 0.1.0 ISLA checkpoint: renaming its field declarations "
             "outputs, boundary_inputs, query_inputs and global_inputs to "
-            "output_schema, boundary_schema, query_schema and global_schema."
+            "output_schema, boundary_schema, query_schema and global_schema." + _RAW_READS
         ),
+        "0.2.0": "Loading a 0.2.0 ISLA checkpoint." + _RAW_READS,
     }
     _RENAMED_ARGS = {
         "outputs": "output_schema",
