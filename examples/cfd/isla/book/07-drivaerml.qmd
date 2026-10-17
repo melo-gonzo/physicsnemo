@@ -2,6 +2,10 @@
 
 **One car family carries the book's two aerodynamic tasks: the Surface task, where the prediction points are the boundary cells themselves, and the Volume task, where they lie in the flow around the car. On the Surface task the three architectures at their reference configurations are within a few percent of one another on the native validation mesh, and ISLA alone keeps its error on a uniform point cloud of the surface and under rotation and translation; on the Volume task it leads GeoTransolver and Transolver on interior pressure and velocity, trails GeoTransolver by a few percent on eddy viscosity and leads Transolver there, and alone keeps its error when the validation cars are rotated and translated.** This chapter follows the layout every dataset chapter shares: the problem and its diversity, what is measured, the standing of the three architectures under their reference configurations, the ladders and controls that belong to this dataset, and what the dataset does not say. The pose and discretization probes run on this dataset are read with their twins on the wings in @sec-invariances (@sec-robustness-density, @sec-training-law, @sec-territories, @sec-pose-contract) and are not repeated here. Protocol: @sec-protocol; the metric is the area-weighted relative L2 in float32 (@sec-metrics); every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
+::: {.callout-warning title="Trained with the raw slice reads"}
+Every ISLA checkpoint behind this chapter's numbers was trained with the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm (@sec-arch-layer), before the normalized reads became the reference configuration; the reruns with the normalized reads replace these numbers.
+:::
+
 ```{python}
 #| label: setup-drivaerml
 #| include: false

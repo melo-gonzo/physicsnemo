@@ -14,6 +14,10 @@ configuration (width 512 with 512 slices, @sec-using-config), which sits on
 these axes as one more point, so every "ISLA" in this chapter is the lane
 its row or caption names.
 
+::: {.callout-warning title="Trained with the raw slice reads"}
+Every ISLA checkpoint behind this chapter's numbers was trained with the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm (@sec-arch-layer), before the normalized reads became the reference configuration; the reruns with the normalized reads replace these numbers.
+:::
+
 ```{python}
 #| label: setup-capacity
 #| include: false
