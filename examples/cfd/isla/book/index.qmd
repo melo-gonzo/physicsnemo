@@ -163,8 +163,8 @@ print(f": The thesis in {len(rows)} rows, one dataset and task per row. "
       "the DeepJEB++ row's ISLA lanes at half that rate; GeoTransolver width 256 at 200,000 cells; Transolver width 512 with 16 layers at 100,000 cells)"
       + (f"; the {lst(False)} rows hold the first-pass lanes under the configurations the DrivAerML half of that selection named (ISLA width 768 "
          "at 100,000 cells, learning rate 2.5e-4; GeoTransolver and Transolver width 1,024 at 100,000 cells)" if lst(False) else "")
-      + ". Every ISLA row was trained with the raw slice reads, before the normalized reads (@sec-arch-layer) became the "
-      "reference configuration; the reruns with the normalized reads replace these numbers. Baselines train without augmentation; interior tasks give all three architectures the stored "
+      + ". Every ISLA row comes from checkpoints trained with the raw slice reads, not the normalized reads of ISLA's "
+      "reference configuration (@sec-isla-layer). Baselines train without augmentation; interior tasks give all three architectures the stored "
       "signed distance and its gradient. Errors are the area-weighted relative L2 (@sec-metrics) in float32, seed means over two seeds, "
       "of surface pressure on the surface tasks and of the named fields elsewhere. The seeds and the controls behind each row, and the "
       "`results/char/` artifact each number is computed from, are in the chapter the row cites. {#tbl-thesis}")

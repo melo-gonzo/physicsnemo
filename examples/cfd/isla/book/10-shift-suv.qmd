@@ -3,7 +3,7 @@
 **Shift-SUV is a second car family, sport-utility bodies in two rear-end styles, read through DrivAerML's pipeline unchanged. Trained and scored within the estate family, GeoTransolver and Transolver lead ISLA on the native validation mesh; on a uniform point cloud of the same budget ISLA's error is unchanged while both baselines lose accuracy, and with every validation body rotated and translated ISLA's error is its native error while the baselines' exceed the mean field.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the three scorings, and what the dataset does not say. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
 ::: {.callout-warning title="Trained with the raw slice reads"}
-Every ISLA checkpoint behind this chapter's numbers was trained with the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm (@sec-arch-layer), before the normalized reads became the reference configuration; the reruns with the normalized reads replace these numbers.
+The trained checkpoints behind this chapter's numbers and pictures use the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm, not the normalized reads of ISLA's reference configuration (@sec-isla-layer).
 :::
 
 ```{python}
