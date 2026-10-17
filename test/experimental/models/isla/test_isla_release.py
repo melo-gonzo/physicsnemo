@@ -31,9 +31,9 @@ backbone golden.
 twice: the first run recreates each missing file from the current code (and fails on
 purpose), the second run must pass. ``data/isla_backbone_v1.pth`` is regenerated only
 when the backbone changes by decision (a forward hook on ``norm_out`` under
-``CONFIGS["default"]`` / ``_make_tensors`` below; last recorded 2026-10-02 when the
-sample-conditioned prototypes became the routing of every block) and pins the
-backbone bitwise through the internal batched routine.
+``CONFIGS["default"]`` / ``_make_tensors`` below; last recorded when the slice
+sublayer came to pool and broadcast the normalized state, H-RESID arm A2) and pins
+the backbone bitwise through the internal batched routine.
 """
 
 from pathlib import Path
@@ -270,18 +270,21 @@ def test_isla_reference_checkpoint_matches_golden(device):
     _assert_dict_close(out, ref, atol=tol, rtol=tol)
 
 
-def test_isla_0_1_0_checkpoint_declarations_are_renamed(tmp_path):
+@pytest.mark.parametrize("version", ["0.1.0", "0.2.0"])
+def test_isla_older_checkpoints_load_with_a_warning(tmp_path, version):
     """A 0.1.0 checkpoint (``outputs``, ``global_inputs``, ...) loads through the
     backward-compatibility mapper, which renames the field declarations to
-    ``output_schema``, ``global_schema`` and so on. The fixture is the committed
-    reference checkpoint rewritten to the 0.1.0 declarations and file version, so
-    the mapper is exercised against the current architecture's weights."""
+    ``output_schema``, ``global_schema`` and so on; a 0.2.0 checkpoint loads as it
+    is. Both warn that their slice blocks were trained on the raw reads. The fixture
+    is the committed reference checkpoint rewritten to that version's declarations
+    and file version, so the mapper is exercised against the current architecture's
+    weights."""
     import json
     import zipfile
 
     src = DATA_DIR / "isla_default_v1.mdlus"
-    old = tmp_path / "isla_0_1_0.mdlus"
-    renamed = {new: old_name for old_name, new in ISLA._RENAMED_ARGS.items()}
+    old = tmp_path / f"isla_{version}.mdlus"
+    renamed = {new: old_name for old_name, new in ISLA._RENAMED_ARGS.items()} if version == "0.1.0" else {}
     with zipfile.ZipFile(src) as zin, zipfile.ZipFile(old, "w", zipfile.ZIP_STORED) as zout:
         for item in zin.infolist():
             data = zin.read(item.filename)
@@ -291,14 +294,14 @@ def test_isla_0_1_0_checkpoint_declarations_are_renamed(tmp_path):
                 data = json.dumps(args).encode()
             elif item.filename == "metadata.json":
                 meta = json.loads(data)
-                meta["mdlus_file_version"] = "0.1.0"
+                meta["mdlus_file_version"] = version
                 data = json.dumps(meta).encode()
             zout.writestr(item, data)
-    with pytest.warns(UserWarning, match="0.1.0 ISLA checkpoint"):
+    with pytest.warns(UserWarning, match=f"{version} ISLA checkpoint.*raw residual stream"):
         model = Module.from_checkpoint(str(old))
     assert list(model.output_schema) == ["p", "v"] and list(model.global_schema) == ["g"]
     assert model.boundary_schema == {} and model.query_schema == {}
-    assert ISLA.__model_checkpoint_version__ == "0.2.0"
+    assert ISLA.__model_checkpoint_version__ == "0.3.0"
 
 
 def test_isla_unknown_constructor_argument_is_a_type_error():

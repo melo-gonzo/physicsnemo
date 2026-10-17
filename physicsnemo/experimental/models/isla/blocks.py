@@ -302,7 +302,8 @@ class _SliceBlock(nn.Module):
     ) -> Float[torch.Tensor, "batch tokens hidden"]:
         ### Soft assignment of points to slices; measure weights enter as a
         ### log-space bias so slice states are quadrature-weighted means.
-        logits = self.assign(self.norm_assign(h), log_w)  # (B, N, S)
+        h_n = self.norm_assign(h)
+        logits = self.assign(h_n, log_w)  # (B, N, S)
         a = _softmax_over_points(logits + log_w)  # normalized over points
         ### Equivariant anchors: weighted mean position AND mean normal
         ### direction per slice -- anchors gain orientation.
@@ -362,9 +363,12 @@ class _SliceBlock(nn.Module):
             )
         logits = logits + bias
         a = _softmax_over_points(logits + log_w)
-        z = torch.einsum("bns,bnh->bsh", a, h)  # slice states
+        ### The slice sublayer reads the normalized state, as a pre-LN sublayer does:
+        ### the pooling and the broadcast both read norm_assign(h), so the raw h
+        ### enters the block only in the residual identity and norm_mlp.
+        z = torch.einsum("bns,bnh->bsh", a, h_n)  # slice states
         z = z + self.slice_mlp(z)
         back = torch.einsum("bns,bsh->bnh", point_mix, z)
         geo_pool = self.geo_feat(pooled)
-        h = h + self.broadcast(torch.cat([h, back, geo_pool], dim=-1))
+        h = h + self.broadcast(torch.cat([h_n, back, geo_pool], dim=-1))
         return h + self.mlp(self.norm_mlp(h))

@@ -254,10 +254,10 @@ flowchart TB
     REF["e. refinement λ'_is = λ_is + w_g·ξ_is + b_g"]:::learned
     PI["read-back weights π_is = softmax over slices of λ'_is"]:::fixed
     A1["f. routing a_is = softmax over tokens of λ'_is + ℓ_i"]:::fixed
-    Z["g. slice states Z_s = Σ_i a_is h_i; Z_s += MLP(LN(Z_s)) (M×d)"]:::learned
+    Z["g. slice states Z_s = Σ_i a_is LN(h_i); Z_s += MLP(LN(Z_s)) (M×d)"]:::learned
     POOL["h. pooled invariants ξ̄_i = Σ_s π_is ξ_is (N×(5+K)); γ_i = W_f ξ̄_i + b_f (N×d/2)"]:::learned
     BACK["h. read-back b_i = Σ_s π_is Z_s (N×d)"]:::fixed
-    BR["i. h_i += W_b [h_i; b_i; γ_i]"]:::learned
+    BR["i. h_i += W_b [LN(h_i); b_i; γ_i]"]:::learned
     MLP["j. h_i += MLP(LN(h_i))"]:::learned
     OUT["updated token state h_i (N×d)"]:::data
 
@@ -377,12 +377,12 @@ $$
 airfoil: the same matrix of logits, read one way as "what each slice
 averages" and the other way as "where each token reads from".
 
-**g. Slice states.** Each slice aggregates the token states it routes, a
-measure-weighted mean, and transforms the result with its own residual MLP
-(`slice_mlp`):
+**g. Slice states.** Each slice aggregates the normalized token states
+$\tilde h_i$ of step a that it routes, a measure-weighted mean, and
+transforms the result with its own residual MLP (`slice_mlp`):
 
 $$
-Z_s = \sum_i a_{is}\, h_i, \qquad
+Z_s = \sum_i a_{is}\, \tilde h_i, \qquad
 Z_s \leftarrow Z_s + \mathrm{MLP}_{\mathrm{slice}}(\mathrm{LN}(Z_s)) .
 $$
 
@@ -400,12 +400,16 @@ b_i = \sum_s \pi_{is}\, Z_s, \qquad
 \gamma_i = W_f\, \bar\xi_i + b_f .
 $$
 
-**i. Broadcast.** The token state, what it read, and where it sits are
-combined by one affine map into a residual update (`broadcast`):
+**i. Broadcast.** The normalized token state, what it read, and where it
+sits are combined by one affine map into a residual update (`broadcast`):
 
 $$
-h_i \leftarrow h_i + W_b\, [\, h_i;\ b_i;\ \gamma_i \,] .
+h_i \leftarrow h_i + W_b\, [\, \tilde h_i;\ b_i;\ \gamma_i \,] .
 $$
+
+Steps a to i read the token state only through $\tilde h_i$, as a
+pre-LayerNorm sublayer does; the raw $h_i$ enters the layer only through
+the residual identity here and the LayerNorm of step j.
 
 **j. Token MLP.** A pre-norm residual MLP closes the layer (`norm_mlp`,
 `mlp`):
