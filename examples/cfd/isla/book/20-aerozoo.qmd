@@ -25,9 +25,9 @@ KEY = {"ISLA": "isla_ref", "ISLA-DTT": "isla_dtt", "GeoTransolver": "gt", "ISLA 
 CONFIG = {"ISLA": "ISLA width 512 with 512 slices, 12 layers, cosine routing, learning rate 3.75e-4",
           "ISLA-DTT": "ISLA-DTT, the same configuration with the read-only tree read (a Barnes-Hut forest at theta 1, built in a frame the boundary carries) in place of the interacting prediction points",
           "GeoTransolver": "GeoTransolver width 256 with 256 slices, 12 layers, learning rate 1e-3",
-          "ISLA (half rate)": "the ISLA reference configuration trained at half the reference rate, 1.875e-4, the per-dataset rate exception the program also makes on DeepJEB++ (@sec-deepjeb)",
+          "ISLA (half rate)": "the ISLA reference configuration at 1.875e-4, half the rate 3.75e-4 at which it trains on every dataset, as a labeled rate control",
           "ISLA-DTT (half rate)": "ISLA-DTT at the same half rate"}
-# the half-rate arms (the rate exception) appear where they have trained; the standing tables stay with the reference-rate arms
+# the half-rate arms (a labeled rate control) appear where they have trained; the standing tables stay with the reference-rate arms
 HR_ARMS = [a for a in ("ISLA (half rate)", "ISLA-DTT (half rate)") if any(m["arm"] == a for m in R["runs"].values())]
 BVR = R.get("bestval", {})           # best-checkpoint diagnostic: BVR[arm][split][side]
 EV = R.get("events", {})             # the instability detector per lane
@@ -157,6 +157,10 @@ print(f"**AeroZoo is the interior task on a dataset built for diversity rather t
       "held-out families, the training trajectories, and what the dataset does not say. Protocol: @sec-protocol; every ratio is baseline ÷ "
       "ISLA, above one favoring ISLA.")
 ```
+
+::: {.callout-warning title="Trained with the raw slice reads"}
+Every ISLA checkpoint behind this chapter's numbers was trained with the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm (@sec-arch-layer), before the normalized reads became the reference configuration; the reruns with the normalized reads replace these numbers.
+:::
 
 ## The problem: bodies from seven banks in four enclosures across five Reynolds decades {#sec-dataset-aerozoo}
 
@@ -814,7 +818,7 @@ else:
     last = {run: max(r["epoch"] for r in rows) for run, rows in TR.items() if rows and RUNS[run]["split"] == "full"}
     print(f"**No `full`-split lane shows a validation loss that doubles its running minimum: every validation loss keeps falling or holds to its "
           f"last validation (epochs {min(last.values())} to {max(last.values())}).** ")
-# the rate exception: the half-rate arms where they have trained, read against their reference-rate twins (reduction: remedy)
+# the rate control: the half-rate arms where they have trained, read against their reference-rate twins (reduction: remedy)
 for a in HR_ARMS:
     m = R.get("remedy", {}).get(a)
     if not m:
@@ -827,7 +831,7 @@ for a in HR_ARMS:
         print(f"**At half the reference rate ({CONFIG[a]}; lanes {where}) the event {'recurs' if m['code'] == 'R3' else 'comes later'}: the validation "
               f"loss doubles its running minimum at epochs {', '.join(str(l['event_epoch']) for l in hits.values())} against "
               f"{', '.join(str(e['event_epoch']) for e in m['twin_events'].values() if e['event_epoch'] is not None)} for {twin} at the reference rate.** "
-              + ("The cause is therefore not the step count at this rate, and the rate exception does not help this dataset. "
+              + ("The cause is therefore not the step count at this rate, and the half rate does not help this dataset. "
                  if m["code"] == "R3" else "The event is rate-bound in the way the DeepJEB++ one is (@sec-deepjeb). "))
     else:
         fv = m.get("full_val_velocity")
@@ -835,7 +839,7 @@ for a in HR_ARMS:
               + (f" (the furthest lane through epoch {furthest})" if furthest > far else "")
               + f", where {twin} at the reference rate doubled at epochs {', '.join(str(e['event_epoch']) for e in m['twin_events'].values() if e['event_epoch'] is not None)}"
               + (f", and the final `full` checkpoints read velocity {fv:.3f} on the validation side" if fv is not None else "") + ".** "
-              + ("The half rate cures the event on this dataset" + (f"; GeoTransolver ÷ {a} on test velocity reads {m['p1_reread']['velocity_ratio']:.2f} against the pre-registered 1.4. "
+              + ("With the raw slice reads, the half rate cures the event on this dataset" + (f"; GeoTransolver ÷ {a} on test velocity reads {m['p1_reread']['velocity_ratio']:.2f} against the pre-registered 1.4. "
                  if m["p1_reread"]["velocity_ratio"] is not None else ". ") if m["code"] == "R2" else ""))
 print("@fig-aerozoo-trajectories draws the validation loss and the interior velocity error of every `full`-split lane against the epoch, the trainer's "
       "own validation every ten epochs in bfloat16 on the 386 validation cases at the training draw; the float32 standings of @tbl-aerozoo-full are "
@@ -924,8 +928,8 @@ if "ISLA-DTT" in ARMS and have("ISLA-DTT", "full", SIDE):
     print(f"**The one control on this dataset is ISLA-DTT, the reference configuration with the tree-accelerated query-independent read in place of the "
           f"dense one: on {SIDE_WORD} of the `full` split it reads " + ", ".join(f"{rs[f]['mean_ratio']:.3f} of ISLA on {FLAB[f]}" for f in FKEYS)
           + f", a largest deviation of {dev * 100:.1f}% against the bar of 5% written before the lanes ran, which it {'meets' if dev <= 0.05 else 'fails'}.** "
-          "No width, depth, rate or cell-count control was run on this dataset; the reference configurations are those the characterization campaign fixed "
-          "on the DrivAerML Volume task and were not re-selected here.")
+          "No width, depth or cell-count control was run on this dataset, and the one rate control is the half-rate lanes of @sec-aerozoo-trajectories; "
+          "the reference configurations are those the characterization campaign fixed on the DrivAerML Volume task and were not re-selected here.")
 else:
     print("**No control lane beyond the reference configurations has been scored on this dataset: the reference configurations are those the "
           "characterization campaign fixed on the DrivAerML Volume task and were not re-selected here, and no width, depth, rate or cell-count control was run.** "
