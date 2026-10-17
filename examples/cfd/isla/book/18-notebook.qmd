@@ -38017,8 +38017,9 @@ AirfRANS lanes). The predictions were registered before submission
 0.818 and 0.924), 0.938 on velocity (0.894 and 0.985) and 0.936 on eddy
 viscosity (0.880 and 0.996); both geo1 seeds lie below both A2 seeds on
 every field, and rotated and translated scoring gives the same ratios.
-A2 on this snapshot reproduces A2 on the earlier one (0.995 to 1.005 on
-pressure and velocity), so the code moved nothing.
+A2 on this snapshot reproduces A2 on the earlier one (seed-mean ratios
+1.005 on pressure and 1.000 on velocity; per seed 0.977 to 1.022), so the
+code changes between the snapshots moved nothing measurable.
 
 At 400 airfoil segments (the protocol of @sec-nb-char-area2-verdict,
 LHR job 253816; per seed 42 and 43; noise floor at most 0.055):
