@@ -31,9 +31,9 @@ backbone golden.
 twice: the first run recreates each missing file from the current code (and fails on
 purpose), the second run must pass. ``data/isla_backbone_v1.pth`` is regenerated only
 when the backbone changes by decision (a forward hook on ``norm_out`` under
-``CONFIGS["default"]`` / ``_make_tensors`` below; last recorded 2026-10-02 when the
-sample-conditioned prototypes became the routing of every block) and pins the
-backbone bitwise through the internal batched routine.
+``CONFIGS["default"]`` / ``_make_tensors`` below; last recorded when the slice
+sublayer came to pool and broadcast the normalized state, H-RESID arm A2) and pins
+the backbone bitwise through the internal batched routine.
 """
 
 from pathlib import Path
