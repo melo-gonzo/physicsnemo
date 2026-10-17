@@ -378,9 +378,8 @@ ISLA-DTT (`model.kernel_read`), whose boundary reads break the graph, set
 
 **Learning rate.** 3.75e-4 at `hidden: 512`, pinned in every ISLA config
 (the recipe default of 3e-3 drives ISLA to a mean-field plateau within five
-epochs; the DeepJEB++ config pins 1.875e-4). For other widths start from the
-width rule `lr = 1e-3 × 192 / hidden` (5e-4 at 384); a CLI override still
-wins.
+epochs). For other widths start from the width rule
+`lr = 1e-3 × 192 / hidden` (5e-4 at 384); a CLI override still wins.
 
 **Inference sampler.** For inference at a fixed cell budget, replace the
 dataset's `SubsampleMesh` stage with the recipe's `StratifiedSubsampleMesh`

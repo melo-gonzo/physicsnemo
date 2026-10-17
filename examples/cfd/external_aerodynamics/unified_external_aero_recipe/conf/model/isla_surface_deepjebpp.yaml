@@ -27,10 +27,8 @@ output_type: mesh
 
 training:
   optimizer:
-    lr: 1.875e-4                  # DeepJEB++ exception to the one-reference rule (Peter, 2026-10-05): at the reference rate
-                                  # 3.75e-4 every ISLA lane on this dataset reaches the mean-field plateau within 4 to 12 epochs
-                                  # (JEB-PLATEAU, book notebook 2026-10-05); half the rate trains. Every other model
-                                  # hyperparameter is the reference configuration.
+    lr: 3.75e-4                   # the reference configuration's rate (REF-80 verdict, 2026-10-04; see isla_surface.yaml); with the
+                                  # normalized slice reads (H-RESID A2) ISLA trains at it on DeepJEB++ without the mean-field plateau
 
 # Whole-model torch.compile: one graph, compiled once for every token count; see isla_volume.yaml.
 compile: true
