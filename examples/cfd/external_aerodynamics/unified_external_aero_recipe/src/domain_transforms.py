@@ -1705,3 +1705,73 @@ class ConcatGlobalFields(MeshTransform):
 
     def extra_repr(self) -> str:
         return f"{self.output_field} = cat({self.fields})"
+
+
+@register()
+class FlipBoundaryOrientation(MeshTransform):
+    r"""Reverse the orientation of named boundaries: cell winding and stored normals.
+
+    A dataset's boundary cells carry their orientation in their winding (a cell's
+    normal follows its vertex order), and the convention differs between datasets:
+    DrivAerML's vehicle and AeroZoo's four boundaries are wound with their normals out
+    of the fluid, AirfRANS's airfoil with its normals into it. A model that reads the
+    normals, and signs its distances by them (ISLA: positive on the side the normals
+    point to), sees one convention when this transform reverses the boundaries wound
+    the other way, so the stored files stay as they are. For every boundary in
+    ``boundaries`` the last two vertices of every cell are swapped (each normal
+    reversed, the cell and its measure unchanged) and every ``cell_data`` field in
+    ``normal_fields`` is negated (a stored normal; names a boundary lacks are
+    skipped); the mesh's cached geometry is dropped with the old winding. Every named
+    boundary must exist; bare ``Mesh`` inputs pass through unchanged.
+
+    Args:
+        boundaries: the names of the boundaries to reverse.
+        normal_fields: ``cell_data`` fields holding stored normals, negated with the
+            winding (default none).
+    """
+
+    def __init__(self, boundaries: Sequence[str], normal_fields: Sequence[str] = ()) -> None:
+        super().__init__()
+        self.boundaries = [str(b) for b in boundaries]
+        self.normal_fields = [str(f) for f in normal_fields]
+        if not self.boundaries:
+            raise ValueError("FlipBoundaryOrientation: boundaries must not be empty")
+
+    def _flip(self, mesh: Mesh) -> Mesh:
+        d = mesh.cells.shape[-1]
+        cells = mesh.cells[:, [*range(d - 2), d - 1, d - 2]]
+        cell_data = mesh.cell_data.clone()
+        for field in self.normal_fields:
+            key = as_nested_key(field)
+            if key in cell_data:
+                cell_data[key] = -cell_data[key]
+        return Mesh(
+            points=mesh.points,
+            cells=cells,
+            point_data=mesh.point_data,
+            cell_data=cell_data,
+            global_data=mesh.global_data,
+        )
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        return mesh
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Reverse the named boundaries of the domain."""
+        missing = [b for b in self.boundaries if b not in domain.boundary_names]
+        if missing:
+            raise KeyError(
+                f"FlipBoundaryOrientation: boundaries {missing!r} not found; available: "
+                f"{domain.boundary_names!r}"
+            )
+        return DomainMesh(
+            interior=domain.interior,
+            boundaries={
+                name: self._flip(b) if name in self.boundaries else b
+                for name, b in domain.boundaries.items()
+            },
+            global_data=domain.global_data,
+        )
+
+    def extra_repr(self) -> str:
+        return f"boundaries={self.boundaries}, normal_fields={self.normal_fields}"

@@ -112,6 +112,28 @@ def _apply_dataset_reader_overrides(
     return OmegaConf.merge(dataset_cfg, {"pipeline": {"reader": reader_overrides}})
 
 
+def _apply_dataset_transform_drops(
+    dataset_cfg: DictConfig, recipe_cfg: DictConfig
+) -> DictConfig:
+    """Drop the dataset transforms a model config names in ``dataset_drop_transforms``.
+
+    Each name is a component's class name (``SubsampleMesh``) and drops every
+    ``pipeline.transforms`` entry whose ``_target_`` resolves to it; a name no entry
+    matches is ignored, so one list serves every variant of a dataset. ISLA's
+    interior configs drop the boundary subsampling a model that samples its own
+    tokens does not need, while the baselines keep it.
+    """
+    names = OmegaConf.select(recipe_cfg, "dataset_drop_transforms", default=None)
+    transforms = OmegaConf.select(dataset_cfg, "pipeline.transforms", default=None)
+    if not names or not transforms:
+        return dataset_cfg
+    suffixes = tuple("." + str(n) for n in names)
+    kept = [t for t in transforms if not str(t.get("_target_", "")).endswith(suffixes)]
+    dataset_cfg = dataset_cfg.copy()
+    dataset_cfg.pipeline.transforms = kept
+    return dataset_cfg
+
+
 ### Transform-config kwargs whose values are file paths and should be
 ### resolved against the recipe root before Hydra instantiates the
 ### transform. Add new entries here when introducing transforms with
@@ -868,6 +890,7 @@ def build_dataloaders(
                 ds_yaml, {"sampling_resolution": sampling_resolution}
             )
         ds_yaml = _apply_dataset_reader_overrides(ds_yaml, cfg)
+        ds_yaml = _apply_dataset_transform_drops(ds_yaml, cfg)
 
         train_datadir = OmegaConf.select(ds_yaml, "train_datadir", default=None)
         if train_datadir and not Path(str(train_datadir)).exists():

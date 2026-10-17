@@ -34,6 +34,7 @@ sys.path.insert(0, str(_RECIPE_ROOT / "src"))
 from collate import build_collate_fn  # noqa: E402
 from datasets import (  # noqa: E402
     _apply_dataset_reader_overrides,
+    _apply_dataset_transform_drops,
     build_dataset,
     load_dataset_config,
 )
@@ -816,3 +817,44 @@ def test_geotransolver_config_reads_the_sdf_and_global_vector_and_runs(
     assert torch.isfinite(total)
     metrics = MetricCalculator(targets, metrics=["l2"])(pred, batch["targets"])
     assert {k.split("_")[0] for k in metrics.keys()} == set(targets)
+
+
+@pytest.mark.parametrize("dataset", sorted(DATASET_FILES))
+def test_isla_reads_every_boundary_whole_and_geotransolver_keeps_its_draw(dataset):
+    """ISLA draws its boundary tokens inside the model, so its config lifts the reader's
+    per-boundary cap (aerozoo_volume*) and drops the uniform twins' SubsampleMesh and
+    the SDF passes only GeoTransolver reads; GeoTransolver's pipeline is the file's.
+    Both reverse the four boundaries after the SDF passes."""
+    ds = load_dataset_config(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
+    targets = lambda d: [str(t.get("_target_")) for t in d.pipeline.transforms]  # noqa: E731
+    gt_cfg, isla_cfg = _compose("geotransolver_volume_aerozoo", dataset=dataset), _compose(
+        "isla_volume_aerozoo", dataset=dataset
+    )
+    gt = _apply_dataset_transform_drops(_apply_dataset_reader_overrides(ds, gt_cfg), gt_cfg)
+    isla = _apply_dataset_transform_drops(_apply_dataset_reader_overrides(ds, isla_cfg), isla_cfg)
+    assert targets(gt) == targets(ds)
+    capped = gt.pipeline.reader.get("subsample_n_cells") == 50000 or targets(gt)[0].endswith(".SubsampleMesh")
+    assert capped
+    assert isla.pipeline.reader.get("subsample_n_cells") is None
+    chain = targets(isla)
+    assert not any(t.endswith((".SubsampleMesh", ".ComputeSDFFromBoundary")) for t in chain), chain
+    assert [t for t in targets(ds) if t not in chain] == [
+        t for t in targets(ds) if t.endswith((".SubsampleMesh", ".ComputeSDFFromBoundary"))
+    ]
+    flips = [t for t in ds.pipeline.transforms if str(t["_target_"]).endswith(".FlipBoundaryOrientation")]
+    assert [list(t.boundaries) for t in flips] == [["inlet", "outlet", "no_slip", "slip"]]
+    order = targets(ds)
+    assert max(i for i, t in enumerate(order) if t.endswith(".ComputeSDFFromBoundary")) < order.index(
+        str(flips[0]["_target_"])
+    )
+
+
+def test_the_pipeline_reverses_the_four_boundaries(pipeline_output):
+    """The release's boundaries are wound with their normals out of the fluid; the
+    pipeline output's normals are the stored ones reversed, face for face."""
+    for case, with_slip, seed in (("with_slip", True, 1), ("no_slip_walls", False, 2)):
+        stored = make_aerozoo_case(with_slip, seed=seed)
+        for name in ("inlet", "outlet", "no_slip", "slip"):
+            out, src = pipeline_output[case].boundaries[name], stored.boundaries[name]
+            assert out.n_cells == src.n_cells
+            torch.testing.assert_close(out.cell_normals, -src.cell_normals)

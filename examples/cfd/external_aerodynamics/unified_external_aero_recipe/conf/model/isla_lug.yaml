@@ -60,6 +60,7 @@ model:
     thickness_std: {rank: 0}
     pressure_std: {rank: 0}
   interior: true                  # predict at prediction_points, which join the encoder as tokens
+  boundary_tokens: 200000         # boundary tokens drawn per case inside the model (equal to the class default; the lug surface is kept whole)
   hidden: 512                     # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
   n_slices: 512

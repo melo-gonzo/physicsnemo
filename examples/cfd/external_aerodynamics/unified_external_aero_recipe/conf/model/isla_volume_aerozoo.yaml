@@ -21,13 +21,24 @@
 # declaration applies to every mesh): a one-hot role label and the prescribed values, zero where a role
 # prescribes nothing. The global inputs are the unit freestream direction, the standardized log Reynolds
 # number and the inlet's four standardized turbulence quantities. No query_schema: each prediction point's
-# geometry (signed distance to the nearest boundary token and the direction to it) is computed inside the
-# model from the boundary sample, so the dataset's stored sdf_wall / sdf_slip (GeoTransolver's inputs) are
-# not read.
+# geometry (its signed distance to the boundary surface, the union of the four meshes, and the direction from
+# it) is computed inside the model from the exact closest point on their cells, positive in the fluid (the
+# dataset files reorient the four boundaries, stored with their normals out of the fluid), so the dataset's
+# stored sdf_wall / sdf_slip (GeoTransolver's inputs) are not read.
 #
-# The boundary measure must sum to the surface area: a subsampled boundary's raw cell areas sum to the kept
-# fraction of it, so the model reads the Horvitz-Thompson corrected `cell_data._effective_measure` that the
-# reader's cell subsample writes (`boundary_subsample: cells`, 50,000 faces per role).
+# The four boundaries go in at full resolution and ISLA draws its boundary tokens inside the model:
+# `boundary_tokens` (200,000, the class default) per case, water-filled over the four roles (50,000 each when
+# all four have more faces; a role with fewer is kept whole and its unused share goes to the others), each
+# face drawn with probability proportional to its area and carrying its Horvitz-Thompson measure. So the
+# datapipe's boundary subsampling is switched off for this model only (GeoTransolver keeps it):
+# `dataset_reader_overrides` lifts the reader's per-boundary cap of the aerozoo_volume* files, and
+# `dataset_drop_transforms` removes the aerozoo_uvolume* files' SubsampleMesh and the SDF passes only
+# GeoTransolver reads.
+dataset_reader_overrides:
+  subsample_n_cells: null             # aerozoo_volume*: every boundary read whole
+dataset_drop_transforms:
+  - SubsampleMesh                     # aerozoo_uvolume*: the per-boundary 50,000-face cap
+  - ComputeSDFFromBoundary            # sdf_wall / sdf_slip: GeoTransolver's inputs, not ISLA's
 input_type: mesh
 output_type: mesh
 
@@ -40,10 +51,11 @@ training:
     lr: 3.75e-4
 
 # Per-block compile here (compile_blocks below), not the whole-model compile of isla_volume.yaml: on
-# AeroZoo's four boundaries the whole-model graph still recompiles (2026-10-16): Dynamo's duck sizing ties
-# boundaries with equal cell counts in the first case (the 50,000-face cap), and the input meshes' caches,
-# whose contents differ by case with what the pipeline computed, are guarded by their size. With
-# compile=true model.compile_blocks=false the whole model compiles with these options.
+# AeroZoo's four boundaries the whole-model graph recompiles (2026-10-16): Dynamo's duck sizing ties
+# boundaries with equal cell counts in the first case, and the input meshes' caches, whose contents differ
+# by case with what the pipeline computed, are guarded by their size. The blocks see the token count, which
+# is the 200,000 boundary tokens plus the interior sample whenever a case has more boundary faces than that.
+# With compile=true model.compile_blocks=false the whole model compiles with these options.
 compile: false
 compile_options:
   fullgraph: true
@@ -51,7 +63,7 @@ compile_options:
   mode: max-autotune-no-cudagraphs
 
 forward_kwargs:
-  boundary_meshes:                    # Mesh[2, 3] each, with the corrected cell measure in cell_data
+  boundary_meshes:                    # Mesh[2, 3] each, at full resolution, normals into the fluid
     inlet: boundaries.inlet
     outlet: boundaries.outlet
     no_slip: boundaries.no_slip
@@ -91,6 +103,7 @@ model:
     inlet_intermittency_std: {rank: 0}
     inlet_retheta_std: {rank: 0}
   interior: true                 # predict at prediction_points, which join the encoder as tokens
+  boundary_tokens: 200000        # boundary tokens drawn per case inside the model, water-filled over the four roles (equal to the class default)
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
   n_slices: 512

@@ -100,21 +100,13 @@ def _surface_domain(n_cells: int = 12) -> DomainMesh:
 
 def _volume_domain() -> DomainMesh:
     """What drivaer_ml_volume_reference.yaml hands the collate: an interior point cloud
-    with sdf / sdf_normals and the targets, a vehicle boundary with the corrected measure
-    materialized by ComposeQuadratureMeasure, the full-resolution vehicle surface the
-    sample was drawn from (stl_geometry), and U_inf_dir in global_data."""
+    with sdf / sdf_normals and the targets, the whole vehicle boundary with its measure
+    materialized by ComposeQuadratureMeasure, and U_inf_dir in global_data."""
     domain = make_volume_domain_mesh(n_pts=64)
-    vehicle = domain.boundaries["vehicle"]
-    stl = Mesh(points=vehicle.points.clone(), cells=vehicle.cells.clone())
-    scale_measures(vehicle, 4.0)
-    vehicle = ComposeQuadratureMeasure()(vehicle)
+    vehicle = ComposeQuadratureMeasure()(domain.boundaries["vehicle"])
     gd = domain.global_data.clone()
     gd["U_inf_dir"] = torch.tensor([1.0, 0.0, 0.0])
-    return DomainMesh(
-        interior=domain.interior,
-        boundaries={"vehicle": vehicle, "stl_geometry": stl},
-        global_data=gd,
-    )
+    return DomainMesh(interior=domain.interior, boundaries={"vehicle": vehicle}, global_data=gd)
 
 
 def _targets(dataset: str) -> dict:
@@ -225,17 +217,13 @@ def test_isla_volume_composes_and_runs():
         "pressure": {"rank": 0},
         "nut": {"rank": 0},
     }
-    ### The prediction points' geometry is computed from the full-resolution STL.
-    assert OmegaConf.to_container(cfg.forward_kwargs.boundary_geometry) == {
-        "vehicle": "boundaries.stl_geometry"
-    }
+    ### One boundary input: the full-resolution vehicle, the surface of the prediction
+    ### points' geometry and the source of the tokens the model draws.
+    assert set(cfg.forward_kwargs) == {"boundary_meshes", "prediction_points", "global_data"}
+    assert OmegaConf.to_container(cfg.forward_kwargs.boundary_meshes) == {"vehicle": "boundaries.vehicle"}
     domain = _volume_domain()
     batch, out, pred = _run(cfg, domain, _targets("drivaer_ml_volume_reference"))
     assert batch["forward_kwargs"]["prediction_points"] is domain.interior
-    assert (
-        batch["forward_kwargs"]["boundary_geometry"]["vehicle"].n_cells
-        == domain.boundaries["stl_geometry"].n_cells
-    )
     torch.testing.assert_close(out.points, domain.interior.points)
     assert pred["velocity"].shape == (64, 3) and pred["nut"].shape == (64,)
 
@@ -278,20 +266,40 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
 
 
 @pytest.mark.parametrize("suffix", ["", "_area", "_posed", "_sdf"])
-def test_reference_volume_datasets_keep_the_full_stl(suffix):
-    """ISLA's boundary_geometry is the STL the stored SDF is computed from: every
-    reference volume dataset file loads it and no longer drops it."""
+def test_reference_volume_datasets_read_the_vehicle_whole_into_the_fluid(suffix):
+    """ISLA draws its boundary tokens inside the model, so every reference volume
+    dataset file reads the vehicle whole (no boundary cell cap, no subsampling
+    transform), reverses its stored winding so the normals point into the fluid, and
+    drops the STL once the stored SDF is computed from it."""
     ds = OmegaConf.load(
         _RECIPE_ROOT / "datasets" / f"drivaer_ml_volume_reference{suffix}.yaml"
     )
-    assert "stl_geometry" in ds.pipeline.reader.extra_boundaries
+    assert ds.pipeline.reader.get("subsample_n_cells") is None
     raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
-    dropped = [
-        t.get("names", [])
-        for t in raw
-        if isinstance(t, dict) and "DropBoundary" in str(t.get("_target_"))
-    ]
-    assert not any("stl_geometry" in names for names in dropped), dropped
+    targets = [str(t["_target_"]) for t in raw]
+    assert not any("Subsample" in t for t in targets), targets
+    flips = [t for t in raw if "FlipBoundaryOrientation" in str(t["_target_"])]
+    assert [t["boundaries"] for t in flips] == [["vehicle"]]
+    dropped = [t.get("names", []) for t in raw if "DropBoundary" in str(t["_target_"])]
+    assert ["stl_geometry"] in dropped
+    sdf = targets.index("${dp:ComputeSDFFromBoundary}")
+    assert sdf < targets.index("${dp:DropBoundary}")
+
+
+@pytest.mark.parametrize("model", sorted(p.stem for p in (_RECIPE_ROOT / "conf" / "model").glob("isla_*.yaml")))
+def test_interior_isla_configs_use_the_class_default_boundary_budget(model):
+    """Every interior ISLA config draws the class default of boundary tokens (no config
+    overrides it); the surface configs, which sample nothing, do not set it."""
+    import inspect
+
+    from physicsnemo.experimental.models.isla import ISLA
+
+    cfg = _compose(model, "drivaer_ml_volume_reference")
+    default = inspect.signature(ISLA.__init__).parameters["boundary_tokens"].default
+    if cfg.model.get("interior", False):
+        assert cfg.model.boundary_tokens == default == 200_000
+    else:
+        assert "boundary_tokens" not in cfg.model
 
 
 def test_corrected_measure_sees_the_surface_area():

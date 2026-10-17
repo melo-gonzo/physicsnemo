@@ -1,10 +1,10 @@
-# Reference interior dataset (2026-09-14): drivaer_ml_volume.yaml plus, after the
-# boundary is reduced to {vehicle}, ComposeQuadratureMeasure, which writes the
-# Horvitz-Thompson-corrected cell
-# effective measure (including all sampling corrections) to
-# boundaries.vehicle.cell_data._effective_measure for conf/model/isla_volume.yaml.
-# The reader subsamples boundaries by cells (boundary_subsample: cells), which is
-# what records the inclusion probabilities the correction needs.
+# Reference interior dataset (2026-09-14) for conf/model/isla_volume.yaml:
+# drivaer_ml_volume.yaml with the vehicle boundary read whole (ISLA takes the
+# full-resolution surface and draws its boundary tokens inside the model, so no
+# boundary cell cap here), reoriented so its normals point into the fluid
+# (FlipBoundaryOrientation: the stored vehicle cells are wound into the body),
+# and ComposeQuadratureMeasure, which materializes the cell measure ISLA reads
+# as boundaries.vehicle.cell_data._effective_measure.
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
 # SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
@@ -38,11 +38,10 @@ pipeline:
     path: ${train_datadir}
     pattern: "run_*/domain_*.pdmsh"
     subsample_n_points: ${sampling_resolution}
-    subsample_n_cells: ${sampling_resolution}
-    # Boundaries get only the cell subsample. Applying both to the triangulated
-    # vehicle surface keeps only cells whose three vertices all survive the
-    # point cut (~N/27 cells instead of N); the interior is a point cloud and
-    # is unaffected by this setting.
+    # No subsample_n_cells: the vehicle is read whole. boundary_subsample:
+    # cells keeps the interior's point cap off the boundaries (a point cut of
+    # the triangulated surface would keep only cells whose three vertices all
+    # survive it); the interior is a point cloud and is unaffected.
     boundary_subsample: cells
     # The volume model consumes the interior as a point cloud (interior.points +
     # interior.point_data); dropping interior tet topology makes the point
@@ -95,9 +94,14 @@ pipeline:
       # _single_solid STL is watertight, so this is exact and avoids the
       # O(n_points * n_faces) winding-number sign pass.
       use_winding_number: false
-    # The full-resolution STL stays: ISLA (isla_volume.yaml) reads it as
-    # boundary_geometry, the surface its prediction points' built-in distance
-    # and direction are computed from (the vehicle boundary is the token sample).
+    - _target_: ${dp:DropBoundary}
+      names: [stl_geometry]
+    # ISLA's signed distance is positive on the side the boundary normals point
+    # to; the stored vehicle cells are wound into the body (signed volume
+    # -6.3 to -8.0 m^3), so reverse them: the normals then point into the fluid
+    # and the distance is positive there, as on AirfRANS and AeroZoo.
+    - _target_: ${dp:FlipBoundaryOrientation}
+      boundaries: [vehicle]
     - _target_: ${dp:RenameMeshFields}
       point_data:
         UMeanTrim: velocity
@@ -114,7 +118,7 @@ pipeline:
     # model YAML's `forward_kwargs:` spec. Targets are extracted from
     # interior.point_data.<name> by the `targets:` block below.
 
-    # Last in the chain: the corrected measure on the cells the model will see.
+    # Last in the chain: the cell measure on the cells the model will see.
     - _target_: ${dp:ComposeQuadratureMeasure}
 targets:
   velocity: vector
