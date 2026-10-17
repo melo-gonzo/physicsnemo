@@ -78,13 +78,14 @@ fields at query points.** Per case, the inputs are:
   material label or a source term at an interior query, at rank 0 or above.
   A field of rank 1 or 2 enters only through its invariants against the
   token's own directions (@sec-isla-inputs-rank).
-- For prediction off the surface, the interior query positions $x_q$ and
-  the boundary surface at full resolution (`boundary_geometry`; the tokens
-  are a sample of it). The direction and the signed distance an interior
-  token needs are functions of that surface and the query position, so the
-  model computes them itself from the exact closest point of the surface
-  (@sec-arch-modes), the same for every way the tokens were sampled. No
-  stored signed-distance field is read.
+- For prediction off the surface, the interior query positions $x_q$, with
+  the boundary given at full resolution. The direction and the signed
+  distance an interior token needs are functions of that surface and the
+  query position, so the model computes them itself from the exact closest
+  point of the surface (@sec-arch-modes), and it draws its boundary tokens
+  from the same cells: a fixed budget, each cell kept with a probability
+  proportional to its area and weighted by the area it stands for
+  (@sec-arch-boundary-draw). No stored signed-distance field is read.
 
 The outputs are named fields of declared rank at the query points: scalar
 fields (surface pressure, in every surface result of the book), vector
@@ -147,16 +148,17 @@ tensor and `parity: odd` marks a pseudotensor output. One name declares one fiel
 scalars, such as a standardized parameter vector, are several rank-0 names.
 `forward` takes the boundary as `boundary_meshes`, a mapping from a name to
 a `Mesh` of codimension one whose cells are the tokens (centroid, normal
-and effective measure), with the `boundary_schema` fields in each
+and effective measure; on the interior task the boundary at full
+resolution, whose tokens the model draws itself, `boundary_tokens` per
+case), with the `boundary_schema` fields in each
 mesh's `cell_data`; the per-case `global_schema` fields in `global_data`, a rank-1 field
 a `(3,)` vector and a rank-0 field a scalar; and, on the interior task,
 `prediction_points`, a point cloud carrying the `query_schema` fields in its
 `point_data`. It returns a point-cloud `Mesh` with the outputs in its
 `point_data`, `(N,)`, `(N, 3)` or `(N, 3, 3)` by rank. A prediction point's
 direction and signed wall distance are computed inside the model from the
-boundary surface (`boundary_geometry`, the same named boundaries at full
-resolution; without it the tokens' own cells, when they are the whole
-boundary); a dataset's stored signed-distance field enters, if
+boundary surface, the cells of `boundary_meshes`; a dataset's stored
+signed-distance field enters, if
 wanted, as a declared query input like any other datum (@sec-arch-modes).
 Each named mapping can be given flat with dotted names, nested, or as a
 TensorDict. The output is a TensorDict of batch size (batch, tokens) whose

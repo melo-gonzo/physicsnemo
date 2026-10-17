@@ -65,7 +65,7 @@ leading batch dimension on every tensor.
 
 | symbol | shape | code | meaning |
 |---|---|---|---|
-| $x_i, n_i, w_i$ | $N{\times}3,\ N{\times}3,\ N$ | `cell_centroids`, `cell_normals`, `cell_measures` of the boundary meshes | sampled boundary positions, outward normals, the surface area each sample stands for (the cell's effective measure when the mesh carries one, else its geometric measure) |
+| $x_i, n_i, w_i$ | $N{\times}3,\ N{\times}3,\ N$ | `cell_centroids`, `cell_normals`, `cell_measures` of the boundary meshes | boundary token positions, normals, the surface area each token stands for (the cell's effective measure when the mesh carries one, else its geometric measure; on the interior task the Horvitz-Thompson weight of the model's own draw, @sec-arch-boundary-draw) |
 | $g_k$, $\sigma$ | $K{\times}3$, $S$ | `global_schema` (rank 1, rank 0) | the problem's global directions and scalars, as named fields (external aerodynamics, the benchmark instance: $K = 1$, the far-field flow direction; $S = 0$ on the surface tasks, $S = 1$ on AirfRANS) |
 | $v_{ip}$, $T_{iq}$ | $N{\times}P{\times}3$, $N{\times}Q{\times}3{\times}3$ | `boundary_schema`, `query_schema` (rank 1, rank 2) | per-token tensor inputs (a prescribed traction, a prescribed stress); $P = Q = 0$ on the aerodynamic tasks |
 | $\hat g_k$, $\hat n_i$ | $K{\times}3$, $N{\times}3$ | `g_unit`, `n_hat` | the same directions and normals, normalized to unit length |
@@ -684,7 +684,7 @@ flowchart LR
     end
     subgraph Q["interior task (interior=True): prediction points as tokens"]
         direction TB
-        Q1["boundary tokens (N)"]:::data
+        Q1["boundary tokens (N), drawn inside the model from the full-resolution boundary"]:::data
         Q2["prediction-point tokens (Q): position and declared query inputs; direction and signed distance<br/>to the boundary surface computed inside; learned routing mass"]:::aqua
         Q3["slice layers × 12 on all N + Q tokens"]:::learned
         Q4["head frame + head on the Q query tokens"]:::learned
@@ -701,18 +701,17 @@ $Q{\times}3$ tensor) and whatever per-point fields were declared in
 quantities: a direction to stand in for the normal, and a distance to the
 wall. **Both are functions of the boundary surface and of $x_q$, never of
 how the boundary tokens were sampled from it.** The model always computes
-them itself; they are never inputs. The surface is `forward`'s
-`boundary_geometry`: the same named boundaries as `boundary_meshes`, at full
-resolution (on DrivAerML the vehicle's watertight STL, the surface the
-dataset's stored signed-distance field is computed from), while
-`boundary_meshes` stay the tokens, a measure-weighted sample of it. Picture
-a query a hair off an airfoil whose sample kept every fifth panel: the
-nearest *kept* panel is up to two panels away, but the nearest point of the
-*airfoil* is directly below the query. With $p_q$ the exact closest point
-of the surface's cells to $x_q$ (point to face, never point to centroid)
-and $\hat N$ the pseudo-normal of the feature it lies on (the cell's normal
-on a cell's interior; on an edge or a vertex the sum of the normals of the
-cells that share it, angle-weighted at a vertex in three dimensions),
+them itself; they are never inputs. The surface is the union of the cells
+of `boundary_meshes`, which the interior task takes at full resolution: its
+one boundary input, from which the model also draws its tokens
+(@sec-arch-boundary-draw). Picture a query a hair off an airfoil whose
+tokens kept every fifth panel: the nearest *kept* panel is up to two panels
+away, but the nearest point of the *airfoil* is directly below the query.
+With $p_q$ the exact closest point of the surface's cells to $x_q$ (point
+to face, never point to centroid) and $\hat N$ the pseudo-normal of the
+feature it lies on (the cell's normal on a cell's interior; on an edge or a
+vertex the sum of the normals of the cells that share it, angle-weighted at
+a vertex in three dimensions),
 
 $$
 \delta_q \equiv \operatorname{sign}\big((x_q - p_q) \cdot \hat N\big)\, \lvert x_q - p_q \rvert ,
@@ -726,36 +725,32 @@ $$
 are the signed distance to the surface and the direction from the surface
 to the query. The pseudo-normal makes the sign right behind a sharp
 trailing edge and at a concave corner, where the normal of the one closest
-cell would flip it. Each named surface is first oriented as its own tokens:
-if the tokens' normals, weighted by their measures, disagree on average
-with the surface's pseudo-normals at the tokens' closest points, the
-surface's cells are reversed. So the distance is positive on the side the
-*tokens'* normals point to (outside, for outward normals), whichever way
-the surface file was stored. A query on the surface takes $\delta_q = 0$
-and $\hat N$ as its direction. Both quantities are differences of
-positions, so the distance is invariant and the direction covariant under
-every rigid motion and reflection, and the distance scales with the
-geometry. They converge as $O(h^2)$ under refinement of the surface, like
-the stored field, and are bitwise the same for every sampling law, count
-and window of the tokens. The search is a Warp BVH over the triangles in
-three dimensions (a compiled custom operator) and an exact brute force over
-the segments in two; the closest point is then rebuilt from its cell's
-vertices, so both quantities carry gradients (`exact_boundary_geometry`).
+cell would flip it. The distance is positive on the side the cells' normals
+point to; the recipe's dataset files orient the flow datasets' boundaries
+so their normals point into the fluid (the `FlipBoundaryOrientation`
+transform reverses the ones stored the other way, DrivAerML's vehicle and
+AeroZoo's four boundaries; AirfRANS's airfoil is stored that way), so
+$\delta_q > 0$ in the fluid on DrivAerML, AeroZoo and AirfRANS. The
+Tensile2d and lug surfaces keep their outward normals, so there
+$\delta_q < 0$ inside the specimen. A query on the surface takes $\delta_q = 0$ and
+$\hat N$ as its direction. Both quantities are differences of positions, so
+the distance is invariant and the direction covariant under every rigid
+motion and reflection, and the distance scales with the geometry. They
+converge as $O(h^2)$ under refinement of the surface, like the stored
+field, and are bitwise the same for every draw of the tokens. The search is
+a Warp BVH over the triangles in three dimensions (a compiled custom
+operator) and an exact brute force over the segments in two; the closest
+point is then rebuilt from its cell's vertices, so both quantities carry
+gradients (`exact_boundary_geometry`). The interior task is implemented in
+two and three dimensions.
 
-Without `boundary_geometry` the tokens' own cells are the surface. That is
-exact when the boundary is whole, as the AirfRANS airfoil is, and the model
-refuses it otherwise: a cell whose effective measure exceeds its geometric
-measure stands for surface that a sampling stage dropped (its
-Horvitz-Thompson weight is its measure over its inclusion probability), so
-it cannot stand for the surface. The interior task is implemented in two
-and three dimensions.
-
-::: {.callout-note collapse="true" title="Why the kept cells are not enough"}
-The exact distance to the cells the sample kept still depends on the
-sample: a sample of 200,000 of 17 million cells covers about 1.2% of the
-car's area, so almost every near-wall query sits over a gap and reads the
+::: {.callout-note collapse="true" title="Why the tokens' own cells are not enough"}
+The exact distance to the cells a sample kept still depends on the sample:
+a sample of 200,000 of 17 million cells covers about 1.2% of the car's
+area, so almost every near-wall query sits over a gap and reads the
 distance to the nearest kept cell's rim, about the nearest-centroid
-distance. Only the full surface removes the dependence.
+distance. Only the full surface removes the dependence, which is why the
+interior task takes the boundary whole and samples its tokens itself.
 :::
 
 The point is then placed in
@@ -801,6 +796,62 @@ The prediction points' geometry is one function on the boundary surface, compute
 #| output: asis
 listing("geometry.py", "exact_boundary_geometry")
 listing("model.py", "ISLA._forward_tokens", start="if query is not None:", end="h, log_w, r = tokens")
+```
+:::
+
+### The boundary tokens of the interior task {#sec-arch-boundary-draw}
+
+**The interior task draws its boundary tokens inside the forward pass: a
+fixed budget of the full-resolution cells, each kept with a probability
+proportional to its area and carrying the area it stands for.** A surface
+task predicts at every cell it is given, so its tokens are those cells; an
+interior task predicts at the prediction points, and its boundary tokens are
+a quadrature of the surface, which the model draws itself
+(`sample_boundary_cells`) in three steps.
+
+- **Budget.** `boundary_tokens` per case (200,000, the class default and the
+  reference configuration's) are shared over the named boundaries by water
+  filling: equal shares, a boundary with fewer cells than its share kept
+  whole and its unused share split equally over the others, until no share
+  changes. On AeroZoo's four roles that is 50,000 each when every role has
+  more faces; an AirfRANS airfoil (about a thousand segments) or a lug
+  surface is kept whole.
+- **Inclusion probabilities.** Within a boundary of share $b$, cell $i$ of
+  measure $a_i$ is kept with probability $\pi_i = \min(1, c\, a_i)$, the one
+  constant $c$ making $\sum_i \pi_i = b$ (the capped fixed point of the
+  iterative adjustment, found exactly from the sorted measures).
+- **Systematic draw.** The cells are laid along a line, each boundary's in
+  the Morton order of its centroids, each cell an interval of length
+  $\pi_i$, and the cells hit by the points $u + m$, $m = 0, \dots, k - 1$,
+  are kept, with $k = \min(\text{cells}, \texttt{boundary\_tokens})$.
+
+Each kept cell's measure is its Horvitz-Thompson weight $w_i = a_i / \pi_i$.
+Over a uniform start $u$ every cell is kept with probability exactly
+$\pi_i$, so every measure-weighted sum over the tokens (the slice states,
+the length unit $L$, the routing mass) is an unbiased quadrature of the
+full surface, exact on a boundary kept whole; and the kept cells are spaced
+evenly in cumulative probability along the space-filling curve, so the
+sample is spread over the surface rather than clumped. The count $k$ is a
+function of the cell counts alone, so the draw has static shapes and traces
+into the one whole-model graph. In training $u$ is uniform from the global
+torch RNG on every step (`torch.manual_seed` reproduces a run), so the model
+sees a new quadrature of the same surface each time; in evaluation
+(`model.eval()`) $u = 1/2$, so inference is deterministic. A boundary given
+at twice or four times the resolution reads as another draw of the same
+quadrature: on a NACA 0012 and a sphere at 400 tokens the outputs move by
+less than three times the largest change between two training-mode draws
+on the native mesh, and by less than 2.5% in relative L2, the bounds
+`test_outputs_are_invariant_to_the_resolution_of_the_input_mesh` holds them
+to.
+
+::: {.callout-note collapse="true" title="The boundary draw in the code"}
+```{python}
+#| label: code-boundary-draw
+#| output: asis
+listing("sampling.py", "water_fill")
+listing("sampling.py", "pps_inclusion_probabilities")
+listing("sampling.py", "sample_boundary_cells")
+listing("model.py", "ISLA.forward", start="### The boundary tokens: the sample", end="### One case")
 ```
 :::
 
@@ -1029,7 +1080,8 @@ above.
 | `global_schema` (none) | 1, 2, 3d, 5 | the per-case fields by name and rank, read from `global_data`: each rank-1 field is a global direction $\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed |
 | `boundary_schema` (none) | 2, 3d | per-cell fields by name and rank 0 to 2, read from every boundary mesh's `cell_data`: their invariants $\beta_i$ join the seed (prediction-point tokens carry zeros), and rank-1 and rank-2 fields add their contractions with $\hat\rho_{is}$ to the relational invariants (@sec-isla-inputs-rank) |
 | `query_schema` (none) | interior | per-prediction-point fields by name and rank 0 to 2 (a material label, a source term, a stored signed distance and its gradient), read from the prediction Mesh's `point_data` and carried by the prediction-point tokens through their own embedding after the built-in distance channel; rank-0 fields are divided by $L$ and paired with a signed log |
-| `interior` (`False`) | modes | the task: `False` predicts at the boundary cells and takes no prediction points; `True` predicts at the prediction points, which join the encoder as interacting tokens with the built-in direction and signed distance to the boundary surface (`boundary_geometry`, @sec-arch-modes) |
+| `interior` (`False`) | modes | the task: `False` predicts at the boundary cells and takes no prediction points; `True` predicts at the prediction points, which join the encoder as interacting tokens with the built-in direction and signed distance to the boundary surface (the cells of `boundary_meshes`, @sec-arch-modes) |
+| `boundary_tokens` (200,000) | modes | interior task only: the boundary tokens drawn per case inside the model from the full-resolution `boundary_meshes`, water-filled over the named boundaries, kept with probability proportional to area by a systematic draw along the Morton order, each with its Horvitz-Thompson measure; a random start in training, a fixed one in evaluation (@sec-arch-boundary-draw). A surface task reads every cell it is given and takes only the default |
 | `query_independent` (`False`) | modes, after each slice layer | interior task only: `True` is ISLA-DTT. The prediction points are passive (@sec-arch-passive-decoder), with no routing weight and no routing-mass parameter, and after every slice layer they read the boundary cells through the cluster forest at $\theta = 1$ (@sec-arch-global-read, @sec-arch-tree-read), so each prediction depends on its own point and the boundary alone; rank-2 per-token inputs are refused with it |
 | `compile_blocks` (`False`) | 3 | each slice block's forward is wrapped in `torch.compile`, built lazily at the first call. Parameter names, the state dict and the eager path are unchanged, and the fused geometry kernel stays a custom-op leaf. Measured on four GB300 ranks at 200,000 cells per case: the DrivAerML Surface step falls from 221 to 180 ms and peak memory from 44.9 to 32.9 GiB, the Volume step from 475 to 308 ms and 88.5 to 64.5 GiB, with losses at bfloat16 roundoff. The recipe's ISLA configurations leave it off and compile the whole model instead (`fullgraph=True`, dynamic shapes: one graph for every mesh size); it remains the way to compile ISLA-DTT, whose boundary read breaks that graph |
 | `dim` (3) | all | the spatial dimension: every boundary mesh is a `Mesh[dim - 1, dim]` (a polyline in two dimensions), every prediction point has `dim` coordinates, and the head's basis follows it (perpendiculars instead of cross products in two dimensions; odd-parity outputs refused for `dim >= 4`). The fused kernels are written for three dimensions; other dimensions run the eager region. The interior task's exact boundary geometry is implemented in two and three dimensions. A planar problem is passed with `dim=2`, never embedded with a zero third coordinate |

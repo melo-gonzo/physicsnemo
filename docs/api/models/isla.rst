@@ -82,13 +82,24 @@ in three dimensions);
 a prescribed boundary vector is a rank-1 boundary input
 (``boundary_schema={"traction": {"rank": 1}}``, read from each boundary mesh's
 ``cell_data["traction"]``). An interior task is built with ``interior=True``
-and called with ``prediction_points=``; each prediction point's signed
-distance to the boundary surface and the direction from it are computed inside
-the model from the exact closest point on the surface's cells and are never an
-input. The surface is ``boundary_geometry=``, the same named boundaries as
-``boundary_meshes`` at full resolution (the tokens are a sample of it); without
-it the tokens' own cells are the surface, accepted when they are the whole
-boundary. A dataset's stored signed distance enters, if wanted, as an ordinary
+and called with ``prediction_points=``. Its ``boundary_meshes`` are the
+boundaries at full resolution, the only boundary input: each prediction
+point's signed distance to that surface (positive on the side the cells'
+normals point to) and the direction from it are computed inside the model
+from the exact closest point on its cells and are never an input, and the
+boundary tokens are drawn from the same cells inside the forward pass. The
+budget is ``boundary_tokens`` per case (default 200,000), shared over the
+named boundaries by water filling (a boundary with fewer cells than its share
+is kept whole); within a boundary each cell is drawn with probability
+proportional to its measure (capped at one) by systematic sampling along the
+Morton order of the cell centroids, and carries its Horvitz-Thompson measure,
+so the token count is exactly ``min(cells, boundary_tokens)`` (static shapes,
+one compiled graph) and every measure-weighted read is an unbiased quadrature
+of the full surface. In training the draw's start comes from the global torch
+RNG (``torch.manual_seed`` reproduces it); in evaluation (``model.eval()``) it
+is fixed, so inference is deterministic. A surface task reads every cell it is
+given and samples none. A dataset's stored signed distance enters, if wanted,
+as an ordinary
 ``query_schema`` field. With
 ``query_independent=True`` (ISLA-DTT) the prediction points are passive
 readers of the slices and of the boundary cells, so each prediction depends
@@ -103,6 +114,8 @@ the reference configuration, its variants, and the data-to-model mapping.
     :show-inheritance:
     :members:
     :exclude-members: forward
+
+.. autofunction:: physicsnemo.experimental.models.isla.sampling.sample_boundary_cells
 
 .. autoclass:: physicsnemo.mesh.fields.RankSpec
     :members:

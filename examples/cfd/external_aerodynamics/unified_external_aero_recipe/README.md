@@ -347,7 +347,8 @@ point-cloud `Mesh` whose `point_data` holds the declared outputs by name.
 One case per call, no batch axis. From each boundary Mesh the model reads
 the cell centroids, cell normals and cell measures (the Horvitz-Thompson
 corrected `cell_data._effective_measure` when present, else the geometric
-cell area); the problem's data enter as named fields of declared tensor
+cell area): every cell for a surface task, a sample drawn inside the model
+for an interior task (below); the problem's data enter as named fields of declared tensor
 rank (`global_schema` fields from `global_data`, `boundary_schema` fields
 from each boundary's `cell_data`, `query_schema` fields from the prediction
 Mesh's `point_data`). Two contracts hold by construction rather than by
@@ -410,20 +411,44 @@ model:
 A surface task (`interior: false`, the default) predicts at the boundary
 cells themselves and passes no prediction points: the surface dataset's
 `MeshToDomainMesh` puts the targets at the vehicle's cell centroids in cell
-order, which is the order of the output Mesh's points. The interior task
+order, which is the order of the output Mesh's points; its dataset subsamples
+the surface to the cells it predicts at. The interior task
 (`isla_volume.yaml`, `interior: true`) adds `prediction_points: interior`,
-the dataset's interior point-cloud Mesh; the prediction points join the
-encoder as interacting tokens and each one's signed distance to the boundary
-surface and direction from it are computed inside the model from the exact
-closest point on the surface's cells, never read from the dataset. The surface
-is `forward_kwargs.boundary_geometry`: on DrivAerML the full-resolution vehicle
-STL (`boundaries.stl_geometry`, which the reference volume dataset files load
-for their stored SDF and keep), while `boundary_meshes` stay the 200,000-cell
-token sample, so the geometry does not depend on how the sample was drawn; on
-AirfRANS the airfoil is read whole and is its own surface (no
-`boundary_geometry`). `isla_volume_sdf.yaml` declares the dataset's stored
+the dataset's interior point-cloud Mesh, and takes `boundary_meshes` at full
+resolution, its only boundary input. The prediction points join the encoder
+as interacting tokens; each one's signed distance to the boundary surface
+(the cells of `boundary_meshes`) and direction from it are computed inside
+the model from the exact closest point on the cells, never read from the
+dataset, and the distance is positive on the side the cells' normals point
+to. The boundary tokens are drawn from the same cells inside the model:
+`boundary_tokens` per case (200,000, the class default, which every interior
+config states), water-filled over the named boundaries (a boundary with fewer
+cells than its share is kept whole, its unused share going to the others: on
+AeroZoo 50,000 per role when all four roles exceed that), each cell drawn with
+probability proportional to its area by systematic sampling along the Morton
+order of the centroids and carrying its Horvitz-Thompson measure; a random
+start per step in training, a fixed one in evaluation. So the interior
+configs' datasets read the boundaries whole: the DrivAerML reference volume
+files carry no boundary cell cap, and `isla_volume_aerozoo.yaml` lifts the
+AeroZoo files' per-boundary cap for ISLA only (`dataset_reader_overrides`
+for the reader's cap, `dataset_drop_transforms` for the uniform twins'
+`SubsampleMesh` and the SDF passes only GeoTransolver reads; a model config's
+`dataset_drop_transforms` removes every dataset transform of a named class).
+On AirfRANS, Tensile2d and the lug the boundary is below the budget and every
+cell is a token. `isla_volume_sdf.yaml` declares the dataset's stored
 `sdf` (rank 0) and `sdf_normals` (rank 1) as `query_schema` fields, read from
 `interior.point_data`, for the internal-versus-stored geometry measurement.
+
+**Boundary orientation.** The datasets store their boundaries with different
+windings: DrivAerML's vehicle is wound into the body, AeroZoo's four
+boundaries out of the fluid (the OpenFOAM convention), AirfRANS's airfoil
+into the fluid. The `FlipBoundaryOrientation` transform
+(`src/domain_transforms.py`) reverses the cells and any named stored normals
+of the boundaries it names; the DrivAerML reference volume files set it for
+the vehicle and every AeroZoo file for its four roles (after the SDF passes,
+so GeoTransolver's stored distances are unchanged), so every interior
+dataset hands ISLA normals that point into the fluid and its signed distance
+is positive there. The stored files are never modified.
 
 `global_data` is passed through whole; the model selects the leaves it
 declares under `global_schema` by name (`U_inf_dir`, the unit freestream
@@ -437,7 +462,8 @@ their dataset's leaf names.
 `SubsampleMesh` writes on a subsampled surface and `MeshToDomainMesh` keeps
 on `boundaries.vehicle.cell_data` (and records for the interior points as
 the target measure); on a volume dataset the reader's boundary cell
-subsample writes it (`boundary_subsample: cells`). Both store complete
+subsample writes it (`boundary_subsample: cells`), and on a boundary read
+whole `ComposeQuadratureMeasure` materializes the cell areas. All store complete
 measures, including all sampling corrections; do not multiply them by cell
 area again. Explicit point measures carry their represented dimension and
 follow geometric scaling, including physical-coordinate inference exports.
