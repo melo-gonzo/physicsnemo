@@ -37837,3 +37837,30 @@ index lede adds AirfRANS to the Volume sentence. The protocol tables
 keep their native and posed columns; the reduced-budget draws have
 their own table in each chapter. The CHAR-PROTOCOLS ledger row and
 tech-tree node record the measurement.
+
+## 2026-10-16 — AIRFRANS H-RESID P5 holds: with the normalized reads (A2) ISLA's errors fall by 14 percent on pressure and 21 percent on velocity {#sec-nb-airfrans-hresid-p5}
+
+The two AirfRANS lanes of the H-RESID remedy (@sec-nb-aerozoo-hresid-prereg;
+A2 on the code_v20 base, snapshot code_v20a2, rows 8 and 9 of the
+uniform-interior campaign, 500 epochs at the reference configuration)
+finished and were scored on the 200 test airfoils, float32, with the
+uniform interior files of @sec-nb-airfrans-uniform-verdict. Registered:
+"the remedy's pressure and velocity test errors are within 5 percent of
+the reference ISLA lanes' or better." Against the reference ISLA lanes
+(rows 0 and 1), seed means with seeds 42 and 43 in brackets:
+
+| Field | Reference ISLA | A2 | A2 ÷ reference |
+|---|---|---|---|
+| pressure | 0.0208 (0.0197, 0.0219) | 0.0179 (0.0182, 0.0176) | 0.862 (0.925, 0.806) |
+| velocity | 0.0120 (0.0116, 0.0124) | 0.0095 (0.0095, 0.0094) | 0.790 (0.817, 0.763) |
+| eddy viscosity | 0.0242 (0.0236, 0.0249) | 0.0213 (0.0212, 0.0214) | 0.877 (0.897, 0.859) |
+
+**P5 holds, and A2 is better on every field:** both A2 seeds lie below
+both reference seeds on each field. Rotated and translated scoring gives
+the same ratios to three decimals, so the change keeps the pose contract.
+Against GeoTransolver on the same files (0.0123 / 0.0365 / 0.0194),
+A2 still trails on pressure (GeoTransolver ÷ A2 0.69) and leads further on
+velocity (3.86). With P4 (@sec-nb-deepjeb-hresid-p4) and the P3 interim
+(@sec-nb-aerozoo-hresid-p3-interim), every registered prediction of
+H-RESID holds so far; P3 is read at epoch 250, and then the adoption of
+A2 as the reference configuration is proposed.
