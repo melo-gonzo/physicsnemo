@@ -99,5 +99,5 @@ model:
   geo_kernel: null
   # Per-block torch.compile (PERF-3, 2026-10-01): off, since the recipe compiles
   # the whole model (compile_options above). The way to compile ISLA-DTT
-  # (model.kernel_read), whose reads break the whole-model graph.
+  # (model.query_independent=true), whose boundary read breaks the whole-model graph.
   compile_blocks: false

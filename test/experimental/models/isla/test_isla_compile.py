@@ -20,9 +20,10 @@ The compiled model (Mesh inputs and output included) must match the eager model,
 outputs and gradients, and a case with other boundary and query counts must reuse
 the graph rather than recompile. The surface task has one boundary mesh; the
 interior task has two boundary meshes and prediction points, so its token axis is
-a sum of three independent counts. The support task adds support points (a fourth
-count) and a rank-2 boundary input; the passive task's prediction points are
-passive readers (``query_independent``) with a rank-1 query input.
+a sum of three independent counts. The inputs task is an interior task with a
+rank-2 boundary input and rank-0 and rank-1 query inputs. ISLA-DTT
+(``query_independent``) is not here: its boundary read sizes its pairs from the data
+and compiles per block (``compile_blocks``) instead.
 """
 
 import copy
@@ -45,8 +46,6 @@ PV = {"p": {"rank": 0}, "v": {"rank": 1}}
 #: Per-case token counts, all distinct (and distinct from every other input
 #: dimension) so that duck sizing ties no two of them together.
 SIZES = [({"inlet": 23, "wall": 41}, 57), ({"inlet": 31, "wall": 37}, 45)]
-#: Support points per case (the support task).
-N_SUPPORT = [19, 29]
 
 
 def _model(task: str) -> ISLA:
@@ -59,28 +58,19 @@ def _model(task: str) -> ISLA:
             "global_schema": {"g": {"rank": 1}, "re": {"rank": 0}},
             "interior": True,
         }
-    elif task == "support":
+    else:  # inputs
         kw = {
             "boundary_schema": {"bc": {"rank": 0}, "T": {"rank": 2}},
             "global_schema": {"g": {"rank": 1}},
-            "query_schema": {"sdf": {"rank": 0}},
+            "query_schema": {"sdf": {"rank": 0}, "m": {"rank": 1}},
             "interior": True,
-        }
-    else:  # passive
-        kw = {
-            "global_schema": {"g": {"rank": 1}},
-            "query_schema": {"m": {"rank": 1}},
-            "interior": True,
-            "query_independent": True,
         }
     return ISLA(
         output_schema=PV, hidden=32, n_layers=2, n_slices=8, geo_checkpoint=True, **kw
     )
 
 
-def _case(
-    task: str, sizes: dict, nq: int, device, seed: int, n_support: int = 0
-) -> dict:
+def _case(task: str, sizes: dict, nq: int, device, seed: int) -> dict:
     g = torch.Generator().manual_seed(seed)
     if task == "surface":
         sizes = {"wall": sum(sizes.values())}
@@ -93,7 +83,7 @@ def _case(
                 "bc": torch.rand(n, generator=g),
                 "u_bc": torch.randn(n, 3, generator=g),
             }
-        elif task == "support":
+        elif task == "inputs":
             data = {
                 "bc": torch.rand(n, generator=g),
                 "T": torch.randn(n, 3, 3, generator=g),
@@ -102,20 +92,13 @@ def _case(
     drv = torch.nn.functional.normalize(torch.randn(3, generator=g), dim=0)
     case = {"boundary_meshes": meshes, "global_data": {"g": drv.to(device)}}
 
-    def points(n):
-        x = 2 * torch.randn(n, 3, generator=g)
-        if task == "support":
-            return points_mesh(x, {"sdf": torch.randn(n, generator=g)}).to(device)
-        if task == "passive":
-            return points_mesh(x, {"m": torch.randn(n, 3, generator=g)}).to(device)
-        return x.to(device)
-
     if task == "interior":
         case["global_data"]["re"] = torch.tensor(0.3, device=device)
-    if task != "surface":
-        case["prediction_points"] = points(nq)
-    if task == "support":
-        case["support_points"] = points(n_support)
+        case["prediction_points"] = (2 * torch.randn(nq, 3, generator=g)).to(device)
+    elif task == "inputs":
+        x = 2 * torch.randn(nq, 3, generator=g)
+        fields = {"sdf": torch.randn(nq, generator=g), "m": torch.randn(nq, 3, generator=g)}
+        case["prediction_points"] = points_mesh(x, fields).to(device)
     return case
 
 
@@ -138,7 +121,7 @@ def _assert_close(a, b, device, rel=3e-2):
 
 
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("task", ["surface", "interior", "support", "passive"])
+@pytest.mark.parametrize("task", ["surface", "interior", "inputs"])
 def test_whole_model_compiles_fullgraph_with_dynamic_shapes_and_matches_eager(
     task, device
 ):
@@ -153,7 +136,7 @@ def test_whole_model_compiles_fullgraph_with_dynamic_shapes_and_matches_eager(
     compiled = torch.compile(model, fullgraph=True, dynamic=True)
     autocast = device == "cuda"
     for i, (sizes, nq) in enumerate(SIZES):
-        case = _case(task, sizes, nq, device, seed=i, n_support=N_SUPPORT[i])
+        case = _case(task, sizes, nq, device, seed=i)
         ### The second case has other boundary and query counts: no recompile.
         with torch._dynamo.config.patch(error_on_recompile=i > 0):
             out, grads = _step(compiled, model, case, autocast)

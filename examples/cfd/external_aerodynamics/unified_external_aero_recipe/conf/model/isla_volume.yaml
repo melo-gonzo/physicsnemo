@@ -65,9 +65,8 @@ training:
 # is long (about 11 minutes on a cold cache for DrivAerML Surface on a GB300,
 # a minute from a warm one): keep TORCHINDUCTOR_CACHE_DIR and TRITON_CACHE_DIR
 # across the links of a chained run. Not with
-# model.kernel_read (ISLA-DTT): its radius and tree reads break the graph and the
-# global read recompiles for every query count; there set compile=false and
-# model.compile_blocks=true.
+# model.query_independent=true (ISLA-DTT): its boundary read breaks the graph;
+# there set compile=false and model.compile_blocks=true.
 compile: true
 compile_options:
   fullgraph: true
@@ -101,5 +100,5 @@ model:
   geo_kernel: null
   # Per-block torch.compile (PERF-3, 2026-10-01): off, since the recipe compiles
   # the whole model (compile_options above). The way to compile ISLA-DTT
-  # (model.kernel_read), whose reads break the whole-model graph.
+  # (model.query_independent=true), whose boundary read breaks the whole-model graph.
   compile_blocks: false

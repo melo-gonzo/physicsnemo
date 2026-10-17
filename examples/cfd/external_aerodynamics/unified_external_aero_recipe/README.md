@@ -373,7 +373,7 @@ and the eager PyTorch region otherwise. The configs (all but
 and `mode: max-autotune-no-cudagraphs`): one graph with dynamic shapes, so a
 new mesh size does not recompile it (see `isla_volume.yaml` for the first
 compile's cost and the one exception); the per-block `compile_blocks` is off. For
-ISLA-DTT (`model.kernel_read`), whose boundary reads break the graph, set
+ISLA-DTT (`model.query_independent=true`), whose boundary read breaks the graph, set
 `compile=false model.compile_blocks=true` instead.
 
 **Learning rate.** 3.75e-4 at `hidden: 512`, pinned in every ISLA config

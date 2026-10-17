@@ -23,7 +23,7 @@ Mesh wrapper over the internal batched routine; checkpoint save and
 backbone golden.
 
 **Regenerating the goldens**: delete ``data/isla_default_v1.pth``,
-``data/isla_interior_v1.pth``, ``data/isla_default_v1.mdlus`` and
+``data/isla_interior_v1.pth``, ``data/isla_dtt_v1.pth``, ``data/isla_default_v1.mdlus`` and
 ``data/isla_default_checkpoint_output_v1.pth`` and run
 
     uv run --no-sync python -m pytest test/experimental/models/isla/test_isla_release.py
@@ -51,11 +51,14 @@ DATA_DIR = Path(__file__).parent / "data"
 #: Every configuration declares one scalar and one vector output and one global direction.
 IO = dict(output_schema={"p": {"rank": 0}, "v": {"rank": 1}}, global_schema={"g": {"rank": 1}})
 
-#: One small configuration in its two task structures (a surface task and an interior
-#: task; the constructor's ``interior`` flag).
+#: One small configuration in its three forms: a surface task, an interior task (the
+#: constructor's ``interior`` flag) and ISLA-DTT (``query_independent``).
 CONFIGS = {
     "default": dict(hidden=32, n_layers=2, n_slices=8, geo_kernel="eager", **IO),
     "interior": dict(hidden=32, n_layers=2, n_slices=8, geo_kernel="eager", interior=True, **IO),
+    "dtt": dict(
+        hidden=32, n_layers=2, n_slices=8, geo_kernel="eager", interior=True, query_independent=True, **IO
+    ),
 }
 
 
@@ -178,10 +181,10 @@ def test_isla_constructor_attributes(config):
 @pytest.mark.parametrize("config", list(CONFIGS))
 def test_isla_forward_non_regression(device, config):
     model = _instantiate_model(**CONFIGS[config]).to(device)
-    inputs = _make_inputs(device, query=(config == "interior"))
+    inputs = _make_inputs(device, query=(config != "default"))
     with torch.no_grad():
         out = outputs(model(**inputs))
-    n_out = 40 if config == "interior" else 64
+    n_out = 64 if config == "default" else 40
     assert out["p"].shape == (n_out,) and out["v"].shape == (n_out, 3)
     ref = _load_or_create_reference(f"isla_{config}_v1.pth", out)
     tol = 1e-5 if device == "cpu" else 1e-4
@@ -195,7 +198,7 @@ def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
     reads (cell centroids, cell normals, effective cell measures, a batch axis of
     one) give bitwise-identical outputs."""
     model = _instantiate_model(**CONFIGS[config]).to(device)
-    inputs = _make_inputs(device, query=(config == "interior"))
+    inputs = _make_inputs(device, query=(config != "default"))
     mesh = inputs["boundary_meshes"]["wall"]
     q = inputs.get("prediction_points")
     with torch.no_grad():
