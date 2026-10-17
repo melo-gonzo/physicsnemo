@@ -694,7 +694,6 @@ def test_isla_config_declares_the_harmonized_grammar_and_runs(request, dataset):
         "model.hidden=16",
         "model.n_layers=1",
         "model.n_slices=4",
-        "model.geo_kernel=eager",
         "model.compile_blocks=false",
         *ISLA_VP_OVERRIDES[dataset],
         dataset=dataset,

@@ -178,17 +178,18 @@ inputs of rank 2 are refused (broadcast the tensor to the boundary cells and
 declare it as a boundary input instead).
 
 **Kernels.** The per-layer geometry region has two exact implementations
-of the same arithmetic: ``geo_kernel="eager"`` (PyTorch; ``geo_checkpoint``
-rebuilds its intermediates in backward instead of storing them) and
-``geo_kernel="fused"`` (one Triton kernel per direction that never
-materializes the (B, N, S, .) tensor; CUDA, float32/float64 geometry, one
-to four per-point vectors counting the global directions and the token's
-rank-1 inputs together, at most 1024 slices, no rank-2 inputs). The default
-``geo_kernel=None`` means *auto*: at the first forward
-pass the model picks the fused kernel when the inputs are on CUDA, Triton
-is importable and the constraints hold, and the eager region otherwise,
-logging the choice once; at 200,000 cells the fused kernel runs the
-training step in about a third of the eager time and memory. The per-token
+of the same arithmetic: the eager PyTorch region, which rebuilds its
+intermediates in backward instead of storing them, and the fused one (one
+Triton kernel per direction that never materializes the (B, N, S, .) tensor;
+CUDA, float32/float64 geometry, one to four per-point vectors counting the
+global directions and the token's rank-1 inputs together, at most 1024
+slices, no rank-2 inputs). At the first forward pass the model picks the
+fused kernel when the inputs are on CUDA, Triton is importable and the
+constraints hold, and the eager region otherwise, logging the choice once
+(:meth:`ISLA.resolve_geo_kernel`; the ``geo_kernel`` attribute, ``"auto"``,
+can be set to ``"eager"`` or ``"fused"`` to force one); at 200,000 cells the
+fused kernel runs the training step in about a third of the eager time and
+memory. The per-token
 rank-2 contractions (rho^T T rho) are the standing kernel follow-up; until
 then a model with rank-2 boundary or query inputs runs the eager region.
 
@@ -230,7 +231,6 @@ from tensordict import TensorDict
 from physicsnemo.core.meta import ModelMetaData
 from physicsnemo.core.module import Module
 from physicsnemo.experimental.models.isla.blocks import (
-    GeoKernel,
     _QueryTokens,
     _RoutingLogits,
     _SliceBlock,
@@ -265,6 +265,9 @@ from physicsnemo.mesh.calculus.measure import cell_measures
 from physicsnemo.mesh.fields import FieldSchema, FieldSchemaLike
 
 logger = logging.getLogger(__name__)
+
+#: Numerical floor for norms and logarithms.
+EPS = 1e-12
 
 
 def _hint_token_axis(n, widths) -> None:
@@ -409,18 +412,6 @@ class ISLA(Module):
             reference training rate is 3.75e-4 (the width rule 1e-3 x 192 / hidden).
         n_layers: Number of slice-attention blocks.
         n_slices: Number of soft slices (data-adaptive anchors) per block.
-        mlp_ratio: Expansion ratio of the per-token and per-slice MLPs.
-        geo_checkpoint: Rebuild the per-slice geometric invariants in the
-            backward pass instead of storing them (bitwise-identical forward and
-            gradients, lower peak memory).
-        geo_kernel: ``None`` (default) selects automatically at the first
-            forward pass: ``"fused"`` (exact Triton kernel for the per-layer
-            geometry region) when the inputs are on CUDA, Triton is available,
-            there are one to four per-point vectors (global directions plus rank-1
-            boundary or query inputs), at most 1024 slices and no rank-2 inputs,
-            else ``"eager"`` (the PyTorch reference region). Pass ``"eager"`` or
-            ``"fused"`` to force one; ``"fused"`` raises when its constraints
-            cannot be met.
         compile_blocks: Run every slice block through :func:`torch.compile`
             (default ``False``). The compiled function is the block's forward,
             built at the first forward pass, so parameter names, checkpoints and
@@ -441,7 +432,6 @@ class ISLA(Module):
             nearest-boundary search works in any dimension. A
             two-dimensional problem is passed with ``dim=2`` (polyline
             boundaries) rather than embedded with a zero third coordinate.
-        eps: Numerical floor for norms and logarithms.
 
     Output contract: a field declared with rank ``r`` and even parity
     transforms as a true rank-``r`` tensor under every orthogonal map of the
@@ -507,12 +497,8 @@ class ISLA(Module):
         hidden: int = 512,
         n_layers: int = 12,
         n_slices: int = 512,
-        mlp_ratio: int = 4,
-        geo_checkpoint: bool = False,
-        geo_kernel: GeoKernel | None = None,
         compile_blocks: bool = False,
         dim: int = 3,
-        eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
         ### compile_blocks: run each slice block through torch.compile (built lazily at
@@ -594,24 +580,16 @@ class ISLA(Module):
         ### Each kind's columns in schema order (cached layouts, see _global_fields).
         self._global_vector_layout = _schema_layout({k: (self.dim,) for k in self.global_vector_names})
         self._global_scalar_layout = _schema_layout({k: () for k in self.global_scalar_names})
-        ### geo_kernel selects the implementation of the per-layer geometry region,
-        ### not its arithmetic. "eager" is the PyTorch region (with geo_checkpoint
-        ### deciding whether its (B,N,S,.) intermediates are stored or rebuilt in
-        ### backward); "fused" is the Triton kernel of geo_kernel.py, which reads
-        ### the pre-logits once and writes the bias and mix once per direction,
-        ### with the recompute built in (CUDA only). geo_kernel=None resolves at
-        ### the first forward pass to "fused" wherever the fused kernel can run and
-        ### to "eager" otherwise; the blocks read the resolved name. An explicit
-        ### "eager" or "fused" is honored.
-        if geo_kernel is None:
-            geo_kernel = "auto"
-        if geo_kernel not in ("auto", "eager", "fused"):
-            raise ValueError(
-                f"geo_kernel must be None (auto), 'eager' or 'fused', got {geo_kernel!r}"
-            )
-        self.geo_kernel = geo_kernel
+        ### geo_kernel names the implementation of the per-layer geometry region,
+        ### not its arithmetic. "eager" is the PyTorch region (its (B,N,S,.)
+        ### intermediates rebuilt in backward); "fused" is the Triton kernel of
+        ### geo_kernel.py, which reads the pre-logits once and writes the bias and
+        ### mix once per direction, with the recompute built in (CUDA only). "auto"
+        ### resolves at the first forward pass to "fused" wherever the fused kernel
+        ### can run and to "eager" otherwise; the blocks read the resolved name.
+        ### Writable: tests and debugging set "eager" or "fused" to force one.
+        self.geo_kernel = "auto"
         self.n_slices = int(n_slices)
-        self.eps = eps
         ### The boundary cells' fields and the interior queries' fields, each set
         ### with its own invariant layout (_InputSet). Every token carries the
         ### UNION of the two block-level vector/tensor stacks (zeros where a class
@@ -622,23 +600,6 @@ class ISLA(Module):
         self.qin = _InputSet(self.query_schema, n_frame, scaled_scalars=True, dim=self.dim)
         self.n_block_vecs = self.bin.n_block_vecs + self.qin.n_block_vecs
         self.n_block_tens = self.bin.n_block_tens + self.qin.n_block_tens
-        if geo_kernel == "fused":
-            if self.dim != 3:
-                raise ValueError(
-                    f"geo_kernel='fused' is written for three spatial dimensions; got dim={self.dim} "
-                    "(use geo_kernel='eager' or None, which resolves to the eager region)"
-                )
-            if self.n_block_tens:
-                raise ValueError(
-                    "geo_kernel='fused' does not support rank-2 boundary or query inputs "
-                    "(kernel follow-up); use geo_kernel='eager' or None"
-                )
-            if not 1 <= K + self.n_block_vecs <= 4 or K < 1:
-                raise ValueError(
-                    f"geo_kernel='fused' is written for one to four per-point vectors "
-                    f"(global directions plus rank-1 token inputs); got {K} global "
-                    f"direction(s) and {self.n_block_vecs} token vector(s)"
-                )
         ### Seed width: the K invariants n.g_k (the only origin-free scalars of
         ### {n, g_k}; positions enter through the anchors), the boundary inputs'
         ### invariants and the global scalars.
@@ -656,9 +617,6 @@ class ISLA(Module):
             _SliceBlock(
                 hidden,
                 n_slices,
-                mlp_ratio,
-                geo_checkpoint=geo_checkpoint,
-                geo_kernel=geo_kernel,
                 n_global_vectors=K,
                 n_block_vecs=self.n_block_vecs,
                 n_block_tens=self.n_block_tens,
@@ -819,8 +777,8 @@ class ISLA(Module):
     def resolve_geo_kernel(self, points: torch.Tensor) -> str:
         """The geometry-kernel implementation this forward pass will use.
 
-        ``"eager"`` or ``"fused"`` when the constructor fixed it; under the
-        default (auto) the fused kernel when ``points`` is on CUDA, Triton is
+        ``"eager"`` or ``"fused"`` when the ``geo_kernel`` attribute forces it;
+        under the default (``"auto"``) the fused kernel when ``points`` is on CUDA, Triton is
         importable, the model has one to four per-point vectors (global directions
         plus rank-1 token inputs), at most 1024 slices and no rank-2 inputs, else the
         eager region. The
@@ -954,7 +912,7 @@ class ISLA(Module):
             gv = _pack(global_rows, self._global_vector_layout).unflatten(-1, (-1, self.dim))
             ### Each direction is normalized; the magnitude, if it means anything,
             ### is a rank-0 global input.
-            g_unit = gv / gv.norm(dim=-1, keepdim=True).clamp_min(self.eps)  # (B, K, d)
+            g_unit = gv / gv.norm(dim=-1, keepdim=True).clamp_min(EPS)  # (B, K, d)
         else:
             g_unit = like.new_zeros(global_rows.batch_size[0], 0, self.dim)
         g_scalars = _pack(global_rows, self._global_scalar_layout) if self.n_global_scalars else None
@@ -1193,7 +1151,7 @@ class ISLA(Module):
             log_frac=log_frac,
             g_unit=g_unit,
             theta=self._tree_read_theta,
-            eps=self.eps,
+            eps=EPS,
         )
 
     def _forward_tensors(
@@ -1272,16 +1230,16 @@ class ISLA(Module):
         ### centre). Normalized weights make it converge under refinement where
         ### the total measure diverges, and make it invariant to a weight rescale.
         measure = boundary.get("measure", None)
-        gauge = rms_pairwise_distance(points, measure, self.eps)
+        gauge = rms_pairwise_distance(points, measure, EPS)
         normals = boundary["normals"]
-        n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+        n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(EPS)
 
         if measure is None:
             ### No measures given: every token carries the same measure, i.e. the
             ### count-weighted quadrature.
             log_w = points.new_zeros(b, n, 1)
         else:
-            log_w = torch.log(measure.to(points.dtype).clamp_min(self.eps))[..., None]
+            log_w = torch.log(measure.to(points.dtype).clamp_min(EPS))[..., None]
 
         ### Boundary inputs: invariants against the token's frame {n, g_k}.
         if self.bin:
@@ -1310,15 +1268,15 @@ class ISLA(Module):
             ### token's "normal" in every invariant), from the exact nearest token.
             with torch.autocast(points.device.type, enabled=False):
                 dist, q_nhat = nearest_boundary_geometry(
-                    query_points, points, n_hat, eps=self.eps
+                    query_points, points, n_hat, eps=EPS
                 )
                 s = (dist / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
-                builtin = torch.cat([s, torch.sign(s) * torch.log(s.abs() + self.eps)], -1)
+                builtin = torch.cat([s, torch.sign(s) * torch.log(s.abs() + EPS)], -1)
             q_g = g_unit[:, None].expand(b, nq, K, dim)
             if self.qin:
                 q_frame = torch.cat([q_nhat[:, :, None], q_g], dim=2)
                 q_feat, q_vecs, q_tens = self.qin.features(
-                    query["fields"], q_frame, gauge=gauge, eps=self.eps
+                    query["fields"], q_frame, gauge=gauge, eps=EPS
                 )
                 q_feat = torch.cat([builtin, q_feat], -1)
             else:
@@ -1356,7 +1314,7 @@ class ISLA(Module):
         h, log_w, r = tokens["h"], tokens["log_w"], tokens["r"]
         vecs, tens = tokens.get("vecs", None), tokens.get("tens", None)
         for i, block in enumerate(self._block_callables()):
-            h = block(h, log_w, r, tokens["n_hat"], tokens["g_hat"], self.eps, vecs, tens, geo_kernel=geo_kernel)
+            h = block(h, log_w, r, tokens["n_hat"], tokens["g_hat"], EPS, vecs, tens, geo_kernel=geo_kernel)
             if self.kernel_reads is not None:
                 ### The points' residual update from the boundary cells' states at this
                 ### depth; the boundary tokens (and so the slices) are untouched.
@@ -1387,7 +1345,7 @@ class ISLA(Module):
         b_f = torch.softmax(self.frame_assign.logits(out["h"], protos_f), dim=-1)
         r_out = out["r"]
         u = r_out - torch.einsum("bns,bsc->bnc", b_f, z_f).to(r_out.dtype)
-        r_hat = u / u.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+        r_hat = u / u.norm(dim=-1, keepdim=True).clamp_min(EPS)
 
         ### The token basis. True vectors: the global directions, the normal, the
         ### radial direction and the polar complements of (rhat, n) and each

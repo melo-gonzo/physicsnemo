@@ -15,7 +15,7 @@
 # limitations under the License.
 
 """The implementation options of ISLA's geometry region compute the same thing as the
-eager reference (geo_kernel="eager", geo_checkpoint=True).
+eager reference (the eager region, rebuilt in backward).
 
 Bars from the study brief, applied to the reference configuration's arithmetic:
 the fused Triton region reproduces the eager forward to 1e-6 relative in float32 and
@@ -39,7 +39,6 @@ REF = dict(
     hidden=64,
     n_layers=3,
     n_slices=32,
-    geo_checkpoint=True,
 )
 
 
@@ -67,11 +66,12 @@ def _run(model, inputs, target):
     return out.detach(), grads
 
 
-def _pair(dtype, device="cuda", **kw):
+def _pair(dtype, device="cuda", geo_kernel="auto", **kw):
     torch.manual_seed(0)
     ref = ISLA(**REF).to(device, dtype)
     torch.manual_seed(0)
     opt = ISLA(**{**REF, **kw}).to(device, dtype)
+    opt.geo_kernel = geo_kernel
     opt.load_state_dict(ref.state_dict())
     return ref, opt
 
@@ -188,7 +188,8 @@ def test_fused_geo_kernel_model_rank1_boundary_input_exact_in_float64():
     torch.manual_seed(0)
     ref = ISLA(**spec).to("cuda", torch.float64)
     torch.manual_seed(0)
-    opt = ISLA(**{**spec, "geo_kernel": "fused"}).to("cuda", torch.float64)
+    opt = ISLA(**spec).to("cuda", torch.float64)
+    opt.geo_kernel = "fused"
     opt.load_state_dict(ref.state_dict())
     t = torch.randn(600, 3, generator=torch.Generator().manual_seed(9)) * 0.5
     inputs, tgt = _boundary(600, dtype=torch.float64, cell_data={"t": t})
@@ -200,12 +201,6 @@ def test_fused_geo_kernel_model_rank1_boundary_input_exact_in_float64():
         if g.norm() < 1e-6 * total:
             continue
         assert _rel(g_opt[k], g) < 1e-11, (k, _rel(g_opt[k], g))
-
-
-@cuda_only
-def test_geo_kernel_argument_is_validated():
-    with pytest.raises(ValueError):
-        ISLA(**REF, geo_kernel="triton")
 
 
 # --------------------------------------------------------------------------- torch.compile
@@ -251,14 +246,16 @@ def test_compile_blocks_matches_eager(device):
 
 @cuda_only
 def test_query_independent_interior_fused_and_compiled_blocks_match_eager():
-    """The training configuration of the passive interior task (fused geometry kernel,
-    compiled blocks) reproduces the eager model in float64, and its predictions stay
+    """The training configuration of ISLA-DTT (fused geometry kernel, compiled blocks)
+    reproduces the eager model in float64, and its predictions stay
     query-independent on CUDA: a request's prefix gives the prefix of the predictions."""
     spec = {**REF, "interior": True, "query_independent": True}
     torch.manual_seed(0)
-    ref = ISLA(**spec, geo_kernel="eager").to("cuda", torch.float64)
+    ref = ISLA(**spec).to("cuda", torch.float64)
+    ref.geo_kernel = "eager"
     torch.manual_seed(0)
-    opt = ISLA(**spec, geo_kernel="fused", compile_blocks=True).to("cuda", torch.float64)
+    opt = ISLA(**spec, compile_blocks=True).to("cuda", torch.float64)
+    opt.geo_kernel = "fused"
     opt.load_state_dict(ref.state_dict())
     inputs, _ = _boundary(600, dtype=torch.float64)
     q = torch.randn(300, 3, generator=torch.Generator().manual_seed(5), dtype=torch.float64).cuda() * 3.0

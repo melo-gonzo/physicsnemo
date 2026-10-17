@@ -217,19 +217,10 @@ def test_field_validation_errors():
         mq(boundary_meshes={"wall": soup(pts, nrm, w)}, prediction_points=points_mesh(q[:, :2], {"sdf": q[:, 0]}), global_data=gd)
 
 
-def test_fused_kernel_refuses_tensor_inputs_and_auto_falls_back():
-    """The fused kernel takes rank-1 token inputs as per-point vectors (at most four
-    with the global directions); rank-2 inputs and more than four vectors are refused
-    and auto falls back to eager (off CUDA it does anyway)."""
+def test_fused_kernel_auto_falls_back_with_tensor_inputs():
+    """The fused kernel does not take rank-2 inputs: auto falls back to eager (off CUDA
+    it does anyway)."""
     base = dict(output_schema=OUT, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8)
-    ISLA(boundary_schema={"trac": {"rank": 1}}, geo_kernel="fused", **base)  # K = 1, P' = 1: accepted
-    ISLA(boundary_schema={"trac": {"rank": 1}, "disp": {"rank": 1}, "u": {"rank": 1}}, geo_kernel="fused", **base)  # K + P' = 4
-    with pytest.raises(ValueError, match="one to four per-point vectors"):
-        ISLA(boundary_schema={"trac": {"rank": 1}, "disp": {"rank": 1}, "u": {"rank": 1}, "v": {"rank": 1}}, geo_kernel="fused", **base)
-    with pytest.raises(ValueError, match="does not support rank-2"):
-        ISLA(interior=True, query_schema={"S": {"rank": 2}}, geo_kernel="fused", **base)
-    ### rank-0 inputs never touch the geometry region: the fused kernel stays available
-    ISLA(boundary_schema={"tag": {"rank": 0}}, geo_kernel="fused", **base)
     m = ISLA(interior=True, query_schema={"S": {"rank": 2}}, **base)
     assert m.geo_kernel == "auto"
     assert m.resolve_geo_kernel(torch.zeros(1, 4, 3)) == "eager"
@@ -264,31 +255,6 @@ def test_rank0_query_inputs_are_scaled_by_the_gauge():
     base, scaled, geo_only = call(1.0, 1.0), call(s, s), call(s, 1.0)
     assert all(torch.allclose(scaled[k], base[k], atol=1e-10) for k in base)
     assert not torch.allclose(geo_only["p"], base["p"], atol=1e-6)
-
-
-def test_geo_checkpoint_is_exact_with_tensor_inputs():
-    """The recompute path carries the extra vectors and quadratic forms bitwise."""
-    torch.manual_seed(0)
-    ref = _model(interior=True, boundary_schema=BIN, query_schema=QIN)
-    ckp = _model(interior=True, boundary_schema=BIN, query_schema=QIN, geo_checkpoint=True)
-    ckp.load_state_dict(ref.state_dict())
-    pts, nrm, w, _ = cloud(50)
-    q, _, _, _ = cloud(9, seed=1)
-    kw = dict(
-        boundary_meshes={"wall": soup(pts, nrm, w, cell_data=_boundary_fields(50))},
-        prediction_points=points_mesh(q, _query_fields(9)),
-        global_data={"g": torch.tensor([1.0, 0.2, 0.0], dtype=D)},
-    )
-    outs = []
-    for m in (ref, ckp):
-        m.train()
-        out = outputs(m(**kw))
-        sum(o.square().sum() for o in out.values()).backward()
-        outs.append(out)
-    assert all(torch.equal(outs[0][k], outs[1][k]) for k in outs[0])
-    for (n, p), (_, g) in zip(ref.named_parameters(), ckp.named_parameters()):
-        assert p.grad is not None and g.grad is not None, n
-        assert torch.allclose(p.grad, g.grad, atol=1e-11, rtol=1e-9), n
 
 
 def test_fields_keep_their_declaration_order_as_columns():

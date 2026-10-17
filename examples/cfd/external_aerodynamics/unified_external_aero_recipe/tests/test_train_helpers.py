@@ -162,7 +162,6 @@ def test_isla_training_on_thin_triangles(device):
         hidden=16,
         n_layers=1,
         n_slices=4,
-        geo_kernel="eager",
     ).to(device)
     with torch.no_grad():
         prediction = model(**batch["forward_kwargs"]).point_data["pressure"]

@@ -66,7 +66,7 @@ def _model(task: str) -> ISLA:
             "interior": True,
         }
     return ISLA(
-        output_schema=PV, hidden=32, n_layers=2, n_slices=8, geo_checkpoint=True, **kw
+        output_schema=PV, hidden=32, n_layers=2, n_slices=8, **kw
     )
 
 

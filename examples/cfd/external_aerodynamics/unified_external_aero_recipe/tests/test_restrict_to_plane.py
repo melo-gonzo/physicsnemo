@@ -127,7 +127,6 @@ def test_isla_runs_natively_in_two_dimensions_on_the_restricted_domain():
         n_layers=1,
         n_slices=8,
         dim=2,
-        geo_kernel="eager",
     )
     ### The restricted boundary is a Mesh[1, 2] (a polyline): its cells carry the normals
     ### and lengths ISLA reads; the interior Mesh's point_data carries the declared query input.

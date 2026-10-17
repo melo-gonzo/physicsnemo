@@ -54,17 +54,17 @@ IO = dict(output_schema={"p": {"rank": 0}, "v": {"rank": 1}}, global_schema={"g"
 #: One small configuration in its three forms: a surface task, an interior task (the
 #: constructor's ``interior`` flag) and ISLA-DTT (``query_independent``).
 CONFIGS = {
-    "default": dict(hidden=32, n_layers=2, n_slices=8, geo_kernel="eager", **IO),
-    "interior": dict(hidden=32, n_layers=2, n_slices=8, geo_kernel="eager", interior=True, **IO),
-    "dtt": dict(
-        hidden=32, n_layers=2, n_slices=8, geo_kernel="eager", interior=True, query_independent=True, **IO
-    ),
+    "default": dict(hidden=32, n_layers=2, n_slices=8, **IO),
+    "interior": dict(hidden=32, n_layers=2, n_slices=8, interior=True, **IO),
+    "dtt": dict(hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=True, **IO),
 }
 
 
 def _instantiate_model(seed: int = 0, **kwargs) -> ISLA:
-    """Build an ISLA with reproducible random parameters (MOD-008b pattern)."""
+    """Build an ISLA with reproducible random parameters (MOD-008b pattern), forced to
+    the eager geometry region (the one the goldens were recorded with)."""
     model = ISLA(**kwargs)
+    model.geo_kernel = "eager"
     gen = torch.Generator(device="cpu").manual_seed(seed)
     with torch.no_grad():
         for p in model.parameters():
@@ -139,7 +139,6 @@ def test_isla_constructor_attributes(config):
         assert m.interior is False and m.qt is None
         assert m.n_global_vectors == 1 and m.n_global_scalars == 0
         assert m.boundary_schema == {} and m.query_schema == {}
-        assert m.eps == 1e-12
     else:
         m = ISLA(
             output_schema={
@@ -157,19 +156,15 @@ def test_isla_constructor_attributes(config):
             hidden=64,
             n_layers=3,
             n_slices=16,
-            geo_kernel="eager",
-            geo_checkpoint=True,
-            eps=1e-8,
         )
         assert len(m.output_schema) == 6 and m.output_schema["stress"].symmetric
         assert m.n_slices == 16
-        assert len(m.blocks) == 3 and all(b.geo_checkpoint for b in m.blocks)
-        assert m.geo_kernel == "eager"
+        assert len(m.blocks) == 3
+        assert m.geo_kernel == "auto"
         assert m.n_global_vectors == 2 and m.n_global_scalars == 1
         assert list(m.boundary_schema) == ["trace", "traction"]
         assert list(m.query_schema) == ["sdf"]
         assert m.interior is True and m.qt is not None
-        assert m.eps == 1e-8
     assert isinstance(m, Module)
 
 
@@ -249,7 +244,7 @@ def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
     model.save(path)
     loaded = Module.from_checkpoint(str(path)).to(device).eval()
     assert isinstance(loaded, ISLA)
-    for name in ("n_slices", "geo_kernel", "interior", "n_global_vectors", "output_schema", "global_schema"):
+    for name in ("n_slices", "interior", "n_global_vectors", "output_schema", "global_schema"):
         assert getattr(loaded, name) == getattr(model, name), name
     with torch.no_grad():
         _assert_dict_close(outputs(loaded(**inputs)), outputs(model(**inputs)), atol=0.0, rtol=0.0)

@@ -362,13 +362,12 @@ so a call reads exactly as the `forward_kwargs:` mapping does.
 origin-free frame (positions enter only as point-to-anchor differences, no
 centroid anywhere) with the measure-weighted RMS-pairwise-distance length
 unit, so no per-dataset reference length is needed; `hidden: 512`,
-`n_layers: 12`, `n_slices: 512`, `mlp_ratio: 4` (the class defaults);
-`geo_checkpoint: true` (rebuilds the per-slice geometric invariants in
-backward instead of storing them: same forward and gradients bitwise, lower
-peak memory; set `false` to trade memory for speed); `geo_kernel: null`
-selects the exact fused Triton geometry kernel wherever it can run (CUDA)
-and the eager PyTorch region otherwise. The configs (all but
-`isla_volume_aerozoo`, see its comment) compile the whole model
+`n_layers: 12`, `n_slices: 512` (the class defaults). The model rebuilds the
+per-slice geometric invariants in backward instead of storing them (same
+forward and gradients bitwise, lower peak memory) and selects the exact fused
+Triton geometry kernel wherever it can run (CUDA) and the eager PyTorch region
+otherwise. The configs (all but `isla_volume_aerozoo`, see its comment)
+compile the whole model
 (`compile: true` with `compile_options` `fullgraph: true`, `dynamic: true`
 and `mode: max-autotune-no-cudagraphs`): one graph with dynamic shapes, so a
 new mesh size does not recompile it (see `isla_volume.yaml` for the first
@@ -725,8 +724,8 @@ python src/train.py model=flare_volume dataset=drivaer_ml_volume \
     training.optimizer.lr=1e-3 training.scheduler.gamma=0.5
 
 # ISLA (Invariant Slice Attention), surface reference configuration (mesh in,
-# mesh out; lr 3.75e-4 pinned in the config). geo_kernel: null picks the exact
-# fused Triton geometry kernel on CUDA; force with model.geo_kernel=eager|fused.
+# mesh out; lr 3.75e-4 pinned in the config). The model picks the exact fused
+# Triton geometry kernel on CUDA.
 python src/train.py model=isla_surface dataset=drivaer_ml_surface
 
 # ISLA interior reference: boundary -> interior prediction points as tokens.
