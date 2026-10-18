@@ -304,7 +304,7 @@ print(f"**The Surface task of @sec-surface on the 210-wing rung: 210 training ca
       "architectures run at their reference configurations "
       f"({S.CONFIG['ISLA']} at 3.75e-4 and 200,000 cells; {S.CONFIG['GeoTransolver']} at 1e-3 and 200,000 cells; "
       f"{S.CONFIG['Transolver']} at 1e-3 and 100,000 cells; sizes in @tbl-drivaerml-configs), with no rotation or translation "
-      "augmentation. This rung is one of the two datasets on which the reference configurations were chosen (@sec-protocol). Each "
+      "augmentation. This rung is one of the two datasets on which the reference configurations were chosen (@sec-resource-matching). Each "
       "checkpoint is scored three ways, as on DrivAerML (@sec-drivaerml-scorings): on the native mesh, on a uniform point cloud of the "
       "surface, and rotated and translated with $\\hat g_1$ rotated alike.")
 ```
@@ -389,8 +389,8 @@ else:
           "native error: ISLA's error stays at its native value and the baselines' does not. "
           "@tbl-hilift-protocols is the standing and @fig-hilift-shifts draws it.")
 if not HL.ds.reference:
-    print("\nISLA's arm of this standing is the raw-read variant at the reference size: its checkpoints' slice sublayer pools and "
-          "broadcasts the raw token state rather than its normalization (@sec-isla-layer); the GeoTransolver and Transolver arms are "
+    print("\nISLA's checkpoints in this standing are the raw-read variant at the reference size: its checkpoints' slice sublayer pools and "
+          "broadcasts the raw token state rather than its normalization (@sec-isla-layer); the GeoTransolver and Transolver checkpoints are "
           "their reference configurations.")
 ```
 
@@ -454,7 +454,7 @@ print("**The unit-direction control: on the 210-wing rung, the same two baseline
       f"{UDP['transolver_unit']['lower_on']} of {UDP['transolver_unit']['n']}. The study ran at a smaller protocol than the standing, so it "
       "is a statement about the input and these configurations, not a standing.")
 print()
-print("| arm | surface pressure | wall shear | ÷ ISLA, pressure |\n|---|--:|--:|--:|")
+print("| model and input | surface pressure | wall shear | ÷ ISLA, pressure |\n|---|--:|--:|--:|")
 for lab, k in UDK:
     a = UD[k]
     print(f"| {lab} | {a['pressure_l2']:.4f} | {a['tau_wall_l2']:.4f} | "
@@ -464,7 +464,7 @@ print(": The unit-direction control on the HiLiftAeroML 210-wing rung: area-weig
       "(two seeds for the baselines, three for ISLA), scored in float32; each baseline once with the freestream as the physical vector in "
       "inch/s and once as its unit direction, nothing else changed; Transolver at its better rate, 3e-3. How to read this: the physical-vector "
       "rows are the input of the standing's baselines (@tbl-hilift-protocols); ÷ ISLA below one means the baseline is the more accurate. "
-      "Instrument: ISLA at 192 wide, 256 slices, 1e-3, linear routing, raw slice reads (@sec-study-configurations), every arm trained at "
+      "Instrument: ISLA at 192 wide, 256 slices, 1e-3, linear routing, raw slice reads (@sec-study-configurations), every model trained at "
       "10,000 cells per case. Data: results/udrvl_210_reduction_2026-09-10.json. {#tbl-hilift-unit-drive}")
 ```
 
@@ -513,7 +513,7 @@ print(f"**GeoTransolver is ahead of ISLA or level with it on every rung of the l
 #|   below it; it is a statement about these configurations and does not show
 #|   the reference standing (@tbl-hilift-protocols). Instrument: ISLA at 384 wide, 256
 #|   slices, 5e-4, raw slice reads (@sec-study-configurations). Every
-#|   GeoTransolver lane here runs at 3e-3; at 510 and 1,260 cases they train
+#|   GeoTransolver here trains at 3e-3; at 510 and 1,260 cases they train
 #|   at 100,000 cells. Data: results/ref_surface_2026-09-23.json;
 #|   results/campaigns_2026-09-22/ref/metrics; results/scalelaw_2026-10-08.json;
 #|   results/p200k_fleet_interim_2026-09-20.json;
@@ -527,7 +527,7 @@ xs = [RUNGS[k][0] for k in case_k]; ys = [RATIO[k] for k in case_k]
 ax.plot(xs, ys, **series_kwargs("gt"), zorder=3)
 for k in case_k:
     lo, hi = span(RUNGS[k]); ax.plot([RUNGS[k][0]] * 2, [lo, hi], color=RED, lw=1.2, zorder=2)
-label_line(ax, xs[-1] * 1.06, ys[-1], "nested case rungs\n(GeoTransolver width 512)", RED, va="center")
+label_line(ax, xs[-1] * 1.06, ys[-1] - 0.025, "nested case rungs\n(GeoTransolver width 512)", RED, va="top")
 for k, mk, dx, ha in (("4 geometries", "o", 1.08, "left"), ("21 geometries", "s", 1 / 1.08, "right"), ("126 geometries at 12°", "D", 1 / 1.08, "right")):
     v = RUNGS[k]; lo, hi = span(v)
     ax.plot([v[0]] * 2, [lo, hi], color=RED_LIGHT, lw=1.2, zorder=2)
@@ -710,11 +710,11 @@ Questions this dataset raises and leaves open:
 #| output: asis
 if not HL.ds.fair_drive:
     print("- **How do the three reference configurations compare on this rung when every model reads the freestream as a unit "
-          "direction?** Unit-direction GeoTransolver and Transolver lanes at their reference configurations, scored by the same "
+          "direction?** GeoTransolver and Transolver trained with the unit direction at their reference configurations, scored by the same "
           "protocol beside ISLA's, settle it.")
 if not HL.ds.reference:
-    print("- **What does ISLA's reference configuration, with the normalized slice reads, score on this rung?** The ISLA arm of "
-          "@tbl-hilift-protocols is the raw-read variant; checkpoints of the reference configuration, scored by the same protocol, settle it.")
+    print("- **What does ISLA's reference configuration, with the normalized slice reads, score on this rung?** ISLA's checkpoints in "
+          "@tbl-hilift-protocols are the raw-read variant; checkpoints of the reference configuration, scored by the same protocol, settle it.")
 ```
 - **How does ISLA's reference configuration extrapolate in flow regime?** The angle-of-attack and stall test sets of @tbl-hilift-splits hold out the high angles and the post-stall flow. No checkpoint of the reference configuration is scored on them; a smaller ISLA and a GeoTransolver reading the physical freestream vector, scored once on them, both lose about a factor of ten from their validation error (the lab notebook, @sec-notebook; results/hilift_sealed_test_2026-09-04.json).
 - **What sets GeoTransolver's lower error on the wings?** Both architectures share the data exponent, no element of the aircraft carries the difference, and GeoTransolver stays ahead or level at every training-set size; what in the two architectures sets the level is open (@sec-open-questions).

@@ -225,7 +225,7 @@ print("**Cost.** One training epoch on four GB300 ranks in bfloat16 (peak device
 if FAIR:
     print(f"**ISLA {word('GeoTransolver', 'velocity_l2')} and {word('Transolver', 'velocity_l2')} on interior velocity; on pressure it "
           f"{word('GeoTransolver', 'pressure_l2')} and {word('Transolver', 'pressure_l2')}; on eddy viscosity it {word('GeoTransolver', 'nut_l2')} "
-          f"and {word('Transolver', 'nut_l2')}.** The words follow the seed rule: ISLA leads or trails only when every seed of one arm lies beyond "
+          f"and {word('Transolver', 'nut_l2')}.** The words follow the seed rule: ISLA leads or trails only when every seed of one model lies beyond "
           "every seed of the other and the seed means differ by at least 3%. @tbl-airfrans-protocols holds the numbers.")
 else:
     print("**The standing's native numbers are given and not compared, because its baselines read the inlet velocity as a raw physical "
@@ -251,9 +251,9 @@ print(table("tbl-airfrans-protocols", f"The AirfRANS interior task, `full` split
 print("::: {.callout-note collapse=\"true\" title=\"Optional: a second pair of ISLA checkpoints\"}")
 print(f"A second pair of ISLA checkpoints, the same configuration and seeds trained from a second build of the code, scores "
       + " / ".join(f"{REP['native'][f]['mean']:.4f}" for f, _ in FIELDS) + " on " + " / ".join(l for _, l in FIELDS)
-      + ", that is " + " / ".join(f"{rep_ratio[f]:.3f}" for f, _ in FIELDS) + " times the standing's ISLA arm. The replication moves "
+      + ", that is " + " / ".join(f"{rep_ratio[f]:.3f}" for f, _ in FIELDS) + " times the standing's ISLA checkpoints. The replication moves "
       f"pressure and velocity by under {max(abs(rep_ratio[f] - 1) for f in ('pressure_l2', 'velocity_l2')) * 100:.1f}% and eddy viscosity by "
-      f"{abs(rep_ratio['nut_l2'] - 1) * 100:.1f}%, inside the standing arm's own seed spread on eddy viscosity "
+      f"{abs(rep_ratio['nut_l2'] - 1) * 100:.1f}%, inside the standing's own ISLA seed spread on eddy viscosity "
       f"({seeds_txt(St.seeds('ISLA', 'nut_l2'))}). Data: {St.source} (`replication`).")
 print(":::")
 ```
@@ -442,7 +442,7 @@ print("**When the inlet condition leaves its training range, ISLA's interior err
       "eddy viscosity and the same on velocity.** AirfRANS ships two extrapolation splits: `reynolds` trains on 504 airfoils inside a band of "
       "Reynolds numbers and tests on 496 outside it, and `aoa` trains on 804 inside a band of angles and tests on 196 outside it. The readout "
       "that separates extrapolation from a smaller training set is the *growth factor*: an architecture's test error on the split divided by "
-      "its own error on the `full` split. The comparison is the ratio of the two growth factors, with bars of 1.10 and 0.90 that both seed "
+      "its own error on the `full` split. The comparison is the ratio of the two growth factors, with thresholds of 1.10 and 0.90 that both seed "
       f"pairs must clear. On the split itself the pressure ordering of the `full` split inverts: GeoTransolver-volume ÷ ISLA on pressure is "
       f"{on('reynolds'):.2f} outside the training Reynolds band and {on('aoa'):.2f} outside the training angles (@tbl-interior-airfrans-extrap).")
 ```
@@ -452,7 +452,7 @@ print("**When the inlet condition leaves its training range, ISLA's interior err
 #| output: asis
 names = {"reynolds": "Reynolds number", "aoa": "angle of attack"}
 out = ("| split | field | ISLA error (growth) | GeoTransolver-volume error (growth) | growth ratio, GeoTransolver-volume ÷ ISLA (per seed) "
-       "| GeoTransolver-volume ÷ ISLA on the split | reading |\n|---|---|--:|--:|---|--:|---|\n")
+       "| GeoTransolver-volume ÷ ISLA on the split | growth reading |\n|---|---|--:|--:|---|--:|---|\n")
 for sp in ("reynolds", "aoa"):
     X = AFX[sp]
     for f, lab in FIELDS:
@@ -463,7 +463,7 @@ for sp in ("reynolds", "aoa"):
 print(out)
 print(": The AirfRANS extrapolation splits: relative L2 on each split's test cases, float32, two seeds, 100,000 interior points, 500 epochs. "
       "Growth = the split's test error ÷ the same architecture's `full`-split test error; the growth ratio above one means ISLA's error grows "
-      "less; the last ratio is the standing on the split itself (above one favors ISLA). Bars: 1.10 and 0.90 with both seed pairs agreeing. "
+      "less; the last ratio is the standing on the split itself (above one favors ISLA). Thresholds of the growth reading: 1.10 and 0.90, with both seed pairs agreeing. "
       "Instrument: ISLA at 192 wide, 256 slices, 1e-3, raw slice reads (@sec-study-configurations); interior points read as contiguous blocks "
       "of the stored rows. How to read this: the Reynolds split trains on 504 airfoils against the `full` split's 800, so part of each growth "
       "factor is data size, which both architectures pay; that is why the ratio of growths is the readout. Data: "

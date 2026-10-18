@@ -490,7 +490,7 @@ QUESTIONS = (
     "ISLA on every field of `full`.\n")
 if HAVE:
     print(f"**{St.ds.name}: the standing of the reference configurations in distribution and on the held-out families.** "
-          + ("ISLA's arm is from checkpoints without the normalized slice reads. " if not St.ds.reference else "")
+          + ("ISLA's checkpoints are the raw-read variant, without the normalized slice reads. " if not St.ds.reference else "")
           + f"@tbl-aerozoo-full is the `full` split; the held-out splits follow.")
     print()
     print(St.table("tbl-aerozoo-full", f"The AeroZoo interior task, `full` split, {SPLITS['full']['n_test']} test cases",
