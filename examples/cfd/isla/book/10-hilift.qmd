@@ -22,11 +22,17 @@ U_MAG = float(np.linalg.norm(load_problem("hilift")[1]["U_inf"]))   # |U_inf| of
 DRIVE_NOTE = ("" if HL.ds.fair_drive else
     "In this standing's record GeoTransolver and Transolver read the freestream as the physical velocity vector in inch/s "
     f"(the recipe's `global_data.U_inf`, {U_MAG:,.0f} in/s on the case of @fig-problem-hilift and turning with the angle of attack), "
-    "while ISLA reads its unit direction. "
+    "while ISLA reads its unit direction (@tbl-model-inputs). "
     "That input difference matters on this dataset: on the 210-wing rung, the same two baselines trained with the unit direction "
-    f"score {UD_GT:.1f} times (GeoTransolver) and {UD_T:.1f} times (Transolver) lower pressure error than with the physical vector, "
-    f"and there they reach {UD_R['GeoTransolver']:.2f} and {UD_R['Transolver']:.2f} of the error of the ISLA of that study. "
-    "So this chapter gives the standing's numbers and draws no comparison between ISLA and the baselines from them.")
+    f"score {UD_GT:.1f} times (GeoTransolver) and {UD_T:.1f} times (Transolver) lower pressure error than with the physical vector "
+    "(@tbl-hilift-unit-drive). So this chapter gives the standing's numbers and draws no comparison between ISLA and the baselines from them.")
+
+
+def hl_table(label, setting):
+    """The headline table; where the baselines' inputs differ from the protocol its caption says the ratios are not compared."""
+    t = HL.table(label, setting)
+    return t if HL.ds.fair_drive else t.replace(
+        "so a value above one favors ISLA", "and here no native ratio is read as a comparison, because the baselines read " + HL.ds.drive_note)
 HL_F = tuple(HL.fields)              # pressure_l2, tau_wall_l2
 KEY = {"ISLA": "isla_ref", "GeoTransolver": "gt", "Transolver": "t"}
 seeds_txt = lambda a, f, p="native": " and ".join(f"{v:.4f}" for v in HL.seeds(a, f, p))
@@ -112,7 +118,7 @@ RUNGS = {
 RATIO = {k: mean(v[3]) / mean(v[2]) for k, v in RUNGS.items()}
 ```
 
-**HiLiftAeroML is the book's one dataset where the far-field direction is a real input: 180 high-lift wing geometries, each at ten angles of attack, on a full geometry-by-angle grid.** The grid lets a split hold out either axis alone, so this is where the book measures how accuracy grows with training data, and whether it is paid for in cases or in geometries.
+**HiLiftAeroML is the book's one surface dataset where the far-field direction varies: 180 high-lift wing geometries, each at ten angles of attack, on a full geometry-by-angle grid.** The grid lets a split hold out either axis alone, so this is where the book measures how accuracy grows with training data, and whether it is paid for in cases or in geometries.
 
 *Before this chapter:* @sec-drivaerml, in particular the Surface task (@sec-surface) and the three scorings of one checkpoint, including the uniform point cloud (@sec-drivaerml-scorings); @sec-protocol and @sec-metrics. Every ratio is baseline ÷ ISLA.
 
@@ -125,8 +131,8 @@ print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver
          "In one paragraph: the 210-wing standing's baselines read the freestream as a physical vector rather than a unit direction, so its native "
          "numbers are given but not compared (@sec-de-result). ")
       + "Only ISLA keeps its error on a uniform point cloud of the aircraft and under rotation and translation. On the data-efficiency "
-      "ladders, run on a smaller ISLA against unit-direction baselines, GeoTransolver is ahead where the training set is small and the gap "
-      "closes as it grows, and what ISLA needs is distinct geometries rather than cases (@sec-hilift-ladders).")
+      "ladders, run on a smaller ISLA against unit-direction baselines, GeoTransolver is ahead or level on every rung, its lead largest "
+      "where the training set is small, and what ISLA needs is distinct geometries rather than cases (@sec-hilift-ladders).")
 ```
 
 ## The problem: 180 wings at ten angles {#sec-dataset-hilift}
@@ -142,10 +148,11 @@ print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver
 #|   $C_p$, seen from above (top) and from the side (bottom); the black arrow
 #|   is the far-field direction $\hat g_1$, the one global vector input, which
 #|   carries the angle of attack. What varies per sample is the slat and flap
-#|   setting and the far-field direction. What the model receives: surface
-#|   cells with positions, outward normals and areas, and $\hat g_1$; it
-#|   predicts pressure, temperature, density, velocity and wall shear on those
-#|   cells. How to read this: the suction on the slat and on the main
+#|   setting and the far-field direction. What ISLA receives: surface cells
+#|   with positions, outward normals and areas, and $\hat g_1$; the baselines
+#|   read coordinates, normals and the freestream as a physical vector
+#|   (@tbl-model-inputs). Every model predicts pressure, temperature, density,
+#|   velocity and wall shear on those cells. How to read this: the suction on the slat and on the main
 #|   element's leading edge runs far below the bottom of the color scale,
 #|   which is clipped; coordinates are converted from the dataset's inches to
 #|   meters; the colors are the reference CFD, not predictions. Data:
@@ -174,8 +181,8 @@ plt.show()
 Dcar, _ = load_problem("drivaer")
 deep = np.percentile(cp, 1) / np.percentile(Dcar["surf_cp"], 1)
 print(f"On this case the most negative pressure coefficient among the drawn cells is {cp.min():.1f}, and 1% of them sit below "
-      f"{np.percentile(cp, 1):.1f}, against a stagnation value near one: the suction runs {deep:.1f} times deeper than on the DrivAerML "
-      "car of @fig-problem-drivaer, and its extremes sit on the slat and the leading edges, on a small share of the area. The flow is compressible, and the far "
+      f"{np.percentile(cp, 1):.1f}, against a stagnation value near one: that first percentile is {deep:.1f} times deeper than the DrivAerML "
+      "car's of @fig-problem-drivaer, and the extremes sit on the slat and the leading edges, on a small share of the area. The flow is compressible, and the far "
       "field's Mach and Reynolds numbers are the same in every case.")
 ```
 
@@ -236,7 +243,8 @@ print(f"**The angle changes the flow more than the geometry does.** @fig-hilift-
       f"the largest share of the wetted area on the flap ({100 * fa['min']:.1f}%, {100 * fa['median']:.1f}% and {100 * fa['max']:.1f}% "
       f"of the surface) among the {fa['n']} geometries that carry an element-label file, a proxy for the flap setting. Along a row the "
       "suction on the upper surface deepens with the angle on every geometry; down a column the change is confined to the flap and the "
-      "slat. The far-field speed is the same in every case, so the angle enters the model only through the direction $\\hat g_1$.")
+      "slat. The far-field speed is the same in every case, so the angle enters ISLA only through the direction $\\hat g_1$, and the "
+      "baselines through the direction of the freestream vector they read.")
 ```
 
 ```{python}
@@ -280,7 +288,7 @@ plt.show()
 
 ### Files, conversion and normalization {#sec-data-hilift}
 
-**1,800 cases on a full grid of 180 geometries by ten angles, in imperial units, with curated manifests for every split.** Each case is a `geo_LHC<nnn>_AoA_<a>` directory; the recipe reads the boundary tensordict (`geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle`) and merges the parent's `global_data` (`U_inf`, `p_inf`, `rho_inf`, `T_inf`, `L_ref`). Units are slug, inch, second and Rankine; the figures convert positions to meters for display only. The targets are the projected averages `PROJ(AVG(P))`, `PROJ(AVG(T))`, `PROJ(AVG(RHO))`, `PROJ(AVG(U))` and `AVG(TAU_WALL)` on the surface cells, nondimensionalized from the case's `global_data`, renamed `pressure`, `temperature`, `density`, `velocity` and `tau_wall`, and standardized with fixed constants in the dataset yaml (pressure mean −0.5 and standard deviation 1; temperature 1.00 / 0.002; density 1.0 / 0.02; velocity 0.20; wall shear 0.003). A case has about 290 million surface cells, the largest surface in the book, so a 200,000-cell draw is a $10^{-3}$ sample of it. Every split is a curated manifest of dataset revision `bbec30bcfc6103309c1375c5228b3ad0a586bfaf`.
+**1,800 cases on a full grid of 180 geometries by ten angles, in imperial units, with curated manifests for every split.** Each case is a `geo_LHC<nnn>_AoA_<a>` directory; the recipe reads the boundary tensordict (`geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle`) and merges the parent's `global_data` (`U_inf`, `p_inf`, `rho_inf`, `T_inf`, `L_ref`). Units are slug, inch, second and Rankine; the figures convert positions to meters for display only. The targets are the projected averages `PROJ(AVG(P))`, `PROJ(AVG(T))`, `PROJ(AVG(RHO))`, `PROJ(AVG(U))` and `AVG(TAU_WALL)` on the surface cells, nondimensionalized from the case's `global_data`, renamed `pressure`, `temperature`, `density`, `velocity` and `tau_wall`, and standardized with fixed constants in the dataset yaml (pressure mean −0.5 and standard deviation 1; temperature 1.00 / 0.002; density 1.0 / 0.02; velocity 0.20; wall shear 0.003). A case has about 290 million surface cells, the largest surface in the book, so a 200,000-cell draw is a $10^{-3}$ sample of it. Every split is a curated manifest of one pinned revision of the dataset.
 
 ## What is measured {#sec-de-setup}
 
@@ -290,8 +298,10 @@ plt.show()
 n_val = HL.cell("ISLA", "pressure_l2")["n_cases"]; n_seeds = HL.cell("ISLA", "pressure_l2")["n_seeds"]
 print(f"**The Surface task of @sec-surface on the 210-wing rung: 210 training cases, {n_val} validation cases, 500 epochs, {n_seeds} seeds, "
       "scored at 200,000 sampled cells per case in float32 as the area-weighted relative L2 of surface pressure and of the wall-shear "
-      "vector (@sec-metrics).** Every model receives the sampled surface cells with positions, outward normals and areas, and the "
-      "far-field direction, which carries the angle of attack. The three architectures run at their reference configurations "
+      "vector (@sec-metrics).** ISLA receives the sampled surface cells with positions, outward normals and areas, and the unit "
+      "far-field direction $\\hat g_1$, which carries the angle of attack. GeoTransolver and Transolver receive the cells' centered "
+      "coordinates and normals and the freestream as the physical velocity vector in inch/s (@tbl-model-inputs). The three "
+      "architectures run at their reference configurations "
       f"({S.CONFIG['ISLA']} at 3.75e-4 and 200,000 cells; {S.CONFIG['GeoTransolver']} at 1e-3 and 200,000 cells; "
       f"{S.CONFIG['Transolver']} at 1e-3 and 100,000 cells; sizes in @tbl-drivaerml-configs), with no rotation or translation "
       "augmentation. This rung is one of the two datasets on which the reference configurations were chosen (@sec-protocol). Each "
@@ -307,11 +317,12 @@ print(f"**The Surface task of @sec-surface on the 210-wing rung: 210 training ca
 |---|---|---:|---:|---:|---|
 | data efficiency | nested rungs | 35, 210, 510, 1,260 | 180 | 360 | nothing; measures sample complexity (validation geometries recur in training at other angles) |
 | unseen geometry | geometry | 1,260, 210 or 40 cases (126, 21 or 4 geometries) | 18 geometries, all ten angles | 36 geometries, all ten angles | the geometry itself |
-| fixed angle | 4°, 12°, 22° | 126 geometries at one angle | 18 geometries at that angle | — | the far-field direction as a variable |
+| fixed angle | 4°, 12°, 22° | 126 geometries at one angle | 18 geometries at that angle | 36 geometries at that angle, not scored | the far-field direction as a variable |
 | regime extrapolation | angle of attack | 788 (angles up to 12°) | 112 | 900 (14° and above) | higher angles of attack |
 | regime extrapolation | stall | 942 (pre-stall) | 135 | 723 (post-stall) | post-stall flow |
+| geometry parameters | deflection | 1,260 (126 geometries with milder flap settings) | 180 (18 geometries) | 360 (36 geometries with the highest deflections) | a range of the flap setting |
 
-: The HiLiftAeroML splits, in cases unless a cell says geometries; every split is a curated manifest of the dataset revision named in @sec-data-hilift, and the fixed-angle splits have no test set. How to read this: a row is one question; the manifests overlap (the callout below), so a test column is held out per checkpoint, not per program. {#tbl-hilift-splits}
+: The HiLiftAeroML splits, in cases unless a cell says geometries; every split is a curated manifest of one pinned revision of the dataset. How to read this: a row is one question; the manifests overlap (below), so a test column is held out per checkpoint: no model scored on it trained on it. Data: the split sizes of results/hilift_exposure_ledger_2026-09-08.json. {#tbl-hilift-splits}
 
 ```{python}
 #| label: fig-hilift-splits
@@ -342,9 +353,22 @@ fig.tight_layout()
 plt.show()
 ```
 
-::: {.callout-warning collapse="true" title="The HiLiftAeroML manifests overlap, so a test split is sealed per checkpoint, not per program"}
-The manifests are separate but not disjoint. The angle-of-attack and stall test sets between them contain every one of the 180 geometries. The 360-case data-efficiency test set shares 179 cases with them, the geometry test set 182 and the deflection test set 182 (37 and 40 of their cases also sit in the shared validation set). A test split is therefore held out per checkpoint, since no model evaluated on it trained on it. Once the regime-extrapolation tests are read, no HiLiftAeroML geometry remains unexposed at the level of the program, and no later evaluation on these manifests is an independent program-level confirmation.
-:::
+```{python}
+#| label: para-hilift-overlap
+#| output: asis
+XL = J("hilift_exposure_ledger_2026-09-08.json"); XI = XL["intersections"]
+print("::: {.callout-warning title=\"The HiLiftAeroML manifests overlap, so a test split is held out per checkpoint\"}")
+cov, ng = XL['summary']['geometries_covered_by_aoa_or_stall_test'], XL['summary']['n_geometries_total']
+print(f"The manifests are separate but not disjoint. The angle-of-attack and stall test sets between them contain "
+      + (f"every one of the {ng} geometries" if cov == ng else f"{cov} of the {ng} geometries") + ". The 360-case "
+      f"data-efficiency test set shares {XI['full_test']['cap_aoa_or_stall_test']} cases with them, the geometry test set "
+      f"{XI['geometry_test']['cap_aoa_or_stall_test']} and the deflection test set {XI['deflection_test']['cap_aoa_or_stall_test']}, and "
+      f"{XI['geometry_test']['cap_full_val']} and {XI['deflection_test']['cap_full_val']} cases of the last two also sit in the shared "
+      "validation set. A test split is therefore held out per checkpoint: no model scored on it trained on it, but a score on any of "
+      "these manifests is not independent of a score on the regime-extrapolation test sets. "
+      "Data: results/hilift_exposure_ledger_2026-09-08.json.")
+print(":::")
+```
 
 ### No Volume task {#sec-hilift-volume}
 
@@ -373,8 +397,10 @@ if not HL.ds.reference:
 ```{python}
 #| label: make-tbl-hilift-protocols
 #| output: asis
-print(HL.table("tbl-hilift-protocols", "HiLiftAeroML at the 210-wing rung, 180 validation cases, 200,000 cells per case"))
+print(hl_table("tbl-hilift-protocols", "HiLiftAeroML at the 210-wing rung, 180 validation cases, 200,000 cells per case"))
 ```
+
+<!-- SLOT: unit-direction baseline pair (registry swap when scored) -->
 
 ```{python}
 #| label: fig-hilift-shifts
@@ -384,10 +410,12 @@ print(HL.table("tbl-hilift-protocols", "HiLiftAeroML at the 210-wing rung, 180 v
 #|   wall shear (bottom), seed mean (marker, printed) and the two seeds (black
 #|   dots), logarithmic axis; ISLA blue squares, GeoTransolver red circles,
 #|   Transolver amber triangles; the dashed line at one is the error of
-#|   predicting zero everywhere. How to read this: down the rows ISLA's marker
-#|   stays put and the baselines' move right; the figure does not show where
-#|   on the aircraft the error sits (@sec-de-strata). Data:
-#|   results/char/hilift_surface.json.
+#|   predicting zero everywhere. How to read this: read each architecture down
+#|   the rows against its own native marker: ISLA's stays put and the
+#|   baselines' move right; the native row is a record, not a comparison,
+#|   when the baselines read the freestream as a physical vector
+#|   (@tbl-hilift-protocols); the figure does not show where on the aircraft
+#|   the error sits (@sec-de-strata). Data: results/char/hilift_surface.json.
 protocol_dots(HL, HL_F); plt.show()
 ```
 
@@ -413,6 +441,33 @@ print(f"Three readings. " + first +
       "the far-field direction is rotated with the case.")
 ```
 
+```{python}
+#| label: para-hilift-unit-drive
+#| output: asis
+UDK = (("GeoTransolver, physical vector, 1e-3", "gt_physical_lr1e3"), ("GeoTransolver, unit direction, 1e-3", "gt_unit_lr1e3"),
+       ("Transolver, physical vector, 3e-3", "transolver_physical_lr3e3"), ("Transolver, unit direction, 3e-3", "transolver_unit_lr3e3"),
+       ("ISLA", "isla"))
+UDP = J("udrvl_210_reduction_2026-09-10.json")["paired_fp32_vs_isla"]
+print("**The unit-direction control: on the 210-wing rung, the same two baselines trained with the unit direction are more accurate "
+      f"than the ISLA of that study** (@tbl-hilift-unit-drive). GeoTransolver ÷ ISLA is {UD_R['GeoTransolver']:.2f} on pressure, lower on "
+      f"{UDP['gt_unit']['lower_on']} of {UDP['gt_unit']['n']} validation cases, and Transolver ÷ ISLA {UD_R['Transolver']:.2f}, lower on "
+      f"{UDP['transolver_unit']['lower_on']} of {UDP['transolver_unit']['n']}. The study ran at a smaller protocol than the standing, so it "
+      "is a statement about the input and these configurations, not a standing.")
+print()
+print("| arm | surface pressure | wall shear | ÷ ISLA, pressure |\n|---|--:|--:|--:|")
+for lab, k in UDK:
+    a = UD[k]
+    print(f"| {lab} | {a['pressure_l2']:.4f} | {a['tau_wall_l2']:.4f} | "
+          + ("1" if k == "isla" else f"{a['pressure_l2'] / UD['isla']['pressure_l2']:.2f}") + " |")
+print()
+print(": The unit-direction control on the HiLiftAeroML 210-wing rung: area-weighted relative L2 on the 180 validation cases, seed means "
+      "(two seeds for the baselines, three for ISLA), scored in float32; each baseline once with the freestream as the physical vector in "
+      "inch/s and once as its unit direction, nothing else changed; Transolver at its better rate, 3e-3. How to read this: the physical-vector "
+      "rows are the input of the standing's baselines (@tbl-hilift-protocols); ÷ ISLA below one means the baseline is the more accurate. "
+      "Instrument: ISLA at 192 wide, 256 slices, 1e-3, linear routing, raw slice reads (@sec-study-configurations), every arm trained at "
+      "10,000 cells per case. Data: results/udrvl_210_reduction_2026-09-10.json. {#tbl-hilift-unit-drive}")
+```
+
 <!-- RENDERING SLOT: fig-hilift-prediction: truth / ISLA / GeoTransolver / Transolver and errors on one held-out case -->
 
 ## Studies on this dataset {#sec-data-efficiency}
@@ -426,9 +481,14 @@ The studies below were run on a smaller ISLA than the reference configuration. T
 #| output: asis
 c = {k: RATIO[k] for k in ("35 cases", "210 cases", "510 cases", "1,260 cases")}
 geo_cost = mean(RUNGS["4 geometries"][2]) / mean(RUNGS["35 cases"][2])
-print(f"**ISLA gains more per training case than GeoTransolver, and what it needs is distinct geometries.** On the nested case rungs "
-      f"GeoTransolver width 512 ÷ ISLA runs {' / '.join(f'{v:.2f}' for v in c.values())} at 35 / 210 / 510 / 1,260 training cases "
-      "(@fig-hilift-data-efficiency): the baseline is ahead where the training set is small and the gap closes as it grows. The cost of "
+GT256_1260 = J("p200k_hl_ladder_2026-09-30.json")["rungs"]["full"]["arms"]["gt_unit"]["pressure_l2_seeds"]   # GeoTransolver-256 at 1e-3, 200,000 cells
+GT256_1260_RATIO = mean(GT256_1260) / mean(RUNGS["1,260 cases"][2])
+print(f"**GeoTransolver is ahead of ISLA or level with it on every rung of the ladders, and what ISLA needs is distinct geometries.** "
+      f"On the nested case rungs GeoTransolver width 512 ÷ ISLA runs {' / '.join(f'{v:.2f}' for v in c.values())} at 35 / 210 / 510 / 1,260 "
+      "training cases (@fig-hilift-data-efficiency): the gap to that baseline closes as the training set grows. At 1,260 cases "
+      f"GeoTransolver's best pair, width 256 at 1e-3 and 200,000 cells, reads {GT256_1260_RATIO:.2f} of ISLA's error, so the gap to "
+      "GeoTransolver as a whole does not close. Both architectures share the data exponent on the wings (@sec-capacity); what differs is the "
+      "level. The cost of "
       f"few geometries is the larger effect for ISLA: 40 cases on 4 geometries give it {geo_cost:.1f} times the error of 35 cases on 33 "
       "geometries, although the 4-geometry rung is validated on geometries it never saw and the 35-case rung is not. Where the validation "
       f"geometries are held out, GeoTransolver ÷ ISLA is {RATIO['4 geometries']:.2f} at 4 training geometries and "
@@ -447,10 +507,11 @@ print(f"**ISLA gains more per training case than GeoTransolver, and what it need
 #|   geometries recur in training at other angles). Open markers: the geometry
 #|   rungs against GeoTransolver width 256 (4 and 21 training geometries at
 #|   all ten angles, validated on geometries never seen) and the fixed-angle
-#|   rung (126 geometries at 12°). The bars span the four seed pairings. How to
-#|   read this: the ratio rises toward one with training cases; it is a
-#|   statement about these configurations and does not show the reference
-#|   standing (@tbl-hilift-protocols). Instrument: ISLA at 384 wide, 256
+#|   rung (126 geometries at 12°). The bars span the four seed pairings. Every
+#|   GeoTransolver here reads the freestream as a unit direction. How to
+#|   read this: the ratio rises toward one with training cases and stays at or
+#|   below it; it is a statement about these configurations and does not show
+#|   the reference standing (@tbl-hilift-protocols). Instrument: ISLA at 384 wide, 256
 #|   slices, 5e-4, raw slice reads (@sec-study-configurations). Every
 #|   GeoTransolver lane here runs at 3e-3; at 510 and 1,260 cases they train
 #|   at 100,000 cells. Data: results/ref_surface_2026-09-23.json;
@@ -501,7 +562,20 @@ print(": The HiLiftAeroML ladders: seed mean (seed range) of surface-pressure ar
 
 #### Seeds and training draws {#sec-de-controls}
 
-**Two seeds do not bound the choice of training cases.** Each case rung is one random draw from the pool, and at 35 cases a different draw moves GeoTransolver ÷ ISLA by more than a second seed does, without changing its sign. The 35-case ratio of @tbl-hilift-ladder is therefore less certain than its seed range shows, and the ladder is read for its trend across rungs.
+```{python}
+#| label: para-hilift-draws
+#| output: asis
+CA = json.load(open(Path("..") / "research" / "transfer_program" / "studies" / "campaign_a_draws" / "campaign_a_n35_fp32_2026-09-10.json"))
+CAR = [v["ratio"] for v in CA["ratios"]["gt_over_isla_n35"]["per_draw"].values()]
+NUMW = ["no", "one", "two", "three", "four", "five", "six"]
+print(f"**Two seeds do not bound the choice of training cases.** Each case rung is one random draw from the pool. In a study that "
+      f"trained GeoTransolver and ISLA on {NUMW[len(CAR)]} 35-case draws, the rung's own and {NUMW[len(CAR) - 1]} geometry-stratified ones, GeoTransolver ÷ ISLA ran from "
+      f"{min(CAR):.2f} to {max(CAR):.2f} across the draws, a wider spread than the seeds of any one draw give, and stayed below one on every "
+      "draw. The 35-case ratio of @tbl-hilift-ladder is therefore less certain than its seed range shows, and the ladder is read for its "
+      "trend across rungs. Instrument: ISLA at 192 wide, 256 slices, 1e-3, linear routing, raw slice reads (@sec-study-configurations), "
+      "GeoTransolver reading the unit direction at 1e-3, both trained at 10,000 cells per case. Data: "
+      "research/transfer_program/studies/campaign_a_draws/campaign_a_n35_fp32_2026-09-10.json.")
+```
 
 ### Where the error sits {#sec-de-strata}
 
@@ -513,7 +587,7 @@ print(": The HiLiftAeroML ladders: seed mean (seed range) of surface-pressure ar
 #|   Where the surface-pressure error sits on the HiLiftAeroML aircraft at the
 #|   210-wing rung: for each element, its share of the surface area (gray) and
 #|   its share of the area-weighted squared pressure error for ISLA (blue) and
-#|   GeoTransolver width 512 (red), case means over the labelled validation
+#|   GeoTransolver width 512 (red), case means over the labeled validation
 #|   cases, seeds as black dots. The slat, main element (with the fuselage),
 #|   flap and other bodies (tail, nacelle) partition the surface; the gap band,
 #|   every slat, main or flap cell within 0.02 $L_{\mathrm{ref}}$ of another
@@ -560,7 +634,7 @@ print(f"The slat and the flap together are {100 * sum(area(c) for c in thin):.0f
       "fastest along the surface. They are hard for both architectures alike. The ratio of the two models' errors on each element is the "
       "ratio on the whole surface within the seed spread, so no element carries the difference between them: what separates the two "
       f"architectures on the wings is spread over the whole aircraft ({EA['n_cases_labelled']} of {EA['n_cases_shared']} validation cases "
-      "labelled).")
+      "labeled).")
 ```
 
 ```{python}
@@ -616,17 +690,18 @@ print(f"**The separated regime is where both models fail most.** Above 14° the 
 _dp = J("deflection_p200k_2026-09-29.json")["readout"]
 inv = lambda f: 1 / _dp[f]["isla_over_gt_test"]
 print("**Across a boundary in the geometry parameters ISLA does not generalize better than GeoTransolver.** The deflection split trains "
-      "on the 144 milder flap settings and scores once on the sealed 360-case test of the high deflections. GeoTransolver width 256 at 1e-3 "
-      f"÷ ISLA is {inv('pressure_l2'):.2f} on pressure, {inv('velocity_l2'):.2f} on velocity and {inv('tau_wall_l2'):.2f} on wall shear, and "
-      f"both models degrade from their validation error to the sealed test by the same factor (ISLA {_dp['pressure_l2']['d_isla']:.2f}, "
-      f"GeoTransolver {_dp['pressure_l2']['d_gt']:.2f} on pressure). A split across geometry classes, rather than across a parameter range, "
-      "is the stronger test, and no dataset in the book provides one. Instrument: ISLA at 384 wide, 256 slices, 5e-4, raw slice reads "
-      "(@sec-study-configurations). Data: results/deflection_p200k_2026-09-29.json.")
+      "on the milder flap settings and scores once on the 360-case test of the high deflections (@tbl-hilift-splits). GeoTransolver width "
+      f"256 at 1e-3, reading the freestream as a unit direction, ÷ ISLA is {inv('pressure_l2'):.2f} on pressure, {inv('velocity_l2'):.2f} "
+      f"on velocity and {inv('tau_wall_l2'):.2f} on wall shear, and both models degrade from their validation error to the test by the "
+      f"same factor (ISLA {_dp['pressure_l2']['d_isla']:.2f}, GeoTransolver {_dp['pressure_l2']['d_gt']:.2f} on pressure). A split across "
+      "geometry classes, rather than across a parameter range, is the stronger test; AeroZoo's held-out families are that test "
+      "(@sec-aerozoo-splits). Instrument: ISLA at 384 wide, 256 slices, 5e-4, raw slice reads (@sec-study-configurations). "
+      "Data: results/deflection_p200k_2026-09-29.json.")
 ```
 
 ## What this dataset does not say {#sec-de-limits}
 
-**The standing is one rung of one aircraft family in one far-field condition, scored on a validation set; the ladders measure sample complexity on a smaller ISLA.** The reference configurations are each the most accurate of their architecture under one memory budget, not matched in parameters or step time, so a native comparison at 210 wings, once its baselines read the unit direction, will be a statement about what that budget buys each architecture on this family (@sec-limits).
+**The standing is one rung of one aircraft family in one far-field condition, scored on a validation set; the ladders measure sample complexity on a smaller ISLA.** The reference configurations are each the most accurate of their architecture under one memory budget, not matched in parameters or step time, so a native comparison at 210 wings with unit-direction baselines is a statement about what that budget buys each architecture on this family (@sec-limits).
 
 Questions this dataset raises and leaves open:
 
@@ -641,5 +716,5 @@ if not HL.ds.reference:
     print("- **What does ISLA's reference configuration, with the normalized slice reads, score on this rung?** The ISLA arm of "
           "@tbl-hilift-protocols is the raw-read variant; checkpoints of the reference configuration, scored by the same protocol, settle it.")
 ```
-- **How does ISLA extrapolate in flow regime?** The sealed angle-of-attack and stall test sets of @tbl-hilift-splits hold out the high angles and the post-stall flow; no ISLA checkpoint has been scored on them.
-- **Why does GeoTransolver gain less per case?** The ladders show the ratio closing with training cases and no element of the aircraft carrying the difference; what in the two architectures sets the slope is open (@sec-open-questions).
+- **How does ISLA's reference configuration extrapolate in flow regime?** The angle-of-attack and stall test sets of @tbl-hilift-splits hold out the high angles and the post-stall flow. No checkpoint of the reference configuration is scored on them; a smaller ISLA and a GeoTransolver reading the physical freestream vector, scored once on them, both lose about a factor of ten from their validation error (the lab notebook, @sec-notebook; results/hilift_sealed_test_2026-09-04.json).
+- **What sets GeoTransolver's lower error on the wings?** Both architectures share the data exponent, no element of the aircraft carries the difference, and GeoTransolver stays ahead or level at every training-set size; what in the two architectures sets the level is open (@sec-open-questions).

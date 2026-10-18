@@ -86,7 +86,7 @@ print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver
 
 ## The problem: one notchback, 484 shapes, one wind {#sec-benchmarks}
 
-**DrivAerML is 484 parametrically morphed variants of one notchback car, each simulated once in the same far-field flow, so the geometry is the only thing that varies.** The base body is the DrivAer notchback, a public research sedan. Each variant is a parametric morph of it, simulated with a hybrid RANS/LES closure; the fields are time averages over the simulated window with the start-up transient trimmed. The model is given the vehicle surface alone: the positions, outward normals and areas of its cells, and the far-field direction. The ground plane and the outer boundaries of the domain exist in the simulation but are not inputs, which is the information diet of every published model on the dataset. @fig-problem-drivaer shows one validation car with both tasks' fields.
+**DrivAerML is 484 parametrically morphed variants of one notchback car, each simulated once in the same far-field flow, so the geometry is the only thing that varies.** The base body is the DrivAer notchback, a public research sedan. Each variant is a parametric morph of it, simulated with a hybrid RANS/LES closure; the fields are time averages over the simulated window with the start-up transient trimmed. Every model is given the vehicle surface alone. ISLA reads the positions, outward normals and areas of its cells and the unit far-field direction; GeoTransolver and Transolver read the cells' centered coordinates and normals and the freestream as the physical vector, 38.9 m/s along $x$ on every car, which carries no information beyond the direction (@tbl-model-inputs). The ground plane and the outer boundaries of the domain exist in the simulation but are not inputs, which is the information diet of every published model on the dataset. @fig-problem-drivaer shows one validation car with both tasks' fields.
 
 ```{python}
 #| label: fig-problem-drivaer
@@ -102,7 +102,7 @@ print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver
 #|   predicts the fields at points drawn from this mesh, whose extent is
 #|   printed. How to read this: colors are the reference CFD fields, not
 #|   predictions; the dots are a random subset of the cells, so their density
-#|   is not the mesh resolution; the ground plane and the domain's outer
+#|   follows the mesh, not the field; the ground plane and the domain's outer
 #|   boundaries are not model inputs. Data: results/problem_figures_2026-09-22/drivaer.npz.
 D, Dm = load_problem("drivaer")
 sp, cp = D["surf_points"], D["surf_cp"]
@@ -305,14 +305,15 @@ print(f"**The Surface task predicts the pressure and the wall-shear vector at th
       f"Every model trains on the 435 training cars for 500 epochs and is scored on the {n_val} validation cars, {n_seeds} seeds each "
       "(42 and 43), at 200,000 sampled cells per car, in float32, from its final checkpoint. The score of one car is the area-weighted "
       "relative L2 error of each field, $\\lVert \\hat f - f \\rVert_w / \\lVert f \\rVert_w$ with every cell weighted by its area, and "
-      "the reported number is its mean over the cars (@sec-metrics). Every model receives the same inputs: the sampled cells' positions, "
-      "outward normals and areas, and $\\hat g_1$. No model trains with rotation or translation augmentation.")
+      "the reported number is its mean over the cars (@sec-metrics). ISLA receives the sampled cells' positions, outward normals and "
+      "areas, and $\\hat g_1$; GeoTransolver and Transolver receive the cells' centered coordinates and normals, no areas, and the "
+      "constant freestream vector (@tbl-model-inputs). No model trains with rotation or translation augmentation.")
 ```
 
 The three architectures run at their reference configurations, the one configuration of each architecture that the book scores on every dataset (@sec-protocol):
 
 - **ISLA**: width 512, 12 layers, 512 slices, learning rate 3.75e-4, trained at 200,000 cells per case;
-- **GeoTransolver**: width 256 (local width 32), learning rate 1e-3, trained at 200,000 cells;
+- **GeoTransolver**: width 256, learning rate 1e-3, trained at 200,000 cells, with its ball-query local features off on the Surface task (@sec-baselines);
 - **Transolver**: width 512, 16 layers, learning rate 1e-3, trained at 100,000 cells.
 
 They are not matched in parameters, memory or time; @tbl-drivaerml-configs states all three.
@@ -347,7 +348,7 @@ print(": The reference configurations on the two DrivAerML tasks: parameters, pe
 
 *The uniform point cloud.* The second scoring draws the 200,000 points with probability proportional to cell area instead, by independent (Poisson) inclusion, so the sample has the same density per square meter everywhere on the body. That is what one gets from sampling an STL or a CAD surface without a mesher. Each drawn cell carries the *Horvitz–Thompson weight* $w_i = A_i / \pi_i$, its area divided by its inclusion probability, which makes every measure-weighted sum over the sample an unbiased estimate of the surface integral, whatever the draw (@sec-sampling-laws). The surface, the fields and the metric are unchanged; only the sampling law moves. A model whose internal averages are quadratures with these weights, as ISLA's are (@sec-isla-quadrature), sees the same surface integrals under both laws. A model that averages its tokens without weights sees a different car: the native draw over-represents the finely meshed features, the uniform draw the large flat panels. The column therefore measures the remeshing contract of @sec-invariances on a real car.
 
-*Rotated and translated.* The third scoring applies to every validation car a rigid rotation drawn from a fixed key and a translation by one RMS point radius, rotating the far-field direction with it. The flow is the same flow in another frame, so the exact answer is the rotated field. A model that reads laboratory coordinates and never trained on a rotated car has no reason to give it; ISLA is built to (@sec-pose).
+*Rotated and translated.* The third scoring applies to every validation car a rigid rotation drawn from a fixed key and a translation by one RMS point radius, rotating the far-field direction with it. The flow is the same flow in another frame, so the exact answer is the rotated field. A model that reads laboratory coordinates and never trained on a rotated car has no reason to give it; ISLA is built to (@sec-pose). The external-aerodynamics pipelines center every case on its sample before any model sees it, so on DrivAerML, HiLiftAeroML and SHIFT-SUV the translation never reaches a model and this column measures the rotation (the lab notebook, @sec-notebook); on AirfRANS and the solids the translation reaches the model.
 
 ### The Volume task: boundary to interior {#sec-interior}
 
@@ -398,7 +399,7 @@ plt.show()
 
 **Metric.** For one car and one field the error is the relative L2 over the prediction points, with the field in its training normalization: pressure as $C_p$; velocity as $U / |U_\infty|$ with the far-field speed included, the Frobenius norm over the three components; eddy viscosity standardized to zero mean and unit scale before scoring. The eddy-viscosity denominator is the norm of a mean-subtracted field, so an eddy-viscosity error of 0.10 is not a 10% error in physical $\nu_t$; orderings under the metric hold, percentages do not. The velocity denominator includes the far-field speed, which every point carries, so the velocity error reads small against the wake's own deficit. The reported number is the mean over the 48 cars. Training and scoring use 200,000 boundary cells and 200,000 interior points per car (Transolver trains at 100,000), 500 epochs, two seeds, float32.
 
-**What each architecture receives.** The three architectures do not see the same inputs. GeoTransolver and Transolver never see the boundary sample. Their tokens are the interior points alone, each carrying its coordinates, the far-field direction, and the exact signed distance to the full-resolution body and its gradient, computed by the datapipe. That is the boundary in a different, denser form. ISLA's tokens are the boundary sample and the interior points together. ISLA does not read the stored field: each interior point's wall distance and direction are computed inside the model from the nearest token of the boundary sample.
+**What each architecture receives** (@tbl-interior-inputs, @tbl-model-inputs). The three architectures do not see the same inputs. GeoTransolver and Transolver never see the boundary sample. Their tokens are the interior points alone, each carrying its coordinates and the exact signed distance to the full-resolution body and its gradient, computed by the datapipe, with the freestream as the constant physical vector, 38.9 m/s along $x$. That is the boundary in a different, denser form. ISLA's tokens are the boundary sample and the interior points together, with the unit far-field direction. ISLA does not read the stored field: each interior point's wall distance and direction are computed inside the model from the nearest token of the boundary sample.
 
 | architecture | what an interior point is | what it knows about the geometry | does a prediction depend on the other points requested? |
 |---|---|---|---|
@@ -407,9 +408,11 @@ plt.show()
 | ISLA | an *interacting prediction point*: a token in the encoder beside the surface tokens, with a learned routing weight | its relational invariants against the slice anchors, with the direction to the nearest boundary token as its normal, and its signed distance to that token | yes |
 | ISLA-DTT | a *read-only prediction point*: it reads the slices at every layer and never writes into them, and reads every boundary cell through a tree | as ISLA, plus the relative geometry of every boundary cell it reads | no |
 
+: What an interior point is to each architecture on the DrivAerML Volume task. How to read this: the second column says whether the point takes part in the slices or only reads them, the third what it knows about the wall, and the last whether its prediction can change when other points are requested with it (@sec-interior-companion). Data: the model configurations of @tbl-model-inputs. {#tbl-interior-inputs}
+
 #### ISLA's interior prediction points {#sec-interior-query-tokens}
 
-**ISLA admits the interior points into its encoder as tokens, so the twelve slice layers run over the surface and the air together.** Each interior point is seeded the way a boundary token is, from the relational invariants of its position against the slice anchors (@sec-isla-relational) and the global direction, plus a learned type embedding. It has no normal of its own, so the unit direction $u_q$ from its nearest boundary token plays that part in every invariant, and its distance $d_q$ to that token, signed by the token's normal, enters as the channels $[d_q / L,\ \mathrm{sign}(d_q) \log(|d_q| / L + \epsilon)]$ in the length unit $L$. Both are computed inside the model by an exact nearest-neighbor search over the boundary sample; the dataset's stored distance field is not an input. The interior points take part in the measure-weighted routing with a learned total weight, a fraction of the whole boundary's measure split equally over them, so their share of each slice does not depend on how many are requested. Every input is a function of relative geometry, so the rigid-motion contract holds exactly (@sec-isla-contracts). One property is given up: an interior point's prediction depends on the other interior points of the request, because they write into the same slices. ISLA-DTT keeps query independence instead (@sec-arch-modes); @sec-interior-read-only measures what that costs.
+**ISLA admits the interior points into its encoder as tokens, so the twelve slice layers run over the surface and the air together.** Each interior point is seeded the way a boundary token is, from the relational invariants of its position against the slice anchors (@sec-isla-relational) and the global direction, plus a learned type embedding. It has no normal of its own, so the unit direction $\hat\nu_q$ from its nearest boundary token plays that part in every invariant, and its distance $d_q$ to that token, signed by the token's normal, enters as the channels $[d_q / L,\ \mathrm{sign}(d_q) \log(|d_q| / L + \epsilon)]$ in the length unit $L$, with $\epsilon = 10^{-12}$ guarding the logarithm at the wall. Both are computed inside the model by an exact nearest-neighbor search over the boundary sample; the dataset's stored distance field is not an input. The interior points take part in the measure-weighted routing with a learned total weight, a fraction of the whole boundary's measure split equally over them, so their share of each slice does not depend on how many are requested. Every input is a function of relative geometry, so the rigid-motion contract holds exactly (@sec-isla-contracts). One property is given up: an interior point's prediction depends on the other interior points of the request, because they write into the same slices. ISLA-DTT keeps query independence instead (@sec-arch-modes); @sec-interior-read-only measures what that costs.
 
 #### Why the Volume task is harder {#sec-interior-harder}
 
@@ -635,77 +638,11 @@ print(f"Under the area-proportional boundary draw ISLA's interior error is {' / 
       f"model class on the Surface task moves by {pct(SURF.shift('ISLA', 'wss_l2', 'area'))} or less under the same draw. The slice states, "
       "anchors and routing weights are Horvitz–Thompson quadratures over the boundary and are unbiased under either law, as the Surface "
       "task shows. The interior points' built-in wall distance is not a quadrature: it is a minimum over the sample, and a minimum "
-      "changes when the sample does. @tbl-vol-geo takes the sensitivity apart.")
+      "changes when the sample does. @tbl-vol-geo takes the sensitivity apart on the study configuration with the raw slice reads, "
+      "whose own redraw factor, in the table's second row, is larger than the reference configuration's.")
 ```
 
-```{python}
-#| label: fig-interior-nearest-token
-#| fig-cap: >
-#|   Why a nearest-token distance depends on the sample, on the book's running
-#|   airfoil (a concept figure; no trained model). Top: the airfoil sampled
-#|   twice with the same number of tokens, once graded toward the leading and
-#|   trailing edges as a mesher would (black dots) and once uniformly in
-#|   arclength (open circles); each line joins a prediction point near the wall
-#|   (aqua) to its nearest token in one sample (solid: graded; dashed: uniform).
-#|   Bottom: for 600 points at random distances from the wall, the built-in
-#|   distance under the uniform sample divided by that under the graded one,
-#|   against the exact distance; the dotted line is the mean token spacing. How
-#|   to read this: within about one token spacing of the wall the same point's
-#|   built-in distance changes by a factor of several between the two samples,
-#|   and far from the wall it does not; the figure shows the input, not its
-#|   effect on any prediction, which is @tbl-vol-geo.
-fine = joukowski(n_cells=4000)
-n = 48
-t = np.linspace(0, 1, n + 1)
-graded = joukowski(n_cells=n, frac=t - 0.9 * np.sin(4 * np.pi * t) / (4 * np.pi))      # dense at both edges, as a mesher grades
-rng = np.random.default_rng(3)
-u = np.concatenate([[0], np.sort(rng.uniform(0, 1, n - 1)), [1]])
-unif = joukowski(n_cells=n, frac=u)                                                    # positions uniform in arclength
-A, B = graded["mid"], unif["mid"]
-k = rng.choice(len(fine["mid"]), 600, replace=False)
-off = np.exp(rng.uniform(np.log(0.005), np.log(1.0), len(k)))
-P = fine["mid"][k] + off[:, None] * fine["nrm"][k]
-def nearest(P, T):
-    d = np.linalg.norm(P[:, None, :] - T[None], axis=2); i = d.argmin(1); return d[np.arange(len(P)), i], i
-dex, _ = nearest(P, fine["mid"]); dA, iA = nearest(P, A); dB, iB = nearest(P, B)
-h = fine["w"].sum() / n
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 7.0), gridspec_kw=dict(height_ratios=[0.8, 1.0], hspace=0.35))
-ax1.plot(fine["xy"][:, 0], fine["xy"][:, 1], color=BASELINE, lw=1.4, zorder=1)
-ax1.plot(A[:, 0], A[:, 1], "o", ms=4.5, color=INK, zorder=3)
-ax1.plot(B[:, 0], B[:, 1], "o", ms=5.5, mfc="white", mec=INK2, mew=1.2, zorder=3)
-cand = [i for i in range(len(P)) if -1.0 < P[i, 0] < 1.5 and P[i, 1] > 0.2 and 0.03 < off[i] < 0.15]
-sel = sorted(cand, key=lambda i: P[i, 0])[::max(1, len(cand) // 6)][:6]
-for i in sel:
-    ax1.plot([P[i, 0], A[iA[i], 0]], [P[i, 1], A[iA[i], 1]], color=INK, lw=1.0, zorder=2)
-    ax1.plot([P[i, 0], B[iB[i], 0]], [P[i, 1], B[iB[i], 1]], color=INK2, lw=1.0, ls="--", zorder=2)
-    ax1.plot(*P[i], "o", ms=6, mfc=AQUA, mec="white", zorder=5)
-ax1.set_xlim(-1.2, 1.7); ax1.set_ylim(-0.12, 0.5); ax1.set_aspect("equal"); ax1.grid(False)
-for s_ in ax1.spines.values(): s_.set_visible(False)
-ax1.set_xlabel("x [–]"); ax1.set_ylabel("y [–]")
-ax1.set_title("two samples of one airfoil: graded (black) and uniform in arclength (open);\nlines join each prediction point (aqua) to its nearest token in each sample", fontsize=9.5)
-r = dB / dA
-ax2.loglog(dex, r, "o", ms=3, mfc=AQUA, mec="white", mew=0.3, alpha=0.9)
-ax2.axhline(1, color=MUTED, lw=1, ls="--"); ax2.axvline(h, color=MUTED, lw=1, ls=":")
-ax2.text(h * 1.08, 6, "mean token\nspacing", fontsize=8, color=MUTED, va="top")
-ax2.set_ylim(0.15, 8); ax2.set_xlim(0.004, 1.2)
-ax2.set_yticks([0.2, 0.5, 1, 2, 5]); ax2.set_yticklabels(["0.2", "0.5", "1", "2", "5"])
-ax2.set_xticks([0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1]); ax2.set_xticklabels(["0.005", "0.01", "0.02", "0.05", "0.1", "0.2", "0.5", "1"])
-ax2.yaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax2.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
-ax2.set_xlabel("exact distance of the point to the wall [–]")
-ax2.set_ylabel("built-in distance,\nuniform sample ÷\ngraded sample [–]", rotation=0, ha="right", va="center")
-ax2.set_title("the same point's built-in wall distance under the two samples", fontsize=9.5)
-plt.show()
-```
-
-```{python}
-#| label: para-nearest-token
-#| output: asis
-near = dex < h / 2
-print(f"@fig-interior-nearest-token shows the mechanism on the running airfoil. Within half a token spacing of the wall the two samples "
-      f"give the same point built-in distances that differ by a typical factor of {np.exp(np.sqrt(np.mean(np.log(r[near]) ** 2))):.1f}; "
-      f"beyond two spacings the factor is {np.exp(np.sqrt(np.mean(np.log(r[dex > 2 * h]) ** 2))):.2f} (the typical factor is the exponential of the RMS of the log ratio). On the car most interior points lie "
-      "near the wall, because the volume mesh, and so the sample of it, is refined there.")
-```
+The mechanism is the one of @fig-isla-interior. Far from the wall the nearest-token distance is the exact distance; within about one token spacing of the wall it overestimates it by up to half the local spacing, in a sawtooth that follows the sample, and its direction leans toward the nearest token. Redrawing the boundary moves the sawtooth. On the car most interior points lie near the wall, because the volume mesh, and so the sample of it, is refined there.
 
 ```{python}
 #| label: make-tbl-vol-geo
@@ -738,20 +675,22 @@ print(": The Volume task's sensitivity to the boundary law taken apart at scorin
 natgeo = [VGR["area_natgeo"][f] for f in VOL_F]; frac = [VGF["area_natgeo"][f] for f in VOL_F]
 print(f"Keep every redrawn token and compute only the built-in geometry from the native sample, and the error is "
       f"{' / '.join(f'{v:.3f}' for v in natgeo)} of native; that one channel accounts for {' / '.join(f'{v:.2f}' for v in frac)} of the "
-      "logarithmic excess. The input moves a lot in the place the model reads it: under the redraw "
+      "redraw's excess on a log scale (one minus the logarithm of the third row's ratio over that of the second). The input moves a lot in the place the model reads it: under the redraw "
       f"{100 * VGS['frac_nearest_token_changed']:.0f}% of the interior points change nearest token, and near the wall the RMS change of "
       f"the logarithm of the built-in distance is {VGS['rms_log_absdArea_over_absdNat_nearwall_sdf']:.2f}. Nor can the exact field be "
       f"substituted after training: near the wall the sampled distance has a median of {VGS['median_abs_dNat_over_L_nearwall_sdf'] * 1e4:.1f}e-4 $L$ "
       f"against {VGS['median_abs_sdf_over_L_nearwall_sdf'] * 1e4:.1f}e-4 $L$ for the exact one, an RMS log ratio of "
-      f"{VGS['rms_log_absdNat_over_abssdf_nearwall_sdf']:.1f}, and a model trained on one is as far outside its training distribution on "
-      "the other as on the redraw. The sensitivity is a bias of one discretization-dependent input, not a resolution requirement on the "
+      f"{VGS['rms_log_absdNat_over_abssdf_nearwall_sdf']:.1f}, and a model trained on one is "
+      + ("further outside its training distribution on the other than on the redraw" if VGR['native_sdfgeo']['pressure_l2'] > VGR['area']['pressure_l2']
+         else "as far outside its training distribution on the other as on the redraw")
+      + " (the last row against the second). The sensitivity is a bias of one discretization-dependent input, not a resolution requirement on the "
       "boundary sample: a nearest-sample selection is a discontinuous function of the sample, and a minimum over a sample is the one "
       "operation in ISLA that the Horvitz–Thompson weights cannot correct.")
 ```
 
 ### Read-only prediction points: ISLA-DTT {#sec-interior-read-only}
 
-**ISLA-DTT makes every interior prediction a function of its point and the boundary alone; on the Volume task its error is about 1.1 times ISLA's on every field, and it loses most of the boundary-law sensitivity.** ISLA-DTT is ISLA with `query_independent=True`: the interior points carry no routing weight, so they read the slices at every layer and write nothing into them, and after every layer each point also reads every boundary cell directly through a learned kernel of relative geometry, evaluated with a Barnes–Hut forest at opening angle $\theta = 1$ (@sec-arch-modes). The boundary read adds 1.2 million parameters to ISLA's 69 million. Everything else is held equal in @tbl-interior-read-only, including the middle row, which keeps the read-only points and removes the boundary read.
+**ISLA-DTT makes every interior prediction a function of its point and the boundary alone; on the Volume task its error is about 1.1 times ISLA's on every field, and it loses most of the boundary-law sensitivity.** ISLA-DTT is ISLA with `query_independent=True`: the interior points carry no routing weight, so they read the slices at every layer and write nothing into them, and after every layer each point also reads every boundary cell directly through a learned kernel of relative geometry, evaluated with a Barnes–Hut forest at opening angle $\theta = 1$ (@sec-arch-modes). The forest is built in a canonical frame that the boundary carries (its weighted centroid and principal axes), so ISLA-DTT's pose invariance at finite $\theta$ holds up to ties of that frame. The boundary read adds 1.2 million parameters to ISLA's 69 million. Everything else is held equal in @tbl-interior-read-only, including the middle row, which keeps the read-only points and removes the boundary read.
 
 | configuration | native mesh: p / v / nut | ÷ ISLA | area-proportional boundary sample (÷ own native) | rotated and translated |
 |---|---|---|---|---|
@@ -761,7 +700,7 @@ print(f"Keep every redrawn token and compute only the built-in geometry from the
 
 : ISLA against ISLA-DTT on the DrivAerML Volume task: interior pressure / velocity / eddy viscosity (p / v / nut) relative L2, float32, 48 validation cars, seed means of two seeds (ISLA 0.0387 / 0.0619 / 0.0868 and 0.0400 / 0.0651 / 0.0884; read-only without a read 0.0454 / 0.0847 / 0.1745 and 0.0443 / 0.0822 / 0.1188; ISLA-DTT 0.0446 / 0.0728 / 0.0997 and 0.0439 / 0.0685 / 0.0967, every ISLA-DTT seed above every ISLA seed on every field). The three rows share the configuration, the recipe, 435 training cars and 200,000 boundary cells and interior points per car. How to read this: ÷ ISLA above one means less accurate than ISLA; each row's boundary-law factor is its own. Instrument: ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads (@sec-study-configurations). Data: results/char/drivaerml_volume.json (ISLA); research/dtt/REPORT.md, "E3 setup" (read-only points without a read) and "Pose-free parity on the car" (ISLA-DTT). {#tbl-interior-read-only}
 
-Without the boundary read, read-only points trail ISLA by 14% on pressure, 31% on velocity and 68% on eddy viscosity. The read takes back almost none of the pressure deficit and most of the other two. The pressure that remains is what interacting points supply to one another through the slices, which a query-independent model gives up by construction. The boundary-law factor falls from about seven to two or three because read-only points no longer write a sample-dependent geometry into the slices that every other point reads.
+Without the boundary read, read-only points trail ISLA by 14% on pressure, 31% on velocity and 68% on eddy viscosity. The read takes back almost none of the pressure deficit and most of the other two. The pressure that remains is what interacting points supply to one another through the slices, which a query-independent model gives up by construction. The boundary-law factor falls from about seven to two or three, likely because read-only points no longer write a sample-dependent geometry into the slices that every other point reads; no measurement isolates that cause.
 
 #### What the boundary read supplies {#sec-interior-read-only-mechanism}
 
@@ -800,7 +739,7 @@ print(": Dependence on the request on the DrivAerML Volume task: the error on fi
       "change of any ISLA-DTT prediction on the shared points is 4.7e-5 relative L2, float32 roundoff. How to read this: a ratio of one "
       "means the other points of the request do not matter; it says nothing about accuracy, which is @tbl-interior-read-only. Instrument: "
       "ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads (@sec-study-configurations). Data: results/char/qpop_2026-10-06.json "
-      "(ISLA); ISLA-DTT scored on the cluster with the same request generator on its two checkpoints of @tbl-interior-read-only. "
+      "(ISLA); ISLA-DTT scored with the same request generator on its two checkpoints of @tbl-interior-read-only. "
       "{#tbl-interior-query-population}")
 ```
 
@@ -819,8 +758,21 @@ print(f"The cause is the learned routing weight. ISLA's 200,000 interacting poin
 
 **DrivAerML is one car family in one far-field condition, scored in distribution, by three configurations that are matched in neither parameters nor inputs.** The surface tie and the interior leads are statements about what one memory budget buys each architecture on this family. Nothing here measures a change of vehicle family, of far-field speed or direction, or of flow regime, because none varies in the set; @sec-shift-suv and @sec-hilift take those up in part, and @sec-limits states the rest.
 
-Three questions this dataset raises and leaves open:
+Questions this dataset raises and leaves open:
 
-- **What is ISLA's interior error with an exact full-resolution wall distance?** The nearest-token distance is the one discretization-dependent input of the Volume task (@sec-interior-boundary-law). An exact signed distance and direction to the full-resolution surface would make the interior points' geometry a property of the car rather than of the sample. Whether that changes the native error, and whether it removes the boundary-law factor of a trained model, needs a model trained with it (@sec-open-questions).
+```{python}
+#| label: para-interior-open-geometry
+#| output: asis
+IG = J("cluster_return_reductions_2026-09-25.json")["groups"]["internal_geometry"]["drvol"]["internal_over_provided"]
+print("- **What does an exact full-resolution wall distance buy at the reference configuration?** The nearest-token distance is the one "
+      "discretization-dependent input of the Volume task (@sec-interior-boundary-law). An exact signed distance and direction to the "
+      "full-resolution surface would make the interior points' geometry a property of the car rather than of the sample. On a study "
+      "configuration the price of the nearest token is measured: trained with the stored full-mesh distance field instead, the same ISLA "
+      f"scores {(1 - 1 / IG['velocity_l2']) * 100:.0f}% lower velocity error, and {(1 - 1 / IG['pressure_l2']) * 100:.0f}% and "
+      f"{(1 - 1 / IG['nut_l2']) * 100:.0f}% lower on pressure and eddy viscosity (two seeds each; instrument: ISLA at 384 wide, 256 slices, "
+      "5e-4, raw slice reads, @sec-study-configurations; data: results/cluster_return_reductions_2026-09-25.json, `internal_geometry`). "
+      "A stored field exists only where the dataset ships one. What a full-resolution form computed inside the model gives the reference "
+      "configuration, and whether it removes the boundary-law factor of a trained model, is open (@sec-open-questions).")
+```
 - **What does query independence cost at the reference configuration?** @tbl-interior-read-only measures ISLA-DTT against ISLA on a model whose slice sublayer reads the raw stream; the ratio for the reference configuration needs ISLA-DTT trained with the normalized slice reads.
 - **Where does the eddy-viscosity deficit come from?** GeoTransolver's local features over neighboring interior points are the one input ISLA lacks, and the eddy viscosity is the field where GeoTransolver leads; no ablation has isolated that input on this task.
