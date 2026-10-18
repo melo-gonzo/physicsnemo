@@ -76,7 +76,8 @@ def brief(st, f, p="native"):
     if len(set(v.values())) == 1:
         return f"{v['GeoTransolver']} both on {st.fields[f]} ({r['GeoTransolver']}, {r['Transolver']})"
     return f"{v['GeoTransolver']} GeoTransolver ({r['GeoTransolver']}) and {v['Transolver']} Transolver ({r['Transolver']}) on {st.fields[f]}"
-print("In one paragraph, with the ratios baseline ÷ ISLA in parentheses, GeoTransolver first: on the Surface task, on the native mesh, "
+print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference configuration (@sec-protocol). "
+      "In one paragraph, with the ratios baseline ÷ ISLA in parentheses, GeoTransolver first: on the Surface task, on the native mesh, "
       f"ISLA {brief(SURF, 'pressure_l2')} and {brief(SURF, 'wss_l2')}, and only ISLA keeps its error when the surface is sampled as a "
       f"uniform point cloud or the car is rotated and translated. On the Volume task ISLA {brief(VOL, 'pressure_l2')}, "
       f"{brief(VOL, 'velocity_l2')}, and {brief(VOL, 'nut_l2')}; only ISLA keeps its error under the pose, and ISLA alone depends on "

@@ -106,7 +106,8 @@ RATIO = {k: mean(v[3]) / mean(v[2]) for k, v in RUNGS.items()}
 ```{python}
 #| label: para-hilift-lede
 #| output: asis
-print(f"In one paragraph: at the 210-wing rung{'' if HL.ds.reference else ', with ISLA represented by the raw-read variant,'} {clause(HL, 'pressure_l2')} on surface pressure and {clause(HL, 'tau_wall_l2')} on "
+print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference configuration (@sec-protocol). "
+      f"In one paragraph: at the 210-wing rung{'' if HL.ds.reference else ', with ISLA represented by the raw-read variant,'} {clause(HL, 'pressure_l2')} on surface pressure and {clause(HL, 'tau_wall_l2')} on "
       "wall shear on the native mesh, and only ISLA keeps its error on a uniform point cloud of the aircraft and under rotation and "
       "translation (@sec-de-result). On the data-efficiency ladders, run on a smaller ISLA, ISLA's error falls faster with training cases "
       "than GeoTransolver's, and it is paid for in distinct geometries rather than in cases (@sec-hilift-ladders).")

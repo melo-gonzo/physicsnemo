@@ -61,9 +61,20 @@ def protocol_dots(st, fields, protos=None):
     return fig
 ```
 
-**SHIFT-SUV is the book's second car family: sport-utility bodies in two rear-end styles, read through DrivAerML's pipeline unchanged.** It asks whether the DrivAerML Surface standing is a property of one sedan or of the task. Within the estate family, on the native mesh, Transolver is ahead of ISLA on pressure by the seed rule and GeoTransolver is level with it; on a uniform point cloud and with every body rotated and translated, only ISLA keeps its error.
+**SHIFT-SUV is the book's second car family: sport-utility bodies in two rear-end styles, read through DrivAerML's pipeline unchanged.** It asks whether the DrivAerML Surface standing is a property of one sedan or of the task.
 
 *Before this chapter:* @sec-drivaerml, in particular the Surface task (@sec-surface), the flow around a car (@sec-drivaerml-flow) and the three scorings of one checkpoint, including the uniform point cloud (@sec-drivaerml-scorings). Every ratio is baseline ÷ ISLA.
+
+```{python}
+#| label: para-shift-suv-intro
+#| output: asis
+lead = {b: SUV.verdict(b, "pressure_l2") for b in S.BASELINES}
+word = {"leads": "ISLA leads {b}", "trails": "{b} leads ISLA", "is level with": "ISLA is level with {b}"}
+print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference "
+      "configuration (@sec-protocol). In one paragraph: within the estate family, on the native mesh, "
+      + " and ".join(word[lead[b]].format(b=b) for b in S.BASELINES)
+      + " on surface pressure by the seed rule; on a uniform point cloud and with every body rotated and translated, only ISLA keeps its error.")
+```
 
 ## The problem: two sport-utility families {#sec-shift-suv-problem}
 
