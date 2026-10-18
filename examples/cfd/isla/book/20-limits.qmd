@@ -11,7 +11,7 @@ settling would cost in GPU-hours, and ends with the outcomes that would change t
 recommendation. Every number is computed from the standing artifacts through `standing.py` or
 from the cost record as the page renders. Ratios are baseline ÷ ISLA, so a value above one favors
 ISLA; the metric is the area-weighted relative L2 in float32 (@sec-metrics); *leads*, *trails*
-and *level* follow the seed rule of @sec-standing.
+and *level* follow the seed rule of @sec-fair-comparison.
 
 ```{python}
 #| label: setup-limits

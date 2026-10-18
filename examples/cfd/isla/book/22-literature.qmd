@@ -87,7 +87,7 @@ bent_ds = {}
 for ds, fl, r in bent:
     bent_ds[ds] = max(bent_ds.get(ds, 1.0), r)
 print(f"At the reference configurations on the native mesh, over {len(keys) - len(unfair)} datasets and {n} comparisons "
-      f"(each headline field against each baseline, by the seed rule of @sec-standing), ISLA leads in {len(lead)}, "
+      f"(each headline field against each baseline, by the seed rule of @sec-fair-comparison), ISLA leads in {len(lead)}, "
       f"is level in {level} and trails in {len(trail)}. It trails on: {group(trail)}. "
       + (f"{' and '.join(unfair)} are not counted: their baselines read the freestream as a raw physical vector "
          "(@tbl-model-inputs), so no verdict is drawn there. " if unfair else "") +
