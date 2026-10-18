@@ -9,7 +9,6 @@ import json, re, statistics
 import sys; sys.path.insert(0, ".")
 from palette import *
 import standing as S
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 RES = S.RES
 ST = S.Standing("tensile2d")
@@ -23,7 +22,7 @@ POSE_SEED = [p / n for f in SD for p, n in zip(ST.seeds("ISLA", f, "posed"), ST.
 POSE_LO, POSE_HI = min(POSE_SEED), max(POSE_SEED)
 GT_SD = [ST.ratio("GeoTransolver", f) for f in SD]
 
-# the normalization the lanes trained under, read from the dataset configuration they ran with
+# the normalization the models trained under, read from the dataset configuration they ran with
 T2D_YAML = (RES / "campaigns_2026-10-02/char/datasets/plaid_tensile2d_2d.yaml").read_text()
 STRESS_SCALE = float(re.search(r"sig11: \{type: scalar, mean: 0\.0, std: ([0-9.]+)\}", T2D_YAML).group(1))
 DISP_SCALE = float(re.search(r"displacement: \{type: vector, mean: \[0\.0, 0\.0\], std: ([0-9.e-]+)\}", T2D_YAML).group(1))
@@ -33,6 +32,21 @@ Q_MEAN, Q_STD = map(float, re.search(r"q: \{type: scalar, mean: ([0-9.e-]+), std
 TIES = json.load(open(RES / "char" / "solids_ties_2026-10-18.json"))
 TT = TIES["tensile2d"]
 T1 = TT["sample_000001"]
+
+from matplotlib.collections import PolyCollection
+def lug_conditions(ax, bp, bc, fixed, loaded, hole, lw=4.0, fill="#e4e3dc"):
+    """The lug seen along the hole's axis: its silhouette, the clamped end face as a thick line and the hole's loaded and free halves
+    as arcs, in the boundary-condition colors (the same drawing as @sec-lug)."""
+    if fill:
+        ax.add_collection(PolyCollection(bp[bc][:, :, :2], facecolors=fill, edgecolors="none", zorder=1))
+    cen = bp[bc].mean(axis=1)
+    f = cen[fixed]; x0 = f[:, 0].mean()
+    ax.plot([x0, x0], [f[:, 1].min(), f[:, 1].max()], color=BC["value"], lw=lw, solid_capstyle="butt", zorder=4)
+    hc = cen[hole][:, :2]; ctr = hc.mean(axis=0); R = np.linalg.norm(hc - ctr, axis=1).mean()
+    a = np.arctan2(cen[loaded][:, 1] - ctr[1], cen[loaded][:, 0] - ctr[0])
+    t = np.linspace(a.min(), a.max(), 120); u = np.linspace(a.max(), a.min() + 2 * np.pi, 120)
+    ax.plot(ctr[0] + R * np.cos(u), ctr[1] + R * np.sin(u), color=BC["free"], lw=0.5 * lw, zorder=4)
+    ax.plot(ctr[0] + R * np.cos(t), ctr[1] + R * np.sin(t), color=BC["flux"], lw=lw, solid_capstyle="butt", zorder=5)
 ```
 
 **On a planar notched specimen whose target includes the stress tensor, GeoTransolver leads ISLA on stress and displacement: ISLA's error is `{python} f"{1 / max(GT_SD):.1f}"` to `{python} f"{1 / min(GT_SD):.1f}"` times GeoTransolver's.** ISLA is the one architecture of the three that keeps its answer when the specimen is rotated and translated. It keeps it to within `{python} f"{100 * (POSE_HI - 1):.0f}"`%, and the rest has a cause this chapter locates: mesh nodes that sit on the boundary itself, where the input ISLA builds from its nearest boundary sample is decided by rounding.
@@ -49,14 +63,15 @@ T1 = TT["sample_000001"]
 #|   (value: fixed, clamped, pinned) or a prescribed traction (flux: an applied
 #|   pressure or load); the rest is free. Left: a PLAID Tensile2d specimen, the
 #|   outer polyline over its mesh nodes (gray). Middle: a GINOT bracket lug,
-#|   its surface triangles in an orthographic view. Right: a DeepJEB++ bracket
+#|   seen along its hole's axis, the clamped end face edge-on as a line and the
+#|   pressed half of the hole as an arc. Right: a DeepJEB++ bracket
 #|   seen along $y$, its surface cells as points. The line under each panel
 #|   names the task and what the dataset tests. How to read this: the three
 #|   are drawn at their own scales (dataset units for Tensile2d, mm for the
 #|   lug and the bracket), so their sizes are not comparable; no field is
 #|   drawn. Data: results/problem_figures_2026-09-22/{tensile2d,lug}.npz and
 #|   results/sample_figures_2026-10-02/deepjeb.npz.
-#| fig-alt: "Three panels: a 2-D notched tension specimen with its loaded top edge and fixed bottom edge colored, a 3-D lug with its clamped end face and pressed hole colored, and a generated bracket with clamped bolt holes and the loaded lug bore colored."
+#| fig-alt: "Three panels: a 2-D notched tension specimen with its loaded top edge and fixed bottom edge colored, a lug seen from above with its clamped end and the pressed half of its hole colored, and a generated bracket with clamped bolt holes and the loaded lug bore colored."
 #| code-fold: true
 fig = plt.figure(figsize=(9.0, 3.6))
 gs = fig.add_gridspec(1, 3, width_ratios=[0.9, 1.25, 1.0], wspace=0.08, left=0.02, right=0.98, top=0.86, bottom=0.2)
@@ -70,14 +85,10 @@ map_axes(ax); ax.set_xticks([]); ax.set_yticks([]); ax.set_xlim(-1.15, 1.15); ax
 ax.set_title("PLAID Tensile2d", fontsize=10)
 
 L, _ = load_problem("lug")
-ax = fig.add_subplot(gs[0, 1], projection="3d"); ax.set_proj_type("ortho")
+ax = fig.add_subplot(gs[0, 1])
 bp = L["bnd_points"] * 1e3
-kinds = np.where(L["bc_loaded"] > 0.5, "flux", np.where(L["bc_fixed"] > 0.5, "value", "free"))
-face = np.array([BC[k] if k != "free" else "#d9d8d0" for k in kinds])
-ax.add_collection3d(Poly3DCollection(bp[L["bnd_cells"]], facecolors=face, edgecolors="none"))
-ext = bp.max(0) - bp.min(0)
-ax.set_xlim(bp[:, 0].min(), bp[:, 0].max()); ax.set_ylim(bp[:, 1].min(), bp[:, 1].max()); ax.set_zlim(bp[:, 2].min(), bp[:, 2].max())
-ax.set_box_aspect(tuple(ext / ext.max()), zoom=1.1); ax.view_init(elev=30, azim=-60); ax.set_axis_off()
+lug_conditions(ax, bp, L["bnd_cells"], L["bc_fixed"] > 0.5, L["bc_loaded"] > 0.5, L["bc_hole"] > 0.5, lw=3.0)
+map_axes(ax); ax.set_xticks([]); ax.set_yticks([]); ax.margins(0.06)
 ax.set_title("GINOT bracket lug", fontsize=10)
 
 J, _ = load_samples("deepjeb")
@@ -92,7 +103,7 @@ map_axes(ax); ax.set_xticks([]); ax.set_yticks([]); ax.margins(0.05)
 ax.set_title("DeepJEB++", fontsize=10)
 
 for x, txt in ((0.16, "2-D interior task\ntests: a stress tensor as output"),
-               (0.5, "3-D interior task, no global vector\ntests: nodes tied for their nearest sample"),
+               (0.5, "3-D interior task, no global vector\ntests: nearest-sample ties"),
                (0.84, "3-D surface task, generated shapes\ntests: a load direction as the global vector")):
     fig.text(x, 0.1, txt, ha="center", va="center", fontsize=8.5, color=INK2, linespacing=1.4)
 from matplotlib.patches import Patch
@@ -125,7 +136,7 @@ The three map onto ISLA's inputs the same way. A boundary condition is a label o
 T, Tm = load_problem("tensile2d")
 bp, bc = T["bnd_points"], T["bnd_cells"]; mid = bp[bc].mean(axis=1)
 kinds = np.where(T["bc_loaded"] > 0.5, "flux", np.where(T["bc_fixed"] > 0.5, "value", "free"))
-fig, axes = plt.subplots(1, 3, figsize=(8, 4.2), sharey=True, gridspec_kw=dict(wspace=0.15, width_ratios=[1.75, 1, 1]))
+fig, axes = plt.subplots(1, 3, figsize=(8.4, 4.2), sharey=True, gridspec_kw=dict(wspace=0.34, width_ratios=[1.75, 1, 1]))
 ax = axes[0]
 ax.scatter(T["int_points"][:, 0], T["int_points"][:, 1], s=1.2, c=GRID, lw=0, rasterized=True)
 bc_segments(ax, bp, bc, kinds, lw=4.5)
@@ -134,7 +145,7 @@ ax.text(0.0, 1.07, f"top edge: pressure P = {Tm['globals']['P']:.1f} (flux)", ha
 ax.text(0.0, -1.08, "bottom edge: fixed $u_2$ = 0 (value)\ntriangle: pinned $u_1$ = 0", ha="center", va="top", fontsize=8.5, color=BC["value"], path_effects=halo())
 ax.text(0.72, 0.0, "notches: free", ha="center", va="center", fontsize=8.5, color=BC["free"], rotation=90)
 g = Tm["globals"]
-ax.text(-2.45, 1.0, "global scalars\n" + "\n".join(f"{k} = {g[k]:g}" for k in ("P", "p1", "p2", "p3", "p4", "p5")), ha="left", va="top", fontsize=7.8, color=INK2,
+ax.text(-2.52, 1.0, "global scalars\n" + "\n".join(f"{k} = {g[k]:g}" for k in ("P", "p1", "p2", "p3", "p4", "p5")), ha="left", va="top", fontsize=7.2, color=INK2,
         bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=BASELINE))
 map_axes(ax); ax.set_xlim(-2.55, 1.3); ax.set_ylim(-1.5, 1.35); ax.set_ylabel("y [dataset units]"); ax.set_xlabel("x [dataset units]")
 ax.set_title("conditions and global inputs", fontsize=9.5)
@@ -169,9 +180,10 @@ print(f"**The notch, the load and the material all change from case to case.** @
 #|   by condition (loaded top edge, fixed bottom edge with the pinned corner as
 #|   a triangle, free notches), the nodes by the axial stress $\sigma_{22}$ on
 #|   one shared scale, and the box lists the five material parameters; $P$ is
-#|   printed above. How to read this: the stress scale is clipped at its top so
-#|   that the notch concentration does not wash out the rest; coordinates are
-#|   the dataset's (a unit half-width). Data:
+#|   printed above and the title gives the waist width. How to read this: the
+#|   stress scale is clipped at its top so that the notch concentration does
+#|   not wash out the rest; coordinates and widths are in the dataset's units
+#|   (a unit half-width). Data:
 #|   results/sample_figures_2026-10-02/tensile2d.npz.
 #| code-fold: true
 io = Ts_["int_offsets"]; po = Ts_["bnd_point_offsets"]; co = Ts_["bnd_cell_offsets"]
@@ -188,10 +200,10 @@ for i, c in enumerate(cs):
     pin = mid[pinned > 0.5]; ax.plot(pin[:, 0], pin[:, 1], marker="^", ms=7, color=BC["value"], mec=INK, ls="none", zorder=5)
     g = c["globals"]
     ax.text(0.0, 1.06, f"P = {g['P']:.1f}", ha="center", va="bottom", fontsize=8, color=BC["flux"], path_effects=halo())
-    ax.text(-1.95, 1.0, "\n".join(f"$p_{k}$ = {g[f'p{k}']:g}" for k in range(1, 6)), ha="left", va="top", fontsize=7.2, color=INK2,
+    ax.text(-2.62, 1.0, "\n".join(f"$p_{k}$ = {g[f'p{k}']:g}" for k in range(1, 6)), ha="left", va="top", fontsize=6.8, color=INK2,
             bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=BASELINE))
-    ax.set_xlim(-2.0, 1.2); ax.set_ylim(-1.25, 1.3)
-    ax.set_title(f"{c['case']}: waist {c['waist_width']:.2f}", fontsize=8.5)
+    ax.set_xlim(-2.7, 1.2); ax.set_ylim(-1.25, 1.3); ax.set_xticks([-1, 0, 1])
+    ax.set_title(f"waist width {c['waist_width']:.2f}", fontsize=8.5)
     if i % 3 == 0: ax.set_ylabel("y [dataset units]")
     if i // 3 == 1: ax.set_xlabel("x [dataset units]")
 cb = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.01, extend="max"); cb.set_label("$\\sigma_{22}$ [MPa]"); cb.outline.set_visible(False)
@@ -219,17 +231,17 @@ print(f"**Diversity.** Each of the {G['n_ok']} cases has its own geometry and it
 
 ### Files, conversion and normalization {#sec-data-tensile2d}
 
-**702 two-dimensional quasi-static elasto-viscoplastic tension cases of a notched specimen (Safran; CC-BY-SA-4.0; Hugging Face `PLAID-datasets/Tensile2d`), of which the 500 official training samples carry targets.** Plane strain, small deformations. Each sample is an unstructured triangle mesh of 6 to 12 thousand nodes in $[-1, 1]$ (a unit half-width): a pressure $P$ on the top edge, a fixed bottom edge ($u_2 = 0$) with its bottom-left node pinned ($u_1 = 0$), free curved notches, and five constitutive scalars $p_1 \ldots p_5$. The 200 test samples and the 2 out-of-distribution samples ship without output fields; the converter writes them under `withheld/`, which no lane reads.
+**702 two-dimensional quasi-static elasto-viscoplastic tension cases of a notched specimen (Safran; CC-BY-SA-4.0; Hugging Face `PLAID-datasets/Tensile2d`), of which the 500 official training samples carry targets.** Plane strain, small deformations. Each sample is an unstructured triangle mesh of 6 to 12 thousand nodes in $[-1, 1]$ (a unit half-width): a pressure $P$ on the top edge, a fixed bottom edge ($u_2 = 0$) with its bottom-left node pinned ($u_1 = 0$), free curved notches, and five scalar parameters of the elasto-viscoplastic constitutive law, which the release names only $p_1 \ldots p_5$. The 200 test samples and the 2 out-of-distribution samples ship without output fields; the converter writes them under `withheld/`, which no model reads.
 
 - **Conversion** (`plaid_tensile2d_convert.py`). Interior: every node, embedded at $z = 0$, with `displacement` $(U_1, U_2, 0)$, `q`, the stress components `sig11`, `sig22`, `sig12` (MPa), the stored signed distance `sdf` (negative inside) and its gradient `sdf_normals`, and the nodal tags `tag_top`, `tag_bottom`, `tag_bottomleft`. Boundary `outer`: every triangle edge owned by one triangle, as line cells with outward in-plane normals, segment lengths as the measure, and the per-cell labels `bc_loaded`, `bc_fixed`, `bc_pinned` and `bc_pressure` ($= P$ on loaded cells). Global data: `P`, `p1` … `p5`.
-- **What each model receives.** ISLA (`isla_tensile2d.yaml`, `dim: 2` after `RestrictToPlane`) reads the outer cells with the four labels, the six standardized scalars as six global scalars, and every node as a prediction point with the stored `sdf` and `sdf_normals`. Inside the model each prediction point also gets the signed distance and the direction to its nearest boundary sample (@sec-tensile2d-ties). GeoTransolver and Transolver read every node with its coordinates, the same stored `sdf` and `sdf_normals` and the three nodal tags, since a per-boundary-cell input is a path they do not have, and the six scalars as their global embedding. They predict the three stress components as three scalars.
+- **What each model receives.** ISLA (`isla_tensile2d.yaml`, `dim: 2` after `RestrictToPlane`) reads the outer cells with the four labels, the six standardized scalars as six global scalars, and every node as a prediction point with the stored `sdf` and `sdf_normals`. Inside the model each prediction point also gets the signed distance and the direction to its nearest boundary sample (@sec-tensile2d-ties). GeoTransolver and Transolver read every node with its coordinates, the same stored `sdf` and `sdf_normals` and the three nodal tags `tag_top`, `tag_bottom`, `tag_bottomleft`, which carry the boundary conditions to them, and the six scalars as their global embedding (@tbl-model-inputs). They predict the three stress components as three scalars.
 - **Normalization** (statistics over `train_400`). The six scalars are standardized per component. **Every target of rank one or more is normalized with zero mean and one isotropic scale**, because a vector shifted by a laboratory-frame mean, or a tensor scaled per component, is no longer equivariant: no equivariant model can emit it for a rotated specimen. The displacement is divided by `{python} f"{DISP_SCALE:.2e}"` and the three stress components by the one scale `{python} f"{STRESS_SCALE:.1f}"` MPa, the root mean of $(\sigma_{11}^2 + \sigma_{22}^2 + 2\sigma_{12}^2)/4$ over the training nodes. The plastic strain is standardized to zero mean and unit variance. The baselines train on the same normalized numbers.
-- **Splits.** `val_100` holds 100 samples drawn with seed 0 from `train_500` minus `train_250`, so the official nested ladder up to `train_250` stays disjoint from it, and `train_400` is `train_500` minus `val_100`. Every lane trains on `train_400` and is scored on `val_100`.
-- **Pitfalls.** Most specimens never yield. On 69 of the 100 validation specimens $q$ is identically zero, which the standardization maps to the constant `{python} f"{-Q_MEAN / Q_STD:.4f}"`. On those specimens the relative error of $q$ is the model's absolute error divided by `{python} f"{Q_MEAN / Q_STD:.4f}"`: the size of a constant offset, not an error in a plastic field. The leaderboard's Tensile2d numbers are on the withheld test set and are not comparable to `val_100` figures.
+- **Splits.** `val_100` holds 100 samples drawn with seed 0 from `train_500` minus `train_250`, so the official nested ladder up to `train_250` stays disjoint from it, and `train_400` is `train_500` minus `val_100`. Every model trains on `train_400` and is scored on `val_100`.
+- **Pitfalls.** Most specimens never yield. On 69 of the 100 validation specimens $q$ is identically zero, which the standardization maps to the constant `{python} f"{-Q_MEAN / Q_STD:.4f}"`. On those specimens the relative error of $q$ is the model's absolute error divided by `{python} f"{Q_MEAN / Q_STD:.4f}"`: the size of a constant offset, not an error in a plastic field. The numbers of PLAID's public benchmark leaderboard are on the withheld test set and are not comparable to `val_100` figures.
 
 ## What is measured {#sec-tensile2d-measured}
 
-**Every mesh node is a prediction point; the readout is the relative L2 error of the stress tensor, the displacement and the plastic strain over the `{python} f"{N_VAL}"` validation specimens, at 400 training specimens, 500 epochs and two seeds.** The three architectures run at their reference configurations: ISLA width 512, 12 layers, 512 slices, learning rate 3.75e-4; GeoTransolver width 256 and Transolver width 512 with 16 layers, both at 1e-3. No lane trains with rotation or translation augmentation.
+**Every mesh node is a prediction point; the readout is the relative L2 error of the stress tensor, the displacement and the plastic strain over the `{python} f"{N_VAL}"` validation specimens, at 400 training specimens, 500 epochs and two seeds.** The three architectures run at their reference configurations: ISLA width 512, 12 layers, 512 slices, learning rate 3.75e-4; GeoTransolver width 256 and Transolver width 512 with 16 layers, both at 1e-3. No model trains with rotation or translation augmentation.
 
 For a tensor target the error is the Frobenius relative L2 of the assembled tensor. Write $\sigma_i$ for the reference stress at node $i$ of a specimen and $\hat\sigma_i$ for the prediction, both $2 \times 2$ and symmetric. Then
 
@@ -308,28 +320,28 @@ print(f"**The plastic-strain column ranks a constant offset, not a plastic field
 print()
 print(f"**Rotated and translated, ISLA keeps its answer and the baselines lose theirs.** ISLA's stress and displacement errors are "
       f"{POSE_LO:.2f} to {POSE_HI:.2f} times its native errors, per seed; its plastic-strain error is {ST.shift('ISLA', 'q_l2', 'posed'):.3f} "
-      f"times. The baselines' stress and displacement errors rise to {min(b_posed):.2f} to {max(b_posed):.2f}, the level of a prediction "
-      "no better than the mean field. A model that reads laboratory coordinates and trained without augmentation has no answer for a "
+      f"times. The baselines' stress and displacement errors rise to {min(b_posed):.2f} to {max(b_posed):.2f}, "
+      "near one, about the error of predicting zero everywhere. A model that reads laboratory coordinates and trained without augmentation has no answer for a "
       "rotated specimen; a scalar head for each stress component could not follow the rotating tensor even if it had one. ISLA's "
       f"residual shift of up to {100 * (POSE_HI - 1):.0f}% is not noise: it has a located cause, the subject of the next section.")
 ```
 
 ## Studies on this dataset {#sec-tensile2d-ladders}
 
-**Two studies belong to Tensile2d: why ISLA's error moves under the pose at all, and what happens when the boundary it reads is thinned.** No training-set ladder or width control was run on this dataset.
+**Two studies belong to Tensile2d: why ISLA's error moves under the pose at all, and what happens when the boundary it reads is thinned.** Tensile2d carries no training-set ladder or width study.
 
 ### Why ISLA's error moves under the pose {#sec-tensile2d-ties}
 
-**ISLA's prediction is exactly equivariant in exact arithmetic; on this mesh it is not in float32, because a few hundred nodes tie for their nearest boundary sample and rounding breaks the tie.** Every prediction point gets two quantities from the boundary sample nearest to it: the signed distance $d$ to that sample and the unit direction $u$ from it, which serves as the point's own "normal" in every invariant it computes (@sec-isla-relational). With $y^\ast$ the nearest boundary-cell centroid and $n^\ast$ its outward normal,
+**ISLA's prediction is exactly equivariant in exact arithmetic; on this mesh it is not in float32, because a few hundred nodes tie for their nearest boundary sample and rounding breaks the tie.** Every prediction point gets two quantities from the boundary sample nearest to it: the signed distance $d$ to that sample and the unit direction $\hat\nu$ from it, which serves as the point's own "normal" in every invariant it computes (@sec-isla-relational). With $y^\ast$ the nearest boundary-cell centroid and $n^\ast$ its outward normal,
 
 $$
-u \equiv \frac{x - y^\ast}{\lvert x - y^\ast \rvert}, \qquad d \equiv \operatorname{sign}(u \cdot n^\ast)\,\lvert x - y^\ast \rvert,
+\hat\nu \equiv \frac{x - y^\ast}{\lvert x - y^\ast \rvert}, \qquad d \equiv \operatorname{sign}(\hat\nu \cdot n^\ast)\,\lvert x - y^\ast \rvert,
 \qquad y^\ast = \arg\min_j \lvert x - y_j \rvert ,
 $$
 
-with the tangent case $u \cdot n^\ast = 0$ counted as the positive side (`nearest_boundary_geometry`). Both are functions of differences of positions, so a rigid motion leaves $d$ unchanged and rotates $u$ with the body. The argmin is the weak point. Where two samples are equally near, the choice between them is a discontinuous function of position, and rounding the rotated coordinates to float32 can make it either way.
+with the tangent case $\hat\nu \cdot n^\ast = 0$ counted as the positive side (`nearest_boundary_geometry`). Both are functions of differences of positions, so a rigid motion leaves $d$ unchanged and rotates $\hat\nu$ with the body. The argmin is the weak point. Where two samples are equally near, the choice between them is a discontinuous function of position, and rounding the rotated coordinates to float32 can make it either way.
 
-On Tensile2d the tied points are almost all the nodes that lie on the polyline itself (@fig-tensile2d-ties). Such a node is the junction of two segments, and the two segment midpoints beside it are equally far from it. The direction from either midpoint to the node runs along the wall, so the two candidates give $u = +t$ and $u = -t$ for the wall tangent $t$: a reversal. Along the wall $u \cdot n^\ast$ is zero in exact arithmetic, so the sign of $d$ is decided by rounding as well. The node's distance input therefore jumps between two values of opposite sign, and the logarithmic channel ISLA builds from it, $\operatorname{sign}(s)\log\lvert s\rvert$ with $s = d/L$, jumps further.
+On Tensile2d the tied points are almost all the nodes that lie on the polyline itself (@fig-tensile2d-ties). Such a node is the junction of two segments, and the two segment midpoints beside it are equally far from it. The direction from either midpoint to the node runs along the wall, so the two candidates give $\hat\nu = +t$ and $\hat\nu = -t$ for the wall tangent $t$: a reversal. Along the wall $\hat\nu \cdot n^\ast$ is zero in exact arithmetic, so the sign of $d$ is decided by rounding as well. The node's distance input therefore jumps between two values of opposite sign, and the logarithmic channel ISLA builds from it, $\operatorname{sign}(s)\log\lvert s\rvert$ with $s = d/L$, jumps further.
 
 ```{python}
 #| label: fig-tensile2d-ties
@@ -339,8 +351,8 @@ On Tensile2d the tied points are almost all the nodes that lie on the polyline i
 #|   boundary sample changes when the specimen is rotated by 37° and translated
 #|   by one RMS node radius in float32 (aqua, filled). Bottom: a stretch of the
 #|   free notch, enlarged: the polyline (gray), its segment midpoints, which are
-#|   ISLA's boundary samples (black), and the mesh nodes (aqua circles); at one
-#|   node on the wall the two arrows are the directions $u$ from its two equally
+#|   ISLA's boundary samples (black), and the mesh nodes (gray circles), the node that switches filled aqua; at one
+#|   node on the wall the two arrows are the directions $\hat\nu$ from its two equally
 #|   near samples, opposite along the wall. How to read this: the nodes that
 #|   switch are the nodes on the polyline; the interior nodes keep their
 #|   nearest sample; the figure is geometry only and shows no prediction.
@@ -367,12 +379,12 @@ segs = bp[bc]
 keep = np.all(np.abs(segs - x0).max(-1) < 2 * w, axis=1)
 from matplotlib.collections import LineCollection
 bx.add_collection(LineCollection(segs[keep], colors=MUTED, linewidths=2.0, zorder=2))
-bx.scatter(ip[box, 0], ip[box, 1], s=46, facecolors="white", edgecolors=AQUA, lw=1.4, zorder=3)
+bx.scatter(ip[box, 0], ip[box, 1], s=46, facecolors="white", edgecolors=MUTED, lw=1.4, zorder=3)
 mk = (np.abs(mid[:, 0] - x0[0]) < 1.2 * w) & (np.abs(mid[:, 1] - x0[1]) < 1.2 * w)
 bx.scatter(mid[mk, 0], mid[mk, 1], s=34, c=INK, marker="s", zorder=4)
 inward = ip[box].mean(0) - x0; inward /= np.linalg.norm(inward)
 j = np.argsort(np.linalg.norm(mid - x0, axis=1))[:2]
-for k, lab in zip(j, ("$u = +t$", "$u = -t$")):
+for k, lab in zip(j, ("$\\hat\\nu = +t$", "$\\hat\\nu = -t$")):
     bx.annotate("", xy=(x0[0], x0[1]), xytext=(mid[k, 0], mid[k, 1]),
                 arrowprops=dict(arrowstyle="-|>,head_width=0.35,head_length=0.7", color=INK, lw=2.0, shrinkA=4, shrinkB=6), zorder=6)
     pos = 0.5 * (mid[k] + x0) + 0.35 * w * inward
@@ -397,7 +409,7 @@ ch = [r["nearest_changes_under_pose_fraction"] for r in TT.values()]
 print(f"**The counts, on the seven specimens the chapter draws.** {100 * min(ch):.1f}% to {100 * max(ch):.1f}% of the nodes change their "
       f"nearest sample under one generic pose. On the validation specimen of @fig-problem-tensile2d that is "
       f"{T1['nearest_changes_under_pose_nodes']} of {T1['n_nodes']:,} nodes, {T1['nearest_changes_on_boundary_nodes']} of them on the polyline, "
-      f"and their direction $u$ turns by a median of {T1['direction_change_deg_median']:.0f}°. Of its {T1['n_on_boundary']} nodes on the polyline, "
+      f"and their direction $\\hat\\nu$ turns by a median of {T1['direction_change_deg_median']:.0f}°. Of its {T1['n_on_boundary']} nodes on the polyline, "
       f"{T1['tied_on_boundary_nodes']} are tied to a relative gap of 1e-4, {T1['on_boundary_outside_sign_nodes']} get the outside sign of $d$ on "
       f"the native mesh, and {T1['sign_flips_on_boundary_nodes']} change that sign under the pose; no interior node changes sign. "
       "Data: results/char/solids_ties_2026-10-18.json.")
@@ -442,7 +454,7 @@ print(f"\n: ISLA on the {N_VAL} validation specimens with the boundary polyline 
 
 **Tensile2d measures a tensor target in a planar solid, with six global scalars and the pose contract in its tensor form; it measures neither a change of geometry class nor the sampling law of the boundary.**
 
-- **Where ISLA's deficit sits is open.** GeoTransolver's lead on stress and displacement is the one standing on the solids that favors a baseline, and the error per node has not been compared between the architectures. One measurement would locate it: ISLA's error on the polyline nodes against its error in the interior, set beside the baselines'. If ISLA's excess sits on the polyline, the tie construction of @sec-tensile2d-ties accounts for part of the native deficit as well; if it sits at the notch root, it does not.
+- **Where ISLA's deficit sits is open.** ISLA trails GeoTransolver on stress and displacement and Transolver on displacement and plastic strain, the only trails among the solids' standings (@tbl-tensile2d-protocols), and where on the specimen the excess error sits is not measured. One measurement would locate it: ISLA's error on the polyline nodes against its error in the interior, set beside the baselines'. If ISLA's excess sits on the polyline, the tie construction of @sec-tensile2d-ties accounts for part of the native deficit as well; if it sits at the notch root, it does not.
 - **The pose contract holds to a few percent, not exactly.** The residual shift is the nearest-sample construction at nodes on the boundary, a property of ISLA's interior geometry input on meshes whose prediction points include boundary nodes. An exact, continuous form of that input is an open design question (@sec-open-questions).
 - **The plastic-strain column is an ordering on a constant-offset metric.** It says little about how well any of the three predicts the plastic field, since the 69 validation specimens that never yield dominate it.
 - **The sampling law is not separable here.** The segments are nearly equal, so the length-proportional and uniform draws coincide, and only ISLA reads the boundary; independence of the sampling law is measured on the surface datasets (@sec-invariances).

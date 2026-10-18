@@ -4,7 +4,7 @@
 reference configurations and the study configurations (@sec-study-configurations), and ISLA's
 quadrature (@sec-isla-quadrature). No result of the dataset chapters is assumed.
 
-**Training cells per case stop paying above 100,000, the error falls towards a floor as the model
+**Training cells per case stop paying above 100,000, the error falls toward a floor as the model
 and the training set grow, a fitted law says how to split a compute budget between the two, and
 the cost of a training step is linear in the number of tokens.** This chapter answers the three questions an engineer asks before spending a
 GPU budget on a surrogate: how many cells per case, how many parameters against how many training
@@ -50,7 +50,7 @@ def star(ax, x, y, key, label=None, ms=15, **kw):
     """A reference configuration: the architecture's color, a black-edged star."""
     return ax.plot([x], [y], marker="*", ms=ms, mfc=STYLE[key]["color"], mec=INK, mew=0.9, ls="none",
                    label=label, zorder=6, **kw)
-HL_NOTE = ("" if S.DATASETS["hilift"].reference else
+HL_NOTE = ("" if S.DATASETS["hilift"].reference or not S.DATASETS["hilift"].fair_drive else
            " HiLiftAeroML's ISLA star is from checkpoints of the raw-read variant (@sec-isla-layer), not of the reference configuration.")
 ```
 
@@ -58,12 +58,12 @@ HL_NOTE = ("" if S.DATASETS["hilift"].reference else
 
 **Above 100,000 training cells per case the error of every architecture is flat in the cell
 count, and doubling the training length moves it by less than a seed spread, so neither cells
-nor epochs is a lever past the reporting protocol.** A training cell is a quadrature node: the
+nor epochs buys accuracy past the reporting protocol.** A training cell is a quadrature node: the
 model sees a random subsample of the surface mesh each step, and its sums over that subsample
 estimate integrals over the surface. Once the estimate is good enough that the network's own
 approximation error dominates, more nodes buy nothing. @tbl-cells-ladder measures where that
 happens. Each row trains one model at one width from 100,000 to 600,000 cells per case and scores
-every lane on the same instrument (200,000 cells, float32), so the only variable down a column is
+every run on the same instrument (200,000 cells, float32), so the only variable down a column is
 how densely the training draw samples the surface.
 
 ```{python}
@@ -100,7 +100,7 @@ print(f"The fitted exponent of error against training cells is {abs(ISOJ['bars']
       f"{ISOJ['bars']['cells_exponent']['alpha_gt']:.2f} for GeoTransolver over this range. The training length is converged too: "
       f"1,000 epochs instead of 500 at 200,000 cells move ISLA at 192 wide by {ep('isla|w192|c200k|lr1e-3|ep500'):.2f}% and GeoTransolver "
       f"at 256 wide by {ep('gt_unit|w256|c200k|lr3e-3|ep500'):.2f}%. What still buys accuracy at 435 cars is capacity "
-      "(@sec-shared-floor) and, more cheaply, cases (@sec-compute-allocation).")
+      "(@sec-shared-floor) and, more cheaply, cases (@sec-compute-allocation). Data: results/isocost_reduction_2026-09-20.json.")
 ```
 
 ### Below 100,000 cells ISLA pays a quadrature-noise penalty {#sec-deficit-anatomy}
@@ -110,16 +110,17 @@ because ISLA's slice states are measure-weighted quadratures whose variance a sp
 inflates.** Each slice state is a ratio estimator of a surface integral (@sec-isla-quadrature):
 
 $$
-Z_s \;=\; \frac{\sum_i a_{is}\, w_i\, \tilde h_i}{\sum_i a_{is}\, w_i},
+Z_s \;=\; \sum_i a_{is}\, \tilde h_i \;=\; \frac{\sum_i w_i\, e^{\lambda_{is}}\, \tilde h_i}{\sum_i w_i\, e^{\lambda_{is}}},
 $$
 
-with $a_{is}$ the routing weight of token $i$ into slice $s$, $w_i$ its measure weight and
-$\tilde h_i$ its normalized state. Under an independent draw of $n$ cells its variance falls like
+with $a_{is}$ the routing weight of token $i$ into slice $s$, which carries the token's measure
+weight $w_i$ (@sec-isla-quadrature), $\lambda_{is}$ its learned routing score and $\tilde h_i$ its
+normalized state. Under an independent draw of $n$ cells its variance falls like
 $1/n_\text{eff}$, where Kish's effective sample size $n_\text{eff} = (\sum_i w_i)^2 / \sum_i
 w_i^2$ is smaller than $n$ whenever the cell areas vary. A surface mesh refined at the edges and
 coarse on the flanks has cell areas spread over orders of magnitude, so a weighted mean over
 10,000 such cells is noisier than an unweighted one. The baselines average token states without
-weights; they pay a different price, a bias towards wherever the mesher put its cells
+weights; they pay a different price, a bias toward wherever the mesher put its cells
 (@sec-sampling-laws), but not this variance.
 
 Two scorings of the same checkpoints separate the variance from everything else
@@ -144,7 +145,7 @@ more than the baselines'.
 #|   (@tbl-cells-ladder). Data: results/quadvar_reduction_2026-09-17.json.
 #| fig-alt: "Error against scoring cell count for three architectures; ISLA's uniform-draw curve falls most steeply, and its stratified point at 10,000 cells sits well below its uniform point."
 fig, ax = plt.subplots(figsize=(7.4, 4.4))
-for arm, key, dx in (("isla_ref", "isla_ref", 0.94), ("gt_unit", "gt", 1.0), ("transolver_unit", "t", 1.06)):
+for arm, key, dx in (("isla_ref", "isla_ref", 0.9), ("gt_unit", "gt", 1.0), ("transolver_unit", "t", 1.11)):
     q = QV[arm]; ns = sorted(int(k) for k in q["unif"])
     kw = series_kwargs(key, ms=7, lw=1.8, label="_nolegend_")
     ax.plot([n * dx for n in ns], [q["unif"][str(n)] for n in ns], **kw)
@@ -181,12 +182,11 @@ print(f"The stratified draw lowers ISLA's error by {gain('isla_ref'):.1f}%, GeoT
 ## The capacity floor {#sec-shared-floor}
 
 **At 435 DrivAerML cars and 100,000 cells per case both architectures approach the same floor in
-surface-pressure error as width and depth grow, and ISLA reaches it with about half of
-GeoTransolver's parameters.** With cells saturated, what remains at a fixed dataset is capacity.
+surface-pressure error as width and depth grow, and they reach it at similar parameter counts.** With cells saturated, what remains at a fixed dataset is capacity.
 Two ladders measure it. A width ladder takes ISLA from 192 to 1,536 wide and GeoTransolver from
 256 to 2,048 wide, each width at the better of the learning rates run for it. A depth ladder takes
-ISLA at 384 wide from 12 to 48 layers and GeoTransolver at 512 wide from 12 to 24. Every lane
-trains for 500 epochs with two seeds. @fig-capacity puts every lane on one axis of trainable
+ISLA at 384 wide from 12 to 48 layers and GeoTransolver at 512 wide from 12 to 24. Every run
+trains for 500 epochs with two seeds. @fig-capacity puts every run on one axis of trainable
 parameters, with the three reference configurations beside them.
 
 ```{python}
@@ -229,15 +229,16 @@ REFP = {a: ref_point(SURF, "DrivAerML Surface", a) for a, _ in REF_KEYS}
 #|   Surface-pressure error against trainable parameters on the DrivAerML Surface task (435
 #|   training cars, 100,000 training cells per case unless labeled, 500 epochs, float32 at 200,000
 #|   cells on the 48 validation cars; two-seed means with the seeds as short bars). Red:
-#|   GeoTransolver's width ladder at 12 layers (filled circles) and its 24-layer lane at 512 wide
+#|   GeoTransolver's width ladder at 12 layers (filled circles) and its 24-layer run at 512 wide
 #|   (open circle). Blue: ISLA's width ladder at 12 layers (filled squares), its depth ladder at 384
-#|   wide (open diamonds, dotted), and the 24-layer lane trained at 200,000 cells (cross).
+#|   wide (open diamonds, dotted), and the 24-layer run trained at 200,000 cells (cross, drawn
+#|   offset to the right of its 100,000-cell twin, which has the same parameters).
 #|   *Instrument:* ISLA at 192 to 1,536 wide, 256 slices, 1e-3 to 2.5e-4, raw slice reads
 #|   (@sec-study-configurations). Large black-edged stars: the three reference configurations on the
 #|   same validation cars, a different instrument (200,000 training cells, 100,000 for Transolver;
 #|   the normalized slice reads and 512 slices for ISLA; results/char/drivaerml_surface_a2.json,
 #|   parameters from results/char/char_lanes_cost_2026-10-04.json). The gray band spans the best two
-#|   ladder lanes of each architecture. How to read this: the x axis is parameters, not memory or
+#|   ladder runs of each architecture. How to read this: the x axis is parameters, not memory or
 #|   time (those are @tbl-ref-cost and @fig-cost-sweep); GeoTransolver-2,048's count is extrapolated
 #|   from its measured 256 to 1,024 ladder; the y axis starts below the floor. Data:
 #|   results/cap435_reduction_2026-09-20.json, results/routenorm_interim_2026-09-20.json,
@@ -255,10 +256,10 @@ draw(gt_width, "gt", "GeoTransolver, width 256 → 2,048")
 draw(gt_depth, "gt", "GeoTransolver, 512 wide, 12 → 24 layers", ls=":", mfc="white")
 draw(isla_width, "isla_ref", "ISLA, width 192 → 1,536")
 draw(isla_depth, "isla_ref", "ISLA, 384 wide, 12 → 48 layers", ls=":", marker="D", mfc="white")
-draw([isla_200k], "isla_ref", "ISLA, 384 × 24, trained at 200,000 cells", ls="none", marker="X", ms=10)
+draw([(isla_200k[0] * 1.12,) + isla_200k[1:]], "isla_ref", "ISLA, 384 × 24, trained at 200,000 cells (drawn offset right)", ls="none", marker="X", ms=10)
 for a, key in REF_KEYS:
     star(ax, *REFP[a], key, ms=17)
-    ax.annotate(f"{a} reference", REFP[a], textcoords="offset points", xytext=(9, 4), fontsize=8.2,
+    ax.annotate(f"{a} reference\n(different instrument)", REFP[a], textcoords="offset points", xytext=(9, 4), fontsize=8.0,
                 color=STYLE[key]["color"], path_effects=halo())
 ax.axhspan(floor_lo, floor_hi, color=GRID, zorder=0)
 ax.text(5.6e6, (floor_lo + floor_hi) / 2, f"floor band {floor_lo:.4f} to {floor_hi:.4f}", fontsize=8.5, color=INK2, va="center", path_effects=halo())
@@ -278,23 +279,25 @@ ref_over = {a: REFP[a][1] / floor_hi for a, _ in REF_KEYS}
 print(f"1. **Width pays both architectures at first, and only GeoTransolver keeps buying with it.** GeoTransolver's width ladder improves by "
       f"{gains} per doubling from 256 to 2,048 wide, the last doubling the size of a seed spread. ISLA's improves by "
       f"{100 * (1 - isla_width[1][1] / isla_width[0][1]):.1f}% from 192 to 384 wide and then levels off: 768 wide gains a further "
-      f"{100 * (1 - isla_width[2][1] / isla_width[1][1]):.1f}%, and the 1,024- and 1,536-wide lanes are worse than the 384-wide one "
+      f"{100 * (1 - isla_width[2][1] / isla_width[1][1]):.1f}%, and the 1,024- and 1,536-wide runs are worse than the 384-wide one "
       f"({isla_width[3][1]:.4f} and {isla_width[4][1]:.4f} against {isla_width[1][1]:.4f}).")
 print(f"2. **Depth is ISLA's capacity axis on this dataset.** At 384 wide, 24 layers read {isla_depth[1][1]:.4f} at "
-      f"{isla_depth[1][0] / 1e6:.0f}M parameters and 48 layers {isla_depth[2][1]:.4f} at {isla_depth[2][0] / 1e6:.0f}M. The 24-layer lane "
+      f"{isla_depth[1][0] / 1e6:.0f}M parameters and 48 layers {isla_depth[2][1]:.4f} at {isla_depth[2][0] / 1e6:.0f}M. The 24-layer run "
       f"trained at 200,000 cells reads {isla_200k[1]:.4f}, within {100 * abs(isla_200k[1] / isla_depth[1][1] - 1):.1f}% of its 100,000-cell twin, "
       "so the floor is not an artifact of the 100,000-cell budget.")
-print(f"3. **Both reach one floor, ISLA with fewer parameters.** At about {gt_width[2][0] / 1e6:.0f}M parameters GeoTransolver at 1,024 wide "
-      f"÷ ISLA at 384 × 48 = {gt_width[2][1] / isla_depth[2][1]:.3f}. ISLA at 384 × 24 sits {100 * (isla_depth[1][1] / gt_width[2][1] - 1):.1f}% "
-      f"above GeoTransolver-1,024 at {100 * isla_depth[1][0] / gt_width[2][0]:.0f}% of its parameters.")
+print(f"3. **Both reach one floor at similar parameter counts.** GeoTransolver at 512 × 24 reads {gt_depth[1][1]:.4f} at "
+      f"{gt_depth[1][0] / 1e6:.0f}M parameters and ISLA at 384 × 24 {isla_depth[1][1]:.4f} at {isla_depth[1][0] / 1e6:.0f}M; at 12 layers "
+      f"GeoTransolver at 512 wide reads {gt_width[1][1]:.4f} at {gt_width[1][0] / 1e6:.0f}M and ISLA at 384 wide {isla_width[1][1]:.4f} at "
+      f"{isla_width[1][0] / 1e6:.0f}M; the pairs differ by {100 * max(abs(gt_depth[1][1] / isla_depth[1][1] - 1), abs(gt_width[1][1] / isla_width[1][1] - 1)):.1f}% or less. At about {gt_width[2][0] / 1e6:.0f}M parameters GeoTransolver at "
+      f"1,024 wide ÷ ISLA at 384 × 48 = {gt_width[2][1] / isla_depth[2][1]:.3f}.")
 print(f"4. **The reference configurations sit above the band.** Their errors are "
       + ", ".join(f"{a} {REFP[a][1]:.4f} at {REFP[a][0] / 1e6:.0f}M parameters ({ref_over[a]:.2f}× the band's upper edge)" for a, _ in REF_KEYS)
-      + ". They are a different instrument (more training cells and, for ISLA, 512 slices, the normalized reads and the class as it stands), "
-        "chosen under a memory budget of 80 GiB per GPU rather than for capacity. Whether the reference ISLA reaches the band with depth is "
-        "an open question with a priced answer (@sec-oq-scaling).")
+      + ". They are a different instrument (more training cells and, for ISLA, 512 slices and the normalized reads), "
+        "chosen under a memory budget of 80 GiB per GPU rather than for capacity. Whether the reference ISLA reaches the band is "
+        "an open question (@sec-oq-scaling).")
 ```
 
-::: {.callout-note collapse="true" title="Optional: the lanes at the floor, with their parameters and memory"}
+::: {.callout-note collapse="true" title="Optional: the runs at the floor, with their parameters and memory"}
 
 ```{python}
 #| label: tbl-floor
@@ -319,7 +322,7 @@ for arch, shape, cells, lr, c in floor_rows:
     memv = c.get("peak_mem_gb")
     out += f"| {arch} | {shape} | {params} | {cells} | {lr} | **{c['pressure_l2_mean']:.4f}** ({seeds}) | {'not logged' if memv is None else f'{memv:.0f}'} |\n"
 print(out)
-print(": The ladder lanes at or near the floor on the DrivAerML Surface task (435 cars, 500 epochs, two seeds, float32 at 200,000 cells on the "
+print(": The ladder runs at or near the floor on the DrivAerML Surface task (435 cars, 500 epochs, two seeds, float32 at 200,000 cells on the "
       "48 validation cars). *Instrument:* ISLA at 384 wide, 256 slices, 5e-4 and 2.5e-4, raw slice reads (@sec-study-configurations). "
       "*Parameters*: trainable, as counted by the training script. *Memory*: the peak of the per-step reserved memory the training log "
       "records, per GPU. How to read this: the table names the floor and what each model pays to reach it; the errors differ by less than "
@@ -368,7 +371,7 @@ print(": The capacity readings on the 510-wing HiLiftAeroML rung: surface-pressu
 comparison between them is resource-matched only on the memory budget they were chosen under.**
 ISLA's reference has several times GeoTransolver's parameters, and Transolver's trains at half
 the cells. @tbl-ref-cost lists, for every task with a cost record, what one training epoch costs
-each architecture on four GB300 GPUs, the GPU-hours of a 500-epoch lane, and the headline error
+each architecture on four GB300 GPUs, the GPU-hours of a 500-epoch training run, and the headline error
 of its standing. Two terms need a line each. The *allocator peak* is the largest amount of GPU
 memory the training process held in live tensors at once (PyTorch's `max_memory_allocated`);
 the allocator reserves somewhat more in cached blocks, so the peak is a lower bound on the card a
@@ -382,7 +385,7 @@ TASKS = [("DrivAerML Surface", "drivaerml_surface"), ("DrivAerML Volume", "driva
          ("AirfRANS", "airfrans"), ("Tensile2D", "tensile2d"), ("lug", "lug"), ("DeepJEB++", "deepjeb")]
 EPOCHS = {"DeepJEB++": 40}  # every other task trains for 500 epochs (@sec-protocol)
 lane_gpuh = lambda task, arch: COST[task][arch]["epoch_seconds"] * EPOCHS.get(task, 500) * 4 / 3600
-out = "| dataset and task | architecture | parameters | allocator peak per GPU [GiB] | epoch [s] | GPU-hours per lane | error, first headline field | ÷ ISLA |\n|---|---|--:|--:|--:|--:|--:|--:|\n"
+out = "| dataset and task | architecture | parameters | allocator peak per GPU [GiB] | epoch [s] | GPU-hours per run | error, first headline field | ÷ ISLA |\n|---|---|--:|--:|--:|--:|--:|--:|\n"
 for task, key in TASKS:
     st_ = S.Standing(key); f = st_.ds.headline[0]
     for i, (arch, _) in enumerate(REF_KEYS):
@@ -393,7 +396,7 @@ for task, key in TASKS:
                 f"{st_.err(arch, f):.4f} | {rel} |\n")
 print(out)
 print(": What the three reference configurations spend, per dataset and task: trainable parameters, the training allocator peak per GPU (the "
-      "maximum over four GB300 ranks, bfloat16, one case per GPU), the wall time of one training epoch, and the GPU-hours of one lane "
+      "maximum over four GB300 ranks, bfloat16, one case per GPU), the wall time of one training epoch, and the GPU-hours of one training run "
       "(epoch time × epochs × four GPUs; 500 epochs, 40 on DeepJEB++), beside the seed-mean error of the dataset's first headline field from its "
       "standing and the ratio baseline ÷ ISLA. The one-epoch cost runs used the raw slice reads, which have the same parameters and the "
       "same tensors as the normalized reads, so the counts are exact and the costs representative. How to read this: the cost columns come "
@@ -410,7 +413,7 @@ small = [COST[t]["ISLA"]["epoch_seconds"] / COST[t][b]["epoch_seconds"] for t in
 print(f"On the DrivAerML Surface task the reference ISLA holds {d['ISLA']['n_parameters'] / d['GeoTransolver']['n_parameters']:.1f}× "
       f"GeoTransolver's parameters in {d['ISLA']['peak_gib'] / d['GeoTransolver']['peak_gib']:.2f}× its memory and "
       f"{d['ISLA']['epoch_seconds'] / d['GeoTransolver']['epoch_seconds']:.2f}× its epoch time. Its parameters are cheap because ISLA's memory "
-      "goes to the per-token, per-slice geometry rather than to weights (@sec-architecture). On the small structured meshes "
+      "goes to the per-token, per-slice geometry rather than to weights (@sec-architecture). On the small finite-element meshes "
       f"(PLAID Tensile2d, the GINOT bracket lug) the same ISLA spends {min(small):.1f} to {max(small):.1f} times the baselines' epoch time. The one-GPU sweep of "
       "@sec-cost-sweep, in which ISLA's and GeoTransolver's steps are level at a few thousand tokens, does not account for that gap, and "
       "its cause is not measured.")
@@ -429,7 +432,7 @@ The instrument is a scaling study on two surface datasets. ISLA at three widths 
 at three widths train for 500 epochs at 100,000 cells per case on 27, 54, 109, 218 and 435
 DrivAerML cars and on 35, 210, 510 and 1,260 HiLiftAeroML wings, two seeds each, scored in
 float32. @fig-scaling-cases shows the raw curves. They bend: steep at the small rungs, flattening
-towards a floor at the large ones, on both datasets.
+toward a floor at the large ones, on both datasets.
 
 ```{python}
 #| label: fig-scaling-cases
@@ -442,9 +445,10 @@ towards a floor at the large ones, on both datasets.
 #|   accepted (ISLA on both datasets, GeoTransolver on the wings); gray dashed line: ISLA's fitted
 #|   floor. *Instrument:* ISLA at 192, 384 and 768 wide, 256 slices, 1e-3 / 5e-4 / 5e-4, raw slice
 #|   reads (@sec-study-configurations); GeoTransolver at 256, 512 and 1,024 wide, 3e-3 / 3e-3 /
-#|   1e-3. Black-edged stars: the three reference configurations at the dataset's full training
-#|   set (435 cars, 210 wings), a different instrument (results/char/drivaerml_surface_a2.json,
-#|   results/char/hilift_surface.json), offset sideways for legibility. How to read this: the
+#|   1e-3. Black-edged stars: the three reference configurations at the full training set of 435
+#|   cars, a different instrument (results/char/drivaerml_surface_a2.json), offset sideways for
+#|   legibility; the HiLiftAeroML panel carries them only where its standing compares the
+#|   architectures (@sec-oq-unit-direction). How to read this: the
 #|   vertical spread between shades is what parameters buy at one training-set size; the slope is
 #|   what cases buy. Both axes are logarithmic. Data: results/scalelaw_2026-10-08.json.
 #| fig-alt: "Two stacked log-log scatters of pressure error against training cases, DrivAerML above and HiLiftAeroML below; three blue shades for ISLA widths and three red shades for GeoTransolver widths, dotted fitted curves bending toward a floor, and stars for the reference configurations."
@@ -468,7 +472,7 @@ for ax, (ds, title, ticks, xlim, ylim, yticks, stand, nref) in zip(axes, PANELS)
         kw = series_kwargs(key); F = SLF[f"{ds}|{m}"]; f = F["fit"]; accepted = F["law_accepted_rms_below_3pct"]
         for shade, (w, rows) in zip(shades[m], sorted(pts[m].items())):
             rows = sorted(rows); x = [r[0] for r in rows]; y = [r[1] for r in rows]
-            ax.plot(x, y, marker=kw["marker"], color=shade, ls="none", ms=6, label=f"{STYLE[key]['label']}, {w} wide")
+            ax.plot(x, y, marker=kw["marker"], color=shade, mec=INK2, mew=0.4, ls="none", ms=6, label=f"{STYLE[key]['label']}, {w} wide")
             for r in rows:
                 ax.plot([r[0]] * len(r[2]), r[2], ls="none", marker="_", color=shade, ms=7, mew=1.1)
             if accepted:
@@ -476,9 +480,10 @@ for ax, (ds, title, ticks, xlim, ylim, yticks, stand, nref) in zip(axes, PANELS)
         if m == "isla" and accepted:
             ax.axhline(f["eps_inf"], color=BASELINE, ls="--", lw=0.8, zorder=0)
             ax.text(xlim[0] * 1.15, f["eps_inf"] * 0.985, f"ISLA's fitted floor {f['eps_inf']:.4f}", fontsize=7.5, color=INK2, va="top", ha="left")
-    for (a, key), dx in zip(REF_KEYS, (1.0, 1.12, 0.89)):
-        star(ax, nref * dx, stand.err(a, "pressure_l2"), key, ms=13)
-    ax.plot([], [], marker="*", ms=12, mfc="white", mec=INK, ls="none", label="reference configurations")
+    if stand.ds.fair_drive:
+        for (a, key), dx in zip(REF_KEYS, (1.0, 1.12, 0.89)):
+            star(ax, nref * dx, stand.err(a, "pressure_l2"), key, ms=13)
+        ax.plot([], [], marker="*", ms=12, mfc="white", mec=INK, ls="none", label="reference configurations")
     ax.set_xscale("log"); ax.set_yscale("log"); ax.set_xticks(ticks); ax.set_xticklabels([f"{t:,}" for t in ticks])
     ax.set_yticks(yticks); ax.set_yticklabels([f"{t:.2f}" for t in yticks]); ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
     ax.set_xlim(*xlim); ax.set_ylim(*ylim)
@@ -500,7 +505,7 @@ print(HL_NOTE.strip())
 gw = {(ds, m): SLF[f"{ds}|{m}"]["gain_widest_over_narrowest_by_n"] for ds in ("drivaerml", "hilift") for m in ("isla", "gt")}
 print("Two readings of the curves come before any fit. The error is not one power law in the case count on either dataset: the local "
       "exponent (the negative log-log slope between adjacent rungs, @tbl-scaling-exponents) falls rung by rung, the signature of an approach "
-      "to a floor. And parameters lower the curve at every rung without changing its slope much: the widest lane improves on the narrowest "
+      "to a floor. And parameters lower the curve at every rung without changing its slope much: the widest run improves on the narrowest "
       f"by up to {100 * max(max(gw[('drivaerml', m)].values()) for m in ('isla', 'gt')):.0f}% on the cars and up to "
       f"{100 * max(max(gw[('hilift', m)].values()) for m in ('isla', 'gt')):.0f}% on the wings, while a step from one rung to the next "
       "buys more than that below a few hundred cases.")
@@ -529,9 +534,9 @@ for ds in ("drivaerml", "hilift"):
                 gains.append(f"{n:,}: {100 * (hi / lo - 1):+.0f}%" if lo and hi else f"{n:,}: —")
             out += f"| {DS_NAME[ds]} | {name} | {w} | {cells} | {'; '.join(gains) if w == ws[0] else ''} |\n"
 out += (f"\n: Local exponents of the error against training cases (the negative log-log slope between adjacent rungs, at each width) and the "
-        f"change in error from the narrowest to the widest lane at each rung (a {ratios[('drivaerml', 'isla')]:.0f}× parameter increase for ISLA "
+        f"change in error from the narrowest to the widest run at each rung (a {ratios[('drivaerml', 'isla')]:.0f}× parameter increase for ISLA "
         f"and {ratios[('drivaerml', 'gt')]:.0f}× for GeoTransolver). *Instrument:* as @fig-scaling-cases. How to read this: an exponent that falls "
-        "with the rung is an approach to a floor, not a scale-free law; a positive change is a rung where the widest lane is not the best. "
+        "with the rung is an approach to a floor, not a scale-free law; a positive change is a rung where the widest run is not the best. "
         "Data: results/scalelaw_2026-10-08.json.\n")
 print(out)
 ```
@@ -539,7 +544,7 @@ print(out)
 ### The fitted law {#sec-scaling-law}
 
 **A floor plus two power laws reproduces every seed mean of ISLA to within a few percent on both
-datasets, and both architectures share the data exponent of each dataset.** The form separates
+datasets; GeoTransolver's fit passes the same bar on the wings and misses it on the cars.** The form separates
 three sources of error: what no amount of data or capacity removes, what more cases remove, and
 what more parameters remove,
 
@@ -557,7 +562,7 @@ before the fit. @tbl-scaling-fit gives the coefficients.
 #| label: tbl-scaling-fit
 #| output: asis
 out = ("| dataset | model | $\\varepsilon_\\infty$ | $a$ | $\\alpha$ | $b$ | $\\beta$ | RMS residual | accepted | "
-       "$n$ where $D = \\Pi$ at the narrowest width |\n|---|---|--:|--:|--:|--:|--:|--:|:--:|--:|\n")
+       "crossover $n$ |\n|---|---|--:|--:|--:|--:|--:|--:|:--:|--:|\n")
 UNIT = {"drivaerml": "cars", "hilift": "wings"}
 for ds in ("drivaerml", "hilift"):
     for m, name in (("isla", "ISLA"), ("gt", "GeoTransolver")):
@@ -567,8 +572,9 @@ for ds in ("drivaerml", "hilift"):
         bval = f"{f['b']:.0f}" if f["b"] >= 10 else f"{f['b']:.2f}"
         out += f"| {DS_NAME[ds]} | {name} | {floor} | {f['a']:.1f} | {rng_('alpha')} | {bval} | {rng_('beta')} | {100 * f['rms_rel_residual']:.1f}% | {'yes' if F['law_accepted_rms_below_3pct'] else 'no'} | {F['n_star_recipe_width']:,.0f} {UNIT[ds]} |\n"
 out += ("\n: The fitted law $\\varepsilon = \\varepsilon_\\infty + a\\,n^{-\\alpha} + b\\,P^{-\\beta}$ per architecture and dataset, 16th to 84th "
-        "percentiles of a 400-draw two-seed bootstrap in parentheses. A fit is accepted when its RMS relative residual is below 3%. The last column "
-        "is the case count at which the two fitted terms are equal at the narrowest width (ISLA 192, GeoTransolver 256), the crossover defined "
+        "percentiles of a 400-draw two-seed bootstrap in parentheses; $D \\equiv a\\,n^{-\\alpha}$ is the data term and $\\Pi \\equiv b\\,P^{-\\beta}$ the "
+        "parameter term. A fit is accepted when its RMS relative residual is below 3%. The last column, *crossover $n$*, "
+        "is the case count at which $D = \\Pi$ at the narrowest width (ISLA 192, GeoTransolver 256), the crossover defined "
         "before the fit. *Instrument:* as @fig-scaling-cases. How to read this: GeoTransolver's DrivAerML row misses the bar and puts its floor on "
         "the bound, so its exponents are indicative. With three widths per model $\\beta$ is weakly identified (its bootstrap range says so); "
         "GeoTransolver's wing fit uses that freedom to set $\\beta$ near zero, which turns $b\\,P^{-\\beta}$ into a constant and sends "
@@ -586,11 +592,12 @@ print(f"For ISLA on the cars the floor lands inside its allowed range at {Dd['is
       f"({100 * Dd['gt']['fit']['rms_rel_residual']:.1f}%). The cause is its 27-car rung, where the 1,024-wide model "
       f"({gt27['1024']:.4f}) is worse than the 512-wide one ({gt27['512']:.4f}): an additive law has no term for a wide model losing to a "
       "narrower one at small data. "
-      f"The data exponents agree between the architectures to within the bootstrap spread on both datasets: $\\alpha$ = "
-      f"{Dd['isla']['fit']['alpha']:.2f} and {Dd['gt']['fit']['alpha']:.2f} on the cars, {H['isla']['fit']['alpha']:.2f} and "
-      f"{H['gt']['fit']['alpha']:.2f} on the wings. **The two architectures convert cases into accuracy at the same rate; the rate belongs to "
-      "the dataset.** The exponents describe the reducible error above the floor, which is why $\\alpha$ exceeds every local slope of the total "
-      "error in @tbl-scaling-exponents.")
+      f"On the wings, where both fits pass, the data exponents are {H['isla']['fit']['alpha']:.2f} for ISLA and {H['gt']['fit']['alpha']:.2f} "
+      "for GeoTransolver, inside each other's bootstrap range, although GeoTransolver's fit there sets its parameter term near a constant "
+      f"($\\beta$ = {H['gt']['fit']['beta']:.2f}, floor {H['gt']['fit']['eps_inf']:.3f}). On the cars they are {Dd['isla']['fit']['alpha']:.2f} "
+      f"and {Dd['gt']['fit']['alpha']:.2f}, an indicative agreement only, since GeoTransolver's fit misses the bar. **Where both fits pass, the two "
+      "architectures convert cases into accuracy at the same rate; the rate differs between the datasets.** The exponents describe the reducible "
+      "error above the floor, which is why $\\alpha$ exceeds every local slope of the total error in @tbl-scaling-exponents.")
 ```
 
 ### Compute allocation as a constrained minimization {#sec-iso-compute}
@@ -599,7 +606,7 @@ print(f"For ISLA on the cars the floor lands inside its allowed range at {Dd['is
 form: the optimal path keeps the data term a fixed fraction $\beta/\alpha$ of the parameter term,
 and grows parameters as $C^{\alpha/(\alpha+\beta)}$ and cases as $C^{\beta/(\alpha+\beta)}$.**
 Picture the plane of training cases against parameters (@fig-iso-compute). The fitted error is a
-landscape on it, falling towards the upper right. A training budget is a curve on the same plane:
+landscape on it, falling toward the upper right. A training budget is a curve on the same plane:
 each case is seen for the same number of epochs at the same cell count, and the arithmetic of a
 step grows with the parameters it multiplies, so compute is proportional to $P\,n$ and a fixed
 budget is a straight line of slope −1 in log-log axes. The best model for that budget is where the
@@ -630,13 +637,13 @@ n_on_path = lambda P: (P / Kp) ** (be_ / al_)
 #|   surface-pressure error. Dashed white diagonals: budgets of equal training compute, proportional to
 #|   parameters × cases, labeled as multiples of the reference ISLA's (its parameters at 435 cars).
 #|   Black line: the compute-optimal path, where each budget line touches its lowest contour.
-#|   Small white circles: the fifteen lanes the law is fitted to; the colors are full inside the
+#|   Small white circles: the fifteen runs the law is fitted to; the colors are full inside the
 #|   dashed rectangle they span and faint outside it, where the contours are extrapolation. Blue star: the reference ISLA, a
 #|   different instrument whose measured error is printed beside it. *Instrument:* as
 #|   @fig-scaling-cases. How to read this: moving along a dashed line spends the same compute; the
 #|   best point on it is where it crosses the black path. The figure assumes compute ∝ P·n, which
 #|   counts arithmetic, not GPU wall time (see the callout below). Data: results/scalelaw_2026-10-08.json.
-#| fig-alt: "Contour map of predicted error over training cases on the x axis and parameters on the y axis, both logarithmic, with diagonal iso-compute lines, a steep black optimal path, the fitted lanes as white dots inside a clear rectangle and a blue star for the reference ISLA."
+#| fig-alt: "Contour map of predicted error over training cases on the x axis and parameters on the y axis, both logarithmic, with diagonal iso-compute lines, a steep black optimal path, the fitted runs as white dots inside a clear rectangle and a blue star for the reference ISLA."
 nn = np.geomspace(15, 2500, 220); PP = np.geomspace(3e6, 1.2e9, 220)
 NN, PG = np.meshgrid(nn, PP); EE = law(NN, PG)
 fig, ax = plt.subplots(figsize=(8.0, 6.4))
@@ -661,7 +668,8 @@ for w, rows in pts_sl["isla"].items():
         ax.plot(r[0], params_sl["isla"][w], marker="o", ms=5, mfc="white", mec=INK, mew=0.8, ls="none", zorder=6)
 star(ax, N_REF, P_REF, "isla_ref", ms=18)
 ax.annotate(f"reference ISLA\nmeasured {SURF.err('ISLA', 'pressure_l2'):.4f}\nlaw {law(N_REF, P_REF):.4f}", (N_REF, P_REF),
-            textcoords="offset points", xytext=(12, -6), fontsize=8, color=BLUE, path_effects=halo(), zorder=7, va="top")
+            textcoords="offset points", xytext=(12, -6), fontsize=8, color=BLUE, zorder=7, va="top",
+            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="none", alpha=0.9))
 ax.plot([n_opt], [P_opt], marker="D", ms=7, mfc=WHITE, mec=INK, mew=1.4, zorder=7)
 ax.annotate(f"optimum for the\nreference budget:\n{n_opt:.0f} cases, {P_opt / 1e6:.0f}M\nlaw {law(n_opt, P_opt):.4f}", (n_opt, P_opt),
             textcoords="offset points", xytext=(10, -22), ha="left", va="top", fontsize=8, color=INK, path_effects=halo(), zorder=7)
@@ -713,13 +721,15 @@ print(f"With ISLA's exponents on the cars ($\\alpha$ = {al_:.2f}, $\\beta$ = {be
       "@tbl-scaling-fit, which marks where the terms trade places, not where the budget is best spent). At the full 435-car training set the "
       f"optimal model has {P435 / 1e6:.0f}M parameters. The reference ISLA, at {P_REF / 1e6:.1f}M parameters and 435 cars, lies above the path: "
       f"for its compute the law prefers {n_opt:.0f} cars and {P_opt / 1e6:.0f}M parameters and predicts {law(n_opt, P_opt):.4f} there against "
-      f"{law(N_REF, P_REF):.4f} at the reference point. The minimum is shallow, and DrivAerML has no more cars to buy.")
+      f"{law(N_REF, P_REF):.4f} at the reference point. The minimum is shallow, and DrivAerML has no more cars to buy. The path counts "
+      "arithmetic, a step's cost in proportion to $P\\,n$; on a GPU, widening a narrow ISLA is nearly free in wall time while depth is paid "
+      "in full, so the wall-clock optimum leans further toward width than the figure shows (the callout below measures it).")
 ```
 
 **When the data are capped, the problem has a corner solution.** In engineering a training case is
 a CFD solution, and its cost is in solver hours, not GPU hours; a dataset of 435 cars is what
 exists. With $n$ fixed at $n_\text{max}$ the only remaining variable is $P$, the error falls
-monotonically towards $\varepsilon_\infty + a\,n_\text{max}^{-\alpha}$, and every further unit of
+monotonically toward $\varepsilon_\infty + a\,n_\text{max}^{-\alpha}$, and every further unit of
 compute goes to parameters at a diminishing rate $\beta\,\Pi(P)$ per $e$-fold. That is the regime
 the reference configurations live in on every dataset of this book. The law then answers a
 different question: what one more simulated case is worth. At the reference ISLA, the marginal
@@ -748,7 +758,7 @@ P^\ast \propto C^{\alpha/(\alpha\gamma+\beta)}, \qquad
 n^\ast \propto C^{\beta/(\alpha\gamma+\beta)} .
 $$
 
-A $\gamma$ below one makes parameters cheaper than arithmetic suggests and tilts the path towards
+A $\gamma$ below one makes parameters cheaper than arithmetic suggests and tilts the path toward
 width. The one-GPU cost sweep (@sec-cost-sweep) measures $\gamma$ directly:
 
 ```{python}
@@ -769,8 +779,9 @@ print(f"at 200,000 tokens, widening ISLA from 192 to 384 (12 layers) multiplies 
 **The rate at which error falls with cases is a property of the dataset and the task, and it does
 not transfer between them.** The fitted data exponent of ISLA is
 `{python} f"{SLF['drivaerml|isla']['fit']['alpha']:.2f}"` on the cars and
-`{python} f"{SLF['hilift|isla']['fit']['alpha']:.2f}"` on the wings, and GeoTransolver's sits
-within the bootstrap spread of ISLA's on each. A compute-allocation rule measured on one dataset
+`{python} f"{SLF['hilift|isla']['fit']['alpha']:.2f}"` on the wings. GeoTransolver's sits within
+the bootstrap spread of ISLA's on the wings, where both fits pass their bar, and close to it on the
+cars, where GeoTransolver's fit misses the bar. A compute-allocation rule measured on one dataset
 therefore says nothing quantitative about another, and a claim that one architecture "scales
 better" needs both architectures' exponents on the same ladder. @fig-exponents-datasets compares the learning-curve
 exponent of the total error, the single slope of a least-squares line in log-log axes, for the two
@@ -807,7 +818,7 @@ for y, (lab, a_i, a_g) in zip(ys, ROWS):
         ax.annotate(f"{v:.2f}", (v, y), textcoords="offset points", xytext=(0, 8), ha="center", fontsize=8, color=STYLE[key]["color"], path_effects=halo())
 ax.set_yticks(ys); ax.set_yticklabels([r[0] for r in ROWS], fontsize=8.5); ax.grid(False, axis="y")
 ax.set_xlabel("learning-curve exponent of the total error [–]   (error ∝ cases$^{-\\mathrm{exponent}}$)")
-ax.set_xlim(0, max(max(r[1], r[2]) for r in ROWS) + 0.12); ax.set_ylim(-0.6, len(ROWS) - 0.2)
+ax.set_xlim(max(0, min(min(r[1], r[2]) for r in ROWS) - 0.12), max(max(r[1], r[2]) for r in ROWS) + 0.12); ax.set_ylim(-0.6, len(ROWS) - 0.2)
 from matplotlib.lines import Line2D
 ax.legend(handles=[Line2D([], [], **series_kwargs("isla_ref", ls="none")), Line2D([], [], **series_kwargs("gt", ls="none"))],
           loc="lower left", fontsize=8.2)
@@ -819,8 +830,8 @@ plt.tight_layout(); plt.show()
 #| output: asis
 steeper = [r[0].split(",")[0] for r in ROWS if r[1] > 1.05 * r[2]]
 print(f"ISLA's total error falls faster with data than GeoTransolver's on {len(steeper)} of the {len(ROWS)} ladders "
-      f"({', '.join(steeper)}). On the two surface datasets that is not a different rate: the fitted exponents of the reducible error are "
-      "the same for both architectures (@tbl-scaling-fit). ISLA's data coefficient $a$ is the larger, so it starts from a higher error at "
+      f"({', '.join(steeper)}). On the wings that is not a different rate: the fitted exponents of the reducible error agree there "
+      "(@tbl-scaling-fit), and on the cars, where GeoTransolver's fit misses its bar, they agree only indicatively. ISLA's data coefficient $a$ is the larger, so it starts from a higher error at "
       "the smallest rung and closes the distance by the full training set. A steeper total-error curve can mean a faster rate or a larger "
       "coefficient at the same rate, and only the fitted law separates the two. Where the curves end is what the reference standings "
       "measure (@sec-standing).")
@@ -918,7 +929,9 @@ print(f"Three readings follow. In the launch-bound regime a sixteenfold increase
       "100,000 tokens the slopes of @tbl-cost-slopes rank the configurations per token, "
       "and ISLA at 192 wide is the cheapest after Transolver. Memory is where the architectures differ most: at 200,000 tokens GeoTransolver "
       f"at its reference width reserves {g['reserved_bytes'] / 2**30:.0f} GiB in the allocator's cache for an allocator peak of "
-      f"{g['peak_allocated_gib']:.0f} GiB, so the card it needs is set by its reserve, not by its live tensors.")
+      f"{g['peak_allocated_gib']:.0f} GiB, so the card it needs is set by its reserve, not by its live tensors. Its training peak on real "
+      f"DrivAerML cars at the same width and token count is {COST['DrivAerML Surface']['GeoTransolver']['peak_gib']:.0f} GiB (@tbl-ref-cost); the "
+      "sweep runs random inputs on one GPU, and the difference between the two is not attributed.")
 ```
 
 <!-- SLOT: per-token step time and memory at the reference configurations (fig-cost-sweep-ref) -->
