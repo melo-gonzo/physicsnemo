@@ -178,14 +178,17 @@ class Standing:
             out.append(f"| {CONFIG[arch]} | "
                        + " | ".join(" / ".join(f"{self.err(arch, f, p):.4f}" for f in fields) for p in protocols) + " |")
         for arch in BASELINES:
-            if self.has(arch):
+            if self.has(arch) and self.ds.fair_drive:
                 out.append(f"| {arch} ÷ ISLA | "
                            + " | ".join(" / ".join(fmt_ratio(self.ratio(arch, f, p)) for f in fields) for p in protocols) + " |")
         cap = (f": {setting}: the architectures at their reference configurations, {flab}, "
                f"relative L2 error (@sec-metrics), seed means over two seeds, float32; "
                + ", ".join(f"*{PROTOCOL[p]}*" for p in protocols)
-               + " score one checkpoint per seed. How to read this: lower is better; a ratio row is baseline ÷ ISLA, "
-                 f"so a value above one favors ISLA. Data: {self.source}. {{#{label}}}")
+               + " score one checkpoint per seed. How to read this: lower is better; "
+               + ("a ratio row is baseline ÷ ISLA, so a value above one favors ISLA. " if self.ds.fair_drive else
+                  f"no ratio is drawn, because in this record the baselines read {self.ds.drive_note}, so each architecture's "
+                  "protocol columns are read against its own native column only. ")
+               + f"Data: {self.source}. {{#{label}}}")
         return "\n".join(out) + "\n\n" + cap + "\n"
 
 
