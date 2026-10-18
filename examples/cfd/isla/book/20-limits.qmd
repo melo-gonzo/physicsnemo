@@ -1,77 +1,87 @@
 # Limits, open questions and directions {#sec-limits}
 
-**Every claim in this book has a boundary, and this chapter states each one
-as a fact about the evidence: what is measured, on which split, with which
-instrument, and what would move it.** The claims themselves live in the
-evidence chapters with their numbers and are not restated here; the thesis
-table of the front matter (@sec-verdict) is the list of what is established.
-This chapter is the one home for every scope statement in the book. It
-reduces each headline claim to its limit, says what the book does not
-claim, lists the open questions with the readout that would settle each,
-names the datasets that extend the program beyond external aerodynamics,
-and ends with the two outcomes that would change the recommendation. Ratios throughout are
-baseline ÷ ISLA, above one favoring ISLA; the metric is the area-weighted
-relative L2 in float32 (@sec-metrics); protocol: @sec-protocol.
+*Before this chapter:* the standing (@sec-standing), the two invariances (@sec-invariances), the
+scoring protocol (@sec-protocol) and the study configurations (@sec-study-configurations).
+
+**Every claim in this book has a boundary, and this chapter states each one as a fact about the
+evidence: what was measured, on which split, with which instrument, and what measurement would
+move it.** The claims live in the evidence chapters with their numbers; this chapter collects
+their limits in one place, lists the open questions with what would settle each and what the
+settling would cost in GPU-hours, and ends with the outcomes that would change the
+recommendation. Every number is computed from the standing artifacts through `standing.py` or
+from the cost record as the page renders. Ratios are baseline ÷ ISLA, so a value above one favors
+ISLA; the metric is the area-weighted relative L2 in float32 (@sec-metrics); *leads*, *trails*
+and *level* follow the seed rule of @sec-standing.
 
 ```{python}
 #| label: setup-limits
 #| include: false
+import sys; sys.path.insert(0, ".")
 import json
 from pathlib import Path
+import standing as S
+from standing import fmt_ratio
 RES = Path("..") / "results"
-def char_arms(artifact):
-    """The three-protocol artifact of one dataset, arms keyed by architecture (the arm label's first word)."""
-    C = json.load(open(RES / "char" / artifact))
-    return C, {arm.split()[0]: d for arm, d in C["arms"].items()}
-def shift(arms, arch, field, protocol):
-    """A protocol's error over the native error of the same arm."""
-    return arms[arch][protocol][field]["mean"] / arms[arch]["native"][field]["mean"]
-def fmt_ratio(r):
-    return f"{r:.0f}x" if r >= 10 else f"{r:.1f}x" if r >= 2 else f"{r:.2f}"
-# DrivAerML Surface and Volume, Tensile2d, the lug and Shift-SUV: ISLA's normalized-read reruns (<dataset>_a2.json); AirfRANS: the
-# uniform-draw record of chapter 9
-VC, VOL = char_arms("drivaerml_volume_a2.json"); SC, SURF = char_arms("drivaerml_surface_a2.json")
-LC, LUG = char_arms("lug_a2.json"); TC, T2D = char_arms("tensile2d_a2.json"); AC, AIR = char_arms("airfrans_uniform.json"); UC, SUV = char_arms("shift_suv_surface_a2.json")
-HC, HIL = char_arms("hilift_surface.json")
-rat = lambda arms, arch, f, pk="native": arms[arch][pk][f]["mean"] / arms["ISLA"][pk][f]["mean"]
-BASELINES = ("GeoTransolver", "Transolver")
+ST = {k: S.Standing(k) for k in S.available()}
+COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]
+TASK = {"drivaerml_surface": "DrivAerML Surface", "drivaerml_volume": "DrivAerML Volume", "shift_suv": "Shift-SUV",
+        "airfrans": "AirfRANS", "tensile2d": "Tensile2D", "lug": "lug", "deepjeb": "DeepJEB++"}
+EPOCHS = {"deepjeb": 40}  # every other task trains for 500 epochs (@sec-protocol)
+GPUS = 4
+def lane_gpuh(key, arch="ISLA", scale=1.0):
+    """GPU-hours of one training lane of a reference configuration: epoch time x epochs x four GPUs, times a scale."""
+    return COST[TASK[key]][arch]["epoch_seconds"] * EPOCHS.get(key, 500) * GPUS / 3600 * scale
+def field_name(s, f):
+    return s.fields[f]
+def tally():
+    """Counts of (dataset, headline field, baseline) pairs by verdict, native mesh."""
+    out = {"leads": [], "is level with": [], "trails": []}
+    for k, s in ST.items():
+        for f in s.ds.headline:
+            for b in S.BASELINES:
+                out[s.verdict(b, f)].append((k, f, b))
+    return out
+TAL = tally()
+def r(key, b, f, p="native"):
+    return ST[key].ratio(b, f, p)
+HL_REF = S.DATASETS["hilift"].reference
+AZ = S.DATASETS["aerozoo"]
 ```
 
 ## What this book does not claim {#sec-not-claimed}
 
-**Each claim in this book has a scope, and the list below names what sits
-outside it; the sections above state each one with its instrument.**
+**Each claim has a scope, and the list below names what sits outside it.** The sections that
+follow give each item its numbers.
 
-- **Not that ISLA is more accurate in distribution in general**
-  (@sec-limits-in-distribution).
-- **Not that equivariance is an accuracy edge in general.** A baseline
-  trained in a canonical frame is exactly pose-invariant. ISLA's pose lead
-  is against GeoTransolver and Transolver trained in the laboratory frame
-  without augmentation, scored in random poses (@sec-pose,
-  @sec-pose-contract).
-- **Not that ISLA's pose invariance is exact on every mesh.** It holds
-  within a fraction of a percent on meshes without equidistant boundary samples
-  and is not where a query's nearest boundary sample is tied
-  (@sec-limits-ties).
-- **Not that discretization consistency is an exact invariance.** It is a
-  fine-mesh-limit property: ISLA's residual under a biased draw is
-  quadrature variance that shrinks with cell count (@sec-principle,
-  @sec-robustness-density); and on the Volume task the interior readout
-  depends on the law that places the boundary tokens (@sec-limits-boundary-law).
-- **Not that ISLA is indifferent to the training sampling law.** Its
-  dependence is weak beside GeoTransolver and Transolver, whose errors
-  change by factors. Why the cars show the larger dependence is an open
-  question (@sec-training-law).
+```{python}
+#| label: para-not-claimed
+#| output: asis
+n_all = sum(len(v) for v in TAL.values())
+print(f"- **Not that ISLA is more accurate in distribution in general.** Across the {len(ST)} standings and their headline fields, "
+      f"ISLA leads a baseline in {len(TAL['leads'])} of {n_all} comparisons, is level in {len(TAL['is level with'])} and trails in "
+      f"{len(TAL['trails'])}" + ("" if HL_REF else " (HiLiftAeroML's ISLA arm is the raw-read variant)") + "; @sec-limits-in-distribution.")
+```
+
+- **Not that equivariance is an accuracy edge in general.** A baseline given a canonical frame is
+  exactly pose-invariant, and one trained with rotation augmentation approximately so. ISLA's pose lead is
+  against GeoTransolver and Transolver as released, trained in the dataset's frame without
+  augmentation and scored in random poses (@sec-pose).
+- **Not that ISLA's pose invariance is exact on every mesh.** It is exact to roundoff where each
+  prediction point has one nearest boundary sample, and it is not where structured meshes put
+  points equidistant from two (@sec-limits-ties).
+- **Not that discretization consistency is an exact invariance.** It is a fine-mesh-limit
+  property: under a change of sampling law ISLA's residual is quadrature variance that shrinks
+  with the cell count (@sec-principle). On the interior tasks one input, the wall distance from
+  the nearest sampled boundary token, still reads the sample (@sec-limits-boundary-law).
 - **Not that the interior lead is unconditional** (@sec-limits-interior).
-- **Not that either architecture extrapolates across a flow regime** or
-  transfers zero-shot to a different vehicle family (@sec-limits-regime,
-  @sec-limits-transfer).
-- **Not that the HiLiftAeroML numbers are test-set numbers**
-  (@sec-limits-validation).
-- **Not that ISLA's learning curve is always the steeper one.** It is on
-  the lug and on AirfRANS pressure. On the DrivAerML Surface
-  task the two architectures' exponents are the same within the fit
-  (@sec-compute-allocation).
+- **Not that either architecture extrapolates across a flow regime or transfers zero-shot to a
+  new geometry family** (@sec-limits-regime, @sec-limits-transfer).
+- **Not that the HiLiftAeroML numbers are test-set numbers** (@sec-limits-validation).
+- **Not that the scaling law, the cell-count saturation or the capacity floor are measured at the
+  reference configuration.** They are measured on smaller ISLAs and read for slopes and floors
+  (@sec-capacity, @sec-oq-scaling).
+- **Not that the three reference configurations are matched in capacity.** They are matched on
+  one memory budget per GPU and differ in parameters and cells (@sec-review-frontier).
 
 ## Limits of each headline claim {#sec-review-honesty}
 
@@ -80,163 +90,114 @@ outside it; the sections above state each one with its instrument.**
 ```{python}
 #| label: para-limits-in-distribution
 #| output: asis
-print(f"**In distribution, under the reference configurations, ISLA's standing on the surface is a tie within seed noise on the DrivAerML "
-      f"Surface task (GeoTransolver width 256 ÷ ISLA {rat(SURF, 'GeoTransolver', 'pressure_l2'):.2f}, Transolver width 512 with 16 layers "
-      f"÷ ISLA {rat(SURF, 'Transolver', 'pressure_l2'):.2f} on pressure) and a lead on the 210-wing HiLiftAeroML rung "
-      f"({rat(HIL, 'GeoTransolver', 'pressure_l2'):.2f} and {rat(HIL, 'Transolver', 'pressure_l2'):.2f}), and no mechanism for either is "
-      "claimed.** The three configurations are matched on the 80 GiB memory budget they were selected under and on nothing else: "
-      "GeoTransolver's reference has a tenth of ISLA's parameters, Transolver's trains at half the cells (@sec-protocol), so the surface "
-      "standing is a statement about what one budget buys each architecture, not a matched-capacity comparison. The ladders, which hold "
-      "ISLA at 384 wide, 12 layers, 256 slices, 5e-4 against GeoTransolver-256 at its better rate and the parameter-matched "
-      "GeoTransolver-512, read the other way on the wings and at small car counts: GeoTransolver-512 leads at 35, 210 and 510 wings "
-      "and reaches parity only at the full pool of 1,260, where GeoTransolver-256 at its better rate still leads; GeoTransolver-256 leads "
-      "below 109 cars, and ISLA's width to 384, depth and learning rate, the cell count and GeoTransolver's width all "
-      "leave that ordering where it is (@tbl-wing-controls, @sec-car-ladder). What ISLA buys elsewhere is stated with its scope where it "
-      "is measured: pose covariance, exact on meshes without tied boundary samples (@sec-pose-contract, @sec-limits-ties), its error "
-      "unchanged on a uniform point cloud where the baselines' grow by factors (@sec-scoreboard-200k, @sec-de-result), weak dependence on "
-      "the law the training sample is drawn by (@sec-training-law), slice territories that stay put under a change of draw "
-      "(@sec-territories), and the interior velocity lead on two datasets (@sec-interior). What would move this: a mechanism for the "
-      "ladders' wing deficit against GeoTransolver-512, located and removed by a principled configuration (@sec-open-questions), and a "
-      "second seed pair on the 210-wing rung.")
+SURF_KEYS = [k for k in ("drivaerml_surface", "hilift", "shift_suv", "deepjeb") if k in ST]
+def reading(k):
+    s = ST[k]; f = s.ds.headline[0]
+    return (f"{s.ds.name}: ISLA {s.verdict('GeoTransolver', f)} GeoTransolver ({r(k, 'GeoTransolver', f):.2f}) and "
+            f"{s.verdict('Transolver', f)} Transolver ({r(k, 'Transolver', f):.2f}) on {field_name(s, f)}")
+cs = COST["DrivAerML Surface"]
+print("**On the surface tasks the standing is mixed and depends on the dataset.** " + "; ".join(reading(k) for k in SURF_KEYS) + ". "
+      + ("" if HL_REF else "HiLiftAeroML's ISLA arm is from checkpoints of the raw-read variant, not of the reference configuration. ")
+      + "No mechanism is claimed for any of these orderings. The three configurations are matched on the memory budget per GPU they were "
+      f"selected under and on nothing else: on the DrivAerML Surface task GeoTransolver's reference has {cs['GeoTransolver']['n_parameters'] / cs['ISLA']['n_parameters']:.2f} "
+      f"of ISLA's parameters and Transolver's {cs['Transolver']['n_parameters'] / cs['ISLA']['n_parameters']:.2f}, and Transolver trains at half the cells "
+      "(@tbl-ref-cost). The standing says what one budget buys each architecture; it is not a matched-capacity comparison, and all three sit "
+      "above the capacity floor that wider or deeper models reach on the same cars (@sec-shared-floor). What would move this: the "
+      "standing re-measured along the capacity axis, @sec-oq-scaling.")
 ```
 
-### The data-efficiency ladders {#sec-limits-data-efficiency}
+### Data efficiency and the scaling law {#sec-limits-data-efficiency}
 
-**The ladders are data-efficiency measurements over the range of
-training-set sizes every production CFD dataset in this program occupies,
-not scaling laws.** On the DrivAerML Surface task the flattening has a
-measured cause: a shared floor of about 0.040 that both architectures
-reach given width and depth, with the cell count flat above 100,000
-(@sec-shared-floor). On the wings the flattening is not attributed. Seeds
-do not measure the choice of training cases: every seed at a rung trains
-on the same curated subset, so a seed range measures initialization, and
-the between-draw intervals of @sec-de-controls, three to eleven times
-wider at 35 cases, are the uncertainty to read. What would move this: a
-ladder whose rungs are each averaged over several training draws.
+**The scaling law and the training-case ladders are measured on smaller ISLAs and describe
+slopes, floors and exponents, not the reference configuration's errors.** On the DrivAerML
+Surface task the fitted law separates a floor from two reducible terms and is accepted for ISLA;
+on GeoTransolver it misses its acceptance bar (@sec-scaling-law). Seeds do not measure the choice
+of training cases: every seed at a rung trains on the same subset of cases, so a seed spread
+measures initialization only, and a rung's error has a second, unmeasured spread from which
+cases it holds. What would move this: rungs averaged over several draws of training cases, and
+the law re-fitted at the reference configuration (@sec-oq-scaling).
 
 ### The HiLiftAeroML accuracy figures are validation-set figures {#sec-limits-validation}
 
-**Every HiLiftAeroML accuracy number in this book is scored on the shared
-180-case validation set on final-epoch checkpoints; no checkpoint is
-selected on validation error, but no HiLiftAeroML split remains that
-could confirm the numbers independently of the program's own history.**
-The validation set entered more than one decision: each architecture's
-learning rate on the full split (@sec-lr-protocol), the baselines' rate per
-rung, the design of the ablations and the choice of what to present. The
-sealed test splits were spent on regime extrapolation and the deflection
-split, which between them read every one of the 180 geometries
-(results/hilift_exposure_ledger_2026-09-08.json), and because those test
-sets cover every geometry (@sec-splits) every remaining test split is held
-out per checkpoint but is not a program-level confirmation. What would move
-this: a sealed evaluation of the 35-case checkpoints on the 360 test cases
-is a within-protocol held-out check of the 35-case ratios; an independent
-confirmation needs geometries no part of the program has scored, which on
-HiLiftAeroML means a prospective dataset.
+**Every HiLiftAeroML accuracy number in this book is scored on the shared 180-case validation set
+on final-epoch checkpoints, and no HiLiftAeroML split remains that could confirm the numbers
+independently of the program's own history.** No checkpoint is selected on validation error. The
+validation set did enter decisions, among them the rule that fixed the reference configurations,
+which read the 210-wing rung (@sec-protocol). The sealed test splits were spent on regime
+extrapolation and the deflection split, which between them read every one of the 180 validation
+geometries (results/hilift_exposure_ledger_2026-09-08.json). What would move this: a held-out
+evaluation of the current checkpoints on the test cases is a within-protocol check; an independent
+confirmation needs geometries no part of the program has scored, which on HiLiftAeroML means a
+new dataset.
 
 ### Mechanism: what is known and what is not {#sec-limits-mechanism}
 
-**On the DrivAerML Surface task there is no in-distribution gap left to
-explain at the reporting protocol; on the wings the deficit is measured on
-every rung and not decomposed.** What the cell count contributes below
-the protocol is @sec-equal-budget; the limits on the mechanism are these.
+**The book explains why ISLA is invariant and consistent; it does not explain why it leads where
+it leads or trails where it trails.**
 
-- **No single ingredient of ISLA is load-bearing for its own accuracy,
-  as far as it is measured.** The single-factor ablations on the 35-wing
-  rung each move the error by a fraction of the ladder deficit to
-  GeoTransolver-512 at that rung, and the exactness of the covariance contract
-  neither costs nor buys anything measurable in distribution at that rung;
-  the decomposition is unmeasured at the reporting protocol. What would
-  move this: an ablation at the reporting protocol that moves the error by
-  the size of the deficit.
-- **The measure weights' price is variance plus mesh pattern, and only
-  the variance part shrinks with cell count.** Weights off is an ablation
-  that prices the measure semantics, never a configuration
-  (@sec-principle); the instrument that separates the two parts is the
-  training-law test (@sec-training-law), on two datasets.
-- **The contracts are exact in float32 and not in bf16, on meshes without
-  tied boundary samples.** On the trained GPU path the rotation and
-  translation residual is at the level of float32 rounding, and at the
-  level of a few percent of the field under the bf16 autocast the recipe
-  trains with, mostly ordinary rounding. A bf16 deployment does not
-  exercise the contracts at the level the book claims for them; float32
-  inference does (@sec-isla-contracts, @sec-using-sampler). Where a
-  query's nearest boundary sample is tied, float32 inference does not
-  either (@sec-limits-ties).
+- **No ingredient is located as the source of any standing.** The ablations behind the design
+  decisions (@sec-principled-ledger) were measured on study configurations and price a decision
+  each; none was run at the reference configuration to decompose a lead or a deficit.
+- **The measure weights' price below the saturation count is variance.** A slice state is a
+  weighted quadrature, and a sparse draw of cells with widely varying areas inflates its
+  variance (@sec-deficit-anatomy); at the reporting protocol the penalty is gone.
+- **The contracts are exact in float32, not in bfloat16.** On the trained GPU path the rotation
+  and translation residual is at float32 roundoff, and at a few percent of the field under the
+  bfloat16 autocast the recipe trains with. A bfloat16 deployment does not exercise the contracts
+  at the level the book claims for them; float32 inference does (@sec-isla-contracts,
+  @sec-using-sampler).
 
 ### Regime extrapolation {#sec-limits-regime}
 
-**ISLA's generalization across a physical-regime boundary is measured on
-one dataset and one task: on AirfRANS's Reynolds-number and angle-of-attack
-extrapolation splits its interior error grows less than
-GeoTransolver-volume's on pressure and eddy viscosity and the same on
-velocity, and it leads on every field outside the training range
-(@sec-interior-extrapolation).** It is unmeasured on the surface task and on
-three-dimensional flow. No ISLA lane exists on the HiLiftAeroML sealed
-regime splits (angle of attack, attached to separated flow), and the finding
-that GeoTransolver and Transolver lose about an order of magnitude across
-that boundary is a mechanism finding on those architectures, not a
-comparison with ISLA. What would move this: the sealed regime splits run
-once with ISLA and the unit-direction baselines at the reporting protocol.
-
-**Across a geometry-parameter boundary ISLA does not generalize better
-than GeoTransolver.** On the HiLiftAeroML deflection split, trained on the
-milder flap settings and scored once on the sealed high-deflection test,
-GeoTransolver is the more accurate model on pressure, velocity and wall
-shear, and both models degrade from validation to the sealed test by the
-same factor (@sec-hilift-deflection). The preregistered claim that ISLA's
-geometry generalization carries across that boundary is falsified. A split
-across geometry *classes* remains the open test, and none of this book's
-datasets provides one.
+**Generalization across a physical-regime boundary is measured only on the AirfRANS
+Reynolds-number and angle-of-attack splits, at study configurations; it is unmeasured at the
+reference configurations, on the surface tasks and in three-dimensional flow** (@sec-airfrans).
+No ISLA lane exists on the HiLiftAeroML sealed regime splits (angle of attack, attached to
+separated flow). Across a geometry-parameter boundary ISLA does not generalize better than
+GeoTransolver: on the HiLiftAeroML deflection split, trained on the milder flap settings and
+scored once on the sealed high-deflection test, GeoTransolver is the more accurate model and both
+degrade by the same factor; the preregistered claim that ISLA's advantage carries across that
+boundary is falsified (@sec-hilift). The held-out splits of AeroZoo are the test across geometry
+families and enclosures (@sec-oq-aerozoo).
 
 ### Interior accuracy {#sec-limits-interior}
 
 ```{python}
 #| label: para-limits-interior
 #| output: asis
-r = lambda arms, arch, f: arms[arch]["native"][f]["mean"] / arms["ISLA"]["native"][f]["mean"]
-print(f"**The interior standing holds at the scoring query count on two datasets (DrivAerML Volume task, AirfRANS interior task). ISLA leads "
-      f"GeoTransolver on velocity on both (GeoTransolver ÷ ISLA {r(VOL, 'GeoTransolver', 'velocity_l2'):.2f} on the cars, "
-      f"{fmt_ratio(r(AIR, 'GeoTransolver', 'velocity_l2'))} on the airfoils), leads it on pressure on the cars "
-      f"({r(VOL, 'GeoTransolver', 'pressure_l2'):.2f}) and trails on pressure on the airfoils ({r(AIR, 'GeoTransolver', 'pressure_l2'):.2f}), "
-      f"and trails on eddy viscosity on both ({r(VOL, 'GeoTransolver', 'nut_l2'):.2f} on the cars, {r(AIR, 'GeoTransolver', 'nut_l2'):.2f} on "
-      f"the airfoils); Transolver trails ISLA on velocity on both ({r(VOL, 'Transolver', 'velocity_l2'):.2f} and "
-      f"{fmt_ratio(r(AIR, 'Transolver', 'velocity_l2'))}) and on pressure on the cars ({r(VOL, 'Transolver', 'pressure_l2'):.2f}), and leads it "
-      f"on pressure on the airfoils ({r(AIR, 'Transolver', 'pressure_l2'):.2f}; @tbl-drivaerml-volume-protocols, "
-      "@tbl-airfrans-protocols).** Three limits bound it. The comparison is not resource-matched and the architectures do not receive the "
-      "same inputs: the baselines read interior points with the stored signed distance and its gradient and never see the boundary sample. "
-      "The interacting decode's prediction depends on the joint query set, and training over a range of counts reduces the dependence "
-      "without removing it, so the interacting configuration is deployed at its training count (@sec-interior-companion). The "
-      "eddy-viscosity metric is on a standardized field, so its ratios are orderings under that centering, not physical percentages. And "
-      "the seed means are over two seeds per arm. What would move this: the "
-      "baselines on the 54- and 109-car interior rungs, where only ISLA is measured (@sec-interior-results).")
+INT = [k for k in ("drivaerml_volume", "airfrans") if k in ST]
+def line(k):
+    s = ST[k]
+    return f"{s.ds.name}: " + ", ".join(f"{field_name(s, f)} GeoTransolver {fmt_ratio(r(k, 'GeoTransolver', f))} / Transolver {fmt_ratio(r(k, 'Transolver', f))}"
+                                        for f in s.ds.headline)
+lead_v = all(ST[k].verdict(b, "velocity_l2") == "leads" for k in INT for b in S.BASELINES)
+print(f"**The interior standing is a velocity lead on both interior datasets and a mixed reading on pressure and eddy viscosity.** "
+      + "; ".join(line(k) for k in INT) + ". "
+      + ("ISLA leads both baselines on velocity on both datasets by the seed rule. " if lead_v else "")
+      + "Three limits bound it. The architectures do not receive the same inputs: GeoTransolver and Transolver read every prediction point "
+        "with the stored signed-distance field, computed by the dataset from the full-resolution surface, while ISLA computes its wall distance "
+        "and direction from the nearest sampled boundary token (@sec-limits-boundary-law). The interacting configuration's prediction at a point "
+        "depends on the other points in the request (@sec-limits-query-independence). And each arm has two seeds. What would move this: "
+        "@sec-oq-geometry and @sec-oq-dtt.")
 ```
 
-### The volume model and the boundary token law {#sec-limits-boundary-law}
+### The interior model and the boundary token law {#sec-limits-boundary-law}
 
 ```{python}
 #| label: para-limits-boundary-law
 #| output: asis
-F3 = [("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity")]
-VG = json.load(open(RES / "char" / "vol_geo_2026-10-05.json")); VGR = VG["mean_ratio_to_native"]
-VGS = {k: sum(s[k] for s in VG["shift"].values()) / len(VG["shift"]) for k in VG["shift"]["42"] if isinstance(VG["shift"]["42"][k], (int, float))}
-vol_area = [shift(VOL, "ISLA", f, "area") for f, _ in F3]
-surf_area = max(abs(shift(SURF, "ISLA", f, "area") - 1) for f in SURF["ISLA"]["native"])
-base_area = max(abs(shift(VOL, a, f, "area") - 1) for a in BASELINES for f, _ in F3)
-print(f"**ISLA's interior prediction on the DrivAerML Volume task depends on the law that places its boundary tokens: under an "
-      f"area-proportional uniform redraw of the boundary surface its errors are {fmt_ratio(min(vol_area))} to {fmt_ratio(max(vol_area))} "
-      f"its native errors ({' / '.join(f'{fmt_ratio(v)} on {lab}' for v, (_, lab) in zip(vol_area, F3))}), while the Surface model's errors "
-      f"under the same redraw are within {100 * surf_area:.0f}% of native (@tbl-drivaerml-volume-protocols, "
-      "@tbl-drivaerml-surface-protocols).** GeoTransolver and Transolver are untouched by that variant (largest change "
-      f"{100 * base_area:.2f}%) because they never read the boundary sample, so the column compares nothing across architectures; it "
-      "measures a property of the trained volume model alone, and it is an open weakness of that model. The cause is measured on "
-      "checkpoints trained with the raw slice reads: with every "
-      "area-draw token kept and only the queries' built-in nearest-boundary distance and direction computed from the native draw, the error "
-      f"returns to {' / '.join(f'{VGR['area_natgeo'][f]:.3f}' for f, _ in F3)} of native, so the slice states, anchors and routing mass carry none of it and "
-      f"the sensitivity is a bias of that one discretization-dependent input ({100 * VGS['frac_nearest_token_changed']:.0f}% of the queries "
-      f"change nearest token under the redraw); the exact stored signed-distance field does not substitute at scoring time "
-      f"({' / '.join(fmt_ratio(VGR['area_sdfgeo'][f]) for f, _ in F3)} native) because the trained model is calibrated to the sampled distance "
-      "(@tbl-vol-geo). The AirfRANS interior task shows the same dependence on how the airfoil is sampled, by law and by count (@sec-airfrans-boundary-law). What would move this: a sample-independent query geometry, a measure-weighted softmin over the boundary tokens or the "
-      "stored field where one exists, trained in; until then the interior standing is a native-mesh standing.")
+V = ST["drivaerml_volume"]; SF = ST["drivaerml_surface"]
+vol = [V.shift("ISLA", f, "area") for f in V.ds.headline]
+surf = max(abs(SF.shift("ISLA", f, "area") - 1) for f in SF.ds.headline)
+print(f"**ISLA's interior prediction on the DrivAerML Volume task depends on the law that places its boundary tokens: redrawing the "
+      f"car's surface in proportion to area raises its errors to {fmt_ratio(min(vol))} to {fmt_ratio(max(vol))} times native, while the "
+      f"Surface model's errors under the same redraw stay within {100 * surf:.0f}% of native.** The comparison is ISLA against itself: "
+      "the baselines never read the boundary sample on this task, so the redraw leaves them untouched. The cause is the one "
+      "discretization-dependent input of the interior task. A prediction point takes its wall distance and direction from the nearest "
+      "sampled boundary token (@sec-isla-inputs); the nearest token of a sparse sample sits up to one sample spacing from the true "
+      "closest point, so the distance overestimates the true wall distance near the wall and moves when the sampling law moves the "
+      "tokens. With the native-draw geometry and every other input from the redraw, the error returns to native (@sec-interior-results). "
+      "The slices, anchors and routing carry none of the sensitivity. What would move this: @sec-oq-geometry.")
 ```
 
 ### Pose invariance where boundary samples tie {#sec-limits-ties}
@@ -244,189 +205,294 @@ print(f"**ISLA's interior prediction on the DrivAerML Volume task depends on the
 ```{python}
 #| label: para-limits-ties
 #| output: asis
-lug_shift = shift(LUG, "ISLA", "von_mises_l2", "posed"); t2_shift = shift(T2D, "ISLA", "stress_l2", "posed")
-exact = max(abs(shift(arms, "ISLA", f, "posed") - 1) for arms in (VOL, SURF, AIR, SUV) for f in arms["ISLA"]["native"])
-lug_native = LUG["ISLA"]["native"]["von_mises_l2"]["mean"]; lug_delta = LUG["ISLA"]["posed"]["von_mises_l2"]["mean"] - lug_native
-TIE = json.load(open(RES / "char" / "lug_ties_2026-10-04.json")); T32 = TIE["fp32"]; T64 = TIE["fp64"]
-tied = TIE["two_nearest_tie_fraction_by_rel_gap"]["1e-04"]["fraction"]; flipped = TIE["nearest_index_changes_under_translation"]["fraction"]
-jit = [T32[f"jitter_{g}_rel_change"] for g in ("1e-7", "1e-6", "1e-5")]
-same_jit = max(jit) - min(jit) < 1e-4
-PREC = json.load(open(RES / "char" / "lug_prec_2026-10-05.json"))["lanes"]
-prec_worse = " and ".join(f"{100 * v['frac_fp32_worse_1p5x']:.0f}%" for r, v in PREC.items() if r.startswith("cl_r_lug_isla"))
-print(f"**ISLA's error is within {100 * exact:.2f}% of its native error under a generic rotation and translation on the DrivAerML "
-      f"Surface and Volume tasks, AirfRANS and Shift-SUV, and it is not on the two structured finite-element meshes: "
-      f"{lug_shift:.2f} times its native error on the lug and {t2_shift:.2f} times on Tensile2d "
-      "(@tbl-lug-protocols, @tbl-tensile2d-protocols).** The cause is a discontinuity in the geometry construction, not a frame-dependent "
-      "input: every input is transformed consistently, and on one test lug with one checkpoint trained with the raw slice reads an exact "
-      "rigid motion in float32 (a "
-      f"quarter turn about an axis) changes the prediction by {100 * T32['rot90_rel_change']:.2f}% of the field, while a 37-degree rotation "
-      f"changes it by {100 * T32['rot37_rel_change']:.2f}%, a one-radius translation by {100 * T32['translate_rel_change']:.2f}%, and a "
-      f"coordinate jitter of 1e-7 relative with no motion at all by {100 * jit[0]:.2f}%{', the same at 1e-6 and 1e-5' if same_jit else ''} "
-      f"(native error {100 * T32['native_rel_err']:.2f}%; in float64 the native error itself moves to {100 * T64['native_rel_err']:.2f}%). Each "
-      f"query reads its nearest boundary sample, and on that structured mesh {100 * tied:.0f}% of the interior nodes are equidistant from "
-      f"two boundary centroids to within 1e-4 relative, so the choice is decided by sub-roundoff noise ({100 * flipped:.0f}% of the nearest "
-      "indices change under the translation) and the direction feature changes by order one where the two candidates sit on faces at a "
-      "large angle. The factor is large "
-      f"on the lug because its native error is {100 * lug_native:.2f}% of the field: the posed-minus-native difference is "
-      f"{100 * lug_delta:.2f}%, invisible against the several-percent errors of the aerodynamic tasks (@sec-interior-lug). The remedy is a "
-      "measure-weighted average over near-tied boundary samples in the geometry construction, which makes the feature continuous; it is "
-      "future work on the class, and every pose number in the book is measured without it. The same selection also depends on the "
-      "precision of the forward pass: on the lug, checkpoints trained with the raw slice reads and scored in bfloat16, the training precision, "
-      "put ISLA width 512 with "
-      f"512 slices and both baselines within one band ({min(v['bf16'] for v in PREC.values()):.4f} to {max(v['bf16'] for v in PREC.values()):.4f}), "
-      f"while float32 scoring lowers the baselines to {min(v['fp32'] for r, v in PREC.items() if 'isla' not in r):.4f} to "
-      f"{max(v['fp32'] for r, v in PREC.items() if 'isla' not in r):.4f} and raises that ISLA's per-case error by more than 1.5x on "
-      f"{prec_worse} of the 600 cases, "
-      "so on those checkpoints the float32 ordering is a precision sensitivity of one trained model and reverses across the scoring "
-      f"precision; the checkpoints of the lug's standing (GeoTransolver ÷ ISLA {rat(LUG, 'GeoTransolver', 'von_mises_l2'):.2f} in float32) "
-      "are not scored in bfloat16 (@sec-interior-lug). The same object, the argmin over "
-      "boundary tokens that gives a query its nearest sample, is behind the volume model's sensitivity to the boundary sampling law "
-      "(@sec-limits-boundary-law) and behind the sign flips of on-wall queries: a nearest-sample selection is a discontinuous, "
-      "law-dependent function of the sample, and every one of these readings is that one function measured under a different perturbation. "
-      "Data: results/char/lug_ties_2026-10-04.json; results/char/lug_prec_2026-10-05.json; results/char/vol_geo_2026-10-05.json.")
+TIE = json.load(open(RES / "char" / "lug_ties_2026-10-04.json"))
+tied = TIE["two_nearest_tie_fraction_by_rel_gap"]["1e-04"]["fraction"]; moved = TIE["nearest_index_changes_under_translation"]["fraction"]
+exact = [k for k in ST if all(abs(ST[k].shift("ISLA", f, "posed") - 1) < 0.02 for f in ST[k].ds.headline)]
+worst = max(abs(ST[k].shift("ISLA", f, "posed") - 1) for k in exact for f in ST[k].ds.headline)
+lug = ST["lug"].shift("ISLA", "von_mises_l2", "posed"); t2 = max(ST["tensile2d"].shift("ISLA", f, "posed") for f in ("stress_l2", "displacement_l2"))
+dl = ST["lug"].err("ISLA", "von_mises_l2", "posed") - ST["lug"].err("ISLA", "von_mises_l2")
+print(f"**Under a rotation and translation ISLA's error stays within {100 * worst:.1f}% of native on {len(exact)} of the {len(ST)} "
+      f"standings, and it does not on the two structured finite-element meshes: {lug:.2f} times native on the GINOT bracket lug and up to "
+      f"{t2:.2f} times on PLAID Tensile2d.** Every input is transformed consistently; the break is a discontinuity in the geometry "
+      "construction. Each prediction point reads its nearest boundary token, and on a structured mesh many points are equidistant from "
+      f"two of them: on one lug, {100 * tied:.0f}% of the interior nodes have two nearest boundary centroids within 1e-4 relative distance, "
+      f"and a one-radius translation in float32 changes the nearest index of {100 * moved:.0f}% of them. Where the two candidates sit on "
+      "faces at a large angle, the direction input changes by order one. The factor is large on the lug because its native error is small: "
+      f"the posed-minus-native difference is {100 * dl:.2f}% of the field. The same argmin is behind the volume model's sensitivity to the "
+      "boundary sampling law (@sec-limits-boundary-law): a nearest-sample selection is a discontinuous, law-dependent function of the sample, "
+      "and both readings measure that one function under different perturbations. Data: results/char/lug_ties_2026-10-04.json (the mesh "
+      "geometry of one test lug). What would move this: @sec-oq-ties.")
 ```
 
 ### The prediction depends on the query set {#sec-limits-query-independence}
 
-**ISLA's prediction at a point depends on which other points are in the
-request: every surface point is an interacting token, and so is every
-interior query in the reported configuration.** On the interior the
-dependence is measured. At the exploration budget a checkpoint trained at
-one request size and scored at a fifth of it loses more on every field
-than either margin against GeoTransolver-volume. Training over a range of
-request sizes reduces that penalty by about 40% at a 3.7% pressure cost
-and does not remove it. The queries' routing mass,
-a learned fraction of the total boundary measure split over the request,
-removes the count scaling of the routing weight by construction, while the
-dependence through the shared slices remains (@sec-interior-companion). The
-interacting configuration is therefore deployed at its training request
-count, and every interior number in the book states that count. The
-read-only interior model, ISLA-DTT, removes the dependence by
-construction: its prediction points read the slices and the boundary
-cells and never write into the slices, so its prediction at a point is a
-function of that point and the boundary alone, and it moves by float32
-roundoff under every change of the request (@sec-arch-passive-decoder,
-@sec-interior-companion). Its price is measured on both interior
-datasets: 1.12 / 1.11 / 1.12 times ISLA's error on pressure / velocity /
-eddy viscosity on the DrivAerML Volume task, and 0.74 / 0.83 / 1.03 on
-the AirfRANS interior task (@sec-interior-read-only,
-@sec-airfrans-read-only). What remains open is the cars: no read of the
-boundary of any size recovers the 12% on pressure, which is what
-interacting prediction points supply to one another
-(@sec-interior-read-only-mechanism), so the interior standings of the
-book stay with the interacting configuration and its request-count rule.
+**ISLA's prediction at an interior point depends on which other points are in the request,
+because its prediction points are interacting tokens that write into the slices.** The total
+routing mass of the prediction points is a learned fraction of the boundary measure, split
+equally over them, so the count of points does not scale their weight; the dependence through
+the shared slices remains. The interacting configuration is therefore deployed at its training
+request count, and every interior number in the book is scored at that count. ISLA-DTT
+(`query_independent=True`) removes the dependence by construction: its prediction points carry no
+routing mass, read the slices and every boundary cell, and never write, so its prediction at a
+point is a function of that point and the boundary alone, and a request can be split into chunks
+with the same result (@sec-arch-modes). Which of the two forms should be ISLA's interior model is
+@sec-oq-dtt.
 
 ### Cross-family transfer {#sec-limits-transfer}
 
-**Whether ISLA transfers zero-shot across vehicle families is unmeasured:
-no ISLA lane exists for it at any budget, and the finding that
-cross-family error is governed by the diversity of the training data is a
-mechanism finding on the architectures tested, not
-a ranking.** What would move this: a corpus in which geometry, pose, scale
-and regime vary one at a time, with ISLA and the unit-direction baselines
-trained on it under the protocol.
+**Whether ISLA transfers zero-shot across geometry families is measured on no reference
+configuration.** The cars, wings and sport-utility bodies of this book each train and score
+within one family. AeroZoo's held-out splits hold out a geometry bank, an enclosure family or a
+Reynolds range, and are the instrument for the question (@sec-oq-aerozoo).
 
 ## Open questions, and what would settle each {#sec-open-questions}
 
-**Each open question carries a readout and, where one has been written, a
-preregistered bar; the live status of every item is in @sec-program-status
-and the preregistrations are in the notebook.** Unless stated, the readout
-is the surface-pressure relative L2 of @sec-metrics and the ratio is
-baseline ÷ ISLA, so above one favors ISLA.
+**Each open question below names the measurement that would settle it and what that measurement
+would cost.** Costs are GPU-hours on GB300s, computed from the cost record of the reference
+configurations (results/char/char_lanes_cost_2026-10-04.json: one epoch's wall time on four GPUs,
+times the epochs of the dataset's protocol, times four) and from the lane counts each design
+needs; AeroZoo, which has no entry in that record, is priced from the step times of its lanes in
+the lab notebook. @tbl-open-questions is the summary; the sections after it give each question
+its reasoning.
 
-| question | what would settle it | bar |
-|---|---|---|
-| What is the mechanism of the ladders' wing deficit against GeoTransolver-512 (ISLA at 384 wide, 5e-4)? Its location is known: at 35 wings the ratio is 0.77 up to 14 degrees and 0.67 from 16 degrees, where the flow separates and both errors double, and the two models rank the cases alike (@sec-de-strata) | the mesher-pattern hypothesis (validation geometries recur in training with a different mesh) tested by a split that holds geometries out entirely at matched case count, at the reporting protocol; the positional hypothesis (GeoTransolver reads absolute position) is quantified by the pose-prior diagnostic (@sec-pose-prior): giving ISLA the dataset's axes, a rejected input, recovers about half of the low-angle gap and a quarter of the high-angle widening, so position in the fixed pose is part of the deficit and the separated regime keeps the rest | the ratio moves toward parity when recurrence is removed, or does not |
-| What is ISLA's ratio on the two largest HiLiftAeroML rungs (510 and 1,260 cases)? | ISLA trained there at the reporting protocol | reported as measured |
-| Do the 35-case ratios hold on cases no decision has read? | the 35-case ISLA and unit-direction baseline checkpoints scored once on the 360-case sealed test | the validation ratios reproduced within their seed spread |
-| Do the capacity floor and the memory frontier reproduce on the wings? On the 510-wing rung the cells and width-independence readings reproduce and the width turnover and the memory frontier do not (@tbl-scalehl) | the width and depth ladders of @sec-shared-floor on a second wing rung at the scaling budget | both ladders flatten at one floor, and the best ISLA at or under each memory budget is at least as accurate as the best GeoTransolver, or not |
-| Why does ISLA's training-law dependence differ between datasets (1% on the wings, 8% on the cars)? | the twin training under a third law, or on a third dataset, with the same independent uniform readout (@sec-training-law) | no bar is preregistered; reported as measured |
-| Does the architecture match a same-size baseline on a problem that is not external aerodynamics? | a dataset outside external aerodynamics with GeoTransolver trained on it under the fair-comparison protocol (@sec-limits-datasets); the screened-Poisson acceptance case already trains with $K = 0$ global vectors and one global scalar | the error at the level of the same-size baseline on that problem |
-| Does either architecture extrapolate across geometry classes? | a split across classes rather than along one parameter of one family | none of this book's datasets provides one |
-| Does the interior pressure deficit survive a third seed? | third seeds of the interior configuration at the reporting protocol on both interior datasets | no bar is preregistered; the velocity lead and the eddy-viscosity ratios must not move by more than 5% |
-| Do the extrapolation splits of AirfRANS (Reynolds number, angle of attack) separate the architectures? | ISLA and GeoTransolver-volume trained on each split, the readout the growth of error from the in-distribution to the extrapolation test set | a 10% difference in error growth counts |
+```{python}
+#| label: setup-oq
+#| include: false
+# AeroZoo, which is not in the cost record: GPU-hours of one ISLA lane (250 epochs, four GPUs) and the ISLA-DTT step relative to ISLA's,
+# from the step times of the AeroZoo lanes recorded in the lab notebook
+AZ_ISLA_GPUH = 33.0
+AZ_DTT_OVER_ISLA = 1.17 / 0.6
+AZ_DTT_GPUH = AZ_ISLA_GPUH * AZ_DTT_OVER_ISLA
+AZ_HELDOUT = 3  # an enclosure family, a Reynolds range and a geometry bank held out
+SEEDS = 2
+# (i) exact geometry: the interior datasets in the cost record, ISLA with the exact construction, two seeds; plus the AeroZoo held-out splits
+q1_lanes = {"DrivAerML Volume": SEEDS * lane_gpuh("drivaerml_volume"), "AirfRANS": SEEDS * lane_gpuh("airfrans"),
+            "AeroZoo held-out splits": SEEDS * AZ_HELDOUT * AZ_ISLA_GPUH}
+q1 = sum(q1_lanes.values())
+# (ii) ISLA against ISLA-DTT on AeroZoo's held-out splits
+q2 = AZ_HELDOUT * SEEDS * (AZ_ISLA_GPUH + AZ_DTT_GPUH)
+# (iii) the AeroZoo standing on the held-out splits: ISLA, GeoTransolver, Transolver (each priced at ISLA's lane), two seeds
+q3 = AZ_HELDOUT * SEEDS * 3 * AZ_ISLA_GPUH
+# (v) the scaling ladder at the reference configuration on the DrivAerML Surface task:
+# five case rungs x three sizes x two seeds, each lane's epoch proportional to its cases, every size priced at the reference's cost
+RUNGS = (27, 54, 109, 218, 435); SIZES = 3
+ref_lane = lane_gpuh("drivaerml_surface")
+q5_ladder = SEEDS * SIZES * sum(ref_lane * n / 435 for n in RUNGS)
+CELLS = (100, 200, 400)  # thousand cells per case; the step is linear in tokens (@sec-cost-sweep)
+q5_cells = SEEDS * sum(ref_lane * c / 200 for c in CELLS)
+q5 = q5_ladder + q5_cells
+# (vi) Tensile2d: two arms that isolate a cause (ISLA with the stored distance field as an input; GeoTransolver + ISLA's measure-weighted pooling)
+q6 = SEEDS * (lane_gpuh("tensile2d", "ISLA") + lane_gpuh("tensile2d", "GeoTransolver"))
+# (vii) pose on tied meshes: ISLA with a continuous geometry construction on the lug and Tensile2d, two seeds
+q7 = SEEDS * (lane_gpuh("lug") + lane_gpuh("tensile2d"))
+fmt_h = lambda h: f"{h:,.0f}" if h < 1000 else f"{h / 1000:.1f} thousand"
+```
 
-### Datasets beyond external aerodynamics {#sec-limits-datasets}
+```{python}
+#| label: tbl-open-questions
+#| output: asis
+rows = [
+    ("Should a prediction point's wall geometry come from the exact full-resolution surface, with the boundary drawn inside the model, rather than from the nearest sampled token?",
+     "the exact construction against the nearest-token form at equal size on DrivAerML Volume, AirfRANS and the AeroZoo held-out splits; native error and the boundary-law shift", fmt_h(q1)),
+    ("Should ISLA-DTT be ISLA's only interior form?", "ISLA-DTT ÷ ISLA on velocity and pressure on each AeroZoo held-out split, at equal size", fmt_h(q2)),
+    ("Where does ISLA stand on AeroZoo's held-out families?", "the three architectures at their reference configurations on each held-out split; each one's held-out penalty", fmt_h(q3)),
+]
+if not HL_REF:
+    rows.append(("Where does ISLA stand on HiLiftAeroML with the normalized slice reads?", "the reference ISLA retrained on the 210-wing rung, two seeds, scored under the three protocols",
+                 "two lanes; the wing rung is not in the cost record"))
+rows += [
+    ("Do the scaling law, the cell-count saturation and the capacity floor hold at the reference configuration?", "the case ladder at three sizes around the reference and a cell ladder at 435 cars, on the DrivAerML Surface task", fmt_h(q5)),
+    ("What causes ISLA's stress and displacement deficit on Tensile2d?", "two arms that each remove one candidate cause, on the reference configuration's protocol", fmt_h(q6)),
+    ("Can pose invariance be exact on meshes with tied boundary samples?", "a continuous geometry construction, retrained on the lug and Tensile2d and scored posed", fmt_h(q7)),
+]
+out = "| question | what would settle it | cost [GPU-hours] |\n|---|---|--:|\n" + "".join(f"| {a} | {b} | {c} |\n" for a, b, c in rows)
+print(out)
+print(": The open questions, the measurement that would settle each, and its cost. *Cost*: GPU-hours of the lanes the measurement needs, two "
+      "seeds per arm, each lane priced from the reference configurations' cost record (epoch time on four GB300 GPUs × the protocol's epochs × "
+      "four) or, for AeroZoo, from its lanes' recorded step times; a lane at a smaller training set is priced in proportion to its cases. How to "
+      "read this: the costs are training only, not scoring; they price the experiment's design, not a schedule. Data: "
+      "results/char/char_lanes_cost_2026-10-04.json.")
+```
 
-**The flow standings of this book are measured on external aerodynamics
-(DrivAerML, HiLiftAeroML, AirfRANS). Two solids problems (PLAID Tensile2d,
-GINOT Bracket Lug) and one bracket family under prescribed loads
-(DeepJEB++) carry standings too (@sec-interior-tensile2d,
-@sec-interior-lug, @sec-surface-deepjeb). Whether the interface carries to
-further steady boundary-driven PDEs is still the open axis.** These sets
-were chosen for varying boundary conditions and loads, not only varying
-geometry, so that the global-scalar, global-vector and boundary-input
-channels are exercised; each is drawn on sample cases in its own chapter
-(@sec-tensile2d, @sec-lug, @sec-deepjeb). On Tensile2d GeoTransolver and
-Transolver lead ISLA on stress and displacement and Transolver also on
-plastic strain, on DeepJEB++ ISLA leads both, and on
-the lug ISLA leads both: the Tensile2d standing is the one that most needs
-a located mechanism. AeroZoo, a diversity-stress aerodynamics
-benchmark in generation, is the coming out-of-distribution instance within
-external aerodynamics; it carries no number yet, and the status of each
-conversion is in @sec-program-status.
+### Exact wall geometry for prediction points {#sec-oq-geometry}
+
+**Should an interior prediction point take its wall distance and direction from the exact
+full-resolution surface, with the boundary tokens drawn inside the model, instead of from the
+nearest sampled token?** The nearest-token form is the one input of the interior task that reads
+the discretization (@sec-limits-boundary-law, @sec-limits-ties). The alternative computes, for
+every prediction point, the signed distance and direction to the closest point of the
+full-resolution boundary meshes, and lets the model draw its boundary tokens from those meshes
+itself, by a systematic sample in proportion to area with exact Horvitz–Thompson weights. The
+interior ISLA would then take whole boundary meshes as input rather than a sample, a change of
+its input contract. Tried on AirfRANS, the exact construction lowers ISLA's pressure error by
+about 13% and removes most of its dependence on how the airfoil is sampled, while the criterion
+set in advance for the count effect fails. What would settle the question: the exact form against
+the nearest-token form at equal size, two seeds each, on DrivAerML Volume, AirfRANS and the
+AeroZoo held-out splits, read on native error and on the boundary-law shift.
+
+```{python}
+#| label: para-oq-geometry
+#| output: asis
+print("Cost: " + "; ".join(f"{k} {fmt_h(v)} GPU-hours" for k, v in q1_lanes.items()) + f"; {fmt_h(q1)} in all.")
+```
+
+### ISLA or ISLA-DTT as the interior form {#sec-oq-dtt}
+
+**Should the read-only form, whose prediction at a point is a function of that point and the
+boundary alone, be ISLA's only interior model?** The interacting form lets prediction points
+inform one another through the slices, and pays for it with a prediction that depends on the
+request (@sec-limits-query-independence). The read-only form gives that up and reads every
+boundary cell through a Barnes–Hut tree at every depth, at about twice the step time on AeroZoo.
+On the two interior standings ISLA-DTT is not part of the reference set. The decisive data are
+AeroZoo's held-out splits, where generalization rather than in-distribution accuracy is at stake.
+What would settle it: both forms at equal size on each held-out split, two seeds each, with the
+ratio ISLA-DTT ÷ ISLA on velocity and pressure as the readout and the 5% band of the AeroZoo
+preregistration as the bar. If the ratio is inside the band on every split, the read-only form
+can be the only one: the query routing mass and the `query_independent` switch go, and every
+interior prediction can be chunked freely.
+
+```{python}
+#| label: para-oq-dtt
+#| output: asis
+print(f"Cost: {AZ_HELDOUT} held-out splits × two forms × two seeds, ISLA at about {AZ_ISLA_GPUH:.0f} GPU-hours a lane and ISLA-DTT at "
+      f"{AZ_DTT_OVER_ISLA:.1f} times that: {fmt_h(q2)} GPU-hours.")
+```
+
+### The AeroZoo standing on held-out families {#sec-oq-aerozoo}
+
+```{python}
+#| label: para-oq-aerozoo
+#| output: asis
+print("**Where do the three architectures stand on AeroZoo, in distribution and with a geometry bank, an enclosure family or a Reynolds "
+      "range held out?** "
+      + ("AeroZoo has no standing artifact in the registry. " if AZ.artifact is None else "")
+      + "It is the one dataset of the program whose cases differ in enclosure, scale and Reynolds number at once, and the only one with "
+        "held-out splits along those axes. Its readout is two numbers per architecture and field: the in-distribution error and the "
+        "held-out penalty, the error on a held-out split divided by the in-distribution error. The preregistered bar asks for ISLA's "
+        "held-out penalty to be at least 20% smaller than GeoTransolver's. What would settle it: the three architectures at their reference "
+        f"configurations on each held-out split, two seeds each. Cost: {fmt_h(q3)} GPU-hours, every arm priced at ISLA's lane.")
+```
+
+```{python}
+#| label: para-oq-hilift
+#| output: asis
+if not HL_REF:
+    s = ST["hilift"]
+    a2_effect = []
+    for k, st_ in ST.items():
+        rr = st_.raw.get("raw_read_isla")
+        if rr:
+            f = st_.ds.headline[0]
+            a2_effect.append((st_.ds.name, st_.err("ISLA", f) / rr["native"][f]["mean"]))
+    print("### HiLiftAeroML with the normalized slice reads {#sec-oq-hilift}")
+    print()
+    print("**Does ISLA's lead on the 210-wing HiLiftAeroML rung hold for the reference configuration?** The rung's ISLA arm is from "
+          "checkpoints of the raw-read variant, in which the slice sublayer pools and broadcasts the raw token state "
+          f"(@sec-isla-layer); there GeoTransolver ÷ ISLA reads {r('hilift', 'GeoTransolver', 'pressure_l2'):.2f} and Transolver ÷ ISLA "
+          f"{r('hilift', 'Transolver', 'pressure_l2'):.2f} on pressure. Where both variants are scored, the normalized reads change ISLA's "
+          "first headline error by a factor of " + ", ".join(f"{v:.2f} on {n}" for n, v in a2_effect) + " (normalized ÷ raw; @sec-standing). What would settle it: "
+          "the reference ISLA retrained on the rung, two seeds, and scored under the three protocols; two lanes. The wing rung is not in "
+          "the cost record, so the cost is not priced here.")
+```
+
+### The scaling law at the reference configuration {#sec-oq-scaling}
+
+```{python}
+#| label: para-oq-scaling
+#| output: asis
+print("**Do the cell-count saturation, the capacity floor and the fitted scaling law hold for the reference ISLA?** All three are "
+      "measured on ISLAs of 192 to 1,536 wide with 256 slices and the raw slice reads (@sec-capacity). The reference configurations sit "
+      "above the floor those ladders reach (@sec-shared-floor), and the fitted law, evaluated at the reference ISLA's parameters and 435 "
+      "cars, predicts a lower error than the reference measures (@fig-iso-compute). Both gaps could be the instrument or the configuration. "
+      "What would settle it: on the DrivAerML Surface task, the five case rungs at three sizes around the reference configuration, two "
+      f"seeds each ({fmt_h(q5_ladder)} GPU-hours, each lane's epoch proportional to its cases and every size priced at the reference's "
+      f"{ref_lane:.0f} GPU-hours a lane, a lower bound for the larger sizes), and a cell ladder of 100,000, 200,000 and 400,000 cells at "
+      f"435 cars ({fmt_h(q5_cells)} GPU-hours, the step linear in tokens); {fmt_h(q5)} GPU-hours in all. The same design on the wings needs "
+      "the wing rung's cost, which the record does not hold.")
+```
+
+### The Tensile2d deficit {#sec-oq-tensile2d}
+
+```{python}
+#| label: para-oq-tensile2d
+#| output: asis
+t = ST["tensile2d"]
+worst_ratio = min(ST[k].ratio(b, f) for k in ST for f in ST[k].ds.headline for b in S.BASELINES)
+print(f"**Why does GeoTransolver lead ISLA on stress and displacement on PLAID Tensile2d?** GeoTransolver ÷ ISLA reads "
+      f"{r('tensile2d', 'GeoTransolver', 'stress_l2'):.2f} on stress and {r('tensile2d', 'GeoTransolver', 'displacement_l2'):.2f} on "
+      f"displacement, and Transolver ÷ ISLA {r('tensile2d', 'Transolver', 'stress_l2'):.2f} and {r('tensile2d', 'Transolver', 'displacement_l2'):.2f} "
+      f"(@sec-tensile2d); on plastic strain ISLA {t.verdict('GeoTransolver', 'q_l2')} GeoTransolver and {t.verdict('Transolver', 'q_l2')} "
+      "Transolver, on a metric dominated by specimens that never yield. Displacement is ISLA's largest deficit in the standing "
+      f"(the smallest ratio of all {n_all} comparisons is {worst_ratio:.2f}). Two candidate causes are testable. One is the interior geometry: Tensile2d's structured mesh "
+      "ties nearest boundary samples (@sec-limits-ties), and GeoTransolver reads a stored distance field instead; ISLA accepts the same field "
+      "as an ordinary prediction-point input, so ISLA with it isolates the cause. The other is the aggregation: GeoTransolver + ISLA's "
+      "measure-weighted pooling (ablation) isolates whether the quadrature weighting costs accuracy on a uniform structured mesh. What would "
+      f"settle it: the two arms, two seeds each, at the reference protocol. Cost: {fmt_h(q6)} GPU-hours.")
+```
+
+### Pose on tied meshes {#sec-oq-ties}
+
+```{python}
+#| label: para-oq-ties
+#| output: asis
+n_pose = sum(all(abs(ST[k].shift("ISLA", f, "posed") - 1) <= 0.002 for f in ST[k].ds.headline) for k in ST)
+print("**Can ISLA's pose invariance be exact on structured meshes too?** The break comes from one discontinuous selection, the nearest "
+      "boundary token (@sec-limits-ties). A construction that is continuous in the sample removes it: a measure-weighted soft minimum over "
+      "the near-tied tokens, or the exact closest point of @sec-oq-geometry, which is continuous wherever the closest point is unique. The bar "
+      f"already exists: posed ÷ native within 0.002 of one on every headline field, which {n_pose} of the {len(ST)} standings meet. What would "
+      f"settle it: the lug and Tensile2d retrained with the continuous construction, two seeds each, scored native and posed. Cost: "
+      f"{fmt_h(q7)} GPU-hours.")
+```
+
+## Datasets beyond external aerodynamics {#sec-limits-datasets}
+
+```{python}
+#| label: para-limits-datasets
+#| output: asis
+SOL = [k for k in ("tensile2d", "lug", "deepjeb") if k in ST]
+def sline(k):
+    s = ST[k]
+    return f"{s.ds.name}: " + ", ".join(f"{field_name(s, f)} ISLA {s.verdict('GeoTransolver', f)} GeoTransolver and {s.verdict('Transolver', f)} Transolver"
+                                        for f in s.ds.headline)
+print("**Three structures problems carry standings beside the aerodynamic ones, and they read in both directions.** "
+      + "; ".join(sline(k) for k in SOL) + " (@sec-tensile2d, @sec-lug, @sec-deepjeb). These sets were chosen for varying boundary "
+      "conditions and loads, not only varying geometry, so that the global-scalar, global-vector and boundary-input channels are "
+      "exercised. Whether the interface carries to further steady boundary-driven PDEs, heat conduction or electrostatics for example, "
+      "is unmeasured. "
+      + ("AeroZoo, the diversity benchmark within aerodynamics, has no standing yet (@sec-oq-aerozoo)." if AZ.artifact is None else ""))
+```
 
 ## Engineering directions {#sec-future}
 
-**Four directions are engineering, not research: each has a measured
-starting point and a stated remainder.**
+**Four directions are engineering rather than research: each has a measured starting point and a
+stated remainder.**
 
 | direction | what is in place | what remains |
 |---|---|---|
-| Problems outside external aerodynamics | the interface accepts zero or more global vector inputs and zero or more global scalar inputs, and per-cell boundary data through the boundary-scalar channel (@sec-isla-inputs); the contract tests cover zero and two global directions; a screened-Poisson acceptance case trains with no global vector and one global scalar, and the scalar is decisive where the boundary data cannot substitute for it | a production dataset outside external aerodynamics with a baseline trained on it under the protocol (@sec-limits-datasets) |
-| Cost at scale | with the exact fused geometry kernel, the default on CUDA, ISLA's step tracks GeoTransolver's at every token count (@sec-cost-sweep); the three reference configurations all train under 80 GiB per GPU on the selection task (@sec-using-cost), and on the 100,000-cell lanes ISLA holds the accuracy-against-memory frontier below about 70 GB at 435 cars (@sec-review-frontier) | cost logs for the depth ladder, which reaches the floor at half GeoTransolver's parameters but is absent from the cost frontier; the gap below GeoTransolver's footprint is headroom for a wider or deeper model, since on DrivAerML cells past 100,000 buy nothing |
-| Sampling conventions | ISLA's convention-swap penalty converges under refinement, and so does that of GeoTransolver and Transolver + ISLA's measure-weighted pooling + Horvitz–Thompson-centered datapipe (ablation); GeoTransolver's and Transolver's as released does not (@sec-consistency-bench) | at 10,000 cells no architecture is consistent across conventions; the fine-mesh limit is within a few percent of reached at 40,000 |
-| Query-count consistency of the interior decode | the total query mass is a learned fraction of the total source measure divided by the query count, so neither refining the source nor changing the request size moves the balance between surface and queries (@sec-isla-contracts); count augmentation reduces the interacting decode's dependence without removing it | a decode whose prediction at a point is independent of the request at the interacting configuration's accuracy (@sec-interior-open) |
+| Problems outside external aerodynamics | the interface accepts zero or more global vector inputs, zero or more global scalar inputs and per-cell boundary data of declared tensor rank (@sec-isla-inputs); the contract tests cover zero and two global directions | a production dataset outside external aerodynamics with a baseline trained on it under the fair-comparison protocol (@sec-limits-datasets) |
+| Cost on small meshes | above 100,000 tokens a step is linear in tokens for every architecture, and below about 40,000 it is launch-bound and level between ISLA and GeoTransolver (@sec-cost-sweep) | on the structured meshes ISLA's training epoch is two to three times the baselines' (@tbl-ref-cost), a gap the per-step sweep does not explain; a profile of those lanes would locate it |
+| Inference on a small budget | the stratified sampler removes most of the quadrature variance at 10,000 cells (@sec-deficit-anatomy, @sec-using-sampler) | a default that picks the sampler from the requested count |
+| Query-count consistency of the interacting form | the prediction points' routing mass is a learned fraction of the boundary measure, independent of their count (@sec-isla-contracts) | a prediction at a point independent of the request at the interacting form's accuracy, or the read-only form as the only one (@sec-oq-dtt) |
 
 ## What would change the recommendation {#sec-review-roads}
 
-**ISLA is the choice wherever the deployment mesh may differ from the
-training mesh, wherever the training sampling law is not the deployment
-one, where geometries arrive in arbitrary poses, and where memory at scale
-binds; under the 80 GiB reference configurations it ties the baselines on
-the DrivAerML Surface task and leads them on the 210-wing rung, and a wider
-GeoTransolver above that budget is the more accurate model for
-matched-mesher, known-pose surface prediction from few training cases on
-the wings and below about 100 cars (@sec-scoreboard-200k, @sec-de-result,
-@sec-hilift-ladders).** The recommendation splits on consistency, and
-consistency is a property of the frame, not of the architecture. Every
-configuration that centers its coordinates on a statistic of the sampled
-points degrades several-fold under a sampling-density bias when the frame
-is taken from the biased sample, GeoTransolver and Transolver included.
-Only frames that do not read the sample hold: ISLA's origin-free
-frame, and the ablations of GeoTransolver and Transolver given
-a Horvitz–Thompson center (@sec-robustness-density). Those ablations
-locate the property. GeoTransolver and Transolver are stable, in use and
-published, and are not modified, so measure weighting and a sample-free
-frame reach users through ISLA (@sec-principled-ledger). Two
-outcomes would change the recommendation.
-
-**ISLA gains an in-distribution accuracy claim at small training sets**
-if the mechanism of the ladders' deficit against GeoTransolver-512 is
-located and removed by a principled configuration: the geometry-holdout
-test of @sec-open-questions is the one such candidate. If that deficit
-closes, the recommendation on matched-mesher, known-pose surface
-prediction from few training cases becomes a trade of a few percent of
-accuracy against the contracts rather than a preference for a wider
-GeoTransolver.
-
-**The interior recommendation becomes unconditional for ISLA** only if
-the AirfRANS pressure deficit and the eddy-viscosity deficits of both
-interior datasets close without moving velocity, and the volume model's dependence on the
-boundary token law is removed (@sec-limits-boundary-law). Until then the
-recommendation on the interior is ISLA on velocity on both datasets and on
-DrivAerML Volume pressure, and GeoTransolver on AirfRANS pressure and on
-eddy viscosity on both datasets (@sec-interior).
-
-If neither fires, the recommendation stands as written, with the bounds
-of this chapter attached. The program's ISLA-specific claims are these:
-covariance that is exact on meshes without tied boundary samples
-(@sec-limits-ties) and its lead in arbitrary poses; consistency under a
-change of inference draw and weak dependence on the training sampling law,
-both properties of the origin-free frame and the measure weights; the
-interior velocity lead; the cost figures of @sec-capacity; and, on
-in-distribution surface accuracy under the reference configurations, a tie
-on the DrivAerML Surface task and a lead on the 210-wing rung, with a
-deficit against a wider GeoTransolver at small training sets on the
-ladders, a deficit on tensor targets, and on the sport-utility bodies a
-tie with GeoTransolver and a deficit against Transolver.
+```{python}
+#| label: para-review-roads
+#| output: asis
+print("**ISLA is the choice where the deployment mesh or sampling law may differ from the training one, where geometries arrive in "
+      "arbitrary poses, and where a surrogate must be a function of the physics rather than of the dataset's frame; on in-distribution "
+      f"accuracy at matched memory it leads in {len(TAL['leads'])}, is level in {len(TAL['is level with'])} and trails in "
+      f"{len(TAL['trails'])} of the {n_all} comparisons of the standing (@sec-standing).** The recommendation rests on the contracts, which "
+      "hold on every standing up to the two limits of this chapter (tied samples, the interior's nearest-token geometry), and not on an "
+      "accuracy lead. GeoTransolver and Transolver are released, in use and not modified; measure weighting and an origin-free frame reach "
+      "users through ISLA (@sec-principled-ledger). Three outcomes would change the recommendation.")
+print()
+print("- **The interior recommendation becomes unconditional** if the exact wall geometry (@sec-oq-geometry) removes the boundary-law "
+      "dependence without costing velocity, and the pressure and eddy-viscosity deficits close.")
+print("- **The interior model changes form** if ISLA-DTT is inside the band on every AeroZoo held-out split (@sec-oq-dtt): the "
+      "recommendation is then a read-only model whose prediction at a point depends on that point and the boundary alone.")
+print("- **ISLA gains a generalization claim** if its held-out penalty on AeroZoo is smaller than GeoTransolver's by the preregistered "
+      "margin (@sec-oq-aerozoo); it loses one if the penalty is larger.")
+print()
+print("If none fires, the recommendation stands as written, with the bounds of this chapter attached.")
+```
