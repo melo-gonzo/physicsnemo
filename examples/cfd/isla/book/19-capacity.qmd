@@ -100,7 +100,7 @@ print(f"The fitted exponent of error against training cells is {abs(ISOJ['bars']
       f"{ISOJ['bars']['cells_exponent']['alpha_gt']:.2f} for GeoTransolver over this range. The training length is converged too: "
       f"1,000 epochs instead of 500 at 200,000 cells move ISLA at 192 wide by {ep('isla|w192|c200k|lr1e-3|ep500'):.2f}% and GeoTransolver "
       f"at 256 wide by {ep('gt_unit|w256|c200k|lr3e-3|ep500'):.2f}%. What still buys accuracy at 435 cars is capacity "
-      "(@sec-shared-floor) and, more cheaply, cases (@sec-compute-allocation).")
+      "(@sec-shared-floor) and, more cheaply, cases (@sec-compute-allocation). Data: results/isocost_reduction_2026-09-20.json.")
 ```
 
 ### Below 100,000 cells ISLA pays a quadrature-noise penalty {#sec-deficit-anatomy}

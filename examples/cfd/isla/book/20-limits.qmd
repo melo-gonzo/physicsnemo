@@ -47,7 +47,7 @@ def r(key, b, f, p="native"):
 PR = json.load(open(RES / "precres_2026-09-18.json"))["reduction"]
 HL_REF = S.DATASETS["hilift"].reference
 AZ = S.DATASETS["aerozoo"]
-FAIR = [k for k in ST if S.DATASETS[k].fair_drive]          # the standings whose baselines read the inputs of the protocol
+FAIR = [k for k in ST if S.DATASETS[k].fair_drive]          # the standings that compare the architectures
 UNFAIR = [k for k in ST if not S.DATASETS[k].fair_drive]     # the standings whose baselines read the freestream as a physical vector
 def nm(k):
     n = ST[k].ds.name.replace(", ", " ")
@@ -70,8 +70,8 @@ follow give each item its numbers.
 #| output: asis
 n_all = sum(len(v) for k, v in TAL.items() if k != "is not compared with")
 HL_FAIR = S.DATASETS["hilift"].fair_drive
-print(f"- **Not that ISLA is more accurate in distribution in general.** Across the {len(FAIR)} standings whose baselines read the inputs of "
-      f"the protocol and their headline fields, ISLA leads a baseline in {len(TAL['leads'])} of {n_all} comparisons, is level in "
+print(f"- **Not that ISLA is more accurate in distribution in general.** Across the {len(FAIR)} standings that compare the architectures "
+      f"and their headline fields, ISLA leads a baseline in {len(TAL['leads'])} of {n_all} comparisons, is level in "
       f"{len(TAL['is level with'])} and trails in {len(TAL['trails'])}"
       + (f"; {names(UNFAIR)} {'is' if len(UNFAIR) == 1 else 'are'} not counted, because the baselines of {'its record' if len(UNFAIR) == 1 else 'their records'} "
          "read the freestream as a physical vector, not as a unit direction (@sec-oq-unit-direction)" if UNFAIR else "")
@@ -167,7 +167,7 @@ it leads or trails where it trails.**
   variance (@sec-deficit-anatomy); at the reporting protocol the penalty is gone.
 - **The contracts are exact in float32, not in bfloat16.** On two trained DrivAerML Surface
   checkpoints of an earlier ISLA, a rotation and translation moves the float32 prediction by at most
-  `{python} f"{PR['float32']['scalar_residual']['max_over_cars']:.0e}"` of the field, and the
+  `{python} f"{100 * PR['float32']['scalar_residual']['max_over_cars']:.3f}"`% of the field, and the
   prediction under the bfloat16 autocast the recipe trains with by
   `{python} f"{100 * PR['bfloat16']['scalar_residual']['mean_over_seeds']:.0f}"`% on pressure and
   `{python} f"{100 * PR['bfloat16']['vector_residual']['mean_over_seeds']:.0f}"`% on wall shear on
@@ -258,15 +258,13 @@ lug = ST["lug"].shift("ISLA", "von_mises_l2", "posed"); t2 = max(ST["tensile2d"]
 dl = ST["lug"].err("ISLA", "von_mises_l2", "posed") - ST["lug"].err("ISLA", "von_mises_l2")
 print(f"**Under a rotation and translation ISLA's error stays within {100 * worst:.1f}% of native on {len(exact)} of the {len(ST)} "
       f"standings, and it does not on the two finite-element meshes whose nodes tie for their nearest boundary sample: {lug:.2f} times "
-      f"native on the GINOT bracket lug and up to {t2:.2f} times on PLAID Tensile2d.** Every input is transformed consistently; the break is "
-      "a discontinuity in the geometry construction. Each prediction point reads its nearest boundary token, and where two tokens are "
-      "equally near, float32 rounding of the moved coordinates picks between them. On the lug's structured hexahedral mesh "
-      f"{100 * tied:.0f}% of the nodes tie, interior ones included, and one rigid motion changes the nearest sample of {100 * moved:.0f}% of "
-      "them (@sec-lug-ties); on Tensile2d's unstructured mesh only the nodes on the polyline tie (@sec-tensile2d-ties). The factor is large "
-      f"on the lug because its native error is small: the posed-minus-native difference is {100 * dl:.2f}% of the field. The same argmin is "
-      "behind the volume model's sensitivity to the boundary sampling law (@sec-limits-boundary-law): a nearest-sample selection is a "
-      "discontinuous, law-dependent function of the sample, and both readings measure that one function under different perturbations. "
-      "Data: results/char/solids_ties_2026-10-18.json. What would move this: @sec-oq-ties.")
+      f"native on the GINOT bracket lug and up to {t2:.2f} times on PLAID Tensile2d.** Where two boundary tokens are equally near a "
+      "prediction point, float32 rounding of the moved coordinates picks between them, and the point's direction input can turn by order "
+      f"one; on the lug's structured hexahedral mesh {100 * tied:.0f}% of the nodes tie and one rigid motion moves the nearest sample of "
+      f"{100 * moved:.0f}% (@sec-lug-ties), while on Tensile2d only the nodes on the polyline tie (@sec-tensile2d-ties). The lug's factor is "
+      f"large because its native error is small: the posed-minus-native difference is {100 * dl:.2f}% of the field. The same nearest-sample "
+      "selection is behind the boundary-law dependence of @sec-limits-boundary-law. Data: results/char/solids_ties_2026-10-18.json. "
+      "What would move this: @sec-oq-ties.")
 ```
 
 ### The prediction depends on the query set {#sec-limits-query-independence}
@@ -411,7 +409,7 @@ print("**The open question is whether the read-only form, whose prediction at a 
       "the two interior standings ISLA-DTT is not part of the reference set. The decisive data are AeroZoo's held-out splits, where "
       "generalization rather than in-distribution accuracy is at stake. What would settle it: both forms at equal size on each of the "
       f"{AZ_HELDOUT} held-out splits, two seeds each, with the ratio ISLA-DTT ÷ ISLA on velocity and pressure as the readout and the 5% band "
-      "that the AeroZoo preregistration sets in distribution as the bar. If the ratio is inside the band on every split, the read-only form "
+      "that the AeroZoo preregistration sets in distribution as the bar (results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json, its predictions block). If the ratio is inside the band on every split, the read-only form "
       "can be the only one: the query routing mass and the `query_independent` switch go, and every interior prediction can be chunked freely.")
 print()
 print(f"Cost: {AZ_HELDOUT} held-out splits × two forms × two seeds, ISLA at {AZ_ISLA_GPUH:.0f} GPU-hours a run and ISLA-DTT at "
@@ -447,7 +445,8 @@ print("**The open question is where ISLA stands against GeoTransolver on AeroZoo
       + "It is the one dataset of the book whose cases differ in enclosure, scale and Reynolds number at once, and the only one with "
         f"held-out splits along those axes ({AZ_HELDOUT} of them, @tbl-aerozoo-splits). Its readout is two numbers per architecture and field: "
         "the in-distribution error and the held-out penalty, the error on a held-out split divided by the in-distribution error. The "
-        "preregistered bar asks for ISLA's penalty on the held-out enclosure family to be at least 20% smaller than GeoTransolver's. "
+        "preregistered bar asks for ISLA's penalty on the held-out enclosure family to be at least 20% smaller than GeoTransolver's (the "
+        "reduction's predictions block). "
         "Transolver is not trained on AeroZoo (@sec-aerozoo-measured). What would settle it: both reference configurations on each held-out "
         f"split, two seeds each. Cost: {fmt_h(q3)} GPU-hours, ISLA at {AZ_ISLA_GPUH:.0f} and GeoTransolver at {AZ_GT_GPUH:.0f} GPU-hours a run.")
 ```
