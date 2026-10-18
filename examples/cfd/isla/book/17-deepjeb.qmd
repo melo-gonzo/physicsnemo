@@ -25,7 +25,7 @@ COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]
 
 **DeepJEB++ is 15,360 generated jet-engine brackets in the SimJEB design space, each solved by linear static finite elements under four load cases applied at the lug bore with the bolt holes clamped.** ISLA receives the surface triangles with the clamped and loaded labels and the applied traction as boundary inputs. The load direction is its one global vector $\hat g_1$, and a force-or-torque one-hot enters as two global scalars. It predicts the von Mises stress and the displacement at the surface cells, so this is a surface task: the boundary tokens are also the prediction points.
 
-The one-hot is there because a direction does not say what kind of load it carries. A force along $\hat g_1$ and a torque about $\hat g_1$ are different loads with the same unit vector, and a moment axis is a pseudovector: under a proper rotation it transforms as a vector does, under a reflection it does not. The model is told which one it has.
+The one-hot is there because a direction does not say what kind of load it carries. A force along $\hat g_1$ and a torque about $\hat g_1$ are different loads with the same unit vector, and a moment axis is a pseudovector: under a proper rotation it transforms as a vector does, under a reflection it does not. The model is told which one it has, and still takes the axis as an ordinary global vector, the only kind of global vector ISLA accepts (@sec-isla-inputs). The one-hot does not restore the mirror behavior, so on DeepJEB++ ISLA's covariance contract covers proper rotations and translations only. The rotated and translated scoring uses proper rotations, so the standing is unaffected.
 
 ```{python}
 #| label: para-deepjeb-samples
@@ -49,7 +49,7 @@ print(f"**Shape, load direction and load kind all change from file to file.** @f
 #|   condition's color: clamped bolt holes (value) and the loaded lug bore
 #|   (flux). The black arrow from the lug is the load direction, the one
 #|   global vector; the title names the load case, its magnitude, the
-#|   force-or-torque one-hot (the two global scalars) and the bracket's mass.
+#|   force-or-torque one-hot (the two global scalars), the bracket and its mass.
 #|   How to read this: the geometry is generated, not a morph of one body, so
 #|   the outlines differ in kind; a torsion's arrow is its axis, not a force;
 #|   the stress scale is clipped at the 95th percentile of the cells shown,
@@ -69,12 +69,12 @@ for i, c in enumerate(cs):
     ax.scatter(cen[fixed, 0], cen[fixed, 2], s=2.0, c=BC["value"], lw=0, rasterized=True, zorder=3)
     ax.scatter(cen[loaded, 0], cen[loaded, 2], s=2.0, c=BC["flux"], lw=0, rasterized=True, zorder=3)
     d = np.array(c["load_dir"]); lug = cen[loaded].mean(axis=0); Lc = 0.3 * (cen[:, 2].max() - cen[:, 2].min() + cen[:, 0].max() - cen[:, 0].min()) / 2
-    ax.annotate("", xy=(lug[0] + Lc * d[0], lug[2] + Lc * d[2]), xytext=(lug[0], lug[2]), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0), zorder=6)
+    ax.annotate("", xy=(lug[0] + Lc * d[0], lug[2] + Lc * d[2]), xytext=(lug[0], lug[2]), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0), zorder=6, annotation_clip=False)
     mag = f"{c['load_magnitude'] / 1e3:.1f} kN" if c["load_type"] == "force" else f"{c['load_magnitude'] / 1e3:.0f} N·m"
     oh = c["load_type_onehot"]
-    ax.set_title(f"{c['bracket']}, {c['mass_g']:.0f} g\n{NAME[c['load']]}, {mag}\none-hot [force, torque] = [{oh[0]:.0f}, {oh[1]:.0f}]", fontsize=7.8)
+    ax.set_title(f"{NAME[c['load']]}, {mag}\none-hot [force, torque] = [{oh[0]:.0f}, {oh[1]:.0f}]\nbracket {c['bracket']}, {c['mass_g']:.0f} g", fontsize=7.8)
     ax.set_xlabel("x [mm]"); ax.set_ylabel("z [mm]") if i % 3 == 0 else None
-    ax.margins(0.08)
+    ax.margins(0.08); ax.set_ylim(top=max(ax.get_ylim()[1], lug[2] + 1.15 * Lc))
 cb = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.01, extend="max"); cb.set_label("von Mises [MPa]"); cb.outline.set_visible(False)
 from matplotlib.lines import Line2D
 fig.legend(handles=[Line2D([], [], color=BC["value"], marker="o", ls="none", ms=6, label="clamped bolt holes: $u$ = 0 (value)"),
@@ -84,20 +84,20 @@ fig.legend(handles=[Line2D([], [], color=BC["value"], marker="o", ls="none", ms=
 plt.show()
 ```
 
-**Diversity.** The geometry is the most varied in the book. The brackets are generated shapes spanning a design space, not morphs of one body; each appears under four loads whose direction is a global input of the problem; and the loading changes kind between force and torque. The price is label quality: a census of the stress fields found unphysical maxima on a tenth of the brackets, and the clean split used here removes those without making the remaining fields smooth.
+**Diversity.** The geometry is the most varied in the book. The brackets are generated shapes spanning a design space, not morphs of one body; each appears under four loads whose direction is a global input of the problem; and the loading changes kind between force and torque. The price is label quality: a census of the stress fields found unphysical maxima, above 10,000 MPa against a yield stress of 903 MPa, on a tenth of the brackets (lab notebook, @sec-notebook), and the clean split used here removes those without making the remaining fields smooth.
 
 ### Files, conversion and normalization {#sec-data-deepjeb}
 
-**15,360 TRELLIS-generated jet-engine brackets in the SimJEB design space (Yoo et al., KAIST; Hugging Face `KAIST-SmartDesignLab/DeepJEB-PP`; ODC-By 1.0), each under four static linear-elastic load cases (Ti-6Al-4V): vertical, horizontal and diagonal forces and a torsion about $z$, with the bolt holes clamped and the load shared over the lug bore.** The surface is decimated to 25,000 vertices, with per-vertex displacement (mm) and von Mises stress (MPa) for each load case and explicit index sets for the clamped bolt and loaded lug vertices.
+**15,360 jet-engine brackets generated with TRELLIS, a generative model of 3-D shapes, in the design space of SimJEB, the simulated jet-engine bracket dataset (Yoo et al., KAIST; Hugging Face `KAIST-SmartDesignLab/DeepJEB-PP`; ODC-By 1.0), each under four static linear-elastic load cases (Ti-6Al-4V): vertical, horizontal and diagonal forces and a torsion about $z$, with the bolt holes clamped and the load shared over the lug bore.** The surface is decimated to 25,000 vertices, with per-vertex displacement (mm) and von Mises stress (MPa) for each load case and explicit index sets for the clamped bolt and loaded lug vertices.
 
 - **Conversion** (`deepjebpp_convert.py`). One file per bracket and load: the surface triangles wound outward, their areas, the `bc_fixed` and `bc_loaded` labels, the traction `bc_load` (for a force $F\,\hat d / A_{\text{loaded}}$; for the torsion the rigid-twist traction about the lug axis), cell-mean targets, and global data with `load_dir` (the force direction or the moment axis), the `load_type` one-hot [force, torque], the magnitude and the bracket's mass and volume.
 - **What each model receives.** A surface task in the DrivAerML layout (`deepjebpp_surface.yaml`), with coordinates scaled from mm to 0.1 m so that a bracket spans about one unit. ISLA (`isla_surface_deepjebpp.yaml`) takes `load_dir` as the one global vector ($K = 1$), the one-hot as two global scalars, the two labels as boundary scalars and the traction as a boundary vector, which it reads through invariants against each cell's normal and $\hat g_1$ (@sec-isla-inputs). It predicts the von Mises stress as a scalar and the displacement as a vector. GeoTransolver and Transolver read each cell's coordinates, normal, labels and traction as laboratory-frame features, and the load direction and the one-hot as global features.
 - **Splits.** Grouped by SimJEB seed pair, because the brackets of one pair are a smooth family and must not straddle a split: a seed-0 draw of 10% of the pairs is the test set and the rest train. The authors' pair-grouped and random splits are kept under `official_*`.
-- **Pitfalls.** The label census removed a tenth of the brackets for unphysical stress maxima; every number in this chapter is on the clean split. Published stress errors for Transolver, GNOT and GI-FNO are 30 to 37%, comparable in kind but not in split.
+- **Pitfalls.** The label census removed a tenth of the brackets for unphysical stress maxima; every number in this chapter is on the clean split. Published stress errors for Transolver, GNOT (the General Neural Operator Transformer) and GI-FNO (a geometry-informed Fourier neural operator) are 30 to 37% (`results/book_audit_2026-09-22/datasets_scout.md`), comparable in kind but not in split.
 
 ## What is measured {#sec-deepjeb-measured}
 
-**The readout is the area-weighted relative L2 error of von Mises stress and displacement over every surface cell, averaged over the `{python} f"{N_TEST:,}"` clean test files (1,385 held-out brackets under all four loads), after 40 epochs on the 12,451 clean training brackets, two seeds.** The three architectures run at their reference configurations: ISLA width 512, 12 layers, 512 slices, learning rate 3.75e-4; GeoTransolver width 256 and Transolver width 512 with 16 layers, both at 1e-3. No lane trains with rotation or translation augmentation. Each checkpoint is scored twice on the same files: on the native mesh, and with every bracket rotated by a random three-dimensional rotation and translated by one RMS radius, the load direction and the traction rotated with it and the displacement compared as a vector (@sec-invariances). The third scoring of the other surface datasets, a uniform point cloud, is the native mesh here: every bracket's surface has fewer cells than the 200,000 the protocol scores.
+**The readout is the area-weighted relative L2 error of von Mises stress and displacement over every surface cell, averaged over the `{python} f"{N_TEST:,}"` clean test files (1,385 held-out brackets under all four loads), after 40 epochs on the 12,451 clean training brackets, two seeds.** The three architectures run at their reference configurations: ISLA width 512, 12 layers, 512 slices, learning rate 3.75e-4; GeoTransolver width 256 and Transolver width 512 with 16 layers, both at 1e-3. No model trains with rotation or translation augmentation. Each checkpoint is scored twice on the same files: on the native mesh, and with every bracket rotated by a random three-dimensional rotation and translated by one RMS radius, the load direction and the traction rotated with it and the displacement compared as a vector (@sec-invariances). The third scoring of the other surface datasets, a uniform point cloud, is the native mesh here: every bracket's surface has fewer cells than the 200,000 the protocol scores.
 
 ```{python}
 #| label: tab-deepjeb-cost
@@ -106,10 +106,13 @@ print("| | parameters | peak memory per GPU [GiB] | time per epoch [s] |\n|---|-
 for a in S.ARCHS:
     v = COST[a]
     print(f"| {S.CONFIG[a]} | {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.1f} | {v['epoch_seconds']:.0f} |")
+mem_low = COST["ISLA"]["peak_gib"] < min(COST[a]["peak_gib"] for a in S.BASELINES)
+t_mid = min(COST[a]["epoch_seconds"] for a in S.BASELINES) <= COST["ISLA"]["epoch_seconds"] <= max(COST[a]["epoch_seconds"] for a in S.BASELINES)
 print("\n: The cost of training on DeepJEB++ at the three reference configurations: parameters, peak device memory (maximum over four GB300 "
       "ranks, bfloat16) and wall time of one epoch over the clean training files. The parameter counts are exact for the standing's "
       "checkpoints, since the normalized slice reads add no parameters; memory and time are one-epoch measurements. How to read this: ISLA "
-      "has the most parameters, while its memory and epoch time sit between the baselines'. Instrument: ISLA at 512 wide, 512 slices, "
+      "has the most parameters" + (" and the lowest memory" if mem_low else "") + (", and its epoch time sits between the baselines'" if t_mid else "")
+      + ". Instrument: ISLA at 512 wide, 512 slices, "
       "3.75e-4, raw slice reads (@sec-study-configurations). Data: results/char/char_lanes_cost_2026-10-04.json. {#tbl-deepjeb-cost}")
 ```
 
@@ -156,7 +159,7 @@ same_txt = ("equal its native ones to every digit the record keeps" if max(pz) <
 print(f"**Rotated and translated, ISLA reproduces its native numbers; the baselines lose the field.** ISLA's posed errors "
       f"{same_txt}. GeoTransolver reads {bp['GeoTransolver'][0]:.2f} on von Mises stress and "
       f"{bp['GeoTransolver'][1]:.2f} on displacement, Transolver {bp['Transolver'][0]:.2f} and {bp['Transolver'][1]:.2f}: errors above one, "
-      "worse than predicting the mean field. This is a surface task, so ISLA builds no nearest-sample input for its prediction points, "
+      "worse than predicting zero everywhere. This is a surface task, so ISLA builds no nearest-sample input for its prediction points, "
       "which are the boundary tokens themselves, and the tie mechanism that bends the contract on the other two solids "
       "(@sec-tensile2d-ties, @sec-lug-ties) has nothing to act on.")
 ```
@@ -180,10 +183,10 @@ dep = [departs(e) for e in raw]
 last = [e[max(e, key=int)]["von_mises_l2_val"] for e in raw]
 lo, hi = f"{min(d[1] for d in dep):.0f}", f"{max(d[1] for d in dep):.0f}"
 fac = lo if lo == hi else f"{lo} to {hi}"
-print("**One study ran on this dataset, and it belongs to the mechanism of the slice layer.** The raw-read variant of ISLA, an ablation in "
+print("**One study belongs to this dataset, and it belongs to the mechanism of the slice layer.** The raw-read variant of ISLA, an ablation in "
       "which the slice sublayer pools and broadcasts the raw token state instead of its normalized form, trained here at the same rate, "
       f"has its validation loss rise {fac} times by epoch {max(d[0] for d in dep)} and "
-      f"never recovers: its von Mises error at epoch 40 is {min(last):.2f} to {max(last):.2f}, the field-mean level. Normalizing the slice "
+      f"never recovers: its von Mises error at epoch 40 is {min(last):.2f} to {max(last):.2f}, about the error of predicting zero everywhere. Normalizing the slice "
       "sublayer's reads removes this, which is why the reference configuration trains on DeepJEB++ at all (@sec-isla-layer). "
       "Data: results/char/deepjeb_trajectories_2026-10-07.json (trainer-side validation, bfloat16).")
 ```
@@ -192,7 +195,7 @@ print("**One study ran on this dataset, and it belongs to the mechanism of the s
 
 **The DeepJEB++ standing is one 40-epoch protocol on the full clean training set, on labels of which a tenth were removed as unphysical.**
 
-- **It says nothing about the surface sampling law on brackets.** Every bracket's surface is scored whole, and no reduced-budget draw was scored at the reference configuration of ISLA.
+- **It says nothing about the surface sampling law on brackets.** Every bracket's surface is scored whole, so the standing holds no reduced-budget draw of the surface.
 - **It is not a learning curve.** One training-set size and one epoch budget are measured; neither the data exponent nor whether a longer schedule changes the ordering is known.
 - **Absolute errors near `{python} f"{ST.err('ISLA', 'von_mises_l2'):.1f}"` on von Mises stress are a property of the labels**, for every architecture.
 - **No tensor target.** Tensile2d measures one (@sec-interior-tensile2d).
