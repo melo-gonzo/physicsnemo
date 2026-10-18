@@ -15,6 +15,13 @@ code cell on this page runs on a CPU as the page renders, on the running
 airfoil of @sec-problem, with a model far too small to predict anything, so
 the shapes and the residuals can be read.
 
+::: {.callout-tip title="If you run one thing"}
+From the recipe root, train the DrivAerML Surface model at its reference configuration with
+`python src/train.py model=isla_surface dataset=drivaer_ml_surface`, then score it in float32 at 200,000 cells with the
+`src/infer.py` command of @sec-using-sampler. Everything else on this page explains what those two commands fix and
+how to change them for your data.
+:::
+
 ```{python}
 #| label: setup-using
 #| include: false
