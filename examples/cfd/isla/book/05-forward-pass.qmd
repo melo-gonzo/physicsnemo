@@ -1402,9 +1402,134 @@ symbolic size would fix it (`_log_count`), and a guard tells the compiler
 that a flattened token axis divides by the token count (`_hint_token_axis`).
 ISLA-DTT is the exception. Its forest and each point's list of sources are
 sized by the data, which breaks a fullgraph trace, so it compiles each slice
-block separately instead (`compile_blocks=True`, @sec-arch-switches).
+block separately instead (`compile_blocks=True`, @sec-arch-switches). So
+does ISLA on AeroZoo: with four boundary meshes whose capped cell counts are
+often equal, the compiler's guards tie their sizes and the whole-model graph
+recompiles case after case, so `isla_volume_aerozoo.yaml` compiles per
+block.
 
-<!-- SLOT: PERF stage breakdown (fig-arch-step-breakdown) -->
+**Where a training step's time goes.** @fig-arch-step-breakdown takes one
+warm training step of ISLA and of ISLA-DTT apart on AeroZoo, on one node of
+four GB300 GPUs under data parallelism (each GPU trains on its own case and
+the gradients are averaged across them, an *all-reduce*, during the reverse
+pass).
+
+```{python}
+#| label: fig-arch-step-breakdown
+#| fig-cap: >
+#|   One warm training step of ISLA and of ISLA-DTT at their reference
+#|   configurations on AeroZoo (`family_non_box` split, 200,000 interior
+#|   cells, bfloat16, per-block compile, one node of four GB300 GPUs, data
+#|   parallel; mean over 150 steps and the four ranks). (a) The wall time of
+#|   the step by phase (upper bar of each pair), and the time the GPU spends
+#|   running kernels in each phase (lower bar, from the profiler, collective
+#|   communication excluded); the gap between the two bars is time the GPU
+#|   waits. (b) The forward pass by module, synchronized at each module
+#|   boundary. How to read this: the backward phase includes the wait for the
+#|   gradient all-reduce, which is time the GPUs spend waiting for the
+#|   slowest of them; the data phase is the main thread preparing the next
+#|   case, measured here at the start of the step. Data:
+#|   results/perf_2026-10-18/step_breakdown.json.
+#| code-fold: true
+PB = json.load(open(RES / "perf_2026-10-18" / "step_breakdown.json"))
+HT, GK, FM = PB["host_timeline_ms"], PB["gpu_kernels_ms"], PB["forward_modules_ms"]
+PH = [("data", ("data_consume", "data_collective"), MUTED), ("forward", ("fwd_host", "fwd_collective"), VIOLET),
+      ("backward and all-reduce wait", ("bwd_host", "gradnorm_drain"), "#b3abe0"), ("optimizer and logging", ("opt_host", "log"), BASELINE)]
+GPH = {"data": ("data",), "forward": ("fwd",), "backward and all-reduce wait": ("bwd",), "optimizer and logging": ("opt",)}
+fig, axes = plt.subplots(2, 1, figsize=(8, 6.2), gridspec_kw=dict(hspace=0.95, height_ratios=[1.25, 1.0]))
+ax = axes[0]
+for row, (key, name) in enumerate((("isla", "ISLA"), ("isla_dtt", "ISLA-DTT"))):
+    y0 = 1.6 * (1 - row)
+    x = 0.0
+    for lab, parts, col in PH:
+        w = sum(HT[key][p] for p in parts)
+        ax.barh(y0 + 0.32, w, left=x, height=0.5, color=col, edgecolor=WHITE)
+        if w > 60:
+            ax.text(x + w / 2, y0 + 0.32, f"{w:.0f}", ha="center", va="center", fontsize=8, color=WHITE if col == VIOLET else INK)
+        x += w
+    ax.text(x + 12, y0 + 0.32, f"step {HT[key]['step']:,.0f} ms", va="center", fontsize=8.5, color=INK)
+    x = 0.0
+    for lab, parts, col in PH:
+        w = sum(GK[key][p] for p in GPH[lab])
+        ax.barh(y0 - 0.3, w, left=x, height=0.5, color=col, edgecolor=WHITE, alpha=0.85)
+        x += w
+    ax.text(x + 12, y0 - 0.3, f"GPU kernels {x:,.0f} ms", va="center", fontsize=8.5, color=MUTED)
+ax.set_yticks([1.6, 0.0]); ax.set_yticklabels(["ISLA", "ISLA-DTT"], fontsize=9.5)
+ax.set_xlim(0, 1750); ax.set_xlabel("time per training step [ms]")
+ax.set_title("(a) the step by phase: wall time (upper) and GPU kernel time (lower)", fontsize=9.5, loc="left")
+ax.legend(handles=[plt.Rectangle((0, 0), 1, 1, color=c) for _, _, c in PH], labels=[l for l, _, _ in PH],
+          fontsize=8, ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.3), frameon=False)
+for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+ax.grid(axis="y", visible=False)
+ax = axes[1]
+MODS = [("slice blocks", lambda m: m["blocks"], VIOLET), ("nearest-boundary geometry", lambda m: m["nearest_boundary_geometry"], AQUA),
+        ("tree: forest build", lambda m: m.get("tree_forest_build", 0), "#5f5e58"),
+        ("tree: walk, plan and basis", lambda m: m.get("tree_walk", 0) + m.get("tree_pair_plan", 0) + m.get("tree_basis", 0), MUTED),
+        ("tree reads", lambda m: m.get("tree_reads", 0), BASELINE)]
+for row, (key, name) in enumerate((("isla", "ISLA"), ("isla_dtt", "ISLA-DTT"))):
+    m = FM[key]; x = 0.0
+    for lab, f, col in MODS:
+        w = f(m)
+        if w:
+            ax.barh(1 - row, w, left=x, height=0.55, color=col, edgecolor=WHITE)
+            if w > 45:
+                ax.text(x + w / 2, 1 - row, f"{w:.0f}", ha="center", va="center", fontsize=8, color=WHITE if col in (VIOLET, "#5f5e58") else INK)
+        x += w
+    rest = m["total"] - x
+    ax.barh(1 - row, rest, left=x, height=0.55, color=WHITE, edgecolor=MUTED, lw=0.6)
+    ax.text(m["total"] + 10, 1 - row, f"forward {m['total']:.0f} ms", va="center", fontsize=8.5, color=INK)
+ax.set_yticks([1, 0]); ax.set_yticklabels(["ISLA", "ISLA-DTT"], fontsize=9.5)
+ax.set_xlim(0, 750); ax.set_xlabel("time in the forward pass, synchronized [ms]")
+ax.set_title("(b) the forward pass by module (open: the rest)", fontsize=9.5, loc="left")
+ax.legend(handles=[plt.Rectangle((0, 0), 1, 1, color=c) for _, _, c in MODS], labels=[l for l, _, _ in MODS],
+          fontsize=8, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.4), frameon=False)
+for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+ax.grid(axis="y", visible=False)
+plt.show()
+```
+
+```{python}
+#| label: para-arch-step-breakdown
+#| output: asis
+gb = lambda k: PB["gpu_busy_unprofiled_fraction"][k]
+pa = PB["prefetch_ab_ms"]
+sav = sorted(100 * (1 - np.mean(r["fix"]) / r["base"]) for r in (pa["isla_aba_269723"], pa["isla_abab_270549"]))
+ri, dd = PB["rank_imbalance"], PB["ddp_allreduce"]
+bc, sy, mem = PB["boundary_cells_per_rank"]["isla"], PB["host_syncs_per_step"]["isla_dtt"], PB["peak_memory_gib"]
+FMi, FMd = FM["isla"], FM["isla_dtt"]
+print(f"**The step is bound by the GPU, and what is left is waiting.** ISLA's warm step takes {HT['isla']['step']:,.0f} ms and keeps "
+      f"the GPUs running kernels for about {100 * gb('isla'):.0f}% of it; its forward and reverse passes issue their kernels faster "
+      f"than the GPU runs them ({HT['isla']['fwd_host']:.0f} ms of host time against {GK['isla']['fwd']:.0f} ms of kernels in the "
+      f"forward, {HT['isla']['bwd_host']:.0f} against {GK['isla']['bwd']:.0f} in the reverse pass). In the forward, the twelve slice "
+      f"blocks take {FMi['blocks']:.0f} of {FMi['total']:.0f} ms and the nearest-boundary search of the prediction points "
+      f"{FMi['nearest_boundary_geometry']:.0f}. The optimizer is a small share: Muon stacks the matrices of equal shape and orthogonalizes "
+      f"them in one batched Newton–Schulz iteration, {HT['isla']['opt_host']:.0f} ms of host time per step. Two costs are real. The "
+      f"first is rank imbalance: the four GPUs draw different numbers of boundary tokens ({bc['mean']:,} on average, {bc['max']:,} on "
+      f"the fullest), the forward of the slowest rank runs {ri['isla_fwd_max_minus_mean_ms'][0]} to {ri['isla_fwd_max_minus_mean_ms'][1]} ms "
+      f"longer than the mean, and with the reverse pass the others wait {ri['isla_step_cost_ms'][0]} to {ri['isla_step_cost_ms'][1]} ms "
+      f"per step ({100 * ri['isla_step_cost_fraction'][0]:.0f} to {100 * ri['isla_step_cost_fraction'][1]:.0f}%). The all-reduce kernels "
+      f"take {dd['isla_bwd_nccl_kernel_ms'][0]} to {dd['isla_bwd_nccl_kernel_ms'][1]} ms of the reverse pass while moving the gradients "
+      f"takes {dd['pure_transfer_ms']} ms: that time is waiting for the slowest rank, not bandwidth. The second is data preparation: "
+      f"the main thread moves the next case to the GPU and runs its transforms ({HT['isla']['data_consume']:.0f} ms) in many small "
+      f"kernels, and when it does so at the start of a step, the GPU has just drained and sits idle. The recipe therefore loads "
+      f"the next batch right after the reverse pass is launched, while the GPU is still running it (`_run_epoch` in `src/train.py`), "
+      f"with the same samples in the same order; that makes ISLA's step {sav[0]:.1f} to {sav[1]:.1f}% shorter on AeroZoo "
+      f"({pa['isla_aba_269723']['base']} against {pa['isla_aba_269723']['fix']} ms, and {pa['isla_abab_270549']['base']} against "
+      f"{np.mean(pa['isla_abab_270549']['fix']):.0f}, in two comparisons on one node). Neither the DDP "
+      f"options (static graph, gradient bucket views, bucket size) nor a newer PyTorch (2.14.1, a 2.16 nightly) shortens the step. "
+      f"Peak memory is {mem['isla']['allocated']} GiB allocated per GPU.")
+print()
+print(f"**ISLA-DTT's forward waits on the host.** Its step takes {HT['isla_dtt']['step']:,.0f} ms with the GPU busy about "
+      f"{100 * gb('isla_dtt'):.0f}% of it, at {mem['isla_dtt']['allocated']} GiB. The Barnes–Hut forest is built from the data in each "
+      f"forward ({FMd['tree_forest_build']:.0f} ms, of {FMd['tree_total']:.0f} ms for the whole tree stage), and its sizes are known "
+      f"only on the host, so the forward synchronizes host and GPU {sy['fwd']} times per step and launches "
+      f"{PB['kernel_launches_per_step']['isla_dtt']['fwd']:,} kernels against ISLA's {PB['kernel_launches_per_step']['isla']['fwd']:,}. "
+      f"The slice blocks cost what they cost in ISLA ({FMd['blocks']:.0f} ms); the twelve tree reads add {FMd['tree_reads']:.0f}. "
+      f"Its reverse pass is host-bound as well, which is why loading the next batch during it does not shorten its step. "
+      "Data: results/perf_2026-10-18/step_breakdown.json.")
+```
+
+<!-- SLOT: GEO2 (single-input exact-geometry design, if adopted): its step from results/perf_2026-10-18/step_breakdown.json "single_input_isla" (fixed 200,000-token draw removes the rank imbalance; prefetch saves 8%) -->
 
 <!-- SLOT: per-token step time and memory at the reference configurations (fig-arch-token-sweep) -->
 

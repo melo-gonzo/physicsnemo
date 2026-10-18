@@ -1,0 +1,246 @@
+{
+ "_provenance": "Compact copy of the coordinator's PERF lane (2026-10-18): /home/psharpe/gh/physicsnemo/scratch/isla-perf-2026-10-18/REPORT.md section 1 and tables_base.md. LHR GB300, one node, 4 ranks, DDP, bf16, compile_blocks, AeroZoo split family_non_box, 200,000 cells, seed 42, the decision lanes' exact training command. Jobs 269430 (ISLA), 269431 (ISLA-DTT), 269524 (single-input exact-geometry ISLA); prefetch A/B 269723, 270549, 270269, 270784; transform timers 270255; DDP options 269724; torch versions 270579, 271179; whole-model compile 269902. Warm steps, ms.",
+ "configs": {
+  "isla": "ISLA reference configuration of the A2 class (code_a2r + recipe_a2r, lane dtd_nonbox_isla)",
+  "isla_dtt": "ISLA-DTT (lane dtd_nonbox_dtt)",
+  "single_input_isla": "single-input exact-geometry ISLA, in-model draw of 200,000 boundary tokens (lane geo2_nonbox_isla); for the GEO2 slot only"
+ },
+ "host_timeline_ms": {
+  "parts": {
+   "step": "step (node)",
+   "data_consume": "data: lookahead consume on the main thread (H2D + 17 transforms; GPU idle)",
+   "data_collective": "data: _fail_together collective (rank skew, prep-stream drain)",
+   "fwd_host": "forward, host",
+   "fwd_collective": "forward _fail_together (forward GPU tail + rank skew)",
+   "bwd_host": "backward, host (backward() returns)",
+   "gradnorm_drain": "grad-norm isfinite sync (backward GPU tail + DDP all-reduce + rank waits)",
+   "opt_host": "optimizer (Muon shape-batched + AdamW foreach), host",
+   "log": "loss reduce + logging"
+  },
+  "isla": {
+   "step": 744.8,
+   "data_consume": 48.8,
+   "data_collective": 21.9,
+   "fwd_host": 76.7,
+   "fwd_collective": 155.5,
+   "bwd_host": 230.1,
+   "gradnorm_drain": 181.4,
+   "opt_host": 14.6,
+   "log": 10.5
+  },
+  "isla_dtt": {
+   "step": 1416.8,
+   "data_consume": 48.4,
+   "data_collective": 15.3,
+   "fwd_host": 502.5,
+   "fwd_collective": 112.1,
+   "bwd_host": 624.1,
+   "gradnorm_drain": 80.8,
+   "opt_host": 22.0,
+   "log": 9.6
+  },
+  "single_input_isla": {
+   "step": 590.0,
+   "data_consume": 41.5,
+   "data_collective": 20.1,
+   "fwd_host": 78.0,
+   "fwd_collective": 85.8,
+   "bwd_host": 206.7,
+   "gradnorm_drain": 129.2,
+   "opt_host": 14.2,
+   "log": 11.3
+  }
+ },
+ "gpu_kernels_ms": {
+  "isla": {
+   "data": 14.4,
+   "fwd": 189.1,
+   "bwd": 375.8,
+   "opt": 3.1,
+   "bwd_nccl": 189.8
+  },
+  "isla_dtt": {
+   "data": 14.3,
+   "fwd": 342.9,
+   "bwd": 650.6,
+   "opt": 3.8,
+   "bwd_nccl": 275.7
+  },
+  "single_input_isla": {
+   "data": 3.6,
+   "fwd": 135.4,
+   "bwd": 339.1,
+   "opt": 3.1,
+   "bwd_nccl": 49.8
+  }
+ },
+ "gpu_busy_unprofiled_fraction": {
+  "isla": 0.78,
+  "isla_dtt": 0.71,
+  "single_input_isla": 0.82
+ },
+ "forward_modules_ms": {
+  "isla": {
+   "total": 228.2,
+   "blocks": 146.9,
+   "nearest_boundary_geometry": 59.3
+  },
+  "isla_dtt": {
+   "total": 606.0,
+   "tree_total": 290.9,
+   "tree_forest_build": 148.4,
+   "tree_from_points": 124.1,
+   "tree_walk": 99.0,
+   "tree_pair_plan": 5.9,
+   "tree_basis": 35.1,
+   "blocks": 136.7,
+   "tree_reads": 91.8,
+   "nearest_boundary_geometry": 59.5
+  },
+  "single_input_isla": {
+   "total": 177.8,
+   "blocks": 127.4,
+   "exact_boundary_geometry": 20.0,
+   "sample_boundary_cells": 7.6
+  }
+ },
+ "host_syncs_per_step": {
+  "isla": {
+   "data": 9,
+   "fwd": 0,
+   "bwd": 0
+  },
+  "isla_dtt": {
+   "data": 9,
+   "fwd": 341,
+   "bwd": 12
+  },
+  "single_input_isla": {
+   "data": 8,
+   "fwd": 2,
+   "bwd": 0
+  }
+ },
+ "kernel_launches_per_step": {
+  "isla": {
+   "data": 2304,
+   "fwd": 1276,
+   "bwd": 2269,
+   "opt": 461
+  },
+  "isla_dtt": {
+   "data": 2304,
+   "fwd": 14899,
+   "bwd": 10767,
+   "opt": 752
+  }
+ },
+ "peak_memory_gib": {
+  "isla": {
+   "allocated": 127,
+   "reserved": 130
+  },
+  "isla_dtt": {
+   "allocated": 162,
+   "reserved": 165
+  },
+  "single_input_isla": {
+   "allocated": 127,
+   "reserved": 130
+  }
+ },
+ "boundary_cells_per_rank": {
+  "isla": {
+   "mean": 166032,
+   "max": 189300
+  },
+  "single_input_isla_note": "fixed 200,000-token draw"
+ },
+ "rank_imbalance": {
+  "isla_fwd_max_minus_mean_ms": [
+   17,
+   30
+  ],
+  "isla_step_cost_ms": [
+   50,
+   90
+  ],
+  "isla_step_cost_fraction": [
+   0.07,
+   0.12
+  ],
+  "single_input_fwd_max_minus_mean_ms": [
+   3,
+   7
+  ]
+ },
+ "ddp_allreduce": {
+  "pure_transfer_ms": 1.2,
+  "isla_bwd_nccl_kernel_ms": [
+   128,
+   228
+  ],
+  "isla_dtt_bwd_nccl_kernel_ms": [
+   222,
+   276
+  ],
+  "note": "the NCCL kernel time in the backward is ranks waiting for the slowest one, not bandwidth"
+ },
+ "h2d_per_step": {
+  "MB": 50,
+  "ms": 0.5
+ },
+ "prefetch_ab_ms": {
+  "_what": "recipe change 6d5ee04dc (merged psharpe/isla ea397e04f): in training, batch i+1 is fetched right after loss.backward() returns, so its H2D and transforms run while the GPU drains the backward; same samples in the same order",
+  "isla_aba_269723": {
+   "base": 705,
+   "fix": 685
+  },
+  "isla_abab_270549": {
+   "base": 710,
+   "fix": [
+    677,
+    679
+   ]
+  },
+  "single_input_isla_abab_270784": {
+   "base": 586,
+   "fix": [
+    537,
+    540
+   ]
+  },
+  "isla_dtt_aba_270269_harness": {
+   "base": [
+    1356,
+    1364
+   ],
+   "fix": 1370
+  },
+  "summary": "ISLA 3-4.5 % faster, single-input ISLA 8 %, ISLA-DTT unchanged"
+ },
+ "no_gain": {
+  "ddp_static_graph_bucket_view_ms": [
+   702,
+   703,
+   705
+  ],
+  "torch_2_14_1_abab_ms": [
+   741,
+   744,
+   747,
+   746
+  ],
+  "torch_2_16_nightly_vs_2_12_median_ms": {
+   "2.12": [
+    720,
+    721
+   ],
+   "2.16": [
+    717,
+    719
+   ]
+  }
+ },
+ "whole_model_compile_aerozoo": "not usable as configured: dtd ISLA with compile=true model.compile_blocks=false took 567 s for the first step and recompiled on each of the next steps (guards on equal capped boundary counts and on Mesh cache contents); the AeroZoo config compiles per block"
+}
