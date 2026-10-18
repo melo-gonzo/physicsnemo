@@ -329,9 +329,9 @@ protocol_table("lug.json", "tbl-lug-protocols", "The GINOT bracket lug at 2,400 
 ```{python}
 #| label: para-lug-reading
 #| output: asis
-V, VAR = char_arms("drivaerml_volume.json")
+V, VAR = char_arms("drivaerml_volume_a2.json")
 dr_native = VAR["ISLA"]["native"]["pressure_l2"]["mean"]; dr_posed_shift = VAR["ISLA"]["posed"]["pressure_l2"]["mean"] / dr_native
-T, TAR = char_arms("tensile2d.json")
+T, TAR = char_arms("tensile2d_a2.json")
 TIE = json.load(open(RES / "char" / "lug_ties_2026-10-04.json")); T32 = TIE["fp32"]; T64 = TIE["fp64"]
 tied = TIE["two_nearest_tie_fraction_by_rel_gap"]["1e-04"]["fraction"]; flipped = TIE["nearest_index_changes_under_translation"]["fraction"]
 jit = [T32[f"jitter_{g}_rel_change"] for g in ("1e-7", "1e-6", "1e-5")]
@@ -366,9 +366,8 @@ print(f"Two readings. First, the native column: ISLA's error is {100 * lug_nativ
       "changes by order one, a change the attention spreads over the field. The effect is visible here because the native error is so "
       f"small: the posed-minus-native difference is {100 * lug_delta:.2f}% of the field, which raises an error of {100 * lug_native:.2f}% by "
       f"{100 * (shift('ISLA', 'posed') - 1):.0f}% and would move the DrivAerML Volume pressure error of {100 * dr_native:.1f}% by about "
-      f"{100 * lug_delta / dr_native:.0f}% of itself, below "
-      "its seed spread; the same construction runs on every dataset and is exact there to the fourth decimal because ties are rare on "
-      "unstructured meshes. The remedy that follows is a measure-weighted average over near-tied boundary samples in the geometry "
+      f"{100 * lug_delta / dr_native:.0f}% of itself; the same construction runs on every dataset, is exact to the fourth decimal on the "
+      f"unstructured meshes, where ties are rare, and moves ISLA's stress error on the structured Tensile2d mesh by {100 * (t2_shift - 1):.0f}%. The remedy that follows is a measure-weighted average over near-tied boundary samples in the geometry "
       "construction, which makes the feature continuous; it is a change to the class after this campaign, not one its lanes carry, so "
       "the column reports the factor as measured. Data: results/char/lug_ties_2026-10-04.json.")
 ```

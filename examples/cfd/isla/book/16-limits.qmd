@@ -28,8 +28,9 @@ def shift(arms, arch, field, protocol):
     return arms[arch][protocol][field]["mean"] / arms[arch]["native"][field]["mean"]
 def fmt_ratio(r):
     return f"{r:.0f}x" if r >= 10 else f"{r:.1f}x" if r >= 2 else f"{r:.2f}"
-VC, VOL = char_arms("drivaerml_volume.json"); SC, SURF = char_arms("drivaerml_surface.json")
-LC, LUG = char_arms("lug.json"); TC, T2D = char_arms("tensile2d.json"); AC, AIR = char_arms("airfrans.json"); UC, SUV = char_arms("shift_suv_surface.json")
+# DrivAerML Surface and Volume and Tensile2d: ISLA's normalized-read reruns (<dataset>_a2.json)
+VC, VOL = char_arms("drivaerml_volume_a2.json"); SC, SURF = char_arms("drivaerml_surface_a2.json")
+LC, LUG = char_arms("lug.json"); TC, T2D = char_arms("tensile2d_a2.json"); AC, AIR = char_arms("airfrans.json"); UC, SUV = char_arms("shift_suv_surface.json")
 HC, HIL = char_arms("hilift_surface.json")
 rat = lambda arms, arch, f, pk="native": arms[arch][pk][f]["mean"] / arms["ISLA"][pk][f]["mean"]
 BASELINES = ("GeoTransolver", "Transolver")
@@ -194,7 +195,7 @@ datasets provides one.
 r = lambda arms, arch, f: arms[arch]["native"][f]["mean"] / arms["ISLA"]["native"][f]["mean"]
 print(f"**The interior standing holds at the scoring query count on two datasets (DrivAerML Volume task, AirfRANS interior task). ISLA leads "
       f"GeoTransolver on velocity on both (GeoTransolver ÷ ISLA {r(VOL, 'GeoTransolver', 'velocity_l2'):.2f} on the cars, "
-      f"{fmt_ratio(r(AIR, 'GeoTransolver', 'velocity_l2'))} on the airfoils), is level with it on pressure on the cars "
+      f"{fmt_ratio(r(AIR, 'GeoTransolver', 'velocity_l2'))} on the airfoils), leads it on pressure on the cars "
       f"({r(VOL, 'GeoTransolver', 'pressure_l2'):.2f}) and trails on pressure on the airfoils ({r(AIR, 'GeoTransolver', 'pressure_l2'):.2f}), "
       f"trails on eddy viscosity on the cars ({r(VOL, 'GeoTransolver', 'nut_l2'):.2f}) and is level on the airfoils "
       f"({r(AIR, 'GeoTransolver', 'nut_l2'):.2f}); Transolver trails ISLA on pressure and velocity on both (@tbl-drivaerml-volume-protocols, "
@@ -224,7 +225,8 @@ print(f"**ISLA's interior prediction on the DrivAerML Volume task depends on the
       f"under the same redraw are within {100 * surf_area:.0f}% of native (@tbl-drivaerml-volume-protocols, "
       "@tbl-drivaerml-surface-protocols).** GeoTransolver and Transolver are untouched by that variant (largest change "
       f"{100 * base_area:.2f}%) because they never read the boundary sample, so the column compares nothing across architectures; it "
-      "measures a property of the trained volume model alone, and it is an open weakness of that model. The cause is measured: with every "
+      "measures a property of the trained volume model alone, and it is an open weakness of that model. The cause is measured on "
+      "checkpoints trained with the raw slice reads: with every "
       "area-draw token kept and only the queries' built-in nearest-boundary distance and direction computed from the native draw, the error "
       f"returns to {' / '.join(f'{VGR['area_natgeo'][f]:.3f}' for f, _ in F3)} of native, so the slice states, anchors and routing mass carry none of it and "
       f"the sensitivity is a bias of that one discretization-dependent input ({100 * VGS['frac_nearest_token_changed']:.0f}% of the queries "
@@ -350,7 +352,8 @@ were chosen for varying boundary conditions and loads, not only varying
 geometry, so that the global-scalar, global-vector and boundary-input
 channels are exercised; each is drawn on sample cases in its own chapter
 (@sec-tensile2d, @sec-lug, @sec-deepjeb). On Tensile2d GeoTransolver and
-Transolver lead ISLA on stress, displacement and plastic strain, and on
+Transolver lead ISLA on stress and displacement and Transolver also on
+plastic strain, on DeepJEB++ ISLA leads both, and on
 the lug ISLA leads both: the Tensile2d standing is the one that most needs
 a located mechanism. AeroZoo, a diversity-stress aerodynamics
 benchmark in generation, is the coming out-of-distribution instance within
