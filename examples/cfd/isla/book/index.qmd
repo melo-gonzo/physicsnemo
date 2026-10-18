@@ -1,209 +1,216 @@
-# What this book is {.unnumbered}
+# Preface {.unnumbered}
 
-This book is the guide to **ISLA** (Invariant Slice Attention), a neural
-surrogate for steady, boundary-driven PDE problems. Given a discretized
-boundary and the problem's global conditions, ISLA predicts the steady field
-on that boundary and in the domain it bounds. The book is written the way a
-user guide for a design code is written. It teaches what the method computes
-and why each part is there. It shows how to run it. Then it lays out, with
-the same care, what the measurements say for it and against it. The reader
-we have in mind is fluent in PDE numerics and machine learning and has never
-seen this program. Every term is defined where it first appears. Every
-number is computed from a checked-in artifact as the page renders.
+This book is a guide to **ISLA** (Invariant Slice Attention), a neural
+surrogate for steady, boundary-driven PDE problems: given the surface of a
+body and the conditions it sits in, ISLA predicts the steady field on that
+surface and in the domain around it, in a fraction of a second where a
+solver takes hours. It is written for a reader fluent in PDEs, numerics and
+optimization who has not met this model, and perhaps not the transformer
+machinery behind it. Every term is defined where it first appears, and
+every number is computed from a checked-in result file as the page renders.
 
 ::: {.callout-note collapse="true" title="Where the name comes from"}
-An *isla* is an island, a shape defined entirely by its boundary. The boundary is what the method takes as input.
-The code class is `physicsnemo.experimental.models.ISLA`.
+An *isla* is an island: a shape defined entirely by its boundary. The
+boundary is what the method takes as input. The code is
+`physicsnemo.experimental.models.ISLA`.
 :::
-
-## The thesis {#sec-verdict}
-
-**ISLA is a slice-attention surrogate that is exactly equivariant to rigid
-motions and consistent under a change of boundary discretization, and it
-pays nothing in accuracy for either.** The two invariances are defined in
-@sec-invariances. It is measured against GeoTransolver, the strongest
-published slice-attention surrogate, and Transolver, with every model
-given the same inputs and scored on the same instrument at the reporting
-protocol of @sec-protocol. Each architecture runs at one reference configuration, the most
-accurate of its architecture that trains under 80 GiB per GPU on the two
-selection datasets, and every checkpoint is scored on the native validation
-mesh and with every validation case rotated and translated; on the three
-surface datasets whose meshes exceed the cell budget (the DrivAerML Surface
-task, HiLiftAeroML and Shift-SUV) it is also scored on a uniform point cloud
-of the surface. Rotated and translated, ISLA's error barely moves and the
-baselines' error grows by factors, except on two structured solid meshes
-where ISLA's own error moves too. On the uniform point cloud of those three
-surface datasets, ISLA's error moves by at most 2% and the baselines' grows
-by factors. On the DrivAerML Volume task the same draw changes only the
-boundary sample, which only ISLA reads, and ISLA's interior error rises
-several-fold through the queries' distance to the nearest boundary sample,
-and on the AirfRANS interior task, with the airfoil thinned to 400
-segments, a length-proportional draw about doubles ISLA's pressure and
-velocity errors against a uniform draw of the same count; in distribution
-the three are within seed noise on the cars, ISLA leads on the wings,
-on interior velocity, on the DeepJEB++ brackets and on the lug, is level with
-GeoTransolver and trails Transolver on the sport-utility bodies, and trails on tensor targets. @tbl-thesis is the standing, one row per dataset and
-task.
 
 ```{python}
 #| label: setup-index
 #| include: false
-import json, statistics
-from pathlib import Path
 import sys; sys.path.insert(0, ".")
 from palette import *
-RES = Path("..") / "results"
-J = lambda p: json.load(open(RES / p))
-mean = statistics.mean
+import standing as S
+from matplotlib.colors import TwoSlopeNorm
 
-# Every standing row reads the dataset's three-protocol artifact (results/char/<dataset>.json): the three architectures at
-# their reference configurations, scored on the native validation mesh, on a uniform point cloud at the same budget, and with
-# every validation case rotated and translated. Arms are keyed by architecture (the arm label's first word).
-def char_arms(artifact):
-    C = json.load(open(RES / "char" / artifact))
-    return C, {arm.split()[0]: d for arm, d in C["arms"].items()}
-def fmt_ratio(r):
-    """A ratio as the book writes it: two decimals near one, one decimal to ten, none above."""
-    return f"{r:.0f}x" if r >= 10 else f"{r:.1f}x" if r >= 2 else f"{r:.2f}"
-BASELINES = ("GeoTransolver", "Transolver")
-# the DrivAerML Surface and Volume, Shift-SUV, Tensile2d, lug and DeepJEB++ artifacts hold ISLA's normalized-read reruns (<dataset>_a2.json)
-ART = {name: char_arms(f) for name, f in (("surface", "drivaerml_surface_a2.json"), ("hilift", "hilift_surface.json"),
-                                          ("volume", "drivaerml_volume_a2.json"), ("airfrans", "airfrans_uniform.json"),
-                                          ("suv", "shift_suv_surface_a2.json"), ("tensile2d", "tensile2d_a2.json"), ("lug", "lug_a2.json"),
-                                          ("deepjeb", "deepjeb_surface_a2.json"))}
-rat = lambda name, arch, f, pk="native": ART[name][1][arch][pk][f]["mean"] / ART[name][1]["ISLA"][pk][f]["mean"]
-shift = lambda name, arch, f, pk: ART[name][1][arch][pk][f]["mean"] / ART[name][1][arch]["native"][f]["mean"]
-has = lambda name, arch: arch in ART[name][1]
-pair = lambda name, f, pk="native": " / ".join(fmt_ratio(rat(name, a, f, pk)) if has(name, a) else "—" for a in BASELINES)
-# which rows hold the final reference configurations is read from each artifact's ISLA arm label
-FINAL = {name: "512 with 512 slices" in C["isla_arm"] for name, (C, _) in ART.items()}
-label = lambda name: "final reference configurations" if FINAL[name] else "first-pass reference configurations"
-NAMES = {"surface": "DrivAerML Surface", "hilift": "HiLiftAeroML", "volume": "DrivAerML Volume", "airfrans": "AirfRANS", "suv": "Shift-SUV", "tensile2d": "Tensile2d", "lug": "lug", "deepjeb": "DeepJEB++"}
-lst = lambda flag: ", ".join(NAMES[n] for n in ART if FINAL[n] == flag)
-three = lambda name, f, pks=("native", "area", "posed"): "; ".join(f"{lab} {pair(name, f, pk)}" for pk, lab in (("native", "native"), ("area", "point cloud"), ("posed", "posed")) if pk in pks)
-tri = lambda name, fields, arch: " / ".join(f"{rat(name, arch, f):.2f}" for f in fields)
-def word(name, arch, f):
-    """One native baseline ÷ ISLA ratio in words: a lead or a deficit when every baseline seed sits on one side of every ISLA seed, level when the seeds interleave."""
-    b = list(ART[name][1][arch]["native"][f]["per_seed"].values()); i = list(ART[name][1]["ISLA"]["native"][f]["per_seed"].values())
-    if min(b) > max(i): return "leads"
-    if max(b) < min(i): return "trails"
-    return "is level with"
+ROWS = S.headline_rows()
+def verdicts():
+    out = {"leads": [], "is level with": [], "trails": []}
+    for k, f, lab in ROWS:
+        s = S.Standing(k)
+        for a in S.BASELINES:
+            if s.has(a):
+                out[s.verdict(a, f)].append((k, f, a))
+    return out
+V = verdicts()
+n_pairs = sum(len(v) for v in V.values())
+SURF = [k for k in S.available() if "area" in S.DATASETS[k].protocols]
+isla_area = max(abs(S.Standing(k).shift("ISLA", S.DATASETS[k].headline[0], "area") - 1) for k in SURF)
+base_area = min(S.Standing(k).shift(a, S.DATASETS[k].headline[0], "area") for k in SURF for a in S.BASELINES)
+FLOW = [k for k in S.available() if k not in ("tensile2d", "lug", "deepjeb")]
+SOLID = [k for k in S.available() if k in ("tensile2d", "lug", "deepjeb")]
+psh = lambda ks, archs: [S.Standing(k).shift(a, S.DATASETS[k].headline[0], "posed") for k in ks for a in archs]
+isla_posed = max(abs(x - 1) for x in psh(FLOW, ["ISLA"]))
+base_posed_flow = (min(psh(FLOW, S.BASELINES)), max(psh(FLOW, S.BASELINES)))
+base_posed_solid = (min(psh(SOLID, S.BASELINES)), max(psh(SOLID, S.BASELINES)))
+tie_shift = {k: S.Standing(k).shift("ISLA", S.DATASETS[k].headline[0], "posed") for k in ("tensile2d", "lug")}
+```
+
+## The thesis {#sec-verdict}
+
+```{python}
+#| label: para-thesis
+#| output: asis
+print(
+    "**ISLA is a slice-attention transformer that is exactly equivariant to rigid motions and consistent under a change of "
+    "mesh, by construction, and it pays no systematic accuracy price for either.** It is measured against GeoTransolver and "
+    "Transolver, the strongest published surrogates of its family, each at its own reference configuration, every model given "
+    "the same inputs and scored the same way. "
+    f"Over the {n_pairs} comparisons of @fig-standing (each headline field of each dataset against each baseline), ISLA leads "
+    f"in {len(V['leads'])}, is level in {len(V['is level with'])} and trails in {len(V['trails'])}. "
+    f"Rotate and translate the test geometry, and on the {len(FLOW)} flow tasks the baselines' errors grow "
+    f"{base_posed_flow[0]:.0f}-fold to {base_posed_flow[1]:.0f}-fold while ISLA's moves by less than {100 * isla_posed:.1f}%; "
+    f"on the {len(SOLID)} solid-mechanics tasks the baselines' grow {base_posed_solid[0]:.1f}-fold to {base_posed_solid[1]:.0f}-fold, "
+    f"and ISLA's is unchanged on DeepJEB++ but moves {tie_shift['tensile2d']:.2f}-fold and {tie_shift['lug']:.1f}-fold on the two "
+    "structured meshes, where tied nearest-boundary samples break the symmetry of its interior geometry (@sec-invariances). "
+    "redraw the surface as a uniform point cloud, and the baselines' errors grow at least "
+    f"{base_area:.1f}-fold while ISLA's moves by less than {100 * isla_area:.1f}%. "
+    "Where ISLA trails, the book says where and why, and where its own error does move, the book shows the mechanism."
+)
 ```
 
 ```{python}
-#| label: tbl-thesis
-#| output: asis
-F3 = ("pressure_l2", "velocity_l2", "nut_l2")
-S, H, V, A, U, T, L = (ART[k][1] for k in ("surface", "hilift", "volume", "airfrans", "suv", "tensile2d", "lug"))
-area_b = lambda name, f: " and ".join(fmt_ratio(shift(name, a, f, "area")) for a in BASELINES if has(name, a)) or "—"
-posed_b = lambda name, f: " and ".join(fmt_ratio(shift(name, a, f, "posed")) for a in BASELINES if has(name, a)) or "—"
-rows = [
-    (f"**DrivAerML Surface task**, 435 cars, {label('surface')}: surface pressure, native mesh / uniform point cloud / rotated and translated (GeoTransolver width 256 ÷ ISLA; Transolver width 512 with 16 layers ÷ ISLA)",
-     three("surface", "pressure_l2"),
-     f"a tie within seed noise on the native mesh; on the point cloud ISLA's own error moves {shift('surface', 'ISLA', 'pressure_l2', 'area'):.2f}x and the baselines' {area_b('surface', 'pressure_l2')}; rotated and translated ISLA's moves {shift('surface', 'ISLA', 'pressure_l2', 'posed'):.3f}x and the baselines' read at the mean-field level",
-     "@sec-scoreboard-200k"),
-    (f"**HiLiftAeroML**, the 210-wing rung, {label('hilift')}: surface pressure, native / point cloud / posed (the same two ratios)",
-     three("hilift", "pressure_l2"),
-     f"ISLA leads both baselines natively (GeoTransolver width 256 by {(rat('hilift', 'GeoTransolver', 'pressure_l2') - 1) * 100:.0f}%); its own error moves {shift('hilift', 'ISLA', 'pressure_l2', 'area'):.2f}x on the point cloud and {shift('hilift', 'ISLA', 'pressure_l2', 'posed'):.2f}x posed, the baselines' {area_b('hilift', 'pressure_l2')} and {posed_b('hilift', 'pressure_l2')}",
-     "@sec-de-result"),
-    (f"**DrivAerML Volume task**, 200,000 boundary cells and 200,000 interior queries, {label('volume')}: pressure / velocity / eddy viscosity, native mesh (GeoTransolver; Transolver)",
-     tri("volume", F3, "GeoTransolver") + "; " + tri("volume", F3, "Transolver"),
-     f"ISLA {word('volume', 'GeoTransolver', 'velocity_l2')} GeoTransolver on velocity, {word('volume', 'GeoTransolver', 'pressure_l2')} on pressure and {word('volume', 'GeoTransolver', 'nut_l2')} on eddy viscosity; posed, ISLA's error moves {shift('volume', 'ISLA', 'pressure_l2', 'posed'):.3f}x; the point-cloud variant redraws only the boundary, which the baselines do not read, and ISLA's error there is {fmt_ratio(min(shift('volume', 'ISLA', f, 'area') for f in F3))} to {fmt_ratio(max(shift('volume', 'ISLA', f, 'area') for f in F3))} its native error, the queries' nearest-boundary-token geometry (the one discretization-dependent input)",
-     "@sec-interior-results"),
-    (f"**AirfRANS interior task**, 800 training airfoils, 100,000 queries per case, {label('airfrans')}: pressure / velocity / eddy viscosity, native (GeoTransolver; Transolver)",
-     tri("airfrans", F3, "GeoTransolver") + "; " + tri("airfrans", F3, "Transolver"),
-     f"ISLA {word('airfrans', 'GeoTransolver', 'velocity_l2')} GeoTransolver on velocity by {fmt_ratio(rat('airfrans', 'GeoTransolver', 'velocity_l2'))}, {word('airfrans', 'GeoTransolver', 'nut_l2')} on eddy viscosity and {word('airfrans', 'GeoTransolver', 'pressure_l2')} on pressure; posed, ISLA's error moves {shift('airfrans', 'ISLA', 'pressure_l2', 'posed'):.3f}x and the baselines' read above the mean field; outside the training Reynolds and angle ranges, on lanes trained and scored on contiguous blocks of the stored points, it leads on every field",
-     "@sec-interior-airfrans"),
-    (f"**Shift-SUV**, 794 estate bodies, {label('suv')}: surface pressure, native / point cloud / posed (GeoTransolver; Transolver)",
-     three("suv", "pressure_l2"),
-     (f"natively ISLA {word('suv', 'GeoTransolver', 'pressure_l2')} GeoTransolver and {word('suv', 'Transolver', 'pressure_l2')} Transolver; "
-      if all(has('suv', a) for a in BASELINES) else "the artifact holds ISLA's arm only, so no ratio is read; ")
-     + f"on the point cloud ISLA's error moves {shift('suv', 'ISLA', 'pressure_l2', 'area'):.2f}x and posed {shift('suv', 'ISLA', 'pressure_l2', 'posed'):.3f}x"
-     + (f"; the baselines' move {area_b('suv', 'pressure_l2')} on the point cloud and read above the mean field posed" if all(has('suv', a) for a in BASELINES) else ""),
-     "@sec-shift-suv-standing"),
-    (f"**Tensor targets on a solid**: PLAID Tensile2d at 400 specimens, {label('tensile2d')}: stress (Frobenius) / displacement / plastic strain, native (GeoTransolver width 256; Transolver width 512 with 16 layers)",
-     tri("tensile2d", ("stress_l2", "displacement_l2", "q_l2"), "GeoTransolver") + "; " + tri("tensile2d", ("stress_l2", "displacement_l2", "q_l2"), "Transolver"),
-     f"both baselines lead on stress and displacement by their seed means, the open standing of the book; on plastic strain ISLA {word('tensile2d', 'GeoTransolver', 'q_l2')} GeoTransolver and {word('tensile2d', 'Transolver', 'q_l2')} Transolver; under a generic in-plane pose ISLA's stress error moves {shift('tensile2d', 'ISLA', 'stress_l2', 'posed'):.3f}x where the baselines' read above the mean field",
-     "@sec-interior-tensile2d"),
-    (f"**GINOT bracket lug** at 2,400 training lugs, {label('lug')}: von Mises stress, native / posed (GeoTransolver; Transolver)",
-     three("lug", "von_mises_l2", ("native", "posed")),
-     ("under the float32 protocol ISLA leads both baselines, every ISLA seed below every baseline seed" if all(word('lug', a, 'von_mises_l2') == "leads" for a in BASELINES) else
-      f"under the float32 protocol ISLA {word('lug', 'GeoTransolver', 'von_mises_l2')} GeoTransolver and {word('lug', 'Transolver', 'von_mises_l2')} Transolver")
-     + f"; rotated and translated ISLA's error moves {shift('lug', 'ISLA', 'von_mises_l2', 'posed'):.1f}x through its nearest-boundary-sample selection on a tied mesh, where the baselines' read at the mean field",
-     "@sec-interior-lug"),
-    (f"**DeepJEB++** at 12,451 brackets and 40 epochs, {label('deepjeb')}: von Mises / displacement, native (GeoTransolver; Transolver)",
-     tri("deepjeb", ("von_mises_l2", "displacement_l2"), "GeoTransolver") + "; " + tri("deepjeb", ("von_mises_l2", "displacement_l2"), "Transolver"),
-     ("ISLA leads both baselines on both fields, every ISLA seed below every baseline seed"
-      if all(word('deepjeb', a, f) == "leads" for a in BASELINES for f in ("von_mises_l2", "displacement_l2")) else
-      f"ISLA {word('deepjeb', 'GeoTransolver', 'von_mises_l2')} GeoTransolver and {word('deepjeb', 'Transolver', 'von_mises_l2')} Transolver on von Mises stress, "
-      f"{word('deepjeb', 'GeoTransolver', 'displacement_l2')} GeoTransolver and {word('deepjeb', 'Transolver', 'displacement_l2')} Transolver on displacement")
-     + "; posed, ISLA's error is unchanged and the baselines' read above the mean field",
-     "@sec-surface-deepjeb"),
-]
-out = "| Dataset, task and setting | baseline ÷ ISLA | Reading | Chapter |\n|---|---:|---|---|\n"
-for r in rows: out += "| " + " | ".join(r) + " |\n"
-print(out)
-print(f": The thesis in {len(rows)} rows, one dataset and task per row. "
-      "How to read this: each row is one setting and one instrument, so rows are not comparable with one another, and a ratio is the named "
-      "baseline's error divided by ISLA's, so a value above one favors ISLA; where a row lists three ratios they are the native mesh, the "
-      "uniform point cloud and the rotated-and-translated scoring of one checkpoint, each as GeoTransolver ÷ ISLA / Transolver ÷ ISLA; the lug "
-      "row lists the native and the rotated-and-translated ratios only, because its surface is below the cell budget and the point cloud "
-      "would be the native mesh itself. "
-      + (f"The {lst(True)} rows hold the final reference configurations, one per architecture, each the most accurate "
-         if lst(False) else "Every row holds the final reference configurations, one per architecture, each the most accurate ")
-      + "under 80 GiB per GPU on the two selection datasets (ISLA width 512 with 512 slices at 200,000 cells, learning rate 3.75e-4 on every dataset; "
-      "GeoTransolver width 256 at 200,000 cells; Transolver width 512 with 16 layers at 100,000 cells)"
-      + (f"; the {lst(False)} rows hold the first-pass lanes under the configurations the DrivAerML half of that selection named (ISLA width 768 "
-         "at 100,000 cells, learning rate 2.5e-4; GeoTransolver and Transolver width 1,024 at 100,000 cells)" if lst(False) else "")
-      + ". The ISLA rows of the DrivAerML Surface and Volume tasks, Shift-SUV, Tensile2d, the lug and DeepJEB++ come from checkpoints trained with the "
-      "normalized slice reads of ISLA's reference configuration, the other ISLA rows from checkpoints trained with the raw slice reads "
-      "(@sec-isla-layer). Baselines train without augmentation; interior tasks give all three architectures the stored "
-      "signed distance and its gradient. Errors are the area-weighted relative L2 (@sec-metrics) in float32, seed means over two seeds, "
-      "of surface pressure on the surface tasks and of the named fields elsewhere. The seeds and the controls behind each row, and the "
-      "`results/char/` artifact each number is computed from, are in the chapter the row cites. {#tbl-thesis}")
+#| label: fig-hero
+#| fig-cap: >
+#|   The problem, on one DrivAerML car. Top: the input is the surface
+#|   (here 150,000 of its 17 million cells) and the far-field direction;
+#|   the output on a surface task is the field on it, here the pressure
+#|   coefficient $C_p = (p - p_\infty)/\tfrac12\rho U_\infty^2$ from the
+#|   reference solution. Bottom: on an interior task the output is the
+#|   flow around the body, here the velocity magnitude on the symmetry
+#|   plane. How to read this: these are the reference CFD fields, not a
+#|   prediction; ISLA's predictions of fields like these, and their errors,
+#|   are drawn in the dataset chapters. Data:
+#|   results/problem_figures_2026-09-22/drivaer.npz.
+#| fig-height: 5.2
+#| code-fold: true
+D, Dm = load_problem("drivaer")
+fig, axes = plt.subplots(2, 1, figsize=(8, 5.0), sharex=True, gridspec_kw=dict(hspace=0.12, height_ratios=[1.0, 1.15]))
+ax = axes[0]
+sp = D["surf_points"]
+sc = depth_scatter(ax, sp[:, [0, 2]], sp[:, 1], D["surf_cp"], s=1.6, cmap=DIVERGING, norm=TwoSlopeNorm(vcenter=0.0, vmin=-1.5, vmax=1.0))
+map_axes(ax); ax.set_ylabel("z [m]")
+cb = fig.colorbar(sc, ax=ax, fraction=0.03, pad=0.01, extend="min"); cb.outline.set_visible(False); cb.set_label("$C_p$ [–]")
+bb = D["surf_bbox"]; ax.annotate("", xy=(bb[0, 0] - 0.2, 0.8), xytext=(bb[0, 0] - 1.1, 0.8), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2))
+ax.text(bb[0, 0] - 0.65, 0.95, r"$\hat g_1$", ha="center", fontsize=11, color=INK)
+ax.set_xlim(bb[0, 0] - 1.3, bb[1, 0] + 0.6)
+ax = axes[1]
+pp = D["slice_points"]; keep = (pp[:, 0] > bb[0, 0] - 1.3) & (pp[:, 0] < bb[1, 0] + 0.6) & (pp[:, 2] < bb[1, 2] + 0.9)
+sc = ax.scatter(pp[keep, 0], pp[keep, 2], c=D["slice_umag"][keep], s=1.4, lw=0, cmap=SEQUENTIAL, vmin=0, vmax=1.3, rasterized=True)
+map_axes(ax); ax.set_xlabel("x [m]"); ax.set_ylabel("z [m]")
+cb = fig.colorbar(sc, ax=ax, fraction=0.03, pad=0.01); cb.outline.set_visible(False); cb.set_label(r"$|u| / U_\infty$ [–]")
+plt.show()
 ```
+
+## The standing in one figure {#sec-standing-index}
+
+```{python}
+#| label: fig-standing
+#| fig-cap: >
+#|   The standing of ISLA against both baselines at their reference
+#|   configurations, every dataset and headline field. Left: the native
+#|   mesh, as baseline ÷ ISLA, so a mark right of the line favours ISLA;
+#|   GeoTransolver (red circles) and Transolver (amber triangles) at the
+#|   seed-mean ratio, the faint bar spanning every pairing of a baseline seed
+#|   with an ISLA seed; the gray band is the ±3% band inside which two
+#|   architectures are called level. Right: what happens to each
+#|   architecture's own error when every test case is rotated and translated,
+#|   as its error over its native error; ISLA (blue squares) sits at one
+#|   except on the two structured solid meshes. How to read this: rows are different datasets, fields
+#|   and units of difficulty and are not comparable with one another; a row
+#|   marked † holds ISLA checkpoints without the normalized slice reads of
+#|   its reference configuration. Data: results/char/ (@sec-standing).
+#| fig-height: 6.6
+#| code-fold: true
+fig, axes = plt.subplots(1, 2, figsize=(10, 6.4), gridspec_kw=dict(width_ratios=[1.35, 1.0], wspace=0.06))
+ax = axes[0]
+S.plot_native(ax)
+ax.set_xlim(0.45, 9.0); ax.set_xticks([0.5, 1, 2, 5]); ax.set_xticklabels(["0.5", "1", "2", "5"])
+ax.set_xlabel("native mesh: baseline error ÷ ISLA error [–]")
+ax.text(1.05, len(ROWS) - 0.15, "favours ISLA →", fontsize=8.5, color=INK2, va="bottom")
+ax.text(0.95, len(ROWS) - 0.15, "← favours the baseline", fontsize=8.5, color=INK2, va="bottom", ha="right")
+ax = axes[1]
+# one row per dataset, aligned with that dataset's first headline row on the left
+first = {}
+for j, (k, f, lab) in enumerate(ROWS):
+    first.setdefault(k, len(ROWS) - 1 - j)
+for k in first:
+    s = S.Standing(k); f = s.ds.headline[0]; yy = first[k]
+    for arch, key, dy in (("ISLA", "isla_ref", 0.0), ("GeoTransolver", "gt", 0.16), ("Transolver", "t", -0.16)):
+        if s.has(arch):
+            st = STYLE[key]
+            ax.plot(s.shift(arch, f, "posed"), yy + dy, marker=st["marker"], color=st["color"], ms=6.5, mec="white", mew=0.6, ls="none")
+ax.axvline(1.0, color=INK2, lw=1.0); ax.set_xscale("log"); ax.set_ylim(axes[0].get_ylim())
+ax.set_yticks([]); ax.grid(axis="y", visible=False)
+ax.set_xlim(0.8, 900); ax.set_xticks([1, 10, 100]); ax.set_xticklabels(["1", "10", "100"])
+ax.set_xlabel("rotated and translated ÷ native, own error [–]")
+label_line(ax, 1.15, len(ROWS) - 0.6, "ISLA", BLUE, fontsize=8.5)
+label_line(ax, 80, len(ROWS) - 0.6, "GeoTransolver", RED, fontsize=8.5, ha="center")
+label_line(ax, 80, len(ROWS) - 1.4, "Transolver", AMBER, fontsize=8.5, ha="center")
+plt.show()
+```
+
+```{python}
+#| label: para-standing-reading
+#| output: asis
+def names(items):
+    seen = []
+    for k, f, a in items:
+        t = f"{S.DATASETS[k].name} {S.Standing(k).fields[f]} against {a}"
+        seen.append(t)
+    return "; ".join(seen)
+print(f"**Where ISLA trails** ({len(V['trails'])} of {n_pairs}): {names(V['trails'])}. "
+      "Two families of task account for these: the interior pressure on the AirfRANS airfoils, and the stress and displacement "
+      "of the PLAID Tensile2d specimens, whose structured meshes also make ISLA's nearest-boundary geometry tie "
+      "(@sec-interior-airfrans, @sec-interior-tensile2d). The full table, with every seed, is @sec-standing.")
+```
+
+The same picture, with every seed, the scoring under a uniform point cloud
+and the full numbers, is @sec-standing. The scope of every claim on this
+page is in @sec-limits.
+
+## Names and colours {#sec-key-index}
+
+The book names three architectures, always at their reference
+configurations unless a caption says otherwise, and gives each a colour and
+a marker it keeps in every figure.
+
+| | colour and mark | reference configuration |
+|---|---|---|
+| **ISLA** | blue, filled square | width 512, 12 layers, 512 slices, learning rate 3.75e-4, 200,000 training cells |
+| **ISLA-DTT** | light blue, open square | ISLA with read-only prediction points (interior tasks) |
+| **GeoTransolver** | red, filled circle | width 256, learning rate 1e-3, 200,000 training cells |
+| **Transolver** | amber, filled triangle | width 512, 16 layers, learning rate 1e-3, 100,000 training cells |
+
+: The architectures of this book. How to read this: a ratio is always
+*baseline ÷ ISLA*, so above one favours ISLA; errors are the area-weighted
+relative L2 of @sec-metrics, scored in float32 and averaged over two seeds.
+Every name, symbol and colour is in @sec-principled-decisions.
+{#tbl-key-index}
 
 ## How to read this book {#sec-how-to-read}
 
-**The book reads in order. Each chapter assumes only the ones before it.**
+**The book reads in order, and each chapter assumes only the ones before
+it.** Three readers will want different paths through it.
 
-- **The problem and how we measure** (@sec-problem): the boundary-to-field
-  operator and its general interface, taught on a two-dimensional airfoil
-  whose exact solution we know, then the generalization axes, the metric
-  and the instrument.
-- **ISLA, one idea at a time** (@sec-isla): why each part of the
-  architecture is there, from "a sum over cells should be an integral" to
-  the equivariant output basis.
-- **The two invariances ISLA is built for** (@sec-invariances): what
-  rigid-motion equivariance and discretization consistency mean, what each
-  buys, and every pose and discretization measurement of the book.
-- **The ISLA forward pass** (@sec-architecture): the computation stage by
-  stage, with every tensor shape and code identifier.
-- **Baselines, datasets and the protocol** (@sec-baselines): GeoTransolver
-  and Transolver, the dataset roster and the conventions they share, and
-  the rules that make a comparison fair.
-- **Using ISLA** (@sec-using): the reference configuration, the inputs, the
-  commands, the sampler, checkpoints and cost.
-- **Evidence, by dataset.** One chapter per dataset, each in the same
-  order: the problem and its diversity, what is measured, the standing of
-  the three architectures, the ladders and controls, and what the dataset
-  does not say. DrivAerML, both tasks (@sec-drivaerml); HiLiftAeroML
-  (@sec-hilift); AirfRANS (@sec-airfrans); Shift-SUV (@sec-shift-suv);
-  PLAID Tensile2d (@sec-tensile2d); the GINOT bracket lug (@sec-lug);
-  DeepJEB++ (@sec-deepjeb). Then capacity, scaling laws and cost
-  (@sec-capacity), the one evidence chapter organized by question rather
-  than by dataset.
-- **Limits and open questions** (@sec-limits), then **program status**
-  (@sec-program-status), the one chapter with dates.
-- **Appendices.** The names and colors and the design-decision ledger
-  (@sec-principled-decisions), ISLA against the literature
-  (@sec-isla-vs-geotransolver), and the lab notebook (@sec-notebook): every
-  preregistration, launch and verdict, including the failures, in the order
-  they happened.
-
-Every claim's scope is in @sec-limits, which also says what the book does
-not claim.
+- **To understand the method**, read Parts I and II: the problem and how a
+  surrogate is scored (@sec-problem); a field guide to neural PDE
+  surrogates, from attention as an integral operator to slice attention
+  (@sec-landscape); ISLA one idea at a time (@sec-isla); the two
+  invariances it is built for, as contracts and as measurements
+  (@sec-invariances); and the forward pass stage by stage, with the code
+  and what it costs on a GPU (@sec-architecture).
+- **To use it**, read Part III: the configuration, inputs, commands and
+  checkpoints (@sec-using) and the benchmark rules every number obeys
+  (@sec-baselines). Then the dataset chapter closest to your problem.
+- **To judge it**, start with the standing (@sec-standing), then the
+  dataset chapters of Part IV, which all follow one order: the problem and
+  what varies, what is measured, the standing with pictures of the
+  predictions, the studies that belong to that dataset, and what the
+  dataset does not say. Then capacity and scaling (@sec-capacity), the
+  limits and open questions (@sec-limits), and, for the dated record of
+  every experiment, the program status (@sec-program-status) and the lab
+  notebook (@sec-notebook).
 
 Optional depth sits in collapsed notes like the one at the top of this
-page. The throughline reads completely with all of them closed.
-
+page; the text reads completely with all of them closed.

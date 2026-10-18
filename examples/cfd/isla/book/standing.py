@@ -180,3 +180,85 @@ def fmt_pct(r: float) -> str:
 def available():
     """The datasets whose standing artifact exists, in registry order."""
     return [k for k, d in DATASETS.items() if d.artifact and (CHAR / d.artifact).exists()]
+
+
+# --- The standing as figures (index, 08-standing) -------------------------------------------------
+
+def headline_rows():
+    """(dataset key, field key, row label) for every headline field of every dataset with a standing."""
+    out = []
+    for k in available():
+        s = Standing(k)
+        for f in s.ds.headline:
+            out.append((k, f, f"{s.ds.name}: {s.fields[f]}"))
+    return out
+
+
+def _seed_range(s, arch, f, protocol="native"):
+    """The smallest and largest ratio over the seed pairs (baseline seed ÷ ISLA seed)."""
+    r = [b / i for b in s.seeds(arch, f, protocol) for i in s.seeds("ISLA", f, protocol)]
+    return min(r), max(r)
+
+
+def plot_native(ax, rows=None, note_flag="†"):
+    """Forest plot of baseline ÷ ISLA on the native mesh: one row per (dataset, field), both baselines, the seed-pair
+    range as a bar, log x. Returns the row labels drawn (with ``note_flag`` on rows whose ISLA arm is not the
+    reference configuration)."""
+    from palette import STYLE, GRID, INK2, MUTED, BASELINE, halo
+    rows = rows or headline_rows()
+    y = list(range(len(rows)))[::-1]
+    labels = []
+    for yy, (k, f, lab) in zip(y, rows):
+        s = Standing(k)
+        flag = "" if s.ds.reference else f" {note_flag}"
+        labels.append(lab + flag)
+        for arch, key, dy in (("GeoTransolver", "gt", 0.16), ("Transolver", "t", -0.16)):
+            if not s.has(arch):
+                continue
+            st = STYLE[key]
+            lo, hi = _seed_range(s, arch, f)
+            ax.plot([lo, hi], [yy + dy] * 2, color=st["color"], lw=4, alpha=0.3, solid_capstyle="butt")
+            ax.plot(s.ratio(arch, f), yy + dy, marker=st["marker"], color=st["color"], ms=6.5, mec="white", mew=0.6, ls="none")
+    ax.axvline(1.0, color=INK2, lw=1.0)
+    ax.axvspan(1.0 - TIE_BAND, 1.0 + TIE_BAND, color=GRID, alpha=0.8, lw=0)
+    ax.set_xscale("log")
+    ax.set_yticks(y); ax.set_yticklabels(labels, fontsize=8.6)
+    ax.set_ylim(-0.7, len(rows) - 0.3)
+    ax.grid(axis="y", visible=False)
+    return labels
+
+
+def plot_shifts(ax, protocol="posed", keys=None, field=None):
+    """Each architecture's error under ``protocol`` over its native error, one row per dataset (first headline field),
+    log x."""
+    from palette import STYLE, INK2
+    keys = keys or [k for k in available() if protocol in DATASETS[k].protocols]
+    y = list(range(len(keys)))[::-1]
+    for yy, k in zip(y, keys):
+        s = Standing(k)
+        f = field or s.ds.headline[0]
+        for arch, key, dy in (("ISLA", "isla_ref", 0.0), ("GeoTransolver", "gt", 0.22), ("Transolver", "t", -0.22)):
+            if s.has(arch):
+                st = STYLE[key]
+                ax.plot(s.shift(arch, f, protocol), yy + dy, marker=st["marker"], color=st["color"], ms=7, mec="white", mew=0.6, ls="none")
+    ax.axvline(1.0, color=INK2, lw=1.0)
+    ax.set_xscale("log")
+    ax.set_yticks(y); ax.set_yticklabels([f"{DATASETS[k].name}: {Standing(k).fields[field or DATASETS[k].headline[0]]}" for k in keys], fontsize=8.6)
+    ax.set_ylim(-0.7, len(keys) - 0.3)
+    ax.grid(axis="y", visible=False)
+    return keys
+
+
+# --- Cost of the reference configurations ------------------------------------------------------------
+#: Per task and architecture: training peak memory (GiB, max over four GB300 ranks), epoch wall time (s) and parameter
+#: count, from the one-epoch lanes of the reference configurations. The lanes ran with the raw slice reads; the
+#: normalized reads add no parameter and no tensor of note, so the counts are exact and the cost representative.
+COST_FILE = "char_lanes_cost_2026-10-04.json"
+_COST_KEY = {"drivaerml_surface": "DrivAerML Surface", "drivaerml_volume": "DrivAerML Volume", "shift_suv": "Shift-SUV",
+             "airfrans": "AirfRANS", "tensile2d": "Tensile2D", "lug": "lug", "deepjeb": "DeepJEB++"}
+
+
+def cost(key: str, arch: str):
+    """{peak_gib, epoch_seconds, n_parameters, source} of one reference configuration on one task, or None."""
+    c = json.load(open(CHAR / COST_FILE))["cost"].get(_COST_KEY.get(key, ""), {})
+    return c.get(arch)
