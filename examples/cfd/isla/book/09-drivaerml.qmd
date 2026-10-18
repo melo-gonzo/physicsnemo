@@ -45,7 +45,7 @@ def protocol_dots(st, fields, protos=None):
                 y = y0 + (1 - j) * 0.25
                 ax.plot(st.err(a, f, p), y, **series_kwargs(KEY[a], ls="none", ms=8), zorder=4)
                 ax.plot(st.seeds(a, f, p), [y] * len(st.seeds(a, f, p)), "o", ms=2.6, color=INK, zorder=5)
-                ax.text(st.err(a, f, p) * 1.12, y, f"{st.err(a, f, p):.3f}", va="center", fontsize=7.5, color=STYLE[KEY[a]]["color"],
+                ax.text(max([st.err(a, f, p)] + st.seeds(a, f, p)) * 1.12, y, f"{st.err(a, f, p):.3f}", va="center", fontsize=7.5, color=STYLE[KEY[a]]["color"],
                         path_effects=halo())
         ax.axvline(1.0, color=MUTED, lw=1.0, ls="--", zorder=1)
         ax.set_yticks(range(len(protos))); ax.set_yticklabels([S.PROTOCOL[p] for p in protos][::-1])

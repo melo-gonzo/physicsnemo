@@ -1,127 +1,87 @@
-# Shift-SUV {#sec-shift-suv}
-
-**Shift-SUV is a second car family, sport-utility bodies in two rear-end styles, read through DrivAerML's pipeline unchanged. Trained and scored within the estate family, ISLA is level with GeoTransolver and trails Transolver by a few percent on the native validation mesh; on a uniform point cloud of the same budget ISLA's error is unchanged while both baselines lose accuracy, and with every validation body rotated and translated ISLA's error is its native error while the baselines' exceed the mean field.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the three scorings, and what the dataset does not say. Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
-
-::: {.callout-warning title="Trained with the raw slice reads"}
-ISLA's standing (@tbl-shift-suv-protocols) comes from checkpoints trained with the normalized slice reads of ISLA's reference configuration (@sec-isla-layer). ISLA's parameter count and its training cost come from lanes trained with the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm.
-:::
+# SHIFT-SUV {#sec-shift-suv}
 
 ```{python}
 #| label: setup-shift-suv
 #| include: false
 import sys; sys.path.insert(0, ".")
 from palette import *
+import standing as S
 import json, statistics
 from pathlib import Path
+from matplotlib.colors import TwoSlopeNorm
 RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
 mean = statistics.mean
-from matplotlib.colors import TwoSlopeNorm
-from matplotlib.collections import LineCollection
-PF = RES / "problem_figures_2026-09-22"
+pct = lambda r: f"{abs(1 - r) * 100:.0f}%"
+SUV = S.Standing("shift_suv")
+DR = S.Standing("drivaerml_surface")
+SUV_F = tuple(SUV.fields)            # pressure_l2, wss_l2
+KEY = {"ISLA": "isla_ref", "GeoTransolver": "gt", "Transolver": "t"}
+seeds_txt = lambda a, f, p="native", d=4: " and ".join(f"{v:.{d}f}" for v in SUV.seeds(a, f, p))
 
-def load_problem(name):
-    """One representative sample of a dataset, reduced for plotting (results/problem_figures_2026-09-22/)."""
-    z = np.load(PF / f"{name}.npz"); meta = json.load(open(PF / f"{name}.json"))
-    return {k: z[k] for k in z.files}, meta
 
-SF = RES / "sample_figures_2026-10-02"
+def clause(st, f, p="native"):
+    """ISLA against both baselines on one field, worded by the seed rule (standing.Standing.verdict)."""
+    v = {b: st.verdict(b, f, p) for b in S.BASELINES}
+    r = {b: S.fmt_ratio(st.ratio(b, f, p)) for b in S.BASELINES}
+    if len(set(v.values())) == 1:
+        return f"ISLA {v['GeoTransolver']} both baselines (GeoTransolver ÷ ISLA {r['GeoTransolver']}, Transolver ÷ ISLA {r['Transolver']})"
+    return "ISLA " + " and ".join(f"{v[b]} {b} ({b} ÷ ISLA {r[b]})" for b in S.BASELINES)
 
-def load_samples(name):
-    """Several samples of a dataset, reduced for plotting (results/sample_figures_2026-10-02/); per-sample arrays are
-    concatenated and cut with the matching ``*_offsets`` array via ``part``."""
-    z = np.load(SF / f"{name}.npz"); meta = json.load(open(SF / f"{name}.json"))
-    return {k: z[k] for k in z.files}, meta
 
-def part(a, off, i):
-    """Rows of the concatenated array ``a`` that belong to sample ``i``."""
-    return a[off[i]:off[i + 1]]
-
-def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
-    """Draw line cells colored by boundary-condition kind (keys of palette.BC)."""
-    segs = pts[cells][:, :, :2]
-    ax.add_collection(LineCollection(segs, colors=[BC[k] for k in kinds], linewidths=lw, capstyle="butt", zorder=zorder))
-
-def field_scatter(ax, xy, v, s=3.0, signed=False, vmin=None, vmax=None):
-    if signed:
-        lim = max(abs(np.nanmin(v)), abs(np.nanmax(v))) if vmin is None else None
-        norm = TwoSlopeNorm(vcenter=0.0, vmin=(-lim if vmin is None else vmin), vmax=(lim if vmax is None else vmax))
-        return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=DIVERGING, norm=norm, rasterized=True)
-    return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=SEQUENTIAL, vmin=vmin, vmax=vmax, rasterized=True)
-
-def small_colorbar(fig, sc, ax, label, **kw):
-    cb = fig.colorbar(sc, ax=ax, fraction=0.035, pad=0.02, **kw); cb.outline.set_visible(False); cb.ax.tick_params(labelsize=8)
-    cb.set_label(label, fontsize=8.5)
-    return cb
-
-def bc_legend(ax, kinds, loc="lower right", extra=()):
-    from matplotlib.lines import Line2D
-    handles = [Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds] + list(extra)
-    ax.legend(handles=handles, loc=loc, fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
-
-# ---- the three-protocol headline table ----
-# The three architectures' reference configurations scored on (i) the native validation mesh, (ii) a uniform point cloud of
-# the same budget and (iii) every validation case rotated and translated, read from results/char/<dataset>.json. Schema:
-# {"protocols": {"native": label, "area": label, "posed": label}, "fields": {key: label}, "isla_arm": name,
-#  "arms": {name: {protocol: {field: {"mean": x, "per_seed": {seed: x}, "n_cases": n, "n_seeds": n}}}}}.
-def protocol_table(artifact, label, setting):
-    C = json.load(open(RES / "char" / artifact)); protos = C["protocols"]; fields = C["fields"]; isla = C["arms"][C["isla_arm"]]
-    flab = " / ".join(fields.values())
-    hdr = "| configuration | " + " | ".join(f"{pl}: {flab}" for pl in protos.values()) + " |\n|---|" + "---|" * len(protos) + "\n"
-    rows = []
-    for arm, d in C["arms"].items():
-        one = any(d[pk][f]["n_seeds"] < 2 for pk in protos for f in fields)
-        rows.append(f"| {arm}{' (one seed)' if one else ''} | " + " | ".join(" / ".join(f"{d[pk][f]['mean']:.4f}" for f in fields) for pk in protos) + " |")
-        if arm != C["isla_arm"]:
-            rows.append(f"| {arm} ÷ ISLA | " + " | ".join(" / ".join(f"{d[pk][f]['mean'] / isla[pk][f]['mean']:.2f}" for f in fields) for pk in protos) + " |")
-    print(hdr + "\n".join(rows) + "\n")
-    print(f": {setting}: the three architectures at their reference configurations under three scorings of one checkpoint, the "
-          f"native validation mesh, a uniform point cloud at the same budget, and every validation case rotated and translated; "
-          f"fields {flab}; seed means over two seeds unless the row says one, float32. How to read this: a ratio is baseline ÷ ISLA, "
-          f"above one favoring ISLA; the three columns share the checkpoint and differ only in how the validation cases are presented. "
-          f"Data: results/char/{artifact}. {{#{label}}}")
-
-# ---- readings from the same artifact ----
-# Arms are keyed by architecture (the arm label's first word); every ratio in the prose is baseline ÷ ISLA, every shift is a
-# protocol's error over the native error of the same arm.
-def char_arms(artifact):
-    C = json.load(open(RES / "char" / artifact))
-    arms = {arm.split()[0]: d for arm, d in C["arms"].items()}
-    return C, arms
-def fmt_ratio(r):
-    """A ratio as the book writes it: two decimals near one, one decimal to ten, none above."""
-    return f"{r:.0f}x" if r >= 10 else f"{r:.1f}x" if r >= 2 else f"{r:.2f}"
-lead = lambda r: f"{(r - 1) * 100:.0f}%"
-trail = lambda r: f"{(1 - r) * 100:.0f}%"
-seeds_of = lambda cell: list(cell["per_seed"].values())
-def word(arms, arch, f):
-    """ISLA's native standing against one baseline on one field: a lead or a deficit when every baseline seed sits on one side of every
-    ISLA seed, level when the seeds interleave."""
-    b = seeds_of(arms[arch]["native"][f]); i = seeds_of(arms["ISLA"]["native"][f])
-    return "leads" if min(b) > max(i) else "trails" if max(b) < min(i) else "is level with"
+def protocol_dots(st, fields, protos=None):
+    """Error of each architecture under each scoring of one checkpoint (the figure of @fig-drivaerml-shifts)."""
+    protos = tuple(protos or st.ds.protocols)
+    fig, axes = plt.subplots(len(fields), 1, figsize=(8.0, 1.0 + 1.0 * len(protos) * len(fields)), sharex=True,
+                             gridspec_kw=dict(hspace=0.22))
+    axes = np.atleast_1d(axes)
+    for ax, f in zip(axes, fields):
+        for i, p in enumerate(protos):
+            y0 = len(protos) - 1 - i
+            ax.axhspan(y0 - 0.45, y0 + 0.45, color=PAPER if i % 2 else WHITE, zorder=0, lw=0)
+            for j, a in enumerate(S.ARCHS):
+                y = y0 + (1 - j) * 0.25
+                ax.plot(st.err(a, f, p), y, **series_kwargs(KEY[a], ls="none", ms=8), zorder=4)
+                ax.plot(st.seeds(a, f, p), [y] * len(st.seeds(a, f, p)), "o", ms=2.6, color=INK, zorder=5)
+                ax.text(max([st.err(a, f, p)] + st.seeds(a, f, p)) * 1.12, y, f"{st.err(a, f, p):.3f}", va="center", fontsize=7.5, color=STYLE[KEY[a]]["color"],
+                        path_effects=halo())
+        ax.axvline(1.0, color=MUTED, lw=1.0, ls="--", zorder=1)
+        ax.set_yticks(range(len(protos))); ax.set_yticklabels([S.PROTOCOL[p] for p in protos][::-1])
+        ax.set_ylim(-0.55, len(protos) - 0.45); ax.grid(axis="y", visible=False)
+        ax.set_title(f"{st.fields[f]}", fontsize=9.5)
+    ax = axes[-1]
+    ax.set_xscale("log"); ax.set_xlim(0.025, 3.0)
+    ticks = [0.03, 0.05, 0.1, 0.2, 0.5, 1, 2]
+    ax.set_xticks(ticks); ax.set_xticklabels([f"{t:g}" for t in ticks]); ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+    ax.set_xlabel("area-weighted relative L2 error [–], seed mean (marker) and seeds (dots)")
+    axes[0].text(1.04, len(protos) - 0.6, "1 = predicting\nzero everywhere", fontsize=7.5, color=MUTED, va="top")
+    h = [mpl.lines.Line2D([], [], **series_kwargs(KEY[a], ls="none", ms=7)) for a in S.ARCHS]
+    fig.legend(handles=h, loc="upper center", ncol=3, fontsize=8.5, bbox_to_anchor=(0.55, 1.0))
+    fig.subplots_adjust(top=1 - 0.45 / fig.get_figheight())
+    return fig
 ```
+
+**SHIFT-SUV is the book's second car family: sport-utility bodies in two rear-end styles, read through DrivAerML's pipeline unchanged.** It asks whether the DrivAerML Surface standing is a property of one sedan or of the task. Within the estate family, on the native mesh, Transolver is ahead of ISLA on pressure by the seed rule and GeoTransolver is level with it; on a uniform point cloud and with every body rotated and translated, only ISLA keeps its error.
+
+*Before this chapter:* @sec-drivaerml, in particular the Surface task (@sec-surface), the flow around a car (@sec-drivaerml-flow) and the three scorings of one checkpoint, including the uniform point cloud (@sec-drivaerml-scorings). Every ratio is baseline ÷ ISLA.
 
 ## The problem: two sport-utility families {#sec-shift-suv-problem}
 
-**Shift-SUV is about a thousand sport-utility bodies in each of two rear-end families, estate and fastback, in one far-field condition, with the same reference length and far-field direction as DrivAerML at a lower speed.** The model receives exactly what it receives on DrivAerML: surface cells with positions, outward normals and areas, and the far-field direction. @fig-problem-shift-suv shows one fastback case.
+**SHIFT-SUV is about a thousand morphed bodies in each of two rear-end families, estate and fastback, in one far-field condition.** An *estate* (squareback) ends in a near-vertical tailgate, so the air leaves the body at the roof's trailing edge and the whole rear face sits in the wake. A *fastback* slopes from the roof to the tail, so the pressure recovers along the sloping rear window, and where the flow leaves the body depends on the slope. Both families are taller than the DrivAerML notchback. The model receives exactly what it receives on DrivAerML: surface cells with positions, outward normals and areas, and the far-field direction. @fig-problem-shift-suv shows one fastback.
 
 ```{python}
 #| label: fig-problem-shift-suv
 #| fig-cap: >
-#|   The Shift-SUV problem, on one fastback case. The vehicle surface
-#|   (150,000 of its 5 million cells at their centroids) colored by the
-#|   pressure coefficient $C_p = (p - p_\infty) / \tfrac{1}{2}\rho U_\infty^2$,
-#|   seen from the side and from above; the black arrow is the far-field
-#|   direction $\hat g_1$. What varies per sample is the geometry; the far-field
-#|   speed is fixed and lower than DrivAerML's, a covariate shift every model
-#|   sees alike since none receives the Reynolds number. What the model
-#|   receives is exactly what it receives on DrivAerML (positions, normals,
-#|   areas, $\hat g_1$). What the model predicts: pressure and wall shear at
-#|   the sampled cells.
-#|   How to read this: the same color scale as @fig-problem-drivaer, so the
-#|   two bodies can be compared by eye. Data:
+#|   The SHIFT-SUV problem, on one fastback case. The vehicle surface (150,000
+#|   of its 5 million cells at their centroids) colored by the pressure
+#|   coefficient $C_p = (p - p_\infty) / \tfrac{1}{2}\rho U_\infty^2$, seen from
+#|   the side and from above; the black arrow is the far-field direction
+#|   $\hat g_1$. What varies per sample is the geometry; the far-field speed is
+#|   fixed and lower than DrivAerML's. What the model predicts: pressure and
+#|   wall shear at the sampled cells. How to read this: the color scale is the
+#|   one of @fig-problem-drivaer, so the two bodies can be compared by eye; the
+#|   colors are the reference CFD, not predictions. Data:
 #|   results/problem_figures_2026-09-22/shift_suv.npz.
-#| code-fold: true
 S_, Sm = load_problem("shift_suv")
 sp, cp = S_["surf_points"], S_["surf_cp"]
 norm = TwoSlopeNorm(vcenter=0.0, vmin=-1.5, vmax=1.0)
@@ -148,10 +108,12 @@ cs = Ssm["cases"]
 def _rng(fam, k):
     v = [c[k] for c in cs if c["family"] == fam]; return min(v), max(v)
 La, Lb = min(c["length"] for c in cs), max(c["length"] for c in cs); Wa, Wb = min(c["width"] for c in cs), max(c["width"] for c in cs)
-print(f"@fig-shift-suv-samples shows three validation bodies of each family, the first, the middle and the last of each family's validation list. "
-      f"The morphs keep the footprint (length {La:.2f} to {Lb:.2f} m, width {Wa:.2f} to {Wb:.2f} m across the six) and differ in height: "
-      f"the height runs from {_rng('estate', 'height')[0]:.2f} to {_rng('estate', 'height')[1]:.2f} m among the estates shown and from "
-      f"{_rng('fastback', 'height')[0]:.2f} to {_rng('fastback', 'height')[1]:.2f} m among the fastbacks; the far field is "
+foot = (f"every body shown is {La:.2f} m long and {Wa:.2f} m wide" if (Lb - La < 0.005 and Wb - Wa < 0.005)
+        else f"length {La:.2f} to {Lb:.2f} m, width {Wa:.2f} to {Wb:.2f} m across the six")
+print(f"**Within a family the bodies are morphs of one shape; between the families the rear end changes class.** "
+      f"@fig-shift-suv-samples shows three validation bodies of each family, the first, the middle and the last of each family's "
+      f"validation list. The morphs keep the footprint ({foot}) and differ in height: from {_rng('estate', 'height')[0]:.2f} to {_rng('estate', 'height')[1]:.2f} m among the estates shown and from "
+      f"{_rng('fastback', 'height')[0]:.2f} to {_rng('fastback', 'height')[1]:.2f} m among the fastbacks. The far field is "
       f"{np.linalg.norm(cs[0]['U_inf']):.0f} m/s along $\\hat g_1$ in every case.")
 ```
 
@@ -160,25 +122,23 @@ print(f"@fig-shift-suv-samples shows three validation bodies of each family, the
 #| fig-cap: >
 #|   Six SHIFT-SUV validation bodies, three estates (top row) and three
 #|   fastbacks (bottom row), seen from the side and colored by the surface
-#|   pressure coefficient $C_p$ on one shared scale (60,000 of each body's cells
-#|   at their centroids); the body length, width and height are printed per
-#|   panel and the black arrow is the far-field direction $\hat g_1$, the same
-#|   for every body. How to read this: within a row the bodies are morphs of
-#|   one family, between the rows the rear end changes class; the scale is the
-#|   one of @fig-problem-shift-suv and @fig-problem-drivaer so the three
-#|   car sets can be compared by eye; colors are the reference CFD field, not
-#|   predictions. Data: results/sample_figures_2026-10-02/shift_suv.npz.
-#| code-fold: true
-Ss_, Ssm = load_samples("shift_suv")
-cs = Ssm["cases"]; so = Ss_["surf_offsets"]
+#|   pressure coefficient $C_p$ on one shared scale (60,000 of each body's
+#|   cells at their centroids); the body length, width and height are printed
+#|   per panel and the black arrow is the far-field direction $\hat g_1$, the
+#|   same for every body. How to read this: within a row the bodies are morphs
+#|   of one family, between the rows the rear end changes class; the scale is
+#|   the one of @fig-problem-shift-suv and @fig-problem-drivaer; the colors
+#|   are the reference CFD, not predictions. Data:
+#|   results/sample_figures_2026-10-02/shift_suv.npz.
+so = Ss_["surf_offsets"]
 norm = TwoSlopeNorm(vcenter=0.0, vmin=-1.5, vmax=1.0)
 xlim = (min(c["bbox"][0][0] for c in cs) - 0.3, max(c["bbox"][1][0] for c in cs) + 0.3)
 zlim = (min(c["bbox"][0][2] for c in cs) - 0.1, max(c["bbox"][1][2] for c in cs) + 0.6)
 fig, axes = plt.subplots(2, 3, figsize=(8, 4.4), sharex=True, sharey=True, gridspec_kw=dict(hspace=0.3, wspace=0.05))
 for i, c in enumerate(cs):
     ax = axes[i // 3, i % 3]
-    sp = part(Ss_["surf_points"], so, i); cp = part(Ss_["surf_cp"], so, i)
-    sc = depth_scatter(ax, sp[:, [0, 2]], sp[:, 1], cp, s=1.2, cmap=DIVERGING, norm=norm); map_axes(ax)
+    spi = part(Ss_["surf_points"], so, i); cpi = part(Ss_["surf_cp"], so, i)
+    sc = depth_scatter(ax, spi[:, [0, 2]], spi[:, 1], cpi, s=1.2, cmap=DIVERGING, norm=norm); map_axes(ax)
     ax.set_xlim(*xlim); ax.set_ylim(*zlim)
     ax.set_title(f"{c['family']} {c['case']}\nL {c['length']:.2f} m, W {c['width']:.2f} m, H {c['height']:.2f} m", fontsize=7.8)
     if i == 0:
@@ -191,75 +151,45 @@ cb = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.01, extend="min"); cb.set_la
 plt.show()
 ```
 
-**Diversity.** Within a family the geometry varies as on DrivAerML, by parametric morphs of one body; between the two families the rear end changes class, estate against fastback, which is a larger step than any morph. The far-field speed is fixed and lower than DrivAerML's, a Reynolds-number shift that every architecture sees alike since none receives the Reynolds number ($K = 1$, $S = 0$). Every lane in the book trains and validates within the estate family; the fastback family is held out of every model, so the set also holds a geometry class no model has seen (@sec-limits-transfer).
+**What varies, and what does not.** Within a family the geometry varies as on DrivAerML, by parametric morphs of one body; between the families the rear end changes class, a larger step than any morph. The far-field speed is fixed and lower than DrivAerML's, a Reynolds-number difference that every architecture sees alike, since none receives the Reynolds number ($K = 1$, $S = 0$). Every model in the book trains and validates within the estate family. The fastback family is held out of every model, so the set holds a geometry class that no model has seen.
 
 ### Files, conversion and normalization {#sec-data-shift-suv}
 
-**Sport-utility bodies in two rear-end families, estate and fastback,
-read with DrivAerML's transform pipeline unchanged, so the two car sets
-share one nondimensionalization and one subsampling.** The curated manifest
-separates the estate family (794 / 99 / 100 cases for training /
-validation / test) from the fastback family (796 / 99 / 99); the frozen
-inventory with the split hashes and the exclusion policy is
-`results/shift_suv_full_dataset_inventory_2026-07-29/inventory.json`.
-The recipe reads each run's `domain.pdmsh` boundary tensordict
-(`run_*/domain.pdmsh/_tensordict/boundaries/vehicle`) under the family
-subdirectory, and merges the case's `U_inf`, `p_inf`, `rho_inf`, `nu`,
-`L_ref`. The sample fastback in @tbl-data-samples has 5.0 million surface
-cells.
+**SHIFT-SUV is read with DrivAerML's transform pipeline unchanged, so the two car sets share one nondimensionalization and one subsampling.** The curated manifest separates the estate family (794 / 99 / 100 cases for training / validation / test) from the fastback family (796 / 99 / 99); the frozen inventory with the split hashes and the exclusion policy is `results/shift_suv_full_dataset_inventory_2026-07-29/inventory.json`. The recipe reads each run's boundary tensordict (`run_*/domain.pdmsh/_tensordict/boundaries/vehicle`) under the family subdirectory and merges the case's `U_inf`, `p_inf`, `rho_inf`, `nu` and `L_ref`. A body has about 5 million surface cells.
 
-- **What is the same as DrivAerML.** `L_ref` is 5.0 m in both datasets,
-  so the nondimensional coordinates are on the same scale; the same
-  nondimensionalization, the same `wss` standard deviation and the same
-  subsampling are applied; the fields `pressure_average` and
-  `wall_shear_stress_average` are the time-averaged analogues of
-  DrivAerML's `pMeanTrim` and `wallShearStressMeanTrim` (SI units verified
-  against the release's `units.json`).
-- **What differs, and how it is handled.** SHIFT-SUV stores absolute
-  pressure with `p_inf` = 101,325 Pa where DrivAerML stores gauge pressure
-  with `p_inf` = 0. The shared transform $(p - p_\infty) / q_\infty$ gives
-  a proper pressure coefficient for both, with no correction. The
-  far-field speed is 30.0 m/s against DrivAerML's 38.89, a Reynolds number
-  about 1.3 times lower. Every model receives the unit direction only and
-  none receives the Reynolds number, so this is a covariate shift
-  identical for every architecture. It is reported alongside the
-  geometry-family shift rather than corrected.
-- **Role.** The estate family's manifest split (794 training, 99
-  validation bodies) is the training and validation set of every lane in
-  the book; the fastback family is held out from every model and is the
-  target of the cross-family measurement, which is unmeasured
-  (@sec-limits-transfer).
-- **License.** As for DrivAerML, not restated here.
+- **What is the same as DrivAerML.** `L_ref` is 5.0 m in both datasets, so the nondimensional coordinates are on the same scale; the nondimensionalization, the `wss` standard deviation and the subsampling are the same; the fields `pressure_average` and `wall_shear_stress_average` are the time-averaged analogues of DrivAerML's `pMeanTrim` and `wallShearStressMeanTrim`.
+- **What differs, and how it is handled.** SHIFT-SUV stores absolute pressure with `p_inf` = 101,325 Pa where DrivAerML stores gauge pressure with `p_inf` = 0. The shared transform $(p - p_\infty) / q_\infty$ gives a pressure coefficient for both, with no correction. The far-field speed is 30.0 m/s against DrivAerML's 38.89, a Reynolds number about 1.3 times lower.
 
 ## What is measured {#sec-shift-suv-measured}
 
 ```{python}
 #| label: para-shift-suv-measured
 #| output: asis
-C, A = char_arms("shift_suv_surface_a2.json")
-n_val = A["ISLA"]["native"]["pressure_l2"]["n_cases"]; n_seeds = A["ISLA"]["native"]["pressure_l2"]["n_seeds"]
-# the cost record of the configurations this chapter's protocol artifact holds (final references, or the first-pass lanes); parameter counts come from it
-COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost" if "512 with 512 slices" in C["isla_arm"] else "cost_first_pass"]["Shift-SUV"]
-PARAMS = {a: v["n_parameters"] / 1e6 for a, v in COST.items()}
+n_val = SUV.cell("ISLA", "pressure_l2")["n_cases"]; n_seeds = SUV.cell("ISLA", "pressure_l2")["n_seeds"]
 print(f"**The Surface task of @sec-surface within the estate family: 794 training bodies, {n_val} validation bodies, 500 epochs, "
-      f"{n_seeds} seeds, every architecture scored at 200,000 sampled cells per case in float32; the readout is the "
-      "area-weighted relative L2 of surface pressure and of wall shear (@sec-metrics).** The three architectures run at their reference "
-      "configurations, one per architecture for every dataset in the book (@sec-protocol): ISLA width 512 with 512 slices, 12 layers, cosine "
-      f"routing, learning rate 3.75e-4, trained at 200,000 cells ({PARAMS['ISLA']:.0f}M parameters); GeoTransolver width 256, trained at "
-      f"200,000 cells ({PARAMS['GeoTransolver']:.0f}M); Transolver width 512 with 16 layers at 100,000 cells ({PARAMS['Transolver']:.0f}M), "
-      "both at the recipe's rate of 1e-3; no lane trains with "
-      "rotation or translation augmentation. Every model receives what it receives on DrivAerML: the sampled surface cells with "
-      "positions, outward normals and areas, and the far-field direction as the one global vector. Each trained checkpoint is scored "
-      "three ways on the same validation bodies: on the native validation mesh; on a uniform point cloud at the same cell budget, an "
-      "area-proportional Poisson draw with exact Horvitz-Thompson weights, which is what an STL gives without a volume mesh; and with "
-      "every validation body rigidly rotated and translated by a keyed rotation and a translation of one RMS point radius "
-      "(@sec-invariances).")
-epoch_ratio = COST["ISLA"]["epoch_seconds"] / statistics.mean(COST[a]["epoch_seconds"] for a in ("GeoTransolver", "Transolver"))
+      f"{n_seeds} seeds, every architecture scored at 200,000 sampled cells per case in float32 as the area-weighted relative L2 of surface "
+      "pressure and of the wall-shear vector (@sec-metrics).** The three architectures run at their reference configurations "
+      f"({S.CONFIG['ISLA']} at 3.75e-4 and 200,000 cells; {S.CONFIG['GeoTransolver']} at 1e-3 and 200,000 cells; "
+      f"{S.CONFIG['Transolver']} at 1e-3 and 100,000 cells), with no rotation or translation augmentation; @tbl-shift-suv-configs states "
+      "their sizes and costs. Each checkpoint is scored three ways, as on DrivAerML (@sec-drivaerml-scorings): on the native mesh, on a "
+      "uniform point cloud of the surface, and with every body rotated and translated.")
+```
+
+```{python}
+#| label: make-tbl-shift-suv-configs
+#| output: asis
+COST = J("char/char_lanes_cost_2026-10-04.json")["cost"]["Shift-SUV"]
+print("| | parameters | peak memory per GPU | one epoch |")
+print("|---|--:|--:|--:|")
+for a in S.ARCHS:
+    v = COST[a]
+    print(f"| {S.CONFIG[a]} | {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.0f} GiB | {v['epoch_seconds']:.0f} s |")
 print()
-print("**Cost.** Training on this task, one epoch at the reference configurations on four GB300 ranks in bfloat16 (peak device memory, "
-      "maximum over ranks): " + "; ".join(f"{a} {v['peak_gib']:.1f} GiB and {v['epoch_seconds']:.0f} s per epoch at {v['n_parameters'] / 1e6:.0f}M parameters"
-      for a, v in COST.items()) + f". ISLA's epoch is {epoch_ratio:.1f}x the baselines' mean on this task. "
-      "Data: results/char/char_lanes_cost_2026-10-04.json.")
+print(": The reference configurations on SHIFT-SUV: parameters, peak device memory (maximum over four GB300 ranks, bfloat16 training) "
+      "and the wall time of one training epoch over the 794 training bodies. How to read this: the three are matched in none of the "
+      "columns; ISLA has the most parameters and GeoTransolver the highest peak memory. Instrument (memory and time): ISLA at 512 wide, "
+      "512 slices, 3.75e-4, raw slice reads (@sec-study-configurations); the normalized slice reads change no parameter and no tensor "
+      "shape. Data: results/char/char_lanes_cost_2026-10-04.json. {#tbl-shift-suv-configs}")
 ```
 
 ## The standing {#sec-shift-suv-standing}
@@ -267,65 +197,63 @@ print("**Cost.** Training on this task, one epoch at the reference configuration
 ```{python}
 #| label: para-shift-suv-lede
 #| output: asis
-nat = lambda arch, f: A[arch]["native"][f]["mean"]
-rat = lambda arch, f, pk="native": A[arch][pk][f]["mean"] / A["ISLA"][pk][f]["mean"]
-shift = lambda arch, f, pk: A[arch][pk][f]["mean"] / A[arch]["native"][f]["mean"]
-pk_p = {arch: rat(arch, "pressure_l2") for arch in ("GeoTransolver", "Transolver")}
-def native_txt(arch):
-    w = word(A, arch, "pressure_l2"); r = pk_p[arch]
-    return (f"ISLA is level with {arch} ({arch} ÷ ISLA {r:.2f})" if w == "is level with" else
-            f"{arch} leads ISLA by {trail(r)} ({arch} ÷ ISLA {r:.2f})" if w == "trails" else f"ISLA leads {arch} by {lead(r)} ({arch} ÷ ISLA {r:.2f})")
-print(f"**On the native mesh {native_txt('GeoTransolver')} and {native_txt('Transolver')} on "
-      f"surface pressure; on the uniform point cloud ISLA's error is {fmt_ratio(shift('ISLA', 'pressure_l2', 'area'))} of its native error "
-      f"while GeoTransolver's is {fmt_ratio(shift('GeoTransolver', 'pressure_l2', 'area'))} and Transolver's "
-      f"{fmt_ratio(shift('Transolver', 'pressure_l2', 'area'))} of theirs; rotated and translated, ISLA's error is "
-      f"{fmt_ratio(shift('ISLA', 'pressure_l2', 'posed'))} of its native error while the baselines read "
-      f"{fmt_ratio(min(rat(a, f, 'posed') for a in ('GeoTransolver', 'Transolver') for f in C['fields']))} to "
-      f"{fmt_ratio(max(rat(a, f, 'posed') for a in ('GeoTransolver', 'Transolver') for f in C['fields']))} ISLA's on the two fields.** "
-      "@tbl-shift-suv-protocols is the standing; every number below is read from it.")
+print(f"**On the native mesh {clause(SUV, 'pressure_l2')} on surface pressure, and {clause(SUV, 'wss_l2')} on wall shear.** "
+      f"{'Every Transolver seed sits below both ISLA seeds on both fields. ' if all(SUV.verdict('Transolver', f) == 'trails' for f in SUV_F) else ''}On the uniform point cloud and rotated and translated, ISLA's "
+      "error is its native error and the baselines' is not. @tbl-shift-suv-protocols is the standing and @fig-shift-suv-shifts draws it.")
 ```
 
 ```{python}
-#| label: tbl-shift-suv-protocols
+#| label: make-tbl-shift-suv-protocols
 #| output: asis
-protocol_table("shift_suv_surface_a2.json", "tbl-shift-suv-protocols", "Shift-SUV, the Surface task, 794 training bodies")
+print(SUV.table("tbl-shift-suv-protocols", "SHIFT-SUV, estate family, 794 training bodies, 99 validation bodies, 200,000 cells per case"))
+```
+
+```{python}
+#| label: fig-shift-suv-shifts
+#| fig-cap: >
+#|   SHIFT-SUV under the three scorings of one checkpoint: the error of each
+#|   architecture's reference configuration on surface pressure (top) and wall
+#|   shear (bottom), seed mean (marker, printed) and the two seeds (black
+#|   dots), logarithmic axis; ISLA blue squares, GeoTransolver red circles,
+#|   Transolver amber triangles; the dashed line at one is the error of
+#|   predicting zero everywhere. How to read this: in the native row
+#|   Transolver's triangle sits left of the other two, its lead; down the rows
+#|   ISLA's square stays put and the baselines' markers move right, and
+#|   GeoTransolver's two seeds part on the point cloud. Data:
+#|   results/char/shift_suv_surface_a2.json.
+protocol_dots(SUV, SUV_F); plt.show()
 ```
 
 ```{python}
 #| label: para-shift-suv-reading
 #| output: asis
-D, B = char_arms("drivaerml_surface_a2.json")
-dr_area = {a: B[a]["area"]["pressure_l2"]["mean"] / B[a]["native"]["pressure_l2"]["mean"] for a in ("GeoTransolver", "Transolver")}
-suv_area = {a: shift(a, "pressure_l2", "area") for a in ("GeoTransolver", "Transolver")}
-posed_floor = min(A[a]["posed"][f]["mean"] for a in ("GeoTransolver", "Transolver") for f in C["fields"])
-SEED_WORD = {"is level with": "interleave with ISLA's", "trails": "lie below both ISLA seeds", "leads": "lie above both ISLA seeds"}
-def seed_txt(arch):
-    ws = {word(A, arch, f) for f in C["fields"]}
-    return (f"{arch}'s seeds {SEED_WORD[ws.pop()]} on both fields" if len(ws) == 1 else
-            f"{arch}'s seeds " + " and ".join(f"{SEED_WORD[word(A, arch, f)]} on {lab}" for f, lab in C["fields"].items()))
-print(f"Three readings. First, the native column: GeoTransolver ÷ ISLA "
-      f"{rat('GeoTransolver', 'pressure_l2'):.2f} / {rat('GeoTransolver', 'wss_l2'):.2f} and Transolver ÷ ISLA "
-      f"{rat('Transolver', 'pressure_l2'):.2f} / {rat('Transolver', 'wss_l2'):.2f} (pressure / wall shear); {seed_txt('GeoTransolver')} and "
-      f"{seed_txt('Transolver')} (pressure: ISLA {', '.join(f'{v:.4f}' for v in seeds_of(A['ISLA']['native']['pressure_l2']))}, "
-      f"GeoTransolver {', '.join(f'{v:.4f}' for v in seeds_of(A['GeoTransolver']['native']['pressure_l2']))}, "
-      f"Transolver {', '.join(f'{v:.4f}' for v in seeds_of(A['Transolver']['native']['pressure_l2']))}). Second, the point-cloud column "
-      f"changes only the baselines: ISLA reads {shift('ISLA', 'pressure_l2', 'area'):.3f} / {shift('ISLA', 'wss_l2', 'area'):.3f} of its "
-      f"native error, GeoTransolver {fmt_ratio(suv_area['GeoTransolver'])} / {fmt_ratio(shift('GeoTransolver', 'wss_l2', 'area'))} and "
-      f"Transolver {fmt_ratio(suv_area['Transolver'])} / {fmt_ratio(shift('Transolver', 'wss_l2', 'area'))}, so the native ordering on "
-      f"pressure becomes GeoTransolver ÷ ISLA {fmt_ratio(rat('GeoTransolver', 'pressure_l2', 'area'))} and Transolver ÷ ISLA "
-      f"{fmt_ratio(rat('Transolver', 'pressure_l2', 'area'))} on the point cloud; GeoTransolver's two seeds read "
-      f"{' and '.join(f'{v:.3f}' for v in seeds_of(A['GeoTransolver']['area']['pressure_l2']))} there against a native "
-      f"{' and '.join(f'{v:.4f}' for v in seeds_of(A['GeoTransolver']['native']['pressure_l2']))}, so how much a trained GeoTransolver depends "
-      "on the draw is itself seed-dependent. The baselines' penalty is smaller here than on the DrivAerML "
-      f"Surface task, where the same draw costs GeoTransolver {fmt_ratio(dr_area['GeoTransolver'])} and Transolver "
-      f"{fmt_ratio(dr_area['Transolver'])} of their native pressure error (@tbl-drivaerml-surface-protocols): the SUV meshes are "
-      "more uniform, so the native and the area-proportional draws differ less, and a model whose answer depends on the draw moves "
-      f"less. Third, the rotated and translated column is the native column for ISLA within {100 * max(abs(shift('ISLA', f, 'posed') - 1) for f in C['fields']):.1g}% on both fields, while "
-      f"every baseline error exceeds {posed_floor:.2f}, worse than predicting the mean field: a model that reads laboratory "
-      "coordinates and never trained on a rotated body has no answer for one. Transolver's native lead is therefore a lead "
-      "on one mesh family in one pose (@sec-invariances).")
+posed_floor = min(SUV.err(a, f, "posed") for a in S.BASELINES for f in SUV_F)
+gts = SUV.seeds("GeoTransolver", "pressure_l2", "area")
+print(f"Three readings. **First, of the three aerodynamic Surface standings in the book this is the one where a baseline leads.** Transolver's "
+      f"pressure seeds are {seeds_txt('Transolver', 'pressure_l2')} against ISLA's {seeds_txt('ISLA', 'pressure_l2')}, a gap of "
+      f"{pct(SUV.ratio('Transolver', 'pressure_l2'))} on pressure and {pct(SUV.ratio('Transolver', 'wss_l2'))} on wall shear; GeoTransolver's "
+      f"seeds ({seeds_txt('GeoTransolver', 'pressure_l2')}) interleave with ISLA's. "
+      f"**Second, the uniform point cloud changes only the baselines.** ISLA's error there is {SUV.shift('ISLA', 'pressure_l2', 'area'):.3f} / "
+      f"{SUV.shift('ISLA', 'wss_l2', 'area'):.3f} of its native error (pressure / wall shear); GeoTransolver's is "
+      f"{S.fmt_ratio(SUV.shift('GeoTransolver', 'pressure_l2', 'area'))} times its native pressure error and Transolver's "
+      f"{S.fmt_ratio(SUV.shift('Transolver', 'pressure_l2', 'area'))} times, so on the point cloud Transolver ÷ ISLA is "
+      f"{S.fmt_ratio(SUV.ratio('Transolver', 'pressure_l2', 'area'))}. The penalty is smaller than on DrivAerML, where the same draw costs "
+      f"GeoTransolver {S.fmt_ratio(DR.shift('GeoTransolver', 'pressure_l2', 'area'))} and Transolver "
+      f"{S.fmt_ratio(DR.shift('Transolver', 'pressure_l2', 'area'))} times their native pressure error: the penalty measures how far the "
+      "native mesh's density is from uniform, as the model sees it, and that distance differs from one dataset's mesher to another's. "
+      f"GeoTransolver's two seeds read {' and '.join(f'{v:.3f}' for v in gts)} on the point cloud, so how much a trained GeoTransolver "
+      f"depends on the draw is itself seed-dependent. **Third, rotated and translated, ISLA's error is its native error to a relative "
+      f"{max(abs(SUV.shift('ISLA', f, 'posed') - 1) for f in SUV_F):.0e}**, while every baseline error is at least "
+      f"{posed_floor:.2f}, near or above the score of predicting zero. Transolver's native lead is a lead on one mesh family in one pose.")
 ```
+
+<!-- RENDERING SLOT: fig-shift-suv-prediction: truth / ISLA / GeoTransolver / Transolver and errors on one held-out case -->
 
 ## What this dataset does not say {#sec-shift-suv-limits}
 
-**Shift-SUV measures a second car family within one geometry class and one far-field condition.** The fastback family is held out of every lane, so the cross-family question (@sec-limits-transfer) is unmeasured, and the lower far-field speed is a regime difference from DrivAerML that no lane here is asked to bridge. ISLA's native tie with GeoTransolver, Transolver's native lead and ISLA's point-cloud and pose readings are properties of the three configurations as shipped, with the parameter counts of @sec-shift-suv-measured and unmatched step time and memory, and the columns say what each error becomes when the mesh or the pose changes, not why the native ordering is what it is.
+**SHIFT-SUV measures a second car family within one rear-end class and one far-field condition.** The native lead of Transolver and the level GeoTransolver are properties of the three configurations as shipped, with the sizes of @tbl-shift-suv-configs and unmatched step time and memory. The point-cloud and pose columns say what each error becomes when the mesh or the pose changes, not why the native ordering is what it is.
+
+Questions this dataset raises and leaves open:
+
+- **Does a model trained on estates predict fastbacks?** The fastback family is held out of every model, so the cross-family question is unmeasured; a single scoring of the estate checkpoints on the fastback validation bodies settles it for the three configurations (@sec-limits).
+- **Why does Transolver lead here and not on DrivAerML?** The two car sets differ in body class, in mesh and in Reynolds number at once; no experiment in the book separates them (@sec-open-questions).
