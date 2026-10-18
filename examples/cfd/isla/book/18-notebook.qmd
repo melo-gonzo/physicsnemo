@@ -38103,3 +38103,27 @@ by the A2 reruns; generator `a2r_protocol_artifacts_2026-10-17.py`
 beside it). Each chapter's raw-reads label now names only the analyses
 still on raw-read checkpoints. SHIFT-SUV, the lug, HiLift and the AeroZoo
 `full` ISLA-DTT lanes are still running.
+
+## 2026-10-18 — AEROZOO H-RESID P3 final: both arms keep their validation minimum through epoch 250, so P3 holds on both {#sec-nb-aerozoo-hresid-p3-final}
+
+The four remedy lanes of @sec-nb-aerozoo-hresid-prereg (AeroZoo `full`
+at 3.75e-4, uniform protocol; arm A rows 340 and 341, arm A2 rows 342
+and 343) finished their 250 epochs. Over the 26 validation epochs, no
+lane's validation loss rises above 1.084 times its running minimum: the
+largest ratios are 1.084 (epoch 60) and 1.051 (epoch 249) for A, and
+1.059 (epoch 40) and 1.084 (epoch 30) for A2, against the event's 2. At
+epoch 249 validation loss is 0.0229 and 0.0238 for A (minima 0.0221
+and 0.0226) and 0.0222 and 0.0223 for A2 (minima 0.0215 and 0.0209).
+The reference-rate twins lost their minimum between epochs 38 and 52.
+
+With the second part read at epoch 43 (@sec-nb-aerozoo-hresid-p3-interim:
+token norms two orders below the bar on both arms), **P3 holds on both
+arms.** The normalized reads remove the reference-rate event on AeroZoo
+for the whole schedule, not only through the window in which the twins
+lost their minimum. Arm A holding to the end confirms the interim's
+attribution: the direct read of the raw stream into the broadcast
+carries the growth. A2's validation minima are 3 to 8 percent below A's.
+
+The test-side finals of rows 340 to 343 are scored by the AeroZoo
+scoring pump; rows 342 and 343 (`azu_full_islabn2`) are the ISLA arm of
+the in-distribution `full` read of DTT-DECIDE.
