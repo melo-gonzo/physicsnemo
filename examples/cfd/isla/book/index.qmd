@@ -25,7 +25,7 @@ from matplotlib.colors import TwoSlopeNorm
 
 ROWS = S.headline_rows()
 def verdicts():
-    out = {"leads": [], "is level with": [], "trails": []}
+    out = {"leads": [], "is level with": [], "trails": [], "is not compared with": []}
     for k, f, lab in ROWS:
         s = S.Standing(k)
         for a in S.BASELINES:
@@ -33,7 +33,8 @@ def verdicts():
                 out[s.verdict(a, f)].append((k, f, a))
     return out
 V = verdicts()
-n_pairs = sum(len(v) for v in V.values())
+n_pairs = sum(len(v) for k, v in V.items() if k != "is not compared with")
+UNFAIR = [S.DATASETS[k].name for k in S.available() if not S.DATASETS[k].fair_drive]
 SURF = [k for k in S.available() if "area" in S.DATASETS[k].protocols]
 isla_area = max(abs(S.Standing(k).shift("ISLA", S.DATASETS[k].headline[0], "area") - 1) for k in SURF)
 base_area = min(S.Standing(k).shift(a, S.DATASETS[k].headline[0], "area") for k in SURF for a in S.BASELINES)
@@ -56,8 +57,9 @@ print(
     "mesh, by construction, and it pays no systematic accuracy price for either.** It is measured against GeoTransolver and "
     "Transolver, the strongest published surrogates of its family, each at its own reference configuration, every model given "
     "the same inputs and scored the same way. "
-    f"Over the {n_pairs} comparisons of @fig-standing (each headline field of each dataset against each baseline), ISLA leads "
-    f"in {len(V['leads'])}, is level in {len(V['is level with'])} and trails in {len(V['trails'])}. "
+    f"Over the {n_pairs} comparisons of @fig-standing (each headline field of each dataset against each baseline"
+    + (f", {' and '.join(UNFAIR)} excepted, whose recorded baselines read a different freestream input" if UNFAIR else "")
+    + f"), ISLA leads in {len(V['leads'])}, is level in {len(V['is level with'])} and trails in {len(V['trails'])}. "
     f"Rotate and translate the test geometry, and on the {len(FLOW)} flow tasks the baselines' errors grow "
     f"{base_posed_flow[0]:.0f}-fold to {base_posed_flow[1]:.0f}-fold while ISLA's moves by less than {100 * isla_posed:.1f}%; "
     f"on the {len(SOLID)} solid-mechanics tasks the baselines' grow {base_posed_solid[0]:.1f}-fold to {base_posed_solid[1]:.0f}-fold, "
@@ -119,7 +121,10 @@ plt.show()
 #|   except on the two structured solid meshes. How to read this: rows are different datasets, fields
 #|   and units of difficulty and are not comparable with one another; a row
 #|   marked † holds ISLA checkpoints without the normalized slice reads of
-#|   its reference configuration. Data: results/char/ (@sec-standing).
+#|   its reference configuration; a row marked ‡ has its baselines drawn
+#|   hollow because in that record they read the freestream as a physical
+#|   vector rather than a unit direction, so it is not compared (@sec-de-result).
+#|   Data: results/char/ (@sec-standing).
 #| fig-height: 6.6
 #| code-fold: true
 fig, axes = plt.subplots(1, 2, figsize=(10, 6.4), gridspec_kw=dict(width_ratios=[1.35, 1.0], wspace=0.06))

@@ -33,7 +33,7 @@ for k, f, lab in ROWS:
     cells = []
     for a in S.BASELINES:
         v = s.verdict(a, f)
-        word = {"leads": "ISLA leads", "trails": "ISLA trails", "is level with": "level"}[v]
+        word = {"leads": "ISLA leads", "trails": "ISLA trails", "is level with": "level", "is not compared with": "not compared‡"}[v]
         cells.append(f"{S.fmt_ratio(s.ratio(a, f))} ({word})" if s.has(a) else "—")
     name = s.ds.name + ("†" if not s.ds.reference else "")
     out.append(f"| {name} | {s.fields[f]} | {s.err('ISLA', f):.4f} | {cells[0]} | {cells[1]} | {s.shift('ISLA', f, 'posed'):.3f} | @{s.ds.section} |")
@@ -44,7 +44,8 @@ print(": The standing of the three reference configurations on every dataset wit
       "each dataset (@sec-splits). The words apply the book's seed rule: a lead needs every seed of one architecture below every "
       "seed of the other and the seed means at least 3% apart. How to read this: a ratio above one favors ISLA; rows are "
       "different problems and are not comparable with one another; † marks a row whose ISLA checkpoints are of the raw-read "
-      "variant rather than the reference configuration (@sec-isla-normalized-reads). "
+      "variant rather than the reference configuration (@sec-isla-normalized-reads); ‡ marks a row whose baselines read the "
+      "freestream as a physical vector rather than a unit direction, so no comparison is drawn from it (@sec-de-result). "
       "Data: results/char/ (the artifact of each row is named in its chapter).")
 ```
 
@@ -119,12 +120,17 @@ def rel(k, f, a):
 def both(k, f):
     return " and ".join(f"{a} ÷ ISLA {S.fmt_ratio(rel(k, f, a)[0])}" for a in S.BASELINES if S.Standing(k).has(a))
 lines = []
+hl = S.Standing("hilift")
+_ud = __import__("json").load(open(S.RES / "udrvl_210_reduction_2026-09-10.json"))["arms_fp32"]
+UDF = _ud["gt_physical_lr1e3"]["pressure_l2"] / _ud["gt_unit_lr1e3"]["pressure_l2"]   # physical-vector over unit-direction GeoTransolver, 210-wing rung
+hl_txt = (f" On the 210-wing HiLiftAeroML rung {'ISLA ' + hl.verdict('GeoTransolver', 'pressure_l2') + ' GeoTransolver'} on pressure"
+          if hl.ds.fair_drive else
+          " The HiLiftAeroML standing is not compared: in its record the baselines read the freestream as a physical vector, an input "
+          f"difference that on this dataset multiplies GeoTransolver's own pressure error by {UDF:.1f} (@sec-de-result)")
 lines.append("**External aerodynamics, surface fields.** On the DrivAerML Surface task the three architectures are level "
              f"on pressure ({both('drivaerml_surface', 'pressure_l2')}) and on wall shear; on SHIFT-SUV, ISLA is level with "
-             f"GeoTransolver and Transolver leads on pressure ({both('shift_suv', 'pressure_l2')}). On the 210-wing "
-             f"HiLiftAeroML rung ISLA leads both on pressure ({both('hilift', 'pressure_l2')})"
-             + ("" if S.DATASETS["hilift"].reference else ", on checkpoints of the raw-read variant")
-             + " (@sec-scoreboard-200k, @sec-shift-suv-standing, @sec-de-result).")
+             f"GeoTransolver and Transolver leads on pressure ({both('shift_suv', 'pressure_l2')})."
+             + hl_txt + " (@sec-scoreboard-200k, @sec-shift-suv-standing).")
 lines.append("**Flow fields in the volume.** On the DrivAerML Volume task ISLA leads both baselines on pressure "
              f"({both('drivaerml_volume', 'pressure_l2')}) and velocity ({both('drivaerml_volume', 'velocity_l2')}). On "
              f"the AirfRANS interior task it leads by a wide margin on velocity ({both('airfrans', 'velocity_l2')}) and trails "

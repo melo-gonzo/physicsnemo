@@ -14,6 +14,19 @@ J = lambda p: json.load(open(RES / p))
 mean = statistics.mean
 pct = lambda r: f"{abs(1 - r) * 100:.0f}%"
 HL = S.Standing("hilift")
+UD = J("udrvl_210_reduction_2026-09-10.json")["arms_fp32"]   # the unit-direction control of the baselines on the 210-wing rung
+UD_GT = UD["gt_physical_lr1e3"]["pressure_l2"] / UD["gt_unit_lr1e3"]["pressure_l2"]
+UD_T = UD["transolver_physical_lr3e3"]["pressure_l2"] / UD["transolver_unit_lr3e3"]["pressure_l2"]
+UD_R = {a: UD[k]["pressure_l2"] / UD["isla"]["pressure_l2"] for a, k in (("GeoTransolver", "gt_unit_lr1e3"), ("Transolver", "transolver_unit_lr3e3"))}
+U_MAG = float(np.linalg.norm(load_problem("hilift")[1]["U_inf"]))   # |U_inf| of the drawn validation case, inch/s
+DRIVE_NOTE = ("" if HL.ds.fair_drive else
+    "In this standing's record GeoTransolver and Transolver read the freestream as the physical velocity vector in inch/s "
+    f"(the recipe's `global_data.U_inf`, {U_MAG:,.0f} in/s on the case of @fig-problem-hilift and turning with the angle of attack), "
+    "while ISLA reads its unit direction. "
+    "That input difference matters on this dataset: on the 210-wing rung, the same two baselines trained with the unit direction "
+    f"score {UD_GT:.1f} times (GeoTransolver) and {UD_T:.1f} times (Transolver) lower pressure error than with the physical vector, "
+    f"and there they reach {UD_R['GeoTransolver']:.2f} and {UD_R['Transolver']:.2f} of the error of the ISLA of that study. "
+    "So this chapter gives the standing's numbers and draws no comparison between ISLA and the baselines from them.")
 HL_F = tuple(HL.fields)              # pressure_l2, tau_wall_l2
 KEY = {"ISLA": "isla_ref", "GeoTransolver": "gt", "Transolver": "t"}
 seeds_txt = lambda a, f, p="native": " and ".join(f"{v:.4f}" for v in HL.seeds(a, f, p))
@@ -107,10 +120,13 @@ RATIO = {k: mean(v[3]) / mean(v[2]) for k, v in RUNGS.items()}
 #| label: para-hilift-lede
 #| output: asis
 print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference configuration (@sec-protocol). "
-      f"In one paragraph: at the 210-wing rung{'' if HL.ds.reference else ', with ISLA represented by the raw-read variant,'} {clause(HL, 'pressure_l2')} on surface pressure and {clause(HL, 'tau_wall_l2')} on "
-      "wall shear on the native mesh, and only ISLA keeps its error on a uniform point cloud of the aircraft and under rotation and "
-      "translation (@sec-de-result). On the data-efficiency ladders, run on a smaller ISLA, ISLA's error falls faster with training cases "
-      "than GeoTransolver's, and it is paid for in distinct geometries rather than in cases (@sec-hilift-ladders).")
+      + (f"In one paragraph: at the 210-wing rung {clause(HL, 'pressure_l2')} on surface pressure and {clause(HL, 'tau_wall_l2')} on wall shear on the native mesh. "
+         if HL.ds.fair_drive else
+         "In one paragraph: the 210-wing standing's baselines read the freestream as a physical vector rather than a unit direction, so its native "
+         "numbers are given but not compared (@sec-de-result). ")
+      + "Only ISLA keeps its error on a uniform point cloud of the aircraft and under rotation and translation. On the data-efficiency "
+      "ladders, run on a smaller ISLA against unit-direction baselines, GeoTransolver is ahead where the training set is small and the gap "
+      "closes as it grows, and what ISLA needs is distinct geometries rather than cases (@sec-hilift-ladders).")
 ```
 
 ## The problem: 180 wings at ten angles {#sec-dataset-hilift}
@@ -339,9 +355,15 @@ The dataset's volume files carry interior coordinates for 31 of the 1,800 cases 
 ```{python}
 #| label: para-de-lede
 #| output: asis
-print(f"**At the 210-wing rung, on the native mesh, {clause(HL, 'pressure_l2')} on surface pressure and {clause(HL, 'tau_wall_l2')} "
-      "on wall shear.** On the uniform point cloud and under rotation and translation ISLA's error is its native error and the baselines' "
-      "is not. @tbl-hilift-protocols is the standing and @fig-hilift-shifts draws it.")
+if HL.ds.fair_drive:
+    print(f"**At the 210-wing rung, on the native mesh, {clause(HL, 'pressure_l2')} on surface pressure and {clause(HL, 'tau_wall_l2')} "
+          "on wall shear.** On the uniform point cloud and under rotation and translation ISLA's error is its native error and the baselines' "
+          "is not. @tbl-hilift-protocols is the standing and @fig-hilift-shifts draws it.")
+else:
+    print("**At the 210-wing rung, the standing's native numbers do not compare like with like, and its protocol columns do.** "
+          + DRIVE_NOTE + " Under the uniform point cloud and under rotation and translation, each architecture is read against its own "
+          "native error: ISLA's error stays at its native value and the baselines' does not. "
+          "@tbl-hilift-protocols is the standing and @fig-hilift-shifts draws it.")
 if not HL.ds.reference:
     print("\nISLA's arm of this standing is the raw-read variant at the reference size: its checkpoints' slice sublayer pools and "
           "broadcasts the raw token state rather than its normalization (@sec-isla-layer); the GeoTransolver and Transolver arms are "
@@ -374,9 +396,14 @@ protocol_dots(HL, HL_F); plt.show()
 #| output: asis
 posed_floor = min(HL.err(a, f, "posed") for a in S.BASELINES for f in HL_F)
 sep = all(min(HL.seeds(b, "pressure_l2")) > max(HL.seeds("ISLA", "pressure_l2")) for b in S.BASELINES)
-print(f"Three readings. **First, the native lead is a lead by the seed rule:** ISLA's pressure seeds are {seeds_txt('ISLA', 'pressure_l2')}, "
-      f"GeoTransolver's {seeds_txt('GeoTransolver', 'pressure_l2')} and Transolver's {seeds_txt('Transolver', 'pressure_l2')}"
-      f"{', so every baseline seed sits above every ISLA seed' if sep else ''}, and the wall-shear ordering follows pressure. "
+first = (f"**First, the native lead is a lead by the seed rule:** ISLA's pressure seeds are {seeds_txt('ISLA', 'pressure_l2')}, "
+         f"GeoTransolver's {seeds_txt('GeoTransolver', 'pressure_l2')} and Transolver's {seeds_txt('Transolver', 'pressure_l2')}"
+         f"{', so every baseline seed sits above every ISLA seed' if sep else ''}, and the wall-shear ordering follows pressure. "
+         if HL.ds.fair_drive else
+         f"**First, the native seeds:** ISLA's pressure seeds are {seeds_txt('ISLA', 'pressure_l2')}, GeoTransolver's "
+         f"{seeds_txt('GeoTransolver', 'pressure_l2')} and Transolver's {seeds_txt('Transolver', 'pressure_l2')}, read with the input "
+         "difference above. ")
+print(f"Three readings. " + first +
       f"**Second, the uniform point cloud costs the baselines {S.fmt_ratio(HL.shift('GeoTransolver', 'pressure_l2', 'area'))} "
       f"(GeoTransolver) and {S.fmt_ratio(HL.shift('Transolver', 'pressure_l2', 'area'))} (Transolver) times their native pressure error, "
       f"and ISLA {HL.shift('ISLA', 'pressure_l2', 'area'):.3f}.** A 290-million-cell surface is meshed far more finely in some places than in "
@@ -599,16 +626,20 @@ print("**Across a boundary in the geometry parameters ISLA does not generalize b
 
 ## What this dataset does not say {#sec-de-limits}
 
-**The standing is one rung of one aircraft family in one far-field condition, scored on a validation set; the ladders measure sample complexity on a smaller ISLA.** The reference configurations are each the most accurate of their architecture under one memory budget, not matched in parameters or step time, so the native lead at 210 wings is a statement about what that budget buys each architecture on this family (@sec-limits).
+**The standing is one rung of one aircraft family in one far-field condition, scored on a validation set; the ladders measure sample complexity on a smaller ISLA.** The reference configurations are each the most accurate of their architecture under one memory budget, not matched in parameters or step time, so a native comparison at 210 wings, once its baselines read the unit direction, will be a statement about what that budget buys each architecture on this family (@sec-limits).
 
 Questions this dataset raises and leaves open:
 
 ```{python}
 #| label: para-hilift-open-reference
 #| output: asis
+if not HL.ds.fair_drive:
+    print("- **How do the three reference configurations compare on this rung when every model reads the freestream as a unit "
+          "direction?** Unit-direction GeoTransolver and Transolver lanes at their reference configurations, scored by the same "
+          "protocol beside ISLA's, settle it.")
 if not HL.ds.reference:
-    print("- **Does the native lead hold for ISLA's reference configuration?** The ISLA arm of @tbl-hilift-protocols is the raw-read "
-          "variant; checkpoints of the reference configuration on this rung, scored by the same protocol, settle it.")
+    print("- **What does ISLA's reference configuration, with the normalized slice reads, score on this rung?** The ISLA arm of "
+          "@tbl-hilift-protocols is the raw-read variant; checkpoints of the reference configuration, scored by the same protocol, settle it.")
 ```
 - **How does ISLA extrapolate in flow regime?** The sealed angle-of-attack and stall test sets of @tbl-hilift-splits hold out the high angles and the post-stall flow; no ISLA checkpoint has been scored on them.
 - **Why does GeoTransolver gain less per case?** The ladders show the ratio closing with training cases and no element of the aircraft carrying the difference; what in the two architectures sets the slope is open (@sec-open-questions).
