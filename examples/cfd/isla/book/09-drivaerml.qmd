@@ -30,7 +30,7 @@ def clause(st, f, p="native"):
     return "ISLA " + " and ".join(f"{v[b]} {b} ({b} ÷ ISLA {r[b]})" for b in S.BASELINES)
 
 
-def protocol_dots(st, fields, protos=None):
+def protocol_dots(st, fields, protos=None, metric="area-weighted relative L2 error"):
     """Error of each architecture under each scoring of one checkpoint: one panel per field, a row per scoring,
     seed means as the architecture's marker and the two seeds as small dots, logarithmic error axis."""
     protos = tuple(protos or st.ds.protocols)
@@ -55,7 +55,7 @@ def protocol_dots(st, fields, protos=None):
     ax.set_xscale("log"); ax.set_xlim(0.025, 3.0)
     ticks = [0.03, 0.05, 0.1, 0.2, 0.5, 1, 2]
     ax.set_xticks(ticks); ax.set_xticklabels([f"{t:g}" for t in ticks]); ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
-    ax.set_xlabel("area-weighted relative L2 error [–], seed mean (marker) and seeds (dots)")
+    ax.set_xlabel(f"{metric} [–], seed mean (marker) and seeds (dots)")
     axes[0].text(1.04, len(protos) - 0.6, "1 = predicting\nzero everywhere", fontsize=7.5, color=MUTED, va="top")
     h = [mpl.lines.Line2D([], [], **series_kwargs(KEY[a], ls="none", ms=7)) for a in S.ARCHS]
     fig.legend(handles=h, loc="upper center", ncol=3, fontsize=8.5, bbox_to_anchor=(0.55, 1.0))
@@ -397,18 +397,18 @@ plt.show()
 
 **Metric.** For one car and one field the error is the relative L2 over the prediction points, with the field in its training normalization: pressure as $C_p$; velocity as $U / |U_\infty|$ with the far-field speed included, the Frobenius norm over the three components; eddy viscosity standardized to zero mean and unit scale before scoring. The eddy-viscosity denominator is the norm of a mean-subtracted field, so an eddy-viscosity error of 0.10 is not a 10% error in physical $\nu_t$; orderings under the metric hold, percentages do not. The velocity denominator includes the far-field speed, which every point carries, so the velocity error reads small against the wake's own deficit. The reported number is the mean over the 48 cars. Training and scoring use 200,000 boundary cells and 200,000 interior points per car (Transolver trains at 100,000), 500 epochs, two seeds, float32.
 
-**What each architecture receives.** The three architectures do not see the same inputs. GeoTransolver and Transolver never see the boundary sample. Their tokens are the interior points alone, each carrying its coordinates, the far-field direction, and the exact signed distance to the full-resolution body and its gradient, computed by the datapipe. That is the boundary in a different, denser form. ISLA's tokens are the boundary sample and the interior points together; the interior points carry the same stored distance and gradient as inputs, and ISLA adds its own wall distance and direction from the nearest boundary token.
+**What each architecture receives.** The three architectures do not see the same inputs. GeoTransolver and Transolver never see the boundary sample. Their tokens are the interior points alone, each carrying its coordinates, the far-field direction, and the exact signed distance to the full-resolution body and its gradient, computed by the datapipe. That is the boundary in a different, denser form. ISLA's tokens are the boundary sample and the interior points together. ISLA does not read the stored field: each interior point's wall distance and direction are computed inside the model from the nearest token of the boundary sample.
 
 | architecture | what an interior point is | what it knows about the geometry | does a prediction depend on the other points requested? |
 |---|---|---|---|
 | GeoTransolver | a token routed into slices with the other interior points | its signed distance and wall normal; ball-query features over neighboring interior points at six radii; no surface tokens | yes |
 | Transolver | a token routed into slices with the other interior points | its signed distance and wall normal; no surface tokens | yes |
-| ISLA | an *interacting prediction point*: a token in the encoder beside the surface tokens, with a learned routing weight | its relational invariants against the slice anchors, its wall normal and signed distance, and its distance and direction to the nearest boundary token | yes |
+| ISLA | an *interacting prediction point*: a token in the encoder beside the surface tokens, with a learned routing weight | its relational invariants against the slice anchors, with the direction to the nearest boundary token as its normal, and its signed distance to that token | yes |
 | ISLA-DTT | a *read-only prediction point*: it reads the slices at every layer and never writes into them, and reads every boundary cell through a tree | as ISLA, plus the relative geometry of every boundary cell it reads | no |
 
 #### ISLA's interior prediction points {#sec-interior-query-tokens}
 
-**ISLA admits the interior points into its encoder as tokens, so the twelve slice layers run over the surface and the air together.** Each interior point is seeded the way a boundary token is, from the relational invariants of its position against the slice anchors (@sec-isla-relational), its wall normal and the global direction, plus a learned type embedding. Its own geometry, a signed distance $s$ and a direction to the nearest boundary token, enters as the channels $[s,\ \mathrm{sign}(s) \log(|s| + \epsilon)]$ with $s$ in the length unit $L$. The interior points take part in the measure-weighted routing with a learned total weight, a fraction of the whole boundary's measure split equally over them, so their share of each slice does not depend on how many are requested. Every input is a function of relative geometry, so the rigid-motion contract holds exactly (@sec-isla-contracts). One property is given up: an interior point's prediction depends on the other interior points of the request, because they write into the same slices. ISLA-DTT keeps query independence instead (@sec-arch-modes); @sec-interior-read-only measures what that costs.
+**ISLA admits the interior points into its encoder as tokens, so the twelve slice layers run over the surface and the air together.** Each interior point is seeded the way a boundary token is, from the relational invariants of its position against the slice anchors (@sec-isla-relational) and the global direction, plus a learned type embedding. It has no normal of its own, so the unit direction $u_q$ from its nearest boundary token plays that part in every invariant, and its distance $d_q$ to that token, signed by the token's normal, enters as the channels $[d_q / L,\ \mathrm{sign}(d_q) \log(|d_q| / L + \epsilon)]$ in the length unit $L$. Both are computed inside the model by an exact nearest-neighbor search over the boundary sample; the dataset's stored distance field is not an input. The interior points take part in the measure-weighted routing with a learned total weight, a fraction of the whole boundary's measure split equally over them, so their share of each slice does not depend on how many are requested. Every input is a function of relative geometry, so the rigid-motion contract holds exactly (@sec-isla-contracts). One property is given up: an interior point's prediction depends on the other interior points of the request, because they write into the same slices. ISLA-DTT keeps query independence instead (@sec-arch-modes); @sec-interior-read-only measures what that costs.
 
 #### Why the Volume task is harder {#sec-interior-harder}
 
@@ -485,13 +485,30 @@ The native tie is a statement about these three configurations under one memory 
 #| output: asis
 print(f"**On the DrivAerML Volume task {clause(VOL, 'pressure_l2')} on interior pressure and {clause(VOL, 'velocity_l2')} on "
       f"velocity; on eddy viscosity {clause(VOL, 'nut_l2')}.** Rotated and translated, ISLA's error is its native error and the "
-      "baselines' errors rise to near or above the score of predicting zero. @tbl-drivaerml-volume-protocols is the standing.")
+      "baselines' errors rise to near or above the score of predicting zero. @tbl-drivaerml-volume-protocols is the standing and @fig-drivaerml-volume-shifts draws it.")
 ```
 
 ```{python}
 #| label: make-tbl-drivaerml-volume-protocols
 #| output: asis
 print(VOL.table("tbl-drivaerml-volume-protocols", "The DrivAerML Volume task, 435 training cars, 48 validation cars, 200,000 boundary cells and 200,000 interior points per car"))
+```
+
+```{python}
+#| label: fig-drivaerml-volume-shifts
+#| fig-cap: >
+#|   The DrivAerML Volume task on the native mesh and rotated and translated:
+#|   the interior relative L2 error (@sec-interior-task) of each architecture's reference configuration on
+#|   pressure, velocity and eddy viscosity, seed mean (marker, printed) and the
+#|   two seeds (black dots), logarithmic axis; ISLA blue squares, GeoTransolver
+#|   red circles, Transolver amber triangles; the dashed line at one is the
+#|   error of predicting zero everywhere. How to read this: in the native rows
+#|   ISLA's square sits left of both baselines on pressure and velocity and
+#|   right of GeoTransolver's circle on eddy viscosity; posed, only ISLA's
+#|   marker stays. The uniform point cloud is left out because on this task it
+#|   redraws only ISLA's input (@sec-interior-boundary-law). Data:
+#|   results/char/drivaerml_volume_a2.json.
+protocol_dots(VOL, VOL_F, metric="relative L2 error over the interior points"); plt.show()
 ```
 
 ```{python}
@@ -618,6 +635,75 @@ print(f"Under the area-proportional boundary draw ISLA's interior error is {' / 
       "anchors and routing weights are Horvitz–Thompson quadratures over the boundary and are unbiased under either law, as the Surface "
       "task shows. The interior points' built-in wall distance is not a quadrature: it is a minimum over the sample, and a minimum "
       "changes when the sample does. @tbl-vol-geo takes the sensitivity apart.")
+```
+
+```{python}
+#| label: fig-interior-nearest-token
+#| fig-cap: >
+#|   Why a nearest-token distance depends on the sample, on the book's running
+#|   airfoil (a concept figure; no trained model). Top: the airfoil sampled
+#|   twice with the same number of tokens, once graded toward the leading and
+#|   trailing edges as a mesher would (black dots) and once uniformly in
+#|   arclength (open circles); each line joins a prediction point near the wall
+#|   (aqua) to its nearest token in one sample (solid: graded; dashed: uniform).
+#|   Bottom: for 600 points at random distances from the wall, the built-in
+#|   distance under the uniform sample divided by that under the graded one,
+#|   against the exact distance; the dotted line is the mean token spacing. How
+#|   to read this: within about one token spacing of the wall the same point's
+#|   built-in distance changes by a factor of several between the two samples,
+#|   and far from the wall it does not; the figure shows the input, not its
+#|   effect on any prediction, which is @tbl-vol-geo.
+fine = joukowski(n_cells=4000)
+n = 48
+t = np.linspace(0, 1, n + 1)
+graded = joukowski(n_cells=n, frac=t - 0.9 * np.sin(4 * np.pi * t) / (4 * np.pi))      # dense at both edges, as a mesher grades
+rng = np.random.default_rng(3)
+u = np.concatenate([[0], np.sort(rng.uniform(0, 1, n - 1)), [1]])
+unif = joukowski(n_cells=n, frac=u)                                                    # positions uniform in arclength
+A, B = graded["mid"], unif["mid"]
+k = rng.choice(len(fine["mid"]), 600, replace=False)
+off = np.exp(rng.uniform(np.log(0.005), np.log(1.0), len(k)))
+P = fine["mid"][k] + off[:, None] * fine["nrm"][k]
+def nearest(P, T):
+    d = np.linalg.norm(P[:, None, :] - T[None], axis=2); i = d.argmin(1); return d[np.arange(len(P)), i], i
+dex, _ = nearest(P, fine["mid"]); dA, iA = nearest(P, A); dB, iB = nearest(P, B)
+h = fine["w"].sum() / n
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 7.0), gridspec_kw=dict(height_ratios=[0.8, 1.0], hspace=0.35))
+ax1.plot(fine["xy"][:, 0], fine["xy"][:, 1], color=BASELINE, lw=1.4, zorder=1)
+ax1.plot(A[:, 0], A[:, 1], "o", ms=4.5, color=INK, zorder=3)
+ax1.plot(B[:, 0], B[:, 1], "o", ms=5.5, mfc="white", mec=INK2, mew=1.2, zorder=3)
+cand = [i for i in range(len(P)) if -1.0 < P[i, 0] < 1.5 and P[i, 1] > 0.2 and 0.03 < off[i] < 0.15]
+sel = sorted(cand, key=lambda i: P[i, 0])[::max(1, len(cand) // 6)][:6]
+for i in sel:
+    ax1.plot([P[i, 0], A[iA[i], 0]], [P[i, 1], A[iA[i], 1]], color=INK, lw=1.0, zorder=2)
+    ax1.plot([P[i, 0], B[iB[i], 0]], [P[i, 1], B[iB[i], 1]], color=INK2, lw=1.0, ls="--", zorder=2)
+    ax1.plot(*P[i], "o", ms=6, mfc=AQUA, mec="white", zorder=5)
+ax1.set_xlim(-1.2, 1.7); ax1.set_ylim(-0.12, 0.5); ax1.set_aspect("equal"); ax1.grid(False)
+for s_ in ax1.spines.values(): s_.set_visible(False)
+ax1.set_xlabel("x [–]"); ax1.set_ylabel("y [–]")
+ax1.set_title("two samples of one airfoil: graded (black) and uniform in arclength (open);\nlines join each prediction point (aqua) to its nearest token in each sample", fontsize=9.5)
+r = dB / dA
+ax2.loglog(dex, r, "o", ms=3, mfc=AQUA, mec="white", mew=0.3, alpha=0.9)
+ax2.axhline(1, color=MUTED, lw=1, ls="--"); ax2.axvline(h, color=MUTED, lw=1, ls=":")
+ax2.text(h * 1.08, 6, "mean token\nspacing", fontsize=8, color=MUTED, va="top")
+ax2.set_ylim(0.15, 8); ax2.set_xlim(0.004, 1.2)
+ax2.set_yticks([0.2, 0.5, 1, 2, 5]); ax2.set_yticklabels(["0.2", "0.5", "1", "2", "5"])
+ax2.set_xticks([0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1]); ax2.set_xticklabels(["0.005", "0.01", "0.02", "0.05", "0.1", "0.2", "0.5", "1"])
+ax2.yaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax2.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+ax2.set_xlabel("exact distance of the point to the wall [–]")
+ax2.set_ylabel("built-in distance,\nuniform sample ÷\ngraded sample [–]", rotation=0, ha="right", va="center")
+ax2.set_title("the same point's built-in wall distance under the two samples", fontsize=9.5)
+plt.show()
+```
+
+```{python}
+#| label: para-nearest-token
+#| output: asis
+near = dex < h / 2
+print(f"@fig-interior-nearest-token shows the mechanism on the running airfoil. Within half a token spacing of the wall the two samples "
+      f"give the same point built-in distances that differ by a typical factor of {np.exp(np.sqrt(np.mean(np.log(r[near]) ** 2))):.1f}; "
+      f"beyond two spacings the factor is {np.exp(np.sqrt(np.mean(np.log(r[dex > 2 * h]) ** 2))):.2f} (the typical factor is the exponential of the RMS of the log ratio). On the car most interior points lie "
+      "near the wall, because the volume mesh, and so the sample of it, is refined there.")
 ```
 
 ```{python}
