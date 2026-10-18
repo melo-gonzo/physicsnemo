@@ -122,7 +122,9 @@ print("\n: The cost of training on DeepJEB++ at the three reference configuratio
 #| output: asis
 ver = {a: {ST.verdict(a, f) for f in FIELDS} for a in S.BASELINES}
 same = all(len(v) == 1 for v in ver.values())
-who = " and ".join(f"{next(iter(ver[a]))} {S.CONFIG[a]}" for a in S.BASELINES) if same else "is mixed against the baselines"
+kinds = {next(iter(ver[a])) for a in S.BASELINES} if same else set()
+who = (f"{next(iter(kinds))} " + " and ".join(S.CONFIG[a] for a in S.BASELINES) if len(kinds) == 1 else
+       " and ".join(f"{next(iter(ver[a]))} {S.CONFIG[a]}" for a in S.BASELINES) if same else "is mixed against the baselines")
 print(f"**On DeepJEB++ at 12,451 training brackets and 40 epochs, scored on the native mesh, ISLA {who} on both fields"
       f"{', every ISLA seed below every seed of both baselines on both fields' if SEP else ''}.** @tbl-deepjeb-protocols is the standing. "
       f"*Leads* means that every seed of one architecture sits below every seed of the other and the seed means differ by at least "
@@ -176,9 +178,11 @@ def departs(e):
     return None, None
 dep = [departs(e) for e in raw]
 last = [e[max(e, key=int)]["von_mises_l2_val"] for e in raw]
+lo, hi = f"{min(d[1] for d in dep):.0f}", f"{max(d[1] for d in dep):.0f}"
+fac = lo if lo == hi else f"{lo} to {hi}"
 print("**One study ran on this dataset, and it belongs to the mechanism of the slice layer.** The raw-read variant of ISLA, an ablation in "
       "which the slice sublayer pools and broadcasts the raw token state instead of its normalized form, trained here at the same rate, "
-      f"has its validation loss rise {min(d[1] for d in dep):.0f} to {max(d[1] for d in dep):.0f} times by epoch {max(d[0] for d in dep)} and "
+      f"has its validation loss rise {fac} times by epoch {max(d[0] for d in dep)} and "
       f"never recovers: its von Mises error at epoch 40 is {min(last):.2f} to {max(last):.2f}, the field-mean level. Normalizing the slice "
       "sublayer's reads removes this, which is why the reference configuration trains on DeepJEB++ at all (@sec-isla-layer). "
       "Data: results/char/deepjeb_trajectories_2026-10-07.json (trainer-side validation, bfloat16).")

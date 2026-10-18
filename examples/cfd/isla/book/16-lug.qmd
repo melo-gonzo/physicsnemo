@@ -218,7 +218,7 @@ print(f"**Rotated and translated, the baselines fail and ISLA bends.** GeoTranso
 #|   reorder (about $2^{-24}\lvert x\rvert / d$ at a node a distance $d$ from its
 #|   nearest sample). Bottom: two layers of the lug's
 #|   nodes seen along the hole's axis, the top face (on the boundary) and the
-#|   middle layer through the thickness (interior), colored by how far the
+#|   middle layer through the thickness (interior but for its rim), colored by how far the
 #|   direction $u$ turns when the lug is rotated and translated in float32; gray
 #|   nodes keep their nearest sample. How to read this: a curve's height at the
 #|   band is the share of nodes whose nearest sample is decided by rounding; the
@@ -256,7 +256,7 @@ for col, (lay, name) in enumerate(((10, "top face (on the boundary)"), (5, "midd
     if col == 0: bx.set_ylabel("y [mm]")
     else: bx.set_yticklabels([])
     bx.set_title(f"{name}: {int(sw.sum())} of {int(m.sum())} switch", fontsize=9)
-cb = fig.colorbar(sc, ax=fig.axes[1:], fraction=0.03, pad=0.02, ticks=[0, 45, 90, 135, 180]); cb.outline.set_visible(False)
+cb = fig.colorbar(sc, ax=fig.axes[1:], orientation="horizontal", fraction=0.05, pad=0.2, aspect=40, ticks=[0, 45, 90, 135, 180]); cb.outline.set_visible(False)
 cb.set_label("turn of $u$ under the pose [deg]")
 plt.show()
 ```
@@ -273,7 +273,7 @@ print(f"**The counts.** On this lug {100 * LT['tie_fraction_by_rel_gap']['1e-07'
       f"in the interior, the direction $u$ turns by more than 30°; {LT['sign_flips_on_boundary_nodes']:,} of the "
       f"{LT['n_on_boundary']:,} surface nodes also change the sign of their distance. Data: results/char/solids_ties_2026-10-18.json.")
 print()
-print("**This is the input side of the mechanism, and it explains the size of the effect.** Each switched node presents ISLA with an "
+print("**The size of the input change tracks the size of the shift.** Each switched node presents ISLA with an "
       "order-one change of its direction input, in thousands of nodes at once, and the attention spreads each change across the field. "
       "On Tensile2d a few percent of the nodes switch, all of them on the wall, and ISLA's error moves by a few percent; here three nodes in "
       "ten switch, many deep inside the body, and ISLA's error grows several-fold. The other interior tasks of the book use unstructured "

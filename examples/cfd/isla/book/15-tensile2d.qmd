@@ -14,7 +14,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 RES = S.RES
 ST = S.Standing("tensile2d")
 FIELDS = list(ST.fields)                     # stress_l2, displacement_l2, q_l2
-SD = ("stress_l2", "displacement_l2")         # the two load-bearing fields
+SD = ("stress_l2", "displacement_l2")         # stress and displacement
 WORD = {"stress_l2": "stress", "displacement_l2": "displacement", "q_l2": "plastic strain"}
 N_VAL = ST.cell("ISLA", "stress_l2")["n_cases"]
 
@@ -77,7 +77,7 @@ face = np.array([BC[k] if k != "free" else "#d9d8d0" for k in kinds])
 ax.add_collection3d(Poly3DCollection(bp[L["bnd_cells"]], facecolors=face, edgecolors="none"))
 ext = bp.max(0) - bp.min(0)
 ax.set_xlim(bp[:, 0].min(), bp[:, 0].max()); ax.set_ylim(bp[:, 1].min(), bp[:, 1].max()); ax.set_zlim(bp[:, 2].min(), bp[:, 2].max())
-ax.set_box_aspect(tuple(ext / ext.max()), zoom=0.95); ax.view_init(elev=30, azim=-60); ax.set_axis_off()
+ax.set_box_aspect(tuple(ext / ext.max()), zoom=1.1); ax.view_init(elev=30, azim=-60); ax.set_axis_off()
 ax.set_title("GINOT bracket lug", fontsize=10)
 
 J, _ = load_samples("deepjeb")
@@ -101,7 +101,7 @@ fig.legend(handles=[Patch(color=BC["value"], label="prescribed displacement (val
 plt.show()
 ```
 
-In all three the reader's familiar objects carry over directly. A boundary condition is a label on the boundary cells that carry it: a prescribed displacement is a *value* condition, a prescribed traction a *flux* condition. The geometry, the conditions and the loads enter as ISLA's boundary tokens, one per sampled boundary cell. The material and load parameters enter as *global scalars*, numbers that hold for the whole case. A direction that holds for the whole case, such as DeepJEB++'s load direction, enters as a *global vector* $\hat g_k$. The fields are predicted at *prediction points*: on Tensile2d and the lug every mesh node, which joins the boundary tokens inside the network (@sec-isla-inputs).
+The three map onto ISLA's inputs the same way. A boundary condition is a label on the boundary cells that carry it: a prescribed displacement is a *value* condition, a prescribed traction a *flux* condition. The geometry, the conditions and the loads enter as ISLA's boundary tokens, one per sampled boundary cell. The material and load parameters enter as *global scalars*, numbers that hold for the whole case. A direction that holds for the whole case, such as DeepJEB++'s load direction, enters as a *global vector* $\hat g_k$. The fields are predicted at *prediction points*: on Tensile2d and the lug every mesh node, which joins the boundary tokens inside the network (@sec-isla-inputs).
 
 ## The problem: a notched specimen under a varying load and material {#sec-tensile2d-problem}
 
@@ -267,12 +267,14 @@ ISLA_EPOCH = COST["ISLA"]["epoch_seconds"] / statistics.mean(COST[a]["epoch_seco
 #| label: tensile2d-lede
 #| output: asis
 v = {a: {f: ST.verdict(a, f) for f in FIELDS} for a in S.BASELINES}
-def phrase(a):
+def phrase(a, name):
     by = {}
     for f in FIELDS:
         by.setdefault(v[a][f], []).append(WORD[f])
-    return "; ".join(f"ISLA {k} {S.CONFIG[a]} on {' and '.join(fs)}" for k, fs in by.items())
-print(f"**On PLAID Tensile2d at 400 training specimens, scored on the native mesh, {phrase('GeoTransolver')}; {phrase('Transolver')}.** "
+    parts = [f"{k.replace('is level with', 'is level')} on {' and '.join(fs)}" for k, fs in by.items()]
+    return f"against {name} ISLA " + " and ".join(parts)
+print(f"**On PLAID Tensile2d at 400 training specimens, scored on the native mesh: {phrase('GeoTransolver', S.CONFIG['GeoTransolver'])}; "
+      f"{phrase('Transolver', S.CONFIG['Transolver'])}.** "
       f"@tbl-tensile2d-protocols is the standing. Here and below, *leads* means that every seed of one architecture sits below every seed "
       f"of the other and the seed means differ by at least {100 * S.TIE_BAND:.0f}%; otherwise the two are *level*. Every ratio is "
       "baseline ÷ ISLA, so a value below one favors the baseline.")
@@ -292,7 +294,7 @@ print(ST.table("tbl-tensile2d-protocols", f"PLAID Tensile2d, 400 training specim
 gt = {f: ST.ratio("GeoTransolver", f) for f in FIELDS}; tr = {f: ST.ratio("Transolver", f) for f in FIELDS}
 b_posed = [ST.err(a, f, "posed") for a in S.BASELINES for f in SD]
 ahead = [f"{a} on {' and '.join(WORD[f] for f in SD if v[a][f] == 'trails')}" for a in S.BASELINES if any(v[a][f] == "trails" for f in SD)]
-print(f"**On the two load-bearing fields the baselines are the more accurate: {' and '.join(ahead)} lead ISLA.** GeoTransolver ÷ ISLA is "
+print(f"**On stress and displacement the baselines are the more accurate: {' and '.join(ahead)} lead ISLA.** GeoTransolver ÷ ISLA is "
       f"{gt['stress_l2']:.2f} on stress and {gt['displacement_l2']:.2f} on displacement; Transolver ÷ ISLA is {tr['stress_l2']:.2f} and "
       f"{tr['displacement_l2']:.2f}. Both baselines get there with a fraction of ISLA's parameters (@tbl-tensile2d-cost), on a problem whose "
       "boundary is a few hundred segments and whose physics parameters are six scalars. Where on the specimen ISLA's excess error sits is "
@@ -430,7 +432,7 @@ print(f"\n: ISLA on the {N_VAL} validation specimens with the boundary polyline 
       "Data: results/char/area2_2026-10-16.json. {#tbl-tensile2d-area2}")
 ```
 
-**Thinning the free edges multiplies ISLA's stress and displacement errors by `{python} f"{min(CNT):.0f}"` to `{python} f"{max(CNT):.0f}"`, and the law of the draw does nothing, because on this polyline the two laws are the same draw.** @tbl-tensile2d-area2 keeps every labeled segment and thins the free notches to about a third. The segments are nearly equal in length, so drawing in proportion to length or uniformly keeps almost the same segments, and area ÷ uniform is `{python} f"{min(LAW):.2f}"` to `{python} f"{max(LAW):.2f}"`. The large count effect has the mechanism of the previous section behind it: with a free segment removed, the nodes beside it read a sample farther away, a different direction and a different distance, and the prediction follows. The plastic-strain row sits inside its own noise floor, since a redraw moves the few yielded nodes' error by as much as the law does.
+**Thinning the free edges multiplies ISLA's stress and displacement errors by `{python} f"{min(CNT):.0f}"` to `{python} f"{max(CNT):.0f}"`, and the law of the draw has no effect, because on this polyline the two laws are the same draw.** @tbl-tensile2d-area2 keeps every labeled segment and thins the free notches to about a third. The segments are nearly equal in length, so drawing in proportion to length or uniformly keeps almost the same segments, and area ÷ uniform is `{python} f"{min(LAW):.2f}"` to `{python} f"{max(LAW):.2f}"`. Thinning changes the input of every node beside a removed segment: its nearest sample is farther away, so its distance and direction change. The table does not separate that from the change of the slice states, which become measure-weighted means over fewer tokens. The plastic-strain row sits inside its own noise floor, since a redraw moves the few yielded nodes' error by as much as the law does.
 
 ## What this dataset does not say {#sec-tensile2d-limits}
 
@@ -438,6 +440,6 @@ print(f"\n: ISLA on the {N_VAL} validation specimens with the boundary polyline 
 
 - **Where ISLA's deficit sits is open.** GeoTransolver's lead on stress and displacement is the one standing on the solids that favors a baseline, and the error per node has not been compared between the architectures. One measurement would locate it: ISLA's error on the polyline nodes against its error in the interior, set beside the baselines'. If ISLA's excess sits on the polyline, the tie construction of @sec-tensile2d-ties accounts for part of the native deficit as well; if it sits at the notch root, it does not.
 - **The pose contract holds to a few percent, not exactly.** The residual shift is the nearest-sample construction at nodes on the boundary, a property of ISLA's interior geometry input on meshes whose prediction points include boundary nodes. An exact, continuous form of that input is an open design question (@sec-open-questions).
-- **The plastic-strain column is an ordering on a constant-offset metric.** It says little about how well any of the three predicts the plastic field, since a handful of validation specimens yield.
+- **The plastic-strain column is an ordering on a constant-offset metric.** It says little about how well any of the three predicts the plastic field, since the 69 validation specimens that never yield dominate it.
 - **The sampling law is not separable here.** The segments are nearly equal, so the length-proportional and uniform draws coincide, and only ISLA reads the boundary; independence of the sampling law is measured on the surface datasets (@sec-invariances).
 - **One specimen family, configurations not matched in cost.** The notch moves and widens and the outline stays a tension specimen. The three architectures run at their reference configurations with the parameters and memory of @tbl-tensile2d-cost.
