@@ -349,7 +349,7 @@ ro_ratio = lambda k: [m / i for m, i in zip(RO[k][2], RO_I)]
 dtt = ro_ratio("ISLA-DTT (forest read at θ = 1)"); nor = ro_ratio("passive prediction points, no boundary read")
 dtt_dense = [a / b for a, b in zip(RO["ISLA-DTT (forest read at θ = 1)"][2], RO["passive prediction points, dense global read"][2])]
 print(f"**On the airfoil, prediction points that never write into the slices lose nothing, and a global read of the boundary makes them "
-      f"more accurate than interacting ones: ISLA-DTT ÷ ISLA is {' / '.join(f'{v:.2f}' for v in dtt)} on pressure / velocity / eddy viscosity "
+      f"more accurate than interacting ones on pressure and velocity: ISLA-DTT ÷ ISLA is {' / '.join(f'{v:.2f}' for v in dtt)} on pressure / velocity / eddy viscosity "
       "within one instrument.** In ISLA the prediction points are *interacting*: they carry routing mass, write into the slices and so "
       "influence one another. In ISLA-DTT they are *read-only*: they read the boundary's slices at every layer, never write, and also read "
       "every boundary segment through a learned kernel evaluated with a Barnes–Hut cluster forest at opening angle θ = 1 "
@@ -436,12 +436,12 @@ SEG = B2["budget_segments"]
 #| output: asis
 pv = [v for f in ("pressure_l2", "velocity_l2") for v in law("ISLA", f)]
 cnt = [v for f, _ in FIELDS for v in count("ISLA", f)]
-print(f"**ISLA's interior error depends on which airfoil segments it is given, and most strongly on the leading edge: with the airfoil thinned "
+print(f"**ISLA's interior error depends on which airfoil segments it is given: with the airfoil thinned "
       f"to an expected {SEG} segments, a draw in proportion to segment length makes ISLA's pressure and velocity errors {min(pv):.1f} to "
       f"{max(pv):.1f} times those of a uniform draw of the same count.** The cause is the one discretization-dependent input of the interior "
       "task. Each prediction point takes a distance and a direction from its nearest boundary token (@tbl-airfrans-inputs), and that direction "
       "serves as the point's normal in every relational invariant (@sec-isla-relational). A nearest-token distance overestimates the true wall "
-      "distance by up to about half the local token spacing, and the spacing is set by the draw. @fig-airfrans-draw-spacing shows what the two "
+      "distance by up to about the local token spacing, and the spacing is set by the draw. @fig-airfrans-draw-spacing shows what the two "
       "draws do to the spacing on a real AirfRANS airfoil.")
 ```
 
@@ -458,7 +458,7 @@ print(f"**ISLA's interior error depends on which airfoil segments it is given, a
 #|   strips the short ones, so its spacing is the same everywhere. Both draws
 #|   divide each kept segment's length by its inclusion probability, so every
 #|   boundary integral stays unbiased. How to read this: a prediction point's
-#|   nearest-token distance errs by up to about half the spacing, so near the
+#|   nearest-token distance errs by up to about the spacing, so near the
 #|   leading edge the length-proportional draw hands each point a much coarser
 #|   geometry; the figure shows the inputs, not a trained model's errors.
 #|   Data: results/problem_figures_2026-09-22/airfrans.npz (the airfoil of
@@ -528,8 +528,8 @@ print(f": ISLA's reference configuration on the AirfRANS interior task with its 
 #| output: asis
 nut_law = law("ISLA", "nut_l2"); nut_floor = floor("ISLA", "nut_l2")
 print(f"**Three readings.** First, the law: pressure and velocity move far past the redraw noise, pressure most "
-      f"({' and '.join(f'{v:.2f}' for v in law('ISLA', 'pressure_l2'))} on the two seeds), as the spacing picture predicts, since the suction "
-      f"peak sits on the stripped leading edge. Eddy viscosity moves least ({' and '.join(f'{v:.2f}' for v in nut_law)}, against redraw noise of "
+      f"({' and '.join(f'{v:.2f}' for v in law('ISLA', 'pressure_l2'))} on the two seeds), consistent with the spacing picture: the suction "
+      f"peak sits on the leading edge that the length-proportional draw strips. Eddy viscosity moves least ({' and '.join(f'{v:.2f}' for v in nut_law)}, against redraw noise of "
       f"{' and '.join(f'{v:.3f}' for v in nut_floor)}). Second, the count: thinning the airfoil to {SEG} segments at a uniform law already "
       f"makes every error {min(cnt):.0f} to {max(cnt):.0f} times native. The checkpoints trained on whole airfoils, so a {SEG}-segment airfoil "
       "lies far outside their training distribution; the law comparison is between two degraded states, a property of these trained models at "

@@ -179,7 +179,7 @@ plt.show()
 | `inlet` | the upstream face or dome; a second face in the dual-inlet boxes | velocity, turbulent kinetic energy $k$, specific dissipation rate $\omega$, intermittency $\gamma$, transition Reynolds number $Re_\theta$ | value |
 | `outlet` | the downstream face or dome | gauge pressure $p = 0$ with zero normal gradient of velocity; values to use where flow re-enters | value on pressure, flux on velocity |
 | `no_slip` | the body's no-slip band, ground planes, confining walls, duct walls | $u = 0$ | value |
-| `slip` | the body's slip bands, symmetry planes, open box faces | zero normal velocity and zero tangential stress | free |
+| `slip` | the body's slip bands, symmetry planes, the box walls that are not no-slip | zero normal velocity and zero tangential stress | free |
 
 : The four boundary roles of AeroZoo and the conditions they carry. Each face of every role reaches ISLA with its position, normal, area, a one-hot role label and the prescribed values in the table (velocity as a rank-1 input, the rest as rank 0). How to read this: the "kind" column is the color of the role in @fig-aerozoo-problem and @fig-aerozoo-samples; a role is a condition type, not a piece of geometry, so one mesh can hold parts of the body and parts of the enclosure. Data: datasets/aerozoo_uvolume.yaml of the recipe. {#tbl-aerozoo-roles}
 
@@ -401,6 +401,50 @@ print(f": The held-out splits of AeroZoo on which ISLA is compared with GeoTrans
       "the family, the smaller its training set; the last column names what a model must carry beyond its training "
       "distribution. Data: results/campaigns_2026-10-09/aerozoo/case_labels.json (cases per family in the release). "
       "{#tbl-aerozoo-splits}")
+```
+
+```{python}
+#| label: fig-aerozoo-families
+#| fig-cap: >
+#|   The release by family, and what each held-out split removes: case counts
+#|   by enclosure, geometry bank, box layout (external boxes only) and decade
+#|   of Reynolds number, with the families each held-out split of
+#|   @tbl-aerozoo-splits holds out drawn in black and named. How to read this:
+#|   a long black bar is a held-out split that also takes much of the training
+#|   data away, so its penalty mixes generalization with data size (the blob
+#|   bank most); a short one tests generalization at almost the full training
+#|   set (the CAD bank, the box layouts); the gray bars are what such a split
+#|   trains on. Data: results/campaigns_2026-10-09/aerozoo/case_labels.json.
+#| fig-alt: "Four stacked horizontal bar charts of AeroZoo case counts by enclosure, bank, box layout and Reynolds decade, with the held-out families in black."
+#| code-fold: true
+C = LAB_META["counts"]
+NICE = {"rectangular_prism": "external box", "opposed_hemisphere": "spherical cap", "opposed_sphere": "sphere", "internal_duct": "duct",
+        "blender_streamlined": "Blender streamlined", "blender_bluff": "Blender bluff", "zero_to_cad": "CAD bank", "streamlined": "streamlined",
+        "cars": "cars", "airframes": "airframes", "blobs": "procedural blobs", "ground_effect": "ground effect", "crossflow": "crossflow",
+        "dual_inlet": "dual inlet", "confined_opposed": "confined", "open_opposed": "open"}
+BOX = ("ground_effect", "crossflow", "dual_inlet", "confined_opposed", "open_opposed")
+groups = [
+    ("enclosure", {k: v for k, v in C["enclosure"].items()}, {"opposed_hemisphere": "family_non_box", "opposed_sphere": "family_non_box", "internal_duct": "family_non_box"}),
+    ("geometry bank", {k: v for k, v in C["bank"].items() if k != "None"}, {"blobs": "bank_blobs", "zero_to_cad": "bank_zero_to_cad"}),
+    ("box layout", {k: C["profile"][k] for k in BOX}, {"crossflow": "profile_crossflow", "dual_inlet": "profile_dual_inlet"}),
+    ("Reynolds-number decade", {f"$10^{{{k}}}$ to $10^{{{int(k) + 1}}}$": v for k, v in sorted(C["log10_re_decade"].items())},
+     {"$10^{6}$ to $10^{7}$": "reynolds", "$10^{7}$ to $10^{8}$": "reynolds"}),
+]
+fig, axes = plt.subplots(len(groups), 1, figsize=(8, 7.6), sharex=True,
+                         gridspec_kw=dict(height_ratios=[len(g[1]) for g in groups], hspace=0.45))
+for ax, (title, counts, held) in zip(axes, groups):
+    items = sorted(counts.items(), key=lambda kv: kv[1]) if title != "Reynolds-number decade" else list(counts.items())[::-1]
+    ys = np.arange(len(items))
+    for y, (k, v) in zip(ys, items):
+        h = k in held
+        ax.barh(y, v, color=INK if h else BASELINE, height=0.7)
+        if h:
+            ax.text(v + 25, y, held[k], va="center", ha="left", fontsize=8, family="monospace", color=INK)
+    ax.set_yticks(ys); ax.set_yticklabels([NICE.get(k, k) for k, _ in items], fontsize=8.5)
+    ax.set_title(f"by {title}", fontsize=9.5); ax.grid(axis="y", visible=False)
+axes[-1].set_xlabel("cases in the release [count]")
+axes[0].set_xlim(0, max(max(g[1].values()) for g in groups) * 1.18)
+plt.show()
 ```
 
 ## How ISLA trains on this dataset {#sec-aerozoo-trajectories}
