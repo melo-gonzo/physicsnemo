@@ -29,6 +29,8 @@ from matplotlib.collections import LineCollection
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch, Rectangle
 from matplotlib.colors import Normalize, to_rgba
 import standing as S
+import json
+from pathlib import Path
 JK = joukowski(alpha_deg=6.0, n_cells=60)
 ```
 
@@ -86,11 +88,12 @@ the interface hands over: its position $x_i$, outward normal $n_i$,
 measure $w_i$ and its boundary data. In two dimensions that is
 five numbers before any boundary data. A learned map, usually a small
 multilayer perceptron (MLP), lifts these raw features to a vector
-$h_i \in \mathbb R^d$. This vector is the token's *embedding*, or its
-*state*, and $d$ is the *width* of the network. The reference
+$h_i \in \mathbb R^D$. This vector is the token's *embedding*, or its
+*state*, and $D$ is the *width* of the network ($d$ is reserved for the
+spatial dimension). The reference
 configurations of this book are `{python} S.CONFIG["ISLA"]`,
 `{python} S.CONFIG["Transolver"]` and `{python} S.CONFIG["GeoTransolver"]`
-(@sec-baselines). The token states of a case form an $N \times d$ array whose row
+(@sec-baselines). The token states of a case form an $N \times D$ array whose row
 order carries no meaning (@fig-landscape-tokens).
 
 ```{python}
@@ -100,7 +103,7 @@ order carries no meaning (@fig-landscape-tokens).
 #|   airfoil, one of them highlighted with its normal. Middle: that cell's
 #|   raw features (position, normal, measure). Right: the token states of all
 #|   60 cells after a randomly initialized two-layer embedding to width
-#|   d = 32, one row per cell; the highlighted row is the highlighted cell.
+#|   D = 32, one row per cell; the highlighted row is the highlighted cell.
 #|   How to read this: the embedding here is random, so the colors carry no
 #|   learned meaning; the figure shows the shapes of the objects, and the
 #|   order of the rows is the mesher's and carries no information.
@@ -135,12 +138,12 @@ for k, (lab, v) in enumerate(zip(labels, feats[i0])):
 ax1.text(0.59, 0.97, "raw features", ha="center", fontsize=9, color=INK)
 ax1.annotate("", xy=(1.02, 0.5), xytext=(0.84, 0.5), xycoords="axes fraction",
              arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.4))
-ax1.text(0.93, 0.56, "embed", ha="center", fontsize=8.5, color=INK2, transform=ax1.transAxes)
+ax1.text(0.99, 0.53, "embed", ha="center", va="bottom", fontsize=7.5, color=INK2, transform=ax1.transAxes)
 lim = np.abs(H).max()
 ax2.imshow(H, aspect="auto", cmap=DIVERGING, vmin=-lim, vmax=lim, interpolation="nearest")
 ax2.add_patch(Rectangle((-0.5, i0 - 0.5), d_emb, 1, fill=False, ec=VIOLET, lw=1.6))
 ax2.set_xlabel("feature index of the state $h_i$ [–]"); ax2.set_ylabel("token index $i$ [–]")
-ax2.grid(False); ax2.set_title(r"token states, an $N \times d$ array")
+ax2.grid(False); ax2.set_title(r"token states, an $N \times D$ array")
 plt.show()
 ```
 
@@ -258,7 +261,7 @@ plt.show()
 ```
 
 A transformer runs several attentions side by side. *Multi-head attention*
-splits the $d$ features into $H$ groups of $d/H$, runs @eq-attention on
+splits the $D$ features into $H$ groups of $D/H$, runs @eq-attention on
 each group with its own $W_Q$, $W_K$, $W_V$, and concatenates the results.
 Each head is a different kernel. The step costs one score per pair of
 tokens and per head: an $N \times N$ array, which is the subject of
@@ -297,7 +300,7 @@ def box(x, y, wdt, txt, learned):
 def plus(x):
     ax.add_patch(plt.Circle((x, 0.3), 0.17, fc=WHITE, ec=INK, lw=1.4, zorder=5))
     ax.text(x, 0.3, "+", ha="center", va="center", fontsize=12, zorder=6)
-for x0, name, xp in ((1.0, "attention\n(mixes tokens)", 4.6), (5.4, "MLP\n(each token alone)", 9.0)):
+for x0, name, xp in ((1.0, "attention\n(mixes tokens)", 4.6), (5.4, "MLP\n(per token)", 9.0)):
     ax.plot([x0, x0], [0.3, 1.5], color=INK2, lw=1.4)
     ax.annotate("", xy=(x0 + 0.16, 1.5), xytext=(x0, 1.5), arrowprops=dict(arrowstyle="-|>", color=INK2, lw=1.4))
     box(x0 + 0.2, 1.2, 0.85, "LN", False)
@@ -319,14 +322,14 @@ h \leftarrow h + \operatorname{Attn}\bigl(\operatorname{LN}(h)\bigr),
 h \leftarrow h + \operatorname{MLP}\bigl(\operatorname{LN}(h)\bigr).
 $$ {#eq-preln}
 
-*LayerNorm* (LN) normalizes each token separately across its $d$ features:
+*LayerNorm* (LN) normalizes each token separately across its $D$ features:
 it subtracts the token's feature mean, divides by the token's feature
 standard deviation, and applies a learned per-feature scale $\gamma$ and
 shift $\beta$ (Ba et al., 2016). So
 $\operatorname{LN}(h)_i = \gamma \odot (h_i - \bar h_i)/\operatorname{std}(h_i) + \beta$,
 whatever the size of $h_i$. The *MLP* is a two-layer perceptron applied to
 each token alone, $\operatorname{MLP}(u) = W_2\,\phi(W_1 u)$, with a hidden
-width of four times $d$ and a smooth rectifier $\phi$, usually the GELU
+width of four times $D$ and a smooth rectifier $\phi$, usually the GELU
 (Hendrycks and Gimpel, 2016). Attention is the only step that couples
 tokens. The block is the pattern of a neural-operator layer,
 $\sigma(Wv + \mathcal K v)$ (Kovachki et al., 2023): a nonlocal integral
@@ -341,59 +344,11 @@ gradient reaches the first layer through the identity path. The arrangement
 of @eq-preln is the *pre-LN block* (Xiong et al., 2020). It is
 called pre-LN because the normalization sits before each sublayer, inside
 the branch. The original transformer normalized after the addition, which
-needs a learning-rate warm-up to train.
+needs a learning-rate *warm-up*, a rate raised gradually from near zero over
+the first steps, to train.
 
-**Why each branch reads the normalized state.** In a pre-LN block a
-sublayer's input has a fixed scale, so the size of its update is set by its
-weights and not by the size of the stream. The stream then grows by
-addition. If instead a sublayer reads the raw state through a linear map,
-its update is proportional to the stream, and the block multiplies the
-stream by $I + W$. Over twelve blocks a per-block gain of 1.5 is a factor
-of about 130. @fig-landscape-stream shows both wirings with the same random
-weights. The slice sublayer of ISLA reads the normalized state for exactly
-this reason (@sec-isla-layer).
-
-```{python}
-#| label: fig-landscape-stream
-#| fig-cap: >
-#|   The size of the residual stream through 12 blocks of one random network
-#|   wired two ways: each MLP branch reads LN(h) (pre-LN, solid) or reads h
-#|   itself (dotted). Width 256, 64 tokens, Gaussian weights scaled so that
-#|   a raw-read update is comparable to the stream it reads; the mean token
-#|   norm is divided by its value at the input. How to read this: the pre-LN
-#|   stream grows by addition, a fixed-size update per block; the raw-read
-#|   stream grows by a fixed factor per block, a geometric series. These are
-#|   random weights, not a trained model; the per-block factor of a trained
-#|   network depends on its training.
-#| fig-height: 3.4
-rng = np.random.default_rng(1)
-dS, nS, Lb, gain = 256, 64, 12, 1.6
-Ws = [(rng.normal(0, 1 / np.sqrt(dS), (dS, 4 * dS)), rng.normal(0, gain / np.sqrt(4 * dS), (4 * dS, dS))) for _ in range(Lb)]
-relu = lambda x: np.maximum(x, 0)
-def ln(h):
-    return (h - h.mean(1, keepdims=True)) / h.std(1, keepdims=True)
-def run(h0, pre):
-    h = h0.copy(); out = [np.linalg.norm(h, axis=1).mean()]
-    for A, B in Ws:
-        u = ln(h) if pre else h
-        h = h + relu(u @ A) @ B
-        out.append(np.linalg.norm(h, axis=1).mean())
-    return np.array(out) / out[0]
-h0 = rng.normal(0, 1, (nS, dS))
-r_raw = run(h0, False); r_pre = run(h0, True)
-fig, ax = plt.subplots(figsize=(8, 3.4))
-ell = np.arange(Lb + 1)
-ax.plot(ell, r_pre, color=INK, lw=2.0, marker="o", ms=4)
-ax.plot(ell, r_raw, color=INK2, lw=2.0, ls=":", marker="o", ms=4, mfc="white")
-ax.set_yscale("log")
-ax.set_yticks([1, 2, 5, 10, 20, 50, 100, 200]); ax.set_yticklabels(["1", "2", "5", "10", "20", "50", "100", "200"])
-ax.set_xlabel("block $\\ell$ [–]"); ax.set_ylabel("mean token norm / input norm [–]")
-label_line(ax, 12.2, r_raw[-1], f"MLP reads h:\n×{r_raw[-1] ** (1 / Lb):.2f} per block", INK2, fontsize=8.5)
-label_line(ax, 12.2, r_pre[-1], "MLP reads LN(h):\nadditive growth", INK, fontsize=8.5)
-ax.set_xlim(-0.3, 14.8); ax.set_xticks(range(0, 13, 2))
-ax.set_title("same weights, two wirings")
-plt.show()
-```
+The argument for why every branch reads the normalized state, and why ISLA's
+slice sublayer does too, is in @sec-isla-normalized-reads.
 
 Other placements of the normalization exist. The *sandwich* or *peri-LN*
 block also normalizes each sublayer's output before the addition (Ding et
@@ -414,7 +369,8 @@ width and depth of ISLA:
 ```{python}
 #| label: para-landscape-cost
 #| output: asis
-N, d, Hh, L, M = 200_000, 512, 8, 12, 512
+N, d, Hh, L, M = 200_000, 512, 8, 12, 512   # d here is the width D of the text
+DRV_CELLS = json.load(open(Path("..") / "results" / "problem_figures_2026-09-22" / "drivaer.json"))["n_surface_cells"]
 GiB = 2**30
 score_one = N * N * 2 / GiB                # one head, one layer, bfloat16 (2 bytes)
 score_all = score_one * Hh
@@ -437,7 +393,7 @@ print(f"- one $N \\times N$ score array, one head, one layer, in bfloat16: ${sco
       f"{fl_attn / fl_slice:.0f} times less than dense attention and below the MLP.\n\n"
       f"Memory-efficient attention kernels (Dao et al., 2022) never store the score array, which removes the "
       f"first line; they leave the arithmetic unchanged. At $10^7$ points, the order of a full DrivAerML "
-      f"surface mesh (about $9 \\times 10^6$ cells, as Alkin et al., 2025, list it), the arithmetic is "
+      f"surface mesh (the car drawn in @fig-datasets has {DRV_CELLS:,} cells), the arithmetic is "
       f"{(1e7 / N) ** 2:,.0f} times larger. The rate ${sci(thr)}$ FLOP/s is an assumption of this worked "
       f"example, not a measurement.")
 ```
@@ -459,9 +415,9 @@ Ns = np.logspace(3, 7, 200)
 fig, (a0, a1) = plt.subplots(2, 1, figsize=(8, 5.0), sharex=True)
 a0.plot(Ns, Hh * Ns**2 * 2 / GiB, color=INK, lw=2.0)
 a0.plot(Ns, Ns * M * 2 / GiB, color=VIOLET, lw=2.0)
-a0.axhline(80, color=MUTED, lw=1.0, ls="--"); a0.text(1.2e3, 110, "80 GiB, one GPU", color=MUTED, fontsize=8.5)
+a0.axhline(80, color=MUTED, lw=1.0, ls="--"); a0.text(1.5e6, 130, "80 GiB, one GPU", color=MUTED, fontsize=8.5)
 a0.set_yscale("log"); a0.set_ylabel("memory [GiB]")
-label_line(a0, 1.5e4, Hh * 1.5e4**2 * 2 / GiB * 30, "dense attention:\n8 score arrays", INK, ha="right", fontsize=8.5)
+label_line(a0, 5e3, Hh * 5e3**2 * 2 / GiB * 30, "dense attention:\n8 score arrays", INK, ha="right", fontsize=8.5)
 label_line(a0, 1.5e6, 1.5e6 * M * 2 / GiB * 0.25, "slice attention: N × M routing", VIOLET, fontsize=8.5)
 a1.plot(Ns, 4 * Ns**2 * d, color=INK, lw=2.0)
 a1.plot(Ns, 6 * Ns * M * d, color=VIOLET, lw=2.0)
@@ -606,7 +562,8 @@ al., 2024). AB-UPT, its automotive form, runs attention on a reduced set of
 *anchor* tokens drawn from the points, uses separate branches for the
 geometry, the surface and the volume, and lets the remaining query points
 cross-attend to the anchors (Alkin et al., 2025). It reports volume meshes
-up to 150 million cells and a divergence-free vorticity built in by
+up to 150 million cells, and it predicts the vorticity as the curl of a
+learned field, so the predicted vorticity is divergence-free by
 construction.
 
 ### Slice attention: Transolver {#sec-landscape-slice}
@@ -619,8 +576,8 @@ restriction and prolongation pair of algebraic multigrid.** Transolver
 $a_{is} = \operatorname{softmax}_s(\text{linear}(h_i)/\tau)$. The softmax
 runs over slices, so each token's weights sum to one: the $a_{is}$ form a
 partition of unity on the tokens. A slice state is the weighted mean of its
-tokens, $z_s = \sum_i a_{is} h_i / \sum_i a_{is}$. Attention runs among the
-$M$ slice states. Token $i$ reads back $\sum_s a_{is} z'_s$. Written as
+tokens, $Z_s = \sum_i a_{is} h_i / \sum_i a_{is}$. Attention runs among the
+$M$ slice states. Token $i$ reads back $\sum_s a_{is} Z'_s$. Written as
 matrices, with $P \equiv (a_{is})$ of size $N \times M$ and
 $R \equiv \operatorname{diag}(P^\top \mathbf 1)^{-1} P^\top$ of size
 $M \times N$, the token-mixing step is
@@ -638,9 +595,10 @@ every layer, and soft. The coarse operator is a nonlinear attention, not a
 Galerkin product $R A P$. And the slices group tokens by similarity of
 state, which places points of similar physics in one slice wherever they
 sit on the body. Hu et al. (2026) show the
-mechanism is a form of linear attention, and argue that most of its value
+mechanism is a form of *linear attention* (attention whose kernel factors
+through a feature map, so its cost is linear in $N$), and argue that most of its value
 lies in the restriction and prolongation rather than in the attention
-among slices. The cost is $O(NMd)$ per layer, which is the line of
+among slices. The cost is $O(NMD)$ per layer, which is the line of
 @fig-landscape-cost.
 
 ```{python}
@@ -697,7 +655,9 @@ parameters. It computes that embedding once from multi-scale ball queries
 al., 2025), and reuses it in every block. Its configurations in this book
 are described in @sec-baselines. Transolver++ (Luo et al., 2025) gives each
 point an adaptive routing temperature and samples the slice weights with a
-Gumbel-softmax, against slice weights that become uniform, and adds a
+*Gumbel-softmax* (a softmax of logits perturbed by Gumbel noise, a
+differentiable stand-in for sampling one slice), against slice weights that
+become uniform, and adds a
 parallel implementation that reaches million-point meshes. Transolver-3
 (Zhou et al., 2026) tiles the slice computation and reorders its matrix
 products to reach meshes of over 160 million cells. Transolver and GeoTransolver,
@@ -759,9 +719,10 @@ the principal axes with a small equivariant network (Kaba et al., 2023).
 #|   Why a canonical frame is discontinuous. A family of closed curves, an
 #|   ellipse with aspect ratio between 0.8 and 1.25 carrying a small
 #|   off-axis bump, aligned by the principal axes of its length-weighted
-#|   second moment. Top: three members of the family, 6% apart in aspect
-#|   ratio, with their first principal axis. Bottom: the angle of that axis
-#|   against the aspect ratio. How to read this: the frame turns through
+#|   second moment. Top: three members of the family, 3% apart in aspect
+#|   ratio, with their first principal axis (a line: an axis has no sign).
+#|   Bottom: the angle between that axis and the horizontal, against the
+#|   aspect ratio. How to read this: the frame turns through
 #|   nearly 90° across a few percent of aspect ratio, where the two principal
 #|   moments nearly cross, so a network fed canonical coordinates sees three
 #|   near-identical shapes in three different poses; for a shape with an
@@ -778,7 +739,7 @@ def axis_angle(pts):
     C = (wl[:, None, None] * X[:, :, None] * X[:, None, :]).sum(0)
     ev, V = np.linalg.eigh(C); v = V[:, -1]
     ang = np.degrees(np.arctan2(v[1], v[0])) % 180
-    return ang, c0, v
+    return min(ang, 180 - ang), c0, v
 ars = np.linspace(0.8, 1.25, 400)
 angs = np.array([axis_angle(shape(a))[0] for a in ars])
 fig = plt.figure(figsize=(8, 5.0))
@@ -787,13 +748,13 @@ for k, a in enumerate((0.97, 1.0, 1.03)):
     ax = fig.add_subplot(gs[0, k]); clean_axes(ax)
     pts = shape(a); ang, c0, v = axis_angle(pts)
     ax.plot(*np.vstack([pts, pts[:1]]).T, color=INK, lw=1.5)
-    ax.annotate("", xy=c0 + 1.1 * v, xytext=c0 - 1.1 * v, arrowprops=dict(arrowstyle="-|>", color=VIOLET, lw=1.8))
+    ax.plot(*np.column_stack([c0 - 1.1 * v, c0 + 1.1 * v]), color=VIOLET, lw=1.8)
     ax.set_title(f"aspect ratio {a:.3f}", loc="center", fontsize=9)
     ax.set_xlim(-1.5, 1.5); ax.set_ylim(-1.5, 1.5)
 ax = fig.add_subplot(gs[1, :])
 ax.plot(ars, angs, color=VIOLET, lw=2.0)
-ax.set_xlabel("aspect ratio of the curve [–]"); ax.set_ylabel("first principal axis [deg]")
-ax.set_yticks([0, 45, 90, 135, 180])
+ax.set_xlabel("aspect ratio of the curve [–]"); ax.set_ylabel("first principal axis,\nangle to horizontal [deg]")
+ax.set_yticks([0, 45, 90]); ax.set_ylim(-5, 95)
 plt.show()
 ```
 
@@ -844,48 +805,9 @@ $\frac1N\sum_j f(y_j) \to \int_\Gamma f\,\rho\,dS$. That limit depends on
 the mesher. Weighting each term by the cell measure,
 $\sum_j w_j f(y_j)$ with $\sum_j w_j = |\Gamma|$, converges to
 $\int_\Gamma f\,dS$ for any density: it is a quadrature rule. Under a
-random, non-uniform draw the weights are Horvitz–Thompson weights, inverse
-inclusion probabilities, which are the importance weights of Monte Carlo
-integration. @fig-landscape-quadrature shows both sums on the airfoil
-under two meshers.
-
-```{python}
-#| label: fig-landscape-quadrature
-#| fig-cap: >
-#|   A mean over the surface of the running airfoil, the surface pressure
-#|   coefficient averaged two ways, against the number of cells, under two
-#|   meshers: equal-arclength cells (solid) and cells clustered at the leading
-#|   edge (dashed). Black: weighted by cell length (a quadrature rule). Gray:
-#|   one unit of weight per cell (a count). How to read this: the
-#|   length-weighted means of the two meshers converge to one value, the
-#|   integral over the surface; on equal cells the count is the same rule,
-#|   and on clustered cells it converges to a different value, an integral
-#|   against that mesher's cell density.
-#|   Exact potential-flow solution, no model.
-#| fig-height: 3.6
-u = np.linspace(0, 1, 2001)
-dens = 1.0 + 14.0 * np.exp(-((u - 0.5) / 0.05) ** 2) + 2.0 * np.exp(-(u / 0.04) ** 2) + 2.0 * np.exp(-((u - 1.0) / 0.04) ** 2)
-cdf = np.concatenate([[0], np.cumsum(dens[:-1] * np.diff(u))]); cdf /= cdf[-1]
-Ns_q = np.unique(np.round(np.logspace(np.log10(30), np.log10(4000), 22)).astype(int))
-res = {}
-for lab, fr in (("uniform", None), ("clustered", True)):
-    cm, mm = [], []
-    for n in Ns_q:
-        JJ = joukowski(n_cells=n, frac=(np.interp(np.linspace(0, 1, n + 1), cdf, u) if fr else None))
-        cm.append(JJ["cp_s"].mean()); mm.append(np.sum(JJ["w"] * JJ["cp_s"]) / JJ["w"].sum())
-    res[lab] = (np.array(cm), np.array(mm))
-fig, ax = plt.subplots(figsize=(8, 3.6))
-for lab, ls in (("uniform", "-"), ("clustered", "--")):
-    cm, mm = res[lab]
-    ax.plot(Ns_q, mm, color=INK, lw=2.0, ls=ls)
-    ax.plot(Ns_q, cm, color=MUTED, lw=2.0, ls=ls)
-ax.set_xscale("log")
-ax.set_xticks([20, 50, 100, 200, 500, 1000, 2000]); ax.set_xticklabels(["20", "50", "100", "200", "500", "1,000", "2,000"])
-ax.set_xlabel("cells on the airfoil $N$ [–]"); ax.set_ylabel(r"mean surface $C_p$ [–]")
-label_line(ax, 3000, res["uniform"][1][-1] + 0.035, "length-weighted, both meshers; count-weighted, equal cells", INK, ha="right", fontsize=8.5)
-label_line(ax, 3000, res["clustered"][0][-1] + 0.035, "count-weighted, cells clustered at the leading edge", MUTED, ha="right", fontsize=8.5)
-plt.show()
-```
+random, non-uniform draw the weights are Horvitz–Thompson weights, the
+importance weights of Monte Carlo integration (@sec-sampling-laws).
+@fig-isla-quadrature shows both sums on the airfoil under two meshers.
 
 **Inside attention the fix is one term in the exponent.** Adding $\log w_j$
 to the score of token $j$ turns the count-weighted softmax of
@@ -913,7 +835,7 @@ as one family of discretizations is refined (Kovachki et al., 2023). That is
 a statement about refinement of one mesher. It does not say that two
 meshers with different cell densities give the same answer, and a
 count-weighted layer converges to a different operator for each density,
-as the gray curves of @fig-landscape-quadrature do. Models with a fixed
+as the plain means of @fig-isla-quadrature do. Models with a fixed
 number of nearest neighbors change their stencil with resolution. A
 fixed-radius graph does not, but it counts neighbors. A latent grid is
 resolution-independent in its processor and depends on how points are
@@ -946,8 +868,9 @@ instead: rigid-motion equivariance holds as an exact property of the map
 (@sec-isla-contracts) and every sum over the boundary is a quadrature rule
 by construction, where a penalty would hold such properties only
 approximately.
-AB-UPT takes a third road for one constraint: its vorticity is
-divergence-free by construction, a hard constraint in the output basis.
+AB-UPT takes a third road for one constraint: it predicts the vorticity as a
+curl, so the output is divergence-free by construction, a hard constraint in
+the output basis.
 
 ## A taxonomy {#sec-landscape-taxonomy}
 
@@ -972,7 +895,7 @@ measures how well the two baselines of this book do.
 | slice attention (Transolver, Transolver++, Transolver-3) | point set, laboratory coordinates | no | no: Transolver counts each token once | as tokens of the input set | yes, linear in $N$ |
 | GeoTransolver | point set, laboratory coordinates, ball-query geometry encoding, global context | no | no: counts each token once | as tokens, with the signed distance | yes, linear in $N$ |
 | physics-informed networks (PINN) | coordinates of one instance | no | not applicable | yes | one instance per training |
-| **ISLA** | boundary cells with their measure; invariants against slice anchors | **yes**, rotations and translations (@sec-isla-contracts) | **yes**: a log-measure bias in the routing | **yes**, as interacting or read-only prediction points | **yes**, linear in $N$; 200,000 cells per case in this book |
+| **ISLA** | boundary cells with their measure; invariants against slice anchors | **yes**, rotations and translations (@sec-isla-contracts); ISLA-DTT's tree read up to ties of its canonical frame (@sec-arch-tree-read) | **yes**: a log-measure bias in the routing | **yes**, as interacting or read-only prediction points | **yes**, linear in $N$; 200,000 cells per case in this book |
 
 : The families of neural PDE surrogates against the five properties that
 matter for steady boundary-driven problems, each as constructed in the

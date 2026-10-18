@@ -1,15 +1,15 @@
 # The benchmark: baselines, datasets and the rules {#sec-baselines}
 
+*Before this chapter:* @sec-isla (tokens, slices, measure weights, global directions and scalars), @sec-metrics (the
+area-weighted relative L2 error) and @sec-invariances (the three scorings: native mesh, uniform point cloud, rotated and
+translated).
+
 **ISLA is measured against two public slice-attention transformers, GeoTransolver and Transolver, on eight datasets and
 nine tasks. The protocol fixes everything except the architecture, and every number in the book is scored by it.** The
 baselines are the public model classes, run unmodified from the PhysicsNeMo recipe. Each architecture is scored at one
 reference configuration, chosen by one rule. This chapter says what each baseline computes and what it is given, states
 the rules of the comparison and how the reference configurations were chosen, shows every dataset on one page, and defines
-how a checkpoint is scored. It closes by defining the tag that marks a study run on a smaller ISLA.
-
-*Before this chapter:* @sec-isla (tokens, slices, measure weights, global directions and scalars), @sec-metrics (the
-area-weighted relative L2 error) and @sec-invariances (the three scorings: native mesh, uniform point cloud, rotated and
-translated).
+how a checkpoint is scored. It closes by defining the tag that marks a study run on another configuration of ISLA.
 
 ```{python}
 #| label: setup-baselines
@@ -47,7 +47,7 @@ geometry and on the global inputs. ISLA keeps the factorization and changes what
 %%|   the dashed box is a fixed map with no parameters. GeoTransolver and Transolver receive coordinates in the dataset's
 %%|   frame and the stored freestream vector; ISLA receives positions, normals and measure weights, consumed only through
 %%|   invariants, and each global direction as a unit vector. How to read this: the diagram shows inputs and structure
-%%|   on the surface tasks, not accuracy; the interior inputs are in @tbl-baseline-inputs.
+%%|   on the surface tasks, not accuracy; the interior inputs are in @tbl-model-inputs.
 flowchart TB
     classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
     classDef learned fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
@@ -88,7 +88,7 @@ vector. It reads positions only through differences to its anchors (@sec-isla). 
 join as tokens, and each one reads its distance and direction to the nearest sampled boundary token (@sec-nearest-token).
 
 @tbl-architectures gives the three reference configurations side by side, with the parameter count and the training memory
-the selection read. @tbl-baseline-inputs lists, per task family, exactly which fields each model's forward call receives.
+the selection read. @tbl-model-inputs lists, per dataset, what each model's forward call receives; the dataset chapters point to it.
 
 ```{python}
 #| label: cell-tbl-architectures
@@ -102,28 +102,66 @@ for a, l, w, m, h, c, lr in rows:
     out += f"| {a} | {l} | {w} | {m} | {h} | {c} | {lr} | {fc['n_parameters'] / 1e6:.1f}M | {fc['train_peak_gib']:.0f} |\n"
 print(out)
 print(": The three reference configurations. *Slices*: $M$, the number of soft slices per layer. *Heads*: attention heads "
-      "among the slice tokens. *Parameters* and *training peak* are measured on the DrivAerML Surface task in the one-epoch lanes "
+      "among the slice tokens. *Parameters* and *training peak* are measured on the DrivAerML Surface task in the one-epoch training runs "
       "that fixed the memory frontier of the selection (peak device memory of a training epoch, maximum over four GPUs, batch "
       "one, bfloat16); they change by task with the input and output channels. How to read this: the table states what each "
       "model is, not how accurate it is; the three are matched on the memory budget, not on parameters or cells. Sources: the "
-      "lane configurations under results/campaigns_2026-10-02/char/, results/char/ref80_frontier_2026-10-02.json. "
+      "training-run configurations under results/campaigns_2026-10-02/char/, results/char/ref80_frontier_2026-10-02.json. "
       "{#tbl-architectures}")
 ```
 
-| task family | GeoTransolver | Transolver | ISLA |
-|---|---|---|---|
-| surface aerodynamics (DrivAerML Surface task, HiLiftAeroML, SHIFT-SUV) | per point: centered coordinates, unit normal; geometry encoder on the coordinates; global: `U_inf` | per point: centered coordinates, unit normal, with `U_inf` concatenated | boundary cells: position, normal, measure weight; global: the unit direction `U_inf_dir` |
-| interior aerodynamics (DrivAerML Volume task, AirfRANS) | per point: coordinates, the stored signed distance `sdf` and its gradient `sdf_normals`; no boundary mesh; global: `U_inf` | the same per-point fields, with `U_inf` concatenated | boundary cells as above, prediction points as tokens with their nearest-token distance and direction; on AirfRANS also `sdf` and `sdf_normals`; global: `U_inf_dir`, and on AirfRANS the inlet speed as a scalar |
-| solids (PLAID Tensile2d, the GINOT lug) | per node: coordinates, `sdf`, `sdf_normals`; on Tensile2d also the three boundary labels (top, bottom, pinned corner) as nodal indicators, on the lug no boundary label; no boundary mesh; global: the standardized load and geometry or material scalars | the same | boundary cells with per-cell labels and prescribed values; nodes as prediction tokens with `sdf` and `sdf_normals`; the same global scalars |
-| DeepJEB++ | per point: coordinates, normal, the fixed and loaded labels and the load vector; global: load direction and load type | the same | boundary cells with the same labels and the load vector as a rank-1 field; global: the load direction and two scalars for the load type |
-
-: What each model's forward call receives, by task family, read from the recorded configurations of the reference lanes.
-`U_inf` is the freestream velocity as the dataset stores it, in solver units; `U_inf_dir` is the same vector normalized.
-How to read this: the baselines receive the stored signed-distance field computed from the full-resolution boundary on every
-interior task, and they never load the boundary mesh there; ISLA's built-in wall distance is computed from its sampled
-boundary tokens (@sec-nearest-token). AeroZoo's inputs are in @sec-aerozoo. Source: the `forward_kwargs` and `model` rows of
-the lane configurations, `results/campaigns_2026-10-02/char/cs/*/metrics.jsonl` and `rf1/*/metrics.jsonl`.
-{#tbl-baseline-inputs tbl-colwidths="[19,27,20,34]"}
+```{python}
+#| label: cell-tbl-model-inputs
+#| output: asis
+# One row per dataset, from section 1 of the drive audit (results/drive_audit_2026-10-18/REPORT.md): what each model's
+# forward call receives as global or drive input, boundary conditions and per-point geometry.
+BC = "boundary cells: position, normal, measure weight"
+NT = "prediction points as tokens, with their nearest-token wall distance and direction"
+GP = "per point: coordinates centered on the case, unit normal"
+GV = "per point: coordinates, the stored `sdf` and `sdf_normals`; no boundary mesh"
+MI = [
+    ("drivaerml_surface", f"{BC}; `U_inf_dir`, $(1, 0, 0)$ on every car", f"{GP}; `U_inf` = $(38.9, 0, 0)$ m/s on every car",
+     "the same, with `U_inf` concatenated to every point", "the same: a constant vector carries no case information"),
+    ("drivaerml_volume", f"{BC}; {NT}; `U_inf_dir`, constant", f"{GV}; `U_inf` = $(38.9, 0, 0)$ m/s on every car (GeoTransolver-volume)",
+     "the same per-point fields, with `U_inf` concatenated", "the same globals; the baselines' wall distance is the full-resolution field, ISLA's is from its sampled tokens"),
+    ("hilift", f"{BC}; `U_inf_dir`, angle of attack 4 to 20°", f"{GP}; `U_inf` in inch/s, magnitude 2,680 on every case, turning with the angle of attack",
+     "the same, with `U_inf` concatenated", "the same information at 2,680 times the scale"),
+    ("shift_suv", f"{BC}; `U_inf_dir`, constant", f"{GP}; `U_inf` = $(30, 0, 0)$ m/s on every case",
+     "the same, with `U_inf` concatenated", "the same: a constant vector"),
+    ("airfrans", f"{BC}; {NT}, plus `sdf` and `sdf_normals`; `U_inf_dir` and the raw inlet speed `U_inf_mag` (31 to 94 m/s) as a scalar",
+     f"{GV}; `U_inf` in m/s, magnitude 31 to 94, angle −4.9 to 14.9°", "the same per-point fields, with `U_inf` concatenated",
+     "the same information at 30 to 94 times the scale, varying in magnitude and direction"),
+    ("aerozoo", f"four boundary meshes (body, enclosure, inlet, outlet), each face with its role and prescribed values; {NT}; "
+     "`U_inf_dir`, the standardized log Reynolds number and four inlet-turbulence scalars",
+     "per point: coordinates, wall and slip-wall distances and the wall normal; the same eight globals", "not trained on AeroZoo",
+     "less: no inlet or outlet faces and no prescribed per-face values"),
+    ("tensile2d", "boundary segments with the loaded, fixed and pinned labels and the applied pressure; nodes as tokens; "
+     "the pressure and five material parameters as six standardized scalars",
+     "per node: coordinates, `sdf`, `sdf_normals` and the top, bottom and pinned-corner tags; the same six scalars", "the same",
+     "the same"),
+    ("lug", "boundary faces labeled clamped, hole and loaded half of the hole, with the pressure on them; nodes as tokens; "
+     "four standardized scalars (hole radius, length, thickness, pressure)",
+     "per node: coordinates, `sdf`, `sdf_normals`; the same four scalars; no boundary-condition label", "the same",
+     "less as explicit input: the clamp and the load are known to the baselines only through the shape, in its fixed pose"),
+    ("deepjeb", "boundary cells with the fixed and loaded labels and the load as a rank-1 field; the load direction; force or "
+     "torque as two scalars", "per point: coordinates, normal, the same labels and load; global: the load direction and type",
+     "the same", "the same"),
+]
+out = "| dataset | ISLA | GeoTransolver | Transolver | against ISLA's input |\n|---|---|---|---|---|\n"
+for key, i, g, t, info in MI:
+    d = S.DATASETS[key]
+    flag = "" if d.fair_drive else ". **No standing comparison is drawn.**"
+    out += f"| {d.name} | {i} | {g} | {t} | {info}{flag} |\n"
+print(out)
+print(": What each model receives, per dataset: the global inputs with their units and range across cases, the boundary "
+      "conditions, and the per-point geometry, read from the configurations of the standing's training runs. `U_inf` is the "
+      "freestream velocity as the dataset stores it; `U_inf_dir` is the same vector normalized; `sdf` and `sdf_normals` are "
+      "the stored signed distance to the full-resolution boundary and its gradient. How to read this: the last column says "
+      "whether the baselines receive the same information as ISLA; a row marked *no standing comparison* is one whose "
+      "baselines read the freestream as a raw physical vector of varying direction, so its ratios are printed and not "
+      "read as a verdict. The table does not say how much a difference in input costs a model. Source: "
+      "results/drive_audit_2026-10-18/REPORT.md, section 1. {#tbl-model-inputs tbl-colwidths=\"[11,27,25,14,23]\"}")
+```
 
 ### Global directions as unit vectors, magnitudes as scalars {#sec-unit-direction-rule}
 
@@ -134,10 +172,11 @@ would have to learn to ignore it. A magnitude that matters physically, a far-fie
 with its own place in the input. ISLA normalizes every global vector it receives and takes magnitudes only as global
 scalars (@sec-isla-inputs).
 
-GeoTransolver and Transolver consume whatever vector the pipeline hands them, and in the recipe and in every reference lane
-whose configuration is recorded that vector is `U_inf`, in solver units. On the DrivAerML tasks and on SHIFT-SUV every case
-has the same freestream, so `U_inf` is one constant vector per dataset and holds no case information. On HiLiftAeroML it
-carries the angle of attack, in inches per second. Its scale matters before training: GeoTransolver's context projector
+GeoTransolver and Transolver consume whatever vector the pipeline hands them, and in the recipe and in every training run
+of the standings that vector is `U_inf`, in solver units (@tbl-model-inputs). On the DrivAerML tasks and on SHIFT-SUV every
+case has the same freestream, so `U_inf` is one constant vector per dataset and holds no case information. On HiLiftAeroML
+it carries the angle of attack, in inches per second, at a magnitude of 2,680. On AirfRANS it carries the angle of attack
+and the inlet speed, in m/s. Its scale matters before training: GeoTransolver's context projector
 applies linear maps and a slice softmax to the raw vector, so its conditioning depends on the magnitude (@tbl-projector).
 
 ```{python}
@@ -156,7 +195,7 @@ print(": GeoTransolver's context projector at initialization, at the recipe's di
       "note below. Data: results/geotransolver_drive_conditioning_2026-09-08.json. {#tbl-projector}")
 ```
 
-::: {.callout-note collapse="true" title="Optional: the trained consequence on 35 wings"}
+::: {.callout-note title="The trained consequence on 35 wings"}
 At 35 HiLiftAeroML training cases, GeoTransolver and Transolver fed the unit direction are each more accurate than their
 twins fed the physical velocity on every one of the 180 validation cases, by a median factor above three
 (@tbl-unit-vs-physical). The control was trained at 10,000 cells per case, a budget no standing uses, and measures an input
@@ -174,7 +213,7 @@ arms = [
     ("Transolver, physical velocity, 3e-3", fp([f"t1_hl_transolver_super_scarce_lr3e3_seed{s}" for s in (42, 43, 44)])),
     ("Transolver, unit direction, 3e-3", fp([f"udrv_hl_transolver_super_scarce_lr3e3_seed{s}" for s in (42, 43, 44)])),
 ]
-out = "| arm | surface pressure error, seed mean (seeds) |\n|---|---|\n"
+out = "| configuration | surface pressure error, seed mean (seeds) |\n|---|---|\n"
 for lab, v in arms:
     out += f"| {lab} | {mean(v):.4f} ({' / '.join(f'{x:.4f}' for x in v)}) |\n"
 print(out)
@@ -189,8 +228,10 @@ print(f": The input-scale control at 35 HiLiftAeroML training cases (256 wide, 1
 ```
 :::
 
-What the physical vector costs the baselines at the reference configurations on HiLiftAeroML, where it varies per case, is
-an open question that bears on that dataset's standing (@sec-open-questions).
+What the physical vector costs the baselines at the reference configurations on HiLiftAeroML and AirfRANS, where it
+varies per case, is an open question (@sec-open-questions); those two standings are printed without a verdict.
+
+<!-- SLOT: unit-direction baseline pair (registry swap when scored) -->
 
 ## The fair-comparison rules {#sec-fair-comparison}
 
@@ -201,13 +242,13 @@ difference is read.
 **Inputs.**
 
 1. Every model is given the same physical problem: the same cases, the same targets, the same validation and test cases,
-   drawn with the same seed. The inputs differ only as @tbl-baseline-inputs states.
-2. No reference lane trains with augmentation. The rotation-augmented baselines of @sec-pose-contract are a labeled
+   drawn with the same random seed. The inputs differ only as @tbl-model-inputs states.
+2. No reference configuration trains with augmentation. The rotation-augmented baselines of @sec-pose-contract are a labeled
    control.
 3. Boundary conditions enter ISLA as per-cell fields on boundary meshes. GeoTransolver and Transolver have no
-   boundary-token path; they receive what their recipe configurations give them, which @tbl-baseline-inputs lists per
-   task. On the lug that is no boundary label at all, and the loaded and clamped faces are known to them only through the
-   shape (@sec-data-conventions).
+   boundary-token path; they receive what their recipe configurations give them, which @tbl-model-inputs lists per
+   dataset. On the lug that is no boundary label at all, and the loaded and clamped faces are known to them only through
+   the shape (@sec-data-conventions).
 
 **Budget.**
 
@@ -223,21 +264,21 @@ difference is read.
 
 7. Every number is scored by one protocol (@sec-protocol): float32, final checkpoints, the same cells per case for every
    architecture.
-8. Two seeds per arm, both reported. One arm *leads* another on a field only when every seed of the one lies below every
-   seed of the other and the seed means differ by at least 3%; otherwise the two are *level*.
+8. Two random seeds per configuration, both reported. One model *leads* another on a field only when every seed of the
+   one lies below every seed of the other and the seed means differ by at least 3%; otherwise the two are *level*.
 9. A ratio is always baseline ÷ ISLA, so a value above one favors ISLA.
 10. A sealed test split is evaluated once per checkpoint, with the checkpoint and configuration declared beforehand
     (@sec-splits).
 11. Every experiment states, in readout units and before it runs, the value that confirms it and the value that refutes it.
 
-### One instrument per dataset {#sec-review-instrument}
+### One scoring set per dataset {#sec-review-instrument}
 
-**Every number in a family of comparisons is read from one fixed instrument, and a control that changes the instrument is
-reported as a control.** The *instrument* of a dataset is its fixed validation or test set and its scoring configuration:
+**Every number in a family of comparisons is read from one fixed scoring set, and a control that changes it is reported as
+a control.** The *scoring set* of a dataset is its fixed validation or test set and its scoring configuration:
 on the DrivAerML Surface task, surface pressure and wall shear on 48 held-out cars at 200,000 cells, in float32; on the
 DrivAerML Volume task, pressure, velocity and eddy viscosity at 200,000 interior points of the same 48 cars; on
-HiLiftAeroML, 180 held-out wing cases shared by every training rung. An instrument is never widened after a result is read
-from it. A control that changes it (another cell count, a pose, a sampling law) is reported as such and never mixed into a
+HiLiftAeroML, 180 held-out wing cases shared by every *rung*, a training-set size of a data-efficiency ladder (the
+210-wing rung trains on 210 wings). A scoring set is never widened after a result is read from it. A control that changes it (another cell count, a pose, a sampling law) is reported as such and never mixed into a
 standing. Its limits bind where stated: 48 cars is a small validation set, and two seeds a thin noise estimate
 (@sec-limits).
 
@@ -252,46 +293,99 @@ the configuration's cost there.
 
 ### Learning rate {#sec-lr-protocol}
 
-**Every lane of an architecture trains at one learning rate on every dataset: ISLA at $3.75 \times 10^{-4}$, GeoTransolver and
-Transolver at $10^{-3}$.** ISLA's rate is its width rule, $10^{-3} \times 192 / \text{width}$, at width 512. The baselines'
-rate is set in every reference lane's command line. The recipe's own default, $3 \times 10^{-3}$ in `conf/train.yaml`, is
-not used for any reference lane. GeoTransolver at width 256 on the DrivAerML Surface task scored 0.0445 at
-$3 \times 10^{-3}$ against 0.0455 at $10^{-3}$ in one paired comparison, a gap inside the 3% band within which the seed rule
-calls two arms level. The rate of every other configuration in the book is named where it appears.
+**Every reference configuration trains at one learning rate on every dataset: ISLA at $3.75 \times 10^{-4}$,
+GeoTransolver and Transolver at $10^{-3}$.** ISLA's rate is its width rule, $10^{-3} \times 192 / \text{width}$, at width
+512. The baselines' rate is set on the command line of every training run of the standings. The recipe's own default,
+$3 \times 10^{-3}$ in `conf/train.yaml`, is not used for any of them; some studies train a baseline at it and say so where
+they appear.
 
-### How the reference configurations were chosen
+```{python}
+#| label: para-lr-gt
+#| output: asis
+P3 = J("p200k_trio_reduction_2026-09-19.json")["arms"]
+g1, g3 = P3["gt_unit_lr1e3"]["pressure_mean"], P3["gt_unit_lr3e3"]["pressure_mean"]
+print(f"GeoTransolver at width 256 on the DrivAerML Surface task, fed the unit direction, scores {g3:.4f} at $3 \\times "
+      f"10^{{-3}}$ against {g1:.4f} at $10^{{-3}}$ (surface pressure, 435 training cars, 200,000 cells, seed means; "
+      f"results/p200k_trio_reduction_2026-09-19.json), a gap of {100 * (g1 / g3 - 1):.1f}%, inside the 3% band within which "
+      "the seed rule calls two models level.")
+```
 
-**The reference configuration of each architecture is the most accurate candidate that trains under 80 GiB per GPU on two
-selection datasets, the DrivAerML Surface task and the 210-wing HiLiftAeroML rung, with two seeds per candidate and ties
-within 3% going to the cheaper candidate.** Every candidate trained for 500 epochs and was scored on the native mesh at
-200,000 cells. The two datasets name different winners for every architecture, so a candidate's accuracy is its error
-divided by the best candidate's error on each dataset, averaged over the two. For ISLA the reference is the one candidate
-within about 3% of the best on each dataset separately. @tbl-selection lists every candidate.
+
+### How the reference configurations were chosen {#sec-selection}
+
+**Each reference configuration was chosen once, among candidates that train under 80 GiB per GPU, on two selection
+datasets: the DrivAerML Surface task and HiLiftAeroML at 210 training wings. The registered rule names a winner per
+dataset, and the two datasets named different winners for every architecture.** Every candidate trained for 500 epochs on
+two seeds and was scored on the native mesh at 200,000 cells, by its seed-mean surface pressure error. The rule, written
+before the candidates were scored, takes on each dataset the candidate with the lowest error, with candidates within 3% of
+the best counted as tied and the tie going to the one with the lower training peak memory. A candidate that wins on both
+datasets is the reference configuration; if the datasets disagree, both winners are listed and the decision is recorded
+with its reason.
+
+```{python}
+#| label: cell-tbl-selection-winners
+#| output: asis
+D = SEL["datasets"]
+nm = lambda k: "w384_s256" if k == "isla_ref" else k.replace("isla_", "").replace("gt_", "").replace("t_", "")
+out = "| architecture | winner on DrivAerML Surface | winner on the 210 wings | the two agree | reference configuration |\n|---|---|---|---|---|\n"
+for arch in S.ARCHS:
+    w = SEL["reference"][arch]
+    out += (f"| {arch} | {nm(w['winners']['drivaer_surface'])} | {nm(w['winners']['hilift_210'])} | "
+            f"{'yes' if w['agreed'] else 'no'} | {nm(REF[arch])} |\n")
+print(out)
+print(": The registered selection rule, applied per dataset (lowest seed-mean pressure error, ties within 3% to the lower "
+      "training peak memory), and the configuration taken. Candidate names as in @tbl-selection. How to read this: the "
+      "rule by itself names no reference configuration for any architecture; the last column is the decision described "
+      "below. Data: results/char/ref80_select_2026-10-03.json. {#tbl-selection-winners}")
+```
+
+```{python}
+#| label: para-selection-decision
+#| output: asis
+def joint(arch):
+    cd, cw = D["drivaer_surface"][arch]["candidates"], D["hilift_210"][arch]["candidates"]
+    bd = min(v["pressure_l2"] for v in cd.values()); bw = min(v["pressure_l2"] for v in cw.values())
+    return {k: (cd[k]["pressure_l2"] / bd, cw[k]["pressure_l2"] / bw, cd[k]["peak_memory_gib"]) for k in cd if k in cw}
+JS = {a: joint(a) for a in S.ARCHS}
+mj = lambda r: (r[0] + r[1]) / 2
+for a in S.ARCHS:   # the decision is the smallest joint score, and also the smallest worse-of-two ratio
+    assert min(JS[a], key=lambda k: mj(JS[a][k])) == REF[a] and min(JS[a], key=lambda k: max(JS[a][k][:2])) == REF[a]
+def cheaper_ties(a):
+    r0 = JS[a][REF[a]]
+    return [(k, r) for k, r in JS[a].items() if k != REF[a] and mj(r) <= mj(r0) * 1.03 and r[2] < r0[2]]
+pct = lambda x: f"{100 * (x - 1):.1f}%"
+def tie_text(a):
+    r0 = JS[a][REF[a]]
+    parts = [f"{nm(k)} ({r[2]:.0f} GiB) trails the best by {pct(max(r[:2]))} on "
+             f"{'the cars' if r[0] > r[1] else 'the wings'}" for k, r in sorted(cheaper_ties(a), key=lambda kr: kr[1][2])]
+    return (f"For {a} the joint score's 3% tie band also holds cheaper candidates: " + "; ".join(parts)
+            + f"; {nm(REF[a])} ({r0[2]:.0f} GiB) trails by at most {pct(max(r0[:2]))}.")
+gt = JS["GeoTransolver"][REF["GeoTransolver"]]
+print("The decision used a joint score: a candidate's error divided by the best candidate's error on each dataset, "
+      "averaged over the two. Each reference configuration has the smallest joint score of its architecture, and it is "
+      "also the candidate that trails the best by the least on its worse dataset. The tie clause was not carried over to "
+      "the joint score. " + " ".join(tie_text(a) for a in ("ISLA", "Transolver") if cheaper_ties(a))
+      + f" No GeoTransolver candidate is within 3% of the best on both datasets; width 256 is the best on the wings and "
+      f"trails by {pct(gt[0])} on the cars. On the wings GeoTransolver and Transolver read the freestream in inch/s "
+      "(@tbl-model-inputs), so their ranking there is the ranking under that input. @tbl-selection lists every candidate.")
+```
 
 ```{python}
 #| label: cell-tbl-selection
 #| output: asis
-D = SEL["datasets"]
 out = "| architecture | candidate | DrivAerML Surface: error ÷ best | 210 wings: error ÷ best | mean | training peak [GiB] |\n|---|---|--:|--:|--:|--:|\n"
 for arch in S.ARCHS:
-    cd, cw = D["drivaer_surface"][arch]["candidates"], D["hilift_210"][arch]["candidates"]
-    bd = min(v["pressure_l2"] for v in cd.values()); bw = min(v["pressure_l2"] for v in cw.values())
-    rows = []
-    for k in cd:
-        if k in cw:
-            rd, rw = cd[k]["pressure_l2"] / bd, cw[k]["pressure_l2"] / bw
-            rows.append(((rd + rw) / 2, k, rd, rw, cd[k]["peak_memory_gib"]))
-    for j, (m, k, rd, rw, gib) in enumerate(sorted(rows)):
-        name = k.replace("isla_", "").replace("gt_", "").replace("t_", "")
-        lab = f"**{name} (reference)**" if k == REF[arch] else name
+    rows = sorted(((mj(r), k, r[0], r[1], r[2]) for k, r in JS[arch].items()))
+    for j, (m, k, rd, rw, gib) in enumerate(rows):
+        lab = f"**{nm(k)} (reference)**" if k == REF[arch] else nm(k)
         out += f"| {arch if j == 0 else ''} | {lab} | {rd:.3f} | {rw:.3f} | {m:.3f} | {gib:.0f} |\n"
 print(out)
 print(": Every candidate of the selection, by architecture: its seed-mean surface pressure error on each selection dataset "
-      "divided by the best candidate's on that dataset, the mean of the two, and its training peak memory. Candidate names: "
-      "`w` width, `s` slices, `d` layers, `h` width of a baseline, `l` its layers, `c100k` trained at 100,000 cells; ISLA's "
-      "`ref` is width 384 with 256 slices. How to read this: 1.000 is the best candidate on that dataset; the table selects "
-      "configurations and ranks nothing across architectures. Data: results/char/ref80_select_2026-10-03.json. "
-      "{#tbl-selection}")
+      "divided by the best candidate's on that dataset, the mean of the two (the joint score), and its training peak "
+      "memory. Candidate names: `w` width, `s` slices, `d` layers, `h` width of a baseline, `l` its layers, `c100k` trained "
+      "at 100,000 cells; an ISLA name lists only what differs from width 384, 256 slices and 12 layers (`w384_s256` is that configuration). How to read this: 1.000 is the best candidate on that "
+      "dataset; the table selects configurations and ranks nothing across architectures. Data: "
+      "results/char/ref80_select_2026-10-03.json. {#tbl-selection}")
 ```
 
 ## The datasets {#sec-datasets}
@@ -329,7 +423,7 @@ out = "| dataset | what it is | what varies per case | $K$ | $S$ | task | scored
 for d, w, v, k, s, task, key, ch in rows:
     out += f"| {d} | {w} | {v} | {k if d else ''} | {s if d else ''} | {task} | {nc(key)} | {ch if d else ''} |\n"
 print(out)
-print(": The datasets of the book. $K$: global unit directions; $S$: global scalars, as ISLA's reference lanes declare them "
+print(": The datasets of the book. $K$: global unit directions; $S$: global scalars, as ISLA's reference configurations declare them "
       "(@sec-isla-inputs). *Scored cases*: the validation or test cases of the standing. How to read this: a row names what "
       "varies within the set, which fixes what a model trained on it must learn; the per-cell boundary data of the solids and "
       "brackets are listed in their chapters. AeroZoo has no standing artifact; its chapter holds its evidence. Data: the "
@@ -345,7 +439,8 @@ print(": The datasets of the book. $K$: global unit directions; $S$: global scal
 #|   plane of the enclosure, the body in black. Tensile2d: the axial stress $\sigma_{22}$ at the nodes. The lug: the von
 #|   Mises stress at the nodes, projected along the thickness. DeepJEB++: the von Mises stress on one bracket's surface. How
 #|   to read this: colors are reference CFD and FEM fields, not predictions; each panel has its own color scale and its own
-#|   length scale, and surfaces are drawn from a random subset of their cells, so dot density is not mesh resolution. Data:
+#|   length scale, and surfaces are drawn from a random subset of their cells, so dot density follows the mesh, not the
+#|   field. The SHIFT-SUV panel is a fastback; every model trains and is scored on the estate family (@sec-shift-suv). Data:
 #|   results/problem_figures_2026-09-22/*.npz (DeepJEB++: results/sample_figures_2026-10-02/deepjeb.npz).
 #| code-fold: true
 #| fig-height: 11
@@ -443,7 +538,7 @@ print(": The case each panel of @fig-datasets draws, and the size of its native 
 Tensile2d, the lug and DeepJEB++ are steady solid-mechanics problems whose loads and boundary conditions vary per case. They
 exercise what the aerodynamic datasets leave unused: global scalars, per-cell boundary labels and values, a tensor output,
 and problems with no global direction. Every dataset enters the evidence only with GeoTransolver and Transolver trained on
-it under the rules above, and with a preregistration written before its first lane. What the set does not cover is stated
+it under the rules above, and with a preregistration written before its first training run. What the set does not cover is stated
 in @sec-limits.
 
 ### Conventions shared by every dataset {#sec-data-conventions}
@@ -464,7 +559,7 @@ in @sec-limits.
   `bc_load`, …). A prescribed vector enters ISLA as a rank-1 boundary field; one stored component by component is stacked
   into one vector first, because laboratory components fed as scalars leak the frame. Where a dataset configuration gives
   GeoTransolver and Transolver boundary labels, it writes them as nodal indicators on the interior points
-  (@tbl-baseline-inputs).
+  (@tbl-model-inputs).
 - **Global vectors must be data of the problem.** For external aerodynamics `ComputeFreestreamDirection` writes `U_inf_dir`
   from the stored velocity. For a loaded solid the load direction is the global vector. Where the targets are components in
   a fixed frame, ISLA predicts the tensor and the components are read off it (@sec-isla-heads). The dataset's axes are never
@@ -487,7 +582,7 @@ in @sec-limits.
 : Where each dataset's conversion and configuration live. `datasets/` and `conf/` are relative to the recipe root,
 `examples/cfd/external_aerodynamics/unified_external_aero_recipe`. The GeoTransolver and Transolver configurations sit
 beside ISLA's in `conf/model/`, with the prefixes `geotransolver_` and `transolver_`. How to read this: the table locates
-files; it says nothing about what a model receives, which is @tbl-baseline-inputs. {#tbl-data-files}
+files; it says nothing about what a model receives, which is @tbl-model-inputs. {#tbl-data-files}
 
 ### Splits {#sec-splits}
 
@@ -497,7 +592,7 @@ AirfRANS, SHIFT-SUV, PLAID's official ladder), they are used unchanged. Where a 
 fixed-seed permutation recorded in the manifest, and every smaller training rung is a prefix of the larger one, so a rung
 differs from the next only by the cases it lacks. DrivAerML has one validation set of 48 cars, shared by the Surface and
 Volume tasks and by every experiment, with 435 training cars or a nested rung of 27, 54, 109 or 218. HiLiftAeroML's
-manifests each hold out one question and overlap, so a test split there is sealed per checkpoint, not per program. Each
+manifests each hold out one question and overlap, so a test split there is sealed per checkpoint, not once for every experiment. Each
 dataset chapter gives its splits in full.
 
 ## The scoring protocol {#sec-protocol}
@@ -514,7 +609,7 @@ area-weighted relative L2 error of @sec-metrics, computed per case and averaged 
 | checkpoint | the final epoch of each seed; no selection on validation error |
 | seeds | 42 and 43, both reported; the standing quotes the seed mean and applies the seed rule of @sec-fair-comparison |
 | metric | area-weighted relative L2 per case, averaged over the scored cases (@sec-metrics) |
-| scorings | the *native mesh*; the *uniform point cloud*, the area-proportional law with exact Horvitz–Thompson weights; *rotated and translated*, a random rotation and a translation of one RMS radius per case (in-plane on the planar datasets) |
+| scorings | the *native mesh*; the *uniform point cloud*, the area-proportional law with exact Horvitz–Thompson weights; *rotated and translated*, a random rotation and a translation of one RMS radius per case (the root-mean-square distance of the case's points from their centroid; in-plane on the planar datasets) |
 
 : The scoring protocol of every standing. How to read this: the three scorings rescore one checkpoint and train nothing; a
 number outside this protocol says so in its caption. {#tbl-protocol}
@@ -532,41 +627,42 @@ things:
 
 Only the first group appears as a point-cloud standing (@fig-contract-shifts).
 
-::: {.callout-warning collapse="true" title="What the validation set is used for"}
+::: {.callout-warning title="What the validation set is used for"}
 The DrivAerML and HiLiftAeroML accuracy figures are validation-set figures with no checkpoint selection behind them. The
-validation sets were used to select the reference configurations (@tbl-selection) and to design the ablations that
-followed other readouts, and the choice of which results to present was made with them in view. The HiLiftAeroML test
-splits are spent only on the regime-extrapolation evaluations of @sec-hilift. Because those test sets cover every geometry,
-the remaining test manifests are held out per checkpoint but are not program-level confirmations (@sec-limits).
+same validation sets selected the reference configurations (@tbl-selection) and were in view when the ablations were
+designed, so they are not an untouched test. The sealed HiLiftAeroML test splits were scored once, on regime
+extrapolation, with an ISLA study configuration against baselines that read the physical freestream (@sec-hilift); no
+reference configuration is scored on them. Because those test sets cover every geometry, the remaining test manifests
+are held out per checkpoint but do not confirm a result across the whole set of experiments (@sec-limits).
 :::
 
 ## Study configurations {#sec-study-configurations}
 
-**A study run on a smaller ISLA than the reference configuration has one tag in its caption: "Instrument: ISLA at
+**A study run on an ISLA other than the reference configuration has one tag in its caption: "Instrument: ISLA at
 ⟨width⟩ wide, ⟨slices⟩ slices, ⟨rate⟩, raw slice reads". Such a study is read for slopes and mechanisms, never as a
-standing.** Several of the book's mechanism probes, sampling probes and scaling ladders were run on smaller
-configurations of ISLA. They used fewer slices, a narrower width, a higher learning rate, and the *raw slice reads*, the
+standing.** Several of the book's mechanism probes, sampling probes and scaling ladders were run on other
+configurations of ISLA, most of them smaller. They used fewer slices, another width, another learning rate, and the
+*raw slice reads*, the
 ablation of @sec-isla-layer in which the slice sublayer pools and broadcasts the raw token state instead of its
 LayerNorm. A slope (how an error moves with cells, data or width) and a mechanism (where a dependence on the sample lives)
 carry over between configurations of one architecture. An absolute error does not, and no tagged number is compared with a
-standing. A study whose lanes used the *linear* routing score, an unbounded affine score in place of ISLA's bounded cosine
+standing. A study whose runs used the *linear* routing score, an unbounded affine score in place of ISLA's bounded cosine
 score, has the variant "Instrument: ISLA at ⟨width⟩ wide, ⟨slices⟩ slices, ⟨rate⟩, linear routing, raw slice reads".
 @tbl-study-configurations lists the configurations as they appear in the book's artifacts.
 
 | tag | layers | width | slices | learning rate | routing score | training cells | where the book uses it |
 |---|--:|--:|--:|--:|---|---|---|
-| ISLA at 384 wide, 256 slices, 5e-4, raw slice reads | 12 | 384 | 256 | $5 \times 10^{-4}$ | cosine | 200,000 | the biased-draw probe, the slice territories, the rotation-augmented comparison (@sec-contract-studies, @sec-pose-contract); the 384-wide rungs of the capacity ladders (@sec-capacity) |
+| ISLA at 384 wide, 256 slices, 5e-4, raw slice reads | 12 | 384 | 256 | $5 \times 10^{-4}$ | cosine | 200,000 | the biased-draw probe, the slice territories, the rotation-augmented comparison (@sec-contract-studies, @sec-pose-contract); the 384-wide points of the capacity ladders (@sec-capacity) |
 | ISLA at 192 wide, 256 slices, 1e-3, linear routing, raw slice reads | 12 | 192 | 256 | $10^{-3}$ | linear | 100,000 (cars), 200,000 (wings) | the training-law swap (@sec-training-law) |
 | ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads | 12 | 512 | 512 | $3.75 \times 10^{-4}$ | cosine | 200,000 | the nearest-token geometry swap on the DrivAerML Volume task (@sec-nearest-token); the HiLiftAeroML standing, noted where it appears |
 | ISLA at 768 wide, 256 slices, 2.5e-4, raw slice reads | 12 | 768 | 256 | $2.5 \times 10^{-4}$ | cosine | 20,000 | the tie diagnostic on the lug (@sec-nearest-ties) |
-| capacity ladders | 12 to 48 | 192 to 1,536 | 256 | named per rung | cosine or linear, named per rung | 10,000 to 200,000, named per rung | the scaling fits and the cells ladder (@sec-capacity); each rung names its own configuration |
+| capacity ladders | 12 to 48 | 192 to 1,536 | 256 | named per point | cosine or linear, named per point | 10,000 to 200,000, named per point | the scaling fits and the cells ladder (@sec-capacity); each point names its own configuration |
 
 : The study configurations of ISLA and where the book uses them. Every configuration other than the reference one uses
-the raw slice reads. *Learning rate*: the width rule $10^{-3} \times 192 / \text{width}$, except the 384-wide
-configuration, which trains at $5 \times 10^{-4}$. *Routing score*: *cosine* is the bounded cosine score of ISLA's slice
+the raw slice reads. *Learning rate*: the width rule $10^{-3} \times 192 / \text{width}$. *Routing score*: *cosine* is the bounded cosine score of ISLA's slice
 routing (@sec-isla-slices); *linear* is an unbounded affine score of the token state, which the class does not have, and a
 tag names it. How to read this: a caption that has a tag reads its numbers against other numbers with the same tag, never
-against a standing. Sources: the lane configurations recorded in
+against a standing. Sources: the training-run configurations recorded in
 `results/campaigns_2026-10-02/char/rf1/rf1_isla_ref/metrics.jsonl` (384 wide, 256 slices, $5 \times 10^{-4}$) and
 `cs/cs_t2dz_isla/metrics.jsonl` (768 wide, 256 slices, $2.5 \times 10^{-4}$); the protocol strings of
 `results/consistency_r1_2026-09-23.json`, `results/trainarea_dr_r1_2026-09-23.json` and

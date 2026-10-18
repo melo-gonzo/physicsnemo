@@ -15,6 +15,13 @@ code cell on this page runs on a CPU as the page renders, on the running
 airfoil of @sec-problem, with a model far too small to predict anything, so
 the shapes and the residuals can be read.
 
+::: {.callout-tip title="If you run one thing"}
+From the recipe root, train the DrivAerML Surface model at its reference configuration with
+`python src/train.py model=isla_surface dataset=drivaer_ml_surface`, then score it in float32 at 200,000 cells with the
+`src/infer.py` command of @sec-using-sampler. Everything else on this page explains what those two commands fix and
+how to change them for your data.
+:::
+
 ```{python}
 #| label: setup-using
 #| include: false
@@ -86,11 +93,12 @@ print(f"The reference configuration is width `hidden={DEFAULTS['hidden']}`, `n_l
       "as the page renders).")
 ```
 
-It is the most accurate ISLA that trains in under 80 GiB per GPU on the
-DrivAerML Surface task and the HiLiftAeroML 210-wing rung, by the selection
-rule that also fixed the reference configurations of GeoTransolver (width
-256) and Transolver (width 512, 16 layers); @sec-baselines states the rule
-with its candidates. Everything else
+It was chosen among ISLA configurations that train in under 80 GiB per GPU,
+on the DrivAerML Surface task and on HiLiftAeroML at 210 training wings, by
+the selection that also fixed the reference configurations of GeoTransolver
+(width 256) and Transolver (width 512, 16 layers). The two datasets named
+different winners, and the configuration with the best score over both was
+taken; @sec-selection gives the rule, the outcome and every candidate. Everything else
 about ISLA is fixed in the class: the frame, the routing, the length unit,
 the wall geometry of interior prediction points, the geometry kernel's
 selection. The arguments left on the constructor (@tbl-arch-switches) are
@@ -244,8 +252,9 @@ print(f"On the airfoil: its {airfoil.n_cells} segments have total length {airfoi
 **A rank-1 global input is a direction.** The model normalizes each global
 direction and discards its magnitude. For external aerodynamics the
 recipe's `ComputeFreestreamDirection` writes the unit far-field direction
-from the solver's velocity, and the same unit-direction rule holds for every
-architecture in the book (@sec-unit-direction-rule).
+`U_inf_dir` from the solver's velocity (@sec-unit-direction-rule).
+GeoTransolver and Transolver do not apply this rule; what they read on each
+dataset is in @tbl-model-inputs.
 
 **A global direction must be a datum of the problem.** The inlet direction,
 a load direction and gravity are admissible. The axes of the dataset's
@@ -277,8 +286,9 @@ fields (`boundaries.vehicle` under `boundary_meshes`, the interior point
 cloud under `prediction_points`, the case's global tensors under
 `global_data`). Under the second, the recipe reads its targets out of the
 returned mesh's `point_data` by the names of the `output_schema`
-declaration. GLOBE uses the same contract, so the two models are swapped by
-changing the model block alone.
+declaration. GLOBE, another surrogate the recipe trains
+(`conf/model/globe_surface.yaml`), uses the same contract, so the two models
+are swapped by changing the model block alone.
 
 ::: {.callout-note collapse="true" title="Nested field names"}
 A dataset that stores its fields in groups (`solution/pressure` on disk,
@@ -383,8 +393,8 @@ AdamW for everything that is not a matrix.**
 #| label: para-using-lr
 #| output: asis
 print(f"Every ISLA configuration pins this rate. The recipe-wide default (`conf/train.yaml`, "
-      f"{sci(TRAIN['training']['optimizer']['lr'])}) is higher and drives ISLA to a mean-field plateau, so an ISLA configuration "
-      "never inherits it. For another width, start from the width rule the configuration files state, "
+      f"{sci(TRAIN['training']['optimizer']['lr'])}) is {TRAIN['training']['optimizer']['lr'] / next(iter(lrs.values())):.0f} times ISLA's rate, and an ISLA "
+      "configuration never inherits it. For another width, start from the width rule the configuration files state, "
       "$10^{-3} \\times 192 / \\mathrm{hidden}$, which gives the reference rate at width 512, and treat it as a starting rate.")
 ```
 
@@ -416,7 +426,7 @@ matches that of a typical AdamW step at the same rate. Two consequences
 matter for ISLA. The step on a matrix has a fixed size set by the rate
 alone, not by the gradient's scale, so the rate is a statement about how
 far each weight matrix moves per step; one number then serves the
-embedding, the routing seeds, the slice and token MLPs and the head alike.
+embedding, the routing's base prototypes, the slice and token MLPs and the head alike.
 And the vectors that Muon does not take, the LayerNorm parameters and the
 biases, get AdamW's per-coordinate normalization at a matched step size.
 The one rate holds on every dataset because no block multiplies the
@@ -441,16 +451,17 @@ python src/infer.py model=isla_surface dataset=drivaer_ml_surface \
 #| label: para-using-precision
 #| output: asis
 INFER = yaml.safe_load((RECIPE / "conf" / "infer.yaml").read_text())
-PR2 = json.load(open(RES / "isla_perf_round2_2026-09-09.json"))["exactness_bf16"]
-bf = [r["rel_l2_bf16_vs_fp32_same_model"] for r in PR2]
+PR = json.load(open(RES / "precres_2026-09-18.json"))["reduction"]; PRB, PRF = PR["bfloat16"], PR["float32"]
 print(f"The recipe trains under {BASE['precision']} autocast (`conf/base.yaml`), and `conf/infer.yaml` reads the whole mesh "
       f"by default (`sampling_resolution: {INFER['sampling_resolution']:,}`), hence the two overrides. Every number in this "
       "book is a float32 inference on the final-epoch checkpoint (@sec-metrics). A bfloat16 inference rounds the learned maps' "
-      f"arithmetic: the same model's bfloat16 output differs from its float32 output by {min(bf):.1%} to {max(bf):.1%} in "
-      "relative L2 (results/isla_perf_round2_2026-09-09.json, untrained models on random point clouds, 192 and 512 wide, 10,000 and 40,000 tokens), "
-      "and a rigid motion of the input moves a bfloat16 prediction by rounding of that order, where a float32 inference meets "
-      "the contract at float32 roundoff (@sec-isla-contracts). If your use depends on the pose or the sampling "
-      "contract, infer in float32.")
+      f"arithmetic. On two trained DrivAerML Surface checkpoints, the bfloat16 pressure prediction differs from the float32 one "
+      f"by {PRB['scalar_vs_fp32_unrotated']['mean_over_seeds']:.1%} on average, and a rigid motion of the input moves the "
+      f"bfloat16 prediction by {min(PRB['scalar_residual']['per_seed_mean']):.1%} to {max(PRB['scalar_residual']['per_seed_mean']):.1%} "
+      f"(the wall-shear vector by {min(PRB['vector_residual']['per_seed_mean']):.1%} to {max(PRB['vector_residual']['per_seed_mean']):.1%}), "
+      f"where in float32 it moves by {PRF['scalar_residual']['max_over_cars']:.3%} at worst (twelve validation cars per checkpoint; "
+      "an ISLA at 192 wide, 256 slices, 1e-3, linear routing, raw slice reads, @sec-study-configurations; "
+      "results/precres_2026-09-18.json). If your use depends on the pose or the sampling contract, infer in float32.")
 ```
 
 **For inference at a fixed cell budget, draw the cells with the stratified
