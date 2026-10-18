@@ -1,0 +1,156 @@
+{
+ "protocol": "A2-RERUN artifacts (2026-10-17, #sec-nb-a2-rerun-jeb-t2d, #sec-nb-a2-rerun-drivaerml,\n#sec-nb-a2-rerun-suv-lug): the CHAR-PROTOCOLS record of each\nrerun dataset with ISLA's arm replaced by the A2 reruns (the reference configuration with the normalized slice reads, seeds 42\nand 43, final checkpoints, the CHAR scorer: float32, native mesh / uniform point cloud / rotated + translated). The A2 scores\nare the reductions committed in results/campaigns_2026-10-17/a2r/<stem>_a2_scores.json (copied unmodified from\nscratch/isla-a2-rerun-2026-10-17/, written there by char_a2_table.py and deepjeb_a2_table.py); the baselines' arms are the CHAR\nrecord's, unchanged (GeoTransolver and Transolver are not rerun). Writes results/char/<dataset>_a2.json in the schema of\nresults/char/<dataset>.json (protocols, fields, isla_arm, arms[arm][protocol][field] = {mean, per_seed, n_cases, n_seeds},\ncomplete), so the chapters' protocol_table() and char_arms() read it unchanged, plus the key \"raw_read_isla\", the CHAR record's\nISLA arm (raw slice reads), which protocol_table ignores. n_cases is the A2 record's where it has one (DeepJEB++), else the CHAR\nISLA arm's: the A2 lanes are scored on the same validation split by the same scorer.\nusage: python a2r_protocol_artifacts_2026-10-17.py",
+ "protocols": {
+  "native": "native mesh",
+  "area": "uniform point cloud",
+  "posed": "rotated + translated"
+ },
+ "fields": {
+  "von_mises_l2": "von Mises"
+ },
+ "isla_arm": "ISLA 512 with 512 slices",
+ "arms": {
+  "ISLA 512 with 512 slices": {
+   "native": {
+    "von_mises_l2": {
+     "mean": 0.001725596884886424,
+     "per_seed": {
+      "42": 0.0016015164057413738,
+      "43": 0.001849677364031474
+     },
+     "n_cases": 600,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "von_mises_l2": {
+     "mean": 0.001725596884886424,
+     "per_seed": {
+      "42": 0.0016015164057413738,
+      "43": 0.001849677364031474
+     },
+     "n_cases": 600,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "von_mises_l2": {
+     "mean": 0.005973888635635376,
+     "per_seed": {
+      "42": 0.006632994413375854,
+      "43": 0.005314782857894897
+     },
+     "n_cases": 600,
+     "n_seeds": 2
+    }
+   }
+  },
+  "GeoTransolver 256": {
+   "native": {
+    "von_mises_l2": {
+     "mean": 0.00209203839302063,
+     "per_seed": {
+      "42": 0.0022914167245229084,
+      "43": 0.0018926600615183512
+     },
+     "n_cases": 600,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "von_mises_l2": {
+     "mean": 0.00209203839302063,
+     "per_seed": {
+      "42": 0.0022914167245229084,
+      "43": 0.0018926600615183512
+     },
+     "n_cases": 600,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "von_mises_l2": {
+     "mean": 0.939171651204427,
+     "per_seed": {
+      "42": 0.9179189046223958,
+      "43": 0.9604243977864584
+     },
+     "n_cases": 600,
+     "n_seeds": 2
+    }
+   }
+  },
+  "Transolver 512 x 16": {
+   "native": {
+    "von_mises_l2": {
+     "mean": 0.002167949378490448,
+     "per_seed": {
+      "42": 0.0023111812273661297,
+      "43": 0.0020247175296147666
+     },
+     "n_cases": 600,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "von_mises_l2": {
+     "mean": 0.002167949378490448,
+     "per_seed": {
+      "42": 0.0023111812273661297,
+      "43": 0.0020247175296147666
+     },
+     "n_cases": 600,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "von_mises_l2": {
+     "mean": 1.0240613810221353,
+     "per_seed": {
+      "42": 1.001461181640625,
+      "43": 1.0466615804036459
+     },
+     "n_cases": 600,
+     "n_seeds": 2
+    }
+   }
+  }
+ },
+ "complete": true,
+ "raw_read_isla": {
+  "label": "ISLA 512 with 512 slices",
+  "native": {
+   "von_mises_l2": {
+    "mean": 0.004046604235967,
+    "per_seed": {
+     "42": 0.0034681336085001626,
+     "43": 0.004625074863433838
+    },
+    "n_cases": 600,
+    "n_seeds": 2
+   }
+  },
+  "area": {
+   "von_mises_l2": {
+    "mean": 0.004046604235967,
+    "per_seed": {
+     "42": 0.0034681336085001626,
+     "43": 0.004625074863433838
+    },
+    "n_cases": 600,
+    "n_seeds": 2
+   }
+  },
+  "posed": {
+   "von_mises_l2": {
+    "mean": 0.006495604117711385,
+    "per_seed": {
+     "42": 0.006956599553426107,
+     "43": 0.0060346086819966635
+    },
+    "n_cases": 600,
+    "n_seeds": 2
+   }
+  }
+ }
+}

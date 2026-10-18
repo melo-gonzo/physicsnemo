@@ -460,7 +460,7 @@ print(f"**Thinning the Tensile2d boundary multiplies ISLA's errors and the law o
       f"uniformly changes them by a factor of {min(sd_r):.2f} to {max(sd_r):.2f}.** Two ISLA checkpoints of width 512 with 512 slices, trained "
       f"with the raw slice reads, were scored on the {N_VAL} validation specimens with the polyline replaced by all 201 of its condition-labelled segments "
       "and an expected 100 of the other 241 to 295, drawn three ways; the nodes, the targets and the global scalars are the same in every "
-      "draw (@tbl-tensile2d-area2). The segments are nearly equal in length (@sec-nb-char-area2-verdict), so the length-proportional and "
+      "draw (@tbl-tensile2d-area2). The segments are nearly equal in length, so the length-proportional and "
       "uniform draws keep almost the same segments, and the law is not separable here. GeoTransolver and Transolver were not scored, "
       "because they read no boundary sample; the reading is ISLA's alone.")
 ```
