@@ -9,7 +9,7 @@ nine tasks. The protocol fixes everything except the architecture, and every num
 baselines are the public model classes, run unmodified from the PhysicsNeMo recipe. Each architecture is scored at one
 reference configuration, chosen by one rule. This chapter says what each baseline computes and what it is given, states
 the rules of the comparison and how the reference configurations were chosen, shows every dataset on one page, and defines
-how a checkpoint is scored. It closes by defining the tag that marks a study run on a smaller ISLA.
+how a checkpoint is scored. It closes by defining the tag that marks a study run on another configuration of ISLA.
 
 ```{python}
 #| label: setup-baselines
@@ -327,7 +327,7 @@ with its reason.
 #| label: cell-tbl-selection-winners
 #| output: asis
 D = SEL["datasets"]
-nm = lambda k: k.replace("isla_", "").replace("gt_", "").replace("t_", "")
+nm = lambda k: "w384_s256" if k == "isla_ref" else k.replace("isla_", "").replace("gt_", "").replace("t_", "")
 out = "| architecture | winner on DrivAerML Surface | winner on the 210 wings | the two agree | reference configuration |\n|---|---|---|---|---|\n"
 for arch in S.ARCHS:
     w = SEL["reference"][arch]
@@ -384,7 +384,7 @@ print(out)
 print(": Every candidate of the selection, by architecture: its seed-mean surface pressure error on each selection dataset "
       "divided by the best candidate's on that dataset, the mean of the two (the joint score), and its training peak "
       "memory. Candidate names: `w` width, `s` slices, `d` layers, `h` width of a baseline, `l` its layers, `c100k` trained "
-      "at 100,000 cells; ISLA's `ref` is width 384 with 256 slices. How to read this: 1.000 is the best candidate on that "
+      "at 100,000 cells; an ISLA name lists only what differs from width 384, 256 slices and 12 layers (`w384_s256` is that configuration). How to read this: 1.000 is the best candidate on that "
       "dataset; the table selects configurations and ranks nothing across architectures. Data: "
       "results/char/ref80_select_2026-10-03.json. {#tbl-selection}")
 ```
@@ -639,10 +639,11 @@ are held out per checkpoint but do not confirm a result across the whole set of 
 
 ## Study configurations {#sec-study-configurations}
 
-**A study run on a smaller ISLA than the reference configuration has one tag in its caption: "Instrument: ISLA at
+**A study run on an ISLA other than the reference configuration has one tag in its caption: "Instrument: ISLA at
 ⟨width⟩ wide, ⟨slices⟩ slices, ⟨rate⟩, raw slice reads". Such a study is read for slopes and mechanisms, never as a
-standing.** Several of the book's mechanism probes, sampling probes and scaling ladders were run on smaller
-configurations of ISLA. They used fewer slices, a narrower width, a higher learning rate, and the *raw slice reads*, the
+standing.** Several of the book's mechanism probes, sampling probes and scaling ladders were run on other
+configurations of ISLA, most of them smaller. They used fewer slices, another width, another learning rate, and the
+*raw slice reads*, the
 ablation of @sec-isla-layer in which the slice sublayer pools and broadcasts the raw token state instead of its
 LayerNorm. A slope (how an error moves with cells, data or width) and a mechanism (where a dependence on the sample lives)
 carry over between configurations of one architecture. An absolute error does not, and no tagged number is compared with a

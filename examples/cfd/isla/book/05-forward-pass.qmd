@@ -227,13 +227,13 @@ scalars of $\{\hat n_i, \hat g_k\}$ that survive a rotation are the cosines
 between them. The seed is therefore
 
 $$
-\eta_i \equiv \big[\, \hat n_i \!\cdot\! \hat g_1,\ \dots,\ \hat n_i \!\cdot\! \hat g_K,\ \beta_i,\ \sigma \,\big]
+\eta_i \equiv \big[\, \hat n_i \!\cdot\! \hat g_1,\ \dots,\ \hat n_i \!\cdot\! \hat g_K,\ \zeta_i,\ \sigma \,\big]
 \quad (K + n_b + S \text{ scalars}),
 \qquad
 h_i \equiv \mathrm{MLP}_{\mathrm{embed}}(\eta_i),
 $$
 
-where $\beta_i$ are the invariants of the declared per-cell boundary inputs
+where $\zeta_i$ are the invariants of the declared per-cell boundary inputs
 and $\sigma$ the global scalar inputs, broadcast to every token. A rank-0
 boundary field is its own scalar. A rank-1 field $v_i$ contributes $v_i \cdot
 \hat n_i$, $v_i \cdot \hat g_k$, $\lvert v_i \rvert$ and its dot products
@@ -246,7 +246,7 @@ between the normal and the far-field direction. If the seed would be empty
 separation between tokens comes from the slice layers (`constant_seed`).
 
 ::: {.callout-note collapse="true" title="Stage 2 in the code"}
-The seed is the cosines against the global directions, the boundary-input invariants and the global scalars, in that order; `_InputSet._features` is where a rank-1 or rank-2 per-token field becomes the invariants $\beta_i$.
+The seed is the cosines against the global directions, the boundary-input invariants and the global scalars, in that order; `_InputSet._features` is where a rank-1 or rank-2 per-token field becomes the invariants $\zeta_i$.
 
 ```{python}
 #| label: code-stage-2

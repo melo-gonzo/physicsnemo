@@ -57,7 +57,7 @@ apply.
 |---|---|---:|
 | rotation $x \mapsto Qx$, $\det Q = 1$; normals and $\hat g$ rotated with it | $p$ unchanged, $v \mapsto Qv$ | $10^{-10}$ |
 | reflection, $\det Q = -1$ | a rank-$r$ output of even parity maps as $Q^{\otimes r}$; an odd-parity output (a pseudotensor) also picks up $\det Q$ | $10^{-11}$; $10^{-4}$ relative in two dimensions |
-| translation $x \mapsto x + t$ | every output unchanged, with no centering anywhere in the model | $10^{-10}$ |
+| translation $x \mapsto x + t$ | every output unchanged, with no centering in the learned path | $10^{-10}$ |
 | uniform rescale $x \mapsto kx$, measures $\times k^2$ or left alone | every output unchanged, with prediction points moved along | $10^{-10}$ |
 | measure-weight rescale $w \mapsto 137\,w$ | every output unchanged: the routing reads $\log w$ through a softmax, which a constant shift does not move | $10^{-9}$ |
 | cell splitting: every cell replaced by two coincident copies of half its measure | the interior prediction unchanged: the discrete measure, and every integral over it, is the same | $10^{-10}$ |
@@ -67,7 +67,9 @@ apply.
 : The contract tests and what each verifies. The transformations act on the boundary cells (positions, normals, measure
 weights), on the global directions and, for the interior task, on the prediction points together. How to read this: a
 tolerance is an absolute bound on the output difference in float64, except the two-dimensional test, which runs in float32
-at a relative tolerance of $10^{-4}$; a contract that holds here holds for every set of weights, trained or not. The test functions are listed below. Source: `test/experimental/models/isla/`.
+at a relative tolerance of $10^{-4}$; a contract that holds here holds for every set of weights, trained or not. ISLA-DTT's forest read keeps the rotation and translation rows at its finite opening angle up to
+ties of the canonical frame the forest is built in (@sec-arch-tree-read). The test functions are listed below. Source:
+`test/experimental/models/isla/`.
 {#tbl-contracts tbl-colwidths="[36,50,14]"}
 
 ::: {.callout-note collapse="true" title="Optional: the test functions, row by row"}
@@ -318,7 +320,8 @@ print(f"**At the reference configurations, rotating and translating every case l
       f"point cloud by {min(barea):.1f} to {max(barea):.1f}.** "
       "Every standing artifact scores each final checkpoint three times on the same validation cases: on the *native mesh*, on "
       "the *uniform point cloud* (the area-proportional law with exact Horvitz–Thompson weights), and *rotated and translated* "
-      "(a random rotation and a translation of one RMS radius per case, in-plane on the planar datasets, tensor targets rotated "
+      "(a random rotation and a translation of one RMS radius, the root-mean-square distance of the case's points from their "
+      "centroid, per case, in-plane on the planar datasets, tensor targets rotated "
       "as tensors). @fig-contract-shifts shows each architecture's *shift*: its error under a protocol divided by its own "
       f"native error. The architectures are at their reference configurations: {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} "
       f"and {S.CONFIG['Transolver']} (@sec-protocol).")
