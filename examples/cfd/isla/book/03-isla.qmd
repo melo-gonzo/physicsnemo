@@ -128,8 +128,7 @@ what the network is allowed to see.** @sec-landscape introduced slice
 attention: every token is routed softly into a few hundred slices, the
 slices exchange information, and the result is read back to the tokens. It
 is the cheapest form of global attention that still learns its own
-partition of the domain, and it holds the strongest record among learned
-surrogates on industrial aerodynamics. Transolver and GeoTransolver feed it
+partition of the domain. Transolver and GeoTransolver feed it
 raw coordinates in the dataset's frame and the global conditions as raw
 feature columns, so both learn the physics of pose from data, and both
 average over whatever points the mesher produced. @tbl-isla-vs-transolver
@@ -441,8 +440,8 @@ plt.show()
 
 ### The routing score: a bounded cosine against sample-conditioned prototypes {#sec-isla-routing-forms}
 
-**ISLA scores a token against a slice by a bounded cosine, so no layer can
-route every token to one slice however large its weights grow.** The score
+**ISLA scores a token against a slice by a bounded cosine, so the routing
+cannot sharpen without limit as its weights grow.** The score
 reads the normalized token state $\tilde h_i \equiv \mathrm{LN}(h_i)$,
 where LayerNorm (@sec-landscape) removes a vector's mean and scales it to
 unit variance across its 512 components, and compares it with one
@@ -694,7 +693,8 @@ weights.
 #|   state $h$: the fraction of the update's components that change the sum.
 #|   How to read this: the top panel is arithmetic and the bottom one is
 #|   computed here from random numbers; neither is a measurement of ISLA. The
-#|   measurement on a trained ISLA is @fig-isla-stream.
+#|   measurements on trained models are in @tbl-aerozoo-training and
+#|   @sec-surface-deepjeb.
 #| fig-height: 6.2
 #| code-fold: true
 import torch
@@ -731,11 +731,12 @@ inputs are read in several places: routing, pooling and broadcast all read
 $\tilde h$, and the raw $h$ enters the layer only through the residual
 identity and the token MLP's own LayerNorm. On ISLA trained at its single
 learning rate, the effect is measured directly. The ablation that reads the
-raw state in the pooling and the broadcast (the *raw-read variant*) grows
-its stream by orders of magnitude over training; on AeroZoo its validation
-loss then rises severalfold and does not recover, and on DeepJEB++ it stalls
-on a plateau. ISLA's stream stays bounded and its validation loss keeps its
-minimum (@fig-isla-stream).
+raw state in the pooling and the broadcast (the *raw-read variant*) loses
+its validation minimum on two datasets: on AeroZoo its validation loss is
+above twice its minimum from epoch 60 on (@tbl-aerozoo-training), and on
+DeepJEB++ it rises and never recovers, ending at the field-mean level
+(@sec-surface-deepjeb). ISLA's reference configuration, with the normalized
+reads, keeps its minimum on both.
 
 <!-- SLOT: fig-isla-stream: measured mean token norm against epoch, ISLA vs the raw-read variant (ablation), AeroZoo, log scale (FIG lane, results/renderings_2026-10-18/) -->
 
@@ -908,8 +909,9 @@ ne_dr = [n_eff(DR["q"][li]) for li in range(12)]
 dr_l1_top = np.sort(DR["q"][0])[::-1]
 print(
     f"**What the pictures show.** In the first layer the car model routes with an effective number of {ne_dr[0]:.0f} slices, "
-    f"and its heaviest slice holds {100 * dr_l1_top[0]:.0f}% of the mass. That layer can see only the embedded seed (each normal "
-    f"against the far-field direction), and a car's surface offers few distinct values of it. From the second layer on, the token "
+    f"and its heaviest slice holds {100 * dr_l1_top[0]:.0f}% of the mass. That layer's scores read only the embedded seed (each normal "
+    f"against the far-field direction), refined by the geometry against anchors formed from that same seed, and a car's surface "
+    f"offers few distinct values of it. From the second layer on, the token "
     f"states carry position through the relational invariants, and the effective number rises to {min(ne_dr[1:6]):.0f} to "
     f"{max(ne_dr[1:6]):.0f} in layers 2 to 6 and {min(ne_dr[6:]):.0f} to {max(ne_dr[6:]):.0f} in layers 7 to 12, of 256. "
     f"The assignment stays soft: in the sixth layer {undecided(DR, 5):.0f}% of the car's tokens give no single slice more than half "
@@ -996,8 +998,9 @@ it needs the laboratory axes $e_x, e_y$. ISLA therefore predicts the tensor
 itself, declared with its rank (`stress: {rank: 2, symmetric: true}`), and
 the components are read off it afterwards. No laboratory frame enters
 anywhere. Passing the dataset's axes as extra global directions would also
-keep the algebra covariant, but those axes are not a datum of the PDE: a
-model that needs them has been told the pose of the training set
+keep the algebra covariant if the axes rotated with every case; held fixed,
+as a dataset stores them, they are not a datum of the PDE but the pose of
+the training set, and a model that needs them has been told it
 (@sec-pose-inputs).
 
 ::: {.callout-note collapse="true" title="Optional: reflections and pseudotensors"}
@@ -1107,8 +1110,8 @@ plt.show()
 
 The nearest-token geometry is exact in the sense of the code (a brute-force
 search, no approximation), but it is a function of the boundary *sample*:
-near the wall it overestimates the true distance by up to about one sample
-spacing, and a different draw of boundary cells moves it. It is the one
+near the wall it overestimates the true distance by up to about half a
+sample spacing, and a different draw of boundary cells moves it. It is the one
 input of ISLA that depends on the discretization; @sec-invariances measures
 what that costs, and @sec-open-questions states what would replace it.
 
@@ -1210,8 +1213,15 @@ statistic is worse still, since it moves with the mesher
 (@fig-isla-frame). The relative construction presumes none of this:
 positions enter only as differences against anchors that are themselves
 quadrature means, and the one mean position in the model sits inside the
-scalar $L$. The two properties this buys, pose and discretization, are the
-subject of @sec-invariances.
+scalar $L$. One component is the exception, and it is an implementation
+device rather than an input: ISLA-DTT builds its Barnes–Hut forest in a
+frame the boundary carries (its measure-weighted centroid and principal
+axes, signed by the third moments), so that every pose of a case gets the
+same clusters; where that frame ties, on a body with equal principal
+variances or a symmetric axis, the far-field approximation can differ
+between poses (@sec-arch-modes). The two properties the relative
+construction buys, pose and discretization, are the subject of
+@sec-invariances.
 
 ## The forward pass on one page {#sec-isla-forward}
 

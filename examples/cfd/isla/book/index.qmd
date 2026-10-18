@@ -34,17 +34,19 @@ def verdicts():
     return out
 V = verdicts()
 n_pairs = sum(len(v) for k, v in V.items() if k != "is not compared with")
-UNFAIR = [S.DATASETS[k].name for k in S.available() if not S.DATASETS[k].fair_drive]
+UNFAIR = [S.DATASETS[k].short for k in S.available() if not S.DATASETS[k].fair_drive]
 SURF = [k for k in S.available() if "area" in S.DATASETS[k].protocols]
-isla_area = max(abs(S.Standing(k).shift("ISLA", S.DATASETS[k].headline[0], "area") - 1) for k in SURF)
-base_area = min(S.Standing(k).shift(a, S.DATASETS[k].headline[0], "area") for k in SURF for a in S.BASELINES)
 FLOW = [k for k in S.available() if k not in ("tensile2d", "lug", "deepjeb")]
 SOLID = [k for k in S.available() if k in ("tensile2d", "lug", "deepjeb")]
-psh = lambda ks, archs: [S.Standing(k).shift(a, S.DATASETS[k].headline[0], "posed") for k in ks for a in archs]
-isla_posed = max(abs(x - 1) for x in psh(FLOW, ["ISLA"]))
-base_posed_flow = (min(psh(FLOW, S.BASELINES)), max(psh(FLOW, S.BASELINES)))
-base_posed_solid = (min(psh(SOLID, S.BASELINES)), max(psh(SOLID, S.BASELINES)))
-tie_shift = {k: S.Standing(k).shift("ISLA", S.DATASETS[k].headline[0], "posed") for k in ("tensile2d", "lug")}
+def shifts(ks, archs, protocol):
+    """Every headline field's error under a protocol over its native error, for the given datasets and architectures."""
+    return [S.Standing(k).shift(a, f, protocol) for k in ks for f in S.DATASETS[k].headline for a in archs]
+isla_area = max(abs(x - 1) for x in shifts(SURF, ["ISLA"], "area"))
+base_area = min(shifts(SURF, S.BASELINES, "area"))
+isla_posed = max(abs(x - 1) for x in shifts(FLOW, ["ISLA"], "posed"))
+base_posed_flow = (min(shifts(FLOW, S.BASELINES, "posed")), max(shifts(FLOW, S.BASELINES, "posed")))
+base_posed_solid = (min(shifts(SOLID, S.BASELINES, "posed")), max(shifts(SOLID, S.BASELINES, "posed")))
+tie_shift = {k: max(shifts([k], ["ISLA"], "posed")) for k in ("tensile2d", "lug")}
 ```
 
 ## The thesis {#sec-verdict}
@@ -54,20 +56,21 @@ tie_shift = {k: S.Standing(k).shift("ISLA", S.DATASETS[k].headline[0], "posed") 
 #| output: asis
 print(
     "**ISLA is a slice-attention transformer that is exactly equivariant to rigid motions and consistent under a change of "
-    "mesh, by construction, and it pays no systematic accuracy price for either.** It is measured against GeoTransolver and "
-    "Transolver, the strongest published surrogates of its family, each at its own reference configuration, every model given "
-    "the same inputs and scored the same way. "
+    "mesh, by construction, and in distribution it is about as accurate as the strongest models of its family.** It is measured "
+    "against Transolver and its geometry-aware successor GeoTransolver, two published slice-attention surrogates, each at its own "
+    "reference configuration and scored the same way. "
     f"Over the {n_pairs} comparisons of @fig-standing (each headline field of each dataset against each baseline"
-    + (f", {' and '.join(UNFAIR)} excepted, whose recorded baselines read a different freestream input" if UNFAIR else "")
+    + (f"; {' and '.join(UNFAIR)} are not counted, because in their records the baselines read the freestream as a raw "
+       "physical vector" if UNFAIR else "")
     + f"), ISLA leads in {len(V['leads'])}, is level in {len(V['is level with'])} and trails in {len(V['trails'])}. "
-    f"Rotate and translate the test geometry, and on the {len(FLOW)} flow tasks the baselines' errors grow "
-    f"{base_posed_flow[0]:.0f}-fold to {base_posed_flow[1]:.0f}-fold while ISLA's moves by less than {100 * isla_posed:.1f}%; "
-    f"on the {len(SOLID)} solid-mechanics tasks the baselines' grow {base_posed_solid[0]:.1f}-fold to {base_posed_solid[1]:.0f}-fold, "
-    f"and ISLA's is unchanged on DeepJEB++ but moves {tie_shift['tensile2d']:.2f}-fold and {tie_shift['lug']:.1f}-fold on the two "
-    "structured meshes, where tied nearest-boundary samples break the symmetry of its interior geometry (@sec-invariances). "
-    "redraw the surface as a uniform point cloud, and the baselines' errors grow at least "
-    f"{base_area:.1f}-fold while ISLA's moves by less than {100 * isla_area:.1f}%. "
-    "Where ISLA trails, the book says where and why, and where its own error does move, the book shows the mechanism."
+    f"Rotate and translate the test geometry, and on the {len(FLOW)} flow tasks every baseline error grows "
+    f"{base_posed_flow[0]:.0f}-fold to {base_posed_flow[1]:.0f}-fold while ISLA's stays within {100 * isla_posed:.1f}% of its native value. "
+    f"On the {len(SOLID)} solid-mechanics tasks the baselines' grow {base_posed_solid[0]:.1f}-fold to {base_posed_solid[1]:.0f}-fold; "
+    f"ISLA's is unchanged on DeepJEB++ and moves up to {tie_shift['tensile2d']:.2f}-fold on Tensile2d and {tie_shift['lug']:.1f}-fold "
+    "on the lug, where boundary samples tie for nearest and break the symmetry of its interior geometry (@sec-invariances). "
+    "Redraw the surface as a uniform point cloud, and every baseline error grows at least "
+    f"{base_area:.1f}-fold while ISLA's stays within {100 * isla_area:.1f}%. "
+    "Where ISLA trails, and where its own error moves, the book shows the mechanism."
 )
 ```
 
@@ -118,12 +121,13 @@ plt.show()
 #|   architectures are called level. Right: what happens to each
 #|   architecture's own error when every test case is rotated and translated,
 #|   as its error over its native error; ISLA (blue squares) sits at one
-#|   except on the two structured solid meshes. How to read this: rows are different datasets, fields
+#|   except on the lug and Tensile2d, whose boundary samples tie. How to read this: rows are different datasets, fields
 #|   and units of difficulty and are not comparable with one another; a row
 #|   marked † holds ISLA checkpoints without the normalized slice reads of
 #|   its reference configuration; a row marked ‡ has its baselines drawn
-#|   hollow because in that record they read the freestream as a physical
-#|   vector rather than a unit direction, so it is not compared (@sec-de-result).
+#|   hollow and is not compared, because in that record they read the
+#|   freestream as a raw physical vector rather than a unit direction
+#|   (@sec-de-result, @sec-interior-airfrans).
 #|   Data: results/char/ (@sec-standing).
 #| fig-height: 6.6
 #| code-fold: true
@@ -164,10 +168,13 @@ def names(items):
         t = f"{S.DATASETS[k].name} {S.Standing(k).fields[f]} against {a}"
         seen.append(t)
     return "; ".join(seen)
-print(f"**Where ISLA trails** ({len(V['trails'])} of {n_pairs}): {names(V['trails'])}. "
-      "Two families of task account for these: the interior pressure on the AirfRANS airfoils, and the stress and displacement "
-      "of the PLAID Tensile2d specimens, whose structured meshes also make ISLA's nearest-boundary geometry tie "
-      "(@sec-interior-airfrans, @sec-interior-tensile2d). The full table, with every seed, is @sec-standing.")
+by = {}
+for k, f, a in V["trails"]:
+    by.setdefault(k, []).append(f"{S.Standing(k).fields[f]} against {a}")
+print(f"**Where ISLA trails** ({len(V['trails'])} of {n_pairs}): "
+      + "; ".join(f"on {S.DATASETS[k].name}, {', '.join(v)}" for k, v in by.items())
+      + ". Each dataset chapter shows where on the body or in the field the difference sits; the full table, with every seed, "
+        "is @tbl-thesis.")
 ```
 
 The same picture, with every seed, the scoring under a uniform point cloud
@@ -183,8 +190,8 @@ a marker it keeps in every figure.
 | | color and mark | reference configuration |
 |---|---|---|
 | **ISLA** | blue, filled square | width 512, 12 layers, 512 slices, learning rate 3.75e-4, 200,000 training cells |
-| **ISLA-DTT** | light blue, open square | ISLA with read-only prediction points (interior tasks) |
-| **GeoTransolver** | red, filled circle | width 256, learning rate 1e-3, 200,000 training cells |
+| **ISLA-DTT** | light blue, open square | ISLA's reference configuration with read-only prediction points (interior tasks) |
+| **GeoTransolver** | red, filled circle | width 256 (local width 32), learning rate 1e-3, 200,000 training cells |
 | **Transolver** | amber, filled triangle | width 512, 16 layers, learning rate 1e-3, 100,000 training cells |
 
 : The architectures of this book. How to read this: a ratio is always

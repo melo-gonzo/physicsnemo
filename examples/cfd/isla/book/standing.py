@@ -62,6 +62,16 @@ class Dataset:
     drive_note: str = ""  # what the baselines read instead, for the one sentence the chapters print (results/drive_audit_2026-10-18/)
     notes: dict = field(default_factory=dict)
 
+    @property
+    def short(self) -> str:
+        """The name without its task or rung qualifier ("AirfRANS", "HiLiftAeroML", "DrivAerML Surface")."""
+        return self.name.split(" (")[0].replace(" interior task", "").replace(" task", "")
+
+    @property
+    def in_sentence(self) -> str:
+        """The name as it reads after a preposition: 'the DrivAerML Surface task', 'SHIFT-SUV'."""
+        return ("the " + self.name) if self.name.endswith("task") else self.name
+
 
 DATASETS = {
     d.key: d
@@ -73,7 +83,7 @@ DATASETS = {
         # the normalized-read rerun replaces this file when its lanes are scored (hilift_surface_a2.json); in this file the
         # baselines read global_data.U_inf, the physical freestream vector in inch/s (recipe_v8 geotransolver_surface.yaml
         # global_embedding, transolver_surface.yaml fx), so no ISLA-vs-baseline verdict is drawn from it (fair_drive=False)
-        Dataset("hilift", "HiLiftAeroML, 210-wing rung", "hilift_surface.json",
+        Dataset("hilift", "HiLiftAeroML (210 training cases)", "hilift_surface.json",
                 ("pressure_l2", "tau_wall_l2"), ("native", "area", "posed"), "sec-de-result", reference=False,
                 fair_drive=False, drive_note="the freestream as the physical velocity vector in inch/s (magnitude 2,680 on every "
                 "case, turning with the angle of attack), where ISLA reads its unit direction"),
