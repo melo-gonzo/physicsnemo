@@ -44,6 +44,7 @@ def tally():
 TAL = tally()
 def r(key, b, f, p="native"):
     return ST[key].ratio(b, f, p)
+PR = json.load(open(RES / "precres_2026-09-18.json"))["reduction"]
 HL_REF = S.DATASETS["hilift"].reference
 AZ = S.DATASETS["aerozoo"]
 FAIR = [k for k in ST if S.DATASETS[k].fair_drive]          # the standings whose baselines read the inputs of the protocol
@@ -120,7 +121,7 @@ def reading(k):
 cs = COST["DrivAerML Surface"]
 print("**On the surface tasks the standing is mixed and depends on the dataset.** " + "; ".join(reading(k) for k in SURF_KEYS) + ". "
       + (unfair_sentence(SURF_UNFAIR) + " No comparison is drawn from " + ("that record" if len(SURF_UNFAIR) == 1 else "those records") + ". " if SURF_UNFAIR else "")
-      + ("" if HL_REF else "HiLiftAeroML's ISLA arm is from checkpoints of the raw-read variant, not of the reference configuration. ")
+      + ("" if HL_REF else "HiLiftAeroML's ISLA checkpoints are checkpoints of the raw-read variant, not of the reference configuration. ")
       + "No mechanism is claimed for any of these orderings. The three configurations are matched on the memory budget per GPU they were "
       f"selected under and on nothing else: on the DrivAerML Surface task GeoTransolver's reference has {cs['GeoTransolver']['n_parameters'] / cs['ISLA']['n_parameters']:.2f} "
       f"of ISLA's parameters and Transolver's {cs['Transolver']['n_parameters'] / cs['ISLA']['n_parameters']:.2f}, and Transolver trains at half the cells "
@@ -164,9 +165,13 @@ it leads or trails where it trails.**
 - **The measure weights' price below the saturation count is variance.** A slice state is a
   weighted quadrature, and a sparse draw of cells with widely varying areas inflates its
   variance (@sec-deficit-anatomy); at the reporting protocol the penalty is gone.
-- **The contracts are exact in float32, not in bfloat16.** On the trained GPU path the rotation
-  and translation residual is at float32 roundoff, and at a few percent of the field under the
-  bfloat16 autocast the recipe trains with. A bfloat16 deployment does not exercise the contracts
+- **The contracts are exact in float32, not in bfloat16.** On two trained DrivAerML Surface
+  checkpoints of an earlier ISLA, a rotation and translation moves the float32 prediction by at most
+  `{python} f"{PR['float32']['scalar_residual']['max_over_cars']:.0e}"` of the field, and the
+  prediction under the bfloat16 autocast the recipe trains with by
+  `{python} f"{100 * PR['bfloat16']['scalar_residual']['mean_over_seeds']:.0f}"`% on pressure and
+  `{python} f"{100 * PR['bfloat16']['vector_residual']['mean_over_seeds']:.0f}"`% on wall shear on
+  average (results/precres_2026-09-18.json). A bfloat16 deployment does not exercise the contracts
   at the level the book claims for them; float32 inference does (@sec-isla-contracts,
   @sec-using-sampler).
 
@@ -217,7 +222,7 @@ print(f"**On {names(INT)}, the interior standing that compares the architectures
       + "Three limits bound the comparison. The architectures do not receive the same inputs: GeoTransolver and Transolver read every prediction point "
         "with the stored signed-distance field, computed by the dataset from the full-resolution surface, while ISLA computes its wall distance "
         "and direction from the nearest sampled boundary token (@sec-limits-boundary-law). The interacting configuration's prediction at a point "
-        "depends on the other points in the request (@sec-limits-query-independence). And each arm has two seeds. What would move this: "
+        "depends on the other points in the request (@sec-limits-query-independence). And each configuration has two seeds. What would move this: "
         "@sec-oq-geometry and @sec-oq-dtt.")
 ```
 
@@ -289,7 +294,7 @@ Reynolds range, and are the instrument for the question (@sec-oq-aerozoo).
 
 **Each open question below names the measurement that would settle it and what that measurement
 would cost.** Costs are GPU-hours on GB300s for the training runs each design needs, two seeds per
-arm. A run is priced from the cost record of the reference configurations
+configuration. A run is priced from the cost record of the reference configurations
 (results/char/char_lanes_cost_2026-10-04.json: one epoch's wall time on four GPUs, times the epochs
 of the dataset's protocol, times four GPUs), or, on AeroZoo, which that record does not hold, from
 the GPU-hours of the 250-epoch runs on its `full` split
@@ -357,7 +362,7 @@ rows += [
 out = "| question | what would settle it | cost [GPU-hours] |\n|---|---|---|\n" + "".join(f"| {a} | {b} | {c} |\n" for a, b, c in rows)
 print(out)
 print(": The open questions, the measurement that would settle each, and its cost. *Cost*: GPU-hours of the training runs the measurement "
-      "needs, two seeds per arm, each run priced from the reference configurations' cost record (epoch time on four GB300 GPUs × the "
+      "needs, two seeds per configuration, each run priced from the reference configurations' cost record (epoch time on four GB300 GPUs × the "
       "protocol's epochs × four) or, on AeroZoo, from the GPU-hours of its 250-epoch `full`-split runs, an upper bound for a held-out split; "
       "a run at a smaller training set is priced in proportion to its cases; *scoring only* means the measurement reads checkpoints that "
       "exist. How to read this: the costs are training only, not scoring; they price the experiment's design, not a schedule. Data: "
@@ -463,7 +468,7 @@ if UNFAIR:
     print(f"**The open question is how the reference configurations compare on {names(UNFAIR)} when every model reads the freestream as a "
           "unit direction.** " + unfair_sentence(UNFAIR) + " A baseline's input projection that reads a raw vector of that size is badly "
           "conditioned from initialization (results/drive_audit_2026-10-18/), and no ratio of these records is read as a comparison"
-          + ("" if HL_REF else "; on HiLiftAeroML ISLA's arm is also the raw-read variant (@sec-isla-normalized-reads), and on the "
+          + ("" if HL_REF else "; on HiLiftAeroML ISLA's checkpoints are also of the raw-read variant (@sec-isla-normalized-reads), and on the "
              f"{len(a2_effect)} standings where both ISLA variants are scored, the normalized reads change ISLA's first headline error by a "
              f"factor of {min(v for _, v in a2_effect):.2f} to {max(v for _, v in a2_effect):.2f} (normalized ÷ raw)") + ". What would settle it: GeoTransolver and "
           "Transolver at their reference configurations reading the unit direction" + ("" if "airfrans" not in UNFAIR else
@@ -573,7 +578,7 @@ print("**ISLA is the choice where the deployment mesh or sampling law may differ
       f"accuracy at matched memory it leads in {len(TAL['leads'])}, is level in {len(TAL['is level with'])} and trails in "
       f"{len(TAL['trails'])} of the {n_all} comparisons of the standing (@sec-standing).** The recommendation rests on the contracts, which "
       "hold on every standing up to the two limits of this chapter (tied samples, the interior's nearest-token geometry), and not on an "
-      "accuracy lead. GeoTransolver and Transolver are released, in use and not modified; measure weighting and an origin-free frame reach "
+      "accuracy lead. GeoTransolver and Transolver are released, in use and not modified; measure weighting and origin-free positions reach "
       "users through ISLA (@sec-principled-ledger). Three outcomes would change the recommendation.")
 print()
 print("- **The interior recommendation becomes unconditional** if the exact wall geometry (@sec-oq-geometry) removes the boundary-law "

@@ -58,7 +58,7 @@ HL_NOTE = ("" if S.DATASETS["hilift"].reference or not S.DATASETS["hilift"].fair
 
 **Above 100,000 training cells per case the error of every architecture is flat in the cell
 count, and doubling the training length moves it by less than a seed spread, so neither cells
-nor epochs is a lever past the reporting protocol.** A training cell is a quadrature node: the
+nor epochs buys accuracy past the reporting protocol.** A training cell is a quadrature node: the
 model sees a random subsample of the surface mesh each step, and its sums over that subsample
 estimate integrals over the surface. Once the estimate is good enough that the network's own
 approximation error dominates, more nodes buy nothing. @tbl-cells-ladder measures where that
@@ -145,7 +145,7 @@ more than the baselines'.
 #|   (@tbl-cells-ladder). Data: results/quadvar_reduction_2026-09-17.json.
 #| fig-alt: "Error against scoring cell count for three architectures; ISLA's uniform-draw curve falls most steeply, and its stratified point at 10,000 cells sits well below its uniform point."
 fig, ax = plt.subplots(figsize=(7.4, 4.4))
-for arm, key, dx in (("isla_ref", "isla_ref", 0.94), ("gt_unit", "gt", 1.0), ("transolver_unit", "t", 1.06)):
+for arm, key, dx in (("isla_ref", "isla_ref", 0.9), ("gt_unit", "gt", 1.0), ("transolver_unit", "t", 1.11)):
     q = QV[arm]; ns = sorted(int(k) for k in q["unif"])
     kw = series_kwargs(key, ms=7, lw=1.8, label="_nolegend_")
     ax.plot([n * dx for n in ns], [q["unif"][str(n)] for n in ns], **kw)
@@ -472,7 +472,7 @@ for ax, (ds, title, ticks, xlim, ylim, yticks, stand, nref) in zip(axes, PANELS)
         kw = series_kwargs(key); F = SLF[f"{ds}|{m}"]; f = F["fit"]; accepted = F["law_accepted_rms_below_3pct"]
         for shade, (w, rows) in zip(shades[m], sorted(pts[m].items())):
             rows = sorted(rows); x = [r[0] for r in rows]; y = [r[1] for r in rows]
-            ax.plot(x, y, marker=kw["marker"], color=shade, ls="none", ms=6, label=f"{STYLE[key]['label']}, {w} wide")
+            ax.plot(x, y, marker=kw["marker"], color=shade, mec=INK2, mew=0.4, ls="none", ms=6, label=f"{STYLE[key]['label']}, {w} wide")
             for r in rows:
                 ax.plot([r[0]] * len(r[2]), r[2], ls="none", marker="_", color=shade, ms=7, mew=1.1)
             if accepted:
