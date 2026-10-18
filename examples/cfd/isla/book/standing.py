@@ -159,7 +159,7 @@ class Standing:
             if self.has(arch):
                 out.append(f"| {arch} ÷ ISLA | "
                            + " | ".join(" / ".join(fmt_ratio(self.ratio(arch, f, p)) for f in fields) for p in protocols) + " |")
-        cap = (f": {setting}: the three architectures at their reference configurations, {flab}, "
+        cap = (f": {setting}: the architectures at their reference configurations, {flab}, "
                f"relative L2 error (@sec-metrics), seed means over two seeds, float32; "
                + ", ".join(f"*{PROTOCOL[p]}*" for p in protocols)
                + " score one checkpoint per seed. How to read this: lower is better; a ratio row is baseline ÷ ISLA, "
