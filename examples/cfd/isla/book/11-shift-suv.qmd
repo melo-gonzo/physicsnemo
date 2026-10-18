@@ -68,22 +68,24 @@ def protocol_dots(st, fields, protos=None):
 ```{python}
 #| label: para-shift-suv-intro
 #| output: asis
-lead = {b: SUV.verdict(b, "pressure_l2") for b in S.BASELINES}
-word = {"leads": "ISLA leads {b}", "trails": "{b} leads ISLA", "is level with": "ISLA is level with {b}"}
+word = {"leads": "ISLA leads {b}", "trails": "{b} leads ISLA", "is level with": "ISLA is level with {b}",
+        "is not compared with": "ISLA is not compared with {b}"}
 print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference "
       "configuration (@sec-protocol). In one paragraph: within the estate family, on the native mesh, "
-      + " and ".join(word[lead[b]].format(b=b) for b in S.BASELINES)
-      + " on surface pressure by the seed rule; on a uniform point cloud and with every body rotated and translated, only ISLA keeps its error.")
+      + "; ".join(f"on {SUV.fields[f]} " + " and ".join(word[SUV.verdict(b, f)].format(b=b) for b in S.BASELINES) for f in SUV_F)
+      + ", by the seed rule; on a uniform point cloud and with every body rotated and translated, only ISLA keeps its error.")
 ```
 
 ## The problem: two sport-utility families {#sec-shift-suv-problem}
 
-**SHIFT-SUV is about a thousand morphed bodies in each of two rear-end families, estate and fastback, in one far-field condition.** An *estate* (squareback) ends in a near-vertical tailgate, so the air leaves the body at the roof's trailing edge and the whole rear face sits in the wake. A *fastback* slopes from the roof to the tail, so the pressure recovers along the sloping rear window, and where the flow leaves the body depends on the slope. Both families are taller than the DrivAerML notchback. The model receives exactly what it receives on DrivAerML: surface cells with positions, outward normals and areas, and the far-field direction. @fig-problem-shift-suv shows one fastback.
+**SHIFT-SUV is about a thousand morphed bodies in each of two rear-end families, estate and fastback, in one far-field condition.** An *estate* (squareback) ends in a near-vertical tailgate, so the air leaves the body at the roof's trailing edge and the whole rear face sits in the wake. A *fastback* slopes from the roof to the tail, so the pressure recovers along the sloping rear window, and where the flow leaves the body depends on the slope. Both families are taller than the DrivAerML notchback. Each model receives what it receives on DrivAerML (@tbl-model-inputs): ISLA the surface cells with positions, outward normals and areas, and the unit far-field direction; GeoTransolver and Transolver the cells' centered coordinates and normals and the freestream as the physical vector, 30 m/s along $x$ on every body, which carries no information beyond the direction. @fig-problem-shift-suv shows one fastback, a body of the family that every model holds out.
 
 ```{python}
 #| label: fig-problem-shift-suv
 #| fig-cap: >
-#|   The SHIFT-SUV problem, on one fastback case. The vehicle surface (150,000
+#|   The SHIFT-SUV problem, on one fastback case, a body of the family that
+#|   every model in the book holds out (they train and validate on estates,
+#|   @fig-shift-suv-samples top row). The vehicle surface (150,000
 #|   of its 5 million cells at their centroids) colored by the pressure
 #|   coefficient $C_p = (p - p_\infty) / \tfrac{1}{2}\rho U_\infty^2$, seen from
 #|   the side and from above; the black arrow is the far-field direction
@@ -119,7 +121,7 @@ cs = Ssm["cases"]
 def _rng(fam, k):
     v = [c[k] for c in cs if c["family"] == fam]; return min(v), max(v)
 La, Lb = min(c["length"] for c in cs), max(c["length"] for c in cs); Wa, Wb = min(c["width"] for c in cs), max(c["width"] for c in cs)
-foot = (f"every body shown is {La:.2f} m long and {Wa:.2f} m wide" if (Lb - La < 0.005 and Wb - Wa < 0.005)
+foot = (f"every body shown is {La:.2f} m long and {Wa:.2f} m wide" if (f"{La:.2f}" == f"{Lb:.2f}" and f"{Wa:.2f}" == f"{Wb:.2f}")
         else f"length {La:.2f} to {Lb:.2f} m, width {Wa:.2f} to {Wb:.2f} m across the six")
 print(f"**Within a family the bodies are morphs of one shape; between the families the rear end changes class.** "
       f"@fig-shift-suv-samples shows three validation bodies of each family, the first, the middle and the last of each family's "
@@ -134,9 +136,10 @@ print(f"**Within a family the bodies are morphs of one shape; between the famili
 #|   Six SHIFT-SUV validation bodies, three estates (top row) and three
 #|   fastbacks (bottom row), seen from the side and colored by the surface
 #|   pressure coefficient $C_p$ on one shared scale (60,000 of each body's
-#|   cells at their centroids); the body length, width and height are printed
-#|   per panel and the black arrow is the far-field direction $\hat g_1$, the
-#|   same for every body. How to read this: within a row the bodies are morphs
+#|   cells at their centroids); the body height is printed per panel (the
+#|   footprint is the same for all six) and the black arrow is the far-field
+#|   direction $\hat g_1$, the same for every body; every model trains and
+#|   validates on the estates and holds the fastbacks out. How to read this: within a row the bodies are morphs
 #|   of one family, between the rows the rear end changes class; the scale is
 #|   the one of @fig-problem-shift-suv and @fig-problem-drivaer; the colors
 #|   are the reference CFD, not predictions. Data:
@@ -151,7 +154,7 @@ for i, c in enumerate(cs):
     spi = part(Ss_["surf_points"], so, i); cpi = part(Ss_["surf_cp"], so, i)
     sc = depth_scatter(ax, spi[:, [0, 2]], spi[:, 1], cpi, s=1.2, cmap=DIVERGING, norm=norm); map_axes(ax)
     ax.set_xlim(*xlim); ax.set_ylim(*zlim)
-    ax.set_title(f"{c['family']} {c['case']}\nL {c['length']:.2f} m, W {c['width']:.2f} m, H {c['height']:.2f} m", fontsize=7.8)
+    ax.set_title(f"{c['family']} {c['case']}\nheight {c['height']:.2f} m", fontsize=7.8)
     if i == 0:
         x0 = c["bbox"][0][0]; z0 = c["bbox"][1][2] + 0.35
         ax.annotate("", xy=(x0 + 1.2, z0), xytext=(x0, z0), arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.6))
