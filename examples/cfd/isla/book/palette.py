@@ -33,8 +33,8 @@ from matplotlib.colors import LinearSegmentedColormap
 
 # --- Architecture hues -------------------------------------------------------
 BLUE = "#2a78d6"        # ISLA (reference configuration)
-BLUE_LIGHT = "#8fbbea"  # ISLA frame variants (legacy centered, similarity gauge); diagnostic notes only
-BLUE_PALE = "#c9def5"   # ISLA ablations / diagnostics (hatched)
+BLUE_LIGHT = "#8fbbea"  # ISLA-DTT (the query-independent interior form)
+BLUE_PALE = "#c9def5"   # ISLA ablations (hatched; never a shipped model)
 RED = "#e34948"         # GeoTransolver (surface and volume)
 RED_LIGHT = "#f2a3a2"   # GeoTransolver research variants
 AMBER = "#c98a00"       # Transolver
@@ -83,15 +83,11 @@ def slice_colors(n_slices: int, seed: int = 0):
 STYLE = {
     "isla_ref": dict(label="ISLA", color=BLUE, marker="s", ls="-", mfc="full", hatch=""),
     "isla_dtt": dict(label="ISLA-DTT", color=BLUE_LIGHT, marker="s", ls="-.", mfc="none", hatch=""),
-    "isla_cg": dict(label="ISLA, constant-gauge variant", color=BLUE_LIGHT, marker="s", ls=":", mfc="none", hatch=""),
-    "isla_sg": dict(label="ISLA, similarity-gauge variant (diagnostic)", color=BLUE_LIGHT, marker="D", ls="--", mfc="none", hatch=""),
     "isla_abl": dict(label="ISLA ablation (not adopted)", color=BLUE_PALE, marker="s", ls=":", mfc="none", hatch="///"),
     "isla_hr": dict(label="ISLA at half the reference rate", color=BLUE, marker="s", ls="--", mfc="none", hatch=""),
     "isla_dtt_hr": dict(label="ISLA-DTT at half the reference rate", color=BLUE_LIGHT, marker="s", ls=":", mfc="none", hatch=""),
     "gt": dict(label="GeoTransolver", color=RED, marker="o", ls="-", mfc="full", hatch=""),
-    "gt_var": dict(label="GeoTransolver + ISLA feature (ablation)", color=RED_LIGHT, marker="o", ls=":", mfc="none", hatch=""),
     "t": dict(label="Transolver", color=AMBER, marker="^", ls="--", mfc="full", hatch=""),
-    "t_var": dict(label="Transolver + ISLA feature (ablation)", color=AMBER_LIGHT, marker="^", ls=":", mfc="none", hatch=""),
 }
 
 
@@ -229,6 +225,68 @@ def joukowski(alpha_deg: float = 6.0, n_cells: int = 60, c=complex(-0.08, 0.08),
 
     return dict(xy=xy, mid=mid, nrm=nrm, w=w, cp_s=cp_s, cp_field=cp_field, alpha=alpha,
                 g_hat=np.array([np.cos(alpha), np.sin(alpha)]))
+
+
+
+
+# --- Dataset figure helpers ----------------------------------------------------
+# The reduced dataset arrays every dataset chapter draws from (no trained model involved).
+from pathlib import Path as _Path
+import json as _json
+
+_RES = _Path(__file__).resolve().parent.parent / "results"
+PROBLEM_DIR = _RES / "problem_figures_2026-09-22"
+SAMPLES_DIR = _RES / "sample_figures_2026-10-02"
+
+
+def load_problem(name):
+    """One representative sample of a dataset, reduced for plotting: (arrays, metadata), from
+    results/problem_figures_2026-09-22/<name>.{npz,json}."""
+    z = np.load(PROBLEM_DIR / f"{name}.npz")
+    return {k: z[k] for k in z.files}, _json.load(open(PROBLEM_DIR / f"{name}.json"))
+
+
+def load_samples(name):
+    """Several samples of a dataset (results/sample_figures_2026-10-02/<name>.{npz,json}); per-sample arrays are
+    concatenated and cut with the matching ``*_offsets`` array via :func:`part`."""
+    z = np.load(SAMPLES_DIR / f"{name}.npz")
+    return {k: z[k] for k in z.files}, _json.load(open(SAMPLES_DIR / f"{name}.json"))
+
+
+def part(a, off, i):
+    """Rows of the concatenated array ``a`` that belong to sample ``i``."""
+    return a[off[i]:off[i + 1]]
+
+
+def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
+    """Draw line cells colored by boundary-condition kind (keys of BC)."""
+    from matplotlib.collections import LineCollection
+    segs = pts[cells][:, :, :2]
+    ax.add_collection(LineCollection(segs, colors=[BC[k] for k in kinds], linewidths=lw, capstyle="butt", zorder=zorder))
+
+
+def field_scatter(ax, xy, v, s=3.0, signed=False, vmin=None, vmax=None):
+    """A field on scattered points: the diverging map centred on zero for a signed field, viridis otherwise."""
+    from matplotlib.colors import TwoSlopeNorm
+    if signed:
+        lim = max(abs(np.nanmin(v)), abs(np.nanmax(v)))
+        norm = TwoSlopeNorm(vcenter=0.0, vmin=(-lim if vmin is None else vmin), vmax=(lim if vmax is None else vmax))
+        return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=DIVERGING, norm=norm, rasterized=True)
+    return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=SEQUENTIAL, vmin=vmin, vmax=vmax, rasterized=True)
+
+
+def small_colorbar(fig, sc, ax, label, **kw):
+    """A slim colorbar with a labeled quantity and unit."""
+    cb = fig.colorbar(sc, ax=ax, fraction=0.035, pad=0.02, **kw)
+    cb.outline.set_visible(False); cb.ax.tick_params(labelsize=8); cb.set_label(label, fontsize=8.5)
+    return cb
+
+
+def bc_legend(ax, kinds, loc="lower right", extra=()):
+    """A legend of boundary-condition kinds (the one place the book uses a legend for BC colors)."""
+    from matplotlib.lines import Line2D
+    handles = [Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds] + list(extra)
+    ax.legend(handles=handles, loc=loc, fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
 
 
 __all__ = [n for n in dir() if not n.startswith("_") and n not in ("annotations", "mpl", "np", "plt")] + ["mpl", "np", "plt"]

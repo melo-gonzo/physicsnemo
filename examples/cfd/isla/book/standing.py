@@ -1,0 +1,182 @@
+"""The book's one reader of the standing artifacts.
+
+Every chapter that quotes how the three architectures compare reads it through this module,
+so the artifact behind each dataset, the ratio convention and the seed rule are written once.
+
+The standing artifacts live in ``results/char/<file>.json`` and share one schema::
+
+    {"protocols": {"native": label, "area": label, "posed": label},
+     "fields":    {key: label},
+     "isla_arm":  arm name,
+     "arms":      {arm name: {protocol: {field: {"mean": x, "per_seed": {seed: x},
+                                                 "n_cases": n, "n_seeds": n}}}}}
+
+Conventions (STYLE.md):
+
+* a ratio is *baseline ÷ ISLA*, so a value above one favours ISLA;
+* a *shift* is an arm's error under a protocol divided by the same arm's native error;
+* the seed rule: one arm leads another on a field only if every seed of the one sits below every
+  seed of the other *and* the seed means differ by at least the tie band (3%, the tie band of the
+  rule that selected the reference configurations); otherwise the two are *level*.
+
+``DATASETS`` is the registry. When a rerun lands (a new artifact file), change its entry here and
+every chapter follows.
+"""
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+
+RES = Path(__file__).resolve().parent.parent / "results"
+CHAR = RES / "char"
+
+ARCHS = ("ISLA", "GeoTransolver", "Transolver")
+BASELINES = ("GeoTransolver", "Transolver")
+
+#: How each architecture's reference configuration is written in prose and captions.
+CONFIG = {
+    "ISLA": "ISLA (width 512, 12 layers, 512 slices)",
+    "GeoTransolver": "GeoTransolver (width 256)",
+    "Transolver": "Transolver (width 512, 16 layers)",
+}
+
+#: Seed means closer than this fraction are level, whatever the seeds do (the selection rule's tie band).
+TIE_BAND = 0.03
+
+#: The protocol names as the book writes them.
+PROTOCOL = {"native": "native mesh", "area": "uniform point cloud", "posed": "rotated and translated"}
+
+
+@dataclass(frozen=True)
+class Dataset:
+    """One dataset and task of the standing."""
+
+    key: str
+    name: str  # as written in a cross-architecture sentence
+    artifact: str | None  # file under results/char/, None while no standing exists
+    headline: tuple  # the fields the headline figure reads, in order
+    protocols: tuple = ("native", "posed")  # the protocols that mean something on this task
+    section: str = ""  # the chapter section that holds the standing
+    reference: bool = True  # False: ISLA's arm is from checkpoints without the normalized slice reads
+    notes: dict = field(default_factory=dict)
+
+
+DATASETS = {
+    d.key: d
+    for d in (
+        Dataset("drivaerml_surface", "DrivAerML Surface task", "drivaerml_surface_a2.json",
+                ("pressure_l2", "wss_l2"), ("native", "area", "posed"), "sec-scoreboard-200k"),
+        Dataset("drivaerml_volume", "DrivAerML Volume task", "drivaerml_volume_a2.json",
+                ("pressure_l2", "velocity_l2", "nut_l2"), ("native", "posed"), "sec-interior-results"),
+        # the normalized-read rerun replaces this file when its lanes are scored (hilift_surface_a2.json)
+        Dataset("hilift", "HiLiftAeroML, 210-wing rung", "hilift_surface.json",
+                ("pressure_l2", "tau_wall_l2"), ("native", "area", "posed"), "sec-de-result", reference=False),
+        Dataset("shift_suv", "SHIFT-SUV", "shift_suv_surface_a2.json",
+                ("pressure_l2", "wss_l2"), ("native", "area", "posed"), "sec-shift-suv-standing"),
+        Dataset("airfrans", "AirfRANS interior task", "airfrans_a2.json",
+                ("pressure_l2", "velocity_l2", "nut_l2"), ("native", "posed"), "sec-interior-airfrans"),
+        Dataset("aerozoo", "AeroZoo", None, (), ("native",), "sec-interior-aerozoo"),
+        Dataset("tensile2d", "PLAID Tensile2d", "tensile2d_a2.json",
+                ("stress_l2", "displacement_l2", "q_l2"), ("native", "posed"), "sec-interior-tensile2d"),
+        Dataset("lug", "GINOT bracket lug", "lug_a2.json", ("von_mises_l2",), ("native", "posed"), "sec-interior-lug"),
+        Dataset("deepjeb", "DeepJEB++", "deepjeb_surface_a2.json",
+                ("von_mises_l2", "displacement_l2"), ("native", "posed"), "sec-surface-deepjeb"),
+    )
+}
+
+
+def _arch(arm_name: str) -> str:
+    """The architecture of an arm: the first word of its label."""
+    return arm_name.split()[0]
+
+
+class Standing:
+    """The standing of the three reference configurations on one dataset."""
+
+    def __init__(self, key: str):
+        self.ds = DATASETS[key]
+        path = CHAR / self.ds.artifact
+        if not path.exists():
+            raise FileNotFoundError(f"{self.ds.name}: no standing artifact at {path}")
+        self.path = path
+        self.raw = json.load(open(path))
+        self.fields = self.raw["fields"]  # key -> label
+        self.arms = {_arch(name): arm for name, arm in self.raw["arms"].items()}
+        self.arm_names = {_arch(name): name for name in self.raw["arms"]}
+
+    @property
+    def source(self) -> str:
+        """The artifact path as captions print it."""
+        return f"results/char/{self.ds.artifact}"
+
+    def has(self, arch: str) -> bool:
+        return arch in self.arms
+
+    def cell(self, arch: str, f: str, protocol: str = "native") -> dict:
+        return self.arms[arch][protocol][f]
+
+    def err(self, arch: str, f: str, protocol: str = "native") -> float:
+        """Seed-mean error."""
+        return self.cell(arch, f, protocol)["mean"]
+
+    def seeds(self, arch: str, f: str, protocol: str = "native") -> list:
+        return list(self.cell(arch, f, protocol)["per_seed"].values())
+
+    def ratio(self, arch: str, f: str, protocol: str = "native") -> float:
+        """baseline ÷ ISLA under one protocol (seed means)."""
+        return self.err(arch, f, protocol) / self.err("ISLA", f, protocol)
+
+    def shift(self, arch: str, f: str, protocol: str) -> float:
+        """An arm's error under a protocol over its native error."""
+        return self.err(arch, f, protocol) / self.err(arch, f, "native")
+
+    def verdict(self, arch: str, f: str, protocol: str = "native") -> str:
+        """ISLA against one baseline by the seed rule: 'leads', 'trails' or 'is level with'."""
+        b, i = self.seeds(arch, f, protocol), self.seeds("ISLA", f, protocol)
+        if abs(self.ratio(arch, f, protocol) - 1) < TIE_BAND:
+            return "is level with"
+        if min(b) > max(i):
+            return "leads"
+        if max(b) < min(i):
+            return "trails"
+        return "is level with"
+
+    def table(self, label: str, setting: str, protocols=None, fields=None) -> str:
+        """The headline table: one row per architecture, one column group per protocol, ratio rows.
+
+        Returns markdown with a Quarto caption; print it from an ``output: asis`` cell."""
+        protocols = tuple(protocols or self.ds.protocols)
+        fields = tuple(fields or self.fields)
+        flab = " / ".join(self.fields[f] for f in fields)
+        out = ["| | " + " | ".join(f"{PROTOCOL[p]}: {flab}" for p in protocols) + " |",
+               "|---|" + "---:|" * len(protocols)]
+        for arch in ARCHS:
+            if not self.has(arch):
+                continue
+            out.append(f"| {CONFIG[arch]} | "
+                       + " | ".join(" / ".join(f"{self.err(arch, f, p):.4f}" for f in fields) for p in protocols) + " |")
+        for arch in BASELINES:
+            if self.has(arch):
+                out.append(f"| {arch} ÷ ISLA | "
+                           + " | ".join(" / ".join(fmt_ratio(self.ratio(arch, f, p)) for f in fields) for p in protocols) + " |")
+        cap = (f": {setting}: the three architectures at their reference configurations, {flab}, "
+               f"area-weighted relative L2 error, seed means over two seeds, float32; "
+               + ", ".join(f"*{PROTOCOL[p]}*" for p in protocols)
+               + " score one checkpoint per seed. How to read this: lower is better; a ratio row is baseline ÷ ISLA, "
+                 f"so a value above one favours ISLA. Data: {self.source}. {{#{label}}}")
+        return "\n".join(out) + "\n\n" + cap + "\n"
+
+
+def fmt_ratio(r: float) -> str:
+    """A ratio as the book writes it: two decimals below 2, one decimal below 10, none above."""
+    return f"{r:.0f}" if r >= 10 else f"{r:.1f}" if r >= 2 else f"{r:.2f}"
+
+
+def fmt_pct(r: float) -> str:
+    """A ratio near one as a percentage difference: 1.07 -> '7%'."""
+    return f"{abs(r - 1) * 100:.0f}%"
+
+
+def available():
+    """The datasets whose standing artifact exists, in registry order."""
+    return [k for k, d in DATASETS.items() if d.artifact and (CHAR / d.artifact).exists()]
