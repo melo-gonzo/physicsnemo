@@ -618,17 +618,17 @@ layers make the encoder. @fig-isla-layer-flow draws one layer as a flow.
 %%|   carry tensors of shape (tokens, width) or (slices, width), not
 %%|   coordinates; the exact shapes and code are in @sec-arch-layer.
 flowchart TD
-  h["token state h"]:::data --> ln["LayerNorm: h̃"]:::learned
+  h["token state h"]:::data --> ln["LayerNorm: LN(h)"]:::learned
   ln --> score["scores λ: cosine vs prototypes"]:::learned
-  ln -. "h̃" .-> pool
-  ln -. "h̃" .-> add1
+  ln -. "LN(h)" .-> pool
+  ln -. "LN(h)" .-> add1
   score --> route["routing a: softmax over tokens, + log w"]:::fixed
   route --> anchors["anchors z, m"]:::fixed
   anchors --> inv["invariants ξ"]:::fixed
   inv --> refine["refined routing a′, read-back π"]:::learned
-  refine --> pool["slice states Z = Σ a′ h̃, + slice MLP"]:::learned
+  refine --> pool["slice states Z = Σ a′ LN(h), then the slice MLP"]:::learned
   pool --> back["read back b = Σ π Z, γ = W Σ π ξ"]:::learned
-  back --> add1(("h + W_b [h̃; b; γ]")):::data
+  back --> add1(("h + W [LN(h); b; γ]")):::data
   h -. residual .-> add1
   add1 --> mlp["h + MLP(LN(h))"]:::learned
   classDef data fill:#f4f3ee,stroke:#898781;
@@ -1088,7 +1088,7 @@ def nearest(X, P):
     d2 = ((X[:, None, :] - P[None]) ** 2).sum(-1); k = d2.argmin(1)
     return np.sqrt(d2[np.arange(len(X)), k]), k
 d_tok, k_tok = nearest(Xq, J["mid"]); d_ex, _ = nearest(Xq, Jf["mid"])
-fig, axes = plt.subplots(2, 1, figsize=(8, 6.6), gridspec_kw=dict(hspace=0.25, height_ratios=[1.0, 0.9]))
+fig, axes = plt.subplots(2, 1, figsize=(8, 7.4), gridspec_kw=dict(hspace=0.25, height_ratios=[1.0, 1.25]))
 ax = axes[0]; clean_axes(ax); ax.set_xlim(-2.6, 2.75); ax.set_ylim(-1.3, 1.3)
 sc = ax.scatter(Xq[:, 0], Xq[:, 1], c=d_tok / L_, s=4, cmap=SEQUENTIAL, norm=mpl.colors.LogNorm(vmin=0.01, vmax=1.0), zorder=2, rasterized=True)
 for q in np.random.default_rng(3).choice(len(Xq), 14, replace=False):
@@ -1097,8 +1097,8 @@ for q in np.random.default_rng(3).choice(len(Xq), 14, replace=False):
 airfoil(ax, J, color=INK, lw=1.2); ax.plot(J["mid"][:, 0], J["mid"][:, 1], "o", ms=2.5, color=INK, zorder=4)
 cb = fig.colorbar(sc, ax=ax, fraction=0.03, pad=0.01); cb.outline.set_visible(False); cb.set_label("$d_q / L$ [–]")
 ax.set_title("distance to the nearest boundary token", fontsize=9.5)
-ax = axes[1]; clean_axes(ax); ax.set_xlim(-2.25, -1.25); ax.set_ylim(-0.32, 0.38)
-gx2, gy2 = np.meshgrid(np.linspace(-2.25, -1.25, 220), np.linspace(-0.32, 0.38, 160))
+ax = axes[1]; clean_axes(ax); ax.set_xlim(-2.25, -0.85); ax.set_ylim(-0.32, 0.42)
+gx2, gy2 = np.meshgrid(np.linspace(-2.25, -0.85, 300), np.linspace(-0.32, 0.42, 170))
 X2 = np.stack([gx2.ravel(), gy2.ravel()], 1); X2 = X2[~MPath(Jf["xy"]).contains_points(X2)]
 e = (nearest(X2, J["mid"])[0] - nearest(X2, Jf["mid"])[0]) / L_
 sc2 = ax.scatter(X2[:, 0], X2[:, 1], c=e, s=3, cmap=SEQUENTIAL, vmin=0, vmax=np.quantile(e, 0.995), zorder=2, rasterized=True)
@@ -1180,7 +1180,7 @@ for k in (1, 3, 5):
     d_ = z6[k] - q; nrm_ = np.array([-d_[1], d_[0]]) / np.linalg.norm(d_) * 0.05
     ax.annotate("", xy=z6[k] + nrm_, xytext=q + nrm_, arrowprops=dict(arrowstyle="-|>", color=AQUA, lw=1.3), zorder=4)
     ax.annotate("", xy=q - nrm_, xytext=z6[k] - nrm_, arrowprops=dict(arrowstyle="-|>", color=AQUA, lw=1.0, ls="--"), zorder=4)
-ax.text(0.95, 1.05, "writes and reads", fontsize=9, color=AQUA, path_effects=halo())
+ax.text(0.95, 1.0, "writes and reads", fontsize=9, color=AQUA, path_effects=halo())
 ax.set_title("interacting point: writes into the slices", fontsize=9.5)
 ax = axes[1]; clean_axes(ax); ax.set_xlim(-2.4, 2.4); ax.set_ylim(-1.0, 1.0)
 segs = np.stack([J["xy"][:-1], J["xy"][1:]], axis=1)

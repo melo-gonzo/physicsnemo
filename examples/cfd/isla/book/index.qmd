@@ -127,8 +127,8 @@ plt.show()
 #|   its reference configuration; a row marked ‡ has its baselines drawn
 #|   hollow and is not compared, because in that record they read the
 #|   freestream as a raw physical vector rather than a unit direction
-#|   (@sec-de-result, @sec-interior-airfrans).
-#|   Data: results/char/ (@sec-standing).
+#|   (@sec-hilift, @sec-airfrans). Data: results/char/; every number is in
+#|   @tbl-thesis.
 #| fig-height: 6.6
 #| code-fold: true
 fig, axes = plt.subplots(1, 2, figsize=(10, 6.4), gridspec_kw=dict(width_ratios=[1.35, 1.0], wspace=0.06))
@@ -139,12 +139,9 @@ ax.set_xlabel("native mesh: baseline error ÷ ISLA error [–]")
 ax.text(1.05, len(ROWS) - 0.15, "favors ISLA →", fontsize=8.5, color=INK2, va="bottom")
 ax.text(0.95, len(ROWS) - 0.15, "← favors the baseline", fontsize=8.5, color=INK2, va="bottom", ha="right")
 ax = axes[1]
-# one row per dataset, aligned with that dataset's first headline row on the left
-first = {}
+# one row per dataset and headline field, aligned with the rows on the left
 for j, (k, f, lab) in enumerate(ROWS):
-    first.setdefault(k, len(ROWS) - 1 - j)
-for k in first:
-    s = S.Standing(k); f = s.ds.headline[0]; yy = first[k]
+    s = S.Standing(k); yy = len(ROWS) - 1 - j
     for arch, key, dy in (("ISLA", "isla_ref", 0.0), ("GeoTransolver", "gt", 0.16), ("Transolver", "t", -0.16)):
         if s.has(arch):
             st = STYLE[key]
