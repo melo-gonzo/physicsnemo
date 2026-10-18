@@ -1,3 +1,998 @@
 # Neural surrogates for PDEs: a field guide {#sec-landscape}
 
-This chapter is being written.
+*Before this chapter:* @sec-problem, for the boundary-to-field operator, the
+interface and the metric. The chapter assumes integral operators,
+quadrature, Green's functions and gradient descent on a multilayer
+perceptron. It assumes nothing about transformers.
+
+**Every neural surrogate in this book is a composition of a dozen learned
+nonlinear integral operators, each applied to a cloud of sampled points.
+The families of the literature differ in three choices: how they make the
+kernel cheap enough to apply at $10^5$ to $10^7$ points, which symmetries
+they build in, and which measure their sums integrate against.** This
+chapter teaches the machinery in the vocabulary of numerical analysis:
+tokens, attention as a kernel smoother, the transformer block as a product
+of near-identity maps, and the families that avoid the quadratic cost of
+attention. It then reviews symmetry, discretization and physics-informed
+losses, gathers the families into one table, and names the two gaps that
+ISLA fills. The terms defined here (token, embedding, attention, softmax,
+residual stream, LayerNorm, pre-LN block, MLP) are used in the rest of the
+book without redefinition. Citations are by author and year. Full entries,
+with arXiv identifiers, are in the bibliography of @sec-vs-bibliography.
+
+```{python}
+#| label: setup-landscape
+#| include: false
+import sys; sys.path.insert(0, ".")
+from palette import *
+from matplotlib.collections import LineCollection
+from matplotlib.patches import FancyBboxPatch, FancyArrowPatch, Rectangle
+from matplotlib.colors import Normalize, to_rgba
+import standing as S
+JK = joukowski(alpha_deg=6.0, n_cells=60)
+```
+
+## What a surrogate learns {#sec-landscape-task}
+
+**A surrogate is a parametrized map, fitted to solver output, that stands
+in for the solution operator of a family of problems.** A training set is a
+few hundred to a few thousand cases. Each case pairs an input (here a
+discretized boundary, its data and the global conditions) with the field a
+conventional solver computed for it. Training adjusts the parameters
+$\theta$ of a map $\mathcal G_\theta$ by stochastic gradient descent on the
+mean error over the cases. The trained map is then evaluated on cases it
+has not seen. One forward pass costs seconds where the solver costs hours.
+
+Two broad kinds of surrogate exist. A *time stepper* learns the map from
+the state at one instant to the state at the next and is applied
+recursively, so its errors compound over a rollout. A *solution-operator
+surrogate* learns the map from the problem data to the answer in one
+evaluation. The steady boundary-driven problems of this book are of the
+second kind, and they are a special case in three ways that shape every
+architecture choice.
+
+1. **The input lives on a set of one lower dimension than the output.** The
+   input is a surface (a curve, in two dimensions) with data on it. The
+   output is a field on that surface and in the volume it bounds.
+   Green's representation (@eq-green) says this is not a loss of
+   information: for the admitted class, the boundary data determine the
+   field.
+2. **The input is an unordered set of sampled cells of variable size.**
+   Two cars have different meshes with different cell counts, and nothing
+   about the order in which a mesher lists its cells is physical. An
+   architecture must therefore accept a set of $N$ points for any $N$ and
+   give an answer that does not depend on their order. This is
+   *permutation invariance*.
+3. **Every interior point depends on every boundary cell.** The
+   representation of @eq-green has no cutoff radius. Any architecture must
+   either couple all points directly, at a cost that grows like $N^2$, or
+   reach global coupling through a cheaper intermediary.
+
+The rest of this chapter is about the third point and its consequences.
+
+## Tokens, attention and the transformer block {#sec-landscape-transformer}
+
+**A transformer is a map from a set of vectors to a set of vectors of the
+same size. It alternates a step that mixes the vectors with one another
+(attention) and a step that transforms each vector alone (the MLP), and it
+adds each step's output to a running state.** This section defines each
+piece once, for the whole book.
+
+### A token is a sampled point with features {#sec-landscape-tokens}
+
+**The network sees each boundary cell as one vector, called a token, and
+the whole case as a set of $N$ tokens.** A cell's raw features are whatever
+the interface hands over: its position $x_i$, outward normal $n_i$,
+measure $w_i$ and its boundary data. In two dimensions that is
+five numbers before any boundary data. A learned map, usually a small
+multilayer perceptron (MLP), lifts these raw features to a vector
+$h_i \in \mathbb R^d$. This vector is the token's *embedding*, or its
+*state*, and $d$ is the *width* of the network. The reference
+configurations of this book are `{python} S.CONFIG["ISLA"]`,
+`{python} S.CONFIG["Transolver"]` and `{python} S.CONFIG["GeoTransolver"]`
+(@sec-baselines). The token states of a case form an $N \times d$ array whose row
+order carries no meaning (@fig-landscape-tokens).
+
+```{python}
+#| label: fig-landscape-tokens
+#| fig-cap: >
+#|   A token is one sampled boundary cell. Left: the 60 cells of the running
+#|   airfoil, one of them highlighted with its normal. Middle: that cell's
+#|   raw features (position, normal, measure). Right: the token states of all
+#|   60 cells after a randomly initialized two-layer embedding to width
+#|   d = 32, one row per cell; the highlighted row is the highlighted cell.
+#|   How to read this: the embedding here is random, so the colors carry no
+#|   learned meaning; the figure shows the shapes of the objects, and the
+#|   order of the rows is the mesher's and carries no information.
+#| fig-height: 3.3
+xy, mid, nrm, w = JK["xy"], JK["mid"], JK["nrm"], JK["w"]
+i0 = 12
+feats = np.column_stack([mid, nrm, w / w.mean()])
+rng = np.random.default_rng(0)
+d_emb = 32
+W1 = rng.normal(0, 1 / np.sqrt(5), (5, 64)); W2 = rng.normal(0, 1 / np.sqrt(64), (64, d_emb))
+gelu = lambda x: 0.5 * x * (1 + np.tanh(0.7978845608 * (x + 0.044715 * x**3)))
+H = gelu(feats @ W1) @ W2
+fig = plt.figure(figsize=(9.6, 3.3))
+gs = fig.add_gridspec(1, 3, width_ratios=[2.3, 0.7, 1.15], wspace=0.4)
+ax0 = fig.add_subplot(gs[0]); ax1 = fig.add_subplot(gs[1]); ax2 = fig.add_subplot(gs[2])
+clean_axes(ax0)
+ax0.plot(xy[:, 0], xy[:, 1], color=MUTED, lw=1.2)
+ax0.plot(mid[:, 0], mid[:, 1], "o", ms=3, color=INK2)
+ax0.plot(xy[i0:i0 + 2, 0], xy[i0:i0 + 2, 1], color=VIOLET, lw=4, solid_capstyle="butt")
+ax0.quiver(mid[i0, 0], mid[i0, 1], nrm[i0, 0], nrm[i0, 1], color=VIOLET, scale=4, width=0.008, zorder=5)
+ax0.text(mid[i0, 0] + 0.1, mid[i0, 1] + 0.32, "cell $i$ and its normal $n_i$", color=VIOLET, fontsize=9,
+         path_effects=halo())
+ax0.set_xlim(-2.15, 2.15); ax0.set_ylim(-0.45, 0.75)
+ax0.set_title("60 sampled boundary cells")
+ax1.axis("off"); ax1.set_xlim(0, 1); ax1.set_ylim(0, 1)
+labels = [r"$x_{i,1}$", r"$x_{i,2}$", r"$n_{i,1}$", r"$n_{i,2}$", r"$w_i/\bar w$"]
+for k, (lab, v) in enumerate(zip(labels, feats[i0])):
+    y = 0.82 - 0.15 * k
+    ax1.add_patch(Rectangle((0.38, y - 0.06), 0.42, 0.12, fc=PAPER, ec=BASELINE))
+    ax1.text(0.33, y, lab, ha="right", va="center", fontsize=9, color=INK2)
+    ax1.text(0.59, y, f"{v:+.2f}", ha="center", va="center", fontsize=9, color=INK)
+ax1.text(0.59, 0.97, "raw features", ha="center", fontsize=9, color=INK)
+ax1.annotate("", xy=(1.02, 0.5), xytext=(0.84, 0.5), xycoords="axes fraction",
+             arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.4))
+ax1.text(0.93, 0.56, "embed", ha="center", fontsize=8.5, color=INK2, transform=ax1.transAxes)
+lim = np.abs(H).max()
+ax2.imshow(H, aspect="auto", cmap=DIVERGING, vmin=-lim, vmax=lim, interpolation="nearest")
+ax2.add_patch(Rectangle((-0.5, i0 - 0.5), d_emb, 1, fill=False, ec=VIOLET, lw=1.6))
+ax2.set_xlabel("feature index of the state $h_i$ [–]"); ax2.set_ylabel("token index $i$ [–]")
+ax2.grid(False); ax2.set_title(r"token states, an $N \times d$ array")
+plt.show()
+```
+
+A token need not be a boundary cell. An interior prediction point becomes a
+token the same way, from its position and whatever geometric features the
+architecture computes for it. A latent token, met below, is a vector that
+belongs to no point at all.
+
+### Attention is a data-dependent kernel integral {#sec-landscape-attention}
+
+**Attention replaces each token's state with a weighted average of the
+values of all the tokens, and the weights form a normalized kernel computed
+from the tokens themselves. In the language of statistics it is a
+Nadaraya–Watson kernel smoother whose kernel is learned and depends on the
+data.** Each token $i$ forms three vectors by fixed linear maps of its
+state: a *query* $q_i = W_Q h_i$, a *key* $k_i = W_K h_i$ and a *value*
+$v_i = W_V h_i$. Token $i$'s output is
+
+$$
+\operatorname{Attn}(h)_i \equiv \sum_{j=1}^{N} \alpha_{ij}\, v_j ,
+\qquad
+\alpha_{ij} \equiv \frac{\exp\!\bigl(q_i \cdot k_j/\sqrt{d_k}\bigr)}{\sum_{l=1}^{N}\exp\!\bigl(q_i \cdot k_l/\sqrt{d_k}\bigr)},
+$$ {#eq-attention}
+
+where $d_k$ is the length of a query. The map from a row of scores
+$s_j = q_i \cdot k_j / \sqrt{d_k}$ to the weights $\alpha_{ij}$ is the
+*softmax*: it exponentiates and normalizes, so the weights are positive
+and sum to one over $j$. The factor $1/\sqrt{d_k}$ keeps the scores of
+order one when the entries of $q$ and $k$ are of order one (Vaswani et al.,
+2017; @sec-vs-bibliography).
+
+Read @eq-attention as quadrature. Let the tokens sample a domain at points
+$y_j$ and write the kernel as $\kappa(x, y) = \exp(q(x)\cdot k(y)/\sqrt{d_k})$.
+Then attention is the discrete form of the normalized integral operator
+
+$$
+(\mathcal A v)(x) = \frac{\int \kappa(x,y)\, v(y)\, d\mu(y)}{\int \kappa(x,y)\, d\mu(y)} ,
+$$
+
+with $\mu$ the *empirical measure* $\frac1N\sum_j \delta_{y_j}$, one unit of
+mass per token. This is the Nadaraya–Watson estimator of nonparametric
+regression (Nadaraya, 1964; Watson, 1964). Tsai et al. (2019) make the
+reading explicit for transformers. Three things set it apart from the
+smoothers a numerical analyst knows. The kernel is learned, through $W_Q$
+and $W_K$. It depends on the current states, so the operator is nonlinear
+in its input. And the measure counts tokens, not area; @sec-landscape-discretization
+returns to that.
+
+A dot-product kernel can express the Gaussian kernel exactly, which makes
+the smoother concrete. Give a token at position $y$ the key
+$k = (y/h,\ -y^2/2h^2)$ and a token at $x$ the query $q = (x/h,\ 1)$. Then
+$q\cdot k = -(x-y)^2/2h^2 + x^2/2h^2$, and the last term is the same for
+every $j$, so the softmax cancels it. What remains is the Gaussian kernel of
+bandwidth $h$. Append the same construction for a field value $f$ carried
+in the state, and the kernel becomes
+$\exp(-(x-y)^2/2h^2 - (f(x)-f(y))^2/2s^2)$. That is the bilateral filter
+of image processing: it averages over neighbors that are close in position
+*and* in value, so it does not smear a jump. @fig-landscape-attention
+computes both on a one-dimensional signal.
+
+```{python}
+#| label: fig-landscape-attention
+#| fig-cap: >
+#|   Attention as a kernel smoother, computed exactly with the dot-product
+#|   construction of the text on noisy samples of a signal with a jump,
+#|   drawn more densely on the left (160 samples, noise 0.06). Top: the samples (gray), the noise-free
+#|   signal (thin gray line), the output of attention whose keys and queries
+#|   carry position only (dashed, a Gaussian Nadaraya–Watson smoother of
+#|   bandwidth 0.05), and the output when they also carry the sampled value
+#|   (violet, a bilateral filter); the window from 0.25 to 0.85 is shown. Bottom: the attention weights of one
+#|   query, the token at x = 0.53 just left of the jump, under each kernel.
+#|   How to read this: the position-only weights spill across the jump and
+#|   pull the output toward the far side; the value-dependent weights stay on
+#|   one side. Nothing here is trained: the queries and keys are constructed
+#|   by hand to show what the formula can represent.
+#| fig-height: 5.0
+rng = np.random.default_rng(4)
+N1 = 160
+x1 = np.sort(rng.random(N1) ** 1.3)
+f_true = lambda x: 0.45 * np.sin(2 * np.pi * x) + 0.8 * (x > 0.55)
+f1 = f_true(x1) + rng.normal(0, 0.06, N1)
+hh, ss = 0.05, 0.3
+def attn(q, k, v):
+    s = q @ k.T
+    s -= s.max(axis=1, keepdims=True)
+    a = np.exp(s); a /= a.sum(axis=1, keepdims=True)
+    return a @ v, a
+q_pos = np.column_stack([x1 / hh, np.ones(N1)]); k_pos = np.column_stack([x1 / hh, -x1**2 / (2 * hh**2)])
+q_val = np.column_stack([q_pos, f1 / ss, np.ones(N1)]); k_val = np.column_stack([k_pos, f1 / ss, -f1**2 / (2 * ss**2)])
+y_pos, A_pos = attn(q_pos, k_pos, f1)
+y_val, A_val = attn(q_val, k_val, f1)
+iq = np.argmin(np.abs(x1 - 0.53))
+fig, (a0, a1) = plt.subplots(2, 1, figsize=(8, 5.0), sharex=True, gridspec_kw=dict(height_ratios=[1.5, 1]))
+xx = np.linspace(0, 1, 800)
+a0.plot(xx, f_true(xx), color=BASELINE, lw=1.0)
+a0.plot(x1, f1, "o", ms=3, color=MUTED, alpha=0.7)
+a0.plot(x1, y_pos, color=INK2, lw=1.8, ls="--")
+a0.plot(x1, y_val, color=VIOLET, lw=2.0)
+a0.axvline(x1[iq], color=AQUA, lw=1.0, ls=":")
+label_line(a0, 0.585, 0.05, "position-only kernel\n(Nadaraya–Watson)", INK2, fontsize=8.5)
+label_line(a0, 0.40, 0.72, "position and value\n(bilateral filter)", VIOLET, fontsize=8.5)
+a0.set_ylabel("signal $f$ [–]")
+a0.set_title("attention output for every token")
+a1.vlines(x1 - 0.002, 0, A_pos[iq], color=INK2, lw=1.6)
+a1.vlines(x1 + 0.002, 0, A_val[iq], color=VIOLET, lw=1.6)
+a1.axvline(0.55, color=BASELINE, lw=1.0)
+a1.text(0.555, A_val[iq].max() * 0.92, "jump", color=MUTED, fontsize=8.5)
+a1.axvline(x1[iq], color=AQUA, lw=1.0, ls=":")
+a1.text(x1[iq] - 0.01, A_val[iq].max() * 0.92, "query", color=AQUA, fontsize=8.5, ha="right")
+a1.set_xlim(0.25, 0.85); a1.set_ylim(0, None)
+a1.set_xlabel("position of token $j$ [–]"); a1.set_ylabel(r"weight $\alpha_{ij}$ [–]")
+a1.set_title("the weights of one query")
+fig.tight_layout()
+plt.show()
+```
+
+A transformer runs several attentions side by side. *Multi-head attention*
+splits the $d$ features into $H$ groups of $d/H$, runs @eq-attention on
+each group with its own $W_Q$, $W_K$, $W_V$, and concatenates the results.
+Each head is a different kernel. The step costs one score per pair of
+tokens and per head: an $N \times N$ array, which is the subject of
+@sec-landscape-cost.
+
+### The block: residual stream, LayerNorm and the MLP {#sec-landscape-block}
+
+**A transformer block adds two small updates to a running state: one that
+mixes tokens (attention) and one that transforms each token alone (the
+MLP). Each update reads a normalized copy of the state. The network is
+therefore a product of near-identity maps, like the steps of an explicit
+time integrator.** @fig-landscape-block draws one block.
+
+```{python}
+#| label: fig-landscape-block
+#| fig-cap: >
+#|   One pre-LN transformer block. The residual stream (the thick line) carries
+#|   the token states from left to right. Each of the two branches reads a
+#|   LayerNorm of the stream, computes an update, and adds it back at a
+#|   circled plus. Attention couples the tokens; the MLP acts on each token
+#|   separately. Blue boxes are learned maps; the dashed white boxes are
+#|   normalizations with only a per-feature scale and shift to learn. How to
+#|   read this: the stream itself is never normalized or overwritten inside the
+#|   block, only added to; a stack of L blocks is the same picture repeated L
+#|   times.
+#| fig-height: 2.6
+fig, ax = plt.subplots(figsize=(9.4, 2.6))
+ax.set_xlim(0, 10); ax.set_ylim(-0.3, 2.5); ax.axis("off")
+ax.annotate("", xy=(9.9, 0.3), xytext=(0.1, 0.3), arrowprops=dict(arrowstyle="-|>", color=INK, lw=3.0))
+ax.text(0.15, 0.0, r"stream $h^{(\ell)}$", fontsize=9.5, color=INK)
+ax.text(9.85, 0.0, r"$h^{(\ell+1)}$", fontsize=9.5, color=INK, ha="right")
+def box(x, y, wdt, txt, learned):
+    fc, ec, ls = ("#e6f0fb", BLUE, "-") if learned else (WHITE, BLUE, (0, (4, 3)))
+    ax.add_patch(FancyBboxPatch((x, y), wdt, 0.6, boxstyle="round,pad=0.04", fc=fc, ec=ec, ls=ls, lw=1.4))
+    ax.text(x + wdt / 2, y + 0.3, txt, ha="center", va="center", fontsize=9.5, color=INK)
+def plus(x):
+    ax.add_patch(plt.Circle((x, 0.3), 0.17, fc=WHITE, ec=INK, lw=1.4, zorder=5))
+    ax.text(x, 0.3, "+", ha="center", va="center", fontsize=12, zorder=6)
+for x0, name, xp in ((1.0, "attention\n(mixes tokens)", 4.6), (5.4, "MLP\n(each token alone)", 9.0)):
+    ax.plot([x0, x0], [0.3, 1.5], color=INK2, lw=1.4)
+    ax.annotate("", xy=(x0 + 0.16, 1.5), xytext=(x0, 1.5), arrowprops=dict(arrowstyle="-|>", color=INK2, lw=1.4))
+    box(x0 + 0.2, 1.2, 0.85, "LN", False)
+    ax.annotate("", xy=(x0 + 1.55, 1.5), xytext=(x0 + 1.05, 1.5), arrowprops=dict(arrowstyle="-|>", color=INK2, lw=1.4))
+    box(x0 + 1.6, 1.2, 1.7, name, True)
+    ax.plot([x0 + 3.3, xp], [1.5, 1.5], color=INK2, lw=1.4)
+    ax.annotate("", xy=(xp, 0.5), xytext=(xp, 1.5), arrowprops=dict(arrowstyle="-|>", color=INK2, lw=1.4))
+    plus(xp)
+plt.show()
+```
+
+The *residual stream* is the sequence of token states $h^{(0)}, h^{(1)},
+\dots, h^{(L)}$ that passes through the $L$ blocks. A block never replaces
+it. It adds to it:
+
+$$
+h \leftarrow h + \operatorname{Attn}\bigl(\operatorname{LN}(h)\bigr),
+\qquad
+h \leftarrow h + \operatorname{MLP}\bigl(\operatorname{LN}(h)\bigr).
+$$ {#eq-preln}
+
+*LayerNorm* (LN) normalizes each token separately across its $d$ features:
+it subtracts the token's feature mean, divides by the token's feature
+standard deviation, and applies a learned per-feature scale $\gamma$ and
+shift $\beta$ (Ba et al., 2016). So
+$\operatorname{LN}(h)_i = \gamma \odot (h_i - \bar h_i)/\operatorname{std}(h_i) + \beta$,
+whatever the size of $h_i$. The *MLP* is a two-layer perceptron applied to
+each token alone, $\operatorname{MLP}(u) = W_2\,\phi(W_1 u)$, with a hidden
+width of four times $d$ and a smooth rectifier $\phi$, usually the GELU
+(Hendrycks and Gimpel, 2016). Attention is the only step that couples
+tokens. The block is the pattern of a neural-operator layer,
+$\sigma(Wv + \mathcal K v)$ (Kovachki et al., 2023): a nonlocal integral
+operator, then a pointwise nonlinearity.
+
+**Each block is a near-identity map.** When its updates are small against
+the stream, a block's Jacobian is $I + O(\varepsilon)$ and the network is a
+product $\prod_\ell (I + F_\ell)$ of perturbations of the identity. This is
+forward Euler on $\dot h = F(h, t)$ (Haber and Ruthotto, 2017), and it is
+why very deep residual networks train at all (He et al., 2016): the
+gradient reaches the first layer through the identity path. The arrangement
+of @eq-preln is the *pre-LN block* (Xiong et al., 2020). It is
+called pre-LN because the normalization sits before each sublayer, inside
+the branch. The original transformer normalized after the addition, which
+needs a learning-rate warm-up to train.
+
+**Why each branch reads the normalized state.** In a pre-LN block a
+sublayer's input has a fixed scale, so the size of its update is set by its
+weights and not by the size of the stream. The stream then grows by
+addition. If instead a sublayer reads the raw state through a linear map,
+its update is proportional to the stream, and the block multiplies the
+stream by $I + W$. Over twelve blocks a per-block gain of 1.5 is a factor
+of about 130. @fig-landscape-stream shows both wirings with the same random
+weights. The slice sublayer of ISLA reads the normalized state for exactly
+this reason (@sec-isla-layer).
+
+```{python}
+#| label: fig-landscape-stream
+#| fig-cap: >
+#|   The size of the residual stream through 12 blocks of one random network
+#|   wired two ways: each MLP branch reads LN(h) (pre-LN, solid) or reads h
+#|   itself (dotted). Width 256, 64 tokens, Gaussian weights scaled so that
+#|   a raw-read update is comparable to the stream it reads; the mean token
+#|   norm is divided by its value at the input. How to read this: the pre-LN
+#|   stream grows by addition, a fixed-size update per block; the raw-read
+#|   stream grows by a fixed factor per block, a geometric series. These are
+#|   random weights, not a trained model; the per-block factor of a trained
+#|   network depends on its training.
+#| fig-height: 3.4
+rng = np.random.default_rng(1)
+dS, nS, Lb, gain = 256, 64, 12, 1.6
+Ws = [(rng.normal(0, 1 / np.sqrt(dS), (dS, 4 * dS)), rng.normal(0, gain / np.sqrt(4 * dS), (4 * dS, dS))) for _ in range(Lb)]
+relu = lambda x: np.maximum(x, 0)
+def ln(h):
+    return (h - h.mean(1, keepdims=True)) / h.std(1, keepdims=True)
+def run(h0, pre):
+    h = h0.copy(); out = [np.linalg.norm(h, axis=1).mean()]
+    for A, B in Ws:
+        u = ln(h) if pre else h
+        h = h + relu(u @ A) @ B
+        out.append(np.linalg.norm(h, axis=1).mean())
+    return np.array(out) / out[0]
+h0 = rng.normal(0, 1, (nS, dS))
+r_raw = run(h0, False); r_pre = run(h0, True)
+fig, ax = plt.subplots(figsize=(8, 3.4))
+ell = np.arange(Lb + 1)
+ax.plot(ell, r_pre, color=INK, lw=2.0, marker="o", ms=4)
+ax.plot(ell, r_raw, color=INK2, lw=2.0, ls=":", marker="o", ms=4, mfc="white")
+ax.set_yscale("log")
+ax.set_yticks([1, 2, 5, 10, 20, 50, 100, 200]); ax.set_yticklabels(["1", "2", "5", "10", "20", "50", "100", "200"])
+ax.set_xlabel("block $\\ell$ [–]"); ax.set_ylabel("mean token norm / input norm [–]")
+label_line(ax, 12.2, r_raw[-1], f"MLP reads h:\n×{r_raw[-1] ** (1 / Lb):.2f} per block", INK2, fontsize=8.5)
+label_line(ax, 12.2, r_pre[-1], "MLP reads LN(h):\nadditive growth", INK, fontsize=8.5)
+ax.set_xlim(-0.3, 14.8); ax.set_xticks(range(0, 13, 2))
+ax.set_title("same weights, two wirings")
+plt.show()
+```
+
+Other placements of the normalization exist. The *sandwich* or *peri-LN*
+block also normalizes each sublayer's output before the addition (Ding et
+al., 2021; Kim et al., 2025). *QK-normalization* normalizes queries and keys
+before the dot product, which bounds every score (Henry et al., 2020;
+Dehghani et al., 2023). The *normalized transformer* keeps every state on
+the unit sphere (Loshchilov et al., 2024). All of them control the scale of
+what a sublayer reads, and that is the property that matters here.
+
+## Why $N^2$ is impossible at 200,000 points, and the ways around it {#sec-landscape-cost}
+
+**Dense attention scores every pair of tokens. At the 200,000 cells per
+case of this book's protocol, the score arrays of one layer fill several
+GPUs, and their arithmetic costs GPU-days per training run. Every scalable family replaces the $N \times N$ kernel with
+something of cost linear in $N$.** The arithmetic, for a network of the
+width and depth of ISLA:
+
+```{python}
+#| label: para-landscape-cost
+#| output: asis
+N, d, Hh, L, M = 200_000, 512, 8, 12, 512
+GiB = 2**30
+score_one = N * N * 2 / GiB                # one head, one layer, bfloat16 (2 bytes)
+score_all = score_one * Hh
+fl_attn = 4 * N * N * d                    # QK^T and AV, 2 flops per multiply-add each
+fl_mlp = 16 * N * d * d                    # two matmuls d -> 4d -> d
+fl_slice = 6 * N * M * d                   # routing logits, pooling and read-back, N x M x d each
+thr = 4e14                                 # assumed sustained arithmetic rate, FLOP/s
+steps = 1e5
+t_step = 3 * L * fl_attn / thr             # forward + backward ~ 3x forward
+def sci(x):
+    e = int(np.floor(np.log10(x))); return f"{x / 10**e:.1f} \\times 10^{{{e}}}"
+print(f"- one $N \\times N$ score array, one head, one layer, in bfloat16: ${score_one:.0f}$ GiB; "
+      f"all {Hh} heads of one layer: ${score_all:.0f}$ GiB, against 80 GiB on one GPU;\n"
+      f"- arithmetic of dense attention per layer, forward: ${sci(fl_attn)}$ floating-point operations, "
+      f"{fl_attn / fl_mlp:.0f} times the MLP's ${sci(fl_mlp)}$;\n"
+      f"- a training step of {L} layers (backward about twice the forward): "
+      f"{t_step:.1f} s of attention arithmetic alone at an assumed sustained ${sci(thr)}$ FLOP/s, "
+      f"so {steps * t_step / 86400:.0f} GPU-days for $10^5$ steps;\n"
+      f"- slice attention with $M = {M}$ slices instead: ${sci(fl_slice)}$ per layer, "
+      f"{fl_attn / fl_slice:.0f} times less than dense attention and below the MLP.\n\n"
+      f"Memory-efficient attention kernels (Dao et al., 2022) never store the score array, which removes the "
+      f"first line; they leave the arithmetic unchanged. At $10^7$ points, the order of a full DrivAerML "
+      f"surface mesh (about $9 \\times 10^6$ cells, as Alkin et al., 2025, list it), the arithmetic is "
+      f"{(1e7 / N) ** 2:,.0f} times larger. The rate ${sci(thr)}$ FLOP/s is an assumption of this worked "
+      f"example, not a measurement.")
+```
+
+```{python}
+#| label: fig-landscape-cost
+#| fig-cap: >
+#|   Cost of one layer against the number of tokens N, at width 512 with 8
+#|   heads. Top: memory of the stored N × N score arrays of one layer in
+#|   bfloat16 (dense attention) and of the N × M routing array of slice
+#|   attention with M = 512, against the 80 GiB of one GPU. Bottom:
+#|   forward arithmetic of the token-mixing step of each, with the per-token
+#|   MLP for reference. The vertical line marks 200,000 tokens. How to read
+#|   this: dense attention's memory and arithmetic both grow like N², slice
+#|   attention's like N; the figure counts the dominant matrix products only
+#|   and ignores constant factors such as the backward pass.
+#| fig-height: 5.0
+Ns = np.logspace(3, 7, 200)
+fig, (a0, a1) = plt.subplots(2, 1, figsize=(8, 5.0), sharex=True)
+a0.plot(Ns, Hh * Ns**2 * 2 / GiB, color=INK, lw=2.0)
+a0.plot(Ns, Ns * M * 2 / GiB, color=VIOLET, lw=2.0)
+a0.axhline(80, color=MUTED, lw=1.0, ls="--"); a0.text(1.2e3, 110, "80 GiB, one GPU", color=MUTED, fontsize=8.5)
+a0.set_yscale("log"); a0.set_ylabel("memory [GiB]")
+label_line(a0, 1.5e4, Hh * 1.5e4**2 * 2 / GiB * 30, "dense attention:\n8 score arrays", INK, ha="right", fontsize=8.5)
+label_line(a0, 1.5e6, 1.5e6 * M * 2 / GiB * 0.25, "slice attention: N × M routing", VIOLET, fontsize=8.5)
+a1.plot(Ns, 4 * Ns**2 * d, color=INK, lw=2.0)
+a1.plot(Ns, 6 * Ns * M * d, color=VIOLET, lw=2.0)
+a1.plot(Ns, 16 * Ns * d * d, color=MUTED, lw=1.5, ls="--")
+a1.set_yscale("log"); a1.set_xscale("log"); a1.set_ylabel("forward FLOP per layer [–]")
+a1.set_xlabel("tokens per case $N$ [–]")
+label_line(a1, 3e6, 16 * 3e6 * d * d * 2.5, "MLP", MUTED, fontsize=8.5)
+label_line(a1, 3e6, 6 * 3e6 * M * d * 0.3, "slice attention", VIOLET, fontsize=8.5)
+label_line(a1, 2.5e4, 4 * 2.5e4**2 * d * 3, "dense attention", INK, ha="right", fontsize=8.5)
+for a in (a0, a1):
+    a.axvline(2e5, color=AQUA, lw=1.0, ls=":")
+a0.text(2.2e5, 1e-2, "200,000", color=AQUA, fontsize=8.5)
+a1.set_xticks([1e3, 1e4, 1e5, 1e6, 1e7]); a1.set_xticklabels(["1,000", "10,000", "100,000", "1,000,000", "10,000,000"])
+a0.set_yticks([1e-2, 1, 1e2, 1e4, 1e6]); a0.set_yticklabels(["0.01", "1", "100", "10,000", "1,000,000"])
+fig.tight_layout()
+plt.show()
+```
+
+**Four families route the global coupling through something cheaper.**
+@fig-landscape-routes draws them on the airfoil. A numerical analyst knows
+each one already: a stencil, a spectral method on a background grid, a
+coarse basis, and an algebraic coarse level.
+
+```{python}
+#| label: fig-landscape-routes
+#| fig-cap: >
+#|   Four ways to couple N boundary tokens at a cost linear in N, drawn on the
+#|   running airfoil (60 cells). (a) Local neighborhoods: each token exchanges
+#|   messages with its nearest neighbors; after three rounds the highlighted
+#|   token has reached the shaded ones. (b) A regular latent grid: tokens
+#|   are scattered onto grid nodes, a spectral convolution acts on the grid,
+#|   and the result is gathered back. (c) Learned latent tokens: a fixed set
+#|   of M vectors (squares) cross-attends to every token; each line is one
+#|   attention weight of one latent token. (d) Slice attention: a soft
+#|   partition of the tokens into M slices, one slice state per color. How to
+#|   read this: the figure shows the coupling pattern of each family, not any
+#|   trained weights; M = 6 here, a few hundred in practice.
+#| fig-height: 4.6
+fig, axs = plt.subplots(2, 2, figsize=(8.6, 4.6))
+P = mid; Nn = len(P)
+for ax in axs.flat:
+    clean_axes(ax); ax.plot(xy[:, 0], xy[:, 1], color=BASELINE, lw=1.0)
+    ax.set_xlim(-2.4, 2.4); ax.set_ylim(-1.15, 1.45)
+# (a) graph: ring neighbors (k = 2 each side), three hops
+ax = axs[0, 0]; i0 = 15
+for i in range(Nn):
+    for o in (1, 2):
+        j = (i + o) % Nn
+        ax.plot(P[[i, j], 0], P[[i, j], 1], color=GRID, lw=0.8, zorder=1)
+reach = {(i0 + o) % Nn for o in range(-6, 7)}
+ax.plot(P[:, 0], P[:, 1], "o", ms=3, color=INK2, zorder=2)
+ax.plot(P[list(reach), 0], P[list(reach), 1], "o", ms=6, color=VIOLET, alpha=0.35, zorder=2)
+ax.plot(P[i0, 0], P[i0, 1], "o", ms=7, color=VIOLET, zorder=3)
+ax.set_title("(a) local neighborhoods: graph networks")
+# (b) latent grid
+ax = axs[0, 1]
+gx = np.linspace(-2.3, 2.3, 12); gy = np.linspace(-1.1, 1.3, 7)
+for xg in gx: ax.plot([xg, xg], [gy[0], gy[-1]], color=GRID, lw=0.8)
+for yg in gy: ax.plot([gx[0], gx[-1]], [yg, yg], color=GRID, lw=0.8)
+GX, GY = np.meshgrid(gx, gy); ax.plot(GX, GY, "s", ms=3, color=VIOLET, alpha=0.7)
+ax.plot(P[:, 0], P[:, 1], "o", ms=3, color=INK2)
+for i in range(0, Nn, 4):
+    jx = np.argmin(np.abs(gx - P[i, 0])); jy = np.argmin(np.abs(gy - P[i, 1]))
+    ax.plot([P[i, 0], gx[jx]], [P[i, 1], gy[jy]], color=VIOLET, lw=0.8)
+ax.set_title("(b) a latent grid: FNO, Geo-FNO, GINO")
+# (c) latent tokens
+ax = axs[1, 0]
+lat = np.column_stack([np.linspace(-2.0, 2.0, 6), np.full(6, 1.32)])
+ax.plot(lat[:, 0], lat[:, 1], "s", ms=8, color=VIOLET)
+ax.plot(P[:, 0], P[:, 1], "o", ms=3, color=INK2)
+rng = np.random.default_rng(2)
+for m in (1, 4):
+    sc = -np.sum((P - (lat[m] - [0, 1.3])) ** 2, 1) / 0.6
+    wts = np.exp(sc - sc.max()); wts /= wts.max()
+    for i in range(Nn):
+        ax.plot([P[i, 0], lat[m, 0]], [P[i, 1], lat[m, 1]], color=VIOLET, lw=0.4 + 1.2 * wts[i], alpha=0.15 + 0.6 * wts[i])
+ax.set_title("(c) latent tokens: Perceiver, UPT, AB-UPT")
+# (d) slices
+ax = axs[1, 1]
+cent = np.array([[-1.9, 0.05], [-1.1, 0.35], [-0.1, 0.45], [0.9, 0.25], [1.8, 0.0], [0.0, -0.1]])
+lg = -np.sum((P[:, None, :] - cent[None]) ** 2, -1) / 0.25
+Wsl = np.exp(lg - lg.max(1, keepdims=True)); Wsl /= Wsl.sum(1, keepdims=True)
+cols = slice_colors(6, seed=3)
+rgba = Wsl @ cols[:, :3]
+ax.scatter(P[:, 0], P[:, 1], s=28, c=np.clip(rgba, 0, 1), edgecolor="none", zorder=3)
+ax.set_title("(d) slice attention: Transolver family")
+fig.tight_layout()
+plt.show()
+```
+
+### Local neighborhoods: graph networks {#sec-landscape-graph}
+
+**A graph network replaces the global kernel with a stencil and recovers
+global coupling by applying it many times.** MeshGraphNets treats the
+simulation mesh as a graph (Pfaff et al., 2021; @sec-vs-bibliography). Each
+layer computes a message on every edge from the two endpoint states and
+their relative position, sums the incoming messages at every node, and
+updates the node state with an MLP. A layer costs $O(Nk)$ for $k$
+neighbors per node. A message travels one edge per layer, so a signal
+crosses a mesh of diameter $D$ edges only after $D$ layers. Elliptic
+problems couple everything, so a purely local network needs very many
+layers or a hierarchy of coarsened graphs, as a multigrid solver does.
+Message-passing PDE solvers (Brandstetter et al., 2022) show that this class
+contains finite differences and finite volumes as special cases. The sum
+over neighbors weights each neighbor once, whatever the size of its cell.
+
+### Spectral and latent grids: FNO, Geo-FNO, GINO {#sec-landscape-grid}
+
+**A Fourier neural operator writes the kernel integral as a convolution on
+a regular grid and applies it with the FFT, truncated to a few modes.**
+The *neural operator* framework (Kovachki et al., 2023) defines each layer
+as $v \mapsto \sigma(Wv + \mathcal K v)$, with $\mathcal K$ an integral
+operator with a learned kernel, and asks that the layers converge as the
+discretization is refined. The graph kernel network (Li et al., 2020)
+evaluates $\mathcal K$ as a quadrature sum over a radius graph. The FNO
+(Li et al., 2021) takes $\kappa(x,y)=\kappa(x-y)$ and multiplies Fourier
+coefficients by learned matrices, at cost $O(n \log n)$ on $n$ grid nodes.
+An irregular geometry must first be put on a grid. Geo-FNO learns a deformation of the
+physical domain onto a uniform latent grid (Li et al., 2023a). GINO reads the shape as a point cloud and a signed-distance
+function, uses a graph neural operator to carry features onto a regular
+latent grid, applies an FNO there, and maps the result back to
+arbitrary query points (Li et al., 2023b). The
+grid is a background mesh, and its resolution, not the number of input
+points, sets the cost and the smallest resolved scale: a thin boundary
+layer on a car needs a fine grid in a large box.
+
+### Learned latent tokens: Perceiver, UPT, AB-UPT {#sec-landscape-latent}
+
+**A latent-token model compresses the $N$ inputs into $M \ll N$ learned
+vectors by cross-attention, processes those, and decodes at any query
+point.** *Cross-attention* is @eq-attention with the queries from one set
+of tokens and the keys and values from another. The Perceiver keeps a fixed
+array of $M$ latent vectors as queries and attends from them to the $N$
+inputs, at cost $NM$, then runs ordinary attention among the latents, at
+cost $M^2$ (Jaegle et al., 2021). Perceiver IO decodes by a second
+cross-attention from output queries to the latents (Jaegle et al., 2022).
+The latent array is a learned coarse basis: the encoder is a projection
+onto it and the decoder an interpolation from it. Universal Physics
+Transformers (UPT) encode a mesh or particle set into a latent set,
+propagate it there and query the latent field at arbitrary points (Alkin et
+al., 2024). AB-UPT, its automotive form, runs attention on a reduced set of
+*anchor* tokens drawn from the points, uses separate branches for the
+geometry, the surface and the volume, and lets the remaining query points
+cross-attend to the anchors (Alkin et al., 2025). It reports volume meshes
+up to 150 million cells and a divergence-free vorticity built in by
+construction.
+
+### Slice attention: Transolver {#sec-landscape-slice}
+
+**Slice attention routes each token softly into $M$ slices, runs attention
+among the $M$ slice states, and spreads the result back. It factors the
+dense $N \times N$ operator through a learned soft partition of unity, the
+restriction and prolongation pair of algebraic multigrid.** Transolver
+(Wu et al., 2024) computes, for every token, weights over the slices,
+$a_{is} = \operatorname{softmax}_s(\text{linear}(h_i)/\tau)$. The softmax
+runs over slices, so each token's weights sum to one: the $a_{is}$ form a
+partition of unity on the tokens. A slice state is the weighted mean of its
+tokens, $z_s = \sum_i a_{is} h_i / \sum_i a_{is}$. Attention runs among the
+$M$ slice states. Token $i$ reads back $\sum_s a_{is} z'_s$. Written as
+matrices, with $P \equiv (a_{is})$ of size $N \times M$ and
+$R \equiv \operatorname{diag}(P^\top \mathbf 1)^{-1} P^\top$ of size
+$M \times N$, the token-mixing step is
+
+$$
+h' = P \, \mathcal A_M \, R \, h ,
+$$ {#eq-slice-factor}
+
+with $\mathcal A_M$ the attention among slices. $R$ restricts the fine
+level to $M$ coarse unknowns by weighted averages. $P$ prolongs back by a
+partition of unity. The fine-level coupling has rank at most $M$, as a
+two-level method's coarse correction does (@fig-landscape-slices). The analogy has limits that
+matter. The partition is learned, recomputed from the current states in
+every layer, and soft. The coarse operator is a nonlinear attention, not a
+Galerkin product $R A P$. And the slices group tokens by similarity of
+state, which places points of similar physics in one slice wherever they
+sit on the body. Hu et al. (2026) show the
+mechanism is a form of linear attention, and argue that most of its value
+lies in the restriction and prolongation rather than in the attention
+among slices. The cost is $O(NMd)$ per layer, which is the line of
+@fig-landscape-cost.
+
+```{python}
+#| label: fig-landscape-slices
+#| fig-cap: >
+#|   Slice attention as a low-rank factorization, on the running airfoil with
+#|   M = 6 slices from a hand-made routing (a softmax over slices of the
+#|   squared distance to six points). Top: each cell drawn in the blend of
+#|   its slices' colors, and each slice's weighted-mean position (stars).
+#|   Bottom: the matrices of @eq-slice-factor, drawn to scale: prolongation
+#|   P (N × M), the coarse operator A among slices (M × M, here a random
+#|   attention), the restriction R (M × N), and their product, an N × N
+#|   operator of rank 6. Darker is larger.
+#|   How to read this: in a trained network the routing comes from the token
+#|   states, not from position, and is recomputed in every layer; this figure
+#|   shows only the algebra.
+#| fig-height: 5.4
+Pm = Wsl                                   # N x M, rows sum to one
+Rm = (Pm / Pm.sum(0, keepdims=True)).T     # M x N, rows sum to one
+rng = np.random.default_rng(5)
+sc = rng.normal(0, 1.2, (6, 6)); Am = np.exp(sc); Am /= Am.sum(1, keepdims=True)
+K = Pm @ Am @ Rm
+fig = plt.figure(figsize=(8.6, 5.4))
+gs = fig.add_gridspec(2, 7, height_ratios=[0.8, 1.2], width_ratios=[6, 5, 6, 5, 60, 5, 60], hspace=0.12, wspace=0.05)
+ax = fig.add_subplot(gs[0, :]); clean_axes(ax)
+ax.plot(xy[:, 0], xy[:, 1], color=BASELINE, lw=1.0)
+ax.scatter(P[:, 0], P[:, 1], s=40, c=np.clip(Wsl @ cols[:, :3], 0, 1), edgecolor="none", zorder=3)
+zs = Rm @ P
+for s in range(6):
+    ax.plot(zs[s, 0], zs[s, 1], "*", ms=14, color=cols[s], mec=INK, mew=0.8, zorder=4)
+ax.set_xlim(-2.4, 2.4); ax.set_ylim(-0.75, 0.85)
+ax.set_title("a soft partition of 60 tokens into 6 slices; stars: slice mean positions")
+def mat(axm, Mx, title, cmap="Greys"):
+    axm.imshow(Mx, aspect="equal", cmap=cmap, interpolation="nearest", vmin=0)
+    axm.set_xticks([]); axm.set_yticks([]); axm.grid(False); axm.set_title(title, fontsize=9, loc="center")
+    for sp in axm.spines.values(): sp.set_visible(True); sp.set_color(BASELINE)
+mat(fig.add_subplot(gs[1, 0]), Pm, "P\nN × M")
+mat(fig.add_subplot(gs[1, 2]), Am, "A\nM × M")
+mat(fig.add_subplot(gs[1, 4]), Rm, "R,  M × N")
+mat(fig.add_subplot(gs[1, 6]), K, "P · A · R  (N × N, rank 6)")
+for k, sym in ((1, "·"), (3, "·"), (5, "=")):
+    a_ = fig.add_subplot(gs[1, k]); a_.axis("off"); a_.text(0.5, 0.5, sym, ha="center", va="center", fontsize=18, color=INK)
+plt.show()
+```
+
+### GeoTransolver and Transolver++ {#sec-landscape-geotransolver}
+
+**GeoTransolver adds a geometry encoder and global context to Transolver;
+Transolver++ sharpens the routing and scales it across GPUs.** GeoTransolver
+(Adams et al., 2025) pairs the slice self-attention of each block with a
+cross-attention to a shared embedding of the geometry and the global
+parameters. It computes that embedding once from multi-scale ball queries
+(neighborhoods of several radii around each point), after DoMINO (Ranade et
+al., 2025), and reuses it in every block. Its configurations in this book
+are described in @sec-baselines. Transolver++ (Luo et al., 2025) gives each
+point an adaptive routing temperature and samples the slice weights with a
+Gumbel-softmax, against slice weights that become uniform, and adds a
+parallel implementation that reaches million-point meshes. Transolver-3
+(Zhou et al., 2026) tiles the slice computation and reorders its matrix
+products to reach meshes of over 160 million cells. Transolver and GeoTransolver,
+as released in PhysicsNeMo, take coordinates in a laboratory frame and
+weight each token once in their slice states.
+
+### DeepONet: a branch and a trunk {#sec-landscape-deeponet}
+
+**DeepONet writes the solution as a separated expansion: coefficients that
+depend on the input function, times basis functions of the query point.**
+Its prediction at a point $y$ is $\mathcal G(u)(y) \approx \sum_{k=1}^{p}
+b_k(u)\, t_k(y)$ (Lu et al., 2021). A *branch* network maps the input
+function, sampled at fixed sensor points, to the coefficients $b_k$. A
+*trunk* network maps the query point to the basis values $t_k$. The form
+is that of a proper orthogonal decomposition with a learned basis. It
+follows a universal approximation theorem for operators (Chen and Chen,
+1995). Each query point is evaluated independently of the others, so the
+answer at a point does not depend on which other points were requested.
+The branch needs the input at fixed sensors, which a varying boundary mesh
+does not supply without interpolation.
+
+## Symmetry: augment, canonicalize or build it in {#sec-landscape-symmetry}
+
+**A surrogate can respect a rigid motion in three ways: learn it from
+rotated copies of the data, rotate every input to a standard pose first, or
+use only operations that commute with the motion. Only the last is exact
+for every input, and it constrains the architecture.** The physics of
+@sec-problem does not depend on where the body sits in the laboratory, so a
+correct surrogate satisfies $\mathcal G(Qx + b) = Q\,\mathcal G(x)$ for
+vector outputs and $\mathcal G(Qx + b) = \mathcal G(x)$ for scalar outputs,
+for every rotation $Q$ and translation $b$, with the normals and the global
+directions rotated by $Q$ as well. A map with this property is
+*equivariant*, or *invariant* for scalars.
+
+**Data augmentation** trains on randomly rotated and translated copies of
+each case. It changes nothing in the architecture, costs training time, and
+yields an approximate symmetry only over the poses it was shown. Rygiel et
+al. (2026) measure the effect on ShapeNet-Car. Their measure is the median relative L2
+error of velocity over five runs. An AB-UPT trained without rotations
+scores 1.31% in the training pose and 10.5% at a test rotation of 5°.
+Trained on rotations up to 90°, it scores about 2.1% at every test
+rotation up to 90° and 10.7% at 180°. The equivariant model of the same
+study scores 2.19% at every rotation.
+
+**Canonicalization** maps every input to a standard pose before the
+network sees it, for instance by centering on the centroid and aligning the
+principal axes of the shape's second moment. The network can then be
+anything. The canonical pose is exact where it is unique, and it is
+discontinuous where it is not. When two principal moments are nearly
+equal, a small change of shape turns the canonical frame through nearly
+90°, and when they are equal the turn is a jump (@fig-landscape-canon). Eigenvector signs are a
+second ambiguity. Frame averaging averages the network over all the frames
+the ambiguity allows (Puny et al., 2022). A learned canonicalizer replaces
+the principal axes with a small equivariant network (Kaba et al., 2023).
+
+```{python}
+#| label: fig-landscape-canon
+#| fig-cap: >
+#|   Why a canonical frame is discontinuous. A family of closed curves, an
+#|   ellipse with aspect ratio between 0.8 and 1.25 carrying a small
+#|   off-axis bump, aligned by the principal axes of its length-weighted
+#|   second moment. Top: three members of the family, 6% apart in aspect
+#|   ratio, with their first principal axis. Bottom: the angle of that axis
+#|   against the aspect ratio. How to read this: the frame turns through
+#|   nearly 90° across a few percent of aspect ratio, where the two principal
+#|   moments nearly cross, so a network fed canonical coordinates sees three
+#|   near-identical shapes in three different poses; for a shape with an
+#|   exact symmetry the turn becomes a jump.
+#| fig-height: 5.0
+def shape(ar, n=400):
+    t = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    r = 1 + 0.03 * np.exp(-((t - 0.8) / 0.25) ** 2)
+    pts = np.column_stack([ar * r * np.cos(t), r * np.sin(t)])
+    return pts
+def axis_angle(pts):
+    seg = np.roll(pts, -1, 0) - pts; wl = np.linalg.norm(seg, axis=1); m = pts + seg / 2
+    c0 = (wl[:, None] * m).sum(0) / wl.sum(); X = m - c0
+    C = (wl[:, None, None] * X[:, :, None] * X[:, None, :]).sum(0)
+    ev, V = np.linalg.eigh(C); v = V[:, -1]
+    ang = np.degrees(np.arctan2(v[1], v[0])) % 180
+    return ang, c0, v
+ars = np.linspace(0.8, 1.25, 400)
+angs = np.array([axis_angle(shape(a))[0] for a in ars])
+fig = plt.figure(figsize=(8, 5.0))
+gs = fig.add_gridspec(2, 3, height_ratios=[1, 1.1], hspace=0.35)
+for k, a in enumerate((0.97, 1.0, 1.03)):
+    ax = fig.add_subplot(gs[0, k]); clean_axes(ax)
+    pts = shape(a); ang, c0, v = axis_angle(pts)
+    ax.plot(*np.vstack([pts, pts[:1]]).T, color=INK, lw=1.5)
+    ax.annotate("", xy=c0 + 1.1 * v, xytext=c0 - 1.1 * v, arrowprops=dict(arrowstyle="-|>", color=VIOLET, lw=1.8))
+    ax.set_title(f"aspect ratio {a:.3f}", loc="center", fontsize=9)
+    ax.set_xlim(-1.5, 1.5); ax.set_ylim(-1.5, 1.5)
+ax = fig.add_subplot(gs[1, :])
+ax.plot(ars, angs, color=VIOLET, lw=2.0)
+ax.set_xlabel("aspect ratio of the curve [–]"); ax.set_ylabel("first principal axis [deg]")
+ax.set_yticks([0, 45, 90, 135, 180])
+plt.show()
+```
+
+**Equivariance by construction** uses only operations that commute with
+the group. EGNN builds its messages from relative distances and updates
+positions by weighted sums of relative vectors, which is exact for
+rotations, translations and reflections at the cost of an MLP on scalars
+(Satorras et al., 2021). Tensor field networks and the e3nn library carry
+features as irreducible representations of the rotation group (scalars,
+vectors, and higher-order tensors written in spherical harmonics) and
+combine them with Clebsch–Gordan tensor products (Thomas et al., 2018;
+Geiger and Smidt, 2022). The SE(3)-Transformer brings that construction to
+attention (Fuchs et al., 2020). The Geometric Algebra Transformer represents
+every state as an element of the projective geometric algebra of
+three-dimensional space (Brehmer et al., 2023). These networks are exact for
+every input. Their price is in every layer: typed features, constrained
+linear maps and tensor products whose cost rises steeply with the highest
+order carried. In the Rygiel et al. (2026) study, the equivariant AB-GATr
+trains 2 to 11 times slower than AB-UPT.
+
+A fourth route sits between the second and the third. Compute the
+invariants of the input first (distances, angles, dot products against
+vectors that move with the body), run an ordinary network on those scalars,
+and rebuild vector outputs at the end from a basis that rotates with the
+body. It is exact, it puts the cost at the edges of the network rather than
+in every layer, and it is the route ISLA takes (@sec-isla-frame,
+@sec-isla-heads).
+
+| route | exact for every input | what it costs | where the cost sits |
+|:---|:---|:---|:---|
+| data augmentation | no, approximate over the poses trained | training time and data | in training |
+| canonicalization | yes where the frame is unique; discontinuous where it is not | a frame rule and its failure set | at the input |
+| equivariant layers (EGNN, e3nn, GATr) | yes | typed features, constrained maps, tensor products | in every layer |
+| invariants in, equivariant basis out | yes | a basis that moves with the body, scalar-only trunk | at the input and output |
+
+: Four routes to rigid-motion symmetry. How to read this: "exact" means the
+property holds to roundoff for every input and every weight setting, the
+sense of a contract in @sec-fidelity-columns. {#tbl-landscape-symmetry}
+
+## Discretization: count-weighted and measure-weighted sums {#sec-landscape-discretization}
+
+**Every aggregation in a network is a sum over tokens, and a sum over
+sampled points converges to an integral against the sampling density, not
+against the surface measure, unless each term carries its cell's
+measure.** If the $N$ points are drawn with density $\rho$ on a surface
+$\Gamma$, then
+$\frac1N\sum_j f(y_j) \to \int_\Gamma f\,\rho\,dS$. That limit depends on
+the mesher. Weighting each term by the cell measure,
+$\sum_j w_j f(y_j)$ with $\sum_j w_j = |\Gamma|$, converges to
+$\int_\Gamma f\,dS$ for any density: it is a quadrature rule. Under a
+random, non-uniform draw the weights are Horvitz–Thompson weights, inverse
+inclusion probabilities, which are the importance weights of Monte Carlo
+integration. @fig-landscape-quadrature shows both sums on the airfoil
+under two meshers.
+
+```{python}
+#| label: fig-landscape-quadrature
+#| fig-cap: >
+#|   A mean over the surface of the running airfoil, the surface pressure
+#|   coefficient averaged two ways, against the number of cells, under two
+#|   meshers: equal-arclength cells (solid) and cells clustered at the leading
+#|   edge (dashed). Black: weighted by cell length (a quadrature rule). Gray:
+#|   one unit of weight per cell (a count). How to read this: the
+#|   length-weighted means of the two meshers converge to one value, the
+#|   integral over the surface; on equal cells the count is the same rule,
+#|   and on clustered cells it converges to a different value, an integral
+#|   against that mesher's cell density.
+#|   Exact potential-flow solution, no model.
+#| fig-height: 3.6
+u = np.linspace(0, 1, 2001)
+dens = 1.0 + 14.0 * np.exp(-((u - 0.5) / 0.05) ** 2) + 2.0 * np.exp(-(u / 0.04) ** 2) + 2.0 * np.exp(-((u - 1.0) / 0.04) ** 2)
+cdf = np.concatenate([[0], np.cumsum(dens[:-1] * np.diff(u))]); cdf /= cdf[-1]
+Ns_q = np.unique(np.round(np.logspace(np.log10(30), np.log10(4000), 22)).astype(int))
+res = {}
+for lab, fr in (("uniform", None), ("clustered", True)):
+    cm, mm = [], []
+    for n in Ns_q:
+        JJ = joukowski(n_cells=n, frac=(np.interp(np.linspace(0, 1, n + 1), cdf, u) if fr else None))
+        cm.append(JJ["cp_s"].mean()); mm.append(np.sum(JJ["w"] * JJ["cp_s"]) / JJ["w"].sum())
+    res[lab] = (np.array(cm), np.array(mm))
+fig, ax = plt.subplots(figsize=(8, 3.6))
+for lab, ls in (("uniform", "-"), ("clustered", "--")):
+    cm, mm = res[lab]
+    ax.plot(Ns_q, mm, color=INK, lw=2.0, ls=ls)
+    ax.plot(Ns_q, cm, color=MUTED, lw=2.0, ls=ls)
+ax.set_xscale("log")
+ax.set_xticks([20, 50, 100, 200, 500, 1000, 2000]); ax.set_xticklabels(["20", "50", "100", "200", "500", "1,000", "2,000"])
+ax.set_xlabel("cells on the airfoil $N$ [–]"); ax.set_ylabel(r"mean surface $C_p$ [–]")
+label_line(ax, 3000, res["uniform"][1][-1] + 0.035, "length-weighted, both meshers; count-weighted, equal cells", INK, ha="right", fontsize=8.5)
+label_line(ax, 3000, res["clustered"][0][-1] + 0.035, "count-weighted, cells clustered at the leading edge", MUTED, ha="right", fontsize=8.5)
+plt.show()
+```
+
+**Inside attention the fix is one term in the exponent.** Adding $\log w_j$
+to the score of token $j$ turns the count-weighted softmax of
+@eq-attention into a quadrature of the normalized kernel integral,
+
+$$
+\frac{w_j\, e^{s_j}}{\sum_l w_l\, e^{s_l}}
+= \operatorname{softmax}_j\bigl(s_j + \log w_j\bigr),
+$$
+
+so splitting a cell into two halves leaves the output unchanged. Cao (2021)
+reads attention without the softmax as a Petrov–Galerkin projection, a
+quadrature on the grid. Berner et al. (2026) state the general principle for
+attention in operator learning: quadrature weights in the normalization and
+the aggregation, so that a layer has one limit under refinement. Transolver's slice states
+$\sum_i a_{is} h_i / \sum_i a_{is}$ weight each token once. A slice state
+then counts a cluster of small cells near a leading edge once per cell, so the mesher's refinement decides how much
+that region weighs. ISLA's routing adds exactly the log-measure bias
+(@sec-isla-quadrature).
+
+**"Resolution invariance" claims need to be read with their sampler.** A
+neural operator is called discretization-invariant or
+discretization-convergent when its layers converge to a continuum operator
+as one family of discretizations is refined (Kovachki et al., 2023). That is
+a statement about refinement of one mesher. It does not say that two
+meshers with different cell densities give the same answer, and a
+count-weighted layer converges to a different operator for each density,
+as the gray curves of @fig-landscape-quadrature do. Models with a fixed
+number of nearest neighbors change their stencil with resolution. A
+fixed-radius graph does not, but it counts neighbors. A latent grid is
+resolution-independent in its processor and depends on how points are
+scattered onto it. The question to ask of any claim is which limit it
+proves, and under which change of the sample it was measured. ISLA's
+answer is in @sec-sampling-laws.
+
+## Physics-informed losses, and why ISLA takes none {#sec-landscape-pinn}
+
+**A physics-informed neural network penalizes the PDE residual of its
+output. ISLA takes no such term, because the residual of the equations its
+labels solve is not available to it and the metric scores the labels.** A
+PINN represents one solution $u_\theta(x)$ as a network of the coordinates
+and minimizes a weighted sum of the squared PDE residual at collocation
+points, the boundary-condition residual and any data misfit, with the
+derivatives taken by automatic differentiation (Raissi et al., 2019;
+@sec-vs-bibliography). The loss is a soft constraint. Its optimization is
+often ill-conditioned (Wang et al., 2021; Krishnapriyan et al., 2021), and
+in its basic form one training solves one PDE instance. The
+physics-informed neural operator adds residual terms to operator learning
+(Li et al., 2024).
+
+The book's industrial labels are time-averaged turbulent flows computed
+with a turbulence closure or a scale-resolving model. The closure is an
+empirical fit, and the residual a model could compute (the steady
+Navier–Stokes equations with some closure) is not the residual the labels
+satisfy. A penalty on it would pull predictions away from the labels the
+metric scores. ISLA puts its physical structure in the architecture
+instead: rigid-motion equivariance holds as an exact property of the map
+(@sec-isla-contracts) and every sum over the boundary is a quadrature rule
+by construction, where a penalty would hold such properties only
+approximately.
+AB-UPT takes a third road for one constraint: its vorticity is
+divergence-free by construction, a hard constraint in the output basis.
+
+## A taxonomy {#sec-landscape-taxonomy}
+
+**The families differ along five axes: what they read, whether they are
+exactly equivariant to rigid motions, whether their sums are quadratures,
+whether they answer at arbitrary interior points, and whether they reach
+the $10^5$ to $10^7$ points of industrial meshes.** @tbl-landscape-taxonomy
+places each family as it is published. A "no" in the equivariance or
+quadrature column describes the construction, not the behavior: such a
+model can learn the property approximately from data, and @sec-invariances
+measures how well the two baselines of this book do.
+
+| family (example) | input representation | exact rigid-motion equivariance | measure-weighted aggregation | interior queries | $10^5$–$10^7$ points |
+|:---|:---|:---|:---|:---|:---|
+| graph networks (MeshGraphNets, MP-PDE) | mesh graph, relative positions on edges | translations only | not by construction: sums over neighbors | at mesh nodes | with partitioning or graph hierarchies |
+| equivariant graph networks (EGNN; tensor field networks, e3nn) | point graph, relative vectors | yes | not by construction | at graph nodes | costly at high tensor order |
+| Fourier neural operators (FNO, Geo-FNO) | regular grid, or a learned map onto one | no (translations of a periodic grid) | uniform quadrature on the grid | at grid nodes, by interpolation | limited by the 3-D grid |
+| GINO | point cloud and signed distance, carried onto a latent grid | no | converges under refinement, as published | yes | yes, as published |
+| DeepONet | input at fixed sensors; query coordinates | no | not applicable: fixed sensors | yes, each point independent | in the trunk; the branch needs fixed sensors |
+| latent tokens (Perceiver IO, UPT, AB-UPT) | point sets, cross-attended to latents or anchors | no | not by construction | yes, by cross-attention | yes; AB-UPT reports $1.5 \times 10^8$ cells |
+| equivariant latent tokens (AB-GATr) | point sets in geometric algebra | yes | not by construction | yes | yes, at 2 to 11 times AB-UPT's training time |
+| slice attention (Transolver, Transolver++, Transolver-3) | point set, laboratory coordinates | no | no: Transolver counts each token once | as tokens of the input set | yes, linear in $N$ |
+| GeoTransolver | point set, laboratory coordinates, ball-query geometry encoding, global context | no | no: counts each token once | as tokens, with the signed distance | yes, linear in $N$ |
+| physics-informed networks (PINN) | coordinates of one instance | no | not applicable | yes | one instance per training |
+| **ISLA** | boundary cells with their measure; invariants against slice anchors | **yes**, rotations and translations (@sec-isla-contracts) | **yes**: a log-measure bias in the routing | **yes**, as interacting or read-only prediction points | **yes**, linear in $N$; 200,000 cells per case in this book |
+
+: The families of neural PDE surrogates against the five properties that
+matter for steady boundary-driven problems, each as constructed in the
+cited papers (@sec-vs-bibliography) and, for ISLA, in its code. How to read
+this: a row says what the architecture guarantees by construction, not how
+accurate it is; accuracy is the subject of @sec-standing. {#tbl-landscape-taxonomy}
+
+## The two gaps ISLA fills {#sec-landscape-gaps}
+
+**The scalable families pool by token count and take laboratory
+coordinates; the exactly equivariant families pay for it in every layer.
+ISLA closes both gaps in one slice transformer.** No published slice or
+latent-token transformer at industrial scale is exactly equivariant to
+rigid motions without typed features in every layer, and none weights its
+aggregation by the measure the cells stand for, so their predictions depend
+on the pose of the body and on the mesher's cell density. ISLA keeps the
+Transolver family's linear-cost slice attention and changes what the
+network sees. Every sum over the boundary is a quadrature rule. Positions
+enter only as invariants of a token against the slices' own anchors. Vector
+and tensor outputs are rebuilt at the end from a basis that moves with the
+body. The trunk between those edges is an ordinary scalar transformer of
+pre-LN blocks. How each of these works, on the same airfoil, is
+@sec-isla.
