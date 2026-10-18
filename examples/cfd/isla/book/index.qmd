@@ -68,7 +68,7 @@ def fmt_ratio(r):
 BASELINES = ("GeoTransolver", "Transolver")
 # the DrivAerML Surface and Volume, Shift-SUV, Tensile2d, lug and DeepJEB++ artifacts hold ISLA's normalized-read reruns (<dataset>_a2.json)
 ART = {name: char_arms(f) for name, f in (("surface", "drivaerml_surface_a2.json"), ("hilift", "hilift_surface.json"),
-                                          ("volume", "drivaerml_volume_a2.json"), ("airfrans", "airfrans.json"),
+                                          ("volume", "drivaerml_volume_a2.json"), ("airfrans", "airfrans_uniform.json"),
                                           ("suv", "shift_suv_surface_a2.json"), ("tensile2d", "tensile2d_a2.json"), ("lug", "lug_a2.json"),
                                           ("deepjeb", "deepjeb_surface_a2.json"))}
 rat = lambda name, arch, f, pk="native": ART[name][1][arch][pk][f]["mean"] / ART[name][1]["ISLA"][pk][f]["mean"]
@@ -112,7 +112,7 @@ rows = [
      "@sec-interior-results"),
     (f"**AirfRANS interior task**, 800 training airfoils, 100,000 queries per case, {label('airfrans')}: pressure / velocity / eddy viscosity, native (GeoTransolver; Transolver)",
      tri("airfrans", F3, "GeoTransolver") + "; " + tri("airfrans", F3, "Transolver"),
-     f"ISLA {word('airfrans', 'GeoTransolver', 'velocity_l2')} GeoTransolver on velocity by {fmt_ratio(rat('airfrans', 'GeoTransolver', 'velocity_l2'))}, {word('airfrans', 'GeoTransolver', 'nut_l2')} on eddy viscosity and {word('airfrans', 'GeoTransolver', 'pressure_l2')} on pressure; posed, ISLA's error moves {shift('airfrans', 'ISLA', 'pressure_l2', 'posed'):.3f}x and the baselines' read above the mean field; outside the training Reynolds and angle ranges it leads on every field",
+     f"ISLA {word('airfrans', 'GeoTransolver', 'velocity_l2')} GeoTransolver on velocity by {fmt_ratio(rat('airfrans', 'GeoTransolver', 'velocity_l2'))}, {word('airfrans', 'GeoTransolver', 'nut_l2')} on eddy viscosity and {word('airfrans', 'GeoTransolver', 'pressure_l2')} on pressure; posed, ISLA's error moves {shift('airfrans', 'ISLA', 'pressure_l2', 'posed'):.3f}x and the baselines' read above the mean field; outside the training Reynolds and angle ranges, on lanes trained and scored on contiguous blocks of the stored points, it leads on every field",
      "@sec-interior-airfrans"),
     (f"**Shift-SUV**, 794 estate bodies, {label('suv')}: surface pressure, native / point cloud / posed (GeoTransolver; Transolver)",
      three("suv", "pressure_l2"),
