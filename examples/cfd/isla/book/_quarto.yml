@@ -3,38 +3,42 @@ project:
   output-dir: _book
 
 book:
-  title: "ISLA: Invariant Slice Attention for Boundary-to-Field Surrogates"
-  subtitle: "A guide to the method, its use, and the evidence, measured against GeoTransolver and Transolver on steady boundary-driven PDE benchmarks"
+  title: "ISLA: Invariant Slice Attention"
+  subtitle: "A guide to a neural surrogate for boundary-driven PDEs that is exact under rigid motions and consistent under remeshing: how it works, how to use it, and how it measures against GeoTransolver and Transolver"
   chapters:
     - index.qmd
-    - part: "I. The problem and the two invariances"
+    - part: "I. The problem and the landscape"
       chapters:
         - 01-problem.qmd
-        - 02-isla.qmd
-        - 03-invariances.qmd
-        - 04-architecture.qmd
-    - part: "II. Protocol and use"
+        - 02-landscape.qmd
+    - part: "II. How ISLA works"
       chapters:
-        - 05-protocol.qmd
+        - 03-isla.qmd
+        - 04-invariances.qmd
+        - 05-forward-pass.qmd
+    - part: "III. Using ISLA"
+      chapters:
         - 06-using-isla.qmd
-    - part: "III. Evidence, by dataset"
+        - 07-benchmark.qmd
+    - part: "IV. Evidence"
       chapters:
-        - 07-drivaerml.qmd
-        - 08-hilift.qmd
-        - 09-airfrans.qmd
-        - 10-shift-suv.qmd
-        - 11-tensile2d.qmd
-        - 12-lug.qmd
-        - 13-deepjeb.qmd
-        - 20-aerozoo.qmd
-        - 15-capacity-scaling-cost.qmd
-    - part: "IV. Limits and status"
+        - 08-standing.qmd
+        - 09-drivaerml.qmd
+        - 10-hilift.qmd
+        - 11-shift-suv.qmd
+        - 12-airfrans.qmd
+        - 13-aerozoo.qmd
+        - 15-tensile2d.qmd
+        - 16-lug.qmd
+        - 17-deepjeb.qmd
+        - 19-capacity.qmd
+    - part: "V. Limits and status"
       chapters:
-        - 16-limits.qmd
+        - 20-limits.qmd
         - 14-program-status.qmd
   appendices:
-    - 17-design-decisions.qmd
-    - 19-literature.qmd
+    - 21-design.qmd
+    - 22-literature.qmd
     - 18-notebook.qmd
 
 execute:

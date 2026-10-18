@@ -56,7 +56,7 @@ the `mt1-final` tag.
 ## Historical book material
 
 Superseded chapters, their figure script, irreplaceable figure PNGs and the
-gallery dataset are grouped under [book/archive/](book/archive/). They are
+gallery dataset are grouped under [book/_archive/](book/_archive/). They are
 excluded from the live book's chapter list. The archive's README describes
 their execution context; the live ISLA book does not depend on them.
 
