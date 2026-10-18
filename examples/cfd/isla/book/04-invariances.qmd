@@ -3,8 +3,7 @@
 **ISLA is built around two facts that every boundary-driven PDE respects: the answer does not depend on where the body
 sits in the laboratory, and it does not depend on how the boundary was meshed.** The first fact gives an exact contract,
 rigid-motion equivariance, which ISLA holds to roundoff. The second gives a convergence property, discretization
-consistency, which ISLA holds in the fine-mesh limit and which the program uses as the acceptance test for every change to
-the architecture. This chapter states both as exact tests on the code. It then says what each one buys, draws the sampling
+consistency, which ISLA holds in the fine-mesh limit and which decides whether a change to the architecture is adopted. This chapter states both as exact tests on the code. It then says what each one buys, draws the sampling
 laws through which the second is measured, and reads both off the standing of the three reference configurations on every
 dataset. It closes with the two places where ISLA's own error moves, explained as properties of the class.
 
@@ -31,6 +30,7 @@ ST = {k: S.Standing(k) for k in KEYS}
 AREA_KEYS = [k for k in KEYS if "area" in S.DATASETS[k].protocols]   # where the point cloud resamples the scored set
 HEAD = {k: ST[k].ds.headline[0] for k in KEYS}                # the field each dataset's bar shows
 NONREF = [S.DATASETS[k].name for k in KEYS if not S.DATASETS[k].reference]
+PR = J("precres_2026-09-18.json")["reduction"]; PRB, PRF = PR["bfloat16"], PR["float32"]
 ```
 
 ## Two of the four properties need work {#sec-four-properties}
@@ -56,7 +56,7 @@ apply.
 | transformation of the input | what must hold | tolerance |
 |---|---|---:|
 | rotation $x \mapsto Qx$, $\det Q = 1$; normals and $\hat g$ rotated with it | $p$ unchanged, $v \mapsto Qv$ | $10^{-10}$ |
-| reflection, $\det Q = -1$ | a rank-$r$ output of even parity maps as $Q^{\otimes r}$; an odd-parity output (a pseudotensor) also picks up $\det Q$ | $10^{-11}$ |
+| reflection, $\det Q = -1$ | a rank-$r$ output of even parity maps as $Q^{\otimes r}$; an odd-parity output (a pseudotensor) also picks up $\det Q$ | $10^{-11}$; $10^{-4}$ relative in two dimensions |
 | translation $x \mapsto x + t$ | every output unchanged, with no centering anywhere in the model | $10^{-10}$ |
 | uniform rescale $x \mapsto kx$, measures $\times k^2$ or left alone | every output unchanged, with prediction points moved along | $10^{-10}$ |
 | measure-weight rescale $w \mapsto 137\,w$ | every output unchanged: the routing reads $\log w$ through a softmax, which a constant shift does not move | $10^{-9}$ |
@@ -66,8 +66,8 @@ apply.
 
 : The contract tests and what each verifies. The transformations act on the boundary cells (positions, normals, measure
 weights), on the global directions and, for the interior task, on the prediction points together. How to read this: a
-tolerance is an absolute bound on the output difference in float64; a contract that holds here holds for every set of
-weights, trained or not. The test functions are listed below. Source: `test/experimental/models/isla/`.
+tolerance is an absolute bound on the output difference in float64, except the two-dimensional test, which runs in float32
+at a relative tolerance of $10^{-4}$; a contract that holds here holds for every set of weights, trained or not. The test functions are listed below. Source: `test/experimental/models/isla/`.
 {#tbl-contracts tbl-colwidths="[36,50,14]"}
 
 ::: {.callout-note collapse="true" title="Optional: the test functions, row by row"}
@@ -91,7 +91,7 @@ same vectors (@sec-isla-heads). The last three rows are discretization statement
 quadrature over the split cells is the same sum. Refinement and resampling are statements about a limit, and the next two
 sections are about them.
 
-::: {.callout-warning collapse="true" title="What is not a contract"}
+::: {.callout-warning title="What is not a contract"}
 - **The magnitude of a global vector input.** It is discarded by design: a direction is normalized, and a magnitude that
   matters (a speed, a Reynolds number) enters as a global scalar.
 - **Independence from the other prediction points.** In ISLA's interacting interior form, every prediction point is a token
@@ -100,10 +100,19 @@ sections are about them.
   (`test_query_independent_interior_contracts`; @sec-arch-modes).
 - **Completeness of the representation.** The anchors are first moments, so two arrangements with the same first moments
   per slice are indistinguishable to a layer (`results/isla_first_moment_collision_2026-09-08.json`).
-- **The deployed arithmetic.** The tests run in float64. On the GPU in float32, ISLA's rotated-and-translated error equals its
-  native error to the digits @tbl-contract-shifts prints. Under bfloat16 autocast every activation is rounded to an 8-bit
-  mantissa, about 0.4% relative, so a bfloat16 forward pass is covariant only up to that rounding. Score and deploy in
-  float32 where the contract matters.
+- **The deployed arithmetic.** The tests run in float64. On the GPU in float32 the algebra keeps the contract to float32
+  roundoff, but one input of the interior task does not: where a prediction point is equally near two boundary samples, the
+  rounding of its coordinates decides which one it reads (@sec-nearest-ties). ISLA's rotated-and-translated error therefore
+  equals its native error on the tasks without such ties and moves on the lug and on Tensile2d (@tbl-contract-shifts), and on
+  HiLiftAeroML, whose standing is of the raw-read variant, it is
+  `{python} S.fmt_ratio(ST['hilift'].shift('ISLA', HEAD['hilift'], 'posed'))` times native. Under *bfloat16 autocast* (matrix products
+  run in the 16-bit bfloat16 format, with an 8-bit significand of which 7 bits are stored) the rounding is larger still:
+  `{python} f"{PRB['scalar_residual']['per_seed_mean'][0]:.1%}"` and `{python} f"{PRB['scalar_residual']['per_seed_mean'][1]:.1%}"`
+  of the pressure prediction under a rigid motion on two trained checkpoints, against
+  `{python} f"{PRB['scalar_vs_fp32_unrotated']['mean_over_seeds']:.1%}"` between bfloat16 and float32 with no motion, and
+  `{python} f"{PRF['scalar_residual']['max_over_cars']:.3%}"` at worst in float32 (an ISLA at 192 wide, 256 slices, 1e-3,
+  linear routing, raw slice reads, @sec-study-configurations; DrivAerML Surface task, twelve validation cars per
+  checkpoint; results/precres_2026-09-18.json). Score and deploy in float32 where the contract matters.
 :::
 
 ## A rigid motion of the body must move the field with it {#sec-equivariance-centerpiece}
@@ -122,15 +131,11 @@ standing artifact rescores each checkpoint with every validation case rotated an
 
 ### Equivariant by construction, or invariant by canonicalization {#sec-pose}
 
-**An equivariant model commutes with rigid motions in every operation. A canonicalizing pipeline estimates a frame per
-case, runs an ordinary model in it, and rotates the outputs back. Both are exact when they work, and only the first always
-works.** The usual canonical frame for an aerodynamic body sends the global direction $\hat g_1$ to $+x$, fixes the roll
-from the measure-weighted principal axes of the boundary in the transverse plane, and fixes the sign of each axis from the
-third moment. The pipeline is invariant exactly when that estimate depends on the geometry alone. Two conditions follow.
-First, the canonicalization must be part of training: a model trained in one exact pose and canonicalized only at inference
-meets the estimator's small tilt errors as inputs it never saw. Second, the frame must exist.
-
-It does not exist in three settings a general PDE surrogate meets:
+**A canonicalizing pipeline, which rotates every case to a frame estimated from its own geometry (@sec-landscape-symmetry,
+@fig-landscape-canon), is exact only where that frame exists and is unique. ISLA's equivariance does not need one.** The
+frame must also be part of training: a model trained in one exact pose and canonicalized only at inference meets the
+estimator's small tilt errors as inputs it never saw. The frame does not exist in three settings a general PDE surrogate
+meets:
 
 - a problem with no distinguished global direction ($K = 0$): a body under a scalar load, a heat-conduction or
   electrostatics problem, the GINOT lug of @sec-lug;
@@ -138,22 +143,23 @@ It does not exist in three settings a general PDE surrogate meets:
   fixed;
 - an assembly of parts in mixed orientations, where no single frame canonicalizes every part.
 
-ISLA needs neither a frame estimate nor a global direction. In these settings the contract separates a working surrogate
-from one whose error a random orientation multiplies by the factors of @fig-contract-shifts.
+ISLA needs neither a frame estimate nor a global direction, with one exception: ISLA-DTT builds the cluster forest of its
+boundary read in a canonical frame of the boundary (measure-weighted centroid, principal axes signed by their third
+moments; @sec-arch-tree-read), so its pose invariance at the class's opening angle holds up to ties of that frame. In these
+settings the contract separates a working surrogate from one whose error a random orientation multiplies by the factors
+of @fig-contract-shifts.
 
 **The contract has a clause for outputs that are components in a frame.** A stress component $\sigma_{12}$ or a
 displacement along a laboratory axis is not a property of the body alone: it belongs to the body and the frame together.
-ISLA predicts the tensor itself and reads the component off it (@sec-isla-heads). Supplying the dataset's axes as extra global
-vectors would break the contract, because those axes are not a datum of the PDE (@sec-pose-inputs). The clause binds on PLAID
+ISLA predicts the tensor itself and reads the component off it (@sec-isla-heads). The dataset's axes are not supplied as
+extra global vectors (@sec-pose-inputs). Rotated with the case they would keep the algebra covariant, but they are not a
+datum of the PDE; held fixed they leak the training set's pose. The clause binds on PLAID
 Tensile2d, whose targets are stress components (@sec-tensile2d).
 
 ### What ISLA is not given {#sec-pose-inputs}
 
-**Every input ISLA takes is a datum of the PDE problem: the geometry, the boundary data, the material or flow parameters,
-and the directions the physics names (an inlet, a load, gravity).** The axes of the dataset's coordinate frame are none of
-these. A solver never asks which way the dataset's $x$ axis points. On a dataset where every case shares one pose, those
-axes tell a model the canonical pose of the training set rather than anything about the equations, and a model that reads
-them gives up the contract.
+Every input ISLA takes is a datum of the PDE problem; the axes of the dataset's frame are not one, and ISLA is not given
+them (@sec-isla-inputs states the rule).
 
 ## The answer must not depend on how the boundary was meshed {#sec-discretization-centerpiece}
 
@@ -165,8 +171,8 @@ the training set did not contain.
 
 ### Discretization consistency is an acceptance criterion {#sec-principle}
 
-**The program adopts a change to the architecture only if the model's prediction converges to one field under
-refinement, and to the same field under different sampling laws. In-distribution accuracy alone never justifies a
+**A change to the architecture is adopted only if the model's prediction converges to one field under refinement, and
+to the same field under different sampling laws. In-distribution accuracy alone never justifies a
 change.** The goal is an accurate surrogate reached by physically principled means, because the principles carry a model to
 problems it was not trained on. Model size buys accuracy, but it does not buy generalization to a new mesher. A different
 mesher then differs from the training mesher only by a discretization error that vanishes in the fine-mesh limit. An error
@@ -317,18 +323,18 @@ print(f"**At the reference configurations, rotating and translating every case l
       f"native error. The architectures are at their reference configurations: {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} "
       f"and {S.CONFIG['Transolver']} (@sec-protocol).")
 if NONREF:
-    print(f"\n\nThe ISLA arm of {', '.join(NONREF)} comes from checkpoints trained with the raw slice reads.")
+    print(f"\n\nOn {', '.join(NONREF)}, ISLA's checkpoints are of the raw-read variant (@sec-study-configurations).")
 ```
 
 ```{python}
 #| label: fig-contract-shifts
 #| fig-cap: >
-#|   Each architecture's error under the two realism protocols divided by its own native-mesh error, at the reference
+#|   Each architecture's error under the two other scorings divided by its own native-mesh error, at the reference
 #|   configurations, on every task with a standing artifact. Top: rotated and translated ÷ native. Bottom: uniform point
-#|   cloud ÷ native, on the three surface tasks where that protocol resamples the scored cells. Each bar starts at 1 (no
-#|   shift) on a log axis and shows the seed mean of the task's first headline field (named in the row label); dots are
-#|   the two seeds and the printed number is the seed mean. ISLA blue, GeoTransolver red, Transolver amber. How to read
-#|   this: a bar at 1 means the protocol leaves that architecture's error unchanged; the figure does not rank native
+#|   cloud ÷ native, on the three surface tasks where that protocol resamples the scored cells. Each large marker is the
+#|   seed mean of the task's first headline field (a field its standing reports, named in the row label), joined to 1 (no
+#|   shift) by a thin line on a log axis; small open dots are the two seeds and the printed number is the seed mean. ISLA blue, GeoTransolver red, Transolver amber. How to read
+#|   this: a marker at 1 means the protocol leaves that architecture's error unchanged; the figure does not rank native
 #|   accuracy (@sec-standing), and every headline field is in @tbl-contract-shifts. Data: results/char/*.json, read
 #|   through standing.py.
 #| code-fold: true
@@ -345,8 +351,8 @@ def shift_panel(ax, keys, protocol, xmax):
             yy = y0 + 0.27 * (j - 1)
             r = st.shift(arch, f, protocol)
             seeds = [a / b for a, b in zip(st.seeds(arch, f, protocol), st.seeds(arch, f, "native"))]
-            ax.barh(yy, r - 1, left=1, height=0.25, zorder=2, **bar_kwargs(sk))
-            ax.plot([r], [yy], marker=STYLE[sk]["marker"], ms=6, color=STYLE[sk]["color"], mec=INK, mew=0.5, ls="none", zorder=5)
+            ax.plot([1, r], [yy, yy], color=STYLE[sk]["color"], lw=1.6, zorder=2, solid_capstyle="butt")
+            ax.plot([r], [yy], marker=STYLE[sk]["marker"], ms=7, color=STYLE[sk]["color"], mec=INK, mew=0.5, ls="none", zorder=5)
             ax.plot(seeds, [yy] * len(seeds), "o", ms=3.2, mfc="white", mec=INK, mew=0.7, zorder=4)
             ax.text(max(r, max(seeds)) * 1.12, yy, S.fmt_ratio(r), va="center", fontsize=7.6, color=INK2)
         yt.append(y0); yl.append(f"{st.ds.name}\n{st.fields[f]}")
@@ -360,6 +366,7 @@ def shift_panel(ax, keys, protocol, xmax):
 fig, axs = plt.subplots(2, 1, figsize=(8.0, 10.0), gridspec_kw=dict(height_ratios=[len(KEYS), len(AREA_KEYS) + 0.6], hspace=0.22))
 shift_panel(axs[0], KEYS, "posed", 2500)
 axs[0].set_title("rotated and translated ÷ native mesh", fontsize=10)
+axs[0].set_xlabel("error rotated and translated ÷ the same checkpoint's native-mesh error [–]")
 shift_panel(axs[1], AREA_KEYS, "area", 20)
 axs[1].set_title("uniform point cloud ÷ native mesh", fontsize=10)
 axs[1].set_xlabel("error under the protocol ÷ the same checkpoint's native-mesh error [–]")
@@ -396,37 +403,43 @@ The two protocols ask different questions, and the figure answers each.
 #| output: asis
 bpe = [ST[k].err(a, HEAD[k], "posed") for k in KEYS for a in S.BASELINES if ST[k].has(a)]
 H = ST["hilift"]
-print("**The pose protocol tests the contract.** No reference lane trains with augmentation, so every model meets the rotated "
+print("**The pose protocol tests the contract.** No reference configuration trains with augmentation, so every model meets the rotated "
       "validation set without having seen a rotated case. GeoTransolver and Transolver read coordinates in the dataset's frame, "
       "so for them a rotated case is an input outside the training distribution, and their posed errors run from "
       f"{min(bpe):.2f} to {max(bpe):.1f}, the order of the field itself. ISLA has no frame to be out of. Its bars sit at one "
       "except where its interior geometry ties (@sec-nearest-ties) and on HiLiftAeroML, where its posed error is "
-      f"{S.fmt_ratio(H.shift('ISLA', HEAD['hilift'], 'posed'))} times native; what moves that arm is an open question "
+      f"{S.fmt_ratio(H.shift('ISLA', HEAD['hilift'], 'posed'))} times native; what moves ISLA's error there is an open question "
       "(@sec-open-questions).")
 ```
 
 **The point-cloud protocol tests consistency.** The same checkpoint, trained under the native law, is scored on a sample of
 the same surfaces drawn by the area law. Every model sees integrals estimated from a different sample, and only the
-measure-weighted estimator sees the same integrals. GeoTransolver's and Transolver's inputs are point positions, which the
-area law moves off the refined features and onto the flat panels. Their error grows by the factors in the bottom panel, on
-cases they score well on the native mesh.
+measure-weighted estimator sees the same integrals. The area law changes two things a baseline reads: which points it
+gets (it moves them off the refined features and onto the flat panels) and, through them, the plain mean on which the
+datapipe centers its coordinates. Their error grows by the factors in the bottom panel, on cases they score well on the
+native mesh. The probes of @sec-contract-studies separate the two causes.
 
 ### Pose: a contract, not an accuracy edge {#sec-pose-contract}
 
 **The posed column measures pose invariance, not accuracy. Against baselines trained with rotation augmentation, ISLA's
 exactness is still worth a measurable margin.** A baseline trained on randomly rotated cases learns approximate invariance
-from data and pays for it in accuracy. The augmented comparison below was run on a smaller ISLA, so it is read as a
-mechanism. The factors it gives are not a standing.
+from data and pays for it in accuracy. @tbl-pose-200k sets every training and validation car of the DrivAerML Surface task
+in its own random pose. The comparison was run on a smaller ISLA than the reference configuration, so it is read as a
+mechanism, and the factors it gives are not a standing.
 
 <!-- RENDERING SLOT: fig-pose-rendering: one DrivAerML car rotated and translated, the three models' predictions mapped back to the body frame -->
 
-::: {.callout-note collapse="true" title="Optional: ISLA against rotation-augmented baselines"}
 ```{python}
 #| label: cell-tbl-pose-200k
 #| output: asis
 POSE = J("p200k_pose_r1_2026-09-23.json"); PA, PV, PN = POSE["arms"], POSE["verdict"], POSE["native_frame_reference"]
+import torch
+from physicsnemo.experimental.models import ISLA
+NP_POSE = sum(p.numel() for p in ISLA(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, global_schema={"U_inf_dir": {"rank": 1}},
+                                      hidden=384, n_layers=12, n_slices=256).parameters())
+FRP = J("char/ref80_frontier_2026-10-02.json")["candidates"]
 pseeds = lambda arm: " / ".join(f"{v['pressure_l2']:.4f}" for v in PA[arm]["per_seed"].values())
-out = "| arm | native pose | every case in its own random pose (seeds) | posed ÷ native | augmented baseline ÷ posed ISLA |\n|---|---:|---|---:|---:|\n"
+out = "| model | native pose | every case in its own random pose (seeds) | posed ÷ native | augmented baseline ÷ posed ISLA |\n|---|---:|---|---:|---:|\n"
 for label, arm, ratio in (("ISLA, no augmentation", "isla", None), ("GeoTransolver, rotation-augmented", "gt_unit", PV["gt_aug_posed_over_isla_posed"]),
                           ("Transolver, rotation-augmented", "transolver_unit", PV["t_aug_posed_over_isla_posed"])):
     out += (f"| {label} | {PN[arm]:.4f} | {PA[arm]['posed_mean']:.4f} ({pseeds(arm)}) | {PA[arm]['posed_over_native']:.3f} | "
@@ -437,14 +450,23 @@ print(": Surface pressure error on the DrivAerML Surface task (435 training cars
       "random pose. GeoTransolver and Transolver are 256 wide and trained with rotation augmentation in the posed rows; ISLA "
       "trains without augmentation in both columns. How to read this: the last column is what exact covariance buys against "
       "augmentation when cases arrive in arbitrary poses; posed ÷ native is each model's own cost of the setting. "
-      + tag(384, 256, "5e-4") + " Data: results/p200k_pose_r1_2026-09-23.json, which copies the baselines' arms from "
+      + tag(384, 256, "5e-4") + " Data: results/p200k_pose_r1_2026-09-23.json, which copies the baselines' rows from "
       "results/p200k_pose_reduction_2026-09-19.json. {#tbl-pose-200k}")
 ```
 
-The augmented baselines learn most of the invariance: their posed ÷ native factor is close to one, not the factor of twenty
-of an unaugmented model. The remaining gap is what augmentation costs: the model spends capacity on representing every
-pose of every car, and it is still not exact.
-:::
+```{python}
+#| label: para-pose-augmented
+#| output: asis
+DS = ST["drivaerml_surface"]
+unaug = [DS.shift(b, "pressure_l2", "posed") for b in S.BASELINES]
+print(f"The augmented baselines learn most of the invariance: their posed ÷ native factor is close to one, not the "
+      f"{min(unaug):.0f} to {max(unaug):.0f} of the unaugmented reference configurations on the same task "
+      f"(@tbl-contract-shifts). The remaining gap is what augmentation costs: the model spends capacity on representing every "
+      f"pose of every car, and it is still not exact. The comparison is not matched in size: the ISLA has "
+      f"{NP_POSE / 1e6:.1f} million parameters, and GeoTransolver and Transolver at 256 wide have "
+      f"{FRP['gt_h256']['n_parameters'] / 1e6:.1f} and {FRP['t_h256']['n_parameters'] / 1e6:.1f} million on this task "
+      "(results/char/ref80_frontier_2026-10-02.json); all three read 200,000 cells per case.")
+```
 
 ## Where ISLA's own error moves {#sec-contract-bends}
 
@@ -530,15 +552,16 @@ print(f"The DrivAerML Volume task shows the effect at full scale. Under the poin
       f"{' / '.join(V.fields[f] for f in vf)} is {vs} times its native error ({V.source}). On that task the protocol redraws "
       "only ISLA's boundary tokens. The interior prediction points, the targets and the global inputs are the native ones, and "
       "GeoTransolver and Transolver do not read the boundary at all, so their inputs and errors do not change. The shift is "
-      "therefore ISLA's alone, and it is real for the trained model. A scoring-time swap locates it. It keeps every "
-      "area-law boundary token and recomputes only the prediction points' nearest-token distance and direction from the native "
-      f"draw. The error then returns to {vm['area_natgeo']['pressure_l2']:.3f} / {vm['area_natgeo']['velocity_l2']:.3f} / "
+      "therefore ISLA's alone, and it is real for the trained model. A scoring-time swap locates it, on a study "
+      "configuration at the reference configuration's width and slice count with the raw slice reads ("
+      + tag(512, 512, "3.75e-4").removesuffix(".") + "), whose own point-cloud shift is a different number from the "
+      "standing's. The swap keeps every area-law boundary token and recomputes only the prediction points' nearest-token "
+      f"distance and direction from the native draw. That model's error then returns to {vm['area_natgeo']['pressure_l2']:.3f} / {vm['area_natgeo']['velocity_l2']:.3f} / "
       f"{vm['area_natgeo']['nut_l2']:.3f} of native, against {vm['area']['pressure_l2']:.1f} / {vm['area']['velocity_l2']:.1f} / "
-      f"{vm['area']['nut_l2']:.1f} without the swap. The slice states carry none of the shift. Replacing the sampled distance "
+      f"{vm['area']['nut_l2']:.1f} of native without the swap. The slice states carry none of the shift. Replacing the sampled distance "
       "with the exact stored signed-distance field does not help either: the error rises to "
       f"{vm['native_sdfgeo']['pressure_l2']:.0f} times native, because the trained model is calibrated to the sampled distance "
-      "and its bias. The swap ran on the reference configuration's width and slice count with the raw slice reads ("
-      + tag(512, 512, "3.75e-4").removesuffix(".") + "; results/char/vol_geo_2026-10-05.json).")
+      "and its bias (results/char/vol_geo_2026-10-05.json).")
 ```
 
 The surface tasks do not have the effect, because a surface prediction point is itself a boundary token and reads no
@@ -546,11 +569,12 @@ nearest-sample geometry. On the other interior tasks, AirfRANS and the solids, t
 mesh (@sec-protocol), so the standing does not measure the effect there. A query geometry that is exact at
 full resolution would remove the effect and is an open design question (@sec-open-questions).
 
-### Tied nearest samples on structured meshes {#sec-nearest-ties}
+### Tied nearest samples on the solid meshes {#sec-nearest-ties}
 
-**On a structured mesh, many interior nodes are equidistant from two boundary cells. Which one the nearest search picks
-then depends on rounding, and a rotation changes the rounding.** The GINOT lug and PLAID Tensile2d are meshed by a
-structured generator, so a node often sits exactly as far from two boundary centroids. Natively the search breaks each tie
+**Where a node is equidistant from two boundary cells, which one the nearest search picks depends on rounding, and a
+rotation changes the rounding.** The GINOT lug is meshed by structured hexahedra, so a node often sits exactly as far
+from two boundary centroids. PLAID Tensile2d is an unstructured triangle mesh, and its ties sit on the boundary polyline
+itself: a polyline node is equally far from the midpoints of its two segments. Natively the search breaks each tie
 one way. After a rotation and translation, the float32 coordinates round differently and the tie breaks the other way. The
 chosen token's normal can point in a different direction, the direction feature flips, and the prediction moves.
 
@@ -559,18 +583,22 @@ chosen token's normal can point in a different direction, the direction feature 
 #| output: asis
 L_, T_ = ST["lug"], ST["tensile2d"]
 LT = J("char/lug_ties_2026-10-04.json"); tie = LT["two_nearest_tie_fraction_by_rel_gap"]
+TS = J("char/solids_ties_2026-10-18.json")["tensile2d"]["sample_000001"]
 print(f"On the lug, ISLA's rotated-and-translated error is {S.fmt_ratio(L_.shift('ISLA', 'von_mises_l2', 'posed'))} times its "
       f"native error (seeds {' and '.join(S.fmt_ratio(a / b) for a, b in zip(L_.seeds('ISLA', 'von_mises_l2', 'posed'), L_.seeds('ISLA', 'von_mises_l2', 'native')))}; "
       f"{L_.source}). The mesh explains why. On one test lug, {tie['1e-04']['fraction']:.0%} of the {LT['n_interior_nodes']:,} "
       f"interior nodes have their two nearest boundary centroids within a relative gap of $10^{{-4}}$, and "
       f"{tie['1e-07']['fraction']:.0%} within $10^{{-7}}$. A translation of one RMS radius applied in float32 changes the "
       f"nearest boundary cell of {LT['nearest_index_changes_under_translation']['fraction']:.0%} of the nodes "
-      "(results/char/lug_ties_2026-10-04.json). On PLAID Tensile2d the ties are fewer, about 2% of the nodes, at the junctions "
-      f"of collinear boundary segments, and ISLA's posed error is {' / '.join(S.fmt_ratio(T_.shift('ISLA', f, 'posed')) for f in T_.ds.headline)} "
+      "(results/char/lug_ties_2026-10-04.json). On one Tensile2d specimen "
+      f"{TS['tied_fraction']:.0%} of the {TS['n_nodes']:,} nodes tie within $10^{{-4}}$, almost all of them nodes on the "
+      f"polyline ({TS['tied_on_boundary_nodes']} of its {TS['n_on_boundary']}), and the same rigid motion changes the nearest "
+      f"sample of {TS['nearest_changes_under_pose_fraction']:.0%} of the nodes (results/char/solids_ties_2026-10-18.json). "
+      f"ISLA's posed error there is {' / '.join(S.fmt_ratio(T_.shift('ISLA', f, 'posed')) for f in T_.ds.headline)} "
       f"times native on {' / '.join(T_.fields[f] for f in T_.ds.headline)} ({T_.source}).")
 ```
 
-Both shifts are small beside the baselines'. Both are also a real limit of the current class, not a scoring artifact. They
+Both shifts are small beside the baselines'. Both are also a real limit of the class, not a scoring artifact. They
 belong to the same object as the Volume shift: the argmin over a sample is a discontinuous function of the sample and of its
 coordinates. A query geometry that is a continuous function of the boundary, or exact at full resolution, is the open
 question these shifts and @sec-nearest-token share (@sec-open-questions).
@@ -580,6 +608,9 @@ question these shifts and @sec-nearest-token share (@sec-open-questions).
 **Three probes on a smaller ISLA measure what the standing cannot: how the shift falls with the sample count,
 what happens when the training law changes, and where inside the network the dependence on the sample lives.** Each caption has
 the study tag of @sec-study-configurations. They are read for slopes and mechanisms, and their errors are never a standing.
+The probes perturb different things. The biased draw changes the scored sample, and with it the plain mean on which the
+baselines' coordinates are centered. The training-law swap changes the sample a model is fitted on and scores every
+checkpoint on one native draw. The territory probe looks inside the network under the biased draw.
 
 ### The biased draw at two counts {#sec-robustness-density}
 
@@ -611,16 +642,33 @@ print(": Surface pressure error under the 10:1 biased draw divided by the same c
         "results/wingbench_200k_reduction_2026-09-19.json. {#tbl-density}")
 ```
 
-The mechanism is the frame. In this probe each model's coordinates are centered on the drawn sample, as a biased mesher
-would deliver them. A biased draw moves the plain mean of the points toward the over-sampled front, and every coordinate
-GeoTransolver and Transolver see moves with it (@sec-isla-frame shows the same shift on the airfoil). ISLA has no center:
-positions enter as differences to anchors, which are measure-weighted means and move only by their quadrature error. That error is the residual in the ISLA
-rows, and it falls as the count grows, as the variance of @eq-ht requires.
+```{python}
+#| label: para-density-mechanism
+#| output: asis
+ts = TC["arms"]["transolver_unit_uniform"]["per_seed"]
+tseeds = [v["biased"] / v["unif"] for v in ts.values()]
+MW = J("mwaw_2026-09-11.json")["runs"]
+mw = {a: (MW[k]["probe_sfaw"]["ratio_mean"], MW[k]["probe_sfht"]["ratio_mean"]) for a, k in
+      (("GeoTransolver", "mwaw_dr_gt_unit_lr1e3"), ("Transolver", "mwaw_dr_transolver_unit_lr3e3"))}
+print(f"Transolver's two DrivAerML seeds read {S.fmt_ratio(min(tseeds))} and {S.fmt_ratio(max(tseeds))} "
+      "(results/trainarea_dr_reduction_2026-09-20.json), a factor of two apart, so its row is a coarse number.\n\n"
+      "**For the baselines, the mechanism is the center.** The recipe's datapipe centers each case's coordinates on the plain "
+      "mean of the cells it receives, and the probe applies that centering after the draw, as the pipeline would to a mesh "
+      "delivered with this density. A biased draw moves the plain mean toward the over-sampled front, and every coordinate "
+      "GeoTransolver and Transolver see moves with it (@sec-isla-frame shows the same shift on the airfoil). A control isolates "
+      "it: GeoTransolver and Transolver with ISLA's measure-weighted pooling, centered on the area-weighted mean of the drawn "
+      f"cells, still move by {S.fmt_ratio(mw['GeoTransolver'][0])} and {S.fmt_ratio(mw['Transolver'][0])} under the bias, and "
+      f"centered on the Horvitz–Thompson estimate of the centroid, by {S.fmt_ratio(mw['GeoTransolver'][1])} and "
+      f"{S.fmt_ratio(mw['Transolver'][1])} (DrivAerML Surface task, 48 validation cars, 10,000 cells, two seeds; "
+      "results/mwaw_2026-09-11.json). ISLA has no center: positions enter as differences to anchors, which are "
+      "measure-weighted means and move only by their quadrature error. That error is the residual in the ISLA rows, and it "
+      "falls as the count grows, as the variance of @eq-ht requires.")
+```
 
 ### The law the training sample is drawn by {#sec-training-law}
 
 **A GeoTransolver or Transolver checkpoint is accurate on the sampling law it was trained under and on no other. ISLA's
-trained function barely depends on the law.** Changing the draw at inference is half of the question. The other half is
+trained function depends on the law weakly: within the preregistered band on the wings, outside it on the cars.** Changing the draw at inference is half of the question. The other half is
 the one a practitioner meets when a surrogate trained on one mesher's output receives a mesh from another. Each
 architecture is trained twice, under the native law and under the area-proportional law, and both checkpoints are scored on
 one independent native draw (@fig-training-law).
@@ -633,7 +681,7 @@ one independent native draw (@fig-training-law).
 #|   independent native draw of the validation set, and the label is open ÷ filled. Small dots are the seeds. Top:
 #|   HiLiftAeroML, 35 training cases, 180 validation cases, 200,000 cells per case. Bottom: the DrivAerML Surface task,
 #|   435 training cars, 48 validation cars, 100,000 cells per case. GeoTransolver and Transolver are 256 wide. How to read
-#|   this: two markers at one height mean the trained function does not depend on the law its training sample was drawn
+#|   this: the filled marker sits left of the open one; two markers at one height mean the trained function does not depend on the law its training sample was drawn
 #|   by; the axis is logarithmic because the baselines' area-trained errors are an order of magnitude above their
 #|   native-trained ones. Instrument: ISLA at 192 wide, 256 slices, 1e-3, linear routing, raw slice reads
 #|   (@sec-study-configurations).
@@ -647,12 +695,12 @@ for ax, (title, arms) in zip(axs, (("HiLiftAeroML, 35 training cases, 200,000 ce
         u = arms[f"{m}_uniform"]["mean"]["unif"]; a = arms[f"{m}_area"]["mean"]["unif"]
         us = [s["unif"] for s in arms[f"{m}_uniform"]["per_seed"].values()]; as_ = [s["unif"] for s in arms[f"{m}_area"]["per_seed"].values()]
         kw = series_kwargs(key)
-        ax.plot([k, k], [u, a], color=kw["color"], lw=1.6, zorder=2)
-        ax.plot([k], [u], marker=kw["marker"], color=kw["color"], mfc=kw["color"], mec=kw["color"], ls="none", ms=9, zorder=4)
-        ax.plot([k], [a], marker=kw["marker"], color=kw["color"], mfc="white", mec=kw["color"], mew=1.8, ls="none", ms=9, zorder=4)
-        ax.plot([k + 0.08] * 2, us, ls="none", marker="o", color=kw["color"], ms=3.2, zorder=5)
-        ax.plot([k + 0.08] * 2, as_, ls="none", marker="o", mfc="white", color=kw["color"], ms=3.2, zorder=5)
-        ax.text(k + 0.16, (u * a) ** 0.5, f"×{S.fmt_ratio(a / u)}", color=kw["color"], fontsize=9.5, va="center", path_effects=halo())
+        ax.plot([k - 0.08, k + 0.08], [u, a], color=kw["color"], lw=1.6, zorder=2)
+        ax.plot([k - 0.08], [u], marker=kw["marker"], color=kw["color"], mfc=kw["color"], mec=kw["color"], ls="none", ms=9, zorder=4)
+        ax.plot([k + 0.08], [a], marker=kw["marker"], color=kw["color"], mfc="none", mec=kw["color"], mew=1.8, ls="none", ms=9, zorder=4)
+        ax.plot([k - 0.27, k - 0.21], us, ls="none", marker="o", color=kw["color"], ms=3.2, zorder=5)
+        ax.plot([k + 0.21, k + 0.27], as_, ls="none", marker="o", mfc="white", color=kw["color"], ms=3.2, zorder=5)
+        ax.text(k + 0.34, (u * a) ** 0.5, f"×{S.fmt_ratio(a / u)}", color=kw["color"], fontsize=9.5, va="center", path_effects=halo())
     ax.set_yscale("log"); ax.set_xticks([0, 1, 2]); ax.set_xticklabels([a_[0] for a_ in ARMS])
     ax.set_yticks([0.04, 0.1, 0.2, 0.5]); ax.set_yticklabels(["0.04", "0.1", "0.2", "0.5"]); ax.yaxis.set_minor_locator(NullLocator())
     ax.set_ylim(0.035, 0.6); ax.set_xlim(-0.5, 2.7); ax.grid(axis="x", visible=False)
@@ -681,9 +729,20 @@ print(": The training-law ratio: the error of the checkpoint trained under the a
         "results/trainarea_dr_reduction_2026-09-20.json. {#tbl-consistency-40k}")
 ```
 
-The mechanism is the quadrature again. The baselines' slice aggregates are averages over the kept points, so the trained
-function absorbs the point pattern it was fitted on and fails on any other. ISLA's aggregates are measure-weighted
-integrals, the same under any law whose weights come with the sample. The baselines' dependence is larger on the cars than on
+```{python}
+#| label: para-training-law-verdict
+#| output: asis
+print(f"The registered verdicts read the ISLA rows as they are: on the wings the ratio is "
+      f"{S.fmt_ratio(TW['verdict']['isla_area_over_uniform_unif'])}, a null; on the cars it is "
+      f"{S.fmt_ratio(TC['verdict']['isla_area_over_uniform_unif'])}, outside the 5% band set before the test, and the "
+      "registered reading is that ISLA's indifference to the training law is not general. The baselines' factors are "
+      f"{S.fmt_ratio(min(TW['verdict'][f'{m}_area_over_uniform_unif'] for m in ('gt_unit', 'transolver_unit')))} and more.")
+```
+
+This probe scores every checkpoint on one native draw, so the scored points and their center are the same for both
+checkpoints of a model. What differs is the sample each was fitted on. The baselines' slice aggregates are averages over
+the kept points, counted once each, so the trained function absorbs the point pattern it was fitted on. ISLA's aggregates
+are measure-weighted integrals, the same under any law whose weights come with the sample. The baselines' dependence is larger on the cars than on
 the wings, although the cars' cell areas spread less; the cell-area spread alone does not explain the difference
 (@sec-open-questions).
 
@@ -697,7 +756,7 @@ I, G = TT["ISLA"]["summary"], TT["GeoTransolver"]["summary"]
 IW, GW = TTW["ISLA"]["summary"], TTW["GeoTransolver"]["summary"]
 print("**Consistency of the output implies consistency of the internal partition, and the partition can be looked at: "
       "GeoTransolver's slices follow the points, and ISLA's stay on the surface.** Under the 10:1 biased draw, GeoTransolver's "
-      f"slice centroids move by {G['displacement_median']:.2f} of the car's RMS radius and ISLA's anchors by "
+      f"slice mean positions move by {G['displacement_median']:.2f} of the car's RMS radius and ISLA's anchors by "
       f"{I['displacement_median']:.2f}; on the wings, {GW['displacement_median']:.2f} against {IW['displacement_median']:.3f}. "
       "The probe records each token's *dominant slice* (the slice that gives it the largest weight) in every block, under two "
       "independent native draws and under the biased draw. It matches every token of one draw to its nearest token in another "
@@ -715,7 +774,7 @@ print("**Consistency of the output implies consistency of the internal partition
 #|   expected cells. How to read this: colors are slice identities within one model and are not comparable between rows; a
 #|   territory that keeps its place and outline between the columns is a function of the surface, one that moves is a
 #|   function of the sample; the printed agreement is the fraction of points whose slice matches that of the nearest
-#|   native-draw point. Instrument: ISLA at 384 wide, 256 slices, 5e-4, raw slice reads (@sec-study-configurations).
+#|   native-draw point; the axes are the datapipe's nondimensional coordinates. Instrument: ISLA at 384 wide, 256 slices, 5e-4, raw slice reads (@sec-study-configurations).
 #|   Data: results/territory_pictures_r1_2026-09-23.npz.
 #| code-fold: true
 T = np.load(RES / "territory_pictures_r1_2026-09-23.npz")
@@ -730,8 +789,8 @@ for i, (name, label) in enumerate((("isla", STYLE["isla_ref"]["label"]), ("gt", 
         ax.set_title(f"{label}, {'native draw' if draw == 'unif' else '10:1 biased draw'}", fontsize=9, loc="left")
         if draw == "biased":
             ax.text(0.98, 0.04, f"agreement {float(T[f'{name}_agreement_block']):.2f}", transform=ax.transAxes, ha="right", va="bottom", fontsize=8.5, path_effects=halo())
-for ax in axs[-1]: ax.set_xlabel("x [m]")
-for ax in axs[:, 0]: ax.set_ylabel("z [m]")
+for ax in axs[-1]: ax.set_xlabel("x [–]")
+for ax in axs[:, 0]: ax.set_ylabel("z [–]")
 fig.tight_layout()
 plt.show()
 ```
@@ -754,7 +813,7 @@ for key, name in (("isla_ref", "ISLA"), ("gt", "GeoTransolver")):
     ax.plot(x, [r_["agreement_biased"] for r_ in pb], marker=kw["marker"], color=kw["color"], mfc="white", mew=1.6, ls="--", lw=1.2, ms=6)
     label_line(ax, 11.25, pb[-1]["agreement_biased"], f"{STYLE[key]['label']}, biased", kw["color"], fontsize=8.5)
     label_line(ax, 11.25, pb[-1]["floor"], f"{STYLE[key]['label']}, floor", kw["color"], fontsize=8.5)
-ax.set_ylim(0, 1.0); ax.set_xlim(-0.3, 13.6); ax.set_xticks(range(12)); ax.set_xlabel("slice block [index]"); ax.set_ylabel("dominant-slice agreement [–]")
+ax.set_ylim(0, 1.04); ax.set_xlim(-0.3, 13.6); ax.set_xticks(range(12)); ax.set_xlabel("slice block [–]"); ax.set_ylabel("dominant-slice agreement [–]")
 plt.show()
 ```
 
@@ -784,7 +843,7 @@ I200 = TT200["ISLA"]["summary"]
 deep = [r_["excess"] for r_ in TT["ISLA"]["per_block"] if r_["block"] >= 8]; shallow = [r_["excess"] for r_ in TT["ISLA"]["per_block"] if 1 <= r_["block"] < 6]
 print("Two readings matter. Under the bias, ISLA's anchors move "
       f"{I['displacement_median'] / I['displacement_floor_median']:.1f} times as far as under a fresh native draw, where "
-      f"GeoTransolver's centroids move {G['displacement_median'] / G['displacement_floor_median']:.0f} times as far; this ordering "
+      f"GeoTransolver's slice mean positions move {G['displacement_median'] / G['displacement_floor_median']:.0f} times as far; this ordering "
       "holds on both datasets. And ISLA's small excess is quadrature noise: it sits in the deep blocks "
       f"({min(deep):+.2f} to {max(deep):+.2f} in blocks 8 to 11, against {min(shallow):+.2f} to {max(shallow):+.2f} in blocks 1 to 5), "
       "where each anchor averages the fewest tokens, and the same checkpoint probed at 200,000 cells reads "
