@@ -1,0 +1,171 @@
+{
+ "protocol": "AirfRANS boundary draw at a reduced budget, on the checkpoints of the AirfRANS standing (results/char/airfrans_a2.json).\n\nThe reduction of area2_2026-10-16.py applied to the normalized-read records: per run (seed) and field, the mean over cases of\nthe per-case relative L2 under three draws of the airfoil at an expected 400 of its about 1,000 segments, \"ca2a\" (inclusion in\nproportion to the segment length), \"ca2u\" (uniform inclusion) and \"ca2v\" (uniform inclusion with an independent seed), each kept\nsegment's measure divided by its inclusion probability; \"native\" is the protocol record of the same checkpoint. Readouts per\nfield: r = ca2a / ca2u (the sampling law), d = |ca2v / ca2u - 1| (the noise floor of a redraw), count_effect = ca2u / native\n(thinning the airfoil at a uniform law). The interior queries, the targets and the global inputs are the same in all draws.\n\nArms:\n  ISLA  afu_a2s_isla_seed42/43: ISLA's reference configuration with the normalized slice reads, the ISLA arm of airfrans_a2.json.\n  exact-geometry variant  afu_geo1_isla_seed42/43: the same configuration with each query's distance and direction taken from the\n        exact closest point on the full-resolution airfoil instead of the nearest boundary token (branch psharpe/isla-geo-exact,\n        not part of ISLA); kept for the open question on exact query geometry.\nRecords: campaigns_2026-10-14/afu/ca2_400/<run>/<draw>/metrics.jsonl, campaigns_2026-10-14/afu/protocols/<run>/native/metrics.jsonl\n(float32, the 200 full_test cases; the last scoring pass per file counts).\nusage: python airfrans_area2_a2_2026-10-18.py  ->  results/char/airfrans_area2_a2.json",
+ "budget_segments": 400,
+ "fields": {
+  "pressure_l2": "pressure",
+  "velocity_l2": "velocity",
+  "nut_l2": "eddy viscosity"
+ },
+ "runs": {
+  "afu_a2s_isla_seed42": {
+   "arm": "ISLA",
+   "seed": 42,
+   "n_cases": 200,
+   "fields": {
+    "pressure_l2": {
+     "mean": {
+      "ca2a": 0.8976225681602955,
+      "ca2u": 0.34929758816957474,
+      "ca2v": 0.34330583035945894,
+      "native": 0.018541031028144063
+     },
+     "r": 2.569793203738136,
+     "d": 0.017153733701725238,
+     "count_effect": 18.839167446479326
+    },
+    "velocity_l2": {
+     "mean": {
+      "ca2a": 0.25214366517961023,
+      "ca2u": 0.11528772000223399,
+      "ca2v": 0.1143995488807559,
+      "native": 0.009697543703950942
+     },
+     "r": 2.18708172192775,
+     "d": 0.007703952523832269,
+     "count_effect": 11.88834240110347
+    },
+    "nut_l2": {
+     "mean": {
+      "ca2a": 0.5798398696631193,
+      "ca2u": 0.5316119349747896,
+      "ca2v": 0.5528393320739269,
+      "native": 0.023254501218907535
+     },
+     "r": 1.0907201880082258,
+     "d": 0.039930249308913535,
+     "count_effect": 22.860603629827672
+    }
+   }
+  },
+  "afu_a2s_isla_seed43": {
+   "arm": "ISLA",
+   "seed": 43,
+   "n_cases": 200,
+   "fields": {
+    "pressure_l2": {
+     "mean": {
+      "ca2a": 0.68442811191082,
+      "ca2u": 0.2904407807812095,
+      "ca2v": 0.29071248702704905,
+      "native": 0.017446992923505603
+     },
+     "r": 2.356515190703895,
+     "d": 0.0009354961968794928,
+     "count_effect": 16.647039524496556
+    },
+    "velocity_l2": {
+     "mean": {
+      "ca2a": 0.2437502597272396,
+      "ca2u": 0.11355750039219856,
+      "ca2v": 0.11550846438854932,
+      "native": 0.009214075983036309
+     },
+     "r": 2.146491943600278,
+     "d": 0.017180406310570717,
+     "count_effect": 12.32435033108746
+    },
+    "nut_l2": {
+     "mean": {
+      "ca2a": 0.6071383528411388,
+      "ca2u": 0.5764680552482605,
+      "ca2v": 0.6082399340718985,
+      "native": 0.021341625072527678
+     },
+     "r": 1.053203811232298,
+     "d": 0.05511472584539856,
+     "count_effect": 27.011441410351058
+    }
+   }
+  },
+  "afu_geo1_isla_seed42": {
+   "arm": "exact-geometry variant",
+   "seed": 42,
+   "n_cases": 200,
+   "fields": {
+    "pressure_l2": {
+     "mean": {
+      "ca2a": 0.059749144692905244,
+      "ca2u": 0.11467796130571514,
+      "ca2v": 0.1115744982426986,
+      "native": 0.015169620317174122
+     },
+     "r": 0.5210168022923125,
+     "d": 0.02706241921011432,
+     "count_effect": 7.559712036818992
+    },
+    "velocity_l2": {
+     "mean": {
+      "ca2a": 0.025563465054146944,
+      "ca2u": 0.042690524063073096,
+      "ca2v": 0.0407528475811705,
+      "native": 0.008668658398091793
+     },
+     "r": 0.5988088835915487,
+     "d": 0.045388912983119534,
+     "count_effect": 4.924697929320924
+    },
+    "nut_l2": {
+     "mean": {
+      "ca2a": 0.06601228860206902,
+      "ca2u": 0.10995613808743655,
+      "ca2v": 0.11338047522120177,
+      "native": 0.0204744066670537
+     },
+     "r": 0.6003511013598567,
+     "d": 0.031142755587161508,
+     "count_effect": 5.370418780651259
+    }
+   }
+  },
+  "afu_geo1_isla_seed43": {
+   "arm": "exact-geometry variant",
+   "seed": 43,
+   "n_cases": 200,
+   "fields": {
+    "pressure_l2": {
+     "mean": {
+      "ca2a": 0.04977342020254582,
+      "ca2u": 0.10767166543751955,
+      "ca2v": 0.10286061058752238,
+      "native": 0.01612085507833399
+     },
+     "r": 0.4622703661199397,
+     "d": 0.04468264543366762,
+     "count_effect": 6.679029425816716
+    },
+    "velocity_l2": {
+     "mean": {
+      "ca2a": 0.02260433780727908,
+      "ca2u": 0.035895734019577505,
+      "ca2v": 0.034329684232361615,
+      "native": 0.009072963583748787
+     },
+     "r": 0.6297221222708719,
+     "d": 0.0436277410112792,
+     "count_effect": 3.9563405813589774
+    },
+    "nut_l2": {
+     "mean": {
+      "ca2a": 0.054082678342238066,
+      "ca2u": 0.09488943461328744,
+      "ca2v": 0.0957689127093181,
+      "native": 0.02125395693583414
+     },
+     "r": 0.5699546905579815,
+     "d": 0.009268451220253215,
+     "count_effect": 4.4645538193080645
+    }
+   }
+  }
+ }
+}
