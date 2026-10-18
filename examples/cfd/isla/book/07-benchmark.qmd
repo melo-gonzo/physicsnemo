@@ -229,8 +229,7 @@ print(f": The input-scale control at 35 HiLiftAeroML training cases (256 wide, 1
 :::
 
 What the physical vector costs the baselines at the reference configurations on HiLiftAeroML and AirfRANS, where it
-varies per case, is an open question, and those two standings are printed without a verdict until it is settled
-(@sec-open-questions).
+varies per case, is an open question (@sec-open-questions); those two standings are printed without a verdict.
 
 <!-- SLOT: unit-direction baseline pair (registry swap when scored) -->
 
