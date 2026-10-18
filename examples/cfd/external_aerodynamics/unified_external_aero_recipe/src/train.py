@@ -33,7 +33,6 @@ Usage::
     python src/train.py benchmark_io=true +training.benchmark_max_steps=20
 """
 
-import gc
 import os
 from pathlib import Path
 import time
@@ -433,16 +432,6 @@ def _run_epoch(
                         )
                 if cfg.training.get("scheduler_update_mode", "epoch") == "step":
                     scheduler.step()
-                ### Move every object alive after an epoch's first step (model,
-                ### compiled graphs, loader state) out of the garbage collector's
-                ### reach. A full collection otherwise scans them all, a 0.5-1 s
-                ### pause every ~150 steps on each rank that the other ranks
-                ### wait for (AeroZoo ISLA on GB300, 2026-10-18). Unfreezing first
-                ### lets this one collection per epoch free what died since.
-                if i == 0:
-                    gc.unfreeze()
-                    gc.collect()
-                    gc.freeze()
 
             ### Accumulate on-device with no sync. First iteration clones
             ### so subsequent in-place ``add_`` calls don't alias the
