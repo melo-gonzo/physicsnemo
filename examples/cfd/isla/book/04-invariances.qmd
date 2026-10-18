@@ -409,7 +409,7 @@ H = ST["hilift"]
 print("**The pose protocol tests the contract.** No reference configuration trains with augmentation, so every model meets the rotated "
       "validation set without having seen a rotated case. GeoTransolver and Transolver read coordinates in the dataset's frame, "
       "so for them a rotated case is an input outside the training distribution, and their posed errors run from "
-      f"{min(bpe):.2f} to {max(bpe):.1f}, the order of the field itself. ISLA has no frame to be out of. Its bars sit at one "
+      f"{min(bpe):.2f} to {max(bpe):.1f}, the order of the field itself. ISLA has no frame to be out of. Its markers sit at one "
       "except where its interior geometry ties (@sec-nearest-ties) and on HiLiftAeroML, where its posed error is "
       f"{S.fmt_ratio(H.shift('ISLA', HEAD['hilift'], 'posed'))} times native; what moves ISLA's error there is an open question "
       "(@sec-open-questions).")
