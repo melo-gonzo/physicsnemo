@@ -484,6 +484,26 @@ def test_train_loads_the_next_batch_after_backward(monkeypatch):
     ]  # fmt: skip
 
 
+def test_train_freezes_gc_once_per_epoch(monkeypatch):
+    """Train mode runs one full collection and freezes the survivors after the
+    epoch's first step; val mode leaves the garbage collector alone."""
+    calls = []
+    for name in ("unfreeze", "collect", "freeze"):
+        monkeypatch.setattr(train.gc, name, lambda *a, n=name: calls.append(n))
+    model = torch.nn.Linear(1, 1, bias=False)
+
+    def forward(*args, **kwargs):
+        loss = model.weight.sum()
+        values = TensorDict({"loss/test": loss.detach()})
+        return loss, values, values.clone()
+
+    monkeypatch.setattr(train, "forward_pass", forward)
+    _run_test_epoch([{}] * 3, model, mode="train", dist_manager=_single_rank())
+    assert calls == ["unfreeze", "collect", "freeze"]
+    _run_test_epoch([{}] * 3, model, mode="val", dist_manager=_single_rank())
+    assert calls == ["unfreeze", "collect", "freeze"]
+
+
 class _TwoStepLoader:
     """Yield one healthy batch, then optionally fail on a chosen rank."""
 
