@@ -41,8 +41,8 @@ and on the AirfRANS interior task, with the airfoil thinned to 400
 segments, a length-proportional draw about doubles ISLA's pressure and
 velocity errors against a uniform draw of the same count; in distribution
 the three are within seed noise on the cars, ISLA leads on the wings,
-on interior velocity and on the DeepJEB++ brackets, and trails on tensor targets, on the lug under the
-float32 protocol and on the sport-utility bodies. @tbl-thesis is the standing, one row per dataset and
+on interior velocity, on the DeepJEB++ brackets and on the lug, is level with
+GeoTransolver and trails Transolver on the sport-utility bodies, and trails on tensor targets. @tbl-thesis is the standing, one row per dataset and
 task.
 
 ```{python}
@@ -66,10 +66,10 @@ def fmt_ratio(r):
     """A ratio as the book writes it: two decimals near one, one decimal to ten, none above."""
     return f"{r:.0f}x" if r >= 10 else f"{r:.1f}x" if r >= 2 else f"{r:.2f}"
 BASELINES = ("GeoTransolver", "Transolver")
-# the DrivAerML Surface and Volume, Tensile2d and DeepJEB++ artifacts hold ISLA's normalized-read reruns (<dataset>_a2.json)
+# the DrivAerML Surface and Volume, Shift-SUV, Tensile2d, lug and DeepJEB++ artifacts hold ISLA's normalized-read reruns (<dataset>_a2.json)
 ART = {name: char_arms(f) for name, f in (("surface", "drivaerml_surface_a2.json"), ("hilift", "hilift_surface.json"),
                                           ("volume", "drivaerml_volume_a2.json"), ("airfrans", "airfrans.json"),
-                                          ("suv", "shift_suv_surface.json"), ("tensile2d", "tensile2d_a2.json"), ("lug", "lug.json"),
+                                          ("suv", "shift_suv_surface_a2.json"), ("tensile2d", "tensile2d_a2.json"), ("lug", "lug_a2.json"),
                                           ("deepjeb", "deepjeb_surface_a2.json"))}
 rat = lambda name, arch, f, pk="native": ART[name][1][arch][pk][f]["mean"] / ART[name][1]["ISLA"][pk][f]["mean"]
 shift = lambda name, arch, f, pk: ART[name][1][arch][pk][f]["mean"] / ART[name][1][arch]["native"][f]["mean"]
@@ -116,7 +116,7 @@ rows = [
      "@sec-interior-airfrans"),
     (f"**Shift-SUV**, 794 estate bodies, {label('suv')}: surface pressure, native / point cloud / posed (GeoTransolver; Transolver)",
      three("suv", "pressure_l2"),
-     (f"the baselines lead natively by {(1 - rat('suv', 'GeoTransolver', 'pressure_l2')) * 100:.0f}% and {(1 - rat('suv', 'Transolver', 'pressure_l2')) * 100:.0f}%; "
+     (f"natively ISLA {word('suv', 'GeoTransolver', 'pressure_l2')} GeoTransolver and {word('suv', 'Transolver', 'pressure_l2')} Transolver; "
       if all(has('suv', a) for a in BASELINES) else "the artifact holds ISLA's arm only, so no ratio is read; ")
      + f"on the point cloud ISLA's error moves {shift('suv', 'ISLA', 'pressure_l2', 'area'):.2f}x and posed {shift('suv', 'ISLA', 'pressure_l2', 'posed'):.3f}x"
      + (f"; the baselines' move {area_b('suv', 'pressure_l2')} on the point cloud and read above the mean field posed" if all(has('suv', a) for a in BASELINES) else ""),
@@ -127,7 +127,9 @@ rows = [
      "@sec-interior-tensile2d"),
     (f"**GINOT bracket lug** at 2,400 training lugs, {label('lug')}: von Mises stress, native / posed (GeoTransolver; Transolver)",
      three("lug", "von_mises_l2", ("native", "posed")),
-     f"under the float32 protocol both baselines lead (ISLA {word('lug', 'GeoTransolver', 'von_mises_l2')} GeoTransolver and {word('lug', 'Transolver', 'von_mises_l2')} Transolver), a precision sensitivity of the trained model's nearest-boundary-sample selection on a tied mesh, not a capacity difference; rotated and translated ISLA's error moves {shift('lug', 'ISLA', 'von_mises_l2', 'posed'):.2f}x by the same mechanism, where the baselines' read at the mean field",
+     ("under the float32 protocol ISLA leads both baselines, every ISLA seed below every baseline seed" if all(word('lug', a, 'von_mises_l2') == "leads" for a in BASELINES) else
+      f"under the float32 protocol ISLA {word('lug', 'GeoTransolver', 'von_mises_l2')} GeoTransolver and {word('lug', 'Transolver', 'von_mises_l2')} Transolver")
+     + f"; rotated and translated ISLA's error moves {shift('lug', 'ISLA', 'von_mises_l2', 'posed'):.1f}x through its nearest-boundary-sample selection on a tied mesh, where the baselines' read at the mean field",
      "@sec-interior-lug"),
     (f"**DeepJEB++** at 12,451 brackets and 40 epochs, {label('deepjeb')}: von Mises / displacement, native (GeoTransolver; Transolver)",
      tri("deepjeb", ("von_mises_l2", "displacement_l2"), "GeoTransolver") + "; " + tri("deepjeb", ("von_mises_l2", "displacement_l2"), "Transolver"),
@@ -153,7 +155,7 @@ print(f": The thesis in {len(rows)} rows, one dataset and task per row. "
       "GeoTransolver width 256 at 200,000 cells; Transolver width 512 with 16 layers at 100,000 cells)"
       + (f"; the {lst(False)} rows hold the first-pass lanes under the configurations the DrivAerML half of that selection named (ISLA width 768 "
          "at 100,000 cells, learning rate 2.5e-4; GeoTransolver and Transolver width 1,024 at 100,000 cells)" if lst(False) else "")
-      + ". The ISLA rows of the DrivAerML Surface and Volume tasks, Tensile2d and DeepJEB++ come from checkpoints trained with the "
+      + ". The ISLA rows of the DrivAerML Surface and Volume tasks, Shift-SUV, Tensile2d, the lug and DeepJEB++ come from checkpoints trained with the "
       "normalized slice reads of ISLA's reference configuration, the other ISLA rows from checkpoints trained with the raw slice reads "
       "(@sec-isla-layer). Baselines train without augmentation; interior tasks give all three architectures the stored "
       "signed distance and its gradient. Errors are the area-weighted relative L2 (@sec-metrics) in float32, seed means over two seeds, "
