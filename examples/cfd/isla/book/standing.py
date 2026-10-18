@@ -183,8 +183,9 @@ class Standing:
                            + " | ".join(" / ".join(fmt_ratio(self.ratio(arch, f, p)) for f in fields) for p in protocols) + " |")
         cap = (f": {setting}: the architectures at their reference configurations, {flab}, "
                f"relative L2 error (@sec-metrics), seed means over two seeds, float32; "
+               + "each column scores the same checkpoint of each seed on the test cases as presented: "
                + ", ".join(f"*{PROTOCOL[p]}*" for p in protocols)
-               + " score one checkpoint per seed. How to read this: lower is better; "
+               + ". How to read this: lower is better; "
                + ("a ratio row is baseline ÷ ISLA, so a value above one favors ISLA. " if self.ds.fair_drive else
                   f"no ratio is drawn, because in this record the baselines read {self.ds.drive_note}, so each architecture's "
                   "protocol columns are read against its own native column only. ")
