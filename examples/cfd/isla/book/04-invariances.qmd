@@ -265,10 +265,10 @@ mesh_dens = np.interp(grid, s_mid, 1 / (w / w.sum()) / N)
 axd.fill_between(grid, 0, mesh_dens / mesh_dens.mean() * (n / w.sum()), color=GRID, zorder=0, label="the mesh itself (scaled to n cells)")
 for name, col, dens in densities:
     axd.plot(grid, dens, color=col, lw=1.8, zorder=3, label=name.split(":")[0])
-axd.axhline(n / w.sum(), color=INK2, lw=0.8, ls="--", zorder=2)
-axd.text(0.995, n / w.sum(), "spread evenly (n ÷ perimeter)", ha="right", va="bottom", fontsize=8, color=INK2, transform=axd.get_yaxis_transform(), path_effects=halo())
+axd.axhline(n / w.sum(), color=INK2, lw=0.8, ls="--", zorder=2, label="spread evenly (n ÷ perimeter)")
 for s_, lab in ((0.0, "trailing edge"), (0.5, "leading edge"), (1.0, "trailing edge")):
-    axd.axvline(s_, color=BASELINE, lw=0.8); axd.text(s_, 1.5, lab, ha="center", va="bottom", fontsize=8, color=MUTED, path_effects=halo())
+    axd.axvline(s_, color=BASELINE, lw=0.8)
+    axd.text(s_, 1.01, lab, ha={0.0: "left", 0.5: "center", 1.0: "right"}[s_], va="bottom", fontsize=8, color=MUTED, transform=axd.get_xaxis_transform())
 axd.set_xlabel("position along the surface [fraction of arclength]")
 axd.set_ylabel("kept points per unit\nsurface length [1/chord]")
 axd.set_xlim(0, 1); axd.set_ylim(0, 1.08 * max(d.max() for _, _, d in densities)); axd.legend(loc="upper left", fontsize=8.5)
@@ -538,7 +538,7 @@ ax.axhline(1, color=INK2, lw=0.8, ls="--")
 ax.set_yscale("log"); ax.set_ylim(0.9, 12); ax.set_yticks([1, 2, 5, 10]); ax.set_yticklabels(["1", "2", "5", "10"]); ax.yaxis.set_minor_locator(NullLocator())
 ax.axvline(0.5, color=BASELINE, lw=0.8); ax.text(0.5, 0.97, "leading edge", ha="center", va="top", fontsize=8, color=MUTED, transform=ax.get_xaxis_transform(), path_effects=halo())
 ax.set_xlim(0, 1); ax.set_xlabel("position of the prediction point along the surface [fraction of arclength from the trailing edge]")
-ax.set_ylabel("sampled ÷ exact\nwall distance [–]"); ax.legend(loc="upper left", fontsize=8.5)
+ax.set_ylabel("sampled ÷ exact\nwall distance [–]"); ax.set_ylim(0.9, 25); ax.legend(loc="upper left", fontsize=8.5)
 plt.show()
 ```
 
