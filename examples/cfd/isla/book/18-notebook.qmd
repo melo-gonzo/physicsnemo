@@ -38209,3 +38209,67 @@ The steward's log gives the SHIFT-SUV baselines' area factors as 2.6 to
 3.3x; the records give 2.2 to 3.3x (Transolver's wall shear 2.23x),
 written here from the records. It also gives the native fall on the lug
 as 2.4x; the seed means give 2.35 (1 ÷ 0.426), written here as 2.3.
+
+## 2026-10-18 — Baseline drive inputs: on HiLift and AirfRANS the baselines read the raw freestream vector where ISLA reads its direction; four reruns are pre-registered and launched {#sec-nb-drive-audit}
+
+**Finding.** The book overhaul found, and verified on LHR, that the
+REF-80 HiLift baseline lanes fed GeoTransolver
+(`global_embedding: global_data.U_inf`) and Transolver
+(`fx.source: global_data.U_inf`) the physical freestream vector in inches
+per second, of magnitude 2,679.5 on every case read, while ISLA reads the
+unit direction `U_inf_dir`. The recipe's non-dimensionalization touches
+cell data only. The September unit-drive rungs measured what this scale
+costs the baselines on HiLift: with the unit direction, GeoTransolver
+reached 0.83 and Transolver 0.91 of ISLA's error at the 210-wing rung
+(@sec-nb-udrvl-210-verdict; @sec-nb-udrv-1260-verdict). The REF-80
+HiLift standing (GeoTransolver ÷ ISLA 1.28, Transolver ÷ ISLA 1.07) is
+therefore not a fair comparison, and it is replaced when the
+unit-direction pair is scored.
+
+**Audit of every dataset** (read-only; the lanes' saved configs and 6
+to 14 cases per dataset):
+
+- **AirfRANS.** GeoTransolver and Transolver read the raw `U_inf`: speed
+  31 to 94 m/s and angle −4.9 to 14.9 degrees, both varying across
+  cases. ISLA reads the unit direction and the speed. The baselines'
+  velocity ratios (GeoTransolver ÷ ISLA 3.05, Transolver ÷ ISLA 5.59 on
+  the uniform protocol) are what a model that cannot read the flow angle
+  would show, so they are probably inflated as HiLift's were. The speed
+  carries the Reynolds number, so the fair input is the unit direction
+  plus a standardized speed, not the direction alone.
+- **DrivAerML Surface and Volume, SHIFT-SUV.** The baselines get a
+  constant `U_inf` of 38.9 or 30 m/s: no information is missing, only
+  its scale. GeoTransolver was shown insensitive to it in September
+  (@sec-nb-udrv-int-verdict); Transolver at a constant drive of this size
+  was never tested.
+- **The lug.** The baselines get no boundary-condition labels, while
+  ISLA reads clamp, hole, loaded half and pressure on each boundary
+  face. The labels can be inferred from coordinates in the lug's fixed
+  frame.
+- **No flag.** DeepJEB++, Tensile2d and the AeroZoo global inputs are
+  the same O(1) values for every model. On AeroZoo GeoTransolver has no
+  inlet or outlet faces and no secondary-inlet velocity, which chapter 20
+  states; it leads ISLA on most fields regardless.
+
+**Launched**, each pre-registered before submission:
+
+- **UDRV-HL** (JHB, 4 lanes): GeoTransolver 256 and Transolver 512 × 16
+  on HiLift, two seeds each, the REF-80 rows with only the drive set to
+  `U_inf_dir`, on the data pipeline and scorer of the HiLift A2 ISLA
+  lanes (scratch/isla-udrv-hl-2026-10-18/).
+- **DRIVE-FIX** (scratch/isla-drive-fix-2026-10-18/): R1, the four
+  AirfRANS baseline lanes with the unit direction plus the speed
+  standardized by the training-split statistics; R2, the reference
+  Transolver on DrivAerML Surface with the unit direction (two seeds;
+  within 3 percent of the reference Transolver on pressure and wall
+  shear means no further reruns, otherwise Transolver on DrivAerML
+  Volume and SHIFT-SUV and GeoTransolver on all three are considered);
+  R3, GeoTransolver 256 on the lug with the four boundary-condition
+  labels in its geometry input. ISLA's own AirfRANS speed input stays
+  raw: it is not a fairness question.
+
+**Rule from here on.** Every baseline lane reads the unit direction,
+plus a standardized magnitude wherever the speed varies across cases,
+and a lane counts only after its saved config shows the inputs
+(`forward_kwargs`) it was meant to read. The recipe's baseline model
+defaults still read `global_data.U_inf` and are changed separately.
