@@ -378,8 +378,12 @@ for k, lab in zip(j, ("$u = +t$", "$u = -t$")):
     pos = 0.5 * (mid[k] + x0) + 0.35 * w * inward
     bx.text(pos[0], pos[1], lab, fontsize=10, ha="center", va="center", color=INK, path_effects=halo())
 bx.scatter([x0[0]], [x0[1]], s=90, c=AQUA, zorder=5)
-bx.text(0.98, 0.03, "black squares: boundary samples (segment midpoints)\naqua circles: mesh nodes (prediction points)\nfilled: the node whose nearest sample switches",
-        transform=bx.transAxes, fontsize=8.2, color=INK2, va="bottom", ha="right", bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=BASELINE))
+mm = np.where(mk)[0]; above = mm[np.argmax(mid[mm, 1] - 1e3 * (mid[mm, 1] > x0[1] + 0.6 * w))]
+onw = np.where(box & (np.min(np.linalg.norm(bp[None, :, :] - ip[:, None, :], axis=-1), axis=1) < 1e-6))[0]
+nw = onw[np.argmin(np.abs(ip[onw, 1] - (x0[1] - 0.45 * w)))]
+for pt, txt in ((mid[above], "boundary sample\n(segment midpoint)"), (ip[nw], "mesh node on the wall"), (x0, "the node that switches")):
+    bx.annotate(txt, xy=pt, xytext=(x0[0] + 0.3 * w, pt[1]), fontsize=8.5, color=INK2, va="center", ha="left",
+                arrowprops=dict(arrowstyle="-", color=MUTED, lw=0.8, shrinkA=2, shrinkB=5), path_effects=halo())
 map_axes(bx); bx.set_xlim(x0[0] - w, x0[0] + w); bx.set_ylim(x0[1] - w, x0[1] + w)
 bx.set_xlabel("x [dataset units]"); bx.set_ylabel("y [dataset units]")
 bx.set_title("enlarged: a node on the wall is equally near two samples, and rounding picks the direction", fontsize=9.5)

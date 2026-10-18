@@ -162,8 +162,9 @@ print("\n: The cost of training on the GINOT bracket lug at the three reference 
 #| label: lug-lede
 #| output: asis
 ver = {a: ST.verdict(a, F) for a in S.BASELINES}
-print(f"**On the GINOT bracket lug at 2,400 training lugs, scored on the native mesh, ISLA {ver['GeoTransolver']} {S.CONFIG['GeoTransolver']} "
-      f"and {ver['Transolver']} {S.CONFIG['Transolver']} on the von Mises stress.** @tbl-lug-protocols is the standing. *Leads* means that "
+both = (f"{ver['GeoTransolver']} {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}" if ver["GeoTransolver"] == ver["Transolver"]
+        else f"{ver['GeoTransolver']} {S.CONFIG['GeoTransolver']} and {ver['Transolver']} {S.CONFIG['Transolver']}")
+print(f"**On the GINOT bracket lug at 2,400 training lugs, scored on the native mesh, ISLA {both} on the von Mises stress.** @tbl-lug-protocols is the standing. *Leads* means that "
       f"every seed of one architecture sits below every seed of the other and the seed means differ by at least {100 * S.TIE_BAND:.0f}%. "
       "Every ratio is baseline ÷ ISLA, so a value above one favors ISLA.")
 ```
@@ -200,7 +201,7 @@ print(f"**Rotated and translated, the baselines fail and ISLA bends.** GeoTranso
 
 ### Why the posed error is several times the native error {#sec-lug-ties}
 
-**The lug's structured mesh puts three quarters of its nodes in a tie for their nearest boundary sample, and a rigid motion in float32 breaks a third of those ties the other way.** ISLA gives every prediction point the distance $d$ and the direction $u$ from its nearest boundary sample, the centroid of the nearest surface triangle (@sec-tensile2d-ties). On Tensile2d only the nodes on the polyline tie. On the lug two more kinds of node tie, both because the mesh is structured:
+**The lug's structured mesh puts `{python} f"{100 * LT['tied_fraction']:.0f}"`% of its nodes in a tie for their nearest boundary sample, and one rigid motion in float32 changes the nearest sample of `{python} f"{100 * LT['nearest_changes_under_pose_fraction']:.0f}"`% of all nodes.** ISLA gives every prediction point the distance $d$ and the direction $u$ from its nearest boundary sample, the centroid of the nearest surface triangle (@sec-tensile2d-ties). On Tensile2d only the nodes on the polyline tie. On the lug two more kinds of node tie, both because the mesh is structured:
 
 - **Nodes on a surface.** A node at a corner of the surface quadrilaterals is equally far from the centroids of the triangles around it, and $u$ lies in the face, so the sign of $d$ is decided by rounding too.
 - **Interior nodes on a symmetry plane of the mesh.** The node layers are uniform through the thickness, so the middle layer is exactly as far from the top face as from the bottom face. Its nodes' $u$ points up or down depending on rounding: a reversal deep inside the body. Nodes in a column under a surface vertex tie between that vertex's triangles, with a change of direction that shrinks with depth.
