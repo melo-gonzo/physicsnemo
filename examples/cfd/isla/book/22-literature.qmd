@@ -50,8 +50,8 @@ are @sec-isla-contracts.
 
 **In distribution, ISLA leads on some datasets and fields and trails on
 others. Rotated and translated, or resampled, its error barely moves except
-on two structured solid meshes, while the baselines' errors grow by
-factors.**
+on the two solid meshes whose nearest boundary samples tie, while the
+baselines' errors grow by factors.**
 
 ```{python}
 #| label: para-vs-standing
@@ -64,10 +64,13 @@ for k in keys:
         for b in S.BASELINES:
             if s.has(b):
                 cells.append((s.ds.name, s.fields[f], b, s.verdict(b, f)))
+unfair = [S.DATASETS[k].name for k in keys if not S.DATASETS[k].fair_drive]
+cells = [c for c in cells if c[3] != "is not compared with"]
 n = len(cells)
 lead = [c for c in cells if c[3] == "leads"]
 trail = [c for c in cells if c[3] == "trails"]
-level = n - len(lead) - len(trail)
+level = len([c for c in cells if c[3] == "is level with"])
+assert len(lead) + len(trail) + level == n
 def group(cs):
     by = {}
     for ds, fl, b, _ in cs:
@@ -83,17 +86,19 @@ for k in keys:
 bent_ds = {}
 for ds, fl, r in bent:
     bent_ds[ds] = max(bent_ds.get(ds, 1.0), r)
-print(f"At the reference configurations on the native mesh, over {len(keys)} datasets and {n} comparisons "
+print(f"At the reference configurations on the native mesh, over {len(keys) - len(unfair)} datasets and {n} comparisons "
       f"(each headline field against each baseline, by the seed rule of @sec-standing), ISLA leads in {len(lead)}, "
       f"is level in {level} and trails in {len(trail)}. It trails on: {group(trail)}. "
+      + (f"{' and '.join(unfair)} are not counted: their baselines read the freestream as a raw physical vector "
+         "(@tbl-model-inputs), so no verdict is drawn there. " if unfair else "") +
       f"Rotated and translated, ISLA's error moves by at most "
       f"{100 * max(abs(r - 1) for *_, r in posed_isla):.1f}% on every headline field except on "
       + " and ".join(f"{ds} (up to ×{r:.2f})" for ds, r in bent_ds.items())
-      + f", two structured solid meshes where tied samples bend the contract (@sec-invariances); "
+      + f", the two solid meshes where tied nearest samples move the prediction (@sec-nearest-ties); "
       f"the baselines' errors grow by factors of {min(posed_base):.1f} to {max(posed_base):.0f}.")
 notes = [S.DATASETS[k] for k in keys if not S.DATASETS[k].reference]
 if notes:
-    print("\n\n" + " ".join(f"On {d.name}, the ISLA arm of the standing is the raw-read variant: its slice pooling "
+    print("\n\n" + " ".join(f"On {d.name}, ISLA's checkpoints are of the raw-read variant: its slice pooling "
                              f"and broadcast read the raw stream." for d in notes))
 print("\n\nData: " + ", ".join(S.Standing(k).source for k in keys) + ". The standing row by row is @sec-standing.")
 ```
@@ -161,7 +166,7 @@ measure-weights row of the design ledger (@sec-principled-ledger). The
 property is portable: GeoTransolver and Transolver given ISLA's
 measure-weighted pooling and a Horvitz–Thompson-centered datapipe, an
 ablation that leaves the released baselines unmodified, are consistent under
-refinement too (@sec-invariances).
+the biased draw too (@sec-robustness-density).
 
 *Caveat.* Quadrature-weighted attention is adopted from the
 neural-operator literature; the routing form, the instruments and the
@@ -172,8 +177,10 @@ is an open question (@sec-open-questions).
 
 ### An origin-free frame with an integral length unit {#sec-vs-novel-frame}
 
-*What ISLA does.* No center is ever named. Positions enter only as
-differences from the slices' own anchors, and the one length unit is the
+*What ISLA does.* No center is ever named, except by ISLA-DTT's cluster
+forest, which is built in a canonical frame of the boundary
+(@sec-arch-tree-read). Positions enter only as differences from the slices'
+own anchors, and the one length unit is the
 measure-weighted RMS pairwise distance of the boundary sample, a two-point
 integral that converges under refinement (@sec-isla-frame).
 
@@ -306,12 +313,14 @@ contribution is its application to a sublayer with three reads of the
 state, two of them hidden inside a geometry-weighted pooling and broadcast,
 and the mechanism it removes: a sublayer that concatenates the raw state
 into a linear map multiplies the stream by a fixed factor per block, and
-twelve such blocks multiply it geometrically (@fig-landscape-stream).
+twelve such blocks multiply it geometrically (@sec-isla-normalized-reads).
 
-*Evidence.* The stream-growth measurement and the raw-read ablation of
-@sec-isla-layer; the reference-configuration standings (@sec-standing).
+*Evidence.* The raw-read ablation on AeroZoo, whose validation loss loses
+its minimum within the first 60 epochs while the normalized reads train
+through (@tbl-aerozoo-training); the reference-configuration standings
+(@sec-standing).
 
-*Caveat.* The fix is adopted, not invented. Its accuracy effect is measured
+*Caveat.* The normalized read is adopted, not invented. Its accuracy effect is measured
 against the raw-read variant, an ablation, and not against other
 normalization placements.
 
@@ -319,9 +328,9 @@ normalization placements.
 
 *What ISLA does.* The routing logit is a fixed temperature times the
 cosine between the normalized token state and a prototype per slice,
-synthesized per sample from learned seeds. Every logit is therefore
-bounded, and no block can route every token to one slice however its
-weights grow (@sec-isla-slices).
+synthesized per sample from learned base prototypes. Every content logit
+is therefore bounded, so the content score cannot sharpen the routing
+without limit as the weights grow (@sec-isla-slices).
 
 *Prior work.* Scaled cosine attention in Swin Transformer V2 replaces the
 dot product to stabilize training at scale (Liu et al., 2022);
@@ -338,9 +347,9 @@ slice routing.
 *Evidence.* The routing design row (@sec-principled-ledger) and the
 trained routing (@sec-arch-routing-trained).
 
-*Caveat.* A bound on the logits prevents total collapse onto one slice; it
-does not by itself prevent routing that is too soft or too concentrated for
-the task.
+*Caveat.* The bound is on the content score; the geometric refinement
+added to it is not bounded, and the bound does not by itself prevent
+routing that is too soft or too concentrated for the task.
 
 ### Read-only prediction points with a tree-evaluated boundary read {#sec-vs-novel-tree}
 
@@ -371,11 +380,13 @@ Barnes–Hut forest so that every prediction point reads every boundary
 cell, beside read-only access to the slices.
 
 *Evidence.* The interior chapters measure ISLA-DTT against the
-interacting form (@sec-drivaerml, @sec-airfrans, @sec-aerozoo).
+interacting form (@sec-drivaerml, @sec-airfrans); its step cost is in
+@sec-arch-tree-read.
 
 *Caveat.* Which interior form is the better default is an open question
 (@sec-open-questions); the read costs time and memory over the interacting
-form.
+form. The forest is built in a canonical frame of the boundary, so
+ISLA-DTT's pose invariance holds up to ties of that frame.
 
 ### The general boundary interface {#sec-vs-novel-interface}
 
@@ -465,7 +476,7 @@ on are in @sec-open-questions.
   remaining dependence on the training sampling law;
 - inter-slice attention as a control, after Hu et al. (2026);
 - an externally run benchmark, CarBench on DrivAerNet++ (Elrefaie et al.,
-  2025), for a held-out confirmation outside this program;
+  2025), for a held-out confirmation outside this book's experiments;
 - the published GINOT numbers on the bracket lug (Liu et al., 2025),
   re-scored on this book's split, to say whether ISLA's lead there is a lead
   over the field or only over the two baselines.
@@ -504,10 +515,10 @@ rows or with any number in this book; the book's own comparisons are in
 
 ## Bibliography {#sec-vs-bibliography}
 
-Every entry was checked against its arXiv record (authors, title and
-identifier), and its venue against the arXiv record, Crossref, OpenAlex or
-Semantic Scholar; work without an arXiv record was checked against Crossref
-or OpenAlex. The year is that of the published version where one is named,
+Each entry gives the authors, title and identifier of its arXiv record,
+and its venue as the arXiv record, Crossref, OpenAlex or Semantic Scholar
+lists it; work without an arXiv record is cited as Crossref or OpenAlex
+lists it. The year is that of the published version where one is named,
 and of the first arXiv version otherwise. An entry without a venue is an
 arXiv preprint. This list is the bibliography of the whole book.
 
