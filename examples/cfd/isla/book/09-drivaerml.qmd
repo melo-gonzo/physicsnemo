@@ -70,17 +70,22 @@ def protocol_dots(st, fields, protos=None):
 ```{python}
 #| label: para-drivaerml-lede
 #| output: asis
-v = {f: VOL.verdict("GeoTransolver", f) for f in VOL_F}
-print(f"In one paragraph: on the Surface task the three architectures at their reference configurations are level on the native mesh "
-      f"({clause(SURF, 'pressure_l2')} on pressure), and only ISLA keeps its error when the surface is sampled as a uniform point cloud "
-      f"or the car is rotated and translated. On the Volume task {clause(VOL, 'pressure_l2')} on pressure, "
-      f"{clause(VOL, 'velocity_l2')} on velocity and {clause(VOL, 'nut_l2')} on eddy viscosity; only ISLA keeps its error under the "
-      "pose, and ISLA alone depends on how its boundary sample is drawn, through one input (@sec-interior-boundary-law).")
+def brief(st, f, p="native"):
+    """One field's standing in a few words: the verdicts and the two ratios (GeoTransolver first)."""
+    v = {b: st.verdict(b, f, p) for b in S.BASELINES}; r = {b: S.fmt_ratio(st.ratio(b, f, p)) for b in S.BASELINES}
+    if len(set(v.values())) == 1:
+        return f"{v['GeoTransolver']} both on {st.fields[f]} ({r['GeoTransolver']}, {r['Transolver']})"
+    return f"{v['GeoTransolver']} GeoTransolver ({r['GeoTransolver']}) and {v['Transolver']} Transolver ({r['Transolver']}) on {st.fields[f]}"
+print("In one paragraph, with the ratios baseline ÷ ISLA in parentheses, GeoTransolver first: on the Surface task, on the native mesh, "
+      f"ISLA {brief(SURF, 'pressure_l2')} and {brief(SURF, 'wss_l2')}, and only ISLA keeps its error when the surface is sampled as a "
+      f"uniform point cloud or the car is rotated and translated. On the Volume task ISLA {brief(VOL, 'pressure_l2')}, "
+      f"{brief(VOL, 'velocity_l2')}, and {brief(VOL, 'nut_l2')}; only ISLA keeps its error under the pose, and ISLA alone depends on "
+      "how its boundary sample is drawn, through one input (@sec-interior-boundary-law).")
 ```
 
 ## The problem: one notchback, 484 shapes, one wind {#sec-benchmarks}
 
-**DrivAerML is 484 parametrically morphed variants of one notchback car, each simulated once in the same far-field flow, so the geometry is the only thing that varies.** The base body is the DrivAer notchback, a public research sedan. Each variant is a parametric morph of it, simulated with a hybrid RANS/LES closure; the fields are time averages over the simulated window with the start-up transient trimmed. The model is given the vehicle surface alone: the positions, outward normals and areas of its cells, and the far-field direction. The ground plane and the wind-tunnel walls exist in the simulation but are not inputs, which is the information diet of every published model on the dataset. @fig-problem-drivaer shows one validation car with both tasks' fields.
+**DrivAerML is 484 parametrically morphed variants of one notchback car, each simulated once in the same far-field flow, so the geometry is the only thing that varies.** The base body is the DrivAer notchback, a public research sedan. Each variant is a parametric morph of it, simulated with a hybrid RANS/LES closure; the fields are time averages over the simulated window with the start-up transient trimmed. The model is given the vehicle surface alone: the positions, outward normals and areas of its cells, and the far-field direction. The ground plane and the outer boundaries of the domain exist in the simulation but are not inputs, which is the information diet of every published model on the dataset. @fig-problem-drivaer shows one validation car with both tasks' fields.
 
 ```{python}
 #| label: fig-problem-drivaer
@@ -96,8 +101,8 @@ print(f"In one paragraph: on the Surface task the three architectures at their r
 #|   predicts the fields at points drawn from this mesh, whose extent is
 #|   printed. How to read this: colors are the reference CFD fields, not
 #|   predictions; the dots are a random subset of the cells, so their density
-#|   is not the mesh resolution; the ground plane and the tunnel are not model
-#|   inputs. Data: results/problem_figures_2026-09-22/drivaer.npz.
+#|   is not the mesh resolution; the ground plane and the domain's outer
+#|   boundaries are not model inputs. Data: results/problem_figures_2026-09-22/drivaer.npz.
 D, Dm = load_problem("drivaer")
 sp, cp = D["surf_points"], D["surf_cp"]
 norm = TwoSlopeNorm(vcenter=0.0, vmin=-1.5, vmax=1.0)
@@ -361,8 +366,8 @@ print(": The reference configurations on the two DrivAerML tasks: parameters, pe
 #|   prediction.
 Jk = joukowski(n_cells=50)
 fig, ax = plt.subplots(figsize=(8.0, 3.9))
-clean_axes(ax); ax.set_xlim(-2.6, 2.8); ax.set_ylim(-1.5, 1.6)
-xs = np.linspace(-2.6, 2.8, 301); ys = np.linspace(-1.5, 1.6, 181)
+clean_axes(ax); ax.set_xlim(-2.6, 2.8); ax.set_ylim(-1.6, 1.65)
+xs = np.linspace(-2.6, 2.8, 301); ys = np.linspace(-1.6, 1.65, 181)
 X, Y = np.meshgrid(xs, ys); Z = X + 1j * Y
 cpf = Jk["cp_field"](Z)
 c0 = complex(-0.08, 0.08); a0 = abs(1 - c0)
@@ -374,13 +379,13 @@ ax.fill(Jk["xy"][:, 0], Jk["xy"][:, 1], color="white", zorder=2)
 ax.plot(Jk["xy"][:, 0], Jk["xy"][:, 1], color=INK, lw=1.4, zorder=3)
 ax.plot(Jk["mid"][:, 0], Jk["mid"][:, 1], "o", ms=3, color=INK, zorder=4)
 rng = np.random.default_rng(5)
-qa = np.stack([rng.uniform(-2.4, 2.6, 400), rng.uniform(-1.3, 1.4, 400)], axis=1)
+qa = np.stack([rng.uniform(-2.4, 2.6, 400), rng.uniform(-1.15, 1.2, 400)], axis=1)
 qz = qa[:, 0] + 1j * qa[:, 1]
-zeta = (qz + np.sqrt(qz * qz - 4 + 0j)) / 2
-qa = qa[np.abs(zeta - c0) > a0 * 1.06][:140]
+z1 = (qz + np.sqrt(qz * qz - 4 + 0j)) / 2; z2 = 1 / z1      # the two preimages; exactly one lies outside the circle in the fluid
+qa = qa[np.maximum(np.abs(z1 - c0), np.abs(z2 - c0)) > a0 * 1.06][:140]
 ax.plot(qa[:, 0], qa[:, 1], "o", ms=4, mfc=AQUA, mec="white", mew=0.6, zorder=5)
-ax.text(-2.5, 1.35, "input: boundary sample (black), interior prediction points (aqua)", fontsize=9.5, color=INK)
-ax.text(-2.5, -1.4, "target: the field at the prediction points (color: exact $C_p$)", fontsize=9.5, color=INK2)
+ax.text(-2.5, 1.42, "input: boundary sample (black), interior prediction points (aqua)", fontsize=9.5, color=INK, path_effects=halo())
+ax.text(-2.5, -1.45, "target: the field at the prediction points (color: exact $C_p$)", fontsize=9.5, color=INK2, path_effects=halo())
 sm = plt.cm.ScalarMappable(norm=nrm_, cmap=DIVERGING); sm.set_array([])
 cb = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02); cb.set_label("pressure coefficient $C_p$ [–]", color=INK2)
 plt.show()
