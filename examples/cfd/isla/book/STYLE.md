@@ -98,6 +98,9 @@ softmax normalizes over points"). Use American spelling.
 | GeoTransolver, Transolver, GeoTransolver-volume | "GT", "T", "the released baselines", "the baselines" without naming them | the public models, never modified |
 | GeoTransolver + ISLA's <feature> (ablation) | "research variant" | a baseline with one of ISLA's features added to isolate an effect |
 | the study configuration tag: "Instrument: ISLA at <width> wide, <slices> slices, <rate>, raw slice reads" (in the caption) | an unlabeled smaller-ISLA number | a study run on a smaller ISLA than the reference configuration (scaling ladders, sampling probes); defined once in 07 (`#sec-study-configurations`); read for slopes and mechanisms, never as a standing |
+| a standing that is not compared (‡) | "ISLA leads on HiLiftAeroML / AirfRANS" | a standing artifact whose baselines read the freestream as a raw physical vector rather than a unit direction (`standing.DATASETS[k].fair_drive` False; what they read is `drive_note`, from results/drive_audit_2026-10-18/); its numbers are given, no verdict is drawn and no sentence rests a claim on its ratios; it is left out of every count |
+| the $n$-case rung (of a data-efficiency ladder) | "rung" undefined | a training-set size of a data-efficiency ladder, defined in 07 |
+| "Instrument: ISLA at <w> wide, <M> slices, <rate>, linear routing, raw slice reads" | | the tag variant for study lanes that used the removed unbounded routing score (07, `sec-study-configurations`) |
 | slice, anchor | "cluster", "centroid" | a soft group of tokens; its measure-weighted mean position $z_s$ and mean normal $m_s$ |
 | routing / read-back | | softmax over points into slices / softmax over slices back to points |
 | relational invariants | "geo features" | the scalars describing a token relative to an anchor |
