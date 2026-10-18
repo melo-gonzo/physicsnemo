@@ -58,6 +58,7 @@ class Dataset:
     protocols: tuple = ("native", "posed")  # the protocols that mean something on this task
     section: str = ""  # the chapter section that holds the standing
     reference: bool = True  # False: ISLA's arm is from checkpoints without the normalized slice reads
+    fair_drive: bool = True  # False: the baselines in this artifact read the freestream as a physical vector, not a unit direction
     notes: dict = field(default_factory=dict)
 
 
@@ -68,9 +69,12 @@ DATASETS = {
                 ("pressure_l2", "wss_l2"), ("native", "area", "posed"), "sec-scoreboard-200k"),
         Dataset("drivaerml_volume", "DrivAerML Volume task", "drivaerml_volume_a2.json",
                 ("pressure_l2", "velocity_l2", "nut_l2"), ("native", "posed"), "sec-interior-results"),
-        # the normalized-read rerun replaces this file when its lanes are scored (hilift_surface_a2.json)
+        # the normalized-read rerun replaces this file when its lanes are scored (hilift_surface_a2.json); in this file the
+        # baselines read global_data.U_inf, the physical freestream vector in inch/s (recipe_v8 geotransolver_surface.yaml
+        # global_embedding, transolver_surface.yaml fx), so no ISLA-vs-baseline verdict is drawn from it (fair_drive=False)
         Dataset("hilift", "HiLiftAeroML, 210-wing rung", "hilift_surface.json",
-                ("pressure_l2", "tau_wall_l2"), ("native", "area", "posed"), "sec-de-result", reference=False),
+                ("pressure_l2", "tau_wall_l2"), ("native", "area", "posed"), "sec-de-result", reference=False,
+                fair_drive=False),
         Dataset("shift_suv", "SHIFT-SUV", "shift_suv_surface_a2.json",
                 ("pressure_l2", "wss_l2"), ("native", "area", "posed"), "sec-shift-suv-standing"),
         Dataset("airfrans", "AirfRANS interior task", "airfrans_a2.json",
@@ -131,7 +135,10 @@ class Standing:
         return self.err(arch, f, protocol) / self.err(arch, f, "native")
 
     def verdict(self, arch: str, f: str, protocol: str = "native") -> str:
-        """ISLA against one baseline by the seed rule: 'leads', 'trails' or 'is level with'."""
+        """ISLA against one baseline by the seed rule: 'leads', 'trails' or 'is level with'; 'is not compared with'
+        where the baselines' inputs differ from the protocol (``fair_drive`` False)."""
+        if not self.ds.fair_drive and arch != "ISLA":
+            return "is not compared with"
         b, i = self.seeds(arch, f, protocol), self.seeds("ISLA", f, protocol)
         if abs(self.ratio(arch, f, protocol) - 1) < TIE_BAND:
             return "is level with"
@@ -210,15 +217,18 @@ def plot_native(ax, rows=None, note_flag="†"):
     labels = []
     for yy, (k, f, lab) in zip(y, rows):
         s = Standing(k)
-        flag = "" if s.ds.reference else f" {note_flag}"
+        flag = ("" if s.ds.reference else f" {note_flag}") + ("" if s.ds.fair_drive else " ‡")
         labels.append(lab + flag)
         for arch, key, dy in (("GeoTransolver", "gt", 0.16), ("Transolver", "t", -0.16)):
             if not s.has(arch):
                 continue
             st = STYLE[key]
             lo, hi = _seed_range(s, arch, f)
-            ax.plot([lo, hi], [yy + dy] * 2, color=st["color"], lw=4, alpha=0.3, solid_capstyle="butt")
-            ax.plot(s.ratio(arch, f), yy + dy, marker=st["marker"], color=st["color"], ms=6.5, mec="white", mew=0.6, ls="none")
+            if s.ds.fair_drive:
+                ax.plot([lo, hi], [yy + dy] * 2, color=st["color"], lw=4, alpha=0.3, solid_capstyle="butt")
+                ax.plot(s.ratio(arch, f), yy + dy, marker=st["marker"], color=st["color"], ms=6.5, mec="white", mew=0.6, ls="none")
+            else:  # baselines fed the physical freestream vector: hollow marks, no seed bar
+                ax.plot(s.ratio(arch, f), yy + dy, marker=st["marker"], color="white", ms=6.5, mec=st["color"], mew=1.3, ls="none")
     ax.axvline(1.0, color=INK2, lw=1.0)
     ax.axvspan(1.0 - TIE_BAND, 1.0 + TIE_BAND, color=GRID, alpha=0.8, lw=0)
     ax.set_xscale("log")
