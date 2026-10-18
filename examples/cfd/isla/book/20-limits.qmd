@@ -35,7 +35,7 @@ def field_name(s, f):
     return s.fields[f]
 def tally():
     """Counts of (dataset, headline field, baseline) pairs by verdict, native mesh."""
-    out = {"leads": [], "is level with": [], "trails": []}
+    out = {"leads": [], "is level with": [], "trails": [], "is not compared with": []}
     for k, s in ST.items():
         for f in s.ds.headline:
             for b in S.BASELINES:
@@ -56,10 +56,12 @@ follow give each item its numbers.
 ```{python}
 #| label: para-not-claimed
 #| output: asis
-n_all = sum(len(v) for v in TAL.values())
+n_all = sum(len(v) for k, v in TAL.items() if k != "is not compared with")
+HL_FAIR = S.DATASETS["hilift"].fair_drive
 print(f"- **Not that ISLA is more accurate in distribution in general.** Across the {len(ST)} standings and their headline fields, "
       f"ISLA leads a baseline in {len(TAL['leads'])} of {n_all} comparisons, is level in {len(TAL['is level with'])} and trails in "
-      f"{len(TAL['trails'])}" + ("" if HL_REF else " (HiLiftAeroML's ISLA arm is the raw-read variant)") + "; @sec-limits-in-distribution.")
+      f"{len(TAL['trails'])}" + ("" if HL_FAIR else "; HiLiftAeroML is not counted, because the baselines of its record read the freestream as a physical vector (@sec-de-result)")
+      + "; @sec-limits-in-distribution.")
 ```
 
 - **Not that equivariance is an accuracy edge in general.** A baseline given a canonical frame is
@@ -297,9 +299,10 @@ rows = [
     ("Should ISLA-DTT be ISLA's only interior form?", "ISLA-DTT ÷ ISLA on velocity and pressure on each AeroZoo held-out split, at equal size", fmt_h(q2)),
     ("Where does ISLA stand on AeroZoo's held-out families?", "the three architectures at their reference configurations on each held-out split; each one's held-out penalty", fmt_h(q3)),
 ]
-if not HL_REF:
-    rows.append(("Where does ISLA stand on HiLiftAeroML with the normalized slice reads?", "the reference ISLA retrained on the 210-wing rung, two seeds, scored under the three protocols",
-                 "two lanes; the wing rung is not in the cost record"))
+if not (HL_REF and HL_FAIR):
+    rows.append(("Where does ISLA stand on HiLiftAeroML?", "unit-direction GeoTransolver and Transolver at their reference configurations"
+                 + ("" if HL_REF else " and the reference ISLA with the normalized slice reads") + " on the 210-wing rung, two seeds each, scored under the three protocols",
+                 "four to six lanes; the wing rung is not in the cost record"))
 rows += [
     ("Do the scaling law, the cell-count saturation and the capacity floor hold at the reference configuration?", "the case ladder at three sizes around the reference and a cell ladder at 435 cars, on the DrivAerML Surface task", fmt_h(q5)),
     ("What causes ISLA's stress and displacement deficit on Tensile2d?", "two arms that each remove one candidate cause, on the reference configuration's protocol", fmt_h(q6)),
@@ -384,15 +387,16 @@ if not HL_REF:
         if rr:
             f = st_.ds.headline[0]
             a2_effect.append((st_.ds.name, st_.err("ISLA", f) / rr["native"][f]["mean"]))
-    print("### HiLiftAeroML with the normalized slice reads {#sec-oq-hilift}")
+if not (HL_REF and HL_FAIR):
+    print("### HiLiftAeroML {#sec-oq-hilift}")
     print()
-    print("**Does ISLA's lead on the 210-wing HiLiftAeroML rung hold for the reference configuration?** The rung's ISLA arm is from "
-          "checkpoints of the raw-read variant, in which the slice sublayer pools and broadcasts the raw token state "
-          f"(@sec-isla-layer); there GeoTransolver ÷ ISLA reads {r('hilift', 'GeoTransolver', 'pressure_l2'):.2f} and Transolver ÷ ISLA "
-          f"{r('hilift', 'Transolver', 'pressure_l2'):.2f} on pressure. Where both variants are scored, the normalized reads change ISLA's "
-          "first headline error by a factor of " + ", ".join(f"{v:.2f} on {n}" for n, v in a2_effect) + " (normalized ÷ raw; @sec-standing). What would settle it: "
-          "the reference ISLA retrained on the rung, two seeds, and scored under the three protocols; two lanes. The wing rung is not in "
-          "the cost record, so the cost is not priced here.")
+    print("**How do the three reference configurations compare on the 210-wing HiLiftAeroML rung when every model reads the freestream "
+          "as a unit direction?** In the rung's standing record the baselines read it as the physical velocity vector (@sec-de-result)"
+          + ("" if HL_REF else ", and ISLA's arm is the raw-read variant (@sec-isla-normalized-reads); where both ISLA variants are scored, "
+             "the normalized reads change ISLA's first headline error by a factor of " + ", ".join(f"{v:.2f} on {n}" for n, v in a2_effect)
+             + " (normalized ÷ raw)") + ". What would settle it: unit-direction GeoTransolver and Transolver lanes at their reference "
+          "configurations" + ("" if HL_REF else " and the reference ISLA") + ", two seeds each, scored under the three protocols. The wing "
+          "rung is not in the cost record, so the cost is not priced here.")
 ```
 
 ### The scaling law at the reference configuration {#sec-oq-scaling}

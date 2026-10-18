@@ -24,7 +24,7 @@ ROWS = S.headline_rows()
 ## Every headline number {#sec-standing-table}
 
 ```{python}
-#| label: tbl-standing
+#| label: tbl-thesis
 #| output: asis
 out = ["| dataset and task | field | ISLA error | GeoTransolver ÷ ISLA | Transolver ÷ ISLA | ISLA rotated and translated ÷ native | chapter |",
        "|---|---|---:|---:|---:|---:|---|"]

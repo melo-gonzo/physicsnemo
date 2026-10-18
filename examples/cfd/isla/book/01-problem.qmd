@@ -401,7 +401,7 @@ print(": One prediction error, a smooth bump of amplitude 0.35 in the pressure c
       "with 60 cells each. The area-weighted relative L2 agrees between the samplings to quadrature error; "
       "the per-point relative L2 rises when the mesher places more cells where the error is. "
       "How to read this: the metric measures the field, not the mesh. It is a constructed illustration, not "
-      "a measurement of any model. {#tbl-metric-illustration}")
+      "a measurement of any model.")
 ```
 
 The table is the whole argument. The per-point error is a quadrature of
