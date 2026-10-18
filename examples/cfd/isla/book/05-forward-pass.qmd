@@ -527,10 +527,10 @@ for ax, mat, title, vmax in ((axes[0], a.T, r"routing $a_{is}$: softmax over tok
     cb = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.01); cb.ax.tick_params(labelsize=8); cb.outline.set_visible(False)
     cb.set_label("weight [–]", fontsize=8.5)
 i_le = int(np.argmin(JJ["mid"][:, 0]))
-axes[1].set_xlabel("token $i$ along the surface, from the trailing edge around the leading edge and back [index]", fontsize=9)
+axes[1].set_xlabel("token $i$ along the surface, from the trailing edge around the leading edge and back [–]", fontsize=9)
 for ax in axes:
     ax.axvline(i_le, color=WHITE, lw=1.0, ls="--")
-axes[1].text(i_le + 0.8, n_sl - 0.55, "leading edge", ha="left", va="center", fontsize=8.5, color=WHITE)
+axes[1].text(i_le - 0.8, n_sl - 2, "leading edge", ha="right", va="center", fontsize=8.5, color=WHITE)
 plt.show()
 ```
 
@@ -1317,7 +1317,7 @@ for yy, (name, fl, by, col) in zip(y, ops):
     ax.text(I * 1.12, yy, f"{I:,.1f}" if I < 10 else f"{I:,.0f}", va="center", fontsize=8.5, color=INK)
 ax.set_yticks(y); ax.set_yticklabels([o[0] for o in ops], fontsize=8.8)
 ax.set_xscale("log"); ax.set_xlim(0.1, 3000)
-ax.set_xticks([0.1, 1, 10, 100, 1000]); ax.set_xticklabels(["0.1", "1", "10", "100", "1000"])
+ax.set_xticks([0.1, 1, 10, 100, 1000]); ax.set_xticklabels(["0.1", "1", "10", "100", "1,000"])
 ax.set_xlabel("arithmetic intensity [floating-point operations per byte of HBM traffic]")
 ax.grid(axis="y", visible=False)
 for sp in ("top", "right"): ax.spines[sp].set_visible(False)
