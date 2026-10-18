@@ -150,7 +150,7 @@ MI = [
 out = "| dataset | ISLA | GeoTransolver | Transolver | against ISLA's input |\n|---|---|---|---|---|\n"
 for key, i, g, t, info in MI:
     d = S.DATASETS[key]
-    flag = "" if d.fair_drive else " **No standing comparison is drawn.**"
+    flag = "" if d.fair_drive else ". **No standing comparison is drawn.**"
     out += f"| {d.name} | {i} | {g} | {t} | {info}{flag} |\n"
 print(out)
 print(": What each model receives, per dataset: the global inputs with their units and range across cases, the boundary "
@@ -195,7 +195,7 @@ print(": GeoTransolver's context projector at initialization, at the recipe's di
       "note below. Data: results/geotransolver_drive_conditioning_2026-09-08.json. {#tbl-projector}")
 ```
 
-::: {.callout-note collapse="true" title="Optional: the trained consequence on 35 wings"}
+::: {.callout-note title="The trained consequence on 35 wings"}
 At 35 HiLiftAeroML training cases, GeoTransolver and Transolver fed the unit direction are each more accurate than their
 twins fed the physical velocity on every one of the 180 validation cases, by a median factor above three
 (@tbl-unit-vs-physical). The control was trained at 10,000 cells per case, a budget no standing uses, and measures an input
@@ -440,7 +440,8 @@ print(": The datasets of the book. $K$: global unit directions; $S$: global scal
 #|   plane of the enclosure, the body in black. Tensile2d: the axial stress $\sigma_{22}$ at the nodes. The lug: the von
 #|   Mises stress at the nodes, projected along the thickness. DeepJEB++: the von Mises stress on one bracket's surface. How
 #|   to read this: colors are reference CFD and FEM fields, not predictions; each panel has its own color scale and its own
-#|   length scale, and surfaces are drawn from a random subset of their cells, so dot density is not mesh resolution. Data:
+#|   length scale, and surfaces are drawn from a random subset of their cells, so dot density follows the mesh, not the
+#|   field. The SHIFT-SUV panel is a fastback; every model trains and is scored on the estate family (@sec-shift-suv). Data:
 #|   results/problem_figures_2026-09-22/*.npz (DeepJEB++: results/sample_figures_2026-10-02/deepjeb.npz).
 #| code-fold: true
 #| fig-height: 11
