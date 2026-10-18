@@ -38098,11 +38098,8 @@ checkpoints.
 
 **Book.** Chapters 7, 11 and 13, the thesis table and the limits chapter
 read ISLA's standing on these four datasets from
-results/char/<dataset>_a2.json (the CHAR record with ISLA's arm replaced
+`results/char/<dataset>_a2.json` (the CHAR record with ISLA's arm replaced
 by the A2 reruns; generator `a2r_protocol_artifacts_2026-10-17.py`
 beside it). Each chapter's raw-reads label now names only the analyses
 still on raw-read checkpoints. SHIFT-SUV, the lug, HiLift and the AeroZoo
 `full` ISLA-DTT lanes are still running.
-
-The brief for this entry gave the Surface posed bound as 3.4e-5; the
-records give 3.34e-5, written here as 3.3e-5 as in the steward's log.
