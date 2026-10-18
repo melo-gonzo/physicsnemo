@@ -38042,3 +38042,67 @@ larger than the design study's estimate of 1.8 to 4. Velocity's law
 effect, recorded rather than predicted after @sec-nb-geo0, also falls
 below 1. Under the area-weighted draw at 400 segments geo1's errors are
 about 3 to 4 times its native errors where A2's are about 26 to 48 times.
+
+## 2026-10-17 — A2-RERUN, DrivAerML: R-A2 and R-POSE hold on the Surface and the Volume task; on Volume pressure and velocity both A2 seeds sit above the old two-seed range, a real regression of about 4 percent inside the bar {#sec-nb-a2-rerun-drivaerml}
+
+The DrivAerML lanes of A2-RERUN (rows 10 to 13 of
+scratch/isla-a2-rerun-2026-10-17/PREREG.md, registered before any lane;
+@sec-nb-a2-rerun-jeb-t2d for the first two datasets) are trained and
+scored: `a2r_dr_isla_seed42/43` (Surface) and `a2r_vol_isla_seed42/43`
+(Volume), the reference configuration with the normalized slice reads,
+500 epochs at 3.75e-4, snapshot code_a2r (7e167820a) with recipe_a2r, on
+JHB. Scoring is the CHAR scorer's copy (`kernel/a2r/score.sbatch`):
+final checkpoints, float32, 200,000 cells, the 48 validation cars, the
+native, area and posed protocols; JHB jobs 1077636 (Surface) and 1081856
+(Volume). As registered, R-A2 measures A2 together with the code drift
+the snapshot brings. The reductions are
+results/campaigns_2026-10-17/a2r/drivaerml_{surface,volume}_a2_scores.json.
+
+**R-A2** (A2 seed mean ÷ old seed mean on the native mesh, bar 1.05; in
+parentheses each A2 seed, 42 and 43, ÷ the old seed mean):
+
+| Task | Field | A2 (seeds 42, 43) | old reference (42, 43) | A2 ÷ old | verdict |
+|---|---|---|---|---|---|
+| Surface | pressure | 0.0445 (0.0436, 0.0455) | 0.0443 (0.0449, 0.0438) | 1.005 (0.983, 1.026) | holds |
+| Surface | wall shear | 0.0700 (0.0684, 0.0717) | 0.0699 (0.0707, 0.0692) | 1.001 (0.977, 1.025) | holds |
+| Volume | pressure | 0.0409 (0.0413, 0.0404) | 0.0394 (0.0387, 0.0400) | 1.038 (1.049, 1.026) | holds |
+| Volume | velocity | 0.0660 (0.0662, 0.0657) | 0.0635 (0.0619, 0.0651) | 1.039 (1.043, 1.035) | holds |
+| Volume | eddy viscosity | 0.0881 (0.0895, 0.0867) | 0.0876 (0.0868, 0.0884) | 1.005 (1.021, 0.989) | holds |
+
+On the Surface task the A2 seeds interleave with the old ones. On Volume
+pressure and velocity both A2 seeds lie above the old two-seed range
+([0.0387, 0.0400] and [0.0619, 0.0651]), so the narrow pass there is a
+real regression of about 4 percent inside the bar, not seed noise; eddy
+viscosity interleaves.
+
+**R-POSE holds** (bar |posed ÷ native − 1| at most 0.002 per field and
+seed). Surface: at most 3.3e-5 (pressure 3.1e-5 and 3.0e-5, wall shear
+3.3e-5 and 2.9e-5). Volume: at most 5.4e-4, on velocity for both seeds
+(old 5e-4); pressure 5.8e-5 and 1.5e-4, eddy viscosity 1.1e-4 and 4.2e-5.
+
+**Against the baselines** (unchanged CHAR records; baseline ÷ A2, seed
+means). Surface: GeoTransolver width 256 1.022 on pressure and 0.993 on
+wall shear, Transolver width 512 with 16 layers 0.981 and 0.994; the
+three still tie within seed noise. Volume: GeoTransolver 1.191 / 1.519 /
+0.951 and Transolver 1.285 / 1.895 / 1.014 (pressure / velocity / eddy
+viscosity); against Transolver the eddy-viscosity seeds now interleave.
+
+**Area protocol** (recorded, not predicted). Surface: A2 0.0445 / 0.0707,
+1.000 and 1.010 of native. Volume: A2 0.196 / 0.347 / 0.483 against the
+old 0.311 / 0.417 / 0.583 (4.8x / 5.3x / 5.5x of A2's native, against
+7.9x / 6.6x / 6.6x). On the Volume task this protocol redraws only ISLA's
+vehicle boundary, which the baselines never load (@sec-nb-char-area-audit),
+so it is a property of the trained ISLA model and not a comparison;
+VOL-GEO (@sec-nb-char-vol-geo-verdict) was not rerun on the A2
+checkpoints.
+
+**Book.** Chapters 7, 11 and 13, the thesis table and the limits chapter
+read ISLA's standing on these four datasets from
+results/char/<dataset>_a2.json (the CHAR record with ISLA's arm replaced
+by the A2 reruns; generator `a2r_protocol_artifacts_2026-10-17.py`
+beside it). Each chapter's raw-reads label now names only the analyses
+still on raw-read checkpoints. SHIFT-SUV, the lug, HiLift and the AeroZoo
+`full` ISLA-DTT lanes are still running.
+
+The brief for this entry gave the Surface posed bound as 3.4e-5; the
+records give 3.34e-5, written here as 3.3e-5 as in the steward's log.
