@@ -59,6 +59,7 @@ class Dataset:
     section: str = ""  # the chapter section that holds the standing
     reference: bool = True  # False: ISLA's arm is from checkpoints without the normalized slice reads
     fair_drive: bool = True  # False: the baselines in this artifact read the freestream as a physical vector, not a unit direction
+    drive_note: str = ""  # what the baselines read instead, for the one sentence the chapters print (results/drive_audit_2026-10-18/)
     notes: dict = field(default_factory=dict)
 
 
@@ -74,11 +75,15 @@ DATASETS = {
         # global_embedding, transolver_surface.yaml fx), so no ISLA-vs-baseline verdict is drawn from it (fair_drive=False)
         Dataset("hilift", "HiLiftAeroML, 210-wing rung", "hilift_surface.json",
                 ("pressure_l2", "tau_wall_l2"), ("native", "area", "posed"), "sec-de-result", reference=False,
-                fair_drive=False),
+                fair_drive=False, drive_note="the freestream as the physical velocity vector in inch/s (magnitude 2,680 on every "
+                "case, turning with the angle of attack), where ISLA reads its unit direction"),
         Dataset("shift_suv", "SHIFT-SUV", "shift_suv_surface_a2.json",
                 ("pressure_l2", "wss_l2"), ("native", "area", "posed"), "sec-shift-suv-standing"),
+        # the baselines of this file read global_data.U_inf, the raw inlet velocity (results/drive_audit_2026-10-18/, F1)
         Dataset("airfrans", "AirfRANS interior task", "airfrans_a2.json",
-                ("pressure_l2", "velocity_l2", "nut_l2"), ("native", "posed"), "sec-interior-airfrans"),
+                ("pressure_l2", "velocity_l2", "nut_l2"), ("native", "posed"), "sec-interior-airfrans",
+                fair_drive=False, drive_note="the inlet velocity as the physical vector in m/s (31 to 94 m/s, at angles of "
+                "-4.9 to 14.9 degrees), where ISLA reads its unit direction and the speed as a scalar"),
         Dataset("aerozoo", "AeroZoo", None, (), ("native",), "sec-interior-aerozoo"),
         Dataset("tensile2d", "PLAID Tensile2d", "tensile2d_a2.json",
                 ("stress_l2", "displacement_l2", "q_l2"), ("native", "posed"), "sec-interior-tensile2d"),
