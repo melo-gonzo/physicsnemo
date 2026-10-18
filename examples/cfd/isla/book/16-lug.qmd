@@ -21,9 +21,25 @@ TIES = json.load(open(RES / "char" / "solids_ties_2026-10-18.json"))
 LT = TIES["lug"]["lug_0004"]
 TT = TIES["tensile2d"]["sample_000001"]
 COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]["lug"]
+
+from matplotlib.collections import PolyCollection
+def lug_conditions(ax, bp, bc, fixed, loaded, hole, lw=4.0, fill="#e4e3dc"):
+    """The lug seen along the hole's axis: its silhouette, the clamped end face as a thick line and the hole's loaded and free halves
+    as arcs, in the boundary-condition colors. Returns the clamped line's midpoint, the hole center and radius (for labels)."""
+    if fill:
+        ax.add_collection(PolyCollection(bp[bc][:, :, :2], facecolors=fill, edgecolors="none", zorder=1))
+    cen = bp[bc].mean(axis=1)
+    f = cen[fixed]; x0 = f[:, 0].mean()
+    ax.plot([x0, x0], [f[:, 1].min(), f[:, 1].max()], color=BC["value"], lw=lw, solid_capstyle="butt", zorder=4)
+    hc = cen[hole][:, :2]; ctr = hc.mean(axis=0); R = np.linalg.norm(hc - ctr, axis=1).mean()
+    a = np.arctan2(cen[loaded][:, 1] - ctr[1], cen[loaded][:, 0] - ctr[0])
+    t = np.linspace(a.min(), a.max(), 120); u = np.linspace(a.max(), a.min() + 2 * np.pi, 120)
+    ax.plot(ctr[0] + R * np.cos(u), ctr[1] + R * np.sin(u), color=BC["free"], lw=0.5 * lw, zorder=4)
+    ax.plot(ctr[0] + R * np.cos(t), ctr[1] + R * np.sin(t), color=BC["flux"], lw=lw, solid_capstyle="butt", zorder=5)
+    return np.array([x0, f[:, 1].mean()]), ctr, R
 ```
 
-**On the GINOT bracket lug ISLA leads GeoTransolver and Transolver: their errors are `{python} f"{ST.ratio('GeoTransolver', F):.2f}"` and `{python} f"{ST.ratio('Transolver', F):.2f}"` times ISLA's on the von Mises stress.** Rotated and translated, ISLA's error grows to `{python} f"{ST.shift('ISLA', F, 'posed'):.1f}"` times its native value and stays `{python} f"{min(B_POSED) / ST.err('ISLA', F, 'posed'):.0f}"` times below the baselines', which fall to the mean-field level. The growth is the mechanism of @sec-tensile2d-ties at full strength: on this structured hexahedral mesh `{python} f"{100 * LT['tied_fraction']:.0f}"`% of the nodes tie for their nearest boundary sample, interior nodes included.
+**On the GINOT bracket lug ISLA leads GeoTransolver and Transolver: their errors are `{python} f"{ST.ratio('GeoTransolver', F):.2f}"` and `{python} f"{ST.ratio('Transolver', F):.2f}"` times ISLA's on the von Mises stress.** Rotated and translated, ISLA's error grows to `{python} f"{ST.shift('ISLA', F, 'posed'):.1f}"` times its native value and stays `{python} f"{min(B_POSED) / ST.err('ISLA', F, 'posed'):.0f}"` times below the baselines', which rise to about one, the error of predicting zero everywhere. The inputs differ: the baselines read no boundary-condition labels, while ISLA reads, face by face, which faces are clamped, which belong to the hole and to its loaded half, and the pressure on each. The growth is the mechanism of @sec-tensile2d-ties at full strength: on this structured hexahedral mesh `{python} f"{100 * LT['tied_fraction']:.0f}"`% of the nodes tie for their nearest boundary sample, interior nodes included.
 
 ## The problem: a clamped lug pressed in its hole {#sec-lug-problem}
 
@@ -32,11 +48,11 @@ COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]
 ```{python}
 #| label: fig-problem-lug
 #| fig-cap: >
-#|   The GINOT bracket lug problem on one test bracket. Left: the surface
-#|   triangles that are ISLA's boundary tokens, colored by condition: the end
-#|   face is clamped (value), the lower half of the hole carries the pressure
-#|   (flux), the rest of the hole and the outer surface are free; orthographic
-#|   view (azimuth −60°, elevation 30°). Right: the von Mises stress at the mesh
+#|   The GINOT bracket lug problem on one test bracket, seen along the hole's
+#|   axis. Left: the surface ISLA reads as boundary tokens, colored by
+#|   condition: the end face is clamped (value; seen edge-on, the thick line),
+#|   the lower half of the hole carries the pressure (flux), the rest of the hole
+#|   and the outer surface are free (gray). Right: the von Mises stress at the mesh
 #|   nodes projected along the hole's axis, the top face nearest; the line
 #|   below lists the four global scalars. How to read this: every node is a
 #|   prediction point; the projection shows the top face's nodes over the
@@ -47,24 +63,24 @@ COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]
 Lg, Lm = load_problem("lug")
 bp, bc = Lg["bnd_points"] * 1e3, Lg["bnd_cells"]
 kinds = np.where(Lg["bc_loaded"] > 0.5, "flux", np.where(Lg["bc_fixed"] > 0.5, "value", "free"))
-fig = plt.figure(figsize=(8, 3.6))
-ax = fig.add_subplot(1, 2, 1, projection="3d"); ax.set_proj_type("ortho")
-face = np.array([BC[k] if k != "free" else "#d9d8d0" for k in kinds])
-ax.add_collection3d(Poly3DCollection(bp[bc], facecolors=face, edgecolors="none", linewidths=0.1))
-ext = bp.max(0) - bp.min(0)
-ax.set_xlim(bp[:, 0].min(), bp[:, 0].max()); ax.set_ylim(bp[:, 1].min(), bp[:, 1].max()); ax.set_zlim(bp[:, 2].min(), bp[:, 2].max()); ax.set_box_aspect(tuple(ext / ext.max()), zoom=1.0)
-ax.view_init(elev=30, azim=-60); ax.set_axis_off()
-ax.text2D(0.02, 0.90, "clamped end face: $u$ = 0 (value)", transform=ax.transAxes, color=BC["value"], fontsize=8.5, path_effects=halo())
-ax.text2D(0.98, 0.14, "lower half of the hole:\npressure p (flux)", transform=ax.transAxes, color=BC["flux"], fontsize=8.5, ha="right", path_effects=halo())
-ax.text2D(0.5, 0.02, "outer surface and upper hole: free", transform=ax.transAxes, color=BC["free"], fontsize=8.5, ha="center")
-ax.set_title("boundary tokens and their conditions", fontsize=9.5, loc="left")
-ax2 = fig.add_subplot(1, 2, 2)
+fig, (ax, ax2) = plt.subplots(1, 2, figsize=(8.4, 3.9), gridspec_kw=dict(wspace=0.32))
+cl, ctr, R = lug_conditions(ax, bp, bc, Lg["bc_fixed"] > 0.5, Lg["bc_loaded"] > 0.5, Lg["bc_hole"] > 0.5, lw=5.0)
+ax.annotate("clamped end face:\n$u$ = 0 (value)", xy=cl, xytext=(cl[0] + 12, bp[:, 1].max() + 14), fontsize=8.5, color=BC["value"],
+            ha="left", va="bottom", arrowprops=dict(arrowstyle="-", color=BC["value"], lw=0.9))
+ax.annotate("lower half of the hole:\npressure p (flux)", xy=(ctr[0], ctr[1] - R), xytext=(ctr[0] - 8, bp[:, 1].min() - 14), fontsize=8.5,
+            color=BC["flux"], ha="center", va="top", arrowprops=dict(arrowstyle="-", color=BC["flux"], lw=0.9))
+ax.annotate("outer surface and\nupper hole: free", xy=(ctr[0], ctr[1] + R), xytext=(ctr[0] + 4, bp[:, 1].max() + 14), fontsize=8.5,
+            color=INK2, ha="center", va="bottom", arrowprops=dict(arrowstyle="-", color=BC["free"], lw=0.9))
+map_axes(ax); ax.set_xlim(bp[:, 0].min() - 6, bp[:, 0].max() + 6); ax.set_ylim(bp[:, 1].min() - 30, bp[:, 1].max() + 30)
+ax.set_xlabel("x [mm]"); ax.set_ylabel("y [mm]")
+ax.set_title("boundary tokens and their conditions", fontsize=9.5)
 ip = Lg["int_points"] * 1e3
 sc = depth_scatter(ax2, ip[:, [0, 1]], ip[:, 2], Lg["von_mises"], s=6, cmap=SEQUENTIAL, vmin=0, vmax=float(np.quantile(Lg["von_mises"], 0.995))); map_axes(ax2)
+ax2.set_ylim(*ax.get_ylim())
 g = Lm["globals"]
 ax2.set_xlabel("x [mm]"); ax2.set_ylabel("y [mm]"); ax2.set_title("von Mises stress at the nodes", fontsize=9.5)
 small_colorbar(fig, sc, ax2, "von Mises [MPa]", extend="max")
-fig.text(0.5, 0.0, f"this sample's global scalars: hole radius {1e3 * g['hole_radius']:.1f} mm, length {1e3 * g['length']:.1f} mm, thickness {1e3 * g['thickness']:.1f} mm, pressure {g['pressure_mpa']:.1f} MPa",
+fig.text(0.5, 0.02, f"this sample's global scalars: hole radius {1e3 * g['hole_radius']:.1f} mm, length {1e3 * g['length']:.1f} mm, thickness {1e3 * g['thickness']:.1f} mm, pressure {g['pressure_mpa']:.1f} MPa",
          ha="center", va="top", fontsize=8.5, color=INK2)
 plt.show()
 ```
@@ -85,42 +101,35 @@ print(f"**The parameters span a wide range within one topology.** @fig-lug-sampl
 #| label: fig-lug-samples
 #| fig-cap: >
 #|   Six GINOT bracket lug test cases at the ends of the parameter ranges, one
-#|   per column. Top row: the surface triangles colored by condition (clamped
-#|   end face, value; pressed lower half of the hole, flux; the rest free), in
-#|   the view of @fig-problem-lug. Bottom row: the von Mises stress at the
-#|   nodes projected along the hole's axis, top face nearest, on one shared
-#|   scale, with the four global scalars of the case under it. How to read
-#|   this: each column is the smallest or the largest value of one parameter
-#|   among the test cases (named above it), so the columns span the ranges
-#|   rather than sample them evenly; the stress scale is clipped at its top.
-#|   Data: results/sample_figures_2026-10-02/lug.npz.
+#|   per column (named above it), seen along the hole's axis: the von Mises
+#|   stress at the nodes, top face nearest, on one shared scale, with the
+#|   boundary conditions drawn over it (the clamped end face edge-on as a
+#|   purple line, value; the pressed lower half of the hole as an orange arc,
+#|   flux; the rest free) and the four global scalars of the case under it. How
+#|   to read this: each column is the smallest or the largest value of one
+#|   parameter among the test cases, so the columns span the ranges rather than
+#|   sample them evenly; the stress scale is clipped at its top. Data:
+#|   results/sample_figures_2026-10-02/lug.npz.
 #| code-fold: true
 cs = Lsm["cases"]; io = Ls_["int_offsets"]; po = Ls_["bnd_point_offsets"]; co = Ls_["bnd_cell_offsets"]
 vmax = float(np.quantile(Ls_["von_mises"], 0.995))
-fig = plt.figure(figsize=(8.5, 3.9))
-gs = fig.add_gridspec(2, 6, height_ratios=[1, 1.0], hspace=0.0, wspace=0.08, left=0.03, right=0.9, top=0.88, bottom=0.16)
-for i, c in enumerate(cs):
+fig, axes = plt.subplots(1, 6, figsize=(8.6, 2.5), sharey=True, gridspec_kw=dict(wspace=0.06, left=0.02, right=0.9, top=0.78, bottom=0.3))
+for i, (c, ax2) in enumerate(zip(cs, axes)):
     bp = part(Ls_["bnd_points"], po, i) * 1e3; bc = part(Ls_["bnd_cells"], co, i)
-    loaded = part(Ls_["bc_loaded"], co, i); fixed = part(Ls_["bc_fixed"], co, i)
-    kinds = np.where(loaded > 0.5, "flux", np.where(fixed > 0.5, "value", "free"))
-    ax = fig.add_subplot(gs[0, i], projection="3d"); ax.set_proj_type("ortho")
-    face = np.array([BC[k] if k != "free" else "#d9d8d0" for k in kinds])
-    ax.add_collection3d(Poly3DCollection(bp[bc], facecolors=face, edgecolors="none"))
-    ext = bp.max(0) - bp.min(0)
-    ax.set_xlim(bp[:, 0].min(), bp[:, 0].max()); ax.set_ylim(bp[:, 1].min(), bp[:, 1].max()); ax.set_zlim(bp[:, 2].min(), bp[:, 2].max())
-    ax.set_box_aspect(tuple(ext / ext.max()), zoom=1.45); ax.view_init(elev=30, azim=-60); ax.set_axis_off()
-    ax.set_title(c["role"].replace("pressure_mpa", "pressure").replace("_", " "), fontsize=8, loc="center")
-    ax2 = fig.add_subplot(gs[1, i])
     ip = part(Ls_["int_points"], io, i) * 1e3; vm = part(Ls_["von_mises"], io, i)
-    sc = depth_scatter(ax2, ip[:, [0, 1]], ip[:, 2], vm, s=5.0, cmap=SEQUENTIAL, vmin=0, vmax=vmax); map_axes(ax2)
-    ax2.set_xticks([]); ax2.set_yticks([])
+    sc = depth_scatter(ax2, ip[:, [0, 1]], ip[:, 2], vm, s=4.0, cmap=SEQUENTIAL, vmin=0, vmax=vmax)
+    lug_conditions(ax2, bp, bc, part(Ls_["bc_fixed"], co, i) > 0.5, part(Ls_["bc_loaded"], co, i) > 0.5, part(Ls_["bc_hole"], co, i) > 0.5,
+                   lw=2.6, fill=None)
+    map_axes(ax2); ax2.set_xticks([]); ax2.set_yticks([])
+    ax2.set_title(c["role"].replace("pressure_mpa", "pressure").replace("_", " "), fontsize=8)
     g = c["globals"]
     ax2.set_xlabel(f"r {1e3 * g['hole_radius']:.1f} mm, L {1e3 * g['length']:.0f} mm\nt {1e3 * g['thickness']:.1f} mm, p {g['pressure_mpa']:.0f} MPa", fontsize=7.4)
-cb = fig.colorbar(sc, ax=fig.axes, fraction=0.025, pad=0.01, extend="max", location="right", shrink=0.45, anchor=(0, 0.0)); cb.set_label("von Mises [MPa]"); cb.outline.set_visible(False)
-from matplotlib.patches import Patch
-fig.legend(handles=[Patch(color=BC["value"], label="clamped end face: $u$ = 0 (value)"), Patch(color=BC["flux"], label="lower half of the hole: pressure p (flux)"),
-                    Patch(color="#d9d8d0", label="outer surface and upper hole: free")], loc="upper center", ncol=3, fontsize=7.8, bbox_to_anchor=(0.46, 1.0))
-fig.text(0.46, 0.53, "von Mises stress at the nodes, seen along the hole's axis; the top face nearest", ha="center", va="center", fontsize=8.2, color=INK2)
+cb = fig.colorbar(sc, ax=list(axes), fraction=0.02, pad=0.01, extend="max"); cb.set_label("von Mises [MPa]"); cb.outline.set_visible(False)
+from matplotlib.lines import Line2D
+fig.legend(handles=[Line2D([], [], color=BC["value"], lw=3, label="clamped end face: $u$ = 0 (value)"),
+                    Line2D([], [], color=BC["flux"], lw=3, label="lower half of the hole: pressure p (flux)"),
+                    Line2D([], [], color=BC["free"], lw=1.5, label="upper hole and outer surface: free")],
+           loc="upper center", ncol=3, fontsize=7.8, bbox_to_anchor=(0.46, 1.02))
 plt.show()
 ```
 
@@ -187,7 +196,7 @@ print(f"**Natively the three are close in absolute terms and ISLA is the most ac
       "scalar and whose parameters enter as four global scalars.")
 print()
 print(f"**Rotated and translated, the baselines fail and ISLA bends.** GeoTransolver and Transolver read {min(B_POSED):.2f} and "
-      f"{max(B_POSED):.2f}, the level of a prediction no better than the mean field: a model that reads laboratory coordinates and trained "
+      f"{max(B_POSED):.2f}, about the error of predicting zero everywhere: a model that reads laboratory coordinates and trained "
       f"without augmentation has no answer for a rotated lug. ISLA reads {ST.err('ISLA', F, 'posed'):.4f}, {ST.shift('ISLA', F, 'posed'):.1f} "
       f"times its native error (per seed {' and '.join(f'{x:.1f}' for x in POSE_SEED)}). In absolute terms ISLA's posed error is "
       f"{100 * (ST.err('ISLA', F, 'posed') - ST.err('ISLA', F)):.2f}% of the field above its native one. The ratio is large because the native "
@@ -197,14 +206,14 @@ print(f"**Rotated and translated, the baselines fail and ISLA bends.** GeoTranso
 
 ## Studies on this dataset {#sec-lug-ladders}
 
-**Two studies belong to the lug: why ISLA's error grows under the pose, and what happens when the surface it reads is thinned.** No training-set ladder or width control was run at the reference configurations on this dataset.
+**Two studies belong to the lug: why ISLA's error grows under the pose, and what happens when the surface it reads is thinned.** The lug's training-set ladder is a study configuration's and appears with the other learning curves (@fig-exponents-datasets).
 
 ### Why the posed error is several times the native error {#sec-lug-ties}
 
-**The lug's structured mesh puts `{python} f"{100 * LT['tied_fraction']:.0f}"`% of its nodes in a tie for their nearest boundary sample, and one rigid motion in float32 changes the nearest sample of `{python} f"{100 * LT['nearest_changes_under_pose_fraction']:.0f}"`% of all nodes.** ISLA gives every prediction point the distance $d$ and the direction $u$ from its nearest boundary sample, the centroid of the nearest surface triangle (@sec-tensile2d-ties). On Tensile2d only the nodes on the polyline tie. On the lug two more kinds of node tie, both because the mesh is structured:
+**The lug's structured mesh puts `{python} f"{100 * LT['tied_fraction']:.0f}"`% of its nodes in a tie for their nearest boundary sample, and one rigid motion in float32 changes the nearest sample of `{python} f"{100 * LT['nearest_changes_under_pose_fraction']:.0f}"`% of all nodes.** ISLA gives every prediction point the distance $d$ and the direction $\hat\nu$ from its nearest boundary sample, the centroid of the nearest surface triangle (@sec-tensile2d-ties). On Tensile2d only the nodes on the polyline tie. On the lug two more kinds of node tie, both because the mesh is structured:
 
-- **Nodes on a surface.** A node at a corner of the surface quadrilaterals is equally far from the centroids of the triangles around it, and $u$ lies in the face, so the sign of $d$ is decided by rounding too.
-- **Interior nodes on a symmetry plane of the mesh.** The node layers are uniform through the thickness, so the middle layer is exactly as far from the top face as from the bottom face. Its nodes' $u$ points up or down depending on rounding: a reversal deep inside the body. Nodes in a column under a surface vertex tie between that vertex's triangles, with a change of direction that shrinks with depth.
+- **Nodes on a surface.** A node at a corner of the surface quadrilaterals is equally far from the centroids of the triangles around it, and $\hat\nu$ lies in the face, so the sign of $d$ is decided by rounding too.
+- **Interior nodes on a symmetry plane of the mesh.** The node layers are uniform through the thickness, so the middle layer is exactly as far from the top face as from the bottom face. Its nodes' $\hat\nu$ points up or down depending on rounding: a reversal deep inside the body. Nodes in a column under a surface vertex tie between that vertex's triangles, with a change of direction that shrinks with depth.
 
 @fig-lug-ties measures both effects on one test lug and sets it beside the Tensile2d specimens.
 
@@ -220,18 +229,20 @@ print(f"**Rotated and translated, the baselines fail and ISLA bends.** GeoTranso
 #|   nearest sample). Bottom: two layers of the lug's
 #|   nodes seen along the hole's axis, the top face (on the boundary) and the
 #|   middle layer through the thickness (interior but for its rim), colored by how far the
-#|   direction $u$ turns when the lug is rotated and translated in float32; gray
+#|   direction $\hat\nu$ turns when the lug is rotated and translated in float32; gray
 #|   nodes keep their nearest sample. How to read this: a curve's height at the
 #|   band is the share of nodes whose nearest sample is decided by rounding; the
-#|   lug's curve sits an order of magnitude above Tensile2d's. The figure is
+#|   curves join measurements at the five marked gaps, so inside the band the
+#|   height is read off the line between two of them; the lug's curve sits an
+#|   order of magnitude above Tensile2d's. The figure is
 #|   geometry only and shows no prediction. Data:
 #|   results/char/solids_ties_2026-10-18.{json,npz};
 #|   results/problem_figures_2026-09-22/lug.npz.
 #| fig-alt: "Top: share of tied nodes against the relative gap on a log axis, the lug curve near 0.45 to 0.8 and the Tensile2d curves near 0.02 to 0.3. Bottom: two maps of the lug's node layers colored by the change of the boundary direction under a rotation."
 #| code-fold: true
 NODE = np.load(RES / "char" / "solids_ties_2026-10-18.npz")
-fig = plt.figure(figsize=(8.0, 7.4))
-gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 0.95], hspace=0.42, wspace=0.08)
+fig = plt.figure(figsize=(8.0, 6.6))
+gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 0.95], hspace=0.3, wspace=0.08)
 ax = fig.add_subplot(gs[0, :])
 gaps = [float(k) for k in LT["tie_fraction_by_rel_gap"]]
 for case, r in TIES["tensile2d"].items():
@@ -242,7 +253,7 @@ label_line(ax, gaps[-1], max(r["tie_fraction_by_rel_gap"]["1e-03"] for r in TIES
 g32 = [LT["float32_rounding_rel_gap_median"]] + [r["float32_rounding_rel_gap_median"] for r in TIES["tensile2d"].values()]
 ax.axvspan(min(g32), max(g32), color=GRID, zorder=0)
 ax.text(np.sqrt(min(g32) * max(g32)), 0.93, "float32\nrounding", ha="center", va="top", fontsize=8, color=INK2)
-ax.set_xscale("log"); ax.set_xticks(gaps); ax.set_xticklabels(["1e-7", "1e-6", "1e-5", "1e-4", "1e-3"])
+ax.set_xscale("log"); ax.set_xticks(gaps); ax.set_xticklabels([f"$10^{{{int(round(np.log10(g)))}}}$" for g in gaps]); ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
 ax.set_ylim(0, 1); ax.set_xlabel("relative gap between the two nearest boundary samples, $\\delta$ [–]")
 ax.set_ylabel("share of nodes\ntied within $\\delta$ [–]")
 ax.set_title("how many nodes tie for their nearest boundary sample", fontsize=9.5)
@@ -257,8 +268,8 @@ for col, (lay, name) in enumerate(((10, "top face (on the boundary)"), (5, "midd
     if col == 0: bx.set_ylabel("y [mm]")
     else: bx.set_yticklabels([])
     bx.set_title(f"{name}: {int(sw.sum())} of {int(m.sum())} switch", fontsize=9)
-cb = fig.colorbar(sc, ax=fig.axes[1:], orientation="horizontal", fraction=0.05, pad=0.2, aspect=40, ticks=[0, 45, 90, 135, 180]); cb.outline.set_visible(False)
-cb.set_label("turn of $u$ under the pose [deg]")
+cb = fig.colorbar(sc, ax=fig.axes[1:], orientation="horizontal", fraction=0.05, pad=0.26, aspect=40, ticks=[0, 45, 90, 135, 180]); cb.outline.set_visible(False)
+cb.set_label("turn of $\\hat\\nu$ under the pose [deg]")
 plt.show()
 ```
 
@@ -271,7 +282,7 @@ print(f"**The counts.** On this lug {100 * LT['tie_fraction_by_rel_gap']['1e-07'
       f"generic rotation and translation in float32, {LT['nearest_changes_under_pose_nodes']:,} nodes ({100 * LT['nearest_changes_under_pose_fraction']:.0f}%) "
       f"change their nearest sample, against {100 * TT['nearest_changes_under_pose_fraction']:.0f}% on Tensile2d. For "
       f"{LT['direction_change_over_30deg_nodes']:,} of them, {LT['direction_change_over_30deg_nodes'] - LT['direction_change_over_30deg_on_boundary_nodes']:,} "
-      f"in the interior, the direction $u$ turns by more than 30°; {LT['sign_flips_on_boundary_nodes']:,} of the "
+      f"in the interior, the direction $\\hat\\nu$ turns by more than 30°; {LT['sign_flips_on_boundary_nodes']:,} of the "
       f"{LT['n_on_boundary']:,} surface nodes also change the sign of their distance. Data: results/char/solids_ties_2026-10-18.json.")
 print()
 print("**The size of the input change tracks the size of the shift.** Each switched node presents ISLA with an "
@@ -281,11 +292,21 @@ print("**The size of the input change tracks the size of the shift.** Each switc
       "meshes on which ties are rare, and their rotated and translated scores reproduce the native ones (@sec-standing).")
 ```
 
+```{python}
+#| label: para-lug-precision
+#| output: asis
+TIE = json.load(open(RES / "char" / "lug_ties_2026-10-04.json")); T32, T64 = TIE["fp32"], TIE["fp64"]
+print(f"**Higher precision does not remove the effect, because the trained model depends on how the ties are broken.** On one trained ISLA "
+      f"lug model and one test lug (a study configuration, @tbl-lug-model-check), a forward pass in float64 shrinks the change under a quarter "
+      f"turn and a translation from {100 * T32['rot90_translate_rel_change']:.2f}% to {100 * T64['rot90_translate_rel_change']:.2f}% of the field, "
+      f"and raises the native error from {100 * T32['native_rel_err']:.2f}% to {100 * T64['native_rel_err']:.2f}%: another arithmetic breaks the "
+      "ties differently, and the model's output follows. The remedy is an input that is continuous at ties, not more bits.")
+```
+
 ::: {.callout-note collapse="true" title="Optional: the same mechanism seen through one trained model"}
 ```{python}
 #| label: tab-lug-model-check
 #| output: asis
-TIE = json.load(open(RES / "char" / "lug_ties_2026-10-04.json")); T32, T64 = TIE["fp32"], TIE["fp64"]
 rows = [("a quarter turn about a coordinate axis (exact in float32: a permutation of coordinates)", T32["rot90_rel_change"]),
         ("a 37° rotation", T32["rot37_rel_change"]),
         ("a translation by one RMS node radius", T32["translate_rel_change"]),
@@ -309,11 +330,7 @@ print(f"\n: One trained ISLA lug model on one test lug ({TIE['case']}), its von 
 #| output: asis
 print(f"@tbl-lug-model-check probes one trained model directly. A coordinate jitter of 1e-7 relative, with no motion at all, changes the "
       f"prediction by {100 * T32['jitter_1e-7_rel_change']:.2f}% of the field, exactly as much as a jitter a hundred times larger: once a tie "
-      "is broken the other way the change is the same, however small the push. A float64 forward pass shrinks the posed change to "
-      f"{100 * T64['rot90_translate_rel_change']:.2f}%, but it also moves the native prediction, whose error becomes "
-      f"{100 * T64['native_rel_err']:.2f}% of the field against {100 * T32['native_rel_err']:.2f}% in float32: the trained model has learned "
-      "the float32 tie-breaking of its training data, and a different arithmetic breaks the ties differently. Higher precision is "
-      "therefore not the remedy; an input that is continuous at ties is.")
+      "is broken the other way the change is the same, however small the push.")
 ```
 :::
 
@@ -345,7 +362,7 @@ print(f"\n: ISLA's von Mises error on the {N_TEST} test lugs with each lug's sur
 **The lug standing is one scalar field on one bracket family, three shape parameters and one load; its posed column measures ISLA's nearest-sample construction on a structured mesh, not a frame-dependent input.**
 
 - **The pose contract does not hold on this mesh.** ISLA's posed error is several times its native one through tied nearest samples, a property of the interior geometry input on structured meshes with nodes on boundaries and symmetry planes. An input that is continuous at ties, such as the exact distance and direction to the boundary surface, is the open design question that would remove it (@sec-open-questions).
-- **The native lead is a float32 reading.** The standing's checkpoints were scored in float32 only; how their ordering responds to another scoring precision, through the same ties, is not measured.
+- **The native lead is a float32 reading.** The standing's checkpoints were scored in float32 only. On a study model a float64 forward pass raises ISLA's native error several-fold through the same ties (@sec-lug-ties), so how the ordering responds to another scoring precision is not known.
 - **No tensor target and no geometry class change.** Tensile2d measures a tensor target (@sec-interior-tensile2d); the lug's shapes are one topology.
 - **The surface sampling law is measured only at a reduced budget**, and only for ISLA, since the baselines read no surface sample (@sec-lug-boundary-law).
 - **Not matched in cost**, and the published GINOT, Transolver and GNOT numbers are on the authors' split: comparable in kind, not in value.
