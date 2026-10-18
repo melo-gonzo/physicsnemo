@@ -13,7 +13,7 @@ The standing artifacts live in ``results/char/<file>.json`` and share one schema
 
 Conventions (STYLE.md):
 
-* a ratio is *baseline ÷ ISLA*, so a value above one favours ISLA;
+* a ratio is *baseline ÷ ISLA*, so a value above one favors ISLA;
 * a *shift* is an arm's error under a protocol divided by the same arm's native error;
 * the seed rule: one arm leads another on a field only if every seed of the one sits below every
   seed of the other *and* the seed means differ by at least the tie band (3%, the tie band of the
@@ -160,10 +160,10 @@ class Standing:
                 out.append(f"| {arch} ÷ ISLA | "
                            + " | ".join(" / ".join(fmt_ratio(self.ratio(arch, f, p)) for f in fields) for p in protocols) + " |")
         cap = (f": {setting}: the three architectures at their reference configurations, {flab}, "
-               f"area-weighted relative L2 error, seed means over two seeds, float32; "
+               f"relative L2 error (@sec-metrics), seed means over two seeds, float32; "
                + ", ".join(f"*{PROTOCOL[p]}*" for p in protocols)
                + " score one checkpoint per seed. How to read this: lower is better; a ratio row is baseline ÷ ISLA, "
-                 f"so a value above one favours ISLA. Data: {self.source}. {{#{label}}}")
+                 f"so a value above one favors ISLA. Data: {self.source}. {{#{label}}}")
         return "\n".join(out) + "\n\n" + cap + "\n"
 
 

@@ -32,13 +32,13 @@ So:
 
 | Part | Chapters | The reader leaves knowing |
 |---|---|---|
-| Front | `index.qmd` | the thesis in one paragraph; ISLA in one picture; the standing in one figure; the key of names and colours; three reading paths |
+| Front | `index.qmd` | the thesis in one paragraph; ISLA in one picture; the standing in one figure; the key of names and colors; three reading paths |
 | I The problem and the landscape | `01-problem`, `02-landscape` | the boundary-to-field operator and how a surrogate is scored, on an airfoil with an exact solution; how neural PDE surrogates work (attention as an integral operator, slice attention, neural operators, graph and point networks, equivariant networks) and the two gaps ISLA fills |
 | II How ISLA works | `03-isla`, `04-invariances`, `05-forward-pass` | each idea of ISLA with a picture on the airfoil; the two contracts (rigid motion; remeshing) as exact tests and as measurements on every dataset; the forward pass stage by stage with code, shapes, parameters and where the time and memory go on a GPU (the source of truth for the architecture) |
 | III Using ISLA | `06-using-isla`, `07-benchmark` | the configuration, the input contract, commands, sampler, checkpoints and cost; the baselines, the fairness rules, the datasets and how every number is scored |
 | IV Evidence | `08-standing`, `09`…`17` (one per dataset), `19-capacity` | the standing on one page, then each dataset in the same order (a)–(e) below, then capacity, scaling and cost |
 | V Limits and status | `20-limits`, `14-program-status` | what each claim does not say and what would settle each open question; the live ledger (the one chapter with dates) |
-| Appendices | `21-design`, `22-literature`, `18-notebook` | names, symbols, colours and the design decisions with their principle; what is new against the literature, with a bibliography; the dated lab notebook |
+| Appendices | `21-design`, `22-literature`, `18-notebook` | names, symbols, colors and the design decisions with their principle; what is new against the literature, with a bibliography; the dated lab notebook |
 
 `_quarto.yml` is the order of record. `14-program-status.qmd` and `18-notebook.qmd` belong
 to the program coordinator; chapter work never edits them.
@@ -118,9 +118,9 @@ state; $\pi_{is}$ read-back weight; $\hat u_i$ radial basis vector; $M$ slices (
 $N$ boundary tokens; $Q$ prediction points; $d$ spatial dimension. Definitions use $\equiv$.
 $S$ is reserved for global scalars, never the slice count.
 
-## Colour and mark semantics (from `palette.py`)
+## Color and mark semantics (from `palette.py`)
 
-| Concept | Colour | Marker / line |
+| Concept | Color | Marker / line |
 |---|---|---|
 | ISLA | `BLUE` | filled square, solid |
 | ISLA-DTT | `BLUE_LIGHT` | open square, dash-dot |
@@ -142,7 +142,7 @@ geometric maps `fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3`; learned maps
 
 ## Shared code
 
-- `palette.py`: colours, `STYLE`, house rcParams, plotting helpers, the running airfoil, and
+- `palette.py`: colors, `STYLE`, house rcParams, plotting helpers, the running airfoil, and
   the dataset figure loaders (`load_problem`, `load_samples`, `part`, `bc_segments`,
   `field_scatter`, `small_colorbar`, `bc_legend`).
 - `standing.py`: the one reader of the standing artifacts. `standing.DATASETS` names the
@@ -156,8 +156,8 @@ geometric maps `fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3`; learned maps
 - Bars start at zero; log axes only where the range spans a decade, with 1–2–5 ticks written out.
 - Multi-panel figures stack vertically and share the x-axis; no dual axes.
 - Seeds are dots on bars or bands on lines; the seed mean is the mark.
-- Renderings of fields (`figures/renderings/`): one named camera per dataset, a shared colour
-  scale across truth and models, the diverging map for errors, the colourbar labeled with the
+- Renderings of fields (`figures/renderings/`): one named camera per dataset, a shared color
+  scale across truth and models, the diverging map for errors, the colorbar labeled with the
   quantity and unit, the case id and each model's error on that case in the caption.
 - Table captions name the artifact; the `{#tbl-…}` label is on the caption line.
 

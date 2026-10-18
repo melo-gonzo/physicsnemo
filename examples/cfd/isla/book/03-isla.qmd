@@ -137,7 +137,7 @@ puts the three side by side.
 
 | | Transolver | GeoTransolver | ISLA |
 |---|---|---|---|
-| what a learned layer reads about position | coordinates $x_i$ in the dataset frame | coordinates, plus multi-scale neighbourhood features and a global geometry context | distances and cosines to slice anchors; no coordinate ever |
+| what a learned layer reads about position | coordinates $x_i$ in the dataset frame | coordinates, plus multi-scale neighborhood features and a global geometry context | distances and cosines to slice anchors; no coordinate ever |
 | a slice average | over points (count-weighted) | over points | over measure (a quadrature) |
 | a vector or tensor output | its components in the dataset frame | its components in the dataset frame | invariant coefficients times body-fixed basis vectors |
 | a rigid motion of the input | must be learned (or augmented) | must be learned | changes nothing: exact by construction |
@@ -677,7 +677,7 @@ silently. With the normalized read, $F_k$ depends on $h$ only through
 $\tilde h = \mathrm{LN}(h)$, which has unit RMS whatever $\lVert h \rVert$
 is, so $\lVert F_k(h) \rVert$ is bounded independently of the stream's size
 and the stream grows at most additively, by a bounded amount per layer.
-@fig-isla-stream-toy shows both behaviours on a toy stack with random
+@fig-isla-stream-toy shows both behaviors on a toy stack with random
 weights.
 
 ```{python}
@@ -829,7 +829,7 @@ plt.show()
 #|   soft assignment $\pi_{is}$ to the slice, as heat, for the three slices
 #|   that dominate the most tokens, seen from the side (left) and from below
 #|   (right). The star is the slice's anchor. How to read this: a slice is a
-#|   soft region, brightest at its core and fading over its neighbours; the
+#|   soft region, brightest at its core and fading over its neighbors; the
 #|   anchor is the region's weighted mean position and sits inside the body
 #|   when the region wraps around it. The largest territories of this layer
 #|   are on the wheels and the underbody. Each panel's color scale runs to

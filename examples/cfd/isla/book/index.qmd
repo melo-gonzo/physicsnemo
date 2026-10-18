@@ -109,7 +109,7 @@ plt.show()
 #| fig-cap: >
 #|   The standing of ISLA against both baselines at their reference
 #|   configurations, every dataset and headline field. Left: the native
-#|   mesh, as baseline ÷ ISLA, so a mark right of the line favours ISLA;
+#|   mesh, as baseline ÷ ISLA, so a mark right of the line favors ISLA;
 #|   GeoTransolver (red circles) and Transolver (amber triangles) at the
 #|   seed-mean ratio, the faint bar spanning every pairing of a baseline seed
 #|   with an ISLA seed; the gray band is the ±3% band inside which two
@@ -127,8 +127,8 @@ ax = axes[0]
 S.plot_native(ax)
 ax.set_xlim(0.45, 9.0); ax.set_xticks([0.5, 1, 2, 5]); ax.set_xticklabels(["0.5", "1", "2", "5"])
 ax.set_xlabel("native mesh: baseline error ÷ ISLA error [–]")
-ax.text(1.05, len(ROWS) - 0.15, "favours ISLA →", fontsize=8.5, color=INK2, va="bottom")
-ax.text(0.95, len(ROWS) - 0.15, "← favours the baseline", fontsize=8.5, color=INK2, va="bottom", ha="right")
+ax.text(1.05, len(ROWS) - 0.15, "favors ISLA →", fontsize=8.5, color=INK2, va="bottom")
+ax.text(0.95, len(ROWS) - 0.15, "← favors the baseline", fontsize=8.5, color=INK2, va="bottom", ha="right")
 ax = axes[1]
 # one row per dataset, aligned with that dataset's first headline row on the left
 first = {}
@@ -169,13 +169,13 @@ The same picture, with every seed, the scoring under a uniform point cloud
 and the full numbers, is @sec-standing. The scope of every claim on this
 page is in @sec-limits.
 
-## Names and colours {#sec-key-index}
+## Names and colors {#sec-key-index}
 
 The book names three architectures, always at their reference
-configurations unless a caption says otherwise, and gives each a colour and
+configurations unless a caption says otherwise, and gives each a color and
 a marker it keeps in every figure.
 
-| | colour and mark | reference configuration |
+| | color and mark | reference configuration |
 |---|---|---|
 | **ISLA** | blue, filled square | width 512, 12 layers, 512 slices, learning rate 3.75e-4, 200,000 training cells |
 | **ISLA-DTT** | light blue, open square | ISLA with read-only prediction points (interior tasks) |
@@ -183,9 +183,9 @@ a marker it keeps in every figure.
 | **Transolver** | amber, filled triangle | width 512, 16 layers, learning rate 1e-3, 100,000 training cells |
 
 : The architectures of this book. How to read this: a ratio is always
-*baseline ÷ ISLA*, so above one favours ISLA; errors are the area-weighted
+*baseline ÷ ISLA*, so above one favors ISLA; errors are the area-weighted
 relative L2 of @sec-metrics, scored in float32 and averaged over two seeds.
-Every name, symbol and colour is in @sec-principled-decisions.
+Every name, symbol and color is in @sec-principled-decisions.
 {#tbl-key-index}
 
 ## How to read this book {#sec-how-to-read}
