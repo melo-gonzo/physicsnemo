@@ -1,4 +1,5 @@
-"""A2-RERUN artifacts (2026-10-17, #sec-nb-a2-rerun-jeb-t2d, #sec-nb-a2-rerun-drivaerml): the CHAR-PROTOCOLS record of each
+"""A2-RERUN artifacts (2026-10-17, #sec-nb-a2-rerun-jeb-t2d, #sec-nb-a2-rerun-drivaerml,
+#sec-nb-a2-rerun-suv-lug): the CHAR-PROTOCOLS record of each
 rerun dataset with ISLA's arm replaced by the A2 reruns (the reference configuration with the normalized slice reads, seeds 42
 and 43, final checkpoints, the CHAR scorer: float32, native mesh / uniform point cloud / rotated + translated). The A2 scores
 are the reductions committed in results/campaigns_2026-10-17/a2r/<stem>_a2_scores.json (copied unmodified from
@@ -16,7 +17,8 @@ SRC = os.path.join(os.path.dirname(R), "campaigns_2026-10-17", "a2r")
 ISLA_ARM = "ISLA 512 with 512 slices"
 # CHAR dataset stem -> (A2 score file stem, the arm of that file holding A2, or None for the char_a2_table.py layout)
 DATASETS = {"drivaerml_surface": ("drivaerml_surface", None), "drivaerml_volume": ("drivaerml_volume", None),
-            "tensile2d": ("tensile2d", None), "deepjeb_surface": ("deepjeb", "ISLA A2 at 3.75e-4 (jbn2)")}
+            "tensile2d": ("tensile2d", None), "deepjeb_surface": ("deepjeb", "ISLA A2 at 3.75e-4 (jbn2)"),
+            "shift_suv_surface": ("shift_suv_surface", None), "lug": ("lug", None)}
 
 for ds, (stem, a2_arm) in DATASETS.items():
     C = json.load(open(f"{R}/{ds}.json")); old = C["arms"][C["isla_arm"]]
