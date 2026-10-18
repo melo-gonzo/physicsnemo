@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`examples/cfd/rotor37_geotransolver`)
 - Adds an experimental, independently implemented SMART operator with sampled
   geometry encoding, reusable latent contexts, and chunked field decoding.
+- Adds experimental `LookSAM` and `LookLayerSAM` optimizer wrappers
+  (`physicsnemo.experimental.optim`), efficient sharpness-aware minimization
+  that wraps any base optimizer and supports DDP, FSDP2, and `ShardTensor`
+  domain parallelism.
 
 - Adds standalone FLARE++ attention and model APIs, with input-conditioned
   dynamic routing, plus a ``GALE_FPP`` backend for using the same mixer inside
