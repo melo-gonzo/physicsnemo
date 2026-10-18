@@ -114,7 +114,7 @@ print(f"In one paragraph: at the 210-wing rung{'' if HL.ds.reference else ', wit
 
 ## The problem: 180 wings at ten angles {#sec-dataset-hilift}
 
-**HiLiftAeroML is 1,800 compressible RANS solutions of one transport aircraft in landing configuration: 180 settings of its slat and flap, each flown at ten angles of attack from 4° to 22°.** A high-lift wing is three wings in tandem. The *slat* is a small airfoil ahead of the main element's leading edge, the *flap* a second one behind its trailing edge, and the narrow *gaps* between them let high-pressure air from the lower surface blow onto the upper surface of the next element, re-energizing its boundary layer. The arrangement lets the wing reach a lift coefficient far above what a clean wing can, at the price of the most intricate flow on any surface in the book: each element has its own suction peak, its own boundary layer and its own wake, and the wakes of the upstream elements flow over the downstream ones. @fig-problem-hilift shows one case.
+**HiLiftAeroML is 1,800 compressible RANS solutions of one transport aircraft in high-lift configuration: 180 settings of its slat and flap, each flown at ten angles of attack from 4° to 22°.** A high-lift wing is three wings in tandem. The *slat* is a small airfoil ahead of the main element's leading edge, the *flap* a second one behind its trailing edge, and narrow *gaps* separate them. Each element starts a fresh boundary layer, and each upstream element's trailing edge sits in the fast flow induced by the element behind it, which relieves the pressure recovery its boundary layer must survive (the effects A. M. O. Smith named in his analysis of multi-element airfoils). The arrangement lets the wing reach a lift coefficient far above that of a single-element wing, at the price of the most intricate flow on any surface in the book: each element has its own suction peak, its own boundary layer and its own wake, and the wakes of the upstream elements flow over the downstream ones. @fig-problem-hilift shows one case.
 
 ```{python}
 #| label: fig-problem-hilift
@@ -154,10 +154,59 @@ plt.show()
 ```{python}
 #| label: para-hilift-problem-numbers
 #| output: asis
+Dcar, _ = load_problem("drivaer")
+deep = np.percentile(cp, 1) / np.percentile(Dcar["surf_cp"], 1)
 print(f"On this case the most negative pressure coefficient among the drawn cells is {cp.min():.1f}, and 1% of them sit below "
-      f"{np.percentile(cp, 1):.1f}, against a stagnation value near one: the pressure field spans an order of magnitude more than on the "
-      "car, and its extremes sit on the slat and the leading edges, on a small share of the area. The flow is compressible, and the far "
+      f"{np.percentile(cp, 1):.1f}, against a stagnation value near one: the suction runs {deep:.1f} times deeper than on the DrivAerML "
+      "car of @fig-problem-drivaer, and its extremes sit on the slat and the leading edges, on a small share of the area. The flow is compressible, and the far "
       "field's Mach and Reynolds numbers are the same in every case.")
+```
+
+**A cut through the wing shows the three elements at work.** @fig-hilift-section takes the sampled cells in a thin streamwise slab at 40% of the half-span and plots their pressure coefficient against $x$, the way a wind-tunnel engineer reads a pressure-tapped section. Each element carries its own suction peak at its own leading edge, the main element's by far the strongest, and each recovers toward its trailing edge, where the next element takes over.
+
+```{python}
+#| label: fig-hilift-section
+#| fig-cap: >
+#|   A streamwise section through the HiLiftAeroML wing of
+#|   @fig-problem-hilift (16° angle of attack): the sampled cells within
+#|   0.15 m of the plane at 40% of the half-span, without the nacelle that
+#|   the plane also cuts.
+#|   Top: the pressure coefficient $C_p$ against $x$, suction up. Bottom: the
+#|   same cells in the $x$–$z$ plane, the section's shape, with the three
+#|   elements named. How to read this: one curve per element surface, upper
+#|   and lower; the suction peak of each element sits at its own leading edge
+#|   and the trailing edge of each upstream element sits over the next one;
+#|   the dots are a random subset of the cells, so gaps in a curve are
+#|   sampling, not flow. Data:
+#|   results/problem_figures_2026-09-22/hilift.npz.
+bbH = H["surf_bbox"]; y0 = bbH[0, 1] + 0.4 * (bbH[1, 1] - bbH[0, 1])
+mS = (np.abs(sp[:, 1] - y0) < 0.15)
+zc_ = np.median(sp[mS, 2]); xw = sp[mS & (sp[:, 2] > zc_ - 0.0), 0]
+wing = mS & (sp[:, 0] > np.percentile(sp[mS, 0], 1)) & (sp[:, 2] > 4.0)
+xs_, zs_, cs_ = sp[wing, 0], sp[wing, 2], cp[wing]
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 6.0), sharex=True, gridspec_kw=dict(height_ratios=[1.6, 1.0], hspace=0.08))
+ax1.plot(xs_, cs_, "o", ms=2.4, color=INK, alpha=0.8, lw=0)
+ax1.axhline(0, color=BASELINE, lw=0.8); ax1.invert_yaxis()
+ax1.set_ylabel("$C_p$ [–]\n(suction up)", rotation=0, ha="right", va="center")
+x0_, x1_ = xs_.min(), xs_.max(); L_ = x1_ - x0_
+for lo, hi, name, dx, dy in ((0.0, 0.08, "slat", -0.04, -1.3), (0.08, 0.80, "main element", 0.06, -0.2), (0.80, 1.0, "flap", -0.02, -1.4)):
+    m = (xs_ >= x0_ + lo * L_) & (xs_ <= x0_ + hi * L_)
+    if np.any(m):
+        k = np.argmin(cs_[m])
+        ax1.annotate(f"{name}:\nsuction peak {cs_[m][k]:.1f}", xy=(xs_[m][k], cs_[m][k]), xytext=(xs_[m][k] + dx * L_, cs_[m][k] + dy),
+                     ha="left", fontsize=8, color=INK2, arrowprops=dict(arrowstyle="-", color=MUTED, lw=0.7), path_effects=halo())
+ax1.set_ylim(1.4, min(cs_) - 1.2)
+ax1.set_title(f"$C_p$ on the section at y = {y0:.1f} m, angle of attack {float(Hm['aoa_deg']):.0f}°", fontsize=9.5)
+ax2.plot(xs_, zs_, "o", ms=2.0, color=INK, lw=0)
+ax2.set_aspect("equal"); ax2.grid(False)
+for s_ in ax2.spines.values(): s_.set_visible(False)
+ax2.set_xlabel("x [m]"); ax2.set_ylabel("z [m]")
+for frac_, name in ((0.02, "slat"), (0.45, "main element"), (0.93, "flap")):
+    xq = x0_ + frac_ * L_; m = np.abs(xs_ - xq) < 0.03 * L_
+    if np.any(m):
+        ax2.text(xq, zs_[m].min() - 0.25, name, ha="center", va="top", fontsize=8.5, color=INK2)
+ax2.set_ylim(zs_.min() - 0.8, zs_.max() + 0.2)
+plt.show()
 ```
 
 ```{python}
@@ -168,8 +217,8 @@ fa = Hsm["flap_area_share_all"]; cs = Hsm["cases"]
 print(f"**The angle changes the flow more than the geometry does.** @fig-hilift-samples shows three geometries at the two ends of the "
       f"angle range, {Hsm['aoas_deg'][0]:.0f}° and {Hsm['aoas_deg'][1]:.0f}°. The geometries are those with the smallest, the median and "
       f"the largest share of the wetted area on the flap ({100 * fa['min']:.1f}%, {100 * fa['median']:.1f}% and {100 * fa['max']:.1f}% "
-      f"of the surface) among the {fa['n']} geometries that carry an element-label file, a proxy for the flap setting. Down a column the "
-      "suction on the upper surface deepens with the angle on every geometry; across a row the change is confined to the flap and the "
+      f"of the surface) among the {fa['n']} geometries that carry an element-label file, a proxy for the flap setting. Along a row the "
+      "suction on the upper surface deepens with the angle on every geometry; down a column the change is confined to the flap and the "
       "slat. The far-field speed is the same in every case, so the angle enters the model only through the direction $\\hat g_1$.")
 ```
 
@@ -269,8 +318,8 @@ ax.text(1260 + 90, 0, "val\n180", ha="center", va="center", fontsize=9, color=IN
 ax.text(1440 + 180, 0, "sealed test 360", ha="center", va="center", fontsize=9, color=INK)
 ax.set_xlim(0, 1800); ax.set_ylim(-0.6, 0.6); ax.set_yticks([]); ax.grid(False)
 ax.spines["left"].set_visible(False)
-ax.set_xticks([0, 35, 210, 510, 1260, 1440, 1800])
-ax.set_xticklabels(["0", "35", "210", "510", "1,260", "1,440", "1,800"], fontsize=8.5)
+ax.set_xticks([35, 210, 510, 1260, 1440, 1800])
+ax.set_xticklabels(["35", "210", "510", "1,260", "1,440", "1,800"], fontsize=8.5)
 ax.set_xlabel("cases [count]")
 fig.tight_layout()
 plt.show()
