@@ -452,7 +452,8 @@ print(": Surface pressure error on the DrivAerML Surface task (435 training cars
       "float32, two seeds) with every training and validation case in the dataset's pose, and with every case rotated into its own "
       "random pose. GeoTransolver and Transolver are 256 wide and trained with rotation augmentation in the posed rows; ISLA "
       "trains without augmentation in both columns. How to read this: the last column is what exact covariance buys against "
-      "augmentation when cases arrive in arbitrary poses; posed ÷ native is each model's own cost of the setting. "
+      "augmentation when cases arrive in arbitrary poses; posed ÷ native is each model's own cost of the setting; the "
+      "configurations are not matched in size (see the text). "
       + tag(384, 256, "5e-4") + " Data: results/p200k_pose_r1_2026-09-23.json, which copies the baselines' rows from "
       "results/p200k_pose_reduction_2026-09-19.json. {#tbl-pose-200k}")
 ```
@@ -640,7 +641,7 @@ print(out)
 print(": Surface pressure error under the 10:1 biased draw divided by the same checkpoint's error under an independent native "
       "draw, float32, seed means over two seeds, 48 validation cars and 180 validation wings. GeoTransolver and Transolver are "
       "256 wide. How to read this: 1 is a prediction that depends on the surface only; the ISLA rows at two counts on the "
-      "same checkpoint show the residual falling as the sample grows. " + tag(384, 256, "5e-4")
+      "same checkpoint show the residual falling as the sample grows; the table does not show the errors themselves. " + tag(384, 256, "5e-4")
       + " Data: results/consistency_r1_2026-09-23.json; results/trainarea_dr_reduction_2026-09-20.json; "
         "results/wingbench_200k_reduction_2026-09-19.json. {#tbl-density}")
 ```
@@ -727,7 +728,8 @@ for label, m, _ in ARMS:
 print(out)
 print(": The training-law ratio: the error of the checkpoint trained under the area-proportional law divided by that of the "
       "same configuration trained under the native law, both scored on one independent native draw (float32, seed means; the "
-      "seed-paired ratios in parentheses). How to read this: 1 means the trained function does not depend on the law. "
+      "seed-paired ratios in parentheses). How to read this: 1 means the trained function does not depend on the law; the "
+      "errors themselves are in @fig-training-law. "
       + tag(192, 256, "1e-3", linear=True) + " Data: results/trainarea_reduction_2026-09-20.json; "
         "results/trainarea_dr_reduction_2026-09-20.json. {#tbl-consistency-40k}")
 ```
@@ -806,7 +808,7 @@ plt.show()
 #|   floor is below one for both models because soft boundaries move under any resampling; what separates them is the
 #|   extra loss under the biased draw. ISLA seed 42 (its block 0 routes every token to one slice, so both agreements there
 #|   are 1); GeoTransolver at 256 wide averaged over its eight heads; four validation cars, 100,000 expected cells per
-#|   draw. Instrument: ISLA at 384 wide, 256 slices, 5e-4, raw slice reads (@sec-study-configurations). Data:
+#|   draw. The figure does not show how far the slices move, which @tbl-territory gives. Instrument: ISLA at 384 wide, 256 slices, 5e-4, raw slice reads (@sec-study-configurations). Data:
 #|   results/territory_r1_2026-09-23.json.
 #| code-fold: true
 fig, ax = plt.subplots(figsize=(8.0, 3.6))
@@ -835,7 +837,7 @@ print(": Slice territories under a change of draw, medians over the twelve slice
       "draw; the excess is floor minus biased agreement; the displacement is the RMS motion of a slice's anchor (ISLA) or "
       "weight-averaged centroid (GeoTransolver, 256 wide) between the native and the biased draw, with the same motion between "
       "two native draws as its floor. How to read this: on the wings both checkpoints route softly, so only the displacement "
-      "separates them there. " + tag(384, 256, "5e-4") + " Data: results/territory_r1_2026-09-23.json; "
+      "separates them there; the table does not say which slices matter for the prediction. " + tag(384, 256, "5e-4") + " Data: results/territory_r1_2026-09-23.json; "
       "results/territory_r1_200k_2026-09-23.json; results/territory_wings_r1_2026-09-23.json. {#tbl-territory}")
 ```
 
