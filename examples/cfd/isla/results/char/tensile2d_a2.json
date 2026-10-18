@@ -1,0 +1,374 @@
+{
+ "protocol": "A2-RERUN artifacts (2026-10-17, #sec-nb-a2-rerun-jeb-t2d, #sec-nb-a2-rerun-drivaerml): the CHAR-PROTOCOLS record of each\nrerun dataset with ISLA's arm replaced by the A2 reruns (the reference configuration with the normalized slice reads, seeds 42\nand 43, final checkpoints, the CHAR scorer: float32, native mesh / uniform point cloud / rotated + translated). The A2 scores\nare the reductions committed in results/campaigns_2026-10-17/a2r/<stem>_a2_scores.json (copied unmodified from\nscratch/isla-a2-rerun-2026-10-17/, written there by char_a2_table.py and deepjeb_a2_table.py); the baselines' arms are the CHAR\nrecord's, unchanged (GeoTransolver and Transolver are not rerun). Writes results/char/<dataset>_a2.json in the schema of\nresults/char/<dataset>.json (protocols, fields, isla_arm, arms[arm][protocol][field] = {mean, per_seed, n_cases, n_seeds},\ncomplete), so the chapters' protocol_table() and char_arms() read it unchanged, plus the key \"raw_read_isla\", the CHAR record's\nISLA arm (raw slice reads), which protocol_table ignores. n_cases is the A2 record's where it has one (DeepJEB++), else the CHAR\nISLA arm's: the A2 lanes are scored on the same validation split by the same scorer.\nusage: python a2r_protocol_artifacts_2026-10-17.py",
+ "protocols": {
+  "native": "native mesh",
+  "area": "uniform point cloud",
+  "posed": "rotated + translated"
+ },
+ "fields": {
+  "stress_l2": "stress (Frobenius)",
+  "displacement_l2": "displacement",
+  "q_l2": "plastic strain"
+ },
+ "isla_arm": "ISLA 512 with 512 slices",
+ "arms": {
+  "ISLA 512 with 512 slices": {
+   "native": {
+    "stress_l2": {
+     "mean": 0.007808386087417602,
+     "per_seed": {
+      "42": 0.007023336291313171,
+      "43": 0.008593435883522033
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "displacement_l2": {
+     "mean": 0.00687919557094574,
+     "per_seed": {
+      "42": 0.006794339418411255,
+      "43": 0.006964051723480224
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "q_l2": {
+     "mean": 0.41451366424560543,
+     "per_seed": {
+      "42": 0.36867862701416015,
+      "43": 0.46034870147705076
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "stress_l2": {
+     "mean": 0.007808425128459931,
+     "per_seed": {
+      "42": 0.007023336887359619,
+      "43": 0.008593513369560242
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "displacement_l2": {
+     "mean": 0.0068792209029197695,
+     "per_seed": {
+      "42": 0.006794339418411255,
+      "43": 0.006964102387428284
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "q_l2": {
+     "mean": 0.4145136833190918,
+     "per_seed": {
+      "42": 0.36867862701416015,
+      "43": 0.46034873962402345
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "stress_l2": {
+     "mean": 0.008511366844177245,
+     "per_seed": {
+      "42": 0.007879174947738647,
+      "43": 0.009143558740615844
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "displacement_l2": {
+     "mean": 0.007530777156352997,
+     "per_seed": {
+      "42": 0.007355707883834839,
+      "43": 0.0077058464288711544
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "q_l2": {
+     "mean": 0.41563560485839846,
+     "per_seed": {
+      "42": 0.37182640075683593,
+      "43": 0.4594448089599609
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    }
+   }
+  },
+  "GeoTransolver 256": {
+   "native": {
+    "stress_l2": {
+     "mean": 0.005322745740413666,
+     "per_seed": {
+      "42": 0.005500827431678772,
+      "43": 0.0051446640491485595
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "displacement_l2": {
+     "mean": 0.00401639699935913,
+     "per_seed": {
+      "42": 0.0037513402104377746,
+      "43": 0.004281453788280487
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "q_l2": {
+     "mean": 0.4603334045410156,
+     "per_seed": {
+      "42": 0.5678118133544922,
+      "43": 0.3528549957275391
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "stress_l2": {
+     "mean": 0.005322745740413666,
+     "per_seed": {
+      "42": 0.005500827431678772,
+      "43": 0.0051446640491485595
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "displacement_l2": {
+     "mean": 0.00401639699935913,
+     "per_seed": {
+      "42": 0.0037513402104377746,
+      "43": 0.004281453788280487
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "q_l2": {
+     "mean": 0.4603334045410156,
+     "per_seed": {
+      "42": 0.5678118133544922,
+      "43": 0.3528549957275391
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "stress_l2": {
+     "mean": 1.0768090820312501,
+     "per_seed": {
+      "42": 1.0737645721435547,
+      "43": 1.0798535919189454
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "displacement_l2": {
+     "mean": 1.2581548690795898,
+     "per_seed": {
+      "42": 1.27351318359375,
+      "43": 1.2427965545654296
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "q_l2": {
+     "mean": 3.1846775817871094,
+     "per_seed": {
+      "42": 3.443570251464844,
+      "43": 2.925784912109375
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    }
+   }
+  },
+  "Transolver 512 x 16": {
+   "native": {
+    "stress_l2": {
+     "mean": 0.006891702711582183,
+     "per_seed": {
+      "42": 0.007217332124710083,
+      "43": 0.006566073298454284
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "displacement_l2": {
+     "mean": 0.005506532490253449,
+     "per_seed": {
+      "42": 0.006108229160308838,
+      "43": 0.004904835820198059
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "q_l2": {
+     "mean": 0.2304072666168213,
+     "per_seed": {
+      "42": 0.21090150833129884,
+      "43": 0.24991302490234374
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "stress_l2": {
+     "mean": 0.006891702711582183,
+     "per_seed": {
+      "42": 0.007217332124710083,
+      "43": 0.006566073298454284
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "displacement_l2": {
+     "mean": 0.005506532490253449,
+     "per_seed": {
+      "42": 0.006108229160308838,
+      "43": 0.004904835820198059
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "q_l2": {
+     "mean": 0.2304072666168213,
+     "per_seed": {
+      "42": 0.21090150833129884,
+      "43": 0.24991302490234374
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "stress_l2": {
+     "mean": 1.006049575805664,
+     "per_seed": {
+      "42": 1.0062427520751953,
+      "43": 1.0058563995361327
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "displacement_l2": {
+     "mean": 1.2364633178710938,
+     "per_seed": {
+      "42": 1.2483640289306641,
+      "43": 1.2245626068115234
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "q_l2": {
+     "mean": 4.629472351074218,
+     "per_seed": {
+      "42": 4.733234252929687,
+      "43": 4.52571044921875
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    }
+   }
+  }
+ },
+ "complete": true,
+ "raw_read_isla": {
+  "label": "ISLA 512 with 512 slices",
+  "native": {
+   "stress_l2": {
+    "mean": 0.013755245804786681,
+    "per_seed": {
+     "42": 0.013421872854232788,
+     "43": 0.014088618755340575
+    },
+    "n_cases": 100,
+    "n_seeds": 2
+   },
+   "displacement_l2": {
+    "mean": 0.013255044221878051,
+    "per_seed": {
+     "42": 0.014674532413482665,
+     "43": 0.011835556030273437
+    },
+    "n_cases": 100,
+    "n_seeds": 2
+   },
+   "q_l2": {
+    "mean": 0.3277963447570801,
+    "per_seed": {
+     "42": 0.34767513275146483,
+     "43": 0.30791755676269533
+    },
+    "n_cases": 100,
+    "n_seeds": 2
+   }
+  },
+  "area": {
+   "stress_l2": {
+    "mean": 0.013755257129669188,
+    "per_seed": {
+     "42": 0.013421874046325683,
+     "43": 0.014088640213012696
+    },
+    "n_cases": 100,
+    "n_seeds": 2
+   },
+   "displacement_l2": {
+    "mean": 0.013255086541175843,
+    "per_seed": {
+     "42": 0.014674545526504516,
+     "43": 0.011835627555847168
+    },
+    "n_cases": 100,
+    "n_seeds": 2
+   },
+   "q_l2": {
+    "mean": 0.3277963352203369,
+    "per_seed": {
+     "42": 0.3476751708984375,
+     "43": 0.30791749954223635
+    },
+    "n_cases": 100,
+    "n_seeds": 2
+   }
+  },
+  "posed": {
+   "stress_l2": {
+    "mean": 0.01389392077922821,
+    "per_seed": {
+     "42": 0.013640222549438476,
+     "43": 0.014147619009017945
+    },
+    "n_cases": 100,
+    "n_seeds": 2
+   },
+   "displacement_l2": {
+    "mean": 0.01321373701095581,
+    "per_seed": {
+     "42": 0.014833176136016845,
+     "43": 0.011594297885894776
+    },
+    "n_cases": 100,
+    "n_seeds": 2
+   },
+   "q_l2": {
+    "mean": 0.32783578872680663,
+    "per_seed": {
+     "42": 0.34908802032470704,
+     "43": 0.3065835571289062
+    },
+    "n_cases": 100,
+    "n_seeds": 2
+   }
+  }
+ }
+}

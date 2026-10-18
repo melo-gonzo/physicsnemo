@@ -1,0 +1,79 @@
+{
+ "protocol": "A2-RERUN: reduce the a2r scores (scores/<run>/<protocol>/<run>/metrics.jsonl, fetched from LHR $T/evals_a2r; scorer\nkernel/a2r/score.sbatch, a copy of the CHAR-PROTOCOLS scorer) exactly as results/char/protocol_artifacts_2026-10-03.py does\n(infer_summary, else the mean of the per-sample infer_step rows, last row per sample id) and compare with the CHAR record of\nthe dataset (old reference ISLA and the baselines). usage: python char_a2_table.py <stem> <char json> (e.g. a2r_t2dz_isla tensile2d)",
+ "fields": {
+  "pressure_l2": "pressure",
+  "velocity_l2": "velocity",
+  "nut_l2": "eddy viscosity"
+ },
+ "a2": {
+  "native": {
+   "pressure_l2": {
+    "mean": 0.040858518332242966,
+    "per_seed": {
+     "42": 0.04131508866945902,
+     "43": 0.04040194799502691
+    }
+   },
+   "velocity_l2": {
+    "mean": 0.06595566868782043,
+    "per_seed": {
+     "42": 0.06621550520261128,
+     "43": 0.06569583217302959
+    }
+   },
+   "nut_l2": {
+    "mean": 0.08806381126244862,
+    "per_seed": {
+     "42": 0.08946662147839864,
+     "43": 0.08666100104649861
+    }
+   }
+  },
+  "area": {
+   "pressure_l2": {
+    "mean": 0.19603749116261798,
+    "per_seed": {
+     "42": 0.18128442764282227,
+     "43": 0.21079055468241373
+    }
+   },
+   "velocity_l2": {
+    "mean": 0.3469758133093516,
+    "per_seed": {
+     "42": 0.31425140301386517,
+     "43": 0.37970022360483807
+    }
+   },
+   "nut_l2": {
+    "mean": 0.4826085567474365,
+    "per_seed": {
+     "42": 0.5750472942988077,
+     "43": 0.39016981919606525
+    }
+   }
+  },
+  "posed": {
+   "pressure_l2": {
+    "mean": 0.040862789998451866,
+    "per_seed": {
+     "42": 0.041317502657572426,
+     "43": 0.04040807733933131
+    }
+   },
+   "velocity_l2": {
+    "mean": 0.06599079817533493,
+    "per_seed": {
+     "42": 0.06625109910964966,
+     "43": 0.0657304972410202
+    }
+   },
+   "nut_l2": {
+    "mean": 0.08807075520356496,
+    "per_seed": {
+     "42": 0.08947690327962239,
+     "43": 0.08666460712750752
+    }
+   }
+  }
+ }
+}

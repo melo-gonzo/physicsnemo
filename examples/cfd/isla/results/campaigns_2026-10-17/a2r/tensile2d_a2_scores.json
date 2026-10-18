@@ -1,0 +1,79 @@
+{
+ "protocol": "A2-RERUN: reduce the a2r scores (scores/<run>/<protocol>/<run>/metrics.jsonl, fetched from LHR $T/evals_a2r; scorer\nkernel/a2r/score.sbatch, a copy of the CHAR-PROTOCOLS scorer) exactly as results/char/protocol_artifacts_2026-10-03.py does\n(infer_summary, else the mean of the per-sample infer_step rows, last row per sample id) and compare with the CHAR record of\nthe dataset (old reference ISLA and the baselines). usage: python char_a2_table.py <stem> <char json> (e.g. a2r_t2dz_isla tensile2d)",
+ "fields": {
+  "stress_l2": "stress (Frobenius)",
+  "displacement_l2": "displacement",
+  "q_l2": "plastic strain"
+ },
+ "a2": {
+  "native": {
+   "stress_l2": {
+    "mean": 0.007808386087417602,
+    "per_seed": {
+     "42": 0.007023336291313171,
+     "43": 0.008593435883522033
+    }
+   },
+   "displacement_l2": {
+    "mean": 0.00687919557094574,
+    "per_seed": {
+     "42": 0.006794339418411255,
+     "43": 0.006964051723480224
+    }
+   },
+   "q_l2": {
+    "mean": 0.41451366424560543,
+    "per_seed": {
+     "42": 0.36867862701416015,
+     "43": 0.46034870147705076
+    }
+   }
+  },
+  "area": {
+   "stress_l2": {
+    "mean": 0.007808425128459931,
+    "per_seed": {
+     "42": 0.007023336887359619,
+     "43": 0.008593513369560242
+    }
+   },
+   "displacement_l2": {
+    "mean": 0.0068792209029197695,
+    "per_seed": {
+     "42": 0.006794339418411255,
+     "43": 0.006964102387428284
+    }
+   },
+   "q_l2": {
+    "mean": 0.4145136833190918,
+    "per_seed": {
+     "42": 0.36867862701416015,
+     "43": 0.46034873962402345
+    }
+   }
+  },
+  "posed": {
+   "stress_l2": {
+    "mean": 0.008511366844177245,
+    "per_seed": {
+     "42": 0.007879174947738647,
+     "43": 0.009143558740615844
+    }
+   },
+   "displacement_l2": {
+    "mean": 0.007530777156352997,
+    "per_seed": {
+     "42": 0.007355707883834839,
+     "43": 0.0077058464288711544
+    }
+   },
+   "q_l2": {
+    "mean": 0.41563560485839846,
+    "per_seed": {
+     "42": 0.37182640075683593,
+     "43": 0.4594448089599609
+    }
+   }
+  }
+ }
+}
