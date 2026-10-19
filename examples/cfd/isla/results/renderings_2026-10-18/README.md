@@ -74,9 +74,10 @@ ISLA A2 reference: `a2r_dr_isla_seed42`, `a2r_vol_isla_seed42` (trained on JHB, 
 cells), `cl_r_{vol,suv,t2dz,lug,jeb}_{gt,t}`, `afu_r_{gt,t}`, all seed 42, copied from AGA. Each row is the scorer's
 infer.py command (snapshot, recipe, venv, cells) for that run.
 
-## Pending at hand-off (see the lane report)
+## Pending (2026-10-19)
 
-- DrivAerML Surface rendered 2026-10-19 (above).
-- All 24 rows of `scripts/fig_rows.tsv` are dumped (LHR jobs 271987 and 275252): `$F/dump/<tag>/<protocol>/*.npz` with
-  the scorer's metrics.jsonl beside each, copied to the local scratch `fig/dump/`; only AirfRANS is packed and rendered.
+- Rendered: every dumped dataset (DrivAerML Surface incl. the posed protocol, DrivAerML Volume, SHIFT-SUV, lug,
+  Tensile2d, DeepJEB++, AirfRANS). The STLs/surfaces the renderers read are in the local scratch `fig/geom/` (copied from
+  LHR; not committed). The LHR checkpoint copies `$F/runs` (5.0 GB) were deleted on 2026-10-19; `$F/dump` (118 MB) is kept
+  as the source the jsons cite.
 - Not started: HiLift (dataset not on LHR; A2 lanes at epoch 285/500 on JHB), AeroZoo mid-span planes, hero view.
