@@ -534,7 +534,8 @@ else:
           "@tbl-aerozoo-splits, under the protocol of @sec-aerozoo-measured, read by the seed rule.")
     print()
     print(QUESTIONS)
-    print("Scored on the raw-read variant of ISLA and ISLA-DTT, whose training loses its validation minimum (@tbl-aerozoo-training), the "
+    print("Scored on ISLA and ISLA-DTT checkpoints with the raw slice reads, the variant whose ISLA training loses its validation minimum "
+          "(@tbl-aerozoo-training), the "
           f"registered predictions read: on `full`, GeoTransolver ÷ ISLA is {PR['P1']['velocity_ratio']:.2f} on velocity and "
           f"{PR['P1']['pressure_ratio']:.2f} on pressure, against a bar of at least 1.2 on velocity and at most 0.9 on pressure "
           f"({PR['P1']['verdict']}); on the enclosure split ISLA's penalty is {P2F['velocity_l2']['isla_penalty']:.2f} on velocity "

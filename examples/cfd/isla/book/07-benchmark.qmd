@@ -450,8 +450,8 @@ print(": The datasets of the book. $K$: global unit directions; $S$: global scal
 #|   Mises stress at the nodes, projected along the thickness. DeepJEB++: the von Mises stress on one bracket's surface. How
 #|   to read this: colors are reference CFD and FEM fields, not predictions; each panel has its own color scale and its own
 #|   length scale, and surfaces are drawn from a random subset of their cells, so dot density follows the mesh, not the
-#|   field. The SHIFT-SUV panel is a fastback; every model trains and is scored on the estate family (@sec-shift-suv). Data:
-#|   results/problem_figures_2026-09-22/*.npz (DeepJEB++: results/sample_figures_2026-10-02/deepjeb.npz).
+#|   field. The SHIFT-SUV panel is an estate, the family on which every model trains and is scored (@sec-shift-suv). Data:
+#|   results/problem_figures_2026-09-22/*.npz (SHIFT-SUV and DeepJEB++: results/sample_figures_2026-10-02/shift_suv.npz, deepjeb.npz).
 #| code-fold: true
 #| fig-height: 11
 def proj2(p, drop):
@@ -474,8 +474,9 @@ H_, Hm = load_problem("hilift"); xy, dep = proj2(H_["surf_points"], 2)
 sc = depth_scatter(axs[1], xy, dep, H_["surf_cp"], s=0.6, cmap=DIVERGING, norm=TwoSlopeNorm(vcenter=0.0, vmin=-4.0, vmax=1.0)); map_axes(axs[1])
 title(axs[1], "HiLiftAeroML", f"{Hm['case']}, $C_p$, top view"); cbar(sc, axs[1], "$C_p$ [–]")
 # SHIFT-SUV
-U_, Um = load_problem("shift_suv"); xy, dep = proj2(U_["surf_points"], 1)
-sc = depth_scatter(axs[2], xy, -dep, U_["surf_cp"], s=0.6, cmap=DIVERGING, norm=cpn); map_axes(axs[2])
+U_, Um_ = load_samples("shift_suv"); iu = next(i for i, c in enumerate(Um_["cases"]) if c["family"] == "estate"); Um = Um_["cases"][iu]
+xy, dep = proj2(part(U_["surf_points"], U_["surf_offsets"], iu), 1)
+sc = depth_scatter(axs[2], xy, -dep, part(U_["surf_cp"], U_["surf_offsets"], iu), s=1.2, cmap=DIVERGING, norm=cpn); map_axes(axs[2])
 title(axs[2], "SHIFT-SUV", f"{Um['family']} {Um['case']}, $C_p$"); cbar(sc, axs[2], "$C_p$ [–]")
 # AirfRANS
 A_, Am = load_problem("airfrans"); ip = A_["int_points"]

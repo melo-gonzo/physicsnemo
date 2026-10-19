@@ -78,15 +78,15 @@ print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver
 
 ## The problem: two sport-utility families {#sec-shift-suv-problem}
 
-**SHIFT-SUV is about a thousand morphed bodies in each of two rear-end families, estate and fastback, in one far-field condition.** An *estate* (squareback) ends in a near-vertical tailgate, so the air leaves the body at the roof's trailing edge and the whole rear face sits in the wake. A *fastback* slopes from the roof to the tail, so the pressure recovers along the sloping rear window, and where the flow leaves the body depends on the slope. Both families are taller than the DrivAerML notchback. Each model receives what it receives on DrivAerML (@tbl-model-inputs): ISLA the surface cells with positions, outward normals and areas, and the unit far-field direction; GeoTransolver and Transolver the cells' centered coordinates and normals and the freestream as the physical vector, 30 m/s along $x$ on every body, which carries no information beyond the direction. @fig-problem-shift-suv shows one fastback, a body of the family that every model holds out.
+**SHIFT-SUV is about a thousand morphed bodies in each of two rear-end families, estate and fastback, in one far-field condition.** An *estate* (squareback) ends in a near-vertical tailgate, so the air leaves the body at the roof's trailing edge and the whole rear face sits in the wake. A *fastback* slopes from the roof to the tail, so the pressure recovers along the sloping rear window, and where the flow leaves the body depends on the slope. Both families are taller than the DrivAerML notchback. Each model receives what it receives on DrivAerML (@tbl-model-inputs): ISLA the surface cells with positions, outward normals and areas, and the unit far-field direction; GeoTransolver and Transolver the cells' centered coordinates and normals and the freestream as the physical vector, 30 m/s along $x$ on every body, which carries no information beyond the direction. @fig-problem-shift-suv shows one estate, a body of the family on which every model trains and is scored.
 
 ```{python}
 #| label: fig-problem-shift-suv
 #| fig-cap: >
-#|   The SHIFT-SUV problem, on one fastback case, a body of the family that
-#|   every model in the book holds out (they train and validate on estates,
-#|   @fig-shift-suv-samples top row). The vehicle surface (150,000
-#|   of its 5 million cells at their centroids) colored by the pressure
+#|   The SHIFT-SUV problem, on one estate validation case, a body of the
+#|   family on which every model in the book trains and is scored (the
+#|   fastbacks are held out, @fig-shift-suv-samples bottom row). The vehicle
+#|   surface (60,000 of its 5 million cells at their centroids) colored by the pressure
 #|   coefficient $C_p = (p - p_\infty) / \tfrac{1}{2}\rho U_\infty^2$, seen from
 #|   the side and from above; the black arrow is the far-field direction
 #|   $\hat g_1$. What varies per sample is the geometry; the far-field speed is
@@ -94,20 +94,20 @@ print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver
 #|   wall shear at the sampled cells. How to read this: the color scale is the
 #|   one of @fig-problem-drivaer, so the two bodies can be compared by eye; the
 #|   colors are the reference CFD, not predictions. Data:
-#|   results/problem_figures_2026-09-22/shift_suv.npz.
-S_, Sm = load_problem("shift_suv")
-sp, cp = S_["surf_points"], S_["surf_cp"]
+#|   results/sample_figures_2026-10-02/shift_suv.npz.
+S_, Sm_ = load_samples("shift_suv"); i0 = next(i for i, c in enumerate(Sm_["cases"]) if c["family"] == "estate"); Sm = Sm_["cases"][i0]
+sp, cp = part(S_["surf_points"], S_["surf_offsets"], i0), part(S_["surf_cp"], S_["surf_offsets"], i0)
 norm = TwoSlopeNorm(vcenter=0.0, vmin=-1.5, vmax=1.0)
 fig, axes = plt.subplots(2, 1, figsize=(8, 5.6), sharex=True, gridspec_kw=dict(height_ratios=[1.0, 1.15], hspace=0.15))
 ax = axes[0]
-depth_scatter(ax, sp[:, [0, 2]], sp[:, 1], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
-U = S_["U_inf"]; bb = S_["surf_bbox"]; x0 = bb[0, 0] - 1.9; z0 = 0.5 * (bb[0, 2] + bb[1, 2])
+depth_scatter(ax, sp[:, [0, 2]], sp[:, 1], cp, s=4.0, cmap=DIVERGING, norm=norm); map_axes(ax)
+U = np.asarray(Sm["U_inf"]); bb = np.asarray(Sm["bbox"]); x0 = bb[0, 0] - 1.9; z0 = 0.5 * (bb[0, 2] + bb[1, 2])
 ax.annotate("", xy=(x0 + 1.2, z0), xytext=(x0, z0), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0))
 ax.text(x0 + 0.6, z0 - 0.1, f"far field: $U_\\infty$ = {np.linalg.norm(U):.0f} m/s\nalong $\\hat g_1$", ha="center", va="top", fontsize=8.2, color=INK2)
 ax.set_xlim(x0 - 0.2, bb[1, 0] + 0.3)
 ax.set_ylabel("z [m]"); ax.set_title(f"side view: $C_p$ on the {Sm['family']} family", fontsize=9.5)
 ax = axes[1]
-sc = depth_scatter(ax, sp[:, [0, 1]], sp[:, 2], cp, s=2.2, cmap=DIVERGING, norm=norm); map_axes(ax)
+sc = depth_scatter(ax, sp[:, [0, 1]], sp[:, 2], cp, s=4.0, cmap=DIVERGING, norm=norm); map_axes(ax)
 ax.set_ylabel("y [m]"); ax.set_xlabel("x [m]"); ax.set_title("top view: $C_p$", fontsize=9.5)
 cb = fig.colorbar(sc, ax=axes, fraction=0.025, pad=0.01, extend="min"); cb.set_label("$C_p$ [–]"); cb.outline.set_visible(False)
 plt.show()
