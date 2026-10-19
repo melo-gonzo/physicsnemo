@@ -1,11 +1,11 @@
-"""2-D renderings (FIG lane, 2026-10-18): AirfRANS and Tensile2d truth / ISLA / GeoTransolver / Transolver on the scored
+"""2-D renderings (FIG lane, 2026-10-18): AirfRANS, Tensile2d and the lug's top face truth / ISLA / GeoTransolver / Transolver on the scored
 points of one validation sample (dump.sbatch, LHR jobs 271987 and 275252), drawn with matplotlib on a Delaunay
 triangulation of those points (triangles longer than a cut-off are masked, so holes such as the airfoil stay empty).
 Top row: the field, one shared colour scale (viridis, 0.5-99.5th percentile of the truth). Bottom row: prediction minus
 truth, one shared symmetric scale (the book's DIVERGING map, 99th percentile of the three errors). Panel titles carry the
 scorer's per-sample relative L2 of that field (metrics.jsonl of the same run, normalized space, as in results/char).
 Also writes the compact arrays the book can redraw from (float32 coordinates, float16 fields).
-usage: python render_2d.py <dump_dir> <out_png_dir> <out_arrays_dir>
+usage: python render_2d.py <dump_dir> <out_png_dir> <out_arrays_dir> [airfrans,tensile2d,lug]
 """
 import glob
 import json
@@ -20,8 +20,13 @@ import matplotlib.tri as mtri  # noqa: E402
 import numpy as np  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import render_lib as R  # noqa: E402
 from render_lib import palette  # noqa: E402
 
+# Lug and Tensile2d dumps are in the pipeline's normalized units (their pipelines have no NonDimensionalizeByMetadata for
+# infer.py to invert); the figures undo NormalizeMeshFields with the stats of ginot_lug_volume.yaml / plaid_tensile2d_2d.yaml.
+TENSILE_SIG_STD = 37.837  # MPa, zero mean, shared by sig11, sig22, sig12
+LUG_VM = (150.2, 92.4)  # MPa, mean and std of von_mises
 WALL_SDF = 2e-4  # [chord] points this close to the airfoil count as wall points for the hole mask
 MODELS = [("isla", "ISLA"), ("gt", "GeoTransolver"), ("t", "Transolver")]  # sizes: README run map
 
@@ -52,12 +57,13 @@ def tri_of(xy, maxlen, hole_box=None, wall=None):
     return t
 
 
-def panel_grid(xy, truth, preds, titles, label, unit, window, maxlen, out_png, suptitle, aspect_w=4.2, hole_box=None, wall=None):
+def panel_grid(xy, truth, preds, titles, label, unit, window, maxlen, out_png, suptitle, aspect_w=4.2, hole_box=None, wall=None,
+               err_label="prediction $-$ truth"):
     T = tri_of(xy, maxlen, hole_box, wall)
     lo, hi = np.percentile(truth, [0.5, 99.5])
     errs = [p - truth for p in preds]
     v = np.percentile(np.abs(np.concatenate(errs)), 99)
-    fig, axes = plt.subplots(2, 4, figsize=(4 * aspect_w * 0.62 + 1.6, 2 * aspect_w * 0.62 * (window[3] - window[2]) / (window[1] - window[0]) + 1.4),
+    fig, axes = plt.subplots(2, 4, figsize=(4 * aspect_w * 0.62 + 1.6, max(2 * aspect_w * 0.62 * (window[3] - window[2]) / (window[1] - window[0]) + 1.4, 4.4)),
                              constrained_layout=True)
     for ax in axes.ravel():
         ax.set_xlim(window[0], window[1]); ax.set_ylim(window[2], window[3]); ax.set_aspect("equal")
@@ -75,9 +81,9 @@ def panel_grid(xy, truth, preds, titles, label, unit, window, maxlen, out_png, s
     cb = fig.colorbar(im, ax=axes[0, :], shrink=0.85, pad=0.01)
     cb.set_label(f"{label} {unit}")
     cb2 = fig.colorbar(ime, ax=axes[1, :], shrink=0.85, pad=0.01)
-    cb2.set_label(f"prediction $-$ truth {unit}")
+    cb2.set_label(f"{err_label} {unit}")
     fig.suptitle(suptitle, fontsize=10.5)
-    fig.savefig(out_png, dpi=200, facecolor="white")
+    fig.savefig(out_png, dpi=200, facecolor="white", bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
 
 
@@ -93,7 +99,7 @@ def airfrans(dump, out_png, out_arr):
     window = (-0.25, 1.35, -0.40, 0.40)
     sel = (xy[:, 0] > window[0] - 0.3) & (xy[:, 0] < window[1] + 0.3) & (xy[:, 1] > window[2] - 0.3) & (xy[:, 1] < window[3] + 0.3)
     xs = xy[sel]
-    rec = {"sample_id": sid, "q_inf": q, "U_inf": U, "aoa_deg": float(g["global.aoa_deg"]), "Re": float(g["global.Re"]),
+    rec = {"sample_id": sid, "source": R.provenance([(f"af_{k}", "native") for k, _ in MODELS]), "q_inf": q, "U_inf": U, "aoa_deg": float(g["global.aoa_deg"]), "Re": float(g["global.Re"]),
            "n_points_scored": int(len(xy)), "per_sample_rel_l2": {}}
     arrays = {"xy": xs.astype(np.float32)}
     for field, lab, unit, f in (("pressure", "$c_p$", "[–]", lambda d, w: d[f"{w}_pressure"] / q),
@@ -121,8 +127,8 @@ def tensile(dump, out_png, out_arr):
         assert np.allclose(D[k][0]["points"][:, :2], D["isla"][0]["points"][:, :2]), k
     sid = D["isla"][2]
 
-    def vm(d, w):  # plane-stress von Mises from the scored components
-        s11, s22, s12 = d[f"{w}_sig11"], d[f"{w}_sig22"], d[f"{w}_sig12"]
+    def vm(d, w):  # plane-stress von Mises from the scored components (infer.py writes them normalized: x 37.837 MPa)
+        s11, s22, s12 = (TENSILE_SIG_STD * d[f"{w}_{c}"].astype(np.float64) for c in ("sig11", "sig22", "sig12"))
         return np.sqrt(s11 ** 2 - s11 * s22 + s22 ** 2 + 3 * s12 ** 2)
 
     truth = vm(D["isla"][0], "true")
@@ -140,16 +146,50 @@ def tensile(dump, out_png, out_arr):
     for (k, _), p in zip(MODELS, preds):
         arrays[f"von_mises_{k}"] = p.astype(np.float16)
     np.savez_compressed(f"{out_arr}/tensile2d_{sid.split('_')[0]}.npz", **arrays)
-    return {"sample_id": sid, "n_points_scored": int(len(xy)),
+    return {"sample_id": sid, "source": R.provenance([(f"t2d_{k}", "native") for k, _ in MODELS]), "n_points_scored": int(len(xy)),
             "per_sample_rel_l2": {f: {name: D[k][1]["metrics"][f] for k, name in MODELS} for f in ("stress_l2", "displacement_l2", "q_l2")}}
+
+
+def lug(dump, out_png, out_arr):
+    """The lug's top face (z = thickness, the 1,060 nodes of the top layer of the 12-layer hex mesh), von Mises in MPa."""
+    D = {k: load(dump, f"lug_{k}") for k, _ in MODELS}
+    P = D["isla"][0]["points"].astype(np.float64)
+    for k, _ in MODELS:
+        assert np.allclose(D[k][0]["points"], P), k
+    sid = D["isla"][2]
+    g = D["isla"][0]
+    top = np.abs(P[:, 2] - P[:, 2].max()) < 1e-5
+    xy = P[top, :2]
+    vm = lambda d, w: LUG_VM[0] + LUG_VM[1] * d[f"{w}_von_mises"].astype(np.float64)  # noqa: E731
+    truth = vm(g, "true")[top]
+    preds = [vm(D[k][0], "pred")[top] for k, _ in MODELS]
+    titles = [f"{name}\nrel. L2 {D[k][1]['metrics']['von_mises_l2']:.4f}" for k, name in MODELS]
+    lo, hi = xy.min(0), xy.max(0)
+    pad = 0.03 * (hi - lo).max()
+    window = (lo[0] - pad, hi[0] + pad, lo[1] - pad, hi[1] + pad)
+    t = mtri.Triangulation(xy[:, 0], xy[:, 1])
+    e = np.sort(np.linalg.norm(xy[t.edges[:, 0]] - xy[t.edges[:, 1]], axis=1))
+    panel_grid(xy, truth, preds, titles, "von Mises stress", "[MPa]", window, 3 * e[len(e) // 2], f"{out_png}/lug_von_mises.png",
+               f"Lug test case {sid.split('_')[0]} (hole radius {1e3 * float(g['global.hole_radius']):.1f} mm, length "
+               f"{1e3 * float(g['global.length']):.0f} mm, thickness {1e3 * float(g['global.thickness']):.1f} mm, pressure "
+               f"{float(g['global.pressure_mpa']):.1f} MPa):\nthe case of median ISLA error among the 600 test lugs; top face",
+               aspect_w=4.2, err_label="error")
+    arrays = {"xy_top": xy.astype(np.float32), "von_mises_true": truth.astype(np.float16)}
+    for (k, _), p in zip(MODELS, preds):
+        arrays[f"von_mises_{k}"] = p.astype(np.float16)
+    np.savez_compressed(f"{out_arr}/lug_{sid.split('_')[0]}.npz", **arrays)
+    return {"sample_id": sid, "source": R.provenance([(f"lug_{k}", "native") for k, _ in MODELS]), "n_points_scored": int(len(P)),
+            "n_points_top_face": int(top.sum()), "units": "MPa (von_mises = 150.2 + 92.4 x the dump's normalized value)",
+            "params": {"hole_radius_m": float(g["global.hole_radius"]), "length_m": float(g["global.length"]),
+                       "thickness_m": float(g["global.thickness"]), "pressure_mpa": float(g["global.pressure_mpa"])},
+            "per_sample_rel_l2": {"von_mises_l2": {name: D[k][1]["metrics"]["von_mises_l2"] for k, name in MODELS}}}
 
 
 if __name__ == "__main__":
     dump, out_png, out_arr = sys.argv[1:4]
     os.makedirs(out_png, exist_ok=True); os.makedirs(out_arr, exist_ok=True)
-    which = sys.argv[4].split(",") if len(sys.argv) > 4 else ["airfrans", "tensile2d"]
-    res = {}
+    which = sys.argv[4].split(",") if len(sys.argv) > 4 else ["airfrans", "tensile2d", "lug"]
     for w in which:
-        res[w] = {"airfrans": airfrans, "tensile2d": tensile}[w](dump, out_png, out_arr)
-        print(w, json.dumps(res[w])[:400])
-    json.dump(res, open(f"{out_arr}/render_2d_{'_'.join(which)}.json", "w"), indent=1)
+        rec = {"airfrans": airfrans, "tensile2d": tensile, "lug": lug}[w](dump, out_png, out_arr)
+        print(w, json.dumps(rec)[:400])
+        json.dump({w: rec}, open(f"{out_arr}/render_2d_{w}.json", "w"), indent=1)

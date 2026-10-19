@@ -39,11 +39,19 @@ infer.py writes the centred points divided by L_ref = 5 m, so the body frame is 
 |---|---|---|
 | `book/figures/renderings/drivaerml_surface_cp.png`, `drivaerml_surface_cf.png`; `arrays/drivaerml_surface_00079.npz`, `arrays/render_car.json` | DrivAerML Surface car 00079 (run 171), left side, orthographic, on the case's STL (753,238 triangles; each triangle takes the nearest scored cell of that model, median distance 5.7 mm, ISLA and GeoTransolver on the same 200,000 cells, Transolver on its 100,000): c_p and \|tau_w\|/q_inf, truth / three models / errors | `python scripts/render_car.py fig/dump fig/geom/drivaer_171_single_solid.stl.pmsh <png> <arrays> pose` |
 | `book/figures/renderings/pose_cp.png`, `pose_geometry.png` (numbers in `render_car.json` `pose`) | the scorer's posed protocol (FixedRandomPose: rotation 169.5°, \|t\| = 1.55 m) on the same car: per model, native c_p, posed c_p mapped back to the body frame (x = L_ref R^T x* + c; the posed and native draws are the same cells, map-back distance <= 6e-7 m), posed minus native; and the posed car itself coloured by ISLA's posed prediction | same command |
+| `book/figures/renderings/airfrans_pressure.png`, `airfrans_velocity.png` (re-rendered) | as above; panels now labelled by architecture, json keys ISLA / GeoTransolver / Transolver (were "GeoTransolver 256", "Transolver 512 x 16") with a `source` block; numbers unchanged | `python scripts/render_2d.py fig/dump <png> <arrays> airfrans` |
+| `book/figures/renderings/tensile2d_stress.png`; `arrays/tensile2d_00238.npz`, `arrays/render_2d_tensile2d.json` | Tensile2d validation specimen 00238: plane-stress von Mises from the scored sig11, sig22, sig12 on a Delaunay of the 9,547 nodes. The dump is in normalized units; the figure multiplies by the shared stress std 37.837 MPa (plaid_tensile2d_2d.yaml), so the scale is MPa | `... render_2d.py ... tensile2d` |
+| `book/figures/renderings/lug_von_mises.png`; `arrays/lug_00633.npz`, `arrays/render_2d_lug.json` | lug test case 00633, the top face (the 1,060 nodes at z = thickness of the 12,720 scored nodes): von Mises = 150.2 + 92.4 x the dump's normalized value (ginot_lug_volume.yaml), MPa | `... render_2d.py ... lug` |
+| `book/figures/renderings/deepjebpp_von_mises.png`, `deepjebpp_displacement.png`; `arrays/deepjebpp_60073.npz`, `arrays/render_cloud_deepjebpp.json` | DeepJEB++ test bracket 60073 (611-092-IS06_hor), three-quarter view, on the case's FEM surface (50,024 triangles, copied from LHR `datasets/deepjebpp_pdmsh/611-092-IS06_hor/.../boundaries/surface`, 4.4 MB, to `fig/geom/`): every triangle is one scored cell (centroid match <= 1.1e-5 mm). von Mises [MPa] and \|u\| [mm] as infer.py writes them; the panel titles' displacement L2 is the scorer's vector metric | `python scripts/render_cloud.py fig/dump <png> <arrays> deepjebpp fig/geom/deepjebpp_611-092-IS06_hor_surface` |
 
 DrivAerML Surface 00079, per-sample relative L2 (`arrays/render_car.json`): pressure ISLA 0.0415, GeoTransolver 0.0424,
 Transolver 0.0406; wall shear ISLA 0.0612, GeoTransolver 0.0667, Transolver 0.0668. Posed protocol, pressure: ISLA
 0.0415 (posed minus native rms c_p 7.2e-4, 0.16 % of the native c_p norm), GeoTransolver 0.885 (rms 0.38), Transolver
 0.778 (rms 0.35).
+Tensile2d 00238 (`arrays/render_2d_tensile2d.json`): stress ISLA 0.0067, GeoTransolver 0.0060, Transolver 0.0071;
+displacement 0.0068, 0.0059, 0.0044. Lug 00633 (`arrays/render_2d_lug.json`): von Mises ISLA 0.00137, GeoTransolver
+0.00173, Transolver 0.00192. DeepJEB++ 60073 (`arrays/render_cloud_deepjebpp.json`): von Mises ISLA 0.403,
+GeoTransolver 0.446, Transolver 0.547; displacement 0.077, 0.115, 0.165.
 
 ## Case selection
 

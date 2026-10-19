@@ -1,0 +1,73 @@
+{
+ "sample_id": "60073_611-092-IS06_hor_611-092-IS06_hor",
+ "source": {
+  "jeb_isla/native": {
+   "row": 9,
+   "run_id": "jbn2_isla_seed42",
+   "dataset": "deepjebpp_surface",
+   "model": "isla_surface_deepjebpp",
+   "cells": 200000,
+   "lhr_dump_job": 271987,
+   "dump": "$T/book_figs_2026-10-18/dump/jeb_isla/native/ (copy: fig/dump/jeb_isla/native/)"
+  },
+  "jeb_gt/native": {
+   "row": 10,
+   "run_id": "cl_r_jeb_gt_seed42",
+   "dataset": "deepjebpp_surface",
+   "model": "geotransolver_surface_deepjebpp",
+   "cells": 200000,
+   "lhr_dump_job": 275252,
+   "dump": "$T/book_figs_2026-10-18/dump/jeb_gt/native/ (copy: fig/dump/jeb_gt/native/)"
+  },
+  "jeb_t/native": {
+   "row": 11,
+   "run_id": "cl_r_jeb_t_seed42",
+   "dataset": "deepjebpp_surface",
+   "model": "transolver_surface_deepjebpp",
+   "cells": 200000,
+   "lhr_dump_job": 275252,
+   "dump": "$T/book_figs_2026-10-18/dump/jeb_t/native/ (copy: fig/dump/jeb_t/native/)"
+  }
+ },
+ "n_points_scored": 50024,
+ "load_dir": [
+  -1.0,
+  0.0,
+  0.0
+ ],
+ "load_magnitude": 37800.0,
+ "per_sample_rel_l2": {
+  "von_mises_l2": {
+   "ISLA": 0.40337446331977844,
+   "GeoTransolver": 0.44566091895103455,
+   "Transolver": 0.5468088984489441
+  },
+  "displacement_l2": {
+   "ISLA": 0.07714434713125229,
+   "GeoTransolver": 0.11530466377735138,
+   "Transolver": 0.1653471291065216
+  }
+ },
+ "views": {
+  "von_mises": {
+   "clim": [
+    0.0,
+    1193.303225097657
+   ],
+   "err_clim": 500.15994781494334
+  },
+  "displacement": {
+   "clim": [
+    0.0,
+    2.0866044485569004
+   ],
+   "err_clim": 0.1910041493177414
+  }
+ },
+ "mesh": {
+  "surface": "/home/psharpe/gh/physicsnemo/scratch/isla-book-overhaul-2026-10-18/fig/geom/deepjebpp_611-092-IS06_hor_surface",
+  "n_triangles": 50024,
+  "n_distinct_points_used": 50024,
+  "centroid_match_distance_max_mm": 1.1154548513136538e-05
+ }
+}
