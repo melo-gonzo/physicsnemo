@@ -35382,6 +35382,10 @@ snapshot of the library, which the AeroZoo benchmark will produce.
 
 ## 2026-10-09 — AEROZOO pre-registration: ISLA, ISLA-DTT and GeoTransolver on AeroZoo v1.2's interior task (the boundaries with their prescribed values in, the interior fields out), in distribution and with a geometry bank, an enclosure family or a Reynolds range held out; a new chapter {#sec-nb-aerozoo-prereg}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **Setting.** Peter's instruction of 2026-10-09: take the ISLA architecture
 as it is and the ISLA-DTT variant, test them on the AeroZoo v1.2 dataset
 on the interior prediction task (given a well-posed PDE problem from the
@@ -35515,6 +35519,10 @@ with Phase 2.
 
 ## 2026-10-09 — AEROZOO launched: the shuffled copy, the statistics, the snapshot pair code_v26 / recipe_v9 and both smoke lanes are done; the four Phase 1 lanes and the twelve Phase 2a lanes (held-out enclosures, Reynolds range and blob bank) are in the AGA queues {#sec-nb-aerozoo-launch}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **What was built.** The row-permuted copy of every interior
 (`kernel/aerozoo/aerozoo_shuffle.py`, two 48-worker CPU tasks, 3,816
 cases, 1.2 TB; on six random cases a contiguous 200,000-row block covers
@@ -35560,6 +35568,10 @@ when Phase 1 is complete. ISLA-DTT lanes follow the Barnes-Hut fork's
 confirmation of its form.
 
 ## 2026-10-10 — AEROZOO scoring machinery and the chapter draft staged while the sixteen lanes train; ISLA-DTT waits for the fork's pose-invariant forest read {#sec-nb-aerozoo-machinery}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 **Setting.** The sixteen AEROZOO lanes (@sec-nb-aerozoo-launch) train on
 AGA: at 00:05 EDT the four `full` lanes and the four held-out-enclosure
@@ -35632,6 +35644,10 @@ own pace and extend the chapter with the penalties.
 
 ## 2026-10-10 — AEROZOO ISLA-DTT lanes launched on the fork's pose-free forest read (snapshot code_dtt16, theta 1); both in-distribution lanes stepping at 1.17 s and 159 GB {#sec-nb-aerozoo-dtt-launch}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **Setting.** The AEROZOO benchmark (@sec-nb-aerozoo-prereg) names
 ISLA-DTT, the tree-accelerated query-independent read of the Barnes-Hut
 fork, as its third arm, in the form the fork confirms after its parity
@@ -35686,6 +35702,10 @@ scored like the other lanes, and the P4 verdict (ISLA-DTT within 5
 percent of ISLA on every field of the `full` test side) is written here.
 
 ## 2026-10-10 — AEROZOO amendment: the query-population shift becomes a scoring protocol of the benchmark for all three arms, with its predictions written before any AeroZoo score exists {#sec-nb-aerozoo-qpop-amendment}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 **Setting.** The AEROZOO pre-registration (@sec-nb-aerozoo-prereg)
 scores every arm natively: the training draw of 200,000 interior points
@@ -35752,6 +35772,10 @@ first.
 
 ## 2026-10-11 — ISLA-DTT configuration confirmed for AEROZOO: the pose-free forest read at theta 1 (snapshot code_dtt16) passes parity on the cars and reproduces native under the pose on every field; the eight lanes stand {#sec-nb-aerozoo-dtt-confirmed}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **What the fork reported (2026-10-11, early morning).** The Barnes-Hut
 fork's car pair on the snapshot the AeroZoo lanes run (code_dtt16, the
 pose-free forest at theta 1, two seeds, 48 validation cars, float32):
@@ -35779,6 +35803,10 @@ made if the accuracy bar fails; its AeroZoo script is in the fork's
 smoke test.
 
 ## 2026-10-11 — AEROZOO first scores: every ISLA lane reaches a validation loss two to three times below GeoTransolver's by epoch 30-60, then an optimization event at epoch 43-50 raises its training and validation loss three- to four-fold for the rest of the run; the final checkpoints lose P1, the best checkpoints would win its velocity clause {#sec-nb-aerozoo-instability}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 **The setting.** The AeroZoo benchmark (@sec-nb-aerozoo-prereg) trains
 the reference ISLA, the read-only ISLA-DTT and GeoTransolver on the
@@ -35958,6 +35986,10 @@ identification proceed.
 
 ## 2026-10-11 — ISLA-DTT merged into psharpe/isla as an option: the read-only interior model and its forest read enter the book {#sec-nb-dtt-merged}
 
+::: {.callout-warning}
+**AeroZoo numbers withdrawn 2026-10-19** (@sec-nb-aerozoo-withdrawn); the rest of this entry stands.
+:::
+
 **The setting.** ISLA's interior task admits the prediction points as
 interacting tokens, so a prediction at a point depends on the other
 points requested with it (QUERY-POP, @sec-nb-query-pop: the error on
@@ -36007,6 +36039,10 @@ instrument: the read's car-scale cost comes from one GB300 bench (job
 
 ## 2026-10-12 — AEROZOO held-out-box split scored for both architectures: GeoTransolver's final checkpoints lead ISLA's by 1.2 to 1.4x on velocity, pressure and eddy viscosity, while ISLA's best checkpoints lead GeoTransolver's finals on every field {#sec-nb-aerozoo-nonbox-scored}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **What was scored.** The float32 scorer (the protocol of
 @sec-nb-aerozoo-prereg, final checkpoint, validation side, the training
 draw) ran on the GeoTransolver `family_non_box` pair at epoch 249 and on
@@ -36037,6 +36073,10 @@ for the three lanes; the reduction (`aerozoo_reduce.py`) now carries the
 `family_non_box` ratio block.
 
 ## 2026-10-12 — AEROZOO Phase 1 verdict on the test side: P1 falsified (GeoTransolver ÷ ISLA 0.76 on velocity, 0.62 on pressure) and P2 mixed (ISLA's held-out-enclosure penalty larger on velocity, pressure and turbulence kinetic energy, smaller on eddy viscosity); every ISLA number is a post-event checkpoint {#sec-nb-aerozoo-phase1-verdict}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 **What was scored.** The eight lanes of Phase 1 and the held-out-box
 split (ISLA and GeoTransolver, two seeds each, `full` and
@@ -36100,6 +36140,10 @@ splits, both architectures, and the eight ISLA-DTT lanes) and the
 query-population protocol follow as their lanes finish.
 
 ## 2026-10-12 — AEROZOO remedy pre-registered and launched: half-rate ISLA and ISLA-DTT lanes on the `full` and held-out-box splits, and a labeled best-checkpoint table for every arm {#sec-nb-aerozoo-remedy-prereg}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 **Peter's ruling.** On the instability record of
 @sec-nb-aerozoo-instability and the Phase 1 verdict of
@@ -36170,6 +36214,10 @@ before its training protocol failed it, if it failed. Jobs
 
 ## 2026-10-13 — AEROZOO: the test-side best-checkpoint scorer had re-scored the validation split; fixed and resubmitted; GeoTransolver held-out validation sides in {#sec-nb-aerozoo-bestval-scorer-fix}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 The best-checkpoint table of @sec-nb-aerozoo-remedy-prereg is scored by
 `eval_bestval.sbatch`, which takes `BESTVAL_SIDE=val|test`. The first
 test-side job (1230646, lane rows 0 1 4 5) produced records identical to
@@ -36210,6 +36258,10 @@ the half-rate trajectories where they have trained (commit b2fd220d1 and
 the one after it).
 
 ## 2026-10-13 — AEROZOO best-checkpoint table on the test side: ISLA's pre-event checkpoints lead GeoTransolver's best on every field in distribution and trail on every field with the enclosure held out {#sec-nb-aerozoo-bestckpt-verdict}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 **The setting.** The pre-registered standing of the AeroZoo chapter
 scores the final checkpoint of every lane
@@ -36293,6 +36345,10 @@ about ten hours of training after the pair starts.
 
 ## 2026-10-14 — AEROZOO remedy, first read: no half-rate ISLA lane loses its validation minimum through epochs 50-90, so R3 is excluded; the lanes run on the LHR site {#sec-nb-aerozoo-remedy-first-read}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **The setting.** The remedy of @sec-nb-aerozoo-remedy-prereg trains
 ISLA and ISLA-DTT at half the reference rate, 1.875e-4, on the `full`
 and held-out-box splits (eight lanes), with three outcomes written
@@ -36358,6 +36414,10 @@ block), which now carries these lanes.
 
 ## 2026-10-14 — AEROZOO: the twelve remaining lanes move from AGA to LHR with every checkpoint and resume in LHR's normal queue {#sec-nb-aerozoo-migration-lhr}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **The setting.** After the half-rate lanes moved to the LHR site
 (@sec-nb-aerozoo-remedy-first-read), twelve AeroZoo lanes still sat in
 AGA's short queue as chain links waiting between runs: the ISLA
@@ -36411,6 +36471,10 @@ since the fleet's scoring pump does not run there; the campaign's
 fetcher pulls their records from LHR.
 
 ## 2026-10-14 — AEROZOO by enclosure family: ISLA's deficit sits in the spherical enclosures; Peter's rulings on the remedies; three tests pre-registered (the ISLA-DTT pressure read, one distance per boundary condition, a doubled training budget) {#sec-nb-aerozoo-family-prereg}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 **The family breakdown.** A diagnostic read of the per-case test
 records that already exist: the errors of the `full` and
@@ -36528,6 +36592,10 @@ a quarter on boxes.
 
 ## 2026-10-14 — AEROZOO: H-BOUND refuted; four more tests pre-registered (the 18 untested splits, velocity-and-pressure targets, a fixed head-frame gain, WALLDIST on ISLA-DTT) {#sec-nb-aerozoo-matrix-prereg}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **H-BOUND is refuted.** The probe of @sec-nb-aerozoo-family-prereg
 read the four reference-rate Reynolds and blob-bank ISLA lanes and the
 four half-rate lanes at epochs 11 to 153, on eight validation cases per
@@ -36608,6 +36676,10 @@ half-rate ISLA-DTT lanes; predictions W-a to W-c of
 
 ## 2026-10-14 — AEROZOO: GAUGE refuted, and W1 is mostly the reference rate's early checkpoints: at half rate ISLA's sphere pressure equals GeoTransolver's {#sec-nb-aerozoo-w1-correction}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **GAUGE.** Both half-rate ISLA `full` lanes were scored at their
 validation minima so far (checkpoints 51 and 71) on all 386 `full`
 validation cases, with the predictions kept. The probe's relative L2
@@ -36658,6 +36730,10 @@ comparison states which of the two normalizations it uses.
 
 ## 2026-10-14 — AEROZOO: the matrix's files, the scarce-split protocol, and launch {#sec-nb-aerozoo-matrix-launch}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **Files.** The 18 new dataset files and the two velocity-and-pressure
 variants (`aerozoo_volume_vp`, `aerozoo_volume_nonbox_vp`) are on
 branch psharpe/isla-azsplits, commit bd947c89c. Each split's file
@@ -36691,6 +36767,10 @@ normal queue.
 
 ## 2026-10-14 — AEROZOO: half-rate ISLA-DTT joins the matrix {#sec-nb-aerozoo-matrix-dtt}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **Why.** ISLA-DTT is the variant built for AeroZoo's query populations
 (@sec-nb-dtt-merged). At the reference rate's best checkpoints its
 forest read lowers pressure error by 34 to 58 percent in every
@@ -36713,6 +36793,10 @@ lower on at least 10 splits, the read's advantage at the reference rate
 was training time.
 
 ## 2026-10-14 — AEROZOO D1 at the best checkpoints: mixed; ISLA-DTT's read lowers pressure in every family and narrows, but does not close, the held-out gap {#sec-nb-aerozoo-d1-best}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 **Readout.** The labeled best-checkpoint protocol, test side, float32,
 seed means of case means, at the reference rate: ISLA's checkpoints 31
@@ -36747,6 +36831,10 @@ half of D1 follows when both ISLA-DTT pairs finish, and the half-rate
 matrix (M5) measures the read without the event.
 
 ## 2026-10-14 — AEROZOO protocol defect: every volume lane saw each large boundary as one contiguous window of faces, often without the body; today's 140 lanes cancelled, a uniform-sampling relaunch prepared {#sec-nb-aerozoo-boundary-window}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 **How it was found.** Building the surface task, the implementing
 lane found that the reader's cell cap takes one contiguous block. The
@@ -36799,6 +36887,10 @@ ones. The relaunch is pre-registered before it starts.
 
 ## 2026-10-14 — AEROZOO uniform-boundary relaunch (AZ-UNIFORM): the fix verified, every arm relaunched, predictions {#sec-nb-aerozoo-uniform-prereg}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **The fix.** The `aerozoo_uvolume*` dataset files (branch
 psharpe/isla-azuniform, commit cd4b9490b; 24 files on the LHR site's
 recipe_v9 as new files) equal their `aerozoo_volume*` sources except
@@ -36837,6 +36929,10 @@ TARGETS-VP's predictions are read on these lanes. The old protocol's
 versions of the matrix were cancelled before any result existed.
 
 ## 2026-10-14 — SAMPLING-AUDIT: every configuration checked; AirfRANS's interior was also read as one contiguous window; DrivAerML, HiLift and SHIFT-SUV are shuffled and unaffected {#sec-nb-sampling-audit}
+
+::: {.callout-warning}
+**AeroZoo numbers withdrawn 2026-10-19** (@sec-nb-aerozoo-withdrawn); the rest of this entry stands.
+:::
 
 **Test.** For each stored array that a reader caps, r is the mean
 distance between consecutive stored rows divided by the mean distance
@@ -36945,6 +37041,10 @@ scoring effect. AF2 is read on that training effect.
 
 ## 2026-10-15 — AEROZOO QUERY-POP on the reference-rate `full` finals (old boundary protocol): Q1 holds on seed 42, Q2 fails as written, Q3 holds {#sec-nb-aerozoo-qpop}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **Run.** The registered instrument of the 2026-10-10 amendment, in a
 copy on the LHR site (`kernel/aerozoo/qpop_lhr/`): only the checkpoint
 root, paths and an output-only record of the prediction deviation
@@ -36985,6 +37085,10 @@ deviation recorded from the start.
 
 ## 2026-10-15 — AEROZOO remedy, second read: no half-rate lane has lost its validation minimum through epochs 130 to 180, so R1 is unlikely {#sec-nb-aerozoo-remedy-second-read}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 The eight half-rate lanes of @sec-nb-aerozoo-remedy-prereg (old
 boundary protocol, the protocol R1 to R3 were registered on), at
 09:25 EDT. Half-rate ISLA `family_non_box` has reached validation epochs
@@ -36998,6 +37102,10 @@ than cured, is now unlikely. R2 is read at epoch 250, with the final
 `full` checkpoints' validation velocity against the 0.25 bar.
 
 ## 2026-10-15 — AEROZOO U2 falsified on seed 42: the reference-rate event recurs under uniform boundary draws; H-FRAME launched {#sec-nb-aerozoo-u2-falsified}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 **Result.** `azu_full_isla_seed42`: ISLA at 3.75e-4 on `full`, uniform
 boundary draws (@sec-nb-aerozoo-uniform-prereg). Its mean training
@@ -37025,6 +37133,10 @@ lanes `azu_full_islavp_seed{42,43}`. Both tests now run first among
 this program's jobs on LHR.
 
 ## 2026-10-15 — AEROZOO H-LOGIT pre-registration: does an unnormalized query-key logit grow under Muon until the event? {#sec-nb-aerozoo-hlogit-prereg}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 **Why.** ISLA trains its weight matrices with Muon (momentum 0.95,
 Nesterov, five Newton-Schulz steps, update RMS matched to AdamW's) and
@@ -37067,6 +37179,10 @@ that site's queries and keys, as the routing already does. It would be
 tested on two datasets before it is adopted.
 
 ## 2026-10-15 — AEROZOO H-LOGIT verdict: L1 fails as written, L2 holds; the head frame's seed attention is an argmax from epoch 29 at either rate, and the residual stream grows 190-fold from epoch 9 to 43 at the reference rate {#sec-nb-aerozoo-hlogit-verdict}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 **Run.** One LHR job (223072) on 48 checkpoints: `azu_full_isla_seed42`
 at 28 epochs from 1 to 85, `azu_full_islahr_seed42` at 4 and
@@ -37113,6 +37229,10 @@ read LayerNorm'd states. The raw read dates from the first ISLA block
 (September 2026), and no note gives a reason for it.
 
 ## 2026-10-15 — AEROZOO H-RESID pre-registration: a multiplicative residual stream collapses the routing; the broadcast reads the normalized state {#sec-nb-aerozoo-hresid-prereg}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 **Hypothesis.** H-RESID: the raw read of `h` in the broadcast makes each
 block's update multiplicative, and Muon's fixed-size updates at the
@@ -37184,6 +37304,10 @@ path.
 
 ## 2026-10-15 — AEROZOO H-RESID Instrument 1: P1 fails, P2 holds; every block amplifies the stream, both raw-h paths carry the growth, and the deep blocks' updates are rounded away {#sec-nb-aerozoo-hresid-probe}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **Run.** One LHR job (224693) on the 48 checkpoints of the H-LOGIT
 probe, plus half-rate epoch 189. The hooks leave the outputs bitwise
 unchanged and reproduce the H-LOGIT numbers. The residual stream is
@@ -37235,6 +37359,10 @@ terms).
 
 ## 2026-10-15 — AEROZOO H-PREC pre-registration: is the event the bfloat16 rounding of the deep blocks' updates? A float32 fork from epoch 39 {#sec-nb-aerozoo-hprec-prereg}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 **Hypothesis.** H-PREC: the multiplicative stream harms training
 through the rounding of the bfloat16 stream, which drops the deep
 blocks' MLP and geometry updates. Float32 resolves updates about 65,000
@@ -37257,6 +37385,10 @@ come through the rounding, and the growth itself is the cause. Either
 way A2 remains the remedy, because it removes the growth.
 
 ## 2026-10-16 — AEROZOO four reads: U2 falsified on both seeds, V1 not target-driven, H-PREC's F1 fails, H-FRAME's event comes ten epochs later {#sec-nb-aerozoo-four-reads}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 All on `full` at 3.75e-4 with uniform boundary draws; "departs" means
 a completed epoch's mean training loss above twice its running minimum,
@@ -37316,6 +37448,10 @@ loss) when its lanes finish. The lanes run on to epoch 40, and the
 comparison with the baselines waits for their scored finals.
 
 ## 2026-10-16 — AEROZOO remedy R2, first condition holds: no half-rate lane doubles its running minimum through epoch 250 {#sec-nb-aerozoo-remedy-r2-first}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 The four half-rate ISLA lanes of @sec-nb-aerozoo-remedy-prereg (rows 24
 to 27, windowed boundary protocol) finished epoch 249. With the
@@ -37454,6 +37590,10 @@ are labeled so. The other chapters that quote `results/char/airfrans.json`
 comparison) are not changed in this entry.
 
 ## 2026-10-16 — AEROZOO remedy R2 holds: the half rate cures the event, and GeoTransolver ÷ half-rate ISLA reads 2.01 on velocity {#sec-nb-aerozoo-remedy-r2}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 The second condition of R2 (@sec-nb-aerozoo-remedy-prereg) is read on
 the float32 scores of the final `full` checkpoints of the half-rate ISLA
@@ -37613,6 +37753,10 @@ of it.
 
 ## 2026-10-16 — AEROZOO lanes: a deeper read-ahead from about 18:05 EDT; samples and warm steps unchanged {#sec-nb-aerozoo-prefetch}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 A profile of real AeroZoo training steps on the LHR site (four GPUs,
 the lanes' configuration) found that the step times logged per link
 include a cold first epoch: each link starts on a new node and reads
@@ -37630,6 +37774,10 @@ architecture runs with the same setting, so the step-time comparisons
 stay like for like.
 
 ## 2026-10-16 — AEROZOO H-RESID P3 interim: both arms keep the validation minimum through epoch 70 and hold the stream four orders below the reference; arm A holds too, so the direct read carries the growth {#sec-nb-aerozoo-hresid-p3-interim}
+
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
 
 The four remedy lanes of @sec-nb-aerozoo-hresid-prereg (AeroZoo `full`
 at 3.75e-4, uniform protocol; arm A rows 340 and 341, arm A2 rows 342
@@ -37909,6 +38057,10 @@ segments outside its bars.
 
 ## 2026-10-17 — H-RESID A2 adopted: ISLA's slice sublayer pools and broadcasts the normalized state, and the DeepJEB++ and AeroZoo rate exceptions are retired {#sec-nb-a2-adopted}
 
+::: {.callout-warning}
+**AeroZoo numbers withdrawn 2026-10-19** (@sec-nb-aerozoo-withdrawn); the rest of this entry stands.
+:::
+
 **Ruling.** Peter, 2026-10-17: "make this the ISLA default... no need
 for parallel old implementations." Arm A2 of H-RESID
 (@sec-nb-aerozoo-hresid-prereg, amendment) becomes ISLA's slice-sublayer
@@ -38106,6 +38258,10 @@ still on raw-read checkpoints. SHIFT-SUV, the lug, HiLift and the AeroZoo
 
 ## 2026-10-18 — AEROZOO H-RESID P3 final: both arms keep their validation minimum through epoch 250, so P3 holds on both {#sec-nb-aerozoo-hresid-p3-final}
 
+::: {.callout-warning}
+**Withdrawn 2026-10-19.** Every AeroZoo number in this entry was measured with label inputs that the AeroZoo input rule forbids, and its lanes and scores are deleted (@sec-nb-aerozoo-withdrawn).
+:::
+
 The four remedy lanes of @sec-nb-aerozoo-hresid-prereg (AeroZoo `full`
 at 3.75e-4, uniform protocol; arm A rows 340 and 341, arm A2 rows 342
 and 343) finished their 250 epochs. Over the 26 validation epochs, no
@@ -38211,6 +38367,10 @@ written here from the records. It also gives the native fall on the lug
 as 2.4x; the seed means give 2.35 (1 ÷ 0.426), written here as 2.3.
 
 ## 2026-10-18 — Baseline drive inputs: on HiLift and AirfRANS the baselines read the raw freestream vector where ISLA reads its direction; four reruns are pre-registered and launched {#sec-nb-drive-audit}
+
+::: {.callout-warning}
+**AeroZoo numbers withdrawn 2026-10-19** (@sec-nb-aerozoo-withdrawn); the rest of this entry stands.
+:::
 
 **Finding.** The book overhaul found, and verified on LHR, that the
 REF-80 HiLift baseline lanes fed GeoTransolver
@@ -38389,3 +38549,45 @@ direction ties on the part's medial surface
 conditions by name (psharpe/isla-bc-names). It lands there with a new
 checkpoint version, because its features change while the weight layout
 stays the same.
+
+## 2026-10-19 — AeroZoo results withdrawn: every AeroZoo lane read labels that the input rule forbids, and a corrected protocol replaces it {#sec-nb-aerozoo-withdrawn}
+
+**Ruling.** Peter ruled on 2026-10-15, in the AeroZoo book's section on allowed inputs, what an AeroZoo model may
+read: only the data of the PDE. That is the boundary meshes with their condition types, the prescribed values
+(`cell_data/prescribed/*`) and the kinematic viscosity, with density only to convert pressure and shear to pascals.
+Everything else in `global_data` is a label. On 2026-10-19 he added that no model may receive a reference length
+that varies per sample: "If a model wants normalized coordinates, it needs to bring it to the table."
+
+**What the AeroZoo lanes read.** Every AeroZoo lane of this program, from @sec-nb-aerozoo-prereg on, read labels
+(scratch/isla-lref-audit-2026-10-19/REPORT.md; scratch/isla-az-compliant-2026-10-19/inventory/):
+
+- ISLA, ISLA-DTT and GeoTransolver read the freestream direction from `reference.velocity`, and a log Reynolds number
+  built from `reference.length`.
+- The per-face prescribed ω and the inlet globals were scaled by `reference.length`.
+- Every arm's eddy-viscosity and ω targets were scaled by `reference.length`.
+- GeoTransolver's coordinates, signed distances and ball radii were scaled by `reference.length`.
+
+`reference.length` is the body's largest extent before the random pose: 0.02 to 18 m, a different value in every
+case, and not computable from the posed boundary.
+
+**Action.** Peter: "If the new one is strictly better or fixes a bug, just do that and delete the old results."
+
+- The corrected protocol replaces the label-input one under the same file names. It gives every model only physical
+  PDE inputs.
+  - ISLA computes its own length, velocity and Reynolds-number scales inside the model.
+  - GeoTransolver reads every boundary face, with its condition type and prescribed values, through its
+    geometry-features channel. Its local features are off: a supported setting, but a departure from its released
+    configurations.
+  - Transolver's inputs have no channel for boundary values, so it runs two floor lanes on `full`.
+  - Targets are physical, with one constant scale per field, and every arm trains with a per-case relative L2 loss.
+- All 391 label-era AeroZoo lanes were cancelled, and their checkpoints and scores deleted: 14.45 TB on LHR and
+  1.02 TB on AGA (scratch/isla-az-retire-2026-10-19/SUMMARY.md). The entries above that report AeroZoo numbers carry a
+  withdrawal note. They remain as the record of how decisions were made.
+
+**Decisions that used AeroZoo evidence.**
+
+- A2 (@sec-nb-a2-adopted) also rests on DeepJEB++ and AirfRANS, and it stands.
+- The single-input exact-geometry design was decided by Peter on principle on 2026-10-19, after a close AeroZoo
+  result, and it stands.
+- ISLA against ISLA-DTT, which Peter wants AeroZoo to decide, moves to the corrected lanes, which run both.
+- The AeroZoo ratios of the head-frame normalization test move to the corrected protocol.
