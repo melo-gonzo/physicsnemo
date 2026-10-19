@@ -19,6 +19,28 @@ ISLA_ARM = "ISLA 512 with 512 slices"
 DATASETS = {"drivaerml_surface": ("drivaerml_surface", None), "drivaerml_volume": ("drivaerml_volume", None),
             "tensile2d": ("tensile2d", None), "deepjeb_surface": ("deepjeb", "ISLA A2 at 3.75e-4 (jbn2)"),
             "shift_suv_surface": ("shift_suv_surface", None), "lug": ("lug", None)}
+# Baseline arms replaced by a fair-input rerun of the same configuration, scored by the same protocol:
+# dataset -> {arm label: (reduced score file under results/, run stem without _seedNN, the key the replaced arm is kept under,
+# what the rerun reads)}. The score file is reduce_drivefix.py's layout ({"<stem>_seed<s>/<protocol>": {metrics, n, epoch, source}}).
+# DRIVE-FIX (2026-10-19, campaigns_2026-10-19/drive_fix/README.md): on the lug GeoTransolver's geometry context becomes the surface
+# triangles with their normals and the four boundary-condition labels ISLA reads (bc_fixed, bc_hole, bc_loaded, bc_pressure), where the
+# CHAR arm's context is the interior nodes and reads no label.
+FAIR_INPUT = {
+    "lug": {"GeoTransolver 256": ("campaigns_2026-10-19/drive_fix/drivefix_scores_2026-10-19.json", "evals_lugbc/lugbc_gt",
+                                  "unlabelled_geotransolver", "the surface triangles with their normals and the four boundary-condition "
+                                  "labels as its geometry context (lugbc_gt)")},
+}
+
+
+def rerun_arm(path, stem, fields, protocols, seeds=("42", "43")):
+    """{protocol: {field: {mean, per_seed, n_cases, n_seeds}}} of a fair-input rerun, from a reduce_drivefix.py score file."""
+    rec = json.load(open(f"{os.path.dirname(R)}/{path}"))
+    runs = {s: {pk: rec[f"{stem}_seed{s}/{pk}"] for pk in protocols} for s in seeds}
+    assert all(r["epoch"] == 500 and r["source"] == "summary" for v in runs.values() for r in v.values())
+    return {pk: {f: {"mean": sum(runs[s][pk]["metrics"][f] for s in seeds) / len(seeds),
+                     "per_seed": {s: runs[s][pk]["metrics"][f] for s in seeds},
+                     "n_cases": min(runs[s][pk]["n"] for s in seeds), "n_seeds": len(seeds)} for f in fields} for pk in protocols}
+
 
 for ds, (stem, a2_arm) in DATASETS.items():
     C = json.load(open(f"{R}/{ds}.json")); old = C["arms"][C["isla_arm"]]
@@ -31,5 +53,9 @@ for ds, (stem, a2_arm) in DATASETS.items():
            "arms": {ISLA_ARM: arm, **{k: v for k, v in C["arms"].items() if k != C["isla_arm"]}},
            "complete": all(c["n_seeds"] == 2 for p in arm.values() for c in p.values()),
            "raw_read_isla": {"label": C["isla_arm"], **old}}
+    for label, (path, stem, key, reads) in FAIR_INPUT.get(ds, {}).items():
+        out[key] = {"label": f"{label}, the CHAR record's arm", **out["arms"][label]}
+        out["arms"][label] = rerun_arm(path, stem, C["fields"], C["protocols"])
+        out.setdefault("fair_input", {})[label] = f"retrained reading {reads}; scores: {path}; the replaced arm is kept under {key}"
     json.dump(out, open(f"{R}/{ds}_a2.json", "w"), indent=1)
     print(ds, " ".join(f"{pk}:" + "/".join(f"{arm[pk][f]['mean']:.4f}" for f in C["fields"]) for pk in C["protocols"]))
