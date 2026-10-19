@@ -675,7 +675,24 @@ def test_tree_read_cuda_float32_matches_cpu_float64():
 
 @cuda_only
 @pytest.mark.parametrize("theta", [0.0, 0.5])
-def test_tree_read_cuda_matches_cpu_float64(theta):
+def test_tree_read_cuda_matches_cpu_float64(theta, monkeypatch):
+    """The float64 model on CUDA against CPU. Both walk the forest to the same pair
+    lists (every opening decision agrees). At theta = 0 every pair is a cell and the
+    read is float64 throughout: the outputs agree to 1e-9. At theta > 0 the virtual
+    cells' means are float32 by design (node_means), summed in another order on each
+    device (CUDA's index_add is atomic), so the outputs agree to float32 roundoff of
+    each field's scale: a few units of eps32 times its RMS, through the two layers
+    (measured on GB300: 5e-9 to 2e-8 absolute)."""
+    import physicsnemo.experimental.models.isla.model as isla_model
+
+    plans = []
+
+    def capture(*args, **kwargs):
+        pairs = tree_read_pairs(*args, **kwargs)
+        plans.append(set(zip(pairs.plan.qi.tolist(), pairs.plan.bj.tolist())))
+        return pairs
+
+    monkeypatch.setattr(isla_model, "tree_read_pairs", capture)
     tree = _tree(3, theta)
     mesh, drv, q = _sphere_case(n=1500, nq=120)
     cpu = outputs(_run(tree, mesh, drv, q))
@@ -684,4 +701,14 @@ def test_tree_read_cuda_matches_cpu_float64(theta):
     gpu = outputs(
         _run(tree_c, mesh.to(dev), drv.to(dev), q.to(dev))
     )
-    assert same({k: v.cpu() for k, v in gpu.items()}, cpu, atol=1e-9)
+    assert len(plans) == 2 and plans[0] == plans[1]  # the same opening decisions
+    gpu = {k: v.cpu() for k, v in gpu.items()}
+    if theta == 0.0:
+        assert same(gpu, cpu, atol=1e-9)
+    else:
+        eps32 = torch.finfo(torch.float32).eps
+        for k in cpu:
+            bound = 8 * eps32 * cpu[k].square().mean().sqrt()
+            err = (gpu[k] - cpu[k]).abs().max()
+            print(f"{k}: max abs {err.item():.3e}, bound {bound.item():.3e}")
+            assert err <= bound, k
