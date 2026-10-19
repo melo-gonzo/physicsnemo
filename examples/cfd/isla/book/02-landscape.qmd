@@ -731,12 +731,14 @@ aligned with the laboratory axes. At a finite $\theta$ a rotation
 therefore regroups the clusters, and the kernel's exact equivariance holds
 only to the accuracy of the monopole; at $\theta = 0$ the sum is exact.
 
-GLOBE and ISLA share three choices: the boundary is the input, the
-rigid-motion symmetry is built in exactly, and every sum over the boundary
-is weighted by the cells' measure. They couple the boundary differently. GLOBE
-couples every face to every target through learned kernels of the pair's
-geometry; ISLA couples the cells through a learned soft partition into
-slices. ISLA-DTT's read-only prediction points follow GLOBE's evaluation
+ISLA draws on the best parts of GLOBE and of Transolver. From GLOBE it
+takes the boundary as the input, the rigid-motion symmetry built into the
+architecture exactly, sums over the boundary weighted by the cells'
+measure, and dimensionless geometry, in units of a length ISLA computes
+from the boundary where GLOBE is given its reference lengths. From
+Transolver it takes the coupling: a learned soft partition into slices,
+at a cost linear in $N$, in place of GLOBE's kernel per face–target pair
+(@sec-landscape-gaps). ISLA-DTT's read-only prediction points follow GLOBE's evaluation
 pattern: after every layer each point reads every boundary cell through a
 learned kernel of the pair's relative geometry, walking a forest of
 GLOBE's cluster trees, near cells one by one and distant clusters as monopoles
@@ -864,7 +866,8 @@ body. It is exact, it puts the cost at the edges of the network rather than
 in every layer, and it is the route ISLA takes (@sec-isla-frame,
 @sec-isla-heads). GLOBE takes it inside every kernel evaluation: invariants
 of the face–target pair in, vector outputs rebuilt on true vectors of the
-pair, which makes it exact under reflections as well (Sharpe, 2025).
+pair, which makes it exact under reflections too, for scalar and vector
+outputs (Sharpe, 2025).
 
 | route | exact for every input | what it costs | where the cost sits |
 |:---|:---|:---|:---|
@@ -979,7 +982,7 @@ measures how well the two baselines of this book do.
 | equivariant latent tokens (AB-GATr) | point sets in geometric algebra | yes | not by construction | yes | yes, at 2 to 11 times AB-UPT's training time |
 | slice attention (Transolver, Transolver++, Transolver-3) | point set, laboratory coordinates | no | no: Transolver counts each token once | as tokens of the input set | yes, linear in $N$ |
 | GeoTransolver | point set, laboratory coordinates, ball-query geometry encoding, global context | no | no: counts each token once | as tokens, with the signed distance | yes, linear in $N$ |
-| boundary-integral kernels (GLOBE) | boundary faces by boundary-condition type (centroid, normal, area, data), no connectivity; reference lengths | yes, rotations, translations and reflections in the kernel; at a finite opening angle a rotation regroups its laboratory-axis tree | yes: each face's kernel times its area | yes, at arbitrary points | $N \log N$ with a Barnes–Hut tree in its PhysicsNeMo code; published dense, $N^2$, on two-dimensional airfoils |
+| boundary-integral kernels (GLOBE) | boundary faces by boundary-condition type (centroid, normal, area, data), no connectivity; reference lengths | yes, rotations, translations and reflections in the kernel; at a finite opening angle a rotation regroups its laboratory-axis tree | yes: each face's kernel times its area | yes, at arbitrary points; its dual-tree traversal builds a tree over the prediction points, so at a finite opening angle a point's far-field list can depend on the other points requested | $N \log N$ with a Barnes–Hut tree in its PhysicsNeMo code; published dense, $N^2$, on two-dimensional airfoils |
 | physics-informed networks (PINN) | coordinates of one instance | no | not applicable | yes | one instance per training |
 | **ISLA** | boundary cells with their measure; invariants against slice anchors | **yes**, rotations and translations (@sec-isla-contracts); ISLA-DTT's tree read up to ties of its canonical frame (@sec-arch-tree-read) | **yes**: a log-measure bias in the routing | **yes**, as interacting or read-only prediction points | **yes**, linear in $N$; 200,000 cells per case in this book |
 
@@ -992,16 +995,26 @@ accurate it is; accuracy is the subject of @sec-standing. {#tbl-landscape-taxono
 
 ## The two gaps ISLA fills {#sec-landscape-gaps}
 
-**The scalable families pool by token count and take laboratory
-coordinates; the exactly equivariant families pay for it in every layer.
-ISLA closes both gaps in one slice transformer.** No published slice or
-latent-token transformer at industrial scale is exactly equivariant to
-rigid motions without typed features in every layer, and none weights its
-aggregation by the measure the cells stand for, so their predictions depend
-on the pose of the body and on the mesher's cell density. ISLA keeps the
-Transolver family's linear-cost slice attention and changes what the
-network sees. Every sum over the boundary is a quadrature rule. Positions
-enter only as invariants of a token against the slices' own anchors. Vector
+**ISLA draws on the best parts of GLOBE and Transolver. The scalable
+slice and latent-token transformers pool by token count and take
+laboratory coordinates; ISLA fills those two gaps by combining GLOBE's
+principles with Transolver's slice attention in one transformer.** No
+published slice or latent-token transformer at industrial scale is exactly
+equivariant to rigid motions without typed features in every layer, and
+none weights its aggregation by the measure the cells stand for, so their
+predictions depend on the pose of the body and on the mesher's cell
+density. From GLOBE (@sec-landscape-globe), ISLA takes the boundary as the
+input, the rigid-motion symmetry built into the architecture, sums over
+the boundary that are quadratures against the cells' measure, so that the
+prediction is consistent under remeshing, and dimensionless geometry.
+From Transolver (@sec-landscape-slice), it takes slice attention: a
+learned soft partition that couples every point globally at a cost linear
+in $N$. ISLA is not either architecture with a tweak: GLOBE couples
+through a kernel per face–target pair, Transolver's slices see laboratory
+coordinates and count tokens, and ISLA's slices are built on GLOBE's
+principles. Every sum over the boundary is a quadrature rule. Positions
+enter only as invariants of a token against the slices' own anchors, in
+units of a length computed from the boundary. Vector
 and tensor outputs are rebuilt at the end from a basis that moves with the
 body. The trunk between those edges is an ordinary scalar transformer of
 pre-LN blocks. How each of these works, on the same airfoil, is

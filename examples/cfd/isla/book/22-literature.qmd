@@ -3,9 +3,11 @@
 *Before this appendix:* @sec-landscape, for the families of neural PDE
 surrogates and the terms used here, and @sec-isla, for ISLA's ideas.
 
-**ISLA is a slice-attention transformer of the Transolver family. What is
-new in it is a short list of specific constructions inside that
-transformer, each with a closest prior work that does part of it.** This
+**ISLA draws on the best parts of GLOBE and Transolver: from GLOBE the
+boundary as the input, exact symmetry by construction, measure-weighted
+sums and dimensionless geometry; from Transolver slice attention. What is
+new in it is that combination and a short list of specific constructions
+that make it work, each with a closest prior work that does part of it.** This
 appendix states each idea against that prior work: what ISLA does, what the
 prior work does, what is new, the evidence in this book, and the caveat. It
 ends with the contributions that matter most, ideas from the literature
@@ -36,9 +38,13 @@ and the mesher's habits from data. Their reference configurations in this
 book are GeoTransolver at width 256 and Transolver at width 512 with 16
 layers; what each sees, and the protocol, are in @sec-baselines.
 
-**ISLA** (width 512, 12 layers, 512 slices) keeps the slice mechanism and
-changes its inputs and its sums (@sec-isla). No coordinate reaches a
-learned map. Every sum over the boundary is a measure-weighted quadrature
+**ISLA** (width 512, 12 layers, 512 slices) combines the slice mechanism
+with the principles of GLOBE (Sharpe, 2025), a boundary-integral surrogate
+whose field is a sum of learned kernels from the boundary faces to the
+target (@sec-landscape-globe): the boundary as the input, the rigid-motion
+symmetry built into the architecture, sums over the boundary weighted by
+the cells' measure, and dimensionless geometry (@sec-isla). No coordinate
+reaches a learned map. Every sum over the boundary is a measure-weighted quadrature
 rule. Position is stated only as invariants of a token against the slices'
 own anchors, in a length unit computed from the sample. Vector and tensor
 outputs are rebuilt at the end from a basis that rotates with the body. The
@@ -132,7 +138,9 @@ tokens decouple the discretization from the processor (Lee and Oh, 2024;
 Wang and Wang, 2024). M³ treats the biased empirical measure of a mesh as
 a training problem and rebalances the supervision (Mei et al., 2026). RIGNO
 and GAOT report robustness to unseen resolutions (Mousavi et al., 2025;
-Wen et al., 2025). Transolver and GeoTransolver weight each point once.
+Wen et al., 2025). GLOBE multiplies each face's kernel by the face's area,
+so its boundary sums are quadratures (Sharpe, 2025). Transolver and
+GeoTransolver weight each point once.
 
 *What is new.* The form: a log-measure bias inside the point softmax of
 slice routing, which turns a soft partition into a set of quadrature rules
@@ -171,8 +179,8 @@ measure-weighted pooling and a Horvitz–Thompson-centered datapipe, an
 ablation that leaves the released baselines unmodified, are consistent under
 the biased draw too (@sec-robustness-density).
 
-*Caveat.* Quadrature-weighted attention is adopted from the
-neural-operator literature; the routing form, the instruments and the
+*Caveat.* Measure-weighted boundary sums are adopted from GLOBE, and
+quadrature-weighted attention from the neural-operator literature; the routing form, the instruments and the
 factors are what is new. The interior task has one discretization-dependent
 input: an interior prediction point takes its wall distance and direction
 from the nearest sampled boundary token, and an exact full-resolution form
@@ -193,7 +201,9 @@ messages from relative squared distances and updates positions by weighted
 sums of relative vectors (Satorras et al., 2021); MeshGraphNets encode
 relative positions on mesh edges (Pfaff et al., 2021); message-passing PDE
 solvers carry relative positions in their messages (Brandstetter et al.,
-2022). All of them take differences between *neighbors* on a graph. Frame
+2022). All of them take differences between *neighbors* on a graph. GLOBE
+states every position relative to a boundary face, in units of reference
+lengths it is given (Sharpe, 2025). Frame
 averaging (Puny et al., 2022) and learned canonicalization (Kaba et al.,
 2023) instead fix a frame from the input, which is what a canonical frame
 does for GeoTransolver in @sec-pose.
@@ -234,7 +244,9 @@ architecture of AB-UPT (Rygiel et al., 2026). EqGINO makes a geometry-informed
 Fourier operator exactly equivariant to the discrete symmetries of its grid
 (Kim et al., 2026). GLOBE builds a translation-, rotation- and
 parity-equivariant surrogate from Green's-function-like kernels evaluated
-from boundary faces to targets (Sharpe, 2025). Most of these pay for
+from boundary faces to targets, each on parity-even invariants of the
+face–target pair with vector outputs rebuilt on the pair's true vectors
+(Sharpe, 2025). Most of these pay for
 equivariance inside every layer.
 
 *What is new.* The choice to keep the entire trunk an ordinary scalar
@@ -373,7 +385,8 @@ solution as a learned kernel from the boundary to the target: DeepGreen
 and BI-GreenNet learn Green's functions (Gin et al., 2021; Lin et al.,
 2022), BENO embeds boundary geometry and data in a Green's-function-motivated
 operator (Wang et al., 2024), and GLOBE evaluates such kernels from
-boundary faces to targets (Sharpe, 2025). The Barnes–Hut tree evaluates an
+boundary faces to targets (Sharpe, 2025); its PhysicsNeMo code does so
+with the cluster tree that ISLA-DTT's forest is built from. The Barnes–Hut tree evaluates an
 $N$-body sum in $O(N \log N)$ (Barnes and Hut, 1986), and Erwin builds a
 hierarchical transformer on a ball tree (Zhdanov et al., 2025).
 
@@ -473,8 +486,12 @@ on are in @sec-open-questions.
 - a measure-weighted local aggregation among interior prediction points,
   after GeoTransolver's ball queries, DoMINO and GAOT (Ranade et al., 2025;
   Wen et al., 2025), for the interior eddy-viscosity deficit against GeoTransolver on the DrivAerML Volume task;
-- parity-typed invariants, after GLOBE and GATr, for frame-component
-  targets;
+- reflection-odd invariants (a triple product of a token's normal, a
+  global direction and its separation from an anchor) for frame-component
+  targets, after GATr, whose multivector features are typed by grade
+  (Brehmer et al., 2023); GLOBE, like ISLA's trunk, stays
+  parity-equivariant through parity-even invariants and true vectors
+  alone (Sharpe, 2025);
 - a measure-weighted training loss, after M³ (Mei et al., 2026), for any
   remaining dependence on the training sampling law;
 - inter-slice attention as a control, after Hu et al. (2026);
