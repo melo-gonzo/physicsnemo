@@ -4,8 +4,8 @@
 area-weighted relative L2 error) and @sec-invariances (the three scorings: native mesh, uniform point cloud, rotated and
 translated).
 
-**ISLA is measured against two public slice-attention transformers, GeoTransolver and Transolver, on eight datasets and
-nine tasks. The protocol fixes everything except the architecture, and every number in the book is scored by it.** The
+**ISLA is measured against two public slice-attention transformers, GeoTransolver and Transolver, on seven datasets and
+eight tasks; an eighth dataset, AeroZoo, has its benchmark protocol and no model comparison. The protocol fixes everything except the architecture, and every number in the book is scored by it.** The
 baselines are the public model classes, run unmodified from the PhysicsNeMo recipe. Each architecture is scored at one
 reference configuration, chosen once on two selection datasets (@sec-selection). This chapter says what each baseline computes and what it is given, states
 the rules of the comparison and how the reference configurations were chosen, shows every dataset on one page, and defines
@@ -131,12 +131,17 @@ MI = [
     ("airfrans", f"{BC}; {NT}, plus `sdf` and `sdf_normals`; `U_inf_dir` and the raw inlet speed `U_inf_mag` (31 to 94 m/s) as a scalar",
      f"{GV}; `U_inf_dir` and the inlet speed standardized over the training airfoils, read by the context projector",
      "the same per-point fields, with the same two globals concatenated",
-     "the same information; the baselines predict a third, out-of-plane velocity component"),
-    ("aerozoo", f"four boundary meshes (`inlet`, `outlet`, `no_slip`, `slip`), each face with its role and prescribed values; {NT}; "
-     "`U_inf_dir` and the standardized log Reynolds number, both from `global_data/reference`, and four inlet-turbulence scalars",
-     "per point: coordinates, wall and slip-wall distances and the wall normal; the same eight globals", "not trained on AeroZoo",
-     "less: no inlet or outlet faces and no prescribed per-face values; both read inputs that AeroZoo's rule classes as labels "
-     "(@sec-aerozoo-allowed)"),
+     "the same information; the baselines also predict an out-of-plane velocity component, which leaves their velocity error "
+     "unchanged to the precision printed (@sec-interior-airfrans)"),
+    ("aerozoo", f"four boundary meshes (`inlet`, `outlet`, `no_slip`, `slip`), each face with its condition type and prescribed values "
+     f"in SI units; {NT}; the kinematic viscosity and the density; its length and velocity scales, the inlet direction and the Reynolds "
+     "number computed inside the model from these",
+     "as geometry, every boundary face with its centroid in meters, its condition type and its prescribed values, each column "
+     "standardized by one constant per dataset, without local features; per point: coordinates in meters, the signed distance and "
+     "normal to the `no_slip` faces; the kinematic viscosity, log-standardized by dataset constants",
+     "per point: coordinates in meters, the signed distance and normal to the `no_slip` faces, the log-standardized kinematic viscosity",
+     "the same boundary data for GeoTransolver; less for Transolver, which receives no inlet or outlet value and so cannot see the "
+     "speed or direction of the flow (@sec-aerozoo-allowed)"),
     ("tensile2d", "boundary segments with the loaded, fixed and pinned labels and the applied pressure; nodes as prediction-point tokens "
      "with their nearest-token wall distance and direction, plus `sdf` and `sdf_normals`; "
      "the pressure and five material parameters as six standardized scalars",
@@ -166,13 +171,11 @@ print(": What each model receives, per dataset: the global inputs with their uni
       "the stored signed distance to the full-resolution boundary and its gradient. How to read this: the last column says "
       "whether the baselines receive the same information as ISLA; a row marked *no standing comparison* is one whose "
       "baselines read the freestream as a raw physical vector of varying direction, so its ratios are printed and not "
-      "read as a verdict; a field *given without a verdict* is one whose error is not measured alike for the three "
-      "(@sec-interior-airfrans). AeroZoo's own rule admits only the boundary meshes with their condition types, the prescribed values "
-      "and the kinematic viscosity, and classes the reference scales of `global_data/reference` as labels; its row reads them, so "
-      "its numbers are measured under the label-input protocol (@sec-aerozoo-allowed). "
+      "read as a verdict. AeroZoo's row is its benchmark protocol (@sec-aerozoo-allowed), which reads no label of the dataset; "
+      "the book holds no model comparison on AeroZoo. "
       "The table does not say how much a difference in input costs a model. Source: "
       "results/drive_audit_2026-10-18/REPORT.md, section 1; for the AirfRANS and lug baselines, "
-      "results/campaigns_2026-10-19/drive_fix/PREREG.md. {#tbl-model-inputs tbl-colwidths=\"[11,27,25,14,23]\"}")
+      "results/campaigns_2026-10-19/drive_fix/PREREG.md; for AeroZoo, results/campaigns_2026-10-19/aerozoo_protocol/protocol_design.md. {#tbl-model-inputs tbl-colwidths=\"[11,27,25,14,23]\"}")
 ```
 
 ### Global directions as unit vectors, magnitudes as scalars {#sec-unit-direction-rule}
@@ -195,20 +198,23 @@ so its conditioning depends on the magnitude (@tbl-projector).
 ```{python}
 #| label: para-constant-drive
 #| output: asis
-UDC = S.unit_drive_control()
+UDC = S.unit_drive_control(); UDI = S.unit_drive_control("isla")
 print("On the DrivAerML tasks and on SHIFT-SUV every case has the same freestream, so `U_inf` is one constant vector per "
       "dataset and holds no case information. Its scale still reaches the trained model. Transolver at its reference "
       "configuration on the DrivAerML Surface task, retrained reading `U_inf_dir` in place of `U_inf`, scores "
       f"{UDC['pressure_l2']:.3f} times its error on pressure and {UDC['wss_l2']:.3f} times it on wall shear, seed means on the "
-      f"same {S.Standing('drivaerml_surface').cell('Transolver', 'pressure_l2')['n_cases']} validation cars. The band of ±3% "
-      "registered for this control before it ran holds on wall shear and not on pressure. "
+      f"same {S.Standing('drivaerml_surface').cell('Transolver', 'pressure_l2')['n_cases']} validation cars, each arm scored on its "
+      "own draw of 100,000 cells. The band of ±3% registered for this control before it ran, on those draws, holds on wall shear and "
+      "not on pressure. Re-scored on the 200,000 cells of ISLA's scored set, the same checkpoints read "
+      f"{UDI['pressure_l2']:.3f} on pressure and {UDI['wss_l2']:.3f} on wall shear"
+      + (", inside the band on both. " if max(abs(v - 1) for v in UDI.values()) <= 0.03 else ". ")
       + (f"The baselines' ratios on {', '.join(S.DATASETS[k].in_sentence for k in S.CONSTANT_DRIVE[:-1])} and "
          f"{S.DATASETS[S.CONSTANT_DRIVE[-1]].in_sentence} therefore carry an uncertainty of about "
          f"{S.fmt_pct(1 + S.drive_bias())} from the scale of the constant vector, and a verdict that close to the level band says so in "
          "its chapter (@sec-oq-constant-drive). " if S.CONSTANT_DRIVE else "")
       + "Data: "
       "results/campaigns_2026-10-19/drive_fix/drivefix_scores_2026-10-19.json (the band: PREREG.md beside it), "
-      "results/char/drivaerml_surface_a2.json.")
+      "results/campaigns_2026-10-19/drive_fix2/scoreset/tset200k_scores.json, results/char/drivaerml_surface_a2.json.")
 ```
 
 ```{python}
@@ -278,9 +284,9 @@ difference is read.
    restricts the inputs, it binds as well. AeroZoo's rule admits only the data of the PDE: the boundary meshes with the
    condition type each names, the values prescribed on them and the kinematic viscosity, with the density only to
    convert pressure and shear to pascals. Every other global datum is a label, among them the reference length, speed
-   and direction and any Reynolds number built on them. Every AeroZoo model of this book reads the inlet direction and
-   the Reynolds number from those reference scales, so its numbers are measured under the label-input protocol and a
-   comparison with a baseline there is provisional (@sec-aerozoo-allowed). On every other dataset a reference length,
+   and direction and any Reynolds number built on them. On AeroZoo every model reads only those data, in physical units,
+   and a model that wants a length, a velocity scale or a Reynolds number computes it from them (@sec-aerozoo-allowed); the
+   book holds no model comparison on AeroZoo. On every other dataset a reference length,
    where one is used, is one constant for the whole set.
 2. No reference configuration trains with augmentation. The rotation-augmented baselines of @sec-pose-contract are a labeled
    control.
@@ -439,7 +445,7 @@ print(": Every candidate of the selection, by architecture: its seed-mean surfac
 
 ## The datasets {#sec-datasets}
 
-**Eight datasets carry the evidence, and all of them supply one input schema: boundary cells with positions, outward
+**Seven datasets carry the evidence and an eighth, AeroZoo, has its benchmark protocol and no model result; all eight supply one input schema: boundary cells with positions, outward
 normals and measures, the problem's global conditions, and per-cell boundary data where the problem has them.** One model
 implementation therefore runs on all of them. The aerodynamic datasets are external flows with one global direction, the
 flow direction ($K = 1$). The solids and brackets exercise the global scalars, the per-cell boundary data and, on the lug and
@@ -475,7 +481,7 @@ print(out)
 print(": The datasets of the book. $K$: global unit directions; $S$: global scalars, as ISLA's reference configurations declare them "
       "(@sec-isla-inputs). *Scored cases*: the validation or test cases of the standing. How to read this: a row names what "
       "varies within the set, which fixes what a model trained on it must learn; the per-cell boundary data of the solids and "
-      "brackets are listed in their chapters. AeroZoo has no standing artifact; its chapter holds its evidence. Data: the "
+      "brackets are listed in their chapters. AeroZoo has no standing: the book holds no model comparison on it (@sec-oq-aerozoo). Data: the "
       "standing artifacts through standing.py. {#tbl-datasets tbl-colwidths=\"[12,26,18,4,4,13,9,14]\"}")
 ```
 
@@ -624,7 +630,7 @@ in @sec-limits.
 | HiLiftAeroML | native files | `datasets/highlift_surface.yaml` | `conf/model/isla_surface_highlift.yaml` |
 | SHIFT-SUV | native files | `datasets/shift_suv_surface.yaml` and the two family files | `conf/model/isla_surface.yaml` |
 | AirfRANS | `results/campaigns_2026-09-21/af/airfrans_convert.py` | `datasets/airfrans_uvolume_2d.yaml` (ISLA), `airfrans_uvolume.yaml` (the baselines) | `conf/model/isla_volume_airfrans.yaml` |
-| AeroZoo | native files of the dataset release | `datasets/aerozoo_uvolume.yaml` and its split files | `conf/model/isla_volume_aerozoo.yaml` |
+| AeroZoo | native files of the dataset release | `datasets/aerozoo_uvolume.yaml` and its six held-out-split files, which hold the benchmark protocol's physical PDE inputs only (@sec-data-aerozoo) | `conf/model/isla_volume_aerozoo.yaml` |
 | PLAID Tensile2d | `results/campaigns_2026-09-22/datasets/plaid_tensile2d_convert.py` | `results/campaigns_2026-10-02/char/datasets/plaid_tensile2d.yaml` | `conf/model/isla_tensile2d.yaml` |
 | GINOT Bracket Lug | `results/campaigns_2026-09-22/datasets/ginot_lug_convert.py` | `results/campaigns_2026-10-02/char/datasets/ginot_lug_volume.yaml` | `conf/model/isla_lug.yaml` |
 | DeepJEB++ | `results/campaigns_2026-09-22/datasets/deepjebpp_convert.py` | `results/campaigns_2026-10-02/char/datasets/deepjebpp_surface.yaml` | `conf/model/isla_surface_deepjebpp.yaml` |

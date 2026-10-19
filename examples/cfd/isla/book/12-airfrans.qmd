@@ -30,9 +30,10 @@ nparams = lambda path: json.loads(open(RES / path / "native" / path.split("/")[-
 DF = "campaigns_2026-10-19/drive_fix/scores/evals_afu_ud"
 PARAMS = {"ISLA": nparams("campaigns_2026-10-14/afu/protocols/afu_a2s_isla_seed42"), "GeoTransolver": nparams(f"{DF}/afu_ud_gt_seed42"),
           "Transolver": nparams(f"{DF}/afu_ud_t_seed42")}
-# the out-of-plane velocity component of the baselines' prediction: its relative L2 per run (native), against a near-zero target
-DFS = J("campaigns_2026-10-19/drive_fix/drivefix_scores_2026-10-19.json")
-VZ = [DFS[f"evals_afu_ud/afu_ud_{a}_seed{s}/native"]["metrics"]["velocity_z_l2"] for a in ("gt", "t") for s in (42, 43)]
+# the baselines' velocity error in the plane (x, y) against their scored three-component error, per seed, native mesh, the standing's arms
+PL = J("campaigns_2026-10-19/drive_fix2/planar/planar_scores.json")
+PLANAR_DEV = max(abs(xy / v3 - 1) for a in ("gt", "t") for v3, xy in zip(PL[f"afu_ud_{a}/native"]["velocity_l2"],
+                                                                          PL[f"afu_ud_{a}/native"]["velocity_xy_l2"]))
 COST = J("char/char_lanes_cost_2026-10-04.json")["cost"]["AirfRANS"]
 def word(arch, f, p="native"):
     """ISLA against a baseline in the book's words: 'leads GeoTransolver 3.9x', 'trails Transolver (ratio 0.75)', 'is level with ...',
@@ -224,10 +225,12 @@ print("**ISLA " + "; it ".join(f"{both(f)} on {l}" for f, l in CMP)
       "@tbl-airfrans-protocols holds the numbers.")
 if HELD:
     print()
-    print(f"**Velocity is not measured alike for the three.** {St.ds.provisional['velocity_l2']}. The true out-of-plane component is "
-          "close to zero, so the baselines' relative error on it alone is "
-          f"{min(VZ):.0f} to {max(VZ):.0f} on the four checkpoints, and whatever they predict there adds to their velocity error. "
-          "The velocity ratios of @tbl-airfrans-protocols are printed and no verdict is drawn from them (@sec-oq-planar-velocity).")
+    print(f"**{' and '.join(St.fields[f] for f in HELD)} carries no verdict:** {'; '.join(St.ds.provisional[f] for f in HELD)}.")
+print()
+print("**Velocity is measured alike for the three.** GeoTransolver and Transolver predict the planar flow as three velocity "
+      "components, and their velocity error is scored on all three; scored on the two in-plane components alone, on the same "
+      f"checkpoints, it differs by at most {100 * PLANAR_DEV:.4f}% on the native mesh, so the ratios read the same under either "
+      "definition. Data: results/campaigns_2026-10-19/drive_fix2/planar/planar_scores.json.")
 ```
 
 ```{python}
@@ -235,8 +238,6 @@ if HELD:
 #| output: asis
 print(St.table("tbl-airfrans-protocols", f"The AirfRANS interior task, `full` split, {N_TEST} test airfoils"))
 ```
-
-<!-- SLOT: in-plane velocity (registry: drop the airfrans provisional entry when scored) -->
 
 ```{python}
 #| label: para-airfrans-replication
@@ -610,12 +611,11 @@ print(f"**Three readings.** First, the law: pressure and velocity move far past 
 gx = {f: mean(law("exact-geometry variant", f)) for f in ("pressure_l2", "velocity_l2")}
 gc = [v for f in ("pressure_l2", "velocity_l2") for v in count("exact-geometry variant", f)]
 print("**The AirfRANS standing is one two-dimensional dataset: "
-      + "a native comparison on " + " and ".join(l for _, l in CMP) + "".join(f", {St.fields[f]} without a verdict" for f in HELD) + ", "
+      + "a native comparison on " + (", ".join(l for _, l in CMP[:-1]) + " and " if len(CMP) > 1 else "") + CMP[-1][1] + "".join(f", {St.fields[f]} without a verdict" for f in HELD) + ", "
       + "an exact pose reading for ISLA, three studies on smaller instruments and one boundary-draw study on the standing's checkpoints.**")
 print()
-if HELD:
-    print(f"- **No verdict on velocity.** {St.ds.provisional['velocity_l2']}. The baselines' velocity error scored on its two in-plane "
-          "components, on the same checkpoints, settles it (@sec-oq-planar-velocity).")
+for f in HELD:
+    print(f"- **No verdict on {St.fields[f]}.** {St.ds.provisional[f]}.")
 print("- **Not resource-matched.** The three configurations differ in parameters and memory (@sec-airfrans-measured) and do not receive the "
       "same inputs (@tbl-airfrans-inputs), so any ratio is a record of the configurations as each is scored on every dataset.")
 print("- **Not a statement about geometry.** The airfoils are one smooth parameterization; nothing here says how ISLA generalizes across "

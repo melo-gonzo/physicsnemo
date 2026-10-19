@@ -74,10 +74,6 @@ class Dataset:
         return ("the " + self.name) if self.name.endswith("task") else self.name
 
 
-#: Why AirfRANS velocity carries no verdict (the registry's ``provisional`` entry), as the chapters print it.
-VELOCITY_3D = ("GeoTransolver and Transolver predict AirfRANS as a three-dimensional field, so their velocity error includes an "
-               "out-of-plane component, which ISLA's planar prediction does not have")
-
 #: The datasets whose baselines read the freestream as one constant physical vector in m/s, where ISLA reads its unit direction.
 #: On the DrivAerML Surface task the unit direction moves Transolver's error by ``drive_bias()``; when the unit-direction lanes of
 #: these arms are scored (a2r_protocol_artifacts_2026-10-17.py, FAIR_INPUT), this tuple empties and the chapters' clause goes with it.
@@ -100,11 +96,11 @@ DATASETS = {
         Dataset("shift_suv", "SHIFT-SUV", "shift_suv_surface_a2.json",
                 ("pressure_l2", "wss_l2"), ("native", "area", "posed"), "sec-shift-suv-standing"),
         # the baselines of this file read U_inf_dir and the standardized inlet speed (DRIVE-FIX, campaigns_2026-10-19/drive_fix/);
-        # they run AirfRANS embedded in 3-D, so their velocity_l2 includes a z component that ISLA's 2-D set lacks (AF-PLANAR checks it):
-        # once velocity is scored in the plane (airfrans_a2_2026-10-18.py), deleting the provisional line below draws its verdict
+        # they run AirfRANS embedded in 3-D, and their velocity_l2 equals the in-plane error to within 4e-6 relative on the native mesh
+        # (AF-PLANAR, campaigns_2026-10-19/drive_fix2/planar/), so velocity is compared like the other fields
         Dataset("airfrans", "AirfRANS interior task", "airfrans_a2.json",
                 ("pressure_l2", "velocity_l2", "nut_l2"), ("native", "posed"), "sec-interior-airfrans",
-                provisional={"velocity_l2": VELOCITY_3D}),
+                provisional={}),
         Dataset("aerozoo", "AeroZoo", None, (), ("native",), "sec-interior-aerozoo"),
         Dataset("tensile2d", "PLAID Tensile2d", "tensile2d_a2.json",
                 ("stress_l2", "displacement_l2", "q_l2"), ("native", "posed"), "sec-interior-tensile2d"),
@@ -238,15 +234,22 @@ def fmt_pct(r: float) -> str:
     return f"{abs(r - 1) * 100:.0f}%"
 
 
-def unit_drive_control():
+def unit_drive_control(scored_set: str = "registered"):
     """{field: error with the unit direction ÷ error with the constant physical vector}: Transolver at its reference configuration
-    on the DrivAerML Surface task, the same lanes retrained reading U_inf_dir (DRIVE-FIX, r80ud_dr_t), seed means."""
-    rec = json.load(open(RES / "campaigns_2026-10-19" / "drive_fix" / "drivefix_scores_2026-10-19.json"))
+    on the DrivAerML Surface task, the same lanes retrained reading U_inf_dir (DRIVE-FIX, r80ud_dr_t), seed means. ``scored_set``:
+    "registered", both arms on their own 100,000-cell draw, the set the control's band was registered on; "isla", both re-scored on
+    ISLA's 200,000-cell set (T-SCORESET, campaigns_2026-10-19/drive_fix2/scoreset/)."""
     ref = Standing("drivaerml_surface")
-    run = "evals_r80ud/r80ud_dr_t_h512_l16_c100k_seed{}/native"
     raw = ref.raw.get("raw_drive_transolver")  # the physical-vector arm, once a unit-direction arm replaces it (FAIR_INPUT)
-    base = (lambda f: raw["native"][f]["mean"]) if raw else (lambda f: ref.err("Transolver", f))
-    return {f: sum(rec[run.format(s)]["metrics"][f] for s in (42, 43)) / 2 / base(f) for f in ref.ds.headline}
+    if scored_set == "registered":
+        rec = json.load(open(RES / "campaigns_2026-10-19" / "drive_fix" / "drivefix_scores_2026-10-19.json"))
+        run = "evals_r80ud/r80ud_dr_t_h512_l16_c100k_seed{}/native"
+        arm = ref.raw.get("transolver_100k_scoring") or raw or ref.arms["Transolver"]
+    else:
+        rec = json.load(open(RES / "campaigns_2026-10-19" / "drive_fix2" / "scoreset" / "tset200k_scores.json"))["files"]
+        run = "evals_tset200k/r80ud_dr_t_h512_l16_c100k_seed{}/native"
+        arm = raw or ref.arms["Transolver"]
+    return {f: sum(rec[run.format(s)]["metrics"][f] for s in (42, 43)) / 2 / arm["native"][f]["mean"] for f in ref.ds.headline}
 
 
 def drive_bias() -> float:

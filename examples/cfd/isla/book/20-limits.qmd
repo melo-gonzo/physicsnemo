@@ -309,35 +309,21 @@ Reynolds range, and are the instrument for the question (@sec-oq-aerozoo).
 would cost.** Costs are GPU-hours on GB300s for the training runs each design needs, two seeds per
 configuration. A run is priced from the cost record of the reference configurations
 (results/char/char_lanes_cost_2026-10-04.json: one epoch's wall time on four GPUs, times the epochs
-of the dataset's protocol, times four GPUs), or, on AeroZoo, which that record does not hold, from
-the GPU-hours of the 250-epoch runs on its `full` split
-(results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json). @tbl-open-questions is the summary;
+of the dataset's protocol, times four GPUs); no cost record holds an AeroZoo run of its benchmark
+protocol, so the AeroZoo measurements are not priced. @tbl-open-questions is the summary;
 the sections after it give each question its reasoning.
 
 ```{python}
 #| label: setup-oq
 #| include: false
-AZR = json.load(open(RES / "campaigns_2026-10-09" / "aerozoo" / "aerozoo_reduction.json"))
-def az_gpuh(arm):
-    """GPU-hours of one 250-epoch AeroZoo run on the `full` split, the seed mean of the training records (four GPUs)."""
-    return statistics.mean(c["gpu_hours_est"] for c in AZR["cost"][arm]["full"].values() if c["gpu_hours_est"])
-AZ_ISLA_GPUH, AZ_DTT_GPUH, AZ_GT_GPUH = az_gpuh("ISLA"), az_gpuh("ISLA-DTT"), az_gpuh("GeoTransolver")
-AZ_DTT_OVER_ISLA = AZ_DTT_GPUH / AZ_ISLA_GPUH
-# the held-out splits of @tbl-aerozoo-splits; each run is priced at the `full` split's, an upper bound (a held-out split trains on fewer cases)
+# the held-out splits of @tbl-aerozoo-splits; no cost record holds an AeroZoo run of the benchmark protocol, so its runs are not priced
 AZ_SPLITS = ("family_non_box", "reynolds", "bank_blobs", "bank_zero_to_cad", "profile_crossflow", "profile_dual_inlet")
 AZ_HELDOUT = len(AZ_SPLITS)
-AZ_P2 = AZR["predictions"]["P2"]["statement"]; AZ_P4 = AZR["predictions"]["P4"]["statement"]
+AZ_COST = "not priced (no cost record holds an AeroZoo run)"
 SEEDS = 2
-# (i) exact geometry: ISLA with the exact construction on the interior datasets of the cost record and on the AeroZoo held-out splits
-q1_lanes = {"DrivAerML Volume": SEEDS * lane_gpuh("drivaerml_volume"), "AirfRANS": SEEDS * lane_gpuh("airfrans"),
-            "the AeroZoo held-out splits": SEEDS * AZ_HELDOUT * AZ_ISLA_GPUH}
+# (i) exact geometry: ISLA with the exact construction on the interior datasets of the cost record (and, unpriced, the AeroZoo held-out splits)
+q1_lanes = {"DrivAerML Volume": SEEDS * lane_gpuh("drivaerml_volume"), "AirfRANS": SEEDS * lane_gpuh("airfrans")}
 q1 = sum(q1_lanes.values())
-# (ii) ISLA against ISLA-DTT on AeroZoo's held-out splits
-q2 = AZ_HELDOUT * SEEDS * (AZ_ISLA_GPUH + AZ_DTT_GPUH)
-# (iii) ISLA against GeoTransolver on the held-out splits (Transolver is not trained on AeroZoo)
-q3 = AZ_HELDOUT * SEEDS * (AZ_ISLA_GPUH + AZ_GT_GPUH)
-# (viii) AeroZoo on its allowed inputs: the three arms on `full` and on every held-out split
-q8 = (1 + AZ_HELDOUT) * SEEDS * (AZ_ISLA_GPUH + AZ_DTT_GPUH + AZ_GT_GPUH)
 # (iv) the flagged standings with unit-direction baselines: both baselines, two seeds; the record of tasks the cost record holds
 UD = {k: SEEDS * sum(lane_gpuh(k, b) for b in S.BASELINES) if k in TASK else None for k in UNFAIR}
 # (ix) the constant-drive standings with unit-direction baselines: GeoTransolver on each, Transolver where it has not read it yet
@@ -363,12 +349,12 @@ fmt_h = lambda h: f"{h:,.0f}" if h < 1000 else f"{h / 1000:.1f} thousand"
 #| output: asis
 rows = [
     ("Should a prediction point's wall geometry come from the exact full-resolution surface, with the boundary drawn inside the model, rather than from the nearest sampled token?",
-     "the exact construction against the nearest-token form at equal size on DrivAerML Volume, AirfRANS and the AeroZoo held-out splits; native error and the boundary-law shift", fmt_h(q1)),
-    ("Should ISLA-DTT be ISLA's only interior form?", "ISLA-DTT ÷ ISLA on velocity and pressure on each AeroZoo held-out split, at equal size", fmt_h(q2)),
+     "the exact construction against the nearest-token form at equal size on DrivAerML Volume, AirfRANS and the AeroZoo held-out splits; native error and the boundary-law shift",
+     f"{fmt_h(q1)}, the AeroZoo splits not priced"),
+    ("Should ISLA-DTT be ISLA's only interior form?", "ISLA-DTT ÷ ISLA on velocity and pressure on `full` and each AeroZoo held-out split under the benchmark protocol, at equal size", AZ_COST),
     ("How large is ISLA-DTT's tree error at θ = 1 where its forest's frame ties?", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
-    ("Where does ISLA stand against GeoTransolver on AeroZoo's held-out families?", "both reference configurations on each held-out split; each one's held-out penalty", fmt_h(q3)),
-    ("Do AeroZoo's comparisons with GeoTransolver hold when every model reads only the inputs the benchmark allows?",
-     "ISLA, ISLA-DTT and GeoTransolver trained and scored on the allowed inputs only, the freestream computed from the inlet faces, on `full` and each held-out split", fmt_h(q8)),
+    ("Where does ISLA stand on AeroZoo, in distribution and with a family held out?",
+     "ISLA, ISLA-DTT, GeoTransolver and Transolver at their reference configurations under the benchmark protocol, on `full` and each held-out split; each one's error and held-out penalty", AZ_COST),
 ]
 if UNFAIR:
     rows.append((f"How do the reference configurations compare on {names(UNFAIR)} when every model reads the unit direction?",
@@ -394,10 +380,10 @@ out = "| question | what would settle it | cost [GPU-hours] |\n|---|---|---|\n" 
 print(out)
 print(": The open questions, the measurement that would settle each, and its cost. *Cost*: GPU-hours of the training runs the measurement "
       "needs, two seeds per configuration, each run priced from the reference configurations' cost record (epoch time on four GB300 GPUs × the "
-      "protocol's epochs × four) or, on AeroZoo, from the GPU-hours of its 250-epoch `full`-split runs, an upper bound for a held-out split; "
+      "protocol's epochs × four); an AeroZoo run is not priced, because that record holds none; "
       "a run at a smaller training set is priced in proportion to its cases; *scoring only* means the measurement reads checkpoints that "
       "exist. How to read this: the costs are training only, not scoring; they price the experiment's design, not a schedule. Data: "
-      "results/char/char_lanes_cost_2026-10-04.json; results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json.")
+      "results/char/char_lanes_cost_2026-10-04.json.")
 ```
 
 ### Exact wall geometry for prediction points {#sec-oq-geometry}
@@ -428,7 +414,8 @@ print("**The open question is whether an interior prediction point should take i
       "(results/char/airfrans_area2_a2.json). What would settle the question: the exact form against the nearest-token form at equal size, "
       "two seeds each, on DrivAerML Volume, AirfRANS and the AeroZoo held-out splits, read on native error and on the boundary-law shift.")
 print()
-print("Cost: " + "; ".join(f"{k} {fmt_h(v)} GPU-hours" for k, v in q1_lanes.items()) + f"; {fmt_h(q1)} in all.")
+print("Cost: " + "; ".join(f"{k} {fmt_h(v)} GPU-hours" for k, v in q1_lanes.items()) + f"; {fmt_h(q1)} in all; the AeroZoo held-out "
+      "splits are not priced, because no cost record holds an AeroZoo run.")
 ```
 
 ### ISLA or ISLA-DTT as the interior form {#sec-oq-dtt}
@@ -439,15 +426,15 @@ print("Cost: " + "; ".join(f"{k} {fmt_h(v)} GPU-hours" for k, v in q1_lanes.item
 print("**The open question is whether the read-only form, whose prediction at a point is a function of that point and the boundary alone, "
       "should be ISLA's only interior model.** The interacting form lets prediction points inform one another through the slices, and pays "
       "for it with a prediction that depends on the request (@sec-limits-query-independence). The read-only form gives that up and reads "
-      f"every boundary cell through a Barnes–Hut forest at every depth, at {AZ_DTT_OVER_ISLA:.1f} times ISLA's training cost on AeroZoo. On "
+      "every boundary cell through a Barnes–Hut forest at every depth, at a longer training step (@sec-arch-tree-read). On "
       "the two interior standings ISLA-DTT is not part of the reference set. The decisive data are AeroZoo's held-out splits, where "
-      "generalization rather than in-distribution accuracy is at stake. What would settle it: both forms at equal size on each of the "
-      f"{AZ_HELDOUT} held-out splits, two seeds each, with the ratio ISLA-DTT ÷ ISLA on velocity and pressure as the readout and the 5% band "
-      "that the AeroZoo preregistration sets in distribution as the bar (results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json, its predictions block). If the ratio is inside the band on every split, the read-only form "
-      "can be the only one: the query routing mass and the `query_independent` switch go, and every interior prediction can be chunked freely.")
+      "generalization rather than in-distribution accuracy is at stake. What would settle it: both forms at equal size under the "
+      f"benchmark protocol (@sec-aerozoo-allowed), on `full` and on each of the {AZ_HELDOUT} held-out splits, two seeds each, with the "
+      "ratio ISLA-DTT ÷ ISLA on velocity and pressure as the readout, read by the seed rule. If the two are level on every split, the "
+      "read-only form can be the only one: the query routing mass and the `query_independent` switch go, and every interior prediction "
+      "can be chunked freely.")
 print()
-print(f"Cost: {AZ_HELDOUT} held-out splits × two forms × two seeds, ISLA at {AZ_ISLA_GPUH:.0f} GPU-hours a run and ISLA-DTT at "
-      f"{AZ_DTT_GPUH:.0f}: {fmt_h(q2)} GPU-hours.")
+print(f"Cost: {1 + AZ_HELDOUT} splits × two forms × two seeds, {AZ_COST}.")
 ```
 
 ### The frame of ISLA-DTT's forest {#sec-oq-dtt-frame}
@@ -470,38 +457,21 @@ checkpoints scored rotated and translated and under boundary redraws on cases wh
 variances are nearly equal, such as AeroZoo's sphere bodies and spherical enclosures, against the
 same scorings on cases with a well-separated frame. Cost: scoring only.
 
-### The AeroZoo standing on held-out families {#sec-oq-aerozoo}
+### The AeroZoo standing {#sec-oq-aerozoo}
 
 ```{python}
 #| label: para-oq-aerozoo
 #| output: asis
-print("**The open question is where ISLA stands against GeoTransolver on AeroZoo, in distribution and with a family held out.** "
-      + ("AeroZoo carries no standing in @sec-standing. " if AZ.artifact is None else "")
+print("**The open question is where ISLA stands on AeroZoo, in distribution and with a family held out, when every model reads only "
+      "the inputs the benchmark allows.** "
+      + ("The book holds no model comparison on AeroZoo. " if AZ.artifact is None else "")
       + "It is the one dataset of the book whose cases differ in enclosure, scale and Reynolds number at once, and the only one with "
-        f"held-out splits along those axes ({AZ_HELDOUT} of them, @tbl-aerozoo-splits). Its readout is two numbers per architecture and field: "
-        "the in-distribution error and the held-out penalty, the error on a held-out split divided by the in-distribution error. The "
-        "preregistered bar asks for ISLA's penalty on the held-out enclosure family to be at least 20% smaller than GeoTransolver's (the "
-        "reduction's predictions block). "
-        "Transolver is not trained on AeroZoo (@sec-aerozoo-measured). What would settle it: both reference configurations on each held-out "
-        f"split, two seeds each, on the inputs the benchmark allows (@sec-oq-aerozoo-inputs). Cost: {fmt_h(q3)} GPU-hours, ISLA at {AZ_ISLA_GPUH:.0f} and GeoTransolver at {AZ_GT_GPUH:.0f} GPU-hours a run.")
-```
-
-### AeroZoo on the inputs the benchmark allows {#sec-oq-aerozoo-inputs}
-
-```{python}
-#| label: para-oq-aerozoo-inputs
-#| output: asis
-print("**The open question is whether AeroZoo's comparisons with GeoTransolver hold when every model reads only the inputs the "
-      "benchmark allows.** AeroZoo's rule admits the boundary meshes with their condition types, the prescribed values and the kinematic "
-      "viscosity, and classes the reference scales of `global_data/reference` as labels. Every AeroZoo model of this book reads them: the "
-      "inlet direction and the Reynolds number come from them, and the reference length scales the targets and GeoTransolver's "
-      "coordinates (@sec-aerozoo-allowed). ISLA-DTT ÷ ISLA and each ablation pair compare arms that read the same labels; a comparison "
-      "with GeoTransolver is provisional under that label-input protocol. What would settle it: the same arms, ISLA, ISLA-DTT and "
-      "GeoTransolver at their reference configurations, trained and scored on the allowed inputs only, with the freestream computed "
-      f"from the inlet faces, on `full` and on each of the {AZ_HELDOUT} held-out splits, two seeds each.")
-print()
-print(f"Cost: {1 + AZ_HELDOUT} splits × three arms × two seeds, ISLA at {AZ_ISLA_GPUH:.0f}, ISLA-DTT at {AZ_DTT_GPUH:.0f} and "
-      f"GeoTransolver at {AZ_GT_GPUH:.0f} GPU-hours a run: {fmt_h(q8)} GPU-hours.")
+        f"held-out splits along those axes ({AZ_HELDOUT} of them, @tbl-aerozoo-splits). Its benchmark protocol offers every model only the "
+        "data of the PDE, the boundary meshes with their condition types and prescribed values in SI units and the kinematic viscosity, "
+        "of which each architecture reads what it can; it reads no label and leaves each model to bring its own scales (@sec-aerozoo-allowed). Its readout is two numbers per architecture and field: "
+        "the in-distribution error and the held-out penalty, the error on a held-out split divided by the in-distribution error. "
+        "What would settle it: ISLA, ISLA-DTT, GeoTransolver and Transolver at their reference configurations under that protocol, on "
+        f"`full` and on each held-out split, two seeds each. Cost: {AZ_COST}.")
 ```
 
 ```{python}
@@ -587,7 +557,8 @@ print("**The open question is whether GeoTransolver and Transolver keep their re
       f"on the DrivAerML Surface task against {sel('GeoTransolver', GT_REF, 'drivaer_surface'):.4f} for the reference width 256, and "
       f"{sel('GeoTransolver', GT_BIG, 'hilift_210'):.3f} against {sel('GeoTransolver', GT_REF, 'hilift_210'):.3f} on the wings, which cost it "
       "the joint score. Transolver's reference, width 512 with 16 layers, also owes its place to the wings: width 1,024 wins on the cars, "
-      f"{sel('Transolver', T_CAR, 'drivaer_surface'):.4f} against {sel('Transolver', T_REF, 'drivaer_surface'):.4f} and at lower memory, and trails on the wings, "
+      f"{sel('Transolver', T_CAR, 'drivaer_surface'):.4f} against {sel('Transolver', T_REF, 'drivaer_surface'):.4f} and at lower memory, both trained "
+      "at 100,000 cells and scored at 200,000 as every candidate of the selection (@sec-selection), and trails on the wings, "
       f"{sel('Transolver', T_CAR, 'hilift_210'):.4f} against {sel('Transolver', T_REF, 'hilift_210'):.4f} (@tbl-selection). If the wing "
       "ranking is an artifact of the raw vector, the baselines' reference configurations, and every standing scored with them, may change. "
       "What would settle it: the GeoTransolver and Transolver candidates of @tbl-selection retrained on the 210 wings reading the unit "
@@ -667,7 +638,7 @@ print("**Three structural-mechanics problems carry standings beside the aerodyna
       "conditions and loads, not only varying geometry, so that the global-scalar, global-vector and boundary-input channels are "
       "exercised. Whether the interface carries to further steady boundary-driven PDEs, heat conduction or electrostatics for example, "
       "is unmeasured. "
-      + ("AeroZoo, the diversity benchmark within aerodynamics, carries no standing in @sec-standing; its questions are @sec-oq-aerozoo, @sec-oq-aerozoo-inputs and @sec-oq-dtt." if AZ.artifact is None else ""))
+      + ("AeroZoo, the diversity benchmark within aerodynamics, carries no standing in @sec-standing; its questions are @sec-oq-aerozoo and @sec-oq-dtt." if AZ.artifact is None else ""))
 ```
 
 ## Engineering directions {#sec-future}
@@ -699,11 +670,10 @@ print("**ISLA is the choice where the deployment mesh or sampling law may differ
 print()
 print("- **The interior recommendation becomes unconditional** if the exact wall geometry (@sec-oq-geometry) removes the boundary-law "
       "dependence without costing velocity, and the eddy-viscosity deficit against GeoTransolver on the DrivAerML Volume task closes.")
-print("- **The interior model changes form** if ISLA-DTT is inside the band on every AeroZoo held-out split (@sec-oq-dtt): the "
+print("- **The interior model changes form** if ISLA-DTT is level with ISLA on every AeroZoo held-out split (@sec-oq-dtt): the "
       "recommendation is then a read-only model whose prediction at a point depends on that point and the boundary alone.")
-print("- **ISLA gains a generalization claim** if its held-out penalty on AeroZoo, measured on the inputs the benchmark allows, is "
-      "smaller than GeoTransolver's by the preregistered margin (@sec-oq-aerozoo, @sec-oq-aerozoo-inputs); it loses one if the penalty "
-      "is larger.")
+print("- **ISLA gains a generalization claim** if its held-out penalty on AeroZoo, measured under the benchmark protocol, is "
+      "smaller than GeoTransolver's (@sec-oq-aerozoo); it loses one if the penalty is larger.")
 print()
 print("If none fires, the recommendation stands as written, with the bounds of this chapter attached.")
 ```

@@ -1,0 +1,210 @@
+[
+ {
+  "set": "DrivAerML Surface native",
+  "transolver": "dr_t_c200k",
+  "isla_a2": "dr_isla_a2r",
+  "cases": 48,
+  "digest_t": "52c7f2b8e3b6142f",
+  "digest_isla": "52c7f2b8e3b6142f",
+  "points_targets_match": 48,
+  "boundaries_match": 48,
+  "bnd_keys_t": [
+   "bnd.vehicle"
+  ],
+  "bnd_keys_isla": [
+   "bnd.vehicle"
+  ],
+  "n_points": 200000
+ },
+ {
+  "set": "DrivAerML Surface native, U_inf_dir arm",
+  "transolver": "dr_tud_c200k",
+  "isla_a2": "dr_isla_a2r",
+  "cases": 48,
+  "digest_t": "52c7f2b8e3b6142f",
+  "digest_isla": "52c7f2b8e3b6142f",
+  "points_targets_match": 48,
+  "boundaries_match": 48,
+  "bnd_keys_t": [
+   "bnd.vehicle"
+  ],
+  "bnd_keys_isla": [
+   "bnd.vehicle"
+  ],
+  "n_points": 200000
+ },
+ {
+  "set": "DrivAerML Surface area",
+  "transolver": "dra_t_c200k",
+  "isla_a2": "dra_isla_a2r",
+  "cases": 12,
+  "digest_t": "ebe7c21985c9e929",
+  "digest_isla": "ebe7c21985c9e929",
+  "points_targets_match": 12,
+  "boundaries_match": 12,
+  "bnd_keys_t": [
+   "bnd.vehicle"
+  ],
+  "bnd_keys_isla": [
+   "bnd.vehicle"
+  ],
+  "n_points": 198235
+ },
+ {
+  "set": "DrivAerML Surface area, U_inf_dir arm",
+  "transolver": "dra_tud_c200k",
+  "isla_a2": "dra_isla_a2r",
+  "cases": 12,
+  "digest_t": "ebe7c21985c9e929",
+  "digest_isla": "ebe7c21985c9e929",
+  "points_targets_match": 12,
+  "boundaries_match": 12,
+  "bnd_keys_t": [
+   "bnd.vehicle"
+  ],
+  "bnd_keys_isla": [
+   "bnd.vehicle"
+  ],
+  "n_points": 198235
+ },
+ {
+  "set": "DrivAerML Surface posed",
+  "transolver": "drp_t_c200k",
+  "isla_a2": "drp_isla_a2r",
+  "cases": 12,
+  "digest_t": "a55c3bf02b13877f",
+  "digest_isla": "a55c3bf02b13877f",
+  "points_targets_match": 12,
+  "boundaries_match": 12,
+  "bnd_keys_t": [
+   "bnd.vehicle"
+  ],
+  "bnd_keys_isla": [
+   "bnd.vehicle"
+  ],
+  "n_points": 200000
+ },
+ {
+  "set": "DrivAerML Surface posed, U_inf_dir arm",
+  "transolver": "drp_tud_c200k",
+  "isla_a2": "drp_isla_a2r",
+  "cases": 12,
+  "digest_t": "a55c3bf02b13877f",
+  "digest_isla": "a55c3bf02b13877f",
+  "points_targets_match": 12,
+  "boundaries_match": 12,
+  "bnd_keys_t": [
+   "bnd.vehicle"
+  ],
+  "bnd_keys_isla": [
+   "bnd.vehicle"
+  ],
+  "n_points": 200000
+ },
+ {
+  "set": "DrivAerML Surface native, Transolver at 100k (CHAR)",
+  "transolver": "dr_t_r80_c100k",
+  "isla_a2": "dr_isla_a2r",
+  "cases": 48,
+  "digest_t": "3d60cb6f0fa2a067",
+  "digest_isla": "52c7f2b8e3b6142f",
+  "points_targets_match": 0,
+  "boundaries_match": 0,
+  "bnd_keys_t": [
+   "bnd.vehicle"
+  ],
+  "bnd_keys_isla": [
+   "bnd.vehicle"
+  ],
+  "n_points": 100000
+ },
+ {
+  "set": "SHIFT-SUV native",
+  "transolver": "suv_t_c200k",
+  "isla_a2": "suv_isla_a2r",
+  "cases": 99,
+  "digest_t": "983a2c6420a2e604",
+  "digest_isla": "983a2c6420a2e604",
+  "points_targets_match": 99,
+  "boundaries_match": 99,
+  "bnd_keys_t": [
+   "bnd.vehicle"
+  ],
+  "bnd_keys_isla": [
+   "bnd.vehicle"
+  ],
+  "n_points": 200000
+ },
+ {
+  "set": "SHIFT-SUV area",
+  "transolver": "suva_t_c200k",
+  "isla_a2": "suva_isla_a2r",
+  "cases": 12,
+  "digest_t": "8df5b101f6c0e0c9",
+  "digest_isla": "8df5b101f6c0e0c9",
+  "points_targets_match": 12,
+  "boundaries_match": 12,
+  "bnd_keys_t": [
+   "bnd.vehicle"
+  ],
+  "bnd_keys_isla": [
+   "bnd.vehicle"
+  ],
+  "n_points": 192549
+ },
+ {
+  "set": "SHIFT-SUV posed",
+  "transolver": "suvp_t_c200k",
+  "isla_a2": "suvp_isla_a2r",
+  "cases": 12,
+  "digest_t": "9cf4b6a63f61cd3c",
+  "digest_isla": "9cf4b6a63f61cd3c",
+  "points_targets_match": 12,
+  "boundaries_match": 12,
+  "bnd_keys_t": [
+   "bnd.vehicle"
+  ],
+  "bnd_keys_isla": [
+   "bnd.vehicle"
+  ],
+  "n_points": 200000
+ },
+ {
+  "set": "DrivAerML Volume native",
+  "transolver": "vol_t_c200k",
+  "isla_a2": "vol_isla_a2r",
+  "cases": 48,
+  "digest_t": "87c9e0b4ea3ede26",
+  "digest_isla": "56444d2fba11d5ae",
+  "points_targets_match": 48,
+  "boundaries_match": 0,
+  "bnd_keys_t": [],
+  "bnd_keys_isla": [
+   "bnd.inlet",
+   "bnd.no_slip",
+   "bnd.outlet",
+   "bnd.slip",
+   "bnd.vehicle"
+  ],
+  "n_points": 200000
+ },
+ {
+  "set": "DrivAerML Volume posed",
+  "transolver": "volp_t_c200k",
+  "isla_a2": "volp_isla_a2r",
+  "cases": 12,
+  "digest_t": "9afa2b2aa5cd99bc",
+  "digest_isla": "7e15aa46f5c6900e",
+  "points_targets_match": 12,
+  "boundaries_match": 0,
+  "bnd_keys_t": [],
+  "bnd_keys_isla": [
+   "bnd.inlet",
+   "bnd.no_slip",
+   "bnd.outlet",
+   "bnd.slip",
+   "bnd.vehicle"
+  ],
+  "n_points": 200000
+ }
+]

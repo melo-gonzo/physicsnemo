@@ -1,0 +1,23 @@
+{
+ "run": "afu_r_t_seed42",
+ "n_cases": 200,
+ "n_matched_new": 200,
+ "n_matched_shared": 200,
+ "mean": {
+  "velocity_l2": 0.06517098765820264,
+  "velocity_xy_l2": 0.06517098737880588,
+  "velocity_x_l2": 0.05270214357413352,
+  "velocity_y_l2": 0.0996254839003086,
+  "velocity_z_l2": 21.758768606185914,
+  "err2_share_z": 1.739899443420126e-08,
+  "true_z_rms": 3.080577293987112e-17,
+  "pred_z_rms": 6.880726780704841e-06
+ },
+ "true_z_absmax_max": 6.755692468114749e-13,
+ "max_reldiff_vs_new_rows": 2.3709613193072003e-07,
+ "max_reldiff_vs_shared_rows": 2.3709613193072003e-07,
+ "new_summary_velocity_l2": 0.06517098903656006,
+ "shared_summary_velocity_l2": 0.06517098903656006,
+ "tol": 1e-05,
+ "check_ok": true
+}

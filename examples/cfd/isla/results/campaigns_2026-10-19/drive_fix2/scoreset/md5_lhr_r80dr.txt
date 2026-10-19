@@ -1,0 +1,10 @@
+f553225df4bf2b3f864181a727d0e40d  ./r80_dr_t_h512_l16_c100k_seed42/checkpoints/Transolver.0.500.mdlus
+61f4784cf9f5704b6317c211e2ec00fb  ./r80_dr_t_h512_l16_c100k_seed42/checkpoints/checkpoint.0.500.pt
+1f6c7280b3ba83e1aba4def6e7cb0f02  ./r80_dr_t_h512_l16_c100k_seed42/checkpoints/norm_stats.pt
+4b322695f337559e029a4bd7171f9299  ./r80_dr_t_h512_l16_c100k_seed42/resolved_config.yaml
+8a228d0c60b79ce83b63c3e03ef2128c  ./r80_dr_t_h512_l16_c100k_seed42/train.log
+0b0518e118d57e8fea6e4dfae19390fd  ./r80_dr_t_h512_l16_c100k_seed43/checkpoints/Transolver.0.500.mdlus
+8506e86ddaf4a174c3bee88b0410200a  ./r80_dr_t_h512_l16_c100k_seed43/checkpoints/checkpoint.0.500.pt
+1f6c7280b3ba83e1aba4def6e7cb0f02  ./r80_dr_t_h512_l16_c100k_seed43/checkpoints/norm_stats.pt
+82c0058664dc389ac3e868686dc1dfb4  ./r80_dr_t_h512_l16_c100k_seed43/resolved_config.yaml
+4c14cb9829e8f9685b7e878eac5da4ba  ./r80_dr_t_h512_l16_c100k_seed43/train.log

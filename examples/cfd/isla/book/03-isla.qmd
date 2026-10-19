@@ -698,8 +698,7 @@ weights.
 #|   state $h$: the fraction of the update's components that change the sum.
 #|   How to read this: the top panel is arithmetic and the bottom one is
 #|   computed here from random numbers; neither is a measurement of ISLA. The
-#|   measurements on trained models are in @tbl-aerozoo-training and
-#|   @sec-surface-deepjeb.
+#|   measurement on a trained model is in @sec-deepjeb-ladders.
 #| fig-height: 6.2
 #| code-fold: true
 import torch
@@ -734,73 +733,14 @@ plt.show()
 The normalized read is the full meaning of "pre-LN" for a sublayer whose
 inputs are read in several places: routing, pooling and broadcast all read
 $\tilde h$, and the raw $h$ enters the layer only through the residual
-identity and the token MLP's own LayerNorm. On ISLA trained at its single
-learning rate, the effect is measured directly (@fig-isla-stream).
+identity and the token MLP's own LayerNorm. On DeepJEB++, trained at
+ISLA's single learning rate, the raw-read variant's validation loss rises
+and never recovers, and ISLA's reference configuration, with the normalized
+reads, trains through (@sec-deepjeb-ladders).
 
-```{python}
-#| label: fig-isla-stream
-#| fig-cap: >
-#|   The residual stream of ISLA and of the raw-read variant during training
-#|   on AeroZoo (`full` split, learning rate 3.75e-4, two seeds each, solid
-#|   and dashed). (a) The
-#|   mean token norm $\lvert h\rvert$ after the last slice layer, against
-#|   epoch. (b) The mean token norm entering each of the twelve layers, at the
-#|   last probed epoch. How to read this: the vertical axes are logarithmic;
-#|   a straight rising line in (b) is a constant factor per layer, the
-#|   geometric growth of the top panel of @fig-isla-stream-toy. Probed on four fixed
-#|   validation cases with the same 200,000-cell draws at every checkpoint,
-#|   bfloat16 forward pass as in training; the mean is over every token of
-#|   the four cases. Instrument for the raw-read variant: ISLA at 512 wide,
-#|   12 layers, raw slice reads (@sec-study-configurations). Data:
-#|   results/renderings_2026-10-18/stream_norms.json.
-#| code-fold: true
-import json as _json
-from pathlib import Path as _P
-SN = _json.load(open(_P("..") / "results" / "renderings_2026-10-18" / "stream_norms.json"))["runs"]
-RUNS = [("azu_full_islabn2_seed42", "ISLA", BLUE, "-"), ("azu_full_islabn2_seed43", None, BLUE, "--"),
-        ("azu_full_isla_seed42", "raw-read variant", MUTED, "-"), ("azu_full_isla_seed43", None, MUTED, "--")]
-fig, axes = plt.subplots(1, 2, figsize=(8, 3.4), gridspec_kw=dict(wspace=0.32, width_ratios=[1.35, 1.0]))
-ax = axes[0]
-for k, lab, col, ls in RUNS:
-    e = SN[k]["epochs"]
-    ax.plot([x["epoch"] for x in e], [x["stream_out"] for x in e], ls, color=col,
-            lw=1.6, marker="o", ms=2.8, label=lab)
-ax.set_yscale("log"); ax.set_xlabel("epoch"); ax.set_ylabel(r"mean $|h|$ after the last layer")
-ax.set_title("(a) over training", fontsize=9.5, loc="left")
-ax.legend(fontsize=8.5, frameon=False, loc="center right")
-for sp in ("top", "right"): ax.spines[sp].set_visible(False)
-ax = axes[1]
-for k, lab, col, ls in RUNS:
-    last = SN[k]["epochs"][-1]
-    ax.plot(np.arange(1, 13), last["norm_in"], ls, color=col, lw=1.6, marker="o", ms=2.8,
-            label=f"epoch {last['epoch']}" if ls == "-" else None)
-ax.set_yscale("log"); ax.set_xlabel("layer"); ax.set_ylabel(r"mean $|h|$ entering the layer")
-ax.set_xticks([1, 4, 8, 12]); ax.set_title("(b) through the depth, last probe", fontsize=9.5, loc="left")
-for sp in ("top", "right"): ax.spines[sp].set_visible(False)
-plt.show()
-```
-
-```{python}
-#| label: para-isla-stream
-#| output: asis
-_g = lambda k, ep: next(x["stream_out"] for x in SN[k]["epochs"] if x["epoch"] == ep)
-_raw = [SN[k]["epochs"] for k in ("azu_full_isla_seed42", "azu_full_isla_seed43")]
-_isl = [SN[k]["epochs"] for k in ("azu_full_islabn2_seed42", "azu_full_islabn2_seed43")]
-rmax = max(x["stream_out"] for e in _raw for x in e)
-imax = max(x["stream_out"] for e in _isl for x in e)
-r1 = min(e[0]["stream_out"] for e in _raw)
-fac = lambda e: e[-1]["norm_in"][-1] / e[-1]["norm_in"][0]
-def sci(x):
-    ex = int(np.floor(np.log10(x)))
-    return f"${x / 10 ** ex:.1f} \\times 10^{{{ex}}}$"
-print(f"The raw-read variant's stream starts near {r1:,.0f} and reaches {sci(rmax)} in mean token norm; ISLA's stays below "
-      f"{imax:,.0f} through epoch {SN['azu_full_islabn2_seed42']['epochs'][-1]['epoch']}. Through the depth, the raw-read "
-      f"stream grows by a factor of {sci(min(fac(e) for e in _raw))} to {sci(max(fac(e) for e in _raw))} from the first layer to the "
-      f"last, ISLA's by {min(fac(e) for e in _isl):.1f} to {max(fac(e) for e in _isl):.1f}. The loss follows: on AeroZoo the "
-      "raw-read variant's validation loss is above twice its minimum from epoch 60 on (@tbl-aerozoo-training), and on DeepJEB++ it "
-      "rises and never recovers (@sec-surface-deepjeb). ISLA's reference configuration, with the normalized reads, keeps its "
-      "minimum on both.")
-```
+<!-- SLOT: fig-isla-stream: the residual stream of ISLA and of the raw-read variant over training and through the depth, on AirfRANS;
+data in the schema of the cut results/renderings_2026-10-18/stream_norms.json ({"runs": {run: {"epochs": [{"epoch", "stream_out",
+"norm_in"[12]}]}}}), with its paragraph (the stream's growth over training and through the depth, and the validation loss). -->
 
 ### What the trained routing looks like {#sec-arch-routing-trained}
 

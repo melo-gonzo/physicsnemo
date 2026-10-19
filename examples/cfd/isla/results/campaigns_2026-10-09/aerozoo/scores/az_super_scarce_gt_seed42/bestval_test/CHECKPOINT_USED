@@ -1,4 +1,0 @@
-total 0
-lrwxrwxrwx 1 psharpe dip 169 Oct 14 18:52 GeoTransolver.0.61.mdlus -> /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs/az_super_scarce_gt_seed42/checkpoints/GeoTransolver.0.61.mdlus
-lrwxrwxrwx 1 psharpe dip 163 Oct 14 18:52 checkpoint.0.61.pt -> /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs/az_super_scarce_gt_seed42/checkpoints/checkpoint.0.61.pt
-lrwxrwxrwx 1 psharpe dip 158 Oct 14 18:52 norm_stats.pt -> /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs/az_super_scarce_gt_seed42/checkpoints/norm_stats.pt
