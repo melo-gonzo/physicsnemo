@@ -242,3 +242,32 @@ def test_a_warm_compile_cache_reuses_the_graph_across_the_budget():
                 case = _case("interior", s, nq, "cpu", seed=i)
                 with torch.no_grad(), torch._dynamo.config.patch(error_on_recompile=i > 0):
                     compiled(**case)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
+def test_the_in_model_draw_compiles_under_max_autotune_at_full_resolution():
+    """The recipe's whole-model compile (``max-autotune-no-cudagraphs``) of an interior
+    model on 1.4 million boundary cells: the draw's float64 sums over every cell are
+    long enough for Inductor's split scan, whose kernel failed on GB300 in this compile;
+    the draw runs them through ATen (``sampling._cumsum``). The compiled model gives the
+    eager outputs."""
+    torch._dynamo.reset()
+    torch.manual_seed(0)
+    model = ISLA(
+        output_schema=PV,
+        boundary_schemas=SCHEMAS["interior"],
+        global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
+        interior=True,
+        hidden=32,
+        n_layers=2,
+        n_slices=8,
+    ).cuda().eval()
+    eager = copy.deepcopy(model)  # never called under compile: no shared module state
+    compiled = torch.compile(model, fullgraph=True, dynamic=True, mode="max-autotune-no-cudagraphs")
+    case = _case("interior", {"inlet": 700_000, "wall": 700_000}, 2000, "cuda", seed=0)
+    with torch.no_grad():
+        out = outputs(compiled(**case))
+        torch.cuda.synchronize()
+        ref = outputs(eager(**case))
+    for k in ref:
+        _assert_close(out[k], ref[k], "cuda")
