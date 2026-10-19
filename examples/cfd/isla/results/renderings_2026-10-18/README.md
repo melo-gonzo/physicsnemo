@@ -22,6 +22,42 @@ Per-sample relative L2 on AirfRANS 00215 (from `arrays/render_2d_airfrans.json`)
 
 | `routing/<run>_s<sample>.{npz,json}` | trained routing of the A2 reference ISLA checkpoints (final epoch 500) on the median case: per layer dominant slice, its weight, slice masses q and qw, anchors and anchor normals; for layers 0, 5, 11 the 8 largest-territory slices' soft assignment and routing density (schema of results/probes/slices_2026-09-22); json: per-layer n_eff, entropies, anchor spread. Runs: a2r_dr_isla_seed42 (DrivAerML 00079, all 200,000 tokens stored), afu_a2s_isla_seed42 (AirfRANS 00215), a2r_lug_isla_seed42 (lug 00633), a2r_t2dz_isla_seed42 (Tensile2d 00238) | `scripts/slices_probe_a2.py` via `scripts/routing.sbatch`, LHR job **275271** |
 
+## Renderings of the median cases (2026-10-19)
+
+All rendered locally on the CPU (`CUDA_VISIBLE_DEVICES= nice -n 19`, VTK 9.7.1 / pyvista 0.49 off-screen on llvmpipe,
+matplotlib) from the dumps of LHR jobs 271987 and 275252 (local copy `fig/dump/`); each json beside the arrays records
+the case, the scorer's per-sample relative L2 of every rendered field (metrics.jsonl of the same run, normalized space,
+as in results/char) and, under `source`, the fig_rows.tsv row, run id and LHR dump job of every panel. Panels are labelled
+by architecture (ISLA = A2 reference 512 x 12, GeoTransolver = 256, Transolver = 512 x 16; run map below). Fields:
+viridis, 0.5-99.5th percentile of the truth; errors: the book's DIVERGING map, symmetric, 99th percentile of the errors.
+Why the first car run was blank: on this machine's software OpenGL, VTK draws a mesh coloured by CELL data as white
+when lighting is on (a plain-colour or point-data mesh draws correctly); `render_lib.render` now converts cell values to
+point data (mean of the adjacent cells) and also resets the clipping range. The car points were also misplaced by 1 m:
+infer.py writes the centred points divided by L_ref = 5 m, so the body frame is x = 5 x* + center (`render_car.to_body`).
+
+| file | what | command |
+|---|---|---|
+| `book/figures/renderings/drivaerml_surface_cp.png`, `drivaerml_surface_cf.png`; `arrays/drivaerml_surface_00079.npz`, `arrays/render_car.json` | DrivAerML Surface car 00079 (run 171), left side, orthographic, on the case's STL (753,238 triangles; each triangle takes the nearest scored cell of that model, median distance 5.7 mm, ISLA and GeoTransolver on the same 200,000 cells, Transolver on its 100,000): c_p and \|tau_w\|/q_inf, truth / three models / errors | `python scripts/render_car.py fig/dump fig/geom/drivaer_171_single_solid.stl.pmsh <png> <arrays> pose` |
+| `book/figures/renderings/pose_cp.png`, `pose_geometry.png` (numbers in `render_car.json` `pose`) | the scorer's posed protocol (FixedRandomPose: rotation 169.5°, \|t\| = 1.55 m) on the same car: per model, native c_p, posed c_p mapped back to the body frame (x = L_ref R^T x* + c; the posed and native draws are the same cells, map-back distance <= 6e-7 m), posed minus native; and the posed car itself coloured by ISLA's posed prediction | same command |
+| `book/figures/renderings/airfrans_pressure.png`, `airfrans_velocity.png` (re-rendered) | as above; panels now labelled by architecture, json keys ISLA / GeoTransolver / Transolver (were "GeoTransolver 256", "Transolver 512 x 16") with a `source` block; numbers unchanged | `python scripts/render_2d.py fig/dump <png> <arrays> airfrans` |
+| `book/figures/renderings/tensile2d_stress.png`; `arrays/tensile2d_00238.npz`, `arrays/render_2d_tensile2d.json` | Tensile2d validation specimen 00238: plane-stress von Mises from the scored sig11, sig22, sig12 on a Delaunay of the 9,547 nodes. The dump is in normalized units; the figure multiplies by the shared stress std 37.837 MPa (plaid_tensile2d_2d.yaml), so the scale is MPa | `... render_2d.py ... tensile2d` |
+| `book/figures/renderings/lug_von_mises.png`; `arrays/lug_00633.npz`, `arrays/render_2d_lug.json` | lug test case 00633, the top face (the 1,060 nodes at z = thickness of the 12,720 scored nodes): von Mises = 150.2 + 92.4 x the dump's normalized value (ginot_lug_volume.yaml), MPa | `... render_2d.py ... lug` |
+| `book/figures/renderings/deepjebpp_von_mises.png`, `deepjebpp_displacement.png`; `arrays/deepjebpp_60073.npz`, `arrays/render_cloud_deepjebpp.json` | DeepJEB++ test bracket 60073 (611-092-IS06_hor), three-quarter view, on the case's FEM surface (50,024 triangles, copied from LHR `datasets/deepjebpp_pdmsh/611-092-IS06_hor/.../boundaries/surface`, 4.4 MB, to `fig/geom/`): every triangle is one scored cell (centroid match <= 1.1e-5 mm). von Mises [MPa] and \|u\| [mm] as infer.py writes them; the panel titles' displacement L2 is the scorer's vector metric | `python scripts/render_cloud.py fig/dump <png> <arrays> deepjebpp fig/geom/deepjebpp_611-092-IS06_hor_surface` |
+| `book/figures/renderings/shift_suv_cp.png`; `arrays/shift_suv_00184.npz`, `arrays/render_cloud_shift_suv.json` | SHIFT-SUV validation case 00184 (run 00187), left side, orthographic, on the case's merged_surfaces.stl.pmsh (5,010,474 triangles, copied from LHR `PhysicsNeMo-ShiftSUV/estate/run_00187/`, 144 MB, to `fig/geom/`). The pipeline centres the car without storing the centre; a translation-only nearest-neighbour fit puts every scored point on an STL triangle centroid (residual <= 6.4e-7 m), and every other triangle takes the nearest scored point (median 3.5 mm) | `python scripts/render_cloud.py fig/dump <png> <arrays> shift_suv shift_suv=fig/geom/shift_suv_00187_merged_surfaces.stl.pmsh` |
+| `book/figures/renderings/drivaerml_volume_pressure.png`, `drivaerml_volume_velocity.png`; `arrays/drivaerml_volume_00033.npz`, `arrays/render_2d_drivaerml_volume.json` | DrivAerML Volume car 00033 (run 129): the 11,053 scored volume points within 15 cm of the symmetry plane, side view, Delaunay in (x, z); c_p = p/q_inf and \|u\|/U_inf; the body's cut at y = 0 (STL drivaer_129_single_solid.stl.pmsh, 22 MB, copied from LHR) masks the triangles inside it and is drawn grey. The un-centring offset is solved so that the near-wall points' distance to the STL equals their sdf (median residual 1.3e-6 m) | `python scripts/render_2d.py fig/dump <png> <arrays> drivaerml_volume drivaerml_volume=fig/geom/drivaer_129_single_solid.stl.pmsh` |
+
+DrivAerML Surface 00079, per-sample relative L2 (`arrays/render_car.json`): pressure ISLA 0.0415, GeoTransolver 0.0424,
+Transolver 0.0406; wall shear ISLA 0.0612, GeoTransolver 0.0667, Transolver 0.0668. Posed protocol, pressure: ISLA
+0.0415 (posed minus native rms c_p 7.2e-4, 0.16 % of the native c_p norm), GeoTransolver 0.885 (rms 0.38), Transolver
+0.778 (rms 0.35).
+Tensile2d 00238 (`arrays/render_2d_tensile2d.json`): stress ISLA 0.0067, GeoTransolver 0.0060, Transolver 0.0071;
+displacement 0.0068, 0.0059, 0.0044. Lug 00633 (`arrays/render_2d_lug.json`): von Mises ISLA 0.00137, GeoTransolver
+0.00173, Transolver 0.00192. DeepJEB++ 60073 (`arrays/render_cloud_deepjebpp.json`): von Mises ISLA 0.403,
+GeoTransolver 0.446, Transolver 0.547; displacement 0.077, 0.115, 0.165.
+SHIFT-SUV 00184 (`arrays/render_cloud_shift_suv.json`): pressure ISLA 0.0412, GeoTransolver 0.0408, Transolver 0.0376;
+wall shear 0.0568, 0.0620, 0.0602. DrivAerML Volume 00033 (`arrays/render_2d_drivaerml_volume.json`): pressure ISLA
+0.0401, GeoTransolver 0.0509, Transolver 0.0542; velocity 0.0696, 0.1017, 0.1226; nut 0.0666, 0.0634, 0.0637.
+
 ## Case selection
 
 The representative case of each dataset is the case of median per-case ISLA error (seed 42, final checkpoint, native
@@ -38,12 +74,10 @@ ISLA A2 reference: `a2r_dr_isla_seed42`, `a2r_vol_isla_seed42` (trained on JHB, 
 cells), `cl_r_{vol,suv,t2dz,lug,jeb}_{gt,t}`, `afu_r_{gt,t}`, all seed 42, copied from AGA. Each row is the scorer's
 infer.py command (snapshot, recipe, venv, cells) for that run.
 
-## Pending at hand-off (see the lane report)
+## Pending (2026-10-19)
 
-- DrivAerML Surface native + posed predictions are dumped (LHR job 275252 rows 0-5, `$F/dump/dr_*`); the renderer
-  `scripts/render_car.py` (side view of c_p and c_f, and the pose figure) ran once locally at hand-off and every VTK
-  panel came out blank (white), so `common_crop` found nothing; likely cause: the camera's clipping range is not reset
-  after `camera_position` is set in `render_lib.render` (add `p.reset_camera_clipping_range()`). Not yet fixed.
-- All 24 rows of `scripts/fig_rows.tsv` are dumped (LHR jobs 271987 and 275252): `$F/dump/<tag>/<protocol>/*.npz` with
-  the scorer's metrics.jsonl beside each, copied to the local scratch `fig/dump/`; only AirfRANS is packed and rendered.
+- Rendered: every dumped dataset (DrivAerML Surface incl. the posed protocol, DrivAerML Volume, SHIFT-SUV, lug,
+  Tensile2d, DeepJEB++, AirfRANS). The STLs/surfaces the renderers read are in the local scratch `fig/geom/` (copied from
+  LHR; not committed). The LHR checkpoint copies `$F/runs` (5.0 GB) were deleted on 2026-10-19; `$F/dump` (118 MB) is kept
+  as the source the jsons cite.
 - Not started: HiLift (dataset not on LHR; A2 lanes at epoch 285/500 on JHB), AeroZoo mid-span planes, hero view.
