@@ -16,3 +16,13 @@ Copied unmodified from `scratch/isla-az-compliant-2026-10-19/` of the main check
 | `islascale_REPORT.md` | `v2/islascale/REPORT.md` | the code reading of ISLA's insertion points for its scales |
 
 The "v2" in the source names is the design lane's own revision counter, not a version of the dataset (AeroZoo v1.2).
+
+Where the recipe as built differs from this design record (the coordinator's facts, 2026-10-19), the book follows the recipe:
+
+- the dataset files keep their names, `datasets/aerozoo_uvolume.yaml` and `_nonbox`, `_reynolds`, `_blobs`, `_bank_zero_to_cad`,
+  `_profile_crossflow`, `_profile_dual_inlet`, and hold physical PDE inputs only (`aerozoo_puvolume.yaml` here is the design's
+  proposed name); the release's other 15 splits have no such file;
+- the targets are physical and standardized by scale only (mean 0, one constant per field per dataset);
+- every arm trains with a per-case relative L2 loss, velocity weighted 3;
+- the score is the plain relative L2, which equals the relative L2 of the physical field, in place of section 3's map into the
+  label-reference space.
