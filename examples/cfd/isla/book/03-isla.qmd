@@ -176,7 +176,9 @@ fields at prediction points.** Per case, the inputs are:
   such as a Reynolds number or an inlet speed.
 - Optionally, per-cell **boundary data** (a condition tag, a prescribed
   traction, a Dirichlet value) and per-point **query data** (a material
-  label), as named fields of declared tensor rank.
+  label), as named fields of declared tensor rank. One declaration of
+  boundary fields serves every boundary condition, so a condition's
+  identity reaches ISLA only as such a field.
 - For an interior task, the **prediction points** $x_q$ and nothing else
   about them. The wall distance and direction a prediction point needs are
   functions of the boundary and the point, so ISLA computes them itself
@@ -223,7 +225,8 @@ grammar every mesh model of the library shares
 `boundary_schema`, `query_schema` and `global_schema`. `forward` takes
 `boundary_meshes`, a mapping from a name to a codimension-one `Mesh` whose
 cells are the tokens (centroid, normal, measure) with the boundary fields in
-its `cell_data`; `global_data`, with a rank-1 field as a `(d,)` vector and a
+its `cell_data`; the names set only the order in which the meshes' cells
+join one token set, and every mesh carries every declared boundary field; `global_data`, with a rank-1 field as a `(d,)` vector and a
 rank-0 field as a scalar; and, for an interior task, `prediction_points`, a
 point cloud with the query fields in its `point_data`. It returns a
 point-cloud `Mesh` whose `point_data` holds the outputs, shaped `(N,)`,
