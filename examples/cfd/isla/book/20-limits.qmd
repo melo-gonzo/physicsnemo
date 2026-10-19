@@ -91,8 +91,8 @@ print(f"- **Not that ISLA is more accurate in distribution in general.** Across 
 - **Not that ISLA's pose invariance is exact on every mesh.** It is exact to roundoff where each
   prediction point has one nearest boundary sample, and it is not where the mesh puts points
   equidistant from two: the lug's structured hexahedral mesh and the nodes on Tensile2d's polyline
-  (@sec-limits-ties). ISLA-DTT's far-field read adds a second tie, of the frame its forest is
-  built in (@sec-oq-dtt-frame).
+  (@sec-limits-ties). ISLA-DTT's far-field read adds no such limit: a tie of its forest's
+  frame moves the read only by the tree's error (@sec-oq-dtt-frame).
 - **Not that discretization consistency is an exact invariance.** It is a fine-mesh-limit
   property: under a change of sampling law ISLA's residual is quadrature variance that shrinks
   with the cell count (@sec-principle). On the interior tasks one input, the wall distance from
@@ -348,7 +348,7 @@ rows = [
     ("Should a prediction point's wall geometry come from the exact full-resolution surface, with the boundary drawn inside the model, rather than from the nearest sampled token?",
      "the exact construction against the nearest-token form at equal size on DrivAerML Volume, AirfRANS and the AeroZoo held-out splits; native error and the boundary-law shift", fmt_h(q1)),
     ("Should ISLA-DTT be ISLA's only interior form?", "ISLA-DTT ÷ ISLA on velocity and pressure on each AeroZoo held-out split, at equal size", fmt_h(q2)),
-    ("Does ISLA-DTT's far-field read keep pose and sampling invariance where its frame ties?", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
+    ("How large is ISLA-DTT's tree error at θ = 1 where its forest's frame ties?", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
     ("Where does ISLA stand against GeoTransolver on AeroZoo's held-out families?", "both reference configurations on each held-out split; each one's held-out penalty", fmt_h(q3)),
 ]
 if UNFAIR:
@@ -426,19 +426,20 @@ print(f"Cost: {AZ_HELDOUT} held-out splits × two forms × two seeds, ISLA at {A
 
 ### The frame of ISLA-DTT's forest {#sec-oq-dtt-frame}
 
-**The open question is whether ISLA-DTT's far-field read keeps the pose and sampling invariance of
-the rest of ISLA on boundaries whose frame ties.** ISLA itself uses no frame and no center: every
-position enters as a difference from a slice anchor (@sec-isla-frame). ISLA-DTT's Barnes–Hut forest
-is the one exception. Its clusters are built in a canonical frame the boundary carries: the
-measure-weighted centroid of the sampled cells and the principal axes of their measure-weighted
-covariance, each signed so that the third moment along it is positive (`tree_read.canonical_frame`).
-That frame moves with a rigid motion, so the forest, and with it every point's list of far clusters
-at a finite opening angle $\theta$, is the same in every pose. It does so up to ties: where two
-principal variances are equal, or the third moment along an axis vanishes, the axis or its sign is
-decided by rounding (the code then falls back to the laboratory axis of largest overlap), and a
+**The open question is how large ISLA-DTT's tree error is at $\theta = 1$ on boundaries whose
+forest frame ties.** ISLA uses no frame and no center: every position enters as a difference from
+a slice anchor (@sec-isla-frame). ISLA-DTT's Barnes–Hut forest groups its clusters, for speed
+alone, in a canonical frame the boundary carries: the measure-weighted centroid of the sampled
+cells and the principal axes of their measure-weighted covariance, each signed so that the third
+moment along it is positive (`tree_read.canonical_frame`). That frame moves with a rigid motion, so
+the forest, and with it every point's list of far clusters at a finite opening angle $\theta$, is
+the same in every pose. Where two principal variances are equal, or the third moment along an
+axis vanishes, the axis or its sign is decided by rounding (the code then falls back to the laboratory axis of largest overlap), and a
 rotation can regroup the clusters. A redraw of the boundary moves the centroid and the moments by
-quadrature noise, which regroups clusters near a tie as well. The read is exact as $\theta \to 0$,
-so the effect is bounded by the far-field approximation error. What would settle it: ISLA-DTT's
+quadrature noise, which regroups clusters near a tie as well. A regrouping moves the read only by
+the tree's error, which vanishes as $\theta \to 0$, so ISLA-DTT keeps the pose and sampling
+invariance of the rest of ISLA; the size of that error at $\theta = 1$ on such boundaries is not
+measured. What would settle it: ISLA-DTT's
 checkpoints scored rotated and translated and under boundary redraws on cases whose principal
 variances are nearly equal, such as AeroZoo's sphere bodies and spherical enclosures, against the
 same scorings on cases with a well-separated frame. Cost: scoring only.
