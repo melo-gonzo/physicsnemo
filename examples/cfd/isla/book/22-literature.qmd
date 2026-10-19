@@ -32,7 +32,7 @@ each slice state as a count-weighted mean of its points, attends among the
 slices and reads the result back (@sec-landscape-cost). GeoTransolver
 (Adams et al., 2025) adds a cross-attention in every block to a shared
 embedding of the geometry and the global parameters, built once from
-multi-scale ball queries. Both read point coordinates in a laboratory frame
+multi-scale ball queries. Both read raw point coordinates
 and the problem's global vector as a feature, and both learn pose, scale
 and the mesher's habits from data. Their reference configurations in this
 book are GeoTransolver at width 256 and Transolver at width 512 with 16
@@ -71,6 +71,7 @@ for k in keys:
             if s.has(b):
                 cells.append((s.ds.name, s.fields[f], b, s.verdict(b, f)))
 unfair = [S.DATASETS[k].name for k in keys if not S.DATASETS[k].fair_drive]
+held = [(S.DATASETS[k].short, S.Standing(k).fields[f]) for k in keys if S.DATASETS[k].fair_drive for f in S.DATASETS[k].provisional]
 cells = [c for c in cells if c[3] != "is not compared with"]
 n = len(cells)
 lead = [c for c in cells if c[3] == "leads"]
@@ -94,11 +95,14 @@ for ds, fl, r in bent:
     bent_ds[ds] = max(bent_ds.get(ds, 1.0), r)
 print(f"At the reference configurations on the native mesh, over {len(keys) - len(unfair)} datasets and {n} comparisons "
       f"(each headline field against each baseline, by the seed rule of @sec-fair-comparison), ISLA leads in {len(lead)}"
-      + (f" ({nl} of them on the lug, where only ISLA is given the boundary-condition labels)" if (nl := sum("lug" in c[0] for c in lead)) else "")
+      + (f" ({nl} of them on the lug against Transolver, which reads no boundary-condition labels there)"
+         if (nl := sum("lug" in c[0] and c[2] == "Transolver" for c in lead)) else "")
       + f", "
       f"is level in {level} and trails in {len(trail)}. It trails on: {group(trail)}. "
-      + (f"{' and '.join(unfair)} are not counted: their baselines read the freestream as a raw physical vector "
-         "(@tbl-model-inputs), so no verdict is drawn there. " if unfair else "") +
+      + (f"{' and '.join(unfair)} {'is' if len(unfair) == 1 else 'are'} not counted: {'its' if len(unfair) == 1 else 'their'} "
+         "baselines read the freestream as a raw physical vector (@tbl-model-inputs), so no verdict is drawn there. " if unfair else "")
+      + "".join(f"{d} {fl} is not counted either: the baselines' error on it includes an out-of-plane component that ISLA's "
+                "planar prediction does not have (@sec-interior-airfrans). " for d, fl in held) +
       f"Rotated and translated, ISLA's error moves by at most "
       f"{100 * max(abs(r - 1) for *_, r in posed_isla):.1f}% on every headline field except on "
       + " and ".join(f"{ds} (up to ×{r:.2f})" for ds, r in bent_ds.items())
@@ -188,9 +192,9 @@ is an open question (@sec-open-questions).
 
 ### An origin-free frame with an integral length unit {#sec-vs-novel-frame}
 
-*What ISLA does.* No center is ever named, except by ISLA-DTT's cluster
-forest, which is built in a canonical frame of the boundary
-(@sec-arch-tree-read). Positions enter only as differences from the slices'
+*What ISLA does.* No center reaches a learned map; ISLA-DTT's cluster
+forest uses a canonical frame of the boundary only to group cells for
+speed (@sec-arch-tree-read). Positions enter only as differences from the slices'
 own anchors, and the one length unit is the
 measure-weighted RMS pairwise distance of the boundary sample, a two-point
 integral that converges under refinement (@sec-isla-frame).
@@ -257,7 +261,7 @@ contrast in the literature is the price of the per-layer route: Rygiel et
 al. (2026) report AB-GATr at 2 to 11 times the training time of AB-UPT. A
 second element is small and sharp. Scalar heads on invariants are
 reflection-invariant, so a target that is one frame component of a tensor
-(a stress $\sigma_{12}$, a laboratory-axis displacement) is representable
+(a stress $\sigma_{12}$, a displacement along one of the dataset's axes) is representable
 only as a view of a predicted tensor (@sec-isla-heads). A third is a rule:
 every input ISLA takes is a datum of the PDE problem, and a dataset's own
 axes are excluded even where they would buy accuracy (@sec-pose-prior).
@@ -385,8 +389,10 @@ solution as a learned kernel from the boundary to the target: DeepGreen
 and BI-GreenNet learn Green's functions (Gin et al., 2021; Lin et al.,
 2022), BENO embeds boundary geometry and data in a Green's-function-motivated
 operator (Wang et al., 2024), and GLOBE evaluates such kernels from
-boundary faces to targets (Sharpe, 2025); its PhysicsNeMo code does so
-with the cluster tree that ISLA-DTT's forest is built from. The Barnes–Hut tree evaluates an
+boundary faces to targets, each target independently of the others
+(Sharpe, 2025); its PhysicsNeMo code does so with the cluster tree that
+ISLA-DTT's forest is built from, an approximation that vanishes as the
+opening angle $\theta \to 0$. The Barnes–Hut tree evaluates an
 $N$-body sum in $O(N \log N)$ (Barnes and Hut, 1986), and Erwin builds a
 hierarchical transformer on a ball tree (Zhdanov et al., 2025).
 
@@ -401,8 +407,8 @@ interacting form (@sec-drivaerml, @sec-airfrans); its step cost is in
 
 *Caveat.* Which interior form is the better default is an open question
 (@sec-open-questions); the read costs time and memory over the interacting
-form. The forest is built in a canonical frame of the boundary, so
-ISLA-DTT's pose invariance holds up to ties of that frame.
+form. Where the canonical frame the forest is built in ties, a rotation
+regroups clusters and moves the read only by the tree's error.
 
 ### The general boundary interface {#sec-vs-novel-interface}
 

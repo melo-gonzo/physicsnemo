@@ -8,6 +8,11 @@ P5 pair of #sec-nb-airfrans-hresid-p5) is stored under "replication". The baseli
 (afu_r_gt, afu_r_t: same uniform-interior files, same scorer), and the raw-read ISLA arm of that file is kept under
 "raw_read_isla", as the other *_a2.json files do. Records: campaigns_2026-10-14/afu/protocols/<run>/<protocol>/metrics.jsonl
 (their provenance is in afu_protocol_artifacts_2026-10-14.py).
+DRIVE-FIX (2026-10-19): the baselines' arms are afu_ud_gt and afu_ud_t, the same configurations retrained reading the unit inlet
+direction U_inf_dir and the standardized inlet speed U_inf_mag_std where afu_r_gt and afu_r_t read the raw vector U_inf in m/s,
+scored by the same protocol (recipe_v8ud). Seed means of the infer_summary rows in
+campaigns_2026-10-19/drive_fix/drivefix_scores_2026-10-19.json (provenance in that directory's README.md). The raw-drive arms are
+kept under "raw_drive_geotransolver" and "raw_drive_transolver".
 usage: python airfrans_a2_2026-10-18.py  ->  results/char/airfrans_a2.json"""
 import importlib.util
 import json
@@ -20,6 +25,21 @@ spec.loader.exec_module(afu)
 
 SRC = f"{os.path.dirname(R)}/campaigns_2026-10-14/afu/protocols"
 ISLA_ARM = "ISLA 512 with 512 slices"
+DRIVE_FIX = f"{os.path.dirname(R)}/campaigns_2026-10-19/drive_fix/drivefix_scores_2026-10-19.json"
+# baseline arm -> (its DRIVE-FIX run stem in DRIVE_FIX, the key the raw-drive arm is kept under)
+FAIR_DRIVE = {"GeoTransolver 256": ("evals_afu_ud/afu_ud_gt", "raw_drive_geotransolver"),
+              "Transolver 512 x 16": ("evals_afu_ud/afu_ud_t", "raw_drive_transolver")}
+
+
+def drive_fix_arm(stem):
+    """{protocol: {field: {mean, per_seed, n_cases, n_seeds}}} of one DRIVE-FIX arm, seeds 42 and 43."""
+    rec = json.load(open(DRIVE_FIX))
+    runs = {s: {pk: rec[f"{stem}_seed{s}/{pk}"] for pk in afu.PROTOCOLS} for s in afu.SEEDS}
+    assert all(r["epoch"] == 500 and r["source"] == "summary" for v in runs.values() for r in v.values())
+    return {pk: {f: {"mean": sum(runs[s][pk]["metrics"][f] for s in afu.SEEDS) / len(afu.SEEDS),
+                     "per_seed": {str(s): runs[s][pk]["metrics"][f] for s in afu.SEEDS},
+                     "n_cases": min(runs[s][pk]["n"] for s in afu.SEEDS), "n_seeds": len(afu.SEEDS)}
+                 for f in afu.FIELDS} for pk in afu.PROTOCOLS}
 
 
 def main():
@@ -32,11 +52,11 @@ def main():
         "protocols": base["protocols"],
         "fields": base["fields"],
         "isla_arm": ISLA_ARM,
-        "arms": {ISLA_ARM: a2, "GeoTransolver 256": base["arms"]["GeoTransolver 256"],
-                 "Transolver 512 x 16": base["arms"]["Transolver 512 x 16"]},
+        "arms": {ISLA_ARM: a2, **{b: drive_fix_arm(stem) for b, (stem, _) in FAIR_DRIVE.items()}},
         "complete": bool(ok and base["complete"]),
         "replication": {"label": "ISLA 512 with 512 slices, normalized reads, snapshot code_v20a2 (afu_bn2_isla)", **rep},
         "raw_read_isla": {"label": "ISLA 512 with 512 slices, raw slice reads (afu_r_isla)", **base["arms"][ISLA_ARM]},
+        **{key: {"label": f"{b}, reading the inlet velocity U_inf in m/s", **base["arms"][b]} for b, (_, key) in FAIR_DRIVE.items()},
     }
     path = f"{R}/airfrans_a2.json"
     json.dump(out, open(path, "w"), indent=1)

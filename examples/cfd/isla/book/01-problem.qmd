@@ -355,9 +355,12 @@ question per split, never two combined into one score.
   (@sec-airfrans, @sec-limits).
 - **Cross-family transfer.** Training on one family of bodies and testing
   on another (@sec-shift-suv, @sec-aerozoo).
-- **Pose.** The same cases presented in arbitrary rigid poses. The physics
-  does not depend on where the body sits in the laboratory, so the answer
-  must not either (@sec-pose).
+- **Pose.** The same cases presented in arbitrary rigid poses. Each
+  dataset stores its meshes in one fixed set of $x, y, z$ axes, which this
+  book calls *the dataset's axes* (on DrivAerML, $x$ runs along the car and
+  $z$ points up). The physics does not depend on where the body sits or
+  how it is turned relative to those axes, so the answer must not either
+  (@sec-pose).
 - **Discretization.** The same cases presented under a different sampling
   of the boundary at inference, and a model trained under one sampling law
   and scored under another. The physics does not depend on how the surface

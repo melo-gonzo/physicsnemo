@@ -42,8 +42,8 @@ def tally():
                 out[s.verdict(b, f)].append((k, f, b))
     return out
 TAL = tally()
-_nl = sum(k == "lug" for k, _, _ in TAL["leads"])
-LUGC = f" ({_nl} of them on the lug, where only ISLA is given the boundary-condition labels)" if _nl else ""
+_nl = sum(k == "lug" and b == "Transolver" for k, _, b in TAL["leads"])
+LUGC = f" ({_nl} of them on the lug against Transolver, which reads no boundary-condition labels there)" if _nl else ""
 def r(key, b, f, p="native"):
     return ST[key].ratio(b, f, p)
 PR = json.load(open(RES / "precres_2026-09-18.json"))["reduction"]
@@ -57,6 +57,10 @@ def nm(k):
 def names(keys):
     n = [nm(k) for k in keys]
     return n[0] if len(n) == 1 else ", ".join(n[:-1]) + " and " + n[-1]
+HELD = [(k, f) for k in ST for f in ST[k].ds.headline if ST[k].ds.fair_drive and f in ST[k].ds.provisional]  # ratios without a verdict
+def held_clause():
+    """The fields of compared standings that are given without a verdict, as one clause."""
+    return "".join(f"; {nm(k)} {ST[k].fields[f]} is not counted, because {ST[k].ds.provisional[f]} (@{ST[k].ds.section})" for k, f in HELD)
 def unfair_sentence(keys):
     """What the baselines of each flagged standing read, from the registry's note, as one sentence."""
     return " ".join(f"In the record of {nm(k)} the baselines read {ST[k].ds.drive_note} (@{ST[k].ds.section})." for k in keys)
@@ -77,7 +81,7 @@ print(f"- **Not that ISLA is more accurate in distribution in general.** Across 
       f"{len(TAL['is level with'])} and trails in {len(TAL['trails'])}"
       + (f"; {names(UNFAIR)} {'is' if len(UNFAIR) == 1 else 'are'} not counted, because the baselines of {'its record' if len(UNFAIR) == 1 else 'their records'} "
          "read the freestream as a physical vector, not as a unit direction (@sec-oq-unit-direction)" if UNFAIR else "")
-      + ". The readings are in @sec-limits-in-distribution.")
+      + held_clause() + ". The readings are in @sec-limits-in-distribution.")
 ```
 
 - **Not that ISLA converts training cases into accuracy faster than GeoTransolver.** Where both fits pass their bar the
@@ -91,8 +95,8 @@ print(f"- **Not that ISLA is more accurate in distribution in general.** Across 
 - **Not that ISLA's pose invariance is exact on every mesh.** It is exact to roundoff where each
   prediction point has one nearest boundary sample, and it is not where the mesh puts points
   equidistant from two: the lug's structured hexahedral mesh and the nodes on Tensile2d's polyline
-  (@sec-limits-ties). ISLA-DTT's far-field read adds a second tie, of the frame its forest is
-  built in (@sec-oq-dtt-frame).
+  (@sec-limits-ties). ISLA-DTT's far-field read adds no such limit: a tie of its forest's
+  frame moves the read only by the tree's error (@sec-oq-dtt-frame).
 - **Not that discretization consistency is an exact invariance.** It is a fine-mesh-limit
   property: under a change of sampling law ISLA's residual is quadrature variance that shrinks
   with the cell count (@sec-principle). On the interior tasks one input, the wall distance from
@@ -213,12 +217,20 @@ INT_UNFAIR = [k for k in ("drivaerml_volume", "airfrans") if k in UNFAIR]
 def line(k):
     s = ST[k]
     return f"{s.ds.name}: " + ", ".join(f"{field_name(s, f)} ISLA {s.verdict('GeoTransolver', f)} GeoTransolver ({fmt_ratio(r(k, 'GeoTransolver', f))}) and "
-                                        f"{s.verdict('Transolver', f)} Transolver ({fmt_ratio(r(k, 'Transolver', f))})" for f in s.ds.headline)
-lead_v = all(ST[k].verdict(b, "velocity_l2") == "leads" for k in INT for b in S.BASELINES)
-both_led = [field_name(ST[k], f) for k in INT for f in ST[k].ds.headline if all(ST[k].verdict(b, f) == "leads" for b in S.BASELINES)]
-rest = [field_name(ST[k], f) for k in INT for f in ST[k].ds.headline if field_name(ST[k], f) not in both_led]
-print(f"**On {names(INT)}, the interior standing that compares the architectures, ISLA leads both baselines on {' and '.join(both_led)}"
-      + (f" and the reading on {' and '.join(rest)} is mixed" if rest else "") + ".** " + "; ".join(line(k) for k in INT) + ". "
+                                        f"{s.verdict('Transolver', f)} Transolver ({fmt_ratio(r(k, 'Transolver', f))})"
+                                        for f in s.ds.headline if f not in s.ds.provisional)
+def summary(k):
+    """'ISLA leads both baselines on pressure and velocity and the reading on eddy viscosity is mixed', per dataset."""
+    s = ST[k]; fs = [f for f in s.ds.headline if f not in s.ds.provisional]
+    both = {w: [field_name(s, f) for f in fs if all(s.verdict(b, f) == w for b in S.BASELINES)] for w in ("leads", "trails")}
+    rest = [field_name(s, f) for f in fs if field_name(s, f) not in both["leads"] + both["trails"]]
+    parts = [f"{'leads' if w == 'leads' else 'trails'} both baselines on {' and '.join(v)}" for w, v in both.items() if v]
+    return (f"on {nm(k)} ISLA " + " and ".join(parts) + (f" and the reading on {' and '.join(rest)} is mixed" if rest else "")
+            + "".join(f", with {field_name(s, f)} given without a verdict" for f in s.ds.provisional))
+print(f"**On the interior standings that compare the architectures, the reading depends on the dataset: "
+      + "; ".join(summary(k) for k in INT) + ".** " + "; ".join(line(k) for k in INT) + ". "
+      + "".join(f"On {nm(k)} {ST[k].fields[f]} carries no verdict, because {ST[k].ds.provisional[f]} (@sec-oq-planar-velocity). "
+                for k, f in HELD if k in INT)
       + (unfair_sentence(INT_UNFAIR) + " No comparison is drawn from " + ("that record" if len(INT_UNFAIR) == 1 else "those records")
          + " (@sec-oq-unit-direction). " if INT_UNFAIR else "")
       + "Three limits bound the comparison. The architectures do not receive the same inputs: GeoTransolver and Transolver read every prediction point "
@@ -324,8 +336,13 @@ q1 = sum(q1_lanes.values())
 q2 = AZ_HELDOUT * SEEDS * (AZ_ISLA_GPUH + AZ_DTT_GPUH)
 # (iii) ISLA against GeoTransolver on the held-out splits (Transolver is not trained on AeroZoo)
 q3 = AZ_HELDOUT * SEEDS * (AZ_ISLA_GPUH + AZ_GT_GPUH)
+# (viii) AeroZoo on its allowed inputs: the three arms on `full` and on every held-out split
+q8 = (1 + AZ_HELDOUT) * SEEDS * (AZ_ISLA_GPUH + AZ_DTT_GPUH + AZ_GT_GPUH)
 # (iv) the flagged standings with unit-direction baselines: both baselines, two seeds; the record of tasks the cost record holds
 UD = {k: SEEDS * sum(lane_gpuh(k, b) for b in S.BASELINES) if k in TASK else None for k in UNFAIR}
+# (ix) the constant-drive standings with unit-direction baselines: GeoTransolver on each, Transolver where it has not read it yet
+CD_ARMS = [(k, b) for k in S.CONSTANT_DRIVE for b in S.BASELINES if not (k == "drivaerml_surface" and b == "Transolver")]
+q9 = SEEDS * sum(lane_gpuh(k, b) for k, b in CD_ARMS)
 # (v) the scaling ladder at the reference configuration on the DrivAerML Surface task:
 # five case rungs x three sizes x two seeds, each run's epoch proportional to its cases, every size priced at the reference's cost
 RUNGS = (27, 54, 109, 218, 435); SIZES = 3
@@ -348,14 +365,23 @@ rows = [
     ("Should a prediction point's wall geometry come from the exact full-resolution surface, with the boundary drawn inside the model, rather than from the nearest sampled token?",
      "the exact construction against the nearest-token form at equal size on DrivAerML Volume, AirfRANS and the AeroZoo held-out splits; native error and the boundary-law shift", fmt_h(q1)),
     ("Should ISLA-DTT be ISLA's only interior form?", "ISLA-DTT ÷ ISLA on velocity and pressure on each AeroZoo held-out split, at equal size", fmt_h(q2)),
-    ("Does ISLA-DTT's far-field read keep pose and sampling invariance where its frame ties?", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
+    ("How large is ISLA-DTT's tree error at θ = 1 where its forest's frame ties?", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
     ("Where does ISLA stand against GeoTransolver on AeroZoo's held-out families?", "both reference configurations on each held-out split; each one's held-out penalty", fmt_h(q3)),
+    ("Do AeroZoo's comparisons with GeoTransolver hold when every model reads only the inputs the benchmark allows?",
+     "ISLA, ISLA-DTT and GeoTransolver trained and scored on the allowed inputs only, the freestream computed from the inlet faces, on `full` and each held-out split", fmt_h(q8)),
 ]
 if UNFAIR:
     rows.append((f"How do the reference configurations compare on {names(UNFAIR)} when every model reads the unit direction?",
                  "GeoTransolver and Transolver reading the unit direction" + ("" if HL_REF else ", and on HiLiftAeroML the reference ISLA") + ", two seeds each, scored under the dataset's protocols",
                  (lambda t: t[:1].upper() + t[1:])("; ".join((f"{nm(k)} {fmt_h(v)}" if v is not None else f"{nm(k)}: not in the cost record")
                                                          for k, v in UD.items()))))
+if HELD:
+    rows.append((f"How do the architectures compare on {names(sorted({k for k, _ in HELD}))} {' and '.join(ST[k].fields[f] for k, f in HELD)} measured alike?",
+                 "the baselines' velocity error scored on its two in-plane components, on the standing's checkpoints", "scoring only"))
+if S.CONSTANT_DRIVE:
+    rows.append((f"Where do the baselines stand on {names(S.CONSTANT_DRIVE)} when they read the unit direction?",
+                 "; ".join(f"{b} on {' and '.join(nm(k) for k, bb in CD_ARMS if bb == b)}" for b in S.BASELINES)
+                 + ", reading the unit direction, two seeds each, scored under each dataset's protocols", fmt_h(q9)))
 rows += [
     ("Do GeoTransolver and Transolver keep their reference configurations when the selection's wings read the unit direction?",
      "the baselines' candidates retrained on the 210 wings with the unit direction, two seeds each, and the selection rule applied again",
@@ -426,19 +452,20 @@ print(f"Cost: {AZ_HELDOUT} held-out splits × two forms × two seeds, ISLA at {A
 
 ### The frame of ISLA-DTT's forest {#sec-oq-dtt-frame}
 
-**The open question is whether ISLA-DTT's far-field read keeps the pose and sampling invariance of
-the rest of ISLA on boundaries whose frame ties.** ISLA itself uses no frame and no center: every
-position enters as a difference from a slice anchor (@sec-isla-frame). ISLA-DTT's Barnes–Hut forest
-is the one exception. Its clusters are built in a canonical frame the boundary carries: the
-measure-weighted centroid of the sampled cells and the principal axes of their measure-weighted
-covariance, each signed so that the third moment along it is positive (`tree_read.canonical_frame`).
-That frame moves with a rigid motion, so the forest, and with it every point's list of far clusters
-at a finite opening angle $\theta$, is the same in every pose. It does so up to ties: where two
-principal variances are equal, or the third moment along an axis vanishes, the axis or its sign is
-decided by rounding (the code then falls back to the laboratory axis of largest overlap), and a
+**The open question is how large ISLA-DTT's tree error is at $\theta = 1$ on boundaries whose
+forest frame ties.** ISLA uses no frame and no center: every position enters as a difference from
+a slice anchor (@sec-isla-frame). ISLA-DTT's Barnes–Hut forest groups its clusters, for speed
+alone, in a canonical frame the boundary carries: the measure-weighted centroid of the sampled
+cells and the principal axes of their measure-weighted covariance, each signed so that the third
+moment along it is positive (`tree_read.canonical_frame`). That frame moves with a rigid motion, so
+the forest, and with it every point's list of far clusters at a finite opening angle $\theta$, is
+the same in every pose. Where two principal variances are equal, or the third moment along an
+axis vanishes, the axis or its sign is decided by rounding (the code then takes the sign of whichever of the dataset's axes it overlaps most), and a
 rotation can regroup the clusters. A redraw of the boundary moves the centroid and the moments by
-quadrature noise, which regroups clusters near a tie as well. The read is exact as $\theta \to 0$,
-so the effect is bounded by the far-field approximation error. What would settle it: ISLA-DTT's
+quadrature noise, which regroups clusters near a tie as well. A regrouping moves the read only by
+the tree's error, which vanishes as $\theta \to 0$, so ISLA-DTT keeps the pose and sampling
+invariance of the rest of ISLA; the size of that error at $\theta = 1$ on such boundaries is not
+measured. What would settle it: ISLA-DTT's
 checkpoints scored rotated and translated and under boundary redraws on cases whose principal
 variances are nearly equal, such as AeroZoo's sphere bodies and spherical enclosures, against the
 same scorings on cases with a well-separated frame. Cost: scoring only.
@@ -456,7 +483,25 @@ print("**The open question is where ISLA stands against GeoTransolver on AeroZoo
         "preregistered bar asks for ISLA's penalty on the held-out enclosure family to be at least 20% smaller than GeoTransolver's (the "
         "reduction's predictions block). "
         "Transolver is not trained on AeroZoo (@sec-aerozoo-measured). What would settle it: both reference configurations on each held-out "
-        f"split, two seeds each. Cost: {fmt_h(q3)} GPU-hours, ISLA at {AZ_ISLA_GPUH:.0f} and GeoTransolver at {AZ_GT_GPUH:.0f} GPU-hours a run.")
+        f"split, two seeds each, on the inputs the benchmark allows (@sec-oq-aerozoo-inputs). Cost: {fmt_h(q3)} GPU-hours, ISLA at {AZ_ISLA_GPUH:.0f} and GeoTransolver at {AZ_GT_GPUH:.0f} GPU-hours a run.")
+```
+
+### AeroZoo on the inputs the benchmark allows {#sec-oq-aerozoo-inputs}
+
+```{python}
+#| label: para-oq-aerozoo-inputs
+#| output: asis
+print("**The open question is whether AeroZoo's comparisons with GeoTransolver hold when every model reads only the inputs the "
+      "benchmark allows.** AeroZoo's rule admits the boundary meshes with their condition types, the prescribed values and the kinematic "
+      "viscosity, and classes the reference scales of `global_data/reference` as labels. Every AeroZoo model of this book reads them: the "
+      "inlet direction and the Reynolds number come from them, and the reference length scales the targets and GeoTransolver's "
+      "coordinates (@sec-aerozoo-allowed). ISLA-DTT ÷ ISLA and each ablation pair compare arms that read the same labels; a comparison "
+      "with GeoTransolver is provisional under that label-input protocol. What would settle it: the same arms, ISLA, ISLA-DTT and "
+      "GeoTransolver at their reference configurations, trained and scored on the allowed inputs only, with the freestream computed "
+      f"from the inlet faces, on `full` and on each of the {AZ_HELDOUT} held-out splits, two seeds each.")
+print()
+print(f"Cost: {1 + AZ_HELDOUT} splits × three arms × two seeds, ISLA at {AZ_ISLA_GPUH:.0f}, ISLA-DTT at {AZ_DTT_GPUH:.0f} and "
+      f"GeoTransolver at {AZ_GT_GPUH:.0f} GPU-hours a run: {fmt_h(q8)} GPU-hours.")
 ```
 
 ```{python}
@@ -485,6 +530,42 @@ if UNFAIR:
                       for k, v in UD.items()) + ".")
     print()
     print("<!-- SLOT: unit-direction baseline pair (registry swap when scored) -->")
+```
+
+```{python}
+#| label: para-oq-planar-velocity
+#| output: asis
+for k, f in HELD:
+    s_ = ST[k]
+    print(f"### {s_.ds.short} {s_.fields[f]} in the plane {{#sec-oq-planar-velocity}}")
+    print()
+    print(f"**The open question is how the architectures compare on {nm(k)} {s_.fields[f]} when all three are scored on the same "
+          f"components.** On this standing every model reads the unit inlet direction and the inlet speed, and the verdicts on "
+          f"{' and '.join(s_.fields[g] for g in s_.ds.headline if g not in s_.ds.provisional)} are drawn (@{s_.ds.section}). On "
+          f"{s_.fields[f]}, {s_.ds.provisional[f]}. GeoTransolver ÷ ISLA reads {fmt_ratio(r(k, 'GeoTransolver', f))} and Transolver ÷ ISLA "
+          f"{fmt_ratio(r(k, 'Transolver', f))}, and no verdict is drawn from them. What would settle it: the baselines' {s_.fields[f]} "
+          "error scored on its two in-plane components, on the standing's checkpoints. Cost: scoring only.")
+    print()
+```
+
+```{python}
+#| label: para-oq-constant-drive
+#| output: asis
+if S.CONSTANT_DRIVE:
+    UDC = S.unit_drive_control()
+    near = [(k, f, b) for k in S.CONSTANT_DRIVE for f in ST[k].ds.headline for b in S.BASELINES if ST[k].near_drive(b, f)]
+    print("### The constant freestream vector {#sec-oq-constant-drive}")
+    print()
+    print(f"**The open question is where GeoTransolver and Transolver stand on {names(S.CONSTANT_DRIVE)} when they read the unit "
+          "direction.** On these datasets the baselines read `U_inf`, one constant vector in m/s per dataset. Transolver retrained "
+          f"reading the unit direction on the DrivAerML Surface task scores {UDC['pressure_l2']:.3f} times its error on pressure and "
+          f"{UDC['wss_l2']:.3f} times it on wall shear (@sec-unit-direction-rule), so a verdict within "
+          f"{S.fmt_pct(1 + S.drive_bias())} of the level band may move. Of the "
+          f"{sum(1 for k in S.CONSTANT_DRIVE for f in ST[k].ds.headline for b in S.BASELINES)} comparisons on these datasets, {len(near)} "
+          "are that close: " + "; ".join(f"{field_name(ST[k], f)} on {nm(k)} against {b} ({fmt_ratio(r(k, b, f))}, ISLA {ST[k].verdict(b, f)} it)"
+                               for k, f, b in near)
+          + ". What would settle it: " + "; ".join(f"{b} on {' and '.join(nm(k) for k, bb in CD_ARMS if bb == b)}" for b in S.BASELINES)
+          + f", reading the unit direction, two seeds each, scored under each dataset's protocols. Cost: {fmt_h(q9)} GPU-hours.")
 ```
 
 ### The baselines' reference configurations with unit-direction wings {#sec-oq-reference-selection}
@@ -537,7 +618,7 @@ print("**The open question is whether the cell-count saturation, the capacity fl
 #| output: asis
 t = ST["tensile2d"]
 WD = {"stress_l2": "stress", "displacement_l2": "displacement", "q_l2": "plastic strain"}
-worst = min(((ST[k].ratio(b, f), k, f, b) for k in FAIR for f in ST[k].ds.headline for b in S.BASELINES))
+worst = min(((ST[k].ratio(b, f), k, f, b) for k in FAIR for f in ST[k].ds.headline for b in S.BASELINES if ST[k].compared(b, f)))
 disp_worst = min((t.ratio(b, "displacement_l2"), b) for b in S.BASELINES)
 trails = [f"{b} on {' and '.join(WD[f] for f in t.ds.headline if t.verdict(b, f) == 'trails')}"
           for b in S.BASELINES if any(t.verdict(b, f) == "trails" for f in t.ds.headline)]
@@ -578,7 +659,7 @@ print("**The open question is whether ISLA's pose invariance can be exact on mes
 SOL = [k for k in ("tensile2d", "lug", "deepjeb") if k in ST]
 def sline(k):
     s = ST[k]
-    cav = " (the baselines read no boundary-condition labels)" if k == "lug" else ""
+    cav = " (Transolver reads no boundary-condition labels there)" if k == "lug" else ""
     return f"{s.ds.name}: " + ", ".join(f"{field_name(s, f)} ISLA {s.verdict('GeoTransolver', f)} GeoTransolver and {s.verdict('Transolver', f)} Transolver"
                                         for f in s.ds.headline) + cav
 print("**Three structural-mechanics problems carry standings beside the aerodynamic ones, and they read in both directions.** "
@@ -586,7 +667,7 @@ print("**Three structural-mechanics problems carry standings beside the aerodyna
       "conditions and loads, not only varying geometry, so that the global-scalar, global-vector and boundary-input channels are "
       "exercised. Whether the interface carries to further steady boundary-driven PDEs, heat conduction or electrostatics for example, "
       "is unmeasured. "
-      + ("AeroZoo, the diversity benchmark within aerodynamics, carries no standing in @sec-standing; its questions are @sec-oq-aerozoo and @sec-oq-dtt." if AZ.artifact is None else ""))
+      + ("AeroZoo, the diversity benchmark within aerodynamics, carries no standing in @sec-standing; its questions are @sec-oq-aerozoo, @sec-oq-aerozoo-inputs and @sec-oq-dtt." if AZ.artifact is None else ""))
 ```
 
 ## Engineering directions {#sec-future}
@@ -620,8 +701,9 @@ print("- **The interior recommendation becomes unconditional** if the exact wall
       "dependence without costing velocity, and the eddy-viscosity deficit against GeoTransolver on the DrivAerML Volume task closes.")
 print("- **The interior model changes form** if ISLA-DTT is inside the band on every AeroZoo held-out split (@sec-oq-dtt): the "
       "recommendation is then a read-only model whose prediction at a point depends on that point and the boundary alone.")
-print("- **ISLA gains a generalization claim** if its held-out penalty on AeroZoo is smaller than GeoTransolver's by the preregistered "
-      "margin (@sec-oq-aerozoo); it loses one if the penalty is larger.")
+print("- **ISLA gains a generalization claim** if its held-out penalty on AeroZoo, measured on the inputs the benchmark allows, is "
+      "smaller than GeoTransolver's by the preregistered margin (@sec-oq-aerozoo, @sec-oq-aerozoo-inputs); it loses one if the penalty "
+      "is larger.")
 print()
 print("If none fires, the recommendation stands as written, with the bounds of this chapter attached.")
 ```

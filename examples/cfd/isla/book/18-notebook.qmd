@@ -38273,3 +38273,71 @@ plus a standardized magnitude wherever the speed varies across cases,
 and a lane counts only after its saved config shows the inputs
 (`forward_kwargs`) it was meant to read. The recipe's baseline model
 defaults still read `global_data.U_inf` and are changed separately.
+
+## 2026-10-19 — Drive reruns scored: the fair drive lowers the AirfRANS baselines' pressure and eddy-viscosity errors, and the unit direction alone moves Transolver on DrivAerML Surface by 3 percent {#sec-nb-drive-fix-scored}
+
+The DRIVE-FIX lanes of @sec-nb-drive-audit were scored in float32 on
+their final checkpoints, each under its dataset's protocol
+(scratch/isla-drive-fix-2026-10-18/RESULTS.md). Values are seed means,
+with seeds 42 and 43 in parentheses.
+
+**R1, AirfRANS** (uniform protocol, 200 test airfoils, native):
+
+| Arm | Pressure | Velocity | Eddy viscosity |
+|---|---|---|---|
+| GeoTransolver, fair drive | 0.0109 (0.0111, 0.0107) | 0.0400 (0.0397, 0.0402) | 0.0171 (0.0176, 0.0166) |
+| GeoTransolver, raw drive | 0.0123 | 0.0365 | 0.0194 |
+| Transolver, fair drive | 0.0109 (0.0107, 0.0111) | 0.0297 (0.0298, 0.0296) | 0.0178 (0.0177, 0.0180) |
+| Transolver, raw drive | 0.0135 | 0.0669 | 0.0212 |
+| ISLA (A2) | 0.0180 | 0.0095 | 0.0223 |
+
+The fair drive (the unit direction plus the standardized speed) lowers
+both baselines' pressure error, by 11 and 19 percent, and their eddy
+viscosity error, by 12 and 16 percent. It halves Transolver's velocity
+error, while GeoTransolver's rises by 10 percent. Against ISLA, the
+ratios are GeoTransolver 0.61 / 4.23 / 0.77 and Transolver
+0.61 / 3.14 / 0.80 on pressure / velocity / eddy viscosity. The
+registered prediction for GeoTransolver's velocity ratio (1.0 to 2.5)
+failed; Transolver's (1.2 to 4.0) held. Posed, the baselines' errors
+are 1.2 to 1.9, because they are not pose-equivariant. The baselines
+run AirfRANS embedded in 3-D. Their in-plane velocity error equals the
+scored velocity error to within 4e-6, so the out-of-plane component adds
+nothing and the comparison stands as scored (DRIVE-FIX2,
+scratch/isla-drive-fix2-2026-10-19/partC/REPORT.md). Their `velocity_z_l2`
+is not a relative error, since the true z is float noise, and is not
+reported.
+
+**R2, DrivAerML Surface**, Transolver 512 × 16 with the drive (1, 0, 0)
+in place of the constant (38.9, 0, 0): pressure 0.0423 (0.0423, 0.0423),
+wall shear 0.0676 (0.0674, 0.0678), which are 0.967 and 0.971 of the
+reference Transolver. The registered rule required both within
+[0.97, 1.03], so it fails on pressure. The drive is the same constant on
+every case, so it carries no information here, and the 3 percent is
+the cost of its scale alone. Decision: rerun the remaining
+constant-drive baseline lanes with the unit direction (Transolver on
+DrivAerML Volume and SHIFT-SUV, GeoTransolver on DrivAerML Surface,
+Volume and SHIFT-SUV; scratch/isla-drive-fix2-2026-10-19/).
+
+**R3, the lug**, GeoTransolver 256 with the four boundary-condition
+labels in its geometry input: von Mises 0.00224 (0.00218, 0.00230),
+against 0.00209 without the labels and 0.00173 for ISLA, a ratio of
+1.30 (prediction 0.95 to 1.35, held). The labels did not help
+GeoTransolver. The labelled arm is the fair one, because it reads what
+ISLA reads.
+
+**Scored sets.** The Transolver 512 × 16 lanes on DrivAerML Surface and
+HiLift were scored on 100,000 cells, while ISLA and GeoTransolver are
+scored on 200,000. Every other dataset's Transolver lanes were already
+scored on ISLA's set. Re-scored on ISLA's 200,000-cell set, hash-matched
+on all 48 cars, the reference Transolver reads 0.0435 / 0.0696 and the
+unit-drive arm 0.0423 / 0.0678. Native scores move by at most
+0.4 percent, while area scores fall by 12 to 21 percent
+(scratch/isla-drive-fix2-2026-10-19/partB/REPORT.md). On that set the
+R2 ratios are 0.973 and 0.974, inside the band. The registered verdict
+above, read on the 100,000-cell set, stands as written. The reruns go
+ahead either way: the effect sits at the band's edge, and the drive
+rule requires the unit direction regardless.
+
+**Incident.** The completion watch for these lanes never fired: its
+field split compared `trained=4` with `4`. The lanes finished between
+18:50 on 10-18 and 02:00 on 10-19, and were scored at 11:43 EDT on 10-19.

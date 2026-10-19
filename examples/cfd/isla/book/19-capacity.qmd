@@ -399,7 +399,9 @@ print(": What the three reference configurations spend, per dataset and task: tr
       "maximum over four GB300 ranks, bfloat16, one case per GPU), the wall time of one training epoch, and the GPU-hours of one training run "
       "(epoch time × epochs × four GPUs; 500 epochs, 40 on DeepJEB++), beside the seed-mean error of the dataset's first headline field from its "
       "standing and the ratio baseline ÷ ISLA. The one-epoch cost runs used the raw slice reads, which have the same parameters and the "
-      "same tensors as the normalized reads, so the counts are exact and the costs representative. How to read this: the cost columns come "
+      "same tensors as the normalized reads, so the counts are exact and the costs representative. The AirfRANS baselines and the lug's "
+      "GeoTransolver were costed with the inputs of their earlier runs; their standing checkpoints' parameter counts agree with the "
+      "table's to the printed precision. How to read this: the cost columns come "
       "from one-epoch runs of each configuration and the error "
       "column from the 500-epoch standing, so the table pairs a price with a result; it does not say what each architecture would score at "
       "another architecture's budget. Data: results/char/char_lanes_cost_2026-10-04.json and the standing artifacts of @sec-standing.")

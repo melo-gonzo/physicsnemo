@@ -104,6 +104,7 @@ softmax normalizes over points"). Use American spelling.
 | slice, anchor | "cluster", "centroid" | a soft group of tokens; its measure-weighted mean position $z_s$ and mean normal $m_s$ |
 | routing / read-back | | softmax over points into slices / softmax over slices back to points |
 | relational invariants | "geo features" | the scalars describing a token relative to an anchor |
+| the dataset's axes; raw coordinates; components along the dataset's axes | "laboratory frame", "laboratory axes", "laboratory coordinates", "laboratory components", "lab frame" | the fixed $x, y, z$ axes a dataset stores its meshes in (DrivAerML: $x$ along the car, $z$ up), as opposed to a frame the body carries or the slice anchors; defined in 01's pose bullet. A tree aligned with them is "a tree whose boxes are aligned with the dataset's axes" |
 | length unit $L$ | "gauge" in prose | the measure-weighted RMS pairwise distance of the boundary sample |
 | measure weight $w_i$ | "area" alone, "quadrature weight" alone | the measure (area, length) a sampled cell stands for, Horvitz–Thompson-corrected under a non-uniform draw |
 | global vector inputs, global scalar inputs | "drive", "freestream feature" | the problem's global conditions; $K$ unit directions $\hat g_k$, $S$ scalars $\sigma$ |
@@ -183,5 +184,16 @@ geometric maps `fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3`; learned maps
   tokens per case and memory of both sides, or says where they differ.
 - **No hedged verdicts** and no result made to look better than it is. Scope and limits sit
   beside the claim, not only in 20.
+- **A property exact in the limit of a performance knob is credited.** Where a property holds
+  exactly as a knob that trades accuracy for speed goes to zero, with an error that converges to
+  zero, and the model is run where that error is small, the book states the property as the
+  model's. A Barnes–Hut opening angle $\theta$ is the case in point: GLOBE is rotation-equivariant
+  and query-independent, and ISLA-DTT pose-invariant, although at a finite $\theta$ a rotation or a
+  different request regroups their clusters. The chapter names the knob once, briefly, as an
+  approximation that vanishes as $\theta \to 0$, not as a failure of the property, and keeps any
+  deviation it measures at the working $\theta$ as the size of that approximation. A property
+  broken with no convergent knob is still stated as a limit: float32 tie-breaking on tied meshes,
+  a non-equivariant network fed a canonicalized input, whose output jumps by $O(1)$ at a tie of
+  the frame, and the query-population dependence of interacting ISLA.
 - **Chapter work never edits `18-notebook.qmd`, `14-program-status.qmd` or `results/` files
   that already exist.** New result files (a reduction, a rendering) are added with their script.

@@ -25,8 +25,14 @@ rep_ratio = {f: REP["native"][f]["mean"] / St.err("ISLA", f) for f, _ in FIELDS}
 # the interior points per case in training and scoring, from the scorer of the standing's lanes
 CELLS = int(re.search(r"CELLS=(\d+)", (RES / "campaigns_2026-10-14/afu/score.sbatch").read_text()).group(1))
 # parameter counts, from the config line of each arm's own scoring record
-nparams = lambda run: json.loads(open(RES / f"campaigns_2026-10-14/afu/protocols/{run}/native/metrics.jsonl").readline())["num_parameters"]
-PARAMS = {"ISLA": nparams("afu_a2s_isla_seed42"), "GeoTransolver": nparams("afu_r_gt_seed42"), "Transolver": nparams("afu_r_t_seed42")}
+nparams = lambda path: json.loads(open(RES / path / "native" / path.split("/")[-1] / "metrics.jsonl").readline() if "drive_fix" in path
+                                   else open(RES / path / "native" / "metrics.jsonl").readline())["num_parameters"]
+DF = "campaigns_2026-10-19/drive_fix/scores/evals_afu_ud"
+PARAMS = {"ISLA": nparams("campaigns_2026-10-14/afu/protocols/afu_a2s_isla_seed42"), "GeoTransolver": nparams(f"{DF}/afu_ud_gt_seed42"),
+          "Transolver": nparams(f"{DF}/afu_ud_t_seed42")}
+# the out-of-plane velocity component of the baselines' prediction: its relative L2 per run (native), against a near-zero target
+DFS = J("campaigns_2026-10-19/drive_fix/drivefix_scores_2026-10-19.json")
+VZ = [DFS[f"evals_afu_ud/afu_ud_{a}_seed{s}/native"]["metrics"]["velocity_z_l2"] for a in ("gt", "t") for s in (42, 43)]
 COST = J("char/char_lanes_cost_2026-10-04.json")["cost"]["AirfRANS"]
 def word(arch, f, p="native"):
     """ISLA against a baseline in the book's words: 'leads GeoTransolver 3.9x', 'trails Transolver (ratio 0.75)', 'is level with ...',
@@ -38,29 +44,19 @@ def word(arch, f, p="native"):
         return f"trails {arch} (ratio {S.fmt_ratio(r)})"
     return f"{v} {arch}"
 seeds_txt = lambda xs: ", ".join(f"{v:.4f}" for v in xs)
-FAIR = St.ds.fair_drive   # False: the standing's baselines read the raw inlet velocity, so no ISLA-vs-baseline verdict is drawn
-NOTE = St.ds.drive_note.replace("-4.9", "−4.9")
-DRIVE = ("" if FAIR else f"In this standing's record GeoTransolver and Transolver read {NOTE} (@tbl-model-inputs).")
-def table(label, setting):
-    """The headline table; where the baselines' inputs differ from the protocol its caption says the ratios are not compared."""
-    t = St.table(label, setting)
-    return t if FAIR else t.replace("so a value above one favors ISLA", "and here no ratio is read as a comparison, because the baselines read "
-                                      + NOTE)
+HELD = [f for f, _ in FIELDS if f in St.ds.provisional]   # fields given without a verdict (the registry's provisional entry)
+CMP = [(f, l) for f, l in FIELDS if f not in HELD]          # the fields with a verdict
+both = lambda f: (f"{word('GeoTransolver', f)} and {word('Transolver', f)}")
 ```
 
 ```{python}
 #| label: para-airfrans-lede
 #| output: asis
 isla_posed = max(abs(St.shift("ISLA", f, "posed") - 1) for f, _ in FIELDS)
-if FAIR:
-    print(f"**On the AirfRANS interior task ISLA {word('GeoTransolver', 'velocity_l2')} and {word('Transolver', 'velocity_l2')} on velocity, "
-          f"keeps its error to within {isla_posed * 100:.2f}% when every case is rotated and translated, and when its airfoil is thinned, "
-          "its interior error depends strongly on which segments it keeps.** ", end="")
-else:
-    print(f"**On the AirfRANS interior task ISLA keeps its error to within {isla_posed * 100:.2f}% when every case is rotated and translated, "
-          "and when its airfoil is thinned, its interior error depends strongly on which segments it keeps; its native numbers beside "
-          "GeoTransolver and Transolver are given and not compared, because those baselines read the inlet velocity as a raw physical "
-          "vector.** ", end="")
+print(f"**On the AirfRANS interior task ISLA " + "; it ".join(f"{both(f)} on {l}" for f, l in CMP)
+      + "".join(f"; its {St.fields[f]} carries no verdict" for f in HELD)
+      + f". It keeps its error to within {isla_posed * 100:.2f}% when every case is rotated and translated, and when its airfoil is "
+      "thinned, its interior error depends strongly on which segments it keeps.** ", end="")
 print("AirfRANS is the book's two-dimensional interior dataset and its one case with a global scalar input, the inlet speed. The chapter shows "
       "the problem, what is measured, the standing of the three reference configurations, three studies that belong to this dataset (the "
       "training-airfoil ladder, the read-only prediction points, the extrapolation splits) and the boundary-sampling study, and ends with what the "
@@ -189,16 +185,17 @@ print(f"- **Transolver**: width 512, 16 layers, learning rate 1e-3, {PARAMS['Tra
 print()
 print("No model trains with rotation or translation augmentation. **The three do not receive the same inputs** (@tbl-airfrans-inputs, "
       "@tbl-model-inputs): GeoTransolver and Transolver never see the airfoil, only a signed distance to it stored at every point, and they "
-      "read the inlet velocity as the physical vector in m/s, where ISLA reads its unit direction and the speed as a separate scalar.")
+      "read the unit inlet direction and the inlet speed standardized over the training airfoils, where ISLA reads the speed in m/s. "
+      "They also run the planar case embedded in three dimensions and predict three velocity components.")
 ```
 
 | | boundary | global inputs | at each prediction point |
 |---|---|---|---|
 | ISLA | the airfoil polyline: each segment's position, normal and length | $\hat g_1$, the unit inlet direction (rank 1), and the inlet speed $U_\infty$ in m/s (rank 0) | position, entering only through relational invariants; the stored `sdf` (rank 0) and `sdf_normals` (rank 1); the distance and direction to the nearest boundary token, computed inside the model |
-| GeoTransolver | none | the inlet velocity $U_\infty \hat g_1$ as the physical vector in m/s, read by the context projector | coordinates; the stored `sdf` and `sdf_normals` |
-| Transolver | none | the same physical vector, concatenated to every point's features | coordinates; the stored `sdf` and `sdf_normals` |
+| GeoTransolver | none | $\hat g_1$ and the inlet speed standardized over the 800 training airfoils, read by the context projector | coordinates; the stored `sdf` and `sdf_normals` |
+| Transolver | none | the same two, concatenated to every point's features | coordinates; the stored `sdf` and `sdf_normals` |
 
-: What each architecture receives on the AirfRANS interior task. How to read this: only ISLA reads the airfoil itself; the stored signed distance is exact (computed by the converter from the full airfoil), while ISLA's built-in nearest-token distance and direction depend on which boundary segments the model is given, the one input of the interior task that changes with the boundary sample (@sec-airfrans-boundary-law); the global column carries the same information for all three, but the baselines receive it as one vector whose magnitude runs from 31 to 94 m/s and whose angle runs from −4.9° to 14.9° across the cases. Data: conf/model/isla_volume_airfrans.yaml of the recipe, the two baselines' recipe configurations (@sec-baselines) and results/drive_audit_2026-10-18/REPORT.md. {#tbl-airfrans-inputs}
+: What each architecture receives on the AirfRANS interior task. How to read this: only ISLA reads the airfoil itself; the stored signed distance is exact (computed by the converter from the full airfoil), while ISLA's built-in nearest-token distance and direction depend on which boundary segments the model is given, the one input of the interior task that changes with the boundary sample (@sec-airfrans-boundary-law); the global column carries the same information for all three, the baselines' at a scale of one; the baselines read the planar case embedded in three dimensions, with a third coordinate and a third velocity component. Data: conf/model/isla_volume_airfrans.yaml of the recipe, the two baselines' recipe configurations (@sec-baselines) and results/campaigns_2026-10-19/drive_fix/PREREG.md. {#tbl-airfrans-inputs}
 
 ```{python}
 #| label: para-airfrans-scorings
@@ -221,27 +218,25 @@ print("**Cost.** One training epoch on four GB300 ranks in bfloat16 (peak device
 ```{python}
 #| label: para-airfrans-standing-lede
 #| output: asis
-if FAIR:
-    print(f"**ISLA {word('GeoTransolver', 'velocity_l2')} and {word('Transolver', 'velocity_l2')} on interior velocity; on pressure it "
-          f"{word('GeoTransolver', 'pressure_l2')} and {word('Transolver', 'pressure_l2')}; on eddy viscosity it {word('GeoTransolver', 'nut_l2')} "
-          f"and {word('Transolver', 'nut_l2')}.** The words follow the seed rule: ISLA leads or trails only when every seed of one model lies beyond "
-          "every seed of the other and the seed means differ by at least 3%. @tbl-airfrans-protocols holds the numbers.")
-else:
-    print("**The standing's native numbers are given and not compared, because its baselines read the inlet velocity as a raw physical "
-          f"vector.** {DRIVE} On AirfRANS the inlet changes in speed and in angle from case to case, so the vector the baselines read "
-          "changes threefold in length as well as turning with the angle of attack, where ISLA's unit direction only turns. "
-          "@tbl-airfrans-protocols holds each architecture's errors. They are a record of these trained models, "
-          "not a comparison of the architectures: no verdict is drawn from them in this book. The protocol column is read below for each "
-          "architecture against its own native error.")
+print("**ISLA " + "; it ".join(f"{both(f)} on {l}" for f, l in CMP)
+      + "".join(f"; {St.fields[f]} is given without a verdict" for f in HELD) + ".** The words follow the seed rule: ISLA leads or trails "
+      f"only when every seed of one model lies beyond every seed of the other and the seed means differ by at least {100 * S.TIE_BAND:.0f}%. "
+      "@tbl-airfrans-protocols holds the numbers.")
+if HELD:
+    print()
+    print(f"**Velocity is not measured alike for the three.** {St.ds.provisional['velocity_l2']}. The true out-of-plane component is "
+          "close to zero, so the baselines' relative error on it alone is "
+          f"{min(VZ):.0f} to {max(VZ):.0f} on the four checkpoints, and whatever they predict there adds to their velocity error. "
+          "The velocity ratios of @tbl-airfrans-protocols are printed and no verdict is drawn from them (@sec-oq-planar-velocity).")
 ```
 
 ```{python}
 #| label: out-tbl-airfrans-protocols
 #| output: asis
-print(table("tbl-airfrans-protocols", f"The AirfRANS interior task, `full` split, {N_TEST} test airfoils"))
+print(St.table("tbl-airfrans-protocols", f"The AirfRANS interior task, `full` split, {N_TEST} test airfoils"))
 ```
 
-<!-- SLOT: unit-direction baseline pair (registry swap when scored) -->
+<!-- SLOT: in-plane velocity (registry: drop the airfrans provisional entry when scored) -->
 
 ```{python}
 #| label: para-airfrans-replication
@@ -261,20 +256,19 @@ print(":::")
 #| output: asis
 b_shift = [St.shift(a, f, "posed") for a in BASE for f, _ in FIELDS]
 b_posed_err = [St.err(a, f, "posed") for a in BASE for f, _ in FIELDS]
-if FAIR:
-    V = S.Standing("drivaerml_volume")
-    print(f"**Against the cars.** On the DrivAerML Volume task GeoTransolver ÷ ISLA is {V.ratio('GeoTransolver', 'velocity_l2'):.2f} on "
-          f"velocity and {V.ratio('GeoTransolver', 'pressure_l2'):.2f} on pressure (@sec-interior-results); here it is "
-          f"{S.fmt_ratio(St.ratio('GeoTransolver', 'velocity_l2'))} and {St.ratio('GeoTransolver', 'pressure_l2'):.2f}. The two datasets differ "
-          "in what pressure is (gauge pressure on a three-dimensional body against a pressure coefficient in planar incompressible flow) and "
-          "in what the boundary is (200,000 sampled cells of a car against a polyline of about a thousand segments).")
-    print()
+V = S.Standing("drivaerml_volume")
+print(f"**Against the cars.** On the DrivAerML Volume task GeoTransolver ÷ ISLA is {V.ratio('GeoTransolver', 'pressure_l2'):.2f} on "
+      f"pressure and {V.ratio('GeoTransolver', 'nut_l2'):.2f} on eddy viscosity (@sec-interior-results); here it is "
+      f"{St.ratio('GeoTransolver', 'pressure_l2'):.2f} and {St.ratio('GeoTransolver', 'nut_l2'):.2f}. The two datasets differ "
+      "in what pressure is (gauge pressure on a three-dimensional body against a pressure coefficient in planar incompressible flow) and "
+      "in what the boundary is (200,000 sampled cells of a car against a polyline of about a thousand segments).")
+print()
 print(f"**Under rotation and translation ISLA's error is its native error, and the baselines' errors pass the score of predicting zero.** "
       f"ISLA's largest shift on any field is {max(abs(St.shift('ISLA', f, 'posed') - 1) for f, _ in FIELDS) * 100:.2f}% of its native error. "
       f"GeoTransolver's and Transolver's posed errors are {S.fmt_ratio(min(b_shift))} to {S.fmt_ratio(max(b_shift))} times their own native "
-      f"errors, every one of the six at or above {min(b_posed_err):.2f}, worse than predicting zero everywhere. They read laboratory "
+      f"errors, every one of the six at or above {min(b_posed_err):.2f}, worse than predicting zero everywhere. They read raw "
       "coordinates and never trained on a rotated airfoil, so a rotated airfoil is outside their training distribution even though the "
-      "inlet velocity rotates with it.")
+      "inlet direction rotates with it.")
 ```
 
 ```{python}
@@ -291,8 +285,8 @@ print(f"The three reference configurations on one held-out AirfRANS airfoil (Rey
       f"{RD['aoa_deg']:.1f}°), the case of median ISLA pressure error among the {N_TEST} test airfoils, seed 42. Top row of each panel: the "
       "solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one symmetric scale. "
       f"Relative L2 on this case: {case_errors(PE)}. How to read this: one case, not a standing; the "
-      "baselines read the inlet velocity as the physical vector, so the panels show what each trained model does and are not a "
-      "comparison. ISLA's error map is cut into straight-edged patches around the airfoil, the shape of a quantity that is piecewise "
+      "baseline panels are drawn from GeoTransolver and Transolver checkpoints that read the inlet velocity as the physical vector "
+      "in m/s, not from the standing's, so they show what those trained models do and are not a comparison. ISLA's error map is cut into straight-edged patches around the airfoil, the shape of a quantity that is piecewise "
       "constant over the points that share a nearest boundary token (@sec-isla-interior); the book does not measure that link further. "
       "The 100,000 points are drawn once for this figure, so ISLA's pressure error differs slightly from the scored record's. Data: "
       "results/renderings_2026-10-18/arrays/render_2d_airfrans.json and airfrans_00215.npz.\n")
@@ -301,7 +295,7 @@ print(":::")
 
 ## Studies on this dataset {#sec-airfrans-ladders}
 
-**Three studies on this dataset use smaller ISLA configurations than the reference one; they are read for slopes and mechanisms, never as standings.** Each caption names its instrument in the tag of @sec-study-configurations. Their baseline is *GeoTransolver-volume*, the GeoTransolver of the DrivAerML Volume task with its ball-query local features on (@sec-baselines), at width 256 and learning rate 1e-3, where the standing uses the reference GeoTransolver. Like the standing's baselines it reads the inlet velocity as the physical vector (@tbl-model-inputs), so a comparison with it carries the same input difference and is a statement about these two configurations. The three studies also read the interior points as contiguous blocks of the stored rows, a spatially coherent window of the domain rather than a uniform sample, in training and in scoring alike. The comparisons inside each study are like for like; their absolute errors are not comparable with @tbl-airfrans-protocols. The fourth study, the boundary draw, is measured on the standing's own checkpoints.
+**Three studies on this dataset use smaller ISLA configurations than the reference one; they are read for slopes and mechanisms, never as standings.** Each caption names its instrument in the tag of @sec-study-configurations. Their baseline is *GeoTransolver-volume*, the GeoTransolver of the DrivAerML Volume task with its ball-query local features on (@sec-baselines), at width 256 and learning rate 1e-3, where the standing uses the reference GeoTransolver. Unlike the standing's baselines it reads the inlet velocity as the physical vector in m/s (@sec-unit-direction-rule), so a comparison with it carries that input difference and is a statement about these two configurations. The three studies also read the interior points as contiguous blocks of the stored rows, a spatially coherent window of the domain rather than a uniform sample, in training and in scoring alike. The comparisons inside each study are like for like; their absolute errors are not comparable with @tbl-airfrans-protocols. The fourth study, the boundary draw, is measured on the standing's own checkpoints.
 
 ### The training-airfoil ladder {#sec-airfrans-ladder}
 
@@ -418,8 +412,8 @@ print(f"**On the airfoil, read-only prediction points with a global read of the 
       f"pressure and velocity: ISLA-DTT ÷ ISLA is {' / '.join(f'{v:.2f}' for v in dtt)} on pressure / velocity / eddy viscosity "
       "within one instrument.** In ISLA the prediction points are *interacting*: they carry routing mass, write into the slices and so "
       "influence one another. In ISLA-DTT they are *read-only*: they read the boundary's slices at every layer, never write, and also read "
-      "every boundary segment through a learned kernel evaluated with a Barnes–Hut cluster forest at opening angle θ = 1, built in a "
-      "canonical frame that the boundary carries (@sec-arch-passive-decoder, @sec-arch-tree-read). A prediction then depends on its own point "
+      "every boundary segment through a learned kernel evaluated with a Barnes–Hut cluster forest at opening angle θ = 1, built, to group "
+      "segments for speed, in a canonical frame that the boundary carries (@sec-arch-passive-decoder, @sec-arch-tree-read). A prediction then depends on its own point "
       "and the boundary alone. @tbl-airfrans-read-only separates the two changes. Read-only points without any boundary read are "
       + ", ".join(f"{ro_word(K_NOR, j)} on {names3[j]}" for j in range(3))
       + f" by the seed rule ({' / '.join(f'{v:.2f}' for v in nor)}), where on the DrivAerML Volume task they trail it "
@@ -444,7 +438,7 @@ print(": Read-only prediction points on the AirfRANS interior task: relative L2 
       "read; the dense read evaluates the global read pair by pair. Instrument: ISLA at 384 wide, 256 slices, 5e-4, raw slice reads "
       "(@sec-study-configurations); interior points read as contiguous blocks of the stored rows. How to read this: ÷ ISLA below one means more "
       "accurate than the interacting row; the rows are a within-instrument control, not the standing (@tbl-airfrans-protocols); rotated and "
-      "translated, ISLA-DTT keeps its native error, up to ties of the forest's canonical frame. Data: research/dtt/REPORT.md (the AirfRANS "
+      "translated, ISLA-DTT keeps its native error. Data: research/dtt/REPORT.md (the AirfRANS "
       "read-only control and the pose-free parity table). {#tbl-airfrans-read-only}")
 ```
 
@@ -616,13 +610,12 @@ print(f"**Three readings.** First, the law: pressure and velocity move far past 
 gx = {f: mean(law("exact-geometry variant", f)) for f in ("pressure_l2", "velocity_l2")}
 gc = [v for f in ("pressure_l2", "velocity_l2") for v in count("exact-geometry variant", f)]
 print("**The AirfRANS standing is one two-dimensional dataset: "
-      + ("a native comparison, " if FAIR else "native numbers given and not compared, ")
+      + "a native comparison on " + " and ".join(l for _, l in CMP) + "".join(f", {St.fields[f]} without a verdict" for f in HELD) + ", "
       + "an exact pose reading for ISLA, three studies on smaller instruments and one boundary-draw study on the standing's checkpoints.**")
 print()
-if not FAIR:
-    print(f"- **No native comparison with the baselines.** {DRIVE} A GeoTransolver and Transolver pair trained with the unit inlet direction "
-          "and the inlet speed as a scalar in m/s, the form ISLA reads it in, scored by the same protocol beside ISLA's checkpoints, is the comparison "
-          "(@sec-open-questions); no ratio of @tbl-airfrans-protocols is read as a verdict.")
+if HELD:
+    print(f"- **No verdict on velocity.** {St.ds.provisional['velocity_l2']}. The baselines' velocity error scored on its two in-plane "
+          "components, on the same checkpoints, settles it (@sec-oq-planar-velocity).")
 print("- **Not resource-matched.** The three configurations differ in parameters and memory (@sec-airfrans-measured) and do not receive the "
       "same inputs (@tbl-airfrans-inputs), so any ratio is a record of the configurations as each is scored on every dataset.")
 print("- **Not a statement about geometry.** The airfoils are one smooth parameterization; nothing here says how ISLA generalizes across "

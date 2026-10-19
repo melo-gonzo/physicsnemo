@@ -1,0 +1,302 @@
+{
+ "evals_afu_ud/afu_ud_gt_seed42/area": {
+  "metrics": {
+   "nut_l2": 0.017548094987869262,
+   "pressure_l2": 0.011069586277008056,
+   "velocity_l2": 0.03973079442977905,
+   "velocity_x_l2": 0.02881721258163452,
+   "velocity_y_l2": 0.06402556896209717,
+   "velocity_z_l2": 193.00671875
+  },
+  "n": 200,
+  "dataset": "airfrans_uvolume_ud_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_afu_ud/afu_ud_gt_seed42/native": {
+  "metrics": {
+   "nut_l2": 0.017548094987869262,
+   "pressure_l2": 0.011069586277008056,
+   "velocity_l2": 0.03973079442977905,
+   "velocity_x_l2": 0.02881721258163452,
+   "velocity_y_l2": 0.06402556896209717,
+   "velocity_z_l2": 193.00671875
+  },
+  "n": 200,
+  "dataset": "airfrans_uvolume_ud",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_afu_ud/afu_ud_gt_seed42/posed": {
+  "metrics": {
+   "nut_l2": 1.6699966430664062,
+   "pressure_l2": 1.9344876098632813,
+   "velocity_l2": 1.1847661590576173,
+   "velocity_x_l2": 1.549991455078125,
+   "velocity_y_l2": 0.9968390655517578,
+   "velocity_z_l2": 4188.0846875
+  },
+  "n": 200,
+  "dataset": "airfrans_uvolume_ud_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_afu_ud/afu_ud_gt_seed43/area": {
+  "metrics": {
+   "nut_l2": 0.01661405086517334,
+   "pressure_l2": 0.010730949640274047,
+   "velocity_l2": 0.04022439479827881,
+   "velocity_x_l2": 0.02942753553390503,
+   "velocity_y_l2": 0.06476212978363037,
+   "velocity_z_l2": 283.6094921875
+  },
+  "n": 200,
+  "dataset": "airfrans_uvolume_ud_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_afu_ud/afu_ud_gt_seed43/native": {
+  "metrics": {
+   "nut_l2": 0.01661405086517334,
+   "pressure_l2": 0.010730949640274047,
+   "velocity_l2": 0.04022439479827881,
+   "velocity_x_l2": 0.02942753553390503,
+   "velocity_y_l2": 0.06476212978363037,
+   "velocity_z_l2": 283.6094921875
+  },
+  "n": 200,
+  "dataset": "airfrans_uvolume_ud",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_afu_ud/afu_ud_gt_seed43/posed": {
+  "metrics": {
+   "nut_l2": 1.5076522827148438,
+   "pressure_l2": 1.6733578491210936,
+   "velocity_l2": 1.1492133331298828,
+   "velocity_x_l2": 1.5846159362792969,
+   "velocity_y_l2": 0.8575393676757812,
+   "velocity_z_l2": 3410.299375
+  },
+  "n": 200,
+  "dataset": "airfrans_uvolume_ud_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_afu_ud/afu_ud_t_seed42/area": {
+  "metrics": {
+   "nut_l2": 0.01766584873199463,
+   "pressure_l2": 0.01067850112915039,
+   "velocity_l2": 0.029762799739837646,
+   "velocity_x_l2": 0.022316040992736815,
+   "velocity_y_l2": 0.04862301349639893,
+   "velocity_z_l2": 19.660623779296873
+  },
+  "n": 200,
+  "dataset": "airfrans_uvolume_ud_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_afu_ud/afu_ud_t_seed42/native": {
+  "metrics": {
+   "nut_l2": 0.01766584873199463,
+   "pressure_l2": 0.01067850112915039,
+   "velocity_l2": 0.029762799739837646,
+   "velocity_x_l2": 0.022316040992736815,
+   "velocity_y_l2": 0.04862301349639893,
+   "velocity_z_l2": 19.660623779296873
+  },
+  "n": 200,
+  "dataset": "airfrans_uvolume_ud",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_afu_ud/afu_ud_t_seed42/posed": {
+  "metrics": {
+   "nut_l2": 2.0712615966796877,
+   "pressure_l2": 1.3591575622558594,
+   "velocity_l2": 1.2550589752197265,
+   "velocity_x_l2": 1.7228317260742188,
+   "velocity_y_l2": 0.9476937866210937,
+   "velocity_z_l2": 153.741669921875
+  },
+  "n": 200,
+  "dataset": "airfrans_uvolume_ud_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_afu_ud/afu_ud_t_seed43/area": {
+  "metrics": {
+   "nut_l2": 0.01795823335647583,
+   "pressure_l2": 0.011124216318130493,
+   "velocity_l2": 0.029578707218170165,
+   "velocity_x_l2": 0.022474498748779298,
+   "velocity_y_l2": 0.0479395866394043,
+   "velocity_z_l2": 43.7007373046875
+  },
+  "n": 200,
+  "dataset": "airfrans_uvolume_ud_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_afu_ud/afu_ud_t_seed43/native": {
+  "metrics": {
+   "nut_l2": 0.01795823335647583,
+   "pressure_l2": 0.011124216318130493,
+   "velocity_l2": 0.029578707218170165,
+   "velocity_x_l2": 0.022474498748779298,
+   "velocity_y_l2": 0.0479395866394043,
+   "velocity_z_l2": 43.7007373046875
+  },
+  "n": 200,
+  "dataset": "airfrans_uvolume_ud",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_afu_ud/afu_ud_t_seed43/posed": {
+  "metrics": {
+   "nut_l2": 1.6288465881347656,
+   "pressure_l2": 1.1829087829589844,
+   "velocity_l2": 1.2060287475585938,
+   "velocity_x_l2": 1.55900146484375,
+   "velocity_y_l2": 0.9727751159667969,
+   "velocity_z_l2": 48.7188232421875
+  },
+  "n": 200,
+  "dataset": "airfrans_uvolume_ud_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_lugbc/lugbc_gt_seed42/area": {
+  "metrics": {
+   "von_mises_l2": 0.0021777751048405966
+  },
+  "n": 600,
+  "dataset": "ginot_lug_volume_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_lugbc/lugbc_gt_seed42/native": {
+  "metrics": {
+   "von_mises_l2": 0.0021777751048405966
+  },
+  "n": 600,
+  "dataset": "ginot_lug_volume",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_lugbc/lugbc_gt_seed42/posed": {
+  "metrics": {
+   "von_mises_l2": 0.9370986938476562
+  },
+  "n": 600,
+  "dataset": "ginot_lug_volume_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_lugbc/lugbc_gt_seed43/area": {
+  "metrics": {
+   "von_mises_l2": 0.002299848198890686
+  },
+  "n": 600,
+  "dataset": "ginot_lug_volume_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_lugbc/lugbc_gt_seed43/native": {
+  "metrics": {
+   "von_mises_l2": 0.002299848198890686
+  },
+  "n": 600,
+  "dataset": "ginot_lug_volume",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_lugbc/lugbc_gt_seed43/posed": {
+  "metrics": {
+   "von_mises_l2": 0.969747314453125
+  },
+  "n": 600,
+  "dataset": "ginot_lug_volume_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_r80ud/r80ud_dr_t_h512_l16_c100k_seed42/area": {
+  "metrics": {
+   "pressure_l2": 0.3478701114654541,
+   "wss_l2": 0.4130905071894328,
+   "wss_x_l2": 0.33672674496968585,
+   "wss_y_l2": 0.6943532625834147,
+   "wss_z_l2": 0.5363916556040446
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_surface_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_r80ud/r80ud_dr_t_h512_l16_c100k_seed42/native": {
+  "metrics": {
+   "pressure_l2": 0.042253454526265465,
+   "wss_l2": 0.06740506986776988,
+   "wss_x_l2": 0.05098657806714376,
+   "wss_y_l2": 0.1174083948135376,
+   "wss_z_l2": 0.09743906060854594
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_surface",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_r80ud/r80ud_dr_t_h512_l16_c100k_seed42/posed": {
+  "metrics": {
+   "pressure_l2": 1.2999778588612874,
+   "wss_l2": 1.4011354446411133,
+   "wss_x_l2": 1.9211630821228027,
+   "wss_y_l2": 1.1623529593149822,
+   "wss_z_l2": 1.1736345291137695
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_surface_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_r80ud/r80ud_dr_t_h512_l16_c100k_seed43/area": {
+  "metrics": {
+   "pressure_l2": 0.34185771147410077,
+   "wss_l2": 0.4317099650700887,
+   "wss_x_l2": 0.3543738126754761,
+   "wss_y_l2": 0.689850648244222,
+   "wss_z_l2": 0.5858399470647176
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_surface_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_r80ud/r80ud_dr_t_h512_l16_c100k_seed43/native": {
+  "metrics": {
+   "pressure_l2": 0.04225663344065348,
+   "wss_l2": 0.06778892874717712,
+   "wss_x_l2": 0.05126649638017019,
+   "wss_y_l2": 0.1182510753472646,
+   "wss_z_l2": 0.09776086608568828
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_surface",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_r80ud/r80ud_dr_t_h512_l16_c100k_seed43/posed": {
+  "metrics": {
+   "pressure_l2": 1.2865904172261555,
+   "wss_l2": 1.3069560527801514,
+   "wss_x_l2": 1.7327837944030762,
+   "wss_y_l2": 1.0681421756744385,
+   "wss_z_l2": 1.176397720972697
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_surface_posed",
+  "epoch": 500,
+  "source": "summary"
+ }
+}
