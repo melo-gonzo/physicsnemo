@@ -800,10 +800,10 @@ print(f"The raw-read variant's stream starts near {r1:,.0f} and reaches {sci(rma
 
 ### What the trained routing looks like {#sec-arch-routing-trained}
 
-**On a trained model a slice is a soft region of the body: the first
-layer barely routes, a few middle layers cut the surface into patches such
-as the wheels, and the last layers spread the mass over most of the slices
-again, with every token's weight shared among many of them.** Every routing picture so far drew
+**On a trained model a slice is a soft region of the body: on the car a
+few early layers cut the surface into patches such as the wheels, the last
+layers spread the mass over most of the slices, and every token's weight is
+shared among many of them.** Every routing picture so far drew
 hand-made weights. This section reads the real ones out of trained
 checkpoints. The instrument records the refined routing scores of every
 layer on one validation case. From them, each token's **soft assignment**
