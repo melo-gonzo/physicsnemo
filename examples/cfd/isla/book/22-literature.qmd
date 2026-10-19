@@ -146,17 +146,18 @@ finding, which follows.
 #| label: para-vs-area
 #| output: asis
 rows = []
-for k in ("drivaerml_surface", "hilift", "shift_suv"):
+SURF = ("drivaerml_surface", "shift_suv")   # the compared surface standings with a uniform point cloud
+for k in SURF:
     s = S.Standing(k)
     sh = {a: [s.shift(a, f, "area") for f in s.ds.headline] for a in S.ARCHS}
     rows.append((s.ds.name, sh))
 lo = min(min(v) for _, sh in rows for a, v in sh.items() if a != "ISLA")
 hi = max(max(v) for _, sh in rows for a, v in sh.items() if a != "ISLA")
 isla = max(abs(x - 1) for _, sh in rows for x in sh["ISLA"])
-print(f"**The finding.** On the three surface datasets whose uniform point cloud resamples the scored cells "
+print(f"**The finding.** On the two compared surface datasets whose uniform point cloud resamples the scored cells "
       f"({', '.join(n for n, _ in rows)}), the two released slice transformers' errors on the uniform point cloud "
       f"are {lo:.1f} to {hi:.1f} times their native-mesh errors on the headline fields, and ISLA's moves by at most "
-      f"{100 * isla:.1f}%. Data: " + ", ".join(S.Standing(k).source for k in ("drivaerml_surface", "hilift", "shift_suv")) + ".")
+      f"{100 * isla:.1f}%. Data: " + ", ".join(S.Standing(k).source for k in SURF) + ".")
 ```
 
 No benchmark had exposed this dependence, because every benchmark scores
@@ -239,7 +240,7 @@ equivariance inside every layer.
 *What is new.* The choice to keep the entire trunk an ordinary scalar
 transformer and pay for equivariance once, at the edges, in an
 industrial-scale slice transformer, and the measurement of what that costs
-against two non-equivariant baselines on `{python} len(S.available())` datasets (@sec-standing). The
+against two non-equivariant baselines on `{python} sum(S.DATASETS[k].fair_drive for k in S.available())` datasets (@sec-standing). The
 contrast in the literature is the price of the per-layer route: Rygiel et
 al. (2026) report AB-GATr at 2 to 11 times the training time of AB-UPT. A
 second element is small and sharp. Scalar heads on invariants are
@@ -288,8 +289,8 @@ relational-invariant ablations of @sec-isla-relational.
 
 *Caveat.* The anchors are formed from the geometry, so where the geometry
 barely varies between cases they barely move, and positional resolution is
-then only as fine as the partition. PLAID Tensile2d, whose specimen shape
-barely varies, is the dataset where that bound would bind, and
+then only as fine as the partition. PLAID Tensile2d, one specimen family whose
+outline stays a tension specimen, is the dataset where that bound would bind, and
 GeoTransolver leads there on stress and displacement (@sec-tensile2d).
 Whether the bound is the cause is not measured.
 
@@ -443,14 +444,14 @@ geometry run at 200,000 cells per case (@sec-architecture).
 
 1. **Discretization consistency as a measured property, and the dependence
    of the released slice transformers on the sampling law**
-   (@sec-vs-novel-measure). The instruments, the factors on three surface
+   (@sec-vs-novel-measure). The instruments, the factors on two surface
    datasets, and the one-term mechanism that removes the dependence.
    Self-contained and reproducible.
 2. **Exact rigid-motion covariance in a slice transformer, paid for at the
    edges** (@sec-vs-novel-frame, @sec-vs-novel-invariants,
    @sec-vs-novel-anchors together): the anchor-relative invariant
    construction, its contracts, and its cost measured as the
-   in-distribution standing on `{python} len(S.available())` datasets, with the component clause of
+   in-distribution standing on `{python} sum(S.DATASETS[k].fair_drive for k in S.available())` datasets, with the component clause of
    the scalar heads as a corollary.
 3. **Read-only prediction points with a tree-evaluated boundary read**
    (@sec-vs-novel-tree): a query-independent interior form whose evidence
