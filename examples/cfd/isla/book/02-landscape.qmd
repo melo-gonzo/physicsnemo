@@ -30,7 +30,13 @@ from matplotlib.patches import FancyBboxPatch, FancyArrowPatch, Rectangle
 from matplotlib.colors import Normalize, to_rgba
 import standing as S
 import json
+import ast
 from pathlib import Path
+# GLOBE's constructor defaults, read from its source without importing the model
+_globe = ast.parse((Path("../../../..") / "physicsnemo/experimental/models/globe/model.py").read_text())
+_init = next(f for c in _globe.body if isinstance(c, ast.ClassDef) and c.name == "GLOBE"
+             for f in c.body if isinstance(f, ast.FunctionDef) and f.name == "__init__").args
+GLOBE_DEFAULTS = {a.arg: ast.literal_eval(v) for a, v in zip(_init.args[-len(_init.defaults):], _init.defaults)}
 JK = joukowski(alpha_deg=6.0, n_cells=60)
 ```
 
@@ -362,8 +368,8 @@ what a sublayer reads, and that is the property that matters here.
 
 **Dense attention scores every pair of tokens. At the 200,000 cells per
 case of this book's protocol, the score arrays of one layer fill several
-GPUs, and their arithmetic costs GPU-days per training run. Every scalable family replaces the $N \times N$ kernel with
-something of cost linear in $N$.** The arithmetic, for a network of the
+GPUs, and their arithmetic costs GPU-days per training run. Every scalable family replaces the dense $N \times N$ kernel with
+something of cost linear in $N$, or $N \log N$ for a tree code.** The arithmetic, for a network of the
 width and depth of ISLA:
 
 ```{python}
@@ -664,6 +670,81 @@ products to reach meshes of over 160 million cells. Transolver and GeoTransolver
 as released in PhysicsNeMo, take coordinates in a laboratory frame and
 weight each token once in their slice states.
 
+### A learned boundary integral on a tree: GLOBE {#sec-landscape-globe}
+
+**GLOBE takes Green's representation as its architecture: the field at a
+target is a sum over the boundary faces of a learned kernel from each face
+to the target, weighted by the face's area. It keeps every face-to-target
+pair and makes the sum cheap the way an N-body code does, with a
+Barnes–Hut tree.** The four families above route the coupling through an
+intermediary. GLOBE (Sharpe, 2025) keeps the all-to-all sum of a
+boundary-element method and learns its kernel: Green's representation
+(@eq-green) with the fundamental solution replaced by a network. For faces
+$s$ with centroid $x_s$, normal $n_s$ and area $w_s$ (in units of a
+reference area), one evaluation at a target $x_t$ is
+
+$$
+\mathcal K_t = \sum_{s=1}^{N} \lambda_s\, w_s\, g\bigl(\lVert r_{ts}\rVert\bigr)\, \kappa(\xi_{ts}),
+\qquad
+r_{ts} \equiv \frac{x_t - x_s}{\ell},
+\qquad
+g(r) \equiv \frac{1 - e^{-r^2}}{(1 + r^2)^{(d-1)/2}} ,
+$$ {#eq-landscape-globe}
+
+with $\ell$ a reference length of the problem and $\lambda_s$ a learned
+strength of the face. The pair's invariants $\xi_{ts}$ are the magnitudes
+of its vectors ($r_{ts}$, $n_s$, vector boundary data and latent
+vectors) and Legendre polynomials of the cosine between every two of them.
+A small network $\kappa$, a ratio of two MLPs shaped like a Padé
+approximant, maps them to output channels. A scalar output is one channel.
+A vector output is a combination, with coefficients from $\kappa$, of the
+pair's own directions: $\hat r_{ts}$, each input vector and its part
+orthogonal to $\hat r_{ts}$. The envelope $g$ vanishes at
+$r = 0$ and decays like $r^{1-d}$, as the field $\nabla G$ of a point
+source does. No softmax normalizes the sum, so it is linear in the
+strengths, as @eq-green is linear in the boundary data.
+
+A *communication hyperlayer* evaluates @eq-landscape-globe from the faces
+to the faces themselves and returns each face's strengths and latent
+fields for the next one, a learned stand-in for the dense solve that gives
+a boundary-element method its source densities. By default the class
+stacks `{python} GLOBE_DEFAULTS["n_communication_hyperlayers"]` of them
+before a last hyperlayer, which evaluates at the requested points,
+wherever they lie. Each hyperlayer sums one kernel per reference length and per
+boundary-condition type. The kernels are small: the paper's AirfRANS model
+has 117,282 parameters.
+
+The decay envelope is what lets a tree code apply. Evaluated densely, a
+hyperlayer costs $N^2$ kernel evaluations. A distant cluster of faces
+contributes like $r^{1-d}$, so GLOBE's PhysicsNeMo code reads it as one
+virtual face: the kernel is evaluated once, at the cluster's area-weighted
+centroid with its area-weighted mean normal and data, and multiplied by
+the cluster's total $\sum_s \lambda_s w_s$. This is the monopole term of a
+multipole expansion, the tree code of Barnes and Hut (1986) and the lowest
+order of the fast multipole method. The tree bisects the face centroids
+along a Morton space-filling curve. A pair of boxes counts as far when the
+sum of their diagonals is below $\theta$ times their gap
+($\theta$ is `{python} GLOBE_DEFAULTS["theta"]` by default),
+nearer faces are summed one by one, and the cost falls to $O(N \log N)$.
+@fig-isla-dtt draws this access pattern on the airfoil. The boxes are
+aligned with the laboratory axes. At a finite $\theta$ a rotation
+therefore regroups the clusters, and the kernel's exact equivariance holds
+only to the accuracy of the monopole; at $\theta = 0$ the sum is exact.
+
+GLOBE and ISLA share three choices: the boundary is the input, the
+rigid-motion symmetry is built in exactly, and every sum over the boundary
+is weighted by the cells' measure. They couple the boundary differently. GLOBE
+couples every face to every target through learned kernels of the pair's
+geometry; ISLA couples the cells through a learned soft partition into
+slices. ISLA-DTT's read-only prediction points follow GLOBE's evaluation
+pattern: after every layer each point reads every boundary cell through a
+learned kernel of the pair's relative geometry, walking a forest of
+GLOBE's cluster trees, near cells one by one and distant clusters as monopoles
+(@sec-arch-tree-read). That read is a softmax over the cells with a
+log-measure bias, a normalized quadrature, and its forest is built in a
+frame the boundary carries, so a rotation does not regroup it, up to ties
+of that frame.
+
 ### DeepONet: a branch and a trunk {#sec-landscape-deeponet}
 
 **DeepONet writes the solution as a separated expansion: coefficients that
@@ -781,7 +862,9 @@ vectors that move with the body), run an ordinary network on those scalars,
 and rebuild vector outputs at the end from a basis that rotates with the
 body. It is exact, it puts the cost at the edges of the network rather than
 in every layer, and it is the route ISLA takes (@sec-isla-frame,
-@sec-isla-heads).
+@sec-isla-heads). GLOBE takes it inside every kernel evaluation: invariants
+of the face–target pair in, vector outputs rebuilt on true vectors of the
+pair, which makes it exact under reflections as well (Sharpe, 2025).
 
 | route | exact for every input | what it costs | where the cost sits |
 |:---|:---|:---|:---|
@@ -826,7 +909,9 @@ the aggregation, so that a layer has one limit under refinement. Transolver's sl
 $\sum_i a_{is} h_i / \sum_i a_{is}$ weight each token once. A slice state
 then counts a cluster of small cells near a leading edge once per cell, so the mesher's refinement decides how much
 that region weighs. ISLA's routing adds exactly the log-measure bias
-(@sec-isla-quadrature).
+(@sec-isla-quadrature). GLOBE multiplies each face's kernel by the face's
+area (@eq-landscape-globe), so every sum it takes is a quadrature of a
+boundary integral.
 
 **"Resolution invariance" claims need to be read with their sampler.** A
 neural operator is called discretization-invariant or
@@ -894,12 +979,14 @@ measures how well the two baselines of this book do.
 | equivariant latent tokens (AB-GATr) | point sets in geometric algebra | yes | not by construction | yes | yes, at 2 to 11 times AB-UPT's training time |
 | slice attention (Transolver, Transolver++, Transolver-3) | point set, laboratory coordinates | no | no: Transolver counts each token once | as tokens of the input set | yes, linear in $N$ |
 | GeoTransolver | point set, laboratory coordinates, ball-query geometry encoding, global context | no | no: counts each token once | as tokens, with the signed distance | yes, linear in $N$ |
+| boundary-integral kernels (GLOBE) | boundary faces by boundary-condition type (centroid, normal, area, data), no connectivity; reference lengths | yes, rotations, translations and reflections in the kernel; at a finite opening angle a rotation regroups its laboratory-axis tree | yes: each face's kernel times its area | yes, at arbitrary points | $N \log N$ with a Barnes–Hut tree in its PhysicsNeMo code; published dense, $N^2$, on two-dimensional airfoils |
 | physics-informed networks (PINN) | coordinates of one instance | no | not applicable | yes | one instance per training |
 | **ISLA** | boundary cells with their measure; invariants against slice anchors | **yes**, rotations and translations (@sec-isla-contracts); ISLA-DTT's tree read up to ties of its canonical frame (@sec-arch-tree-read) | **yes**: a log-measure bias in the routing | **yes**, as interacting or read-only prediction points | **yes**, linear in $N$; 200,000 cells per case in this book |
 
 : The families of neural PDE surrogates against the five properties that
 matter for steady boundary-driven problems, each as constructed in the
-cited papers (@sec-vs-bibliography) and, for ISLA, in its code. How to read
+cited papers (@sec-vs-bibliography) and, for ISLA and GLOBE's tree, in
+the PhysicsNeMo code. How to read
 this: a row says what the architecture guarantees by construction, not how
 accurate it is; accuracy is the subject of @sec-standing. {#tbl-landscape-taxonomy}
 
