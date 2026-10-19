@@ -46,21 +46,27 @@ PV = {"p": {"rank": 0}, "v": {"rank": 1}}
 #: Per-case token counts, all distinct (and distinct from every other input
 #: dimension) so that duck sizing ties no two of them together.
 SIZES = [({"inlet": 23, "wall": 41}, 57), ({"inlet": 31, "wall": 37}, 45)]
+#: The conditions of the interior and inputs tasks, each with its own fields (the
+#: wall of the interior task with none).
+SCHEMAS = {
+    "interior": {"inlet": {"bc": {"rank": 0}, "u_bc": {"rank": 1}}, "wall": {}},
+    "inputs": {"inlet": {"T": {"rank": 2}}, "wall": {"bc": {"rank": 0}}},
+}
 
 
 def _model(task: str) -> ISLA:
     torch.manual_seed(0)
     if task == "surface":
-        kw = {"global_schema": {"g": {"rank": 1}}}
+        kw = {"boundary_schemas": {"wall": {}}, "global_schema": {"g": {"rank": 1}}}
     elif task == "interior":
         kw = {
-            "boundary_schema": {"bc": {"rank": 0}, "u_bc": {"rank": 1}},
+            "boundary_schemas": SCHEMAS["interior"],
             "global_schema": {"g": {"rank": 1}, "re": {"rank": 0}},
             "interior": True,
         }
     else:  # inputs
         kw = {
-            "boundary_schema": {"bc": {"rank": 0}, "T": {"rank": 2}},
+            "boundary_schemas": SCHEMAS["inputs"],
             "global_schema": {"g": {"rank": 1}},
             "query_schema": {"sdf": {"rank": 0}, "m": {"rank": 1}},
             "interior": True,
@@ -77,17 +83,8 @@ def _case(task: str, sizes: dict, nq: int, device, seed: int) -> dict:
     meshes = {}
     for k, (name, n) in enumerate(sorted(sizes.items())):
         pts, nrm, w, _ = cloud(n, seed=seed + k, dtype=torch.float32)
-        data = {}
-        if task == "interior":
-            data = {
-                "bc": torch.rand(n, generator=g),
-                "u_bc": torch.randn(n, 3, generator=g),
-            }
-        elif task == "inputs":
-            data = {
-                "bc": torch.rand(n, generator=g),
-                "T": torch.randn(n, 3, 3, generator=g),
-            }
+        schema = SCHEMAS[task][name] if task in SCHEMAS else {}
+        data = {f: torch.randn(n, *(3,) * spec["rank"], generator=g) for f, spec in schema.items()}
         meshes[name] = soup(pts, nrm, w, cell_data=data).to(device)
     drv = torch.nn.functional.normalize(torch.randn(3, generator=g), dim=0)
     case = {"boundary_meshes": meshes, "global_data": {"g": drv.to(device)}}
@@ -197,7 +194,7 @@ def test_the_in_model_boundary_draw_compiles_once_across_the_budget():
     torch._dynamo.reset()
     model = ISLA(
         output_schema=PV,
-        boundary_schema={"bc": {"rank": 0}, "u_bc": {"rank": 1}},
+        boundary_schemas=SCHEMAS["interior"],
         global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
         interior=True,
         boundary_tokens=60,

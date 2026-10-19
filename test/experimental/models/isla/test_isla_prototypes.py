@@ -44,6 +44,7 @@ def _problem(n=300, seed=0):
 
 KW = dict(
     output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+    boundary_schemas={"wall": {}},
     global_schema={"g": {"rank": 1}},
     hidden=32,
     n_layers=2,

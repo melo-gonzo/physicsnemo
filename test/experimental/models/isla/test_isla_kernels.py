@@ -35,6 +35,7 @@ cuda_only = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA kerne
 
 REF = dict(
     output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+    boundary_schemas={"wall": {}},
     global_schema={"g": {"rank": 1}},
     hidden=64,
     n_layers=3,
@@ -185,7 +186,7 @@ def test_fused_geo_kernel_model_exact_in_float64():
 def test_fused_geo_kernel_model_rank1_boundary_input_exact_in_float64():
     """A model with a rank-1 boundary input (the RANK-IO configuration) runs the fused
     kernel and matches the eager region to float64 roundoff."""
-    spec = {**REF, "boundary_schema": {"t": {"rank": 1}}}
+    spec = {**REF, "boundary_schemas": {"wall": {"t": {"rank": 1}}}}
     torch.manual_seed(0)
     ref = ISLA(**spec).to("cuda", torch.float64)
     torch.manual_seed(0)

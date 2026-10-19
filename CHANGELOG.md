@@ -60,7 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Attention), an O(d)/SE(d)-equivariant (any spatial dimension d >= 2),
   measure-aware slice-attention surrogate for steady boundary-value problems.
   Inputs (global, per-boundary-cell, per-query) and outputs are named fields of
-  declared tensor rank, declared by `global_schema`, `boundary_schema`,
+  declared tensor rank, declared by `global_schema`, `boundary_schemas` (the
+  boundary conditions by name, each with its own per-cell fields),
   `query_schema` and `output_schema` (`output_schema={"pressure": {"rank": 0},
   "wss": {"rank": 1}, "stress": {"rank": 2, "symmetric": True}}`, see
   `FieldSchema` under Changed); every input enters through O(d)-invariants and

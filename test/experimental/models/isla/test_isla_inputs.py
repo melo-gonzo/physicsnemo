@@ -80,7 +80,7 @@ def _move(fields, specs, R):
 
 def _model(**kw):
     torch.manual_seed(0)
-    base = dict(output_schema=OUT, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8)
+    base = dict(output_schema=OUT, boundary_schemas={"wall": {}}, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8)
     base.update(kw)
     return ISLA(**base).double().eval()
 
@@ -97,7 +97,7 @@ def _assert_covariant(m, call, improper):
 
 @pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])
 def test_boundary_inputs_covariance(improper):
-    m = _model(boundary_schema=BIN)
+    m = _model(boundary_schemas={"wall": BIN})
     pts, nrm, w, _ = cloud(200)
     bf = _boundary_fields(200)
     mesh = soup(pts, nrm, w, cell_data=bf)
@@ -105,7 +105,7 @@ def test_boundary_inputs_covariance(improper):
     def call(R, shift):
         with torch.no_grad():
             return outputs(
-                m(boundary_meshes={"wall": transform(mesh, R, shift, specs=m.boundary_schema)}, global_data={"g": DRV @ R.T})
+                m(boundary_meshes={"wall": transform(mesh, R, shift, specs=m.boundary_schemas["wall"])}, global_data={"g": DRV @ R.T})
             )
 
     base = _assert_covariant(m, call, improper)
@@ -119,7 +119,7 @@ def test_boundary_inputs_covariance(improper):
     R = orthogonal(3, 6, False)
     with torch.no_grad():
         skew = outputs(
-            m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data=_move(bf, m.boundary_schema, R))}, global_data={"g": DRV})
+            m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data=_move(bf, m.boundary_schemas["wall"], R))}, global_data={"g": DRV})
         )
     assert not torch.allclose(skew["p"], base["p"], atol=1e-6)
 
@@ -129,7 +129,7 @@ def test_query_inputs_covariance(improper):
     """Rank-0/1/2 per-prediction-point fields in the prediction Mesh's point_data."""
     pts, nrm, w, _ = cloud(200)
     q_pts, _, _, _ = cloud(40, seed=3)
-    m = _model(interior=True, query_schema=QIN, boundary_schema={"trac": {"rank": 1}})
+    m = _model(interior=True, query_schema=QIN, boundary_schemas={"wall": {"trac": {"rank": 1}}})
     bf = {"trac": torch.randn(200, 3, dtype=D, generator=torch.Generator().manual_seed(5))}
     mesh = soup(pts, nrm, w, cell_data=bf)
     n_q = 40
@@ -139,7 +139,7 @@ def test_query_inputs_covariance(improper):
         with torch.no_grad():
             return outputs(
                 m(
-                    boundary_meshes={"wall": transform(mesh, R, shift, specs=m.boundary_schema)},
+                    boundary_meshes={"wall": transform(mesh, R, shift, specs=m.boundary_schemas["wall"])},
                     prediction_points=points_mesh(q_pts @ R.T + shift, _move(qf, m.query_schema, R)),
                     global_data={"g": DRV @ R.T},
                 )
@@ -166,25 +166,26 @@ def test_geometry_width_and_seed_width():
     for K in (0, 1, 2):
         m = _model(
             global_schema={f"g{k}": {"rank": 1} for k in range(K)},
-            boundary_schema={"v": {"rank": 1}, "T": {"rank": 2, "symmetric": True}},
+            boundary_schemas={"wall": {"v": {"rank": 1}, "T": {"rank": 2, "symmetric": True}}},
         )
         F = 1 + K
         assert m.blocks[0].n_geo == 5 + K + (1 + F) + 1
         assert m.n_block_vecs == 1 + F and m.n_block_tens == 1
-        assert m.bin.n_features == (F + 1) + (F * (F + 1) // 2 + 2)
-        assert m.embed[0].in_features == K + m.bin.n_features
+        wall = m.boundary_conditions["wall"]
+        assert wall.inputs.n_features == (F + 1) + (F * (F + 1) // 2 + 2)
+        assert wall.seed.in_features == 1 + K + wall.inputs.n_features
     ### a non-symmetric rank-2 input contracts both T a and T^T a and all F^2 pairs
-    m = _model(boundary_schema={"A": {"rank": 2}})
-    assert m.n_block_vecs == 2 * 2 and m.bin.n_features == 4 + 2
+    m = _model(boundary_schemas={"wall": {"A": {"rank": 2}}})
+    assert m.n_block_vecs == 2 * 2 and m.boundary_conditions["wall"].inputs.n_features == 4 + 2
     ### query inputs widen the union stack for every token, boundary ones included
-    m = _model(interior=True, query_schema={"u": {"rank": 1}}, boundary_schema={"v": {"rank": 1}})
+    m = _model(interior=True, query_schema={"u": {"rank": 1}}, boundary_schemas={"wall": {"v": {"rank": 1}}})
     assert m.blocks[0].n_geo == 5 + 1 + 2
 
 
 def test_field_validation_errors():
     """Declared fields are read from cell_data / point_data by name and checked for
     shape; extras there are ignored (like GLOBE)."""
-    m = _model(boundary_schema={"trac": {"rank": 1}, "tag": {"rank": 0}})
+    m = _model(boundary_schemas={"wall": {"trac": {"rank": 1}, "tag": {"rank": 0}}})
     pts, nrm, w, _ = cloud(20)
     gd = {"g": torch.ones(3, dtype=D)}
     trac, tag = torch.randn(20, 3, dtype=D), torch.rand(20, dtype=D)
@@ -197,9 +198,10 @@ def test_field_validation_errors():
     ### extras in cell_data are ignored
     out = m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data={"trac": trac, "tag": tag, "extra": tag})}, global_data=gd)
     assert out.point_data["p"].shape == (20,)
-    ### every boundary mesh must carry every declared field
-    with pytest.raises(ValueError, match="boundary_meshes\\['b'\\].cell_data is missing"):
-        m(
+    ### every boundary mesh carries its own condition's fields
+    m2 = _model(boundary_schemas={"a": {"trac": {"rank": 1}, "tag": {"rank": 0}}, "b": {"tag": {"rank": 0}}})
+    with pytest.raises(ValueError, match="boundary_meshes\\['b'\\].cell_data is missing the declared fields \\['tag'\\]"):
+        m2(
             boundary_meshes={
                 "a": soup(pts, nrm, w, cell_data={"trac": trac, "tag": tag}),
                 "b": soup(pts + 10, nrm, w, cell_data={"trac": trac}),
@@ -220,7 +222,7 @@ def test_field_validation_errors():
 def test_fused_kernel_auto_falls_back_with_tensor_inputs():
     """The fused kernel does not take rank-2 inputs: auto falls back to eager (off CUDA
     it does anyway)."""
-    base = dict(output_schema=OUT, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8)
+    base = dict(output_schema=OUT, boundary_schemas={"wall": {}}, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8)
     m = ISLA(interior=True, query_schema={"S": {"rank": 2}}, **base)
     assert m.geo_kernel == "auto"
     assert m.resolve_geo_kernel(torch.zeros(1, 4, 3)) == "eager"
@@ -233,7 +235,7 @@ def test_rank0_query_inputs_are_scaled_by_the_gauge():
     of the geometry alone changes the output. The scaled pair takes two embedding
     channels per rank-0 field, after the built-in distance pair."""
     m = _model(interior=True, query_schema={"sdf": {"rank": 0}, "u": {"rank": 1}})
-    assert m.qin.n_features == 2 + (2 + 1) and m.qt.embed[0].in_features == 2 + m.qin.n_features
+    assert m.qin.n_features == 2 + (2 + 1) and m.qt.seed.in_features == 1 + 2 + m.qin.n_features
     pts, nrm, w, _ = cloud(60)
     mesh = soup(pts, nrm, w)
     q, _, _, _ = cloud(12, seed=1)
@@ -259,18 +261,19 @@ def test_rank0_query_inputs_are_scaled_by_the_gauge():
 
 def test_fields_keep_their_declaration_order_as_columns():
     """The field inputs fill the seed, and the head's coefficients fill the
-    outputs, in declaration order, not in key order: with the embedding reading
-    only its first seed column and the head writing only its first coefficient,
+    outputs, in declaration order, not in key order: with the condition's input
+    layer reading only its constant and its first field column and the head
+    writing only its first coefficient,
     the first declared input alone moves the first declared output."""
     m = ISLA(
         output_schema={"z": {"rank": 0}, "a": {"rank": 0}},
-        boundary_schema={"y": {"rank": 0}, "b.c": {"rank": 0}},
+        boundary_schemas={"wall": {"y": {"rank": 0}, "b.c": {"rank": 0}}},
         hidden=16,
         n_layers=1,
         n_slices=4,
     ).double().eval()
     with torch.no_grad():
-        m.embed[0].weight[:, 1:] = 0
+        m.boundary_conditions["wall"].seed.weight[:, 2:] = 0  # [1, y, b.c]: no global inputs
         m.head.weight[1:] = 0
         m.head.bias[1:] = 0
     pts, nrm, w, _ = cloud(30, seed=0)

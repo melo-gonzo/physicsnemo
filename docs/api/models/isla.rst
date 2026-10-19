@@ -6,8 +6,9 @@ dimension d >= 2), measure-aware slice-attention surrogate for steady
 boundary-value problems. A boundary sample
 (positions, unit normals, quadrature measures) goes in together with the
 problem's data as *named fields of declared tensor rank*: global inputs (a
-direction, a PDE parameter), per-boundary-cell inputs (a condition tag, a
-prescribed traction, a prescribed stress) and, for an interior task, per-query
+direction, a PDE parameter), per-boundary-cell inputs declared per named
+boundary condition (an inlet's prescribed velocity, a loaded face's traction; a
+no-slip wall declares none) and, for an interior task, per-query
 inputs (a source term, a material label). Named fields of declared rank come
 out: scalars,
 vectors, tensors up to rank 4, each exactly covariant. The attention operates
@@ -21,7 +22,7 @@ releases.
 Rank specs
 ----------
 
-``output_schema``, ``boundary_schema``, ``query_schema`` and ``global_schema`` map a
+``output_schema``, each schema of ``boundary_schemas``, ``query_schema`` and ``global_schema`` map a
 field name to a field declaration in the grammar shared by every mesh model
 (:meth:`physicsnemo.mesh.fields.FieldSchema.parse`): a
 :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping of values ``{"rank": r,
@@ -48,17 +49,31 @@ Contracts
 - **Measure-aware aggregation.** Slice states are quadrature-weighted means, so
   the routing reads a sampled integral rather than a raw point population.
 
+Boundary conditions by name
+---------------------------
+
+``boundary_schemas`` declares the boundary conditions by name, each with the
+per-cell fields it alone carries (``{}`` for a condition without fields). The
+names are fixed at construction, in sorted order. ``forward`` takes any
+non-empty subset of them, in any order: an absent condition contributes no
+tokens, an unknown name is an error. Each condition has its own input layer
+(whose column on a constant is the condition's learned offset, so its identity
+is structural even without fields) and its own equivariant linear maps from its
+vector and tensor inputs onto the shared channels of the slice layers, which
+every condition shares. No tag field names a condition.
+
 Mesh API
 --------
 
 ``forward`` follows the mesh-native contract of the mesh models (GLOBE's): one
-case per call, no batch axis. The boundary is a mapping of named
-:class:`~physicsnemo.mesh.Mesh` objects (one per boundary condition or part,
-each a ``Mesh[dim - 1, dim]`` whose cells have normals); the per-case data is
+case per call, no batch axis. The boundary is a mapping of
+:class:`~physicsnemo.mesh.Mesh` objects keyed by declared boundary-condition
+name (each a ``Mesh[dim - 1, dim]`` whose cells have normals); the per-case data is
 a ``TensorDict`` or mapping; for an interior task (``interior=True``) the
 prediction points are a point-cloud ``Mesh`` (or a bare ``(N, dim)`` tensor
 when ``query_schema`` declares no fields). The result is a point-cloud ``Mesh``
-whose ``point_data`` holds the declared outputs. Every constructor argument
+whose ``point_data`` holds the declared outputs (on a surface task at the
+given conditions' cells, the conditions in sorted name order). Every constructor argument
 and every ``forward`` input is keyword-only. The reference configuration on a
 surface task is the class defaults (``hidden=512``, ``n_layers=12``,
 ``n_slices=512``), as the recipe configures it:
@@ -67,6 +82,7 @@ surface task is the class defaults (``hidden=512``, ``n_layers=12``,
 
     model = ISLA(
         output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}},  # a scalar and a vector field
+        boundary_schemas={"vehicle": {}},  # one boundary condition, no per-cell fields
         global_schema={"U_inf_dir": {"rank": 1}},  # one global direction
     )
     out = model(
@@ -79,9 +95,9 @@ surface task is the class defaults (``hidden=512``, ``n_layers=12``,
 A tensor-valued target is declared with its rank
 (``output_schema={"stress": {"rank": 2, "symmetric": True}}`` gives ``(N, 3, 3)``
 in three dimensions);
-a prescribed boundary vector is a rank-1 boundary input
-(``boundary_schema={"traction": {"rank": 1}}``, read from each boundary mesh's
-``cell_data["traction"]``). An interior task is built with ``interior=True``
+a prescribed boundary vector is a rank-1 input of its condition
+(``boundary_schemas={"loaded": {"traction": {"rank": 1}}, "fixed": {}, "free": {}}``,
+read from ``boundary_meshes["loaded"].cell_data["traction"]``). An interior task is built with ``interior=True``
 and called with ``prediction_points=``. Its ``boundary_meshes`` are the
 boundaries at full resolution, the only boundary input: each prediction
 point's signed distance to that surface (positive on the side the cells'

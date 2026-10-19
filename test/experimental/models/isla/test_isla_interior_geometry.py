@@ -51,8 +51,12 @@ D = torch.float64
 PV = {"p": {"rank": 0}, "v": {"rank": 1}}
 
 
+WALL = {"wall": {}}
+
+
 def _model(**kw):
     torch.manual_seed(0)
+    kw.setdefault("boundary_schemas", WALL)
     return ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True, **kw).double().eval()
 
 
@@ -95,7 +99,7 @@ def test_stored_distance_is_an_ordinary_query_input():
     q, _, _, _ = cloud(25, seed=1, scale=(4.0, 4.0, 4.0))
     d, grad = exact_boundary_geometry(q, mesh.points, mesh.cells)
     m = _model(query_schema={"geometry.sdf": {"rank": 0}, "geometry.grad": {"rank": 1}})
-    assert m.qt.embed[0].in_features == 2 + (2 + (2 + 1))  # built-in pair, scaled scalar pair, vector cosines and norm
+    assert m.qt.seed.in_features == 1 + 2 + (2 + (2 + 1))  # n.g, built-in pair, scaled scalar pair, vector cosines and norm
 
     def call(sdf, g):
         with torch.no_grad():
@@ -126,8 +130,8 @@ def test_no_query_normals_argument():
 def test_fused_kernel_stays_available_with_the_built_in_distance():
     """The built-in distance enters the embedding, not the geometry region, so a model
     without rank-1 or rank-2 per-token inputs keeps the fused kernel."""
-    m = ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True)
-    assert m.n_query_builtin == 2 and m.qt.embed[0].in_features == 2
+    m = ISLA(output_schema=PV, boundary_schemas=WALL, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True)
+    assert m.n_query_builtin == 2 and m.qt.seed.in_features == 1 + 2
     assert not (m.n_block_vecs or m.n_block_tens)
 
 
@@ -162,6 +166,7 @@ def test_saved_posed_airfrans_case_runs():
     torch.manual_seed(0)
     m = ISLA(
         output_schema={"velocity": {"rank": 1}, "pressure": {"rank": 0}, "nut": {"rank": 0}},
+        boundary_schemas={"airfoil": {}},
         global_schema={"U_inf_dir": {"rank": 1}, "U_inf_mag": {"rank": 0}},
         query_schema={"sdf": {"rank": 0}, "sdf_normals": {"rank": 1}},
         dim=2, interior=True, hidden=32, n_layers=2, n_slices=8,
@@ -480,6 +485,7 @@ def test_exact_geometry_refuses_other_dimensions():
 
 def _interior(dim: int, **kw) -> ISLA:
     torch.manual_seed(0)
+    kw.setdefault("boundary_schemas", {"wall": {}, "airfoil": {}, "far": {}})
     return ISLA(output_schema=PV, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True, dim=dim, **kw).double().eval()
 
 
@@ -614,16 +620,16 @@ def test_boundary_tokens_is_validated():
     outside two and three dimensions."""
     for bad in (0, -3, 2.5, True):
         with pytest.raises(ValueError, match="positive integer"):
-            ISLA(output_schema=PV, interior=True, boundary_tokens=bad)
+            ISLA(output_schema=PV, boundary_schemas=WALL, interior=True, boundary_tokens=bad)
     with pytest.raises(ValueError, match="surface task"):
-        ISLA(output_schema=PV, boundary_tokens=1000)
-    ISLA(output_schema=PV, boundary_tokens=200_000)
+        ISLA(output_schema=PV, boundary_schemas=WALL, boundary_tokens=1000)
+    ISLA(output_schema=PV, boundary_schemas=WALL, boundary_tokens=200_000)
     surface, q, gd = _airfoil_case(60, 10)
     empty = Mesh(points=surface.points, cells=surface.cells[:0])
     with torch.no_grad(), pytest.raises(ValueError, match="have no cells"):
         _interior(2)(boundary_meshes={"airfoil": empty}, prediction_points=q, global_data=gd)
     with pytest.raises(NotImplementedError, match="two and three dimensions"):
-        ISLA(output_schema=PV, interior=True, dim=4)
+        ISLA(output_schema=PV, boundary_schemas=WALL, interior=True, dim=4)
 
 
 def _flipped(mesh: Mesh) -> Mesh:

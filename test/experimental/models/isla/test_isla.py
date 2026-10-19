@@ -49,7 +49,12 @@ G = {"g": {"rank": 1}}
 D = torch.float64
 
 
+#: One boundary condition without fields, the cloud's.
+WALL = {"wall": {}}
+
+
 def _isla(**kw):
+    kw.setdefault("boundary_schemas", WALL)
     return ISLA(output_schema=PV, global_schema=G, **kw)
 
 
@@ -125,23 +130,6 @@ def test_token_permutation_equivariance(setup):
     assert same(outputs(out), _rows(base, perm), atol=1e-10)
 
 
-def test_several_boundary_meshes_are_one_token_set(setup):
-    """The cells of every boundary mesh are the tokens, concatenated in sorted key
-    order: two meshes carrying halves of the cloud give the outputs of the whole
-    cloud, in that order, whatever the mapping's insertion order."""
-    m, mesh, drv, base = setup
-    n = mesh.n_cells // 2
-    w = mesh.cell_data[EFFECTIVE_MEASURE_KEY]
-    parts = {
-        "b_rear": Mesh(points=mesh.points, cells=mesh.cells[n:], cell_data={EFFECTIVE_MEASURE_KEY: w[n:]}),
-        "a_front": Mesh(points=mesh.points, cells=mesh.cells[:n], cell_data={EFFECTIVE_MEASURE_KEY: w[:n]}),
-    }
-    with torch.no_grad():
-        out = m(boundary_meshes=parts, global_data={"g": drv})
-    assert torch.allclose(out.points, base.points, atol=1e-12)
-    assert same(out, base, atol=1e-10)
-
-
 def test_no_effective_measures_is_the_geometric_quadrature(setup):
     """Without ``_effective_measure`` the cells' geometric measures are the weights;
     a soup without prescribed measures has congruent cells, so this is the uniform
@@ -162,14 +150,14 @@ def test_boundary_scalar_contracts():
     """Two rank-0 boundary fields (one leaf per scalar) in ``cell_data`` ride along
     under a rotation."""
     torch.manual_seed(0)
-    m = _isla(hidden=64, n_layers=2, n_slices=16, boundary_schema={"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}).double().eval()
+    m = _isla(hidden=64, n_layers=2, n_slices=16, boundary_schemas={"wall": {"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}}).double().eval()
     pts, nrm, w, drv = cloud(300)
     bs = {"bc_a": torch.randn(300, dtype=D), "bc_b": torch.randn(300, dtype=D)}
     mesh = soup(pts, nrm, w, cell_data=bs)
     base = _run(m, mesh, drv)
     q = _rotation()
-    _assert_rotated(_run(m, transform(mesh, q, specs=m.boundary_schema), drv @ q.T), base, q)
-    assert m.embed[0].in_features == 1 + 2
+    _assert_rotated(_run(m, transform(mesh, q, specs=m.boundary_schemas["wall"]), drv @ q.T), base, q)
+    assert m.boundary_conditions["wall"].seed.in_features == 1 + 1 + 2  # constant, n.g, the two fields
 
 
 def test_head_runs_under_bf16_autocast():
@@ -249,7 +237,7 @@ def test_query_scalars_contracts():
     assert same(sc, out, atol=1e-10)
     ### gradients reach the query-input embedding
     sum(o.square().sum() for o in outputs(out).values()).backward()
-    assert all(p.grad is not None and p.grad.abs().sum() > 0 for p in m.qt.embed.parameters())
+    assert all(p.grad is not None and p.grad.abs().sum() > 0 for p in m.qt.seed.parameters())
     with pytest.raises(ValueError, match="missing the declared fields \\['sdf'\\]"):
         m(boundary_meshes={"wall": mesh}, prediction_points=points_mesh(q), global_data={"g": drive})
     with pytest.raises(ValueError, match="pass prediction_points as a Mesh"):
@@ -377,7 +365,7 @@ def test_boundary_scalars_reach_the_interior_prediction():
     torch.manual_seed(0)
     pts, nrm, w, drv = cloud(60)
     bs = {"bc_a": torch.randn(60, dtype=D), "bc_b": torch.randn(60, dtype=D)}
-    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, boundary_schema={"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}).double().eval()
+    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, boundary_schemas={"wall": {"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}}).double().eval()
     q = pts[:17] * 0.5
     out = _run(m, soup(pts, nrm, w, cell_data=bs), drv, q)
     out2 = _run(m, soup(pts, nrm, w, cell_data={k: 2 * v for k, v in bs.items()}), drv, q)
@@ -410,7 +398,7 @@ def test_frame_contracts():
     shift = torch.tensor([300.0, -70.0, 1100.0], dtype=D)
     torch.manual_seed(1)
     m = _isla(hidden=64, n_layers=2, n_slices=16).double().eval()
-    assert m.embed[0].in_features == 1
+    assert m.boundary_conditions["wall"].seed.in_features == 1 + 1  # the constant and n.g
     assert m.blocks[0].geo_logit.in_features == 6
     base = _run(m, mesh, drv)
     assert all(torch.isfinite(o).all() for o in outputs(base).values())
@@ -461,10 +449,10 @@ def test_defaults_are_the_reference_configuration():
     m = _isla(hidden=32, n_layers=2, n_slices=8)
     assert m.interior is False and m.qt is None
     assert m.geo_kernel == "auto"
-    assert m.embed[0].in_features == 1
+    assert m.boundary_conditions["wall"].seed.in_features == 1 + 1
     assert m.blocks[0].geo_logit.in_features == 6
     mi = _isla(hidden=32, n_layers=2, n_slices=8, interior=True)
-    assert mi.qt.embed[0].in_features == 2  # the built-in distance pair
+    assert mi.qt.seed.in_features == 1 + 2  # n.g and the built-in distance pair
 
 
 def test_constructor_and_forward_are_keyword_only():
@@ -474,9 +462,11 @@ def test_constructor_and_forward_are_keyword_only():
     pts, nrm, w, drv = cloud(16, dtype=torch.float32)
     mesh = soup(pts, nrm, w)
     with pytest.raises(TypeError):
-        ISLA(PV, G)
+        ISLA(PV, WALL, G)
     with pytest.raises(TypeError):
-        ISLA(hidden=32, n_layers=1, n_slices=8)  # outputs is required
+        ISLA(boundary_schemas=WALL, hidden=32, n_layers=1, n_slices=8)  # outputs is required
+    with pytest.raises(TypeError):
+        ISLA(output_schema=PV, hidden=32, n_layers=1, n_slices=8)  # so are the conditions
     m = _isla(hidden=32, n_layers=1, n_slices=8)
     with pytest.raises(TypeError):
         m({"wall": mesh}, None, {"g": drv})
@@ -546,8 +536,8 @@ def test_mesh_validation_errors():
         m(boundary_meshes={}, global_data={"g": drv})
     with pytest.raises(TypeError, match="must be a physicsnemo.mesh.Mesh"):
         m(boundary_meshes={"wall": pts}, global_data={"g": drv})
-    with pytest.raises(ValueError, match="boundary_meshes\\['cloud'\\]: the boundary of a 3-dimensional domain is a Mesh\\[2, 3\\]"):
-        m(boundary_meshes={"cloud": Mesh(points=pts)}, global_data={"g": drv})
+    with pytest.raises(ValueError, match="boundary_meshes\\['wall'\\]: the boundary of a 3-dimensional domain is a Mesh\\[2, 3\\]"):
+        m(boundary_meshes={"wall": Mesh(points=pts)}, global_data={"g": drv})
     pts2, nrm2, w2, _ = cloud(20, d=2, dtype=torch.float32)
     with pytest.raises(ValueError, match="has 2 spatial dimensions; this model has dim=3"):
         m(boundary_meshes={"wall": soup(pts2, nrm2, w2)}, global_data={"g": drv})
@@ -649,7 +639,7 @@ def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices(
     # five global directions: auto stays eager (off CUDA it does anyway; the kernel is
     # unrolled for one to four)
     five = {"g1": {"rank": 1}, "g2": {"rank": 1}, "g3": {"rank": 1}, "g4": {"rank": 1}, "g5": {"rank": 1}}
-    two = ISLA(output_schema=PV, global_schema=five, hidden=32, n_layers=2, n_slices=8).double().eval()
+    two = ISLA(output_schema=PV, boundary_schemas=WALL, global_schema=five, hidden=32, n_layers=2, n_slices=8).double().eval()
     assert two.resolve_geo_kernel(pts) == "eager"
 
 
@@ -664,7 +654,7 @@ def test_scalar_only_model_has_no_frame_routing_and_every_parameter_gets_a_gradi
     mesh = soup(pts, nrm, w)
     q = torch.randn(30, 3) * 2.0
     for outs in ({"u": {"rank": 0}}, {"u": {"rank": 0}, "q1": {"rank": 0}, "q2": {"rank": 0}}, {"u": {"rank": 0}, "v": {"rank": 1}}):
-        m = ISLA(output_schema=outs, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True)
+        m = ISLA(output_schema=outs, boundary_schemas=WALL, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True)
         has_vec = any(v["rank"] == 1 for v in outs.values())
         assert m.needs_frame == has_vec and (m.frame_assign is not None) == has_vec
         out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}))

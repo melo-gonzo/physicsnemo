@@ -76,7 +76,7 @@ cuda_only = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
 
 def _model(dim=3, theta=TREE_READ_THETA, randomize=True, seed=0, **kw):
     torch.manual_seed(seed)
-    kw = {"hidden": 32, "n_layers": 2, "n_slices": 8, **kw}
+    kw = {"hidden": 32, "n_layers": 2, "n_slices": 8, "boundary_schemas": {"wall": {}}, **kw}
     m = ISLA(
         output_schema=PV,
         global_schema=G,
@@ -111,7 +111,7 @@ def _exact_read(model, read, h_b, h_q, tok):
     n_j\cdot v, \hat\rho\cdot u, n_q\cdot u]`, the kernel basis, and a softmax over the
     cells of the kernel term, the query-key match and the log measure fraction."""
     bnd, qry, wall, g = tok["bnd"], tok["qry"], tok["q_wall"][0], tok["g_unit"][0]
-    nb = model.bin.n_block_vecs
+    nb = model.n_boundary_vecs
     y, n_j = bnd["r"][0], bnd["n_hat"][0]
     x, n_q = qry["r"][0], qry["n_hat"][0]
     rel = x[:, None] - y[None]
@@ -215,7 +215,7 @@ def _rel(a, b):
 def test_tree_read_at_theta_zero_is_the_exact_read(dim, vectors):
     """At theta 0 the forest read is the all-pairs read (the brute-force reference
     above), with and without rank-1 boundary inputs; at the model's angle it is not."""
-    extra = {"boundary_schema": {"tr": {"rank": 1}}} if vectors else {}
+    extra = {"boundary_schemas": {"wall": {"tr": {"rank": 1}}}} if vectors else {}
     tree = _tree(dim, 0.0, **extra)
     assert isinstance(tree.kernel_reads[0], _TreeKernelRead) and len(tree.kernel_reads) == 2
     mesh, drv, q, sdf, sn = _case(dim)
@@ -581,7 +581,7 @@ def test_tree_read_bf16_autocast_is_finite():
 
 def test_tree_read_rank2_inputs_are_refused():
     with pytest.raises(NotImplementedError, match="rank-2"):
-        _model(boundary_schema={"S": {"rank": 2}}, randomize=False)
+        _model(boundary_schemas={"wall": {"S": {"rank": 2}}}, randomize=False)
 
 
 @cuda_only

@@ -18,7 +18,8 @@
 
 :func:`_declare` parses and checks one of the constructor's rank-spec declarations;
 :class:`_InputSet` holds one token class's per-token fields and turns them into the
-seed invariants, the block-level derived vectors and the block-level rank-2 tensors.
+seed invariants, the block-level derived vectors and the block-level rank-2 tensors;
+:class:`_BoundaryCondition` holds one named boundary condition's input parameters.
 Private to :mod:`physicsnemo.experimental.models.isla`."""
 
 import dataclasses
@@ -26,6 +27,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import torch
+import torch.nn as nn
 from tensordict import PackLayout, TensorDict
 
 from physicsnemo.mesh.fields import FieldSchema, FieldSchemaLike, RankSpec
@@ -240,6 +242,31 @@ class _InputSet:
         vecs_t = torch.cat(vecs, 2) if vecs else frame.new_zeros(b, n, 0, d)
         tens_t = tens if self.rank2 else frame.new_zeros(b, n, 0, d, d)
         return seed_t, vecs_t, tens_t
+
+
+class _BoundaryCondition(nn.Module):
+    """One named boundary condition's input parameters.
+
+    ``seed`` is the condition's input layer, ``(hidden, 1 + n_seed)`` without a bias:
+    it maps the condition's seed ``[1, n.g_k, field invariants, global scalars]``
+    to the token width, its first column (on the constant 1) being the condition's
+    learned offset, so that two conditions differ in the parameters their tokens
+    read even when neither declares a field. ``vector_map`` ``(n_vecs, P')`` and
+    ``tensor_map`` ``(n_tens, Q)`` are linear maps from the condition's own block
+    vectors and rank-2 tensors (:class:`_InputSet`) to the model's shared channels;
+    a linear combination with scalar weights commutes with every orthogonal map, so
+    the channels are true vectors and tensors like their inputs. Both start as the
+    identity padded with zeros (the condition's ``j``-th vector is channel ``j``)
+    and are ``None`` where the condition has no such input.
+    """
+
+    def __init__(self, inputs: _InputSet, n_seed: int, hidden: int, n_vecs: int, n_tens: int) -> None:
+        super().__init__()
+        self.inputs = inputs
+        self.seed = nn.Linear(1 + n_seed, hidden, bias=False)
+        p, q = inputs.n_block_vecs, inputs.n_block_tens
+        self.vector_map = nn.Parameter(torch.eye(n_vecs, p)) if p else None
+        self.tensor_map = nn.Parameter(torch.eye(n_tens, q)) if q else None
 
 
 def _contract_vectors(x, y):
