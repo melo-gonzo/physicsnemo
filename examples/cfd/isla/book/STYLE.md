@@ -104,6 +104,7 @@ softmax normalizes over points"). Use American spelling.
 | slice, anchor | "cluster", "centroid" | a soft group of tokens; its measure-weighted mean position $z_s$ and mean normal $m_s$ |
 | routing / read-back | | softmax over points into slices / softmax over slices back to points |
 | relational invariants | "geo features" | the scalars describing a token relative to an anchor |
+| the dataset's axes; raw coordinates; components along the dataset's axes | "laboratory frame", "laboratory axes", "laboratory coordinates", "laboratory components", "lab frame" | the fixed $x, y, z$ axes a dataset stores its meshes in (DrivAerML: $x$ along the car, $z$ up), as opposed to a frame the body carries or the slice anchors; defined in 01's pose bullet. A tree aligned with them is "a tree whose boxes are aligned with the dataset's axes" |
 | length unit $L$ | "gauge" in prose | the measure-weighted RMS pairwise distance of the boundary sample |
 | measure weight $w_i$ | "area" alone, "quadrature weight" alone | the measure (area, length) a sampled cell stands for, Horvitz–Thompson-corrected under a non-uniform draw |
 | global vector inputs, global scalar inputs | "drive", "freestream feature" | the problem's global conditions; $K$ unit directions $\hat g_k$, $S$ scalars $\sigma$ |

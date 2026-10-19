@@ -435,7 +435,7 @@ covariance, each signed so that the third moment along it is positive (`tree_rea
 That frame moves with a rigid motion, so the forest, and with it every point's list of far clusters
 at a finite opening angle $\theta$, is the same in every pose. It does so up to ties: where two
 principal variances are equal, or the third moment along an axis vanishes, the axis or its sign is
-decided by rounding (the code then falls back to the laboratory axis of largest overlap), and a
+decided by rounding (the code then takes the sign of whichever of the dataset's axes it overlaps most), and a
 rotation can regroup the clusters. A redraw of the boundary moves the centroid and the moments by
 quadrature noise, which regroups clusters near a tie as well. The read is exact as $\theta \to 0$,
 so the effect is bounded by the far-field approximation error. What would settle it: ISLA-DTT's

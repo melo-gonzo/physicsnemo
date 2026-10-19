@@ -32,7 +32,7 @@ each slice state as a count-weighted mean of its points, attends among the
 slices and reads the result back (@sec-landscape-cost). GeoTransolver
 (Adams et al., 2025) adds a cross-attention in every block to a shared
 embedding of the geometry and the global parameters, built once from
-multi-scale ball queries. Both read point coordinates in a laboratory frame
+multi-scale ball queries. Both read raw point coordinates
 and the problem's global vector as a feature, and both learn pose, scale
 and the mesher's habits from data. Their reference configurations in this
 book are GeoTransolver at width 256 and Transolver at width 512 with 16
@@ -257,7 +257,7 @@ contrast in the literature is the price of the per-layer route: Rygiel et
 al. (2026) report AB-GATr at 2 to 11 times the training time of AB-UPT. A
 second element is small and sharp. Scalar heads on invariants are
 reflection-invariant, so a target that is one frame component of a tensor
-(a stress $\sigma_{12}$, a laboratory-axis displacement) is representable
+(a stress $\sigma_{12}$, a displacement along one of the dataset's axes) is representable
 only as a view of a predicted tensor (@sec-isla-heads). A third is a rule:
 every input ISLA takes is a datum of the PDE problem, and a dataset's own
 axes are excluded even where they would buy accuracy (@sec-pose-prior).

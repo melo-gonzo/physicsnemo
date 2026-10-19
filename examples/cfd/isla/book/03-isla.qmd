@@ -1072,10 +1072,10 @@ plt.show()
 **A tensor component is only ever a view of a tensor.** A scalar head can
 represent only invariants of the input vector set, and a stress component
 $\sigma_{xy} = e_x^{\mathsf T} \sigma\, e_y$ is not an invariant of that set:
-it needs the laboratory axes $e_x, e_y$. ISLA therefore predicts the tensor
+it needs the dataset's axes $e_x, e_y$. ISLA therefore predicts the tensor
 itself, declared with its rank (`stress: {rank: 2, symmetric: true}`), and
-the components are read off it afterwards. No laboratory frame enters
-anywhere. Passing the dataset's axes as extra global directions would also
+the components are read off it afterwards. The dataset's axes enter
+nowhere. Passing them as extra global directions would also
 keep the algebra covariant if the axes rotated with every case; held fixed,
 as a dataset stores them, they are not a datum of the PDE but the pose of
 the training set, and a model that needs them has been told it
@@ -1112,8 +1112,8 @@ $\hat\rho \cdot T_i \hat n_i$, $\hat\rho \cdot T_i \hat g_k$ inside every
 layer. Only true vectors appear on the input side, so every input invariant
 is unchanged by a mirror, and pseudotensor inputs are refused. A dataset
 that stores a vector component by component stacks the components into one
-rank-1 field before ISLA sees it; feeding laboratory components as scalars
-would leak the frame.
+rank-1 field before ISLA sees it; feeding its components along the
+dataset's axes as separate scalars would make the model depend on those axes.
 
 ## Idea 7: predicting inside the domain {#sec-isla-interior}
 

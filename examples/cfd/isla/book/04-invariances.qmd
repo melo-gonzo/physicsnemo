@@ -1,7 +1,7 @@
 # The two invariances ISLA is built for {#sec-invariances}
 
 **ISLA is built around two facts that every boundary-driven PDE respects: the answer does not depend on where the body
-sits in the laboratory, and it does not depend on how the boundary was meshed.** The first fact gives an exact contract,
+sits or how it is turned, and it does not depend on how the boundary was meshed.** The first fact gives an exact contract,
 rigid-motion equivariance, which ISLA holds to roundoff. The second gives a convergence property, discretization
 consistency, which ISLA holds in the fine-mesh limit and which decides whether a change to the architecture is adopted. This chapter states both as exact tests on the code. It then says what each one buys, draws the sampling
 laws through which the second is measured, and reads both off the standing of the three reference configurations on every
@@ -125,7 +125,7 @@ sections are about them.
 **Rotate and translate the body together with the far-field direction, and the field must rotate and translate with it:
 scalars unchanged at the moved points, vectors rotated.** A steady problem with a uniform far field has no preferred origin
 and no preferred axes. The geometry's relation to the global directions is all the equations see. A surrogate that reads
-coordinates in a laboratory frame has to learn that the frame is arbitrary, from whatever poses its training set happens
+raw coordinates has to learn that the dataset's axes are arbitrary, from whatever poses its training set happens
 to contain, and a dataset in which every car points along $+x$ cannot teach it that. ISLA never reads a coordinate
 (@tbl-contracts), so the property costs it no data.
 
@@ -154,7 +154,7 @@ settings the contract separates a working surrogate from one whose error a rando
 of @fig-contract-shifts.
 
 **The contract has a clause for outputs that are components in a frame.** A stress component $\sigma_{12}$ or a
-displacement along a laboratory axis is not a property of the body alone: it belongs to the body and the frame together.
+displacement along one of the dataset's axes is not a property of the body alone: it belongs to the body and those axes together.
 ISLA predicts the tensor itself and reads the component off it (@sec-isla-heads); the dataset's axes are not among its
 inputs (@sec-pose-inputs). The clause binds on PLAID Tensile2d, whose targets are stress components (@sec-tensile2d).
 

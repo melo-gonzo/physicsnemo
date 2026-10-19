@@ -206,7 +206,7 @@ print(f"**Natively the three are close in absolute terms and ISLA's error is the
       "scalar and whose parameters enter as four global scalars.")
 print()
 print(f"**Rotated and translated, the baselines fail and ISLA bends.** GeoTransolver and Transolver read {min(B_POSED):.2f} and "
-      f"{max(B_POSED):.2f}, about the error of predicting zero everywhere: a model that reads laboratory coordinates and trained "
+      f"{max(B_POSED):.2f}, about the error of predicting zero everywhere: a model that reads raw coordinates and trained "
       f"without augmentation has no answer for a rotated lug. ISLA reads {ST.err('ISLA', F, 'posed'):.4f}, {ST.shift('ISLA', F, 'posed'):.1f} "
       f"times its native error (per seed {' and '.join(f'{x:.1f}' for x in POSE_SEED)}). In absolute terms ISLA's posed error is "
       f"{100 * (ST.err('ISLA', F, 'posed') - ST.err('ISLA', F)):.2f}% of the field above its native one. The ratio is large because the native "

@@ -272,7 +272,7 @@ if FAIR:
 print(f"**Under rotation and translation ISLA's error is its native error, and the baselines' errors pass the score of predicting zero.** "
       f"ISLA's largest shift on any field is {max(abs(St.shift('ISLA', f, 'posed') - 1) for f, _ in FIELDS) * 100:.2f}% of its native error. "
       f"GeoTransolver's and Transolver's posed errors are {S.fmt_ratio(min(b_shift))} to {S.fmt_ratio(max(b_shift))} times their own native "
-      f"errors, every one of the six at or above {min(b_posed_err):.2f}, worse than predicting zero everywhere. They read laboratory "
+      f"errors, every one of the six at or above {min(b_posed_err):.2f}, worse than predicting zero everywhere. They read raw "
       "coordinates and never trained on a rotated airfoil, so a rotated airfoil is outside their training distribution even though the "
       "inlet velocity rotates with it.")
 ```

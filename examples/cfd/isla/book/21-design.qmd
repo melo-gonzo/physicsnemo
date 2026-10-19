@@ -239,7 +239,7 @@ LEDGER = [
      "a solver needs the load's direction, never the dataset's axes", "the dataset's coordinate axes as extra global directions",
      "the axes buy accuracy on data that never change pose, and the gain does not survive a change of pose (@sec-pose-prior)"),
     ("5. Fields of declared tensor rank", "inputs of any rank enter through O(d) invariants against the token's own directions; outputs leave through an equivariant tensor basis",
-     "a component is a view of a tensor, never a channel", "laboratory components fed or read as separate scalars",
+     "a component is a view of a tensor, never a channel", "components along the dataset's axes fed or read as separate scalars",
      "the covariance contracts hold to roundoff for every declared rank (@sec-isla-heads, @sec-isla-contracts)"),
     ("6. Bounded routing", "each block routes by the cosine between the normalized token state and a per-slice prototype, times a fixed temperature, so every logit is bounded",
      "trainability: no block can send every point to one slice however its weights grow", "unbounded affine routing logits",

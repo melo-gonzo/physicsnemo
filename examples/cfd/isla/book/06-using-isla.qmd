@@ -325,7 +325,7 @@ and supplies the pinned values as a rank-0 boundary input
 An elasticity problem passes its prescribed displacement and traction as
 rank-1 boundary inputs and predicts the stress as one symmetric rank-2
 output (`stress: {rank: 2, symmetric: true}`), from which the recipe reads
-the laboratory components of a `symmetric_tensor` target. Each global
+a `symmetric_tensor` target's components along the dataset's axes. Each global
 direction adds one seed cosine, one relational cosine and two vectors to
 the output basis; each rank-1 boundary input adds its frame cosines and
 norm to the seed and one relational cosine per slice (@sec-arch-seed,

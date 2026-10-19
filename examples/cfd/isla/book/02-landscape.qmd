@@ -667,8 +667,8 @@ become uniform, and adds a
 parallel implementation that reaches million-point meshes. Transolver-3
 (Zhou et al., 2026) tiles the slice computation and reorders its matrix
 products to reach meshes of over 160 million cells. Transolver and GeoTransolver,
-as released in PhysicsNeMo, take coordinates in a laboratory frame and
-weight each token once in their slice states.
+as released in PhysicsNeMo, take each point's raw coordinates along the
+dataset's axes and weight each token once in their slice states.
 
 ### A learned boundary integral on a tree: GLOBE {#sec-landscape-globe}
 
@@ -727,7 +727,7 @@ sum of their diagonals is below $\theta$ times their gap
 ($\theta$ is `{python} GLOBE_DEFAULTS["theta"]` by default),
 nearer faces are summed one by one, and the cost falls to $O(N \log N)$.
 @fig-isla-dtt draws this access pattern on the airfoil. The boxes are
-aligned with the laboratory axes. At a finite $\theta$ a rotation
+aligned with the dataset's axes, not with the body. At a finite $\theta$ a rotation
 therefore regroups the clusters, and the kernel's exact equivariance holds
 only to the accuracy of the monopole; at $\theta = 0$ the sum is exact.
 
@@ -768,7 +768,8 @@ does not supply without interpolation.
 rotated copies of the data, rotate every input to a standard pose first, or
 use only operations that commute with the motion. Only the last is exact
 for every input, and it constrains the architecture.** The physics of
-@sec-problem does not depend on where the body sits in the laboratory, so a
+@sec-problem does not depend on where the body sits or how it is turned
+relative to the dataset's axes, so a
 correct surrogate satisfies $\mathcal G(Qx + b) = Q\,\mathcal G(x)$ for
 vector outputs and $\mathcal G(Qx + b) = \mathcal G(x)$ for scalar outputs,
 for every rotation $Q$ and translation $b$, with the normals and the global
@@ -980,9 +981,9 @@ measures how well the two baselines of this book do.
 | DeepONet | input at fixed sensors; query coordinates | no | not applicable: fixed sensors | yes, each point independent | in the trunk; the branch needs fixed sensors |
 | latent tokens (Perceiver IO, UPT, AB-UPT) | point sets, cross-attended to latents or anchors | no | not by construction | yes, by cross-attention | yes; AB-UPT reports $1.5 \times 10^8$ cells |
 | equivariant latent tokens (AB-GATr) | point sets in geometric algebra | yes | not by construction | yes | yes, at 2 to 11 times AB-UPT's training time |
-| slice attention (Transolver, Transolver++, Transolver-3) | point set, laboratory coordinates | no | no: Transolver counts each token once | as tokens of the input set | yes, linear in $N$ |
-| GeoTransolver | point set, laboratory coordinates, ball-query geometry encoding, global context | no | no: counts each token once | as tokens, with the signed distance | yes, linear in $N$ |
-| boundary-integral kernels (GLOBE) | boundary faces by boundary-condition type (centroid, normal, area, data), no connectivity; reference lengths | yes, rotations, translations and reflections in the kernel; at a finite opening angle a rotation regroups its laboratory-axis tree | yes: each face's kernel times its area | yes, at arbitrary points; its dual-tree traversal builds a tree over the prediction points, so at a finite opening angle a point's far-field list can depend on the other points requested | $N \log N$ with a Barnes–Hut tree in its PhysicsNeMo code; published dense, $N^2$, on two-dimensional airfoils |
+| slice attention (Transolver, Transolver++, Transolver-3) | point set, raw coordinates | no | no: Transolver counts each token once | as tokens of the input set | yes, linear in $N$ |
+| GeoTransolver | point set, raw coordinates, ball-query geometry encoding, global context | no | no: counts each token once | as tokens, with the signed distance | yes, linear in $N$ |
+| boundary-integral kernels (GLOBE) | boundary faces by boundary-condition type (centroid, normal, area, data), no connectivity; reference lengths | yes, rotations, translations and reflections in the kernel; at a finite opening angle a rotation regroups its tree, whose boxes are aligned with the dataset's axes | yes: each face's kernel times its area | yes, at arbitrary points; its dual-tree traversal builds a tree over the prediction points, so at a finite opening angle a point's far-field list can depend on the other points requested | $N \log N$ with a Barnes–Hut tree in its PhysicsNeMo code; published dense, $N^2$, on two-dimensional airfoils |
 | physics-informed networks (PINN) | coordinates of one instance | no | not applicable | yes | one instance per training |
 | **ISLA** | boundary cells with their measure; invariants against slice anchors | **yes**, rotations, translations and reflections (@sec-isla-contracts); ISLA-DTT's tree read up to ties of its canonical frame (@sec-arch-tree-read) | **yes**: a log-measure bias in the routing | **yes**, as interacting or read-only prediction points | **yes**, linear in $N$; 200,000 cells per case in this book |
 
@@ -997,7 +998,7 @@ accurate it is; accuracy is the subject of @sec-standing. {#tbl-landscape-taxono
 
 **ISLA draws on the best parts of GLOBE and Transolver. The scalable
 slice and latent-token transformers pool by token count and take
-laboratory coordinates; ISLA fills those two gaps by combining GLOBE's
+raw coordinates; ISLA fills those two gaps by combining GLOBE's
 principles with Transolver's slice attention in one transformer.** No
 published slice or latent-token transformer at industrial scale is exactly
 equivariant to rigid motions without typed features in every layer, and
@@ -1010,7 +1011,7 @@ prediction is consistent under remeshing, and dimensionless geometry.
 From Transolver (@sec-landscape-slice), it takes slice attention: a
 learned soft partition that couples every point globally at a cost linear
 in $N$. ISLA is not either architecture with a tweak: GLOBE couples
-through a kernel per face–target pair, Transolver's slices see laboratory
+through a kernel per face–target pair, Transolver's slices see raw
 coordinates and count tokens, and ISLA's slices are built on GLOBE's
 principles. Every sum over the boundary is a quadrature rule. Positions
 enter only as invariants of a token against the slices' own anchors, in

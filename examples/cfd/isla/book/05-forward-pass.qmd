@@ -1088,8 +1088,8 @@ prediction is query-independent. And a rotation, reflection or translation
 of the case gives the same forest and the same lists
 (`test_forest_and_every_list_are_the_same_in_every_pose_at_finite_theta`),
 up to ties of that frame: two equal principal variances, or an axis without
-a third moment, whose sign then follows the laboratory axis it overlaps
-most. Where the frame ties, a rigid motion can change the forest, and
+a third moment, whose sign then follows whichever of the dataset's axes it
+overlaps most. Where the frame ties, a rigid motion can change the forest, and
 ISLA-DTT's pose invariance at $\theta = 1$ holds only approximately. $\theta$ is a constant of the class (`TREE_READ_THETA`), not
 an argument: ISLA-DTT trains and is scored at $\theta = 1$, so its kernel,
 keys and values are learned as the forest groups the cells.
