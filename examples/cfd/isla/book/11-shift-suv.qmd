@@ -212,6 +212,7 @@ print(": The reference configurations on SHIFT-SUV: parameters, peak device memo
 #| label: para-shift-suv-lede
 #| output: asis
 print(f"**On the native mesh {clause(SUV, 'pressure_l2')} on surface pressure, and {clause(SUV, 'wss_l2')} on wall shear.** "
+      + SUV.drive_sentence() +
       f"{'Every Transolver seed sits below both ISLA seeds on both fields. ' if all(SUV.verdict('Transolver', f) == 'trails' for f in SUV_F) else ''}On the uniform point cloud and rotated and translated, ISLA's "
       "error is its native error and the baselines' is not. @tbl-shift-suv-protocols is the standing and @fig-shift-suv-shifts draws it.")
 ```

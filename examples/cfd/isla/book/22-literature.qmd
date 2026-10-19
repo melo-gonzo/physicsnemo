@@ -71,6 +71,7 @@ for k in keys:
             if s.has(b):
                 cells.append((s.ds.name, s.fields[f], b, s.verdict(b, f)))
 unfair = [S.DATASETS[k].name for k in keys if not S.DATASETS[k].fair_drive]
+held = [(S.DATASETS[k].short, S.Standing(k).fields[f]) for k in keys if S.DATASETS[k].fair_drive for f in S.DATASETS[k].provisional]
 cells = [c for c in cells if c[3] != "is not compared with"]
 n = len(cells)
 lead = [c for c in cells if c[3] == "leads"]
@@ -94,11 +95,14 @@ for ds, fl, r in bent:
     bent_ds[ds] = max(bent_ds.get(ds, 1.0), r)
 print(f"At the reference configurations on the native mesh, over {len(keys) - len(unfair)} datasets and {n} comparisons "
       f"(each headline field against each baseline, by the seed rule of @sec-fair-comparison), ISLA leads in {len(lead)}"
-      + (f" ({nl} of them on the lug, where only ISLA is given the boundary-condition labels)" if (nl := sum("lug" in c[0] for c in lead)) else "")
+      + (f" ({nl} of them on the lug against Transolver, which reads no boundary-condition labels there)"
+         if (nl := sum("lug" in c[0] and c[2] == "Transolver" for c in lead)) else "")
       + f", "
       f"is level in {level} and trails in {len(trail)}. It trails on: {group(trail)}. "
-      + (f"{' and '.join(unfair)} are not counted: their baselines read the freestream as a raw physical vector "
-         "(@tbl-model-inputs), so no verdict is drawn there. " if unfair else "") +
+      + (f"{' and '.join(unfair)} {'is' if len(unfair) == 1 else 'are'} not counted: {'its' if len(unfair) == 1 else 'their'} "
+         "baselines read the freestream as a raw physical vector (@tbl-model-inputs), so no verdict is drawn there. " if unfair else "")
+      + "".join(f"{d} {fl} is not counted either: the baselines' error on it includes an out-of-plane component that ISLA's "
+                "planar prediction does not have (@sec-interior-airfrans). " for d, fl in held) +
       f"Rotated and translated, ISLA's error moves by at most "
       f"{100 * max(abs(r - 1) for *_, r in posed_isla):.1f}% on every headline field except on "
       + " and ".join(f"{ds} (up to ×{r:.2f})" for ds, r in bent_ds.items())

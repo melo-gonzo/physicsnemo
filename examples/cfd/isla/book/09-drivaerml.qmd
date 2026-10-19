@@ -430,7 +430,7 @@ plt.show()
 #| label: para-surface-lede
 #| output: asis
 print(f"**On the native mesh of the DrivAerML Surface task the three reference configurations are level: {clause(SURF, 'pressure_l2')} on "
-      f"surface pressure, and {clause(SURF, 'wss_l2')} on wall shear.** On the uniform point cloud and under rotation and translation, "
+      f"surface pressure, and {clause(SURF, 'wss_l2')} on wall shear.** {SURF.drive_sentence()}On the uniform point cloud and under rotation and translation, "
       "ISLA's error is its native error and the baselines' is not. @tbl-drivaerml-surface-protocols is the standing; "
       "@fig-drivaerml-shifts draws it.")
 ```
@@ -511,7 +511,7 @@ rendering_figure("fig-drivaerml-prediction", [("figures/renderings/drivaerml_sur
 #| label: para-interior-results-lead
 #| output: asis
 print(f"**On the DrivAerML Volume task {clause(VOL, 'pressure_l2')} on interior pressure and {clause(VOL, 'velocity_l2')} on "
-      f"velocity; on eddy viscosity {clause(VOL, 'nut_l2')}.** Rotated and translated, ISLA's error is its native error and the "
+      f"velocity; on eddy viscosity {clause(VOL, 'nut_l2')}.** {VOL.drive_sentence()}Rotated and translated, ISLA's error is its native error and the "
       "baselines' errors rise to near or above the score of predicting zero. @tbl-drivaerml-volume-protocols is the standing and @fig-drivaerml-volume-shifts draws it.")
 ```
 

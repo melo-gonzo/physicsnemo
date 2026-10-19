@@ -184,6 +184,17 @@ class Standing:
         return (self.ds.key in CONSTANT_DRIVE and arch != "ISLA" and self.compared(arch, f)
                 and abs(self.ratio(arch, f, protocol) - 1) < TIE_BAND + drive_bias())
 
+    def drive_sentence(self, fields=None, protocol: str = "native") -> str:
+        """One sentence naming the verdicts that ``near_drive`` flags on ``fields``, with ``drive_clause()``; empty if none."""
+        near = {f: [b for b in BASELINES if self.has(b) and self.near_drive(b, f, protocol)] for f in (fields or self.ds.headline)}
+        near = {f: bs for f, bs in near.items() if bs}
+        if not near:
+            return ""
+        what = " and on ".join(f"{self.fields[f]} against " + ("both baselines" if len(bs) == len(BASELINES) else bs[0])
+                            for f, bs in near.items())
+        many = len(near) > 1 or any(len(bs) > 1 for bs in near.values())
+        return f"The verdict{'s' if many else ''} on {what} lie{'' if many else 's'} {drive_clause()}. "
+
     def table(self, label: str, setting: str, protocols=None, fields=None) -> str:
         """The headline table: one row per architecture, one column group per protocol, ratio rows.
 
@@ -243,7 +254,7 @@ def drive_bias() -> float:
 
 def drive_clause() -> str:
     """The one clause a verdict near level carries on a ``CONSTANT_DRIVE`` dataset."""
-    return (f"inside {fmt_pct(1 + drive_bias())} of the level band, which is how far reading the unit direction rather than the "
+    return (f"within {fmt_pct(1 + drive_bias())} of the level band, which is how far reading the unit direction rather than the "
             "constant freestream vector moves Transolver's error on the DrivAerML Surface task (@sec-unit-direction-rule)")
 
 

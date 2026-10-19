@@ -61,7 +61,7 @@ NAMES = [
     ("**the scoring protocol**", "200,000 sampled cells per case, float32, final checkpoints, two seeds (42, 43), per-case area-weighted relative L2 averaged over cases", "@sec-protocol"),
     ("**area-weighted relative L2**", "the metric", "@sec-metrics"),
     ("**leads**, **trails**, **level**", f"the seed rule: a lead needs every seed of one architecture below every seed of the other and seed means at least {100 * S.TIE_BAND:.0f}% apart; otherwise level (`standing.Standing.verdict`)", "@sec-standing"),
-    ("**is not compared with**", "the verdict on a standing whose baselines read the freestream as a physical vector rather than its unit direction (`standing.DATASETS[...].fair_drive` is False): the ratios are given and no comparison is drawn from them", "@sec-standing, @sec-oq-unit-direction"),
+    ("**is not compared with**", "the verdict on a standing whose baselines read the freestream as a physical vector rather than its unit direction (`standing.DATASETS[...].fair_drive` is False): the ratios are given and no comparison is drawn from them; also the verdict on a field whose errors are not measured alike for the architectures (`standing.DATASETS[...].provisional`, marked §)", "@sec-standing, @sec-oq-unit-direction, @sec-oq-planar-velocity"),
     ("precise failure terms", "\"the validation loss rises 3x and does not recover\", \"routes every token to one slice\"; never \"collapsed\" or \"diverged\" without the measurement", "@sec-isla-layer"),
     ("**contract**", "a structural property asserted to roundoff as a unit test (rigid motion, remeshing)", "@sec-isla-contracts"),
 ]
@@ -261,7 +261,9 @@ LEDGER = [
     ("12. The same physical information, float32 scoring (protocol)", "each architecture receives the problem's physical information through the channels it has, listed per dataset, and is scored in float32",
      "compare architectures, not protocols", "bfloat16 scoring, whose offsets fall unevenly across architectures",
      "@tbl-model-inputs, @sec-protocol" + (f"; where a record breaks the rule ({' and '.join(UNFAIR)}: the baselines read the freestream as a physical vector) no comparison is drawn (@sec-oq-unit-direction)" if UNFAIR else "")
-     + "; on the GINOT bracket lug the baselines receive no boundary-condition labels, because the data has no nodal condition tags, and the lug's lead carries that caveat (@sec-lug)"),
+     + "".join(f"; on {d.short} the baselines' {f.replace('_l2', '')} error includes an out-of-plane component that ISLA's planar prediction does not have, so {f.replace('_l2', '')} carries no verdict (@{d.section})"
+               for d in S.DATASETS.values() if d.artifact and d.fair_drive for f in d.provisional)
+     + "; on the GINOT bracket lug GeoTransolver reads ISLA's boundary-condition labels on the surface triangles, and Transolver, which has no boundary path, receives none, because the data has no nodal condition tags; the lead over Transolver carries that caveat (@sec-lug)"),
     ("13. The baselines unmodified (program)", "GeoTransolver and Transolver run as released; ISLA's features enter them only as labeled ablations",
      "released models are not modified", "back-porting measure weights and origin-free positions into them", "@sec-baselines"),
 ]

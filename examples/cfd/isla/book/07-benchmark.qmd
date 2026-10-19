@@ -202,8 +202,9 @@ print("On the DrivAerML tasks and on SHIFT-SUV every case has the same freestrea
       f"{UDC['pressure_l2']:.3f} times its error on pressure and {UDC['wss_l2']:.3f} times it on wall shear, seed means on the "
       f"same {S.Standing('drivaerml_surface').cell('Transolver', 'pressure_l2')['n_cases']} validation cars. The band of ±3% registered for this control before it ran holds on wall shear and not on "
       f"pressure. The baselines' ratios on {', '.join(S.DATASETS[k].in_sentence for k in S.CONSTANT_DRIVE[:-1])} and "
-      f"{S.DATASETS[S.CONSTANT_DRIVE[-1]].in_sentence} therefore carry a bias of up to {S.fmt_pct(1 + S.drive_bias())} "
-      "from the scale of the constant vector, and a verdict that close to the level band says so in its chapter. Data: "
+      f"{S.DATASETS[S.CONSTANT_DRIVE[-1]].in_sentence} therefore carry an uncertainty of about "
+      f"{S.fmt_pct(1 + S.drive_bias())} from the scale of the constant vector, and a verdict that close to the level band says so in "
+      "its chapter (@sec-oq-constant-drive). Data: "
       "results/campaigns_2026-10-19/drive_fix/drivefix_scores_2026-10-19.json (the band: PREREG.md beside it), "
       "results/char/drivaerml_surface_a2.json.")
 ```

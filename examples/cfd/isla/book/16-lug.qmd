@@ -20,6 +20,9 @@ TIES = json.load(open(RES / "char" / "solids_ties_2026-10-18.json"))
 LT = TIES["lug"]["lug_0004"]
 TT = TIES["tensile2d"]["sample_000001"]
 COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]["lug"]
+# GeoTransolver's standing arm reads the labeled surface triangles as its geometry context: its parameter count is its own scoring record's
+_df = RES / "campaigns_2026-10-19/drive_fix/scores/evals_lugbc/lugbc_gt_seed42/native/lugbc_gt_seed42/metrics.jsonl"
+COST = {**COST, "GeoTransolver": {**COST["GeoTransolver"], "n_parameters": json.loads(open(_df).readline())["num_parameters"]}}
 
 from matplotlib.collections import PolyCollection
 def lug_conditions(ax, bp, bc, fixed, loaded, hole, lw=4.0, fill="#e4e3dc"):
@@ -38,7 +41,7 @@ def lug_conditions(ax, bp, bc, fixed, loaded, hole, lw=4.0, fill="#e4e3dc"):
     return np.array([x0, f[:, 1].mean()]), ctr, R
 ```
 
-**On the GINOT bracket lug ISLA leads GeoTransolver and Transolver: their errors are `{python} f"{ST.ratio('GeoTransolver', F):.2f}"` and `{python} f"{ST.ratio('Transolver', F):.2f}"` times ISLA's on the von Mises stress.** Rotated and translated, ISLA's error grows to `{python} f"{ST.shift('ISLA', F, 'posed'):.1f}"` times its native value and stays `{python} f"{min(B_POSED) / ST.err('ISLA', F, 'posed'):.0f}"` times below the baselines', which rise to about one, the error of predicting zero everywhere. The inputs differ: the baselines read no boundary-condition labels, while ISLA reads, face by face, which faces are clamped, which belong to the hole and to its loaded half, and the pressure on each. The growth is the mechanism of @sec-tensile2d-ties at full strength: on one test lug's structured hexahedral mesh, `{python} f"{100 * LT['tie_fraction_by_rel_gap']['1e-07']:.0f}"`% of the nodes, interior nodes included, tie for their nearest boundary sample to a relative gap of 1e-7, inside float32 rounding, and one rigid motion changes the nearest sample of `{python} f"{100 * LT['nearest_changes_under_pose_fraction']:.0f}"`%.
+**On the GINOT bracket lug ISLA leads GeoTransolver and Transolver: their errors are `{python} f"{ST.ratio('GeoTransolver', F):.2f}"` and `{python} f"{ST.ratio('Transolver', F):.2f}"` times ISLA's on the von Mises stress.** Rotated and translated, ISLA's error grows to `{python} f"{ST.shift('ISLA', F, 'posed'):.1f}"` times its native value and stays `{python} f"{min(B_POSED) / ST.err('ISLA', F, 'posed'):.0f}"` times below the baselines', which rise to about one, the error of predicting zero everywhere. ISLA reads, face by face, which faces are clamped, which belong to the hole and to its loaded half, and the pressure on each; GeoTransolver reads the same four labels on the surface triangles, and Transolver reads none. The growth is the mechanism of @sec-tensile2d-ties at full strength: on one test lug's structured hexahedral mesh, `{python} f"{100 * LT['tie_fraction_by_rel_gap']['1e-07']:.0f}"`% of the nodes, interior nodes included, tie for their nearest boundary sample to a relative gap of 1e-7, inside float32 rounding, and one rigid motion changes the nearest sample of `{python} f"{100 * LT['nearest_changes_under_pose_fraction']:.0f}"`%.
 
 ## The problem: a clamped lug pressed in its hole {#sec-lug-problem}
 
@@ -139,7 +142,7 @@ plt.show()
 **3,000 three-dimensional elastoplastic lugs (Liu, Koric et al.; Zenodo 15293036; CC BY 4.0), clamped at one end and pressed on the lower half of the hole, with three geometry parameters and the pressure varying.** The material is steel-like: $E$ = 200 GPa, $\nu$ = 0.3, yield stress $\sigma_y$ = 380 MPa, linear isotropic hardening with modulus $H$ = 571.4 MPa. The release stores the corner nodes of a quadratic hexahedral mesh (5 to 15 thousand nodes, mean 9.5 thousand), the nodal von Mises stress in MPa, the hexahedral connectivity and the parameters [hole radius, length, thickness, pressure] in m and Pa, with pressures of 50 to 100 MPa. The lug lies along $+x$: the flat end face at $x_{\min}$ is clamped, the far end is a semicircular nose around a hole whose axis is parallel to $z$, and the lug is 0.05 m wide.
 
 - **Conversion** (`ginot_lug_convert.py`). Interior: every node with `von_mises` (MPa), the stored signed distance `sdf` (negative inside) and its gradient `sdf_normals`. Boundary `surface`: the boundary quadrilaterals of the hexahedral mesh, each split into two triangles, with outward normals, triangle areas as the measure, and the per-cell labels `bc_fixed` (the clamped face), `bc_hole` (the hole's cylinder), `bc_loaded` (the lower half of the hole) and `bc_pressure` (MPa on loaded cells). The clamped and pressed faces are identified geometrically from the paper's description; their areas match the paper's to 0.1%.
-- **What each model receives.** ISLA (`isla_lug.yaml`) reads the surface triangles with the four labels, the four standardized design parameters as four global scalars, and every node as a prediction point with the stored `sdf` and `sdf_normals`; inside the model each node also gets the distance and direction to its nearest boundary sample (@sec-tensile2d-ties). Coordinates stay in meters; ISLA's length unit absorbs the scale. GeoTransolver and Transolver read every node with its coordinates and the same stored `sdf` and `sdf_normals`, and the four standardized parameters, the pressure among them, as their global embedding. They receive no boundary-condition label: the lug data carries its conditions only as labels on boundary cells, and has no nodal condition tags (Tensile2d has them, @sec-data-tensile2d). In every case's stored frame the clamped face sits at the same place, and the hole lies on a fixed axis at a position set by the length and the hole radius, which the baselines read as global scalars. No model trains with augmentation, so the baselines can infer the clamped and loaded regions from the coordinates and the parameters; they are not told them (@tbl-model-inputs).
+- **What each model receives.** ISLA (`isla_lug.yaml`) reads the surface triangles with the four labels, the four standardized design parameters as four global scalars, and every node as a prediction point with the stored `sdf` and `sdf_normals`; inside the model each node also gets the distance and direction to its nearest boundary sample (@sec-tensile2d-ties). Coordinates stay in meters; ISLA's length unit absorbs the scale. GeoTransolver and Transolver read every node with its coordinates and the same stored `sdf` and `sdf_normals`, and the four standardized parameters, the pressure among them, as their global embedding. GeoTransolver's geometry context is the surface triangles, each with its centroid, its normal and the four labels ISLA reads, so it is told the boundary conditions. Transolver has no boundary path and receives no boundary-condition label: the lug data carries its conditions only as labels on boundary cells, and has no nodal condition tags (Tensile2d has them, @sec-data-tensile2d). In every case's stored frame the clamped face sits at the same place, and the hole lies on a fixed axis at a position set by the length and the hole radius, which the baselines read as global scalars. No model trains with augmentation, so Transolver can infer the clamped and loaded regions from the coordinates and the parameters; it is not told them (@tbl-model-inputs).
 - **Normalization** (statistics over the 2,400 training lugs). The four parameters are standardized per component (mean $[0.01249, 0.1001, 0.02251, 7.53\times10^{7}]$, standard deviation $[1.44\times10^{-3}, 0.0116, 4.24\times10^{-3}, 1.44\times10^{7}]$); the von Mises stress has mean 150.2 MPa and standard deviation 92.4 MPa over 22.8 million nodes.
 - **Splits.** No indices are published (the paper holds out 20%), so the converter draws one seed-0 permutation: 600 test lugs and 2,400 training lugs. Every model trains on the 2,400 and is scored on the 600.
 - **Published numbers** on the authors' split (from the dataset scouting notes, `results/book_audit_2026-09-22/datasets_scout.md`): Transolver 2.74% (0.32% with the load scalar as input), GNOT (the General Neural Operator Transformer of Hao et al.) 3.58%, and GINOT (the Geometry-Informed Neural Operator Transformer the dataset's authors propose) 0.40% relative error. They are comparable in kind to this chapter's figures, not in split.
@@ -157,7 +160,8 @@ for a in S.ARCHS:
     print(f"| {S.CONFIG[a]} | {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.1f} | {v['epoch_seconds']:.0f} |")
 print("\n: The cost of training on the GINOT bracket lug at the three reference configurations: parameters, peak device memory (maximum over "
       "four GB300 ranks, bfloat16) and wall time of one epoch of 2,400 lugs. The parameter counts are exact for the standing's checkpoints, "
-      "since the normalized slice reads add no parameters; memory and time are one-epoch measurements. How to read this: the comparison "
+      "since the normalized slice reads add no parameters, and GeoTransolver's is read from its own scoring record; memory and time are "
+      "one-epoch measurements, GeoTransolver's in its configuration without the labeled surface context. How to read this: the comparison "
       "of @tbl-lug-protocols is not resource-matched; ISLA has the most parameters and the longest epoch. Instrument: ISLA at 512 wide, "
       "512 slices, 3.75e-4, raw slice reads (@sec-study-configurations). Data: results/char/char_lanes_cost_2026-10-04.json. {#tbl-lug-cost}")
 ```
@@ -172,7 +176,7 @@ print("\n: The cost of training on the GINOT bracket lug at the three reference 
 ver = {a: ST.verdict(a, F) for a in S.BASELINES}
 both = (f"{ver['GeoTransolver']} {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}" if ver["GeoTransolver"] == ver["Transolver"]
         else f"{ver['GeoTransolver']} {S.CONFIG['GeoTransolver']} and {ver['Transolver']} {S.CONFIG['Transolver']}")
-print(f"**On the GINOT bracket lug at 2,400 training lugs, scored on the native mesh, ISLA {both} on the von Mises stress; the baselines read no boundary-condition labels, where ISLA reads which faces are clamped and loaded (@tbl-model-inputs).** @tbl-lug-protocols is the standing. *Leads* means that "
+print(f"**On the GINOT bracket lug at 2,400 training lugs, scored on the native mesh, ISLA {both} on the von Mises stress; GeoTransolver reads the boundary-condition labels ISLA reads, and Transolver reads none (@tbl-model-inputs).** @tbl-lug-protocols is the standing. *Leads* means that "
       f"every seed of one architecture sits below every seed of the other and the seed means differ by at least {100 * S.TIE_BAND:.0f}%. "
       "Every ratio is baseline ÷ ISLA, so a value above one favors ISLA.")
 ```
@@ -193,7 +197,7 @@ rendering_figure("fig-lug-prediction", [("figures/renderings/lug_von_mises.png",
     f"The three reference configurations on one GINOT bracket lug from the test set, {_R['sample_id'].split('_')[0]}, its top face. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
       "symmetric scale. How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
       "not a standing; the standing is the table above. "
-    + "The baselines read no boundary-condition labels, while ISLA reads which faces are clamped, which is the hole, which half of it is loaded and the pressure on it (@tbl-model-inputs). Data: results/renderings_2026-10-18/arrays/render_2d_lug.json.", nrow=None)
+    + "GeoTransolver's panel is drawn from its checkpoint that reads no boundary-condition labels, not from the standing's, which reads them; Transolver reads none (@tbl-model-inputs). Data: results/renderings_2026-10-18/arrays/render_2d_lug.json.", nrow=None)
 ```
 
 ```{python}
@@ -360,8 +364,7 @@ print(f"\n: ISLA's von Mises error on the {N_TEST} test lugs with each lug's sur
       "nodes, the targets and the global scalars are the same in every draw. *Uniform ÷ native* is the error on the thinned surface over "
       "the error on the whole one; *area ÷ uniform* isolates the law of the draw; the last row is how much a second uniform draw moves the "
       "error, the noise floor. How to read this: the checkpoints trained on the whole surface, so the first row is the response of a "
-      "trained model to a surface thinner than any it saw, not a resolution requirement; GeoTransolver and Transolver read no surface "
-      "sample and are not in the table. Instrument: ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads (@sec-study-configurations). "
+      "trained model to a surface thinner than any it saw, not a resolution requirement; only ISLA is scored on the thinned surfaces. Instrument: ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads (@sec-study-configurations). "
       "Data: results/char/area2_2026-10-16.json. {#tbl-lug-area2}")
 ```
 
@@ -374,5 +377,6 @@ print(f"\n: ISLA's von Mises error on the {N_TEST} test lugs with each lug's sur
 - **The pose contract does not hold on this mesh.** ISLA's posed error is several times its native one through tied nearest samples, a property of the interior geometry input on structured meshes with nodes on boundaries and symmetry planes. An input that is continuous at ties, such as the exact distance and direction to the boundary surface, is the open design question that would remove it (@sec-open-questions).
 - **The native lead is a float32 reading.** The standing's checkpoints were scored in float32 only. On a study model a float64 forward pass raises ISLA's native error several-fold through the same ties (@sec-lug-ties), so how the ordering responds to another scoring precision is not known.
 - **No tensor target and no geometry class change.** Tensile2d measures a tensor target (@sec-interior-tensile2d); the lug's shapes are one topology.
-- **The surface sampling law is measured only at a reduced budget**, and only for ISLA, since the baselines read no surface sample (@sec-lug-boundary-law).
+- **The surface sampling law is measured only at a reduced budget**, and only for ISLA (@sec-lug-boundary-law).
+- **Against Transolver the inputs differ.** Transolver reads no boundary-condition label, and knows the clamp and the load only through the shape in its fixed pose; GeoTransolver and ISLA read the same four labels (@tbl-model-inputs).
 - **Not matched in cost**, and the published GINOT, Transolver and GNOT numbers are on the authors' split: comparable in kind, not in value.
