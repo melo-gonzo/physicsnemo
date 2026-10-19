@@ -8,7 +8,9 @@ record's, unchanged (GeoTransolver and Transolver are not rerun). Writes results
 results/char/<dataset>.json (protocols, fields, isla_arm, arms[arm][protocol][field] = {mean, per_seed, n_cases, n_seeds},
 complete), so the chapters' protocol_table() and char_arms() read it unchanged, plus the key "raw_read_isla", the CHAR record's
 ISLA arm (raw slice reads), which protocol_table ignores. n_cases is the A2 record's where it has one (DeepJEB++), else the CHAR
-ISLA arm's: the A2 lanes are scored on the same validation split by the same scorer.
+ISLA arm's: the A2 lanes are scored on the same validation split by the same scorer. Two lists replace a baseline arm: FAIR_INPUT
+(retrained on fair inputs) and SCORESET (the same checkpoints re-scored on ISLA's scored set); each keeps the replaced arm under its
+own key.
 usage: python a2r_protocol_artifacts_2026-10-17.py"""
 import json, os
 
@@ -30,6 +32,27 @@ FAIR_INPUT = {
                                   "unlabelled_geotransolver", "the surface triangles with their normals and the four boundary-condition "
                                   "labels as its geometry context (lugbc_gt)")},
 }
+# Baseline arms re-scored on ISLA's scored set: dataset -> {arm label: (score file under results/, run stem without _seedNN, the key
+# the replaced arm is kept under, the arm's new label, what changed)}. The score file is reduce_tset200k.py's layout
+# ({"files": {"<evals>/<stem>_seed<s>/<protocol>": {metrics, n, source}}}). T-SCORESET (2026-10-19,
+# campaigns_2026-10-19/drive_fix2/README.md): the DrivAerML Surface Transolver arm, trained at 100,000 cells, was scored on its own
+# 100,000-cell draw; re-scored on the 200,000 cells of ISLA's set (hash-identical per car), same checkpoints and scorer.
+SCORESET = {
+    "drivaerml_surface": {"Transolver 512 x 16 at 100k cells": (
+        "campaigns_2026-10-19/drive_fix2/scoreset/tset200k_scores.json", "evals_tset200k/r80_dr_t_h512_l16_c100k",
+        "transolver_100k_scoring", "Transolver 512 x 16, trained at 100k cells",
+        "re-scored on ISLA's 200,000-cell set (r80_dr_t_h512_l16_c100k, the same checkpoints)")},
+}
+
+
+def rescored_arm(path, stem, fields, protocols, seeds=("42", "43")):
+    """{protocol: {field: {mean, per_seed, n_cases, n_seeds}}} of a re-scored arm, from a reduce_tset200k.py score file."""
+    rec = json.load(open(f"{os.path.dirname(R)}/{path}"))["files"]
+    runs = {s: {pk: rec[f"{stem}_seed{s}/{pk}"] for pk in protocols} for s in seeds}
+    assert all(r["source"] == "summary" for v in runs.values() for r in v.values())
+    return {pk: {f: {"mean": sum(runs[s][pk]["metrics"][f] for s in seeds) / len(seeds),
+                     "per_seed": {s: runs[s][pk]["metrics"][f] for s in seeds},
+                     "n_cases": min(runs[s][pk]["n"] for s in seeds), "n_seeds": len(seeds)} for f in fields} for pk in protocols}
 
 
 def rerun_arm(path, stem, fields, protocols, seeds=("42", "43")):
@@ -57,5 +80,9 @@ for ds, (stem, a2_arm) in DATASETS.items():
         out[key] = {"label": f"{label}, the CHAR record's arm", **out["arms"][label]}
         out["arms"][label] = rerun_arm(path, stem, C["fields"], C["protocols"])
         out.setdefault("fair_input", {})[label] = f"retrained reading {reads}; scores: {path}; the replaced arm is kept under {key}"
+    for label, (path, stem, key, new, what) in SCORESET.get(ds, {}).items():
+        out[key] = {"label": f"{label}, the CHAR record's arm", **out["arms"].pop(label)}
+        out["arms"][new] = rescored_arm(path, stem, C["fields"], C["protocols"])
+        out.setdefault("scored_set", {})[new] = f"{what}; scores: {path}; the arm scored on its own draw is kept under {key}"
     json.dump(out, open(f"{R}/{ds}_a2.json", "w"), indent=1)
     print(ds, " ".join(f"{pk}:" + "/".join(f"{arm[pk][f]['mean']:.4f}" for f in C["fields"]) for pk in C["protocols"]))
