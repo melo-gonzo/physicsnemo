@@ -5,7 +5,7 @@ Top row: the field, one shared colour scale (viridis, 0.5-99.5th percentile of t
 truth, one shared symmetric scale (the book's DIVERGING map, 99th percentile of the three errors). Panel titles carry the
 scorer's per-sample relative L2 of that field (metrics.jsonl of the same run, normalized space, as in results/char).
 Also writes the compact arrays the book can redraw from (float32 coordinates, float16 fields).
-usage: python render_2d.py <dump_dir> <out_png_dir> <out_arrays_dir> [airfrans,tensile2d,lug]
+usage: python render_2d.py <dump_dir> <out_png_dir> <out_arrays_dir> [airfrans,tensile2d,lug,drivaerml_volume] [drivaerml_volume=<stl.pmsh>]
 """
 import glob
 import json
@@ -58,8 +58,8 @@ def tri_of(xy, maxlen, hole_box=None, wall=None):
 
 
 def panel_grid(xy, truth, preds, titles, label, unit, window, maxlen, out_png, suptitle, aspect_w=4.2, hole_box=None, wall=None,
-               err_label="prediction $-$ truth"):
-    T = tri_of(xy, maxlen, hole_box, wall)
+               err_label="prediction $-$ truth", tri=None, overlay=None):
+    T = tri if tri is not None else tri_of(xy, maxlen, hole_box, wall)
     lo, hi = np.percentile(truth, [0.5, 99.5])
     errs = [p - truth for p in preds]
     v = np.percentile(np.abs(np.concatenate(errs)), 99)
@@ -78,6 +78,9 @@ def panel_grid(xy, truth, preds, titles, label, unit, window, maxlen, out_png, s
         ime = axes[1, k + 1].tripcolor(T, errs[k], shading="gouraud", cmap=palette.DIVERGING, vmin=-v, vmax=v, rasterized=True)
         axes[1, k + 1].set_title(ttl.split("\n")[0] + ": error", fontsize=10)
     axes[1, 0].axis("off")
+    if overlay is not None:
+        for ax in list(axes[0]) + list(axes[1, 1:]):
+            overlay(ax)
     cb = fig.colorbar(im, ax=axes[0, :], shrink=0.85, pad=0.01)
     cb.set_label(f"{label} {unit}")
     cb2 = fig.colorbar(ime, ax=axes[1, :], shrink=0.85, pad=0.01)
@@ -185,11 +188,88 @@ def lug(dump, out_png, out_arr):
             "per_sample_rel_l2": {"von_mises_l2": {name: D[k][1]["metrics"]["von_mises_l2"] for k, name in MODELS}}}
 
 
+def volume(dump, out_png, out_arr, stl, half_width=0.03):
+    """DrivAerML Volume car 00033 (run 129): the scored volume points in the slab |y*| < half_width (x L_ref = 15 cm) about
+    the symmetry plane, drawn in (x, z) on a Delaunay of the slab's points, with the body's cut at y* = 0 masked and drawn
+    grey. infer.py writes the points centred and divided by L_ref = 5 m without storing the centre; the offset is solved
+    by point-to-plane least squares so that the distance of the near-wall points (sdf < 2e-4) to the case's STL
+    (drivaer_129_single_solid.stl.pmsh, copied from LHR) equals their sdf. A view of a thin slab, not an interpolation
+    onto the plane."""
+    import pyvista as pv
+    from matplotlib.path import Path
+    from physicsnemo.mesh import Mesh
+
+    D = {k: load(dump, f"vol_{k}") for k, _ in MODELS}
+    P = D["isla"][0]["points"].astype(np.float64)
+    for k, _ in MODELS:
+        assert np.allclose(D[k][0]["points"], P), k
+    g = D["isla"][0]
+    sid = D["isla"][2]
+    L = float(g["global.L_ref"])
+    U = float(np.linalg.norm(g["global.U_inf"]))
+    q = 0.5 * float(g["global.rho_inf"]) * U ** 2
+    sdf = np.ravel(g["interior.sdf"]).astype(np.float64)
+    m = Mesh.load(stl)
+    V = m.points.numpy().astype(np.float64)
+    F = m.cells.numpy().astype(np.int64)
+    body = pv.PolyData(V, np.hstack([np.full((len(F), 1), 3, np.int64), F]).ravel())
+    near = (sdf < 2e-4) & (P[:, 2] > P[:, 2].min() + 0.005)  # near-wall points on the car, not the ground
+    x = L * P[near]
+    off = V[F].mean(1).mean(0) - x.mean(0)
+    for _ in range(20):
+        _, cp = body.find_closest_cell(x + off, return_closest_point=True)
+        r = cp - (x + off)
+        dist = np.linalg.norm(r, axis=1)
+        off = off + np.linalg.lstsq(r / np.maximum(dist[:, None], 1e-12), dist - L * sdf[near], rcond=None)[0]
+    fit = np.abs(dist - L * sdf[near])
+    cut = body.slice(normal="y", origin=(0.0, off[1], 0.0)).strip(join=True)
+    loops = []
+    for c in range(cut.n_cells):
+        pts = np.asarray(cut.get_cell(c).points)
+        loops.append(np.c_[(pts[:, 0] - off[0]) / L, (pts[:, 2] - off[2]) / L])
+    window = (-0.75, 1.15, P[:, 2].min(), 0.30)
+    sel = (np.abs(P[:, 1]) < half_width) & (P[:, 0] > window[0] - 0.1) & (P[:, 0] < window[1] + 0.1) & (P[:, 2] < window[3] + 0.1)
+    xz = P[sel][:, [0, 2]]
+    t = mtri.Triangulation(xz[:, 0], xz[:, 1])
+    c = xz[t.triangles].mean(1)
+    inside = np.zeros(len(c), bool)
+    for lp in loops:
+        inside |= Path(lp).contains_points(c)
+    t.set_mask(inside)
+
+    def overlay(ax):
+        for lp in loops:
+            ax.fill(lp[:, 0], lp[:, 1], color=palette.BASELINE, lw=0.4, ec=palette.MUTED, zorder=3)
+
+    rec = {"sample_id": sid, "source": R.provenance([(f"vol_{k}", "native") for k, _ in MODELS]), "n_points_scored": int(len(P)),
+           "slab_half_width_m": half_width * L, "n_points_in_slab_window": int(sel.sum()), "q_inf": q, "U_inf": U, "stl": stl,
+           "solved_centre_m": off.tolist(), "stl_fit_abs_sdf_residual_m": {"median": float(np.median(fit)), "p99": float(np.percentile(fit, 99))},
+           "per_sample_rel_l2": {f: {name: D[k][1]["metrics"][f] for k, name in MODELS} for f in ("pressure_l2", "velocity_l2", "nut_l2")}}
+    arrays = {"xz": xz.astype(np.float32)}
+    for field, lab, f, mkey in (("pressure", "$c_p$", lambda d, w: d[f"{w}_pressure"].astype(np.float64) / q, "pressure_l2"),
+                                ("velocity", "$|u|/U_\\infty$", lambda d, w: np.linalg.norm(d[f"{w}_velocity"].astype(np.float64), axis=1) / U,
+                                 "velocity_l2")):
+        truth = f(g, "true")[sel]
+        preds = [f(D[k][0], "pred")[sel] for k, _ in MODELS]
+        titles = [f"{name}\nrel. L2 {D[k][1]['metrics'][mkey]:.4f}" for k, name in MODELS]
+        panel_grid(xz, truth, preds, titles, lab, "[–]", window, None, f"{out_png}/drivaerml_volume_{field}.png",
+                   f"DrivAerML Volume validation car {sid.split('_')[0]} (run 129), the case of median ISLA pressure error among the 48 "
+                   f"validation cars:\nthe {int(sel.sum()):,} scored points (of {len(P):,}) within {1e2 * half_width * L:.0f} cm of the "
+                   f"symmetry plane, side view; coordinates / L_ref", aspect_w=4.2, tri=t, overlay=overlay)
+        arrays[f"{field}_true"] = truth.astype(np.float16)
+        for (k, _), p in zip(MODELS, preds):
+            arrays[f"{field}_{k}"] = p.astype(np.float16)
+    for n, lp in enumerate(loops):
+        arrays[f"body_cut_{n}"] = lp.astype(np.float32)
+    np.savez_compressed(f"{out_arr}/drivaerml_volume_{sid.split('_')[0]}.npz", **arrays)
+    return rec
+
 if __name__ == "__main__":
     dump, out_png, out_arr = sys.argv[1:4]
     os.makedirs(out_png, exist_ok=True); os.makedirs(out_arr, exist_ok=True)
-    which = sys.argv[4].split(",") if len(sys.argv) > 4 else ["airfrans", "tensile2d", "lug"]
+    which = sys.argv[4].split(",") if len(sys.argv) > 4 else ["airfrans", "tensile2d", "lug"]  # drivaerml_volume needs its STL
     for w in which:
-        rec = {"airfrans": airfrans, "tensile2d": tensile, "lug": lug}[w](dump, out_png, out_arr)
+        extra = [a.split("=", 1)[1] for a in sys.argv[5:] if a.startswith(w + "=")]  # drivaerml_volume=<stl.pmsh>
+        rec = {"airfrans": airfrans, "tensile2d": tensile, "lug": lug, "drivaerml_volume": volume}[w](dump, out_png, out_arr, *extra)
         print(w, json.dumps(rec)[:400])
         json.dump({w: rec}, open(f"{out_arr}/render_2d_{w}.json", "w"), indent=1)

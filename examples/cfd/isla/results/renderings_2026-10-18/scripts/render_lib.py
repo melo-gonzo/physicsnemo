@@ -104,6 +104,39 @@ def render_cloud(points, values, view, cmap, clim, size=(1600, 1000), point_size
     return np.asarray(img)[..., :3]
 
 
+def silhouette(points, view, size, radius):
+    """Pixel mask of a point cloud's outline in an orthographic view (rasterized points, closed by `radius` pixels)."""
+    from scipy.ndimage import distance_transform_edt as edt
+
+    W, H = size
+    f = np.asarray(view["focal"], np.float64)
+    d = f - np.asarray(view["position"], np.float64)
+    d /= np.linalg.norm(d)
+    u = np.asarray(view["up"], np.float64)
+    r = np.cross(d, u)
+    p = np.asarray(points, np.float64) - f
+    k = (H / 2) / view["scale"]
+    px = np.rint(W / 2 + k * (p @ r)).astype(int)
+    py = np.rint(H / 2 - k * (p @ u)).astype(int)
+    ok = (px >= 0) & (px < W) & (py >= 0) & (py < H)
+    m = np.zeros((H, W), bool)
+    m[py[ok], px[ok]] = True
+    grown = edt(~m) <= radius
+    return edt(grown) > radius
+
+
+def fill_holes(img, mask, thresh=250):
+    """Give every background pixel inside `mask` the colour of the nearest drawn pixel (gaps between sparse points)."""
+    from scipy.ndimage import distance_transform_edt as edt
+
+    bg = (img >= thresh).all(-1)
+    _, (iy, ix) = edt(bg, return_indices=True)
+    out = img.copy()
+    sel = bg & mask
+    out[sel] = img[iy[sel], ix[sel]]
+    return out
+
+
 def common_crop(images, pad=12, thresh=250):
     """Crop a list of same-size images to the union of their non-white boxes (so panels keep one scale)."""
     m = np.zeros(images[0].shape[:2], bool)
