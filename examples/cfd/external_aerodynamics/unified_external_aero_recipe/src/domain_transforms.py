@@ -1839,7 +1839,9 @@ class SplitBoundaryByLabels(MeshTransform):
         names = [*self.labels, *([self.rest] if self.rest is not None else [])]
         taken = [n for n in names if n in domain.boundary_names]
         if taken:
-            raise ValueError(f"SplitBoundaryByLabels: boundaries {taken!r} exist already")
+            raise ValueError(
+                f"SplitBoundaryByLabels: boundaries {taken!r} exist already"
+            )
         mesh = domain.boundaries[self.boundary]
         keys = [as_nested_key(field) for field in self.labels.values()]
         assigned = torch.zeros(mesh.n_cells, dtype=torch.bool, device=mesh.cells.device)
@@ -1867,7 +1869,9 @@ class SplitBoundaryByLabels(MeshTransform):
                     f"centroids of {self.boundary!r} ({mesh.n_cells} cells); it has "
                     f"{interior.n_points} points"
                 )
-            interior = interior.slice_points(torch.cat([index[n] for n in sorted(index)]))
+            interior = interior.slice_points(
+                torch.cat([index[n] for n in sorted(index)])
+            )
         return DomainMesh(
             interior=interior,
             boundaries={**domain.boundaries, **split},
