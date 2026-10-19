@@ -1124,6 +1124,18 @@ def test_v2_geotransolver_option_b_and_transolver_configs_run():
     ):
         cfg = _compose(model, dataset="aerozoo_puvolume")
         assert cfg.training.loss_type == "case_relative_l2"
+        ### velocity weighs 3 (the label era's channel balance); scored in the label-era space, in
+        ### training and in inference (infer.yaml composes the model after base.yaml too)
+        assert OmegaConf.to_container(cfg.training.field_weights) == {"velocity": 3}
+        assert cfg.score_space == "label_reference"
+        with initialize_config_dir(
+            config_dir=str(_RECIPE_ROOT / "conf"), version_base=None
+        ):
+            infer_cfg = compose(
+                config_name="infer",
+                overrides=[f"model={model}", "dataset=aerozoo_puvolume"],
+            )
+        assert infer_cfg.score_space == "label_reference"
         assert cfg.input_type == "tensors" and cfg.model.out_dim == 7
         if model.startswith("geo"):
             assert cfg.model.include_local_features is False
@@ -1144,10 +1156,18 @@ def test_v2_geotransolver_option_b_and_transolver_configs_run():
         with torch.no_grad():
             out = net(**fk)
         pred = normalize_output_to_tensordict(out, targets, "tensors")
-        total, _ = LossCalculator(targets, loss_type=cfg.training.loss_type)(
-            pred, batch["targets"]
-        )
+        total, losses = LossCalculator(
+            targets,
+            loss_type=cfg.training.loss_type,
+            field_weights=OmegaConf.to_container(cfg.training.field_weights),
+        )(pred, batch["targets"])
         assert torch.isfinite(total)
+        unweighted = LossCalculator(targets, loss_type=cfg.training.loss_type)(
+            pred, batch["targets"]
+        )[1]
+        torch.testing.assert_close(
+            losses["loss/velocity"], 3 * unweighted["loss/velocity"]
+        )
 
 
 @pytest.mark.parametrize("with_slip", [True, False])

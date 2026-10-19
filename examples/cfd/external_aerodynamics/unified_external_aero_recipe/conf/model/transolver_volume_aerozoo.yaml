@@ -27,8 +27,9 @@
 # per-point channels, and AeroZoo has no global freestream (any reduction of
 # the inlet faces would be derived by the recipe), so it does not see the
 # inlet velocity: a documented floor (PREREG_v2 Q2), run on `full` only.
-# The loss is the per-case relative L2 every AeroZoo v2 arm sets
-# (geotransolver_volume_aerozoo.yaml).
+# The loss, its field weights and the score space are every AeroZoo v2
+# arm's (geotransolver_volume_aerozoo.yaml): case_relative_l2 with velocity
+# weighing 3 (the label era's channel balance), scored in label_reference.
 dataset_reader_overrides:
   # The boundaries stay: the SDF to no_slip is computed from them.
   drop_in_file_boundaries: false
@@ -38,6 +39,10 @@ output_type: tensors
 
 training:
   loss_type: case_relative_l2
+  field_weights:
+    velocity: 3
+
+score_space: label_reference
 
 forward_kwargs:
   embedding:

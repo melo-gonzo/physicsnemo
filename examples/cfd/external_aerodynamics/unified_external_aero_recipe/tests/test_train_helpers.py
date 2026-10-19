@@ -45,6 +45,7 @@ this module's tensorboard skip guard.)
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -414,6 +415,18 @@ def _run_test_epoch(
         optimizer=optimizer,
         scheduler=torch.optim.lr_scheduler.StepLR(optimizer, step_size=1),
     )
+
+
+def test_float32_matmuls_stay_full_precision():
+    """``precision=float32`` runs without autocast, and nothing the trainer or the baselines import turns
+    TF32 on for matmuls (PyTorch's default: ``allow_tf32`` False, precision ``highest``), so an fp32 arm of a
+    bf16-vs-fp32 comparison is true fp32 (AZ-V2-RECIPE review, 2026-10-19)."""
+    import physicsnemo.models.geotransolver  # noqa: F401
+    import physicsnemo.models.transolver  # noqa: F401
+
+    assert torch.get_float32_matmul_precision() == "highest"
+    assert torch.backends.cuda.matmul.allow_tf32 is False
+    assert isinstance(train.get_autocast_context("float32"), nullcontext)
 
 
 def test_fail_together_single_process():
