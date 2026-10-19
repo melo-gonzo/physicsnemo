@@ -34,7 +34,9 @@ Recipe-local datapipe components that the library does not provide.
   :class:`DropDegenerateCells` and :class:`ComposeQuadratureMeasure`.
 - Adapters for a multi-boundary case with per-face boundary conditions
   (AeroZoo): :class:`ComputeLogReynolds`, :class:`HarmonizeBoundaryFields`,
-  :class:`BoundaryFieldToGlobal` and :class:`ConcatGlobalFields`.
+  :class:`BoundaryFieldToGlobal` and :class:`ConcatGlobalFields`; and
+  :class:`SplitBoundaryByLabels`, one boundary per condition for a dataset that
+  labels its conditions inside one mesh.
 
 Recipe-local module registered into the global datapipe component registry
 so the classes can be referenced via ``${dp:...}`` short names in Hydra
@@ -685,8 +687,8 @@ class SetConstantCellField(MeshTransform):
     pipelines) and rides along into ``boundaries.<name>.cell_data`` like
     ``normals``.  Transfer-program campaign C (T1, complete conditioning):
     lets ISLA read it as a rank-0 boundary input
-    (``boundary_schema: {cond: {rank: 0}}``, read from each boundary mesh's
-    ``cell_data``) and
+    (``boundary_schemas: {vehicle: {cond: {rank: 0}}}``, read from the boundary
+    mesh's ``cell_data``) and
     GeoTransolver / Transolver as an extra per-point functional channel
     (append the field to ``forward_kwargs.local_embedding`` and raise
     ``functional_dim`` by one).  A scalar is an invariant, so every ISLA
@@ -722,8 +724,8 @@ class StackScalarFields(MeshTransform):
     ``fields: [bc_disp_x, bc_disp_y]`` (each ``(N,)`` or ``(N, 1)``) becomes
     ``output_field`` of shape ``(N, 3)`` with a zero third component: how a planar
     dataset that stored a boundary vector component by component presents it as
-    ONE rank-1 field to a model with tensor-valued inputs (a field of ISLA's
-    ``boundary_schema``). ``association`` is ``"cell_data"`` or ``"point_data"``.
+    ONE rank-1 field to a model with tensor-valued inputs (a field of one of ISLA's
+    ``boundary_schemas``). ``association`` is ``"cell_data"`` or ``"point_data"``.
     The source fields are kept.
     """
 
@@ -986,7 +988,7 @@ class SqueezeScalarFields(MeshTransform):
 
     Converted datasets store some per-point scalars as one-channel columns (AirfRANS keeps its
     signed distance as ``(N, 1)``); a model with a declared field grammar reads a rank-0 field as a
-    plain ``(N,)`` tensor (ISLA's ``query_schema``, ``boundary_schema``) and refuses the column. This
+    plain ``(N,)`` tensor (ISLA's ``query_schema``, ``boundary_schemas``) and refuses the column. This
     transform squeezes exactly one trailing axis of length one from each named field and leaves
     everything else untouched; a field that is already ``(N,)`` passes through, and a field whose
     trailing axis is not of length one is refused (it is not a scalar).
@@ -1520,8 +1522,8 @@ class HarmonizeBoundaryFields(MeshTransform):
     A case whose boundaries are grouped by condition type stores on each only the values that type
     prescribes (the inlet its velocity and turbulence, the outlet its pressure and reverse-flow values, the
     wall nothing but zero velocity, a slip wall nothing). A model with one declared boundary grammar reads
-    the same fields from every boundary mesh it is handed (ISLA's ``boundary_schema`` applies to all of
-    ``boundary_meshes``), so this transform writes, on every boundary:
+    the same fields from every boundary mesh it is handed, so this transform writes, on every boundary
+    (ISLA, which declares each condition's own fields by name, drops it):
 
     * a one-hot label per listed boundary, ``cell_data[field] = 1`` on the boundary of that name and ``0``
       on every other, shape ``(F,)``; and
@@ -1775,3 +1777,105 @@ class FlipBoundaryOrientation(MeshTransform):
 
     def extra_repr(self) -> str:
         return f"boundaries={self.boundaries}, normal_fields={self.normal_fields}"
+
+
+@register()
+class SplitBoundaryByLabels(MeshTransform):
+    r"""Split one boundary of a ``DomainMesh`` into one boundary per boundary condition (2026-10-19).
+
+    A dataset that stores several boundary conditions in one mesh tells them apart by 0/1 label
+    fields in its ``cell_data`` (the lug's ``bc_fixed``, ``bc_hole`` and ``bc_loaded`` on one
+    surface). ISLA declares its boundary conditions by name and reads each from its own mesh
+    (``boundary_schemas``), so this transform adds, next to ``boundary``, one boundary per entry
+    of ``labels``: the cells whose label field is nonzero, the first entry winning where two
+    labels mark the same cell (list the more specific condition first, ``loaded`` before
+    ``hole``), and, under the name ``rest``, the cells no label marks. Each new boundary is the
+    source mesh's points with those cells and their ``cell_data`` without the label fields, so a
+    condition's fields are its own cells' values; a condition no cell carries is a boundary with
+    no cells. The source boundary is kept as it is, for the models that read it.
+
+    With ``reorder_interior`` (a surface task, whose interior is the point cloud of the source
+    boundary's cell centroids carrying the targets, as ``MeshToDomainMesh`` with
+    ``interior_points: cell_centroids`` writes it) the interior points are permuted into the
+    order of ISLA's surface predictions: the new boundaries in sorted name order, each its cells
+    in mesh order. The scored points and their targets are the same, in that order.
+
+    Args:
+        boundary: the boundary to split.
+        labels: ``{new boundary name: label field}``, in priority order.
+        rest: the name of the boundary of the unlabelled cells; ``None`` requires every cell
+            to carry a label.
+        reorder_interior: permute the interior to the order of the new boundaries' cells.
+    """
+
+    def __init__(
+        self,
+        boundary: str,
+        labels: dict[str, str],
+        rest: str | None = None,
+        reorder_interior: bool = False,
+    ) -> None:
+        super().__init__()
+        self.boundary = str(boundary)
+        self.labels = {str(name): str(field) for name, field in labels.items()}
+        self.rest = None if rest is None else str(rest)
+        self.reorder_interior = bool(reorder_interior)
+        names = [*self.labels, *([self.rest] if self.rest is not None else [])]
+        if not self.labels or len(set(names)) != len(names):
+            raise ValueError(
+                f"SplitBoundaryByLabels: labels must name distinct boundaries (rest included), got {names!r}"
+            )
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        return mesh
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Add the split boundaries (and reorder the interior when asked)."""
+        if self.boundary not in domain.boundary_names:
+            raise KeyError(
+                f"SplitBoundaryByLabels: boundary {self.boundary!r} not found; available: "
+                f"{domain.boundary_names!r}"
+            )
+        names = [*self.labels, *([self.rest] if self.rest is not None else [])]
+        taken = [n for n in names if n in domain.boundary_names]
+        if taken:
+            raise ValueError(f"SplitBoundaryByLabels: boundaries {taken!r} exist already")
+        mesh = domain.boundaries[self.boundary]
+        keys = [as_nested_key(field) for field in self.labels.values()]
+        assigned = torch.zeros(mesh.n_cells, dtype=torch.bool, device=mesh.cells.device)
+        index = {}
+        for name, key in zip(self.labels, keys):
+            hit = (mesh.cell_data[key] != 0) & ~assigned
+            index[name] = torch.nonzero(hit).flatten()
+            assigned |= hit
+        if self.rest is not None:
+            index[self.rest] = torch.nonzero(~assigned).flatten()
+        elif not bool(assigned.all()):
+            raise ValueError(
+                f"SplitBoundaryByLabels: {int((~assigned).sum())} cells of {self.boundary!r} carry "
+                "no label; name their boundary with `rest`"
+            )
+        split = {}
+        for name, idx in index.items():
+            part = mesh.slice_cells(idx)
+            split[name] = part.with_data(cell_data=part.cell_data.exclude(*keys))
+        interior = domain.interior
+        if self.reorder_interior:
+            if interior.n_points != mesh.n_cells:
+                raise ValueError(
+                    f"SplitBoundaryByLabels: reorder_interior needs the interior to be the cell "
+                    f"centroids of {self.boundary!r} ({mesh.n_cells} cells); it has "
+                    f"{interior.n_points} points"
+                )
+            interior = interior.slice_points(torch.cat([index[n] for n in sorted(index)]))
+        return DomainMesh(
+            interior=interior,
+            boundaries={**domain.boundaries, **split},
+            global_data=domain.global_data,
+        )
+
+    def extra_repr(self) -> str:
+        return (
+            f"boundary={self.boundary!r}, labels={self.labels}, rest={self.rest!r}, "
+            f"reorder_interior={self.reorder_interior}"
+        )

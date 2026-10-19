@@ -332,14 +332,20 @@ def _filled_dataset_yaml(root: Path, dataset: str = DATASET):
     )
 
 
-def _read_back(tmp_path_factory, dataset: str) -> dict[str, DomainMesh]:
-    """Two cases written in the release tree and read back through the yaml's reader and transforms."""
+def _read_back(tmp_path_factory, dataset: str, model_cfg=None) -> dict[str, DomainMesh]:
+    """Two cases written in the release tree and read back through the yaml's reader and transforms
+    (with ``model_cfg``'s reader overrides and transform drops, the model's view of the dataset)."""
     root = tmp_path_factory.mktemp(dataset)
     for case, with_slip in (("case-0001", True), ("case-0002", False)):
         path = root / "shard-000" / case / "domain.pdmsh"
         path.parent.mkdir(parents=True)
         make_aerozoo_case(with_slip, seed=int(case[-1])).save(path)
-    ds = build_dataset(_filled_dataset_yaml(root, dataset), device=None, num_workers=1)
+    ds_yaml = _filled_dataset_yaml(root, dataset)
+    if model_cfg is not None:
+        ds_yaml = _apply_dataset_transform_drops(
+            _apply_dataset_reader_overrides(ds_yaml, model_cfg), model_cfg
+        )
+    ds = build_dataset(ds_yaml, device=None, num_workers=1)
     try:
         return {"with_slip": ds[0][0], "no_slip_walls": ds[1][0]}
     finally:
@@ -364,6 +370,20 @@ def pipeline_output_uniform(tmp_path_factory) -> dict[str, DomainMesh]:
 @pytest.fixture(scope="module")
 def pipeline_output_uniform_vp(tmp_path_factory) -> dict[str, DomainMesh]:
     return _read_back(tmp_path_factory, "aerozoo_uvolume_vp")
+
+
+@pytest.fixture(scope="module")
+def isla_pipeline_outputs(tmp_path_factory):
+    """The ISLA config's view of a dataset (its reader overrides and transform drops), per dataset."""
+    cache = {}
+
+    def get(dataset: str) -> dict[str, DomainMesh]:
+        if dataset not in cache:
+            cfg = _compose("isla_volume_aerozoo", dataset=dataset)
+            cache[dataset] = _read_back(tmp_path_factory, dataset, cfg)
+        return cache[dataset]
+
+    return get
 
 
 def _outputs(request, dataset: str) -> dict[str, DomainMesh]:
@@ -686,9 +706,34 @@ def test_uniform_twin_draws_a_uniform_subset_of_the_whole_boundary(tmp_path):
         DatasetBase.close(src)
 
 
+#: The fields each condition prescribes, as ISLA declares them (rank by name).
+ISLA_CONDITIONS = {
+    "inlet": {
+        "bc_velocity": 1,
+        "bc_tke": 0,
+        "bc_omega": 0,
+        "bc_intermittency": 0,
+        "bc_retheta": 0,
+    },
+    "outlet": {
+        "bc_pressure": 0,
+        "bc_velocity_reverse": 1,
+        "bc_tke_reverse": 0,
+        "bc_omega_reverse": 0,
+        "bc_intermittency_reverse": 0,
+        "bc_retheta_reverse": 0,
+    },
+    "no_slip": {},
+    "slip": {},
+}
+
+
 @pytest.mark.parametrize("dataset", sorted(ISLA_VP_OVERRIDES))
-def test_isla_config_declares_the_harmonized_grammar_and_runs(request, dataset):
-    pipeline_output = _outputs(request, dataset)
+def test_isla_config_declares_each_condition_s_fields_and_runs(isla_pipeline_outputs, dataset):
+    """ISLA declares the four conditions by name, each with the prescribed values it alone carries;
+    its view of the dataset has no role labels and no zero-filled copies (HarmonizeBoundaryFields
+    dropped), and every declared field is the condition's own prescribed value."""
+    pipeline_output = isla_pipeline_outputs(dataset)
     targets = DATASET_FILES[dataset][1]
     cfg = _compose(
         "isla_volume_aerozoo",
@@ -706,8 +751,23 @@ def test_isla_config_declares_the_harmonized_grammar_and_runs(request, dataset):
         r: f"boundaries.{r}" for r in ("inlet", "outlet", "no_slip", "slip")
     }
     assert {
-        k: v["rank"] for k, v in OmegaConf.to_container(m.boundary_schema).items()
-    } == BC_FIELDS
+        name: {k: v["rank"] for k, v in schema.items()}
+        for name, schema in OmegaConf.to_container(m.boundary_schemas).items()
+    } == ISLA_CONDITIONS
+    for domain in pipeline_output.values():
+        for name, bnd in domain.boundaries.items():
+            present = set(bnd.cell_data.keys())
+            assert not present & {f"bc_{role}" for role in ISLA_CONDITIONS}, name
+            assert set(ISLA_CONDITIONS[name]) <= present, name
+            ### no zero-filled copy of another condition's field: the inlet carries no
+            ### outlet value, and the slip walls, which prescribe nothing, carry none
+            assert not present & set(ISLA_CONDITIONS["outlet" if name == "inlet" else "inlet"]) or name == "no_slip"
+            assert name != "slip" or not present & set(BC_FIELDS)
+    inlet = pipeline_output["with_slip"].boundaries["inlet"]
+    torch.testing.assert_close(
+        inlet.cell_data["bc_velocity"],
+        torch.tensor([1.0, 0.0, 0.0]).expand(inlet.n_cells, 3),
+    )
     assert OmegaConf.to_container(m.global_schema) == {
         "U_inf_dir": {"rank": 1},
         "log_re_std": {"rank": 0},
@@ -822,8 +882,9 @@ def test_geotransolver_config_reads_the_sdf_and_global_vector_and_runs(
 @pytest.mark.parametrize("dataset", sorted(DATASET_FILES))
 def test_isla_reads_every_boundary_whole_and_geotransolver_keeps_its_draw(dataset):
     """ISLA draws its boundary tokens inside the model, so its config lifts the reader's
-    per-boundary cap (aerozoo_volume*) and drops the uniform twins' SubsampleMesh and
-    the SDF passes only GeoTransolver reads; GeoTransolver's pipeline is the file's.
+    per-boundary cap (aerozoo_volume*) and drops the uniform twins' SubsampleMesh, the
+    SDF passes only GeoTransolver reads and the harmonized role labels it does not read;
+    GeoTransolver's pipeline is the file's.
     Both reverse the four boundaries after the SDF passes."""
     ds = load_dataset_config(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
     targets = lambda d: [str(t.get("_target_")) for t in d.pipeline.transforms]  # noqa: E731
@@ -837,10 +898,9 @@ def test_isla_reads_every_boundary_whole_and_geotransolver_keeps_its_draw(datase
     assert capped
     assert isla.pipeline.reader.get("subsample_n_cells") is None
     chain = targets(isla)
-    assert not any(t.endswith((".SubsampleMesh", ".ComputeSDFFromBoundary")) for t in chain), chain
-    assert [t for t in targets(ds) if t not in chain] == [
-        t for t in targets(ds) if t.endswith((".SubsampleMesh", ".ComputeSDFFromBoundary"))
-    ]
+    dropped = (".SubsampleMesh", ".ComputeSDFFromBoundary", ".HarmonizeBoundaryFields")
+    assert not any(t.endswith(dropped) for t in chain), chain
+    assert [t for t in targets(ds) if t not in chain] == [t for t in targets(ds) if t.endswith(dropped)]
     flips = [t for t in ds.pipeline.transforms if str(t["_target_"]).endswith(".FlipBoundaryOrientation")]
     assert [list(t.boundaries) for t in flips] == [["inlet", "outlet", "no_slip", "slip"]]
     order = targets(ds)

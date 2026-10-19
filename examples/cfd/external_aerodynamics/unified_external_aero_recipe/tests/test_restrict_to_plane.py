@@ -19,11 +19,10 @@ two-dimensional one; non-planar input is refused; ISLA runs natively on the rest
 
 import pytest
 import torch
+from domain_transforms import RestrictToPlane
 from tensordict import TensorDict
 
 from physicsnemo.mesh import DomainMesh, Mesh
-
-from domain_transforms import RestrictToPlane
 
 
 def _square_domain(
@@ -120,7 +119,9 @@ def test_isla_runs_natively_in_two_dimensions_on_the_restricted_domain():
     d2 = RestrictToPlane(vector_fields=VEC).apply_to_domain(_square_domain())
     model = ISLA(
         output_schema={"u": {"rank": 0}},
-        boundary_schema={"bc_dirichlet": {"rank": 0}, "bc_value_g": {"rank": 0}},
+        boundary_schemas={
+            "outer": {"bc_dirichlet": {"rank": 0}, "bc_value_g": {"rank": 0}}
+        },
         query_schema={"sdf_normals": {"rank": 1}},
         interior=True,
         hidden=32,

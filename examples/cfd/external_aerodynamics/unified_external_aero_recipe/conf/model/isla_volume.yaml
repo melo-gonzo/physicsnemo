@@ -86,6 +86,8 @@ model:
     velocity: {rank: 1}
     pressure: {rank: 0}
     nut: {rank: 0}
+  boundary_schemas:              # the boundary conditions by name, each with its own per-cell fields
+    vehicle: {}                  # the vehicle surface, a no-slip wall: no per-cell fields
   global_schema:
     U_inf_dir: {rank: 1}         # the unit freestream direction, read from global_data.U_inf_dir
   interior: true                 # predict at prediction_points, which join the encoder as tokens

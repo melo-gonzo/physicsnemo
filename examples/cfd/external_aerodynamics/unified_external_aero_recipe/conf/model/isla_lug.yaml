@@ -16,14 +16,23 @@
 # limitations under the License.
 
 # ISLA, interior task, on the GINOT PLASTIC_LUG (ginot_lug_volume): the reference configuration of isla_volume.yaml on a
-# three-dimensional solid. The boundary is the lug's watertight surface triangulation (`boundaries.surface`); the boundary
-# conditions enter as per-boundary-cell fields of that mesh (boundary_schema: the clamped face, the hole, the loaded half of
-# the hole and the applied pressure on it), the four design parameters as named rank-0 global inputs (the dataset's
+# three-dimensional solid. The boundary is the lug's watertight surface triangulation (`boundaries.surface`), which the
+# dataset labels by condition (bc_fixed, bc_hole, bc_loaded); SplitBoundaryByLabels (dataset_append_transforms below, for this
+# model only) splits it into four named boundary conditions (boundary_schemas): the clamped face, the loaded half of the hole
+# with its applied pressure, the rest of the hole and the free surface, together the same cells. The four design parameters as named rank-0 global inputs (the dataset's
 # SplitGlobalVector standardizes `params` and splits it), and the stored signed distance and its gradient as per-query inputs
 # (query_schema), the same wall geometry the tensor-input baselines read. The lug has no global direction, so the fused
 # geometry kernel (which needs one) does not apply and the model runs the eager region.
 input_type: mesh
 output_type: mesh
+
+# ISLA-only steps after the dataset's own chain (the baselines read the dataset as it is): one boundary per condition, the
+# first label winning where two mark a cell (the loaded cells are part of the hole), the unlabelled cells the free surface.
+dataset_append_transforms:
+  - _target_: ${dp:SplitBoundaryByLabels}
+    boundary: surface
+    labels: {loaded: bc_loaded, hole: bc_hole, fixed: bc_fixed}
+    rest: free
 
 training:
   optimizer:
@@ -37,8 +46,11 @@ compile_options:
   mode: max-autotune-no-cudagraphs
 
 forward_kwargs:
-  boundary_meshes:
-    surface: boundaries.surface   # Mesh[2, 3]: outward-wound triangles; centroids, normals and areas are read from it
+  boundary_meshes:                # Mesh[2, 3] each: outward-wound triangles of the lug's surface, split by condition
+    fixed: boundaries.fixed
+    hole: boundaries.hole
+    loaded: boundaries.loaded
+    free: boundaries.free
   prediction_points: interior     # the lug's mesh nodes as a point cloud; point_data carries the query_schema fields
   global_data: global_data        # the case's TensorDict; the model selects its declared leaves
 
@@ -46,11 +58,12 @@ model:
   _target_: physicsnemo.experimental.models.isla.ISLA
   output_schema:
     von_mises: {rank: 0}          # MPa, standardized by the dataset config
-  boundary_schema:                # per-boundary-cell inputs, all rank 0 (0/1 labels and the scaled pressure)
-    bc_fixed: {rank: 0}           # 1 on the clamped end face
-    bc_hole: {rank: 0}            # 1 on the hole's cylindrical surface
-    bc_loaded: {rank: 0}          # 1 on the pressure-loaded half of the hole
-    bc_pressure: {rank: 0}        # the applied pressure on the loaded cells (scaled to O(1) by the dataset config), 0 elsewhere
+  boundary_schemas:               # the boundary conditions by name, each with its own per-cell fields
+    fixed: {}                     # the clamped end face
+    hole: {}                      # the unloaded half of the hole's cylindrical surface
+    loaded:                       # the pressure-loaded half of the hole
+      bc_pressure: {rank: 0}      # the applied pressure (scaled to O(1) by the dataset config)
+    free: {}                      # the traction-free rest of the surface
   query_schema:
     sdf: {rank: 0}                # the stored signed distance (a length, scaled by the frame's length unit inside the model)
     sdf_normals: {rank: 1}        # the stored SDF gradient

@@ -349,8 +349,9 @@ the cell centroids, cell normals and cell measures (the Horvitz-Thompson
 corrected `cell_data._effective_measure` when present, else the geometric
 cell area): every cell for a surface task, a sample drawn inside the model
 for an interior task (below); the problem's data enter as named fields of declared tensor
-rank (`global_schema` fields from `global_data`, `boundary_schema` fields
-from each boundary's `cell_data`, `query_schema` fields from the prediction
+rank (`global_schema` fields from `global_data`, each boundary condition's
+`boundary_schemas` fields from its own boundary's `cell_data`, `query_schema`
+fields from the prediction
 Mesh's `point_data`). Two contracts hold by construction rather than by
 augmentation: rotation, reflection and translation covariance (the backbone
 sees only invariants of the per-point vector set; the frame is re-attached
@@ -473,9 +474,15 @@ Native volume query points have no implied volume measure.
 dataset's target names with their ranks: `pressure: {rank: 0}`, `wss: {rank: 1}`,
 `stress: {rank: 2, symmetric: true}`; a bare integer is not a rank spec), `global_schema:` (rank 1 = a global
 direction, normalized inside the model; rank 0 = a PDE parameter),
-`boundary_schema:` (per-cell fields of rank 0 to 2 read from every boundary
-Mesh's `cell_data`: a condition tag, a prescribed traction as a rank-1
-field, a prescribed stress as a rank-2 field) and `query_schema:`
+`boundary_schemas:` (the boundary conditions by name, each with the per-cell
+fields of rank 0 to 2 it carries, read from its own boundary Mesh's
+`cell_data`: an inlet's prescribed velocity as a rank-1 field, a loaded face's
+pressure as a rank-0 field, `{}` for a wall without fields; `forward_kwargs:
+boundary_meshes:` names a boundary per condition, and a dataset that labels
+its conditions inside one mesh is split per condition by
+`SplitBoundaryByLabels`, listed under the model config's
+`dataset_append_transforms:` so the other models read the dataset as it is)
+and `query_schema:`
 (per-prediction-point fields of rank 0 to 2 read from the prediction Mesh's
 `point_data`). A name may be dotted for a nested leaf. Every input enters
 through invariants and every output leaves through an equivariant basis, so

@@ -136,7 +136,7 @@ pipeline:
       output_field: U_inf_dir
     # (f) One boundary grammar for the four roles: a one-hot role label on every boundary and a
     # zero-filled copy of every prescribed field a boundary lacks (a 0-face slip mesh gets zero rows), so
-    # ISLA's boundary_schema applies to all four. Renamed to flat names below.
+    # one declaration reads all four (ISLA declares each condition's own fields and drops this step). Renamed below.
     - _target_: ${dp:HarmonizeBoundaryFields}
       one_hot:
         inlet: bc_inlet

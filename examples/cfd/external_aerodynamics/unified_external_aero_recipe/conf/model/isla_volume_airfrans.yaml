@@ -55,6 +55,8 @@ model:
     velocity: {rank: 1}
     pressure: {rank: 0}
     nut: {rank: 0}
+  boundary_schemas:              # the boundary conditions by name, each with its own per-cell fields
+    airfoil: {}                  # the airfoil, a no-slip wall: no per-cell fields
   global_schema:
     U_inf_dir: {rank: 1}         # the unit inlet direction, read from global_data.U_inf_dir
     U_inf_mag: {rank: 0}         # the inlet speed, a rank-0 global input (the Reynolds number varies across cases)

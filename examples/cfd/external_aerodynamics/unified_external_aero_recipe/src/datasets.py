@@ -134,6 +134,26 @@ def _apply_dataset_transform_drops(
     return dataset_cfg
 
 
+def _apply_dataset_transform_appends(
+    dataset_cfg: DictConfig, recipe_cfg: DictConfig
+) -> DictConfig:
+    """Append the transforms a model config lists in ``dataset_append_transforms``.
+
+    Each entry is a transform config, as in a dataset's ``pipeline.transforms``, run
+    after the dataset's own chain, so the steps one model needs and the others do
+    not leave the dataset files and the other models' inputs as they are. ISLA's
+    configs split a boundary that holds several boundary conditions into one
+    boundary per condition (``SplitBoundaryByLabels``).
+    """
+    extra = OmegaConf.select(recipe_cfg, "dataset_append_transforms", default=None)
+    if not extra:
+        return dataset_cfg
+    transforms = OmegaConf.select(dataset_cfg, "pipeline.transforms", default=None)
+    dataset_cfg = dataset_cfg.copy()
+    dataset_cfg.pipeline.transforms = [*(transforms or []), *extra]
+    return dataset_cfg
+
+
 ### Transform-config kwargs whose values are file paths and should be
 ### resolved against the recipe root before Hydra instantiates the
 ### transform. Add new entries here when introducing transforms with
@@ -891,6 +911,7 @@ def build_dataloaders(
             )
         ds_yaml = _apply_dataset_reader_overrides(ds_yaml, cfg)
         ds_yaml = _apply_dataset_transform_drops(ds_yaml, cfg)
+        ds_yaml = _apply_dataset_transform_appends(ds_yaml, cfg)
 
         train_datadir = OmegaConf.select(ds_yaml, "train_datadir", default=None)
         if train_datadir and not Path(str(train_datadir)).exists():

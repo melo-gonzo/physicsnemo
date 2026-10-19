@@ -274,7 +274,7 @@ def test_isla_end_to_end_through_collate_and_loss():
             "displacement": {"rank": 1},
         },
         global_schema={"load_dir": {"rank": 1}},
-        boundary_schema={"traction": {"rank": 1}, "fixed": {"rank": 0}},
+        boundary_schemas={"outer": {"traction": {"rank": 1}, "fixed": {"rank": 0}}},
         hidden=16,
         n_layers=1,
         n_slices=4,
@@ -353,9 +353,11 @@ def test_stress_l2_is_one_frobenius_formula_for_both_target_paths_and_rotation_i
     for k in ("sig11_l2", "sig22_l2", "sig12_l2"):
         torch.testing.assert_close(m_s[k], m_t[k])
     ### Frobenius by hand: off-diagonal twice.
-    fro = lambda a, b: math.sqrt(
-        float(((a - b)[:, :2] ** 2).sum() + 2 * ((a - b)[:, 2] ** 2).sum())
-    ) / math.sqrt(float((b[:, :2] ** 2).sum() + 2 * (b[:, 2] ** 2).sum()))
+    def fro(a, b):
+        return math.sqrt(
+            float(((a - b)[:, :2] ** 2).sum() + 2 * ((a - b)[:, 2] ** 2).sum())
+        ) / math.sqrt(float((b[:, :2] ** 2).sum() + 2 * (b[:, 2] ** 2).sum()))
+
     assert abs(float(m_t["stress_l2"]) - fro(p, t)) < 1e-5
     ### Rotation invariance of the aggregate; per-component errors change.
     c, s_ = math.cos(0.7), math.sin(0.7)
