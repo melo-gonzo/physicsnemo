@@ -41,6 +41,11 @@ import warnings
 
 import pytest
 import torch
+from torch.distributed.checkpoint.state_dict import (
+    StateDictOptions,
+    get_optimizer_state_dict,
+    set_optimizer_state_dict,
+)
 from torch.distributed.device_mesh import init_device_mesh
 from torch.distributed.fsdp import fully_shard
 from torch.distributed.tensor import DTensor
@@ -48,10 +53,7 @@ from torch.distributed.tensor.placement_types import Replicate, Shard
 from torch.nn.parallel import DistributedDataParallel
 
 from physicsnemo.distributed import DistributedManager
-
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    from physicsnemo.experimental.optim import LookLayerSAM, LookSAM
+from physicsnemo.experimental.optim import LookLayerSAM, LookSAM
 
 STEPS, BATCH, SEQ = 6, 8, 16
 HPARAMS = dict(rho=0.1, alpha=0.7, k=2)
@@ -168,7 +170,8 @@ def test_fsdp2(cls, dtype):
         _batch_slice(x, dm.rank, dm.world_size),
         _batch_slice(y, dm.rank, dm.world_size),
     )
-    assert all(isinstance(v, DTensor) for v in opt.state_dict()["g_v"][0])
+    g_v = [s["g_v"] for s in opt.state_dict()["state"].values()]
+    assert g_v and all(isinstance(v, DTensor) for v in g_v)
     _assert_matches(model, _reference(cls, dm.device), dtype)
 
 
@@ -191,7 +194,8 @@ def test_fsdp2_mixed_precision():
         _batch_slice(x, dm.rank, dm.world_size),
         _batch_slice(y, dm.rank, dm.world_size),
     )
-    assert all(v.dtype == torch.float32 for v in opt.state_dict()["g_v"][0])
+    g_v = [s["g_v"] for s in opt.state_dict()["state"].values()]
+    assert g_v and all(v.dtype == torch.float32 for v in g_v)
     _assert_matches(model, _reference(LookSAM, dm.device), torch.bfloat16)
 
 
@@ -210,6 +214,33 @@ def test_fsdp2_state_dict_roundtrip():
     state = opt.state_dict()
     opt2 = _optimizer(LookSAM, model)
     opt2.load_state_dict(state)
+    _train(opt2, model, x, y, steps=STEPS - 3)
+    _assert_matches(model, _reference(LookSAM, dm.device))
+
+
+@pytest.mark.multigpu_static
+@pytest.mark.parametrize("full_state_dict", [False, True])
+def test_fsdp2_distributed_checkpoint(full_state_dict):
+    """torch.distributed.checkpoint state dicts round-trip into a fresh optimizer."""
+    dm = _dm()
+    mesh = init_device_mesh(dm.device.type, (dm.world_size,))
+    x, y = _data(dm.device)
+    x = _batch_slice(x, dm.rank, dm.world_size)
+    y = _batch_slice(y, dm.rank, dm.world_size)
+    options = StateDictOptions(full_state_dict=full_state_dict)
+
+    model = fully_shard(_model(dm.device), mesh=mesh)
+    opt = _optimizer(LookSAM, model)
+    _train(opt, model, x, y, steps=3)
+    state = get_optimizer_state_dict(model, opt, options=options)
+    assert state["param_groups"][0]["looksam_global_step"] == 3
+    model.zero_grad(set_to_none=True)  # a freshly resumed run has no gradients
+    opt2 = _optimizer(LookSAM, model)
+    with warnings.catch_warnings():
+        # DCP initializes the fresh optimizer's state with a closure-less step().
+        warnings.filterwarnings("ignore", message=".*without a closure")
+        set_optimizer_state_dict(model, opt2, state, options=options)
+    assert (opt2.global_step, opt2.sam_step) == (3, 2)
     _train(opt2, model, x, y, steps=STEPS - 3)
     _assert_matches(model, _reference(LookSAM, dm.device))
 
