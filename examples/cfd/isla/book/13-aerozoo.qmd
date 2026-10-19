@@ -14,18 +14,13 @@ from matplotlib.colors import TwoSlopeNorm
 from matplotlib.lines import Line2D
 RES = Path("..") / "results"
 AZ = RES / "campaigns_2026-10-09" / "aerozoo"
-# dataset metadata: the per-case labels of the release (bank, enclosure, profile, Reynolds number, stability population) and the split
-# sizes and per-lane cost recorded by the AeroZoo reduction
+# dataset metadata: the per-case labels of the release (bank, enclosure, profile, Reynolds number, stability population), and the
+# case counts of the `full` split's train, validation and test sides from the field scan of the release
 LAB = json.load(open(AZ / "case_labels.json")); LAB_META = LAB.pop("_meta")
-RZ = json.load(open(AZ / "aerozoo_reduction.json")); SPLITS = RZ["splits"]
-mean = statistics.mean
-FIELDS = {"velocity_l2": "velocity", "pressure_l2": "pressure", "nut_l2": "eddy viscosity", "tke_l2": "turbulent kinetic energy",
-          "omega_l2": "specific dissipation rate"}
-# the standing slot: S.DATASETS["aerozoo"].artifact names results/char/<file>.json once it exists (schema of the other standing
-# artifacts, the `full` split under "arms" with protocol "native"; held-out splits under "splits": {split: {"arms": {...}}})
-AZD = S.DATASETS["aerozoo"]
-HAVE = bool(AZD.artifact) and (S.CHAR / AZD.artifact).exists()
-St = S.Standing("aerozoo") if HAVE else None
+OUT = json.load(open(AZ / "probe" / "outliers.json"))
+FULL = {side: OUT["scan"][f"full.{side}"]["n_cases"] for side in ("train", "val", "test")}
+# the benchmark protocol (copied from the design lane): results/campaigns_2026-10-19/aerozoo_protocol/
+PROTO = "results/campaigns_2026-10-19/aerozoo_protocol/protocol_design.md"
 # ---- AeroZoo figure helpers: the reduced arrays are in the stored (world) frame; ``frame`` (rows: inlet direction, in-plane
 # cross-flow axis, plane normal) about ``body_centroid`` projects them into the mid-span plane ----
 AZ_WALL = {0: ("inlet", "value"), 1: ("outlet", "flux"), 2: ("no-slip wall", "value"), 3: ("slip wall / symmetry plane", "free")}
@@ -60,15 +55,14 @@ print(f"**AeroZoo is the book's generalization benchmark: {n:,} RANS solutions a
       "families across five decades of Reynolds number, each posed to the model as the boundary-value problem that produced it, with splits "
       "that hold a whole family out of training.** It is the one dataset of the book on which the body, the enclosure, the boundary conditions, "
       "the scale and the Reynolds number all vary at once, and the one whose held-out splits test generalization to a family no training case "
-      "belongs to. The chapter shows the problem and its diversity, what is measured and why each held-out split asks a different question, "
-      "how ISLA's reference configuration trains on it, the standing, and what the dataset does not say. Every model measurement in it "
-      "is made under the label-input protocol of @sec-aerozoo-allowed: the models read reference scales that the benchmark's rule "
-      "classes as labels.")
+      "belongs to. The chapter shows the problem and its diversity, the benchmark protocol and what each model reads under it, why each "
+      "held-out split asks a different question, and what the dataset does not say. The book holds no model comparison on AeroZoo; where "
+      "ISLA stands on it is an open question (@sec-oq-aerozoo).")
 ```
 
 ## The problem: bodies from seven banks in four enclosures across five Reynolds decades {#sec-dataset-aerozoo}
 
-**Every AeroZoo case is a body in its own enclosure at its own size and Reynolds number, and the model sees only the boundaries and the values prescribed on them.** The release holds time-averaged solutions of the incompressible Reynolds-averaged Navier–Stokes equations with the transition SST closure. The body comes from one of seven geometry banks: procedural blobs, cars, streamlined bodies, airframes, two Blender banks of bluff and streamlined shapes, and a CAD bank. The enclosure is an external box under one of five boundary-condition layouts, a spherical cap standing on a symmetry plane, a sphere split into an inlet half and an outlet half, or an internal duct. The Reynolds number is drawn across five decades, from $10^3$ to $10^8$, and a body's surface is all no-slip or carries slip bands. ISLA receives four boundary meshes, keyed by the kind of condition on each, with the prescribed values on every face, and global inputs read from the global data (@sec-aerozoo-allowed); GeoTransolver reads distances to two of them (@tbl-aerozoo-inputs). The interior is a cloud of 0.6 to 24 million cell centroids (median 5 million) carrying velocity, gauge pressure, eddy viscosity, turbulent kinetic energy and the specific dissipation rate; the model predicts all five. @fig-aerozoo-problem shows one validation case.
+**Every AeroZoo case is a body in its own enclosure at its own size and Reynolds number, and the model sees only the boundaries and the values prescribed on them.** The release holds time-averaged solutions of the incompressible Reynolds-averaged Navier–Stokes equations with the transition SST closure. The body comes from one of seven geometry banks: procedural blobs, cars, streamlined bodies, airframes, two Blender banks of bluff and streamlined shapes, and a CAD bank. The enclosure is an external box under one of five boundary-condition layouts, a spherical cap standing on a symmetry plane, a sphere split into an inlet half and an outlet half, or an internal duct. The Reynolds number is drawn across five decades, from $10^3$ to $10^8$, and a body's surface is all no-slip or carries slip bands. The problem is posed by four boundary meshes, keyed by the kind of condition on each, with the prescribed values on every face, and by the fluid's viscosity; each model reads of these what its architecture can take (@sec-aerozoo-allowed, @tbl-aerozoo-inputs). The interior is a cloud of 0.6 to 24 million cell centroids (median 5 million) carrying velocity, gauge pressure, eddy viscosity, turbulent kinetic energy and the specific dissipation rate; the model predicts all five. @fig-aerozoo-problem shows one validation case.
 
 ```{python}
 #| label: fig-aerozoo-problem
@@ -298,20 +292,21 @@ print(f"**Two facts about the release that @fig-aerozoo-families does not show.*
 
 ### Files, sampling and normalization {#sec-data-aerozoo}
 
-**The release is read natively, as PhysicsNeMo `DomainMesh` files in dimensional SI units; the recipe draws the interior points and the boundary faces uniformly at random and makes every field dimensionless by the case's reference scales.**
+**The release is read natively, as PhysicsNeMo `DomainMesh` files in dimensional SI units; the recipe draws the interior points and the boundary faces uniformly at random and keeps every field in SI units, and the scorer makes each field dimensionless by the case's reference scales.**
 
 - **Layout.** `shard-NNN/<case_id>/domain.pdmsh`. The interior is a point cloud of cell centroids with the solution fields and the cell volumes; the four boundaries are triangle meshes with all data on the cells: the solution on every boundary, the prescribed values under `prescribed.dirichlet.*` and the outlet's reverse-flow values under `prescribed.reverse_flow.*`. The global data hold the fluid (density, kinematic viscosity), the reference velocity, speed, length and dynamic pressure, and identity and diagnostic blocks that are never inputs.
 - **Interior draw.** The release stores the interior in the solver's cell order, which runs through space, so the recipe reads a copy whose interior rows are randomly permuted once per case; a contiguous block of that copy is a uniform sample. Each step draws 200,000 interior points.
-- **Boundary draw.** Each boundary is read whole, and the first transform keeps a uniform random 50,000 of its faces when it has more (`SubsampleMesh`), multiplying each kept face's area by the boundary's face count over 50,000, so every boundary integral stays unbiased. The inlet and outlet usually fall under the cap and are kept whole. GeoTransolver's distance fields are computed from the same draw.
-- **Normalization** (`aerozoo_uvolume.yaml`). Coordinates are divided by the reference length and centered on the interior sample's mean. Velocity is divided by the reference speed, the gauge pressure by the reference dynamic pressure (so `pressure` is a pressure coefficient), the eddy viscosity by speed times length, $k$ by the speed squared and $\omega$ by speed over length; the prescribed values on the boundaries follow the same rules. The Reynolds number enters as $(\log_{10}(U L / \nu) - 5.5) / 1.5$. Each target is then standardized by its mean and standard deviation over the training side of the split, so the per-field relative L2 is computed on standardized fields: its ratios between models order them and are not physical percentages.
+- **Boundary draw.** Each boundary is read whole, and the first transform keeps a uniform random 50,000 of its faces when it has more (`SubsampleMesh`), multiplying each kept face's area by the boundary's face count over 50,000, so every boundary integral stays unbiased. The inlet and outlet usually fall under the cap and are kept whole. The baselines' distance to the `no_slip` faces is computed from the same draw.
+- **Normalization.** Coordinates stay in meters, uncentered, and the prescribed values on the boundaries stay in SI units. Each of the five targets, in SI units, is standardized by one mean and one standard deviation for the dataset, the same for every model, with vector means zero. Nothing is derived per case.
+- **Scoring.** The scorer returns each prediction to SI units and then makes it dimensionless by the case's reference scales, which the rule admits for scoring: velocity by the reference speed, the gauge pressure by the reference dynamic pressure (so `pressure` is a pressure coefficient), the eddy viscosity by speed times length, $k$ by the speed squared and $\omega$ by speed over length. Each field is then standardized by its mean and standard deviation over the training side of the split, so the per-field relative L2 is computed on standardized fields: its ratios between models order them and are not physical percentages.
 
 ```{python}
 #| label: para-aerozoo-omega
 #| output: asis
-OUT = json.load(open(AZ / "probe" / "outliers.json")); TR_ = OUT["scan"]["full.train"]; TH = OUT["thresholds"]
+TR_ = OUT["scan"]["full.train"]; TH = OUT["thresholds"]
 mx, mn = TR_["per_field_n_max_gt_threshold"], TR_["per_field_n_mean_gt_threshold"]
 print(f"**The specific dissipation rate has a heavy tail that the other fields lack, which makes its column partly a count of cases.** Of "
-      f"the {TR_['n_cases']:,} training cases of the `full` split, {mx['omega']:,} hold at least one interior point whose standardized "
+      f"the {TR_['n_cases']:,} training cases of the `full` split, {mx['omega']:,} hold at least one interior point whose scored, standardized "
       f"$\\omega$ exceeds {TH['max_abs_z']:.0f}, against {mx['tke']} on turbulent kinetic energy and "
       f"{'none' if max(mx[f] for f in ('velocity', 'pressure', 'nut')) == 0 else 'a few'} on velocity, pressure and eddy viscosity; over the "
       "whole release, 238 cases hold a point above 1,000 standard deviations and 110 above 10,000. Each extreme is a single point. When one "
@@ -319,7 +314,7 @@ print(f"**The specific dissipation rate has a heavy tail that the other fields l
       f"the pressure coefficient of the fastest cases ({mn['pressure']} training cases whose standardized pressure averages above "
       f"{TH['mean_abs_z']:.0f} in magnitude over the case) and the "
       f"eddy viscosity of the slowest ({mn['nut']}, mostly in the spherical enclosures). No field is clipped or transformed beyond the "
-      "normalization above. Data: results/campaigns_2026-10-09/aerozoo/probe/outliers.json.")
+      "scoring above. Data: results/campaigns_2026-10-09/aerozoo/probe/outliers.json.")
 ```
 
 ## What is measured {#sec-aerozoo-measured}
@@ -327,58 +322,48 @@ print(f"**The specific dissipation rate has a heavy tail that the other fields l
 ```{python}
 #| label: para-aerozoo-measured
 #| output: asis
-F_ = SPLITS["full"]
-cost = {a: list(RZ["cost"][a]["full"].values()) for a in ("ISLA", "ISLA-DTT", "GeoTransolver")}
-params = {a: v[0]["n_parameters"] / 1e6 for a, v in cost.items()}
-spe = cost["ISLA"][0]["steps_per_epoch"]
-print(f"**The interior task on the `full` split: {F_['n_train']:,} training cases, {F_['n_val']} validation cases, {F_['n_test']} test cases; "
-      "200,000 interior points and up to 50,000 faces per boundary per case; 250 epochs; two seeds; float32 scoring of the final "
-      "checkpoints on the test side.** The validation side selects nothing; the test side of every split is scored once. The metric is the "
-      "per-case relative L2 per field on the standardized fields, averaged over the cases (@sec-metrics). No model trains with rotation or "
-      "translation augmentation, and none needs to see a canonical pose: the stored coordinates of every case are already a random rotation. "
-      f"One epoch of the `full` split is {spe:,} steps at one case per rank, so 250 epochs are {250 * spe:,} steps. Two architectures and one "
-      "variant run at their reference configurations:")
+print(f"**The interior task on the `full` split: {FULL['train']:,} training cases, {FULL['val']} validation cases, {FULL['test']} test cases; "
+      "200,000 interior points and up to 50,000 faces per boundary per case; 250 epochs; two seeds; float32 scoring on the test side of "
+      "the checkpoint the validation side selects, by the scored metric.** The test side of every split is scored once. The metric is the "
+      "per-case relative L2 per field on the scored fields of @sec-data-aerozoo, averaged over the cases (@sec-metrics). No model trains "
+      "with rotation or translation augmentation, and none needs to see a canonical pose: the stored coordinates of every case are already "
+      "a random rotation. The protocol fixes the inputs of four models at their reference configurations:")
 print()
-print(f"- **ISLA**: width 512, 12 layers, 512 slices, learning rate 3.75e-4, {params['ISLA']:.1f}M parameters; the slice sublayer reads the "
-      "normalized token state (@sec-isla-layer).")
-print(f"- **ISLA-DTT**: the same configuration with read-only prediction points (`query_independent=True`), which also read every boundary "
-      f"token at every layer through a Barnes–Hut cluster forest (@sec-arch-modes), {params['ISLA-DTT']:.1f}M parameters.")
-print(f"- **GeoTransolver-volume**, the GeoTransolver of the interior tasks with its ball-query local features on (@sec-baselines): "
-      f"width 256, local width 32, learning rate 1e-3, {params['GeoTransolver']:.1f}M parameters; called GeoTransolver below.")
-print()
-print("Transolver is not trained on AeroZoo. **Cost.** On four GB300 ranks in bfloat16, the median step of the final epoch and the peak "
-      "device memory any rank reports: " + "; ".join(f"{a} {mean(c['step_seconds_median'] for c in v):.2f} s and {max(c['mem_gb_max'] for c in v):.0f} GiB"
-                                                      for a, v in cost.items())
-      + ". Instrument (step time and memory): 250-epoch training runs of these configurations on shared nodes, ISLA and ISLA-DTT with "
-      "the raw slice reads (@sec-study-configurations); the normalized slice reads change no parameter and no tensor shape. Data: "
-      "results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json.")
+print("- **ISLA**: width 512, 12 layers, 512 slices, learning rate 3.75e-4; the slice sublayer reads the normalized token state "
+      "(@sec-isla-layer).")
+print("- **ISLA-DTT**: the same configuration with read-only prediction points (`query_independent=True`), which also read every boundary "
+      "token at every layer through a Barnes–Hut cluster forest (@sec-arch-modes).")
+print("- **GeoTransolver-volume**, the GeoTransolver of the interior tasks, here with its ball-query local features off "
+      "(@sec-aerozoo-allowed): width 256, learning rate 1e-3; called GeoTransolver below.")
+print("- **Transolver**: width 512, 16 layers, learning rate 1e-3.")
 ```
 
 ```{python}
 #| label: para-aerozoo-inputs
 #| output: asis
 n_dual = LAB_META["counts"]["profile"]["dual_inlet"]
-print("**The architectures read the same problem through different inputs** (@tbl-aerozoo-inputs). ISLA reads the four boundaries face by "
-      "face; GeoTransolver reads each interior point with its signed distance and the distance's gradient to the `no_slip` faces and its "
-      "signed distance to the `slip` faces, and never sees a boundary face. GeoTransolver has no "
-      f"channel at all for the inlet and outlet faces, and in the {n_dual} dual-inlet boxes the second inlet's velocity reaches ISLA as "
-      "per-face values and GeoTransolver not at all (its global vector holds the primary inlet's direction). Neither model sees the body "
-      "identifier, the solution on the boundaries or the solver's diagnostics.")
+print("**The architectures read the same problem through different inputs** (@tbl-aerozoo-inputs). ISLA and ISLA-DTT read the four "
+      "boundaries face by face. GeoTransolver reads every boundary face as one token of its geometry input, with the face's centroid, its "
+      "condition type and its prescribed values. Transolver has only channels at each prediction point: it reads the point's coordinates "
+      "and its distance and normal to the `no_slip` faces, and no inlet or outlet value, so neither the speed nor the direction of the "
+      f"flow reaches it. In the {n_dual} dual-inlet boxes the second inlet's velocity reaches ISLA, ISLA-DTT and GeoTransolver as per-face "
+      "values. No model sees the body identifier, the solution on the boundaries, the solver's diagnostics or any reference scale.")
 ```
 
 | | boundary | global inputs | at each prediction point |
 |---|---|---|---|
-| ISLA | the four boundary meshes, up to 50,000 faces each: position, normal, area, one-hot role, prescribed values | the inlet direction $\hat g_1$ (rank 1); the standardized log Reynolds number and the inlet's four standardized turbulence quantities (rank 0) | position, entering only through relational invariants; the distance and direction to the nearest boundary token, computed inside the model |
+| ISLA | the four boundary meshes, up to 50,000 faces each: position, normal, area, one-hot condition type, prescribed values in SI units | the kinematic viscosity and the density; computed inside the model from the boundary: the length unit $L$, a velocity scale $U$, the inlet direction $\hat g_1$ and the standardized log Reynolds number | position, entering only through relational invariants; the distance and direction to the nearest boundary token, computed inside the model |
 | ISLA-DTT | as ISLA, and every boundary token read at every layer | as ISLA | as ISLA; the prediction points read the slices and never write into them |
-| GeoTransolver | none | one vector: the inlet direction, the log Reynolds number and the four inlet turbulence quantities | coordinates; the signed distance and its gradient to the `no_slip` faces and the signed distance to the `slip` faces, computed from the same boundary draw |
+| GeoTransolver | every boundary face as one geometry token: centroid in meters, one-hot condition type, prescribed values, each column standardized by one constant per dataset | the kinematic viscosity, as its logarithm standardized by dataset constants | coordinates in meters; the signed distance and normal to the `no_slip` faces |
+| Transolver | none | the same viscosity input, concatenated to every point's features | coordinates in meters; the signed distance and normal to the `no_slip` faces |
 
-: What each architecture receives on the AeroZoo interior task. How to read this: the two global columns carry the same information in different packaging; the difference is the boundary column, where ISLA has the faces with their roles and prescribed values and GeoTransolver has distances to two of the four roles; a role mixes body and enclosure (@tbl-aerozoo-roles), so neither distance is "the distance to the body"; the inlet direction and the log Reynolds number of both global columns come from `global_data/reference`, which the benchmark's rule classes as labels (@sec-aerozoo-allowed). Data: conf/model/isla_volume_aerozoo.yaml, conf/model/geotransolver_volume_aerozoo.yaml and datasets/aerozoo_uvolume.yaml of the recipe. {#tbl-aerozoo-inputs}
+: What each architecture receives on the AeroZoo interior task under the benchmark protocol. How to read this: ISLA, ISLA-DTT and GeoTransolver receive the same per-face data, ISLA's tokens with their area and GeoTransolver's without; Transolver receives no boundary value, so it cannot tell the inlet from the outlet; a role mixes body and enclosure (@tbl-aerozoo-roles), so the distance to the `no_slip` faces is not "the distance to the body"; no column reads `global_data/reference`. Data: results/campaigns_2026-10-19/aerozoo_protocol/protocol_design.md, section 2. {#tbl-aerozoo-inputs}
 
 ### What the benchmark allows a model to read {#sec-aerozoo-allowed}
 
-**AeroZoo's rule admits as inputs only the data of the partial differential equation, and every model of this chapter also reads reference scales the rule classes as labels: this chapter calls that the *label-input protocol*.** The rule, in the dataset's own documentation, lets a model use anything computed from a sample's inputs and from the training part of its split, and nothing computed from a test sample's solution. The inputs are the data that pose the problem: the four boundary meshes, each naming the type of condition its faces carry; the values `cell_data/prescribed/*` holds on them; and the kinematic viscosity, `global_data/physics/kinematic_viscosity`. Two more physical keys may be read: the density, which only converts the solver's kinematic pressure and shear to pascals, and the body acceleration, which is zero in every case. Every other key of `global_data` is a label. Among them is `global_data/reference`: the primary body's largest extent $L_\mathrm{ref}$, the primary inlet's velocity and speed $U_\mathrm{ref}$, the dynamic pressure and the fastest inlet's direction; a Reynolds number built on them is a label as well. The equations contain no reference length, so naming a different length the reference changes the label and leaves the solution unchanged. A model that wants a freestream computes it from the inlet faces.
+**AeroZoo's rule admits as inputs only the data of the partial differential equation, and the benchmark protocol gives every model those data alone, in physical units: a model that needs a scale brings it itself.** The rule, in the dataset's own documentation, lets a model use anything computed from a sample's inputs and from the training part of its split, and nothing computed from a test sample's solution. The inputs are the data that pose the problem: the four boundary meshes, each naming the type of condition its faces carry; the values `cell_data/prescribed/*` holds on them; and the kinematic viscosity, `global_data/physics/kinematic_viscosity`. Two more physical keys may be read: the density, which only converts the solver's kinematic pressure and shear to pascals, and the body acceleration, which is zero in every case. Every other key of `global_data` is a label. Among them is `global_data/reference`: the primary body's largest extent $L_\mathrm{ref}$, the primary inlet's velocity and speed $U_\mathrm{ref}$, the dynamic pressure and the fastest inlet's direction; a Reynolds number built on them is a label as well. The equations contain no reference length, so naming a different length the reference changes the label and leaves the solution unchanged. A model that wants a freestream computes it from the inlet faces.
 
-Every model of this chapter reads `reference`. ISLA, ISLA-DTT and GeoTransolver take the inlet direction $\hat g_1$ from it and the log Reynolds number $U_\mathrm{ref} L_\mathrm{ref} / \nu$ (@tbl-aerozoo-inputs). The normalization divides every target and every prescribed value by reference scales (@sec-data-aerozoo), so $L_\mathrm{ref}$, the body's largest extent before its random pose, sets the scale of the eddy-viscosity and specific-dissipation targets of every model. It also scales GeoTransolver's coordinates and wall distances. ISLA and ISLA-DTT measure positions in their own length unit $L$, computed from the boundary (@sec-isla-frame), so that scaling cancels for them. A comparison between two arms that read the same inputs is informative under this protocol: ISLA-DTT ÷ ISLA, and the two arms of each ablation. A comparison with GeoTransolver is provisional under the label-input protocol; how it reads on the allowed inputs alone is an open question (@sec-oq-aerozoo-inputs).
+The protocol reads no label and derives nothing per case. The recipe hands every model the same data, the boundary meshes with their condition types and their prescribed values in SI units, the kinematic viscosity and coordinates in meters; each model takes of them what its architecture can read (@tbl-aerozoo-inputs), and every model is trained on the same standardized targets (@sec-data-aerozoo). ISLA brings its own scales and computes them from the full-resolution boundary of each case: its length unit $L$, the area-weighted RMS pairwise distance of the boundary cells (@sec-isla-frame); a velocity scale $U$, the area-weighted RMS speed prescribed on the inlet faces; the inlet direction $\hat g_1$, the direction of the inlet velocities' area-weighted mean; and the Reynolds number $U L / \nu$, whose logarithm, standardized by dataset constants, is a global scalar. It divides every prescribed value by the scales its units declare, velocity by $U$, $k$ by $U^2$, $\omega$ by $U / L$ and pressure by $\rho U^2$, which is the one use of the density, and multiplies its outputs back into SI units. GeoTransolver and Transolver bring no scales and read the inputs as they are, the kinematic viscosity as its logarithm standardized by dataset constants. GeoTransolver takes the boundary faces through its geometry input, which accepts columns other than coordinates only with its ball-query local features off, so it runs without them. Transolver has only channels at each prediction point and receives no inlet or outlet value. The labels enter the scoring alone, which the rule allows (@sec-data-aerozoo). Data: results/campaigns_2026-10-19/aerozoo_protocol/protocol_design.md.
 
 ### The splits, and what each one asks {#sec-aerozoo-splits}
 
@@ -390,15 +375,14 @@ print("**Each held-out split removes one family from training and tests on it, a
       "generalize over: the far boundary, a global scalar, the body's shape, or the layout of the boundary conditions.** The readout of a "
       "held-out split is each architecture's *penalty*: its test error on the held-out family divided by its own test error on the `full` "
       "split. A held-out split also trains on fewer cases than `full`, and both architectures pay that; the comparison is therefore the "
-      "ratio of the two architectures' penalties, never a held-out error alone. @tbl-aerozoo-splits lists the six held-out splits on which "
-      "the open questions of @sec-interior-aerozoo are read.")
+      "ratio of the two architectures' penalties, never a held-out error alone. @tbl-aerozoo-splits lists the six held-out splits of the "
+      "benchmark protocol.")
 print()
-print("Three of the six are built to separate a model that reads boundary faces with their roles from one that reads distances to walls "
-      "(@tbl-aerozoo-inputs). With the enclosure held out, the far boundary takes a new shape and new roles: domes for the inlet and the "
-      "outlet, a symmetry disk, duct walls. ISLA reads them as faces; GeoTransolver sees them only through its wall distances and the extent "
-      "of the point cloud. In a crossflow box the flow must turn toward a side face, and only the outlet's role says which face that is; "
-      "GeoTransolver has no outlet input. In a dual-inlet box a second prescribed velocity enters through the top face; ISLA reads it face by "
-      "face and GeoTransolver does not receive it. The Reynolds split changes no geometry and tests extrapolation in one global scalar, as "
+print("Three of the six are built to separate a model that reads the boundary faces with their condition types from one that reads "
+      "only a distance to walls (@tbl-aerozoo-inputs): ISLA, ISLA-DTT and GeoTransolver read the faces, Transolver its distance to the "
+      "`no_slip` faces. With the enclosure held out, the far boundary takes a new shape and new roles: domes for the inlet and the "
+      "outlet, a symmetry disk, duct walls. In a crossflow box the flow must turn toward a side face, and only the outlet's condition "
+      "type says which face that is. In a dual-inlet box a second prescribed velocity enters through the top face. The Reynolds split changes no geometry and tests extrapolation in one global scalar, as "
       "the AirfRANS extrapolation splits do (@sec-interior-extrapolation). The two bank splits test the body's shape, one with a large and "
       "one with a small loss of training data.")
 ```
@@ -419,8 +403,8 @@ out = "| split | held out of training, tested on | cases | what must generalize 
 for r in rows:
     out += f"| {r[0]} | {r[1]} | {r[2]:,} | {r[3]} |\n"
 print(out)
-print(f": The held-out splits of AeroZoo on which ISLA is compared with GeoTransolver and with ISLA-DTT, with the number of cases of the "
-      f"held-out family in the release of {LAB_META['n_cases']:,}. The in-distribution `full` split trains on {SPLITS['full']['n_train']:,} "
+print(f": The held-out splits of the AeroZoo benchmark protocol, with the number of cases of the "
+      f"held-out family in the release of {LAB_META['n_cases']:,}. The in-distribution `full` split trains on {FULL['train']:,} "
       "cases of every family. How to read this: a held-out split trains on the rest of the release and tests on the family, so the larger "
       "the family, the smaller its training set; the last column names what a model must carry beyond its training "
       "distribution. Data: results/campaigns_2026-10-09/aerozoo/case_labels.json (cases per family in the release). "
@@ -471,93 +455,17 @@ axes[0].set_xlim(0, max(max(g[1].values()) for g in groups) * 1.18)
 plt.show()
 ```
 
-## How ISLA trains on this dataset {#sec-aerozoo-trajectories}
+## The standing {#sec-interior-aerozoo}
 
-**With the normalized slice reads, ISLA's reference configuration trains through all 250 epochs on AeroZoo without losing its validation minimum; the raw-read variant, the ablation that pools and broadcasts the raw token state, loses it within the first 60 epochs.** AeroZoo is where the difference between the two reads shows most clearly. In the raw-read variant each block's update reads the raw stream, so each block multiplies the stream's norm by a factor above one and the norm grows geometrically with depth and training time; the normalized reads make each update additive (@sec-isla-layer). @tbl-aerozoo-training gives the trainer's validation loss of the four `full`-split training runs, two seeds of each read, under the sampling of @sec-data-aerozoo at the reference learning rate.
+**The book holds no model comparison on AeroZoo.** The benchmark protocol (@sec-aerozoo-allowed) fixes what a standing reads: each
+model's test error on the `full` split, and its penalty on each held-out split of @tbl-aerozoo-splits, its error on the held-out
+family divided by its own `full` error, both read by the seed rule per field (@sec-fair-comparison); and ISLA-DTT ÷ ISLA on the same
+splits, the accuracy a prediction gives up when it depends on its point and the boundary alone. Where ISLA stands on these readouts is the open
+question of @sec-oq-aerozoo.
 
-| validation loss on the 386 `full` validation cases | normalized slice reads (ISLA) | raw-read variant (ablation) |
-|---|---|---|
-| minimum over training, seeds 42 / 43 | 0.0215 / 0.0209 | 0.0315 / 0.0374 |
-| at epoch 70 | 0.0248 / 0.0236 | 0.120 / 0.143 |
-| largest ratio to the running minimum | 1.059 / 1.084 over all 250 epochs | above 2 by epoch 60 on both seeds |
-
-: Validation loss of ISLA's reference configuration on the AeroZoo `full` split with the normalized slice reads and with the raw-read variant: the trainer's own validation every ten epochs, bfloat16, the Huber loss (quadratic for small residuals, linear for large ones) summed over the five standardized targets, at the training draw; learning rate 3.75e-4, uniform boundary draws, two seeds each; label-input protocol, the same inputs for both reads (@sec-aerozoo-allowed). How to read this: a ratio to the running minimum of one means the loss never rose above its best; the raw-read runs reach their minimum in the first 30 epochs and their loss is above twice that minimum from epoch 60; at epoch 249 the normalized-read runs read 0.0222 and 0.0223; validation loss is not the test-side metric of the standing. Data: the training records of the four runs, as recorded in the lab notebook (@sec-notebook). {#tbl-aerozoo-training}
-
-## The registered questions {#sec-interior-aerozoo}
-
-```{python}
-#| label: para-aerozoo-standing
-#| output: asis
-QUESTIONS = (
-    "- **Does ISLA generalize better than GeoTransolver to a family it never saw?** The readout is GeoTransolver's penalty ÷ ISLA's on each "
-    "held-out split of @tbl-aerozoo-splits, with the seed rule applied per field. The enclosure, crossflow and dual-inlet splits are the ones "
-    "built to separate a model that reads boundary faces with their roles from one that reads distances to walls (@tbl-aerozoo-inputs). "
-    "The bar set before the runs: on the enclosure split ISLA's penalty is at least 20% smaller than GeoTransolver's; the claim fails if "
-    "it is not smaller at all (results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json, its `predictions` block).\n"
-    "- **Does ISLA-DTT match ISLA on held-out families?** ISLA-DTT's prediction at a point depends on that point and the boundary alone, so it "
-    "can be evaluated in any number of chunks; the question is what that independence costs in accuracy. The readout is ISLA-DTT ÷ ISLA on "
-    "velocity and pressure on every held-out split, and in distribution on `full`; the bar set before the runs is ISLA-DTT within 5% of "
-    "ISLA on every field of `full`.\n")
-if HAVE:
-    print(f"**{St.ds.name}: the standing of the reference configurations in distribution and on the held-out families.** "
-          + ("ISLA's checkpoints are the raw-read variant, without the normalized slice reads. " if not St.ds.reference else "")
-          + f"@tbl-aerozoo-full is the `full` split; the held-out splits follow.")
-    print()
-    print(St.table("tbl-aerozoo-full", f"The AeroZoo interior task, `full` split, {SPLITS['full']['n_test']} test cases, measured "
-                   "under the label-input protocol (@sec-aerozoo-allowed), provisional against GeoTransolver",
-                   protocols=("native",)))
-    if St.has("ISLA-DTT"):
-        print(f"ISLA-DTT ÷ ISLA on the same split: " + " / ".join(f"{St.err('ISLA-DTT', f) / St.err('ISLA', f):.2f}" for f in St.fields)
-              + " on " + " / ".join(St.fields.values()) + f" (seed means). Data: {St.source}.")
-        print()
-    held = St.raw.get("splits", {})
-    if held:
-        arms = {name.split()[0]: d for sp in held.values() for name, d in sp["arms"].items()}
-        names = [a for a in ("ISLA", "ISLA-DTT", "GeoTransolver") if a in arms]
-        fl = list(St.fields)
-        full = {a: St.arms[a]["native"] for a in names if a in St.arms}
-        pen = lambda A_, a, f: A_[a]["native"][f]["mean"] / full[a][f]["mean"]
-        out = ("| split | " + " | ".join(f"{a} penalty" for a in names) + " | GeoTransolver's penalty ÷ ISLA's |\n|---|"
-               + "---|" * (len(names) + 1) + "\n")
-        for sp, d in held.items():
-            A_ = {name.split()[0]: v for name, v in d["arms"].items()}
-            cells = [" / ".join(f"{pen(A_, a, f):.2f}" for f in fl) if a in A_ and a in full else "–" for a in names]
-            both = all(a in A_ and a in full for a in ("ISLA", "GeoTransolver"))
-            cells.append(" / ".join(f"{pen(A_, 'GeoTransolver', f) / pen(A_, 'ISLA', f):.2f}" for f in fl) if both else "–")
-            out += f"| `{sp}` | " + " | ".join(cells) + " |\n"
-        print(out)
-        print(f": Penalties of holding a family out: each architecture's test error on the held-out family ÷ its own `full` test error, seed "
-              f"means, float32, the fields {' / '.join(St.fields[f] for f in fl)}, measured under the label-input protocol "
-              f"(@sec-aerozoo-allowed), provisional against GeoTransolver. Each cell lists the fields in that order. How to read this: a smaller penalty means "
-              f"the error grew less when the family left training; the last column above one means ISLA's grew less; compare penalties, not "
-              f"held-out errors. Data: {St.source} (splits). {{#tbl-aerozoo-heldout}}")
-    print()
-    print("Two questions are read on these numbers:")
-    print()
-    print(QUESTIONS)
-else:
-    PR = RZ["predictions"]; P2F = PR["P2"]["per_field"]
-    def by(v):
-        n = [FIELDS[f] for f, d in P2F.items() if d["verdict"] == v]
-        return n[0] if len(n) == 1 else ", ".join(n[:-1]) + " and " + n[-1]
-    print("**The held-out splits decide two questions about ISLA on this dataset; for the reference configuration both are open "
-          "(@sec-open-questions).** The standing of "
-          "the reference configurations on AeroZoo is the test-side scoring of their final checkpoints on `full` and on the six splits of "
-          "@tbl-aerozoo-splits, under the protocol of @sec-aerozoo-measured, read by the seed rule.")
-    print()
-    print(QUESTIONS)
-    print("Scored under the label-input protocol (@sec-aerozoo-allowed) on ISLA and ISLA-DTT checkpoints with the raw slice reads, the "
-          "variant whose ISLA training loses its validation minimum (@tbl-aerozoo-training), the "
-          f"registered predictions read: on `full`, GeoTransolver ÷ ISLA is {PR['P1']['velocity_ratio']:.2f} on velocity and "
-          f"{PR['P1']['pressure_ratio']:.2f} on pressure, against a bar of at least 1.2 on velocity and at most 0.9 on pressure "
-          f"({PR['P1']['verdict']}); on the enclosure split ISLA's penalty is {P2F['velocity_l2']['isla_penalty']:.2f} on velocity "
-          f"against GeoTransolver's {P2F['velocity_l2']['gt_penalty']:.2f}, and the bar is {PR['P2']['verdict']}: falsified on "
-          f"{by('falsified')}, supported on {by('supported')}, between its two thresholds on {by('between')}; and ISLA-DTT ÷ ISLA "
-          f"on `full` runs from {min(PR['P4']['ratios'].values()):.2f} to {max(PR['P4']['ratios'].values()):.2f} across the fields, "
-          f"outside the 5% bar ({PR['P4']['verdict']}). The two readouts against GeoTransolver are provisional under that protocol; "
-          "ISLA-DTT ÷ ISLA compares two arms that read the same inputs. What the reference configuration, with the normalized slice "
-          "reads, scores against the same bars is the open question.")
-```
+<!-- SLOT: the AeroZoo standing (results/char/<file>.json named by standing.DATASETS["aerozoo"].artifact; the `full` split under
+"arms", protocol "native"; held-out splits under "splits": {split: {"arms": {...}}}): the `full` table, ISLA-DTT ÷ ISLA, and the
+penalty table per held-out split -->
 
 <!-- RENDERING SLOT: fig-aerozoo-prediction: truth / ISLA / GeoTransolver / Transolver and errors on one held-out case -->
 
@@ -569,11 +477,13 @@ else:
 print("**AeroZoo tests generalization across families within one PDE, steady incompressible RANS with one closure, and only on the "
       "interior task.**")
 print()
-print("- **Not resource-matched.** ISLA, ISLA-DTT and GeoTransolver differ in parameters, step time and memory (@sec-aerozoo-measured) and do "
-      "not receive the same inputs (@tbl-aerozoo-inputs); a standing here compares the configurations as each is scored on every dataset.")
-print("- **Label inputs.** Every model here reads reference scales that the benchmark's rule classes as labels (@sec-aerozoo-allowed); "
-      "a comparison with GeoTransolver is provisional, and how it reads on the allowed inputs alone is an open question "
-      "(@sec-oq-aerozoo-inputs).")
+print("- **No model result.** The book holds no AeroZoo model comparison; the protocol says what one reads (@sec-interior-aerozoo), "
+      "and where ISLA stands on it is an open question (@sec-oq-aerozoo).")
+print("- **Not resource-matched.** The four configurations differ in parameters and memory and do not receive the same inputs "
+      "(@tbl-aerozoo-inputs); the protocol compares the configurations as each is scored on every dataset.")
+print("- **Not every model can see the flow.** Transolver receives no inlet or outlet value, so the speed and direction of the flow do "
+      "not reach it, and GeoTransolver reads the boundary faces only with its ball-query local features off (@sec-aerozoo-allowed); a "
+      "penalty of either measures the architecture under those inputs.")
 print("- **Penalties mix generalization with data size.** Every held-out split trains on fewer cases than `full`; only the ratio of penalties "
       "across architectures is read, and the mechanism behind a smaller or larger penalty is not measured by it.")
 print("- **Standardized fields.** Every error is on standardized fields, so a ratio orders the models and is not a physical percentage; the "
@@ -583,7 +493,7 @@ print("- **Label noise.** A quarter of the labels are time averages the solver m
 print("- **One discretization-dependent input.** Each prediction point's distance and direction come from the nearest of the up to 50,000 "
       "sampled faces per boundary, so the interior prediction depends on the boundary draw, as on AirfRANS (@sec-airfrans-boundary-law). Whether "
       "an exact form computed from the full-resolution boundaries removes that dependence is an open design question (@sec-open-questions).")
-print("- **Not measured here:** the surface task (the boundary solution and the wall shear from the same inputs), the uniform-point-cloud "
-      "and rotated-and-translated scorings of the other chapters (the stored poses are already random; the pose contract is measured on the "
-      "other datasets, @sec-invariances), and Transolver.")
+print("- **Not part of the protocol:** the surface task (the boundary solution and the wall shear from the same inputs), and the "
+      "uniform-point-cloud and rotated-and-translated scorings of the other chapters (the stored poses are already random; the pose "
+      "contract is measured on the other datasets, @sec-invariances).")
 ```
